@@ -42,7 +42,7 @@ var (
 func Run(ctx context.Context, logger *zap.Logger) {
 	flag.Usage = fetcherUsage
 	collectorEndpoint := flag.String("jaeger-collector-endpoint", "", "")
-	specializeOnStart := flag.Bool("specialize-on-startup", false, "Flag to activate specialize process at pod starup")
+	specializeOnStart := flag.Bool("specialize-on-startup", false, "Flag to activate specialize process at pod startup")
 	specializePayload := flag.String("specialize-request", "", "JSON payload for specialize request")
 	secretDir := flag.String("secret-dir", "", "Path to shared secrets directory")
 	configDir := flag.String("cfgmap-dir", "", "Path to shared configmap directory")

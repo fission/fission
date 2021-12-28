@@ -174,7 +174,7 @@ func (p *PoolPodController) handleRSDelete(obj interface{}) {
 	if !ok {
 		tombstone, ok := obj.(k8sCache.DeletedFinalStateUnknown)
 		if !ok {
-			p.logger.Error("couldnt get object from tombstone", zap.Any("obj", obj))
+			p.logger.Error("couldn't get object from tombstone", zap.Any("obj", obj))
 			return
 		}
 		rs, ok = tombstone.Obj.(*apps.ReplicaSet)
@@ -411,7 +411,7 @@ func (p *PoolPodController) spCleanupPodQueueProcessFunc() bool {
 			p.gpm.fsCache.DeleteFunctionSvc(ctx, fsvc)
 			p.gpm.fsCache.DeleteEntry(fsvc)
 		} else {
-			p.logger.Error("could not covert item from PodToFsvc", zap.String("key", key))
+			p.logger.Error("could not convert item from PodToFsvc", zap.String("key", key))
 		}
 	}
 	err = p.kubernetesClient.CoreV1().Pods(p.namespace).Delete(context.TODO(), pod.Name, metav1.DeleteOptions{})

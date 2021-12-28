@@ -123,7 +123,7 @@ func (cn *Container) updateDeployment(ctx context.Context, deployment *appsv1.De
 
 func (cn *Container) deleteDeployment(ctx context.Context, ns string, name string) error {
 	// DeletePropagationBackground deletes the object immediately and dependent are deleted later
-	// DeletePropagationForeground not advisable; it marks for deleteion and API can still serve those objects
+	// DeletePropagationForeground not advisable; it marks for deletion and API can still serve those objects
 	deletePropagation := metav1.DeletePropagationBackground
 	return cn.kubernetesClient.AppsV1().Deployments(ns).Delete(ctx, name, metav1.DeleteOptions{
 		PropagationPolicy: &deletePropagation,

@@ -664,7 +664,7 @@ func (caaf *Container) getObjName(fn *fv1.Function) string {
 			functionMetadata = functionMetadata + "-" + fn.ObjectMeta.Namespace
 		}
 	}
-	// contructed name should be 63 characters long, as it is a valid k8s name
+	// constructed name should be 63 characters long, as it is a valid k8s name
 	// functionMetadata should be 35 characters long, as we take 17 characters from functionUid
 	// with newdeploy 10 character prefix
 	return strings.ToLower(fmt.Sprintf("container-%s-%s", functionMetadata, uid))

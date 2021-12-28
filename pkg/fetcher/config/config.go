@@ -113,7 +113,7 @@ func (cfg *Config) NewSpecializeRequest(fn *fv1.Function, env *fv1.Environment) 
 		if env.Spec.AllowedFunctionsPerContainer == fv1.AllowedFunctionsPerContainerInfinite {
 			// workflow loads multiple functions into one function pod,
 			// we have to use a Function UID to separate the function code
-			// to avoid overwritting.
+			// to avoid overwriting.
 			targetFilename = string(fn.ObjectMeta.UID)
 		} else {
 			// set target file name to fix pattern for

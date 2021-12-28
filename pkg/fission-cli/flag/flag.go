@@ -45,7 +45,7 @@ type (
 		Usage        string
 		DefaultValue interface{}
 
-		// If a flag is marked as deprecated, it will hided from
+		// If a flag is marked as deprecated, it will hidden from
 		// the help message automatically. Hence, a flag cannot be
 		// marked as hidden and deprecated at the same time.
 		Hidden     bool
@@ -200,7 +200,7 @@ var (
 	SpecDelete     = Flag{Type: Bool, Name: flagkey.SpecDelete, Usage: "Allow apply to delete resources that no longer exist in the specification"}
 	SpecDry        = Flag{Type: Bool, Name: flagkey.SpecDry, Usage: "View the generated specs"}
 	SpecValidation = Flag{Type: String, Name: flagkey.SpecValidate, Usage: "Turns server side validations of Fission objects on/off"}
-	SpecIgnore     = Flag{Type: String, Name: flagkey.SpecIgnore, Usage: fmt.Sprintf("File containing specs to be ingored inside --specdir, defaults to %v", util.SPEC_IGNORE_FILE)}
+	SpecIgnore     = Flag{Type: String, Name: flagkey.SpecIgnore, Usage: fmt.Sprintf("File containing specs to be ignored inside --specdir, defaults to %v", util.SPEC_IGNORE_FILE)}
 
 	SupportOutput = Flag{Type: String, Name: flagkey.SupportOutput, Short: "o", Usage: "Output directory to save dump archive/files", DefaultValue: flagkey.DefaultSpecOutputDir}
 	SupportNoZip  = Flag{Type: Bool, Name: flagkey.SupportNoZip, Usage: "Save dump information into multiple files instead of single zip file"}
