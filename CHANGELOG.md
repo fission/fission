@@ -1,5 +1,18 @@
 # Changelog
 
+## [v1.15.1](https://github.com/fission/fission/tree/v1.15.1) (2021-12-28)
+
+[Full Changelog](https://github.com/fission/fission/compare/v1.15.0...v1.15.1)
+
+**Merged pull requests:**
+
+- MQT Kafka: Use Sarama Group Consumer instead of bsm/sarama-cluster library [\#2286](https://github.com/fission/fission/pull/2286) ([sanketsudake](https://github.com/sanketsudake))
+- Capture error from schema check in preupgrade verification [\#2285](https://github.com/fission/fission/pull/2285) ([sanketsudake](https://github.com/sanketsudake))
+- chore: Update dependency opencontainers/runc v1.0.3 [\#2281](https://github.com/fission/fission/pull/2281) ([sanketsudake](https://github.com/sanketsudake))
+- Allow user to use existing bucket with same name via fission storage service [\#2275](https://github.com/fission/fission/pull/2275) ([YachikaRalhan](https://github.com/YachikaRalhan))
+- Retry pod choose if we get terminated or deleted pod from ready pod controller [\#2274](https://github.com/fission/fission/pull/2274) ([sanketsudake](https://github.com/sanketsudake))
+- Add support for generating CRD docs [\#2273](https://github.com/fission/fission/pull/2273) ([sanketsudake](https://github.com/sanketsudake))
+
 ## [v1.15.0](https://github.com/fission/fission/tree/v1.15.0) (2021-11-23)
 
 [Full Changelog](https://github.com/fission/fission/compare/v1.15.0-rc2...v1.15.0)
