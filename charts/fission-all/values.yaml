@@ -161,7 +161,6 @@ router:
   ## router resource utilization when under heavy workloads.
   ##
   displayAccessLog: false
-
   ## svcAnnotations is the annotations to be added to the service resource created for router.
   ##
   # svcAnnotations:
@@ -482,6 +481,37 @@ prometheus:
 ##
 canaryDeployment:
   enabled: false
+
+## Enable authentication for fission function invocation via Fission router
+##
+authentication:
+  ## set this flag to true if you need authentication
+  ## for all function invocations
+  ## default 'false'
+  ##
+  enabled: false
+  ## authUriPath defines authentication endpoint path
+  ## via router
+  ## default '/auth/login'
+  ##
+  authUriPath:
+  ## authUsername is used as a username for authentication
+  ## default 'admin'
+  ##
+  authUsername: admin
+  ## jwtSigningKey is the signing key used for
+  ## signing the JWT token
+  ##
+  jwtSigningKey: serverless
+  ## jwtExpiryTime is the JWT expiry time
+  ## in seconds
+  ## default '120'
+  ##
+  jwtExpiryTime: 
+  ## jwtIssuer is the issuer of JWT
+  ## default 'fission'
+  ##
+  jwtIssuer: fission
 
 ## Use the following flags to enable OpenTracing.
 ## Note: OpenTracing support will be removed in an upcoming release.

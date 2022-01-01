@@ -60,6 +60,8 @@ func MakeErrorFromHTTP(resp *http.Response) error {
 		errCode = ErrorRequestTimeout
 	case http.StatusTooManyRequests:
 		errCode = ErrorTooManyRequests
+	case http.StatusUnauthorized:
+		errCode = ErrorNotAuthorized
 	default:
 		errCode = ErrorInternal
 	}

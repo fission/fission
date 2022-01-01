@@ -22,6 +22,7 @@ require (
 	github.com/go-git/go-git/v5 v5.4.2
 	github.com/go-ini/ini v1.63.2 // indirect
 	github.com/go-openapi/spec v0.20.4
+	github.com/golang-jwt/jwt/v4 v4.2.0
 	github.com/gorilla/mux v1.8.0
 	github.com/gotestyourself/gotestyourself v2.2.0+incompatible // indirect
 	github.com/graymeta/stow v0.2.7

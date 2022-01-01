@@ -18,10 +18,16 @@ package router
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
+	"github.com/golang-jwt/jwt/v4"
 	"github.com/gorilla/mux"
 	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/types"
@@ -31,12 +37,15 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
 	executorClient "github.com/fission/fission/pkg/executor/client"
+	config "github.com/fission/fission/pkg/featureconfig"
 	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
 	"github.com/fission/fission/pkg/throttler"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/otel"
 	"github.com/fission/fission/pkg/utils/tracing"
 )
+
+var featureConfig *config.FeatureConfig
 
 // HTTPTriggerSet represents an HTTP trigger set
 type HTTPTriggerSet struct {
@@ -57,6 +66,20 @@ type HTTPTriggerSet struct {
 	isDebugEnv                 bool
 	svcAddrUpdateThrottler     *throttler.Throttler
 	unTapServiceTimeout        time.Duration
+}
+
+func init() {
+	_ = loadFeatureConfigmap()
+}
+
+func loadFeatureConfigmap() error {
+	var err error
+	featureConfig, err = config.GetFeatureConfig()
+	if err != nil {
+		fmt.Println(err)
+		return errors.New("error while loading feature configmap")
+	}
+	return nil
 }
 
 func makeHTTPTriggerSet(logger *zap.Logger, fmap *functionServiceMap, fissionClient *crd.FissionClient,
@@ -106,8 +129,90 @@ func defaultHomeHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+func createErrorResponse(errMsg string, statusCode int) []byte {
+	resp, _ := json.Marshal(map[string]interface{}{"statusCode": statusCode, "message": errMsg})
+	return resp
+}
+
 func routerHealthHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
+}
+
+func authLoginHandler(w http.ResponseWriter, r *http.Request) {
+
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write(createErrorResponse("Error while reading request body", http.StatusBadRequest))
+		return
+	}
+
+	var t fv1.AuthLogin
+
+	err = json.Unmarshal(body, &t)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write(createErrorResponse("Error while reading request body", http.StatusBadRequest))
+		return
+	}
+
+	username, ok := os.LookupEnv("AUTH_USERNAME")
+	if !ok || len(username) == 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write(createErrorResponse("Username not found or invalid", http.StatusBadRequest))
+		return
+	}
+
+	password, ok := os.LookupEnv("AUTH_PASSWORD")
+	if !ok || len(password) == 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write(createErrorResponse("Password not found or invalid", http.StatusBadRequest))
+		return
+	}
+
+	signingKey, ok := os.LookupEnv("JWT_SIGNING_KEY")
+	if !ok || len(signingKey) == 0 {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write(createErrorResponse("Internal server error occurred", http.StatusInternalServerError))
+		return
+	}
+
+	rat := &fv1.RouterAuthToken{}
+
+	if t.Username == username && t.Password == password {
+
+		claims := &jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(jwt.TimeFunc().Add(featureConfig.AuthConfig.JWTExpiryTime * time.Second)),
+			Issuer:    featureConfig.AuthConfig.JWTIssuer,
+			NotBefore: jwt.NewNumericDate(jwt.TimeFunc()),
+		}
+
+		token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+		ss, err := token.SignedString([]byte(signingKey))
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write(createErrorResponse("Internal server error occurred", http.StatusInternalServerError))
+			return
+		}
+		rat.AccessToken = ss
+		rat.TokenType = "Bearer"
+
+	} else {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write(createErrorResponse("Unauthorized: invalid username and/or password", http.StatusUnauthorized))
+		return
+	}
+
+	resp, err := json.Marshal(rat)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write(createErrorResponse("Internal server error occurred", http.StatusInternalServerError))
+		return
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	_, _ = w.Write(resp)
+
 }
 
 func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) *mux.Router {
@@ -199,7 +304,12 @@ func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) *mux.Router 
 				}
 				ts.logger.Debug("add prefix route for function", zap.String("route", prefix), zap.Any("function", fh.function), zap.Strings("methods", methods))
 			} else {
-				ht1 := muxRouter.Handle(prefix, handler)
+				var ht1 *mux.Route
+				if featureConfig.AuthConfig.IsEnabled {
+					ht1 = muxRouter.Handle(prefix, authMiddleware(handler))
+				} else {
+					ht1 = muxRouter.Handle(prefix, handler)
+				}
 				ht1.Methods(methods...)
 				if trigger.Spec.Host != "" {
 					ht1.Host(trigger.Spec.Host)
@@ -212,7 +322,12 @@ func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) *mux.Router 
 				ts.logger.Debug("add prefix and handler route for function", zap.String("route", prefix), zap.Any("function", fh.function), zap.Strings("methods", methods))
 			}
 		} else {
-			ht := muxRouter.Handle(trigger.Spec.RelativeURL, handler)
+			var ht *mux.Route
+			if featureConfig.AuthConfig.IsEnabled {
+				ht = muxRouter.Handle(trigger.Spec.RelativeURL, authMiddleware(handler))
+			} else {
+				ht = muxRouter.Handle(trigger.Spec.RelativeURL, handler)
+			}
 			ht.Methods(methods...)
 			if trigger.Spec.Host != "" {
 				ht.Host(trigger.Spec.Host)
@@ -259,15 +374,69 @@ func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) *mux.Router 
 		} else {
 			handler = otel.GetHandlerWithOTEL(http.HandlerFunc(fh.handler), internalRoute)
 		}
-		muxRouter.Handle(internalRoute, handler)
+
+		if featureConfig.AuthConfig.IsEnabled {
+			muxRouter.Handle(internalRoute, authMiddleware(handler))
+		} else {
+			muxRouter.Handle(internalRoute, handler)
+		}
 		muxRouter.PathPrefix(internalPrefixRoute).Handler(handler)
 		ts.logger.Debug("add internal handler and prefix route for function", zap.String("router", internalRoute), zap.Any("function", fn))
+	}
+
+	if featureConfig.AuthConfig.IsEnabled {
+
+		path := featureConfig.AuthConfig.AuthUriPath
+		if len(path) == 0 {
+			path = "/auth/login"
+		}
+
+		// Auth endpoint for the router.
+		muxRouter.HandleFunc(path, authLoginHandler).Methods("POST")
 	}
 
 	// Healthz endpoint for the router.
 	muxRouter.HandleFunc("/router-healthz", routerHealthHandler).Methods("GET")
 
 	return muxRouter
+}
+
+func authMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+		authHeader := strings.Split(r.Header.Get("Authorization"), "Bearer ")
+		if len(authHeader) != 2 || len(authHeader[1]) == 0 {
+			// malformed token
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write(createErrorResponse("Unauthorized: malformed Token", http.StatusUnauthorized))
+		} else {
+			jwtToken := authHeader[1]
+			token, err := jwt.Parse(jwtToken, func(token *jwt.Token) (interface{}, error) {
+				return []byte(os.Getenv("JWT_SIGNING_KEY")), nil
+			})
+
+			if token != nil && token.Valid {
+				// valid token
+				next.ServeHTTP(w, r)
+			} else if ve, ok := err.(*jwt.ValidationError); ok {
+				w.WriteHeader(http.StatusUnauthorized)
+				if ve.Errors&jwt.ValidationErrorMalformed != 0 {
+					// malformed token
+					_, _ = w.Write(createErrorResponse("Unauthorized: malformed Token", http.StatusUnauthorized))
+				} else if ve.Errors&(jwt.ValidationErrorExpired|jwt.ValidationErrorNotValidYet) != 0 {
+					// token is either expired or not active yet
+					_, _ = w.Write(createErrorResponse("Unauthorized: token is either expired or not active yet", http.StatusUnauthorized))
+				} else {
+					_, _ = w.Write(createErrorResponse(fmt.Sprintf("Unauthorized: %v", err.Error()), http.StatusUnauthorized))
+				}
+			} else {
+				w.WriteHeader(http.StatusUnauthorized)
+				_, _ = w.Write(createErrorResponse("Unauthorized", http.StatusUnauthorized))
+			}
+
+		}
+
+	})
 }
 
 func (ts *HTTPTriggerSet) updateTriggerStatusFailed(ht *fv1.HTTPTrigger, err error) {

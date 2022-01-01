@@ -31,6 +31,13 @@ canary:
   prometheusSvc: {{ .Values.prometheus.serviceEndpoint | default "" | quote }}
   {{- end }}
   {{- printf "\n" -}}
+auth:
+  enabled: {{ .Values.authentication.enabled | default false }}
+  {{- if .Values.authentication.enabled }}
+  authUriPath: {{ .Values.authentication.authUriPath | default "/auth/login" | quote}}
+  jwtExpiryTime: {{ .Values.authentication.jwtExpiryTime | default 120 }}
+  jwtIssuer: {{ .Values.authentication.jwtIssuer | default "fission" | quote }}
+  {{- end }}
 {{- end -}}
 
 {{/*
