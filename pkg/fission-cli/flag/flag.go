@@ -170,6 +170,7 @@ var (
 	EnvVersion                = Flag{Type: Int, Name: flagkey.EnvVersion, Usage: "Environment API version (1 means v1 interface)", DefaultValue: 1}
 	EnvImagePullSecret        = Flag{Type: String, Name: flagkey.EnvImagePullSecret, Usage: "Secret for Kubernetes to pull an image from a private registry"}
 	EnvExecutorType           = Flag{Type: String, Name: flagkey.EnvExecutorType, Usage: "Executor type of pod in environment; one of 'poolmgr', 'newdeploy', 'container'"}
+	EnvIgnoreNotFound         = Flag{Type: Bool, Name: flagkey.EnvIgnoreNotFound, Usage: "Skips the deletion of environment if it's not found", DefaultValue: false}
 
 	KwName      = Flag{Type: String, Name: flagkey.KwName, Usage: "Watch name"}
 	KwFnName    = Flag{Type: String, Name: flagkey.KwFnName, Usage: "Function name"}

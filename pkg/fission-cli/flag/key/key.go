@@ -121,6 +121,7 @@ const (
 	EnvVersion         = "version"
 	EnvImagePullSecret = "imagepullsecret"
 	EnvExecutorType    = "executortype"
+	EnvIgnoreNotFound  = "ignoreNotFound"
 
 	KwName      = resourceName
 	KwFnName    = "function"
