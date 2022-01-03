@@ -24,6 +24,7 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
+	"github.com/pkg/errors"
 )
 
 type DeleteSubCommand struct {
@@ -42,12 +43,11 @@ func (opts *DeleteSubCommand) do(input cli.Input) error {
 
 	err := opts.Client().V1().Environment().Delete(m)
 	if err != nil {
-		fmt.Print(input.Bool(flagkey.EnvIgnoreNotFound))
 		if input.Bool(flagkey.EnvIgnoreNotFound) {
 			return nil
-		} /*else {
+		} else {
 			return errors.Wrap(err, "error deleting environment")
-		}*/
+		}
 	}
 
 	fmt.Printf("environment '%v' deleted\n", m.Name)
