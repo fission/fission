@@ -19,7 +19,6 @@ package environment
 import (
 	"fmt"
 
-	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
@@ -42,11 +41,13 @@ func (opts *DeleteSubCommand) do(input cli.Input) error {
 	}
 
 	err := opts.Client().V1().Environment().Delete(m)
-	if err != nil && input.Int(flagkey.EnvIgnoreNotFound) == 1 {
-		return nil
-	}
 	if err != nil {
-		return errors.Wrap(err, "error deleting environment")
+		fmt.Print(input.Bool(flagkey.EnvIgnoreNotFound))
+		if input.Bool(flagkey.EnvIgnoreNotFound) {
+			return nil
+		} /*else {
+			return errors.Wrap(err, "error deleting environment")
+		}*/
 	}
 
 	fmt.Printf("environment '%v' deleted\n", m.Name)
