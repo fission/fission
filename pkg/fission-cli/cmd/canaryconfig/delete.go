@@ -43,7 +43,10 @@ func (opts *DeleteSubCommand) run(input cli.Input) error {
 
 	err := opts.Client().V1().CanaryConfig().Delete(m)
 	if err != nil {
-		return errors.Wrap(err, "error deleting canary config")
+		if !input.Bool(flagkey.IgnoreNotFound) {
+			return errors.Wrap(err, "error deleting canary config")
+		}
+		return nil
 	}
 
 	fmt.Printf("canaryconfig '%v.%v' deleted\n", m.Name, m.Namespace)

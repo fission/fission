@@ -65,7 +65,7 @@ func Commands() *cobra.Command {
 	}
 	wrapper.SetFlags(deleteCmd, flag.FlagSet{
 		Required: []flag.Flag{flag.CanaryName},
-		Optional: []flag.Flag{flag.NamespaceCanary},
+		Optional: []flag.Flag{flag.NamespaceCanary, flag.IgnoreNotFound},
 	})
 
 	listCmd := &cobra.Command{
