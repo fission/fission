@@ -43,7 +43,10 @@ func (opts *DeleteSubCommand) do(input cli.Input) error {
 
 	err := opts.Client().V1().Function().Delete(m)
 	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("delete function '%v'", m.Name))
+		if !input.Bool(flagkey.IgnoreNotFound) {
+			return errors.Wrap(err, fmt.Sprintf("delete function '%v'", m.Name))
+		}
+		return nil
 	}
 
 	fmt.Printf("function '%v' deleted\n", m.Name)

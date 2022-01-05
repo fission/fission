@@ -110,7 +110,7 @@ func Commands() *cobra.Command {
 	}
 	wrapper.SetFlags(deleteCmd, flag.FlagSet{
 		Required: []flag.Flag{flag.FnName},
-		Optional: []flag.Flag{flag.NamespaceFunction},
+		Optional: []flag.Flag{flag.NamespaceFunction, flag.IgnoreNotFound},
 	})
 
 	listCmd := &cobra.Command{
