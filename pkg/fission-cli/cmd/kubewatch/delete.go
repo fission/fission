@@ -57,7 +57,10 @@ func (opts *DeleteSubCommand) run(input cli.Input) error {
 		Namespace: opts.namespace,
 	})
 	if err != nil {
-		return errors.Wrap(err, "error deleting kubewatch")
+		if !input.Bool(flagkey.IgnoreNotFound) {
+			return errors.Wrap(err, "error deleting kubewatch")
+		}
+		return nil
 	}
 
 	fmt.Printf("trigger '%v' deleted\n", opts.name)
