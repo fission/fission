@@ -55,7 +55,10 @@ func (opts *DeleteSubCommand) complete(input cli.Input) error {
 func (opts *DeleteSubCommand) run(input cli.Input) error {
 	err := opts.Client().V1().MessageQueueTrigger().Delete(opts.metadata)
 	if err != nil {
-		return errors.Wrap(err, "error deleting message queue trigger")
+		if !input.Bool(flagkey.IgnoreNotFound) {
+			return errors.Wrap(err, "error deleting message queue trigger")
+		}
+		return nil
 	}
 
 	fmt.Printf("trigger '%v' deleted\n", opts.metadata.Name)

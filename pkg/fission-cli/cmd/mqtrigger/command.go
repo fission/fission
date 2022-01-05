@@ -60,7 +60,7 @@ func Commands() *cobra.Command {
 	}
 	wrapper.SetFlags(deleteCmd, flag.FlagSet{
 		Required: []flag.Flag{flag.MqtName},
-		Optional: []flag.Flag{flag.NamespaceTrigger},
+		Optional: []flag.Flag{flag.NamespaceTrigger, flag.IgnoreNotFound},
 	})
 
 	listCmd := &cobra.Command{
