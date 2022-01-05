@@ -68,7 +68,10 @@ func (opts *DeleteSubCommand) run(input cli.Input) error {
 			Name:      opts.name,
 		})
 		if err != nil {
-			return errors.Wrap(err, "find package")
+			if !input.Bool(flagkey.IgnoreNotFound) {
+				return errors.Wrap(err, "find package")
+			}
+			return nil
 		}
 
 		fnList, err := GetFunctionsByPackage(opts.Client(), opts.name, opts.namespace)
