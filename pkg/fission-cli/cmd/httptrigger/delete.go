@@ -63,7 +63,10 @@ func (opts *DeleteSubCommand) complete(input cli.Input) error {
 func (opts *DeleteSubCommand) run(input cli.Input) error {
 	triggers, err := opts.Client().V1().HTTPTrigger().List(opts.namespace)
 	if err != nil {
-		return errors.Wrap(err, "error getting HTTP trigger list")
+		if !input.Bool(flagkey.IgnoreNotFound) {
+			return errors.Wrap(err, "error getting HTTP trigger list")
+		}
+		return nil
 	}
 
 	var triggersToDelete []string
@@ -94,7 +97,10 @@ func (opts *DeleteSubCommand) run(input cli.Input) error {
 	}
 
 	if errs.ErrorOrNil() != nil {
-		return errors.Wrap(errs.ErrorOrNil(), "error deleting trigger(s)")
+		if !input.Bool(flagkey.IgnoreNotFound) {
+			return errors.Wrap(errs.ErrorOrNil(), "error deleting trigger(s)")
+		}
+		return nil
 	}
 
 	return nil
