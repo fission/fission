@@ -25,6 +25,7 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
+	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type DeleteSubCommand struct {
@@ -55,6 +56,9 @@ func (opts *DeleteSubCommand) complete(input cli.Input) error {
 func (opts *DeleteSubCommand) run(input cli.Input) error {
 	err := opts.Client().V1().MessageQueueTrigger().Delete(opts.metadata)
 	if err != nil {
+		if input.Bool(flagkey.IgnoreNotFound) && util.IsNotFound(err) {
+			return nil
+		}
 		return errors.Wrap(err, "error deleting message queue trigger")
 	}
 

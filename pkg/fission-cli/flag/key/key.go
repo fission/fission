@@ -29,6 +29,8 @@ const (
 	Labels     = "labels"
 	Annotation = "annotation"
 
+	IgnoreNotFound = "ignorenotfound"
+
 	NamespaceFunction    = "fnNamespace"
 	NamespaceEnvironment = "envNamespace"
 	NamespacePackage     = "pkgNamespace"
