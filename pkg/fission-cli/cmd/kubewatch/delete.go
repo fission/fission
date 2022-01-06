@@ -25,6 +25,7 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
+	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type DeleteSubCommand struct {
@@ -57,10 +58,10 @@ func (opts *DeleteSubCommand) run(input cli.Input) error {
 		Namespace: opts.namespace,
 	})
 	if err != nil {
-		if !input.Bool(flagkey.IgnoreNotFound) {
-			return errors.Wrap(err, "error deleting kubewatch")
+		if input.Bool(flagkey.IgnoreNotFound) && util.IsNotFound(err) {
+			return nil
 		}
-		return nil
+		return errors.Wrap(err, "error deleting kubewatch")
 	}
 
 	fmt.Printf("trigger '%v' deleted\n", opts.name)
