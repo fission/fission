@@ -76,7 +76,7 @@ var (
 
 	KubeContext = Flag{Type: String, Name: flagkey.KubeContext, Usage: "Kubernetes context to be used for the execution of Fission commands", DefaultValue: ""}
 
-	IgnoreNotFound = Flag{Type: Bool, Name: flagkey.IgnoreNotFound, Usage: "Avoid error if Fission resource not found during deletion", DefaultValue: false}
+	IgnoreNotFound = Flag{Type: Bool, Name: flagkey.IgnoreNotFound, Usage: "Treat \"resource not found\" as a successful delete.", DefaultValue: false}
 
 	Labels     = Flag{Type: String, Name: flagkey.Labels, Usage: "Comma separated labels to apply to the function. E.g. --labels=\"environment=dev,application=analytics\""}
 	Annotation = Flag{Type: StringSlice, Name: flagkey.Annotation, Usage: "Annotation to apply to the function. To mention multiple annotations --annotation=\"abc.com/team=dev\" --annotation=\"foo=bar\""}
