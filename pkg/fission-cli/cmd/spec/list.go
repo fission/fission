@@ -53,7 +53,7 @@ func (opts *ListSubCommand) run(input cli.Input) error {
 		// get specdir, specignore and read the deployID
 		specDir := util.GetSpecDir(input)
 		specIgnore := util.GetSpecIgnore(input)
-		fr, err := ReadSpecs(specDir, specIgnore)
+		fr, err := ReadSpecs(specDir, specIgnore, false)
 		if err != nil {
 			return errors.Wrap(err, "error reading specs")
 		}

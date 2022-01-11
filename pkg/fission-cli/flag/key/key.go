@@ -144,16 +144,17 @@ const (
 	PkgStatus         = "status"
 	PkgOrphan         = "orphan"
 
-	SpecSave     = "spec"
-	SpecDir      = "specdir"
-	SpecName     = resourceName
-	SpecDeployID = "deployid"
-	SpecWait     = "wait"
-	SpecWatch    = "watch"
-	SpecDelete   = "delete"
-	SpecDry      = "dry"
-	SpecValidate = "validation"
-	SpecIgnore   = "specignore"
+	SpecSave             = "spec"
+	SpecDir              = "specdir"
+	SpecName             = resourceName
+	SpecDeployID         = "deployid"
+	SpecWait             = "wait"
+	SpecWatch            = "watch"
+	SpecDelete           = "delete"
+	SpecDry              = "dry"
+	SpecValidate         = "validation"
+	SpecIgnore           = "specignore"
+	SpecApplyCommitLabel = "commitlabel"
 
 	SupportOutput = Output
 	SupportNoZip  = "nozip"

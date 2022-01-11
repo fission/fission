@@ -19,4 +19,5 @@ package util
 // fission-cli options
 const (
 	SPEC_IGNORE_FILE = ".specignore"
+	COMMIT_LABEL     = "commit"
 )
