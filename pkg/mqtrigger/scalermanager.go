@@ -104,7 +104,7 @@ func mqTriggerEventHandlers(logger *zap.Logger, kubeClient *kubernetes.Clientset
 							logger.Error("Failed to delete Authentication Trigger", zap.Error(err))
 						}
 					}
-					if err = deleteDeployment(mqt.ObjectMeta.Name, kubeClient); err != nil {
+					if err = deleteDeployment(mqt.ObjectMeta.Name, mqt.ObjectMeta.Namespace, kubeClient); err != nil {
 						logger.Error("Failed to delete Deployment", zap.Error(err))
 					}
 				}
@@ -453,7 +453,7 @@ func createDeployment(mqt *fv1.MessageQueueTrigger, routerURL string, kubeClient
 	if err != nil {
 		return err
 	}
-	_, err = kubeClient.AppsV1().Deployments(apiv1.NamespaceDefault).Create(context.TODO(), deployment, metav1.CreateOptions{})
+	_, err = kubeClient.AppsV1().Deployments(mqt.ObjectMeta.Namespace).Create(context.TODO(), deployment, metav1.CreateOptions{})
 	if err != nil {
 		return err
 	}
@@ -465,16 +465,16 @@ func updateDeployment(mqt *fv1.MessageQueueTrigger, routerURL string, kubeClient
 	if err != nil {
 		return err
 	}
-	_, err = kubeClient.AppsV1().Deployments(apiv1.NamespaceDefault).Update(context.TODO(), deployment, metav1.UpdateOptions{})
+	_, err = kubeClient.AppsV1().Deployments(mqt.ObjectMeta.Namespace).Update(context.TODO(), deployment, metav1.UpdateOptions{})
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func deleteDeployment(name string, kubeClient *kubernetes.Clientset) error {
+func deleteDeployment(name string, namespace string, kubeClient *kubernetes.Clientset) error {
 	deletePolicy := metav1.DeletePropagationForeground
-	if err := kubeClient.AppsV1().Deployments(apiv1.NamespaceDefault).Delete(context.TODO(), name, metav1.DeleteOptions{
+	if err := kubeClient.AppsV1().Deployments(namespace).Delete(context.TODO(), name, metav1.DeleteOptions{
 		PropagationPolicy: &deletePolicy,
 	}); err != nil {
 		return err
