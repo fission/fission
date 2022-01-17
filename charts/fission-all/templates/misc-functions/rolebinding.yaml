@@ -1,12 +1,12 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: fission-fetcher
+  name: {{ .Release.Name }}-fission-fetcher
   namespace: default
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: fission-fetcher
+  name: {{ .Release.Name }}-fission-fetcher
 subjects:
   - kind: ServiceAccount
     name: fission-fetcher
@@ -16,12 +16,12 @@ subjects:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: fission-builder
+  name: {{ .Release.Name }}-fission-builder
   namespace: default
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: fission-builder
+  name: {{ .Release.Name }}-fission-builder
 subjects:
   - kind: ServiceAccount
     name: fission-builder
