@@ -60,7 +60,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   namespace: {{ .Values.functionNamespace }}
-  name: event-fetcher
+  name: {{ .Release.Name }}-event-fetcher
 rules:
   - apiGroups: [""] # "" indicates the core API group
     resources: ["pods"]
