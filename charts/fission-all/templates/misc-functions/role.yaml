@@ -2,7 +2,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: {{ .Release.Name }}-fission-fetcher
-  namespace: default
+  namespace: {{ .Values.defaultNamespace }}
 rules:
   - apiGroups:
       - ""
@@ -39,7 +39,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: {{ .Release.Name }}-fission-builder
-  namespace: default
+  namespace: {{ .Values.defaultNamespace }}
 rules:
   - apiGroups:
       - fission.io
