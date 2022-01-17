@@ -140,7 +140,7 @@ func (deploy *NewDeploy) setupRBACObjs(ctx context.Context, deployNamespace stri
 	}
 
 	// create a cluster role binding for the fetcher SA, if not already created, granting access to do a get on packages in any ns
-	err = utils.SetupRoleBinding(ctx, deploy.logger, deploy.kubernetesClient, fv1.PackageGetterRB, fn.Spec.Package.PackageRef.Namespace, fv1.PackageGetterCR, fv1.ClusterRole, fv1.FissionFetcherSA, deployNamespace)
+	err = utils.SetupRoleBinding(ctx, deploy.logger, deploy.kubernetesClient, fv1.PackageGetterRB, fn.Spec.Package.PackageRef.Namespace, utils.GetPackageGetterCR(), fv1.ClusterRole, fv1.FissionFetcherSA, deployNamespace)
 	if err != nil {
 		deploy.logger.Error("error creating role binding for function",
 			zap.Error(err),
@@ -151,7 +151,7 @@ func (deploy *NewDeploy) setupRBACObjs(ctx context.Context, deployNamespace stri
 	}
 
 	// create rolebinding in function namespace for fetcherSA.envNamespace to be able to get secrets and configmaps
-	err = utils.SetupRoleBinding(ctx, deploy.logger, deploy.kubernetesClient, fv1.SecretConfigMapGetterRB, fn.ObjectMeta.Namespace, fv1.SecretConfigMapGetterCR, fv1.ClusterRole, fv1.FissionFetcherSA, deployNamespace)
+	err = utils.SetupRoleBinding(ctx, deploy.logger, deploy.kubernetesClient, fv1.SecretConfigMapGetterRB, fn.ObjectMeta.Namespace, utils.GetSecretConfigMapGetterCR(), fv1.ClusterRole, fv1.FissionFetcherSA, deployNamespace)
 	if err != nil {
 		deploy.logger.Error("error creating role binding for function",
 			zap.Error(err),

@@ -19,6 +19,7 @@ package utils
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"go.uber.org/zap"
 
@@ -294,4 +295,20 @@ func DeleteRoleBinding(ctx context.Context, k8sClient *kubernetes.Clientset, rol
 
 func MakeSAMapKey(saName, saNamespace string) string {
 	return fmt.Sprintf("%s-%s", saName, saNamespace)
+}
+
+func GetSecretConfigMapGetterCR() string {
+	releaseName := os.Getenv("HELM_RELEASE_NAME")
+	if len(releaseName) > 0 {
+		return fmt.Sprintf("%s-secret-configmap-getter", releaseName)
+	}
+	return "secret-configmap-getter"
+}
+
+func GetPackageGetterCR() string {
+	releaseName := os.Getenv("HELM_RELEASE_NAME")
+	if len(releaseName) > 0 {
+		return fmt.Sprintf("%s-package-getter", releaseName)
+	}
+	return "package-getter"
 }
