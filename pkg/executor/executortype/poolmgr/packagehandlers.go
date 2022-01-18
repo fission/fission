@@ -47,7 +47,7 @@ func PackageEventHandlers(logger *zap.Logger, kubernetesClient *kubernetes.Clien
 			ctx := context.Background()
 			// here, we return if we hit an error during rolebinding setup. this is because this rolebinding is mandatory for
 			// every function's package to be loaded into its env. without that, there's no point to move forward.
-			err := utils.SetupRoleBinding(ctx, logger, kubernetesClient, fv1.PackageGetterRB, pkg.ObjectMeta.Namespace, fv1.PackageGetterCR, fv1.ClusterRole, fv1.FissionFetcherSA, envNs)
+			err := utils.SetupRoleBinding(ctx, logger, kubernetesClient, fv1.PackageGetterRB, pkg.ObjectMeta.Namespace, utils.GetPackageGetterCR(), fv1.ClusterRole, fv1.FissionFetcherSA, envNs)
 			if err != nil {
 				logger.Error("error creating rolebinding for package",
 					zap.Error(err),
@@ -83,7 +83,7 @@ func PackageEventHandlers(logger *zap.Logger, kubernetesClient *kubernetes.Clien
 
 				ctx := context.Background()
 				err := utils.SetupRoleBinding(ctx, logger, kubernetesClient, fv1.PackageGetterRB,
-					newPkg.ObjectMeta.Namespace, fv1.PackageGetterCR, fv1.ClusterRole,
+					newPkg.ObjectMeta.Namespace, utils.GetPackageGetterCR(), fv1.ClusterRole,
 					fv1.FissionFetcherSA, envNs)
 				if err != nil {
 					logger.Error("error updating rolebinding for package",

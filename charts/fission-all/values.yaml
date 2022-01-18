@@ -68,6 +68,10 @@ functionNamespace: fission-function
 ##
 builderNamespace: fission-builder
 
+## defaultNamespace represents the default namespace in Kubernetes.
+##
+defaultNamespace: default
+
 ## createNamespace decides to create namespaces by the chart.
 ## If set to true, functionNamespace and builderNamespace namespaces mentioned above will be created by the chart.
 ## Set to false if you want to create the namespaces manually.
