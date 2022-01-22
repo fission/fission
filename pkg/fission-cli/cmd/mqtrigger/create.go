@@ -146,6 +146,11 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 			console.Warn(fmt.Sprintf("MessageQueueTrigger '%v' references unknown Function '%v', please create it before applying spec",
 				mqtName, fnName))
 		}
+	} else {
+		err = util.CheckFunctionExistence(opts.Client(), []string{fnName}, fnNamespace)
+		if err != nil {
+			return err
+		}
 	}
 
 	opts.trigger = &fv1.MessageQueueTrigger{
