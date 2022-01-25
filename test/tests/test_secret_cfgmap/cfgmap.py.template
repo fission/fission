@@ -1,5 +1,0 @@
-def main():
-	path = "/configs/default/{{ FN_CFGMAP }}/TEST_KEY"
-	f = open(path, "r")
-	data = f.read()
-	return data, 200
