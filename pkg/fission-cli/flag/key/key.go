@@ -76,6 +76,7 @@ const (
 	FnRequestsPerPod        = "requestsperpod"
 	FnOnceOnly              = "onceonly"
 	FnSubPath               = "subpath"
+	FnGracePeriod           = "graceperiod"
 
 	HtName              = resourceName
 	HtMethod            = "method"

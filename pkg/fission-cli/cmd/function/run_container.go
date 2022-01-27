@@ -100,6 +100,11 @@ func (opts *RunContainerSubCommand) complete(input cli.Input) error {
 		return err
 	}
 
+	fnGracePeriod := input.Int64(flagkey.FnGracePeriod)
+	if fnGracePeriod < 0 {
+		console.Warn("grace period must be a non-negative integer, using default value (6 mins)")
+	}
+
 	var imageName string
 	var port int
 	var command, args string
@@ -205,7 +210,8 @@ func (opts *RunContainerSubCommand) complete(input cli.Input) error {
 	}
 
 	opts.function.Spec.PodSpec = &apiv1.PodSpec{
-		Containers: []apiv1.Container{*container},
+		Containers:                    []apiv1.Container{*container},
+		TerminationGracePeriodSeconds: &fnGracePeriod,
 	}
 
 	return nil
