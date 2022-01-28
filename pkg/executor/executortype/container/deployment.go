@@ -172,6 +172,9 @@ func (cn *Container) getDeploymentSpec(ctx context.Context, fn *fv1.Function, ta
 	}
 
 	gracePeriodSeconds := int64(6 * 60)
+	if *fn.Spec.PodSpec.TerminationGracePeriodSeconds >= 0 {
+		gracePeriodSeconds = *fn.Spec.PodSpec.TerminationGracePeriodSeconds
+	}
 
 	podAnnotations := make(map[string]string)
 
