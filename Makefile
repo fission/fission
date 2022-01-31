@@ -80,7 +80,7 @@ generate-swagger-doc:
 	@./hack/update-swagger-docs.sh
 
 generate-cli-docs:
-	go run tools/cmd-docs/main.go -o "../fission.io/content/en/docs/fission-cli"
+	go run tools/cmd-docs/main.go -o "../fission.io/content/en/docs/reference/fission-cli"
 
 generate-crd-ref-docs:
 	# crd-ref-docs: https://github.com/elastic/crd-ref-docs
