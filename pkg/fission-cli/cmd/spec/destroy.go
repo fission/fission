@@ -53,7 +53,7 @@ func (opts *DestroySubCommand) run(input cli.Input) error {
 	emptyFr.DeploymentConfig = fr.DeploymentConfig
 
 	// "apply" the empty state
-	_, _, err = applyResources(opts.Client(), specDir, &emptyFr, true)
+	_, _, err = applyResources(opts.Client(), specDir, &emptyFr, true, input)
 	if err != nil {
 		return errors.Wrap(err, "error deleting resources")
 	}

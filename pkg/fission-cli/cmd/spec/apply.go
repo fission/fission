@@ -130,7 +130,7 @@ func (opts *ApplySubCommand) run(input cli.Input) error {
 		}
 
 		// make changes to the cluster based on the specs
-		pkgMetas, as, err := applyResources(opts.Client(), specDir, fr, deleteResources)
+		pkgMetas, as, err := applyResources(opts.Client(), specDir, fr, deleteResources, input)
 		if err != nil {
 			return errors.Wrap(err, "error applying specs")
 		}
@@ -357,7 +357,7 @@ func applyArchives(fclient client.Interface, specDir string, fr *FissionResource
 }
 
 // applyResources applies the given set of fission resources.
-func applyResources(fclient client.Interface, specDir string, fr *FissionResources, delete bool) (map[string]metav1.ObjectMeta, map[string]ResourceApplyStatus, error) {
+func applyResources(fclient client.Interface, specDir string, fr *FissionResources, delete bool, input cli.Input) (map[string]metav1.ObjectMeta, map[string]ResourceApplyStatus, error) {
 
 	applyStatus := make(map[string]ResourceApplyStatus)
 
@@ -367,7 +367,7 @@ func applyResources(fclient client.Interface, specDir string, fr *FissionResourc
 		return nil, nil, err
 	}
 
-	_, ras, err := applyEnvironments(fclient, fr, delete)
+	_, ras, err := applyEnvironments(fclient, fr, delete, input)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "environment apply failed")
 	}
@@ -770,7 +770,7 @@ func applyFunctions(fclient client.Interface, fr *FissionResources, delete bool)
 	return metadataMap, &ras, nil
 }
 
-func applyEnvironments(fclient client.Interface, fr *FissionResources, delete bool) (map[string]metav1.ObjectMeta, *ResourceApplyStatus, error) {
+func applyEnvironments(fclient client.Interface, fr *FissionResources, delete bool, input cli.Input) (map[string]metav1.ObjectMeta, *ResourceApplyStatus, error) {
 	// get list
 	allObjs, err := fclient.V1().Environment().List(metav1.NamespaceAll)
 	if err != nil {
@@ -779,10 +779,14 @@ func applyEnvironments(fclient client.Interface, fr *FissionResources, delete bo
 
 	// filter
 	objs := make([]fv1.Environment, 0)
-	for _, o := range allObjs {
-		if hasDeploymentConfig(&o.ObjectMeta, fr) {
-			objs = append(objs, o)
+	if !input.Bool(flagkey.SpecAllowConflicts) {
+		for _, o := range allObjs {
+			if hasDeploymentConfig(&o.ObjectMeta, fr) {
+				objs = append(objs, o)
+			}
 		}
+	} else {
+		objs = allObjs
 	}
 
 	// index
@@ -807,6 +811,7 @@ func applyEnvironments(fclient client.Interface, fr *FissionResources, delete bo
 
 		// exists?
 		existingObj, ok := existent[mapKey(&o.ObjectMeta)]
+
 		if ok {
 			// ok, a resource with the same name exists, is it the same?
 			if isObjectMetaEqual(existingObj.ObjectMeta, o.ObjectMeta) && reflect.DeepEqual(existingObj.Spec, o.Spec) {
@@ -828,9 +833,10 @@ func applyEnvironments(fclient client.Interface, fr *FissionResources, delete bo
 			newmeta, err := fclient.V1().Environment().Create(&o)
 			if err != nil {
 				return nil, nil, err
+			} else {
+				ras.Created = append(ras.Created, newmeta)
+				metadataMap[mapKey(&o.ObjectMeta)] = *newmeta
 			}
-			ras.Created = append(ras.Created, newmeta)
-			metadataMap[mapKey(&o.ObjectMeta)] = *newmeta
 		}
 	}
 
