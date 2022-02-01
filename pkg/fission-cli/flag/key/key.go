@@ -22,6 +22,8 @@ const (
 	ClientOnly  = "client-only"
 	KubeContext = "kube-context"
 
+	PreCheckOnly = "pre"
+
 	resourceName = "name"
 	force        = "force"
 	Output       = "output"

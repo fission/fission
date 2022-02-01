@@ -10,6 +10,7 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/driver/cobra/helptemplate"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/cmd/canaryconfig"
+	"github.com/fission/fission/pkg/fission-cli/cmd/check"
 	"github.com/fission/fission/pkg/fission-cli/cmd/environment"
 	"github.com/fission/fission/pkg/fission-cli/cmd/function"
 	"github.com/fission/fission/pkg/fission-cli/cmd/httptrigger"
@@ -21,6 +22,7 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cmd/timetrigger"
 	"github.com/fission/fission/pkg/fission-cli/cmd/version"
 	"github.com/fission/fission/pkg/fission-cli/console"
+
 	"github.com/fission/fission/pkg/fission-cli/flag"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
@@ -81,7 +83,7 @@ func App() *cobra.Command {
 	groups = append(groups, helptemplate.CreateCmdGroup("Trigger Commands", httptrigger.Commands(), mqtrigger.Commands(), timetrigger.Commands(), kubewatch.Commands()))
 	groups = append(groups, helptemplate.CreateCmdGroup("Deploy Strategies Commands", canaryconfig.Commands()))
 	groups = append(groups, helptemplate.CreateCmdGroup("Declarative Application Commands", spec.Commands()))
-	groups = append(groups, helptemplate.CreateCmdGroup("Other Commands", support.Commands(), version.Commands()))
+	groups = append(groups, helptemplate.CreateCmdGroup("Other Commands", support.Commands(), version.Commands(), check.Commands()))
 	groups.Add(rootCmd)
 
 	flagExposer := helptemplate.ActsAsRootCommand(rootCmd, nil, groups...)
