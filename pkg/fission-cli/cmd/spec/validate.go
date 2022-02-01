@@ -72,7 +72,7 @@ func (opts *ValidateSubCommand) run(input cli.Input) error {
 		return errors.Wrap(err, "error validating specs")
 	}
 
-	err = resourceConflictCheck(opts.Client(), fr, input)
+	err = resourceConflictCheck(opts.Client(), fr, input.Bool(flagkey.SpecAllowConflicts))
 	if err != nil {
 		return errors.Wrap(err, "name conflict error")
 	}
@@ -90,7 +90,7 @@ func (opts *ValidateSubCommand) run(input cli.Input) error {
 // the same name is already present in the same cluster namespace.
 // If a same name resource exists in the same namespace, a name
 // conflict error will be returned.
-func resourceConflictCheck(c client.Interface, fr *FissionResources, input cli.Input) error {
+func resourceConflictCheck(c client.Interface, fr *FissionResources, specAllowConflicts bool) error {
 	deployUID := fr.DeploymentConfig.UID
 	result := utils.MultiErrorWithFormat()
 
@@ -100,7 +100,7 @@ func resourceConflictCheck(c client.Interface, fr *FissionResources, input cli.I
 	}
 	for _, sObj := range fr.Functions {
 		for _, cObj := range fnList {
-			if err := isResourceConflicts(deployUID, &sObj, &cObj, input); err != nil {
+			if err := isResourceConflicts(deployUID, &sObj, &cObj, specAllowConflicts); err != nil {
 				result = multierror.Append(result, err)
 				break
 			}
@@ -113,7 +113,7 @@ func resourceConflictCheck(c client.Interface, fr *FissionResources, input cli.I
 	}
 	for _, sObj := range fr.Environments {
 		for _, cObj := range envList {
-			if err := isResourceConflicts(deployUID, &sObj, &cObj, input); err != nil {
+			if err := isResourceConflicts(deployUID, &sObj, &cObj, specAllowConflicts); err != nil {
 				result = multierror.Append(result, err)
 				break
 			}
@@ -126,7 +126,7 @@ func resourceConflictCheck(c client.Interface, fr *FissionResources, input cli.I
 	}
 	for _, sObj := range fr.Packages {
 		for _, cObj := range pkgList {
-			if err := isResourceConflicts(deployUID, &sObj, &cObj, input); err != nil {
+			if err := isResourceConflicts(deployUID, &sObj, &cObj, specAllowConflicts); err != nil {
 				result = multierror.Append(result, err)
 				break
 			}
@@ -139,7 +139,7 @@ func resourceConflictCheck(c client.Interface, fr *FissionResources, input cli.I
 	}
 	for _, sObj := range fr.HttpTriggers {
 		for _, cObj := range httptriggerList {
-			if err := isResourceConflicts(deployUID, &sObj, &cObj, input); err != nil {
+			if err := isResourceConflicts(deployUID, &sObj, &cObj, specAllowConflicts); err != nil {
 				result = multierror.Append(result, err)
 				break
 			}
@@ -152,7 +152,7 @@ func resourceConflictCheck(c client.Interface, fr *FissionResources, input cli.I
 	}
 	for _, sObj := range fr.MessageQueueTriggers {
 		for _, cObj := range mqtriggerList {
-			if err := isResourceConflicts(deployUID, &sObj, &cObj, input); err != nil {
+			if err := isResourceConflicts(deployUID, &sObj, &cObj, specAllowConflicts); err != nil {
 				result = multierror.Append(result, err)
 				break
 			}
@@ -165,7 +165,7 @@ func resourceConflictCheck(c client.Interface, fr *FissionResources, input cli.I
 	}
 	for _, sObj := range fr.TimeTriggers {
 		for _, cObj := range timetriggerList {
-			if err := isResourceConflicts(deployUID, &sObj, &cObj, input); err != nil {
+			if err := isResourceConflicts(deployUID, &sObj, &cObj, specAllowConflicts); err != nil {
 				result = multierror.Append(result, err)
 				break
 			}
@@ -178,7 +178,7 @@ func resourceConflictCheck(c client.Interface, fr *FissionResources, input cli.I
 	}
 	for _, sObj := range fr.KubernetesWatchTriggers {
 		for _, cObj := range kubewatchtriggerList {
-			if err := isResourceConflicts(deployUID, &sObj, &cObj, input); err != nil {
+			if err := isResourceConflicts(deployUID, &sObj, &cObj, specAllowConflicts); err != nil {
 				result = multierror.Append(result, err)
 				break
 			}
@@ -188,11 +188,11 @@ func resourceConflictCheck(c client.Interface, fr *FissionResources, input cli.I
 	return result.ErrorOrNil()
 }
 
-func isResourceConflicts(deployUID string, specObj fv1.MetadataAccessor, clusterObj fv1.MetadataAccessor, input cli.Input) error {
+func isResourceConflicts(deployUID string, specObj fv1.MetadataAccessor, clusterObj fv1.MetadataAccessor, specAllowConflicts bool) error {
 	if specObj.GetObjectMeta().GetName() == clusterObj.GetObjectMeta().GetName() &&
 		specObj.GetObjectMeta().GetNamespace() == clusterObj.GetObjectMeta().GetNamespace() &&
 		deployUID != clusterObj.GetObjectMeta().GetAnnotations()[FISSION_DEPLOYMENT_UID_KEY] {
-		if input.Bool(flagkey.SpecAllowConflicts) {
+		if specAllowConflicts {
 			return nil
 		}
 		return fmt.Errorf("%v: '%v/%v' with different deploy uid already exists",
