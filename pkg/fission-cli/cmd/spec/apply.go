@@ -733,7 +733,7 @@ func applyFunctions(fclient client.Interface, fr *FissionResources, delete bool,
 		existingObj, ok := existent[mapKey(&o.ObjectMeta)]
 		if ok {
 			// ok, a resource with the same name exists, is it the same?
-			if isObjectMetaEqual(existingObj.ObjectMeta, o.ObjectMeta) && reflect.DeepEqual(existingObj.Spec, o.Spec) || !specAllowConflicts {
+			if isObjectMetaEqual(existingObj.ObjectMeta, o.ObjectMeta) && reflect.DeepEqual(existingObj.Spec, o.Spec) && !specAllowConflicts {
 				// nothing to do on the server
 				metadataMap[mapKey(&o.ObjectMeta)] = existingObj.ObjectMeta
 			} else {
