@@ -839,10 +839,9 @@ func applyEnvironments(fclient client.Interface, fr *FissionResources, delete bo
 			newmeta, err := fclient.V1().Environment().Create(&o)
 			if err != nil {
 				return nil, nil, err
-			} else {
-				ras.Created = append(ras.Created, newmeta)
-				metadataMap[mapKey(&o.ObjectMeta)] = *newmeta
 			}
+			ras.Created = append(ras.Created, newmeta)
+			metadataMap[mapKey(&o.ObjectMeta)] = *newmeta
 		}
 	}
 
