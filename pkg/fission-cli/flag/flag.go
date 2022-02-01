@@ -142,6 +142,10 @@ var (
 	HtPrefix            = Flag{Type: String, Name: flagkey.HtPrefix, Usage: "Prefix with which functions are exposed. NOTE: Prefix takes precedence over URL/RelativeURL [DEPRECATED for 'fn create', use 'route create' instead]"}
 	HtKeepPrefix        = Flag{Type: Bool, Name: flagkey.HtKeepPrefix, Usage: "Keep the prefix in the URL while forwarding request to the function"}
 
+	TokUsername = Flag{Type: String, Name: flagkey.TokUsername, Usage: "Username to generate token for function invocation"}
+	TokPassword = Flag{Type: String, Name: flagkey.TokPassword, Usage: "Password to generate token for function invocation"}
+	TokAuthURI  = Flag{Type: String, Name: flagkey.TokAuthURI, Usage: "Relative URI path to generate token"}
+
 	TtName   = Flag{Type: String, Name: flagkey.TtName, Usage: "Time Trigger name"}
 	TtCron   = Flag{Type: String, Name: flagkey.TtCron, Usage: "Time trigger cron spec with each asterisk representing respectively second, minute, hour, the day of the month, month and day of the week. Also supports readable formats like '@every 5m', '@hourly'"}
 	TtFnName = Flag{Type: String, Name: flagkey.TtFnName, Usage: "Function name"}

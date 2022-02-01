@@ -20,6 +20,15 @@ Windows:
   # Register this function with Fission
   $ fission function create --name hello --env nodejs --code hello.js
 
+{{- if .Values.authentication.enabled }}
+
+  # Create token
+  $ FISSION_USERNAME=$(kubectl get secrets/router --template={{`{{.data.username}}`}} -n fission | base64 -d)
+  $ FISSION_PASSWORD=$(kubectl get secrets/router --template={{`{{.data.password}}`}} -n fission | base64 -d)
+  $ export FISSION_AUTH_TOKEN=$(fission token create --username $FISSION_USERNAME --password $FISSION_PASSWORD)
+{{- end }}
+
   # Run this function
   $ fission function test --name hello
   Hello, world!
+

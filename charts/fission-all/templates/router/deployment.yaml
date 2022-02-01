@@ -35,6 +35,23 @@ spec:
         command: ["/fission-bundle"]
         args: ["--routerPort", "8888", "--executorUrl", "http://executor.{{ .Release.Namespace }}"]
         env:
+        {{- if .Values.authentication.enabled }}
+        - name: AUTH_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: router
+              key: username
+        - name: AUTH_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: router
+              key: password
+        - name: JWT_SIGNING_KEY
+          valueFrom:
+            secretKeyRef:
+              name: router
+              key: jwtSigningKey
+        {{- end }}      
         - name: POD_NAMESPACE
           valueFrom:
             fieldRef:
@@ -80,6 +97,10 @@ spec:
             port: 8888
           initialDelaySeconds: 35
           periodSeconds: 5
+        volumeMounts:
+        - name: config-volume
+          mountPath: /etc/config/config.yaml
+          subPath: config.yaml
         ports:
         - containerPort: 8080
           name: metrics
@@ -100,6 +121,10 @@ spec:
         terminationMessagePolicy: {{ .Values.terminationMessagePolicy }}
         {{- end }}
       serviceAccountName: fission-svc
+      volumes:
+      - name: config-volume
+        configMap:
+          name: feature-config
 {{- if .Values.router.priorityClassName }}
       priorityClassName: {{ .Values.router.priorityClassName }}
 {{- else if .Values.priorityClassName }}

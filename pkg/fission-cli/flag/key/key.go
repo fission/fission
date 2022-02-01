@@ -92,6 +92,10 @@ const (
 	HtPrefix            = "prefix"
 	HtKeepPrefix        = "keepprefix"
 
+	TokUsername = "username"
+	TokPassword = "password"
+	TokAuthURI  = "authuri"
+
 	TtName   = resourceName
 	TtCron   = "cron"
 	TtFnName = "function"

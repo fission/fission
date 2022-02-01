@@ -18,6 +18,7 @@ package function
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -178,6 +179,11 @@ func doHTTPRequest(ctx context.Context, url string, headers []string, method, bo
 		return nil, errors.Wrap(err, "error creating HTTP request")
 	}
 
+	accesstoken, ok := os.LookupEnv(util.FISSION_AUTH_TOKEN)
+	if ok && len(accesstoken) != 0 {
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %v", accesstoken))
+	}
+
 	for _, header := range headers {
 		headerKeyValue := strings.SplitN(header, ":", 2)
 		if len(headerKeyValue) != 2 {
@@ -185,6 +191,7 @@ func doHTTPRequest(ctx context.Context, url string, headers []string, method, bo
 		}
 		req.Header.Set(headerKeyValue[0], headerKeyValue[1])
 	}
+
 	hc := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
 	resp, err := hc.Do(req.WithContext(ctx))
 	if err != nil {

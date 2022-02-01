@@ -854,6 +854,18 @@ type (
 		GetObjectKind() schema.ObjectKind
 		GetObjectMeta() metav1.Object
 	}
+
+	// AuthLogin defines the body for router login
+	AuthLogin struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+
+	// RouterAuthToken defines the authorization token for accessing router
+	RouterAuthToken struct {
+		AccessToken string `json:"accesstoken"`
+		TokenType   string `json:"tokentype"`
+	}
 )
 
 //IsEmpty checks if the archive byte and litreal are of length 0
