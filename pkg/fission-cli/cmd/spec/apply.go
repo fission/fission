@@ -630,7 +630,8 @@ func applyPackages(fclient client.Interface, fr *FissionResources, delete bool, 
 				keep = true
 			}
 
-			if keep && isObjectMetaEqual(existingObj.ObjectMeta, o.ObjectMeta) && existingObj.Status.BuildStatus == fv1.BuildStatusSucceeded && !specAllowConflicts {
+			if keep && isObjectMetaEqual(existingObj.ObjectMeta, o.ObjectMeta) && existingObj.Status.BuildStatus == fv1.BuildStatusSucceeded &&
+				existingObj.ObjectMeta.Annotations[FISSION_DEPLOYMENT_UID_KEY] == o.ObjectMeta.Annotations[FISSION_DEPLOYMENT_UID_KEY] {
 				// nothing to do on the server
 				metadataMap[mapKey(&o.ObjectMeta)] = existingObj.ObjectMeta
 			} else {
@@ -733,7 +734,8 @@ func applyFunctions(fclient client.Interface, fr *FissionResources, delete bool,
 		existingObj, ok := existent[mapKey(&o.ObjectMeta)]
 		if ok {
 			// ok, a resource with the same name exists, is it the same?
-			if isObjectMetaEqual(existingObj.ObjectMeta, o.ObjectMeta) && reflect.DeepEqual(existingObj.Spec, o.Spec) && !specAllowConflicts {
+			if isObjectMetaEqual(existingObj.ObjectMeta, o.ObjectMeta) && reflect.DeepEqual(existingObj.Spec, o.Spec) &&
+				existingObj.ObjectMeta.Annotations[FISSION_DEPLOYMENT_UID_KEY] == o.ObjectMeta.Annotations[FISSION_DEPLOYMENT_UID_KEY] {
 				// nothing to do on the server
 				metadataMap[mapKey(&o.ObjectMeta)] = existingObj.ObjectMeta
 			} else {
@@ -820,7 +822,8 @@ func applyEnvironments(fclient client.Interface, fr *FissionResources, delete bo
 		existingObj, ok := existent[mapKey(&o.ObjectMeta)]
 		if ok {
 			// ok, a resource with the same name exists, is it the same?
-			if isObjectMetaEqual(existingObj.ObjectMeta, o.ObjectMeta) && reflect.DeepEqual(existingObj.Spec, o.Spec) && !specAllowConflicts {
+			if isObjectMetaEqual(existingObj.ObjectMeta, o.ObjectMeta) && reflect.DeepEqual(existingObj.Spec, o.Spec) &&
+				existingObj.ObjectMeta.Annotations[FISSION_DEPLOYMENT_UID_KEY] == o.ObjectMeta.Annotations[FISSION_DEPLOYMENT_UID_KEY] {
 				// nothing to do on the server
 				metadataMap[mapKey(&o.ObjectMeta)] = existingObj.ObjectMeta
 			} else {
@@ -908,7 +911,8 @@ func applyHTTPTriggers(fclient client.Interface, fr *FissionResources, delete bo
 		existingObj, ok := existent[mapKey(&o.ObjectMeta)]
 		if ok {
 			// ok, a resource with the same name exists, is it the same?
-			if isObjectMetaEqual(existingObj.ObjectMeta, o.ObjectMeta) && reflect.DeepEqual(existingObj.Spec, o.Spec) && !specAllowConflicts {
+			if isObjectMetaEqual(existingObj.ObjectMeta, o.ObjectMeta) && reflect.DeepEqual(existingObj.Spec, o.Spec) &&
+				existingObj.ObjectMeta.Annotations[FISSION_DEPLOYMENT_UID_KEY] == o.ObjectMeta.Annotations[FISSION_DEPLOYMENT_UID_KEY] {
 				// nothing to do on the server
 				metadataMap[mapKey(&o.ObjectMeta)] = existingObj.ObjectMeta
 			} else {
@@ -995,7 +999,8 @@ func applyKubernetesWatchTriggers(fclient client.Interface, fr *FissionResources
 		existingObj, ok := existent[mapKey(&o.ObjectMeta)]
 		if ok {
 			// ok, a resource with the same name exists, is it the same?
-			if isObjectMetaEqual(existingObj.ObjectMeta, o.ObjectMeta) && reflect.DeepEqual(existingObj.Spec, o.Spec) && !specAllowConflicts {
+			if isObjectMetaEqual(existingObj.ObjectMeta, o.ObjectMeta) && reflect.DeepEqual(existingObj.Spec, o.Spec) &&
+				existingObj.ObjectMeta.Annotations[FISSION_DEPLOYMENT_UID_KEY] == o.ObjectMeta.Annotations[FISSION_DEPLOYMENT_UID_KEY] {
 				// nothing to do on the server
 				metadataMap[mapKey(&o.ObjectMeta)] = existingObj.ObjectMeta
 			} else {
@@ -1082,7 +1087,8 @@ func applyTimeTriggers(fclient client.Interface, fr *FissionResources, delete bo
 		existingObj, ok := existent[mapKey(&o.ObjectMeta)]
 		if ok {
 			// ok, a resource with the same name exists, is it the same?
-			if isObjectMetaEqual(existingObj.ObjectMeta, o.ObjectMeta) && reflect.DeepEqual(existingObj.Spec, o.Spec) && !specAllowConflicts {
+			if isObjectMetaEqual(existingObj.ObjectMeta, o.ObjectMeta) && reflect.DeepEqual(existingObj.Spec, o.Spec) &&
+				existingObj.ObjectMeta.Annotations[FISSION_DEPLOYMENT_UID_KEY] == o.ObjectMeta.Annotations[FISSION_DEPLOYMENT_UID_KEY] {
 				// nothing to do on the server
 				metadataMap[mapKey(&o.ObjectMeta)] = existingObj.ObjectMeta
 			} else {
@@ -1169,7 +1175,8 @@ func applyMessageQueueTriggers(fclient client.Interface, fr *FissionResources, d
 		existingObj, ok := existent[mapKey(&o.ObjectMeta)]
 		if ok {
 			// ok, a resource with the same name exists, is it the same?
-			if isObjectMetaEqual(existingObj.ObjectMeta, o.ObjectMeta) && reflect.DeepEqual(existingObj.Spec, o.Spec) && !specAllowConflicts {
+			if isObjectMetaEqual(existingObj.ObjectMeta, o.ObjectMeta) && reflect.DeepEqual(existingObj.Spec, o.Spec) &&
+				existingObj.ObjectMeta.Annotations[FISSION_DEPLOYMENT_UID_KEY] == o.ObjectMeta.Annotations[FISSION_DEPLOYMENT_UID_KEY] {
 				// nothing to do on the server
 				metadataMap[mapKey(&o.ObjectMeta)] = existingObj.ObjectMeta
 			} else {

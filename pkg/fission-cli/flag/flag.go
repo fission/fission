@@ -210,7 +210,7 @@ var (
 	SpecValidation       = Flag{Type: String, Name: flagkey.SpecValidate, Usage: "Turns server side validations of Fission objects on/off"}
 	SpecIgnore           = Flag{Type: String, Name: flagkey.SpecIgnore, Usage: fmt.Sprintf("File containing specs to be ingored inside --specdir, defaults to %v", util.SPEC_IGNORE_FILE)}
 	SpecApplyCommitLabel = Flag{Type: Bool, Name: flagkey.SpecApplyCommitLabel, Usage: "Apply commit label to the resources"}
-	SpecAllowConflicts   = Flag{Type: Bool, Name: flagkey.SpecAllowConflicts, Usage: "If true, spec apply will be forced even if resources are already deployed", DefaultValue: false}
+	SpecAllowConflicts   = Flag{Type: Bool, Name: flagkey.SpecAllowConflicts, Usage: "If true, spec apply will be forced even if conflicting resources exist", DefaultValue: false}
 
 	SupportOutput = Flag{Type: String, Name: flagkey.SupportOutput, Short: "o", Usage: "Output directory to save dump archive/files", DefaultValue: flagkey.DefaultSpecOutputDir}
 	SupportNoZip  = Flag{Type: Bool, Name: flagkey.SupportNoZip, Usage: "Save dump information into multiple files instead of single zip file"}
