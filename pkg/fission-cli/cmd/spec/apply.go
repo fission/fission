@@ -632,11 +632,26 @@ func applyPackages(fclient client.Interface, fr *FissionResources, delete bool, 
 
 			if keep && isObjectMetaEqual(existingObj.ObjectMeta, o.ObjectMeta) && existingObj.Status.BuildStatus == fv1.BuildStatusSucceeded {
 				// nothing to do on the server
+				if specAllowConflicts {
+					o.ObjectMeta.ResourceVersion = existingObj.ObjectMeta.ResourceVersion
+					pkg, err := waitForPackageBuild(fclient, &o)
+					if err != nil {
+						console.Warn(fmt.Sprintf("Error waiting for package '%v' build, ignoring", o.ObjectMeta.Name))
+						pkg = &o
+					}
+
+					if pkg.Status.BuildStatus == fv1.BuildStatusFailed {
+						pkg.Status.BuildStatus = fv1.BuildStatusPending
+					}
+					_, err = fclient.V1().Package().Update(pkg)
+					if err != nil {
+						return nil, nil, err
+					}
+				}
 				metadataMap[mapKey(&o.ObjectMeta)] = existingObj.ObjectMeta
 			} else {
 				// update
 				o.ObjectMeta.ResourceVersion = existingObj.ObjectMeta.ResourceVersion
-
 				// We may be racing against the package builder to update the
 				// package (a previous version might have been getting built).  So,
 				// wait for the package to have a non-running build status.
@@ -823,6 +838,14 @@ func applyEnvironments(fclient client.Interface, fr *FissionResources, delete bo
 			// ok, a resource with the same name exists, is it the same?
 			if isObjectMetaEqual(existingObj.ObjectMeta, o.ObjectMeta) && reflect.DeepEqual(existingObj.Spec, o.Spec) {
 				// nothing to do on the server
+				//Update is necessary to update the UID incase of conflict
+				if specAllowConflicts {
+					o.ObjectMeta.ResourceVersion = existingObj.ObjectMeta.ResourceVersion
+					_, err := fclient.V1().Environment().Update(&o)
+					if err != nil {
+						return nil, nil, err
+					}
+				}
 				metadataMap[mapKey(&o.ObjectMeta)] = existingObj.ObjectMeta
 			} else {
 				// update
@@ -911,6 +934,13 @@ func applyHTTPTriggers(fclient client.Interface, fr *FissionResources, delete bo
 			// ok, a resource with the same name exists, is it the same?
 			if isObjectMetaEqual(existingObj.ObjectMeta, o.ObjectMeta) && reflect.DeepEqual(existingObj.Spec, o.Spec) {
 				// nothing to do on the server
+				if specAllowConflicts {
+					o.ObjectMeta.ResourceVersion = existingObj.ObjectMeta.ResourceVersion
+					_, err := fclient.V1().HTTPTrigger().Update(&o)
+					if err != nil {
+						return nil, nil, err
+					}
+				}
 				metadataMap[mapKey(&o.ObjectMeta)] = existingObj.ObjectMeta
 			} else {
 				// update
@@ -998,6 +1028,13 @@ func applyKubernetesWatchTriggers(fclient client.Interface, fr *FissionResources
 			// ok, a resource with the same name exists, is it the same?
 			if isObjectMetaEqual(existingObj.ObjectMeta, o.ObjectMeta) && reflect.DeepEqual(existingObj.Spec, o.Spec) {
 				// nothing to do on the server
+				if specAllowConflicts {
+					o.ObjectMeta.ResourceVersion = existingObj.ObjectMeta.ResourceVersion
+					_, err := fclient.V1().KubeWatcher().Update(&o)
+					if err != nil {
+						return nil, nil, err
+					}
+				}
 				metadataMap[mapKey(&o.ObjectMeta)] = existingObj.ObjectMeta
 			} else {
 				// update
@@ -1085,6 +1122,13 @@ func applyTimeTriggers(fclient client.Interface, fr *FissionResources, delete bo
 			// ok, a resource with the same name exists, is it the same?
 			if isObjectMetaEqual(existingObj.ObjectMeta, o.ObjectMeta) && reflect.DeepEqual(existingObj.Spec, o.Spec) {
 				// nothing to do on the server
+				if specAllowConflicts {
+					o.ObjectMeta.ResourceVersion = existingObj.ObjectMeta.ResourceVersion
+					_, err := fclient.V1().TimeTrigger().Update(&o)
+					if err != nil {
+						return nil, nil, err
+					}
+				}
 				metadataMap[mapKey(&o.ObjectMeta)] = existingObj.ObjectMeta
 			} else {
 				// update
@@ -1172,6 +1216,13 @@ func applyMessageQueueTriggers(fclient client.Interface, fr *FissionResources, d
 			// ok, a resource with the same name exists, is it the same?
 			if isObjectMetaEqual(existingObj.ObjectMeta, o.ObjectMeta) && reflect.DeepEqual(existingObj.Spec, o.Spec) {
 				// nothing to do on the server
+				if specAllowConflicts {
+					o.ObjectMeta.ResourceVersion = existingObj.ObjectMeta.ResourceVersion
+					_, err := fclient.V1().MessageQueueTrigger().Update(&o)
+					if err != nil {
+						return nil, nil, err
+					}
+				}
 				metadataMap[mapKey(&o.ObjectMeta)] = existingObj.ObjectMeta
 			} else {
 				// update
