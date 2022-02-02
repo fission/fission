@@ -20,7 +20,7 @@ url: %s
 ---
 `
 
-const baseURL = "/docs/fission-cli/"
+const baseURL = "/docs/reference/fission-cli/"
 
 var filePrepender = func(filename string) string {
 	name := filepath.Base(filename)
