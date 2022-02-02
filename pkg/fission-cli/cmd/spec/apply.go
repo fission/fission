@@ -130,7 +130,7 @@ func (opts *ApplySubCommand) run(input cli.Input) error {
 		}
 
 		// make changes to the cluster based on the specs
-		pkgMetas, as, err := applyResources(opts.Client(), specDir, fr, deleteResources)
+		pkgMetas, as, err := applyResources(opts.Client(), specDir, fr, deleteResources, input.Bool(flagkey.SpecAllowConflicts))
 		if err != nil {
 			return errors.Wrap(err, "error applying specs")
 		}
@@ -357,7 +357,7 @@ func applyArchives(fclient client.Interface, specDir string, fr *FissionResource
 }
 
 // applyResources applies the given set of fission resources.
-func applyResources(fclient client.Interface, specDir string, fr *FissionResources, delete bool) (map[string]metav1.ObjectMeta, map[string]ResourceApplyStatus, error) {
+func applyResources(fclient client.Interface, specDir string, fr *FissionResources, delete bool, specAllowConflicts bool) (map[string]metav1.ObjectMeta, map[string]ResourceApplyStatus, error) {
 
 	applyStatus := make(map[string]ResourceApplyStatus)
 
@@ -367,13 +367,13 @@ func applyResources(fclient client.Interface, specDir string, fr *FissionResourc
 		return nil, nil, err
 	}
 
-	_, ras, err := applyEnvironments(fclient, fr, delete)
+	_, ras, err := applyEnvironments(fclient, fr, delete, specAllowConflicts)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "environment apply failed")
 	}
 	applyStatus["environment"] = *ras
 
-	pkgMeta, ras, err := applyPackages(fclient, fr, delete)
+	pkgMeta, ras, err := applyPackages(fclient, fr, delete, specAllowConflicts)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "package apply failed")
 	}
@@ -402,31 +402,31 @@ func applyResources(fclient client.Interface, specDir string, fr *FissionResourc
 		fr.Functions[i].Spec.Package.PackageRef.ResourceVersion = m.ResourceVersion
 	}
 
-	_, ras, err = applyFunctions(fclient, fr, delete)
+	_, ras, err = applyFunctions(fclient, fr, delete, specAllowConflicts)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "function apply failed")
 	}
 	applyStatus["function"] = *ras
 
-	_, ras, err = applyHTTPTriggers(fclient, fr, delete)
+	_, ras, err = applyHTTPTriggers(fclient, fr, delete, specAllowConflicts)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "HTTPTrigger apply failed")
 	}
 	applyStatus["HTTPTrigger"] = *ras
 
-	_, ras, err = applyKubernetesWatchTriggers(fclient, fr, delete)
+	_, ras, err = applyKubernetesWatchTriggers(fclient, fr, delete, specAllowConflicts)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "KubernetesWatchTrigger apply failed")
 	}
 	applyStatus["KubernetesWatchTrigger"] = *ras
 
-	_, ras, err = applyTimeTriggers(fclient, fr, delete)
+	_, ras, err = applyTimeTriggers(fclient, fr, delete, specAllowConflicts)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "TimeTrigger apply failed")
 	}
 	applyStatus["TimeTrigger"] = *ras
 
-	_, ras, err = applyMessageQueueTriggers(fclient, fr, delete)
+	_, ras, err = applyMessageQueueTriggers(fclient, fr, delete, specAllowConflicts)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "MessageQueueTrigger apply failed")
 	}
@@ -576,7 +576,7 @@ func waitForPackageBuild(fclient client.Interface, pkg *fv1.Package) (*fv1.Packa
 	}
 }
 
-func applyPackages(fclient client.Interface, fr *FissionResources, delete bool) (map[string]metav1.ObjectMeta, *ResourceApplyStatus, error) {
+func applyPackages(fclient client.Interface, fr *FissionResources, delete bool, specAllowConflicts bool) (map[string]metav1.ObjectMeta, *ResourceApplyStatus, error) {
 	// get list
 	allObjs, err := fclient.V1().Package().List(metav1.NamespaceAll)
 	if err != nil {
@@ -585,9 +585,13 @@ func applyPackages(fclient client.Interface, fr *FissionResources, delete bool) 
 
 	// filter
 	objs := make([]fv1.Package, 0)
-	for _, o := range allObjs {
-		if hasDeploymentConfig(&o.ObjectMeta, fr) {
-			objs = append(objs, o)
+	if specAllowConflicts {
+		objs = allObjs
+	} else {
+		for _, o := range allObjs {
+			if hasDeploymentConfig(&o.ObjectMeta, fr) {
+				objs = append(objs, o)
+			}
 		}
 	}
 
@@ -632,7 +636,6 @@ func applyPackages(fclient client.Interface, fr *FissionResources, delete bool) 
 			} else {
 				// update
 				o.ObjectMeta.ResourceVersion = existingObj.ObjectMeta.ResourceVersion
-
 				// We may be racing against the package builder to update the
 				// package (a previous version might have been getting built).  So,
 				// wait for the package to have a non-running build status.
@@ -687,7 +690,7 @@ func applyPackages(fclient client.Interface, fr *FissionResources, delete bool) 
 	return metadataMap, &ras, nil
 }
 
-func applyFunctions(fclient client.Interface, fr *FissionResources, delete bool) (map[string]metav1.ObjectMeta, *ResourceApplyStatus, error) {
+func applyFunctions(fclient client.Interface, fr *FissionResources, delete bool, specAllowConflicts bool) (map[string]metav1.ObjectMeta, *ResourceApplyStatus, error) {
 	// get list
 	allObjs, err := fclient.V1().Function().List(metav1.NamespaceAll)
 	if err != nil {
@@ -696,9 +699,13 @@ func applyFunctions(fclient client.Interface, fr *FissionResources, delete bool)
 
 	// filter
 	objs := make([]fv1.Function, 0)
-	for _, o := range allObjs {
-		if hasDeploymentConfig(&o.ObjectMeta, fr) {
-			objs = append(objs, o)
+	if specAllowConflicts {
+		objs = allObjs
+	} else {
+		for _, o := range allObjs {
+			if hasDeploymentConfig(&o.ObjectMeta, fr) {
+				objs = append(objs, o)
+			}
 		}
 	}
 
@@ -770,7 +777,7 @@ func applyFunctions(fclient client.Interface, fr *FissionResources, delete bool)
 	return metadataMap, &ras, nil
 }
 
-func applyEnvironments(fclient client.Interface, fr *FissionResources, delete bool) (map[string]metav1.ObjectMeta, *ResourceApplyStatus, error) {
+func applyEnvironments(fclient client.Interface, fr *FissionResources, delete bool, specAllowConflicts bool) (map[string]metav1.ObjectMeta, *ResourceApplyStatus, error) {
 	// get list
 	allObjs, err := fclient.V1().Environment().List(metav1.NamespaceAll)
 	if err != nil {
@@ -779,9 +786,13 @@ func applyEnvironments(fclient client.Interface, fr *FissionResources, delete bo
 
 	// filter
 	objs := make([]fv1.Environment, 0)
-	for _, o := range allObjs {
-		if hasDeploymentConfig(&o.ObjectMeta, fr) {
-			objs = append(objs, o)
+	if specAllowConflicts {
+		objs = allObjs
+	} else {
+		for _, o := range allObjs {
+			if hasDeploymentConfig(&o.ObjectMeta, fr) {
+				objs = append(objs, o)
+			}
 		}
 	}
 
@@ -853,7 +864,7 @@ func applyEnvironments(fclient client.Interface, fr *FissionResources, delete bo
 	return metadataMap, &ras, nil
 }
 
-func applyHTTPTriggers(fclient client.Interface, fr *FissionResources, delete bool) (map[string]metav1.ObjectMeta, *ResourceApplyStatus, error) {
+func applyHTTPTriggers(fclient client.Interface, fr *FissionResources, delete bool, specAllowConflicts bool) (map[string]metav1.ObjectMeta, *ResourceApplyStatus, error) {
 	// get list
 	allObjs, err := fclient.V1().HTTPTrigger().List(metav1.NamespaceAll)
 	if err != nil {
@@ -862,9 +873,13 @@ func applyHTTPTriggers(fclient client.Interface, fr *FissionResources, delete bo
 
 	// filter
 	objs := make([]fv1.HTTPTrigger, 0)
-	for _, o := range allObjs {
-		if hasDeploymentConfig(&o.ObjectMeta, fr) {
-			objs = append(objs, o)
+	if specAllowConflicts {
+		objs = allObjs
+	} else {
+		for _, o := range allObjs {
+			if hasDeploymentConfig(&o.ObjectMeta, fr) {
+				objs = append(objs, o)
+			}
 		}
 	}
 
@@ -936,7 +951,7 @@ func applyHTTPTriggers(fclient client.Interface, fr *FissionResources, delete bo
 	return metadataMap, &ras, nil
 }
 
-func applyKubernetesWatchTriggers(fclient client.Interface, fr *FissionResources, delete bool) (map[string]metav1.ObjectMeta, *ResourceApplyStatus, error) {
+func applyKubernetesWatchTriggers(fclient client.Interface, fr *FissionResources, delete bool, specAllowConflicts bool) (map[string]metav1.ObjectMeta, *ResourceApplyStatus, error) {
 	// get list
 	allObjs, err := fclient.V1().KubeWatcher().List(metav1.NamespaceAll)
 	if err != nil {
@@ -945,9 +960,13 @@ func applyKubernetesWatchTriggers(fclient client.Interface, fr *FissionResources
 
 	// filter
 	objs := make([]fv1.KubernetesWatchTrigger, 0)
-	for _, o := range allObjs {
-		if hasDeploymentConfig(&o.ObjectMeta, fr) {
-			objs = append(objs, o)
+	if specAllowConflicts {
+		objs = allObjs
+	} else {
+		for _, o := range allObjs {
+			if hasDeploymentConfig(&o.ObjectMeta, fr) {
+				objs = append(objs, o)
+			}
 		}
 	}
 
@@ -1019,7 +1038,7 @@ func applyKubernetesWatchTriggers(fclient client.Interface, fr *FissionResources
 	return metadataMap, &ras, nil
 }
 
-func applyTimeTriggers(fclient client.Interface, fr *FissionResources, delete bool) (map[string]metav1.ObjectMeta, *ResourceApplyStatus, error) {
+func applyTimeTriggers(fclient client.Interface, fr *FissionResources, delete bool, specAllowConflicts bool) (map[string]metav1.ObjectMeta, *ResourceApplyStatus, error) {
 	// get list
 	allObjs, err := fclient.V1().TimeTrigger().List(metav1.NamespaceAll)
 	if err != nil {
@@ -1028,9 +1047,13 @@ func applyTimeTriggers(fclient client.Interface, fr *FissionResources, delete bo
 
 	// filter
 	objs := make([]fv1.TimeTrigger, 0)
-	for _, o := range allObjs {
-		if hasDeploymentConfig(&o.ObjectMeta, fr) {
-			objs = append(objs, o)
+	if specAllowConflicts {
+		objs = allObjs
+	} else {
+		for _, o := range allObjs {
+			if hasDeploymentConfig(&o.ObjectMeta, fr) {
+				objs = append(objs, o)
+			}
 		}
 	}
 
@@ -1102,7 +1125,7 @@ func applyTimeTriggers(fclient client.Interface, fr *FissionResources, delete bo
 	return metadataMap, &ras, nil
 }
 
-func applyMessageQueueTriggers(fclient client.Interface, fr *FissionResources, delete bool) (map[string]metav1.ObjectMeta, *ResourceApplyStatus, error) {
+func applyMessageQueueTriggers(fclient client.Interface, fr *FissionResources, delete bool, specAllowConflicts bool) (map[string]metav1.ObjectMeta, *ResourceApplyStatus, error) {
 	// get list
 	allObjs, err := fclient.V1().MessageQueueTrigger().List("", metav1.NamespaceAll)
 	if err != nil {
@@ -1111,9 +1134,13 @@ func applyMessageQueueTriggers(fclient client.Interface, fr *FissionResources, d
 
 	// filter
 	objs := make([]fv1.MessageQueueTrigger, 0)
-	for _, o := range allObjs {
-		if hasDeploymentConfig(&o.ObjectMeta, fr) {
-			objs = append(objs, o)
+	if specAllowConflicts {
+		objs = allObjs
+	} else {
+		for _, o := range allObjs {
+			if hasDeploymentConfig(&o.ObjectMeta, fr) {
+				objs = append(objs, o)
+			}
 		}
 	}
 
@@ -1186,25 +1213,5 @@ func applyMessageQueueTriggers(fclient client.Interface, fr *FissionResources, d
 }
 
 func isObjectMetaEqual(existingObj, newObj metav1.ObjectMeta) bool {
-
-	if !reflect.DeepEqual(existingObj.Labels, newObj.Labels) {
-		return false
-	}
-
-	existingAnnotations := make(map[string]string)
-	newAnnotations := make(map[string]string)
-
-	for existingObjKey, existingObjVal := range existingObj.Annotations {
-		if existingObjKey != FISSION_DEPLOYMENT_NAME_KEY && existingObjKey != FISSION_DEPLOYMENT_UID_KEY {
-			existingAnnotations[existingObjKey] = existingObjVal
-		}
-	}
-
-	for newObjKey, newObjVal := range newObj.Annotations {
-		if newObjKey != FISSION_DEPLOYMENT_NAME_KEY && newObjKey != FISSION_DEPLOYMENT_UID_KEY {
-			newAnnotations[newObjKey] = newObjVal
-		}
-	}
-
-	return reflect.DeepEqual(existingAnnotations, newAnnotations)
+	return reflect.DeepEqual(existingObj.Labels, newObj.Labels) && reflect.DeepEqual(existingObj.Annotations, newObj.Annotations)
 }

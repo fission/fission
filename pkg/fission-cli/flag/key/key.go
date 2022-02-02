@@ -160,6 +160,7 @@ const (
 	SpecValidate         = "validation"
 	SpecIgnore           = "specignore"
 	SpecApplyCommitLabel = "commitlabel"
+	SpecAllowConflicts   = "allowconflicts"
 
 	SupportOutput = Output
 	SupportNoZip  = "nozip"
