@@ -23,6 +23,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
@@ -91,12 +92,11 @@ func (hc *HealthChecker) CheckKubeVersion() (err error) {
 	major, _ := strconv.Atoi(version.Major)
 	minor, _ := strconv.Atoi(version.Minor)
 	apiVersion := [3]int{major, minor, 0}
-	minAPIVersion := [3]int{1, 19, 0}
 
-	if !isCompatibleVersion(minAPIVersion, apiVersion) {
+	if !isCompatibleVersion(fv1.MinimumKubernetesVersion, apiVersion) {
 		return fmt.Errorf("kubernetes is on version %d.%d.%d, but version %d.%d.%d or more recent is required",
 			apiVersion[0], apiVersion[1], apiVersion[2],
-			minAPIVersion[0], minAPIVersion[1], minAPIVersion[2])
+			fv1.MinimumKubernetesVersion[0], fv1.MinimumKubernetesVersion[1], fv1.MinimumKubernetesVersion[2])
 	}
 
 	return nil
@@ -123,17 +123,13 @@ func (hc *HealthChecker) CheckServiceStatus(namespace string, name string) (err 
 func (hc *HealthChecker) CheckFissionVersion() error {
 	ver := util.GetVersion(hc.FissionClient)
 
-	major, _ := strconv.Atoi(strings.Split(ver.Client["fission/core"].Version, ".")[0])
-	minor, _ := strconv.Atoi(strings.Split(ver.Client["fission/core"].Version, ".")[1])
-	fix, _ := strconv.Atoi(strings.Split(ver.Client["fission/core"].Version, ".")[2])
+	clientVersion := ver.Client["fission/core"].Version
+	serverVersion := ver.Server["fission/core"].Version
 
-	apiVersion := [3]int{major, minor, fix}
-	minAPIVersion := [3]int{1, 15, 1}
-	if !isCompatibleVersion(minAPIVersion, apiVersion) {
-		return fmt.Errorf("fission is on version %d.%d.%d, but version %d.%d.%d is the latest",
-			apiVersion[0], apiVersion[1], apiVersion[2],
-			minAPIVersion[0], minAPIVersion[1], minAPIVersion[2])
+	if clientVersion != serverVersion {
+		return fmt.Errorf("client version %s does not match with server version %s", clientVersion, serverVersion)
 	}
+
 	return nil
 }
 
