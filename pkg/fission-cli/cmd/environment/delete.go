@@ -22,7 +22,6 @@ import (
 	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
@@ -55,20 +54,13 @@ func (opts *DeleteSubCommand) do(input cli.Input) error {
 
 	fns, err := opts.Client().V1().Function().List(metav1.NamespaceAll)
 	if err != nil {
-		return errors.Wrap(err, "Error updating function environment")
+		return errors.Wrap(err, "Error getting functions wrt environment.")
 	}
 
 	for _, fn := range fns {
-		if fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypeNewdeploy &&
-			fn.Spec.Environment.Name == m.Name {
-			funcm := &metav1.ObjectMeta{
-				Name:      fn.Name,
-				Namespace: fn.Namespace,
-			}
-			err := opts.Client().V1().Function().Delete(funcm)
-			if err != nil {
-				return errors.Wrap(err, "error deleting functions associated with env")
-			}
+		if fn.Spec.Environment.Name == m.Name &&
+			fn.Spec.Environment.Namespace == m.Namespace {
+			return errors.New("Environment is used by atleast one function.")
 		}
 	}
 	return nil
