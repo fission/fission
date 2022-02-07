@@ -16,6 +16,10 @@ limitations under the License.
 
 package v1
 
+var (
+	MinimumKubernetesVersion = [3]int{1, 19, 0}
+)
+
 const (
 	EXECUTOR_INSTANCEID_LABEL string = "executorInstanceId"
 	DEFAULT_FUNCTION_TIMEOUT  int    = 60

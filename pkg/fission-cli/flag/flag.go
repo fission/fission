@@ -74,6 +74,8 @@ var (
 
 	ClientOnly = Flag{Type: Bool, Name: flagkey.ClientOnly, Usage: "If set, the CLI won't connect to remote server"}
 
+	PreCheckOnly = Flag{Type: Bool, Name: flagkey.PreCheckOnly, Usage: "Only run pre-installation checks, to determine if fission can be installed"}
+
 	KubeContext = Flag{Type: String, Name: flagkey.KubeContext, Usage: "Kubernetes context to be used for the execution of Fission commands", DefaultValue: ""}
 
 	IgnoreNotFound = Flag{Type: Bool, Name: flagkey.IgnoreNotFound, Usage: "Treat \"resource not found\" as a successful delete.", DefaultValue: false}
