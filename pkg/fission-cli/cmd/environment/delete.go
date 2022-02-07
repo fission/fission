@@ -42,19 +42,21 @@ func (opts *DeleteSubCommand) do(input cli.Input) error {
 		Namespace: input.String(flagkey.NamespaceEnvironment),
 	}
 
-	fns, err := opts.Client().V1().Function().List(metav1.NamespaceAll)
-	if err != nil {
-		return errors.Wrap(err, "Error getting functions wrt environment.")
-	}
+	if !input.Bool(flagkey.EnvForce) {
+		fns, err := opts.Client().V1().Function().List(metav1.NamespaceAll)
+		if err != nil {
+			return errors.Wrap(err, "Error getting functions wrt environment.")
+		}
 
-	for _, fn := range fns {
-		if fn.Spec.Environment.Name == m.Name &&
-			fn.Spec.Environment.Namespace == m.Namespace {
-			return errors.New("Environment is used by atleast one function.")
+		for _, fn := range fns {
+			if fn.Spec.Environment.Name == m.Name &&
+				fn.Spec.Environment.Namespace == m.Namespace {
+				return errors.New("Environment is used by atleast one function.")
+			}
 		}
 	}
 
-	err = opts.Client().V1().Environment().Delete(m)
+	err := opts.Client().V1().Environment().Delete(m)
 	if err != nil {
 		if input.Bool(flagkey.IgnoreNotFound) && util.IsNotFound(err) {
 			return nil

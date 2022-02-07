@@ -128,6 +128,7 @@ const (
 	EnvVersion         = "version"
 	EnvImagePullSecret = "imagepullsecret"
 	EnvExecutorType    = "executortype"
+	EnvForce           = force
 
 	KwName      = resourceName
 	KwFnName    = "function"
