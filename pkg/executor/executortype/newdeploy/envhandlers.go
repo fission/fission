@@ -27,7 +27,26 @@ import (
 
 func (deploy *NewDeploy) EnvEventHandlers() k8sCache.ResourceEventHandlerFuncs {
 	return k8sCache.ResourceEventHandlerFuncs{
-		AddFunc:    func(obj interface{}) {},
+		AddFunc: func(obj interface{}) {
+			env := obj.(*fv1.Environment)
+			ctx := context.Background()
+			funcs := deploy.getEnvFunctions(ctx, &env.ObjectMeta)
+
+			for _, fn := range funcs {
+				if fn.Spec.Environment.Name == env.ObjectMeta.Name {
+					function, err := deploy.fissionClient.CoreV1().Functions(fn.ObjectMeta.Namespace).Get(ctx, fn.ObjectMeta.Name, metav1.GetOptions{})
+					if err != nil {
+						deploy.logger.Error("Error getting function", zap.Error(err), zap.Any("function", function))
+						continue
+					}
+					err = deploy.updateFuncDeployment(ctx, function, env)
+					if err != nil {
+						deploy.logger.Error("Error updating function", zap.Error(err), zap.Any("function", function))
+						continue
+					}
+				}
+			}
+		},
 		DeleteFunc: func(obj interface{}) {},
 		UpdateFunc: func(oldObj interface{}, newObj interface{}) {
 			newEnv := newObj.(*fv1.Environment)
