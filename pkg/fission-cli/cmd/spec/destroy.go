@@ -19,6 +19,7 @@ package spec
 import (
 	"github.com/pkg/errors"
 
+	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/util"
@@ -53,9 +54,51 @@ func (opts *DestroySubCommand) run(input cli.Input) error {
 	emptyFr.DeploymentConfig = fr.DeploymentConfig
 
 	// "apply" the empty state
-	_, _, err = applyResources(opts.Client(), specDir, &emptyFr, true, false)
+	err = deleteResources(opts.Client(), &emptyFr)
 	if err != nil {
 		return errors.Wrap(err, "error deleting resources")
+	}
+
+	return nil
+}
+
+func deleteResources(fclient client.Interface, fr *FissionResources) error {
+
+	var err error
+
+	_, _, err = applyHTTPTriggers(fclient, fr, true, false)
+	if err != nil {
+		return errors.Wrap(err, "HTTPTrigger delete failed")
+	}
+
+	_, _, err = applyKubernetesWatchTriggers(fclient, fr, true, false)
+	if err != nil {
+		return errors.Wrap(err, "KubernetesWatchTrigger delete failed")
+	}
+
+	_, _, err = applyTimeTriggers(fclient, fr, true, false)
+	if err != nil {
+		return errors.Wrap(err, "TimeTrigger delete failed")
+	}
+
+	_, _, err = applyMessageQueueTriggers(fclient, fr, true, false)
+	if err != nil {
+		return errors.Wrap(err, "MessageQueueTrigger delete failed")
+	}
+
+	_, _, err = applyFunctions(fclient, fr, true, false)
+	if err != nil {
+		return errors.Wrap(err, "function delete failed")
+	}
+
+	_, _, err = applyPackages(fclient, fr, true, false)
+	if err != nil {
+		return errors.Wrap(err, "package delete failed")
+	}
+
+	_, _, err = applyEnvironments(fclient, fr, true, false)
+	if err != nil {
+		return errors.Wrap(err, "environment delete failed")
 	}
 
 	return nil
