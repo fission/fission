@@ -23,6 +23,15 @@ import (
 var (
 	topicValidators = make(map[string]TopicValidator)
 	lock            = sync.Mutex{}
+	kedaValidators  = map[string]bool{
+		"kafka":              true,
+		"aws-sqs-queue":      true,
+		"aws-kinesis-stream": true,
+		"gcp-pubsub":         true,
+		"stan":               true,
+		"rabbitmq":           true,
+		"redis":              true,
+	}
 )
 
 type (
@@ -58,7 +67,7 @@ func IsValidTopic(mqType, topic, mqtKind string) bool {
 
 func IsValidMessageQueue(mqType, mqtKind string) bool {
 	if mqtKind == "keda" {
-		return true
+		return kedaValidators[mqType]
 	}
 	_, registered := topicValidators[mqType]
 	return registered
