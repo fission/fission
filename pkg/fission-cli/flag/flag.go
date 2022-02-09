@@ -155,7 +155,7 @@ var (
 
 	MqtName            = Flag{Type: String, Name: flagkey.MqtName, Usage: "Message queue trigger name"}
 	MqtFnName          = Flag{Type: String, Name: flagkey.MqtFnName, Usage: "Function name"}
-	MqtMQType          = Flag{Type: String, Name: flagkey.MqtMQType, Usage: "Message queue type, e.g. nats-streaming, azure-storage-queue, kafka", DefaultValue: "nats-streaming"}
+	MqtMQType          = Flag{Type: String, Name: flagkey.MqtMQType, Usage: "For mqtype \"fission\" => nats-streaming, azure-storage-queue, kafka\n\t\t\t\t\t For mqtype \"keda\" => kafka, aws-sqs-queue, aws-kinesis-stream, gcp-pubsub, stan, rabbitmq, redis", DefaultValue: "kafka"}
 	MqtTopic           = Flag{Type: String, Name: flagkey.MqtTopic, Usage: "Message queue Topic the trigger listens on"}
 	MqtRespTopic       = Flag{Type: String, Name: flagkey.MqtRespTopic, Usage: "Topic that the function response is sent on (response discarded if unspecified)"}
 	MqtErrorTopic      = Flag{Type: String, Name: flagkey.MqtErrorTopic, Usage: "Topic that the function error messages are sent to (errors discarded if unspecified"}
@@ -167,7 +167,7 @@ var (
 	MqtMaxReplicaCount = Flag{Type: Int, Name: flagkey.MqtMaxReplicaCount, Usage: "Maximum number of replicas of consumers to scale up to", DefaultValue: 100}
 	MqtMetadata        = Flag{Type: StringSlice, Name: flagkey.MqtMetadata, Usage: "Metadata needed for connecting to source system in format: --metadata key1=value1 --metadata key2=value2"}
 	MqtSecret          = Flag{Type: String, Name: flagkey.MqtSecret, Usage: "Name of secret object", DefaultValue: ""}
-	MqtKind            = Flag{Type: String, Name: flagkey.MqtKind, Usage: "Kind of Message Queue Trigger, e.g. fission, keda", DefaultValue: "fission"}
+	MqtKind            = Flag{Type: String, Name: flagkey.MqtKind, Usage: "Kind of Message Queue Trigger, e.g. fission, keda", DefaultValue: "keda"}
 
 	EnvName                   = Flag{Type: String, Name: flagkey.EnvName, Usage: "Environment name"}
 	EnvPoolsize               = Flag{Type: Int, Name: flagkey.EnvPoolsize, Usage: "Size of the pool", DefaultValue: 3}
