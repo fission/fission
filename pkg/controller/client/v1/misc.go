@@ -64,7 +64,7 @@ func (c *Misc) SecretExists(m *metav1.ObjectMeta) error {
 		return err
 	}
 	if resp.StatusCode >= 400 {
-		return k8serrors.NewNotFound(schema.GroupResource{"", ""}, "")
+		return k8serrors.NewNotFound(schema.GroupResource{}, "")
 	}
 	defer resp.Body.Close()
 	return nil
