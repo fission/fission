@@ -63,10 +63,10 @@ func (c *Misc) SecretExists(m *metav1.ObjectMeta) error {
 	if err != nil {
 		return err
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode >= 400 {
 		return k8serrors.NewNotFound(schema.GroupResource{Group: "", Resource: "secret"}, m.Name)
 	}
-	defer resp.Body.Close()
 	return nil
 }
 
@@ -78,10 +78,10 @@ func (c *Misc) ConfigMapExists(m *metav1.ObjectMeta) error {
 	if err != nil {
 		return err
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode >= 400 {
 		return k8serrors.NewNotFound(schema.GroupResource{Group: "", Resource: "configmap"}, m.Name)
 	}
-	defer resp.Body.Close()
 	return nil
 }
 
