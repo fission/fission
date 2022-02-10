@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httputil"
 	"net/url"
 	"os"
 	"strings"
@@ -197,6 +198,18 @@ func doHTTPRequest(ctx context.Context, url string, headers []string, method, bo
 	if err != nil {
 		return nil, errors.Wrap(err, "error executing HTTP request")
 	}
+
+	dumpReq, err := httputil.DumpRequestOut(req, false)
+	if err != nil {
+		return nil, err
+	}
+	console.Verbose(2, string(dumpReq))
+
+	dumpRes, err := httputil.DumpResponse(resp, false)
+	if err != nil {
+		return nil, err
+	}
+	console.Verbose(2, string(dumpRes))
 
 	return resp, nil
 }
