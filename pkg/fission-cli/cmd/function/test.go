@@ -180,6 +180,14 @@ func doHTTPRequest(ctx context.Context, url string, headers []string, method, bo
 		return nil, errors.Wrap(err, "error creating HTTP request")
 	}
 
+	if console.Verbosity >= 2 {
+		dumpReq, err := httputil.DumpRequestOut(req, false)
+		if err != nil {
+			return nil, err
+		}
+		console.Verbose(2, string(dumpReq))
+	}
+
 	accesstoken, ok := os.LookupEnv(util.FISSION_AUTH_TOKEN)
 	if ok && len(accesstoken) != 0 {
 		req.Header.Set("Authorization", fmt.Sprintf("Bearer %v", accesstoken))
@@ -199,17 +207,13 @@ func doHTTPRequest(ctx context.Context, url string, headers []string, method, bo
 		return nil, errors.Wrap(err, "error executing HTTP request")
 	}
 
-	dumpReq, err := httputil.DumpRequestOut(req, false)
-	if err != nil {
-		return nil, err
+	if console.Verbosity >= 2 {
+		dumpRes, err := httputil.DumpResponse(resp, false)
+		if err != nil {
+			return nil, err
+		}
+		console.Verbose(2, string(dumpRes))
 	}
-	console.Verbose(2, string(dumpReq))
-
-	dumpRes, err := httputil.DumpResponse(resp, false)
-	if err != nil {
-		return nil, err
-	}
-	console.Verbose(2, string(dumpRes))
 
 	return resp, nil
 }
