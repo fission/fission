@@ -180,14 +180,6 @@ func doHTTPRequest(ctx context.Context, url string, headers []string, method, bo
 		return nil, errors.Wrap(err, "error creating HTTP request")
 	}
 
-	if console.Verbosity >= 2 {
-		dumpReq, err := httputil.DumpRequestOut(req, false)
-		if err != nil {
-			return nil, err
-		}
-		console.Verbose(2, string(dumpReq))
-	}
-
 	accesstoken, ok := os.LookupEnv(util.FISSION_AUTH_TOKEN)
 	if ok && len(accesstoken) != 0 {
 		req.Header.Set("Authorization", fmt.Sprintf("Bearer %v", accesstoken))
@@ -199,6 +191,14 @@ func doHTTPRequest(ctx context.Context, url string, headers []string, method, bo
 			return nil, errors.New("failed to create request without appropriate headers")
 		}
 		req.Header.Set(headerKeyValue[0], headerKeyValue[1])
+	}
+
+	if console.Verbosity >= 2 {
+		dumpReq, err := httputil.DumpRequestOut(req, false)
+		if err != nil {
+			return nil, err
+		}
+		console.Verbose(2, string(dumpReq))
 	}
 
 	hc := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
