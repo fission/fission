@@ -1,5 +1,26 @@
 # Changelog
 
+## [v1.16.0-rc1](https://github.com/fission/fission/tree/v1.16.0-rc1) (2022-02-11)
+
+[Full Changelog](https://github.com/fission/fission/compare/v1.15.1...v1.16.0-rc1)
+
+**Merged pull requests:**
+
+- Fix validation for secret & configmap reference with function   [\#2349](https://github.com/fission/fission/pull/2349) ([blackfly19](https://github.com/blackfly19))
+- dump HTTP request/response for function test [\#2348](https://github.com/fission/fission/pull/2348) ([shubham4443](https://github.com/shubham4443))
+- Added validation to keda types and updated help [\#2346](https://github.com/fission/fission/pull/2346) ([blackfly19](https://github.com/blackfly19))
+- Changed spec deletion order according to dependency [\#2344](https://github.com/fission/fission/pull/2344) ([blackfly19](https://github.com/blackfly19))
+- Prevent env deletion if any function exists [\#2343](https://github.com/fission/fission/pull/2343) ([blackfly19](https://github.com/blackfly19))
+- CLI Check [\#2341](https://github.com/fission/fission/pull/2341) ([shubham4443](https://github.com/shubham4443))
+- \[Feature\] Force spec apply even if conflicting resources exist with different deployment ID [\#2338](https://github.com/fission/fission/pull/2338) ([blackfly19](https://github.com/blackfly19))
+- make graceperiod configurable for container functions [\#2337](https://github.com/fission/fission/pull/2337) ([shubham4443](https://github.com/shubham4443))
+- show error while creating mqtrigger if given function is not present [\#2306](https://github.com/fission/fission/pull/2306) ([shubham4443](https://github.com/shubham4443))
+- Rbac resources per release [\#2302](https://github.com/fission/fission/pull/2302) ([sanketsudake](https://github.com/sanketsudake))
+- Kafka connector namespace issue [\#2298](https://github.com/fission/fission/pull/2298) ([blackfly19](https://github.com/blackfly19))
+- Added ignorenotfound flag for all resources' deletion [\#2293](https://github.com/fission/fission/pull/2293) ([blackfly19](https://github.com/blackfly19))
+- feature: Basic auth support with fission router [\#2292](https://github.com/fission/fission/pull/2292) ([praddy26](https://github.com/praddy26))
+- feature: Apply commit label on resources created/updated when '--commitlabel' is passed [\#2279](https://github.com/fission/fission/pull/2279) ([praddy26](https://github.com/praddy26))
+
 ## [v1.15.1](https://github.com/fission/fission/tree/v1.15.1) (2021-12-28)
 
 [Full Changelog](https://github.com/fission/fission/compare/v1.15.0...v1.15.1)
