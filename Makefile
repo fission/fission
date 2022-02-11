@@ -87,7 +87,7 @@ generate-crd-ref-docs:
 	crd-ref-docs --source-path=pkg/apis/core/v1 --config=tools/crd-ref-docs/config.yaml --renderer markdown
 	cp tools/crd-ref-docs/header.md crd_docs.md
 	cat out.md >> crd_docs.md && rm out.md
-	cp crd_docs.md ../fission.io/content/en/docs/crd/_index.md
+	mv crd_docs.md ../fission.io/content/en/docs/reference/crd-reference.md
 
 all-generators: codegen generate-crds generate-swagger-doc
 

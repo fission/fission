@@ -22,6 +22,14 @@ func (Archive) SwaggerDoc() map[string]string {
 	return map_Archive
 }
 
+var map_AuthLogin = map[string]string{
+	"": "AuthLogin defines the body for router login",
+}
+
+func (AuthLogin) SwaggerDoc() map[string]string {
+	return map_AuthLogin
+}
+
 var map_Builder = map[string]string{
 	"":          "Builder is the setting for environment builder.",
 	"image":     "Image for containing the language compilation environment.",
@@ -368,6 +376,14 @@ var map_PackageStatus = map[string]string{
 
 func (PackageStatus) SwaggerDoc() map[string]string {
 	return map_PackageStatus
+}
+
+var map_RouterAuthToken = map[string]string{
+	"": "RouterAuthToken defines the authorization token for accessing router",
+}
+
+func (RouterAuthToken) SwaggerDoc() map[string]string {
+	return map_RouterAuthToken
 }
 
 var map_Runtime = map[string]string{
