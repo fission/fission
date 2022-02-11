@@ -23,7 +23,9 @@ import (
 	"net/http"
 
 	"github.com/pkg/errors"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/fission/fission/pkg/controller/client/rest"
 	"github.com/fission/fission/pkg/fission-cli/console"
@@ -62,6 +64,9 @@ func (c *Misc) SecretExists(m *metav1.ObjectMeta) error {
 		return err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		return k8serrors.NewNotFound(schema.GroupResource{Group: "", Resource: "secret"}, m.Name)
+	}
 	return nil
 }
 
@@ -74,6 +79,9 @@ func (c *Misc) ConfigMapExists(m *metav1.ObjectMeta) error {
 		return err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		return k8serrors.NewNotFound(schema.GroupResource{Group: "", Resource: "configmap"}, m.Name)
+	}
 	return nil
 }
 
