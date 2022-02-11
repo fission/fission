@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httputil"
 	"net/url"
 	"os"
 	"strings"
@@ -192,10 +193,26 @@ func doHTTPRequest(ctx context.Context, url string, headers []string, method, bo
 		req.Header.Set(headerKeyValue[0], headerKeyValue[1])
 	}
 
+	if console.Verbosity >= 2 {
+		dumpReq, err := httputil.DumpRequestOut(req, false)
+		if err != nil {
+			return nil, err
+		}
+		console.Verbose(2, string(dumpReq))
+	}
+
 	hc := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
 	resp, err := hc.Do(req.WithContext(ctx))
 	if err != nil {
 		return nil, errors.Wrap(err, "error executing HTTP request")
+	}
+
+	if console.Verbosity >= 2 {
+		dumpRes, err := httputil.DumpResponse(resp, false)
+		if err != nil {
+			return nil, err
+		}
+		console.Verbose(2, string(dumpRes))
 	}
 
 	return resp, nil
