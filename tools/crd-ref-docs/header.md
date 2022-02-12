@@ -1,7 +1,6 @@
 ---
 title: "Fission CRD Reference"
-weight: 99
+weight: 8
 description: >
   Fission Custom Resources Definition(CRD) Reference
-url: /docs/crd-reference/
 ---
