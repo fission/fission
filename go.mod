@@ -31,9 +31,9 @@ require (
 	github.com/influxdata/influxdb v1.9.5
 	github.com/mholt/archiver v2.1.0+incompatible
 	github.com/minio/minio-go v6.0.14+incompatible
-	github.com/nats-io/nats-streaming-server v0.23.0
-	github.com/nats-io/nats.go v1.13.0
-	github.com/nats-io/stan.go v0.10.0
+	github.com/nats-io/nats-streaming-server v0.24.1
+	github.com/nats-io/nats.go v1.13.1-0.20220121202836-972a071d373d
+	github.com/nats-io/stan.go v0.10.2
 	github.com/nwaples/rardecode v1.1.2 // indirect
 	github.com/opencontainers/image-spec v1.0.2 // indirect
 	github.com/opencontainers/runc v1.0.3 // indirect
@@ -61,7 +61,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.1.0
 	go.opentelemetry.io/otel/trace v1.1.0
 	go.uber.org/zap v1.19.1
-	golang.org/x/net v0.0.0-20211101193420-4a448f8816b3
+	golang.org/x/net v0.0.0-20211112202133-69e39bad7dc2
 	google.golang.org/grpc v1.42.0
 	gotest.tools v2.2.0+incompatible // indirect
 	k8s.io/api v0.22.3
