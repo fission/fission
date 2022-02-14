@@ -19,10 +19,11 @@ package controller
 import (
 	"net/http"
 
-	"github.com/fission/fission/pkg/utils"
 	"github.com/gorilla/mux"
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/fission/fission/pkg/utils"
 )
 
 func (a *API) ConfigMapExists(w http.ResponseWriter, r *http.Request) {
