@@ -24,6 +24,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fission/fission/pkg/utils"
 	"github.com/graymeta/stow"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -173,6 +174,7 @@ func (client *StowClient) copyFileToStream(fileId string, w io.Writer) error {
 		return ErrWritingFileIntoResponse
 	}
 
+	fileId = utils.SanitizeString(fileId)
 	client.logger.Debug("successfully wrote file into httpresponse", zap.String("file", fileId))
 	return nil
 }
