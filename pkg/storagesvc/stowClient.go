@@ -24,10 +24,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fission/fission/pkg/utils"
 	"github.com/graymeta/stow"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	"github.com/fission/fission/pkg/utils"
 )
 
 type (
