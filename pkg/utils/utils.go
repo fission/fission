@@ -207,7 +207,7 @@ func DownloadUrl(ctx context.Context, httpClient *http.Client, url string, local
 }
 
 func SanitizeString(str string) string {
-	str = strings.Replace(str, "\n", "", -1)
-	str = strings.Replace(str, "\r", "", -1)
+	replacer := strings.NewReplacer("\n", "", "\r", "")
+	str = replacer.Replace(str)
 	return str
 }
