@@ -23,6 +23,7 @@ import (
 	"math"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -292,7 +293,14 @@ func (gp *GenericPool) choosePod(ctx context.Context, newLabels map[string]strin
 			annotations := gp.getDeployAnnotations(gp.env)
 			annotationPatch, _ := json.Marshal(annotations)
 
-			patch := fmt.Sprintf(`{"metadata":{"annotations":%v, "labels":%v}}`, string(annotationPatch), string(labelPatch))
+			//prevent unsafe quoting
+			annotationPatchStr := string(annotationPatch)
+			unqAnnotationsPatch, err := strconv.Unquote(annotationPatchStr)
+			if err == nil {
+				annotationPatchStr = unqAnnotationsPatch
+			}
+
+			patch := fmt.Sprintf(`{"metadata":{"annotations":%v, "labels":%v}}`, annotationPatchStr, string(labelPatch))
 			logger.Info("relabel pod", zap.String("pod", patch))
 			newPod, err := gp.kubernetesClient.CoreV1().Pods(chosenPod.Namespace).Patch(ctx, chosenPod.Name, k8sTypes.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
 			if err != nil {
