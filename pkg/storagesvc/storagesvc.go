@@ -80,9 +80,6 @@ func (ss *StorageService) uploadHandler(w http.ResponseWriter, r *http.Request) 
 	}
 	defer file.Close()
 
-	//sanitize string to prevent security issues
-	handler.Filename = utils.SanitizeString(handler.Filename)
-
 	// stow wants the file size, but that's different from the
 	// content length, the content length being the size of the
 	// encoded file in the HTTP request. So we require an
@@ -91,7 +88,7 @@ func (ss *StorageService) uploadHandler(w http.ResponseWriter, r *http.Request) 
 	fileSizeS, ok := r.Header["X-File-Size"]
 	if !ok {
 		ss.logger.Error("upload is missing the 'X-File-Size' header",
-			zap.String("filename", handler.Filename))
+			zap.String("filename", utils.EscapeQuotes(handler.Filename)))
 		http.Error(w, "missing X-File-Size header", http.StatusBadRequest)
 		return
 	}
@@ -99,25 +96,25 @@ func (ss *StorageService) uploadHandler(w http.ResponseWriter, r *http.Request) 
 	fileSize, err := strconv.Atoi(fileSizeS[0])
 	if err != nil {
 		for index, fileSize := range fileSizeS {
-			fileSizeS[index] = utils.SanitizeString(fileSize)
+			fileSizeS[index] = utils.EscapeQuotes(fileSize)
 		}
 		ss.logger.Error("error parsing 'X-File-Size' header",
 			zap.Error(err),
 			zap.Strings("header", fileSizeS),
-			zap.String("filename", handler.Filename))
+			zap.String("filename", utils.EscapeQuotes(handler.Filename)))
 		http.Error(w, "missing or bad X-File-Size header", http.StatusBadRequest)
 		return
 	}
 
 	// TODO: allow headers to add more metadata (e.g. environment and function metadata)
 	ss.logger.Debug("handling upload",
-		zap.String("filename", handler.Filename))
+		zap.String("filename", utils.EscapeQuotes(handler.Filename)))
 
 	id, err := ss.storageClient.putFile(file, int64(fileSize))
 	if err != nil {
 		ss.logger.Error("error saving uploaded file",
 			zap.Error(err),
-			zap.String("filename", handler.Filename))
+			zap.String("filename", utils.EscapeQuotes(handler.Filename)))
 		http.Error(w, "Error saving uploaded file", http.StatusInternalServerError)
 		return
 	}
@@ -130,7 +127,7 @@ func (ss *StorageService) uploadHandler(w http.ResponseWriter, r *http.Request) 
 	if err != nil {
 		ss.logger.Error("error marshaling uploaded file response",
 			zap.Error(err),
-			zap.String("filename", handler.Filename))
+			zap.String("filename", utils.EscapeQuotes(handler.Filename)))
 		http.Error(w, "Error marshaling response", http.StatusInternalServerError)
 		return
 	}
@@ -139,7 +136,7 @@ func (ss *StorageService) uploadHandler(w http.ResponseWriter, r *http.Request) 
 		ss.logger.Error(
 			"error writing HTTP response",
 			zap.Error(err),
-			zap.String("filename", handler.Filename),
+			zap.String("filename", utils.EscapeQuotes(handler.Filename)),
 		)
 	}
 }
@@ -182,8 +179,7 @@ func (ss *StorageService) downloadHandler(w http.ResponseWriter, r *http.Request
 	// stream it to response
 	err = ss.storageClient.copyFileToStream(fileId, w)
 	if err != nil {
-		fileId = utils.SanitizeString(fileId)
-		ss.logger.Error("error getting file from storage client", zap.Error(err), zap.String("file_id", fileId))
+		ss.logger.Error("error getting file from storage client", zap.Error(err), zap.String("file_id", utils.EscapeQuotes(fileId)))
 		if err == ErrNotFound {
 			http.Error(w, "Error retrieving item: not found", http.StatusNotFound)
 		} else if err == ErrRetrievingItem {

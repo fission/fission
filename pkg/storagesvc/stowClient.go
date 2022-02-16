@@ -175,8 +175,7 @@ func (client *StowClient) copyFileToStream(fileId string, w io.Writer) error {
 		return ErrWritingFileIntoResponse
 	}
 
-	fileId = utils.SanitizeString(fileId)
-	client.logger.Debug("successfully wrote file into httpresponse", zap.String("file", fileId))
+	client.logger.Debug("successfully wrote file into httpresponse", zap.String("file", utils.EscapeQuotes(fileId)))
 	return nil
 }
 

@@ -36,12 +36,10 @@ func (a *API) SecretExists(w http.ResponseWriter, r *http.Request) {
 
 	_, err := a.kubernetesClient.CoreV1().Secrets(ns).Get(r.Context(), name, metav1.GetOptions{})
 	if err != nil {
-		name = utils.SanitizeString(name)
-		ns = utils.SanitizeString(ns)
 		a.logger.Error("error getting secret",
 			zap.Error(err),
-			zap.String("secret_name", name),
-			zap.String("namespace", ns))
+			zap.String("secret_name", utils.EscapeQuotes(name)),
+			zap.String("namespace", utils.EscapeQuotes(ns)))
 		a.respondWithError(w, err)
 		return
 	}

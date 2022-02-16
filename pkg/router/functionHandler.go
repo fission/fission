@@ -295,11 +295,10 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 				req.URL.Path = "/"
 			}
 
-			req.URL.Path = utils.SanitizeString(req.URL.Path)
 			logger.Debug("function invoke url",
 				zap.String("prefixTrim", prefixTrim),
 				zap.Bool("keepPrefix", keepPrefix),
-				zap.String("hitURL", req.URL.Path))
+				zap.String("hitURL", utils.EscapeQuotes(req.URL.Path)))
 			// Overwrite request host with internal host,
 			// or request will be blocked in some situations
 			// (e.g. istio-proxy)
@@ -387,9 +386,8 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 
 		// Check whether an error is an timeout error ("dial tcp i/o timeout").
 		if isNetTimeoutErr {
-			req.URL.Host = utils.SanitizeString(req.URL.Host)
 			logger.Debug("request errored out - backing off before retrying",
-				zap.String("url", req.URL.Host),
+				zap.String("url", utils.EscapeQuotes(req.URL.Host)),
 				zap.Error(err))
 			retryCounter++
 		}
