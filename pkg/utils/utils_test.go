@@ -81,3 +81,40 @@ func TestGetChecksum(t *testing.T) {
 		})
 	}
 }
+
+func TestSanitizeString(t *testing.T) {
+	tests := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{
+			name: "Testing tab escape sequence",
+			src:  "This\tis\ta\ttest\t string.",
+			want: "Thisisatest string.",
+		},
+		{
+			name: "Testing carriage return",
+			src:  "This is a \rtest string. \r This is the second test string\r.",
+			want: "This is a test string.  This is the second test string.",
+		},
+		{
+			name: "Testing next line escape sequence",
+			src:  "This is a \ntest string. \n This is the second test string\n.",
+			want: "This is a test string.  This is the second test string.",
+		},
+		{
+			name: "Testing quotes",
+			src:  `This is a "test string"". This is" the second test string "."`,
+			want: `This is a \"test string\"\". This is\" the second test string \".\"`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := SanitizeString(tt.src)
+			if got != tt.want {
+				t.Errorf("SanitizeString() got = %v, want = %v", got, tt.want)
+			}
+		})
+	}
+}
