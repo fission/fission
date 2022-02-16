@@ -206,7 +206,7 @@ func DownloadUrl(ctx context.Context, httpClient *http.Client, url string, local
 	return nil
 }
 
-func SanitizeString(str string) string {
+func EscapeQuotes(str string) string {
 	replacer := strings.NewReplacer("\n", "", "\r", "", "\t", "", `"`, `\"`)
 	str = replacer.Replace(str)
 	return str

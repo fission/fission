@@ -82,7 +82,7 @@ func TestGetChecksum(t *testing.T) {
 	}
 }
 
-func TestSanitizeString(t *testing.T) {
+func TestEscapeQuotes(t *testing.T) {
 	tests := []struct {
 		name string
 		src  string
@@ -111,9 +111,9 @@ func TestSanitizeString(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := SanitizeString(tt.src)
+			got := EscapeQuotes(tt.src)
 			if got != tt.want {
-				t.Errorf("SanitizeString() got = %v, want = %v", got, tt.want)
+				t.Errorf("EscapeQuotes() got = %v, want = %v", got, tt.want)
 			}
 		})
 	}
