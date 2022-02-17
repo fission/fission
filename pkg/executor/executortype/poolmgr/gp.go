@@ -300,7 +300,7 @@ func (gp *GenericPool) choosePod(ctx context.Context, newLabels map[string]strin
 				annotationPatchStr = unqAnnotationsPatch
 			}
 
-			patch := fmt.Sprintf(`{"metadata":{"annotations":%v, "labels":%v}}`, annotationPatchStr, string(labelPatch))
+			patch := fmt.Sprintf(`{"metadata":{"annotations":%q, "labels":%v}}`, annotationPatchStr, string(labelPatch))
 			logger.Info("relabel pod", zap.String("pod", patch))
 			newPod, err := gp.kubernetesClient.CoreV1().Pods(chosenPod.Namespace).Patch(ctx, chosenPod.Name, k8sTypes.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
 			if err != nil {
