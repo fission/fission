@@ -295,6 +295,7 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 				req.URL.Path = "/"
 			}
 
+			req.URL.Path = utils.EscapeQuotes(req.URL.Path)
 			logger.Debug("function invoke url",
 				zap.String("prefixTrim", prefixTrim),
 				zap.Bool("keepPrefix", keepPrefix),
@@ -386,6 +387,7 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 
 		// Check whether an error is an timeout error ("dial tcp i/o timeout").
 		if isNetTimeoutErr {
+			req.URL.Host = utils.EscapeQuotes(req.URL.Host)
 			logger.Debug("request errored out - backing off before retrying",
 				zap.String("url", req.URL.Host),
 				zap.Error(err))

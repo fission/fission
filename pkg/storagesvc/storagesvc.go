@@ -31,6 +31,7 @@ import (
 	"go.opencensus.io/plugin/ochttp"
 	"go.uber.org/zap"
 
+	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/otel"
 )
 
@@ -79,6 +80,9 @@ func (ss *StorageService) uploadHandler(w http.ResponseWriter, r *http.Request) 
 	}
 	defer file.Close()
 
+	//sanitize string to prevent security issues
+	handler.Filename = utils.EscapeQuotes(handler.Filename)
+
 	// stow wants the file size, but that's different from the
 	// content length, the content length being the size of the
 	// encoded file in the HTTP request. So we require an
@@ -96,7 +100,6 @@ func (ss *StorageService) uploadHandler(w http.ResponseWriter, r *http.Request) 
 	if err != nil {
 		ss.logger.Error("error parsing 'X-File-Size' header",
 			zap.Error(err),
-			zap.Strings("header", fileSizeS),
 			zap.String("filename", handler.Filename))
 		http.Error(w, "missing or bad X-File-Size header", http.StatusBadRequest)
 		return
@@ -175,6 +178,7 @@ func (ss *StorageService) downloadHandler(w http.ResponseWriter, r *http.Request
 	// stream it to response
 	err = ss.storageClient.copyFileToStream(fileId, w)
 	if err != nil {
+		fileId = utils.EscapeQuotes(fileId)
 		ss.logger.Error("error getting file from storage client", zap.Error(err), zap.String("file_id", fileId))
 		if err == ErrNotFound {
 			http.Error(w, "Error retrieving item: not found", http.StatusNotFound)

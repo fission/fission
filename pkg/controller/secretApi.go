@@ -22,6 +22,8 @@ import (
 	"github.com/gorilla/mux"
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/fission/fission/pkg/utils"
 )
 
 func (a *API) SecretExists(w http.ResponseWriter, r *http.Request) {
@@ -34,6 +36,8 @@ func (a *API) SecretExists(w http.ResponseWriter, r *http.Request) {
 
 	_, err := a.kubernetesClient.CoreV1().Secrets(ns).Get(r.Context(), name, metav1.GetOptions{})
 	if err != nil {
+		name = utils.EscapeQuotes(name)
+		ns = utils.EscapeQuotes(ns)
 		a.logger.Error("error getting secret",
 			zap.Error(err),
 			zap.String("secret_name", name),
