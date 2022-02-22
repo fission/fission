@@ -21,6 +21,7 @@ import (
 
 	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
+	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -143,6 +144,12 @@ func createEnvironmentFromCmd(input cli.Input) (*fv1.Environment, error) {
 		}
 	}
 
+	builderEnvParams := input.StringSlice(flagkey.EnvBuilder)
+	builderEnvList := util.GetEnvVarFromStringSlice(builderEnvParams)
+
+	runtimeEnvParams := input.StringSlice(flagkey.EnvRuntime)
+	runtimeEnvList := util.GetEnvVarFromStringSlice(runtimeEnvParams)
+
 	resourceReq, err := util.GetResourceReqs(input, nil)
 	if err != nil {
 		e = multierror.Append(e, err)
@@ -165,10 +172,16 @@ func createEnvironmentFromCmd(input cli.Input) (*fv1.Environment, error) {
 			Version: envVersion,
 			Runtime: fv1.Runtime{
 				Image: envImg,
+				Container: &apiv1.Container{
+					Env: runtimeEnvList,
+				},
 			},
 			Builder: fv1.Builder{
 				Image:   envBuilderImg,
 				Command: envBuildCmd,
+				Container: &apiv1.Container{
+					Env: builderEnvList,
+				},
 			},
 			Poolsize:                     poolsize,
 			Resources:                    *resourceReq,
