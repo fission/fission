@@ -83,7 +83,7 @@ spec:
         {{- include "opentracing.envs" . | indent 8 }}
         {{- include "opentelemtry.envs" . | indent 8 }}
         resources:
-          {{- toYaml .Values.router.resources | indent 10 }}
+          {{- toYaml .Values.router.resources | nindent 10 }}
         readinessProbe:
           httpGet:
             path: "/router-healthz"
