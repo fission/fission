@@ -37,6 +37,8 @@ spec:
               fieldPath: metadata.namespace
         {{- include "opentracing.envs" . | indent 8 }}
         {{- include "opentelemtry.envs" . | indent 8 }}
+        resources:
+          {{- toYaml .Values.controller.resources | nindent 10 }}
         {{- if .Values.terminationMessagePath }}
         terminationMessagePath: {{ .Values.terminationMessagePath }}
         {{- end }}

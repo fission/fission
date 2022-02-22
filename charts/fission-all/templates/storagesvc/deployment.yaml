@@ -51,6 +51,8 @@ spec:
         {{- end }}
         {{- include "opentracing.envs" . | indent 8 }}
         {{- include "opentelemtry.envs" . | indent 8 }}
+        resources:
+          {{- toYaml .Values.storagesvc.resources | nindent 10 }}
         {{- if ne (.Values.persistence.storageType | default "local") "s3" }}
         volumeMounts:
         - name: fission-storage

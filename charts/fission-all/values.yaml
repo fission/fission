@@ -128,6 +128,17 @@ executor:
   ## This is applicable to Pool Manager executor type only.
   ##
   podReadyTimeout: 300s
+  
+  ## Pod resources as:
+  ##  resources:
+  ##    limits:
+  ##      cpu: <tbd>
+  ##      memory: <tbd>
+  ##    requests:
+  ##      cpu: <tbd>
+  ##      memory: <tbd>
+  ##
+  resources: {}
 
 ## router is responsible for routing function calls to the appropriate function.
 ##
@@ -223,6 +234,78 @@ router:
   #  tolerations:
   #  nodeSelector:
 
+  ## Pod resources as:
+  ##  resources:
+  ##    limits:
+  ##      cpu: <tbd>
+  ##      memory: <tbd>
+  ##    requests:
+  ##      cpu: <tbd>
+  ##      memory: <tbd>
+  ##
+  resources: {}
+
+## The builder manager watches the package & environments CRD changes and manages the builds of function source code.
+## 
+buildermgr:
+  ## Pod resources as:
+  ##  resources:
+  ##    limits:
+  ##      cpu: <tbd>
+  ##      memory: <tbd>
+  ##    requests:
+  ##      cpu: <tbd>
+  ##      memory: <tbd>
+  ##
+  resources: {}
+
+## controller is the component that the client talks to.
+## It contains CRUD APIs for functions, triggers, environments, Kubernetes event watches, etc. and proxy APIs to internal 3rd-party services.
+##
+controller:
+  ## Pod resources as:
+  ##  resources:
+  ##    limits:
+  ##      cpu: <tbd>
+  ##      memory: <tbd>
+  ##    requests:
+  ##      cpu: <tbd>
+  ##      memory: <tbd>
+  ##
+  resources: {}
+
+## kubewatcher watches the Kubernetes API and invokes functions associated with watches, sending the watch event to the function.
+##
+kubewatcher:
+  ## Pod resources as:
+  ##  resources:
+  ##    limits:
+  ##      cpu: <tbd>
+  ##      memory: <tbd>
+  ##    requests:
+  ##      cpu: <tbd>
+  ##      memory: <tbd>
+  ##
+  resources: {}
+
+## The storage service is the home for all archives of packages with sizes larger than 256KB.
+##
+storagesvc:
+  ## Pod resources as:
+  ##  resources:
+  ##    limits:
+  ##      cpu: <tbd>
+  ##      memory: <tbd>
+  ##    requests:
+  ##      cpu: <tbd>
+  ##      memory: <tbd>
+  ##
+  resources: {}
+
+## The timer works like kubernetes CronJob but instead of creating a pod to do the task
+## It sends a request to router to invoke the function.
+##
+timer:
   ## Pod resources as:
   ##  resources:
   ##    limits:
@@ -599,6 +682,17 @@ mqt_keda:
     redis:
       image: fission/keda-redis-http-connector
       tag: v0.1
+
+  ## Pod resources as:
+  ##  resources:
+  ##    limits:
+  ##      cpu: <tbd>
+  ##      memory: <tbd>
+  ##    requests:
+  ##      cpu: <tbd>
+  ##      memory: <tbd>
+  ##
+  resources: {}
 
 ## Enable Pprof based profiling used mostly by Fission developers
 ##
