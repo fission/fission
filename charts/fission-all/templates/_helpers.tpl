@@ -25,11 +25,7 @@ controller/config.go
 {{- define "config" -}}
 canary:
   enabled: {{ .Values.canaryDeployment.enabled }}
-  {{- if .Values.prometheus.enabled }}
-  prometheusSvc: "http://{{ .Release.Name }}-prometheus-server.{{ .Release.Namespace }}"
-  {{- else }}
   prometheusSvc: {{ .Values.prometheus.serviceEndpoint | default "" | quote }}
-  {{- end }}
   {{- printf "\n" -}}
 auth:
   enabled: {{ .Values.authentication.enabled | default false }}

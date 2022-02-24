@@ -22,8 +22,3 @@ maintainers:
     email: sanket@infracloud.io
 engine: gotpl
 type: application
-dependencies:
-  - name: prometheus
-    version: 14.11.0
-    repository: https://prometheus-community.github.io/helm-charts
-    condition: prometheus.enabled

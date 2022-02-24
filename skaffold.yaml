@@ -43,7 +43,6 @@ deploy:
         preUpgradeChecks.imageTag: ""
         namespace: fission
         pprof.enabled: false
-        prometheus.enabled: false
         canaryDeployment.enabled: false
         nats.enabled: false
         influxdb.enabled: false
@@ -102,9 +101,6 @@ profiles:
   - op: replace
     path: /deploy/helm/releases/0/setValues/routerServiceType
     value: NodePort
-  - op: replace
-    path: /deploy/helm/releases/0/setValues/prometheus.enabled
-    value: true
   - op: replace
     path: /deploy/helm/releases/0/setValues/influxdb.enabled
     value: true
