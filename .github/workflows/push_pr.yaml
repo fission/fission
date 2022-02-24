@@ -74,9 +74,6 @@ jobs:
         run: |
           helm lint charts/fission-all/
 
-      - name: Helm update
-        run: helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-
       - name: Install Skaffold
         run: |
           curl -Lo skaffold https://storage.googleapis.com/skaffold/releases/latest/skaffold-linux-amd64
@@ -87,6 +84,13 @@ jobs:
         uses: goreleaser/goreleaser-action@v2
         with:
           install-only: true
+
+      - name: Setup Prometheus Stack
+        run: |
+          helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+          helm repo update
+          kubectl create ns monitoring
+          helm install monitoring prometheus-community/prometheus -n monitoring
 
       - name: Build and Install Fission
         run: |
