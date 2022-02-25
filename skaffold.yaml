@@ -110,7 +110,7 @@ profiles:
     value: true
   - op: replace
     path: /deploy/helm/releases/0/setValues/prometheus.serviceEndpoint
-    value: "monitoring-prometheus-server.monitoring.svc.cluster.local"
+    value: "http://monitoring-prometheus-server.monitoring.svc.cluster.local"
 - name: kind-opentelemetry
   patches:
   - op: replace
