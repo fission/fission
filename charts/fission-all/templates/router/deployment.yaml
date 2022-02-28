@@ -130,6 +130,10 @@ spec:
 {{- else if .Values.priorityClassName }}
       priorityClassName: {{ .Values.priorityClassName }}
 {{- end }}
+    {{- with .Values.imagePullSecrets }}
+      imagePullSecrets: 
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
 {{- if .Values.router.extraCoreComponentPodConfig }}
 {{ toYaml .Values.router.extraCoreComponentPodConfig | indent 6 -}}
 {{- else }}

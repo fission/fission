@@ -31,6 +31,9 @@ imageTag: v1.16.0-rc1
 ##
 pullPolicy: IfNotPresent
 
+## imageppullsecrets 
+imagePullSecrets: []
+
 ## priorityClassName represents the priority class name to use for Fission components.
 ## Refer to https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/
 ## executor.priorityClassName takes precedence over this value for executor.
