@@ -5,53 +5,56 @@ import (
 )
 
 var (
-	// funcname: the function's name
-	// funcuid: the function's version id
-	coldStarts = prometheus.NewCounterVec(
+	// function_name: the function's name
+	// function_uid: the function's version id
+	// function_address: the address of the pod from which the function was called
+	functionLabels    = []string{"function_name", "function_uid"}
+	functionPodLabels = []string{"function_name", "function_address"}
+	coldStarts        = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "fission_cold_starts_total",
-			Help: "How many cold starts are made by funcname, funcuid.",
+			Name: "fission_function_cold_starts_total",
+			Help: "How many cold starts are made by function_name, function_uid.",
 		},
-		[]string{"funcname", "funcuid"},
+		functionLabels,
 	)
 	funcRunningSummary = prometheus.NewSummaryVec(
 		prometheus.SummaryOpts{
-			Name:       "fission_func_running_seconds_summary",
+			Name:       "fission_function_running_seconds",
 			Help:       "The running time (last access - create) in seconds of the function.",
 			Objectives: map[float64]float64{0.5: 0.05, 0.9: 0.01, 0.99: 0.001},
 		},
-		[]string{"funcname", "funcuid"},
+		functionLabels,
 	)
 	funcAliveSummary = prometheus.NewSummaryVec(
 		prometheus.SummaryOpts{
-			Name:       "fission_func_alive_seconds_summary",
+			Name:       "fission_function_alive_seconds",
 			Help:       "The alive time in seconds of the function.",
 			Objectives: map[float64]float64{0.5: 0.05, 0.9: 0.01, 0.99: 0.001},
 		},
-		[]string{"funcname", "funcuid"},
+		functionLabels,
 	)
 	funcIsAlive = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "fission_func_is_alive",
-			Help: "A binary value indicating is the funcname, funcuid alive",
+			Name: "fission_function_is_alive",
+			Help: "A binary value indicating is the function_name, function_uid alive",
 		},
-		[]string{"funcname", "funcuid"},
+		functionLabels,
 	)
 	funcReapTime = prometheus.NewSummaryVec(
 		prometheus.SummaryOpts{
-			Name:       "fission_pod_reaptime_seconds",
+			Name:       "fission_function_pod_reaptime_seconds",
 			Help:       "Amount of seconds to reap a pod",
 			Objectives: map[float64]float64{0.5: 0.05, 0.9: 0.01, 0.99: 0.001},
 		},
-		[]string{"funcname", "funcaddress"},
+		functionPodLabels,
 	)
 	idleTime = prometheus.NewSummaryVec(
 		prometheus.SummaryOpts{
-			Name:       "fission_idle_pod_time",
+			Name:       "fission_function_idle_pod_time",
 			Help:       "Number of seconds it took for Reaper to detect the pod was idle",
 			Objectives: map[float64]float64{0.5: 0.05, 0.9: 0.01, 0.99: 0.001},
 		},
-		[]string{"funcname", "funcaddress"},
+		functionPodLabels,
 	)
 )
 

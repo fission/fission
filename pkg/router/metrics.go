@@ -43,12 +43,12 @@ var (
 	metricAddr = ":8080"
 
 	// function + http labels as strings
-	labelsStrings = []string{"cached", "namespace", "name", "host", "path", "method", "code"}
+	labelsStrings = []string{"cached", "function_namespace", "function_name", "host", "path", "method", "code"}
 
 	// Function http calls count
 	// cached: true | false, is this function service address cached locally
-	// namespace: function namespace
-	// name: function name
+	// function_namespace: function namespace
+	// function_name: function name
 	// code: http status code
 	// path: the client call the function on which http path
 	// method: the function's http method
