@@ -39,7 +39,7 @@ require (
 	github.com/opencontainers/runc v1.0.3 // indirect
 	github.com/ory/dockertest v3.3.5+incompatible
 	github.com/pkg/errors v0.9.1
-	github.com/prometheus/client_golang v1.11.0
+	github.com/prometheus/client_golang v1.12.1
 	github.com/prometheus/common v0.32.1
 	github.com/robfig/cron v1.2.0
 	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06
