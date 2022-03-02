@@ -551,15 +551,12 @@ postInstallReportImage: fission/reporter
 ##
 debugEnv: false
 
-## Prometheus for scrapping service metrics
+## Prometheus related configuration to query metrics
 ##
 prometheus:
-  ## set this flag to true if prometheus needs to be deployed along with fission
-  ##
-  enabled: false
-
-  ## If enabled is false, please assign the prometheus service URL
-  ## that is accessible by components.
+  ## please assign the prometheus service URL
+  ## that is accessible by Fission components.
+  ## This is mainly used to enable canary deployment.
   ##
   serviceEndpoint: ""
 

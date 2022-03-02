@@ -43,7 +43,6 @@ deploy:
         preUpgradeChecks.imageTag: ""
         namespace: fission
         pprof.enabled: false
-        prometheus.enabled: false
         canaryDeployment.enabled: false
         nats.enabled: false
         influxdb.enabled: false
@@ -53,6 +52,7 @@ deploy:
         openTracing.enabled: false
         openTelemetry.otlpCollectorEndpoint: ""
         openTelemetry.otlpInsecure: true
+        prometheus.serviceEndpoint: ""
         priorityClassName: system-cluster-critical
         # Use /var/log directory for kind logs export
         terminationMessagePath: /var/log/termination-log
@@ -103,14 +103,14 @@ profiles:
     path: /deploy/helm/releases/0/setValues/routerServiceType
     value: NodePort
   - op: replace
-    path: /deploy/helm/releases/0/setValues/prometheus.enabled
-    value: true
-  - op: replace
     path: /deploy/helm/releases/0/setValues/influxdb.enabled
     value: true
   - op: replace
     path: /deploy/helm/releases/0/setValues/canaryDeployment.enabled
     value: true
+  - op: replace
+    path: /deploy/helm/releases/0/setValues/prometheus.serviceEndpoint
+    value: "http://monitoring-prometheus-server.monitoring.svc.cluster.local"
 - name: kind-opentelemetry
   patches:
   - op: replace

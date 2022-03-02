@@ -86,7 +86,7 @@ build_yamls() {
         $command >${c}-"${version}".yaml
 
         # for OpenShift
-        command="$cmdprefix --set analytics=false,analyticsNonHelmInstall=true,logger.enableSecurityContext=true,prometheus.enabled=false"
+        command="$cmdprefix --set analytics=false,analyticsNonHelmInstall=true,logger.enableSecurityContext=true"
         echo "$command"
         $command >${c}-"${version}"-openshift.yaml
 

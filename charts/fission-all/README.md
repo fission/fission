@@ -93,6 +93,12 @@ _See [helm upgrade](https://helm.sh/docs/helm/helm_upgrade/) for command documen
 
 A major chart version change (like v1.2.3 -> v2.0.0) indicates that there is an incompatible breaking change needing manual actions.
 
+### Upgrade from 1.15.x to 1.16.x
+
+If you have been using `prometheus.enabled=true` in your fission-all chart, you will need to deploy the prometheus using prometheus community supported chart.
+We have removed prometheus dependency from fission-all chart.
+We would recommend [prometheus-community/prometheus](https://artifacthub.io/packages/helm/prometheus-community/prometheus) or [prometheus-community/kube-prometheus-stack](https://artifacthub.io/packages/helm/prometheus-community/kube-prometheus-stack) chart.
+
 ### Upgrade from 1.14.x to 1.15.x
 
 With 1.15.x release, following changes are made:
@@ -129,4 +135,4 @@ You may also `helm show values` on this chart's [dependencies](#dependencies) fo
 
 ### Multiple releases
 
-The same chart can be used to run multiple Fission instances in the same cluster if required. To disable a dependency during installation, set `prometheus.enabled` to `false`.
+The same chart can be used to run multiple Fission instances in the same cluster if required.
