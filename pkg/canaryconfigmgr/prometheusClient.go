@@ -138,8 +138,7 @@ func (promApiClient *PrometheusApiClient) GetTotalFailedRequestsToFuncInWindow(f
 }
 
 func (promApiClient *PrometheusApiClient) executeQuery(queryString string) (float64, error) {
-	// TODO: Change to debug level once we have a better understanding of what is happening
-	promApiClient.logger.Info("prometheus executing query", zap.String("query", queryString))
+	promApiClient.logger.Debug("executing prometheus query", zap.String("query", queryString))
 
 	val, warn, err := promApiClient.client.Query(context.Background(), queryString, time.Now())
 	if err != nil {
