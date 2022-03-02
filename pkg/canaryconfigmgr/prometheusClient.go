@@ -17,6 +17,7 @@ limitations under the License.
 package canaryconfigmgr
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -25,7 +26,6 @@ import (
 	prometheusv1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/prometheus/common/model"
 	"go.uber.org/zap"
-	"golang.org/x/net/context"
 )
 
 type PrometheusApiClient struct {
@@ -81,15 +81,20 @@ func (promApiClient *PrometheusApiClient) GetFunctionFailurePercentage(path stri
 	return failurePercentForFunc, nil
 }
 
+func (PrometheusApiClient *PrometheusApiClient) getFunctionQueryLabels(functionName, functionNamespace, path, method string) string {
+	return fmt.Sprintf("function_name=\"%s\",function_namespace=\"%s\",path=\"%s\",method=\"%s\"", functionName, functionNamespace, path, method)
+}
+
 func (promApiClient *PrometheusApiClient) GetRequestsToFuncInWindow(path string, method string, funcName string, funcNs string, window string) (float64, error) {
-	queryString := fmt.Sprintf("fission_function_calls_total{path=\"%s\",method=\"%s\",name=\"%s\",namespace=\"%s\"}[%v]", path, method, funcName, funcNs, window)
+	queryLabels := promApiClient.getFunctionQueryLabels(funcName, funcNs, path, method)
+	queryString := fmt.Sprintf("fission_function_calls_total{%s}[%v]", queryLabels, window)
 
 	reqs, err := promApiClient.executeQuery(queryString)
 	if err != nil {
 		return 0, errors.Wrapf(err, "error executing query: %s", queryString)
 	}
 
-	queryString = fmt.Sprintf("fission_function_calls_total{path=\"%s\",method=\"%s\",name=\"%s\",namespace=\"%s\"} offset %v", path, method, funcName, funcNs, window)
+	queryString = fmt.Sprintf("fission_function_calls_total{%s} offset %v", queryLabels, window)
 
 	reqsInPrevWindow, err := promApiClient.executeQuery(queryString)
 	if err != nil {
@@ -107,14 +112,15 @@ func (promApiClient *PrometheusApiClient) GetRequestsToFuncInWindow(path string,
 }
 
 func (promApiClient *PrometheusApiClient) GetTotalFailedRequestsToFuncInWindow(funcName string, funcNs string, path string, method string, window string) (float64, error) {
-	queryString := fmt.Sprintf("fission_function_errors_total{name=\"%s\",namespace=\"%s\",path=\"%s\", method=\"%s\"}[%v]", funcName, funcNs, path, method, window)
+	queryLabels := promApiClient.getFunctionQueryLabels(funcName, funcNs, path, method)
+	queryString := fmt.Sprintf("fission_function_errors_total{%s}[%v]", queryLabels, window)
 
 	failedRequests, err := promApiClient.executeQuery(queryString)
 	if err != nil {
 		return 0, errors.Wrapf(err, "error executing query: %s", queryString)
 	}
 
-	queryString = fmt.Sprintf("fission_function_errors_total{name=\"%s\",namespace=\"%s\",path=\"%s\", method=\"%s\"} offset %v", funcName, funcNs, path, method, window)
+	queryString = fmt.Sprintf("fission_function_errors_total{%s} offset %v", queryLabels, window)
 
 	failedReqsInPrevWindow, err := promApiClient.executeQuery(queryString)
 	if err != nil {
@@ -132,6 +138,9 @@ func (promApiClient *PrometheusApiClient) GetTotalFailedRequestsToFuncInWindow(f
 }
 
 func (promApiClient *PrometheusApiClient) executeQuery(queryString string) (float64, error) {
+	// TODO: Change to debug level once we have a better understanding of what is happening
+	promApiClient.logger.Info("prometheus executing query", zap.String("query", queryString))
+
 	val, warn, err := promApiClient.client.Query(context.Background(), queryString, time.Now())
 	if err != nil {
 		return 0, errors.Wrapf(err, "error querying prometheus")
