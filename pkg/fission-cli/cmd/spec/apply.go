@@ -454,15 +454,13 @@ func localArchiveFromSpec(specDir string, aus *spectypes.ArchiveUploadSpec) (*fv
 
 	file, err := os.Open(aus.IncludeGlobs[0])
 	if err != nil {
-		errors.Wrap(err, "Error opening file")
-		return nil, err
+		return nil, errors.Wrap(err, "Error opening file")
 	}
 	defer file.Close()
 
 	match, err := archiver.DefaultZip.Match(file)
 	if err != nil {
-		errors.Wrap(err, "Error comparing file")
-		return nil, err
+		return nil, errors.Wrap(err, "Error comparing file")
 	}
 
 	if len(aus.IncludeGlobs) == 1 && match {
