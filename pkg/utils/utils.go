@@ -28,7 +28,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/mholt/archiver"
+	"github.com/mholt/archiver/v3"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 	"golang.org/x/net/context/ctxhttp"
@@ -94,7 +94,7 @@ func MakeZipArchive(targetName string, globs ...string) (string, error) {
 	}
 
 	// zip up the file list
-	err = archiver.Zip.Make(targetName, files)
+	err = archiver.DefaultZip.Archive(files, targetName)
 	if err != nil {
 		return "", err
 	}

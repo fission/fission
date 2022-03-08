@@ -28,7 +28,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/mholt/archiver"
+	"github.com/mholt/archiver/v3"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 	"go.opencensus.io/plugin/ochttp"
@@ -352,7 +352,21 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 		}
 	}
 
-	if archiver.Zip.Match(tmpPath) && !req.KeepArchive {
+	file, err := os.Open(tmpPath)
+	if err != nil {
+		logger.Error("Error opening file",
+			zap.Error(err))
+		return http.StatusInternalServerError, err
+	}
+	defer file.Close()
+	match, err := archiver.DefaultZip.Match(file)
+	if err != nil {
+		logger.Error("Error matching file",
+			zap.Error(err))
+		return http.StatusInternalServerError, err
+	}
+
+	if match && !req.KeepArchive {
 		// unarchive tmp file to a tmp unarchive path
 		id, err := uuid.NewV4()
 		if err != nil {
@@ -377,7 +391,7 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 
 	// move tmp file to requested filename
 	renamePath := filepath.Join(fetcher.sharedVolumePath, req.Filename)
-	err := fetcher.rename(tmpPath, renamePath)
+	err = fetcher.rename(tmpPath, renamePath)
 	if err != nil {
 		logger.Error("error renaming file",
 			zap.Error(err),
@@ -621,12 +635,12 @@ func (fetcher *Fetcher) archive(src string, dst string) error {
 	} else {
 		files = append(files, src)
 	}
-	return archiver.Zip.Make(dst, files)
+	return archiver.DefaultZip.Archive(files, dst)
 }
 
 // unarchive is a function that unzips a zip file to destination
 func (fetcher *Fetcher) unarchive(src string, dst string) error {
-	err := archiver.Zip.Open(src, dst)
+	err := archiver.DefaultZip.Unarchive(src, dst)
 	if err != nil {
 		return errors.Wrap(err, "failed to unzip file")
 	}

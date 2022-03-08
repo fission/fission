@@ -27,7 +27,7 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/go-git/go-git/v5"
-	"github.com/mholt/archiver"
+	"github.com/mholt/archiver/v3"
 	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -451,7 +451,21 @@ func localArchiveFromSpec(specDir string, aus *spectypes.ArchiveUploadSpec) (*fv
 	// XXX if there are lots of globs it's probably more efficient
 	// to do a filepath.Walk and call path.Match on each path...
 	files := make([]string, 0)
-	if len(aus.IncludeGlobs) == 1 && archiver.Zip.Match(aus.IncludeGlobs[0]) {
+
+	file, err := os.Open(aus.IncludeGlobs[0])
+	if err != nil {
+		errors.Wrap(err, "Error opening file")
+		return nil, err
+	}
+	defer file.Close()
+
+	match, err := archiver.DefaultZip.Match(file)
+	if err != nil {
+		errors.Wrap(err, "Error comparing file")
+		return nil, err
+	}
+
+	if len(aus.IncludeGlobs) == 1 && match {
 		files = append(files, aus.IncludeGlobs[0])
 	} else {
 		for _, relativeGlob := range aus.IncludeGlobs {
@@ -492,7 +506,7 @@ func localArchiveFromSpec(specDir string, aus *spectypes.ArchiveUploadSpec) (*fv
 			return nil, err
 		}
 		archiveFileName = archiveFile.Name()
-		err = archiver.Zip.Make(archiveFileName, files)
+		err = archiver.DefaultZip.Archive(files, archiveFileName)
 		if err != nil {
 			return nil, err
 		}

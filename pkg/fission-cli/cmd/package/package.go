@@ -26,7 +26,7 @@ import (
 
 	"github.com/dchest/uniuri"
 	"github.com/hashicorp/go-multierror"
-	"github.com/mholt/archiver"
+	"github.com/mholt/archiver/v3"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 
@@ -223,8 +223,20 @@ func makeArchiveFile(archiveNameHint string, archiveInput []string, noZip bool) 
 			return "", errors.Wrapf(err, "open input file %v", files[0])
 		}
 
+		file, err := os.Open(files[0])
+		if err != nil {
+			errors.Wrap(err, "Error opening file")
+			return "", err
+		}
+		defer file.Close()
+
+		match, err := archiver.DefaultZip.Match(file)
+		if err != nil {
+			errors.Wrap(err, "Error comparing file")
+			return "", err
+		}
 		// if it's an existing zip file OR we're not supposed to zip it, don't do anything
-		if archiver.Zip.Match(files[0]) || noZip {
+		if match || noZip {
 			return files[0], nil
 		}
 	}
