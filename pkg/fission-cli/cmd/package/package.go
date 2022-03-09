@@ -210,6 +210,8 @@ func makeArchiveFile(archiveNameHint string, archiveInput []string, noZip bool) 
 	// Unique name for the archive
 	archiveName := archiveName(archiveNameHint, archiveInput)
 
+	var match bool
+
 	// Get files from inputs as number of files decide next steps
 	files, err := utils.FindAllGlobs(archiveInput...)
 	if err != nil {
@@ -223,17 +225,18 @@ func makeArchiveFile(archiveNameHint string, archiveInput []string, noZip bool) 
 			return "", errors.Wrapf(err, "open input file %v", files[0])
 		}
 
+		// if it's an existing zip file OR we're not supposed to zip it, don't do anything
 		file, err := os.Open(files[0])
 		if err != nil {
-			return "", errors.Wrap(err, "Error opening file")
+			match = false
+		} else {
+			match, err = archiver.DefaultZip.Match(file)
+			if err != nil {
+				return "", fmt.Errorf("error comparing file: %v", err)
+			}
 		}
 		defer file.Close()
 
-		match, err := archiver.DefaultZip.Match(file)
-		if err != nil {
-			return "", errors.Wrap(err, "Error comparing file")
-		}
-		// if it's an existing zip file OR we're not supposed to zip it, don't do anything
 		if match || noZip {
 			return files[0], nil
 		}

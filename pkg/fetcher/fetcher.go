@@ -255,6 +255,7 @@ func (fetcher *Fetcher) SpecializeHandler(w http.ResponseWriter, r *http.Request
 // It returns the HTTP code and error if any
 func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req FunctionFetchRequest) (int, error) {
 	logger := otelUtils.LoggerWithTraceID(ctx, fetcher.logger)
+	var match bool
 
 	// check that the requested filename is not an empty string and error out if so
 	if len(req.Filename) == 0 {
@@ -352,19 +353,19 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 		}
 	}
 
+	//checking if file is a zip
 	file, err := os.Open(tmpPath)
 	if err != nil {
-		logger.Error("Error opening file",
-			zap.Error(err))
-		return http.StatusInternalServerError, err
+		match = false
+	} else {
+		match, err = archiver.DefaultZip.Match(file)
+		if err != nil {
+			logger.Error("Error comparing file",
+				zap.Error(err))
+			return http.StatusInternalServerError, err
+		}
 	}
 	defer file.Close()
-	match, err := archiver.DefaultZip.Match(file)
-	if err != nil {
-		logger.Error("Error matching file",
-			zap.Error(err))
-		return http.StatusInternalServerError, err
-	}
 
 	if match && !req.KeepArchive {
 		// unarchive tmp file to a tmp unarchive path
