@@ -495,10 +495,12 @@ func localArchiveFromSpec(specDir string, aus *spectypes.ArchiveUploadSpec) (*fv
 			return nil, err
 		}
 		archiveFileName = archiveFile.Name()
+		archiver.DefaultZip.OverwriteExisting = true
 		err = archiver.DefaultZip.Archive(files, archiveFileName)
 		if err != nil {
 			return nil, err
 		}
+		archiver.DefaultZip.OverwriteExisting = false
 	}
 
 	size, err := utils.FileSize(archiveFileName)

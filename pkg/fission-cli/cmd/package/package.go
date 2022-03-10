@@ -149,7 +149,7 @@ func CreateArchive(client client.Interface, input cli.Input, includeFiles []stri
 	if input.Bool(flagkey.SpecSave) || input.Bool(flagkey.SpecDry) {
 		// create an ArchiveUploadSpec and reference it from the archive
 		aus := &spectypes.ArchiveUploadSpec{
-			Name:         archiveName("", includeFiles) + ".zip",
+			Name:         archiveName("", includeFiles),
 			IncludeGlobs: includeFiles,
 		}
 
@@ -207,7 +207,7 @@ func CreateArchive(client client.Interface, input cli.Input, includeFiles []stri
 func makeArchiveFile(archiveNameHint string, archiveInput []string, noZip bool) (string, error) {
 
 	// Unique name for the archive
-	archiveName := archiveName(archiveNameHint, archiveInput) + ".zip"
+	archiveFileName := archiveName(archiveNameHint, archiveInput) + ".zip"
 
 	// Get files from inputs as number of files decide next steps
 	files, err := utils.FindAllGlobs(archiveInput...)
@@ -234,7 +234,7 @@ func makeArchiveFile(archiveNameHint string, archiveInput []string, noZip bool) 
 		return "", errors.Wrap(err, "error create temporary archive directory")
 	}
 
-	archivePath, err := utils.MakeZipArchive(filepath.Join(tmpDir, archiveName), archiveInput...)
+	archivePath, err := utils.MakeZipArchive(filepath.Join(tmpDir, archiveFileName), archiveInput...)
 	if err != nil {
 		return "", errors.Wrap(err, "create archive file")
 	}
