@@ -149,7 +149,7 @@ func CreateArchive(client client.Interface, input cli.Input, includeFiles []stri
 	if input.Bool(flagkey.SpecSave) || input.Bool(flagkey.SpecDry) {
 		// create an ArchiveUploadSpec and reference it from the archive
 		aus := &spectypes.ArchiveUploadSpec{
-			Name:         archiveName("", includeFiles),
+			Name:         archiveName("", includeFiles) + ".zip",
 			IncludeGlobs: includeFiles,
 		}
 
@@ -207,7 +207,7 @@ func CreateArchive(client client.Interface, input cli.Input, includeFiles []stri
 func makeArchiveFile(archiveNameHint string, archiveInput []string, noZip bool) (string, error) {
 
 	// Unique name for the archive
-	archiveName := archiveName(archiveNameHint, archiveInput)
+	archiveName := archiveName(archiveNameHint, archiveInput) + ".zip"
 
 	// Get files from inputs as number of files decide next steps
 	files, err := utils.FindAllGlobs(archiveInput...)
@@ -244,14 +244,13 @@ func makeArchiveFile(archiveNameHint string, archiveInput []string, noZip bool) 
 
 // Name an archive
 func archiveName(givenNameHint string, includedFiles []string) string {
-	//Adding .zip before returning because archive function expects that.
 	if len(givenNameHint) > 0 {
-		return fmt.Sprintf("%v-%v.zip", givenNameHint, uniuri.NewLen(4))
+		return fmt.Sprintf("%v-%v", givenNameHint, uniuri.NewLen(4))
 	}
 	if len(includedFiles) == 0 {
-		return uniuri.NewLen(8) + ".zip"
+		return uniuri.NewLen(8)
 	}
-	return fmt.Sprintf("%v-%v.zip", util.KubifyName(includedFiles[0]), uniuri.NewLen(4))
+	return fmt.Sprintf("%v-%v", util.KubifyName(includedFiles[0]), uniuri.NewLen(4))
 }
 
 func GetFunctionsByPackage(client client.Interface, pkgName, pkgNamespace string) ([]fv1.Function, error) {
