@@ -255,7 +255,6 @@ func (fetcher *Fetcher) SpecializeHandler(w http.ResponseWriter, r *http.Request
 // It returns the HTTP code and error if any
 func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req FunctionFetchRequest) (int, error) {
 	logger := otelUtils.LoggerWithTraceID(ctx, fetcher.logger)
-	var match bool
 
 	// check that the requested filename is not an empty string and error out if so
 	if len(req.Filename) == 0 {
@@ -354,20 +353,7 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 	}
 
 	//checking if file is a zip
-	file, err := os.Open(tmpPath)
-	if err != nil {
-		match = false
-	} else {
-		match, err = archiver.DefaultZip.Match(file)
-		if err != nil {
-			logger.Error("Error comparing file",
-				zap.Error(err))
-			return http.StatusInternalServerError, err
-		}
-	}
-	defer file.Close()
-
-	if match && !req.KeepArchive {
+	if match, _ := utils.IsZip(tmpPath); match && !req.KeepArchive {
 		// unarchive tmp file to a tmp unarchive path
 		id, err := uuid.NewV4()
 		if err != nil {
@@ -392,7 +378,7 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 
 	// move tmp file to requested filename
 	renamePath := filepath.Join(fetcher.sharedVolumePath, req.Filename)
-	err = fetcher.rename(tmpPath, renamePath)
+	err := fetcher.rename(tmpPath, renamePath)
 	if err != nil {
 		logger.Error("error renaming file",
 			zap.Error(err),
@@ -643,7 +629,7 @@ func (fetcher *Fetcher) archive(src string, dst string) error {
 func (fetcher *Fetcher) unarchive(src string, dst string) error {
 	err := archiver.DefaultZip.Unarchive(src, dst)
 	if err != nil {
-		return errors.Wrap(err, "failed to unzip file")
+		return fmt.Errorf("failed to unzip file: %v", err)
 	}
 	return nil
 }

@@ -205,3 +205,12 @@ func DownloadUrl(ctx context.Context, httpClient *http.Client, url string, local
 
 	return nil
 }
+
+func IsZip(filename string) (bool, error) {
+	f, err := os.Open(filename)
+	if err != nil {
+		return false, nil
+	}
+	defer f.Close()
+	return archiver.DefaultZip.Match(f)
+}

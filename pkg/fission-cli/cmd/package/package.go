@@ -26,7 +26,6 @@ import (
 
 	"github.com/dchest/uniuri"
 	"github.com/hashicorp/go-multierror"
-	"github.com/mholt/archiver/v3"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 
@@ -210,8 +209,6 @@ func makeArchiveFile(archiveNameHint string, archiveInput []string, noZip bool) 
 	// Unique name for the archive
 	archiveName := archiveName(archiveNameHint, archiveInput)
 
-	var match bool
-
 	// Get files from inputs as number of files decide next steps
 	files, err := utils.FindAllGlobs(archiveInput...)
 	if err != nil {
@@ -226,18 +223,7 @@ func makeArchiveFile(archiveNameHint string, archiveInput []string, noZip bool) 
 		}
 
 		// if it's an existing zip file OR we're not supposed to zip it, don't do anything
-		file, err := os.Open(files[0])
-		if err != nil {
-			match = false
-		} else {
-			match, err = archiver.DefaultZip.Match(file)
-			if err != nil {
-				return "", fmt.Errorf("error comparing file: %v", err)
-			}
-		}
-		defer file.Close()
-
-		if match || noZip {
+		if match, _ := utils.IsZip(files[0]); match || noZip {
 			return files[0], nil
 		}
 	}
@@ -258,13 +244,14 @@ func makeArchiveFile(archiveNameHint string, archiveInput []string, noZip bool) 
 
 // Name an archive
 func archiveName(givenNameHint string, includedFiles []string) string {
+	//Adding .zip before returning because archive function expects that.
 	if len(givenNameHint) > 0 {
-		return fmt.Sprintf("%v-%v", givenNameHint, uniuri.NewLen(4))
+		return fmt.Sprintf("%v-%v.zip", givenNameHint, uniuri.NewLen(4))
 	}
 	if len(includedFiles) == 0 {
-		return uniuri.NewLen(8)
+		return uniuri.NewLen(8) + ".zip"
 	}
-	return fmt.Sprintf("%v-%v", util.KubifyName(includedFiles[0]), uniuri.NewLen(4))
+	return fmt.Sprintf("%v-%v.zip", util.KubifyName(includedFiles[0]), uniuri.NewLen(4))
 }
 
 func GetFunctionsByPackage(client client.Interface, pkgName, pkgNamespace string) ([]fv1.Function, error) {

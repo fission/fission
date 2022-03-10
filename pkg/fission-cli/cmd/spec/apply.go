@@ -440,7 +440,6 @@ func applyResources(fclient client.Interface, specDir string, fr *FissionResourc
 func localArchiveFromSpec(specDir string, aus *spectypes.ArchiveUploadSpec) (*fv1.Archive, error) {
 	// get root dir
 	var rootDir string
-	var match bool
 
 	if len(aus.RootDir) == 0 {
 		rootDir = filepath.Clean(specDir + "/..")
@@ -454,18 +453,8 @@ func localArchiveFromSpec(specDir string, aus *spectypes.ArchiveUploadSpec) (*fv
 	// to do a filepath.Walk and call path.Match on each path...
 	files := make([]string, 0)
 
-	file, err := os.Open(aus.IncludeGlobs[0])
-	if err != nil {
-		match = false
-	} else {
-		match, err = archiver.DefaultZip.Match(file)
-		if err != nil {
-			return nil, fmt.Errorf("error comparing file: %v", err)
-		}
-	}
-	defer file.Close()
-
-	if len(aus.IncludeGlobs) == 1 && match {
+	//checking if file is a zip
+	if match, _ := utils.IsZip(aus.IncludeGlobs[0]); match && len(aus.IncludeGlobs) == 1 {
 		files = append(files, aus.IncludeGlobs[0])
 	} else {
 		for _, relativeGlob := range aus.IncludeGlobs {
@@ -500,8 +489,8 @@ func localArchiveFromSpec(specDir string, aus *spectypes.ArchiveUploadSpec) (*fv
 	}
 
 	if len(files) > 1 || !isSingleFile {
-		// zip up the file list
-		archiveFile, err := os.CreateTemp("", fmt.Sprintf("fission-archive-%v", aus.Name))
+		// zip up the file list.Adding .zip because archive function expects that.
+		archiveFile, err := os.CreateTemp("", fmt.Sprintf("fission-archive-%v-*.zip", aus.Name))
 		if err != nil {
 			return nil, err
 		}
