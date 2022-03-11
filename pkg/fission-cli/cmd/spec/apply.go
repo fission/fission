@@ -489,18 +489,19 @@ func localArchiveFromSpec(specDir string, aus *spectypes.ArchiveUploadSpec) (*fv
 	}
 
 	if len(files) > 1 || !isSingleFile {
-		// zip up the file list.Adding .zip because archive function expects that.
+		// Generate archive name with .zip extension and pack all files under it.
 		archiveFile, err := os.CreateTemp("", fmt.Sprintf("fission-archive-%v-*.zip", aus.Name))
 		if err != nil {
 			return nil, err
 		}
 		archiveFileName = archiveFile.Name()
-		archiver.DefaultZip.OverwriteExisting = true
-		err = archiver.DefaultZip.Archive(files, archiveFileName)
+
+		//This instance is required to allow overwriting and not changing DefaultZip
+		zipOverwrite := archiver.Zip{OverwriteExisting: true}
+		err = zipOverwrite.Archive(files, archiveFileName)
 		if err != nil {
 			return nil, err
 		}
-		archiver.DefaultZip.OverwriteExisting = false
 	}
 
 	size, err := utils.FileSize(archiveFileName)

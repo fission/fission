@@ -629,7 +629,7 @@ func (fetcher *Fetcher) archive(src string, dst string) error {
 func (fetcher *Fetcher) unarchive(src string, dst string) error {
 	err := archiver.DefaultZip.Unarchive(src, dst)
 	if err != nil {
-		return fmt.Errorf("failed to unzip file: %v", err)
+		return fmt.Errorf("failed to unzip file: %w", err)
 	}
 	return nil
 }
