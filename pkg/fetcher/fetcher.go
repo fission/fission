@@ -28,7 +28,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/mholt/archiver"
+	"github.com/mholt/archiver/v3"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 	"go.opencensus.io/plugin/ochttp"
@@ -352,7 +352,8 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 		}
 	}
 
-	if archiver.Zip.Match(tmpPath) && !req.KeepArchive {
+	//checking if file is a zip
+	if match, _ := utils.IsZip(tmpPath); match && !req.KeepArchive {
 		// unarchive tmp file to a tmp unarchive path
 		id, err := uuid.NewV4()
 		if err != nil {
@@ -621,14 +622,14 @@ func (fetcher *Fetcher) archive(src string, dst string) error {
 	} else {
 		files = append(files, src)
 	}
-	return archiver.Zip.Make(dst, files)
+	return archiver.DefaultZip.Archive(files, dst)
 }
 
 // unarchive is a function that unzips a zip file to destination
 func (fetcher *Fetcher) unarchive(src string, dst string) error {
-	err := archiver.Zip.Open(src, dst)
+	err := archiver.DefaultZip.Unarchive(src, dst)
 	if err != nil {
-		return errors.Wrap(err, "failed to unzip file")
+		return fmt.Errorf("failed to unzip file: %w", err)
 	}
 	return nil
 }

@@ -28,7 +28,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/mholt/archiver"
+	"github.com/mholt/archiver/v3"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 	"golang.org/x/net/context/ctxhttp"
@@ -94,7 +94,7 @@ func MakeZipArchive(targetName string, globs ...string) (string, error) {
 	}
 
 	// zip up the file list
-	err = archiver.Zip.Make(targetName, files)
+	err = archiver.DefaultZip.Archive(files, targetName)
 	if err != nil {
 		return "", err
 	}
@@ -204,4 +204,13 @@ func DownloadUrl(ctx context.Context, httpClient *http.Client, url string, local
 	}
 
 	return nil
+}
+
+func IsZip(filename string) (bool, error) {
+	f, err := os.Open(filename)
+	if err != nil {
+		return false, nil
+	}
+	defer f.Close()
+	return archiver.DefaultZip.Match(f)
 }

@@ -26,7 +26,6 @@ import (
 
 	"github.com/dchest/uniuri"
 	"github.com/hashicorp/go-multierror"
-	"github.com/mholt/archiver"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 
@@ -208,7 +207,7 @@ func CreateArchive(client client.Interface, input cli.Input, includeFiles []stri
 func makeArchiveFile(archiveNameHint string, archiveInput []string, noZip bool) (string, error) {
 
 	// Unique name for the archive
-	archiveName := archiveName(archiveNameHint, archiveInput)
+	archiveFileName := archiveName(archiveNameHint, archiveInput) + ".zip"
 
 	// Get files from inputs as number of files decide next steps
 	files, err := utils.FindAllGlobs(archiveInput...)
@@ -224,7 +223,7 @@ func makeArchiveFile(archiveNameHint string, archiveInput []string, noZip bool) 
 		}
 
 		// if it's an existing zip file OR we're not supposed to zip it, don't do anything
-		if archiver.Zip.Match(files[0]) || noZip {
+		if match, _ := utils.IsZip(files[0]); match || noZip {
 			return files[0], nil
 		}
 	}
@@ -235,7 +234,7 @@ func makeArchiveFile(archiveNameHint string, archiveInput []string, noZip bool) 
 		return "", errors.Wrap(err, "error create temporary archive directory")
 	}
 
-	archivePath, err := utils.MakeZipArchive(filepath.Join(tmpDir, archiveName), archiveInput...)
+	archivePath, err := utils.MakeZipArchive(filepath.Join(tmpDir, archiveFileName), archiveInput...)
 	if err != nil {
 		return "", errors.Wrap(err, "create archive file")
 	}

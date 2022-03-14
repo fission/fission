@@ -27,7 +27,7 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/go-git/go-git/v5"
-	"github.com/mholt/archiver"
+	"github.com/mholt/archiver/v3"
 	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -440,6 +440,7 @@ func applyResources(fclient client.Interface, specDir string, fr *FissionResourc
 func localArchiveFromSpec(specDir string, aus *spectypes.ArchiveUploadSpec) (*fv1.Archive, error) {
 	// get root dir
 	var rootDir string
+
 	if len(aus.RootDir) == 0 {
 		rootDir = filepath.Clean(specDir + "/..")
 	} else {
@@ -451,7 +452,9 @@ func localArchiveFromSpec(specDir string, aus *spectypes.ArchiveUploadSpec) (*fv
 	// XXX if there are lots of globs it's probably more efficient
 	// to do a filepath.Walk and call path.Match on each path...
 	files := make([]string, 0)
-	if len(aus.IncludeGlobs) == 1 && archiver.Zip.Match(aus.IncludeGlobs[0]) {
+
+	//checking if file is a zip
+	if match, _ := utils.IsZip(aus.IncludeGlobs[0]); match && len(aus.IncludeGlobs) == 1 {
 		files = append(files, aus.IncludeGlobs[0])
 	} else {
 		for _, relativeGlob := range aus.IncludeGlobs {
@@ -486,13 +489,16 @@ func localArchiveFromSpec(specDir string, aus *spectypes.ArchiveUploadSpec) (*fv
 	}
 
 	if len(files) > 1 || !isSingleFile {
-		// zip up the file list
-		archiveFile, err := os.CreateTemp("", fmt.Sprintf("fission-archive-%v", aus.Name))
+		// Generate archive name with .zip extension and pack all files under it.
+		archiveFile, err := os.CreateTemp("", fmt.Sprintf("fission-archive-%v-*.zip", aus.Name))
 		if err != nil {
 			return nil, err
 		}
 		archiveFileName = archiveFile.Name()
-		err = archiver.Zip.Make(archiveFileName, files)
+
+		//This instance is required to allow overwriting and not changing DefaultZip
+		zipOverwrite := archiver.Zip{OverwriteExisting: true}
+		err = zipOverwrite.Archive(files, archiveFileName)
 		if err != nil {
 			return nil, err
 		}
