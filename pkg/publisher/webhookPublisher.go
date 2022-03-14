@@ -18,6 +18,7 @@ package publisher
 
 import (
 	"bytes"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"io"
 	"net/http"
 	"strings"
@@ -25,6 +26,12 @@ import (
 
 	"go.uber.org/zap"
 )
+
+var client *http.Client
+
+func init() {
+	client = &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
+}
 
 type (
 	// WebhookPublisher for a single URL. Satisfies the Publisher interface.
@@ -74,9 +81,10 @@ func (p *WebhookPublisher) Publish(body string, headers map[string]string, targe
 }
 
 func (p *WebhookPublisher) svc() {
+	http.DefaultClient.Timeout = time.Minute * 60
 	for {
 		r := <-p.requestChannel
-		p.makeHTTPRequest(r)
+		go p.makeHTTPRequest(r)
 	}
 }
 
@@ -107,7 +115,7 @@ func (p *WebhookPublisher) makeHTTPRequest(r *publishRequest) {
 		req.Header.Set(k, v)
 	}
 	// Make the request
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		fields = append(fields, zap.Error(err), zap.Any("request", r))
 	} else {

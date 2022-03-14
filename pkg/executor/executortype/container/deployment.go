@@ -36,6 +36,12 @@ import (
 
 func (cn *Container) createOrGetDeployment(ctx context.Context, fn *fv1.Function, deployName string, deployLabels map[string]string, deployAnnotations map[string]string, deployNamespace string) (*appsv1.Deployment, error) {
 	logger := otelUtils.LoggerWithTraceID(ctx, cn.logger)
+	defer func() {
+		if err := recover(); err != nil {
+			logger.Warn("error adopting cn", zap.Any("recover", err), zap.String("funcname", fn.Name),
+				zap.String("cn", deployName), zap.String("ns", deployNamespace))
+		}
+	}()
 
 	// The specializationTimeout here refers to the creation of the pod and not the loading of function
 	// as in other executors.
