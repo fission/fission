@@ -245,7 +245,7 @@ func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function
 		ImagePullPolicy:        deploy.runtimeImagePullPolicy,
 		TerminationMessagePath: "/dev/termination-log",
 		Lifecycle: &apiv1.Lifecycle{
-			PreStop: &apiv1.Handler{
+			PreStop: &apiv1.LifecycleHandler{
 				Exec: &apiv1.ExecAction{
 					Command: []string{
 						"/bin/sleep",

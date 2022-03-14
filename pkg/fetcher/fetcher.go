@@ -43,7 +43,6 @@ import (
 	typedcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/tools/reference"
-	"k8s.io/klog"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
@@ -767,7 +766,7 @@ func (fetcher *Fetcher) WsStartHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	rec, err := eventRecorder(fetcher.kubeClient)
 	if err != nil {
-		klog.Errorf("Error creating recorder %s", err)
+		logger.Error("Error creating recorder", zap.Error(err))
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 	pods, err := fetcher.kubeClient.CoreV1().Pods(fetcher.Info.Namespace).List(ctx, metav1.ListOptions{
@@ -801,7 +800,7 @@ func (fetcher *Fetcher) WsEndHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	rec, err := eventRecorder(fetcher.kubeClient)
 	if err != nil {
-		klog.Errorf("Error creating recorder %s", err)
+		logger.Error("Error creating recorder", zap.Error(err))
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 	pods, err := fetcher.kubeClient.CoreV1().Pods(fetcher.Info.Namespace).List(ctx, metav1.ListOptions{

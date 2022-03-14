@@ -261,7 +261,7 @@ func (cfg *Config) addFetcherToPodSpecWithCommand(podSpec *apiv1.PodSpec, mainCo
 			InitialDelaySeconds: 1,
 			PeriodSeconds:       1,
 			FailureThreshold:    30,
-			Handler: apiv1.Handler{
+			ProbeHandler: apiv1.ProbeHandler{
 				HTTPGet: &apiv1.HTTPGetAction{
 					Path: "/readiness-healthz",
 					Port: intstr.IntOrString{
@@ -274,7 +274,7 @@ func (cfg *Config) addFetcherToPodSpecWithCommand(podSpec *apiv1.PodSpec, mainCo
 		LivenessProbe: &apiv1.Probe{
 			InitialDelaySeconds: 1,
 			PeriodSeconds:       5,
-			Handler: apiv1.Handler{
+			ProbeHandler: apiv1.ProbeHandler{
 				HTTPGet: &apiv1.HTTPGetAction{
 					Path: "/healthz",
 					Port: intstr.IntOrString{
@@ -295,7 +295,7 @@ func (cfg *Config) addFetcherToPodSpecWithCommand(podSpec *apiv1.PodSpec, mainCo
 	// https://github.com/kubernetes/kubernetes/issues/47576#issuecomment-308900172
 	if podSpec.TerminationGracePeriodSeconds != nil {
 		c.Lifecycle = &apiv1.Lifecycle{
-			PreStop: &apiv1.Handler{
+			PreStop: &apiv1.LifecycleHandler{
 				Exec: &apiv1.ExecAction{
 					Command: []string{
 						"/bin/sleep",
