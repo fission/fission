@@ -29,10 +29,6 @@ import (
 
 var client *http.Client
 
-func init() {
-	client = &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
-}
-
 type (
 	// WebhookPublisher for a single URL. Satisfies the Publisher interface.
 	WebhookPublisher struct {
@@ -64,6 +60,11 @@ func MakeWebhookPublisher(logger *zap.Logger, baseURL string) *WebhookPublisher 
 		maxRetries: 10,
 		retryDelay: 500 * time.Millisecond,
 	}
+
+	client = &http.Client{
+		Transport: otelhttp.NewTransport(http.DefaultTransport),
+		Timeout:   time.Minute * 60,
+	}
 	go p.svc()
 	return p
 }
@@ -81,7 +82,6 @@ func (p *WebhookPublisher) Publish(body string, headers map[string]string, targe
 }
 
 func (p *WebhookPublisher) svc() {
-	http.DefaultClient.Timeout = time.Minute * 60
 	for {
 		r := <-p.requestChannel
 		go p.makeHTTPRequest(r)

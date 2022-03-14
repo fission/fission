@@ -37,8 +37,8 @@ import (
 func (cn *Container) createOrGetDeployment(ctx context.Context, fn *fv1.Function, deployName string, deployLabels map[string]string, deployAnnotations map[string]string, deployNamespace string) (*appsv1.Deployment, error) {
 	logger := otelUtils.LoggerWithTraceID(ctx, cn.logger)
 	defer func() {
-		if err := recover(); err != nil {
-			logger.Warn("error adopting cn", zap.Any("recover", err), zap.String("funcname", fn.Name),
+		if err2 := recover(); err2 != nil {
+			logger.Error("createOrGetDeployment panic", zap.Any("recover", err2), zap.String("funcname", fn.Name),
 				zap.String("cn", deployName), zap.String("ns", deployNamespace))
 		}
 	}()
@@ -171,6 +171,14 @@ func (cn *Container) waitForDeploy(ctx context.Context, depl *appsv1.Deployment,
 
 func (cn *Container) getDeploymentSpec(ctx context.Context, fn *fv1.Function, targetReplicas *int32,
 	deployName string, deployNamespace string, deployLabels map[string]string, deployAnnotations map[string]string) (*appsv1.Deployment, error) {
+
+	logger := otelUtils.LoggerWithTraceID(ctx, cn.logger)
+	defer func() {
+		if err2 := recover(); err2 != nil {
+			logger.Error("getDeploymentSpec panic", zap.Any("recover", err2), zap.String("funcname", fn.Name),
+				zap.String("cn", deployName), zap.String("ns", deployNamespace))
+		}
+	}()
 
 	replicas := int32(fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale)
 	if targetReplicas != nil {
