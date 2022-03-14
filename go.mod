@@ -30,8 +30,8 @@ require (
 	github.com/influxdata/influxdb v1.9.5
 	github.com/mholt/archiver/v3 v3.5.1
 	github.com/minio/minio-go v6.0.14+incompatible
-	github.com/nats-io/nats-streaming-server v0.24.1
-	github.com/nats-io/nats.go v1.13.1-0.20220121202836-972a071d373d
+	github.com/nats-io/nats-streaming-server v0.24.3
+	github.com/nats-io/nats.go v1.13.1-0.20220308171302-2f2f6968e98d
 	github.com/nats-io/stan.go v0.10.2
 	github.com/nwaples/rardecode v1.1.2 // indirect
 	github.com/opencontainers/image-spec v1.0.2 // indirect
