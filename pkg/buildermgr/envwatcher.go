@@ -477,7 +477,7 @@ func (envw *environmentWatcher) createBuilderDeployment(env *fv1.Environment, ns
 		ReadinessProbe: &apiv1.Probe{
 			InitialDelaySeconds: 5,
 			PeriodSeconds:       2,
-			Handler: apiv1.Handler{
+			ProbeHandler: apiv1.ProbeHandler{
 				HTTPGet: &apiv1.HTTPGetAction{
 					Path: "/healthz",
 					Port: intstr.IntOrString{

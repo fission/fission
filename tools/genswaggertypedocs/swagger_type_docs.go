@@ -22,7 +22,6 @@ import (
 	kruntime "k8s.io/apimachinery/pkg/runtime"
 
 	flag "github.com/spf13/pflag"
-	"k8s.io/klog"
 )
 
 var (
@@ -35,7 +34,8 @@ func main() {
 	flag.Parse()
 
 	if *typeSrc == "" {
-		klog.Fatalf("Please define -s flag as it is the source file")
+		fmt.Println("Please define -s flag as it is the source file")
+		os.Exit(1)
 	}
 
 	var funcOut io.Writer
@@ -44,7 +44,8 @@ func main() {
 	} else {
 		file, err := os.Create(*functionDest)
 		if err != nil {
-			klog.Fatalf("Couldn't open %v: %v", *functionDest, err)
+			fmt.Printf("Couldn't open %v: %v", *functionDest, err)
+			os.Exit(1)
 		}
 		defer file.Close()
 		funcOut = file

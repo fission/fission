@@ -92,7 +92,7 @@ func (gp *GenericPool) genDeploymentSpec(env *fv1.Environment) (*appsv1.Deployme
 		// https://kubernetes.io/docs/concepts/workloads/pods/pod/#termination-of-pods
 		// https://github.com/kubernetes/kubernetes/issues/47576#issuecomment-308900172
 		Lifecycle: &apiv1.Lifecycle{
-			PreStop: &apiv1.Handler{
+			PreStop: &apiv1.LifecycleHandler{
 				Exec: &apiv1.ExecAction{
 					Command: []string{
 						"/bin/sleep",
