@@ -19,7 +19,6 @@ package poolmgr
 import (
 	"context"
 	"fmt"
-	"math"
 	"strings"
 
 	"go.uber.org/zap"
@@ -33,27 +32,35 @@ import (
 )
 
 // getPoolName returns a unique name of an environment
-func (gp *GenericPool) getPoolName(env *fv1.Environment) string {
+func getPoolName(env *fv1.Environment) string {
 	// TODO: get rid of resource version here
 	var envPodName string
+
+	min := func(a, b int) int {
+		if a > b {
+			return b
+		} else {
+			return a
+		}
+	}
 
 	//To fit the 63 character limit
 	if len(env.ObjectMeta.Name)+len(env.ObjectMeta.Namespace) < 37 {
 		envPodName = env.ObjectMeta.Name + "-" + env.ObjectMeta.Namespace
 	} else {
-		nameLength := int(math.Min(float64(len(env.ObjectMeta.Name)), 18))
-		namespaceLength := int(math.Min(float64(len(env.ObjectMeta.Namespace)), 18))
+		nameLength := min(len(env.ObjectMeta.Name), 18)
+		namespaceLength := min(len(env.ObjectMeta.Namespace), 18)
 		envPodName = env.ObjectMeta.Name[:nameLength] + "-" + env.ObjectMeta.Namespace[:namespaceLength]
 	}
 
-	return strings.ToLower(fmt.Sprintf("poolmgr-%v-%v", envPodName, env.ResourceVersion))
+	return "poolmgr-" + strings.ToLower(fmt.Sprintf("%s-%s", envPodName, env.ResourceVersion))
 }
 
 func (gp *GenericPool) genDeploymentMeta(env *fv1.Environment) metav1.ObjectMeta {
 	deployLabels := gp.getEnvironmentPoolLabels(env)
 	deployAnnotations := gp.getDeployAnnotations(env)
 	return metav1.ObjectMeta{
-		Name:        gp.getPoolName(env),
+		Name:        getPoolName(env),
 		Labels:      deployLabels,
 		Annotations: deployAnnotations,
 	}
