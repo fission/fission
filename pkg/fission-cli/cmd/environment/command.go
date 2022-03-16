@@ -35,9 +35,8 @@ func Commands() *cobra.Command {
 			flag.EnvPoolsize, flag.EnvBuilderImage, flag.EnvBuildCmd,
 			flag.RunTimeMinCPU, flag.RunTimeMaxCPU, flag.RunTimeMinMemory, flag.RunTimeMaxMemory,
 			flag.EnvTerminationGracePeriod, flag.EnvVersion, flag.EnvImagePullSecret, flag.EnvKeepArchive,
-			flag.NamespaceEnvironment, flag.EnvExternalNetwork,
-			flag.Labels, flag.Annotation,
-			flag.SpecSave, flag.SpecDry},
+			flag.NamespaceEnvironment, flag.EnvExternalNetwork, flag.Labels, flag.Annotation,
+			flag.SpecSave, flag.SpecDry, flag.EnvBuilder, flag.EnvRuntime},
 	})
 
 	getCmd := &cobra.Command{

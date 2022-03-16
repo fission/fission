@@ -372,6 +372,21 @@ func UpdateMapFromStringSlice(dataMap *map[string]string, params []string) bool 
 	return updated
 }
 
+// GetEnvVarFromStringSlice parses key, val from "key=val" string array and updates passed []v1.EnvVar
+func GetEnvVarFromStringSlice(params []string) []v1.EnvVar {
+	envVarList := []v1.EnvVar{}
+	for _, m := range params {
+		keyValue := strings.SplitN(m, "=", 2)
+		if len(keyValue) == 2 && keyValue[1] != "" {
+			envVarList = append(envVarList, v1.EnvVar{
+				Name:  keyValue[0],
+				Value: keyValue[1],
+			})
+		}
+	}
+	return envVarList
+}
+
 func UrlForFunction(name, namespace string) string {
 	prefix := "/fission-function"
 	if namespace != metav1.NamespaceDefault {

@@ -181,6 +181,8 @@ var (
 	EnvImagePullSecret        = Flag{Type: String, Name: flagkey.EnvImagePullSecret, Usage: "Secret for Kubernetes to pull an image from a private registry"}
 	EnvExecutorType           = Flag{Type: String, Name: flagkey.EnvExecutorType, Usage: "Executor type of pod in environment; one of 'poolmgr', 'newdeploy', 'container'"}
 	EnvForce                  = Flag{Type: Bool, Name: flagkey.EnvForce, Short: "f", Usage: "Force delete env even if one or more functions exist", DefaultValue: false}
+	EnvBuilder                = Flag{Type: StringSlice, Name: flagkey.EnvBuilder, Usage: "Environment variable to be set in the builder container"}
+	EnvRuntime                = Flag{Type: StringSlice, Name: flagkey.EnvRuntime, Usage: "Environment variable to be set in the runtime container"}
 
 	KwName      = Flag{Type: String, Name: flagkey.KwName, Usage: "Watch name"}
 	KwFnName    = Flag{Type: String, Name: flagkey.KwFnName, Usage: "Function name"}

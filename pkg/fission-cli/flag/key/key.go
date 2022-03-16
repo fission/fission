@@ -131,6 +131,8 @@ const (
 	EnvImagePullSecret = "imagepullsecret"
 	EnvExecutorType    = "executortype"
 	EnvForce           = force
+	EnvBuilder         = "builder-env"
+	EnvRuntime         = "runtime-env"
 
 	KwName      = resourceName
 	KwFnName    = "function"
