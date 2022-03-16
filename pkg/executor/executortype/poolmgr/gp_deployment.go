@@ -39,9 +39,8 @@ func getPoolName(env *fv1.Environment) string {
 	min := func(a, b int) int {
 		if a > b {
 			return b
-		} else {
-			return a
 		}
+		return a
 	}
 
 	//To fit the 63 character limit
