@@ -39,11 +39,12 @@ func TestGetPoolName(t *testing.T) {
 					APIVersion: fv1.CRD_VERSION,
 				},
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test",
-					Namespace: "testns",
+					Name:            "test",
+					Namespace:       "testns",
+					ResourceVersion: "2517",
 				},
 			},
-			"poolmgr-test-testns-",
+			"poolmgr-test-testns-2517",
 		},
 		{
 			"Over character limit",
@@ -53,19 +54,20 @@ func TestGetPoolName(t *testing.T) {
 					APIVersion: fv1.CRD_VERSION,
 				},
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "justtryingtoincreasethenumberofcharactersinthisstring",
-					Namespace: "checkingifthegetpoolfunctionworkswithcharactersmorethan18",
+					Name:            "justtryingtoincreasethenumberofcharactersinthisstring",
+					Namespace:       "checkingifthegetpoolfunctionworkswithcharactersmorethan18",
+					ResourceVersion: "2518",
 				},
 			},
-			"poolmgr-justtryingtoincrea-checkingifthegetpo-",
+			"poolmgr-justtryingtoincrea-checkingifthegetpo-2518",
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := getPoolName(tt.env); got != tt.want {
-				t.Errorf("getPoolName() = %v, want %v", got, tt.want)
+				t.Errorf("getPoolName() = %s, want = %s len(getPoolName()) = %x len(want) = %x", got, tt.want, len(got), len(tt.want))
 			} else {
-				fmt.Print(got)
+				fmt.Printf("getPoolName() = %s,length of string = %x", got, len(got))
 			}
 		})
 	}
