@@ -676,7 +676,7 @@ mqt_keda:
     nats_steaming:
       image: fission/keda-nats-streaming-http-connector
       tag: v0.9
-    gcp_pub_sub:
+    gcp_pubsub:
       image: fission/keda-gcp-pubsub-http-connector
       tag: v0.3
     redis:
