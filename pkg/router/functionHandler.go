@@ -455,7 +455,7 @@ func (roundTripper *RetryingRoundTripper) closeContext() {
 }
 
 func (fh *functionHandler) tapService(fn *fv1.Function, serviceURL *url.URL) {
-	if fh.executor == nil {
+	if fh.executor == nil || serviceURL == nil {
 		return
 	}
 	fh.executor.TapService(fn.ObjectMeta, fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType, serviceURL)

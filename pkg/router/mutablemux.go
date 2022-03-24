@@ -43,6 +43,11 @@ func newMutableRouter(logger *zap.Logger, handler *mux.Router) *mutableRouter {
 }
 
 func (mr *mutableRouter) ServeHTTP(responseWriter http.ResponseWriter, request *http.Request) {
+	defer func() {
+		if err := recover(); err != nil {
+			mr.logger.Error("req Panic", zap.Any("err", err))
+		}
+	}()
 	// Atomically grab the underlying mux router and call it.
 	routerValue := mr.router.Load()
 	router, ok := routerValue.(*mux.Router)
