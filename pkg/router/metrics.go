@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
 var globalFunctionCallCount uint64
@@ -52,40 +53,24 @@ var (
 	// code: http status code
 	// path: the client call the function on which http path
 	// method: the function's http method
-	functionCalls = prometheus.NewCounterVec(
+	functionCalls = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "fission_function_calls_total",
 			Help: "Count of Fission function calls",
 		},
 		labelsStrings,
 	)
-	functionCallErrors = prometheus.NewCounterVec(
+	functionCallErrors = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "fission_function_errors_total",
 			Help: "Count of Fission function errors",
 		},
 		labelsStrings,
 	)
-	functionCallDuration = prometheus.NewSummaryVec(
-		prometheus.SummaryOpts{
-			Name:       "fission_function_duration_seconds",
-			Help:       "Runtime duration of the Fission function.",
-			Objectives: map[float64]float64{0.5: 0.05, 0.9: 0.01, 0.99: 0.001},
-		},
-		labelsStrings,
-	)
-	functionCallOverhead = prometheus.NewSummaryVec(
+	functionCallOverhead = promauto.NewSummaryVec(
 		prometheus.SummaryOpts{
 			Name:       "fission_function_overhead_seconds",
 			Help:       "The function call delay caused by fission.",
-			Objectives: map[float64]float64{0.5: 0.05, 0.9: 0.01, 0.99: 0.001},
-		},
-		labelsStrings,
-	)
-	functionCallResponseSize = prometheus.NewSummaryVec(
-		prometheus.SummaryOpts{
-			Name:       "fission_function_response_size_bytes",
-			Help:       "The response size of the http call to target function.",
 			Objectives: map[float64]float64{0.5: 0.05, 0.9: 0.01, 0.99: 0.001},
 		},
 		labelsStrings,
@@ -95,9 +80,7 @@ var (
 func init() {
 	prometheus.MustRegister(functionCalls)
 	prometheus.MustRegister(functionCallErrors)
-	prometheus.MustRegister(functionCallDuration)
 	prometheus.MustRegister(functionCallOverhead)
-	prometheus.MustRegister(functionCallResponseSize)
 }
 
 func labelsToStrings(f *functionLabels, h *httpLabels) []string {
@@ -118,7 +101,7 @@ func labelsToStrings(f *functionLabels, h *httpLabels) []string {
 	}
 }
 
-func functionCallCompleted(f *functionLabels, h *httpLabels, overhead, duration time.Duration, respSize int64) {
+func functionCallCompleted(f *functionLabels, h *httpLabels, overhead time.Duration) {
 	atomic.AddUint64(&globalFunctionCallCount, 1)
 
 	l := labelsToStrings(f, h)
@@ -132,13 +115,5 @@ func functionCallCompleted(f *functionLabels, h *httpLabels, overhead, duration 
 	// error counter
 	if h.code >= 400 {
 		functionCallErrors.WithLabelValues(l...).Inc()
-	}
-
-	// duration summary
-	functionCallDuration.WithLabelValues(l...).Observe(float64(duration.Nanoseconds()) / 1e9)
-
-	// Response size.  -1 means the size unknown, in which case we don't report it.
-	if respSize != -1 {
-		functionCallResponseSize.WithLabelValues(l...).Observe(float64(respSize))
 	}
 }

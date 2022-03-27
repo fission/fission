@@ -809,7 +809,7 @@ func (fh functionHandler) collectFunctionMetric(start time.Time, rrt *RetryingRo
 	funcMetricLabels.cached = rrt.urlFromCache
 
 	functionCallCompleted(funcMetricLabels, httpMetricLabels,
-		duration, duration, resp.ContentLength)
+		duration)
 
 	// tapService before invoking roundTrip for the serviceUrl
 	if rrt.urlFromCache {

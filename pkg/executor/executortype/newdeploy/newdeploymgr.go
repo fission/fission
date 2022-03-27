@@ -804,8 +804,6 @@ func (deploy *NewDeploy) idleObjectReaper(ctx context.Context) {
 				continue
 			}
 
-			deploy.fsCache.IdleTime(fsvc.Name, fsvc.Address, float64(time.Since(fsvc.Atime)-idlePodReapTime))
-
 			go func() {
 				startTime := time.Now()
 				deployObj := getDeploymentObj(fsvc.KubernetesObjects)
