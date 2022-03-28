@@ -44,7 +44,7 @@ var (
 	metricAddr = ":8080"
 
 	// function + http labels as strings
-	labelsStrings = []string{"cached", "function_namespace", "function_name", "host", "path", "method", "code"}
+	labelsStrings = []string{"function_namespace", "function_name", "method", "code"}
 
 	// Function http calls count
 	// cached: true | false, is this function service address cached locally
@@ -77,25 +77,10 @@ var (
 	)
 )
 
-func init() {
-	prometheus.MustRegister(functionCalls)
-	prometheus.MustRegister(functionCallErrors)
-	prometheus.MustRegister(functionCallOverhead)
-}
-
 func labelsToStrings(f *functionLabels, h *httpLabels) []string {
-	var cached string
-	if f.cached {
-		cached = "true"
-	} else {
-		cached = "false"
-	}
 	return []string{
-		cached,
 		f.namespace,
 		f.name,
-		h.host,
-		h.path,
 		h.method,
 		fmt.Sprint(h.code),
 	}

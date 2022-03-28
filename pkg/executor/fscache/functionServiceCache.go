@@ -343,7 +343,6 @@ func (fsc *FunctionServiceCache) DeleteEntry(fsvc *FuncSvc) {
 	}
 
 	fsc.observeFuncRunningTime(fsvc.Function.Name, string(fsvc.Function.UID), fsvc.Atime.Sub(fsvc.Ctime).Seconds())
-	fsc.observeFuncAliveTime(fsvc.Function.Name, string(fsvc.Function.UID), time.Since(fsvc.Ctime).Seconds())
 }
 
 // DeleteFunctionSvc deletes a function service at key composed of [function][address].

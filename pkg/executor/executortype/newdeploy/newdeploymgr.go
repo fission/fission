@@ -480,6 +480,7 @@ func (deploy *NewDeploy) fnCreate(ctx context.Context, fn *fv1.Function) (*fscac
 	_, err = deploy.fsCache.Add(*fsvc)
 	if err != nil {
 		deploy.logger.Error("error adding function to cache", zap.Error(err), zap.Any("function", fsvc.Function))
+		deploy.fsCache.IncreaseErrors(fn.ObjectMeta.Name, string(fn.ObjectMeta.UID))
 		return fsvc, err
 	}
 
@@ -805,7 +806,6 @@ func (deploy *NewDeploy) idleObjectReaper(ctx context.Context) {
 			}
 
 			go func() {
-				startTime := time.Now()
 				deployObj := getDeploymentObj(fsvc.KubernetesObjects)
 				if deployObj == nil {
 					deploy.logger.Error("error finding function deployment", zap.Error(err), zap.String("function", fsvc.Function.Name))
@@ -830,7 +830,6 @@ func (deploy *NewDeploy) idleObjectReaper(ctx context.Context) {
 				if err != nil {
 					deploy.logger.Error("error scaling down function deployment", zap.Error(err), zap.String("function", fsvc.Function.Name))
 				}
-				deploy.fsCache.ReapTime(fsvc.Function.Name, fsvc.Address, time.Since(startTime).Seconds())
 			}()
 		}
 	}

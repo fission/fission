@@ -440,6 +440,7 @@ func (caaf *Container) fnCreate(ctx context.Context, fn *fv1.Function) (*fscache
 	_, err = caaf.fsCache.Add(*fsvc)
 	if err != nil {
 		caaf.logger.Error("error adding function to cache", zap.Error(err), zap.Any("function", fsvc.Function))
+		caaf.fsCache.IncreaseErrors(fn.ObjectMeta.Name, string(fn.ObjectMeta.UID))
 		return fsvc, err
 	}
 
