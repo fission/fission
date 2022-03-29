@@ -19,6 +19,7 @@ package mqtrigger
 import (
 	"context"
 	"errors"
+	"net/http"
 	"time"
 
 	"go.uber.org/zap"
@@ -28,6 +29,7 @@ import (
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/mqtrigger/messageQueue"
 	"github.com/fission/fission/pkg/utils"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 const (
@@ -80,6 +82,7 @@ func MakeMessageQueueTriggerManager(logger *zap.Logger,
 func (mqt *MessageQueueTriggerManager) Run() {
 	go mqt.service()
 	go mqt.syncTriggers()
+	go mqt.serveMetrics()
 }
 
 func (mqt *MessageQueueTriggerManager) service() {
@@ -105,6 +108,13 @@ func (mqt *MessageQueueTriggerManager) service() {
 			delete(mqt.triggers, crd.CacheKey(&req.triggerSub.trigger.ObjectMeta))
 		}
 	}
+}
+
+func (mqt *MessageQueueTriggerManager) serveMetrics() {
+	http.Handle("/metrics", promhttp.Handler())
+	err := http.ListenAndServe(metricsAddr, nil)
+
+	mqt.logger.Fatal("done listening on metrics endpoint", zap.Error(err))
 }
 
 func (mqt *MessageQueueTriggerManager) addTrigger(triggerSub *triggerSubscription) error {
