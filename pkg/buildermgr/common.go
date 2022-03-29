@@ -47,6 +47,8 @@ import (
 func buildPackage(ctx context.Context, logger *zap.Logger, fissionClient *crd.FissionClient, envBuilderNamespace string,
 	storageSvcUrl string, pkg *fv1.Package) (uploadResp *fetcher.ArchiveUploadResponse, buildLogs string, err error) {
 
+	IncreasePackageCounter(pkg.Name, pkg.Namespace)
+
 	env, err := fissionClient.CoreV1().Environments(pkg.Spec.Environment.Namespace).Get(ctx, pkg.Spec.Environment.Name, metav1.GetOptions{})
 	if err != nil {
 		e := "error getting environment CRD info"
@@ -88,9 +90,11 @@ func buildPackage(ctx context.Context, logger *zap.Logger, fissionClient *crd.Fi
 
 	logger.Info("started building with source package", zap.String("source_package", srcPkgFilename))
 	// send build request to builder
+	startTime := time.Now()
 	buildResp, err := builderC.Build(ctx, pkgBuildReq)
 	if err != nil {
 		e := fmt.Sprintf("Error building deployment package: %v", err)
+		IncreasePackageErrorCounter(pkg.Name, pkg.Namespace)
 		var buildLogs string
 		if buildResp != nil {
 			buildLogs = buildResp.BuildLogs
@@ -99,6 +103,7 @@ func buildPackage(ctx context.Context, logger *zap.Logger, fissionClient *crd.Fi
 		return nil, buildLogs, ferror.MakeError(http.StatusInternalServerError, e)
 	}
 
+	observePackageCreationDuration(pkg.Name, pkg.Namespace, float64(time.Since(startTime).Seconds()))
 	logger.Info("build succeed", zap.String("source_package", srcPkgFilename), zap.String("deployment_package", buildResp.ArtifactFilename))
 
 	archivePackage := !env.Spec.KeepArchive

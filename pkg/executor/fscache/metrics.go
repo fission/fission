@@ -9,9 +9,8 @@ var (
 	// function_name: the function's name
 	// function_uid: the function's version id
 	// function_address: the address of the pod from which the function was called
-	functionLabels    = []string{"function_name", "function_uid"}
-	functionPodLabels = []string{"function_name", "function_address"}
-	coldStarts        = promauto.NewCounterVec(
+	functionLabels = []string{"function_name", "function_uid"}
+	coldStarts     = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "fission_function_cold_starts_total",
 			Help: "How many cold starts are made by function_name, function_uid.",
@@ -28,10 +27,10 @@ var (
 	)
 	funcError = promauto.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "fission_function_errors_total",
+			Name: "fission_function_cold_start_errors_total",
 			Help: "Count of fission cold start errors",
 		},
-		functionPodLabels,
+		functionLabels,
 	)
 )
 
