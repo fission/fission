@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -29,7 +30,6 @@ import (
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/mqtrigger/messageQueue"
 	"github.com/fission/fission/pkg/utils"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 const (
