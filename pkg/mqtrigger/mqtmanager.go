@@ -214,6 +214,6 @@ func (mqt *MessageQueueTriggerManager) syncTriggers() {
 		}
 
 		// TODO replace with a watch
-		time.Sleep(3 * time.Second)
+		time.Sleep(time.Second)
 	}
 }

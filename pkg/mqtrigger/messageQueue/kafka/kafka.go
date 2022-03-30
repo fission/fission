@@ -74,6 +74,12 @@ type MqtConsumerGroupHandler struct {
 	fnUrl          string
 }
 
+type mqtConsumer struct {
+	ctx      context.Context
+	cancel   context.CancelFunc
+	consumer sarama.ConsumerGroup
+}
+
 func NewMqtConsumerGroupHandler(version sarama.KafkaVersion,
 	logger *zap.Logger,
 	trigger *fv1.MessageQueueTrigger,
@@ -351,18 +357,29 @@ func (kafka Kafka) Subscribe(trigger *fv1.MessageQueueTrigger) (messageQueue.Sub
 		}
 	}()
 
+	ctx, cancel := context.WithCancel(context.Background())
+
 	ch := NewMqtConsumerGroupHandler(kafka.version, kafka.logger, trigger, producer, kafka.routerUrl)
 	// consume messages
 	go func() {
 		topic := []string{trigger.Spec.Topic}
-		ctx := context.Background()
 		err = consumer.Consume(ctx, topic, ch)
 		if err != nil {
 			kafka.logger.Error("consumer error", zap.Error(err))
 		}
+
+		if ctx.Err() != nil {
+			return
+		}
 	}()
 
-	return consumer, nil
+	mqtconsumer := mqtConsumer{
+		ctx:      ctx,
+		cancel:   cancel,
+		consumer: consumer,
+	}
+
+	return mqtconsumer, nil
 }
 
 func (kafka Kafka) getTLSConfig() (*tls.Config, error) {
@@ -390,7 +407,9 @@ func (kafka Kafka) getTLSConfig() (*tls.Config, error) {
 }
 
 func (kafka Kafka) Unsubscribe(subscription messageQueue.Subscription) error {
-	return subscription.(sarama.ConsumerGroup).Close()
+	mqtconsumer := subscription.(mqtConsumer)
+	mqtconsumer.cancel()
+	return mqtconsumer.consumer.Close()
 }
 
 func errorHandler(logger *zap.Logger, trigger *fv1.MessageQueueTrigger, producer sarama.SyncProducer, funcUrl string, err error, errorTopicHeaders []sarama.RecordHeader) {
