@@ -19,6 +19,7 @@ package container
 import (
 	"context"
 	"fmt"
+	"github.com/pkg/errors"
 	"time"
 
 	"go.uber.org/zap"
@@ -157,6 +158,11 @@ func (cn *Container) waitForDeploy(ctx context.Context, depl *appsv1.Deployment,
 			return latestDepl, err
 		}
 		time.Sleep(time.Second)
+	}
+
+	if latestDepl == nil {
+		otelUtils.LoggerWithTraceID(ctx, cn.logger).Error("create deployment over max times")
+		return nil, errors.New("create deployment over max times")
 	}
 
 	logger := otelUtils.LoggerWithTraceID(ctx, cn.logger)
