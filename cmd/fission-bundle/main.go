@@ -65,8 +65,8 @@ func runTimer(ctx context.Context, logger *zap.Logger, routerUrl string) error {
 	return timer.Start(ctx, logger, routerUrl)
 }
 
-func runMessageQueueMgr(logger *zap.Logger, routerUrl string) error {
-	return mqtrigger.Start(logger, routerUrl)
+func runMessageQueueMgr(ctx context.Context, logger *zap.Logger, routerUrl string) error {
+	return mqtrigger.Start(ctx, logger, routerUrl)
 }
 
 // KEDA based MessageQueue Trigger Manager
@@ -276,7 +276,7 @@ Options:
 	}
 
 	if arguments["--mqt"] == true {
-		err = runMessageQueueMgr(logger, routerUrl)
+		err = runMessageQueueMgr(ctx, logger, routerUrl)
 		if err != nil {
 			logger.Error("message queue manager exited", zap.Error(err))
 			return

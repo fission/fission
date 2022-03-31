@@ -25,17 +25,18 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	k8sCache "k8s.io/client-go/tools/cache"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
+	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
 	"github.com/fission/fission/pkg/mqtrigger/messageQueue"
-	"github.com/fission/fission/pkg/utils"
 )
 
 const (
 	ADD_TRIGGER requestType = iota
 	DELETE_TRIGGER
-	GET_ALL_TRIGGERS
+	GET_TRIGGER_SUBSCRIPTION
 )
 
 type (
@@ -61,8 +62,8 @@ type (
 		respChan   chan response
 	}
 	response struct {
-		err      error
-		triggers *map[string]*triggerSubscription
+		err        error
+		triggerSub *triggerSubscription
 	}
 )
 
@@ -79,9 +80,12 @@ func MakeMessageQueueTriggerManager(logger *zap.Logger,
 	return &mqTriggerMgr
 }
 
-func (mqt *MessageQueueTriggerManager) Run() {
+func (mqt *MessageQueueTriggerManager) Run(ctx context.Context) {
 	go mqt.service()
-	go mqt.syncTriggers()
+	informerFactory := genInformer.NewSharedInformerFactory(mqt.fissionClient, time.Minute*30)
+	mqTriggerInformer := informerFactory.Core().V1().MessageQueueTriggers()
+	mqTriggerInformer.Informer().AddEventHandler(mqt.mqtInformerHandlers())
+	go mqTriggerInformer.Informer().Run(ctx.Done())
 	go mqt.serveMetrics()
 }
 
@@ -98,12 +102,15 @@ func (mqt *MessageQueueTriggerManager) service() {
 				mqt.triggers[k] = req.triggerSub
 			}
 			req.respChan <- response{err: err}
-		case GET_ALL_TRIGGERS:
-			copyTriggers := make(map[string]*triggerSubscription)
-			for key, val := range mqt.triggers {
-				copyTriggers[key] = val
+		case GET_TRIGGER_SUBSCRIPTION:
+			resp := response{triggerSub: nil, err: nil}
+			k := crd.CacheKey(&req.triggerSub.trigger.ObjectMeta)
+			if _, ok := mqt.triggers[k]; !ok {
+				resp.err = errors.New("trigger does not exist")
+			} else {
+				resp.triggerSub = mqt.triggers[k]
 			}
-			req.respChan <- response{triggers: &copyTriggers}
+			req.respChan <- resp
 		case DELETE_TRIGGER:
 			delete(mqt.triggers, crd.CacheKey(&req.triggerSub.trigger.ObjectMeta))
 		}
@@ -128,14 +135,22 @@ func (mqt *MessageQueueTriggerManager) addTrigger(triggerSub *triggerSubscriptio
 	return r.err
 }
 
-func (mqt *MessageQueueTriggerManager) getAllTriggers() *map[string]*triggerSubscription {
+func (mqt *MessageQueueTriggerManager) getTriggerSubscription(m *metav1.ObjectMeta) *triggerSubscription {
 	respChan := make(chan response)
 	mqt.reqChan <- request{
-		requestType: GET_ALL_TRIGGERS,
-		respChan:    respChan,
+		requestType: GET_TRIGGER_SUBSCRIPTION,
+		triggerSub: &triggerSubscription{
+			trigger: fv1.MessageQueueTrigger{
+				ObjectMeta: *m,
+			},
+		},
 	}
 	r := <-respChan
-	return r.triggers
+	return r.triggerSub
+}
+
+func (mqt *MessageQueueTriggerManager) checkTrigger(m *metav1.ObjectMeta) bool {
+	return mqt.getTriggerSubscription(m) != nil
 }
 
 func (mqt *MessageQueueTriggerManager) delTrigger(m *metav1.ObjectMeta) {
@@ -149,71 +164,50 @@ func (mqt *MessageQueueTriggerManager) delTrigger(m *metav1.ObjectMeta) {
 	}
 }
 
-func (mqt *MessageQueueTriggerManager) syncTriggers() {
-	for {
-		// get new set of triggers
-		newTriggers, err := mqt.fissionClient.CoreV1().MessageQueueTriggers(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{})
+func (mqt *MessageQueueTriggerManager) RegisterTrigger(trigger *fv1.MessageQueueTrigger) {
+	isPresent := mqt.checkTrigger(&trigger.ObjectMeta)
+	if !isPresent {
+		// actually subscribe using the message queue client impl
+		sub, err := mqt.messageQueue.Subscribe(trigger)
 		if err != nil {
-			if utils.IsNetworkError(err) {
-				mqt.logger.Error("encountered network error, will retry", zap.Error(err))
-				time.Sleep(5 * time.Second)
-				continue
-			}
-			mqt.logger.Fatal("failed to read message queue trigger list", zap.Error(err))
+			mqt.logger.Warn("failed to subscribe to message queue trigger", zap.Error(err), zap.String("trigger_name", trigger.ObjectMeta.Name))
+			return
 		}
-		newTriggerMap := make(map[string]*fv1.MessageQueueTrigger)
-		for index := range newTriggers.Items {
-			newTrigger := &newTriggers.Items[index]
-			if newTrigger.Spec.MessageQueueType == mqt.messageQueueType {
-				newTriggerMap[crd.CacheKey(&newTrigger.ObjectMeta)] = newTrigger
-			}
+		triggerSub := triggerSubscription{
+			trigger:      *trigger,
+			subscription: sub,
 		}
+		// add to our list
+		err = mqt.addTrigger(&triggerSub)
+		if err != nil {
+			mqt.logger.Fatal("adding message queue trigger failed", zap.Error(err), zap.String("trigger_name", trigger.ObjectMeta.Name))
+		}
+		mqt.logger.Info("message queue trigger created", zap.String("trigger_name", trigger.ObjectMeta.Name))
+	} else {
+		mqt.logger.Info("message queue trigger already registered", zap.String("trigger_name", trigger.ObjectMeta.Name))
+	}
+}
 
-		// get current set of triggers
-		currentTriggers := mqt.getAllTriggers()
-
-		// register new triggers
-		for key, trigger := range newTriggerMap {
-			if _, ok := (*currentTriggers)[key]; ok {
-				continue
-			}
-
-			// actually subscribe using the message queue client impl
-			sub, err := mqt.messageQueue.Subscribe(trigger)
+func (mqt *MessageQueueTriggerManager) mqtInformerHandlers() k8sCache.ResourceEventHandlerFuncs {
+	return k8sCache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			trigger := obj.(*fv1.MessageQueueTrigger)
+			mqt.RegisterTrigger(trigger)
+		},
+		DeleteFunc: func(obj interface{}) {
+			trigger := obj.(*fv1.MessageQueueTrigger)
+			subscription := mqt.getTriggerSubscription(&trigger.ObjectMeta)
+			err := mqt.messageQueue.Unsubscribe(subscription)
 			if err != nil {
-				mqt.logger.Warn("failed to subscribe to message queue trigger", zap.Error(err), zap.String("trigger_name", trigger.ObjectMeta.Name))
-				continue
+				mqt.logger.Warn("failed to unsubscribe from message queue trigger", zap.Error(err), zap.String("trigger_name", trigger.ObjectMeta.Name))
+				return
 			}
-
-			triggerSub := triggerSubscription{
-				trigger:      *trigger,
-				subscription: sub,
-			}
-
-			// add to our list
-			err = mqt.addTrigger(&triggerSub)
-			if err != nil {
-				mqt.logger.Fatal("adding message queue trigger failed", zap.Error(err), zap.String("trigger_name", trigger.ObjectMeta.Name))
-			}
-
-			mqt.logger.Info("message queue trigger created", zap.String("trigger_name", trigger.ObjectMeta.Name))
-		}
-
-		// remove old triggers
-		for key, triggerSub := range *currentTriggers {
-			if _, ok := newTriggerMap[key]; ok {
-				continue
-			}
-			err := mqt.messageQueue.Unsubscribe(triggerSub.subscription)
-			if err != nil {
-				mqt.logger.Warn("failed to unsubscribe from message queue trigger", zap.Error(err), zap.String("trigger_name", triggerSub.trigger.ObjectMeta.Name))
-				continue
-			}
-			mqt.delTrigger(&triggerSub.trigger.ObjectMeta)
-			mqt.logger.Info("message queue trigger deleted", zap.String("trigger_name", triggerSub.trigger.ObjectMeta.Name))
-		}
-
-		// TODO replace with a watch
-		time.Sleep(3 * time.Second)
+			mqt.delTrigger(&trigger.ObjectMeta)
+			mqt.logger.Info("message queue trigger deleted", zap.String("trigger_name", trigger.ObjectMeta.Name))
+		},
+		UpdateFunc: func(oldObj interface{}, newObj interface{}) {
+			trigger := newObj.(*fv1.MessageQueueTrigger)
+			mqt.RegisterTrigger(trigger)
+		},
 	}
 }
