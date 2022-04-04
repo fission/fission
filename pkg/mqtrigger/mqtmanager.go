@@ -195,7 +195,24 @@ func (mqt *MessageQueueTriggerManager) RegisterTrigger(trigger *fv1.MessageQueue
 		mqt.logger.Info("message queue trigger created", zap.String("trigger_name", trigger.ObjectMeta.Name))
 	} else {
 		mqt.logger.Info("message queue trigger already registered", zap.String("trigger_name", trigger.ObjectMeta.Name))
+		return
 	}
+	// actually subscribe using the message queue client impl
+	sub, err := mqt.messageQueue.Subscribe(trigger)
+	if err != nil {
+		mqt.logger.Warn("failed to subscribe to message queue trigger", zap.Error(err), zap.String("trigger_name", trigger.ObjectMeta.Name))
+		return
+	}
+	triggerSub := triggerSubscription{
+		trigger:      *trigger,
+		subscription: sub,
+	}
+	// add to our list
+	err = mqt.addTrigger(&triggerSub)
+	if err != nil {
+		mqt.logger.Fatal("adding message queue trigger failed", zap.Error(err), zap.String("trigger_name", trigger.ObjectMeta.Name))
+	}
+	mqt.logger.Info("message queue trigger created", zap.String("trigger_name", trigger.ObjectMeta.Name))
 }
 
 func (mqt *MessageQueueTriggerManager) mqtInformerHandlers() k8sCache.ResourceEventHandlerFuncs {
