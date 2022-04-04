@@ -135,6 +135,7 @@ func (mqt *MessageQueueTriggerManager) addTrigger(triggerSub *triggerSubscriptio
 		triggerSub:  triggerSub,
 		respChan:    respChan,
 	}
+	mqt.logger.Info("respchan struct: ", zap.Any("sub: ", triggerSub))
 	r := <-respChan
 	return r.err
 }
@@ -181,6 +182,7 @@ func (mqt *MessageQueueTriggerManager) RegisterTrigger(trigger *fv1.MessageQueue
 	}
 
 	// actually subscribe using the message queue client impl
+	mqt.logger.Info("Trigger", zap.Any("kafka: ", trigger.ObjectMeta))
 	sub, err := mqt.messageQueue.Subscribe(trigger)
 	if err != nil {
 		mqt.logger.Warn("failed to subscribe to message queue trigger", zap.Error(err), zap.String("trigger_name", trigger.ObjectMeta.Name))
@@ -190,7 +192,7 @@ func (mqt *MessageQueueTriggerManager) RegisterTrigger(trigger *fv1.MessageQueue
 		trigger:      *trigger,
 		subscription: sub,
 	}
-	mqt.logger.Info("Subscription successful")
+	mqt.logger.Info("Subscription successful", zap.Any("Sub: ", sub))
 	// add to our list
 	err = mqt.addTrigger(&triggerSub)
 	if err != nil {

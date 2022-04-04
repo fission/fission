@@ -337,6 +337,8 @@ func (kafka Kafka) Subscribe(trigger *fv1.MessageQueueTrigger) (messageQueue.Sub
 		return nil, err
 	}
 
+	kafka.logger.Info("Consumer", zap.Any("consumer: ", consumer))
+
 	producer, err := sarama.NewSyncProducer(kafka.brokers, producerConfig)
 	kafka.logger.Info("created a new producer", zap.Strings("brokers", kafka.brokers),
 		zap.String("input topic", trigger.Spec.Topic),
@@ -358,10 +360,12 @@ func (kafka Kafka) Subscribe(trigger *fv1.MessageQueueTrigger) (messageQueue.Sub
 	}()
 
 	ctx, cancel := context.WithCancel(context.Background())
+	kafka.logger.Info("context", zap.Any("Context", ctx), zap.Any("cancel", cancel))
 
 	ch := NewMqtConsumerGroupHandler(kafka.version, kafka.logger, trigger, producer, kafka.routerUrl)
 
 	// consume messages
+	kafka.logger.Info("Till here its ok")
 	go func() {
 		topic := []string{trigger.Spec.Topic}
 		err = consumer.Consume(ctx, topic, ch)
@@ -379,6 +383,7 @@ func (kafka Kafka) Subscribe(trigger *fv1.MessageQueueTrigger) (messageQueue.Sub
 		cancel:   cancel,
 		consumer: consumer,
 	}
+	kafka.logger.Info("Before returning", zap.Any("mqtConsumer", mqtConsumer))
 	return mqtConsumer, nil
 }
 
