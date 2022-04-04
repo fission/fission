@@ -169,7 +169,6 @@ func (mqt *MessageQueueTriggerManager) delTrigger(m *metav1.ObjectMeta) {
 }
 
 func (mqt *MessageQueueTriggerManager) RegisterTrigger(trigger *fv1.MessageQueueTrigger) {
-	mqt.logger.Info("Inside register trigger")
 	isPresent := mqt.checkTrigger(&trigger.ObjectMeta)
 	if isPresent {
 		mqt.logger.Info("message queue trigger already registered", zap.String("trigger_name", trigger.ObjectMeta.Name))
@@ -177,7 +176,6 @@ func (mqt *MessageQueueTriggerManager) RegisterTrigger(trigger *fv1.MessageQueue
 	}
 
 	// actually subscribe using the message queue client impl
-	mqt.logger.Info("Trigger", zap.Any("kafka: ", trigger.ObjectMeta))
 	sub, err := mqt.messageQueue.Subscribe(trigger)
 	if err != nil {
 		mqt.logger.Warn("failed to subscribe to message queue trigger", zap.Error(err), zap.String("trigger_name", trigger.ObjectMeta.Name))
