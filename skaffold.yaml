@@ -49,6 +49,9 @@ deploy:
         pruneInterval: "60"
         repository: index.docker.io
         routerServiceType: LoadBalancer
+        kafka.enabled: true
+        kafka.brokers: 'my-cluster-kafka-bootstrap.kafka.svc:9092'
+        kafka.version: '3.0.0'
         openTracing.enabled: false
         openTelemetry.otlpCollectorEndpoint: ""
         openTelemetry.otlpInsecure: true

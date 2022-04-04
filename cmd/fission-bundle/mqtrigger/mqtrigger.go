@@ -75,7 +75,8 @@ func Start(ctx context.Context, logger *zap.Logger, routerUrl string) error {
 	if err != nil {
 		logger.Fatal("failed to connect to remote message queue server", zap.Error(err))
 	}
-	mqtrigger.MakeMessageQueueTriggerManager(logger, fissionClient, mqType, mq).Run(ctx)
+	mqtMgr := mqtrigger.MakeMessageQueueTriggerManager(logger, fissionClient, mqType, mq)
+	mqtMgr.Run(ctx)
 	return nil
 }
 

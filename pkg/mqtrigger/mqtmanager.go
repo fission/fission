@@ -83,9 +83,12 @@ func MakeMessageQueueTriggerManager(logger *zap.Logger,
 func (mqt *MessageQueueTriggerManager) Run(ctx context.Context) {
 	go mqt.service()
 	informerFactory := genInformer.NewSharedInformerFactory(mqt.fissionClient, time.Minute*30)
-	mqTriggerInformer := informerFactory.Core().V1().MessageQueueTriggers()
-	mqTriggerInformer.Informer().AddEventHandler(mqt.mqtInformerHandlers())
-	go mqTriggerInformer.Informer().Run(ctx.Done())
+	mqTriggerInformer := informerFactory.Core().V1().MessageQueueTriggers().Informer()
+	mqTriggerInformer.AddEventHandler(mqt.mqtInformerHandlers())
+	go mqTriggerInformer.Run(ctx.Done())
+	if ok := k8sCache.WaitForCacheSync(ctx.Done(), mqTriggerInformer.HasSynced); !ok {
+		mqt.logger.Fatal("failed to wait for caches to sync")
+	}
 	go mqt.serveMetrics()
 }
 
@@ -110,6 +113,7 @@ func (mqt *MessageQueueTriggerManager) service() {
 			} else {
 				resp.triggerSub = mqt.triggers[k]
 			}
+			mqt.logger.Info("Checking for trigger subsription before sending")
 			req.respChan <- resp
 		case DELETE_TRIGGER:
 			delete(mqt.triggers, crd.CacheKey(&req.triggerSub.trigger.ObjectMeta))
@@ -144,8 +148,12 @@ func (mqt *MessageQueueTriggerManager) getTriggerSubscription(m *metav1.ObjectMe
 				ObjectMeta: *m,
 			},
 		},
+		respChan: respChan,
 	}
 	r := <-respChan
+	if r.err != nil {
+		mqt.logger.Error(r.err.Error())
+	}
 	return r.triggerSub
 }
 
@@ -165,6 +173,7 @@ func (mqt *MessageQueueTriggerManager) delTrigger(m *metav1.ObjectMeta) {
 }
 
 func (mqt *MessageQueueTriggerManager) RegisterTrigger(trigger *fv1.MessageQueueTrigger) {
+	mqt.logger.Info("Inside register trigger")
 	isPresent := mqt.checkTrigger(&trigger.ObjectMeta)
 	if !isPresent {
 		// actually subscribe using the message queue client impl
@@ -177,6 +186,7 @@ func (mqt *MessageQueueTriggerManager) RegisterTrigger(trigger *fv1.MessageQueue
 			trigger:      *trigger,
 			subscription: sub,
 		}
+		mqt.logger.Info("Subscription successful")
 		// add to our list
 		err = mqt.addTrigger(&triggerSub)
 		if err != nil {
@@ -189,23 +199,32 @@ func (mqt *MessageQueueTriggerManager) RegisterTrigger(trigger *fv1.MessageQueue
 }
 
 func (mqt *MessageQueueTriggerManager) mqtInformerHandlers() k8sCache.ResourceEventHandlerFuncs {
+	mqt.logger.Info("Inside mqtInformerHandlers function")
 	return k8sCache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
+			mqt.logger.Info("Added mqt")
 			trigger := obj.(*fv1.MessageQueueTrigger)
 			mqt.RegisterTrigger(trigger)
 		},
 		DeleteFunc: func(obj interface{}) {
+			mqt.logger.Info("Delete mqt")
 			trigger := obj.(*fv1.MessageQueueTrigger)
-			subscription := mqt.getTriggerSubscription(&trigger.ObjectMeta)
-			err := mqt.messageQueue.Unsubscribe(subscription)
-			if err != nil {
-				mqt.logger.Warn("failed to unsubscribe from message queue trigger", zap.Error(err), zap.String("trigger_name", trigger.ObjectMeta.Name))
-				return
+			triggerSubscription := mqt.getTriggerSubscription(&trigger.ObjectMeta)
+			if triggerSubscription != nil {
+				err := mqt.messageQueue.Unsubscribe(triggerSubscription.subscription)
+				if err != nil {
+					mqt.logger.Warn("failed to unsubscribe from message queue trigger", zap.Error(err), zap.String("trigger_name", trigger.ObjectMeta.Name))
+					return
+				}
+				mqt.logger.Info("Completed unsubscribe")
+				mqt.delTrigger(&trigger.ObjectMeta)
+				mqt.logger.Info("message queue trigger deleted", zap.String("trigger_name", trigger.ObjectMeta.Name))
+			} else {
+				mqt.logger.Info("Unsubscribe failed")
 			}
-			mqt.delTrigger(&trigger.ObjectMeta)
-			mqt.logger.Info("message queue trigger deleted", zap.String("trigger_name", trigger.ObjectMeta.Name))
 		},
 		UpdateFunc: func(oldObj interface{}, newObj interface{}) {
+			mqt.logger.Info("Updated func")
 			trigger := newObj.(*fv1.MessageQueueTrigger)
 			mqt.RegisterTrigger(trigger)
 		},

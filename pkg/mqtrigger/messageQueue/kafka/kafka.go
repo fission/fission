@@ -409,6 +409,7 @@ func (kafka Kafka) getTLSConfig() (*tls.Config, error) {
 func (kafka Kafka) Unsubscribe(subscription messageQueue.Subscription) error {
 	mqtConsumer := subscription.(MqtConsumer)
 	mqtConsumer.cancel()
+	kafka.logger.Info("Working or no")
 	return mqtConsumer.consumer.Close()
 }
 
