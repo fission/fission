@@ -13,7 +13,7 @@ var (
 			Name: "fission_mqt_subscriptions_total",
 			Help: "Total number of subscriptions to mq currently",
 		},
-		labels,
+		[]string{},
 	)
 	messageCount = promauto.NewCounterVec(
 		prometheus.CounterOpts{
@@ -24,14 +24,14 @@ var (
 	)
 )
 
-func IncreaseSubscriptionCount(trigname, trignamespace string) {
-	subscriptionCount.WithLabelValues(trigname, trignamespace).Inc()
+func IncreaseSubscriptionCount() {
+	subscriptionCount.WithLabelValues().Inc()
 }
 
-func DecreaseSubscriptionCount(trigname, trignamespace string) {
-	subscriptionCount.WithLabelValues(trigname, trignamespace).Dec()
+func DecreaseSubscriptionCount() {
+	subscriptionCount.WithLabelValues().Dec()
 }
 
 func IncreaseMessageCount(trigname, trignamespace string) {
-	subscriptionCount.WithLabelValues(trigname, trignamespace).Inc()
+	messageCount.WithLabelValues(trigname, trignamespace).Inc()
 }

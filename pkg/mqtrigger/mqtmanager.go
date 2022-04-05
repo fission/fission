@@ -109,7 +109,7 @@ func (mqt *MessageQueueTriggerManager) service() {
 			} else {
 				mqt.triggers[k] = req.triggerSub
 				mqt.logger.Debug("set trigger subscription", zap.String("key", k))
-				IncreaseSubscriptionCount(req.triggerSub.trigger.Name, req.triggerSub.trigger.Namespace)
+				IncreaseSubscriptionCount()
 			}
 			req.respChan <- resp
 		case GET_TRIGGER_SUBSCRIPTION:
@@ -122,7 +122,7 @@ func (mqt *MessageQueueTriggerManager) service() {
 		case DELETE_TRIGGER:
 			delete(mqt.triggers, k)
 			mqt.logger.Debug("delete trigger", zap.String("key", k))
-			DecreaseSubscriptionCount(req.triggerSub.trigger.Name, req.triggerSub.trigger.Namespace)
+			DecreaseSubscriptionCount()
 			req.respChan <- resp
 		}
 	}
