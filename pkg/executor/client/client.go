@@ -160,7 +160,7 @@ func (c *Client) service() {
 }
 
 // TapService sends a TapServiceRequest over the request channel.
-func (c *Client) TapService(fnMeta metav1.ObjectMeta, executorType fv1.ExecutorType, serviceURL *url.URL) {
+func (c *Client) TapService(fnMeta metav1.ObjectMeta, executorType fv1.ExecutorType, serviceURL url.URL) {
 	c.requestChan <- TapServiceRequest{
 		FnMetadata: metav1.ObjectMeta{
 			Name:            fnMeta.Name,
