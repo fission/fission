@@ -24,7 +24,6 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sCache "k8s.io/client-go/tools/cache"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -95,19 +94,26 @@ func (mqt *MessageQueueTriggerManager) Run(ctx context.Context) {
 func (mqt *MessageQueueTriggerManager) service() {
 	for {
 		req := <-mqt.reqChan
+		resp := response{triggerSub: nil, err: nil}
+		k, err := k8sCache.MetaNamespaceKeyFunc(&req.triggerSub.trigger)
+		if err != nil {
+			resp.err = err
+			req.respChan <- resp
+			continue
+		}
+
 		switch req.requestType {
 		case ADD_TRIGGER:
-			resp := response{triggerSub: nil, err: nil}
-			k := crd.CacheKey(&req.triggerSub.trigger.ObjectMeta)
 			if _, ok := mqt.triggers[k]; ok {
 				resp.err = errors.New("trigger already exists")
 			} else {
 				mqt.triggers[k] = req.triggerSub
+				mqt.logger.Debug("set trigger subscription", zap.String("key", k))
 			}
 			req.respChan <- resp
 		case GET_TRIGGER_SUBSCRIPTION:
-			resp := response{triggerSub: nil, err: nil}
-			k := crd.CacheKey(&req.triggerSub.trigger.ObjectMeta)
+			_, exists := mqt.triggers[k]
+			mqt.logger.Debug("looking up trigger", zap.String("key", k), zap.Bool("exists", exists))
 			if _, ok := mqt.triggers[k]; !ok {
 				resp.err = errors.New("trigger does not exist")
 			} else {
@@ -115,7 +121,9 @@ func (mqt *MessageQueueTriggerManager) service() {
 			}
 			req.respChan <- resp
 		case DELETE_TRIGGER:
-			delete(mqt.triggers, crd.CacheKey(&req.triggerSub.trigger.ObjectMeta))
+			delete(mqt.triggers, k)
+			mqt.logger.Debug("delete trigger", zap.String("key", k))
+			req.respChan <- resp
 		}
 	}
 }
@@ -123,53 +131,36 @@ func (mqt *MessageQueueTriggerManager) service() {
 func (mqt *MessageQueueTriggerManager) serveMetrics() {
 	http.Handle("/metrics", promhttp.Handler())
 	err := http.ListenAndServe(metricsAddr, nil)
-
 	mqt.logger.Fatal("done listening on metrics endpoint", zap.Error(err))
 }
 
+func (mqt *MessageQueueTriggerManager) makeRequest(requestType requestType, triggerSub *triggerSubscription) response {
+	respChan := make(chan response)
+	mqt.reqChan <- request{requestType, triggerSub, respChan}
+	return <-respChan
+}
+
 func (mqt *MessageQueueTriggerManager) addTrigger(triggerSub *triggerSubscription) error {
-	respChan := make(chan response)
-	mqt.reqChan <- request{
-		requestType: ADD_TRIGGER,
-		triggerSub:  triggerSub,
-		respChan:    respChan,
-	}
-	r := <-respChan
-	return r.err
+	resp := mqt.makeRequest(ADD_TRIGGER, triggerSub)
+	return resp.err
 }
 
-func (mqt *MessageQueueTriggerManager) getTriggerSubscription(m *metav1.ObjectMeta) *triggerSubscription {
-	respChan := make(chan response)
-	mqt.reqChan <- request{
-		requestType: GET_TRIGGER_SUBSCRIPTION,
-		triggerSub: &triggerSubscription{
-			trigger: fv1.MessageQueueTrigger{
-				ObjectMeta: *m,
-			},
-		},
-		respChan: respChan,
-	}
-	r := <-respChan
-	return r.triggerSub
+func (mqt *MessageQueueTriggerManager) getTriggerSubscription(trigger *fv1.MessageQueueTrigger) *triggerSubscription {
+	resp := mqt.makeRequest(GET_TRIGGER_SUBSCRIPTION, &triggerSubscription{trigger: *trigger})
+	return resp.triggerSub
 }
 
-func (mqt *MessageQueueTriggerManager) checkTrigger(m *metav1.ObjectMeta) bool {
-	return mqt.getTriggerSubscription(m) != nil
+func (mqt *MessageQueueTriggerManager) checkTriggerSubscription(trigger *fv1.MessageQueueTrigger) bool {
+	return mqt.getTriggerSubscription(trigger) != nil
 }
 
-func (mqt *MessageQueueTriggerManager) delTrigger(m *metav1.ObjectMeta) {
-	mqt.reqChan <- request{
-		requestType: DELETE_TRIGGER,
-		triggerSub: &triggerSubscription{
-			trigger: fv1.MessageQueueTrigger{
-				ObjectMeta: *m,
-			},
-		},
-	}
+func (mqt *MessageQueueTriggerManager) delTriggerSubscription(trigger *fv1.MessageQueueTrigger) error {
+	resp := mqt.makeRequest(DELETE_TRIGGER, &triggerSubscription{trigger: *trigger})
+	return resp.err
 }
 
 func (mqt *MessageQueueTriggerManager) RegisterTrigger(trigger *fv1.MessageQueueTrigger) {
-	isPresent := mqt.checkTrigger(&trigger.ObjectMeta)
+	isPresent := mqt.checkTriggerSubscription(trigger)
 	if isPresent {
 		mqt.logger.Info("message queue trigger already registered", zap.String("trigger_name", trigger.ObjectMeta.Name))
 		return
@@ -189,7 +180,6 @@ func (mqt *MessageQueueTriggerManager) RegisterTrigger(trigger *fv1.MessageQueue
 		trigger:      *trigger,
 		subscription: sub,
 	}
-	mqt.logger.Info("Subscription successful", zap.Any("Sub: ", sub))
 	// add to our list
 	err = mqt.addTrigger(&triggerSub)
 	if err != nil {
@@ -199,32 +189,35 @@ func (mqt *MessageQueueTriggerManager) RegisterTrigger(trigger *fv1.MessageQueue
 }
 
 func (mqt *MessageQueueTriggerManager) mqtInformerHandlers() k8sCache.ResourceEventHandlerFuncs {
-	mqt.logger.Info("Inside mqtInformerHandlers function")
 	return k8sCache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			trigger := obj.(*fv1.MessageQueueTrigger)
-			mqt.logger.Info("Added mqt", zap.Any("trigger: ", trigger.ObjectMeta))
+			mqt.logger.Debug("Added mqt", zap.Any("trigger: ", trigger.ObjectMeta))
 			mqt.RegisterTrigger(trigger)
 		},
 		DeleteFunc: func(obj interface{}) {
 			trigger := obj.(*fv1.MessageQueueTrigger)
-			mqt.logger.Info("Delete mqt", zap.Any("trigger: ", trigger.ObjectMeta))
-			triggerSubscription := mqt.getTriggerSubscription(&trigger.ObjectMeta)
-			if triggerSubscription != nil {
-				err := mqt.messageQueue.Unsubscribe(triggerSubscription.subscription)
-				if err != nil {
-					mqt.logger.Warn("failed to unsubscribe from message queue trigger", zap.Error(err), zap.String("trigger_name", trigger.ObjectMeta.Name))
-					return
-				}
-				mqt.delTrigger(&trigger.ObjectMeta)
-				mqt.logger.Info("message queue trigger deleted", zap.String("trigger_name", trigger.ObjectMeta.Name))
-			} else {
+			mqt.logger.Debug("Delete mqt", zap.Any("trigger: ", trigger.ObjectMeta))
+			triggerSubscription := mqt.getTriggerSubscription(trigger)
+			if triggerSubscription == nil {
 				mqt.logger.Info("Unsubscribe failed", zap.String("trigger_name", trigger.ObjectMeta.Name))
+				return
 			}
+
+			err := mqt.messageQueue.Unsubscribe(triggerSubscription.subscription)
+			if err != nil {
+				mqt.logger.Warn("failed to unsubscribe from message queue trigger", zap.Error(err), zap.String("trigger_name", trigger.ObjectMeta.Name))
+				return
+			}
+			err = mqt.delTriggerSubscription(trigger)
+			if err != nil {
+				mqt.logger.Warn("deleting message queue trigger failed", zap.Error(err), zap.String("trigger_name", trigger.ObjectMeta.Name))
+			}
+			mqt.logger.Info("message queue trigger deleted", zap.String("trigger_name", trigger.ObjectMeta.Name))
 		},
 		UpdateFunc: func(oldObj interface{}, newObj interface{}) {
 			trigger := newObj.(*fv1.MessageQueueTrigger)
-			mqt.logger.Info("Updated mqt", zap.Any("trigger: ", trigger.ObjectMeta))
+			mqt.logger.Debug("Updated mqt", zap.Any("trigger: ", trigger.ObjectMeta))
 			mqt.RegisterTrigger(trigger)
 		},
 	}

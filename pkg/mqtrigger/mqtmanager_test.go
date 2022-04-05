@@ -20,10 +20,11 @@ import (
 	"context"
 	"testing"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/mqtrigger/messageQueue"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 type mqtConsumer struct {
@@ -61,7 +62,7 @@ func TestMqtManager(t *testing.T) {
 			Namespace: "default",
 		},
 	}
-	if mgr.checkTrigger(&trigger.ObjectMeta) {
+	if mgr.checkTriggerSubscription(&trigger) {
 		t.Errorf("checkTrigger should return false")
 	}
 	sub, err := msgQueue.Subscribe(&trigger)
@@ -76,19 +77,22 @@ func TestMqtManager(t *testing.T) {
 	if err != nil {
 		t.Errorf("addTrigger should not return error")
 	}
-	if !mgr.checkTrigger(&trigger.ObjectMeta) {
+	if !mgr.checkTriggerSubscription(&trigger) {
 		t.Errorf("checkTrigger should return true")
 	}
-	getSub := mgr.getTriggerSubscription(&trigger.ObjectMeta)
+	getSub := mgr.getTriggerSubscription(&trigger)
 	if getSub == nil {
-		t.Errorf("getTriggerSubscription should return triggerSub")
+		t.Fatal("getTriggerSubscription should return triggerSub")
 	}
 	if getSub.trigger.ObjectMeta.Name != trigger.ObjectMeta.Name {
 		t.Errorf("getTriggerSubscription should return triggerSub with trigger name %s", trigger.ObjectMeta.Name)
 	}
 	getSub.subscription.(mqtConsumer).cancel()
-	mgr.delTrigger(&trigger.ObjectMeta)
-	if mgr.checkTrigger(&trigger.ObjectMeta) {
+	err = mgr.delTriggerSubscription(&trigger)
+	if err != nil {
+		t.Errorf("delTriggerSubscription should not return error")
+	}
+	if mgr.checkTriggerSubscription(&trigger) {
 		t.Errorf("checkTrigger should return false")
 	}
 }
