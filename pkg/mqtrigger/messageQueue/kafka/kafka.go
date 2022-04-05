@@ -33,6 +33,7 @@ import (
 	"go.uber.org/zap"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/mqtrigger"
 	"github.com/fission/fission/pkg/mqtrigger/factory"
 	"github.com/fission/fission/pkg/mqtrigger/messageQueue"
 	"github.com/fission/fission/pkg/mqtrigger/validator"
@@ -120,6 +121,7 @@ func (ch MqtConsumerGroupHandler) Cleanup(sarama.ConsumerGroupSession) error {
 func (ch MqtConsumerGroupHandler) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
 	for msg := range claim.Messages() {
 		ch.kafkaMsgHandler(session, msg)
+		mqtrigger.IncreaseMessageCount(ch.trigger.Name, ch.trigger.Namespace)
 	}
 	return nil
 }

@@ -109,11 +109,10 @@ func (mqt *MessageQueueTriggerManager) service() {
 			} else {
 				mqt.triggers[k] = req.triggerSub
 				mqt.logger.Debug("set trigger subscription", zap.String("key", k))
+				IncreaseSubscriptionCount(req.triggerSub.trigger.Name, req.triggerSub.trigger.Namespace)
 			}
 			req.respChan <- resp
 		case GET_TRIGGER_SUBSCRIPTION:
-			_, exists := mqt.triggers[k]
-			mqt.logger.Debug("looking up trigger", zap.String("key", k), zap.Bool("exists", exists))
 			if _, ok := mqt.triggers[k]; !ok {
 				resp.err = errors.New("trigger does not exist")
 			} else {
@@ -123,6 +122,7 @@ func (mqt *MessageQueueTriggerManager) service() {
 		case DELETE_TRIGGER:
 			delete(mqt.triggers, k)
 			mqt.logger.Debug("delete trigger", zap.String("key", k))
+			DecreaseSubscriptionCount(req.triggerSub.trigger.Name, req.triggerSub.trigger.Namespace)
 			req.respChan <- resp
 		}
 	}
