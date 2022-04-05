@@ -10,7 +10,7 @@ var (
 	labels            = []string{"trigger_name", "trigger_namespace"}
 	subscriptionCount = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "fission_mqt_subscriptions_total",
+			Name: "fission_mqt_subscriptions",
 			Help: "Total number of subscriptions to mq currently",
 		},
 		[]string{},
