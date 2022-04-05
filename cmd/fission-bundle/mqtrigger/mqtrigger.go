@@ -17,6 +17,7 @@ limitations under the License.
 package mqtrigger
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path"
@@ -35,7 +36,7 @@ import (
 	_ "github.com/fission/fission/pkg/mqtrigger/messageQueue/nats"
 )
 
-func Start(logger *zap.Logger, routerUrl string) error {
+func Start(ctx context.Context, logger *zap.Logger, routerUrl string) error {
 	fissionClient, _, _, _, err := crd.MakeFissionClient()
 
 	if err != nil {
@@ -74,9 +75,8 @@ func Start(logger *zap.Logger, routerUrl string) error {
 	if err != nil {
 		logger.Fatal("failed to connect to remote message queue server", zap.Error(err))
 	}
-
-	mqtrigger.MakeMessageQueueTriggerManager(logger, fissionClient, mqType, mq).Run()
-
+	mqtMgr := mqtrigger.MakeMessageQueueTriggerManager(logger, fissionClient, mqType, mq)
+	mqtMgr.Run(ctx)
 	return nil
 }
 

@@ -33,6 +33,7 @@ import (
 	"go.uber.org/zap"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/mqtrigger"
 	"github.com/fission/fission/pkg/mqtrigger/factory"
 	"github.com/fission/fission/pkg/mqtrigger/messageQueue"
 	"github.com/fission/fission/pkg/mqtrigger/validator"
@@ -72,6 +73,12 @@ type MqtConsumerGroupHandler struct {
 	fissionHeaders map[string]string
 	producer       sarama.SyncProducer
 	fnUrl          string
+}
+
+type MqtConsumer struct {
+	ctx      context.Context
+	cancel   context.CancelFunc
+	consumer sarama.ConsumerGroup
 }
 
 func NewMqtConsumerGroupHandler(version sarama.KafkaVersion,
@@ -114,6 +121,7 @@ func (ch MqtConsumerGroupHandler) Cleanup(sarama.ConsumerGroupSession) error {
 func (ch MqtConsumerGroupHandler) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
 	for msg := range claim.Messages() {
 		ch.kafkaMsgHandler(session, msg)
+		mqtrigger.IncreaseMessageCount(ch.trigger.Name, ch.trigger.Namespace)
 	}
 	return nil
 }
@@ -351,18 +359,28 @@ func (kafka Kafka) Subscribe(trigger *fv1.MessageQueueTrigger) (messageQueue.Sub
 		}
 	}()
 
+	ctx, cancel := context.WithCancel(context.Background())
 	ch := NewMqtConsumerGroupHandler(kafka.version, kafka.logger, trigger, producer, kafka.routerUrl)
+
 	// consume messages
 	go func() {
 		topic := []string{trigger.Spec.Topic}
-		ctx := context.Background()
 		err = consumer.Consume(ctx, topic, ch)
 		if err != nil {
 			kafka.logger.Error("consumer error", zap.Error(err))
 		}
+
+		if ctx.Err() != nil {
+			return
+		}
 	}()
 
-	return consumer, nil
+	mqtConsumer := MqtConsumer{
+		ctx:      ctx,
+		cancel:   cancel,
+		consumer: consumer,
+	}
+	return mqtConsumer, nil
 }
 
 func (kafka Kafka) getTLSConfig() (*tls.Config, error) {
@@ -390,7 +408,9 @@ func (kafka Kafka) getTLSConfig() (*tls.Config, error) {
 }
 
 func (kafka Kafka) Unsubscribe(subscription messageQueue.Subscription) error {
-	return subscription.(sarama.ConsumerGroup).Close()
+	mqtConsumer := subscription.(MqtConsumer)
+	mqtConsumer.cancel()
+	return mqtConsumer.consumer.Close()
 }
 
 func errorHandler(logger *zap.Logger, trigger *fv1.MessageQueueTrigger, producer sarama.SyncProducer, funcUrl string, err error, errorTopicHeaders []sarama.RecordHeader) {
