@@ -4,7 +4,6 @@ go 1.18
 
 require (
 	contrib.go.opencensus.io/exporter/jaeger v0.2.1
-	github.com/Azure/azure-sdk-for-go v62.1.0+incompatible
 	github.com/Shopify/sarama v1.32.0
 	github.com/dchest/uniuri v0.0.0-20200228104902-7aecb25e1fe5
 	github.com/docopt/docopt-go v0.0.0-20180111231733-ee0de3bc6815
@@ -101,7 +100,6 @@ require (
 	github.com/go-openapi/jsonpointer v0.19.5 // indirect
 	github.com/go-openapi/jsonreference v0.19.6 // indirect
 	github.com/go-openapi/swag v0.19.15 // indirect
-	github.com/gofrs/uuid v4.0.0+incompatible // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
@@ -149,7 +147,6 @@ require (
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/sergi/go-diff v1.1.0 // indirect
 	github.com/sirupsen/logrus v1.8.1 // indirect
-	github.com/stretchr/objx v0.2.0 // indirect
 	github.com/uber/jaeger-client-go v2.28.0+incompatible // indirect
 	github.com/ulikunitz/xz v0.5.9 // indirect
 	github.com/xanzy/ssh-agent v0.3.0 // indirect
