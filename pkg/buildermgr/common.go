@@ -103,7 +103,7 @@ func buildPackage(ctx context.Context, logger *zap.Logger, fissionClient *crd.Fi
 		return nil, buildLogs, ferror.MakeError(http.StatusInternalServerError, e)
 	}
 
-	observePackageCreationDuration(pkg.Name, pkg.Namespace, float64(time.Since(startTime).Seconds()))
+	observePackageCreationDuration(pkg.Name, pkg.Namespace, time.Since(startTime).Seconds())
 	logger.Info("build succeed", zap.String("source_package", srcPkgFilename), zap.String("deployment_package", buildResp.ArtifactFilename))
 
 	archivePackage := !env.Spec.KeepArchive

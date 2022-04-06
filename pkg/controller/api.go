@@ -282,7 +282,7 @@ func monitoringMiddleware(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		startTime := time.Now()
 		h.ServeHTTP(w, r)
-		observeLatency(float64(time.Since(startTime).Milliseconds()))
+		observeLatency(time.Since(startTime).Seconds())
 		IncreaseRequests()
 	})
 }

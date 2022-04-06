@@ -23,7 +23,7 @@ var (
 	)
 	requestsLatency = promauto.NewSummaryVec(
 		prometheus.SummaryOpts{
-			Name:       "fission_requests_milliseconds",
+			Name:       "fission_requests_seconds",
 			Help:       "Time taken to serve the request",
 			Objectives: map[float64]float64{0.5: 0.05, 0.9: 0.01, 0.99: 0.001},
 		},
