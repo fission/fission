@@ -320,13 +320,6 @@ timer:
   ##
   resources: {}
 
-## Azure-storage-queue: enable and configure the details
-##
-azureStorageQueue:
-  enabled: false
-  key: ""
-  accountName: ""
-
 ## Kafka: enable and configure the details
 ##
 kafka:

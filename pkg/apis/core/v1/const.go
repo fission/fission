@@ -76,7 +76,6 @@ const (
 )
 
 const (
-	MessageQueueTypeASQ   = "azure-storage-queue"
 	MessageQueueTypeKafka = "kafka"
 )
 

@@ -31,7 +31,6 @@ import (
 	"github.com/fission/fission/pkg/mqtrigger"
 	"github.com/fission/fission/pkg/mqtrigger/factory"
 	"github.com/fission/fission/pkg/mqtrigger/messageQueue"
-	_ "github.com/fission/fission/pkg/mqtrigger/messageQueue/azurequeuestorage"
 	_ "github.com/fission/fission/pkg/mqtrigger/messageQueue/kafka"
 )
 
