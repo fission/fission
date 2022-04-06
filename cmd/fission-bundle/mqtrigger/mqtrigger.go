@@ -33,7 +33,6 @@ import (
 	"github.com/fission/fission/pkg/mqtrigger/messageQueue"
 	_ "github.com/fission/fission/pkg/mqtrigger/messageQueue/azurequeuestorage"
 	_ "github.com/fission/fission/pkg/mqtrigger/messageQueue/kafka"
-	_ "github.com/fission/fission/pkg/mqtrigger/messageQueue/nats"
 )
 
 func Start(ctx context.Context, logger *zap.Logger, routerUrl string) error {

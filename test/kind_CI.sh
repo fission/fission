@@ -81,8 +81,6 @@ main() {
         $ROOT/test/tests/test_specs/test_spec_archive/test_spec_archive.sh \
         $ROOT/test/tests/test_environments/test_tensorflow_serving_env.sh \
         $ROOT/test/tests/test_environments/test_go_env.sh \
-        $ROOT/test/tests/mqtrigger/nats/test_mqtrigger.sh \
-        $ROOT/test/tests/mqtrigger/nats/test_mqtrigger_error.sh \
         $ROOT/test/tests/test_huge_response/test_huge_response.sh \
         $ROOT/test/tests/test_kubectl/test_kubectl.sh \
         $ROOT/test/tests/websocket/test_ws.sh

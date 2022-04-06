@@ -108,7 +108,6 @@ jobs:
         run: |
           kubectl port-forward svc/router 8888:80 -nfission &
           kubectl port-forward svc/controller 8889:80 -nfission &
-          kubectl port-forward svc/nats-streaming 8890:4222 -nfission &
 
       - name: Get fission version
         run: |
