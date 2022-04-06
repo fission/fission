@@ -44,7 +44,6 @@ deploy:
         namespace: fission
         pprof.enabled: false
         canaryDeployment.enabled: false
-        nats.enabled: false
         influxdb.enabled: false
         pruneInterval: "60"
         repository: index.docker.io

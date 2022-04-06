@@ -41,7 +41,6 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/util"
 	_ "github.com/fission/fission/pkg/mqtrigger/messageQueue/azurequeuestorage"
 	_ "github.com/fission/fission/pkg/mqtrigger/messageQueue/kafka"
-	_ "github.com/fission/fission/pkg/mqtrigger/messageQueue/nats"
 )
 
 const (
