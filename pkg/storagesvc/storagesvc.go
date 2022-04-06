@@ -28,6 +28,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/graymeta/stow"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opencensus.io/plugin/ochttp"
 	"go.uber.org/zap"
 
@@ -75,6 +76,7 @@ func (ss *StorageService) uploadHandler(w http.ResponseWriter, r *http.Request) 
 	file, handler, err := r.FormFile("uploadfile")
 	if err != nil {
 		http.Error(w, "missing upload file", http.StatusBadRequest)
+		IncreaseArchiveErrors()
 		return
 	}
 	defer file.Close()
@@ -89,6 +91,7 @@ func (ss *StorageService) uploadHandler(w http.ResponseWriter, r *http.Request) 
 		ss.logger.Error("upload is missing the 'X-File-Size' header",
 			zap.String("filename", handler.Filename))
 		http.Error(w, "missing X-File-Size header", http.StatusBadRequest)
+		IncreaseArchiveErrors()
 		return
 	}
 
@@ -99,6 +102,7 @@ func (ss *StorageService) uploadHandler(w http.ResponseWriter, r *http.Request) 
 			zap.Strings("header", fileSizeS),
 			zap.String("filename", handler.Filename))
 		http.Error(w, "missing or bad X-File-Size header", http.StatusBadRequest)
+		IncreaseArchiveErrors()
 		return
 	}
 
@@ -112,8 +116,11 @@ func (ss *StorageService) uploadHandler(w http.ResponseWriter, r *http.Request) 
 			zap.Error(err),
 			zap.String("filename", handler.Filename))
 		http.Error(w, "Error saving uploaded file", http.StatusInternalServerError)
+		IncreaseArchiveErrors()
 		return
 	}
+
+	IncreaseMemory(float64(handler.Size))
 
 	// respond with an ID that can be used to retrieve the file
 	ur := &UploadResponse{
@@ -135,6 +142,8 @@ func (ss *StorageService) uploadHandler(w http.ResponseWriter, r *http.Request) 
 			zap.String("filename", handler.Filename),
 		)
 	}
+
+	IncreaseArchives()
 }
 
 func (ss *StorageService) getIdFromRequest(r *http.Request) (string, error) {
@@ -219,6 +228,14 @@ func (ss *StorageService) Start(port int, openTracingEnabled bool) {
 		err = http.ListenAndServe(address, otel.GetHandlerWithOTEL(r, "fission-storagesvc", otel.UrlsToIgnore("/healthz")))
 	}
 	ss.logger.Fatal("done listening", zap.Error(err))
+}
+
+func serveMetric(logger *zap.Logger) {
+	metricsAddr := ":8080"
+	http.Handle("/metrics", promhttp.Handler())
+	err := http.ListenAndServe(metricsAddr, nil)
+
+	logger.Fatal("done listening on metrics endpoint", zap.Error(err))
 }
 
 // Start runs storage service

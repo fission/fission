@@ -22,8 +22,10 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/gorilla/mux"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opencensus.io/plugin/ochttp"
 	"go.uber.org/zap"
 	apiv1 "k8s.io/api/core/v1"
@@ -113,6 +115,7 @@ func (api *API) respondWithSuccess(w http.ResponseWriter, resp []byte) {
 
 func (api *API) respondWithError(w http.ResponseWriter, err error) {
 	// this error type comes with an HTTP code, so just use that
+	IncreaseRequestsError()
 	se, ok := err.(*kerrors.StatusError)
 	if ok {
 		api.logger.Error(err.Error(), zap.Int32("code", se.ErrStatus.Code))
@@ -267,6 +270,23 @@ func (api *API) GetHandler() http.Handler {
 	return r
 }
 
+func serveMetric(logger *zap.Logger) {
+	metricAddr := ":8080"
+	http.Handle("/metrics", promhttp.Handler())
+	err := http.ListenAndServe(metricAddr, nil)
+
+	logger.Fatal("done listening on metrics endpoint", zap.Error(err))
+}
+
+func monitoringMiddleware(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		startTime := time.Now()
+		h.ServeHTTP(w, r)
+		observeLatency(float64(time.Since(startTime).Milliseconds()))
+		IncreaseRequests()
+	})
+}
+
 func (api *API) Serve(port int, openTracingEnabled bool) {
 	address := fmt.Sprintf(":%v", port)
 	api.logger.Info("server started", zap.Int("port", port))
@@ -277,6 +297,8 @@ func (api *API) Serve(port int, openTracingEnabled bool) {
 	} else {
 		handler = otel.GetHandlerWithOTEL(api.GetHandler(), "fission-controller", otel.UrlsToIgnore("/healthz"))
 	}
-	err := http.ListenAndServe(address, handler)
+
+	go serveMetric(api.logger)
+	err := http.ListenAndServe(address, monitoringMiddleware(handler))
 	api.logger.Fatal("done listening", zap.Error(err))
 }
