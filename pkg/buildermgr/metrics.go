@@ -12,14 +12,14 @@ var (
 			Name: "fission_packages_created_total",
 			Help: "Number of packages created",
 		},
-		functionLabels,
+		[]string{},
 	)
 	packageBuildError = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "fission_packages_creation_error_total",
 			Help: "Number of packages failed due to errors",
 		},
-		functionLabels,
+		[]string{},
 	)
 	packageBuildDuration = promauto.NewSummaryVec(
 		prometheus.SummaryOpts{
@@ -31,12 +31,12 @@ var (
 	)
 )
 
-func IncreasePackageCounter(pkgname, pkgnamespace string) {
-	packagesCreated.WithLabelValues(pkgname, pkgnamespace).Inc()
+func IncreasePackageCounter() {
+	packagesCreated.WithLabelValues().Inc()
 }
 
-func IncreasePackageErrorCounter(pkgname, pkgnamespace string) {
-	packageBuildError.WithLabelValues(pkgname, pkgnamespace).Inc()
+func IncreasePackageErrorCounter() {
+	packageBuildError.WithLabelValues().Inc()
 }
 
 func observePackageCreationDuration(pkgname, pkgnamespace string, time float64) {
