@@ -38,6 +38,8 @@ import (
 	"github.com/fission/fission/pkg/executor/util"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	"github.com/fission/fission/pkg/utils"
+	"github.com/fission/fission/pkg/utils/metrics"
+	promMetrics "github.com/fission/fission/pkg/utils/metrics"
 )
 
 type requestType int
@@ -216,6 +218,8 @@ func (envw *environmentWatcher) sync() {
 func (envw *environmentWatcher) service() {
 	for {
 		req := <-envw.requestChan
+		promMetrics.IncreaseRequests()
+		startTime := time.Now()
 		switch req.requestType {
 		case GET_BUILDER:
 			// In order to support backward compatibility, for all environments with builder image created in default env,
@@ -297,6 +301,7 @@ func (envw *environmentWatcher) service() {
 				delete(envw.cache, key)
 			}
 		}
+		metrics.ObserveLatency(time.Since(startTime).Seconds())
 	}
 }
 

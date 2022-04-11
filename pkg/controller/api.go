@@ -22,7 +22,6 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/gorilla/mux"
 	"go.opencensus.io/plugin/ochttp"
@@ -115,6 +114,7 @@ func (api *API) respondWithSuccess(w http.ResponseWriter, resp []byte) {
 
 func (api *API) respondWithError(w http.ResponseWriter, err error) {
 	// this error type comes with an HTTP code, so just use that
+	metrics.IncreaseRequestsError()
 	se, ok := err.(*kerrors.StatusError)
 	if ok {
 		api.logger.Error(err.Error(), zap.Int32("code", se.ErrStatus.Code))
@@ -269,15 +269,6 @@ func (api *API) GetHandler() http.Handler {
 	return r
 }
 
-func monitoringMiddleware(h http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		startTime := time.Now()
-		h.ServeHTTP(w, r)
-		observeLatency(time.Since(startTime).Seconds())
-		IncreaseRequests()
-	})
-}
-
 func (api *API) Serve(port int, openTracingEnabled bool) {
 	address := fmt.Sprintf(":%v", port)
 	api.logger.Info("server started", zap.Int("port", port))
@@ -290,6 +281,6 @@ func (api *API) Serve(port int, openTracingEnabled bool) {
 	}
 
 	go metrics.ServeMetrics(api.logger)
-	err := http.ListenAndServe(address, monitoringMiddleware(handler))
+	err := http.ListenAndServe(address, metrics.MonitoringMiddleware(handler))
 	api.logger.Fatal("done listening", zap.Error(err))
 }

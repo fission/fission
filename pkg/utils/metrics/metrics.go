@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -35,16 +36,25 @@ var (
 	)
 )
 
-func IncreaseRequests(path, code string) {
-	requestsTotal.WithLabelValues(path, code).Inc()
+func IncreaseRequests() {
+	requestsTotal.WithLabelValues().Inc()
 }
 
-func IncreaseRequestsError(path, code string) {
-	requestsError.WithLabelValues(path, code).Inc()
+func IncreaseRequestsError() {
+	requestsError.WithLabelValues().Inc()
 }
 
-func observeLatency(time float64) {
+func ObserveLatency(time float64) {
 	requestsLatency.WithLabelValues().Observe(time)
+}
+
+func MonitoringMiddleware(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		startTime := time.Now()
+		h.ServeHTTP(w, r)
+		ObserveLatency(time.Since(startTime).Seconds())
+		IncreaseRequests()
+	})
 }
 
 func ServeMetrics(logger *zap.Logger) {
