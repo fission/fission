@@ -219,14 +219,15 @@ func (ss *StorageService) Start(port int, openTracingEnabled bool) {
 
 	address := fmt.Sprintf(":%v", port)
 
-	var err error
+	var handler http.Handler
 	if openTracingEnabled {
-		err = http.ListenAndServe(address, &ochttp.Handler{
+		handler = &ochttp.Handler{
 			Handler: r,
-		})
+		}
 	} else {
-		err = http.ListenAndServe(address, otel.GetHandlerWithOTEL(r, "fission-storagesvc", otel.UrlsToIgnore("/healthz")))
+		handler = otel.GetHandlerWithOTEL(r, "fission-storagesvc", otel.UrlsToIgnore("/healthz"))
 	}
+	err := http.ListenAndServe(address, metrics.MonitoringMiddleware(handler))
 	ss.logger.Fatal("done listening", zap.Error(err))
 }
 
@@ -241,8 +242,8 @@ func Start(ctx context.Context, logger *zap.Logger, storage Storage, port int, o
 
 	// create http handlers
 	storageService := MakeStorageService(logger, storageClient, port)
-	go storageService.Start(port, openTracingEnabled)
 	go metrics.ServeMetrics(logger)
+	go storageService.Start(port, openTracingEnabled)
 
 	// enablePruner prevents storagesvc unit test from needing to talk to kubernetes
 	if enablePruner {

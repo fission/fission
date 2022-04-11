@@ -4,11 +4,17 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 )
+
+type ResponseWriterWrapper struct {
+	http.ResponseWriter
+	statusCode int
+}
 
 var (
 	functionLabels = []string{"path", "code"}
@@ -36,24 +42,35 @@ var (
 	)
 )
 
-func IncreaseRequests() {
+func IncreaseRequests(path string, code int) {
 	requestsTotal.WithLabelValues().Inc()
 }
 
-func IncreaseRequestsError() {
+func IncreaseRequestsError(path string, code int) {
 	requestsError.WithLabelValues().Inc()
 }
 
-func ObserveLatency(time float64) {
+func ObserveLatency(path string, code int, time float64) {
 	requestsLatency.WithLabelValues().Observe(time)
+}
+
+func (rw *ResponseWriterWrapper) WriteHeader(statuscode int) {
+	rw.statusCode = statuscode
+	rw.ResponseWriter.WriteHeader(statuscode)
 }
 
 func MonitoringMiddleware(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		route := mux.CurrentRoute(r)
+		path, _ := route.GetPathTemplate()
+		rw := ResponseWriterWrapper{w, http.StatusOK}
 		startTime := time.Now()
-		h.ServeHTTP(w, r)
-		ObserveLatency(time.Since(startTime).Seconds())
-		IncreaseRequests()
+		h.ServeHTTP(&rw, r)
+		ObserveLatency(path, rw.statusCode, time.Since(startTime).Seconds())
+		IncreaseRequests(path, rw.statusCode)
+		if rw.statusCode >= 400 {
+			IncreaseRequestsError(path, rw.statusCode)
+		}
 	})
 }
 

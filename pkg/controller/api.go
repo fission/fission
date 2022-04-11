@@ -114,7 +114,6 @@ func (api *API) respondWithSuccess(w http.ResponseWriter, resp []byte) {
 
 func (api *API) respondWithError(w http.ResponseWriter, err error) {
 	// this error type comes with an HTTP code, so just use that
-	metrics.IncreaseRequestsError()
 	se, ok := err.(*kerrors.StatusError)
 	if ok {
 		api.logger.Error(err.Error(), zap.Int32("code", se.ErrStatus.Code))

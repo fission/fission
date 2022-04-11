@@ -86,9 +86,9 @@ func serve(ctx context.Context, logger *zap.Logger, port int, tracingSamplingRat
 	mr := router(ctx, logger, httpTriggerSet)
 	url := fmt.Sprintf(":%v", port)
 
-	var err error
+	var handler http.Handler
 	if openTracingEnabled {
-		err = http.ListenAndServe(url, &ochttp.Handler{
+		handler = &ochttp.Handler{
 			Handler: mr,
 			GetStartOptions: func(r *http.Request) trace.StartOptions {
 				// do not trace router healthz endpoint
@@ -108,10 +108,11 @@ func serve(ctx context.Context, logger *zap.Logger, port int, tracingSamplingRat
 					Sampler: trace.ProbabilitySampler(tracingSamplingRate),
 				}
 			},
-		})
+		}
 	} else {
-		err = http.ListenAndServe(url, otelUtils.GetHandlerWithOTEL(mr, "fission-router", otelUtils.UrlsToIgnore("/router-healthz")))
+		handler = otelUtils.GetHandlerWithOTEL(mr, "fission-router", otelUtils.UrlsToIgnore("/router-healthz"))
 	}
+	err := http.ListenAndServe(url, metrics.MonitoringMiddleware(handler))
 	if err != nil {
 		logger.Error("HTTP server error", zap.Error(err))
 	}

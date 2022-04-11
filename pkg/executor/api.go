@@ -34,6 +34,7 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/executor/client"
+	"github.com/fission/fission/pkg/utils/metrics"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
@@ -271,6 +272,6 @@ func (executor *Executor) Serve(port int, openTracingEnabled bool) {
 		handler = otelUtils.GetHandlerWithOTEL(executor.GetHandler(), "fission-executor", otelUtils.UrlsToIgnore("/healthz"))
 	}
 
-	err := http.ListenAndServe(address, handler)
+	err := http.ListenAndServe(address, metrics.MonitoringMiddleware(handler))
 	executor.logger.Fatal("done listening", zap.Error(err))
 }
