@@ -28,10 +28,10 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/graymeta/stow"
 	"github.com/pkg/errors"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opencensus.io/plugin/ochttp"
 	"go.uber.org/zap"
 
+	"github.com/fission/fission/pkg/utils/metrics"
 	"github.com/fission/fission/pkg/utils/otel"
 )
 
@@ -230,14 +230,6 @@ func (ss *StorageService) Start(port int, openTracingEnabled bool) {
 	ss.logger.Fatal("done listening", zap.Error(err))
 }
 
-func serveMetric(logger *zap.Logger) {
-	metricsAddr := ":8080"
-	http.Handle("/metrics", promhttp.Handler())
-	err := http.ListenAndServe(metricsAddr, nil)
-
-	logger.Fatal("done listening on metrics endpoint", zap.Error(err))
-}
-
 // Start runs storage service
 func Start(ctx context.Context, logger *zap.Logger, storage Storage, port int, openTracingEnabled bool) error {
 	enablePruner := true
@@ -250,7 +242,7 @@ func Start(ctx context.Context, logger *zap.Logger, storage Storage, port int, o
 	// create http handlers
 	storageService := MakeStorageService(logger, storageClient, port)
 	go storageService.Start(port, openTracingEnabled)
-	go serveMetric(logger)
+	go metrics.ServeMetrics(logger)
 
 	// enablePruner prevents storagesvc unit test from needing to talk to kubernetes
 	if enablePruner {

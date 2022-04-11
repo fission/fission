@@ -25,7 +25,6 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opencensus.io/plugin/ochttp"
 	"go.uber.org/zap"
 	apiv1 "k8s.io/api/core/v1"
@@ -37,6 +36,7 @@ import (
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/fission-cli/logdb"
 	"github.com/fission/fission/pkg/info"
+	"github.com/fission/fission/pkg/utils/metrics"
 	"github.com/fission/fission/pkg/utils/otel"
 )
 
@@ -115,7 +115,6 @@ func (api *API) respondWithSuccess(w http.ResponseWriter, resp []byte) {
 
 func (api *API) respondWithError(w http.ResponseWriter, err error) {
 	// this error type comes with an HTTP code, so just use that
-	IncreaseRequestsError()
 	se, ok := err.(*kerrors.StatusError)
 	if ok {
 		api.logger.Error(err.Error(), zap.Int32("code", se.ErrStatus.Code))
@@ -270,14 +269,6 @@ func (api *API) GetHandler() http.Handler {
 	return r
 }
 
-func serveMetric(logger *zap.Logger) {
-	metricAddr := ":8080"
-	http.Handle("/metrics", promhttp.Handler())
-	err := http.ListenAndServe(metricAddr, nil)
-
-	logger.Fatal("done listening on metrics endpoint", zap.Error(err))
-}
-
 func monitoringMiddleware(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		startTime := time.Now()
@@ -298,7 +289,7 @@ func (api *API) Serve(port int, openTracingEnabled bool) {
 		handler = otel.GetHandlerWithOTEL(api.GetHandler(), "fission-controller", otel.UrlsToIgnore("/healthz"))
 	}
 
-	go serveMetric(api.logger)
+	go metrics.ServeMetrics(api.logger)
 	err := http.ListenAndServe(address, monitoringMiddleware(handler))
 	api.logger.Fatal("done listening", zap.Error(err))
 }

@@ -19,10 +19,8 @@ package buildermgr
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"time"
 
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 	apiv1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -34,6 +32,7 @@ import (
 	"github.com/fission/fission/pkg/cache"
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/utils"
+	"github.com/fission/fission/pkg/utils/metrics"
 )
 
 type (
@@ -325,7 +324,7 @@ func (pkgw *packageWatcher) packageInformerHandler() k8sCache.ResourceEventHandl
 }
 
 func (pkgw *packageWatcher) Run(ctx context.Context) {
-	go serveMetric(pkgw.logger)
+	go metrics.ServeMetrics(pkgw.logger)
 	go (*pkgw.podInformer).Run(ctx.Done())
 	(*pkgw.pkgInformer).AddEventHandler(pkgw.packageInformerHandler())
 	(*pkgw.pkgInformer).Run(ctx.Done())
@@ -353,12 +352,4 @@ func setInitialBuildStatus(fissionClient *crd.FissionClient, pkg *fv1.Package) (
 
 	// TODO: use UpdateStatus to update status
 	return fissionClient.CoreV1().Packages(pkg.Namespace).Update(context.TODO(), pkg, metav1.UpdateOptions{})
-}
-
-func serveMetric(logger *zap.Logger) {
-	metricsAddr := ":8080"
-	http.Handle("/metrics", promhttp.Handler())
-	err := http.ListenAndServe(metricsAddr, nil)
-
-	logger.Fatal("done listening on metrics endpoint", zap.Error(err))
 }

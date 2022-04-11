@@ -19,7 +19,6 @@ package executor
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -28,7 +27,6 @@ import (
 
 	"github.com/dchest/uniuri"
 	"github.com/pkg/errors"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 	k8sInformers "k8s.io/client-go/informers"
 	k8sCache "k8s.io/client-go/tools/cache"
@@ -46,6 +44,7 @@ import (
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
 	"github.com/fission/fission/pkg/utils"
+	"github.com/fission/fission/pkg/utils/metrics"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
@@ -250,15 +249,6 @@ func (executor *Executor) getFunctionServiceFromCache(ctx context.Context, fn *f
 	return e.GetFuncSvcFromCache(ctx, fn)
 }
 
-func serveMetric(logger *zap.Logger) {
-	// Expose the registered metrics via HTTP.
-	metricAddr := ":8080"
-	http.Handle("/metrics", promhttp.Handler())
-	err := http.ListenAndServe(metricAddr, nil)
-
-	logger.Fatal("done listening on metrics endpoint", zap.Error(err))
-}
-
 // StartExecutor Starts executor and the executor components such as Poolmgr,
 // deploymgr and potential future executor types
 func StartExecutor(ctx context.Context, logger *zap.Logger, functionNamespace string, envBuilderNamespace string, port int, openTracingEnabled bool) error {
@@ -380,7 +370,7 @@ func StartExecutor(ctx context.Context, logger *zap.Logger, functionNamespace st
 	}
 	go reaper.CleanupRoleBindings(ctx, logger, kubernetesClient, fissionClient, functionNamespace, envBuilderNamespace, time.Minute*30)
 	go api.Serve(port, openTracingEnabled)
-	go serveMetric(logger)
+	go metrics.ServeMetrics(logger)
 
 	return nil
 }

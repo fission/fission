@@ -41,8 +41,6 @@ type (
 )
 
 var (
-	metricAddr = ":8080"
-
 	// function + http labels as strings
 	labelsStrings = []string{"function_namespace", "function_name", "method", "code"}
 
@@ -81,6 +79,7 @@ func labelsToStrings(f *functionLabels, h *httpLabels) []string {
 	return []string{
 		f.namespace,
 		f.name,
+		h.path,
 		h.method,
 		fmt.Sprint(h.code),
 	}
