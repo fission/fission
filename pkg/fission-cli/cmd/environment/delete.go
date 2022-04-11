@@ -17,11 +17,14 @@ limitations under the License.
 package environment
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
@@ -43,12 +46,17 @@ func (opts *DeleteSubCommand) do(input cli.Input) error {
 	}
 
 	if !input.Bool(flagkey.EnvForce) {
-		fns, err := opts.Client().V1().Function().List(metav1.NamespaceAll)
-		if err != nil {
-			return errors.Wrap(err, "Error getting functions wrt environment.")
-		}
+		fnGvr, err := util.GetGVRFromAPIVersionKind(util.FISSION_API_VERSION, util.FISSION_FUNCTION)
+		util.CheckError(err, "error finding GVR")
 
-		for _, fn := range fns {
+		resp, err := opts.Client().DynamicClient().Resource(*fnGvr).Namespace(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{})
+		util.CheckError(err, "error getting functions wrt environment")
+
+		var fnList *fv1.FunctionList
+		err = runtime.DefaultUnstructuredConverter.FromUnstructured(resp.UnstructuredContent(), &fnList)
+		util.CheckError(err, "error converting unstructured object to FunctionList")
+
+		for _, fn := range fnList.Items {
 			if fn.Spec.Environment.Name == m.Name &&
 				fn.Spec.Environment.Namespace == m.Namespace {
 				return errors.New("Environment is used by atleast one function.")
@@ -56,7 +64,10 @@ func (opts *DeleteSubCommand) do(input cli.Input) error {
 		}
 	}
 
-	err := opts.Client().V1().Environment().Delete(m)
+	gvr, err := util.GetGVRFromAPIVersionKind(util.FISSION_API_VERSION, util.FISSION_ENVIRONMENT)
+	util.CheckError(err, "error finding GVR")
+
+	err = opts.Client().DynamicClient().Resource(*gvr).Namespace(m.Namespace).Delete(context.TODO(), m.Name, metav1.DeleteOptions{})
 	if err != nil {
 		if input.Bool(flagkey.IgnoreNotFound) && util.IsNotFound(err) {
 			return nil

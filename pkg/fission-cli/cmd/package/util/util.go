@@ -28,9 +28,12 @@ import (
 
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
+	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/util/homedir"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/controller/client"
+	"github.com/fission/fission/pkg/fission-cli/util"
 	storageSvcClient "github.com/fission/fission/pkg/storagesvc/client"
 	"github.com/fission/fission/pkg/utils"
 )
@@ -50,7 +53,34 @@ func UploadArchiveFile(ctx context.Context, client client.Interface, fileName st
 			return nil, err
 		}
 	} else {
-		u := strings.TrimSuffix(client.ServerURL(), "/") + "/proxy/storage"
+		// -- CHANGED --
+		// u := strings.TrimSuffix(client.ServerURL(), "/") + "/proxy/storage"
+
+		kubeConfigPath := os.Getenv("KUBECONFIG")
+		if len(kubeConfigPath) == 0 {
+			kubeConfigPath = filepath.Join(homedir.HomeDir(), ".kube", "config")
+		}
+
+		if _, err := os.Stat(kubeConfigPath); os.IsNotExist(err) {
+			return nil, errors.New("Couldn't find kubeconfig file. " +
+				"Set the KUBECONFIG environment variable to your kubeconfig's path.")
+		}
+
+		config, _ := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
+			&clientcmd.ClientConfigLoadingRules{ExplicitPath: kubeConfigPath},
+			&clientcmd.ConfigOverrides{
+				CurrentContext: "",
+			}).RawConfig()
+		currentContext := config.CurrentContext
+
+		serverUrl, err := util.GetApplicationUrl("application=fission-storage", currentContext)
+		if err != nil {
+			return nil, err
+		}
+		u := strings.TrimSuffix(serverUrl, "/") + "/v1/archive"
+
+		// -- END --
+
 		ssClient := storageSvcClient.MakeClient(u)
 
 		// TODO add a progress bar

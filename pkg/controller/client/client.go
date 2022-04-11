@@ -19,24 +19,32 @@ package client
 import (
 	"github.com/fission/fission/pkg/controller/client/rest"
 	v1 "github.com/fission/fission/pkg/controller/client/v1"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
 )
 
 type (
 	Interface interface {
 		V1() v1.V1Interface
 		ServerURL() string
+		KubeClient() *kubernetes.Clientset
+		DynamicClient() dynamic.Interface
 	}
 
 	Clientset struct {
-		restClient rest.Interface
-		v1         v1.V1Interface
+		restClient    rest.Interface
+		v1            v1.V1Interface
+		kubeClient    *kubernetes.Clientset
+		dynamicClient dynamic.Interface
 	}
 )
 
-func MakeClientset(restClient rest.Interface) Interface {
+func MakeClientset(restClient rest.Interface, kubeClient *kubernetes.Clientset, dynamicClient dynamic.Interface) Interface {
 	return &Clientset{
-		restClient: restClient,
-		v1:         v1.MakeV1Client(restClient),
+		restClient:    restClient,
+		v1:            v1.MakeV1Client(restClient),
+		kubeClient:    kubeClient,
+		dynamicClient: dynamicClient,
 	}
 }
 
@@ -46,4 +54,12 @@ func (c *Clientset) V1() v1.V1Interface {
 
 func (c *Clientset) ServerURL() string {
 	return c.restClient.ServerURL()
+}
+
+func (c *Clientset) DynamicClient() dynamic.Interface {
+	return c.dynamicClient
+}
+
+func (c *Clientset) KubeClient() *kubernetes.Clientset {
+	return c.kubeClient
 }

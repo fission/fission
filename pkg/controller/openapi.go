@@ -43,7 +43,7 @@ func openAPIWebService() *restful.WebService {
 	ws := new(restful.WebService)
 
 	// CRD resource
-	RegisterEnvironmentRoute(ws)
+	// RegisterEnvironmentRoute(ws)
 	RegisterFunctionRoute(ws)
 	RegisterHTTPTriggerRoute(ws)
 	RegisterMessageQueueTriggerRoute(ws)

@@ -20,17 +20,23 @@ import (
 	"github.com/fission/fission/pkg/controller/client/rest"
 	v1 "github.com/fission/fission/pkg/controller/client/v1"
 	"github.com/fission/fission/pkg/controller/client/v1/fake"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
 )
 
 type (
 	FakeClientset struct {
-		v1 v1.V1Interface
+		v1            v1.V1Interface
+		kubeClient    *kubernetes.Clientset
+		dynamicClient dynamic.Interface
 	}
 )
 
-func MakeFakeClientset(restClient rest.Interface) Interface {
+func MakeFakeClientset(restClient rest.Interface, kubeClient *kubernetes.Clientset, dynamicClient dynamic.Interface) Interface {
 	return &FakeClientset{
-		v1: fake.MakeV1Client(nil),
+		v1:            fake.MakeV1Client(nil),
+		kubeClient:    kubeClient,
+		dynamicClient: dynamicClient,
 	}
 }
 
@@ -40,4 +46,12 @@ func (c *FakeClientset) V1() v1.V1Interface {
 
 func (c *FakeClientset) ServerURL() string {
 	return ""
+}
+
+func (c *FakeClientset) DynamicClient() dynamic.Interface {
+	return c.dynamicClient
+}
+
+func (c *FakeClientset) KubeClient() *kubernetes.Clientset {
+	return c.kubeClient
 }

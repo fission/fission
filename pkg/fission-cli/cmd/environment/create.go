@@ -17,12 +17,14 @@ limitations under the License.
 package environment
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/hashicorp/go-multierror"
-	"github.com/pkg/errors"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
@@ -66,13 +68,20 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 func (opts *CreateSubCommand) run(input cli.Input) error {
 	m := opts.env.ObjectMeta
 
-	envList, err := opts.Client().V1().Environment().List(m.Namespace)
-	if err != nil {
-		return err
-	} else if len(envList) > 0 {
+	gvr, err := util.GetGVRFromAPIVersionKind(util.FISSION_API_VERSION, util.FISSION_ENVIRONMENT)
+	util.CheckError(err, "error finding GVR")
+
+	resp, err := opts.Client().DynamicClient().Resource(*gvr).Namespace(m.Namespace).List(context.TODO(), metav1.ListOptions{})
+	util.CheckError(err, "")
+
+	var envList *fv1.EnvironmentList
+	err = runtime.DefaultUnstructuredConverter.FromUnstructured(resp.UnstructuredContent(), &envList)
+	util.CheckError(err, "error converting unstructured object to EnvironmentList")
+
+	if len(envList.Items) > 0 {
 		console.Verbose(2, "%d environment(s) are present in the %s namespace.  "+
 			"These environments are not isolated from each other; use separate namespaces if you need isolation.",
-			len(envList), m.Namespace)
+			len(envList.Items), m.Namespace)
 	}
 
 	// if we're writing a spec, don't call the API
@@ -84,16 +93,15 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 	if input.Bool(flagkey.SpecSave) {
 		specFile := fmt.Sprintf("env-%v.yaml", m.Name)
 		err = spec.SpecSave(*opts.env, specFile)
-		if err != nil {
-			return errors.Wrap(err, "error saving environment spec")
-		}
+		util.CheckError(err, "error saving environment spec")
 		return nil
 	}
 
-	_, err = opts.Client().V1().Environment().Create(opts.env)
-	if err != nil {
-		return errors.Wrap(err, "error creating environment")
-	}
+	env, err := runtime.DefaultUnstructuredConverter.ToUnstructured(opts.env)
+	util.CheckError(err, "error converting environment to unstructured object")
+
+	_, err = opts.Client().DynamicClient().Resource(*gvr).Namespace(m.Namespace).Create(context.TODO(), &unstructured.Unstructured{Object: env}, metav1.CreateOptions{})
+	util.CheckError(err, "error creating environment")
 
 	fmt.Printf("environment '%v' created\n", m.Name)
 	return nil

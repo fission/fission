@@ -17,16 +17,19 @@ limitations under the License.
 package environment
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"text/tabwriter"
 
-	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
+	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type GetSubCommand struct {
@@ -43,10 +46,15 @@ func (opts *GetSubCommand) do(input cli.Input) error {
 		Namespace: input.String(flagkey.NamespaceEnvironment),
 	}
 
-	env, err := opts.Client().V1().Environment().Get(m)
-	if err != nil {
-		return errors.Wrap(err, "error getting environment")
-	}
+	gvr, err := util.GetGVRFromAPIVersionKind(util.FISSION_API_VERSION, util.FISSION_ENVIRONMENT)
+	util.CheckError(err, "error finding GVR")
+
+	resp, err := opts.Client().DynamicClient().Resource(*gvr).Namespace(m.Namespace).Get(context.TODO(), m.Name, metav1.GetOptions{})
+	util.CheckError(err, "error getting environment")
+
+	var env *fv1.Environment
+	err = runtime.DefaultUnstructuredConverter.FromUnstructured(resp.UnstructuredContent(), &env)
+	util.CheckError(err, "error converting unstructured object to Environment")
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 

@@ -20,7 +20,7 @@ import (
 	"reflect"
 	"testing"
 
-	v1 "k8s.io/api/core/v1"
+	apiv1 "k8s.io/api/core/v1"
 )
 
 func TestGetEnvVarFromStringSlice(t *testing.T) {
@@ -28,12 +28,12 @@ func TestGetEnvVarFromStringSlice(t *testing.T) {
 	tests := []struct {
 		name string
 		args []string
-		want []v1.EnvVar
+		want []apiv1.EnvVar
 	}{
 		{
 			name: "params-with-key-value",
 			args: []string{"serverless=fission", "container=docker"},
-			want: []v1.EnvVar{
+			want: []apiv1.EnvVar{
 				{
 					Name:  "serverless",
 					Value: "fission",
@@ -47,12 +47,12 @@ func TestGetEnvVarFromStringSlice(t *testing.T) {
 		{
 			name: "params-with-nil-value",
 			args: []string{"serverless=", "container="},
-			want: []v1.EnvVar{},
+			want: []apiv1.EnvVar{},
 		},
 		{
 			name: "params-with-only-key",
 			args: []string{"serverless", "container"},
-			want: []v1.EnvVar{},
+			want: []apiv1.EnvVar{},
 		},
 	}
 

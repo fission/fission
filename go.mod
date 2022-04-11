@@ -74,7 +74,7 @@ require (
 	github.com/andybalholm/brotli v1.0.1 // indirect
 	github.com/aws/aws-sdk-go v1.42.34 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
-	github.com/blend/go-sdk v1.20220212.5 // indirect
+	github.com/blend/go-sdk v1.20220112.5 // indirect
 	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
 	github.com/cenkalti/backoff/v4 v4.1.2 // indirect
 	github.com/cespare/xxhash/v2 v2.1.2 // indirect

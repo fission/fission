@@ -16,6 +16,21 @@ limitations under the License.
 
 package util
 
+// fission CRD API version
+const FISSION_API_VERSION = "fission.io/v1"
+
+// fission CRD Kind
+const (
+	FISSION_ENVIRONMENT            = "Environment"
+	FISSION_CANARYCONFIG           = "CanaryConfig"
+	FISSION_FUNCTION               = "Function"
+	FISSION_HTTPTRIGGER            = "HTTPTrigger"
+	FISSION_KUBERNETESWATCHTRIGGER = "KubernetesWatchTrigger"
+	FISSION_MESSAGEQUEUETRIGGER    = "MessageQueueTrigger"
+	FISSION_PACKAGE                = "Package"
+	FISSION_TIMETRIGGER            = "TimeTrigger"
+)
+
 // fission-cli options
 const (
 	SPEC_IGNORE_FILE   = ".specignore"

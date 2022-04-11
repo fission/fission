@@ -17,6 +17,7 @@ limitations under the License.
 package util
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/user"
@@ -29,14 +30,22 @@ import (
 
 	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
-	v1 "k8s.io/api/core/v1"
+	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/discovery"
+	memory "k8s.io/client-go/discovery/cached"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	restclient "k8s.io/client-go/rest"
+	"k8s.io/client-go/restmapper"
 	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/util/homedir"
 
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/controller/client/rest"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
@@ -151,15 +160,18 @@ func GetKubernetesClient(kubeContext string) (*restclient.Config, *kubernetes.Cl
 func CheckFunctionExistence(client client.Interface, functions []string, fnNamespace string) (err error) {
 	fnMissing := make([]string, 0)
 	for _, fnName := range functions {
-		meta := &metav1.ObjectMeta{
-			Name:      fnName,
-			Namespace: fnNamespace,
-		}
 
-		_, err := client.V1().Function().Get(meta)
-		if err != nil {
-			fnMissing = append(fnMissing, fnName)
-		}
+		gvr, err := GetGVRFromAPIVersionKind(FISSION_API_VERSION, FISSION_FUNCTION)
+		CheckError(err, "error finding GVR")
+
+		resp, err := client.DynamicClient().Resource(*gvr).Namespace(fnNamespace).Get(context.TODO(), fnName, metav1.GetOptions{})
+		CheckError(err, "error getting function")
+
+		var fn *fv1.Function
+		err = runtime.DefaultUnstructuredConverter.FromUnstructured(resp.UnstructuredContent(), &fn)
+		CheckError(err, "error converting unstructured object to Environment")
+
+		fnMissing = append(fnMissing, fnName)
 	}
 
 	if len(fnMissing) > 0 {
@@ -204,7 +216,29 @@ func GetServer(input cli.Input) (c client.Interface, err error) {
 	if err != nil {
 		return nil, err
 	}
-	return client.MakeClientset(rest.NewRESTClient(serverUrl)), nil
+
+	// -- REMOVE --
+	kubeConfigPath := os.Getenv("KUBECONFIG")
+	if len(kubeConfigPath) == 0 {
+		kubeConfigPath = filepath.Join(homedir.HomeDir(), ".kube", "config")
+	}
+
+	if _, err := os.Stat(kubeConfigPath); os.IsNotExist(err) {
+		return nil, errors.New("--Couldn't find kubeconfig file. " +
+			"Set the KUBECONFIG environment variable to your kubeconfig's path.")
+	}
+
+	config, err := clientcmd.BuildConfigFromFlags("", kubeConfigPath)
+	if err != nil {
+		return nil, err
+	}
+
+	dynamicClient, err := dynamic.NewForConfig(config)
+	if err != nil {
+		return nil, err
+	}
+
+	return client.MakeClientset(rest.NewRESTClient(serverUrl), nil, dynamicClient), nil
 }
 
 func GetServerURL(input cli.Input) (serverUrl string, err error) {
@@ -228,8 +262,8 @@ func GetServerURL(input cli.Input) (serverUrl string, err error) {
 	return serverUrl, nil
 }
 
-func GetResourceReqs(input cli.Input, resReqs *v1.ResourceRequirements) (*v1.ResourceRequirements, error) {
-	r := &v1.ResourceRequirements{}
+func GetResourceReqs(input cli.Input, resReqs *apiv1.ResourceRequirements) (*apiv1.ResourceRequirements, error) {
+	r := &apiv1.ResourceRequirements{}
 
 	if resReqs != nil {
 		r.Requests = resReqs.Requests
@@ -237,11 +271,11 @@ func GetResourceReqs(input cli.Input, resReqs *v1.ResourceRequirements) (*v1.Res
 	}
 
 	if len(r.Requests) == 0 {
-		r.Requests = make(map[v1.ResourceName]resource.Quantity)
+		r.Requests = make(map[apiv1.ResourceName]resource.Quantity)
 	}
 
 	if len(r.Limits) == 0 {
-		r.Limits = make(map[v1.ResourceName]resource.Quantity)
+		r.Limits = make(map[apiv1.ResourceName]resource.Quantity)
 	}
 
 	e := utils.MultiErrorWithFormat()
@@ -252,7 +286,7 @@ func GetResourceReqs(input cli.Input, resReqs *v1.ResourceRequirements) (*v1.Res
 		if err != nil {
 			e = multierror.Append(e, errors.Wrap(err, "Failed to parse mincpu"))
 		}
-		r.Requests[v1.ResourceCPU] = cpuRequest
+		r.Requests[apiv1.ResourceCPU] = cpuRequest
 	}
 
 	if input.IsSet(flagkey.RuntimeMinmemory) {
@@ -261,7 +295,7 @@ func GetResourceReqs(input cli.Input, resReqs *v1.ResourceRequirements) (*v1.Res
 		if err != nil {
 			e = multierror.Append(e, errors.Wrap(err, "Failed to parse minmemory"))
 		}
-		r.Requests[v1.ResourceMemory] = memRequest
+		r.Requests[apiv1.ResourceMemory] = memRequest
 	}
 
 	if input.IsSet(flagkey.RuntimeMaxcpu) {
@@ -270,7 +304,7 @@ func GetResourceReqs(input cli.Input, resReqs *v1.ResourceRequirements) (*v1.Res
 		if err != nil {
 			e = multierror.Append(e, errors.Wrap(err, "Failed to parse maxcpu"))
 		}
-		r.Limits[v1.ResourceCPU] = cpuLimit
+		r.Limits[apiv1.ResourceCPU] = cpuLimit
 	}
 
 	if input.IsSet(flagkey.RuntimeMaxmemory) {
@@ -279,23 +313,23 @@ func GetResourceReqs(input cli.Input, resReqs *v1.ResourceRequirements) (*v1.Res
 		if err != nil {
 			e = multierror.Append(e, errors.Wrap(err, "Failed to parse maxmemory"))
 		}
-		r.Limits[v1.ResourceMemory] = memLimit
+		r.Limits[apiv1.ResourceMemory] = memLimit
 	}
 
-	limitCPU := r.Limits[v1.ResourceCPU]
-	requestCPU := r.Requests[v1.ResourceCPU]
+	limitCPU := r.Limits[apiv1.ResourceCPU]
+	requestCPU := r.Requests[apiv1.ResourceCPU]
 
 	if limitCPU.IsZero() && !requestCPU.IsZero() {
-		r.Limits[v1.ResourceCPU] = requestCPU
+		r.Limits[apiv1.ResourceCPU] = requestCPU
 	} else if limitCPU.Cmp(requestCPU) < 0 {
 		e = multierror.Append(e, fmt.Errorf("MinCPU (%v) cannot be greater than MaxCPU (%v)", requestCPU.String(), limitCPU.String()))
 	}
 
-	limitMem := r.Limits[v1.ResourceMemory]
-	requestMem := r.Requests[v1.ResourceMemory]
+	limitMem := r.Limits[apiv1.ResourceMemory]
+	requestMem := r.Requests[apiv1.ResourceMemory]
 
 	if limitMem.IsZero() && !requestMem.IsZero() {
-		r.Limits[v1.ResourceMemory] = requestMem
+		r.Limits[apiv1.ResourceMemory] = requestMem
 	} else if limitMem.Cmp(requestMem) < 0 {
 		e = multierror.Append(e, fmt.Errorf("MinMemory (%v) cannot be greater than MaxMemory (%v)", requestMem.String(), limitMem.String()))
 	}
@@ -304,7 +338,7 @@ func GetResourceReqs(input cli.Input, resReqs *v1.ResourceRequirements) (*v1.Res
 		return nil, e
 	}
 
-	return &v1.ResourceRequirements{
+	return &apiv1.ResourceRequirements{
 		Requests: r.Requests,
 		Limits:   r.Limits,
 	}, nil
@@ -372,13 +406,13 @@ func UpdateMapFromStringSlice(dataMap *map[string]string, params []string) bool 
 	return updated
 }
 
-// GetEnvVarFromStringSlice parses key, val from "key=val" string array and updates passed []v1.EnvVar
-func GetEnvVarFromStringSlice(params []string) []v1.EnvVar {
-	envVarList := []v1.EnvVar{}
+// GetEnvVarFromStringSlice parses key, val from "key=val" string array and updates passed []apiv1.EnvVar
+func GetEnvVarFromStringSlice(params []string) []apiv1.EnvVar {
+	envVarList := []apiv1.EnvVar{}
 	for _, m := range params {
 		keyValue := strings.SplitN(m, "=", 2)
 		if len(keyValue) == 2 && keyValue[1] != "" {
-			envVarList = append(envVarList, v1.EnvVar{
+			envVarList = append(envVarList, apiv1.EnvVar{
 				Name:  keyValue[0],
 				Value: keyValue[1],
 			})
@@ -442,4 +476,51 @@ func ApplyLabelsAndAnnotations(input cli.Input, objectMeta *metav1.ObjectMeta) e
 		objectMeta.Annotations = set
 	}
 	return nil
+}
+
+// GetGVRFromAPIVersionKind returns the GroupVersionResource for the APIVersion and Kind
+func GetGVRFromAPIVersionKind(apiVersion, kind string) (*schema.GroupVersionResource, error) {
+	kubeConfigPath := os.Getenv("KUBECONFIG")
+	if len(kubeConfigPath) == 0 {
+		kubeConfigPath = filepath.Join(homedir.HomeDir(), ".kube", "config")
+	}
+
+	if _, err := os.Stat(kubeConfigPath); os.IsNotExist(err) {
+		return nil, errors.New("Couldn't find kubeconfig file. " +
+			"Set the KUBECONFIG environment variable to your kubeconfig's path.")
+	}
+
+	config, err := clientcmd.BuildConfigFromFlags("", kubeConfigPath)
+	if err != nil {
+		return nil, err
+	}
+
+	dc, err := discovery.NewDiscoveryClientForConfig(config)
+	if err != nil {
+		return nil, err
+	}
+
+	mapper := restmapper.NewDeferredDiscoveryRESTMapper(memory.NewMemCacheClient(dc))
+	gvk := schema.FromAPIVersionAndKind(apiVersion, kind)
+	mapping, err := mapper.RESTMapping(gvk.GroupKind(), gvk.Version)
+	if err != nil {
+		return nil, err
+	}
+
+	return &mapping.Resource, nil
+}
+
+func CheckError(err error, msg string) {
+	colorReset := "\033[0m"
+	colorRed := "\033[31m"
+	errorPrefix := colorRed + "Error:" + colorReset
+
+	if err != nil {
+		if msg != "" {
+			fmt.Println(errorPrefix, errors.Wrap(err, msg))
+		} else {
+			fmt.Println(errorPrefix, err)
+		}
+		os.Exit(1)
+	}
 }

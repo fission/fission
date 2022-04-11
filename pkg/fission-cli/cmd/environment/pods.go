@@ -17,17 +17,19 @@ limitations under the License.
 package environment
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"text/tabwriter"
 
-	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 
-	v1 "github.com/fission/fission/pkg/apis/core/v1"
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
+	"github.com/fission/fission/pkg/fission-cli/util"
 	"github.com/fission/fission/pkg/utils"
 )
 
@@ -40,33 +42,34 @@ func ListPods(input cli.Input) error {
 }
 
 func (opts *ListPodsSubCommand) do(input cli.Input) error {
-
-	// validate environment
-	_, err := opts.Client().V1().Environment().Get(
-		&metav1.ObjectMeta{
-			Name:      input.String(flagkey.EnvName),
-			Namespace: input.String(flagkey.NamespaceEnvironment),
-		})
-	if err != nil {
-		return errors.Wrap(err, "error getting environment")
-	}
-
 	m := &metav1.ObjectMeta{
-		Name: input.String(flagkey.EnvName),
+		Name:      input.String(flagkey.EnvName),
+		Namespace: input.String(flagkey.NamespaceEnvironment),
 		Labels: map[string]string{
-			v1.ENVIRONMENT_NAMESPACE: input.String(flagkey.NamespaceEnvironment),
-			v1.EXECUTOR_TYPE:         input.String(flagkey.EnvExecutorType),
+			fv1.ENVIRONMENT_NAMESPACE: input.String(flagkey.NamespaceEnvironment),
 		},
 	}
 
-	pods, err := opts.Client().V1().Environment().ListPods(m)
-	if err != nil {
-		return errors.Wrap(err, "error listing environments")
+	exType := input.String(flagkey.EnvExecutorType)
+	if len(exType) != 0 {
+		m.Labels[fv1.EXECUTOR_TYPE] = exType
 	}
+
+	gvr, err := util.GetGVRFromAPIVersionKind(util.FISSION_API_VERSION, util.FISSION_ENVIRONMENT)
+	util.CheckError(err, "error finding GVR")
+
+	// validate environment
+	_, err = opts.Client().DynamicClient().Resource(*gvr).Namespace(m.Namespace).Get(context.TODO(), m.Name, metav1.GetOptions{})
+	util.CheckError(err, "error getting environment")
+
+	pods, err := opts.Client().KubeClient().CoreV1().Pods(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{
+		LabelSelector: labels.Set(m.Labels).AsSelector().String(),
+	})
+	util.CheckError(err, "error listing pods for environment")
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t\n", "NAME", "NAMESPACE", "READY", "STATUS", "IP", "EXECUTORTYPE", "MANAGED")
-	for _, pod := range pods {
+	for _, pod := range pods.Items {
 
 		// A deletion timestamp indicates that a pod is terminating. Do not count this pod.
 		if pod.ObjectMeta.DeletionTimestamp != nil {
@@ -75,7 +78,7 @@ func (opts *ListPodsSubCommand) do(input cli.Input) error {
 
 		labelList := pod.GetLabels()
 		readyContainers, noOfContainers := utils.PodContainerReadyStatus(&pod)
-		fmt.Fprintf(w, "%v\t%v\t%v/%v\t%v\t%v\t%v\t%v\t\n", pod.ObjectMeta.Name, pod.ObjectMeta.Namespace, noOfContainers, readyContainers, pod.Status.Phase, pod.Status.PodIP, labelList[v1.EXECUTOR_TYPE], labelList[v1.MANAGED])
+		fmt.Fprintf(w, "%v\t%v\t%v/%v\t%v\t%v\t%v\t%v\t\n", pod.ObjectMeta.Name, pod.ObjectMeta.Namespace, noOfContainers, readyContainers, pod.Status.Phase, pod.Status.PodIP, labelList[fv1.EXECUTOR_TYPE], labelList[fv1.MANAGED])
 	}
 	w.Flush()
 

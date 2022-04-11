@@ -222,12 +222,12 @@ func (api *API) GetHandler() http.Handler {
 	r.HandleFunc("/v2/triggers/http/{httpTrigger}", api.HTTPTriggerApiUpdate).Methods("PUT")
 	r.HandleFunc("/v2/triggers/http/{httpTrigger}", api.HTTPTriggerApiDelete).Methods("DELETE")
 
-	r.HandleFunc("/v2/environments", api.EnvironmentApiList).Methods("GET")
-	r.HandleFunc("/v2/environments", api.EnvironmentApiCreate).Methods("POST")
-	r.HandleFunc("/v2/environments/{environment}", api.EnvironmentApiGet).Methods("GET")
-	r.HandleFunc("/v2/environments/{environment}", api.EnvironmentApiUpdate).Methods("PUT")
-	r.HandleFunc("/v2/environments/{environment}", api.EnvironmentApiDelete).Methods("DELETE")
-	r.HandleFunc("/v2/environments/{environment}/pods", api.EnvironmentApiPodList).Methods("GET")
+	// r.HandleFunc("/v2/environments", api.EnvironmentApiList).Methods("GET")
+	// r.HandleFunc("/v2/environments", api.EnvironmentApiCreate).Methods("POST")
+	// r.HandleFunc("/v2/environments/{environment}", api.EnvironmentApiGet).Methods("GET")
+	// r.HandleFunc("/v2/environments/{environment}", api.EnvironmentApiUpdate).Methods("PUT")
+	// r.HandleFunc("/v2/environments/{environment}", api.EnvironmentApiDelete).Methods("DELETE")
+	// r.HandleFunc("/v2/environments/{environment}/pods", api.EnvironmentApiPodList).Methods("GET")
 
 	r.HandleFunc("/v2/watches", api.WatchApiList).Methods("GET")
 	r.HandleFunc("/v2/watches", api.WatchApiCreate).Methods("POST")
@@ -257,7 +257,7 @@ func (api *API) GetHandler() http.Handler {
 	r.HandleFunc("/v2/canaryconfigs", api.CanaryConfigApiList).Methods("GET")
 
 	r.HandleFunc("/proxy/{dbType}", api.FunctionLogsApiPost).Methods("POST")
-	r.HandleFunc("/proxy/storage/v1/archive", api.StorageServiceProxy)
+	// r.HandleFunc("/proxy/storage/v1/archive", api.StorageServiceProxy)
 	r.HandleFunc("/proxy/logs/{function}", api.FunctionPodLogs).Methods("POST")
 	r.HandleFunc("/proxy/workflows-apiserver/{path:.*}", api.WorkflowApiserverProxy)
 	r.HandleFunc("/proxy/svcname", api.GetSvcName).Queries("application", "").Methods("GET")

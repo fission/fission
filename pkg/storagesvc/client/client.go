@@ -53,7 +53,9 @@ func MakeClient(url string) *Client {
 		hc = &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
 	}
 	return &Client{
-		url:        strings.TrimSuffix(url, "/") + "/v1",
+		// -- CHANGED --
+		url: strings.TrimSuffix(url, "/"),
+		// -- END --
 		httpClient: hc,
 	}
 }
@@ -88,7 +90,9 @@ func (c *Client) Upload(ctx context.Context, filePath string, metadata *map[stri
 	contentType := bodyWriter.FormDataContentType()
 	bodyWriter.Close()
 
-	req, err := http.NewRequest(http.MethodPost, c.url+"/archive", buf)
+	// -- CHANGED --
+	req, err := http.NewRequest(http.MethodPost, c.url, buf)
+	// -- END --
 	if err != nil {
 		return "", err
 	}

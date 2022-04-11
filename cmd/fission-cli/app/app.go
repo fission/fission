@@ -14,7 +14,15 @@ limitations under the License.
 package app
 
 import (
+	"errors"
+	"os"
+	"path/filepath"
+
 	"github.com/spf13/cobra"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/util/homedir"
 
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/controller/client/rest"
@@ -63,14 +71,39 @@ func App() *cobra.Command {
 
 				if input.IsSet(flagkey.ClientOnly) {
 					// TODO: use fake rest client for offline spec generation
-					cmd.SetClientset(client.MakeFakeClientset(nil))
+					cmd.SetClientset(client.MakeFakeClientset(nil, nil, nil))
 				} else {
 					serverUrl, err := util.GetServerURL(input)
 					if err != nil {
 						return err
 					}
 					restClient := rest.NewRESTClient(serverUrl)
-					cmd.SetClientset(client.MakeClientset(restClient))
+
+					kubeConfigPath := os.Getenv("KUBECONFIG")
+					if len(kubeConfigPath) == 0 {
+						kubeConfigPath = filepath.Join(homedir.HomeDir(), ".kube", "config")
+					}
+
+					if _, err := os.Stat(kubeConfigPath); os.IsNotExist(err) {
+						return errors.New("Couldn't find kubeconfig file. " +
+							"Set the KUBECONFIG environment variable to your kubeconfig's path.")
+					}
+
+					config, err := clientcmd.BuildConfigFromFlags("", kubeConfigPath)
+					if err != nil {
+						return err
+					}
+
+					clientset, err := kubernetes.NewForConfig(config)
+					if err != nil {
+						return err
+					}
+
+					dynamicClient, err := dynamic.NewForConfig(config)
+					if err != nil {
+						return err
+					}
+					cmd.SetClientset(client.MakeClientset(restClient, clientset, dynamicClient))
 				}
 
 				return nil
