@@ -252,6 +252,7 @@ func (executor *Executor) unTapService(w http.ResponseWriter, r *http.Request) {
 // GetHandler returns an http.Handler.
 func (executor *Executor) GetHandler() http.Handler {
 	r := mux.NewRouter()
+	r.Use(metrics.MonitoringMiddleware)
 	r.HandleFunc("/v2/getServiceForFunction", executor.getServiceForFunctionAPI).Methods("POST")
 	r.HandleFunc("/v2/tapService", executor.tapService).Methods("POST") // for backward compatibility
 	r.HandleFunc("/v2/tapServices", executor.tapServices).Methods("POST")
@@ -272,6 +273,6 @@ func (executor *Executor) Serve(port int, openTracingEnabled bool) {
 		handler = otelUtils.GetHandlerWithOTEL(executor.GetHandler(), "fission-executor", otelUtils.UrlsToIgnore("/healthz"))
 	}
 
-	err := http.ListenAndServe(address, metrics.MonitoringMiddleware(handler))
+	err := http.ListenAndServe(address, handler)
 	executor.logger.Fatal("done listening", zap.Error(err))
 }

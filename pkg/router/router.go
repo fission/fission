@@ -68,13 +68,15 @@ import (
 
 func router(ctx context.Context, logger *zap.Logger, httpTriggerSet *HTTPTriggerSet) *mutableRouter {
 	var mr *mutableRouter
+	mux := mux.NewRouter()
+	mux.Use(metrics.MonitoringMiddleware)
 
 	// see issue https://github.com/fission/fission/issues/1317
 	useEncodedPath, _ := strconv.ParseBool(os.Getenv("USE_ENCODED_PATH"))
 	if useEncodedPath {
-		mr = newMutableRouter(logger, mux.NewRouter().UseEncodedPath())
+		mr = newMutableRouter(logger, mux.UseEncodedPath())
 	} else {
-		mr = newMutableRouter(logger, mux.NewRouter())
+		mr = newMutableRouter(logger, mux)
 	}
 
 	httpTriggerSet.subscribeRouter(ctx, mr)
@@ -112,7 +114,7 @@ func serve(ctx context.Context, logger *zap.Logger, port int, tracingSamplingRat
 	} else {
 		handler = otelUtils.GetHandlerWithOTEL(mr, "fission-router", otelUtils.UrlsToIgnore("/router-healthz"))
 	}
-	err := http.ListenAndServe(url, metrics.MonitoringMiddleware(handler))
+	err := http.ListenAndServe(url, handler)
 	if err != nil {
 		logger.Error("HTTP server error", zap.Error(err))
 	}

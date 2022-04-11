@@ -212,6 +212,7 @@ func MakeStorageService(logger *zap.Logger, storageClient *StowClient, port int)
 
 func (ss *StorageService) Start(port int, openTracingEnabled bool) {
 	r := mux.NewRouter()
+	r.Use(metrics.MonitoringMiddleware)
 	r.HandleFunc("/v1/archive", ss.uploadHandler).Methods("POST")
 	r.HandleFunc("/v1/archive", ss.downloadHandler).Methods("GET")
 	r.HandleFunc("/v1/archive", ss.deleteHandler).Methods("DELETE")
@@ -227,7 +228,7 @@ func (ss *StorageService) Start(port int, openTracingEnabled bool) {
 	} else {
 		handler = otel.GetHandlerWithOTEL(r, "fission-storagesvc", otel.UrlsToIgnore("/healthz"))
 	}
-	err := http.ListenAndServe(address, metrics.MonitoringMiddleware(handler))
+	err := http.ListenAndServe(address, handler)
 	ss.logger.Fatal("done listening", zap.Error(err))
 }
 
