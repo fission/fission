@@ -26,13 +26,6 @@ var (
 		},
 		functionLabels,
 	)
-	requestsError = promauto.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "fission_requests_error_total",
-			Help: "Number of requests failed due to errors",
-		},
-		functionLabels,
-	)
 	requestsLatency = promauto.NewSummaryVec(
 		prometheus.SummaryOpts{
 			Name:       "fission_requests_seconds",
@@ -45,10 +38,6 @@ var (
 
 func IncreaseRequests(path string, code int) {
 	requestsTotal.WithLabelValues(path, fmt.Sprint(code)).Inc()
-}
-
-func IncreaseRequestsError(path string, code int) {
-	requestsError.WithLabelValues(path, fmt.Sprint(code)).Inc()
 }
 
 func ObserveLatency(path string, code int, time float64) {
@@ -69,9 +58,6 @@ func MonitoringMiddleware(h http.Handler) http.Handler {
 		h.ServeHTTP(&rw, r)
 		ObserveLatency(path, rw.statusCode, time.Since(startTime).Seconds())
 		IncreaseRequests(path, rw.statusCode)
-		if rw.statusCode >= 400 {
-			IncreaseRequestsError(path, rw.statusCode)
-		}
 	})
 }
 
