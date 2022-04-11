@@ -30,14 +30,14 @@ var (
 	)
 )
 
-func IncreaseArchives() {
+func increaseArchives() {
 	totalArchives.WithLabelValues().Inc()
 }
 
-func IncreaseMemory(memory float64) {
+func increaseMemory(memory float64) {
 	totalMemoryUsage.WithLabelValues().Add(memory)
 }
 
-func IncreaseArchiveErrors() {
+func increaseArchiveErrors() {
 	archiveUploadingError.WithLabelValues().Inc()
 }

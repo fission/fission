@@ -31,11 +31,11 @@ var (
 	)
 )
 
-func IncreasePackageCounter() {
+func increasePackageCounter() {
 	packagesCreated.WithLabelValues().Inc()
 }
 
-func IncreasePackageErrorCounter() {
+func increasePackageErrorCounter() {
 	packageBuildError.WithLabelValues().Inc()
 }
 

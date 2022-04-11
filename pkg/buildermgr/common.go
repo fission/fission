@@ -49,7 +49,7 @@ func buildPackage(ctx context.Context, logger *zap.Logger, fissionClient *crd.Fi
 
 	env, err := fissionClient.CoreV1().Environments(pkg.Spec.Environment.Namespace).Get(ctx, pkg.Spec.Environment.Name, metav1.GetOptions{})
 	if err != nil {
-		IncreasePackageErrorCounter()
+		increasePackageErrorCounter()
 		e := "error getting environment CRD info"
 		logger.Error(e, zap.Error(err))
 		e = fmt.Sprintf("%s: %v", e, err)
@@ -71,7 +71,7 @@ func buildPackage(ctx context.Context, logger *zap.Logger, fissionClient *crd.Fi
 	// send fetch request to fetcher
 	err = fetcherC.Fetch(ctx, fetchReq)
 	if err != nil {
-		IncreasePackageErrorCounter()
+		increasePackageErrorCounter()
 		e := "error fetching source package"
 		logger.Error(e, zap.Error(err))
 		e = fmt.Sprintf("%s: %v", e, err)
@@ -94,7 +94,7 @@ func buildPackage(ctx context.Context, logger *zap.Logger, fissionClient *crd.Fi
 	buildResp, err := builderC.Build(ctx, pkgBuildReq)
 	if err != nil {
 		e := fmt.Sprintf("Error building deployment package: %v", err)
-		IncreasePackageErrorCounter()
+		increasePackageErrorCounter()
 		var buildLogs string
 		if buildResp != nil {
 			buildLogs = buildResp.BuildLogs
@@ -118,13 +118,13 @@ func buildPackage(ctx context.Context, logger *zap.Logger, fissionClient *crd.Fi
 	// ask fetcher to upload the deployment package
 	uploadResp, err = fetcherC.Upload(ctx, uploadReq)
 	if err != nil {
-		IncreasePackageErrorCounter()
+		increasePackageErrorCounter()
 		e := fmt.Sprintf("Error uploading deployment package: %v", err)
 		buildResp.BuildLogs += fmt.Sprintf("%v\n", e)
 		return nil, buildResp.BuildLogs, ferror.MakeError(http.StatusInternalServerError, e)
 	}
 
-	IncreasePackageCounter()
+	increasePackageCounter()
 
 	return uploadResp, buildResp.BuildLogs, nil
 }

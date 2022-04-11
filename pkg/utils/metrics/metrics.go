@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"fmt"
 	"net/http"
 	"time"
 
@@ -43,15 +44,15 @@ var (
 )
 
 func IncreaseRequests(path string, code int) {
-	requestsTotal.WithLabelValues().Inc()
+	requestsTotal.WithLabelValues(path, fmt.Sprint(code)).Inc()
 }
 
 func IncreaseRequestsError(path string, code int) {
-	requestsError.WithLabelValues().Inc()
+	requestsError.WithLabelValues(path, fmt.Sprint(code)).Inc()
 }
 
 func ObserveLatency(path string, code int, time float64) {
-	requestsLatency.WithLabelValues().Observe(time)
+	requestsLatency.WithLabelValues(path, fmt.Sprint(code)).Observe(time)
 }
 
 func (rw *ResponseWriterWrapper) WriteHeader(statuscode int) {

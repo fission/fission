@@ -76,7 +76,7 @@ func (ss *StorageService) uploadHandler(w http.ResponseWriter, r *http.Request) 
 	file, handler, err := r.FormFile("uploadfile")
 	if err != nil {
 		http.Error(w, "missing upload file", http.StatusBadRequest)
-		IncreaseArchiveErrors()
+		increaseArchiveErrors()
 		return
 	}
 	defer file.Close()
@@ -91,7 +91,7 @@ func (ss *StorageService) uploadHandler(w http.ResponseWriter, r *http.Request) 
 		ss.logger.Error("upload is missing the 'X-File-Size' header",
 			zap.String("filename", handler.Filename))
 		http.Error(w, "missing X-File-Size header", http.StatusBadRequest)
-		IncreaseArchiveErrors()
+		increaseArchiveErrors()
 		return
 	}
 
@@ -102,7 +102,7 @@ func (ss *StorageService) uploadHandler(w http.ResponseWriter, r *http.Request) 
 			zap.Strings("header", fileSizeS),
 			zap.String("filename", handler.Filename))
 		http.Error(w, "missing or bad X-File-Size header", http.StatusBadRequest)
-		IncreaseArchiveErrors()
+		increaseArchiveErrors()
 		return
 	}
 
@@ -116,11 +116,11 @@ func (ss *StorageService) uploadHandler(w http.ResponseWriter, r *http.Request) 
 			zap.Error(err),
 			zap.String("filename", handler.Filename))
 		http.Error(w, "Error saving uploaded file", http.StatusInternalServerError)
-		IncreaseArchiveErrors()
+		increaseArchiveErrors()
 		return
 	}
 
-	IncreaseMemory(float64(handler.Size))
+	increaseMemory(float64(handler.Size))
 
 	// respond with an ID that can be used to retrieve the file
 	ur := &UploadResponse{
@@ -143,7 +143,7 @@ func (ss *StorageService) uploadHandler(w http.ResponseWriter, r *http.Request) 
 		)
 	}
 
-	IncreaseArchives()
+	increaseArchives()
 }
 
 func (ss *StorageService) getIdFromRequest(r *http.Request) (string, error) {
