@@ -269,7 +269,7 @@ func (api *API) GetHandler() http.Handler {
 	return r
 }
 
-func (api *API) Serve(port int, openTracingEnabled bool) {
+func (api *API) Serve(ctx context.Context, port int, openTracingEnabled bool) {
 	address := fmt.Sprintf(":%v", port)
 	api.logger.Info("server started", zap.Int("port", port))
 
@@ -280,7 +280,7 @@ func (api *API) Serve(port int, openTracingEnabled bool) {
 		handler = otel.GetHandlerWithOTEL(api.GetHandler(), "fission-controller", otel.UrlsToIgnore("/healthz"))
 	}
 
-	go metrics.ServeMetrics(api.logger)
+	go metrics.ServeMetrics(ctx, api.logger)
 	err := http.ListenAndServe(address, handler)
 	api.logger.Fatal("done listening", zap.Error(err))
 }

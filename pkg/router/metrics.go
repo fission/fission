@@ -42,7 +42,7 @@ type (
 
 var (
 	// function + http labels as strings
-	labelsStrings = []string{"function_namespace", "function_name", "method", "code"}
+	labelsStrings = []string{"function_namespace", "function_name", "path", "method", "code"}
 
 	// Function http calls count
 	// cached: true | false, is this function service address cached locally

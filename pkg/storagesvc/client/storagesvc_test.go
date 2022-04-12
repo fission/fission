@@ -76,27 +76,6 @@ func runMinioDockerContainer(pool *dockertest.Pool) *dockertest.Resource {
 	return resource
 }
 
-func startS3StorageService(ctx context.Context, endpoint, bucketName, subDir string) {
-	// testID := uniuri.NewLen(8)
-	port := 8081
-
-	config := zap.NewDevelopmentConfig()
-	config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
-	logger, err := config.Build()
-	panicIf(err)
-
-	log.Println("starting storage svc")
-	os.Setenv("STORAGE_S3_ENDPOINT", endpoint)
-	os.Setenv("STORAGE_S3_BUCKET_NAME", bucketName)
-	os.Setenv("STORAGE_S3_SUB_DIR", subDir)
-	os.Setenv("STORAGE_S3_ACCESS_KEY_ID", minioAccessKeyID)
-	os.Setenv("STORAGE_S3_SECRET_ACCESS_KEY", minioSecretAccessKey)
-	os.Setenv("STORAGE_S3_REGION", minioRegion)
-
-	storage := storagesvc.NewS3Storage()
-	_ = storagesvc.Start(ctx, logger, storage, port, true)
-}
-
 func TestS3StorageService(t *testing.T) {
 	fmt.Println("Test S3 Storage service")
 	var minioClient *minio.Client
@@ -135,7 +114,26 @@ func TestS3StorageService(t *testing.T) {
 	// Start storagesvc
 	bucketName := "test-s3-service"
 	subDir := "x/y/z"
-	startS3StorageService(context.Background(), endpoint, bucketName, subDir)
+	// testID := uniuri.NewLen(8)
+	port := 8081
+
+	config := zap.NewDevelopmentConfig()
+	config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+	logger, err := config.Build()
+	panicIf(err)
+
+	log.Println("starting storage svc")
+	os.Setenv("STORAGE_S3_ENDPOINT", endpoint)
+	os.Setenv("STORAGE_S3_BUCKET_NAME", bucketName)
+	os.Setenv("STORAGE_S3_SUB_DIR", subDir)
+	os.Setenv("STORAGE_S3_ACCESS_KEY_ID", minioAccessKeyID)
+	os.Setenv("STORAGE_S3_SECRET_ACCESS_KEY", minioSecretAccessKey)
+	os.Setenv("STORAGE_S3_REGION", minioRegion)
+
+	storage := storagesvc.NewS3Storage()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	_ = storagesvc.Start(ctx, logger, storage, port, true)
 
 	time.Sleep(time.Second)
 	client := MakeClient(fmt.Sprintf("http://localhost:%v/", 8081))
@@ -146,7 +144,6 @@ func TestS3StorageService(t *testing.T) {
 
 	// store it
 	metadata := make(map[string]string)
-	ctx := context.Background()
 	fileID, err := client.Upload(ctx, tmpfile.Name(), &metadata)
 	panicIf(err)
 
@@ -195,12 +192,11 @@ func TestS3StorageService(t *testing.T) {
 	if err == nil {
 		log.Panic("Download succeeded but file isn't supposed to exist")
 	}
-
 }
 
 func TestLocalStorageService(t *testing.T) {
 	testID := uniuri.NewLen(8)
-	port := 8080
+	port := 8082
 
 	config := zap.NewDevelopmentConfig()
 	config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
@@ -211,7 +207,10 @@ func TestLocalStorageService(t *testing.T) {
 	localPath := fmt.Sprintf("/tmp/%v", testID)
 	_ = os.Mkdir(localPath, os.ModePerm)
 	storage := storagesvc.NewLocalStorage(localPath)
-	_ = storagesvc.Start(context.Background(), logger, storage, port, true)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	os.Setenv("METRICS_ADDR", ":8083")
+	_ = storagesvc.Start(ctx, logger, storage, port, true)
 
 	time.Sleep(time.Second)
 	client := MakeClient(fmt.Sprintf("http://localhost:%v/", port))
@@ -222,7 +221,6 @@ func TestLocalStorageService(t *testing.T) {
 
 	// store it
 	metadata := make(map[string]string)
-	ctx := context.Background()
 	fileID, err := client.Upload(ctx, tmpfile.Name(), &metadata)
 	panicIf(err)
 

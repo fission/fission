@@ -324,7 +324,7 @@ func (pkgw *packageWatcher) packageInformerHandler() k8sCache.ResourceEventHandl
 }
 
 func (pkgw *packageWatcher) Run(ctx context.Context) {
-	go metrics.ServeMetrics(pkgw.logger)
+	go metrics.ServeMetrics(ctx, pkgw.logger)
 	go (*pkgw.podInformer).Run(ctx.Done())
 	(*pkgw.pkgInformer).AddEventHandler(pkgw.packageInformerHandler())
 	(*pkgw.pkgInformer).Run(ctx.Done())

@@ -51,5 +51,5 @@ func Start(ctx context.Context, logger *zap.Logger, port int, unitTestFlag bool,
 	if err != nil {
 		cLogger.Fatal("failed to start controller", zap.Error(err))
 	}
-	api.Serve(port, openTracingEnabled)
+	api.Serve(ctx, port, openTracingEnabled)
 }
