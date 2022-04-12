@@ -34,6 +34,9 @@ import (
 	"go.uber.org/zap/zapcore"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/clientcmd"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/controller/client"
@@ -349,9 +352,21 @@ func TestMain(m *testing.M) {
 	flag.Parse()
 
 	// skip test if no cluster available for testing
-	kubeconfig := os.Getenv("KUBECONFIG")
-	if len(kubeconfig) == 0 {
+	kubeConfigPath := os.Getenv("KUBECONFIG")
+	if len(kubeConfigPath) == 0 {
 		log.Println("Skipping test, no kubernetes cluster")
+		return
+	}
+
+	if _, err := os.Stat(kubeConfigPath); os.IsNotExist(err) {
+		log.Println("Couldn't find kubeconfig file. " +
+			"Set the KUBECONFIG environment variable to your kubeconfig's path.")
+		return
+	}
+
+	kubeConfig, err := clientcmd.BuildConfigFromFlags("", kubeConfigPath)
+	if err != nil {
+		log.Println(err)
 		return
 	}
 
@@ -382,8 +397,21 @@ func TestMain(m *testing.M) {
 	time.Sleep(5 * time.Second)
 
 	restClient := rest.NewRESTClient("http://localhost:8888")
+
+	clientset, err := kubernetes.NewForConfig(kubeConfig)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	dynamicClient, err := dynamic.NewForConfig(kubeConfig)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
 	// TODO: use fake rest client for offline spec generation
-	cmd.SetClientset(client.MakeClientset(restClient))
+	cmd.SetClientset(client.MakeClientset(restClient, clientset, dynamicClient))
 
 	resp, err := http.Get("http://localhost:8888/")
 	panicIf(err)

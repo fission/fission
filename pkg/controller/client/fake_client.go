@@ -17,11 +17,12 @@ limitations under the License.
 package client
 
 import (
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
+
 	"github.com/fission/fission/pkg/controller/client/rest"
 	v1 "github.com/fission/fission/pkg/controller/client/v1"
 	"github.com/fission/fission/pkg/controller/client/v1/fake"
-	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/kubernetes"
 )
 
 type (
