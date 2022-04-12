@@ -17,6 +17,7 @@ limitations under the License.
 package environment
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 
@@ -25,6 +26,8 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
@@ -53,33 +56,42 @@ func (opts *UpdateSubCommand) do(input cli.Input) error {
 }
 
 func (opts *UpdateSubCommand) complete(input cli.Input) error {
-	env, err := opts.Client().V1().Environment().Get(&metav1.ObjectMeta{
+	m := &metav1.ObjectMeta{
 		Name:      input.String(flagkey.EnvName),
 		Namespace: input.String(flagkey.NamespaceEnvironment),
-	})
-	if err != nil {
-		return errors.Wrap(err, "error finding environment")
 	}
 
+	gvr, err := util.GetGVRFromAPIVersionKind(util.FISSION_API_VERSION, util.FISSION_ENVIRONMENT)
+	util.CheckError(err, "error finding GVR")
+
+	resp, err := opts.Client().DynamicClient().Resource(*gvr).Namespace(m.Namespace).Get(context.TODO(), m.Name, metav1.GetOptions{})
+	util.CheckError(err, "error finding environment")
+
+	var env *fv1.Environment
+	err = runtime.DefaultUnstructuredConverter.FromUnstructured(resp.UnstructuredContent(), &env)
+	util.CheckError(err, "error converting unstructured object to environment")
+
 	env, err = updateExistingEnvironmentWithCmd(env, input)
-	if err != nil {
-		return err
-	}
+	util.CheckError(err, "error updating existing environment")
 
 	opts.env = env
 
 	err = util.ApplyLabelsAndAnnotations(input, &opts.env.ObjectMeta)
-	if err != nil {
-		return err
-	}
+	util.CheckError(err, "error applying labels and annotations")
+
 	return nil
 }
 
 func (opts *UpdateSubCommand) run(input cli.Input) error {
-	_, err := opts.Client().V1().Environment().Update(opts.env)
-	if err != nil {
-		return errors.Wrap(err, "error updating environment")
-	}
+
+	env, err := runtime.DefaultUnstructuredConverter.ToUnstructured(opts.env)
+	util.CheckError(err, "error converting environment to unstructured object")
+
+	gvr, err := util.GetGVRFromAPIVersionKind(util.FISSION_API_VERSION, util.FISSION_ENVIRONMENT)
+	util.CheckError(err, "error finding GVR")
+
+	_, err = opts.Client().DynamicClient().Resource(*gvr).Namespace(opts.env.Namespace).Update(context.TODO(), &unstructured.Unstructured{Object: env}, metav1.UpdateOptions{})
+	util.CheckError(err, "error updating environment")
 
 	fmt.Printf("environment '%v' updated\n", opts.env.ObjectMeta.Name)
 	return nil

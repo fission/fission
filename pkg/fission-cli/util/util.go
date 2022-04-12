@@ -491,36 +491,26 @@ func GetGVRFromAPIVersionKind(apiVersion, kind string) (*schema.GroupVersionReso
 	}
 
 	config, err := clientcmd.BuildConfigFromFlags("", kubeConfigPath)
-	if err != nil {
-		return nil, err
-	}
+	CheckError(err, "")
 
 	dc, err := discovery.NewDiscoveryClientForConfig(config)
-	if err != nil {
-		return nil, err
-	}
+	CheckError(err, "")
 
 	mapper := restmapper.NewDeferredDiscoveryRESTMapper(memory.NewMemCacheClient(dc))
 	gvk := schema.FromAPIVersionAndKind(apiVersion, kind)
 	mapping, err := mapper.RESTMapping(gvk.GroupKind(), gvk.Version)
-	if err != nil {
-		return nil, err
-	}
+	CheckError(err, "")
 
 	return &mapping.Resource, nil
 }
 
 func CheckError(err error, msg string) {
-	colorReset := "\033[0m"
-	colorRed := "\033[31m"
-	errorPrefix := colorRed + "Error:" + colorReset
-
-	if err != nil {
-		if msg != "" {
-			fmt.Println(errorPrefix, errors.Wrap(err, msg))
-		} else {
-			fmt.Println(errorPrefix, err)
-		}
-		os.Exit(1)
+	if err == nil {
+		return
 	}
+	if msg != "" {
+		err = errors.Wrap(err, msg)
+	}
+	console.Error(err)
+	os.Exit(1)
 }
