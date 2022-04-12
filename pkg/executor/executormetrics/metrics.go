@@ -1,4 +1,4 @@
-package fscache
+package executormetrics
 
 import (
 	"github.com/prometheus/client_golang/prometheus"
@@ -9,15 +9,15 @@ var (
 	// function_name: the function's name
 	// function_uid: the function's version id
 	// function_address: the address of the pod from which the function was called
-	functionLabels = []string{"function_name", "function_uid"}
-	coldStarts     = promauto.NewCounterVec(
+	functionLabels = []string{"function_name", "function_namespace"}
+	ColdStarts     = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "fission_function_cold_starts_total",
 			Help: "How many cold starts are made by function_name, function_uid.",
 		},
 		functionLabels,
 	)
-	funcRunningSummary = promauto.NewSummaryVec(
+	FuncRunningSummary = promauto.NewSummaryVec(
 		prometheus.SummaryOpts{
 			Name:       "fission_function_running_seconds",
 			Help:       "The running time (last access - create) in seconds of the function.",
@@ -25,7 +25,7 @@ var (
 		},
 		functionLabels,
 	)
-	funcError = promauto.NewCounterVec(
+	FuncError = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "fission_function_cold_start_errors_total",
 			Help: "Count of fission cold start errors",
@@ -33,16 +33,3 @@ var (
 		functionLabels,
 	)
 )
-
-// IncreaseColdStarts increments the counter by 1.
-func (fsc *FunctionServiceCache) IncreaseColdStarts(funcname, funcuid string) {
-	coldStarts.WithLabelValues(funcname, funcuid).Inc()
-}
-
-func (fsc *FunctionServiceCache) observeFuncRunningTime(funcname, funcuid string, running float64) {
-	funcRunningSummary.WithLabelValues(funcname, funcuid).Observe(running)
-}
-
-func (fsc *FunctionServiceCache) IncreaseErrors(funcname, funcuid string) {
-	funcError.WithLabelValues(funcname, funcuid).Inc()
-}

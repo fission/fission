@@ -43,6 +43,7 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
+	"github.com/fission/fission/pkg/executor/executormetrics"
 	"github.com/fission/fission/pkg/executor/executortype"
 	"github.com/fission/fission/pkg/executor/fscache"
 	"github.com/fission/fission/pkg/executor/reaper"
@@ -440,11 +441,12 @@ func (caaf *Container) fnCreate(ctx context.Context, fn *fv1.Function) (*fscache
 	_, err = caaf.fsCache.Add(*fsvc)
 	if err != nil {
 		caaf.logger.Error("error adding function to cache", zap.Error(err), zap.Any("function", fsvc.Function))
-		caaf.fsCache.IncreaseErrors(fn.ObjectMeta.Name, string(fn.ObjectMeta.UID))
+		executormetrics.FuncError.WithLabelValues(fn.ObjectMeta.Name, fn.ObjectMeta.Namespace).Inc()
 		return fsvc, err
 	}
 
-	caaf.fsCache.IncreaseColdStarts(fn.ObjectMeta.Name, string(fn.ObjectMeta.UID))
+	//caaf.fsCache.IncreaseColdStarts(fn.ObjectMeta.Name, string(fn.ObjectMeta.UID))
+	executormetrics.ColdStarts.WithLabelValues(fn.ObjectMeta.Name, fn.ObjectMeta.Namespace).Inc()
 
 	return fsvc, nil
 }

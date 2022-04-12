@@ -34,6 +34,7 @@ import (
 	"github.com/fission/fission/pkg/cache"
 	"github.com/fission/fission/pkg/crd"
 	ferror "github.com/fission/fission/pkg/error"
+	"github.com/fission/fission/pkg/executor/executormetrics"
 	"github.com/fission/fission/pkg/poolcache"
 )
 
@@ -342,7 +343,7 @@ func (fsc *FunctionServiceCache) DeleteEntry(fsvc *FuncSvc) {
 		)
 	}
 
-	fsc.observeFuncRunningTime(fsvc.Function.Name, string(fsvc.Function.UID), fsvc.Atime.Sub(fsvc.Ctime).Seconds())
+	executormetrics.FuncRunningSummary.WithLabelValues(fsvc.Function.Name, fsvc.Function.Namespace).Observe(fsvc.Atime.Sub(fsvc.Ctime).Seconds())
 }
 
 // DeleteFunctionSvc deletes a function service at key composed of [function][address].

@@ -7,8 +7,8 @@ import (
 
 var (
 	functionLabels = []string{}
-	totalArchives  = promauto.NewCounterVec(
-		prometheus.CounterOpts{
+	totalArchives  = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
 			Name: "fission_archives_total",
 			Help: "Number of archives stored",
 		},
@@ -16,28 +16,9 @@ var (
 	)
 	totalMemoryUsage = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "fission_archive_memory_total",
+			Name: "fission_archive_memory_bytes",
 			Help: "Amount of memory consumed by archives",
 		},
 		functionLabels,
 	)
-	archiveUploadingError = promauto.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "fission_archive_upload_errors_total",
-			Help: "Number of archives failed uploading",
-		},
-		functionLabels,
-	)
 )
-
-func increaseArchives() {
-	totalArchives.WithLabelValues().Inc()
-}
-
-func increaseMemory(memory float64) {
-	totalMemoryUsage.WithLabelValues().Add(memory)
-}
-
-func increaseArchiveErrors() {
-	archiveUploadingError.WithLabelValues().Inc()
-}

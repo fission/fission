@@ -786,30 +786,20 @@ func (fh functionHandler) getProxyErrorHandler(start time.Time, rrt *RetryingRou
 
 func (fh functionHandler) collectFunctionMetric(start time.Time, rrt *RetryingRoundTripper, req *http.Request, resp *http.Response) {
 	duration := time.Since(start)
+	var path string
 
-	// Metrics stuff
-	funcMetricLabels := &functionLabels{
-		namespace: fh.function.ObjectMeta.Namespace,
-		name:      fh.function.ObjectMeta.Name,
-	}
-	httpMetricLabels := &httpLabels{
-		method: req.Method,
-	}
 	if fh.httpTrigger != nil {
-		httpMetricLabels.host = fh.httpTrigger.Spec.Host
 		if fh.httpTrigger.Spec.Prefix != nil && *fh.httpTrigger.Spec.Prefix != "" {
-			httpMetricLabels.path = *fh.httpTrigger.Spec.Prefix
+			path = *fh.httpTrigger.Spec.Prefix
 		} else {
-			httpMetricLabels.path = fh.httpTrigger.Spec.RelativeURL
+			path = fh.httpTrigger.Spec.RelativeURL
 		}
 	}
 
-	// Track metrics
-	httpMetricLabels.code = resp.StatusCode
-	funcMetricLabels.cached = rrt.urlFromCache
-
-	functionCallCompleted(funcMetricLabels, httpMetricLabels,
-		duration)
+	functionCallOverhead.WithLabelValues(fh.function.ObjectMeta.Namespace,
+		fh.function.ObjectMeta.Name, path, req.Method,
+		fmt.Sprint(resp.StatusCode)).
+		Observe(float64(duration.Nanoseconds()) / 1e9)
 
 	// tapService before invoking roundTrip for the serviceUrl
 	if rrt.urlFromCache {

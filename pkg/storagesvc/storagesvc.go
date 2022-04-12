@@ -76,7 +76,6 @@ func (ss *StorageService) uploadHandler(w http.ResponseWriter, r *http.Request) 
 	file, handler, err := r.FormFile("uploadfile")
 	if err != nil {
 		http.Error(w, "missing upload file", http.StatusBadRequest)
-		increaseArchiveErrors()
 		return
 	}
 	defer file.Close()
@@ -91,7 +90,6 @@ func (ss *StorageService) uploadHandler(w http.ResponseWriter, r *http.Request) 
 		ss.logger.Error("upload is missing the 'X-File-Size' header",
 			zap.String("filename", handler.Filename))
 		http.Error(w, "missing X-File-Size header", http.StatusBadRequest)
-		increaseArchiveErrors()
 		return
 	}
 
@@ -102,7 +100,6 @@ func (ss *StorageService) uploadHandler(w http.ResponseWriter, r *http.Request) 
 			zap.Strings("header", fileSizeS),
 			zap.String("filename", handler.Filename))
 		http.Error(w, "missing or bad X-File-Size header", http.StatusBadRequest)
-		increaseArchiveErrors()
 		return
 	}
 
@@ -116,11 +113,10 @@ func (ss *StorageService) uploadHandler(w http.ResponseWriter, r *http.Request) 
 			zap.Error(err),
 			zap.String("filename", handler.Filename))
 		http.Error(w, "Error saving uploaded file", http.StatusInternalServerError)
-		increaseArchiveErrors()
 		return
 	}
 
-	increaseMemory(float64(handler.Size))
+	totalMemoryUsage.WithLabelValues().Add(float64(fileSize))
 
 	// respond with an ID that can be used to retrieve the file
 	ur := &UploadResponse{
@@ -143,7 +139,7 @@ func (ss *StorageService) uploadHandler(w http.ResponseWriter, r *http.Request) 
 		)
 	}
 
-	increaseArchives()
+	totalArchives.WithLabelValues().Inc()
 }
 
 func (ss *StorageService) getIdFromRequest(r *http.Request) (string, error) {
@@ -163,12 +159,20 @@ func (ss *StorageService) deleteHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	filesize, err := ss.storageClient.getFileSize(fileId)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+	}
+
 	err = ss.storageClient.removeFileByID(fileId)
 	if err != nil {
 		msg := fmt.Sprintf("Error deleting item: %v", err)
 		http.Error(w, msg, http.StatusInternalServerError)
 		return
 	}
+
+	totalArchives.WithLabelValues().Dec()
+	totalMemoryUsage.WithLabelValues().Sub(float64(filesize))
 	w.WriteHeader(http.StatusOK)
 }
 
