@@ -69,7 +69,9 @@ import (
 func router(ctx context.Context, logger *zap.Logger, httpTriggerSet *HTTPTriggerSet) *mutableRouter {
 	var mr *mutableRouter
 	mux := mux.NewRouter()
-	mux.Use(metrics.MonitoringMiddleware)
+	// TODO: Check if metrics defined in the HTTPMetricMiddleware are not
+	// redefined when we replace router with mutableRouter.
+	mux.Use(metrics.HTTPMetricMiddleware())
 
 	// see issue https://github.com/fission/fission/issues/1317
 	useEncodedPath, _ := strconv.ParseBool(os.Getenv("USE_ENCODED_PATH"))
