@@ -67,6 +67,8 @@ spec:
           mountPath: /etc/config/config.yaml
           subPath: config.yaml
         ports:
+          - containerPort: 8080
+            name: metrics
           - containerPort: 8888
             name: http
         {{- if .Values.pprof.enabled }}
