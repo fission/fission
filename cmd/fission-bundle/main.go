@@ -200,7 +200,8 @@ Options:
 	logger := loggerfactory.GetLogger()
 	defer exitWithSync(logger)
 
-	profile.ProfileIfEnabled(logger)
+	ctx := signals.SetupSignalHandlerWithContext(logger)
+	profile.ProfileIfEnabled(ctx, logger)
 
 	version := fmt.Sprintf("Fission Bundle Version: %v", info.BuildInfo().String())
 	arguments, err := docopt.ParseArgs(usage, nil, version)
@@ -208,8 +209,6 @@ Options:
 		logger.Error("failed to parse arguments", zap.Error(err))
 		return
 	}
-
-	ctx := signals.SetupSignalHandlerWithContext(logger)
 
 	openTracingEnabled := tracing.TracingEnabled(logger)
 	if openTracingEnabled {

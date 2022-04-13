@@ -22,7 +22,6 @@ import (
 )
 
 var (
-	metricsAddr       = ":8080"
 	labels            = []string{"trigger_name", "trigger_namespace"}
 	subscriptionCount = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{

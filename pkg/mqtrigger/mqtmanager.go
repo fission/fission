@@ -19,10 +19,8 @@ package mqtrigger
 import (
 	"context"
 	"errors"
-	"net/http"
 	"time"
 
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 	k8sCache "k8s.io/client-go/tools/cache"
 
@@ -30,6 +28,7 @@ import (
 	"github.com/fission/fission/pkg/crd"
 	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
 	"github.com/fission/fission/pkg/mqtrigger/messageQueue"
+	"github.com/fission/fission/pkg/utils/metrics"
 )
 
 const (
@@ -88,7 +87,7 @@ func (mqt *MessageQueueTriggerManager) Run(ctx context.Context) {
 	if ok := k8sCache.WaitForCacheSync(ctx.Done(), mqTriggerInformer.HasSynced); !ok {
 		mqt.logger.Fatal("failed to wait for caches to sync")
 	}
-	go mqt.serveMetrics()
+	go metrics.ServeMetrics(ctx, mqt.logger)
 }
 
 func (mqt *MessageQueueTriggerManager) service() {
@@ -126,12 +125,6 @@ func (mqt *MessageQueueTriggerManager) service() {
 			req.respChan <- resp
 		}
 	}
-}
-
-func (mqt *MessageQueueTriggerManager) serveMetrics() {
-	http.Handle("/metrics", promhttp.Handler())
-	err := http.ListenAndServe(metricsAddr, nil)
-	mqt.logger.Fatal("done listening on metrics endpoint", zap.Error(err))
 }
 
 func (mqt *MessageQueueTriggerManager) makeRequest(requestType requestType, triggerSub *triggerSubscription) response {

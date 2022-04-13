@@ -24,15 +24,15 @@ import (
 	"github.com/fission/fission/cmd/builder/app"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 	"github.com/fission/fission/pkg/utils/profile"
+	"github.com/fission/fission/pkg/utils/signals"
 )
 
 // Usage: builder <shared volume path>
 func main() {
 	logger := loggerfactory.GetLogger()
 	defer logger.Sync()
-
-	profile.ProfileIfEnabled(logger)
-
+	ctx := signals.SetupSignalHandlerWithContext(logger)
+	profile.ProfileIfEnabled(ctx, logger)
 	shareVolume := os.Args[1]
 	if _, err := os.Stat(shareVolume); err != nil {
 		if os.IsNotExist(err) {
@@ -42,7 +42,5 @@ func main() {
 			}
 		}
 	}
-
-	err := app.Run(logger, shareVolume)
-	logger.Error("error running builder", zap.Error(err))
+	app.Run(ctx, logger, shareVolume)
 }

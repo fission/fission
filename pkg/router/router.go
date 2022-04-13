@@ -58,6 +58,7 @@ import (
 	"github.com/fission/fission/pkg/crd"
 	executorClient "github.com/fission/fission/pkg/executor/client"
 	"github.com/fission/fission/pkg/throttler"
+	"github.com/fission/fission/pkg/utils/httpserver"
 	"github.com/fission/fission/pkg/utils/metrics"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
@@ -86,7 +87,6 @@ func router(ctx context.Context, logger *zap.Logger, httpTriggerSet *HTTPTrigger
 func serve(ctx context.Context, logger *zap.Logger, port int, tracingSamplingRate float64,
 	httpTriggerSet *HTTPTriggerSet, displayAccessLog bool, openTracingEnabled bool) {
 	mr := router(ctx, logger, httpTriggerSet)
-	url := fmt.Sprintf(":%v", port)
 
 	var handler http.Handler
 	if openTracingEnabled {
@@ -114,10 +114,8 @@ func serve(ctx context.Context, logger *zap.Logger, port int, tracingSamplingRat
 	} else {
 		handler = otelUtils.GetHandlerWithOTEL(mr, "fission-router", otelUtils.UrlsToIgnore("/router-healthz"))
 	}
-	err := http.ListenAndServe(url, handler)
-	if err != nil {
-		logger.Error("HTTP server error", zap.Error(err))
-	}
+
+	httpserver.StartServer(ctx, logger, "router", fmt.Sprintf("%d", port), handler)
 }
 
 // Start starts a router

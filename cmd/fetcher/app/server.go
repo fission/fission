@@ -21,7 +21,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"sync/atomic"
@@ -31,6 +30,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/fission/fission/pkg/fetcher"
+	"github.com/fission/fission/pkg/utils/httpserver"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 	"github.com/fission/fission/pkg/utils/tracing"
 )
@@ -135,9 +135,7 @@ func Run(ctx context.Context, logger *zap.Logger) {
 	} else {
 		handler = otelUtils.GetHandlerWithOTEL(mux, "fission-fetcher", otelUtils.UrlsToIgnore("/healthz", "/readiness-healthz"))
 	}
-	if err = http.ListenAndServe(":8000", handler); err != nil {
-		log.Fatal(err)
-	}
+	httpserver.StartServer(ctx, logger, "fetcher", "8000", handler)
 }
 
 func fetcherUsage() {

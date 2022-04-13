@@ -17,6 +17,7 @@ limitations under the License.
 package router
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"testing"
@@ -26,6 +27,7 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
+	"github.com/fission/fission/pkg/utils/httpserver"
 	"github.com/fission/fission/pkg/utils/metrics"
 )
 
@@ -45,13 +47,6 @@ func NewHandler(responseWriter http.ResponseWriter, request *http.Request) {
 func verifyRequest(expectedResponse string) {
 	targetURL := "http://localhost:3333"
 	testRequest(targetURL, expectedResponse)
-}
-
-func startServer(mr *mutableRouter) {
-	err := http.ListenAndServe(":3333", mr)
-	if err != nil {
-		log.Fatal(err)
-	}
 }
 
 func spamServer(quit chan bool) {
@@ -83,10 +78,10 @@ func TestMutableMux(t *testing.T) {
 	panicIf(err)
 
 	mr := newMutableRouter(logger, muxRouter)
-
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	// start http server
-	log.Print("Start http server")
-	go startServer(mr)
+	go httpserver.StartServer(ctx, logger, "router", "3333", mr)
 
 	// continuously make requests, panic if any fails
 	time.Sleep(100 * time.Millisecond)
