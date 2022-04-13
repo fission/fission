@@ -41,6 +41,7 @@ import (
 	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
 	"github.com/fission/fission/pkg/throttler"
 	"github.com/fission/fission/pkg/utils"
+	"github.com/fission/fission/pkg/utils/metrics"
 	"github.com/fission/fission/pkg/utils/otel"
 	"github.com/fission/fission/pkg/utils/tracing"
 )
@@ -217,6 +218,7 @@ func authLoginHandler(w http.ResponseWriter, r *http.Request) {
 
 func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) *mux.Router {
 	muxRouter := mux.NewRouter()
+	muxRouter.Use(metrics.HTTPMetricMiddleware())
 
 	openTracingEnabled := tracing.TracingEnabled(ts.logger)
 
