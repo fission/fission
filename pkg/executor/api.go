@@ -34,6 +34,7 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/executor/client"
+	"github.com/fission/fission/pkg/utils/metrics"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
@@ -251,6 +252,7 @@ func (executor *Executor) unTapService(w http.ResponseWriter, r *http.Request) {
 // GetHandler returns an http.Handler.
 func (executor *Executor) GetHandler() http.Handler {
 	r := mux.NewRouter()
+	r.Use(metrics.HTTPMetricMiddleware())
 	r.HandleFunc("/v2/getServiceForFunction", executor.getServiceForFunctionAPI).Methods("POST")
 	r.HandleFunc("/v2/tapService", executor.tapService).Methods("POST") // for backward compatibility
 	r.HandleFunc("/v2/tapServices", executor.tapServices).Methods("POST")

@@ -50,7 +50,6 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opencensus.io/plugin/ochttp"
 	"go.opencensus.io/trace"
 	"go.opentelemetry.io/otel"
@@ -59,6 +58,7 @@ import (
 	"github.com/fission/fission/pkg/crd"
 	executorClient "github.com/fission/fission/pkg/executor/client"
 	"github.com/fission/fission/pkg/throttler"
+	"github.com/fission/fission/pkg/utils/metrics"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
@@ -68,13 +68,15 @@ import (
 
 func router(ctx context.Context, logger *zap.Logger, httpTriggerSet *HTTPTriggerSet) *mutableRouter {
 	var mr *mutableRouter
+	mux := mux.NewRouter()
+	mux.Use(metrics.HTTPMetricMiddleware())
 
 	// see issue https://github.com/fission/fission/issues/1317
 	useEncodedPath, _ := strconv.ParseBool(os.Getenv("USE_ENCODED_PATH"))
 	if useEncodedPath {
-		mr = newMutableRouter(logger, mux.NewRouter().UseEncodedPath())
+		mr = newMutableRouter(logger, mux.UseEncodedPath())
 	} else {
-		mr = newMutableRouter(logger, mux.NewRouter())
+		mr = newMutableRouter(logger, mux)
 	}
 
 	httpTriggerSet.subscribeRouter(ctx, mr)
@@ -86,9 +88,9 @@ func serve(ctx context.Context, logger *zap.Logger, port int, tracingSamplingRat
 	mr := router(ctx, logger, httpTriggerSet)
 	url := fmt.Sprintf(":%v", port)
 
-	var err error
+	var handler http.Handler
 	if openTracingEnabled {
-		err = http.ListenAndServe(url, &ochttp.Handler{
+		handler = &ochttp.Handler{
 			Handler: mr,
 			GetStartOptions: func(r *http.Request) trace.StartOptions {
 				// do not trace router healthz endpoint
@@ -108,21 +110,14 @@ func serve(ctx context.Context, logger *zap.Logger, port int, tracingSamplingRat
 					Sampler: trace.ProbabilitySampler(tracingSamplingRate),
 				}
 			},
-		})
+		}
 	} else {
-		err = http.ListenAndServe(url, otelUtils.GetHandlerWithOTEL(mr, "fission-router", otelUtils.UrlsToIgnore("/router-healthz")))
+		handler = otelUtils.GetHandlerWithOTEL(mr, "fission-router", otelUtils.UrlsToIgnore("/router-healthz"))
 	}
+	err := http.ListenAndServe(url, handler)
 	if err != nil {
 		logger.Error("HTTP server error", zap.Error(err))
 	}
-}
-
-func serveMetric(logger *zap.Logger) {
-	// Expose the registered metrics via HTTP.
-	http.Handle("/metrics", promhttp.Handler())
-	err := http.ListenAndServe(metricAddr, nil)
-
-	logger.Fatal("done listening on metrics endpoint", zap.Error(err))
 }
 
 // Start starts a router
@@ -253,7 +248,7 @@ func Start(ctx context.Context, logger *zap.Logger, port int, executorURL string
 		svcAddrRetryCount: svcAddrRetryCount,
 	}, isDebugEnv, unTapServiceTimeout, throttler.MakeThrottler(svcAddrUpdateTimeout))
 
-	go serveMetric(logger)
+	go metrics.ServeMetrics(ctx, logger)
 
 	logger.Info("starting router", zap.Int("port", port))
 

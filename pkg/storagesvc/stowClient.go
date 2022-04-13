@@ -182,6 +182,18 @@ func (client *StowClient) removeFileByID(itemID string) error {
 	return client.container.RemoveItem(itemID)
 }
 
+func (client *StowClient) getFileSize(itemID string) (int64, error) {
+	item, err := client.container.Item(itemID)
+	if err != nil {
+		if err == stow.ErrNotFound {
+			return 0, ErrNotFound
+		} else {
+			return 0, ErrRetrievingItem
+		}
+	}
+	return item.Size()
+}
+
 // filter defines an interface to filter out items from a set of items
 type filter func(stow.Item, interface{}) bool
 

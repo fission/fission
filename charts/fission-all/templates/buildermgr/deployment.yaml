@@ -14,6 +14,10 @@ spec:
     metadata:
       labels:
         svc: buildermgr
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "8080"
     spec:
       containers:
       - name: buildermgr
@@ -50,6 +54,9 @@ spec:
           value: {{ .Release.Name | quote }}
         {{- include "opentracing.envs" . | indent 8 }}
         {{- include "opentelemtry.envs" . | indent 8 }}
+        ports:
+          - containerPort: 8080
+            name: metrics
         resources:
           {{- toYaml .Values.buildermgr.resources | nindent 10 }}
         {{- if .Values.terminationMessagePath }}

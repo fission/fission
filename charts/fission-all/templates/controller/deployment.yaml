@@ -17,6 +17,10 @@ spec:
       labels:
         svc: controller
         application: fission-api
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "8080"
     spec:
       containers:
       - name: controller
@@ -63,6 +67,8 @@ spec:
           mountPath: /etc/config/config.yaml
           subPath: config.yaml
         ports:
+          - containerPort: 8080
+            name: metrics
           - containerPort: 8888
             name: http
         {{- if .Values.pprof.enabled }}

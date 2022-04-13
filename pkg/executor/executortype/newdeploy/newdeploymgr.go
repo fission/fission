@@ -45,6 +45,7 @@ import (
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/executor/executortype"
 	"github.com/fission/fission/pkg/executor/fscache"
+	"github.com/fission/fission/pkg/executor/metrics"
 	"github.com/fission/fission/pkg/executor/reaper"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	finformerv1 "github.com/fission/fission/pkg/generated/informers/externalversions/core/v1"
@@ -480,10 +481,11 @@ func (deploy *NewDeploy) fnCreate(ctx context.Context, fn *fv1.Function) (*fscac
 	_, err = deploy.fsCache.Add(*fsvc)
 	if err != nil {
 		deploy.logger.Error("error adding function to cache", zap.Error(err), zap.Any("function", fsvc.Function))
+		metrics.FuncError.WithLabelValues(fn.ObjectMeta.Name, fn.ObjectMeta.Namespace).Inc()
 		return fsvc, err
 	}
 
-	deploy.fsCache.IncreaseColdStarts(fn.ObjectMeta.Name, string(fn.ObjectMeta.UID))
+	metrics.ColdStarts.WithLabelValues(fn.ObjectMeta.Name, fn.ObjectMeta.Namespace).Inc()
 
 	return fsvc, nil
 }
@@ -804,10 +806,7 @@ func (deploy *NewDeploy) idleObjectReaper(ctx context.Context) {
 				continue
 			}
 
-			deploy.fsCache.IdleTime(fsvc.Name, fsvc.Address, float64(time.Since(fsvc.Atime)-idlePodReapTime))
-
 			go func() {
-				startTime := time.Now()
 				deployObj := getDeploymentObj(fsvc.KubernetesObjects)
 				if deployObj == nil {
 					deploy.logger.Error("error finding function deployment", zap.Error(err), zap.String("function", fsvc.Function.Name))
@@ -832,7 +831,6 @@ func (deploy *NewDeploy) idleObjectReaper(ctx context.Context) {
 				if err != nil {
 					deploy.logger.Error("error scaling down function deployment", zap.Error(err), zap.String("function", fsvc.Function.Name))
 				}
-				deploy.fsCache.ReapTime(fsvc.Function.Name, fsvc.Address, time.Since(startTime).Seconds())
 			}()
 		}
 	}

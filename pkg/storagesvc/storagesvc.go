@@ -31,6 +31,7 @@ import (
 	"go.opencensus.io/plugin/ochttp"
 	"go.uber.org/zap"
 
+	"github.com/fission/fission/pkg/utils/metrics"
 	"github.com/fission/fission/pkg/utils/otel"
 )
 
@@ -115,6 +116,8 @@ func (ss *StorageService) uploadHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	totalMemoryUsage.WithLabelValues().Add(float64(fileSize))
+
 	// respond with an ID that can be used to retrieve the file
 	ur := &UploadResponse{
 		ID: id,
@@ -135,6 +138,8 @@ func (ss *StorageService) uploadHandler(w http.ResponseWriter, r *http.Request) 
 			zap.String("filename", handler.Filename),
 		)
 	}
+
+	totalArchives.WithLabelValues().Inc()
 }
 
 func (ss *StorageService) getIdFromRequest(r *http.Request) (string, error) {
@@ -154,12 +159,20 @@ func (ss *StorageService) deleteHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	filesize, err := ss.storageClient.getFileSize(fileId)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+	}
+
 	err = ss.storageClient.removeFileByID(fileId)
 	if err != nil {
 		msg := fmt.Sprintf("Error deleting item: %v", err)
 		http.Error(w, msg, http.StatusInternalServerError)
 		return
 	}
+
+	totalArchives.WithLabelValues().Dec()
+	totalMemoryUsage.WithLabelValues().Sub(float64(filesize))
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -203,6 +216,7 @@ func MakeStorageService(logger *zap.Logger, storageClient *StowClient, port int)
 
 func (ss *StorageService) Start(port int, openTracingEnabled bool) {
 	r := mux.NewRouter()
+	r.Use(metrics.HTTPMetricMiddleware())
 	r.HandleFunc("/v1/archive", ss.uploadHandler).Methods("POST")
 	r.HandleFunc("/v1/archive", ss.downloadHandler).Methods("GET")
 	r.HandleFunc("/v1/archive", ss.deleteHandler).Methods("DELETE")
@@ -210,14 +224,15 @@ func (ss *StorageService) Start(port int, openTracingEnabled bool) {
 
 	address := fmt.Sprintf(":%v", port)
 
-	var err error
+	var handler http.Handler
 	if openTracingEnabled {
-		err = http.ListenAndServe(address, &ochttp.Handler{
+		handler = &ochttp.Handler{
 			Handler: r,
-		})
+		}
 	} else {
-		err = http.ListenAndServe(address, otel.GetHandlerWithOTEL(r, "fission-storagesvc", otel.UrlsToIgnore("/healthz")))
+		handler = otel.GetHandlerWithOTEL(r, "fission-storagesvc", otel.UrlsToIgnore("/healthz"))
 	}
+	err := http.ListenAndServe(address, handler)
 	ss.logger.Fatal("done listening", zap.Error(err))
 }
 
@@ -232,6 +247,7 @@ func Start(ctx context.Context, logger *zap.Logger, storage Storage, port int, o
 
 	// create http handlers
 	storageService := MakeStorageService(logger, storageClient, port)
+	go metrics.ServeMetrics(ctx, logger)
 	go storageService.Start(port, openTracingEnabled)
 
 	// enablePruner prevents storagesvc unit test from needing to talk to kubernetes

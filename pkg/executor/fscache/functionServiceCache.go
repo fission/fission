@@ -34,6 +34,7 @@ import (
 	"github.com/fission/fission/pkg/cache"
 	"github.com/fission/fission/pkg/crd"
 	ferror "github.com/fission/fission/pkg/error"
+	"github.com/fission/fission/pkg/executor/metrics"
 	"github.com/fission/fission/pkg/poolcache"
 )
 
@@ -227,8 +228,6 @@ func (fsc *FunctionServiceCache) AddFunc(ctx context.Context, fsvc FuncSvc) {
 	now := time.Now()
 	fsvc.Ctime = now
 	fsvc.Atime = now
-
-	fsc.setFuncAlive(fsvc.Function.Name, string(fsvc.Function.UID), true)
 }
 
 // SetCPUUtilizaton updates/sets CPUutilization in the pool cache
@@ -284,7 +283,6 @@ func (fsc *FunctionServiceCache) Add(fsvc FuncSvc) (*FuncSvc, error) {
 		return nil, err
 	}
 
-	fsc.setFuncAlive(fsvc.Function.Name, string(fsvc.Function.UID), true)
 	return nil, nil
 }
 
@@ -345,9 +343,7 @@ func (fsc *FunctionServiceCache) DeleteEntry(fsvc *FuncSvc) {
 		)
 	}
 
-	fsc.observeFuncRunningTime(fsvc.Function.Name, string(fsvc.Function.UID), fsvc.Atime.Sub(fsvc.Ctime).Seconds())
-	fsc.observeFuncAliveTime(fsvc.Function.Name, string(fsvc.Function.UID), time.Since(fsvc.Ctime).Seconds())
-	fsc.setFuncAlive(fsvc.Function.Name, string(fsvc.Function.UID), false)
+	metrics.FuncRunningSummary.WithLabelValues(fsvc.Function.Name, fsvc.Function.Namespace).Observe(fsvc.Atime.Sub(fsvc.Ctime).Seconds())
 }
 
 // DeleteFunctionSvc deletes a function service at key composed of [function][address].

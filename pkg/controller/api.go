@@ -35,6 +35,7 @@ import (
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/fission-cli/logdb"
 	"github.com/fission/fission/pkg/info"
+	"github.com/fission/fission/pkg/utils/metrics"
 	"github.com/fission/fission/pkg/utils/otel"
 )
 
@@ -198,6 +199,7 @@ func (api *API) GetSvcName(w http.ResponseWriter, r *http.Request) {
 
 func (api *API) GetHandler() http.Handler {
 	r := mux.NewRouter()
+	r.Use(metrics.HTTPMetricMiddleware())
 	r.HandleFunc("/healthz", api.HealthHandler).Methods("GET")
 	// Give a useful error message if an older CLI attempts to make a request
 	r.HandleFunc(`/v1/{rest:[a-zA-Z0-9=\-\/]+}`, api.ApiVersionMismatchHandler)
@@ -267,7 +269,7 @@ func (api *API) GetHandler() http.Handler {
 	return r
 }
 
-func (api *API) Serve(port int, openTracingEnabled bool) {
+func (api *API) Serve(ctx context.Context, port int, openTracingEnabled bool) {
 	address := fmt.Sprintf(":%v", port)
 	api.logger.Info("server started", zap.Int("port", port))
 
@@ -277,6 +279,8 @@ func (api *API) Serve(port int, openTracingEnabled bool) {
 	} else {
 		handler = otel.GetHandlerWithOTEL(api.GetHandler(), "fission-controller", otel.UrlsToIgnore("/healthz"))
 	}
+
+	go metrics.ServeMetrics(ctx, api.logger)
 	err := http.ListenAndServe(address, handler)
 	api.logger.Fatal("done listening", zap.Error(err))
 }

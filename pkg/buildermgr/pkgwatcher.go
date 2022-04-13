@@ -32,6 +32,7 @@ import (
 	"github.com/fission/fission/pkg/cache"
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/utils"
+	"github.com/fission/fission/pkg/utils/metrics"
 )
 
 type (
@@ -323,6 +324,7 @@ func (pkgw *packageWatcher) packageInformerHandler() k8sCache.ResourceEventHandl
 }
 
 func (pkgw *packageWatcher) Run(ctx context.Context) {
+	go metrics.ServeMetrics(ctx, pkgw.logger)
 	go (*pkgw.podInformer).Run(ctx.Done())
 	(*pkgw.pkgInformer).AddEventHandler(pkgw.packageInformerHandler())
 	(*pkgw.pkgInformer).Run(ctx.Done())
