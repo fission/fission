@@ -796,6 +796,16 @@ func (fh functionHandler) collectFunctionMetric(start time.Time, rrt *RetryingRo
 		}
 	}
 
+	functionCalls.WithLabelValues(fh.function.ObjectMeta.Namespace,
+		fh.function.ObjectMeta.Name, path, req.Method,
+		fmt.Sprint(resp.StatusCode)).Inc()
+
+	if resp.StatusCode >= 400 {
+		functionCallErrors.WithLabelValues(fh.function.ObjectMeta.Namespace,
+			fh.function.ObjectMeta.Name, path, req.Method,
+			fmt.Sprint(resp.StatusCode)).Inc()
+	}
+
 	functionCallOverhead.WithLabelValues(fh.function.ObjectMeta.Namespace,
 		fh.function.ObjectMeta.Name, path, req.Method,
 		fmt.Sprint(resp.StatusCode)).
