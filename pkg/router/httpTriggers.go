@@ -139,6 +139,9 @@ func routerHealthHandler(w http.ResponseWriter, r *http.Request) {
 func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) *mux.Router {
 	muxRouter := mux.NewRouter()
 	muxRouter.Use(metrics.HTTPMetricMiddleware())
+	if featureConfig.AuthConfig.IsEnabled {
+		muxRouter.Use(authMiddleware)
+	}
 
 	openTracingEnabled := tracing.TracingEnabled(ts.logger)
 
@@ -227,11 +230,7 @@ func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) *mux.Router 
 				ts.logger.Debug("add prefix route for function", zap.String("route", prefix), zap.Any("function", fh.function), zap.Strings("methods", methods))
 			} else {
 				var ht1 *mux.Route
-				if featureConfig.AuthConfig.IsEnabled {
-					ht1 = muxRouter.Handle(prefix, authMiddleware(handler))
-				} else {
-					ht1 = muxRouter.Handle(prefix, handler)
-				}
+				ht1 = muxRouter.Handle(prefix, handler)
 				ht1.Methods(methods...)
 				if trigger.Spec.Host != "" {
 					ht1.Host(trigger.Spec.Host)
@@ -245,11 +244,7 @@ func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) *mux.Router 
 			}
 		} else {
 			var ht *mux.Route
-			if featureConfig.AuthConfig.IsEnabled {
-				ht = muxRouter.Handle(trigger.Spec.RelativeURL, authMiddleware(handler))
-			} else {
-				ht = muxRouter.Handle(trigger.Spec.RelativeURL, handler)
-			}
+			ht = muxRouter.Handle(trigger.Spec.RelativeURL, handler)
 			ht.Methods(methods...)
 			if trigger.Spec.Host != "" {
 				ht.Host(trigger.Spec.Host)
@@ -297,11 +292,7 @@ func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) *mux.Router 
 			handler = otel.GetHandlerWithOTEL(http.HandlerFunc(fh.handler), internalRoute)
 		}
 
-		if featureConfig.AuthConfig.IsEnabled {
-			muxRouter.Handle(internalRoute, authMiddleware(handler))
-		} else {
-			muxRouter.Handle(internalRoute, handler)
-		}
+		muxRouter.Handle(internalRoute, handler)
 		muxRouter.PathPrefix(internalPrefixRoute).Handler(handler)
 		ts.logger.Debug("add internal handler and prefix route for function", zap.String("router", internalRoute), zap.Any("function", fn))
 	}
