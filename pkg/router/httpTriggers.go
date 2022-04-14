@@ -229,8 +229,7 @@ func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) *mux.Router 
 				}
 				ts.logger.Debug("add prefix route for function", zap.String("route", prefix), zap.Any("function", fh.function), zap.Strings("methods", methods))
 			} else {
-				var ht1 *mux.Route
-				ht1 = muxRouter.Handle(prefix, handler)
+				ht1 := muxRouter.Handle(prefix, handler)
 				ht1.Methods(methods...)
 				if trigger.Spec.Host != "" {
 					ht1.Host(trigger.Spec.Host)
@@ -243,8 +242,7 @@ func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) *mux.Router 
 				ts.logger.Debug("add prefix and handler route for function", zap.String("route", prefix), zap.Any("function", fh.function), zap.Strings("methods", methods))
 			}
 		} else {
-			var ht *mux.Route
-			ht = muxRouter.Handle(trigger.Spec.RelativeURL, handler)
+			ht := muxRouter.Handle(trigger.Spec.RelativeURL, handler)
 			ht.Methods(methods...)
 			if trigger.Spec.Host != "" {
 				ht.Host(trigger.Spec.Host)
