@@ -97,7 +97,7 @@ func TestMutableMux(t *testing.T) {
 	// change the muxer
 	log.Print("Change mux router")
 	newMuxRouter := mux.NewRouter()
-	muxRouter.Use(metrics.HTTPMetricMiddleware())
+	newMuxRouter.Use(metrics.HTTPMetricMiddleware())
 	newMuxRouter.HandleFunc("/", NewHandler)
 	mr.updateRouter(newMuxRouter)
 
