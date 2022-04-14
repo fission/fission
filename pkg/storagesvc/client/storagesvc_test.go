@@ -209,7 +209,7 @@ func TestLocalStorageService(t *testing.T) {
 	storage := storagesvc.NewLocalStorage(localPath)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	os.Setenv("METRICS_ADDR", ":8083")
+	os.Setenv("METRICS_ADDR", "8083")
 	_ = storagesvc.Start(ctx, logger, storage, port, true)
 
 	time.Sleep(time.Second)

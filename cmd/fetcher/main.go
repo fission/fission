@@ -28,8 +28,7 @@ func main() {
 	logger := loggerfactory.GetLogger()
 	defer logger.Sync()
 
-	profile.ProfileIfEnabled(logger)
-
 	ctx := signals.SetupSignalHandlerWithContext(logger)
+	profile.ProfileIfEnabled(ctx, logger)
 	app.Run(ctx, logger)
 }

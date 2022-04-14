@@ -17,15 +17,17 @@ limitations under the License.
 package app
 
 import (
+	"context"
 	"net/http"
 
 	"go.uber.org/zap"
 
 	builder "github.com/fission/fission/pkg/builder"
+	"github.com/fission/fission/pkg/utils/httpserver"
 )
 
 // Usage: builder <shared volume path>
-func Run(logger *zap.Logger, shareVolume string) error {
+func Run(ctx context.Context, logger *zap.Logger, shareVolume string) {
 	builder := builder.MakeBuilder(logger, shareVolume)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", builder.Handler)
@@ -33,5 +35,5 @@ func Run(logger *zap.Logger, shareVolume string) error {
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	return http.ListenAndServe(":8001", mux)
+	httpserver.StartServer(ctx, logger, "builder", "8001", mux)
 }

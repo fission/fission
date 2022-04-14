@@ -35,6 +35,7 @@ import (
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/fission-cli/logdb"
 	"github.com/fission/fission/pkg/info"
+	"github.com/fission/fission/pkg/utils/httpserver"
 	"github.com/fission/fission/pkg/utils/metrics"
 	"github.com/fission/fission/pkg/utils/otel"
 )
@@ -270,9 +271,6 @@ func (api *API) GetHandler() http.Handler {
 }
 
 func (api *API) Serve(ctx context.Context, port int, openTracingEnabled bool) {
-	address := fmt.Sprintf(":%v", port)
-	api.logger.Info("server started", zap.Int("port", port))
-
 	var handler http.Handler
 	if openTracingEnabled {
 		handler = &ochttp.Handler{Handler: api.GetHandler()}
@@ -281,6 +279,5 @@ func (api *API) Serve(ctx context.Context, port int, openTracingEnabled bool) {
 	}
 
 	go metrics.ServeMetrics(ctx, api.logger)
-	err := http.ListenAndServe(address, handler)
-	api.logger.Fatal("done listening", zap.Error(err))
+	httpserver.StartServer(ctx, api.logger, "controller", fmt.Sprintf("%d", port), handler)
 }

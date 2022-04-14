@@ -24,12 +24,15 @@ limitations under the License.
 package profile
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
 
 	"go.uber.org/zap"
+
+	"github.com/fission/fission/pkg/utils/httpserver"
 )
 
 func getPprofAddr() string {
@@ -44,7 +47,7 @@ func getPprofAddr() string {
 	return fmt.Sprintf("%s:%s", pprofHost, pprofPort)
 }
 
-func ProfileIfEnabled(logger *zap.Logger) {
+func ProfileIfEnabled(ctx context.Context, logger *zap.Logger) {
 	enablePprof := os.Getenv("PPROF_ENABLED")
 	if enablePprof != "true" {
 		return
@@ -53,12 +56,5 @@ func ProfileIfEnabled(logger *zap.Logger) {
 	pprofMux := http.DefaultServeMux
 	http.DefaultServeMux = http.NewServeMux()
 
-	addr := getPprofAddr()
-	logger.Info("Running pprof server", zap.String("addr", addr))
-	go func() {
-		err := http.ListenAndServe(addr, pprofMux)
-		if err != nil {
-			logger.Fatal("pprof http server failed", zap.Error(err))
-		}
-	}()
+	go httpserver.StartServer(ctx, logger, "pprof", getPprofAddr(), pprofMux)
 }

@@ -370,7 +370,7 @@ func StartExecutor(ctx context.Context, logger *zap.Logger, functionNamespace st
 	}
 	go reaper.CleanupRoleBindings(ctx, logger, kubernetesClient, fissionClient, functionNamespace, envBuilderNamespace, time.Minute*30)
 	go metrics.ServeMetrics(ctx, logger)
-	go api.Serve(port, openTracingEnabled)
+	go api.Serve(ctx, port, openTracingEnabled)
 
 	return nil
 }
