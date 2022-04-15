@@ -101,6 +101,7 @@ aggregation &mdash; also helps with ops on your Fission deployment.
 - Understand [Fission Concepts](https://fission.io/docs/concepts/).
 - See the [installation guide](https://fission.io/docs/installation/) for installing and running Fission.
 - You can learn more about Fission and get started from [Fission Docs](https://fission.io/docs).
+- To see Fission in action, check out the [Fission Examples Repo](https://github.com/fission/examples).
 - See the [troubleshooting guide](https://fission.io/docs/trouble-shooting/) for debugging your functions and Fission installation.
 
 ## Contributing
