@@ -18,7 +18,6 @@ package router
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -125,11 +124,6 @@ func (ts *HTTPTriggerSet) subscribeRouter(ctx context.Context, mr *mutableRouter
 
 func defaultHomeHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
-}
-
-func createErrorResponse(errMsg string, statusCode int) []byte {
-	resp, _ := json.Marshal(map[string]interface{}{"statusCode": statusCode, "message": errMsg})
-	return resp
 }
 
 func routerHealthHandler(w http.ResponseWriter, r *http.Request) {
@@ -303,7 +297,7 @@ func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) *mux.Router 
 		}
 
 		// Auth endpoint for the router.
-		muxRouter.HandleFunc(path, authLoginHandler).Methods("POST")
+		muxRouter.HandleFunc(path, authLoginHandler()).Methods("POST")
 	}
 
 	// Healthz endpoint for the router.
