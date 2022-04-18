@@ -297,7 +297,7 @@ func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) *mux.Router 
 		}
 
 		// Auth endpoint for the router.
-		muxRouter.HandleFunc(path, authLoginHandler()).Methods("POST")
+		muxRouter.HandleFunc(path, authLoginHandler(featureConfig)).Methods("POST")
 	}
 
 	// Healthz endpoint for the router.

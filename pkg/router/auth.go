@@ -13,6 +13,7 @@ import (
 	"github.com/golang-jwt/jwt/v4"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	config "github.com/fission/fission/pkg/featureconfig"
 )
 
 var (
@@ -23,41 +24,44 @@ var (
 
 func authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		authHeader := strings.Split(r.Header.Get("Authorization"), "Bearer ")
-		if len(authHeader) != 2 || len(authHeader[1]) == 0 {
-			// malformed token
-			http.Error(w, malformedToken.Error(), http.StatusUnauthorized)
-			return
-		}
-
-		jwtToken := authHeader[1]
-		token, err := jwt.Parse(jwtToken, func(token *jwt.Token) (interface{}, error) {
-			return []byte(os.Getenv("JWT_SIGNING_KEY")), nil
-		})
-
-		if token != nil && token.Valid {
-			// valid token
-			next.ServeHTTP(w, r)
-			return
-		}
-
-		if ve, ok := err.(*jwt.ValidationError); ok {
-			if ve.Errors&jwt.ValidationErrorMalformed != 0 {
+		if r.URL.Path != "/auth/login" && r.URL.Path != "/router-healthz" {
+			authHeader := strings.Split(r.Header.Get("Authorization"), "Bearer ")
+			if len(authHeader) != 2 || len(authHeader[1]) == 0 {
 				// malformed token
-				err = malformedToken
-			} else if ve.Errors&(jwt.ValidationErrorExpired|jwt.ValidationErrorNotValidYet) != 0 {
-				// token is either expired or not active yet
-				err = expiredToken
-			} else {
-				err = fmt.Errorf("Unauthorized: %w", err)
+				http.Error(w, malformedToken.Error(), http.StatusUnauthorized)
+				return
 			}
-		}
 
-		if err == nil {
-			err = errors.New("Unauthorized: invalid token")
-		}
+			jwtToken := authHeader[1]
+			token, err := jwt.Parse(jwtToken, func(token *jwt.Token) (interface{}, error) {
+				return []byte(os.Getenv("JWT_SIGNING_KEY")), nil
+			})
 
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+			if token != nil && token.Valid {
+				// valid token
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			if ve, ok := err.(*jwt.ValidationError); ok {
+				if ve.Errors&jwt.ValidationErrorMalformed != 0 {
+					// malformed token
+					err = malformedToken
+				} else if ve.Errors&(jwt.ValidationErrorExpired|jwt.ValidationErrorNotValidYet) != 0 {
+					// token is either expired or not active yet
+					err = expiredToken
+				} else {
+					err = fmt.Errorf("Unauthorized: %w", err)
+				}
+			}
+
+			if err == nil {
+				err = errors.New("Unauthorized: invalid token")
+			}
+
+			http.Error(w, err.Error(), http.StatusUnauthorized)
+		}
+		next.ServeHTTP(w, r)
 	})
 }
 
@@ -89,15 +93,17 @@ func parseAuthConf(auth *AuthConf) error {
 	return nil
 }
 
-func authLoginHandler() func(w http.ResponseWriter, r *http.Request) {
+func authLoginHandler(featureConfig *config.FeatureConfig) func(w http.ResponseWriter, r *http.Request) {
 	var (
 		err       error
 		validConf bool
 	)
 
+	validConf = true
+
 	auth := &AuthConf{}
 	if err = parseAuthConf(auth); err != nil {
-		validConf = true
+		validConf = false
 	}
 
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -149,7 +155,7 @@ func authLoginHandler() func(w http.ResponseWriter, r *http.Request) {
 		}
 
 		w.WriteHeader(http.StatusCreated)
-		fmt.Println(string(resp))
+		_, _ = w.Write(resp)
 	}
 
 }
