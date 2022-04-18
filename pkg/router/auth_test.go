@@ -35,7 +35,10 @@ func setup(tb testing.TB) func(tb testing.TB) {
 func GetRouterWithAuth() *mux.Router {
 	testHandler := func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		io.WriteString(w, "OK")
+		_, err := io.WriteString(w, "OK")
+		if err != nil {
+			fmt.Println(fmt.Errorf("Error in writing string: %s", err))
+		}
 	}
 
 	featureConfig := &config.FeatureConfig{}

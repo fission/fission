@@ -20,11 +20,12 @@ var (
 	malformedToken = errors.New("Unauthorized: malformed token")
 	expiredToken   = errors.New("Unauthorized: token is either expired or not active yet")
 	invalidCreds   = errors.New("Unauthorized: invalid username or password")
+	authPath       = "/auth/login"
 )
 
 func authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/auth/login" && r.URL.Path != "/router-healthz" {
+		if r.URL.Path != authPath && r.URL.Path != "/router-healthz" {
 			authHeader := strings.Split(r.Header.Get("Authorization"), "Bearer ")
 			if len(authHeader) != 2 || len(authHeader[1]) == 0 {
 				// malformed token

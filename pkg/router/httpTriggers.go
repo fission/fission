@@ -296,6 +296,9 @@ func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) *mux.Router 
 			path = "/auth/login"
 		}
 
+		//Required for authmiddleware
+		authPath = path
+
 		// Auth endpoint for the router.
 		muxRouter.HandleFunc(path, authLoginHandler(featureConfig)).Methods("POST")
 	}
