@@ -155,9 +155,13 @@ func (c *Cache) service() {
 		case markAvailable:
 			if _, ok := c.cache[req.function]; ok {
 				if _, ok = c.cache[req.function][req.address]; ok {
-					c.cache[req.function][req.address].activeRequests--
-					if c.logger.Core().Enabled(zap.DebugLevel) {
-						otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Decrease active requests", zap.String("function", req.function.(string)), zap.String("address", req.address.(string)), zap.Int("activeRequests", c.cache[req.function][req.address].activeRequests))
+					if c.cache[req.function][req.address].activeRequests > 0 {
+						c.cache[req.function][req.address].activeRequests--
+						if c.logger.Core().Enabled(zap.DebugLevel) {
+							otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Decrease active requests", zap.String("function", req.function.(string)), zap.String("address", req.address.(string)), zap.Int("activeRequests", c.cache[req.function][req.address].activeRequests))
+						}
+					} else {
+						otelUtils.LoggerWithTraceID(req.ctx, c.logger).Error("Invalid request to decrease active requests", zap.String("function", req.function.(string)), zap.String("address", req.address.(string)), zap.Int("activeRequests", c.cache[req.function][req.address].activeRequests))
 					}
 				}
 			}
