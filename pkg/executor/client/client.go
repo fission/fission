@@ -21,16 +21,14 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
+	"github.com/hashicorp/go-retryablehttp"
 	"github.com/pkg/errors"
 	"go.opencensus.io/plugin/ochttp"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.uber.org/zap"
-	"golang.org/x/net/context/ctxhttp"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -45,7 +43,7 @@ type (
 		executorURL string
 		tappedByURL map[string]TapServiceRequest
 		requestChan chan TapServiceRequest
-		httpClient  *http.Client
+		httpClient  *retryablehttp.Client
 	}
 
 	// TapServiceRequest represents
@@ -58,11 +56,9 @@ type (
 
 // MakeClient initializes and returns a Client instance.
 func MakeClient(logger *zap.Logger, executorURL string) *Client {
-	var hc *http.Client
+	hc := retryablehttp.NewClient()
 	if tracing.TracingEnabled(logger) {
-		hc = &http.Client{Transport: &ochttp.Transport{}}
-	} else {
-		hc = &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
+		hc.HTTPClient.Transport = &ochttp.Transport{Base: hc.HTTPClient.Transport}
 	}
 
 	c := &Client{
@@ -85,7 +81,13 @@ func (c *Client) GetServiceForFunction(ctx context.Context, fn *fv1.Function) (s
 		return "", errors.Wrap(err, "could not marshal request body for getting service for function")
 	}
 
-	resp, err := ctxhttp.Post(ctx, c.httpClient, executorURL, "application/json", bytes.NewReader(body))
+	req, err := retryablehttp.NewRequestWithContext(ctx, "POST", executorURL, bytes.NewReader(body))
+	if err != nil {
+		return "", errors.Wrap(err, "could not create request for getting service for function")
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return "", errors.Wrap(err, "error posting to getting service for function")
 	}
@@ -116,8 +118,13 @@ func (c *Client) UnTapService(ctx context.Context, fnMeta metav1.ObjectMeta, exe
 	if err != nil {
 		return errors.Wrap(err, "could not marshal request body for getting service for function")
 	}
+	req, err := retryablehttp.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
+	if err != nil {
+		return errors.Wrap(err, "could not create request for untap service for function")
+	}
+	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := ctxhttp.Post(ctx, c.httpClient, url, "application/json", bytes.NewReader(body))
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return errors.Wrap(err, "error posting to getting service for function")
 	}
@@ -183,7 +190,13 @@ func (c *Client) _tapService(ctx context.Context, tapSvcReqs []TapServiceRequest
 		return err
 	}
 
-	resp, err := ctxhttp.Post(ctx, c.httpClient, executorURL, "application/json", bytes.NewReader(body))
+	req, err := retryablehttp.NewRequestWithContext(ctx, "POST", executorURL, bytes.NewReader(body))
+	if err != nil {
+		return errors.Wrap(err, "could not create request for tap service request")
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return err
 	}
