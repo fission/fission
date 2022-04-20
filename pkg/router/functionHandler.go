@@ -733,7 +733,7 @@ func (fh functionHandler) getServiceEntry(ctx context.Context) (svcURL *url.URL,
 
 	record, ok := recordObj.(svcEntryRecord)
 	if !ok {
-		return nil, false, fmt.Errorf("received unknown service record type")
+		return nil, false, fmt.Errorf("unexpected type of recordObj %T: %w", recordObj, err)
 	}
 	return record.svcURL, record.cacheHit, err
 }
