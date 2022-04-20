@@ -17,7 +17,6 @@ import (
 	config "github.com/fission/fission/pkg/featureconfig"
 	"github.com/fission/fission/pkg/utils/httpserver"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
-	"github.com/fission/fission/pkg/utils/metrics"
 )
 
 func setup(tb testing.TB) func(tb testing.TB) {
@@ -44,8 +43,8 @@ func GetRouterWithAuth() *mux.Router {
 	featureConfig := &config.FeatureConfig{}
 	featureConfig.AuthConfig.JWTIssuer = "fission"
 	featureConfig.AuthConfig.JWTExpiryTime = 120
+	featureConfig.AuthConfig.AuthUriPath = "/auth/login"
 	muxRouter := mux.NewRouter()
-	muxRouter.Use(metrics.HTTPMetricMiddleware())
 	muxRouter.Use(authMiddleware)
 	muxRouter.HandleFunc("/auth/login", authLoginHandler(featureConfig)).Methods("POST")
 	// We should be able to access health without login

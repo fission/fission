@@ -20,49 +20,57 @@ var (
 	malformedToken = errors.New("Unauthorized: malformed token")
 	expiredToken   = errors.New("Unauthorized: token is either expired or not active yet")
 	invalidCreds   = errors.New("Unauthorized: invalid username or password")
-	authPath       = "/auth/login"
 )
+
+func checkAuthToken(r *http.Request) error {
+	authHeader := strings.Split(r.Header.Get("Authorization"), "Bearer ")
+	if len(authHeader) != 2 || len(authHeader[1]) == 0 {
+		// malformed token
+		return malformedToken
+	}
+
+	jwtToken := authHeader[1]
+	token, err := jwt.Parse(jwtToken, func(token *jwt.Token) (interface{}, error) {
+		return []byte(os.Getenv("JWT_SIGNING_KEY")), nil
+	})
+
+	if token != nil && token.Valid {
+		// valid token
+		return nil
+	}
+
+	if ve, ok := err.(*jwt.ValidationError); ok {
+		if ve.Errors&jwt.ValidationErrorMalformed != 0 {
+			// malformed token
+			err = malformedToken
+		} else if ve.Errors&(jwt.ValidationErrorExpired|jwt.ValidationErrorNotValidYet) != 0 {
+			// token is either expired or not active yet
+			err = expiredToken
+		} else {
+			err = fmt.Errorf("Unauthorized: %w", err)
+		}
+	}
+
+	if err == nil {
+		err = errors.New("Unauthorized: invalid token")
+	}
+
+	return err
+}
 
 func authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != authPath && r.URL.Path != "/router-healthz" {
-			authHeader := strings.Split(r.Header.Get("Authorization"), "Bearer ")
-			if len(authHeader) != 2 || len(authHeader[1]) == 0 {
-				// malformed token
-				http.Error(w, malformedToken.Error(), http.StatusUnauthorized)
+		if r.URL.Path == featureConfig.AuthConfig.AuthUriPath || r.URL.Path == "/router-healthz" {
+			next.ServeHTTP(w, r)
+		} else {
+			err := checkAuthToken(r)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusUnauthorized)
 				return
 			}
 
-			jwtToken := authHeader[1]
-			token, err := jwt.Parse(jwtToken, func(token *jwt.Token) (interface{}, error) {
-				return []byte(os.Getenv("JWT_SIGNING_KEY")), nil
-			})
-
-			if token != nil && token.Valid {
-				// valid token
-				next.ServeHTTP(w, r)
-				return
-			}
-
-			if ve, ok := err.(*jwt.ValidationError); ok {
-				if ve.Errors&jwt.ValidationErrorMalformed != 0 {
-					// malformed token
-					err = malformedToken
-				} else if ve.Errors&(jwt.ValidationErrorExpired|jwt.ValidationErrorNotValidYet) != 0 {
-					// token is either expired or not active yet
-					err = expiredToken
-				} else {
-					err = fmt.Errorf("Unauthorized: %w", err)
-				}
-			}
-
-			if err == nil {
-				err = errors.New("Unauthorized: invalid token")
-			}
-
-			http.Error(w, err.Error(), http.StatusUnauthorized)
+			next.ServeHTTP(w, r)
 		}
-		next.ServeHTTP(w, r)
 	})
 }
 
