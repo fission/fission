@@ -42,6 +42,7 @@ import (
 	"github.com/fission/fission/pkg/executor/reaper"
 	"github.com/fission/fission/pkg/executor/util"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
+	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/metrics"
@@ -56,7 +57,7 @@ type (
 		executorTypes map[fv1.ExecutorType]executortype.ExecutorType
 		cms           *cms.ConfigSecretController
 
-		fissionClient *crd.FissionClient
+		fissionClient versioned.Interface
 
 		requestChan chan *createFuncServiceRequest
 		fsCreateWg  sync.Map
@@ -76,7 +77,7 @@ type (
 
 // MakeExecutor returns an Executor for given ExecutorType(s).
 func MakeExecutor(ctx context.Context, logger *zap.Logger, cms *cms.ConfigSecretController,
-	fissionClient *crd.FissionClient, types map[fv1.ExecutorType]executortype.ExecutorType,
+	fissionClient versioned.Interface, types map[fv1.ExecutorType]executortype.ExecutorType,
 	informers []k8sCache.SharedIndexInformer) (*Executor, error) {
 	executor := &Executor{
 		logger:        logger.Named("executor"),
@@ -257,7 +258,7 @@ func StartExecutor(ctx context.Context, logger *zap.Logger, functionNamespace st
 		return errors.Wrap(err, "failed to get kubernetes client")
 	}
 
-	err = fissionClient.WaitForCRDs()
+	err = crd.WaitForCRDs(fissionClient)
 	if err != nil {
 		return errors.Wrap(err, "error waiting for CRDs")
 	}

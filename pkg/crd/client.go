@@ -31,20 +31,13 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
 
-	genClientset "github.com/fission/fission/pkg/generated/clientset/versioned"
-)
-
-type (
-	// FissionClient exports the client interface to be used
-	FissionClient struct {
-		genClientset.Interface
-	}
+	"github.com/fission/fission/pkg/generated/clientset/versioned"
 )
 
 // GetKubernetesClient gets a kubernetes client using the kubeconfig file at the
 // environment var $KUBECONFIG, or an in-cluster config if that's
 // undefined.
-func GetKubernetesClient() (*rest.Config, *kubernetes.Clientset, *apiextensionsclient.Clientset, *metricsclient.Clientset, error) {
+func GetKubernetesClient() (*rest.Config, kubernetes.Interface, apiextensionsclient.Interface, metricsclient.Interface, error) {
 	var config *rest.Config
 	var err error
 
@@ -79,29 +72,26 @@ func GetKubernetesClient() (*rest.Config, *kubernetes.Clientset, *apiextensionsc
 	return config, clientset, apiExtClientset, metricsClient, nil
 }
 
-func MakeFissionClient() (*FissionClient, *kubernetes.Clientset, *apiextensionsclient.Clientset, *metricsclient.Clientset, error) {
+func MakeFissionClient() (versioned.Interface, kubernetes.Interface, apiextensionsclient.Interface, metricsclient.Interface, error) {
 	config, kubeClient, apiExtClient, metricsClient, err := GetKubernetesClient()
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
 
 	// make a CRD REST client with the config
-	crdClient, err := genClientset.NewForConfig(config)
+	crdClient, err := versioned.NewForConfig(config)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
 
-	fc := &FissionClient{
-		Interface: crdClient,
-	}
-	return fc, kubeClient, apiExtClient, metricsClient, nil
+	return crdClient, kubeClient, apiExtClient, metricsClient, nil
 }
 
 // WaitForCRDs does a timeout to check if CRDs have been installed
-func (fc *FissionClient) WaitForCRDs() error {
+func WaitForCRDs(fissionClient versioned.Interface) error {
 	start := time.Now()
 	for {
-		fi := fc.CoreV1().Functions(metav1.NamespaceDefault)
+		fi := fissionClient.CoreV1().Functions(metav1.NamespaceDefault)
 		_, err := fi.List(context.TODO(), metav1.ListOptions{})
 		if err != nil {
 			time.Sleep(100 * time.Millisecond)

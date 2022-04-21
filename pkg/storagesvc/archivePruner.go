@@ -24,11 +24,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission/pkg/crd"
+	"github.com/fission/fission/pkg/generated/clientset/versioned"
 )
 
 type ArchivePruner struct {
 	logger        *zap.Logger
-	crdClient     *crd.FissionClient
+	crdClient     versioned.Interface
 	archiveChan   chan string
 	stowClient    *StowClient
 	pruneInterval time.Duration

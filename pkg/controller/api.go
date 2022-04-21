@@ -31,9 +31,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/fission/fission/pkg/crd"
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/fission-cli/logdb"
+	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	"github.com/fission/fission/pkg/info"
 	"github.com/fission/fission/pkg/utils/httpserver"
 	"github.com/fission/fission/pkg/utils/metrics"
@@ -52,8 +52,8 @@ func init() {
 type (
 	API struct {
 		logger            *zap.Logger
-		fissionClient     *crd.FissionClient
-		kubernetesClient  *kubernetes.Clientset
+		fissionClient     versioned.Interface
+		kubernetesClient  kubernetes.Interface
 		storageServiceUrl string
 		builderManagerUrl string
 		workflowApiUrl    string

@@ -105,7 +105,7 @@ func KubifyName(old string) string {
 // GetKubernetesClient builds a new kubernetes client. If the KUBECONFIG
 // environment variable is empty or doesn't exist, ~/.kube/config is used for
 // the kube config path
-func GetKubernetesClient(kubeContext string) (*restclient.Config, *kubernetes.Clientset, error) {
+func GetKubernetesClient(kubeContext string) (*restclient.Config, kubernetes.Interface, error) {
 	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
 
 	kubeConfigPath := os.Getenv("KUBECONFIG")

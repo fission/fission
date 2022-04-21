@@ -43,15 +43,15 @@ const (
 
 // Kubernetes Version
 type KubernetesVersion struct {
-	client *kubernetes.Clientset
+	client kubernetes.Interface
 }
 
-func NewKubernetesVersion(clientset *kubernetes.Clientset) Resource {
+func NewKubernetesVersion(clientset kubernetes.Interface) Resource {
 	return KubernetesVersion{client: clientset}
 }
 
 func (res KubernetesVersion) Dump(dumpDir string) {
-	serverVer, err := res.client.ServerVersion()
+	serverVer, err := res.client.Discovery().ServerVersion()
 	if err != nil {
 		console.Error(fmt.Sprintf("Error setting up kubernetes client: %v", err))
 		return
@@ -63,12 +63,12 @@ func (res KubernetesVersion) Dump(dumpDir string) {
 
 // Kubernetes Object Dumper
 type KubernetesObjectDumper struct {
-	client   *kubernetes.Clientset
+	client   kubernetes.Interface
 	objType  string
 	selector string
 }
 
-func NewKubernetesObjectDumper(clientset *kubernetes.Clientset, objType string, selector string) Resource {
+func NewKubernetesObjectDumper(clientset kubernetes.Interface, objType string, selector string) Resource {
 	return KubernetesObjectDumper{
 		client:   clientset,
 		objType:  objType,
@@ -184,11 +184,11 @@ func nodeClean(node corev1.Node) corev1.Node {
 }
 
 type KubernetesPodLogDumper struct {
-	client        *kubernetes.Clientset
+	client        kubernetes.Interface
 	labelSelector string
 }
 
-func NewKubernetesPodLogDumper(clientset *kubernetes.Clientset, selector string) Resource {
+func NewKubernetesPodLogDumper(clientset kubernetes.Interface, selector string) Resource {
 	return KubernetesPodLogDumper{
 		client:        clientset,
 		labelSelector: selector,

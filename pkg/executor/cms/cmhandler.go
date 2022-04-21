@@ -25,11 +25,11 @@ import (
 	k8sCache "k8s.io/client-go/tools/cache"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
-	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/executor/executortype"
+	"github.com/fission/fission/pkg/generated/clientset/versioned"
 )
 
-func getConfigmapRelatedFuncs(ctx context.Context, logger *zap.Logger, m *metav1.ObjectMeta, fissionClient *crd.FissionClient) ([]fv1.Function, error) {
+func getConfigmapRelatedFuncs(ctx context.Context, logger *zap.Logger, m *metav1.ObjectMeta, fissionClient versioned.Interface) ([]fv1.Function, error) {
 	funcList, err := fissionClient.CoreV1().Functions(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return nil, err
@@ -47,8 +47,8 @@ func getConfigmapRelatedFuncs(ctx context.Context, logger *zap.Logger, m *metav1
 	return relatedFunctions, nil
 }
 
-func ConfigMapEventHandlers(ctx context.Context, logger *zap.Logger, fissionClient *crd.FissionClient,
-	kubernetesClient *kubernetes.Clientset, types map[fv1.ExecutorType]executortype.ExecutorType) k8sCache.ResourceEventHandlerFuncs {
+func ConfigMapEventHandlers(ctx context.Context, logger *zap.Logger, fissionClient versioned.Interface,
+	kubernetesClient kubernetes.Interface, types map[fv1.ExecutorType]executortype.ExecutorType) k8sCache.ResourceEventHandlerFuncs {
 
 	return k8sCache.ResourceEventHandlerFuncs{
 		AddFunc:    func(obj interface{}) {},

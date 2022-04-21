@@ -23,19 +23,19 @@ import (
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/fission/fission/pkg/crd"
+	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	"github.com/fission/fission/pkg/utils"
 )
 
 type (
 	TimerSync struct {
 		logger        *zap.Logger
-		fissionClient *crd.FissionClient
+		fissionClient versioned.Interface
 		timer         *Timer
 	}
 )
 
-func MakeTimerSync(ctx context.Context, logger *zap.Logger, fissionClient *crd.FissionClient, timer *Timer) *TimerSync {
+func MakeTimerSync(ctx context.Context, logger *zap.Logger, fissionClient versioned.Interface, timer *Timer) *TimerSync {
 	ws := &TimerSync{
 		logger:        logger.Named("timer_sync"),
 		fissionClient: fissionClient,

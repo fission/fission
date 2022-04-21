@@ -24,11 +24,11 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/fission/fission/pkg/canaryconfigmgr"
-	"github.com/fission/fission/pkg/crd"
 	config "github.com/fission/fission/pkg/featureconfig"
+	"github.com/fission/fission/pkg/generated/clientset/versioned"
 )
 
-func ConfigCanaryFeature(context context.Context, logger *zap.Logger, fissionClient *crd.FissionClient, kubeClient *kubernetes.Clientset, featureConfig *config.FeatureConfig, featureStatus map[string]string) error {
+func ConfigCanaryFeature(context context.Context, logger *zap.Logger, fissionClient versioned.Interface, kubeClient kubernetes.Interface, featureConfig *config.FeatureConfig, featureStatus map[string]string) error {
 	// start the appropriate controller
 	if featureConfig.CanaryConfig.IsEnabled {
 		canaryCfgMgr, err := canaryconfigmgr.MakeCanaryConfigMgr(logger, fissionClient, kubeClient, featureConfig.CanaryConfig.PrometheusSvc)
@@ -44,7 +44,7 @@ func ConfigCanaryFeature(context context.Context, logger *zap.Logger, fissionCli
 }
 
 // ConfigureFeatures gets the feature config and configures the features that are enabled
-func ConfigureFeatures(context context.Context, logger *zap.Logger, unitTestMode bool, fissionClient *crd.FissionClient, kubeClient *kubernetes.Clientset) (map[string]string, error) {
+func ConfigureFeatures(context context.Context, logger *zap.Logger, unitTestMode bool, fissionClient versioned.Interface, kubeClient kubernetes.Interface) (map[string]string, error) {
 	// set feature enabled to false if unitTestMode
 	if unitTestMode {
 		return nil, nil

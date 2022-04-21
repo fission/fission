@@ -48,6 +48,7 @@ import (
 	"github.com/fission/fission/pkg/crd"
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/error/network"
+	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	"github.com/fission/fission/pkg/info"
 	storageSvcClient "github.com/fission/fission/pkg/storagesvc/client"
 	"github.com/fission/fission/pkg/utils"
@@ -61,8 +62,8 @@ type (
 		sharedVolumePath string
 		sharedSecretPath string
 		sharedConfigPath string
-		fissionClient    *crd.FissionClient
-		kubeClient       *kubernetes.Clientset
+		fissionClient    versioned.Interface
+		kubeClient       kubernetes.Interface
 		httpClient       *http.Client
 		Info             PodInfo
 	}
@@ -824,7 +825,7 @@ func (fetcher *Fetcher) WsEndHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func eventRecorder(kubeClient *kubernetes.Clientset) (record.EventRecorder, error) {
+func eventRecorder(kubeClient kubernetes.Interface) (record.EventRecorder, error) {
 	eventBroadcaster := record.NewBroadcaster()
 	eventBroadcaster.StartLogging(zap.S().Infof)
 	eventBroadcaster.StartRecordingToSink(

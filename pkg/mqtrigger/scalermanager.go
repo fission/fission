@@ -66,7 +66,7 @@ func getAuthTriggerClient(namespace string) (dynamic.ResourceInterface, error) {
 	return dynamicClient.Resource(authTriggerGVR).Namespace(namespace), nil
 }
 
-func mqTriggerEventHandlers(logger *zap.Logger, kubeClient *kubernetes.Clientset, routerURL string) k8sCache.ResourceEventHandlerFuncs {
+func mqTriggerEventHandlers(logger *zap.Logger, kubeClient kubernetes.Interface, routerURL string) k8sCache.ResourceEventHandlerFuncs {
 	return k8sCache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			go func() {
@@ -154,7 +154,7 @@ func StartScalerManager(ctx context.Context, logger *zap.Logger, routerURL strin
 	if err != nil {
 		return err
 	}
-	err = fissionClient.WaitForCRDs()
+	err = crd.WaitForCRDs(fissionClient)
 	if err != nil {
 		return errors.Wrap(err, "error waiting for CRDs")
 	}
@@ -338,7 +338,7 @@ func getAuthTriggerSpec(mqt *fv1.MessageQueueTrigger, authenticationRef string, 
 	return authTriggerObj, nil
 }
 
-func createAuthTrigger(mqt *fv1.MessageQueueTrigger, authenticationRef string, kubeClient *kubernetes.Clientset) error {
+func createAuthTrigger(mqt *fv1.MessageQueueTrigger, authenticationRef string, kubeClient kubernetes.Interface) error {
 	authTriggerObj, err := getAuthTriggerSpec(mqt, authenticationRef, kubeClient)
 	if err != nil {
 		return err
@@ -354,7 +354,7 @@ func createAuthTrigger(mqt *fv1.MessageQueueTrigger, authenticationRef string, k
 	return nil
 }
 
-func updateAuthTrigger(mqt *fv1.MessageQueueTrigger, authenticationRef string, kubeClient *kubernetes.Clientset) error {
+func updateAuthTrigger(mqt *fv1.MessageQueueTrigger, authenticationRef string, kubeClient kubernetes.Interface) error {
 	authTriggerClient, err := getAuthTriggerClient(mqt.ObjectMeta.Namespace)
 	if err != nil {
 		return err
@@ -389,7 +389,7 @@ func deleteAuthTrigger(name, namespace string) error {
 	return nil
 }
 
-func getDeploymentSpec(mqt *fv1.MessageQueueTrigger, routerURL string, kubeClient *kubernetes.Clientset) (*appsv1.Deployment, error) {
+func getDeploymentSpec(mqt *fv1.MessageQueueTrigger, routerURL string, kubeClient kubernetes.Interface) (*appsv1.Deployment, error) {
 	envVars, err := getEnvVarlist(mqt, routerURL, kubeClient)
 	if err != nil {
 		return nil, err
@@ -448,7 +448,7 @@ func getDeploymentSpec(mqt *fv1.MessageQueueTrigger, routerURL string, kubeClien
 	}, nil
 }
 
-func createDeployment(mqt *fv1.MessageQueueTrigger, routerURL string, kubeClient *kubernetes.Clientset) error {
+func createDeployment(mqt *fv1.MessageQueueTrigger, routerURL string, kubeClient kubernetes.Interface) error {
 	deployment, err := getDeploymentSpec(mqt, routerURL, kubeClient)
 	if err != nil {
 		return err
@@ -460,7 +460,7 @@ func createDeployment(mqt *fv1.MessageQueueTrigger, routerURL string, kubeClient
 	return nil
 }
 
-func updateDeployment(mqt *fv1.MessageQueueTrigger, routerURL string, kubeClient *kubernetes.Clientset) error {
+func updateDeployment(mqt *fv1.MessageQueueTrigger, routerURL string, kubeClient kubernetes.Interface) error {
 	deployment, err := getDeploymentSpec(mqt, routerURL, kubeClient)
 	if err != nil {
 		return err
@@ -472,7 +472,7 @@ func updateDeployment(mqt *fv1.MessageQueueTrigger, routerURL string, kubeClient
 	return nil
 }
 
-func deleteDeployment(name string, namespace string, kubeClient *kubernetes.Clientset) error {
+func deleteDeployment(name string, namespace string, kubeClient kubernetes.Interface) error {
 	deletePolicy := metav1.DeletePropagationForeground
 	if err := kubeClient.AppsV1().Deployments(namespace).Delete(context.TODO(), name, metav1.DeleteOptions{
 		PropagationPolicy: &deletePolicy,

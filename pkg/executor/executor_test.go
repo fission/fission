@@ -51,7 +51,7 @@ func panicIf(err error) {
 }
 
 // return the number of pods in the given namespace matching the given labels
-func countPods(kubeClient *kubernetes.Clientset, ns string, labelz map[string]string) int {
+func countPods(kubeClient kubernetes.Interface, ns string, labelz map[string]string) int {
 	pods, err := kubeClient.CoreV1().Pods(ns).List(context.TODO(), metav1.ListOptions{
 		LabelSelector: labels.Set(labelz).AsSelector().String(),
 	})
@@ -61,7 +61,7 @@ func countPods(kubeClient *kubernetes.Clientset, ns string, labelz map[string]st
 	return len(pods.Items)
 }
 
-func createTestNamespace(kubeClient *kubernetes.Clientset, ns string) {
+func createTestNamespace(kubeClient kubernetes.Interface, ns string) {
 	_, err := kubeClient.CoreV1().Namespaces().Create(context.TODO(), &apiv1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: ns,
@@ -74,7 +74,7 @@ func createTestNamespace(kubeClient *kubernetes.Clientset, ns string) {
 }
 
 // create a nodeport service
-func createSvc(kubeClient *kubernetes.Clientset, ns string, name string, targetPort int, nodePort int32, labels map[string]string) *apiv1.Service {
+func createSvc(kubeClient kubernetes.Interface, ns string, name string, targetPort int, nodePort int32, labels map[string]string) *apiv1.Service {
 	svc, err := kubeClient.CoreV1().Services(ns).Create(context.TODO(), &apiv1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
@@ -148,7 +148,7 @@ func TestExecutor(t *testing.T) {
 		log.Panicf("failed to ensure crds: %v", err)
 	}
 
-	err = fissionClient.WaitForCRDs()
+	err = crd.WaitForCRDs(fissionClient)
 	if err != nil {
 		log.Panicf("failed to wait crds: %v", err)
 	}

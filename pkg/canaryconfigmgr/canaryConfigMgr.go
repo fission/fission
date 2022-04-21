@@ -32,7 +32,7 @@ import (
 	k8sCache "k8s.io/client-go/tools/cache"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
-	"github.com/fission/fission/pkg/crd"
+	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
 )
 
@@ -42,14 +42,14 @@ const (
 
 type canaryConfigMgr struct {
 	logger                 *zap.Logger
-	fissionClient          *crd.FissionClient
-	kubeClient             *kubernetes.Clientset
+	fissionClient          versioned.Interface
+	kubeClient             kubernetes.Interface
 	canaryConfigInformer   *k8sCache.SharedIndexInformer
 	promClient             *PrometheusApiClient
 	canaryCfgCancelFuncMap *canaryConfigCancelFuncMap
 }
 
-func MakeCanaryConfigMgr(logger *zap.Logger, fissionClient *crd.FissionClient, kubeClient *kubernetes.Clientset, prometheusSvc string) (*canaryConfigMgr, error) {
+func MakeCanaryConfigMgr(logger *zap.Logger, fissionClient versioned.Interface, kubeClient kubernetes.Interface, prometheusSvc string) (*canaryConfigMgr, error) {
 	if prometheusSvc == "" {
 		logger.Info("try to retrieve prometheus server information from environment variables")
 

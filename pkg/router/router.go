@@ -127,7 +127,7 @@ func Start(ctx context.Context, logger *zap.Logger, port int, executorURL string
 		logger.Fatal("error connecting to kubernetes API", zap.Error(err))
 	}
 
-	err = fissionClient.WaitForCRDs()
+	err = crd.WaitForCRDs(fissionClient)
 	if err != nil {
 		logger.Fatal("error waiting for CRDs", zap.Error(err))
 	}

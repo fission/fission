@@ -23,18 +23,18 @@ import (
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/fission/fission/pkg/crd"
+	"github.com/fission/fission/pkg/generated/clientset/versioned"
 )
 
 type (
 	WatchSync struct {
 		logger      *zap.Logger
-		client      *crd.FissionClient
+		client      versioned.Interface
 		kubeWatcher *KubeWatcher
 	}
 )
 
-func MakeWatchSync(logger *zap.Logger, client *crd.FissionClient, kubeWatcher *KubeWatcher) *WatchSync {
+func MakeWatchSync(logger *zap.Logger, client versioned.Interface, kubeWatcher *KubeWatcher) *WatchSync {
 	ws := &WatchSync{
 		logger:      logger.Named("watch_sync"),
 		client:      client,

@@ -25,8 +25,8 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
-	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/executor/executortype"
+	"github.com/fission/fission/pkg/generated/clientset/versioned"
 )
 
 type (
@@ -34,13 +34,13 @@ type (
 	ConfigSecretController struct {
 		logger *zap.Logger
 
-		fissionClient *crd.FissionClient
+		fissionClient versioned.Interface
 	}
 )
 
 // MakeConfigSecretController makes a controller for configmaps and secrets which changes related functions
-func MakeConfigSecretController(ctx context.Context, logger *zap.Logger, fissionClient *crd.FissionClient,
-	kubernetesClient *kubernetes.Clientset, types map[fv1.ExecutorType]executortype.ExecutorType,
+func MakeConfigSecretController(ctx context.Context, logger *zap.Logger, fissionClient versioned.Interface,
+	kubernetesClient kubernetes.Interface, types map[fv1.ExecutorType]executortype.ExecutorType,
 	configmapInformer informerv1.ConfigMapInformer,
 	secretInformer informerv1.SecretInformer) *ConfigSecretController {
 	logger.Debug("Creating ConfigMap & Secret Controller")

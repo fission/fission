@@ -39,7 +39,7 @@ func init() {
 	}
 }
 
-func createIngress(logger *zap.Logger, trigger *fv1.HTTPTrigger, kubeClient *kubernetes.Clientset) {
+func createIngress(logger *zap.Logger, trigger *fv1.HTTPTrigger, kubeClient kubernetes.Interface) {
 	if !trigger.Spec.CreateIngress {
 		return
 	}
@@ -51,7 +51,7 @@ func createIngress(logger *zap.Logger, trigger *fv1.HTTPTrigger, kubeClient *kub
 	logger.Debug("created ingress successfully for trigger", zap.String("trigger", trigger.ObjectMeta.Name))
 }
 
-func deleteIngress(logger *zap.Logger, trigger *fv1.HTTPTrigger, kubeClient *kubernetes.Clientset) {
+func deleteIngress(logger *zap.Logger, trigger *fv1.HTTPTrigger, kubeClient kubernetes.Interface) {
 	if !trigger.Spec.CreateIngress {
 		return
 	}
@@ -71,7 +71,7 @@ func deleteIngress(logger *zap.Logger, trigger *fv1.HTTPTrigger, kubeClient *kub
 	}
 }
 
-func updateIngress(logger *zap.Logger, oldT *fv1.HTTPTrigger, newT *fv1.HTTPTrigger, kubeClient *kubernetes.Clientset) {
+func updateIngress(logger *zap.Logger, oldT *fv1.HTTPTrigger, newT *fv1.HTTPTrigger, kubeClient kubernetes.Interface) {
 	if !oldT.Spec.CreateIngress && !newT.Spec.CreateIngress {
 		return
 	}
