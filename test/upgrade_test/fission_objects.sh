@@ -52,7 +52,7 @@ create_fission_objects() {
     fi
 
     echo "Creating function"
-    curl -LO https://raw.githubusercontent.com/fission/examples/master/nodejs/hello.js
+    curl -LO https://raw.githubusercontent.com/fission/examples/main/nodejs/hello.js
     if fission function create --name hello --env nodejs --code hello.js; then
         echo "Successfully created function"
     else
