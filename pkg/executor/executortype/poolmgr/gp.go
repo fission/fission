@@ -49,6 +49,7 @@ import (
 	"github.com/fission/fission/pkg/executor/metrics"
 	fetcherClient "github.com/fission/fission/pkg/fetcher/client"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
+	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/maps"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
@@ -67,9 +68,9 @@ type (
 		useSvc                   bool                          // create k8s service for specialized pods
 		useIstio                 bool
 		runtimeImagePullPolicy   apiv1.PullPolicy // pull policy for generic pool to created env deployment
-		kubernetesClient         *kubernetes.Clientset
-		metricsClient            *metricsclient.Clientset
-		fissionClient            *crd.FissionClient
+		kubernetesClient         kubernetes.Interface
+		metricsClient            metricsclient.Interface
+		fissionClient            versioned.Interface
 		fetcherConfig            *fetcherConfig.Config
 		stopReadyPodControllerCh chan struct{}
 		readyPodLister           corelisters.PodLister
@@ -85,9 +86,9 @@ type (
 // MakeGenericPool returns an instance of GenericPool
 func MakeGenericPool(
 	logger *zap.Logger,
-	fissionClient *crd.FissionClient,
-	kubernetesClient *kubernetes.Clientset,
-	metricsClient *metricsclient.Clientset,
+	fissionClient versioned.Interface,
+	kubernetesClient kubernetes.Interface,
+	metricsClient metricsclient.Interface,
 	env *fv1.Environment,
 	namespace string,
 	functionNamespace string,
@@ -173,7 +174,7 @@ func (gp *GenericPool) getDeployAnnotations(env *fv1.Environment) map[string]str
 }
 
 func (gp *GenericPool) checkMetricsApi() bool {
-	apiGroups, err := gp.metricsClient.DiscoveryClient.ServerGroups()
+	apiGroups, err := gp.metricsClient.Discovery().ServerGroups()
 	if err != nil {
 		gp.logger.Error("failed to discover API groups", zap.Error(err))
 		return false

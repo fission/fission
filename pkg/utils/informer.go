@@ -13,7 +13,7 @@ import (
 	v1 "github.com/fission/fission/pkg/apis/core/v1"
 )
 
-func GetInformerFactoryByReadyPod(client *kubernetes.Clientset, namespace string, labelSelector *metav1.LabelSelector) (k8sInformers.SharedInformerFactory, error) {
+func GetInformerFactoryByReadyPod(client kubernetes.Interface, namespace string, labelSelector *metav1.LabelSelector) (k8sInformers.SharedInformerFactory, error) {
 	informerFactory := k8sInformers.NewSharedInformerFactoryWithOptions(client, 0,
 		k8sInformers.WithNamespace(namespace),
 		k8sInformers.WithTweakListOptions(func(options *metav1.ListOptions) {
@@ -23,7 +23,7 @@ func GetInformerFactoryByReadyPod(client *kubernetes.Clientset, namespace string
 	return informerFactory, nil
 }
 
-func GetInformerFactoryByExecutor(client *kubernetes.Clientset, executorType v1.ExecutorType, defaultResync time.Duration) (k8sInformers.SharedInformerFactory, error) {
+func GetInformerFactoryByExecutor(client kubernetes.Interface, executorType v1.ExecutorType, defaultResync time.Duration) (k8sInformers.SharedInformerFactory, error) {
 	executorLabel, err := labels.NewRequirement(v1.EXECUTOR_TYPE, selection.DoubleEquals, []string{string(executorType)})
 	if err != nil {
 		return nil, err

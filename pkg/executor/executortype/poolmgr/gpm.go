@@ -50,6 +50,7 @@ import (
 	"github.com/fission/fission/pkg/executor/fscache"
 	"github.com/fission/fission/pkg/executor/reaper"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
+	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	finformerv1 "github.com/fission/fission/pkg/generated/informers/externalversions/core/v1"
 	"github.com/fission/fission/pkg/utils"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
@@ -69,11 +70,11 @@ type (
 		logger *zap.Logger
 
 		pools            map[string]*GenericPool
-		kubernetesClient *kubernetes.Clientset
-		metricsClient    *metricsclient.Clientset
+		kubernetesClient kubernetes.Interface
+		metricsClient    metricsclient.Interface
 		namespace        string
 
-		fissionClient  *crd.FissionClient
+		fissionClient  versioned.Interface
 		functionEnv    *cache.Cache
 		fsCache        *fscache.FunctionServiceCache
 		instanceID     string
@@ -107,9 +108,9 @@ type (
 
 func MakeGenericPoolManager(
 	logger *zap.Logger,
-	fissionClient *crd.FissionClient,
-	kubernetesClient *kubernetes.Clientset,
-	metricsClient *metricsclient.Clientset,
+	fissionClient versioned.Interface,
+	kubernetesClient kubernetes.Interface,
+	metricsClient metricsclient.Interface,
 	functionNamespace string,
 	fetcherConfig *fetcherConfig.Config,
 	instanceID string,
@@ -657,7 +658,7 @@ func (gpm *GenericPoolManager) idleObjectReaper() {
 }
 
 // WebsocketStartEventChecker checks if the pod has emitted a websocket connection start event
-func (gpm *GenericPoolManager) WebsocketStartEventChecker(kubeClient *kubernetes.Clientset) {
+func (gpm *GenericPoolManager) WebsocketStartEventChecker(kubeClient kubernetes.Interface) {
 
 	informer := k8sCache.NewSharedInformer(
 		&k8sCache.ListWatch{
@@ -698,7 +699,7 @@ func (gpm *GenericPoolManager) WebsocketStartEventChecker(kubeClient *kubernetes
 }
 
 // NoActiveConnectionEventChecker checks if the pod has emitted an inactive event
-func (gpm *GenericPoolManager) NoActiveConnectionEventChecker(kubeClient *kubernetes.Clientset) {
+func (gpm *GenericPoolManager) NoActiveConnectionEventChecker(kubeClient kubernetes.Interface) {
 
 	informer := k8sCache.NewSharedInformer(
 		&k8sCache.ListWatch{
