@@ -15,7 +15,7 @@ spec:
       sum: aa595bb952047c517d849f8fc9e490fdabc37d83795392074a0b15a59748004f
       type: sha256
     type: url
-    url: https://raw.githubusercontent.com/fission/examples/master/go/hello.gogo # this is intentional
+    url: https://raw.githubusercontent.com/fission/examples/main/go/hello-world/hello.gogo # this is intentional
 
 ---
 apiVersion: fission.io/v1
