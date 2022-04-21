@@ -70,7 +70,7 @@ func TestMutableMux(t *testing.T) {
 	// make a simple mutable router
 	log.Print("Create mutable router")
 	muxRouter := mux.NewRouter()
-	muxRouter.Use(metrics.HTTPMetricMiddleware())
+	muxRouter.Use(metrics.HTTPMetricMiddleware)
 	muxRouter.HandleFunc("/", OldHandler)
 	config := zap.NewDevelopmentConfig()
 	config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
@@ -97,7 +97,7 @@ func TestMutableMux(t *testing.T) {
 	// change the muxer
 	log.Print("Change mux router")
 	newMuxRouter := mux.NewRouter()
-	newMuxRouter.Use(metrics.HTTPMetricMiddleware())
+	newMuxRouter.Use(metrics.HTTPMetricMiddleware)
 	newMuxRouter.HandleFunc("/", NewHandler)
 	mr.updateRouter(newMuxRouter)
 

@@ -62,31 +62,29 @@ func (rw *ResponseWriterWrapper) WriteHeader(statuscode int) {
 	rw.ResponseWriter.WriteHeader(statuscode)
 }
 
-func HTTPMetricMiddleware() mux.MiddlewareFunc {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if util.IsWebsocketRequest(r) {
-				next.ServeHTTP(w, r)
-				return
+func HTTPMetricMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if util.IsWebsocketRequest(r) {
+			next.ServeHTTP(w, r)
+			return
+		}
+		labels := make(prometheus.Labels, 0)
+		labels["path"] = r.URL.Path
+		if route := mux.CurrentRoute(r); route != nil {
+			if routePath, err := route.GetPathTemplate(); err == nil {
+				labels["path"] = routePath
 			}
-			labels := make(prometheus.Labels, 0)
-			labels["path"] = r.URL.Path
-			if route := mux.CurrentRoute(r); route != nil {
-				if routePath, err := route.GetPathTemplate(); err == nil {
-					labels["path"] = routePath
-				}
-			}
-			labels["method"] = r.Method
-			rw := ResponseWriterWrapper{w, http.StatusOK}
-			httpRequestInFlight.With(labels).Inc()
-			httpRequestDuration := prometheus.NewTimer(httpRequestDuration.With(labels))
-			defer func() {
-				httpRequestDuration.ObserveDuration()
-				httpRequestInFlight.With(labels).Dec()
-				labels["code"] = fmt.Sprintf("%d", rw.statusCode)
-				httpRequestsTotal.With(labels).Inc()
-			}()
-			next.ServeHTTP(&rw, r)
-		})
-	}
+		}
+		labels["method"] = r.Method
+		rw := ResponseWriterWrapper{w, http.StatusOK}
+		httpRequestInFlight.With(labels).Inc()
+		httpRequestDuration := prometheus.NewTimer(httpRequestDuration.With(labels))
+		defer func() {
+			httpRequestDuration.ObserveDuration()
+			httpRequestInFlight.With(labels).Dec()
+			labels["code"] = fmt.Sprintf("%d", rw.statusCode)
+			httpRequestsTotal.With(labels).Inc()
+		}()
+		next.ServeHTTP(&rw, r)
+	})
 }

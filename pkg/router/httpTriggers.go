@@ -136,7 +136,7 @@ func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) *mux.Router 
 	featureConfig, _ := config.GetFeatureConfig()
 
 	muxRouter := mux.NewRouter()
-	muxRouter.Use(metrics.HTTPMetricMiddleware())
+	muxRouter.Use(metrics.HTTPMetricMiddleware)
 	if featureConfig.AuthConfig.IsEnabled {
 		muxRouter.Use(authMiddleware(featureConfig))
 	}

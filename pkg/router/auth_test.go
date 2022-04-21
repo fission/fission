@@ -48,7 +48,7 @@ func GetRouterWithAuth() *mux.Router {
 
 	muxRouter := mux.NewRouter()
 	muxRouter.Use(authMiddleware(&featureConfig))
-	muxRouter.Use(metrics.HTTPMetricMiddleware())
+	muxRouter.Use(metrics.HTTPMetricMiddleware)
 
 	muxRouter.HandleFunc("/auth/login", authLoginHandler(&featureConfig)).Methods("POST")
 	// We should be able to access health without login
