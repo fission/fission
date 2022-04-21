@@ -93,7 +93,7 @@ func MakeFetcherConfig(sharedMountPath string) (*Config, error) {
 	}, nil
 }
 
-func (cfg *Config) SetupServiceAccount(kubernetesClient *kubernetes.Clientset, namespace string, context interface{}) error {
+func (cfg *Config) SetupServiceAccount(kubernetesClient kubernetes.Interface, namespace string, context interface{}) error {
 	_, err := utils.SetupSA(kubernetesClient, fv1.FissionFetcherSA, namespace)
 	if err != nil {
 		log.Printf("Error : %v creating %s in ns : %s for: %#v", err, fv1.FissionFetcherSA, namespace, context)

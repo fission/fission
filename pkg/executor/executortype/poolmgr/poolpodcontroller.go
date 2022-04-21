@@ -44,7 +44,7 @@ import (
 type (
 	PoolPodController struct {
 		logger           *zap.Logger
-		kubernetesClient *kubernetes.Clientset
+		kubernetesClient kubernetes.Interface
 		namespace        string
 		enableIstio      bool
 
@@ -67,7 +67,7 @@ type (
 )
 
 func NewPoolPodController(logger *zap.Logger,
-	kubernetesClient *kubernetes.Clientset,
+	kubernetesClient kubernetes.Interface,
 	namespace string,
 	enableIstio bool,
 	funcInformer finformerv1.FunctionInformer,
@@ -403,24 +403,24 @@ func (p *PoolPodController) spCleanupPodQueueProcessFunc() bool {
 		}
 		return false
 	}
+	ctx := context.Background()
 	podName := strings.SplitAfter(pod.GetName(), ".")
 	if fsvc, ok := p.gpm.fsCache.PodToFsvc.Load(strings.TrimSuffix(podName[0], ".")); ok {
 		fsvc, ok := fsvc.(*fscache.FuncSvc)
 		if ok {
-			ctx := context.Background()
 			p.gpm.fsCache.DeleteFunctionSvc(ctx, fsvc)
 			p.gpm.fsCache.DeleteEntry(fsvc)
 		} else {
 			p.logger.Error("could not convert item from PodToFsvc", zap.String("key", key))
 		}
 	}
-	err = p.kubernetesClient.CoreV1().Pods(p.namespace).Delete(context.TODO(), pod.Name, metav1.DeleteOptions{})
+	err = p.kubernetesClient.CoreV1().Pods(namespace).Delete(ctx, name, metav1.DeleteOptions{})
 	if err != nil {
-		p.logger.Error("failed to delete pod", zap.Error(err), zap.String("pod", pod.ObjectMeta.Name), zap.String("pod_namespace", pod.ObjectMeta.Namespace))
+		p.logger.Error("failed to delete pod", zap.Error(err), zap.String("pod", name), zap.String("pod_namespace", namespace))
 		return false
 	}
 	p.logger.Info("cleaned specialized pod as environment update/deleted",
-		zap.String("pod", pod.ObjectMeta.Name), zap.String("pod_namespace", pod.ObjectMeta.Namespace),
+		zap.String("pod", name), zap.String("pod_namespace", namespace),
 		zap.String("address", pod.Status.PodIP))
 	p.spCleanupPodQueue.Forget(key)
 	return false

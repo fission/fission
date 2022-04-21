@@ -50,7 +50,7 @@ func MakeSAObj(sa, ns string) *apiv1.ServiceAccount {
 }
 
 // SetupSA checks if a service account is present in the namespace, if not creates it.
-func SetupSA(k8sClient *kubernetes.Clientset, sa, ns string) (*apiv1.ServiceAccount, error) {
+func SetupSA(k8sClient kubernetes.Interface, sa, ns string) (*apiv1.ServiceAccount, error) {
 	saObj, err := k8sClient.CoreV1().ServiceAccounts(ns).Get(context.TODO(), sa, metav1.GetOptions{})
 	if err == nil {
 		return saObj, nil
@@ -105,7 +105,7 @@ type PatchSpec struct {
 }
 
 // AddSaToRoleBindingWithRetries adds a service account to a rolebinding object. IT retries on already exists and conflict errors.
-func AddSaToRoleBindingWithRetries(ctx context.Context, logger *zap.Logger, k8sClient *kubernetes.Clientset, roleBinding, roleBindingNs, sa, saNamespace, role, roleKind string) (err error) {
+func AddSaToRoleBindingWithRetries(ctx context.Context, logger *zap.Logger, k8sClient kubernetes.Interface, roleBinding, roleBindingNs, sa, saNamespace, role, roleKind string) (err error) {
 	patch := PatchSpec{}
 	patch.Op = "add"
 	patch.Path = "/subjects/-"
@@ -177,7 +177,7 @@ func AddSaToRoleBindingWithRetries(ctx context.Context, logger *zap.Logger, k8sC
 
 // RemoveSAFromRoleBindingWithRetries removes an SA from the rolebinding passed as parameter. If this is the only SA in
 // the rolebinding, then it deletes the rolebinding object.
-func RemoveSAFromRoleBindingWithRetries(ctx context.Context, logger *zap.Logger, k8sClient *kubernetes.Clientset, roleBinding, roleBindingNs string, saToRemove map[string]bool) (err error) {
+func RemoveSAFromRoleBindingWithRetries(ctx context.Context, logger *zap.Logger, k8sClient kubernetes.Interface, roleBinding, roleBindingNs string, saToRemove map[string]bool) (err error) {
 	for i := 0; i < maxRetries; i++ {
 		rbObj, err := k8sClient.RbacV1().RoleBindings(roleBindingNs).Get(
 			ctx,
@@ -237,7 +237,7 @@ func RemoveSAFromRoleBindingWithRetries(ctx context.Context, logger *zap.Logger,
 
 // SetupRoleBinding adds a role to a service account if the rolebinding object is already present in the namespace.
 // if not, it creates a rolebinding object granting the role to the SA in the namespace.
-func SetupRoleBinding(ctx context.Context, logger *zap.Logger, k8sClient *kubernetes.Clientset, roleBinding, roleBindingNs, role, roleKind, sa, saNamespace string) error {
+func SetupRoleBinding(ctx context.Context, logger *zap.Logger, k8sClient kubernetes.Interface, roleBinding, roleBindingNs, role, roleKind, sa, saNamespace string) error {
 	// get the role binding object
 	rbObj, err := k8sClient.RbacV1().RoleBindings(roleBindingNs).Get(
 		ctx,
@@ -283,7 +283,7 @@ func SetupRoleBinding(ctx context.Context, logger *zap.Logger, k8sClient *kubern
 
 // DeleteRoleBinding deletes a rolebinding object. if k8s throws an error that the rolebinding is not there, it just
 // returns silently.
-func DeleteRoleBinding(ctx context.Context, k8sClient *kubernetes.Clientset, roleBinding, roleBindingNs string) error {
+func DeleteRoleBinding(ctx context.Context, k8sClient kubernetes.Interface, roleBinding, roleBindingNs string) error {
 	// if deleteRoleBinding is invoked by 2 fission services at the same time for the same rolebinding,
 	// the first call will succeed while the 2nd will fail with isNotFound. but we dont want to error out then.
 	err := k8sClient.RbacV1().RoleBindings(roleBindingNs).Delete(ctx, roleBinding, metav1.DeleteOptions{})
