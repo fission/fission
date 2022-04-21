@@ -27,7 +27,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
-	"github.com/fission/fission/pkg/crd"
+	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	"github.com/fission/fission/pkg/utils"
 )
 
@@ -180,7 +180,7 @@ func CleanupHpa(ctx context.Context, logger *zap.Logger, client kubernetes.Inter
 
 // CleanupRoleBindings periodically lists rolebindings across all namespaces and removes Service Accounts from them or
 // deletes the rolebindings completely if there are no Service Accounts in a rolebinding object.
-func CleanupRoleBindings(ctx context.Context, logger *zap.Logger, client kubernetes.Interface, fissionClient *crd.FissionClient, functionNs, envBuilderNs string, cleanupRoleBindingInterval time.Duration) {
+func CleanupRoleBindings(ctx context.Context, logger *zap.Logger, client kubernetes.Interface, fissionClient versioned.Interface, functionNs, envBuilderNs string, cleanupRoleBindingInterval time.Duration) {
 	for {
 		// some sleep before the next reaper iteration
 		time.Sleep(cleanupRoleBindingInterval)

@@ -25,7 +25,7 @@ import (
 	k8sCache "k8s.io/client-go/tools/cache"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
-	"github.com/fission/fission/pkg/crd"
+	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
 	"github.com/fission/fission/pkg/mqtrigger/messageQueue"
 	"github.com/fission/fission/pkg/utils/metrics"
@@ -44,7 +44,7 @@ type (
 		logger           *zap.Logger
 		reqChan          chan request
 		triggers         map[string]*triggerSubscription
-		fissionClient    *crd.FissionClient
+		fissionClient    versioned.Interface
 		messageQueueType fv1.MessageQueueType
 		messageQueue     messageQueue.MessageQueue
 	}
@@ -66,7 +66,7 @@ type (
 )
 
 func MakeMessageQueueTriggerManager(logger *zap.Logger,
-	fissionClient *crd.FissionClient, mqType fv1.MessageQueueType, messageQueue messageQueue.MessageQueue) *MessageQueueTriggerManager {
+	fissionClient versioned.Interface, mqType fv1.MessageQueueType, messageQueue messageQueue.MessageQueue) *MessageQueueTriggerManager {
 	mqTriggerMgr := MessageQueueTriggerManager{
 		logger:           logger.Named("message_queue_trigger_manager"),
 		reqChan:          make(chan request),

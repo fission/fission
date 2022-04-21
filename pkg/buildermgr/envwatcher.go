@@ -34,9 +34,9 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
-	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/executor/util"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
+	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	"github.com/fission/fission/pkg/utils"
 )
 
@@ -82,8 +82,8 @@ type (
 		cache                  map[string]*builderInfo
 		requestChan            chan envwRequest
 		builderNamespace       string
-		fissionClient          *crd.FissionClient
-		kubernetesClient       *kubernetes.Clientset
+		fissionClient          versioned.Interface
+		kubernetesClient       kubernetes.Interface
 		fetcherConfig          *fetcherConfig.Config
 		builderImagePullPolicy apiv1.PullPolicy
 		useIstio               bool
@@ -92,8 +92,8 @@ type (
 
 func makeEnvironmentWatcher(
 	logger *zap.Logger,
-	fissionClient *crd.FissionClient,
-	kubernetesClient *kubernetes.Clientset,
+	fissionClient versioned.Interface,
+	kubernetesClient kubernetes.Interface,
 	fetcherConfig *fetcherConfig.Config,
 	builderNamespace string) *environmentWatcher {
 

@@ -583,7 +583,7 @@ func (deploy *NewDeploy) cleanupNewdeploy(ctx context.Context, ns string, name s
 // identical way to get a value that can reflect resources changed without affecting by the time.
 // To achieve this goal, the sum of the resource version of all referenced resources is a good fit for our
 // scenario since the sum of the resource version is always the same as long as no resources changed.
-func referencedResourcesRVSum(ctx context.Context, client *kubernetes.Clientset, namespace string, secrets []fv1.SecretReference, cfgmaps []fv1.ConfigMapReference) (int, error) {
+func referencedResourcesRVSum(ctx context.Context, client kubernetes.Interface, namespace string, secrets []fv1.SecretReference, cfgmaps []fv1.ConfigMapReference) (int, error) {
 	rvCount := 0
 
 	if len(secrets) > 0 {

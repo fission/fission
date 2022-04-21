@@ -42,12 +42,12 @@ import (
 	k8sCache "k8s.io/client-go/tools/cache"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
-	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/executor/executortype"
 	"github.com/fission/fission/pkg/executor/fscache"
 	"github.com/fission/fission/pkg/executor/metrics"
 	"github.com/fission/fission/pkg/executor/reaper"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
+	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	finformerv1 "github.com/fission/fission/pkg/generated/informers/externalversions/core/v1"
 	"github.com/fission/fission/pkg/throttler"
 	"github.com/fission/fission/pkg/utils"
@@ -62,8 +62,8 @@ type (
 	NewDeploy struct {
 		logger *zap.Logger
 
-		kubernetesClient *kubernetes.Clientset
-		fissionClient    *crd.FissionClient
+		kubernetesClient kubernetes.Interface
+		fissionClient    versioned.Interface
 		instanceID       string
 		fetcherConfig    *fetcherConfig.Config
 
@@ -88,8 +88,8 @@ type (
 // MakeNewDeploy initializes and returns an instance of NewDeploy.
 func MakeNewDeploy(
 	logger *zap.Logger,
-	fissionClient *crd.FissionClient,
-	kubernetesClient *kubernetes.Clientset,
+	fissionClient versioned.Interface,
+	kubernetesClient kubernetes.Interface,
 	namespace string,
 	fetcherConfig *fetcherConfig.Config,
 	instanceID string,

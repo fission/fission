@@ -31,10 +31,10 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/builder"
 	builderClient "github.com/fission/fission/pkg/builder/client"
-	"github.com/fission/fission/pkg/crd"
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/fetcher"
 	fetcherClient "github.com/fission/fission/pkg/fetcher/client"
+	"github.com/fission/fission/pkg/generated/clientset/versioned"
 )
 
 // buildPackage helps to build source package into deployment package.
@@ -44,7 +44,7 @@ import (
 // 3. Send upload request to fetcher to upload deployment package.
 // 4. Return upload response and build logs.
 // *. Return build logs and error if any one of steps above failed.
-func buildPackage(ctx context.Context, logger *zap.Logger, fissionClient *crd.FissionClient, envBuilderNamespace string,
+func buildPackage(ctx context.Context, logger *zap.Logger, fissionClient versioned.Interface, envBuilderNamespace string,
 	storageSvcUrl string, pkg *fv1.Package) (uploadResp *fetcher.ArchiveUploadResponse, buildLogs string, err error) {
 
 	env, err := fissionClient.CoreV1().Environments(pkg.Spec.Environment.Namespace).Get(ctx, pkg.Spec.Environment.Name, metav1.GetOptions{})
@@ -121,7 +121,7 @@ func buildPackage(ctx context.Context, logger *zap.Logger, fissionClient *crd.Fi
 	return uploadResp, buildResp.BuildLogs, nil
 }
 
-func updatePackage(logger *zap.Logger, fissionClient *crd.FissionClient,
+func updatePackage(logger *zap.Logger, fissionClient versioned.Interface,
 	pkg *fv1.Package, status fv1.BuildStatus, buildLogs string,
 	uploadResp *fetcher.ArchiveUploadResponse) (*fv1.Package, error) {
 

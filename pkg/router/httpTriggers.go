@@ -35,9 +35,9 @@ import (
 	k8sCache "k8s.io/client-go/tools/cache"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
-	"github.com/fission/fission/pkg/crd"
 	executorClient "github.com/fission/fission/pkg/executor/client"
 	config "github.com/fission/fission/pkg/featureconfig"
+	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
 	"github.com/fission/fission/pkg/throttler"
 	"github.com/fission/fission/pkg/utils"
@@ -54,8 +54,8 @@ type HTTPTriggerSet struct {
 	*mutableRouter
 
 	logger                     *zap.Logger
-	fissionClient              *crd.FissionClient
-	kubeClient                 *kubernetes.Clientset
+	fissionClient              versioned.Interface
+	kubeClient                 kubernetes.Interface
 	executor                   *executorClient.Client
 	resolver                   *functionReferenceResolver
 	triggers                   []fv1.HTTPTrigger
@@ -83,8 +83,8 @@ func loadFeatureConfigmap() error {
 	return nil
 }
 
-func makeHTTPTriggerSet(logger *zap.Logger, fmap *functionServiceMap, fissionClient *crd.FissionClient,
-	kubeClient *kubernetes.Clientset, executor *executorClient.Client, params *tsRoundTripperParams, isDebugEnv bool, unTapServiceTimeout time.Duration, actionThrottler *throttler.Throttler) *HTTPTriggerSet {
+func makeHTTPTriggerSet(logger *zap.Logger, fmap *functionServiceMap, fissionClient versioned.Interface,
+	kubeClient kubernetes.Interface, executor *executorClient.Client, params *tsRoundTripperParams, isDebugEnv bool, unTapServiceTimeout time.Duration, actionThrottler *throttler.Throttler) *HTTPTriggerSet {
 
 	httpTriggerSet := &HTTPTriggerSet{
 		logger:                     logger.Named("http_trigger_set"),

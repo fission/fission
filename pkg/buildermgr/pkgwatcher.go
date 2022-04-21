@@ -30,7 +30,7 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/cache"
-	"github.com/fission/fission/pkg/crd"
+	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/metrics"
 )
@@ -38,8 +38,8 @@ import (
 type (
 	packageWatcher struct {
 		logger           *zap.Logger
-		fissionClient    *crd.FissionClient
-		k8sClient        *kubernetes.Clientset
+		fissionClient    versioned.Interface
+		k8sClient        kubernetes.Interface
 		podInformer      *k8sCache.SharedIndexInformer
 		pkgInformer      *k8sCache.SharedIndexInformer
 		builderNamespace string
@@ -48,7 +48,7 @@ type (
 	}
 )
 
-func makePackageWatcher(logger *zap.Logger, fissionClient *crd.FissionClient, k8sClientSet *kubernetes.Clientset,
+func makePackageWatcher(logger *zap.Logger, fissionClient versioned.Interface, k8sClientSet kubernetes.Interface,
 	builderNamespace string, storageSvcUrl string, podInformer *k8sCache.SharedIndexInformer,
 	pkgInformer *k8sCache.SharedIndexInformer) *packageWatcher {
 	pkgw := &packageWatcher{
@@ -333,7 +333,7 @@ func (pkgw *packageWatcher) Run(ctx context.Context) {
 // setInitialBuildStatus sets initial build status to a package if it is empty.
 // This normally occurs when the user applies package YAML files that have no status field
 // through kubectl.
-func setInitialBuildStatus(fissionClient *crd.FissionClient, pkg *fv1.Package) (*fv1.Package, error) {
+func setInitialBuildStatus(fissionClient versioned.Interface, pkg *fv1.Package) (*fv1.Package, error) {
 	pkg.Status = fv1.PackageStatus{
 		LastUpdateTimestamp: metav1.Time{Time: time.Now().UTC()},
 	}

@@ -62,7 +62,7 @@ type HealthChecker struct {
 	categories []*Category
 	*Options
 
-	kubeAPI          *kubernetes.Clientset
+	kubeAPI          kubernetes.Interface
 	fissionNamespace string
 }
 
@@ -84,7 +84,7 @@ func isCompatibleVersion(minimalRequirementVersion [3]int, actualVersion [3]int)
 
 func (hc *HealthChecker) CheckKubeVersion() (err error) {
 
-	version, err := hc.kubeAPI.ServerVersion()
+	version, err := hc.kubeAPI.Discovery().ServerVersion()
 	if err != nil {
 		return err
 	}

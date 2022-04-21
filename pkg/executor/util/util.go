@@ -57,7 +57,7 @@ func WaitTimeout(wg *sync.WaitGroup, timeout time.Duration) {
 }
 
 // ConvertConfigSecrets returns envFromSource which can be passed directly into the pod spec
-func ConvertConfigSecrets(ctx context.Context, fn *fv1.Function, kc *kubernetes.Clientset) ([]apiv1.EnvFromSource, error) {
+func ConvertConfigSecrets(ctx context.Context, fn *fv1.Function, kc kubernetes.Interface) ([]apiv1.EnvFromSource, error) {
 
 	cmList := fn.Spec.ConfigMaps
 	secList := fn.Spec.Secrets

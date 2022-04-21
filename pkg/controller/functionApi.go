@@ -339,7 +339,7 @@ func (a *API) FunctionPodLogs(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func getContainerLog(kubernetesClient *kubernetes.Clientset, w http.ResponseWriter, fn *fv1.Function, pod *apiv1.Pod) error {
+func getContainerLog(kubernetesClient kubernetes.Interface, w http.ResponseWriter, fn *fv1.Function, pod *apiv1.Pod) error {
 	seq := strings.Repeat("=", 35)
 
 	for _, container := range pod.Spec.Containers {

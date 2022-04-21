@@ -52,7 +52,7 @@ type (
 	KubeWatcher struct {
 		logger           *zap.Logger
 		watches          map[types.UID]watchSubscription
-		kubernetesClient *kubernetes.Clientset
+		kubernetesClient kubernetes.Interface
 		requestChannel   chan *kubeWatcherRequest
 		publisher        publisher.Publisher
 	}
@@ -63,7 +63,7 @@ type (
 		kubeWatch           watch.Interface
 		lastResourceVersion string
 		stopped             *int32
-		kubernetesClient    *kubernetes.Clientset
+		kubernetesClient    kubernetes.Interface
 		publisher           publisher.Publisher
 	}
 
@@ -77,7 +77,7 @@ type (
 	}
 )
 
-func MakeKubeWatcher(ctx context.Context, logger *zap.Logger, kubernetesClient *kubernetes.Clientset, publisher publisher.Publisher) *KubeWatcher {
+func MakeKubeWatcher(ctx context.Context, logger *zap.Logger, kubernetesClient kubernetes.Interface, publisher publisher.Publisher) *KubeWatcher {
 	kw := &KubeWatcher{
 		logger:           logger.Named("kube_watcher"),
 		watches:          make(map[types.UID]watchSubscription),
@@ -149,7 +149,7 @@ func printKubernetesObject(obj runtime.Object, w io.Writer) error {
 	return err
 }
 
-func createKubernetesWatch(ctx context.Context, kubeClient *kubernetes.Clientset, w *fv1.KubernetesWatchTrigger, resourceVersion string) (watch.Interface, error) {
+func createKubernetesWatch(ctx context.Context, kubeClient kubernetes.Interface, w *fv1.KubernetesWatchTrigger, resourceVersion string) (watch.Interface, error) {
 	var wi watch.Interface
 	var err error
 	var watchTimeoutSec int64 = 120
@@ -198,7 +198,7 @@ func (kw *KubeWatcher) removeWatch(w *fv1.KubernetesWatchTrigger) error {
 	return nil
 }
 
-func MakeWatchSubscription(ctx context.Context, logger *zap.Logger, w *fv1.KubernetesWatchTrigger, kubeClient *kubernetes.Clientset, publisher publisher.Publisher) (*watchSubscription, error) {
+func MakeWatchSubscription(ctx context.Context, logger *zap.Logger, w *fv1.KubernetesWatchTrigger, kubeClient kubernetes.Interface, publisher publisher.Publisher) (*watchSubscription, error) {
 	var stopped int32 = 0
 	ws := &watchSubscription{
 		logger:              logger.Named("watch_subscription"),

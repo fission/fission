@@ -38,7 +38,7 @@ func Start(ctx context.Context, logger *zap.Logger, storageSvcUrl string, envBui
 		return errors.Wrap(err, "failed to get fission or kubernetes client")
 	}
 
-	err = fissionClient.WaitForCRDs()
+	err = crd.WaitForCRDs(fissionClient)
 	if err != nil {
 		return errors.Wrap(err, "error waiting for CRDs")
 	}

@@ -27,7 +27,7 @@ import (
 )
 
 // EnsureFissionCRDs checks if all Fission CRDs are present
-func EnsureFissionCRDs(logger *zap.Logger, clientset *apiextensionsclient.Clientset) error {
+func EnsureFissionCRDs(logger *zap.Logger, clientset apiextensionsclient.Interface) error {
 	crdsExpected := []string{
 		"canaryconfigs.fission.io",
 		"environments.fission.io",

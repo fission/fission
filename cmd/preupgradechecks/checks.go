@@ -32,14 +32,15 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
+	"github.com/fission/fission/pkg/generated/clientset/versioned"
 )
 
 type (
 	PreUpgradeTaskClient struct {
 		logger        *zap.Logger
-		fissionClient *crd.FissionClient
-		k8sClient     *kubernetes.Clientset
-		apiExtClient  *apiextensionsclient.Clientset
+		fissionClient versioned.Interface
+		k8sClient     kubernetes.Interface
+		apiExtClient  apiextensionsclient.Interface
 		fnPodNs       string
 		envBuilderNs  string
 	}
