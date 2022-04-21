@@ -61,27 +61,8 @@ type HTTPTriggerSet struct {
 	unTapServiceTimeout        time.Duration
 }
 
-<<<<<<< HEAD
-func init() {
-	_ = loadFeatureConfigmap()
-}
-
-func loadFeatureConfigmap() error {
-	var err error
-	featureConfig, err = config.GetFeatureConfig()
-	if err != nil {
-		fmt.Println(err)
-		return errors.New("error while loading feature configmap")
-	}
-	return nil
-}
-
 func makeHTTPTriggerSet(logger *zap.Logger, fmap *functionServiceMap, fissionClient versioned.Interface,
-	kubeClient kubernetes.Interface, executor *executorClient.Client, params *tsRoundTripperParams, isDebugEnv bool, unTapServiceTimeout time.Duration, actionThrottler *throttler.Throttler) *HTTPTriggerSet {
-=======
-func makeHTTPTriggerSet(logger *zap.Logger, fmap *functionServiceMap, fissionClient *crd.FissionClient,
 	kubeClient *kubernetes.Clientset, executor *executorClient.Client, params *tsRoundTripperParams, isDebugEnv bool, unTapServiceTimeout time.Duration, actionThrottler *throttler.Throttler) *HTTPTriggerSet {
->>>>>>> de1888c1 (Removed featureConfig as global variable)
 
 	httpTriggerSet := &HTTPTriggerSet{
 		logger:                     logger.Named("http_trigger_set"),
