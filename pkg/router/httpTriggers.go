@@ -62,7 +62,7 @@ type HTTPTriggerSet struct {
 }
 
 func makeHTTPTriggerSet(logger *zap.Logger, fmap *functionServiceMap, fissionClient versioned.Interface,
-	kubeClient *kubernetes.Clientset, executor *executorClient.Client, params *tsRoundTripperParams, isDebugEnv bool, unTapServiceTimeout time.Duration, actionThrottler *throttler.Throttler) *HTTPTriggerSet {
+	kubeClient kubernetes.Interface, executor *executorClient.Client, params *tsRoundTripperParams, isDebugEnv bool, unTapServiceTimeout time.Duration, actionThrottler *throttler.Throttler) *HTTPTriggerSet {
 
 	httpTriggerSet := &HTTPTriggerSet{
 		logger:                     logger.Named("http_trigger_set"),
