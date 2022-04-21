@@ -45,5 +45,9 @@ func GetFeatureConfig() (*FeatureConfig, error) {
 		return nil, fmt.Errorf("error unmarshalling YAML config %v", err)
 	}
 
+	if featureConfig.AuthConfig.AuthUriPath == "" {
+		featureConfig.AuthConfig.AuthUriPath = "/auth/login"
+	}
+
 	return featureConfig, err
 }

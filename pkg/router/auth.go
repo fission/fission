@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v4"
+	"github.com/gorilla/mux"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	config "github.com/fission/fission/pkg/featureconfig"
@@ -58,20 +59,22 @@ func checkAuthToken(r *http.Request) error {
 	return err
 }
 
-func authMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == featureConfig.AuthConfig.AuthUriPath || r.URL.Path == "/router-healthz" {
-			next.ServeHTTP(w, r)
-		} else {
-			err := checkAuthToken(r)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusUnauthorized)
-				return
-			}
+func authMiddleware(featureConfig *config.FeatureConfig) mux.MiddlewareFunc {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == featureConfig.AuthConfig.AuthUriPath || r.URL.Path == "/router-healthz" {
+				next.ServeHTTP(w, r)
+			} else {
+				err := checkAuthToken(r)
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusUnauthorized)
+					return
+				}
 
-			next.ServeHTTP(w, r)
-		}
-	})
+				next.ServeHTTP(w, r)
+			}
+		})
+	}
 }
 
 type AuthConf struct {

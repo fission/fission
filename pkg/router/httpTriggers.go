@@ -18,8 +18,6 @@ package router
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -42,8 +40,6 @@ import (
 	"github.com/fission/fission/pkg/utils/tracing"
 )
 
-var featureConfig *config.FeatureConfig
-
 // HTTPTriggerSet represents an HTTP trigger set
 type HTTPTriggerSet struct {
 	*functionServiceMap
@@ -65,6 +61,7 @@ type HTTPTriggerSet struct {
 	unTapServiceTimeout        time.Duration
 }
 
+<<<<<<< HEAD
 func init() {
 	_ = loadFeatureConfigmap()
 }
@@ -81,6 +78,10 @@ func loadFeatureConfigmap() error {
 
 func makeHTTPTriggerSet(logger *zap.Logger, fmap *functionServiceMap, fissionClient versioned.Interface,
 	kubeClient kubernetes.Interface, executor *executorClient.Client, params *tsRoundTripperParams, isDebugEnv bool, unTapServiceTimeout time.Duration, actionThrottler *throttler.Throttler) *HTTPTriggerSet {
+=======
+func makeHTTPTriggerSet(logger *zap.Logger, fmap *functionServiceMap, fissionClient *crd.FissionClient,
+	kubeClient *kubernetes.Clientset, executor *executorClient.Client, params *tsRoundTripperParams, isDebugEnv bool, unTapServiceTimeout time.Duration, actionThrottler *throttler.Throttler) *HTTPTriggerSet {
+>>>>>>> de1888c1 (Removed featureConfig as global variable)
 
 	httpTriggerSet := &HTTPTriggerSet{
 		logger:                     logger.Named("http_trigger_set"),
@@ -131,10 +132,13 @@ func routerHealthHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) *mux.Router {
+
+	featureConfig, _ := config.GetFeatureConfig()
+
 	muxRouter := mux.NewRouter()
 	muxRouter.Use(metrics.HTTPMetricMiddleware())
 	if featureConfig.AuthConfig.IsEnabled {
-		muxRouter.Use(authMiddleware)
+		muxRouter.Use(authMiddleware(featureConfig))
 	}
 
 	openTracingEnabled := tracing.TracingEnabled(ts.logger)
@@ -292,10 +296,6 @@ func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) *mux.Router 
 	if featureConfig.AuthConfig.IsEnabled {
 
 		path := featureConfig.AuthConfig.AuthUriPath
-		if len(path) == 0 {
-			path = "/auth/login"
-		}
-
 		// Auth endpoint for the router.
 		muxRouter.HandleFunc(path, authLoginHandler(featureConfig)).Methods("POST")
 	}
