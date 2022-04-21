@@ -62,17 +62,14 @@ func checkAuthToken(r *http.Request) error {
 func authMiddleware(featureConfig *config.FeatureConfig) mux.MiddlewareFunc {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Path == featureConfig.AuthConfig.AuthUriPath || r.URL.Path == "/router-healthz" {
-				next.ServeHTTP(w, r)
-			} else {
+			if r.URL.Path != featureConfig.AuthConfig.AuthUriPath && r.URL.Path != "/router-healthz" {
 				err := checkAuthToken(r)
 				if err != nil {
 					http.Error(w, err.Error(), http.StatusUnauthorized)
 					return
 				}
-
-				next.ServeHTTP(w, r)
 			}
+			next.ServeHTTP(w, r)
 		})
 	}
 }
