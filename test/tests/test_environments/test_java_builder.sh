@@ -27,7 +27,7 @@ else
     log "TEST_NOCLEANUP is set; not cleaning up test artifacts afterwards."
 fi
 
-cd $ROOT/examples/jvm/java
+cd $ROOT/examples/java/hello-world
 
 log "Creating zip from source code"
 zip -r $tmp_dir/java-src-pkg.zip *
