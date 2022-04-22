@@ -200,7 +200,7 @@ func (api *API) GetSvcName(w http.ResponseWriter, r *http.Request) {
 
 func (api *API) GetHandler() http.Handler {
 	r := mux.NewRouter()
-	r.Use(metrics.HTTPMetricMiddleware())
+	r.Use(metrics.HTTPMetricMiddleware)
 	r.HandleFunc("/healthz", api.HealthHandler).Methods("GET")
 	// Give a useful error message if an older CLI attempts to make a request
 	r.HandleFunc(`/v1/{rest:[a-zA-Z0-9=\-\/]+}`, api.ApiVersionMismatchHandler)

@@ -27,7 +27,7 @@ env=go-$TEST_ID
 fn_poolmgr=hello-go-poolmgr-$TEST_ID
 fn_nd=hello-go-nd-$TEST_ID
 
-cd $ROOT/examples/go
+cd $ROOT/examples/go/hello-world
 
 log "Creating environment for Golang"
 fission env create --name $env --image $GO_RUNTIME_IMAGE --builder $GO_BUILDER_IMAGE --period 5
@@ -58,7 +58,7 @@ log "Testing new deployment function"
 timeout 60 bash -c "test_fn $fn_nd 'Hello'"
 
 # Create zip file without top level directory (module-example)
-cd module-example && zip -r $tmp_dir/module.zip *
+cd ../module-example && zip -r $tmp_dir/module.zip *
 
 pkgName=$(generate_test_id)
 fission package create --name $pkgName --src $tmp_dir/module.zip --env $env

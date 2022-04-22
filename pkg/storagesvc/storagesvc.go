@@ -217,7 +217,7 @@ func MakeStorageService(logger *zap.Logger, storageClient *StowClient, port int)
 
 func (ss *StorageService) Start(ctx context.Context, port int, openTracingEnabled bool) {
 	r := mux.NewRouter()
-	r.Use(metrics.HTTPMetricMiddleware())
+	r.Use(metrics.HTTPMetricMiddleware)
 	r.HandleFunc("/v1/archive", ss.uploadHandler).Methods("POST")
 	r.HandleFunc("/v1/archive", ss.downloadHandler).Methods("GET")
 	r.HandleFunc("/v1/archive", ss.deleteHandler).Methods("DELETE")
