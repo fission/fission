@@ -163,6 +163,12 @@ func updateExistingEnvironmentWithCmd(env *fv1.Environment, input cli.Input) (*f
 		env.Spec.Resources.Limits[v1.ResourceMemory] = memLimit
 	}
 
+	if input.IsSet(flagkey.EnvRuntime) {
+		runtimeEnvParams := input.StringSlice(flagkey.EnvRuntime)
+		runtimeEnvList := util.GetEnvVarFromStringSlice(runtimeEnvParams)
+		env.Spec.Runtime.Container.Env = runtimeEnvList
+	}
+
 	limitCPU := env.Spec.Resources.Limits[v1.ResourceCPU]
 	requestCPU := env.Spec.Resources.Requests[v1.ResourceCPU]
 
