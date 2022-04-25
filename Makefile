@@ -57,7 +57,7 @@ build-fission-cli:
 
 install-fission-cli:
 	# TODO: Fix this hack, replace v1 with GOAMD64
-	mv dist/fission-cli_$(GOOS)_$(GOARCH)_$(GOAMD64)/fission$(FISSION-CLI-SUFFIX) /usr/local/bin/fission
+	mv dist/fission-cli_$(GOOS)_$(GOARCH)_v1/fission$(FISSION-CLI-SUFFIX) /usr/local/bin/fission
 
 ### Codegen
 codegen:
