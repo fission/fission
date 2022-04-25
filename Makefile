@@ -33,6 +33,11 @@ endif
 help:
 	@awk '/^#/{c=substr($$0,3);next}c&&/^[[:alpha:]][[:alnum:]_-]+:/{print substr($$1,1,index($$1,":")),c}1{c=0}' $(MAKEFILE_LIST) | column -s: -t
 
+print-%:
+	@echo '$*=$($*)'
+
+debug-vars: print-GOOS print-GOARCH print-GOAMD64 print-VERSION print-TIMESTAMP print-COMMITSHA print-FISSION-CLI-SUFFIX print-SKAFFOLD_PROFILE
+
 ### Static checks
 check: test-run build-fission-cli clean
 

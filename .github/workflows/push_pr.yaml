@@ -92,17 +92,19 @@ jobs:
           kubectl create ns monitoring
           helm install monitoring prometheus-community/prometheus -n monitoring
 
+      - name: Build and Install Fission CLI
+        run: |
+          go env GOAMD64
+          make debug-vars
+          make build-fission-cli
+          sudo make install-fission-cli
+          sudo chmod +x /usr/local/bin/fission
+
       - name: Build and Install Fission
         run: |
           kubectl create ns fission
           make create-crds
           SKAFFOLD_PROFILE=kind-ci make skaffold-deploy
-
-      - name: Build and Install Fission CLI
-        run: |
-          make build-fission-cli
-          sudo make install-fission-cli
-          sudo chmod +x /usr/local/bin/fission
 
       - name: Port-forward fission components
         run: |
