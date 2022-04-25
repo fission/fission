@@ -53,9 +53,10 @@ test-run: code-checks
 
 ### Binaries
 build-fission-cli:
-	@GOOS=$(GOOS) GOARCH=$(GOARCH) GORELEASER_CURRENT_TAG=$(VERSION) goreleaser build --snapshot --rm-dist --single-target --id fission-cli
+	@GOOS=$(GOOS) GOARCH=$(GOARCH) GOAMD64=$(GOAMD64) GORELEASER_CURRENT_TAG=$(VERSION) goreleaser build --snapshot --rm-dist --single-target --id fission-cli
 
-install-fission-cli:
+install-fission-cli: print-GOAMD64
+	@echo mv dist/fission-cli_$(GOOS)_$(GOARCH)_$(GOAMD64)/fission$(FISSION-CLI-SUFFIX) /usr/local/bin/fission
 	mv dist/fission-cli_$(GOOS)_$(GOARCH)_$(GOAMD64)/fission$(FISSION-CLI-SUFFIX) /usr/local/bin/fission
 
 ### Codegen
