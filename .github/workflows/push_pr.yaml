@@ -34,7 +34,7 @@ jobs:
       - name: setup go
         uses: actions/setup-go@v2
         with:
-          go-version: 1.18
+          go-version: 1.18.1
 
       - name: Checkout sources
         uses: actions/checkout@v2.3.4
@@ -84,7 +84,6 @@ jobs:
         uses: goreleaser/goreleaser-action@v2
         with:
           install-only: true
-          version: 1.7.0
 
       - name: Setup Prometheus Stack
         run: |
@@ -93,17 +92,18 @@ jobs:
           kubectl create ns monitoring
           helm install monitoring prometheus-community/prometheus -n monitoring
 
+      - name: Build and Install Fission CLI
+        run: |
+          make debug-vars
+          make build-fission-cli
+          sudo make install-fission-cli
+          sudo chmod +x /usr/local/bin/fission
+
       - name: Build and Install Fission
         run: |
           kubectl create ns fission
           make create-crds
           SKAFFOLD_PROFILE=kind-ci make skaffold-deploy
-
-      - name: Build and Install Fission CLI
-        run: |
-          make build-fission-cli
-          sudo make install-fission-cli
-          sudo chmod +x /usr/local/bin/fission
 
       - name: Port-forward fission components
         run: |

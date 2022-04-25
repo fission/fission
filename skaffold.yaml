@@ -15,13 +15,13 @@ kind: Config
 build:
   artifacts:
   - image: fission-bundle
-    context: dist/fission-bundle_linux_amd64
+    context: dist/fission-bundle_linux_amd64_v1
   - image: fetcher
-    context: dist/fetcher_linux_amd64
+    context: dist/fetcher_linux_amd64_v1
   - image: pre-upgrade-checks
-    context: dist/pre-upgrade-checks_linux_amd64
+    context: dist/pre-upgrade-checks_linux_amd64_v1
   - image: reporter
-    context: dist/reporter_linux_amd64
+    context: dist/reporter_linux_amd64_v1
 deploy:
   helm:
     releases:

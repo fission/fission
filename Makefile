@@ -22,6 +22,7 @@ COMMITSHA ?= $(shell git rev-parse HEAD)
 
 GOOS ?= $(shell go env GOOS)
 GOARCH ?= $(shell go env GOARCH)
+GOAMD64 ?= $(shell go env GOAMD64)
 
 FISSION-CLI-SUFFIX :=
 ifeq ($(GOOS), windows)
@@ -31,6 +32,11 @@ endif
 # Show this help.
 help:
 	@awk '/^#/{c=substr($$0,3);next}c&&/^[[:alpha:]][[:alnum:]_-]+:/{print substr($$1,1,index($$1,":")),c}1{c=0}' $(MAKEFILE_LIST) | column -s: -t
+
+print-%:
+	@echo '$*=$($*)'
+
+debug-vars: print-GOOS print-GOARCH print-GOAMD64 print-VERSION print-TIMESTAMP print-COMMITSHA print-FISSION-CLI-SUFFIX print-SKAFFOLD_PROFILE
 
 ### Static checks
 check: test-run build-fission-cli clean
@@ -47,10 +53,11 @@ test-run: code-checks
 
 ### Binaries
 build-fission-cli:
-	@GOOS=$(GOOS) GOARCH=$(GOARCH) GORELEASER_CURRENT_TAG=$(VERSION) goreleaser build --snapshot --rm-dist --single-target --id fission-cli
+	@GOOS=$(GOOS) GOARCH=$(GOARCH) GOAMD64=$(GOAMD64) GORELEASER_CURRENT_TAG=$(VERSION) goreleaser build --snapshot --rm-dist --single-target --id fission-cli
 
 install-fission-cli:
-	mv dist/fission-cli_$(GOOS)_$(GOARCH)/fission$(FISSION-CLI-SUFFIX) /usr/local/bin/fission
+	# TODO: Fix this hack, replace v1 with GOAMD64
+	mv dist/fission-cli_$(GOOS)_$(GOARCH)_v1/fission$(FISSION-CLI-SUFFIX) /usr/local/bin/fission
 
 ### Codegen
 codegen:
@@ -93,11 +100,11 @@ all-generators: codegen generate-crds generate-swagger-doc
 
 skaffold-prebuild:
 	@GOOS=linux GOARCH=amd64 GORELEASER_CURRENT_TAG=$(VERSION) goreleaser build --snapshot --rm-dist --single-target
-	@cp -v cmd/builder/Dockerfile.fission-builder dist/builder_linux_amd64/Dockerfile
-	@cp -v cmd/fetcher/Dockerfile.fission-fetcher dist/fetcher_linux_amd64/Dockerfile
-	@cp -v cmd/fission-bundle/Dockerfile.fission-bundle dist/fission-bundle_linux_amd64/Dockerfile
-	@cp -v cmd/reporter/Dockerfile.reporter dist/reporter_linux_amd64/Dockerfile
-	@cp -v cmd/preupgradechecks/Dockerfile.fission-preupgradechecks dist/pre-upgrade-checks_linux_amd64/Dockerfile
+	@cp -v cmd/builder/Dockerfile.fission-builder dist/builder_linux_amd64_v1/Dockerfile
+	@cp -v cmd/fetcher/Dockerfile.fission-fetcher dist/fetcher_linux_amd64_v1/Dockerfile
+	@cp -v cmd/fission-bundle/Dockerfile.fission-bundle dist/fission-bundle_linux_amd64_v1/Dockerfile
+	@cp -v cmd/reporter/Dockerfile.reporter dist/reporter_linux_amd64_v1/Dockerfile
+	@cp -v cmd/preupgradechecks/Dockerfile.fission-preupgradechecks dist/pre-upgrade-checks_linux_amd64_v1/Dockerfile
 
 skaffold-deploy: skaffold-prebuild
 	skaffold run -p $(SKAFFOLD_PROFILE)
