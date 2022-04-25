@@ -55,8 +55,8 @@ test-run: code-checks
 build-fission-cli:
 	@GOOS=$(GOOS) GOARCH=$(GOARCH) GOAMD64=$(GOAMD64) GORELEASER_CURRENT_TAG=$(VERSION) goreleaser build --snapshot --rm-dist --single-target --id fission-cli
 
-install-fission-cli: print-GOAMD64
-	@echo mv dist/fission-cli_$(GOOS)_$(GOARCH)_$(GOAMD64)/fission$(FISSION-CLI-SUFFIX) /usr/local/bin/fission
+install-fission-cli:
+	# TODO: Fix this hack, replace v1 with GOAMD64
 	mv dist/fission-cli_$(GOOS)_$(GOARCH)_$(GOAMD64)/fission$(FISSION-CLI-SUFFIX) /usr/local/bin/fission
 
 ### Codegen
