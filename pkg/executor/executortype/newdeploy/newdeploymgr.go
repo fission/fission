@@ -29,6 +29,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
+	asv2beta2 "k8s.io/api/autoscaling/v2beta2"
 	apiv1 "k8s.io/api/core/v1"
 	k8sErrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -46,6 +47,7 @@ import (
 	"github.com/fission/fission/pkg/executor/fscache"
 	"github.com/fission/fission/pkg/executor/metrics"
 	"github.com/fission/fission/pkg/executor/reaper"
+	hpautils "github.com/fission/fission/pkg/executor/util/hpa"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	finformerv1 "github.com/fission/fission/pkg/generated/informers/externalversions/core/v1"
@@ -82,6 +84,8 @@ type (
 
 		deplListerSynced k8sCache.InformerSynced
 		svcListerSynced  k8sCache.InformerSynced
+
+		hpaops *hpautils.HpaOperations
 	}
 )
 
@@ -123,6 +127,8 @@ func MakeNewDeploy(
 		useIstio:               enableIstio,
 
 		defaultIdlePodReapTime: 2 * time.Minute,
+
+		hpaops: hpautils.NewHpaOperations(logger, kubernetesClient, instanceID),
 	}
 
 	nd.deplLister = deplInformer.Lister()
@@ -434,7 +440,7 @@ func (deploy *NewDeploy) fnCreate(ctx context.Context, fn *fv1.Function) (*fscac
 		return nil, errors.Wrapf(err, "error creating deployment %v", objName)
 	}
 
-	hpa, err := deploy.createOrGetHpa(ctx, objName, &fn.Spec.InvokeStrategy.ExecutionStrategy, depl, deployLabels, deployAnnotations)
+	hpa, err := deploy.hpaops.CreateOrGetHpa(ctx, objName, &fn.Spec.InvokeStrategy.ExecutionStrategy, depl, deployLabels, deployAnnotations)
 	if err != nil {
 		deploy.logger.Error("error creating HPA", zap.Error(err), zap.String("hpa", objName))
 		go cleanupFunc(ns, objName)
@@ -541,7 +547,7 @@ func (deploy *NewDeploy) updateFunction(ctx context.Context, oldFn *fv1.Function
 			return err
 		}
 
-		hpa, err := deploy.getHpa(ctx, ns, fsvc.Name)
+		hpa, err := deploy.hpaops.GetHpa(ctx, ns, fsvc.Name)
 		if err != nil {
 			deploy.updateStatus(oldFn, err, "error getting HPA while updating function")
 			return err
@@ -562,12 +568,13 @@ func (deploy *NewDeploy) updateFunction(ctx context.Context, oldFn *fv1.Function
 
 		if newFn.Spec.InvokeStrategy.ExecutionStrategy.TargetCPUPercent != oldFn.Spec.InvokeStrategy.ExecutionStrategy.TargetCPUPercent {
 			targetCpupercent := int32(newFn.Spec.InvokeStrategy.ExecutionStrategy.TargetCPUPercent)
-			hpa.Spec.TargetCPUUtilizationPercentage = &targetCpupercent
+			hpaMetric := hpautils.ConvertTargetCPUToCustomMetric(targetCpupercent)
+			hpa.Spec.Metrics = []asv2beta2.MetricSpec{hpaMetric}
 			hpaChanged = true
 		}
 
 		if hpaChanged {
-			err := deploy.updateHpa(ctx, hpa)
+			err := deploy.hpaops.UpdateHpa(ctx, hpa)
 			if err != nil {
 				deploy.updateStatus(oldFn, err, "error updating HPA while updating function")
 				return err

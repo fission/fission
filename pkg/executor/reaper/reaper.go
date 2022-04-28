@@ -23,7 +23,7 @@ import (
 
 	"go.uber.org/zap"
 	apiv1 "k8s.io/api/core/v1"
-	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -32,21 +32,21 @@ import (
 )
 
 var (
-	deletePropagation = meta_v1.DeletePropagationBackground
-	delOpt            = meta_v1.DeleteOptions{PropagationPolicy: &deletePropagation}
+	deletePropagation = metav1.DeletePropagationBackground
+	delOpt            = metav1.DeleteOptions{PropagationPolicy: &deletePropagation}
 )
 
 // CleanupKubeObject deletes given kubernetes object
 func CleanupKubeObject(ctx context.Context, logger *zap.Logger, kubeClient kubernetes.Interface, kubeobj *apiv1.ObjectReference) {
 	switch strings.ToLower(kubeobj.Kind) {
 	case "pod":
-		err := kubeClient.CoreV1().Pods(kubeobj.Namespace).Delete(ctx, kubeobj.Name, meta_v1.DeleteOptions{})
+		err := kubeClient.CoreV1().Pods(kubeobj.Namespace).Delete(ctx, kubeobj.Name, metav1.DeleteOptions{})
 		if err != nil {
 			logger.Error("error cleaning up pod", zap.Error(err), zap.String("pod", kubeobj.Name))
 		}
 
 	case "service":
-		err := kubeClient.CoreV1().Services(kubeobj.Namespace).Delete(ctx, kubeobj.Name, meta_v1.DeleteOptions{})
+		err := kubeClient.CoreV1().Services(kubeobj.Namespace).Delete(ctx, kubeobj.Name, metav1.DeleteOptions{})
 		if err != nil {
 			logger.Error("error cleaning up service", zap.Error(err), zap.String("service", kubeobj.Name))
 		}
@@ -58,7 +58,7 @@ func CleanupKubeObject(ctx context.Context, logger *zap.Logger, kubeClient kuber
 		}
 
 	case "horizontalpodautoscaler":
-		err := kubeClient.AutoscalingV1().HorizontalPodAutoscalers(kubeobj.Namespace).Delete(ctx, kubeobj.Name, meta_v1.DeleteOptions{})
+		err := kubeClient.AutoscalingV2beta2().HorizontalPodAutoscalers(kubeobj.Namespace).Delete(ctx, kubeobj.Name, metav1.DeleteOptions{})
 		if err != nil {
 			logger.Error("error cleaning up horizontalpodautoscaler", zap.Error(err), zap.String("horizontalpodautoscaler", kubeobj.Name))
 		}
@@ -70,8 +70,8 @@ func CleanupKubeObject(ctx context.Context, logger *zap.Logger, kubeClient kuber
 }
 
 // CleanupDeployments deletes deployment(s) for a given instanceID
-func CleanupDeployments(ctx context.Context, logger *zap.Logger, client kubernetes.Interface, instanceID string, listOps meta_v1.ListOptions) error {
-	deploymentList, err := client.AppsV1().Deployments(meta_v1.NamespaceAll).List(ctx, listOps)
+func CleanupDeployments(ctx context.Context, logger *zap.Logger, client kubernetes.Interface, instanceID string, listOps metav1.ListOptions) error {
+	deploymentList, err := client.AppsV1().Deployments(metav1.NamespaceAll).List(ctx, listOps)
 	if err != nil {
 		return err
 	}
@@ -97,8 +97,8 @@ func CleanupDeployments(ctx context.Context, logger *zap.Logger, client kubernet
 }
 
 // CleanupPods deletes pod(s) for a given instanceID
-func CleanupPods(ctx context.Context, logger *zap.Logger, client kubernetes.Interface, instanceID string, listOps meta_v1.ListOptions) error {
-	podList, err := client.CoreV1().Pods(meta_v1.NamespaceAll).List(ctx, listOps)
+func CleanupPods(ctx context.Context, logger *zap.Logger, client kubernetes.Interface, instanceID string, listOps metav1.ListOptions) error {
+	podList, err := client.CoreV1().Pods(metav1.NamespaceAll).List(ctx, listOps)
 	if err != nil {
 		return err
 	}
@@ -110,7 +110,7 @@ func CleanupPods(ctx context.Context, logger *zap.Logger, client kubernetes.Inte
 		}
 		if ok && id != instanceID {
 			logger.Info("cleaning up pod", zap.String("pod", pod.ObjectMeta.Name))
-			err := client.CoreV1().Pods(pod.ObjectMeta.Namespace).Delete(ctx, pod.ObjectMeta.Name, meta_v1.DeleteOptions{})
+			err := client.CoreV1().Pods(pod.ObjectMeta.Namespace).Delete(ctx, pod.ObjectMeta.Name, metav1.DeleteOptions{})
 			if err != nil {
 				logger.Error("error cleaning up pod",
 					zap.Error(err),
@@ -124,8 +124,8 @@ func CleanupPods(ctx context.Context, logger *zap.Logger, client kubernetes.Inte
 }
 
 // CleanupServices deletes service(s) for a given instanceID
-func CleanupServices(ctx context.Context, logger *zap.Logger, client kubernetes.Interface, instanceID string, listOps meta_v1.ListOptions) error {
-	svcList, err := client.CoreV1().Services(meta_v1.NamespaceAll).List(ctx, listOps)
+func CleanupServices(ctx context.Context, logger *zap.Logger, client kubernetes.Interface, instanceID string, listOps metav1.ListOptions) error {
+	svcList, err := client.CoreV1().Services(metav1.NamespaceAll).List(ctx, listOps)
 	if err != nil {
 		return err
 	}
@@ -137,7 +137,7 @@ func CleanupServices(ctx context.Context, logger *zap.Logger, client kubernetes.
 		}
 		if ok && id != instanceID {
 			logger.Info("cleaning up service", zap.String("service", svc.ObjectMeta.Name))
-			err := client.CoreV1().Services(svc.ObjectMeta.Namespace).Delete(ctx, svc.ObjectMeta.Name, meta_v1.DeleteOptions{})
+			err := client.CoreV1().Services(svc.ObjectMeta.Namespace).Delete(ctx, svc.ObjectMeta.Name, metav1.DeleteOptions{})
 			if err != nil {
 				logger.Error("error cleaning up service",
 					zap.Error(err),
@@ -151,8 +151,8 @@ func CleanupServices(ctx context.Context, logger *zap.Logger, client kubernetes.
 }
 
 // CleanupHpa deletes horizontal pod autoscaler(s) for a given instanceID
-func CleanupHpa(ctx context.Context, logger *zap.Logger, client kubernetes.Interface, instanceID string, listOps meta_v1.ListOptions) error {
-	hpaList, err := client.AutoscalingV1().HorizontalPodAutoscalers(meta_v1.NamespaceAll).List(ctx, listOps)
+func CleanupHpa(ctx context.Context, logger *zap.Logger, client kubernetes.Interface, instanceID string, listOps metav1.ListOptions) error {
+	hpaList, err := client.AutoscalingV2beta2().HorizontalPodAutoscalers(metav1.NamespaceAll).List(ctx, listOps)
 	if err != nil {
 		return err
 	}
@@ -165,7 +165,7 @@ func CleanupHpa(ctx context.Context, logger *zap.Logger, client kubernetes.Inter
 		}
 		if ok && id != instanceID {
 			logger.Info("cleaning up HPA", zap.String("hpa", hpa.ObjectMeta.Name))
-			err := client.AutoscalingV1().HorizontalPodAutoscalers(hpa.ObjectMeta.Namespace).Delete(ctx, hpa.ObjectMeta.Name, meta_v1.DeleteOptions{})
+			err := client.AutoscalingV2beta2().HorizontalPodAutoscalers(hpa.ObjectMeta.Namespace).Delete(ctx, hpa.ObjectMeta.Name, metav1.DeleteOptions{})
 			if err != nil {
 				logger.Error("error cleaning up HPA",
 					zap.Error(err),
@@ -187,7 +187,7 @@ func CleanupRoleBindings(ctx context.Context, logger *zap.Logger, client kuberne
 
 		logger.Debug("starting cleanupRoleBindings cycle")
 		// get all rolebindings ( just to be efficient, one call to kubernetes )
-		rbList, err := client.RbacV1().RoleBindings(meta_v1.NamespaceAll).List(ctx, meta_v1.ListOptions{})
+		rbList, err := client.RbacV1().RoleBindings(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
 		if err != nil {
 			// something wrong, but next iteration hopefully succeeds
 			logger.Error("error listing role bindings in all namespaces", zap.Error(err))
@@ -208,7 +208,7 @@ func CleanupRoleBindings(ctx context.Context, logger *zap.Logger, client kuberne
 
 			// in order to find out if there are any functions that need this role-binding in role-binding namespace,
 			// we can list the functions once per role-binding.
-			funcList, err := fissionClient.CoreV1().Functions(roleBinding.Namespace).List(ctx, meta_v1.ListOptions{})
+			funcList, err := fissionClient.CoreV1().Functions(roleBinding.Namespace).List(ctx, metav1.ListOptions{})
 			if err != nil {
 				logger.Error("error fetching function list in namespace", zap.Error(err), zap.String("namespace", roleBinding.Namespace))
 				continue
@@ -235,7 +235,7 @@ func CleanupRoleBindings(ctx context.Context, logger *zap.Logger, client kuberne
 				isInReservedNS := false
 				if subj.Namespace == functionNs ||
 					subj.Namespace == envBuilderNs {
-					saNs = meta_v1.NamespaceDefault
+					saNs = metav1.NamespaceDefault
 					isInReservedNS = true
 				}
 
@@ -259,7 +259,7 @@ func CleanupRoleBindings(ctx context.Context, logger *zap.Logger, client kuberne
 				// else if its a secret-configmap-rb, we have only one SA which is fission-fetcher
 				if roleBinding.Name == fv1.PackageGetterRB {
 					// check if there is an env obj in saNs
-					envList, err := fissionClient.CoreV1().Environments(saNs).List(ctx, meta_v1.ListOptions{})
+					envList, err := fissionClient.CoreV1().Environments(saNs).List(ctx, metav1.ListOptions{})
 					if err != nil {
 						logger.Error("error fetching environment list in service account namespace", zap.Error(err), zap.String("namespace", saNs))
 						continue

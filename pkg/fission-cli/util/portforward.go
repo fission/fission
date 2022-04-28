@@ -28,7 +28,7 @@ import (
 
 	"github.com/pkg/errors"
 	v1 "k8s.io/api/core/v1"
-	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/portforward"
 	"k8s.io/client-go/transport/spdy"
 
@@ -120,12 +120,12 @@ func runPortForward(ctx context.Context, labelSelector string, localPort string,
 
 	// if namespace is unset, try to find a pod in any namespace
 	if len(ns) == 0 {
-		ns = meta_v1.NamespaceAll
+		ns = metav1.NamespaceAll
 	}
 
 	// get the pod; if there is more than one, ask the user to disambiguate
 	podList, err := clientset.CoreV1().Pods(ns).
-		List(ctx, meta_v1.ListOptions{LabelSelector: labelSelector})
+		List(ctx, metav1.ListOptions{LabelSelector: labelSelector})
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, "error getting pod for port-forwarding with label selector %v", labelSelector)
 	} else if len(podList.Items) == 0 {
@@ -171,7 +171,7 @@ func runPortForward(ctx context.Context, labelSelector string, localPort string,
 
 	// get the service and the target port
 	svcs, err := clientset.CoreV1().Services(podNameSpace).
-		List(ctx, meta_v1.ListOptions{LabelSelector: labelSelector})
+		List(ctx, metav1.ListOptions{LabelSelector: labelSelector})
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, "Error getting %v service", labelSelector)
 	}

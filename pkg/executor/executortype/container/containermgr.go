@@ -29,6 +29,7 @@ import (
 	multierror "github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	asv2beta2 "k8s.io/api/autoscaling/v2beta2"
 	apiv1 "k8s.io/api/core/v1"
 	k8sErrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -46,6 +47,7 @@ import (
 	"github.com/fission/fission/pkg/executor/fscache"
 	"github.com/fission/fission/pkg/executor/metrics"
 	"github.com/fission/fission/pkg/executor/reaper"
+	hpautils "github.com/fission/fission/pkg/executor/util/hpa"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	finformerv1 "github.com/fission/fission/pkg/generated/informers/externalversions/core/v1"
 	"github.com/fission/fission/pkg/throttler"
@@ -81,6 +83,8 @@ type (
 
 		deplListerSynced k8sCache.InformerSynced
 		svcListerSynced  k8sCache.InformerSynced
+
+		hpaops *hpautils.HpaOperations
 	}
 )
 
@@ -120,6 +124,8 @@ func MakeContainer(
 		useIstio:               enableIstio,
 		// Time is set slightly higher than NewDeploy as cold starts are longer for CaaF
 		defaultIdlePodReapTime: 1 * time.Minute,
+
+		hpaops: hpautils.NewHpaOperations(logger, kubernetesClient, instanceID),
 	}
 	caaf.deplLister = deplInformer.Lister()
 	caaf.deplListerSynced = deplInformer.Informer().HasSynced
@@ -395,7 +401,7 @@ func (caaf *Container) fnCreate(ctx context.Context, fn *fv1.Function) (*fscache
 		return nil, errors.Wrapf(err, "error creating deployment %v", objName)
 	}
 
-	hpa, err := caaf.createOrGetHpa(ctx, objName, &fn.Spec.InvokeStrategy.ExecutionStrategy, depl, deployLabels, deployAnnotations)
+	hpa, err := caaf.hpaops.CreateOrGetHpa(ctx, objName, &fn.Spec.InvokeStrategy.ExecutionStrategy, depl, deployLabels, deployAnnotations)
 	if err != nil {
 		caaf.logger.Error("error creating HPA", zap.Error(err), zap.String("hpa", objName))
 		go cleanupFunc(ns, objName)
@@ -499,7 +505,7 @@ func (caaf *Container) updateFunction(ctx context.Context, oldFn *fv1.Function, 
 			return err
 		}
 
-		hpa, err := caaf.getHpa(ctx, ns, fsvc.Name)
+		hpa, err := caaf.hpaops.GetHpa(ctx, ns, fsvc.Name)
 		if err != nil {
 			caaf.updateStatus(oldFn, err, "error getting HPA while updating function")
 			return err
@@ -520,12 +526,13 @@ func (caaf *Container) updateFunction(ctx context.Context, oldFn *fv1.Function, 
 
 		if newFn.Spec.InvokeStrategy.ExecutionStrategy.TargetCPUPercent != oldFn.Spec.InvokeStrategy.ExecutionStrategy.TargetCPUPercent {
 			targetCpupercent := int32(newFn.Spec.InvokeStrategy.ExecutionStrategy.TargetCPUPercent)
-			hpa.Spec.TargetCPUUtilizationPercentage = &targetCpupercent
+			hpaMetric := hpautils.ConvertTargetCPUToCustomMetric(targetCpupercent)
+			hpa.Spec.Metrics = []asv2beta2.MetricSpec{hpaMetric}
 			hpaChanged = true
 		}
 
 		if hpaChanged {
-			err := caaf.updateHpa(ctx, hpa)
+			err := caaf.hpaops.UpdateHpa(ctx, hpa)
 			if err != nil {
 				caaf.updateStatus(oldFn, err, "error updating HPA while updating function")
 				return err
