@@ -143,8 +143,10 @@ var map_ExecutionStrategy = map[string]string{
 	"ExecutorType":          "ExecutorType is the executor type of function used. Defaults to \"poolmgr\".\n\nAvailable value:\n - poolmgr\n - newdeploy\n - container",
 	"MinScale":              "This is only for newdeploy to set up minimum replicas of deployment.",
 	"MaxScale":              "This is only for newdeploy to set up maximum replicas of deployment.",
-	"TargetCPUPercent":      "This is only for newdeploy to set up target CPU utilization of HPA.",
+	"TargetCPUPercent":      "Deprecated: use hpaMetrics instead. This is only for executor type newdeploy and container to set up target CPU utilization of HPA. Applicable for executor type newdeploy and container.",
 	"SpecializationTimeout": "This is the timeout setting for executor to wait for pod specialization.",
+	"hpaMetrics":            "hpaMetrics is the list of metrics used to determine the desired replica count of the Deployment created for the function. Applicable for executor type newdeploy and container.",
+	"hpaBehavior":           "hpaBehavior is the behavior of HPA when scaling in up/down direction. Applicable for executor type newdeploy and container.",
 }
 
 func (ExecutionStrategy) SwaggerDoc() map[string]string {

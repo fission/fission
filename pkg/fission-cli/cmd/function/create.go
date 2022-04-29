@@ -21,12 +21,14 @@ import (
 
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
+	asv2beta2 "k8s.io/api/autoscaling/v2beta2"
 	apiv1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	ferror "github.com/fission/fission/pkg/error"
+	"github.com/fission/fission/pkg/executor/util/hpa"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/cmd/httptrigger"
@@ -494,8 +496,11 @@ func getExecutionStrategy(fnExecutor fv1.ExecutorType, input cli.Input) (strateg
 			ExecutorType:          fnExecutor,
 			MinScale:              minScale,
 			MaxScale:              maxScale,
-			TargetCPUPercent:      targetCPU,
 			SpecializationTimeout: specializationTimeout,
+		}
+
+		if targetCPU > 0 && targetCPU < 100 {
+			strategy.Metrics = []asv2beta2.MetricSpec{hpa.ConvertTargetCPUToCustomMetric(int32(targetCPU))}
 		}
 	}
 

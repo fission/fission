@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"reflect"
 	"regexp"
 	"strings"
 
@@ -270,7 +271,7 @@ func (spec FunctionSpec) Validate() error {
 		result = multierror.Append(result, c.Validate())
 	}
 
-	if spec.InvokeStrategy != (InvokeStrategy{}) {
+	if !reflect.DeepEqual(spec.InvokeStrategy, InvokeStrategy{}) {
 		result = multierror.Append(result, spec.InvokeStrategy.Validate())
 	}
 
