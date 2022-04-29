@@ -21,11 +21,12 @@ import (
 	"testing"
 
 	"github.com/dchest/uniuri"
-	fv1 "github.com/fission/fission/pkg/apis/core/v1"
-	"github.com/fission/fission/pkg/utils/loggerfactory"
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
+
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
 
 func TestConvertTargetCPUToCustomMetric(t *testing.T) {
@@ -50,12 +51,12 @@ func TestHpaOps(t *testing.T) {
 	instanceID := strings.ToLower(uniuri.NewLen(8))
 	ns := "test-namespace"
 	hpaops := NewHpaOperations(logger, kubernetesClient, instanceID)
-	hpaops.logger.Info("HpaOps test")
 	if hpaops.instanceID != instanceID {
 		t.Errorf("Expected instanceID to be %v, got %v", instanceID, hpaops.instanceID)
 	}
 
-	ctx, _ := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	deployLabels := map[string]string{
 		"test-label": "test-label-value",
