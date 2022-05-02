@@ -18,7 +18,6 @@ package function
 
 import (
 	"fmt"
-	"reflect"
 
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
@@ -41,9 +40,8 @@ import (
 )
 
 const (
-	DEFAULT_MIN_SCALE             = 1
-	DEFAULT_TARGET_CPU_PERCENTAGE = 80
-	DEFAULT_CONCURRENCY           = 500
+	DEFAULT_MIN_SCALE   = 1
+	DEFAULT_CONCURRENCY = 500
 )
 
 type CreateSubCommand struct {
@@ -466,13 +464,6 @@ func getExecutionStrategy(fnExecutor fv1.ExecutorType, input cli.Input) (strateg
 			SpecializationTimeout: specializationTimeout,
 		}
 	} else {
-		targetCPU := DEFAULT_TARGET_CPU_PERCENTAGE
-		if input.IsSet(flagkey.RuntimeTargetcpu) {
-			targetCPU, err = getTargetCPU(input)
-			if err != nil {
-				return nil, err
-			}
-		}
 
 		minScale := DEFAULT_MIN_SCALE
 		if input.IsSet(flagkey.ReplicasMinscale) {
@@ -500,10 +491,13 @@ func getExecutionStrategy(fnExecutor fv1.ExecutorType, input cli.Input) (strateg
 			SpecializationTimeout: specializationTimeout,
 		}
 
-		if targetCPU <= 0 || targetCPU > 100 {
-			targetCPU = DEFAULT_TARGET_CPU_PERCENTAGE
+		if input.IsSet(flagkey.RuntimeTargetcpu) {
+			targetCPU, err := getTargetCPU(input)
+			if err != nil {
+				return nil, err
+			}
+			strategy.Metrics = []asv2beta2.MetricSpec{hpa.ConvertTargetCPUToCustomMetric(int32(targetCPU))}
 		}
-		strategy.Metrics = []asv2beta2.MetricSpec{hpa.ConvertTargetCPUToCustomMetric(int32(targetCPU))}
 	}
 
 	return strategy, nil
@@ -554,36 +548,12 @@ func updateExecutionStrategy(input cli.Input, existingExecutionStrategy *fv1.Exe
 			SpecializationTimeout: specializationTimeout,
 		}
 	} else {
-		targetCPU := existingExecutionStrategy.TargetCPUPercent // nolint: staticcheck
 		minScale := existingExecutionStrategy.MinScale
 		maxScale := existingExecutionStrategy.MaxScale
 
 		if fnExecutor != oldExecutor { // from poolmanager to newdeploy
-			targetCPU = DEFAULT_TARGET_CPU_PERCENTAGE
 			minScale = DEFAULT_MIN_SCALE
 			maxScale = minScale
-		}
-
-		hpaMetric := existingExecutionStrategy.Metrics
-		if input.IsSet(flagkey.RuntimeTargetcpu) {
-			targetCPU, err = getTargetCPU(input)
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			if targetCPU <= 0 || targetCPU > 100 {
-				targetCPU = DEFAULT_TARGET_CPU_PERCENTAGE
-			}
-
-		}
-
-		if hpaMetric == nil {
-			hpaMetric = []asv2beta2.MetricSpec{hpa.ConvertTargetCPUToCustomMetric(int32(targetCPU))}
-		} else {
-			newMetric := hpa.ConvertTargetCPUToCustomMetric(int32(targetCPU))
-			if len(hpaMetric) == 1 && !reflect.DeepEqual(newMetric, hpaMetric[0]) {
-				hpaMetric = []asv2beta2.MetricSpec{newMetric}
-			}
 		}
 
 		if input.IsSet(flagkey.ReplicasMinscale) {
@@ -611,9 +581,17 @@ func updateExecutionStrategy(input cli.Input, existingExecutionStrategy *fv1.Exe
 			ExecutorType:          fnExecutor,
 			MinScale:              minScale,
 			MaxScale:              maxScale,
-			Metrics:               hpaMetric,
 			SpecializationTimeout: specializationTimeout,
 		}
+
+		if input.IsSet(flagkey.RuntimeTargetcpu) {
+			targetCPU, err := getTargetCPU(input)
+			if err != nil {
+				return nil, err
+			}
+			strategy.Metrics = []asv2beta2.MetricSpec{hpa.ConvertTargetCPUToCustomMetric(int32(targetCPU))}
+		}
+
 	}
 
 	return strategy, nil

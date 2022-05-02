@@ -70,12 +70,9 @@ func TestGetInvokeStrategy(t *testing.T) {
 			expectedResult: &fv1.InvokeStrategy{
 				StrategyType: fv1.StrategyTypeExecution,
 				ExecutionStrategy: fv1.ExecutionStrategy{
-					ExecutorType: fv1.ExecutorTypeNewdeploy,
-					MinScale:     DEFAULT_MIN_SCALE,
-					MaxScale:     DEFAULT_MIN_SCALE,
-					Metrics: []asv2beta2.MetricSpec{
-						hpa.ConvertTargetCPUToCustomMetric(DEFAULT_TARGET_CPU_PERCENTAGE),
-					},
+					ExecutorType:          fv1.ExecutorTypeNewdeploy,
+					MinScale:              DEFAULT_MIN_SCALE,
+					MaxScale:              DEFAULT_MIN_SCALE,
 					SpecializationTimeout: fv1.DefaultSpecializationTimeOut,
 				},
 			},
@@ -93,12 +90,9 @@ func TestGetInvokeStrategy(t *testing.T) {
 			expectedResult: &fv1.InvokeStrategy{
 				StrategyType: fv1.StrategyTypeExecution,
 				ExecutionStrategy: fv1.ExecutionStrategy{
-					ExecutorType: fv1.ExecutorTypeNewdeploy,
-					MinScale:     DEFAULT_MIN_SCALE,
-					MaxScale:     DEFAULT_MIN_SCALE,
-					Metrics: []asv2beta2.MetricSpec{
-						hpa.ConvertTargetCPUToCustomMetric(DEFAULT_TARGET_CPU_PERCENTAGE),
-					},
+					ExecutorType:          fv1.ExecutorTypeNewdeploy,
+					MinScale:              DEFAULT_MIN_SCALE,
+					MaxScale:              DEFAULT_MIN_SCALE,
 					SpecializationTimeout: fv1.DefaultSpecializationTimeOut,
 				},
 			},
@@ -113,7 +107,6 @@ func TestGetInvokeStrategy(t *testing.T) {
 					ExecutorType:          fv1.ExecutorTypeNewdeploy,
 					MinScale:              DEFAULT_MIN_SCALE,
 					MaxScale:              DEFAULT_MIN_SCALE,
-					TargetCPUPercent:      DEFAULT_TARGET_CPU_PERCENTAGE,
 					SpecializationTimeout: fv1.DefaultSpecializationTimeOut,
 				},
 			},
@@ -137,12 +130,9 @@ func TestGetInvokeStrategy(t *testing.T) {
 			expectedResult: &fv1.InvokeStrategy{
 				StrategyType: fv1.StrategyTypeExecution,
 				ExecutionStrategy: fv1.ExecutionStrategy{
-					ExecutorType: fv1.ExecutorTypeNewdeploy,
-					MinScale:     2,
-					MaxScale:     3,
-					Metrics: []asv2beta2.MetricSpec{
-						hpa.ConvertTargetCPUToCustomMetric(DEFAULT_TARGET_CPU_PERCENTAGE),
-					},
+					ExecutorType:          fv1.ExecutorTypeNewdeploy,
+					MinScale:              2,
+					MaxScale:              3,
 					SpecializationTimeout: fv1.DefaultSpecializationTimeOut,
 				},
 			},
@@ -169,12 +159,9 @@ func TestGetInvokeStrategy(t *testing.T) {
 			expectedResult: &fv1.InvokeStrategy{
 				StrategyType: fv1.StrategyTypeExecution,
 				ExecutionStrategy: fv1.ExecutionStrategy{
-					ExecutorType: fv1.ExecutorTypeNewdeploy,
-					MinScale:     5,
-					MaxScale:     5,
-					Metrics: []asv2beta2.MetricSpec{
-						hpa.ConvertTargetCPUToCustomMetric(DEFAULT_TARGET_CPU_PERCENTAGE),
-					},
+					ExecutorType:          fv1.ExecutorTypeNewdeploy,
+					MinScale:              5,
+					MaxScale:              5,
 					SpecializationTimeout: fv1.DefaultSpecializationTimeOut,
 				},
 			},
@@ -190,12 +177,9 @@ func TestGetInvokeStrategy(t *testing.T) {
 			expectedResult: &fv1.InvokeStrategy{
 				StrategyType: fv1.StrategyTypeExecution,
 				ExecutionStrategy: fv1.ExecutionStrategy{
-					ExecutorType: fv1.ExecutorTypeNewdeploy,
-					MinScale:     DEFAULT_MIN_SCALE,
-					MaxScale:     3,
-					Metrics: []asv2beta2.MetricSpec{
-						hpa.ConvertTargetCPUToCustomMetric(DEFAULT_TARGET_CPU_PERCENTAGE),
-					},
+					ExecutorType:          fv1.ExecutorTypeNewdeploy,
+					MinScale:              DEFAULT_MIN_SCALE,
+					MaxScale:              3,
 					SpecializationTimeout: fv1.DefaultSpecializationTimeOut,
 				},
 			},
@@ -220,12 +204,9 @@ func TestGetInvokeStrategy(t *testing.T) {
 			existingInvokeStrategy: &fv1.InvokeStrategy{
 				StrategyType: fv1.StrategyTypeExecution,
 				ExecutionStrategy: fv1.ExecutionStrategy{
-					ExecutorType: fv1.ExecutorTypeNewdeploy,
-					MinScale:     2,
-					MaxScale:     5,
-					Metrics: []asv2beta2.MetricSpec{
-						hpa.ConvertTargetCPUToCustomMetric(DEFAULT_TARGET_CPU_PERCENTAGE),
-					},
+					ExecutorType:          fv1.ExecutorTypeNewdeploy,
+					MinScale:              2,
+					MaxScale:              5,
 					SpecializationTimeout: fv1.DefaultSpecializationTimeOut,
 				},
 			},
@@ -241,24 +222,18 @@ func TestGetInvokeStrategy(t *testing.T) {
 			existingInvokeStrategy: &fv1.InvokeStrategy{
 				StrategyType: fv1.StrategyTypeExecution,
 				ExecutionStrategy: fv1.ExecutionStrategy{
-					ExecutorType: fv1.ExecutorTypeNewdeploy,
-					MinScale:     2,
-					MaxScale:     5,
-					Metrics: []asv2beta2.MetricSpec{
-						hpa.ConvertTargetCPUToCustomMetric(DEFAULT_TARGET_CPU_PERCENTAGE),
-					},
+					ExecutorType:          fv1.ExecutorTypeNewdeploy,
+					MinScale:              2,
+					MaxScale:              5,
 					SpecializationTimeout: fv1.DefaultSpecializationTimeOut,
 				},
 			},
 			expectedResult: &fv1.InvokeStrategy{
 				StrategyType: fv1.StrategyTypeExecution,
 				ExecutionStrategy: fv1.ExecutionStrategy{
-					ExecutorType: fv1.ExecutorTypeNewdeploy,
-					MinScale:     2,
-					MaxScale:     9,
-					Metrics: []asv2beta2.MetricSpec{
-						hpa.ConvertTargetCPUToCustomMetric(DEFAULT_TARGET_CPU_PERCENTAGE),
-					},
+					ExecutorType:          fv1.ExecutorTypeNewdeploy,
+					MinScale:              2,
+					MaxScale:              9,
 					SpecializationTimeout: fv1.DefaultSpecializationTimeOut,
 				},
 			},
@@ -275,19 +250,15 @@ func TestGetInvokeStrategy(t *testing.T) {
 					ExecutorType:          fv1.ExecutorTypeNewdeploy,
 					MinScale:              2,
 					MaxScale:              5,
-					TargetCPUPercent:      DEFAULT_TARGET_CPU_PERCENTAGE,
 					SpecializationTimeout: fv1.DefaultSpecializationTimeOut,
 				},
 			},
 			expectedResult: &fv1.InvokeStrategy{
 				StrategyType: fv1.StrategyTypeExecution,
 				ExecutionStrategy: fv1.ExecutionStrategy{
-					ExecutorType: fv1.ExecutorTypeNewdeploy,
-					MinScale:     2,
-					MaxScale:     5,
-					Metrics: []asv2beta2.MetricSpec{
-						hpa.ConvertTargetCPUToCustomMetric(DEFAULT_TARGET_CPU_PERCENTAGE),
-					},
+					ExecutorType:          fv1.ExecutorTypeNewdeploy,
+					MinScale:              2,
+					MaxScale:              5,
 					SpecializationTimeout: fv1.DefaultSpecializationTimeOut,
 				},
 			},
@@ -349,10 +320,9 @@ func TestGetInvokeStrategy(t *testing.T) {
 			existingInvokeStrategy: &fv1.InvokeStrategy{
 				StrategyType: fv1.StrategyTypeExecution,
 				ExecutionStrategy: fv1.ExecutionStrategy{
-					ExecutorType:     fv1.ExecutorTypeNewdeploy,
-					MinScale:         2,
-					MaxScale:         5,
-					TargetCPUPercent: DEFAULT_TARGET_CPU_PERCENTAGE,
+					ExecutorType: fv1.ExecutorTypeNewdeploy,
+					MinScale:     2,
+					MaxScale:     5,
 				},
 			},
 			expectedResult: &fv1.InvokeStrategy{
@@ -362,9 +332,6 @@ func TestGetInvokeStrategy(t *testing.T) {
 					MinScale:              2,
 					MaxScale:              5,
 					SpecializationTimeout: 200,
-					Metrics: []asv2beta2.MetricSpec{
-						hpa.ConvertTargetCPUToCustomMetric(DEFAULT_TARGET_CPU_PERCENTAGE),
-					},
 				},
 			},
 			expectError: false,
