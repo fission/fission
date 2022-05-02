@@ -1,0 +1,10 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: storagesvc-service-app
+spec:
+  selector:
+    matchLabels:
+      svc: storagesvc
+  endpoints:
+  - targetPort: 8080
