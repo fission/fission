@@ -18,6 +18,7 @@ package function
 
 import (
 	"fmt"
+	"reflect"
 
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
@@ -499,9 +500,10 @@ func getExecutionStrategy(fnExecutor fv1.ExecutorType, input cli.Input) (strateg
 			SpecializationTimeout: specializationTimeout,
 		}
 
-		if targetCPU > 0 && targetCPU < 100 {
-			strategy.Metrics = []asv2beta2.MetricSpec{hpa.ConvertTargetCPUToCustomMetric(int32(targetCPU))}
+		if targetCPU <= 0 || targetCPU > 100 {
+			targetCPU = DEFAULT_TARGET_CPU_PERCENTAGE
 		}
+		strategy.Metrics = []asv2beta2.MetricSpec{hpa.ConvertTargetCPUToCustomMetric(int32(targetCPU))}
 	}
 
 	return strategy, nil
@@ -552,7 +554,7 @@ func updateExecutionStrategy(input cli.Input, existingExecutionStrategy *fv1.Exe
 			SpecializationTimeout: specializationTimeout,
 		}
 	} else {
-		targetCPU := existingExecutionStrategy.TargetCPUPercent
+		targetCPU := existingExecutionStrategy.TargetCPUPercent // nolint: staticcheck
 		minScale := existingExecutionStrategy.MinScale
 		maxScale := existingExecutionStrategy.MaxScale
 
@@ -562,6 +564,7 @@ func updateExecutionStrategy(input cli.Input, existingExecutionStrategy *fv1.Exe
 			maxScale = minScale
 		}
 
+		hpaMetric := existingExecutionStrategy.Metrics
 		if input.IsSet(flagkey.RuntimeTargetcpu) {
 			targetCPU, err = getTargetCPU(input)
 			if err != nil {
@@ -570,6 +573,16 @@ func updateExecutionStrategy(input cli.Input, existingExecutionStrategy *fv1.Exe
 		} else {
 			if targetCPU <= 0 || targetCPU > 100 {
 				targetCPU = DEFAULT_TARGET_CPU_PERCENTAGE
+			}
+
+		}
+
+		if hpaMetric == nil {
+			hpaMetric = []asv2beta2.MetricSpec{hpa.ConvertTargetCPUToCustomMetric(int32(targetCPU))}
+		} else {
+			newMetric := hpa.ConvertTargetCPUToCustomMetric(int32(targetCPU))
+			if len(hpaMetric) == 1 && !reflect.DeepEqual(newMetric, hpaMetric[0]) {
+				hpaMetric = []asv2beta2.MetricSpec{newMetric}
 			}
 		}
 
@@ -598,7 +611,7 @@ func updateExecutionStrategy(input cli.Input, existingExecutionStrategy *fv1.Exe
 			ExecutorType:          fnExecutor,
 			MinScale:              minScale,
 			MaxScale:              maxScale,
-			TargetCPUPercent:      targetCPU,
+			Metrics:               hpaMetric,
 			SpecializationTimeout: specializationTimeout,
 		}
 	}

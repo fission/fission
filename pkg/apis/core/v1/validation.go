@@ -310,7 +310,7 @@ func (es ExecutionStrategy) Validate() error {
 		result = multierror.Append(result, MakeValidationErr(ErrorUnsupportedType, "ExecutionStrategy.ExecutorType", es.ExecutorType, "not a valid executor type"))
 	}
 
-	if es.ExecutorType == ExecutorTypeNewdeploy {
+	if es.ExecutorType == ExecutorTypeNewdeploy || es.ExecutorType == ExecutorTypeContainer {
 		if es.MinScale < 0 {
 			result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "ExecutionStrategy.MinScale", es.MinScale, "minimum scale must be greater than or equal to 0"))
 		}
@@ -323,7 +323,7 @@ func (es ExecutionStrategy) Validate() error {
 			result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "ExecutionStrategy.MaxScale", es.MaxScale, "maximum scale must be greater than or equal to minimum scale"))
 		}
 
-		if es.TargetCPUPercent <= 0 || es.TargetCPUPercent > 100 {
+		if es.TargetCPUPercent < 0 || es.TargetCPUPercent > 100 {
 			result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "ExecutionStrategy.TargetCPUPercent", es.TargetCPUPercent, "TargetCPUPercent must be a value between 1 - 100"))
 		}
 
