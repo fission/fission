@@ -116,7 +116,7 @@ func (res KubernetesObjectDumper) Dump(dumpDir string) {
 		}
 
 	case KubernetesHPA:
-		objs, err := res.client.AutoscalingV2beta1().HorizontalPodAutoscalers(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{LabelSelector: res.selector})
+		objs, err := res.client.AutoscalingV2beta2().HorizontalPodAutoscalers(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{LabelSelector: res.selector})
 		if err != nil {
 			console.Error(fmt.Sprintf("Error getting %v list with selector %v: %v", res.objType, res.selector, err))
 			return

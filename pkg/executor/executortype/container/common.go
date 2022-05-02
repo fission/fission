@@ -77,7 +77,7 @@ func (cn *Container) cleanupContainer(ctx context.Context, ns string, name strin
 		result = multierror.Append(result, err)
 	}
 
-	err = cn.deleteHpa(ctx, ns, name)
+	err = cn.hpaops.DeleteHpa(ctx, ns, name)
 	if err != nil && !k8s_err.IsNotFound(err) {
 		cn.logger.Error("error deleting HPA for Container function",
 			zap.Error(err),

@@ -23,10 +23,8 @@ import (
 	"time"
 
 	multierror "github.com/hashicorp/go-multierror"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	appsv1 "k8s.io/api/apps/v1"
-	asv1 "k8s.io/api/autoscaling/v1"
 	apiv1 "k8s.io/api/core/v1"
 	k8s_err "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -38,12 +36,6 @@ import (
 	"github.com/fission/fission/pkg/executor/util"
 	"github.com/fission/fission/pkg/utils"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
-)
-
-// Deployment Constants
-const (
-	DeploymentKind    = "Deployment"
-	DeploymentVersion = "apps/v1"
 )
 
 func (deploy *NewDeploy) createOrGetDeployment(ctx context.Context, fn *fv1.Function, env *fv1.Environment,
@@ -367,86 +359,6 @@ func (deploy *NewDeploy) getResources(env *fv1.Environment, fn *fv1.Function) ap
 	return resources
 }
 
-func (deploy *NewDeploy) createOrGetHpa(ctx context.Context, hpaName string, execStrategy *fv1.ExecutionStrategy,
-	depl *appsv1.Deployment, deployLabels map[string]string, deployAnnotations map[string]string) (*asv1.HorizontalPodAutoscaler, error) {
-
-	if depl == nil {
-		return nil, errors.New("failed to create HPA, found empty deployment")
-	}
-	logger := otelUtils.LoggerWithTraceID(ctx, deploy.logger)
-
-	minRepl := int32(execStrategy.MinScale)
-	if minRepl == 0 {
-		minRepl = 1
-	}
-	maxRepl := int32(execStrategy.MaxScale)
-	if maxRepl == 0 {
-		maxRepl = minRepl
-	}
-	targetCPU := int32(execStrategy.TargetCPUPercent)
-
-	hpa := &asv1.HorizontalPodAutoscaler{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        hpaName,
-			Labels:      deployLabels,
-			Annotations: deployAnnotations,
-		},
-		Spec: asv1.HorizontalPodAutoscalerSpec{
-			ScaleTargetRef: asv1.CrossVersionObjectReference{
-				Kind:       DeploymentKind,
-				Name:       depl.ObjectMeta.Name,
-				APIVersion: DeploymentVersion,
-			},
-			MinReplicas:                    &minRepl,
-			MaxReplicas:                    maxRepl,
-			TargetCPUUtilizationPercentage: &targetCPU,
-		},
-	}
-
-	existingHpa, err := deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(depl.ObjectMeta.Namespace).Get(ctx, hpaName, metav1.GetOptions{})
-	if err == nil {
-		// to adopt orphan service
-		if existingHpa.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL] != deploy.instanceID {
-			existingHpa.Annotations = hpa.Annotations
-			existingHpa.Labels = hpa.Labels
-			existingHpa.Spec = hpa.Spec
-			existingHpa, err = deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(depl.ObjectMeta.Namespace).Update(ctx, existingHpa, metav1.UpdateOptions{})
-			if err != nil {
-				logger.Warn("error adopting HPA", zap.Error(err),
-					zap.String("HPA", hpaName), zap.String("ns", depl.ObjectMeta.Namespace))
-				return nil, err
-			}
-		}
-		return existingHpa, err
-	} else if k8s_err.IsNotFound(err) {
-		cHpa, err := deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(depl.ObjectMeta.Namespace).Create(ctx, hpa, metav1.CreateOptions{})
-		if err != nil {
-			if k8s_err.IsAlreadyExists(err) {
-				cHpa, err = deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(depl.ObjectMeta.Namespace).Get(ctx, hpaName, metav1.GetOptions{})
-			}
-			if err != nil {
-				return nil, err
-			}
-		}
-		otelUtils.SpanTrackEvent(ctx, "createdService", otelUtils.GetAttributesForHPA(cHpa)...)
-		return cHpa, nil
-	}
-	return nil, err
-}
-
-func (deploy *NewDeploy) getHpa(ctx context.Context, ns, name string) (*asv1.HorizontalPodAutoscaler, error) {
-	return deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(ns).Get(ctx, name, metav1.GetOptions{})
-}
-
-func (deploy *NewDeploy) updateHpa(ctx context.Context, hpa *asv1.HorizontalPodAutoscaler) error {
-	_, err := deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(hpa.ObjectMeta.Namespace).Update(ctx, hpa, metav1.UpdateOptions{})
-	return err
-}
-
-func (deploy *NewDeploy) deleteHpa(ctx context.Context, ns string, name string) error {
-	return deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(ns).Delete(ctx, name, metav1.DeleteOptions{})
-}
-
 func (deploy *NewDeploy) createOrGetSvc(ctx context.Context, deployLabels map[string]string, deployAnnotations map[string]string, svcName string, svcNamespace string) (*apiv1.Service, error) {
 	logger := otelUtils.LoggerWithTraceID(ctx, deploy.logger)
 	service := &apiv1.Service{
@@ -554,7 +466,7 @@ func (deploy *NewDeploy) cleanupNewdeploy(ctx context.Context, ns string, name s
 		result = multierror.Append(result, err)
 	}
 
-	err = deploy.deleteHpa(ctx, ns, name)
+	err = deploy.hpaops.DeleteHpa(ctx, ns, name)
 	if err != nil && !k8s_err.IsNotFound(err) {
 		deploy.logger.Error("error deleting HPA for newdeploy function",
 			zap.Error(err),
