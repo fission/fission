@@ -1,7 +1,8 @@
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
-  name: storagesvc-service-app
+  name: storagesvc-monitor
+  namespace: {{ .Release.Namespace }}
 spec:
   selector:
     matchLabels:
