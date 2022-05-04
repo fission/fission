@@ -364,8 +364,9 @@ kafka:
 
 serviceMonitor:
   enabled: false
-##namespace in which you want to deploy servicemonitor
-  namespace: fission
+  ##namespace in which you want to deploy servicemonitor
+  ##
+  namespace: ""
 
 ## Persist data to a persistent volume.
 ##
