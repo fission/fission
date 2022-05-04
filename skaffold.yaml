@@ -56,8 +56,6 @@ deploy:
         # Use /var/log directory for kind logs export
         terminationMessagePath: /var/log/termination-log
         terminationMessagePolicy: FallbackToLogsOnError
-        serviceMonitor.enabled: true
-        serviceMonitor.namespace: monitoring
       wait: true
     flags:
       install:
