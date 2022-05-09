@@ -21,12 +21,14 @@ import (
 
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
+	asv2beta2 "k8s.io/api/autoscaling/v2beta2"
 	apiv1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	ferror "github.com/fission/fission/pkg/error"
+	"github.com/fission/fission/pkg/executor/util/hpa"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/cmd/httptrigger"
@@ -38,9 +40,8 @@ import (
 )
 
 const (
-	DEFAULT_MIN_SCALE             = 1
-	DEFAULT_TARGET_CPU_PERCENTAGE = 80
-	DEFAULT_CONCURRENCY           = 500
+	DEFAULT_MIN_SCALE   = 1
+	DEFAULT_CONCURRENCY = 500
 )
 
 type CreateSubCommand struct {
@@ -463,13 +464,6 @@ func getExecutionStrategy(fnExecutor fv1.ExecutorType, input cli.Input) (strateg
 			SpecializationTimeout: specializationTimeout,
 		}
 	} else {
-		targetCPU := DEFAULT_TARGET_CPU_PERCENTAGE
-		if input.IsSet(flagkey.RuntimeTargetcpu) {
-			targetCPU, err = getTargetCPU(input)
-			if err != nil {
-				return nil, err
-			}
-		}
 
 		minScale := DEFAULT_MIN_SCALE
 		if input.IsSet(flagkey.ReplicasMinscale) {
@@ -494,8 +488,15 @@ func getExecutionStrategy(fnExecutor fv1.ExecutorType, input cli.Input) (strateg
 			ExecutorType:          fnExecutor,
 			MinScale:              minScale,
 			MaxScale:              maxScale,
-			TargetCPUPercent:      targetCPU,
 			SpecializationTimeout: specializationTimeout,
+		}
+
+		if input.IsSet(flagkey.RuntimeTargetcpu) {
+			targetCPU, err := getTargetCPU(input)
+			if err != nil {
+				return nil, err
+			}
+			strategy.Metrics = []asv2beta2.MetricSpec{hpa.ConvertTargetCPUToCustomMetric(int32(targetCPU))}
 		}
 	}
 
@@ -547,25 +548,12 @@ func updateExecutionStrategy(input cli.Input, existingExecutionStrategy *fv1.Exe
 			SpecializationTimeout: specializationTimeout,
 		}
 	} else {
-		targetCPU := existingExecutionStrategy.TargetCPUPercent
 		minScale := existingExecutionStrategy.MinScale
 		maxScale := existingExecutionStrategy.MaxScale
 
 		if fnExecutor != oldExecutor { // from poolmanager to newdeploy
-			targetCPU = DEFAULT_TARGET_CPU_PERCENTAGE
 			minScale = DEFAULT_MIN_SCALE
 			maxScale = minScale
-		}
-
-		if input.IsSet(flagkey.RuntimeTargetcpu) {
-			targetCPU, err = getTargetCPU(input)
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			if targetCPU <= 0 || targetCPU > 100 {
-				targetCPU = DEFAULT_TARGET_CPU_PERCENTAGE
-			}
 		}
 
 		if input.IsSet(flagkey.ReplicasMinscale) {
@@ -593,9 +581,17 @@ func updateExecutionStrategy(input cli.Input, existingExecutionStrategy *fv1.Exe
 			ExecutorType:          fnExecutor,
 			MinScale:              minScale,
 			MaxScale:              maxScale,
-			TargetCPUPercent:      targetCPU,
 			SpecializationTimeout: specializationTimeout,
 		}
+
+		if input.IsSet(flagkey.RuntimeTargetcpu) {
+			targetCPU, err := getTargetCPU(input)
+			if err != nil {
+				return nil, err
+			}
+			strategy.Metrics = []asv2beta2.MetricSpec{hpa.ConvertTargetCPUToCustomMetric(int32(targetCPU))}
+		}
+
 	}
 
 	return strategy, nil

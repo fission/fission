@@ -17,6 +17,7 @@ limitations under the License.
 package v1
 
 import (
+	asv2beta2 "k8s.io/api/autoscaling/v2beta2"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -459,22 +460,36 @@ type (
 		// +optional
 		ExecutorType ExecutorType `json:"ExecutorType"`
 
-		// +optional
 		// This is only for newdeploy to set up minimum replicas of deployment.
+		// +optional
 		MinScale int `json:"MinScale"`
 
-		// +optional
 		// This is only for newdeploy to set up maximum replicas of deployment.
+		// +optional
 		MaxScale int `json:"MaxScale"`
 
+		// Deprecated: use hpaMetrics instead.
+		// This is only for executor type newdeploy and container to set up target CPU utilization of HPA.
+		// Applicable for executor type newdeploy and container.
 		// +optional
-		// This is only for newdeploy to set up target CPU utilization of HPA.
 		TargetCPUPercent int `json:"TargetCPUPercent"`
 
-		// +optional
 		// This is the timeout setting for executor to wait for pod specialization.
+		// +optional
 		SpecializationTimeout int `json:"SpecializationTimeout"`
+
+		// hpaMetrics is the list of metrics used to determine the desired replica count of the Deployment
+		// created for the function.
+		// Applicable for executor type newdeploy and container.
+		// +optional
+		Metrics []asv2beta2.MetricSpec `json:"hpaMetrics,omitempty"`
+
+		// hpaBehavior is the behavior of HPA when scaling in up/down direction.
+		// Applicable for executor type newdeploy and container.
+		// +optional
+		Behavior *asv2beta2.HorizontalPodAutoscalerBehavior `json:"hpaBehavior,omitempty"`
 	}
+
 	// FunctionReferenceType refers to type of Function
 	FunctionReferenceType string
 

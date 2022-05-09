@@ -88,10 +88,14 @@ func (hpaops *HpaOperations) CreateOrGetHpa(ctx context.Context, hpaName string,
 	if maxRepl == 0 {
 		maxRepl = minRepl
 	}
-	targetCPU := int32(execStrategy.TargetCPUPercent)
+	targetCPU := int32(execStrategy.TargetCPUPercent) // nolint: staticcheck
 	var hpaMetrics []asv2beta2.MetricSpec
-	if targetCPU > 0 {
+	if targetCPU > 0 && targetCPU < 100 {
 		hpaMetrics = append(hpaMetrics, ConvertTargetCPUToCustomMetric(targetCPU))
+	}
+
+	if execStrategy.Metrics != nil {
+		hpaMetrics = append(hpaMetrics, execStrategy.Metrics...)
 	}
 
 	hpa := &asv2beta2.HorizontalPodAutoscaler{
@@ -105,6 +109,7 @@ func (hpaops *HpaOperations) CreateOrGetHpa(ctx context.Context, hpaName string,
 			MinReplicas:    &minRepl,
 			MaxReplicas:    maxRepl,
 			Metrics:        hpaMetrics,
+			Behavior:       execStrategy.Behavior,
 		},
 	}
 

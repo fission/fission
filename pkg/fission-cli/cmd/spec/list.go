@@ -218,7 +218,7 @@ func ShowFunctions(fns []fv1.Function) {
 	if len(fns) > 0 {
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 		fmt.Fprintf(w, "%v\n", "Functions:")
-		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "ENV", "EXECUTORTYPE", "MINSCALE", "MAXSCALE", "MINCPU", "MAXCPU", "MINMEMORY", "MAXMEMORY", "TARGETCPU", "SECRETS", "CONFIGMAPS")
+		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "ENV", "EXECUTORTYPE", "MINSCALE", "MAXSCALE", "MINCPU", "MAXCPU", "MINMEMORY", "MAXMEMORY", "SECRETS", "CONFIGMAPS")
 
 		for _, f := range fns {
 			secrets := f.Spec.Secrets
@@ -231,7 +231,7 @@ func ShowFunctions(fns []fv1.Function) {
 				configMapList = append(configMapList, configMap.Name)
 			}
 
-			fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
+			fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
 				f.ObjectMeta.Name, f.Spec.Environment.Name,
 				f.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType,
 				f.Spec.InvokeStrategy.ExecutionStrategy.MinScale,
@@ -240,7 +240,6 @@ func ShowFunctions(fns []fv1.Function) {
 				f.Spec.Resources.Limits.Cpu().String(),
 				f.Spec.Resources.Requests.Memory().String(),
 				f.Spec.Resources.Limits.Memory().String(),
-				f.Spec.InvokeStrategy.ExecutionStrategy.TargetCPUPercent,
 				strings.Join(secretsList, ","),
 				strings.Join(configMapList, ","))
 		}

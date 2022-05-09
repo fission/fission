@@ -49,7 +49,7 @@ sleep 5
 func=function
 actualMinScale=$(kubectl -n default get $func $fn -ojsonpath='{.spec.InvokeStrategy.ExecutionStrategy.MinScale}')
 actualMaxScale=$(kubectl -n default get $func $fn -ojsonpath='{.spec.InvokeStrategy.ExecutionStrategy.MaxScale}')
-actualTargetCPU=$(kubectl -n default get $func $fn -ojsonpath='{.spec.InvokeStrategy.ExecutionStrategy.TargetCPUPercent}')
+actualTargetCPU=$(kubectl -n default get $func $fn -ojsonpath='{.spec.InvokeStrategy.ExecutionStrategy.hpaMetrics[0].target.averageUtilization}')
 
 if [ "$actualMinScale" -ne "$targetMinScale" ]
 then

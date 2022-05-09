@@ -29,7 +29,6 @@ import (
 	multierror "github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	asv2beta2 "k8s.io/api/autoscaling/v2beta2"
 	apiv1 "k8s.io/api/core/v1"
 	k8sErrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -490,8 +489,7 @@ func (caaf *Container) updateFunction(ctx context.Context, oldFn *fv1.Function, 
 		return err
 	}
 
-	if oldFn.Spec.InvokeStrategy != newFn.Spec.InvokeStrategy {
-
+	if !reflect.DeepEqual(oldFn.Spec.InvokeStrategy, newFn.Spec.InvokeStrategy) {
 		// to support backward compatibility, if the function was created in default ns, we fall back to creating the
 		// deployment of the function in fission-function ns, so cleaning up resources there
 		ns := caaf.namespace
@@ -524,10 +522,13 @@ func (caaf *Container) updateFunction(ctx context.Context, oldFn *fv1.Function, 
 			hpaChanged = true
 		}
 
-		if newFn.Spec.InvokeStrategy.ExecutionStrategy.TargetCPUPercent != oldFn.Spec.InvokeStrategy.ExecutionStrategy.TargetCPUPercent {
-			targetCpupercent := int32(newFn.Spec.InvokeStrategy.ExecutionStrategy.TargetCPUPercent)
-			hpaMetric := hpautils.ConvertTargetCPUToCustomMetric(targetCpupercent)
-			hpa.Spec.Metrics = []asv2beta2.MetricSpec{hpaMetric}
+		if !reflect.DeepEqual(newFn.Spec.InvokeStrategy.ExecutionStrategy.Metrics, oldFn.Spec.InvokeStrategy.ExecutionStrategy.Metrics) {
+			hpa.Spec.Metrics = newFn.Spec.InvokeStrategy.ExecutionStrategy.Metrics
+			hpaChanged = true
+		}
+
+		if !reflect.DeepEqual(newFn.Spec.InvokeStrategy.ExecutionStrategy.Behavior, oldFn.Spec.InvokeStrategy.ExecutionStrategy.Behavior) {
+			hpa.Spec.Behavior = newFn.Spec.InvokeStrategy.ExecutionStrategy.Behavior
 			hpaChanged = true
 		}
 
