@@ -59,7 +59,7 @@ func Commands() *cobra.Command {
 		Optional: []flag.Flag{flag.EnvImage, flag.EnvPoolsize,
 			flag.EnvBuilderImage, flag.EnvBuildCmd, flag.EnvImagePullSecret,
 			flag.RunTimeMinCPU, flag.RunTimeMaxCPU, flag.RunTimeMinMemory, flag.RunTimeMaxMemory,
-			flag.EnvTerminationGracePeriod, flag.EnvKeepArchive,
+			flag.EnvTerminationGracePeriod, flag.EnvKeepArchive, flag.EnvRuntime,
 			flag.NamespaceEnvironment, flag.EnvExternalNetwork,
 			flag.Labels, flag.Annotation},
 	})
