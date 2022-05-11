@@ -1,5 +1,40 @@
 # Changelog
 
+## [v1.16.0-rc2](https://github.com/fission/fission/tree/v1.16.0-rc2) (2022-05-11)
+
+[Full Changelog](https://github.com/fission/fission/compare/v1.16.0-rc1...v1.16.0-rc2)
+
+**Merged pull requests:**
+
+- Added service monitors for components whose metrics are exposed [\#2424](https://github.com/fission/fission/pull/2424) ([blackfly19](https://github.com/blackfly19))
+- Add support for custom metrics for HPA [\#2423](https://github.com/fission/fission/pull/2423) ([sanketsudake](https://github.com/sanketsudake))
+- Migrate HPA v1 to v2beta2 [\#2421](https://github.com/fission/fission/pull/2421) ([sanketsudake](https://github.com/sanketsudake))
+- feat: 🎸 add runtime-env flags to the env update cmd [\#2420](https://github.com/fission/fission/pull/2420) ([AetheWu](https://github.com/AetheWu))
+- Use Clientset interface instead of type for Fission/kubernetes clients [\#2416](https://github.com/fission/fission/pull/2416) ([sanketsudake](https://github.com/sanketsudake))
+- Fix namespace used in speciallized pod cleanup [\#2415](https://github.com/fission/fission/pull/2415) ([sanketsudake](https://github.com/sanketsudake))
+- Add http retries in executor client with go-retryablehttp [\#2414](https://github.com/fission/fission/pull/2414) ([sanketsudake](https://github.com/sanketsudake))
+- Check active request before decrease in functionCache [\#2413](https://github.com/fission/fission/pull/2413) ([sanketsudake](https://github.com/sanketsudake))
+- Removed demo, documentations & updated Readme [\#2411](https://github.com/fission/fission/pull/2411) ([techmaharaj](https://github.com/techmaharaj))
+- Created separate file for authmiddleware fn [\#2410](https://github.com/fission/fission/pull/2410) ([blackfly19](https://github.com/blackfly19))
+- Use common httpserver across fission [\#2409](https://github.com/fission/fission/pull/2409) ([sanketsudake](https://github.com/sanketsudake))
+- Optimize port forward in fission CLI by waiting on ready channel [\#2405](https://github.com/fission/fission/pull/2405) ([sanketsudake](https://github.com/sanketsudake))
+- Remove deprecated Fission Azure Storage Queue connector [\#2404](https://github.com/fission/fission/pull/2404) ([sanketsudake](https://github.com/sanketsudake))
+- Remove deprecated Fission Nats connector [\#2403](https://github.com/fission/fission/pull/2403) ([sanketsudake](https://github.com/sanketsudake))
+- Avoid tapservice call to executor with empty URL [\#2402](https://github.com/fission/fission/pull/2402) ([sanketsudake](https://github.com/sanketsudake))
+- Added metrics for fission mqtrigger and optimizations in trigger subscriptions [\#2399](https://github.com/fission/fission/pull/2399) ([blackfly19](https://github.com/blackfly19))
+- Prometheus metrics improvements [\#2398](https://github.com/fission/fission/pull/2398) ([blackfly19](https://github.com/blackfly19))
+- Go version 1.18 update [\#2395](https://github.com/fission/fission/pull/2395) ([sanketsudake](https://github.com/sanketsudake))
+- Fixing gcp connector name typo [\#2393](https://github.com/fission/fission/pull/2393) ([blackfly19](https://github.com/blackfly19))
+- Upgraded alpine version to 3.15 [\#2391](https://github.com/fission/fission/pull/2391) ([blackfly19](https://github.com/blackfly19))
+- Fixed poolmgr pod naming error [\#2385](https://github.com/fission/fission/pull/2385) ([blackfly19](https://github.com/blackfly19))
+- Go1.17 [\#2381](https://github.com/fission/fission/pull/2381) ([sanketsudake](https://github.com/sanketsudake))
+- Upgraded archiver [\#2378](https://github.com/fission/fission/pull/2378) ([blackfly19](https://github.com/blackfly19))
+- Refactoring prometheus metrics and labels [\#2375](https://github.com/fission/fission/pull/2375) ([sanketsudake](https://github.com/sanketsudake))
+- \[helm chart\] Remove prometheus chart dependency from Fission [\#2371](https://github.com/fission/fission/pull/2371) ([sanketsudake](https://github.com/sanketsudake))
+- \[helm chart\] fission deployments resources [\#2370](https://github.com/fission/fission/pull/2370) ([carlosrmendes](https://github.com/carlosrmendes))
+- feature: Added commandline flags to set env var on the runtime and builder containers [\#2369](https://github.com/fission/fission/pull/2369) ([praddy26](https://github.com/praddy26))
+- Added imagepullsecrets to helm [\#2364](https://github.com/fission/fission/pull/2364) ([blackfly19](https://github.com/blackfly19))
+
 ## [v1.16.0-rc1](https://github.com/fission/fission/tree/v1.16.0-rc1) (2022-02-12)
 
 [Full Changelog](https://github.com/fission/fission/compare/v1.15.1...v1.16.0-rc1)
@@ -239,7 +274,7 @@
 - For fixing staticcheck issue [\#1652](https://github.com/fission/fission/pull/1652) ([vishal-biyani](https://github.com/vishal-biyani))
 - Allow user to override nats-streaming image [\#1645](https://github.com/fission/fission/pull/1645) ([funkypenguin](https://github.com/funkypenguin))
 - Allow user to define busybox image [\#1643](https://github.com/fission/fission/pull/1643) ([funkypenguin](https://github.com/funkypenguin))
-- Python env changes for pip3 [\#1633](https://github.com/fission/fission/pull/1633) ([agiwalpooja20](https://github.com/agiwalpooja20))
+- Python env changes for pip3 [\#1633](https://github.com/fission/fission/pull/1633) ([agiwalpooja20-zz](https://github.com/agiwalpooja20-zz))
 - S3 backend for storage service [\#1629](https://github.com/fission/fission/pull/1629) ([vishal-biyani](https://github.com/vishal-biyani))
 - Fixing verify-staticcheck.sh [\#1622](https://github.com/fission/fission/pull/1622) ([rajalokan](https://github.com/rajalokan))
 - Added support for setting bodyParser limit param via environment variable [\#1618](https://github.com/fission/fission/pull/1618) ([therahulbhati](https://github.com/therahulbhati))
