@@ -617,25 +617,25 @@ mqt_keda:
   connector_images:
     kafka:
       image: fission/keda-kafka-http-connector
-      tag: v0.9
+      tag: v0.10
     rabbitmq:
       image: fission/keda-rabbitmq-http-connector
-      tag: v0.8
+      tag: v0.9
     awskinesis:
       image: fission/keda-aws-kinesis-http-connector
-      tag: v0.8
+      tag: v0.9
     aws_sqs:
       image: fission/keda-aws-sqs-http-connector
-      tag: v0.8
+      tag: v0.9
     nats_steaming:
       image: fission/keda-nats-streaming-http-connector
-      tag: v0.9
+      tag: v0.11
     gcp_pubsub:
       image: fission/keda-gcp-pubsub-http-connector
-      tag: v0.3
+      tag: v0.4
     redis:
       image: fission/keda-redis-http-connector
-      tag: v0.1
+      tag: v0.2
 
   ## Pod resources as:
   ##  resources:
