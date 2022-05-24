@@ -1,5 +1,13 @@
 # Changelog
 
+## [v1.16.0](https://github.com/fission/fission/tree/v1.16.0) (2022-05-24)
+
+[Full Changelog](https://github.com/fission/fission/compare/v1.16.0-rc2...v1.16.0)
+
+**Merged pull requests:**
+
+- Updated keda image versions [\#2433](https://github.com/fission/fission/pull/2433) ([blackfly19](https://github.com/blackfly19))
+
 ## [v1.16.0-rc2](https://github.com/fission/fission/tree/v1.16.0-rc2) (2022-05-11)
 
 [Full Changelog](https://github.com/fission/fission/compare/v1.16.0-rc1...v1.16.0-rc2)
