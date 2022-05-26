@@ -60,6 +60,7 @@ Table of Contents
   - [Getting Started](#getting-started)
   - [Learn More](#learn-more)
   - [Contributing](#contributing)
+  - [Who is using Fission?](#who-is-using-fission)
   - [Sponsors](#sponsors)
 - [License](#license)
 
