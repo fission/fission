@@ -116,6 +116,13 @@ Check out the [contributing guide](CONTRIBUTING.md).
 - A large telecom CSP
 - [Gadget](https://gadget.dev)
 - [CinnamonAI](https://cinnamon.is/en)
+- [Armo](https://www.armosec.io/)
+- [The Social Audience](https://thesocialaudience.com/)
+- [KubeML](https://github.com/DiegoStock12/kubeml)
+- Unilever
+- [BD](https://www.bd.com/en-in)
+- [Biofourmis](https://biofourmis.com/)
+- [Babylon](https://www.babylonhealth.com/en-gb)
 
 ## Sponsors
 
