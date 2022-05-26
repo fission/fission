@@ -108,6 +108,14 @@ aggregation &mdash; also helps with ops on your Fission deployment.
 
 Check out the [contributing guide](CONTRIBUTING.md).
 
+## Who is using Fission?
+- [Fareye](https://www.getfareye.com)
+- Apple
+- [iQuanti](https://www.iquanti.com)
+- A large telecom CSP
+- [Gadget](https://gadget.dev)
+- [CinnamonAI](https://cinnamon.is/en)
+
 ## Sponsors
 
 The following companies, organizations, and individuals support Fission's ongoing maintenance and development. If you are using/contributing to Fission, we would be happy to list you here, please raise a Pull request.
