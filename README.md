@@ -60,6 +60,7 @@ Table of Contents
   - [Getting Started](#getting-started)
   - [Learn More](#learn-more)
   - [Contributing](#contributing)
+  - [Who is using Fission?](#who-is-using-fission)
   - [Sponsors](#sponsors)
 - [License](#license)
 
@@ -107,6 +108,14 @@ aggregation &mdash; also helps with ops on your Fission deployment.
 ## Contributing
 
 Check out the [contributing guide](CONTRIBUTING.md).
+
+## Who is using Fission?
+- [Fareye](https://www.getfareye.com)
+- Apple
+- [iQuanti](https://www.iquanti.com)
+- A large telecom CSP
+- [Gadget](https://gadget.dev)
+- [CinnamonAI](https://cinnamon.is/en)
 
 ## Sponsors
 
