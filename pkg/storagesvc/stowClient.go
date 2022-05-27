@@ -240,3 +240,12 @@ func (client StowClient) filterItemCreatedAMinuteAgo(item stow.Item, currentTime
 	}
 	return false
 }
+
+func (client StowClient) filterAllItems(item stow.Item, _ interface{}) bool {
+	itemLastModTime, _ := item.LastMod()
+	client.logger.Debug("item info",
+		zap.String("item", item.ID()),
+		zap.Time("last_modified_time", itemLastModTime))
+	return false
+
+}
