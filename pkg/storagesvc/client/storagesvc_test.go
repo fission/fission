@@ -42,20 +42,25 @@ const (
 	minioRegion          = "ap-south-1"
 )
 
-func panicIf(err error) {
+func failTest(t *testing.T, err error) {
 	if err != nil {
-		log.Panicf("Error: %v", err)
+		t.Fatalf("%v", err)
 	}
 }
 
-func MakeTestFile(size int) *os.File {
+func MakeTestFile(size int) (*os.File, error) {
 	f, err := os.CreateTemp("", "storagesvc_test_")
-	panicIf(err)
+
+	if err != nil {
+		return nil, err
+	}
 
 	_, err = f.Write(bytes.Repeat([]byte("."), size))
-	panicIf(err)
 
-	return f
+	if err != nil {
+		return nil, err
+	}
+	return f, nil
 }
 
 func runMinioDockerContainer(pool *dockertest.Pool) *dockertest.Resource {
@@ -120,7 +125,7 @@ func TestS3StorageService(t *testing.T) {
 	config := zap.NewDevelopmentConfig()
 	config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
 	logger, err := config.Build()
-	panicIf(err)
+	failTest(t, err)
 
 	log.Println("starting storage svc")
 	os.Setenv("STORAGE_S3_ENDPOINT", endpoint)
@@ -139,27 +144,28 @@ func TestS3StorageService(t *testing.T) {
 	client := MakeClient(fmt.Sprintf("http://localhost:%v/", 8081))
 
 	// generate a test file
-	tmpfile := MakeTestFile(10 * 1024)
+	tmpfile, err := MakeTestFile(10 * 1024)
+	failTest(t, err)
 	defer os.Remove(tmpfile.Name())
 
 	// store it
 	metadata := make(map[string]string)
 	fileID, err := client.Upload(ctx, tmpfile.Name(), &metadata)
-	panicIf(err)
+	failTest(t, err)
 
 	time.Sleep(10 * time.Second)
 
 	// Retrieve file through minioClient
 	reader, err := minioClient.GetObject(bucketName, fileID, minio.GetObjectOptions{})
-	panicIf(err)
+	failTest(t, err)
 	defer reader.Close()
 
 	retThroughMinio, err := os.CreateTemp("", "storagesvc_verify_minio_")
-	panicIf(err)
+	failTest(t, err)
 	defer os.Remove(retThroughMinio.Name())
 
 	stat, err := reader.Stat()
-	panicIf(err)
+	failTest(t, err)
 
 	if _, err := io.CopyN(retThroughMinio, reader, stat.Size); err != nil {
 		log.Fatalln(err)
@@ -167,25 +173,25 @@ func TestS3StorageService(t *testing.T) {
 
 	// Retrieve file through API
 	retThroughAPI, err := os.CreateTemp("", "storagesvc_verify_")
-	panicIf(err)
+	failTest(t, err)
 	os.Remove(retThroughAPI.Name())
 
 	err = client.Download(ctx, fileID, retThroughAPI.Name())
-	panicIf(err)
+	failTest(t, err)
 	defer os.Remove(retThroughAPI.Name())
 
 	// compare contents
 	contentsMinio, err := os.ReadFile(retThroughMinio.Name())
-	panicIf(err)
+	failTest(t, err)
 	contentsAPI, err := os.ReadFile(retThroughAPI.Name())
-	panicIf(err)
+	failTest(t, err)
 	if !bytes.Equal(contentsMinio, contentsAPI) {
 		log.Panic("Contents don't match")
 	}
 
 	// delete uploaded file
 	err = client.Delete(ctx, fileID)
-	panicIf(err)
+	failTest(t, err)
 
 	// make sure download fails
 	err = client.Download(ctx, fileID, "xxx")
@@ -201,7 +207,7 @@ func TestLocalStorageService(t *testing.T) {
 	config := zap.NewDevelopmentConfig()
 	config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
 	logger, err := config.Build()
-	panicIf(err)
+	failTest(t, err)
 
 	log.Println("starting storage svc")
 	localPath := fmt.Sprintf("/tmp/%v", testID)
@@ -216,36 +222,45 @@ func TestLocalStorageService(t *testing.T) {
 	client := MakeClient(fmt.Sprintf("http://localhost:%v/", port))
 
 	// generate a test file
-	tmpfile := MakeTestFile(10 * 1024)
+	tmpfile, err := MakeTestFile(10 * 1024)
+	failTest(t, err)
 	defer os.Remove(tmpfile.Name())
 
 	// store it
 	metadata := make(map[string]string)
 	fileID, err := client.Upload(ctx, tmpfile.Name(), &metadata)
-	panicIf(err)
+	failTest(t, err)
+
+	ids, err := client.List(ctx)
+	if err != nil {
+		t.Fatalf("Could not list files: %s", err)
+	}
+	if len(ids) != 1 {
+		t.Fatalf("Expected 1 file, got %v", len(ids))
+	}
 
 	// make a temp file for verification
 	retrievedfile, err := os.CreateTemp("", "storagesvc_verify_")
-	panicIf(err)
+	failTest(t, err)
 	os.Remove(retrievedfile.Name())
 
 	// retrieve uploaded file
 	err = client.Download(ctx, fileID, retrievedfile.Name())
-	panicIf(err)
+	failTest(t, err)
 	defer os.Remove(retrievedfile.Name())
 
 	// compare contents
 	contents1, err := os.ReadFile(tmpfile.Name())
-	panicIf(err)
+	failTest(t, err)
 	contents2, err := os.ReadFile(retrievedfile.Name())
-	panicIf(err)
+	failTest(t, err)
 	if !bytes.Equal(contents1, contents2) {
 		log.Panic("Contents don't match")
 	}
 
 	// delete uploaded file
 	err = client.Delete(ctx, fileID)
-	panicIf(err)
+	failTest(t, err)
 
 	// make sure download fails
 	err = client.Download(ctx, fileID, "xxx")

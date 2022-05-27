@@ -123,6 +123,33 @@ func (c *Client) GetUrl(id string) string {
 	return fmt.Sprintf("%v/archive?id=%v", c.url, url.PathEscape(id))
 }
 
+func (c *Client) List(ctx context.Context) ([]string, error) {
+	req, err := http.NewRequest(http.MethodGet, c.url+"/archive", nil)
+	if err != nil {
+		return []string{}, err
+	}
+	resp, err := ctxhttp.Do(ctx, c.httpClient, req)
+	if err != nil {
+		return []string{}, err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return []string{}, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		msg := fmt.Sprintf("List error %v", resp.Status)
+		return []string{}, errors.New(msg)
+	}
+
+	var ids []string
+	err = json.Unmarshal(body, &ids)
+	if err != nil {
+		return []string{}, err
+	}
+	return ids, nil
+}
+
 // Download fetches the file identified by ID to the local file path.
 // filePath must not exist.
 func (c *Client) Download(ctx context.Context, id string, filePath string) error {
