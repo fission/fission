@@ -29,7 +29,7 @@ var (
 	ColdStarts     = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "fission_function_cold_starts_total",
-			Help: "How many cold starts are made by function_name, function_uid.",
+			Help: "How many cold starts are made by function_name, function_namespace.",
 		},
 		functionLabels,
 	)
