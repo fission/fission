@@ -22,6 +22,9 @@ spec:
         prometheus.io/path: "/metrics"
         prometheus.io/port: "8080"
     spec:
+      {{- if .Values.storagesvc.securityContext.enabled }}
+      securityContext: {{- omit .Values.storagesvc.securityContext "enabled" | toYaml | nindent 8 }}
+      {{- end }}
       containers:
       - name: storagesvc
         image: {{ include "fission-bundleImage" . | quote }}

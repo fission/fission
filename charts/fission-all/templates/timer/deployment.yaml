@@ -15,6 +15,9 @@ spec:
       labels:
         svc: timer
     spec:
+      {{- if .Values.timer.securityContext.enabled }}
+      securityContext: {{- omit .Values.timer.securityContext "enabled" | toYaml | nindent 8 }}
+      {{- end }}
       containers:
       - name: timer
         image: {{ include "fission-bundleImage" . | quote }}

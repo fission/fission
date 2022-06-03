@@ -19,6 +19,9 @@ spec:
         prometheus.io/path: "/metrics"
         prometheus.io/port: "8080"
     spec:
+      {{- if .Values.buildermgr.securityContext.enabled }}
+      securityContext: {{- omit .Values.buildermgr.securityContext "enabled" | toYaml | nindent 8 }}
+      {{- end }}
       containers:
       - name: buildermgr
         image: {{ include "fission-bundleImage" . | quote }}
