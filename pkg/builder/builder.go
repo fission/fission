@@ -118,12 +118,23 @@ func (builder *Builder) Handler(w http.ResponseWriter, r *http.Request) {
 	srcPkgPath := filepath.Join(builder.sharedVolumePath, req.SrcPkgFilename)
 	deployPkgFilename := fmt.Sprintf("%v-%v", req.SrcPkgFilename, strings.ToLower(uniuri.NewLen(6)))
 	deployPkgPath := filepath.Join(builder.sharedVolumePath, deployPkgFilename)
+
+	var buildArgs []string
 	buildCmd := req.BuildCommand
 	if len(buildCmd) == 0 {
 		// use default build command
 		buildCmd = "/build"
+	} else {
+		// split executable command and arguments
+		args := strings.Split(buildCmd, " ")
+		buildCmd = args[0] // get the executable command, executable command will always be on Zero index
+
+		// get all the arguments
+		for i := 1; i < len(args); i++ {
+			buildArgs = append(buildArgs, args[i])
+		}
 	}
-	buildLogs, err := builder.build(buildCmd, srcPkgPath, deployPkgPath)
+	buildLogs, err := builder.build(buildCmd, buildArgs, srcPkgPath, deployPkgPath)
 	if err != nil {
 		e := "error building source package"
 		builder.logger.Error(e, zap.Error(err))
@@ -163,8 +174,8 @@ func (builder *Builder) reply(w http.ResponseWriter, pkgFilename string, buildLo
 	}
 }
 
-func (builder *Builder) build(command string, srcPkgPath string, deployPkgPath string) (string, error) {
-	cmd := exec.Command(command)
+func (builder *Builder) build(command string, args []string, srcPkgPath string, deployPkgPath string) (string, error) {
+	cmd := exec.Command(command, args...)
 
 	fi, err := os.Stat(srcPkgPath)
 	if err != nil {
