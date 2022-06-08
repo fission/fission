@@ -18,6 +18,7 @@ package util
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -442,4 +443,24 @@ func ApplyLabelsAndAnnotations(input cli.Input, objectMeta *metav1.ObjectMeta) e
 		objectMeta.Annotations = set
 	}
 	return nil
+}
+
+func GetStorageURL(kubeContext string, archiveID string) (string, error) {
+	storageLocalPort, err := SetupPortForward(GetFissionNamespace(), "application=fission-storage", kubeContext)
+	if err != nil {
+		return "", err
+	}
+
+	relativeURL, _ := url.Parse(FISSION_STORAGE_URI)
+	serverURL, _ := url.Parse("http://127.0.0.1:" + storageLocalPort)
+
+	if len(archiveID) > 0 {
+		queryString := relativeURL.Query()
+		queryString.Set("id", archiveID)
+		relativeURL.RawQuery = queryString.Encode()
+	}
+
+	storageAccessURL := serverURL.ResolveReference(relativeURL)
+
+	return storageAccessURL.String(), nil
 }

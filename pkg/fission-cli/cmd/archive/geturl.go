@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Fission Authors.
+Copyright 2019 The Fission Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,13 +14,4 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package util
-
-// fission-cli options
-const (
-	SPEC_IGNORE_FILE    = ".specignore"
-	COMMIT_LABEL        = "commit"
-	FISSION_AUTH_URI    = "/auth/login"
-	FISSION_AUTH_TOKEN  = "FISSION_AUTH_TOKEN"
-	FISSION_STORAGE_URI = "/v1/archive"
-)
+package archive
