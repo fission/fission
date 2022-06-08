@@ -56,7 +56,6 @@ deploy:
         # Use /var/log directory for kind logs export
         terminationMessagePath: /var/log/termination-log
         terminationMessagePolicy: FallbackToLogsOnError
-        fetcher.securityContext.enabled: true
         executor.securityContext.enabled: true
         router.securityContext.enabled: true
         buildermgr.securityContext.enabled: true
