@@ -445,13 +445,13 @@ func ApplyLabelsAndAnnotations(input cli.Input, objectMeta *metav1.ObjectMeta) e
 	return nil
 }
 
-func GetStorageURL(kubeContext string) (string, error) {
+func GetStorageURL(kubeContext string) (*url.URL, error) {
 	storageLocalPort, err := SetupPortForward(GetFissionNamespace(), "application=fission-storage", kubeContext)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	serverURL, _ := url.Parse("http://127.0.0.1:" + storageLocalPort)
 
-	return serverURL.String(), nil
+	return serverURL, nil
 }

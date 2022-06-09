@@ -44,7 +44,7 @@ func (opts *ListSubCommand) do(input cli.Input) error {
 		return err
 	}
 
-	client := storagesvcClient.MakeClient(storageAccessURL)
+	client := storagesvcClient.MakeClient(storageAccessURL.String())
 	files, err := client.List(context.Background())
 	if err != nil {
 		return err

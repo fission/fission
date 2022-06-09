@@ -45,7 +45,7 @@ func (opts *DeleteSubCommand) do(input cli.Input) error {
 		return err
 	}
 
-	client := storagesvcClient.MakeClient(storagesvcURL)
+	client := storagesvcClient.MakeClient(storagesvcURL.String())
 
 	err = client.Delete(context.Background(), archiveID)
 	if err != nil {

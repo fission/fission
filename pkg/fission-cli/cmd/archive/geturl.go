@@ -19,11 +19,13 @@ package archive
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
+	storagesvcClient "github.com/fission/fission/pkg/storagesvc/client"
 )
 
 type GetURLSubCommand struct {
@@ -39,12 +41,20 @@ func (opts *GetURLSubCommand) do(input cli.Input) error {
 	kubeContext := input.String(flagkey.KubeContext)
 	archiveID := input.String(flagkey.ArchiveId)
 
-	storageAccessURL, err := util.GetStorageURL(kubeContext)
+	serverURL, err := util.GetStorageURL(kubeContext)
 	if err != nil {
 		return err
 	}
 
-	resp, err := http.Head(storageAccessURL)
+	relativeURL, _ := url.Parse(util.FISSION_STORAGE_URI)
+
+	queryString := relativeURL.Query()
+	queryString.Set("id", archiveID)
+	relativeURL.RawQuery = queryString.Encode()
+
+	storageAccessURL := serverURL.ResolveReference(relativeURL)
+
+	resp, err := http.Head(storageAccessURL.String())
 	if err != nil {
 		return err
 	}
@@ -54,7 +64,22 @@ func (opts *GetURLSubCommand) do(input cli.Input) error {
 		return fmt.Errorf("Error getting URL. Exited with Status:  %v", resp.Status)
 	}
 
-	fmt.Printf("The URL for id: %s is %s", archiveID, fmt.Sprint(resp.Body))
+	archiveURL, err := url.Parse(resp.Header.Get("url"))
+	if err != nil {
+		return err
+	}
+
+	if archiveURL.Scheme == "file" {
+		storageSvc, err := opts.Client().V1().Misc().GetSvcURL("application=fission-storage")
+		if err != nil {
+			return err
+		}
+		storagesvcURL := "http://" + storageSvc
+		client := storagesvcClient.MakeClient(storagesvcURL)
+		fmt.Printf("The URL for id: %s is %s", archiveID, fmt.Sprint(client.GetUrl(archiveID)))
+	} else {
+		fmt.Printf("The URL for id: %s is %s", archiveID, fmt.Sprint(resp.Header.Get("url")))
+	}
 
 	return nil
 }

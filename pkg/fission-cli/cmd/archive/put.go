@@ -45,13 +45,13 @@ func (opts *PutSubCommand) do(input cli.Input) error {
 		return err
 	}
 
-	client := storagesvcClient.MakeClient(storagesvcURL)
+	client := storagesvcClient.MakeClient(storagesvcURL.String())
 	archiveID, err := client.Upload(context.Background(), archiveName, nil)
 	if err != nil {
 		return err
 	}
 
-	fmt.Printf("File successfully uploaded with ID: %s", archiveID)
+	fmt.Printf("File successfully uploaded with ID: %s ", archiveID)
 
 	return nil
 }

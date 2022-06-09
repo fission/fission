@@ -50,7 +50,7 @@ func (opts *DownloadSubCommand) do(input cli.Input) error {
 		return err
 	}
 
-	client := storagesvcClient.MakeClient(storageAccessURL)
+	client := storagesvcClient.MakeClient(storageAccessURL.String())
 	err = client.Download(context.Background(), archiveID, archiveOutput)
 	if err != nil {
 		return err
