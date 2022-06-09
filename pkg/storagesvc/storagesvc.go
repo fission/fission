@@ -229,6 +229,23 @@ func (ss *StorageService) downloadHandler(w http.ResponseWriter, r *http.Request
 	}
 }
 
+func (ss *StorageService) infoHandler(w http.ResponseWriter, r *http.Request) {
+
+	fileId, err := ss.getIdFromRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	itemURL, err := ss.storageClient.getURL(fileId)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+	}
+
+	w.Header().Add("url", itemURL.String())
+
+}
+
 func (ss *StorageService) healthHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
@@ -248,6 +265,7 @@ func (ss *StorageService) Start(ctx context.Context, port int, openTracingEnable
 	r.HandleFunc("/v1/archive", ss.downloadHandler).Queries("id", "{id}").Methods("GET")
 	r.HandleFunc("/v1/archive", ss.listItems).Methods("GET")
 	r.HandleFunc("/v1/archive", ss.deleteHandler).Methods("DELETE")
+	r.HandleFunc("/v1/archive", ss.infoHandler).Methods("HEAD")
 	r.HandleFunc("/healthz", ss.healthHandler).Methods("GET")
 
 	var handler http.Handler

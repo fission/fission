@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Fission Authors.
+Copyright 2022 The Fission Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -44,23 +44,25 @@ func Commands() *cobra.Command {
 		Optional: []flag.Flag{flag.KubeContext},
 	})
 
-	/*deleteCmd := &cobra.Command{
+	deleteCmd := &cobra.Command{
 		Use:   "delete",
 		Short: "Delete an archive",
 		RunE:  wrapper.Wrapper(Delete),
 	}
 	wrapper.SetFlags(deleteCmd, flag.FlagSet{
 		Required: []flag.Flag{flag.ArchiveId},
-	})*/
+		Optional: []flag.Flag{flag.ArchiveOutput},
+	})
 
-	/*geturlCmd := &cobra.Command{
+	geturlCmd := &cobra.Command{
 		Use:   "geturl",
 		Short: "Get url of a uploaded archive",
-		RunE:  wrapper.Wrapper(GetUrl),
+		RunE:  wrapper.Wrapper(GetURL),
 	}
 	wrapper.SetFlags(geturlCmd, flag.FlagSet{
 		Required: []flag.Flag{flag.ArchiveId},
-	})*/
+		Optional: []flag.Flag{flag.KubeContext},
+	})
 
 	downloadCmd := &cobra.Command{
 		Use:   "download",
@@ -69,7 +71,7 @@ func Commands() *cobra.Command {
 	}
 	wrapper.SetFlags(downloadCmd, flag.FlagSet{
 		Required: []flag.Flag{flag.ArchiveId},
-		Optional: []flag.Flag{flag.KubeContext},
+		Optional: []flag.Flag{flag.KubeContext, flag.ArchiveOutput},
 	})
 
 	command := &cobra.Command{
@@ -77,7 +79,6 @@ func Commands() *cobra.Command {
 		Short: "For managing archives",
 	}
 
-	command.AddCommand(putCmd, listCmd, downloadCmd)
-	//command.AddCommand(putCmd, listCmd, deleteCmd, geturlCmd, downloadCmd)
+	command.AddCommand(putCmd, listCmd, deleteCmd, geturlCmd, downloadCmd)
 	return command
 }

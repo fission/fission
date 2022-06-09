@@ -15,3 +15,46 @@ limitations under the License.
 */
 
 package archive
+
+import (
+	"fmt"
+	"net/http"
+
+	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+	"github.com/fission/fission/pkg/fission-cli/cmd"
+	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
+	"github.com/fission/fission/pkg/fission-cli/util"
+)
+
+type GetURLSubCommand struct {
+	cmd.CommandActioner
+}
+
+func GetURL(input cli.Input) error {
+	return (&GetURLSubCommand{}).do(input)
+}
+
+func (opts *GetURLSubCommand) do(input cli.Input) error {
+
+	kubeContext := input.String(flagkey.KubeContext)
+	archiveID := input.String(flagkey.ArchiveId)
+
+	storageAccessURL, err := util.GetStorageURL(kubeContext)
+	if err != nil {
+		return err
+	}
+
+	resp, err := http.Head(storageAccessURL)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("Error getting URL. Exited with Status:  %v", resp.Status)
+	}
+
+	fmt.Printf("The URL for id: %s is %s", archiveID, fmt.Sprint(resp.Body))
+
+	return nil
+}

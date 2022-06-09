@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Fission Authors.
+Copyright 2022 The Fission Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,16 +17,14 @@ limitations under the License.
 package archive
 
 import (
-	"bytes"
+	"context"
 	"fmt"
-	"io"
-	"net/http"
-	"os"
 
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
+	storagesvcClient "github.com/fission/fission/pkg/storagesvc/client"
 )
 
 type PutSubCommand struct {
@@ -34,7 +32,7 @@ type PutSubCommand struct {
 }
 
 func Put(input cli.Input) error {
-	return (&ListSubCommand{}).do(input)
+	return (&PutSubCommand{}).do(input)
 }
 
 func (opts *PutSubCommand) do(input cli.Input) error {
@@ -42,36 +40,18 @@ func (opts *PutSubCommand) do(input cli.Input) error {
 	kubeContext := input.String(flagkey.KubeContext)
 	archiveName := input.String(flagkey.ArchiveName)
 
-	client := &http.Client{}
-
-	storageAccessURL, err := util.GetStorageURL(kubeContext, "")
+	storagesvcURL, err := util.GetStorageURL(kubeContext)
 	if err != nil {
 		return err
 	}
 
-	data, err := os.ReadFile(archiveName)
+	client := storagesvcClient.MakeClient(storagesvcURL)
+	archiveID, err := client.Upload(context.Background(), archiveName, nil)
 	if err != nil {
 		return err
 	}
 
-	request, err := http.NewRequest("POST", storageAccessURL, bytes.NewBuffer(data))
-	if err != nil {
-		return err
-	}
-	request.Header.Set("Content-Type", "multipart/form-data")
-	request.Header.Set("X-File-Size", fmt.Sprint(len(data)))
-
-	resp, err := client.Do(request)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return err
-	}
-	fmt.Println(body)
+	fmt.Printf("File successfully uploaded with ID: %s", archiveID)
 
 	return nil
 }

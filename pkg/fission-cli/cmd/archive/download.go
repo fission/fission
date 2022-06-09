@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Fission Authors.
+Copyright 2022 The Fission Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,14 +17,14 @@ limitations under the License.
 package archive
 
 import (
-	"io"
-	"net/http"
-	"os"
+	"context"
+	"fmt"
 
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
+	storagesvcClient "github.com/fission/fission/pkg/storagesvc/client"
 )
 
 type DownloadSubCommand struct {
@@ -32,36 +32,30 @@ type DownloadSubCommand struct {
 }
 
 func Download(input cli.Input) error {
-	return (&ListSubCommand{}).do(input)
+	return (&DownloadSubCommand{}).do(input)
 }
 
 func (opts *DownloadSubCommand) do(input cli.Input) error {
 
 	kubeContext := input.String(flagkey.KubeContext)
 	archiveID := input.String(flagkey.ArchiveId)
+	archiveOutput := input.String(flagkey.ArchiveOutput)
 
-	storageAccessURL, err := util.GetStorageURL(kubeContext, archiveID)
+	if len(archiveOutput) == 0 {
+		archiveOutput = archiveID
+	}
+
+	storageAccessURL, err := util.GetStorageURL(kubeContext)
 	if err != nil {
 		return err
 	}
 
-	resp, err := http.Get(storageAccessURL)
+	client := storagesvcClient.MakeClient(storageAccessURL)
+	err = client.Download(context.Background(), archiveID, archiveOutput)
 	if err != nil {
 		return err
 	}
 
-	defer resp.Body.Close()
-
-	out, err := os.Create("downloaded.zip")
-	if err != nil {
-		return err
-	}
-	defer out.Close()
-
-	_, err = io.Copy(out, resp.Body)
-	if err != nil {
-		return err
-	}
-
+	fmt.Printf("File download complete. File name: %s", archiveOutput)
 	return nil
 }

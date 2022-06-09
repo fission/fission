@@ -178,8 +178,9 @@ const (
 	CanaryIncrementInterval = "increment-interval"
 	CanaryFailureThreshold  = "failure-threshold"
 
-	ArchiveName = resourceName
-	ArchiveId   = "id"
+	ArchiveName   = resourceName
+	ArchiveId     = "id"
+	ArchiveOutput = Output
 
 	DefaultSpecOutputDir = "fission-dump"
 )

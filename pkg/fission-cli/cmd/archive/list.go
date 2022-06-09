@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Fission Authors.
+Copyright 2022 The Fission Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,14 +17,14 @@ limitations under the License.
 package archive
 
 import (
+	"context"
 	"fmt"
-	"io"
-	"net/http"
 
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
+	storagesvcClient "github.com/fission/fission/pkg/storagesvc/client"
 )
 
 type ListSubCommand struct {
@@ -39,24 +39,19 @@ func (opts *ListSubCommand) do(input cli.Input) error {
 
 	kubeContext := input.String(flagkey.KubeContext)
 
-	storageAccessURL, err := util.GetStorageURL(kubeContext, "")
+	storageAccessURL, err := util.GetStorageURL(kubeContext)
 	if err != nil {
 		return err
 	}
 
-	resp, err := http.Get(storageAccessURL)
+	client := storagesvcClient.MakeClient(storageAccessURL)
+	files, err := client.List(context.Background())
 	if err != nil {
 		return err
 	}
 
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return err
-	}
-
-	fmt.Println(string(body))
+	fmt.Println(files)
 
 	return nil
+
 }
