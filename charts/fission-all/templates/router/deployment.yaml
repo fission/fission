@@ -28,6 +28,9 @@ spec:
         prometheus.io/path: "/metrics"
         prometheus.io/port: "8080"
     spec:
+      {{- if .Values.router.securityContext.enabled }}
+      securityContext: {{- omit .Values.router.securityContext "enabled" | toYaml | nindent 8 }}
+      {{- end }}
       containers:
       - name: router
         image: {{ include "fission-bundleImage" . | quote }}

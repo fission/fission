@@ -15,6 +15,9 @@ spec:
       labels:
         svc: kubewatcher
     spec:
+      {{- if .Values.kubewatcher.securityContext.enabled }}
+      securityContext: {{- omit .Values.kubewatcher.securityContext "enabled" | toYaml | nindent 8 }}
+      {{- end }}
       containers:
       - name: kubewatcher
         image: {{ include "fission-bundleImage" . | quote }}

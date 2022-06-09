@@ -56,6 +56,12 @@ deploy:
         # Use /var/log directory for kind logs export
         terminationMessagePath: /var/log/termination-log
         terminationMessagePolicy: FallbackToLogsOnError
+        executor.securityContext.enabled: true
+        router.securityContext.enabled: true
+        buildermgr.securityContext.enabled: true
+        controller.securityContext.enabled: true
+        kubewatcher.securityContext.enabled: true
+        storagesvc.securityContext.enabled: true
       wait: true
     flags:
       install:

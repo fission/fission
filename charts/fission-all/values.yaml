@@ -143,6 +143,18 @@ executor:
   ##
   resources: {}
 
+  ## Security Context
+  ## It holds pod-level and container level security configuration.
+  ## This is an experimental section, please verify before enabling in production.
+  ## Ref: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#security-context-1
+  securityContext:
+    enabled: false
+    ## Mark it false, if you want to stop the non root user validation
+    runAsNonRoot: true
+    fsGroup: 10001
+    runAsUser: 10001
+    runAsGroup: 10001
+
 ## router is responsible for routing function calls to the appropriate function.
 ##
 router:
@@ -248,6 +260,18 @@ router:
   ##
   resources: {}
 
+  ## Security Context
+  ## It holds pod-level and container level security configuration.
+  ## This is an experimental section, please verify before enabling in production.
+  ## Ref: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#security-context-1
+  securityContext:
+    enabled: false
+    ## Mark it false, if you want to stop the non root user validation
+    runAsNonRoot: true
+    fsGroup: 10001
+    runAsUser: 10001
+    runAsGroup: 10001
+
 ## The builder manager watches the package & environments CRD changes and manages the builds of function source code.
 ## 
 buildermgr:
@@ -261,6 +285,18 @@ buildermgr:
   ##      memory: <tbd>
   ##
   resources: {}
+
+  ## Security Context
+  ## It holds pod-level and container level security configuration.
+  ## This is an experimental section, please verify before enabling in production.
+  ## Ref: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#security-context-1
+  securityContext:
+    enabled: false
+    ## Mark it false, if you want to stop the non root user validation
+    runAsNonRoot: true
+    fsGroup: 10001
+    runAsUser: 10001
+    runAsGroup: 10001
 
 ## controller is the component that the client talks to.
 ## It contains CRUD APIs for functions, triggers, environments, Kubernetes event watches, etc. and proxy APIs to internal 3rd-party services.
@@ -277,6 +313,18 @@ controller:
   ##
   resources: {}
 
+  ## Security Context
+  ## It holds pod-level and container level security configuration.
+  ## This is an experimental section, please verify before enabling in production.
+  ## Ref: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#security-context-1
+  securityContext:
+    enabled: false
+    ## Mark it false, if you want to stop the non root user validation
+    runAsNonRoot: true
+    fsGroup: 10001
+    runAsUser: 10001
+    runAsGroup: 10001
+
 ## kubewatcher watches the Kubernetes API and invokes functions associated with watches, sending the watch event to the function.
 ##
 kubewatcher:
@@ -290,6 +338,18 @@ kubewatcher:
   ##      memory: <tbd>
   ##
   resources: {}
+
+  ## Security Context
+  ## It holds pod-level and container level security configuration.
+  ## This is an experimental section, please verify before enabling in production.
+  ## Ref: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#security-context-1
+  securityContext:
+    enabled: false
+    ## Mark it false, if you want to stop the non root user validation
+    runAsNonRoot: true
+    fsGroup: 10001
+    runAsUser: 10001
+    runAsGroup: 10001
 
 ## The storage service is the home for all archives of packages with sizes larger than 256KB.
 ##
@@ -305,6 +365,18 @@ storagesvc:
   ##
   resources: {}
 
+  ## Security Context
+  ## It holds pod-level and container level security configuration.
+  ## This is an experimental section, please verify before enabling in production.
+  ## Ref: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#security-context-1
+  securityContext:
+    enabled: false
+    ## Mark it false, if you want to stop the non root user validation
+    runAsNonRoot: true
+    fsGroup: 10001
+    runAsUser: 10001
+    runAsGroup: 10001
+
 ## The timer works like kubernetes CronJob but instead of creating a pod to do the task
 ## It sends a request to router to invoke the function.
 ##
@@ -319,6 +391,18 @@ timer:
   ##      memory: <tbd>
   ##
   resources: {}
+
+  ## Security Context
+  ## It holds pod-level and container level security configuration.
+  ## This is an experimental section, please verify before enabling in production.
+  ## Ref: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#security-context-1
+  securityContext:
+    enabled: false
+    ## Mark it false, if you want to stop the non root user validation
+    runAsNonRoot: true
+    fsGroup: 10001
+    runAsUser: 10001
+    runAsGroup: 10001
 
 ## Kafka: enable and configure the details
 ##
