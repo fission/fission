@@ -18,6 +18,7 @@ package util
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	v1 "k8s.io/api/core/v1"
@@ -60,6 +61,48 @@ func TestGetEnvVarFromStringSlice(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := GetEnvVarFromStringSlice(tt.args); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("GetEnvVarFromStringSlice() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGetStorageURL(t *testing.T) {
+	tests := []struct {
+		name    string
+		arg     string
+		want    string
+		wantErr bool
+	}{
+		{
+			name:    "Correct kubecontext",
+			arg:     "",
+			want:    "http://127.0.0.1:",
+			wantErr: false,
+		},
+		{
+			name:    "Wrong kubecontext",
+			arg:     "test",
+			want:    "",
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := GetStorageURL(tt.arg)
+			var gotstring string
+			if got == nil {
+				gotstring = ""
+			} else {
+				gotstring = got.String()
+
+			}
+			if (err != nil) != tt.wantErr {
+				t.Errorf("GetStorageURL() Error got = %v wanterr = %v", err, tt.wantErr)
+				return
+			}
+			if !strings.Contains(gotstring, tt.want) {
+				t.Errorf("GetStorageURL() = %v which must contain %v", got.String(), tt.want)
 			}
 		})
 	}
