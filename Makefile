@@ -64,8 +64,11 @@ codegen:
 	@./hack/update-codegen.sh
 
 ### CRDs
-generate-crds:
-	controller-gen crd:trivialVersions=false,preserveUnknownFields=false  \
+controller-gen-install:
+	go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.9.0
+
+generate-crds: controller-gen-install
+	controller-gen crd \
 	paths=./pkg/apis/core/v1  \
 	output:crd:artifacts:config=crds/v1
 
