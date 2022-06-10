@@ -56,7 +56,7 @@ func Commands() *cobra.Command {
 
 	geturlCmd := &cobra.Command{
 		Use:   "get-url",
-		Short: "Get url of a uploaded archive",
+		Short: "Get url of an uploaded archive",
 		RunE:  wrapper.Wrapper(GetURL),
 	}
 	wrapper.SetFlags(geturlCmd, flag.FlagSet{
@@ -76,7 +76,7 @@ func Commands() *cobra.Command {
 
 	command := &cobra.Command{
 		Use:     "archive",
-		Short:   "For managing archives",
+		Short:   "Manage archives stored with Fission Storage Service.",
 		Aliases: []string{"ar"},
 	}
 
