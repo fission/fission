@@ -242,7 +242,7 @@ func (ss *StorageService) infoHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 	}
 
-	w.Header().Add("url", itemURL.String())
+	w.Header().Add("X-FISSION-ARCHIVEURL", itemURL.String())
 
 }
 

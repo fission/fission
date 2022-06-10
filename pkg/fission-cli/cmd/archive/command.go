@@ -25,12 +25,12 @@ import (
 
 func Commands() *cobra.Command {
 
-	putCmd := &cobra.Command{
-		Use:   "put",
+	uploadCmd := &cobra.Command{
+		Use:   "upload",
 		Short: "Upload an archive",
-		RunE:  wrapper.Wrapper(Put),
+		RunE:  wrapper.Wrapper(Upload),
 	}
-	wrapper.SetFlags(putCmd, flag.FlagSet{
+	wrapper.SetFlags(uploadCmd, flag.FlagSet{
 		Required: []flag.Flag{flag.ArchiveName},
 		Optional: []flag.Flag{flag.KubeContext},
 	})
@@ -55,7 +55,7 @@ func Commands() *cobra.Command {
 	})
 
 	geturlCmd := &cobra.Command{
-		Use:   "geturl",
+		Use:   "get-url",
 		Short: "Get url of a uploaded archive",
 		RunE:  wrapper.Wrapper(GetURL),
 	}
@@ -75,10 +75,11 @@ func Commands() *cobra.Command {
 	})
 
 	command := &cobra.Command{
-		Use:   "archive",
-		Short: "For managing archives",
+		Use:     "archive",
+		Short:   "For managing archives",
+		Aliases: []string{"ar"},
 	}
 
-	command.AddCommand(putCmd, listCmd, deleteCmd, geturlCmd, downloadCmd)
+	command.AddCommand(uploadCmd, listCmd, deleteCmd, geturlCmd, downloadCmd)
 	return command
 }

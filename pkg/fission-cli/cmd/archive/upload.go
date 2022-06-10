@@ -27,15 +27,15 @@ import (
 	storagesvcClient "github.com/fission/fission/pkg/storagesvc/client"
 )
 
-type PutSubCommand struct {
+type UploadSubCommand struct {
 	cmd.CommandActioner
 }
 
-func Put(input cli.Input) error {
-	return (&PutSubCommand{}).do(input)
+func Upload(input cli.Input) error {
+	return (&UploadSubCommand{}).do(input)
 }
 
-func (opts *PutSubCommand) do(input cli.Input) error {
+func (opts *UploadSubCommand) do(input cli.Input) error {
 
 	kubeContext := input.String(flagkey.KubeContext)
 	archiveName := input.String(flagkey.ArchiveName)

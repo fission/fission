@@ -50,7 +50,10 @@ func (opts *ListSubCommand) do(input cli.Input) error {
 		return err
 	}
 
-	fmt.Println(files)
+	fmt.Println("ARCHIVES")
+	for _, file := range files {
+		fmt.Println(file)
+	}
 
 	return nil
 

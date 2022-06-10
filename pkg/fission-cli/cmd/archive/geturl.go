@@ -64,7 +64,7 @@ func (opts *GetURLSubCommand) do(input cli.Input) error {
 		return fmt.Errorf("Error getting URL. Exited with Status:  %v", resp.Status)
 	}
 
-	archiveURL, err := url.Parse(resp.Header.Get("url"))
+	archiveURL, err := url.Parse(resp.Header.Get("X-FISSION-ARCHIVEURL"))
 	if err != nil {
 		return err
 	}
@@ -76,9 +76,9 @@ func (opts *GetURLSubCommand) do(input cli.Input) error {
 		}
 		storagesvcURL := "http://" + storageSvc
 		client := storagesvcClient.MakeClient(storagesvcURL)
-		fmt.Printf("The URL for id: %s is %s", archiveID, fmt.Sprint(client.GetUrl(archiveID)))
+		fmt.Printf("URL: %s", client.GetUrl(archiveID))
 	} else {
-		fmt.Printf("The URL for id: %s is %s", archiveID, fmt.Sprint(resp.Header.Get("url")))
+		fmt.Printf("URL: %s", archiveURL.String())
 	}
 
 	return nil

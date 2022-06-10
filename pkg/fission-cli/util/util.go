@@ -451,7 +451,10 @@ func GetStorageURL(kubeContext string) (*url.URL, error) {
 		return nil, err
 	}
 
-	serverURL, _ := url.Parse("http://127.0.0.1:" + storageLocalPort)
+	serverURL, err := url.Parse("http://127.0.0.1:" + storageLocalPort)
+	if err != nil {
+		return nil, err
+	}
 
 	return serverURL, nil
 }
