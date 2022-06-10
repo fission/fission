@@ -49,6 +49,10 @@ func (ss s3Storage) getContainerName() string {
 	return ss.bucketName
 }
 
+func (ss s3Storage) getSubDir() string {
+	return ss.subDir
+}
+
 func (ss s3Storage) getUploadFileName() (string, error) {
 	id, err := uuid.NewV4()
 	if err != nil {

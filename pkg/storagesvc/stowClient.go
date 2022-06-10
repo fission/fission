@@ -206,7 +206,7 @@ func (client *StowClient) getItemIDsWithFilter(filterFunc filter, filterFuncPara
 	archiveIDList := make([]string, 0)
 
 	for {
-		items, cursor, err = client.container.Items(stow.NoPrefix, cursor, PaginationSize)
+		items, cursor, err = client.container.Items(client.config.storage.getSubDir(), cursor, PaginationSize)
 		if err != nil {
 			return nil, errors.Wrap(err, "error getting items from container")
 		}
