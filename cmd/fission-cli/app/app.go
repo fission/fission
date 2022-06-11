@@ -86,8 +86,7 @@ func App() *cobra.Command {
 	})
 
 	wrapper.SetFlags(rootCmd, flag.FlagSet{
-		Global:   []flag.Flag{flag.GlobalServer, flag.GlobalVerbosity, flag.KubeContext},
-		Optional: []flag.Flag{flag.PreCheckOnly},
+		Global: []flag.Flag{flag.GlobalServer, flag.GlobalVerbosity, flag.KubeContext},
 	})
 
 	groups := helptemplate.CommandGroups{}
