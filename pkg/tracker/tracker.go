@@ -37,6 +37,7 @@ type (
 	tracker struct {
 		gaPropertyID string
 		cid          string
+		gaAPIURL     string
 	}
 	Event struct {
 		Category string
@@ -51,7 +52,11 @@ func init() {
 	if err != nil {
 		panic(err)
 	}
-	Tracker = &tracker{gaPropertyID: os.Getenv(GA_TRACKING_ID), cid: id.String()}
+	Tracker = &tracker{
+		gaPropertyID: os.Getenv(GA_TRACKING_ID),
+		cid:          id.String(),
+		gaAPIURL:     "https://www.google-analytics.com/collect",
+	}
 }
 
 func (t *tracker) SendEvent(ctx context.Context, e Event) error {
@@ -81,7 +86,7 @@ func (t *tracker) SendEvent(ctx context.Context, e Event) error {
 	}
 
 	buf := bytes.NewBufferString(v.Encode())
-	req, err := http.NewRequestWithContext(ctx, "POST", GA_API_URL, buf)
+	req, err := http.NewRequestWithContext(ctx, "POST", t.gaAPIURL, buf)
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Add("User-Agent", "ga-tracker/1.0")
 	if err != nil {
