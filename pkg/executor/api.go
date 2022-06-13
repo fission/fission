@@ -77,7 +77,7 @@ func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *htt
 		if err == nil {
 			// if a pod is already serving request then it already exists else validated
 			logger.Debug("from cache", zap.Int("active", active))
-			if active > 1 || et.IsValid(ctx, fsvc) {
+			if et.IsValid(ctx, fsvc) {
 				// Cached, return svc address
 				logger.Debug("served from cache", zap.String("name", fsvc.Name), zap.String("address", fsvc.Address))
 				executor.writeResponse(w, fsvc.Address, fn.ObjectMeta.Name)
