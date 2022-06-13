@@ -38,8 +38,8 @@ import (
 
 const (
 	// supported environment variables
-	envSrcPkg    = "SRC_PKG"
-	envDeployPkg = "DEPLOY_PKG"
+	envSrcPkg    string = "SRC_PKG"
+	envDeployPkg string = "DEPLOY_PKG"
 )
 
 type (
@@ -114,9 +114,9 @@ func (builder *Builder) Handler(w http.ResponseWriter, r *http.Request) {
 	}
 	builder.logger.Info("builder received request", zap.Any("request", req))
 
-	builder.logger.Info("starting build")
+	builder.logger.Debug("starting build")
 	srcPkgPath := filepath.Join(builder.sharedVolumePath, req.SrcPkgFilename)
-	deployPkgFilename := fmt.Sprintf("%v-%v", req.SrcPkgFilename, strings.ToLower(uniuri.NewLen(6)))
+	deployPkgFilename := fmt.Sprintf("%s-%s", req.SrcPkgFilename, strings.ToLower(uniuri.NewLen(6)))
 	deployPkgPath := filepath.Join(builder.sharedVolumePath, deployPkgFilename)
 
 	var buildArgs []string
@@ -157,7 +157,7 @@ func (builder *Builder) reply(w http.ResponseWriter, pkgFilename string, buildLo
 	rBody, err := json.Marshal(resp)
 	if err != nil {
 		e := errors.Wrap(err, "error encoding response body")
-		rBody = []byte(fmt.Sprintf(`{"buildLogs": "%v"}`, e.Error()))
+		rBody = []byte(fmt.Sprintf(`{"buildLogs": "%s"}`, e.Error()))
 		statusCode = http.StatusInternalServerError
 	}
 
@@ -189,8 +189,8 @@ func (builder *Builder) build(command string, args []string, srcPkgPath string, 
 
 	// set env variables for build command
 	cmd.Env = append(os.Environ(),
-		fmt.Sprintf("%v=%v", envSrcPkg, srcPkgPath),
-		fmt.Sprintf("%v=%v", envDeployPkg, deployPkgPath),
+		fmt.Sprintf("%s=%s", envSrcPkg, srcPkgPath),
+		fmt.Sprintf("%s=%s", envDeployPkg, deployPkgPath),
 	)
 
 	stdout, err := cmd.StdoutPipe()
@@ -203,12 +203,8 @@ func (builder *Builder) build(command string, args []string, srcPkgPath string, 
 		return "", errors.Wrap(err, "error creating stderr pipe for cmd")
 	}
 
-	var buildLogs string
-
-	fmt.Printf("\n=== Build Logs ===")
 	// Init logs
-	fmt.Printf("command=%v\n", command)
-	fmt.Printf("env=%v\n", cmd.Env)
+	builder.logger.Info("building source package", zap.String("command", command), zap.Strings("args", args), zap.Strings("env", cmd.Env))
 
 	out := io.MultiReader(stdout, stderr)
 	scanner := bufio.NewScanner(out)
@@ -217,12 +213,14 @@ func (builder *Builder) build(command string, args []string, srcPkgPath string, 
 	if err != nil {
 		return "", errors.Wrap(err, "error starting cmd")
 	}
-
+	fmt.Printf("========= START =========\n")
+	defer fmt.Printf("========= END ===========\n")
+	var buildLogs string
 	// Runtime logs
 	for scanner.Scan() {
 		output := scanner.Text()
 		fmt.Println(output)
-		buildLogs += fmt.Sprintf("%v\n", output)
+		buildLogs += fmt.Sprintf("%s\n", output)
 	}
 
 	if err := scanner.Err(); err != nil {
@@ -237,7 +235,5 @@ func (builder *Builder) build(command string, args []string, srcPkgPath string, 
 		fmt.Println(cmdErr)
 		return buildLogs, cmdErr
 	}
-	fmt.Printf("==================\n")
-
 	return buildLogs, nil
 }
