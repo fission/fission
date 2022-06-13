@@ -61,7 +61,7 @@ func App() *cobra.Command {
 			func(input cli.Input) error {
 				console.Verbosity = input.Int(flagkey.Verbosity)
 
-				if input.IsSet(flagkey.ClientOnly) {
+				if input.IsSet(flagkey.ClientOnly) || input.IsSet(flagkey.PreCheckOnly) {
 					// TODO: use fake rest client for offline spec generation
 					cmd.SetClientset(client.MakeFakeClientset(nil))
 				} else {
