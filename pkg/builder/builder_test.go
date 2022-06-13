@@ -137,7 +137,7 @@ func TestBuilder(t *testing.T) {
 				builder.Handler(w, r)
 				resp := w.Result()
 				if resp.StatusCode != test.status {
-					t.Errorf("expected status code %d, got %d", http.StatusBadRequest, w.Result().StatusCode)
+					t.Errorf("expected status code %d, got %d", test.status, resp.StatusCode)
 				}
 				body, err = ioutil.ReadAll(resp.Body)
 				if err != nil {
