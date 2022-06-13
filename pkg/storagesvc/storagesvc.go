@@ -41,7 +41,7 @@ type (
 	Storage interface {
 		getStorageType() StorageType
 		dial() (stow.Location, error)
-		// getSubDir() string
+		getSubDir() string
 		getContainerName() string
 		getUploadFileName() (string, error)
 	}

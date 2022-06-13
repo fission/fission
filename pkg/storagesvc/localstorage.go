@@ -42,6 +42,10 @@ func (ls localStorage) getUploadFileName() (string, error) {
 	return id.String(), err
 }
 
+func (ls localStorage) getSubDir() string {
+	return ""
+}
+
 func (ls localStorage) getContainerName() string {
 	return ls.containerName
 }
