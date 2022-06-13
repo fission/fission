@@ -28,7 +28,6 @@ import (
 )
 
 const HTTP_TIMEOUT = 5 * time.Second
-const GA_API_URL = "https://www.google-analytics.com/collect"
 const GA_TRACKING_ID = "GA_TRACKING_ID"
 
 var Tracker *tracker
