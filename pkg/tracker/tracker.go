@@ -19,6 +19,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"os"
@@ -50,7 +51,7 @@ type (
 func NewTracker() error {
 	id, err := uuid.NewV4()
 	if err != nil {
-		return errors.New("tracker.NewTracker: error generating new UUID")
+		return fmt.Errorf("tracker.NewTracker: error generating UUID: %w", err)
 	}
 
 	gaTrackingID := os.Getenv(GA_TRACKING_ID)

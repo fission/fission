@@ -10,13 +10,11 @@ import (
 	"os"
 	"testing"
 
-	uuid "github.com/satori/go.uuid"
 	"github.com/stretchr/testify/assert"
 )
 
 type request struct {
-	tracker *tracker
-	event   *Event
+	event *Event
 }
 
 func TestTracker(t *testing.T) {
@@ -52,15 +50,11 @@ func TestTracker(t *testing.T) {
 	})
 
 	t.Run("SendEvent", func(test *testing.T) {
-		id, err := uuid.NewV4()
+
+		os.Setenv(GA_TRACKING_ID, "UA-000000-2")
+		err := NewTracker()
 		if err != nil {
 			log.Fatal(err)
-		}
-
-		tracker := &tracker{
-			gaPropertyID: "UA-000000-2",
-			gaAPIURL:     "/",
-			cid:          id.String(),
 		}
 		for _, test := range []struct {
 			name     string
@@ -71,7 +65,6 @@ func TestTracker(t *testing.T) {
 			{
 				name: "category and action should not be empty",
 				request: &request{
-					tracker: tracker,
 					event: &Event{
 						Category: "",
 						Action:   "",
@@ -85,7 +78,6 @@ func TestTracker(t *testing.T) {
 			{
 				name: "Google Analytics response should not be OK",
 				request: &request{
-					tracker: tracker,
 					event: &Event{
 						Category: "UI_action",
 						Action:   "button_press",
@@ -99,7 +91,6 @@ func TestTracker(t *testing.T) {
 			{
 				name: "Google Analytics response should be OK",
 				request: &request{
-					tracker: tracker,
 					event: &Event{
 						Category: "UI_action",
 						Action:   "button_press",
@@ -114,9 +105,9 @@ func TestTracker(t *testing.T) {
 			t.Run(test.name, func(testing *testing.T) {
 				server := MockHTTPServer(test.status, "")
 				defer server.Close()
-				test.request.tracker.gaAPIURL = server.URL
+				Tracker.gaAPIURL = server.URL
 
-				resp := test.request.tracker.SendEvent(context.Background(), *test.request.event)
+				resp := Tracker.SendEvent(context.Background(), *test.request.event)
 				if test.status == http.StatusOK {
 					assert.Nil(testing, resp, test.expected)
 				} else {
