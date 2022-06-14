@@ -36,7 +36,7 @@ create_archive
 uploadResp=$(fission ar upload --name $tmp_dir/test-deploy-pkg.zip)
 filename=$(echo $uploadResp | cut -d':' -f2 | tr -d ' ')
 
-kubectl exec -it $podname -n fission -- /bin/sh -c "ls $filename"
+kubectl exec -i $podname -n fission -- /bin/sh -c "ls $filename"
 
 #Test for list
 listResp=$(fission ar list)
@@ -56,7 +56,7 @@ echo $getURLResp | grep "http://storagesvc.fission/v1/archive?id=%2Ffission%2Ffi
 #Test for delete
 fission ar delete --id $filename
 
-kubectl exec -it $podname -n fission -- /bin/sh -c "ls $filename" | grep "$filename: No such file or directory"
+kubectl exec -i $podname -n fission -- /bin/sh -c "ls $filename" | grep "$filename: No such file or directory"
 
 log "Archive CLI tests done."
 
