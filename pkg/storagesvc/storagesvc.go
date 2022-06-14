@@ -236,7 +236,10 @@ func (ss *StorageService) Start(ctx context.Context, port int, openTracingEnable
 
 // Start runs storage service
 func Start(ctx context.Context, logger *zap.Logger, storage Storage, port int, openTracingEnabled bool) error {
-	enablePruner := true
+	enablePruner, err := strconv.ParseBool(os.Getenv("PRUNE_ENABLED"))
+	if err != nil {
+		enablePruner = true
+	}
 	// create a storage client
 	storageClient, err := MakeStowClient(logger, storage)
 	if err != nil {

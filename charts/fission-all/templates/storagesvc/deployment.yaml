@@ -36,8 +36,12 @@ spec:
         args: ["--storageServicePort", "8000", "--storageType", "local"]
         {{- end }}
         env:
+        - name: PRUNE_ENABLED
+          value: "{{.Values.archivePruner.enabled}}"
+        {{- if .Values.archivePruner.enabled }}
         - name: PRUNE_INTERVAL
-          value: "{{.Values.pruneInterval}}"
+          value: "{{.Values.archivePruner.interval}}"
+        {{- end }}
         - name: DEBUG_ENV
           value: {{ .Values.debugEnv | quote }}
         - name: PPROF_ENABLED
