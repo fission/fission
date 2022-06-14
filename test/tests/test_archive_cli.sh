@@ -35,14 +35,15 @@ create_archive() {
 create_archive
 uploadResp=$(fission ar upload --name $tmp_dir/test-deploy-pkg.zip)
 
-fileName=$(kubectl exec -it $podname -n fission -- /bin/sh -c "ls /fission/fission-functions/")
+filename=$(kubectl exec -it $podname -n fission -- /bin/sh -c "ls /fission/fission-functions/")
 
-echo $uploadResp | grep -Fxc -- "$filename"
+echo "$uploadResp" | grep -F "$filename"
 
 #Test for list
 listResp=$(fission ar list)
 
-echo $listResp | grep $fileName
+echo $listResp | grep -F "$filename"
+
 
 
 
