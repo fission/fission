@@ -28,9 +28,11 @@ import (
 	uuid "github.com/satori/go.uuid"
 )
 
-const HTTP_TIMEOUT = 5 * time.Second
-const GA_TRACKING_ID = "GA_TRACKING_ID"
-const GA_API_URL = "GA_API_URL"
+const (
+	HTTP_TIMEOUT   time.Duration = 5 * time.Second
+	GA_TRACKING_ID string        = "GA_TRACKING_ID"
+	GA_API_URL     string        = "GA_API_URL"
+)
 
 var Tracker *tracker
 
