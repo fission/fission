@@ -365,6 +365,12 @@ storagesvc:
   ##
   resources: {}
 
+  ##ArchivePruner removes archives from storage after every interval(in mins).
+  archivePruner:
+    enabled: true
+    interval: 60
+
+
   ## Security Context
   ## It holds pod-level and container level security configuration.
   ## This is an experimental section, please verify before enabling in production.
@@ -567,10 +573,6 @@ busyboxImage: busybox
 ## This interval configures the frequency at which it runs inside the storagesvc pod.
 ## The value is in minutes.
 ##
-archivePruner:
-  enabled: true
-
-  interval: 60
 
 preUpgradeChecks:
   ## Run pre-install/pre-upgrade checks if true

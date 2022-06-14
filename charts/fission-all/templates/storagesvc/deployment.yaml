@@ -37,10 +37,10 @@ spec:
         {{- end }}
         env:
         - name: PRUNE_ENABLED
-          value: "{{.Values.archivePruner.enabled}}"
-        {{- if .Values.archivePruner.enabled }}
+          value: "{{.Values.storagesvc.archivePruner.enabled}}"
+        {{- if .Values.storagesvc.archivePruner.enabled }}
         - name: PRUNE_INTERVAL
-          value: "{{.Values.archivePruner.interval}}"
+          value: "{{.Values.storagesvc.archivePruner.interval}}"
         {{- end }}
         - name: DEBUG_ENV
           value: {{ .Values.debugEnv | quote }}

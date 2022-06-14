@@ -238,6 +238,7 @@ func (ss *StorageService) Start(ctx context.Context, port int, openTracingEnable
 func Start(ctx context.Context, logger *zap.Logger, storage Storage, port int, openTracingEnabled bool) error {
 	enablePruner, err := strconv.ParseBool(os.Getenv("PRUNE_ENABLED"))
 	if err != nil {
+		logger.Warn("PRUNE_ENABLED value not set. Enabling archive pruner by default.", zap.Error(err))
 		enablePruner = true
 	}
 	// create a storage client
