@@ -17,10 +17,10 @@ limitations under the License.
 package main
 
 import (
-	"github.com/fission/fission/pkg/utils/loggerfactory"
 	"go.uber.org/zap"
 
 	"github.com/fission/fission/cmd/reporter/app"
+	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
 
 func main() {
