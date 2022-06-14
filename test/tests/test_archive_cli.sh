@@ -34,15 +34,34 @@ create_archive() {
 #Test for upload
 create_archive
 uploadResp=$(fission ar upload --name $tmp_dir/test-deploy-pkg.zip)
+filename=$(echo $uploadResp | cut -d':' -f2 | tr -d ' ')
 
-filename=$(kubectl exec -it $podname -n fission -- /bin/sh -c "ls /fission/fission-functions/")
-
-echo "$uploadResp" | grep -F "$filename"
+kubectl exec -it $podname -n fission -- /bin/sh -c "ls $filename"
 
 #Test for list
 listResp=$(fission ar list)
 
-echo $listResp | grep -F "$filename"
+echo "$listResp" | grep "$filename"
+
+#Test for download
+downloadResp=$(fission ar download --id $filename)
+
+ls | grep "$filename"
+
+#Test for get-url
+getURLResp=$(fission ar get-url --id $filename)
+
+echo $getURLResp | grep "http://storagesvc.fission/v1/archive?id=%2Ffission%2Ffission-functions%$filename"
+
+#Test for delete
+fission ar delete --id $filename
+
+kubectl exec -it $podname -n fission -- /bin/sh -c "ls $filename" | grep "$filename: No such file or directory"
+
+log "Archive CLI tests done."
+
+
+
 
 
 

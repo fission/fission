@@ -19,6 +19,7 @@ package archive
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
@@ -42,7 +43,7 @@ func (opts *DownloadSubCommand) do(input cli.Input) error {
 	archiveOutput := input.String(flagkey.ArchiveOutput)
 
 	if len(archiveOutput) == 0 {
-		archiveOutput = archiveID
+		archiveOutput = strings.TrimPrefix(archiveID, "/fission/fission-functions/")
 	}
 
 	storageAccessURL, err := util.GetStorageURL(kubeContext)
