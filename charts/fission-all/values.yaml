@@ -365,11 +365,11 @@ storagesvc:
   ##
   resources: {}
 
-  ##ArchivePruner removes archives from storage after every interval(in mins).
+  ## Archive pruner removes archives from storage which are not referenced by any package.
   archivePruner:
     enabled: true
+    ## Run prune routine at interval (in minutes)
     interval: 60
-
 
   ## Security Context
   ## It holds pod-level and container level security configuration.
