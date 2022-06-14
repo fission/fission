@@ -69,7 +69,10 @@ func MockServer(status int, encodeValue interface{}) *httptest.Server {
 	f := func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(status)
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(encodeValue)
+		err := json.NewEncoder(w).Encode(encodeValue)
+		if err != nil {
+			log.Panic(err)
+		}
 	}
 
 	return httptest.NewServer(http.HandlerFunc(f))
