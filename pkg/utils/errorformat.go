@@ -35,6 +35,6 @@ func DefaultErrorFormat(es []error) string {
 		points[i] = fmt.Sprintf("* %s", err)
 	}
 	return fmt.Sprintf(
-		"%d errors occured:\n\t%s\n",
+		"%d errors occurred:\n\t%s\n",
 		len(es), strings.Join(points, "\n\t"))
 }

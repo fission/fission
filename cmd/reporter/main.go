@@ -29,6 +29,6 @@ func main() {
 
 	err := app.App().Execute()
 	if err != nil {
-		logger.Error("error occured while establishing connection with google analytics", zap.Error(err))
+		logger.Error("error occurred while establishing connection with google analytics", zap.Error(err))
 	}
 }

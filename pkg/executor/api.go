@@ -93,7 +93,7 @@ func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *htt
 
 		if active >= concurrency {
 			errMsg := fmt.Sprintf("max concurrency reached for %v. All %v instance are active", fn.ObjectMeta.Name, concurrency)
-			logger.Error("error occured", zap.String("error", errMsg))
+			logger.Error("error occurred", zap.String("error", errMsg))
 			http.Error(w, html.EscapeString(errMsg), http.StatusTooManyRequests)
 			return
 		}

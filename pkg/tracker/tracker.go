@@ -29,6 +29,7 @@ import (
 
 const HTTP_TIMEOUT = 5 * time.Second
 const GA_TRACKING_ID = "GA_TRACKING_ID"
+const GA_API_URL = "GA_API_URL"
 
 var Tracker *tracker
 
@@ -46,23 +47,31 @@ type (
 	}
 )
 
-func init() {
+func NewTracker() error {
 	id, err := uuid.NewV4()
 	if err != nil {
-		panic(err)
+		return errors.New("tracker.NewTracker: error generating new UUID")
 	}
+
+	gaTrackingID := os.Getenv(GA_TRACKING_ID)
+	if gaTrackingID == "" {
+		return errors.New("tracker.NewTracker: GA_TRACKING_ID env not set")
+	}
+
+	gaAPIURL := os.Getenv(GA_API_URL)
+	if gaAPIURL == "" {
+		gaAPIURL = "https://www.google-analytics.com/collect"
+	}
+
 	Tracker = &tracker{
-		gaPropertyID: os.Getenv(GA_TRACKING_ID),
+		gaPropertyID: gaTrackingID,
 		cid:          id.String(),
-		gaAPIURL:     "https://www.google-analytics.com/collect",
+		gaAPIURL:     gaAPIURL,
 	}
+	return nil
 }
 
 func (t *tracker) SendEvent(ctx context.Context, e Event) error {
-	if t.gaPropertyID == "" {
-		return errors.New("tracker.SendEvent: GA_TRACKING_ID env not set")
-	}
-
 	if e.Action == "" || e.Category == "" {
 		return errors.New("tracker.SendEvent: category and action are required")
 	}

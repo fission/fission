@@ -3,77 +3,140 @@ package tracker
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	uuid "github.com/satori/go.uuid"
 	"github.com/stretchr/testify/assert"
 )
 
-func TestSendEvent(t *testing.T) {
-	id, err := uuid.NewV4()
-	if err != nil {
-		log.Panic(err)
-	}
-	tracker := &tracker{
-		cid: id.String(),
-	}
+type request struct {
+	tracker *tracker
+	event   *Event
+}
 
-	event := &Event{
-		Label: "play",
-		Value: "value",
-	}
-
-	//Testcase 1
-	t.Run("GA Tracking ID should not be empty", func(test *testing.T) {
-		resp := tracker.SendEvent(context.Background(), *event)
-		assert.NotNil(test, resp, "error can't be nil")
-		assert.Equal(test, resp.Error(), "tracker.SendEvent: GA_TRACKING_ID env not set",
-			"SendEvent must return an error in case gaPropertyID is empty")
+func TestTracker(t *testing.T) {
+	t.Run("NewTracker", func(test *testing.T) {
+		for _, test := range []struct {
+			name     string
+			gaAPIURl string
+			expected error
+		}{
+			{
+				name:     "GA Tracking ID should not be empty",
+				gaAPIURl: "",
+				expected: errors.New("tracker.NewTracker: GA_TRACKING_ID env not set"),
+			},
+			{
+				name:     "Tracker should initialize properly",
+				gaAPIURl: "/",
+				expected: nil,
+			},
+		} {
+			t.Run(test.name, func(testing *testing.T) {
+				if test.expected == nil {
+					os.Setenv(GA_TRACKING_ID, "UA-000000-2")
+					resp := NewTracker()
+					assert.Nil(testing, resp, test.expected)
+				} else {
+					resp := NewTracker()
+					assert.NotNil(testing, resp)
+					assert.Equal(testing, resp.Error(), test.expected.Error())
+				}
+			})
+		}
 	})
 
-	tracker.gaPropertyID = "UA-000000-2"
-	//Testcase 2
-	t.Run("category and action should not be empty", func(test *testing.T) {
-		resp := tracker.SendEvent(context.Background(), *event)
-		assert.NotNil(test, resp, "error can't be nil")
-		assert.Equal(test, resp.Error(), "tracker.SendEvent: category and action are required",
-			"SendEvent must return an error in case category and action is empty")
-	})
+	t.Run("SendEvent", func(test *testing.T) {
+		id, err := uuid.NewV4()
+		if err != nil {
+			log.Fatal(err)
+		}
 
-	event.Action = "button_press"
-	event.Category = "ui_action"
+		tracker := &tracker{
+			gaPropertyID: "UA-000000-2",
+			gaAPIURL:     "/",
+			cid:          id.String(),
+		}
+		for _, test := range []struct {
+			name     string
+			request  *request
+			expected error
+			status   int
+		}{
+			{
+				name: "category and action should not be empty",
+				request: &request{
+					tracker: tracker,
+					event: &Event{
+						Category: "",
+						Action:   "",
+						Label:    "play",
+						Value:    "value",
+					},
+				},
+				expected: errors.New("tracker.SendEvent: category and action are required"),
+				status:   http.StatusInternalServerError,
+			},
+			{
+				name: "Google Analytics response should not be OK",
+				request: &request{
+					tracker: tracker,
+					event: &Event{
+						Category: "UI_action",
+						Action:   "button_press",
+						Label:    "play",
+						Value:    "value",
+					},
+				},
+				expected: errors.New("tracker.SendEvent: analytics response status not ok"),
+				status:   http.StatusInternalServerError,
+			},
+			{
+				name: "Google Analytics response should be OK",
+				request: &request{
+					tracker: tracker,
+					event: &Event{
+						Category: "UI_action",
+						Action:   "button_press",
+						Label:    "play",
+						Value:    "value",
+					},
+				},
+				expected: nil,
+				status:   http.StatusOK,
+			},
+		} {
+			t.Run(test.name, func(testing *testing.T) {
+				server := MockHTTPServer(test.status, "")
+				defer server.Close()
+				test.request.tracker.gaAPIURL = server.URL
 
-	//Testcase 3
-	t.Run("Google Analytics response should not be OK", func(test *testing.T) {
-		server := MockServer(400, "")
-		tracker.gaAPIURL = server.URL
-		resp := tracker.SendEvent(context.Background(), *event)
-		assert.NotNil(test, resp, "error can't be nil")
-		assert.Equal(test, resp.Error(), "tracker.SendEvent: analytics response status not ok",
-			"SendEvent must return an error in case response not ok from google analytics")
-	})
+				resp := test.request.tracker.SendEvent(context.Background(), *test.request.event)
+				if test.status == http.StatusOK {
+					assert.Nil(testing, resp, test.expected)
+				} else {
+					assert.NotNil(testing, resp)
+					assert.Equal(testing, resp.Error(), test.expected.Error())
+				}
 
-	//Testcase 4
-	t.Run("Google Analytics response should be OK", func(test *testing.T) {
-		server := MockServer(200, "")
-		tracker.gaAPIURL = server.URL
-		resp := tracker.SendEvent(context.Background(), *event)
-		assert.Nil(test, resp, "error must be nil if response is ok from google analytics")
+			})
+		}
 	})
 }
 
-func MockServer(status int, encodeValue interface{}) *httptest.Server {
+func MockHTTPServer(status int, encodeValue interface{}) *httptest.Server {
 	f := func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(status)
 		w.Header().Set("Content-Type", "application/json")
 		err := json.NewEncoder(w).Encode(encodeValue)
 		if err != nil {
-			log.Panic(err)
+			log.Fatal(err)
 		}
 	}
-
 	return httptest.NewServer(http.HandlerFunc(f))
 }
