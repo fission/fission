@@ -45,18 +45,19 @@ echo "$listResp" | grep "$filename"
 
 #Test for download
 downloadResp=$(fission ar download --id $filename)
+fileID=$(echo $filename | cut -d'/' -f4)
 
-ls | grep "$filename"
+ls | grep "$fileID"
 
 #Test for get-url
 getURLResp=$(fission ar get-url --id $filename)
 
-echo $getURLResp | grep "http://storagesvc.fission/v1/archive?id=%2Ffission%2Ffission-functions%$filename"
+echo $getURLResp | grep "http://storagesvc.fission/v1/archive?id=%2Ffission%2Ffission-functions%$fileID"
 
 #Test for delete
 fission ar delete --id $filename
 
-kubectl exec -i $podname -n fission -- /bin/sh -c "ls $filename" | grep "$filename: No such file or directory"
+kubectl exec -i $podname -n fission -- /bin/sh -c "ls $filename" 2>&1 | grep "$filename: No such file or directory"
 
 log "Archive CLI tests done."
 
