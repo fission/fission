@@ -39,7 +39,7 @@ func Download(input cli.Input) error {
 func (opts *DownloadSubCommand) do(input cli.Input) error {
 
 	kubeContext := input.String(flagkey.KubeContext)
-	archiveID := input.String(flagkey.ArchiveId)
+	archiveID := input.String(flagkey.ArchiveID)
 	archiveOutput := input.String(flagkey.ArchiveOutput)
 
 	if len(archiveOutput) == 0 {

@@ -179,7 +179,7 @@ const (
 	CanaryFailureThreshold  = "failure-threshold"
 
 	ArchiveName   = resourceName
-	ArchiveId     = "id"
+	ArchiveID     = "id"
 	ArchiveOutput = Output
 
 	DefaultSpecOutputDir = "fission-dump"

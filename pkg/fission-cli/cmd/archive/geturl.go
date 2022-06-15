@@ -39,7 +39,7 @@ func GetURL(input cli.Input) error {
 func (opts *GetURLSubCommand) do(input cli.Input) error {
 
 	kubeContext := input.String(flagkey.KubeContext)
-	archiveID := input.String(flagkey.ArchiveId)
+	archiveID := input.String(flagkey.ArchiveID)
 
 	serverURL, err := util.GetStorageURL(kubeContext)
 	if err != nil {

@@ -229,6 +229,6 @@ var (
 	CanaryFailureThreshold  = Flag{Type: Int, Name: flagkey.CanaryFailureThreshold, Aliases: []string{"threshold"}, Usage: "Threshold in percentage beyond which the new version of the function is considered unstable", DefaultValue: 10}
 
 	ArchiveName   = Flag{Type: String, Name: flagkey.ArchiveName, Usage: "Name of the archive file"}
-	ArchiveId     = Flag{Type: String, Name: flagkey.ArchiveId, Usage: "Id for the archive file"}
+	ArchiveID     = Flag{Type: String, Name: flagkey.ArchiveID, Usage: "Id for the archive file"}
 	ArchiveOutput = Flag{Type: String, Name: flagkey.ArchiveOutput, Usage: "Download file with this name", Aliases: []string{"o"}, DefaultValue: ""}
 )

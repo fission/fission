@@ -50,17 +50,17 @@ func Commands() *cobra.Command {
 		RunE:  wrapper.Wrapper(Delete),
 	}
 	wrapper.SetFlags(deleteCmd, flag.FlagSet{
-		Required: []flag.Flag{flag.ArchiveId},
+		Required: []flag.Flag{flag.ArchiveID},
 		Optional: []flag.Flag{flag.ArchiveOutput},
 	})
 
 	geturlCmd := &cobra.Command{
 		Use:   "get-url",
-		Short: "Get url of an uploaded archive",
+		Short: "Get URL of an uploaded archive",
 		RunE:  wrapper.Wrapper(GetURL),
 	}
 	wrapper.SetFlags(geturlCmd, flag.FlagSet{
-		Required: []flag.Flag{flag.ArchiveId},
+		Required: []flag.Flag{flag.ArchiveID},
 		Optional: []flag.Flag{flag.KubeContext},
 	})
 
@@ -70,7 +70,7 @@ func Commands() *cobra.Command {
 		RunE:  wrapper.Wrapper(Download),
 	}
 	wrapper.SetFlags(downloadCmd, flag.FlagSet{
-		Required: []flag.Flag{flag.ArchiveId},
+		Required: []flag.Flag{flag.ArchiveID},
 		Optional: []flag.Flag{flag.KubeContext, flag.ArchiveOutput},
 	})
 
