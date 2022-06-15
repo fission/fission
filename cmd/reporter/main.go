@@ -17,14 +17,18 @@ limitations under the License.
 package main
 
 import (
-	"log"
+	"go.uber.org/zap"
 
 	"github.com/fission/fission/cmd/reporter/app"
+	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
 
 func main() {
+	logger := loggerfactory.GetLogger()
+	defer logger.Sync()
+
 	err := app.App().Execute()
 	if err != nil {
-		log.Fatal(err)
+		logger.Error("error occurred during analytics reporting", zap.Error(err))
 	}
 }

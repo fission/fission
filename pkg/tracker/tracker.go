@@ -19,6 +19,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"os"
@@ -27,16 +28,17 @@ import (
 	uuid "github.com/satori/go.uuid"
 )
 
-const HTTP_TIMEOUT = 5 * time.Second
-const GA_API_URL = "https://www.google-analytics.com/collect"
-const GA_TRACKING_ID = "GA_TRACKING_ID"
-
-var Tracker *tracker
+const (
+	HTTP_TIMEOUT   time.Duration = 5 * time.Second
+	GA_TRACKING_ID string        = "GA_TRACKING_ID"
+	GA_API_URL     string        = "GA_API_URL"
+)
 
 type (
-	tracker struct {
+	Tracker struct {
 		gaPropertyID string
 		cid          string
+		gaAPIURL     string
 	}
 	Event struct {
 		Category string
@@ -46,19 +48,31 @@ type (
 	}
 )
 
-func init() {
+func NewTracker() (*Tracker, error) {
 	id, err := uuid.NewV4()
 	if err != nil {
-		panic(err)
+		return nil, fmt.Errorf("tracker.NewTracker: error generating UUID: %w", err)
 	}
-	Tracker = &tracker{gaPropertyID: os.Getenv(GA_TRACKING_ID), cid: id.String()}
+
+	gaTrackingID := os.Getenv(GA_TRACKING_ID)
+	if gaTrackingID == "" {
+		return nil, errors.New("tracker.NewTracker: GA_TRACKING_ID env not set")
+	}
+
+	gaAPIURL := os.Getenv(GA_API_URL)
+	if gaAPIURL == "" {
+		gaAPIURL = "https://www.google-analytics.com/collect"
+	}
+
+	tracker := &Tracker{
+		gaPropertyID: gaTrackingID,
+		cid:          id.String(),
+		gaAPIURL:     gaAPIURL,
+	}
+	return tracker, nil
 }
 
-func (t *tracker) SendEvent(ctx context.Context, e Event) error {
-	if t.gaPropertyID == "" {
-		return errors.New("tracker.SendEvent: GA_TRACKING_ID env not set")
-	}
-
+func (t *Tracker) SendEvent(ctx context.Context, e Event) error {
 	if e.Action == "" || e.Category == "" {
 		return errors.New("tracker.SendEvent: category and action are required")
 	}
@@ -81,7 +95,7 @@ func (t *tracker) SendEvent(ctx context.Context, e Event) error {
 	}
 
 	buf := bytes.NewBufferString(v.Encode())
-	req, err := http.NewRequestWithContext(ctx, "POST", GA_API_URL, buf)
+	req, err := http.NewRequestWithContext(ctx, "POST", t.gaAPIURL, buf)
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Add("User-Agent", "ga-tracker/1.0")
 	if err != nil {
