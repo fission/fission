@@ -57,7 +57,7 @@ echo $getURLResp | grep "http://storagesvc.fission/v1/archive?id=%2Ffission%2Ffi
 #Test for delete
 fission ar delete --id $filename
 
-kubectl exec -i $podname -n fission -- /bin/sh -c "ls $filename" 2>&1 | grep "$filename: No such file or directory"
+fission ar list | grep -v "$filename"
 
 log "Archive CLI tests done."
 
