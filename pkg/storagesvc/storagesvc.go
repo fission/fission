@@ -67,6 +67,32 @@ func getStorageLocation(config *storageConfig) (stow.Location, error) {
 	return config.storage.dial()
 }
 
+func (ss *StorageService) listItems(w http.ResponseWriter, r *http.Request) {
+	// get all archives on storage
+	// out of them, there may be some just created but not referenced by packages yet.
+	// need to filter them out.
+	archivesInStorage, err := ss.storageClient.getItemIDsWithFilter(ss.storageClient.filterAllItems, false)
+	if err != nil {
+		ss.logger.Error("error getting items from storage", zap.Error(err))
+		return
+	}
+	ss.logger.Debug("archives in storage", zap.Strings("archives", archivesInStorage))
+
+	// respond with the list of items
+	resp, err := json.Marshal(archivesInStorage)
+	if err != nil {
+		http.Error(w, "error marshaling item list", http.StatusInternalServerError)
+		return
+	}
+	_, err = w.Write(resp)
+	if err != nil {
+		ss.logger.Error(
+			"error writing HTTP response",
+			zap.Error(err),
+		)
+	}
+}
+
 // Handle multipart file uploads.
 func (ss *StorageService) uploadHandler(w http.ResponseWriter, r *http.Request) {
 	// handle upload
@@ -203,6 +229,23 @@ func (ss *StorageService) downloadHandler(w http.ResponseWriter, r *http.Request
 	}
 }
 
+func (ss *StorageService) infoHandler(w http.ResponseWriter, r *http.Request) {
+
+	fileId, err := ss.getIdFromRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	itemURL, err := ss.storageClient.getURL(fileId)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+	}
+
+	w.Header().Add("X-FISSION-ARCHIVEURL", itemURL.String())
+
+}
+
 func (ss *StorageService) healthHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
@@ -219,8 +262,10 @@ func (ss *StorageService) Start(ctx context.Context, port int, openTracingEnable
 	r := mux.NewRouter()
 	r.Use(metrics.HTTPMetricMiddleware)
 	r.HandleFunc("/v1/archive", ss.uploadHandler).Methods("POST")
-	r.HandleFunc("/v1/archive", ss.downloadHandler).Methods("GET")
+	r.HandleFunc("/v1/archive", ss.downloadHandler).Queries("id", "{id}").Methods("GET")
+	r.HandleFunc("/v1/archive", ss.listItems).Methods("GET")
 	r.HandleFunc("/v1/archive", ss.deleteHandler).Methods("DELETE")
+	r.HandleFunc("/v1/archive", ss.infoHandler).Methods("HEAD")
 	r.HandleFunc("/healthz", ss.healthHandler).Methods("GET")
 
 	var handler http.Handler

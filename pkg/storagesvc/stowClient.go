@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io"
 	"mime/multipart"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -182,6 +183,18 @@ func (client *StowClient) removeFileByID(itemID string) error {
 	return client.container.RemoveItem(itemID)
 }
 
+func (client *StowClient) getURL(itemID string) (*url.URL, error) {
+	item, err := client.container.Item(itemID)
+	if err != nil {
+		if err == stow.ErrNotFound {
+			return nil, ErrNotFound
+		} else {
+			return nil, ErrRetrievingItem
+		}
+	}
+	return item.URL(), nil
+}
+
 func (client *StowClient) getFileSize(itemID string) (int64, error) {
 	item, err := client.container.Item(itemID)
 	if err != nil {
@@ -239,4 +252,13 @@ func (client StowClient) filterItemCreatedAMinuteAgo(item stow.Item, currentTime
 		return true
 	}
 	return false
+}
+
+func (client StowClient) filterAllItems(item stow.Item, _ interface{}) bool {
+	itemLastModTime, _ := item.LastMod()
+	client.logger.Debug("item info",
+		zap.String("item", item.ID()),
+		zap.Time("last_modified_time", itemLastModTime))
+	return false
+
 }

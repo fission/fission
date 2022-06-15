@@ -57,6 +57,7 @@ main() {
     # run tests without newdeploy in parallel.
     export JOBS=6
     source $ROOT/test/run_test.sh \
+        $ROOT/test/tests/test_archive_cli.sh \
         $ROOT/test/tests/test_canary.sh \
         $ROOT/test/tests/test_fn_update/test_idle_objects_reaper.sh \
         $ROOT/test/tests/mqtrigger/kafka/test_kafka.sh \
