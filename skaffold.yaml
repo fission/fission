@@ -45,7 +45,8 @@ deploy:
         pprof.enabled: false
         canaryDeployment.enabled: false
         influxdb.enabled: false
-        pruneInterval: "60"
+        storagesvc.archivePruner.enabled: true
+        storagesvc.archivePruner.interval: "60"
         repository: index.docker.io
         routerServiceType: LoadBalancer
         openTracing.enabled: false
@@ -102,7 +103,7 @@ profiles:
     path: /deploy/helm/releases/0/setValues/repository
     value: ""
   - op: replace
-    path: /deploy/helm/releases/0/setValues/pruneInterval
+    path: /deploy/helm/releases/0/setValues/storagesvc.archivePruner.interval
     value: 1
   - op: replace
     path: /deploy/helm/releases/0/setValues/routerServiceType
