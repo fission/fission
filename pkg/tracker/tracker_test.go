@@ -13,10 +13,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-type request struct {
-	event *Event
-}
-
 func TestTracker(t *testing.T) {
 	t.Run("NewTracker", func(test *testing.T) {
 		for _, test := range []struct {
@@ -38,12 +34,14 @@ func TestTracker(t *testing.T) {
 			t.Run(test.name, func(testing *testing.T) {
 				if test.expected == nil {
 					os.Setenv(GA_TRACKING_ID, "UA-000000-2")
-					resp := NewTracker()
-					assert.Nil(testing, resp, test.expected)
-				} else {
-					resp := NewTracker()
+					resp, err := NewTracker()
+					assert.Nil(testing, err)
 					assert.NotNil(testing, resp)
-					assert.Equal(testing, resp.Error(), test.expected.Error())
+				} else {
+					resp, err := NewTracker()
+					assert.Nil(testing, resp)
+					assert.NotNil(testing, err)
+					assert.Equal(testing, err.Error(), test.expected.Error())
 				}
 			})
 		}
@@ -52,52 +50,48 @@ func TestTracker(t *testing.T) {
 	t.Run("SendEvent", func(test *testing.T) {
 
 		os.Setenv(GA_TRACKING_ID, "UA-000000-2")
-		err := NewTracker()
+		resp, err := NewTracker()
 		if err != nil {
 			log.Fatal(err)
 		}
 		for _, test := range []struct {
 			name     string
-			request  *request
+			request  *Event
 			expected error
 			status   int
 		}{
 			{
 				name: "category and action should not be empty",
-				request: &request{
-					event: &Event{
-						Category: "",
-						Action:   "",
-						Label:    "play",
-						Value:    "value",
-					},
+				request: &Event{
+					Category: "",
+					Action:   "",
+					Label:    "play",
+					Value:    "value",
 				},
 				expected: errors.New("tracker.SendEvent: category and action are required"),
 				status:   http.StatusInternalServerError,
 			},
 			{
 				name: "Google Analytics response should not be OK",
-				request: &request{
-					event: &Event{
-						Category: "UI_action",
-						Action:   "button_press",
-						Label:    "play",
-						Value:    "value",
-					},
+				request: &Event{
+					Category: "UI_action",
+					Action:   "button_press",
+					Label:    "play",
+					Value:    "value",
 				},
+
 				expected: errors.New("tracker.SendEvent: analytics response status not ok"),
 				status:   http.StatusInternalServerError,
 			},
 			{
 				name: "Google Analytics response should be OK",
-				request: &request{
-					event: &Event{
-						Category: "UI_action",
-						Action:   "button_press",
-						Label:    "play",
-						Value:    "value",
-					},
+				request: &Event{
+					Category: "UI_action",
+					Action:   "button_press",
+					Label:    "play",
+					Value:    "value",
 				},
+
 				expected: nil,
 				status:   http.StatusOK,
 			},
@@ -105,9 +99,9 @@ func TestTracker(t *testing.T) {
 			t.Run(test.name, func(testing *testing.T) {
 				server := MockHTTPServer(test.status, "")
 				defer server.Close()
-				Tracker.gaAPIURL = server.URL
+				resp.gaAPIURL = server.URL
 
-				resp := Tracker.SendEvent(context.Background(), *test.request.event)
+				resp := resp.SendEvent(context.Background(), *test.request)
 				if test.status == http.StatusOK {
 					assert.Nil(testing, resp, test.expected)
 				} else {

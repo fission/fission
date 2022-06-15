@@ -34,10 +34,8 @@ const (
 	GA_API_URL     string        = "GA_API_URL"
 )
 
-var Tracker *tracker
-
 type (
-	tracker struct {
+	Tracker struct {
 		gaPropertyID string
 		cid          string
 		gaAPIURL     string
@@ -50,15 +48,15 @@ type (
 	}
 )
 
-func NewTracker() error {
+func NewTracker() (*Tracker, error) {
 	id, err := uuid.NewV4()
 	if err != nil {
-		return fmt.Errorf("tracker.NewTracker: error generating UUID: %w", err)
+		return nil, fmt.Errorf("tracker.NewTracker: error generating UUID: %w", err)
 	}
 
 	gaTrackingID := os.Getenv(GA_TRACKING_ID)
 	if gaTrackingID == "" {
-		return errors.New("tracker.NewTracker: GA_TRACKING_ID env not set")
+		return nil, errors.New("tracker.NewTracker: GA_TRACKING_ID env not set")
 	}
 
 	gaAPIURL := os.Getenv(GA_API_URL)
@@ -66,15 +64,15 @@ func NewTracker() error {
 		gaAPIURL = "https://www.google-analytics.com/collect"
 	}
 
-	Tracker = &tracker{
+	tracker := &Tracker{
 		gaPropertyID: gaTrackingID,
 		cid:          id.String(),
 		gaAPIURL:     gaAPIURL,
 	}
-	return nil
+	return tracker, nil
 }
 
-func (t *tracker) SendEvent(ctx context.Context, e Event) error {
+func (t *Tracker) SendEvent(ctx context.Context, e Event) error {
 	if e.Action == "" || e.Category == "" {
 		return errors.New("tracker.SendEvent: category and action are required")
 	}
