@@ -34,12 +34,12 @@ func TestTracker(t *testing.T) {
 			t.Run(test.name, func(testing *testing.T) {
 				if test.expected == nil {
 					os.Setenv(GA_TRACKING_ID, "UA-000000-2")
-					resp, err := NewTracker()
+					t, err := NewTracker()
 					assert.Nil(testing, err)
-					assert.NotNil(testing, resp)
+					assert.NotNil(testing, t)
 				} else {
-					resp, err := NewTracker()
-					assert.Nil(testing, resp)
+					t, err := NewTracker()
+					assert.Nil(testing, t)
 					assert.NotNil(testing, err)
 					assert.Equal(testing, err.Error(), test.expected.Error())
 				}
@@ -50,7 +50,7 @@ func TestTracker(t *testing.T) {
 	t.Run("SendEvent", func(test *testing.T) {
 
 		os.Setenv(GA_TRACKING_ID, "UA-000000-2")
-		resp, err := NewTracker()
+		tr, err := NewTracker()
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -99,14 +99,14 @@ func TestTracker(t *testing.T) {
 			t.Run(test.name, func(testing *testing.T) {
 				server := MockHTTPServer(test.status, "")
 				defer server.Close()
-				resp.gaAPIURL = server.URL
+				tr.gaAPIURL = server.URL
 
-				resp := resp.SendEvent(context.Background(), *test.request)
+				t := tr.SendEvent(context.Background(), *test.request)
 				if test.status == http.StatusOK {
-					assert.Nil(testing, resp, test.expected)
+					assert.Nil(testing, t, test.expected)
 				} else {
-					assert.NotNil(testing, resp)
-					assert.Equal(testing, resp.Error(), test.expected.Error())
+					assert.NotNil(testing, t)
+					assert.Equal(testing, t.Error(), test.expected.Error())
 				}
 
 			})

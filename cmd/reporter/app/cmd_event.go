@@ -52,11 +52,11 @@ func eventCommandHandler(cmd *cobra.Command, args []string) error {
 
 	ctx := context.Background()
 
-	tracker, err := tracker.NewTracker()
+	t, err := tracker.NewTracker()
 	if err != nil {
 		return err
 	}
-	return tracker.SendEvent(ctx, event)
+	return t.SendEvent(ctx, event)
 }
 
 //EventCommand reports an event to analytics
