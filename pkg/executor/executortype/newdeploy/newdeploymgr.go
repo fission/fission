@@ -766,6 +766,7 @@ func (deploy *NewDeploy) updateStatus(fn *fv1.Function, err error, message strin
 
 // idleObjectReaper reaps objects after certain idle time
 func (deploy *NewDeploy) idleObjectReaper(ctx context.Context) {
+	deploy.logger.Info("idleObjectReaper function invoked", zap.String("function", "idleObjectReaper"))
 	pollSleep := 5 * time.Second
 	for {
 		time.Sleep(pollSleep)
@@ -818,10 +819,14 @@ func (deploy *NewDeploy) idleObjectReaper(ctx context.Context) {
 			}
 
 			if time.Since(fsvc.Atime) < idlePodReapTime {
+				deploy.logger.Info("function last access timeout and function name", zap.String("access time", time.Since(fsvc.Atime).String()), zap.String("function", fsvc.Function.Name))
 				continue
 			}
-
+			var wg sync.WaitGroup
+			wg.Add(1)
 			go func() {
+				defer wg.Done()
+				deploy.logger.Info("go function last access timeout and function name", zap.String("access time", time.Since(fsvc.Atime).String()), zap.String("function", fsvc.Function.Name))
 				deployObj := getDeploymentObj(fsvc.KubernetesObjects)
 				if deployObj == nil {
 					deploy.logger.Error("error finding function deployment", zap.Error(err), zap.String("function", fsvc.Function.Name))
@@ -847,6 +852,8 @@ func (deploy *NewDeploy) idleObjectReaper(ctx context.Context) {
 					deploy.logger.Error("error scaling down function deployment", zap.Error(err), zap.String("function", fsvc.Function.Name))
 				}
 			}()
+
+			wg.Wait()
 		}
 	}
 }
