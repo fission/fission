@@ -59,6 +59,8 @@ spec:
           value: {{ .Values.pprof.enabled | quote }}
         - name: HELM_RELEASE_NAME
           value: {{ .Release.Name | quote }}
+        - name: FISSION_NAMESPACE
+          value: {{ .Release.Namespace }}
         {{- include "opentracing.envs" . | indent 8 }}
         {{- include "opentelemtry.envs" . | indent 8 }}
         resources:

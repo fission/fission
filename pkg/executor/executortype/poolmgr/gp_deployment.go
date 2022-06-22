@@ -19,8 +19,10 @@ package poolmgr
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
+	"github.com/ghodss/yaml"
 	"go.uber.org/zap"
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
@@ -149,6 +151,25 @@ func (gp *GenericPool) genDeploymentSpec(env *fv1.Environment) (*appsv1.Deployme
 			TerminationGracePeriodSeconds: &gracePeriodSeconds,
 		},
 	}
+
+	var additionalSpec apiv1.PodSpec
+
+	podSpecPatch, err := gp.kubernetesClient.CoreV1().ConfigMaps(os.Getenv("FISSION_NAMESPACE")).Get(context.Background(), "podspecpatch", metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+
+	err = yaml.Unmarshal([]byte(podSpecPatch.Data["spec"]), &additionalSpec)
+	if err != nil {
+		return nil, err
+	}
+
+	updatedPodSpec, err := util.MergePodSpec(&pod.Spec, &additionalSpec)
+	if err != nil {
+		return nil, err
+	}
+
+	pod.Spec = *updatedPodSpec
 
 	pod.Spec = *(util.ApplyImagePullSecret(env.Spec.ImagePullSecret, pod.Spec))
 
