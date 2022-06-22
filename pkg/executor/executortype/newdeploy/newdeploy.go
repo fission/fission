@@ -19,11 +19,9 @@ package newdeploy
 import (
 	"context"
 	"fmt"
-	"os"
 	"strconv"
 	"time"
 
-	"github.com/ghodss/yaml"
 	multierror "github.com/hashicorp/go-multierror"
 	"go.uber.org/zap"
 	appsv1 "k8s.io/api/apps/v1"
@@ -280,22 +278,10 @@ func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function
 		},
 	}
 
-	var additionalSpec apiv1.PodSpec
-	podSpecPatch, err := deploy.kubernetesClient.CoreV1().ConfigMaps(os.Getenv("FISSION_NAMESPACE")).Get(context.Background(), "podspecpatch", metav1.GetOptions{})
+	updatedPodSpec, err := util.GetSpecConfigMap(ctx, deploy.kubernetesClient, pod.Spec)
 	if err != nil {
 		return nil, err
 	}
-
-	err = yaml.Unmarshal([]byte(podSpecPatch.Data["spec"]), &additionalSpec)
-	if err != nil {
-		return nil, err
-	}
-
-	updatedPodSpec, err := util.MergePodSpec(&pod.Spec, &additionalSpec)
-	if err != nil {
-		return nil, err
-	}
-
 	pod.Spec = *updatedPodSpec
 
 	pod.Spec = *(util.ApplyImagePullSecret(env.Spec.ImagePullSecret, pod.Spec))

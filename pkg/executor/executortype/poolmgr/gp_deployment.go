@@ -19,10 +19,8 @@ package poolmgr
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 
-	"github.com/ghodss/yaml"
 	"go.uber.org/zap"
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
@@ -67,7 +65,7 @@ func (gp *GenericPool) genDeploymentMeta(env *fv1.Environment) metav1.ObjectMeta
 	}
 }
 
-func (gp *GenericPool) genDeploymentSpec(env *fv1.Environment) (*appsv1.DeploymentSpec, error) {
+func (gp *GenericPool) genDeploymentSpec(ctx context.Context, env *fv1.Environment) (*appsv1.DeploymentSpec, error) {
 	deployLabels := gp.getEnvironmentPoolLabels(env)
 	// Use long terminationGracePeriodSeconds for connection draining in case that
 	// pod still runs user functions.
@@ -152,23 +150,10 @@ func (gp *GenericPool) genDeploymentSpec(env *fv1.Environment) (*appsv1.Deployme
 		},
 	}
 
-	var additionalSpec apiv1.PodSpec
-
-	podSpecPatch, err := gp.kubernetesClient.CoreV1().ConfigMaps(os.Getenv("FISSION_NAMESPACE")).Get(context.Background(), "podspecpatch", metav1.GetOptions{})
+	updatedPodSpec, err := util.GetSpecConfigMap(ctx, gp.kubernetesClient, pod.Spec)
 	if err != nil {
 		return nil, err
 	}
-
-	err = yaml.Unmarshal([]byte(podSpecPatch.Data["spec"]), &additionalSpec)
-	if err != nil {
-		return nil, err
-	}
-
-	updatedPodSpec, err := util.MergePodSpec(&pod.Spec, &additionalSpec)
-	if err != nil {
-		return nil, err
-	}
-
 	pod.Spec = *updatedPodSpec
 
 	pod.Spec = *(util.ApplyImagePullSecret(env.Spec.ImagePullSecret, pod.Spec))
@@ -208,7 +193,7 @@ func (gp *GenericPool) genDeploymentSpec(env *fv1.Environment) (*appsv1.Deployme
 // creates the pool but doesn't wait for any pods to be ready.
 func (gp *GenericPool) createPoolDeployment(ctx context.Context, env *fv1.Environment) error {
 	deploymentMeta := gp.genDeploymentMeta(env)
-	deploymentSpec, err := gp.genDeploymentSpec(env)
+	deploymentSpec, err := gp.genDeploymentSpec(ctx, env)
 	if err != nil {
 		return err
 	}
@@ -250,7 +235,7 @@ func (gp *GenericPool) updatePoolDeployment(ctx context.Context, env *fv1.Enviro
 		return nil
 	}
 	newDeployment := gp.deployment.DeepCopy()
-	spec, err := gp.genDeploymentSpec(env)
+	spec, err := gp.genDeploymentSpec(ctx, env)
 	if err != nil {
 		logger.Error("error generating deployment spec", zap.Error(err))
 		return err

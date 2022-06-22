@@ -19,12 +19,14 @@ package util
 import (
 	"context"
 	"errors"
+	"os"
 	"sync"
 	"time"
 
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	"sigs.k8s.io/yaml"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 )
@@ -112,4 +114,25 @@ func ConvertConfigSecrets(ctx context.Context, fn *fv1.Function, kc kubernetes.I
 		envFromSources = append(envFromSources, envFromSource)
 	}
 	return envFromSources, nil
+}
+
+func GetSpecConfigMap(ctx context.Context, kubeClient kubernetes.Interface, podSpec apiv1.PodSpec) (*apiv1.PodSpec, error) {
+	var additionalSpec apiv1.PodSpec
+
+	podSpecPatch, err := kubeClient.CoreV1().ConfigMaps(os.Getenv("FISSION_NAMESPACE")).Get(ctx, "runtime-podspec-patch", metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+
+	err = yaml.Unmarshal([]byte(podSpecPatch.Data["spec"]), &additionalSpec)
+	if err != nil {
+		return nil, err
+	}
+
+	updatedPodSpec, err := MergePodSpec(&podSpec, &additionalSpec)
+	if err != nil {
+		return nil, err
+	}
+
+	return updatedPodSpec, nil
 }
