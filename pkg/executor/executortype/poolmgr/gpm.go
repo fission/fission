@@ -92,6 +92,8 @@ type (
 		defaultIdlePodReapTime time.Duration
 
 		poolPodC *PoolPodController
+
+		podSpecConfigMap *apiv1.ConfigMap
 	}
 	request struct {
 		requestType
@@ -119,6 +121,7 @@ func MakeGenericPoolManager(
 	envInformer finformerv1.EnvironmentInformer,
 	podInformer coreinformers.PodInformer,
 	rsInformer appsinformers.ReplicaSetInformer,
+	podSpecConfigMap *apiv1.ConfigMap,
 ) (executortype.ExecutorType, error) {
 
 	gpmLogger := logger.Named("generic_pool_manager")
@@ -150,6 +153,7 @@ func MakeGenericPoolManager(
 		fetcherConfig:          fetcherConfig,
 		enableIstio:            enableIstio,
 		poolPodC:               poolPodC,
+		podSpecConfigMap:       podSpecConfigMap,
 	}
 	gpm.podLister = podInformer.Lister()
 	gpm.podListerSynced = podInformer.Informer().HasSynced
@@ -476,7 +480,7 @@ func (gpm *GenericPoolManager) service() {
 				}
 				pool = MakeGenericPool(gpm.logger, gpm.fissionClient, gpm.kubernetesClient,
 					gpm.metricsClient, req.env, ns, gpm.namespace, gpm.fsCache,
-					gpm.fetcherConfig, gpm.instanceID, gpm.enableIstio)
+					gpm.fetcherConfig, gpm.instanceID, gpm.enableIstio, gpm.podSpecConfigMap)
 				err = pool.setup(req.ctx)
 				if err != nil {
 					req.responseChannel <- &response{error: err}

@@ -278,11 +278,14 @@ func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function
 		},
 	}
 
-	updatedPodSpec, err := util.GetSpecConfigMap(ctx, deploy.kubernetesClient, pod.Spec)
+	updatedPodSpec, err := util.GetSpecConfigMap(ctx, deploy.kubernetesClient, pod.Spec, deploy.podSpecConfigMap)
 	if err != nil {
 		return nil, err
 	}
-	pod.Spec = *updatedPodSpec
+
+	if updatedPodSpec != nil {
+		pod.Spec = *updatedPodSpec
+	}
 
 	pod.Spec = *(util.ApplyImagePullSecret(env.Spec.ImagePullSecret, pod.Spec))
 

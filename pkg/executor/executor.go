@@ -19,6 +19,7 @@ package executor
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"strconv"
 	"strings"
@@ -28,6 +29,7 @@ import (
 	"github.com/dchest/uniuri"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sInformers "k8s.io/client-go/informers"
 	k8sCache "k8s.io/client-go/tools/cache"
 
@@ -270,6 +272,16 @@ func StartExecutor(ctx context.Context, logger *zap.Logger, functionNamespace st
 
 	executorInstanceID := strings.ToLower(uniuri.NewLen(8))
 
+	body, err := ioutil.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
+	if err != nil {
+		logger.Warn("Failed to read namespace file: %v", zap.Error(err))
+	}
+
+	podSpecPatch, err := kubernetesClient.CoreV1().ConfigMaps(string(body)).Get(ctx, fv1.RuntimePodSpecConfigmap, metav1.GetOptions{})
+	if err != nil {
+		logger.Warn("No configmap for pod spec found %v", zap.Error(err))
+	}
+
 	logger.Info("Starting executor", zap.String("instanceID", executorInstanceID))
 
 	informerFactory := genInformer.NewSharedInformerFactory(fissionClient, time.Minute*30)
@@ -288,7 +300,7 @@ func StartExecutor(ctx context.Context, logger *zap.Logger, functionNamespace st
 		fissionClient, kubernetesClient, metricsClient,
 		functionNamespace, fetcherConfig, executorInstanceID,
 		funcInformer, pkgInformer, envInformer,
-		gpmPodInformer, gpmRsInformer)
+		gpmPodInformer, gpmRsInformer, podSpecPatch)
 	if err != nil {
 		return errors.Wrap(err, "pool manager creation failed")
 	}
@@ -304,7 +316,7 @@ func StartExecutor(ctx context.Context, logger *zap.Logger, functionNamespace st
 		fissionClient, kubernetesClient,
 		functionNamespace, fetcherConfig, executorInstanceID,
 		funcInformer, envInformer,
-		ndmDeplInformer, ndmSvcInformer)
+		ndmDeplInformer, ndmSvcInformer, podSpecPatch)
 	if err != nil {
 		return errors.Wrap(err, "new deploy manager creation failed")
 	}

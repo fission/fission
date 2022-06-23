@@ -67,6 +67,10 @@ const (
 )
 
 const (
+	RuntimePodSpecConfigmap = "runtime-podspec-patch"
+)
+
+const (
 	SharedVolumeUserfunc   = "userfunc"
 	SharedVolumePackages   = "packages"
 	SharedVolumeSecrets    = "secrets"

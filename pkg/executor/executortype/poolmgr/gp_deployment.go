@@ -150,11 +150,14 @@ func (gp *GenericPool) genDeploymentSpec(ctx context.Context, env *fv1.Environme
 		},
 	}
 
-	updatedPodSpec, err := util.GetSpecConfigMap(ctx, gp.kubernetesClient, pod.Spec)
+	updatedPodSpec, err := util.GetSpecConfigMap(ctx, gp.kubernetesClient, pod.Spec, gp.podSpecConfigMap)
 	if err != nil {
 		return nil, err
 	}
-	pod.Spec = *updatedPodSpec
+
+	if updatedPodSpec != nil {
+		pod.Spec = *updatedPodSpec
+	}
 
 	pod.Spec = *(util.ApplyImagePullSecret(env.Spec.ImagePullSecret, pod.Spec))
 

@@ -19,7 +19,6 @@ package util
 import (
 	"context"
 	"errors"
-	"os"
 	"sync"
 	"time"
 
@@ -116,15 +115,15 @@ func ConvertConfigSecrets(ctx context.Context, fn *fv1.Function, kc kubernetes.I
 	return envFromSources, nil
 }
 
-func GetSpecConfigMap(ctx context.Context, kubeClient kubernetes.Interface, podSpec apiv1.PodSpec) (*apiv1.PodSpec, error) {
-	var additionalSpec apiv1.PodSpec
+func GetSpecConfigMap(ctx context.Context, kubeClient kubernetes.Interface, podSpec apiv1.PodSpec, podSpecConfigMap *apiv1.ConfigMap) (*apiv1.PodSpec, error) {
 
-	podSpecPatch, err := kubeClient.CoreV1().ConfigMaps(os.Getenv("FISSION_NAMESPACE")).Get(ctx, "runtime-podspec-patch", metav1.GetOptions{})
-	if err != nil {
-		return nil, err
+	if podSpecConfigMap == nil {
+		return nil, nil
 	}
 
-	err = yaml.Unmarshal([]byte(podSpecPatch.Data["spec"]), &additionalSpec)
+	var additionalSpec apiv1.PodSpec
+
+	err := yaml.Unmarshal([]byte(podSpecConfigMap.Data["spec"]), &additionalSpec)
 	if err != nil {
 		return nil, err
 	}
