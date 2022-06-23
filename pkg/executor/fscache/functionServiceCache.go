@@ -130,10 +130,17 @@ func (fsc *FunctionServiceCache) service() {
 			resp.error = fsc._touchByAddress(req.address)
 		case LISTOLD:
 			// get svcs idle for > req.age
-			fscs := fsc.byFunction.Copy()
+			fscs := fsc.byFunctionUID.Copy()
 			funcObjects := make([]*FuncSvc, 0)
 			for _, funcSvc := range fscs {
-				fsvc := funcSvc.(*FuncSvc)
+				mI := funcSvc.(metav1.ObjectMeta)
+				fsvcI, err := fsc.byFunction.Get(crd.CacheKey(&mI))
+				if err != nil {
+					// resp.error = err
+					fsc.logger.Error("error while getting service", zap.Any("error", err))
+					return
+				}
+				fsvc := fsvcI.(*FuncSvc)
 				if time.Since(fsvc.Atime) > req.age {
 					funcObjects = append(funcObjects, fsvc)
 				}

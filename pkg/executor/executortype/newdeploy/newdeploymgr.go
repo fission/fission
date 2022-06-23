@@ -592,7 +592,9 @@ func (deploy *NewDeploy) updateFunction(ctx context.Context, oldFn *fv1.Function
 
 	if oldFn.Spec.Environment != newFn.Spec.Environment ||
 		oldFn.Spec.Package.PackageRef != newFn.Spec.Package.PackageRef ||
-		oldFn.Spec.Package.FunctionName != newFn.Spec.Package.FunctionName {
+		oldFn.Spec.Package.FunctionName != newFn.Spec.Package.FunctionName ||
+		newFn.Spec.IdleTimeout != nil && (*oldFn.Spec.IdleTimeout != *newFn.Spec.IdleTimeout) {
+		deploy.logger.Info("deployment changed", zap.String("msg", "deployment changed"))
 		deployChanged = true
 	}
 
@@ -786,10 +788,11 @@ func (deploy *NewDeploy) idleObjectReaper(ctx context.Context) {
 			deploy.logger.Error("error reaping idle pods", zap.Error(err))
 			continue
 		}
-
+		count := 0
 		for i := range funcSvcs {
+			count++
+			deploy.logger.Info("funcSvcs", zap.Int("counter", count), zap.Any("functionSvcs", funcSvcs))
 			fsvc := funcSvcs[i]
-
 			if fsvc.Executor != fv1.ExecutorTypeNewdeploy {
 				continue
 			}
@@ -822,11 +825,10 @@ func (deploy *NewDeploy) idleObjectReaper(ctx context.Context) {
 				deploy.logger.Info("function last access timeout and function name", zap.String("access time", time.Since(fsvc.Atime).String()), zap.String("function", fsvc.Function.Name))
 				continue
 			}
-			var wg sync.WaitGroup
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				deploy.logger.Info("go function last access timeout and function name", zap.String("access time", time.Since(fsvc.Atime).String()), zap.String("function", fsvc.Function.Name))
+
+			func() {
+
+				deploy.logger.Info("self execute function last access timeout and function name", zap.String("access time", time.Since(fsvc.Atime).String()), zap.String("function", fsvc.Function.Name))
 				deployObj := getDeploymentObj(fsvc.KubernetesObjects)
 				if deployObj == nil {
 					deploy.logger.Error("error finding function deployment", zap.Error(err), zap.String("function", fsvc.Function.Name))
@@ -853,7 +855,6 @@ func (deploy *NewDeploy) idleObjectReaper(ctx context.Context) {
 				}
 			}()
 
-			wg.Wait()
 		}
 	}
 }
