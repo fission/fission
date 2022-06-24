@@ -115,20 +115,6 @@ func ConvertConfigSecrets(ctx context.Context, fn *fv1.Function, kc kubernetes.I
 	return envFromSources, nil
 }
 
-func CheckAndMergeSpec(podSpec apiv1.PodSpec, additionalSpec *apiv1.PodSpec) (*apiv1.PodSpec, error) {
-
-	if additionalSpec == nil {
-		return nil, nil
-	}
-
-	updatedPodSpec, err := MergePodSpec(&podSpec, additionalSpec)
-	if err != nil {
-		return nil, err
-	}
-
-	return updatedPodSpec, nil
-}
-
 func GetSpecFromConfigMap(ctx context.Context, kubeClient kubernetes.Interface, cm string, cmns string) (*apiv1.PodSpec, error) {
 
 	podSpecPatch, err := kubeClient.CoreV1().ConfigMaps(cmns).Get(ctx, cm, metav1.GetOptions{})

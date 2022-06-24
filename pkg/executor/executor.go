@@ -28,6 +28,7 @@ import (
 	"github.com/dchest/uniuri"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	apiv1 "k8s.io/api/core/v1"
 	k8sInformers "k8s.io/client-go/informers"
 	k8sCache "k8s.io/client-go/tools/cache"
 
@@ -270,14 +271,15 @@ func StartExecutor(ctx context.Context, logger *zap.Logger, functionNamespace st
 
 	executorInstanceID := strings.ToLower(uniuri.NewLen(8))
 
+	var podSpecPatch *apiv1.PodSpec
 	namespace, err := utils.GetCurrentNamespace()
 	if err != nil {
 		logger.Warn("Current namespace not found %v", zap.Error(err))
-	}
-
-	podSpecPatch, err := util.GetSpecFromConfigMap(ctx, kubernetesClient, fv1.RuntimePodSpecConfigmap, namespace)
-	if err != nil {
-		logger.Warn("Either configmap is not found or error reading data %v", zap.Error(err))
+	} else {
+		podSpecPatch, err = util.GetSpecFromConfigMap(ctx, kubernetesClient, fv1.RuntimePodSpecConfigmap, namespace)
+		if err != nil {
+			logger.Warn("Either configmap is not found or error reading data %v", zap.Error(err))
+		}
 	}
 
 	logger.Info("Starting executor", zap.String("instanceID", executorInstanceID))

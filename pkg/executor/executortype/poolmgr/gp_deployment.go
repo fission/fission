@@ -65,7 +65,7 @@ func (gp *GenericPool) genDeploymentMeta(env *fv1.Environment) metav1.ObjectMeta
 	}
 }
 
-func (gp *GenericPool) genDeploymentSpec(ctx context.Context, env *fv1.Environment) (*appsv1.DeploymentSpec, error) {
+func (gp *GenericPool) genDeploymentSpec(env *fv1.Environment) (*appsv1.DeploymentSpec, error) {
 	deployLabels := gp.getEnvironmentPoolLabels(env)
 	// Use long terminationGracePeriodSeconds for connection draining in case that
 	// pod still runs user functions.
@@ -150,13 +150,14 @@ func (gp *GenericPool) genDeploymentSpec(ctx context.Context, env *fv1.Environme
 		},
 	}
 
-	updatedPodSpec, err := util.CheckAndMergeSpec(pod.Spec, gp.podSpec)
-	if err != nil {
-		return nil, err
-	}
+	if gp.podSpec != nil {
 
-	if updatedPodSpec != nil {
-		pod.Spec = *updatedPodSpec
+		updatedPodSpec, err := util.MergePodSpec(&pod.Spec, gp.podSpec)
+		if err == nil {
+			pod.Spec = *updatedPodSpec
+		} else {
+			gp.logger.Warn("Failed to merge the specs: %v", zap.Error(err))
+		}
 	}
 
 	pod.Spec = *(util.ApplyImagePullSecret(env.Spec.ImagePullSecret, pod.Spec))
@@ -196,7 +197,7 @@ func (gp *GenericPool) genDeploymentSpec(ctx context.Context, env *fv1.Environme
 // creates the pool but doesn't wait for any pods to be ready.
 func (gp *GenericPool) createPoolDeployment(ctx context.Context, env *fv1.Environment) error {
 	deploymentMeta := gp.genDeploymentMeta(env)
-	deploymentSpec, err := gp.genDeploymentSpec(ctx, env)
+	deploymentSpec, err := gp.genDeploymentSpec(env)
 	if err != nil {
 		return err
 	}
@@ -238,7 +239,7 @@ func (gp *GenericPool) updatePoolDeployment(ctx context.Context, env *fv1.Enviro
 		return nil
 	}
 	newDeployment := gp.deployment.DeepCopy()
-	spec, err := gp.genDeploymentSpec(ctx, env)
+	spec, err := gp.genDeploymentSpec(env)
 	if err != nil {
 		logger.Error("error generating deployment spec", zap.Error(err))
 		return err

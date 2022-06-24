@@ -22,11 +22,15 @@ import (
 
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	apiv1 "k8s.io/api/core/v1"
 	k8sInformers "k8s.io/client-go/informers"
 
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
+	"github.com/fission/fission/pkg/executor/util"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
+	"github.com/fission/fission/pkg/utils"
 )
 
 // Start the buildermgr service.
@@ -48,7 +52,18 @@ func Start(ctx context.Context, logger *zap.Logger, storageSvcUrl string, envBui
 		return errors.Wrap(err, "error making fetcher config")
 	}
 
-	envWatcher := makeEnvironmentWatcher(bmLogger, fissionClient, kubernetesClient, fetcherConfig, envBuilderNamespace)
+	var podSpecPatch *apiv1.PodSpec
+	namespace, err := utils.GetCurrentNamespace()
+	if err != nil {
+		logger.Warn("Current namespace not found %v", zap.Error(err))
+	} else {
+		podSpecPatch, err = util.GetSpecFromConfigMap(ctx, kubernetesClient, fv1.BuilderPodSpecConfigmap, namespace)
+		if err != nil {
+			logger.Warn("Either configmap is not found or error reading data %v", zap.Error(err))
+		}
+	}
+
+	envWatcher := makeEnvironmentWatcher(bmLogger, fissionClient, kubernetesClient, fetcherConfig, envBuilderNamespace, podSpecPatch)
 	go envWatcher.watchEnvironments()
 
 	k8sInformerFactory := k8sInformers.NewSharedInformerFactory(kubernetesClient, time.Minute*30)

@@ -68,6 +68,7 @@ const (
 
 const (
 	RuntimePodSpecConfigmap = "runtime-podspec-patch"
+	BuilderPodSpecConfigmap = "builder-podspec-patch"
 )
 
 const (
