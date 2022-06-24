@@ -742,9 +742,13 @@ mqt_keda:
 pprof:
   enabled: false
 
+## Enable runtimePodSpec and add spec to your poolmgr or newdeploy pods
 runtimePodSpec:
-  enabled: false
+  enabled: true
+## Refer https://doc.crds.dev/github.com/fission/fission/fission.io/Environment/v1@v1.16.0#spec-runtime-podspec
+## To write podspec
   podSpec:
+## Default podspec to improve security of the pods
     securityContext:
       fsGroup: 10001
       runAsGroup: 10001

@@ -115,23 +115,33 @@ func ConvertConfigSecrets(ctx context.Context, fn *fv1.Function, kc kubernetes.I
 	return envFromSources, nil
 }
 
-func GetSpecConfigMap(ctx context.Context, kubeClient kubernetes.Interface, podSpec apiv1.PodSpec, podSpecConfigMap *apiv1.ConfigMap) (*apiv1.PodSpec, error) {
+func CheckAndMergeSpec(podSpec apiv1.PodSpec, additionalSpec *apiv1.PodSpec) (*apiv1.PodSpec, error) {
 
-	if podSpecConfigMap == nil {
+	if additionalSpec == nil {
 		return nil, nil
 	}
 
-	var additionalSpec apiv1.PodSpec
-
-	err := yaml.Unmarshal([]byte(podSpecConfigMap.Data["spec"]), &additionalSpec)
-	if err != nil {
-		return nil, err
-	}
-
-	updatedPodSpec, err := MergePodSpec(&podSpec, &additionalSpec)
+	updatedPodSpec, err := MergePodSpec(&podSpec, additionalSpec)
 	if err != nil {
 		return nil, err
 	}
 
 	return updatedPodSpec, nil
+}
+
+func GetSpecFromConfigMap(ctx context.Context, kubeClient kubernetes.Interface, cm string, cmns string) (*apiv1.PodSpec, error) {
+
+	podSpecPatch, err := kubeClient.CoreV1().ConfigMaps(cmns).Get(ctx, cm, metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+
+	var additionalSpec apiv1.PodSpec
+
+	err = yaml.Unmarshal([]byte(podSpecPatch.Data["spec"]), &additionalSpec)
+	if err != nil {
+		return nil, err
+	}
+
+	return &additionalSpec, nil
 }

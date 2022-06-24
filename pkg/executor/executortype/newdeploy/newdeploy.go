@@ -278,7 +278,7 @@ func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function
 		},
 	}
 
-	updatedPodSpec, err := util.GetSpecConfigMap(ctx, deploy.kubernetesClient, pod.Spec, deploy.podSpecConfigMap)
+	updatedPodSpec, err := util.CheckAndMergeSpec(pod.Spec, deploy.podSpec)
 	if err != nil {
 		return nil, err
 	}

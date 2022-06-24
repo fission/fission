@@ -87,7 +87,7 @@ type (
 
 		hpaops *hpautils.HpaOperations
 
-		podSpecConfigMap *apiv1.ConfigMap
+		podSpec *apiv1.PodSpec
 	}
 )
 
@@ -103,7 +103,7 @@ func MakeNewDeploy(
 	envInformer finformerv1.EnvironmentInformer,
 	deplInformer appsinformers.DeploymentInformer,
 	svcInformer coreinformers.ServiceInformer,
-	podSpecConfigMap *apiv1.ConfigMap,
+	podSpec *apiv1.PodSpec,
 ) (executortype.ExecutorType, error) {
 	enableIstio := false
 	if len(os.Getenv("ENABLE_ISTIO")) > 0 {
@@ -133,7 +133,7 @@ func MakeNewDeploy(
 
 		hpaops: hpautils.NewHpaOperations(logger, kubernetesClient, instanceID),
 
-		podSpecConfigMap: podSpecConfigMap,
+		podSpec: podSpec,
 	}
 
 	nd.deplLister = deplInformer.Lister()
