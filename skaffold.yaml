@@ -47,8 +47,8 @@ deploy:
         influxdb.enabled: false
         storagesvc.archivePruner.enabled: true
         storagesvc.archivePruner.interval: "60"
-        runtimePodSpec.enabled: true
-        builderPodSpec.enabled: true
+        runtimePodSpec.enabled: false
+        builderPodSpec.enabled: false
         repository: index.docker.io
         routerServiceType: LoadBalancer
         openTracing.enabled: false
