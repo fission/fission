@@ -93,7 +93,7 @@ type (
 
 		poolPodC *PoolPodController
 
-		podSpec *apiv1.PodSpec
+		podSpecPatch *apiv1.PodSpec
 	}
 	request struct {
 		requestType
@@ -121,7 +121,7 @@ func MakeGenericPoolManager(
 	envInformer finformerv1.EnvironmentInformer,
 	podInformer coreinformers.PodInformer,
 	rsInformer appsinformers.ReplicaSetInformer,
-	podSpec *apiv1.PodSpec,
+	podSpecPatch *apiv1.PodSpec,
 ) (executortype.ExecutorType, error) {
 
 	gpmLogger := logger.Named("generic_pool_manager")
@@ -153,7 +153,7 @@ func MakeGenericPoolManager(
 		fetcherConfig:          fetcherConfig,
 		enableIstio:            enableIstio,
 		poolPodC:               poolPodC,
-		podSpec:                podSpec,
+		podSpecPatch:           podSpecPatch,
 	}
 	gpm.podLister = podInformer.Lister()
 	gpm.podListerSynced = podInformer.Informer().HasSynced
@@ -480,7 +480,7 @@ func (gpm *GenericPoolManager) service() {
 				}
 				pool = MakeGenericPool(gpm.logger, gpm.fissionClient, gpm.kubernetesClient,
 					gpm.metricsClient, req.env, ns, gpm.namespace, gpm.fsCache,
-					gpm.fetcherConfig, gpm.instanceID, gpm.enableIstio, gpm.podSpec)
+					gpm.fetcherConfig, gpm.instanceID, gpm.enableIstio, gpm.podSpecPatch)
 				err = pool.setup(req.ctx)
 				if err != nil {
 					req.responseChannel <- &response{error: err}

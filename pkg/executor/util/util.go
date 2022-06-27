@@ -125,9 +125,6 @@ func GetSpecFromConfigMap(ctx context.Context, kubeClient kubernetes.Interface, 
 	var additionalSpec apiv1.PodSpec
 
 	err = yaml.Unmarshal([]byte(podSpecPatch.Data["spec"]), &additionalSpec)
-	if err != nil {
-		return nil, err
-	}
 
-	return &additionalSpec, nil
+	return &additionalSpec, err
 }

@@ -78,7 +78,7 @@ type (
 		readyPodQueue            workqueue.DelayingInterface
 		poolInstanceID           string // small random string to uniquify pod names
 		instanceID               string // poolmgr instance id
-		podSpec                  *apiv1.PodSpec
+		podSpecPatch             *apiv1.PodSpec
 		// TODO: move this field into fsCache
 		podFSVCMap sync.Map
 	}
@@ -97,7 +97,7 @@ func MakeGenericPool(
 	fetcherConfig *fetcherConfig.Config,
 	instanceID string,
 	enableIstio bool,
-	podSpec *apiv1.PodSpec) *GenericPool {
+	podSpecPatch *apiv1.PodSpec) *GenericPool {
 
 	gpLogger := logger.Named("generic_pool")
 
@@ -132,7 +132,7 @@ func MakeGenericPool(
 		poolInstanceID:           uniuri.NewLen(8),
 		instanceID:               instanceID,
 		podFSVCMap:               sync.Map{},
-		podSpec:                  podSpec,
+		podSpecPatch:             podSpecPatch,
 	}
 
 	gp.runtimeImagePullPolicy = utils.GetImagePullPolicy(os.Getenv("RUNTIME_IMAGE_PULL_POLICY"))

@@ -216,10 +216,10 @@ func IsZip(filename string) (bool, error) {
 	return archiver.DefaultZip.Match(f)
 }
 
-//Returns namespace where fission is deployed.
+// GetCurrentNamespace returns Kubernetes namespace of current Pod
 func GetCurrentNamespace() (string, error) {
 
-	//This file contains the namespace and can be found in each container.
+	// This file contains the namespace and can be found in each container.
 	body, err := ioutil.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
 	if err != nil {
 		return "", err

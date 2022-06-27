@@ -150,9 +150,9 @@ func (gp *GenericPool) genDeploymentSpec(env *fv1.Environment) (*appsv1.Deployme
 		},
 	}
 
-	if gp.podSpec != nil {
+	if gp.podSpecPatch != nil {
 
-		updatedPodSpec, err := util.MergePodSpec(&pod.Spec, gp.podSpec)
+		updatedPodSpec, err := util.MergePodSpec(&pod.Spec, gp.podSpecPatch)
 		if err == nil {
 			pod.Spec = *updatedPodSpec
 		} else {

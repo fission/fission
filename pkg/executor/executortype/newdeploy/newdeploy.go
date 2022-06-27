@@ -278,9 +278,9 @@ func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function
 		},
 	}
 
-	if deploy.podSpec != nil {
+	if deploy.podSpecPatch != nil {
 
-		updatedPodSpec, err := util.MergePodSpec(&pod.Spec, deploy.podSpec)
+		updatedPodSpec, err := util.MergePodSpec(&pod.Spec, deploy.podSpecPatch)
 		if err == nil {
 			pod.Spec = *updatedPodSpec
 		} else {

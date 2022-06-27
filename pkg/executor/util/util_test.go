@@ -91,6 +91,13 @@ securityContext:
 			want:    nil,
 			wantErr: true,
 		},
+		{
+			name:    "Wrong namespace",
+			cm:      "test-config-map",
+			cmns:    "fissio",
+			want:    nil,
+			wantErr: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

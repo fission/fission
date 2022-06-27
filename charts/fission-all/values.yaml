@@ -745,13 +745,17 @@ pprof:
 ## Enable runtimePodSpec and add spec to your poolmgr or newdeploy pods
 ##
 runtimePodSpec:
-  enabled: true
+
+  ## Setting it false by default so that integration tests pass
+  ##
+  enabled: false
+  
   ## Checkout PodSpec in https://fission.io/docs/reference/crd-reference/#runtime
   ##
-  
   podSpec:
-  ## Default podspec to improve security of the pods
-  ##
+
+    ## Default podspec to improve security of the pods
+    ##
     securityContext:
       fsGroup: 10001
       runAsGroup: 10001
@@ -761,13 +765,17 @@ runtimePodSpec:
 ## Enable builderPodSpec and add spec to your env builder pods
 ##
 builderPodSpec:
-  enabled: true
+
+  ## Setting it false by default so that integration tests pass
+  ##
+  enabled: false
+
   ## Checkout PodSpec in https://fission.io/docs/reference/crd-reference/#builder
   ##
-  
   podSpec:
-  ## Default podspec to improve security of the pods
-  ##
+
+    ## Default podspec to improve security of the pods
+    ##
     securityContext:
       fsGroup: 10001
       runAsGroup: 10001

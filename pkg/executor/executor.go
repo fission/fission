@@ -274,7 +274,7 @@ func StartExecutor(ctx context.Context, logger *zap.Logger, functionNamespace st
 	var podSpecPatch *apiv1.PodSpec
 	namespace, err := utils.GetCurrentNamespace()
 	if err != nil {
-		logger.Warn("Current namespace not found %v", zap.Error(err))
+		logger.Warn("Current namespace not found %s", zap.Error(err))
 	} else {
 		podSpecPatch, err = util.GetSpecFromConfigMap(ctx, kubernetesClient, fv1.RuntimePodSpecConfigmap, namespace)
 		if err != nil {

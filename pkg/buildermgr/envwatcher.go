@@ -87,7 +87,7 @@ type (
 		fetcherConfig          *fetcherConfig.Config
 		builderImagePullPolicy apiv1.PullPolicy
 		useIstio               bool
-		podSpec                *apiv1.PodSpec
+		podSpecPatch           *apiv1.PodSpec
 	}
 )
 
@@ -97,7 +97,7 @@ func makeEnvironmentWatcher(
 	kubernetesClient kubernetes.Interface,
 	fetcherConfig *fetcherConfig.Config,
 	builderNamespace string,
-	podSpec *apiv1.PodSpec) *environmentWatcher {
+	podSpecPatch *apiv1.PodSpec) *environmentWatcher {
 
 	useIstio := false
 	enableIstio := os.Getenv("ENABLE_ISTIO")
@@ -121,7 +121,7 @@ func makeEnvironmentWatcher(
 		builderImagePullPolicy: builderImagePullPolicy,
 		useIstio:               useIstio,
 		fetcherConfig:          fetcherConfig,
-		podSpec:                podSpec,
+		podSpecPatch:           podSpecPatch,
 	}
 
 	go envWatcher.service()
@@ -506,9 +506,9 @@ func (envw *environmentWatcher) createBuilderDeployment(env *fv1.Environment, ns
 		},
 	}
 
-	if envw.podSpec != nil {
+	if envw.podSpecPatch != nil {
 
-		updatedPodSpec, err := util.MergePodSpec(&pod.Spec, envw.podSpec)
+		updatedPodSpec, err := util.MergePodSpec(&pod.Spec, envw.podSpecPatch)
 		if err == nil {
 			pod.Spec = *updatedPodSpec
 		} else {
