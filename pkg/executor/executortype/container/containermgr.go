@@ -61,7 +61,6 @@ var _ executortype.ExecutorType = &Container{}
 type (
 	// Container represents an executor type
 	Container struct {
-		ctx    context.Context
 		logger *zap.Logger
 
 		kubernetesClient kubernetes.Interface
@@ -143,7 +142,7 @@ func (caaf *Container) Run(ctx context.Context) {
 	if ok := k8sCache.WaitForCacheSync(ctx.Done(), caaf.deplListerSynced, caaf.svcListerSynced); !ok {
 		caaf.logger.Fatal("failed to wait for caches to sync")
 	}
-	go caaf.idleObjectReaper()
+	go caaf.idleObjectReaper(ctx)
 }
 
 // GetTypeName returns the executor type name.
@@ -705,14 +704,12 @@ func (caaf *Container) updateStatus(fn *fv1.Function, err error, message string)
 }
 
 // idleObjectReaper reaps objects after certain idle time
-func (caaf *Container) idleObjectReaper() {
-	caaf.ctx = context.Background()
-
+func (caaf *Container) idleObjectReaper(ctx context.Context) {
 	// calling function doIdleObjectReaper() repeatedly at given interval of time
-	wait.Forever(caaf.doIdleObjectReaper, time.Second*5)
+	wait.UntilWithContext(ctx, caaf.doIdleObjectReaper, time.Second*5)
 }
 
-func (caaf *Container) doIdleObjectReaper() {
+func (caaf *Container) doIdleObjectReaper(ctx context.Context) {
 	funcSvcs, err := caaf.fsCache.ListOld(time.Second * 5)
 	if err != nil {
 		caaf.logger.Error("error reaping idle pods", zap.Error(err))
@@ -726,7 +723,7 @@ func (caaf *Container) doIdleObjectReaper() {
 			continue
 		}
 
-		fn, err := caaf.fissionClient.CoreV1().Functions(fsvc.Function.Namespace).Get(caaf.ctx, fsvc.Function.Name, metav1.GetOptions{})
+		fn, err := caaf.fissionClient.CoreV1().Functions(fsvc.Function.Namespace).Get(ctx, fsvc.Function.Name, metav1.GetOptions{})
 		if err != nil {
 			// CaaF manager handles the function delete event and clean cache/kubeobjs itself,
 			// so we ignore the not found error for functions with CaaF executor type here.
@@ -754,7 +751,7 @@ func (caaf *Container) doIdleObjectReaper() {
 			}
 
 			currentDeploy, err := caaf.kubernetesClient.AppsV1().
-				Deployments(deployObj.Namespace).Get(caaf.ctx, deployObj.Name, metav1.GetOptions{})
+				Deployments(deployObj.Namespace).Get(ctx, deployObj.Name, metav1.GetOptions{})
 			if err != nil {
 				caaf.logger.Error("error getting function deployment", zap.Error(err), zap.String("function", fsvc.Function.Name))
 				return
@@ -767,7 +764,7 @@ func (caaf *Container) doIdleObjectReaper() {
 				return
 			}
 
-			err = caaf.scaleDeployment(caaf.ctx, deployObj.Namespace, deployObj.Name, minScale)
+			err = caaf.scaleDeployment(ctx, deployObj.Namespace, deployObj.Name, minScale)
 			if err != nil {
 				caaf.logger.Error("error scaling down function deployment", zap.Error(err), zap.String("function", fsvc.Function.Name))
 			}

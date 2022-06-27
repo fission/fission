@@ -68,7 +68,6 @@ const (
 
 type (
 	GenericPoolManager struct {
-		ctx    context.Context
 		logger *zap.Logger
 
 		pools            map[string]*GenericPool
@@ -171,7 +170,7 @@ func (gpm *GenericPoolManager) Run(ctx context.Context) {
 	gpm.poolPodC.InjectGpm(gpm)
 	go gpm.WebsocketStartEventChecker(gpm.kubernetesClient)
 	go gpm.NoActiveConnectionEventChecker(gpm.kubernetesClient)
-	go gpm.idleObjectReaper()
+	go gpm.idleObjectReaper(ctx)
 	go gpm.poolPodC.Run(ctx.Done())
 }
 
@@ -571,15 +570,13 @@ func (gpm *GenericPoolManager) getFunctionEnv(ctx context.Context, fn *fv1.Funct
 }
 
 // idleObjectReaper reaps objects after certain idle time
-func (gpm *GenericPoolManager) idleObjectReaper() {
-	gpm.ctx = context.Background()
-
+func (gpm *GenericPoolManager) idleObjectReaper(ctx context.Context) {
 	// calling function doIdleObjectReaper() repeatedly at given interval of time
-	wait.Forever(gpm.doIdleObjectReaper, time.Second*5)
+	wait.UntilWithContext(ctx, gpm.doIdleObjectReaper, time.Second*5)
 }
 
-func (gpm *GenericPoolManager) doIdleObjectReaper() {
-	envs, err := gpm.fissionClient.CoreV1().Environments(metav1.NamespaceAll).List(gpm.ctx, metav1.ListOptions{})
+func (gpm *GenericPoolManager) doIdleObjectReaper(ctx context.Context) {
+	envs, err := gpm.fissionClient.CoreV1().Environments(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		gpm.logger.Error("failed to get environment list", zap.Error(err))
 		return
@@ -590,7 +587,7 @@ func (gpm *GenericPoolManager) doIdleObjectReaper() {
 		envList[env.ObjectMeta.UID] = struct{}{}
 	}
 
-	fns, err := gpm.fissionClient.CoreV1().Functions(metav1.NamespaceAll).List(gpm.ctx, metav1.ListOptions{})
+	fns, err := gpm.fissionClient.CoreV1().Functions(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		gpm.logger.Error("failed to get environment list", zap.Error(err))
 		return
@@ -641,7 +638,7 @@ func (gpm *GenericPoolManager) doIdleObjectReaper() {
 		}
 
 		go func() {
-			deleted, err := gpm.fsCache.DeleteOldPoolCache(gpm.ctx, fsvc, idlePodReapTime)
+			deleted, err := gpm.fsCache.DeleteOldPoolCache(ctx, fsvc, idlePodReapTime)
 			if err != nil {
 				gpm.logger.Error("error deleting Kubernetes objects for function service",
 					zap.Error(err),
@@ -655,7 +652,7 @@ func (gpm *GenericPoolManager) doIdleObjectReaper() {
 						zap.String("executor", string(fsvc.Executor)),
 						zap.String("pod", fsvc.Name),
 					)
-					reaper.CleanupKubeObject(gpm.ctx, gpm.logger, gpm.kubernetesClient, &fsvc.KubernetesObjects[i])
+					reaper.CleanupKubeObject(ctx, gpm.logger, gpm.kubernetesClient, &fsvc.KubernetesObjects[i])
 					time.Sleep(50 * time.Millisecond)
 				}
 			}
