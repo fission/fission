@@ -136,7 +136,6 @@ func (fsc *FunctionServiceCache) service() {
 				mI := funcSvc.(metav1.ObjectMeta)
 				fsvcI, err := fsc.byFunction.Get(crd.CacheKey(&mI))
 				if err != nil {
-					// resp.error = err
 					fsc.logger.Error("error while getting service", zap.Any("error", err))
 					return
 				}
