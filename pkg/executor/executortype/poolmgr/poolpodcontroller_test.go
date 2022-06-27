@@ -78,7 +78,7 @@ func TestPoolPodControllerPodCleanup(t *testing.T) {
 		fissionClient, kubernetesClient, metricsClient,
 		fnNamespace, fetcherConfig, executorInstanceID,
 		funcInformer, pkgInformer, envInformer,
-		gpmPodInformer, gpmRsInformer)
+		gpmPodInformer, gpmRsInformer, nil)
 	if err != nil {
 		t.Fatalf("Error creating generic pool manager: %v", err)
 	}

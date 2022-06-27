@@ -22,6 +22,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
@@ -213,4 +214,15 @@ func IsZip(filename string) (bool, error) {
 	}
 	defer f.Close()
 	return archiver.DefaultZip.Match(f)
+}
+
+// GetCurrentNamespace returns Kubernetes namespace of current Pod
+func GetCurrentNamespace() (string, error) {
+
+	// This file contains the namespace and can be found in each container.
+	body, err := ioutil.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
+	if err != nil {
+		return "", err
+	}
+	return string(body), nil
 }

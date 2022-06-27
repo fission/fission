@@ -278,6 +278,16 @@ func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function
 		},
 	}
 
+	if deploy.podSpecPatch != nil {
+
+		updatedPodSpec, err := util.MergePodSpec(&pod.Spec, deploy.podSpecPatch)
+		if err == nil {
+			pod.Spec = *updatedPodSpec
+		} else {
+			deploy.logger.Warn("Failed to merge the specs: %v", zap.Error(err))
+		}
+	}
+
 	pod.Spec = *(util.ApplyImagePullSecret(env.Spec.ImagePullSecret, pod.Spec))
 
 	deployment := &appsv1.Deployment{

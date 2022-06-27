@@ -150,6 +150,16 @@ func (gp *GenericPool) genDeploymentSpec(env *fv1.Environment) (*appsv1.Deployme
 		},
 	}
 
+	if gp.podSpecPatch != nil {
+
+		updatedPodSpec, err := util.MergePodSpec(&pod.Spec, gp.podSpecPatch)
+		if err == nil {
+			pod.Spec = *updatedPodSpec
+		} else {
+			gp.logger.Warn("Failed to merge the specs: %v", zap.Error(err))
+		}
+	}
+
 	pod.Spec = *(util.ApplyImagePullSecret(env.Spec.ImagePullSecret, pod.Spec))
 
 	poolsize := getEnvPoolSize(env)

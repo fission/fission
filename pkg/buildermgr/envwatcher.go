@@ -87,6 +87,7 @@ type (
 		fetcherConfig          *fetcherConfig.Config
 		builderImagePullPolicy apiv1.PullPolicy
 		useIstio               bool
+		podSpecPatch           *apiv1.PodSpec
 	}
 )
 
@@ -95,7 +96,8 @@ func makeEnvironmentWatcher(
 	fissionClient versioned.Interface,
 	kubernetesClient kubernetes.Interface,
 	fetcherConfig *fetcherConfig.Config,
-	builderNamespace string) *environmentWatcher {
+	builderNamespace string,
+	podSpecPatch *apiv1.PodSpec) *environmentWatcher {
 
 	useIstio := false
 	enableIstio := os.Getenv("ENABLE_ISTIO")
@@ -119,6 +121,7 @@ func makeEnvironmentWatcher(
 		builderImagePullPolicy: builderImagePullPolicy,
 		useIstio:               useIstio,
 		fetcherConfig:          fetcherConfig,
+		podSpecPatch:           podSpecPatch,
 	}
 
 	go envWatcher.service()
@@ -501,6 +504,16 @@ func (envw *environmentWatcher) createBuilderDeployment(env *fv1.Environment, ns
 			Containers:         []apiv1.Container{*container},
 			ServiceAccountName: "fission-builder",
 		},
+	}
+
+	if envw.podSpecPatch != nil {
+
+		updatedPodSpec, err := util.MergePodSpec(&pod.Spec, envw.podSpecPatch)
+		if err == nil {
+			pod.Spec = *updatedPodSpec
+		} else {
+			envw.logger.Warn("Failed to merge the specs: %v", zap.Error(err))
+		}
 	}
 
 	pod.Spec = *(util.ApplyImagePullSecret(env.Spec.ImagePullSecret, pod.Spec))

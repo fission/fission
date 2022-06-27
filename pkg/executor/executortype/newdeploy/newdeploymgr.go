@@ -86,6 +86,8 @@ type (
 		svcListerSynced  k8sCache.InformerSynced
 
 		hpaops *hpautils.HpaOperations
+
+		podSpecPatch *apiv1.PodSpec
 	}
 )
 
@@ -101,6 +103,7 @@ func MakeNewDeploy(
 	envInformer finformerv1.EnvironmentInformer,
 	deplInformer appsinformers.DeploymentInformer,
 	svcInformer coreinformers.ServiceInformer,
+	podSpecPatch *apiv1.PodSpec,
 ) (executortype.ExecutorType, error) {
 	enableIstio := false
 	if len(os.Getenv("ENABLE_ISTIO")) > 0 {
@@ -129,6 +132,8 @@ func MakeNewDeploy(
 		defaultIdlePodReapTime: 2 * time.Minute,
 
 		hpaops: hpautils.NewHpaOperations(logger, kubernetesClient, instanceID),
+
+		podSpecPatch: podSpecPatch,
 	}
 
 	nd.deplLister = deplInformer.Lister()

@@ -25,6 +25,7 @@ import (
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	"sigs.k8s.io/yaml"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 )
@@ -112,4 +113,18 @@ func ConvertConfigSecrets(ctx context.Context, fn *fv1.Function, kc kubernetes.I
 		envFromSources = append(envFromSources, envFromSource)
 	}
 	return envFromSources, nil
+}
+
+func GetSpecFromConfigMap(ctx context.Context, kubeClient kubernetes.Interface, cm string, cmns string) (*apiv1.PodSpec, error) {
+
+	podSpecPatch, err := kubeClient.CoreV1().ConfigMaps(cmns).Get(ctx, cm, metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+
+	var additionalSpec apiv1.PodSpec
+
+	err = yaml.Unmarshal([]byte(podSpecPatch.Data["spec"]), &additionalSpec)
+
+	return &additionalSpec, err
 }
