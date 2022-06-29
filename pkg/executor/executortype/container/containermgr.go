@@ -34,6 +34,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
 	appsinformers "k8s.io/client-go/informers/apps/v1"
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	"k8s.io/client-go/kubernetes"
@@ -141,7 +142,7 @@ func (caaf *Container) Run(ctx context.Context) {
 	if ok := k8sCache.WaitForCacheSync(ctx.Done(), caaf.deplListerSynced, caaf.svcListerSynced); !ok {
 		caaf.logger.Fatal("failed to wait for caches to sync")
 	}
-	go caaf.idleObjectReaper()
+	go caaf.idleObjectReaper(ctx)
 }
 
 // GetTypeName returns the executor type name.
@@ -168,7 +169,7 @@ func (caaf *Container) GetFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 // GetFuncSvcFromCache returns a function service from cache; error otherwise.
 func (caaf *Container) GetFuncSvcFromCache(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
 	otelUtils.SpanTrackEvent(ctx, "GetFuncSvcFromCache", otelUtils.GetAttributesForFunction(fn)...)
-	return caaf.fsCache.GetByFunction(&fn.ObjectMeta)
+	return caaf.fsCache.GetByFunctionUID(fn.UID)
 }
 
 // DeleteFuncSvcFromCache deletes a function service from cache.
@@ -703,73 +704,71 @@ func (caaf *Container) updateStatus(fn *fv1.Function, err error, message string)
 }
 
 // idleObjectReaper reaps objects after certain idle time
-func (caaf *Container) idleObjectReaper() {
-	ctx := context.Background()
+func (caaf *Container) idleObjectReaper(ctx context.Context) {
+	// calling function doIdleObjectReaper() repeatedly at given interval of time
+	wait.UntilWithContext(ctx, caaf.doIdleObjectReaper, time.Second*5)
+}
 
-	pollSleep := 5 * time.Second
-	for {
-		time.Sleep(pollSleep)
+func (caaf *Container) doIdleObjectReaper(ctx context.Context) {
+	funcSvcs, err := caaf.fsCache.ListOld(time.Second * 5)
+	if err != nil {
+		caaf.logger.Error("error reaping idle pods", zap.Error(err))
+		return
+	}
 
-		funcSvcs, err := caaf.fsCache.ListOld(pollSleep)
-		if err != nil {
-			caaf.logger.Error("error reaping idle pods", zap.Error(err))
+	for i := range funcSvcs {
+		fsvc := funcSvcs[i]
+
+		if fsvc.Executor != fv1.ExecutorTypeContainer {
 			continue
 		}
 
-		for i := range funcSvcs {
-			fsvc := funcSvcs[i]
-
-			if fsvc.Executor != fv1.ExecutorTypeContainer {
+		fn, err := caaf.fissionClient.CoreV1().Functions(fsvc.Function.Namespace).Get(ctx, fsvc.Function.Name, metav1.GetOptions{})
+		if err != nil {
+			// CaaF manager handles the function delete event and clean cache/kubeobjs itself,
+			// so we ignore the not found error for functions with CaaF executor type here.
+			if k8sErrs.IsNotFound(err) && fsvc.Executor == fv1.ExecutorTypeContainer {
 				continue
 			}
-
-			fn, err := caaf.fissionClient.CoreV1().Functions(fsvc.Function.Namespace).Get(ctx, fsvc.Function.Name, metav1.GetOptions{})
-			if err != nil {
-				// CaaF manager handles the function delete event and clean cache/kubeobjs itself,
-				// so we ignore the not found error for functions with CaaF executor type here.
-				if k8sErrs.IsNotFound(err) && fsvc.Executor == fv1.ExecutorTypeContainer {
-					continue
-				}
-				caaf.logger.Error("error getting function", zap.Error(err), zap.String("function", fsvc.Function.Name))
-				continue
-			}
-
-			idlePodReapTime := caaf.defaultIdlePodReapTime
-			if fn.Spec.IdleTimeout != nil {
-				idlePodReapTime = time.Duration(*fn.Spec.IdleTimeout) * time.Second
-			}
-
-			if time.Since(fsvc.Atime) < idlePodReapTime {
-				continue
-			}
-
-			go func() {
-				deployObj := getDeploymentObj(fsvc.KubernetesObjects)
-				if deployObj == nil {
-					caaf.logger.Error("error finding function deployment", zap.Error(err), zap.String("function", fsvc.Function.Name))
-					return
-				}
-
-				currentDeploy, err := caaf.kubernetesClient.AppsV1().
-					Deployments(deployObj.Namespace).Get(ctx, deployObj.Name, metav1.GetOptions{})
-				if err != nil {
-					caaf.logger.Error("error getting function deployment", zap.Error(err), zap.String("function", fsvc.Function.Name))
-					return
-				}
-
-				minScale := int32(fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale)
-
-				// do nothing if the current replicas is already lower than minScale
-				if *currentDeploy.Spec.Replicas <= minScale {
-					return
-				}
-
-				err = caaf.scaleDeployment(ctx, deployObj.Namespace, deployObj.Name, minScale)
-				if err != nil {
-					caaf.logger.Error("error scaling down function deployment", zap.Error(err), zap.String("function", fsvc.Function.Name))
-				}
-			}()
+			caaf.logger.Error("error getting function", zap.Error(err), zap.String("function", fsvc.Function.Name))
+			continue
 		}
+
+		idlePodReapTime := caaf.defaultIdlePodReapTime
+		if fn.Spec.IdleTimeout != nil {
+			idlePodReapTime = time.Duration(*fn.Spec.IdleTimeout) * time.Second
+		}
+
+		if time.Since(fsvc.Atime) < idlePodReapTime {
+			continue
+		}
+
+		go func() {
+			deployObj := getDeploymentObj(fsvc.KubernetesObjects)
+			if deployObj == nil {
+				caaf.logger.Error("error finding function deployment", zap.Error(err), zap.String("function", fsvc.Function.Name))
+				return
+			}
+
+			currentDeploy, err := caaf.kubernetesClient.AppsV1().
+				Deployments(deployObj.Namespace).Get(ctx, deployObj.Name, metav1.GetOptions{})
+			if err != nil {
+				caaf.logger.Error("error getting function deployment", zap.Error(err), zap.String("function", fsvc.Function.Name))
+				return
+			}
+
+			minScale := int32(fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale)
+
+			// do nothing if the current replicas is already lower than minScale
+			if *currentDeploy.Spec.Replicas <= minScale {
+				return
+			}
+
+			err = caaf.scaleDeployment(ctx, deployObj.Namespace, deployObj.Name, minScale)
+			if err != nil {
+				caaf.logger.Error("error scaling down function deployment", zap.Error(err), zap.String("function", fsvc.Function.Name))
+			}
+		}()
 	}
 }
 

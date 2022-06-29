@@ -35,6 +35,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
 	appsinformers "k8s.io/client-go/informers/apps/v1"
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	"k8s.io/client-go/kubernetes"
@@ -169,7 +170,7 @@ func (deploy *NewDeploy) GetFuncSvc(ctx context.Context, fn *fv1.Function) (*fsc
 // GetFuncSvcFromCache returns a function service from cache; error otherwise.
 func (deploy *NewDeploy) GetFuncSvcFromCache(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
 	otelUtils.SpanTrackEvent(ctx, "GetFuncSvcFromCache")
-	return deploy.fsCache.GetByFunction(&fn.ObjectMeta)
+	return deploy.fsCache.GetByFunctionUID(fn.UID)
 }
 
 // DeleteFuncSvcFromCache deletes a function service from cache.
@@ -593,6 +594,7 @@ func (deploy *NewDeploy) updateFunction(ctx context.Context, oldFn *fv1.Function
 	if oldFn.Spec.Environment != newFn.Spec.Environment ||
 		oldFn.Spec.Package.PackageRef != newFn.Spec.Package.PackageRef ||
 		oldFn.Spec.Package.FunctionName != newFn.Spec.Package.FunctionName {
+		deploy.logger.Debug("deployment changed", zap.String("msg", "deployment changed"))
 		deployChanged = true
 	}
 
@@ -766,88 +768,87 @@ func (deploy *NewDeploy) updateStatus(fn *fv1.Function, err error, message strin
 
 // idleObjectReaper reaps objects after certain idle time
 func (deploy *NewDeploy) idleObjectReaper(ctx context.Context) {
-	pollSleep := 5 * time.Second
-	for {
-		time.Sleep(pollSleep)
+	// calling function doIdleObjectReaper() repeatedly at given interval of time
+	wait.UntilWithContext(ctx, deploy.doIdleObjectReaper, time.Second*5)
+}
 
-		envs, err := deploy.fissionClient.CoreV1().Environments(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
-		if err != nil {
-			deploy.logger.Fatal("failed to get environment list", zap.Error(err))
-		}
+func (deploy *NewDeploy) doIdleObjectReaper(ctx context.Context) {
+	envs, err := deploy.fissionClient.CoreV1().Environments(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		deploy.logger.Fatal("failed to get environment list", zap.Error(err))
+	}
 
-		envList := make(map[k8sTypes.UID]struct{})
-		for _, env := range envs.Items {
-			envList[env.ObjectMeta.UID] = struct{}{}
-		}
+	envList := make(map[k8sTypes.UID]struct{})
+	for _, env := range envs.Items {
+		envList[env.ObjectMeta.UID] = struct{}{}
+	}
 
-		funcSvcs, err := deploy.fsCache.ListOld(pollSleep)
-		if err != nil {
-			deploy.logger.Error("error reaping idle pods", zap.Error(err))
+	funcSvcs, err := deploy.fsCache.ListOld(time.Second * 5)
+	if err != nil {
+		deploy.logger.Error("error reaping idle pods", zap.Error(err))
+		return
+	}
+
+	for i := range funcSvcs {
+		fsvc := funcSvcs[i]
+		if fsvc.Executor != fv1.ExecutorTypeNewdeploy {
 			continue
 		}
 
-		for i := range funcSvcs {
-			fsvc := funcSvcs[i]
-
-			if fsvc.Executor != fv1.ExecutorTypeNewdeploy {
-				continue
-			}
-
-			// For function with the environment that no longer exists, executor
-			// scales down the deployment as usual and prints log to notify user.
-			if _, ok := envList[fsvc.Environment.ObjectMeta.UID]; !ok {
-				deploy.logger.Warn("function environment no longer exists",
-					zap.String("environment", fsvc.Environment.ObjectMeta.Name),
-					zap.String("function", fsvc.Name))
-			}
-
-			fn, err := deploy.fissionClient.CoreV1().Functions(fsvc.Function.Namespace).Get(ctx, fsvc.Function.Name, metav1.GetOptions{})
-			if err != nil {
-				// Newdeploy manager handles the function delete event and clean cache/kubeobjs itself,
-				// so we ignore the not found error for functions with newdeploy executor type here.
-				if k8sErrs.IsNotFound(err) && fsvc.Executor == fv1.ExecutorTypeNewdeploy {
-					continue
-				}
-				deploy.logger.Error("error getting function", zap.Error(err), zap.String("function", fsvc.Function.Name))
-				continue
-			}
-
-			idlePodReapTime := deploy.defaultIdlePodReapTime
-			if fn.Spec.IdleTimeout != nil {
-				idlePodReapTime = time.Duration(*fn.Spec.IdleTimeout) * time.Second
-			}
-
-			if time.Since(fsvc.Atime) < idlePodReapTime {
-				continue
-			}
-
-			go func() {
-				deployObj := getDeploymentObj(fsvc.KubernetesObjects)
-				if deployObj == nil {
-					deploy.logger.Error("error finding function deployment", zap.Error(err), zap.String("function", fsvc.Function.Name))
-					return
-				}
-
-				currentDeploy, err := deploy.kubernetesClient.AppsV1().
-					Deployments(deployObj.Namespace).Get(ctx, deployObj.Name, metav1.GetOptions{})
-				if err != nil {
-					deploy.logger.Error("error getting function deployment", zap.Error(err), zap.String("function", fsvc.Function.Name))
-					return
-				}
-
-				minScale := int32(fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale)
-
-				// do nothing if the current replicas is already lower than minScale
-				if *currentDeploy.Spec.Replicas <= minScale {
-					return
-				}
-
-				err = deploy.scaleDeployment(ctx, deployObj.Namespace, deployObj.Name, minScale)
-				if err != nil {
-					deploy.logger.Error("error scaling down function deployment", zap.Error(err), zap.String("function", fsvc.Function.Name))
-				}
-			}()
+		// For function with the environment that no longer exists, executor
+		// scales down the deployment as usual and prints log to notify user.
+		if _, ok := envList[fsvc.Environment.ObjectMeta.UID]; !ok {
+			deploy.logger.Warn("function environment no longer exists",
+				zap.String("environment", fsvc.Environment.ObjectMeta.Name),
+				zap.String("function", fsvc.Name))
 		}
+
+		fn, err := deploy.fissionClient.CoreV1().Functions(fsvc.Function.Namespace).Get(ctx, fsvc.Function.Name, metav1.GetOptions{})
+		if err != nil {
+			// Newdeploy manager handles the function delete event and clean cache/kubeobjs itself,
+			// so we ignore the not found error for functions with newdeploy executor type here.
+			if k8sErrs.IsNotFound(err) && fsvc.Executor == fv1.ExecutorTypeNewdeploy {
+				continue
+			}
+			deploy.logger.Error("error getting function", zap.Error(err), zap.String("function", fsvc.Function.Name))
+			continue
+		}
+
+		idlePodReapTime := deploy.defaultIdlePodReapTime
+		if fn.Spec.IdleTimeout != nil {
+			idlePodReapTime = time.Duration(*fn.Spec.IdleTimeout) * time.Second
+		}
+
+		if time.Since(fsvc.Atime) < idlePodReapTime {
+			continue
+		}
+
+		go func() {
+			deployObj := getDeploymentObj(fsvc.KubernetesObjects)
+			if deployObj == nil {
+				deploy.logger.Error("error finding function deployment", zap.Error(err), zap.String("function", fsvc.Function.Name))
+				return
+			}
+
+			currentDeploy, err := deploy.kubernetesClient.AppsV1().
+				Deployments(deployObj.Namespace).Get(ctx, deployObj.Name, metav1.GetOptions{})
+			if err != nil {
+				deploy.logger.Error("error getting function deployment", zap.Error(err), zap.String("function", fsvc.Function.Name))
+				return
+			}
+
+			minScale := int32(fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale)
+
+			// do nothing if the current replicas is already lower than minScale
+			if *currentDeploy.Spec.Replicas <= minScale {
+				return
+			}
+
+			err = deploy.scaleDeployment(ctx, deployObj.Namespace, deployObj.Name, minScale)
+			if err != nil {
+				deploy.logger.Error("error scaling down function deployment", zap.Error(err), zap.String("function", fsvc.Function.Name))
+			}
+		}()
 	}
 }
 

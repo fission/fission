@@ -35,6 +35,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/apimachinery/pkg/watch"
 	appsinformers "k8s.io/client-go/informers/apps/v1"
 	coreinformers "k8s.io/client-go/informers/core/v1"
@@ -169,7 +170,7 @@ func (gpm *GenericPoolManager) Run(ctx context.Context) {
 	gpm.poolPodC.InjectGpm(gpm)
 	go gpm.WebsocketStartEventChecker(gpm.kubernetesClient)
 	go gpm.NoActiveConnectionEventChecker(gpm.kubernetesClient)
-	go gpm.idleObjectReaper()
+	go gpm.idleObjectReaper(ctx)
 	go gpm.poolPodC.Run(ctx.Done())
 }
 
@@ -569,95 +570,93 @@ func (gpm *GenericPoolManager) getFunctionEnv(ctx context.Context, fn *fv1.Funct
 }
 
 // idleObjectReaper reaps objects after certain idle time
-func (gpm *GenericPoolManager) idleObjectReaper() {
-	ctx := context.Background()
-	pollSleep := 5 * time.Second
+func (gpm *GenericPoolManager) idleObjectReaper(ctx context.Context) {
+	// calling function doIdleObjectReaper() repeatedly at given interval of time
+	wait.UntilWithContext(ctx, gpm.doIdleObjectReaper, time.Second*5)
+}
 
-	for {
-		time.Sleep(pollSleep)
+func (gpm *GenericPoolManager) doIdleObjectReaper(ctx context.Context) {
+	envs, err := gpm.fissionClient.CoreV1().Environments(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		gpm.logger.Error("failed to get environment list", zap.Error(err))
+		return
+	}
 
-		envs, err := gpm.fissionClient.CoreV1().Environments(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
-		if err != nil {
-			gpm.logger.Error("failed to get environment list", zap.Error(err))
+	envList := make(map[k8sTypes.UID]struct{})
+	for _, env := range envs.Items {
+		envList[env.ObjectMeta.UID] = struct{}{}
+	}
+
+	fns, err := gpm.fissionClient.CoreV1().Functions(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		gpm.logger.Error("failed to get environment list", zap.Error(err))
+		return
+	}
+
+	fnList := make(map[k8sTypes.UID]fv1.Function)
+	for i, fn := range fns.Items {
+		fnList[fn.ObjectMeta.UID] = fns.Items[i]
+	}
+
+	funcSvcs, err := gpm.fsCache.ListOldForPool(time.Second * 5)
+	if err != nil {
+		gpm.logger.Error("error reaping idle pods", zap.Error(err))
+		return
+	}
+
+	for i := range funcSvcs {
+		fsvc := funcSvcs[i]
+
+		if fsvc.Executor != fv1.ExecutorTypePoolmgr {
 			continue
 		}
 
-		envList := make(map[k8sTypes.UID]struct{})
-		for _, env := range envs.Items {
-			envList[env.ObjectMeta.UID] = struct{}{}
+		if _, ok := gpm.fsCache.WebsocketFsvc.Load(fsvc.Name); ok {
+			continue
+		}
+		// For function with the environment that no longer exists, executor
+		// cleanups the idle pod as usual and prints log to notify user.
+		if _, ok := envList[fsvc.Environment.ObjectMeta.UID]; !ok {
+			gpm.logger.Warn("function environment no longer exists",
+				zap.String("environment", fsvc.Environment.ObjectMeta.Name),
+				zap.String("function", fsvc.Name))
 		}
 
-		fns, err := gpm.fissionClient.CoreV1().Functions(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
-		if err != nil {
-			gpm.logger.Error("failed to get environment list", zap.Error(err))
+		if fsvc.Environment.Spec.AllowedFunctionsPerContainer == fv1.AllowedFunctionsPerContainerInfinite {
 			continue
 		}
 
-		fnList := make(map[k8sTypes.UID]fv1.Function)
-		for i, fn := range fns.Items {
-			fnList[fn.ObjectMeta.UID] = fns.Items[i]
+		idlePodReapTime := gpm.defaultIdlePodReapTime
+		if fn, ok := fnList[fsvc.Function.UID]; ok {
+			if fn.Spec.IdleTimeout != nil {
+				idlePodReapTime = time.Duration(*fn.Spec.IdleTimeout) * time.Second
+			}
 		}
 
-		funcSvcs, err := gpm.fsCache.ListOldForPool(pollSleep)
-		if err != nil {
-			gpm.logger.Error("error reaping idle pods", zap.Error(err))
+		if time.Since(fsvc.Atime) < idlePodReapTime {
 			continue
 		}
 
-		for i := range funcSvcs {
-			fsvc := funcSvcs[i]
-
-			if fsvc.Executor != fv1.ExecutorTypePoolmgr {
-				continue
+		go func() {
+			deleted, err := gpm.fsCache.DeleteOldPoolCache(ctx, fsvc, idlePodReapTime)
+			if err != nil {
+				gpm.logger.Error("error deleting Kubernetes objects for function service",
+					zap.Error(err),
+					zap.Any("service", fsvc))
 			}
-
-			if _, ok := gpm.fsCache.WebsocketFsvc.Load(fsvc.Name); ok {
-				continue
-			}
-			// For function with the environment that no longer exists, executor
-			// cleanups the idle pod as usual and prints log to notify user.
-			if _, ok := envList[fsvc.Environment.ObjectMeta.UID]; !ok {
-				gpm.logger.Warn("function environment no longer exists",
-					zap.String("environment", fsvc.Environment.ObjectMeta.Name),
-					zap.String("function", fsvc.Name))
-			}
-
-			if fsvc.Environment.Spec.AllowedFunctionsPerContainer == fv1.AllowedFunctionsPerContainerInfinite {
-				continue
-			}
-
-			idlePodReapTime := gpm.defaultIdlePodReapTime
-			if fn, ok := fnList[fsvc.Function.UID]; ok {
-				if fn.Spec.IdleTimeout != nil {
-					idlePodReapTime = time.Duration(*fn.Spec.IdleTimeout) * time.Second
+			if deleted {
+				for i := range fsvc.KubernetesObjects {
+					gpm.logger.Info("release idle function resources",
+						zap.String("function", fsvc.Function.Name),
+						zap.String("address", fsvc.Address),
+						zap.String("executor", string(fsvc.Executor)),
+						zap.String("pod", fsvc.Name),
+					)
+					reaper.CleanupKubeObject(ctx, gpm.logger, gpm.kubernetesClient, &fsvc.KubernetesObjects[i])
+					time.Sleep(50 * time.Millisecond)
 				}
 			}
-
-			if time.Since(fsvc.Atime) < idlePodReapTime {
-				continue
-			}
-
-			go func() {
-				deleted, err := gpm.fsCache.DeleteOldPoolCache(ctx, fsvc, idlePodReapTime)
-				if err != nil {
-					gpm.logger.Error("error deleting Kubernetes objects for function service",
-						zap.Error(err),
-						zap.Any("service", fsvc))
-				}
-				if deleted {
-					for i := range fsvc.KubernetesObjects {
-						gpm.logger.Info("release idle function resources",
-							zap.String("function", fsvc.Function.Name),
-							zap.String("address", fsvc.Address),
-							zap.String("executor", string(fsvc.Executor)),
-							zap.String("pod", fsvc.Name),
-						)
-						reaper.CleanupKubeObject(ctx, gpm.logger, gpm.kubernetesClient, &fsvc.KubernetesObjects[i])
-						time.Sleep(50 * time.Millisecond)
-					}
-				}
-			}()
-		}
+		}()
 	}
 }
 
