@@ -231,6 +231,18 @@ func (ss *StorageService) downloadHandler(w http.ResponseWriter, r *http.Request
 
 func (ss *StorageService) infoHandler(w http.ResponseWriter, r *http.Request) {
 
+	fileID, err := ss.getIdFromRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	_, err = ss.storageClient.container.Item(fileID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
 	storageType := ss.storageClient.config.storage.getStorageType()
 	if storageType == StorageTypeS3 {
 		w.Header().Add("X-FISSION-BUCKET", ss.storageClient.config.storage.getContainerName())

@@ -61,7 +61,7 @@ func (opts *GetURLSubCommand) do(input cli.Input) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("Error getting URL. Exited with Status:  %v", resp.Status)
+		return fmt.Errorf("Error getting URL. Exited with Status:  %s", resp.Status)
 	}
 
 	storageType := resp.Header.Get("X-FISSION-STORAGETYPE")
