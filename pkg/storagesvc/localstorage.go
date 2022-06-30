@@ -54,7 +54,3 @@ func (ls localStorage) dial() (stow.Location, error) {
 	cfg := stow.ConfigMap{"path": ls.localPath}
 	return stow.Dial("local", cfg)
 }
-
-func (ls localStorage) getRegion() string {
-	return ""
-}

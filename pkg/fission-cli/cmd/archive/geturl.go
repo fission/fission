@@ -75,9 +75,8 @@ func (opts *GetURLSubCommand) do(input cli.Input) error {
 		client := storagesvcClient.MakeClient(storagesvcURL)
 		fmt.Printf("URL: %s", client.GetUrl(archiveID))
 	} else {
-		storageRegion := resp.Header.Get("X-FISSION-REGION")
 		storageBucket := resp.Header.Get("X-FISSION-BUCKET")
-		s3url := fmt.Sprintf("https://%s.amazonaws.com/%s/%s", storageRegion, storageBucket, archiveID)
+		s3url := fmt.Sprintf("https://%s.s3.amazonaws.com/%s", storageBucket, archiveID)
 		fmt.Printf("URL: %s", s3url)
 	}
 

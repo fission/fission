@@ -44,7 +44,6 @@ type (
 		getSubDir() string
 		getContainerName() string
 		getUploadFileName() (string, error)
-		getRegion() string
 	}
 
 	// StorageService is a struct to hold all things for storage service
@@ -234,7 +233,6 @@ func (ss *StorageService) infoHandler(w http.ResponseWriter, r *http.Request) {
 
 	storageType := ss.storageClient.config.storage.getStorageType()
 	if storageType == StorageTypeS3 {
-		w.Header().Add("X-FISSION-REGION", ss.storageClient.config.storage.getRegion())
 		w.Header().Add("X-FISSION-BUCKET", ss.storageClient.config.storage.getContainerName())
 	}
 	w.Header().Add("X-FISSION-STORAGETYPE", string(storageType))

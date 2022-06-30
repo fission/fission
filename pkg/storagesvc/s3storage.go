@@ -49,10 +49,6 @@ func (ss s3Storage) getContainerName() string {
 	return ss.bucketName
 }
 
-func (ss s3Storage) getRegion() string {
-	return ss.region
-}
-
 func (ss s3Storage) getSubDir() string {
 	return ss.subDir
 }
