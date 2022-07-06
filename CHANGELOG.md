@@ -1,5 +1,27 @@
 # Changelog
 
+## [v1.17.0-rc1](https://github.com/fission/fission/tree/v1.17.0-rc1) (2022-07-06)
+
+[Full Changelog](https://github.com/fission/fission/compare/v1.16.0...v1.17.0-rc1)
+
+**Merged pull requests:**
+
+- Update controller-tools to v0.9.2 [\#2467](https://github.com/fission/fission/pull/2467) ([sanketsudake](https://github.com/sanketsudake))
+- OpenTelemetry package update to v1.7.0 [\#2466](https://github.com/fission/fission/pull/2466) ([shubham-bansal96](https://github.com/shubham-bansal96))
+- Added support to set builder and fn pod specs via helm chart [\#2461](https://github.com/fission/fission/pull/2461) ([blackfly19](https://github.com/blackfly19))
+- Pods immediately terminate for idletimeout in new deployment and container executer type [\#2459](https://github.com/fission/fission/pull/2459) ([shubham-bansal96](https://github.com/shubham-bansal96))
+- Added variable to enable or disable archivePruner [\#2458](https://github.com/fission/fission/pull/2458) ([blackfly19](https://github.com/blackfly19))
+- Avoid fission installation failure due to analytics connection error [\#2457](https://github.com/fission/fission/pull/2457) ([shubham-bansal96](https://github.com/shubham-bansal96))
+- Fix for archivepruner to delete files only from subdir [\#2456](https://github.com/fission/fission/pull/2456) ([blackfly19](https://github.com/blackfly19))
+- Upgraded controller-gen to remove status from fission CRDs [\#2454](https://github.com/fission/fission/pull/2454) ([sanketsudake](https://github.com/sanketsudake))
+- builder: Allow command with arguments via custom build options [\#2453](https://github.com/fission/fission/pull/2453) ([shubham-bansal96](https://github.com/shubham-bansal96))
+- CLI to operate archives managed by Storage Service [\#2450](https://github.com/fission/fission/pull/2450) ([blackfly19](https://github.com/blackfly19))
+- \[issue-2401\] Added pod security context for Fission Components [\#2449](https://github.com/fission/fission/pull/2449) ([baba230896](https://github.com/baba230896))
+- Update github.com/opencontainers/runc dependency to 1.1.2 [\#2448](https://github.com/fission/fission/pull/2448) ([blackfly19](https://github.com/blackfly19))
+- Fixed help for ColdStarts metric in executor according to new labels [\#2446](https://github.com/fission/fission/pull/2446) ([blackfly19](https://github.com/blackfly19))
+- Ensure poolmanager fn address validation even if pod has active connections [\#2441](https://github.com/fission/fission/pull/2441) ([blackfly19](https://github.com/blackfly19))
+- Fix pre-check failure during new fission installation [\#2437](https://github.com/fission/fission/pull/2437) ([shubham4443](https://github.com/shubham4443))
+
 ## [v1.16.0](https://github.com/fission/fission/tree/v1.16.0) (2022-05-24)
 
 [Full Changelog](https://github.com/fission/fission/compare/v1.16.0-rc2...v1.16.0)
