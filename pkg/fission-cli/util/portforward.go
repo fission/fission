@@ -50,16 +50,20 @@ func SetupPortForward(namespace, labelSelector string, kubeContext string) (stri
 		return "", errors.Wrap(err, "error finding unused port")
 	}
 
-	var duration time.Duration = 50
+	var (
+		defaultDuration time.Duration = 50
+		maxDuration     time.Duration = 2000
+	)
+
 	console.Verbose(2, "Waiting for local port %v", localPort)
 	for {
 		conn, _ := net.DialTimeout("tcp",
-			net.JoinHostPort("", localPort), time.Millisecond*duration)
+			net.JoinHostPort("", localPort), time.Millisecond*defaultDuration)
 		if conn != nil {
 			conn.Close()
-			duration *= 2
-			if duration > 2000 {
-				duration = 2000
+			defaultDuration *= 2
+			if defaultDuration > maxDuration {
+				defaultDuration = maxDuration
 			}
 		} else {
 			break
@@ -78,15 +82,15 @@ func SetupPortForward(namespace, labelSelector string, kubeContext string) (stri
 
 	console.Verbose(2, "Waiting for port forward %v to start...", localPort)
 
-	duration = 50
+	defaultDuration = 50
 	for {
 		conn, err := net.DialTimeout("tcp",
-			net.JoinHostPort("", localPort), time.Millisecond*duration)
+			net.JoinHostPort("", localPort), time.Millisecond*defaultDuration)
 		if err != nil {
 			console.Verbose(2, "Error dialing on local port %v: %s", localPort, err.Error())
-			duration *= 2
-			if duration > 2000 {
-				duration = 2000
+			defaultDuration *= 2
+			if defaultDuration > maxDuration {
+				defaultDuration = maxDuration
 			}
 		} else {
 			conn.Close()
