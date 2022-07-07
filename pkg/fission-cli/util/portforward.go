@@ -36,6 +36,8 @@ import (
 	"github.com/fission/fission/pkg/utils"
 )
 
+const maxDuration time.Duration = 2000
+
 // Port forward a free local port to a pod on the cluster. The pod is
 // found in the specified namespace by labelSelector. The pod's port
 // is found by looking for a service in the same namespace and using
@@ -50,16 +52,21 @@ func SetupPortForward(namespace, labelSelector string, kubeContext string) (stri
 		return "", errors.Wrap(err, "error finding unused port")
 	}
 
+	var waitDuration time.Duration = 50
+
 	console.Verbose(2, "Waiting for local port %v", localPort)
 	for {
 		conn, _ := net.DialTimeout("tcp",
-			net.JoinHostPort("", localPort), time.Millisecond)
+			net.JoinHostPort("", localPort), time.Millisecond*waitDuration)
 		if conn != nil {
 			conn.Close()
+			waitDuration *= 2
+			if waitDuration > maxDuration {
+				waitDuration = maxDuration
+			}
 		} else {
 			break
 		}
-		time.Sleep(time.Millisecond * 50)
 	}
 
 	console.Verbose(2, "Starting port forward from local port %v", localPort)
@@ -73,19 +80,21 @@ func SetupPortForward(namespace, labelSelector string, kubeContext string) (stri
 	<-readyC
 
 	console.Verbose(2, "Waiting for port forward %v to start...", localPort)
+
+	waitDuration = 50
 	for {
 		conn, err := net.DialTimeout("tcp",
-			net.JoinHostPort("", localPort), time.Millisecond)
+			net.JoinHostPort("", localPort), time.Millisecond*waitDuration)
 		if err != nil {
 			console.Verbose(2, "Error dialing on local port %v: %s", localPort, err.Error())
-			time.Sleep(time.Millisecond * 50)
-			continue
-		}
-		if conn != nil {
+			waitDuration *= 2
+			if waitDuration > maxDuration {
+				waitDuration = maxDuration
+			}
+		} else {
 			conn.Close()
 			break
 		}
-		time.Sleep(time.Millisecond * 50)
 	}
 
 	console.Verbose(2, "Port forward from local port %v started", localPort)
