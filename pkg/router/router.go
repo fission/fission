@@ -42,16 +42,11 @@ package router
 import (
 	"context"
 	"fmt"
-	"net/http"
-	"net/http/httputil"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/gorilla/mux"
-	"go.opencensus.io/plugin/ochttp"
-	"go.opencensus.io/trace"
 	"go.opentelemetry.io/otel"
 	"go.uber.org/zap"
 
@@ -85,41 +80,14 @@ func router(ctx context.Context, logger *zap.Logger, httpTriggerSet *HTTPTrigger
 }
 
 func serve(ctx context.Context, logger *zap.Logger, port int, tracingSamplingRate float64,
-	httpTriggerSet *HTTPTriggerSet, displayAccessLog bool, openTracingEnabled bool) {
+	httpTriggerSet *HTTPTriggerSet, displayAccessLog bool) {
 	mr := router(ctx, logger, httpTriggerSet)
-
-	var handler http.Handler
-	if openTracingEnabled {
-		handler = &ochttp.Handler{
-			Handler: mr,
-			GetStartOptions: func(r *http.Request) trace.StartOptions {
-				// do not trace router healthz endpoint
-				if strings.Compare(r.URL.Path, "/router-healthz") == 0 {
-					return trace.StartOptions{
-						Sampler: trace.NeverSample(),
-					}
-				}
-				if displayAccessLog {
-					reqMsg, err := httputil.DumpRequest(r, false)
-					if err != nil {
-						logger.Error("error dumping request", zap.Error(err))
-					}
-					logger.Info("request dump", zap.String("request", string(reqMsg)))
-				}
-				return trace.StartOptions{
-					Sampler: trace.ProbabilitySampler(tracingSamplingRate),
-				}
-			},
-		}
-	} else {
-		handler = otelUtils.GetHandlerWithOTEL(mr, "fission-router", otelUtils.UrlsToIgnore("/router-healthz"))
-	}
-
+	handler := otelUtils.GetHandlerWithOTEL(mr, "fission-router", otelUtils.UrlsToIgnore("/router-healthz"))
 	httpserver.StartServer(ctx, logger, "router", fmt.Sprintf("%d", port), handler)
 }
 
 // Start starts a router
-func Start(ctx context.Context, logger *zap.Logger, port int, executorURL string, openTracingEnabled bool) {
+func Start(ctx context.Context, logger *zap.Logger, port int, executorURL string) {
 	fmap := makeFunctionServiceMap(logger, time.Minute)
 
 	fissionClient, kubeClient, _, _, err := crd.MakeFissionClient()
@@ -254,5 +222,5 @@ func Start(ctx context.Context, logger *zap.Logger, port int, executorURL string
 	ctx, span := tracer.Start(ctx, "router/Start")
 	defer span.End()
 
-	serve(ctx, logger, port, tracingSamplingRate, triggers, displayAccessLog, openTracingEnabled)
+	serve(ctx, logger, port, tracingSamplingRate, triggers, displayAccessLog)
 }

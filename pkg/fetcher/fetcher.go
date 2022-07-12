@@ -31,7 +31,6 @@ import (
 	"github.com/mholt/archiver/v3"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
-	"go.opencensus.io/plugin/ochttp"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.uber.org/zap"
 	"golang.org/x/net/context/ctxhttp"
@@ -53,7 +52,6 @@ import (
 	storageSvcClient "github.com/fission/fission/pkg/storagesvc/client"
 	"github.com/fission/fission/pkg/utils"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
-	"github.com/fission/fission/pkg/utils/tracing"
 )
 
 type (
@@ -107,13 +105,7 @@ func MakeFetcher(logger *zap.Logger, sharedVolumePath string, sharedSecretPath s
 		return nil, errors.Wrap(err, "error reading pod namespace from downward volume")
 	}
 
-	var hc *http.Client
-	if tracing.TracingEnabled(logger) {
-		hc = &http.Client{Transport: &ochttp.Transport{}}
-	} else {
-		hc = &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
-	}
-
+	hc := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
 	return &Fetcher{
 		logger:           fLogger,
 		sharedVolumePath: sharedVolumePath,

@@ -118,8 +118,6 @@ spec:
                 fieldRef:
                   apiVersion: v1
                   fieldPath: spec.nodeName
-            - name: OPENTRACING_ENABLED
-              value: {{ .Values.openTracing.enabled | default false | quote }}
           command: ["/fission-bundle"]
           args: ["--logger"]
           volumeMounts:
@@ -161,8 +159,6 @@ spec:
                   key: password
             - name: LOG_PATH
               value: /var/log/fission/*.log
-            - name: OPENTRACING_ENABLED
-              value: {{ .Values.openTracing.enabled | default false | quote }}
 {{- if .Values.logger.enableSecurityContext }}
           securityContext:
             privileged: true

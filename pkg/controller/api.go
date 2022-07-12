@@ -24,7 +24,6 @@ import (
 	"strings"
 
 	"github.com/gorilla/mux"
-	"go.opencensus.io/plugin/ochttp"
 	"go.uber.org/zap"
 	apiv1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
@@ -270,14 +269,8 @@ func (api *API) GetHandler() http.Handler {
 	return r
 }
 
-func (api *API) Serve(ctx context.Context, port int, openTracingEnabled bool) {
-	var handler http.Handler
-	if openTracingEnabled {
-		handler = &ochttp.Handler{Handler: api.GetHandler()}
-	} else {
-		handler = otel.GetHandlerWithOTEL(api.GetHandler(), "fission-controller", otel.UrlsToIgnore("/healthz"))
-	}
-
+func (api *API) Serve(ctx context.Context, port int) {
+	handler := otel.GetHandlerWithOTEL(api.GetHandler(), "fission-controller", otel.UrlsToIgnore("/healthz"))
 	go metrics.ServeMetrics(ctx, api.logger)
 	httpserver.StartServer(ctx, api.logger, "controller", fmt.Sprintf("%d", port), handler)
 }

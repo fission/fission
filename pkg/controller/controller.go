@@ -24,7 +24,7 @@ import (
 	"github.com/fission/fission/pkg/crd"
 )
 
-func Start(ctx context.Context, logger *zap.Logger, port int, unitTestFlag bool, openTracingEnabled bool) {
+func Start(ctx context.Context, logger *zap.Logger, port int, unitTestFlag bool) {
 	cLogger := logger.Named("controller")
 
 	fc, kc, apiExtClient, _, err := crd.MakeFissionClient()
@@ -51,5 +51,5 @@ func Start(ctx context.Context, logger *zap.Logger, port int, unitTestFlag bool,
 	if err != nil {
 		cLogger.Fatal("failed to start controller", zap.Error(err))
 	}
-	api.Serve(ctx, port, openTracingEnabled)
+	api.Serve(ctx, port)
 }

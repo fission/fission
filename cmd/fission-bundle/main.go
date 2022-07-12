@@ -42,19 +42,18 @@ import (
 	"github.com/fission/fission/pkg/utils/otel"
 	"github.com/fission/fission/pkg/utils/profile"
 	"github.com/fission/fission/pkg/utils/signals"
-	"github.com/fission/fission/pkg/utils/tracing"
 )
 
-func runController(ctx context.Context, logger *zap.Logger, port int, openTracingEnabled bool) {
-	controller.Start(ctx, logger, port, false, openTracingEnabled)
+func runController(ctx context.Context, logger *zap.Logger, port int) {
+	controller.Start(ctx, logger, port, false)
 }
 
-func runRouter(ctx context.Context, logger *zap.Logger, port int, executorUrl string, openTracingEnabled bool) {
-	router.Start(ctx, logger, port, executorUrl, openTracingEnabled)
+func runRouter(ctx context.Context, logger *zap.Logger, port int, executorUrl string) {
+	router.Start(ctx, logger, port, executorUrl)
 }
 
-func runExecutor(ctx context.Context, logger *zap.Logger, port int, functionNamespace, envBuilderNamespace string, openTracingEnabled bool) error {
-	return executor.StartExecutor(ctx, logger, functionNamespace, envBuilderNamespace, port, openTracingEnabled)
+func runExecutor(ctx context.Context, logger *zap.Logger, port int, functionNamespace, envBuilderNamespace string) error {
+	return executor.StartExecutor(ctx, logger, functionNamespace, envBuilderNamespace, port)
 }
 
 func runKubeWatcher(ctx context.Context, logger *zap.Logger, routerUrl string) error {
@@ -74,8 +73,8 @@ func runMQManager(ctx context.Context, logger *zap.Logger, routerURL string) err
 	return mqt.StartScalerManager(ctx, logger, routerURL)
 }
 
-func runStorageSvc(ctx context.Context, logger *zap.Logger, port int, storage storagesvc.Storage, openTracingEnabled bool) error {
-	return storagesvc.Start(ctx, logger, storage, port, openTracingEnabled)
+func runStorageSvc(ctx context.Context, logger *zap.Logger, port int, storage storagesvc.Storage) error {
+	return storagesvc.Start(ctx, logger, storage, port)
 }
 
 func runBuilderMgr(ctx context.Context, logger *zap.Logger, storageSvcUrl string, envBuilderNamespace string) error {
@@ -210,22 +209,13 @@ Options:
 		return
 	}
 
-	openTracingEnabled := tracing.TracingEnabled(logger)
-	if openTracingEnabled {
-		err = tracing.RegisterTraceExporter(logger, os.Getenv("TRACE_JAEGER_COLLECTOR_ENDPOINT"), getServiceName(arguments))
-		if err != nil {
-			logger.Error("failed to register trace exporter", zap.Error(err), zap.Any("argument", arguments))
-			return
-		}
-	} else {
-		shutdown, err := otel.InitProvider(ctx, logger, getServiceName(arguments))
-		if err != nil {
-			logger.Error("error initializing provider for OTLP", zap.Error(err), zap.Any("argument", arguments))
-			return
-		}
-		if shutdown != nil {
-			defer shutdown(ctx)
-		}
+	shutdown, err := otel.InitProvider(ctx, logger, getServiceName(arguments))
+	if err != nil {
+		logger.Error("error initializing provider for OTLP", zap.Error(err), zap.Any("argument", arguments))
+		return
+	}
+	if shutdown != nil {
+		defer shutdown(ctx)
 	}
 
 	functionNs := getStringArgWithDefault(arguments["--namespace"], "fission-function")
@@ -237,21 +227,21 @@ Options:
 
 	if arguments["--controllerPort"] != nil {
 		port := getPort(logger, arguments["--controllerPort"])
-		runController(ctx, logger, port, openTracingEnabled)
+		runController(ctx, logger, port)
 		logger.Error("controller exited")
 		return
 	}
 
 	if arguments["--routerPort"] != nil {
 		port := getPort(logger, arguments["--routerPort"])
-		runRouter(ctx, logger, port, executorUrl, openTracingEnabled)
+		runRouter(ctx, logger, port, executorUrl)
 		logger.Error("router exited")
 		return
 	}
 
 	if arguments["--executorPort"] != nil {
 		port := getPort(logger, arguments["--executorPort"])
-		err = runExecutor(ctx, logger, port, functionNs, envBuilderNs, openTracingEnabled)
+		err = runExecutor(ctx, logger, port, functionNs, envBuilderNs)
 		if err != nil {
 			logger.Error("executor exited", zap.Error(err))
 			return
@@ -314,7 +304,7 @@ Options:
 		} else if arguments["--storageType"] == string(storagesvc.StorageTypeLocal) {
 			storage = storagesvc.NewLocalStorage("/fission")
 		}
-		err := runStorageSvc(ctx, logger, port, storage, openTracingEnabled)
+		err := runStorageSvc(ctx, logger, port, storage)
 		if err != nil {
 			logger.Error("storage service exited", zap.Error(err))
 			return

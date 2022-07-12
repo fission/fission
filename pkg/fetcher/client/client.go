@@ -10,14 +10,12 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"go.opencensus.io/plugin/ochttp"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.uber.org/zap"
 	"golang.org/x/net/context/ctxhttp"
 
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/fetcher"
-	"github.com/fission/fission/pkg/utils/tracing"
 )
 
 type (
@@ -29,13 +27,7 @@ type (
 )
 
 func MakeClient(logger *zap.Logger, fetcherUrl string) *Client {
-	var hc *http.Client
-	if tracing.TracingEnabled(logger) {
-		hc = &http.Client{Transport: &ochttp.Transport{}}
-	} else {
-		hc = &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
-	}
-
+	hc := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
 	return &Client{
 		logger:     logger.Named("fetcher_client"),
 		url:        strings.TrimSuffix(fetcherUrl, "/"),

@@ -30,7 +30,6 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"go.opencensus.io/plugin/ochttp"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.uber.org/zap"
 	k8stypes "k8s.io/apimachinery/pkg/types"
@@ -68,7 +67,6 @@ type (
 		svcAddrUpdateThrottler   *throttler.Throttler
 		functionTimeoutMap       map[k8stypes.UID]int
 		unTapServiceTimeout      time.Duration
-		openTracingEnabled       bool
 	}
 
 	tsRoundTripperParams struct {
@@ -323,15 +321,14 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 		// The otelhttp.NewTransport() does not work with WebSocket.
 		// This is probably because it modifies the response body.
 		// Until we find a better solution to handle websocket requests, we will continue to
-		// use ochttp.Transport(). We check if the request isWebsocketRequest() and use the
-		// ochttp.Transport() irrespective of open telemetry is enabled or not.
+		// use http.Transport(). We check if the request isWebsocketRequest() and use the
+		// http.Transport() irrespective of open telemetry is enabled or not.
 		// Related issue: https://github.com/open-telemetry/opentelemetry-js-contrib/issues/12
 
 		// forward the request to the function service
 		var resp *http.Response
-		if roundTripper.funcHandler.openTracingEnabled || util.IsWebsocketRequest(newReq) {
-			ocRoundTripper := &ochttp.Transport{Base: transport}
-			resp, err = ocRoundTripper.RoundTrip(newReq)
+		if util.IsWebsocketRequest(newReq) {
+			resp, err = transport.RoundTrip(newReq)
 		} else {
 			otelUtils.SpanTrackEvent(ctx, "roundtrip", otelUtils.MapToAttributes(map[string]string{
 				"function-name":      fnMeta.Name,

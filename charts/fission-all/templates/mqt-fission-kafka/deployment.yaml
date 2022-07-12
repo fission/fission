@@ -44,7 +44,6 @@ spec:
           value: {{ .Values.debugEnv | quote }}
         - name: PPROF_ENABLED
           value: {{ .Values.pprof.enabled | quote }}
-        {{- include "opentracing.envs" . | indent 8 }}
         {{- include "opentelemtry.envs" . | indent 8 }}
         # TLS authentication is TLS with authentication (2 way)
         # More info: https://docs.confluent.io/current/kafka/authentication_ssl.html#ssl-overview

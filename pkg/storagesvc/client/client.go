@@ -29,12 +29,10 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
-	"go.opencensus.io/plugin/ochttp"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"golang.org/x/net/context/ctxhttp"
 
 	"github.com/fission/fission/pkg/storagesvc"
-	"github.com/fission/fission/pkg/utils/tracing"
 )
 
 type (
@@ -46,12 +44,7 @@ type (
 
 // Client creates a storage service client.
 func MakeClient(url string) *Client {
-	var hc *http.Client
-	if tracing.TracingEnabled(nil) {
-		hc = &http.Client{Transport: &ochttp.Transport{}}
-	} else {
-		hc = &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
-	}
+	hc := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
 	return &Client{
 		url:        strings.TrimSuffix(url, "/") + "/v1",
 		httpClient: hc,

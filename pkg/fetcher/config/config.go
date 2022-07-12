@@ -34,8 +34,6 @@ type Config struct {
 	sharedCfgMapPath string
 
 	serviceAccount string
-
-	jaegerCollectorEndpoint string
 }
 
 func getFetcherResources() (apiv1.ResourceRequirements, error) {
@@ -82,14 +80,13 @@ func MakeFetcherConfig(sharedMountPath string) (*Config, error) {
 	}
 
 	return &Config{
-		resourceRequirements:    resources,
-		fetcherImage:            fetcherImage,
-		fetcherImagePullPolicy:  utils.GetImagePullPolicy(fetcherImagePullPolicy),
-		sharedMountPath:         sharedMountPath,
-		sharedSecretPath:        "/secrets",
-		sharedCfgMapPath:        "/configs",
-		jaegerCollectorEndpoint: os.Getenv("TRACE_JAEGER_COLLECTOR_ENDPOINT"),
-		serviceAccount:          fv1.FissionFetcherSA,
+		resourceRequirements:   resources,
+		fetcherImage:           fetcherImage,
+		fetcherImagePullPolicy: utils.GetImagePullPolicy(fetcherImagePullPolicy),
+		sharedMountPath:        sharedMountPath,
+		sharedSecretPath:       "/secrets",
+		sharedCfgMapPath:       "/configs",
+		serviceAccount:         fv1.FissionFetcherSA,
 	}, nil
 }
 
@@ -169,7 +166,6 @@ func (cfg *Config) fetcherCommand(extraArgs ...string) []string {
 	command := []string{"/fetcher",
 		"-secret-dir", cfg.sharedSecretPath,
 		"-cfgmap-dir", cfg.sharedCfgMapPath,
-		"-jaeger-collector-endpoint", cfg.jaegerCollectorEndpoint,
 	}
 
 	command = append(command, extraArgs...)
