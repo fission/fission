@@ -639,23 +639,6 @@ authentication:
   ##
   jwtIssuer: fission
 
-## Use the following flags to enable OpenTracing.
-## Note: OpenTracing support will be removed in an upcoming release.
-## Please prefer using OpenTelemetry instead.
-##
-openTracing:
-  ## set this flag to true if you wish to enable OpenTracing
-  ##
-  enabled: false
-
-  ## if enabled is true, the variable is endpoint of Jaeger collector in the format shown below
-  ##
-  #collectorEndpoint: "http://jaeger-collector.jaeger.svc:14268/api/traces?format=jaeger.thrift"
-
-  ## uniformly sample traces with the given probabilistic sampling rate
-  ##
-  #samplingRate: 0.75
-
 ## OpenTelemetry is a set of tools for collecting, analyzing, and visualizing
 ## distributed tracing data across function calls.
 ##

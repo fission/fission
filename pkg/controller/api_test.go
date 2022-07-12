@@ -377,7 +377,7 @@ func TestMain(m *testing.M) {
 	panicIf(err)
 
 	ctx := context.Background()
-	go Start(ctx, logger, 8888, true, true)
+	go Start(ctx, logger, 8888, true)
 
 	time.Sleep(5 * time.Second)
 

@@ -55,7 +55,6 @@ spec:
           value: {{ .Values.pprof.enabled | quote }}
         - name: HELM_RELEASE_NAME
           value: {{ .Release.Name | quote }}
-        {{- include "opentracing.envs" . | indent 8 }}
         {{- include "opentelemtry.envs" . | indent 8 }}
         ports:
           - containerPort: 8080

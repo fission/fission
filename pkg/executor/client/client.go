@@ -27,13 +27,11 @@ import (
 
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/pkg/errors"
-	"go.opencensus.io/plugin/ochttp"
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	ferror "github.com/fission/fission/pkg/error"
-	"github.com/fission/fission/pkg/utils/tracing"
 )
 
 type (
@@ -57,10 +55,6 @@ type (
 // MakeClient initializes and returns a Client instance.
 func MakeClient(logger *zap.Logger, executorURL string) *Client {
 	hc := retryablehttp.NewClient()
-	if tracing.TracingEnabled(logger) {
-		hc.HTTPClient.Transport = &ochttp.Transport{Base: hc.HTTPClient.Transport}
-	}
-
 	c := &Client{
 		logger:      logger.Named("executor_client"),
 		executorURL: strings.TrimSuffix(executorURL, "/"),

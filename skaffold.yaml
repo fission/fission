@@ -51,7 +51,6 @@ deploy:
         builderPodSpec.enabled: false
         repository: index.docker.io
         routerServiceType: LoadBalancer
-        openTracing.enabled: false
         openTelemetry.otlpCollectorEndpoint: ""
         openTelemetry.otlpInsecure: true
         prometheus.serviceEndpoint: ""

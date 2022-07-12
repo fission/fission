@@ -28,7 +28,6 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
-	"go.opencensus.io/plugin/ochttp"
 	"go.uber.org/zap"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -263,14 +262,8 @@ func (executor *Executor) GetHandler() http.Handler {
 }
 
 // Serve starts an HTTP server.
-func (executor *Executor) Serve(ctx context.Context, port int, openTracingEnabled bool) {
-	var handler http.Handler
-	if openTracingEnabled {
-		handler = &ochttp.Handler{Handler: executor.GetHandler()}
-	} else {
-		handler = otelUtils.GetHandlerWithOTEL(executor.GetHandler(), "fission-executor", otelUtils.UrlsToIgnore("/healthz"))
-	}
-
+func (executor *Executor) Serve(ctx context.Context, port int) {
+	handler := otelUtils.GetHandlerWithOTEL(executor.GetHandler(), "fission-executor", otelUtils.UrlsToIgnore("/healthz"))
 	httpserver.StartServer(ctx, executor.logger, "executor", fmt.Sprintf("%d", port), handler)
 
 }

@@ -28,7 +28,6 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/graymeta/stow"
 	"github.com/pkg/errors"
-	"go.opencensus.io/plugin/ochttp"
 	"go.uber.org/zap"
 
 	"github.com/fission/fission/pkg/utils/httpserver"
@@ -262,7 +261,7 @@ func MakeStorageService(logger *zap.Logger, storageClient *StowClient, port int)
 	}
 }
 
-func (ss *StorageService) Start(ctx context.Context, port int, openTracingEnabled bool) {
+func (ss *StorageService) Start(ctx context.Context, port int) {
 	r := mux.NewRouter()
 	r.Use(metrics.HTTPMetricMiddleware)
 	r.HandleFunc("/v1/archive", ss.uploadHandler).Methods("POST")
@@ -272,19 +271,12 @@ func (ss *StorageService) Start(ctx context.Context, port int, openTracingEnable
 	r.HandleFunc("/v1/archive", ss.infoHandler).Methods("HEAD")
 	r.HandleFunc("/healthz", ss.healthHandler).Methods("GET")
 
-	var handler http.Handler
-	if openTracingEnabled {
-		handler = &ochttp.Handler{
-			Handler: r,
-		}
-	} else {
-		handler = otel.GetHandlerWithOTEL(r, "fission-storagesvc", otel.UrlsToIgnore("/healthz"))
-	}
+	handler := otel.GetHandlerWithOTEL(r, "fission-storagesvc", otel.UrlsToIgnore("/healthz"))
 	httpserver.StartServer(ctx, ss.logger, "storagesvc", fmt.Sprintf("%d", port), handler)
 }
 
 // Start runs storage service
-func Start(ctx context.Context, logger *zap.Logger, storage Storage, port int, openTracingEnabled bool) error {
+func Start(ctx context.Context, logger *zap.Logger, storage Storage, port int) error {
 	enablePruner, err := strconv.ParseBool(os.Getenv("PRUNE_ENABLED"))
 	if err != nil {
 		logger.Warn("PRUNE_ENABLED value not set. Enabling archive pruner by default.", zap.Error(err))
@@ -299,7 +291,7 @@ func Start(ctx context.Context, logger *zap.Logger, storage Storage, port int, o
 	// create http handlers
 	storageService := MakeStorageService(logger, storageClient, port)
 	go metrics.ServeMetrics(ctx, logger)
-	go storageService.Start(ctx, port, openTracingEnabled)
+	go storageService.Start(ctx, port)
 
 	// enablePruner prevents storagesvc unit test from needing to talk to kubernetes
 	if enablePruner {

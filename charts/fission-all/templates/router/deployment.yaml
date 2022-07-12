@@ -83,7 +83,6 @@ spec:
           value: {{ .Values.pprof.enabled | quote }}
         - name: DISPLAY_ACCESS_LOG
           value: {{ .Values.router.displayAccessLog | default false | quote }}
-        {{- include "opentracing.envs" . | indent 8 }}
         {{- include "opentelemtry.envs" . | indent 8 }}
         resources:
           {{- toYaml .Values.router.resources | nindent 10 }}
