@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"io"
 	"mime/multipart"
-	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -181,18 +180,6 @@ func (client *StowClient) copyFileToStream(fileId string, w io.Writer) error {
 // removeFileByID deletes the file from storage
 func (client *StowClient) removeFileByID(itemID string) error {
 	return client.container.RemoveItem(itemID)
-}
-
-func (client *StowClient) getURL(itemID string) (*url.URL, error) {
-	item, err := client.container.Item(itemID)
-	if err != nil {
-		if err == stow.ErrNotFound {
-			return nil, ErrNotFound
-		} else {
-			return nil, ErrRetrievingItem
-		}
-	}
-	return item.URL(), nil
 }
 
 func (client *StowClient) getFileSize(itemID string) (int64, error) {

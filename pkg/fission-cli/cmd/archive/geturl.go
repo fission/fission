@@ -61,15 +61,12 @@ func (opts *GetURLSubCommand) do(input cli.Input) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("Error getting URL. Exited with Status:  %v", resp.Status)
+		return fmt.Errorf("Error getting URL. Exited with Status:  %s", resp.Status)
 	}
 
-	archiveURL, err := url.Parse(resp.Header.Get("X-FISSION-ARCHIVEURL"))
-	if err != nil {
-		return err
-	}
+	storageType := resp.Header.Get("X-FISSION-STORAGETYPE")
 
-	if archiveURL.Scheme == "file" {
+	if storageType == "local" {
 		storageSvc, err := opts.Client().V1().Misc().GetSvcURL("application=fission-storage")
 		if err != nil {
 			return err
@@ -77,8 +74,10 @@ func (opts *GetURLSubCommand) do(input cli.Input) error {
 		storagesvcURL := "http://" + storageSvc
 		client := storagesvcClient.MakeClient(storagesvcURL)
 		fmt.Printf("URL: %s", client.GetUrl(archiveID))
-	} else {
-		fmt.Printf("URL: %s", archiveURL.String())
+	} else if storageType == "s3" {
+		storageBucket := resp.Header.Get("X-FISSION-BUCKET")
+		s3url := fmt.Sprintf("https://%s.s3.amazonaws.com/%s", storageBucket, archiveID)
+		fmt.Printf("URL: %s", s3url)
 	}
 
 	return nil
