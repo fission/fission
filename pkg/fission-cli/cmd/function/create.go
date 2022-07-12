@@ -326,11 +326,19 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 
 // generatePackgeName => will return package name by appending id in function name and will make sure that package name will never be more than length of 63 characters.
 func generatePackageName(fnName string, id string) string {
-	if len(fnName) <= 26 {
+	var (
+		lenFnName       int = len(fnName)
+		lenId           int = len(id)
+		lastIndexOfChar int
+	)
+	if lenFnName+lenId <= 62 {
 		return fmt.Sprintf("%v-%v", fnName, id)
 	}
-	console.Info("Package name is more than 63 characters, hence trimming to 63 characters")
-	return fmt.Sprintf("%v-%v", fnName[:26], id)
+
+	lastIndexOfChar = lenFnName - (lenFnName + lenId - 62)
+	pkgName := fmt.Sprintf("%v-%v", fnName[:lastIndexOfChar], id)
+	console.Info(fmt.Sprintf("Generated package %v from function to acceptable character limit", pkgName))
+	return pkgName
 }
 
 // run write the resource to a spec file or create a fission CRD with remote fission server.
