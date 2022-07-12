@@ -6,11 +6,6 @@ import (
 	uuid "github.com/satori/go.uuid"
 )
 
-type pkgRequest struct {
-	uid    string
-	fnName string
-}
-
 func TestGeneratePackageName(t *testing.T) {
 	for _, test := range []struct {
 		name     string
