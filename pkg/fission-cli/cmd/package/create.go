@@ -62,6 +62,12 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 			console.Warn(fmt.Sprintf("--%v will be soon marked as required flag, see 'help' for details", flagkey.HtName))
 		}
 	}
+
+	if len(pkgName) > 63 {
+		console.Info("Package name is more than 63 characters, hence trimming to 63 characters")
+		pkgName = pkgName[:63]
+	}
+
 	pkgNamespace := input.String(flagkey.NamespacePackage)
 	envName := input.String(flagkey.PkgEnvironment)
 	envNamespace := input.String(flagkey.NamespaceEnvironment)

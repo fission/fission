@@ -221,7 +221,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		if err != nil {
 			return errors.Wrap(err, "error generating uuid")
 		}
-		pkgName := fmt.Sprintf("%v-%v", fnName, id.String())
+		pkgName := generatePackageName(fnName, id.String())
 
 		// create new package in the same namespace as the function.
 		pkgMetadata, err = _package.CreatePackage(input, opts.Client(), pkgName, fnNamespace, envName, envNamespace,
@@ -322,6 +322,15 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	}
 
 	return nil
+}
+
+// generatePackgeName => will return package name by appending id in function name and will make sure that package name will never be more than length of 63 characters.
+func generatePackageName(fnName string, id string) string {
+	if len(fnName) <= 26 {
+		return fmt.Sprintf("%v-%v", fnName, id)
+	}
+	console.Info("Package name is more than 63 characters, hence trimming to 63 characters")
+	return fmt.Sprintf("%v-%v", fnName[:26], id)
 }
 
 // run write the resource to a spec file or create a fission CRD with remote fission server.
