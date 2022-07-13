@@ -62,6 +62,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 			console.Warn(fmt.Sprintf("--%v will be soon marked as required flag, see 'help' for details", flagkey.HtName))
 		}
 	}
+
 	pkgNamespace := input.String(flagkey.NamespacePackage)
 	envName := input.String(flagkey.PkgEnvironment)
 	envNamespace := input.String(flagkey.NamespaceEnvironment)
@@ -85,6 +86,11 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 	var specDir, specFile string
 
 	if input.Bool(flagkey.SpecSave) {
+		// since package CRD created using --spec, not validate by k8s. So we need to validate it and make sure package name is not more than 63 characters.
+		if len(pkgName) > 63 {
+			return errors.Errorf("error creating package: package name %v, must be no more than 63 characters", pkgName)
+		}
+
 		specDir = util.GetSpecDir(input)
 		specIgnore := util.GetSpecIgnore(input)
 		fr, err := spec.ReadSpecs(specDir, specIgnore, false)
