@@ -662,6 +662,7 @@ openTelemetry:
   ## parentbased_always_on - (default if empty) Sampler that respects its parent span's sampling decision, but otherwise always samples.
   ## parentbased_always_off - Sampler that respects its parent span's sampling decision, but otherwise never samples.
   ## parentbased_traceidratio - Sampler that respects its parent span's sampling decision, but otherwise samples probabalistically based on rate.
+  ## See https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/sdk-environment-variables.md#general-sdk-configuration
   ##
   tracesSampler: "parentbased_traceidratio"
   ## Each Sampler type defines its own expected input, if any.
@@ -679,6 +680,8 @@ openTelemetry:
   ## jaeger - Jaeger uber-trace-id header
   ## xray - AWS X-Ray (third party)
   ## ottrace - OpenTracing Trace (third party)
+  ## none - No tracing
+  ## See https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/sdk-environment-variables.md#general-sdk-configuration
   ##
   propagators: "tracecontext,baggage"
 
