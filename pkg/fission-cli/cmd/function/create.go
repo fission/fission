@@ -112,6 +112,10 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	secretNames := input.StringSlice(flagkey.FnSecret)
 	cfgMapNames := input.StringSlice(flagkey.FnCfgMap)
 
+	if input.String(flagkey.FnExecutorType) == string(fv1.ExecutorTypeContainer) {
+		return errors.Errorf("this command does not support creating function of executor type container. Check `fission function run-container --help`")
+	}
+
 	invokeStrategy, err := getInvokeStrategy(input, nil)
 	if err != nil {
 		return err
