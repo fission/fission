@@ -304,7 +304,7 @@ type (
 		//   is ready for deploy instead of setting "none" in build status.
 
 		// BuildStatus is the package build status.
-		// +kubebuilder:default:="Pending"
+		// +kubebuilder:default:="pending"
 		BuildStatus BuildStatus `json:"buildstatus,omitempty"`
 
 		// BuildLog stores build log during the compilation.
