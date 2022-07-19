@@ -104,7 +104,7 @@ spec:
                 description: BuildLog stores build log during the compilation.
                 type: string
               buildstatus:
-                default: Pending
+                default: pending
                 description: BuildStatus is the package build status.
                 type: string
               lastUpdateTimestamp:
