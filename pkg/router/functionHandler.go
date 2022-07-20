@@ -39,7 +39,6 @@ import (
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/error/network"
 	executorClient "github.com/fission/fission/pkg/executor/client"
-	"github.com/fission/fission/pkg/router/util"
 	"github.com/fission/fission/pkg/throttler"
 	"github.com/fission/fission/pkg/utils"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
@@ -318,37 +317,20 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 			dumpReqFunc(newReq)
 		}
 
-		// The otelhttp.NewTransport() does not work with WebSocket.
-		// This is probably because it modifies the response body.
-		// Until we find a better solution to handle websocket requests, we will continue to
-		// use http.Transport(). We check if the request isWebsocketRequest() and use the
-		// http.Transport() irrespective of open telemetry is enabled or not.
-		// Related issue: https://github.com/open-telemetry/opentelemetry-js-contrib/issues/12
-
 		// forward the request to the function service
-		var resp *http.Response
-		if util.IsWebsocketRequest(newReq) {
-			resp, err = transport.RoundTrip(newReq)
-		} else {
-			otelUtils.SpanTrackEvent(ctx, "roundtrip", otelUtils.MapToAttributes(map[string]string{
-				"function-name":      fnMeta.Name,
-				"function-namespace": fnMeta.Namespace,
-				"function-url":       newReq.URL.String(),
-				"retryCounter":       fmt.Sprintf("%d", retryCounter)})...)
-			otelRoundTripper := otelhttp.NewTransport(transport)
-			resp, err = otelRoundTripper.RoundTrip(newReq)
+		otelUtils.SpanTrackEvent(ctx, "roundtrip", otelUtils.MapToAttributes(map[string]string{
+			"function-name":      fnMeta.Name,
+			"function-namespace": fnMeta.Namespace,
+			"function-url":       newReq.URL.String(),
+			"retryCounter":       fmt.Sprintf("%d", retryCounter)})...)
+		otelRoundTripper := otelhttp.NewTransport(transport)
+		resp, err := otelRoundTripper.RoundTrip(newReq)
+		if roundTripper.funcHandler.isDebugEnv {
+			dumpRespFunc(resp)
 		}
-
 		if err == nil {
 			// return response back to user
-			if roundTripper.funcHandler.isDebugEnv {
-				dumpRespFunc(resp)
-			}
 			return resp, nil
-		}
-
-		if roundTripper.funcHandler.isDebugEnv && resp != nil {
-			dumpRespFunc(resp)
 		}
 
 		roundTripper.totalRetry++

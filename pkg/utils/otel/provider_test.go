@@ -2,145 +2,54 @@ package otel
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"reflect"
+	"sort"
 	"testing"
 
-	"go.opentelemetry.io/contrib/propagators/jaeger"
+	"go.opentelemetry.io/contrib/propagators/autoprop"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
-	"go.opentelemetry.io/otel/propagation"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
 
 func TestGetPropogater(t *testing.T) {
-	if OtelPropogaters != "OTEL_PROPOGATORS" {
-		t.Errorf("Expected OTEL_PROPOGATORS to be set, got %s", OtelPropogaters)
+	if OtelPropagaters != "OTEL_PROPAGATORS" {
+		t.Errorf("Expected OTEL_PROPOGATORS to be set, got %s", OtelPropagaters)
 	}
+	// tracecontext, baggage, b3, b3multi, jaeger, xray, ottrace, and none
 	tests := []struct {
 		propogaterEnv string
-		propogaters   []propagation.TextMapPropagator
+		propogaters   []string
 	}{
 		{
-			"",
-			[]propagation.TextMapPropagator{propagation.TraceContext{}, propagation.Baggage{}},
+			"none",
+			[]string{},
 		},
 		{
 			"tracecontext,baggage",
-			[]propagation.TextMapPropagator{propagation.TraceContext{}, propagation.Baggage{}},
+			[]string{"baggage", "traceparent", "tracestate"},
 		},
 		{
 			"jaeger",
-			[]propagation.TextMapPropagator{jaeger.Jaeger{}},
+			[]string{"uber-trace-id"},
 		},
 		{
 			"baggage,tracecontext",
-			[]propagation.TextMapPropagator{propagation.Baggage{}, propagation.TraceContext{}},
+			[]string{"baggage", "traceparent", "tracestate"},
 		},
 		{
 			"jaeger,baggage",
-			[]propagation.TextMapPropagator{jaeger.Jaeger{}, propagation.Baggage{}},
-		},
-	}
-	logger := loggerfactory.GetLogger()
-	for _, tt := range tests {
-		os.Setenv(OtelPropogaters, tt.propogaterEnv)
-		prop := GetPropogater(logger)
-		if prop == nil {
-			t.Errorf("GetPropogater() = %#v, want %#v", prop, tt.propogaters)
-		}
-		if len(prop) != len(tt.propogaters) {
-			t.Errorf("GetPropogater() = %#v, want %#v", prop, tt.propogaters)
-		}
-		if !reflect.DeepEqual(prop, tt.propogaters) {
-			t.Errorf("GetPropogater() = %#v, want %#v", prop, tt.propogaters)
-		}
-	}
-}
-
-func TestGetSampler(t *testing.T) {
-	if OtelTracesSampler != "OTEL_TRACES_SAMPLER" {
-		t.Errorf("Expected OTEL_TRACES_SAMPLER to be set, got %s", OtelTracesSampler)
-	}
-	if OtelTracesSamplerArg != "OTEL_TRACES_SAMPLER_ARG" {
-		t.Errorf("Expected OTEL_TRACES_SAMPLER_ARG to be set, got %s", OtelTracesSamplerArg)
-	}
-	if OtelPropogaters != "OTEL_PROPOGATORS" {
-		t.Errorf("Expected OTEL_PROPOGATORS to be set, got %s", OtelPropogaters)
-	}
-	tests := []struct {
-		sampler     string
-		samplerArg  string
-		wantSampler sdktrace.Sampler
-		wantError   error
-	}{
-		{
-			"",
-			"",
-			sdktrace.ParentBased(sdktrace.AlwaysSample()),
-			nil,
-		},
-		{
-			"always_on",
-			"",
-			sdktrace.AlwaysSample(),
-			nil,
-		},
-		{
-			"always_off",
-			"",
-			sdktrace.NeverSample(),
-			nil,
-		},
-		{
-			"parentbased_always_on",
-			"",
-			sdktrace.ParentBased(sdktrace.AlwaysSample()),
-			nil,
-		},
-		{
-			"parentbased_always_off",
-			"",
-			sdktrace.ParentBased(sdktrace.NeverSample()),
-			nil,
-		},
-		{
-			"traceidratio",
-			"0.5",
-			sdktrace.TraceIDRatioBased(0.5),
-			nil,
-		},
-		{
-			"traceidratio",
-			"",
-			nil,
-			errors.New("invalid sampler arg: strconv.ParseFloat: parsing \"\": invalid syntax"),
-		},
-		{
-			"parentbased_traceidratio",
-			"",
-			nil,
-			errors.New("invalid sampler arg: strconv.ParseFloat: parsing \"\": invalid syntax"),
-		},
-		{
-			"parentbased_traceidratio",
-			"0.01",
-			sdktrace.ParentBased(sdktrace.TraceIDRatioBased(0.01)),
-			nil,
+			[]string{"baggage", "uber-trace-id"},
 		},
 	}
 	for _, tt := range tests {
-		os.Setenv(OtelTracesSampler, tt.sampler)
-		os.Setenv(OtelTracesSamplerArg, tt.samplerArg)
-		gotSampler, gotError := GetSampler()
-		if !reflect.DeepEqual(gotSampler, tt.wantSampler) {
-			t.Errorf("GetSampler() gotSampler = %#v, want %#v", gotSampler, tt.wantSampler)
-		}
-		if fmt.Sprintf("%s", gotError) != fmt.Sprintf("%s", tt.wantError) {
-			t.Errorf("GetSampler() gotError = %#v, want %#v", gotError, tt.wantError)
+		os.Setenv(OtelPropagaters, tt.propogaterEnv)
+		propFields := autoprop.NewTextMapPropagator().Fields()
+		sort.Strings(propFields)
+		if !reflect.DeepEqual(propFields, tt.propogaters) {
+			t.Errorf("Expected %s, got %s", tt.propogaters, propFields)
 		}
 	}
 }
