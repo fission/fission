@@ -1,3 +1,5 @@
+<b>Note:</b> This is a forked repository. Please check [this page](https://fission.io/docs/contributing/) for instructions on how to build and deploy Fission.
+
 <p align="center">
   <img src="https://fission.io/images/logo-gh.svg" width="300" />
   <br>
