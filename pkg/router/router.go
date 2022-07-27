@@ -79,7 +79,7 @@ func router(ctx context.Context, logger *zap.Logger, httpTriggerSet *HTTPTrigger
 	return mr
 }
 
-func serve(ctx context.Context, logger *zap.Logger, port int, tracingSamplingRate float64,
+func serve(ctx context.Context, logger *zap.Logger, port int,
 	httpTriggerSet *HTTPTriggerSet, displayAccessLog bool) {
 	mr := router(ctx, logger, httpTriggerSet)
 	handler := otelUtils.GetHandlerWithOTEL(mr, "fission-router", otelUtils.UrlsToIgnore("/router-healthz"))
@@ -185,16 +185,6 @@ func Start(ctx context.Context, logger *zap.Logger, port int, executorURL string
 			zap.Duration("default", unTapServiceTimeout))
 	}
 
-	tracingSamplingRateStr := os.Getenv("TRACING_SAMPLING_RATE")
-	tracingSamplingRate, err := strconv.ParseFloat(tracingSamplingRateStr, 64)
-	if err != nil {
-		tracingSamplingRate = .5
-		logger.Error("failed to parse tracing sampling rate from 'TRACING_SAMPLING_RATE' - set to the default value",
-			zap.Error(err),
-			zap.String("value", tracingSamplingRateStr),
-			zap.Float64("default", tracingSamplingRate))
-	}
-
 	displayAccessLogStr := os.Getenv("DISPLAY_ACCESS_LOG")
 	displayAccessLog, err := strconv.ParseBool(displayAccessLogStr)
 	if err != nil {
@@ -222,5 +212,5 @@ func Start(ctx context.Context, logger *zap.Logger, port int, executorURL string
 	ctx, span := tracer.Start(ctx, "router/Start")
 	defer span.End()
 
-	serve(ctx, logger, port, tracingSamplingRate, triggers, displayAccessLog)
+	serve(ctx, logger, port, triggers, displayAccessLog)
 }
