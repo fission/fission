@@ -22,6 +22,7 @@ minmem2=512
 maxmem2=768
 
 cleanup() {
+    echo "previous response" $?
     log "Cleaning up..."
     clean_resource_by_id $TEST_ID
 }

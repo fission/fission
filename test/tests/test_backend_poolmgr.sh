@@ -12,6 +12,7 @@ env=nodejs-$TEST_ID
 fn=nodejs-hello-$TEST_ID
 
 cleanup() {
+    echo "previous response" $?
     log "Cleaning up..."
     clean_resource_by_id $TEST_ID
 }

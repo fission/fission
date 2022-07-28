@@ -18,6 +18,7 @@ old_secret=old-secret-$TEST_ID
 new_secret=new-secret-$TEST_ID
 
 cleanup() {
+    echo "previous response" $?
     log "Cleaning up..."
     clean_resource_by_id $TEST_ID
     rm -rf $tmp_dir

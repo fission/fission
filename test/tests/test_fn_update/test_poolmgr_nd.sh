@@ -12,6 +12,7 @@ env=python-$TEST_ID
 fn=hellopython-$TEST_ID
 
 cleanup() {
+    echo "previous response" $?
     log "Cleaning up..."
     clean_resource_by_id $TEST_ID
 }

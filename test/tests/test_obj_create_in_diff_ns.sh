@@ -19,6 +19,7 @@ final_cleanup() {
 trap final_cleanup EXIT
 
 cleanup() {
+    echo "previous response" $?
     [[ -n "${1+x}"  && -n "${2+x}" ]]; fission env delete --name $1 --envns $2 || true
     [[ -n "${3+x}"  && -n "${4+x}" ]]; fission fn delete --name $3 --fns $4 || true
     [[ -n "${5+x}"  && -n "${6+x}" ]]; fission pkg delete --name $5 --pkgns $6 || true

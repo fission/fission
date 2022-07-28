@@ -12,6 +12,7 @@ fn0=nodejs-hello-0-$TEST_ID
 fn1=nodejs-hello-1-$TEST_ID
 
 cleanup() {
+    echo "previous response" $?
     log "Cleaning up..."
     clean_resource_by_id $TEST_ID
 }

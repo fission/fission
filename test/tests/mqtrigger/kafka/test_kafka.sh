@@ -59,6 +59,7 @@ test_fnmessage() {
 export -f test_fnmessage
 
 cleanup() {
+    echo "previous response" $?
     log "Cleaning up..."
     clean_resource_by_id $TEST_ID
     rm -rf $tmp_dir

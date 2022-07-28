@@ -23,6 +23,7 @@ canary_1=canary-1-$TEST_ID
 canary_2=canary-2-$TEST_ID
 echo "Exported all the things"
 cleanup() {
+    echo "previous response" $?
     log "Cleaning up..."
     clean_resource_by_id $TEST_ID
     rm -rf $tmp_dir
