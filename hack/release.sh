@@ -39,14 +39,17 @@ check_clean() {
 }
 
 check_github_token() {
-    if [ ! -f "$HOME"/.github-token ]; then
-        echo "Error finding github access token at ${HOME}/.github-token"
+    if [ ! -f "$HOME"/.github-token ] && [ -z "$GITHUB_TOKEN" ]; then
+        echo "Error finding github access token at ${HOME}/.github-token or in GITHUB_TOKEN envvar"
         exit 1
     fi
     echo "check_github_token == PASSED"
 }
 
-export GITHUB_TOKEN=$(cat ~/.github-token)
+# Read token from file if not set as envvar
+if [ -z "$GITHUB_TOKEN"]; then
+    export GITHUB_TOKEN=$(cat ~/.github-token)
+fi
 
 version=$1
 if [ -z "$version" ]; then
@@ -66,6 +69,7 @@ check_github_token
 
 export GORELEASER_CURRENT_TAG=$version
 echo "Release version $GORELEASER_CURRENT_TAG "
+echo "DOCKER_CLI_EXPERIMENTAL $DOCKER_CLI_EXPERIMENTAL"
 goreleaser release
 
 echo "############ DONE #############"
