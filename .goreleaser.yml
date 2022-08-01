@@ -1,17 +1,4 @@
 project_name: fission
-release:
-  github:
-    owner: fission
-    name: fission
-  prerelease: true
-  draft: true
-  header: |
-    Release Highlights: https://fission.io/docs/releases/{{ .Tag }}/
-    Install Guide: https://fission.io/docs/installation/
-    Full Changelog: https://github.com/fission/fission/blob/master/CHANGELOG.md
-  extra_files:
-    - glob: ./manifest/charts/*
-    - glob: ./manifest/yamls/*
 
 before:
   hooks:

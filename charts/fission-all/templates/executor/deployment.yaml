@@ -25,7 +25,7 @@ spec:
       containers:
       - name: executor
         image: {{ include "fission-bundleImage" . | quote }}
-        imagePullPolicy: {{ .Values.pullPolicy }}
+        imagePullPolicy: {{ .Values.fission_bundle.pullPolicy }}
         command: ["/fission-bundle"]
         args: ["--executorPort", "8888", "--namespace", "{{ .Values.functionNamespace }}"]
         env:
@@ -100,7 +100,7 @@ spec:
 {{- else if .Values.priorityClassName }}
       priorityClassName: {{ .Values.priorityClassName }}
 {{- end }}
-    {{- with .Values.imagePullSecrets }}
+    {{- with .Values.fission_bundle.imagePullSecrets }}
       imagePullSecrets: 
         {{- toYaml . | nindent 8 }}
     {{- end }}

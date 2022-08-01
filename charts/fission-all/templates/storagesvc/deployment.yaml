@@ -28,7 +28,7 @@ spec:
       containers:
       - name: storagesvc
         image: {{ include "fission-bundleImage" . | quote }}
-        imagePullPolicy: {{ .Values.pullPolicy }}
+        imagePullPolicy: {{ .Values.fission_bundle.pullPolicy }}
         command: ["/fission-bundle"]
         {{- if and (.Values.persistence.enabled) (eq (.Values.persistence.storageType | default "local") "s3") }}
         args: ["--storageServicePort", "8000", "--storageType", "s3"]
@@ -110,7 +110,7 @@ spec:
 {{- if .Values.priorityClassName }}
       priorityClassName: {{ .Values.priorityClassName }}
 {{- end }}
-    {{- with .Values.imagePullSecrets }}
+    {{- with .Values.fission_bundle.imagePullSecrets }}
       imagePullSecrets: 
         {{- toYaml . | nindent 8 }}
     {{- end }}

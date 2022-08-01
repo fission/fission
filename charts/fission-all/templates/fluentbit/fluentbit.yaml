@@ -111,7 +111,7 @@ spec:
       containers:
         - name: logger
           image: {{ include "fission-bundleImage" . | quote }}
-          imagePullPolicy: {{ .Values.pullPolicy }}
+          imagePullPolicy: {{ .Values.fission_bundle.pullPolicy }}
           env:
             - name: NODE_NAME
               valueFrom:

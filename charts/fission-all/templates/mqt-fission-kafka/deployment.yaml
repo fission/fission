@@ -25,12 +25,8 @@ spec:
     spec:
       containers:
       - name: mqtrigger
-      {{- if eq .Values.imageTag "" }}
-        image: "{{ .Values.image }}"
-      {{- else }}
-        image: "{{ .Values.image }}:{{ .Values.imageTag }}"
-      {{- end }}
-        imagePullPolicy: {{ .Values.pullPolicy }}
+        image: {{ include "fission-bundleImage" . | quote }}
+        imagePullPolicy: {{ .Values.fission_bundle.pullPolicy }}
         command: ["/fission-bundle"]
         args: ["--mqt", "--routerUrl", "http://router.{{ .Release.Namespace }}"]
         env:
@@ -71,7 +67,7 @@ spec:
         secret:
           secretName: mqtrigger-kafka-secrets
       {{- end }}
-    {{- with .Values.imagePullSecrets }}
+    {{- with .Values.fission_bundle.imagePullSecrets }}
       imagePullSecrets: 
         {{- toYaml . | nindent 8 }}
     {{- end }}

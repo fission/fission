@@ -16,13 +16,7 @@ routerServiceType: LoadBalancer
 ##
 repository: index.docker.io
 
-## image represents the base image fission-bundle used by multiple Fission components.
-## We alter arguments to the image to run a particular component.
-##
-image: fission/fission-bundle
-
-## imageTag represents the tag of the base image fission-bundle used by multiple Fission components.
-## It is also used by the chart to identify version of the few more images apart from fission-bundle.
+## imageTag represents the tag of the base image to identify version of the few images apart from fission-bundle.
 ## Keep it empty for using latest tag.
 ##
 imageTag: v1.17.0-rc1
@@ -84,6 +78,22 @@ createNamespace: true
 ## enableIstio indicates whether to enable istio integration.
 ##
 enableIstio: false
+
+fission_bundle:
+  ## repository represents base repository for fission-bundle image used in the chart.
+  ## Keep it empty for using existing local image
+  ##
+  repository: index.docker.io
+  ## image represents the base image fission-bundle used by multiple Fission components.
+  ## We alter arguments to the image to run a particular component.
+  ##
+  image: fission/fission-bundle
+  ## imageTag represents the tag of the base image fission-bundle used by multiple Fission components.
+  imageTag: v1.17.0-rc1
+  ## pullPolicy represents the pull policy to use for images in the chart.
+  pullPolicy: IfNotPresent
+  ## imageppullsecrets
+  imagePullSecrets: []
 
 ## fetcher is a light weight component that helps in running functions.
 ## fetcher helps in fetching function source code/build and uploading it when function is invoked.

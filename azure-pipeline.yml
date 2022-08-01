@@ -1,1 +1,298 @@
+parameters:
+  - name: ProjectName
+    type: string
+    default: 'fission'
+  - name: DockerImageName
+    type: string
+    default: 'fission-bundle'
+  - name: DockerBuildArguments
+    type: string
+    default: ''
+  - name: DockerBuildContext
+    type: string
+    default: '$(System.DefaultWorkingDirectory)/fission/dist/fission-bundle_linux_amd64_v1'
+  - name: DockerFilePath
+    type: string
+    default: '$(System.DefaultWorkingDirectory)/fission/dist/fission-bundle_linux_amd64_v1'
+  - name: HelmChartName
+    type: string
+    default: 'fission-all'
+  - name: HelmChartECRRepository
+    type: string
+    default: '083779802266.dkr.ecr.eu-central-1.amazonaws.com/helm/'
+  - name: ProjectSrcFolder
+    type: string
+    default: ''
+  - name: ProjectPath
+    type: string
+    default: ''
+  - name: GithubConnection
+    type: string
+    default: 'SDLC Phoenix Cloud'
+  - name: ContainerRegistry
+    type: string
+    default: 'SDLC EdenCore'
+  - name : AcrName
+    type: string
+    default: 'edencore'
+  - name: AzureSubscription
+    type: string
+    default: 'Azure SDLC'
+  - name: IsGitLFS
+    type: boolean
+    default: false
+  - name: FetchSubmodules
+    type: boolean
+    default: false
+  - name: RunSetupJob
+    type: boolean
+    default: true
+  - name: DoRelease
+    type: boolean
+    default: true
+  - name: ReleaseVersion
+    type: string
+    default: 'v1.17.0-rc1-0.0.1'
+  - name: HelmDeploy
+    type: boolean
+    default: true
+  - name: PreSetup
+    type: stepList
+    default: []
+  - name: PreDockerBuild
+    type: stepList
+    default: []
+  - name: PostDockerBuild
+    type: stepList
+    default: []
 
+variables:
+  - name: GO_VERSION
+    value: "1.18"
+  - name: MAVEN_OS_CREDENTIALS_DOCKER_PARAMETERS
+    value: '--build-arg MAVEN_OS_USERNAME="OutSystemsRD" --build-arg MAVEN_OS_PASSWORD="$(System.AccessToken)"'
+
+resources:
+  repositories:
+    - repository: OutSystems.CICDPlatform.PhoenixServicePipelineTemplates
+      type: github
+      ref: refs/tags/v2
+      name: OutSystems/OutSystems.CICDPlatform.PhoenixServicePipelineTemplates
+      endpoint: OutSystems-CICD Platform-Phoenix Cloud
+    - repository: OutSystems.CICDPlatform.AzureCITemplates
+      type: github
+      ref: refs/tags/v1
+      name: OutSystems/OutSystems.CICDPlatform.AzureCITemplates
+      endpoint: OutSystems-CICD Platform-Phoenix Cloud
+
+trigger:
+  branches:
+    include:
+      - main-os
+
+pr: none
+
+stages:
+  - stage: BuildAndPublish
+    displayName: 'Build and Publish'
+    dependsOn: [ ]
+    variables:
+      - group: Phoenix Variables
+      - template: setup/vars.yml@OutSystems.CICDPlatform.PhoenixServicePipelineTemplates
+    jobs:
+      ########################################################################################################################
+      # SETUP JOB - Any setup tasks to run before the parallel jobs
+      ########################################################################################################################
+      - job: Setup
+        displayName: 'Setup'
+        timeoutInMinutes: 10
+        pool:
+          vmImage: 'ubuntu-20.04'
+        dependsOn: []
+        condition: eq(${{ parameters.RunSetupJob }}, true)
+        steps:
+          - template: setup/checkout.yml@OutSystems.CICDPlatform.PhoenixServicePipelineTemplates
+            parameters:
+              IsGitLFS: ${{ parameters.IsGitLFS }}
+          - template: setup/set-variables-go.yml@OutSystems.CICDPlatform.PhoenixServicePipelineTemplates
+            parameters:
+              DockerImageName: ${{ parameters.DockerImageName }}
+              ProjectName: ${{ parameters.ProjectName }}
+              ProjectSrcFolder: ${{ parameters.ProjectSrcFolder }}
+              ProjectPath: ${{ parameters.ProjectPath }}
+          # PreSetup Step
+          - ${{ each step in parameters.PreSetup }}:
+              - ${{ each pair in step }}:
+                  ${{ pair.key }}: ${{ pair.value }}
+          - template: setup/phoenix-versioning.yml@OutSystems.CICDPlatform.AzureCITemplates
+            parameters:
+              ScriptsDir: $(TemplatePath)
+              WorkingDir: $(ProjectPath)
+              GithubToken: $(GITHUB_TOKEN)
+              GithubConnection: ${{parameters.GithubConnection}}
+              DoRelease: false
+              Version: ${{ parameters.ReleaseVersion }}
+
+      ########################################################################################################################
+      # COMPILE AND BUILD DOCKER IMAGE
+      ########################################################################################################################
+      - job: Build
+        displayName: 'Build'
+        dependsOn:
+          - Setup
+        condition: eq(dependencies.Setup.result, 'Succeeded')
+        pool:
+          vmImage: 'ubuntu-20.04'
+        variables:
+          ${{ if eq(parameters.RunSetupJob, true) }}:
+            ServiceVersion: $[ dependencies.Setup.outputs['Version.ServiceVersion'] ]
+          ${{ if ne(parameters.RunSetupJob, true) }}:
+            ServiceVersion: $(Build.BuildId)
+        steps:
+          - template: setup/checkout.yml@OutSystems.CICDPlatform.PhoenixServicePipelineTemplates
+            parameters:
+              IsGitLFS: ${{ parameters.IsGitLFS }}
+              FetchSubmodules: ${{ parameters.FetchSubmodules }}
+          - template: setup/set-variables-go.yml@OutSystems.CICDPlatform.PhoenixServicePipelineTemplates
+            parameters:
+              DockerImageName: ${{ parameters.DockerImageName }}
+              DockerFilePath: ${{ parameters.DockerFilePath }}
+              DockerBuildContext: ${{ parameters.DockerBuildContext }}
+              ProjectName: ${{ parameters.ProjectName }}
+              ProjectSrcFolder: ${{ parameters.ProjectSrcFolder }}
+              ProjectPath: ${{ parameters.ProjectPath }}
+          - template: setup/docker-acr-login.yml@OutSystems.CICDPlatform.AzureCITemplates
+            parameters:
+              ContainerRegistry: ${{ parameters.ContainerRegistry }}
+          - task: GoTool@0
+            inputs:
+              version: "$(GO_VERSION)"
+            displayName: Install Go
+          # Compile fission
+          - bash: |
+              echo "Installing goreleaser"
+              echo 'deb [trusted=yes] https://repo.goreleaser.com/apt/ /' | sudo tee /etc/apt/sources.list.d/goreleaser.list
+              sudo apt update && sudo apt install goreleaser
+              echo "Running goreleaser build"
+              GOOS=linux GOARCH=amd64 goreleaser build --snapshot --rm-dist --single-target
+              cp cmd/fission-bundle/Dockerfile.fission-bundle dist/fission-bundle_linux_amd64_v1/Dockerfile
+            workingDirectory: $(ProjectPath)
+            displayName: 'Run goreleaser build'
+          # Pre Docker Build Step
+          - ${{ each step in parameters.PreDockerBuild }}:
+              - ${{ each pair in step }}:
+                  ${{ pair.key }}: ${{ pair.value }}
+          # Build the docker image
+          - template: build/docker-build.yml@OutSystems.CICDPlatform.AzureCITemplates
+            parameters:
+              DockerfilePath: $(DockerFilePath)
+              BuildContext: $(DockerBuildContext)
+              BuildArguments: >
+                -t $(DockerImageName):$(ServiceVersion)
+                -t $(CoreACRUri)/$(DockerImageName):$(ServiceVersion)
+                -t $(DockerImageName):latest
+                ${{ parameters.DockerBuildArguments }}
+                $(MAVEN_OS_CREDENTIALS_DOCKER_PARAMETERS)
+          # Post Docker Build Step
+          - ${{ each step in parameters.PostDockerBuild }}:
+              - ${{ each pair in step }}:
+                  ${{ pair.key }}: ${{ pair.value }}
+
+          ########################################################################################################################
+          # PUSH TO ACR AND ECR
+          ########################################################################################################################
+          # Push to Core ACR on pass or fail
+          - template: publish/docker-push.yml@OutSystems.CICDPlatform.AzureCITemplates
+            parameters:
+              ServiceConnection: 'SDLC EdenCore'
+              SourceImageName: $(DockerImageName)
+              SourceImageTag: $(ServiceVersion)
+              Condition: and(succeededOrFailed(), eq('${{ parameters.DoRelease }}', 'true'))
+          # Push image to ECR
+          - task: ECRPushImage@1
+            displayName: 'Publish Docker image to ECR (version tag)'
+            condition: and(succeeded(), eq('${{ parameters.HelmDeploy }}', 'true'))
+            inputs:
+              awsCredentials: 'sdlc_datafabric_core'
+              regionName: 'eu-central-1'
+              imageSource: 'imagename'
+              sourceImageName: $(DockerImageName)
+              sourceImageTag: $(ServiceVersion)
+              repositoryName: $(DockerImageName)
+              pushTag: $(ServiceVersion)
+              autoCreateRepository: true
+          - task: ECRPushImage@1
+            displayName: 'Publish Docker image to ECR (latest tag)'
+            condition: and(succeeded(), eq('${{ parameters.HelmDeploy }}', 'true'))
+            inputs:
+              awsCredentials: 'sdlc_datafabric_core'
+              regionName: 'eu-central-1'
+              imageSource: 'imagename'
+              sourceImageName: $(DockerImageName)
+              sourceImageTag: $(ServiceVersion)
+              repositoryName: $(DockerImageName)
+              pushTag: latest
+              autoCreateRepository: true
+          # Package and push Helm Chart
+          - task: HelmInstaller@1
+            displayName: Helm installer
+            inputs:
+              helmVersionToInstall: 3.8.1
+          - bash: |
+              helm package . --version $(ServiceVersion)
+            workingDirectory: $(ProjectPath)/charts/fission-all
+            env:
+              HELM_EXPERIMENTAL_OCI: 1
+          - task: AzureCLI@2
+            displayName: 'Push Helm Chart to ACR'
+            condition: and(succeeded(), eq('${{ parameters.DoRelease }}', 'true'))
+            env:
+              HELM_EXPERIMENTAL_OCI: 1
+            inputs:
+              azureSubscription: '${{ parameters.AzureSubscription }}'
+              scriptType: 'bash'
+              workingDirectory: $(ProjectPath)/charts/fission-all
+              addSpnToEnvironment: true
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                echo $servicePrincipalKey | helm registry login ${{parameters.AcrName}}.azurecr.io -u $servicePrincipalId --password-stdin
+                helm push ${{ parameters.HelmChartName }}-$(ServiceVersion).tgz oci://${{parameters.AcrName}}.azurecr.io/helm/
+          - bash: |
+              aws ecr get-login-password --region eu-central-1 | helm registry login --username AWS --password-stdin ${{ parameters.HelmChartECRRepository }}
+              helm push ${{ parameters.HelmChartName }}-$(ServiceVersion).tgz oci://${{ parameters.HelmChartECRRepository }}
+            displayName: 'Push Helm Chart to ECR'
+            condition: and(succeeded(), eq('${{ parameters.HelmDeploy }}', 'true'))
+            workingDirectory: $(ProjectPath)/charts/fission-all
+            env:
+              HELM_EXPERIMENTAL_OCI: 1
+              AWS_ACCESS_KEY_ID: $(DatafabricAWSKey)
+              AWS_SECRET_ACCESS_KEY: $(DatafabricAWSSecretKey)
+
+      ########################################################################################################################
+      # CREATE A NEW GIT RELEASE
+      ########################################################################################################################
+      - job: Release
+        displayName: 'Git Release'
+        dependsOn:
+          - Setup
+          - Build
+        condition: eq(dependencies.Build.result, 'Succeeded')
+        pool:
+          vmImage: 'ubuntu-20.04'
+        variables:
+          ${{ if eq(parameters.RunSetupJob, true) }}:
+            ServiceVersion: $[ dependencies.Setup.outputs['Version.ServiceVersion'] ]
+          ${{ if ne(parameters.RunSetupJob, true) }}:
+            ServiceVersion: $(Build.BuildId)
+        steps:
+          - ${{ if eq(parameters.DoRelease, true) }}:
+            - task: GitHubRelease@0
+              inputs:
+                gitHubConnection: ${{parameters.GithubConnection}}
+                repositoryName: '$(Build.Repository.Name)'
+                action: 'create'
+                target: '$(Build.SourceVersion)'
+                tagSource: 'manual'
+                tag: $(ServiceVersion)
+                addChangeLog: true
+                

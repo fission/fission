@@ -40,17 +40,17 @@ auth:
 This template generates the image name for the deployment depending on the value of "repository" field in values.yaml file.
 */}}
 {{- define "fission-bundleImage" -}}
-{{- if .Values.repository -}}
-  {{- if eq .Values.imageTag "" -}}
-    {{ .Values.repository }}/{{ .Values.image }}
+{{- if .Values.fission_bundle.repository -}}
+  {{- if eq .Values.fission_bundle.imageTag "" -}}
+    {{ .Values.fission_bundle.repository }}/{{ .Values.fission_bundle.image }}
   {{- else -}}
-    {{ .Values.repository }}/{{ .Values.image }}:{{ .Values.imageTag }}
+    {{ .Values.fission_bundle.repository }}/{{ .Values.fission_bundle.image }}:{{ .Values.fission_bundle.imageTag }}
   {{- end }}
 {{- else -}}
-  {{- if eq .Values.imageTag "" -}}
-    {{ .Values.image }}
+  {{- if eq .Values.fission_bundle.imageTag "" -}}
+    {{ .Values.fission_bundle.image }}
   {{- else -}}
-    {{ .Values.image }}:{{ .Values.imageTag }}
+    {{ .Values.fission_bundle.image }}:{{ .Values.fission_bundle.imageTag }}
   {{- end }}
 {{- end }}
 {{- end -}}
