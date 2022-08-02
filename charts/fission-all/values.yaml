@@ -240,6 +240,24 @@ router:
     ##
     maxRetries: 10
 
+  stickyCookie:
+    ## If true, router will check incoming requests for a sticky cookie, requests containing a
+    ## sticky cookie with a valid service address will be routed to the specified function pod.
+    ## Additionally, a service address header is added to all requests so that the function can
+    ## issue the required cookie.
+    ##
+    ## If false, router ignores sticky cookies and the default load balancing behaviour applies.
+    ##
+    enable: false
+
+    ## name of the sticky cookie to expect in requests.
+    ##
+    cookieName: fission_serviceaddress
+
+    ## header which will be set on requests with the function pod service address.
+    svcAddressHeader: X-Fission-Service-Address
+
+
   ## Extend the container specs for the core fission pods.
   ## Can be used to add things like affinty/tolerations/nodeSelectors/etc.
   ## For example:

@@ -75,6 +75,12 @@ spec:
           value: {{ .Values.router.svcAddressUpdateTimeout | default "30s" | quote }}
         - name: ROUTER_UNTAP_SERVICE_TIMEOUT
           value: {{ .Values.router.unTapServiceTimeout | default "3600s" | quote }}
+        - name: ROUTER_STICKINESS_ENABLE
+          value: {{ .Values.router.stickiness.enable }}
+        - name: ROUTER_STICKINESS_COOKIE_NAME
+          value: {{ .Values.router.stickiness.cookieName }}
+        - name: ROUTER_STICKINESS_SVC_ADDRESS_HEADER
+          value: {{ .Values.router.stickiness.svcAddressHeader }}
         - name: USE_ENCODED_PATH
           value: {{ .Values.router.useEncodedPath | default false | quote }}
         - name: DEBUG_ENV
