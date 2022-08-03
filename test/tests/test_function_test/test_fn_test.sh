@@ -17,6 +17,7 @@ valid_fn_name=hello-$TEST_ID
 invalid_fn_name=errhello-$TEST_ID
 
 cleanup() {
+    echo "previous response" $?
     log "Cleaning up..."
     clean_resource_by_id $TEST_ID
     rm -rf $tmp_dir
