@@ -177,7 +177,7 @@ func (kafka Kafka) Subscribe(trigger *fv1.MessageQueueTrigger) (messageQueue.Sub
 		// Create a new session for the consumer group until the context is cancelled
 		for {
 			// Consume messages
-			err = consumer.Consume(ctx, topic, ch)
+			err := consumer.Consume(ctx, topic, ch)
 			if err != nil {
 				kafka.logger.Error("consumer error", zap.Error(err), zap.String("trigger", trigger.ObjectMeta.Name))
 			}

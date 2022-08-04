@@ -105,9 +105,11 @@ func (ch MqtConsumerGroupHandler) ConsumeClaim(session sarama.ConsumerGroupSessi
 	for {
 		select {
 		case msg := <-claim.Messages():
-			ch.kafkaMsgHandler(msg)
-			session.MarkMessage(msg, "")
-			mqtrigger.IncreaseMessageCount(ch.trigger.Name, ch.trigger.Namespace)
+			if msg != nil {
+				ch.kafkaMsgHandler(msg)
+				session.MarkMessage(msg, "")
+				mqtrigger.IncreaseMessageCount(ch.trigger.Name, ch.trigger.Namespace)
+			}
 		// Should return when `session.Context()` is done.
 		case <-session.Context().Done():
 			return nil
