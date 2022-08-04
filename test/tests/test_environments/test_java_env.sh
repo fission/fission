@@ -15,6 +15,7 @@ fn_n=jvm-hello-n-$TEST_ID
 fn_p=jvm-hello-p-$TEST_ID
 
 cleanup() {
+    echo "previous response" $?
     log "Cleaning up..."
     clean_resource_by_id $TEST_ID
 }

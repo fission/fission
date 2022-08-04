@@ -15,6 +15,7 @@ env=python-$TEST_ID
 fn=spec-$TEST_ID
 
 cleanup() {
+    echo "previous response" $?
     log "Cleaning up..."
     clean_resource_by_id $TEST_ID
     rm -rf $tmp_dir

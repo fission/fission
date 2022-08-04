@@ -11,6 +11,7 @@ fn=hellopython-$TEST_ID
 ROOT=$(dirname $0)/../../..
 
 cleanup() {
+    echo "previous response" $?
     log "Cleaning up..."
     clean_resource_by_id $TEST_ID
 }

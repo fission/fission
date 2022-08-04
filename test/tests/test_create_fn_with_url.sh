@@ -14,6 +14,7 @@ code_url=https://raw.githubusercontent.com/fission/examples/master/nodejs/hello.
 base64val=$(wget -O- ${code_url} | base64)
 
 cleanup() {
+    echo "previous response" $?
     log "Cleaning up..."
     clean_resource_by_id $TEST_ID
 }

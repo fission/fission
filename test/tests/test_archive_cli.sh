@@ -12,6 +12,7 @@ mkdir -p "$tmp_dir"
 podname=$(kubectl get pods -n fission | grep "storagesvc" |awk '{print $1}')
 
 cleanup() {
+    echo "previous response" $?
     log "Cleaning up..."
     clean_resource_by_id $TEST_ID
     rm -rf $tmp_dir

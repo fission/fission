@@ -8,6 +8,7 @@ set -euo pipefail
 source $(dirname $0)/../../utils.sh
 
 cleanup() {
+    echo "previous response" $?
     log "Deleting websocket setup"
     fission spec destroy 
 }

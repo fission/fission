@@ -140,6 +140,7 @@ END
 )
 
 cleanup() {
+    echo "previous response" $?
     clean_resource_by_id $TEST_ID
 }
 

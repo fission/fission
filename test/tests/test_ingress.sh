@@ -17,6 +17,7 @@ hostName="test-$TEST_ID.com"
 routeName="ingress-$TEST_ID"
 
 cleanup() {
+    echo "previous response" $?
     log "Cleaning up..."
     clean_resource_by_id $TEST_ID
 }

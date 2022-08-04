@@ -5,6 +5,7 @@ source $(dirname $0)/../../../utils.sh
 ROOT=` realpath $(dirname $0)/../../../../`
 
 cleanup() {
+    echo "previous response" $?
     log "Cleaning up..."
     fission spec destroy
     rm -rf func

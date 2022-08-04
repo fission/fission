@@ -18,6 +18,7 @@ old_cfgmap=old-cfgmap-$TEST_ID
 new_cfgmap=new-cfgmap-$TEST_ID
 
 cleanup() {
+    echo "previous response" $?
     log "Cleaning up..."
     clean_resource_by_id $TEST_ID
     rm -rf $tmp_dir
