@@ -114,8 +114,8 @@ func New(logger *zap.Logger, mqCfg messageQueue.Config, routerUrl string) (messa
 }
 
 func (kafka Kafka) Subscribe(trigger *fv1.MessageQueueTrigger) (messageQueue.Subscription, error) {
-	kafka.logger.Info("inside kakfa subscribe", zap.Any("trigger", trigger))
-	kafka.logger.Info("brokers set", zap.Strings("brokers", kafka.brokers))
+	kafka.logger.Debug("inside kakfa subscribe", zap.Any("trigger", trigger))
+	kafka.logger.Debug("brokers set", zap.Strings("brokers", kafka.brokers))
 
 	// Create new consumer
 	consumerConfig := sarama.NewConfig()
@@ -131,47 +131,40 @@ func (kafka Kafka) Subscribe(trigger *fv1.MessageQueueTrigger) (messageQueue.Sub
 
 	// Setup TLS for both producer and consumer
 	if kafka.tls {
-		consumerConfig.Net.TLS.Enable = true
-		producerConfig.Net.TLS.Enable = true
 		tlsConfig, err := kafka.getTLSConfig()
 
 		if err != nil {
 			return nil, err
 		}
 
+		producerConfig.Net.TLS.Enable = true
 		producerConfig.Net.TLS.Config = tlsConfig
+		consumerConfig.Net.TLS.Enable = true
 		consumerConfig.Net.TLS.Config = tlsConfig
 	}
 
 	consumer, err := sarama.NewConsumerGroup(kafka.brokers, string(trigger.ObjectMeta.UID), consumerConfig)
-	kafka.logger.Info("created a new consumer", zap.Strings("brokers", kafka.brokers),
-		zap.String("input topic", trigger.Spec.Topic),
-		zap.String("output topic", trigger.Spec.ResponseTopic),
-		zap.String("error topic", trigger.Spec.ErrorTopic),
-		zap.String("trigger name", trigger.ObjectMeta.Name),
-		zap.String("function namespace", trigger.ObjectMeta.Namespace),
-		zap.String("function name", trigger.Spec.FunctionReference.Name))
 	if err != nil {
 		return nil, err
 	}
 
 	producer, err := sarama.NewSyncProducer(kafka.brokers, producerConfig)
-	kafka.logger.Info("created a new producer", zap.Strings("brokers", kafka.brokers),
-		zap.String("input topic", trigger.Spec.Topic),
-		zap.String("output topic", trigger.Spec.ResponseTopic),
-		zap.String("error topic", trigger.Spec.ErrorTopic),
-		zap.String("trigger name", trigger.ObjectMeta.Name),
-		zap.String("function namespace", trigger.ObjectMeta.Namespace),
-		zap.String("function name", trigger.Spec.FunctionReference.Name))
-
 	if err != nil {
 		return nil, err
 	}
 
+	kafka.logger.Info("created a new producer and a new consumer", zap.Strings("brokers", kafka.brokers),
+		zap.String("topic", trigger.Spec.Topic),
+		zap.String("response topic", trigger.Spec.ResponseTopic),
+		zap.String("error topic", trigger.Spec.ErrorTopic),
+		zap.String("trigger", trigger.ObjectMeta.Name),
+		zap.String("function namespace", trigger.ObjectMeta.Namespace),
+		zap.String("function name", trigger.Spec.FunctionReference.Name))
+
 	// consume errors
 	go func() {
 		for err := range consumer.Errors() {
-			kafka.logger.Error("consumer error", zap.Error(err))
+			kafka.logger.With(zap.String("trigger", trigger.ObjectMeta.Name), zap.String("topic", trigger.Spec.Topic)).Error("consumer error received", zap.Error(err))
 		}
 	}()
 
@@ -186,15 +179,18 @@ func (kafka Kafka) Subscribe(trigger *fv1.MessageQueueTrigger) (messageQueue.Sub
 			// Consume messages
 			err = consumer.Consume(ctx, topic, ch)
 			if err != nil {
-				kafka.logger.Error("consumer error", zap.Error(err), zap.String("topic", trigger.Spec.Topic))
+				kafka.logger.Error("consumer error", zap.Error(err), zap.String("trigger", trigger.ObjectMeta.Name))
 			}
 
 			if ctx.Err() != nil {
-				kafka.logger.Info("consumer context cancelled", zap.String("topic", trigger.Spec.Topic))
+				kafka.logger.Info("consumer context cancelled", zap.String("trigger", trigger.ObjectMeta.Name))
 				return
 			}
+			ch.ready = make(chan bool)
 		}
 	}()
+
+	<-ch.ready // wait for consumer to be ready
 
 	mqtConsumer := MqtConsumer{
 		ctx:      ctx,
