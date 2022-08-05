@@ -11,7 +11,6 @@ require (
 	github.com/emicklei/go-restful-openapi v1.4.1
 	github.com/fatih/color v1.13.0
 	github.com/fsnotify/fsnotify v1.5.1
-	github.com/ghodss/yaml v1.0.0
 	github.com/go-git/go-git/v5 v5.4.2
 	github.com/go-openapi/spec v0.20.4
 	github.com/golang-jwt/jwt/v4 v4.3.0

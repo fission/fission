@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/ghodss/yaml"
+	"sigs.k8s.io/yaml"
 )
 
 // GetFeatureConfig reads the configMap file and unmarshals the config into a feature config struct

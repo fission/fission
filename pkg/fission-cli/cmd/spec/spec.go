@@ -23,11 +23,11 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/ghodss/yaml"
 	multierror "github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/yaml"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
