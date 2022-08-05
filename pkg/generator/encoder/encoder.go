@@ -19,7 +19,7 @@ package encoder
 import (
 	"encoding/json"
 
-	"github.com/ghodss/yaml"
+	"sigs.k8s.io/yaml"
 )
 
 type (
