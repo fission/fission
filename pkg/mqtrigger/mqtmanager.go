@@ -155,7 +155,7 @@ func (mqt *MessageQueueTriggerManager) delTriggerSubscription(trigger *fv1.Messa
 func (mqt *MessageQueueTriggerManager) RegisterTrigger(trigger *fv1.MessageQueueTrigger) {
 	isPresent := mqt.checkTriggerSubscription(trigger)
 	if isPresent {
-		mqt.logger.Info("message queue trigger already registered", zap.String("trigger_name", trigger.ObjectMeta.Name))
+		mqt.logger.Debug("message queue trigger already registered", zap.String("trigger_name", trigger.ObjectMeta.Name))
 		return
 	}
 
