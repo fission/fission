@@ -19,8 +19,8 @@ package controller
 import (
 	"net/http"
 
-	"github.com/emicklei/go-restful"
-	restfulspec "github.com/emicklei/go-restful-openapi"
+	restfulspec "github.com/emicklei/go-restful-openapi/v2"
+	restful "github.com/emicklei/go-restful/v3"
 	"github.com/go-openapi/spec"
 )
 
