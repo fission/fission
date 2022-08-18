@@ -23,7 +23,7 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/flag"
 )
 
-//Commands returns support commands
+// Commands returns support commands
 func Commands() *cobra.Command {
 	dumpCmd := &cobra.Command{
 		Use:   "dump",

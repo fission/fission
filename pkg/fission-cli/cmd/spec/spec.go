@@ -296,7 +296,7 @@ func (fr *FissionResources) validateFunctionReference(functions map[string]bool,
 	return nil
 }
 
-//Validate validates the spec file for irregular references
+// Validate validates the spec file for irregular references
 func (fr *FissionResources) Validate(input cli.Input) ([]string, error) {
 	result := utils.MultiErrorWithFormat()
 	var warnings []string
