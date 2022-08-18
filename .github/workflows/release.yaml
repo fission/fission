@@ -6,7 +6,7 @@ on:
       - v2.**
 
 env:
-  GO_VERSION: 1.18.1
+  GO_VERSION: 1.18.5
   KIND_VERSION: v0.14.0
   KIND_NODE_IMAGE_TAG: v1.19.16
 
