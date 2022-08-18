@@ -8,7 +8,6 @@ release:
   header: |
     Release Highlights: https://fission.io/docs/releases/{{ .Tag }}/
     Install Guide: https://fission.io/docs/installation/
-    Full Changelog: https://github.com/fission/fission/blob/master/CHANGELOG.md
   extra_files:
     - glob: ./manifest/charts/*
     - glob: ./manifest/yamls/*
@@ -27,9 +26,9 @@ builds:
       - -X github.com/fission/fission/pkg/info.BuildDate={{.Date}}
       - -X github.com/fission/fission/pkg/info.Version={{.Tag}}
     gcflags:
-      - all=-trimpath={{.Env.PWD}}
+      - all=-trimpath={{ if index .Env "GITHUB_WORKSPACE"}}{{ .Env.GITHUB_WORKSPACE }}{{ else }}{{ .Env.PWD }}{{ end }}
     asmflags:
-      - all=-trimpath={{.Env.PWD}}
+      - all=-trimpath={{ if index .Env "GITHUB_WORKSPACE"}}{{ .Env.GITHUB_WORKSPACE }}{{ else }}{{ .Env.PWD }}{{ end }}
     env:
       - CGO_ENABLED=0
     goos:
@@ -258,7 +257,7 @@ docker_manifests:
       - fission/reporter:latest-arm64
       - fission/reporter:latest-armv7
 changelog:
-  skip: true
+  skip: false
 archives:
   - id: fission
     builds:
