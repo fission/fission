@@ -13,11 +13,13 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 )
 
-/* GetAttributesForFunction returns a set of attributes for a function. Attributes returned:
-    function-name
-    function-namespace
-    environment-name
-    environment-namespace
+/*
+	GetAttributesForFunction returns a set of attributes for a function. Attributes returned:
+	   function-name
+	   function-namespace
+	   environment-name
+	   environment-namespace
+
 These attributes are tags that can be used to filter traces.
 */
 func GetAttributesForFunction(fn *fv1.Function) []attribute.KeyValue {

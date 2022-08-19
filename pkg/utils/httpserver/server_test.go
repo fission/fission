@@ -2,7 +2,7 @@ package httpserver
 
 import (
 	"context"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"testing"
 
@@ -51,7 +51,7 @@ func TestStartServer(t *testing.T) {
 		if resp.StatusCode != test.StatusCode {
 			t.Errorf("expected status code %v, got %v", test.StatusCode, resp.StatusCode)
 		}
-		body, err := ioutil.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
 		if err != nil {
 			t.Errorf("failed to read response body: %v", err)
 		}

@@ -27,18 +27,18 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        kindimage : [ 'kindest/node:v1.19.11' ]
+        kindimage : [ 'kindest/node:v1.19.16' ]
         os: [ ubuntu-latest ]
     steps:
     - name: Setup go
-      uses: actions/setup-go@v2
+      uses: actions/setup-go@v3
       with:
-        go-version: 1.18.1
+        go-version: 1.18.5
 
     - name: Checkout action sources
-      uses: actions/checkout@v2.3.4
+      uses: actions/checkout@v3
 
-    - uses: actions/cache@v2
+    - uses: actions/cache@v3
       with:
         path: ~/go/pkg/mod
         key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
@@ -46,7 +46,7 @@ jobs:
           ${{ runner.os }}-go-
 
     - name: Setup Helm
-      uses: Azure/setup-helm@v1
+      uses: Azure/setup-helm@v3
       with:
         version: v3.3.4
 
@@ -54,7 +54,7 @@ jobs:
       uses: engineerd/setup-kind@v0.5.0
       with:
         image:  ${{ matrix.kindimage }}
-        version: v0.11.1
+        version: v0.14.0
 
     - name: Install GoReleaser
       uses: goreleaser/goreleaser-action@v2

@@ -21,7 +21,6 @@ limitations under the License.
 // +k8s:defaulter-gen=TypeMeta
 // +groupName=fission.io
 // +groupGoName=core
-//
 package v1
 
 const (

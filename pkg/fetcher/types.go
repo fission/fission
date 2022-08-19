@@ -22,11 +22,9 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 )
 
-//
 // Fission-Environment interface. The following types are not
 // exposed in the Fission API, but rather used by Fission to
 // talk to environments.
-//
 type (
 	FetchRequestType int
 

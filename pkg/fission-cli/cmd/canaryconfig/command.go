@@ -23,7 +23,7 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/flag"
 )
 
-//Commands returns canary config commands
+// Commands returns canary config commands
 func Commands() *cobra.Command {
 	createCmd := &cobra.Command{
 		Use:   "create",

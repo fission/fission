@@ -28,24 +28,24 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        kindversion: ["v1.19.11", "v1.20.7", "v1.21.1"]
+        kindversion: ["v1.19.16", "v1.20.15", "v1.21.12"]
         os: [ubuntu-latest]
     steps:
       - name: setup go
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v3
         with:
           go-version: 1.18.1
 
       - name: Checkout sources
-        uses: actions/checkout@v2.3.4
+        uses: actions/checkout@v3
 
       - name: Checkout sources
-        uses: actions/checkout@v2.3.4
+        uses: actions/checkout@v3
         with:
           repository: fission/examples
           path: examples
 
-      - uses: actions/cache@v2
+      - uses: actions/cache@v3
         with:
           path: ~/go/pkg/mod
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
@@ -53,7 +53,7 @@ jobs:
             ${{ runner.os }}-go-
 
       - name: Helm installation
-        uses: Azure/setup-helm@v1
+        uses: Azure/setup-helm@v3
         with:
           version: v3.3.4
 
@@ -61,7 +61,7 @@ jobs:
         uses: engineerd/setup-kind@v0.5.0
         with:
           image: kindest/node:${{ matrix.kindversion }}
-          version: v0.11.1
+          version: v0.14.0
           config: kind.yaml
 
       - name: Configuring and testing the Installation

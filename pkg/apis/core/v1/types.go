@@ -883,7 +883,7 @@ type (
 	}
 )
 
-//IsEmpty checks if the archive byte and litreal are of length 0
+// IsEmpty checks if the archive byte and litreal are of length 0
 func (a Archive) IsEmpty() bool {
 	return len(a.Literal) == 0 && len(a.URL) == 0
 }
