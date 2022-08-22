@@ -42,9 +42,7 @@ debug-vars: print-GOOS print-GOARCH print-GOAMD64 print-VERSION print-TIMESTAMP 
 check: test-run build-fission-cli clean
 
 code-checks:
-	hack/verify-gofmt.sh
-	hack/verify-govet.sh
-	hack/verify-staticcheck.sh
+	golangci-lint run
 
 # run basic check scripts
 test-run: code-checks
@@ -92,7 +90,10 @@ generate-swagger-doc:
 generate-cli-docs:
 	go run tools/cmd-docs/main.go -o "../fission.io/content/en/docs/reference/fission-cli"
 
-generate-crd-ref-docs:
+install-crd-ref-docs:
+	go install github.com/elastic/crd-ref-docs@master
+
+generate-crd-ref-docs: install-crd-ref-docs
 	# crd-ref-docs: https://github.com/elastic/crd-ref-docs
 	crd-ref-docs --source-path=pkg/apis/core/v1 --config=tools/crd-ref-docs/config.yaml --renderer markdown
 	cp tools/crd-ref-docs/header.md crd_docs.md

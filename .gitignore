@@ -33,3 +33,5 @@ local/
 build/
 dist/
 manifest/
+.vscode/
+coverage.txt
