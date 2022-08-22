@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/fission/fission/blob/master/LICENSE">
+  <a href="https://github.com/fission/fission/blob/main/LICENSE">
     <img alt="Fission Licence" src="https://img.shields.io/github/license/fission/fission">
   </a>
   <a href="https://github.com/fission/fission/releases">
@@ -20,7 +20,7 @@
   <a href="https://github.com/fission/fission/graphs/contributors">
     <img alt="Fission contributors" src="https://img.shields.io/github/contributors/fission/fission">
   </a>
-  <a href="https://github.com/fission/fission/commits/master">
+  <a href="https://github.com/fission/fission/commits/main">
     <img alt="Commit Activity" src="https://img.shields.io/github/commit-activity/m/fission/fission">
   </a>
   <br>

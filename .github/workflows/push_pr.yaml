@@ -3,7 +3,7 @@ name: Fission CI
 on:
   push:
     branches:
-      - master
+      - main
     paths:
       - "**.go"
       - "charts/**"
@@ -12,7 +12,7 @@ on:
       - go.sum
   pull_request:
     branches:
-      - master
+      - main
     paths:
       - "**.go"
       - "charts/**"

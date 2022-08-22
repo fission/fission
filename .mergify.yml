@@ -1,7 +1,7 @@
 pull_request_rules:
   - name: Automatic merge on approval
     conditions:
-      - base=master
+      - base=main
       - "#approved-reviews-by>=1"
       - label=ready-to-merge
       - label!=hold-off-merging
