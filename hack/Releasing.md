@@ -55,11 +55,11 @@ Fix the build if it is not green. DON'T proceed unless build is GREEN!
 
 6. Push this release-x.y.z branch to remote repo. Create a PR and wait for CI passed.
 
-7. Now manually merge the release-x.y.z branch into master branch with Git command to prevent the commit SHA from being changed.
+7. Now manually merge the release-x.y.z branch into main branch with Git command to prevent the commit SHA from being changed.
 
-    `git checkout master && git merge --ff-only release-<VERSION>`
+    `git checkout main && git merge --ff-only release-<VERSION>`
 
-8. Test build from master branch for sanity check and make sure the master build is green
+8. Test build from main branch for sanity check and make sure the main build is green
 
 ## Updating [Fission Charts](https://github.com/fission/fission-charts)
 
@@ -80,7 +80,7 @@ Before you save the release - UNCHECK the "This is a pre-release" checkbox. This
 
 1. Documentation Update
 
-a. Merge documentation PRs that are peer reviewed and get latest master locally.
+a. Merge documentation PRs that are peer reviewed and get latest main locally.
 
 b. In the repo fission/fission.io change version in version.sh file to latest version (x.y.z) and run build.sh script
 

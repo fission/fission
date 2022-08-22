@@ -3,14 +3,14 @@ name: Code Scanning
 on:
   push:
     branches:
-      - master
+      - main
     paths:
       - '**.go'
       - go.mod
       - go.sum
   pull_request:
     branches:
-      - master
+      - main
     paths:
       - '**.go'
       - go.mod

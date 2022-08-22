@@ -22,8 +22,8 @@ check_commands() {
 # Ensure we're on the master branch
 check_branch() {
     curr_branch=$(git rev-parse --abbrev-ref HEAD)
-    if [ "$curr_branch" != "master" ]; then
-        echo "Not on master branch."
+    if [ "$curr_branch" != "main" ]; then
+        echo "Not on main branch."
         exit 1
     fi
     echo "check_branch == PASSED"
