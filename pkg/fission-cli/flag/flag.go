@@ -155,7 +155,7 @@ var (
 
 	MqtName            = Flag{Type: String, Name: flagkey.MqtName, Usage: "Message queue trigger name"}
 	MqtFnName          = Flag{Type: String, Name: flagkey.MqtFnName, Usage: "Function name"}
-	MqtMQType          = Flag{Type: String, Name: flagkey.MqtMQType, Usage: "For mqtype \"fission\" => kafka\n\t\t\t\t\t For mqtype \"keda\" => kafka, aws-sqs-queue, aws-kinesis-stream, gcp-pubsub, stan, rabbitmq, redis", DefaultValue: "kafka"}
+	MqtMQType          = Flag{Type: String, Name: flagkey.MqtMQType, Usage: "For mqtype \"fission\" => kafka\n\t\t\t\t\t For mqtype \"keda\" => kafka, aws-sqs-queue, aws-kinesis-stream, gcp-pubsub, stan, nats-jetstream,rabbitmq, redis", DefaultValue: "kafka"}
 	MqtTopic           = Flag{Type: String, Name: flagkey.MqtTopic, Usage: "Message queue Topic the trigger listens on"}
 	MqtRespTopic       = Flag{Type: String, Name: flagkey.MqtRespTopic, Usage: "Topic that the function response is sent on (response discarded if unspecified)"}
 	MqtErrorTopic      = Flag{Type: String, Name: flagkey.MqtErrorTopic, Usage: "Topic that the function error messages are sent to (errors discarded if unspecified"}
