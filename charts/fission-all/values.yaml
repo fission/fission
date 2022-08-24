@@ -479,7 +479,9 @@ persistence:
   #   accessKeyId: <awsAccessKeyId>
   #   secretAccessKey: <awsSecretAccessKey>
   #   region: <awsRegion>
-
+  ## For Minio and other s3 compatible storage systems set endPoint property
+  #   endPoint: <s3StorageUrl>
+  
   ## A manually managed Persistent Volume Claim name
   ## Requires persistence.enabled: true
   ## If defined, PVC must be created manually before volume will be bound
