@@ -773,3 +773,12 @@ builderPodSpec:
       runAsNonRoot: true
       runAsUser: 10001
 
+
+## Enable Grafana Dashboard configmaps for auto dashboard provisioning
+## If you use kube-prometheus stack for monitoring, these will get imported into grafana
+grafana:
+  ## The namespace in which grafana pod is present
+  namespace: monitoring
+  dashboards:
+    ## Disabled by default. switch to true to deploy them
+    enable: false
