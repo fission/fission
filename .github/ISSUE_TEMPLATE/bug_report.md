@@ -17,7 +17,7 @@ assignees: ''
 <!-- If you tested with other services, for example Istio, please also provide the version of service as well. -->
 
 <pre>
-$ fission --version
+$ fission version
 $ kubectl version
 </pre>
 
