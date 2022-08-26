@@ -16,7 +16,7 @@ import (
 
 func TestGetPropogater(t *testing.T) {
 	if OtelPropagaters != "OTEL_PROPAGATORS" {
-		t.Errorf("Expected OTEL_PROPOGATORS to be set, got %s", OtelPropagaters)
+		t.Errorf("Expected OTEL_PROPAGATORS to be set, got %s", OtelPropagaters)
 	}
 	// tracecontext, baggage, b3, b3multi, jaeger, xray, ottrace, and none
 	tests := []struct {
