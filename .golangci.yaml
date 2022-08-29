@@ -1,16 +1,13 @@
 linters:
   enable:
     # Default linter
-    - deadcode
     - errcheck
     - gosimple
     - govet
     - ineffassign
     - staticcheck
-    - structcheck
     - typecheck
     - unused
-    - varcheck
     # Additional linters
     - gofmt
     - goimports
@@ -22,7 +19,6 @@ linters:
     # - dogsled
     # - dupl
     # - gosec
-    # - ifshort
     # - nilerr
     # - prealloc
     # - revive
