@@ -31,6 +31,7 @@ var (
 		"stan":               true,
 		"rabbitmq":           true,
 		"redis":              true,
+		"nats-jetstream":     true,
 	}
 )
 
