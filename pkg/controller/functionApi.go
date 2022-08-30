@@ -332,21 +332,21 @@ func (a *API) FunctionPodLogs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// get the pod with highest resource version
-	err = getContainerLog(a.kubernetesClient, w, f, &pods[0])
+	err = getContainerLog(r.Context(), a.kubernetesClient, w, f, &pods[0])
 	if err != nil {
 		a.respondWithError(w, errors.Wrapf(err, "error getting container logs"))
 		return
 	}
 }
 
-func getContainerLog(kubernetesClient kubernetes.Interface, w http.ResponseWriter, fn *fv1.Function, pod *apiv1.Pod) error {
+func getContainerLog(ctx context.Context, kubernetesClient kubernetes.Interface, w http.ResponseWriter, fn *fv1.Function, pod *apiv1.Pod) error {
 	seq := strings.Repeat("=", 35)
 
 	for _, container := range pod.Spec.Containers {
 		podLogOpts := apiv1.PodLogOptions{Container: container.Name} // Only the env container, not fetcher
 		podLogsReq := kubernetesClient.CoreV1().Pods(pod.Namespace).GetLogs(pod.ObjectMeta.Name, &podLogOpts)
 
-		podLogs, err := podLogsReq.Stream(context.Background())
+		podLogs, err := podLogsReq.Stream(ctx)
 		if err != nil {
 			return errors.Wrapf(err, "error streaming pod log")
 		}
