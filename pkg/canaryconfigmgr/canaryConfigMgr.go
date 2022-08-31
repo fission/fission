@@ -199,7 +199,7 @@ func (canaryCfgMgr *canaryConfigMgr) processCanaryConfig(ctx *context.Context, c
 				zap.String("name", canaryConfig.ObjectMeta.Name),
 				zap.String("namespace", canaryConfig.ObjectMeta.Namespace),
 				zap.String("version", canaryConfig.ObjectMeta.ResourceVersion))
-			canaryCfgMgr.RollForwardOrBack(canaryConfig, quit, ticker)
+			canaryCfgMgr.RollForwardOrBack(*ctx, canaryConfig, quit, ticker)
 
 		case <-quit:
 			// we're done processing this canary config either because the new function receives 100% of the traffic
@@ -221,7 +221,7 @@ func (canaryCfgMgr *canaryConfigMgr) processCanaryConfig(ctx *context.Context, c
 	}
 }
 
-func (canaryCfgMgr *canaryConfigMgr) RollForwardOrBack(canaryConfig *fv1.CanaryConfig, quit chan struct{}, ticker *time.Ticker) {
+func (canaryCfgMgr *canaryConfigMgr) RollForwardOrBack(ctx context.Context, canaryConfig *fv1.CanaryConfig, quit chan struct{}, ticker *time.Ticker) {
 	// handle race between delete event and notification on ticker.C
 	_, err := canaryCfgMgr.canaryCfgCancelFuncMap.lookup(&canaryConfig.ObjectMeta)
 	if err != nil {
@@ -233,7 +233,7 @@ func (canaryCfgMgr *canaryConfigMgr) RollForwardOrBack(canaryConfig *fv1.CanaryC
 	}
 
 	// get the http trigger object associated with this canary config
-	triggerObj, err := canaryCfgMgr.fissionClient.CoreV1().HTTPTriggers(canaryConfig.ObjectMeta.Namespace).Get(context.TODO(), canaryConfig.Spec.Trigger, metav1.GetOptions{})
+	triggerObj, err := canaryCfgMgr.fissionClient.CoreV1().HTTPTriggers(canaryConfig.ObjectMeta.Namespace).Get(ctx, canaryConfig.Spec.Trigger, metav1.GetOptions{})
 	if err != nil {
 		// if the http trigger is not found, then give up processing this config.
 		if k8serrors.IsNotFound(err) {
@@ -286,7 +286,7 @@ func (canaryCfgMgr *canaryConfigMgr) RollForwardOrBack(canaryConfig *fv1.CanaryC
 				methods = append(methods, triggerObj.Spec.Method)
 			}
 		}
-		failurePercent, err := canaryCfgMgr.promClient.GetFunctionFailurePercentage(urlPath, methods,
+		failurePercent, err := canaryCfgMgr.promClient.GetFunctionFailurePercentage(ctx, urlPath, methods,
 			canaryConfig.Spec.NewFunction, canaryConfig.ObjectMeta.Namespace, canaryConfig.Spec.WeightIncrementDuration)
 		if err != nil {
 			// silently ignore. wait for next window to increment weight

@@ -51,11 +51,11 @@ func MakePrometheusClient(logger *zap.Logger, prometheusSvc string) (*Prometheus
 	}, nil
 }
 
-func (promApiClient *PrometheusApiClient) GetFunctionFailurePercentage(path string, methods []string, funcName, funcNs string, window string) (float64, error) {
+func (promApiClient *PrometheusApiClient) GetFunctionFailurePercentage(ctx context.Context, path string, methods []string, funcName, funcNs string, window string) (float64, error) {
 	var reqs, failedReqs float64
 	// first get a total count of requests to this url in a time window
 	for _, method := range methods {
-		mreqs, err := promApiClient.GetRequestsToFuncInWindow(path, method, funcName, funcNs, window)
+		mreqs, err := promApiClient.GetRequestsToFuncInWindow(ctx, path, method, funcName, funcNs, window)
 		if err != nil {
 			return 0, err
 		}
@@ -68,7 +68,7 @@ func (promApiClient *PrometheusApiClient) GetFunctionFailurePercentage(path stri
 
 	// next, get a total count of errored out requests to this function in the same window
 	for _, method := range methods {
-		mfailedReqs, err := promApiClient.GetTotalFailedRequestsToFuncInWindow(funcName, funcNs, path, method, window)
+		mfailedReqs, err := promApiClient.GetTotalFailedRequestsToFuncInWindow(ctx, funcName, funcNs, path, method, window)
 		if err != nil {
 			return 0, err
 		}
@@ -85,18 +85,18 @@ func (PrometheusApiClient *PrometheusApiClient) getFunctionQueryLabels(functionN
 	return fmt.Sprintf("function_name=\"%s\",function_namespace=\"%s\",path=\"%s\",method=\"%s\"", functionName, functionNamespace, path, method)
 }
 
-func (promApiClient *PrometheusApiClient) GetRequestsToFuncInWindow(path string, method string, funcName string, funcNs string, window string) (float64, error) {
+func (promApiClient *PrometheusApiClient) GetRequestsToFuncInWindow(ctx context.Context, path string, method string, funcName string, funcNs string, window string) (float64, error) {
 	queryLabels := promApiClient.getFunctionQueryLabels(funcName, funcNs, path, method)
 	queryString := fmt.Sprintf("fission_function_calls_total{%s}[%v]", queryLabels, window)
 
-	reqs, err := promApiClient.executeQuery(queryString)
+	reqs, err := promApiClient.executeQuery(ctx, queryString)
 	if err != nil {
 		return 0, errors.Wrapf(err, "error executing query: %s", queryString)
 	}
 
 	queryString = fmt.Sprintf("fission_function_calls_total{%s} offset %v", queryLabels, window)
 
-	reqsInPrevWindow, err := promApiClient.executeQuery(queryString)
+	reqsInPrevWindow, err := promApiClient.executeQuery(ctx, queryString)
 	if err != nil {
 		return 0, errors.Wrapf(err, "error executing query: %s", queryString)
 	}
@@ -111,18 +111,18 @@ func (promApiClient *PrometheusApiClient) GetRequestsToFuncInWindow(path string,
 	return reqsInCurrentWindow, nil
 }
 
-func (promApiClient *PrometheusApiClient) GetTotalFailedRequestsToFuncInWindow(funcName string, funcNs string, path string, method string, window string) (float64, error) {
+func (promApiClient *PrometheusApiClient) GetTotalFailedRequestsToFuncInWindow(ctx context.Context, funcName string, funcNs string, path string, method string, window string) (float64, error) {
 	queryLabels := promApiClient.getFunctionQueryLabels(funcName, funcNs, path, method)
 	queryString := fmt.Sprintf("fission_function_errors_total{%s}[%v]", queryLabels, window)
 
-	failedRequests, err := promApiClient.executeQuery(queryString)
+	failedRequests, err := promApiClient.executeQuery(ctx, queryString)
 	if err != nil {
 		return 0, errors.Wrapf(err, "error executing query: %s", queryString)
 	}
 
 	queryString = fmt.Sprintf("fission_function_errors_total{%s} offset %v", queryLabels, window)
 
-	failedReqsInPrevWindow, err := promApiClient.executeQuery(queryString)
+	failedReqsInPrevWindow, err := promApiClient.executeQuery(ctx, queryString)
 	if err != nil {
 		return 0, errors.Wrapf(err, "error executing query: %s", queryString)
 	}
@@ -137,10 +137,10 @@ func (promApiClient *PrometheusApiClient) GetTotalFailedRequestsToFuncInWindow(f
 	return failedReqsInCurrentWindow, nil
 }
 
-func (promApiClient *PrometheusApiClient) executeQuery(queryString string) (float64, error) {
+func (promApiClient *PrometheusApiClient) executeQuery(ctx context.Context, queryString string) (float64, error) {
 	promApiClient.logger.Debug("executing prometheus query", zap.String("query", queryString))
 
-	val, warn, err := promApiClient.client.Query(context.Background(), queryString, time.Now())
+	val, warn, err := promApiClient.client.Query(ctx, queryString, time.Now())
 	if err != nil {
 		return 0, errors.Wrapf(err, "error querying prometheus")
 	}
