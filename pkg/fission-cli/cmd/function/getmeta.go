@@ -18,8 +18,6 @@ package function
 
 import (
 	"fmt"
-	"os"
-	"text/tabwriter"
 
 	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -46,10 +44,20 @@ func (opts *GetMetaSubCommand) do(input cli.Input) error {
 		return errors.Wrap(err, "error getting function")
 	}
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
-	fmt.Fprintf(w, "%v\t%v\n", "NAME", "ENV")
-	fmt.Fprintf(w, "%v\t%v\n", fn.ObjectMeta.Name, fn.Spec.Environment.Name)
-	w.Flush()
+	fmt.Printf("Name: %v\n", fn.ObjectMeta.Name)
+	fmt.Printf("Environment: %v\n", fn.Spec.Environment.Name)
+	if len(fn.ObjectMeta.Labels) != 0 {
+		fmt.Println("Labels:")
+		for k, v := range fn.ObjectMeta.Labels {
+			fmt.Printf("  %s=%s\n", k, v)
+		}
+	}
+	if len(fn.ObjectMeta.Annotations) != 0 {
+		fmt.Println("Annotations:")
+		for k, v := range fn.ObjectMeta.Annotations {
+			fmt.Printf("  %s=%s\n", k, v)
+		}
+	}
 
 	return nil
 }
