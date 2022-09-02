@@ -1,0 +1,9 @@
+exclusions:
+  template-job-rule:
+    reason: "Most panels dont need to be filtered by job"
+  template-instance-rule:
+    reason: "Most panels dont need to be filtered by instance"
+  target-job-rule:
+    reason: "Most panels dont need to be filtered by job"
+  target-instance-rule:
+    reason: "Most panels dont need to be filtered by instance"
