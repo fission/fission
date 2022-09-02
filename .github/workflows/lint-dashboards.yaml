@@ -28,6 +28,7 @@ jobs:
 
       - name: Install dashboard linter
         run: |
+          go get github.com/grafana/dashboard-linter
           go install github.com/grafana/dashboard-linter
 
       - name: Run dashboard linter
