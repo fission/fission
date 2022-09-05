@@ -2,34 +2,44 @@ package newdeploy
 
 import (
 	"context"
-	"log"
+	"fmt"
+	"os"
 	"testing"
 	"time"
+
+	uuid "github.com/satori/go.uuid"
+	"github.com/stretchr/testify/assert"
+	apiv1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/kubernetes/fake"
+	k8sCache "k8s.io/client-go/tools/cache"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/executor/util"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
-	"github.com/fission/fission/pkg/fission-cli/cmd"
 	fClient "github.com/fission/fission/pkg/generated/clientset/versioned/fake"
 	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
-	uuid "github.com/satori/go.uuid"
-	appsv1 "k8s.io/api/apps/v1"
-	apiv1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/kubernetes/fake"
 )
 
-var (
-	g struct {
-		cmd.CommandActioner
-	}
+const (
+	defaultNamespace  string = "default"
+	functionNamespace string = "fission-function"
 )
+
+func runInformers(ctx context.Context, informers []k8sCache.SharedIndexInformer) {
+	// Run all informers
+	for _, informer := range informers {
+		go informer.Run(ctx.Done())
+	}
+}
 
 func TestRefreshFuncPods(t *testing.T) {
+	os.Setenv("DEBUG_ENV", "true")
 	logger := loggerfactory.GetLogger()
 	kubernetesClient := fake.NewSimpleClientset()
 	fissionClient := fClient.NewSimpleClientset()
@@ -44,12 +54,16 @@ func TestRefreshFuncPods(t *testing.T) {
 
 	deployInformer := newDeployInformerFactory.Apps().V1().Deployments()
 	svcInformer := newDeployInformerFactory.Core().V1().Services()
-	namespace := "fission-function"
 
-	ctx := context.Background()
-	BuildConfigMap(kubernetesClient)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	podSpecPatch, err := util.GetSpecFromConfigMap(ctx, kubernetesClient, fv1.RuntimePodSpecConfigmap, namespace)
+	err = BuildConfigMap(ctx, kubernetesClient, functionNamespace, fv1.RuntimePodSpecConfigmap, map[string]string{})
+	if err != nil {
+		t.Fatalf("Error building configmap: %v", err)
+	}
+
+	podSpecPatch, err := util.GetSpecFromConfigMap(ctx, kubernetesClient, fv1.RuntimePodSpecConfigmap, functionNamespace)
 	if err != nil {
 		t.Fatalf("Error creating pod spec: %v", err)
 	}
@@ -59,128 +73,179 @@ func TestRefreshFuncPods(t *testing.T) {
 		t.Fatalf("Error creating fetcher config: %v", err)
 	}
 
-	ppc, err := MakeNewDeploy(logger, fissionClient, kubernetesClient, namespace, fetcherConfig, "test",
+	executor, err := MakeNewDeploy(logger, fissionClient, kubernetesClient, functionNamespace, fetcherConfig, "test",
 		funcInformer, envInformer, deployInformer, svcInformer, podSpecPatch)
 	if err != nil {
 		t.Fatalf("new deploy manager creation failed: %v", err)
 	}
 
-	envUID, err := uuid.NewV4()
-	if err != nil {
-		t.Fatal(err)
+	ndm := executor.(*NewDeploy)
+
+	go ndm.Run(ctx)
+	t.Log("New deploy manager started")
+
+	runInformers(ctx, []k8sCache.SharedIndexInformer{
+		envInformer.Informer(),
+		funcInformer.Informer(),
+		deployInformer.Informer(),
+		svcInformer.Informer(),
+	})
+	t.Log("Informers required for new deploy manager started")
+
+	if ok := k8sCache.WaitForCacheSync(ctx.Done(), ndm.deplListerSynced, ndm.svcListerSynced); !ok {
+		t.Fatal("Timed out waiting for caches to sync")
 	}
-	testEnv := &fv1.Environment{
+
+	envSpec := &fv1.Environment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "fission-env",
-			Namespace: namespace,
-			UID:       types.UID(envUID.String()),
+			Name:      "newdeploy-test-env",
+			Namespace: defaultNamespace,
+			// UID:       types.UID(envUID.String()),
 		},
 		Spec: fv1.EnvironmentSpec{
 			Version: 1,
 			Runtime: fv1.Runtime{
 				Image: "gcr.io/xyz",
 			},
-			Resources: v1.ResourceRequirements{},
-			Poolsize:  3,
 		},
 	}
 
-	_, err2 := fissionClient.CoreV1().Environments(namespace).Create(ctx, testEnv, metav1.CreateOptions{})
-	if err2 != nil {
-		t.Fatalf("creating environment failed : %v", err2)
+	_, err = fissionClient.CoreV1().Environments(defaultNamespace).Create(ctx, envSpec, metav1.CreateOptions{})
+	if err != nil {
+		t.Fatalf("creating environment failed : %s", err)
 	}
+
+	envRes, err := fissionClient.CoreV1().Environments(defaultNamespace).Get(ctx, "newdeploy-test-env", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Error getting environment: %s", err)
+	}
+	assert.Equal(t, envRes.ObjectMeta.Name, "newdeploy-test-env")
 
 	funcUID, err := uuid.NewV4()
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	labels := map[string]string{
-		"name":      "fission-env",
-		"namespace": namespace,
-		"uid":       string(testEnv.ObjectMeta.UID),
-	}
 	funcSpec := fv1.Function{
 		ObjectMeta: metav1.ObjectMeta{
-			UID:    types.UID(funcUID.String()),
-			Labels: labels,
+			Name:      "newdeploy-test-func",
+			Namespace: defaultNamespace,
+			UID:       types.UID(funcUID.String()),
 		},
 		Spec: fv1.FunctionSpec{
 			Environment: fv1.EnvironmentReference{
-				Name:      "fission-env",
-				Namespace: namespace,
+				Name:      "newdeploy-test-env",
+				Namespace: defaultNamespace,
 			},
-		},
-	}
-	_, err3 := fissionClient.CoreV1().Functions(namespace).Create(ctx, &funcSpec, metav1.CreateOptions{})
-	if err3 != nil {
-		t.Fatalf("failed to create function : %v", err3)
-	}
-
-	deploySpec := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "testdeploy",
-			Labels:    labels,
-			Namespace: namespace,
-		},
-		Spec: appsv1.DeploymentSpec{
-			Selector: &metav1.LabelSelector{
-				MatchLabels: labels,
-			},
-			Template: v1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: labels,
-				},
-				Spec: v1.PodSpec{
-					Containers: []v1.Container{
-						{
-							Name:  testEnv.ObjectMeta.Name,
-							Image: testEnv.Spec.Runtime.Image,
-						},
-					},
+			InvokeStrategy: fv1.InvokeStrategy{
+				ExecutionStrategy: fv1.ExecutionStrategy{
+					ExecutorType: fv1.ExecutorTypeNewdeploy,
 				},
 			},
 		},
 	}
+	_, err = fissionClient.CoreV1().Functions(defaultNamespace).Create(ctx, &funcSpec, metav1.CreateOptions{})
+	if err != nil {
+		t.Fatalf("creating function failed : %s", err)
+	}
 
-	_, err4 := kubernetesClient.AppsV1().Deployments(namespace).Create(ctx, deploySpec, metav1.CreateOptions{})
-	if err4 != nil {
-		t.Fatalf("failed to create deployment : %v", err4)
+	funcRes, err := fissionClient.CoreV1().Functions(defaultNamespace).Get(ctx, "newdeploy-test-func", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Error getting function: %s", err)
 	}
-	err5 := ppc.RefreshFuncPods(ctx, logger, funcSpec)
-	if err5 != nil {
-		t.Fatalf("failed to patch : %v", err5)
+	assert.Equal(t, funcRes.ObjectMeta.Name, "newdeploy-test-func")
+
+	ctx2, cancel2 := context.WithCancel(context.Background())
+	wait.Until(func() {
+		t.Log("Checking for deployment")
+		ret, err := kubernetesClient.AppsV1().Deployments(functionNamespace).List(ctx2, metav1.ListOptions{})
+		if err != nil {
+			t.Fatalf("Error getting deployment: %s", err)
+		}
+		if len(ret.Items) > 0 {
+			t.Log("Deployment created", ret.Items[0].Name)
+			cancel2()
+		}
+	}, time.Second*2, ctx2.Done())
+
+	err = BuildConfigMap(ctx, kubernetesClient, defaultNamespace, "newdeploy-test-configmap", map[string]string{
+		"test-key": "test-value",
+	})
+	if err != nil {
+		t.Fatalf("Error building configmap: %s", err)
 	}
+
+	t.Log("Adding configmap to function")
+	funcRes.Spec.ConfigMaps = []fv1.ConfigMapReference{
+		{
+			Name:      "newdeploy-test-configmap",
+			Namespace: defaultNamespace,
+		},
+	}
+	_, err = fissionClient.CoreV1().Functions(defaultNamespace).Update(ctx, funcRes, metav1.UpdateOptions{})
+	if err != nil {
+		t.Fatalf("Error updating function: %s", err)
+	}
+	funcRes, err = fissionClient.CoreV1().Functions(defaultNamespace).Get(ctx, "newdeploy-test-func", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Error getting function: %s", err)
+	}
+	assert.Greater(t, len(funcRes.Spec.ConfigMaps), 0)
+
+	err = ndm.RefreshFuncPods(ctx, logger, *funcRes)
+	if err != nil {
+		t.Fatalf("Error refreshing function pods: %s", err)
+	}
+
+	funcLabels := ndm.getDeployLabels(funcRes.ObjectMeta, envRes.ObjectMeta)
+
+	dep, err := kubernetesClient.AppsV1().Deployments(metav1.NamespaceAll).List(ctx, metav1.ListOptions{
+		LabelSelector: labels.Set(funcLabels).AsSelector().String(),
+	})
+
+	if err != nil {
+		t.Fatalf("Error getting deployment: %s", err)
+	}
+	assert.Equal(t, len(dep.Items), 1)
+
+	cm, err := kubernetesClient.CoreV1().ConfigMaps(defaultNamespace).Get(ctx, "newdeploy-test-configmap", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Error getting configmap: %s", err)
+	}
+	assert.Equal(t, cm.ObjectMeta.Name, "newdeploy-test-configmap")
+	updatedDepl := dep.Items[0]
+	resourceVersionMatch := false
+	assert.Equal(t, len(updatedDepl.Spec.Template.Spec.Containers), 2)
+	for _, v := range updatedDepl.Spec.Template.Spec.Containers {
+		if v.Name == "newdeploy-test-env" {
+			assert.Greater(t, len(v.Env), 0)
+			for _, env := range v.Env {
+				if env.Name == "RESOURCE_VERSION_COUNT" {
+					assert.Equal(t, env.Value, cm.ObjectMeta.ResourceVersion)
+					resourceVersionMatch = true
+				}
+			}
+		}
+	}
+	assert.True(t, resourceVersionMatch)
 }
 
-func BuildConfigMap(kubernetesClient *fake.Clientset) {
+func FakeResourceVersion() string {
+	return fmt.Sprint(time.Now().Nanosecond())[:6]
+}
 
-	configMapData := make(map[string]string, 0)
-	// 	specPatch := `
-	// securityContext:
-	//   fsGroup: 10001
-	//   runAsGroup: 10001
-	//   runAsNonRoot: true
-	//   runAsUser: 10001`
-
-	// configMapData["spec"] = specPatch
-
+func BuildConfigMap(ctx context.Context, kubernetesClient *fake.Clientset, namespace, name string, data map[string]string) error {
 	testConfigMap := apiv1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "ConfigMap",
 			APIVersion: "v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      fv1.RuntimePodSpecConfigmap,
-			Namespace: "fission-function",
+			Name:            name,
+			Namespace:       namespace,
+			ResourceVersion: FakeResourceVersion(),
 		},
-		Data: configMapData,
+		Data: data,
 	}
-
-	configmap, err := kubernetesClient.CoreV1().ConfigMaps("fission-function").Create(context.Background(), &testConfigMap, metav1.CreateOptions{})
-	if err != nil {
-		log.Fatalf("Error creating configmap %v", err)
-	}
-
-	log.Printf("Configmap: %v", configmap.Data)
+	_, err := kubernetesClient.CoreV1().ConfigMaps(namespace).Create(ctx, &testConfigMap, metav1.CreateOptions{})
+	return err
 }
