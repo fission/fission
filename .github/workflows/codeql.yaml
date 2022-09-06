@@ -27,12 +27,11 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v3
 
-      - uses: actions/cache@v3
+      - name: setup go
+        uses: actions/setup-go@v3
         with:
-          path: ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
+          go-version-file: "go.mod"
+          cache: true
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v2

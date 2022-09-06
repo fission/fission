@@ -38,7 +38,7 @@ func main() {
 		if os.IsNotExist(err) {
 			err = os.MkdirAll(shareVolume, os.ModeDir|0700)
 			if err != nil {
-				logger.Fatal("error creating directory: %v", zap.Error(err), zap.String("directory", shareVolume))
+				logger.Fatal("error creating directory: %s", zap.Error(err), zap.String("directory", shareVolume))
 			}
 		}
 	}

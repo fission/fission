@@ -5,21 +5,25 @@ on:
     branches:
       - main
     paths:
-      - '**.go'
-      - 'charts/**'
-      - 'test/**'
+      - "**.go"
+      - "charts/**"
+      - "test/**"
       - go.mod
       - go.sum
   pull_request:
     branches:
       - main
     paths:
-      - '**.go'
-      - 'charts/**'
-      - 'test/**'
+      - "**.go"
+      - "charts/**"
+      - "test/**"
       - go.mod
       - go.sum
   workflow_dispatch:
+
+env:
+  HELM_VERSION: v3.9.0
+  KIND_VERSION: v0.14.0
 
 jobs:
   upgrade-test:
@@ -27,76 +31,70 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        kindimage : [ 'kindest/node:v1.19.16' ]
-        os: [ ubuntu-latest ]
+        kindimage: ["kindest/node:v1.19.16"]
+        os: [ubuntu-latest]
     steps:
-    - name: Setup go
-      uses: actions/setup-go@v3
-      with:
-        go-version: 1.19
+      - name: Checkout action sources
+        uses: actions/checkout@v3
 
-    - name: Checkout action sources
-      uses: actions/checkout@v3
+      - name: Setup go
+        uses: actions/setup-go@v3
+        with:
+          go-version-file: "go.mod"
+          cache: true
 
-    - uses: actions/cache@v3
-      with:
-        path: ~/go/pkg/mod
-        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-        restore-keys: |
-          ${{ runner.os }}-go-
+      - name: Setup Helm
+        uses: Azure/setup-helm@v3
+        with:
+          version: ${{ env.HELM_VERSION }}
 
-    - name: Setup Helm
-      uses: Azure/setup-helm@v3
-      with:
-        version: v3.3.4
+      - name: Setup Kind Clutser
+        uses: engineerd/setup-kind@v0.5.0
+        with:
+          image: ${{ matrix.kindimage }}
+          version: ${{ env.KIND_VERSION }}
 
-    - name: Setup Kind Clutser
-      uses: engineerd/setup-kind@v0.5.0
-      with:
-        image:  ${{ matrix.kindimage }}
-        version: v0.14.0
+      - name: Install GoReleaser
+        uses: goreleaser/goreleaser-action@v2
+        with:
+          install-only: true
 
-    - name: Install GoReleaser
-      uses: goreleaser/goreleaser-action@v2
-      with:
-        install-only: true
+      - name: Setup kubectl & fetch node information
+        run: |
+          kubectl cluster-info --context kind-kind
+          kubectl get nodes
+          kubectl get storageclasses.storage.k8s.io
 
-    - name: Setup kubectl & fetch node information
-      run: |
-        kubectl cluster-info --context kind-kind
-        kubectl get nodes
-        kubectl get storageclasses.storage.k8s.io
+      - name: Dump system info
+        run: |
+          source ./test/upgrade_test/fission_objects.sh dump_system_info
 
-    - name: Dump system info
-      run: |
-        source ./test/upgrade_test/fission_objects.sh dump_system_info
+      - name: Install and configure previous stable fission
+        run: |
+          source ./test/upgrade_test/fission_objects.sh install_stable_release \
+          && create_fission_objects \
+          && test_fission_objects
 
-    - name: Install and configure previous stable fission
-      run: |
-        source ./test/upgrade_test/fission_objects.sh install_stable_release \
-        && create_fission_objects \
-        && test_fission_objects
+      - name: Upgrade fission to latest
+        run: |
+          source ./test/upgrade_test/fission_objects.sh build_docker_images \
+          && kind_image_load \
+          && install_current_release \
+          && install_fission_cli
 
-    - name: Upgrade fission to latest
-      run: |
-        source ./test/upgrade_test/fission_objects.sh build_docker_images \
-        && kind_image_load \
-        && install_current_release \
-        && install_fission_cli
+      - name: Test previously created fission objects with new release
+        run: |
+          source ./test/upgrade_test/fission_objects.sh test_fission_objects
 
-    - name: Test previously created fission objects with new release
-      run: |
-        source ./test/upgrade_test/fission_objects.sh test_fission_objects
+      - name: Collect Fission Dump
+        if: ${{ always() }}
+        run: |
+          command -v fission && fission support dump
 
-    - name: Collect Fission Dump
-      if: ${{ always() }}
-      run: |
-        command -v fission && fission support dump
-
-    - name: Archive fission dump
-      if: ${{ failure() }}
-      uses: actions/upload-artifact@v2
-      with:
-        name: fission-dump
-        path: fission-dump/*.zip
-        retention-days: 5
+      - name: Archive fission dump
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v2
+        with:
+          name: fission-dump
+          path: fission-dump/*.zip
+          retention-days: 5

@@ -21,6 +21,10 @@ on:
       - go.sum
   workflow_dispatch:
 
+env:
+  HELM_VERSION: v3.9.0
+  KIND_VERSION: v0.14.0
+
 jobs:
   # Job to run change detection
   integration-test:
@@ -31,13 +35,14 @@ jobs:
         kindversion: ["v1.19.16", "v1.20.15", "v1.21.12"]
         os: [ubuntu-latest]
     steps:
+      - name: Checkout sources
+        uses: actions/checkout@v3
+
       - name: setup go
         uses: actions/setup-go@v3
         with:
-          go-version: 1.19
-
-      - name: Checkout sources
-        uses: actions/checkout@v3
+          go-version-file: "go.mod"
+          cache: true
 
       - name: Checkout sources
         uses: actions/checkout@v3
@@ -45,23 +50,16 @@ jobs:
           repository: fission/examples
           path: examples
 
-      - uses: actions/cache@v3
-        with:
-          path: ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
-
       - name: Helm installation
         uses: Azure/setup-helm@v3
         with:
-          version: v3.3.4
+          version: ${{ env.HELM_VERSION }}
 
       - name: Kind Clutser
         uses: engineerd/setup-kind@v0.5.0
         with:
           image: kindest/node:${{ matrix.kindversion }}
-          version: v0.14.0
+          version: ${{ env.KIND_VERSION }}
           config: kind.yaml
 
       - name: Configuring and testing the Installation
