@@ -29,6 +29,9 @@ import (
 const (
 	defaultNamespace  string = "default"
 	functionNamespace string = "fission-function"
+	envName           string = "newdeploy-test-env"
+	functionName      string = "newdeploy-test-func"
+	configmapName     string = "newdeploy-test-configmap"
 )
 
 func runInformers(ctx context.Context, informers []k8sCache.SharedIndexInformer) {
@@ -49,7 +52,7 @@ func TestRefreshFuncPods(t *testing.T) {
 
 	newDeployInformerFactory, err := utils.GetInformerFactoryByExecutor(kubernetesClient, fv1.ExecutorTypeNewdeploy, time.Minute*30)
 	if err != nil {
-		t.Fatalf("Error creating informer factory: %v", err)
+		t.Fatalf("Error creating informer factory: %s", err)
 	}
 
 	deployInformer := newDeployInformerFactory.Apps().V1().Deployments()
@@ -60,23 +63,23 @@ func TestRefreshFuncPods(t *testing.T) {
 
 	err = BuildConfigMap(ctx, kubernetesClient, functionNamespace, fv1.RuntimePodSpecConfigmap, map[string]string{})
 	if err != nil {
-		t.Fatalf("Error building configmap: %v", err)
+		t.Fatalf("Error building configmap: %s", err)
 	}
 
 	podSpecPatch, err := util.GetSpecFromConfigMap(ctx, kubernetesClient, fv1.RuntimePodSpecConfigmap, functionNamespace)
 	if err != nil {
-		t.Fatalf("Error creating pod spec: %v", err)
+		t.Fatalf("Error creating pod spec: %s", err)
 	}
 
 	fetcherConfig, err := fetcherConfig.MakeFetcherConfig("/userfunc")
 	if err != nil {
-		t.Fatalf("Error creating fetcher config: %v", err)
+		t.Fatalf("Error creating fetcher config: %s", err)
 	}
 
 	executor, err := MakeNewDeploy(logger, fissionClient, kubernetesClient, functionNamespace, fetcherConfig, "test",
 		funcInformer, envInformer, deployInformer, svcInformer, podSpecPatch)
 	if err != nil {
-		t.Fatalf("new deploy manager creation failed: %v", err)
+		t.Fatalf("new deploy manager creation failed: %s", err)
 	}
 
 	ndm := executor.(*NewDeploy)
@@ -98,9 +101,9 @@ func TestRefreshFuncPods(t *testing.T) {
 
 	envSpec := &fv1.Environment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "newdeploy-test-env",
+			Name:      envName,
 			Namespace: defaultNamespace,
-			// UID:       types.UID(envUID.String()),
+			UID:       "83c82da2-81e9-4ebd-867e-f383e65e603f",
 		},
 		Spec: fv1.EnvironmentSpec{
 			Version: 1,
@@ -115,11 +118,11 @@ func TestRefreshFuncPods(t *testing.T) {
 		t.Fatalf("creating environment failed : %s", err)
 	}
 
-	envRes, err := fissionClient.CoreV1().Environments(defaultNamespace).Get(ctx, "newdeploy-test-env", metav1.GetOptions{})
+	envRes, err := fissionClient.CoreV1().Environments(defaultNamespace).Get(ctx, envName, metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Error getting environment: %s", err)
 	}
-	assert.Equal(t, envRes.ObjectMeta.Name, "newdeploy-test-env")
+	assert.Equal(t, envRes.ObjectMeta.Name, envName)
 
 	funcUID, err := uuid.NewV4()
 	if err != nil {
@@ -127,13 +130,13 @@ func TestRefreshFuncPods(t *testing.T) {
 	}
 	funcSpec := fv1.Function{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "newdeploy-test-func",
+			Name:      functionName,
 			Namespace: defaultNamespace,
 			UID:       types.UID(funcUID.String()),
 		},
 		Spec: fv1.FunctionSpec{
 			Environment: fv1.EnvironmentReference{
-				Name:      "newdeploy-test-env",
+				Name:      envName,
 				Namespace: defaultNamespace,
 			},
 			InvokeStrategy: fv1.InvokeStrategy{
@@ -148,11 +151,11 @@ func TestRefreshFuncPods(t *testing.T) {
 		t.Fatalf("creating function failed : %s", err)
 	}
 
-	funcRes, err := fissionClient.CoreV1().Functions(defaultNamespace).Get(ctx, "newdeploy-test-func", metav1.GetOptions{})
+	funcRes, err := fissionClient.CoreV1().Functions(defaultNamespace).Get(ctx, functionName, metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Error getting function: %s", err)
 	}
-	assert.Equal(t, funcRes.ObjectMeta.Name, "newdeploy-test-func")
+	assert.Equal(t, funcRes.ObjectMeta.Name, functionName)
 
 	ctx2, cancel2 := context.WithCancel(context.Background())
 	wait.Until(func() {
@@ -167,7 +170,7 @@ func TestRefreshFuncPods(t *testing.T) {
 		}
 	}, time.Second*2, ctx2.Done())
 
-	err = BuildConfigMap(ctx, kubernetesClient, defaultNamespace, "newdeploy-test-configmap", map[string]string{
+	err = BuildConfigMap(ctx, kubernetesClient, defaultNamespace, configmapName, map[string]string{
 		"test-key": "test-value",
 	})
 	if err != nil {
@@ -177,7 +180,7 @@ func TestRefreshFuncPods(t *testing.T) {
 	t.Log("Adding configmap to function")
 	funcRes.Spec.ConfigMaps = []fv1.ConfigMapReference{
 		{
-			Name:      "newdeploy-test-configmap",
+			Name:      configmapName,
 			Namespace: defaultNamespace,
 		},
 	}
@@ -185,7 +188,7 @@ func TestRefreshFuncPods(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error updating function: %s", err)
 	}
-	funcRes, err = fissionClient.CoreV1().Functions(defaultNamespace).Get(ctx, "newdeploy-test-func", metav1.GetOptions{})
+	funcRes, err = fissionClient.CoreV1().Functions(defaultNamespace).Get(ctx, functionName, metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Error getting function: %s", err)
 	}
@@ -207,19 +210,19 @@ func TestRefreshFuncPods(t *testing.T) {
 	}
 	assert.Equal(t, len(dep.Items), 1)
 
-	cm, err := kubernetesClient.CoreV1().ConfigMaps(defaultNamespace).Get(ctx, "newdeploy-test-configmap", metav1.GetOptions{})
+	cm, err := kubernetesClient.CoreV1().ConfigMaps(defaultNamespace).Get(ctx, configmapName, metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Error getting configmap: %s", err)
 	}
-	assert.Equal(t, cm.ObjectMeta.Name, "newdeploy-test-configmap")
+	assert.Equal(t, cm.ObjectMeta.Name, configmapName)
 	updatedDepl := dep.Items[0]
 	resourceVersionMatch := false
 	assert.Equal(t, len(updatedDepl.Spec.Template.Spec.Containers), 2)
 	for _, v := range updatedDepl.Spec.Template.Spec.Containers {
-		if v.Name == "newdeploy-test-env" {
+		if v.Name == envName {
 			assert.Greater(t, len(v.Env), 0)
 			for _, env := range v.Env {
-				if env.Name == "RESOURCE_VERSION_COUNT" {
+				if env.Name == fv1.ResourceVersionCount {
 					assert.Equal(t, env.Value, cm.ObjectMeta.ResourceVersion)
 					resourceVersionMatch = true
 				}
