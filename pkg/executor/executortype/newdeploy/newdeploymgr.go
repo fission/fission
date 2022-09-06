@@ -264,13 +264,13 @@ func (deploy *NewDeploy) RefreshFuncPods(ctx context.Context, logger *zap.Logger
 
 	// Ideally there should be only one deployment but for now we rely on label/selector to ensure that condition
 	for _, deployment := range dep.Items {
-		rvCount, err := referencedResourcesRVSum(ctx, deploy.kubernetesClient, deployment.Namespace, f.Spec.Secrets, f.Spec.ConfigMaps)
+		rvCount, err := referencedResourcesRVSum(ctx, deploy.kubernetesClient, f.ObjectMeta.Namespace, f.Spec.Secrets, f.Spec.ConfigMaps)
 		if err != nil {
 			return err
 		}
 
-		patch := fmt.Sprintf(`{"spec" : {"template": {"spec":{"containers":[{"name": "%s", "env":[{"name": "%s", "value": "%v"}]}]}}}}`,
-			f.ObjectMeta.Name, fv1.ResourceVersionCount, rvCount)
+		patch := fmt.Sprintf(`{"spec" : {"template": {"spec":{"containers":[{"name": "%s", "image": "%s", "env":[{"name": "%s", "value": "%d"}]}]}}}}`,
+			env.ObjectMeta.Name, env.Spec.Runtime.Image, fv1.ResourceVersionCount, rvCount)
 
 		_, err = deploy.kubernetesClient.AppsV1().Deployments(deployment.ObjectMeta.Namespace).Patch(ctx, deployment.ObjectMeta.Name,
 			k8sTypes.StrategicMergePatchType,

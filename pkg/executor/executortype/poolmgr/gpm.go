@@ -278,11 +278,11 @@ func (gpm *GenericPoolManager) RefreshFuncPods(ctx context.Context, logger *zap.
 	}
 
 	funcSvc, err := gp.fsCache.GetByFunction(&f.ObjectMeta)
-	if err != nil {
-		return err
-	}
 
-	gp.fsCache.DeleteEntry(funcSvc)
+	// delete function service address from cache only when function service address found in cache
+	if err == nil {
+		gp.fsCache.DeleteEntry(funcSvc)
+	}
 
 	funcLabels := gp.labelsForFunction(&f.ObjectMeta)
 
