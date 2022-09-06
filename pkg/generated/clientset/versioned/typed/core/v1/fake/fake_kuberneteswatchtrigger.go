@@ -105,7 +105,7 @@ func (c *FakeKubernetesWatchTriggers) Update(ctx context.Context, _kubernetesWat
 // Delete takes name of the _kubernetesWatchTrigger and deletes it. Returns an error if one occurs.
 func (c *FakeKubernetesWatchTriggers) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
 	_, err := c.Fake.
-		Invokes(testing.NewDeleteAction(kuberneteswatchtriggersResource, c.ns, name), &corev1.KubernetesWatchTrigger{})
+		Invokes(testing.NewDeleteActionWithOptions(kuberneteswatchtriggersResource, c.ns, name, opts), &corev1.KubernetesWatchTrigger{})
 
 	return err
 }

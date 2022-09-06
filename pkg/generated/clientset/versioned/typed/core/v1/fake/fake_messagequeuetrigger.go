@@ -105,7 +105,7 @@ func (c *FakeMessageQueueTriggers) Update(ctx context.Context, _messageQueueTrig
 // Delete takes name of the _messageQueueTrigger and deletes it. Returns an error if one occurs.
 func (c *FakeMessageQueueTriggers) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
 	_, err := c.Fake.
-		Invokes(testing.NewDeleteAction(messagequeuetriggersResource, c.ns, name), &corev1.MessageQueueTrigger{})
+		Invokes(testing.NewDeleteActionWithOptions(messagequeuetriggersResource, c.ns, name, opts), &corev1.MessageQueueTrigger{})
 
 	return err
 }
