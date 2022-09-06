@@ -249,7 +249,7 @@ func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function
 		Env: []apiv1.EnvVar{
 			{
 				Name:  fv1.ResourceVersionCount,
-				Value: fmt.Sprintf("%v", rvCount),
+				Value: fmt.Sprintf("%d", rvCount),
 			},
 		},
 		// https://istio.io/docs/setup/kubernetes/additional-setup/requirements/
