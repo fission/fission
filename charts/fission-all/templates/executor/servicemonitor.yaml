@@ -6,6 +6,10 @@ metadata:
   {{- if .Values.serviceMonitor.namespace }}
   namespace: {{ .Values.serviceMonitor.namespace }}
   {{- end }}
+  {{- with .Values.serviceMonitor.additionalServiceMonitorLabels }}
+  labels:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
   namespaceSelector:
     matchNames:

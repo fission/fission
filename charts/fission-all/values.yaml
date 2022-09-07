@@ -457,6 +457,7 @@ serviceMonitor:
   ##namespace in which you want to deploy servicemonitor
   ##
   namespace: ""
+  additionalServiceMonitorLabels: {}
 
 ## Persist data to a persistent volume.
 ##
