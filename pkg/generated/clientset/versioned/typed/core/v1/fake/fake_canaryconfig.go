@@ -117,7 +117,7 @@ func (c *FakeCanaryConfigs) UpdateStatus(ctx context.Context, _canaryConfig *cor
 // Delete takes name of the _canaryConfig and deletes it. Returns an error if one occurs.
 func (c *FakeCanaryConfigs) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
 	_, err := c.Fake.
-		Invokes(testing.NewDeleteAction(canaryconfigsResource, c.ns, name), &corev1.CanaryConfig{})
+		Invokes(testing.NewDeleteActionWithOptions(canaryconfigsResource, c.ns, name, opts), &corev1.CanaryConfig{})
 
 	return err
 }

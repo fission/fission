@@ -105,7 +105,7 @@ func (c *FakeHTTPTriggers) Update(ctx context.Context, _hTTPTrigger *corev1.HTTP
 // Delete takes name of the _hTTPTrigger and deletes it. Returns an error if one occurs.
 func (c *FakeHTTPTriggers) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
 	_, err := c.Fake.
-		Invokes(testing.NewDeleteAction(httptriggersResource, c.ns, name), &corev1.HTTPTrigger{})
+		Invokes(testing.NewDeleteActionWithOptions(httptriggersResource, c.ns, name, opts), &corev1.HTTPTrigger{})
 
 	return err
 }

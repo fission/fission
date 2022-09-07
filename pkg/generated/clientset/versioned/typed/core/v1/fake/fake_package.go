@@ -117,7 +117,7 @@ func (c *FakePackages) UpdateStatus(ctx context.Context, _package *corev1.Packag
 // Delete takes name of the _package and deletes it. Returns an error if one occurs.
 func (c *FakePackages) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
 	_, err := c.Fake.
-		Invokes(testing.NewDeleteAction(packagesResource, c.ns, name), &corev1.Package{})
+		Invokes(testing.NewDeleteActionWithOptions(packagesResource, c.ns, name, opts), &corev1.Package{})
 
 	return err
 }

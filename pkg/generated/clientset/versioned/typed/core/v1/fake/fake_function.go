@@ -105,7 +105,7 @@ func (c *FakeFunctions) Update(ctx context.Context, _function *corev1.Function, 
 // Delete takes name of the _function and deletes it. Returns an error if one occurs.
 func (c *FakeFunctions) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
 	_, err := c.Fake.
-		Invokes(testing.NewDeleteAction(functionsResource, c.ns, name), &corev1.Function{})
+		Invokes(testing.NewDeleteActionWithOptions(functionsResource, c.ns, name, opts), &corev1.Function{})
 
 	return err
 }
