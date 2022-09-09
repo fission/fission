@@ -457,7 +457,11 @@ serviceMonitor:
   ##namespace in which you want to deploy servicemonitor
   ##
   namespace: ""
+  ## Map of additional lables to add to the ServiceMonitor resources
+  #  to make prometheus seamlessly discover the ServiceMonitors
   additionalServiceMonitorLabels: {}
+  #  release: "monitoring"
+  #  key: "value"
 
 ## Persist data to a persistent volume.
 ##
