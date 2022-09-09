@@ -458,8 +458,20 @@ serviceMonitor:
   ##
   namespace: ""
   ## Map of additional lables to add to the ServiceMonitor resources
-  #  to make prometheus seamlessly discover the ServiceMonitors
+  #  to allow selecting sepcific ServiceMonitors
+  #  in case of multiple prometheus deployments
   additionalServiceMonitorLabels: {}
+  #  release: "monitoring"
+  #  key: "value"
+podMonitor:
+  enabled: false
+  ##namespace in which you want to deploy servicemonitor
+  ##
+  namespace: ""
+  ## Map of additional lables to add to the PodMonitor resources
+  #  to allow selecting sepcific PodMonitor
+  #  in case of multiple prometheus deployments
+  additionalPodMonitorLabels: {}
   #  release: "monitoring"
   #  key: "value"
 
