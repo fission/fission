@@ -153,3 +153,14 @@ const (
 
 	ClusterRole = "ClusterRole"
 )
+
+const (
+	CanaryConfigResource    = "canaryconfigs"
+	EnvironmentResource     = "environments"
+	FunctionResource        = "functions"
+	HttpTriggerResource     = "httptriggers"
+	KubernetesWatchResource = "kuberneteswatchtriggers"
+	MessageQueueResource    = "messagequeuetriggers"
+	PackagesResource        = "packages"
+	TimeTriggerResource     = "timetriggers"
+)

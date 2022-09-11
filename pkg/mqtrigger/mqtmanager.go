@@ -26,8 +26,8 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
-	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
 	"github.com/fission/fission/pkg/mqtrigger/messageQueue"
+	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/metrics"
 )
 
@@ -80,12 +80,13 @@ func MakeMessageQueueTriggerManager(logger *zap.Logger,
 
 func (mqt *MessageQueueTriggerManager) Run(ctx context.Context) {
 	go mqt.service()
-	informerFactory := genInformer.NewSharedInformerFactory(mqt.fissionClient, time.Minute*30)
-	mqTriggerInformer := informerFactory.Core().V1().MessageQueueTriggers().Informer()
-	mqTriggerInformer.AddEventHandler(mqt.mqtInformerHandlers())
-	go mqTriggerInformer.Run(ctx.Done())
-	if ok := k8sCache.WaitForCacheSync(ctx.Done(), mqTriggerInformer.HasSynced); !ok {
-		mqt.logger.Fatal("failed to wait for caches to sync")
+	informers := utils.GetInformersForNamespaces(mqt.fissionClient, time.Minute*30, fv1.MessageQueueResource)
+	for _, informer := range informers {
+		informer.AddEventHandler(mqt.mqtInformerHandlers())
+		go informer.Run(ctx.Done())
+		if ok := k8sCache.WaitForCacheSync(ctx.Done(), informer.HasSynced); !ok {
+			mqt.logger.Fatal("failed to wait for caches to sync")
+		}
 	}
 	go metrics.ServeMetrics(ctx, mqt.logger)
 }

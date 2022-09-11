@@ -34,7 +34,7 @@ type (
 	functionReferenceResolver struct {
 		// FunctionReference -> function metadata
 		refCache     *cache.Cache
-		funcInformer *k8sCache.SharedIndexInformer
+		funcInformer []k8sCache.SharedIndexInformer
 		// store    k8sCache.Store
 	}
 
@@ -69,7 +69,7 @@ const (
 	resolveResultMultipleFunctions
 )
 
-func makeFunctionReferenceResolver(funcInformer *k8sCache.SharedIndexInformer) *functionReferenceResolver {
+func makeFunctionReferenceResolver(funcInformer []k8sCache.SharedIndexInformer) *functionReferenceResolver {
 	frr := &functionReferenceResolver{
 		refCache:     cache.MakeCache(time.Minute, 0),
 		funcInformer: funcInformer,
@@ -121,20 +121,27 @@ func (frr *functionReferenceResolver) resolve(trigger fv1.HTTPTrigger) (*resolve
 // resolveByName simply looks up function by name in a namespace.
 func (frr *functionReferenceResolver) resolveByName(namespace, name string) (*resolveResult, error) {
 	// get function from cache
-	obj, isExist, err := (*frr.funcInformer).GetStore().Get(&fv1.Function{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: namespace,
-			Name:      name,
-		},
-	})
-	if err != nil {
-		return nil, err
+	var isExist bool
+	var f *fv1.Function
+	for _, informer := range frr.funcInformer {
+		obj, isExist, err := informer.GetStore().Get(&fv1.Function{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: namespace,
+				Name:      name,
+			},
+		})
+
+		if err != nil {
+			return nil, err
+		}
+		if !isExist {
+			continue
+		}
+		f = obj.(*fv1.Function)
 	}
 	if !isExist {
 		return nil, errors.Errorf("function %v does not exist", name)
 	}
-
-	f := obj.(*fv1.Function)
 	functionMap := map[string]*fv1.Function{
 		f.ObjectMeta.Name: f,
 	}
@@ -155,20 +162,26 @@ func (frr *functionReferenceResolver) resolveByFunctionWeights(namespace string,
 
 	for functionName, functionWeight := range fr.FunctionWeights {
 		// get function from cache
-		obj, isExist, err := (*frr.funcInformer).GetStore().Get(&fv1.Function{
-			ObjectMeta: metav1.ObjectMeta{
-				Namespace: namespace,
-				Name:      functionName,
-			},
-		})
-		if err != nil {
-			return nil, err
+		var isExist bool
+		var f *fv1.Function
+		for _, informer := range frr.funcInformer {
+			obj, isExist, err := informer.GetStore().Get(&fv1.Function{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: namespace,
+					Name:      functionName,
+				},
+			})
+			if err != nil {
+				return nil, err
+			}
+			if !isExist {
+				continue
+			}
+			f = obj.(*fv1.Function)
 		}
 		if !isExist {
 			return nil, fmt.Errorf("function %v does not exist", functionName)
 		}
-
-		f := obj.(*fv1.Function)
 		functionMap[f.ObjectMeta.Name] = f
 		sumPrefix = sumPrefix + functionWeight
 		fnWtDistrList = append(fnWtDistrList, functionWeightDistribution{
