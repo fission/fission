@@ -17,6 +17,7 @@ package poolmgr
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -48,8 +49,8 @@ type (
 		namespace        string
 		enableIstio      bool
 
-		envLister       flisterv1.EnvironmentLister
-		envListerSynced k8sCache.InformerSynced
+		envLister       map[string]flisterv1.EnvironmentLister
+		envListerSynced map[string]k8sCache.InformerSynced
 
 		// podLister can list/get pods from the shared informer's store
 		podLister corelisters.PodLister
@@ -70,37 +71,44 @@ func NewPoolPodController(ctx context.Context, logger *zap.Logger,
 	kubernetesClient kubernetes.Interface,
 	namespace string,
 	enableIstio bool,
-	funcInformer finformerv1.FunctionInformer,
-	pkgInformer finformerv1.PackageInformer,
-	envInformer finformerv1.EnvironmentInformer,
+	funcInformer map[string]finformerv1.FunctionInformer,
+	pkgInformer map[string]finformerv1.PackageInformer,
+	envInformer map[string]finformerv1.EnvironmentInformer,
 	rsInformer appsinformers.ReplicaSetInformer,
 	podInformer coreinformers.PodInformer) *PoolPodController {
 	logger = logger.Named("pool_pod_controller")
 	p := &PoolPodController{
-		logger:           logger,
-		kubernetesClient: kubernetesClient,
-		namespace:        namespace,
-		enableIstio:      enableIstio,
-
+		logger:               logger,
+		kubernetesClient:     kubernetesClient,
+		namespace:            namespace,
+		enableIstio:          enableIstio,
+		envLister:            make(map[string]flisterv1.EnvironmentLister, 0),
+		envListerSynced:      make(map[string]k8sCache.InformerSynced, 0),
 		envCreateUpdateQueue: workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "EnvAddUpdateQueue"),
 		envDeleteQueue:       workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "EnvDeleteQueue"),
 		spCleanupPodQueue:    workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "SpecializedPodCleanupQueue"),
 	}
-	funcInformer.Informer().AddEventHandler(FunctionEventHandlers(ctx, p.logger, p.kubernetesClient, p.namespace, p.enableIstio))
-	pkgInformer.Informer().AddEventHandler(PackageEventHandlers(ctx, p.logger, p.kubernetesClient, p.namespace))
-	envInformer.Informer().AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
-		AddFunc:    p.enqueueEnvAdd,
-		UpdateFunc: p.enqueueEnvUpdate,
-		DeleteFunc: p.enqueueEnvDelete,
-	})
+	for _, informer := range funcInformer {
+		informer.Informer().AddEventHandler(FunctionEventHandlers(ctx, p.logger, p.kubernetesClient, p.namespace, p.enableIstio))
+	}
+	for _, informer := range pkgInformer {
+		informer.Informer().AddEventHandler(PackageEventHandlers(ctx, p.logger, p.kubernetesClient, p.namespace))
+	}
+	for ns, informer := range envInformer {
+		informer.Informer().AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
+			AddFunc:    p.enqueueEnvAdd,
+			UpdateFunc: p.enqueueEnvUpdate,
+			DeleteFunc: p.enqueueEnvDelete,
+		})
+		p.envLister[ns] = informer.Lister()
+		p.envListerSynced[ns] = informer.Informer().HasSynced
+	}
 	rsInformer.Informer().AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
 		AddFunc:    p.handleRSAdd,
 		UpdateFunc: p.handleRSUpdate,
 		DeleteFunc: p.handleRSDelete,
 	})
 
-	p.envLister = envInformer.Lister()
-	p.envListerSynced = envInformer.Informer().HasSynced
 	p.podLister = podInformer.Lister()
 	p.podListerSynced = podInformer.Informer().HasSynced
 	p.logger.Info("pool pod controller handlers registered")
@@ -221,10 +229,15 @@ func (p *PoolPodController) Run(ctx context.Context, stopCh <-chan struct{}) {
 	defer p.envCreateUpdateQueue.ShutDown()
 	defer p.envDeleteQueue.ShutDown()
 	defer p.spCleanupPodQueue.ShutDown()
-
 	// Wait for the caches to be synced before starting workers
 	p.logger.Info("Waiting for informer caches to sync")
-	if ok := k8sCache.WaitForCacheSync(stopCh, p.envListerSynced, p.podListerSynced); !ok {
+
+	waitSynced := make([]k8sCache.InformerSynced, 0)
+	waitSynced = append(waitSynced, p.podListerSynced)
+	for _, synced := range p.envListerSynced {
+		waitSynced = append(waitSynced, synced)
+	}
+	if ok := k8sCache.WaitForCacheSync(stopCh, waitSynced...); !ok {
 		p.logger.Fatal("failed to wait for caches to sync")
 	}
 	for i := 0; i < 4; i++ {
@@ -247,6 +260,19 @@ func (p *PoolPodController) workerRun(ctx context.Context, name string, processF
 			}
 		}
 	}
+}
+
+func (p *PoolPodController) getEnvLister(namespace string) (flisterv1.EnvironmentLister, error) {
+	lister, ok := p.envLister[metav1.NamespaceAll]
+	if ok {
+		return lister, nil
+	}
+	for ns, lister := range p.envLister {
+		if ns == namespace {
+			return lister, nil
+		}
+	}
+	return nil, fmt.Errorf("no environment lister found for namespace %s", namespace)
 }
 
 func (p *PoolPodController) envCreateUpdateQueueProcessFunc(ctx context.Context) bool {
@@ -292,7 +318,13 @@ func (p *PoolPodController) envCreateUpdateQueueProcessFunc(ctx context.Context)
 		p.envCreateUpdateQueue.Forget(key)
 		return false
 	}
-	env, err := p.envLister.Environments(namespace).Get(name)
+	envLister, err := p.getEnvLister(namespace)
+	if err != nil {
+		p.logger.Error("error getting environment lister", zap.Error(err))
+		p.envCreateUpdateQueue.Forget(key)
+		return false
+	}
+	env, err := envLister.Environments(namespace).Get(name)
 	if apierrors.IsNotFound(err) {
 		p.logger.Info("env not found", zap.String("key", key))
 		p.envCreateUpdateQueue.Forget(key)

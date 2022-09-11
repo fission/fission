@@ -103,8 +103,8 @@ func MakeNewDeploy(
 	namespace string,
 	fetcherConfig *fetcherConfig.Config,
 	instanceID string,
-	funcInformer finformerv1.FunctionInformer,
-	envInformer finformerv1.EnvironmentInformer,
+	funcInformer map[string]finformerv1.FunctionInformer,
+	envInformer map[string]finformerv1.EnvironmentInformer,
 	deplInformer appsinformers.DeploymentInformer,
 	svcInformer coreinformers.ServiceInformer,
 	podSpecPatch *apiv1.PodSpec,
@@ -146,9 +146,12 @@ func MakeNewDeploy(
 	nd.svcLister = svcInformer.Lister()
 	nd.svcListerSynced = svcInformer.Informer().HasSynced
 
-	funcInformer.Informer().AddEventHandler(nd.FunctionEventHandlers(ctx))
-	envInformer.Informer().AddEventHandler(nd.EnvEventHandlers(ctx))
-
+	for _, fnInformer := range funcInformer {
+		fnInformer.Informer().AddEventHandler(nd.FunctionEventHandlers(ctx))
+	}
+	for _, envInformer := range envInformer {
+		envInformer.Informer().AddEventHandler(nd.EnvEventHandlers(ctx))
+	}
 	return nd, nil
 }
 

@@ -119,9 +119,9 @@ func MakeGenericPoolManager(ctx context.Context,
 	functionNamespace string,
 	fetcherConfig *fetcherConfig.Config,
 	instanceID string,
-	funcInformer finformerv1.FunctionInformer,
-	pkgInformer finformerv1.PackageInformer,
-	envInformer finformerv1.EnvironmentInformer,
+	funcInformer map[string]finformerv1.FunctionInformer,
+	pkgInformer map[string]finformerv1.PackageInformer,
+	envInformer map[string]finformerv1.EnvironmentInformer,
 	podInformer coreinformers.PodInformer,
 	rsInformer appsinformers.ReplicaSetInformer,
 	podSpecPatch *apiv1.PodSpec,
@@ -554,7 +554,11 @@ func (gpm *GenericPoolManager) getFunctionEnv(ctx context.Context, fn *fv1.Funct
 	}
 
 	// Get env from controller
-	env, err = gpm.poolPodC.envLister.Environments(fn.Spec.Environment.Namespace).Get(fn.Spec.Environment.Name)
+	envLister, err := gpm.poolPodC.getEnvLister(fn.Spec.Environment.Namespace)
+	if err != nil {
+		return nil, err
+	}
+	env, err = envLister.Environments(fn.Spec.Environment.Namespace).Get(fn.Spec.Environment.Name)
 	if err != nil {
 		return nil, err
 	}
