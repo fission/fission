@@ -13,6 +13,12 @@ import (
 	v1 "github.com/fission/fission/pkg/apis/core/v1"
 )
 
+func GetNamespaces() []string {
+	return []string{
+		metav1.NamespaceAll,
+	}
+}
+
 func GetInformerFactoryByReadyPod(client kubernetes.Interface, namespace string, labelSelector *metav1.LabelSelector) (k8sInformers.SharedInformerFactory, error) {
 	informerFactory := k8sInformers.NewSharedInformerFactoryWithOptions(client, 0,
 		k8sInformers.WithNamespace(namespace),

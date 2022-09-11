@@ -40,8 +40,8 @@ type (
 		logger           *zap.Logger
 		fissionClient    versioned.Interface
 		k8sClient        kubernetes.Interface
-		podInformer      *k8sCache.SharedIndexInformer
-		pkgInformer      *k8sCache.SharedIndexInformer
+		podInformer      k8sCache.SharedIndexInformer
+		pkgInformer      []k8sCache.SharedIndexInformer
 		builderNamespace string
 		storageSvcUrl    string
 		buildCache       *cache.Cache
@@ -49,8 +49,8 @@ type (
 )
 
 func makePackageWatcher(logger *zap.Logger, fissionClient versioned.Interface, k8sClientSet kubernetes.Interface,
-	builderNamespace string, storageSvcUrl string, podInformer *k8sCache.SharedIndexInformer,
-	pkgInformer *k8sCache.SharedIndexInformer) *packageWatcher {
+	builderNamespace string, storageSvcUrl string, podInformer k8sCache.SharedIndexInformer,
+	pkgInformer []k8sCache.SharedIndexInformer) *packageWatcher {
 	pkgw := &packageWatcher{
 		logger:           logger.Named("package_watcher"),
 		fissionClient:    fissionClient,
@@ -122,7 +122,7 @@ func (pkgw *packageWatcher) build(ctx context.Context, srcpkg *fv1.Package) {
 	for healthCheckBackOff.NextExists() {
 		// Informer store is not able to use label to find the pod,
 		// iterate all available environment builders.
-		items := (*pkgw.podInformer).GetStore().List()
+		items := pkgw.podInformer.GetStore().List()
 		if err != nil {
 			pkgw.logger.Error("error retrieving pod information for environment", zap.Error(err), zap.String("environment", env.ObjectMeta.Name))
 			return
@@ -323,9 +323,11 @@ func (pkgw *packageWatcher) packageInformerHandler(ctx context.Context) k8sCache
 
 func (pkgw *packageWatcher) Run(ctx context.Context) {
 	go metrics.ServeMetrics(ctx, pkgw.logger)
-	go (*pkgw.podInformer).Run(ctx.Done())
-	(*pkgw.pkgInformer).AddEventHandler(pkgw.packageInformerHandler(ctx))
-	(*pkgw.pkgInformer).Run(ctx.Done())
+	go pkgw.podInformer.Run(ctx.Done())
+	for _, pkgInformer := range pkgw.pkgInformer {
+		pkgInformer.AddEventHandler(pkgw.packageInformerHandler())
+		pkgInformer.Run(ctx.Done())
+	}
 }
 
 // setInitialBuildStatus sets initial build status to a package if it is empty.
