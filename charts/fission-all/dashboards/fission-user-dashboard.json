@@ -32,7 +32,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "",
+      "description": "Shows function calls, namespaces and their response codes.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -80,7 +80,7 @@
               }
             ]
           },
-          "unit": "none"
+          "unit": "reqps"
         },
         "overrides": []
       },
@@ -116,7 +116,7 @@
           "refId": "A"
         }
       ],
-      "title": "Function calls per minute",
+      "title": "Function calls",
       "type": "timeseries"
     },
     {
@@ -124,6 +124,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
+      "description": "Shows any functions that return 400 or 500 errors.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -171,7 +172,7 @@
               }
             ]
           },
-          "unit": "none"
+          "unit": "reqps"
         },
         "overrides": []
       },
@@ -214,6 +215,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
+      "description": "Tracks cold starts of all functions.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -317,6 +319,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
+      "description": "Shows the number of requests currently in flight per function path",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -407,6 +410,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
+      "description": "Shows the average latency for each path.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -506,6 +510,7 @@
         },
         "hide": 0,
         "includeAll": false,
+        "label": "Data Source",
         "multi": false,
         "name": "datasource",
         "options": [],
@@ -638,6 +643,6 @@
   "timezone": "",
   "title": "Fission User Dashboard",
   "uid": "he2w3Xq7z",
-  "version": 1,
+  "version": 3,
   "weekStart": ""
 }

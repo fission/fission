@@ -32,6 +32,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
+      "description": "Shows the ready replicas of all internal fission components",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -68,6 +69,7 @@
               "mode": "off"
             }
           },
+          "decimals": 0,
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
@@ -82,7 +84,7 @@
               }
             ]
           },
-          "unit": "none"
+          "unit": "Pods"
         },
         "overrides": []
       },
@@ -138,6 +140,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
+      "description": "Calculates the percentage of requests that returned a 200 response across all fission services.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -190,7 +193,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(http_requests_total{code=~\"20.*\"}) / sum(http_requests_total)",
+          "expr": "sum(rate(http_requests_total{code=~\"20.*\"}[$__rate_interval])) / sum(rate(http_requests_total[$__rate_interval]))",
           "interval": "",
           "range": true,
           "refId": "A"
@@ -204,6 +207,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
+      "description": "The number of request fission is currently processing.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -223,7 +227,7 @@
               }
             ]
           },
-          "unit": "none"
+          "unit": "Requests"
         },
         "overrides": []
       },
@@ -270,6 +274,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
+      "description": "Number of errors faced by functions when called.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -289,7 +294,7 @@
               }
             ]
           },
-          "unit": "none"
+          "unit": "Errors"
         },
         "overrides": []
       },
@@ -336,6 +341,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
+      "description": "Total number of errors faced by ",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -355,7 +361,7 @@
               }
             ]
           },
-          "unit": "none"
+          "unit": "Errors"
         },
         "overrides": []
       },
@@ -402,7 +408,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "",
+      "description": "Average latency overhead for functions due to Fission.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -469,6 +475,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
+      "description": "Message queue triggers",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -535,6 +542,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
+      "description": "The number of request fission is currently processing.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -625,7 +633,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "",
+      "description": "Cold starts for functions that ",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -713,7 +721,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "",
+      "description": "Latency added to function calls due to fission overhead.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -818,6 +826,74 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
+      "description": "Total Number of archives present in the cluster",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 0,
+        "y": 33
+      },
+      "id": 19,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "9.0.5",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "fission_archives_total",
+          "legendFormat": "Namespace: {{namespace}} Pod: {{pod}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Fission Archive Total",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Changes in the number of fission archives",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -872,10 +948,10 @@
       "gridPos": {
         "h": 8,
         "w": 12,
-        "x": 0,
+        "x": 6,
         "y": 33
       },
-      "id": 19,
+      "id": 23,
       "options": {
         "legend": {
           "calcs": [],
@@ -894,13 +970,13 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "fission_archives_total",
+          "expr": "rate(fission_archives_total[$__rate_interval])",
           "legendFormat": "Namespace: {{namespace}} Pod: {{pod}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Fission Archive Total",
+      "title": "Fission Archives Created/Deleted",
       "type": "timeseries"
     },
     {
@@ -908,6 +984,74 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
+      "description": "Total size used by all archives",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "decbytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 0,
+        "y": 41
+      },
+      "id": 20,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "9.0.5",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "expr": "fission_archive_memory_bytes",
+          "legendFormat": "Namespace: {{namespace}} Pod: {{pod}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Fission Archives Size",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "description": "Size used by fission archives",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -962,10 +1106,10 @@
       "gridPos": {
         "h": 8,
         "w": 12,
-        "x": 12,
-        "y": 33
+        "x": 6,
+        "y": 41
       },
-      "id": 20,
+      "id": 24,
       "options": {
         "legend": {
           "calcs": [],
@@ -984,7 +1128,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "fission_archive_memory_bytes",
+          "expr": "sum(fission_archive_memory_bytes) by (pod,namespacem,service)",
           "legendFormat": "Namespace: {{namespace}} Pod: {{pod}}",
           "range": true,
           "refId": "A"
@@ -1009,6 +1153,7 @@
         },
         "hide": 0,
         "includeAll": false,
+        "label": "Data Source",
         "multi": false,
         "name": "datasource",
         "options": [],
@@ -1028,6 +1173,6 @@
   "timezone": "",
   "title": "Fission Admin dashboard",
   "uid": "4dOlQDZVz",
-  "version": 1,
+  "version": 8,
   "weekStart": ""
 }
