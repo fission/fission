@@ -1,0 +1,17 @@
+{{- if .Values.grafana.dashboards.enable }}
+{{- $files := .Files }}
+{{- range $path, $bytes := .Files.Glob "dashboards/*.json" }}
+{{- $filename := trimSuffix (ext $path) (base $path) }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ printf "%s-%s" $.Chart.Name $filename | trunc 63 | trimSuffix "-" }}
+  namespace: {{ $.grafana.Namespace }}
+  labels:
+    grafana_dashboard: "1"
+    created_by: "{{ .Chart.Name }}"
+data:
+  {{ base $path }}: '{{ $files.Get $path }}'
+---
+{{- end }}
+{{- end }}
