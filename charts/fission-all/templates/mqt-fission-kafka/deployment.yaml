@@ -33,6 +33,9 @@ spec:
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
         args: ["--mqt", "--routerUrl", "http://router.{{ .Release.Namespace }}"]
+        ports:
+          - containerPort: 8080
+            name: metrics
         env:
         - name: MESSAGE_QUEUE_TYPE
           value: kafka
