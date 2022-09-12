@@ -31,7 +31,6 @@ import (
 
 	uuid "github.com/satori/go.uuid"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -41,6 +40,7 @@ import (
 	"github.com/fission/fission/pkg/crd"
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
+	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
 
 var (
@@ -130,7 +130,10 @@ func TestFunctionApi(t *testing.T) {
 	testFunc.ObjectMeta.Name = "bar"
 	m2, err := g.Client().V1().Function().Create(testFunc)
 	panicIf(err)
-	defer panicIf(g.Client().V1().Function().Delete(m2))
+	defer func() {
+		err := g.Client().V1().Function().Delete(m2)
+		panicIf(err)
+	}()
 
 	funcs, err := g.Client().V1().Function().List(testNS)
 	panicIf(err)
@@ -174,7 +177,10 @@ func TestHTTPTriggerApi(t *testing.T) {
 
 	m, err := g.Client().V1().HTTPTrigger().Create(testTrigger)
 	panicIf(err)
-	defer panicIf(g.Client().V1().HTTPTrigger().Delete(m))
+	defer func() {
+		err := g.Client().V1().HTTPTrigger().Delete(m)
+		panicIf(err)
+	}()
 
 	_, err = g.Client().V1().HTTPTrigger().Create(testTrigger)
 	assertNameReuseFailure(err, "httptrigger")
@@ -199,7 +205,10 @@ func TestHTTPTriggerApi(t *testing.T) {
 	testTrigger.Spec.RelativeURL = "/hi2"
 	m2, err := g.Client().V1().HTTPTrigger().Create(testTrigger)
 	panicIf(err)
-	defer panicIf(g.Client().V1().HTTPTrigger().Delete(m2))
+	defer func() {
+		err = g.Client().V1().HTTPTrigger().Delete(m2)
+		panicIf(err)
+	}()
 
 	ts, err := g.Client().V1().HTTPTrigger().List(testNS)
 	panicIf(err)
@@ -228,7 +237,10 @@ func TestEnvironmentApi(t *testing.T) {
 
 	m, err := g.Client().V1().Environment().Create(testEnv)
 	panicIf(err)
-	defer panicIf(g.Client().V1().Environment().Delete(m))
+	defer func() {
+		err := g.Client().V1().Environment().Delete(m)
+		panicIf(err)
+	}()
 
 	_, err = g.Client().V1().Environment().Create(testEnv)
 	assertNameReuseFailure(err, "environment")
@@ -247,7 +259,10 @@ func TestEnvironmentApi(t *testing.T) {
 
 	m2, err := g.Client().V1().Environment().Create(testEnv)
 	panicIf(err)
-	defer panicIf(g.Client().V1().Environment().Delete(m2))
+	defer func() {
+		err := g.Client().V1().Environment().Delete(m2)
+		panicIf(err)
+	}()
 
 	ts, err := g.Client().V1().Environment().List(testNS)
 	panicIf(err)
@@ -277,7 +292,10 @@ func TestWatchApi(t *testing.T) {
 
 	m, err := g.Client().V1().KubeWatcher().Create(testWatch)
 	panicIf(err)
-	defer panicIf(g.Client().V1().KubeWatcher().Delete(m))
+	defer func() {
+		err := g.Client().V1().KubeWatcher().Delete(m)
+		panicIf(err)
+	}()
 
 	_, err = g.Client().V1().KubeWatcher().Create(testWatch)
 	assertNameReuseFailure(err, "watch")
@@ -292,7 +310,10 @@ func TestWatchApi(t *testing.T) {
 	testWatch.ObjectMeta.Name = "yyy"
 	m2, err := g.Client().V1().KubeWatcher().Create(testWatch)
 	panicIf(err)
-	defer panicIf(g.Client().V1().KubeWatcher().Delete(m2))
+	defer func() {
+		err := g.Client().V1().KubeWatcher().Delete(m2)
+		panicIf(err)
+	}()
 
 	ws, err := g.Client().V1().KubeWatcher().List(testNS)
 	panicIf(err)
@@ -318,7 +339,10 @@ func TestTimeTriggerApi(t *testing.T) {
 
 	m, err := g.Client().V1().TimeTrigger().Create(testTrigger)
 	panicIf(err)
-	defer panicIf(g.Client().V1().TimeTrigger().Delete(m))
+	defer func() {
+		err := g.Client().V1().TimeTrigger().Delete(m)
+		panicIf(err)
+	}()
 
 	_, err = g.Client().V1().TimeTrigger().Create(testTrigger)
 	assertNameReuseFailure(err, "trigger")
@@ -348,10 +372,15 @@ func TestTimeTriggerApi(t *testing.T) {
 func TestMain(m *testing.M) {
 	flag.Parse()
 
+	ctx, cancel := context.WithCancel(context.Background())
+
+	logger := loggerfactory.GetLogger()
+
 	// skip test if no cluster available for testing
 	kubeconfig := os.Getenv("KUBECONFIG")
 	if len(kubeconfig) == 0 {
 		log.Println("Skipping test, no kubernetes cluster")
+		cancel()
 		return
 	}
 
@@ -362,21 +391,22 @@ func TestMain(m *testing.M) {
 	id, err := uuid.NewV4()
 	panicIf(err)
 	testNS = id.String()
-	_, err = kubeClient.CoreV1().Namespaces().Create(context.TODO(), &v1.Namespace{
+	_, err = kubeClient.CoreV1().Namespaces().Create(ctx, &v1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: testNS,
 		},
 	}, metav1.CreateOptions{})
 	panicIf(err)
-	defer panicIf(kubeClient.CoreV1().Namespaces().Delete(context.TODO(), testNS, metav1.DeleteOptions{}))
 
-	config := zap.NewDevelopmentConfig()
-	config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
-	logger, err := config.Build()
+	defer func() {
+		logger.Info("Deleting test namespace", zap.String("namespace", testNS))
+		err := kubeClient.CoreV1().Namespaces().Delete(context.TODO(), testNS, metav1.DeleteOptions{})
+		if err != nil {
+			logger.Error("error deleting test namespace", zap.String("namespace", testNS), zap.Error(err))
+		}
+		cancel()
+	}()
 
-	panicIf(err)
-
-	ctx := context.Background()
 	go Start(ctx, logger, 8888, true)
 
 	time.Sleep(5 * time.Second)
