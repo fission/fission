@@ -398,15 +398,6 @@ func TestMain(m *testing.M) {
 	}, metav1.CreateOptions{})
 	panicIf(err)
 
-	defer func() {
-		logger.Info("Deleting test namespace", zap.String("namespace", testNS))
-		err := kubeClient.CoreV1().Namespaces().Delete(context.TODO(), testNS, metav1.DeleteOptions{})
-		if err != nil {
-			logger.Error("error deleting test namespace", zap.String("namespace", testNS), zap.Error(err))
-		}
-		cancel()
-	}()
-
 	go Start(ctx, logger, 8888, true)
 
 	time.Sleep(5 * time.Second)
@@ -430,5 +421,12 @@ func TestMain(m *testing.M) {
 	_, err = io.ReadAll(resp.Body)
 	panicIf(err)
 
-	os.Exit(m.Run())
+	exitVal := m.Run()
+	logger.Info("Deleting test namespace", zap.String("namespace", testNS))
+	err = kubeClient.CoreV1().Namespaces().Delete(context.TODO(), testNS, metav1.DeleteOptions{})
+	if err != nil {
+		logger.Error("error deleting test namespace", zap.String("namespace", testNS), zap.Error(err))
+	}
+	cancel()
+	os.Exit(exitVal)
 }
