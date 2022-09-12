@@ -4,12 +4,13 @@ import (
 	"context"
 	"testing"
 
-	corev1 "github.com/fission/fission/pkg/apis/core/v1"
-	fClient "github.com/fission/fission/pkg/generated/clientset/versioned/fake"
-	"github.com/fission/fission/pkg/utils/loggerfactory"
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
+
+	corev1 "github.com/fission/fission/pkg/apis/core/v1"
+	fClient "github.com/fission/fission/pkg/generated/clientset/versioned/fake"
+	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
 
 func TestCheckHTTPTriggerDuplicates(t *testing.T) {
