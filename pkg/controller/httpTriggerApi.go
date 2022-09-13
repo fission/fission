@@ -134,7 +134,7 @@ func (a *API) checkHTTPTriggerDuplicates(ctx context.Context, t *fv1.HTTPTrigger
 			continue
 		}
 		urlMatch := false
-		if ht.Spec.RelativeURL == t.Spec.RelativeURL || (ht.Spec.Prefix != nil && t.Spec.Prefix != nil && *ht.Spec.Prefix != "" && *ht.Spec.Prefix == *t.Spec.Prefix) {
+		if (ht.Spec.RelativeURL != "" && ht.Spec.RelativeURL == t.Spec.RelativeURL) || (ht.Spec.Prefix != nil && t.Spec.Prefix != nil && *ht.Spec.Prefix != "" && *ht.Spec.Prefix == *t.Spec.Prefix) {
 			urlMatch = true
 		}
 		methodMatch := false
