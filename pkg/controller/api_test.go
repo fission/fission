@@ -215,6 +215,97 @@ func TestHTTPTriggerApi(t *testing.T) {
 	assert(len(ts) == 2, fmt.Sprintf("created two triggers, but found %v", len(ts)))
 }
 
+func createFissionFnForMultipleTrigger() {
+	testFunc := &fv1.Function{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "foo1",
+			Namespace: testNS,
+		},
+		Spec: fv1.FunctionSpec{
+			Environment: fv1.EnvironmentReference{
+				Name:      "nodejs",
+				Namespace: testNS,
+			},
+			Package: fv1.FunctionPackageRef{
+				FunctionName: "xxx",
+				PackageRef: fv1.PackageRef{
+					Namespace:       testNS,
+					Name:            "xxx",
+					ResourceVersion: "12345",
+				},
+			},
+		},
+	}
+
+	_, err := g.Client().V1().Function().Create(testFunc)
+	panicIf(err)
+	defer func() {
+		panicIf(err)
+	}()
+
+	testFunc.Name = "foo2"
+
+	_, err = g.Client().V1().Function().Create(testFunc)
+	panicIf(err)
+	defer func() {
+		panicIf(err)
+	}()
+}
+
+func TestHTTPTriggerCreateMultipleTrigger(t *testing.T) {
+	createFissionFnForMultipleTrigger()
+	prefix := "url_new"
+	testTrigger := &fv1.HTTPTrigger{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "foo1",
+			Namespace: testNS,
+		},
+
+		Spec: fv1.HTTPTriggerSpec{
+			Methods: []string{http.MethodGet},
+			Prefix:  &prefix,
+			FunctionReference: fv1.FunctionReference{
+				Type: fv1.FunctionReferenceTypeFunctionName,
+				Name: "foo1",
+			},
+		},
+	}
+
+	m, err := g.Client().V1().HTTPTrigger().Create(testTrigger)
+	panicIf(err)
+	defer panicIf(g.Client().V1().HTTPTrigger().Delete(m))
+
+	prefix_2 := "url_another"
+	testTrigger2 := &fv1.HTTPTrigger{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "foo2",
+			Namespace: testNS,
+		},
+
+		Spec: fv1.HTTPTriggerSpec{
+			Methods: []string{http.MethodGet},
+			Prefix:  &prefix_2,
+			FunctionReference: fv1.FunctionReference{
+				Type: fv1.FunctionReferenceTypeFunctionName,
+				Name: "foo2",
+			},
+		},
+	}
+
+	m2, err := g.Client().V1().HTTPTrigger().Create(testTrigger2)
+
+	if err != nil {
+		t.Fatal()
+	}
+
+	defer func() {
+		if m2 != nil {
+			g.Client().V1().HTTPTrigger().Delete(m2)
+		}
+	}()
+
+}
+
 func TestEnvironmentApi(t *testing.T) {
 	testEnv := &fv1.Environment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -423,7 +514,8 @@ func TestMain(m *testing.M) {
 
 	exitVal := m.Run()
 	logger.Info("Deleting test namespace", zap.String("namespace", testNS))
-	err = kubeClient.CoreV1().Namespaces().Delete(context.TODO(), testNS, metav1.DeleteOptions{})
+	gracePeriod := int64(0)
+	err = kubeClient.CoreV1().Namespaces().Delete(context.TODO(), testNS, metav1.DeleteOptions{GracePeriodSeconds: &gracePeriod})
 	if err != nil {
 		logger.Error("error deleting test namespace", zap.String("namespace", testNS), zap.Error(err))
 	}
