@@ -253,6 +253,7 @@ func createFissionFnForMultipleTrigger() {
 }
 
 func TestHTTPTriggerCreateMultipleTrigger(t *testing.T) {
+	logger := loggerfactory.GetLogger()
 	createFissionFnForMultipleTrigger()
 	prefix := "url_new"
 	testTrigger := &fv1.HTTPTrigger{
@@ -300,7 +301,10 @@ func TestHTTPTriggerCreateMultipleTrigger(t *testing.T) {
 
 	defer func() {
 		if m2 != nil {
-			g.Client().V1().HTTPTrigger().Delete(m2)
+			err := g.Client().V1().HTTPTrigger().Delete(m2)
+			if err != nil {
+				logger.Error("Error deleting http trigger", zap.String("name", m2.Name), zap.Error(err))
+			}
 		}
 	}()
 
