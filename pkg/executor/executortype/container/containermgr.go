@@ -798,7 +798,7 @@ func getObjectReaperInterval(logger *zap.Logger, defaultReaperInterval int) int 
 		logger.Debug("CONTAINERMGR_OBJECT_REAPER_INTERVAL not set or empty, trying to use OBJECT_REAPER_INTERVAL")
 	}
 
-	// Get global reaper interval if newdeploy interval is not set
+	// Get global reaper interval if containermgr interval is not set
 	objectReaperIntervalEnv := os.Getenv("OBJECT_REAPER_INTERVAL")
 	if len(objectReaperIntervalEnv) > 0 {
 		interval, err := strconv.Atoi(objectReaperIntervalEnv)

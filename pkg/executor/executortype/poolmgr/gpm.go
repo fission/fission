@@ -94,7 +94,8 @@ type (
 
 		poolPodC *PoolPodController
 
-		podSpecPatch *apiv1.PodSpec
+		podSpecPatch               *apiv1.PodSpec
+		objectReaperIntervalSecond time.Duration
 	}
 	request struct {
 		requestType
@@ -140,21 +141,22 @@ func MakeGenericPoolManager(
 		enableIstio, funcInformer, pkgInformer, envInformer, rsInformer, podInformer)
 
 	gpm := &GenericPoolManager{
-		logger:                 gpmLogger,
-		pools:                  make(map[string]*GenericPool),
-		kubernetesClient:       kubernetesClient,
-		metricsClient:          metricsClient,
-		namespace:              functionNamespace,
-		fissionClient:          fissionClient,
-		functionEnv:            cache.MakeCache(10*time.Second, 0),
-		fsCache:                fscache.MakeFunctionServiceCache(gpmLogger),
-		instanceID:             instanceID,
-		requestChannel:         make(chan *request),
-		defaultIdlePodReapTime: 2 * time.Minute,
-		fetcherConfig:          fetcherConfig,
-		enableIstio:            enableIstio,
-		poolPodC:               poolPodC,
-		podSpecPatch:           podSpecPatch,
+		logger:                     gpmLogger,
+		pools:                      make(map[string]*GenericPool),
+		kubernetesClient:           kubernetesClient,
+		metricsClient:              metricsClient,
+		namespace:                  functionNamespace,
+		fissionClient:              fissionClient,
+		functionEnv:                cache.MakeCache(10*time.Second, 0),
+		fsCache:                    fscache.MakeFunctionServiceCache(gpmLogger),
+		instanceID:                 instanceID,
+		requestChannel:             make(chan *request),
+		defaultIdlePodReapTime:     2 * time.Minute,
+		fetcherConfig:              fetcherConfig,
+		enableIstio:                enableIstio,
+		poolPodC:                   poolPodC,
+		podSpecPatch:               podSpecPatch,
+		objectReaperIntervalSecond: time.Duration(getObjectReaperInterval(logger, 5)) * time.Second,
 	}
 	gpm.podLister = podInformer.Lister()
 	gpm.podListerSynced = podInformer.Informer().HasSynced
@@ -572,7 +574,7 @@ func (gpm *GenericPoolManager) getFunctionEnv(ctx context.Context, fn *fv1.Funct
 // idleObjectReaper reaps objects after certain idle time
 func (gpm *GenericPoolManager) idleObjectReaper(ctx context.Context) {
 	// calling function doIdleObjectReaper() repeatedly at given interval of time
-	wait.UntilWithContext(ctx, gpm.doIdleObjectReaper, time.Second*5)
+	wait.UntilWithContext(ctx, gpm.doIdleObjectReaper, gpm.objectReaperIntervalSecond)
 }
 
 func (gpm *GenericPoolManager) doIdleObjectReaper(ctx context.Context) {
@@ -752,4 +754,35 @@ func (gpm *GenericPoolManager) NoActiveConnectionEventChecker(kubeClient kuberne
 	})
 	informer.Run(stopper)
 
+}
+
+func getObjectReaperInterval(logger *zap.Logger, defaultReaperInterval int) int {
+
+	// Trying to get first
+	poolmgrObjectReaperIntervalEnv := os.Getenv("POOLMGR_OBJECT_REAPER_INTERVAL")
+	if len(poolmgrObjectReaperIntervalEnv) > 0 {
+		interval, err := strconv.Atoi(poolmgrObjectReaperIntervalEnv)
+		if err != nil {
+			logger.Error("Failed to parse POOLMGR_OBJECT_REAPER_INTERVAL, trying to use OBJECT_REAPER_INTERVAL")
+		} else {
+			return interval
+		}
+	} else {
+		logger.Debug("POOLMGR_OBJECT_REAPER_INTERVAL not set or empty, trying to use OBJECT_REAPER_INTERVAL")
+	}
+
+	// Get global reaper interval if poolmgr interval is not set
+	objectReaperIntervalEnv := os.Getenv("OBJECT_REAPER_INTERVAL")
+	if len(objectReaperIntervalEnv) > 0 {
+		interval, err := strconv.Atoi(objectReaperIntervalEnv)
+		if err != nil {
+			logger.Error(fmt.Sprintf("Failed to parse OBJECT_REAPER_INTERVAL, using default %ds interval", defaultReaperInterval))
+		} else {
+			return interval
+		}
+	} else {
+		logger.Debug(fmt.Sprintf("OBJECT_REAPER_INTERVAL, using default %ds interval", defaultReaperInterval))
+	}
+
+	return defaultReaperInterval
 }
