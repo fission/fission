@@ -84,7 +84,8 @@ type (
 		deplListerSynced k8sCache.InformerSynced
 		svcListerSynced  k8sCache.InformerSynced
 
-		hpaops *hpautils.HpaOperations
+		hpaops                     *hpautils.HpaOperations
+		objectReaperIntervalSecond time.Duration
 	}
 )
 
@@ -123,9 +124,9 @@ func MakeContainer(
 		runtimeImagePullPolicy: utils.GetImagePullPolicy(os.Getenv("RUNTIME_IMAGE_PULL_POLICY")),
 		useIstio:               enableIstio,
 		// Time is set slightly higher than NewDeploy as cold starts are longer for CaaF
-		defaultIdlePodReapTime: 1 * time.Minute,
-
-		hpaops: hpautils.NewHpaOperations(logger, kubernetesClient, instanceID),
+		defaultIdlePodReapTime:     1 * time.Minute,
+		objectReaperIntervalSecond: time.Duration(getObjectReaperInterval(logger, 5)) * time.Second,
+		hpaops:                     hpautils.NewHpaOperations(logger, kubernetesClient, instanceID),
 	}
 	caaf.deplLister = deplInformer.Lister()
 	caaf.deplListerSynced = deplInformer.Informer().HasSynced
@@ -706,7 +707,7 @@ func (caaf *Container) updateStatus(fn *fv1.Function, err error, message string)
 // idleObjectReaper reaps objects after certain idle time
 func (caaf *Container) idleObjectReaper(ctx context.Context) {
 	// calling function doIdleObjectReaper() repeatedly at given interval of time
-	wait.UntilWithContext(ctx, caaf.doIdleObjectReaper, time.Second*5)
+	wait.UntilWithContext(ctx, caaf.doIdleObjectReaper, caaf.objectReaperIntervalSecond)
 }
 
 func (caaf *Container) doIdleObjectReaper(ctx context.Context) {
@@ -780,4 +781,35 @@ func getDeploymentObj(kubeobjs []apiv1.ObjectReference) *apiv1.ObjectReference {
 		}
 	}
 	return nil
+}
+
+func getObjectReaperInterval(logger *zap.Logger, defaultReaperInterval int) int {
+
+	// Trying to get first
+	containerObjectReaperIntervalEnv := os.Getenv("CONTAINERMGR_OBJECT_REAPER_INTERVAL")
+	if len(containerObjectReaperIntervalEnv) > 0 {
+		interval, err := strconv.Atoi(containerObjectReaperIntervalEnv)
+		if err != nil {
+			logger.Error("Failed to parse CONTAINERMGR_OBJECT_REAPER_INTERVAL, trying to use OBJECT_REAPER_INTERVAL")
+		} else {
+			return interval
+		}
+	} else {
+		logger.Debug("CONTAINERMGR_OBJECT_REAPER_INTERVAL not set or empty, trying to use OBJECT_REAPER_INTERVAL")
+	}
+
+	// Get global reaper interval if newdeploy interval is not set
+	objectReaperIntervalEnv := os.Getenv("OBJECT_REAPER_INTERVAL")
+	if len(objectReaperIntervalEnv) > 0 {
+		interval, err := strconv.Atoi(objectReaperIntervalEnv)
+		if err != nil {
+			logger.Error(fmt.Sprintf("Failed to parse OBJECT_REAPER_INTERVAL, using default %ds interval", defaultReaperInterval))
+		} else {
+			return interval
+		}
+	} else {
+		logger.Debug(fmt.Sprintf("OBJECT_REAPER_INTERVAL, using default %ds interval", defaultReaperInterval))
+	}
+
+	return defaultReaperInterval
 }
