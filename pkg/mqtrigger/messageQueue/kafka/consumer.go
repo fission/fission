@@ -100,6 +100,13 @@ func (ch MqtConsumerGroupHandler) Cleanup(session sarama.ConsumerGroupSession) e
 
 // ConsumeClaims implemented to satisfy the sarama.ConsumerGroupHandler interface
 func (ch MqtConsumerGroupHandler) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
+	// set metrics to -1
+	mqtrigger.SetMessageLagCount(ch.trigger.GetObjectMeta().GetName(),
+		ch.trigger.GetObjectMeta().GetNamespace(),
+		claim.Topic(),
+		string(claim.Partition()),
+		-1)
+
 	// Do not move the code below to a goroutine.
 	// The `ConsumeClaim` itself is called within a goroutine
 	for {
@@ -110,6 +117,12 @@ func (ch MqtConsumerGroupHandler) ConsumeClaim(session sarama.ConsumerGroupSessi
 				session.MarkMessage(msg, "")
 				mqtrigger.IncreaseMessageCount(ch.trigger.Name, ch.trigger.Namespace)
 			}
+
+			mqtrigger.SetMessageLagCount(ch.trigger.GetObjectMeta().GetName(),
+				ch.trigger.GetObjectMeta().GetNamespace(),
+				claim.Topic(),
+				string(claim.Partition()),
+				int64(claim.HighWaterMarkOffset()-msg.Offset)-1)
 		// Should return when `session.Context()` is done.
 		case <-session.Context().Done():
 			return nil
