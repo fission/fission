@@ -88,7 +88,8 @@ type (
 
 		hpaops *hpautils.HpaOperations
 
-		podSpecPatch *apiv1.PodSpec
+		podSpecPatch               *apiv1.PodSpec
+		objectReaperIntervalSecond time.Duration
 	}
 )
 
@@ -130,9 +131,9 @@ func MakeNewDeploy(
 		runtimeImagePullPolicy: utils.GetImagePullPolicy(os.Getenv("RUNTIME_IMAGE_PULL_POLICY")),
 		useIstio:               enableIstio,
 
-		defaultIdlePodReapTime: 2 * time.Minute,
-
-		hpaops: hpautils.NewHpaOperations(logger, kubernetesClient, instanceID),
+		defaultIdlePodReapTime:     2 * time.Minute,
+		objectReaperIntervalSecond: time.Duration(getObjectReaperInterval(logger, 5)) * time.Second,
+		hpaops:                     hpautils.NewHpaOperations(logger, kubernetesClient, instanceID),
 
 		podSpecPatch: podSpecPatch,
 	}
@@ -769,7 +770,7 @@ func (deploy *NewDeploy) updateStatus(fn *fv1.Function, err error, message strin
 // idleObjectReaper reaps objects after certain idle time
 func (deploy *NewDeploy) idleObjectReaper(ctx context.Context) {
 	// calling function doIdleObjectReaper() repeatedly at given interval of time
-	wait.UntilWithContext(ctx, deploy.doIdleObjectReaper, time.Second*5)
+	wait.UntilWithContext(ctx, deploy.doIdleObjectReaper, deploy.objectReaperIntervalSecond)
 }
 
 func (deploy *NewDeploy) doIdleObjectReaper(ctx context.Context) {
@@ -883,4 +884,35 @@ func (deploy *NewDeploy) scaleDeployment(ctx context.Context, deplNS string, dep
 		},
 	}, metav1.UpdateOptions{})
 	return err
+}
+
+func getObjectReaperInterval(logger *zap.Logger, defaultReaperInterval int) int {
+
+	// Trying to get first
+	newdeployObjectReaperIntervalEnv := os.Getenv("NEWDEPLOY_OBJECT_REAPER_INTERVAL")
+	if len(newdeployObjectReaperIntervalEnv) > 0 {
+		interval, err := strconv.Atoi(newdeployObjectReaperIntervalEnv)
+		if err != nil {
+			logger.Error("Failed to parse NEWDEPLOY_OBJECT_REAPER_INTERVAL, trying to use OBJECT_REAPER_INTERVAL")
+		} else {
+			return interval
+		}
+	} else {
+		logger.Debug("NEWDEPLOY_OBJECT_REAPER_INTERVAL not set or empty, trying to use OBJECT_REAPER_INTERVAL")
+	}
+
+	// Get global reaper interval if newdeploy interval is not set
+	objectReaperIntervalEnv := os.Getenv("OBJECT_REAPER_INTERVAL")
+	if len(objectReaperIntervalEnv) > 0 {
+		interval, err := strconv.Atoi(objectReaperIntervalEnv)
+		if err != nil {
+			logger.Error(fmt.Sprintf("Failed to parse OBJECT_REAPER_INTERVAL, using default %ds interval", defaultReaperInterval))
+		} else {
+			return interval
+		}
+	} else {
+		logger.Debug(fmt.Sprintf("OBJECT_REAPER_INTERVAL, using default %ds interval", defaultReaperInterval))
+	}
+
+	return defaultReaperInterval
 }
