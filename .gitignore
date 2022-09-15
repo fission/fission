@@ -35,3 +35,5 @@ dist/
 manifest/
 .vscode/
 coverage.txt
+
+cosign.key
