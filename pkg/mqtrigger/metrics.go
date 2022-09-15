@@ -37,6 +37,13 @@ var (
 		},
 		labels,
 	)
+	messageLagCount = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "fission_mqt_message_lag",
+			Help: "Total number of messages lag per topic and partition",
+		},
+		[]string{"trigger_name", "trigger_namespace", "topic", "partition"},
+	)
 )
 
 func IncreaseSubscriptionCount() {
@@ -49,4 +56,8 @@ func DecreaseSubscriptionCount() {
 
 func IncreaseMessageCount(trigname, trignamespace string) {
 	messageCount.WithLabelValues(trigname, trignamespace).Inc()
+}
+
+func SetMessageLagCount(trigname, trignamespace, topic, partition string, lag int64) {
+	messageLagCount.WithLabelValues(trigname, trignamespace, topic, partition).Set(float64(lag))
 }
