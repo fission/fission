@@ -6,10 +6,10 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: {{ printf "%s-%s" $.Chart.Name $filename | trunc 63 | trimSuffix "-" }}
-  namespace: {{ $.grafana.Namespace }}
+  namespace: {{ $.Values.grafana.namespace }}
   labels:
     grafana_dashboard: "1"
-    created_by: "{{ .Chart.Name }}"
+    created_by: "{{ $.Chart.Name }}"
 data:
   {{ base $path }}: '{{ $files.Get $path }}'
 ---
