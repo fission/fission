@@ -48,6 +48,7 @@ import (
 	"github.com/fission/fission/pkg/executor/fscache"
 	"github.com/fission/fission/pkg/executor/metrics"
 	"github.com/fission/fission/pkg/executor/reaper"
+	executorUtils "github.com/fission/fission/pkg/executor/util"
 	hpautils "github.com/fission/fission/pkg/executor/util/hpa"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
@@ -132,7 +133,7 @@ func MakeNewDeploy(
 		useIstio:               enableIstio,
 
 		defaultIdlePodReapTime:     2 * time.Minute,
-		objectReaperIntervalSecond: time.Duration(getObjectReaperInterval(logger, 5)) * time.Second,
+		objectReaperIntervalSecond: time.Duration(executorUtils.GetObjectReaperInterval(logger, fv1.ExecutorTypeContainer, 5)) * time.Second,
 		hpaops:                     hpautils.NewHpaOperations(logger, kubernetesClient, instanceID),
 
 		podSpecPatch: podSpecPatch,
@@ -884,35 +885,4 @@ func (deploy *NewDeploy) scaleDeployment(ctx context.Context, deplNS string, dep
 		},
 	}, metav1.UpdateOptions{})
 	return err
-}
-
-func getObjectReaperInterval(logger *zap.Logger, defaultReaperInterval int) int {
-
-	// Trying to get first
-	newdeployObjectReaperIntervalEnv := os.Getenv("NEWDEPLOY_OBJECT_REAPER_INTERVAL")
-	if len(newdeployObjectReaperIntervalEnv) > 0 {
-		interval, err := strconv.Atoi(newdeployObjectReaperIntervalEnv)
-		if err != nil {
-			logger.Error("Failed to parse NEWDEPLOY_OBJECT_REAPER_INTERVAL, trying to use OBJECT_REAPER_INTERVAL")
-		} else {
-			return interval
-		}
-	} else {
-		logger.Debug("NEWDEPLOY_OBJECT_REAPER_INTERVAL not set or empty, trying to use OBJECT_REAPER_INTERVAL")
-	}
-
-	// Get global reaper interval if newdeploy interval is not set
-	objectReaperIntervalEnv := os.Getenv("OBJECT_REAPER_INTERVAL")
-	if len(objectReaperIntervalEnv) > 0 {
-		interval, err := strconv.Atoi(objectReaperIntervalEnv)
-		if err != nil {
-			logger.Error(fmt.Sprintf("Failed to parse OBJECT_REAPER_INTERVAL, using default %ds interval", defaultReaperInterval))
-		} else {
-			return interval
-		}
-	} else {
-		logger.Debug(fmt.Sprintf("OBJECT_REAPER_INTERVAL, using default %ds interval", defaultReaperInterval))
-	}
-
-	return defaultReaperInterval
 }

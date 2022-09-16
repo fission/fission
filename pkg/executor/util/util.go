@@ -19,6 +19,11 @@ package util
 import (
 	"context"
 	"errors"
+	"fmt"
+	"go.uber.org/zap"
+	"os"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -127,4 +132,40 @@ func GetSpecFromConfigMap(ctx context.Context, kubeClient kubernetes.Interface, 
 	err = yaml.Unmarshal([]byte(podSpecPatch.Data["spec"]), &additionalSpec)
 
 	return &additionalSpec, err
+}
+
+func GetObjectReaperInterval(logger *zap.Logger, executorType fv1.ExecutorType, defaultReaperInterval int) int {
+
+	// Trying to get first
+	executorTypeEnvVariableName := getExecutorEnvVariableName(executorType)
+	objectReaperIntervalEnv := os.Getenv(executorTypeEnvVariableName)
+	if len(objectReaperIntervalEnv) > 0 {
+		interval, err := strconv.Atoi(objectReaperIntervalEnv)
+		if err != nil {
+			logger.Error(fmt.Sprintf("Failed to parse %s, trying to use OBJECT_REAPER_INTERVAL", executorTypeEnvVariableName))
+		} else {
+			return interval
+		}
+	} else {
+		logger.Debug(fmt.Sprintf("%s not set or empty, trying to use OBJECT_REAPER_INTERVAL", executorTypeEnvVariableName))
+	}
+
+	// Get global reaper interval if newdeploy interval is not set
+	objectReaperIntervalEnv = os.Getenv("OBJECT_REAPER_INTERVAL")
+	if len(objectReaperIntervalEnv) > 0 {
+		interval, err := strconv.Atoi(objectReaperIntervalEnv)
+		if err != nil {
+			logger.Error(fmt.Sprintf("Failed to parse OBJECT_REAPER_INTERVAL, using default %ds interval", defaultReaperInterval))
+		} else {
+			return interval
+		}
+	} else {
+		logger.Debug(fmt.Sprintf("OBJECT_REAPER_INTERVAL, using default %ds interval", defaultReaperInterval))
+	}
+
+	return defaultReaperInterval
+}
+
+func getExecutorEnvVariableName(executor fv1.ExecutorType) string {
+	return strings.ToUpper(string(executor)) + "_OBJECT_REAPER_INTERVAL"
 }
