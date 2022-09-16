@@ -267,3 +267,29 @@ archives:
 checksum:
   name_template: "checksums.txt"
   algorithm: sha256
+
+# signs the checksum file
+# https://goreleaser.com/customization/sign
+signs:
+- cmd: cosign
+  artifacts: all
+  stdin: '{{ .Env.COSIGN_PWD }}'
+  output: true
+  args:
+    - sign-blob
+    - '--key=cosign.key'
+    - '--output-certificate=${certificate}'
+    - '--output-signature=${signature}'
+    - '${artifact}'
+
+# signs our docker image
+# https://goreleaser.com/customization/docker_sign
+docker_signs:
+- cmd: cosign
+  artifacts: all
+  stdin: '{{ .Env.COSIGN_PWD }}'
+  output: true
+  args:
+    - 'sign'
+    - '--key=cosign.key'
+    - '${artifact}'

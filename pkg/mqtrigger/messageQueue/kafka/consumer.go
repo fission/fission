@@ -100,6 +100,15 @@ func (ch MqtConsumerGroupHandler) Cleanup(session sarama.ConsumerGroupSession) e
 
 // ConsumeClaims implemented to satisfy the sarama.ConsumerGroupHandler interface
 func (ch MqtConsumerGroupHandler) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
+
+	trigger := ch.trigger.Name
+	triggerNamespace := ch.trigger.Namespace
+	topic := claim.Topic()
+	partition := string(claim.Partition())
+
+	// initially set metrics to -1
+	mqtrigger.SetMessageLagCount(trigger, triggerNamespace, topic, partition, -1)
+
 	// Do not move the code below to a goroutine.
 	// The `ConsumeClaim` itself is called within a goroutine
 	for {
@@ -108,8 +117,12 @@ func (ch MqtConsumerGroupHandler) ConsumeClaim(session sarama.ConsumerGroupSessi
 			if msg != nil {
 				ch.kafkaMsgHandler(msg)
 				session.MarkMessage(msg, "")
-				mqtrigger.IncreaseMessageCount(ch.trigger.Name, ch.trigger.Namespace)
+				mqtrigger.IncreaseMessageCount(trigger, triggerNamespace)
 			}
+
+			mqtrigger.SetMessageLagCount(trigger, triggerNamespace, topic, partition,
+				claim.HighWaterMarkOffset()-msg.Offset-1)
+
 		// Should return when `session.Context()` is done.
 		case <-session.Context().Done():
 			return nil
