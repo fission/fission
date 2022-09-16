@@ -157,7 +157,7 @@ func MakeGenericPoolManager(
 		enableIstio:                enableIstio,
 		poolPodC:                   poolPodC,
 		podSpecPatch:               podSpecPatch,
-		objectReaperIntervalSecond: time.Duration(executorUtils.GetObjectReaperInterval(logger, fv1.ExecutorTypeContainer, 5)) * time.Second,
+		objectReaperIntervalSecond: time.Duration(executorUtils.GetObjectReaperInterval(logger, fv1.ExecutorTypePoolmgr, 5)) * time.Second,
 	}
 	gpm.podLister = podInformer.Lister()
 	gpm.podListerSynced = podInformer.Informer().HasSynced

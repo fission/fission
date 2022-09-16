@@ -133,7 +133,7 @@ func MakeNewDeploy(
 		useIstio:               enableIstio,
 
 		defaultIdlePodReapTime:     2 * time.Minute,
-		objectReaperIntervalSecond: time.Duration(executorUtils.GetObjectReaperInterval(logger, fv1.ExecutorTypeContainer, 5)) * time.Second,
+		objectReaperIntervalSecond: time.Duration(executorUtils.GetObjectReaperInterval(logger, fv1.ExecutorTypeNewdeploy, 5)) * time.Second,
 		hpaops:                     hpautils.NewHpaOperations(logger, kubernetesClient, instanceID),
 
 		podSpecPatch: podSpecPatch,
