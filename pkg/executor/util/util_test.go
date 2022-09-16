@@ -129,7 +129,7 @@ func TestGetObjectReaperInterval(t *testing.T) {
 		t.Fatalf(`Get default ObjectReaperInterval failed. Want %d, Got %d`, want, got)
 	}
 
-	// Test when only newdeploy reaper interval set
+	// Test when only specific reaper interval set
 	want = 2
 	os.Setenv("CONTAINER_OBJECT_REAPER_INTERVAL", fmt.Sprint(want))
 	os.Unsetenv("OBJECT_REAPER_INTERVAL")
@@ -147,7 +147,7 @@ func TestGetObjectReaperInterval(t *testing.T) {
 		t.Fatalf(`%d %d`, want, got)
 	}
 
-	// Test when broken newdeploy reaper interval set
+	// Test when broken specific reaper interval set
 	want = 4
 	os.Setenv("CONTAINER_OBJECT_REAPER_INTERVAL", "just some string!")
 	os.Unsetenv("OBJECT_REAPER_INTERVAL")
@@ -156,7 +156,7 @@ func TestGetObjectReaperInterval(t *testing.T) {
 		t.Fatalf(`%d %d`, want, got)
 	}
 
-	// Test when empty newdeploy reaper interval set
+	// Test when empty specific reaper interval set
 	want = 5
 	os.Setenv("CONTAINER_OBJECT_REAPER_INTERVAL", "")
 	os.Unsetenv("OBJECT_REAPER_INTERVAL")
