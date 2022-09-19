@@ -9,5 +9,3 @@ exclusions:
     reason: "Most panels dont need to be filtered by instance"
   panel-units-rule:
     reason: "Some panels are using the 'number' unit which throws a linting error."
-  target-counter-agg-rule:
-    reason: "disabled for fission_archives_total. This metric should be not have total due to naming conventions as its a gauge, not a counter"

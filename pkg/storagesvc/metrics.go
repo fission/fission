@@ -9,7 +9,7 @@ var (
 	functionLabels = []string{}
 	totalArchives  = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "fission_archives_total",
+			Name: "fission_archives",
 			Help: "Number of archives stored",
 		},
 		functionLabels,
