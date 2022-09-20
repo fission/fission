@@ -19,15 +19,16 @@ package util
 import (
 	"context"
 	"fmt"
-	"github.com/fission/fission/pkg/utils/loggerfactory"
 	"os"
 	"reflect"
 	"testing"
 
-	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
+
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
 
 func TestGetSpecFromConfigMap(t *testing.T) {

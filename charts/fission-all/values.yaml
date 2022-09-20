@@ -158,7 +158,7 @@ executor:
   ## Object Reaper
   ## objectReaperInterval (seconds) represents GLOBAL interval to run process that reaps objects after certain idle time.
   ## Also you can set different objectReaperInterval for specific executor type. See poolmgs/newdeploy/container section
-  ## Default: 5
+  ## Default: 5 (in seconds)
   ##
   objectReaperInterval: 5
 
