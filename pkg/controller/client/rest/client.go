@@ -24,7 +24,7 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
-	"golang.org/x/net/context/ctxhttp"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 type (
@@ -39,13 +39,17 @@ type (
 	}
 
 	RESTClient struct {
-		url string
+		url        string
+		HTTPClient *http.Client
 	}
 )
 
 func NewRESTClient(serverUrl string) Interface {
 	return &RESTClient{
 		url: strings.TrimSuffix(serverUrl, "/"),
+		HTTPClient: &http.Client{
+			Transport: otelhttp.NewTransport(http.DefaultTransport),
+		},
 	}
 }
 
@@ -54,7 +58,7 @@ func (c *RESTClient) Create(relativeUrl string, contentType string, payload []by
 	if len(payload) > 0 {
 		reader = bytes.NewReader(payload)
 	}
-	return c.sendRequest(http.MethodPost, c.v2CrdUrl(relativeUrl), map[string]string{"Content-type": contentType}, reader)
+	return c.sendRequest(context.TODO(), http.MethodPost, c.v2CrdUrl(relativeUrl), map[string]string{"Content-type": contentType}, reader)
 }
 
 func (c *RESTClient) Put(relativeUrl string, contentType string, payload []byte) (*http.Response, error) {
@@ -62,15 +66,15 @@ func (c *RESTClient) Put(relativeUrl string, contentType string, payload []byte)
 	if len(payload) > 0 {
 		reader = bytes.NewReader(payload)
 	}
-	return c.sendRequest(http.MethodPut, c.v2CrdUrl(relativeUrl), map[string]string{"Content-type": contentType}, reader)
+	return c.sendRequest(context.TODO(), http.MethodPut, c.v2CrdUrl(relativeUrl), map[string]string{"Content-type": contentType}, reader)
 }
 
 func (c *RESTClient) Get(relativeUrl string) (*http.Response, error) {
-	return c.sendRequest(http.MethodGet, c.v2CrdUrl(relativeUrl), nil, nil)
+	return c.sendRequest(context.TODO(), http.MethodGet, c.v2CrdUrl(relativeUrl), nil, nil)
 }
 
 func (c *RESTClient) Delete(relativeUrl string) error {
-	resp, err := c.sendRequest(http.MethodDelete, c.v2CrdUrl(relativeUrl), nil, nil)
+	resp, err := c.sendRequest(context.TODO(), http.MethodDelete, c.v2CrdUrl(relativeUrl), nil, nil)
 	if err != nil {
 		return err
 	}
@@ -93,27 +97,26 @@ func (c *RESTClient) Proxy(method string, relativeUrl string, payload []byte) (*
 	if len(payload) > 0 {
 		reader = bytes.NewReader(payload)
 	}
-	return c.sendRequest(method, c.proxyUrl(relativeUrl), nil, reader)
+	return c.sendRequest(context.TODO(), method, c.proxyUrl(relativeUrl), nil, reader)
 }
 
 func (c *RESTClient) ServerInfo() (*http.Response, error) {
-	return c.sendRequest(http.MethodGet, c.url, nil, nil)
+	return c.sendRequest(context.TODO(), http.MethodGet, c.url, nil, nil)
 }
 
 func (c *RESTClient) ServerURL() string {
 	return c.url
 }
 
-func (c *RESTClient) sendRequest(method string, relativeUrl string, headers map[string]string, reader io.Reader) (*http.Response, error) {
-	req, err := http.NewRequest(method, relativeUrl, reader)
+func (c *RESTClient) sendRequest(ctx context.Context, method string, relativeUrl string, headers map[string]string, reader io.Reader) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, method, relativeUrl, reader)
 	if err != nil {
 		return nil, err
 	}
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
-	// TODO: accept context
-	return ctxhttp.Do(context.Background(), &http.Client{}, req)
+	return c.HTTPClient.Do(req)
 }
 
 func (c *RESTClient) v2CrdUrl(relativeUrl string) string {

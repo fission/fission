@@ -17,7 +17,6 @@ limitations under the License.
 package archive
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
@@ -40,14 +39,14 @@ func (opts *DeleteSubCommand) do(input cli.Input) error {
 	kubeContext := input.String(flagkey.KubeContext)
 	archiveID := input.String(flagkey.ArchiveID)
 
-	storagesvcURL, err := util.GetStorageURL(kubeContext)
+	storagesvcURL, err := util.GetStorageURL(input.Context(), kubeContext)
 	if err != nil {
 		return err
 	}
 
 	client := storagesvcClient.MakeClient(storagesvcURL.String())
 
-	err = client.Delete(context.Background(), archiveID)
+	err = client.Delete(input.Context(), archiveID)
 	if err != nil {
 		return err
 	}

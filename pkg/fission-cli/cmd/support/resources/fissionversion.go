@@ -17,6 +17,7 @@ limitations under the License.
 package resources
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 
@@ -32,7 +33,7 @@ func NewFissionVersion(client client.Interface) Resource {
 	return FissionVersion{client: client}
 }
 
-func (res FissionVersion) Dump(dumpDir string) {
+func (res FissionVersion) Dump(ctx context.Context, dumpDir string) {
 	ver := util.GetVersion(res.client)
 	file := filepath.Clean(fmt.Sprintf("%v/%v", dumpDir, "fission-version.txt"))
 	writeToFile(file, ver)

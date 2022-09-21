@@ -41,7 +41,7 @@ func (opts *GetURLSubCommand) do(input cli.Input) error {
 	kubeContext := input.String(flagkey.KubeContext)
 	archiveID := input.String(flagkey.ArchiveID)
 
-	serverURL, err := util.GetStorageURL(kubeContext)
+	serverURL, err := util.GetStorageURL(input.Context(), kubeContext)
 	if err != nil {
 		return err
 	}
@@ -61,7 +61,7 @@ func (opts *GetURLSubCommand) do(input cli.Input) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("Error getting URL. Exited with Status:  %s", resp.Status)
+		return fmt.Errorf("error getting URL. Exited with Status:  %s", resp.Status)
 	}
 
 	storageType := resp.Header.Get("X-FISSION-STORAGETYPE")

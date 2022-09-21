@@ -17,6 +17,7 @@ limitations under the License.
 package dummy
 
 import (
+	"context"
 	"time"
 
 	fCli "github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
@@ -31,6 +32,10 @@ type Cli struct {
 // TestFlagSet returns a flag set for unit test purpose.
 func TestFlagSet() Cli {
 	return Cli{c: make(map[string]interface{})}
+}
+
+func (u Cli) Context() context.Context {
+	return context.TODO()
 }
 
 // Set allows to set any kinds of value with given key.

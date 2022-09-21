@@ -17,6 +17,7 @@ limitations under the License.
 package util
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"os"
@@ -53,13 +54,13 @@ func GetFissionNamespace() string {
 	return fissionNamespace
 }
 
-func GetApplicationUrl(selector string, kubeContext string) (string, error) {
+func GetApplicationUrl(ctx context.Context, selector string, kubeContext string) (string, error) {
 	var serverUrl string
 	// Use FISSION_URL env variable if set; otherwise, port-forward to controller.
 	fissionUrl := os.Getenv("FISSION_URL")
 	if len(fissionUrl) == 0 {
 		fissionNamespace := GetFissionNamespace()
-		localPort, err := SetupPortForward(fissionNamespace, selector, kubeContext)
+		localPort, err := SetupPortForward(ctx, fissionNamespace, selector, kubeContext)
 		if err != nil {
 			return "", err
 		}
@@ -213,7 +214,7 @@ func GetServerURL(input cli.Input) (serverUrl string, err error) {
 	kubeContext := input.String(flagkey.KubeContext)
 	if len(serverUrl) == 0 {
 		// starts local portforwarder etc.
-		serverUrl, err = GetApplicationUrl("application=fission-api", kubeContext)
+		serverUrl, err = GetApplicationUrl(input.Context(), "application=fission-api", kubeContext)
 		if err != nil {
 			return "", err
 		}
@@ -445,8 +446,8 @@ func ApplyLabelsAndAnnotations(input cli.Input, objectMeta *metav1.ObjectMeta) e
 	return nil
 }
 
-func GetStorageURL(kubeContext string) (*url.URL, error) {
-	storageLocalPort, err := SetupPortForward(GetFissionNamespace(), "application=fission-storage", kubeContext)
+func GetStorageURL(ctx context.Context, kubeContext string) (*url.URL, error) {
+	storageLocalPort, err := SetupPortForward(ctx, GetFissionNamespace(), "application=fission-storage", kubeContext)
 	if err != nil {
 		return nil, err
 	}

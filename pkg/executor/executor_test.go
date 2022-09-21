@@ -143,12 +143,12 @@ func TestExecutor(t *testing.T) {
 	panicIf(err)
 
 	// make sure CRD types exist on cluster
-	err = crd.EnsureFissionCRDs(logger, apiExtClient)
+	err = crd.EnsureFissionCRDs(context.TODO(), logger, apiExtClient)
 	if err != nil {
 		log.Panicf("failed to ensure crds: %v", err)
 	}
 
-	err = crd.WaitForCRDs(fissionClient)
+	err = crd.WaitForCRDs(context.TODO(), fissionClient)
 	if err != nil {
 		log.Panicf("failed to wait crds: %v", err)
 	}
