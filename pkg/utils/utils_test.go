@@ -19,6 +19,7 @@ package utils
 import (
 	"bytes"
 	"io"
+	"os"
 	"reflect"
 	"testing"
 
@@ -77,6 +78,86 @@ func TestGetChecksum(t *testing.T) {
 			}
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("GetChecksum() got = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGetStringValueFromEnv(t *testing.T) {
+	varName := "TEST_VAR"
+	tests := []struct {
+		name    string
+		value   string
+		want    string
+		wantErr bool
+	}{
+		{
+			name:    "empty string case",
+			value:   "",
+			want:    "",
+			wantErr: true,
+		},
+		{
+			name:    "string case",
+			value:   "test sting",
+			want:    "test sting",
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			os.Setenv(varName, tt.value)
+			got, err := GetStringValueFromEnv(varName)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("GetStringValueFromEnv() error = %v, wantErr %v, got %s", err, tt.wantErr, got)
+				return
+			}
+		})
+	}
+
+}
+
+func TestGetUIntValueFromEnv(t *testing.T) {
+	varName := "TEST_VAR"
+	tests := []struct {
+		name    string
+		value   string
+		want    uint
+		wantErr bool
+	}{
+		{
+			name:    "empty string case",
+			value:   "",
+			want:    0,
+			wantErr: true,
+		},
+		{
+			name:    "string case",
+			value:   "test sting",
+			want:    0,
+			wantErr: true,
+		},
+		{
+			name:    "not uint case",
+			value:   "-100",
+			want:    0,
+			wantErr: true,
+		},
+		{
+			name:    "uint case",
+			value:   "7",
+			want:    7,
+			wantErr: false,
+		}}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			os.Setenv(varName, tt.value)
+			got, err := GetUIntValueFromEnv(varName)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("GetUIntValueFromEnv() error = %v, wantErr %v, got %d", err, tt.wantErr, got)
+				return
 			}
 		})
 	}
