@@ -22,3 +22,9 @@ func CopyStringMap(m map[string]string) map[string]string {
 	}
 	return n
 }
+
+func MergeStringMap(targetMap map[string]string, sourceMap map[string]string) {
+	for k, v := range sourceMap {
+		targetMap[k] = v
+	}
+}
