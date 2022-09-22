@@ -747,17 +747,14 @@ func (deploy *NewDeploy) getDeployLabels(fnMeta metav1.ObjectMeta, envMeta metav
 		fv1.FUNCTION_NAMESPACE:    fnMeta.Namespace,
 		fv1.FUNCTION_UID:          string(fnMeta.UID),
 	}
-	for k, v := range envMeta.Labels {
-		deployLabels[k] = v
-	}
+	maps.MergeStringMap(deployLabels, envMeta.Labels)
+	maps.MergeStringMap(deployLabels, fnMeta.Labels)
 	return deployLabels
 }
 
 func (deploy *NewDeploy) getDeployAnnotations(fnMeta metav1.ObjectMeta, envMeta metav1.ObjectMeta) map[string]string {
 	deployAnnotations := maps.CopyStringMap(envMeta.Annotations)
-	for k, v := range fnMeta.Annotations {
-		deployAnnotations[k] = v
-	}
+	maps.MergeStringMap(deployAnnotations, fnMeta.Annotations)
 	deployAnnotations[fv1.EXECUTOR_INSTANCEID_LABEL] = deploy.instanceID
 	deployAnnotations[fv1.FUNCTION_RESOURCE_VERSION] = fnMeta.ResourceVersion
 	return deployAnnotations
