@@ -121,7 +121,7 @@ securityContext:
 func TestGetObjectReaperInterval(t *testing.T) {
 	logger := loggerfactory.GetLogger()
 
-	var want int
+	var want uint
 
 	// Test default reaper interval
 	want = 1

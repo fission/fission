@@ -20,8 +20,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -33,6 +31,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/utils"
 )
 
 // ApplyImagePullSecret applies image pull secret to the give pod spec.
@@ -134,38 +133,25 @@ func GetSpecFromConfigMap(ctx context.Context, kubeClient kubernetes.Interface, 
 	return &additionalSpec, err
 }
 
-func GetObjectReaperInterval(logger *zap.Logger, executorType fv1.ExecutorType, defaultReaperInterval int) int {
+func GetObjectReaperInterval(logger *zap.Logger, executorType fv1.ExecutorType, defaultReaperInterval uint) uint {
 
-	// Trying to get first
-	executorTypeEnvVariableName := getExecutorEnvVariableName(executorType)
-	objectReaperIntervalEnv := os.Getenv(executorTypeEnvVariableName)
-	if len(objectReaperIntervalEnv) > 0 {
-		interval, err := strconv.Atoi(objectReaperIntervalEnv)
+	// TODO think about migration to executor package as const.
+	globalEnvVarName := "OBJECT_REAPER_INTERVAL"
+
+	executorTypeEnvVarName := getExecutorEnvVarName(executorType)
+	keys := []string{executorTypeEnvVarName, globalEnvVarName}
+	for _, k := range keys {
+		interval, err := utils.GetUintValueFromEnv(k)
 		if err != nil {
-			logger.Error(fmt.Sprintf("Failed to parse %s, trying to use OBJECT_REAPER_INTERVAL", executorTypeEnvVariableName))
+			logger.Debug(fmt.Sprintf("Failed to parse %s", k))
 		} else {
 			return interval
 		}
-	} else {
-		logger.Debug(fmt.Sprintf("%s not set or empty, trying to use OBJECT_REAPER_INTERVAL", executorTypeEnvVariableName))
-	}
-
-	// Get global reaper interval if newdeploy interval is not set
-	objectReaperIntervalEnv = os.Getenv("OBJECT_REAPER_INTERVAL")
-	if len(objectReaperIntervalEnv) > 0 {
-		interval, err := strconv.Atoi(objectReaperIntervalEnv)
-		if err != nil {
-			logger.Error(fmt.Sprintf("Failed to parse OBJECT_REAPER_INTERVAL, using default %ds interval", defaultReaperInterval))
-		} else {
-			return interval
-		}
-	} else {
-		logger.Debug(fmt.Sprintf("OBJECT_REAPER_INTERVAL, using default %ds interval", defaultReaperInterval))
 	}
 
 	return defaultReaperInterval
 }
 
-func getExecutorEnvVariableName(executor fv1.ExecutorType) string {
+func getExecutorEnvVarName(executor fv1.ExecutorType) string {
 	return strings.ToUpper(string(executor)) + "_OBJECT_REAPER_INTERVAL"
 }
