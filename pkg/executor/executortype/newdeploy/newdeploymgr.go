@@ -455,7 +455,7 @@ func (deploy *NewDeploy) fnCreate(ctx context.Context, fn *fv1.Function) (*fscac
 
 	kubeObjRefs := []apiv1.ObjectReference{
 		{
-			//obj.TypeMeta.Kind does not work hence this, needs investigation and a fix
+			// obj.TypeMeta.Kind does not work hence this, needs investigation and a fix
 			Kind:            "deployment",
 			Name:            depl.ObjectMeta.Name,
 			APIVersion:      depl.TypeMeta.APIVersion,
@@ -755,6 +755,9 @@ func (deploy *NewDeploy) getDeployLabels(fnMeta metav1.ObjectMeta, envMeta metav
 
 func (deploy *NewDeploy) getDeployAnnotations(fnMeta metav1.ObjectMeta, envMeta metav1.ObjectMeta) map[string]string {
 	deployAnnotations := maps.CopyStringMap(envMeta.Annotations)
+	for k, v := range fnMeta.Annotations {
+		deployAnnotations[k] = v
+	}
 	deployAnnotations[fv1.EXECUTOR_INSTANCEID_LABEL] = deploy.instanceID
 	deployAnnotations[fv1.FUNCTION_RESOURCE_VERSION] = fnMeta.ResourceVersion
 	return deployAnnotations
