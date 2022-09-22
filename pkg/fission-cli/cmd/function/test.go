@@ -62,7 +62,7 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 	}
 
 	// Portforward to the fission router
-	localRouterPort, err := util.SetupPortForward(util.GetFissionNamespace(), "application=fission-router", kubeContext)
+	localRouterPort, err := util.SetupPortForward(input.Context(), util.GetFissionNamespace(), "application=fission-router", kubeContext)
 	if err != nil {
 		return err
 	}
@@ -107,10 +107,10 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 
 	testTimeout := input.Duration(flagkey.FnTestTimeout)
 	if testTimeout <= 0*time.Second {
-		ctx = context.Background()
+		ctx = input.Context()
 	} else {
 		var closeCtx context.CancelFunc
-		ctx, closeCtx = context.WithTimeout(context.Background(), input.Duration(flagkey.FnTestTimeout))
+		ctx, closeCtx = context.WithTimeout(input.Context(), input.Duration(flagkey.FnTestTimeout))
 		defer closeCtx()
 	}
 

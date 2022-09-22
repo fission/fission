@@ -879,7 +879,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "fission_archives_total",
+          "expr": "fission_archives",
           "legendFormat": "Namespace: {{namespace}} Pod: {{pod}}",
           "range": true,
           "refId": "A"
@@ -970,7 +970,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "rate(fission_archives_total[$__rate_interval])",
+          "expr": "rate(fission_archives[$__rate_interval])",
           "legendFormat": "Namespace: {{namespace}} Pod: {{pod}}",
           "range": true,
           "refId": "A"

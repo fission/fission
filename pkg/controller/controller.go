@@ -32,12 +32,12 @@ func Start(ctx context.Context, logger *zap.Logger, port int, unitTestFlag bool)
 		cLogger.Fatal("failed to connect to k8s API", zap.Error(err))
 	}
 
-	err = crd.EnsureFissionCRDs(cLogger, apiExtClient)
+	err = crd.EnsureFissionCRDs(ctx, cLogger, apiExtClient)
 	if err != nil {
 		cLogger.Fatal("failed to find fission CRDs", zap.Error(err))
 	}
 
-	err = crd.WaitForCRDs(fc)
+	err = crd.WaitForCRDs(ctx, fc)
 	if err != nil {
 		cLogger.Fatal("error waiting for CRDs", zap.Error(err))
 	}

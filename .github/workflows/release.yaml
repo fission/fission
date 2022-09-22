@@ -62,6 +62,12 @@ jobs:
         env:
           KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
 
+      - name: Generate yaml for manifest, Minikube and Openshift installation
+        run: ${GITHUB_WORKSPACE}/hack/build-yaml.sh $VERSION
+        env:
+          VERSION: ${{ steps.get_version.outputs.VERSION }}
+        shell: bash
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v3
         with:

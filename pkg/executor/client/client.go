@@ -27,6 +27,7 @@ import (
 
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/pkg/errors"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -55,6 +56,7 @@ type (
 // MakeClient initializes and returns a Client instance.
 func MakeClient(logger *zap.Logger, executorURL string) *Client {
 	hc := retryablehttp.NewClient()
+	hc.HTTPClient.Transport = otelhttp.NewTransport(hc.HTTPClient.Transport)
 	c := &Client{
 		logger:      logger.Named("executor_client"),
 		executorURL: strings.TrimSuffix(executorURL, "/"),

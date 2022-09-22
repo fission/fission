@@ -17,7 +17,6 @@ limitations under the License.
 package archive
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
@@ -46,13 +45,13 @@ func (opts *DownloadSubCommand) do(input cli.Input) error {
 		archiveOutput = strings.TrimPrefix(archiveID, "/fission/fission-functions/")
 	}
 
-	storageAccessURL, err := util.GetStorageURL(kubeContext)
+	storageAccessURL, err := util.GetStorageURL(input.Context(), kubeContext)
 	if err != nil {
 		return err
 	}
 
 	client := storagesvcClient.MakeClient(storageAccessURL.String())
-	err = client.Download(context.Background(), archiveID, archiveOutput)
+	err = client.Download(input.Context(), archiveID, archiveOutput)
 	if err != nil {
 		return err
 	}

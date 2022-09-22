@@ -130,7 +130,7 @@ func (opts *ApplySubCommand) run(input cli.Input) error {
 		}
 
 		// make changes to the cluster based on the specs
-		pkgMetas, as, err := applyResources(opts.Client(), specDir, fr, deleteResources, input.Bool(flagkey.SpecAllowConflicts))
+		pkgMetas, as, err := applyResources(input.Context(), opts.Client(), specDir, fr, deleteResources, input.Bool(flagkey.SpecAllowConflicts))
 		if err != nil {
 			return errors.Wrap(err, "error applying specs")
 		}
@@ -141,7 +141,7 @@ func (opts *ApplySubCommand) run(input cli.Input) error {
 			pbw.addPackages(pkgMetas)
 		}
 
-		ctx, pkgWatchCancel := context.WithCancel(context.Background())
+		ctx, pkgWatchCancel := context.WithCancel(input.Context())
 
 		if watchResources {
 			// if we're watching for files, we don't need to wait for builds to complete
@@ -283,7 +283,7 @@ func pluralize(num int, word string) string {
 }
 
 // applyArchives figures out the set of archives that need to be uploaded, and uploads them.
-func applyArchives(fclient client.Interface, specDir string, fr *FissionResources) error {
+func applyArchives(ctx context.Context, fclient client.Interface, specDir string, fr *FissionResources) error {
 
 	// archive:// URL -> archive map.
 	archiveFiles := make(map[string]fv1.Archive)
@@ -329,7 +329,6 @@ func applyArchives(fclient client.Interface, specDir string, fr *FissionResource
 			// doesn't exist, upload
 			fmt.Printf("uploading archive %v\n", name)
 			// ar.URL is actually a local filename at this stage
-			ctx := context.Background()
 			uploadedAr, err := pkgutil.UploadArchiveFile(ctx, fclient, ar.URL)
 			if err != nil {
 				return err
@@ -357,12 +356,12 @@ func applyArchives(fclient client.Interface, specDir string, fr *FissionResource
 }
 
 // applyResources applies the given set of fission resources.
-func applyResources(fclient client.Interface, specDir string, fr *FissionResources, delete bool, specAllowConflicts bool) (map[string]metav1.ObjectMeta, map[string]ResourceApplyStatus, error) {
+func applyResources(ctx context.Context, fclient client.Interface, specDir string, fr *FissionResources, delete bool, specAllowConflicts bool) (map[string]metav1.ObjectMeta, map[string]ResourceApplyStatus, error) {
 
 	applyStatus := make(map[string]ResourceApplyStatus)
 
 	// upload archives that need to be uploaded. Changes archive references in fr.Packages.
-	err := applyArchives(fclient, specDir, fr)
+	err := applyArchives(ctx, fclient, specDir, fr)
 	if err != nil {
 		return nil, nil, err
 	}

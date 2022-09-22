@@ -17,6 +17,7 @@ limitations under the License.
 package resources
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -29,7 +30,7 @@ import (
 )
 
 type Resource interface {
-	Dump(string)
+	Dump(context.Context, string)
 }
 
 func getFileName(dumpdir string, meta metav1.ObjectMeta) string {
