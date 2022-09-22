@@ -66,7 +66,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 
 	kubeContext := input.String(flagkey.KubeContext)
 	// Portforward to the fission router
-	localRouterPort, err := util.SetupPortForward(util.GetFissionNamespace(), "application=fission-router", kubeContext)
+	localRouterPort, err := util.SetupPortForward(input.Context(), util.GetFissionNamespace(), "application=fission-router", kubeContext)
 	if err != nil {
 		return err
 	}

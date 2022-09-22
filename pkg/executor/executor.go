@@ -259,7 +259,7 @@ func StartExecutor(ctx context.Context, logger *zap.Logger, functionNamespace st
 		return errors.Wrap(err, "failed to get kubernetes client")
 	}
 
-	err = crd.WaitForCRDs(fissionClient)
+	err = crd.WaitForCRDs(ctx, fissionClient)
 	if err != nil {
 		return errors.Wrap(err, "error waiting for CRDs")
 	}

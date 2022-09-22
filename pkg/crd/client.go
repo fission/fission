@@ -88,11 +88,11 @@ func MakeFissionClient() (versioned.Interface, kubernetes.Interface, apiextensio
 }
 
 // WaitForCRDs does a timeout to check if CRDs have been installed
-func WaitForCRDs(fissionClient versioned.Interface) error {
+func WaitForCRDs(ctx context.Context, fissionClient versioned.Interface) error {
 	start := time.Now()
 	for {
 		fi := fissionClient.CoreV1().Functions(metav1.NamespaceDefault)
-		_, err := fi.List(context.TODO(), metav1.ListOptions{})
+		_, err := fi.List(ctx, metav1.ListOptions{})
 		if err != nil {
 			time.Sleep(100 * time.Millisecond)
 		} else {

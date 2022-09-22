@@ -43,7 +43,7 @@ const maxDuration time.Duration = 2000
 // is found by looking for a service in the same namespace and using
 // its targetPort. Once the port forward is started, wait for it to
 // start accepting connections before returning.
-func SetupPortForward(namespace, labelSelector string, kubeContext string) (string, error) {
+func SetupPortForward(ctx context.Context, namespace, labelSelector string, kubeContext string) (string, error) {
 	console.Verbose(2, "Setting up port forward to %s in namespace %s",
 		labelSelector, namespace)
 
@@ -71,7 +71,7 @@ func SetupPortForward(namespace, labelSelector string, kubeContext string) (stri
 
 	console.Verbose(2, "Starting port forward from local port %v", localPort)
 
-	readyC, _, err := runPortForward(context.Background(), labelSelector, localPort, namespace, kubeContext)
+	readyC, _, err := runPortForward(ctx, labelSelector, localPort, namespace, kubeContext)
 	if err != nil {
 		fmt.Printf("Error forwarding to port %v: %s", localPort, err.Error())
 		return "", err

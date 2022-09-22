@@ -27,7 +27,7 @@ import (
 )
 
 // EnsureFissionCRDs checks if all Fission CRDs are present
-func EnsureFissionCRDs(logger *zap.Logger, clientset apiextensionsclient.Interface) error {
+func EnsureFissionCRDs(ctx context.Context, logger *zap.Logger, clientset apiextensionsclient.Interface) error {
 	crdsExpected := []string{
 		"canaryconfigs.fission.io",
 		"environments.fission.io",
@@ -40,7 +40,7 @@ func EnsureFissionCRDs(logger *zap.Logger, clientset apiextensionsclient.Interfa
 	}
 	errs := &multierror.Error{}
 	for _, crdName := range crdsExpected {
-		crd, err := clientset.ApiextensionsV1().CustomResourceDefinitions().Get(context.TODO(), crdName, metav1.GetOptions{})
+		crd, err := clientset.ApiextensionsV1().CustomResourceDefinitions().Get(ctx, crdName, metav1.GetOptions{})
 		if err != nil {
 			errs = multierror.Append(errs, fmt.Errorf("CRD %s not found: %s", crdName, err))
 		}

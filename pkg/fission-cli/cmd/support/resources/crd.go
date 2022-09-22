@@ -17,6 +17,7 @@ limitations under the License.
 package resources
 
 import (
+	"context"
 	"fmt"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -46,7 +47,7 @@ func NewCrdDumper(client client.Interface, crdType string) Resource {
 	return CrdDumper{client: client, crdType: crdType}
 }
 
-func (res CrdDumper) Dump(dumpDir string) {
+func (res CrdDumper) Dump(ctx context.Context, dumpDir string) {
 
 	switch res.crdType {
 	case CrdEnvironment:

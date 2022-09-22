@@ -137,7 +137,7 @@ func (opts *DumpSubCommand) do(input cli.Input) error {
 		wg.Add(1)
 		go func(res resources.Resource, dir string) {
 			defer wg.Done()
-			res.Dump(dir)
+			res.Dump(input.Context(), dir)
 		}(res, dir)
 	}
 

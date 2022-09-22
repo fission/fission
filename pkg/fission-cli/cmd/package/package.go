@@ -17,7 +17,6 @@ limitations under the License.
 package _package
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"os"
@@ -128,7 +127,7 @@ func CreateArchive(client client.Interface, input cli.Input, includeFiles []stri
 				return nil, err
 			}
 			file := filepath.Join(tmpDir, id.String())
-			err = utils.DownloadUrl(context.Background(), http.DefaultClient, fileURL, file)
+			err = utils.DownloadUrl(input.Context(), http.DefaultClient, fileURL, file)
 			if err != nil {
 				return nil, errors.Wrap(err, "error downloading file from the given URL")
 			}
@@ -193,8 +192,7 @@ func CreateArchive(client client.Interface, input cli.Input, includeFiles []stri
 		return nil, err
 	}
 
-	ctx := context.Background()
-	return pkgutil.UploadArchiveFile(ctx, client, archivePath)
+	return pkgutil.UploadArchiveFile(input.Context(), client, archivePath)
 }
 
 // makeArchiveFile creates a zip file from the given list of input files,

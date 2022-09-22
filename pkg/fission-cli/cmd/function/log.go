@@ -59,7 +59,7 @@ func (opts *LogSubCommand) do(input cli.Input) error {
 		return errors.Wrap(err, "error getting function")
 	}
 
-	server, err := util.GetApplicationUrl("application=fission-api", kubeContext)
+	server, err := util.GetApplicationUrl(input.Context(), "application=fission-api", kubeContext)
 	if err != nil {
 		return err
 	}
@@ -72,7 +72,7 @@ func (opts *LogSubCommand) do(input cli.Input) error {
 
 	requestChan := make(chan struct{})
 	responseChan := make(chan struct{})
-	ctx := context.Background()
+	ctx := input.Context()
 
 	go func(ctx context.Context, requestChan, responseChan chan struct{}) {
 		t := time.Unix(0, 0*int64(time.Millisecond))

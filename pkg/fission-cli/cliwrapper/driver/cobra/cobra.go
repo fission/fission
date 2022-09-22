@@ -17,6 +17,7 @@ limitations under the License.
 package cobra
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -215,6 +216,10 @@ func WrapperChain(actions ...cmd.CommandAction) func(*cobra.Command, []string) e
 		}
 		return nil
 	}
+}
+
+func (u Cli) Context() context.Context {
+	return u.c.Context()
 }
 
 func (u Cli) IsSet(key string) bool {

@@ -17,11 +17,14 @@ limitations under the License.
 package cli
 
 import (
+	"context"
 	"time"
 )
 
 type (
 	Input interface {
+		Context() context.Context
+
 		//Parse(input interface{}) error
 
 		// IsSet checks whether a flag has been set by the user
