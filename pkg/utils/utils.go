@@ -235,7 +235,7 @@ func GetStringValueFromEnv(envVar string) (string, error) {
 	return v, nil
 }
 
-func GetUintValueFromEnv(envVar string) (uint, error) {
+func GetUIntValueFromEnv(envVar string) (uint, error) {
 	s, err := GetStringValueFromEnv(envVar)
 	if err != nil {
 		return 0, err

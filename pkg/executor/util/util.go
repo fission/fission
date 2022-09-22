@@ -141,7 +141,7 @@ func GetObjectReaperInterval(logger *zap.Logger, executorType fv1.ExecutorType, 
 	executorTypeEnvVarName := getExecutorEnvVarName(executorType)
 	keys := []string{executorTypeEnvVarName, globalEnvVarName}
 	for _, k := range keys {
-		interval, err := utils.GetUintValueFromEnv(k)
+		interval, err := utils.GetUIntValueFromEnv(k)
 		if err != nil {
 			logger.Debug(fmt.Sprintf("Failed to parse %s", k))
 		} else {
