@@ -89,6 +89,7 @@ var (
 	NamespaceTrigger     = Flag{Type: String, Name: flagkey.NamespaceTrigger, Aliases: []string{"triggerns"}, Usage: "Namespace for trigger object", DefaultValue: metav1.NamespaceDefault}
 	NamespaceCanary      = Flag{Type: String, Name: flagkey.NamespaceCanary, Aliases: []string{"canaryns"}, Usage: "Namespace for canary config object", DefaultValue: metav1.NamespaceDefault}
 	Namespace            = Flag{Type: String, Name: flagkey.Namespace, Aliases: []string{"ns"}, Usage: "Namespace for resource", DefaultValue: metav1.NamespaceDefault}
+	AllNamespace         = Flag{Type: String, Name: flagkey.Namespace, Aliases: []string{"ns"}, Usage: "Namespace for resource", DefaultValue: metav1.NamespaceDefault}
 
 	RunTimeMinCPU    = Flag{Type: Int, Name: flagkey.RuntimeMincpu, Usage: "Minimum CPU to be assigned to pod (In millicore, minimum 1)"}
 	RunTimeMaxCPU    = Flag{Type: Int, Name: flagkey.RuntimeMaxcpu, Usage: "Maximum CPU to be assigned to pod (In millicore, minimum 1)"}

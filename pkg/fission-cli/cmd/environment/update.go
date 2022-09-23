@@ -54,14 +54,11 @@ func (opts *UpdateSubCommand) do(input cli.Input) error {
 
 func (opts *UpdateSubCommand) complete(input cli.Input) error {
 
-	namespace := flagkey.NamespaceEnvironment // Once deprecated we can remove the if condition
-	if input.String(flagkey.Namespace) != "default" {
-		namespace = flagkey.Namespace
-	}
+	namespace := util.GetResourceNamespace(input, flagkey.NamespaceEnvironment)
 
 	env, err := opts.Client().V1().Environment().Get(&metav1.ObjectMeta{
 		Name:      input.String(flagkey.EnvName),
-		Namespace: input.String(namespace),
+		Namespace: namespace,
 	})
 	if err != nil {
 		return errors.Wrap(err, "error finding environment")

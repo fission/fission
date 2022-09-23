@@ -105,11 +105,8 @@ func createEnvironmentFromCmd(input cli.Input) (*fv1.Environment, error) {
 
 	envName := input.String(flagkey.EnvName)
 	envImg := input.String(flagkey.EnvImage)
-	envNamespace := input.String(flagkey.NamespaceEnvironment)
-	// will overide the envNamespace value because the flagkey.NamespaceEnvironment flag is deprecated.
-	if input.String(flagkey.Namespace) != "default" {
-		envNamespace = input.String(flagkey.Namespace)
-	}
+
+	envNamespace := util.GetResourceNamespace(input, flagkey.NamespaceEnvironment)
 	envBuildCmd := input.String(flagkey.EnvBuildcommand)
 	envExternalNetwork := input.Bool(flagkey.EnvExternalNetwork)
 	keepArchive := input.Bool(flagkey.EnvKeeparchive)

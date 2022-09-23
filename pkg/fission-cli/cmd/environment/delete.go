@@ -38,13 +38,11 @@ func Delete(input cli.Input) error {
 
 func (opts *DeleteSubCommand) do(input cli.Input) error {
 
-	namespace := flagkey.NamespaceEnvironment // Once deprecated we can remove the if condition
-	if input.String(flagkey.Namespace) != "default" {
-		namespace = flagkey.Namespace
-	}
+	namespace := util.GetResourceNamespace(input, flagkey.NamespaceEnvironment)
+
 	m := &metav1.ObjectMeta{
 		Name:      input.String(flagkey.EnvName),
-		Namespace: input.String(namespace),
+		Namespace: namespace,
 	}
 
 	if !input.Bool(flagkey.EnvForce) {

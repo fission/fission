@@ -51,10 +51,7 @@ func (opts *UpdateSubCommand) do(input cli.Input) error {
 
 func (opts *UpdateSubCommand) complete(input cli.Input) error {
 	fnName := input.String(flagkey.FnName)
-	fnNamespace := input.String(flagkey.NamespaceFunction)
-	if input.String(flagkey.Namespace) != "default" {
-		fnNamespace = input.String(flagkey.Namespace)
-	}
+	fnNamespace := util.GetResourceNamespace(input, flagkey.NamespaceFunction)
 
 	function, err := opts.Client().V1().Function().Get(&metav1.ObjectMeta{
 		Name:      input.String(flagkey.FnName),

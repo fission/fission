@@ -38,10 +38,7 @@ func Delete(input cli.Input) error {
 
 func (opts *DeleteSubCommand) do(input cli.Input) error {
 
-	namespace := input.String(flagkey.NamespaceFunction)
-	if input.String(flagkey.Namespace) != "default" {
-		namespace = input.String(flagkey.Namespace)
-	}
+	namespace := util.GetResourceNamespace(input, flagkey.NamespaceFunction)
 	m := &metav1.ObjectMeta{
 		Name:      input.String(flagkey.FnName),
 		Namespace: namespace,

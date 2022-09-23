@@ -459,3 +459,12 @@ func GetStorageURL(ctx context.Context, kubeContext string) (*url.URL, error) {
 
 	return serverURL, nil
 }
+
+func GetResourceNamespace(input cli.Input, deprecatedFlag string) string {
+	namespace := input.String(deprecatedFlag)
+
+	if input.String(flagkey.Namespace) != "default" {
+		namespace = input.String(flagkey.Namespace)
+	}
+	return namespace
+}
