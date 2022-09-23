@@ -24,14 +24,13 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 )
 
-func (deploy *NewDeploy) FunctionEventHandlers() k8sCache.ResourceEventHandlerFuncs {
+func (deploy *NewDeploy) FunctionEventHandlers(ctx context.Context) k8sCache.ResourceEventHandlerFuncs {
 	return k8sCache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			// TODO: A workaround to process items in parallel. We should use workqueue ("k8s.io/client-go/util/workqueue")
 			// and worker pattern to process items instead of moving process to another goroutine.
 			// example: https://github.com/kubernetes/kubernetes/blob/master/pkg/controller/job/job_controller.go
 			go func() {
-				ctx := context.Background()
 				fn := obj.(*fv1.Function)
 				deploy.logger.Debug("create deployment for function", zap.Any("fn", fn.ObjectMeta), zap.Any("fnspec", fn.Spec))
 				_, err := deploy.createFunction(ctx, fn)
@@ -46,7 +45,6 @@ func (deploy *NewDeploy) FunctionEventHandlers() k8sCache.ResourceEventHandlerFu
 		DeleteFunc: func(obj interface{}) {
 			fn := obj.(*fv1.Function)
 			go func() {
-				ctx := context.Background()
 				err := deploy.deleteFunction(ctx, fn)
 				if err != nil {
 					deploy.logger.Error("error deleting function",
@@ -59,7 +57,6 @@ func (deploy *NewDeploy) FunctionEventHandlers() k8sCache.ResourceEventHandlerFu
 			oldFn := oldObj.(*fv1.Function)
 			newFn := newObj.(*fv1.Function)
 			go func() {
-				ctx := context.Background()
 				err := deploy.updateFunction(ctx, oldFn, newFn)
 				if err != nil {
 					deploy.logger.Error("error updating function",

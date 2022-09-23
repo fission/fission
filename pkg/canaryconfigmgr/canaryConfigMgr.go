@@ -49,7 +49,7 @@ type canaryConfigMgr struct {
 	canaryCfgCancelFuncMap *canaryConfigCancelFuncMap
 }
 
-func MakeCanaryConfigMgr(logger *zap.Logger, fissionClient versioned.Interface, kubeClient kubernetes.Interface, prometheusSvc string) (*canaryConfigMgr, error) {
+func MakeCanaryConfigMgr(ctx context.Context, logger *zap.Logger, fissionClient versioned.Interface, kubeClient kubernetes.Interface, prometheusSvc string) (*canaryConfigMgr, error) {
 	if prometheusSvc == "" {
 		logger.Info("try to retrieve prometheus server information from environment variables")
 
@@ -96,16 +96,16 @@ func MakeCanaryConfigMgr(logger *zap.Logger, fissionClient versioned.Interface, 
 	informerFactory := genInformer.NewSharedInformerFactory(fissionClient, time.Minute*30)
 	informer := informerFactory.Core().V1().CanaryConfigs().Informer()
 	configMgr.canaryConfigInformer = &informer
-	configMgr.CanaryConfigEventHandlers()
+	configMgr.CanaryConfigEventHandlers(ctx)
 	return configMgr, nil
 }
 
-func (canaryCfgMgr *canaryConfigMgr) CanaryConfigEventHandlers() {
+func (canaryCfgMgr *canaryConfigMgr) CanaryConfigEventHandlers(ctx context.Context) {
 	(*canaryCfgMgr.canaryConfigInformer).AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			canaryConfig := obj.(*fv1.CanaryConfig)
 			if canaryConfig.Status.Status == fv1.CanaryConfigStatusPending {
-				go canaryCfgMgr.addCanaryConfig(canaryConfig)
+				go canaryCfgMgr.addCanaryConfig(ctx, canaryConfig)
 			}
 		},
 		DeleteFunc: func(obj interface{}) {
@@ -121,9 +121,9 @@ func (canaryCfgMgr *canaryConfigMgr) CanaryConfigEventHandlers() {
 					zap.String("name", newConfig.ObjectMeta.Name),
 					zap.String("namespace", newConfig.ObjectMeta.Namespace),
 					zap.String("version", newConfig.ObjectMeta.ResourceVersion))
-				go canaryCfgMgr.updateCanaryConfig(oldConfig, newConfig)
+				go canaryCfgMgr.updateCanaryConfig(ctx, oldConfig, newConfig)
 			}
-			go canaryCfgMgr.reSyncCanaryConfigs()
+			go canaryCfgMgr.reSyncCanaryConfigs(ctx)
 
 		},
 	})
@@ -134,7 +134,7 @@ func (canaryCfgMgr *canaryConfigMgr) Run(ctx context.Context) {
 	canaryCfgMgr.logger.Info("started canary configmgr controller")
 }
 
-func (canaryCfgMgr *canaryConfigMgr) addCanaryConfig(canaryConfig *fv1.CanaryConfig) {
+func (canaryCfgMgr *canaryConfigMgr) addCanaryConfig(ctx context.Context, canaryConfig *fv1.CanaryConfig) {
 	canaryCfgMgr.logger.Debug("addCanaryConfig called", zap.String("canary_config", canaryConfig.ObjectMeta.Name))
 
 	// for each canary config, create a ticker with increment interval
@@ -152,7 +152,7 @@ func (canaryCfgMgr *canaryConfigMgr) addCanaryConfig(canaryConfig *fv1.CanaryCon
 
 	// create a context cancel func for each canary config. this will be used to cancel the processing of this canary
 	// config in the event that it's deleted
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(ctx)
 
 	cacheValue := &CanaryProcessingInfo{
 		CancelFunc: &cancel,
@@ -491,7 +491,7 @@ func (canaryCfgMgr *canaryConfigMgr) rollForward(ctx context.Context, canaryConf
 	return doneProcessingCanaryConfig, err
 }
 
-func (canaryCfgMgr *canaryConfigMgr) reSyncCanaryConfigs() {
+func (canaryCfgMgr *canaryConfigMgr) reSyncCanaryConfigs(ctx context.Context) {
 	for _, obj := range (*canaryCfgMgr.canaryConfigInformer).GetStore().List() {
 		canaryConfig := obj.(*fv1.CanaryConfig)
 		_, err := canaryCfgMgr.canaryCfgCancelFuncMap.lookup(&canaryConfig.ObjectMeta)
@@ -502,7 +502,7 @@ func (canaryCfgMgr *canaryConfigMgr) reSyncCanaryConfigs() {
 				zap.String("version", canaryConfig.ObjectMeta.ResourceVersion))
 
 			// new canaryConfig detected, add it to our cache and start processing it
-			go canaryCfgMgr.addCanaryConfig(canaryConfig)
+			go canaryCfgMgr.addCanaryConfig(ctx, canaryConfig)
 		}
 	}
 }
@@ -527,7 +527,7 @@ func (canaryCfgMgr *canaryConfigMgr) deleteCanaryConfig(canaryConfig *fv1.Canary
 	(*canaryProcessingInfo.CancelFunc)()
 }
 
-func (canaryCfgMgr *canaryConfigMgr) updateCanaryConfig(oldCanaryConfig *fv1.CanaryConfig, newCanaryConfig *fv1.CanaryConfig) {
+func (canaryCfgMgr *canaryConfigMgr) updateCanaryConfig(ctx context.Context, oldCanaryConfig *fv1.CanaryConfig, newCanaryConfig *fv1.CanaryConfig) {
 	// before removing the object from cache, we need to get it's cancel func and cancel it
 	canaryCfgMgr.deleteCanaryConfig(oldCanaryConfig)
 
@@ -540,7 +540,7 @@ func (canaryCfgMgr *canaryConfigMgr) updateCanaryConfig(oldCanaryConfig *fv1.Can
 			zap.String("version", oldCanaryConfig.ObjectMeta.ResourceVersion))
 		return
 	}
-	canaryCfgMgr.addCanaryConfig(newCanaryConfig)
+	canaryCfgMgr.addCanaryConfig(ctx, newCanaryConfig)
 }
 
 func getEnvValue(envVar string) string {

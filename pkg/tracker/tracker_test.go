@@ -14,6 +14,8 @@ import (
 )
 
 func TestTracker(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	t.Run("NewTracker", func(test *testing.T) {
 		for _, test := range []struct {
 			name     string
@@ -101,7 +103,7 @@ func TestTracker(t *testing.T) {
 				defer server.Close()
 				tr.gaAPIURL = server.URL
 
-				t := tr.SendEvent(context.Background(), *test.request)
+				t := tr.SendEvent(ctx, *test.request)
 				if test.status == http.StatusOK {
 					assert.Nil(testing, t, test.expected)
 				} else {

@@ -76,7 +76,7 @@ func TestRefreshFuncPods(t *testing.T) {
 		t.Fatalf("Error creating fetcher config: %s", err)
 	}
 
-	executor, err := MakeNewDeploy(logger, fissionClient, kubernetesClient, functionNamespace, fetcherConfig, "test",
+	executor, err := MakeNewDeploy(ctx, logger, fissionClient, kubernetesClient, functionNamespace, fetcherConfig, "test",
 		funcInformer, envInformer, deployInformer, svcInformer, podSpecPatch)
 	if err != nil {
 		t.Fatalf("new deploy manager creation failed: %s", err)

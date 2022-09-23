@@ -37,7 +37,7 @@ func List(input cli.Input) error {
 func (opts *ListSubCommand) do(input cli.Input) error {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 	fmt.Fprintln(w, "NAME\tVERSION\tPATH")
-	for _, p := range plugin.FindAll() {
+	for _, p := range plugin.FindAll(input.Context()) {
 		fmt.Fprintf(w, "%v\t%v\t%v\n", p.Name, p.Version, p.Path)
 	}
 	w.Flush()

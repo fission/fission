@@ -41,10 +41,9 @@ func getIstioServiceLabels(fnName string) map[string]string {
 // Based on function create/update/delete event, we create role binding
 // for the secret/configmap access which is used by fetcher component.
 // If istio is enabled, we create a service for the function.
-func FunctionEventHandlers(logger *zap.Logger, kubernetesClient kubernetes.Interface, fissionfnNamespace string, istioEnabled bool) k8sCache.ResourceEventHandlerFuncs {
+func FunctionEventHandlers(ctx context.Context, logger *zap.Logger, kubernetesClient kubernetes.Interface, fissionfnNamespace string, istioEnabled bool) k8sCache.ResourceEventHandlerFuncs {
 	return k8sCache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
-			ctx := context.Background()
 			fn := obj.(*fv1.Function)
 
 			// Since istio only allows accessing pod through k8s service,
@@ -133,7 +132,6 @@ func FunctionEventHandlers(logger *zap.Logger, kubernetesClient kubernetes.Inter
 		},
 
 		DeleteFunc: func(obj interface{}) {
-			ctx := context.Background()
 			fn := obj.(*fv1.Function)
 
 			fnExecutorType := fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType
@@ -183,7 +181,6 @@ func FunctionEventHandlers(logger *zap.Logger, kubernetesClient kubernetes.Inter
 				if newFunc.Spec.Environment.Namespace != metav1.NamespaceDefault {
 					envNs = newFunc.Spec.Environment.Namespace
 				}
-				ctx := context.Background()
 				err := utils.SetupRoleBinding(ctx, logger, kubernetesClient, fv1.SecretConfigMapGetterRB,
 					newFunc.ObjectMeta.Namespace, utils.GetSecretConfigMapGetterCR(), fv1.ClusterRole,
 					fv1.FissionFetcherSA, envNs)

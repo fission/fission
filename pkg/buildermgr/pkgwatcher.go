@@ -280,7 +280,7 @@ func (pkgw *packageWatcher) build(ctx context.Context, srcpkg *fv1.Package) {
 		zap.String("package", fmt.Sprintf("%s.%s", pkg.ObjectMeta.Name, pkg.ObjectMeta.Namespace)))
 }
 
-func (pkgw *packageWatcher) packageInformerHandler() k8sCache.ResourceEventHandlerFuncs {
+func (pkgw *packageWatcher) packageInformerHandler(ctx context.Context) k8sCache.ResourceEventHandlerFuncs {
 	processPkg := func(ctx context.Context, pkg *fv1.Package) {
 		var err error
 		if len(pkg.Status.BuildStatus) == 0 {
@@ -301,7 +301,7 @@ func (pkgw *packageWatcher) packageInformerHandler() k8sCache.ResourceEventHandl
 	return k8sCache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			pkg := obj.(*fv1.Package)
-			processPkg(context.Background(), pkg)
+			processPkg(ctx, pkg)
 		},
 		UpdateFunc: func(oldObj, newObj interface{}) {
 			oldPkg := oldObj.(*fv1.Package)
@@ -316,7 +316,7 @@ func (pkgw *packageWatcher) packageInformerHandler() k8sCache.ResourceEventHandl
 				pkg.Status.BuildStatus != fv1.BuildStatusPending {
 				return
 			}
-			processPkg(context.Background(), pkg)
+			processPkg(ctx, pkg)
 		},
 	}
 }
@@ -324,7 +324,7 @@ func (pkgw *packageWatcher) packageInformerHandler() k8sCache.ResourceEventHandl
 func (pkgw *packageWatcher) Run(ctx context.Context) {
 	go metrics.ServeMetrics(ctx, pkgw.logger)
 	go (*pkgw.podInformer).Run(ctx.Done())
-	(*pkgw.pkgInformer).AddEventHandler(pkgw.packageInformerHandler())
+	(*pkgw.pkgInformer).AddEventHandler(pkgw.packageInformerHandler(ctx))
 	(*pkgw.pkgInformer).Run(ctx.Done())
 }
 

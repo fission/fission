@@ -62,7 +62,8 @@ func TestGetTraceExporter(t *testing.T) {
 		t.Errorf("Expected OTEL_EXPORTER_OTLP_INSECURE to be set, got %s", OtelInsecureEnvVar)
 	}
 	logger := loggerfactory.GetLogger()
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	tests := []struct {
 		oltpEndpoint string
 		oltpInsecure string

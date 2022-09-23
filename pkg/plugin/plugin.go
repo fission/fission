@@ -69,13 +69,13 @@ func (md *Metadata) HasAlias(needle string) bool {
 // Find searches the machine for the given plugin, returning the metadata of the plugin.
 // The only metadata that is guaranteed to be non-empty is the path and Name. All other fields are considered optional.
 // If found it returns the plugin, otherwise it returns ErrPluginNotFound if the plugin was not found.
-func Find(pluginName string) (*Metadata, error) {
+func Find(ctx context.Context, pluginName string) (*Metadata, error) {
 	// Search PATH for plugin as command-name
 	// To check if plugin is actually there still.
 	pluginPath, err := findPluginOnPath(pluginName)
 	if err != nil {
 		// Fallback: Search for alias in each command
-		mds := FindAll()
+		mds := FindAll(ctx)
 		for _, md := range mds {
 			if md.HasAlias(pluginName) {
 				return md, nil
@@ -84,7 +84,7 @@ func Find(pluginName string) (*Metadata, error) {
 		return nil, ErrPluginNotFound
 	}
 
-	md, err := fetchPluginMetadata(pluginPath)
+	md, err := fetchPluginMetadata(ctx, pluginPath)
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +102,7 @@ func Exec(md *Metadata, args []string) error {
 }
 
 // FindAll searches the machine for all plugins currently present.
-func FindAll() map[string]*Metadata {
+func FindAll(ctx context.Context) map[string]*Metadata {
 	plugins := map[string]*Metadata{}
 
 	dirs := strings.Split(os.Getenv("PATH"), ":")
@@ -116,7 +116,7 @@ func FindAll() map[string]*Metadata {
 				continue
 			}
 			fp := path.Join(dir, f.Name())
-			md, err := fetchPluginMetadata(fp)
+			md, err := fetchPluginMetadata(ctx, fp)
 			if err != nil {
 				continue
 			}
@@ -142,7 +142,7 @@ func findPluginOnPath(pluginName string) (path string, err error) {
 }
 
 // fetchPluginMetadata attempts to fetch the plugin metadata given the plugin path.
-func fetchPluginMetadata(pluginPath string) (*Metadata, error) {
+func fetchPluginMetadata(ctx context.Context, pluginPath string) (*Metadata, error) {
 	d, err := os.Stat(pluginPath)
 	if err != nil {
 		return nil, ErrPluginNotFound
@@ -153,7 +153,7 @@ func fetchPluginMetadata(pluginPath string) (*Metadata, error) {
 
 	// Fetch the metadata from the plugin itself.
 	buf := bytes.NewBuffer(nil)
-	ctx, cancel := context.WithTimeout(context.Background(), cmdTimeout)
+	ctx, cancel := context.WithTimeout(ctx, cmdTimeout)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, pluginPath, cmdMetadataArgs) // Note: issue can occur with signal propagation

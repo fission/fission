@@ -109,7 +109,7 @@ type (
 	}
 )
 
-func MakeGenericPoolManager(
+func MakeGenericPoolManager(ctx context.Context,
 	logger *zap.Logger,
 	fissionClient versioned.Interface,
 	kubernetesClient kubernetes.Interface,
@@ -136,7 +136,7 @@ func MakeGenericPoolManager(
 		enableIstio = istio
 	}
 
-	poolPodC := NewPoolPodController(gpmLogger, kubernetesClient, functionNamespace,
+	poolPodC := NewPoolPodController(ctx, gpmLogger, kubernetesClient, functionNamespace,
 		enableIstio, funcInformer, pkgInformer, envInformer, rsInformer, podInformer)
 
 	gpm := &GenericPoolManager{
@@ -171,7 +171,7 @@ func (gpm *GenericPoolManager) Run(ctx context.Context) {
 	go gpm.WebsocketStartEventChecker(ctx, gpm.kubernetesClient)
 	go gpm.NoActiveConnectionEventChecker(ctx, gpm.kubernetesClient)
 	go gpm.idleObjectReaper(ctx)
-	go gpm.poolPodC.Run(ctx.Done())
+	go gpm.poolPodC.Run(ctx, ctx.Done())
 }
 
 func (gpm *GenericPoolManager) GetTypeName(ctx context.Context) fv1.ExecutorType {
@@ -734,7 +734,6 @@ func (gpm *GenericPoolManager) NoActiveConnectionEventChecker(ctx context.Contex
 					gpm.logger.Error("could not convert value from PodToFsvc")
 					return
 				}
-				ctx := context.Background()
 				gpm.fsCache.DeleteFunctionSvc(ctx, fsvc)
 				for i := range fsvc.KubernetesObjects {
 					gpm.logger.Info("release idle function resources due to  inactivity",

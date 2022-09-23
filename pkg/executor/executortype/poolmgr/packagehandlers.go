@@ -31,7 +31,7 @@ import (
 // PackageEventHandlers provides handlers for package events.
 // Based on package create/update event, we create role binding
 // for the package which is used by fetcher component.
-func PackageEventHandlers(logger *zap.Logger, kubernetesClient kubernetes.Interface, fissionfnNamespace string) k8sCache.ResourceEventHandlerFuncs {
+func PackageEventHandlers(ctx context.Context, logger *zap.Logger, kubernetesClient kubernetes.Interface, fissionfnNamespace string) k8sCache.ResourceEventHandlerFuncs {
 	return k8sCache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			pkg := obj.(*fv1.Package)
@@ -44,7 +44,6 @@ func PackageEventHandlers(logger *zap.Logger, kubernetesClient kubernetes.Interf
 			if pkg.Spec.Environment.Namespace != metav1.NamespaceDefault {
 				envNs = pkg.Spec.Environment.Namespace
 			}
-			ctx := context.Background()
 			// here, we return if we hit an error during rolebinding setup. this is because this rolebinding is mandatory for
 			// every function's package to be loaded into its env. without that, there's no point to move forward.
 			err := utils.SetupRoleBinding(ctx, logger, kubernetesClient, fv1.PackageGetterRB, pkg.ObjectMeta.Namespace, utils.GetPackageGetterCR(), fv1.ClusterRole, fv1.FissionFetcherSA, envNs)
@@ -81,7 +80,6 @@ func PackageEventHandlers(logger *zap.Logger, kubernetesClient kubernetes.Interf
 					envNs = newPkg.Spec.Environment.Namespace
 				}
 
-				ctx := context.Background()
 				err := utils.SetupRoleBinding(ctx, logger, kubernetesClient, fv1.PackageGetterRB,
 					newPkg.ObjectMeta.Namespace, utils.GetPackageGetterCR(), fv1.ClusterRole,
 					fv1.FissionFetcherSA, envNs)

@@ -17,7 +17,8 @@ func checkErr(err error) {
 }
 
 func TestPoolCache(t *testing.T) {
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	logger := loggerfactory.GetLogger()
 	c := NewPoolCache(logger)
 

@@ -25,14 +25,13 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 )
 
-func (deploy *NewDeploy) EnvEventHandlers() k8sCache.ResourceEventHandlerFuncs {
+func (deploy *NewDeploy) EnvEventHandlers(ctx context.Context) k8sCache.ResourceEventHandlerFuncs {
 	return k8sCache.ResourceEventHandlerFuncs{
 		AddFunc:    func(obj interface{}) {},
 		DeleteFunc: func(obj interface{}) {},
 		UpdateFunc: func(oldObj interface{}, newObj interface{}) {
 			newEnv := newObj.(*fv1.Environment)
 			oldEnv := oldObj.(*fv1.Environment)
-			ctx := context.Background()
 			// Currently only an image update in environment calls for function's deployment recreation. In future there might be more attributes which would want to do it
 			if oldEnv.Spec.Runtime.Image != newEnv.Spec.Runtime.Image {
 				deploy.logger.Debug("Updating all function of the environment that changed, old env:", zap.Any("environment", oldEnv))

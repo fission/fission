@@ -44,6 +44,8 @@ func runInformers(ctx context.Context, informers []k8sCache.SharedIndexInformer)
 }
 
 func TestPoolPodControllerPodCleanup(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	logger := loggerfactory.GetLogger()
 	kubernetesClient := fake.NewSimpleClientset()
 	fissionClient := fClient.NewSimpleClientset()
@@ -60,7 +62,7 @@ func TestPoolPodControllerPodCleanup(t *testing.T) {
 	gpmRsInformer := gpmInformerFactory.Apps().V1().ReplicaSets()
 
 	fnNamespace := "fission-function"
-	ppc := NewPoolPodController(logger, kubernetesClient, fnNamespace, false,
+	ppc := NewPoolPodController(ctx, logger, kubernetesClient, fnNamespace, false,
 		funcInformer,
 		pkgInformer,
 		envInformer,
@@ -73,7 +75,7 @@ func TestPoolPodControllerPodCleanup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error creating fetcher config: %v", err)
 	}
-	executor, err := MakeGenericPoolManager(
+	executor, err := MakeGenericPoolManager(ctx,
 		logger,
 		fissionClient, kubernetesClient, metricsClient,
 		fnNamespace, fetcherConfig, executorInstanceID,
@@ -85,10 +87,7 @@ func TestPoolPodControllerPodCleanup(t *testing.T) {
 	gpm := executor.(*GenericPoolManager)
 	ppc.InjectGpm(gpm)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	go ppc.Run(ctx.Done())
+	go ppc.Run(ctx, ctx.Done())
 
 	podInformer := gpmPodInformer.Informer()
 

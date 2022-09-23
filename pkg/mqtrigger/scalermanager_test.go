@@ -99,7 +99,7 @@ func Test_getEnvVarlist(t *testing.T) {
 	}
 
 	kubeClient := fake.NewSimpleClientset()
-	_, err := kubeClient.CoreV1().Secrets(namespace).Create(context.Background(), secret, metav1.CreateOptions{})
+	_, err := kubeClient.CoreV1().Secrets(namespace).Create(ctx, secret, metav1.CreateOptions{})
 	if err != nil {
 		assert.Equal(t, nil, err)
 	}

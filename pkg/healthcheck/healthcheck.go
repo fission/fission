@@ -120,8 +120,8 @@ func (hc *HealthChecker) CheckServiceStatus(ctx context.Context, namespace strin
 	return nil
 }
 
-func (hc *HealthChecker) CheckFissionVersion() error {
-	ver := util.GetVersion(hc.FissionClient)
+func (hc *HealthChecker) CheckFissionVersion(ctx context.Context) error {
+	ver := util.GetVersion(ctx, hc.FissionClient)
 
 	clientVersion := ver.Client["fission/core"].Version
 	serverVersion := ver.Server["fission/core"].Version
@@ -191,7 +191,7 @@ func (hc *HealthChecker) allCategories() []*Category {
 				{
 					successMsg: "fission is up-to-date",
 					check: func(ctx context.Context) error {
-						return hc.CheckFissionVersion()
+						return hc.CheckFissionVersion(ctx)
 					},
 				},
 			},

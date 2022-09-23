@@ -94,6 +94,7 @@ type (
 
 // MakeNewDeploy initializes and returns an instance of NewDeploy.
 func MakeNewDeploy(
+	ctx context.Context,
 	logger *zap.Logger,
 	fissionClient versioned.Interface,
 	kubernetesClient kubernetes.Interface,
@@ -143,8 +144,8 @@ func MakeNewDeploy(
 	nd.svcLister = svcInformer.Lister()
 	nd.svcListerSynced = svcInformer.Informer().HasSynced
 
-	funcInformer.Informer().AddEventHandler(nd.FunctionEventHandlers())
-	envInformer.Informer().AddEventHandler(nd.EnvEventHandlers())
+	funcInformer.Informer().AddEventHandler(nd.FunctionEventHandlers(ctx))
+	envInformer.Informer().AddEventHandler(nd.EnvEventHandlers(ctx))
 
 	return nd, nil
 }
@@ -400,8 +401,7 @@ func (deploy *NewDeploy) deleteFunction(ctx context.Context, fn *fv1.Function) e
 }
 
 func (deploy *NewDeploy) fnCreate(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
-	cleanupFunc := func(ns string, name string) {
-		ctx := context.Background()
+	cleanupFunc := func(ctx context.Context, ns string, name string) {
 		err := deploy.cleanupNewdeploy(ctx, ns, name)
 		if err != nil {
 			deploy.logger.Error("received error while cleaning function resources",
@@ -434,7 +434,7 @@ func (deploy *NewDeploy) fnCreate(ctx context.Context, fn *fv1.Function) (*fscac
 	svc, err := deploy.createOrGetSvc(ctx, deployLabels, deployAnnotations, objName, ns)
 	if err != nil {
 		deploy.logger.Error("error creating service", zap.Error(err), zap.String("service", objName))
-		go cleanupFunc(ns, objName)
+		go cleanupFunc(context.Background(), ns, objName)
 		return nil, errors.Wrapf(err, "error creating service %v", objName)
 	}
 	svcAddress := fmt.Sprintf("%v.%v", svc.Name, svc.Namespace)
@@ -442,14 +442,14 @@ func (deploy *NewDeploy) fnCreate(ctx context.Context, fn *fv1.Function) (*fscac
 	depl, err := deploy.createOrGetDeployment(ctx, fn, env, objName, deployLabels, deployAnnotations, ns)
 	if err != nil {
 		deploy.logger.Error("error creating deployment", zap.Error(err), zap.String("deployment", objName))
-		go cleanupFunc(ns, objName)
+		go cleanupFunc(context.Background(), ns, objName)
 		return nil, errors.Wrapf(err, "error creating deployment %v", objName)
 	}
 
 	hpa, err := deploy.hpaops.CreateOrGetHpa(ctx, objName, &fn.Spec.InvokeStrategy.ExecutionStrategy, depl, deployLabels, deployAnnotations)
 	if err != nil {
 		deploy.logger.Error("error creating HPA", zap.Error(err), zap.String("hpa", objName))
-		go cleanupFunc(ns, objName)
+		go cleanupFunc(context.Background(), ns, objName)
 		return nil, errors.Wrapf(err, "error creating the HPA %v", objName)
 	}
 

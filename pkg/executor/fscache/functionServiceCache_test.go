@@ -184,7 +184,9 @@ func TestFunctionServiceNewCache(t *testing.T) {
 		},
 	}
 
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	fsc.AddFunc(ctx, *fsvc)
 	_, active, err := fsc.GetFuncSvc(ctx, fsvc.Function, 5)
 	if err != nil {
