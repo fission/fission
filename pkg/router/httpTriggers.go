@@ -283,13 +283,13 @@ func (ts *HTTPTriggerSet) addTriggerHandlers() {
 	ts.triggerInformer.AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			trigger := obj.(*fv1.HTTPTrigger)
-			go createIngress(ts.logger, trigger, ts.kubeClient)
+			go createIngress(context.Background(), ts.logger, trigger, ts.kubeClient)
 			ts.syncTriggers()
 		},
 		DeleteFunc: func(obj interface{}) {
 			ts.syncTriggers()
 			trigger := obj.(*fv1.HTTPTrigger)
-			go deleteIngress(ts.logger, trigger, ts.kubeClient)
+			go deleteIngress(context.Background(), ts.logger, trigger, ts.kubeClient)
 		},
 		UpdateFunc: func(oldObj interface{}, newObj interface{}) {
 			oldTrigger := oldObj.(*fv1.HTTPTrigger)
@@ -299,7 +299,7 @@ func (ts *HTTPTriggerSet) addTriggerHandlers() {
 				return
 			}
 
-			go updateIngress(ts.logger, oldTrigger, newTrigger, ts.kubeClient)
+			go updateIngress(context.Background(), ts.logger, oldTrigger, newTrigger, ts.kubeClient)
 			ts.syncTriggers()
 		},
 	})

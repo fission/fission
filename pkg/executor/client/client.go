@@ -153,7 +153,7 @@ func (c *Client) service() {
 					svcReqs = append(svcReqs, req)
 				}
 				c.logger.Debug("tapped services in batch", zap.Int("service_count", len(urls)))
-				err := c._tapService(context.TODO(), svcReqs)
+				err := c._tapService(context.Background(), svcReqs)
 				if err != nil {
 					c.logger.Error("error tapping function service address", zap.Error(err))
 				}

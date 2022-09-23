@@ -34,20 +34,20 @@ type (
 	}
 )
 
-func MakeWatchSync(logger *zap.Logger, client versioned.Interface, kubeWatcher *KubeWatcher) *WatchSync {
+func MakeWatchSync(ctx context.Context, logger *zap.Logger, client versioned.Interface, kubeWatcher *KubeWatcher) *WatchSync {
 	ws := &WatchSync{
 		logger:      logger.Named("watch_sync"),
 		client:      client,
 		kubeWatcher: kubeWatcher,
 	}
-	go ws.syncSvc()
+	go ws.syncSvc(ctx)
 	return ws
 }
 
-func (ws *WatchSync) syncSvc() {
+func (ws *WatchSync) syncSvc(ctx context.Context) {
 	// TODO watch instead of polling
 	for {
-		watches, err := ws.client.CoreV1().KubernetesWatchTriggers(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{})
+		watches, err := ws.client.CoreV1().KubernetesWatchTriggers(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
 		if err != nil {
 			ws.logger.Fatal("failed to get Kubernetes watch trigger list", zap.Error(err))
 		}

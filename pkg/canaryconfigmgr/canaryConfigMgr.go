@@ -319,7 +319,7 @@ func (canaryCfgMgr *canaryConfigMgr) RollForwardOrBack(ctx context.Context, cana
 				zap.String("namespace", canaryConfig.ObjectMeta.Namespace),
 				zap.String("version", canaryConfig.ObjectMeta.ResourceVersion))
 			ticker.Stop()
-			err := canaryCfgMgr.rollback(canaryConfig, triggerObj)
+			err := canaryCfgMgr.rollback(ctx, canaryConfig, triggerObj)
 			if err != nil {
 				canaryCfgMgr.logger.Error("error rolling back canary config",
 					zap.Error(err),
@@ -332,7 +332,7 @@ func (canaryCfgMgr *canaryConfigMgr) RollForwardOrBack(ctx context.Context, cana
 		}
 	}
 
-	doneProcessingCanaryConfig, err := canaryCfgMgr.rollForward(canaryConfig, triggerObj)
+	doneProcessingCanaryConfig, err := canaryCfgMgr.rollForward(ctx, canaryConfig, triggerObj)
 	if err != nil {
 		// just log the error and hope that next iteration will succeed
 		canaryCfgMgr.logger.Error("error incrementing weights for trigger",
@@ -348,7 +348,7 @@ func (canaryCfgMgr *canaryConfigMgr) RollForwardOrBack(ctx context.Context, cana
 		ticker.Stop()
 		// update the status of canary config as done processing, we don't care if we aren't able to update because
 		// resync takes care of the update
-		err = canaryCfgMgr.updateCanaryConfigStatusWithRetries(canaryConfig.ObjectMeta.Name, canaryConfig.ObjectMeta.Namespace,
+		err = canaryCfgMgr.updateCanaryConfigStatusWithRetries(ctx, canaryConfig.ObjectMeta.Name, canaryConfig.ObjectMeta.Namespace,
 			fv1.CanaryConfigStatusSucceeded)
 		if err != nil {
 			// can't do much after max retries other than logging it.
@@ -368,9 +368,9 @@ func (canaryCfgMgr *canaryConfigMgr) RollForwardOrBack(ctx context.Context, cana
 	}
 }
 
-func (canaryCfgMgr *canaryConfigMgr) updateHttpTriggerWithRetries(triggerName, triggerNamespace string, fnWeights map[string]int) (err error) {
+func (canaryCfgMgr *canaryConfigMgr) updateHttpTriggerWithRetries(ctx context.Context, triggerName, triggerNamespace string, fnWeights map[string]int) (err error) {
 	for i := 0; i < maxRetries; i++ {
-		triggerObj, err := canaryCfgMgr.fissionClient.CoreV1().HTTPTriggers(triggerNamespace).Get(context.TODO(), triggerName, metav1.GetOptions{})
+		triggerObj, err := canaryCfgMgr.fissionClient.CoreV1().HTTPTriggers(triggerNamespace).Get(ctx, triggerName, metav1.GetOptions{})
 		if err != nil {
 			e := "error getting http trigger object"
 			canaryCfgMgr.logger.Error(e, zap.Error(err), zap.String("trigger_name", triggerName), zap.String("trigger_namespace", triggerNamespace))
@@ -379,7 +379,7 @@ func (canaryCfgMgr *canaryConfigMgr) updateHttpTriggerWithRetries(triggerName, t
 
 		triggerObj.Spec.FunctionReference.FunctionWeights = fnWeights
 
-		_, err = canaryCfgMgr.fissionClient.CoreV1().HTTPTriggers(triggerNamespace).Update(context.TODO(), triggerObj, metav1.UpdateOptions{})
+		_, err = canaryCfgMgr.fissionClient.CoreV1().HTTPTriggers(triggerNamespace).Update(ctx, triggerObj, metav1.UpdateOptions{})
 		switch {
 		case err == nil:
 			canaryCfgMgr.logger.Debug("updated http trigger", zap.String("trigger_name", triggerName), zap.String("trigger_namespace", triggerNamespace))
@@ -403,9 +403,9 @@ func (canaryCfgMgr *canaryConfigMgr) updateHttpTriggerWithRetries(triggerName, t
 	return err
 }
 
-func (canaryCfgMgr *canaryConfigMgr) updateCanaryConfigStatusWithRetries(cfgName, cfgNamespace string, status string) (err error) {
+func (canaryCfgMgr *canaryConfigMgr) updateCanaryConfigStatusWithRetries(ctx context.Context, cfgName, cfgNamespace string, status string) (err error) {
 	for i := 0; i < maxRetries; i++ {
-		canaryCfgObj, err := canaryCfgMgr.fissionClient.CoreV1().CanaryConfigs(cfgNamespace).Get(context.TODO(), cfgName, metav1.GetOptions{})
+		canaryCfgObj, err := canaryCfgMgr.fissionClient.CoreV1().CanaryConfigs(cfgNamespace).Get(ctx, cfgName, metav1.GetOptions{})
 		if err != nil {
 			e := "error getting http canary config object"
 			canaryCfgMgr.logger.Error(e,
@@ -423,7 +423,7 @@ func (canaryCfgMgr *canaryConfigMgr) updateCanaryConfigStatusWithRetries(cfgName
 
 		canaryCfgObj.Status.Status = status
 
-		_, err = canaryCfgMgr.fissionClient.CoreV1().CanaryConfigs(cfgNamespace).Update(context.TODO(), canaryCfgObj, metav1.UpdateOptions{})
+		_, err = canaryCfgMgr.fissionClient.CoreV1().CanaryConfigs(cfgNamespace).Update(ctx, canaryCfgObj, metav1.UpdateOptions{})
 		switch {
 		case err == nil:
 			canaryCfgMgr.logger.Info("updated canary config",
@@ -449,23 +449,23 @@ func (canaryCfgMgr *canaryConfigMgr) updateCanaryConfigStatusWithRetries(cfgName
 	return err
 }
 
-func (canaryCfgMgr *canaryConfigMgr) rollback(canaryConfig *fv1.CanaryConfig, trigger *fv1.HTTPTrigger) error {
+func (canaryCfgMgr *canaryConfigMgr) rollback(ctx context.Context, canaryConfig *fv1.CanaryConfig, trigger *fv1.HTTPTrigger) error {
 	functionWeights := trigger.Spec.FunctionReference.FunctionWeights
 	functionWeights[canaryConfig.Spec.NewFunction] = 0
 	functionWeights[canaryConfig.Spec.OldFunction] = 100
 
-	err := canaryCfgMgr.updateHttpTriggerWithRetries(trigger.ObjectMeta.Name, trigger.ObjectMeta.Namespace, functionWeights)
+	err := canaryCfgMgr.updateHttpTriggerWithRetries(ctx, trigger.ObjectMeta.Name, trigger.ObjectMeta.Namespace, functionWeights)
 	if err != nil {
 		return err
 	}
 
-	err = canaryCfgMgr.updateCanaryConfigStatusWithRetries(canaryConfig.ObjectMeta.Name, canaryConfig.ObjectMeta.Namespace,
+	err = canaryCfgMgr.updateCanaryConfigStatusWithRetries(ctx, canaryConfig.ObjectMeta.Name, canaryConfig.ObjectMeta.Namespace,
 		fv1.CanaryConfigStatusFailed)
 
 	return err
 }
 
-func (canaryCfgMgr *canaryConfigMgr) rollForward(canaryConfig *fv1.CanaryConfig, trigger *fv1.HTTPTrigger) (bool, error) {
+func (canaryCfgMgr *canaryConfigMgr) rollForward(ctx context.Context, canaryConfig *fv1.CanaryConfig, trigger *fv1.HTTPTrigger) (bool, error) {
 	doneProcessingCanaryConfig := false
 
 	functionWeights := trigger.Spec.FunctionReference.FunctionWeights
@@ -487,7 +487,7 @@ func (canaryCfgMgr *canaryConfigMgr) rollForward(canaryConfig *fv1.CanaryConfig,
 		zap.String("namespace", canaryConfig.ObjectMeta.Namespace),
 		zap.Any("function_weights", functionWeights))
 
-	err := canaryCfgMgr.updateHttpTriggerWithRetries(trigger.ObjectMeta.Name, trigger.ObjectMeta.Namespace, functionWeights)
+	err := canaryCfgMgr.updateHttpTriggerWithRetries(ctx, trigger.ObjectMeta.Name, trigger.ObjectMeta.Namespace, functionWeights)
 	return doneProcessingCanaryConfig, err
 }
 

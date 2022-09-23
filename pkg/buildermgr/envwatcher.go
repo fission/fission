@@ -67,6 +67,7 @@ type (
 
 	envwRequest struct {
 		requestType
+		ctx      context.Context
 		env      *fv1.Environment
 		envList  []fv1.Environment
 		respChan chan envwResponse
@@ -148,10 +149,10 @@ func (envw *environmentWatcher) getLabels(envName string, envNamespace string, e
 	}
 }
 
-func (envw *environmentWatcher) watchEnvironments() {
+func (envw *environmentWatcher) watchEnvironments(ctx context.Context) {
 	rv := ""
 	for {
-		wi, err := envw.fissionClient.CoreV1().Environments(metav1.NamespaceAll).Watch(context.TODO(),
+		wi, err := envw.fissionClient.CoreV1().Environments(metav1.NamespaceAll).Watch(ctx,
 			metav1.ListOptions{
 				ResourceVersion: rv,
 			})
@@ -178,15 +179,15 @@ func (envw *environmentWatcher) watchEnvironments() {
 			}
 			env := ev.Object.(*fv1.Environment)
 			rv = env.ObjectMeta.ResourceVersion
-			envw.sync()
+			envw.sync(ctx)
 		}
 	}
 }
 
-func (envw *environmentWatcher) sync() {
+func (envw *environmentWatcher) sync(ctx context.Context) {
 	maxRetries := 10
 	for i := 0; i < maxRetries; i++ {
-		envList, err := envw.fissionClient.CoreV1().Environments(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{})
+		envList, err := envw.fissionClient.CoreV1().Environments(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
 		if err != nil {
 			if utils.IsNetworkError(err) {
 				envw.logger.Error("error syncing environment CRD resources due to network error, retrying later", zap.Error(err))
@@ -204,14 +205,14 @@ func (envw *environmentWatcher) sync() {
 				len(env.Spec.Builder.Image) == 0 { // ignore env without builder image
 				continue
 			}
-			_, err := envw.getEnvBuilder(&env)
+			_, err := envw.getEnvBuilder(ctx, &env)
 			if err != nil {
 				envw.logger.Error("error creating builder", zap.Error(err), zap.String("builder_target", env.ObjectMeta.Name))
 			}
 		}
 
 		// Remove environment builders no longer needed
-		envw.cleanupEnvBuilders(envList.Items)
+		envw.cleanupEnvBuilders(ctx, envList.Items)
 		break
 	}
 }
@@ -231,7 +232,7 @@ func (envw *environmentWatcher) service() {
 			key := envw.getCacheKey(req.env.ObjectMeta.Name, ns, req.env.ObjectMeta.ResourceVersion)
 			builderInfo, ok := envw.cache[key]
 			if !ok {
-				builderInfo, err := envw.createBuilder(req.env, ns)
+				builderInfo, err := envw.createBuilder(req.ctx, req.env, ns)
 				if err != nil {
 					req.respChan <- envwResponse{err: err}
 					continue
@@ -260,7 +261,7 @@ func (envw *environmentWatcher) service() {
 			// cache and CRD. We need to iterate over the services &
 			// deployments to remove both normal and orphan builders.
 
-			svcList, err := envw.getBuilderServiceList(envw.getLabelForDeploymentOwner(), metav1.NamespaceAll)
+			svcList, err := envw.getBuilderServiceList(req.ctx, envw.getLabelForDeploymentOwner(), metav1.NamespaceAll)
 			if err != nil {
 				envw.logger.Error("error getting the builder service list", zap.Error(err))
 			}
@@ -270,7 +271,7 @@ func (envw *environmentWatcher) service() {
 				envResourceVersion := svc.ObjectMeta.Labels[LABEL_ENV_RESOURCEVERSION]
 				key := envw.getCacheKey(envName, envNamespace, envResourceVersion)
 				if _, ok := latestEnvList[key]; !ok {
-					err := envw.deleteBuilderServiceByName(svc.ObjectMeta.Name, svc.ObjectMeta.Namespace)
+					err := envw.deleteBuilderServiceByName(req.ctx, svc.ObjectMeta.Name, svc.ObjectMeta.Namespace)
 					if err != nil {
 						envw.logger.Error("error removing builder service", zap.Error(err),
 							zap.String("service_name", svc.ObjectMeta.Name),
@@ -280,7 +281,7 @@ func (envw *environmentWatcher) service() {
 				delete(envw.cache, key)
 			}
 
-			deployList, err := envw.getBuilderDeploymentList(envw.getLabelForDeploymentOwner(), metav1.NamespaceAll)
+			deployList, err := envw.getBuilderDeploymentList(req.ctx, envw.getLabelForDeploymentOwner(), metav1.NamespaceAll)
 			if err != nil {
 				envw.logger.Error("error getting the builder deployment list", zap.Error(err))
 			}
@@ -290,7 +291,7 @@ func (envw *environmentWatcher) service() {
 				envResourceVersion := deploy.ObjectMeta.Labels[LABEL_ENV_RESOURCEVERSION]
 				key := envw.getCacheKey(envName, envNamespace, envResourceVersion)
 				if _, ok := latestEnvList[key]; !ok {
-					err := envw.deleteBuilderDeploymentByName(deploy.ObjectMeta.Name, deploy.ObjectMeta.Namespace)
+					err := envw.deleteBuilderDeploymentByName(req.ctx, deploy.ObjectMeta.Name, deploy.ObjectMeta.Namespace)
 					if err != nil {
 						envw.logger.Error("error removing builder deployment", zap.Error(err),
 							zap.String("deployment_name", deploy.ObjectMeta.Name),
@@ -303,10 +304,11 @@ func (envw *environmentWatcher) service() {
 	}
 }
 
-func (envw *environmentWatcher) getEnvBuilder(env *fv1.Environment) (*builderInfo, error) {
+func (envw *environmentWatcher) getEnvBuilder(ctx context.Context, env *fv1.Environment) (*builderInfo, error) {
 	respChan := make(chan envwResponse)
 	envw.requestChan <- envwRequest{
 		requestType: GET_BUILDER,
+		ctx:         ctx,
 		env:         env,
 		respChan:    respChan,
 	}
@@ -314,26 +316,27 @@ func (envw *environmentWatcher) getEnvBuilder(env *fv1.Environment) (*builderInf
 	return resp.builderInfo, resp.err
 }
 
-func (envw *environmentWatcher) cleanupEnvBuilders(envs []fv1.Environment) {
+func (envw *environmentWatcher) cleanupEnvBuilders(ctx context.Context, envs []fv1.Environment) {
 	envw.requestChan <- envwRequest{
 		requestType: CLEANUP_BUILDERS,
+		ctx:         ctx,
 		envList:     envs,
 	}
 }
 
-func (envw *environmentWatcher) createBuilder(env *fv1.Environment, ns string) (*builderInfo, error) {
+func (envw *environmentWatcher) createBuilder(ctx context.Context, env *fv1.Environment, ns string) (*builderInfo, error) {
 	var svc *apiv1.Service
 	var deploy *appsv1.Deployment
 
 	sel := envw.getLabels(env.ObjectMeta.Name, ns, env.ObjectMeta.ResourceVersion)
 
-	svcList, err := envw.getBuilderServiceList(sel, ns)
+	svcList, err := envw.getBuilderServiceList(ctx, sel, ns)
 	if err != nil {
 		return nil, err
 	}
 	// there should be only one service in svcList
 	if len(svcList) == 0 {
-		svc, err = envw.createBuilderService(env, ns)
+		svc, err = envw.createBuilderService(ctx, env, ns)
 		if err != nil {
 			return nil, errors.Wrap(err, "error creating builder service")
 		}
@@ -343,19 +346,19 @@ func (envw *environmentWatcher) createBuilder(env *fv1.Environment, ns string) (
 		return nil, fmt.Errorf("found more than one builder service for environment %q", env.ObjectMeta.Name)
 	}
 
-	deployList, err := envw.getBuilderDeploymentList(sel, ns)
+	deployList, err := envw.getBuilderDeploymentList(ctx, sel, ns)
 	if err != nil {
 		return nil, err
 	}
 	// there should be only one deploy in deployList
 	if len(deployList) == 0 {
 		// create builder SA in this ns, if not already created
-		_, err := utils.SetupSA(envw.kubernetesClient, fv1.FissionBuilderSA, ns)
+		_, err := utils.SetupSA(ctx, envw.kubernetesClient, fv1.FissionBuilderSA, ns)
 		if err != nil {
 			return nil, errors.Wrapf(err, "error creating %q in ns: %s", fv1.FissionBuilderSA, ns)
 		}
 
-		deploy, err = envw.createBuilderDeployment(env, ns)
+		deploy, err = envw.createBuilderDeployment(ctx, env, ns)
 		if err != nil {
 			return nil, errors.Wrap(err, "error creating builder deployment")
 		}
@@ -372,29 +375,29 @@ func (envw *environmentWatcher) createBuilder(env *fv1.Environment, ns string) (
 	}, nil
 }
 
-func (envw *environmentWatcher) deleteBuilderServiceByName(name, namespace string) error {
+func (envw *environmentWatcher) deleteBuilderServiceByName(ctx context.Context, name, namespace string) error {
 	err := envw.kubernetesClient.CoreV1().
 		Services(namespace).
-		Delete(context.TODO(), name, delOpt)
+		Delete(ctx, name, delOpt)
 	if err != nil {
 		return errors.Wrapf(err, "error deleting builder service %s.%s", name, namespace)
 	}
 	return nil
 }
 
-func (envw *environmentWatcher) deleteBuilderDeploymentByName(name, namespace string) error {
+func (envw *environmentWatcher) deleteBuilderDeploymentByName(ctx context.Context, name, namespace string) error {
 	err := envw.kubernetesClient.AppsV1().
 		Deployments(namespace).
-		Delete(context.TODO(), name, delOpt)
+		Delete(ctx, name, delOpt)
 	if err != nil {
 		return errors.Wrapf(err, "error deleting builder deployment %s.%s", name, namespace)
 	}
 	return nil
 }
 
-func (envw *environmentWatcher) getBuilderServiceList(sel map[string]string, ns string) ([]apiv1.Service, error) {
+func (envw *environmentWatcher) getBuilderServiceList(ctx context.Context, sel map[string]string, ns string) ([]apiv1.Service, error) {
 	svcList, err := envw.kubernetesClient.CoreV1().Services(ns).List(
-		context.TODO(),
+		ctx,
 		metav1.ListOptions{
 			LabelSelector: labels.Set(sel).AsSelector().String(),
 		})
@@ -404,7 +407,7 @@ func (envw *environmentWatcher) getBuilderServiceList(sel map[string]string, ns 
 	return svcList.Items, nil
 }
 
-func (envw *environmentWatcher) createBuilderService(env *fv1.Environment, ns string) (*apiv1.Service, error) {
+func (envw *environmentWatcher) createBuilderService(ctx context.Context, env *fv1.Environment, ns string) (*apiv1.Service, error) {
 	name := fmt.Sprintf("%v-%v", env.ObjectMeta.Name, env.ObjectMeta.ResourceVersion)
 	sel := envw.getLabels(env.ObjectMeta.Name, ns, env.ObjectMeta.ResourceVersion)
 	service := apiv1.Service{
@@ -439,16 +442,16 @@ func (envw *environmentWatcher) createBuilderService(env *fv1.Environment, ns st
 		},
 	}
 	envw.logger.Info("creating builder service", zap.String("service_name", name))
-	_, err := envw.kubernetesClient.CoreV1().Services(ns).Create(context.TODO(), &service, metav1.CreateOptions{})
+	_, err := envw.kubernetesClient.CoreV1().Services(ns).Create(ctx, &service, metav1.CreateOptions{})
 	if err != nil {
 		return nil, err
 	}
 	return &service, nil
 }
 
-func (envw *environmentWatcher) getBuilderDeploymentList(sel map[string]string, ns string) ([]appsv1.Deployment, error) {
+func (envw *environmentWatcher) getBuilderDeploymentList(ctx context.Context, sel map[string]string, ns string) ([]appsv1.Deployment, error) {
 	deployList, err := envw.kubernetesClient.AppsV1().Deployments(ns).List(
-		context.TODO(),
+		ctx,
 		metav1.ListOptions{
 			LabelSelector: labels.Set(sel).AsSelector().String(),
 		})
@@ -458,7 +461,7 @@ func (envw *environmentWatcher) getBuilderDeploymentList(sel map[string]string, 
 	return deployList.Items, nil
 }
 
-func (envw *environmentWatcher) createBuilderDeployment(env *fv1.Environment, ns string) (*appsv1.Deployment, error) {
+func (envw *environmentWatcher) createBuilderDeployment(ctx context.Context, env *fv1.Environment, ns string) (*appsv1.Deployment, error) {
 	name := fmt.Sprintf("%v-%v", env.ObjectMeta.Name, env.ObjectMeta.ResourceVersion)
 	sel := envw.getLabels(env.ObjectMeta.Name, ns, env.ObjectMeta.ResourceVersion)
 	var replicas int32 = 1
@@ -546,7 +549,7 @@ func (envw *environmentWatcher) createBuilderDeployment(env *fv1.Environment, ns
 		deployment.Spec.Template.Spec = *newPodSpec
 	}
 
-	_, err = envw.kubernetesClient.AppsV1().Deployments(ns).Create(context.TODO(), deployment, metav1.CreateOptions{})
+	_, err = envw.kubernetesClient.AppsV1().Deployments(ns).Create(ctx, deployment, metav1.CreateOptions{})
 	if err != nil {
 		return nil, err
 	}

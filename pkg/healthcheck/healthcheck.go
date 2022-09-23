@@ -50,7 +50,7 @@ type Category struct {
 
 type Checker struct {
 	successMsg string
-	check      func() error
+	check      func(ctx context.Context) error
 }
 
 type Options struct {
@@ -102,8 +102,8 @@ func (hc *HealthChecker) CheckKubeVersion() (err error) {
 	return nil
 }
 
-func (hc *HealthChecker) CheckServiceStatus(namespace string, name string) (err error) {
-	depl, err := hc.kubeAPI.AppsV1().Deployments(namespace).Get(context.TODO(), name, metav1.GetOptions{})
+func (hc *HealthChecker) CheckServiceStatus(ctx context.Context, namespace string, name string) (err error) {
+	depl, err := hc.kubeAPI.AppsV1().Deployments(namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to get %s deployment status", name)
 	}
@@ -112,7 +112,7 @@ func (hc *HealthChecker) CheckServiceStatus(namespace string, name string) (err 
 		return fmt.Errorf("%s deployment is not running", name)
 	}
 
-	_, err = hc.kubeAPI.CoreV1().Services(namespace).Get(context.TODO(), name, metav1.GetOptions{})
+	_, err = hc.kubeAPI.CoreV1().Services(namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to get %s service status", name)
 	}
@@ -148,7 +148,7 @@ func (hc *HealthChecker) allCategories() []*Category {
 			[]Checker{
 				{
 					successMsg: "kubernetes version is compatible",
-					check: func() (err error) {
+					check: func(ctx context.Context) (err error) {
 						return hc.CheckKubeVersion()
 					},
 				},
@@ -160,26 +160,26 @@ func (hc *HealthChecker) allCategories() []*Category {
 			[]Checker{
 				{
 					successMsg: "controller is running fine",
-					check: func() error {
-						return hc.CheckServiceStatus(hc.fissionNamespace, "controller")
+					check: func(ctx context.Context) error {
+						return hc.CheckServiceStatus(ctx, hc.fissionNamespace, "controller")
 					},
 				},
 				{
 					successMsg: "executor is running fine",
-					check: func() error {
-						return hc.CheckServiceStatus(hc.fissionNamespace, "executor")
+					check: func(ctx context.Context) error {
+						return hc.CheckServiceStatus(ctx, hc.fissionNamespace, "executor")
 					},
 				},
 				{
 					successMsg: "router is running fine",
-					check: func() error {
-						return hc.CheckServiceStatus(hc.fissionNamespace, "router")
+					check: func(ctx context.Context) error {
+						return hc.CheckServiceStatus(ctx, hc.fissionNamespace, "router")
 					},
 				},
 				{
 					successMsg: "storagesvc is running fine",
-					check: func() error {
-						return hc.CheckServiceStatus(hc.fissionNamespace, "storagesvc")
+					check: func(ctx context.Context) error {
+						return hc.CheckServiceStatus(ctx, hc.fissionNamespace, "storagesvc")
 					},
 				},
 			},
@@ -190,7 +190,7 @@ func (hc *HealthChecker) allCategories() []*Category {
 			[]Checker{
 				{
 					successMsg: "fission is up-to-date",
-					check: func() error {
+					check: func(ctx context.Context) error {
 						return hc.CheckFissionVersion()
 					},
 				},
@@ -224,13 +224,13 @@ func NewHealthChecker(categoryIDs []CategoryID, options *Options) *HealthChecker
 	return hc
 }
 
-func RunChecks(hc *HealthChecker) {
+func RunChecks(ctx context.Context, hc *HealthChecker) {
 	for _, c := range hc.categories {
 		if c.enabled {
 			fmt.Println(c.ID)
 			fmt.Println(strings.Repeat("-", 20))
 			for _, checker := range c.checkers {
-				err := checker.check()
+				err := checker.check(ctx)
 				if err != nil {
 					fmt.Printf("%s %s\n", failStatus, err)
 				} else {

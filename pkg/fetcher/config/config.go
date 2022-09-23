@@ -1,6 +1,7 @@
 package container
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -90,8 +91,8 @@ func MakeFetcherConfig(sharedMountPath string) (*Config, error) {
 	}, nil
 }
 
-func (cfg *Config) SetupServiceAccount(kubernetesClient kubernetes.Interface, namespace string, context interface{}) error {
-	_, err := utils.SetupSA(kubernetesClient, fv1.FissionFetcherSA, namespace)
+func (cfg *Config) SetupServiceAccount(ctx context.Context, kubernetesClient kubernetes.Interface, namespace string, context interface{}) error {
+	_, err := utils.SetupSA(ctx, kubernetesClient, fv1.FissionFetcherSA, namespace)
 	if err != nil {
 		log.Printf("Error : %v creating %s in ns : %s for: %#v", err, fv1.FissionFetcherSA, namespace, context)
 		return err

@@ -45,6 +45,6 @@ func (opts *CheckSubCommand) do(input cli.Input) error {
 		FissionClient: opts.Client(),
 	})
 
-	healthcheck.RunChecks(hc)
+	healthcheck.RunChecks(input.Context(), hc)
 	return nil
 }
