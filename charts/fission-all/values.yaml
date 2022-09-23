@@ -155,6 +155,26 @@ executor:
     runAsUser: 10001
     runAsGroup: 10001
 
+  ## Object Reaper
+  ## objectReaperInterval (seconds) represents GLOBAL interval to run process that reaps objects after certain idle time.
+  ## Also you can set different objectReaperInterval for specific executor type. See poolmgs/newdeploy/container section
+  ## Default: 5 (in seconds)
+  ##
+  objectReaperInterval: 5
+
+  poolmgr: {}
+    ## objectReaperInterval specific to poolmgr executor type
+    ##
+    ## objectReaperInterval: 5
+  newdeploy: {}
+    ## objectReaperInterval specific to newdeploy  executor type
+    ##
+    ## objectReaperInterval: 5
+  container: {}
+    ## objectReaperInterval specific to container executor type
+    ##
+    ## objectReaperInterval: 5
+
 ## router is responsible for routing function calls to the appropriate function.
 ##
 router:

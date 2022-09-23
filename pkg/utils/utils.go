@@ -26,6 +26,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/mholt/archiver/v3"
@@ -224,4 +225,24 @@ func GetCurrentNamespace() (string, error) {
 		return "", err
 	}
 	return string(body), nil
+}
+
+func GetStringValueFromEnv(envVar string) (string, error) {
+	v := os.Getenv(envVar)
+	if v == "" {
+		return v, errors.New(fmt.Sprintf("Еnvironment variable %s empty", envVar))
+	}
+	return v, nil
+}
+
+func GetUIntValueFromEnv(envVar string) (uint, error) {
+	s, err := GetStringValueFromEnv(envVar)
+	if err != nil {
+		return 0, err
+	}
+	value, err := strconv.ParseUint(s, 10, 32)
+	if err != nil {
+		return 0, err
+	}
+	return uint(value), nil
 }

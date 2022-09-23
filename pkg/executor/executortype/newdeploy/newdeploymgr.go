@@ -48,6 +48,7 @@ import (
 	"github.com/fission/fission/pkg/executor/fscache"
 	"github.com/fission/fission/pkg/executor/metrics"
 	"github.com/fission/fission/pkg/executor/reaper"
+	executorUtils "github.com/fission/fission/pkg/executor/util"
 	hpautils "github.com/fission/fission/pkg/executor/util/hpa"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
@@ -88,7 +89,8 @@ type (
 
 		hpaops *hpautils.HpaOperations
 
-		podSpecPatch *apiv1.PodSpec
+		podSpecPatch               *apiv1.PodSpec
+		objectReaperIntervalSecond time.Duration
 	}
 )
 
@@ -130,9 +132,9 @@ func MakeNewDeploy(
 		runtimeImagePullPolicy: utils.GetImagePullPolicy(os.Getenv("RUNTIME_IMAGE_PULL_POLICY")),
 		useIstio:               enableIstio,
 
-		defaultIdlePodReapTime: 2 * time.Minute,
-
-		hpaops: hpautils.NewHpaOperations(logger, kubernetesClient, instanceID),
+		defaultIdlePodReapTime:     2 * time.Minute,
+		objectReaperIntervalSecond: time.Duration(executorUtils.GetObjectReaperInterval(logger, fv1.ExecutorTypeNewdeploy, 5)) * time.Second,
+		hpaops:                     hpautils.NewHpaOperations(logger, kubernetesClient, instanceID),
 
 		podSpecPatch: podSpecPatch,
 	}
@@ -769,7 +771,7 @@ func (deploy *NewDeploy) updateStatus(fn *fv1.Function, err error, message strin
 // idleObjectReaper reaps objects after certain idle time
 func (deploy *NewDeploy) idleObjectReaper(ctx context.Context) {
 	// calling function doIdleObjectReaper() repeatedly at given interval of time
-	wait.UntilWithContext(ctx, deploy.doIdleObjectReaper, time.Second*5)
+	wait.UntilWithContext(ctx, deploy.doIdleObjectReaper, deploy.objectReaperIntervalSecond)
 }
 
 func (deploy *NewDeploy) doIdleObjectReaper(ctx context.Context) {

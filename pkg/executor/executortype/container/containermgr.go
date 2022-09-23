@@ -47,6 +47,7 @@ import (
 	"github.com/fission/fission/pkg/executor/fscache"
 	"github.com/fission/fission/pkg/executor/metrics"
 	"github.com/fission/fission/pkg/executor/reaper"
+	executorUtils "github.com/fission/fission/pkg/executor/util"
 	hpautils "github.com/fission/fission/pkg/executor/util/hpa"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	finformerv1 "github.com/fission/fission/pkg/generated/informers/externalversions/core/v1"
@@ -84,7 +85,8 @@ type (
 		deplListerSynced k8sCache.InformerSynced
 		svcListerSynced  k8sCache.InformerSynced
 
-		hpaops *hpautils.HpaOperations
+		hpaops                     *hpautils.HpaOperations
+		objectReaperIntervalSecond time.Duration
 	}
 )
 
@@ -123,9 +125,9 @@ func MakeContainer(
 		runtimeImagePullPolicy: utils.GetImagePullPolicy(os.Getenv("RUNTIME_IMAGE_PULL_POLICY")),
 		useIstio:               enableIstio,
 		// Time is set slightly higher than NewDeploy as cold starts are longer for CaaF
-		defaultIdlePodReapTime: 1 * time.Minute,
-
-		hpaops: hpautils.NewHpaOperations(logger, kubernetesClient, instanceID),
+		defaultIdlePodReapTime:     1 * time.Minute,
+		objectReaperIntervalSecond: time.Duration(executorUtils.GetObjectReaperInterval(logger, fv1.ExecutorTypeContainer, 5)) * time.Second,
+		hpaops:                     hpautils.NewHpaOperations(logger, kubernetesClient, instanceID),
 	}
 	caaf.deplLister = deplInformer.Lister()
 	caaf.deplListerSynced = deplInformer.Informer().HasSynced
@@ -706,7 +708,7 @@ func (caaf *Container) updateStatus(fn *fv1.Function, err error, message string)
 // idleObjectReaper reaps objects after certain idle time
 func (caaf *Container) idleObjectReaper(ctx context.Context) {
 	// calling function doIdleObjectReaper() repeatedly at given interval of time
-	wait.UntilWithContext(ctx, caaf.doIdleObjectReaper, time.Second*5)
+	wait.UntilWithContext(ctx, caaf.doIdleObjectReaper, caaf.objectReaperIntervalSecond)
 }
 
 func (caaf *Container) doIdleObjectReaper(ctx context.Context) {

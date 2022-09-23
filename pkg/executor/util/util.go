@@ -19,15 +19,19 @@ package util
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"sync"
 	"time"
 
+	"go.uber.org/zap"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/yaml"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/utils"
 )
 
 // ApplyImagePullSecret applies image pull secret to the give pod spec.
@@ -127,4 +131,27 @@ func GetSpecFromConfigMap(ctx context.Context, kubeClient kubernetes.Interface, 
 	err = yaml.Unmarshal([]byte(podSpecPatch.Data["spec"]), &additionalSpec)
 
 	return &additionalSpec, err
+}
+
+func GetObjectReaperInterval(logger *zap.Logger, executorType fv1.ExecutorType, defaultReaperInterval uint) uint {
+
+	// TODO think about migration to executor package as const.
+	globalEnvVarName := "OBJECT_REAPER_INTERVAL"
+
+	executorTypeEnvVarName := getExecutorEnvVarName(executorType)
+	keys := []string{executorTypeEnvVarName, globalEnvVarName}
+	for _, k := range keys {
+		interval, err := utils.GetUIntValueFromEnv(k)
+		if err != nil {
+			logger.Debug(fmt.Sprintf("Failed to parse %s", k))
+		} else {
+			return interval
+		}
+	}
+
+	return defaultReaperInterval
+}
+
+func getExecutorEnvVarName(executor fv1.ExecutorType) string {
+	return strings.ToUpper(string(executor)) + "_OBJECT_REAPER_INTERVAL"
 }

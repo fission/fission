@@ -50,6 +50,7 @@ import (
 	"github.com/fission/fission/pkg/executor/executortype"
 	"github.com/fission/fission/pkg/executor/fscache"
 	"github.com/fission/fission/pkg/executor/reaper"
+	executorUtils "github.com/fission/fission/pkg/executor/util"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	finformerv1 "github.com/fission/fission/pkg/generated/informers/externalversions/core/v1"
@@ -94,7 +95,8 @@ type (
 
 		poolPodC *PoolPodController
 
-		podSpecPatch *apiv1.PodSpec
+		podSpecPatch               *apiv1.PodSpec
+		objectReaperIntervalSecond time.Duration
 	}
 	request struct {
 		requestType
@@ -140,21 +142,22 @@ func MakeGenericPoolManager(
 		enableIstio, funcInformer, pkgInformer, envInformer, rsInformer, podInformer)
 
 	gpm := &GenericPoolManager{
-		logger:                 gpmLogger,
-		pools:                  make(map[string]*GenericPool),
-		kubernetesClient:       kubernetesClient,
-		metricsClient:          metricsClient,
-		namespace:              functionNamespace,
-		fissionClient:          fissionClient,
-		functionEnv:            cache.MakeCache(10*time.Second, 0),
-		fsCache:                fscache.MakeFunctionServiceCache(gpmLogger),
-		instanceID:             instanceID,
-		requestChannel:         make(chan *request),
-		defaultIdlePodReapTime: 2 * time.Minute,
-		fetcherConfig:          fetcherConfig,
-		enableIstio:            enableIstio,
-		poolPodC:               poolPodC,
-		podSpecPatch:           podSpecPatch,
+		logger:                     gpmLogger,
+		pools:                      make(map[string]*GenericPool),
+		kubernetesClient:           kubernetesClient,
+		metricsClient:              metricsClient,
+		namespace:                  functionNamespace,
+		fissionClient:              fissionClient,
+		functionEnv:                cache.MakeCache(10*time.Second, 0),
+		fsCache:                    fscache.MakeFunctionServiceCache(gpmLogger),
+		instanceID:                 instanceID,
+		requestChannel:             make(chan *request),
+		defaultIdlePodReapTime:     2 * time.Minute,
+		fetcherConfig:              fetcherConfig,
+		enableIstio:                enableIstio,
+		poolPodC:                   poolPodC,
+		podSpecPatch:               podSpecPatch,
+		objectReaperIntervalSecond: time.Duration(executorUtils.GetObjectReaperInterval(logger, fv1.ExecutorTypePoolmgr, 5)) * time.Second,
 	}
 	gpm.podLister = podInformer.Lister()
 	gpm.podListerSynced = podInformer.Informer().HasSynced
@@ -572,7 +575,7 @@ func (gpm *GenericPoolManager) getFunctionEnv(ctx context.Context, fn *fv1.Funct
 // idleObjectReaper reaps objects after certain idle time
 func (gpm *GenericPoolManager) idleObjectReaper(ctx context.Context) {
 	// calling function doIdleObjectReaper() repeatedly at given interval of time
-	wait.UntilWithContext(ctx, gpm.doIdleObjectReaper, time.Second*5)
+	wait.UntilWithContext(ctx, gpm.doIdleObjectReaper, gpm.objectReaperIntervalSecond)
 }
 
 func (gpm *GenericPoolManager) doIdleObjectReaper(ctx context.Context) {

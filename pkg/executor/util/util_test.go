@@ -18,12 +18,17 @@ package util
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"reflect"
 	"testing"
 
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
+
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
 
 func TestGetSpecFromConfigMap(t *testing.T) {
@@ -110,5 +115,54 @@ securityContext:
 				t.Errorf("GetSpecFromConfigMap() got = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestGetObjectReaperInterval(t *testing.T) {
+	logger := loggerfactory.GetLogger()
+
+	var want uint
+
+	// Test default reaper interval
+	want = 1
+	got := GetObjectReaperInterval(logger, fv1.ExecutorTypeContainer, want)
+	if want != got {
+		t.Fatalf(`Get default ObjectReaperInterval failed. Want %d, Got %d`, want, got)
+	}
+
+	// Test when only specific reaper interval set
+	want = 2
+	os.Setenv("CONTAINER_OBJECT_REAPER_INTERVAL", fmt.Sprint(want))
+	os.Unsetenv("OBJECT_REAPER_INTERVAL")
+	got = GetObjectReaperInterval(logger, fv1.ExecutorTypeContainer, 5)
+	if want != got {
+		t.Fatalf(`%d %d`, want, got)
+	}
+
+	// Test when only global reaper interval set
+	want = 3
+	os.Unsetenv("CONTAINER_OBJECT_REAPER_INTERVAL")
+	os.Setenv("OBJECT_REAPER_INTERVAL", fmt.Sprint(want))
+	got = GetObjectReaperInterval(logger, fv1.ExecutorTypeContainer, 5)
+	if want != got {
+		t.Fatalf(`%d %d`, want, got)
+	}
+
+	// Test when broken specific reaper interval set
+	want = 4
+	os.Setenv("CONTAINER_OBJECT_REAPER_INTERVAL", "just some string!")
+	os.Unsetenv("OBJECT_REAPER_INTERVAL")
+	got = GetObjectReaperInterval(logger, fv1.ExecutorTypeContainer, want)
+	if want != got {
+		t.Fatalf(`%d %d`, want, got)
+	}
+
+	// Test when empty specific reaper interval set
+	want = 5
+	os.Setenv("CONTAINER_OBJECT_REAPER_INTERVAL", "")
+	os.Unsetenv("OBJECT_REAPER_INTERVAL")
+	got = GetObjectReaperInterval(logger, fv1.ExecutorTypeContainer, 5)
+	if want != got {
+		t.Fatalf(`%d %d`, want, got)
 	}
 }
