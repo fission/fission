@@ -41,11 +41,16 @@ func ListPods(input cli.Input) error {
 
 func (opts *ListPodsSubCommand) do(input cli.Input) error {
 
+	namespace := flagkey.NamespaceEnvironment // Once deprecated we can remove the if condition
+	if input.String(flagkey.Namespace) != "default" {
+		namespace = flagkey.Namespace
+	}
+
 	// validate environment
 	_, err := opts.Client().V1().Environment().Get(
 		&metav1.ObjectMeta{
 			Name:      input.String(flagkey.EnvName),
-			Namespace: input.String(flagkey.NamespaceEnvironment),
+			Namespace: input.String(namespace),
 		})
 	if err != nil {
 		return errors.Wrap(err, "error getting environment")
@@ -54,7 +59,7 @@ func (opts *ListPodsSubCommand) do(input cli.Input) error {
 	m := &metav1.ObjectMeta{
 		Name: input.String(flagkey.EnvName),
 		Labels: map[string]string{
-			v1.ENVIRONMENT_NAMESPACE: input.String(flagkey.NamespaceEnvironment),
+			v1.ENVIRONMENT_NAMESPACE: input.String(namespace),
 			v1.EXECUTOR_TYPE:         input.String(flagkey.EnvExecutorType),
 		},
 	}

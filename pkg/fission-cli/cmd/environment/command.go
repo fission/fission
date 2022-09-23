@@ -35,7 +35,7 @@ func Commands() *cobra.Command {
 			flag.EnvPoolsize, flag.EnvBuilderImage, flag.EnvBuildCmd,
 			flag.RunTimeMinCPU, flag.RunTimeMaxCPU, flag.RunTimeMinMemory, flag.RunTimeMaxMemory,
 			flag.EnvTerminationGracePeriod, flag.EnvVersion, flag.EnvImagePullSecret, flag.EnvKeepArchive,
-			flag.NamespaceEnvironment, flag.EnvExternalNetwork, flag.Labels, flag.Annotation,
+			flag.NamespaceEnvironment, flag.Namespace, flag.EnvExternalNetwork, flag.Labels, flag.Annotation,
 			flag.SpecSave, flag.SpecDry, flag.EnvBuilder, flag.EnvRuntime},
 	})
 
@@ -46,7 +46,7 @@ func Commands() *cobra.Command {
 	}
 	wrapper.SetFlags(getCmd, flag.FlagSet{
 		Required: []flag.Flag{flag.EnvName},
-		Optional: []flag.Flag{flag.NamespaceEnvironment},
+		Optional: []flag.Flag{flag.NamespaceEnvironment, flag.Namespace},
 	})
 
 	updateCmd := &cobra.Command{
@@ -60,7 +60,7 @@ func Commands() *cobra.Command {
 			flag.EnvBuilderImage, flag.EnvBuildCmd, flag.EnvImagePullSecret,
 			flag.RunTimeMinCPU, flag.RunTimeMaxCPU, flag.RunTimeMinMemory, flag.RunTimeMaxMemory,
 			flag.EnvTerminationGracePeriod, flag.EnvKeepArchive, flag.EnvRuntime,
-			flag.NamespaceEnvironment, flag.EnvExternalNetwork,
+			flag.NamespaceEnvironment, flag.Namespace, flag.EnvExternalNetwork,
 			flag.Labels, flag.Annotation},
 	})
 
@@ -71,7 +71,7 @@ func Commands() *cobra.Command {
 	}
 	wrapper.SetFlags(deleteCmd, flag.FlagSet{
 		Required: []flag.Flag{flag.EnvName},
-		Optional: []flag.Flag{flag.NamespaceEnvironment, flag.IgnoreNotFound, flag.EnvForce},
+		Optional: []flag.Flag{flag.NamespaceEnvironment, flag.Namespace, flag.IgnoreNotFound, flag.EnvForce},
 	})
 
 	listCmd := &cobra.Command{
@@ -81,7 +81,7 @@ func Commands() *cobra.Command {
 		RunE:  wrapper.Wrapper(List),
 	}
 	wrapper.SetFlags(listCmd, flag.FlagSet{
-		Optional: []flag.Flag{flag.NamespaceEnvironment},
+		Optional: []flag.Flag{flag.NamespaceEnvironment, flag.Namespace},
 	})
 
 	listPodsCmd := &cobra.Command{
@@ -93,7 +93,7 @@ func Commands() *cobra.Command {
 	}
 	wrapper.SetFlags(listPodsCmd, flag.FlagSet{
 		Required: []flag.Flag{flag.EnvName},
-		Optional: []flag.Flag{flag.NamespaceEnvironment, flag.EnvExecutorType},
+		Optional: []flag.Flag{flag.NamespaceEnvironment, flag.Namespace, flag.EnvExecutorType},
 	})
 
 	command := &cobra.Command{

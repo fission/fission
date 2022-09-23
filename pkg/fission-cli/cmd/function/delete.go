@@ -37,9 +37,14 @@ func Delete(input cli.Input) error {
 }
 
 func (opts *DeleteSubCommand) do(input cli.Input) error {
+
+	namespace := input.String(flagkey.NamespaceFunction)
+	if input.String(flagkey.Namespace) != "default" {
+		namespace = input.String(flagkey.Namespace)
+	}
 	m := &metav1.ObjectMeta{
 		Name:      input.String(flagkey.FnName),
-		Namespace: input.String(flagkey.NamespaceFunction),
+		Namespace: namespace,
 	}
 
 	err := opts.Client().V1().Function().Delete(m)

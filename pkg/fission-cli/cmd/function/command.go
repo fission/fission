@@ -49,8 +49,7 @@ func Commands() *cobra.Command {
 			flag.RunTimeMinCPU, flag.RunTimeMaxCPU, flag.RunTimeMinMemory,
 			flag.RunTimeMaxMemory, flag.ReplicasMin,
 			flag.ReplicasMax, flag.RunTimeTargetCPU,
-
-			flag.NamespaceFunction, flag.NamespaceEnvironment, flag.SpecSave, flag.SpecDry},
+			flag.NamespaceFunction, flag.Namespace, flag.NamespaceEnvironment, flag.SpecSave, flag.SpecDry},
 	})
 
 	getCmd := &cobra.Command{
@@ -61,7 +60,7 @@ func Commands() *cobra.Command {
 	}
 	wrapper.SetFlags(getCmd, flag.FlagSet{
 		Required: []flag.Flag{flag.FnName},
-		Optional: []flag.Flag{flag.NamespaceFunction},
+		Optional: []flag.Flag{flag.NamespaceFunction, flag.Namespace},
 	})
 
 	getmetaCmd := &cobra.Command{
@@ -72,7 +71,7 @@ func Commands() *cobra.Command {
 	}
 	wrapper.SetFlags(getmetaCmd, flag.FlagSet{
 		Required: []flag.Flag{flag.FnName},
-		Optional: []flag.Flag{flag.NamespaceFunction},
+		Optional: []flag.Flag{flag.NamespaceFunction, flag.Namespace},
 	})
 
 	updateCmd := &cobra.Command{
@@ -98,7 +97,7 @@ func Commands() *cobra.Command {
 			flag.RunTimeMaxMemory, flag.ReplicasMin, flag.ReplicasMax,
 			flag.RunTimeTargetCPU,
 
-			flag.NamespaceFunction, flag.NamespaceEnvironment, flag.SpecSave,
+			flag.NamespaceFunction, flag.Namespace, flag.NamespaceEnvironment, flag.SpecSave,
 		},
 	})
 
@@ -110,7 +109,7 @@ func Commands() *cobra.Command {
 	}
 	wrapper.SetFlags(deleteCmd, flag.FlagSet{
 		Required: []flag.Flag{flag.FnName},
-		Optional: []flag.Flag{flag.NamespaceFunction, flag.IgnoreNotFound},
+		Optional: []flag.Flag{flag.NamespaceFunction, flag.Namespace, flag.IgnoreNotFound},
 	})
 
 	listCmd := &cobra.Command{
@@ -121,7 +120,7 @@ func Commands() *cobra.Command {
 		RunE:    wrapper.Wrapper(List),
 	}
 	wrapper.SetFlags(listCmd, flag.FlagSet{
-		Optional: []flag.Flag{flag.NamespaceFunction},
+		Optional: []flag.Flag{flag.NamespaceFunction, flag.Namespace},
 	})
 
 	logsCmd := &cobra.Command{
@@ -134,7 +133,7 @@ func Commands() *cobra.Command {
 		Required: []flag.Flag{flag.FnName},
 		Optional: []flag.Flag{
 			flag.FnLogFollow, flag.FnLogReverseQuery, flag.FnLogCount,
-			flag.FnLogDetail, flag.FnLogPod, flag.NamespaceFunction, flag.FnLogDBType},
+			flag.FnLogDetail, flag.FnLogPod, flag.NamespaceFunction, flag.Namespace, flag.FnLogDBType},
 	})
 
 	testCmd := &cobra.Command{
@@ -146,7 +145,7 @@ func Commands() *cobra.Command {
 	wrapper.SetFlags(testCmd, flag.FlagSet{
 		Required: []flag.Flag{flag.FnName},
 		Optional: []flag.Flag{flag.HtMethod, flag.FnTestHeader, flag.FnTestBody,
-			flag.FnTestQuery, flag.FnTestTimeout, flag.NamespaceFunction,
+			flag.FnTestQuery, flag.FnTestTimeout, flag.NamespaceFunction, flag.Namespace,
 			// for getting log from log database if
 			// we failed to get logs from function pod.
 			flag.FnLogDBType,
@@ -175,7 +174,7 @@ func Commands() *cobra.Command {
 			flag.RunTimeMaxMemory, flag.ReplicasMin,
 			flag.ReplicasMax, flag.RunTimeTargetCPU,
 
-			flag.NamespaceFunction, flag.SpecSave, flag.SpecDry,
+			flag.NamespaceFunction, flag.Namespace, flag.SpecSave, flag.SpecDry,
 		},
 	})
 
@@ -198,7 +197,7 @@ func Commands() *cobra.Command {
 			flag.RunTimeMaxMemory, flag.ReplicasMin, flag.ReplicasMax,
 			flag.RunTimeTargetCPU,
 
-			flag.NamespaceFunction, flag.SpecSave,
+			flag.NamespaceFunction, flag.Namespace, flag.SpecSave,
 		},
 	})
 
@@ -211,7 +210,7 @@ func Commands() *cobra.Command {
 	}
 	wrapper.SetFlags(listPodsCmd, flag.FlagSet{
 		Required: []flag.Flag{flag.FnName},
-		Optional: []flag.Flag{flag.NamespaceFunction},
+		Optional: []flag.Flag{flag.NamespaceFunction, flag.Namespace},
 	})
 
 	command := &cobra.Command{

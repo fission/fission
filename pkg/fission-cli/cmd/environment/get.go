@@ -38,9 +38,15 @@ func Get(input cli.Input) error {
 }
 
 func (opts *GetSubCommand) do(input cli.Input) error {
+
+	namespace := flagkey.NamespaceEnvironment // Once deprecated we can remove the if condition
+	if input.String(flagkey.Namespace) != "default" {
+		namespace = flagkey.Namespace
+	}
+
 	m := &metav1.ObjectMeta{
 		Name:      input.String(flagkey.EnvName),
-		Namespace: input.String(flagkey.NamespaceEnvironment),
+		Namespace: input.String(namespace),
 	}
 
 	env, err := opts.Client().V1().Environment().Get(m)

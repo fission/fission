@@ -37,7 +37,12 @@ func List(input cli.Input) error {
 }
 
 func (opts *ListSubCommand) do(input cli.Input) error {
-	envs, err := opts.Client().V1().Environment().List(input.String(flagkey.NamespaceEnvironment))
+
+	namespace := flagkey.NamespaceEnvironment
+	if input.String(flagkey.Namespace) != "default" {
+		namespace = flagkey.Namespace
+	}
+	envs, err := opts.Client().V1().Environment().List(input.String(namespace))
 	if err != nil {
 		return errors.Wrap(err, "error listing environments")
 	}

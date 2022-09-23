@@ -64,7 +64,12 @@ func (opts *CreateSubCommand) do(input cli.Input) error {
 
 func (opts *CreateSubCommand) complete(input cli.Input) error {
 	fnName := input.String(flagkey.FnName)
+
 	fnNamespace := input.String(flagkey.NamespaceFunction)
+	if input.String(flagkey.Namespace) != "default" {
+		fnNamespace = input.String(flagkey.Namespace)
+	}
+
 	envNamespace := input.String(flagkey.NamespaceEnvironment)
 
 	// user wants a spec, create a yaml file with package and function
@@ -80,7 +85,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		// check for unique function names within a namespace
 		fn, err := opts.Client().V1().Function().Get(&metav1.ObjectMeta{
 			Name:      input.String(flagkey.FnName),
-			Namespace: input.String(flagkey.NamespaceFunction),
+			Namespace: fnNamespace,
 		})
 		if err != nil && !ferror.IsNotFound(err) {
 			return err

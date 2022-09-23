@@ -53,9 +53,15 @@ func (opts *UpdateSubCommand) do(input cli.Input) error {
 }
 
 func (opts *UpdateSubCommand) complete(input cli.Input) error {
+
+	namespace := flagkey.NamespaceEnvironment // Once deprecated we can remove the if condition
+	if input.String(flagkey.Namespace) != "default" {
+		namespace = flagkey.Namespace
+	}
+
 	env, err := opts.Client().V1().Environment().Get(&metav1.ObjectMeta{
 		Name:      input.String(flagkey.EnvName),
-		Namespace: input.String(flagkey.NamespaceEnvironment),
+		Namespace: input.String(namespace),
 	})
 	if err != nil {
 		return errors.Wrap(err, "error finding environment")
@@ -126,6 +132,9 @@ func updateExistingEnvironmentWithCmd(env *fv1.Environment, input cli.Input) (*f
 	if input.IsSet(flagkey.EnvImagePullSecret) {
 		env.Spec.ImagePullSecret = input.String(flagkey.EnvImagePullSecret)
 	}
+
+	env.Spec.Resources.Requests = make(v1.ResourceList)
+	env.Spec.Resources.Limits = make(v1.ResourceList)
 
 	if input.IsSet(flagkey.RuntimeMincpu) {
 		mincpu := input.Int(flagkey.RuntimeMincpu)
