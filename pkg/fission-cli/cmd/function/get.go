@@ -17,6 +17,7 @@ limitations under the License.
 package function
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/pkg/errors"
@@ -37,8 +38,10 @@ func Get(input cli.Input) error {
 }
 
 func (opts *GetSubCommand) do(input cli.Input) error {
-	namespace := util.GetResourceNamespace(input, flagkey.NamespaceFunction)
-
+	_, namespace, err := util.GetResourceNamespace(input, flagkey.NamespaceFunction)
+	if err != nil {
+		return errors.Wrap(err, fmt.Sprintf("error in deleting function "))
+	}
 	fn, err := opts.Client().V1().Function().Get(&metav1.ObjectMeta{
 		Name:      input.String(flagkey.FnName),
 		Namespace: namespace,

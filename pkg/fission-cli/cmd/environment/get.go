@@ -38,13 +38,16 @@ func Get(input cli.Input) error {
 	return (&GetSubCommand{}).do(input)
 }
 
-func (opts *GetSubCommand) do(input cli.Input) error {
+func (opts *GetSubCommand) do(input cli.Input) (err error) {
 
-	namespace := util.GetResourceNamespace(input, flagkey.NamespaceEnvironment)
+	_, currentNS, err := util.GetResourceNamespace(input, flagkey.NamespaceEnvironment)
+	if err != nil {
+		return errors.Wrap(err, "error creating environment")
+	}
 
 	m := &metav1.ObjectMeta{
 		Name:      input.String(flagkey.EnvName),
-		Namespace: namespace,
+		Namespace: currentNS,
 	}
 
 	env, err := opts.Client().V1().Environment().Get(m)

@@ -52,7 +52,10 @@ func Test(input cli.Input) error {
 
 func (opts *TestSubCommand) do(input cli.Input) error {
 
-	namespace := util.GetResourceNamespace(input, flagkey.NamespaceFunction)
+	_, namespace, err := util.GetResourceNamespace(input, flagkey.NamespaceFunction)
+	if err != nil {
+		return errors.Wrap(err, fmt.Sprintf("error in deleting function "))
+	}
 
 	m := &metav1.ObjectMeta{
 		Name:      input.String(flagkey.FnName),

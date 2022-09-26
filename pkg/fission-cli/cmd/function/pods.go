@@ -42,10 +42,13 @@ func ListPods(input cli.Input) error {
 
 func (opts *ListPodsSubCommand) do(input cli.Input) error {
 
-	namespace := util.GetResourceNamespace(input, flagkey.NamespaceFunction)
+	_, namespace, err := util.GetResourceNamespace(input, flagkey.NamespaceFunction)
 
+	if err != nil {
+		return errors.Wrap(err, fmt.Sprintf("error in deleting function "))
+	}
 	// validate function
-	_, err := opts.Client().V1().Function().Get(&metav1.ObjectMeta{
+	_, err = opts.Client().V1().Function().Get(&metav1.ObjectMeta{
 		Name:      input.String(flagkey.FnName),
 		Namespace: namespace,
 	})

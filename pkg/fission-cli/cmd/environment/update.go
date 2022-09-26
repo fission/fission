@@ -52,13 +52,15 @@ func (opts *UpdateSubCommand) do(input cli.Input) error {
 	return opts.run(input)
 }
 
-func (opts *UpdateSubCommand) complete(input cli.Input) error {
+func (opts *UpdateSubCommand) complete(input cli.Input) (err error) {
 
-	namespace := util.GetResourceNamespace(input, flagkey.NamespaceEnvironment)
-
+	_, currentContextNS, err := util.GetResourceNamespace(input, flagkey.NamespaceEnvironment)
+	if err != nil {
+		return errors.Wrap(err, "error creating environment")
+	}
 	env, err := opts.Client().V1().Environment().Get(&metav1.ObjectMeta{
 		Name:      input.String(flagkey.EnvName),
-		Namespace: namespace,
+		Namespace: currentContextNS,
 	})
 	if err != nil {
 		return errors.Wrap(err, "error finding environment")

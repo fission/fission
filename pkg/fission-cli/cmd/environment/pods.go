@@ -40,15 +40,18 @@ func ListPods(input cli.Input) error {
 	return (&ListPodsSubCommand{}).do(input)
 }
 
-func (opts *ListPodsSubCommand) do(input cli.Input) error {
+func (opts *ListPodsSubCommand) do(input cli.Input) (err error) {
 
-	namespace := util.GetResourceNamespace(input, flagkey.NamespaceEnvironment)
+	_, currentNS, err := util.GetResourceNamespace(input, flagkey.NamespaceEnvironment)
+	if err != nil {
+		return errors.Wrap(err, "error creating environment")
+	}
 
 	// validate environment
-	_, err := opts.Client().V1().Environment().Get(
+	_, err = opts.Client().V1().Environment().Get(
 		&metav1.ObjectMeta{
 			Name:      input.String(flagkey.EnvName),
-			Namespace: namespace,
+			Namespace: currentNS,
 		})
 	if err != nil {
 		return errors.Wrap(err, "error getting environment")
@@ -57,7 +60,7 @@ func (opts *ListPodsSubCommand) do(input cli.Input) error {
 	m := &metav1.ObjectMeta{
 		Name: input.String(flagkey.EnvName),
 		Labels: map[string]string{
-			v1.ENVIRONMENT_NAMESPACE: namespace,
+			v1.ENVIRONMENT_NAMESPACE: currentNS,
 			v1.EXECUTOR_TYPE:         input.String(flagkey.EnvExecutorType),
 		},
 	}

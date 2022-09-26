@@ -24,6 +24,7 @@ import (
 
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
+	"github.com/fission/fission/pkg/fission-cli/console"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
@@ -36,13 +37,22 @@ func Delete(input cli.Input) error {
 	return (&DeleteSubCommand{}).do(input)
 }
 
-func (opts *DeleteSubCommand) do(input cli.Input) error {
+func (opts *DeleteSubCommand) do(input cli.Input) (err error) {
 
-	namespace := util.GetResourceNamespace(input, flagkey.NamespaceEnvironment)
+	_, currentContextNS, err := util.GetResourceNamespace(input, flagkey.NamespaceEnvironment)
+	console.Verbose(2, "Namespace before not set %v ", currentContextNS)
+	// if namespace == "" {
+	// 	kubeContext := "" //TODO: get correct value here
+	// 	namespace, err = util.GetKubernetesCurrentNamespace(kubeContext)
+	if err != nil {
+		return errors.Wrap(err, "error creating environment")
+	}
+	// }
+	console.Verbose(2, "Namespace after set %v ", currentContextNS)
 
 	m := &metav1.ObjectMeta{
 		Name:      input.String(flagkey.EnvName),
-		Namespace: namespace,
+		Namespace: currentContextNS,
 	}
 
 	if !input.Bool(flagkey.EnvForce) {
@@ -59,7 +69,7 @@ func (opts *DeleteSubCommand) do(input cli.Input) error {
 		}
 	}
 
-	err := opts.Client().V1().Environment().Delete(m)
+	err = opts.Client().V1().Environment().Delete(m)
 	if err != nil {
 		if input.Bool(flagkey.IgnoreNotFound) && util.IsNotFound(err) {
 			return nil

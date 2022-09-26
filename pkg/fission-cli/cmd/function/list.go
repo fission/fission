@@ -39,7 +39,10 @@ func List(input cli.Input) error {
 }
 
 func (opts *ListSubCommand) do(input cli.Input) error {
-	namespace := util.GetResourceNamespace(input, flagkey.NamespaceFunction)
+	_, namespace, err := util.GetResourceNamespace(input, flagkey.NamespaceFunction)
+	if err != nil {
+		return errors.Wrap(err, fmt.Sprintf("error in deleting function "))
+	}
 
 	fns, err := opts.Client().V1().Function().List(namespace)
 	if err != nil {

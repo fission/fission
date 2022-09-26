@@ -37,23 +37,27 @@ func List(input cli.Input) error {
 	return (&ListSubCommand{}).do(input)
 }
 
-func (opts *ListSubCommand) do(input cli.Input) error {
+func (opts *ListSubCommand) do(input cli.Input) (err error) {
 
-	namespace := util.GetResourceNamespace(input, flagkey.NamespaceEnvironment)
+	_, currentNS, err := util.GetResourceNamespace(input, flagkey.NamespaceEnvironment)
+	if err != nil {
+		return errors.Wrap(err, "error creating environment")
+	}
 
-	envs, err := opts.Client().V1().Environment().List(namespace)
+	envs, err := opts.Client().V1().Environment().List(currentNS)
 	if err != nil {
 		return errors.Wrap(err, "error listing environments")
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
-	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "IMAGE", "BUILDER_IMAGE", "POOLSIZE", "MINCPU", "MAXCPU", "MINMEMORY", "MAXMEMORY", "EXTNET", "GRACETIME")
+	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "IMAGE", "BUILDER_IMAGE", "POOLSIZE", "MINCPU", "MAXCPU", "MINMEMORY", "MAXMEMORY", "EXTNET", "GRACETIME", "NAMESPACE")
 	for _, env := range envs {
-		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
+		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
 			env.ObjectMeta.Name, env.Spec.Runtime.Image, env.Spec.Builder.Image, env.Spec.Poolsize,
 			env.Spec.Resources.Requests.Cpu(), env.Spec.Resources.Limits.Cpu(),
 			env.Spec.Resources.Requests.Memory(), env.Spec.Resources.Limits.Memory(),
-			env.Spec.AllowAccessToExternalNetwork, env.Spec.TerminationGracePeriod)
+			env.Spec.AllowAccessToExternalNetwork, env.Spec.TerminationGracePeriod, env.Namespace,
+		)
 	}
 	w.Flush()
 

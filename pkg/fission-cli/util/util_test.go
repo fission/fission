@@ -17,6 +17,7 @@ limitations under the License.
 package util
 
 import (
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -63,4 +64,12 @@ func TestGetEnvVarFromStringSlice(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestGetConfig(t *testing.T) {
+	response, err := GetKubernetesCurrentNamespace("")
+	if err != nil {
+		fmt.Println(err)
+	}
+	fmt.Println("Current NS: ", response)
 }

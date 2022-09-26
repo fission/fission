@@ -56,7 +56,10 @@ func (opts *RunContainerSubCommand) do(input cli.Input) error {
 func (opts *RunContainerSubCommand) complete(input cli.Input) error {
 	fnName := input.String(flagkey.FnName)
 
-	fnNamespace := util.GetResourceNamespace(input, flagkey.NamespaceFunction)
+	_, fnNamespace, err := util.GetResourceNamespace(input, flagkey.NamespaceFunction)
+	if err != nil {
+		return errors.Wrap(err, fmt.Sprintf("error in deleting function "))
+	}
 
 	// user wants a spec, create a yaml file with package and function
 	toSpec := false

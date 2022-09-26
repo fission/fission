@@ -104,11 +104,8 @@ func KubifyName(old string) string {
 	return newName
 }
 
-// GetKubernetesClient builds a new kubernetes client. If the KUBECONFIG
-// environment variable is empty or doesn't exist, ~/.kube/config is used for
-// the kube config path
-func GetKubernetesClient(kubeContext string) (*restclient.Config, kubernetes.Interface, error) {
-	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
+func getLoadingRules() (loadingRules *clientcmd.ClientConfigLoadingRules, err error) {
+	loadingRules = clientcmd.NewDefaultClientConfigLoadingRules()
 
 	kubeConfigPath := os.Getenv("KUBECONFIG")
 	if len(kubeConfigPath) == 0 {
@@ -126,13 +123,24 @@ func GetKubernetesClient(kubeContext string) (*restclient.Config, kubernetes.Int
 		kubeConfigPath = filepath.Join(homeDir, ".kube", "config")
 
 		if _, err := os.Stat(kubeConfigPath); os.IsNotExist(err) {
-			return nil, nil, errors.New("Couldn't find kubeconfig file. " +
+			return nil, errors.New("Couldn't find kubeconfig file. " +
 				"Set the KUBECONFIG environment variable to your kubeconfig's path.")
 		}
 		loadingRules.ExplicitPath = kubeConfigPath
 		console.Verbose(2, "Using kubeconfig from %q", kubeConfigPath)
 	} else {
 		console.Verbose(2, "Using kubeconfig from environment %q", kubeConfigPath)
+	}
+	return loadingRules, nil
+}
+
+// GetKubernetesClient builds a new kubernetes client. If the KUBECONFIG
+// environment variable is empty or doesn't exist, ~/.kube/config is used for
+// the kube config path
+func GetKubernetesClient(kubeContext string) (*restclient.Config, kubernetes.Interface, error) {
+	loadingRules, err := getLoadingRules()
+	if err != nil {
+		return nil, nil, err
 	}
 
 	config, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
@@ -147,6 +155,25 @@ func GetKubernetesClient(kubeContext string) (*restclient.Config, kubernetes.Int
 	}
 
 	return config, clientset, nil
+}
+
+// GetKubernetesCurrentNamespace builds a new kubernetes client. If the KUBECONFIG
+// environment variable is empty or doesn't exist, ~/.kube/config is used for
+// the kube config path
+func GetKubernetesCurrentNamespace(kubeContext string) (currentNS string, err error) {
+	loadingRules, err := getLoadingRules()
+	if err != nil {
+		return "", err
+	}
+
+	config1, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
+		loadingRules, &clientcmd.ConfigOverrides{CurrentContext: kubeContext}).RawConfig()
+	if err != nil {
+		return "", errors.Wrap(err, "Failed to build Kubernetes config")
+	}
+	currentNS = config1.Contexts[config1.CurrentContext].Namespace
+
+	return currentNS, nil
 }
 
 // given a list of functions, this checks if the functions actually exist on the cluster
@@ -460,11 +487,23 @@ func GetStorageURL(ctx context.Context, kubeContext string) (*url.URL, error) {
 	return serverURL, nil
 }
 
-func GetResourceNamespace(input cli.Input, deprecatedFlag string) string {
-	namespace := input.String(deprecatedFlag)
+func GetResourceNamespace(input cli.Input, deprecatedFlag string) (namespace, currentNS string, err error) {
+	namespace = input.String(deprecatedFlag)
 
-	if input.String(flagkey.Namespace) != "default" {
+	if input.String(flagkey.Namespace) != "" {
 		namespace = input.String(flagkey.Namespace)
 	}
-	return namespace
+	console.Verbose(2, "Namespace from user %v ", namespace)
+	currentNS = namespace
+	if namespace == "" {
+		kubeContext := "" //TODO: get correct value here
+		currentNS, err = GetKubernetesCurrentNamespace(kubeContext)
+		if err != nil {
+			return namespace, currentNS, err
+		}
+	}
+
+	console.Verbose(2, "Namespace final %v ", namespace)
+
+	return namespace, currentNS, nil
 }

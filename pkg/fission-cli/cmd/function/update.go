@@ -51,7 +51,10 @@ func (opts *UpdateSubCommand) do(input cli.Input) error {
 
 func (opts *UpdateSubCommand) complete(input cli.Input) error {
 	fnName := input.String(flagkey.FnName)
-	fnNamespace := util.GetResourceNamespace(input, flagkey.NamespaceFunction)
+	_, fnNamespace, err := util.GetResourceNamespace(input, flagkey.NamespaceFunction)
+	if err != nil {
+		return errors.Wrap(err, fmt.Sprintf("error in deleting function "))
+	}
 
 	function, err := opts.Client().V1().Function().Get(&metav1.ObjectMeta{
 		Name:      input.String(flagkey.FnName),

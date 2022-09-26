@@ -65,7 +65,7 @@ func (opts *CreateSubCommand) do(input cli.Input) error {
 func (opts *CreateSubCommand) complete(input cli.Input) error {
 	fnName := input.String(flagkey.FnName)
 
-	fnNamespace := util.GetResourceNamespace(input, flagkey.NamespaceFunction)
+	_, fnNamespace, err := util.GetResourceNamespace(input, flagkey.NamespaceFunction)
 	envNamespace := input.String(flagkey.NamespaceEnvironment)
 
 	// user wants a spec, create a yaml file with package and function
