@@ -111,7 +111,7 @@ type (
 	}
 )
 
-func MakeGenericPoolManager(
+func MakeGenericPoolManager(ctx context.Context,
 	logger *zap.Logger,
 	fissionClient versioned.Interface,
 	kubernetesClient kubernetes.Interface,
@@ -138,7 +138,7 @@ func MakeGenericPoolManager(
 		enableIstio = istio
 	}
 
-	poolPodC := NewPoolPodController(gpmLogger, kubernetesClient, functionNamespace,
+	poolPodC := NewPoolPodController(ctx, gpmLogger, kubernetesClient, functionNamespace,
 		enableIstio, funcInformer, pkgInformer, envInformer, rsInformer, podInformer)
 
 	gpm := &GenericPoolManager{
@@ -171,10 +171,10 @@ func (gpm *GenericPoolManager) Run(ctx context.Context) {
 	}
 	go gpm.service()
 	gpm.poolPodC.InjectGpm(gpm)
-	go gpm.WebsocketStartEventChecker(gpm.kubernetesClient)
-	go gpm.NoActiveConnectionEventChecker(gpm.kubernetesClient)
+	go gpm.WebsocketStartEventChecker(ctx, gpm.kubernetesClient)
+	go gpm.NoActiveConnectionEventChecker(ctx, gpm.kubernetesClient)
 	go gpm.idleObjectReaper(ctx)
-	go gpm.poolPodC.Run(ctx.Done())
+	go gpm.poolPodC.Run(ctx, ctx.Done())
 }
 
 func (gpm *GenericPoolManager) GetTypeName(ctx context.Context) fv1.ExecutorType {
@@ -664,17 +664,17 @@ func (gpm *GenericPoolManager) doIdleObjectReaper(ctx context.Context) {
 }
 
 // WebsocketStartEventChecker checks if the pod has emitted a websocket connection start event
-func (gpm *GenericPoolManager) WebsocketStartEventChecker(kubeClient kubernetes.Interface) {
+func (gpm *GenericPoolManager) WebsocketStartEventChecker(ctx context.Context, kubeClient kubernetes.Interface) {
 
 	informer := k8sCache.NewSharedInformer(
 		&k8sCache.ListWatch{
 			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
 				options.FieldSelector = "involvedObject.kind=Pod,type=Normal,reason=WsConnectionStarted"
-				return kubeClient.CoreV1().Events(apiv1.NamespaceAll).List(context.TODO(), options)
+				return kubeClient.CoreV1().Events(apiv1.NamespaceAll).List(ctx, options)
 			},
 			WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
 				options.FieldSelector = "involvedObject.kind=Pod,type=Normal,reason=WsConnectionStarted"
-				return kubeClient.CoreV1().Events(apiv1.NamespaceAll).Watch(context.TODO(), options)
+				return kubeClient.CoreV1().Events(apiv1.NamespaceAll).Watch(ctx, options)
 			},
 		},
 		&apiv1.Event{},
@@ -705,17 +705,17 @@ func (gpm *GenericPoolManager) WebsocketStartEventChecker(kubeClient kubernetes.
 }
 
 // NoActiveConnectionEventChecker checks if the pod has emitted an inactive event
-func (gpm *GenericPoolManager) NoActiveConnectionEventChecker(kubeClient kubernetes.Interface) {
+func (gpm *GenericPoolManager) NoActiveConnectionEventChecker(ctx context.Context, kubeClient kubernetes.Interface) {
 
 	informer := k8sCache.NewSharedInformer(
 		&k8sCache.ListWatch{
 			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
 				options.FieldSelector = "involvedObject.kind=Pod,type=Normal,reason=NoActiveConnections"
-				return kubeClient.CoreV1().Events(apiv1.NamespaceAll).List(context.TODO(), options)
+				return kubeClient.CoreV1().Events(apiv1.NamespaceAll).List(ctx, options)
 			},
 			WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
 				options.FieldSelector = "involvedObject.kind=Pod,type=Normal,reason=NoActiveConnections"
-				return kubeClient.CoreV1().Events(apiv1.NamespaceAll).Watch(context.TODO(), options)
+				return kubeClient.CoreV1().Events(apiv1.NamespaceAll).Watch(ctx, options)
 			},
 		},
 		&apiv1.Event{},
@@ -737,7 +737,6 @@ func (gpm *GenericPoolManager) NoActiveConnectionEventChecker(kubeClient kuberne
 					gpm.logger.Error("could not convert value from PodToFsvc")
 					return
 				}
-				ctx := context.Background()
 				gpm.fsCache.DeleteFunctionSvc(ctx, fsvc)
 				for i := range fsvc.KubernetesObjects {
 					gpm.logger.Info("release idle function resources due to  inactivity",

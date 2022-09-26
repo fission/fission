@@ -60,7 +60,9 @@ securityContext:
 		Data: configMapData,
 	}
 
-	configmap, err := kubeClient.CoreV1().ConfigMaps("fission").Create(context.Background(), &testConfigMap, metav1.CreateOptions{})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	configmap, err := kubeClient.CoreV1().ConfigMaps("fission").Create(ctx, &testConfigMap, metav1.CreateOptions{})
 	if err != nil {
 		t.Errorf("Error creating configmap %v", err)
 	}
@@ -106,7 +108,7 @@ securityContext:
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := GetSpecFromConfigMap(context.Background(), kubeClient, tt.cm, tt.cmns)
+			got, err := GetSpecFromConfigMap(ctx, kubeClient, tt.cm, tt.cmns)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("GetSpecFromConfigMap() error = %v, wantErr %v", err, tt.wantErr)
 				return

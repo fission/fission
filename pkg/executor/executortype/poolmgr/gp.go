@@ -142,7 +142,7 @@ func MakeGenericPool(
 
 func (gp *GenericPool) setup(ctx context.Context) error {
 	// create fetcher SA in this ns, if not already created
-	err := gp.fetcherConfig.SetupServiceAccount(gp.kubernetesClient, gp.namespace, nil)
+	err := gp.fetcherConfig.SetupServiceAccount(ctx, gp.kubernetesClient, gp.namespace, nil)
 	if err != nil {
 		return errors.Wrapf(err, "error creating fetcher service account in namespace %q", gp.namespace)
 	}
@@ -156,7 +156,7 @@ func (gp *GenericPool) setup(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	go gp.updateCPUUtilizationSvc()
+	go gp.updateCPUUtilizationSvc(ctx)
 	return nil
 }
 
@@ -185,7 +185,7 @@ func (gp *GenericPool) checkMetricsApi() bool {
 	return utils.SupportedMetricsAPIVersionAvailable(apiGroups)
 }
 
-func (gp *GenericPool) updateCPUUtilizationSvc() {
+func (gp *GenericPool) updateCPUUtilizationSvc(ctx context.Context) {
 	var metricsApiAvailabe bool
 	checkDuration := 30
 
@@ -194,8 +194,8 @@ func (gp *GenericPool) updateCPUUtilizationSvc() {
 		gp.logger.Warn("Metrics API not available")
 	}
 
-	serviceFunc := func() {
-		podMetricsList, err := gp.metricsClient.MetricsV1beta1().PodMetricses(gp.namespace).List(context.TODO(), metav1.ListOptions{
+	serviceFunc := func(ctx context.Context) {
+		podMetricsList, err := gp.metricsClient.MetricsV1beta1().PodMetricses(gp.namespace).List(ctx, metav1.ListOptions{
 			LabelSelector: "managed=false",
 		})
 		if err != nil {
@@ -220,7 +220,7 @@ func (gp *GenericPool) updateCPUUtilizationSvc() {
 
 	for {
 		if metricsApiAvailabe {
-			serviceFunc()
+			serviceFunc(ctx)
 		} else {
 			if gp.checkMetricsApi() {
 				metricsApiAvailabe = true
@@ -342,22 +342,20 @@ func (gp *GenericPool) labelsForFunction(metadata *metav1.ObjectMeta) map[string
 	return label
 }
 
-func (gp *GenericPool) scheduleDeletePod(name string) {
-	go func() {
-		// The sleep allows debugging or collecting logs from the pod before it's
-		// cleaned up.  (We need a better solutions for both those things; log
-		// aggregation and storage will help.)
-		gp.logger.Error("error in pod - scheduling cleanup", zap.String("pod", name))
-		err := gp.kubernetesClient.CoreV1().Pods(gp.namespace).Delete(context.TODO(), name, metav1.DeleteOptions{})
-		if err != nil {
-			gp.logger.Error(
-				"error deleting pod",
-				zap.String("name", name),
-				zap.String("namespace", gp.namespace),
-				zap.Error(err),
-			)
-		}
-	}()
+func (gp *GenericPool) scheduleDeletePod(ctx context.Context, name string) {
+	// The sleep allows debugging or collecting logs from the pod before it's
+	// cleaned up.  (We need a better solutions for both those things; log
+	// aggregation and storage will help.)
+	gp.logger.Error("error in pod - scheduling cleanup", zap.String("pod", name))
+	err := gp.kubernetesClient.CoreV1().Pods(gp.namespace).Delete(ctx, name, metav1.DeleteOptions{})
+	if err != nil {
+		gp.logger.Error(
+			"error deleting pod",
+			zap.String("name", name),
+			zap.String("namespace", gp.namespace),
+			zap.Error(err),
+		)
+	}
 }
 
 // IsIPv6 validates if the podIP follows to IPv6 protocol
@@ -502,7 +500,7 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 	gp.readyPodQueue.Done(key)
 	err = gp.specializePod(ctx, pod, fn)
 	if err != nil {
-		gp.scheduleDeletePod(pod.ObjectMeta.Name)
+		go gp.scheduleDeletePod(context.Background(), pod.ObjectMeta.Name)
 		return nil, err
 	}
 	logger.Info("specialized pod", zap.String("pod", pod.ObjectMeta.Name), zap.String("podNamespace", pod.ObjectMeta.Namespace), zap.String("podIP", pod.Status.PodIP))
@@ -516,11 +514,11 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 
 		svc, err := gp.createSvc(ctx, svcName, funcLabels)
 		if err != nil {
-			gp.scheduleDeletePod(pod.ObjectMeta.Name)
+			go gp.scheduleDeletePod(context.Background(), pod.ObjectMeta.Name)
 			return nil, err
 		}
 		if svc.ObjectMeta.Name != svcName {
-			gp.scheduleDeletePod(pod.ObjectMeta.Name)
+			go gp.scheduleDeletePod(context.Background(), pod.ObjectMeta.Name)
 			return nil, errors.Errorf("sanity check failed for svc %v", svc.ObjectMeta.Name)
 		}
 

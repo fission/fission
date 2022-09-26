@@ -66,7 +66,7 @@ type (
 	}
 )
 
-func NewPoolPodController(logger *zap.Logger,
+func NewPoolPodController(ctx context.Context, logger *zap.Logger,
 	kubernetesClient kubernetes.Interface,
 	namespace string,
 	enableIstio bool,
@@ -86,8 +86,8 @@ func NewPoolPodController(logger *zap.Logger,
 		envDeleteQueue:       workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "EnvDeleteQueue"),
 		spCleanupPodQueue:    workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "SpecializedPodCleanupQueue"),
 	}
-	funcInformer.Informer().AddEventHandler(FunctionEventHandlers(p.logger, p.kubernetesClient, p.namespace, p.enableIstio))
-	pkgInformer.Informer().AddEventHandler(PackageEventHandlers(p.logger, p.kubernetesClient, p.namespace))
+	funcInformer.Informer().AddEventHandler(FunctionEventHandlers(ctx, p.logger, p.kubernetesClient, p.namespace, p.enableIstio))
+	pkgInformer.Informer().AddEventHandler(PackageEventHandlers(ctx, p.logger, p.kubernetesClient, p.namespace))
 	envInformer.Informer().AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
 		AddFunc:    p.enqueueEnvAdd,
 		UpdateFunc: p.enqueueEnvUpdate,
@@ -216,7 +216,7 @@ func (p *PoolPodController) enqueueEnvDelete(obj interface{}) {
 	p.envDeleteQueue.Add(env)
 }
 
-func (p *PoolPodController) Run(stopCh <-chan struct{}) {
+func (p *PoolPodController) Run(ctx context.Context, stopCh <-chan struct{}) {
 	defer utilruntime.HandleCrash()
 	defer p.envCreateUpdateQueue.ShutDown()
 	defer p.envDeleteQueue.ShutDown()
@@ -228,20 +228,20 @@ func (p *PoolPodController) Run(stopCh <-chan struct{}) {
 		p.logger.Fatal("failed to wait for caches to sync")
 	}
 	for i := 0; i < 4; i++ {
-		go wait.Until(p.workerRun("envCreateUpdate", p.envCreateUpdateQueueProcessFunc), time.Second, stopCh)
+		go wait.Until(p.workerRun(ctx, "envCreateUpdate", p.envCreateUpdateQueueProcessFunc), time.Second, stopCh)
 	}
-	go wait.Until(p.workerRun("envDeleteQueue", p.envDeleteQueueProcessFunc), time.Second, stopCh)
-	go wait.Until(p.workerRun("spCleanupPodQueue", p.spCleanupPodQueueProcessFunc), time.Second, stopCh)
+	go wait.Until(p.workerRun(ctx, "envDeleteQueue", p.envDeleteQueueProcessFunc), time.Second, stopCh)
+	go wait.Until(p.workerRun(ctx, "spCleanupPodQueue", p.spCleanupPodQueueProcessFunc), time.Second, stopCh)
 	p.logger.Info("Started workers for poolPodController")
 	<-stopCh
 	p.logger.Info("Shutting down workers for poolPodController")
 }
 
-func (p *PoolPodController) workerRun(name string, processFunc func() bool) func() {
+func (p *PoolPodController) workerRun(ctx context.Context, name string, processFunc func(ctx context.Context) bool) func() {
 	return func() {
 		p.logger.Debug("Starting worker with func", zap.String("name", name))
 		for {
-			if quit := processFunc(); quit {
+			if quit := processFunc(ctx); quit {
 				p.logger.Info("Shutting down worker", zap.String("name", name))
 				return
 			}
@@ -249,7 +249,7 @@ func (p *PoolPodController) workerRun(name string, processFunc func() bool) func
 	}
 }
 
-func (p *PoolPodController) envCreateUpdateQueueProcessFunc() bool {
+func (p *PoolPodController) envCreateUpdateQueueProcessFunc(ctx context.Context) bool {
 	maxRetries := 3
 	handleEnv := func(ctx context.Context, env *fv1.Environment) error {
 		log := p.logger.With(zap.String("env", env.ObjectMeta.Name), zap.String("namespace", env.ObjectMeta.Namespace))
@@ -310,7 +310,6 @@ func (p *PoolPodController) envCreateUpdateQueueProcessFunc() bool {
 		return false
 	}
 
-	ctx := context.Background()
 	err = handleEnv(ctx, env)
 	if err != nil {
 		if p.envCreateUpdateQueue.NumRequeues(key) < maxRetries {
@@ -326,7 +325,7 @@ func (p *PoolPodController) envCreateUpdateQueueProcessFunc() bool {
 	return false
 }
 
-func (p *PoolPodController) envDeleteQueueProcessFunc() bool {
+func (p *PoolPodController) envDeleteQueueProcessFunc(ctx context.Context) bool {
 	obj, quit := p.envDeleteQueue.Get()
 	if quit {
 		return true
@@ -338,7 +337,6 @@ func (p *PoolPodController) envDeleteQueueProcessFunc() bool {
 		p.envDeleteQueue.Forget(obj)
 		return false
 	}
-	ctx := context.Background()
 	p.logger.Debug("env delete request processing")
 	p.gpm.cleanupPool(ctx, env)
 	specializePodLables := getSpecializedPodLabels(env)
@@ -368,7 +366,7 @@ func (p *PoolPodController) envDeleteQueueProcessFunc() bool {
 	return false
 }
 
-func (p *PoolPodController) spCleanupPodQueueProcessFunc() bool {
+func (p *PoolPodController) spCleanupPodQueueProcessFunc(ctx context.Context) bool {
 	maxRetries := 3
 	obj, quit := p.spCleanupPodQueue.Get()
 	if quit {
@@ -403,7 +401,6 @@ func (p *PoolPodController) spCleanupPodQueueProcessFunc() bool {
 		}
 		return false
 	}
-	ctx := context.Background()
 	podName := strings.SplitAfter(pod.GetName(), ".")
 	if fsvc, ok := p.gpm.fsCache.PodToFsvc.Load(strings.TrimSuffix(podName[0], ".")); ok {
 		fsvc, ok := fsvc.(*fscache.FuncSvc)

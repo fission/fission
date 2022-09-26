@@ -34,7 +34,7 @@ func NewFissionVersion(client client.Interface) Resource {
 }
 
 func (res FissionVersion) Dump(ctx context.Context, dumpDir string) {
-	ver := util.GetVersion(res.client)
+	ver := util.GetVersion(ctx, res.client)
 	file := filepath.Clean(fmt.Sprintf("%v/%v", dumpDir, "fission-version.txt"))
 	writeToFile(file, ver)
 }

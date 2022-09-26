@@ -50,15 +50,15 @@ func MakeSAObj(sa, ns string) *apiv1.ServiceAccount {
 }
 
 // SetupSA checks if a service account is present in the namespace, if not creates it.
-func SetupSA(k8sClient kubernetes.Interface, sa, ns string) (*apiv1.ServiceAccount, error) {
-	saObj, err := k8sClient.CoreV1().ServiceAccounts(ns).Get(context.TODO(), sa, metav1.GetOptions{})
+func SetupSA(ctx context.Context, k8sClient kubernetes.Interface, sa, ns string) (*apiv1.ServiceAccount, error) {
+	saObj, err := k8sClient.CoreV1().ServiceAccounts(ns).Get(ctx, sa, metav1.GetOptions{})
 	if err == nil {
 		return saObj, nil
 	}
 
 	if k8serrors.IsNotFound(err) {
 		saObj = MakeSAObj(sa, ns)
-		saObj, err = k8sClient.CoreV1().ServiceAccounts(ns).Create(context.TODO(), saObj, metav1.CreateOptions{})
+		saObj, err = k8sClient.CoreV1().ServiceAccounts(ns).Create(ctx, saObj, metav1.CreateOptions{})
 	}
 
 	return saObj, err

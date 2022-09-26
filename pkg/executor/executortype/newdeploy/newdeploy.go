@@ -120,7 +120,7 @@ func (deploy *NewDeploy) createOrGetDeployment(ctx context.Context, fn *fv1.Func
 
 func (deploy *NewDeploy) setupRBACObjs(ctx context.Context, deployNamespace string, fn *fv1.Function) error {
 	// create fetcher SA in this ns, if not already created
-	err := deploy.fetcherConfig.SetupServiceAccount(deploy.kubernetesClient, deployNamespace, fn.ObjectMeta)
+	err := deploy.fetcherConfig.SetupServiceAccount(ctx, deploy.kubernetesClient, deployNamespace, fn.ObjectMeta)
 	if err != nil {
 		deploy.logger.Error("error creating fission fetcher service account for function",
 			zap.Error(err),

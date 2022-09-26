@@ -66,7 +66,7 @@ func getAuthTriggerClient(namespace string) (dynamic.ResourceInterface, error) {
 	return dynamicClient.Resource(authTriggerGVR).Namespace(namespace), nil
 }
 
-func mqTriggerEventHandlers(logger *zap.Logger, kubeClient kubernetes.Interface, routerURL string) k8sCache.ResourceEventHandlerFuncs {
+func mqTriggerEventHandlers(ctx context.Context, logger *zap.Logger, kubeClient kubernetes.Interface, routerURL string) k8sCache.ResourceEventHandlerFuncs {
 	return k8sCache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			go func() {
@@ -79,17 +79,17 @@ func mqTriggerEventHandlers(logger *zap.Logger, kubeClient kubernetes.Interface,
 				authenticationRef := ""
 				if len(mqt.Spec.Secret) > 0 {
 					authenticationRef = fmt.Sprintf("%s-auth-trigger", mqt.ObjectMeta.Name)
-					err := createAuthTrigger(mqt, authenticationRef, kubeClient)
+					err := createAuthTrigger(ctx, mqt, authenticationRef, kubeClient)
 					if err != nil {
 						logger.Error("Failed to create Authentication Trigger", zap.Error(err))
 						return
 					}
 				}
 
-				if err := createDeployment(mqt, routerURL, kubeClient); err != nil {
+				if err := createDeployment(ctx, mqt, routerURL, kubeClient); err != nil {
 					logger.Error("Failed to create Deployment", zap.Error(err))
 					if len(authenticationRef) > 0 {
-						err = deleteAuthTrigger(authenticationRef, mqt.ObjectMeta.Namespace)
+						err = deleteAuthTrigger(ctx, authenticationRef, mqt.ObjectMeta.Namespace)
 						if err != nil {
 							logger.Error("Failed to delete Authentication Trigger", zap.Error(err))
 						}
@@ -97,14 +97,14 @@ func mqTriggerEventHandlers(logger *zap.Logger, kubeClient kubernetes.Interface,
 					return
 				}
 
-				if err := createScaledObject(mqt, authenticationRef); err != nil {
+				if err := createScaledObject(ctx, mqt, authenticationRef); err != nil {
 					logger.Error("Failed to create ScaledObject", zap.Error(err))
 					if len(authenticationRef) > 0 {
-						if err = deleteAuthTrigger(authenticationRef, mqt.ObjectMeta.Namespace); err != nil {
+						if err = deleteAuthTrigger(ctx, authenticationRef, mqt.ObjectMeta.Namespace); err != nil {
 							logger.Error("Failed to delete Authentication Trigger", zap.Error(err))
 						}
 					}
-					if err = deleteDeployment(mqt.ObjectMeta.Name, mqt.ObjectMeta.Namespace, kubeClient); err != nil {
+					if err = deleteDeployment(ctx, mqt.ObjectMeta.Name, mqt.ObjectMeta.Namespace, kubeClient); err != nil {
 						logger.Error("Failed to delete Deployment", zap.Error(err))
 					}
 				}
@@ -126,18 +126,18 @@ func mqTriggerEventHandlers(logger *zap.Logger, kubeClient kubernetes.Interface,
 				authenticationRef := ""
 				if len(newMqt.Spec.Secret) > 0 && newMqt.Spec.Secret != mqt.Spec.Secret {
 					authenticationRef = fmt.Sprintf("%s-auth-trigger", mqt.ObjectMeta.Name)
-					if err := updateAuthTrigger(mqt, authenticationRef, kubeClient); err != nil {
+					if err := updateAuthTrigger(ctx, mqt, authenticationRef, kubeClient); err != nil {
 						logger.Error("Failed to update Authentication Trigger", zap.Error(err))
 						return
 					}
 				}
 
-				if err := updateDeployment(mqt, routerURL, kubeClient); err != nil {
+				if err := updateDeployment(ctx, mqt, routerURL, kubeClient); err != nil {
 					logger.Error("Failed to Update Deployment", zap.Error(err))
 					return
 				}
 
-				if err := updateScaledObject(mqt, authenticationRef); err != nil {
+				if err := updateScaledObject(ctx, mqt, authenticationRef); err != nil {
 					logger.Error("Failed to Update ScaledObject", zap.Error(err))
 					return
 				}
@@ -160,7 +160,7 @@ func StartScalerManager(ctx context.Context, logger *zap.Logger, routerURL strin
 	}
 	informerFactory := genInformer.NewSharedInformerFactory(fissionClient, time.Minute*30)
 	mqTriggerInformer := informerFactory.Core().V1().MessageQueueTriggers().Informer()
-	mqTriggerInformer.AddEventHandler(mqTriggerEventHandlers(logger, kubeClient, routerURL))
+	mqTriggerInformer.AddEventHandler(mqTriggerEventHandlers(ctx, logger, kubeClient, routerURL))
 	mqTriggerInformer.Run(ctx.Done())
 	return nil
 }
@@ -171,7 +171,7 @@ func toEnvVar(str string) string {
 	return strings.ToUpper(envVar)
 }
 
-func getEnvVarlist(mqt *fv1.MessageQueueTrigger, routerURL string, kubeClient kubernetes.Interface) ([]apiv1.EnvVar, error) {
+func getEnvVarlist(ctx context.Context, mqt *fv1.MessageQueueTrigger, routerURL string, kubeClient kubernetes.Interface) ([]apiv1.EnvVar, error) {
 	url := routerURL + "/" + strings.TrimPrefix(utils.UrlForFunction(mqt.Spec.FunctionReference.Name, mqt.ObjectMeta.Namespace), "/")
 	envVars := []apiv1.EnvVar{
 		{
@@ -214,7 +214,7 @@ func getEnvVarlist(mqt *fv1.MessageQueueTrigger, routerURL string, kubeClient ku
 	// Add Auth Fields
 	secretName := mqt.Spec.Secret
 	if len(secretName) > 0 {
-		secret, err := kubeClient.CoreV1().Secrets(apiv1.NamespaceDefault).Get(context.TODO(), secretName, metav1.GetOptions{})
+		secret, err := kubeClient.CoreV1().Secrets(apiv1.NamespaceDefault).Get(ctx, secretName, metav1.GetOptions{})
 		if err != nil {
 			return nil, err
 		}
@@ -300,8 +300,8 @@ func checkAndUpdateTriggerFields(mqt, newMqt *fv1.MessageQueueTrigger) bool {
 	return updated
 }
 
-func getAuthTriggerSpec(mqt *fv1.MessageQueueTrigger, authenticationRef string, kubeClient kubernetes.Interface) (*unstructured.Unstructured, error) {
-	secret, err := kubeClient.CoreV1().Secrets(apiv1.NamespaceDefault).Get(context.TODO(), mqt.Spec.Secret, metav1.GetOptions{})
+func getAuthTriggerSpec(ctx context.Context, mqt *fv1.MessageQueueTrigger, authenticationRef string, kubeClient kubernetes.Interface) (*unstructured.Unstructured, error) {
+	secret, err := kubeClient.CoreV1().Secrets(apiv1.NamespaceDefault).Get(ctx, mqt.Spec.Secret, metav1.GetOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -338,8 +338,8 @@ func getAuthTriggerSpec(mqt *fv1.MessageQueueTrigger, authenticationRef string, 
 	return authTriggerObj, nil
 }
 
-func createAuthTrigger(mqt *fv1.MessageQueueTrigger, authenticationRef string, kubeClient kubernetes.Interface) error {
-	authTriggerObj, err := getAuthTriggerSpec(mqt, authenticationRef, kubeClient)
+func createAuthTrigger(ctx context.Context, mqt *fv1.MessageQueueTrigger, authenticationRef string, kubeClient kubernetes.Interface) error {
+	authTriggerObj, err := getAuthTriggerSpec(ctx, mqt, authenticationRef, kubeClient)
 	if err != nil {
 		return err
 	}
@@ -347,50 +347,50 @@ func createAuthTrigger(mqt *fv1.MessageQueueTrigger, authenticationRef string, k
 	if err != nil {
 		return err
 	}
-	_, err = authTriggerClient.Create(context.Background(), authTriggerObj, metav1.CreateOptions{})
+	_, err = authTriggerClient.Create(ctx, authTriggerObj, metav1.CreateOptions{})
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func updateAuthTrigger(mqt *fv1.MessageQueueTrigger, authenticationRef string, kubeClient kubernetes.Interface) error {
+func updateAuthTrigger(ctx context.Context, mqt *fv1.MessageQueueTrigger, authenticationRef string, kubeClient kubernetes.Interface) error {
 	authTriggerClient, err := getAuthTriggerClient(mqt.ObjectMeta.Namespace)
 	if err != nil {
 		return err
 	}
-	oldAuthTriggerObj, err := authTriggerClient.Get(context.Background(), authenticationRef, metav1.GetOptions{})
+	oldAuthTriggerObj, err := authTriggerClient.Get(ctx, authenticationRef, metav1.GetOptions{})
 	if err != nil {
 		return err
 	}
 	resourceVersion := oldAuthTriggerObj.GetResourceVersion()
 
-	authTriggerObj, err := getAuthTriggerSpec(mqt, authenticationRef, kubeClient)
+	authTriggerObj, err := getAuthTriggerSpec(ctx, mqt, authenticationRef, kubeClient)
 	if err != nil {
 		return err
 	}
 	authTriggerObj.SetResourceVersion(resourceVersion)
-	_, err = authTriggerClient.Update(context.Background(), authTriggerObj, metav1.UpdateOptions{})
+	_, err = authTriggerClient.Update(ctx, authTriggerObj, metav1.UpdateOptions{})
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func deleteAuthTrigger(name, namespace string) error {
+func deleteAuthTrigger(ctx context.Context, name, namespace string) error {
 	authTriggerClient, err := getAuthTriggerClient(namespace)
 	if err != nil {
 		return err
 	}
-	err = authTriggerClient.Delete(context.Background(), name, metav1.DeleteOptions{})
+	err = authTriggerClient.Delete(ctx, name, metav1.DeleteOptions{})
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func getDeploymentSpec(mqt *fv1.MessageQueueTrigger, routerURL string, kubeClient kubernetes.Interface) (*appsv1.Deployment, error) {
-	envVars, err := getEnvVarlist(mqt, routerURL, kubeClient)
+func getDeploymentSpec(ctx context.Context, mqt *fv1.MessageQueueTrigger, routerURL string, kubeClient kubernetes.Interface) (*appsv1.Deployment, error) {
+	envVars, err := getEnvVarlist(ctx, mqt, routerURL, kubeClient)
 	if err != nil {
 		return nil, err
 	}
@@ -448,33 +448,33 @@ func getDeploymentSpec(mqt *fv1.MessageQueueTrigger, routerURL string, kubeClien
 	}, nil
 }
 
-func createDeployment(mqt *fv1.MessageQueueTrigger, routerURL string, kubeClient kubernetes.Interface) error {
-	deployment, err := getDeploymentSpec(mqt, routerURL, kubeClient)
+func createDeployment(ctx context.Context, mqt *fv1.MessageQueueTrigger, routerURL string, kubeClient kubernetes.Interface) error {
+	deployment, err := getDeploymentSpec(ctx, mqt, routerURL, kubeClient)
 	if err != nil {
 		return err
 	}
-	_, err = kubeClient.AppsV1().Deployments(mqt.ObjectMeta.Namespace).Create(context.TODO(), deployment, metav1.CreateOptions{})
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func updateDeployment(mqt *fv1.MessageQueueTrigger, routerURL string, kubeClient kubernetes.Interface) error {
-	deployment, err := getDeploymentSpec(mqt, routerURL, kubeClient)
-	if err != nil {
-		return err
-	}
-	_, err = kubeClient.AppsV1().Deployments(mqt.ObjectMeta.Namespace).Update(context.TODO(), deployment, metav1.UpdateOptions{})
+	_, err = kubeClient.AppsV1().Deployments(mqt.ObjectMeta.Namespace).Create(ctx, deployment, metav1.CreateOptions{})
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func deleteDeployment(name string, namespace string, kubeClient kubernetes.Interface) error {
+func updateDeployment(ctx context.Context, mqt *fv1.MessageQueueTrigger, routerURL string, kubeClient kubernetes.Interface) error {
+	deployment, err := getDeploymentSpec(ctx, mqt, routerURL, kubeClient)
+	if err != nil {
+		return err
+	}
+	_, err = kubeClient.AppsV1().Deployments(mqt.ObjectMeta.Namespace).Update(ctx, deployment, metav1.UpdateOptions{})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func deleteDeployment(ctx context.Context, name string, namespace string, kubeClient kubernetes.Interface) error {
 	deletePolicy := metav1.DeletePropagationForeground
-	if err := kubeClient.AppsV1().Deployments(namespace).Delete(context.TODO(), name, metav1.DeleteOptions{
+	if err := kubeClient.AppsV1().Deployments(namespace).Delete(ctx, name, metav1.DeleteOptions{
 		PropagationPolicy: &deletePolicy,
 	}); err != nil {
 		return err
@@ -522,25 +522,25 @@ func getScaledObject(mqt *fv1.MessageQueueTrigger, authenticationRef string) *un
 	}
 }
 
-func createScaledObject(mqt *fv1.MessageQueueTrigger, authenticationRef string) error {
+func createScaledObject(ctx context.Context, mqt *fv1.MessageQueueTrigger, authenticationRef string) error {
 	scaledObject := getScaledObject(mqt, authenticationRef)
 	kedaClient, err := getScaledObjectClient(mqt.ObjectMeta.Namespace)
 	if err != nil {
 		return err
 	}
-	_, err = kedaClient.Create(context.Background(), scaledObject, metav1.CreateOptions{})
+	_, err = kedaClient.Create(ctx, scaledObject, metav1.CreateOptions{})
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func updateScaledObject(mqt *fv1.MessageQueueTrigger, authenticationRef string) error {
+func updateScaledObject(ctx context.Context, mqt *fv1.MessageQueueTrigger, authenticationRef string) error {
 	kedaClient, err := getScaledObjectClient(mqt.ObjectMeta.Namespace)
 	if err != nil {
 		return err
 	}
-	oldScaledObject, err := kedaClient.Get(context.Background(), mqt.ObjectMeta.Name, metav1.GetOptions{})
+	oldScaledObject, err := kedaClient.Get(ctx, mqt.ObjectMeta.Name, metav1.GetOptions{})
 	if err != nil {
 		return err
 	}
@@ -549,7 +549,7 @@ func updateScaledObject(mqt *fv1.MessageQueueTrigger, authenticationRef string) 
 	scaledObject := getScaledObject(mqt, authenticationRef)
 	scaledObject.SetResourceVersion(resourceVersion)
 
-	_, err = kedaClient.Update(context.Background(), scaledObject, metav1.UpdateOptions{})
+	_, err = kedaClient.Update(ctx, scaledObject, metav1.UpdateOptions{})
 	if err != nil {
 		return err
 	}

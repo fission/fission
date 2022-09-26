@@ -519,7 +519,7 @@ func TestMain(m *testing.M) {
 	exitVal := m.Run()
 	logger.Info("Deleting test namespace", zap.String("namespace", testNS))
 	gracePeriod := int64(0)
-	err = kubeClient.CoreV1().Namespaces().Delete(context.TODO(), testNS, metav1.DeleteOptions{GracePeriodSeconds: &gracePeriod})
+	err = kubeClient.CoreV1().Namespaces().Delete(ctx, testNS, metav1.DeleteOptions{GracePeriodSeconds: &gracePeriod})
 	if err != nil {
 		logger.Error("error deleting test namespace", zap.String("namespace", testNS), zap.Error(err))
 	}

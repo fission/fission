@@ -258,7 +258,7 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 				"service-entry":      roundTripper.serviceURL.String()})...)
 			if roundTripper.funcHandler.function.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypePoolmgr {
 				defer func(ctx context.Context, fn *fv1.Function, serviceURL *url.URL) {
-					go roundTripper.funcHandler.unTapService(fn, serviceURL) //nolint errcheck
+					go roundTripper.funcHandler.unTapService(context.Background(), fn, serviceURL) //nolint errcheck
 				}(ctx, roundTripper.funcHandler.function, roundTripper.serviceURL)
 			}
 
@@ -584,9 +584,9 @@ func (roundTripper RetryingRoundTripper) addForwardedHostHeader(req *http.Reques
 }
 
 // unTapservice marks the serviceURL in executor's cache as inactive, so that it can be reused
-func (fh functionHandler) unTapService(fn *fv1.Function, serviceUrl *url.URL) error {
+func (fh functionHandler) unTapService(ctx context.Context, fn *fv1.Function, serviceUrl *url.URL) error {
 	fh.logger.Debug("UnTapService Called")
-	ctx, cancel := context.WithTimeout(context.Background(), fh.unTapServiceTimeout)
+	ctx, cancel := context.WithTimeout(ctx, fh.unTapServiceTimeout)
 	defer cancel()
 	err := fh.executor.UnTapService(ctx, fn.ObjectMeta, fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType, serviceUrl)
 	if err != nil {

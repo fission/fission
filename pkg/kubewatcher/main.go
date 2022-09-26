@@ -39,7 +39,7 @@ func Start(ctx context.Context, logger *zap.Logger, routerUrl string) error {
 
 	poster := publisher.MakeWebhookPublisher(logger, routerUrl)
 	kubeWatch := MakeKubeWatcher(ctx, logger, kubeClient, poster)
-	MakeWatchSync(logger, fissionClient, kubeWatch)
+	MakeWatchSync(ctx, logger, fissionClient, kubeWatch)
 
 	return nil
 }

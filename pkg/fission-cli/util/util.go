@@ -171,7 +171,7 @@ func CheckFunctionExistence(client client.Interface, functions []string, fnNames
 	return nil
 }
 
-func GetVersion(client client.Interface) info.Versions {
+func GetVersion(ctx context.Context, client client.Interface) info.Versions {
 	// Fetch client versions
 	versions := info.Versions{
 		Client: map[string]info.BuildMeta{
@@ -179,7 +179,7 @@ func GetVersion(client client.Interface) info.Versions {
 		},
 	}
 
-	for _, pmd := range plugin.FindAll() {
+	for _, pmd := range plugin.FindAll(ctx) {
 		versions.Client[pmd.Name] = info.BuildMeta{
 			Version: pmd.Version,
 		}

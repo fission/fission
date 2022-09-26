@@ -40,6 +40,8 @@ func Test_toEnvVar(t *testing.T) {
 }
 
 func Test_getEnvVarlist(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	// Kafka Test with Valid Secret
 	pollingInterval := int32(30)
 	cooldownPeriod := int32(300)
@@ -97,7 +99,7 @@ func Test_getEnvVarlist(t *testing.T) {
 	}
 
 	kubeClient := fake.NewSimpleClientset()
-	_, err := kubeClient.CoreV1().Secrets(namespace).Create(context.Background(), secret, metav1.CreateOptions{})
+	_, err := kubeClient.CoreV1().Secrets(namespace).Create(ctx, secret, metav1.CreateOptions{})
 	if err != nil {
 		assert.Equal(t, nil, err)
 	}
@@ -217,7 +219,7 @@ func Test_getEnvVarlist(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := getEnvVarlist(tt.args.mqt, tt.args.routerURL, tt.args.kubeClient)
+			got, err := getEnvVarlist(ctx, tt.args.mqt, tt.args.routerURL, tt.args.kubeClient)
 			sort.Slice(got, func(i, j int) bool {
 				return got[i].Name < got[j].Name
 			})
@@ -371,7 +373,8 @@ func Test_checkAndUpdateTriggerFields(t *testing.T) {
 }
 
 func Test_getAuthTriggerSpec(t *testing.T) {
-
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	// Valid - with Secret
 	pollingInterval := int32(30)
 	cooldownPeriod := int32(300)
@@ -428,7 +431,7 @@ func Test_getAuthTriggerSpec(t *testing.T) {
 	}
 
 	kubeClient := fake.NewSimpleClientset()
-	_, err := kubeClient.CoreV1().Secrets(namespace).Create(context.Background(), secret, metav1.CreateOptions{})
+	_, err := kubeClient.CoreV1().Secrets(namespace).Create(ctx, secret, metav1.CreateOptions{})
 	if err != nil {
 		assert.Equal(t, nil, err)
 	}
@@ -537,7 +540,7 @@ func Test_getAuthTriggerSpec(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := getAuthTriggerSpec(tt.args.mqt, tt.args.authenticationRef, tt.args.kubeClient)
+			got, err := getAuthTriggerSpec(ctx, tt.args.mqt, tt.args.authenticationRef, tt.args.kubeClient)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("getAuthTriggerSpec() error = %v, wantErr %v", err, tt.wantErr)
 				return

@@ -295,7 +295,7 @@ func StartExecutor(ctx context.Context, logger *zap.Logger, functionNamespace st
 	}
 	gpmPodInformer := gpmInformerFactory.Core().V1().Pods()
 	gpmRsInformer := gpmInformerFactory.Apps().V1().ReplicaSets()
-	gpm, err := poolmgr.MakeGenericPoolManager(
+	gpm, err := poolmgr.MakeGenericPoolManager(ctx,
 		logger,
 		fissionClient, kubernetesClient, metricsClient,
 		functionNamespace, fetcherConfig, executorInstanceID,
@@ -311,7 +311,7 @@ func StartExecutor(ctx context.Context, logger *zap.Logger, functionNamespace st
 	}
 	ndmDeplInformer := ndmInformerFactory.Apps().V1().Deployments()
 	ndmSvcInformer := ndmInformerFactory.Core().V1().Services()
-	ndm, err := newdeploy.MakeNewDeploy(
+	ndm, err := newdeploy.MakeNewDeploy(ctx,
 		logger,
 		fissionClient, kubernetesClient,
 		functionNamespace, fetcherConfig, executorInstanceID,

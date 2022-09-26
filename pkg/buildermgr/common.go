@@ -121,7 +121,7 @@ func buildPackage(ctx context.Context, logger *zap.Logger, fissionClient version
 	return uploadResp, buildResp.BuildLogs, nil
 }
 
-func updatePackage(logger *zap.Logger, fissionClient versioned.Interface,
+func updatePackage(ctx context.Context, logger *zap.Logger, fissionClient versioned.Interface,
 	pkg *fv1.Package, status fv1.BuildStatus, buildLogs string,
 	uploadResp *fetcher.ArchiveUploadResponse) (*fv1.Package, error) {
 
@@ -140,7 +140,7 @@ func updatePackage(logger *zap.Logger, fissionClient versioned.Interface,
 	}
 
 	// update package spec
-	pkg, err := fissionClient.CoreV1().Packages(pkg.ObjectMeta.Namespace).Update(context.TODO(), pkg, metav1.UpdateOptions{})
+	pkg, err := fissionClient.CoreV1().Packages(pkg.ObjectMeta.Namespace).Update(ctx, pkg, metav1.UpdateOptions{})
 	if err != nil {
 		e := "error updating package"
 		logger.Error(e, zap.Error(err))

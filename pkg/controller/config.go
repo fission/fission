@@ -28,15 +28,15 @@ import (
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 )
 
-func ConfigCanaryFeature(context context.Context, logger *zap.Logger, fissionClient versioned.Interface, kubeClient kubernetes.Interface, featureConfig *config.FeatureConfig, featureStatus map[string]string) error {
+func ConfigCanaryFeature(ctx context.Context, logger *zap.Logger, fissionClient versioned.Interface, kubeClient kubernetes.Interface, featureConfig *config.FeatureConfig, featureStatus map[string]string) error {
 	// start the appropriate controller
 	if featureConfig.CanaryConfig.IsEnabled {
-		canaryCfgMgr, err := canaryconfigmgr.MakeCanaryConfigMgr(logger, fissionClient, kubeClient, featureConfig.CanaryConfig.PrometheusSvc)
+		canaryCfgMgr, err := canaryconfigmgr.MakeCanaryConfigMgr(ctx, logger, fissionClient, kubeClient, featureConfig.CanaryConfig.PrometheusSvc)
 		if err != nil {
 			featureStatus[config.CanaryFeature] = err.Error()
 			return errors.Wrap(err, "failed to start canary config manager")
 		}
-		canaryCfgMgr.Run(context)
+		canaryCfgMgr.Run(ctx)
 		logger.Info("started canary config manager")
 	}
 
@@ -44,7 +44,7 @@ func ConfigCanaryFeature(context context.Context, logger *zap.Logger, fissionCli
 }
 
 // ConfigureFeatures gets the feature config and configures the features that are enabled
-func ConfigureFeatures(context context.Context, logger *zap.Logger, unitTestMode bool, fissionClient versioned.Interface, kubeClient kubernetes.Interface) (map[string]string, error) {
+func ConfigureFeatures(ctx context.Context, logger *zap.Logger, unitTestMode bool, fissionClient versioned.Interface, kubeClient kubernetes.Interface) (map[string]string, error) {
 	// set feature enabled to false if unitTestMode
 	if unitTestMode {
 		return nil, nil
@@ -61,6 +61,6 @@ func ConfigureFeatures(context context.Context, logger *zap.Logger, unitTestMode
 
 	// configure respective features
 	// in the future when new optional features are added, we need to add corresponding feature handlers and invoke them here
-	err = ConfigCanaryFeature(context, logger, fissionClient, kubeClient, featureConfig, featureStatus)
+	err = ConfigCanaryFeature(ctx, logger, fissionClient, kubeClient, featureConfig, featureStatus)
 	return featureStatus, err
 }
