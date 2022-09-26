@@ -73,7 +73,6 @@ deploy:
       upgrade:
       - --timeout=3m
       - --install
-      - --force
       - --debug
 profiles:
 - name: kind
