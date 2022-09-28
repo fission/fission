@@ -100,7 +100,7 @@ func (client *PreUpgradeTaskClient) LatestSchemaApplied(ctx context.Context) err
 		return fmt.Errorf("could not get the Function CRD")
 	}
 	// Any new field added in Function spec can be checked here provided the substring matches the description in CRD Validation of the field
-	if !strings.Contains(funcCRD.Spec.String(), "RequestsPerPod") || !strings.Contains(funcCRD.Spec.String(), "OnceOnly") || !strings.Contains(funcCRD.Spec.String(), "PodSpec") {
+	if !strings.Contains(funcCRD.Spec.String(), "requestsPerPod") || !strings.Contains(funcCRD.Spec.String(), "onceOnly") || !strings.Contains(funcCRD.Spec.String(), "podSpec") {
 		return fmt.Errorf("could not find RequestPerPod/OnceOnly/PodSpec in Function CRD")
 	}
 
@@ -110,7 +110,7 @@ func (client *PreUpgradeTaskClient) LatestSchemaApplied(ctx context.Context) err
 	}
 
 	// Any new field added in MQT spec can be checked here provided the substring matches the description in CRD Validation of the field
-	if !strings.Contains(mqtCRD.Spec.String(), "PodSpec") {
+	if !strings.Contains(mqtCRD.Spec.String(), "podSpec") {
 		return fmt.Errorf("could not find PodSpec field in MQT CRD")
 	}
 
