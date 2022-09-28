@@ -188,7 +188,7 @@ var (
 
 	KwName      = Flag{Type: String, Name: flagkey.KwName, Usage: "Watch name"}
 	KwFnName    = Flag{Type: String, Name: flagkey.KwFnName, Usage: "Function name"}
-	KwNamespace = Flag{Type: String, Name: flagkey.KwNamespace, Aliases: []string{"ns"}, Usage: "Namespace of resource to watch", DefaultValue: metav1.NamespaceDefault}
+	KwNamespace = Flag{Type: String, Name: flagkey.KwNamespace, Aliases: []string{"ns"}, Usage: "Namespace of resource to watch"}
 	KwObjType   = Flag{Type: String, Name: flagkey.KwObjType, Usage: "Type of resource to watch (Pod, Service, etc.)", DefaultValue: "pod"}
 	KwLabels    = Flag{Type: String, Name: flagkey.KwLabels, Usage: "Label selector of the form a=b,c=d"}
 

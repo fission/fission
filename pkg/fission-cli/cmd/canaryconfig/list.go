@@ -26,6 +26,7 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
+	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type ListSubCommand struct {
@@ -45,8 +46,11 @@ func (opts *ListSubCommand) do(input cli.Input) error {
 	return opts.run(input)
 }
 
-func (opts *ListSubCommand) complete(input cli.Input) error {
-	opts.namespace = input.String(flagkey.NamespaceCanary)
+func (opts *ListSubCommand) complete(input cli.Input) (err error) {
+	_, opts.namespace, err = util.GetResourceNamespace(input, flagkey.NamespaceCanary)
+	if err != nil {
+		return errors.Wrap(err, "error in listing canary config ")
+	}
 	return nil
 }
 

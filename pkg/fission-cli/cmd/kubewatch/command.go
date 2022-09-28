@@ -44,7 +44,7 @@ func Commands() *cobra.Command {
 	}
 	wrapper.SetFlags(deleteCmd, flag.FlagSet{
 		Required: []flag.Flag{flag.KwFnName},
-		Optional: []flag.Flag{flag.NamespaceTrigger, flag.IgnoreNotFound},
+		Optional: []flag.Flag{flag.NamespaceTrigger, flag.Namespace, flag.IgnoreNotFound},
 	})
 
 	listCmd := &cobra.Command{
@@ -55,7 +55,7 @@ func Commands() *cobra.Command {
 		RunE:    wrapper.Wrapper(List),
 	}
 	wrapper.SetFlags(listCmd, flag.FlagSet{
-		Optional: []flag.Flag{flag.NamespaceTrigger},
+		Optional: []flag.Flag{flag.NamespaceTrigger, flag.Namespace},
 	})
 
 	command := &cobra.Command{

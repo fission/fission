@@ -61,7 +61,12 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		mqtName = id.String()
 	}
 	fnName := input.String(flagkey.MqtFnName)
-	fnNamespace := input.String(flagkey.NamespaceFunction)
+
+	userProvidedNS, fnNamespace, err := util.GetResourceNamespace(input, flagkey.NamespaceFunction)
+	if err != nil {
+		return errors.Wrap(err, "error in deleting function ")
+	}
+	// fnNamespace := input.String(flagkey.NamespaceFunction)
 
 	mqtKind := input.String(flagkey.MqtKind)
 
@@ -94,7 +99,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		contentType = "application/json"
 	}
 
-	err := checkMQTopicAvailability(mqType, mqtKind, topic, respTopic)
+	err = checkMQTopicAvailability(mqType, mqtKind, topic, respTopic)
 	if err != nil {
 		return err
 	}
@@ -136,7 +141,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		exists, err := fr.ExistsInSpecs(fv1.Function{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      fnName,
-				Namespace: fnNamespace,
+				Namespace: userProvidedNS,
 			},
 		})
 		if err != nil {
@@ -153,11 +158,19 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		}
 	}
 
-	opts.trigger = &fv1.MessageQueueTrigger{
-		ObjectMeta: metav1.ObjectMeta{
+	m := metav1.ObjectMeta{
+		Name:      mqtName,
+		Namespace: fnNamespace,
+	}
+
+	if input.Bool(flagkey.SpecSave) || input.Bool(flagkey.SpecDry) {
+		m = metav1.ObjectMeta{
 			Name:      mqtName,
-			Namespace: fnNamespace,
-		},
+			Namespace: userProvidedNS,
+		}
+	}
+	opts.trigger = &fv1.MessageQueueTrigger{
+		ObjectMeta: m,
 		Spec: fv1.MessageQueueTriggerSpec{
 			FunctionReference: fv1.FunctionReference{
 				Type: fv1.FunctionReferenceTypeFunctionName,

@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// TODO: need some input here
 package kubewatch
 
 import (
@@ -60,7 +61,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		watchName = id.String()
 	}
 	fnName := input.String(flagkey.KwFnName)
-	fnNamespace := input.String(flagkey.NamespaceFunction)
+	fnNamespace := input.String(flagkey.NamespaceFunction) // TODO: we want watch to be created in same namespace or different
 	namespace := input.String(flagkey.KwNamespace)
 	objType := input.String(flagkey.KwObjType)
 

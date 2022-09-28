@@ -27,6 +27,7 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
+	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type UpdateSubCommand struct {
@@ -46,16 +47,19 @@ func (opts *UpdateSubCommand) do(input cli.Input) error {
 	return opts.run(input)
 }
 
-func (opts *UpdateSubCommand) complete(input cli.Input) error {
+func (opts *UpdateSubCommand) complete(input cli.Input) (err error) {
 	// get the current config
 	name := input.String(flagkey.CanaryName)
-	ns := input.String(flagkey.NamespaceCanary)
+	_, ns, err := util.GetResourceNamespace(input, flagkey.NamespaceCanary)
+	if err != nil {
+		return errors.Wrap(err, "error updating canary config")
+	}
 	incrementStep := input.Int(flagkey.CanaryWeightIncrement)
 	failureThreshold := input.Int(flagkey.CanaryFailureThreshold)
 	incrementInterval := input.String(flagkey.CanaryIncrementInterval)
 
 	// check for time parsing
-	_, err := time.ParseDuration(incrementInterval)
+	_, err = time.ParseDuration(incrementInterval)
 	if err != nil {
 		return errors.Wrap(err, "error parsing time duration")
 	}

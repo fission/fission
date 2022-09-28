@@ -46,10 +46,15 @@ func (opts *UpdateSubCommand) do(input cli.Input) error {
 	return opts.run(input)
 }
 
-func (opts *UpdateSubCommand) complete(input cli.Input) error {
+func (opts *UpdateSubCommand) complete(input cli.Input) (err error) {
+	_, namespace, err := util.GetResourceNamespace(input, flagkey.NamespaceTrigger)
+	if err != nil {
+		return errors.Wrap(err, "error in deleting function ")
+	}
+
 	mqt, err := opts.Client().V1().MessageQueueTrigger().Get(&metav1.ObjectMeta{
 		Name:      input.String(flagkey.MqtName),
-		Namespace: input.String(flagkey.NamespaceTrigger),
+		Namespace: namespace,
 	})
 	if err != nil {
 		return errors.Wrap(err, "error getting message queue trigger")

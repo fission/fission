@@ -26,6 +26,7 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
+	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type ListSubCommand struct {
@@ -37,7 +38,11 @@ func List(input cli.Input) error {
 }
 
 func (opts *ListSubCommand) do(input cli.Input) error {
-	ttNs := input.String(flagkey.NamespaceTrigger)
+	_, ttNs, err := util.GetResourceNamespace(input, flagkey.NamespaceTrigger)
+	if err != nil {
+		return errors.Wrap(err, "error in deleting function ")
+	}
+	// ttNs := input.String(flagkey.NamespaceTrigger)
 	tts, err := opts.Client().V1().TimeTrigger().List(ttNs)
 	if err != nil {
 		return errors.Wrap(err, "list Time triggers")
