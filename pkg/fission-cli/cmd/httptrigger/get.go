@@ -29,6 +29,7 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
+	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type GetSubCommand struct {
@@ -43,10 +44,15 @@ func (opts *GetSubCommand) do(input cli.Input) error {
 	return opts.run(input)
 }
 
-func (opts *GetSubCommand) run(input cli.Input) error {
+func (opts *GetSubCommand) run(input cli.Input) (err error) {
+	_, namespace, err := util.GetResourceNamespace(input, flagkey.NamespaceFunction)
+	if err != nil {
+		return errors.Wrap(err, "error in deleting function ")
+	}
+
 	m := &metav1.ObjectMeta{
 		Name:      input.String(flagkey.HtName),
-		Namespace: input.String(flagkey.NamespaceFunction),
+		Namespace: namespace,
 	}
 	ht, err := opts.Client().V1().HTTPTrigger().Get(m)
 	if err != nil {

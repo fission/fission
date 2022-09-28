@@ -22,6 +22,7 @@ import (
 	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
@@ -49,9 +50,14 @@ func (opts *DeleteSubCommand) do(input cli.Input) error {
 	return opts.run(input)
 }
 
-func (opts *DeleteSubCommand) complete(input cli.Input) error {
+func (opts *DeleteSubCommand) complete(input cli.Input) (err error) {
 	opts.name = input.String(flagkey.PkgName)
-	opts.namespace = input.String(flagkey.NamespacePackage)
+	_, opts.namespace, err = util.GetResourceNamespace(input, flagkey.NamespacePackage)
+	if err != nil {
+		return fv1.AggregateValidationErrors("Environment", err)
+	}
+
+	// opts.namespace = input.String(flagkey.NamespacePackage)
 	opts.deleteOrphans = input.Bool(flagkey.PkgOrphan)
 	opts.force = input.Bool(flagkey.PkgForce)
 

@@ -33,7 +33,7 @@ func Commands() *cobra.Command {
 		Required: []flag.Flag{flag.PkgEnvironment},
 		Optional: []flag.Flag{flag.PkgName, flag.PkgCode, flag.PkgSrcArchive, flag.PkgDeployArchive,
 			flag.PkgSrcChecksum, flag.PkgDeployChecksum, flag.PkgInsecure, flag.PkgBuildCmd,
-			flag.NamespacePackage, flag.NamespaceEnvironment, flag.SpecSave, flag.SpecDry},
+			flag.NamespacePackage, flag.Namespace, flag.SpecSave, flag.SpecDry}, //flag.NamespaceEnvironment- we don't want env and pkg NS to be different
 	})
 
 	getSrcCmd := &cobra.Command{
@@ -43,7 +43,7 @@ func Commands() *cobra.Command {
 	}
 	wrapper.SetFlags(getSrcCmd, flag.FlagSet{
 		Required: []flag.Flag{flag.PkgName},
-		Optional: []flag.Flag{flag.NamespacePackage, flag.PkgOutput},
+		Optional: []flag.Flag{flag.NamespacePackage, flag.Namespace, flag.PkgOutput},
 	})
 
 	getDeployCmd := &cobra.Command{
@@ -53,7 +53,7 @@ func Commands() *cobra.Command {
 	}
 	wrapper.SetFlags(getDeployCmd, flag.FlagSet{
 		Required: []flag.Flag{flag.PkgName},
-		Optional: []flag.Flag{flag.NamespacePackage, flag.PkgOutput},
+		Optional: []flag.Flag{flag.NamespacePackage, flag.Namespace, flag.PkgOutput},
 	})
 
 	updateCmd := &cobra.Command{
@@ -65,7 +65,7 @@ func Commands() *cobra.Command {
 		Required: []flag.Flag{flag.PkgName},
 		Optional: []flag.Flag{flag.PkgEnvironment, flag.PkgCode, flag.PkgSrcArchive, flag.PkgDeployArchive,
 			flag.PkgSrcChecksum, flag.PkgDeployChecksum, flag.PkgInsecure, flag.PkgBuildCmd, flag.PkgForce,
-			flag.NamespacePackage, flag.NamespaceEnvironment},
+			flag.NamespacePackage, flag.Namespace, flag.NamespaceEnvironment}, //, flag.NamespaceEnvironment
 	})
 
 	deleteCmd := &cobra.Command{
@@ -74,7 +74,7 @@ func Commands() *cobra.Command {
 		RunE:  wrapper.Wrapper(Delete),
 	}
 	wrapper.SetFlags(deleteCmd, flag.FlagSet{
-		Optional: []flag.Flag{flag.PkgName, flag.PkgForce, flag.PkgOrphan, flag.NamespacePackage, flag.IgnoreNotFound},
+		Optional: []flag.Flag{flag.PkgName, flag.PkgForce, flag.PkgOrphan, flag.NamespacePackage, flag.Namespace, flag.IgnoreNotFound},
 	})
 
 	listCmd := &cobra.Command{
@@ -84,7 +84,7 @@ func Commands() *cobra.Command {
 		RunE:  wrapper.Wrapper(List),
 	}
 	wrapper.SetFlags(listCmd, flag.FlagSet{
-		Optional: []flag.Flag{flag.PkgOrphan, flag.PkgStatus, flag.NamespacePackage},
+		Optional: []flag.Flag{flag.PkgOrphan, flag.PkgStatus, flag.NamespacePackage, flag.Namespace},
 	})
 
 	infoCmd := &cobra.Command{
@@ -94,7 +94,7 @@ func Commands() *cobra.Command {
 	}
 	wrapper.SetFlags(infoCmd, flag.FlagSet{
 		Required: []flag.Flag{flag.PkgName},
-		Optional: []flag.Flag{flag.NamespacePackage},
+		Optional: []flag.Flag{flag.NamespacePackage, flag.Namespace},
 	})
 
 	rebuildCmd := &cobra.Command{
@@ -104,7 +104,7 @@ func Commands() *cobra.Command {
 	}
 	wrapper.SetFlags(rebuildCmd, flag.FlagSet{
 		Required: []flag.Flag{flag.PkgName},
-		Optional: []flag.Flag{flag.NamespacePackage},
+		Optional: []flag.Flag{flag.NamespacePackage, flag.Namespace},
 	})
 
 	command := &cobra.Command{

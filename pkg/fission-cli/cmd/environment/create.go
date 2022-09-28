@@ -75,6 +75,13 @@ func (opts *CreateSubCommand) run(input cli.Input) (err error) {
 			len(envList), m.Namespace)
 	}
 
+	userDefinedNS, currentNS, err := util.GetResourceNamespace(input, flagkey.NamespaceEnvironment)
+	if err != nil {
+		return fv1.AggregateValidationErrors("Environment", err)
+	}
+	// we user only user provided NS in spec. While creating actual record we use the current context's NS.
+	opts.env.ObjectMeta.Namespace = userDefinedNS
+
 	// if we're writing a spec, don't call the API
 	// save to spec file or display the spec to console
 	if input.Bool(flagkey.SpecDry) {
@@ -98,11 +105,6 @@ func (opts *CreateSubCommand) run(input cli.Input) (err error) {
 			return errors.Wrap(err, "error saving environment spec")
 		}
 		return nil
-	}
-
-	_, currentNS, err := util.GetResourceNamespace(input, flagkey.NamespaceEnvironment)
-	if err != nil {
-		return fv1.AggregateValidationErrors("Environment", err)
 	}
 
 	opts.env.ObjectMeta.Namespace = currentNS
@@ -212,16 +214,6 @@ func createEnvironmentFromCmd(input cli.Input) (*fv1.Environment, error) {
 			ImagePullSecret:              pullSecret,
 		},
 	}
-
-	// if !(input.Bool(flagkey.SpecDry) || input.Bool(flagkey.SpecSave)) || namespace != "" {
-
-	// }
-	// else {
-	// 	err = env.Validate()
-	// 	if err != nil {
-	// 		return nil, fv1.AggregateValidationErrors("Environment", err)
-	// 	}
-	// }
 
 	err = util.ApplyLabelsAndAnnotations(input, &env.ObjectMeta)
 	if err != nil {

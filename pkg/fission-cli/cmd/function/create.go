@@ -65,7 +65,10 @@ func (opts *CreateSubCommand) do(input cli.Input) error {
 func (opts *CreateSubCommand) complete(input cli.Input) error {
 	fnName := input.String(flagkey.FnName)
 
-	_, fnNamespace, err := util.GetResourceNamespace(input, flagkey.NamespaceFunction)
+	userProvidedNS, fnNamespace, err := util.GetResourceNamespace(input, flagkey.NamespaceFunction)
+	if err != nil {
+		return errors.Wrap(err, "error retrieving namespace information")
+	}
 	envNamespace := input.String(flagkey.NamespaceEnvironment)
 
 	// user wants a spec, create a yaml file with package and function
@@ -138,14 +141,20 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 			if err != nil {
 				return errors.Wrap(err, fmt.Sprintf("error reading spec in '%v'", specDir))
 			}
-			obj := fr.SpecExists(&fv1.Package{
+
+			obj := fr.SpecExists(&fv1.Package{ // In case of spec I might or might not have the `fnNamespace`, how will I get pkg objectMeta here.
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      pkgName,
 					Namespace: fnNamespace,
 				},
 			}, true, false)
 			if obj == nil {
-				return errors.Errorf("please create package %v spec file before referencing it", pkgName)
+				return errors.Errorf("please create package %v spec file with namespace %v before referencing it", pkgName, fnNamespace)
+			}
+
+			// if user did not provide NS, we use current context NS. And
+			if userProvidedNS != fnNamespace {
+				console.Warn(fmt.Sprintf("since no namespace provided by the user, will use pkg %s from namespace %s", pkgName, fnNamespace))
 			}
 			pkg = obj.(*fv1.Package)
 			pkgMetadata = &pkg.ObjectMeta
@@ -230,7 +239,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 
 		// create new package in the same namespace as the function.
 		pkgMetadata, err = _package.CreatePackage(input, opts.Client(), pkgName, fnNamespace, envName, envNamespace,
-			srcArchiveFiles, deployArchiveFiles, buildcmd, specDir, opts.specFile, noZip)
+			srcArchiveFiles, deployArchiveFiles, buildcmd, specDir, opts.specFile, noZip, userProvidedNS)
 		if err != nil {
 			return errors.Wrap(err, "error creating package")
 		}
