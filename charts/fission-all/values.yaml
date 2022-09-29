@@ -729,6 +729,9 @@ openTelemetry:
   ##
   propagators: "tracecontext,baggage"
 
+  collector:
+    enabled: false
+
 ## Message Queue Trigger Kind, KEDA: enable and configuration
 ##
 mqt_keda:
