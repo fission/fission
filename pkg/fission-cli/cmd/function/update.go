@@ -53,7 +53,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 	fnName := input.String(flagkey.FnName)
 	_, fnNamespace, err := util.GetResourceNamespace(input, flagkey.NamespaceFunction)
 	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("error in deleting function "))
+		return errors.Wrap(err, "error in updating function ")
 	}
 
 	function, err := opts.Client().V1().Function().Get(&metav1.ObjectMeta{

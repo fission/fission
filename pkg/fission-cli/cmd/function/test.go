@@ -54,7 +54,7 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 
 	_, namespace, err := util.GetResourceNamespace(input, flagkey.NamespaceFunction)
 	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("error in deleting function "))
+		return errors.Wrap(err, "error in testing function ")
 	}
 
 	m := &metav1.ObjectMeta{

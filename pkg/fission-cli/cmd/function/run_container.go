@@ -58,7 +58,7 @@ func (opts *RunContainerSubCommand) complete(input cli.Input) error {
 
 	_, fnNamespace, err := util.GetResourceNamespace(input, flagkey.NamespaceFunction)
 	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("error in deleting function "))
+		return errors.Wrap(err, "error in running container for function ")
 	}
 
 	// user wants a spec, create a yaml file with package and function

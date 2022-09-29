@@ -121,14 +121,14 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 		specFile = fmt.Sprintf("package-%v.yaml", pkgName)
 	}
 
-	_, err = CreatePackage(input, opts.Client(), pkgName, pkgNamespace, envName, pkgNamespace,
+	_, err = CreatePackage(input, opts.Client(), pkgName, pkgNamespace, envName,
 		srcArchiveFiles, deployArchiveFiles, buildcmd, specDir, specFile, noZip, userProvidedNS)
 
 	return err
 }
 
 // TODO: get all necessary value from CLI input directly
-func CreatePackage(input cli.Input, client client.Interface, pkgName string, pkgNamespace string, envName string, envNamespace string,
+func CreatePackage(input cli.Input, client client.Interface, pkgName string, pkgNamespace string, envName string,
 	srcArchiveFiles []string, deployArchiveFiles []string, buildcmd string, specDir string, specFile string, noZip bool, userProvidedNS string) (*metav1.ObjectMeta, error) {
 
 	insecure := input.Bool(flagkey.PkgInsecure)

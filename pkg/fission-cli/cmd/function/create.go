@@ -62,6 +62,8 @@ func (opts *CreateSubCommand) do(input cli.Input) error {
 	return opts.run(input)
 }
 
+// 249
+
 func (opts *CreateSubCommand) complete(input cli.Input) error {
 	fnName := input.String(flagkey.FnName)
 
@@ -69,7 +71,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	if err != nil {
 		return errors.Wrap(err, "error retrieving namespace information")
 	}
-	envNamespace := input.String(flagkey.NamespaceEnvironment)
+	//envNamespace := input.String(flagkey.NamespaceEnvironment)
 
 	// user wants a spec, create a yaml file with package and function
 	toSpec := false
@@ -145,17 +147,13 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 			obj := fr.SpecExists(&fv1.Package{ // In case of spec I might or might not have the `fnNamespace`, how will I get pkg objectMeta here.
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      pkgName,
-					Namespace: fnNamespace,
+					Namespace: userProvidedNS,
 				},
 			}, true, false)
 			if obj == nil {
-				return errors.Errorf("please create package %v spec file with namespace %v before referencing it", pkgName, fnNamespace)
+				return errors.Errorf("please create package %v spec file with namespace %v before referencing it", pkgName, userProvidedNS)
 			}
 
-			// if user did not provide NS, we use current context NS. And
-			if userProvidedNS != fnNamespace {
-				console.Warn(fmt.Sprintf("since no namespace provided by the user, will use pkg %s from namespace %s", pkgName, fnNamespace))
-			}
 			pkg = obj.(*fv1.Package)
 			pkgMetadata = &pkg.ObjectMeta
 		} else {
@@ -174,7 +172,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		if envName != input.String(flagkey.FnEnvironmentName) {
 			console.Warn("Function's environment is different than package's environment, package's environment will be used for creating function")
 		}
-		envNamespace = pkg.Spec.Environment.Namespace
+		// envNamespace = pkg.Spec.Environment.Namespace
 	} else {
 		// need to specify environment for creating new package
 		envName = input.String(flagkey.FnEnvironmentName)
@@ -191,7 +189,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 			exists, err := fr.ExistsInSpecs(fv1.Environment{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      envName,
-					Namespace: envNamespace,
+					Namespace: userProvidedNS,
 				},
 			})
 			if err != nil {
@@ -203,12 +201,12 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 			}
 		} else {
 			_, err := opts.Client().V1().Environment().Get(&metav1.ObjectMeta{
-				Namespace: envNamespace,
+				Namespace: fnNamespace,
 				Name:      envName,
 			})
 			if err != nil {
 				if e, ok := err.(ferror.Error); ok && e.Code == ferror.ErrorNotFound {
-					console.Warn(fmt.Sprintf("Environment \"%v\" does not exist. Please create the environment before executing the function. \nFor example: `fission env create --name %v --envns %v --image <image>`\n", envName, envName, envNamespace))
+					console.Warn(fmt.Sprintf("Environment \"%v\" does not exist. Please create the environment before executing the function. \nFor example: `fission env create --name %v --envns %v --image <image>`\n", envName, envName, fnNamespace))
 				} else {
 					return errors.Wrap(err, "error retrieving environment information")
 				}
@@ -238,7 +236,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		pkgName := generatePackageName(fnName, id.String())
 
 		// create new package in the same namespace as the function.
-		pkgMetadata, err = _package.CreatePackage(input, opts.Client(), pkgName, fnNamespace, envName, envNamespace,
+		pkgMetadata, err = _package.CreatePackage(input, opts.Client(), pkgName, fnNamespace, envName,
 			srcArchiveFiles, deployArchiveFiles, buildcmd, specDir, opts.specFile, noZip, userProvidedNS)
 		if err != nil {
 			return errors.Wrap(err, "error creating package")
@@ -263,15 +261,22 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 						return errors.Wrapf(err, "error checking secret %s", secretName)
 					}
 				}
+				newSecret := fv1.SecretReference{
+					Name:      secretName,
+					Namespace: fnNamespace,
+				}
+				secrets = append(secrets, newSecret)
+			}
+		} else {
+			for _, secretName := range secretNames {
+				newSecret := fv1.SecretReference{
+					Name:      secretName,
+					Namespace: userProvidedNS,
+				}
+				secrets = append(secrets, newSecret)
 			}
 		}
-		for _, secretName := range secretNames {
-			newSecret := fv1.SecretReference{
-				Name:      secretName,
-				Namespace: fnNamespace,
-			}
-			secrets = append(secrets, newSecret)
-		}
+
 	}
 
 	if len(cfgMapNames) > 0 {
@@ -289,14 +294,20 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 						return errors.Wrapf(err, "error checking configmap %s", cfgMapName)
 					}
 				}
+				newCfgMap := fv1.ConfigMapReference{
+					Name:      cfgMapName,
+					Namespace: fnNamespace,
+				}
+				cfgmaps = append(cfgmaps, newCfgMap)
 			}
-		}
-		for _, cfgMapName := range cfgMapNames {
-			newCfgMap := fv1.ConfigMapReference{
-				Name:      cfgMapName,
-				Namespace: fnNamespace,
+		} else {
+			for _, cfgMapName := range cfgMapNames {
+				newCfgMap := fv1.ConfigMapReference{
+					Name:      cfgMapName,
+					Namespace: userProvidedNS,
+				}
+				cfgmaps = append(cfgmaps, newCfgMap)
 			}
-			cfgmaps = append(cfgmaps, newCfgMap)
 		}
 	}
 
@@ -324,7 +335,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	}
 	opts.function.Spec.Environment = fv1.EnvironmentReference{
 		Name:      envName,
-		Namespace: envNamespace,
+		Namespace: fnNamespace,
 	}
 	opts.function.Spec.Package = fv1.FunctionPackageRef{
 		FunctionName: entrypoint,
@@ -333,6 +344,12 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 			Name:            pkgMetadata.Name,
 			ResourceVersion: pkgMetadata.ResourceVersion,
 		},
+	}
+
+	if toSpec {
+		opts.function.ObjectMeta.Namespace = userProvidedNS
+		opts.function.Spec.Package.PackageRef.Namespace = userProvidedNS
+		opts.function.Spec.Environment.Namespace = userProvidedNS
 	}
 
 	return nil

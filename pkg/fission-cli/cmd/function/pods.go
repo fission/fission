@@ -45,7 +45,7 @@ func (opts *ListPodsSubCommand) do(input cli.Input) error {
 	_, namespace, err := util.GetResourceNamespace(input, flagkey.NamespaceFunction)
 
 	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("error in deleting function "))
+		return errors.Wrap(err, "error in finding pod for function ")
 	}
 	// validate function
 	_, err = opts.Client().V1().Function().Get(&metav1.ObjectMeta{

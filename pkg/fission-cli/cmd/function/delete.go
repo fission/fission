@@ -40,7 +40,7 @@ func (opts *DeleteSubCommand) do(input cli.Input) error {
 
 	_, namespace, err := util.GetResourceNamespace(input, flagkey.NamespaceFunction)
 	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("error in deleting function "))
+		return errors.Wrap(err, "error in deleting function ")
 	}
 	m := &metav1.ObjectMeta{
 		Name:      input.String(flagkey.FnName),
