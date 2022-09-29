@@ -96,7 +96,7 @@ spec:
         {{- if .Values.terminationMessagePolicy }}
         terminationMessagePolicy: {{ .Values.terminationMessagePolicy }}
         {{- end }}
-      serviceAccountName: fission-svc
+      serviceAccountName: fission-storagesvc
       {{- if and (.Values.persistence.enabled) (ne (.Values.persistence.storageType | default "local") "s3") }}
       volumes:
       - name: fission-storage

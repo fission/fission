@@ -78,7 +78,7 @@ spec:
             name: pprof
         {{- end }}
   
-      serviceAccountName: fission-svc
+      serviceAccountName: fission-controller
       volumes:
       - name: config-volume
         configMap:

@@ -122,7 +122,7 @@ spec:
         {{- else if .Values.terminationMessagePolicy }}
         terminationMessagePolicy: {{ .Values.terminationMessagePolicy }}
         {{- end }}
-      serviceAccountName: fission-svc
+      serviceAccountName: fission-router
       volumes:
       - name: config-volume
         configMap:

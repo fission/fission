@@ -108,7 +108,7 @@ spec:
         {{- else if .Values.terminationMessagePolicy }}
         terminationMessagePolicy: {{ .Values.terminationMessagePolicy }}
         {{- end }}
-      serviceAccountName: fission-svc
+      serviceAccountName: fission-executor
 {{- if .Values.executor.priorityClassName }}
       priorityClassName: {{ .Values.executor.priorityClassName }}
 {{- else if .Values.priorityClassName }}

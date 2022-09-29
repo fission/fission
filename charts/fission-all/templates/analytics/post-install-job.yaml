@@ -47,5 +47,5 @@ spec:
         {{- if .Values.terminationMessagePolicy }}
           terminationMessagePolicy: {{ .Values.terminationMessagePolicy }}
         {{- end }}
-      serviceAccountName: fission-svc
+      serviceAccountName: fission-analytics
 {{- end }}
