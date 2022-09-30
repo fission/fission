@@ -164,3 +164,15 @@ const (
 	PackagesResource        = "packages"
 	TimeTriggerResource     = "timetriggers"
 )
+
+// These env variables is used to watch informers in specific namespace
+const (
+	CanaryConfigInformerNS    = "CANARY_INFORMER_NS"
+	EnvironmentInformerNS     = "ENVIRONMENT_INFORMER_NS"
+	FunctionInformerNS        = "FUNCTION_INFORMER_NS"
+	HttpTriggerInformerNS     = "HTTP_TRIGGER_INFORMER_NS"
+	KubernetesWatchInformerNS = "KUBERNETES_WATCH_INFORMER_NS"
+	MessageQueueInformerNS    = "MESSAGE_QUEUE_INFORMER_NS"
+	PackagesInformerNS        = "PACKAGE_INFORMER_NS"
+	TimeTriggerInformerNS     = "TIME_TRIGGER_INFORMER_NS"
+)

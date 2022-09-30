@@ -1,6 +1,8 @@
 package utils
 
 import (
+	"os"
+	"strings"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -18,10 +20,48 @@ import (
 	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
 )
 
-func GetNamespaces(kind string) []string {
-	return []string{
-		metav1.NamespaceAll,
+func getEnvVal(name string) []string {
+	envValue := os.Getenv(name)
+	if len(envValue) == 0 {
+		return []string{
+			metav1.NamespaceAll,
+		}
 	}
+
+	informerNS := make([]string, 0)
+	lstNamespaces := strings.Split(envValue, ",")
+	for _, namespace := range lstNamespaces {
+		//check to handle string with additional comma at the end of string. eg- ns1,ns2,
+		if namespace != "" {
+			informerNS = append(informerNS, namespace)
+		}
+	}
+	return informerNS
+}
+
+func GetNamespaces(kind string) []string {
+	var namespaces []string
+	switch kind {
+	case fv1.CanaryConfigResource:
+		namespaces = getEnvVal(fv1.CanaryConfigInformerNS)
+	case fv1.EnvironmentResource:
+		namespaces = getEnvVal(fv1.EnvironmentInformerNS)
+	case fv1.FunctionResource:
+		namespaces = getEnvVal(fv1.FunctionInformerNS)
+	case fv1.HttpTriggerResource:
+		namespaces = getEnvVal(fv1.HttpTriggerInformerNS)
+	case fv1.KubernetesWatchResource:
+		namespaces = getEnvVal(fv1.KubernetesWatchInformerNS)
+	case fv1.MessageQueueResource:
+		namespaces = getEnvVal(fv1.MessageQueueInformerNS)
+	case fv1.PackagesResource:
+		namespaces = getEnvVal(fv1.PackagesInformerNS)
+	case fv1.TimeTriggerResource:
+		namespaces = getEnvVal(fv1.TimeTriggerInformerNS)
+	default:
+		panic("Unknown kind: " + kind)
+	}
+	return namespaces
 }
 
 func GetInformersForNamespaces(client versioned.Interface, defaultSync time.Duration, kind string) map[string]cache.SharedIndexInformer {

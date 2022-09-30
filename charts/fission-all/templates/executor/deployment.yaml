@@ -71,6 +71,18 @@ spec:
         - name: CONTAINER_OBJECT_REAPER_INTERVAL
           value: {{ .Values.executor.container.objectReaperInterval | quote }}
         {{- end}}
+        {{- if .Values.informerNamespace.function }}
+        - name: FUNCTION_INFORMER_NS
+          value: {{ .Values.informerNamespace.function | quote }}
+        {{- end}}
+        {{- if .Values.informerNamespace.environment }}
+        - name: ENVIRONMENT_INFORMER_NS
+          value: {{ .Values.informerNamespace.environment | quote }}
+        {{- end}}
+        {{- if .Values.informerNamespace.packages }}
+        - name: PACKAGE_INFORMER_NS
+          value: {{ .Values.informerNamespace.packages | quote }}
+        {{- end}}
         - name: HELM_RELEASE_NAME
           value: {{ .Release.Name | quote }}
         {{- include "opentelemtry.envs" . | indent 8 }}
