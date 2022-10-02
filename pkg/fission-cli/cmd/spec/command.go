@@ -39,7 +39,7 @@ func Commands() *cobra.Command {
 		RunE:  wrapper.Wrapper(Validate),
 	}
 	wrapper.SetFlags(validateCmd, flag.FlagSet{
-		Optional: []flag.Flag{flag.SpecDir, flag.SpecIgnore, flag.SpecAllowConflicts},
+		Optional: []flag.Flag{flag.SpecDir, flag.SpecIgnore, flag.SpecAllowConflicts, flag.Namespace},
 	})
 
 	applyCmd := &cobra.Command{
@@ -48,7 +48,7 @@ func Commands() *cobra.Command {
 		RunE:  wrapper.Wrapper(Apply),
 	}
 	wrapper.SetFlags(applyCmd, flag.FlagSet{
-		Optional: []flag.Flag{flag.SpecDir, flag.SpecIgnore, flag.SpecDelete, flag.SpecWait, flag.SpecWatch, flag.SpecValidation, flag.SpecApplyCommitLabel, flag.SpecAllowConflicts},
+		Optional: []flag.Flag{flag.SpecDir, flag.SpecIgnore, flag.SpecDelete, flag.SpecWait, flag.SpecWatch, flag.SpecValidation, flag.SpecApplyCommitLabel, flag.SpecAllowConflicts, flag.Namespace},
 	})
 
 	destroyCmd := &cobra.Command{
@@ -66,7 +66,7 @@ func Commands() *cobra.Command {
 		RunE:  wrapper.Wrapper(List),
 	}
 	wrapper.SetFlags(listCmd, flag.FlagSet{
-		Optional: []flag.Flag{flag.SpecDeployID, flag.SpecDir, flag.SpecIgnore},
+		Optional: []flag.Flag{flag.SpecDeployID, flag.SpecDir, flag.SpecIgnore, flag.Namespace},
 	})
 
 	command := &cobra.Command{

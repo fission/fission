@@ -62,8 +62,6 @@ func (opts *CreateSubCommand) do(input cli.Input) error {
 	return opts.run(input)
 }
 
-// 249
-
 func (opts *CreateSubCommand) complete(input cli.Input) error {
 	fnName := input.String(flagkey.FnName)
 

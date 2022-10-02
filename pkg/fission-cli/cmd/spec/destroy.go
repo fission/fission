@@ -62,6 +62,7 @@ func (opts *DestroySubCommand) run(input cli.Input) error {
 	return nil
 }
 
+// TODO: we don't have namespace here. It uses UUID. Do we need to add namespace here
 func deleteResources(fclient client.Interface, fr *FissionResources) error {
 
 	var err error

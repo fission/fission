@@ -41,13 +41,9 @@ func (opts *DeleteSubCommand) do(input cli.Input) (err error) {
 
 	_, currentContextNS, err := util.GetResourceNamespace(input, flagkey.NamespaceEnvironment)
 	console.Verbose(2, "Namespace before not set %v ", currentContextNS)
-	// if namespace == "" {
-	// 	kubeContext := "" //TODO: get correct value here
-	// 	namespace, err = util.GetKubernetesCurrentNamespace(kubeContext)
 	if err != nil {
 		return errors.Wrap(err, "error creating environment")
 	}
-	// }
 	console.Verbose(2, "Namespace after set %v ", currentContextNS)
 
 	m := &metav1.ObjectMeta{

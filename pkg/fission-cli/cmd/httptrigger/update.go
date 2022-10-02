@@ -56,8 +56,6 @@ func (opts *UpdateSubCommand) complete(input cli.Input) (err error) {
 		return errors.Wrap(err, "error in deleting function ")
 	}
 
-	// triggerNamespace := input.String(flagkey.NamespaceTrigger)
-
 	ht, err := opts.Client().V1().HTTPTrigger().Get(&metav1.ObjectMeta{
 		Name:      htName,
 		Namespace: triggerNamespace,

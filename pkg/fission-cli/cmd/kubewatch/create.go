@@ -61,8 +61,14 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		watchName = id.String()
 	}
 	fnName := input.String(flagkey.KwFnName)
-	fnNamespace := input.String(flagkey.NamespaceFunction) // TODO: we want watch to be created in same namespace or different
-	namespace := input.String(flagkey.KwNamespace)
+	// Don't need this. Will use single namespace
+	// fnNamespace := input.String(flagkey.NamespaceFunction) // TODO: we want watch to be created in same namespace or different
+
+	_, namespace, err := util.GetResourceNamespace(input, flagkey.KwNamespace)
+	if err != nil {
+		return errors.Wrap(err, "error in listing function ")
+	}
+
 	objType := input.String(flagkey.KwObjType)
 
 	if input.Bool(flagkey.SpecSave) {
@@ -76,7 +82,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		exists, err := fr.ExistsInSpecs(fv1.Function{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      fnName,
-				Namespace: fnNamespace,
+				Namespace: namespace,
 			},
 		})
 		if err != nil {
@@ -91,7 +97,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	opts.watcher = &fv1.KubernetesWatchTrigger{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      watchName,
-			Namespace: fnNamespace,
+			Namespace: namespace,
 		},
 		Spec: fv1.KubernetesWatchTriggerSpec{
 			Namespace: namespace,
