@@ -496,7 +496,7 @@ func GetResourceNamespace(input cli.Input, deprecatedFlag string) (namespace, cu
 	console.Verbose(2, "Namespace from user %v ", namespace)
 	currentNS = namespace
 	if namespace == "" {
-		kubeContext := "" //TODO: get correct value here
+		kubeContext := input.String(flagkey.KubeContext)
 		currentNS, err = GetKubernetesCurrentNamespace(kubeContext)
 		if err != nil {
 			return namespace, currentNS, err

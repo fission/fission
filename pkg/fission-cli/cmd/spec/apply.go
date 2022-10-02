@@ -77,42 +77,42 @@ func (opts *ApplySubCommand) insertNamespace(input cli.Input, fr *FissionResourc
 	}
 
 	for i := range fr.Functions {
-		if fr.Functions[i].Namespace == "" {
+		if fr.Functions[i].Namespace == "" || input.Bool(flagkey.ForceNamespace) {
 			fr.Functions[i].Namespace = currentNS
 			fr.Functions[i].Spec.Package.PackageRef.Namespace = currentNS
 			fr.Functions[i].Spec.Environment.Namespace = currentNS
 		}
 	}
 	for i := range fr.Environments {
-		if fr.Environments[i].Namespace == "" {
+		if fr.Environments[i].Namespace == "" || input.Bool(flagkey.ForceNamespace) {
 			fr.Environments[i].Namespace = currentNS
 		}
 	}
 	for i := range fr.Packages {
-		if fr.Packages[i].Namespace == "" {
+		if fr.Packages[i].Namespace == "" || input.Bool(flagkey.ForceNamespace) {
 			fr.Packages[i].Namespace = currentNS
 			fr.Packages[i].Spec.Environment.Namespace = currentNS
 			fr.Packages[i].ObjectMeta.Namespace = currentNS
 		}
 	}
 	for i := range fr.HttpTriggers {
-		if fr.HttpTriggers[i].Namespace == "" {
+		if fr.HttpTriggers[i].Namespace == "" || input.Bool(flagkey.ForceNamespace) {
 			fr.HttpTriggers[i].Namespace = currentNS
 			// sObj.Spec.FunctionReference. TODO: it doesn't have namespace info
 		}
 	}
 	for i := range fr.MessageQueueTriggers {
-		if fr.MessageQueueTriggers[i].Namespace == "" {
+		if fr.MessageQueueTriggers[i].Namespace == "" || input.Bool(flagkey.ForceNamespace) {
 			fr.MessageQueueTriggers[i].Namespace = currentNS
 		}
 	}
 	for i := range fr.TimeTriggers {
-		if fr.TimeTriggers[i].Namespace == "" {
+		if fr.TimeTriggers[i].Namespace == "" || input.Bool(flagkey.ForceNamespace) {
 			fr.TimeTriggers[i].Namespace = currentNS
 		}
 	}
 	for i := range fr.KubernetesWatchTriggers {
-		if fr.KubernetesWatchTriggers[i].Namespace == "" {
+		if fr.KubernetesWatchTriggers[i].Namespace == "" || input.Bool(flagkey.ForceNamespace) {
 			fr.KubernetesWatchTriggers[i].Namespace = currentNS
 		}
 	}

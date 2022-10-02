@@ -21,8 +21,6 @@ import (
 	"net/http"
 	"time"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
@@ -87,8 +85,9 @@ var (
 	NamespaceEnvironment = Flag{Type: String, Name: flagkey.NamespaceEnvironment, Aliases: []string{"envns"}, Usage: "Namespace for environment object", Deprecated: true, Substitute: flagkey.Namespace}
 	NamespacePackage     = Flag{Type: String, Name: flagkey.NamespacePackage, Aliases: []string{"pkgns"}, Usage: "Namespace for package object", Deprecated: true, Substitute: flagkey.Namespace}
 	NamespaceTrigger     = Flag{Type: String, Name: flagkey.NamespaceTrigger, Aliases: []string{"triggerns"}, Usage: "Namespace for trigger object", Deprecated: true, Substitute: flagkey.Namespace}
-	NamespaceCanary      = Flag{Type: String, Name: flagkey.NamespaceCanary, Aliases: []string{"canaryns"}, Usage: "Namespace for canary config object", DefaultValue: metav1.NamespaceDefault}
+	NamespaceCanary      = Flag{Type: String, Name: flagkey.NamespaceCanary, Aliases: []string{"canaryns"}, Usage: "Namespace for canary config object", Deprecated: true, Substitute: flagkey.Namespace}
 	Namespace            = Flag{Type: String, Name: flagkey.Namespace, Aliases: []string{"ns"}, Usage: "Namespace for resource"}
+	ForceNamespace       = Flag{Type: Bool, Name: flagkey.ForceNamespace, Aliases: []string{"ns"}, Usage: "If true, resources will be created in namespace provided by (--namespace flag ) even if spec file contains some other namespace"}
 	AllNamespace         = Flag{Type: String, Name: flagkey.Namespace, Aliases: []string{"ns"}, Usage: "Namespace for resource"}
 
 	RunTimeMinCPU    = Flag{Type: Int, Name: flagkey.RuntimeMincpu, Usage: "Minimum CPU to be assigned to pod (In millicore, minimum 1)"}
