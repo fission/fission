@@ -54,7 +54,7 @@ log "Waiting for router to catch up"
 sleep 5
 
 log "Testing function"
-timeout 60 bash -c "test_fn $fn_name 'TESTVALUE'"
+timeout 120 bash -c "test_fn $fn_name 'TESTVALUE'"
 
 log "Creating a new secret"
 kubectl create secret generic ${new_secret} --from-literal=TEST_KEY="TESTVALUE_NEW" -n default
