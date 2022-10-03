@@ -501,6 +501,9 @@ func GetResourceNamespace(input cli.Input, deprecatedFlag string) (namespace, cu
 		if err != nil {
 			return namespace, currentNS, err
 		}
+		if currentNS == "" {
+			return namespace, currentNS, errors.Errorf("either set current-context or provide namespace with --namespace flag")
+		}
 	}
 
 	console.Verbose(2, "Namespace final %v ", namespace)

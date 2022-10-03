@@ -55,7 +55,7 @@ jobs:
         with:
           version: ${{ env.HELM_VERSION }}
 
-      - name: Kind Clutser
+      - name: Kind Cluster
         uses: engineerd/setup-kind@v0.5.0
         with:
           image: kindest/node:${{ matrix.kindversion }}
@@ -67,6 +67,9 @@ jobs:
           kubectl cluster-info --context kind-kind
           kubectl get nodes
           sudo apt-get install -y apache2-utils
+          kubectl config use-context kind-kind
+          kubectl config set-context --current --namespace=default
+          kubectl config view
 
       - name: Helm chart lint
         run: |

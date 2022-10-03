@@ -64,6 +64,9 @@ jobs:
           kubectl cluster-info --context kind-kind
           kubectl get nodes
           kubectl get storageclasses.storage.k8s.io
+          kubectl config use-context kind-kind
+          kubectl config set-context --current --namespace=default
+          kubectl config view
 
       - name: Dump system info
         run: |
