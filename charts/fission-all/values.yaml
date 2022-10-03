@@ -607,8 +607,8 @@ logger:
 ##
 influxdb:
   enabled: false
-  image: influxdb:1.8
-
+  image: influxdb:2.4
+  logRetention: 14d
 ## Allow user to override busybox image used in fluent-bit init container
 ##
 busyboxImage: busybox
