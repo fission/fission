@@ -185,9 +185,6 @@ func (opts *ApplySubCommand) run(input cli.Input) error {
 			}
 		}
 
-		console.Infof("Resources:\n *%+v \n %v NS \n * %v ENV \n %v Packages \n * \n",
-			fr.Packages[0], fr.Packages[0].Namespace, fr.Functions[0].Spec.Environment.Namespace, fr.Functions[0].Spec.Package.PackageRef.Namespace)
-
 		err = warnIfDirtyWorkTree(filepath.Clean(specDir + "/.."))
 		if err != nil {
 			console.Warn(err.Error())
