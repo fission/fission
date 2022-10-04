@@ -57,6 +57,11 @@ spec:
           value: {{ .Values.influxdb.logRetention }}
         - name: DOCKER_INFLUXDB_INIT_MODE
           value: setup
+        - name: DOCKER_INFLUXDB_INIT_ADMIN_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: influxdb
+              key: token
 {{- if .Values.extraCoreComponentPodConfig }}
 {{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
 {{- end }}
