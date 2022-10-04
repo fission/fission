@@ -66,7 +66,6 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	if err != nil {
 		return errors.Wrap(err, "error in deleting function ")
 	}
-	// fnNamespace := input.String(flagkey.NamespaceFunction)
 
 	mqtKind := input.String(flagkey.MqtKind)
 

@@ -51,7 +51,6 @@ func (opts *ListSubCommand) complete(input cli.Input) (err error) {
 	if err != nil {
 		return errors.Wrap(err, "error in deleting function ")
 	}
-	// opts.namespace = input.String(flagkey.NamespaceTrigger)
 	return nil
 }
 

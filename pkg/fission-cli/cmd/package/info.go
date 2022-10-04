@@ -55,7 +55,6 @@ func (opts *InfoSubCommand) complete(input cli.Input) (err error) {
 	if err != nil {
 		return fv1.AggregateValidationErrors("Environment", err)
 	}
-	// opts.namespace = input.String(flagkey.NamespacePackage)
 	return nil
 }
 

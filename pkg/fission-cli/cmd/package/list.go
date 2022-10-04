@@ -59,7 +59,6 @@ func (opts *ListSubCommand) complete(input cli.Input) (err error) {
 	if err != nil {
 		return fv1.AggregateValidationErrors("Environment", err)
 	}
-	// opts.pkgNamespace = input.String(flagkey.NamespacePackage)
 	return nil
 }
 

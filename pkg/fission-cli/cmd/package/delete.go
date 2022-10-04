@@ -57,7 +57,6 @@ func (opts *DeleteSubCommand) complete(input cli.Input) (err error) {
 		return fv1.AggregateValidationErrors("Environment", err)
 	}
 
-	// opts.namespace = input.String(flagkey.NamespacePackage)
 	opts.deleteOrphans = input.Bool(flagkey.PkgOrphan)
 	opts.force = input.Bool(flagkey.PkgForce)
 

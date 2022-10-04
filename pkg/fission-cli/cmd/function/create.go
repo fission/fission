@@ -69,7 +69,6 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	if err != nil {
 		return errors.Wrap(err, "error retrieving namespace information")
 	}
-	//envNamespace := input.String(flagkey.NamespaceEnvironment)
 
 	// user wants a spec, create a yaml file with package and function
 	toSpec := false
@@ -170,7 +169,6 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		if envName != input.String(flagkey.FnEnvironmentName) {
 			console.Warn("Function's environment is different than package's environment, package's environment will be used for creating function")
 		}
-		// envNamespace = pkg.Spec.Environment.Namespace
 	} else {
 		// need to specify environment for creating new package
 		envName = input.String(flagkey.FnEnvironmentName)

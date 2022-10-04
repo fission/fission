@@ -63,7 +63,6 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 		}
 	}
 
-	// pkgNamespace := input.String(flagkey.NamespacePackage)
 	envName := input.String(flagkey.PkgEnvironment)
 
 	userProvidedNS, pkgNamespace, err := util.GetResourceNamespace(input, flagkey.NamespacePackage)
@@ -71,7 +70,6 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 		return fv1.AggregateValidationErrors("Environment", err)
 	}
 
-	// envNamespace := input.String(flagkey.NamespaceEnvironment)
 	srcArchiveFiles := input.StringSlice(flagkey.PkgSrcArchive)
 	deployArchiveFiles := input.StringSlice(flagkey.PkgDeployArchive)
 	buildcmd := input.String(flagkey.PkgBuildCmd)

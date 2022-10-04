@@ -53,7 +53,6 @@ func (opts *UpdateSubCommand) do(input cli.Input) error {
 
 func (opts *UpdateSubCommand) complete(input cli.Input) (err error) {
 	opts.pkgName = input.String(flagkey.PkgName)
-	// opts.pkgNamespace = input.String(flagkey.NamespacePackage)
 	_, opts.pkgNamespace, err = util.GetResourceNamespace(input, flagkey.NamespacePackage)
 	if err != nil {
 		return fv1.AggregateValidationErrors("Environment", err)
@@ -123,12 +122,6 @@ func UpdatePackage(input cli.Input, client client.Interface, pkg *fv1.Package) (
 		needToRebuild = true
 		needToUpdate = true
 	}
-
-	// if input.IsSet(flagkey.NamespaceEnvironment) {
-	// 	pkg.Spec.Environment.Namespace = envNamespace
-	// 	needToRebuild = true
-	// 	needToUpdate = true
-	// }
 
 	if input.IsSet(flagkey.PkgBuildCmd) {
 		pkg.Spec.BuildCommand = buildcmd

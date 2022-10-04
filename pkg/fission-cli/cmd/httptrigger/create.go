@@ -81,7 +81,6 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	if err != nil {
 		return errors.Wrap(err, "error in deleting function ")
 	}
-	// fnNamespace := input.String(flagkey.NamespaceFunction)
 
 	triggerUrl := input.String(flagkey.HtUrl)
 	prefix := input.String(flagkey.HtPrefix)
@@ -194,10 +193,6 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 
 	opts.trigger = &fv1.HTTPTrigger{
 		ObjectMeta: m,
-		// metav1.ObjectMeta{
-		// 	Name:      triggerName,
-		// 	Namespace: fnNamespace,
-		// },
 		Spec: fv1.HTTPTriggerSpec{
 			Host:              host,
 			RelativeURL:       triggerUrl,
