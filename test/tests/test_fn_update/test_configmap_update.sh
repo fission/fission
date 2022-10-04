@@ -54,7 +54,7 @@ log "Waiting for router to catch up"
 sleep 5
 
 log "Testing function"
-timeout 120 bash -c "test_fn $fn_name 'TESTVALUE'"
+timeout 60 bash -c "test_fn $fn_name 'TESTVALUE'"
 
 log "Creating a new cfgmap"
 kubectl create configmap ${new_cfgmap} --from-literal=TEST_KEY="TESTVALUE_NEW" -n default

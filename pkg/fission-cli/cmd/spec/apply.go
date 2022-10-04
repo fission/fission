@@ -81,6 +81,12 @@ func (opts *ApplySubCommand) insertNamespace(input cli.Input, fr *FissionResourc
 			fr.Functions[i].Namespace = currentNS
 			fr.Functions[i].Spec.Package.PackageRef.Namespace = currentNS
 			fr.Functions[i].Spec.Environment.Namespace = currentNS
+			for j := range fr.Functions[i].Spec.ConfigMaps {
+				fr.Functions[i].Spec.ConfigMaps[j].Namespace = currentNS
+			}
+			for j := range fr.Functions[i].Spec.Secrets {
+				fr.Functions[i].Spec.Secrets[j].Namespace = currentNS
+			}
 		}
 	}
 	for i := range fr.Environments {
