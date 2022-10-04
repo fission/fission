@@ -30,20 +30,6 @@ rules:
   verbs:
   - '*'
 - apiGroups:
-  - batch
-  resources:
-  - jobs
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups:
-  - networking.k8s.io
-  resources:
-  - ingresses
-  verbs:
-  - '*'
-- apiGroups:
   - apiextensions.k8s.io
   resources:
   - customresourcedefinitions
@@ -65,12 +51,6 @@ rules:
   verbs:
   - '*'
 - apiGroups:
-  - autoscaling
-  resources:
-  - horizontalpodautoscalers
-  verbs:
-  - '*'
-- apiGroups:
   - rbac.authorization.k8s.io
   resources:
   - rolebindings
@@ -82,34 +62,3 @@ rules:
   - clusterroles
   verbs:
   - bind
-- apiGroups:
-  - keda.sh
-  resources:
-  - scaledjobs
-  - scaledobjects
-  - scaledjobs/finalizers
-  - scaledjobs/status
-  - triggerauthentications
-  - triggerauthentications/status
-  verbs:
-  - '*'
-{{- if .Values.mqt_keda.enabled }}
-- apiGroups:
-  - keda.k8s.io
-  resources:
-  - scaledjobs
-  - scaledobjects
-  - scaledjobs/finalizers
-  - scaledjobs/status
-  - triggerauthentications
-  - triggerauthentications/status
-  verbs:
-  - '*'
-{{- end }}
-- apiGroups:
-  - metrics.k8s.io
-  resources:
-  - pods
-  verbs:
-  - get
-  - list

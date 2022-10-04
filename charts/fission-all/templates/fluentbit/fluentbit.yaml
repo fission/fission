@@ -173,7 +173,6 @@ spec:
             - name: fluentbit-config
               mountPath: /fluent-bit/etc/
               readOnly: true
-      serviceAccountName: fission-fluentbit
       volumes:
         - name: container-log
           hostPath:
