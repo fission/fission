@@ -1,0 +1,12 @@
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: {{ .Release.Name }}-fission-cr-executor
+subjects:
+  - kind: ServiceAccount
+    name: fission-executor
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: ClusterRole
+  name: {{ .Release.Name }}-fission-cr-executor
+  apiGroup: rbac.authorization.k8s.io

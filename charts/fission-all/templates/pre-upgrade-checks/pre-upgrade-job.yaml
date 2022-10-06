@@ -15,6 +15,7 @@ metadata:
     # job is considered part of the release.
     "helm.sh/hook": pre-upgrade
     "helm.sh/hook-delete-policy": hook-succeeded
+    "helm.sh/hook-weight": "1"
 spec:
   backoffLimit: 0
   template:
@@ -41,5 +42,5 @@ spec:
         {{- if .Values.terminationMessagePolicy }}
         terminationMessagePolicy: {{ .Values.terminationMessagePolicy }}
         {{- end }}
-      serviceAccountName: fission-svc
+      serviceAccountName: fission-preupgrade
 {{- end }}

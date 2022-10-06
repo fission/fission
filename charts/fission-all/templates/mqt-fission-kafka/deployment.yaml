@@ -67,7 +67,7 @@ spec:
         {{- if .Values.terminationMessagePolicy }}
         terminationMessagePolicy: {{ .Values.terminationMessagePolicy }}
         {{- end }}
-      serviceAccountName: fission-svc
+      serviceAccountName: fission-kafka
       {{- if .Values.kafka.authentication.tls.enabled }}
       volumes:
       - name: kafka-secrets

@@ -91,10 +91,23 @@ jobs:
         run: |
           command -v fission && fission support dump
 
+      - name: Kind export logs
+        if: ${{ always() }}
+        run: |
+          kind export logs --name kind kind-logs
+
       - name: Archive fission dump
         if: ${{ failure() }}
         uses: actions/upload-artifact@v2
         with:
           name: fission-dump
           path: fission-dump/*.zip
+          retention-days: 5
+
+      - name: Archive kind logs
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v2
+        with:
+          name: kind-logs-${{ github.run_id }}-${{ matrix.kindversion }}
+          path: kind-logs/*
           retention-days: 5

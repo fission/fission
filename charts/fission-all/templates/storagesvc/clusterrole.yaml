@@ -1,0 +1,12 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ .Release.Name }}-fission-cr-storagesvc
+rules:
+- apiGroups:
+  - fission.io
+  resources:
+  - packages
+  verbs:
+  - get
+  - list
