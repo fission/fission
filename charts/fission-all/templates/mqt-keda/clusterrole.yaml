@@ -28,7 +28,13 @@ rules:
   - deployments/scale
   - replicasets
   verbs:
-  - '*'
+  - create
+  - get
+  - list
+  - watch
+  - update
+  - patch
+  - delete
 - apiGroups:
   - apiextensions.k8s.io
   resources:
@@ -49,19 +55,37 @@ rules:
   - packages
   - timetriggers
   verbs:
-  - '*'
+  - create
+  - get
+  - list
+  - watch
+  - update
+  - patch
+  - delete
 - apiGroups:
   - autoscaling
   resources:
   - horizontalpodautoscalers
   verbs:
-  - '*'
+  - create
+  - get
+  - list
+  - watch
+  - update
+  - patch
+  - delete
 - apiGroups:
   - rbac.authorization.k8s.io
   resources:
   - rolebindings
   verbs:
-  - '*'
+  - create
+  - get
+  - list
+  - watch
+  - update
+  - patch
+  - delete
 - apiGroups:
   - rbac.authorization.k8s.io
   resources:
@@ -78,7 +102,13 @@ rules:
   - triggerauthentications
   - triggerauthentications/status
   verbs:
-  - '*'
+  - create
+  - get
+  - list
+  - watch
+  - update
+  - patch
+  - delete
 {{- if .Values.mqt_keda.enabled }}
 - apiGroups:
   - keda.k8s.io
@@ -90,7 +120,13 @@ rules:
   - triggerauthentications
   - triggerauthentications/status
   verbs:
-  - '*'
+  - create
+  - get
+  - list
+  - watch
+  - update
+  - patch
+  - delete
 {{- end }}
 - apiGroups:
   - metrics.k8s.io

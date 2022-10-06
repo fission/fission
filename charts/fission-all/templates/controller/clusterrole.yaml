@@ -28,7 +28,13 @@ rules:
   - deployments/scale
   - replicasets
   verbs:
-  - '*'
+  - create
+  - get
+  - list
+  - watch
+  - update
+  - patch
+  - delete
 - apiGroups:
   - apiextensions.k8s.io
   resources:
@@ -49,13 +55,25 @@ rules:
   - packages
   - timetriggers
   verbs:
-  - '*'
+  - create
+  - get
+  - list
+  - watch
+  - update
+  - patch
+  - delete
 - apiGroups:
   - rbac.authorization.k8s.io
   resources:
   - rolebindings
   verbs:
-  - '*'
+  - create
+  - get
+  - list
+  - watch
+  - update
+  - patch
+  - delete
 - apiGroups:
   - rbac.authorization.k8s.io
   resources:
