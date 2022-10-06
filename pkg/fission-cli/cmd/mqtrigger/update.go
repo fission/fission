@@ -25,6 +25,7 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
+	"github.com/fission/fission/pkg/fission-cli/console"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
@@ -98,6 +99,12 @@ func (opts *UpdateSubCommand) complete(input cli.Input) (err error) {
 		updated = true
 	}
 	if len(fnName) > 0 {
+		functionList := []string{fnName}
+		err := util.CheckFunctionExistence(opts.Client(), functionList, namespace)
+		if err != nil {
+			console.Warn(err.Error())
+		}
+
 		mqt.Spec.FunctionReference.Name = fnName
 		updated = true
 	}

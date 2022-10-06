@@ -41,6 +41,7 @@ const (
 	Namespace            = "namespace"
 	ForceNamespace       = "forcenamespace"
 	AllNamespaces        = "allNamespaces"
+	ForceDelete          = "force"
 
 	RuntimeMincpu    = "mincpu"
 	RuntimeMaxcpu    = "maxcpu"

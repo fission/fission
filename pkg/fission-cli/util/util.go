@@ -495,18 +495,23 @@ func GetResourceNamespace(input cli.Input, deprecatedFlag string) (namespace, cu
 	}
 	console.Verbose(2, "Namespace from user %v ", namespace)
 	currentNS = namespace
+
 	if namespace == "" {
-		kubeContext := input.String(flagkey.KubeContext)
-		currentNS, err = GetKubernetesCurrentNamespace(kubeContext)
-		if err != nil {
-			return namespace, currentNS, err
+		if os.Getenv("NAMESPACE") != "" {
+			currentNS = os.Getenv("NAMESPACE")
+		} else {
+			kubeContext := input.String(flagkey.KubeContext)
+			currentNS, err = GetKubernetesCurrentNamespace(kubeContext)
+			if err != nil {
+				return namespace, currentNS, err
+			}
 		}
 		if currentNS == "" {
 			return namespace, currentNS, errors.Errorf("either set current-context or provide namespace with --namespace flag")
 		}
 	}
 
-	console.Verbose(2, "Namespace final %v ", namespace)
+	console.Verbose(2, "Namespace final %v ", currentNS)
 
 	return namespace, currentNS, nil
 }

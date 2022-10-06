@@ -397,8 +397,8 @@ func ShowAppliedKubeWatchers(ws []fv1.KubernetesWatchTrigger) {
 	}
 }
 
-// getAllFunctions get lists of functions in all namespaces
-func getAllFunctions(client client.Interface, namespace string) ([]fv1.Function, error) { // TODO: do we want this to be ns specific now
+// getAllFunctions get lists of functions in provided namespaces
+func getAllFunctions(client client.Interface, namespace string) ([]fv1.Function, error) {
 	fns, err := client.V1().Function().List(namespace)
 	if err != nil {
 		return nil, errors.Errorf("Unable to get Functions %v", err.Error())

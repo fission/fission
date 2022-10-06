@@ -58,7 +58,7 @@ func Commands() *cobra.Command {
 		RunE:  wrapper.Wrapper(Destroy),
 	}
 	wrapper.SetFlags(destroyCmd, flag.FlagSet{
-		Optional: []flag.Flag{flag.SpecDir, flag.SpecIgnore},
+		Optional: []flag.Flag{flag.SpecDir, flag.SpecIgnore, flag.Namespace, flag.ForceDelete},
 	})
 
 	listCmd := &cobra.Command{
