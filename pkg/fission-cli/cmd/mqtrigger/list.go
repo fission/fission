@@ -23,8 +23,10 @@ import (
 
 	"github.com/pkg/errors"
 
+	v1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
+	"github.com/fission/fission/pkg/fission-cli/console"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
@@ -54,19 +56,28 @@ func (opts *ListSubCommand) complete(input cli.Input) (err error) {
 	return nil
 }
 
-func (opts *ListSubCommand) run(input cli.Input) error {
-	mqts, err := opts.Client().V1().MessageQueueTrigger().List(input.String(flagkey.MqtMQType), opts.namespace)
+func (opts *ListSubCommand) run(input cli.Input) (err error) {
+
+	var mqts []v1.MessageQueueTrigger
+	var namespace string
+	if input.Bool(flagkey.AllNamespaces) {
+		mqts, err = opts.Client().V1().MessageQueueTrigger().List(input.String(flagkey.MqtMQType), "")
+	} else {
+		console.Warn(fmt.Sprintf("Namespace we got: %s", opts.namespace))
+		mqts, err = opts.Client().V1().MessageQueueTrigger().List(input.String(flagkey.MqtMQType), opts.namespace)
+	}
+	console.Warn(fmt.Sprintf("Namespace we got from API: %s", namespace))
 	if err != nil {
 		return errors.Wrap(err, "error listing message queue triggers")
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 
-	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
-		"NAME", "FUNCTION_NAME", "MESSAGE_QUEUE_TYPE", "TOPIC", "RESPONSE_TOPIC", "ERROR_TOPIC", "MAX_RETRIES", "PUB_MSG_CONTENT_TYPE")
+	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
+		"NAME", "FUNCTION_NAME", "MESSAGE_QUEUE_TYPE", "TOPIC", "RESPONSE_TOPIC", "ERROR_TOPIC", "MAX_RETRIES", "PUB_MSG_CONTENT_TYPE", "NAMESPACE")
 	for _, mqt := range mqts {
-		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
-			mqt.ObjectMeta.Name, mqt.Spec.FunctionReference.Name, mqt.Spec.MessageQueueType, mqt.Spec.Topic, mqt.Spec.ResponseTopic, mqt.Spec.ErrorTopic, mqt.Spec.MaxRetries, mqt.Spec.ContentType)
+		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
+			mqt.ObjectMeta.Name, mqt.Spec.FunctionReference.Name, mqt.Spec.MessageQueueType, mqt.Spec.Topic, mqt.Spec.ResponseTopic, mqt.Spec.ErrorTopic, mqt.Spec.MaxRetries, mqt.Spec.ContentType, mqt.ObjectMeta.Namespace)
 	}
 	w.Flush()
 

@@ -23,6 +23,7 @@ import (
 
 	"github.com/pkg/errors"
 
+	v1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
@@ -54,8 +55,14 @@ func (opts *ListSubCommand) complete(input cli.Input) (err error) {
 	return nil
 }
 
-func (opts *ListSubCommand) run(input cli.Input) error {
-	canaryCfgs, err := opts.Client().V1().CanaryConfig().List(opts.namespace)
+func (opts *ListSubCommand) run(input cli.Input) (err error) {
+
+	var canaryCfgs []v1.CanaryConfig
+	if input.Bool(flagkey.AllNamespaces) {
+		canaryCfgs, err = opts.Client().V1().CanaryConfig().List("")
+	} else {
+		canaryCfgs, err = opts.Client().V1().CanaryConfig().List(opts.namespace)
+	}
 	if err != nil {
 		return errors.Wrap(err, "error listing canary config")
 	}

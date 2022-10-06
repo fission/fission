@@ -23,6 +23,7 @@ import (
 
 	"github.com/pkg/errors"
 
+	v1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
@@ -44,7 +45,13 @@ func (opts *ListSubCommand) do(input cli.Input) (err error) {
 		return errors.Wrap(err, "error creating environment")
 	}
 
-	envs, err := opts.Client().V1().Environment().List(currentNS)
+	var envs []v1.Environment
+	if input.Bool(flagkey.AllNamespaces) {
+		envs, err = opts.Client().V1().Environment().List("")
+	} else {
+		envs, err = opts.Client().V1().Environment().List(currentNS)
+	}
+
 	if err != nil {
 		return errors.Wrap(err, "error listing environments")
 	}

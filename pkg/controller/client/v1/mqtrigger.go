@@ -142,10 +142,10 @@ func (c *MessageQueueTrigger) Delete(m *metav1.ObjectMeta) error {
 }
 
 func (c *MessageQueueTrigger) List(mqType string, ns string) ([]fv1.MessageQueueTrigger, error) {
-	relativeUrl := "triggers/messagequeue"
+	relativeUrl := fmt.Sprintf("triggers/messagequeue?namespace=%v", ns)
 	if len(mqType) > 0 {
 		// TODO remove this, replace with field selector
-		relativeUrl += fmt.Sprintf("?mqtype=%v&namespace=%v", mqType, ns)
+		relativeUrl += fmt.Sprintf("&mqtype=%v", mqType)
 	}
 
 	resp, err := c.client.Get(relativeUrl)

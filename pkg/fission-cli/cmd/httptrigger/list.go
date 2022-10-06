@@ -45,7 +45,13 @@ func (opts *ListSubCommand) run(input cli.Input) (err error) {
 		return errors.Wrap(err, "error in deleting function ")
 	}
 
-	hts, err := opts.Client().V1().HTTPTrigger().List(namespace)
+	var hts []fv1.HTTPTrigger
+	if input.Bool(flagkey.AllNamespaces) {
+		hts, err = opts.Client().V1().HTTPTrigger().List("")
+	} else {
+		hts, err = opts.Client().V1().HTTPTrigger().List(namespace)
+	}
+
 	if err != nil {
 		return errors.Wrap(err, "error listing HTTP triggers")
 	}

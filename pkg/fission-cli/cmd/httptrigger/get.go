@@ -66,7 +66,7 @@ func (opts *GetSubCommand) run(input cli.Input) (err error) {
 
 func printHtSummary(triggers []fv1.HTTPTrigger) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
-	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "METHOD", "URL", "FUNCTION(s)", "INGRESS", "HOST", "PATH", "TLS", "ANNOTATIONS")
+	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "METHOD", "URL", "FUNCTION(s)", "INGRESS", "HOST", "PATH", "TLS", "ANNOTATIONS", "NAMESPACE")
 	for _, trigger := range triggers {
 		function := ""
 		if trigger.Spec.FunctionReference.Type == fv1.FunctionReferenceTypeFunctionName {
@@ -99,8 +99,8 @@ func printHtSummary(triggers []fv1.HTTPTrigger) {
 		if len(trigger.Spec.Methods) > 0 {
 			methods = trigger.Spec.Methods
 		}
-		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
-			trigger.ObjectMeta.Name, methods, trigger.Spec.RelativeURL, function, trigger.Spec.CreateIngress, host, path, trigger.Spec.IngressConfig.TLS, ann)
+		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
+			trigger.ObjectMeta.Name, methods, trigger.Spec.RelativeURL, function, trigger.Spec.CreateIngress, host, path, trigger.Spec.IngressConfig.TLS, ann, trigger.ObjectMeta.Namespace)
 	}
 	w.Flush()
 }

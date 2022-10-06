@@ -81,7 +81,7 @@ func Commands() *cobra.Command {
 		RunE:  wrapper.Wrapper(List),
 	}
 	wrapper.SetFlags(listCmd, flag.FlagSet{
-		Optional: []flag.Flag{flag.NamespaceEnvironment, flag.Namespace},
+		Optional: []flag.Flag{flag.NamespaceEnvironment, flag.Namespace, flag.AllNamespaces},
 	})
 
 	listPodsCmd := &cobra.Command{

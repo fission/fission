@@ -120,7 +120,7 @@ func Commands() *cobra.Command {
 		RunE:    wrapper.Wrapper(List),
 	}
 	wrapper.SetFlags(listCmd, flag.FlagSet{
-		Optional: []flag.Flag{flag.NamespaceFunction, flag.Namespace},
+		Optional: []flag.Flag{flag.NamespaceFunction, flag.Namespace, flag.AllNamespaces},
 	})
 
 	logsCmd := &cobra.Command{

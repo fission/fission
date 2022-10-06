@@ -39,8 +39,8 @@ const (
 	NamespaceTrigger     = "triggerNamespace"
 	NamespaceCanary      = "canaryNamespace"
 	Namespace            = "namespace"
-	ForceNamespace       = "forcenamespace"
-	AllNamespaces        = "allNamespaces"
+	ForceNamespace       = "force-namespace"
+	AllNamespaces        = "all-namespaces"
 	ForceDelete          = "force"
 
 	RuntimeMincpu    = "mincpu"

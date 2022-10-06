@@ -23,6 +23,7 @@ import (
 
 	"github.com/pkg/errors"
 
+	v1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
@@ -37,13 +38,20 @@ func List(input cli.Input) error {
 	return (&ListSubCommand{}).do(input)
 }
 
-func (opts *ListSubCommand) do(input cli.Input) error {
+func (opts *ListSubCommand) do(input cli.Input) (err error) {
 	_, ttNs, err := util.GetResourceNamespace(input, flagkey.NamespaceTrigger)
 	if err != nil {
 		return errors.Wrap(err, "error in deleting function ")
 	}
 	// ttNs := input.String(flagkey.NamespaceTrigger)
-	tts, err := opts.Client().V1().TimeTrigger().List(ttNs)
+
+	var tts []v1.TimeTrigger
+	if input.Bool(flagkey.AllNamespaces) {
+		tts, err = opts.Client().V1().TimeTrigger().List("")
+	} else {
+		tts, err = opts.Client().V1().TimeTrigger().List(ttNs)
+	}
+
 	if err != nil {
 		return errors.Wrap(err, "list Time triggers")
 	}

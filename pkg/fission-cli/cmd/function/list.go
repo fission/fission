@@ -24,6 +24,7 @@ import (
 
 	"github.com/pkg/errors"
 
+	v1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
@@ -44,7 +45,12 @@ func (opts *ListSubCommand) do(input cli.Input) error {
 		return errors.Wrap(err, "error in listing function ")
 	}
 
-	fns, err := opts.Client().V1().Function().List(namespace)
+	var fns []v1.Function
+	if input.Bool(flagkey.AllNamespaces) {
+		fns, err = opts.Client().V1().Function().List("")
+	} else {
+		fns, err = opts.Client().V1().Function().List(namespace)
+	}
 	if err != nil {
 		return errors.Wrap(err, "error listing functions")
 	}
