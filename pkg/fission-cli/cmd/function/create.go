@@ -74,7 +74,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	toSpec := false
 	if input.Bool(flagkey.SpecSave) {
 		toSpec = true
-		opts.specFile = fmt.Sprintf("function-%v.yaml", fnName)
+		opts.specFile = fmt.Sprintf("function-%s.yaml", fnName)
 	}
 	specDir := util.GetSpecDir(input)
 	specIgnore := util.GetSpecIgnore(input)
@@ -138,7 +138,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 
 			fr, err := spec.ReadSpecs(specDir, specIgnore, false)
 			if err != nil {
-				return errors.Wrap(err, fmt.Sprintf("error reading spec in '%v'", specDir))
+				return errors.Wrap(err, fmt.Sprintf("error reading spec in '%s'", specDir))
 			}
 
 			obj := fr.SpecExists(&fv1.Package{ // In case of spec I might or might not have the `fnNamespace`, how will I get pkg objectMeta here.
@@ -160,7 +160,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 				Name:      pkgName,
 			})
 			if err != nil {
-				return errors.Wrap(err, fmt.Sprintf("read package in '%v' in Namespace: %s. Package needs to be present in the same namespace as function", pkgName, fnNamespace))
+				return errors.Wrap(err, fmt.Sprintf("read package in '%s' in Namespace: %s. Package needs to be present in the same namespace as function", pkgName, fnNamespace))
 			}
 			pkgMetadata = &pkg.ObjectMeta
 		}
@@ -180,7 +180,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 
 			fr, err := spec.ReadSpecs(specDir, specIgnore, false)
 			if err != nil {
-				return errors.Wrap(err, fmt.Sprintf("error reading spec in '%v'", specDir))
+				return errors.Wrap(err, fmt.Sprintf("error reading spec in '%s'", specDir))
 			}
 			exists, err := fr.ExistsInSpecs(fv1.Environment{
 				ObjectMeta: metav1.ObjectMeta{
@@ -192,7 +192,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 				return err
 			}
 			if !exists {
-				console.Warn(fmt.Sprintf("Function '%v' references unknown Environment '%v', please create it before applying spec",
+				console.Warn(fmt.Sprintf("Function '%s' references unknown Environment '%s', please create it before applying spec",
 					fnName, envName))
 			}
 		} else {
@@ -359,12 +359,12 @@ func generatePackageName(fnName string, id string) string {
 		lastIndexOfChar int
 	)
 	if lenFnName+lenId <= 62 {
-		return fmt.Sprintf("%v-%v", fnName, id)
+		return fmt.Sprintf("%s-%s", fnName, id)
 	}
 
 	lastIndexOfChar = lenFnName - (lenFnName + lenId - 62)
-	pkgName := fmt.Sprintf("%v-%v", fnName[:lastIndexOfChar], id)
-	console.Info(fmt.Sprintf("Generated package %v from function to acceptable character limit", pkgName))
+	pkgName := fmt.Sprintf("%v-%s", fnName[:lastIndexOfChar], id)
+	console.Info(fmt.Sprintf("Generated package %s from function to acceptable character limit", pkgName))
 	return pkgName
 }
 
@@ -390,7 +390,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 		return errors.Wrap(err, "error creating function")
 	}
 
-	fmt.Printf("function '%v' created\n", opts.function.ObjectMeta.Name)
+	fmt.Printf("function '%s' created\n", opts.function.ObjectMeta.Name)
 
 	// Allow the user to specify an HTTP trigger while creating a function.
 	triggerUrl := input.String(flagkey.HtUrl)
@@ -439,7 +439,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 		return errors.Wrap(err, "error creating HTTP trigger")
 	}
 
-	fmt.Printf("route created: %v %v -> %v\n", methods, triggerUrl, opts.function.ObjectMeta.Name)
+	fmt.Printf("route created: %s %s -> %s\n", methods, triggerUrl, opts.function.ObjectMeta.Name)
 	return nil
 }
 

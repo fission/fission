@@ -52,9 +52,9 @@ func (opts *DeleteSubCommand) do(input cli.Input) error {
 		if input.Bool(flagkey.IgnoreNotFound) && util.IsNotFound(err) {
 			return nil
 		}
-		return errors.Wrap(err, fmt.Sprintf("delete function '%v'", m.Name))
+		return errors.Wrap(err, fmt.Sprintf("delete function '%s'", m.Name))
 	}
 
-	fmt.Printf("function '%v' deleted\n", m.Name)
+	fmt.Printf("function '%s' deleted\n", m.Name)
 	return nil
 }
