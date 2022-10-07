@@ -33,7 +33,7 @@ func Commands() *cobra.Command {
 		Required: []flag.Flag{flag.HtFnName},
 		Optional: []flag.Flag{flag.HtUrl, flag.HtName, flag.HtMethod, flag.HtIngress,
 			flag.HtIngressRule, flag.HtIngressAnnotation, flag.HtIngressTLS,
-			flag.HtFnWeight, flag.HtHost, flag.NamespaceFunction, flag.Namespace, flag.SpecSave, flag.SpecDry,
+			flag.HtFnWeight, flag.HtHost, flag.NamespaceFunction, flag.SpecSave, flag.SpecDry,
 			flag.HtPrefix, flag.HtKeepPrefix},
 	})
 
@@ -57,7 +57,7 @@ func Commands() *cobra.Command {
 		Required: []flag.Flag{flag.HtName},
 		Optional: []flag.Flag{flag.HtUrl, flag.HtFnName,
 			flag.HtMethod, flag.HtIngress, flag.HtIngressRule, flag.HtIngressAnnotation,
-			flag.HtIngressTLS, flag.HtFnWeight, flag.HtHost, flag.NamespaceTrigger, flag.Namespace,
+			flag.HtIngressTLS, flag.HtFnWeight, flag.HtHost, flag.NamespaceTrigger,
 			flag.HtPrefix, flag.HtKeepPrefix},
 	})
 
@@ -68,7 +68,7 @@ func Commands() *cobra.Command {
 		RunE:    wrapper.Wrapper(Delete),
 	}
 	wrapper.SetFlags(deleteCmd, flag.FlagSet{
-		Optional: []flag.Flag{flag.HtName, flag.HtFnFilter, flag.NamespaceTrigger, flag.Namespace, flag.IgnoreNotFound},
+		Optional: []flag.Flag{flag.HtName, flag.HtFnFilter, flag.NamespaceTrigger, flag.IgnoreNotFound},
 	})
 
 	listCmd := &cobra.Command{
@@ -79,7 +79,7 @@ func Commands() *cobra.Command {
 		RunE:    wrapper.Wrapper(List),
 	}
 	wrapper.SetFlags(listCmd, flag.FlagSet{
-		Optional: []flag.Flag{flag.NamespaceTrigger, flag.Namespace, flag.HtFnFilter, flag.AllNamespaces},
+		Optional: []flag.Flag{flag.NamespaceTrigger, flag.HtFnFilter, flag.AllNamespaces},
 	})
 
 	command := &cobra.Command{

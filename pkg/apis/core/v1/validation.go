@@ -163,8 +163,8 @@ func ValidateKubeReference(refName string, name string, namespace string) error 
 	result := &multierror.Error{}
 
 	result = multierror.Append(result,
-		ValidateKubeName(fmt.Sprintf("%v.Name", refName), name),
-		validateNS(fmt.Sprintf("%v.Namespace", refName), namespace))
+		ValidateKubeName(fmt.Sprintf("%s.Name", refName), name),
+		validateNS(fmt.Sprintf("%s.Namespace", refName), namespace))
 
 	return result.ErrorOrNil()
 }

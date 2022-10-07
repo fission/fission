@@ -852,7 +852,7 @@ func applyFunctions(fclient client.Interface, fr *FissionResources, delete bool,
 
 func applyEnvironments(fclient client.Interface, fr *FissionResources, delete bool, specAllowConflicts bool) (map[string]metav1.ObjectMeta, *ResourceApplyStatus, error) {
 	// get list
-	allObjs, err := fclient.V1().Environment().List(metav1.NamespaceAll) // TBD: this can be conflicting with the multi-tenancy but check if we have valid use case for this
+	allObjs, err := fclient.V1().Environment().List(metav1.NamespaceAll)
 	if err != nil {
 		return nil, nil, err
 	}

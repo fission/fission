@@ -31,7 +31,7 @@ func Commands() *cobra.Command {
 	}
 	wrapper.SetFlags(createCmd, flag.FlagSet{
 		Optional: []flag.Flag{flag.TtName, flag.TtFnName,
-			flag.TtCron, flag.NamespaceFunction, flag.Namespace, flag.SpecSave, flag.SpecDry},
+			flag.TtCron, flag.NamespaceFunction, flag.SpecSave, flag.SpecDry},
 	})
 
 	updateCmd := &cobra.Command{
@@ -42,7 +42,7 @@ func Commands() *cobra.Command {
 	}
 	wrapper.SetFlags(updateCmd, flag.FlagSet{
 		Required: []flag.Flag{flag.TtName},
-		Optional: []flag.Flag{flag.TtFnName, flag.TtCron, flag.NamespaceTrigger, flag.Namespace},
+		Optional: []flag.Flag{flag.TtFnName, flag.TtCron, flag.NamespaceTrigger},
 	})
 
 	deleteCmd := &cobra.Command{
@@ -53,7 +53,7 @@ func Commands() *cobra.Command {
 	}
 	wrapper.SetFlags(deleteCmd, flag.FlagSet{
 		Required: []flag.Flag{flag.TtName},
-		Optional: []flag.Flag{flag.NamespaceTrigger, flag.Namespace, flag.IgnoreNotFound},
+		Optional: []flag.Flag{flag.NamespaceTrigger, flag.IgnoreNotFound},
 	})
 
 	listCmd := &cobra.Command{
@@ -64,7 +64,7 @@ func Commands() *cobra.Command {
 		RunE:    wrapper.Wrapper(List),
 	}
 	wrapper.SetFlags(listCmd, flag.FlagSet{
-		Optional: []flag.Flag{flag.NamespaceTrigger, flag.Namespace, flag.AllNamespaces},
+		Optional: []flag.Flag{flag.NamespaceTrigger, flag.AllNamespaces},
 	})
 
 	showCmd := &cobra.Command{

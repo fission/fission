@@ -79,7 +79,7 @@ func (opts *CreateSubCommand) run(input cli.Input) (err error) {
 	if err != nil {
 		return fv1.AggregateValidationErrors("Environment", err)
 	}
-	// we user only user provided NS in spec. While creating actual record we use the current context's NS.
+	// we use user provided NS in spec. While creating actual record we use the current context's NS.
 	opts.env.ObjectMeta.Namespace = userDefinedNS
 
 	// if we're writing a spec, don't call the API
@@ -189,7 +189,6 @@ func createEnvironmentFromCmd(input cli.Input) (*fv1.Environment, error) {
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: envName,
-			// Namespace: envNamespace,
 		},
 		Spec: fv1.EnvironmentSpec{
 			Version: envVersion,

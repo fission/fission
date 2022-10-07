@@ -81,15 +81,16 @@ var (
 	Labels     = Flag{Type: String, Name: flagkey.Labels, Usage: "Comma separated labels to apply to the function. E.g. --labels=\"environment=dev,application=analytics\""}
 	Annotation = Flag{Type: StringSlice, Name: flagkey.Annotation, Usage: "Annotation to apply to the function. To mention multiple annotations --annotation=\"abc.com/team=dev\" --annotation=\"foo=bar\""}
 
+	Namespace = Flag{Type: String, Name: flagkey.Namespace, Short: "n", Usage: "If present, the namespace scope for this CLI request"}
+
 	NamespaceFunction    = Flag{Type: String, Name: flagkey.NamespaceFunction, Aliases: []string{"fns"}, Usage: "Namespace for function object", Deprecated: true, Substitute: flagkey.Namespace}
 	NamespaceEnvironment = Flag{Type: String, Name: flagkey.NamespaceEnvironment, Aliases: []string{"envns"}, Usage: "Namespace for environment object", Deprecated: true, Substitute: flagkey.Namespace}
 	NamespacePackage     = Flag{Type: String, Name: flagkey.NamespacePackage, Aliases: []string{"pkgns"}, Usage: "Namespace for package object", Deprecated: true, Substitute: flagkey.Namespace}
 	NamespaceTrigger     = Flag{Type: String, Name: flagkey.NamespaceTrigger, Aliases: []string{"triggerns"}, Usage: "Namespace for trigger object", Deprecated: true, Substitute: flagkey.Namespace}
 	NamespaceCanary      = Flag{Type: String, Name: flagkey.NamespaceCanary, Aliases: []string{"canaryns"}, Usage: "Namespace for canary config object", Deprecated: true, Substitute: flagkey.Namespace}
-	Namespace            = Flag{Type: String, Name: flagkey.Namespace, Aliases: []string{"ns"}, Usage: "Namespace for resource"}
 	ForceNamespace       = Flag{Type: Bool, Name: flagkey.ForceNamespace, Aliases: []string{"force"}, Usage: "If true, resources will be created in namespace provided by (--namespace flag ) even if spec file contains some other namespace", DefaultValue: false}
 	ForceDelete          = Flag{Type: Bool, Name: flagkey.ForceDelete, Aliases: []string{"force"}, Usage: "Delete all resources across all namespaces present in spec"}
-	AllNamespaces        = Flag{Type: Bool, Name: flagkey.AllNamespaces, Aliases: []string{"all"}, Usage: "Fetch resources from all namespaces"}
+	AllNamespaces        = Flag{Type: Bool, Name: flagkey.AllNamespaces, Short: "A", Usage: "Fetch resources from all namespaces"}
 	RunTimeMinCPU        = Flag{Type: Int, Name: flagkey.RuntimeMincpu, Usage: "Minimum CPU to be assigned to pod (In millicore, minimum 1)"}
 	RunTimeMaxCPU        = Flag{Type: Int, Name: flagkey.RuntimeMaxcpu, Usage: "Maximum CPU to be assigned to pod (In millicore, minimum 1)"}
 	RunTimeTargetCPU     = Flag{Type: Int, Name: flagkey.RuntimeTargetcpu, Usage: "Target average CPU usage percentage across pods for scaling", DefaultValue: 80}

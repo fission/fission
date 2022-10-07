@@ -43,7 +43,6 @@ func (opts *ListSubCommand) do(input cli.Input) (err error) {
 	if err != nil {
 		return errors.Wrap(err, "error in deleting function ")
 	}
-	// ttNs := input.String(flagkey.NamespaceTrigger)
 
 	var tts []v1.TimeTrigger
 	if input.Bool(flagkey.AllNamespaces) {

@@ -40,11 +40,10 @@ func Delete(input cli.Input) error {
 func (opts *DeleteSubCommand) do(input cli.Input) (err error) {
 
 	_, currentContextNS, err := util.GetResourceNamespace(input, flagkey.NamespaceEnvironment)
-	console.Verbose(2, "Namespace before not set %v ", currentContextNS)
 	if err != nil {
 		return errors.Wrap(err, "error creating environment")
 	}
-	console.Verbose(2, "Namespace after set %v ", currentContextNS)
+	console.Verbose(2, "Namespace used to delete resource: %s ", currentContextNS)
 
 	m := &metav1.ObjectMeta{
 		Name:      input.String(flagkey.EnvName),

@@ -148,7 +148,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 				},
 			}, true, false)
 			if obj == nil {
-				return errors.Errorf("please create package %v spec file with namespace %v before referencing it", pkgName, userProvidedNS)
+				return errors.Errorf("please create package %s spec file with namespace %s before referencing it", pkgName, userProvidedNS)
 			}
 
 			pkg = obj.(*fv1.Package)
@@ -202,7 +202,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 			})
 			if err != nil {
 				if e, ok := err.(ferror.Error); ok && e.Code == ferror.ErrorNotFound {
-					console.Warn(fmt.Sprintf("Environment \"%v\" does not exist. Please create the environment before executing the function. \nFor example: `fission env create --name %v --envns %v --image <image>`\n", envName, envName, fnNamespace))
+					console.Warn(fmt.Sprintf("Environment \"%s\" does not exist. Please create the environment before executing the function. \nFor example: `fission env create --name %s --envns %s --image <image>`\n", envName, envName, fnNamespace))
 				} else {
 					return errors.Wrap(err, "error retrieving environment information")
 				}

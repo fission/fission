@@ -103,7 +103,6 @@ func RegisterHTTPTriggerRoute(ws *restful.WebService) {
 
 func (a *API) HTTPTriggerApiList(w http.ResponseWriter, r *http.Request) {
 	ns := a.extractQueryParamFromRequest(r, "namespace")
-	// TODO: TBD do we want this behaviour
 	if len(ns) == 0 {
 		ns = metav1.NamespaceAll
 	}

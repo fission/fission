@@ -218,36 +218,34 @@ func deleteResources(fclient client.Interface, fr *FissionResources, forceDelete
 }
 
 func destroyHTTPTriggers(fclient client.Interface, fr *FissionResources) error {
-	// objs is already filtered with our UID
 	for _, o := range fr.HttpTriggers {
 		err := fclient.V1().HTTPTrigger().Delete(&o.ObjectMeta)
 		if err != nil && strings.Contains(err.Error(), "not found") {
-			console.Verbose(2, fmt.Sprintf("could not delete httptrigger: %v Namespace: %v", o.ObjectMeta.Name, o.ObjectMeta.Namespace))
+			console.Verbose(2, fmt.Sprintf("could not delete httptrigger: %s Namespace: %s", o.ObjectMeta.Name, o.ObjectMeta.Namespace))
 			err = nil
 			continue
 
 		} else if err != nil {
 			return err
 		}
-		fmt.Printf("Deleted %v %v/%v\n", o.TypeMeta.Kind, o.ObjectMeta.Namespace, o.ObjectMeta.Name)
+		fmt.Printf("Deleted %s %s/%s\n", o.TypeMeta.Kind, o.ObjectMeta.Namespace, o.ObjectMeta.Name)
 	}
 	return nil
 }
 
 func destroyKubernetesWatchTriggers(fclient client.Interface, fr *FissionResources) error {
 
-	// objs is already filtered with our UID
 	for _, o := range fr.KubernetesWatchTriggers {
 		err := fclient.V1().KubeWatcher().Delete(&o.ObjectMeta)
 		if err != nil && strings.Contains(err.Error(), "not found") {
-			console.Verbose(2, fmt.Sprintf("could not delete watch: %v Namespace: %v", o.ObjectMeta.Name, o.ObjectMeta.Namespace))
+			console.Verbose(2, fmt.Sprintf("could not delete watch: %s Namespace: %s", o.ObjectMeta.Name, o.ObjectMeta.Namespace))
 			err = nil
 			continue
 
 		} else if err != nil {
 			return err
 		}
-		fmt.Printf("Deleted %v %v/%v\n", o.TypeMeta.Kind, o.ObjectMeta.Namespace, o.ObjectMeta.Name)
+		fmt.Printf("Deleted %s %s/%s\n", o.TypeMeta.Kind, o.ObjectMeta.Namespace, o.ObjectMeta.Name)
 	}
 
 	return nil
@@ -255,18 +253,17 @@ func destroyKubernetesWatchTriggers(fclient client.Interface, fr *FissionResourc
 
 func destroyTimeTriggers(fclient client.Interface, fr *FissionResources) error {
 
-	// objs is already filtered with our UID
 	for _, o := range fr.TimeTriggers {
 		err := fclient.V1().TimeTrigger().Delete(&o.ObjectMeta)
 		if err != nil && strings.Contains(err.Error(), "not found") {
-			console.Verbose(2, fmt.Sprintf("could not delete Time trigger: %v Namespace: %v", o.ObjectMeta.Name, o.ObjectMeta.Namespace))
+			console.Verbose(2, fmt.Sprintf("could not delete Time trigger: %s Namespace: %s", o.ObjectMeta.Name, o.ObjectMeta.Namespace))
 			err = nil
 			continue
 
 		} else if err != nil {
 			return err
 		}
-		fmt.Printf("Deleted %v %v/%v\n", o.TypeMeta.Kind, o.ObjectMeta.Namespace, o.ObjectMeta.Name)
+		fmt.Printf("Deleted %s %s/%s\n", o.TypeMeta.Kind, o.ObjectMeta.Namespace, o.ObjectMeta.Name)
 	}
 
 	return nil
@@ -274,18 +271,17 @@ func destroyTimeTriggers(fclient client.Interface, fr *FissionResources) error {
 
 func destroyMessageQueueTriggers(fclient client.Interface, fr *FissionResources) error {
 
-	// objs is already filtered with our UID
 	for _, o := range fr.MessageQueueTriggers {
 		err := fclient.V1().MessageQueueTrigger().Delete(&o.ObjectMeta)
 		if err != nil && strings.Contains(err.Error(), "not found") {
-			console.Verbose(2, fmt.Sprintf("could not delete Message trigger: %v Namespace: %v", o.ObjectMeta.Name, o.ObjectMeta.Namespace))
+			console.Verbose(2, fmt.Sprintf("could not delete Message trigger: %s Namespace: %s", o.ObjectMeta.Name, o.ObjectMeta.Namespace))
 			err = nil
 			continue
 
 		} else if err != nil {
 			return err
 		}
-		fmt.Printf("Deleted %v %v/%v\n", o.TypeMeta.Kind, o.ObjectMeta.Namespace, o.ObjectMeta.Name)
+		fmt.Printf("Deleted %s %s/%s\n", o.TypeMeta.Kind, o.ObjectMeta.Namespace, o.ObjectMeta.Name)
 	}
 
 	return nil
@@ -293,18 +289,17 @@ func destroyMessageQueueTriggers(fclient client.Interface, fr *FissionResources)
 
 func destroyFunctions(fclient client.Interface, fr *FissionResources) error {
 
-	// objs is already filtered with our UID
 	for _, o := range fr.Functions {
 		err := fclient.V1().Function().Delete(&o.ObjectMeta)
 		if err != nil && strings.Contains(err.Error(), "not found") {
-			console.Verbose(2, fmt.Sprintf("could not delete Functions: %v Namespace: %v", o.ObjectMeta.Name, o.ObjectMeta.Namespace))
+			console.Verbose(2, fmt.Sprintf("could not delete Functions: %s Namespace: %s", o.ObjectMeta.Name, o.ObjectMeta.Namespace))
 			err = nil
 			continue
 
 		} else if err != nil {
 			return err
 		}
-		fmt.Printf("Deleted %v %v/%v\n", o.TypeMeta.Kind, o.ObjectMeta.Namespace, o.ObjectMeta.Name)
+		fmt.Printf("Deleted %s %s/%s\n", o.TypeMeta.Kind, o.ObjectMeta.Namespace, o.ObjectMeta.Name)
 	}
 
 	return nil
@@ -312,18 +307,17 @@ func destroyFunctions(fclient client.Interface, fr *FissionResources) error {
 
 func destroyPackages(fclient client.Interface, fr *FissionResources) error {
 
-	// objs is already filtered with our UID
 	for _, o := range fr.Packages {
 		err := fclient.V1().Package().Delete(&o.ObjectMeta)
 		if err != nil && strings.Contains(err.Error(), "not found") {
-			console.Verbose(2, fmt.Sprintf("could not delete Package: %v Namespace: %v", o.ObjectMeta.Name, o.ObjectMeta.Namespace))
+			console.Verbose(2, fmt.Sprintf("could not delete Package: %s Namespace: %s", o.ObjectMeta.Name, o.ObjectMeta.Namespace))
 			err = nil
 			continue
 
 		} else if err != nil {
 			return err
 		}
-		fmt.Printf("Deleted %v %v/%v\n", o.TypeMeta.Kind, o.ObjectMeta.Namespace, o.ObjectMeta.Name)
+		fmt.Printf("Deleted %s %s/%s\n", o.TypeMeta.Kind, o.ObjectMeta.Namespace, o.ObjectMeta.Name)
 	}
 
 	return nil
@@ -331,18 +325,17 @@ func destroyPackages(fclient client.Interface, fr *FissionResources) error {
 
 func destroyEnvironments(fclient client.Interface, fr *FissionResources) error {
 
-	// objs is already filtered with our UID
 	for _, o := range fr.Environments {
 		err := fclient.V1().Environment().Delete(&o.ObjectMeta)
 		if err != nil && strings.Contains(err.Error(), "not found") {
-			console.Verbose(2, fmt.Sprintf("could not delete Env: %v Namespace: %v", o.ObjectMeta.Name, o.ObjectMeta.Namespace))
+			console.Verbose(2, fmt.Sprintf("could not delete Env: %s Namespace: %s", o.ObjectMeta.Name, o.ObjectMeta.Namespace))
 			err = nil
 			continue
 
 		} else if err != nil {
 			return err
 		}
-		fmt.Printf("Deleted %v %v/%v\n", o.TypeMeta.Kind, o.ObjectMeta.Namespace, o.ObjectMeta.Name)
+		fmt.Printf("Deleted %s %s/%s\n", o.TypeMeta.Kind, o.ObjectMeta.Namespace, o.ObjectMeta.Name)
 	}
 
 	return nil

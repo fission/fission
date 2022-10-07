@@ -87,7 +87,7 @@ func App() *cobra.Command {
 	})
 
 	wrapper.SetFlags(rootCmd, flag.FlagSet{
-		Global: []flag.Flag{flag.GlobalServer, flag.GlobalVerbosity, flag.KubeContext},
+		Global: []flag.Flag{flag.GlobalServer, flag.GlobalVerbosity, flag.KubeContext, flag.Namespace},
 	})
 
 	groups := helptemplate.CommandGroups{}
@@ -101,7 +101,7 @@ func App() *cobra.Command {
 
 	flagExposer := helptemplate.ActsAsRootCommand(rootCmd, nil, groups...)
 	// show global options in usage
-	flagExposer.ExposeFlags(rootCmd, flagkey.Server, flagkey.Verbosity, flagkey.KubeContext)
+	flagExposer.ExposeFlags(rootCmd, flagkey.Server, flagkey.Verbosity, flagkey.KubeContext, flagkey.Namespace)
 
 	return rootCmd
 }
