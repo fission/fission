@@ -104,7 +104,6 @@ func (opts *ApplySubCommand) insertNamespace(input cli.Input, fr *FissionResourc
 	for i := range fr.HttpTriggers {
 		if fr.HttpTriggers[i].Namespace == "" || input.Bool(flagkey.ForceNamespace) {
 			fr.HttpTriggers[i].Namespace = currentNS
-			// sObj.Spec.FunctionReference. TODO: it doesn't have namespace info
 		}
 	}
 	for i := range fr.MessageQueueTriggers {
