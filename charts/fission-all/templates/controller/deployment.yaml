@@ -42,6 +42,11 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
+        - name: INFLUXDB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: influxdb
+              key: token
         {{- include "opentelemtry.envs" . | indent 8 }}
         resources:
           {{- toYaml .Values.controller.resources | nindent 10 }}

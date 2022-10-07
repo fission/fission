@@ -271,8 +271,11 @@ func (a *API) FunctionLogsApiPost(w http.ResponseWriter, r *http.Request) {
 		req.URL.Host = svcUrl.Host
 		req.URL.Path = svcUrl.Path
 		req.Host = svcUrl.Host
+
+		req.Header.Add("Authorization", "Token "+dbCnf.token)
+		req.Header.Add("Content-Type", "application/json")
 		// set up http basic auth for database authentication
-		req.SetBasicAuth(dbCnf.username, dbCnf.password)
+		// req.SetBasicAuth(dbCnf.username, dbCnf.password)
 	}
 	proxy := &httputil.ReverseProxy{
 		Director: director,

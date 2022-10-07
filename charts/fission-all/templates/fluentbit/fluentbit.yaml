@@ -147,16 +147,15 @@ spec:
               value: "8086"
             - name: INFLUXDB_DBNAME
               value: "fissionFunctionLog"
-            - name: INFLUXDB_USERNAME
+            - name: INFLUXDB_BUCKET
+              value: "fission"
+            - name: INFLUXDB_ORG
+              value: "fission"
+            - name: INFLUXDB_TOKEN
               valueFrom:
                 secretKeyRef:
                   name: influxdb
-                  key: username
-            - name: INFLUXDB_PASSWD
-              valueFrom:
-                secretKeyRef:
-                  name: influxdb
-                  key: password
+                  key: token
             - name: LOG_PATH
               value: /var/log/fission/*.log
 {{- if .Values.logger.enableSecurityContext }}
