@@ -80,7 +80,7 @@ func (opts *ListSubCommand) getResource(input cli.Input, namespace string, deplo
 		printNS = "all"
 	}
 
-	allfn, err = getAllFunctions(opts.Client(), "")
+	allfn, err = getAllFunctions(opts.Client(), namespace)
 	if err != nil {
 		return errors.Wrap(err, fmt.Sprintf("error getting Functions from %s namespaces", printNS))
 	}
