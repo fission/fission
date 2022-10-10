@@ -98,7 +98,6 @@ func (opts *UpdateSubCommand) run(input cli.Input) error {
 
 func UpdatePackage(input cli.Input, client client.Interface, pkg *fv1.Package) (*metav1.ObjectMeta, error) {
 	envName := input.String(flagkey.PkgEnvironment)
-	// envNamespace := input.String(flagkey.NamespaceEnvironment)
 	srcArchiveFiles := input.StringSlice(flagkey.PkgSrcArchive)
 	deployArchiveFiles := input.StringSlice(flagkey.PkgDeployArchive)
 	buildcmd := input.String(flagkey.PkgBuildCmd)

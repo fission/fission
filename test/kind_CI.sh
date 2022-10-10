@@ -101,6 +101,10 @@ main() {
         $ROOT/test/tests/test_fn_update/test_secret_update.sh \
         $ROOT/test/tests/test_fn_update/test_nd_pkg_update.sh \
         $ROOT/test/tests/test_fn_update/test_poolmgr_nd.sh  
+        $ROOT/test/tests/test_namespace/test_ns_current_context.sh
+        $ROOT/test/tests/test_namespace/test_ns_flag.sh
+        $ROOT/test/tests/test_namespace/test_ns_env.sh
+        $ROOT/test/tests/test_namespace/test_ns_deprecated_flag.sh
 
     set -e
 

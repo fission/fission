@@ -65,103 +65,85 @@ func (opts *ListSubCommand) run(input cli.Input) error {
 		return fv1.AggregateValidationErrors("Environment", err)
 	}
 
-	var allfn []fv1.Function
 	if input.Bool(flagkey.AllNamespaces) {
-		allfn, err = getAllFunctions(opts.Client(), "")
+		return opts.getResource(input, "", deployID)
 	} else {
-		allfn, err = getAllFunctions(opts.Client(), currentNS)
+		return opts.getResource(input, currentNS, deployID)
 	}
+
+}
+
+func (opts *ListSubCommand) getResource(input cli.Input, namespace string, deployID string) (err error) {
+	var allfn []fv1.Function
+	printNS := namespace
+	if printNS == "" {
+		printNS = "all"
+	}
+
+	allfn, err = getAllFunctions(opts.Client(), "")
 	if err != nil {
-		return errors.Wrap(err, "error getting Functions from all namespaces")
+		return errors.Wrap(err, fmt.Sprintf("error getting Functions from %s namespaces", printNS))
 	}
 	specfns := getAppliedFunctions(allfn, deployID)
 	ShowFunctions(specfns)
 
 	var allenvs []fv1.Environment
-	if input.Bool(flagkey.AllNamespaces) {
-		allenvs, err = getAllEnvironments(opts.Client(), "")
-	} else {
-		allenvs, err = getAllEnvironments(opts.Client(), currentNS)
-	}
+	allenvs, err = getAllEnvironments(opts.Client(), namespace)
 	if err != nil {
-		return errors.Wrap(err, "error getting Environments from all namespaces")
+		return errors.Wrap(err, fmt.Sprintf("error getting Environments from  %s namespaces", printNS))
 	}
 	specenvs := getAppliedEnvironments(allenvs, deployID)
 	ShowEnvironments(specenvs)
 
 	var pkglists []fv1.Package
-	if input.Bool(flagkey.AllNamespaces) {
-		pkglists, err = getAllPackages(opts.Client(), "")
-	} else {
-		pkglists, err = getAllPackages(opts.Client(), currentNS)
-	}
+	pkglists, err = getAllPackages(opts.Client(), namespace)
 	if err != nil {
-		return errors.Wrap(err, "error getting Packages from all namespaces")
+		return errors.Wrap(err, fmt.Sprintf("error getting Packages from  %s namespaces", printNS))
 	}
 	specPkgs := getAppliedPackages(pkglists, deployID)
 	ShowPackages(specPkgs)
 
 	var canaryCfgs []fv1.CanaryConfig
-	if input.Bool(flagkey.AllNamespaces) {
-		canaryCfgs, err = getAllCanaryConfigs(opts.Client(), "")
-	} else {
-		canaryCfgs, err = getAllCanaryConfigs(opts.Client(), currentNS)
-	}
+	canaryCfgs, err = getAllCanaryConfigs(opts.Client(), namespace)
 	if err != nil {
-		return errors.Wrap(err, "error getting Canary Config from all namespaces")
+		return errors.Wrap(err, fmt.Sprintf("error getting Canary Config from  %s namespaces", printNS))
 	}
 	specCanaryCfgs := getAppliedCanaryConfigs(canaryCfgs, deployID)
 	ShowCanaryConfigs(specCanaryCfgs)
 
 	var hts []fv1.HTTPTrigger
-	if input.Bool(flagkey.AllNamespaces) {
-		hts, err = getAllHTTPTriggers(opts.Client(), "")
-	} else {
-		hts, err = getAllHTTPTriggers(opts.Client(), currentNS)
-	}
+	hts, err = getAllHTTPTriggers(opts.Client(), namespace)
 	if err != nil {
-		return errors.Wrap(err, "error getting HTTP Triggers from all namespaces")
+		return errors.Wrap(err, fmt.Sprintf("error getting HTTP Triggers from  %s namespaces", printNS))
 	}
 	specHTTPTriggers := getAppliedHTTPTriggers(hts, deployID)
 	ShowHTTPTriggers(specHTTPTriggers)
 
 	var mqts []fv1.MessageQueueTrigger
-	if input.Bool(flagkey.AllNamespaces) {
-		mqts, err = getAllMessageQueueTriggers(opts.Client(), input.String(flagkey.MqtMQType), "")
-	} else {
-		mqts, err = getAllMessageQueueTriggers(opts.Client(), input.String(flagkey.MqtMQType), currentNS)
-	}
+	mqts, err = getAllMessageQueueTriggers(opts.Client(), input.String(flagkey.MqtMQType), namespace)
 	if err != nil {
-		return errors.Wrap(err, "error getting MessageQueue Triggers from all namespaces")
+		return errors.Wrap(err, fmt.Sprintf("error getting MessageQueue Triggers from  %s namespaces", printNS))
 	}
 	specMessageQueueTriggers := getAppliedMessageQueueTriggers(mqts, deployID)
 	ShowMQTriggers(specMessageQueueTriggers)
 
 	var tts []fv1.TimeTrigger
-	if input.Bool(flagkey.AllNamespaces) {
-		tts, err = getAllTimeTriggers(opts.Client(), "")
-	} else {
-		tts, err = getAllTimeTriggers(opts.Client(), currentNS)
-	}
+	tts, err = getAllTimeTriggers(opts.Client(), namespace)
 	if err != nil {
-		return errors.Wrap(err, "error getting Time Triggers from all namespaces")
+		return errors.Wrap(err, fmt.Sprintf("error getting Time Triggers from  %s namespaces", printNS))
 	}
 	specTimeTriggers := getAppliedTimeTriggers(tts, deployID)
 	ShowTimeTriggers(specTimeTriggers)
 
 	var kws []fv1.KubernetesWatchTrigger
-	if input.Bool(flagkey.AllNamespaces) {
-		kws, err = getAllKubeWatchTriggers(opts.Client(), "")
-	} else {
-		kws, err = getAllKubeWatchTriggers(opts.Client(), currentNS)
-	}
+	kws, err = getAllKubeWatchTriggers(opts.Client(), namespace)
 	if err != nil {
-		return errors.Wrap(err, "error getting Kube Watchers from all namespaces")
+		return errors.Wrap(err, fmt.Sprintf("error getting Kube Watchers from  %s namespaces", printNS))
 	}
 	specKubeWatchers := getSpecKubeWatchers(kws, deployID)
 	ShowAppliedKubeWatchers(specKubeWatchers)
 
-	return nil
+	return err
 }
 
 func getAppliedFunctions(fns []fv1.Function, deployID string) []fv1.Function {

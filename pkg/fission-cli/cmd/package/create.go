@@ -111,12 +111,12 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 			return err
 		}
 		if !exists {
-			console.Warn(fmt.Sprintf("Package '%v' references unknown Environment '%v' in Namespace '%v', please create it before applying spec",
+			console.Warn(fmt.Sprintf("Package '%s' references unknown Environment '%s' in Namespace '%s', please create it before applying spec",
 				pkgName, envName, userProvidedNS))
 		}
 
 		specDir = util.GetSpecDir(input)
-		specFile = fmt.Sprintf("package-%v.yaml", pkgName)
+		specFile = fmt.Sprintf("package-%s.yaml", pkgName)
 	}
 
 	_, err = CreatePackage(input, opts.Client(), pkgName, pkgNamespace, envName,

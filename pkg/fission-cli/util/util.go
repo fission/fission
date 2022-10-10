@@ -157,10 +157,10 @@ func GetKubernetesClient(kubeContext string) (*restclient.Config, kubernetes.Int
 	return config, clientset, nil
 }
 
-// GetKubernetesCurrentNamespace builds a new kubernetes client. If the KUBECONFIG
+// GetKubernetesNamespace builds a new kubernetes client. If the KUBECONFIG
 // environment variable is empty or doesn't exist, ~/.kube/config is used for
 // the kube config path
-func GetKubernetesCurrentNamespace(kubeContext string) (currentNS string, err error) {
+func GetKubernetesNamespace(kubeContext string) (currentNS string, err error) {
 	loadingRules, err := getLoadingRules()
 	if err != nil {
 		return "", err
@@ -489,19 +489,21 @@ func GetStorageURL(ctx context.Context, kubeContext string) (*url.URL, error) {
 
 func GetResourceNamespace(input cli.Input, deprecatedFlag string) (namespace, currentNS string, err error) {
 	namespace = input.String(deprecatedFlag)
+	currentNS = namespace
 
 	if input.String(flagkey.Namespace) != "" {
 		namespace = input.String(flagkey.Namespace)
+		currentNS = namespace
+		return namespace, currentNS, err
 	}
-	console.Verbose(2, "Namespace from user %v ", namespace)
-	currentNS = namespace
+	console.Verbose(2, "Namespace from user %s ", namespace)
 
 	if namespace == "" {
-		if os.Getenv("NAMESPACE") != "" {
-			currentNS = os.Getenv("NAMESPACE")
+		if os.Getenv("FISSION_DEFAULT_NAMESPACE") != "" {
+			currentNS = os.Getenv("FISSION_DEFAULT_NAMESPACE")
 		} else {
 			kubeContext := input.String(flagkey.KubeContext)
-			currentNS, err = GetKubernetesCurrentNamespace(kubeContext)
+			currentNS, err = GetKubernetesNamespace(kubeContext)
 			if err != nil {
 				return namespace, currentNS, err
 			}
@@ -511,7 +513,7 @@ func GetResourceNamespace(input cli.Input, deprecatedFlag string) (namespace, cu
 		}
 	}
 
-	console.Verbose(2, "Namespace final %v ", currentNS)
+	console.Verbose(2, "Namespace final %s ", currentNS)
 
 	return namespace, currentNS, nil
 }
