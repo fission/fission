@@ -48,17 +48,29 @@ func Validate(input cli.Input) error {
 }
 
 func (opts *ValidateSubCommand) do(input cli.Input) error {
-	return opts.run(input)
+	return opts.run(input, nil)
 }
 
-func (opts *ValidateSubCommand) run(input cli.Input) error {
+func validateForApply(input cli.Input, fr *FissionResources) error {
+
+	return (&ValidateSubCommand{}).doValidateForApply(input, fr)
+}
+func (opts *ValidateSubCommand) doValidateForApply(input cli.Input, fr *FissionResources) error {
+	return opts.run(input, fr)
+}
+
+func (opts *ValidateSubCommand) run(input cli.Input, fr *FissionResources) (err error) {
 
 	// this will error on parse errors and on duplicates
 	specDir := util.GetSpecDir(input)
 	specIgnore := util.GetSpecIgnore(input)
-	fr, err := ReadSpecs(specDir, specIgnore, false)
-	if err != nil {
-		return errors.Wrap(err, "error reading specs")
+
+	// If the call for validate is from apply spec we already have a parsed fission resource
+	if fr == nil {
+		fr, err = ReadSpecs(specDir, specIgnore, false)
+		if err != nil {
+			return errors.Wrap(err, "error reading specs")
+		}
 	}
 
 	console.Infof("DeployUID: %v", fr.DeploymentConfig.UID)
@@ -72,7 +84,7 @@ func (opts *ValidateSubCommand) run(input cli.Input) error {
 		return errors.Wrap(err, "error validating specs")
 	}
 
-	err = resourceConflictCheck(opts.Client(), fr, input.Bool(flagkey.SpecAllowConflicts))
+	err = resourceConflictCheck(opts.Client(), fr, input.Bool(flagkey.SpecAllowConflicts), "")
 	if err != nil {
 		return errors.Wrap(err, "name conflict error")
 	}
@@ -90,11 +102,11 @@ func (opts *ValidateSubCommand) run(input cli.Input) error {
 // the same name is already present in the same cluster namespace.
 // If a same name resource exists in the same namespace, a name
 // conflict error will be returned.
-func resourceConflictCheck(c client.Interface, fr *FissionResources, specAllowConflicts bool) error {
+func resourceConflictCheck(c client.Interface, fr *FissionResources, specAllowConflicts bool, namespace string) error {
 	deployUID := fr.DeploymentConfig.UID
 	result := utils.MultiErrorWithFormat()
 
-	fnList, err := getAllFunctions(c)
+	fnList, err := getAllFunctions(c, namespace)
 	if err != nil {
 		return errors.Errorf("Unable to get Functions %v", err.Error())
 	}
@@ -107,7 +119,7 @@ func resourceConflictCheck(c client.Interface, fr *FissionResources, specAllowCo
 		}
 	}
 
-	envList, err := getAllEnvironments(c)
+	envList, err := getAllEnvironments(c, namespace)
 	if err != nil {
 		return errors.Errorf("Unable to get Environments %v", err.Error())
 	}
@@ -120,7 +132,7 @@ func resourceConflictCheck(c client.Interface, fr *FissionResources, specAllowCo
 		}
 	}
 
-	pkgList, err := getAllPackages(c)
+	pkgList, err := getAllPackages(c, namespace)
 	if err != nil {
 		return errors.Errorf("Unable to get Packages %v", err.Error())
 	}
@@ -133,7 +145,7 @@ func resourceConflictCheck(c client.Interface, fr *FissionResources, specAllowCo
 		}
 	}
 
-	httptriggerList, err := getAllHTTPTriggers(c)
+	httptriggerList, err := getAllHTTPTriggers(c, namespace)
 	if err != nil {
 		return errors.Errorf("Unable to get HTTPTrigger %v", err.Error())
 	}
@@ -146,7 +158,7 @@ func resourceConflictCheck(c client.Interface, fr *FissionResources, specAllowCo
 		}
 	}
 
-	mqtriggerList, err := getAllMessageQueueTriggers(c, "")
+	mqtriggerList, err := getAllMessageQueueTriggers(c, "", namespace)
 	if err != nil {
 		return errors.Errorf("Unable to get Message Queue Trigger %v", err.Error())
 	}
@@ -159,7 +171,7 @@ func resourceConflictCheck(c client.Interface, fr *FissionResources, specAllowCo
 		}
 	}
 
-	timetriggerList, err := getAllTimeTriggers(c)
+	timetriggerList, err := getAllTimeTriggers(c, namespace)
 	if err != nil {
 		return errors.Errorf("Unable to get Time Trigger %v", err.Error())
 	}
@@ -172,7 +184,7 @@ func resourceConflictCheck(c client.Interface, fr *FissionResources, specAllowCo
 		}
 	}
 
-	kubewatchtriggerList, err := getAllKubeWatchTriggers(c)
+	kubewatchtriggerList, err := getAllKubeWatchTriggers(c, namespace)
 	if err != nil {
 		return errors.Errorf("Unable to get Kubernetes Watch Trigger %v", err.Error())
 	}

@@ -37,19 +37,24 @@ func Delete(input cli.Input) error {
 }
 
 func (opts *DeleteSubCommand) do(input cli.Input) error {
+
+	_, namespace, err := util.GetResourceNamespace(input, flagkey.NamespaceFunction)
+	if err != nil {
+		return errors.Wrap(err, "error in deleting function ")
+	}
 	m := &metav1.ObjectMeta{
 		Name:      input.String(flagkey.FnName),
-		Namespace: input.String(flagkey.NamespaceFunction),
+		Namespace: namespace,
 	}
 
-	err := opts.Client().V1().Function().Delete(m)
+	err = opts.Client().V1().Function().Delete(m)
 	if err != nil {
 		if input.Bool(flagkey.IgnoreNotFound) && util.IsNotFound(err) {
 			return nil
 		}
-		return errors.Wrap(err, fmt.Sprintf("delete function '%v'", m.Name))
+		return errors.Wrap(err, fmt.Sprintf("delete function '%s'", m.Name))
 	}
 
-	fmt.Printf("function '%v' deleted\n", m.Name)
+	fmt.Printf("function '%s' deleted\n", m.Name)
 	return nil
 }

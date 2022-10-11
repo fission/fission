@@ -24,9 +24,11 @@ import (
 
 	"github.com/pkg/errors"
 
+	v1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
+	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type ListSubCommand struct {
@@ -38,16 +40,24 @@ func List(input cli.Input) error {
 }
 
 func (opts *ListSubCommand) do(input cli.Input) error {
-	ns := input.String(flagkey.NamespaceFunction)
+	_, namespace, err := util.GetResourceNamespace(input, flagkey.NamespaceFunction)
+	if err != nil {
+		return errors.Wrap(err, "error in listing function ")
+	}
 
-	fns, err := opts.Client().V1().Function().List(ns)
+	var fns []v1.Function
+	if input.Bool(flagkey.AllNamespaces) {
+		fns, err = opts.Client().V1().Function().List("")
+	} else {
+		fns, err = opts.Client().V1().Function().List(namespace)
+	}
 	if err != nil {
 		return errors.Wrap(err, "error listing functions")
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 
-	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "ENV", "EXECUTORTYPE", "MINSCALE", "MAXSCALE", "MINCPU", "MAXCPU", "MINMEMORY", "MAXMEMORY", "SECRETS", "CONFIGMAPS")
+	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "ENV", "EXECUTORTYPE", "MINSCALE", "MAXSCALE", "MINCPU", "MAXCPU", "MINMEMORY", "MAXMEMORY", "SECRETS", "CONFIGMAPS", "NAMESPACE")
 	for _, f := range fns {
 		secrets := f.Spec.Secrets
 		configMaps := f.Spec.ConfigMaps
@@ -59,7 +69,7 @@ func (opts *ListSubCommand) do(input cli.Input) error {
 			configMapList = append(configMapList, configMap.Name)
 		}
 
-		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
+		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
 			f.ObjectMeta.Name, f.Spec.Environment.Name,
 			f.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType,
 			f.Spec.InvokeStrategy.ExecutionStrategy.MinScale,
@@ -69,7 +79,8 @@ func (opts *ListSubCommand) do(input cli.Input) error {
 			f.Spec.Resources.Requests.Memory().String(),
 			f.Spec.Resources.Limits.Memory().String(),
 			strings.Join(secretsList, ","),
-			strings.Join(configMapList, ","))
+			strings.Join(configMapList, ","),
+			f.ObjectMeta.Namespace)
 	}
 	w.Flush()
 

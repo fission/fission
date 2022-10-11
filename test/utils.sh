@@ -43,6 +43,38 @@ clean_resource_by_id() {
     set -e
 }
 
+clean_resource_by_id_for_namespace() {
+    test_id=$1
+    namespace=$2
+    KUBECTL="kubectl --namespace $namespace"
+    set +e
+    echo test_id
+
+    fn_list=$(fission function list | grep $test_id | awk '{print $1}')
+    for fn in $fn_list; do
+        fission fn delete --name $fn
+    done
+
+    pkg_list=$(fission package list | grep $test_id | awk '{print $1}')
+    for pkg in $pkg_list; do
+        fission pkg info --name $pkg
+        fission pkg delete -f --name $pkg
+    done
+
+    route_list=$(fission route list | grep $test_id | awk '{print $1}')
+    for route in $route_list; do
+        fission route delete --name $route
+    done
+
+    crds=$($KUBECTL get crd | grep "fission.io" | awk '{print $1}')
+    crds="$crds configmaps secrets"
+    for crd in $crds; do
+        $KUBECTL get $crd -o name | grep $test_id | xargs --no-run-if-empty $KUBECTL delete
+    done
+
+    set -e
+}
+
 test_fn() {
     if [ -z $FISSION_ROUTER ]; then
         log "Environment FISSION_ROUTER not set"

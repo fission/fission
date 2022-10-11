@@ -36,13 +36,18 @@ func Delete(input cli.Input) error {
 	return (&DeleteSubCommand{}).do(input)
 }
 
-func (opts *DeleteSubCommand) do(input cli.Input) error {
+func (opts *DeleteSubCommand) do(input cli.Input) (err error) {
+
+	_, namespace, err := util.GetResourceNamespace(input, flagkey.NamespaceTrigger)
+	if err != nil {
+		return errors.Wrap(err, "error in deleting function ")
+	}
 	m := &metav1.ObjectMeta{
 		Name:      input.String(flagkey.TtName),
-		Namespace: input.String(flagkey.NamespaceTrigger),
+		Namespace: namespace,
 	}
 
-	err := opts.Client().V1().TimeTrigger().Delete(m)
+	err = opts.Client().V1().TimeTrigger().Delete(m)
 	if err != nil {
 		if input.Bool(flagkey.IgnoreNotFound) && util.IsNotFound(err) {
 			return nil

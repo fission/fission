@@ -36,13 +36,17 @@ func Delete(input cli.Input) error {
 	return (&DeleteSubCommand{}).run(input)
 }
 
-func (opts *DeleteSubCommand) run(input cli.Input) error {
+func (opts *DeleteSubCommand) run(input cli.Input) (err error) {
+	_, namespace, err := util.GetResourceNamespace(input, flagkey.NamespaceCanary)
+	if err != nil {
+		return errors.Wrap(err, "error in deleting canaryConfig ")
+	}
 	m := &metav1.ObjectMeta{
 		Name:      input.String(flagkey.CanaryName),
-		Namespace: input.String(flagkey.NamespaceCanary),
+		Namespace: namespace,
 	}
 
-	err := opts.Client().V1().CanaryConfig().Delete(m)
+	err = opts.Client().V1().CanaryConfig().Delete(m)
 	if err != nil {
 		if input.Bool(flagkey.IgnoreNotFound) && util.IsNotFound(err) {
 			return nil

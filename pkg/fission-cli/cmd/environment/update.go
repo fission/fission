@@ -52,10 +52,15 @@ func (opts *UpdateSubCommand) do(input cli.Input) error {
 	return opts.run(input)
 }
 
-func (opts *UpdateSubCommand) complete(input cli.Input) error {
+func (opts *UpdateSubCommand) complete(input cli.Input) (err error) {
+
+	_, currentContextNS, err := util.GetResourceNamespace(input, flagkey.NamespaceEnvironment)
+	if err != nil {
+		return errors.Wrap(err, "error creating environment")
+	}
 	env, err := opts.Client().V1().Environment().Get(&metav1.ObjectMeta{
 		Name:      input.String(flagkey.EnvName),
-		Namespace: input.String(flagkey.NamespaceEnvironment),
+		Namespace: currentContextNS,
 	})
 	if err != nil {
 		return errors.Wrap(err, "error finding environment")
@@ -126,6 +131,9 @@ func updateExistingEnvironmentWithCmd(env *fv1.Environment, input cli.Input) (*f
 	if input.IsSet(flagkey.EnvImagePullSecret) {
 		env.Spec.ImagePullSecret = input.String(flagkey.EnvImagePullSecret)
 	}
+
+	env.Spec.Resources.Requests = make(v1.ResourceList)
+	env.Spec.Resources.Limits = make(v1.ResourceList)
 
 	if input.IsSet(flagkey.RuntimeMincpu) {
 		mincpu := input.Int(flagkey.RuntimeMincpu)

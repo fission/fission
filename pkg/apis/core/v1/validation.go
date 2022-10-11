@@ -150,12 +150,21 @@ func ValidateKubeName(field string, val string) error {
 	return result.ErrorOrNil()
 }
 
+// validateNS is to match the k8s behaviour. Where it is not mandatory to provide a NS. And so we validate it if user has provided one.
+// Or we skip the validation on namespace.
+func validateNS(refName string, namespace string) error {
+	if namespace != "" {
+		return ValidateKubeName(refName, namespace)
+	}
+	return nil
+}
+
 func ValidateKubeReference(refName string, name string, namespace string) error {
 	result := &multierror.Error{}
 
 	result = multierror.Append(result,
-		ValidateKubeName(fmt.Sprintf("%v.Name", refName), name),
-		ValidateKubeName(fmt.Sprintf("%v.Namespace", refName), namespace))
+		ValidateKubeName(fmt.Sprintf("%s.Name", refName), name),
+		validateNS(fmt.Sprintf("%s.Namespace", refName), namespace))
 
 	return result.ErrorOrNil()
 }

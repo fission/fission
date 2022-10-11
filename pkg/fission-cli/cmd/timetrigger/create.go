@@ -53,7 +53,7 @@ func (opts *CreateSubCommand) do(input cli.Input) error {
 	return opts.run(input)
 }
 
-func (opts *CreateSubCommand) complete(input cli.Input) error {
+func (opts *CreateSubCommand) complete(input cli.Input) (err error) {
 	name := input.String(flagkey.TtName)
 	if len(name) == 0 {
 		id, err := uuid.NewV4()
@@ -68,7 +68,10 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		return errors.New("Need a function name to create a trigger, use --function")
 	}
 
-	fnNamespace := input.String(flagkey.NamespaceFunction)
+	userProvidedNS, fnNamespace, err := util.GetResourceNamespace(input, flagkey.NamespaceFunction)
+	if err != nil {
+		return errors.Wrap(err, "error in deleting function ")
+	}
 
 	cronSpec := input.String(flagkey.TtCron)
 	if len(cronSpec) == 0 {
@@ -86,7 +89,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		exists, err := fr.ExistsInSpecs(fv1.Function{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      fnName,
-				Namespace: fnNamespace,
+				Namespace: userProvidedNS,
 			},
 		})
 		if err != nil {
@@ -98,11 +101,20 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		}
 	}
 
-	opts.trigger = &fv1.TimeTrigger{
-		ObjectMeta: metav1.ObjectMeta{
+	m := metav1.ObjectMeta{
+		Name:      name,
+		Namespace: fnNamespace,
+	}
+
+	if input.Bool(flagkey.SpecSave) || input.Bool(flagkey.SpecDry) {
+		m = metav1.ObjectMeta{
 			Name:      name,
-			Namespace: fnNamespace,
-		},
+			Namespace: userProvidedNS,
+		}
+	}
+
+	opts.trigger = &fv1.TimeTrigger{
+		ObjectMeta: m,
 		Spec: fv1.TimeTriggerSpec{
 			Cron: cronSpec,
 			FunctionReference: fv1.FunctionReference{

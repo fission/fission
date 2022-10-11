@@ -21,8 +21,6 @@ import (
 	"net/http"
 	"time"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
@@ -83,17 +81,21 @@ var (
 	Labels     = Flag{Type: String, Name: flagkey.Labels, Usage: "Comma separated labels to apply to the function. E.g. --labels=\"environment=dev,application=analytics\""}
 	Annotation = Flag{Type: StringSlice, Name: flagkey.Annotation, Usage: "Annotation to apply to the function. To mention multiple annotations --annotation=\"abc.com/team=dev\" --annotation=\"foo=bar\""}
 
-	NamespaceFunction    = Flag{Type: String, Name: flagkey.NamespaceFunction, Aliases: []string{"fns"}, Usage: "Namespace for function object", DefaultValue: metav1.NamespaceDefault}
-	NamespaceEnvironment = Flag{Type: String, Name: flagkey.NamespaceEnvironment, Aliases: []string{"envns"}, Usage: "Namespace for environment object", DefaultValue: metav1.NamespaceDefault}
-	NamespacePackage     = Flag{Type: String, Name: flagkey.NamespacePackage, Aliases: []string{"pkgns"}, Usage: "Namespace for package object", DefaultValue: metav1.NamespaceDefault}
-	NamespaceTrigger     = Flag{Type: String, Name: flagkey.NamespaceTrigger, Aliases: []string{"triggerns"}, Usage: "Namespace for trigger object", DefaultValue: metav1.NamespaceDefault}
-	NamespaceCanary      = Flag{Type: String, Name: flagkey.NamespaceCanary, Aliases: []string{"canaryns"}, Usage: "Namespace for canary config object", DefaultValue: metav1.NamespaceDefault}
+	Namespace = Flag{Type: String, Name: flagkey.Namespace, Short: "n", Usage: "If present, the namespace scope for this CLI request"}
 
-	RunTimeMinCPU    = Flag{Type: Int, Name: flagkey.RuntimeMincpu, Usage: "Minimum CPU to be assigned to pod (In millicore, minimum 1)"}
-	RunTimeMaxCPU    = Flag{Type: Int, Name: flagkey.RuntimeMaxcpu, Usage: "Maximum CPU to be assigned to pod (In millicore, minimum 1)"}
-	RunTimeTargetCPU = Flag{Type: Int, Name: flagkey.RuntimeTargetcpu, Usage: "Target average CPU usage percentage across pods for scaling", DefaultValue: 80}
-	RunTimeMinMemory = Flag{Type: Int, Name: flagkey.RuntimeMinmemory, Usage: "Minimum memory to be assigned to pod (In megabyte)"}
-	RunTimeMaxMemory = Flag{Type: Int, Name: flagkey.RuntimeMaxmemory, Usage: "Maximum memory to be assigned to pod (In megabyte)"}
+	NamespaceFunction    = Flag{Type: String, Name: flagkey.NamespaceFunction, Aliases: []string{"fns"}, Usage: "Namespace for function object", Deprecated: true, Substitute: flagkey.Namespace}
+	NamespaceEnvironment = Flag{Type: String, Name: flagkey.NamespaceEnvironment, Aliases: []string{"envns"}, Usage: "Namespace for environment object", Deprecated: true, Substitute: flagkey.Namespace}
+	NamespacePackage     = Flag{Type: String, Name: flagkey.NamespacePackage, Aliases: []string{"pkgns"}, Usage: "Namespace for package object", Deprecated: true, Substitute: flagkey.Namespace}
+	NamespaceTrigger     = Flag{Type: String, Name: flagkey.NamespaceTrigger, Aliases: []string{"triggerns"}, Usage: "Namespace for trigger object", Deprecated: true, Substitute: flagkey.Namespace}
+	NamespaceCanary      = Flag{Type: String, Name: flagkey.NamespaceCanary, Aliases: []string{"canaryns"}, Usage: "Namespace for canary config object", Deprecated: true, Substitute: flagkey.Namespace}
+	ForceNamespace       = Flag{Type: Bool, Name: flagkey.ForceNamespace, Aliases: []string{"force"}, Usage: "If true, resources will be created in namespace provided by (--namespace flag ) even if spec file contains some other namespace", DefaultValue: false}
+	ForceDelete          = Flag{Type: Bool, Name: flagkey.ForceDelete, Aliases: []string{"force"}, Usage: "Delete all resources across all namespaces present in spec"}
+	AllNamespaces        = Flag{Type: Bool, Name: flagkey.AllNamespaces, Short: "A", Usage: "Fetch resources from all namespaces"}
+	RunTimeMinCPU        = Flag{Type: Int, Name: flagkey.RuntimeMincpu, Usage: "Minimum CPU to be assigned to pod (In millicore, minimum 1)"}
+	RunTimeMaxCPU        = Flag{Type: Int, Name: flagkey.RuntimeMaxcpu, Usage: "Maximum CPU to be assigned to pod (In millicore, minimum 1)"}
+	RunTimeTargetCPU     = Flag{Type: Int, Name: flagkey.RuntimeTargetcpu, Usage: "Target average CPU usage percentage across pods for scaling", DefaultValue: 80}
+	RunTimeMinMemory     = Flag{Type: Int, Name: flagkey.RuntimeMinmemory, Usage: "Minimum memory to be assigned to pod (In megabyte)"}
+	RunTimeMaxMemory     = Flag{Type: Int, Name: flagkey.RuntimeMaxmemory, Usage: "Maximum memory to be assigned to pod (In megabyte)"}
 
 	ReplicasMin = Flag{Type: Int, Name: flagkey.ReplicasMinscale, Usage: "Minimum number of pods (Uses resource inputs to configure HPA)", DefaultValue: 1}
 	ReplicasMax = Flag{Type: Int, Name: flagkey.ReplicasMaxscale, Usage: "Maximum number of pods (Uses resource inputs to configure HPA)", DefaultValue: 1}
@@ -186,7 +188,7 @@ var (
 
 	KwName      = Flag{Type: String, Name: flagkey.KwName, Usage: "Watch name"}
 	KwFnName    = Flag{Type: String, Name: flagkey.KwFnName, Usage: "Function name"}
-	KwNamespace = Flag{Type: String, Name: flagkey.KwNamespace, Aliases: []string{"ns"}, Usage: "Namespace of resource to watch", DefaultValue: metav1.NamespaceDefault}
+	KwNamespace = Flag{Type: String, Name: flagkey.KwNamespace, Aliases: []string{"ns"}, Usage: "Namespace of resource to watch"}
 	KwObjType   = Flag{Type: String, Name: flagkey.KwObjType, Usage: "Type of resource to watch (Pod, Service, etc.)", DefaultValue: "pod"}
 	KwLabels    = Flag{Type: String, Name: flagkey.KwLabels, Usage: "Label selector of the form a=b,c=d"}
 

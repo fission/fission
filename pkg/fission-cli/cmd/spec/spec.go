@@ -491,7 +491,7 @@ func (fr *FissionResources) Validate(input cli.Input) ([]string, error) {
 
 	for _, f := range fr.Functions {
 		if _, ok := environments[fmt.Sprintf("%s:%s", f.Spec.Environment.Name, f.Spec.Environment.Namespace)]; !ok {
-			warnings = append(warnings, "Environment %s is referenced in function %s but not declared in specs", f.Spec.Environment.Name, f.ObjectMeta.Name)
+			warnings = append(warnings, fmt.Sprintf("Environment %s is referenced in function %s but not declared in specs", f.Spec.Environment.Name, f.ObjectMeta.Name))
 		}
 		strategy := f.Spec.InvokeStrategy.ExecutionStrategy
 		if strategy.ExecutorType == fv1.ExecutorTypeNewdeploy && strategy.SpecializationTimeout < fv1.DefaultSpecializationTimeOut {

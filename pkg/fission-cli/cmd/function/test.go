@@ -51,9 +51,15 @@ func Test(input cli.Input) error {
 }
 
 func (opts *TestSubCommand) do(input cli.Input) error {
+
+	_, namespace, err := util.GetResourceNamespace(input, flagkey.NamespaceFunction)
+	if err != nil {
+		return errors.Wrap(err, "error in testing function ")
+	}
+
 	m := &metav1.ObjectMeta{
 		Name:      input.String(flagkey.FnName),
-		Namespace: input.String(flagkey.NamespaceFunction),
+		Namespace: namespace,
 	}
 	kubeContext := input.String(flagkey.KubeContext)
 	routerURL := os.Getenv("FISSION_ROUTER")

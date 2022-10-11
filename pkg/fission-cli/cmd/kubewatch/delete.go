@@ -46,9 +46,12 @@ func (opts *DeleteSubCommand) do(input cli.Input) error {
 	return opts.run(input)
 }
 
-func (opts *DeleteSubCommand) complete(input cli.Input) error {
+func (opts *DeleteSubCommand) complete(input cli.Input) (err error) {
 	opts.name = input.String(flagkey.KwName)
-	opts.namespace = input.String(flagkey.NamespaceTrigger)
+	_, opts.namespace, err = util.GetResourceNamespace(input, flagkey.NamespaceTrigger)
+	if err != nil {
+		return errors.Wrap(err, "error in deleting kubewatch")
+	}
 	return nil
 }
 

@@ -71,7 +71,7 @@ func Commands() *cobra.Command {
 		RunE:    wrapper.Wrapper(List),
 	}
 	wrapper.SetFlags(listCmd, flag.FlagSet{
-		Optional: []flag.Flag{flag.NamespaceTrigger},
+		Optional: []flag.Flag{flag.NamespaceTrigger, flag.AllNamespaces},
 	})
 
 	command := &cobra.Command{

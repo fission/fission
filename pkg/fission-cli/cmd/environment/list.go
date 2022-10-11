@@ -23,9 +23,11 @@ import (
 
 	"github.com/pkg/errors"
 
+	v1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
+	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type ListSubCommand struct {
@@ -36,20 +38,33 @@ func List(input cli.Input) error {
 	return (&ListSubCommand{}).do(input)
 }
 
-func (opts *ListSubCommand) do(input cli.Input) error {
-	envs, err := opts.Client().V1().Environment().List(input.String(flagkey.NamespaceEnvironment))
+func (opts *ListSubCommand) do(input cli.Input) (err error) {
+
+	_, currentNS, err := util.GetResourceNamespace(input, flagkey.NamespaceEnvironment)
+	if err != nil {
+		return errors.Wrap(err, "error creating environment")
+	}
+
+	var envs []v1.Environment
+	if input.Bool(flagkey.AllNamespaces) {
+		envs, err = opts.Client().V1().Environment().List("")
+	} else {
+		envs, err = opts.Client().V1().Environment().List(currentNS)
+	}
+
 	if err != nil {
 		return errors.Wrap(err, "error listing environments")
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
-	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "IMAGE", "BUILDER_IMAGE", "POOLSIZE", "MINCPU", "MAXCPU", "MINMEMORY", "MAXMEMORY", "EXTNET", "GRACETIME")
+	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "IMAGE", "BUILDER_IMAGE", "POOLSIZE", "MINCPU", "MAXCPU", "MINMEMORY", "MAXMEMORY", "EXTNET", "GRACETIME", "NAMESPACE")
 	for _, env := range envs {
-		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
+		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
 			env.ObjectMeta.Name, env.Spec.Runtime.Image, env.Spec.Builder.Image, env.Spec.Poolsize,
 			env.Spec.Resources.Requests.Cpu(), env.Spec.Resources.Limits.Cpu(),
 			env.Spec.Resources.Requests.Memory(), env.Spec.Resources.Limits.Memory(),
-			env.Spec.AllowAccessToExternalNetwork, env.Spec.TerminationGracePeriod)
+			env.Spec.AllowAccessToExternalNetwork, env.Spec.TerminationGracePeriod, env.Namespace,
+		)
 	}
 	w.Flush()
 

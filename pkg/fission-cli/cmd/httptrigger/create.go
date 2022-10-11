@@ -76,19 +76,10 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		}
 		triggerName = id.String()
 	}
-	fnNamespace := input.String(flagkey.NamespaceFunction)
 
-	m := &metav1.ObjectMeta{
-		Name:      triggerName,
-		Namespace: fnNamespace,
-	}
-
-	htTrigger, err := opts.Client().V1().HTTPTrigger().Get(m)
-	if err != nil && !ferror.IsNotFound(err) {
-		return err
-	}
-	if htTrigger != nil {
-		return errors.New("duplicate trigger exists, choose a different name or leave it empty for fission to auto-generate it")
+	userProvidedNS, fnNamespace, err := util.GetResourceNamespace(input, flagkey.NamespaceFunction)
+	if err != nil {
+		return errors.Wrap(err, "error in deleting function ")
 	}
 
 	triggerUrl := input.String(flagkey.HtUrl)
@@ -130,9 +121,24 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 			return err
 		}
 	}
+	m := metav1.ObjectMeta{
+		Name:      triggerName,
+		Namespace: userProvidedNS,
+	}
+
+	console.Warn(fmt.Sprintf("Ns: %v", userProvidedNS))
 
 	// For Specs, the spec validate checks for function reference
 	if input.Bool(flagkey.SpecSave) {
+
+		htTrigger, err := opts.Client().V1().HTTPTrigger().Get(&m)
+		if err != nil && !ferror.IsNotFound(err) {
+			return err
+		}
+		if htTrigger != nil {
+			return errors.New("duplicate trigger exists, choose a different name or leave it empty for fission to auto-generate it")
+		}
+
 		specDir := util.GetSpecDir(input)
 		specIgnore := util.GetSpecIgnore(input)
 		fr, err := spec.ReadSpecs(specDir, specIgnore, false)
@@ -143,7 +149,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 			exists, err := fr.ExistsInSpecs(fv1.Function{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      fn,
-					Namespace: fnNamespace,
+					Namespace: userProvidedNS,
 				},
 			})
 			if err != nil {
@@ -155,6 +161,20 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 			}
 		}
 	} else {
+
+		m = metav1.ObjectMeta{
+			Name:      triggerName,
+			Namespace: fnNamespace,
+		}
+
+		htTrigger, err := opts.Client().V1().HTTPTrigger().Get(&m)
+		if err != nil && !ferror.IsNotFound(err) {
+			return err
+		}
+		if htTrigger != nil {
+			return errors.New("duplicate trigger exists, choose a different name or leave it empty for fission to auto-generate it")
+		}
+
 		err = util.CheckFunctionExistence(opts.Client(), functionList, fnNamespace)
 		if err != nil {
 			console.Warn(err.Error())
@@ -172,10 +192,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	host := input.String(flagkey.HtHost)
 
 	opts.trigger = &fv1.HTTPTrigger{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      triggerName,
-			Namespace: fnNamespace,
-		},
+		ObjectMeta: m,
 		Spec: fv1.HTTPTriggerSpec{
 			Host:              host,
 			RelativeURL:       triggerUrl,

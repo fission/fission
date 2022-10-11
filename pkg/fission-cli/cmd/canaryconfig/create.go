@@ -47,20 +47,23 @@ func (opts *CreateSubCommand) do(input cli.Input) error {
 	return opts.run(input)
 }
 
-func (opts *CreateSubCommand) complete(input cli.Input) error {
+func (opts *CreateSubCommand) complete(input cli.Input) (err error) {
 	// canary configs can be created for functions in the same namespace
 
 	name := input.String(flagkey.CanaryName)
 	ht := input.String(flagkey.CanaryHTTPTriggerName)
 	newFunc := input.String(flagkey.CanaryNewFunc)
 	oldFunc := input.String(flagkey.CanaryOldFunc)
-	fnNs := input.String(flagkey.NamespaceFunction)
+	_, fnNs, err := util.GetResourceNamespace(input, flagkey.NamespaceFunction)
+	if err != nil {
+		return errors.Wrap(err, "error in creating canaryconfig")
+	}
 	incrementStep := input.Int(flagkey.CanaryWeightIncrement)
 	failureThreshold := input.Int(flagkey.CanaryFailureThreshold)
 	incrementInterval := input.String(flagkey.CanaryIncrementInterval)
 
 	// check for time parsing
-	_, err := time.ParseDuration(incrementInterval)
+	_, err = time.ParseDuration(incrementInterval)
 	if err != nil {
 		return errors.Wrap(err, "error parsing time duration")
 	}

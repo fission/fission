@@ -62,6 +62,67 @@ func Apply(input cli.Input) error {
 
 func (opts *ApplySubCommand) do(input cli.Input) error {
 	return opts.run(input)
+
+}
+
+// insertNamespace inserts the Namespace value if it was not provided at the time of `spec save`.
+// we make sure that all component of a resource should be present in the same Namespace. i.e.
+// Function's env and package should be present in same namespace
+func (opts *ApplySubCommand) insertNamespace(input cli.Input, fr *FissionResources) error {
+
+	result := utils.MultiErrorWithFormat()
+	_, currentNS, err := util.GetResourceNamespace(input, flagkey.NamespaceEnvironment)
+	if err != nil {
+		return fv1.AggregateValidationErrors("Environment", err)
+	}
+
+	for i := range fr.Functions {
+		if fr.Functions[i].Namespace == "" || input.Bool(flagkey.ForceNamespace) {
+			fr.Functions[i].Namespace = currentNS
+			fr.Functions[i].Spec.Package.PackageRef.Namespace = currentNS
+			fr.Functions[i].Spec.Environment.Namespace = currentNS
+			for j := range fr.Functions[i].Spec.ConfigMaps {
+				fr.Functions[i].Spec.ConfigMaps[j].Namespace = currentNS
+			}
+			for j := range fr.Functions[i].Spec.Secrets {
+				fr.Functions[i].Spec.Secrets[j].Namespace = currentNS
+			}
+		}
+	}
+	for i := range fr.Environments {
+		if fr.Environments[i].Namespace == "" || input.Bool(flagkey.ForceNamespace) {
+			fr.Environments[i].Namespace = currentNS
+		}
+	}
+	for i := range fr.Packages {
+		if fr.Packages[i].Namespace == "" || input.Bool(flagkey.ForceNamespace) {
+			fr.Packages[i].Namespace = currentNS
+			fr.Packages[i].Spec.Environment.Namespace = currentNS
+			fr.Packages[i].ObjectMeta.Namespace = currentNS
+		}
+	}
+	for i := range fr.HttpTriggers {
+		if fr.HttpTriggers[i].Namespace == "" || input.Bool(flagkey.ForceNamespace) {
+			fr.HttpTriggers[i].Namespace = currentNS
+		}
+	}
+	for i := range fr.MessageQueueTriggers {
+		if fr.MessageQueueTriggers[i].Namespace == "" || input.Bool(flagkey.ForceNamespace) {
+			fr.MessageQueueTriggers[i].Namespace = currentNS
+		}
+	}
+	for i := range fr.TimeTriggers {
+		if fr.TimeTriggers[i].Namespace == "" || input.Bool(flagkey.ForceNamespace) {
+			fr.TimeTriggers[i].Namespace = currentNS
+		}
+	}
+	for i := range fr.KubernetesWatchTriggers {
+		if fr.KubernetesWatchTriggers[i].Namespace == "" || input.Bool(flagkey.ForceNamespace) {
+			fr.KubernetesWatchTriggers[i].Namespace = currentNS
+		}
+	}
+
+	return result.ErrorOrNil()
 }
 
 func (opts *ApplySubCommand) run(input cli.Input) error {
@@ -117,8 +178,13 @@ func (opts *ApplySubCommand) run(input cli.Input) error {
 			return errors.Wrap(err, "error reading specs")
 		}
 
+		err = opts.insertNamespace(input, fr)
+		if err != nil {
+			return errors.Wrap(err, "error reading specs")
+		}
+
 		if validateSpecs {
-			err = Validate(input)
+			err = validateForApply(input, fr)
 			if err != nil {
 				return errors.Wrap(err, "abort applying resources")
 			}
@@ -616,6 +682,7 @@ func applyPackages(fclient client.Interface, fr *FissionResources, delete bool, 
 	for _, o := range fr.Packages {
 		// apply deploymentConfig so we can find our objects on future apply invocations
 		applyDeploymentConfig(&o.ObjectMeta, fr)
+		console.Verbose(2, fmt.Sprintf("Package is here '%s','%s','%s','%s'", o.Namespace, o.Name, o.Spec.Environment.Namespace, o.Spec.Environment.Name))
 
 		// index desired state
 		desired[mapKey(&o.ObjectMeta)] = true

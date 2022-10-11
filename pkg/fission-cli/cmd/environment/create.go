@@ -63,7 +63,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 
 // run write the resource to a spec file or create a fission CRD with remote fission server.
 // It also prints warning/error if necessary.
-func (opts *CreateSubCommand) run(input cli.Input) error {
+func (opts *CreateSubCommand) run(input cli.Input) (err error) {
 	m := opts.env.ObjectMeta
 
 	envList, err := opts.Client().V1().Environment().List(m.Namespace)
@@ -75,19 +75,42 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 			len(envList), m.Namespace)
 	}
 
+	userDefinedNS, currentNS, err := util.GetResourceNamespace(input, flagkey.NamespaceEnvironment)
+	if err != nil {
+		return fv1.AggregateValidationErrors("Environment", err)
+	}
+	// we use user provided NS in spec. While creating actual record we use the current context's NS.
+	opts.env.ObjectMeta.Namespace = userDefinedNS
+
 	// if we're writing a spec, don't call the API
 	// save to spec file or display the spec to console
 	if input.Bool(flagkey.SpecDry) {
+		err = opts.env.Validate()
+		if err != nil {
+			return fv1.AggregateValidationErrors("Environment", err)
+		}
+
 		return spec.SpecDry(*opts.env)
 	}
 
 	if input.Bool(flagkey.SpecSave) {
+		err = opts.env.Validate()
+		if err != nil {
+			return fv1.AggregateValidationErrors("Environment", err)
+		}
+
 		specFile := fmt.Sprintf("env-%v.yaml", m.Name)
 		err = spec.SpecSave(*opts.env, specFile)
 		if err != nil {
 			return errors.Wrap(err, "error saving environment spec")
 		}
 		return nil
+	}
+
+	opts.env.ObjectMeta.Namespace = currentNS
+	err = opts.env.Validate()
+	if err != nil {
+		return fv1.AggregateValidationErrors("Environment", err)
 	}
 
 	_, err = opts.Client().V1().Environment().Create(opts.env)
@@ -105,7 +128,7 @@ func createEnvironmentFromCmd(input cli.Input) (*fv1.Environment, error) {
 
 	envName := input.String(flagkey.EnvName)
 	envImg := input.String(flagkey.EnvImage)
-	envNamespace := input.String(flagkey.NamespaceEnvironment)
+
 	envBuildCmd := input.String(flagkey.EnvBuildcommand)
 	envExternalNetwork := input.Bool(flagkey.EnvExternalNetwork)
 	keepArchive := input.Bool(flagkey.EnvKeeparchive)
@@ -165,8 +188,7 @@ func createEnvironmentFromCmd(input cli.Input) (*fv1.Environment, error) {
 			APIVersion: fv1.CRD_VERSION,
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      envName,
-			Namespace: envNamespace,
+			Name: envName,
 		},
 		Spec: fv1.EnvironmentSpec{
 			Version: envVersion,
@@ -195,10 +217,6 @@ func createEnvironmentFromCmd(input cli.Input) (*fv1.Environment, error) {
 	err = util.ApplyLabelsAndAnnotations(input, &env.ObjectMeta)
 	if err != nil {
 		return nil, err
-	}
-	err = env.Validate()
-	if err != nil {
-		return nil, fv1.AggregateValidationErrors("Environment", err)
 	}
 
 	return env, nil

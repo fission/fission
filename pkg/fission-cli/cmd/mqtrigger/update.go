@@ -25,6 +25,7 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
+	"github.com/fission/fission/pkg/fission-cli/console"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
@@ -46,10 +47,15 @@ func (opts *UpdateSubCommand) do(input cli.Input) error {
 	return opts.run(input)
 }
 
-func (opts *UpdateSubCommand) complete(input cli.Input) error {
+func (opts *UpdateSubCommand) complete(input cli.Input) (err error) {
+	_, namespace, err := util.GetResourceNamespace(input, flagkey.NamespaceTrigger)
+	if err != nil {
+		return errors.Wrap(err, "error in deleting function ")
+	}
+
 	mqt, err := opts.Client().V1().MessageQueueTrigger().Get(&metav1.ObjectMeta{
 		Name:      input.String(flagkey.MqtName),
-		Namespace: input.String(flagkey.NamespaceTrigger),
+		Namespace: namespace,
 	})
 	if err != nil {
 		return errors.Wrap(err, "error getting message queue trigger")
@@ -93,6 +99,12 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 		updated = true
 	}
 	if len(fnName) > 0 {
+		functionList := []string{fnName}
+		err := util.CheckFunctionExistence(opts.Client(), functionList, namespace)
+		if err != nil {
+			console.Warn(err.Error())
+		}
+
 		mqt.Spec.FunctionReference.Name = fnName
 		updated = true
 	}

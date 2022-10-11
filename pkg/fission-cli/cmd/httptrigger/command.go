@@ -79,7 +79,7 @@ func Commands() *cobra.Command {
 		RunE:    wrapper.Wrapper(List),
 	}
 	wrapper.SetFlags(listCmd, flag.FlagSet{
-		Optional: []flag.Flag{flag.NamespaceTrigger, flag.HtFnFilter},
+		Optional: []flag.Flag{flag.NamespaceTrigger, flag.HtFnFilter, flag.AllNamespaces},
 	})
 
 	command := &cobra.Command{

@@ -40,6 +40,11 @@ func Log(input cli.Input) error {
 }
 
 func (opts *LogSubCommand) do(input cli.Input) error {
+	_, namespace, err := util.GetResourceNamespace(input, flagkey.NamespaceFunction)
+	if err != nil {
+		return errors.Wrap(err, "error in logs for function ")
+	}
+
 	dbType := input.String(flagkey.FnLogDBType)
 	fnPod := input.String(flagkey.FnLogPod)
 	kubeContext := input.String(flagkey.KubeContext)
@@ -53,7 +58,7 @@ func (opts *LogSubCommand) do(input cli.Input) error {
 
 	f, err := opts.Client().V1().Function().Get(&metav1.ObjectMeta{
 		Name:      input.String(flagkey.FnName),
-		Namespace: input.String(flagkey.NamespaceFunction),
+		Namespace: namespace,
 	})
 	if err != nil {
 		return errors.Wrap(err, "error getting function")

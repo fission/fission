@@ -51,11 +51,14 @@ func (opts *UpdateSubCommand) do(input cli.Input) error {
 
 func (opts *UpdateSubCommand) complete(input cli.Input) error {
 	fnName := input.String(flagkey.FnName)
-	fnNamespace := input.String(flagkey.NamespaceFunction)
+	_, fnNamespace, err := util.GetResourceNamespace(input, flagkey.NamespaceFunction)
+	if err != nil {
+		return errors.Wrap(err, "error in updating function ")
+	}
 
 	function, err := opts.Client().V1().Function().Get(&metav1.ObjectMeta{
 		Name:      input.String(flagkey.FnName),
-		Namespace: input.String(flagkey.NamespaceFunction),
+		Namespace: fnNamespace,
 	})
 	if err != nil {
 		return errors.Wrap(err, fmt.Sprintf("read function '%v'", fnName))

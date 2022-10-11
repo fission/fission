@@ -55,7 +55,11 @@ func (opts *RunContainerSubCommand) do(input cli.Input) error {
 
 func (opts *RunContainerSubCommand) complete(input cli.Input) error {
 	fnName := input.String(flagkey.FnName)
-	fnNamespace := input.String(flagkey.NamespaceFunction)
+
+	_, fnNamespace, err := util.GetResourceNamespace(input, flagkey.NamespaceFunction)
+	if err != nil {
+		return errors.Wrap(err, "error in running container for function ")
+	}
 
 	// user wants a spec, create a yaml file with package and function
 	toSpec := false
@@ -68,7 +72,7 @@ func (opts *RunContainerSubCommand) complete(input cli.Input) error {
 		// check for unique function names within a namespace
 		fn, err := opts.Client().V1().Function().Get(&metav1.ObjectMeta{
 			Name:      input.String(flagkey.FnName),
-			Namespace: input.String(flagkey.NamespaceFunction),
+			Namespace: fnNamespace,
 		})
 		if err != nil && !ferror.IsNotFound(err) {
 			return err

@@ -63,9 +63,13 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 		}
 	}
 
-	pkgNamespace := input.String(flagkey.NamespacePackage)
 	envName := input.String(flagkey.PkgEnvironment)
-	envNamespace := input.String(flagkey.NamespaceEnvironment)
+
+	userProvidedNS, pkgNamespace, err := util.GetResourceNamespace(input, flagkey.NamespacePackage)
+	if err != nil {
+		return fv1.AggregateValidationErrors("Environment", err)
+	}
+
 	srcArchiveFiles := input.StringSlice(flagkey.PkgSrcArchive)
 	deployArchiveFiles := input.StringSlice(flagkey.PkgDeployArchive)
 	buildcmd := input.String(flagkey.PkgBuildCmd)
@@ -100,30 +104,30 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 		exists, err := fr.ExistsInSpecs(fv1.Environment{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      envName,
-				Namespace: envNamespace,
+				Namespace: userProvidedNS,
 			},
 		})
 		if err != nil {
 			return err
 		}
 		if !exists {
-			console.Warn(fmt.Sprintf("Package '%v' references unknown Environment '%v', please create it before applying spec",
-				pkgName, envName))
+			console.Warn(fmt.Sprintf("Package '%s' references unknown Environment '%s' in Namespace '%s', please create it before applying spec",
+				pkgName, envName, userProvidedNS))
 		}
 
 		specDir = util.GetSpecDir(input)
-		specFile = fmt.Sprintf("package-%v.yaml", pkgName)
+		specFile = fmt.Sprintf("package-%s.yaml", pkgName)
 	}
 
-	_, err := CreatePackage(input, opts.Client(), pkgName, pkgNamespace, envName, envNamespace,
-		srcArchiveFiles, deployArchiveFiles, buildcmd, specDir, specFile, noZip)
+	_, err = CreatePackage(input, opts.Client(), pkgName, pkgNamespace, envName,
+		srcArchiveFiles, deployArchiveFiles, buildcmd, specDir, specFile, noZip, userProvidedNS)
 
 	return err
 }
 
 // TODO: get all necessary value from CLI input directly
-func CreatePackage(input cli.Input, client client.Interface, pkgName string, pkgNamespace string, envName string, envNamespace string,
-	srcArchiveFiles []string, deployArchiveFiles []string, buildcmd string, specDir string, specFile string, noZip bool) (*metav1.ObjectMeta, error) {
+func CreatePackage(input cli.Input, client client.Interface, pkgName string, pkgNamespace string, envName string,
+	srcArchiveFiles []string, deployArchiveFiles []string, buildcmd string, specDir string, specFile string, noZip bool, userProvidedNS string) (*metav1.ObjectMeta, error) {
 
 	insecure := input.Bool(flagkey.PkgInsecure)
 	deployChecksum := input.String(flagkey.PkgDeployChecksum)
@@ -131,10 +135,19 @@ func CreatePackage(input cli.Input, client client.Interface, pkgName string, pkg
 
 	pkgSpec := fv1.PackageSpec{
 		Environment: fv1.EnvironmentReference{
-			Namespace: envNamespace,
+			Namespace: pkgNamespace,
 			Name:      envName,
 		},
 	}
+	if input.Bool(flagkey.SpecSave) || input.Bool(flagkey.SpecDry) {
+		pkgSpec = fv1.PackageSpec{
+			Environment: fv1.EnvironmentReference{
+				Namespace: userProvidedNS,
+				Name:      envName,
+			},
+		}
+	}
+
 	var pkgStatus fv1.BuildStatus = fv1.BuildStatusSucceeded
 
 	if len(deployArchiveFiles) > 0 {
@@ -177,7 +190,7 @@ func CreatePackage(input cli.Input, client client.Interface, pkgName string, pkg
 	pkg := &fv1.Package{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      pkgName,
-			Namespace: pkgNamespace,
+			Namespace: userProvidedNS,
 		},
 		Spec: pkgSpec,
 		Status: fv1.PackageStatus{
@@ -210,6 +223,7 @@ func CreatePackage(input cli.Input, client client.Interface, pkgName string, pkg
 		}
 		return &pkg.ObjectMeta, nil
 	} else {
+		pkg.ObjectMeta.Namespace = pkgNamespace
 		pkgMetadata, err := client.V1().Package().Create(pkg)
 		if err != nil {
 			return nil, errors.Wrap(err, "error creating package")

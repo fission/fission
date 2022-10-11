@@ -28,6 +28,7 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
+	"github.com/fission/fission/pkg/fission-cli/util"
 	"github.com/fission/fission/pkg/utils"
 )
 
@@ -41,10 +42,15 @@ func ListPods(input cli.Input) error {
 
 func (opts *ListPodsSubCommand) do(input cli.Input) error {
 
+	_, namespace, err := util.GetResourceNamespace(input, flagkey.NamespaceFunction)
+
+	if err != nil {
+		return errors.Wrap(err, "error in finding pod for function ")
+	}
 	// validate function
-	_, err := opts.Client().V1().Function().Get(&metav1.ObjectMeta{
+	_, err = opts.Client().V1().Function().Get(&metav1.ObjectMeta{
 		Name:      input.String(flagkey.FnName),
-		Namespace: input.String(flagkey.NamespaceFunction),
+		Namespace: namespace,
 	})
 	if err != nil {
 		return errors.Wrap(err, "error getting function")
@@ -53,7 +59,7 @@ func (opts *ListPodsSubCommand) do(input cli.Input) error {
 	m := &metav1.ObjectMeta{
 		Name: input.String(flagkey.FnName),
 		Labels: map[string]string{
-			v1.FUNCTION_NAMESPACE: input.String(flagkey.NamespaceFunction),
+			v1.FUNCTION_NAMESPACE: namespace,
 		},
 	}
 

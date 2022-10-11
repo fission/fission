@@ -49,8 +49,7 @@ func Commands() *cobra.Command {
 			flag.RunTimeMinCPU, flag.RunTimeMaxCPU, flag.RunTimeMinMemory,
 			flag.RunTimeMaxMemory, flag.ReplicasMin,
 			flag.ReplicasMax, flag.RunTimeTargetCPU,
-
-			flag.NamespaceFunction, flag.NamespaceEnvironment, flag.SpecSave, flag.SpecDry},
+			flag.NamespaceFunction, flag.SpecSave, flag.SpecDry},
 	})
 
 	getCmd := &cobra.Command{
@@ -121,7 +120,7 @@ func Commands() *cobra.Command {
 		RunE:    wrapper.Wrapper(List),
 	}
 	wrapper.SetFlags(listCmd, flag.FlagSet{
-		Optional: []flag.Flag{flag.NamespaceFunction},
+		Optional: []flag.Flag{flag.NamespaceFunction, flag.AllNamespaces},
 	})
 
 	logsCmd := &cobra.Command{

@@ -38,6 +38,10 @@ const (
 	NamespacePackage     = "pkgNamespace"
 	NamespaceTrigger     = "triggerNamespace"
 	NamespaceCanary      = "canaryNamespace"
+	Namespace            = "namespace"
+	ForceNamespace       = "force-namespace"
+	AllNamespaces        = "all-namespaces"
+	ForceDelete          = "force"
 
 	RuntimeMincpu    = "mincpu"
 	RuntimeMaxcpu    = "maxcpu"

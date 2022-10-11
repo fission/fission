@@ -25,9 +25,11 @@ import (
 
 	"github.com/pkg/errors"
 
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
+	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type ListSubCommand struct {
@@ -49,16 +51,25 @@ func (opts *ListSubCommand) do(input cli.Input) error {
 	return opts.run(input)
 }
 
-func (opts *ListSubCommand) complete(input cli.Input) error {
+func (opts *ListSubCommand) complete(input cli.Input) (err error) {
 	// option for the user to list all orphan packages (not referenced by any function)
 	opts.listOrphans = input.Bool(flagkey.PkgOrphan)
 	opts.status = input.String(flagkey.PkgStatus)
-	opts.pkgNamespace = input.String(flagkey.NamespacePackage)
+	_, opts.pkgNamespace, err = util.GetResourceNamespace(input, flagkey.NamespacePackage)
+	if err != nil {
+		return fv1.AggregateValidationErrors("Environment", err)
+	}
 	return nil
 }
 
-func (opts *ListSubCommand) run(input cli.Input) error {
-	pkgList, err := opts.Client().V1().Package().List(opts.pkgNamespace)
+func (opts *ListSubCommand) run(input cli.Input) (err error) {
+
+	var pkgList []fv1.Package
+	if input.Bool(flagkey.AllNamespaces) {
+		pkgList, err = opts.Client().V1().Package().List("")
+	} else {
+		pkgList, err = opts.Client().V1().Package().List(opts.pkgNamespace)
+	}
 	if err != nil {
 		return err
 	}
@@ -69,7 +80,7 @@ func (opts *ListSubCommand) run(input cli.Input) error {
 	})
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
-	fmt.Fprintf(w, "%v\t%v\t%v\t%v\n", "NAME", "BUILD_STATUS", "ENV", "LASTUPDATEDAT")
+	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\n", "NAME", "BUILD_STATUS", "ENV", "LASTUPDATEDAT", "NAMESPACE")
 
 	for _, pkg := range pkgList {
 		show := true
@@ -87,7 +98,7 @@ func (opts *ListSubCommand) run(input cli.Input) error {
 			show = false
 		}
 		if show {
-			fmt.Fprintf(w, "%v\t%v\t%v\t%v\n", pkg.ObjectMeta.Name, pkg.Status.BuildStatus, pkg.Spec.Environment.Name, pkg.Status.LastUpdateTimestamp.Format(time.RFC822))
+			fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\n", pkg.ObjectMeta.Name, pkg.Status.BuildStatus, pkg.Spec.Environment.Name, pkg.Status.LastUpdateTimestamp.Format(time.RFC822), pkg.ObjectMeta.Namespace)
 		}
 	}
 
