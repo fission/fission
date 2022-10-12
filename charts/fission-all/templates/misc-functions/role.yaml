@@ -23,14 +23,9 @@ rules:
   - apiGroups:
       - fission.io
     resources:
-      - canaryconfigs
       - environments
       - functions
-      - httptriggers
-      - kuberneteswatchtriggers
-      - messagequeuetriggers
       - packages
-      - timetriggers
     verbs:
       - "*"
 
@@ -44,14 +39,9 @@ rules:
   - apiGroups:
       - fission.io
     resources:
-      - canaryconfigs
       - environments
       - functions
-      - httptriggers
-      - kuberneteswatchtriggers
-      - messagequeuetriggers
       - packages
-      - timetriggers
     verbs:
       - "*"
 
