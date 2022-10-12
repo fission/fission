@@ -18,6 +18,12 @@ rules:
   - watch
   - patch
 - apiGroups:
+  - apps
+  resources:
+  - deployments
+  verbs:
+  - list
+- apiGroups:
   - fission.io
   resources:
   - environments
