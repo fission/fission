@@ -23,6 +23,7 @@ rules:
   - deployments
   verbs:
   - list
+  - create
 - apiGroups:
   - fission.io
   resources:
