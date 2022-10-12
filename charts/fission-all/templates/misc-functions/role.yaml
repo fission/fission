@@ -4,47 +4,25 @@ metadata:
   name: {{ .Release.Name }}-fission-fetcher
   namespace: {{ .Values.defaultNamespace }}
 rules:
-  - apiGroups:
-      - ""
-    resources:
-      - configmaps
-      - secrets
-      - pods
-    verbs:
-      - get
-      - list
-      - watch
-  - apiGroups:
-      - ""
-    resources:
-      - events
-    verbs:
-      - "*"
-  - apiGroups:
-      - fission.io
-    resources:
-      - environments
-      - functions
-      - packages
-    verbs:
-      - "*"
-
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: {{ .Release.Name }}-fission-builder
-  namespace: {{ .Values.defaultNamespace }}
-rules:
-  - apiGroups:
-      - fission.io
-    resources:
-      - environments
-      - functions
-      - packages
-    verbs:
-      - "*"
-
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  - secrets
+  verbs:
+  - get
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - list
+- apiGroups:
+  - fission.io
+  resources:
+  - packages
+  verbs:
+  - "get"
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
@@ -52,9 +30,34 @@ metadata:
   namespace: {{ .Values.functionNamespace }}
   name: {{ .Release.Name }}-event-fetcher
 rules:
-  - apiGroups: [""] # "" indicates the core API group
-    resources: ["pods"]
-    verbs: ["get", "watch", "list"]
-  - apiGroups: [""] # "" indicates the core API group
-    resources: ["events"]
-    verbs: ["*"]
+- apiGroups:
+  - ""
+  resources:
+  - "events"
+  verbs:
+  - "get"
+  - "list"
+  - "watch"
+  - "create"
+  - "update"
+  - "patch"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ .Release.Name }}-fission-builder
+  namespace: {{ .Values.defaultNamespace }}
+rules:
+- apiGroups:
+  - fission.io
+  resources:
+  - packages
+  verbs:
+  - "get"
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  - secrets
+  verbs:
+  - get

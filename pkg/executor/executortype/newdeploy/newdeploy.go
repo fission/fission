@@ -273,7 +273,7 @@ func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function
 		},
 		Spec: apiv1.PodSpec{
 			Containers:                    []apiv1.Container{*container},
-			ServiceAccountName:            "fission-fetcher",
+			ServiceAccountName:            fv1.FissionFetcherSA,
 			TerminationGracePeriodSeconds: &gracePeriodSeconds,
 		},
 	}
