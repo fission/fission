@@ -22,20 +22,6 @@ rules:
   - watch
   - patch
 - apiGroups:
-  - apps
-  resources:
-  - deployments
-  - deployments/scale
-  - replicasets
-  verbs:
-  - create
-  - get
-  - list
-  - watch
-  - update
-  - patch
-  - delete
-- apiGroups:
   - networking.k8s.io
   resources:
   - ingresses
@@ -58,18 +44,6 @@ rules:
   - messagequeuetriggers
   - packages
   - timetriggers
-  verbs:
-  - create
-  - get
-  - list
-  - watch
-  - update
-  - patch
-  - delete
-- apiGroups:
-  - autoscaling
-  resources:
-  - horizontalpodautoscalers
   verbs:
   - create
   - get

@@ -55,18 +55,6 @@ rules:
   - patch
   - delete
 - apiGroups:
-  - autoscaling
-  resources:
-  - horizontalpodautoscalers
-  verbs:
-  - create
-  - get
-  - list
-  - watch
-  - update
-  - patch
-  - delete
-- apiGroups:
   - rbac.authorization.k8s.io
   resources:
   - rolebindings
