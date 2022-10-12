@@ -12,7 +12,6 @@ rules:
   - services
   - serviceaccounts
   - replicationcontrollers
-  - namespaces
   - events
   verbs:
   - create
@@ -41,11 +40,7 @@ rules:
   - canaryconfigs
   - environments
   - functions
-  - httptriggers
-  - kuberneteswatchtriggers
-  - messagequeuetriggers
   - packages
-  - timetriggers
   verbs:
   - create
   - get

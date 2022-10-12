@@ -12,7 +12,6 @@ rules:
   - services
   - serviceaccounts
   - replicationcontrollers
-  - namespaces
   - events
   verbs:
   - create
