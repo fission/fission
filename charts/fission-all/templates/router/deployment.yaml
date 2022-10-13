@@ -83,10 +83,6 @@ spec:
           value: {{ .Values.pprof.enabled | quote }}
         - name: DISPLAY_ACCESS_LOG
           value: {{ .Values.router.displayAccessLog | default false | quote }}
-        {{- if .Values.informerNamespace.httpTrigger }}
-        - name: HTTP_TRIGGER_INFORMER_NS
-          value: {{ .Values.informerNamespace.httpTrigger | quote }}
-        {{- end}}  
         {{- include "opentelemtry.envs" . | indent 8 }}
         resources:
           {{- toYaml .Values.router.resources | nindent 10 }}

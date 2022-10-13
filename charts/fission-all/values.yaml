@@ -110,27 +110,6 @@ fetcher:
       requests: "16Mi"
       limits: ""
 
-# informerNamespace to watch informers in specific namespaces.
-informerNamespace:
-  # User can provide comma seperated values for each resources
-  ##
-  # informer namspace for canary config resource
-  canaryConfig: ""
-  # informer namspace for environment resource
-  environment: ""
-  # informer namspace for function resource
-  function: ""
-  # informer namspace for http trigger resource
-  httpTrigger: ""
-  # informer namspace for kubernetes watch trigger resource
-  kubernetesWatch: ""
-  # informer namspace for message queue trigger resource
-  messageQueue: ""
-  # informer namspace for packages resource
-  packages: ""
-  # informer namspace for time trigger resource
-  timeTrigger: ""
-
 ## executor is responsible for providing resources to your functions.
 ##
 executor:
