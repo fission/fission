@@ -12,7 +12,6 @@ rules:
   - services
   - serviceaccounts
   - replicationcontrollers
-  - namespaces
   - events
   verbs:
   - create
@@ -36,16 +35,19 @@ rules:
   - patch
   - delete
 - apiGroups:
+  - apiextensions.k8s.io
+  resources:
+  - customresourcedefinitions
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
   - fission.io
   resources:
-  - canaryconfigs
   - environments
   - functions
-  - httptriggers
-  - kuberneteswatchtriggers
-  - messagequeuetriggers
   - packages
-  - timetriggers
   verbs:
   - create
   - get

@@ -22,6 +22,7 @@ import (
 	"os"
 	"time"
 
+	"go.uber.org/zap"
 	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/dynamic"
@@ -88,7 +89,8 @@ func MakeFissionClient() (versioned.Interface, kubernetes.Interface, apiextensio
 }
 
 // WaitForCRDs does a timeout to check if CRDs have been installed
-func WaitForCRDs(ctx context.Context, fissionClient versioned.Interface) error {
+func WaitForCRDs(ctx context.Context, logger *zap.Logger, fissionClient versioned.Interface) error {
+	logger.Info("Waiting for CRDs to be installed")
 	start := time.Now()
 	for {
 		fi := fissionClient.CoreV1().Functions(metav1.NamespaceDefault)

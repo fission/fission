@@ -154,7 +154,7 @@ func StartScalerManager(ctx context.Context, logger *zap.Logger, routerURL strin
 	if err != nil {
 		return err
 	}
-	err = crd.WaitForCRDs(ctx, fissionClient)
+	err = crd.WaitForCRDs(ctx, logger, fissionClient)
 	if err != nil {
 		return errors.Wrap(err, "error waiting for CRDs")
 	}

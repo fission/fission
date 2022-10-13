@@ -12,7 +12,6 @@ rules:
   - services
   - serviceaccounts
   - replicationcontrollers
-  - namespaces
   - events
   verbs:
   - create
@@ -22,20 +21,6 @@ rules:
   - watch
   - patch
 - apiGroups:
-  - apps
-  resources:
-  - deployments
-  - deployments/scale
-  - replicasets
-  verbs:
-  - create
-  - get
-  - list
-  - watch
-  - update
-  - patch
-  - delete
-- apiGroups:
   - batch
   resources:
   - jobs
@@ -44,28 +29,20 @@ rules:
   - list
   - watch
 - apiGroups:
-  - fission.io
+  - apiextensions.k8s.io
   resources:
-  - canaryconfigs
-  - environments
-  - functions
-  - httptriggers
-  - kuberneteswatchtriggers
-  - messagequeuetriggers
-  - packages
-  - timetriggers
+  - customresourcedefinitions
   verbs:
-  - create
   - get
   - list
   - watch
-  - update
-  - patch
-  - delete
 - apiGroups:
-  - autoscaling
+  - fission.io
   resources:
-  - horizontalpodautoscalers
+  - environments
+  - functions
+  - kuberneteswatchtriggers
+  - packages
   verbs:
   - create
   - get

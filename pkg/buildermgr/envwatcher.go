@@ -505,7 +505,7 @@ func (envw *environmentWatcher) createBuilderDeployment(ctx context.Context, env
 		},
 		Spec: apiv1.PodSpec{
 			Containers:         []apiv1.Container{*container},
-			ServiceAccountName: "fission-builder",
+			ServiceAccountName: fv1.FissionBuilderSA,
 		},
 	}
 

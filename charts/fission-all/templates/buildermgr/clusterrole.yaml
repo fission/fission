@@ -8,12 +8,8 @@ rules:
   resources:
   - configmaps
   - pods
-  - secrets
   - services
   - serviceaccounts
-  - replicationcontrollers
-  - namespaces
-  - events
   verbs:
   - create
   - delete
@@ -25,39 +21,24 @@ rules:
   - apps
   resources:
   - deployments
-  - deployments/scale
-  - replicasets
   verbs:
+  - list
   - create
+  - delete
+- apiGroups:
+  - apiextensions.k8s.io
+  resources:
+  - customresourcedefinitions
+  verbs:
   - get
   - list
   - watch
-  - update
-  - patch
-  - delete
 - apiGroups:
   - fission.io
   resources:
-  - canaryconfigs
   - environments
   - functions
-  - httptriggers
-  - kuberneteswatchtriggers
-  - messagequeuetriggers
   - packages
-  - timetriggers
-  verbs:
-  - create
-  - get
-  - list
-  - watch
-  - update
-  - patch
-  - delete
-- apiGroups:
-  - autoscaling
-  resources:
-  - horizontalpodautoscalers
   verbs:
   - create
   - get
