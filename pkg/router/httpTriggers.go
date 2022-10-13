@@ -89,7 +89,7 @@ func makeHTTPTriggerSet(logger *zap.Logger, fmap *functionServiceMap, fissionCli
 }
 
 func (ts *HTTPTriggerSet) subscribeRouter(ctx context.Context, mr *mutableRouter) {
-	resolver := makeFunctionReferenceResolver(ts.funcInformer)
+	resolver := makeFunctionReferenceResolver(ts.logger, ts.funcInformer)
 	ts.resolver = resolver
 	ts.mutableRouter = mr
 

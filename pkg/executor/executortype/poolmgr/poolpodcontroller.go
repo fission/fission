@@ -272,6 +272,7 @@ func (p *PoolPodController) getEnvLister(namespace string) (flisterv1.Environmen
 			return lister, nil
 		}
 	}
+	p.logger.Error("no environment lister found for namespace", zap.String("namespace", namespace))
 	return nil, fmt.Errorf("no environment lister found for namespace %s", namespace)
 }
 

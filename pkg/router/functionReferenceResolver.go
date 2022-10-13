@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sCache "k8s.io/client-go/tools/cache"
 
@@ -35,6 +36,7 @@ type (
 		// FunctionReference -> function metadata
 		refCache     *cache.Cache
 		funcInformer []k8sCache.SharedIndexInformer
+		logger       *zap.Logger
 		// store    k8sCache.Store
 	}
 
@@ -69,10 +71,11 @@ const (
 	resolveResultMultipleFunctions
 )
 
-func makeFunctionReferenceResolver(funcInformer []k8sCache.SharedIndexInformer) *functionReferenceResolver {
+func makeFunctionReferenceResolver(logger *zap.Logger, funcInformer []k8sCache.SharedIndexInformer) *functionReferenceResolver {
 	frr := &functionReferenceResolver{
 		refCache:     cache.MakeCache(time.Minute, 0),
 		funcInformer: funcInformer,
+		logger:       logger.Named("function_ref_resolver"),
 	}
 	return frr
 }
@@ -132,6 +135,7 @@ func (frr *functionReferenceResolver) resolveByName(namespace, name string) (*re
 		})
 
 		if err != nil {
+			frr.logger.Error("error occurred while getting informer local cache by name", zap.Error(err))
 			return nil, err
 		}
 		if !isExist {
@@ -140,6 +144,7 @@ func (frr *functionReferenceResolver) resolveByName(namespace, name string) (*re
 		f = obj.(*fv1.Function)
 	}
 	if !isExist {
+		frr.logger.Error("function does not exists", zap.String("name", name))
 		return nil, errors.Errorf("function %v does not exist", name)
 	}
 	functionMap := map[string]*fv1.Function{
@@ -172,6 +177,7 @@ func (frr *functionReferenceResolver) resolveByFunctionWeights(namespace string,
 				},
 			})
 			if err != nil {
+				frr.logger.Error("error occurred while getting informer local cache by function weight", zap.Error(err))
 				return nil, err
 			}
 			if !isExist {
@@ -180,6 +186,7 @@ func (frr *functionReferenceResolver) resolveByFunctionWeights(namespace string,
 			f = obj.(*fv1.Function)
 		}
 		if !isExist {
+			frr.logger.Error("function does not exists", zap.String("name", functionName))
 			return nil, fmt.Errorf("function %v does not exist", functionName)
 		}
 		functionMap[f.ObjectMeta.Name] = f
