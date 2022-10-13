@@ -13,6 +13,8 @@ rules:
   - customresourcedefinitions
   verbs:
   - get
+  - list
+  - watch
 - apiGroups:
   - fission.io
   resources:
