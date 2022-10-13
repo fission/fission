@@ -37,7 +37,7 @@ func Start(ctx context.Context, logger *zap.Logger, port int, unitTestFlag bool)
 		cLogger.Fatal("failed to find fission CRDs", zap.Error(err))
 	}
 
-	err = crd.WaitForCRDs(ctx, fc)
+	err = crd.WaitForCRDs(ctx, logger, fc)
 	if err != nil {
 		cLogger.Fatal("error waiting for CRDs", zap.Error(err))
 	}

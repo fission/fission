@@ -41,7 +41,7 @@ func Start(ctx context.Context, logger *zap.Logger, routerUrl string) error {
 		return errors.Wrap(err, "failed to get fission or kubernetes client")
 	}
 
-	err = crd.WaitForCRDs(ctx, fissionClient)
+	err = crd.WaitForCRDs(ctx, logger, fissionClient)
 	if err != nil {
 		return errors.Wrap(err, "error waiting for CRDs")
 	}

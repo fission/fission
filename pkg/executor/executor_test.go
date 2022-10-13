@@ -149,7 +149,7 @@ func TestExecutor(t *testing.T) {
 		log.Panicf("failed to ensure crds: %v", err)
 	}
 
-	err = crd.WaitForCRDs(ctx, fissionClient)
+	err = crd.WaitForCRDs(ctx, logger, fissionClient)
 	if err != nil {
 		log.Panicf("failed to wait crds: %v", err)
 	}
