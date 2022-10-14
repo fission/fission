@@ -1,0 +1,37 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ .Release.Name }}-controller-fissionio
+rules:
+- apiGroups:
+  - fission.io
+  resources:
+  - canaryconfigs
+  - environments
+  - functions
+  - httptriggers
+  - kuberneteswatchtriggers
+  - messagequeuetriggers
+  - packages
+  - timetriggers
+  verbs:
+  - create
+  - get
+  - list
+  - watch
+  - update
+  - patch
+  - delete
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: {{ .Release.Name }}-controller-fissionio
+subjects:
+  - kind: ServiceAccount
+    name: fission-controller
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: ClusterRole
+  name: {{ .Release.Name }}-controller-fissionio
+  apiGroup: rbac.authorization.k8s.io

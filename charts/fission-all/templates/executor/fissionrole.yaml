@@ -1,0 +1,32 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ .Release.Name }}-executor-fissionio
+rules:
+- apiGroups:
+  - fission.io
+  resources:
+  - environments
+  - functions
+  - packages
+  verbs:
+  - create
+  - get
+  - list
+  - watch
+  - update
+  - patch
+  - delete
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: {{ .Release.Name }}-executor-fissionio
+subjects:
+  - kind: ServiceAccount
+    name: fission-executor
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: ClusterRole
+  name: {{ .Release.Name }}-executor-fissionio
+  apiGroup: rbac.authorization.k8s.io
