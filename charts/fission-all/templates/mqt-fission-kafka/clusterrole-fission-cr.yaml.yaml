@@ -1,14 +1,14 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: {{ .Release.Name }}-router-fissionio
+  name: {{ .Release.Name }}-kafka-fission-cr
 rules:
 - apiGroups:
   - fission.io
   resources:
   - environments
   - functions
-  - httptriggers
+  - messagequeuetriggers
   - packages
   verbs:
   - create
@@ -22,12 +22,12 @@ rules:
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-  name: {{ .Release.Name }}-router-fissionio
+  name: {{ .Release.Name }}-kafka-fission-cr
 subjects:
   - kind: ServiceAccount
-    name: fission-router
+    name: fission-kafka
     namespace: {{ .Release.Namespace }}
 roleRef:
   kind: ClusterRole
-  name: {{ .Release.Name }}-router-fissionio
+  name: {{ .Release.Name }}-kafka-fission-cr
   apiGroup: rbac.authorization.k8s.io

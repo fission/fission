@@ -1,7 +1,7 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: {{ .Release.Name }}-buildermgr-fissionio
+  name: {{ .Release.Name }}-executor-fission-cr
 rules:
 - apiGroups:
   - fission.io
@@ -21,12 +21,12 @@ rules:
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-  name: {{ .Release.Name }}-buildermgr-fissionio
+  name: {{ .Release.Name }}-executor-fission-cr
 subjects:
   - kind: ServiceAccount
-    name: fission-buildermgr
+    name: fission-executor
     namespace: {{ .Release.Namespace }}
 roleRef:
   kind: ClusterRole
-  name: {{ .Release.Name }}-buildermgr-fissionio
+  name: {{ .Release.Name }}-executor-fission-cr
   apiGroup: rbac.authorization.k8s.io

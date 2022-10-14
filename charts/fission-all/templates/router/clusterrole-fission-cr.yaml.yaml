@@ -1,15 +1,15 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: {{ .Release.Name }}-timer-fissionio
+  name: {{ .Release.Name }}-router-fission-cr
 rules:
 - apiGroups:
   - fission.io
   resources:
   - environments
   - functions
+  - httptriggers
   - packages
-  - timetriggers
   verbs:
   - create
   - get
@@ -22,12 +22,12 @@ rules:
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-  name: {{ .Release.Name }}-timer-fissionio
+  name: {{ .Release.Name }}-router-fission-cr
 subjects:
   - kind: ServiceAccount
-    name: fission-timer
+    name: fission-router
     namespace: {{ .Release.Namespace }}
 roleRef:
   kind: ClusterRole
-  name: {{ .Release.Name }}-timer-fissionio
+  name: {{ .Release.Name }}-router-fission-cr
   apiGroup: rbac.authorization.k8s.io

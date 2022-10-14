@@ -1,33 +1,25 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: {{ .Release.Name }}-kubewatcher-fissionio
+  name: {{ .Release.Name }}-storagesvc-fission-cr
 rules:
 - apiGroups:
   - fission.io
   resources:
-  - environments
-  - functions
-  - kuberneteswatchtriggers
   - packages
   verbs:
-  - create
   - get
   - list
-  - watch
-  - update
-  - patch
-  - delete
 ---
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-  name: {{ .Release.Name }}-kubewatcher-fissionio
+  name: {{ .Release.Name }}-storagesvc-fission-cr
 subjects:
   - kind: ServiceAccount
-    name: fission-kubewatcher
+    name: fission-storagesvc
     namespace: {{ .Release.Namespace }}
 roleRef:
   kind: ClusterRole
-  name: {{ .Release.Name }}-kubewatcher-fissionio
+  name: {{ .Release.Name }}-storagesvc-fission-cr
   apiGroup: rbac.authorization.k8s.io
