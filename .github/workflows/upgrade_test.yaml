@@ -28,6 +28,7 @@ env:
 jobs:
   upgrade-test:
     runs-on: ${{ matrix.os }}
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip-ci') }}
     strategy:
       fail-fast: false
       matrix:
@@ -86,6 +87,7 @@ jobs:
           && install_fission_cli
 
       - name: Test previously created fission objects with new release
+        timeout-minutes: 10
         run: |
           source ./test/upgrade_test/fission_objects.sh test_fission_objects
 
@@ -100,10 +102,10 @@ jobs:
           kind export logs --name kind kind-logs
 
       - name: Archive fission dump
-        if: ${{ failure() }}
+        if: ${{ failure() || cancelled() }}
         uses: actions/upload-artifact@v3
         with:
-          name: fission-dump
+          name: fission-dump-${{ github.run_id }}-${{ matrix.kindversion }}
           path: fission-dump/*.zip
           retention-days: 5
 
