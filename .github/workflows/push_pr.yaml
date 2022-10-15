@@ -29,6 +29,7 @@ jobs:
   # Job to run change detection
   integration-test:
     runs-on: ${{ matrix.os }}
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip-ci') }}
     strategy:
       fail-fast: false
       matrix:

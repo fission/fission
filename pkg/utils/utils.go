@@ -44,7 +44,7 @@ func UrlForFunction(name, namespace string) string {
 	if namespace != metav1.NamespaceDefault {
 		prefix = fmt.Sprintf("/fission-function/%s", namespace)
 	}
-	return fmt.Sprintf("%v/%v", prefix, name)
+	return fmt.Sprintf("%s/%s", prefix, name)
 }
 
 // IsNetworkError returns true if an error is a network error, and false otherwise.
@@ -55,7 +55,7 @@ func IsNetworkError(err error) bool {
 
 // GetFunctionIstioServiceName return service name of function for istio feature
 func GetFunctionIstioServiceName(fnName, fnNamespace string) string {
-	return fmt.Sprintf("istio-%v-%v", fnName, fnNamespace)
+	return fmt.Sprintf("istio-%s-%s", fnName, fnNamespace)
 }
 
 // GetTempDir creates and return a temporary directory
@@ -76,11 +76,11 @@ func FindAllGlobs(paths ...string) ([]string, error) {
 		// use absolute path to find files
 		path, err := filepath.Abs(p)
 		if err != nil {
-			return nil, errors.Wrapf(err, "error getting absolute path of path '%v'", p)
+			return nil, errors.Wrapf(err, "error getting absolute path of path '%s'", p)
 		}
 		globs, err := filepath.Glob(path)
 		if err != nil {
-			return nil, errors.Errorf("invalid glob %v: %v", path, err)
+			return nil, errors.Errorf("invalid glob %s: %s", path, err)
 		}
 		files = append(files, globs...)
 		// xxx handle excludeGlobs here

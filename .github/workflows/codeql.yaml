@@ -22,7 +22,7 @@ on:
 jobs:
   CodeQL-Build:
     runs-on: ubuntu-latest
-
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip-ci') }}
     steps:
       - name: Check out code
         uses: actions/checkout@v3
