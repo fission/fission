@@ -43,7 +43,7 @@ func (opts *DeleteSubCommand) do(input cli.Input) (err error) {
 	if err != nil {
 		return errors.Wrap(err, "error creating environment")
 	}
-	console.Verbose(2, "Namespace used to delete resource: %s ", currentContextNS)
+	console.Verbose(2, "Searching for resource in  %s Namespace", currentContextNS)
 
 	m := &metav1.ObjectMeta{
 		Name:      input.String(flagkey.EnvName),
