@@ -126,8 +126,6 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		Namespace: userProvidedNS,
 	}
 
-	console.Warn(fmt.Sprintf("Ns: %v", userProvidedNS))
-
 	// For Specs, the spec validate checks for function reference
 	if input.Bool(flagkey.SpecSave) {
 

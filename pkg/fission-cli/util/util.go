@@ -494,9 +494,9 @@ func GetResourceNamespace(input cli.Input, deprecatedFlag string) (namespace, cu
 	if input.String(flagkey.Namespace) != "" {
 		namespace = input.String(flagkey.Namespace)
 		currentNS = namespace
+		console.Verbose(2, "Namespace for resource %s ", currentNS)
 		return namespace, currentNS, err
 	}
-	console.Verbose(2, "Namespace from user %s ", namespace)
 
 	if namespace == "" {
 		if os.Getenv("FISSION_DEFAULT_NAMESPACE") != "" {
@@ -513,7 +513,7 @@ func GetResourceNamespace(input cli.Input, deprecatedFlag string) (namespace, cu
 		}
 	}
 
-	console.Verbose(2, "Namespace final %s ", currentNS)
+	console.Verbose(2, "Namespace for resource %s ", currentNS)
 
 	return namespace, currentNS, nil
 }
