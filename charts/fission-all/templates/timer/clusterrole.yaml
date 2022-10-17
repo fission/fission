@@ -1,7 +1,7 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: {{ .Release.Name }}-fission-cr-timer
+  name: {{ .Release.Name }}-timer
 rules:
 - apiGroups:
   - ""
@@ -20,21 +20,6 @@ rules:
   - list
   - watch
   - patch
-- apiGroups:
-  - fission.io
-  resources:
-  - environments
-  - functions
-  - packages
-  - timetriggers
-  verbs:
-  - create
-  - get
-  - list
-  - watch
-  - update
-  - patch
-  - delete
 - apiGroups:
   - rbac.authorization.k8s.io
   resources:
