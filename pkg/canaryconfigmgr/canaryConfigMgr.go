@@ -44,7 +44,7 @@ type canaryConfigMgr struct {
 	logger                 *zap.Logger
 	fissionClient          versioned.Interface
 	kubeClient             kubernetes.Interface
-	canaryConfigInformer   []k8sCache.SharedIndexInformer
+	canaryConfigInformer   map[string]k8sCache.SharedIndexInformer
 	promClient             *PrometheusApiClient
 	canaryCfgCancelFuncMap *canaryConfigCancelFuncMap
 }
@@ -92,11 +92,7 @@ func MakeCanaryConfigMgr(ctx context.Context, logger *zap.Logger, fissionClient 
 		promClient:             promClient,
 		canaryCfgCancelFuncMap: makecanaryConfigCancelFuncMap(),
 	}
-	canaryInformers := make([]k8sCache.SharedIndexInformer, 0)
-	for _, informer := range utils.GetInformersForNamespaces(fissionClient, time.Minute*30, fv1.CanaryConfigResource) {
-		canaryInformers = append(canaryInformers, informer)
-	}
-	configMgr.canaryConfigInformer = canaryInformers
+	configMgr.canaryConfigInformer = utils.GetInformersForNamespaces(fissionClient, time.Minute*30, fv1.CanaryConfigResource)
 	configMgr.CanaryConfigEventHandlers(ctx)
 	return configMgr, nil
 }

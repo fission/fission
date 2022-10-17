@@ -24,7 +24,6 @@ import (
 	"go.uber.org/zap"
 	apiv1 "k8s.io/api/core/v1"
 	k8sInformers "k8s.io/client-go/informers"
-	"k8s.io/client-go/tools/cache"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
@@ -68,12 +67,9 @@ func Start(ctx context.Context, logger *zap.Logger, storageSvcUrl string, envBui
 
 	k8sInformerFactory := k8sInformers.NewSharedInformerFactory(kubernetesClient, time.Minute*30)
 	podInformer := k8sInformerFactory.Core().V1().Pods().Informer()
-	pkgInformers := make([]cache.SharedIndexInformer, 0)
-	for _, pkgInformer := range utils.GetInformersForNamespaces(fissionClient, time.Minute*30, fv1.PackagesResource) {
-		pkgInformers = append(pkgInformers, pkgInformer)
-	}
 	pkgWatcher := makePackageWatcher(bmLogger, fissionClient,
-		kubernetesClient, envBuilderNamespace, storageSvcUrl, podInformer, pkgInformers)
+		kubernetesClient, envBuilderNamespace, storageSvcUrl, podInformer,
+		utils.GetInformersForNamespaces(fissionClient, time.Minute*30, fv1.PackagesResource))
 	pkgWatcher.Run(ctx)
 	return nil
 }

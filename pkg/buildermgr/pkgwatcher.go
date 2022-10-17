@@ -41,7 +41,7 @@ type (
 		fissionClient    versioned.Interface
 		k8sClient        kubernetes.Interface
 		podInformer      k8sCache.SharedIndexInformer
-		pkgInformer      []k8sCache.SharedIndexInformer
+		pkgInformer      map[string]k8sCache.SharedIndexInformer
 		builderNamespace string
 		storageSvcUrl    string
 		buildCache       *cache.Cache
@@ -50,7 +50,7 @@ type (
 
 func makePackageWatcher(logger *zap.Logger, fissionClient versioned.Interface, k8sClientSet kubernetes.Interface,
 	builderNamespace string, storageSvcUrl string, podInformer k8sCache.SharedIndexInformer,
-	pkgInformer []k8sCache.SharedIndexInformer) *packageWatcher {
+	pkgInformer map[string]k8sCache.SharedIndexInformer) *packageWatcher {
 	pkgw := &packageWatcher{
 		logger:           logger.Named("package_watcher"),
 		fissionClient:    fissionClient,

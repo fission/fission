@@ -80,8 +80,7 @@ func MakeMessageQueueTriggerManager(logger *zap.Logger,
 
 func (mqt *MessageQueueTriggerManager) Run(ctx context.Context) {
 	go mqt.service()
-	informers := utils.GetInformersForNamespaces(mqt.fissionClient, time.Minute*30, fv1.MessageQueueResource)
-	for _, informer := range informers {
+	for _, informer := range utils.GetInformersForNamespaces(mqt.fissionClient, time.Minute*30, fv1.MessageQueueResource) {
 		informer.AddEventHandler(mqt.mqtInformerHandlers())
 		go informer.Run(ctx.Done())
 		if ok := k8sCache.WaitForCacheSync(ctx.Done(), informer.HasSynced); !ok {

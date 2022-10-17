@@ -49,9 +49,9 @@ type HTTPTriggerSet struct {
 	executor                   *executorClient.Client
 	resolver                   *functionReferenceResolver
 	triggers                   []fv1.HTTPTrigger
-	triggerInformer            []k8sCache.SharedIndexInformer
+	triggerInformer            map[string]k8sCache.SharedIndexInformer
 	functions                  []fv1.Function
-	funcInformer               []k8sCache.SharedIndexInformer
+	funcInformer               map[string]k8sCache.SharedIndexInformer
 	updateRouterRequestChannel chan struct{}
 	tsRoundTripperParams       *tsRoundTripperParams
 	isDebugEnv                 bool
@@ -75,14 +75,8 @@ func makeHTTPTriggerSet(logger *zap.Logger, fmap *functionServiceMap, fissionCli
 		svcAddrUpdateThrottler:     actionThrottler,
 		unTapServiceTimeout:        unTapServiceTimeout,
 	}
-	httpTriggerSet.triggerInformer = make([]k8sCache.SharedIndexInformer, 0)
-	for _, informer := range utils.GetInformersForNamespaces(fissionClient, time.Minute*30, fv1.HttpTriggerResource) {
-		httpTriggerSet.triggerInformer = append(httpTriggerSet.triggerInformer, informer)
-	}
-	httpTriggerSet.funcInformer = make([]k8sCache.SharedIndexInformer, 0)
-	for _, informer := range utils.GetInformersForNamespaces(fissionClient, time.Minute*30, fv1.FunctionResource) {
-		httpTriggerSet.funcInformer = append(httpTriggerSet.funcInformer, informer)
-	}
+	httpTriggerSet.triggerInformer = utils.GetInformersForNamespaces(fissionClient, time.Minute*30, fv1.HttpTriggerResource)
+	httpTriggerSet.funcInformer = utils.GetInformersForNamespaces(fissionClient, time.Minute*30, fv1.FunctionResource)
 	httpTriggerSet.addTriggerHandlers()
 	httpTriggerSet.addFunctionHandlers()
 	return httpTriggerSet
@@ -347,7 +341,7 @@ func (ts *HTTPTriggerSet) addFunctionHandlers() {
 	}
 }
 
-func (ts *HTTPTriggerSet) runInformer(ctx context.Context, informer []k8sCache.SharedIndexInformer) {
+func (ts *HTTPTriggerSet) runInformer(ctx context.Context, informer map[string]k8sCache.SharedIndexInformer) {
 	for _, inf := range informer {
 		go inf.Run(ctx.Done())
 	}
@@ -377,7 +371,7 @@ func (ts *HTTPTriggerSet) updateRouter() {
 			for _, f := range latestFunctions {
 				fn := *f.(*fv1.Function)
 				functionTimeout[fn.ObjectMeta.UID] = fn.Spec.FunctionTimeout
-				allfunctions = append(allfunctions, *f.(*fv1.Function))
+				allfunctions = append(allfunctions, fn)
 			}
 		}
 		ts.functions = allfunctions

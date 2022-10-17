@@ -35,7 +35,7 @@ type (
 	functionReferenceResolver struct {
 		// FunctionReference -> function metadata
 		refCache     *cache.Cache
-		funcInformer []k8sCache.SharedIndexInformer
+		funcInformer map[string]k8sCache.SharedIndexInformer
 		logger       *zap.Logger
 		// store    k8sCache.Store
 	}
@@ -71,7 +71,7 @@ const (
 	resolveResultMultipleFunctions
 )
 
-func makeFunctionReferenceResolver(logger *zap.Logger, funcInformer []k8sCache.SharedIndexInformer) *functionReferenceResolver {
+func makeFunctionReferenceResolver(logger *zap.Logger, funcInformer map[string]k8sCache.SharedIndexInformer) *functionReferenceResolver {
 	frr := &functionReferenceResolver{
 		refCache:     cache.MakeCache(time.Minute, 0),
 		funcInformer: funcInformer,
