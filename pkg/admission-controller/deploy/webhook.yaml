@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: environment-validator-webhook
+  labels:
+    app: environment-validator-webhook
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: environment-validator-webhook
+  template:
+    metadata:
+      labels:
+        app: environment-validator-webhook
+    spec:
+      containers:
+        - name: environment-validator-webhook
+          image: neha16/environment-validator-webhook
+          imagePullPolicy: Always
+          args:
+            - -tls-cert-file=/etc/webhook/certs/tls.crt
+            - -tls-key-file=/etc/webhook/certs/tls.key
+          volumeMounts:
+            - name: webhook-certs
+              mountPath: /etc/webhook/certs
+              readOnly: true
+      volumes:
+        - name: webhook-certs
+          secret:
+            secretName: environment-validator-webhook-certs
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: environment-validator-webhook
+  labels:
+    app: environment-validator-webhook
+spec:
+  ports:
+  - port: 443
+    targetPort: 8080
+  selector:
+    app: environment-validator-webhook
