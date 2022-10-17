@@ -121,32 +121,38 @@ func (frr *functionReferenceResolver) resolve(trigger fv1.HTTPTrigger) (*resolve
 	return rr, nil
 }
 
+func (frr *functionReferenceResolver) getInformerByNamespace(namespace string) (k8sCache.SharedIndexInformer, error) {
+	if informer, ok := frr.funcInformer[metav1.NamespaceAll]; ok {
+		return informer, nil
+	}
+	if informer, ok := frr.funcInformer[namespace]; ok {
+		return informer, nil
+	}
+	return nil, fmt.Errorf("informer for namespace %s not found", namespace)
+}
+
 // resolveByName simply looks up function by name in a namespace.
 func (frr *functionReferenceResolver) resolveByName(namespace, name string) (*resolveResult, error) {
 	// get function from cache
-	var isExist bool
-	var f *fv1.Function
-	for _, informer := range frr.funcInformer {
-		obj, isExist, err := informer.GetStore().Get(&fv1.Function{
-			ObjectMeta: metav1.ObjectMeta{
-				Namespace: namespace,
-				Name:      name,
-			},
-		})
-
-		if err != nil {
-			frr.logger.Error("error occurred while getting informer local cache by name", zap.Error(err))
-			return nil, err
-		}
-		if !isExist {
-			continue
-		}
-		f = obj.(*fv1.Function)
+	informer, err := frr.getInformerByNamespace(namespace)
+	if err != nil {
+		return nil, err
+	}
+	obj, isExist, err := informer.GetStore().Get(&fv1.Function{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: namespace,
+			Name:      name,
+		},
+	})
+	if err != nil {
+		return nil, err
 	}
 	if !isExist {
-		frr.logger.Error("function does not exists", zap.String("name", name))
-		return nil, errors.Errorf("function %v does not exist", name)
+		frr.logger.Error("function does not exists", zap.String("name", name), zap.String("namespace", namespace))
+		return nil, errors.Errorf("function %s/%s does not exist", namespace, name)
 	}
+	f := obj.(*fv1.Function)
+
 	functionMap := map[string]*fv1.Function{
 		f.ObjectMeta.Name: f,
 	}
@@ -167,28 +173,24 @@ func (frr *functionReferenceResolver) resolveByFunctionWeights(namespace string,
 
 	for functionName, functionWeight := range fr.FunctionWeights {
 		// get function from cache
-		var isExist bool
-		var f *fv1.Function
-		for _, informer := range frr.funcInformer {
-			obj, isExist, err := informer.GetStore().Get(&fv1.Function{
-				ObjectMeta: metav1.ObjectMeta{
-					Namespace: namespace,
-					Name:      functionName,
-				},
-			})
-			if err != nil {
-				frr.logger.Error("error occurred while getting informer local cache by function weight", zap.Error(err))
-				return nil, err
-			}
-			if !isExist {
-				continue
-			}
-			f = obj.(*fv1.Function)
+		informer, err := frr.getInformerByNamespace(namespace)
+		if err != nil {
+			return nil, err
+		}
+		obj, isExist, err := informer.GetStore().Get(&fv1.Function{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: namespace,
+				Name:      functionName,
+			},
+		})
+		if err != nil {
+			return nil, err
 		}
 		if !isExist {
-			frr.logger.Error("function does not exists", zap.String("name", functionName))
-			return nil, fmt.Errorf("function %v does not exist", functionName)
+			frr.logger.Error("function does not exists", zap.String("name", functionName), zap.String("namespace", namespace))
+			return nil, fmt.Errorf("function %s/%s does not exist", namespace, functionName)
 		}
+		f := obj.(*fv1.Function)
 		functionMap[f.ObjectMeta.Name] = f
 		sumPrefix = sumPrefix + functionWeight
 		fnWtDistrList = append(fnWtDistrList, functionWeightDistribution{
