@@ -46,6 +46,10 @@ spec:
           value: "{{ .Values.mqt_keda.connector_images.gcp_pubsub.image }}:{{ .Values.mqt_keda.connector_images.gcp_pubsub.tag }}"
         - name: REDIS_IMAGE
           value: "{{ .Values.mqt_keda.connector_images.redis.image }}:{{ .Values.mqt_keda.connector_images.redis.tag }}"
+        {{- if not .Values.singleDefaultNamespace }}
+        - name: ADDITIONAL_NAMESPACES
+          value: {{ join "," .Values.additionalFissionNamespaces | quote }}
+        {{- end }}  
         {{- include "opentelemtry.envs" . | indent 8 }}
         resources:
           {{- toYaml .Values.mqt_keda.resources | nindent 10 }}

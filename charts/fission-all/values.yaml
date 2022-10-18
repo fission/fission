@@ -75,6 +75,15 @@ builderNamespace: fission-builder
 ##
 defaultNamespace: default
 
+## If true, fission will only watch for fission components created in the `defaultNamespace` above
+##
+singleDefaultNamespace: true
+
+## Fission will watch the following namespaces along with the `defaultNamespace` for fission components.
+## Only works if `singleDefaultNamespace` is false.
+##
+additionalFissionNamespaces: []
+
 ## createNamespace decides to create namespaces by the chart.
 ## If set to true, functionNamespace and builderNamespace namespaces mentioned above will be created by the chart.
 ## Set to false if you want to create the namespaces manually.

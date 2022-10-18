@@ -29,6 +29,10 @@ spec:
           value: {{ .Values.debugEnv | quote }}
         - name: PPROF_ENABLED
           value: {{ .Values.pprof.enabled | quote }}
+        {{- if not .Values.singleDefaultNamespace }}
+        - name: ADDITIONAL_NAMESPACES
+          value: {{ join "," .Values.additionalFissionNamespaces | quote }}
+        {{- end }}  
         {{- include "opentelemtry.envs" . | indent 8 }}
         resources:
           {{- toYaml .Values.timer.resources | nindent 10 }}

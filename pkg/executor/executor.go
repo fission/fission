@@ -289,17 +289,17 @@ func StartExecutor(ctx context.Context, logger *zap.Logger, functionNamespace st
 	envInformer := make(map[string]finformerv1.EnvironmentInformer, 0)
 	pkgInformer := make(map[string]finformerv1.PackageInformer, 0)
 
-	for _, ns := range utils.GetNamespaces(fv1.FunctionResource) {
+	for _, ns := range utils.GetNamespaces() {
 		factory := genInformer.NewFilteredSharedInformerFactory(fissionClient, time.Minute*30, ns, nil)
 		funcInformer[ns] = factory.Core().V1().Functions()
 	}
 
-	for _, ns := range utils.GetNamespaces(fv1.EnvironmentResource) {
+	for _, ns := range utils.GetNamespaces() {
 		factory := genInformer.NewFilteredSharedInformerFactory(fissionClient, time.Minute*30, ns, nil)
 		envInformer[ns] = factory.Core().V1().Environments()
 	}
 
-	for _, ns := range utils.GetNamespaces(fv1.PackagesResource) {
+	for _, ns := range utils.GetNamespaces() {
 		factory := genInformer.NewFilteredSharedInformerFactory(fissionClient, time.Minute*30, ns, nil)
 		pkgInformer[ns] = factory.Core().V1().Packages()
 	}

@@ -55,6 +55,10 @@ spec:
           value: {{ .Values.pprof.enabled | quote }}
         - name: HELM_RELEASE_NAME
           value: {{ .Release.Name | quote }}
+        {{- if not .Values.singleDefaultNamespace }}
+        - name: ADDITIONAL_NAMESPACES
+          value: {{ join "," .Values.additionalFissionNamespaces | quote }}
+        {{- end }}  
         {{- include "opentelemtry.envs" . | indent 8 }}
         ports:
           - containerPort: 8080

@@ -38,6 +38,10 @@ spec:
           value: {{ .Values.debugEnv | quote }}
         - name: PPROF_ENABLED
           value: {{ .Values.pprof.enabled | quote }}
+        {{- if not .Values.singleDefaultNamespace }}
+        - name: ADDITIONAL_NAMESPACES
+          value: {{ join "," .Values.additionalFissionNamespaces | quote }}
+        {{- end }}  
         - name: POD_NAMESPACE
           valueFrom:
             fieldRef:

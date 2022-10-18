@@ -38,6 +38,10 @@ spec:
         {{- if .Values.terminationMessagePolicy }}
         terminationMessagePolicy: {{ .Values.terminationMessagePolicy }}
         {{- end }}
+        {{- if not .Values.singleDefaultNamespace }}
+        - name: ADDITIONAL_NAMESPACES
+          value: {{ join "," .Values.additionalFissionNamespaces | quote }}
+        {{- end }}
       serviceAccountName: fission-kubewatcher
 {{- if .Values.priorityClassName }}
       priorityClassName: {{ .Values.priorityClassName }}

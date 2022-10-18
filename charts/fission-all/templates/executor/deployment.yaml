@@ -71,6 +71,10 @@ spec:
         - name: CONTAINER_OBJECT_REAPER_INTERVAL
           value: {{ .Values.executor.container.objectReaperInterval | quote }}
         {{- end}}
+        {{- if not .Values.singleDefaultNamespace }}
+        - name: ADDITIONAL_NAMESPACES
+          value: {{ join "," .Values.additionalFissionNamespaces | quote }}
+        {{- end }}
         - name: HELM_RELEASE_NAME
           value: {{ .Release.Name | quote }}
         {{- include "opentelemtry.envs" . | indent 8 }}
