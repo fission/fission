@@ -20,7 +20,7 @@ import (
 	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
 )
 
-const additionalNamespaces string = "ADDITIONAL_NAMESPACES"
+const additionalNamespaces string = "FISSION_RESOURCE_NAMESPACES"
 
 func GetNamespaces() []string {
 	envValue := os.Getenv(additionalNamespaces)

@@ -71,3 +71,12 @@ This template generates the image name for the deployment depending on the value
 - name: OTEL_PROPAGATORS
   value: "{{ .Values.openTelemetry.propagators }}"
 {{- end }}
+
+{{- define "additional-namespace.envs" }}
+- name: FISSION_RESOURCE_NAMESPACES
+{{- if not .Values.singleDefaultNamespace }}
+  value: "{{ .Values.defaultNamespace }},{{ join "," .Values.additionalFissionNamespaces }}"
+{{- else }}
+  value: {{ .Values.defaultNamespace }}  
+{{- end }}
+{{- end }}

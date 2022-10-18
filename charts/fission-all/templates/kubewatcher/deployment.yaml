@@ -29,6 +29,7 @@ spec:
           value: {{ .Values.debugEnv | quote }}
         - name: PPROF_ENABLED
           value: {{ .Values.pprof.enabled | quote }}
+        {{- include "additional-namespace.envs" . | indent 8 }}  
         {{- include "opentelemtry.envs" . | indent 8 }}
         resources:
           {{- toYaml .Values.kubewatcher.resources | nindent 10 }}
@@ -37,10 +38,6 @@ spec:
         {{- end }}
         {{- if .Values.terminationMessagePolicy }}
         terminationMessagePolicy: {{ .Values.terminationMessagePolicy }}
-        {{- end }}
-        {{- if not .Values.singleDefaultNamespace }}
-        - name: ADDITIONAL_NAMESPACES
-          value: {{ join "," .Values.additionalFissionNamespaces | quote }}
         {{- end }}
       serviceAccountName: fission-kubewatcher
 {{- if .Values.priorityClassName }}

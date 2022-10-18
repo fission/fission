@@ -60,10 +60,7 @@ spec:
         - name: STORAGE_S3_REGION
           value: {{ .Values.persistence.s3.region }}
         {{- end }}
-        {{- if not .Values.singleDefaultNamespace }}
-        - name: ADDITIONAL_NAMESPACES
-          value: {{ join "," .Values.additionalFissionNamespaces | quote }}
-        {{- end }}
+        {{- include "additional-namespace.envs" . | indent 8 }}
         {{- include "opentelemtry.envs" . | indent 8 }}
         resources:
           {{- toYaml .Values.storagesvc.resources | nindent 10 }}
