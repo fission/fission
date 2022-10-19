@@ -29,7 +29,6 @@ import (
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/executor/util"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
-	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
 	"github.com/fission/fission/pkg/utils"
 )
 
@@ -67,11 +66,10 @@ func Start(ctx context.Context, logger *zap.Logger, storageSvcUrl string, envBui
 	go envWatcher.watchEnvironments(ctx)
 
 	k8sInformerFactory := k8sInformers.NewSharedInformerFactory(kubernetesClient, time.Minute*30)
-	informerFactory := genInformer.NewSharedInformerFactory(fissionClient, time.Minute*30)
 	podInformer := k8sInformerFactory.Core().V1().Pods().Informer()
-	pkgInformer := informerFactory.Core().V1().Packages().Informer()
 	pkgWatcher := makePackageWatcher(bmLogger, fissionClient,
-		kubernetesClient, envBuilderNamespace, storageSvcUrl, &podInformer, &pkgInformer)
+		kubernetesClient, envBuilderNamespace, storageSvcUrl, podInformer,
+		utils.GetInformersForNamespaces(fissionClient, time.Minute*30, fv1.PackagesResource))
 	pkgWatcher.Run(ctx)
 	return nil
 }

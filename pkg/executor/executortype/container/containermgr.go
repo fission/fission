@@ -98,7 +98,7 @@ func MakeContainer(
 	kubernetesClient kubernetes.Interface,
 	namespace string,
 	instanceID string,
-	funcInformer finformerv1.FunctionInformer,
+	funcInformer map[string]finformerv1.FunctionInformer,
 	deplInformer appsinformers.DeploymentInformer,
 	svcInformer coreinformers.ServiceInformer,
 ) (executortype.ExecutorType, error) {
@@ -135,7 +135,9 @@ func MakeContainer(
 	caaf.svcLister = svcInformer.Lister()
 	caaf.svcListerSynced = svcInformer.Informer().HasSynced
 
-	funcInformer.Informer().AddEventHandler(caaf.FuncInformerHandler(ctx))
+	for _, informer := range funcInformer {
+		informer.Informer().AddEventHandler(caaf.FuncInformerHandler(ctx))
+	}
 	return caaf, nil
 }
 

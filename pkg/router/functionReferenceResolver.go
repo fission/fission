@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sCache "k8s.io/client-go/tools/cache"
 
@@ -34,7 +35,8 @@ type (
 	functionReferenceResolver struct {
 		// FunctionReference -> function metadata
 		refCache     *cache.Cache
-		funcInformer *k8sCache.SharedIndexInformer
+		funcInformer map[string]k8sCache.SharedIndexInformer
+		logger       *zap.Logger
 		// store    k8sCache.Store
 	}
 
@@ -69,10 +71,11 @@ const (
 	resolveResultMultipleFunctions
 )
 
-func makeFunctionReferenceResolver(funcInformer *k8sCache.SharedIndexInformer) *functionReferenceResolver {
+func makeFunctionReferenceResolver(logger *zap.Logger, funcInformer map[string]k8sCache.SharedIndexInformer) *functionReferenceResolver {
 	frr := &functionReferenceResolver{
 		refCache:     cache.MakeCache(time.Minute, 0),
 		funcInformer: funcInformer,
+		logger:       logger.Named("function_ref_resolver"),
 	}
 	return frr
 }
@@ -118,10 +121,24 @@ func (frr *functionReferenceResolver) resolve(trigger fv1.HTTPTrigger) (*resolve
 	return rr, nil
 }
 
+func (frr *functionReferenceResolver) getInformerByNamespace(namespace string) (k8sCache.SharedIndexInformer, error) {
+	if informer, ok := frr.funcInformer[metav1.NamespaceAll]; ok {
+		return informer, nil
+	}
+	if informer, ok := frr.funcInformer[namespace]; ok {
+		return informer, nil
+	}
+	return nil, fmt.Errorf("informer for namespace %s not found", namespace)
+}
+
 // resolveByName simply looks up function by name in a namespace.
 func (frr *functionReferenceResolver) resolveByName(namespace, name string) (*resolveResult, error) {
 	// get function from cache
-	obj, isExist, err := (*frr.funcInformer).GetStore().Get(&fv1.Function{
+	informer, err := frr.getInformerByNamespace(namespace)
+	if err != nil {
+		return nil, err
+	}
+	obj, isExist, err := informer.GetStore().Get(&fv1.Function{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: namespace,
 			Name:      name,
@@ -131,10 +148,11 @@ func (frr *functionReferenceResolver) resolveByName(namespace, name string) (*re
 		return nil, err
 	}
 	if !isExist {
-		return nil, errors.Errorf("function %v does not exist", name)
+		frr.logger.Error("function does not exists", zap.String("name", name), zap.String("namespace", namespace))
+		return nil, errors.Errorf("function %s/%s does not exist", namespace, name)
 	}
-
 	f := obj.(*fv1.Function)
+
 	functionMap := map[string]*fv1.Function{
 		f.ObjectMeta.Name: f,
 	}
@@ -155,7 +173,11 @@ func (frr *functionReferenceResolver) resolveByFunctionWeights(namespace string,
 
 	for functionName, functionWeight := range fr.FunctionWeights {
 		// get function from cache
-		obj, isExist, err := (*frr.funcInformer).GetStore().Get(&fv1.Function{
+		informer, err := frr.getInformerByNamespace(namespace)
+		if err != nil {
+			return nil, err
+		}
+		obj, isExist, err := informer.GetStore().Get(&fv1.Function{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: namespace,
 				Name:      functionName,
@@ -165,9 +187,9 @@ func (frr *functionReferenceResolver) resolveByFunctionWeights(namespace string,
 			return nil, err
 		}
 		if !isExist {
-			return nil, fmt.Errorf("function %v does not exist", functionName)
+			frr.logger.Error("function does not exists", zap.String("name", functionName), zap.String("namespace", namespace))
+			return nil, fmt.Errorf("function %s/%s does not exist", namespace, functionName)
 		}
-
 		f := obj.(*fv1.Function)
 		functionMap[f.ObjectMeta.Name] = f
 		sumPrefix = sumPrefix + functionWeight

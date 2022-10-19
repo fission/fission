@@ -24,7 +24,6 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/executor/util"
-	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
 	"github.com/fission/fission/pkg/utils"
 )
 
@@ -158,10 +157,14 @@ func StartScalerManager(ctx context.Context, logger *zap.Logger, routerURL strin
 	if err != nil {
 		return errors.Wrap(err, "error waiting for CRDs")
 	}
-	informerFactory := genInformer.NewSharedInformerFactory(fissionClient, time.Minute*30)
-	mqTriggerInformer := informerFactory.Core().V1().MessageQueueTriggers().Informer()
-	mqTriggerInformer.AddEventHandler(mqTriggerEventHandlers(ctx, logger, kubeClient, routerURL))
-	mqTriggerInformer.Run(ctx.Done())
+
+	for _, informer := range utils.GetInformersForNamespaces(fissionClient, time.Minute*30, fv1.MessageQueueResource) {
+		informer.AddEventHandler(mqTriggerEventHandlers(ctx, logger, kubeClient, routerURL))
+		go informer.Run(ctx.Done())
+		if ok := k8sCache.WaitForCacheSync(ctx.Done(), informer.HasSynced); !ok {
+			logger.Fatal("failed to wait for caches to sync")
+		}
+	}
 	return nil
 }
 

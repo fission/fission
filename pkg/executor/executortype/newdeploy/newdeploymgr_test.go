@@ -22,6 +22,7 @@ import (
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	fClient "github.com/fission/fission/pkg/generated/clientset/versioned/fake"
 	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
+	finformerv1 "github.com/fission/fission/pkg/generated/informers/externalversions/core/v1"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
@@ -47,9 +48,12 @@ func TestRefreshFuncPods(t *testing.T) {
 	kubernetesClient := fake.NewSimpleClientset()
 	fissionClient := fClient.NewSimpleClientset()
 	informerFactory := genInformer.NewSharedInformerFactory(fissionClient, time.Minute*30)
-	funcInformer := informerFactory.Core().V1().Functions()
-	envInformer := informerFactory.Core().V1().Environments()
-
+	funcInformer := map[string]finformerv1.FunctionInformer{
+		metav1.NamespaceAll: informerFactory.Core().V1().Functions(),
+	}
+	envInformer := map[string]finformerv1.EnvironmentInformer{
+		metav1.NamespaceAll: informerFactory.Core().V1().Environments(),
+	}
 	newDeployInformerFactory, err := utils.GetInformerFactoryByExecutor(kubernetesClient, fv1.ExecutorTypeNewdeploy, time.Minute*30)
 	if err != nil {
 		t.Fatalf("Error creating informer factory: %s", err)
@@ -88,8 +92,8 @@ func TestRefreshFuncPods(t *testing.T) {
 	t.Log("New deploy manager started")
 
 	runInformers(ctx, []k8sCache.SharedIndexInformer{
-		envInformer.Informer(),
-		funcInformer.Informer(),
+		envInformer[metav1.NamespaceAll].Informer(),
+		funcInformer[metav1.NamespaceAll].Informer(),
 		deployInformer.Informer(),
 		svcInformer.Informer(),
 	})

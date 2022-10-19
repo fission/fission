@@ -45,6 +45,7 @@ import (
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
+	finformerv1 "github.com/fission/fission/pkg/generated/informers/externalversions/core/v1"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/metrics"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
@@ -79,7 +80,7 @@ type (
 // MakeExecutor returns an Executor for given ExecutorType(s).
 func MakeExecutor(ctx context.Context, logger *zap.Logger, cms *cms.ConfigSecretController,
 	fissionClient versioned.Interface, types map[fv1.ExecutorType]executortype.ExecutorType,
-	informers []k8sCache.SharedIndexInformer) (*Executor, error) {
+	informers ...k8sCache.SharedIndexInformer) (*Executor, error) {
 	executor := &Executor{
 		logger:        logger.Named("executor"),
 		cms:           cms,
@@ -284,10 +285,24 @@ func StartExecutor(ctx context.Context, logger *zap.Logger, functionNamespace st
 
 	logger.Info("Starting executor", zap.String("instanceID", executorInstanceID))
 
-	informerFactory := genInformer.NewSharedInformerFactory(fissionClient, time.Minute*30)
-	funcInformer := informerFactory.Core().V1().Functions()
-	pkgInformer := informerFactory.Core().V1().Packages()
-	envInformer := informerFactory.Core().V1().Environments()
+	funcInformer := make(map[string]finformerv1.FunctionInformer, 0)
+	envInformer := make(map[string]finformerv1.EnvironmentInformer, 0)
+	pkgInformer := make(map[string]finformerv1.PackageInformer, 0)
+
+	for _, ns := range utils.GetNamespaces() {
+		factory := genInformer.NewFilteredSharedInformerFactory(fissionClient, time.Minute*30, ns, nil)
+		funcInformer[ns] = factory.Core().V1().Functions()
+	}
+
+	for _, ns := range utils.GetNamespaces() {
+		factory := genInformer.NewFilteredSharedInformerFactory(fissionClient, time.Minute*30, ns, nil)
+		envInformer[ns] = factory.Core().V1().Environments()
+	}
+
+	for _, ns := range utils.GetNamespaces() {
+		factory := genInformer.NewFilteredSharedInformerFactory(fissionClient, time.Minute*30, ns, nil)
+		pkgInformer[ns] = factory.Core().V1().Packages()
+	}
 
 	gpmInformerFactory, err := utils.GetInformerFactoryByExecutor(kubernetesClient, fv1.ExecutorTypePoolmgr, time.Minute*30)
 	if err != nil {
@@ -364,20 +379,29 @@ func StartExecutor(ctx context.Context, logger *zap.Logger, functionNamespace st
 
 	cms := cms.MakeConfigSecretController(ctx, logger, fissionClient, kubernetesClient, executorTypes, configmapInformer, secretInformer)
 
+	fissionInformers := make([]k8sCache.SharedIndexInformer, 0)
+	for _, informer := range funcInformer {
+		fissionInformers = append(fissionInformers, informer.Informer())
+	}
+	for _, informer := range envInformer {
+		fissionInformers = append(fissionInformers, informer.Informer())
+	}
+	for _, informer := range pkgInformer {
+		fissionInformers = append(fissionInformers, informer.Informer())
+	}
+	fissionInformers = append(fissionInformers,
+		configmapInformer.Informer(),
+		secretInformer.Informer(),
+		gpmPodInformer.Informer(),
+		gpmRsInformer.Informer(),
+		ndmDeplInformer.Informer(),
+		ndmSvcInformer.Informer(),
+		cnmDeplInformer.Informer(),
+		cnmSvcInformer.Informer(),
+	)
 	api, err := MakeExecutor(ctx, logger, cms, fissionClient, executorTypes,
-		[]k8sCache.SharedIndexInformer{
-			funcInformer.Informer(),
-			pkgInformer.Informer(),
-			envInformer.Informer(),
-			configmapInformer.Informer(),
-			secretInformer.Informer(),
-			gpmPodInformer.Informer(),
-			gpmRsInformer.Informer(),
-			ndmDeplInformer.Informer(),
-			ndmSvcInformer.Informer(),
-			cnmDeplInformer.Informer(),
-			cnmSvcInformer.Informer(),
-		})
+		fissionInformers...,
+	)
 	if err != nil {
 		return err
 	}
