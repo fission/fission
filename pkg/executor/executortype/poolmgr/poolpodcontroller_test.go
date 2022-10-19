@@ -32,6 +32,7 @@ import (
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	fClient "github.com/fission/fission/pkg/generated/clientset/versioned/fake"
 	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
+	finformerv1 "github.com/fission/fission/pkg/generated/informers/externalversions/core/v1"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
@@ -50,9 +51,15 @@ func TestPoolPodControllerPodCleanup(t *testing.T) {
 	kubernetesClient := fake.NewSimpleClientset()
 	fissionClient := fClient.NewSimpleClientset()
 	informerFactory := genInformer.NewSharedInformerFactory(fissionClient, time.Minute*30)
-	funcInformer := informerFactory.Core().V1().Functions()
-	pkgInformer := informerFactory.Core().V1().Packages()
-	envInformer := informerFactory.Core().V1().Environments()
+	funcInformer := map[string]finformerv1.FunctionInformer{
+		metav1.NamespaceAll: informerFactory.Core().V1().Functions(),
+	}
+	pkgInformer := map[string]finformerv1.PackageInformer{
+		metav1.NamespaceAll: informerFactory.Core().V1().Packages(),
+	}
+	envInformer := map[string]finformerv1.EnvironmentInformer{
+		metav1.NamespaceAll: informerFactory.Core().V1().Environments(),
+	}
 
 	gpmInformerFactory, err := utils.GetInformerFactoryByExecutor(kubernetesClient, fv1.ExecutorTypePoolmgr, time.Minute*30)
 	if err != nil {
@@ -92,9 +99,9 @@ func TestPoolPodControllerPodCleanup(t *testing.T) {
 	podInformer := gpmPodInformer.Informer()
 
 	runInformers(ctx, []k8sCache.SharedIndexInformer{
-		funcInformer.Informer(),
-		pkgInformer.Informer(),
-		envInformer.Informer(),
+		funcInformer[metav1.NamespaceAll].Informer(),
+		pkgInformer[metav1.NamespaceAll].Informer(),
+		envInformer[metav1.NamespaceAll].Informer(),
 		podInformer,
 		gpmRsInformer.Informer(),
 	})

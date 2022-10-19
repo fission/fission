@@ -33,7 +33,7 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
-	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
+	"github.com/fission/fission/pkg/utils"
 )
 
 const (
@@ -44,7 +44,7 @@ type canaryConfigMgr struct {
 	logger                 *zap.Logger
 	fissionClient          versioned.Interface
 	kubeClient             kubernetes.Interface
-	canaryConfigInformer   *k8sCache.SharedIndexInformer
+	canaryConfigInformer   map[string]k8sCache.SharedIndexInformer
 	promClient             *PrometheusApiClient
 	canaryCfgCancelFuncMap *canaryConfigCancelFuncMap
 }
@@ -92,45 +92,46 @@ func MakeCanaryConfigMgr(ctx context.Context, logger *zap.Logger, fissionClient 
 		promClient:             promClient,
 		canaryCfgCancelFuncMap: makecanaryConfigCancelFuncMap(),
 	}
-
-	informerFactory := genInformer.NewSharedInformerFactory(fissionClient, time.Minute*30)
-	informer := informerFactory.Core().V1().CanaryConfigs().Informer()
-	configMgr.canaryConfigInformer = &informer
+	configMgr.canaryConfigInformer = utils.GetInformersForNamespaces(fissionClient, time.Minute*30, fv1.CanaryConfigResource)
 	configMgr.CanaryConfigEventHandlers(ctx)
 	return configMgr, nil
 }
 
 func (canaryCfgMgr *canaryConfigMgr) CanaryConfigEventHandlers(ctx context.Context) {
-	(*canaryCfgMgr.canaryConfigInformer).AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
-		AddFunc: func(obj interface{}) {
-			canaryConfig := obj.(*fv1.CanaryConfig)
-			if canaryConfig.Status.Status == fv1.CanaryConfigStatusPending {
-				go canaryCfgMgr.addCanaryConfig(ctx, canaryConfig)
-			}
-		},
-		DeleteFunc: func(obj interface{}) {
-			canaryConfig := obj.(*fv1.CanaryConfig)
-			go canaryCfgMgr.deleteCanaryConfig(canaryConfig)
-		},
-		UpdateFunc: func(oldObj interface{}, newObj interface{}) {
-			oldConfig := oldObj.(*fv1.CanaryConfig)
-			newConfig := newObj.(*fv1.CanaryConfig)
-			if oldConfig.ObjectMeta.ResourceVersion != newConfig.ObjectMeta.ResourceVersion &&
-				newConfig.Status.Status == fv1.CanaryConfigStatusPending {
-				canaryCfgMgr.logger.Info("update canary config invoked",
-					zap.String("name", newConfig.ObjectMeta.Name),
-					zap.String("namespace", newConfig.ObjectMeta.Namespace),
-					zap.String("version", newConfig.ObjectMeta.ResourceVersion))
-				go canaryCfgMgr.updateCanaryConfig(ctx, oldConfig, newConfig)
-			}
-			go canaryCfgMgr.reSyncCanaryConfigs(ctx)
+	for _, informer := range canaryCfgMgr.canaryConfigInformer {
+		informer.AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
+			AddFunc: func(obj interface{}) {
+				canaryConfig := obj.(*fv1.CanaryConfig)
+				if canaryConfig.Status.Status == fv1.CanaryConfigStatusPending {
+					go canaryCfgMgr.addCanaryConfig(ctx, canaryConfig)
+				}
+			},
+			DeleteFunc: func(obj interface{}) {
+				canaryConfig := obj.(*fv1.CanaryConfig)
+				go canaryCfgMgr.deleteCanaryConfig(canaryConfig)
+			},
+			UpdateFunc: func(oldObj interface{}, newObj interface{}) {
+				oldConfig := oldObj.(*fv1.CanaryConfig)
+				newConfig := newObj.(*fv1.CanaryConfig)
+				if oldConfig.ObjectMeta.ResourceVersion != newConfig.ObjectMeta.ResourceVersion &&
+					newConfig.Status.Status == fv1.CanaryConfigStatusPending {
+					canaryCfgMgr.logger.Info("update canary config invoked",
+						zap.String("name", newConfig.ObjectMeta.Name),
+						zap.String("namespace", newConfig.ObjectMeta.Namespace),
+						zap.String("version", newConfig.ObjectMeta.ResourceVersion))
+					go canaryCfgMgr.updateCanaryConfig(ctx, oldConfig, newConfig)
+				}
+				go canaryCfgMgr.reSyncCanaryConfigs(ctx)
 
-		},
-	})
+			},
+		})
+	}
 }
 
 func (canaryCfgMgr *canaryConfigMgr) Run(ctx context.Context) {
-	go (*canaryCfgMgr.canaryConfigInformer).Run(ctx.Done())
+	for _, informer := range canaryCfgMgr.canaryConfigInformer {
+		go informer.Run(ctx.Done())
+	}
 	canaryCfgMgr.logger.Info("started canary configmgr controller")
 }
 
@@ -492,17 +493,19 @@ func (canaryCfgMgr *canaryConfigMgr) rollForward(ctx context.Context, canaryConf
 }
 
 func (canaryCfgMgr *canaryConfigMgr) reSyncCanaryConfigs(ctx context.Context) {
-	for _, obj := range (*canaryCfgMgr.canaryConfigInformer).GetStore().List() {
-		canaryConfig := obj.(*fv1.CanaryConfig)
-		_, err := canaryCfgMgr.canaryCfgCancelFuncMap.lookup(&canaryConfig.ObjectMeta)
-		if err != nil && canaryConfig.Status.Status == fv1.CanaryConfigStatusPending {
-			canaryCfgMgr.logger.Debug("adding canary config from resync loop",
-				zap.String("name", canaryConfig.ObjectMeta.Name),
-				zap.String("namespace", canaryConfig.ObjectMeta.Namespace),
-				zap.String("version", canaryConfig.ObjectMeta.ResourceVersion))
+	for _, informer := range canaryCfgMgr.canaryConfigInformer {
+		for _, obj := range informer.GetStore().List() {
+			canaryConfig := obj.(*fv1.CanaryConfig)
+			_, err := canaryCfgMgr.canaryCfgCancelFuncMap.lookup(&canaryConfig.ObjectMeta)
+			if err != nil && canaryConfig.Status.Status == fv1.CanaryConfigStatusPending {
+				canaryCfgMgr.logger.Debug("adding canary config from resync loop",
+					zap.String("name", canaryConfig.ObjectMeta.Name),
+					zap.String("namespace", canaryConfig.ObjectMeta.Namespace),
+					zap.String("version", canaryConfig.ObjectMeta.ResourceVersion))
 
-			// new canaryConfig detected, add it to our cache and start processing it
-			go canaryCfgMgr.addCanaryConfig(ctx, canaryConfig)
+				// new canaryConfig detected, add it to our cache and start processing it
+				go canaryCfgMgr.addCanaryConfig(ctx, canaryConfig)
+			}
 		}
 	}
 }
