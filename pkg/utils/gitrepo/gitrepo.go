@@ -32,7 +32,7 @@ type GitRepo struct {
 	status          git.Status
 	dirPath         string
 	gitRepoRootPath string // absolute path of the root of the git repository
-	commitID        string // commit ID the HEAD of the repository is poitning to
+	commitID        string // commit ID the HEAD of the repository is pointing to
 }
 
 // NewGitRepo creates new GitRepo struct

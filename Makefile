@@ -100,7 +100,7 @@ generate-crd-ref-docs: install-crd-ref-docs
 	cat out.md >> crd_docs.md && rm out.md
 	mv crd_docs.md ../fission.io/content/en/docs/reference/crd-reference.md
 
-all-generators: codegen generate-crds generate-swagger-doc
+all-generators: codegen generate-crds generate-swagger-doc generate-cli-docs generate-crd-ref-docs
 
 skaffold-prebuild:
 	@GOOS=linux GOARCH=amd64 GORELEASER_CURRENT_TAG=$(VERSION) goreleaser build --snapshot --rm-dist --single-target

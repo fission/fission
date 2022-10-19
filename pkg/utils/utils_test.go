@@ -99,8 +99,8 @@ func TestGetStringValueFromEnv(t *testing.T) {
 		},
 		{
 			name:    "string case",
-			value:   "test sting",
-			want:    "test sting",
+			value:   "test string",
+			want:    "test string",
 			wantErr: false,
 		},
 	}
@@ -134,7 +134,7 @@ func TestGetUIntValueFromEnv(t *testing.T) {
 		},
 		{
 			name:    "string case",
-			value:   "test sting",
+			value:   "test string",
 			want:    0,
 			wantErr: true,
 		},
