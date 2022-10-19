@@ -72,6 +72,7 @@ functionNamespace: fission-function
 builderNamespace: fission-builder
 
 ## defaultNamespace represents the default namespace in Kubernetes.
+## Fission will watch the defaultNamespace only if `singleDefaultNamespace` is true.
 ##
 defaultNamespace: default
 
@@ -81,6 +82,11 @@ singleDefaultNamespace: true
 
 ## Fission will watch the following namespaces along with the `defaultNamespace` for fission components.
 ## Only works if `singleDefaultNamespace` is false.
+## Example for additionalFissionNamespaces
+## additionalFissionNamespaces: 
+  # - namespace1
+  # - namespace2
+  # - namespace3
 ##
 additionalFissionNamespaces: []
 

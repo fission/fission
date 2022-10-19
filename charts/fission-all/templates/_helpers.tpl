@@ -72,7 +72,7 @@ This template generates the image name for the deployment depending on the value
   value: "{{ .Values.openTelemetry.propagators }}"
 {{- end }}
 
-{{- define "additional-namespace.envs" }}
+{{- define "fission-resource-namespace.envs" }}
 - name: FISSION_RESOURCE_NAMESPACES
 {{- if not .Values.singleDefaultNamespace }}
   value: "{{ .Values.defaultNamespace }},{{ join "," .Values.additionalFissionNamespaces }}"
