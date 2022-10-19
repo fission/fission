@@ -1,3 +1,4 @@
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
@@ -39,3 +40,36 @@ subjects:
   - kind: ServiceAccount
     name: fission-builder
     namespace: {{ .Values.builderNamespace }}
+
+{{- if not .Values.singleDefaultNamespace }}
+{{- range $namespace := $.Values.additionalFissionNamespaces }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $.Release.Name }}-fission-fetcher
+  namespace: {{ $namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ $.Release.Name }}-fission-fetcher
+subjects:
+  - kind: ServiceAccount
+    name: fission-fetcher
+    namespace: {{ $.Values.functionNamespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $.Release.Name }}-fission-builder
+  namespace: {{ $namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ $.Release.Name }}-fission-builder
+subjects:
+  - kind: ServiceAccount
+    name: fission-builder
+    namespace: {{ $.Values.builderNamespace }}
+{{- end }}
+{{- end }}
