@@ -1,29 +1,9 @@
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: {{ .Release.Name }}-fission-fetcher
-  namespace: {{ .Values.defaultNamespace }}
-rules:
-- apiGroups:
-  - ""
-  resources:
-  - configmaps
-  - secrets
-  verbs:
-  - get
-- apiGroups:
-  - ""
-  resources:
-  - pods
-  verbs:
-  - list
-- apiGroups:
-  - fission.io
-  resources:
-  - packages
-  verbs:
-  - "get"
+{{/* 
+Passing namespace as an argument to the "fissionFunction.roles" template.
+Need to use merge function to pass in the current scope so that ".Release" values
+can be used
+ */}}
+{{ include "fissionFunction.roles" (merge (dict "namespace" .Values.defaultNamespace) .) }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
@@ -42,74 +22,9 @@ rules:
   - "create"
   - "update"
   - "patch"
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: {{ .Release.Name }}-fission-builder
-  namespace: {{ .Values.defaultNamespace }}
-rules:
-- apiGroups:
-  - fission.io
-  resources:
-  - packages
-  verbs:
-  - "get"
-- apiGroups:
-  - ""
-  resources:
-  - configmaps
-  - secrets
-  verbs:
-  - get
 
 {{- if not .Values.singleDefaultNamespace }}
 {{- range $namespace := $.Values.additionalFissionNamespaces }}
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: {{ $.Release.Name }}-fission-fetcher
-  namespace: {{ $namespace }}
-rules:
-- apiGroups:
-  - ""
-  resources:
-  - configmaps
-  - secrets
-  verbs:
-  - get
-- apiGroups:
-  - ""
-  resources:
-  - pods
-  verbs:
-  - list
-- apiGroups:
-  - fission.io
-  resources:
-  - packages
-  verbs:
-  - "get"
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: {{ $.Release.Name }}-fission-builder
-  namespace: {{ $namespace }}
-rules:
-- apiGroups:
-  - fission.io
-  resources:
-  - packages
-  verbs:
-  - "get"
-- apiGroups:
-  - ""
-  resources:
-  - configmaps
-  - secrets
-  verbs:
-  - get
+{{ include "fissionFunction.roles" (merge (dict "namespace" $namespace) $) }}
 {{- end }}
 {{- end }}
