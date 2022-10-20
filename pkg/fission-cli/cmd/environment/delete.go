@@ -59,7 +59,7 @@ func (opts *DeleteSubCommand) do(input cli.Input) (err error) {
 		for _, fn := range fns {
 			if fn.Spec.Environment.Name == m.Name &&
 				fn.Spec.Environment.Namespace == m.Namespace {
-				return errors.New("Environment is used by atleast one function.")
+				return errors.New("Environment is used by at least one function.")
 			}
 		}
 	}
