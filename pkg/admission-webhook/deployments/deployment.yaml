@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: validate-env
+  labels:
+    app: validate-env
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: validate-env
+  template:
+    metadata:
+      labels:
+        app: validate-env
+    spec:
+      containers:
+        - name: validate-env
+          image: neha16/env-validate:latest #TODO: change this
+          imagePullPolicy: Always
+          args:
+            - -certDir=/etc/webhook/certs
+            - -port=8443
+          volumeMounts:
+            - name: webhook-certs
+              mountPath: /etc/webhook/certs
+              readOnly: true
+      volumes:
+        - name: webhook-certs
+          secret:
+            secretName: validate-env-certs
