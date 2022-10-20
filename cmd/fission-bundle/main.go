@@ -20,10 +20,12 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"log"
 	"os"
 	"strconv"
 
 	docopt "github.com/docopt/docopt-go"
+	"github.com/fission/fission/pkg/webhook"
 
 	"go.uber.org/zap"
 
@@ -42,7 +44,20 @@ import (
 	"github.com/fission/fission/pkg/utils/otel"
 	"github.com/fission/fission/pkg/utils/profile"
 	"github.com/fission/fission/pkg/utils/signals"
+	"k8s.io/apimachinery/pkg/runtime"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 )
+
+var (
+	scheme = runtime.NewScheme()
+)
+
+func init() {
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+
+	//+kubebuilder:scaffold:scheme
+}
 
 func runController(ctx context.Context, logger *zap.Logger, port int) {
 	controller.Start(ctx, logger, port, false)
@@ -66,6 +81,10 @@ func runTimer(ctx context.Context, logger *zap.Logger, routerUrl string) error {
 
 func runMessageQueueMgr(ctx context.Context, logger *zap.Logger, routerUrl string) error {
 	return mqtrigger.Start(ctx, logger, routerUrl)
+}
+
+func runWebhook() error {
+	return webhook.Start()
 }
 
 // KEDA based MessageQueue Trigger Manager
@@ -224,6 +243,11 @@ Options:
 	executorUrl := getStringArgWithDefault(arguments["--executorUrl"], "http://executor.fission")
 	routerUrl := getStringArgWithDefault(arguments["--routerUrl"], "http://router.fission")
 	storageSvcUrl := getStringArgWithDefault(arguments["--storageSvcUrl"], "http://storagesvc.fission")
+
+	err = runWebhook()
+	if err != nil {
+		log.Println("error: ", err)
+	}
 
 	if arguments["--controllerPort"] != nil {
 		port := getPort(logger, arguments["--controllerPort"])

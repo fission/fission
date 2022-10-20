@@ -73,9 +73,9 @@ generate-crds: controller-gen-install
 
 # TODO: this is not thoroughly tested  
 generate-webhooks:  controller-gen-install
-	controller-gen rbac:roleName=manager-role crd webhook \
-	 paths=./pkg/admission-webhook-1 \
-	 output:crd:artifacts:config=config
+	controller-gen webhook \
+	 paths=./pkg/apis/core/v1 \
+	 output:crd:artifacts:config=pkg/admission-webhook/config
 
 create-crds:
 	@kubectl create -k crds/v1
