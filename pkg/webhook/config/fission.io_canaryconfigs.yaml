@@ -1,0 +1,80 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.9.2
+  creationTimestamp: null
+  name: canaryconfigs.fission.io
+spec:
+  group: fission.io
+  names:
+    kind: CanaryConfig
+    listKind: CanaryConfigList
+    plural: canaryconfigs
+    singular: canaryconfig
+  scope: Namespaced
+  versions:
+  - name: v1
+    schema:
+      openAPIV3Schema:
+        description: CanaryConfig is for canary deployment of two functions.
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: CanaryConfigSpec defines the canary configuration spec
+            properties:
+              duration:
+                description: 'Weight increment interval, string representation of
+                  time.Duration, ex : 1m, 2h, 2d (default: "2m")'
+                type: string
+              failureType:
+                description: FailureType refers to the type of failure
+                type: string
+              failurethreshold:
+                description: Threshold in percentage beyond which the new version
+                  of the function is considered unstable
+                type: integer
+              newfunction:
+                description: New version of the function
+                type: string
+              oldfunction:
+                description: Old stable version of the function
+                type: string
+              trigger:
+                description: HTTP trigger that this config references
+                type: string
+              weightincrement:
+                description: Weight increment step for function
+                type: integer
+            required:
+            - newfunction
+            - oldfunction
+            - trigger
+            type: object
+          status:
+            description: CanaryConfigStatus represents canary config status
+            properties:
+              status:
+                type: string
+            required:
+            - status
+            type: object
+        required:
+        - metadata
+        - spec
+        - status
+        type: object
+    served: true
+    storage: true

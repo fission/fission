@@ -1,0 +1,20 @@
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: selfsigned-issuer
+  namespace: default
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: selfsigned-cert
+  namespace: default
+spec:
+  secretName: validate-env-certs
+  dnsNames:
+    - validate-env-service.default.svc
+    - validate-env-service.default.svc.cluster.local
+  issuerRef:
+    name: selfsigned-issuer
