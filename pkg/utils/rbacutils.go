@@ -252,7 +252,7 @@ func SetupRoleBinding(ctx context.Context, logger *zap.Logger, k8sClient kuberne
 				zap.String("role_binding_namespace", roleBindingNs))
 			return AddSaToRoleBindingWithRetries(ctx, logger, k8sClient, roleBinding, roleBindingNs, sa, saNamespace, role, roleKind)
 		}
-		if rbObj.RoleRef.Name != role {
+		if rbObj.RoleRef.Name != role || rbObj.RoleRef.Kind != roleKind {
 			logger.Error("rolebinding with different role references exists",
 				zap.String("role_binding", rbObj.Name),
 				zap.String("role_binding_namespace", roleBindingNs),
