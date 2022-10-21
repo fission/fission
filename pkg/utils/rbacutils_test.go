@@ -30,12 +30,10 @@ func TestSetupRoleBinding(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error creating service account: %s", err.Error())
 	}
-
 	_, err = createClusterRole(ctx, clusterRole, kubernetesClient)
 	if err != nil {
 		t.Fatalf("Error creating cluster role: %s", err.Error())
 	}
-
 	err = SetupRoleBinding(ctx, logger, kubernetesClient, rolebinding, namespace, clusterRole, fv1.ClusterRole, serviceAccount, namespace)
 	assert.Nil(t, err, "error should be nil and new role binding will get created")
 
@@ -44,7 +42,6 @@ func TestSetupRoleBinding(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error deleting service account: %s", err.Error())
 	}
-
 	err = SetupRoleBinding(ctx, logger, kubernetesClient, rolebinding, namespace, clusterRole, fv1.ClusterRole, serviceAccount, namespace)
 	assert.Nil(t, err, "error should be nil and service account should add in rolebinding")
 
@@ -52,6 +49,12 @@ func TestSetupRoleBinding(t *testing.T) {
 	err = SetupRoleBinding(ctx, logger, kubernetesClient, rolebinding, namespace, clusterRole, fv1.ClusterRole, serviceAccount, namespace)
 	assert.Nil(t, err, "error should be nil and nothing to add")
 
+	//case 4 => check cluster role name in rolebinding should be same as defined in cluster role
+	rbObj, err := kubernetesClient.RbacV1().RoleBindings(namespace).Get(ctx, rolebinding, metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Role binding doesn't exists: %s", err.Error())
+	}
+	assert.Equal(t, rbObj.RoleRef.Name, clusterRole)
 }
 
 func createClusterRole(ctx context.Context, clusterRole string, kubernetesClient *fake.Clientset) (*v1.ClusterRole, error) {
