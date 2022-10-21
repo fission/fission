@@ -2,6 +2,7 @@ package utils
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -52,7 +53,7 @@ func TestSetupRoleBinding(t *testing.T) {
 	//case 4 => This must fail, if there is change in cluster-role-name
 	err = SetupRoleBinding(ctx, logger, kubernetesClient, rolebinding, namespace, "invalid-cluster-name", fv1.ClusterRole, serviceAccount, namespace)
 	assert.NotNil(t, err)
-	assert.Equal(t, err.Error(), "some issue occurred with rolebinding, delete existing rolebinding and try again")
+	assert.Equal(t, err.Error(), fmt.Sprintf("rolebinding %s in namespace %s exists with different roleref, retry by deleting existing rolebinding", rolebinding, namespace))
 }
 
 func createClusterRole(ctx context.Context, clusterRole string, kubernetesClient *fake.Clientset) (*v1.ClusterRole, error) {
