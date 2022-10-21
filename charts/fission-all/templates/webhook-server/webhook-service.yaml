@@ -11,8 +11,5 @@ spec:
   ports:
   - port: 80
     targetPort: 8888
-{{- if eq .Values.serviceType "NodePort" }}
-    nodePort: {{ .Values.webhookPort }}
-{{- end }}
   selector:
     svc: webhook-service

@@ -33,10 +33,6 @@ spec:
         args: ["--webhookPort", "9443"]
   
       serviceAccountName: fission-webhook
-      volumes:
-      - name: config-volume
-        configMap:
-          name: feature-config
 {{- if .Values.priorityClassName }}
       priorityClassName: {{ .Values.priorityClassName }}
 {{- end }}
