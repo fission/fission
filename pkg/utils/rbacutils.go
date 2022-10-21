@@ -252,6 +252,13 @@ func SetupRoleBinding(ctx context.Context, logger *zap.Logger, k8sClient kuberne
 				zap.String("role_binding_namespace", roleBindingNs))
 			return AddSaToRoleBindingWithRetries(ctx, logger, k8sClient, roleBinding, roleBindingNs, sa, saNamespace, role, roleKind)
 		}
+		if rbObj.RoleRef.Name != role {
+			logger.Error("mismatch of cluster role name in role binding and cluster role",
+				zap.String("role_binding_namespace", roleBindingNs),
+				zap.String("old_clutserRoleName", rbObj.RoleRef.Name),
+				zap.String("new_clutserRoleName", role))
+			return errors.New("some issue occurred with rolebinding, delete existing rolebinding and try again")
+		}
 		logger.Debug("service account already present in rolebinding so nothing to add",
 			zap.String("service_account_name", sa),
 			zap.String("service_account_namespace", saNamespace),
