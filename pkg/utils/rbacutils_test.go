@@ -51,10 +51,6 @@ func TestSetupRoleBinding(t *testing.T) {
 
 	//case 4 => This must fail, if there is change in cluster-role-name
 	err = SetupRoleBinding(ctx, logger, kubernetesClient, rolebinding, namespace, "invalid-cluster-name", fv1.ClusterRole, serviceAccount, namespace)
-	// rbObj, err := kubernetesClient.RbacV1().RoleBindings(namespace).Get(ctx, rolebinding, metav1.GetOptions{})
-	// if err != nil {
-	// 	t.Fatalf("Role binding doesn't exists: %s", err.Error())
-	// }
 	assert.NotNil(t, err)
 	assert.Equal(t, err.Error(), "some issue occurred with rolebinding, delete existing rolebinding and try again")
 }
