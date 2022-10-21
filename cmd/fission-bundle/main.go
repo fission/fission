@@ -25,7 +25,6 @@ import (
 	"strconv"
 
 	docopt "github.com/docopt/docopt-go"
-	"github.com/fission/fission/pkg/webhook"
 
 	"go.uber.org/zap"
 
@@ -44,19 +43,11 @@ import (
 	"github.com/fission/fission/pkg/utils/otel"
 	"github.com/fission/fission/pkg/utils/profile"
 	"github.com/fission/fission/pkg/utils/signals"
-	"k8s.io/apimachinery/pkg/runtime"
-	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"github.com/fission/fission/pkg/webhook"
 )
 
-var (
-	scheme = runtime.NewScheme()
-)
-
-func init() {
-	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-
-	//+kubebuilder:scaffold:scheme
+func runWebhook(ctx context.Context, logger *zap.Logger, port int) error {
+	return webhook.Start(ctx, logger, port)
 }
 
 func runController(ctx context.Context, logger *zap.Logger, port int) {
@@ -81,10 +72,6 @@ func runTimer(ctx context.Context, logger *zap.Logger, routerUrl string) error {
 
 func runMessageQueueMgr(ctx context.Context, logger *zap.Logger, routerUrl string) error {
 	return mqtrigger.Start(ctx, logger, routerUrl)
-}
-
-func runWebhook() error {
-	return webhook.Start()
 }
 
 // KEDA based MessageQueue Trigger Manager
@@ -195,10 +182,13 @@ Usage:
   fission-bundle --timer [--routerUrl=<url>]
   fission-bundle --mqt   [--routerUrl=<url>]
   fission-bundle --mqt_keda [--routerUrl=<url>]
+  fission-bundle --webhookPort
   fission-bundle --logger
   fission-bundle --version
+  
 Options:
   --controllerPort=<port>         Port that the controller should listen on.
+  --webhookPort=<port>         	  Port that the webhook should listen on.
   --routerPort=<port>             Port that the router should listen on.
   --executorPort=<port>           Port that the executor should listen on.
   --storageServicePort=<port>     Port that the storage service should listen on.
@@ -215,6 +205,7 @@ Options:
   --builderMgr                    Start builder manager.
   --version                       Print version information
 `
+	log.Println("We printed logger") // TODO: remove log
 	logger := loggerfactory.GetLogger()
 	defer exitWithSync(logger)
 
@@ -244,9 +235,12 @@ Options:
 	routerUrl := getStringArgWithDefault(arguments["--routerUrl"], "http://router.fission")
 	storageSvcUrl := getStringArgWithDefault(arguments["--storageSvcUrl"], "http://storagesvc.fission")
 
-	err = runWebhook()
-	if err != nil {
-		log.Println("error: ", err)
+	log.Println("We reached here!!!!!!")   // TODO: remove log
+	if arguments["--webhookPort"] != nil { // TODO: implement this
+		port := getPort(logger, arguments["--webhookPort"])
+		err = runWebhook(ctx, logger, port)
+		logger.Error("webhook server exited:", zap.Error(err))
+		return
 	}
 
 	if arguments["--controllerPort"] != nil {

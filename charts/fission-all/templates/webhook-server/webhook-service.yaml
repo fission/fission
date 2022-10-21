@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: webhook-service
+  labels:
+    svc: webhook-service
+    application: fission-api
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+spec:
+  type: {{ .Values.serviceType }}
+  ports:
+  - port: 80
+    targetPort: 8888
+{{- if eq .Values.serviceType "NodePort" }}
+    nodePort: {{ .Values.webhookPort }}
+{{- end }}
+  selector:
+    svc: webhook-service
