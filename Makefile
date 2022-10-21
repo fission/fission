@@ -73,7 +73,7 @@ generate-crds: controller-gen-install
 
 # TODO: this is not thoroughly tested  
 generate-webhooks:  controller-gen-install
-	controller-gen webhook \
+	controller-gen crd webhook \
 	 paths=./pkg/apis/core/v1 \
 	 output:crd:artifacts:config=pkg/admission-webhook/config
 

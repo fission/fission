@@ -17,22 +17,24 @@ limitations under the License.
 package webhook
 
 import (
+	"context"
 	"flag"
-	"fmt"
 	"log"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 
 	v1 "github.com/fission/fission/pkg/apis/core/v1"
+	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	optzap "sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 	//+kubebuilder:scaffold:imports
 )
@@ -48,8 +50,9 @@ func init() {
 	//+kubebuilder:scaffold:scheme
 }
 
-func Start() (err error) {
+func Start(ctx context.Context, logger *zap.Logger, port int) (err error) {
 
+	wLogger := logger.Named("webhook")
 	// var params HookParamters
 	var metricsAddr string
 	var enableLeaderElection bool
@@ -59,7 +62,7 @@ func Start() (err error) {
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
-	opts := zap.Options{
+	opts := optzap.Options{
 		Development: true,
 	}
 	opts.BindFlags(flag.CommandLine)
@@ -70,30 +73,34 @@ func Start() (err error) {
 	mgr, err := manager.New(config.GetConfigOrDie(), manager.Options{
 		Scheme:                 scheme,
 		MetricsBindAddress:     metricsAddr,
-		Port:                   9443,
+		Port:                   port, // TODO: implement this
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "1e55c7b8.fission.io",
 	})
 	if err != nil {
-		log.Println(err, "unable to set up overall controller manager")
+		wLogger.Error("unable to set up overall controller manager", zap.Error(err))
 		return err
 	}
 	log.Println("setting up manager done")
 	something := &v1.CanaryConfig{}
 
 	if err = something.SetupWebhookWithManager(mgr); err != nil {
-		fmt.Println("Error found")
 		log.Println("Error found: ", err)
-		setupLog.Error(err, "unable to create webhook", "webhook", "CanaryConfig")
+		wLogger.Error("unable to create webhook CanaryConfig", zap.Error(err))
 		return err
 	}
 
 	if err = (&v1.Environment{}).SetupWebhookWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create webhook", "webhook", "Environment")
+		wLogger.Error("unable to create webhook Environment", zap.Error(err))
 		return err
 	}
 
+	setupLog.Info("starting manager")
+	if err := mgr.Start(signals.SetupSignalHandler()); err != nil {
+		wLogger.Error("unable to run manager", zap.Error(err))
+		return err
+	}
 	// // Setup webhooks
 	// setupLog.Info("setting up webhook server")
 	// hookServer := mgr.GetWebhookServer()
@@ -106,12 +113,6 @@ func Start() (err error) {
 
 	// // hookServer.Register("/mutate-v1-pod", &webhook.Admission{Handler: &podAnnotator{Client: mgr.GetClient()}})
 	// hookServer.Register("environments/v1/validate", &webhook.Admission{Handler: &EnvValidator{Client: mgr.GetClient()}})
-
-	setupLog.Info("starting manager")
-	if err := mgr.Start(signals.SetupSignalHandler()); err != nil {
-		setupLog.Error(err, "unable to run manager")
-		return err
-	}
 
 	return nil
 }
