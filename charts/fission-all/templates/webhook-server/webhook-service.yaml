@@ -9,7 +9,7 @@ metadata:
 spec:
   type: {{ .Values.serviceType }}
   ports:
-  - port: 80
-    targetPort: 8888
+  - port: 443
+    targetPort: 9443
   selector:
     svc: webhook-service
