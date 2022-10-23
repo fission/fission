@@ -31,7 +31,14 @@ spec:
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
         args: ["--webhookPort", "9443"]
-  
+        volumeMounts:
+        - mountPath: /tmp/k8s-webhook-server/serving-certs
+          name: serving-certs
+          readOnly: true
+      volumes:
+      - name: serving-certs
+        secret:
+          secretName: certs
       serviceAccountName: fission-webhook
 {{- if .Values.priorityClassName }}
       priorityClassName: {{ .Values.priorityClassName }}

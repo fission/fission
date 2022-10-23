@@ -334,10 +334,10 @@ buildermgr:
     runAsUser: 10001
     runAsGroup: 10001
 
-## webhook is the component that validates API calls.
-## It contains validation and mutation for functions, triggers, environments, Kubernetes event watches, etc. 
+## controller is the component that the client talks to.
+## It contains CRUD APIs for functions, triggers, environments, Kubernetes event watches, etc. and proxy APIs to internal 3rd-party services.
 ##
-webhook:
+controller:
   ## Pod resources as:
   ##  resources:
   ##    limits:
@@ -361,11 +361,10 @@ webhook:
     runAsUser: 10001
     runAsGroup: 10001
 
-
-## controller is the component that the client talks to.
-## It contains CRUD APIs for functions, triggers, environments, Kubernetes event watches, etc. and proxy APIs to internal 3rd-party services.
+## webhook is the component that validates API calls.
+## It contains validation and mutation for functions, triggers, environments, Kubernetes event watches, etc. 
 ##
-controller:
+webhook:
   ## Pod resources as:
   ##  resources:
   ##    limits:
