@@ -20,7 +20,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"log"
 	"os"
 	"strconv"
 
@@ -182,13 +181,12 @@ Usage:
   fission-bundle --timer [--routerUrl=<url>]
   fission-bundle --mqt   [--routerUrl=<url>]
   fission-bundle --mqt_keda [--routerUrl=<url>]
-  fission-bundle --webhookPort
+  fission-bundle --webhookPort=<port>
   fission-bundle --logger
   fission-bundle --version
-  
 Options:
   --controllerPort=<port>         Port that the controller should listen on.
-  --webhookPort=<port>         	  Port that the webhook should listen on.
+  --webhookPort=<port>             Port that the webhook should listen on.
   --routerPort=<port>             Port that the router should listen on.
   --executorPort=<port>           Port that the executor should listen on.
   --storageServicePort=<port>     Port that the storage service should listen on.
@@ -205,7 +203,6 @@ Options:
   --builderMgr                    Start builder manager.
   --version                       Print version information
 `
-	log.Println("We printed logger") // TODO: remove log
 	logger := loggerfactory.GetLogger()
 	defer exitWithSync(logger)
 
@@ -218,7 +215,7 @@ Options:
 		logger.Error("failed to parse arguments", zap.Error(err))
 		return
 	}
-
+	logger.Info("the arguments have come")
 	shutdown, err := otel.InitProvider(ctx, logger, getServiceName(arguments))
 	if err != nil {
 		logger.Error("error initializing provider for OTLP", zap.Error(err), zap.Any("argument", arguments))
@@ -235,8 +232,7 @@ Options:
 	routerUrl := getStringArgWithDefault(arguments["--routerUrl"], "http://router.fission")
 	storageSvcUrl := getStringArgWithDefault(arguments["--storageSvcUrl"], "http://storagesvc.fission")
 
-	log.Println("We reached here!!!!!!")   // TODO: remove log
-	if arguments["--webhookPort"] != nil { // TODO: implement this
+	if arguments["--webhookPort"] != nil {
 		port := getPort(logger, arguments["--webhookPort"])
 		err = runWebhook(ctx, logger, port)
 		logger.Error("webhook server exited:", zap.Error(err))
