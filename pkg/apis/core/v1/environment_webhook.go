@@ -17,8 +17,6 @@ limitations under the License.
 package v1
 
 import (
-	"fmt"
-
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -59,8 +57,7 @@ func (r *Environment) ValidateCreate() error {
 	if err != nil {
 		return err
 	}
-	// TODO(user): fill in your validation logic upon object creation.
-	return fmt.Errorf("for try it should always fail")
+	return nil
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
