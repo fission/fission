@@ -36,18 +36,18 @@ type TimeTriggerLister interface {
 	TimeTriggerListerExpansion
 }
 
-// _timeTriggerLister implements the TimeTriggerLister interface.
-type _timeTriggerLister struct {
+// timeTriggerLister implements the TimeTriggerLister interface.
+type timeTriggerLister struct {
 	indexer cache.Indexer
 }
 
 // NewTimeTriggerLister returns a new TimeTriggerLister.
 func NewTimeTriggerLister(indexer cache.Indexer) TimeTriggerLister {
-	return &_timeTriggerLister{indexer: indexer}
+	return &timeTriggerLister{indexer: indexer}
 }
 
 // List lists all TimeTriggers in the indexer.
-func (s *_timeTriggerLister) List(selector labels.Selector) (ret []*v1.TimeTrigger, err error) {
+func (s *timeTriggerLister) List(selector labels.Selector) (ret []*v1.TimeTrigger, err error) {
 	err = cache.ListAll(s.indexer, selector, func(m interface{}) {
 		ret = append(ret, m.(*v1.TimeTrigger))
 	})
@@ -55,8 +55,8 @@ func (s *_timeTriggerLister) List(selector labels.Selector) (ret []*v1.TimeTrigg
 }
 
 // TimeTriggers returns an object that can list and get TimeTriggers.
-func (s *_timeTriggerLister) TimeTriggers(namespace string) TimeTriggerNamespaceLister {
-	return _timeTriggerNamespaceLister{indexer: s.indexer, namespace: namespace}
+func (s *timeTriggerLister) TimeTriggers(namespace string) TimeTriggerNamespaceLister {
+	return timeTriggerNamespaceLister{indexer: s.indexer, namespace: namespace}
 }
 
 // TimeTriggerNamespaceLister helps list and get TimeTriggers.
@@ -71,15 +71,15 @@ type TimeTriggerNamespaceLister interface {
 	TimeTriggerNamespaceListerExpansion
 }
 
-// _timeTriggerNamespaceLister implements the TimeTriggerNamespaceLister
+// timeTriggerNamespaceLister implements the TimeTriggerNamespaceLister
 // interface.
-type _timeTriggerNamespaceLister struct {
+type timeTriggerNamespaceLister struct {
 	indexer   cache.Indexer
 	namespace string
 }
 
 // List lists all TimeTriggers in the indexer for a given namespace.
-func (s _timeTriggerNamespaceLister) List(selector labels.Selector) (ret []*v1.TimeTrigger, err error) {
+func (s timeTriggerNamespaceLister) List(selector labels.Selector) (ret []*v1.TimeTrigger, err error) {
 	err = cache.ListAllByNamespace(s.indexer, s.namespace, selector, func(m interface{}) {
 		ret = append(ret, m.(*v1.TimeTrigger))
 	})
@@ -87,7 +87,7 @@ func (s _timeTriggerNamespaceLister) List(selector labels.Selector) (ret []*v1.T
 }
 
 // Get retrieves the TimeTrigger from the indexer for a given namespace and name.
-func (s _timeTriggerNamespaceLister) Get(name string) (*v1.TimeTrigger, error) {
+func (s timeTriggerNamespaceLister) Get(name string) (*v1.TimeTrigger, error) {
 	obj, exists, err := s.indexer.GetByKey(s.namespace + "/" + name)
 	if err != nil {
 		return nil, err

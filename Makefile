@@ -58,7 +58,8 @@ install-fission-cli:
 	mv dist/fission-cli_$(GOOS)_$(GOARCH)_v1/fission$(FISSION-CLI-SUFFIX) /usr/local/bin/fission
 
 ### Codegen
-codegen:
+codegen: controller-gen-install
+	@controller-gen object:headerFile="hack/boilerplate.txt" paths="./..."
 	@./hack/update-codegen.sh
 
 ### CRDs

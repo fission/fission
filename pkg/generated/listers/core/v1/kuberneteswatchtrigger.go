@@ -36,18 +36,18 @@ type KubernetesWatchTriggerLister interface {
 	KubernetesWatchTriggerListerExpansion
 }
 
-// _kubernetesWatchTriggerLister implements the KubernetesWatchTriggerLister interface.
-type _kubernetesWatchTriggerLister struct {
+// kubernetesWatchTriggerLister implements the KubernetesWatchTriggerLister interface.
+type kubernetesWatchTriggerLister struct {
 	indexer cache.Indexer
 }
 
 // NewKubernetesWatchTriggerLister returns a new KubernetesWatchTriggerLister.
 func NewKubernetesWatchTriggerLister(indexer cache.Indexer) KubernetesWatchTriggerLister {
-	return &_kubernetesWatchTriggerLister{indexer: indexer}
+	return &kubernetesWatchTriggerLister{indexer: indexer}
 }
 
 // List lists all KubernetesWatchTriggers in the indexer.
-func (s *_kubernetesWatchTriggerLister) List(selector labels.Selector) (ret []*v1.KubernetesWatchTrigger, err error) {
+func (s *kubernetesWatchTriggerLister) List(selector labels.Selector) (ret []*v1.KubernetesWatchTrigger, err error) {
 	err = cache.ListAll(s.indexer, selector, func(m interface{}) {
 		ret = append(ret, m.(*v1.KubernetesWatchTrigger))
 	})
@@ -55,8 +55,8 @@ func (s *_kubernetesWatchTriggerLister) List(selector labels.Selector) (ret []*v
 }
 
 // KubernetesWatchTriggers returns an object that can list and get KubernetesWatchTriggers.
-func (s *_kubernetesWatchTriggerLister) KubernetesWatchTriggers(namespace string) KubernetesWatchTriggerNamespaceLister {
-	return _kubernetesWatchTriggerNamespaceLister{indexer: s.indexer, namespace: namespace}
+func (s *kubernetesWatchTriggerLister) KubernetesWatchTriggers(namespace string) KubernetesWatchTriggerNamespaceLister {
+	return kubernetesWatchTriggerNamespaceLister{indexer: s.indexer, namespace: namespace}
 }
 
 // KubernetesWatchTriggerNamespaceLister helps list and get KubernetesWatchTriggers.
@@ -71,15 +71,15 @@ type KubernetesWatchTriggerNamespaceLister interface {
 	KubernetesWatchTriggerNamespaceListerExpansion
 }
 
-// _kubernetesWatchTriggerNamespaceLister implements the KubernetesWatchTriggerNamespaceLister
+// kubernetesWatchTriggerNamespaceLister implements the KubernetesWatchTriggerNamespaceLister
 // interface.
-type _kubernetesWatchTriggerNamespaceLister struct {
+type kubernetesWatchTriggerNamespaceLister struct {
 	indexer   cache.Indexer
 	namespace string
 }
 
 // List lists all KubernetesWatchTriggers in the indexer for a given namespace.
-func (s _kubernetesWatchTriggerNamespaceLister) List(selector labels.Selector) (ret []*v1.KubernetesWatchTrigger, err error) {
+func (s kubernetesWatchTriggerNamespaceLister) List(selector labels.Selector) (ret []*v1.KubernetesWatchTrigger, err error) {
 	err = cache.ListAllByNamespace(s.indexer, s.namespace, selector, func(m interface{}) {
 		ret = append(ret, m.(*v1.KubernetesWatchTrigger))
 	})
@@ -87,7 +87,7 @@ func (s _kubernetesWatchTriggerNamespaceLister) List(selector labels.Selector) (
 }
 
 // Get retrieves the KubernetesWatchTrigger from the indexer for a given namespace and name.
-func (s _kubernetesWatchTriggerNamespaceLister) Get(name string) (*v1.KubernetesWatchTrigger, error) {
+func (s kubernetesWatchTriggerNamespaceLister) Get(name string) (*v1.KubernetesWatchTrigger, error) {
 	obj, exists, err := s.indexer.GetByKey(s.namespace + "/" + name)
 	if err != nil {
 		return nil, err

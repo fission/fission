@@ -36,18 +36,18 @@ type FunctionLister interface {
 	FunctionListerExpansion
 }
 
-// _functionLister implements the FunctionLister interface.
-type _functionLister struct {
+// functionLister implements the FunctionLister interface.
+type functionLister struct {
 	indexer cache.Indexer
 }
 
 // NewFunctionLister returns a new FunctionLister.
 func NewFunctionLister(indexer cache.Indexer) FunctionLister {
-	return &_functionLister{indexer: indexer}
+	return &functionLister{indexer: indexer}
 }
 
 // List lists all Functions in the indexer.
-func (s *_functionLister) List(selector labels.Selector) (ret []*v1.Function, err error) {
+func (s *functionLister) List(selector labels.Selector) (ret []*v1.Function, err error) {
 	err = cache.ListAll(s.indexer, selector, func(m interface{}) {
 		ret = append(ret, m.(*v1.Function))
 	})
@@ -55,8 +55,8 @@ func (s *_functionLister) List(selector labels.Selector) (ret []*v1.Function, er
 }
 
 // Functions returns an object that can list and get Functions.
-func (s *_functionLister) Functions(namespace string) FunctionNamespaceLister {
-	return _functionNamespaceLister{indexer: s.indexer, namespace: namespace}
+func (s *functionLister) Functions(namespace string) FunctionNamespaceLister {
+	return functionNamespaceLister{indexer: s.indexer, namespace: namespace}
 }
 
 // FunctionNamespaceLister helps list and get Functions.
@@ -71,15 +71,15 @@ type FunctionNamespaceLister interface {
 	FunctionNamespaceListerExpansion
 }
 
-// _functionNamespaceLister implements the FunctionNamespaceLister
+// functionNamespaceLister implements the FunctionNamespaceLister
 // interface.
-type _functionNamespaceLister struct {
+type functionNamespaceLister struct {
 	indexer   cache.Indexer
 	namespace string
 }
 
 // List lists all Functions in the indexer for a given namespace.
-func (s _functionNamespaceLister) List(selector labels.Selector) (ret []*v1.Function, err error) {
+func (s functionNamespaceLister) List(selector labels.Selector) (ret []*v1.Function, err error) {
 	err = cache.ListAllByNamespace(s.indexer, s.namespace, selector, func(m interface{}) {
 		ret = append(ret, m.(*v1.Function))
 	})
@@ -87,7 +87,7 @@ func (s _functionNamespaceLister) List(selector labels.Selector) (ret []*v1.Func
 }
 
 // Get retrieves the Function from the indexer for a given namespace and name.
-func (s _functionNamespaceLister) Get(name string) (*v1.Function, error) {
+func (s functionNamespaceLister) Get(name string) (*v1.Function, error) {
 	obj, exists, err := s.indexer.GetByKey(s.namespace + "/" + name)
 	if err != nil {
 		return nil, err

@@ -39,7 +39,7 @@ type FunctionInformer interface {
 	Lister() v1.FunctionLister
 }
 
-type _functionInformer struct {
+type functionInformer struct {
 	factory          internalinterfaces.SharedInformerFactory
 	tweakListOptions internalinterfaces.TweakListOptionsFunc
 	namespace        string
@@ -77,14 +77,14 @@ func NewFilteredFunctionInformer(client versioned.Interface, namespace string, r
 	)
 }
 
-func (f *_functionInformer) defaultInformer(client versioned.Interface, resyncPeriod time.Duration) cache.SharedIndexInformer {
+func (f *functionInformer) defaultInformer(client versioned.Interface, resyncPeriod time.Duration) cache.SharedIndexInformer {
 	return NewFilteredFunctionInformer(client, f.namespace, resyncPeriod, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, f.tweakListOptions)
 }
 
-func (f *_functionInformer) Informer() cache.SharedIndexInformer {
+func (f *functionInformer) Informer() cache.SharedIndexInformer {
 	return f.factory.InformerFor(&corev1.Function{}, f.defaultInformer)
 }
 
-func (f *_functionInformer) Lister() v1.FunctionLister {
+func (f *functionInformer) Lister() v1.FunctionLister {
 	return v1.NewFunctionLister(f.Informer().GetIndexer())
 }

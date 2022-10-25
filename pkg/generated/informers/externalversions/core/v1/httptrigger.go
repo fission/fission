@@ -39,7 +39,7 @@ type HTTPTriggerInformer interface {
 	Lister() v1.HTTPTriggerLister
 }
 
-type _hTTPTriggerInformer struct {
+type hTTPTriggerInformer struct {
 	factory          internalinterfaces.SharedInformerFactory
 	tweakListOptions internalinterfaces.TweakListOptionsFunc
 	namespace        string
@@ -77,14 +77,14 @@ func NewFilteredHTTPTriggerInformer(client versioned.Interface, namespace string
 	)
 }
 
-func (f *_hTTPTriggerInformer) defaultInformer(client versioned.Interface, resyncPeriod time.Duration) cache.SharedIndexInformer {
+func (f *hTTPTriggerInformer) defaultInformer(client versioned.Interface, resyncPeriod time.Duration) cache.SharedIndexInformer {
 	return NewFilteredHTTPTriggerInformer(client, f.namespace, resyncPeriod, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, f.tweakListOptions)
 }
 
-func (f *_hTTPTriggerInformer) Informer() cache.SharedIndexInformer {
+func (f *hTTPTriggerInformer) Informer() cache.SharedIndexInformer {
 	return f.factory.InformerFor(&corev1.HTTPTrigger{}, f.defaultInformer)
 }
 
-func (f *_hTTPTriggerInformer) Lister() v1.HTTPTriggerLister {
+func (f *hTTPTriggerInformer) Lister() v1.HTTPTriggerLister {
 	return v1.NewHTTPTriggerLister(f.Informer().GetIndexer())
 }

@@ -36,18 +36,18 @@ type MessageQueueTriggerLister interface {
 	MessageQueueTriggerListerExpansion
 }
 
-// _messageQueueTriggerLister implements the MessageQueueTriggerLister interface.
-type _messageQueueTriggerLister struct {
+// messageQueueTriggerLister implements the MessageQueueTriggerLister interface.
+type messageQueueTriggerLister struct {
 	indexer cache.Indexer
 }
 
 // NewMessageQueueTriggerLister returns a new MessageQueueTriggerLister.
 func NewMessageQueueTriggerLister(indexer cache.Indexer) MessageQueueTriggerLister {
-	return &_messageQueueTriggerLister{indexer: indexer}
+	return &messageQueueTriggerLister{indexer: indexer}
 }
 
 // List lists all MessageQueueTriggers in the indexer.
-func (s *_messageQueueTriggerLister) List(selector labels.Selector) (ret []*v1.MessageQueueTrigger, err error) {
+func (s *messageQueueTriggerLister) List(selector labels.Selector) (ret []*v1.MessageQueueTrigger, err error) {
 	err = cache.ListAll(s.indexer, selector, func(m interface{}) {
 		ret = append(ret, m.(*v1.MessageQueueTrigger))
 	})
@@ -55,8 +55,8 @@ func (s *_messageQueueTriggerLister) List(selector labels.Selector) (ret []*v1.M
 }
 
 // MessageQueueTriggers returns an object that can list and get MessageQueueTriggers.
-func (s *_messageQueueTriggerLister) MessageQueueTriggers(namespace string) MessageQueueTriggerNamespaceLister {
-	return _messageQueueTriggerNamespaceLister{indexer: s.indexer, namespace: namespace}
+func (s *messageQueueTriggerLister) MessageQueueTriggers(namespace string) MessageQueueTriggerNamespaceLister {
+	return messageQueueTriggerNamespaceLister{indexer: s.indexer, namespace: namespace}
 }
 
 // MessageQueueTriggerNamespaceLister helps list and get MessageQueueTriggers.
@@ -71,15 +71,15 @@ type MessageQueueTriggerNamespaceLister interface {
 	MessageQueueTriggerNamespaceListerExpansion
 }
 
-// _messageQueueTriggerNamespaceLister implements the MessageQueueTriggerNamespaceLister
+// messageQueueTriggerNamespaceLister implements the MessageQueueTriggerNamespaceLister
 // interface.
-type _messageQueueTriggerNamespaceLister struct {
+type messageQueueTriggerNamespaceLister struct {
 	indexer   cache.Indexer
 	namespace string
 }
 
 // List lists all MessageQueueTriggers in the indexer for a given namespace.
-func (s _messageQueueTriggerNamespaceLister) List(selector labels.Selector) (ret []*v1.MessageQueueTrigger, err error) {
+func (s messageQueueTriggerNamespaceLister) List(selector labels.Selector) (ret []*v1.MessageQueueTrigger, err error) {
 	err = cache.ListAllByNamespace(s.indexer, s.namespace, selector, func(m interface{}) {
 		ret = append(ret, m.(*v1.MessageQueueTrigger))
 	})
@@ -87,7 +87,7 @@ func (s _messageQueueTriggerNamespaceLister) List(selector labels.Selector) (ret
 }
 
 // Get retrieves the MessageQueueTrigger from the indexer for a given namespace and name.
-func (s _messageQueueTriggerNamespaceLister) Get(name string) (*v1.MessageQueueTrigger, error) {
+func (s messageQueueTriggerNamespaceLister) Get(name string) (*v1.MessageQueueTrigger, error) {
 	obj, exists, err := s.indexer.GetByKey(s.namespace + "/" + name)
 	if err != nil {
 		return nil, err

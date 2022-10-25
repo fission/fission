@@ -39,7 +39,7 @@ type TimeTriggerInformer interface {
 	Lister() v1.TimeTriggerLister
 }
 
-type _timeTriggerInformer struct {
+type timeTriggerInformer struct {
 	factory          internalinterfaces.SharedInformerFactory
 	tweakListOptions internalinterfaces.TweakListOptionsFunc
 	namespace        string
@@ -77,14 +77,14 @@ func NewFilteredTimeTriggerInformer(client versioned.Interface, namespace string
 	)
 }
 
-func (f *_timeTriggerInformer) defaultInformer(client versioned.Interface, resyncPeriod time.Duration) cache.SharedIndexInformer {
+func (f *timeTriggerInformer) defaultInformer(client versioned.Interface, resyncPeriod time.Duration) cache.SharedIndexInformer {
 	return NewFilteredTimeTriggerInformer(client, f.namespace, resyncPeriod, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, f.tweakListOptions)
 }
 
-func (f *_timeTriggerInformer) Informer() cache.SharedIndexInformer {
+func (f *timeTriggerInformer) Informer() cache.SharedIndexInformer {
 	return f.factory.InformerFor(&corev1.TimeTrigger{}, f.defaultInformer)
 }
 
-func (f *_timeTriggerInformer) Lister() v1.TimeTriggerLister {
+func (f *timeTriggerInformer) Lister() v1.TimeTriggerLister {
 	return v1.NewTimeTriggerLister(f.Informer().GetIndexer())
 }
