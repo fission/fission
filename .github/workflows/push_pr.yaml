@@ -122,6 +122,7 @@ jobs:
         run: ./test/kind_CI.sh
 
       - name: Collect Fission Dump
+        timeout-minutes: 5
         if: ${{ always() }}
         run: |
           command -v fission && fission support dump
