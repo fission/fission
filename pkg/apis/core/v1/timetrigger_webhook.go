@@ -53,8 +53,10 @@ var _ webhook.Validator = &TimeTrigger{}
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type
 func (r *TimeTrigger) ValidateCreate() error {
 	timetriggerlog.Info("validate create", "name", r.Name)
-
-	// TODO(user): fill in your validation logic upon object creation.
+	err := r.Validate()
+	if err != nil {
+		return err
+	}
 	return nil
 }
 

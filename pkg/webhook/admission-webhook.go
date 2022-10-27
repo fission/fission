@@ -18,7 +18,6 @@ package webhook
 
 import (
 	"context"
-	"log"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -34,59 +33,59 @@ import (
 	//+kubebuilder:scaffold:imports
 )
 
-// var (
-// 	scheme   = runtime.NewScheme()
-// 	setupLog = ctrl.Log.WithName("setup")
-// )
-
-// func init() {
-// 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-
-// 	//+kubebuilder:scaffold:scheme
-// }
-
 func Start(ctx context.Context, logger *zap.Logger, port int) (err error) {
 
 	wLogger := logger.Named("webhook")
-	// var params HookParamters
-	// var metricsAddr string
-	// var enableLeaderElection bool
-	// var probeAddr string
-	// flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
-	// flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
-	// flag.BoolVar(&enableLeaderElection, "leader-elect", false,
-	// 	"Enable leader election for controller manager. "+
-	// 		"Enabling this will ensure there is only one active controller manager.")
-	// opts := optzap.Options{
-	// 	Development: true,
-	// }
-	// opts.BindFlags(flag.CommandLine)
-	// flag.Parse()
 
 	// Setup a Manager
-	log.Println("setting up manager")
 	mgr, err := manager.New(config.GetConfigOrDie(), manager.Options{
 		Scheme: scheme.Scheme,
-		// MetricsBindAddress: metricsAddr,
-		Port: port, // TODO: implement this
-		// HealthProbeBindAddress: probeAddr,
-		// LeaderElection:         enableLeaderElection,
-		// LeaderElectionID:       "1e55c7b8.fission.io",
+		Port:   port,
 	})
 	if err != nil {
 		wLogger.Error("unable to set up overall controller manager", zap.Error(err))
 		return err
 	}
-	log.Println("setting up manager done")
-	something := &v1.CanaryConfig{}
 
-	if err = something.SetupWebhookWithManager(mgr); err != nil {
-		log.Println("Error found: ", err)
+	// Setup webhooks
+	wLogger.Info("setting up webhook server")
+
+	if err = (&v1.CanaryConfig{}).SetupWebhookWithManager(mgr); err != nil {
 		wLogger.Error("unable to create webhook CanaryConfig", zap.Error(err))
 		return err
 	}
 
 	if err = (&v1.Environment{}).SetupWebhookWithManager(mgr); err != nil {
+		wLogger.Error("unable to create webhook Environment", zap.Error(err))
+		return err
+	}
+
+	if err = (&v1.Package{}).SetupWebhookWithManager(mgr); err != nil {
+		wLogger.Error("unable to create webhook Environment", zap.Error(err))
+		return err
+	}
+
+	if err = (&v1.Function{}).SetupWebhookWithManager(mgr); err != nil {
+		wLogger.Error("unable to create webhook Environment", zap.Error(err))
+		return err
+	}
+
+	if err = (&v1.HTTPTrigger{}).SetupWebhookWithManager(mgr); err != nil {
+		wLogger.Error("unable to create webhook Environment", zap.Error(err))
+		return err
+	}
+
+	if err = (&v1.MessageQueueTrigger{}).SetupWebhookWithManager(mgr); err != nil {
+		wLogger.Error("unable to create webhook Environment", zap.Error(err))
+		return err
+	}
+
+	if err = (&v1.TimeTrigger{}).SetupWebhookWithManager(mgr); err != nil {
+		wLogger.Error("unable to create webhook Environment", zap.Error(err))
+		return err
+	}
+
+	if err = (&v1.KubernetesWatchTrigger{}).SetupWebhookWithManager(mgr); err != nil {
 		wLogger.Error("unable to create webhook Environment", zap.Error(err))
 		return err
 	}
