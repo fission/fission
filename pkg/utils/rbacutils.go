@@ -252,6 +252,16 @@ func SetupRoleBinding(ctx context.Context, logger *zap.Logger, k8sClient kuberne
 				zap.String("role_binding_namespace", roleBindingNs))
 			return AddSaToRoleBindingWithRetries(ctx, logger, k8sClient, roleBinding, roleBindingNs, sa, saNamespace, role, roleKind)
 		}
+		if rbObj.RoleRef.Name != role || rbObj.RoleRef.Kind != roleKind {
+			logger.Error("rolebinding with different role references exists",
+				zap.String("role_binding", rbObj.Name),
+				zap.String("role_binding_namespace", roleBindingNs),
+				zap.String("roleref", role),
+				zap.String("roleref_kind", roleKind),
+				zap.String("old_roleref", rbObj.RoleRef.Name),
+				zap.String("old_roleref_kind", rbObj.RoleRef.Kind))
+			return fmt.Errorf("rolebinding %s in namespace %s exists with different roleref, retry by deleting existing rolebinding", rbObj.Name, roleBindingNs)
+		}
 		logger.Debug("service account already present in rolebinding so nothing to add",
 			zap.String("service_account_name", sa),
 			zap.String("service_account_namespace", saNamespace),
