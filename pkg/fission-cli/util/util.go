@@ -509,7 +509,8 @@ func GetResourceNamespace(input cli.Input, deprecatedFlag string) (namespace, cu
 			}
 		}
 		if currentNS == "" {
-			return namespace, currentNS, errors.Errorf("either set current-context or provide namespace with --namespace flag")
+			// if no namespace is available then set default namespace as current namespace
+			currentNS = metav1.NamespaceDefault
 		}
 	}
 
