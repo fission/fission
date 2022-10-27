@@ -53,8 +53,10 @@ var _ webhook.Validator = &MessageQueueTrigger{}
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type
 func (r *MessageQueueTrigger) ValidateCreate() error {
 	messagequeuetriggerlog.Info("validate create", "name", r.Name)
-
-	// TODO(user): fill in your validation logic upon object creation.
+	err := r.Validate()
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
