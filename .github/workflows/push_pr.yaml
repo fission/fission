@@ -22,8 +22,8 @@ on:
   workflow_dispatch:
 
 env:
-  HELM_VERSION: v3.9.0
-  KIND_VERSION: v0.14.0
+  HELM_VERSION: v3.10.1
+  KIND_VERSION: v0.17.0
 
 jobs:
   # Job to run change detection
@@ -33,7 +33,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        kindversion: ["v1.19.16", "v1.20.15", "v1.21.12"]
+        kindversion: ["v1.19.16", "v1.20.15", "v1.21.14"]
         os: [ubuntu-latest]
     steps:
       - name: Checkout sources
