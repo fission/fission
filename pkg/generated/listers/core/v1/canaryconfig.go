@@ -36,18 +36,18 @@ type CanaryConfigLister interface {
 	CanaryConfigListerExpansion
 }
 
-// _canaryConfigLister implements the CanaryConfigLister interface.
-type _canaryConfigLister struct {
+// canaryConfigLister implements the CanaryConfigLister interface.
+type canaryConfigLister struct {
 	indexer cache.Indexer
 }
 
 // NewCanaryConfigLister returns a new CanaryConfigLister.
 func NewCanaryConfigLister(indexer cache.Indexer) CanaryConfigLister {
-	return &_canaryConfigLister{indexer: indexer}
+	return &canaryConfigLister{indexer: indexer}
 }
 
 // List lists all CanaryConfigs in the indexer.
-func (s *_canaryConfigLister) List(selector labels.Selector) (ret []*v1.CanaryConfig, err error) {
+func (s *canaryConfigLister) List(selector labels.Selector) (ret []*v1.CanaryConfig, err error) {
 	err = cache.ListAll(s.indexer, selector, func(m interface{}) {
 		ret = append(ret, m.(*v1.CanaryConfig))
 	})
@@ -55,8 +55,8 @@ func (s *_canaryConfigLister) List(selector labels.Selector) (ret []*v1.CanaryCo
 }
 
 // CanaryConfigs returns an object that can list and get CanaryConfigs.
-func (s *_canaryConfigLister) CanaryConfigs(namespace string) CanaryConfigNamespaceLister {
-	return _canaryConfigNamespaceLister{indexer: s.indexer, namespace: namespace}
+func (s *canaryConfigLister) CanaryConfigs(namespace string) CanaryConfigNamespaceLister {
+	return canaryConfigNamespaceLister{indexer: s.indexer, namespace: namespace}
 }
 
 // CanaryConfigNamespaceLister helps list and get CanaryConfigs.
@@ -71,15 +71,15 @@ type CanaryConfigNamespaceLister interface {
 	CanaryConfigNamespaceListerExpansion
 }
 
-// _canaryConfigNamespaceLister implements the CanaryConfigNamespaceLister
+// canaryConfigNamespaceLister implements the CanaryConfigNamespaceLister
 // interface.
-type _canaryConfigNamespaceLister struct {
+type canaryConfigNamespaceLister struct {
 	indexer   cache.Indexer
 	namespace string
 }
 
 // List lists all CanaryConfigs in the indexer for a given namespace.
-func (s _canaryConfigNamespaceLister) List(selector labels.Selector) (ret []*v1.CanaryConfig, err error) {
+func (s canaryConfigNamespaceLister) List(selector labels.Selector) (ret []*v1.CanaryConfig, err error) {
 	err = cache.ListAllByNamespace(s.indexer, s.namespace, selector, func(m interface{}) {
 		ret = append(ret, m.(*v1.CanaryConfig))
 	})
@@ -87,7 +87,7 @@ func (s _canaryConfigNamespaceLister) List(selector labels.Selector) (ret []*v1.
 }
 
 // Get retrieves the CanaryConfig from the indexer for a given namespace and name.
-func (s _canaryConfigNamespaceLister) Get(name string) (*v1.CanaryConfig, error) {
+func (s canaryConfigNamespaceLister) Get(name string) (*v1.CanaryConfig, error) {
 	obj, exists, err := s.indexer.GetByKey(s.namespace + "/" + name)
 	if err != nil {
 		return nil, err

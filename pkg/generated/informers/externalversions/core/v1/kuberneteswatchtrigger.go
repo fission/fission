@@ -39,7 +39,7 @@ type KubernetesWatchTriggerInformer interface {
 	Lister() v1.KubernetesWatchTriggerLister
 }
 
-type _kubernetesWatchTriggerInformer struct {
+type kubernetesWatchTriggerInformer struct {
 	factory          internalinterfaces.SharedInformerFactory
 	tweakListOptions internalinterfaces.TweakListOptionsFunc
 	namespace        string
@@ -77,14 +77,14 @@ func NewFilteredKubernetesWatchTriggerInformer(client versioned.Interface, names
 	)
 }
 
-func (f *_kubernetesWatchTriggerInformer) defaultInformer(client versioned.Interface, resyncPeriod time.Duration) cache.SharedIndexInformer {
+func (f *kubernetesWatchTriggerInformer) defaultInformer(client versioned.Interface, resyncPeriod time.Duration) cache.SharedIndexInformer {
 	return NewFilteredKubernetesWatchTriggerInformer(client, f.namespace, resyncPeriod, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, f.tweakListOptions)
 }
 
-func (f *_kubernetesWatchTriggerInformer) Informer() cache.SharedIndexInformer {
+func (f *kubernetesWatchTriggerInformer) Informer() cache.SharedIndexInformer {
 	return f.factory.InformerFor(&corev1.KubernetesWatchTrigger{}, f.defaultInformer)
 }
 
-func (f *_kubernetesWatchTriggerInformer) Lister() v1.KubernetesWatchTriggerLister {
+func (f *kubernetesWatchTriggerInformer) Lister() v1.KubernetesWatchTriggerLister {
 	return v1.NewKubernetesWatchTriggerLister(f.Informer().GetIndexer())
 }

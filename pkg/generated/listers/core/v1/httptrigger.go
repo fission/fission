@@ -36,18 +36,18 @@ type HTTPTriggerLister interface {
 	HTTPTriggerListerExpansion
 }
 
-// _hTTPTriggerLister implements the HTTPTriggerLister interface.
-type _hTTPTriggerLister struct {
+// hTTPTriggerLister implements the HTTPTriggerLister interface.
+type hTTPTriggerLister struct {
 	indexer cache.Indexer
 }
 
 // NewHTTPTriggerLister returns a new HTTPTriggerLister.
 func NewHTTPTriggerLister(indexer cache.Indexer) HTTPTriggerLister {
-	return &_hTTPTriggerLister{indexer: indexer}
+	return &hTTPTriggerLister{indexer: indexer}
 }
 
 // List lists all HTTPTriggers in the indexer.
-func (s *_hTTPTriggerLister) List(selector labels.Selector) (ret []*v1.HTTPTrigger, err error) {
+func (s *hTTPTriggerLister) List(selector labels.Selector) (ret []*v1.HTTPTrigger, err error) {
 	err = cache.ListAll(s.indexer, selector, func(m interface{}) {
 		ret = append(ret, m.(*v1.HTTPTrigger))
 	})
@@ -55,8 +55,8 @@ func (s *_hTTPTriggerLister) List(selector labels.Selector) (ret []*v1.HTTPTrigg
 }
 
 // HTTPTriggers returns an object that can list and get HTTPTriggers.
-func (s *_hTTPTriggerLister) HTTPTriggers(namespace string) HTTPTriggerNamespaceLister {
-	return _hTTPTriggerNamespaceLister{indexer: s.indexer, namespace: namespace}
+func (s *hTTPTriggerLister) HTTPTriggers(namespace string) HTTPTriggerNamespaceLister {
+	return hTTPTriggerNamespaceLister{indexer: s.indexer, namespace: namespace}
 }
 
 // HTTPTriggerNamespaceLister helps list and get HTTPTriggers.
@@ -71,15 +71,15 @@ type HTTPTriggerNamespaceLister interface {
 	HTTPTriggerNamespaceListerExpansion
 }
 
-// _hTTPTriggerNamespaceLister implements the HTTPTriggerNamespaceLister
+// hTTPTriggerNamespaceLister implements the HTTPTriggerNamespaceLister
 // interface.
-type _hTTPTriggerNamespaceLister struct {
+type hTTPTriggerNamespaceLister struct {
 	indexer   cache.Indexer
 	namespace string
 }
 
 // List lists all HTTPTriggers in the indexer for a given namespace.
-func (s _hTTPTriggerNamespaceLister) List(selector labels.Selector) (ret []*v1.HTTPTrigger, err error) {
+func (s hTTPTriggerNamespaceLister) List(selector labels.Selector) (ret []*v1.HTTPTrigger, err error) {
 	err = cache.ListAllByNamespace(s.indexer, s.namespace, selector, func(m interface{}) {
 		ret = append(ret, m.(*v1.HTTPTrigger))
 	})
@@ -87,7 +87,7 @@ func (s _hTTPTriggerNamespaceLister) List(selector labels.Selector) (ret []*v1.H
 }
 
 // Get retrieves the HTTPTrigger from the indexer for a given namespace and name.
-func (s _hTTPTriggerNamespaceLister) Get(name string) (*v1.HTTPTrigger, error) {
+func (s hTTPTriggerNamespaceLister) Get(name string) (*v1.HTTPTrigger, error) {
 	obj, exists, err := s.indexer.GetByKey(s.namespace + "/" + name)
 	if err != nil {
 		return nil, err

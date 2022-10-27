@@ -22,8 +22,8 @@ on:
   workflow_dispatch:
 
 env:
-  HELM_VERSION: v3.9.0
-  KIND_VERSION: v0.14.0
+  HELM_VERSION: v3.10.1
+  KIND_VERSION: v0.17.0
 
 jobs:
   upgrade-test:

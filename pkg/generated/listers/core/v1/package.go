@@ -36,18 +36,18 @@ type PackageLister interface {
 	PackageListerExpansion
 }
 
-// _packageLister implements the PackageLister interface.
-type _packageLister struct {
+// packageLister implements the PackageLister interface.
+type packageLister struct {
 	indexer cache.Indexer
 }
 
 // NewPackageLister returns a new PackageLister.
 func NewPackageLister(indexer cache.Indexer) PackageLister {
-	return &_packageLister{indexer: indexer}
+	return &packageLister{indexer: indexer}
 }
 
 // List lists all Packages in the indexer.
-func (s *_packageLister) List(selector labels.Selector) (ret []*v1.Package, err error) {
+func (s *packageLister) List(selector labels.Selector) (ret []*v1.Package, err error) {
 	err = cache.ListAll(s.indexer, selector, func(m interface{}) {
 		ret = append(ret, m.(*v1.Package))
 	})
@@ -55,8 +55,8 @@ func (s *_packageLister) List(selector labels.Selector) (ret []*v1.Package, err 
 }
 
 // Packages returns an object that can list and get Packages.
-func (s *_packageLister) Packages(namespace string) PackageNamespaceLister {
-	return _packageNamespaceLister{indexer: s.indexer, namespace: namespace}
+func (s *packageLister) Packages(namespace string) PackageNamespaceLister {
+	return packageNamespaceLister{indexer: s.indexer, namespace: namespace}
 }
 
 // PackageNamespaceLister helps list and get Packages.
@@ -71,15 +71,15 @@ type PackageNamespaceLister interface {
 	PackageNamespaceListerExpansion
 }
 
-// _packageNamespaceLister implements the PackageNamespaceLister
+// packageNamespaceLister implements the PackageNamespaceLister
 // interface.
-type _packageNamespaceLister struct {
+type packageNamespaceLister struct {
 	indexer   cache.Indexer
 	namespace string
 }
 
 // List lists all Packages in the indexer for a given namespace.
-func (s _packageNamespaceLister) List(selector labels.Selector) (ret []*v1.Package, err error) {
+func (s packageNamespaceLister) List(selector labels.Selector) (ret []*v1.Package, err error) {
 	err = cache.ListAllByNamespace(s.indexer, s.namespace, selector, func(m interface{}) {
 		ret = append(ret, m.(*v1.Package))
 	})
@@ -87,7 +87,7 @@ func (s _packageNamespaceLister) List(selector labels.Selector) (ret []*v1.Packa
 }
 
 // Get retrieves the Package from the indexer for a given namespace and name.
-func (s _packageNamespaceLister) Get(name string) (*v1.Package, error) {
+func (s packageNamespaceLister) Get(name string) (*v1.Package, error) {
 	obj, exists, err := s.indexer.GetByKey(s.namespace + "/" + name)
 	if err != nil {
 		return nil, err

@@ -39,7 +39,7 @@ type CanaryConfigInformer interface {
 	Lister() v1.CanaryConfigLister
 }
 
-type _canaryConfigInformer struct {
+type canaryConfigInformer struct {
 	factory          internalinterfaces.SharedInformerFactory
 	tweakListOptions internalinterfaces.TweakListOptionsFunc
 	namespace        string
@@ -77,14 +77,14 @@ func NewFilteredCanaryConfigInformer(client versioned.Interface, namespace strin
 	)
 }
 
-func (f *_canaryConfigInformer) defaultInformer(client versioned.Interface, resyncPeriod time.Duration) cache.SharedIndexInformer {
+func (f *canaryConfigInformer) defaultInformer(client versioned.Interface, resyncPeriod time.Duration) cache.SharedIndexInformer {
 	return NewFilteredCanaryConfigInformer(client, f.namespace, resyncPeriod, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, f.tweakListOptions)
 }
 
-func (f *_canaryConfigInformer) Informer() cache.SharedIndexInformer {
+func (f *canaryConfigInformer) Informer() cache.SharedIndexInformer {
 	return f.factory.InformerFor(&corev1.CanaryConfig{}, f.defaultInformer)
 }
 
-func (f *_canaryConfigInformer) Lister() v1.CanaryConfigLister {
+func (f *canaryConfigInformer) Lister() v1.CanaryConfigLister {
 	return v1.NewCanaryConfigLister(f.Informer().GetIndexer())
 }

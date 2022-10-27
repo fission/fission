@@ -6,7 +6,7 @@ on:
       - v2.**
 
 env:
-  KIND_VERSION: v0.14.0
+  KIND_VERSION: v0.17.0
   KIND_NODE_IMAGE_TAG: v1.19.16
 
 jobs:

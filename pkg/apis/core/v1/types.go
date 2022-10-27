@@ -20,7 +20,6 @@ import (
 	asv2beta2 "k8s.io/api/autoscaling/v2beta2"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 //
@@ -41,7 +40,6 @@ type (
 
 	// Package Think of these as function-level images.
 	// +genclient
-	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 	// +kubebuilder:object:root=true
 	// +kubebuilder:resource:singular="package",scope="Namespaced",shortName={pkg}
 	Package struct {
@@ -56,7 +54,6 @@ type (
 	}
 
 	// PackageList is a list of Packages.
-	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 	// +kubebuilder:object:root=true
 	PackageList struct {
 		metav1.TypeMeta `json:",inline"`
@@ -66,7 +63,6 @@ type (
 
 	// Function is function runs within environment runtime with given package and secrets/configmaps.
 	// +genclient
-	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 	// +kubebuilder:object:root=true
 	// +kubebuilder:subresource:status
 	// +kubebuilder:resource:singular="function",scope="Namespaced",shortName={fn}
@@ -77,7 +73,6 @@ type (
 	}
 
 	// FunctionList is a list of Functions.
-	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 	//+kubebuilder:object:root=true
 	FunctionList struct {
 		metav1.TypeMeta `json:",inline"`
@@ -87,7 +82,6 @@ type (
 
 	// Environment is environment for building and running user functions.
 	// +genclient
-	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 	// +kubebuilder:object:root=true
 	// +kubebuilder:subresource:status
 	Environment struct {
@@ -97,7 +91,6 @@ type (
 	}
 
 	// EnvironmentList is a list of Environments.
-	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 	//+kubebuilder:object:root=true
 	EnvironmentList struct {
 		metav1.TypeMeta `json:",inline"`
@@ -107,7 +100,6 @@ type (
 
 	// HTTPTrigger is the trigger invokes user functions when receiving HTTP requests.
 	// +genclient
-	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 	// +kubebuilder:object:root=true
 	// +kubebuilder:subresource:status
 	HTTPTrigger struct {
@@ -117,7 +109,6 @@ type (
 	}
 
 	// HTTPTriggerList is a list of HTTPTriggers
-	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 	//+kubebuilder:object:root=true
 	HTTPTriggerList struct {
 		metav1.TypeMeta `json:",inline"`
@@ -127,7 +118,6 @@ type (
 
 	// KubernetesWatchTrigger watches kubernetes resource events and invokes functions.
 	// +genclient
-	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 	// +kubebuilder:object:root=true
 	// +kubebuilder:subresource:status
 	KubernetesWatchTrigger struct {
@@ -137,7 +127,6 @@ type (
 	}
 
 	// KubernetesWatchTriggerList is a list of KubernetesWatchTriggers
-	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 	// +kubebuilder:object:root=true
 	KubernetesWatchTriggerList struct {
 		metav1.TypeMeta `json:",inline"`
@@ -147,7 +136,6 @@ type (
 
 	// TimeTrigger invokes functions based on given cron schedule.
 	// +genclient
-	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 	// +kubebuilder:object:root=true
 	// +kubebuilder:subresource:status
 	TimeTrigger struct {
@@ -158,7 +146,6 @@ type (
 	}
 
 	// TimeTriggerList is a list of TimeTriggers.
-	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 	// +kubebuilder:object:root=true
 	TimeTriggerList struct {
 		metav1.TypeMeta `json:",inline"`
@@ -169,7 +156,6 @@ type (
 
 	// MessageQueueTrigger invokes functions when messages arrive to certain topic that trigger subscribes to.
 	// +genclient
-	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 	// +kubebuilder:object:root=true
 	MessageQueueTrigger struct {
 		metav1.TypeMeta   `json:",inline"`
@@ -179,7 +165,6 @@ type (
 	}
 
 	// MessageQueueTriggerList is a list of MessageQueueTriggers.
-	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 	// +kubebuilder:object:root=true
 	MessageQueueTriggerList struct {
 		metav1.TypeMeta `json:",inline"`
@@ -189,7 +174,6 @@ type (
 
 	// CanaryConfig is for canary deployment of two functions.
 	// +genclient
-	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 	// +kubebuilder:object:root=true
 	CanaryConfig struct {
 		metav1.TypeMeta   `json:",inline"`
@@ -199,7 +183,6 @@ type (
 	}
 
 	// CanaryConfigList is a list of CanaryConfigs.
-	// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 	// +kubebuilder:object:root=true
 	CanaryConfigList struct {
 		metav1.TypeMeta `json:",inline"`
@@ -861,13 +844,6 @@ type (
 	// CanaryConfigStatus represents canary config status
 	CanaryConfigStatus struct {
 		Status string `json:"status"`
-	}
-
-	// MetadataAccessor lets you work with object metadata and type metadata
-	// from any of the versioned or internal API objects.
-	MetadataAccessor interface {
-		GetObjectKind() schema.ObjectKind
-		GetObjectMeta() metav1.Object
 	}
 
 	// AuthLogin defines the body for router login

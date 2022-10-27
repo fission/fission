@@ -55,40 +55,40 @@ func New(f internalinterfaces.SharedInformerFactory, namespace string, tweakList
 
 // CanaryConfigs returns a CanaryConfigInformer.
 func (v *version) CanaryConfigs() CanaryConfigInformer {
-	return &_canaryConfigInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
+	return &canaryConfigInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }
 
 // Environments returns a EnvironmentInformer.
 func (v *version) Environments() EnvironmentInformer {
-	return &_environmentInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
+	return &environmentInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }
 
 // Functions returns a FunctionInformer.
 func (v *version) Functions() FunctionInformer {
-	return &_functionInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
+	return &functionInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }
 
 // HTTPTriggers returns a HTTPTriggerInformer.
 func (v *version) HTTPTriggers() HTTPTriggerInformer {
-	return &_hTTPTriggerInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
+	return &hTTPTriggerInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }
 
 // KubernetesWatchTriggers returns a KubernetesWatchTriggerInformer.
 func (v *version) KubernetesWatchTriggers() KubernetesWatchTriggerInformer {
-	return &_kubernetesWatchTriggerInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
+	return &kubernetesWatchTriggerInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }
 
 // MessageQueueTriggers returns a MessageQueueTriggerInformer.
 func (v *version) MessageQueueTriggers() MessageQueueTriggerInformer {
-	return &_messageQueueTriggerInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
+	return &messageQueueTriggerInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }
 
 // Packages returns a PackageInformer.
 func (v *version) Packages() PackageInformer {
-	return &_packageInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
+	return &packageInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }
 
 // TimeTriggers returns a TimeTriggerInformer.
 func (v *version) TimeTriggers() TimeTriggerInformer {
-	return &_timeTriggerInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
+	return &timeTriggerInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }

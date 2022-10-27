@@ -39,7 +39,7 @@ type MessageQueueTriggerInformer interface {
 	Lister() v1.MessageQueueTriggerLister
 }
 
-type _messageQueueTriggerInformer struct {
+type messageQueueTriggerInformer struct {
 	factory          internalinterfaces.SharedInformerFactory
 	tweakListOptions internalinterfaces.TweakListOptionsFunc
 	namespace        string
@@ -77,14 +77,14 @@ func NewFilteredMessageQueueTriggerInformer(client versioned.Interface, namespac
 	)
 }
 
-func (f *_messageQueueTriggerInformer) defaultInformer(client versioned.Interface, resyncPeriod time.Duration) cache.SharedIndexInformer {
+func (f *messageQueueTriggerInformer) defaultInformer(client versioned.Interface, resyncPeriod time.Duration) cache.SharedIndexInformer {
 	return NewFilteredMessageQueueTriggerInformer(client, f.namespace, resyncPeriod, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, f.tweakListOptions)
 }
 
-func (f *_messageQueueTriggerInformer) Informer() cache.SharedIndexInformer {
+func (f *messageQueueTriggerInformer) Informer() cache.SharedIndexInformer {
 	return f.factory.InformerFor(&corev1.MessageQueueTrigger{}, f.defaultInformer)
 }
 
-func (f *_messageQueueTriggerInformer) Lister() v1.MessageQueueTriggerLister {
+func (f *messageQueueTriggerInformer) Lister() v1.MessageQueueTriggerLister {
 	return v1.NewMessageQueueTriggerLister(f.Informer().GetIndexer())
 }

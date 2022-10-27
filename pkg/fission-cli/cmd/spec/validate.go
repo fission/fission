@@ -25,6 +25,8 @@ import (
 
 	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/controller/client"
@@ -200,15 +202,20 @@ func resourceConflictCheck(c client.Interface, fr *FissionResources, specAllowCo
 	return result.ErrorOrNil()
 }
 
-func isResourceConflicts(deployUID string, specObj fv1.MetadataAccessor, clusterObj fv1.MetadataAccessor, specAllowConflicts bool) error {
-	if specObj.GetObjectMeta().GetName() == clusterObj.GetObjectMeta().GetName() &&
-		specObj.GetObjectMeta().GetNamespace() == clusterObj.GetObjectMeta().GetNamespace() &&
-		deployUID != clusterObj.GetObjectMeta().GetAnnotations()[FISSION_DEPLOYMENT_UID_KEY] {
+type objectWithKind interface {
+	schema.ObjectKind
+	metav1.Object
+}
+
+func isResourceConflicts(deployUID string, specObj objectWithKind, clusterObj objectWithKind, specAllowConflicts bool) error {
+	if specObj.GetName() == clusterObj.GetName() &&
+		specObj.GetNamespace() == clusterObj.GetNamespace() &&
+		deployUID != clusterObj.GetAnnotations()[FISSION_DEPLOYMENT_UID_KEY] {
 		if specAllowConflicts {
 			return nil
 		}
-		return fmt.Errorf("%v: '%v/%v' with different deploy uid already exists",
-			clusterObj.GetObjectKind().GroupVersionKind().Kind, clusterObj.GetObjectMeta().GetName(), clusterObj.GetObjectMeta().GetNamespace())
+		return fmt.Errorf("%s: '%s/%s' with different deploy uid already exists",
+			clusterObj.GroupVersionKind().Kind, clusterObj.GetName(), clusterObj.GetNamespace())
 	}
 	return nil
 }

@@ -22,8 +22,8 @@ on:
   workflow_dispatch:
 
 env:
-  HELM_VERSION: v3.9.0
-  KIND_VERSION: v0.14.0
+  HELM_VERSION: v3.10.1
+  KIND_VERSION: v0.17.0
 
 jobs:
   # Job to run change detection
@@ -33,7 +33,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        kindversion: ["v1.19.16", "v1.20.15", "v1.21.12"]
+        kindversion: ["v1.19.16", "v1.20.15", "v1.21.14"]
         os: [ubuntu-latest]
     steps:
       - name: Checkout sources
@@ -102,6 +102,7 @@ jobs:
           sudo chmod +x /usr/local/bin/fission
 
       - name: Build and Install Fission
+        timeout-minutes: 10
         run: |
           kubectl create ns fission
           make create-crds
@@ -117,9 +118,11 @@ jobs:
           fission version
 
       - name: Integration tests
+        timeout-minutes: 90
         run: ./test/kind_CI.sh
 
       - name: Collect Fission Dump
+        timeout-minutes: 5
         if: ${{ always() }}
         run: |
           command -v fission && fission support dump
@@ -130,7 +133,7 @@ jobs:
           kind export logs --name kind kind-logs
 
       - name: Archive fission dump
-        if: ${{ failure() }}
+        if: ${{ failure() || cancelled() }}
         uses: actions/upload-artifact@v3
         with:
           name: fission-dump-${{ github.run_id }}-${{ matrix.kindversion }}

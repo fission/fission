@@ -39,7 +39,7 @@ type EnvironmentInformer interface {
 	Lister() v1.EnvironmentLister
 }
 
-type _environmentInformer struct {
+type environmentInformer struct {
 	factory          internalinterfaces.SharedInformerFactory
 	tweakListOptions internalinterfaces.TweakListOptionsFunc
 	namespace        string
@@ -77,14 +77,14 @@ func NewFilteredEnvironmentInformer(client versioned.Interface, namespace string
 	)
 }
 
-func (f *_environmentInformer) defaultInformer(client versioned.Interface, resyncPeriod time.Duration) cache.SharedIndexInformer {
+func (f *environmentInformer) defaultInformer(client versioned.Interface, resyncPeriod time.Duration) cache.SharedIndexInformer {
 	return NewFilteredEnvironmentInformer(client, f.namespace, resyncPeriod, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, f.tweakListOptions)
 }
 
-func (f *_environmentInformer) Informer() cache.SharedIndexInformer {
+func (f *environmentInformer) Informer() cache.SharedIndexInformer {
 	return f.factory.InformerFor(&corev1.Environment{}, f.defaultInformer)
 }
 
-func (f *_environmentInformer) Lister() v1.EnvironmentLister {
+func (f *environmentInformer) Lister() v1.EnvironmentLister {
 	return v1.NewEnvironmentLister(f.Informer().GetIndexer())
 }
