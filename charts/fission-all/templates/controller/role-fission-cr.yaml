@@ -1,0 +1,85 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ .Release.Name }}-controller-fission-cr
+  namespace: {{ .Values.defaultNamespace }}
+rules:
+- apiGroups:
+  - fission.io
+  resources:
+  - canaryconfigs
+  - environments
+  - functions
+  - httptriggers
+  - kuberneteswatchtriggers
+  - messagequeuetriggers
+  - packages
+  - timetriggers
+  verbs:
+  - create
+  - get
+  - list
+  - watch
+  - update
+  - patch
+  - delete
+---
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: {{ .Release.Name }}-controller-fission-cr
+  namespace: {{ .Values.defaultNamespace }}
+subjects:
+  - kind: ServiceAccount
+    name: fission-controller
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: Role
+  name: {{ .Release.Name }}-controller-fission-cr
+  apiGroup: rbac.authorization.k8s.io
+
+{{- if not .Values.singleDefaultNamespace }}
+{{- range $namespace := $.Values.additionalFissionNamespaces }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $.Release.Name }}-controller-fission-cr
+  namespace: {{ $namespace }}
+rules:
+- apiGroups:
+  - fission.io
+  resources:
+  - canaryconfigs
+  - environments
+  - functions
+  - httptriggers
+  - kuberneteswatchtriggers
+  - messagequeuetriggers
+  - packages
+  - timetriggers
+  verbs:
+  - create
+  - get
+  - list
+  - watch
+  - update
+  - patch
+  - delete
+---
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: {{ $.Release.Name }}-controller-fission-cr
+  namespace: {{ $namespace }}
+subjects:
+  - kind: ServiceAccount
+    name: fission-controller
+    namespace: {{ $.Release.Namespace }}
+roleRef:
+  kind: Role
+  name: {{ $.Release.Name }}-controller-fission-cr
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}
+{{- end }}
