@@ -20,18 +20,18 @@ import (
 	"os"
 
 	"go.uber.org/zap"
+	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 
 	"github.com/fission/fission/cmd/builder/app"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 	"github.com/fission/fission/pkg/utils/profile"
-	"github.com/fission/fission/pkg/utils/signals"
 )
 
 // Usage: builder <shared volume path>
 func main() {
 	logger := loggerfactory.GetLogger()
 	defer logger.Sync()
-	ctx := signals.SetupSignalHandlerWithContext(logger)
+	ctx := signals.SetupSignalHandler()
 	profile.ProfileIfEnabled(ctx, logger)
 	shareVolume := os.Args[1]
 	if _, err := os.Stat(shareVolume); err != nil {
