@@ -583,26 +583,38 @@ func (gpm *GenericPoolManager) idleObjectReaper(ctx context.Context) {
 }
 
 func (gpm *GenericPoolManager) doIdleObjectReaper(ctx context.Context) {
-	envs, err := gpm.fissionClient.CoreV1().Environments(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
-	if err != nil {
-		gpm.logger.Error("failed to get environment list", zap.Error(err))
-		return
+	var envLists []*fv1.EnvironmentList
+	for _, namespace := range utils.GetNamespaces() {
+		envs, err := gpm.fissionClient.CoreV1().Environments(namespace).List(ctx, metav1.ListOptions{})
+		if err != nil {
+			gpm.logger.Error("failed to get environment list", zap.Error(err))
+			return
+		}
+		envLists = append(envLists, envs)
 	}
 
 	envList := make(map[k8sTypes.UID]struct{})
-	for _, env := range envs.Items {
-		envList[env.ObjectMeta.UID] = struct{}{}
+	for _, envs := range envLists {
+		for _, env := range envs.Items {
+			envList[env.ObjectMeta.UID] = struct{}{}
+		}
 	}
 
-	fns, err := gpm.fissionClient.CoreV1().Functions(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
-	if err != nil {
-		gpm.logger.Error("failed to get environment list", zap.Error(err))
-		return
+	var fnLists []*fv1.FunctionList
+	for _, namespace := range utils.GetNamespaces() {
+		fns, err := gpm.fissionClient.CoreV1().Functions(namespace).List(ctx, metav1.ListOptions{})
+		if err != nil {
+			gpm.logger.Error("failed to get environment list", zap.Error(err))
+			return
+		}
+		fnLists = append(fnLists, fns)
 	}
 
 	fnList := make(map[k8sTypes.UID]fv1.Function)
-	for i, fn := range fns.Items {
-		fnList[fn.ObjectMeta.UID] = fns.Items[i]
+	for _, fns := range fnLists {
+		for i, fn := range fns.Items {
+			fnList[fn.ObjectMeta.UID] = fns.Items[i]
+		}
 	}
 
 	funcSvcs, err := gpm.fsCache.ListOldForPool(time.Second * 5)
