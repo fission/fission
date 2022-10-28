@@ -26,6 +26,7 @@ import (
 	docopt "github.com/docopt/docopt-go"
 
 	"go.uber.org/zap"
+	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 
 	"github.com/fission/fission/cmd/fission-bundle/mqtrigger"
 	"github.com/fission/fission/pkg/buildermgr"
@@ -41,7 +42,6 @@ import (
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 	"github.com/fission/fission/pkg/utils/otel"
 	"github.com/fission/fission/pkg/utils/profile"
-	"github.com/fission/fission/pkg/utils/signals"
 	"github.com/fission/fission/pkg/webhook"
 )
 
@@ -206,7 +206,7 @@ Options:
 	logger := loggerfactory.GetLogger()
 	defer exitWithSync(logger)
 
-	ctx := signals.SetupSignalHandlerWithContext(logger)
+	ctx := signals.SetupSignalHandler()
 	profile.ProfileIfEnabled(ctx, logger)
 
 	version := fmt.Sprintf("Fission Bundle Version: %v", info.BuildInfo().String())

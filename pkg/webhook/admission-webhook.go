@@ -18,6 +18,7 @@ package webhook
 
 import (
 	"context"
+	"os"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -28,19 +29,26 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
-
-	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 	//+kubebuilder:scaffold:imports
 )
+
+type WebhookInjector interface {
+	SetupWebhookWithManager(mgr manager.Manager) error
+}
 
 func Start(ctx context.Context, logger *zap.Logger, port int) (err error) {
 
 	wLogger := logger.Named("webhook")
 
+	metricsAddr := os.Getenv("METRICS_ADDR")
+	if metricsAddr == "" {
+		metricsAddr = "8080"
+	}
 	// Setup a Manager
 	mgr, err := manager.New(config.GetConfigOrDie(), manager.Options{
 		Scheme: scheme.Scheme,
 		Port:   port,
+		// MetricsBindAddress: metricsAddr,
 	})
 	if err != nil {
 		wLogger.Error("unable to set up overall controller manager", zap.Error(err))
@@ -48,50 +56,27 @@ func Start(ctx context.Context, logger *zap.Logger, port int) (err error) {
 	}
 
 	// Setup webhooks
-	wLogger.Info("setting up webhook server")
 
-	if err = (&v1.CanaryConfig{}).SetupWebhookWithManager(mgr); err != nil {
-		wLogger.Error("unable to create webhook CanaryConfig", zap.Error(err))
-		return err
+	webhookInjectors := []WebhookInjector{
+		&v1.CanaryConfig{},
+		&v1.Environment{},
+		&v1.Package{},
+		&v1.Function{},
+		&v1.HTTPTrigger{},
+		&v1.MessageQueueTrigger{},
+		&v1.TimeTrigger{},
+		&v1.KubernetesWatchTrigger{},
 	}
 
-	if err = (&v1.Environment{}).SetupWebhookWithManager(mgr); err != nil {
-		wLogger.Error("unable to create webhook Environment", zap.Error(err))
-		return err
-	}
-
-	if err = (&v1.Package{}).SetupWebhookWithManager(mgr); err != nil {
-		wLogger.Error("unable to create webhook Environment", zap.Error(err))
-		return err
-	}
-
-	if err = (&v1.Function{}).SetupWebhookWithManager(mgr); err != nil {
-		wLogger.Error("unable to create webhook Environment", zap.Error(err))
-		return err
-	}
-
-	if err = (&v1.HTTPTrigger{}).SetupWebhookWithManager(mgr); err != nil {
-		wLogger.Error("unable to create webhook Environment", zap.Error(err))
-		return err
-	}
-
-	if err = (&v1.MessageQueueTrigger{}).SetupWebhookWithManager(mgr); err != nil {
-		wLogger.Error("unable to create webhook Environment", zap.Error(err))
-		return err
-	}
-
-	if err = (&v1.TimeTrigger{}).SetupWebhookWithManager(mgr); err != nil {
-		wLogger.Error("unable to create webhook Environment", zap.Error(err))
-		return err
-	}
-
-	if err = (&v1.KubernetesWatchTrigger{}).SetupWebhookWithManager(mgr); err != nil {
-		wLogger.Error("unable to create webhook Environment", zap.Error(err))
-		return err
+	for _, injector := range webhookInjectors {
+		if err := injector.SetupWebhookWithManager(mgr); err != nil {
+			wLogger.Error("unable to create webhook", zap.Error(err))
+			return err
+		}
 	}
 
 	wLogger.Info("starting manager")
-	if err := mgr.Start(signals.SetupSignalHandler()); err != nil {
+	if err := mgr.Start(ctx); err != nil {
 		wLogger.Error("unable to run manager", zap.Error(err))
 		return err
 	}
