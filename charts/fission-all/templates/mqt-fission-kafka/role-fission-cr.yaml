@@ -1,77 +1,7 @@
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: {{ .Release.Name }}-kafka-fission-cr
-  namespace: {{ .Values.defaultNamespace }}
-rules:
-- apiGroups:
-  - fission.io
-  resources:
-  - environments
-  - functions
-  - messagequeuetriggers
-  - packages
-  verbs:
-  - create
-  - get
-  - list
-  - watch
-  - update
-  - patch
-  - delete
----
-kind: RoleBinding
-apiVersion: rbac.authorization.k8s.io/v1
-metadata:
-  name: {{ .Release.Name }}-kafka-fission-cr
-  namespace: {{ .Values.defaultNamespace }}
-subjects:
-  - kind: ServiceAccount
-    name: fission-kafka
-    namespace: {{ .Release.Namespace }}
-roleRef:
-  kind: Role
-  name: {{ .Release.Name }}-kafka-fission-cr
-  apiGroup: rbac.authorization.k8s.io
+{{- include "fission-role-generator" (merge (dict "namespace" .Values.defaultNamespace "component" "kafka") .) }}
 
 {{- if not .Values.singleDefaultNamespace }}
 {{- range $namespace := $.Values.additionalFissionNamespaces }}
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: {{ $.Release.Name }}-kafka-fission-cr
-  namespace: {{ $namespace }}
-rules:
-- apiGroups:
-  - fission.io
-  resources:
-  - environments
-  - functions
-  - messagequeuetriggers
-  - packages
-  verbs:
-  - create
-  - get
-  - list
-  - watch
-  - update
-  - patch
-  - delete
----
-kind: RoleBinding
-apiVersion: rbac.authorization.k8s.io/v1
-metadata:
-  name: {{ $.Release.Name }}-kafka-fission-cr
-  namespace: {{ $namespace }}
-subjects:
-  - kind: ServiceAccount
-    name: fission-kafka
-    namespace: {{ $.Release.Namespace }}
-roleRef:
-  kind: Role
-  name: {{ $.Release.Name }}-kafka-fission-cr
-  apiGroup: rbac.authorization.k8s.io
+{{ include "fission-role-generator" (merge (dict "namespace" $namespace "component" "kafka") $) }}
 {{- end }}
 {{- end }}
