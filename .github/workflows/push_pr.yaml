@@ -69,7 +69,6 @@ jobs:
           kubectl get nodes
           sudo apt-get install -y apache2-utils
           kubectl config use-context kind-kind
-          kubectl config set-context --current --namespace=default
           kubectl config view
 
       - name: Helm chart lint

@@ -166,14 +166,13 @@ func GetKubernetesNamespace(kubeContext string) (currentNS string, err error) {
 		return "", err
 	}
 
-	config1, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
-		loadingRules, &clientcmd.ConfigOverrides{CurrentContext: kubeContext}).RawConfig()
+	namespace, _, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
+		loadingRules, &clientcmd.ConfigOverrides{CurrentContext: kubeContext}).Namespace()
 	if err != nil {
 		return "", errors.Wrap(err, "Failed to build Kubernetes config")
 	}
-	currentNS = config1.Contexts[config1.CurrentContext].Namespace
 
-	return currentNS, nil
+	return namespace, nil
 }
 
 // given a list of functions, this checks if the functions actually exist on the cluster
@@ -507,9 +506,6 @@ func GetResourceNamespace(input cli.Input, deprecatedFlag string) (namespace, cu
 			if err != nil {
 				return namespace, currentNS, err
 			}
-		}
-		if currentNS == "" {
-			return namespace, currentNS, errors.Errorf("either set current-context or provide namespace with --namespace flag")
 		}
 	}
 
