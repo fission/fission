@@ -188,34 +188,36 @@ func (envw *environmentWatcher) watchEnvironments(ctx context.Context) {
 
 func (envw *environmentWatcher) sync(ctx context.Context) {
 	maxRetries := 10
-	for i := 0; i < maxRetries; i++ {
-		envList, err := envw.fissionClient.CoreV1().Environments(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
-		if err != nil {
-			if utils.IsNetworkError(err) {
-				envw.logger.Error("error syncing environment CRD resources due to network error, retrying later", zap.Error(err))
-				time.Sleep(50 * time.Duration(2*i) * time.Millisecond)
-				continue
-			}
-			envw.logger.Fatal("error syncing environment CRD resources", zap.Error(err))
-		}
-
-		// Create environment builders for all environments
-		for i := range envList.Items {
-			env := envList.Items[i]
-
-			if env.Spec.Version == 1 || // builder is not supported with v1 interface
-				len(env.Spec.Builder.Image) == 0 { // ignore env without builder image
-				continue
-			}
-			_, err := envw.getEnvBuilder(ctx, &env)
+	for _, namespace := range utils.GetNamespaces() {
+		for i := 0; i < maxRetries; i++ {
+			envList, err := envw.fissionClient.CoreV1().Environments(namespace).List(ctx, metav1.ListOptions{})
 			if err != nil {
-				envw.logger.Error("error creating builder", zap.Error(err), zap.String("builder_target", env.ObjectMeta.Name))
+				if utils.IsNetworkError(err) {
+					envw.logger.Error("error syncing environment CRD resources due to network error, retrying later", zap.Error(err))
+					time.Sleep(50 * time.Duration(2*i) * time.Millisecond)
+					continue
+				}
+				envw.logger.Fatal("error syncing environment CRD resources", zap.Error(err), zap.String("namespace", namespace))
 			}
-		}
 
-		// Remove environment builders no longer needed
-		envw.cleanupEnvBuilders(ctx, envList.Items)
-		break
+			// Create environment builders for all environments
+			for i := range envList.Items {
+				env := envList.Items[i]
+
+				if env.Spec.Version == 1 || // builder is not supported with v1 interface
+					len(env.Spec.Builder.Image) == 0 { // ignore env without builder image
+					continue
+				}
+				_, err := envw.getEnvBuilder(ctx, &env)
+				if err != nil {
+					envw.logger.Error("error creating builder", zap.Error(err), zap.String("builder_target", env.ObjectMeta.Name))
+				}
+			}
+
+			// Remove environment builders no longer needed
+			envw.cleanupEnvBuilders(ctx, envList.Items)
+			break
+		}
 	}
 }
 
@@ -262,46 +264,48 @@ func (envw *environmentWatcher) service() {
 			// control (an orphan builder) since there is no record in
 			// cache and CRD. We need to iterate over the services &
 			// deployments to remove both normal and orphan builders.
-
-			svcList, err := envw.getBuilderServiceList(req.ctx, envw.getLabelForDeploymentOwner(), metav1.NamespaceAll)
-			if err != nil {
-				envw.logger.Error("error getting the builder service list", zap.Error(err))
-			}
-			for _, svc := range svcList {
-				envName := svc.ObjectMeta.Labels[LABEL_ENV_NAME]
-				envNamespace := svc.ObjectMeta.Labels[LABEL_ENV_NAMESPACE]
-				envResourceVersion := svc.ObjectMeta.Labels[LABEL_ENV_RESOURCEVERSION]
-				key := envw.getCacheKey(envName, envNamespace, envResourceVersion)
-				if _, ok := latestEnvList[key]; !ok {
-					err := envw.deleteBuilderServiceByName(req.ctx, svc.ObjectMeta.Name, svc.ObjectMeta.Namespace)
-					if err != nil {
-						envw.logger.Error("error removing builder service", zap.Error(err),
-							zap.String("service_name", svc.ObjectMeta.Name),
-							zap.String("service_namespace", svc.ObjectMeta.Namespace))
-					}
+			for _, namespace := range utils.GetNamespaces() {
+				svcList, err := envw.getBuilderServiceList(req.ctx, envw.getLabelForDeploymentOwner(), namespace)
+				if err != nil {
+					envw.logger.Error("error getting the builder service list", zap.Error(err), zap.String("namespace", namespace))
 				}
-				delete(envw.cache, key)
+				for _, svc := range svcList {
+					envName := svc.ObjectMeta.Labels[LABEL_ENV_NAME]
+					envNamespace := svc.ObjectMeta.Labels[LABEL_ENV_NAMESPACE]
+					envResourceVersion := svc.ObjectMeta.Labels[LABEL_ENV_RESOURCEVERSION]
+					key := envw.getCacheKey(envName, envNamespace, envResourceVersion)
+					if _, ok := latestEnvList[key]; !ok {
+						err := envw.deleteBuilderServiceByName(req.ctx, svc.ObjectMeta.Name, svc.ObjectMeta.Namespace)
+						if err != nil {
+							envw.logger.Error("error removing builder service", zap.Error(err),
+								zap.String("service_name", svc.ObjectMeta.Name),
+								zap.String("service_namespace", svc.ObjectMeta.Namespace))
+						}
+					}
+					delete(envw.cache, key)
+				}
+
+				deployList, err := envw.getBuilderDeploymentList(req.ctx, envw.getLabelForDeploymentOwner(), namespace)
+				if err != nil {
+					envw.logger.Error("error getting the builder deployment list", zap.Error(err), zap.String("namespace", namespace))
+				}
+				for _, deploy := range deployList {
+					envName := deploy.ObjectMeta.Labels[LABEL_ENV_NAME]
+					envNamespace := deploy.ObjectMeta.Labels[LABEL_ENV_NAMESPACE]
+					envResourceVersion := deploy.ObjectMeta.Labels[LABEL_ENV_RESOURCEVERSION]
+					key := envw.getCacheKey(envName, envNamespace, envResourceVersion)
+					if _, ok := latestEnvList[key]; !ok {
+						err := envw.deleteBuilderDeploymentByName(req.ctx, deploy.ObjectMeta.Name, deploy.ObjectMeta.Namespace)
+						if err != nil {
+							envw.logger.Error("error removing builder deployment", zap.Error(err),
+								zap.String("deployment_name", deploy.ObjectMeta.Name),
+								zap.String("deployment_namespace", deploy.ObjectMeta.Namespace))
+						}
+					}
+					delete(envw.cache, key)
+				}
 			}
 
-			deployList, err := envw.getBuilderDeploymentList(req.ctx, envw.getLabelForDeploymentOwner(), metav1.NamespaceAll)
-			if err != nil {
-				envw.logger.Error("error getting the builder deployment list", zap.Error(err))
-			}
-			for _, deploy := range deployList {
-				envName := deploy.ObjectMeta.Labels[LABEL_ENV_NAME]
-				envNamespace := deploy.ObjectMeta.Labels[LABEL_ENV_NAMESPACE]
-				envResourceVersion := deploy.ObjectMeta.Labels[LABEL_ENV_RESOURCEVERSION]
-				key := envw.getCacheKey(envName, envNamespace, envResourceVersion)
-				if _, ok := latestEnvList[key]; !ok {
-					err := envw.deleteBuilderDeploymentByName(req.ctx, deploy.ObjectMeta.Name, deploy.ObjectMeta.Namespace)
-					if err != nil {
-						envw.logger.Error("error removing builder deployment", zap.Error(err),
-							zap.String("deployment_name", deploy.ObjectMeta.Name),
-							zap.String("deployment_namespace", deploy.ObjectMeta.Namespace))
-					}
-				}
-				delete(envw.cache, key)
-			}
 		}
 	}
 }

@@ -199,46 +199,48 @@ func (pkgw *packageWatcher) build(ctx context.Context, srcpkg *fv1.Package) {
 
 			pkgw.logger.Info("starting package info update", zap.String("package_name", pkg.ObjectMeta.Name))
 
-			fnList, err := pkgw.fissionClient.CoreV1().
-				Functions(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
-			if err != nil {
-				e := "error getting function list"
-				pkgw.logger.Error(e, zap.Error(err))
-				buildLogs += fmt.Sprintf("%s: %v\n", e, err)
-				_, er := updatePackage(ctx, pkgw.logger, pkgw.fissionClient, pkg, fv1.BuildStatusFailed, buildLogs, nil)
-				if er != nil {
-					pkgw.logger.Error(
-						"error updating package",
-						zap.String("package_name", pkg.ObjectMeta.Name),
-						zap.String("resource_version", pkg.ObjectMeta.ResourceVersion),
-						zap.Error(er),
-					)
+			for _, namespace := range utils.GetNamespaces() {
+				fnList, err := pkgw.fissionClient.CoreV1().
+					Functions(namespace).List(ctx, metav1.ListOptions{})
+				if err != nil {
+					e := fmt.Sprintf("error getting function list in namespace %s", namespace)
+					pkgw.logger.Error(e, zap.Error(err), zap.String("namespace", namespace))
+					buildLogs += fmt.Sprintf("%s: %v\n", e, err)
+					_, er := updatePackage(ctx, pkgw.logger, pkgw.fissionClient, pkg, fv1.BuildStatusFailed, buildLogs, nil)
+					if er != nil {
+						pkgw.logger.Error(
+							"error updating package",
+							zap.String("package_name", pkg.ObjectMeta.Name),
+							zap.String("resource_version", pkg.ObjectMeta.ResourceVersion),
+							zap.Error(er),
+						)
+					}
 				}
-			}
 
-			// A package may be used by multiple functions. Update
-			// functions with old package resource version
-			for _, fn := range fnList.Items {
-				if fn.Spec.Package.PackageRef.Name == pkg.ObjectMeta.Name &&
-					fn.Spec.Package.PackageRef.Namespace == pkg.ObjectMeta.Namespace &&
-					fn.Spec.Package.PackageRef.ResourceVersion != pkg.ObjectMeta.ResourceVersion {
-					fn.Spec.Package.PackageRef.ResourceVersion = pkg.ObjectMeta.ResourceVersion
-					// update CRD
-					_, err = pkgw.fissionClient.CoreV1().Functions(fn.ObjectMeta.Namespace).Update(ctx, &fn, metav1.UpdateOptions{})
-					if err != nil {
-						e := "error updating function package resource version"
-						pkgw.logger.Error(e, zap.Error(err))
-						buildLogs += fmt.Sprintf("%s: %v\n", e, err)
-						_, er := updatePackage(ctx, pkgw.logger, pkgw.fissionClient, pkg, fv1.BuildStatusFailed, buildLogs, nil)
-						if er != nil {
-							pkgw.logger.Error(
-								"error updating package",
-								zap.String("package_name", pkg.ObjectMeta.Name),
-								zap.String("resource_version", pkg.ObjectMeta.ResourceVersion),
-								zap.Error(er),
-							)
+				// A package may be used by multiple functions. Update
+				// functions with old package resource version
+				for _, fn := range fnList.Items {
+					if fn.Spec.Package.PackageRef.Name == pkg.ObjectMeta.Name &&
+						fn.Spec.Package.PackageRef.Namespace == pkg.ObjectMeta.Namespace &&
+						fn.Spec.Package.PackageRef.ResourceVersion != pkg.ObjectMeta.ResourceVersion {
+						fn.Spec.Package.PackageRef.ResourceVersion = pkg.ObjectMeta.ResourceVersion
+						// update CRD
+						_, err = pkgw.fissionClient.CoreV1().Functions(fn.ObjectMeta.Namespace).Update(ctx, &fn, metav1.UpdateOptions{})
+						if err != nil {
+							e := "error updating function package resource version"
+							pkgw.logger.Error(e, zap.Error(err))
+							buildLogs += fmt.Sprintf("%s: %v\n", e, err)
+							_, er := updatePackage(ctx, pkgw.logger, pkgw.fissionClient, pkg, fv1.BuildStatusFailed, buildLogs, nil)
+							if er != nil {
+								pkgw.logger.Error(
+									"error updating package",
+									zap.String("package_name", pkg.ObjectMeta.Name),
+									zap.String("resource_version", pkg.ObjectMeta.ResourceVersion),
+									zap.Error(er),
+								)
+							}
+							return
 						}
-						return
 					}
 				}
 			}
