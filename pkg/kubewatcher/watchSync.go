@@ -24,6 +24,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
+	"github.com/fission/fission/pkg/utils"
 )
 
 type (
@@ -47,14 +48,16 @@ func MakeWatchSync(ctx context.Context, logger *zap.Logger, client versioned.Int
 func (ws *WatchSync) syncSvc(ctx context.Context) {
 	// TODO watch instead of polling
 	for {
-		watches, err := ws.client.CoreV1().KubernetesWatchTriggers(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
-		if err != nil {
-			ws.logger.Fatal("failed to get Kubernetes watch trigger list", zap.Error(err))
-		}
+		for _, namespace := range utils.GetNamespaces() {
+			watches, err := ws.client.CoreV1().KubernetesWatchTriggers(namespace).List(ctx, metav1.ListOptions{})
+			if err != nil {
+				ws.logger.Fatal("failed to get Kubernetes watch trigger list", zap.Error(err), zap.String("namespace", namespace))
+			}
 
-		err = ws.kubeWatcher.Sync(watches.Items)
-		if err != nil {
-			ws.logger.Fatal("failed to sync watches", zap.Error(err))
+			err = ws.kubeWatcher.Sync(watches.Items)
+			if err != nil {
+				ws.logger.Fatal("failed to sync watches", zap.Error(err))
+			}
 		}
 		time.Sleep(3 * time.Second)
 	}

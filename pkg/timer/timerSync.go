@@ -47,16 +47,18 @@ func MakeTimerSync(ctx context.Context, logger *zap.Logger, fissionClient versio
 
 func (ws *TimerSync) syncSvc(ctx context.Context) {
 	for {
-		triggers, err := ws.fissionClient.CoreV1().TimeTriggers(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
-		if err != nil {
-			if utils.IsNetworkError(err) {
-				ws.logger.Info("encountered a network error - will retry", zap.Error(err))
-				time.Sleep(5 * time.Second)
-				continue
+		for _, namespace := range utils.GetNamespaces() {
+			triggers, err := ws.fissionClient.CoreV1().TimeTriggers(namespace).List(ctx, metav1.ListOptions{})
+			if err != nil {
+				if utils.IsNetworkError(err) {
+					ws.logger.Info("encountered a network error - will retry", zap.Error(err))
+					time.Sleep(5 * time.Second)
+					continue
+				}
+				ws.logger.Fatal("failed to get time trigger list", zap.Error(err), zap.String("namespace", namespace))
 			}
-			ws.logger.Fatal("failed to get time trigger list", zap.Error(err))
+			ws.timer.Sync(triggers.Items) //nolint: errCheck
 		}
-		ws.timer.Sync(triggers.Items) //nolint: errCheck
 
 		// TODO switch to watches
 		time.Sleep(3 * time.Second)
