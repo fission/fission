@@ -24,6 +24,7 @@ import (
 	"strconv"
 
 	docopt "github.com/docopt/docopt-go"
+	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 
 	"go.uber.org/zap"
 
@@ -41,7 +42,6 @@ import (
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 	"github.com/fission/fission/pkg/utils/otel"
 	"github.com/fission/fission/pkg/utils/profile"
-	"github.com/fission/fission/pkg/utils/signals"
 )
 
 func runController(ctx context.Context, logger *zap.Logger, port int) {
@@ -199,7 +199,7 @@ Options:
 	logger := loggerfactory.GetLogger()
 	defer exitWithSync(logger)
 
-	ctx := signals.SetupSignalHandlerWithContext(logger)
+	ctx := signals.SetupSignalHandler()
 	profile.ProfileIfEnabled(ctx, logger)
 
 	version := fmt.Sprintf("Fission Bundle Version: %v", info.BuildInfo().String())

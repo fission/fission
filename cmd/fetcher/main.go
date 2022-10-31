@@ -17,10 +17,11 @@ limitations under the License.
 package main
 
 import (
+	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
+
 	"github.com/fission/fission/cmd/fetcher/app"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 	"github.com/fission/fission/pkg/utils/profile"
-	"github.com/fission/fission/pkg/utils/signals"
 )
 
 // Usage: fetcher <shared volume path>
@@ -28,7 +29,7 @@ func main() {
 	logger := loggerfactory.GetLogger()
 	defer logger.Sync()
 
-	ctx := signals.SetupSignalHandlerWithContext(logger)
+	ctx := signals.SetupSignalHandler()
 	profile.ProfileIfEnabled(ctx, logger)
 	app.Run(ctx, logger)
 }
