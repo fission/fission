@@ -17,6 +17,10 @@ limitations under the License.
 package v1
 
 import (
+	"fmt"
+
+	"github.com/dustin/go-humanize"
+	ferror "github.com/fission/fission/pkg/error"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -57,14 +61,30 @@ func (r *Package) ValidateCreate() error {
 	if err != nil {
 		return err
 	}
+
+	// Ensure size limits
+	if len(r.Spec.Source.Literal) > int(ArchiveLiteralSizeLimit) {
+		err := ferror.MakeError(ferror.ErrorInvalidArgument,
+			fmt.Sprintf("Package literal larger than %s", humanize.Bytes(uint64(ArchiveLiteralSizeLimit))))
+		return err
+	}
+	if len(r.Spec.Deployment.Literal) > int(ArchiveLiteralSizeLimit) {
+		err := ferror.MakeError(ferror.ErrorInvalidArgument,
+			fmt.Sprintf("Package literal larger than %s", humanize.Bytes(uint64(ArchiveLiteralSizeLimit))))
+		return err
+	}
 	return nil
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
 func (r *Package) ValidateUpdate(old runtime.Object) error {
 	packagelog.Info("validate update", "name", r.Name)
+	err := r.Validate()
 
-	// TODO(user): fill in your validation logic upon object update.
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 

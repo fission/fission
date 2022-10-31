@@ -232,7 +232,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		pkgName := generatePackageName(fnName, id.String())
 
 		// create new package in the same namespace as the function.
-		pkgMetadata, err = _package.CreatePackage(input, opts.Client().DefaultClientset, pkgName, fnNamespace, envName,
+		pkgMetadata, err = _package.CreatePackage(input, opts.Client(), pkgName, fnNamespace, envName,
 			srcArchiveFiles, deployArchiveFiles, buildcmd, specDir, opts.specFile, noZip, userProvidedNS)
 		if err != nil {
 			return errors.Wrap(err, "error creating package")

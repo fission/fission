@@ -17,6 +17,7 @@ limitations under the License.
 package _package
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
@@ -27,10 +28,12 @@ import (
 	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+	"github.com/fission/fission/pkg/fission-cli/cmd"
 	pkgutil "github.com/fission/fission/pkg/fission-cli/cmd/package/util"
 	"github.com/fission/fission/pkg/fission-cli/cmd/spec"
 	spectypes "github.com/fission/fission/pkg/fission-cli/cmd/spec/types"
@@ -251,13 +254,13 @@ func archiveName(givenNameHint string, includedFiles []string) string {
 	return fmt.Sprintf("%v-%v", util.KubifyName(includedFiles[0]), uniuri.NewLen(4))
 }
 
-func GetFunctionsByPackage(client client.Interface, pkgName, pkgNamespace string) ([]fv1.Function, error) {
-	fnList, err := client.V1().Function().List(pkgNamespace)
+func GetFunctionsByPackage(context context.Context, client cmd.Client, pkgName, pkgNamespace string) ([]fv1.Function, error) {
+	fnList, err := client.FissionClientSet.CoreV1().Functions(pkgNamespace).List(context, v1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}
 	fns := []fv1.Function{}
-	for _, fn := range fnList {
+	for _, fn := range fnList.Items {
 		if fn.Spec.Package.PackageRef.Name == pkgName {
 			fns = append(fns, fn)
 		}
