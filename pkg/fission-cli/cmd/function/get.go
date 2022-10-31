@@ -41,7 +41,7 @@ func (opts *GetSubCommand) do(input cli.Input) error {
 	if err != nil {
 		return errors.Wrap(err, "error in get function ")
 	}
-	fn, err := opts.Client().V1().Function().Get(&metav1.ObjectMeta{
+	fn, err := opts.Client().DefaultClientset.V1().Function().Get(&metav1.ObjectMeta{
 		Name:      input.String(flagkey.FnName),
 		Namespace: namespace,
 	})
@@ -49,7 +49,7 @@ func (opts *GetSubCommand) do(input cli.Input) error {
 		return errors.Wrap(err, "error getting function")
 	}
 
-	pkg, err := opts.Client().V1().Package().Get(&metav1.ObjectMeta{
+	pkg, err := opts.Client().DefaultClientset.V1().Package().Get(&metav1.ObjectMeta{
 		Name:      fn.Spec.Package.PackageRef.Name,
 		Namespace: fn.Spec.Package.PackageRef.Namespace,
 	})

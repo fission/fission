@@ -59,7 +59,7 @@ func (opts *InfoSubCommand) complete(input cli.Input) (err error) {
 }
 
 func (opts *InfoSubCommand) run(input cli.Input) error {
-	pkg, err := opts.Client().V1().Package().Get(&metav1.ObjectMeta{
+	pkg, err := opts.Client().DefaultClientset.V1().Package().Get(&metav1.ObjectMeta{
 		Namespace: opts.namespace,
 		Name:      opts.name,
 	})

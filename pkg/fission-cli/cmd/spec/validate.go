@@ -86,7 +86,7 @@ func (opts *ValidateSubCommand) run(input cli.Input, fr *FissionResources) (err 
 		return errors.Wrap(err, "error validating specs")
 	}
 
-	err = resourceConflictCheck(opts.Client(), fr, input.Bool(flagkey.SpecAllowConflicts), "")
+	err = resourceConflictCheck(opts.Client().DefaultClientset, fr, input.Bool(flagkey.SpecAllowConflicts), "")
 	if err != nil {
 		return errors.Wrap(err, "name conflict error")
 	}

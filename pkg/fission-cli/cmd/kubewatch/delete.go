@@ -56,7 +56,7 @@ func (opts *DeleteSubCommand) complete(input cli.Input) (err error) {
 }
 
 func (opts *DeleteSubCommand) run(input cli.Input) error {
-	err := opts.Client().V1().KubeWatcher().Delete(&metav1.ObjectMeta{
+	err := opts.Client().DefaultClientset.V1().KubeWatcher().Delete(&metav1.ObjectMeta{
 		Name:      opts.name,
 		Namespace: opts.namespace,
 	})

@@ -69,7 +69,7 @@ func (opts *DeleteSubCommand) complete(input cli.Input) (err error) {
 
 func (opts *DeleteSubCommand) run(input cli.Input) error {
 	if len(opts.name) != 0 {
-		_, err := opts.Client().V1().Package().Get(&metav1.ObjectMeta{
+		_, err := opts.Client().DefaultClientset.V1().Package().Get(&metav1.ObjectMeta{
 			Namespace: opts.namespace,
 			Name:      opts.name,
 		})
@@ -80,7 +80,7 @@ func (opts *DeleteSubCommand) run(input cli.Input) error {
 			return errors.Wrap(err, "find package")
 		}
 
-		fnList, err := GetFunctionsByPackage(opts.Client(), opts.name, opts.namespace)
+		fnList, err := GetFunctionsByPackage(opts.Client().DefaultClientset, opts.name, opts.namespace)
 		if err != nil {
 			return err
 		}
@@ -88,7 +88,7 @@ func (opts *DeleteSubCommand) run(input cli.Input) error {
 		if !opts.force && len(fnList) > 0 {
 			return errors.New("Package is used by at least one function, use -f to force delete")
 		}
-		err = deletePackage(opts.Client(), opts.name, opts.namespace)
+		err = deletePackage(opts.Client().DefaultClientset, opts.name, opts.namespace)
 		if err != nil {
 			return err
 		}
@@ -97,7 +97,7 @@ func (opts *DeleteSubCommand) run(input cli.Input) error {
 
 	// TODO improve list speed when --orphan
 	if opts.deleteOrphans {
-		err := deleteOrphanPkgs(opts.Client(), opts.namespace)
+		err := deleteOrphanPkgs(opts.Client().DefaultClientset, opts.namespace)
 		if err != nil {
 			return errors.Wrap(err, "deleting orphan packages")
 		}

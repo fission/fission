@@ -151,7 +151,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 				mqtName, fnName))
 		}
 	} else {
-		err = util.CheckFunctionExistence(opts.Client(), []string{fnName}, fnNamespace)
+		err = util.CheckFunctionExistence(opts.Client().DefaultClientset, []string{fnName}, fnNamespace)
 		if err != nil {
 			return err
 		}
@@ -210,7 +210,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 		return nil
 	}
 
-	_, err := opts.Client().V1().MessageQueueTrigger().Create(opts.trigger)
+	_, err := opts.Client().DefaultClientset.V1().MessageQueueTrigger().Create(opts.trigger)
 	if err != nil {
 		return errors.Wrap(err, "create message queue trigger")
 	}

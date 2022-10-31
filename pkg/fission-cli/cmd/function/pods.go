@@ -48,7 +48,7 @@ func (opts *ListPodsSubCommand) do(input cli.Input) error {
 		return errors.Wrap(err, "error in finding pod for function ")
 	}
 	// validate function
-	_, err = opts.Client().V1().Function().Get(&metav1.ObjectMeta{
+	_, err = opts.Client().DefaultClientset.V1().Function().Get(&metav1.ObjectMeta{
 		Name:      input.String(flagkey.FnName),
 		Namespace: namespace,
 	})
@@ -63,7 +63,7 @@ func (opts *ListPodsSubCommand) do(input cli.Input) error {
 		},
 	}
 
-	pods, err := opts.Client().V1().Function().ListPods(m)
+	pods, err := opts.Client().DefaultClientset.V1().Function().ListPods(m)
 	if err != nil {
 		return errors.Wrap(err, "error listing environments")
 	}

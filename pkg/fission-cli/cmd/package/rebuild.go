@@ -57,7 +57,7 @@ func (opts *RebuildSubCommand) complete(input cli.Input) (err error) {
 }
 
 func (opts *RebuildSubCommand) run(input cli.Input) error {
-	pkg, err := opts.Client().V1().Package().Get(&metav1.ObjectMeta{
+	pkg, err := opts.Client().DefaultClientset.V1().Package().Get(&metav1.ObjectMeta{
 		Name:      opts.name,
 		Namespace: opts.namespace,
 	})
@@ -70,7 +70,7 @@ func (opts *RebuildSubCommand) run(input cli.Input) error {
 			pkg.ObjectMeta.Name, fv1.BuildStatusFailed))
 	}
 
-	_, err = updatePackageStatus(opts.Client(), pkg, fv1.BuildStatusPending)
+	_, err = updatePackageStatus(opts.Client().DefaultClientset, pkg, fv1.BuildStatusPending)
 	if err != nil {
 		return errors.Wrap(err, "update package status")
 	}

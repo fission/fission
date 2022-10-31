@@ -58,7 +58,7 @@ func (opts *UpdateContainerSubCommand) complete(input cli.Input) error {
 		return errors.Wrap(err, "error in updating container for function ")
 	}
 
-	function, err := opts.Client().V1().Function().Get(&metav1.ObjectMeta{
+	function, err := opts.Client().DefaultClientset.V1().Function().Get(&metav1.ObjectMeta{
 		Name:      input.String(flagkey.FnName),
 		Namespace: fnNamespace,
 	})
@@ -84,7 +84,7 @@ func (opts *UpdateContainerSubCommand) complete(input cli.Input) error {
 
 		// check that the referenced secret is in the same ns as the function, if not give a warning.
 		for _, secretName := range secretNames {
-			err := opts.Client().V1().Misc().SecretExists(&metav1.ObjectMeta{
+			err := opts.Client().DefaultClientset.V1().Misc().SecretExists(&metav1.ObjectMeta{
 				Namespace: fnNamespace,
 				Name:      secretName,
 			})
@@ -108,7 +108,7 @@ func (opts *UpdateContainerSubCommand) complete(input cli.Input) error {
 
 		// check that the referenced cfgmap is in the same ns as the function, if not give a warning.
 		for _, cfgMapName := range cfgMapNames {
-			err := opts.Client().V1().Misc().ConfigMapExists(&metav1.ObjectMeta{
+			err := opts.Client().DefaultClientset.V1().Misc().ConfigMapExists(&metav1.ObjectMeta{
 				Namespace: fnNamespace,
 				Name:      cfgMapName,
 			})
@@ -192,7 +192,7 @@ func (opts *UpdateContainerSubCommand) complete(input cli.Input) error {
 }
 
 func (opts *UpdateContainerSubCommand) run(input cli.Input) error {
-	_, err := opts.Client().V1().Function().Update(opts.function)
+	_, err := opts.Client().DefaultClientset.V1().Function().Update(opts.function)
 	if err != nil {
 		return errors.Wrap(err, "error updating function")
 	}

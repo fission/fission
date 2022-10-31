@@ -70,7 +70,7 @@ func (opts *GetSubCommand) complete(input cli.Input) (err error) {
 }
 
 func (opts *GetSubCommand) run(input cli.Input) error {
-	pkg, err := opts.Client().V1().Package().Get(&metav1.ObjectMeta{
+	pkg, err := opts.Client().DefaultClientset.V1().Package().Get(&metav1.ObjectMeta{
 		Namespace: opts.namespace,
 		Name:      opts.name,
 	})
@@ -87,7 +87,7 @@ func (opts *GetSubCommand) run(input cli.Input) error {
 	if pkg.Spec.Deployment.Type == fv1.ArchiveTypeLiteral {
 		reader = bytes.NewReader(archive.Literal)
 	} else if pkg.Spec.Deployment.Type == fv1.ArchiveTypeUrl {
-		readCloser, err := pkgutil.DownloadStoragesvcURL(opts.Client(), archive.URL)
+		readCloser, err := pkgutil.DownloadStoragesvcURL(opts.Client().DefaultClientset, archive.URL)
 		if err != nil {
 			return err
 		}

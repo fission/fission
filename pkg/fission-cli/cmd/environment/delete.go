@@ -51,7 +51,7 @@ func (opts *DeleteSubCommand) do(input cli.Input) (err error) {
 	}
 
 	if !input.Bool(flagkey.EnvForce) {
-		fns, err := opts.Client().V1().Function().List(metav1.NamespaceAll)
+		fns, err := opts.Client().DefaultClientset.V1().Function().List(metav1.NamespaceAll)
 		if err != nil {
 			return errors.Wrap(err, "Error getting functions wrt environment.")
 		}
@@ -64,7 +64,7 @@ func (opts *DeleteSubCommand) do(input cli.Input) (err error) {
 		}
 	}
 
-	err = opts.Client().V1().Environment().Delete(m)
+	err = opts.Client().DefaultClientset.V1().Environment().Delete(m)
 	if err != nil {
 		if input.Bool(flagkey.IgnoreNotFound) && util.IsNotFound(err) {
 			return nil

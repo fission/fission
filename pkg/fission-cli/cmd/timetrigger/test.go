@@ -44,7 +44,7 @@ func (opts *ShowSubCommand) run(flaginput cli.Input) error {
 		return errors.New("need a cron spec like '0 30 * * * *', '@every 1h30m', or '@hourly'; use --cron")
 	}
 
-	t, err := getAPITimeInfo(opts.Client())
+	t, err := getAPITimeInfo(opts.Client().DefaultClientset)
 	if err != nil {
 		return err
 	}

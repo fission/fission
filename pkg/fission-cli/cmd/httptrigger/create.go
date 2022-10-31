@@ -129,7 +129,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	// For Specs, the spec validate checks for function reference
 	if input.Bool(flagkey.SpecSave) {
 
-		htTrigger, err := opts.Client().V1().HTTPTrigger().Get(&m)
+		htTrigger, err := opts.Client().DefaultClientset.V1().HTTPTrigger().Get(&m)
 		if err != nil && !ferror.IsNotFound(err) {
 			return err
 		}
@@ -165,7 +165,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 			Namespace: fnNamespace,
 		}
 
-		htTrigger, err := opts.Client().V1().HTTPTrigger().Get(&m)
+		htTrigger, err := opts.Client().DefaultClientset.V1().HTTPTrigger().Get(&m)
 		if err != nil && !ferror.IsNotFound(err) {
 			return err
 		}
@@ -173,7 +173,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 			return errors.New("duplicate trigger exists, choose a different name or leave it empty for fission to auto-generate it")
 		}
 
-		err = util.CheckFunctionExistence(opts.Client(), functionList, fnNamespace)
+		err = util.CheckFunctionExistence(opts.Client().DefaultClientset, functionList, fnNamespace)
 		if err != nil {
 			console.Warn(err.Error())
 		}
@@ -226,7 +226,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 		return nil
 	}
 
-	_, err := opts.Client().V1().HTTPTrigger().Create(opts.trigger)
+	_, err := opts.Client().DefaultClientset.V1().HTTPTrigger().Create(opts.trigger)
 	if err != nil {
 		return errors.Wrap(err, "create HTTP trigger")
 	}

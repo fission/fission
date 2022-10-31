@@ -42,7 +42,7 @@ func (opts *GetMetaSubCommand) do(input cli.Input) error {
 		return errors.Wrap(err, "error in getting meta function ")
 	}
 
-	fn, err := opts.Client().V1().Function().Get(&metav1.ObjectMeta{
+	fn, err := opts.Client().DefaultClientset.V1().Function().Get(&metav1.ObjectMeta{
 		Name:      input.String(flagkey.FnName),
 		Namespace: namespace,
 	})

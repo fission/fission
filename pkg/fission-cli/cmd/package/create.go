@@ -119,7 +119,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 		specFile = fmt.Sprintf("package-%s.yaml", pkgName)
 	}
 
-	_, err = CreatePackage(input, opts.Client(), pkgName, pkgNamespace, envName,
+	_, err = CreatePackage(input, opts.Client().DefaultClientset, pkgName, pkgNamespace, envName,
 		srcArchiveFiles, deployArchiveFiles, buildcmd, specDir, specFile, noZip, userProvidedNS)
 
 	return err

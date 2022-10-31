@@ -56,7 +56,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) (err error) {
 		return errors.Wrap(err, "error in deleting function ")
 	}
 
-	ht, err := opts.Client().V1().HTTPTrigger().Get(&metav1.ObjectMeta{
+	ht, err := opts.Client().DefaultClientset.V1().HTTPTrigger().Get(&metav1.ObjectMeta{
 		Name:      htName,
 		Namespace: triggerNamespace,
 	})
@@ -102,7 +102,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) (err error) {
 	if input.IsSet(flagkey.HtFnName) {
 		// get the functions and their weights if specified
 		functionList := input.StringSlice(flagkey.HtFnName)
-		err := util.CheckFunctionExistence(opts.Client(), functionList, triggerNamespace)
+		err := util.CheckFunctionExistence(opts.Client().DefaultClientset, functionList, triggerNamespace)
 		if err != nil {
 			console.Warn(err.Error())
 		}
@@ -151,7 +151,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) (err error) {
 }
 
 func (opts *UpdateSubCommand) run(input cli.Input) error {
-	_, err := opts.Client().V1().HTTPTrigger().Update(opts.trigger)
+	_, err := opts.Client().DefaultClientset.V1().HTTPTrigger().Update(opts.trigger)
 	if err != nil {
 		return errors.Wrap(err, "error updating the HTTP trigger")
 	}

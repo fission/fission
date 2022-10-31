@@ -67,7 +67,7 @@ func (opts *GetURLSubCommand) do(input cli.Input) error {
 	storageType := resp.Header.Get("X-FISSION-STORAGETYPE")
 
 	if storageType == "local" {
-		storageSvc, err := opts.Client().V1().Misc().GetSvcURL("application=fission-storage")
+		storageSvc, err := opts.Client().DefaultClientset.V1().Misc().GetSvcURL("application=fission-storage")
 		if err != nil {
 			return err
 		}

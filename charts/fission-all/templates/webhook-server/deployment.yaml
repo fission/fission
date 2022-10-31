@@ -5,18 +5,18 @@ metadata:
   labels:
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
     svc: webhook-service
-    application: fission-api
+    application: fission-webhook
 spec:
   replicas: 1
   selector:
     matchLabels:
       svc: webhook-service
-      application: fission-api
+      application: fission-webhook
   template:
     metadata:
       labels:
         svc: webhook-service
-        application: fission-api
+        application: fission-webhook
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/path: "/metrics"

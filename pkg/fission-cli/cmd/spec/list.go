@@ -80,7 +80,7 @@ func (opts *ListSubCommand) getResource(input cli.Input, namespace string, deplo
 		printNS = "all"
 	}
 
-	allfn, err = getAllFunctions(opts.Client(), namespace)
+	allfn, err = getAllFunctions(opts.Client().DefaultClientset, namespace)
 	if err != nil {
 		return errors.Wrap(err, fmt.Sprintf("error getting Functions from %s namespaces", printNS))
 	}
@@ -88,7 +88,7 @@ func (opts *ListSubCommand) getResource(input cli.Input, namespace string, deplo
 	ShowFunctions(specfns)
 
 	var allenvs []fv1.Environment
-	allenvs, err = getAllEnvironments(opts.Client(), namespace)
+	allenvs, err = getAllEnvironments(opts.Client().DefaultClientset, namespace)
 	if err != nil {
 		return errors.Wrap(err, fmt.Sprintf("error getting Environments from  %s namespaces", printNS))
 	}
@@ -96,7 +96,7 @@ func (opts *ListSubCommand) getResource(input cli.Input, namespace string, deplo
 	ShowEnvironments(specenvs)
 
 	var pkglists []fv1.Package
-	pkglists, err = getAllPackages(opts.Client(), namespace)
+	pkglists, err = getAllPackages(opts.Client().DefaultClientset, namespace)
 	if err != nil {
 		return errors.Wrap(err, fmt.Sprintf("error getting Packages from  %s namespaces", printNS))
 	}
@@ -104,7 +104,7 @@ func (opts *ListSubCommand) getResource(input cli.Input, namespace string, deplo
 	ShowPackages(specPkgs)
 
 	var canaryCfgs []fv1.CanaryConfig
-	canaryCfgs, err = getAllCanaryConfigs(opts.Client(), namespace)
+	canaryCfgs, err = getAllCanaryConfigs(opts.Client().DefaultClientset, namespace)
 	if err != nil {
 		return errors.Wrap(err, fmt.Sprintf("error getting Canary Config from  %s namespaces", printNS))
 	}
@@ -112,7 +112,7 @@ func (opts *ListSubCommand) getResource(input cli.Input, namespace string, deplo
 	ShowCanaryConfigs(specCanaryCfgs)
 
 	var hts []fv1.HTTPTrigger
-	hts, err = getAllHTTPTriggers(opts.Client(), namespace)
+	hts, err = getAllHTTPTriggers(opts.Client().DefaultClientset, namespace)
 	if err != nil {
 		return errors.Wrap(err, fmt.Sprintf("error getting HTTP Triggers from  %s namespaces", printNS))
 	}
@@ -120,7 +120,7 @@ func (opts *ListSubCommand) getResource(input cli.Input, namespace string, deplo
 	ShowHTTPTriggers(specHTTPTriggers)
 
 	var mqts []fv1.MessageQueueTrigger
-	mqts, err = getAllMessageQueueTriggers(opts.Client(), input.String(flagkey.MqtMQType), namespace)
+	mqts, err = getAllMessageQueueTriggers(opts.Client().DefaultClientset, input.String(flagkey.MqtMQType), namespace)
 	if err != nil {
 		return errors.Wrap(err, fmt.Sprintf("error getting MessageQueue Triggers from  %s namespaces", printNS))
 	}
@@ -128,7 +128,7 @@ func (opts *ListSubCommand) getResource(input cli.Input, namespace string, deplo
 	ShowMQTriggers(specMessageQueueTriggers)
 
 	var tts []fv1.TimeTrigger
-	tts, err = getAllTimeTriggers(opts.Client(), namespace)
+	tts, err = getAllTimeTriggers(opts.Client().DefaultClientset, namespace)
 	if err != nil {
 		return errors.Wrap(err, fmt.Sprintf("error getting Time Triggers from  %s namespaces", printNS))
 	}
@@ -136,7 +136,7 @@ func (opts *ListSubCommand) getResource(input cli.Input, namespace string, deplo
 	ShowTimeTriggers(specTimeTriggers)
 
 	var kws []fv1.KubernetesWatchTrigger
-	kws, err = getAllKubeWatchTriggers(opts.Client(), namespace)
+	kws, err = getAllKubeWatchTriggers(opts.Client().DefaultClientset, namespace)
 	if err != nil {
 		return errors.Wrap(err, fmt.Sprintf("error getting Kube Watchers from  %s namespaces", printNS))
 	}

@@ -68,14 +68,14 @@ func (opts *DestroySubCommand) run(input cli.Input) error {
 		emptyFr.DeploymentConfig = fr.DeploymentConfig
 
 		// "apply" the empty state
-		err = forceDeleteResources(opts.Client(), &emptyFr)
+		err = forceDeleteResources(opts.Client().DefaultClientset, &emptyFr)
 		if err != nil {
 			return errors.Wrap(err, "error deleting resources")
 		}
 		return nil
 	}
 	forceDelete := input.Bool(flagkey.ForceDelete)
-	err = deleteResources(opts.Client(), fr, forceDelete)
+	err = deleteResources(opts.Client().DefaultClientset, fr, forceDelete)
 	if err != nil {
 		return errors.Wrap(err, "error deleting resources")
 	}

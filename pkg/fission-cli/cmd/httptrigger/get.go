@@ -54,7 +54,7 @@ func (opts *GetSubCommand) run(input cli.Input) (err error) {
 		Name:      input.String(flagkey.HtName),
 		Namespace: namespace,
 	}
-	ht, err := opts.Client().V1().HTTPTrigger().Get(m)
+	ht, err := opts.Client().DefaultClientset.V1().HTTPTrigger().Get(m)
 	if err != nil {
 		return errors.Wrap(err, "error getting http trigger")
 	}
