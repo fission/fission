@@ -19,10 +19,10 @@ package main
 import (
 	"github.com/docopt/docopt-go"
 	"go.uber.org/zap"
+	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 
 	"github.com/fission/fission/pkg/info"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
-	"github.com/fission/fission/pkg/utils/signals"
 )
 
 func getStringArgWithDefault(arg interface{}, defaultValue string) string {
@@ -58,7 +58,7 @@ Options:
 			zap.Error(err))
 	}
 
-	ctx := signals.SetupSignalHandlerWithContext(logger)
+	ctx := signals.SetupSignalHandler()
 	crd := crdBackedClient.GetFunctionCRD(ctx)
 	if crd == nil {
 		logger.Info("nothing to do since CRDs are not present on the cluster")
