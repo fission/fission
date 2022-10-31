@@ -46,9 +46,9 @@ func (opts *ListSubCommand) do(input cli.Input) (err error) {
 
 	var tts []v1.TimeTrigger
 	if input.Bool(flagkey.AllNamespaces) {
-		tts, err = opts.Client().V1().TimeTrigger().List("")
+		tts, err = opts.Client().DefaultClientset.V1().TimeTrigger().List("")
 	} else {
-		tts, err = opts.Client().V1().TimeTrigger().List(ttNs)
+		tts, err = opts.Client().DefaultClientset.V1().TimeTrigger().List(ttNs)
 	}
 
 	if err != nil {

@@ -59,9 +59,9 @@ func (opts *ListSubCommand) run(input cli.Input) (err error) {
 
 	var mqts []v1.MessageQueueTrigger
 	if input.Bool(flagkey.AllNamespaces) {
-		mqts, err = opts.Client().V1().MessageQueueTrigger().List(input.String(flagkey.MqtMQType), "")
+		mqts, err = opts.Client().DefaultClientset.V1().MessageQueueTrigger().List(input.String(flagkey.MqtMQType), "")
 	} else {
-		mqts, err = opts.Client().V1().MessageQueueTrigger().List(input.String(flagkey.MqtMQType), opts.namespace)
+		mqts, err = opts.Client().DefaultClientset.V1().MessageQueueTrigger().List(input.String(flagkey.MqtMQType), opts.namespace)
 	}
 	if err != nil {
 		return errors.Wrap(err, "error listing message queue triggers")

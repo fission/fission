@@ -59,9 +59,9 @@ func (opts *ListSubCommand) run(input cli.Input) (err error) {
 
 	var canaryCfgs []v1.CanaryConfig
 	if input.Bool(flagkey.AllNamespaces) {
-		canaryCfgs, err = opts.Client().V1().CanaryConfig().List("")
+		canaryCfgs, err = opts.Client().DefaultClientset.V1().CanaryConfig().List("")
 	} else {
-		canaryCfgs, err = opts.Client().V1().CanaryConfig().List(opts.namespace)
+		canaryCfgs, err = opts.Client().DefaultClientset.V1().CanaryConfig().List(opts.namespace)
 	}
 	if err != nil {
 		return errors.Wrap(err, "error listing canary config")

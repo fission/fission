@@ -45,7 +45,7 @@ func (opts *GetSubCommand) run(input cli.Input) (err error) {
 		return errors.Wrap(err, "error getting canary config")
 	}
 
-	canaryCfg, err := opts.Client().V1().CanaryConfig().Get(&metav1.ObjectMeta{
+	canaryCfg, err := opts.Client().DefaultClientset.V1().CanaryConfig().Get(&metav1.ObjectMeta{
 		Name:      input.String(flagkey.CanaryName),
 		Namespace: namespace,
 	})

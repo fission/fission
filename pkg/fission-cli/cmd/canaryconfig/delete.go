@@ -46,7 +46,7 @@ func (opts *DeleteSubCommand) run(input cli.Input) (err error) {
 		Namespace: namespace,
 	}
 
-	err = opts.Client().V1().CanaryConfig().Delete(m)
+	err = opts.Client().DefaultClientset.V1().CanaryConfig().Delete(m)
 	if err != nil {
 		if input.Bool(flagkey.IgnoreNotFound) && util.IsNotFound(err) {
 			return nil

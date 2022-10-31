@@ -143,14 +143,14 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 		return nil
 	}
 
-	_, err := opts.Client().V1().TimeTrigger().Create(opts.trigger)
+	_, err := opts.Client().DefaultClientset.V1().TimeTrigger().Create(opts.trigger)
 	if err != nil {
 		return errors.Wrap(err, "error creating Time trigger")
 	}
 
 	fmt.Printf("trigger '%v' created\n", opts.trigger.ObjectMeta.Name)
 
-	t, err := getAPITimeInfo(opts.Client())
+	t, err := getAPITimeInfo(opts.Client().DefaultClientset)
 	if err != nil {
 		return err
 	}

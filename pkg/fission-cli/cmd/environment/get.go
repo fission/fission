@@ -50,7 +50,7 @@ func (opts *GetSubCommand) do(input cli.Input) (err error) {
 		Namespace: currentNS,
 	}
 
-	env, err := opts.Client().V1().Environment().Get(m)
+	env, err := opts.Client().DefaultClientset.V1().Environment().Get(m)
 	if err != nil {
 		return errors.Wrap(err, "error getting environment")
 	}

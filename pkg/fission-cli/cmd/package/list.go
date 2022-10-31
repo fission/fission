@@ -66,9 +66,9 @@ func (opts *ListSubCommand) run(input cli.Input) (err error) {
 
 	var pkgList []fv1.Package
 	if input.Bool(flagkey.AllNamespaces) {
-		pkgList, err = opts.Client().V1().Package().List("")
+		pkgList, err = opts.Client().DefaultClientset.V1().Package().List("")
 	} else {
-		pkgList, err = opts.Client().V1().Package().List(opts.pkgNamespace)
+		pkgList, err = opts.Client().DefaultClientset.V1().Package().List(opts.pkgNamespace)
 	}
 	if err != nil {
 		return err
@@ -86,7 +86,7 @@ func (opts *ListSubCommand) run(input cli.Input) (err error) {
 		show := true
 		// TODO improve list speed when --orphan
 		if opts.listOrphans {
-			fnList, err := GetFunctionsByPackage(opts.Client(), pkg.ObjectMeta.Name, pkg.ObjectMeta.Namespace)
+			fnList, err := GetFunctionsByPackage(opts.Client().DefaultClientset, pkg.ObjectMeta.Name, pkg.ObjectMeta.Namespace)
 			if err != nil {
 				return errors.Wrap(err, fmt.Sprintf("get functions sharing package %s", pkg.ObjectMeta.Name))
 			}

@@ -64,7 +64,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) (err error) {
 		return errors.Wrap(err, "error parsing time duration")
 	}
 
-	canaryCfg, err := opts.Client().V1().CanaryConfig().Get(&metav1.ObjectMeta{
+	canaryCfg, err := opts.Client().DefaultClientset.V1().CanaryConfig().Get(&metav1.ObjectMeta{
 		Name:      name,
 		Namespace: ns,
 	})
@@ -96,7 +96,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) (err error) {
 }
 
 func (opts *UpdateSubCommand) run(input cli.Input) error {
-	_, err := opts.Client().V1().CanaryConfig().Update(opts.canary)
+	_, err := opts.Client().DefaultClientset.V1().CanaryConfig().Update(opts.canary)
 	if err != nil {
 		return errors.Wrap(err, "error updating canary config")
 	}

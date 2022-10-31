@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"os"
 	"text/tabwriter"
+	"time"
 
 	"github.com/pkg/errors"
 
@@ -28,6 +29,7 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
+	"github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
 )
 
 type ListSubCommand struct {
@@ -47,9 +49,23 @@ func (opts *ListSubCommand) do(input cli.Input) (err error) {
 
 	var envs []v1.Environment
 	if input.Bool(flagkey.AllNamespaces) {
-		envs, err = opts.Client().V1().Environment().List("")
+		// envs, err = opts.Client().DefaultClientset.V1().Environment().List("")
+
+		var timeout time.Duration
+		if opts.TimeoutSeconds != nil {
+			timeout = time.Duration(*opts.TimeoutSeconds) * time.Second
+		}
+		result = &v1.EnvironmentList{}
+		err = c.client.Get().
+			Namespace(c.ns).
+			Resource("environments").
+			VersionedParams(&opts, scheme.ParameterCodec).
+			Timeout(timeout).
+			Do(ctx).
+			Into(result)
+
 	} else {
-		envs, err = opts.Client().V1().Environment().List(currentNS)
+		envs, err = opts.Client().DefaultClientset.V1().Environment().List(currentNS)
 	}
 
 	if err != nil {

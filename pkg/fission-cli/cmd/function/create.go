@@ -81,7 +81,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 
 	if !toSpec {
 		// check for unique function names within a namespace
-		fn, err := opts.Client().V1().Function().Get(&metav1.ObjectMeta{
+		fn, err := opts.Client().DefaultClientset.V1().Function().Get(&metav1.ObjectMeta{
 			Name:      input.String(flagkey.FnName),
 			Namespace: fnNamespace,
 		})
@@ -155,7 +155,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 			pkgMetadata = &pkg.ObjectMeta
 		} else {
 			// use existing package
-			pkg, err = opts.Client().V1().Package().Get(&metav1.ObjectMeta{
+			pkg, err = opts.Client().DefaultClientset.V1().Package().Get(&metav1.ObjectMeta{
 				Namespace: fnNamespace,
 				Name:      pkgName,
 			})
@@ -196,7 +196,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 					fnName, envName))
 			}
 		} else {
-			_, err := opts.Client().V1().Environment().Get(&metav1.ObjectMeta{
+			_, err := opts.Client().DefaultClientset.V1().Environment().Get(&metav1.ObjectMeta{
 				Namespace: fnNamespace,
 				Name:      envName,
 			})
@@ -232,7 +232,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		pkgName := generatePackageName(fnName, id.String())
 
 		// create new package in the same namespace as the function.
-		pkgMetadata, err = _package.CreatePackage(input, opts.Client(), pkgName, fnNamespace, envName,
+		pkgMetadata, err = _package.CreatePackage(input, opts.Client().DefaultClientset, pkgName, fnNamespace, envName,
 			srcArchiveFiles, deployArchiveFiles, buildcmd, specDir, opts.specFile, noZip, userProvidedNS)
 		if err != nil {
 			return errors.Wrap(err, "error creating package")
@@ -246,7 +246,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		// check the referenced secret is in the same ns as the function, if not give a warning.
 		if !toSpec { // TODO: workaround in order not to block users from creating function spec, remove it.
 			for _, secretName := range secretNames {
-				err := opts.Client().V1().Misc().SecretExists(&metav1.ObjectMeta{
+				err := opts.Client().DefaultClientset.V1().Misc().SecretExists(&metav1.ObjectMeta{
 					Namespace: fnNamespace,
 					Name:      secretName,
 				})
@@ -279,7 +279,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		// check the referenced cfgmap is in the same ns as the function, if not give a warning.
 		if !toSpec {
 			for _, cfgMapName := range cfgMapNames {
-				err := opts.Client().V1().Misc().ConfigMapExists(&metav1.ObjectMeta{
+				err := opts.Client().DefaultClientset.V1().Misc().ConfigMapExists(&metav1.ObjectMeta{
 					Namespace: fnNamespace,
 					Name:      cfgMapName,
 				})
@@ -385,7 +385,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 		return nil
 	}
 
-	_, err := opts.Client().V1().Function().Create(opts.function)
+	_, err := opts.Client().DefaultClientset.V1().Function().Create(opts.function)
 	if err != nil {
 		return errors.Wrap(err, "error creating function")
 	}
@@ -434,7 +434,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 			},
 		},
 	}
-	_, err = opts.Client().V1().HTTPTrigger().Create(ht)
+	_, err = opts.Client().DefaultClientset.V1().HTTPTrigger().Create(ht)
 	if err != nil {
 		return errors.Wrap(err, "error creating HTTP trigger")
 	}

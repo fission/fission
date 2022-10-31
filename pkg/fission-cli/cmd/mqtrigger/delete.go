@@ -60,7 +60,7 @@ func (opts *DeleteSubCommand) complete(input cli.Input) (err error) {
 }
 
 func (opts *DeleteSubCommand) run(input cli.Input) error {
-	err := opts.Client().V1().MessageQueueTrigger().Delete(opts.metadata)
+	err := opts.Client().DefaultClientset.V1().MessageQueueTrigger().Delete(opts.metadata)
 	if err != nil {
 		if input.Bool(flagkey.IgnoreNotFound) && util.IsNotFound(err) {
 			return nil

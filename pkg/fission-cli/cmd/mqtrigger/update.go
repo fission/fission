@@ -53,7 +53,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) (err error) {
 		return errors.Wrap(err, "error in deleting function ")
 	}
 
-	mqt, err := opts.Client().V1().MessageQueueTrigger().Get(&metav1.ObjectMeta{
+	mqt, err := opts.Client().DefaultClientset.V1().MessageQueueTrigger().Get(&metav1.ObjectMeta{
 		Name:      input.String(flagkey.MqtName),
 		Namespace: namespace,
 	})
@@ -100,7 +100,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) (err error) {
 	}
 	if len(fnName) > 0 {
 		functionList := []string{fnName}
-		err := util.CheckFunctionExistence(opts.Client(), functionList, namespace)
+		err := util.CheckFunctionExistence(opts.Client().DefaultClientset, functionList, namespace)
 		if err != nil {
 			console.Warn(err.Error())
 		}
@@ -151,7 +151,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) (err error) {
 }
 
 func (opts *UpdateSubCommand) run(input cli.Input) error {
-	_, err := opts.Client().V1().MessageQueueTrigger().Update(opts.trigger)
+	_, err := opts.Client().DefaultClientset.V1().MessageQueueTrigger().Update(opts.trigger)
 	if err != nil {
 		return errors.Wrap(err, "error updating message queue trigger")
 	}

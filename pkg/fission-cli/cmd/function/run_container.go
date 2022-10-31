@@ -70,7 +70,7 @@ func (opts *RunContainerSubCommand) complete(input cli.Input) error {
 
 	if !toSpec {
 		// check for unique function names within a namespace
-		fn, err := opts.Client().V1().Function().Get(&metav1.ObjectMeta{
+		fn, err := opts.Client().DefaultClientset.V1().Function().Get(&metav1.ObjectMeta{
 			Name:      input.String(flagkey.FnName),
 			Namespace: fnNamespace,
 		})
@@ -128,7 +128,7 @@ func (opts *RunContainerSubCommand) complete(input cli.Input) error {
 		// check the referenced secret is in the same ns as the function, if not give a warning.
 		if !toSpec { // TODO: workaround in order not to block users from creating function spec, remove it.
 			for _, secretName := range secretNames {
-				err := opts.Client().V1().Misc().SecretExists(&metav1.ObjectMeta{
+				err := opts.Client().DefaultClientset.V1().Misc().SecretExists(&metav1.ObjectMeta{
 					Namespace: fnNamespace,
 					Name:      secretName,
 				})
@@ -154,7 +154,7 @@ func (opts *RunContainerSubCommand) complete(input cli.Input) error {
 		// check the referenced cfgmap is in the same ns as the function, if not give a warning.
 		if !toSpec {
 			for _, cfgMapName := range cfgMapNames {
-				err := opts.Client().V1().Misc().ConfigMapExists(&metav1.ObjectMeta{
+				err := opts.Client().DefaultClientset.V1().Misc().ConfigMapExists(&metav1.ObjectMeta{
 					Namespace: fnNamespace,
 					Name:      cfgMapName,
 				})
@@ -238,7 +238,7 @@ func (opts *RunContainerSubCommand) run(input cli.Input) error {
 		return nil
 	}
 
-	_, err := opts.Client().V1().Function().Create(opts.function)
+	_, err := opts.Client().DefaultClientset.V1().Function().Create(opts.function)
 	if err != nil {
 		return errors.Wrap(err, "error creating function")
 	}

@@ -14,10 +14,12 @@ limitations under the License.
 package app
 
 import (
+	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/controller/client/rest"
+	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	wrapper "github.com/fission/fission/pkg/fission-cli/cliwrapper/driver/cobra"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/driver/cobra/helptemplate"
@@ -64,14 +66,24 @@ func App() *cobra.Command {
 
 				if input.IsSet(flagkey.ClientOnly) || input.IsSet(flagkey.PreCheckOnly) {
 					// TODO: use fake rest client for offline spec generation
-					cmd.SetClientset(client.MakeFakeClientset(nil))
+					fissionClient, kubernetesClient, _, _, err := crd.MakeFissionClient() //TODO: check correct value
+					if err != nil {
+						return errors.Wrap(err, "failed to get fission or kubernetes client")
+					}
+					cmd.SetClientset(client.MakeFakeClientset(nil), fissionClient, kubernetesClient)
 				} else {
 					serverUrl, err := util.GetServerURL(input)
 					if err != nil {
 						return err
 					}
 					restClient := rest.NewRESTClient(serverUrl)
-					cmd.SetClientset(client.MakeClientset(restClient))
+					fissionClient, kubernetesClient, _, _, err := crd.MakeFissionClient()
+					if err != nil {
+						return errors.Wrap(err, "failed to get fission or kubernetes client")
+					}
+
+					cmd.SetClientset(client.MakeClientset(restClient), fissionClient, kubernetesClient)
+
 				}
 
 				return nil

@@ -69,7 +69,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) (err error) {
 	}
 
 	// check that the trigger exists in the same namespace.
-	htTrigger, err := opts.Client().V1().HTTPTrigger().Get(&metav1.ObjectMeta{
+	htTrigger, err := opts.Client().DefaultClientset.V1().HTTPTrigger().Get(&metav1.ObjectMeta{
 		Name:      ht,
 		Namespace: fnNs,
 	})
@@ -95,7 +95,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) (err error) {
 
 	// check that the functions exist in the same namespace
 	fnList := []string{newFunc, oldFunc}
-	err = util.CheckFunctionExistence(opts.Client(), fnList, fnNs)
+	err = util.CheckFunctionExistence(opts.Client().DefaultClientset, fnList, fnNs)
 	if err != nil {
 		return errors.Wrap(err, "error checking functions existence")
 	}
@@ -124,7 +124,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) (err error) {
 }
 
 func (opts *CreateSubCommand) run(input cli.Input) error {
-	_, err := opts.Client().V1().CanaryConfig().Create(opts.canary)
+	_, err := opts.Client().DefaultClientset.V1().CanaryConfig().Create(opts.canary)
 	if err != nil {
 		return errors.Wrap(err, "error creating canary config")
 	}

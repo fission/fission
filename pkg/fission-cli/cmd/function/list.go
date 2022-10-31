@@ -47,9 +47,9 @@ func (opts *ListSubCommand) do(input cli.Input) error {
 
 	var fns []v1.Function
 	if input.Bool(flagkey.AllNamespaces) {
-		fns, err = opts.Client().V1().Function().List("")
+		fns, err = opts.Client().DefaultClientset.V1().Function().List("")
 	} else {
-		fns, err = opts.Client().V1().Function().List(namespace)
+		fns, err = opts.Client().DefaultClientset.V1().Function().List(namespace)
 	}
 	if err != nil {
 		return errors.Wrap(err, "error listing functions")

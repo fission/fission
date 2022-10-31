@@ -56,7 +56,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 		return errors.Wrap(err, "error in updating function ")
 	}
 
-	function, err := opts.Client().V1().Function().Get(&metav1.ObjectMeta{
+	function, err := opts.Client().DefaultClientset.V1().Function().Get(&metav1.ObjectMeta{
 		Name:      input.String(flagkey.FnName),
 		Namespace: fnNamespace,
 	})
@@ -90,7 +90,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 
 		// check that the referenced secret is in the same ns as the function, if not give a warning.
 		for _, secretName := range secretNames {
-			err := opts.Client().V1().Misc().SecretExists(&metav1.ObjectMeta{
+			err := opts.Client().DefaultClientset.V1().Misc().SecretExists(&metav1.ObjectMeta{
 				Namespace: fnNamespace,
 				Name:      secretName,
 			})
@@ -114,7 +114,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 
 		// check that the referenced cfgmap is in the same ns as the function, if not give a warning.
 		for _, cfgMapName := range cfgMapNames {
-			err := opts.Client().V1().Misc().ConfigMapExists(&metav1.ObjectMeta{
+			err := opts.Client().DefaultClientset.V1().Misc().ConfigMapExists(&metav1.ObjectMeta{
 				Namespace: fnNamespace,
 				Name:      cfgMapName,
 			})
@@ -186,7 +186,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 
 	function.Spec.Resources = *resReqs
 
-	pkg, err := opts.Client().V1().Package().Get(&metav1.ObjectMeta{
+	pkg, err := opts.Client().DefaultClientset.V1().Package().Get(&metav1.ObjectMeta{
 		Namespace: fnNamespace,
 		Name:      pkgName,
 	})
@@ -196,7 +196,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 
 	forceUpdate := input.Bool(flagkey.PkgForce)
 
-	fnList, err := _package.GetFunctionsByPackage(opts.Client(), pkg.ObjectMeta.Name, pkg.ObjectMeta.Namespace)
+	fnList, err := _package.GetFunctionsByPackage(opts.Client().DefaultClientset, pkg.ObjectMeta.Name, pkg.ObjectMeta.Namespace)
 	if err != nil {
 		return errors.Wrap(err, "error getting function list")
 	}
@@ -205,7 +205,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 		return errors.Errorf("Package is used by multiple functions, use --%v to force update", flagkey.PkgForce)
 	}
 
-	newPkgMeta, err := _package.UpdatePackage(input, opts.Client(), pkg)
+	newPkgMeta, err := _package.UpdatePackage(input, opts.Client().DefaultClientset, pkg)
 	if err != nil {
 		return errors.Wrap(err, fmt.Sprintf("error updating package '%v'", pkgName))
 	}
@@ -222,7 +222,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 				fns = append(fns, fn)
 			}
 		}
-		err = _package.UpdateFunctionPackageResourceVersion(opts.Client(), newPkgMeta, fns...)
+		err = _package.UpdateFunctionPackageResourceVersion(opts.Client().DefaultClientset, newPkgMeta, fns...)
 		if err != nil {
 			return errors.Wrap(err, "error updating function package reference resource version")
 		}
@@ -255,7 +255,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 }
 
 func (opts *UpdateSubCommand) run(input cli.Input) error {
-	_, err := opts.Client().V1().Function().Update(opts.function)
+	_, err := opts.Client().DefaultClientset.V1().Function().Update(opts.function)
 	if err != nil {
 		return errors.Wrap(err, "error updating function")
 	}

@@ -58,9 +58,9 @@ func (opts *ListSubCommand) complete(input cli.Input) (err error) {
 func (opts *ListSubCommand) run(input cli.Input) (err error) {
 	var ws []v1.KubernetesWatchTrigger
 	if input.Bool(flagkey.AllNamespaces) {
-		ws, err = opts.Client().V1().KubeWatcher().List("")
+		ws, err = opts.Client().DefaultClientset.V1().KubeWatcher().List("")
 	} else {
-		ws, err = opts.Client().V1().KubeWatcher().List(opts.namespace)
+		ws, err = opts.Client().DefaultClientset.V1().KubeWatcher().List(opts.namespace)
 	}
 	if err != nil {
 		return errors.Wrap(err, "error listing kubewatchers")

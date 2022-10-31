@@ -58,7 +58,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) (err error) {
 	if err != nil {
 		return errors.Wrap(err, "error creating environment")
 	}
-	env, err := opts.Client().V1().Environment().Get(&metav1.ObjectMeta{
+	env, err := opts.Client().DefaultClientset.V1().Environment().Get(&metav1.ObjectMeta{
 		Name:      input.String(flagkey.EnvName),
 		Namespace: currentContextNS,
 	})
@@ -81,7 +81,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) (err error) {
 }
 
 func (opts *UpdateSubCommand) run(input cli.Input) error {
-	_, err := opts.Client().V1().Environment().Update(opts.env)
+	_, err := opts.Client().DefaultClientset.V1().Environment().Update(opts.env)
 	if err != nil {
 		return errors.Wrap(err, "error updating environment")
 	}

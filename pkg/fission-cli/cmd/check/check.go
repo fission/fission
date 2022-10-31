@@ -42,7 +42,7 @@ func (opts *CheckSubCommand) do(input cli.Input) error {
 
 	hc := healthcheck.NewHealthChecker(checks, &healthcheck.Options{
 		KubeContext:   kubeContext,
-		FissionClient: opts.Client(),
+		FissionClient: opts.Client().DefaultClientset,
 	})
 
 	healthcheck.RunChecks(input.Context(), hc)

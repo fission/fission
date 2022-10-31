@@ -47,9 +47,9 @@ func (opts *ListSubCommand) run(input cli.Input) (err error) {
 
 	var hts []fv1.HTTPTrigger
 	if input.Bool(flagkey.AllNamespaces) {
-		hts, err = opts.Client().V1().HTTPTrigger().List("")
+		hts, err = opts.Client().DefaultClientset.V1().HTTPTrigger().List("")
 	} else {
-		hts, err = opts.Client().V1().HTTPTrigger().List(namespace)
+		hts, err = opts.Client().DefaultClientset.V1().HTTPTrigger().List(namespace)
 	}
 
 	if err != nil {

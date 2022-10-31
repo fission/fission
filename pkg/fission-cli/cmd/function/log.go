@@ -56,7 +56,7 @@ func (opts *LogSubCommand) do(input cli.Input) error {
 		recordLimit = 1000
 	}
 
-	f, err := opts.Client().V1().Function().Get(&metav1.ObjectMeta{
+	f, err := opts.Client().DefaultClientset.V1().Function().Get(&metav1.ObjectMeta{
 		Name:      input.String(flagkey.FnName),
 		Namespace: namespace,
 	})

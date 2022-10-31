@@ -48,7 +48,7 @@ func (opts *ListPodsSubCommand) do(input cli.Input) (err error) {
 	}
 
 	// validate environment
-	_, err = opts.Client().V1().Environment().Get(
+	_, err = opts.Client().DefaultClientset.V1().Environment().Get(
 		&metav1.ObjectMeta{
 			Name:      input.String(flagkey.EnvName),
 			Namespace: currentNS,
@@ -65,7 +65,7 @@ func (opts *ListPodsSubCommand) do(input cli.Input) (err error) {
 		},
 	}
 
-	pods, err := opts.Client().V1().Environment().ListPods(m)
+	pods, err := opts.Client().DefaultClientset.V1().Environment().ListPods(m)
 	if err != nil {
 		return errors.Wrap(err, "error listing environments")
 	}

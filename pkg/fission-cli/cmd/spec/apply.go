@@ -139,7 +139,7 @@ func (opts *ApplySubCommand) run(input cli.Input) error {
 
 	if watchResources || waitForBuild {
 		// init package build watcher
-		pbw = makePackageBuildWatcher(opts.Client())
+		pbw = makePackageBuildWatcher(opts.Client().DefaultClientset)
 	}
 
 	if watchResources {
@@ -196,7 +196,7 @@ func (opts *ApplySubCommand) run(input cli.Input) error {
 		}
 
 		// make changes to the cluster based on the specs
-		pkgMetas, as, err := applyResources(input.Context(), opts.Client(), specDir, fr, deleteResources, input.Bool(flagkey.SpecAllowConflicts))
+		pkgMetas, as, err := applyResources(input.Context(), opts.Client().DefaultClientset, specDir, fr, deleteResources, input.Bool(flagkey.SpecAllowConflicts))
 		if err != nil {
 			return errors.Wrap(err, "error applying specs")
 		}
