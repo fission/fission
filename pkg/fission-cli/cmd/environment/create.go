@@ -69,18 +69,13 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 func (opts *CreateSubCommand) run(input cli.Input) (err error) {
 	m := opts.env.ObjectMeta
 
-	envList, err := opts.Client().DefaultClientset.V1().Environment().List(m.Namespace)
-	// envList, err := opts.Client().FissionClientSet.CoreV1().Environments(m.Namespace).List(context.TODO(), metav1.ListOptions{})
-	// if err != nil {
-	// 	return errors.Wrap(err, "error creating resource")
-	// }
-	// list := *envList
+	envList, err := opts.Client().FissionClientSet.CoreV1().Environments(m.Namespace).List(input.Context(), metav1.ListOptions{})
 	if err != nil {
 		return err
-	} else if len(envList) > 0 {
+	} else if len(envList.Items) > 0 {
 		console.Verbose(2, "%d environment(s) are present in the %s namespace.  "+
 			"These environments are not isolated from each other; use separate namespaces if you need isolation.",
-			len(envList), m.Namespace)
+			len(envList.Items), m.Namespace)
 	}
 
 	userDefinedNS, currentNS, err := util.GetResourceNamespace(input, flagkey.NamespaceEnvironment)
@@ -122,12 +117,12 @@ func (opts *CreateSubCommand) run(input cli.Input) (err error) {
 	}
 
 	// check if namespace exists, if not create it.
-	err = createNsIfNotExists(opts.Client().KubernetesClient, context.TODO(), opts.env.ObjectMeta.Namespace)
+	err = createNsIfNotExists(opts.Client().KubernetesClient, input.Context(), opts.env.ObjectMeta.Namespace)
 	if err != nil {
 		return errors.Wrap(err, "error creating resource")
 	}
 
-	_, err = opts.Client().FissionClientSet.CoreV1().Environments(opts.env.Namespace).Create(context.TODO(), opts.env, metav1.CreateOptions{})
+	_, err = opts.Client().FissionClientSet.CoreV1().Environments(opts.env.Namespace).Create(input.Context(), opts.env, metav1.CreateOptions{})
 	if err != nil {
 		return errors.Wrap(err, "error creating resource")
 	}

@@ -44,27 +44,23 @@ func (opts *DeleteSubCommand) do(input cli.Input) (err error) {
 		return errors.Wrap(err, "error creating environment")
 	}
 	console.Verbose(2, "Searching for resource in  %s Namespace", currentContextNS)
-
-	m := &metav1.ObjectMeta{
-		Name:      input.String(flagkey.EnvName),
-		Namespace: currentContextNS,
-	}
+	envName := input.String(flagkey.EnvName)
 
 	if !input.Bool(flagkey.EnvForce) {
-		fns, err := opts.Client().DefaultClientset.V1().Function().List(metav1.NamespaceAll)
+		fns, err := opts.Client().FissionClientSet.CoreV1().Functions(metav1.NamespaceAll).List(input.Context(), metav1.ListOptions{})
 		if err != nil {
 			return errors.Wrap(err, "Error getting functions wrt environment.")
 		}
 
-		for _, fn := range fns {
-			if fn.Spec.Environment.Name == m.Name &&
-				fn.Spec.Environment.Namespace == m.Namespace {
+		for _, fn := range fns.Items {
+			if fn.Spec.Environment.Name == envName &&
+				fn.Spec.Environment.Namespace == currentContextNS {
 				return errors.New("Environment is used by at least one function.")
 			}
 		}
 	}
 
-	err = opts.Client().DefaultClientset.V1().Environment().Delete(m)
+	err = opts.Client().FissionClientSet.CoreV1().Environments(currentContextNS).Delete(input.Context(), envName, metav1.DeleteOptions{})
 	if err != nil {
 		if input.Bool(flagkey.IgnoreNotFound) && util.IsNotFound(err) {
 			return nil
@@ -72,7 +68,7 @@ func (opts *DeleteSubCommand) do(input cli.Input) (err error) {
 		return errors.Wrap(err, "error deleting environment")
 	}
 
-	fmt.Printf("environment '%v' deleted\n", m.Name)
+	fmt.Printf("environment '%v' deleted\n", envName)
 
 	return nil
 }
