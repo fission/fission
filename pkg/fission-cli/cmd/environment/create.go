@@ -17,15 +17,12 @@ limitations under the License.
 package environment
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
 	apiv1 "k8s.io/api/core/v1"
-	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
@@ -117,7 +114,7 @@ func (opts *CreateSubCommand) run(input cli.Input) (err error) {
 	}
 
 	// check if namespace exists, if not create it.
-	err = createNsIfNotExists(opts.Client().KubernetesClient, input.Context(), opts.env.ObjectMeta.Namespace)
+	err = util.CreateNsIfNotExists(opts.Client().KubernetesClient, input.Context(), opts.env.ObjectMeta.Namespace)
 	if err != nil {
 		return errors.Wrap(err, "error creating resource")
 	}
@@ -229,24 +226,4 @@ func createEnvironmentFromCmd(input cli.Input) (*fv1.Environment, error) {
 	}
 
 	return env, nil
-}
-
-// check if namespace exists, if not create it.
-func createNsIfNotExists(kClient kubernetes.Interface, ctx context.Context, ns string) error {
-	if ns == metav1.NamespaceDefault {
-		// we don't have to create default ns
-		return nil
-	}
-
-	_, err := kClient.CoreV1().Namespaces().Get(ctx, ns, metav1.GetOptions{})
-	if err != nil && kerrors.IsNotFound(err) {
-		ns := &apiv1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: ns,
-			},
-		}
-		_, err = kClient.CoreV1().Namespaces().Create(ctx, ns, metav1.CreateOptions{})
-	}
-
-	return err
 }

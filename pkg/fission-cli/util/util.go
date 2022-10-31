@@ -31,7 +31,9 @@ import (
 
 	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
+	apiv1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -512,4 +514,24 @@ func GetResourceNamespace(input cli.Input, deprecatedFlag string) (namespace, cu
 	console.Verbose(2, "Namespace for resource %s ", currentNS)
 
 	return namespace, currentNS, nil
+}
+
+// CreateNsIfNotExists check if namespace exists, if not create it.
+func CreateNsIfNotExists(kClient kubernetes.Interface, ctx context.Context, ns string) error {
+	if ns == metav1.NamespaceDefault {
+		// we don't have to create default ns
+		return nil
+	}
+
+	_, err := kClient.CoreV1().Namespaces().Get(ctx, ns, metav1.GetOptions{})
+	if err != nil && kerrors.IsNotFound(err) {
+		ns := &apiv1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: ns,
+			},
+		}
+		_, err = kClient.CoreV1().Namespaces().Create(ctx, ns, metav1.CreateOptions{})
+	}
+
+	return err
 }

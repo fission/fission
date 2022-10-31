@@ -196,7 +196,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 
 	forceUpdate := input.Bool(flagkey.PkgForce)
 
-	fnList, err := _package.GetFunctionsByPackage(opts.Client().DefaultClientset, pkg.ObjectMeta.Name, pkg.ObjectMeta.Namespace)
+	fnList, err := _package.GetFunctionsByPackage(input.Context(), opts.Client(), pkg.ObjectMeta.Name, pkg.ObjectMeta.Namespace)
 	if err != nil {
 		return errors.Wrap(err, "error getting function list")
 	}
@@ -205,7 +205,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 		return errors.Errorf("Package is used by multiple functions, use --%v to force update", flagkey.PkgForce)
 	}
 
-	newPkgMeta, err := _package.UpdatePackage(input, opts.Client().DefaultClientset, pkg)
+	newPkgMeta, err := _package.UpdatePackage(input, opts.Client(), pkg)
 	if err != nil {
 		return errors.Wrap(err, fmt.Sprintf("error updating package '%v'", pkgName))
 	}
@@ -222,7 +222,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 				fns = append(fns, fn)
 			}
 		}
-		err = _package.UpdateFunctionPackageResourceVersion(opts.Client().DefaultClientset, newPkgMeta, fns...)
+		err = _package.UpdateFunctionPackageResourceVersion(input.Context(), opts.Client(), newPkgMeta, fns...)
 		if err != nil {
 			return errors.Wrap(err, "error updating function package reference resource version")
 		}
