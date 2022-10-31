@@ -150,40 +150,39 @@ func (envw *environmentWatcher) getLabels(envName string, envNamespace string, e
 	}
 }
 
-func (envw *environmentWatcher) watchEnvironments(ctx context.Context) {
+func (envw *environmentWatcher) watchEnvironments(ctx context.Context, namespace string) {
 	rv := ""
 	for {
-		for _, namespace := range utils.GetNamespaces() {
-			wi, err := envw.fissionClient.CoreV1().Environments(namespace).Watch(ctx,
-				metav1.ListOptions{
-					ResourceVersion: rv,
-				})
-			if err != nil {
-				if utils.IsNetworkError(err) {
-					envw.logger.Error("encountered network error, retrying later", zap.Error(err))
-					time.Sleep(5 * time.Second)
-					continue
-				}
-				envw.logger.Fatal("error watching environment list", zap.Error(err), zap.String("namespace", namespace))
+		wi, err := envw.fissionClient.CoreV1().Environments(namespace).Watch(ctx,
+			metav1.ListOptions{
+				ResourceVersion: rv,
+			})
+		if err != nil {
+			if utils.IsNetworkError(err) {
+				envw.logger.Error("encountered network error, retrying later", zap.Error(err))
+				time.Sleep(5 * time.Second)
+				continue
 			}
-
-			for {
-				ev, more := <-wi.ResultChan()
-				if !more {
-					// restart watch from last rv
-					break
-				}
-				if ev.Type == watch.Error {
-					// restart watch from the start
-					rv = ""
-					time.Sleep(time.Second)
-					break
-				}
-				env := ev.Object.(*fv1.Environment)
-				rv = env.ObjectMeta.ResourceVersion
-				envw.sync(ctx, namespace)
-			}
+			envw.logger.Fatal("error watching environment list", zap.Error(err), zap.String("namespace", namespace))
 		}
+
+		for {
+			ev, more := <-wi.ResultChan()
+			if !more {
+				// restart watch from last rv
+				break
+			}
+			if ev.Type == watch.Error {
+				// restart watch from the start
+				rv = ""
+				time.Sleep(time.Second)
+				break
+			}
+			env := ev.Object.(*fv1.Environment)
+			rv = env.ObjectMeta.ResourceVersion
+			envw.sync(ctx, namespace)
+		}
+
 	}
 }
 
