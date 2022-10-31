@@ -41,24 +41,26 @@ func MakeWatchSync(ctx context.Context, logger *zap.Logger, client versioned.Int
 		client:      client,
 		kubeWatcher: kubeWatcher,
 	}
-	go ws.syncSvc(ctx)
+
+	for _, namespace := range utils.GetNamespaces() {
+		go ws.syncSvc(ctx, namespace)
+	}
 	return ws
 }
 
-func (ws *WatchSync) syncSvc(ctx context.Context) {
+func (ws *WatchSync) syncSvc(ctx context.Context, namespace string) {
 	// TODO watch instead of polling
 	for {
-		for _, namespace := range utils.GetNamespaces() {
-			watches, err := ws.client.CoreV1().KubernetesWatchTriggers(namespace).List(ctx, metav1.ListOptions{})
-			if err != nil {
-				ws.logger.Fatal("failed to get Kubernetes watch trigger list", zap.Error(err), zap.String("namespace", namespace))
-			}
-
-			err = ws.kubeWatcher.Sync(watches.Items)
-			if err != nil {
-				ws.logger.Fatal("failed to sync watches", zap.Error(err))
-			}
+		watches, err := ws.client.CoreV1().KubernetesWatchTriggers(namespace).List(ctx, metav1.ListOptions{})
+		if err != nil {
+			ws.logger.Fatal("failed to get Kubernetes watch trigger list", zap.Error(err), zap.String("namespace", namespace))
 		}
+
+		err = ws.kubeWatcher.Sync(watches.Items)
+		if err != nil {
+			ws.logger.Fatal("failed to sync watches", zap.Error(err))
+		}
+
 		time.Sleep(3 * time.Second)
 	}
 }

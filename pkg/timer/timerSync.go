@@ -41,24 +41,25 @@ func MakeTimerSync(ctx context.Context, logger *zap.Logger, fissionClient versio
 		fissionClient: fissionClient,
 		timer:         timer,
 	}
-	go ws.syncSvc(ctx)
+
+	for _, namespace := range utils.GetNamespaces() {
+		go ws.syncSvc(ctx, namespace)
+	}
 	return ws
 }
 
-func (ws *TimerSync) syncSvc(ctx context.Context) {
+func (ws *TimerSync) syncSvc(ctx context.Context, namespace string) {
 	for {
-		for _, namespace := range utils.GetNamespaces() {
-			triggers, err := ws.fissionClient.CoreV1().TimeTriggers(namespace).List(ctx, metav1.ListOptions{})
-			if err != nil {
-				if utils.IsNetworkError(err) {
-					ws.logger.Info("encountered a network error - will retry", zap.Error(err))
-					time.Sleep(5 * time.Second)
-					continue
-				}
-				ws.logger.Fatal("failed to get time trigger list", zap.Error(err), zap.String("namespace", namespace))
+		triggers, err := ws.fissionClient.CoreV1().TimeTriggers(namespace).List(ctx, metav1.ListOptions{})
+		if err != nil {
+			if utils.IsNetworkError(err) {
+				ws.logger.Info("encountered a network error - will retry", zap.Error(err))
+				time.Sleep(5 * time.Second)
+				continue
 			}
-			ws.timer.Sync(triggers.Items) //nolint: errCheck
+			ws.logger.Fatal("failed to get time trigger list", zap.Error(err), zap.String("namespace", namespace))
 		}
+		ws.timer.Sync(triggers.Items) //nolint: errCheck
 
 		// TODO switch to watches
 		time.Sleep(3 * time.Second)
