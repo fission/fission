@@ -36,10 +36,7 @@ type (
 )
 
 var (
-	once = sync.Once{}
-	// defaultClientset client.Interface
-	// fissionClientSet versioned.Interface
-	// kubernetesClient kubernetes.Interface
+	once          = sync.Once{}
 	defaultClient Client
 )
 
@@ -53,6 +50,6 @@ func SetClientset(clientset client.Interface, fClientSet versioned.Interface, kC
 	})
 }
 
-func (c *CommandActioner) Client() (defaultClient Client) {
+func (c *CommandActioner) Client() Client {
 	return defaultClient
 }
