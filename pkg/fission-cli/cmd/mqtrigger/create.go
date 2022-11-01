@@ -210,12 +210,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 		return nil
 	}
 
-	err := util.CreateNsIfNotExists(opts.Client().KubernetesClient, input.Context(), opts.trigger.ObjectMeta.Namespace)
-	if err != nil {
-		return errors.Wrap(err, "error creating resource")
-	}
-
-	_, err = opts.Client().FissionClientSet.CoreV1().MessageQueueTriggers(opts.trigger.ObjectMeta.Namespace).Create(input.Context(), opts.trigger, metav1.CreateOptions{})
+	_, err := opts.Client().FissionClientSet.CoreV1().MessageQueueTriggers(opts.trigger.ObjectMeta.Namespace).Create(input.Context(), opts.trigger, metav1.CreateOptions{})
 	if err != nil {
 		return errors.Wrap(err, "create message queue trigger")
 	}

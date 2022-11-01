@@ -149,7 +149,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) (err error) {
 
 func (opts *UpdateSubCommand) run(input cli.Input) error {
 
-	err := checkHTTPTriggerDuplicates(input.Context(), opts.Client(), opts.trigger)
+	err := util.CheckHTTPTriggerDuplicates(input.Context(), opts.Client(), opts.trigger)
 	if err != nil {
 		return errors.Wrap(err, "Error while creating HTTP Trigger")
 	}

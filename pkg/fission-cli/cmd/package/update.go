@@ -129,7 +129,7 @@ func UpdatePackage(input cli.Input, client cmd.Client, pkg *fv1.Package) (*metav
 	}
 
 	if input.IsSet(flagkey.PkgSrcArchive) {
-		srcArchive, err := CreateArchive(client.DefaultClientset, input, srcArchiveFiles, noZip, insecure, srcChecksum, "", "")
+		srcArchive, err := CreateArchive(client, input, srcArchiveFiles, noZip, insecure, srcChecksum, "", "")
 		if err != nil {
 			return nil, errors.Wrap(err, "error creating source archive")
 		}
@@ -145,7 +145,7 @@ func UpdatePackage(input cli.Input, client cmd.Client, pkg *fv1.Package) (*metav
 	}
 
 	if input.IsSet(flagkey.PkgDeployArchive) || input.IsSet(flagkey.PkgCode) {
-		deployArchive, err := CreateArchive(client.DefaultClientset, input, deployArchiveFiles, noZip, insecure, deployChecksum, "", "")
+		deployArchive, err := CreateArchive(client, input, deployArchiveFiles, noZip, insecure, deployChecksum, "", "")
 		if err != nil {
 			return nil, errors.Wrap(err, "error creating deploy archive")
 		}

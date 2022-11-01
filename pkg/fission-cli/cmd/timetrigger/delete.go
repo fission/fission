@@ -26,6 +26,7 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 type DeleteSubCommand struct {
@@ -45,7 +46,7 @@ func (opts *DeleteSubCommand) do(input cli.Input) (err error) {
 
 	err = opts.Client().FissionClientSet.CoreV1().TimeTriggers(namespace).Delete(input.Context(), input.String(flagkey.TtName), metav1.DeleteOptions{})
 	if err != nil {
-		if input.Bool(flagkey.IgnoreNotFound) && util.IsNotFound(err) {
+		if input.Bool(flagkey.IgnoreNotFound) && kerrors.IsNotFound(err) {
 			return nil
 		}
 		return errors.Wrap(err, "error deleting trigger")

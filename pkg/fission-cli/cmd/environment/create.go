@@ -108,16 +108,6 @@ func (opts *CreateSubCommand) run(input cli.Input) (err error) {
 	}
 
 	opts.env.ObjectMeta.Namespace = currentNS
-	err = opts.env.Validate()
-	if err != nil {
-		return fv1.AggregateValidationErrors("Environment", err)
-	}
-
-	// check if namespace exists, if not create it.
-	err = util.CreateNsIfNotExists(opts.Client().KubernetesClient, input.Context(), opts.env.ObjectMeta.Namespace)
-	if err != nil {
-		return errors.Wrap(err, "error creating resource")
-	}
 
 	_, err = opts.Client().FissionClientSet.CoreV1().Environments(opts.env.Namespace).Create(input.Context(), opts.env, metav1.CreateOptions{})
 	if err != nil {

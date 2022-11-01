@@ -53,10 +53,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) (err error) {
 		return errors.Wrap(err, "error in deleting function ")
 	}
 
-	mqt, err := opts.Client().DefaultClientset.V1().MessageQueueTrigger().Get(&metav1.ObjectMeta{
-		Name:      input.String(flagkey.MqtName),
-		Namespace: namespace,
-	})
+	mqt, err := opts.Client().FissionClientSet.CoreV1().MessageQueueTriggers(namespace).Get(input.Context(), input.String(flagkey.MqtName), metav1.GetOptions{})
 	if err != nil {
 		return errors.Wrap(err, "error getting message queue trigger")
 	}
