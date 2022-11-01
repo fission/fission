@@ -22,16 +22,20 @@ import (
 
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	k8sCache "k8s.io/client-go/tools/cache"
 
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	"github.com/fission/fission/pkg/utils"
 )
 
 type (
 	TimerSync struct {
-		logger        *zap.Logger
-		fissionClient versioned.Interface
-		timer         *Timer
+		logger              *zap.Logger
+		fissionClient       versioned.Interface
+		timer               *Timer
+		timeTriggerInformer map[string]k8sCache.SharedIndexInformer
 	}
 )
 
@@ -42,10 +46,52 @@ func MakeTimerSync(ctx context.Context, logger *zap.Logger, fissionClient versio
 		timer:         timer,
 	}
 
-	for _, namespace := range utils.GetNamespaces() {
-		go ws.syncSvc(ctx, namespace)
-	}
+	ws.timeTriggerInformer = utils.GetInformersForNamespaces(fissionClient, time.Minute*30, fv1.TimeTriggerResource)
+	ws.TimeTriggerEventHandlers(ctx)
 	return ws
+}
+
+func (ws *TimerSync) TimeTriggerEventHandlers(ctx context.Context) {
+	for _, informer := range ws.timeTriggerInformer {
+		informer.AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
+			AddFunc: func(obj interface{}) {
+
+				objTimeTrigger := obj.(*fv1.TimeTrigger)
+				ws.logger.Debug("cron added", zap.String("trigger name", objTimeTrigger.ObjectMeta.Name))
+				ws.timer.triggers[crd.CacheKey(&objTimeTrigger.ObjectMeta)] = &timerTriggerWithCron{
+					trigger: *objTimeTrigger,
+					cron:    ws.timer.newCron(*objTimeTrigger),
+				}
+			},
+			UpdateFunc: func(oldObj interface{}, newObj interface{}) {
+				oldTimeTrigger := oldObj.(*fv1.TimeTrigger)
+				newTimeTrigger := newObj.(*fv1.TimeTrigger)
+				if item, ok := ws.timer.triggers[crd.CacheKey(&newTimeTrigger.ObjectMeta)]; ok {
+					if oldTimeTrigger.Spec.Cron != newTimeTrigger.Spec.Cron {
+						if item.cron != nil {
+							item.cron.Stop()
+						}
+						item.cron = ws.timer.newCron(*newTimeTrigger)
+						ws.logger.Debug("cron updated", zap.String("trigger name", newTimeTrigger.ObjectMeta.Name))
+					}
+					ws.logger.Debug("old spec and new spec are not same", zap.String("trigger name", newTimeTrigger.ObjectMeta.Name))
+				}
+				ws.logger.Debug("time trigger not found in update", zap.String("trigger name", newTimeTrigger.ObjectMeta.Name))
+			},
+			DeleteFunc: func(obj interface{}) {
+				objTimeTrigger := obj.(*fv1.TimeTrigger)
+				if item, ok := ws.timer.triggers[crd.CacheKey(&objTimeTrigger.ObjectMeta)]; ok {
+					if item.cron != nil {
+						item.cron.Stop()
+						ws.logger.Info("cron for time trigger stopped", zap.String("trigger", item.trigger.ObjectMeta.Name))
+					}
+					delete(ws.timer.triggers, crd.CacheKey(&objTimeTrigger.ObjectMeta))
+					ws.logger.Debug("time trigger deleted from cache", zap.String("trigger name", objTimeTrigger.ObjectMeta.Name))
+				}
+				ws.logger.Debug("time trigger not found in detele", zap.String("trigger name", objTimeTrigger.ObjectMeta.Name))
+			},
+		})
+	}
 }
 
 func (ws *TimerSync) syncSvc(ctx context.Context, namespace string) {
