@@ -22,16 +22,19 @@ import (
 
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	k8sCache "k8s.io/client-go/tools/cache"
 
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	"github.com/fission/fission/pkg/utils"
 )
 
 type (
 	WatchSync struct {
-		logger      *zap.Logger
-		client      versioned.Interface
-		kubeWatcher *KubeWatcher
+		logger              *zap.Logger
+		client              versioned.Interface
+		kubeWatcher         *KubeWatcher
+		kubeWatcherInformer map[string]k8sCache.SharedIndexInformer
 	}
 )
 
@@ -42,10 +45,31 @@ func MakeWatchSync(ctx context.Context, logger *zap.Logger, client versioned.Int
 		kubeWatcher: kubeWatcher,
 	}
 
-	for _, namespace := range utils.GetNamespaces() {
-		go ws.syncSvc(ctx, namespace)
-	}
+	ws.kubeWatcherInformer = utils.GetInformersForNamespaces(client, time.Minute*30, fv1.KubernetesWatchResource)
+	ws.KubeWatcherEventHandlers(ctx)
 	return ws
+}
+
+func (ws *WatchSync) Run(ctx context.Context) {
+	for _, informer := range ws.kubeWatcherInformer {
+		go informer.Run(ctx.Done())
+	}
+}
+
+func (ws *WatchSync) KubeWatcherEventHandlers(ctx context.Context) {
+	for _, informer := range ws.kubeWatcherInformer {
+		informer.AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
+			AddFunc: func(obj interface{}) {
+				objKubeWatcher := obj.(*fv1.KubernetesWatchTrigger)
+				ws.kubeWatcher.addWatch(ctx, objKubeWatcher)
+			},
+			UpdateFunc: func(oldObj interface{}, newObj interface{}) {},
+			DeleteFunc: func(obj interface{}) {
+				objKubeWatcher := obj.(*fv1.KubernetesWatchTrigger)
+				ws.kubeWatcher.removeWatch(objKubeWatcher)
+			},
+		})
+	}
 }
 
 func (ws *WatchSync) syncSvc(ctx context.Context, namespace string) {
