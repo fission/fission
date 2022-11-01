@@ -326,7 +326,7 @@ func (pkgw *packageWatcher) Run(ctx context.Context) {
 	go pkgw.podInformer.Run(ctx.Done())
 	for _, pkgInformer := range pkgw.pkgInformer {
 		pkgInformer.AddEventHandler(pkgw.packageInformerHandler(ctx))
-		pkgInformer.Run(ctx.Done())
+		go pkgInformer.Run(ctx.Done())
 	}
 }
 
