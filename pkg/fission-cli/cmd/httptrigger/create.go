@@ -17,11 +17,9 @@ limitations under the License.
 package httptrigger
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"os"
-	"sort"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -229,14 +227,9 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 	}
 
 	// Ensure we don't have a duplicate HTTP route defined (same URL and method)
-	err := checkHTTPTriggerDuplicates(input.Context(), opts.Client(), opts.trigger)
+	err := util.CheckHTTPTriggerDuplicates(input.Context(), opts.Client(), opts.trigger)
 	if err != nil {
 		return errors.Wrap(err, "Error while creating HTTP Trigger")
-	}
-
-	err = util.CreateNsIfNotExists(opts.Client().KubernetesClient, input.Context(), opts.trigger.ObjectMeta.Namespace)
-	if err != nil {
-		return errors.Wrap(err, "error creating namespace for trigger")
 	}
 
 	_, err = opts.Client().FissionClientSet.CoreV1().HTTPTriggers(opts.trigger.Namespace).Create(input.Context(), opts.trigger, metav1.CreateOptions{})
@@ -303,38 +296,4 @@ func setHtFunctionRef(functionList []string, functionWeightsList []int) (*fv1.Fu
 	}
 
 	return nil, fmt.Errorf("the number of functions in a trigger can be 1 or 2(for canary feature along with their weights)")
-}
-
-// checkHTTPTriggerDuplicates checks whether the tuple (Method, Host, URL) is duplicate or not.
-func checkHTTPTriggerDuplicates(ctx context.Context, client cmd.Client, t *fv1.HTTPTrigger) error {
-	triggers, err := client.FissionClientSet.CoreV1().HTTPTriggers(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
-	if err != nil {
-		return err
-	}
-	for _, ht := range triggers.Items {
-		if ht.ObjectMeta.UID == t.ObjectMeta.UID {
-			// Same resource. No need to check.
-			continue
-		}
-		urlMatch := false
-		if (ht.Spec.RelativeURL != "" && ht.Spec.RelativeURL == t.Spec.RelativeURL) || (ht.Spec.Prefix != nil && t.Spec.Prefix != nil && *ht.Spec.Prefix != "" && *ht.Spec.Prefix == *t.Spec.Prefix) {
-			urlMatch = true
-		}
-		methodMatch := false
-		if ht.Spec.Method == t.Spec.Method && len(ht.Spec.Methods) == len(t.Spec.Methods) {
-			methodMatch = true
-			sort.Strings(ht.Spec.Methods)
-			sort.Strings(t.Spec.Methods)
-			for i, m1 := range ht.Spec.Methods {
-				if m1 != t.Spec.Methods[i] {
-					methodMatch = false
-				}
-			}
-		}
-		if urlMatch && methodMatch && ht.Spec.Method == t.Spec.Method && ht.Spec.Host == t.Spec.Host {
-			return fmt.Errorf("HTTPTrigger with same Host, URL & method already exists (%v)",
-				ht.ObjectMeta.Name)
-		}
-	}
-	return nil
 }

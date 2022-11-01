@@ -153,7 +153,7 @@ func CreatePackage(input cli.Input, client cmd.Client, pkgName string, pkgNamesp
 		if len(specFile) > 0 { // we should do this in all cases, i think
 			pkgStatus = fv1.BuildStatusNone
 		}
-		deployment, err := CreateArchive(client.DefaultClientset, input, deployArchiveFiles, noZip, insecure, deployChecksum, specDir, specFile)
+		deployment, err := CreateArchive(client, input, deployArchiveFiles, noZip, insecure, deployChecksum, specDir, specFile)
 		if err != nil {
 			return nil, errors.Wrap(err, "error creating source archive")
 		}
@@ -163,7 +163,7 @@ func CreatePackage(input cli.Input, client cmd.Client, pkgName string, pkgNamesp
 		}
 	}
 	if len(srcArchiveFiles) > 0 {
-		source, err := CreateArchive(client.DefaultClientset, input, srcArchiveFiles, false, insecure, srcChecksum, specDir, specFile)
+		source, err := CreateArchive(client, input, srcArchiveFiles, false, insecure, srcChecksum, specDir, specFile)
 		if err != nil {
 			return nil, errors.Wrap(err, "error creating deploy archive")
 		}
@@ -223,12 +223,6 @@ func CreatePackage(input cli.Input, client cmd.Client, pkgName string, pkgNamesp
 		return &pkg.ObjectMeta, nil
 	} else {
 		pkg.ObjectMeta.Namespace = pkgNamespace
-
-		// check if namespace exists, if not create it.
-		err := util.CreateNsIfNotExists(client.KubernetesClient, input.Context(), pkgNamespace)
-		if err != nil {
-			return nil, errors.Wrap(err, "error creating resource")
-		}
 
 		pkgMetadata, err := client.FissionClientSet.CoreV1().Packages(pkgNamespace).Create(input.Context(), pkg, metav1.CreateOptions{})
 		if err != nil {

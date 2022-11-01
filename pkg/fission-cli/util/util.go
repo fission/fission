@@ -24,6 +24,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -31,9 +32,7 @@ import (
 
 	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
-	apiv1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
-	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -41,6 +40,7 @@ import (
 	restclient "k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/controller/client/rest"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
@@ -512,22 +512,36 @@ func GetResourceNamespace(input cli.Input, deprecatedFlag string) (namespace, cu
 	return namespace, currentNS, nil
 }
 
-// CreateNsIfNotExists check if namespace exists, if not create it.
-func CreateNsIfNotExists(kClient kubernetes.Interface, ctx context.Context, ns string) error {
-	if ns == metav1.NamespaceDefault {
-		// we don't have to create default ns
-		return nil
+// CheckHTTPTriggerDuplicates checks whether the tuple (Method, Host, URL) is duplicate or not.
+func CheckHTTPTriggerDuplicates(ctx context.Context, client cmd.Client, t *fv1.HTTPTrigger) error {
+	triggers, err := client.FissionClientSet.CoreV1().HTTPTriggers(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return err
 	}
-
-	_, err := kClient.CoreV1().Namespaces().Get(ctx, ns, metav1.GetOptions{})
-	if err != nil && kerrors.IsNotFound(err) {
-		ns := &apiv1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: ns,
-			},
+	for _, ht := range triggers.Items {
+		if ht.ObjectMeta.UID == t.ObjectMeta.UID {
+			// Same resource. No need to check.
+			continue
 		}
-		_, err = kClient.CoreV1().Namespaces().Create(ctx, ns, metav1.CreateOptions{})
+		urlMatch := false
+		if (ht.Spec.RelativeURL != "" && ht.Spec.RelativeURL == t.Spec.RelativeURL) || (ht.Spec.Prefix != nil && t.Spec.Prefix != nil && *ht.Spec.Prefix != "" && *ht.Spec.Prefix == *t.Spec.Prefix) {
+			urlMatch = true
+		}
+		methodMatch := false
+		if ht.Spec.Method == t.Spec.Method && len(ht.Spec.Methods) == len(t.Spec.Methods) {
+			methodMatch = true
+			sort.Strings(ht.Spec.Methods)
+			sort.Strings(t.Spec.Methods)
+			for i, m1 := range ht.Spec.Methods {
+				if m1 != t.Spec.Methods[i] {
+					methodMatch = false
+				}
+			}
+		}
+		if urlMatch && methodMatch && ht.Spec.Method == t.Spec.Method && ht.Spec.Host == t.Spec.Host {
+			return fmt.Errorf("HTTPTrigger with same Host, URL & method already exists (%v)",
+				ht.ObjectMeta.Name)
+		}
 	}
-
-	return err
+	return nil
 }

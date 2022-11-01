@@ -17,6 +17,7 @@ limitations under the License.
 package environment
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"text/tabwriter"
@@ -48,7 +49,7 @@ func (opts *ListSubCommand) do(input cli.Input) (err error) {
 
 	var response *v1.EnvironmentList
 	if input.Bool(flagkey.AllNamespaces) {
-		response, err = opts.Client().FissionClientSet.CoreV1().Environments(metav1.NamespaceAll).List(input.Context(), metav1.ListOptions{})
+		response, err = opts.Client().FissionClientSet.CoreV1().Environments(metav1.NamespaceAll).List(context.TODO(), metav1.ListOptions{})
 	} else {
 		response, err = opts.Client().FissionClientSet.CoreV1().Environments(currentNS).List(input.Context(), metav1.ListOptions{})
 	}
@@ -56,7 +57,10 @@ func (opts *ListSubCommand) do(input cli.Input) (err error) {
 		return errors.Wrap(err, "error listing environments")
 	}
 
-	envs := response.Items
+	var envs []v1.Environment
+	if response.Items != nil {
+		envs = response.Items
+	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "IMAGE", "BUILDER_IMAGE", "POOLSIZE", "MINCPU", "MAXCPU", "MINMEMORY", "MAXMEMORY", "EXTNET", "GRACETIME", "NAMESPACE")
