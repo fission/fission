@@ -254,8 +254,8 @@ func archiveName(givenNameHint string, includedFiles []string) string {
 	return fmt.Sprintf("%v-%v", util.KubifyName(includedFiles[0]), uniuri.NewLen(4))
 }
 
-func GetFunctionsByPackage(context context.Context, client cmd.Client, pkgName, pkgNamespace string) ([]fv1.Function, error) {
-	fnList, err := client.FissionClientSet.CoreV1().Functions(pkgNamespace).List(context, v1.ListOptions{})
+func GetFunctionsByPackage(ctx context.Context, client cmd.Client, pkgName, pkgNamespace string) ([]fv1.Function, error) {
+	fnList, err := client.FissionClientSet.CoreV1().Functions(pkgNamespace).List(ctx, v1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}

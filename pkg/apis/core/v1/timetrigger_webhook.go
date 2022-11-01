@@ -17,6 +17,8 @@ limitations under the License.
 package v1
 
 import (
+	ferror "github.com/fission/fission/pkg/error"
+	"github.com/robfig/cron"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -57,14 +59,29 @@ func (r *TimeTrigger) ValidateCreate() error {
 	if err != nil {
 		return err
 	}
+
+	_, err = cron.Parse(r.Spec.Cron)
+	if err != nil {
+		err = ferror.MakeError(ferror.ErrorInvalidArgument, "TimeTrigger cron spec is not valid")
+		return err
+	}
 	return nil
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
 func (r *TimeTrigger) ValidateUpdate(old runtime.Object) error {
 	timetriggerlog.Info("validate update", "name", r.Name)
+	err := r.Validate()
+	if err != nil {
+		return err
+	}
 
-	// TODO(user): fill in your validation logic upon object update.
+	_, err = cron.Parse(r.Spec.Cron)
+	if err != nil {
+		err = ferror.MakeError(ferror.ErrorInvalidArgument, "TimeTrigger cron spec is not valid")
+		return err
+	}
+
 	return nil
 }
 

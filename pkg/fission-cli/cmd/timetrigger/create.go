@@ -143,14 +143,20 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 		return nil
 	}
 
-	_, err := opts.Client().DefaultClientset.V1().TimeTrigger().Create(opts.trigger)
+	// check if namespace exists, if not create it.
+	err := util.CreateNsIfNotExists(opts.Client().KubernetesClient, input.Context(), opts.trigger.ObjectMeta.Namespace)
+	if err != nil {
+		return errors.Wrap(err, "error creating resource")
+	}
+
+	_, err = opts.Client().FissionClientSet.CoreV1().TimeTriggers(opts.trigger.Namespace).Create(input.Context(), opts.trigger, metav1.CreateOptions{})
 	if err != nil {
 		return errors.Wrap(err, "error creating Time trigger")
 	}
 
 	fmt.Printf("trigger '%v' created\n", opts.trigger.ObjectMeta.Name)
 
-	t, err := getAPITimeInfo(opts.Client().DefaultClientset)
+	t, err := getAPITimeInfo(opts.Client().DefaultClientset) //TODO: we need to think about this
 	if err != nil {
 		return err
 	}
