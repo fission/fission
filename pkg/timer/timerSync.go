@@ -51,6 +51,12 @@ func MakeTimerSync(ctx context.Context, logger *zap.Logger, fissionClient versio
 	return ws
 }
 
+func (ws *TimerSync) Run(ctx context.Context) {
+	for _, informer := range ws.timeTriggerInformer {
+		go informer.Run(ctx.Done())
+	}
+}
+
 func (ws *TimerSync) TimeTriggerEventHandlers(ctx context.Context) {
 	for _, informer := range ws.timeTriggerInformer {
 		informer.AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
