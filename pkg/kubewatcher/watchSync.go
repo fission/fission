@@ -59,12 +59,12 @@ func (ws *WatchSync) KubeWatcherEventHandlers(ctx context.Context) {
 		informer.AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
 				objKubeWatcher := obj.(*fv1.KubernetesWatchTrigger)
-				ws.kubeWatcher.addWatch(ctx, objKubeWatcher)
+				ws.kubeWatcher.addWatch(ctx, objKubeWatcher) //nolint: errCheck
 			},
 			UpdateFunc: func(oldObj interface{}, newObj interface{}) {},
 			DeleteFunc: func(obj interface{}) {
 				objKubeWatcher := obj.(*fv1.KubernetesWatchTrigger)
-				ws.kubeWatcher.removeWatch(objKubeWatcher)
+				ws.kubeWatcher.removeWatch(objKubeWatcher) //nolint: errCheck
 			},
 		})
 	}
