@@ -105,20 +105,20 @@ func (opts *DeleteSubCommand) run(input cli.Input) error {
 	return nil
 }
 
-func deleteOrphanPkgs(context context.Context, client cmd.Client, pkgNamespace string) error {
-	pkgList, err := client.FissionClientSet.CoreV1().Packages(pkgNamespace).List(context, metav1.ListOptions{})
+func deleteOrphanPkgs(ctx context.Context, client cmd.Client, pkgNamespace string) error {
+	pkgList, err := client.FissionClientSet.CoreV1().Packages(pkgNamespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return err
 	}
 
 	// range through all packages and find out the ones not referenced by any function
 	for _, pkg := range pkgList.Items {
-		fnList, err := GetFunctionsByPackage(context, client, pkg.ObjectMeta.Name, pkgNamespace)
+		fnList, err := GetFunctionsByPackage(ctx, client, pkg.ObjectMeta.Name, pkgNamespace)
 		if err != nil {
 			return errors.Wrap(err, fmt.Sprintf("get functions sharing package %s", pkg.ObjectMeta.Name))
 		}
 		if len(fnList) == 0 {
-			err = deletePackage(context, client, pkg.ObjectMeta.Name, pkgNamespace)
+			err = deletePackage(ctx, client, pkg.ObjectMeta.Name, pkgNamespace)
 			if err != nil {
 				return err
 			}
@@ -127,6 +127,6 @@ func deleteOrphanPkgs(context context.Context, client cmd.Client, pkgNamespace s
 	return nil
 }
 
-func deletePackage(context context.Context, client cmd.Client, pkgName string, pkgNamespace string) error {
-	return client.FissionClientSet.CoreV1().Packages(pkgNamespace).Delete(context, pkgName, metav1.DeleteOptions{})
+func deletePackage(ctx context.Context, client cmd.Client, pkgName string, pkgNamespace string) error {
+	return client.FissionClientSet.CoreV1().Packages(pkgNamespace).Delete(ctx, pkgName, metav1.DeleteOptions{})
 }

@@ -44,6 +44,7 @@ import (
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/controller/client/rest"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/console"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/info"
@@ -178,15 +179,10 @@ func GetKubernetesNamespace(kubeContext string) (currentNS string, err error) {
 }
 
 // given a list of functions, this checks if the functions actually exist on the cluster
-func CheckFunctionExistence(client client.Interface, functions []string, fnNamespace string) (err error) {
+func CheckFunctionExistence(ctx context.Context, client cmd.Client, functions []string, fnNamespace string) (err error) {
 	fnMissing := make([]string, 0)
 	for _, fnName := range functions {
-		meta := &metav1.ObjectMeta{
-			Name:      fnName,
-			Namespace: fnNamespace,
-		}
-
-		_, err := client.V1().Function().Get(meta)
+		_, err := client.FissionClientSet.CoreV1().Functions(fnNamespace).Get(ctx, fnName, metav1.GetOptions{})
 		if err != nil {
 			fnMissing = append(fnMissing, fnName)
 		}

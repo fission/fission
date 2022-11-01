@@ -100,7 +100,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) (err error) {
 	}
 	if len(fnName) > 0 {
 		functionList := []string{fnName}
-		err := util.CheckFunctionExistence(opts.Client().DefaultClientset, functionList, namespace)
+		err := util.CheckFunctionExistence(input.Context(), opts.Client(), functionList, namespace)
 		if err != nil {
 			console.Warn(err.Error())
 		}
@@ -151,7 +151,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) (err error) {
 }
 
 func (opts *UpdateSubCommand) run(input cli.Input) error {
-	_, err := opts.Client().DefaultClientset.V1().MessageQueueTrigger().Update(opts.trigger)
+	_, err := opts.Client().FissionClientSet.CoreV1().MessageQueueTriggers(opts.trigger.ObjectMeta.Namespace).Update(input.Context(), opts.trigger, metav1.UpdateOptions{})
 	if err != nil {
 		return errors.Wrap(err, "error updating message queue trigger")
 	}

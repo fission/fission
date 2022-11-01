@@ -185,13 +185,13 @@ func UpdatePackage(input cli.Input, client cmd.Client, pkg *fv1.Package) (*metav
 	return &newPkgMeta.ObjectMeta, err
 }
 
-func UpdateFunctionPackageResourceVersion(context context.Context, client cmd.Client, pkgMeta *metav1.ObjectMeta, fnList ...fv1.Function) error {
+func UpdateFunctionPackageResourceVersion(ctx context.Context, client cmd.Client, pkgMeta *metav1.ObjectMeta, fnList ...fv1.Function) error {
 	errs := &multierror.Error{}
 
 	// update resource version of package reference of functions that shared the same package
 	for _, fn := range fnList {
 		fn.Spec.Package.PackageRef.ResourceVersion = pkgMeta.ResourceVersion
-		_, err := client.FissionClientSet.CoreV1().Functions(fn.ObjectMeta.Namespace).Update(context, &fn, metav1.UpdateOptions{})
+		_, err := client.FissionClientSet.CoreV1().Functions(fn.ObjectMeta.Namespace).Update(ctx, &fn, metav1.UpdateOptions{})
 		if err != nil {
 			errs = multierror.Append(errs, errors.Wrapf(err, "error updating package resource version of function '%v'", fn.ObjectMeta.Name))
 		}
@@ -200,14 +200,14 @@ func UpdateFunctionPackageResourceVersion(context context.Context, client cmd.Cl
 	return errs.ErrorOrNil()
 }
 
-func updatePackageStatus(context context.Context, client cmd.Client, pkg *fv1.Package, status fv1.BuildStatus) (*metav1.ObjectMeta, error) {
+func updatePackageStatus(ctx context.Context, client cmd.Client, pkg *fv1.Package, status fv1.BuildStatus) (*metav1.ObjectMeta, error) {
 	switch status {
 	case fv1.BuildStatusNone, fv1.BuildStatusPending, fv1.BuildStatusRunning, fv1.BuildStatusSucceeded, fv1.CanaryConfigStatusAborted:
 		pkg.Status = fv1.PackageStatus{
 			BuildStatus:         status,
 			LastUpdateTimestamp: metav1.Time{Time: time.Now().UTC()},
 		}
-		pkg, err := client.FissionClientSet.CoreV1().Packages(pkg.Namespace).Update(context, pkg, metav1.UpdateOptions{})
+		pkg, err := client.FissionClientSet.CoreV1().Packages(pkg.Namespace).Update(ctx, pkg, metav1.UpdateOptions{})
 		return &pkg.ObjectMeta, err
 	}
 	return nil, errors.New("unknown package status")

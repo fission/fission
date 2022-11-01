@@ -95,7 +95,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) (err error) {
 
 	// check that the functions exist in the same namespace
 	fnList := []string{newFunc, oldFunc}
-	err = util.CheckFunctionExistence(opts.Client().DefaultClientset, fnList, fnNs)
+	err = util.CheckFunctionExistence(input.Context(), opts.Client(), fnList, fnNs)
 	if err != nil {
 		return errors.Wrap(err, "error checking functions existence")
 	}

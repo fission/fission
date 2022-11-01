@@ -42,12 +42,8 @@ func (opts *DeleteSubCommand) do(input cli.Input) (err error) {
 	if err != nil {
 		return errors.Wrap(err, "error in deleting function ")
 	}
-	m := &metav1.ObjectMeta{
-		Name:      input.String(flagkey.TtName),
-		Namespace: namespace,
-	}
 
-	err = opts.Client().DefaultClientset.V1().TimeTrigger().Delete(m)
+	err = opts.Client().FissionClientSet.CoreV1().TimeTriggers(namespace).Delete(input.Context(), input.String(flagkey.TtName), metav1.DeleteOptions{})
 	if err != nil {
 		if input.Bool(flagkey.IgnoreNotFound) && util.IsNotFound(err) {
 			return nil
@@ -55,6 +51,6 @@ func (opts *DeleteSubCommand) do(input cli.Input) (err error) {
 		return errors.Wrap(err, "error deleting trigger")
 	}
 
-	fmt.Printf("trigger '%v' deleted\n", m.Name)
+	fmt.Printf("trigger '%v' deleted\n", input.String(flagkey.TtName))
 	return nil
 }

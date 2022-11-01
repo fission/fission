@@ -51,9 +51,9 @@ func (r *HTTPTrigger) Default() {
 var _ webhook.Validator = &HTTPTrigger{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type
-func (r *HTTPTrigger) ValidateCreate() error {
-	httptriggerlog.Info("validate create", "name", r.Name)
-	err := r.Validate()
+func (t *HTTPTrigger) ValidateCreate() error {
+	httptriggerlog.Info("validate create", "name", t.Name)
+	err := t.Validate()
 	if err != nil {
 		return err
 	}
@@ -63,8 +63,11 @@ func (r *HTTPTrigger) ValidateCreate() error {
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
 func (r *HTTPTrigger) ValidateUpdate(old runtime.Object) error {
 	httptriggerlog.Info("validate update", "name", r.Name)
+	err := r.Validate()
+	if err != nil {
+		return err
+	}
 
-	// TODO(user): fill in your validation logic upon object update.
 	return nil
 }
 
