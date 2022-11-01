@@ -545,3 +545,15 @@ func CheckHTTPTriggerDuplicates(ctx context.Context, client cmd.Client, t *fv1.H
 	}
 	return nil
 }
+
+func SecretExists(ctx context.Context, m *metav1.ObjectMeta, kClient kubernetes.Interface) error {
+
+	_, err := kClient.CoreV1().Secrets(m.Namespace).Get(ctx, m.Name, metav1.GetOptions{})
+	return err
+}
+
+func ConfigMapExists(ctx context.Context, m *metav1.ObjectMeta, kClient kubernetes.Interface) error {
+
+	_, err := kClient.CoreV1().ConfigMaps(m.Namespace).Get(ctx, m.Name, metav1.GetOptions{})
+	return err
+}
