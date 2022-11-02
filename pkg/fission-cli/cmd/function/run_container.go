@@ -73,7 +73,7 @@ func (opts *RunContainerSubCommand) complete(input cli.Input) error {
 
 		if err != nil && !kerrors.IsNotFound(err) {
 			return err
-		} else if fn != nil {
+		} else if fn.Name != "" && fn.Namespace != "" {
 			return errors.New("a function with the same name already exists")
 		}
 	}
@@ -126,8 +126,6 @@ func (opts *RunContainerSubCommand) complete(input cli.Input) error {
 		if !toSpec { // TODO: workaround in order not to block users from creating function spec, remove it.
 			for _, secretName := range secretNames {
 				// TODO: discuss if this is fine or should we have a wrapper over kclient interface
-				// 				err := opts.Client().DefaultClientset.V1().Misc().SecretExists(&metav1.ObjectMeta{
-
 				err := util.SecretExists(input.Context(), &metav1.ObjectMeta{Namespace: fnNamespace, Name: secretName}, opts.Client().KubernetesClient)
 				if err != nil {
 					if kerrors.IsNotFound(err) {

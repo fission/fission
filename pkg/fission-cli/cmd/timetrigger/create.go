@@ -28,7 +28,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
-	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd/spec"
 	"github.com/fission/fission/pkg/fission-cli/console"
@@ -150,10 +149,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 
 	fmt.Printf("trigger '%v' created\n", opts.trigger.ObjectMeta.Name)
 
-	t, err := getAPITimeInfo(opts.Client().DefaultClientset) //TODO: we need to think about this
-	if err != nil {
-		return err
-	}
+	t := util.GetServerInfo().ServerTime.CurrentTime.UTC()
 
 	err = getCronNextNActivationTime(opts.trigger.Spec.Cron, t, 1)
 	if err != nil {
@@ -161,14 +157,6 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 	}
 
 	return nil
-}
-
-func getAPITimeInfo(client client.Interface) (time.Time, error) {
-	serverInfo, err := client.V1().Misc().ServerInfo()
-	if err != nil {
-		return time.Time{}, errors.Errorf("Error syncing server time information: %v", err)
-	}
-	return serverInfo.ServerTime.CurrentTime, nil
 }
 
 func getCronNextNActivationTime(cronSpec string, serverTime time.Time, round int) error {

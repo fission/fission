@@ -84,7 +84,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		fn, err := opts.Client().FissionClientSet.CoreV1().Functions(fnNamespace).Get(input.Context(), input.String(flagkey.FnName), metav1.GetOptions{})
 		if err != nil && !k8serrors.IsNotFound(err) {
 			return err
-		} else if fn != nil {
+		} else if fn.Name != "" && fn.Namespace != "" {
 			return errors.New("a function with the same name already exists")
 		}
 	}

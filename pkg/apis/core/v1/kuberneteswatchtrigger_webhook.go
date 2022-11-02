@@ -55,7 +55,7 @@ func (r *KubernetesWatchTrigger) ValidateCreate() error {
 	kuberneteswatchtriggerlog.Info("validate create", "name", r.Name)
 	err := r.Validate()
 	if err != nil {
-		return err
+		return AggregateValidationErrors("Watch", err)
 	}
 	return nil
 }

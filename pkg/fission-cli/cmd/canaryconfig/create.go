@@ -69,10 +69,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) (err error) {
 	}
 
 	// check that the trigger exists in the same namespace.
-	htTrigger, err := opts.Client().DefaultClientset.V1().HTTPTrigger().Get(&metav1.ObjectMeta{
-		Name:      ht,
-		Namespace: fnNs,
-	})
+	htTrigger, err := opts.Client().FissionClientSet.CoreV1().HTTPTriggers(fnNs).Get(input.Context(), ht, metav1.GetOptions{})
 	if err != nil {
 		return errors.Wrap(err, "error finding http trigger referenced in the canary config")
 	}
@@ -124,7 +121,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) (err error) {
 }
 
 func (opts *CreateSubCommand) run(input cli.Input) error {
-	_, err := opts.Client().DefaultClientset.V1().CanaryConfig().Create(opts.canary)
+	_, err := opts.Client().FissionClientSet.CoreV1().CanaryConfigs(opts.canary.ObjectMeta.Namespace).Create(input.Context(), opts.canary, metav1.CreateOptions{})
 	if err != nil {
 		return errors.Wrap(err, "error creating canary config")
 	}
