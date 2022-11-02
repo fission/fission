@@ -195,7 +195,7 @@ func CheckFunctionExistence(ctx context.Context, client cmd.Client, functions []
 	return nil
 }
 
-func GetVersion(ctx context.Context, client client.Interface) info.Versions {
+func GetVersion(ctx context.Context, client cmd.Client) info.Versions {
 	// Fetch client versions
 	versions := info.Versions{
 		Client: map[string]info.BuildMeta{
@@ -209,11 +209,8 @@ func GetVersion(ctx context.Context, client client.Interface) info.Versions {
 		}
 	}
 
-	serverInfo, err := client.V1().Misc().ServerInfo()
-	if err != nil {
-		console.Warn(fmt.Sprintf("Error getting Fission API version: %v", err))
-		serverInfo = &info.ServerInfo{}
-	}
+	// TODO: verify it
+	serverInfo := GetServerInfo()
 
 	// Fetch server versions
 	versions.Server = map[string]info.BuildMeta{
@@ -223,6 +220,10 @@ func GetVersion(ctx context.Context, client client.Interface) info.Versions {
 	// FUTURE: fetch versions of plugins server-side
 
 	return versions
+}
+
+func GetServerInfo() info.ServerInfo {
+	return info.ApiInfo()
 }
 
 func GetServer(input cli.Input) (c client.Interface, err error) {
@@ -556,4 +557,21 @@ func ConfigMapExists(ctx context.Context, m *metav1.ObjectMeta, kClient kubernet
 
 	_, err := kClient.CoreV1().ConfigMaps(m.Namespace).Get(ctx, m.Name, metav1.GetOptions{})
 	return err
+}
+
+func GetSvcName(ctx context.Context, kClient kubernetes.Interface, application string) (string, error) {
+	var podNamespace = os.Getenv("POD_NAMESPACE")
+	if podNamespace == "" {
+		podNamespace = "fission"
+	}
+
+	appLabelSelector := "application=" + application
+	services, err := kClient.CoreV1().Services(podNamespace).List(ctx, metav1.ListOptions{
+		LabelSelector: appLabelSelector,
+	})
+	if err != nil || len(services.Items) > 1 || len(services.Items) == 0 {
+		return "", err
+	}
+	service := services.Items[0]
+	return service.Name + "." + podNamespace, nil
 }

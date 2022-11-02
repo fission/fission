@@ -55,7 +55,7 @@ func (t *HTTPTrigger) ValidateCreate() error {
 	httptriggerlog.Info("validate create", "name", t.Name)
 	err := t.Validate()
 	if err != nil {
-		return err
+		AggregateValidationErrors("HTTPTrigger", err)
 	}
 	return nil
 }
@@ -65,7 +65,7 @@ func (r *HTTPTrigger) ValidateUpdate(old runtime.Object) error {
 	httptriggerlog.Info("validate update", "name", r.Name)
 	err := r.Validate()
 	if err != nil {
-		return err
+		AggregateValidationErrors("HTTPTrigger", err)
 	}
 
 	return nil

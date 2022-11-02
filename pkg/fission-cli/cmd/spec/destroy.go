@@ -108,7 +108,7 @@ func forceDeleteResources(ctx context.Context, fclient cmd.Client, fr *FissionRe
 		return errors.Wrap(err, "MessageQueueTrigger delete failed")
 	}
 
-	_, _, err = applyFunctions(fclient.DefaultClientset, fr, true, false)
+	_, _, err = applyFunctions(ctx, fclient, fr, true, false)
 	if err != nil {
 		return errors.Wrap(err, "function delete failed")
 	}

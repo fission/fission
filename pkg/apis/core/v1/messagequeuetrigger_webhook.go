@@ -55,7 +55,7 @@ func (r *MessageQueueTrigger) ValidateCreate() error {
 	messagequeuetriggerlog.Info("validate create", "name", r.Name)
 	err := r.Validate()
 	if err != nil {
-		return err
+		return AggregateValidationErrors("MessageQueueTrigger", err)
 	}
 	return nil
 }
@@ -65,7 +65,7 @@ func (r *MessageQueueTrigger) ValidateUpdate(old runtime.Object) error {
 	messagequeuetriggerlog.Info("validate update", "name", r.Name)
 	err := r.Validate()
 	if err != nil {
-		return err
+		return AggregateValidationErrors("MessageQueueTrigger", err)
 	}
 	return nil
 }

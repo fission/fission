@@ -55,7 +55,7 @@ func (r *Function) ValidateCreate() error {
 	functionlog.Info("validate create", "name", r.Name)
 	err := r.Validate()
 	if err != nil {
-		return err
+		return AggregateValidationErrors("Function", err)
 	}
 	return nil
 }
@@ -65,7 +65,7 @@ func (r *Function) ValidateUpdate(old runtime.Object) error {
 	functionlog.Info("validate update", "name", r.Name)
 	err := r.Validate()
 	if err != nil {
-		return err
+		return AggregateValidationErrors("Function", err)
 	}
 	return nil
 }

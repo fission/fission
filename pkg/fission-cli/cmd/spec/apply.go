@@ -32,7 +32,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
-	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	pkgutil "github.com/fission/fission/pkg/fission-cli/cmd/package/util"
@@ -467,7 +466,7 @@ func applyResources(ctx context.Context, fclient cmd.Client, specDir string, fr 
 		fr.Functions[i].Spec.Package.PackageRef.ResourceVersion = m.ResourceVersion
 	}
 
-	_, ras, err = applyFunctions(fclient.DefaultClientset, fr, delete, specAllowConflicts) //TODO: update this
+	_, ras, err = applyFunctions(ctx, fclient, fr, delete, specAllowConflicts)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "function apply failed")
 	}
@@ -763,9 +762,9 @@ func applyPackages(ctx context.Context, fclient cmd.Client, fr *FissionResources
 	return metadataMap, &ras, nil
 }
 
-func applyFunctions(fclient client.Interface, fr *FissionResources, delete bool, specAllowConflicts bool) (map[string]metav1.ObjectMeta, *ResourceApplyStatus, error) {
+func applyFunctions(ctx context.Context, fclient cmd.Client, fr *FissionResources, delete bool, specAllowConflicts bool) (map[string]metav1.ObjectMeta, *ResourceApplyStatus, error) {
 	// get list
-	allObjs, err := fclient.V1().Function().List(metav1.NamespaceAll)
+	allObjs, err := fclient.FissionClientSet.CoreV1().Functions(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return nil, nil, err
 	}
@@ -773,9 +772,9 @@ func applyFunctions(fclient client.Interface, fr *FissionResources, delete bool,
 	// filter
 	objs := make([]fv1.Function, 0)
 	if specAllowConflicts {
-		objs = allObjs
+		objs = allObjs.Items
 	} else {
-		for _, o := range allObjs {
+		for _, o := range allObjs.Items {
 			if hasDeploymentConfig(&o.ObjectMeta, fr) {
 				objs = append(objs, o)
 			}
@@ -812,22 +811,22 @@ func applyFunctions(fclient client.Interface, fr *FissionResources, delete bool,
 			} else {
 				// update
 				o.ObjectMeta.ResourceVersion = existingObj.ObjectMeta.ResourceVersion
-				newmeta, err := fclient.V1().Function().Update(&o)
+				newmeta, err := fclient.FissionClientSet.CoreV1().Functions(o.ObjectMeta.Namespace).Update(ctx, &o, metav1.UpdateOptions{})
 				if err != nil {
 					return nil, nil, err
 				}
-				ras.Updated = append(ras.Updated, newmeta)
+				ras.Updated = append(ras.Updated, &newmeta.ObjectMeta)
 				// keep track of metadata in case we need to create a reference to it
-				metadataMap[mapKey(&o.ObjectMeta)] = *newmeta
+				metadataMap[mapKey(&o.ObjectMeta)] = newmeta.ObjectMeta
 			}
 		} else {
 			// create
-			newmeta, err := fclient.V1().Function().Create(&o)
+			newmeta, err := fclient.FissionClientSet.CoreV1().Functions(o.ObjectMeta.Namespace).Create(ctx, &o, metav1.CreateOptions{})
 			if err != nil {
 				return nil, nil, err
 			}
-			ras.Created = append(ras.Created, newmeta)
-			metadataMap[mapKey(&o.ObjectMeta)] = *newmeta
+			ras.Created = append(ras.Created, &newmeta.ObjectMeta)
+			metadataMap[mapKey(&o.ObjectMeta)] = newmeta.ObjectMeta
 		}
 	}
 
@@ -837,7 +836,7 @@ func applyFunctions(fclient client.Interface, fr *FissionResources, delete bool,
 		for _, o := range objs {
 			_, wanted := desired[mapKey(&o.ObjectMeta)]
 			if !wanted {
-				err := fclient.V1().Function().Delete(&o.ObjectMeta)
+				err := fclient.FissionClientSet.CoreV1().Functions(o.ObjectMeta.Namespace).Delete(ctx, o.ObjectMeta.Name, metav1.DeleteOptions{})
 				if err != nil {
 					return nil, nil, err
 				}

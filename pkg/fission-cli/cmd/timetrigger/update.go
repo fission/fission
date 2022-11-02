@@ -93,7 +93,7 @@ func (opts *UpdateSubCommand) run(input cli.Input) error {
 
 	fmt.Printf("trigger '%v' updated\n", opts.trigger.ObjectMeta.Name)
 
-	t, err := getAPITimeInfo(opts.Client().DefaultClientset) // TODO: we need to update this
+	t := util.GetServerInfo().ServerTime.CurrentTime.UTC()
 	if err != nil {
 		return err
 	}
