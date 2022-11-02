@@ -58,7 +58,7 @@ func (ws *TimerSync) Run(ctx context.Context) {
 func (ws *TimerSync) AddUpdateTimeTrigger(timeTrigger *fv1.TimeTrigger) {
 	logger := ws.logger.With(zap.String("trigger_name", timeTrigger.Name), zap.String("trigger_namespace", timeTrigger.Namespace))
 
-	ws.logger.Debug("cron event", zap.String("trigger name", timeTrigger.Name))
+	ws.logger.Debug("cron event")
 	ws.timer.triggers[crd.CacheKey(&timeTrigger.ObjectMeta)] = &timerTriggerWithCron{
 		trigger: *timeTrigger,
 		cron:    ws.timer.newCron(*timeTrigger),

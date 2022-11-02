@@ -57,15 +57,15 @@ func (timer *Timer) newCron(t fv1.TimeTrigger) *cron.Cron {
 	c := cron.New()
 	c.AddFunc(t.Spec.Cron, func() { //nolint: errCheck
 		headers := map[string]string{
-			"X-Fission-Timer-Name": t.ObjectMeta.Name,
+			"X-Fission-Timer-Name": t.Name,
 		}
 
 		// with the addition of multi-tenancy, the users can create functions in any namespace. however,
 		// the triggers can only be created in the same namespace as the function.
 		// so essentially, function namespace = trigger namespace.
-		(*timer.publisher).Publish("", headers, utils.UrlForFunction(t.Spec.FunctionReference.Name, t.ObjectMeta.Namespace))
+		(*timer.publisher).Publish("", headers, utils.UrlForFunction(t.Spec.FunctionReference.Name, t.Namespace))
 	})
 	c.Start()
-	timer.logger.Info("added new cron for time trigger", zap.String("trigger", t.ObjectMeta.Name))
+	timer.logger.Info("started cron for time trigger", zap.String("trigger_name", t.Name), zap.String("trigger_namespace", t.Namespace), zap.String("cron", t.Spec.Cron))
 	return c
 }
