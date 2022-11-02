@@ -55,27 +55,23 @@ func (ws *TimerSync) Run(ctx context.Context) {
 	}
 }
 
-func (ws *TimerSync) AddUpdateTimeTrigger(timeTrigger *fv1.TimeTrigger) {
-	logger := ws.logger.With(zap.String("trigger_name", timeTrigger.Name), zap.String("trigger_namespace", timeTrigger.Namespace))
+func (ws *TimerSync) AddUpdateTimeTrigger(oldTimeTrigger, newTimeTrigger *fv1.TimeTrigger) {
+	logger := ws.logger.With(zap.String("trigger_name", newTimeTrigger.Name), zap.String("trigger_namespace", newTimeTrigger.Namespace))
 
 	ws.logger.Debug("cron event")
-	ws.timer.triggers[crd.CacheKey(&timeTrigger.ObjectMeta)] = &timerTriggerWithCron{
-		trigger: *timeTrigger,
-		cron:    ws.timer.newCron(*timeTrigger),
-	}
 
-	if item, ok := ws.timer.triggers[crd.CacheKey(&timeTrigger.ObjectMeta)]; ok {
-		if item.trigger.Spec.Cron != timeTrigger.Spec.Cron {
+	if item, ok := ws.timer.triggers[crd.CacheKeyUID(&newTimeTrigger.ObjectMeta)]; ok && oldTimeTrigger != nil {
+		if oldTimeTrigger.Spec.Cron != newTimeTrigger.Spec.Cron {
 			if item.cron != nil {
 				item.cron.Stop()
 			}
-			item.cron = ws.timer.newCron(*timeTrigger)
+			item.cron = ws.timer.newCron(*newTimeTrigger)
 			logger.Debug("cron updated")
 		}
 	} else {
-		ws.timer.triggers[crd.CacheKey(&timeTrigger.ObjectMeta)] = &timerTriggerWithCron{
-			trigger: *timeTrigger,
-			cron:    ws.timer.newCron(*timeTrigger),
+		ws.timer.triggers[crd.CacheKeyUID(&newTimeTrigger.ObjectMeta)] = &timerTriggerWithCron{
+			trigger: *newTimeTrigger,
+			cron:    ws.timer.newCron(*newTimeTrigger),
 		}
 		logger.Debug("cron added")
 	}
@@ -84,12 +80,12 @@ func (ws *TimerSync) AddUpdateTimeTrigger(timeTrigger *fv1.TimeTrigger) {
 func (ws *TimerSync) DeleteTimeTrigger(timeTrigger *fv1.TimeTrigger) {
 	logger := ws.logger.With(zap.String("trigger_name", timeTrigger.Name), zap.String("trigger_namespace", timeTrigger.Namespace))
 
-	if item, ok := ws.timer.triggers[crd.CacheKey(&timeTrigger.ObjectMeta)]; ok {
+	if item, ok := ws.timer.triggers[crd.CacheKeyUID(&timeTrigger.ObjectMeta)]; ok {
 		if item.cron != nil {
 			item.cron.Stop()
 			logger.Info("cron for time trigger stopped")
 		}
-		delete(ws.timer.triggers, crd.CacheKey(&timeTrigger.ObjectMeta))
+		delete(ws.timer.triggers, crd.CacheKeyUID(&timeTrigger.ObjectMeta))
 		logger.Debug("cron deleted")
 	}
 }
@@ -99,11 +95,12 @@ func (ws *TimerSync) TimeTriggerEventHandlers(ctx context.Context) {
 		informer.AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
 				timeTrigger := obj.(*fv1.TimeTrigger)
-				ws.AddUpdateTimeTrigger(timeTrigger)
+				ws.AddUpdateTimeTrigger(nil, timeTrigger)
 			},
-			UpdateFunc: func(_ interface{}, obj interface{}) {
-				timeTrigger := obj.(*fv1.TimeTrigger)
-				ws.AddUpdateTimeTrigger(timeTrigger)
+			UpdateFunc: func(oldObj interface{}, newObj interface{}) {
+				oldTimeTrigger := oldObj.(*fv1.TimeTrigger)
+				newTimeTrigger := newObj.(*fv1.TimeTrigger)
+				ws.AddUpdateTimeTrigger(oldTimeTrigger, newTimeTrigger)
 			},
 			DeleteFunc: func(obj interface{}) {
 				timeTrigger := obj.(*fv1.TimeTrigger)
