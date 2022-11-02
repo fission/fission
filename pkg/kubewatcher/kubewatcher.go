@@ -42,18 +42,11 @@ import (
 	"github.com/fission/fission/pkg/utils"
 )
 
-type requestType int
-
-const (
-	SYNC requestType = iota
-)
-
 type (
 	KubeWatcher struct {
 		logger           *zap.Logger
 		watches          map[types.UID]watchSubscription
 		kubernetesClient kubernetes.Interface
-		requestChannel   chan *kubeWatcherRequest
 		publisher        publisher.Publisher
 	}
 
@@ -66,15 +59,6 @@ type (
 		kubernetesClient    kubernetes.Interface
 		publisher           publisher.Publisher
 	}
-
-	kubeWatcherRequest struct {
-		requestType
-		watches         []fv1.KubernetesWatchTrigger
-		responseChannel chan *kubeWatcherResponse
-	}
-	kubeWatcherResponse struct {
-		error
-	}
 )
 
 func MakeKubeWatcher(ctx context.Context, logger *zap.Logger, kubernetesClient kubernetes.Interface, publisher publisher.Publisher) *KubeWatcher {
@@ -83,47 +67,8 @@ func MakeKubeWatcher(ctx context.Context, logger *zap.Logger, kubernetesClient k
 		watches:          make(map[types.UID]watchSubscription),
 		kubernetesClient: kubernetesClient,
 		publisher:        publisher,
-		requestChannel:   make(chan *kubeWatcherRequest),
 	}
-	go kw.svc(ctx)
 	return kw
-}
-
-func (kw *KubeWatcher) Sync(watches []fv1.KubernetesWatchTrigger) error {
-	req := &kubeWatcherRequest{
-		requestType:     SYNC,
-		watches:         watches,
-		responseChannel: make(chan *kubeWatcherResponse),
-	}
-	kw.requestChannel <- req
-	resp := <-req.responseChannel
-	return resp.error
-}
-
-func (kw *KubeWatcher) svc(ctx context.Context) {
-	for {
-		req := <-kw.requestChannel
-		switch req.requestType {
-		case SYNC:
-			newWatchUids := make(map[types.UID]bool)
-			for _, w := range req.watches {
-				newWatchUids[w.ObjectMeta.UID] = true
-			}
-			// Remove old watches
-			for uid, ws := range kw.watches {
-				if _, ok := newWatchUids[uid]; !ok {
-					kw.removeWatch(&ws.watch) //nolint: errCheck
-				}
-			}
-			// Add new watches
-			for _, w := range req.watches {
-				if _, ok := kw.watches[w.ObjectMeta.UID]; !ok {
-					kw.addWatch(ctx, &w) //nolint: errCheck
-				}
-			}
-			req.responseChannel <- &kubeWatcherResponse{error: nil}
-		}
-	}
 }
 
 // TODO lifted from kubernetes/pkg/kubectl/resource_printer.go.
