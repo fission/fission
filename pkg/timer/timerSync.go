@@ -55,23 +55,24 @@ func (ws *TimerSync) Run(ctx context.Context) {
 	}
 }
 
-func (ws *TimerSync) AddUpdateTimeTrigger(oldTimeTrigger, newTimeTrigger *fv1.TimeTrigger) {
-	logger := ws.logger.With(zap.String("trigger_name", newTimeTrigger.Name), zap.String("trigger_namespace", newTimeTrigger.Namespace))
+func (ws *TimerSync) AddUpdateTimeTrigger(timeTrigger *fv1.TimeTrigger) {
+	logger := ws.logger.With(zap.String("trigger_name", timeTrigger.Name), zap.String("trigger_namespace", timeTrigger.Namespace))
 
 	ws.logger.Debug("cron event")
 
-	if item, ok := ws.timer.triggers[crd.CacheKeyUID(&newTimeTrigger.ObjectMeta)]; ok && oldTimeTrigger != nil {
-		if oldTimeTrigger.Spec.Cron != newTimeTrigger.Spec.Cron {
+	if item, ok := ws.timer.triggers[crd.CacheKeyUID(&timeTrigger.ObjectMeta)]; ok {
+		if item.trigger.Spec.Cron != timeTrigger.Spec.Cron {
 			if item.cron != nil {
 				item.cron.Stop()
 			}
-			item.cron = ws.timer.newCron(*newTimeTrigger)
+			item.trigger = *timeTrigger
+			item.cron = ws.timer.newCron(*timeTrigger)
 			logger.Debug("cron updated")
 		}
 	} else {
-		ws.timer.triggers[crd.CacheKeyUID(&newTimeTrigger.ObjectMeta)] = &timerTriggerWithCron{
-			trigger: *newTimeTrigger,
-			cron:    ws.timer.newCron(*newTimeTrigger),
+		ws.timer.triggers[crd.CacheKeyUID(&timeTrigger.ObjectMeta)] = &timerTriggerWithCron{
+			trigger: *timeTrigger,
+			cron:    ws.timer.newCron(*timeTrigger),
 		}
 		logger.Debug("cron added")
 	}
@@ -95,12 +96,11 @@ func (ws *TimerSync) TimeTriggerEventHandlers(ctx context.Context) {
 		informer.AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
 				timeTrigger := obj.(*fv1.TimeTrigger)
-				ws.AddUpdateTimeTrigger(nil, timeTrigger)
+				ws.AddUpdateTimeTrigger(timeTrigger)
 			},
-			UpdateFunc: func(oldObj interface{}, newObj interface{}) {
-				oldTimeTrigger := oldObj.(*fv1.TimeTrigger)
-				newTimeTrigger := newObj.(*fv1.TimeTrigger)
-				ws.AddUpdateTimeTrigger(oldTimeTrigger, newTimeTrigger)
+			UpdateFunc: func(_ interface{}, obj interface{}) {
+				timeTrigger := obj.(*fv1.TimeTrigger)
+				ws.AddUpdateTimeTrigger(timeTrigger)
 			},
 			DeleteFunc: func(obj interface{}) {
 				timeTrigger := obj.(*fv1.TimeTrigger)
