@@ -42,12 +42,6 @@ import (
 	"github.com/fission/fission/pkg/utils"
 )
 
-type requestType int
-
-const (
-	SYNC requestType = iota
-)
-
 type (
 	KubeWatcher struct {
 		logger           *zap.Logger
