@@ -63,8 +63,10 @@ func (r *Function) ValidateCreate() error {
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
 func (r *Function) ValidateUpdate(old runtime.Object) error {
 	functionlog.Info("validate update", "name", r.Name)
-
-	// TODO(user): fill in your validation logic upon object update.
+	err := r.Validate()
+	if err != nil {
+		return err
+	}
 	return nil
 }
 

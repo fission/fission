@@ -261,7 +261,7 @@ func (api *API) GetHandler() http.Handler {
 	r.HandleFunc("/proxy/{dbType}", api.FunctionLogsApiPost).Methods("POST")
 	r.HandleFunc("/proxy/storage/v1/archive", api.StorageServiceProxy)
 	r.HandleFunc("/proxy/logs/{function}", api.FunctionPodLogs).Methods("POST")
-	r.HandleFunc("/proxy/workflows-apiserver/{path:.*}", api.WorkflowApiserverProxy)
+	r.HandleFunc("/proxy/workflows-apiserver/{path:.*}", api.WorkflowApiserverProxy) // Deprecated
 	r.HandleFunc("/proxy/svcname", api.GetSvcName).Queries("application", "").Methods("GET")
 
 	r.Handle("/v2/apidocs.json", openAPI()).Methods("GET")
