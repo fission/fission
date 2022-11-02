@@ -61,7 +61,6 @@ func (ws *WatchSync) KubeWatcherEventHandlers(ctx context.Context) {
 				objKubeWatcher := obj.(*fv1.KubernetesWatchTrigger)
 				ws.kubeWatcher.addWatch(ctx, objKubeWatcher) //nolint: errCheck
 			},
-			UpdateFunc: func(oldObj interface{}, newObj interface{}) {},
 			DeleteFunc: func(obj interface{}) {
 				objKubeWatcher := obj.(*fv1.KubernetesWatchTrigger)
 				ws.kubeWatcher.removeWatch(objKubeWatcher) //nolint: errCheck
