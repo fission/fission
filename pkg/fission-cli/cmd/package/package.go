@@ -17,6 +17,7 @@ limitations under the License.
 package _package
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
@@ -27,10 +28,11 @@ import (
 	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
-	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+	"github.com/fission/fission/pkg/fission-cli/cmd"
 	pkgutil "github.com/fission/fission/pkg/fission-cli/cmd/package/util"
 	"github.com/fission/fission/pkg/fission-cli/cmd/spec"
 	spectypes "github.com/fission/fission/pkg/fission-cli/cmd/spec/types"
@@ -44,7 +46,7 @@ import (
 // create an archive upload spec in the specs directory; otherwise
 // upload the archive using client.  noZip avoids zipping the
 // includeFiles, but is ignored if there's more than one includeFile.
-func CreateArchive(client client.Interface, input cli.Input, includeFiles []string, noZip bool, insecure bool, checksum string, specDir string, specFile string) (*fv1.Archive, error) {
+func CreateArchive(client cmd.Client, input cli.Input, includeFiles []string, noZip bool, insecure bool, checksum string, specDir string, specFile string) (*fv1.Archive, error) {
 	// get root dir
 	var rootDir string
 	var err error
@@ -192,7 +194,7 @@ func CreateArchive(client client.Interface, input cli.Input, includeFiles []stri
 		return nil, err
 	}
 
-	return pkgutil.UploadArchiveFile(input.Context(), client, archivePath)
+	return pkgutil.UploadArchiveFile(input, client, archivePath)
 }
 
 // makeArchiveFile creates a zip file from the given list of input files,
@@ -251,13 +253,13 @@ func archiveName(givenNameHint string, includedFiles []string) string {
 	return fmt.Sprintf("%v-%v", util.KubifyName(includedFiles[0]), uniuri.NewLen(4))
 }
 
-func GetFunctionsByPackage(client client.Interface, pkgName, pkgNamespace string) ([]fv1.Function, error) {
-	fnList, err := client.V1().Function().List(pkgNamespace)
+func GetFunctionsByPackage(ctx context.Context, client cmd.Client, pkgName, pkgNamespace string) ([]fv1.Function, error) {
+	fnList, err := client.FissionClientSet.CoreV1().Functions(pkgNamespace).List(ctx, v1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}
 	fns := []fv1.Function{}
-	for _, fn := range fnList {
+	for _, fn := range fnList.Items {
 		if fn.Spec.Package.PackageRef.Name == pkgName {
 			fns = append(fns, fn)
 		}

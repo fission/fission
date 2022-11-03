@@ -18,6 +18,7 @@ package httptrigger
 
 import (
 	"github.com/pkg/errors"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
@@ -45,11 +46,11 @@ func (opts *ListSubCommand) run(input cli.Input) (err error) {
 		return errors.Wrap(err, "error in deleting function ")
 	}
 
-	var hts []fv1.HTTPTrigger
+	var hts *fv1.HTTPTriggerList
 	if input.Bool(flagkey.AllNamespaces) {
-		hts, err = opts.Client().V1().HTTPTrigger().List("")
+		hts, err = opts.Client().FissionClientSet.CoreV1().HTTPTriggers(v1.NamespaceAll).List(input.Context(), v1.ListOptions{})
 	} else {
-		hts, err = opts.Client().V1().HTTPTrigger().List(namespace)
+		hts, err = opts.Client().FissionClientSet.CoreV1().HTTPTriggers(namespace).List(input.Context(), v1.ListOptions{})
 	}
 
 	if err != nil {
@@ -59,7 +60,7 @@ func (opts *ListSubCommand) run(input cli.Input) (err error) {
 	filterFunctionName := input.String(flagkey.HtFnName)
 
 	var triggers []fv1.HTTPTrigger
-	for _, ht := range hts {
+	for _, ht := range hts.Items {
 		// TODO: list canary http triggers as well.
 		if len(filterFunctionName) == 0 ||
 			(len(filterFunctionName) > 0 && filterFunctionName == ht.Spec.FunctionReference.Name) {

@@ -44,9 +44,9 @@ import (
 )
 
 var (
-	g struct {
-		cmd.CommandActioner
-	}
+	// g struct {
+	// 	cmd.CommandActioner
+	// }
 	testNS = metav1.NamespaceDefault
 )
 
@@ -105,41 +105,45 @@ func TestFunctionApi(t *testing.T) {
 			},
 		},
 	}
-	_, err := g.Client().V1().Function().Get(&metav1.ObjectMeta{
+
+	restClient := rest.NewRESTClient("http://localhost:8888")
+	dClient := client.MakeClientset(restClient)
+
+	_, err := dClient.V1().Function().Get(&metav1.ObjectMeta{
 		Name:      testFunc.ObjectMeta.Name,
 		Namespace: testNS,
 	})
 	assertNotFoundFailure(err, "function")
 
-	m, err := g.Client().V1().Function().Create(testFunc)
+	m, err := dClient.V1().Function().Create(testFunc)
 	panicIf(err)
 	defer func() {
-		err := g.Client().V1().Function().Delete(m)
+		err := dClient.V1().Function().Delete(m)
 		panicIf(err)
 	}()
 
-	_, err = g.Client().V1().Function().Create(testFunc)
+	_, err = dClient.V1().Function().Create(testFunc)
 	assertNameReuseFailure(err, "function")
 
 	testFunc.ObjectMeta.ResourceVersion = m.ResourceVersion
 	testFunc.Spec.Package.FunctionName = "yyy"
-	_, err = g.Client().V1().Function().Update(testFunc)
+	_, err = dClient.V1().Function().Update(testFunc)
 	panicIf(err)
 
 	testFunc.ObjectMeta.ResourceVersion = ""
 	testFunc.ObjectMeta.Name = "bar"
-	m2, err := g.Client().V1().Function().Create(testFunc)
+	m2, err := dClient.V1().Function().Create(testFunc)
 	panicIf(err)
 	defer func() {
-		err := g.Client().V1().Function().Delete(m2)
+		err := dClient.V1().Function().Delete(m2)
 		panicIf(err)
 	}()
 
-	funcs, err := g.Client().V1().Function().List(testNS)
+	funcs, err := dClient.V1().Function().List(testNS)
 	panicIf(err)
 	assert(len(funcs) == 2, fmt.Sprintf("created two functions, but found %v", len(funcs)))
 
-	funcs_url := g.Client().ServerURL() + "/v2/functions"
+	funcs_url := dClient.ServerURL() + "/v2/functions"
 	resp, err := http.Get(funcs_url)
 	panicIf(err)
 	defer resp.Body.Close()
@@ -169,23 +173,27 @@ func TestHTTPTriggerApi(t *testing.T) {
 			},
 		},
 	}
-	_, err := g.Client().V1().HTTPTrigger().Get(&metav1.ObjectMeta{
+
+	restClient := rest.NewRESTClient("http://localhost:8888")
+	dClient := client.MakeClientset(restClient)
+
+	_, err := dClient.V1().HTTPTrigger().Get(&metav1.ObjectMeta{
 		Name:      testTrigger.ObjectMeta.Name,
 		Namespace: testNS,
 	})
 	assertNotFoundFailure(err, "httptrigger")
 
-	m, err := g.Client().V1().HTTPTrigger().Create(testTrigger)
+	m, err := dClient.V1().HTTPTrigger().Create(testTrigger)
 	panicIf(err)
 	defer func() {
-		err := g.Client().V1().HTTPTrigger().Delete(m)
+		err := dClient.V1().HTTPTrigger().Delete(m)
 		panicIf(err)
 	}()
 
-	_, err = g.Client().V1().HTTPTrigger().Create(testTrigger)
+	_, err = dClient.V1().HTTPTrigger().Create(testTrigger)
 	assertNameReuseFailure(err, "httptrigger")
 
-	tr, err := g.Client().V1().HTTPTrigger().Get(m)
+	tr, err := dClient.V1().HTTPTrigger().Get(m)
 	panicIf(err)
 	assert(len(testTrigger.Spec.Methods) == len(tr.Spec.Methods) &&
 		testTrigger.Spec.RelativeURL == tr.Spec.RelativeURL &&
@@ -194,23 +202,23 @@ func TestHTTPTriggerApi(t *testing.T) {
 
 	testTrigger.ObjectMeta.ResourceVersion = m.ResourceVersion
 	testTrigger.Spec.RelativeURL = "/hi"
-	_, err = g.Client().V1().HTTPTrigger().Update(testTrigger)
+	_, err = dClient.V1().HTTPTrigger().Update(testTrigger)
 	panicIf(err)
 
 	testTrigger.ObjectMeta.ResourceVersion = ""
 	testTrigger.ObjectMeta.Name = "yyy"
-	_, err = g.Client().V1().HTTPTrigger().Create(testTrigger)
+	_, err = dClient.V1().HTTPTrigger().Create(testTrigger)
 	assert(err != nil, "duplicate trigger should not be allowed")
 
 	testTrigger.Spec.RelativeURL = "/hi2"
-	m2, err := g.Client().V1().HTTPTrigger().Create(testTrigger)
+	m2, err := dClient.V1().HTTPTrigger().Create(testTrigger)
 	panicIf(err)
 	defer func() {
-		err = g.Client().V1().HTTPTrigger().Delete(m2)
+		err = dClient.V1().HTTPTrigger().Delete(m2)
 		panicIf(err)
 	}()
 
-	ts, err := g.Client().V1().HTTPTrigger().List(testNS)
+	ts, err := dClient.V1().HTTPTrigger().List(testNS)
 	panicIf(err)
 	assert(len(ts) == 2, fmt.Sprintf("created two triggers, but found %v", len(ts)))
 }
@@ -237,7 +245,9 @@ func createFissionFnForMultipleTrigger() {
 		},
 	}
 
-	_, err := g.Client().V1().Function().Create(testFunc)
+	restClient := rest.NewRESTClient("http://localhost:8888")
+	dClient := client.MakeClientset(restClient)
+	_, err := dClient.V1().Function().Create(testFunc)
 	panicIf(err)
 	defer func() {
 		panicIf(err)
@@ -245,7 +255,7 @@ func createFissionFnForMultipleTrigger() {
 
 	testFunc.Name = "foo2"
 
-	_, err = g.Client().V1().Function().Create(testFunc)
+	_, err = dClient.V1().Function().Create(testFunc)
 	panicIf(err)
 	defer func() {
 		panicIf(err)
@@ -272,9 +282,11 @@ func TestHTTPTriggerCreateMultipleTrigger(t *testing.T) {
 		},
 	}
 
-	m, err := g.Client().V1().HTTPTrigger().Create(testTrigger)
+	restClient := rest.NewRESTClient("http://localhost:8888")
+	dClient := client.MakeClientset(restClient)
+	m, err := dClient.V1().HTTPTrigger().Create(testTrigger)
 	panicIf(err)
-	defer panicIf(g.Client().V1().HTTPTrigger().Delete(m))
+	defer panicIf(dClient.V1().HTTPTrigger().Delete(m))
 
 	prefix_2 := "url_another"
 	testTrigger2 := &fv1.HTTPTrigger{
@@ -293,7 +305,7 @@ func TestHTTPTriggerCreateMultipleTrigger(t *testing.T) {
 		},
 	}
 
-	m2, err := g.Client().V1().HTTPTrigger().Create(testTrigger2)
+	m2, err := dClient.V1().HTTPTrigger().Create(testTrigger2)
 
 	if err != nil {
 		t.Fatal()
@@ -301,7 +313,7 @@ func TestHTTPTriggerCreateMultipleTrigger(t *testing.T) {
 
 	defer func() {
 		if m2 != nil {
-			err := g.Client().V1().HTTPTrigger().Delete(m2)
+			err := dClient.V1().HTTPTrigger().Delete(m2)
 			if err != nil {
 				logger.Error("Error deleting http trigger", zap.String("name", m2.Name), zap.Error(err))
 			}
@@ -324,42 +336,46 @@ func TestEnvironmentApi(t *testing.T) {
 			Resources: v1.ResourceRequirements{},
 		},
 	}
-	_, err := g.Client().V1().Environment().Get(&metav1.ObjectMeta{
+
+	restClient := rest.NewRESTClient("http://localhost:8888")
+	dClient := client.MakeClientset(restClient)
+
+	_, err := dClient.V1().Environment().Get(&metav1.ObjectMeta{
 		Name:      testEnv.ObjectMeta.Name,
 		Namespace: testNS,
 	})
 	assertNotFoundFailure(err, "environment")
 
-	m, err := g.Client().V1().Environment().Create(testEnv)
+	m, err := dClient.V1().Environment().Create(testEnv)
 	panicIf(err)
 	defer func() {
-		err := g.Client().V1().Environment().Delete(m)
+		err := dClient.V1().Environment().Delete(m)
 		panicIf(err)
 	}()
 
-	_, err = g.Client().V1().Environment().Create(testEnv)
+	_, err = dClient.V1().Environment().Create(testEnv)
 	assertNameReuseFailure(err, "environment")
 
-	e, err := g.Client().V1().Environment().Get(m)
+	e, err := dClient.V1().Environment().Get(m)
 	panicIf(err)
 	assert(reflect.DeepEqual(testEnv.Spec, e.Spec), "env should match after reading")
 
 	testEnv.ObjectMeta.ResourceVersion = m.ResourceVersion
 	testEnv.Spec.Runtime.Image = "another-img"
-	_, err = g.Client().V1().Environment().Update(testEnv)
+	_, err = dClient.V1().Environment().Update(testEnv)
 	panicIf(err)
 
 	testEnv.ObjectMeta.ResourceVersion = ""
 	testEnv.ObjectMeta.Name = "bar"
 
-	m2, err := g.Client().V1().Environment().Create(testEnv)
+	m2, err := dClient.V1().Environment().Create(testEnv)
 	panicIf(err)
 	defer func() {
-		err := g.Client().V1().Environment().Delete(m2)
+		err := dClient.V1().Environment().Delete(m2)
 		panicIf(err)
 	}()
 
-	ts, err := g.Client().V1().Environment().List(testNS)
+	ts, err := dClient.V1().Environment().List(testNS)
 	panicIf(err)
 	assert(len(ts) == 2, fmt.Sprintf("created two envs, but found %v", len(ts)))
 }
@@ -379,23 +395,27 @@ func TestWatchApi(t *testing.T) {
 			},
 		},
 	}
-	_, err := g.Client().V1().KubeWatcher().Get(&metav1.ObjectMeta{
+
+	restClient := rest.NewRESTClient("http://localhost:8888")
+	dClient := client.MakeClientset(restClient)
+
+	_, err := dClient.V1().KubeWatcher().Get(&metav1.ObjectMeta{
 		Name:      testWatch.ObjectMeta.Name,
 		Namespace: testNS,
 	})
 	assertNotFoundFailure(err, "watch")
 
-	m, err := g.Client().V1().KubeWatcher().Create(testWatch)
+	m, err := dClient.V1().KubeWatcher().Create(testWatch)
 	panicIf(err)
 	defer func() {
-		err := g.Client().V1().KubeWatcher().Delete(m)
+		err := dClient.V1().KubeWatcher().Delete(m)
 		panicIf(err)
 	}()
 
-	_, err = g.Client().V1().KubeWatcher().Create(testWatch)
+	_, err = dClient.V1().KubeWatcher().Create(testWatch)
 	assertNameReuseFailure(err, "watch")
 
-	w, err := g.Client().V1().KubeWatcher().Get(m)
+	w, err := dClient.V1().KubeWatcher().Get(m)
 	panicIf(err)
 	assert(testWatch.Spec.Namespace == w.Spec.Namespace &&
 		testWatch.Spec.Type == w.Spec.Type &&
@@ -403,14 +423,14 @@ func TestWatchApi(t *testing.T) {
 		testWatch.Spec.FunctionReference.Name == w.Spec.FunctionReference.Name, "watch should match after reading")
 
 	testWatch.ObjectMeta.Name = "yyy"
-	m2, err := g.Client().V1().KubeWatcher().Create(testWatch)
+	m2, err := dClient.V1().KubeWatcher().Create(testWatch)
 	panicIf(err)
 	defer func() {
-		err := g.Client().V1().KubeWatcher().Delete(m2)
+		err := dClient.V1().KubeWatcher().Delete(m2)
 		panicIf(err)
 	}()
 
-	ws, err := g.Client().V1().KubeWatcher().List(testNS)
+	ws, err := dClient.V1().KubeWatcher().List(testNS)
 	panicIf(err)
 	assert(len(ws) == 2, fmt.Sprintf("created two watches, but found %v", len(ws)))
 }
@@ -429,20 +449,24 @@ func TestTimeTriggerApi(t *testing.T) {
 			},
 		},
 	}
-	_, err := g.Client().V1().TimeTrigger().Get(&metav1.ObjectMeta{Name: testTrigger.ObjectMeta.Name})
+
+	restClient := rest.NewRESTClient("http://localhost:8888")
+	dClient := client.MakeClientset(restClient)
+
+	_, err := dClient.V1().TimeTrigger().Get(&metav1.ObjectMeta{Name: testTrigger.ObjectMeta.Name})
 	assertNotFoundFailure(err, "trigger")
 
-	m, err := g.Client().V1().TimeTrigger().Create(testTrigger)
+	m, err := dClient.V1().TimeTrigger().Create(testTrigger)
 	panicIf(err)
 	defer func() {
-		err := g.Client().V1().TimeTrigger().Delete(m)
+		err := dClient.V1().TimeTrigger().Delete(m)
 		panicIf(err)
 	}()
 
-	_, err = g.Client().V1().TimeTrigger().Create(testTrigger)
+	_, err = dClient.V1().TimeTrigger().Create(testTrigger)
 	assertNameReuseFailure(err, "trigger")
 
-	tr, err := g.Client().V1().TimeTrigger().Get(m)
+	tr, err := dClient.V1().TimeTrigger().Get(m)
 	panicIf(err)
 	assert(testTrigger.Spec.Cron == tr.Spec.Cron &&
 		testTrigger.Spec.FunctionReference.Type == tr.Spec.FunctionReference.Type &&
@@ -450,16 +474,16 @@ func TestTimeTriggerApi(t *testing.T) {
 
 	testTrigger.ObjectMeta.ResourceVersion = m.ResourceVersion
 	testTrigger.Spec.Cron = "@hourly"
-	_, err = g.Client().V1().TimeTrigger().Update(testTrigger)
+	_, err = dClient.V1().TimeTrigger().Update(testTrigger)
 	panicIf(err)
 
 	testTrigger.ObjectMeta.ResourceVersion = ""
 	testTrigger.ObjectMeta.Name = "yyy"
 	testTrigger.Spec.Cron = "Not valid cron spec"
-	_, err = g.Client().V1().TimeTrigger().Create(testTrigger)
+	_, err = dClient.V1().TimeTrigger().Create(testTrigger)
 	assertCronSpecFails(err)
 
-	ts, err := g.Client().V1().TimeTrigger().List(testNS)
+	ts, err := dClient.V1().TimeTrigger().List(testNS)
 	panicIf(err)
 	assert(len(ts) == 1, fmt.Sprintf("created two time triggers, but found %v", len(ts)))
 }
@@ -498,8 +522,11 @@ func TestMain(m *testing.M) {
 	time.Sleep(5 * time.Second)
 
 	restClient := rest.NewRESTClient("http://localhost:8888")
+
+	fissionClient, kubernetesClient, _, _, err := crd.MakeFissionClient()
+	panicIf(err)
 	// TODO: use fake rest client for offline spec generation
-	cmd.SetClientset(client.MakeClientset(restClient))
+	cmd.SetClientset(client.MakeClientset(restClient), fissionClient, kubernetesClient)
 
 	resp, err := http.Get("http://localhost:8888/")
 	panicIf(err)

@@ -23,7 +23,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
-	"github.com/fission/fission/pkg/controller/client"
+	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/console"
 )
 
@@ -39,11 +39,11 @@ const (
 )
 
 type CrdDumper struct {
-	client  client.Interface
+	client  cmd.Client
 	crdType string
 }
 
-func NewCrdDumper(client client.Interface, crdType string) Resource {
+func NewCrdDumper(client cmd.Client, crdType string) Resource {
 	return CrdDumper{client: client, crdType: crdType}
 }
 
@@ -51,62 +51,62 @@ func (res CrdDumper) Dump(ctx context.Context, dumpDir string) {
 
 	switch res.crdType {
 	case CrdEnvironment:
-		items, err := res.client.V1().Environment().List(metav1.NamespaceAll)
+		items, err := res.client.FissionClientSet.CoreV1().Environments(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
 		if err != nil {
 			console.Warn(fmt.Sprintf("Error getting %v list: %v", res.crdType, err))
 			return
 		}
 
-		for _, item := range items {
+		for _, item := range items.Items {
 			f := getFileName(dumpDir, item.ObjectMeta)
 			writeToFile(f, item)
 		}
 
 	case CrdFunction:
-		items, err := res.client.V1().Function().List(metav1.NamespaceAll)
+		items, err := res.client.FissionClientSet.CoreV1().Functions(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
 		if err != nil {
 			console.Warn(fmt.Sprintf("Error getting %v list: %v", res.crdType, err))
 			return
 		}
 
-		for _, item := range items {
+		for _, item := range items.Items {
 			f := getFileName(dumpDir, item.ObjectMeta)
 			writeToFile(f, item)
 		}
 
 	case CrdPackage:
-		items, err := res.client.V1().Package().List(metav1.NamespaceAll)
+		items, err := res.client.FissionClientSet.CoreV1().Packages(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
 		if err != nil {
 			console.Warn(fmt.Sprintf("Error getting %v list: %v", res.crdType, err))
 			return
 		}
 
-		for _, item := range items {
+		for _, item := range items.Items {
 			item = pkgClean(item)
 			f := getFileName(dumpDir, item.ObjectMeta)
 			writeToFile(f, item)
 		}
 
 	case CrdHttpTrigger:
-		items, err := res.client.V1().HTTPTrigger().List(metav1.NamespaceAll)
+		items, err := res.client.FissionClientSet.CoreV1().HTTPTriggers(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
 		if err != nil {
 			console.Warn(fmt.Sprintf("Error getting %v list: %v", res.crdType, err))
 			return
 		}
 
-		for _, item := range items {
+		for _, item := range items.Items {
 			f := getFileName(dumpDir, item.ObjectMeta)
 			writeToFile(f, item)
 		}
 
 	case CrdKubeWatcher:
-		items, err := res.client.V1().KubeWatcher().List(metav1.NamespaceAll)
+		items, err := res.client.FissionClientSet.CoreV1().KubernetesWatchTriggers(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
 		if err != nil {
 			console.Warn(fmt.Sprintf("Error getting %v list: %v", res.crdType, err))
 			return
 		}
 
-		for _, item := range items {
+		for _, item := range items.Items {
 			f := getFileName(dumpDir, item.ObjectMeta)
 			writeToFile(f, item)
 		}
@@ -114,14 +114,12 @@ func (res CrdDumper) Dump(ctx context.Context, dumpDir string) {
 	case CrdMessageQueueTrigger:
 		var triggers []fv1.MessageQueueTrigger
 
-		for _, mqType := range []string{fv1.MessageQueueTypeKafka} {
-			l, err := res.client.V1().MessageQueueTrigger().List(mqType, metav1.NamespaceAll)
-			if err != nil {
-				console.Warn(fmt.Sprintf("Error getting %v list: %v", res.crdType, err))
-				break
-			}
-			triggers = append(triggers, l...)
+		l, err := res.client.FissionClientSet.CoreV1().MessageQueueTriggers(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
+		if err != nil {
+			console.Warn(fmt.Sprintf("Error getting %v list: %v", res.crdType, err))
+			break
 		}
+		triggers = append(triggers, l.Items...)
 
 		for _, item := range triggers {
 			f := getFileName(dumpDir, item.ObjectMeta)
@@ -129,13 +127,13 @@ func (res CrdDumper) Dump(ctx context.Context, dumpDir string) {
 		}
 
 	case CrdTimeTrigger:
-		items, err := res.client.V1().TimeTrigger().List(metav1.NamespaceAll)
+		items, err := res.client.FissionClientSet.CoreV1().TimeTriggers(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
 		if err != nil {
 			console.Warn(fmt.Sprintf("Error getting %v list: %v", res.crdType, err))
 			return
 		}
 
-		for _, item := range items {
+		for _, item := range items.Items {
 			f := getFileName(dumpDir, item.ObjectMeta)
 			writeToFile(f, item)
 		}

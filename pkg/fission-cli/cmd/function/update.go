@@ -56,10 +56,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 		return errors.Wrap(err, "error in updating function ")
 	}
 
-	function, err := opts.Client().V1().Function().Get(&metav1.ObjectMeta{
-		Name:      input.String(flagkey.FnName),
-		Namespace: fnNamespace,
-	})
+	function, err := opts.Client().FissionClientSet.CoreV1().Functions(fnNamespace).Get(input.Context(), input.String(flagkey.FnName), metav1.GetOptions{})
 	if err != nil {
 		return errors.Wrap(err, fmt.Sprintf("read function '%v'", fnName))
 	}
@@ -90,10 +87,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 
 		// check that the referenced secret is in the same ns as the function, if not give a warning.
 		for _, secretName := range secretNames {
-			err := opts.Client().V1().Misc().SecretExists(&metav1.ObjectMeta{
-				Namespace: fnNamespace,
-				Name:      secretName,
-			})
+			err := util.SecretExists(input.Context(), &metav1.ObjectMeta{Namespace: fnNamespace, Name: secretName}, opts.Client().KubernetesClient)
 			if k8serrors.IsNotFound(err) {
 				console.Warn(fmt.Sprintf("secret %s not found in Namespace: %s. Secret needs to be present in the same namespace as function", secretName, fnNamespace))
 			}
@@ -114,10 +108,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 
 		// check that the referenced cfgmap is in the same ns as the function, if not give a warning.
 		for _, cfgMapName := range cfgMapNames {
-			err := opts.Client().V1().Misc().ConfigMapExists(&metav1.ObjectMeta{
-				Namespace: fnNamespace,
-				Name:      cfgMapName,
-			})
+			err := util.ConfigMapExists(input.Context(), &metav1.ObjectMeta{Namespace: fnNamespace, Name: cfgMapName}, opts.Client().KubernetesClient)
 			if k8serrors.IsNotFound(err) {
 				console.Warn(fmt.Sprintf("ConfigMap %s not found in Namespace: %s. ConfigMap needs to be present in the same namespace as the function", cfgMapName, fnNamespace))
 			}
@@ -186,17 +177,14 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 
 	function.Spec.Resources = *resReqs
 
-	pkg, err := opts.Client().V1().Package().Get(&metav1.ObjectMeta{
-		Namespace: fnNamespace,
-		Name:      pkgName,
-	})
+	pkg, err := opts.Client().FissionClientSet.CoreV1().Packages(fnNamespace).Get(input.Context(), pkgName, metav1.GetOptions{})
 	if err != nil {
 		return errors.Wrap(err, fmt.Sprintf("read package '%v.%v'. Pkg should be present in the same ns as the function", pkgName, fnNamespace))
 	}
 
 	forceUpdate := input.Bool(flagkey.PkgForce)
 
-	fnList, err := _package.GetFunctionsByPackage(opts.Client(), pkg.ObjectMeta.Name, pkg.ObjectMeta.Namespace)
+	fnList, err := _package.GetFunctionsByPackage(input.Context(), opts.Client(), pkg.ObjectMeta.Name, pkg.ObjectMeta.Namespace)
 	if err != nil {
 		return errors.Wrap(err, "error getting function list")
 	}
@@ -222,7 +210,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 				fns = append(fns, fn)
 			}
 		}
-		err = _package.UpdateFunctionPackageResourceVersion(opts.Client(), newPkgMeta, fns...)
+		err = _package.UpdateFunctionPackageResourceVersion(input.Context(), opts.Client(), newPkgMeta, fns...)
 		if err != nil {
 			return errors.Wrap(err, "error updating function package reference resource version")
 		}
@@ -255,7 +243,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 }
 
 func (opts *UpdateSubCommand) run(input cli.Input) error {
-	_, err := opts.Client().V1().Function().Update(opts.function)
+	_, err := opts.Client().FissionClientSet.CoreV1().Functions(opts.function.Namespace).Update(input.Context(), opts.function, metav1.UpdateOptions{})
 	if err != nil {
 		return errors.Wrap(err, "error updating function")
 	}

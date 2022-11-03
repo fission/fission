@@ -57,10 +57,10 @@ func (opts *RebuildSubCommand) complete(input cli.Input) (err error) {
 }
 
 func (opts *RebuildSubCommand) run(input cli.Input) error {
-	pkg, err := opts.Client().V1().Package().Get(&metav1.ObjectMeta{
-		Name:      opts.name,
-		Namespace: opts.namespace,
-	})
+	pkg, err := opts.Client().FissionClientSet.CoreV1().Packages(opts.namespace).Get(input.Context(), opts.name, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
 	if err != nil {
 		return errors.Wrap(err, "find package")
 	}
@@ -70,7 +70,7 @@ func (opts *RebuildSubCommand) run(input cli.Input) error {
 			pkg.ObjectMeta.Name, fv1.BuildStatusFailed))
 	}
 
-	_, err = updatePackageStatus(opts.Client(), pkg, fv1.BuildStatusPending)
+	_, err = updatePackageStatus(input.Context(), opts.Client(), pkg, fv1.BuildStatusPending)
 	if err != nil {
 		return errors.Wrap(err, "update package status")
 	}

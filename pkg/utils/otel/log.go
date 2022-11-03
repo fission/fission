@@ -22,8 +22,8 @@ import (
 	"go.uber.org/zap"
 )
 
-func LoggerWithTraceID(context context.Context, logger *zap.Logger) *zap.Logger {
-	if span := trace.SpanContextFromContext(context); span.TraceID().IsValid() {
+func LoggerWithTraceID(ctx context.Context, logger *zap.Logger) *zap.Logger {
+	if span := trace.SpanContextFromContext(ctx); span.TraceID().IsValid() {
 		return logger.With(zap.String("trace_id", span.TraceID().String()))
 	}
 	return logger

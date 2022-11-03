@@ -58,10 +58,8 @@ func (opts *UpdateContainerSubCommand) complete(input cli.Input) error {
 		return errors.Wrap(err, "error in updating container for function ")
 	}
 
-	function, err := opts.Client().V1().Function().Get(&metav1.ObjectMeta{
-		Name:      input.String(flagkey.FnName),
-		Namespace: fnNamespace,
-	})
+	function, err := opts.Client().FissionClientSet.CoreV1().Functions(fnNamespace).Get(input.Context(), input.String(flagkey.FnName), metav1.GetOptions{})
+
 	if err != nil {
 		return errors.Wrap(err, fmt.Sprintf("read function '%v'", fnName))
 	}
@@ -84,10 +82,7 @@ func (opts *UpdateContainerSubCommand) complete(input cli.Input) error {
 
 		// check that the referenced secret is in the same ns as the function, if not give a warning.
 		for _, secretName := range secretNames {
-			err := opts.Client().V1().Misc().SecretExists(&metav1.ObjectMeta{
-				Namespace: fnNamespace,
-				Name:      secretName,
-			})
+			err := util.SecretExists(input.Context(), &metav1.ObjectMeta{Namespace: fnNamespace, Name: secretName}, opts.Client().KubernetesClient)
 			if k8serrors.IsNotFound(err) {
 				console.Warn(fmt.Sprintf("secret %s not found in Namespace: %s. Secret needs to be present in the same namespace as function", secretName, fnNamespace))
 			}
@@ -108,10 +103,7 @@ func (opts *UpdateContainerSubCommand) complete(input cli.Input) error {
 
 		// check that the referenced cfgmap is in the same ns as the function, if not give a warning.
 		for _, cfgMapName := range cfgMapNames {
-			err := opts.Client().V1().Misc().ConfigMapExists(&metav1.ObjectMeta{
-				Namespace: fnNamespace,
-				Name:      cfgMapName,
-			})
+			err := util.ConfigMapExists(input.Context(), &metav1.ObjectMeta{Namespace: fnNamespace, Name: cfgMapName}, opts.Client().KubernetesClient)
 			if k8serrors.IsNotFound(err) {
 				console.Warn(fmt.Sprintf("ConfigMap %s not found in Namespace: %s. ConfigMap needs to be present in the same namespace as the function", cfgMapName, fnNamespace))
 			}
@@ -192,7 +184,7 @@ func (opts *UpdateContainerSubCommand) complete(input cli.Input) error {
 }
 
 func (opts *UpdateContainerSubCommand) run(input cli.Input) error {
-	_, err := opts.Client().V1().Function().Update(opts.function)
+	_, err := opts.Client().FissionClientSet.CoreV1().Functions(opts.function.Namespace).Update(input.Context(), opts.function, metav1.UpdateOptions{})
 	if err != nil {
 		return errors.Wrap(err, "error updating function")
 	}

@@ -24,10 +24,10 @@ import (
 
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
-	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/cmd/spec"
@@ -129,8 +129,8 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	// For Specs, the spec validate checks for function reference
 	if input.Bool(flagkey.SpecSave) {
 
-		htTrigger, err := opts.Client().V1().HTTPTrigger().Get(&m)
-		if err != nil && !ferror.IsNotFound(err) {
+		htTrigger, err := opts.Client().FissionClientSet.CoreV1().HTTPTriggers(m.Namespace).Get(input.Context(), m.Name, metav1.GetOptions{})
+		if err != nil && !kerrors.IsNotFound(err) {
 			return err
 		}
 		if htTrigger != nil {
@@ -164,16 +164,16 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 			Name:      triggerName,
 			Namespace: fnNamespace,
 		}
+		htTrigger, err := opts.Client().FissionClientSet.CoreV1().HTTPTriggers(m.Namespace).Get(input.Context(), m.Name, metav1.GetOptions{})
 
-		htTrigger, err := opts.Client().V1().HTTPTrigger().Get(&m)
-		if err != nil && !ferror.IsNotFound(err) {
+		if err != nil && !kerrors.IsNotFound(err) {
 			return err
 		}
 		if htTrigger != nil {
 			return errors.New("duplicate trigger exists, choose a different name or leave it empty for fission to auto-generate it")
 		}
 
-		err = util.CheckFunctionExistence(opts.Client(), functionList, fnNamespace)
+		err = util.CheckFunctionExistence(input.Context(), opts.Client(), functionList, fnNamespace)
 		if err != nil {
 			console.Warn(err.Error())
 		}
@@ -226,7 +226,13 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 		return nil
 	}
 
-	_, err := opts.Client().V1().HTTPTrigger().Create(opts.trigger)
+	// Ensure we don't have a duplicate HTTP route defined (same URL and method)
+	err := util.CheckHTTPTriggerDuplicates(input.Context(), opts.Client(), opts.trigger)
+	if err != nil {
+		return errors.Wrap(err, "Error while creating HTTP Trigger")
+	}
+
+	_, err = opts.Client().FissionClientSet.CoreV1().HTTPTriggers(opts.trigger.Namespace).Create(input.Context(), opts.trigger, metav1.CreateOptions{})
 	if err != nil {
 		return errors.Wrap(err, "create HTTP trigger")
 	}

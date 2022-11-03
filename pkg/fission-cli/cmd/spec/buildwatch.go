@@ -25,7 +25,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
-	"github.com/fission/fission/pkg/controller/client"
+	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/cmd/package/util"
 )
 
@@ -33,8 +33,7 @@ type (
 	// packageBuildWatcher is used to watch a set of in-progress builds.
 	packageBuildWatcher struct {
 		// fission client
-		fclient client.Interface
-
+		fclient cmd.Client
 		// set of packages already printed, ensures we don't duplicate the notifications
 		finished map[string]bool
 
@@ -43,7 +42,7 @@ type (
 	}
 )
 
-func makePackageBuildWatcher(fclient client.Interface) *packageBuildWatcher {
+func makePackageBuildWatcher(fclient cmd.Client) *packageBuildWatcher {
 	return &packageBuildWatcher{
 		fclient:  fclient,
 		finished: make(map[string]bool),
@@ -67,7 +66,7 @@ func (w *packageBuildWatcher) watch(ctx context.Context) {
 		}
 
 		// pull list of packages (TODO: convert to watch)
-		pkgs, err := w.fclient.V1().Package().List(metav1.NamespaceAll)
+		pkgs, err := w.fclient.FissionClientSet.CoreV1().Packages(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
 		if err != nil {
 			fmt.Printf("Getting list of packages: %v", err)
 			os.Exit(1)
@@ -77,7 +76,7 @@ func (w *packageBuildWatcher) watch(ctx context.Context) {
 		// build status (either succeeded or failed; not "none")
 		keepWaiting := false
 		buildpkgs := make([]fv1.Package, 0)
-		for _, pkg := range pkgs {
+		for _, pkg := range pkgs.Items {
 			_, ok := w.pkgMeta[mapKey(&pkg.ObjectMeta)]
 			if !ok {
 				continue

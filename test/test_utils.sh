@@ -201,7 +201,7 @@ set_environment() {
     ns=f-$id
 
     # fission env
-    export FISSION_URL=http://$(kubectl -n $ns get svc controller -o jsonpath='{...ip}')
+    # export FISSION_URL=http://$(kubectl -n $ns get svc controller -o jsonpath='{...ip}')
     export FISSION_ROUTER=$(kubectl -n $ns get svc router -o jsonpath='{...ip}')
 
     # ingress controller env

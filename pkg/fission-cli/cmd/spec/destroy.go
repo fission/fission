@@ -17,13 +17,14 @@ limitations under the License.
 package spec
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
 	"github.com/pkg/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
-	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/console"
@@ -68,14 +69,14 @@ func (opts *DestroySubCommand) run(input cli.Input) error {
 		emptyFr.DeploymentConfig = fr.DeploymentConfig
 
 		// "apply" the empty state
-		err = forceDeleteResources(opts.Client(), &emptyFr)
+		err = forceDeleteResources(input.Context(), opts.Client(), &emptyFr)
 		if err != nil {
 			return errors.Wrap(err, "error deleting resources")
 		}
 		return nil
 	}
 	forceDelete := input.Bool(flagkey.ForceDelete)
-	err = deleteResources(opts.Client(), fr, forceDelete)
+	err = deleteResources(input.Context(), opts.Client(), fr, forceDelete)
 	if err != nil {
 		return errors.Wrap(err, "error deleting resources")
 	}
@@ -83,41 +84,41 @@ func (opts *DestroySubCommand) run(input cli.Input) error {
 	return nil
 }
 
-func forceDeleteResources(fclient client.Interface, fr *FissionResources) error {
+func forceDeleteResources(ctx context.Context, fclient cmd.Client, fr *FissionResources) error {
 
 	var err error
 
-	_, _, err = applyHTTPTriggers(fclient, fr, true, false)
+	_, _, err = applyHTTPTriggers(ctx, fclient, fr, true, false)
 	if err != nil {
 		return errors.Wrap(err, "HTTPTrigger delete failed")
 	}
 
-	_, _, err = applyKubernetesWatchTriggers(fclient, fr, true, false)
+	_, _, err = applyKubernetesWatchTriggers(ctx, fclient, fr, true, false)
 	if err != nil {
 		return errors.Wrap(err, "KubernetesWatchTrigger delete failed")
 	}
 
-	_, _, err = applyTimeTriggers(fclient, fr, true, false)
+	_, _, err = applyTimeTriggers(ctx, fclient, fr, true, false)
 	if err != nil {
 		return errors.Wrap(err, "TimeTrigger delete failed")
 	}
 
-	_, _, err = applyMessageQueueTriggers(fclient, fr, true, false)
+	_, _, err = applyMessageQueueTriggers(ctx, fclient, fr, true, false)
 	if err != nil {
 		return errors.Wrap(err, "MessageQueueTrigger delete failed")
 	}
 
-	_, _, err = applyFunctions(fclient, fr, true, false)
+	_, _, err = applyFunctions(ctx, fclient, fr, true, false)
 	if err != nil {
 		return errors.Wrap(err, "function delete failed")
 	}
 
-	_, _, err = applyPackages(fclient, fr, true, false)
+	_, _, err = applyPackages(ctx, fclient, fr, true, false)
 	if err != nil {
 		return errors.Wrap(err, "package delete failed")
 	}
 
-	_, _, err = applyEnvironments(fclient, fr, true, false)
+	_, _, err = applyEnvironments(ctx, fclient, fr, true, false)
 	if err != nil {
 		return errors.Wrap(err, "environment delete failed")
 	}
@@ -175,41 +176,41 @@ func (opts *DestroySubCommand) insertNSToResource(input cli.Input, fr *FissionRe
 	return result.ErrorOrNil()
 }
 
-func deleteResources(fclient client.Interface, fr *FissionResources, forceDelete bool) error {
+func deleteResources(ctx context.Context, fclient cmd.Client, fr *FissionResources, forceDelete bool) error {
 
 	var err error
 
-	err = destroyHTTPTriggers(fclient, fr)
+	err = destroyHTTPTriggers(ctx, fclient, fr)
 	if err != nil {
 		return errors.Wrap(err, "HTTPTrigger delete failed")
 	}
 
-	err = destroyKubernetesWatchTriggers(fclient, fr)
+	err = destroyKubernetesWatchTriggers(ctx, fclient, fr)
 	if err != nil {
 		return errors.Wrap(err, "KubernetesWatchTrigger delete failed")
 	}
 
-	err = destroyTimeTriggers(fclient, fr)
+	err = destroyTimeTriggers(ctx, fclient, fr)
 	if err != nil {
 		return errors.Wrap(err, "TimeTrigger delete failed")
 	}
 
-	err = destroyMessageQueueTriggers(fclient, fr)
+	err = destroyMessageQueueTriggers(ctx, fclient, fr)
 	if err != nil {
 		return errors.Wrap(err, "MessageQueueTrigger delete failed")
 	}
 
-	err = destroyFunctions(fclient, fr)
+	err = destroyFunctions(ctx, fclient, fr)
 	if err != nil {
 		return errors.Wrap(err, "function delete failed")
 	}
 
-	err = destroyPackages(fclient, fr)
+	err = destroyPackages(ctx, fclient, fr)
 	if err != nil {
 		return errors.Wrap(err, "package delete failed")
 	}
 
-	err = destroyEnvironments(fclient, fr)
+	err = destroyEnvironments(ctx, fclient, fr)
 	if err != nil {
 		return errors.Wrap(err, "environment delete failed")
 	}
@@ -217,9 +218,9 @@ func deleteResources(fclient client.Interface, fr *FissionResources, forceDelete
 	return nil
 }
 
-func destroyHTTPTriggers(fclient client.Interface, fr *FissionResources) error {
+func destroyHTTPTriggers(ctx context.Context, fclient cmd.Client, fr *FissionResources) error {
 	for _, o := range fr.HttpTriggers {
-		err := fclient.V1().HTTPTrigger().Delete(&o.ObjectMeta)
+		err := fclient.FissionClientSet.CoreV1().HTTPTriggers(o.ObjectMeta.Namespace).Delete(ctx, o.ObjectMeta.Name, metav1.DeleteOptions{})
 		if err != nil && strings.Contains(err.Error(), "not found") {
 			console.Verbose(2, fmt.Sprintf("could not delete httptrigger: %s Namespace: %s", o.ObjectMeta.Name, o.ObjectMeta.Namespace))
 			err = nil
@@ -233,10 +234,10 @@ func destroyHTTPTriggers(fclient client.Interface, fr *FissionResources) error {
 	return nil
 }
 
-func destroyKubernetesWatchTriggers(fclient client.Interface, fr *FissionResources) error {
+func destroyKubernetesWatchTriggers(ctx context.Context, fclient cmd.Client, fr *FissionResources) error {
 
 	for _, o := range fr.KubernetesWatchTriggers {
-		err := fclient.V1().KubeWatcher().Delete(&o.ObjectMeta)
+		err := fclient.FissionClientSet.CoreV1().KubernetesWatchTriggers(o.ObjectMeta.Namespace).Delete(ctx, o.ObjectMeta.Name, metav1.DeleteOptions{})
 		if err != nil && strings.Contains(err.Error(), "not found") {
 			console.Verbose(2, fmt.Sprintf("could not delete watch: %s Namespace: %s", o.ObjectMeta.Name, o.ObjectMeta.Namespace))
 			err = nil
@@ -251,10 +252,10 @@ func destroyKubernetesWatchTriggers(fclient client.Interface, fr *FissionResourc
 	return nil
 }
 
-func destroyTimeTriggers(fclient client.Interface, fr *FissionResources) error {
+func destroyTimeTriggers(ctx context.Context, fclient cmd.Client, fr *FissionResources) error {
 
 	for _, o := range fr.TimeTriggers {
-		err := fclient.V1().TimeTrigger().Delete(&o.ObjectMeta)
+		err := fclient.FissionClientSet.CoreV1().TimeTriggers(o.ObjectMeta.Namespace).Delete(ctx, o.ObjectMeta.Name, metav1.DeleteOptions{})
 		if err != nil && strings.Contains(err.Error(), "not found") {
 			console.Verbose(2, fmt.Sprintf("could not delete Time trigger: %s Namespace: %s", o.ObjectMeta.Name, o.ObjectMeta.Namespace))
 			err = nil
@@ -269,10 +270,10 @@ func destroyTimeTriggers(fclient client.Interface, fr *FissionResources) error {
 	return nil
 }
 
-func destroyMessageQueueTriggers(fclient client.Interface, fr *FissionResources) error {
+func destroyMessageQueueTriggers(ctx context.Context, fclient cmd.Client, fr *FissionResources) error {
 
 	for _, o := range fr.MessageQueueTriggers {
-		err := fclient.V1().MessageQueueTrigger().Delete(&o.ObjectMeta)
+		err := fclient.FissionClientSet.CoreV1().MessageQueueTriggers(o.ObjectMeta.Namespace).Delete(ctx, o.ObjectMeta.Name, metav1.DeleteOptions{})
 		if err != nil && strings.Contains(err.Error(), "not found") {
 			console.Verbose(2, fmt.Sprintf("could not delete Message trigger: %s Namespace: %s", o.ObjectMeta.Name, o.ObjectMeta.Namespace))
 			err = nil
@@ -287,10 +288,10 @@ func destroyMessageQueueTriggers(fclient client.Interface, fr *FissionResources)
 	return nil
 }
 
-func destroyFunctions(fclient client.Interface, fr *FissionResources) error {
+func destroyFunctions(ctx context.Context, fclient cmd.Client, fr *FissionResources) error {
 
 	for _, o := range fr.Functions {
-		err := fclient.V1().Function().Delete(&o.ObjectMeta)
+		err := fclient.FissionClientSet.CoreV1().Functions(o.ObjectMeta.Namespace).Delete(ctx, o.ObjectMeta.Name, metav1.DeleteOptions{})
 		if err != nil && strings.Contains(err.Error(), "not found") {
 			console.Verbose(2, fmt.Sprintf("could not delete Functions: %s Namespace: %s", o.ObjectMeta.Name, o.ObjectMeta.Namespace))
 			err = nil
@@ -305,10 +306,10 @@ func destroyFunctions(fclient client.Interface, fr *FissionResources) error {
 	return nil
 }
 
-func destroyPackages(fclient client.Interface, fr *FissionResources) error {
+func destroyPackages(ctx context.Context, fclient cmd.Client, fr *FissionResources) error {
 
 	for _, o := range fr.Packages {
-		err := fclient.V1().Package().Delete(&o.ObjectMeta)
+		err := fclient.FissionClientSet.CoreV1().Packages(o.ObjectMeta.Namespace).Delete(ctx, o.ObjectMeta.Name, metav1.DeleteOptions{})
 		if err != nil && strings.Contains(err.Error(), "not found") {
 			console.Verbose(2, fmt.Sprintf("could not delete Package: %s Namespace: %s", o.ObjectMeta.Name, o.ObjectMeta.Namespace))
 			err = nil
@@ -323,10 +324,10 @@ func destroyPackages(fclient client.Interface, fr *FissionResources) error {
 	return nil
 }
 
-func destroyEnvironments(fclient client.Interface, fr *FissionResources) error {
+func destroyEnvironments(ctx context.Context, fclient cmd.Client, fr *FissionResources) error {
 
 	for _, o := range fr.Environments {
-		err := fclient.V1().Environment().Delete(&o.ObjectMeta)
+		err := fclient.FissionClientSet.CoreV1().Environments(o.ObjectMeta.Namespace).Delete(ctx, o.ObjectMeta.Name, metav1.DeleteOptions{})
 		if err != nil && strings.Contains(err.Error(), "not found") {
 			console.Verbose(2, fmt.Sprintf("could not delete Env: %s Namespace: %s", o.ObjectMeta.Name, o.ObjectMeta.Namespace))
 			err = nil

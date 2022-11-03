@@ -71,6 +71,12 @@ generate-crds: controller-gen-install
 	paths=./pkg/apis/core/v1  \
 	output:crd:artifacts:config=crds/v1
 
+# TODO: this is not thoroughly tested  
+generate-webhooks:  controller-gen-install
+	controller-gen crd webhook \
+	 paths=./pkg/apis/core/v1 \
+	 output:crd:artifacts:config=pkg/admission-webhook/config
+
 create-crds:
 	@kubectl create -k crds/v1
 

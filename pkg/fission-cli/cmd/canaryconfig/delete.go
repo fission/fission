@@ -41,12 +41,8 @@ func (opts *DeleteSubCommand) run(input cli.Input) (err error) {
 	if err != nil {
 		return errors.Wrap(err, "error in deleting canaryConfig ")
 	}
-	m := &metav1.ObjectMeta{
-		Name:      input.String(flagkey.CanaryName),
-		Namespace: namespace,
-	}
 
-	err = opts.Client().V1().CanaryConfig().Delete(m)
+	err = opts.Client().FissionClientSet.CoreV1().CanaryConfigs(namespace).Delete(input.Context(), input.String(flagkey.CanaryName), metav1.DeleteOptions{})
 	if err != nil {
 		if input.Bool(flagkey.IgnoreNotFound) && util.IsNotFound(err) {
 			return nil
@@ -54,6 +50,6 @@ func (opts *DeleteSubCommand) run(input cli.Input) (err error) {
 		return errors.Wrap(err, "error deleting canary config")
 	}
 
-	fmt.Printf("canaryconfig '%v.%v' deleted\n", m.Name, m.Namespace)
+	fmt.Printf("canaryconfig '%v.%v' deleted\n", input.String(flagkey.CanaryName), namespace)
 	return nil
 }

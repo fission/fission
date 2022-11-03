@@ -58,10 +58,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) (err error) {
 	if err != nil {
 		return errors.Wrap(err, "error creating environment")
 	}
-	env, err := opts.Client().V1().Environment().Get(&metav1.ObjectMeta{
-		Name:      input.String(flagkey.EnvName),
-		Namespace: currentContextNS,
-	})
+	env, err := opts.Client().FissionClientSet.CoreV1().Environments(currentContextNS).Get(input.Context(), input.String(flagkey.EnvName), metav1.GetOptions{})
 	if err != nil {
 		return errors.Wrap(err, "error finding environment")
 	}
@@ -81,12 +78,16 @@ func (opts *UpdateSubCommand) complete(input cli.Input) (err error) {
 }
 
 func (opts *UpdateSubCommand) run(input cli.Input) error {
-	_, err := opts.Client().V1().Environment().Update(opts.env)
+
+	enew, err := opts.Client().FissionClientSet.CoreV1().Environments(opts.env.ObjectMeta.Namespace).Update(input.Context(), opts.env, metav1.UpdateOptions{})
+	if err != nil {
+		return errors.Wrap(err, "error updating environment")
+	}
 	if err != nil {
 		return errors.Wrap(err, "error updating environment")
 	}
 
-	fmt.Printf("environment '%v' updated\n", opts.env.ObjectMeta.Name)
+	fmt.Printf("environment '%v' updated\n", enew.ObjectMeta.Name)
 	return nil
 }
 

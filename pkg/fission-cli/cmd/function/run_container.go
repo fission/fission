@@ -22,11 +22,10 @@ import (
 
 	"github.com/pkg/errors"
 	apiv1 "k8s.io/api/core/v1"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
-	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/cmd/spec"
@@ -70,13 +69,11 @@ func (opts *RunContainerSubCommand) complete(input cli.Input) error {
 
 	if !toSpec {
 		// check for unique function names within a namespace
-		fn, err := opts.Client().V1().Function().Get(&metav1.ObjectMeta{
-			Name:      input.String(flagkey.FnName),
-			Namespace: fnNamespace,
-		})
-		if err != nil && !ferror.IsNotFound(err) {
+		fn, err := opts.Client().FissionClientSet.CoreV1().Functions(fnNamespace).Get(input.Context(), input.String(flagkey.FnName), metav1.GetOptions{})
+
+		if err != nil && !kerrors.IsNotFound(err) {
 			return err
-		} else if fn != nil {
+		} else if fn.Name != "" && fn.Namespace != "" {
 			return errors.New("a function with the same name already exists")
 		}
 	}
@@ -128,12 +125,10 @@ func (opts *RunContainerSubCommand) complete(input cli.Input) error {
 		// check the referenced secret is in the same ns as the function, if not give a warning.
 		if !toSpec { // TODO: workaround in order not to block users from creating function spec, remove it.
 			for _, secretName := range secretNames {
-				err := opts.Client().V1().Misc().SecretExists(&metav1.ObjectMeta{
-					Namespace: fnNamespace,
-					Name:      secretName,
-				})
+				// TODO: discuss if this is fine or should we have a wrapper over kclient interface
+				err := util.SecretExists(input.Context(), &metav1.ObjectMeta{Namespace: fnNamespace, Name: secretName}, opts.Client().KubernetesClient)
 				if err != nil {
-					if k8serrors.IsNotFound(err) {
+					if kerrors.IsNotFound(err) {
 						console.Warn(fmt.Sprintf("Secret %s not found in Namespace: %s. Secret needs to be present in the same namespace as function", secretName, fnNamespace))
 					} else {
 						return errors.Wrapf(err, "error checking secret %s", secretName)
@@ -154,12 +149,10 @@ func (opts *RunContainerSubCommand) complete(input cli.Input) error {
 		// check the referenced cfgmap is in the same ns as the function, if not give a warning.
 		if !toSpec {
 			for _, cfgMapName := range cfgMapNames {
-				err := opts.Client().V1().Misc().ConfigMapExists(&metav1.ObjectMeta{
-					Namespace: fnNamespace,
-					Name:      cfgMapName,
-				})
+				err := util.ConfigMapExists(input.Context(), &metav1.ObjectMeta{Namespace: fnNamespace, Name: cfgMapName}, opts.Client().KubernetesClient)
+
 				if err != nil {
-					if k8serrors.IsNotFound(err) {
+					if kerrors.IsNotFound(err) {
 						console.Warn(fmt.Sprintf("ConfigMap %s not found in Namespace: %s. ConfigMap needs to be present in the same namespace as function", cfgMapName, fnNamespace))
 					} else {
 						return errors.Wrapf(err, "error checking configmap %s", cfgMapName)
@@ -238,7 +231,7 @@ func (opts *RunContainerSubCommand) run(input cli.Input) error {
 		return nil
 	}
 
-	_, err := opts.Client().V1().Function().Create(opts.function)
+	_, err := opts.Client().FissionClientSet.CoreV1().Functions(opts.function.ObjectMeta.Namespace).Create(input.Context(), opts.function, metav1.CreateOptions{})
 	if err != nil {
 		return errors.Wrap(err, "error creating function")
 	}

@@ -56,10 +56,7 @@ func (opts *DeleteSubCommand) complete(input cli.Input) (err error) {
 }
 
 func (opts *DeleteSubCommand) run(input cli.Input) error {
-	err := opts.Client().V1().KubeWatcher().Delete(&metav1.ObjectMeta{
-		Name:      opts.name,
-		Namespace: opts.namespace,
-	})
+	err := opts.Client().FissionClientSet.CoreV1().KubernetesWatchTriggers(opts.namespace).Delete(input.Context(), opts.name, metav1.DeleteOptions{})
 	if err != nil {
 		if input.Bool(flagkey.IgnoreNotFound) && util.IsNotFound(err) {
 			return nil

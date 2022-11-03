@@ -361,6 +361,33 @@ controller:
     runAsUser: 10001
     runAsGroup: 10001
 
+## webhook is the component that validates API calls.
+## It contains validation and mutation for functions, triggers, environments, Kubernetes event watches, etc. 
+##
+webhook:
+  ## Pod resources as:
+  ##  resources:
+  ##    limits:
+  ##      cpu: <tbd>
+  ##      memory: <tbd>
+  ##    requests:
+  ##      cpu: <tbd>
+  ##      memory: <tbd>
+  ##
+  resources: {}
+
+  ## Security Context
+  ## It holds pod-level and container level security configuration.
+  ## This is an experimental section, please verify before enabling in production.
+  ## Ref: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#security-context-1
+  securityContext:
+    enabled: false
+    ## Mark it false, if you want to stop the non root user validation
+    runAsNonRoot: true
+    fsGroup: 10001
+    runAsUser: 10001
+    runAsGroup: 10001
+
 ## kubewatcher watches the Kubernetes API and invokes functions associated with watches, sending the watch event to the function.
 ##
 kubewatcher:
