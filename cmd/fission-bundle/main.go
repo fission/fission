@@ -45,6 +45,7 @@ import (
 	"github.com/fission/fission/pkg/webhook"
 )
 
+// runWebhook starts admission webhook server
 func runWebhook(ctx context.Context, logger *zap.Logger, port int) error {
 	return webhook.Start(ctx, logger, port)
 }
