@@ -32,7 +32,7 @@ import (
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
-	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
+	"github.com/fission/fission/pkg/fission-cli/console"
 	"github.com/fission/fission/pkg/fission-cli/util"
 	storageSvcClient "github.com/fission/fission/pkg/storagesvc/client"
 	"github.com/fission/fission/pkg/utils"
@@ -54,34 +54,31 @@ func UploadArchiveFile(input cli.Input, client cmd.Client, fileName string) (*fv
 		}
 	} else {
 
-		kubeContext := input.String(flagkey.KubeContext)
+		// storageSvc, err := util.GetSvcName(input.Context(), client.KubernetesClient, "fission-storage")
+		// if err != nil {
+		// 	return nil, errors.Wrapf(err, "error getting storage URL")
+		// }
 
-		u, err := util.GetStorageURL(input.Context(), kubeContext)
+		storageSvc, err := util.GetStorageURL(input.Context(), "")
 		if err != nil {
-			return nil, errors.Wrapf(err, "error getting storage URL")
+			return nil, errors.Wrapf(err, "error uploading file %v", fileName)
 		}
-		ssClient := storageSvcClient.MakeClient(u.String())
+		console.Verbose(2, "storageSvc %s", storageSvc)
 
+		storagesvcURL := "http://" + storageSvc.String()
+		ssClient := storageSvcClient.MakeClient(storagesvcURL)
 		// TODO add a progress bar
 		id, err := ssClient.Upload(input.Context(), fileName, nil)
 		if err != nil {
 			return nil, errors.Wrapf(err, "error uploading file %v", fileName)
 		}
-		// TODO: discuss this
-		storageSvc, err := client.DefaultClientset.V1().Misc().GetSvcURL("application=fission-storage")
-		storageSvcURL := "http://" + storageSvc
-		if err != nil {
-			return nil, errors.Wrapf(err, "error getting fission storage service name")
-		}
+		console.Verbose(2, "id of file uploaded %s", id)
 
-		// We make a new client with actual URL of Storage service so that the URL is not
-		// pointing to 127.0.0.1 i.e. proxy. DON'T reuse previous ssClient
-		pkgClient := storageSvcClient.MakeClient(storageSvcURL)
-		archiveURL := pkgClient.GetUrl(id)
-
+		archiveURL := ssClient.GetUrl(id)
 		archive.Type = fv1.ArchiveTypeUrl
 		archive.URL = archiveURL
 
+		console.Verbose(2, "url of file uploaded %s", archive.URL)
 		csum, err := utils.GetFileChecksum(fileName)
 		if err != nil {
 			return nil, errors.Wrapf(err, "calculate checksum for file %v", fileName)

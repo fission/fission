@@ -133,7 +133,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		if err != nil && !kerrors.IsNotFound(err) {
 			return err
 		}
-		if htTrigger != nil {
+		if htTrigger.Name != "" && htTrigger.Namespace != "" {
 			return errors.New("duplicate trigger exists, choose a different name or leave it empty for fission to auto-generate it")
 		}
 
@@ -169,7 +169,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		if err != nil && !kerrors.IsNotFound(err) {
 			return err
 		}
-		if htTrigger != nil {
+		if htTrigger != nil && htTrigger.Namespace != "" {
 			return errors.New("duplicate trigger exists, choose a different name or leave it empty for fission to auto-generate it")
 		}
 

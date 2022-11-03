@@ -102,6 +102,8 @@ func (opts *GetSubCommand) run(input cli.Input) error {
 
 		storagesvcURL := "http://" + storageSvc
 		ssClient := storagesvcClient.MakeClient(storagesvcURL)
+
+		// TODO: this is not required I suppose S3 not handled here
 		fileDownloadUrl := ssClient.GetUrl(archive.URL)
 		readCloser, err := pkgutil.DownloadURL(fileDownloadUrl)
 		if err != nil {

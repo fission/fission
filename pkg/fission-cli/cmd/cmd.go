@@ -30,7 +30,6 @@ type (
 	CommandAction   func(input cli.Input) error
 	CommandActioner struct{}
 	Client          struct {
-		DefaultClientset client.Interface
 		FissionClientSet versioned.Interface
 		KubernetesClient kubernetes.Interface
 	}
@@ -43,7 +42,7 @@ var (
 
 func SetClientset(clientset client.Interface, fClientSet versioned.Interface, kClient kubernetes.Interface) {
 	once.Do(func() {
-		defaultClient = Client{DefaultClientset: clientset,
+		defaultClient = Client{
 			FissionClientSet: fClientSet,
 			KubernetesClient: kClient,
 		}
