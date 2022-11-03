@@ -24,6 +24,7 @@ import (
 	"strconv"
 
 	docopt "github.com/docopt/docopt-go"
+	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 
 	"go.uber.org/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
