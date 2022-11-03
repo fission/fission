@@ -59,10 +59,11 @@ func (opts *InfoSubCommand) complete(input cli.Input) (err error) {
 }
 
 func (opts *InfoSubCommand) run(input cli.Input) error {
-	pkg, err := opts.Client().V1().Package().Get(&metav1.ObjectMeta{
-		Namespace: opts.namespace,
-		Name:      opts.name,
-	})
+	pkg, err := opts.Client().FissionClientSet.CoreV1().Packages(opts.namespace).Get(input.Context(), opts.name, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+
 	if err != nil {
 		return errors.Wrapf(err, "error finding package %s", opts.name)
 	}

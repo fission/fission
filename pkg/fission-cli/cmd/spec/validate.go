@@ -18,6 +18,7 @@ package spec
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -29,7 +30,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
-	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/console"
@@ -86,7 +86,7 @@ func (opts *ValidateSubCommand) run(input cli.Input, fr *FissionResources) (err 
 		return errors.Wrap(err, "error validating specs")
 	}
 
-	err = resourceConflictCheck(opts.Client(), fr, input.Bool(flagkey.SpecAllowConflicts), "")
+	err = resourceConflictCheck(input.Context(), opts.Client(), fr, input.Bool(flagkey.SpecAllowConflicts), "")
 	if err != nil {
 		return errors.Wrap(err, "name conflict error")
 	}
@@ -104,11 +104,11 @@ func (opts *ValidateSubCommand) run(input cli.Input, fr *FissionResources) (err 
 // the same name is already present in the same cluster namespace.
 // If a same name resource exists in the same namespace, a name
 // conflict error will be returned.
-func resourceConflictCheck(c client.Interface, fr *FissionResources, specAllowConflicts bool, namespace string) error {
+func resourceConflictCheck(ctx context.Context, c cmd.Client, fr *FissionResources, specAllowConflicts bool, namespace string) error {
 	deployUID := fr.DeploymentConfig.UID
 	result := utils.MultiErrorWithFormat()
 
-	fnList, err := getAllFunctions(c, namespace)
+	fnList, err := getAllFunctions(ctx, c, namespace)
 	if err != nil {
 		return errors.Errorf("Unable to get Functions %v", err.Error())
 	}
@@ -121,7 +121,7 @@ func resourceConflictCheck(c client.Interface, fr *FissionResources, specAllowCo
 		}
 	}
 
-	envList, err := getAllEnvironments(c, namespace)
+	envList, err := getAllEnvironments(ctx, c, namespace)
 	if err != nil {
 		return errors.Errorf("Unable to get Environments %v", err.Error())
 	}
@@ -134,7 +134,7 @@ func resourceConflictCheck(c client.Interface, fr *FissionResources, specAllowCo
 		}
 	}
 
-	pkgList, err := getAllPackages(c, namespace)
+	pkgList, err := getAllPackages(ctx, c, namespace)
 	if err != nil {
 		return errors.Errorf("Unable to get Packages %v", err.Error())
 	}
@@ -147,7 +147,7 @@ func resourceConflictCheck(c client.Interface, fr *FissionResources, specAllowCo
 		}
 	}
 
-	httptriggerList, err := getAllHTTPTriggers(c, namespace)
+	httptriggerList, err := getAllHTTPTriggers(ctx, c, namespace)
 	if err != nil {
 		return errors.Errorf("Unable to get HTTPTrigger %v", err.Error())
 	}
@@ -160,7 +160,7 @@ func resourceConflictCheck(c client.Interface, fr *FissionResources, specAllowCo
 		}
 	}
 
-	mqtriggerList, err := getAllMessageQueueTriggers(c, "", namespace)
+	mqtriggerList, err := getAllMessageQueueTriggers(ctx, c, "", namespace)
 	if err != nil {
 		return errors.Errorf("Unable to get Message Queue Trigger %v", err.Error())
 	}
@@ -173,7 +173,7 @@ func resourceConflictCheck(c client.Interface, fr *FissionResources, specAllowCo
 		}
 	}
 
-	timetriggerList, err := getAllTimeTriggers(c, namespace)
+	timetriggerList, err := getAllTimeTriggers(ctx, c, namespace)
 	if err != nil {
 		return errors.Errorf("Unable to get Time Trigger %v", err.Error())
 	}
@@ -186,7 +186,7 @@ func resourceConflictCheck(c client.Interface, fr *FissionResources, specAllowCo
 		}
 	}
 
-	kubewatchtriggerList, err := getAllKubeWatchTriggers(c, namespace)
+	kubewatchtriggerList, err := getAllKubeWatchTriggers(ctx, c, namespace)
 	if err != nil {
 		return errors.Errorf("Unable to get Kubernetes Watch Trigger %v", err.Error())
 	}

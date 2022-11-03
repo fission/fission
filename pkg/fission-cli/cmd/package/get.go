@@ -70,13 +70,18 @@ func (opts *GetSubCommand) complete(input cli.Input) (err error) {
 }
 
 func (opts *GetSubCommand) run(input cli.Input) error {
-	pkg, err := opts.Client().V1().Package().Get(&metav1.ObjectMeta{
-		Namespace: opts.namespace,
-		Name:      opts.name,
-	})
+
+	pkg, err := opts.Client().FissionClientSet.CoreV1().Packages(opts.namespace).Get(input.Context(), opts.name, metav1.GetOptions{})
 	if err != nil {
 		return err
 	}
+
+	// TODO: this is not used currently. Do we need to keep this behaviour
+	// raw := r.FormValue("raw")
+	// var resp []byte
+	// if raw != "" {
+	// 	resp = pkg.Spec.Deployment.Literal
+	// }
 
 	var reader io.Reader
 	archive := pkg.Spec.Source
@@ -87,7 +92,7 @@ func (opts *GetSubCommand) run(input cli.Input) error {
 	if pkg.Spec.Deployment.Type == fv1.ArchiveTypeLiteral {
 		reader = bytes.NewReader(archive.Literal)
 	} else if pkg.Spec.Deployment.Type == fv1.ArchiveTypeUrl {
-		readCloser, err := pkgutil.DownloadStoragesvcURL(opts.Client(), archive.URL)
+		readCloser, err := pkgutil.DownloadStoragesvcURL(opts.Client().DefaultClientset, archive.URL) //TODO: storage server will still run on controller port?
 		if err != nil {
 			return err
 		}

@@ -30,7 +30,6 @@ import (
 	"go.uber.org/zap"
 	apiv1 "k8s.io/api/core/v1"
 	k8sInformers "k8s.io/client-go/informers"
-	k8sInformersv1 "k8s.io/client-go/informers/core/v1"
 	k8sCache "k8s.io/client-go/tools/cache"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -293,7 +292,15 @@ func StartExecutor(ctx context.Context, logger *zap.Logger, functionNamespace st
 	for _, ns := range utils.GetNamespaces() {
 		factory := genInformer.NewFilteredSharedInformerFactory(fissionClient, time.Minute*30, ns, nil)
 		funcInformer[ns] = factory.Core().V1().Functions()
+	}
+
+	for _, ns := range utils.GetNamespaces() {
+		factory := genInformer.NewFilteredSharedInformerFactory(fissionClient, time.Minute*30, ns, nil)
 		envInformer[ns] = factory.Core().V1().Environments()
+	}
+
+	for _, ns := range utils.GetNamespaces() {
+		factory := genInformer.NewFilteredSharedInformerFactory(fissionClient, time.Minute*30, ns, nil)
 		pkgInformer[ns] = factory.Core().V1().Packages()
 	}
 
@@ -366,16 +373,11 @@ func StartExecutor(ctx context.Context, logger *zap.Logger, functionNamespace st
 	// TODO: use context to control the waiting time once kubernetes client supports it.
 	util.WaitTimeout(wg, 30*time.Second)
 
-	configMapInformer := make(map[string]k8sInformersv1.ConfigMapInformer, 0)
-	secretInformer := make(map[string]k8sInformersv1.SecretInformer, 0)
+	k8sInformerFactory := k8sInformers.NewSharedInformerFactory(kubernetesClient, time.Minute*30)
+	configmapInformer := k8sInformerFactory.Core().V1().ConfigMaps()
+	secretInformer := k8sInformerFactory.Core().V1().Secrets()
 
-	for _, ns := range utils.GetNamespaces() {
-		factory := k8sInformers.NewFilteredSharedInformerFactory(kubernetesClient, time.Minute*30, ns, nil)
-		configMapInformer[ns] = factory.Core().V1().ConfigMaps()
-		secretInformer[ns] = factory.Core().V1().Secrets()
-	}
-
-	cms := cms.MakeConfigSecretController(ctx, logger, fissionClient, kubernetesClient, executorTypes, configMapInformer, secretInformer)
+	cms := cms.MakeConfigSecretController(ctx, logger, fissionClient, kubernetesClient, executorTypes, configmapInformer, secretInformer)
 
 	fissionInformers := make([]k8sCache.SharedIndexInformer, 0)
 	for _, informer := range funcInformer {
@@ -387,14 +389,9 @@ func StartExecutor(ctx context.Context, logger *zap.Logger, functionNamespace st
 	for _, informer := range pkgInformer {
 		fissionInformers = append(fissionInformers, informer.Informer())
 	}
-	for _, informer := range configMapInformer {
-		fissionInformers = append(fissionInformers, informer.Informer())
-	}
-	for _, informer := range secretInformer {
-		fissionInformers = append(fissionInformers, informer.Informer())
-	}
-
 	fissionInformers = append(fissionInformers,
+		configmapInformer.Informer(),
+		secretInformer.Informer(),
 		gpmPodInformer.Informer(),
 		gpmRsInformer.Informer(),
 		ndmDeplInformer.Informer(),

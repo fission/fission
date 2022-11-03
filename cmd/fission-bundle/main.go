@@ -24,9 +24,8 @@ import (
 	"strconv"
 
 	docopt "github.com/docopt/docopt-go"
-	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
-
 	"go.uber.org/zap"
+	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 
 	"github.com/fission/fission/cmd/fission-bundle/mqtrigger"
 	"github.com/fission/fission/pkg/buildermgr"
@@ -42,7 +41,13 @@ import (
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 	"github.com/fission/fission/pkg/utils/otel"
 	"github.com/fission/fission/pkg/utils/profile"
+	"github.com/fission/fission/pkg/webhook"
 )
+
+// runWebhook starts admission webhook server
+func runWebhook(ctx context.Context, logger *zap.Logger, port int) error {
+	return webhook.Start(ctx, logger, port)
+}
 
 func runController(ctx context.Context, logger *zap.Logger, port int) {
 	controller.Start(ctx, logger, port, false)
@@ -176,10 +181,12 @@ Usage:
   fission-bundle --timer [--routerUrl=<url>]
   fission-bundle --mqt   [--routerUrl=<url>]
   fission-bundle --mqt_keda [--routerUrl=<url>]
+  fission-bundle --webhookPort=<port>
   fission-bundle --logger
   fission-bundle --version
 Options:
   --controllerPort=<port>         Port that the controller should listen on.
+  --webhookPort=<port>             Port that the webhook should listen on.
   --routerPort=<port>             Port that the router should listen on.
   --executorPort=<port>           Port that the executor should listen on.
   --storageServicePort=<port>     Port that the storage service should listen on.
@@ -208,7 +215,7 @@ Options:
 		logger.Error("failed to parse arguments", zap.Error(err))
 		return
 	}
-
+	logger.Info("the arguments have come")
 	shutdown, err := otel.InitProvider(ctx, logger, getServiceName(arguments))
 	if err != nil {
 		logger.Error("error initializing provider for OTLP", zap.Error(err), zap.Any("argument", arguments))
@@ -224,6 +231,13 @@ Options:
 	executorUrl := getStringArgWithDefault(arguments["--executorUrl"], "http://executor.fission")
 	routerUrl := getStringArgWithDefault(arguments["--routerUrl"], "http://router.fission")
 	storageSvcUrl := getStringArgWithDefault(arguments["--storageSvcUrl"], "http://storagesvc.fission")
+
+	if arguments["--webhookPort"] != nil {
+		port := getPort(logger, arguments["--webhookPort"])
+		err = runWebhook(ctx, logger, port)
+		logger.Error("webhook server exited:", zap.Error(err))
+		return
+	}
 
 	if arguments["--controllerPort"] != nil {
 		port := getPort(logger, arguments["--controllerPort"])

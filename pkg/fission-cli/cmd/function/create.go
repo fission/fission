@@ -81,13 +81,10 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 
 	if !toSpec {
 		// check for unique function names within a namespace
-		fn, err := opts.Client().V1().Function().Get(&metav1.ObjectMeta{
-			Name:      input.String(flagkey.FnName),
-			Namespace: fnNamespace,
-		})
-		if err != nil && !ferror.IsNotFound(err) {
+		fn, err := opts.Client().FissionClientSet.CoreV1().Functions(fnNamespace).Get(input.Context(), input.String(flagkey.FnName), metav1.GetOptions{})
+		if err != nil && !k8serrors.IsNotFound(err) {
 			return err
-		} else if fn != nil {
+		} else if fn.Name != "" && fn.Namespace != "" {
 			return errors.New("a function with the same name already exists")
 		}
 	}
@@ -155,10 +152,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 			pkgMetadata = &pkg.ObjectMeta
 		} else {
 			// use existing package
-			pkg, err = opts.Client().V1().Package().Get(&metav1.ObjectMeta{
-				Namespace: fnNamespace,
-				Name:      pkgName,
-			})
+			pkg, err = opts.Client().FissionClientSet.CoreV1().Packages(fnNamespace).Get(input.Context(), pkgName, metav1.GetOptions{})
 			if err != nil {
 				return errors.Wrap(err, fmt.Sprintf("read package in '%s' in Namespace: %s. Package needs to be present in the same namespace as function", pkgName, fnNamespace))
 			}
@@ -196,10 +190,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 					fnName, envName))
 			}
 		} else {
-			_, err := opts.Client().V1().Environment().Get(&metav1.ObjectMeta{
-				Namespace: fnNamespace,
-				Name:      envName,
-			})
+			_, err := opts.Client().FissionClientSet.CoreV1().Environments(fnNamespace).Get(input.Context(), envName, metav1.GetOptions{})
 			if err != nil {
 				if e, ok := err.(ferror.Error); ok && e.Code == ferror.ErrorNotFound {
 					console.Warn(fmt.Sprintf("Environment \"%s\" does not exist. Please create the environment before executing the function. \nFor example: `fission env create --name %s --envns %s --image <image>`\n", envName, envName, fnNamespace))
@@ -246,10 +237,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		// check the referenced secret is in the same ns as the function, if not give a warning.
 		if !toSpec { // TODO: workaround in order not to block users from creating function spec, remove it.
 			for _, secretName := range secretNames {
-				err := opts.Client().V1().Misc().SecretExists(&metav1.ObjectMeta{
-					Namespace: fnNamespace,
-					Name:      secretName,
-				})
+				err := util.SecretExists(input.Context(), &metav1.ObjectMeta{Namespace: fnNamespace, Name: secretName}, opts.Client().KubernetesClient)
 				if err != nil {
 					if k8serrors.IsNotFound(err) {
 						console.Warn(fmt.Sprintf("Secret %s not found in Namespace: %s. Secret needs to be present in the same namespace as function", secretName, fnNamespace))
@@ -279,10 +267,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		// check the referenced cfgmap is in the same ns as the function, if not give a warning.
 		if !toSpec {
 			for _, cfgMapName := range cfgMapNames {
-				err := opts.Client().V1().Misc().ConfigMapExists(&metav1.ObjectMeta{
-					Namespace: fnNamespace,
-					Name:      cfgMapName,
-				})
+				err := util.ConfigMapExists(input.Context(), &metav1.ObjectMeta{Namespace: fnNamespace, Name: cfgMapName}, opts.Client().KubernetesClient)
 				if err != nil {
 					if k8serrors.IsNotFound(err) {
 						console.Warn(fmt.Sprintf("ConfigMap %s not found in Namespace: %s. ConfigMap needs to be present in the same namespace as function", cfgMapName, fnNamespace))
@@ -385,7 +370,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 		return nil
 	}
 
-	_, err := opts.Client().V1().Function().Create(opts.function)
+	_, err := opts.Client().FissionClientSet.CoreV1().Functions(opts.function.ObjectMeta.Namespace).Create(input.Context(), opts.function, metav1.CreateOptions{})
 	if err != nil {
 		return errors.Wrap(err, "error creating function")
 	}
@@ -434,7 +419,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 			},
 		},
 	}
-	_, err = opts.Client().V1().HTTPTrigger().Create(ht)
+	_, err = opts.Client().FissionClientSet.CoreV1().HTTPTriggers(opts.function.ObjectMeta.Namespace).Create(input.Context(), ht, metav1.CreateOptions{})
 	if err != nil {
 		return errors.Wrap(err, "error creating HTTP trigger")
 	}

@@ -52,10 +52,8 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 	if err != nil {
 		return errors.Wrap(err, "error in deleting function ")
 	}
-	tt, err := opts.Client().V1().TimeTrigger().Get(&metav1.ObjectMeta{
-		Name:      input.String(flagkey.TtName),
-		Namespace: namespace,
-	})
+
+	tt, err := opts.Client().FissionClientSet.CoreV1().TimeTriggers(namespace).Get(input.Context(), input.String(flagkey.TtName), metav1.GetOptions{})
 	if err != nil {
 		return errors.Wrap(err, "error getting time trigger")
 	}
@@ -70,7 +68,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 	fnName := input.String("function")
 	if len(fnName) > 0 {
 		functionList := []string{fnName}
-		err := util.CheckFunctionExistence(opts.Client(), functionList, namespace)
+		err := util.CheckFunctionExistence(input.Context(), opts.Client(), functionList, namespace)
 		if err != nil {
 			console.Warn(err.Error())
 		}
@@ -88,14 +86,14 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 }
 
 func (opts *UpdateSubCommand) run(input cli.Input) error {
-	_, err := opts.Client().V1().TimeTrigger().Update(opts.trigger)
+	_, err := opts.Client().FissionClientSet.CoreV1().TimeTriggers(opts.trigger.ObjectMeta.Namespace).Update(input.Context(), opts.trigger, metav1.UpdateOptions{})
 	if err != nil {
 		return errors.Wrap(err, "error updating Time trigger")
 	}
 
 	fmt.Printf("trigger '%v' updated\n", opts.trigger.ObjectMeta.Name)
 
-	t, err := getAPITimeInfo(opts.Client())
+	t := util.GetServerInfo().ServerTime.CurrentTime.UTC()
 	if err != nil {
 		return err
 	}

@@ -67,7 +67,8 @@ func (opts *GetURLSubCommand) do(input cli.Input) error {
 	storageType := resp.Header.Get("X-FISSION-STORAGETYPE")
 
 	if storageType == "local" {
-		storageSvc, err := opts.Client().V1().Misc().GetSvcURL("application=fission-storage")
+		// TODO: testing required here
+		storageSvc, err := util.GetSvcName(input.Context(), opts.Client().KubernetesClient, "fission-storage")
 		if err != nil {
 			return err
 		}

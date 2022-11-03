@@ -50,11 +50,7 @@ func (opts *GetSubCommand) run(input cli.Input) (err error) {
 		return errors.Wrap(err, "error in deleting function ")
 	}
 
-	m := &metav1.ObjectMeta{
-		Name:      input.String(flagkey.HtName),
-		Namespace: namespace,
-	}
-	ht, err := opts.Client().V1().HTTPTrigger().Get(m)
+	ht, err := opts.Client().FissionClientSet.CoreV1().HTTPTriggers(namespace).Get(input.Context(), input.String(flagkey.HtName), metav1.GetOptions{})
 	if err != nil {
 		return errors.Wrap(err, "error getting http trigger")
 	}

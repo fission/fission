@@ -56,10 +56,7 @@ func (opts *LogSubCommand) do(input cli.Input) error {
 		recordLimit = 1000
 	}
 
-	f, err := opts.Client().V1().Function().Get(&metav1.ObjectMeta{
-		Name:      input.String(flagkey.FnName),
-		Namespace: namespace,
-	})
+	f, err := opts.Client().FissionClientSet.CoreV1().Functions(namespace).Get(input.Context(), input.String(flagkey.FnName), metav1.GetOptions{})
 	if err != nil {
 		return errors.Wrap(err, "error getting function")
 	}

@@ -66,13 +66,13 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 func (opts *CreateSubCommand) run(input cli.Input) (err error) {
 	m := opts.env.ObjectMeta
 
-	envList, err := opts.Client().V1().Environment().List(m.Namespace)
+	envList, err := opts.Client().FissionClientSet.CoreV1().Environments(m.Namespace).List(input.Context(), metav1.ListOptions{})
 	if err != nil {
 		return err
-	} else if len(envList) > 0 {
+	} else if len(envList.Items) > 0 {
 		console.Verbose(2, "%d environment(s) are present in the %s namespace.  "+
 			"These environments are not isolated from each other; use separate namespaces if you need isolation.",
-			len(envList), m.Namespace)
+			len(envList.Items), m.Namespace)
 	}
 
 	userDefinedNS, currentNS, err := util.GetResourceNamespace(input, flagkey.NamespaceEnvironment)
@@ -108,14 +108,10 @@ func (opts *CreateSubCommand) run(input cli.Input) (err error) {
 	}
 
 	opts.env.ObjectMeta.Namespace = currentNS
-	err = opts.env.Validate()
-	if err != nil {
-		return fv1.AggregateValidationErrors("Environment", err)
-	}
 
-	_, err = opts.Client().V1().Environment().Create(opts.env)
+	_, err = opts.Client().FissionClientSet.CoreV1().Environments(opts.env.Namespace).Create(input.Context(), opts.env, metav1.CreateOptions{})
 	if err != nil {
-		return errors.Wrap(err, "error creating environment")
+		return errors.Wrap(err, "error creating resource")
 	}
 
 	fmt.Printf("environment '%v' created\n", m.Name)

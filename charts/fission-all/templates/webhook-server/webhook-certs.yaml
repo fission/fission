@@ -1,0 +1,8 @@
+# apiVersion: v1
+# data:
+#   tls.crt: <TODO: replace it>
+#   tls.key: <TODO: replace it>
+# kind: Secret
+# metadata:
+#   creationTimestamp: null
+#   name: certs

@@ -20,6 +20,7 @@ import (
 	"fmt"
 
 	"github.com/pkg/errors"
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
@@ -60,9 +61,9 @@ func (opts *DeleteSubCommand) complete(input cli.Input) (err error) {
 }
 
 func (opts *DeleteSubCommand) run(input cli.Input) error {
-	err := opts.Client().V1().MessageQueueTrigger().Delete(opts.metadata)
+	err := opts.Client().FissionClientSet.CoreV1().MessageQueueTriggers(opts.metadata.Namespace).Delete(input.Context(), opts.metadata.Name, metav1.DeleteOptions{})
 	if err != nil {
-		if input.Bool(flagkey.IgnoreNotFound) && util.IsNotFound(err) {
+		if input.Bool(flagkey.IgnoreNotFound) && kerrors.IsNotFound(err) {
 			return nil
 		}
 		return errors.Wrap(err, "error deleting message queue trigger")

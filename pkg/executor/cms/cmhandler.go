@@ -29,9 +29,8 @@ import (
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 )
 
-// getConfigmapRelatedFuncs returns functions related to configmap in the same namespace
 func getConfigmapRelatedFuncs(ctx context.Context, logger *zap.Logger, m *metav1.ObjectMeta, fissionClient versioned.Interface) ([]fv1.Function, error) {
-	funcList, err := fissionClient.CoreV1().Functions(m.Namespace).List(ctx, metav1.ListOptions{})
+	funcList, err := fissionClient.CoreV1().Functions(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -58,9 +57,11 @@ func ConfigMapEventHandlers(ctx context.Context, logger *zap.Logger, fissionClie
 			oldCm := oldObj.(*apiv1.ConfigMap)
 			newCm := newObj.(*apiv1.ConfigMap)
 			if oldCm.ObjectMeta.ResourceVersion != newCm.ObjectMeta.ResourceVersion {
-				logger.Debug("Configmap changed",
-					zap.String("configmap_name", newCm.ObjectMeta.Name),
-					zap.String("configmap_namespace", newCm.ObjectMeta.Namespace))
+				if newCm.ObjectMeta.Namespace != "kube-system" {
+					logger.Debug("Configmap changed",
+						zap.String("configmap_name", newCm.ObjectMeta.Name),
+						zap.String("configmap_namespace", newCm.ObjectMeta.Namespace))
+				}
 				funcs, err := getConfigmapRelatedFuncs(ctx, logger, &newCm.ObjectMeta, fissionClient)
 				if err != nil {
 					logger.Error("Failed to get functions related to configmap", zap.String("configmap_name", newCm.ObjectMeta.Name), zap.String("configmap_namespace", newCm.ObjectMeta.Namespace))
