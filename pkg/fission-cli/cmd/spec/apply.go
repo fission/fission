@@ -195,7 +195,7 @@ func (opts *ApplySubCommand) run(input cli.Input) error {
 		}
 
 		// make changes to the cluster based on the specs
-		pkgMetas, as, err := applyResources(input.Context(), opts.Client(), specDir, fr, deleteResources, input.Bool(flagkey.SpecAllowConflicts))
+		pkgMetas, as, err := applyResources(input, opts.Client(), specDir, fr, deleteResources, input.Bool(flagkey.SpecAllowConflicts))
 		if err != nil {
 			return errors.Wrap(err, "error applying specs")
 		}
@@ -348,7 +348,7 @@ func pluralize(num int, word string) string {
 }
 
 // applyArchives figures out the set of archives that need to be uploaded, and uploads them.
-func applyArchives(ctx context.Context, fclient cmd.Client, specDir string, fr *FissionResources) error {
+func applyArchives(input cli.Input, fclient cmd.Client, specDir string, fr *FissionResources) error {
 
 	// archive:// URL -> archive map.
 	archiveFiles := make(map[string]fv1.Archive)
@@ -368,7 +368,7 @@ func applyArchives(ctx context.Context, fclient cmd.Client, specDir string, fr *
 
 	// get list of packages, make content-indexed map of available archives
 	availableArchives := make(map[string]string) // (sha256 -> url)
-	pkgs, err := fclient.FissionClientSet.CoreV1().Packages(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
+	pkgs, err := fclient.FissionClientSet.CoreV1().Packages(metav1.NamespaceAll).List(input.Context(), metav1.ListOptions{})
 	if err != nil {
 		return err
 	}
@@ -394,7 +394,7 @@ func applyArchives(ctx context.Context, fclient cmd.Client, specDir string, fr *
 			// doesn't exist, upload
 			fmt.Printf("uploading archive %v\n", name)
 			// ar.URL is actually a local filename at this stage
-			uploadedAr, err := pkgutil.UploadArchiveFile(ctx, fclient, ar.URL)
+			uploadedAr, err := pkgutil.UploadArchiveFile(input, fclient, ar.URL)
 			if err != nil {
 				return err
 			}
@@ -421,23 +421,23 @@ func applyArchives(ctx context.Context, fclient cmd.Client, specDir string, fr *
 }
 
 // applyResources applies the given set of fission resources.
-func applyResources(ctx context.Context, fclient cmd.Client, specDir string, fr *FissionResources, delete bool, specAllowConflicts bool) (map[string]metav1.ObjectMeta, map[string]ResourceApplyStatus, error) {
+func applyResources(input cli.Input, fclient cmd.Client, specDir string, fr *FissionResources, delete bool, specAllowConflicts bool) (map[string]metav1.ObjectMeta, map[string]ResourceApplyStatus, error) {
 
 	applyStatus := make(map[string]ResourceApplyStatus)
 
 	// upload archives that need to be uploaded. Changes archive references in fr.Packages.
-	err := applyArchives(ctx, fclient, specDir, fr)
+	err := applyArchives(input, fclient, specDir, fr)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	_, ras, err := applyEnvironments(ctx, fclient, fr, delete, specAllowConflicts)
+	_, ras, err := applyEnvironments(input.Context(), fclient, fr, delete, specAllowConflicts)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "environment apply failed")
 	}
 	applyStatus["environment"] = *ras
 
-	pkgMeta, ras, err := applyPackages(ctx, fclient, fr, delete, specAllowConflicts)
+	pkgMeta, ras, err := applyPackages(input.Context(), fclient, fr, delete, specAllowConflicts)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "package apply failed")
 	}
@@ -466,31 +466,31 @@ func applyResources(ctx context.Context, fclient cmd.Client, specDir string, fr 
 		fr.Functions[i].Spec.Package.PackageRef.ResourceVersion = m.ResourceVersion
 	}
 
-	_, ras, err = applyFunctions(ctx, fclient, fr, delete, specAllowConflicts)
+	_, ras, err = applyFunctions(input.Context(), fclient, fr, delete, specAllowConflicts)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "function apply failed")
 	}
 	applyStatus["function"] = *ras
 
-	_, ras, err = applyHTTPTriggers(ctx, fclient, fr, delete, specAllowConflicts)
+	_, ras, err = applyHTTPTriggers(input.Context(), fclient, fr, delete, specAllowConflicts)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "HTTPTrigger apply failed")
 	}
 	applyStatus["HTTPTrigger"] = *ras
 
-	_, ras, err = applyKubernetesWatchTriggers(ctx, fclient, fr, delete, specAllowConflicts)
+	_, ras, err = applyKubernetesWatchTriggers(input.Context(), fclient, fr, delete, specAllowConflicts)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "KubernetesWatchTrigger apply failed")
 	}
 	applyStatus["KubernetesWatchTrigger"] = *ras
 
-	_, ras, err = applyTimeTriggers(ctx, fclient, fr, delete, specAllowConflicts)
+	_, ras, err = applyTimeTriggers(input.Context(), fclient, fr, delete, specAllowConflicts)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "TimeTrigger apply failed")
 	}
 	applyStatus["TimeTrigger"] = *ras
 
-	_, ras, err = applyMessageQueueTriggers(ctx, fclient, fr, delete, specAllowConflicts)
+	_, ras, err = applyMessageQueueTriggers(input.Context(), fclient, fr, delete, specAllowConflicts)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "MessageQueueTrigger apply failed")
 	}

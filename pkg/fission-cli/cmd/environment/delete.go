@@ -69,7 +69,7 @@ func (opts *DeleteSubCommand) do(input cli.Input) (err error) {
 		return errors.Wrap(err, "error deleting environment")
 	}
 
-	fmt.Printf("environment '%v' deleted\n", envName)
+	fmt.Printf("environment '%s' deleted\n", envName)
 
 	return nil
 }

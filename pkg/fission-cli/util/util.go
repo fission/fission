@@ -19,6 +19,7 @@ package util
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"os/user"
@@ -32,6 +33,7 @@ import (
 
 	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
+	apiv1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -574,4 +576,90 @@ func GetSvcName(ctx context.Context, kClient kubernetes.Interface, application s
 	}
 	service := services.Items[0]
 	return service.Name + "." + podNamespace, nil
+}
+
+// FunctionPodLogs : Get logs for a function directly from pod
+func FunctionPodLogs(ctx context.Context, fnName, ns string, client cmd.Client) (err error) {
+
+	podNs := "fission-function"
+
+	if len(ns) == 0 {
+		ns = metav1.NamespaceDefault
+	} else if ns != metav1.NamespaceDefault {
+		// TODO: does it remains the same now????
+		// If the function namespace is "default", executor
+		// will create function pods under "fission-function".
+		// Otherwise, the function pod will be created under
+		// the same namespace of function.
+		podNs = ns
+	}
+
+	f, err := client.FissionClientSet.CoreV1().Functions(ns).Get(ctx, fnName, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+
+	// Get function Pods first
+	selector := map[string]string{
+		fv1.FUNCTION_UID:          string(f.ObjectMeta.UID),
+		fv1.ENVIRONMENT_NAME:      f.Spec.Environment.Name,
+		fv1.ENVIRONMENT_NAMESPACE: f.Spec.Environment.Namespace,
+	}
+	podList, err := client.KubernetesClient.CoreV1().Pods(podNs).List(ctx, metav1.ListOptions{
+		LabelSelector: labels.Set(selector).AsSelector().String(),
+	})
+	if err != nil {
+		return err
+	}
+
+	// Get the logs for last Pod executed
+	pods := podList.Items
+	sort.Slice(pods, func(i, j int) bool {
+		rv1, _ := strconv.ParseInt(pods[i].ObjectMeta.ResourceVersion, 10, 32)
+		rv2, _ := strconv.ParseInt(pods[j].ObjectMeta.ResourceVersion, 10, 32)
+		return rv1 > rv2
+	})
+
+	if len(pods) <= 0 {
+		return errors.New("no active pods found")
+
+	}
+
+	// get the pod with highest resource version
+	err = getContainerLog(ctx, client.KubernetesClient, f, &pods[0])
+	if err != nil {
+		return errors.Wrapf(err, "error getting container logs")
+
+	}
+	return err
+}
+
+func getContainerLog(ctx context.Context, kubernetesClient kubernetes.Interface, fn *fv1.Function, pod *apiv1.Pod) (err error) {
+	seq := strings.Repeat("=", 35)
+
+	for _, container := range pod.Spec.Containers {
+		podLogOpts := apiv1.PodLogOptions{Container: container.Name} // Only the env container, not fetcher
+		podLogsReq := kubernetesClient.CoreV1().Pods(pod.Namespace).GetLogs(pod.ObjectMeta.Name, &podLogOpts)
+
+		podLogs, err := podLogsReq.Stream(ctx)
+		if err != nil {
+			return errors.Wrapf(err, "error streaming pod log")
+		}
+
+		msg := fmt.Sprintf("\n%v\nFunction: %v\nEnvironment: %v\nNamespace: %v\nPod: %v\nContainer: %v\nNode: %v\n%v\n", seq,
+			fn.ObjectMeta.Name, fn.Spec.Environment.Name, pod.Namespace, pod.Name, container.Name, pod.Spec.NodeName, seq)
+
+		if _, err := io.WriteString(os.Stdout, msg); err != nil {
+			return errors.Wrapf(err, "error copying pod log")
+		}
+
+		_, err = io.Copy(os.Stdout, podLogs)
+		if err != nil {
+			return errors.Wrapf(err, "error copying pod log")
+		}
+
+		podLogs.Close()
+	}
+
+	return nil
 }
