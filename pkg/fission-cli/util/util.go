@@ -33,7 +33,6 @@ import (
 
 	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
-	apiv1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -634,11 +633,11 @@ func FunctionPodLogs(ctx context.Context, fnName, ns string, client cmd.Client) 
 	return err
 }
 
-func getContainerLog(ctx context.Context, kubernetesClient kubernetes.Interface, fn *fv1.Function, pod *apiv1.Pod) (err error) {
+func getContainerLog(ctx context.Context, kubernetesClient kubernetes.Interface, fn *fv1.Function, pod *v1.Pod) (err error) {
 	seq := strings.Repeat("=", 35)
 
 	for _, container := range pod.Spec.Containers {
-		podLogOpts := apiv1.PodLogOptions{Container: container.Name} // Only the env container, not fetcher
+		podLogOpts := v1.PodLogOptions{Container: container.Name} // Only the env container, not fetcher
 		podLogsReq := kubernetesClient.CoreV1().Pods(pod.Namespace).GetLogs(pod.ObjectMeta.Name, &podLogOpts)
 
 		podLogs, err := podLogsReq.Stream(ctx)

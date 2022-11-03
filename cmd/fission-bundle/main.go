@@ -24,8 +24,6 @@ import (
 	"strconv"
 
 	docopt "github.com/docopt/docopt-go"
-
-	"go.uber.org/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 
 	"github.com/fission/fission/cmd/fission-bundle/mqtrigger"
@@ -43,6 +41,7 @@ import (
 	"github.com/fission/fission/pkg/utils/otel"
 	"github.com/fission/fission/pkg/utils/profile"
 	"github.com/fission/fission/pkg/webhook"
+	"go.uber.org/zap"
 )
 
 // runWebhook starts admission webhook server

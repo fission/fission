@@ -778,14 +778,16 @@ func (deploy *NewDeploy) idleObjectReaper(ctx context.Context) {
 }
 
 func (deploy *NewDeploy) doIdleObjectReaper(ctx context.Context) {
-	envs, err := deploy.fissionClient.CoreV1().Environments(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
-	if err != nil {
-		deploy.logger.Fatal("failed to get environment list", zap.Error(err))
-	}
-
 	envList := make(map[k8sTypes.UID]struct{})
-	for _, env := range envs.Items {
-		envList[env.ObjectMeta.UID] = struct{}{}
+	for _, namespace := range utils.GetNamespaces() {
+		envs, err := deploy.fissionClient.CoreV1().Environments(namespace).List(ctx, metav1.ListOptions{})
+		if err != nil {
+			deploy.logger.Fatal("failed to get environment list", zap.Error(err), zap.String("namespace", namespace))
+		}
+
+		for _, env := range envs.Items {
+			envList[env.ObjectMeta.UID] = struct{}{}
+		}
 	}
 
 	funcSvcs, err := deploy.fsCache.ListOld(time.Second * 5)
