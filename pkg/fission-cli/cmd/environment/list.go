@@ -20,16 +20,15 @@ import (
 	"fmt"
 	"os"
 	"text/tabwriter"
-	"time"
 
 	"github.com/pkg/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	v1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
-	"github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
 )
 
 type ListSubCommand struct {
@@ -47,30 +46,17 @@ func (opts *ListSubCommand) do(input cli.Input) (err error) {
 		return errors.Wrap(err, "error creating environment")
 	}
 
-	var envs []v1.Environment
+	var response *v1.EnvironmentList
 	if input.Bool(flagkey.AllNamespaces) {
-		// envs, err = opts.Client().DefaultClientset.V1().Environment().List("")
-
-		var timeout time.Duration
-		if opts.TimeoutSeconds != nil {
-			timeout = time.Duration(*opts.TimeoutSeconds) * time.Second
-		}
-		result = &v1.EnvironmentList{}
-		err = c.client.Get().
-			Namespace(c.ns).
-			Resource("environments").
-			VersionedParams(&opts, scheme.ParameterCodec).
-			Timeout(timeout).
-			Do(ctx).
-			Into(result)
-
+		response, err = opts.Client().FissionClientSet.CoreV1().Environments(metav1.NamespaceAll).List(input.Context(), metav1.ListOptions{})
 	} else {
-		envs, err = opts.Client().DefaultClientset.V1().Environment().List(currentNS)
+		response, err = opts.Client().FissionClientSet.CoreV1().Environments(currentNS).List(input.Context(), metav1.ListOptions{})
 	}
-
 	if err != nil {
 		return errors.Wrap(err, "error listing environments")
 	}
+
+	envs := response.Items
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "IMAGE", "BUILDER_IMAGE", "POOLSIZE", "MINCPU", "MAXCPU", "MINMEMORY", "MAXMEMORY", "EXTNET", "GRACETIME", "NAMESPACE")

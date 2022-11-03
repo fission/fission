@@ -55,7 +55,7 @@ func (r *MessageQueueTrigger) ValidateCreate() error {
 	messagequeuetriggerlog.Info("validate create", "name", r.Name)
 	err := r.Validate()
 	if err != nil {
-		return err
+		return AggregateValidationErrors("MessageQueueTrigger", err)
 	}
 	return nil
 }
@@ -63,8 +63,10 @@ func (r *MessageQueueTrigger) ValidateCreate() error {
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
 func (r *MessageQueueTrigger) ValidateUpdate(old runtime.Object) error {
 	messagequeuetriggerlog.Info("validate update", "name", r.Name)
-
-	// TODO(user): fill in your validation logic upon object update.
+	err := r.Validate()
+	if err != nil {
+		return AggregateValidationErrors("MessageQueueTrigger", err)
+	}
 	return nil
 }
 

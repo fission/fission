@@ -17,15 +17,12 @@ limitations under the License.
 package environment
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
 	apiv1 "k8s.io/api/core/v1"
-	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
@@ -69,18 +66,13 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 func (opts *CreateSubCommand) run(input cli.Input) (err error) {
 	m := opts.env.ObjectMeta
 
-	envList, err := opts.Client().DefaultClientset.V1().Environment().List(m.Namespace)
-	// envList, err := opts.Client().FissionClientSet.CoreV1().Environments(m.Namespace).List(context.TODO(), metav1.ListOptions{})
-	// if err != nil {
-	// 	return errors.Wrap(err, "error creating resource")
-	// }
-	// list := *envList
+	envList, err := opts.Client().FissionClientSet.CoreV1().Environments(m.Namespace).List(input.Context(), metav1.ListOptions{})
 	if err != nil {
 		return err
-	} else if len(envList) > 0 {
+	} else if len(envList.Items) > 0 {
 		console.Verbose(2, "%d environment(s) are present in the %s namespace.  "+
 			"These environments are not isolated from each other; use separate namespaces if you need isolation.",
-			len(envList), m.Namespace)
+			len(envList.Items), m.Namespace)
 	}
 
 	userDefinedNS, currentNS, err := util.GetResourceNamespace(input, flagkey.NamespaceEnvironment)
@@ -116,18 +108,8 @@ func (opts *CreateSubCommand) run(input cli.Input) (err error) {
 	}
 
 	opts.env.ObjectMeta.Namespace = currentNS
-	err = opts.env.Validate()
-	if err != nil {
-		return fv1.AggregateValidationErrors("Environment", err)
-	}
 
-	// check if namespace exists, if not create it.
-	err = createNsIfNotExists(opts.Client().KubernetesClient, context.TODO(), opts.env.ObjectMeta.Namespace)
-	if err != nil {
-		return errors.Wrap(err, "error creating resource")
-	}
-
-	_, err = opts.Client().FissionClientSet.CoreV1().Environments(opts.env.Namespace).Create(context.TODO(), opts.env, metav1.CreateOptions{})
+	_, err = opts.Client().FissionClientSet.CoreV1().Environments(opts.env.Namespace).Create(input.Context(), opts.env, metav1.CreateOptions{})
 	if err != nil {
 		return errors.Wrap(err, "error creating resource")
 	}
@@ -234,24 +216,4 @@ func createEnvironmentFromCmd(input cli.Input) (*fv1.Environment, error) {
 	}
 
 	return env, nil
-}
-
-// check if namespace exists, if not create it.
-func createNsIfNotExists(kClient kubernetes.Interface, ctx context.Context, ns string) error {
-	if ns == metav1.NamespaceDefault {
-		// we don't have to create default ns
-		return nil
-	}
-
-	_, err := kClient.CoreV1().Namespaces().Get(ctx, ns, metav1.GetOptions{})
-	if err != nil && kerrors.IsNotFound(err) {
-		ns := &apiv1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: ns,
-			},
-		}
-		_, err = kClient.CoreV1().Namespaces().Create(ctx, ns, metav1.CreateOptions{})
-	}
-
-	return err
 }

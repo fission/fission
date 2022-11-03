@@ -28,7 +28,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
-	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/cmd/spec"
@@ -119,14 +118,14 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 		specFile = fmt.Sprintf("package-%s.yaml", pkgName)
 	}
 
-	_, err = CreatePackage(input, opts.Client().DefaultClientset, pkgName, pkgNamespace, envName,
+	_, err = CreatePackage(input, opts.Client(), pkgName, pkgNamespace, envName,
 		srcArchiveFiles, deployArchiveFiles, buildcmd, specDir, specFile, noZip, userProvidedNS)
 
 	return err
 }
 
 // TODO: get all necessary value from CLI input directly
-func CreatePackage(input cli.Input, client client.Interface, pkgName string, pkgNamespace string, envName string,
+func CreatePackage(input cli.Input, client cmd.Client, pkgName string, pkgNamespace string, envName string,
 	srcArchiveFiles []string, deployArchiveFiles []string, buildcmd string, specDir string, specFile string, noZip bool, userProvidedNS string) (*metav1.ObjectMeta, error) {
 
 	insecure := input.Bool(flagkey.PkgInsecure)
@@ -224,11 +223,12 @@ func CreatePackage(input cli.Input, client client.Interface, pkgName string, pkg
 		return &pkg.ObjectMeta, nil
 	} else {
 		pkg.ObjectMeta.Namespace = pkgNamespace
-		pkgMetadata, err := client.V1().Package().Create(pkg)
+
+		pkgMetadata, err := client.FissionClientSet.CoreV1().Packages(pkgNamespace).Create(input.Context(), pkg, metav1.CreateOptions{})
 		if err != nil {
 			return nil, errors.Wrap(err, "error creating package")
 		}
 		fmt.Printf("Package '%v' created\n", pkgMetadata.GetName())
-		return pkgMetadata, nil
+		return &pkgMetadata.ObjectMeta, nil
 	}
 }

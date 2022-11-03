@@ -24,6 +24,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -39,9 +40,11 @@ import (
 	restclient "k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/controller/client/rest"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/console"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/info"
@@ -176,15 +179,10 @@ func GetKubernetesNamespace(kubeContext string) (currentNS string, err error) {
 }
 
 // given a list of functions, this checks if the functions actually exist on the cluster
-func CheckFunctionExistence(client client.Interface, functions []string, fnNamespace string) (err error) {
+func CheckFunctionExistence(ctx context.Context, client cmd.Client, functions []string, fnNamespace string) (err error) {
 	fnMissing := make([]string, 0)
 	for _, fnName := range functions {
-		meta := &metav1.ObjectMeta{
-			Name:      fnName,
-			Namespace: fnNamespace,
-		}
-
-		_, err := client.V1().Function().Get(meta)
+		_, err := client.FissionClientSet.CoreV1().Functions(fnNamespace).Get(ctx, fnName, metav1.GetOptions{})
 		if err != nil {
 			fnMissing = append(fnMissing, fnName)
 		}
@@ -197,7 +195,7 @@ func CheckFunctionExistence(client client.Interface, functions []string, fnNames
 	return nil
 }
 
-func GetVersion(ctx context.Context, client client.Interface) info.Versions {
+func GetVersion(ctx context.Context, client cmd.Client) info.Versions {
 	// Fetch client versions
 	versions := info.Versions{
 		Client: map[string]info.BuildMeta{
@@ -211,11 +209,8 @@ func GetVersion(ctx context.Context, client client.Interface) info.Versions {
 		}
 	}
 
-	serverInfo, err := client.V1().Misc().ServerInfo()
-	if err != nil {
-		console.Warn(fmt.Sprintf("Error getting Fission API version: %v", err))
-		serverInfo = &info.ServerInfo{}
-	}
+	// TODO: verify it
+	serverInfo := GetServerInfo()
 
 	// Fetch server versions
 	versions.Server = map[string]info.BuildMeta{
@@ -225,6 +220,10 @@ func GetVersion(ctx context.Context, client client.Interface) info.Versions {
 	// FUTURE: fetch versions of plugins server-side
 
 	return versions
+}
+
+func GetServerInfo() info.ServerInfo {
+	return info.ApiInfo()
 }
 
 func GetServer(input cli.Input) (c client.Interface, err error) {
@@ -512,4 +511,67 @@ func GetResourceNamespace(input cli.Input, deprecatedFlag string) (namespace, cu
 	console.Verbose(2, "Namespace for resource %s ", currentNS)
 
 	return namespace, currentNS, nil
+}
+
+// CheckHTTPTriggerDuplicates checks whether the tuple (Method, Host, URL) is duplicate or not.
+func CheckHTTPTriggerDuplicates(ctx context.Context, client cmd.Client, t *fv1.HTTPTrigger) error {
+	triggers, err := client.FissionClientSet.CoreV1().HTTPTriggers(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return err
+	}
+	for _, ht := range triggers.Items {
+		if ht.ObjectMeta.UID == t.ObjectMeta.UID {
+			// Same resource. No need to check.
+			continue
+		}
+		urlMatch := false
+		if (ht.Spec.RelativeURL != "" && ht.Spec.RelativeURL == t.Spec.RelativeURL) || (ht.Spec.Prefix != nil && t.Spec.Prefix != nil && *ht.Spec.Prefix != "" && *ht.Spec.Prefix == *t.Spec.Prefix) {
+			urlMatch = true
+		}
+		methodMatch := false
+		if ht.Spec.Method == t.Spec.Method && len(ht.Spec.Methods) == len(t.Spec.Methods) {
+			methodMatch = true
+			sort.Strings(ht.Spec.Methods)
+			sort.Strings(t.Spec.Methods)
+			for i, m1 := range ht.Spec.Methods {
+				if m1 != t.Spec.Methods[i] {
+					methodMatch = false
+				}
+			}
+		}
+		if urlMatch && methodMatch && ht.Spec.Method == t.Spec.Method && ht.Spec.Host == t.Spec.Host {
+			return fmt.Errorf("HTTPTrigger with same Host, URL & method already exists (%v)",
+				ht.ObjectMeta.Name)
+		}
+	}
+	return nil
+}
+
+func SecretExists(ctx context.Context, m *metav1.ObjectMeta, kClient kubernetes.Interface) error {
+
+	_, err := kClient.CoreV1().Secrets(m.Namespace).Get(ctx, m.Name, metav1.GetOptions{})
+	return err
+}
+
+func ConfigMapExists(ctx context.Context, m *metav1.ObjectMeta, kClient kubernetes.Interface) error {
+
+	_, err := kClient.CoreV1().ConfigMaps(m.Namespace).Get(ctx, m.Name, metav1.GetOptions{})
+	return err
+}
+
+func GetSvcName(ctx context.Context, kClient kubernetes.Interface, application string) (string, error) {
+	var podNamespace = os.Getenv("POD_NAMESPACE")
+	if podNamespace == "" {
+		podNamespace = "fission"
+	}
+
+	appLabelSelector := "application=" + application
+	services, err := kClient.CoreV1().Services(podNamespace).List(ctx, metav1.ListOptions{
+		LabelSelector: appLabelSelector,
+	})
+	if err != nil || len(services.Items) > 1 || len(services.Items) == 0 {
+		return "", err
+	}
+	service := services.Items[0]
+	return service.Name + "." + podNamespace, nil
 }

@@ -55,15 +55,14 @@ func (r *KubernetesWatchTrigger) ValidateCreate() error {
 	kuberneteswatchtriggerlog.Info("validate create", "name", r.Name)
 	err := r.Validate()
 	if err != nil {
-		return err
+		return AggregateValidationErrors("Watch", err)
 	}
 	return nil
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
 func (r *KubernetesWatchTrigger) ValidateUpdate(old runtime.Object) error {
-	kuberneteswatchtriggerlog.Info("validate update", "name", r.Name)
-
+	// WATCH UPDATE NOT IMPLEMENTED
 	// TODO(user): fill in your validation logic upon object update.
 	return nil
 }

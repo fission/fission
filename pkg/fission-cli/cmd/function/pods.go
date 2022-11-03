@@ -48,10 +48,7 @@ func (opts *ListPodsSubCommand) do(input cli.Input) error {
 		return errors.Wrap(err, "error in finding pod for function ")
 	}
 	// validate function
-	_, err = opts.Client().DefaultClientset.V1().Function().Get(&metav1.ObjectMeta{
-		Name:      input.String(flagkey.FnName),
-		Namespace: namespace,
-	})
+	_, err = opts.Client().FissionClientSet.CoreV1().Functions(namespace).Get(input.Context(), input.String(flagkey.FnName), metav1.GetOptions{})
 	if err != nil {
 		return errors.Wrap(err, "error getting function")
 	}
@@ -63,6 +60,7 @@ func (opts *ListPodsSubCommand) do(input cli.Input) error {
 		},
 	}
 
+	// TODO: implement this
 	pods, err := opts.Client().DefaultClientset.V1().Function().ListPods(m)
 	if err != nil {
 		return errors.Wrap(err, "error listing environments")
