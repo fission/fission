@@ -19,10 +19,11 @@ package cmd
 import (
 	"sync"
 
+	"k8s.io/client-go/kubernetes"
+
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
-	"k8s.io/client-go/kubernetes"
 )
 
 type (

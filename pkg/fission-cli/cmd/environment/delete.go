@@ -20,6 +20,7 @@ import (
 	"fmt"
 
 	"github.com/pkg/errors"
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
@@ -27,7 +28,6 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/console"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
-	kerrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 type DeleteSubCommand struct {
