@@ -126,7 +126,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 		return nil
 	}
 
-	_, err := opts.Client().V1().KubeWatcher().Create(opts.watcher)
+	_, err := opts.Client().FissionClientSet.CoreV1().KubernetesWatchTriggers(opts.watcher.ObjectMeta.Namespace).Create(input.Context(), opts.watcher, metav1.CreateOptions{})
 	if err != nil {
 		return errors.Wrap(err, "error creating kubewatch")
 	}

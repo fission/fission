@@ -22,6 +22,7 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
+	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type ShowSubCommand struct {
@@ -44,12 +45,9 @@ func (opts *ShowSubCommand) run(flaginput cli.Input) error {
 		return errors.New("need a cron spec like '0 30 * * * *', '@every 1h30m', or '@hourly'; use --cron")
 	}
 
-	t, err := getAPITimeInfo(opts.Client())
-	if err != nil {
-		return err
-	}
+	t := util.GetServerInfo().ServerTime.CurrentTime.UTC()
 
-	err = getCronNextNActivationTime(cronSpec, t, round)
+	err := getCronNextNActivationTime(cronSpec, t, round)
 	if err != nil {
 		return errors.Wrap(err, "error passing cron spec examination")
 	}

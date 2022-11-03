@@ -24,7 +24,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
-	"github.com/fission/fission/pkg/controller/client"
+	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
@@ -55,7 +55,7 @@ type Checker struct {
 
 type Options struct {
 	KubeContext   string
-	FissionClient client.Interface
+	FissionClient cmd.Client
 }
 
 type HealthChecker struct {

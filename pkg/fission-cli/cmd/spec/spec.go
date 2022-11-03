@@ -31,6 +31,7 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/cmd/spec/types"
 	"github.com/fission/fission/pkg/fission-cli/console"
 	"github.com/fission/fission/pkg/fission-cli/util"
@@ -297,7 +298,7 @@ func (fr *FissionResources) validateFunctionReference(functions map[string]bool,
 }
 
 // Validate validates the spec file for irregular references
-func (fr *FissionResources) Validate(input cli.Input) ([]string, error) {
+func (fr *FissionResources) Validate(input cli.Input, client cmd.Client) ([]string, error) {
 	result := utils.MultiErrorWithFormat()
 	var warnings []string
 
@@ -397,25 +398,17 @@ func (fr *FissionResources) Validate(input cli.Input) ([]string, error) {
 			}
 		}
 
-		client, err := util.GetServer(input)
-		if err != nil {
-			return warnings, err
-		}
 		for _, cm := range f.Spec.ConfigMaps {
-			err := client.V1().Misc().ConfigMapExists(&metav1.ObjectMeta{
-				Name:      cm.Name,
-				Namespace: cm.Namespace,
-			})
+
+			err := util.ConfigMapExists(input.Context(), &metav1.ObjectMeta{Namespace: cm.Namespace, Name: cm.Name}, client.KubernetesClient)
 			if k8serrors.IsNotFound(err) {
 				warnings = append(warnings, fmt.Sprintf("Configmap %s is referred in the spec but not present in the cluster", cm.Name))
 			}
 		}
 
 		for _, s := range f.Spec.Secrets {
-			err := client.V1().Misc().SecretExists(&metav1.ObjectMeta{
-				Name:      s.Name,
-				Namespace: s.Namespace,
-			})
+			err := util.SecretExists(input.Context(), &metav1.ObjectMeta{Namespace: s.Namespace, Name: s.Name}, client.KubernetesClient)
+
 			if k8serrors.IsNotFound(err) {
 				warnings = append(warnings, fmt.Sprintf("Secret %s is referred in the spec but not present in the cluster", s.Name))
 			}

@@ -21,15 +21,15 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/fission/fission/pkg/controller/client"
+	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type FissionVersion struct {
-	client client.Interface
+	client cmd.Client
 }
 
-func NewFissionVersion(client client.Interface) Resource {
+func NewFissionVersion(client cmd.Client) Resource {
 	return FissionVersion{client: client}
 }
 

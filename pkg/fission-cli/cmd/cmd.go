@@ -19,26 +19,36 @@ package cmd
 import (
 	"sync"
 
-	"github.com/fission/fission/pkg/controller/client"
+	"k8s.io/client-go/kubernetes"
+
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+	"github.com/fission/fission/pkg/generated/clientset/versioned"
 )
 
 type (
 	CommandAction   func(input cli.Input) error
 	CommandActioner struct{}
+	Client          struct {
+		FissionClientSet versioned.Interface
+		KubernetesClient kubernetes.Interface
+	}
 )
 
 var (
-	once             = sync.Once{}
-	defaultClientset client.Interface
+	once          = sync.Once{}
+	defaultClient Client
 )
 
-func SetClientset(clientset client.Interface) {
+func SetClientset(fClientSet versioned.Interface, kClient kubernetes.Interface) {
 	once.Do(func() {
-		defaultClientset = clientset
+		defaultClient = Client{
+			FissionClientSet: fClientSet,
+			KubernetesClient: kClient,
+		}
+
 	})
 }
 
-func (c *CommandActioner) Client() client.Interface {
-	return defaultClientset
+func (c *CommandActioner) Client() Client {
+	return defaultClient
 }

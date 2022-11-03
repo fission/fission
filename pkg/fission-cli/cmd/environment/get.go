@@ -45,12 +45,7 @@ func (opts *GetSubCommand) do(input cli.Input) (err error) {
 		return errors.Wrap(err, "error creating environment")
 	}
 
-	m := &metav1.ObjectMeta{
-		Name:      input.String(flagkey.EnvName),
-		Namespace: currentNS,
-	}
-
-	env, err := opts.Client().V1().Environment().Get(m)
+	env, err := opts.Client().FissionClientSet.CoreV1().Environments(currentNS).Get(input.Context(), input.String(flagkey.EnvName), metav1.GetOptions{})
 	if err != nil {
 		return errors.Wrap(err, "error getting environment")
 	}

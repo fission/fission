@@ -32,7 +32,6 @@ import (
 	"go.opentelemetry.io/otel"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/cmd/httptrigger"
@@ -150,16 +149,17 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 	}
 
 	console.Errorf("Error calling function %s: %d; Please try again or fix the error: %s\n", m.Name, resp.StatusCode, string(body))
-	log, err := printPodLogs(opts.Client(), m)
+	err = printPodLogs(opts.Client(), m)
 	if err != nil {
 		console.Errorf("Error getting function logs from controller: %v. Try to get logs from log database.", err)
 		err = Log(input)
 		if err != nil {
 			return errors.Wrapf(err, "error retrieving function log from log database")
 		}
-	} else {
-		console.Info(log)
 	}
+	// else {
+	// 	console.Info(log)
+	// }
 	return errors.New("error getting function response")
 }
 
@@ -224,21 +224,12 @@ func doHTTPRequest(ctx context.Context, url string, headers []string, method, bo
 	return resp, nil
 }
 
-func printPodLogs(client client.Interface, fnMeta *metav1.ObjectMeta) (string, error) {
-	reader, statusCode, err := client.V1().Misc().PodLogs(fnMeta)
+func printPodLogs(client cmd.Client, fnMeta *metav1.ObjectMeta) error {
+	err := util.FunctionPodLogs(context.Background(), fnMeta.Name, fnMeta.Namespace, client)
+
 	if err != nil {
-		return "", errors.Wrap(err, "error executing get logs request")
-	}
-	defer reader.Close()
-
-	body, err := io.ReadAll(reader)
-	if err != nil {
-		return "", errors.Wrap(err, "error reading the response body")
+		return errors.Wrap(err, "error executing get logs request")
 	}
 
-	if statusCode != http.StatusOK {
-		return string(body), errors.Errorf("error getting logs from controller, status code: '%v'", statusCode)
-	}
-
-	return string(body), nil
+	return nil
 }

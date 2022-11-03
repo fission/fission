@@ -22,6 +22,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/pkg/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	v1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
@@ -44,11 +45,11 @@ func (opts *ListSubCommand) do(input cli.Input) (err error) {
 		return errors.Wrap(err, "error in deleting function ")
 	}
 
-	var tts []v1.TimeTrigger
+	var tts *v1.TimeTriggerList
 	if input.Bool(flagkey.AllNamespaces) {
-		tts, err = opts.Client().V1().TimeTrigger().List("")
+		tts, err = opts.Client().FissionClientSet.CoreV1().TimeTriggers(metav1.NamespaceAll).List(input.Context(), metav1.ListOptions{})
 	} else {
-		tts, err = opts.Client().V1().TimeTrigger().List(ttNs)
+		tts, err = opts.Client().FissionClientSet.CoreV1().TimeTriggers(ttNs).List(input.Context(), metav1.ListOptions{})
 	}
 
 	if err != nil {
@@ -58,7 +59,7 @@ func (opts *ListSubCommand) do(input cli.Input) (err error) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 
 	fmt.Fprintf(w, "%v\t%v\t%v\n", "NAME", "CRON", "FUNCTION_NAME")
-	for _, tt := range tts {
+	for _, tt := range tts.Items {
 		fmt.Fprintf(w, "%v\t%v\t%v\n",
 			tt.ObjectMeta.Name, tt.Spec.Cron, tt.Spec.FunctionReference.Name)
 	}

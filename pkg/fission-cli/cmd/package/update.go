@@ -17,6 +17,7 @@ limitations under the License.
 package _package
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -25,7 +26,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
-	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
@@ -62,17 +62,17 @@ func (opts *UpdateSubCommand) complete(input cli.Input) (err error) {
 }
 
 func (opts *UpdateSubCommand) run(input cli.Input) error {
-	pkg, err := opts.Client().V1().Package().Get(&metav1.ObjectMeta{
-		Namespace: opts.pkgNamespace,
-		Name:      opts.pkgName,
-	})
+	pkg, err := opts.Client().FissionClientSet.CoreV1().Packages(opts.pkgNamespace).Get(input.Context(), opts.pkgName, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
 	if err != nil {
 		return errors.Wrap(err, "get package")
 	}
 
 	forceUpdate := input.Bool(flagkey.PkgForce)
 
-	fnList, err := GetFunctionsByPackage(opts.Client(), pkg.ObjectMeta.Name, pkg.ObjectMeta.Namespace)
+	fnList, err := GetFunctionsByPackage(input.Context(), opts.Client(), pkg.ObjectMeta.Name, pkg.ObjectMeta.Namespace)
 	if err != nil {
 		return errors.Wrap(err, "error getting function list")
 	}
@@ -87,7 +87,7 @@ func (opts *UpdateSubCommand) run(input cli.Input) error {
 	}
 
 	if pkg.ObjectMeta.ResourceVersion != newPkgMeta.ResourceVersion {
-		err = UpdateFunctionPackageResourceVersion(opts.Client(), newPkgMeta, fnList...)
+		err = UpdateFunctionPackageResourceVersion(input.Context(), opts.Client(), newPkgMeta, fnList...)
 		if err != nil {
 			return errors.Wrap(err, "error updating function package reference resource version")
 		}
@@ -96,7 +96,7 @@ func (opts *UpdateSubCommand) run(input cli.Input) error {
 	return nil
 }
 
-func UpdatePackage(input cli.Input, client client.Interface, pkg *fv1.Package) (*metav1.ObjectMeta, error) {
+func UpdatePackage(input cli.Input, client cmd.Client, pkg *fv1.Package) (*metav1.ObjectMeta, error) {
 	envName := input.String(flagkey.PkgEnvironment)
 	srcArchiveFiles := input.StringSlice(flagkey.PkgSrcArchive)
 	deployArchiveFiles := input.StringSlice(flagkey.PkgDeployArchive)
@@ -175,23 +175,23 @@ func UpdatePackage(input cli.Input, client client.Interface, pkg *fv1.Package) (
 		}
 	}
 
-	newPkgMeta, err := client.V1().Package().Update(pkg)
+	newPkgMeta, err := client.FissionClientSet.CoreV1().Packages(pkg.ObjectMeta.Namespace).Update(input.Context(), pkg, metav1.UpdateOptions{})
 	if err != nil {
 		return nil, errors.Wrap(err, "update package")
 	}
 
 	fmt.Printf("Package '%v' updated\n", newPkgMeta.GetName())
 
-	return newPkgMeta, err
+	return &newPkgMeta.ObjectMeta, err
 }
 
-func UpdateFunctionPackageResourceVersion(client client.Interface, pkgMeta *metav1.ObjectMeta, fnList ...fv1.Function) error {
+func UpdateFunctionPackageResourceVersion(ctx context.Context, client cmd.Client, pkgMeta *metav1.ObjectMeta, fnList ...fv1.Function) error {
 	errs := &multierror.Error{}
 
 	// update resource version of package reference of functions that shared the same package
 	for _, fn := range fnList {
 		fn.Spec.Package.PackageRef.ResourceVersion = pkgMeta.ResourceVersion
-		_, err := client.V1().Function().Update(&fn)
+		_, err := client.FissionClientSet.CoreV1().Functions(fn.ObjectMeta.Namespace).Update(ctx, &fn, metav1.UpdateOptions{})
 		if err != nil {
 			errs = multierror.Append(errs, errors.Wrapf(err, "error updating package resource version of function '%v'", fn.ObjectMeta.Name))
 		}
@@ -200,15 +200,15 @@ func UpdateFunctionPackageResourceVersion(client client.Interface, pkgMeta *meta
 	return errs.ErrorOrNil()
 }
 
-func updatePackageStatus(client client.Interface, pkg *fv1.Package, status fv1.BuildStatus) (*metav1.ObjectMeta, error) {
+func updatePackageStatus(ctx context.Context, client cmd.Client, pkg *fv1.Package, status fv1.BuildStatus) (*metav1.ObjectMeta, error) {
 	switch status {
 	case fv1.BuildStatusNone, fv1.BuildStatusPending, fv1.BuildStatusRunning, fv1.BuildStatusSucceeded, fv1.CanaryConfigStatusAborted:
 		pkg.Status = fv1.PackageStatus{
 			BuildStatus:         status,
 			LastUpdateTimestamp: metav1.Time{Time: time.Now().UTC()},
 		}
-		pkg, err := client.V1().Package().Update(pkg)
-		return pkg, err
+		pkg, err := client.FissionClientSet.CoreV1().Packages(pkg.Namespace).Update(ctx, pkg, metav1.UpdateOptions{})
+		return &pkg.ObjectMeta, err
 	}
 	return nil, errors.New("unknown package status")
 }

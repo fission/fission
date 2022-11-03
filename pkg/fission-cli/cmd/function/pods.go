@@ -23,6 +23,7 @@ import (
 
 	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 
 	v1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
@@ -48,29 +49,28 @@ func (opts *ListPodsSubCommand) do(input cli.Input) error {
 		return errors.Wrap(err, "error in finding pod for function ")
 	}
 	// validate function
-	_, err = opts.Client().V1().Function().Get(&metav1.ObjectMeta{
-		Name:      input.String(flagkey.FnName),
-		Namespace: namespace,
-	})
+	_, err = opts.Client().FissionClientSet.CoreV1().Functions(namespace).Get(input.Context(), input.String(flagkey.FnName), metav1.GetOptions{})
 	if err != nil {
 		return errors.Wrap(err, "error getting function")
 	}
 
-	m := &metav1.ObjectMeta{
-		Name: input.String(flagkey.FnName),
-		Labels: map[string]string{
-			v1.FUNCTION_NAMESPACE: namespace,
-		},
+	selector := map[string]string{
+		v1.FUNCTION_NAME: input.String(flagkey.FnName),
+	}
+	if len(namespace) != 0 {
+		selector[v1.FUNCTION_NAMESPACE] = namespace
 	}
 
-	pods, err := opts.Client().V1().Function().ListPods(m)
+	pods, err := opts.Client().KubernetesClient.CoreV1().Pods(metav1.NamespaceAll).List(input.Context(), metav1.ListOptions{
+		LabelSelector: labels.Set(selector).AsSelector().String(),
+	})
 	if err != nil {
 		return errors.Wrap(err, "error listing environments")
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t\n", "NAME", "NAMESPACE", "READY", "STATUS", "IP", "EXECUTORTYPE", "MANAGED")
-	for _, pod := range pods {
+	for _, pod := range pods.Items {
 
 		// A deletion timestamp indicates that a pod is terminating. Do not count this pod.
 		if pod.ObjectMeta.DeletionTimestamp != nil {

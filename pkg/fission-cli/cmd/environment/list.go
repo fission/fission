@@ -22,6 +22,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/pkg/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	v1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
@@ -45,16 +46,17 @@ func (opts *ListSubCommand) do(input cli.Input) (err error) {
 		return errors.Wrap(err, "error creating environment")
 	}
 
-	var envs []v1.Environment
+	var response *v1.EnvironmentList
 	if input.Bool(flagkey.AllNamespaces) {
-		envs, err = opts.Client().V1().Environment().List("")
+		response, err = opts.Client().FissionClientSet.CoreV1().Environments(metav1.NamespaceAll).List(input.Context(), metav1.ListOptions{})
 	} else {
-		envs, err = opts.Client().V1().Environment().List(currentNS)
+		response, err = opts.Client().FissionClientSet.CoreV1().Environments(currentNS).List(input.Context(), metav1.ListOptions{})
 	}
-
 	if err != nil {
 		return errors.Wrap(err, "error listing environments")
 	}
+
+	envs := response.Items
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "IMAGE", "BUILDER_IMAGE", "POOLSIZE", "MINCPU", "MAXCPU", "MINMEMORY", "MAXMEMORY", "EXTNET", "GRACETIME", "NAMESPACE")

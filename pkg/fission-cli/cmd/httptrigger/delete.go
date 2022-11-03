@@ -66,7 +66,7 @@ func (opts *DeleteSubCommand) complete(input cli.Input) (err error) {
 }
 
 func (opts *DeleteSubCommand) run(input cli.Input) error {
-	triggers, err := opts.Client().V1().HTTPTrigger().List(opts.namespace)
+	triggers, err := opts.Client().FissionClientSet.CoreV1().HTTPTriggers(opts.namespace).List(input.Context(), metav1.ListOptions{})
 	if err != nil {
 		return errors.Wrap(err, "error getting HTTP trigger list")
 	}
@@ -74,7 +74,7 @@ func (opts *DeleteSubCommand) run(input cli.Input) error {
 	var triggersToDelete []string
 
 	if len(opts.functionName) > 0 {
-		for _, trigger := range triggers {
+		for _, trigger := range triggers.Items {
 			// TODO: delete canary http triggers as well.
 			if trigger.Spec.FunctionReference.Name == opts.functionName {
 				triggersToDelete = append(triggersToDelete, trigger.ObjectMeta.Name)
@@ -87,10 +87,7 @@ func (opts *DeleteSubCommand) run(input cli.Input) error {
 	errs := utils.MultiErrorWithFormat()
 
 	for _, name := range triggersToDelete {
-		err := opts.Client().V1().HTTPTrigger().Delete(&metav1.ObjectMeta{
-			Name:      name,
-			Namespace: opts.namespace,
-		})
+		err := opts.Client().FissionClientSet.CoreV1().HTTPTriggers(opts.namespace).Delete(input.Context(), name, metav1.DeleteOptions{})
 		if err != nil {
 			errs = multierror.Append(errs, err)
 		} else {

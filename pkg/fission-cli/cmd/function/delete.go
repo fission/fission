@@ -47,7 +47,7 @@ func (opts *DeleteSubCommand) do(input cli.Input) error {
 		Namespace: namespace,
 	}
 
-	err = opts.Client().V1().Function().Delete(m)
+	err = opts.Client().FissionClientSet.CoreV1().Functions(namespace).Delete(input.Context(), input.String(flagkey.FnName), metav1.DeleteOptions{})
 	if err != nil {
 		if input.Bool(flagkey.IgnoreNotFound) && util.IsNotFound(err) {
 			return nil
