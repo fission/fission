@@ -21,6 +21,7 @@ import (
 	"io"
 	"os"
 
+	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -29,6 +30,7 @@ import (
 	pkgutil "github.com/fission/fission/pkg/fission-cli/cmd/package/util"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
+	storagesvcClient "github.com/fission/fission/pkg/storagesvc/client"
 )
 
 const (
@@ -92,10 +94,20 @@ func (opts *GetSubCommand) run(input cli.Input) error {
 	if pkg.Spec.Deployment.Type == fv1.ArchiveTypeLiteral {
 		reader = bytes.NewReader(archive.Literal)
 	} else if pkg.Spec.Deployment.Type == fv1.ArchiveTypeUrl {
-		readCloser, err := pkgutil.DownloadStoragesvcURL(opts.Client().DefaultClientset, archive.URL) //TODO: storage server will still run on controller port?
+		// TODO: check its working
+		storageSvc, err := util.GetSvcName(input.Context(), opts.Client().KubernetesClient, "fission-storage")
 		if err != nil {
 			return err
 		}
+
+		storagesvcURL := "http://" + storageSvc
+		ssClient := storagesvcClient.MakeClient(storagesvcURL)
+		fileDownloadUrl := ssClient.GetUrl(archive.URL)
+		readCloser, err := pkgutil.DownloadURL(fileDownloadUrl)
+		if err != nil {
+			return errors.Wrapf(err, "error downloading from storage service url: %s", fileDownloadUrl)
+		}
+
 		defer readCloser.Close()
 		reader = readCloser
 	}

@@ -115,7 +115,7 @@ func TestExecutor(t *testing.T) {
 
 	// connect to k8s
 	// and get CRD client
-	fissionClient, kubeClient, apiExtClient, _, err := crd.MakeFissionClient("")
+	fissionClient, kubeClient, apiExtClient, _, err := crd.MakeFissionClient()
 	if err != nil {
 		log.Panicf("failed to connect: %v", err)
 	}

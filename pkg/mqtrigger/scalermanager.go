@@ -149,7 +149,7 @@ func mqTriggerEventHandlers(ctx context.Context, logger *zap.Logger, kubeClient 
 // StartScalerManager watches for changes in MessageQueueTrigger and,
 // Based on changes, it Creates, Updates and Deletes Objects of Kind ScaledObjects, AuthenticationTriggers and Deployments
 func StartScalerManager(ctx context.Context, logger *zap.Logger, routerURL string) error {
-	fissionClient, kubeClient, _, _, err := crd.MakeFissionClient("")
+	fissionClient, kubeClient, _, _, err := crd.MakeFissionClient()
 	if err != nil {
 		return err
 	}

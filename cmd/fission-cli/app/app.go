@@ -16,10 +16,10 @@ package app
 import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	"k8s.io/client-go/kubernetes"
 
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/controller/client/rest"
-	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	wrapper "github.com/fission/fission/pkg/fission-cli/cliwrapper/driver/cobra"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/driver/cobra/helptemplate"
@@ -42,6 +42,7 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/flag"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
+	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	_ "github.com/fission/fission/pkg/mqtrigger/messageQueue/kafka"
 )
 
@@ -66,7 +67,8 @@ func App() *cobra.Command {
 
 				if input.IsSet(flagkey.ClientOnly) || input.IsSet(flagkey.PreCheckOnly) {
 					// TODO: use fake rest client for offline spec generation
-					fissionClient, kubernetesClient, _, _, err := crd.MakeFissionClient("") //TODO: check correct value
+					fissionClient, kubernetesClient, err := MakeFissionClient("") //TODO: check correct value
+
 					if err != nil {
 						return errors.Wrap(err, "failed to get fission or kubernetes client")
 					}
@@ -77,7 +79,7 @@ func App() *cobra.Command {
 						return err
 					}
 					restClient := rest.NewRESTClient(serverUrl)
-					fissionClient, kubernetesClient, _, _, err := crd.MakeFissionClient("")
+					fissionClient, kubernetesClient, err := MakeFissionClient("")
 					if err != nil {
 						return errors.Wrap(err, "failed to get fission or kubernetes client")
 					}
@@ -116,4 +118,19 @@ func App() *cobra.Command {
 	flagExposer.ExposeFlags(rootCmd, flagkey.Server, flagkey.Verbosity, flagkey.KubeContext, flagkey.Namespace)
 
 	return rootCmd
+}
+
+func MakeFissionClient(kubeContext string) (versioned.Interface, kubernetes.Interface, error) {
+	config, kubeClient, err := util.GetKubernetesClient(kubeContext)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// make a CRD REST client with the config
+	crdClient, err := versioned.NewForConfig(config)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return crdClient, kubeClient, nil
 }

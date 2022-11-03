@@ -23,7 +23,7 @@ import (
 )
 
 func makeCRDBackedAPI(logger *zap.Logger) (*API, error) {
-	fissionClient, kubernetesClient, _, _, err := crd.MakeFissionClient("")
+	fissionClient, kubernetesClient, _, _, err := crd.MakeFissionClient()
 	if err != nil {
 		return nil, err
 	}

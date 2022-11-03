@@ -32,18 +32,33 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
 
-	"github.com/fission/fission/pkg/fission-cli/util"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 )
 
 // GetKubernetesClient gets a kubernetes client using the kubeconfig file at the
 // environment var $KUBECONFIG, or an in-cluster config if that's
 // undefined.
-func GetKubernetesClient(kubeContext string) (*rest.Config, kubernetes.Interface, apiextensionsclient.Interface, metricsclient.Interface, error) {
+func GetKubernetesClient() (*rest.Config, kubernetes.Interface, apiextensionsclient.Interface, metricsclient.Interface, error) {
 	var config *rest.Config
 	var err error
 
-	config, clientset, err := util.GetKubernetesClient(kubeContext)
+	// get the config, either from kubeconfig or using our
+	// in-cluster service account
+	kubeConfig := os.Getenv("KUBECONFIG")
+	if len(kubeConfig) != 0 {
+		config, err = clientcmd.BuildConfigFromFlags("", kubeConfig)
+		if err != nil {
+			return nil, nil, nil, nil, err
+		}
+	} else {
+		config, err = rest.InClusterConfig()
+		if err != nil {
+			return nil, nil, nil, nil, err
+		}
+	}
+
+	// creates the clientset
+	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
@@ -58,8 +73,8 @@ func GetKubernetesClient(kubeContext string) (*rest.Config, kubernetes.Interface
 	return config, clientset, apiExtClientset, metricsClient, nil
 }
 
-func MakeFissionClient(kubeContext string) (versioned.Interface, kubernetes.Interface, apiextensionsclient.Interface, metricsclient.Interface, error) {
-	config, kubeClient, apiExtClient, metricsClient, err := GetKubernetesClient(kubeContext)
+func MakeFissionClient() (versioned.Interface, kubernetes.Interface, apiextensionsclient.Interface, metricsclient.Interface, error) {
+	config, kubeClient, apiExtClient, metricsClient, err := GetKubernetesClient()
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}

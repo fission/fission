@@ -27,7 +27,7 @@ import (
 func Start(ctx context.Context, logger *zap.Logger, port int, unitTestFlag bool) {
 	cLogger := logger.Named("controller")
 
-	fc, kc, apiExtClient, _, err := crd.MakeFissionClient("")
+	fc, kc, apiExtClient, _, err := crd.MakeFissionClient()
 	if err != nil {
 		cLogger.Fatal("failed to connect to k8s API", zap.Error(err))
 	}
