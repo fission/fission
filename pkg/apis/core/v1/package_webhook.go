@@ -59,7 +59,8 @@ func (r *Package) ValidateCreate() error {
 	packagelog.Info("validate create", "name", r.Name)
 	err := r.Validate()
 	if err != nil {
-		return AggregateValidationErrors("Package", err)
+		err = AggregateValidationErrors("Package", err)
+		return err
 	}
 
 	// Ensure size limits
@@ -82,7 +83,8 @@ func (r *Package) ValidateUpdate(old runtime.Object) error {
 	err := r.Validate()
 
 	if err != nil {
-		return AggregateValidationErrors("Package", err)
+		err = AggregateValidationErrors("Package", err)
+		return err
 	}
 
 	return nil

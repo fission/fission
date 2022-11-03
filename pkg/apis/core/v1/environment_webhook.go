@@ -53,7 +53,8 @@ func (r *Environment) ValidateCreate() error {
 	environmentlog.Info("validate create", "name", r.Name)
 	err := r.Validate()
 	if err != nil {
-		AggregateValidationErrors("Environment", err)
+		err = AggregateValidationErrors("Environment", err)
+		return err
 	}
 	return nil
 }

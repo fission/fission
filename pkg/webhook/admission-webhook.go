@@ -18,7 +18,6 @@ package webhook
 
 import (
 	"context"
-	"os"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -40,10 +39,10 @@ func Start(ctx context.Context, logger *zap.Logger, port int) (err error) {
 
 	wLogger := logger.Named("webhook")
 
-	metricsAddr := os.Getenv("METRICS_ADDR")
-	if metricsAddr == "" {
-		metricsAddr = "8080"
-	}
+	// metricsAddr := os.Getenv("METRICS_ADDR")
+	// if metricsAddr == "" {
+	// 	metricsAddr = "8080"
+	// }
 	// Setup a Manager
 	mgr, err := manager.New(config.GetConfigOrDie(), manager.Options{
 		Scheme: scheme.Scheme,

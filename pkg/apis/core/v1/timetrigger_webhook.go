@@ -57,7 +57,8 @@ func (r *TimeTrigger) ValidateCreate() error {
 	timetriggerlog.Info("validate create", "name", r.Name)
 	err := r.Validate()
 	if err != nil {
-		return AggregateValidationErrors("TimeTrigger", err)
+		err = AggregateValidationErrors("TimeTrigger", err)
+		return err
 	}
 
 	_, err = cron.Parse(r.Spec.Cron)
@@ -73,7 +74,8 @@ func (r *TimeTrigger) ValidateUpdate(old runtime.Object) error {
 	timetriggerlog.Info("validate update", "name", r.Name)
 	err := r.Validate()
 	if err != nil {
-		return AggregateValidationErrors("TimeTrigger", err)
+		err = AggregateValidationErrors("TimeTrigger", err)
+		return err
 	}
 
 	_, err = cron.Parse(r.Spec.Cron)
