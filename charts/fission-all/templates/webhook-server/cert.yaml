@@ -9,7 +9,7 @@ spec:
 apiVersion: cert-manager.io/v1  
 kind: Certificate  
 metadata:  
-  name: cert  
+  name: fission-cert  
   namespace: {{ .Release.Namespace }}  
 spec:  
   secretName: fission-certs  

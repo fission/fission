@@ -131,8 +131,7 @@ jobs:
       - name: Collect Fission Dump
         timeout-minutes: 5
         if: ${{ always() }}
-        run: |
-          command -v fission && fission support dump
+        run: ./test/take_dump.sh
 
       - name: Kind export logs
         if: ${{ always() }}
