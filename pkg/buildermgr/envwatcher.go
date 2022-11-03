@@ -41,8 +41,6 @@ import (
 	"github.com/fission/fission/pkg/utils"
 )
 
-type requestType int
-
 const (
 	LABEL_ENV_NAME            = "envName"
 	LABEL_ENV_NAMESPACE       = "envNamespace"
