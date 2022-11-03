@@ -54,10 +54,10 @@ metadata:
   namespace: {{ .namespace }}
 subjects:
   - kind: ServiceAccount
-    name: fission-buildermgr
+    name: "fission-{{ .component }}"
     namespace: {{ .Release.Namespace }}
 roleRef:
   kind: Role
-  name: {{ .Release.Name }}-buildermgr-fission-cr
+  name: "{{ .Release.Name }}-{{ .component }}-fission-cr"
   apiGroup: rbac.authorization.k8s.io
 {{- end }}
