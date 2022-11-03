@@ -503,7 +503,7 @@ func TestMain(m *testing.M) {
 		return
 	}
 
-	_, kubeClient, _, _, err := crd.GetKubernetesClient()
+	_, kubeClient, _, _, err := crd.GetKubernetesClient("")
 	panicIf(err)
 
 	// testNS isolation for running multiple CI builds concurrently.
@@ -523,7 +523,7 @@ func TestMain(m *testing.M) {
 
 	restClient := rest.NewRESTClient("http://localhost:8888")
 
-	fissionClient, kubernetesClient, _, _, err := crd.MakeFissionClient()
+	fissionClient, kubernetesClient, _, _, err := crd.MakeFissionClient("")
 	panicIf(err)
 	// TODO: use fake rest client for offline spec generation
 	cmd.SetClientset(client.MakeClientset(restClient), fissionClient, kubernetesClient)

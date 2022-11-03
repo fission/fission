@@ -66,7 +66,7 @@ func App() *cobra.Command {
 
 				if input.IsSet(flagkey.ClientOnly) || input.IsSet(flagkey.PreCheckOnly) {
 					// TODO: use fake rest client for offline spec generation
-					fissionClient, kubernetesClient, _, _, err := crd.MakeFissionClient() //TODO: check correct value
+					fissionClient, kubernetesClient, _, _, err := crd.MakeFissionClient("") //TODO: check correct value
 					if err != nil {
 						return errors.Wrap(err, "failed to get fission or kubernetes client")
 					}
@@ -77,7 +77,7 @@ func App() *cobra.Command {
 						return err
 					}
 					restClient := rest.NewRESTClient(serverUrl)
-					fissionClient, kubernetesClient, _, _, err := crd.MakeFissionClient()
+					fissionClient, kubernetesClient, _, _, err := crd.MakeFissionClient("")
 					if err != nil {
 						return errors.Wrap(err, "failed to get fission or kubernetes client")
 					}

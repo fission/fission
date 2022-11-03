@@ -53,7 +53,7 @@ const (
 )
 
 func makePreUpgradeTaskClient(logger *zap.Logger, fnPodNs, envBuilderNs string) (*PreUpgradeTaskClient, error) {
-	fissionClient, k8sClient, apiExtClient, _, err := crd.MakeFissionClient()
+	fissionClient, k8sClient, apiExtClient, _, err := crd.MakeFissionClient("")
 	if err != nil {
 		return nil, errors.Wrap(err, "error making fission client")
 	}

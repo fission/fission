@@ -90,7 +90,7 @@ func MakeFetcher(logger *zap.Logger, sharedVolumePath string, sharedSecretPath s
 		fLogger.Fatal("error creating shared config directory", zap.Error(err), zap.String("directory", sharedConfigPath))
 	}
 
-	fissionClient, kubeClient, _, _, err := crd.MakeFissionClient()
+	fissionClient, kubeClient, _, _, err := crd.MakeFissionClient("")
 	if err != nil {
 		return nil, errors.Wrap(err, "error making the fission / kube client")
 	}
