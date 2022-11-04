@@ -62,8 +62,8 @@ func Start(ctx context.Context, logger *zap.Logger, storageSvcUrl string, envBui
 		}
 	}
 
-	envWatcher := makeEnvironmentWatcher(bmLogger, fissionClient, kubernetesClient, fetcherConfig, envBuilderNamespace, podSpecPatch)
-	go envWatcher.watchEnvironments(ctx)
+	envWatcher := makeEnvironmentWatcher(ctx, bmLogger, fissionClient, kubernetesClient, fetcherConfig, envBuilderNamespace, podSpecPatch)
+	envWatcher.Run(ctx)
 
 	k8sInformerFactory := k8sInformers.NewSharedInformerFactory(kubernetesClient, time.Minute*30)
 	podInformer := k8sInformerFactory.Core().V1().Pods().Informer()
