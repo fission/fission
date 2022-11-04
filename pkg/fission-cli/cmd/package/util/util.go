@@ -16,6 +16,7 @@ limitations under the License.
 package util
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -30,15 +31,12 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/controller/client"
-	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
-	"github.com/fission/fission/pkg/fission-cli/console"
-	"github.com/fission/fission/pkg/fission-cli/util"
 	storageSvcClient "github.com/fission/fission/pkg/storagesvc/client"
 	"github.com/fission/fission/pkg/utils"
 )
 
-func UploadArchiveFile(input cli.Input, client cmd.Client, fileName string) (*fv1.Archive, error) {
+func UploadArchiveFile(ctx context.Context, client cmd.Client, fileName string) (*fv1.Archive, error) {
 	var archive fv1.Archive
 
 	size, err := utils.FileSize(fileName)
@@ -53,32 +51,29 @@ func UploadArchiveFile(input cli.Input, client cmd.Client, fileName string) (*fv
 			return nil, err
 		}
 	} else {
+		u := strings.TrimSuffix(client.DefaultClientset.ServerURL(), "/") + "/proxy/storage"
+		ssClient := storageSvcClient.MakeClient(u)
 
-		// storageSvc, err := util.GetSvcName(input.Context(), client.KubernetesClient, "fission-storage")
-		// if err != nil {
-		// 	return nil, errors.Wrapf(err, "error getting storage URL")
-		// }
-
-		storageSvc, err := util.GetStorageURL(input.Context(), "")
-		if err != nil {
-			return nil, errors.Wrapf(err, "error uploading file %v", fileName)
-		}
-		console.Verbose(2, "storageSvc %s", storageSvc)
-
-		storagesvcURL := "http://" + storageSvc.String()
-		ssClient := storageSvcClient.MakeClient(storagesvcURL)
 		// TODO add a progress bar
-		id, err := ssClient.Upload(input.Context(), fileName, nil)
+		id, err := ssClient.Upload(ctx, fileName, nil)
 		if err != nil {
 			return nil, errors.Wrapf(err, "error uploading file %v", fileName)
 		}
-		console.Verbose(2, "id of file uploaded %s", id)
 
-		archiveURL := ssClient.GetUrl(id)
+		storageSvc, err := client.DefaultClientset.V1().Misc().GetSvcURL("application=fission-storage")
+		storageSvcURL := "http://" + storageSvc
+		if err != nil {
+			return nil, errors.Wrapf(err, "error getting fission storage service name")
+		}
+
+		// We make a new client with actual URL of Storage service so that the URL is not
+		// pointing to 127.0.0.1 i.e. proxy. DON'T reuse previous ssClient
+		pkgClient := storageSvcClient.MakeClient(storageSvcURL)
+		archiveURL := pkgClient.GetUrl(id)
+
 		archive.Type = fv1.ArchiveTypeUrl
 		archive.URL = archiveURL
 
-		console.Verbose(2, "url of file uploaded %s", archive.URL)
 		csum, err := utils.GetFileChecksum(fileName)
 		if err != nil {
 			return nil, errors.Wrapf(err, "calculate checksum for file %v", fileName)
