@@ -289,7 +289,7 @@ func (gpm *GenericPoolManager) RefreshFuncPods(ctx context.Context, logger *zap.
 
 	funcLabels := gp.labelsForFunction(&f.ObjectMeta)
 
-	podList, err := gpm.kubernetesClient.CoreV1().Pods(metav1.NamespaceAll).List(ctx, metav1.ListOptions{
+	podList, err := gpm.kubernetesClient.CoreV1().Pods(f.Spec.Environment.Namespace).List(ctx, metav1.ListOptions{
 		LabelSelector: labels.Set(funcLabels).AsSelector().String(),
 	})
 
@@ -311,132 +311,136 @@ func (gpm *GenericPoolManager) RefreshFuncPods(ctx context.Context, logger *zap.
 }
 
 func (gpm *GenericPoolManager) AdoptExistingResources(ctx context.Context) {
-	envs, err := gpm.fissionClient.CoreV1().Environments(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
-	if err != nil {
-		gpm.logger.Error("error getting environment list", zap.Error(err))
-		return
-	}
-
-	envMap := make(map[string]fv1.Environment, len(envs.Items))
+	envMap := make(map[string]fv1.Environment)
 	wg := &sync.WaitGroup{}
 
-	for i := range envs.Items {
-		env := envs.Items[i]
-
-		if getEnvPoolSize(&env) > 0 {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				_, created, err := gpm.getPool(ctx, &env)
-				if err != nil {
-					gpm.logger.Error("adopt pool failed", zap.Error(err))
-				}
-				if created {
-					gpm.logger.Info("created pool for the environment", zap.String("env", env.ObjectMeta.Name), zap.String("namespace", gpm.namespace))
-				}
-			}()
+	for _, namespace := range utils.GetNamespaces() {
+		envs, err := gpm.fissionClient.CoreV1().Environments(namespace).List(ctx, metav1.ListOptions{})
+		if err != nil {
+			gpm.logger.Error("error getting environment list", zap.Error(err))
+			return
 		}
 
-		// create environment map for later use
-		key := fmt.Sprintf("%v/%v", env.ObjectMeta.Namespace, env.ObjectMeta.Name)
-		envMap[key] = env
+		for i := range envs.Items {
+			env := envs.Items[i]
+
+			if getEnvPoolSize(&env) > 0 {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					_, created, err := gpm.getPool(ctx, &env)
+					if err != nil {
+						gpm.logger.Error("adopt pool failed", zap.Error(err))
+					}
+					if created {
+						gpm.logger.Info("created pool for the environment", zap.String("env", env.ObjectMeta.Name), zap.String("namespace", gpm.namespace))
+					}
+				}()
+			}
+
+			// create environment map for later use
+			key := fmt.Sprintf("%v/%v", env.ObjectMeta.Namespace, env.ObjectMeta.Name)
+			envMap[key] = env
+		}
 	}
 
 	l := map[string]string{
 		fv1.EXECUTOR_TYPE: string(fv1.ExecutorTypePoolmgr),
 	}
 
-	podList, err := gpm.kubernetesClient.CoreV1().Pods(metav1.NamespaceAll).List(ctx, metav1.ListOptions{
-		LabelSelector: labels.Set(l).AsSelector().String(),
-	})
+	for _, namespace := range utils.GetNamespaces() {
+		podList, err := gpm.kubernetesClient.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
+			LabelSelector: labels.Set(l).AsSelector().String(),
+		})
 
-	if err != nil {
-		gpm.logger.Error("error getting pod list", zap.Error(err))
-		return
-	}
-
-	for i := range podList.Items {
-		pod := &podList.Items[i]
-		if !utils.IsReadyPod(pod) {
-			continue
+		if err != nil {
+			gpm.logger.Error("error getting pod list", zap.Error(err))
+			return
 		}
 
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-
-			// avoid too many requests arrive Kubernetes API server at the same time.
-			time.Sleep(time.Duration(rand.Intn(30)) * time.Millisecond)
-
-			patch := fmt.Sprintf(`{"metadata":{"annotations":{"%v":"%v"}}}`, fv1.EXECUTOR_INSTANCEID_LABEL, gpm.instanceID)
-			pod, err = gpm.kubernetesClient.CoreV1().Pods(pod.Namespace).Patch(ctx, pod.Name, k8sTypes.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
-			if err != nil {
-				// just log the error since it won't affect the function serving
-				gpm.logger.Warn("error patching executor instance ID of pod", zap.Error(err),
-					zap.String("pod", pod.Name), zap.String("ns", pod.Namespace))
-				return
+		for i := range podList.Items {
+			pod := &podList.Items[i]
+			if !utils.IsReadyPod(pod) {
+				continue
 			}
 
-			// for unspecialized pod, we only update its annotations
-			if pod.Labels["managed"] == "true" {
-				return
-			}
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
 
-			fnName, ok1 := pod.Labels[fv1.FUNCTION_NAME]
-			fnNS, ok2 := pod.Labels[fv1.FUNCTION_NAMESPACE]
-			fnUID, ok3 := pod.Labels[fv1.FUNCTION_UID]
-			fnRV, ok4 := pod.Annotations[fv1.FUNCTION_RESOURCE_VERSION]
-			envName, ok5 := pod.Labels[fv1.ENVIRONMENT_NAME]
-			envNS, ok6 := pod.Labels[fv1.ENVIRONMENT_NAMESPACE]
-			svcHost, ok7 := pod.Annotations[fv1.ANNOTATION_SVC_HOST]
-			env, ok8 := envMap[fmt.Sprintf("%v/%v", envNS, envName)]
+				// avoid too many requests arrive Kubernetes API server at the same time.
+				time.Sleep(time.Duration(rand.Intn(30)) * time.Millisecond)
 
-			if !(ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7 && ok8) {
-				gpm.logger.Warn("failed to adopt pod for function due to lack of necessary information",
-					zap.String("pod", pod.Name), zap.Any("labels", pod.Labels), zap.Any("annotations", pod.Annotations),
-					zap.String("env", env.ObjectMeta.Name))
-				return
-			}
-
-			fsvc := fscache.FuncSvc{
-				Name: pod.Name,
-				Function: &metav1.ObjectMeta{
-					Name:            fnName,
-					Namespace:       fnNS,
-					UID:             k8sTypes.UID(fnUID),
-					ResourceVersion: fnRV,
-				},
-				Environment: &env,
-				Address:     svcHost,
-				KubernetesObjects: []apiv1.ObjectReference{
-					{
-						Kind:            "pod",
-						Name:            pod.Name,
-						APIVersion:      pod.TypeMeta.APIVersion,
-						Namespace:       pod.ObjectMeta.Namespace,
-						ResourceVersion: pod.ObjectMeta.ResourceVersion,
-						UID:             pod.ObjectMeta.UID,
-					},
-				},
-				Executor: fv1.ExecutorTypePoolmgr,
-				Ctime:    time.Now(),
-				Atime:    time.Now(),
-			}
-
-			_, err = gpm.fsCache.Add(fsvc)
-			if err != nil {
-				// If fsvc already exists we just skip the duplicate one. And let reaper to recycle the duplicate pods.
-				// This is for the case that there are multiple function pods for the same function due to unknown reason.
-				if !fscache.IsNameExistError(err) {
-					gpm.logger.Warn("failed to adopt pod for function", zap.Error(err), zap.String("pod", pod.Name))
+				patch := fmt.Sprintf(`{"metadata":{"annotations":{"%v":"%v"}}}`, fv1.EXECUTOR_INSTANCEID_LABEL, gpm.instanceID)
+				pod, err = gpm.kubernetesClient.CoreV1().Pods(pod.Namespace).Patch(ctx, pod.Name, k8sTypes.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
+				if err != nil {
+					// just log the error since it won't affect the function serving
+					gpm.logger.Warn("error patching executor instance ID of pod", zap.Error(err),
+						zap.String("pod", pod.Name), zap.String("ns", pod.Namespace))
+					return
 				}
 
-				return
-			}
+				// for unspecialized pod, we only update its annotations
+				if pod.Labels["managed"] == "true" {
+					return
+				}
 
-			gpm.logger.Info("adopt function pod",
-				zap.String("pod", pod.Name), zap.Any("labels", pod.Labels), zap.Any("annotations", pod.Annotations))
-		}()
+				fnName, ok1 := pod.Labels[fv1.FUNCTION_NAME]
+				fnNS, ok2 := pod.Labels[fv1.FUNCTION_NAMESPACE]
+				fnUID, ok3 := pod.Labels[fv1.FUNCTION_UID]
+				fnRV, ok4 := pod.Annotations[fv1.FUNCTION_RESOURCE_VERSION]
+				envName, ok5 := pod.Labels[fv1.ENVIRONMENT_NAME]
+				envNS, ok6 := pod.Labels[fv1.ENVIRONMENT_NAMESPACE]
+				svcHost, ok7 := pod.Annotations[fv1.ANNOTATION_SVC_HOST]
+				env, ok8 := envMap[fmt.Sprintf("%v/%v", envNS, envName)]
+
+				if !(ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7 && ok8) {
+					gpm.logger.Warn("failed to adopt pod for function due to lack of necessary information",
+						zap.String("pod", pod.Name), zap.Any("labels", pod.Labels), zap.Any("annotations", pod.Annotations),
+						zap.String("env", env.ObjectMeta.Name))
+					return
+				}
+
+				fsvc := fscache.FuncSvc{
+					Name: pod.Name,
+					Function: &metav1.ObjectMeta{
+						Name:            fnName,
+						Namespace:       fnNS,
+						UID:             k8sTypes.UID(fnUID),
+						ResourceVersion: fnRV,
+					},
+					Environment: &env,
+					Address:     svcHost,
+					KubernetesObjects: []apiv1.ObjectReference{
+						{
+							Kind:            "pod",
+							Name:            pod.Name,
+							APIVersion:      pod.TypeMeta.APIVersion,
+							Namespace:       pod.ObjectMeta.Namespace,
+							ResourceVersion: pod.ObjectMeta.ResourceVersion,
+							UID:             pod.ObjectMeta.UID,
+						},
+					},
+					Executor: fv1.ExecutorTypePoolmgr,
+					Ctime:    time.Now(),
+					Atime:    time.Now(),
+				}
+
+				_, err = gpm.fsCache.Add(fsvc)
+				if err != nil {
+					// If fsvc already exists we just skip the duplicate one. And let reaper to recycle the duplicate pods.
+					// This is for the case that there are multiple function pods for the same function due to unknown reason.
+					if !fscache.IsNameExistError(err) {
+						gpm.logger.Warn("failed to adopt pod for function", zap.Error(err), zap.String("pod", pod.Name))
+					}
+
+					return
+				}
+
+				gpm.logger.Info("adopt function pod",
+					zap.String("pod", pod.Name), zap.Any("labels", pod.Labels), zap.Any("annotations", pod.Annotations))
+			}()
+		}
 	}
 
 	wg.Wait()

@@ -260,7 +260,7 @@ func (deploy *NewDeploy) RefreshFuncPods(ctx context.Context, logger *zap.Logger
 		UID:       env.ObjectMeta.UID,
 	})
 
-	dep, err := deploy.kubernetesClient.AppsV1().Deployments(metav1.NamespaceAll).List(ctx, metav1.ListOptions{
+	dep, err := deploy.kubernetesClient.AppsV1().Deployments(f.Spec.Environment.Namespace).List(ctx, metav1.ListOptions{
 		LabelSelector: labels.Set(funcLabels).AsSelector().String(),
 	})
 
@@ -290,28 +290,30 @@ func (deploy *NewDeploy) RefreshFuncPods(ctx context.Context, logger *zap.Logger
 
 // AdoptExistingResources attempts to adopt resources for functions in all namespaces.
 func (deploy *NewDeploy) AdoptExistingResources(ctx context.Context) {
-	fnList, err := deploy.fissionClient.CoreV1().Functions(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
-	if err != nil {
-		deploy.logger.Error("error getting function list", zap.Error(err))
-		return
-	}
-
 	wg := &sync.WaitGroup{}
 
-	for i := range fnList.Items {
-		fn := &fnList.Items[i]
-		if fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypeNewdeploy {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+	for _, namepsace := range utils.GetNamespaces() {
+		fnList, err := deploy.fissionClient.CoreV1().Functions(namepsace).List(ctx, metav1.ListOptions{})
+		if err != nil {
+			deploy.logger.Error("error getting function list", zap.Error(err))
+			return
+		}
 
-				_, err = deploy.fnCreate(ctx, fn)
-				if err != nil {
-					deploy.logger.Warn("failed to adopt resources for function", zap.Error(err))
-					return
-				}
-				deploy.logger.Info("adopt resources for function", zap.String("function", fn.ObjectMeta.Name))
-			}()
+		for i := range fnList.Items {
+			fn := &fnList.Items[i]
+			if fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypeNewdeploy {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+
+					_, err = deploy.fnCreate(ctx, fn)
+					if err != nil {
+						deploy.logger.Warn("failed to adopt resources for function", zap.Error(err))
+						return
+					}
+					deploy.logger.Info("adopt resources for function", zap.String("function", fn.ObjectMeta.Name))
+				}()
+			}
 		}
 	}
 
@@ -349,7 +351,7 @@ func (deploy *NewDeploy) CleanupOldExecutorObjects(ctx context.Context) {
 }
 
 func (deploy *NewDeploy) getEnvFunctions(ctx context.Context, m *metav1.ObjectMeta) []fv1.Function {
-	funcList, err := deploy.fissionClient.CoreV1().Functions(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
+	funcList, err := deploy.fissionClient.CoreV1().Functions(m.Namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		deploy.logger.Error("Error getting functions for env", zap.Error(err), zap.Any("environment", m))
 	}

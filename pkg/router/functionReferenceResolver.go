@@ -122,9 +122,6 @@ func (frr *functionReferenceResolver) resolve(trigger fv1.HTTPTrigger) (*resolve
 }
 
 func (frr *functionReferenceResolver) getInformerByNamespace(namespace string) (k8sCache.SharedIndexInformer, error) {
-	if informer, ok := frr.funcInformer[metav1.NamespaceAll]; ok {
-		return informer, nil
-	}
 	if informer, ok := frr.funcInformer[namespace]; ok {
 		return informer, nil
 	}

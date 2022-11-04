@@ -33,6 +33,7 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
+	"github.com/fission/fission/pkg/utils"
 )
 
 type (
@@ -124,40 +125,41 @@ func (client *PreUpgradeTaskClient) VerifyFunctionSpecReferences(ctx context.Con
 
 	var err error
 	var fList *fv1.FunctionList
-
-	for i := 0; i < maxRetries; i++ {
-		fList, err = client.fissionClient.CoreV1().Functions(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
-		if err == nil {
-			break
-		}
-	}
-
-	if err != nil {
-		client.logger.Fatal("error listing functions after max retries",
-			zap.Error(err),
-			zap.Int("max_retries", maxRetries))
-	}
-
 	errs := &multierror.Error{}
 
-	// check that all secrets, configmaps, packages are in the same namespace
-	for _, fn := range fList.Items {
-		secrets := fn.Spec.Secrets
-		for _, secret := range secrets {
-			if secret.Namespace != "" && secret.Namespace != fn.ObjectMeta.Namespace {
-				errs = multierror.Append(errs, fmt.Errorf("function : %s.%s cannot reference a secret : %s in namespace : %s", fn.ObjectMeta.Name, fn.ObjectMeta.Namespace, secret.Name, secret.Namespace))
+	for _, namespace := range utils.GetNamespaces() {
+		for i := 0; i < maxRetries; i++ {
+			fList, err = client.fissionClient.CoreV1().Functions(namespace).List(ctx, metav1.ListOptions{})
+			if err == nil {
+				break
 			}
 		}
 
-		configmaps := fn.Spec.ConfigMaps
-		for _, configmap := range configmaps {
-			if configmap.Namespace != "" && configmap.Namespace != fn.ObjectMeta.Namespace {
-				errs = multierror.Append(errs, fmt.Errorf("function : %s.%s cannot reference a configmap : %s in namespace : %s", fn.ObjectMeta.Name, fn.ObjectMeta.Namespace, configmap.Name, configmap.Namespace))
-			}
+		if err != nil {
+			client.logger.Fatal("error listing functions after max retries",
+				zap.Error(err),
+				zap.Int("max_retries", maxRetries))
 		}
 
-		if fn.Spec.Package.PackageRef.Namespace != "" && fn.Spec.Package.PackageRef.Namespace != fn.ObjectMeta.Namespace {
-			errs = multierror.Append(errs, fmt.Errorf("function : %s.%s cannot reference a package : %s in namespace : %s", fn.ObjectMeta.Name, fn.ObjectMeta.Namespace, fn.Spec.Package.PackageRef.Name, fn.Spec.Package.PackageRef.Namespace))
+		// check that all secrets, configmaps, packages are in the same namespace
+		for _, fn := range fList.Items {
+			secrets := fn.Spec.Secrets
+			for _, secret := range secrets {
+				if secret.Namespace != "" && secret.Namespace != fn.ObjectMeta.Namespace {
+					errs = multierror.Append(errs, fmt.Errorf("function : %s.%s cannot reference a secret : %s in namespace : %s", fn.ObjectMeta.Name, fn.ObjectMeta.Namespace, secret.Name, secret.Namespace))
+				}
+			}
+
+			configmaps := fn.Spec.ConfigMaps
+			for _, configmap := range configmaps {
+				if configmap.Namespace != "" && configmap.Namespace != fn.ObjectMeta.Namespace {
+					errs = multierror.Append(errs, fmt.Errorf("function : %s.%s cannot reference a configmap : %s in namespace : %s", fn.ObjectMeta.Name, fn.ObjectMeta.Namespace, configmap.Name, configmap.Namespace))
+				}
+			}
+
+			if fn.Spec.Package.PackageRef.Namespace != "" && fn.Spec.Package.PackageRef.Namespace != fn.ObjectMeta.Namespace {
+				errs = multierror.Append(errs, fmt.Errorf("function : %s.%s cannot reference a package : %s in namespace : %s", fn.ObjectMeta.Name, fn.ObjectMeta.Namespace, fn.Spec.Package.PackageRef.Name, fn.Spec.Package.PackageRef.Namespace))
+			}
 		}
 	}
 
