@@ -167,10 +167,7 @@ func (envw *environmentWatcher) AddUpdateBuilder(ctx context.Context, env *fv1.E
 			}
 			envw.cache[crd.CacheKeyUID(&env.ObjectMeta)] = builderInfo
 		} else {
-			envw.DeleteBuilderService(ctx, env)
-			envw.DeleteBuilderDeployment(ctx, env)
-			delete(envw.cache, crd.CacheKeyUID(&env.ObjectMeta))
-
+			envw.DeleteBuilder(ctx, env)
 			// once older builder deleted then add new builder service
 			builderInfo, err := envw.createBuilder(ctx, env, envw.getNamespace(env))
 			if err != nil {
