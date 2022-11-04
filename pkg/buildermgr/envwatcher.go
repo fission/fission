@@ -139,13 +139,13 @@ func (envw *environmentWatcher) EnvWatchEventHandlers(ctx context.Context) {
 		informer.AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
 				envObj := obj.(*fv1.Environment)
-				envw.AddBuilder(ctx, envObj)
+				envw.AddUpdateBuilder(ctx, envObj)
 			},
 			UpdateFunc: func(oldObj interface{}, newObj interface{}) {
 				oldEnvObj := oldObj.(*fv1.Environment)
 				newEnvObj := newObj.(*fv1.Environment)
 				if oldEnvObj.ObjectMeta.ResourceVersion != newEnvObj.ObjectMeta.ResourceVersion {
-					envw.UpdateBuilder(ctx, oldEnvObj, newEnvObj)
+					envw.AddUpdateBuilder(ctx, newEnvObj)
 				}
 			},
 			DeleteFunc: func(obj interface{}) {
@@ -156,51 +156,29 @@ func (envw *environmentWatcher) EnvWatchEventHandlers(ctx context.Context) {
 	}
 }
 
-func (envw *environmentWatcher) AddBuilder(ctx context.Context, env *fv1.Environment) {
-	if env.Spec.Version == 1 {
-		envw.logger.Error("error creating builder service builder is not supported with version 1",
-			zap.String("env_name", env.ObjectMeta.Name),
-			zap.String("namespace", env.ObjectMeta.Namespace))
-		return
-	}
-	if len(env.Spec.Builder.Image) == 0 {
-		envw.logger.Error("error creating builder service: no image found for builder",
-			zap.String("env_name", env.ObjectMeta.Name),
-			zap.String("namespace", env.ObjectMeta.Namespace))
-		return
-	}
+func (envw *environmentWatcher) AddUpdateBuilder(ctx context.Context, env *fv1.Environment) {
+	//builder is not supported with v1 interface and ignore env without builder image
+	if env.Spec.Version != 1 && len(env.Spec.Builder.Image) != 0 {
+		if _, ok := envw.cache[crd.CacheKeyUID(&env.ObjectMeta)]; !ok {
+			builderInfo, err := envw.createBuilder(ctx, env, envw.getNamespace(env))
+			if err != nil {
+				envw.logger.Error("error creating builder service", zap.Error(err))
+				return
+			}
+			envw.cache[crd.CacheKeyUID(&env.ObjectMeta)] = builderInfo
+		} else {
+			envw.DeleteBuilderService(ctx, env)
+			envw.DeleteBuilderDeployment(ctx, env)
+			delete(envw.cache, crd.CacheKeyUID(&env.ObjectMeta))
 
-	if _, ok := envw.cache[crd.CacheKeyUID(&env.ObjectMeta)]; !ok {
-		builderInfo, err := envw.createBuilder(ctx, env, envw.getNamespace(env))
-		if err != nil {
-			envw.logger.Error("error creating builder service", zap.Error(err))
-			return
+			// once older builder deleted then add new builder service
+			builderInfo, err := envw.createBuilder(ctx, env, envw.getNamespace(env))
+			if err != nil {
+				envw.logger.Error("error updating builder service", zap.Error(err))
+				return
+			}
+			envw.cache[crd.CacheKeyUID(&env.ObjectMeta)] = builderInfo
 		}
-		envw.cache[crd.CacheKeyUID(&env.ObjectMeta)] = builderInfo
-	} else {
-		envw.logger.Error("builder service already exists, try deleting environment",
-			zap.String("env_name", env.ObjectMeta.Name),
-			zap.String("namespace", env.ObjectMeta.Namespace))
-	}
-}
-
-func (envw *environmentWatcher) UpdateBuilder(ctx context.Context, oldEnv, newEnv *fv1.Environment) {
-	if _, ok := envw.cache[crd.CacheKeyUID(&oldEnv.ObjectMeta)]; !ok {
-		envw.logger.Error("builder service not found", zap.String("env_name", oldEnv.ObjectMeta.Name),
-			zap.String("namespace", envw.getNamespace(newEnv)))
-	} else {
-		//delete older environment builder service
-		envw.DeleteBuilderService(ctx, oldEnv)
-		envw.DeleteBuilderDeployment(ctx, oldEnv)
-		delete(envw.cache, crd.CacheKeyUID(&oldEnv.ObjectMeta))
-
-		// once deleted then add new builder service
-		builderInfo, err := envw.createBuilder(ctx, newEnv, envw.getNamespace(newEnv))
-		if err != nil {
-			envw.logger.Error("error updating builder service", zap.Error(err))
-			return
-		}
-		envw.cache[crd.CacheKeyUID(&newEnv.ObjectMeta)] = builderInfo
 	}
 }
 
@@ -211,7 +189,7 @@ func (envw *environmentWatcher) DeleteBuilder(ctx context.Context, env *fv1.Envi
 		delete(envw.cache, crd.CacheKeyUID(&env.ObjectMeta))
 		envw.logger.Info("builder service deleted", zap.String("env_name", env.ObjectMeta.Name), zap.String("namespace", envw.getNamespace(env)))
 	} else {
-		envw.logger.Error("builder service not found", zap.String("env_name", env.ObjectMeta.Name), zap.String("namespace", envw.getNamespace(env)))
+		envw.logger.Debug("builder service not found", zap.String("env_name", env.ObjectMeta.Name), zap.String("namespace", envw.getNamespace(env)))
 	}
 }
 
