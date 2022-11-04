@@ -521,12 +521,10 @@ func TestMain(m *testing.M) {
 
 	time.Sleep(5 * time.Second)
 
-	restClient := rest.NewRESTClient("http://localhost:8888")
-
 	fissionClient, kubernetesClient, _, _, err := crd.MakeFissionClient()
 	panicIf(err)
 	// TODO: use fake rest client for offline spec generation
-	cmd.SetClientset(client.MakeClientset(restClient), fissionClient, kubernetesClient)
+	cmd.SetClientset(fissionClient, kubernetesClient)
 
 	resp, err := http.Get("http://localhost:8888/")
 	panicIf(err)

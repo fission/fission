@@ -18,8 +18,6 @@ import (
 	"github.com/spf13/cobra"
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/fission/fission/pkg/controller/client"
-	"github.com/fission/fission/pkg/controller/client/rest"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	wrapper "github.com/fission/fission/pkg/fission-cli/cliwrapper/driver/cobra"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/driver/cobra/helptemplate"
@@ -72,19 +70,14 @@ func App() *cobra.Command {
 					if err != nil {
 						return errors.Wrap(err, "failed to get fission or kubernetes client")
 					}
-					cmd.SetClientset(client.MakeFakeClientset(nil), fissionClient, kubernetesClient)
+					cmd.SetClientset(fissionClient, kubernetesClient)
 				} else {
-					serverUrl, err := util.GetServerURL(input)
-					if err != nil {
-						return err
-					}
-					restClient := rest.NewRESTClient(serverUrl)
 					fissionClient, kubernetesClient, err := MakeFissionClient("")
 					if err != nil {
 						return errors.Wrap(err, "failed to get fission or kubernetes client")
 					}
 
-					cmd.SetClientset(client.MakeClientset(restClient), fissionClient, kubernetesClient)
+					cmd.SetClientset(fissionClient, kubernetesClient)
 
 				}
 

@@ -135,7 +135,7 @@ func getArchiveURL(ctx context.Context, client cmd.Client, archiveID string, ser
 		s3url := fmt.Sprintf("https://%s.s3.amazonaws.com/%s", storageBucket, archiveID)
 		return s3url, nil
 	}
-	return
+	return "", nil
 }
 func GetContents(filePath string) ([]byte, error) {
 	code, err := os.ReadFile(filePath)

@@ -21,7 +21,6 @@ import (
 
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 )
@@ -30,7 +29,6 @@ type (
 	CommandAction   func(input cli.Input) error
 	CommandActioner struct{}
 	Client          struct {
-		DefaultClientset client.Interface
 		FissionClientSet versioned.Interface
 		KubernetesClient kubernetes.Interface
 	}
@@ -41,9 +39,9 @@ var (
 	defaultClient Client
 )
 
-func SetClientset(clientset client.Interface, fClientSet versioned.Interface, kClient kubernetes.Interface) {
+func SetClientset(fClientSet versioned.Interface, kClient kubernetes.Interface) {
 	once.Do(func() {
-		defaultClient = Client{DefaultClientset: clientset,
+		defaultClient = Client{
 			FissionClientSet: fClientSet,
 			KubernetesClient: kClient,
 		}
