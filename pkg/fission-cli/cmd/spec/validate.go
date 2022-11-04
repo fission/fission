@@ -81,7 +81,7 @@ func (opts *ValidateSubCommand) run(input cli.Input, fr *FissionResources) (err 
 
 	var warnings []string
 	// this does the rest of the checks, like dangling refs
-	warnings, err = fr.Validate(input)
+	warnings, err = fr.Validate(input, opts.Client())
 	if err != nil {
 		return errors.Wrap(err, "error validating specs")
 	}

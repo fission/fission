@@ -42,8 +42,6 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
-	"github.com/fission/fission/pkg/controller/client"
-	"github.com/fission/fission/pkg/controller/client/rest"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/console"
@@ -225,14 +223,6 @@ func GetVersion(ctx context.Context, client cmd.Client) info.Versions {
 
 func GetServerInfo() info.ServerInfo {
 	return info.ApiInfo()
-}
-
-func GetServer(input cli.Input) (c client.Interface, err error) {
-	serverUrl, err := GetServerURL(input)
-	if err != nil {
-		return nil, err
-	}
-	return client.MakeClientset(rest.NewRESTClient(serverUrl)), nil
 }
 
 func GetServerURL(input cli.Input) (serverUrl string, err error) {
