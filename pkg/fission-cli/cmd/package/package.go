@@ -194,7 +194,7 @@ func CreateArchive(client cmd.Client, input cli.Input, includeFiles []string, no
 		return nil, err
 	}
 
-	return pkgutil.UploadArchiveFile(input.Context(), client, archivePath)
+	return pkgutil.UploadArchiveFile(input.Context(), client, archivePath, input.String(flagkey.KubeContext))
 }
 
 // makeArchiveFile creates a zip file from the given list of input files,

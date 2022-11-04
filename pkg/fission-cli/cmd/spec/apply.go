@@ -394,7 +394,7 @@ func applyArchives(input cli.Input, fclient cmd.Client, specDir string, fr *Fiss
 			// doesn't exist, upload
 			fmt.Printf("uploading archive %v\n", name)
 			// ar.URL is actually a local filename at this stage
-			uploadedAr, err := pkgutil.UploadArchiveFile(input.Context(), fclient, ar.URL)
+			uploadedAr, err := pkgutil.UploadArchiveFile(input.Context(), fclient, ar.URL, input.String(flagkey.KubeContext))
 			if err != nil {
 				return err
 			}

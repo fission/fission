@@ -21,6 +21,7 @@ import (
 	"io"
 	"os"
 
+	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -93,12 +94,12 @@ func (opts *GetSubCommand) run(input cli.Input) error {
 		reader = bytes.NewReader(archive.Literal)
 	} else if pkg.Spec.Deployment.Type == fv1.ArchiveTypeUrl {
 
-		readCloser, err := pkgutil.DownloadStoragesvcURL(opts.Client().DefaultClientset, archive.URL)
-		if err != nil {
-			return err
-		}
+		// readCloser, err := pkgutil.DownloadStoragesvcURL(opts.Client().DefaultClientset, archive.URL)
+		// if err != nil {
+		// 	return err
+		// }
 
-		// // TODO: check its working
+		// TODO: check its working
 		// storageSvc, err := util.GetSvcName(input.Context(), opts.Client().KubernetesClient, "fission-storage")
 		// if err != nil {
 		// 	return err
@@ -107,12 +108,12 @@ func (opts *GetSubCommand) run(input cli.Input) error {
 		// storagesvcURL := "http://" + storageSvc
 		// ssClient := storagesvcClient.MakeClient(storagesvcURL)
 
-		// // TODO: this is not required I suppose S3 not handled here
+		// TODO: this is not required I suppose S3 not handled here
 		// fileDownloadUrl := ssClient.GetUrl(archive.URL)
-		// readCloser, err := pkgutil.DownloadURL(fileDownloadUrl)
-		// if err != nil {
-		// 	return errors.Wrapf(err, "error downloading from storage service url: %s", fileDownloadUrl)
-		// }
+		readCloser, err := pkgutil.DownloadURL(archive.URL)
+		if err != nil {
+			return errors.Wrapf(err, "error downloading from storage service url: %s", archive.URL)
+		}
 
 		defer readCloser.Close()
 		reader = readCloser

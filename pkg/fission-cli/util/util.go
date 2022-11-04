@@ -567,11 +567,16 @@ func GetSvcName(ctx context.Context, kClient kubernetes.Interface, application s
 	}
 
 	appLabelSelector := "application=" + application
+
 	services, err := kClient.CoreV1().Services(podNamespace).List(ctx, metav1.ListOptions{
 		LabelSelector: appLabelSelector,
 	})
-	if err != nil || len(services.Items) > 1 || len(services.Items) == 0 {
+	if err != nil {
 		return "", err
+	}
+
+	if len(services.Items) > 1 || len(services.Items) == 0 {
+		return "", errors.Errorf("more than one service found for application=%s", application)
 	}
 	service := services.Items[0]
 	return service.Name + "." + podNamespace, nil

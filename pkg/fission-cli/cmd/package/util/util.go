@@ -32,11 +32,12 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
+	"github.com/fission/fission/pkg/fission-cli/util"
 	storageSvcClient "github.com/fission/fission/pkg/storagesvc/client"
 	"github.com/fission/fission/pkg/utils"
 )
 
-func UploadArchiveFile(ctx context.Context, client cmd.Client, fileName string) (*fv1.Archive, error) {
+func UploadArchiveFile(ctx context.Context, client cmd.Client, fileName string, kubeContext string) (*fv1.Archive, error) {
 	var archive fv1.Archive
 
 	size, err := utils.FileSize(fileName)
@@ -51,25 +52,39 @@ func UploadArchiveFile(ctx context.Context, client cmd.Client, fileName string) 
 			return nil, err
 		}
 	} else {
-		u := strings.TrimSuffix(client.DefaultClientset.ServerURL(), "/") + "/proxy/storage"
-		ssClient := storageSvcClient.MakeClient(u)
+		// u := strings.TrimSuffix(client.DefaultClientset.ServerURL(), "/") + "/proxy/storage"
+		// ssClient := storageSvcClient.MakeClient(u)
 
-		// TODO add a progress bar
-		id, err := ssClient.Upload(ctx, fileName, nil)
+		// // TODO add a progress bar
+		// id, err := ssClient.Upload(ctx, fileName, nil)
+		// if err != nil {
+		// 	return nil, errors.Wrapf(err, "error uploading file %v", fileName)
+		// }
+
+		storagesvcURL, err := util.GetStorageURL(ctx, kubeContext)
 		if err != nil {
-			return nil, errors.Wrapf(err, "error uploading file %v", fileName)
+			return nil, errors.Wrapf(err, "error getting fission storage service URL")
 		}
 
-		storageSvc, err := client.DefaultClientset.V1().Misc().GetSvcURL("application=fission-storage")
-		storageSvcURL := "http://" + storageSvc
+		storageClient := storageSvcClient.MakeClient(storagesvcURL.String())
+		id, err := storageClient.Upload(ctx, fileName, nil)
 		if err != nil {
-			return nil, errors.Wrapf(err, "error getting fission storage service name")
+			return nil, errors.Wrapf(err, "error uploading to fission storage service")
 		}
 
-		// We make a new client with actual URL of Storage service so that the URL is not
-		// pointing to 127.0.0.1 i.e. proxy. DON'T reuse previous ssClient
-		pkgClient := storageSvcClient.MakeClient(storageSvcURL)
-		archiveURL := pkgClient.GetUrl(id)
+		// storageSvc, err := client.DefaultClientset.V1().Misc().GetSvcURL("application=fission-storage")
+		// storageSvcURL := "http://" + storageSvc
+		// if err != nil {
+		// 	return nil, errors.Wrapf(err, "error getting fission storage service name")
+		// }
+
+		// // We make a new client with actual URL of Storage service so that the URL is not
+		// // pointing to 127.0.0.1 i.e. proxy. DON'T reuse previous ssClient
+		// pkgClient := storageSvcClient.MakeClient(storageSvcURL)
+		archiveURL, err := getArchiveURL(ctx, client, id, storagesvcURL)
+		if err != nil {
+			return nil, errors.Wrapf(err, "could not get URL of archive")
+		}
 
 		archive.Type = fv1.ArchiveTypeUrl
 		archive.URL = archiveURL
@@ -85,6 +100,43 @@ func UploadArchiveFile(ctx context.Context, client cmd.Client, fileName string) 
 	return &archive, nil
 }
 
+func getArchiveURL(ctx context.Context, client cmd.Client, archiveID string, serverURL *url.URL) (archiveURL string, err error) {
+	relativeURL, _ := url.Parse(util.FISSION_STORAGE_URI)
+
+	queryString := relativeURL.Query()
+	queryString.Set("id", archiveID)
+	relativeURL.RawQuery = queryString.Encode()
+
+	storageAccessURL := serverURL.ResolveReference(relativeURL)
+
+	resp, err := http.Head(storageAccessURL.String())
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("error getting URL. Exited with Status:  %s", resp.Status)
+	}
+
+	storageType := resp.Header.Get("X-FISSION-STORAGETYPE")
+
+	if storageType == "local" {
+		// TODO: testing required here
+		storageSvc, err := util.GetSvcName(ctx, client.KubernetesClient, "fission-storage")
+		if err != nil {
+			return "", err
+		}
+		storagesvcURL := "http://" + storageSvc
+		client := storageSvcClient.MakeClient(storagesvcURL)
+		return client.GetUrl(archiveID), nil
+	} else if storageType == "s3" {
+		storageBucket := resp.Header.Get("X-FISSION-BUCKET")
+		s3url := fmt.Sprintf("https://%s.s3.amazonaws.com/%s", storageBucket, archiveID)
+		return s3url, nil
+	}
+	return
+}
 func GetContents(filePath string) ([]byte, error) {
 	code, err := os.ReadFile(filePath)
 	if err != nil {
