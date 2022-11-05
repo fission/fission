@@ -125,7 +125,6 @@ func (opts *RunContainerSubCommand) complete(input cli.Input) error {
 		// check the referenced secret is in the same ns as the function, if not give a warning.
 		if !toSpec { // TODO: workaround in order not to block users from creating function spec, remove it.
 			for _, secretName := range secretNames {
-				// TODO: discuss if this is fine or should we have a wrapper over kclient interface
 				err := util.SecretExists(input.Context(), &metav1.ObjectMeta{Namespace: fnNamespace, Name: secretName}, opts.Client().KubernetesClient)
 				if err != nil {
 					if kerrors.IsNotFound(err) {

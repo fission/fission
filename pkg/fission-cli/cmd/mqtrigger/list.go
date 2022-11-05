@@ -59,7 +59,6 @@ func (opts *ListSubCommand) run(input cli.Input) (err error) {
 
 	var mqts *v1.MessageQueueTriggerList
 	if input.Bool(flagkey.AllNamespaces) {
-		// TODO: mqtype is ignored as of now in the controller server. I am ignoring it too. This won't create conflict with current implementation.
 		mqts, err = opts.Client().FissionClientSet.CoreV1().MessageQueueTriggers(metav1.NamespaceAll).List(input.Context(), metav1.ListOptions{})
 	} else {
 		mqts, err = opts.Client().FissionClientSet.CoreV1().MessageQueueTriggers(opts.namespace).List(input.Context(), metav1.ListOptions{})

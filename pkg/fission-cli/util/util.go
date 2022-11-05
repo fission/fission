@@ -133,7 +133,6 @@ func GetVersion(ctx context.Context) info.Versions {
 		}
 	}
 
-	// TODO: verify it
 	serverInfo := GetServerInfo()
 
 	// Fetch server versions
@@ -476,11 +475,6 @@ func FunctionPodLogs(ctx context.Context, fnName, ns string, client cmd.Client) 
 	if len(ns) == 0 {
 		ns = metav1.NamespaceDefault
 	} else if ns != metav1.NamespaceDefault {
-		// TODO: does it remains the same now????
-		// If the function namespace is "default", executor
-		// will create function pods under "fission-function".
-		// Otherwise, the function pod will be created under
-		// the same namespace of function.
 		podNs = ns
 	}
 

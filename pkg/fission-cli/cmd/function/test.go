@@ -156,9 +156,6 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 			return errors.Wrapf(err, "error retrieving function log from log database")
 		}
 	}
-	// else {
-	// 	console.Info(log)
-	// }
 	return errors.New("error getting function response")
 }
 

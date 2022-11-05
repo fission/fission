@@ -52,14 +52,6 @@ func UploadArchiveFile(ctx context.Context, client cmd.Client, fileName string) 
 			return nil, err
 		}
 	} else {
-		// u := strings.TrimSuffix(client.DefaultClientset.ServerURL(), "/") + "/proxy/storage"
-		// ssClient := storageSvcClient.MakeClient(u)
-
-		// // TODO add a progress bar
-		// id, err := ssClient.Upload(ctx, fileName, nil)
-		// if err != nil {
-		// 	return nil, errors.Wrapf(err, "error uploading file %v", fileName)
-		// }
 
 		storagesvcURL, err := util.GetStorageURL(ctx, client)
 		if err != nil {
@@ -67,20 +59,12 @@ func UploadArchiveFile(ctx context.Context, client cmd.Client, fileName string) 
 		}
 
 		storageClient := storageSvcClient.MakeClient(storagesvcURL.String())
+		// TODO add a progress bar
 		id, err := storageClient.Upload(ctx, fileName, nil)
 		if err != nil {
 			return nil, errors.Wrapf(err, "error uploading to fission storage service")
 		}
 
-		// storageSvc, err := client.DefaultClientset.V1().Misc().GetSvcURL("application=fission-storage")
-		// storageSvcURL := "http://" + storageSvc
-		// if err != nil {
-		// 	return nil, errors.Wrapf(err, "error getting fission storage service name")
-		// }
-
-		// // We make a new client with actual URL of Storage service so that the URL is not
-		// // pointing to 127.0.0.1 i.e. proxy. DON'T reuse previous ssClient
-		// pkgClient := storageSvcClient.MakeClient(storageSvcURL)
 		archiveURL, err := getArchiveURL(ctx, client, id, storagesvcURL)
 		if err != nil {
 			return nil, errors.Wrapf(err, "could not get URL of archive")
@@ -122,7 +106,6 @@ func getArchiveURL(ctx context.Context, client cmd.Client, archiveID string, ser
 	storageType := resp.Header.Get("X-FISSION-STORAGETYPE")
 
 	if storageType == "local" {
-		// TODO: testing required here
 		storageSvc, err := util.GetSvcName(ctx, client.KubernetesClient, "fission-storage")
 		if err != nil {
 			return "", err

@@ -76,13 +76,6 @@ func (opts *GetSubCommand) run(input cli.Input) error {
 		return err
 	}
 
-	// TODO: this is not used currently. Do we need to keep this behaviour
-	// raw := r.FormValue("raw")
-	// var resp []byte
-	// if raw != "" {
-	// 	resp = pkg.Spec.Deployment.Literal
-	// }
-
 	var reader io.Reader
 	archive := pkg.Spec.Source
 	if opts.archiveType == deployArchive {
@@ -93,22 +86,6 @@ func (opts *GetSubCommand) run(input cli.Input) error {
 		reader = bytes.NewReader(archive.Literal)
 	} else if pkg.Spec.Deployment.Type == fv1.ArchiveTypeUrl {
 
-		// readCloser, err := pkgutil.DownloadStoragesvcURL(opts.Client().DefaultClientset, archive.URL)
-		// if err != nil {
-		// 	return err
-		// }
-
-		// TODO: check its working
-		// storageSvc, err := util.GetSvcName(input.Context(), opts.Client().KubernetesClient, "fission-storage")
-		// if err != nil {
-		// 	return err
-		// }
-
-		// storagesvcURL := "http://" + storageSvc
-		// ssClient := storagesvcClient.MakeClient(storagesvcURL)
-
-		// TODO: this is not required I suppose S3 not handled here
-		// fileDownloadUrl := ssClient.GetUrl(archive.URL)
 		readCloser, err := pkgutil.DownloadURL(archive.URL)
 		if err != nil {
 			return errors.Wrapf(err, "error downloading from storage service url: %s", archive.URL)
