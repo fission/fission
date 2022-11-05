@@ -53,7 +53,7 @@ func (opts *DeleteSubCommand) do(input cli.Input) error {
 
 func (opts *DeleteSubCommand) complete(input cli.Input) (err error) {
 	opts.name = input.String(flagkey.PkgName)
-	_, opts.namespace, err = util.GetResourceNamespace(input, flagkey.NamespacePackage)
+	_, opts.namespace, err = util.GetResourceNamespace(input, opts.Client(), flagkey.NamespacePackage)
 	if err != nil {
 		return fv1.AggregateValidationErrors("Environment", err)
 	}

@@ -53,7 +53,7 @@ func (opts *UpdateSubCommand) do(input cli.Input) error {
 
 func (opts *UpdateSubCommand) complete(input cli.Input) (err error) {
 	opts.pkgName = input.String(flagkey.PkgName)
-	_, opts.pkgNamespace, err = util.GetResourceNamespace(input, flagkey.NamespacePackage)
+	_, opts.pkgNamespace, err = util.GetResourceNamespace(input, opts.Client(), flagkey.NamespacePackage)
 	if err != nil {
 		return fv1.AggregateValidationErrors("Environment", err)
 	}

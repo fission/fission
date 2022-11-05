@@ -36,10 +36,9 @@ func Delete(input cli.Input) error {
 
 func (opts *DeleteSubCommand) do(input cli.Input) error {
 
-	kubeContext := input.String(flagkey.KubeContext)
 	archiveID := input.String(flagkey.ArchiveID)
 
-	storagesvcURL, err := util.GetStorageURL(input.Context(), kubeContext)
+	storagesvcURL, err := util.GetStorageURL(input.Context(), opts.Client())
 	if err != nil {
 		return err
 	}

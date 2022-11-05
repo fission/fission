@@ -32,6 +32,7 @@ import (
 	"k8s.io/client-go/tools/portforward"
 	"k8s.io/client-go/transport/spdy"
 
+	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/console"
 	"github.com/fission/fission/pkg/utils"
 )
@@ -43,7 +44,7 @@ const maxDuration time.Duration = 2000
 // is found by looking for a service in the same namespace and using
 // its targetPort. Once the port forward is started, wait for it to
 // start accepting connections before returning.
-func SetupPortForward(ctx context.Context, namespace, labelSelector string, kubeContext string) (string, error) {
+func SetupPortForward(ctx context.Context, client cmd.Client, namespace, labelSelector string) (string, error) {
 	console.Verbose(2, "Setting up port forward to %s in namespace %s",
 		labelSelector, namespace)
 
@@ -71,7 +72,7 @@ func SetupPortForward(ctx context.Context, namespace, labelSelector string, kube
 
 	console.Verbose(2, "Starting port forward from local port %v", localPort)
 
-	readyC, _, err := runPortForward(ctx, labelSelector, localPort, namespace, kubeContext)
+	readyC, _, err := runPortForward(ctx, client, labelSelector, localPort, namespace)
 	if err != nil {
 		fmt.Printf("Error forwarding to port %v: %s", localPort, err.Error())
 		return "", err
@@ -119,11 +120,7 @@ func findFreePort() (string, error) {
 }
 
 // runPortForward creates a local port forward to the specified pod
-func runPortForward(ctx context.Context, labelSelector string, localPort string, ns string, kubeContext string) (chan struct{}, chan struct{}, error) {
-	config, clientset, err := GetKubernetesClient(kubeContext)
-	if err != nil {
-		return nil, nil, err
-	}
+func runPortForward(ctx context.Context, client cmd.Client, labelSelector string, localPort string, ns string) (chan struct{}, chan struct{}, error) {
 
 	console.Verbose(2, "Connected to Kubernetes API")
 
@@ -133,7 +130,7 @@ func runPortForward(ctx context.Context, labelSelector string, localPort string,
 	}
 
 	// get the pod; if there is more than one, ask the user to disambiguate
-	podList, err := clientset.CoreV1().Pods(ns).
+	podList, err := client.KubernetesClient.CoreV1().Pods(ns).
 		List(ctx, metav1.ListOptions{LabelSelector: labelSelector})
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, "error getting pod for port-forwarding with label selector %v", labelSelector)
@@ -179,7 +176,7 @@ func runPortForward(ctx context.Context, labelSelector string, localPort string,
 	}
 
 	// get the service and the target port
-	svcs, err := clientset.CoreV1().Services(podNameSpace).
+	svcs, err := client.KubernetesClient.CoreV1().Services(podNameSpace).
 		List(ctx, metav1.ListOptions{LabelSelector: labelSelector})
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, "Error getting %v service", labelSelector)
@@ -199,7 +196,7 @@ func runPortForward(ctx context.Context, labelSelector string, localPort string,
 	readyChannel := make(chan struct{})
 
 	// create request URL
-	req := clientset.CoreV1().RESTClient().Post().Resource("pods").
+	req := client.KubernetesClient.CoreV1().RESTClient().Post().Resource("pods").
 		Namespace(podNameSpace).Name(podName).SubResource("portforward")
 	url := req.URL()
 
@@ -208,7 +205,7 @@ func runPortForward(ctx context.Context, labelSelector string, localPort string,
 	ports := []string{portCombo}
 
 	// actually start the port-forwarding process here
-	transport, upgrader, err := spdy.RoundTripperFor(config)
+	transport, upgrader, err := spdy.RoundTripperFor(client.RestConfig)
 	if err != nil {
 		return nil, nil, errors.Errorf("Failed to connect to Fission service on Kubernetes")
 	}

@@ -53,15 +53,8 @@ type Checker struct {
 	check      func(ctx context.Context) error
 }
 
-type Options struct {
-	KubeContext   string
-	FissionClient cmd.Client
-}
-
 type HealthChecker struct {
-	categories []*Category
-	*Options
-
+	categories       []*Category
 	kubeAPI          kubernetes.Interface
 	fissionNamespace string
 }
@@ -121,7 +114,7 @@ func (hc *HealthChecker) CheckServiceStatus(ctx context.Context, namespace strin
 }
 
 func (hc *HealthChecker) CheckFissionVersion(ctx context.Context) error {
-	ver := util.GetVersion(ctx, hc.FissionClient)
+	ver := util.GetVersion(ctx)
 
 	clientVersion := ver.Client["fission/core"].Version
 	serverVersion := ver.Server["fission/core"].Version
@@ -200,14 +193,11 @@ func (hc *HealthChecker) allCategories() []*Category {
 	}
 }
 
-func NewHealthChecker(categoryIDs []CategoryID, options *Options) *HealthChecker {
+func NewHealthChecker(cmd cmd.Client, categoryIDs []CategoryID) *HealthChecker {
 	hc := &HealthChecker{
-		Options: options,
+		kubeAPI:          cmd.KubernetesClient,
+		fissionNamespace: "fission",
 	}
-
-	_, clientset, _ := util.GetKubernetesClient(hc.KubeContext)
-	hc.kubeAPI = clientset
-	hc.fissionNamespace = "fission"
 
 	hc.categories = hc.allCategories()
 

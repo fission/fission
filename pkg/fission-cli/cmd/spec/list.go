@@ -61,7 +61,7 @@ func (opts *ListSubCommand) run(input cli.Input) error {
 		deployID = fr.DeploymentConfig.UID
 	}
 
-	_, currentNS, err := util.GetResourceNamespace(input, flagkey.NamespaceEnvironment)
+	_, currentNS, err := util.GetResourceNamespace(input, opts.Client(), flagkey.NamespaceEnvironment)
 	if err != nil {
 		return fv1.AggregateValidationErrors("Environment", err)
 	}

@@ -51,7 +51,7 @@ func Test(input cli.Input) error {
 
 func (opts *TestSubCommand) do(input cli.Input) error {
 
-	_, namespace, err := util.GetResourceNamespace(input, flagkey.NamespaceFunction)
+	_, namespace, err := util.GetResourceNamespace(input, opts.Client(), flagkey.NamespaceFunction)
 	if err != nil {
 		return errors.Wrap(err, "error in testing function ")
 	}
@@ -60,14 +60,13 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 		Name:      input.String(flagkey.FnName),
 		Namespace: namespace,
 	}
-	kubeContext := input.String(flagkey.KubeContext)
 	routerURL := os.Getenv("FISSION_ROUTER")
 	if len(routerURL) != 0 {
 		console.Warn("The environment variable FISSION_ROUTER is no longer supported for this command")
 	}
 
 	// Portforward to the fission router
-	localRouterPort, err := util.SetupPortForward(input.Context(), util.GetFissionNamespace(), "application=fission-router", kubeContext)
+	localRouterPort, err := util.SetupPortForward(input.Context(), opts.Client(), util.GetFissionNamespace(), "application=fission-router")
 	if err != nil {
 		return err
 	}

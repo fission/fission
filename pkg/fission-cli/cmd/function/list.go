@@ -41,7 +41,7 @@ func List(input cli.Input) error {
 }
 
 func (opts *ListSubCommand) do(input cli.Input) error {
-	_, namespace, err := util.GetResourceNamespace(input, flagkey.NamespaceFunction)
+	_, namespace, err := util.GetResourceNamespace(input, opts.Client(), flagkey.NamespaceFunction)
 	if err != nil {
 		return errors.Wrap(err, "error in listing function ")
 	}

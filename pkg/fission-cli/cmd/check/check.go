@@ -30,8 +30,6 @@ func Check(input cli.Input) error {
 
 func (opts *CheckSubCommand) do(input cli.Input) error {
 
-	kubeContext := input.String(flagkey.KubeContext)
-
 	checks := []healthcheck.CategoryID{}
 
 	if input.IsSet(flagkey.PreCheckOnly) {
@@ -40,10 +38,7 @@ func (opts *CheckSubCommand) do(input cli.Input) error {
 		checks = append(checks, healthcheck.FissionServices, healthcheck.FissionVersion)
 	}
 
-	hc := healthcheck.NewHealthChecker(checks, &healthcheck.Options{
-		KubeContext:   kubeContext,
-		FissionClient: opts.Client(),
-	})
+	hc := healthcheck.NewHealthChecker(opts.Client(), checks)
 
 	healthcheck.RunChecks(input.Context(), hc)
 	return nil

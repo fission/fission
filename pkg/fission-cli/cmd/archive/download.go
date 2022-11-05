@@ -37,7 +37,6 @@ func Download(input cli.Input) error {
 
 func (opts *DownloadSubCommand) do(input cli.Input) error {
 
-	kubeContext := input.String(flagkey.KubeContext)
 	archiveID := input.String(flagkey.ArchiveID)
 	archiveOutput := input.String(flagkey.ArchiveOutput)
 
@@ -45,7 +44,7 @@ func (opts *DownloadSubCommand) do(input cli.Input) error {
 		archiveOutput = strings.TrimPrefix(archiveID, "/fission/fission-functions/")
 	}
 
-	storageAccessURL, err := util.GetStorageURL(input.Context(), kubeContext)
+	storageAccessURL, err := util.GetStorageURL(input.Context(), opts.Client())
 	if err != nil {
 		return err
 	}

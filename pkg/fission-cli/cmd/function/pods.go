@@ -43,7 +43,7 @@ func ListPods(input cli.Input) error {
 
 func (opts *ListPodsSubCommand) do(input cli.Input) error {
 
-	_, namespace, err := util.GetResourceNamespace(input, flagkey.NamespaceFunction)
+	_, namespace, err := util.GetResourceNamespace(input, opts.Client(), flagkey.NamespaceFunction)
 
 	if err != nil {
 		return errors.Wrap(err, "error in finding pod for function ")

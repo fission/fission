@@ -40,7 +40,7 @@ func Delete(input cli.Input) error {
 
 func (opts *DeleteSubCommand) do(input cli.Input) (err error) {
 
-	_, currentContextNS, err := util.GetResourceNamespace(input, flagkey.NamespaceEnvironment)
+	_, currentContextNS, err := util.GetResourceNamespace(input, opts.Client(), flagkey.NamespaceEnvironment)
 	if err != nil {
 		return errors.Wrap(err, "error creating environment")
 	}

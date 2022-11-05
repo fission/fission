@@ -55,7 +55,7 @@ func (opts *RunContainerSubCommand) do(input cli.Input) error {
 func (opts *RunContainerSubCommand) complete(input cli.Input) error {
 	fnName := input.String(flagkey.FnName)
 
-	_, fnNamespace, err := util.GetResourceNamespace(input, flagkey.NamespaceFunction)
+	_, fnNamespace, err := util.GetResourceNamespace(input, opts.Client(), flagkey.NamespaceFunction)
 	if err != nil {
 		return errors.Wrap(err, "error in running container for function ")
 	}

@@ -22,7 +22,6 @@ import (
 	"io"
 	"net/url"
 	"os"
-	"os/user"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -38,8 +37,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"
-	restclient "k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
@@ -56,13 +53,13 @@ func GetFissionNamespace() string {
 	return fissionNamespace
 }
 
-func GetApplicationUrl(ctx context.Context, selector string, kubeContext string) (string, error) {
+func GetApplicationUrl(ctx context.Context, client cmd.Client, selector string) (string, error) {
 	var serverUrl string
 	// Use FISSION_URL env variable if set; otherwise, port-forward to controller.
 	fissionUrl := os.Getenv("FISSION_URL")
 	if len(fissionUrl) == 0 {
 		fissionNamespace := GetFissionNamespace()
-		localPort, err := SetupPortForward(ctx, fissionNamespace, selector, kubeContext)
+		localPort, err := SetupPortForward(ctx, client, fissionNamespace, selector)
 		if err != nil {
 			return "", err
 		}
@@ -106,77 +103,6 @@ func KubifyName(old string) string {
 	return newName
 }
 
-func getLoadingRules() (loadingRules *clientcmd.ClientConfigLoadingRules, err error) {
-	loadingRules = clientcmd.NewDefaultClientConfigLoadingRules()
-
-	kubeConfigPath := os.Getenv("KUBECONFIG")
-	if len(kubeConfigPath) == 0 {
-		var homeDir string
-		usr, err := user.Current()
-		if err != nil {
-			// In case that user.Current() may be unable to work under some circumstances and return errors like
-			// "user: Current not implemented on darwin/amd64" due to cross-compilation problem. (https://github.com/golang/go/issues/6376).
-			// Instead of doing fatal here, we fallback to get home directory from the environment $HOME.
-			console.Warn(fmt.Sprintf("Could not get the current user's directory (%s), fallback to get it from env $HOME", err))
-			homeDir = os.Getenv("HOME")
-		} else {
-			homeDir = usr.HomeDir
-		}
-		kubeConfigPath = filepath.Join(homeDir, ".kube", "config")
-
-		if _, err := os.Stat(kubeConfigPath); os.IsNotExist(err) {
-			return nil, errors.New("Couldn't find kubeconfig file. " +
-				"Set the KUBECONFIG environment variable to your kubeconfig's path.")
-		}
-		loadingRules.ExplicitPath = kubeConfigPath
-		console.Verbose(2, "Using kubeconfig from %q", kubeConfigPath)
-	} else {
-		console.Verbose(2, "Using kubeconfig from environment %q", kubeConfigPath)
-	}
-	return loadingRules, nil
-}
-
-// GetKubernetesClient builds a new kubernetes client. If the KUBECONFIG
-// environment variable is empty or doesn't exist, ~/.kube/config is used for
-// the kube config path
-func GetKubernetesClient(kubeContext string) (*restclient.Config, kubernetes.Interface, error) {
-	loadingRules, err := getLoadingRules()
-	if err != nil {
-		return nil, nil, err
-	}
-
-	config, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
-		loadingRules, &clientcmd.ConfigOverrides{CurrentContext: kubeContext}).ClientConfig()
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "Failed to build Kubernetes config")
-	}
-
-	clientset, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "Failed to connect to Kubernetes")
-	}
-
-	return config, clientset, nil
-}
-
-// GetKubernetesNamespace builds a new kubernetes client. If the KUBECONFIG
-// environment variable is empty or doesn't exist, ~/.kube/config is used for
-// the kube config path
-func GetKubernetesNamespace(kubeContext string) (currentNS string, err error) {
-	loadingRules, err := getLoadingRules()
-	if err != nil {
-		return "", err
-	}
-
-	namespace, _, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
-		loadingRules, &clientcmd.ConfigOverrides{CurrentContext: kubeContext}).Namespace()
-	if err != nil {
-		return "", errors.Wrap(err, "Failed to build Kubernetes config")
-	}
-
-	return namespace, nil
-}
-
 // given a list of functions, this checks if the functions actually exist on the cluster
 func CheckFunctionExistence(ctx context.Context, client cmd.Client, functions []string, fnNamespace string) (err error) {
 	fnMissing := make([]string, 0)
@@ -194,7 +120,7 @@ func CheckFunctionExistence(ctx context.Context, client cmd.Client, functions []
 	return nil
 }
 
-func GetVersion(ctx context.Context, client cmd.Client) info.Versions {
+func GetVersion(ctx context.Context) info.Versions {
 	// Fetch client versions
 	versions := info.Versions{
 		Client: map[string]info.BuildMeta{
@@ -225,12 +151,11 @@ func GetServerInfo() info.ServerInfo {
 	return info.ApiInfo()
 }
 
-func GetServerURL(input cli.Input) (serverUrl string, err error) {
+func GetServerURL(input cli.Input, client cmd.Client) (serverUrl string, err error) {
 	serverUrl = input.GlobalString(flagkey.Server)
-	kubeContext := input.String(flagkey.KubeContext)
 	if len(serverUrl) == 0 {
 		// starts local portforwarder etc.
-		serverUrl, err = GetApplicationUrl(input.Context(), "application=fission-api", kubeContext)
+		serverUrl, err = GetApplicationUrl(input.Context(), client, "application=fission-api")
 		if err != nil {
 			return "", err
 		}
@@ -462,8 +387,8 @@ func ApplyLabelsAndAnnotations(input cli.Input, objectMeta *metav1.ObjectMeta) e
 	return nil
 }
 
-func GetStorageURL(ctx context.Context, kubeContext string) (*url.URL, error) {
-	storageLocalPort, err := SetupPortForward(ctx, GetFissionNamespace(), "application=fission-storage", kubeContext)
+func GetStorageURL(ctx context.Context, client cmd.Client) (*url.URL, error) {
+	storageLocalPort, err := SetupPortForward(ctx, client, GetFissionNamespace(), "application=fission-storage")
 	if err != nil {
 		return nil, err
 	}
@@ -476,7 +401,7 @@ func GetStorageURL(ctx context.Context, kubeContext string) (*url.URL, error) {
 	return serverURL, nil
 }
 
-func GetResourceNamespace(input cli.Input, deprecatedFlag string) (namespace, currentNS string, err error) {
+func GetResourceNamespace(input cli.Input, client cmd.Client, deprecatedFlag string) (namespace, currentNS string, err error) {
 	namespace = input.String(deprecatedFlag)
 	currentNS = namespace
 
@@ -491,11 +416,8 @@ func GetResourceNamespace(input cli.Input, deprecatedFlag string) (namespace, cu
 		if os.Getenv("FISSION_DEFAULT_NAMESPACE") != "" {
 			currentNS = os.Getenv("FISSION_DEFAULT_NAMESPACE")
 		} else {
-			kubeContext := input.String(flagkey.KubeContext)
-			currentNS, err = GetKubernetesNamespace(kubeContext)
-			if err != nil {
-				return namespace, currentNS, err
-			}
+			currentNS = client.Namespace
+			return namespace, currentNS, err
 		}
 	}
 

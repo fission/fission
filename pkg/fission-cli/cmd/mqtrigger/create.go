@@ -62,7 +62,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	}
 	fnName := input.String(flagkey.MqtFnName)
 
-	userProvidedNS, fnNamespace, err := util.GetResourceNamespace(input, flagkey.NamespaceFunction)
+	userProvidedNS, fnNamespace, err := util.GetResourceNamespace(input, opts.Client(), flagkey.NamespaceFunction)
 	if err != nil {
 		return errors.Wrap(err, "error in deleting function ")
 	}

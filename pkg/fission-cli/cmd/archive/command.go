@@ -32,7 +32,7 @@ func Commands() *cobra.Command {
 	}
 	wrapper.SetFlags(uploadCmd, flag.FlagSet{
 		Required: []flag.Flag{flag.ArchiveName},
-		Optional: []flag.Flag{flag.KubeContext},
+		Optional: []flag.Flag{},
 	})
 
 	listCmd := &cobra.Command{
@@ -41,7 +41,7 @@ func Commands() *cobra.Command {
 		RunE:  wrapper.Wrapper(List),
 	}
 	wrapper.SetFlags(listCmd, flag.FlagSet{
-		Optional: []flag.Flag{flag.KubeContext},
+		Optional: []flag.Flag{},
 	})
 
 	deleteCmd := &cobra.Command{
@@ -61,7 +61,7 @@ func Commands() *cobra.Command {
 	}
 	wrapper.SetFlags(geturlCmd, flag.FlagSet{
 		Required: []flag.Flag{flag.ArchiveID},
-		Optional: []flag.Flag{flag.KubeContext},
+		Optional: []flag.Flag{},
 	})
 
 	downloadCmd := &cobra.Command{
@@ -71,7 +71,7 @@ func Commands() *cobra.Command {
 	}
 	wrapper.SetFlags(downloadCmd, flag.FlagSet{
 		Required: []flag.Flag{flag.ArchiveID},
-		Optional: []flag.Flag{flag.KubeContext, flag.ArchiveOutput},
+		Optional: []flag.Flag{flag.ArchiveOutput},
 	})
 
 	command := &cobra.Command{

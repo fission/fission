@@ -41,7 +41,7 @@ func List(input cli.Input) error {
 
 func (opts *ListSubCommand) do(input cli.Input) (err error) {
 
-	_, currentNS, err := util.GetResourceNamespace(input, flagkey.NamespaceEnvironment)
+	_, currentNS, err := util.GetResourceNamespace(input, opts.Client(), flagkey.NamespaceEnvironment)
 	if err != nil {
 		return errors.Wrap(err, "error creating environment")
 	}

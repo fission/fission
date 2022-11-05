@@ -56,7 +56,7 @@ func (opts *ListSubCommand) complete(input cli.Input) (err error) {
 	// option for the user to list all orphan packages (not referenced by any function)
 	opts.listOrphans = input.Bool(flagkey.PkgOrphan)
 	opts.status = input.String(flagkey.PkgStatus)
-	_, opts.pkgNamespace, err = util.GetResourceNamespace(input, flagkey.NamespacePackage)
+	_, opts.pkgNamespace, err = util.GetResourceNamespace(input, opts.Client(), flagkey.NamespacePackage)
 	if err != nil {
 		return fv1.AggregateValidationErrors("Environment", err)
 	}

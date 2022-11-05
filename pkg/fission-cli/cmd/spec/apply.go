@@ -70,7 +70,7 @@ func (opts *ApplySubCommand) do(input cli.Input) error {
 func (opts *ApplySubCommand) insertNamespace(input cli.Input, fr *FissionResources) error {
 
 	result := utils.MultiErrorWithFormat()
-	_, currentNS, err := util.GetResourceNamespace(input, flagkey.NamespaceEnvironment)
+	_, currentNS, err := util.GetResourceNamespace(input, opts.Client(), flagkey.NamespaceEnvironment)
 	if err != nil {
 		return fv1.AggregateValidationErrors("Environment", err)
 	}
@@ -394,7 +394,7 @@ func applyArchives(input cli.Input, fclient cmd.Client, specDir string, fr *Fiss
 			// doesn't exist, upload
 			fmt.Printf("uploading archive %v\n", name)
 			// ar.URL is actually a local filename at this stage
-			uploadedAr, err := pkgutil.UploadArchiveFile(input.Context(), fclient, ar.URL, input.String(flagkey.KubeContext))
+			uploadedAr, err := pkgutil.UploadArchiveFile(input.Context(), fclient, ar.URL)
 			if err != nil {
 				return err
 			}

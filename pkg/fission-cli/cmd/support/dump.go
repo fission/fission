@@ -29,7 +29,6 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/cmd/support/resources"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
-	"github.com/fission/fission/pkg/fission-cli/util"
 	"github.com/fission/fission/pkg/utils"
 )
 
@@ -51,7 +50,6 @@ func (opts *DumpSubCommand) do(input cli.Input) error {
 
 	nozip := input.Bool(flagkey.SupportNoZip)
 	outputDir := input.String(flagkey.SupportOutput)
-	kubeContext := input.String(flagkey.KubeContext)
 	// check whether the dump directory exists.
 	_, err := os.Stat(outputDir)
 	if err != nil && os.IsNotExist(err) {
@@ -68,10 +66,7 @@ func (opts *DumpSubCommand) do(input cli.Input) error {
 		panic(errors.Wrap(err, "Error creating dump directory for dumping files"))
 	}
 
-	_, k8sClient, err := util.GetKubernetesClient(kubeContext)
-	if err != nil {
-		return err
-	}
+	k8sClient := opts.Client().KubernetesClient
 
 	ress := map[string]resources.Resource{
 		// kubernetes info

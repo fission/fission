@@ -40,7 +40,7 @@ func List(input cli.Input) error {
 }
 
 func (opts *ListSubCommand) do(input cli.Input) (err error) {
-	_, ttNs, err := util.GetResourceNamespace(input, flagkey.NamespaceTrigger)
+	_, ttNs, err := util.GetResourceNamespace(input, opts.Client(), flagkey.NamespaceTrigger)
 	if err != nil {
 		return errors.Wrap(err, "error in deleting function ")
 	}

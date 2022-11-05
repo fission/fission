@@ -40,7 +40,7 @@ func Get(input cli.Input) error {
 
 func (opts *GetSubCommand) run(input cli.Input) (err error) {
 
-	_, namespace, err := util.GetResourceNamespace(input, flagkey.NamespaceCanary)
+	_, namespace, err := util.GetResourceNamespace(input, opts.Client(), flagkey.NamespaceCanary)
 	if err != nil {
 		return errors.Wrap(err, "error getting canary config")
 	}

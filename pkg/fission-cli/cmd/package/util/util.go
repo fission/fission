@@ -37,7 +37,7 @@ import (
 	"github.com/fission/fission/pkg/utils"
 )
 
-func UploadArchiveFile(ctx context.Context, client cmd.Client, fileName string, kubeContext string) (*fv1.Archive, error) {
+func UploadArchiveFile(ctx context.Context, client cmd.Client, fileName string) (*fv1.Archive, error) {
 	var archive fv1.Archive
 
 	size, err := utils.FileSize(fileName)
@@ -61,7 +61,7 @@ func UploadArchiveFile(ctx context.Context, client cmd.Client, fileName string, 
 		// 	return nil, errors.Wrapf(err, "error uploading file %v", fileName)
 		// }
 
-		storagesvcURL, err := util.GetStorageURL(ctx, kubeContext)
+		storagesvcURL, err := util.GetStorageURL(ctx, client)
 		if err != nil {
 			return nil, errors.Wrapf(err, "error getting fission storage service URL")
 		}

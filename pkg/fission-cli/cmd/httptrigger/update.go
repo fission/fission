@@ -51,7 +51,7 @@ func (opts *UpdateSubCommand) do(input cli.Input) error {
 func (opts *UpdateSubCommand) complete(input cli.Input) (err error) {
 	htName := input.String(flagkey.HtName)
 
-	_, triggerNamespace, err := util.GetResourceNamespace(input, flagkey.NamespaceTrigger)
+	_, triggerNamespace, err := util.GetResourceNamespace(input, opts.Client(), flagkey.NamespaceTrigger)
 	if err != nil {
 		return errors.Wrap(err, "error in deleting function ")
 	}
