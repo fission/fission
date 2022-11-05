@@ -27,7 +27,6 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/console"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
-	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type DeleteSubCommand struct {
@@ -40,7 +39,7 @@ func Delete(input cli.Input) error {
 
 func (opts *DeleteSubCommand) do(input cli.Input) (err error) {
 
-	_, currentContextNS, err := util.GetResourceNamespace(input, opts.Client(), flagkey.NamespaceEnvironment)
+	_, currentContextNS, err := opts.GetResourceNamespace(input, flagkey.NamespaceEnvironment)
 	if err != nil {
 		return errors.Wrap(err, "error creating environment")
 	}

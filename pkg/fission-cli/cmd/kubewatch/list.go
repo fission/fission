@@ -28,7 +28,6 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
-	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type ListSubCommand struct {
@@ -49,7 +48,7 @@ func (opts *ListSubCommand) do(input cli.Input) error {
 }
 
 func (opts *ListSubCommand) complete(input cli.Input) (err error) {
-	_, opts.namespace, err = util.GetResourceNamespace(input, opts.Client(), flagkey.NamespaceTrigger)
+	_, opts.namespace, err = opts.GetResourceNamespace(input, flagkey.NamespaceTrigger)
 	if err != nil {
 		return errors.Wrap(err, "error listing kubewatchers")
 	}

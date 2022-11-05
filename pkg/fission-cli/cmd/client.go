@@ -90,6 +90,7 @@ func GetClientConfig(kubeContext string) (clientcmd.ClientConfig, error) {
 	}
 	overrides := &clientcmd.ConfigOverrides{}
 	if len(kubeContext) > 0 {
+		console.Verbose(2, "Using kubeconfig context %q", kubeContext)
 		overrides.CurrentContext = kubeContext
 	}
 	return clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, overrides), nil
@@ -110,6 +111,7 @@ func NewClient(opts ClientOptions) (*Client, error) {
 		return nil, err
 	}
 	client.Namespace = namespace
+	console.Verbose(2, "Kubeconfig default namespace %q", namespace)
 
 	restConfig, err := cmdConfig.ClientConfig()
 	if err != nil {

@@ -54,7 +54,8 @@ func (opts *CreateSubCommand) complete(input cli.Input) (err error) {
 	ht := input.String(flagkey.CanaryHTTPTriggerName)
 	newFunc := input.String(flagkey.CanaryNewFunc)
 	oldFunc := input.String(flagkey.CanaryOldFunc)
-	_, fnNs, err := util.GetResourceNamespace(input, opts.Client(), flagkey.NamespaceFunction)
+
+	_, fnNs, err := opts.GetResourceNamespace(input, flagkey.NamespaceFunction)
 	if err != nil {
 		return errors.Wrap(err, "error in creating canaryconfig")
 	}

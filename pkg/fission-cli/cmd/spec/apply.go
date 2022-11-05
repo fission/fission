@@ -70,7 +70,7 @@ func (opts *ApplySubCommand) do(input cli.Input) error {
 func (opts *ApplySubCommand) insertNamespace(input cli.Input, fr *FissionResources) error {
 
 	result := utils.MultiErrorWithFormat()
-	_, currentNS, err := util.GetResourceNamespace(input, opts.Client(), flagkey.NamespaceEnvironment)
+	_, currentNS, err := opts.GetResourceNamespace(input, flagkey.NamespaceEnvironment)
 	if err != nil {
 		return fv1.AggregateValidationErrors("Environment", err)
 	}

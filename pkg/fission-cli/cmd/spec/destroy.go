@@ -132,7 +132,7 @@ func (opts *DestroySubCommand) insertNSToResource(input cli.Input, fr *FissionRe
 
 	result := utils.MultiErrorWithFormat()
 
-	_, currentNS, err := util.GetResourceNamespace(input, opts.Client(), flagkey.NamespaceEnvironment)
+	_, currentNS, err := opts.GetResourceNamespace(input, flagkey.NamespaceEnvironment)
 	if err != nil {
 		return fv1.AggregateValidationErrors("Environment", err)
 	}

@@ -25,7 +25,6 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
-	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type GetMetaSubCommand struct {
@@ -37,7 +36,7 @@ func GetMeta(input cli.Input) error {
 }
 
 func (opts *GetMetaSubCommand) do(input cli.Input) error {
-	_, namespace, err := util.GetResourceNamespace(input, opts.Client(), flagkey.NamespaceFunction)
+	_, namespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceFunction)
 	if err != nil {
 		return errors.Wrap(err, "error in getting meta function ")
 	}

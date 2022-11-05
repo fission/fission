@@ -29,7 +29,6 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
-	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type UpdateSubCommand struct {
@@ -53,7 +52,7 @@ func (opts *UpdateSubCommand) do(input cli.Input) error {
 
 func (opts *UpdateSubCommand) complete(input cli.Input) (err error) {
 	opts.pkgName = input.String(flagkey.PkgName)
-	_, opts.pkgNamespace, err = util.GetResourceNamespace(input, opts.Client(), flagkey.NamespacePackage)
+	_, opts.pkgNamespace, err = opts.GetResourceNamespace(input, flagkey.NamespacePackage)
 	if err != nil {
 		return fv1.AggregateValidationErrors("Environment", err)
 	}

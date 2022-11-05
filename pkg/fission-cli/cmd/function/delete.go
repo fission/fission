@@ -38,7 +38,7 @@ func Delete(input cli.Input) error {
 
 func (opts *DeleteSubCommand) do(input cli.Input) error {
 
-	_, namespace, err := util.GetResourceNamespace(input, opts.Client(), flagkey.NamespaceFunction)
+	_, namespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceFunction)
 	if err != nil {
 		return errors.Wrap(err, "error in deleting function ")
 	}

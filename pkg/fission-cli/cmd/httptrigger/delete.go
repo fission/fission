@@ -58,7 +58,7 @@ func (opts *DeleteSubCommand) complete(input cli.Input) (err error) {
 		return errors.Errorf("need either of --%v or --%v and not both arguments", flagkey.HtName, flagkey.HtFnName)
 	}
 
-	_, opts.namespace, err = util.GetResourceNamespace(input, opts.Client(), flagkey.NamespaceTrigger)
+	_, opts.namespace, err = opts.GetResourceNamespace(input, flagkey.NamespaceTrigger)
 	if err != nil {
 		return errors.Wrap(err, "error in deleting function ")
 	}

@@ -61,7 +61,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	}
 	fnName := input.String(flagkey.KwFnName)
 
-	_, namespace, err := util.GetResourceNamespace(input, opts.Client(), flagkey.KwNamespace)
+	_, namespace, err := opts.GetResourceNamespace(input, flagkey.KwNamespace)
 	if err != nil {
 		return errors.Wrap(err, "error in listing function ")
 	}

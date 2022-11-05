@@ -41,7 +41,6 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
-	"github.com/fission/fission/pkg/fission-cli/console"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/info"
 	"github.com/fission/fission/pkg/plugin"
@@ -399,31 +398,6 @@ func GetStorageURL(ctx context.Context, client cmd.Client) (*url.URL, error) {
 	}
 
 	return serverURL, nil
-}
-
-func GetResourceNamespace(input cli.Input, client cmd.Client, deprecatedFlag string) (namespace, currentNS string, err error) {
-	namespace = input.String(deprecatedFlag)
-	currentNS = namespace
-
-	if input.String(flagkey.Namespace) != "" {
-		namespace = input.String(flagkey.Namespace)
-		currentNS = namespace
-		console.Verbose(2, "Namespace for resource %s ", currentNS)
-		return namespace, currentNS, err
-	}
-
-	if namespace == "" {
-		if os.Getenv("FISSION_DEFAULT_NAMESPACE") != "" {
-			currentNS = os.Getenv("FISSION_DEFAULT_NAMESPACE")
-		} else {
-			currentNS = client.Namespace
-			return namespace, currentNS, err
-		}
-	}
-
-	console.Verbose(2, "Namespace for resource %s ", currentNS)
-
-	return namespace, currentNS, nil
 }
 
 // CheckHTTPTriggerDuplicates checks whether the tuple (Method, Host, URL) is duplicate or not.

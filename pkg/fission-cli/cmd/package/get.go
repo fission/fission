@@ -29,7 +29,6 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	pkgutil "github.com/fission/fission/pkg/fission-cli/cmd/package/util"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
-	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 const (
@@ -62,7 +61,7 @@ func (opts *GetSubCommand) do(input cli.Input) error {
 
 func (opts *GetSubCommand) complete(input cli.Input) (err error) {
 	opts.name = input.String(flagkey.PkgName)
-	_, opts.namespace, err = util.GetResourceNamespace(input, opts.Client(), flagkey.NamespacePackage)
+	_, opts.namespace, err = opts.GetResourceNamespace(input, flagkey.NamespacePackage)
 	if err != nil {
 		return fv1.AggregateValidationErrors("Environment", err)
 	}

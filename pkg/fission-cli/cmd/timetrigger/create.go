@@ -67,7 +67,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) (err error) {
 		return errors.New("Need a function name to create a trigger, use --function")
 	}
 
-	userProvidedNS, fnNamespace, err := util.GetResourceNamespace(input, opts.Client(), flagkey.NamespaceFunction)
+	userProvidedNS, fnNamespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceFunction)
 	if err != nil {
 		return errors.Wrap(err, "error in deleting function ")
 	}

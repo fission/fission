@@ -28,7 +28,6 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
-	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type ListSubCommand struct {
@@ -40,7 +39,7 @@ func List(input cli.Input) error {
 }
 
 func (opts *ListSubCommand) do(input cli.Input) (err error) {
-	_, ttNs, err := util.GetResourceNamespace(input, opts.Client(), flagkey.NamespaceTrigger)
+	_, ttNs, err := opts.GetResourceNamespace(input, flagkey.NamespaceTrigger)
 	if err != nil {
 		return errors.Wrap(err, "error in deleting function ")
 	}

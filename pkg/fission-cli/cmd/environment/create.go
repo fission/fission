@@ -75,7 +75,7 @@ func (opts *CreateSubCommand) run(input cli.Input) (err error) {
 			len(envList.Items), m.Namespace)
 	}
 
-	userDefinedNS, currentNS, err := util.GetResourceNamespace(input, opts.Client(), flagkey.NamespaceEnvironment)
+	userDefinedNS, currentNS, err := opts.GetResourceNamespace(input, flagkey.NamespaceEnvironment)
 	if err != nil {
 		return fv1.AggregateValidationErrors("Environment", err)
 	}
