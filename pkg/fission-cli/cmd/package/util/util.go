@@ -169,6 +169,42 @@ func DownloadURL(fileUrl string) (io.ReadCloser, error) {
 	return resp.Body, nil
 }
 
+func DownloadStrorageURL(ctx context.Context, client cmd.Client, fileUrl string) (io.ReadCloser, error) {
+	var resp *http.Response
+	storageSvc, err := util.GetSvcName(ctx, client.KubernetesClient, "fission-storage")
+	if err != nil {
+		return nil, err
+	}
+
+	if strings.HasPrefix(fileUrl, "http://"+storageSvc+"/v1/archive?id=") {
+		url, err := url.Parse(fileUrl)
+		if err != nil {
+			return nil, err
+		}
+		id := url.Query().Get("id")
+		storageAccessURL, err := util.GetStorageURL(ctx, client)
+		if err != nil {
+			return nil, err
+		}
+
+		client := storageSvcClient.MakeClient(storageAccessURL.String())
+		resp, err = client.GetFile(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		resp, err = http.Get(fileUrl)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("%v - HTTP response returned non 200 status", resp.StatusCode)
+	}
+	return resp.Body, nil
+}
+
 func WriteArchiveToFile(fileName string, reader io.Reader) error {
 	tmpDir, err := utils.GetTempDir()
 	if err != nil {

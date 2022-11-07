@@ -86,7 +86,7 @@ func (opts *GetSubCommand) run(input cli.Input) error {
 		reader = bytes.NewReader(archive.Literal)
 	} else if pkg.Spec.Deployment.Type == fv1.ArchiveTypeUrl {
 
-		readCloser, err := pkgutil.DownloadURL(archive.URL)
+		readCloser, err := pkgutil.DownloadStrorageURL(input.Context(), opts.Client(), archive.URL)
 		if err != nil {
 			return errors.Wrapf(err, "error downloading from storage service url: %s", archive.URL)
 		}
