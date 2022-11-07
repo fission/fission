@@ -45,7 +45,7 @@ func (opts *ShowSubCommand) run(flaginput cli.Input) error {
 		return errors.New("need a cron spec like '0 30 * * * *', '@every 1h30m', or '@hourly'; use --cron")
 	}
 
-	t := util.GetServerInfo().ServerTime.CurrentTime.UTC()
+	t := util.GetServerInfo(flaginput, opts.Client()).ServerTime.CurrentTime.UTC()
 
 	err := getCronNextNActivationTime(cronSpec, t, round)
 	if err != nil {

@@ -149,7 +149,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 
 	fmt.Printf("trigger '%v' created\n", opts.trigger.ObjectMeta.Name)
 
-	t := util.GetServerInfo().ServerTime.CurrentTime.UTC()
+	t := util.GetServerInfo(input, opts.Client()).ServerTime.CurrentTime.UTC()
 
 	err = getCronNextNActivationTime(opts.trigger.Spec.Cron, t, 1)
 	if err != nil {

@@ -39,8 +39,11 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/controller/client"
+	"github.com/fission/fission/pkg/controller/client/rest"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
+	"github.com/fission/fission/pkg/fission-cli/console"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/info"
 	"github.com/fission/fission/pkg/plugin"
@@ -119,7 +122,7 @@ func CheckFunctionExistence(ctx context.Context, client cmd.Client, functions []
 	return nil
 }
 
-func GetVersion(ctx context.Context) info.Versions {
+func GetVersion(ctx context.Context, input cli.Input, cmdClient cmd.Client) info.Versions {
 	// Fetch client versions
 	versions := info.Versions{
 		Client: map[string]info.BuildMeta{
@@ -133,7 +136,7 @@ func GetVersion(ctx context.Context) info.Versions {
 		}
 	}
 
-	serverInfo := GetServerInfo()
+	serverInfo := GetServerInfo(input, cmdClient)
 
 	// Fetch server versions
 	versions.Server = map[string]info.BuildMeta{
@@ -145,8 +148,21 @@ func GetVersion(ctx context.Context) info.Versions {
 	return versions
 }
 
-func GetServerInfo() info.ServerInfo {
-	return info.ApiInfo()
+func GetServerInfo(input cli.Input, cmdClient cmd.Client) *info.ServerInfo {
+	serverUrl, err := GetServerURL(input, cmdClient)
+	if err != nil {
+		return &info.ServerInfo{}
+	}
+	restClient := rest.NewRESTClient(serverUrl)
+	client := client.MakeClientset(restClient)
+
+	serverInfo, err := client.V1().Misc().ServerInfo()
+	if err != nil {
+		console.Warn(fmt.Sprintf("Error getting Fission API version: %v", err))
+		serverInfo = &info.ServerInfo{}
+	}
+
+	return serverInfo
 }
 
 func GetServerURL(input cli.Input, client cmd.Client) (serverUrl string, err error) {

@@ -74,7 +74,7 @@ func (opts *DumpSubCommand) do(input cli.Input) error {
 		"kubernetes-nodes":   resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesNode, ""),
 
 		// fission info
-		"fission-version": resources.NewFissionVersion(opts.Client()),
+		"fission-version": resources.NewFissionVersion(opts.Client(), input),
 
 		// fission component logs & spec
 		"fission-components-svc-spec": resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesService,

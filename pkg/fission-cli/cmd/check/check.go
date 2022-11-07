@@ -40,6 +40,6 @@ func (opts *CheckSubCommand) do(input cli.Input) error {
 
 	hc := healthcheck.NewHealthChecker(opts.Client(), checks)
 
-	healthcheck.RunChecks(input.Context(), hc)
+	healthcheck.RunChecks(input.Context(), input, opts.Client(), hc)
 	return nil
 }
