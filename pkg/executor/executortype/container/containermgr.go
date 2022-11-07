@@ -240,7 +240,7 @@ func (caaf *Container) RefreshFuncPods(ctx context.Context, logger *zap.Logger, 
 
 	funcLabels := caaf.getDeployLabels(f.ObjectMeta)
 
-	dep, err := caaf.kubernetesClient.AppsV1().Deployments(f.Namespace).List(ctx, metav1.ListOptions{
+	dep, err := caaf.kubernetesClient.AppsV1().Deployments(metav1.NamespaceAll).List(ctx, metav1.ListOptions{
 		LabelSelector: labels.Set(funcLabels).AsSelector().String(),
 	})
 	if err != nil {
