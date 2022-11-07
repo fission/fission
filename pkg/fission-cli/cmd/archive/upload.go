@@ -36,10 +36,9 @@ func Upload(input cli.Input) error {
 
 func (opts *UploadSubCommand) do(input cli.Input) error {
 
-	kubeContext := input.String(flagkey.KubeContext)
 	archiveName := input.String(flagkey.ArchiveName)
 
-	storagesvcURL, err := util.GetStorageURL(input.Context(), kubeContext)
+	storagesvcURL, err := util.GetStorageURL(input.Context(), opts.Client())
 	if err != nil {
 		return err
 	}

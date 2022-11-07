@@ -61,7 +61,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	}
 	fnName := input.String(flagkey.KwFnName)
 
-	_, namespace, err := util.GetResourceNamespace(input, flagkey.KwNamespace)
+	_, namespace, err := opts.GetResourceNamespace(input, flagkey.KwNamespace)
 	if err != nil {
 		return errors.Wrap(err, "error in listing function ")
 	}
@@ -126,7 +126,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 		return nil
 	}
 
-	_, err := opts.Client().V1().KubeWatcher().Create(opts.watcher)
+	_, err := opts.Client().FissionClientSet.CoreV1().KubernetesWatchTriggers(opts.watcher.ObjectMeta.Namespace).Create(input.Context(), opts.watcher, metav1.CreateOptions{})
 	if err != nil {
 		return errors.Wrap(err, "error creating kubewatch")
 	}

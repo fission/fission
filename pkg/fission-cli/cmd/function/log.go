@@ -40,14 +40,13 @@ func Log(input cli.Input) error {
 }
 
 func (opts *LogSubCommand) do(input cli.Input) error {
-	_, namespace, err := util.GetResourceNamespace(input, flagkey.NamespaceFunction)
+	_, namespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceFunction)
 	if err != nil {
 		return errors.Wrap(err, "error in logs for function ")
 	}
 
 	dbType := input.String(flagkey.FnLogDBType)
 	fnPod := input.String(flagkey.FnLogPod)
-	kubeContext := input.String(flagkey.KubeContext)
 
 	logReverseQuery := !input.Bool(flagkey.FnLogFollow) && input.Bool(flagkey.FnLogReverseQuery)
 
@@ -56,15 +55,12 @@ func (opts *LogSubCommand) do(input cli.Input) error {
 		recordLimit = 1000
 	}
 
-	f, err := opts.Client().V1().Function().Get(&metav1.ObjectMeta{
-		Name:      input.String(flagkey.FnName),
-		Namespace: namespace,
-	})
+	f, err := opts.Client().FissionClientSet.CoreV1().Functions(namespace).Get(input.Context(), input.String(flagkey.FnName), metav1.GetOptions{})
 	if err != nil {
 		return errors.Wrap(err, "error getting function")
 	}
 
-	server, err := util.GetApplicationUrl(input.Context(), "application=fission-api", kubeContext)
+	server, err := util.GetApplicationUrl(input.Context(), opts.Client(), "application=fission-api")
 	if err != nil {
 		return err
 	}

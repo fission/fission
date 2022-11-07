@@ -185,6 +185,21 @@ func (c *Client) Download(ctx context.Context, id string, filePath string) error
 	return nil
 }
 
+// Download fetches the file identified by ID to the local file path.
+// filePath must not exist.
+func (c *Client) GetFile(ctx context.Context, id string) (resp *http.Response, err error) {
+	// url for id
+	url := c.GetUrl(id)
+
+	// make request
+	resp, err = ctxhttp.Get(ctx, c.httpClient, url)
+	if err != nil {
+		return resp, err
+	}
+
+	return resp, err
+}
+
 func (c *Client) Delete(ctx context.Context, id string) error {
 	url := c.GetUrl(id)
 

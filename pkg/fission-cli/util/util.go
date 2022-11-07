@@ -19,11 +19,12 @@ package util
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
-	"os/user"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -36,12 +37,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"
-	restclient "k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
 
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/controller/client/rest"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/console"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/info"
@@ -54,13 +55,13 @@ func GetFissionNamespace() string {
 	return fissionNamespace
 }
 
-func GetApplicationUrl(ctx context.Context, selector string, kubeContext string) (string, error) {
+func GetApplicationUrl(ctx context.Context, client cmd.Client, selector string) (string, error) {
 	var serverUrl string
 	// Use FISSION_URL env variable if set; otherwise, port-forward to controller.
 	fissionUrl := os.Getenv("FISSION_URL")
 	if len(fissionUrl) == 0 {
 		fissionNamespace := GetFissionNamespace()
-		localPort, err := SetupPortForward(ctx, fissionNamespace, selector, kubeContext)
+		localPort, err := SetupPortForward(ctx, client, fissionNamespace, selector)
 		if err != nil {
 			return "", err
 		}
@@ -104,87 +105,11 @@ func KubifyName(old string) string {
 	return newName
 }
 
-func getLoadingRules() (loadingRules *clientcmd.ClientConfigLoadingRules, err error) {
-	loadingRules = clientcmd.NewDefaultClientConfigLoadingRules()
-
-	kubeConfigPath := os.Getenv("KUBECONFIG")
-	if len(kubeConfigPath) == 0 {
-		var homeDir string
-		usr, err := user.Current()
-		if err != nil {
-			// In case that user.Current() may be unable to work under some circumstances and return errors like
-			// "user: Current not implemented on darwin/amd64" due to cross-compilation problem. (https://github.com/golang/go/issues/6376).
-			// Instead of doing fatal here, we fallback to get home directory from the environment $HOME.
-			console.Warn(fmt.Sprintf("Could not get the current user's directory (%s), fallback to get it from env $HOME", err))
-			homeDir = os.Getenv("HOME")
-		} else {
-			homeDir = usr.HomeDir
-		}
-		kubeConfigPath = filepath.Join(homeDir, ".kube", "config")
-
-		if _, err := os.Stat(kubeConfigPath); os.IsNotExist(err) {
-			return nil, errors.New("Couldn't find kubeconfig file. " +
-				"Set the KUBECONFIG environment variable to your kubeconfig's path.")
-		}
-		loadingRules.ExplicitPath = kubeConfigPath
-		console.Verbose(2, "Using kubeconfig from %q", kubeConfigPath)
-	} else {
-		console.Verbose(2, "Using kubeconfig from environment %q", kubeConfigPath)
-	}
-	return loadingRules, nil
-}
-
-// GetKubernetesClient builds a new kubernetes client. If the KUBECONFIG
-// environment variable is empty or doesn't exist, ~/.kube/config is used for
-// the kube config path
-func GetKubernetesClient(kubeContext string) (*restclient.Config, kubernetes.Interface, error) {
-	loadingRules, err := getLoadingRules()
-	if err != nil {
-		return nil, nil, err
-	}
-
-	config, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
-		loadingRules, &clientcmd.ConfigOverrides{CurrentContext: kubeContext}).ClientConfig()
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "Failed to build Kubernetes config")
-	}
-
-	clientset, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "Failed to connect to Kubernetes")
-	}
-
-	return config, clientset, nil
-}
-
-// GetKubernetesNamespace builds a new kubernetes client. If the KUBECONFIG
-// environment variable is empty or doesn't exist, ~/.kube/config is used for
-// the kube config path
-func GetKubernetesNamespace(kubeContext string) (currentNS string, err error) {
-	loadingRules, err := getLoadingRules()
-	if err != nil {
-		return "", err
-	}
-
-	namespace, _, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
-		loadingRules, &clientcmd.ConfigOverrides{CurrentContext: kubeContext}).Namespace()
-	if err != nil {
-		return "", errors.Wrap(err, "Failed to build Kubernetes config")
-	}
-
-	return namespace, nil
-}
-
 // given a list of functions, this checks if the functions actually exist on the cluster
-func CheckFunctionExistence(client client.Interface, functions []string, fnNamespace string) (err error) {
+func CheckFunctionExistence(ctx context.Context, client cmd.Client, functions []string, fnNamespace string) (err error) {
 	fnMissing := make([]string, 0)
 	for _, fnName := range functions {
-		meta := &metav1.ObjectMeta{
-			Name:      fnName,
-			Namespace: fnNamespace,
-		}
-
-		_, err := client.V1().Function().Get(meta)
+		_, err := client.FissionClientSet.CoreV1().Functions(fnNamespace).Get(ctx, fnName, metav1.GetOptions{})
 		if err != nil {
 			fnMissing = append(fnMissing, fnName)
 		}
@@ -197,7 +122,7 @@ func CheckFunctionExistence(client client.Interface, functions []string, fnNames
 	return nil
 }
 
-func GetVersion(ctx context.Context, client client.Interface) info.Versions {
+func GetVersion(ctx context.Context, input cli.Input, cmdClient cmd.Client) info.Versions {
 	// Fetch client versions
 	versions := info.Versions{
 		Client: map[string]info.BuildMeta{
@@ -211,11 +136,7 @@ func GetVersion(ctx context.Context, client client.Interface) info.Versions {
 		}
 	}
 
-	serverInfo, err := client.V1().Misc().ServerInfo()
-	if err != nil {
-		console.Warn(fmt.Sprintf("Error getting Fission API version: %v", err))
-		serverInfo = &info.ServerInfo{}
-	}
+	serverInfo := GetServerInfo(input, cmdClient)
 
 	// Fetch server versions
 	versions.Server = map[string]info.BuildMeta{
@@ -227,20 +148,28 @@ func GetVersion(ctx context.Context, client client.Interface) info.Versions {
 	return versions
 }
 
-func GetServer(input cli.Input) (c client.Interface, err error) {
-	serverUrl, err := GetServerURL(input)
+func GetServerInfo(input cli.Input, cmdClient cmd.Client) *info.ServerInfo {
+	serverUrl, err := GetServerURL(input, cmdClient)
 	if err != nil {
-		return nil, err
+		return &info.ServerInfo{}
 	}
-	return client.MakeClientset(rest.NewRESTClient(serverUrl)), nil
+	restClient := rest.NewRESTClient(serverUrl)
+	client := client.MakeClientset(restClient)
+
+	serverInfo, err := client.V1().Misc().ServerInfo()
+	if err != nil {
+		console.Warn(fmt.Sprintf("Error getting Fission API version: %v", err))
+		serverInfo = &info.ServerInfo{}
+	}
+
+	return serverInfo
 }
 
-func GetServerURL(input cli.Input) (serverUrl string, err error) {
+func GetServerURL(input cli.Input, client cmd.Client) (serverUrl string, err error) {
 	serverUrl = input.GlobalString(flagkey.Server)
-	kubeContext := input.String(flagkey.KubeContext)
 	if len(serverUrl) == 0 {
 		// starts local portforwarder etc.
-		serverUrl, err = GetApplicationUrl(input.Context(), "application=fission-api", kubeContext)
+		serverUrl, err = GetApplicationUrl(input.Context(), client, "application=fission-api")
 		if err != nil {
 			return "", err
 		}
@@ -472,8 +401,8 @@ func ApplyLabelsAndAnnotations(input cli.Input, objectMeta *metav1.ObjectMeta) e
 	return nil
 }
 
-func GetStorageURL(ctx context.Context, kubeContext string) (*url.URL, error) {
-	storageLocalPort, err := SetupPortForward(ctx, GetFissionNamespace(), "application=fission-storage", kubeContext)
+func GetStorageURL(ctx context.Context, client cmd.Client) (*url.URL, error) {
+	storageLocalPort, err := SetupPortForward(ctx, client, GetFissionNamespace(), "application=fission-storage")
 	if err != nil {
 		return nil, err
 	}
@@ -486,30 +415,151 @@ func GetStorageURL(ctx context.Context, kubeContext string) (*url.URL, error) {
 	return serverURL, nil
 }
 
-func GetResourceNamespace(input cli.Input, deprecatedFlag string) (namespace, currentNS string, err error) {
-	namespace = input.String(deprecatedFlag)
-	currentNS = namespace
-
-	if input.String(flagkey.Namespace) != "" {
-		namespace = input.String(flagkey.Namespace)
-		currentNS = namespace
-		console.Verbose(2, "Namespace for resource %s ", currentNS)
-		return namespace, currentNS, err
+// CheckHTTPTriggerDuplicates checks whether the tuple (Method, Host, URL) is duplicate or not.
+func CheckHTTPTriggerDuplicates(ctx context.Context, client cmd.Client, t *fv1.HTTPTrigger) error {
+	triggers, err := client.FissionClientSet.CoreV1().HTTPTriggers(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return err
 	}
-
-	if namespace == "" {
-		if os.Getenv("FISSION_DEFAULT_NAMESPACE") != "" {
-			currentNS = os.Getenv("FISSION_DEFAULT_NAMESPACE")
-		} else {
-			kubeContext := input.String(flagkey.KubeContext)
-			currentNS, err = GetKubernetesNamespace(kubeContext)
-			if err != nil {
-				return namespace, currentNS, err
+	for _, ht := range triggers.Items {
+		if ht.ObjectMeta.UID == t.ObjectMeta.UID {
+			// Same resource. No need to check.
+			continue
+		}
+		urlMatch := false
+		if (ht.Spec.RelativeURL != "" && ht.Spec.RelativeURL == t.Spec.RelativeURL) || (ht.Spec.Prefix != nil && t.Spec.Prefix != nil && *ht.Spec.Prefix != "" && *ht.Spec.Prefix == *t.Spec.Prefix) {
+			urlMatch = true
+		}
+		methodMatch := false
+		if ht.Spec.Method == t.Spec.Method && len(ht.Spec.Methods) == len(t.Spec.Methods) {
+			methodMatch = true
+			sort.Strings(ht.Spec.Methods)
+			sort.Strings(t.Spec.Methods)
+			for i, m1 := range ht.Spec.Methods {
+				if m1 != t.Spec.Methods[i] {
+					methodMatch = false
+				}
 			}
 		}
+		if urlMatch && methodMatch && ht.Spec.Method == t.Spec.Method && ht.Spec.Host == t.Spec.Host {
+			return fmt.Errorf("HTTPTrigger with same Host, URL & method already exists (%v)",
+				ht.ObjectMeta.Name)
+		}
+	}
+	return nil
+}
+
+func SecretExists(ctx context.Context, m *metav1.ObjectMeta, kClient kubernetes.Interface) error {
+
+	_, err := kClient.CoreV1().Secrets(m.Namespace).Get(ctx, m.Name, metav1.GetOptions{})
+	return err
+}
+
+func ConfigMapExists(ctx context.Context, m *metav1.ObjectMeta, kClient kubernetes.Interface) error {
+
+	_, err := kClient.CoreV1().ConfigMaps(m.Namespace).Get(ctx, m.Name, metav1.GetOptions{})
+	return err
+}
+
+func GetSvcName(ctx context.Context, kClient kubernetes.Interface, application string) (string, error) {
+	var podNamespace = os.Getenv("POD_NAMESPACE")
+	if podNamespace == "" {
+		podNamespace = "fission"
 	}
 
-	console.Verbose(2, "Namespace for resource %s ", currentNS)
+	appLabelSelector := "application=" + application
 
-	return namespace, currentNS, nil
+	services, err := kClient.CoreV1().Services(podNamespace).List(ctx, metav1.ListOptions{
+		LabelSelector: appLabelSelector,
+	})
+	if err != nil {
+		return "", err
+	}
+
+	if len(services.Items) > 1 || len(services.Items) == 0 {
+		return "", errors.Errorf("more than one service found for application=%s", application)
+	}
+	service := services.Items[0]
+	return service.Name + "." + podNamespace, nil
+}
+
+// FunctionPodLogs : Get logs for a function directly from pod
+func FunctionPodLogs(ctx context.Context, fnName, ns string, client cmd.Client) (err error) {
+
+	podNs := "fission-function"
+
+	if len(ns) == 0 {
+		ns = metav1.NamespaceDefault
+	} else if ns != metav1.NamespaceDefault {
+		podNs = ns
+	}
+
+	f, err := client.FissionClientSet.CoreV1().Functions(ns).Get(ctx, fnName, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+
+	// Get function Pods first
+	selector := map[string]string{
+		fv1.FUNCTION_UID:          string(f.ObjectMeta.UID),
+		fv1.ENVIRONMENT_NAME:      f.Spec.Environment.Name,
+		fv1.ENVIRONMENT_NAMESPACE: f.Spec.Environment.Namespace,
+	}
+	podList, err := client.KubernetesClient.CoreV1().Pods(podNs).List(ctx, metav1.ListOptions{
+		LabelSelector: labels.Set(selector).AsSelector().String(),
+	})
+	if err != nil {
+		return err
+	}
+
+	// Get the logs for last Pod executed
+	pods := podList.Items
+	sort.Slice(pods, func(i, j int) bool {
+		rv1, _ := strconv.ParseInt(pods[i].ObjectMeta.ResourceVersion, 10, 32)
+		rv2, _ := strconv.ParseInt(pods[j].ObjectMeta.ResourceVersion, 10, 32)
+		return rv1 > rv2
+	})
+
+	if len(pods) <= 0 {
+		return errors.New("no active pods found")
+
+	}
+
+	// get the pod with highest resource version
+	err = getContainerLog(ctx, client.KubernetesClient, f, &pods[0])
+	if err != nil {
+		return errors.Wrapf(err, "error getting container logs")
+
+	}
+	return err
+}
+
+func getContainerLog(ctx context.Context, kubernetesClient kubernetes.Interface, fn *fv1.Function, pod *v1.Pod) (err error) {
+	seq := strings.Repeat("=", 35)
+
+	for _, container := range pod.Spec.Containers {
+		podLogOpts := v1.PodLogOptions{Container: container.Name} // Only the env container, not fetcher
+		podLogsReq := kubernetesClient.CoreV1().Pods(pod.Namespace).GetLogs(pod.ObjectMeta.Name, &podLogOpts)
+
+		podLogs, err := podLogsReq.Stream(ctx)
+		if err != nil {
+			return errors.Wrapf(err, "error streaming pod log")
+		}
+
+		msg := fmt.Sprintf("\n%v\nFunction: %v\nEnvironment: %v\nNamespace: %v\nPod: %v\nContainer: %v\nNode: %v\n%v\n", seq,
+			fn.ObjectMeta.Name, fn.Spec.Environment.Name, pod.Namespace, pod.Name, container.Name, pod.Spec.NodeName, seq)
+
+		if _, err := io.WriteString(os.Stdout, msg); err != nil {
+			return errors.Wrapf(err, "error copying pod log")
+		}
+
+		_, err = io.Copy(os.Stdout, podLogs)
+		if err != nil {
+			return errors.Wrapf(err, "error copying pod log")
+		}
+
+		podLogs.Close()
+	}
+
+	return nil
 }

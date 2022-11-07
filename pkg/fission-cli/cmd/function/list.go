@@ -23,12 +23,11 @@ import (
 	"text/tabwriter"
 
 	"github.com/pkg/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	v1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
-	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type ListSubCommand struct {
@@ -40,17 +39,16 @@ func List(input cli.Input) error {
 }
 
 func (opts *ListSubCommand) do(input cli.Input) error {
-	_, namespace, err := util.GetResourceNamespace(input, flagkey.NamespaceFunction)
+	_, namespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceFunction)
 	if err != nil {
 		return errors.Wrap(err, "error in listing function ")
 	}
 
-	var fns []v1.Function
 	if input.Bool(flagkey.AllNamespaces) {
-		fns, err = opts.Client().V1().Function().List("")
-	} else {
-		fns, err = opts.Client().V1().Function().List(namespace)
+		namespace = metav1.NamespaceAll
 	}
+	fns, err := opts.Client().FissionClientSet.CoreV1().Functions(namespace).List(input.Context(), metav1.ListOptions{})
+
 	if err != nil {
 		return errors.Wrap(err, "error listing functions")
 	}
@@ -58,7 +56,7 @@ func (opts *ListSubCommand) do(input cli.Input) error {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 
 	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "ENV", "EXECUTORTYPE", "MINSCALE", "MAXSCALE", "MINCPU", "MAXCPU", "MINMEMORY", "MAXMEMORY", "SECRETS", "CONFIGMAPS", "NAMESPACE")
-	for _, f := range fns {
+	for _, f := range fns.Items {
 		secrets := f.Spec.Secrets
 		configMaps := f.Spec.ConfigMaps
 		var secretsList, configMapList []string

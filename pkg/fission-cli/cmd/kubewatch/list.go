@@ -22,12 +22,12 @@ import (
 	"text/tabwriter"
 
 	"github.com/pkg/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	v1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
-	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type ListSubCommand struct {
@@ -48,7 +48,7 @@ func (opts *ListSubCommand) do(input cli.Input) error {
 }
 
 func (opts *ListSubCommand) complete(input cli.Input) (err error) {
-	_, opts.namespace, err = util.GetResourceNamespace(input, flagkey.NamespaceTrigger)
+	_, opts.namespace, err = opts.GetResourceNamespace(input, flagkey.NamespaceTrigger)
 	if err != nil {
 		return errors.Wrap(err, "error listing kubewatchers")
 	}
@@ -56,12 +56,12 @@ func (opts *ListSubCommand) complete(input cli.Input) (err error) {
 }
 
 func (opts *ListSubCommand) run(input cli.Input) (err error) {
-	var ws []v1.KubernetesWatchTrigger
+	var ws *v1.KubernetesWatchTriggerList
 	if input.Bool(flagkey.AllNamespaces) {
-		ws, err = opts.Client().V1().KubeWatcher().List("")
-	} else {
-		ws, err = opts.Client().V1().KubeWatcher().List(opts.namespace)
+		opts.namespace = metav1.NamespaceAll
 	}
+	ws, err = opts.Client().FissionClientSet.CoreV1().KubernetesWatchTriggers(opts.namespace).List(input.Context(), metav1.ListOptions{})
+
 	if err != nil {
 		return errors.Wrap(err, "error listing kubewatchers")
 	}
@@ -70,7 +70,7 @@ func (opts *ListSubCommand) run(input cli.Input) (err error) {
 
 	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\n",
 		"NAME", "NAMESPACE", "OBJTYPE", "LABELS", "FUNCTION_NAME")
-	for _, wa := range ws {
+	for _, wa := range ws.Items {
 		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\n",
 			wa.ObjectMeta.Name, wa.Spec.Namespace, wa.Spec.Type, wa.Spec.LabelSelector, wa.Spec.FunctionReference.Name)
 	}

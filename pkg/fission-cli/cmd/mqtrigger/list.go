@@ -22,12 +22,11 @@ import (
 	"text/tabwriter"
 
 	"github.com/pkg/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	v1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
-	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type ListSubCommand struct {
@@ -48,7 +47,7 @@ func (opts *ListSubCommand) do(input cli.Input) error {
 }
 
 func (opts *ListSubCommand) complete(input cli.Input) (err error) {
-	_, opts.namespace, err = util.GetResourceNamespace(input, flagkey.NamespaceTrigger)
+	_, opts.namespace, err = opts.GetResourceNamespace(input, flagkey.NamespaceTrigger)
 	if err != nil {
 		return errors.Wrap(err, "error in deleting function ")
 	}
@@ -57,12 +56,11 @@ func (opts *ListSubCommand) complete(input cli.Input) (err error) {
 
 func (opts *ListSubCommand) run(input cli.Input) (err error) {
 
-	var mqts []v1.MessageQueueTrigger
 	if input.Bool(flagkey.AllNamespaces) {
-		mqts, err = opts.Client().V1().MessageQueueTrigger().List(input.String(flagkey.MqtMQType), "")
-	} else {
-		mqts, err = opts.Client().V1().MessageQueueTrigger().List(input.String(flagkey.MqtMQType), opts.namespace)
+		opts.namespace = metav1.NamespaceAll
 	}
+	mqts, err := opts.Client().FissionClientSet.CoreV1().MessageQueueTriggers(opts.namespace).List(input.Context(), metav1.ListOptions{})
+
 	if err != nil {
 		return errors.Wrap(err, "error listing message queue triggers")
 	}
@@ -71,7 +69,7 @@ func (opts *ListSubCommand) run(input cli.Input) (err error) {
 
 	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
 		"NAME", "FUNCTION_NAME", "MESSAGE_QUEUE_TYPE", "TOPIC", "RESPONSE_TOPIC", "ERROR_TOPIC", "MAX_RETRIES", "PUB_MSG_CONTENT_TYPE", "NAMESPACE")
-	for _, mqt := range mqts {
+	for _, mqt := range mqts.Items {
 		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
 			mqt.ObjectMeta.Name, mqt.Spec.FunctionReference.Name, mqt.Spec.MessageQueueType, mqt.Spec.Topic, mqt.Spec.ResponseTopic, mqt.Spec.ErrorTopic, mqt.Spec.MaxRetries, mqt.Spec.ContentType, mqt.ObjectMeta.Namespace)
 	}

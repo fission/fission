@@ -14,10 +14,9 @@ limitations under the License.
 package app
 
 import (
+	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
-	"github.com/fission/fission/pkg/controller/client"
-	"github.com/fission/fission/pkg/controller/client/rest"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	wrapper "github.com/fission/fission/pkg/fission-cli/cliwrapper/driver/cobra"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/driver/cobra/helptemplate"
@@ -39,7 +38,6 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/console"
 	"github.com/fission/fission/pkg/fission-cli/flag"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
-	"github.com/fission/fission/pkg/fission-cli/util"
 	_ "github.com/fission/fission/pkg/mqtrigger/messageQueue/kafka"
 )
 
@@ -61,19 +59,17 @@ func App() *cobra.Command {
 		PersistentPreRunE: wrapper.Wrapper(
 			func(input cli.Input) error {
 				console.Verbosity = input.Int(flagkey.Verbosity)
-
-				if input.IsSet(flagkey.ClientOnly) || input.IsSet(flagkey.PreCheckOnly) {
-					// TODO: use fake rest client for offline spec generation
-					cmd.SetClientset(client.MakeFakeClientset(nil))
-				} else {
-					serverUrl, err := util.GetServerURL(input)
-					if err != nil {
-						return err
-					}
-					restClient := rest.NewRESTClient(serverUrl)
-					cmd.SetClientset(client.MakeClientset(restClient))
+				clientOptions := cmd.ClientOptions{
+					KubeContext: input.String(flagkey.KubeContext),
 				}
-
+				// TODO: use fake rest client for offline spec generation
+				// if input.IsSet(flagkey.ClientOnly) || input.IsSet(flagkey.PreCheckOnly) {
+				// }
+				client, err := cmd.NewClient(clientOptions)
+				if err != nil {
+					return errors.Wrap(err, "failed to get fission client")
+				}
+				cmd.SetClientset(*client)
 				return nil
 			},
 		),

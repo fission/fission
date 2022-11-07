@@ -48,7 +48,7 @@ func (opts *DeleteSubCommand) do(input cli.Input) error {
 
 func (opts *DeleteSubCommand) complete(input cli.Input) (err error) {
 	opts.name = input.String(flagkey.KwName)
-	_, opts.namespace, err = util.GetResourceNamespace(input, flagkey.NamespaceTrigger)
+	_, opts.namespace, err = opts.GetResourceNamespace(input, flagkey.NamespaceTrigger)
 	if err != nil {
 		return errors.Wrap(err, "error in deleting kubewatch")
 	}
@@ -56,10 +56,7 @@ func (opts *DeleteSubCommand) complete(input cli.Input) (err error) {
 }
 
 func (opts *DeleteSubCommand) run(input cli.Input) error {
-	err := opts.Client().V1().KubeWatcher().Delete(&metav1.ObjectMeta{
-		Name:      opts.name,
-		Namespace: opts.namespace,
-	})
+	err := opts.Client().FissionClientSet.CoreV1().KubernetesWatchTriggers(opts.namespace).Delete(input.Context(), opts.name, metav1.DeleteOptions{})
 	if err != nil {
 		if input.Bool(flagkey.IgnoreNotFound) && util.IsNotFound(err) {
 			return nil

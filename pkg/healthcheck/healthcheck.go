@@ -24,7 +24,8 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
-	"github.com/fission/fission/pkg/controller/client"
+	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
@@ -50,18 +51,11 @@ type Category struct {
 
 type Checker struct {
 	successMsg string
-	check      func(ctx context.Context) error
-}
-
-type Options struct {
-	KubeContext   string
-	FissionClient client.Interface
+	check      func(ctx context.Context, input cli.Input, client cmd.Client) error
 }
 
 type HealthChecker struct {
-	categories []*Category
-	*Options
-
+	categories       []*Category
 	kubeAPI          kubernetes.Interface
 	fissionNamespace string
 }
@@ -120,8 +114,8 @@ func (hc *HealthChecker) CheckServiceStatus(ctx context.Context, namespace strin
 	return nil
 }
 
-func (hc *HealthChecker) CheckFissionVersion(ctx context.Context) error {
-	ver := util.GetVersion(ctx, hc.FissionClient)
+func (hc *HealthChecker) CheckFissionVersion(ctx context.Context, input cli.Input, client cmd.Client) error {
+	ver := util.GetVersion(ctx, input, client)
 
 	clientVersion := ver.Client["fission/core"].Version
 	serverVersion := ver.Server["fission/core"].Version
@@ -148,7 +142,7 @@ func (hc *HealthChecker) allCategories() []*Category {
 			[]Checker{
 				{
 					successMsg: "kubernetes version is compatible",
-					check: func(ctx context.Context) (err error) {
+					check: func(ctx context.Context, input cli.Input, client cmd.Client) (err error) {
 						return hc.CheckKubeVersion()
 					},
 				},
@@ -160,25 +154,25 @@ func (hc *HealthChecker) allCategories() []*Category {
 			[]Checker{
 				{
 					successMsg: "controller is running fine",
-					check: func(ctx context.Context) error {
+					check: func(ctx context.Context, input cli.Input, client cmd.Client) error {
 						return hc.CheckServiceStatus(ctx, hc.fissionNamespace, "controller")
 					},
 				},
 				{
 					successMsg: "executor is running fine",
-					check: func(ctx context.Context) error {
+					check: func(ctx context.Context, input cli.Input, client cmd.Client) error {
 						return hc.CheckServiceStatus(ctx, hc.fissionNamespace, "executor")
 					},
 				},
 				{
 					successMsg: "router is running fine",
-					check: func(ctx context.Context) error {
+					check: func(ctx context.Context, input cli.Input, client cmd.Client) error {
 						return hc.CheckServiceStatus(ctx, hc.fissionNamespace, "router")
 					},
 				},
 				{
 					successMsg: "storagesvc is running fine",
-					check: func(ctx context.Context) error {
+					check: func(ctx context.Context, input cli.Input, client cmd.Client) error {
 						return hc.CheckServiceStatus(ctx, hc.fissionNamespace, "storagesvc")
 					},
 				},
@@ -190,8 +184,8 @@ func (hc *HealthChecker) allCategories() []*Category {
 			[]Checker{
 				{
 					successMsg: "fission is up-to-date",
-					check: func(ctx context.Context) error {
-						return hc.CheckFissionVersion(ctx)
+					check: func(ctx context.Context, input cli.Input, client cmd.Client) error {
+						return hc.CheckFissionVersion(ctx, input, client)
 					},
 				},
 			},
@@ -200,14 +194,11 @@ func (hc *HealthChecker) allCategories() []*Category {
 	}
 }
 
-func NewHealthChecker(categoryIDs []CategoryID, options *Options) *HealthChecker {
+func NewHealthChecker(cmd cmd.Client, categoryIDs []CategoryID) *HealthChecker {
 	hc := &HealthChecker{
-		Options: options,
+		kubeAPI:          cmd.KubernetesClient,
+		fissionNamespace: "fission",
 	}
-
-	_, clientset, _ := util.GetKubernetesClient(hc.KubeContext)
-	hc.kubeAPI = clientset
-	hc.fissionNamespace = "fission"
 
 	hc.categories = hc.allCategories()
 
@@ -224,13 +215,13 @@ func NewHealthChecker(categoryIDs []CategoryID, options *Options) *HealthChecker
 	return hc
 }
 
-func RunChecks(ctx context.Context, hc *HealthChecker) {
+func RunChecks(ctx context.Context, input cli.Input, client cmd.Client, hc *HealthChecker) {
 	for _, c := range hc.categories {
 		if c.enabled {
 			fmt.Println(c.ID)
 			fmt.Println(strings.Repeat("-", 20))
 			for _, checker := range c.checkers {
-				err := checker.check(ctx)
+				err := checker.check(ctx, input, client)
 				if err != nil {
 					fmt.Printf("%s %s\n", failStatus, err)
 				} else {

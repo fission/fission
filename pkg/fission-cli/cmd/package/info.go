@@ -27,7 +27,6 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	pkgutil "github.com/fission/fission/pkg/fission-cli/cmd/package/util"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
-	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type InfoSubCommand struct {
@@ -51,7 +50,7 @@ func (opts *InfoSubCommand) do(input cli.Input) error {
 func (opts *InfoSubCommand) complete(input cli.Input) (err error) {
 	opts.name = input.String(flagkey.PkgName)
 
-	_, opts.namespace, err = util.GetResourceNamespace(input, flagkey.NamespacePackage)
+	_, opts.namespace, err = opts.GetResourceNamespace(input, flagkey.NamespacePackage)
 	if err != nil {
 		return fv1.AggregateValidationErrors("Environment", err)
 	}
@@ -59,10 +58,11 @@ func (opts *InfoSubCommand) complete(input cli.Input) (err error) {
 }
 
 func (opts *InfoSubCommand) run(input cli.Input) error {
-	pkg, err := opts.Client().V1().Package().Get(&metav1.ObjectMeta{
-		Namespace: opts.namespace,
-		Name:      opts.name,
-	})
+	pkg, err := opts.Client().FissionClientSet.CoreV1().Packages(opts.namespace).Get(input.Context(), opts.name, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+
 	if err != nil {
 		return errors.Wrapf(err, "error finding package %s", opts.name)
 	}

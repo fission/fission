@@ -32,7 +32,6 @@ import (
 	"go.opentelemetry.io/otel"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/cmd/httptrigger"
@@ -52,7 +51,7 @@ func Test(input cli.Input) error {
 
 func (opts *TestSubCommand) do(input cli.Input) error {
 
-	_, namespace, err := util.GetResourceNamespace(input, flagkey.NamespaceFunction)
+	_, namespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceFunction)
 	if err != nil {
 		return errors.Wrap(err, "error in testing function ")
 	}
@@ -61,14 +60,13 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 		Name:      input.String(flagkey.FnName),
 		Namespace: namespace,
 	}
-	kubeContext := input.String(flagkey.KubeContext)
 	routerURL := os.Getenv("FISSION_ROUTER")
 	if len(routerURL) != 0 {
 		console.Warn("The environment variable FISSION_ROUTER is no longer supported for this command")
 	}
 
 	// Portforward to the fission router
-	localRouterPort, err := util.SetupPortForward(input.Context(), util.GetFissionNamespace(), "application=fission-router", kubeContext)
+	localRouterPort, err := util.SetupPortForward(input.Context(), opts.Client(), util.GetFissionNamespace(), "application=fission-router")
 	if err != nil {
 		return err
 	}
@@ -150,15 +148,13 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 	}
 
 	console.Errorf("Error calling function %s: %d; Please try again or fix the error: %s\n", m.Name, resp.StatusCode, string(body))
-	log, err := printPodLogs(opts.Client(), m)
+	err = printPodLogs(input.Context(), opts.Client(), m)
 	if err != nil {
 		console.Errorf("Error getting function logs from controller: %v. Try to get logs from log database.", err)
 		err = Log(input)
 		if err != nil {
 			return errors.Wrapf(err, "error retrieving function log from log database")
 		}
-	} else {
-		console.Info(log)
 	}
 	return errors.New("error getting function response")
 }
@@ -224,21 +220,12 @@ func doHTTPRequest(ctx context.Context, url string, headers []string, method, bo
 	return resp, nil
 }
 
-func printPodLogs(client client.Interface, fnMeta *metav1.ObjectMeta) (string, error) {
-	reader, statusCode, err := client.V1().Misc().PodLogs(fnMeta)
+func printPodLogs(ctx context.Context, client cmd.Client, fnMeta *metav1.ObjectMeta) error {
+	err := util.FunctionPodLogs(ctx, fnMeta.Name, fnMeta.Namespace, client)
+
 	if err != nil {
-		return "", errors.Wrap(err, "error executing get logs request")
-	}
-	defer reader.Close()
-
-	body, err := io.ReadAll(reader)
-	if err != nil {
-		return "", errors.Wrap(err, "error reading the response body")
+		return errors.Wrap(err, "error executing get logs request")
 	}
 
-	if statusCode != http.StatusOK {
-		return string(body), errors.Errorf("error getting logs from controller, status code: '%v'", statusCode)
-	}
-
-	return string(body), nil
+	return nil
 }

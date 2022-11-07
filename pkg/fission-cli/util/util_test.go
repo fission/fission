@@ -65,10 +65,10 @@ func TestGetEnvVarFromStringSlice(t *testing.T) {
 	}
 }
 
-func TestGetConfig(t *testing.T) {
-	response, err := GetKubernetesNamespace("")
-	if err != nil {
-		t.Log(err)
-	}
-	t.Log("Current NS: ", response)
-}
+// func TestGetConfig(t *testing.T) {
+// 	response, err := GetKubernetesNamespace("")
+// 	if err != nil {
+// 		t.Log(err)
+// 	}
+// 	t.Log("Current NS: ", response)
+// }

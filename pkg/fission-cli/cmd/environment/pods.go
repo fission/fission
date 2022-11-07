@@ -23,12 +23,12 @@ import (
 
 	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 
 	v1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
-	"github.com/fission/fission/pkg/fission-cli/util"
 	"github.com/fission/fission/pkg/utils"
 )
 
@@ -42,37 +42,35 @@ func ListPods(input cli.Input) error {
 
 func (opts *ListPodsSubCommand) do(input cli.Input) (err error) {
 
-	_, currentNS, err := util.GetResourceNamespace(input, flagkey.NamespaceEnvironment)
+	_, currentNS, err := opts.GetResourceNamespace(input, flagkey.NamespaceEnvironment)
 	if err != nil {
 		return errors.Wrap(err, "error creating environment")
 	}
 
-	// validate environment
-	_, err = opts.Client().V1().Environment().Get(
-		&metav1.ObjectMeta{
-			Name:      input.String(flagkey.EnvName),
-			Namespace: currentNS,
-		})
+	_, err = opts.Client().FissionClientSet.CoreV1().Environments(currentNS).Get(input.Context(), input.String(flagkey.EnvName), metav1.GetOptions{})
 	if err != nil {
 		return errors.Wrap(err, "error getting environment")
 	}
 
-	m := &metav1.ObjectMeta{
-		Name: input.String(flagkey.EnvName),
-		Labels: map[string]string{
-			v1.ENVIRONMENT_NAMESPACE: currentNS,
-			v1.EXECUTOR_TYPE:         input.String(flagkey.EnvExecutorType),
-		},
+	// label selector
+	selector := map[string]string{
+		v1.ENVIRONMENT_NAME: input.String(flagkey.EnvName),
+	}
+	selector[v1.ENVIRONMENT_NAMESPACE] = currentNS
+	if len(input.String(flagkey.EnvExecutorType)) > 0 {
+		selector[v1.EXECUTOR_TYPE] = input.String(flagkey.EnvExecutorType)
 	}
 
-	pods, err := opts.Client().V1().Environment().ListPods(m)
+	podsList, err := opts.Client().KubernetesClient.CoreV1().Pods(metav1.NamespaceAll).List(input.Context(), metav1.ListOptions{
+		LabelSelector: labels.Set(selector).AsSelector().String(),
+	})
 	if err != nil {
 		return errors.Wrap(err, "error listing environments")
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t\n", "NAME", "NAMESPACE", "READY", "STATUS", "IP", "EXECUTORTYPE", "MANAGED")
-	for _, pod := range pods {
+	for _, pod := range podsList.Items {
 
 		// A deletion timestamp indicates that a pod is terminating. Do not count this pod.
 		if pod.ObjectMeta.DeletionTimestamp != nil {

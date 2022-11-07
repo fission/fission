@@ -36,7 +36,7 @@ func Version(input cli.Input) error {
 }
 
 func (opts *VersionSubCommand) do(input cli.Input) error {
-	ver := util.GetVersion(input.Context(), opts.Client())
+	ver := util.GetVersion(input.Context(), input, opts.Client())
 	bs, err := yaml.Marshal(ver)
 	if err != nil {
 		return errors.Wrap(err, "error formatting versions")

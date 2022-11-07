@@ -25,7 +25,6 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
-	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type GetSubCommand struct {
@@ -37,22 +36,16 @@ func Get(input cli.Input) error {
 }
 
 func (opts *GetSubCommand) do(input cli.Input) error {
-	_, namespace, err := util.GetResourceNamespace(input, flagkey.NamespaceFunction)
+	_, namespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceFunction)
 	if err != nil {
 		return errors.Wrap(err, "error in get function ")
 	}
-	fn, err := opts.Client().V1().Function().Get(&metav1.ObjectMeta{
-		Name:      input.String(flagkey.FnName),
-		Namespace: namespace,
-	})
+	fn, err := opts.Client().FissionClientSet.CoreV1().Functions(namespace).Get(input.Context(), input.String(flagkey.FnName), metav1.GetOptions{})
 	if err != nil {
 		return errors.Wrap(err, "error getting function")
 	}
 
-	pkg, err := opts.Client().V1().Package().Get(&metav1.ObjectMeta{
-		Name:      fn.Spec.Package.PackageRef.Name,
-		Namespace: fn.Spec.Package.PackageRef.Namespace,
-	})
+	pkg, err := opts.Client().FissionClientSet.CoreV1().Packages(fn.Spec.Package.PackageRef.Namespace).Get(input.Context(), fn.Spec.Package.PackageRef.Name, metav1.GetOptions{})
 	if err != nil {
 		return errors.Wrap(err, "error getting package")
 	}

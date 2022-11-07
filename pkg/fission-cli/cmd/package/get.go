@@ -21,6 +21,7 @@ import (
 	"io"
 	"os"
 
+	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -28,7 +29,6 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	pkgutil "github.com/fission/fission/pkg/fission-cli/cmd/package/util"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
-	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 const (
@@ -61,7 +61,7 @@ func (opts *GetSubCommand) do(input cli.Input) error {
 
 func (opts *GetSubCommand) complete(input cli.Input) (err error) {
 	opts.name = input.String(flagkey.PkgName)
-	_, opts.namespace, err = util.GetResourceNamespace(input, flagkey.NamespacePackage)
+	_, opts.namespace, err = opts.GetResourceNamespace(input, flagkey.NamespacePackage)
 	if err != nil {
 		return fv1.AggregateValidationErrors("Environment", err)
 	}
@@ -70,10 +70,8 @@ func (opts *GetSubCommand) complete(input cli.Input) (err error) {
 }
 
 func (opts *GetSubCommand) run(input cli.Input) error {
-	pkg, err := opts.Client().V1().Package().Get(&metav1.ObjectMeta{
-		Namespace: opts.namespace,
-		Name:      opts.name,
-	})
+
+	pkg, err := opts.Client().FissionClientSet.CoreV1().Packages(opts.namespace).Get(input.Context(), opts.name, metav1.GetOptions{})
 	if err != nil {
 		return err
 	}
@@ -87,10 +85,12 @@ func (opts *GetSubCommand) run(input cli.Input) error {
 	if pkg.Spec.Deployment.Type == fv1.ArchiveTypeLiteral {
 		reader = bytes.NewReader(archive.Literal)
 	} else if pkg.Spec.Deployment.Type == fv1.ArchiveTypeUrl {
-		readCloser, err := pkgutil.DownloadStoragesvcURL(opts.Client(), archive.URL)
+
+		readCloser, err := pkgutil.DownloadStrorageURL(input.Context(), opts.Client(), archive.URL)
 		if err != nil {
-			return err
+			return errors.Wrapf(err, "error downloading from storage service url: %s", archive.URL)
 		}
+
 		defer readCloser.Close()
 		reader = readCloser
 	}

@@ -22,12 +22,11 @@ import (
 	"text/tabwriter"
 
 	"github.com/pkg/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	v1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
-	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type ListSubCommand struct {
@@ -39,17 +38,15 @@ func List(input cli.Input) error {
 }
 
 func (opts *ListSubCommand) do(input cli.Input) (err error) {
-	_, ttNs, err := util.GetResourceNamespace(input, flagkey.NamespaceTrigger)
+	_, ttNs, err := opts.GetResourceNamespace(input, flagkey.NamespaceTrigger)
 	if err != nil {
 		return errors.Wrap(err, "error in deleting function ")
 	}
 
-	var tts []v1.TimeTrigger
 	if input.Bool(flagkey.AllNamespaces) {
-		tts, err = opts.Client().V1().TimeTrigger().List("")
-	} else {
-		tts, err = opts.Client().V1().TimeTrigger().List(ttNs)
+		ttNs = metav1.NamespaceAll
 	}
+	tts, err := opts.Client().FissionClientSet.CoreV1().TimeTriggers(ttNs).List(input.Context(), metav1.ListOptions{})
 
 	if err != nil {
 		return errors.Wrap(err, "list Time triggers")
@@ -58,7 +55,7 @@ func (opts *ListSubCommand) do(input cli.Input) (err error) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 
 	fmt.Fprintf(w, "%v\t%v\t%v\n", "NAME", "CRON", "FUNCTION_NAME")
-	for _, tt := range tts {
+	for _, tt := range tts.Items {
 		fmt.Fprintf(w, "%v\t%v\t%v\n",
 			tt.ObjectMeta.Name, tt.Spec.Cron, tt.Spec.FunctionReference.Name)
 	}

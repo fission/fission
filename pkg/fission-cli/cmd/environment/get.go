@@ -27,7 +27,6 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
-	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type GetSubCommand struct {
@@ -40,17 +39,12 @@ func Get(input cli.Input) error {
 
 func (opts *GetSubCommand) do(input cli.Input) (err error) {
 
-	_, currentNS, err := util.GetResourceNamespace(input, flagkey.NamespaceEnvironment)
+	_, currentNS, err := opts.GetResourceNamespace(input, flagkey.NamespaceEnvironment)
 	if err != nil {
 		return errors.Wrap(err, "error creating environment")
 	}
 
-	m := &metav1.ObjectMeta{
-		Name:      input.String(flagkey.EnvName),
-		Namespace: currentNS,
-	}
-
-	env, err := opts.Client().V1().Environment().Get(m)
+	env, err := opts.Client().FissionClientSet.CoreV1().Environments(currentNS).Get(input.Context(), input.String(flagkey.EnvName), metav1.GetOptions{})
 	if err != nil {
 		return errors.Wrap(err, "error getting environment")
 	}

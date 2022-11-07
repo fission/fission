@@ -38,7 +38,7 @@ func Delete(input cli.Input) error {
 
 func (opts *DeleteSubCommand) do(input cli.Input) error {
 
-	_, namespace, err := util.GetResourceNamespace(input, flagkey.NamespaceFunction)
+	_, namespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceFunction)
 	if err != nil {
 		return errors.Wrap(err, "error in deleting function ")
 	}
@@ -47,7 +47,7 @@ func (opts *DeleteSubCommand) do(input cli.Input) error {
 		Namespace: namespace,
 	}
 
-	err = opts.Client().V1().Function().Delete(m)
+	err = opts.Client().FissionClientSet.CoreV1().Functions(namespace).Delete(input.Context(), input.String(flagkey.FnName), metav1.DeleteOptions{})
 	if err != nil {
 		if input.Bool(flagkey.IgnoreNotFound) && util.IsNotFound(err) {
 			return nil

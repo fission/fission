@@ -27,7 +27,6 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
-	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type UpdateSubCommand struct {
@@ -49,8 +48,7 @@ func (opts *UpdateSubCommand) do(input cli.Input) error {
 
 func (opts *UpdateSubCommand) complete(input cli.Input) (err error) {
 	// get the current config
-	name := input.String(flagkey.CanaryName)
-	_, ns, err := util.GetResourceNamespace(input, flagkey.NamespaceCanary)
+	_, ns, err := opts.GetResourceNamespace(input, flagkey.NamespaceCanary)
 	if err != nil {
 		return errors.Wrap(err, "error updating canary config")
 	}
@@ -64,10 +62,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) (err error) {
 		return errors.Wrap(err, "error parsing time duration")
 	}
 
-	canaryCfg, err := opts.Client().V1().CanaryConfig().Get(&metav1.ObjectMeta{
-		Name:      name,
-		Namespace: ns,
-	})
+	canaryCfg, err := opts.Client().FissionClientSet.CoreV1().CanaryConfigs(ns).Get(input.Context(), input.String(flagkey.CanaryName), metav1.GetOptions{})
 	if err != nil {
 		return errors.Wrap(err, "error getting canary config")
 	}
@@ -96,7 +91,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) (err error) {
 }
 
 func (opts *UpdateSubCommand) run(input cli.Input) error {
-	_, err := opts.Client().V1().CanaryConfig().Update(opts.canary)
+	_, err := opts.Client().FissionClientSet.CoreV1().CanaryConfigs(opts.canary.ObjectMeta.Namespace).Update(input.Context(), opts.canary, metav1.UpdateOptions{})
 	if err != nil {
 		return errors.Wrap(err, "error updating canary config")
 	}

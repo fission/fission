@@ -20,12 +20,12 @@ import (
 	"fmt"
 
 	"github.com/pkg/errors"
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
-	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type DeleteSubCommand struct {
@@ -38,23 +38,19 @@ func Delete(input cli.Input) error {
 
 func (opts *DeleteSubCommand) do(input cli.Input) (err error) {
 
-	_, namespace, err := util.GetResourceNamespace(input, flagkey.NamespaceTrigger)
+	_, namespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceTrigger)
 	if err != nil {
 		return errors.Wrap(err, "error in deleting function ")
 	}
-	m := &metav1.ObjectMeta{
-		Name:      input.String(flagkey.TtName),
-		Namespace: namespace,
-	}
 
-	err = opts.Client().V1().TimeTrigger().Delete(m)
+	err = opts.Client().FissionClientSet.CoreV1().TimeTriggers(namespace).Delete(input.Context(), input.String(flagkey.TtName), metav1.DeleteOptions{})
 	if err != nil {
-		if input.Bool(flagkey.IgnoreNotFound) && util.IsNotFound(err) {
+		if input.Bool(flagkey.IgnoreNotFound) && kerrors.IsNotFound(err) {
 			return nil
 		}
 		return errors.Wrap(err, "error deleting trigger")
 	}
 
-	fmt.Printf("trigger '%v' deleted\n", m.Name)
+	fmt.Printf("trigger '%v' deleted\n", input.String(flagkey.TtName))
 	return nil
 }

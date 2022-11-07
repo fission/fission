@@ -38,10 +38,9 @@ func GetURL(input cli.Input) error {
 
 func (opts *GetURLSubCommand) do(input cli.Input) error {
 
-	kubeContext := input.String(flagkey.KubeContext)
 	archiveID := input.String(flagkey.ArchiveID)
 
-	serverURL, err := util.GetStorageURL(input.Context(), kubeContext)
+	serverURL, err := util.GetStorageURL(input.Context(), opts.Client())
 	if err != nil {
 		return err
 	}
@@ -67,7 +66,7 @@ func (opts *GetURLSubCommand) do(input cli.Input) error {
 	storageType := resp.Header.Get("X-FISSION-STORAGETYPE")
 
 	if storageType == "local" {
-		storageSvc, err := opts.Client().V1().Misc().GetSvcURL("application=fission-storage")
+		storageSvc, err := util.GetSvcName(input.Context(), opts.Client().KubernetesClient, "fission-storage")
 		if err != nil {
 			return err
 		}

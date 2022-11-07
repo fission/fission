@@ -54,7 +54,8 @@ func (opts *CreateSubCommand) complete(input cli.Input) (err error) {
 	ht := input.String(flagkey.CanaryHTTPTriggerName)
 	newFunc := input.String(flagkey.CanaryNewFunc)
 	oldFunc := input.String(flagkey.CanaryOldFunc)
-	_, fnNs, err := util.GetResourceNamespace(input, flagkey.NamespaceFunction)
+
+	_, fnNs, err := opts.GetResourceNamespace(input, flagkey.NamespaceFunction)
 	if err != nil {
 		return errors.Wrap(err, "error in creating canaryconfig")
 	}
@@ -69,10 +70,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) (err error) {
 	}
 
 	// check that the trigger exists in the same namespace.
-	htTrigger, err := opts.Client().V1().HTTPTrigger().Get(&metav1.ObjectMeta{
-		Name:      ht,
-		Namespace: fnNs,
-	})
+	htTrigger, err := opts.Client().FissionClientSet.CoreV1().HTTPTriggers(fnNs).Get(input.Context(), ht, metav1.GetOptions{})
 	if err != nil {
 		return errors.Wrap(err, "error finding http trigger referenced in the canary config")
 	}
@@ -95,7 +93,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) (err error) {
 
 	// check that the functions exist in the same namespace
 	fnList := []string{newFunc, oldFunc}
-	err = util.CheckFunctionExistence(opts.Client(), fnList, fnNs)
+	err = util.CheckFunctionExistence(input.Context(), opts.Client(), fnList, fnNs)
 	if err != nil {
 		return errors.Wrap(err, "error checking functions existence")
 	}
@@ -124,7 +122,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) (err error) {
 }
 
 func (opts *CreateSubCommand) run(input cli.Input) error {
-	_, err := opts.Client().V1().CanaryConfig().Create(opts.canary)
+	_, err := opts.Client().FissionClientSet.CoreV1().CanaryConfigs(opts.canary.ObjectMeta.Namespace).Create(input.Context(), opts.canary, metav1.CreateOptions{})
 	if err != nil {
 		return errors.Wrap(err, "error creating canary config")
 	}

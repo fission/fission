@@ -24,12 +24,12 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
-	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type ListSubCommand struct {
@@ -55,7 +55,7 @@ func (opts *ListSubCommand) complete(input cli.Input) (err error) {
 	// option for the user to list all orphan packages (not referenced by any function)
 	opts.listOrphans = input.Bool(flagkey.PkgOrphan)
 	opts.status = input.String(flagkey.PkgStatus)
-	_, opts.pkgNamespace, err = util.GetResourceNamespace(input, flagkey.NamespacePackage)
+	_, opts.pkgNamespace, err = opts.GetResourceNamespace(input, flagkey.NamespacePackage)
 	if err != nil {
 		return fv1.AggregateValidationErrors("Environment", err)
 	}
@@ -64,29 +64,28 @@ func (opts *ListSubCommand) complete(input cli.Input) (err error) {
 
 func (opts *ListSubCommand) run(input cli.Input) (err error) {
 
-	var pkgList []fv1.Package
 	if input.Bool(flagkey.AllNamespaces) {
-		pkgList, err = opts.Client().V1().Package().List("")
-	} else {
-		pkgList, err = opts.Client().V1().Package().List(opts.pkgNamespace)
+		opts.pkgNamespace = v1.NamespaceAll
 	}
+	pkgList, err := opts.Client().FissionClientSet.CoreV1().Packages(opts.pkgNamespace).List(input.Context(), v1.ListOptions{})
+
 	if err != nil {
 		return err
 	}
 
 	// sort the package list by lastUpdatedTimestamp
-	sort.Slice(pkgList, func(i, j int) bool {
-		return pkgList[i].Status.LastUpdateTimestamp.After(pkgList[j].Status.LastUpdateTimestamp.Time)
+	sort.Slice(pkgList.Items, func(i, j int) bool {
+		return pkgList.Items[i].Status.LastUpdateTimestamp.After(pkgList.Items[j].Status.LastUpdateTimestamp.Time)
 	})
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\n", "NAME", "BUILD_STATUS", "ENV", "LASTUPDATEDAT", "NAMESPACE")
 
-	for _, pkg := range pkgList {
+	for _, pkg := range pkgList.Items {
 		show := true
 		// TODO improve list speed when --orphan
 		if opts.listOrphans {
-			fnList, err := GetFunctionsByPackage(opts.Client(), pkg.ObjectMeta.Name, pkg.ObjectMeta.Namespace)
+			fnList, err := GetFunctionsByPackage(input.Context(), opts.Client(), pkg.ObjectMeta.Name, pkg.ObjectMeta.Namespace)
 			if err != nil {
 				return errors.Wrap(err, fmt.Sprintf("get functions sharing package %s", pkg.ObjectMeta.Name))
 			}
