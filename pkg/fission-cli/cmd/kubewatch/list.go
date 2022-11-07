@@ -58,10 +58,10 @@ func (opts *ListSubCommand) complete(input cli.Input) (err error) {
 func (opts *ListSubCommand) run(input cli.Input) (err error) {
 	var ws *v1.KubernetesWatchTriggerList
 	if input.Bool(flagkey.AllNamespaces) {
-		ws, err = opts.Client().FissionClientSet.CoreV1().KubernetesWatchTriggers(metav1.NamespaceAll).List(input.Context(), metav1.ListOptions{})
-	} else {
-		ws, err = opts.Client().FissionClientSet.CoreV1().KubernetesWatchTriggers(opts.namespace).List(input.Context(), metav1.ListOptions{})
+		opts.namespace = metav1.NamespaceAll
 	}
+	ws, err = opts.Client().FissionClientSet.CoreV1().KubernetesWatchTriggers(opts.namespace).List(input.Context(), metav1.ListOptions{})
+
 	if err != nil {
 		return errors.Wrap(err, "error listing kubewatchers")
 	}

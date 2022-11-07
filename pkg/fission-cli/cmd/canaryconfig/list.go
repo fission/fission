@@ -24,7 +24,6 @@ import (
 	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	v1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
@@ -57,12 +56,11 @@ func (opts *ListSubCommand) complete(input cli.Input) (err error) {
 
 func (opts *ListSubCommand) run(input cli.Input) (err error) {
 
-	var canaryCfgs *v1.CanaryConfigList
 	if input.Bool(flagkey.AllNamespaces) {
-		canaryCfgs, err = opts.Client().FissionClientSet.CoreV1().CanaryConfigs(metav1.NamespaceAll).List(input.Context(), metav1.ListOptions{})
-	} else {
-		canaryCfgs, err = opts.Client().FissionClientSet.CoreV1().CanaryConfigs(opts.namespace).List(input.Context(), metav1.ListOptions{})
+		opts.namespace = metav1.NamespaceAll
 	}
+	canaryCfgs, err := opts.Client().FissionClientSet.CoreV1().CanaryConfigs(opts.namespace).List(input.Context(), metav1.ListOptions{})
+
 	if err != nil {
 		return errors.Wrap(err, "error listing canary config")
 	}

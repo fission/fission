@@ -45,12 +45,10 @@ func (opts *ListSubCommand) run(input cli.Input) (err error) {
 		return errors.Wrap(err, "error in deleting function ")
 	}
 
-	var hts *fv1.HTTPTriggerList
 	if input.Bool(flagkey.AllNamespaces) {
-		hts, err = opts.Client().FissionClientSet.CoreV1().HTTPTriggers(v1.NamespaceAll).List(input.Context(), v1.ListOptions{})
-	} else {
-		hts, err = opts.Client().FissionClientSet.CoreV1().HTTPTriggers(namespace).List(input.Context(), v1.ListOptions{})
+		namespace = v1.NamespaceAll
 	}
+	hts, err := opts.Client().FissionClientSet.CoreV1().HTTPTriggers(namespace).List(input.Context(), v1.ListOptions{})
 
 	if err != nil {
 		return errors.Wrap(err, "error listing HTTP triggers")

@@ -64,12 +64,11 @@ func (opts *ListSubCommand) complete(input cli.Input) (err error) {
 
 func (opts *ListSubCommand) run(input cli.Input) (err error) {
 
-	var pkgList *fv1.PackageList
 	if input.Bool(flagkey.AllNamespaces) {
-		pkgList, err = opts.Client().FissionClientSet.CoreV1().Packages(v1.NamespaceAll).List(input.Context(), v1.ListOptions{})
-	} else {
-		pkgList, err = opts.Client().FissionClientSet.CoreV1().Packages(opts.pkgNamespace).List(input.Context(), v1.ListOptions{})
+		opts.pkgNamespace = v1.NamespaceAll
 	}
+	pkgList, err := opts.Client().FissionClientSet.CoreV1().Packages(opts.pkgNamespace).List(input.Context(), v1.ListOptions{})
+
 	if err != nil {
 		return err
 	}

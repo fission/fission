@@ -148,7 +148,7 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 	}
 
 	console.Errorf("Error calling function %s: %d; Please try again or fix the error: %s\n", m.Name, resp.StatusCode, string(body))
-	err = printPodLogs(opts.Client(), m)
+	err = printPodLogs(input.Context(), opts.Client(), m)
 	if err != nil {
 		console.Errorf("Error getting function logs from controller: %v. Try to get logs from log database.", err)
 		err = Log(input)
@@ -220,8 +220,8 @@ func doHTTPRequest(ctx context.Context, url string, headers []string, method, bo
 	return resp, nil
 }
 
-func printPodLogs(client cmd.Client, fnMeta *metav1.ObjectMeta) error {
-	err := util.FunctionPodLogs(context.Background(), fnMeta.Name, fnMeta.Namespace, client)
+func printPodLogs(ctx context.Context, client cmd.Client, fnMeta *metav1.ObjectMeta) error {
+	err := util.FunctionPodLogs(ctx, fnMeta.Name, fnMeta.Namespace, client)
 
 	if err != nil {
 		return errors.Wrap(err, "error executing get logs request")

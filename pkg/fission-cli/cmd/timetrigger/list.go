@@ -24,7 +24,6 @@ import (
 	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	v1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
@@ -44,12 +43,10 @@ func (opts *ListSubCommand) do(input cli.Input) (err error) {
 		return errors.Wrap(err, "error in deleting function ")
 	}
 
-	var tts *v1.TimeTriggerList
 	if input.Bool(flagkey.AllNamespaces) {
-		tts, err = opts.Client().FissionClientSet.CoreV1().TimeTriggers(metav1.NamespaceAll).List(input.Context(), metav1.ListOptions{})
-	} else {
-		tts, err = opts.Client().FissionClientSet.CoreV1().TimeTriggers(ttNs).List(input.Context(), metav1.ListOptions{})
+		ttNs = metav1.NamespaceAll
 	}
+	tts, err := opts.Client().FissionClientSet.CoreV1().TimeTriggers(ttNs).List(input.Context(), metav1.ListOptions{})
 
 	if err != nil {
 		return errors.Wrap(err, "list Time triggers")

@@ -25,7 +25,6 @@ import (
 	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	v1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
@@ -45,12 +44,11 @@ func (opts *ListSubCommand) do(input cli.Input) error {
 		return errors.Wrap(err, "error in listing function ")
 	}
 
-	var fns *v1.FunctionList
 	if input.Bool(flagkey.AllNamespaces) {
-		fns, err = opts.Client().FissionClientSet.CoreV1().Functions(metav1.NamespaceAll).List(input.Context(), metav1.ListOptions{})
-	} else {
-		fns, err = opts.Client().FissionClientSet.CoreV1().Functions(namespace).List(input.Context(), metav1.ListOptions{})
+		namespace = metav1.NamespaceAll
 	}
+	fns, err := opts.Client().FissionClientSet.CoreV1().Functions(namespace).List(input.Context(), metav1.ListOptions{})
+
 	if err != nil {
 		return errors.Wrap(err, "error listing functions")
 	}

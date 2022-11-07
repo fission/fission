@@ -67,10 +67,10 @@ func (opts *ListSubCommand) run(input cli.Input) error {
 	}
 
 	if input.Bool(flagkey.AllNamespaces) {
-		return opts.getResource(input, metav1.NamespaceAll, deployID)
-	} else {
-		return opts.getResource(input, currentNS, deployID)
+		currentNS = metav1.NamespaceAll
 	}
+
+	return opts.getResource(input, currentNS, deployID)
 
 }
 
