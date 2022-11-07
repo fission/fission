@@ -169,7 +169,7 @@ func (kafka Kafka) Subscribe(trigger *fv1.MessageQueueTrigger) (messageQueue.Sub
 	}()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	NewMqtConsumerGroupHandler(ctx, kafka.version, kafka.logger, trigger, producer, kafka.routerUrl, consumer)
+	NewMqtConsumerGroupHandler(ctx, cancel, kafka.version, kafka.logger, trigger, producer, kafka.routerUrl, consumer)
 
 	mqtConsumer := MqtConsumer{
 		ctx:      ctx,

@@ -35,6 +35,7 @@ import (
 
 type MqtConsumerGroupHandler struct {
 	context        context.Context
+	cancel         context.CancelFunc
 	version        sarama.KafkaVersion
 	logger         *zap.Logger
 	trigger        *fv1.MessageQueueTrigger
@@ -44,19 +45,20 @@ type MqtConsumerGroupHandler struct {
 	ready          chan bool
 }
 
-func NewMqtConsumerGroupHandler(ctx context.Context, version sarama.KafkaVersion,
+func NewMqtConsumerGroupHandler(ctx context.Context, cancel context.CancelFunc, version sarama.KafkaVersion,
 	logger *zap.Logger,
 	trigger *fv1.MessageQueueTrigger,
 	producer sarama.SyncProducer,
 	routerUrl string,
 	consumer sarama.ConsumerGroup) MqtConsumerGroupHandler {
 	ch := MqtConsumerGroupHandler{
+		context:  ctx,
+		cancel:   cancel,
 		version:  version,
 		logger:   logger,
 		trigger:  trigger,
 		producer: producer,
 		ready:    make(chan bool),
-		context:  ctx,
 	}
 	// Support other function ref types
 	if ch.trigger.Spec.FunctionReference.Type != fv1.FunctionReferenceTypeFunctionName {
@@ -120,7 +122,7 @@ func (ch MqtConsumerGroupHandler) Cleanup(session sarama.ConsumerGroupSession) e
 		zap.Int32("generationID", session.GenerationID()),
 		zap.String("claims", fmt.Sprintf("%v", session.Claims())),
 	).Info("consumer group session cleanup")
-	ch.context.Done()
+	ch.cancel()
 	return nil
 }
 
