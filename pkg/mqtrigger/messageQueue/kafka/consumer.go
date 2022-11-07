@@ -17,6 +17,7 @@ limitations under the License.
 package kafka
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -33,6 +34,7 @@ import (
 )
 
 type MqtConsumerGroupHandler struct {
+	context        context.Context
 	version        sarama.KafkaVersion
 	logger         *zap.Logger
 	trigger        *fv1.MessageQueueTrigger
@@ -42,17 +44,19 @@ type MqtConsumerGroupHandler struct {
 	ready          chan bool
 }
 
-func NewMqtConsumerGroupHandler(version sarama.KafkaVersion,
+func NewMqtConsumerGroupHandler(ctx context.Context, version sarama.KafkaVersion,
 	logger *zap.Logger,
 	trigger *fv1.MessageQueueTrigger,
 	producer sarama.SyncProducer,
-	routerUrl string) MqtConsumerGroupHandler {
+	routerUrl string,
+	consumer sarama.ConsumerGroup) MqtConsumerGroupHandler {
 	ch := MqtConsumerGroupHandler{
 		version:  version,
 		logger:   logger,
 		trigger:  trigger,
 		producer: producer,
 		ready:    make(chan bool),
+		context:  ctx,
 	}
 	// Support other function ref types
 	if ch.trigger.Spec.FunctionReference.Type != fv1.FunctionReferenceTypeFunctionName {
@@ -69,6 +73,27 @@ func NewMqtConsumerGroupHandler(version sarama.KafkaVersion,
 	}
 	ch.fnUrl = routerUrl + "/" + strings.TrimPrefix(utils.UrlForFunction(ch.trigger.Spec.FunctionReference.Name, ch.trigger.ObjectMeta.Namespace), "/")
 	ch.logger.Debug("function HTTP URL", zap.String("url", ch.fnUrl))
+
+	go func() {
+		topic := []string{trigger.Spec.Topic}
+		// Create a new session for the consumer group until the context is cancelled
+		for {
+			// Consume messages
+			err := consumer.Consume(ctx, topic, ch)
+			if err != nil {
+				ch.logger.Error("consumer error", zap.Error(err), zap.String("trigger", trigger.ObjectMeta.Name))
+			}
+
+			if ctx.Err() != nil {
+				ch.logger.Info("consumer context cancelled", zap.String("trigger", trigger.ObjectMeta.Name))
+				return
+			}
+			ch.ready = make(chan bool)
+		}
+	}()
+
+	<-ch.ready
+
 	return ch
 }
 
@@ -95,6 +120,7 @@ func (ch MqtConsumerGroupHandler) Cleanup(session sarama.ConsumerGroupSession) e
 		zap.Int32("generationID", session.GenerationID()),
 		zap.String("claims", fmt.Sprintf("%v", session.Claims())),
 	).Info("consumer group session cleanup")
+	ch.context.Done()
 	return nil
 }
 

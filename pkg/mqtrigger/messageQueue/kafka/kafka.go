@@ -169,28 +169,7 @@ func (kafka Kafka) Subscribe(trigger *fv1.MessageQueueTrigger) (messageQueue.Sub
 	}()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	ch := NewMqtConsumerGroupHandler(kafka.version, kafka.logger, trigger, producer, kafka.routerUrl)
-
-	// consume messages
-	go func() {
-		topic := []string{trigger.Spec.Topic}
-		// Create a new session for the consumer group until the context is cancelled
-		for {
-			// Consume messages
-			err := consumer.Consume(ctx, topic, ch)
-			if err != nil {
-				kafka.logger.Error("consumer error", zap.Error(err), zap.String("trigger", trigger.ObjectMeta.Name))
-			}
-
-			if ctx.Err() != nil {
-				kafka.logger.Info("consumer context cancelled", zap.String("trigger", trigger.ObjectMeta.Name))
-				return
-			}
-			ch.ready = make(chan bool)
-		}
-	}()
-
-	<-ch.ready // wait for consumer to be ready
+	NewMqtConsumerGroupHandler(ctx, kafka.version, kafka.logger, trigger, producer, kafka.routerUrl, consumer)
 
 	mqtConsumer := MqtConsumer{
 		ctx:      ctx,
