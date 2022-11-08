@@ -17,14 +17,15 @@ limitations under the License.
 package v1
 
 import (
+	"github.com/fission/fission/pkg/utils/loggerfactory"
+	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 )
 
 // log is for logging in this package.
-var canaryconfiglog = logf.Log.WithName("canaryconfig-resource")
+var canaryconfiglog = loggerfactory.GetLogger().Named("canaryconfig-resource")
 
 func (r *CanaryConfig) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewWebhookManagedBy(mgr).
@@ -32,42 +33,35 @@ func (r *CanaryConfig) SetupWebhookWithManager(mgr ctrl.Manager) error {
 		Complete()
 }
 
-//+kubebuilder:webhook:path=/mutate-fission-io-v1-canaryconfig,mutating=true,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=canaryconfigs,verbs=create;update,versions=v1,name=mcanaryconfig.kb.io,admissionReviewVersions=v1
+// Admission webhooks can be added by adding tag: kubebuilder:webhook:path=/mutate-fission-io-v1-canaryconfig,mutating=true,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=canaryconfigs,verbs=create;update,versions=v1,name=mcanaryconfig.kb.io,admissionReviewVersions=v1
+// Refer Makefile -> generate-webhooks to generate config for manifests
 
 var _ webhook.Defaulter = &CanaryConfig{}
 
 // Default implements webhook.Defaulter so a webhook will be registered for the type
 func (r *CanaryConfig) Default() {
-	canaryconfiglog.Info("default", "name", r.Name)
-
-	// TODO(user): fill in your defaulting logic.
+	canaryconfiglog.Debug("default", zap.String("name", r.Name))
 }
 
-// TODO(user): change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
+// user can change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
 //+kubebuilder:webhook:path=/validate-fission-io-v1-canaryconfig,mutating=false,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=canaryconfigs,verbs=create;update,versions=v1,name=vcanaryconfig.kb.io,admissionReviewVersions=v1
 
 var _ webhook.Validator = &CanaryConfig{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type
 func (r *CanaryConfig) ValidateCreate() error {
-	canaryconfiglog.Info("validate create", "name", r.Name)
-
-	// TODO(user): fill in your validation logic upon object creation.
+	canaryconfiglog.Debug("validate create", zap.String("name", r.Name))
 	return nil
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
 func (r *CanaryConfig) ValidateUpdate(old runtime.Object) error {
-	canaryconfiglog.Info("validate update", "name", r.Name)
-
-	// TODO(user): fill in your validation logic upon object update.
+	canaryconfiglog.Debug("validate update", zap.String("name", r.Name))
 	return nil
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type
 func (r *CanaryConfig) ValidateDelete() error {
-	canaryconfiglog.Info("validate delete", "name", r.Name)
-
-	// TODO(user): fill in your validation logic upon object deletion.
+	canaryconfiglog.Debug("validate delete", zap.String("name", r.Name))
 	return nil
 }

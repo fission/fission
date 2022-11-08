@@ -17,14 +17,15 @@ limitations under the License.
 package v1
 
 import (
+	"github.com/fission/fission/pkg/utils/loggerfactory"
+	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 )
 
 // log is for logging in this package.
-var environmentlog = logf.Log.WithName("environment-resource")
+var environmentlog = loggerfactory.GetLogger().Named("environment-resource")
 
 func (r *Environment) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewWebhookManagedBy(mgr).
@@ -32,25 +33,23 @@ func (r *Environment) SetupWebhookWithManager(mgr ctrl.Manager) error {
 		Complete()
 }
 
-//+kubebuilder:webhook:path=/mutate-fission-io-v1-environment,mutating=true,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=environments,verbs=create;update,versions=v1,name=menvironment.kb.io,admissionReviewVersions=v1
+// Admission webhooks can be added by adding tag: kubebuilder:webhook:path=/mutate-fission-io-v1-environment,mutating=true,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=environments,verbs=create;update,versions=v1,name=menvironment.kb.io,admissionReviewVersions=v1
 
 var _ webhook.Defaulter = &Environment{}
 
 // Default implements webhook.Defaulter so a webhook will be registered for the type
 func (r *Environment) Default() {
-	environmentlog.Info("default", "name", r.Name)
-
-	// TODO(user): fill in your defaulting logic.
+	environmentlog.Debug("default", zap.String("name", r.Name))
 }
 
-// TODO(user): change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
+// user: change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
 //+kubebuilder:webhook:path=/validate-fission-io-v1-environment,mutating=false,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=environments,verbs=create;update,versions=v1,name=venvironment.kb.io,admissionReviewVersions=v1
 
 var _ webhook.Validator = &Environment{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type
 func (r *Environment) ValidateCreate() error {
-	environmentlog.Info("validate create", "name", r.Name)
+	environmentlog.Debug("validate create", zap.String("name", r.Name))
 	err := r.Validate()
 	if err != nil {
 		err = AggregateValidationErrors("Environment", err)
@@ -61,7 +60,7 @@ func (r *Environment) ValidateCreate() error {
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
 func (r *Environment) ValidateUpdate(old runtime.Object) error {
-	environmentlog.Info("validate update", "name", r.Name)
+	environmentlog.Debug("validate update", zap.String("name", r.Name))
 
 	// TODO(user): fill in your validation logic upon object update.
 	return nil
@@ -69,8 +68,6 @@ func (r *Environment) ValidateUpdate(old runtime.Object) error {
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type
 func (r *Environment) ValidateDelete() error {
-	environmentlog.Info("validate delete", "name", r.Name)
-
-	// TODO(user): fill in your validation logic upon object deletion.
+	environmentlog.Debug("validate delete", zap.String("name", r.Name))
 	return nil
 }

@@ -17,14 +17,15 @@ limitations under the License.
 package v1
 
 import (
+	"github.com/fission/fission/pkg/utils/loggerfactory"
+	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 )
 
 // log is for logging in this package.
-var httptriggerlog = logf.Log.WithName("httptrigger-resource")
+var httptriggerlog = loggerfactory.GetLogger().Named("httptrigger-resource")
 
 func (r *HTTPTrigger) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewWebhookManagedBy(mgr).
@@ -32,27 +33,23 @@ func (r *HTTPTrigger) SetupWebhookWithManager(mgr ctrl.Manager) error {
 		Complete()
 }
 
-// TODO(user): EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-
-//+kubebuilder:webhook:path=/mutate-fission-io-v1-httptrigger,mutating=true,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=httptriggers,verbs=create;update,versions=v1,name=mhttptrigger.kb.io,admissionReviewVersions=v1
+// Admission webhooks can be added by adding tag: kubebuilder:webhook:path=/mutate-fission-io-v1-httptrigger,mutating=true,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=httptriggers,verbs=create;update,versions=v1,name=mhttptrigger.kb.io,admissionReviewVersions=v1
 
 var _ webhook.Defaulter = &HTTPTrigger{}
 
 // Default implements webhook.Defaulter so a webhook will be registered for the type
 func (r *HTTPTrigger) Default() {
-	httptriggerlog.Info("default", "name", r.Name)
-
-	// TODO(user): fill in your defaulting logic.
+	httptriggerlog.Debug("default", zap.String("name", r.Name))
 }
 
-// TODO(user): change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
+// user change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
 //+kubebuilder:webhook:path=/validate-fission-io-v1-httptrigger,mutating=false,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=httptriggers,verbs=create;update,versions=v1,name=vhttptrigger.kb.io,admissionReviewVersions=v1
 
 var _ webhook.Validator = &HTTPTrigger{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type
 func (t *HTTPTrigger) ValidateCreate() error {
-	httptriggerlog.Info("validate create", "name", t.Name)
+	httptriggerlog.Debug("validate create", zap.String("name", t.Name))
 	err := t.Validate()
 	if err != nil {
 		err = AggregateValidationErrors("HTTPTrigger", err)
@@ -63,7 +60,7 @@ func (t *HTTPTrigger) ValidateCreate() error {
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
 func (r *HTTPTrigger) ValidateUpdate(old runtime.Object) error {
-	httptriggerlog.Info("validate update", "name", r.Name)
+	httptriggerlog.Debug("validate update", zap.String("name", r.Name))
 	err := r.Validate()
 	if err != nil {
 		err = AggregateValidationErrors("HTTPTrigger", err)
@@ -75,8 +72,7 @@ func (r *HTTPTrigger) ValidateUpdate(old runtime.Object) error {
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type
 func (r *HTTPTrigger) ValidateDelete() error {
-	httptriggerlog.Info("validate delete", "name", r.Name)
+	httptriggerlog.Debug("validate delete", zap.String("name", r.Name))
 
-	// TODO(user): fill in your validation logic upon object deletion.
 	return nil
 }

@@ -20,16 +20,17 @@ import (
 	"fmt"
 
 	"github.com/dustin/go-humanize"
+	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	ferror "github.com/fission/fission/pkg/error"
+	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
 
 // log is for logging in this package.
-var packagelog = logf.Log.WithName("package-resource")
+var packagelog = loggerfactory.GetLogger().Named("package-resource")
 
 func (r *Package) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewWebhookManagedBy(mgr).
@@ -37,27 +38,24 @@ func (r *Package) SetupWebhookWithManager(mgr ctrl.Manager) error {
 		Complete()
 }
 
-// TODO(user): EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-
-//+kubebuilder:webhook:path=/mutate-fission-io-v1-package,mutating=true,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=packages,verbs=create;update,versions=v1,name=mpackage.kb.io,admissionReviewVersions=v1
+// Admission webhooks can be added by adding tag: kubebuilder:webhook:path=/mutate-fission-io-v1-package,mutating=true,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=packages,verbs=create;update,versions=v1,name=mpackage.kb.io,admissionReviewVersions=v1
 
 var _ webhook.Defaulter = &Package{}
 
 // Default implements webhook.Defaulter so a webhook will be registered for the type
 func (r *Package) Default() {
-	packagelog.Info("default", "name", r.Name)
+	packagelog.Debug("default", zap.String("name", r.Name))
 
-	// TODO(user): fill in your defaulting logic.
 }
 
-// TODO(user): change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
+// user change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
 //+kubebuilder:webhook:path=/validate-fission-io-v1-package,mutating=false,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=packages,verbs=create;update,versions=v1,name=vpackage.kb.io,admissionReviewVersions=v1
 
 var _ webhook.Validator = &Package{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type
 func (r *Package) ValidateCreate() error {
-	packagelog.Info("validate create", "name", r.Name)
+	packagelog.Debug("validate create", zap.String("name", r.Name))
 	err := r.Validate()
 	if err != nil {
 		err = AggregateValidationErrors("Package", err)
@@ -80,7 +78,7 @@ func (r *Package) ValidateCreate() error {
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
 func (r *Package) ValidateUpdate(old runtime.Object) error {
-	packagelog.Info("validate update", "name", r.Name)
+	packagelog.Debug("validate update", zap.String("name", r.Name))
 	err := r.Validate()
 
 	if err != nil {
@@ -93,8 +91,6 @@ func (r *Package) ValidateUpdate(old runtime.Object) error {
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type
 func (r *Package) ValidateDelete() error {
-	packagelog.Info("validate delete", "name", r.Name)
-
-	// TODO(user): fill in your validation logic upon object deletion.
+	packagelog.Debug("validate delete", zap.String("name", r.Name))
 	return nil
 }
