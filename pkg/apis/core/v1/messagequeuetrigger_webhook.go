@@ -17,14 +17,15 @@ limitations under the License.
 package v1
 
 import (
+	"github.com/fission/fission/pkg/utils/loggerfactory"
+	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 )
 
 // log is for logging in this package.
-var messagequeuetriggerlog = logf.Log.WithName("messagequeuetrigger-resource")
+var messagequeuetriggerlog = loggerfactory.GetLogger().Named("messagequeuetrigger-resource")
 
 func (r *MessageQueueTrigger) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewWebhookManagedBy(mgr).
@@ -32,27 +33,23 @@ func (r *MessageQueueTrigger) SetupWebhookWithManager(mgr ctrl.Manager) error {
 		Complete()
 }
 
-// TODO(user): EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-
-//+kubebuilder:webhook:path=/mutate-fission-io-v1-messagequeuetrigger,mutating=true,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=messagequeuetriggers,verbs=create;update,versions=v1,name=mmessagequeuetrigger.kb.io,admissionReviewVersions=v1
+// Admission webhooks can be added by adding tag: kubebuilder:webhook:path=/mutate-fission-io-v1-messagequeuetrigger,mutating=true,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=messagequeuetriggers,verbs=create;update,versions=v1,name=mmessagequeuetrigger.kb.io,admissionReviewVersions=v1
 
 var _ webhook.Defaulter = &MessageQueueTrigger{}
 
 // Default implements webhook.Defaulter so a webhook will be registered for the type
 func (r *MessageQueueTrigger) Default() {
-	messagequeuetriggerlog.Info("default", "name", r.Name)
-
-	// TODO(user): fill in your defaulting logic.
+	messagequeuetriggerlog.Debug("default", zap.String("name", r.Name))
 }
 
-// TODO(user): change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
+// user change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
 //+kubebuilder:webhook:path=/validate-fission-io-v1-messagequeuetrigger,mutating=false,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=messagequeuetriggers,verbs=create;update,versions=v1,name=vmessagequeuetrigger.kb.io,admissionReviewVersions=v1
 
 var _ webhook.Validator = &MessageQueueTrigger{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type
 func (r *MessageQueueTrigger) ValidateCreate() error {
-	messagequeuetriggerlog.Info("validate create", "name", r.Name)
+	messagequeuetriggerlog.Debug("validate create", zap.String("name", r.Name))
 	err := r.Validate()
 	if err != nil {
 		err = AggregateValidationErrors("MessageQueueTrigger", err)
@@ -63,7 +60,7 @@ func (r *MessageQueueTrigger) ValidateCreate() error {
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
 func (r *MessageQueueTrigger) ValidateUpdate(old runtime.Object) error {
-	messagequeuetriggerlog.Info("validate update", "name", r.Name)
+	messagequeuetriggerlog.Debug("validate update", zap.String("name", r.Name))
 	err := r.Validate()
 	if err != nil {
 		err = AggregateValidationErrors("MessageQueueTrigger", err)
@@ -74,8 +71,6 @@ func (r *MessageQueueTrigger) ValidateUpdate(old runtime.Object) error {
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type
 func (r *MessageQueueTrigger) ValidateDelete() error {
-	messagequeuetriggerlog.Info("validate delete", "name", r.Name)
-
-	// TODO(user): fill in your validation logic upon object deletion.
+	messagequeuetriggerlog.Debug("validate delete", zap.String("name", r.Name))
 	return nil
 }

@@ -18,16 +18,17 @@ package v1
 
 import (
 	"github.com/robfig/cron"
+	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	ferror "github.com/fission/fission/pkg/error"
+	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
 
 // log is for logging in this package.
-var timetriggerlog = logf.Log.WithName("timetrigger-resource")
+var timetriggerlog = loggerfactory.GetLogger().Named("timetrigger-resource")
 
 func (r *TimeTrigger) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewWebhookManagedBy(mgr).
@@ -35,27 +36,23 @@ func (r *TimeTrigger) SetupWebhookWithManager(mgr ctrl.Manager) error {
 		Complete()
 }
 
-// TODO(user): EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-
-//+kubebuilder:webhook:path=/mutate-fission-io-v1-timetrigger,mutating=true,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=timetriggers,verbs=create;update,versions=v1,name=mtimetrigger.kb.io,admissionReviewVersions=v1
+// Admission webhooks can be added by adding tag: kubebuilder:webhook:path=/mutate-fission-io-v1-timetrigger,mutating=true,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=timetriggers,verbs=create;update,versions=v1,name=mtimetrigger.kb.io,admissionReviewVersions=v1
 
 var _ webhook.Defaulter = &TimeTrigger{}
 
 // Default implements webhook.Defaulter so a webhook will be registered for the type
 func (r *TimeTrigger) Default() {
-	timetriggerlog.Info("default", "name", r.Name)
-
-	// TODO(user): fill in your defaulting logic.
+	timetriggerlog.Debug("default", zap.String("name", r.Name))
 }
 
-// TODO(user): change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
+// user change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
 //+kubebuilder:webhook:path=/validate-fission-io-v1-timetrigger,mutating=false,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=timetriggers,verbs=create;update,versions=v1,name=vtimetrigger.kb.io,admissionReviewVersions=v1
 
 var _ webhook.Validator = &TimeTrigger{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type
 func (r *TimeTrigger) ValidateCreate() error {
-	timetriggerlog.Info("validate create", "name", r.Name)
+	timetriggerlog.Debug("validate create", zap.String("name", r.Name))
 	err := r.Validate()
 	if err != nil {
 		err = AggregateValidationErrors("TimeTrigger", err)
@@ -72,7 +69,7 @@ func (r *TimeTrigger) ValidateCreate() error {
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
 func (r *TimeTrigger) ValidateUpdate(old runtime.Object) error {
-	timetriggerlog.Info("validate update", "name", r.Name)
+	timetriggerlog.Debug("validate update", zap.String("name", r.Name))
 	err := r.Validate()
 	if err != nil {
 		err = AggregateValidationErrors("TimeTrigger", err)
@@ -90,8 +87,6 @@ func (r *TimeTrigger) ValidateUpdate(old runtime.Object) error {
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type
 func (r *TimeTrigger) ValidateDelete() error {
-	timetriggerlog.Info("validate delete", "name", r.Name)
-
-	// TODO(user): fill in your validation logic upon object deletion.
+	timetriggerlog.Debug("validate delete", zap.String("name", r.Name))
 	return nil
 }

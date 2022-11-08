@@ -17,14 +17,15 @@ limitations under the License.
 package v1
 
 import (
+	"github.com/fission/fission/pkg/utils/loggerfactory"
+	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 )
 
 // log is for logging in this package.
-var kuberneteswatchtriggerlog = logf.Log.WithName("kuberneteswatchtrigger-resource")
+var kuberneteswatchtriggerlog = loggerfactory.GetLogger().Named("kuberneteswatchtrigger-resource")
 
 func (r *KubernetesWatchTrigger) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewWebhookManagedBy(mgr).
@@ -32,27 +33,23 @@ func (r *KubernetesWatchTrigger) SetupWebhookWithManager(mgr ctrl.Manager) error
 		Complete()
 }
 
-// TODO(user): EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-
-//+kubebuilder:webhook:path=/mutate-fission-io-v1-kuberneteswatchtrigger,mutating=true,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=kuberneteswatchtriggers,verbs=create;update,versions=v1,name=mkuberneteswatchtrigger.kb.io,admissionReviewVersions=v1
+// Admission webhooks can be added by adding tag: kubebuilder:webhook:path=/mutate-fission-io-v1-kuberneteswatchtrigger,mutating=true,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=kuberneteswatchtriggers,verbs=create;update,versions=v1,name=mkuberneteswatchtrigger.kb.io,admissionReviewVersions=v1
 
 var _ webhook.Defaulter = &KubernetesWatchTrigger{}
 
 // Default implements webhook.Defaulter so a webhook will be registered for the type
 func (r *KubernetesWatchTrigger) Default() {
-	kuberneteswatchtriggerlog.Info("default", "name", r.Name)
-
-	// TODO(user): fill in your defaulting logic.
+	kuberneteswatchtriggerlog.Debug("default", zap.String("name", r.Name))
 }
 
-// TODO(user): change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
-//+kubebuilder:webhook:path=/validate-fission-io-v1-kuberneteswatchtrigger,mutating=false,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=kuberneteswatchtriggers,verbs=create;update,versions=v1,name=vkuberneteswatchtrigger.kb.io,admissionReviewVersions=v1
+// user: change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
+//+kubebuilder:webhook:path=/validate-fission-io-v1-kuberneteswatchtrigger,mutating=false,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=kuberneteswatchtriggers,verbs=create,versions=v1,name=vkuberneteswatchtrigger.kb.io,admissionReviewVersions=v1
 
 var _ webhook.Validator = &KubernetesWatchTrigger{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type
 func (r *KubernetesWatchTrigger) ValidateCreate() error {
-	kuberneteswatchtriggerlog.Info("validate create", "name", r.Name)
+	kuberneteswatchtriggerlog.Debug("validate create", zap.String("name", r.Name))
 	err := r.Validate()
 	if err != nil {
 		err = AggregateValidationErrors("Watch", err)
@@ -64,14 +61,11 @@ func (r *KubernetesWatchTrigger) ValidateCreate() error {
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
 func (r *KubernetesWatchTrigger) ValidateUpdate(old runtime.Object) error {
 	// WATCH UPDATE NOT IMPLEMENTED
-	// TODO(user): fill in your validation logic upon object update.
 	return nil
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type
 func (r *KubernetesWatchTrigger) ValidateDelete() error {
-	kuberneteswatchtriggerlog.Info("validate delete", "name", r.Name)
-
-	// TODO(user): fill in your validation logic upon object deletion.
+	kuberneteswatchtriggerlog.Debug("validate delete", zap.String("name", r.Name))
 	return nil
 }
