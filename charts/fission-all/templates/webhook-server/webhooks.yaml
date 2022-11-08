@@ -1,0 +1,354 @@
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  creationTimestamp: null
+  name: mutating-webhook-configuration
+  annotations:
+    cert-manager.io/inject-ca-from: "{{ .Release.Namespace }}/fission-cert"
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace:  {{ .Release.Namespace }}
+      path: /mutate-fission-io-v1-canaryconfig
+    caBundle: Cg==
+  failurePolicy: Fail
+  name: mcanaryconfig.kb.io
+  rules:
+  - apiGroups:
+    - fission.io
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - canaryconfigs
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace:  {{ .Release.Namespace }}
+      path: /mutate-fission-io-v1-environment
+    caBundle: Cg==
+  failurePolicy: Fail
+  name: menvironment.kb.io
+  rules:
+  - apiGroups:
+    - fission.io
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - environments
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace:  {{ .Release.Namespace }}
+      path: /mutate-fission-io-v1-function
+    caBundle: Cg==
+  failurePolicy: Fail
+  name: mfunction.kb.io
+  rules:
+  - apiGroups:
+    - fission.io
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - functions
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace:  {{ .Release.Namespace }}
+      path: /mutate-fission-io-v1-httptrigger
+    caBundle: Cg==
+  failurePolicy: Fail
+  name: mhttptrigger.kb.io
+  rules:
+  - apiGroups:
+    - fission.io
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - httptriggers
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace:  {{ .Release.Namespace }}
+      path: /mutate-fission-io-v1-kuberneteswatchtrigger
+    caBundle: Cg==
+  failurePolicy: Fail
+  name: mkuberneteswatchtrigger.kb.io
+  rules:
+  - apiGroups:
+    - fission.io
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - kuberneteswatchtriggers
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace:  {{ .Release.Namespace }}
+      path: /mutate-fission-io-v1-messagequeuetrigger
+    caBundle: Cg==
+  failurePolicy: Fail
+  name: mmessagequeuetrigger.kb.io
+  rules:
+  - apiGroups:
+    - fission.io
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - messagequeuetriggers
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace:  {{ .Release.Namespace }}
+      path: /mutate-fission-io-v1-package
+    caBundle: Cg==
+  failurePolicy: Fail
+  name: mpackage.kb.io
+  rules:
+  - apiGroups:
+    - fission.io
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - packages
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace:  {{ .Release.Namespace }}
+      path: /mutate-fission-io-v1-timetrigger
+    caBundle: Cg==
+  failurePolicy: Fail
+  name: mtimetrigger.kb.io
+  rules:
+  - apiGroups:
+    - fission.io
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - timetriggers
+  sideEffects: None
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  creationTimestamp: null
+  name: validating-webhook-configuration
+  annotations:
+    cert-manager.io/inject-ca-from: "{{ .Release.Namespace }}/fission-cert"
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace:  {{ .Release.Namespace }}
+      path: /validate-fission-io-v1-canaryconfig
+    caBundle: Cg==
+  failurePolicy: Fail
+  name: vcanaryconfig.kb.io
+  rules:
+  - apiGroups:
+    - fission.io
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - canaryconfigs
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace:  {{ .Release.Namespace }}
+      path: /validate-fission-io-v1-environment
+    caBundle: Cg==
+  failurePolicy: Fail
+  name: venvironment.kb.io
+  rules:
+  - apiGroups:
+    - fission.io
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - environments
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace:  {{ .Release.Namespace }}
+      path: /validate-fission-io-v1-function
+    caBundle: Cg==
+  failurePolicy: Fail
+  name: vfunction.kb.io
+  rules:
+  - apiGroups:
+    - fission.io
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - functions
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace:  {{ .Release.Namespace }}
+      path: /validate-fission-io-v1-httptrigger
+    caBundle: Cg==
+  failurePolicy: Fail
+  name: vhttptrigger.kb.io
+  rules:
+  - apiGroups:
+    - fission.io
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - httptriggers
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace:  {{ .Release.Namespace }}
+      path: /validate-fission-io-v1-kuberneteswatchtrigger
+    caBundle: Cg==
+  failurePolicy: Fail
+  name: vkuberneteswatchtrigger.kb.io
+  rules:
+  - apiGroups:
+    - fission.io
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - kuberneteswatchtriggers
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace:  {{ .Release.Namespace }}
+      path: /validate-fission-io-v1-messagequeuetrigger
+    caBundle: Cg==
+  failurePolicy: Fail
+  name: vmessagequeuetrigger.kb.io
+  rules:
+  - apiGroups:
+    - fission.io
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - messagequeuetriggers
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace:  {{ .Release.Namespace }}
+      path: /validate-fission-io-v1-package
+    caBundle: Cg==
+  failurePolicy: Fail
+  name: vpackage.kb.io
+  rules:
+  - apiGroups:
+    - fission.io
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - packages
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace:  {{ .Release.Namespace }}
+      path: /validate-fission-io-v1-timetrigger
+    caBundle: Cg==
+  failurePolicy: Fail
+  name: vtimetrigger.kb.io
+  rules:
+  - apiGroups:
+    - fission.io
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - timetriggers
+  sideEffects: None

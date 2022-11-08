@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: webhook
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: webhook-service
+    application: fission-webhook
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      svc: webhook-service
+      application: fission-webhook
+  template:
+    metadata:
+      labels:
+        svc: webhook-service
+        application: fission-webhook
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "8080"
+    spec:
+      {{- if .Values.webhook.securityContext.enabled }}
+      securityContext: {{- omit .Values.webhook.securityContext "enabled" | toYaml | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: webhook
+        image: {{ include "fission-bundleImage" . | quote }}
+        imagePullPolicy: {{ .Values.pullPolicy }}
+        command: ["/fission-bundle"]
+        args: ["--webhookPort", "9443"]
+        volumeMounts:
+        - mountPath: /tmp/k8s-webhook-server/serving-certs
+          name: serving-certs
+          readOnly: true
+      volumes:
+      - name: serving-certs
+        secret:
+          secretName: fission-certs
+      serviceAccountName: fission-webhook
+{{- if .Values.priorityClassName }}
+      priorityClassName: {{ .Values.priorityClassName }}
+{{- end }}
+    {{- with .Values.imagePullSecrets }}
+      imagePullSecrets: 
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+{{- if .Values.extraCoreComponentPodConfig }}
+{{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
+{{- end }}
