@@ -17,11 +17,12 @@ limitations under the License.
 package v1
 
 import (
-	"github.com/fission/fission/pkg/utils/loggerfactory"
 	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
+
+	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
 
 // log is for logging in this package.
