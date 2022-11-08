@@ -200,7 +200,7 @@ func (pkgw *packageWatcher) build(ctx context.Context, srcpkg *fv1.Package) {
 			pkgw.logger.Info("starting package info update", zap.String("package_name", pkg.ObjectMeta.Name))
 
 			fnList, err := pkgw.fissionClient.CoreV1().
-				Functions(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
+				Functions(pkg.Namespace).List(ctx, metav1.ListOptions{})
 			if err != nil {
 				e := "error getting function list"
 				pkgw.logger.Error(e, zap.Error(err))

@@ -25,6 +25,7 @@ import (
 
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
+	"github.com/fission/fission/pkg/utils"
 )
 
 type ArchivePruner struct {
@@ -82,33 +83,35 @@ func (pruner *ArchivePruner) getOrphanArchives(ctx context.Context) {
 	var archiveID string
 
 	// get all pkgs from kubernetes
-	pkgList, err := pruner.crdClient.CoreV1().Packages(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
-	if err != nil {
-		pruner.logger.Error("error getting package list from kubernetes", zap.Error(err))
-		return
-	}
-
-	// extract archives referenced by these pkgs
-	for _, pkg := range pkgList.Items {
-		if pkg.Spec.Deployment.URL != "" {
-			archiveID, err = getQueryParamValue(pkg.Spec.Deployment.URL, "id")
-			if err != nil {
-				pruner.logger.Error("error extracting value of archiveID from deployment url",
-					zap.Error(err),
-					zap.String("url", pkg.Spec.Deployment.URL))
-				return
-			}
-			archivesRefByPkgs = append(archivesRefByPkgs, archiveID)
+	for _, namespace := range utils.GetNamespaces() {
+		pkgList, err := pruner.crdClient.CoreV1().Packages(namespace).List(ctx, metav1.ListOptions{})
+		if err != nil {
+			pruner.logger.Error("error getting package list from kubernetes", zap.Error(err))
+			return
 		}
-		if pkg.Spec.Source.URL != "" {
-			archiveID, err = getQueryParamValue(pkg.Spec.Source.URL, "id")
-			if err != nil {
-				pruner.logger.Error("error extracting value of archiveID from source url",
-					zap.Error(err),
-					zap.String("url", pkg.Spec.Source.URL))
-				return
+
+		// extract archives referenced by these pkgs
+		for _, pkg := range pkgList.Items {
+			if pkg.Spec.Deployment.URL != "" {
+				archiveID, err = getQueryParamValue(pkg.Spec.Deployment.URL, "id")
+				if err != nil {
+					pruner.logger.Error("error extracting value of archiveID from deployment url",
+						zap.Error(err),
+						zap.String("url", pkg.Spec.Deployment.URL))
+					return
+				}
+				archivesRefByPkgs = append(archivesRefByPkgs, archiveID)
 			}
-			archivesRefByPkgs = append(archivesRefByPkgs, archiveID)
+			if pkg.Spec.Source.URL != "" {
+				archiveID, err = getQueryParamValue(pkg.Spec.Source.URL, "id")
+				if err != nil {
+					pruner.logger.Error("error extracting value of archiveID from source url",
+						zap.Error(err),
+						zap.String("url", pkg.Spec.Source.URL))
+					return
+				}
+				archivesRefByPkgs = append(archivesRefByPkgs, archiveID)
+			}
 		}
 	}
 

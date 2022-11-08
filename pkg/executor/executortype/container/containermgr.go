@@ -269,28 +269,30 @@ func (caaf *Container) RefreshFuncPods(ctx context.Context, logger *zap.Logger, 
 
 // AdoptExistingResources attempts to adopt resources for functions in all namespaces.
 func (caaf *Container) AdoptExistingResources(ctx context.Context) {
-	fnList, err := caaf.fissionClient.CoreV1().Functions(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
-	if err != nil {
-		caaf.logger.Error("error getting function list", zap.Error(err))
-		return
-	}
-
 	wg := &sync.WaitGroup{}
 
-	for i := range fnList.Items {
-		fn := &fnList.Items[i]
-		if fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypeContainer {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+	for _, namepsace := range utils.GetNamespaces() {
+		fnList, err := caaf.fissionClient.CoreV1().Functions(namepsace).List(ctx, metav1.ListOptions{})
+		if err != nil {
+			caaf.logger.Error("error getting function list", zap.Error(err))
+			return
+		}
 
-				_, err = caaf.fnCreate(ctx, fn)
-				if err != nil {
-					caaf.logger.Warn("failed to adopt resources for function", zap.Error(err))
-					return
-				}
-				caaf.logger.Info("adopt resources for function", zap.String("function", fn.ObjectMeta.Name))
-			}()
+		for i := range fnList.Items {
+			fn := &fnList.Items[i]
+			if fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypeContainer {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+
+					_, err = caaf.fnCreate(ctx, fn)
+					if err != nil {
+						caaf.logger.Warn("failed to adopt resources for function", zap.Error(err))
+						return
+					}
+					caaf.logger.Info("adopt resources for function", zap.String("function", fn.ObjectMeta.Name))
+				}()
+			}
 		}
 	}
 

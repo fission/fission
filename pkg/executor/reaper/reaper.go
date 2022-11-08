@@ -93,6 +93,7 @@ func CleanupDeployments(ctx context.Context, logger *zap.Logger, client kubernet
 			// ignore err
 		}
 	}
+
 	return nil
 }
 
@@ -120,6 +121,7 @@ func CleanupPods(ctx context.Context, logger *zap.Logger, client kubernetes.Inte
 			// ignore err
 		}
 	}
+
 	return nil
 }
 
@@ -147,6 +149,7 @@ func CleanupServices(ctx context.Context, logger *zap.Logger, client kubernetes.
 			// ignore err
 		}
 	}
+
 	return nil
 }
 
@@ -175,6 +178,7 @@ func CleanupHpa(ctx context.Context, logger *zap.Logger, client kubernetes.Inter
 			// ignore err
 		}
 	}
+
 	return nil
 }
 
@@ -186,6 +190,7 @@ func CleanupRoleBindings(ctx context.Context, logger *zap.Logger, client kuberne
 		time.Sleep(cleanupRoleBindingInterval)
 
 		logger.Debug("starting cleanupRoleBindings cycle")
+
 		// get all rolebindings ( just to be efficient, one call to kubernetes )
 		rbList, err := client.RbacV1().RoleBindings(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
 		if err != nil {

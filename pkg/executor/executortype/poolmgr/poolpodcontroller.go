@@ -263,7 +263,7 @@ func (p *PoolPodController) workerRun(ctx context.Context, name string, processF
 }
 
 func (p *PoolPodController) getEnvLister(namespace string) (flisterv1.EnvironmentLister, error) {
-	lister, ok := p.envLister[metav1.NamespaceAll]
+	lister, ok := p.envLister[namespace]
 	if ok {
 		return lister, nil
 	}
