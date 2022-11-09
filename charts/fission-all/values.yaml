@@ -449,11 +449,11 @@ timer:
 ## Kafka: enable and configure the details
 ##
 kafka:
-  enabled: true
+  enabled: false
   ## note: below link is only for reference.
   ## Please use the brokers link for your kafka here.
   ##
-  brokers: "my-cluster-kafka-bootstrap.kafka:9092" # or your-bootstrap-server.kafka:9092/9093
+  brokers: "broker.kafka:9092" # or your-bootstrap-server.kafka:9092/9093
   ## Sample config for authentication
   ## authentication:
   ##   tls:
@@ -486,7 +486,7 @@ kafka:
   ## "major.major.veryMinor" example: 2.0.1
   ## Should be >= 0.11.2.0 to enable Kafka record headers support
   ##
-  version: "3.3.1"
+  # version: "0.11.2.0"
 
 # The following components expose Prometheus metrics and have servicemonitors in this chart (disabled by default)
 # Controller, router, executor, storage svc

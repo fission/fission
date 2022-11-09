@@ -1,4 +1,5 @@
 {{- if .Values.createNamespace }}
+{{- if not (lookup "v1" "Namespace" .Values.functionNamespace "") }}
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -11,6 +12,8 @@ metadata:
     {{- end }}
 
 ---
+{{- end }}
+{{- if not (lookup "v1" "Namespace" .Values.builderNamespace "") }}
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -21,4 +24,5 @@ metadata:
     {{- if .Values.enableIstio }}
     istio-injection: enabled
     {{- end }}
+{{- end }}
 {{- end }}
