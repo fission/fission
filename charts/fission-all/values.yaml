@@ -64,12 +64,12 @@ routerPort: 31314
 ## functionNamespace represents the namespace in which Fission Function resources will be created.
 ## This is different from the release namespace.
 ##
-functionNamespace: fission-function
+functionNamespace: default
 
 ## builderNamespace represents the namespace in which Fission Builder resources will be created.
 ## This is different from the release namespace.
 ##
-builderNamespace: fission-builder
+builderNamespace: default
 
 ## defaultNamespace represents the namespace in which Fission custom resources will be created by the Fission user.
 ## This is different from the release namespace.
@@ -449,11 +449,11 @@ timer:
 ## Kafka: enable and configure the details
 ##
 kafka:
-  enabled: false
+  enabled: true
   ## note: below link is only for reference.
   ## Please use the brokers link for your kafka here.
   ##
-  brokers: "broker.kafka:9092" # or your-bootstrap-server.kafka:9092/9093
+  brokers: "my-cluster-kafka-bootstrap.kafka:9092" # or your-bootstrap-server.kafka:9092/9093
   ## Sample config for authentication
   ## authentication:
   ##   tls:
@@ -486,7 +486,7 @@ kafka:
   ## "major.major.veryMinor" example: 2.0.1
   ## Should be >= 0.11.2.0 to enable Kafka record headers support
   ##
-  # version: "0.11.2.0"
+  version: "3.3.1"
 
 # The following components expose Prometheus metrics and have servicemonitors in this chart (disabled by default)
 # Controller, router, executor, storage svc
