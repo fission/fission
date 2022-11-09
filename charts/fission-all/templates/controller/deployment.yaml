@@ -33,8 +33,12 @@ spec:
         command: ["/fission-bundle"]
         args: ["--controllerPort", "8888"]
         env:
+        - name: FISSION_DEFAULT_NAMESPACE
+          value: "{{ .Values.defaultNamespace }}"
+        - name: FISSION_BUILDER_NAMESPACE
+          value: "{{ .Values.builderNamespace }}"
         - name: FISSION_FUNCTION_NAMESPACE
-          value: "{{ .Values.functionNamespace }}"
+          value: "{{ .Values.functionNamespace }}"  
         - name: DEBUG_ENV
           value: {{ .Values.debugEnv | quote }}
         - name: PPROF_ENABLED

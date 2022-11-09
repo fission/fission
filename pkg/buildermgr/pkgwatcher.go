@@ -37,29 +37,29 @@ import (
 
 type (
 	packageWatcher struct {
-		logger           *zap.Logger
-		fissionClient    versioned.Interface
-		k8sClient        kubernetes.Interface
-		podInformer      k8sCache.SharedIndexInformer
-		pkgInformer      map[string]k8sCache.SharedIndexInformer
-		builderNamespace string
-		storageSvcUrl    string
-		buildCache       *cache.Cache
+		logger        *zap.Logger
+		fissionClient versioned.Interface
+		nsResolver    *utils.NamespaceResolver
+		k8sClient     kubernetes.Interface
+		podInformer   k8sCache.SharedIndexInformer
+		pkgInformer   map[string]k8sCache.SharedIndexInformer
+		storageSvcUrl string
+		buildCache    *cache.Cache
 	}
 )
 
 func makePackageWatcher(logger *zap.Logger, fissionClient versioned.Interface, k8sClientSet kubernetes.Interface,
-	builderNamespace string, storageSvcUrl string, podInformer k8sCache.SharedIndexInformer,
+	storageSvcUrl string, podInformer k8sCache.SharedIndexInformer,
 	pkgInformer map[string]k8sCache.SharedIndexInformer) *packageWatcher {
 	pkgw := &packageWatcher{
-		logger:           logger.Named("package_watcher"),
-		fissionClient:    fissionClient,
-		k8sClient:        k8sClientSet,
-		podInformer:      podInformer,
-		pkgInformer:      pkgInformer,
-		builderNamespace: builderNamespace,
-		storageSvcUrl:    storageSvcUrl,
-		buildCache:       cache.MakeCache(0, 0),
+		logger:        logger.Named("package_watcher"),
+		fissionClient: fissionClient,
+		k8sClient:     k8sClientSet,
+		nsResolver:    utils.GetFissionNamespaces(),
+		podInformer:   podInformer,
+		pkgInformer:   pkgInformer,
+		storageSvcUrl: storageSvcUrl,
+		buildCache:    cache.MakeCache(0, 0),
 	}
 	return pkgw
 }
@@ -137,12 +137,7 @@ func (pkgw *packageWatcher) build(ctx context.Context, srcpkg *fv1.Package) {
 		for _, item := range items {
 			pod := item.(*apiv1.Pod)
 
-			// In order to support backward compatibility, for all builder images created in default env,
-			// the pods will be created in fission-builder namespace
-			builderNs := pkgw.builderNamespace
-			if env.ObjectMeta.Namespace != metav1.NamespaceDefault {
-				builderNs = env.ObjectMeta.Namespace
-			}
+			builderNs := pkgw.nsResolver.GetBuilderNS(env.ObjectMeta.Namespace)
 
 			// Filter non-matching pods
 			if pod.ObjectMeta.Labels[LABEL_ENV_NAME] != env.ObjectMeta.Name ||

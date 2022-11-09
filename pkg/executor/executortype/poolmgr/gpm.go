@@ -58,7 +58,9 @@ import (
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
-var _ executortype.ExecutorType = &GenericPoolManager{}
+var (
+	_ executortype.ExecutorType = &GenericPoolManager{}
+)
 
 type requestType int
 
@@ -74,7 +76,7 @@ type (
 		pools            map[string]*GenericPool
 		kubernetesClient kubernetes.Interface
 		metricsClient    metricsclient.Interface
-		namespace        string
+		nsResolver       *utils.NamespaceResolver
 
 		fissionClient  versioned.Interface
 		functionEnv    *cache.Cache
@@ -116,7 +118,6 @@ func MakeGenericPoolManager(ctx context.Context,
 	fissionClient versioned.Interface,
 	kubernetesClient kubernetes.Interface,
 	metricsClient metricsclient.Interface,
-	functionNamespace string,
 	fetcherConfig *fetcherConfig.Config,
 	instanceID string,
 	funcInformer map[string]finformerv1.FunctionInformer,
@@ -138,15 +139,15 @@ func MakeGenericPoolManager(ctx context.Context,
 		enableIstio = istio
 	}
 
-	poolPodC := NewPoolPodController(ctx, gpmLogger, kubernetesClient, functionNamespace,
+	poolPodC := NewPoolPodController(ctx, gpmLogger, kubernetesClient,
 		enableIstio, funcInformer, pkgInformer, envInformer, rsInformer, podInformer)
 
 	gpm := &GenericPoolManager{
 		logger:                     gpmLogger,
 		pools:                      make(map[string]*GenericPool),
 		kubernetesClient:           kubernetesClient,
+		nsResolver:                 utils.GetFissionNamespaces(),
 		metricsClient:              metricsClient,
-		namespace:                  functionNamespace,
 		fissionClient:              fissionClient,
 		functionEnv:                cache.MakeCache(10*time.Second, 0),
 		fsCache:                    fscache.MakeFunctionServiceCache(gpmLogger),
@@ -161,6 +162,8 @@ func MakeGenericPoolManager(ctx context.Context,
 	}
 	gpm.podLister = podInformer.Lister()
 	gpm.podListerSynced = podInformer.Informer().HasSynced
+
+	gpm.logger.Debug("inside MakeGenericPoolManager")
 
 	return gpm, nil
 }
@@ -197,7 +200,7 @@ func (gpm *GenericPoolManager) GetFuncSvc(ctx context.Context, fn *fv1.Function)
 	}
 
 	if created {
-		logger.Info("created pool for the environment", zap.String("env", env.ObjectMeta.Name), zap.String("namespace", gpm.namespace))
+		logger.Info("created pool for the environment", zap.String("env", env.ObjectMeta.Name), zap.String("namespace", gpm.nsResolver.ResolveNamespace(gpm.nsResolver.FunctionNamespace)))
 	}
 
 	// from GenericPool -> get one function container
@@ -277,7 +280,7 @@ func (gpm *GenericPoolManager) RefreshFuncPods(ctx context.Context, logger *zap.
 	}
 
 	if created {
-		gpm.logger.Info("created pool for the environment", zap.String("env", env.ObjectMeta.Name), zap.String("namespace", gpm.namespace))
+		gpm.logger.Info("created pool for the environment", zap.String("env", env.ObjectMeta.Name), zap.String("namespace", gpm.nsResolver.ResolveNamespace(gpm.nsResolver.FunctionNamespace)))
 	}
 
 	funcSvc, err := gp.fsCache.GetByFunction(&f.ObjectMeta)
@@ -333,7 +336,7 @@ func (gpm *GenericPoolManager) AdoptExistingResources(ctx context.Context) {
 						gpm.logger.Error("adopt pool failed", zap.Error(err))
 					}
 					if created {
-						gpm.logger.Info("created pool for the environment", zap.String("env", env.ObjectMeta.Name), zap.String("namespace", gpm.namespace))
+						gpm.logger.Info("created pool for the environment", zap.String("env", env.ObjectMeta.Name), zap.String("namespace", gpm.nsResolver.ResolveNamespace(gpm.nsResolver.FunctionNamespace)))
 					}
 				}()
 			}
@@ -482,12 +485,9 @@ func (gpm *GenericPoolManager) service() {
 			if !ok {
 				// To support backward compatibility, if envs are created in default ns, we go ahead
 				// and create pools in fission-function ns as earlier.
-				ns := gpm.namespace
-				if req.env.ObjectMeta.Namespace != metav1.NamespaceDefault {
-					ns = req.env.ObjectMeta.Namespace
-				}
+				ns := gpm.nsResolver.GetFunctionNS(req.env.ObjectMeta.Namespace)
 				pool = MakeGenericPool(gpm.logger, gpm.fissionClient, gpm.kubernetesClient,
-					gpm.metricsClient, req.env, ns, gpm.namespace, gpm.fsCache,
+					gpm.metricsClient, req.env, ns, gpm.fsCache,
 					gpm.fetcherConfig, gpm.instanceID, gpm.enableIstio, gpm.podSpecPatch)
 				err = pool.setup(req.ctx)
 				if err != nil {

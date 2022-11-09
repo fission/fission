@@ -40,14 +40,15 @@ import (
 	"github.com/fission/fission/pkg/executor/fscache"
 	finformerv1 "github.com/fission/fission/pkg/generated/informers/externalversions/core/v1"
 	flisterv1 "github.com/fission/fission/pkg/generated/listers/core/v1"
+	"github.com/fission/fission/pkg/utils"
 )
 
 type (
 	PoolPodController struct {
 		logger           *zap.Logger
 		kubernetesClient kubernetes.Interface
-		namespace        string
 		enableIstio      bool
+		nsResolver       *utils.NamespaceResolver
 
 		envLister       map[string]flisterv1.EnvironmentLister
 		envListerSynced map[string]k8sCache.InformerSynced
@@ -69,7 +70,6 @@ type (
 
 func NewPoolPodController(ctx context.Context, logger *zap.Logger,
 	kubernetesClient kubernetes.Interface,
-	namespace string,
 	enableIstio bool,
 	funcInformer map[string]finformerv1.FunctionInformer,
 	pkgInformer map[string]finformerv1.PackageInformer,
@@ -79,8 +79,8 @@ func NewPoolPodController(ctx context.Context, logger *zap.Logger,
 	logger = logger.Named("pool_pod_controller")
 	p := &PoolPodController{
 		logger:               logger,
+		nsResolver:           utils.GetFissionNamespaces(),
 		kubernetesClient:     kubernetesClient,
-		namespace:            namespace,
 		enableIstio:          enableIstio,
 		envLister:            make(map[string]flisterv1.EnvironmentLister, 0),
 		envListerSynced:      make(map[string]k8sCache.InformerSynced, 0),
@@ -89,10 +89,10 @@ func NewPoolPodController(ctx context.Context, logger *zap.Logger,
 		spCleanupPodQueue:    workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "SpecializedPodCleanupQueue"),
 	}
 	for _, informer := range funcInformer {
-		informer.Informer().AddEventHandler(FunctionEventHandlers(ctx, p.logger, p.kubernetesClient, p.namespace, p.enableIstio))
+		informer.Informer().AddEventHandler(FunctionEventHandlers(ctx, p.logger, p.kubernetesClient, p.nsResolver.ResolveNamespace(p.nsResolver.FunctionNamespace), p.enableIstio))
 	}
 	for _, informer := range pkgInformer {
-		informer.Informer().AddEventHandler(PackageEventHandlers(ctx, p.logger, p.kubernetesClient, p.namespace))
+		informer.Informer().AddEventHandler(PackageEventHandlers(ctx, p.logger, p.kubernetesClient, p.nsResolver.ResolveNamespace(p.nsResolver.FunctionNamespace)))
 	}
 	for ns, informer := range envInformer {
 		informer.Informer().AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
@@ -373,7 +373,7 @@ func (p *PoolPodController) envDeleteQueueProcessFunc(ctx context.Context) bool 
 	p.logger.Debug("env delete request processing")
 	p.gpm.cleanupPool(ctx, env)
 	specializePodLables := getSpecializedPodLabels(env)
-	specializedPods, err := p.podLister.Pods(p.gpm.namespace).List(labels.SelectorFromSet(specializePodLables))
+	specializedPods, err := p.podLister.Pods(p.nsResolver.ResolveNamespace(p.nsResolver.FunctionNamespace)).List(labels.SelectorFromSet(specializePodLables))
 	if err != nil {
 		p.logger.Error("failed to list specialized pods", zap.Error(err))
 		p.envDeleteQueue.Forget(obj)

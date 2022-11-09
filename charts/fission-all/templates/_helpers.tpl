@@ -87,3 +87,19 @@ Define the svc's name
 {{- define "fission-webhook.svc" -}}
 {{- printf "webhook-service" -}}
 {{- end -}}
+
+{{- define "fission-function-ns" -}}
+{{- if .Values.functionNamespace -}}
+{{- printf "%s" .Values.functionNamespace -}}
+{{- else -}}
+{{- printf "%s" .Values.defaultNamespace -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "fission-builder-ns" -}}
+{{- if .Values.builderNamespace -}}
+{{- printf "%s" .Values.builderNamespace -}}
+{{- else -}}
+{{- printf "%s" .Values.builderNamespace -}}
+{{- end -}}
+{{- end -}}

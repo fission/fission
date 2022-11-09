@@ -27,7 +27,7 @@ spec:
         image: {{ include "fission-bundleImage" . | quote }}
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
-        args: ["--builderMgr", "--storageSvcUrl", "http://storagesvc.{{ .Release.Namespace }}", "--envbuilder-namespace", "{{ .Values.builderNamespace }}"]
+        args: ["--builderMgr", "--storageSvcUrl", "http://storagesvc.{{ .Release.Namespace }}"]
         env:
         - name: FETCHER_IMAGE
         {{- if eq .Values.fetcher.imageTag "" }}
@@ -39,6 +39,12 @@ spec:
           value: "{{ .Values.pullPolicy }}"
         - name: BUILDER_IMAGE_PULL_POLICY
           value: "{{ .Values.pullPolicy }}"
+        - name: FISSION_BUILDER_NAMESPACE
+          value: "{{ .Values.builderNamespace }}"
+        - name: FISSION_FUNCTION_NAMESPACE
+          value: "{{ .Values.functionNamespace }}"
+        - name: FISSION_DEFAULT_NAMESPACE
+          value: "{{ .Values.defaultNamespace }}"      
         - name: ENABLE_ISTIO
           value: "{{ .Values.enableIstio }}"
         - name: FETCHER_MINCPU
