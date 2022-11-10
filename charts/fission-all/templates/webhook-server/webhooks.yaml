@@ -1,20 +1,32 @@
 ---
+{{- $caCert := include "webhook.caBundleCertPEM" . -}}
+{{- $crtPEM := include "webhook.certPEM" . -}}
+{{- $keyPEM := include "webhook.keyPEM" . -}}
+
+{{- $certManagerEnabled := $.Values.webhook.certManager.enabled }}
+
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
   creationTimestamp: null
   name: validating-webhook-configuration
+  {{- if $certManagerEnabled }}
   annotations:
     cert-manager.io/inject-ca-from: "{{ .Release.Namespace }}/fission-cert"
+  {{- end }}
 webhooks:
 - admissionReviewVersions:
   - v1
   clientConfig:
+    {{- if $certManagerEnabled }}
+    caBundle: Cg==
+    {{- else }}
+    caBundle: {{ ternary (b64enc $caCert) (b64enc (trim $crtPEM)) (empty $crtPEM) }}
+    {{- end }}
     service:
       name: webhook-service
       namespace:  {{ .Release.Namespace }}
       path: /validate-fission-io-v1-canaryconfig
-    caBundle: Cg==
   failurePolicy: Fail
   name: vcanaryconfig.kb.io
   rules:
@@ -31,11 +43,15 @@ webhooks:
 - admissionReviewVersions:
   - v1
   clientConfig:
+    {{- if $certManagerEnabled }}
+    caBundle: Cg==
+    {{- else }}
+    caBundle: {{ ternary (b64enc $caCert) (b64enc (trim $crtPEM)) (empty $crtPEM) }}
+    {{- end }}
     service:
       name: webhook-service
       namespace:  {{ .Release.Namespace }}
       path: /validate-fission-io-v1-environment
-    caBundle: Cg==
   failurePolicy: Fail
   name: venvironment.kb.io
   rules:
@@ -52,11 +68,15 @@ webhooks:
 - admissionReviewVersions:
   - v1
   clientConfig:
+    {{- if $certManagerEnabled }}
+    caBundle: Cg==
+    {{- else }}
+    caBundle: {{ ternary (b64enc $caCert) (b64enc (trim $crtPEM)) (empty $crtPEM) }}
+    {{- end }}
     service:
       name: webhook-service
       namespace:  {{ .Release.Namespace }}
       path: /validate-fission-io-v1-function
-    caBundle: Cg==
   failurePolicy: Fail
   name: vfunction.kb.io
   rules:
@@ -73,11 +93,15 @@ webhooks:
 - admissionReviewVersions:
   - v1
   clientConfig:
+    {{- if $certManagerEnabled }}
+    caBundle: Cg==
+    {{- else }}
+    caBundle: {{ ternary (b64enc $caCert) (b64enc (trim $crtPEM)) (empty $crtPEM) }}
+    {{- end }}
     service:
       name: webhook-service
       namespace:  {{ .Release.Namespace }}
       path: /validate-fission-io-v1-httptrigger
-    caBundle: Cg==
   failurePolicy: Fail
   name: vhttptrigger.kb.io
   rules:
@@ -94,11 +118,15 @@ webhooks:
 - admissionReviewVersions:
   - v1
   clientConfig:
+    {{- if $certManagerEnabled }}
+    caBundle: Cg==
+    {{- else }}
+    caBundle: {{ ternary (b64enc $caCert) (b64enc (trim $crtPEM)) (empty $crtPEM) }}
+    {{- end }}
     service:
       name: webhook-service
       namespace:  {{ .Release.Namespace }}
       path: /validate-fission-io-v1-kuberneteswatchtrigger
-    caBundle: Cg==
   failurePolicy: Fail
   name: vkuberneteswatchtrigger.kb.io
   rules:
@@ -115,11 +143,15 @@ webhooks:
 - admissionReviewVersions:
   - v1
   clientConfig:
+    {{- if $certManagerEnabled }}
+    caBundle: Cg==
+    {{- else }}
+    caBundle: {{ ternary (b64enc $caCert) (b64enc (trim $crtPEM)) (empty $crtPEM) }}
+    {{- end }}
     service:
       name: webhook-service
       namespace:  {{ .Release.Namespace }}
       path: /validate-fission-io-v1-messagequeuetrigger
-    caBundle: Cg==
   failurePolicy: Fail
   name: vmessagequeuetrigger.kb.io
   rules:
@@ -136,11 +168,15 @@ webhooks:
 - admissionReviewVersions:
   - v1
   clientConfig:
+    {{- if $certManagerEnabled }}
+    caBundle: Cg==
+    {{- else }}
+    caBundle: {{ ternary (b64enc $caCert) (b64enc (trim $crtPEM)) (empty $crtPEM) }}
+    {{- end }}
     service:
       name: webhook-service
       namespace:  {{ .Release.Namespace }}
       path: /validate-fission-io-v1-package
-    caBundle: Cg==
   failurePolicy: Fail
   name: vpackage.kb.io
   rules:
@@ -157,11 +193,15 @@ webhooks:
 - admissionReviewVersions:
   - v1
   clientConfig:
+    {{- if $certManagerEnabled }}
+    caBundle: Cg==
+    {{- else }}
+    caBundle: {{ ternary (b64enc $caCert) (b64enc (trim $crtPEM)) (empty $crtPEM) }}
+    {{- end }}
     service:
       name: webhook-service
       namespace:  {{ .Release.Namespace }}
       path: /validate-fission-io-v1-timetrigger
-    caBundle: Cg==
   failurePolicy: Fail
   name: vtimetrigger.kb.io
   rules:

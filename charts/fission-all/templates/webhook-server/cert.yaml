@@ -1,3 +1,19 @@
+{{- $certManagerEnabled := .Values.webhook.certManager.enabled }}
+
+{{- if not $certManagerEnabled }}
+kind: Secret
+apiVersion: v1
+metadata:
+  name: fission-certs
+  labels:
+    app.kubernetes.io/component: webhook-secret
+type: Opaque
+data:
+  ca.crt: {{ b64enc (include "webhook.caBundleCertPEM" .) }}
+  tls.crt: {{ b64enc (include "webhook.certPEM" .) }}
+  tls.key: {{ b64enc (include "webhook.keyPEM" .) }}
+
+{{- else }}
 apiVersion: cert-manager.io/v1 
 kind: Issuer  
 metadata:  
@@ -18,3 +34,5 @@ spec:
     - "webhook-service.{{ .Release.Namespace }}.svc.cluster.local " 
   issuerRef:  
     name: selfsigned-issuer
+
+{{- end }}

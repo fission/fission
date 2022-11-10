@@ -376,6 +376,16 @@ webhook:
   ##
   resources: {}
 
+  certManager:
+    enabled: false
+
+  caBundlePEM: |
+
+  crtPEM: |
+
+  keyPEM: |
+
+
   ## Security Context
   ## It holds pod-level and container level security configuration.
   ## This is an experimental section, please verify before enabling in production.
