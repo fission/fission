@@ -4,7 +4,7 @@ metadata:
   name: webhook-service
   labels:
     svc: webhook-service
-    application: fission-api
+    application: fission-webhook
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
 spec:
   type: {{ .Values.serviceType }}

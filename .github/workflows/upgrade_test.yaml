@@ -59,7 +59,7 @@ jobs:
         uses: goreleaser/goreleaser-action@v3
         with:
           install-only: true
-        
+   
       - name: Setup kubectl & fetch node information
         run: |
           kubectl cluster-info --context kind-kind
