@@ -52,8 +52,8 @@ func runRouter(ctx context.Context, logger *zap.Logger, port int, executorUrl st
 	router.Start(ctx, logger, port, executorUrl)
 }
 
-func runExecutor(ctx context.Context, logger *zap.Logger, port int, functionNamespace, envBuilderNamespace string) error {
-	return executor.StartExecutor(ctx, logger, functionNamespace, envBuilderNamespace, port)
+func runExecutor(ctx context.Context, logger *zap.Logger, port int, functionNamespace string) error {
+	return executor.StartExecutor(ctx, logger, functionNamespace, port)
 }
 
 func runKubeWatcher(ctx context.Context, logger *zap.Logger, routerUrl string) error {
@@ -77,8 +77,8 @@ func runStorageSvc(ctx context.Context, logger *zap.Logger, port int, storage st
 	return storagesvc.Start(ctx, logger, storage, port)
 }
 
-func runBuilderMgr(ctx context.Context, logger *zap.Logger, storageSvcUrl string, envBuilderNamespace string) error {
-	return buildermgr.Start(ctx, logger, storageSvcUrl, envBuilderNamespace)
+func runBuilderMgr(ctx context.Context, logger *zap.Logger, storageSvcUrl string) error {
+	return buildermgr.Start(ctx, logger, storageSvcUrl)
 }
 
 func runLogger(ctx context.Context, logger *zap.Logger) {
@@ -219,7 +219,6 @@ Options:
 	}
 
 	functionNs := getStringArgWithDefault(arguments["--namespace"], "fission-function")
-	envBuilderNs := getStringArgWithDefault(arguments["--envbuilder-namespace"], "fission-builder")
 
 	executorUrl := getStringArgWithDefault(arguments["--executorUrl"], "http://executor.fission")
 	routerUrl := getStringArgWithDefault(arguments["--routerUrl"], "http://router.fission")
@@ -241,7 +240,7 @@ Options:
 
 	if arguments["--executorPort"] != nil {
 		port := getPort(logger, arguments["--executorPort"])
-		err = runExecutor(ctx, logger, port, functionNs, envBuilderNs)
+		err = runExecutor(ctx, logger, port, functionNs)
 		if err != nil {
 			logger.Error("executor exited", zap.Error(err))
 			return
@@ -281,7 +280,7 @@ Options:
 	}
 
 	if arguments["--builderMgr"] == true {
-		err = runBuilderMgr(ctx, logger, storageSvcUrl, envBuilderNs)
+		err = runBuilderMgr(ctx, logger, storageSvcUrl)
 		if err != nil {
 			logger.Error("builder manager exited", zap.Error(err))
 			return

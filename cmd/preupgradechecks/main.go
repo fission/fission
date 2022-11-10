@@ -39,10 +39,9 @@ func main() {
 
 	usage := `Package to perform operations needed prior to fission installation
 Usage:
-  pre-upgrade-checks --fn-pod-namespace=<podNamespace> --envbuilder-namespace=<envBuilderNamespace>
+  pre-upgrade-checks --fn-pod-namespace=<podNamespace>
 Options:
-  --fn-pod-namespace=<podNamespace>                        Namespace where function pods get deployed.
-  --envbuilder-namespace=<envBuilderNamespace>             Namespace where builder env pods are deployed.`
+  --fn-pod-namespace=<podNamespace>                        Namespace where function pods get deployed.`
 
 	arguments, err := docopt.ParseArgs(usage, nil, info.BuildInfo().String())
 	if err != nil {
@@ -50,9 +49,8 @@ Options:
 	}
 
 	functionPodNs := getStringArgWithDefault(arguments["--fn-pod-namespace"], "fission-function")
-	envBuilderNs := getStringArgWithDefault(arguments["--envbuilder-namespace"], "fission-builder")
 
-	crdBackedClient, err := makePreUpgradeTaskClient(logger, functionPodNs, envBuilderNs)
+	crdBackedClient, err := makePreUpgradeTaskClient(logger, functionPodNs)
 	if err != nil {
 		logger.Fatal("error creating a crd client, please retry helm upgrade",
 			zap.Error(err))

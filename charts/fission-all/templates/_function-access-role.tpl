@@ -75,5 +75,5 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: fission-builder
-    namespace: {{ .Values.builderNamespace }}
+    namespace: {{ .Values.defaultNamespace }}
 {{- end -}}

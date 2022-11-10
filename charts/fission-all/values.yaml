@@ -66,11 +66,6 @@ routerPort: 31314
 ##
 functionNamespace: default
 
-## builderNamespace represents the namespace in which Fission Builder resources will be created.
-## This is different from the release namespace.
-##
-builderNamespace: default
-
 ## defaultNamespace represents the namespace in which Fission custom resources will be created by the Fission user.
 ## This is different from the release namespace.
 ## Please consider setting `singleDefaultNamespace` and `additionalFissionNamespaces` if you want

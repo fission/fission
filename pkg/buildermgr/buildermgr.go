@@ -33,7 +33,7 @@ import (
 )
 
 // Start the buildermgr service.
-func Start(ctx context.Context, logger *zap.Logger, storageSvcUrl string, envBuilderNamespace string) error {
+func Start(ctx context.Context, logger *zap.Logger, storageSvcUrl string) error {
 	bmLogger := logger.Named("builder_manager")
 
 	fissionClient, kubernetesClient, _, _, err := crd.MakeFissionClient()
@@ -62,13 +62,13 @@ func Start(ctx context.Context, logger *zap.Logger, storageSvcUrl string, envBui
 		}
 	}
 
-	envWatcher := makeEnvironmentWatcher(ctx, bmLogger, fissionClient, kubernetesClient, fetcherConfig, envBuilderNamespace, podSpecPatch)
+	envWatcher := makeEnvironmentWatcher(ctx, bmLogger, fissionClient, kubernetesClient, fetcherConfig, podSpecPatch)
 	envWatcher.Run(ctx)
 
 	k8sInformerFactory := k8sInformers.NewSharedInformerFactory(kubernetesClient, time.Minute*30)
 	podInformer := k8sInformerFactory.Core().V1().Pods().Informer()
 	pkgWatcher := makePackageWatcher(bmLogger, fissionClient,
-		kubernetesClient, envBuilderNamespace, storageSvcUrl, podInformer,
+		kubernetesClient, storageSvcUrl, podInformer,
 		utils.GetInformersForNamespaces(fissionClient, time.Minute*30, fv1.PackagesResource))
 	pkgWatcher.Run(ctx)
 	return nil

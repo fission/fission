@@ -174,7 +174,7 @@ func TestExecutor(t *testing.T) {
 
 	// create poolmgr
 	port := 9999
-	err = StartExecutor(ctx, logger, functionNs, "fission-builder", port)
+	err = StartExecutor(ctx, logger, functionNs, port)
 	if err != nil {
 		log.Panicf("failed to start poolmgr: %v", err)
 	}

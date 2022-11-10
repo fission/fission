@@ -10,19 +10,5 @@ metadata:
     {{- if .Values.enableIstio }}
     istio-injection: enabled
     {{- end }}
-
----
-{{- end }}
-{{- if not (lookup "v1" "Namespace" .Values.builderNamespace "") }}
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: {{ .Values.builderNamespace }}
-  labels:
-    name: fission-builder
-    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
-    {{- if .Values.enableIstio }}
-    istio-injection: enabled
-    {{- end }}
 {{- end }}
 {{- end }}

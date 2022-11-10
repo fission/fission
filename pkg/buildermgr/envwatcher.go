@@ -64,7 +64,6 @@ type (
 	environmentWatcher struct {
 		logger                 *zap.Logger
 		cache                  map[string]*builderInfo
-		builderNamespace       string
 		fissionClient          versioned.Interface
 		kubernetesClient       kubernetes.Interface
 		fetcherConfig          *fetcherConfig.Config
@@ -81,7 +80,6 @@ func makeEnvironmentWatcher(
 	fissionClient versioned.Interface,
 	kubernetesClient kubernetes.Interface,
 	fetcherConfig *fetcherConfig.Config,
-	builderNamespace string,
 	podSpecPatch *apiv1.PodSpec) *environmentWatcher {
 
 	useIstio := false
@@ -99,7 +97,6 @@ func makeEnvironmentWatcher(
 	envWatcher := &environmentWatcher{
 		logger:                 logger.Named("environment_watcher"),
 		cache:                  make(map[string]*builderInfo),
-		builderNamespace:       builderNamespace,
 		fissionClient:          fissionClient,
 		kubernetesClient:       kubernetesClient,
 		builderImagePullPolicy: builderImagePullPolicy,
@@ -191,13 +188,7 @@ func (envw *environmentWatcher) DeleteBuilder(ctx context.Context, env *fv1.Envi
 }
 
 func (envw *environmentWatcher) getNamespace(env *fv1.Environment) string {
-	// In order to support backward compatibility, for all environments with builder image created in default env,
-	// the pods will be created in fission-builder namespace
-	ns := envw.builderNamespace
-	if env.ObjectMeta.Namespace != metav1.NamespaceDefault {
-		ns = env.ObjectMeta.Namespace
-	}
-	return ns
+	return env.ObjectMeta.Namespace
 }
 
 func (envw *environmentWatcher) DeleteBuilderService(ctx context.Context, env *fv1.Environment) {

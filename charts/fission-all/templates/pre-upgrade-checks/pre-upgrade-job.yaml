@@ -35,7 +35,7 @@ spec:
       {{- end }}
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: [ "/pre-upgrade-checks" ]
-        args: ["--fn-pod-namespace", "{{ .Values.functionNamespace }}", "--envbuilder-namespace", "{{ .Values.builderNamespace }}"]
+        args: ["--fn-pod-namespace", "{{ .Values.functionNamespace }}"]
         {{- if .Values.terminationMessagePath }}
         terminationMessagePath: {{ .Values.terminationMessagePath }}
         {{- end }}

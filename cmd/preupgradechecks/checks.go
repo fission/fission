@@ -43,7 +43,6 @@ type (
 		k8sClient     kubernetes.Interface
 		apiExtClient  apiextensionsclient.Interface
 		fnPodNs       string
-		envBuilderNs  string
 	}
 )
 
@@ -53,7 +52,7 @@ const (
 	MqtCRD      = "messagequeuetriggers.fission.io"
 )
 
-func makePreUpgradeTaskClient(logger *zap.Logger, fnPodNs, envBuilderNs string) (*PreUpgradeTaskClient, error) {
+func makePreUpgradeTaskClient(logger *zap.Logger, fnPodNs string) (*PreUpgradeTaskClient, error) {
 	fissionClient, k8sClient, apiExtClient, _, err := crd.MakeFissionClient()
 	if err != nil {
 		return nil, errors.Wrap(err, "error making fission client")
@@ -64,7 +63,6 @@ func makePreUpgradeTaskClient(logger *zap.Logger, fnPodNs, envBuilderNs string) 
 		fissionClient: fissionClient,
 		k8sClient:     k8sClient,
 		fnPodNs:       fnPodNs,
-		envBuilderNs:  envBuilderNs,
 		apiExtClient:  apiExtClient,
 	}, nil
 }
