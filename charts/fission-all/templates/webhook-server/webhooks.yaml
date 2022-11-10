@@ -12,7 +12,7 @@ metadata:
   name: validating-webhook-configuration
   {{- if $certManagerEnabled }}
   annotations:
-    cert-manager.io/inject-ca-from: "{{ .Release.Namespace }}/fission-cert"
+    cert-manager.io/inject-ca-from: "{{ .Release.Namespace }}/fission-webhook-cert"
   {{- end }}
 webhooks:
 - admissionReviewVersions:

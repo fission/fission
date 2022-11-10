@@ -4,7 +4,7 @@
 kind: Secret
 apiVersion: v1
 metadata:
-  name: fission-certs
+  name: fission-webhook-certs
   labels:
     app.kubernetes.io/component: webhook-secret
 type: Opaque
@@ -17,7 +17,7 @@ data:
 apiVersion: cert-manager.io/v1 
 kind: Issuer  
 metadata:  
-  name: selfsigned-issuer  
+  name: fission-selfsigned-issuer  
   namespace: {{ .Release.Namespace }}  
 spec:  
   selfSigned: {}  
@@ -25,14 +25,14 @@ spec:
 apiVersion: cert-manager.io/v1  
 kind: Certificate  
 metadata:  
-  name: fission-cert  
+  name: fission-webhook-cert  
   namespace: {{ .Release.Namespace }}  
 spec:  
-  secretName: fission-certs  
+  secretName: fission-webhook-certs  
   dnsNames:  
     - "webhook-service.{{ .Release.Namespace }}.svc"  
     - "webhook-service.{{ .Release.Namespace }}.svc.cluster.local " 
   issuerRef:  
-    name: selfsigned-issuer
+    name: fission-selfsigned-issuer
 
 {{- end }}

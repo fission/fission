@@ -38,7 +38,7 @@ spec:
       volumes:
       - name: serving-certs
         secret:
-          secretName: fission-certs
+          secretName: fission-webhook-certs
       serviceAccountName: fission-webhook
 {{- if .Values.priorityClassName }}
       priorityClassName: {{ .Values.priorityClassName }}
