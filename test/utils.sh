@@ -161,7 +161,7 @@ wait_for_builder() {
     # wait for tiller ready
     set +e
     while true; do
-      kubectl --namespace fission-builder get pod -l envName=$env -o jsonpath="$JSONPATH" | grep "Ready=True"
+      kubectl --namespace $BUILDER_NAMESPACE get pod -l envName=$env -o jsonpath="$JSONPATH" | grep "Ready=True"
       if [[ $? -eq 0 ]]; then
           break
       fi

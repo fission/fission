@@ -101,7 +101,6 @@ jobs:
           sudo chmod +x /usr/local/bin/fission
 
       - name: Build and Install Fission
-        timeout-minutes: 10
         run: |
           kubectl create ns fission
           make create-crds
@@ -113,6 +112,7 @@ jobs:
           kubectl port-forward svc/controller 8889:80 -nfission &
 
       - name: Get fission version
+        timeout-minutes: 10
         run: |
           fission version
 
@@ -127,11 +127,13 @@ jobs:
           command -v fission && fission support dump
 
       - name: Kind export logs
+        timeout-minutes: 10
         if: ${{ always() }}
         run: |
           kind export logs --name kind kind-logs
 
       - name: Archive fission dump
+        timeout-minutes: 10
         if: ${{ failure() || cancelled() }}
         uses: actions/upload-artifact@v3
         with:
@@ -140,6 +142,7 @@ jobs:
           retention-days: 5
 
       - name: Archive kind logs
+        timeout-minutes: 10
         if: ${{ always() }}
         uses: actions/upload-artifact@v3
         with:
