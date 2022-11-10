@@ -14,7 +14,7 @@ mkdir -p $tmp_dir
 ENV=python-${TEST_ID}
 RESOURCE_NS=default # Change to test-specific namespace once we support namespaced CRDs
 FUNCTION_NS=${FUNCTION_NAMESPACE:-fission-function}
-BUILDER_NS=fission-builder
+BUILDER_NS=${BUILDER_NAMESPACE:-fission-builder}
 LIST_ANNOTATIONS=go-template='{{range $key,$value := .metadata.annotations}}{{$key}}: {{$value}}{{"\n"}}{{end}}'
 
 # fs
