@@ -24,14 +24,17 @@ import (
 
 	"github.com/gorilla/mux"
 	"go.uber.org/zap"
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	k8sCache "k8s.io/client-go/tools/cache"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	ferror "github.com/fission/fission/pkg/error"
 	executorClient "github.com/fission/fission/pkg/executor/client"
 	config "github.com/fission/fission/pkg/featureconfig"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
+	"github.com/fission/fission/pkg/info"
 	"github.com/fission/fission/pkg/throttler"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/metrics"
@@ -105,6 +108,21 @@ func defaultHomeHandler(w http.ResponseWriter, r *http.Request) {
 
 func routerHealthHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
+}
+
+func versionHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_, err := w.Write([]byte(info.ApiInfo().String()))
+	if err != nil {
+		se, ok := err.(*kerrors.StatusError)
+		if ok {
+			http.Error(w, se.Error(), int(se.ErrStatus.Code))
+			return
+		}
+
+		code, msg := ferror.GetHTTPError(err)
+		http.Error(w, msg, code)
+	}
 }
 
 func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) *mux.Router {
@@ -267,6 +285,8 @@ func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) *mux.Router 
 
 	// Healthz endpoint for the router.
 	muxRouter.HandleFunc("/router-healthz", routerHealthHandler).Methods("GET")
+	// version of application.
+	muxRouter.HandleFunc("/_version", versionHandler).Methods("GET")
 
 	return muxRouter
 }

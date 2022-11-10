@@ -18,8 +18,10 @@ package util
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -39,8 +41,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
-	"github.com/fission/fission/pkg/controller/client"
-	"github.com/fission/fission/pkg/controller/client/rest"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/console"
@@ -149,20 +149,48 @@ func GetVersion(ctx context.Context, input cli.Input, cmdClient cmd.Client) info
 }
 
 func GetServerInfo(input cli.Input, cmdClient cmd.Client) *info.ServerInfo {
-	serverUrl, err := GetServerURL(input, cmdClient)
-	if err != nil {
-		return &info.ServerInfo{}
-	}
-	restClient := rest.NewRESTClient(serverUrl)
-	client := client.MakeClientset(restClient)
 
-	serverInfo, err := client.V1().Misc().ServerInfo()
+	serverURL, err := getRouterURL(input.Context(), cmdClient)
+	if err != nil {
+		console.Warn("could not connect to server")
+		return nil
+	}
+	// make request
+	resp, err := http.Get(serverURL.String() + "/_version")
+	if err != nil {
+		console.Warn("could not get data from server")
+		return nil
+	}
+
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		msg := fmt.Sprintf("HTTP error %v", resp.StatusCode)
+		console.Warn(msg)
+		return nil
+	}
+
+	var serverInfo info.ServerInfo
+	err = json.NewDecoder(resp.Body).Decode(&serverInfo)
 	if err != nil {
 		console.Warn(fmt.Sprintf("Error getting Fission API version: %v", err))
-		serverInfo = &info.ServerInfo{}
+		serverInfo = info.ServerInfo{}
 	}
 
-	return serverInfo
+	return &serverInfo
+}
+
+func getRouterURL(ctx context.Context, cmdClient cmd.Client) (serverURL *url.URL, err error) {
+	// Portforward to the fission router
+	localRouterPort, err := SetupPortForward(ctx, cmdClient, GetFissionNamespace(), "application=fission-router")
+	if err != nil {
+		return serverURL, err
+	}
+
+	serverURL, err = url.Parse("http://127.0.0.1:" + localRouterPort)
+	if err != nil {
+		return serverURL, err
+	}
+	return serverURL, err
 }
 
 func GetServerURL(input cli.Input, client cmd.Client) (serverUrl string, err error) {
