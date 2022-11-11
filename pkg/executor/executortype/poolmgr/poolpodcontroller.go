@@ -69,7 +69,6 @@ type (
 
 func NewPoolPodController(ctx context.Context, logger *zap.Logger,
 	kubernetesClient kubernetes.Interface,
-	namespace string,
 	enableIstio bool,
 	funcInformer map[string]finformerv1.FunctionInformer,
 	pkgInformer map[string]finformerv1.PackageInformer,
@@ -80,7 +79,6 @@ func NewPoolPodController(ctx context.Context, logger *zap.Logger,
 	p := &PoolPodController{
 		logger:               logger,
 		kubernetesClient:     kubernetesClient,
-		namespace:            namespace,
 		enableIstio:          enableIstio,
 		envLister:            make(map[string]flisterv1.EnvironmentLister, 0),
 		envListerSynced:      make(map[string]k8sCache.InformerSynced, 0),
@@ -373,7 +371,7 @@ func (p *PoolPodController) envDeleteQueueProcessFunc(ctx context.Context) bool 
 	p.logger.Debug("env delete request processing")
 	p.gpm.cleanupPool(ctx, env)
 	specializePodLables := getSpecializedPodLabels(env)
-	specializedPods, err := p.podLister.Pods(p.gpm.namespace).List(labels.SelectorFromSet(specializePodLables))
+	specializedPods, err := p.podLister.Pods(env.ObjectMeta.Namespace).List(labels.SelectorFromSet(specializePodLables))
 	if err != nil {
 		p.logger.Error("failed to list specialized pods", zap.Error(err))
 		p.envDeleteQueue.Forget(obj)

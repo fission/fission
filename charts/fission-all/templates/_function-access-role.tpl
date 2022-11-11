@@ -61,7 +61,7 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: fission-fetcher
-    namespace: {{ .Values.functionNamespace }}
+    namespace: {{ .Values.defaultNamespace }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

@@ -255,7 +255,7 @@ func (executor *Executor) getFunctionServiceFromCache(ctx context.Context, fn *f
 
 // StartExecutor Starts executor and the executor components such as Poolmgr,
 // deploymgr and potential future executor types
-func StartExecutor(ctx context.Context, logger *zap.Logger, functionNamespace string, port int) error {
+func StartExecutor(ctx context.Context, logger *zap.Logger, defaultNs string, port int) error {
 	fissionClient, kubernetesClient, _, metricsClient, err := crd.MakeFissionClient()
 	if err != nil {
 		return errors.Wrap(err, "failed to get kubernetes client")
@@ -306,7 +306,7 @@ func StartExecutor(ctx context.Context, logger *zap.Logger, functionNamespace st
 	gpm, err := poolmgr.MakeGenericPoolManager(ctx,
 		logger,
 		fissionClient, kubernetesClient, metricsClient,
-		functionNamespace, fetcherConfig, executorInstanceID,
+		fetcherConfig, executorInstanceID,
 		funcInformer, pkgInformer, envInformer,
 		gpmPodInformer, gpmRsInformer, podSpecPatch)
 	if err != nil {
@@ -322,7 +322,7 @@ func StartExecutor(ctx context.Context, logger *zap.Logger, functionNamespace st
 	ndm, err := newdeploy.MakeNewDeploy(ctx,
 		logger,
 		fissionClient, kubernetesClient,
-		functionNamespace, fetcherConfig, executorInstanceID,
+		fetcherConfig, executorInstanceID,
 		funcInformer, envInformer,
 		ndmDeplInformer, ndmSvcInformer, podSpecPatch)
 	if err != nil {
@@ -338,7 +338,7 @@ func StartExecutor(ctx context.Context, logger *zap.Logger, functionNamespace st
 	cnm, err := container.MakeContainer(
 		ctx, logger,
 		fissionClient, kubernetesClient,
-		functionNamespace, executorInstanceID, funcInformer,
+		executorInstanceID, funcInformer,
 		cnmDeplInformer, cnmSvcInformer)
 	if err != nil {
 		return errors.Wrap(err, "container manager creation failed")
@@ -408,7 +408,7 @@ func StartExecutor(ctx context.Context, logger *zap.Logger, functionNamespace st
 	if err != nil {
 		return err
 	}
-	go reaper.CleanupRoleBindings(ctx, logger, kubernetesClient, fissionClient, functionNamespace, time.Minute*30)
+	go reaper.CleanupRoleBindings(ctx, logger, kubernetesClient, fissionClient, defaultNs, time.Minute*30)
 	go metrics.ServeMetrics(ctx, logger)
 	go api.Serve(ctx, port)
 

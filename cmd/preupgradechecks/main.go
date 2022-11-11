@@ -17,11 +17,9 @@ limitations under the License.
 package main
 
 import (
-	"github.com/docopt/docopt-go"
 	"go.uber.org/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 
-	"github.com/fission/fission/pkg/info"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
 
@@ -37,20 +35,7 @@ func main() {
 	logger := loggerfactory.GetLogger()
 	defer logger.Sync()
 
-	usage := `Package to perform operations needed prior to fission installation
-Usage:
-  pre-upgrade-checks --fn-pod-namespace=<podNamespace>
-Options:
-  --fn-pod-namespace=<podNamespace>                        Namespace where function pods get deployed.`
-
-	arguments, err := docopt.ParseArgs(usage, nil, info.BuildInfo().String())
-	if err != nil {
-		logger.Fatal("Could not parse command line arguments", zap.Error(err))
-	}
-
-	functionPodNs := getStringArgWithDefault(arguments["--fn-pod-namespace"], "fission-function")
-
-	crdBackedClient, err := makePreUpgradeTaskClient(logger, functionPodNs)
+	crdBackedClient, err := makePreUpgradeTaskClient(logger)
 	if err != nil {
 		logger.Fatal("error creating a crd client, please retry helm upgrade",
 			zap.Error(err))

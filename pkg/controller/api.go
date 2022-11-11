@@ -91,12 +91,7 @@ func MakeAPI(logger *zap.Logger, featureStatus map[string]string) (*API, error) 
 		api.workflowApiUrl = "http://workflows-apiserver"
 	}
 
-	fnNs := os.Getenv("FISSION_FUNCTION_NAMESPACE")
-	if len(fnNs) > 0 {
-		api.functionNamespace = fnNs
-	} else {
-		api.functionNamespace = "fission-function"
-	}
+	api.functionNamespace = os.Getenv("FISSION_DEFAULT_NAMESPACE")
 
 	api.featureStatus = featureStatus
 

@@ -68,8 +68,7 @@ func TestPoolPodControllerPodCleanup(t *testing.T) {
 	gpmPodInformer := gpmInformerFactory.Core().V1().Pods()
 	gpmRsInformer := gpmInformerFactory.Apps().V1().ReplicaSets()
 
-	fnNamespace := "fission-function"
-	ppc := NewPoolPodController(ctx, logger, kubernetesClient, fnNamespace, false,
+	ppc := NewPoolPodController(ctx, logger, kubernetesClient, false,
 		funcInformer,
 		pkgInformer,
 		envInformer,
@@ -85,7 +84,7 @@ func TestPoolPodControllerPodCleanup(t *testing.T) {
 	executor, err := MakeGenericPoolManager(ctx,
 		logger,
 		fissionClient, kubernetesClient, metricsClient,
-		fnNamespace, fetcherConfig, executorInstanceID,
+		fetcherConfig, executorInstanceID,
 		funcInformer, pkgInformer, envInformer,
 		gpmPodInformer, gpmRsInformer, nil)
 	if err != nil {

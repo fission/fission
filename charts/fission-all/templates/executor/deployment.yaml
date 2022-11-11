@@ -27,7 +27,7 @@ spec:
         image: {{ include "fission-bundleImage" . | quote }}
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
-        args: ["--executorPort", "8888", "--namespace", "{{ .Values.functionNamespace }}"]
+        args: ["--executorPort", "8888", "--namespace", "{{ .Values.defaultNamespace }}"]
         env:
         - name: FETCHER_IMAGE
         {{- if eq .Values.fetcher.imageTag "" }}

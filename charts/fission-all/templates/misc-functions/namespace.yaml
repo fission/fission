@@ -1,9 +1,9 @@
 {{- if .Values.createNamespace }}
-{{- if not (lookup "v1" "Namespace" .Values.functionNamespace "") }}
+{{- if not (lookup "v1" "Namespace" .Values.defaultNamespace "") }}
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: {{ .Values.functionNamespace }}
+  name: {{ .Values.defaultNamespace }}
   labels:
     name: fission-function
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
