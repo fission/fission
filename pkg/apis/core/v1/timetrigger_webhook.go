@@ -36,7 +36,7 @@ func (r *TimeTrigger) SetupWebhookWithManager(mgr ctrl.Manager) error {
 		Complete()
 }
 
-// Admission webhooks can be added by adding tag: kubebuilder:webhook:path=/mutate-fission-io-v1-timetrigger,mutating=true,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=timetriggers,verbs=create;update,versions=v1,name=mtimetrigger.kb.io,admissionReviewVersions=v1
+// Admission webhooks can be added by adding tag: kubebuilder:webhook:path=/mutate-fission-io-v1-timetrigger,mutating=true,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=timetriggers,verbs=create;update,versions=v1,name=mtimetrigger.fission.io,admissionReviewVersions=v1
 
 var _ webhook.Defaulter = &TimeTrigger{}
 
@@ -46,7 +46,7 @@ func (r *TimeTrigger) Default() {
 }
 
 // user change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
-//+kubebuilder:webhook:path=/validate-fission-io-v1-timetrigger,mutating=false,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=timetriggers,verbs=create;update,versions=v1,name=vtimetrigger.kb.io,admissionReviewVersions=v1
+//+kubebuilder:webhook:path=/validate-fission-io-v1-timetrigger,mutating=false,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=timetriggers,verbs=create;update,versions=v1,name=vtimetrigger.fission.io,admissionReviewVersions=v1
 
 var _ webhook.Validator = &TimeTrigger{}
 

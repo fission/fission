@@ -34,7 +34,7 @@ func (r *CanaryConfig) SetupWebhookWithManager(mgr ctrl.Manager) error {
 		Complete()
 }
 
-// Admission webhooks can be added by adding tag: kubebuilder:webhook:path=/mutate-fission-io-v1-canaryconfig,mutating=true,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=canaryconfigs,verbs=create;update,versions=v1,name=mcanaryconfig.kb.io,admissionReviewVersions=v1
+// Admission webhooks can be added by adding tag: kubebuilder:webhook:path=/mutate-fission-io-v1-canaryconfig,mutating=true,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=canaryconfigs,verbs=create;update,versions=v1,name=mcanaryconfig.fission.io,admissionReviewVersions=v1
 // Refer Makefile -> generate-webhooks to generate config for manifests
 
 var _ webhook.Defaulter = &CanaryConfig{}
@@ -45,7 +45,7 @@ func (r *CanaryConfig) Default() {
 }
 
 // user can change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
-//+kubebuilder:webhook:path=/validate-fission-io-v1-canaryconfig,mutating=false,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=canaryconfigs,verbs=create;update,versions=v1,name=vcanaryconfig.kb.io,admissionReviewVersions=v1
+//+kubebuilder:webhook:path=/validate-fission-io-v1-canaryconfig,mutating=false,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=canaryconfigs,verbs=create;update,versions=v1,name=vcanaryconfig.fission.io,admissionReviewVersions=v1
 
 var _ webhook.Validator = &CanaryConfig{}
 
