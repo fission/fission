@@ -150,26 +150,26 @@ func GetVersion(ctx context.Context, input cli.Input, cmdClient cmd.Client) info
 
 func GetServerInfo(input cli.Input, cmdClient cmd.Client) *info.ServerInfo {
 
+	var serverInfo info.ServerInfo
 	serverURL, err := getRouterURL(input.Context(), cmdClient)
 	if err != nil {
 		console.Warn("could not connect to server")
-		return nil
+		return &serverInfo
 	}
 	// make request
 	resp, err := http.Get(serverURL.String() + "/_version")
 	if err != nil {
 		console.Warn("could not get data from server")
-		return nil
+		return &serverInfo
 	}
 
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		msg := fmt.Sprintf("HTTP error %v", resp.StatusCode)
 		console.Warn(msg)
-		return nil
+		return &serverInfo
 	}
 
-	var serverInfo info.ServerInfo
 	err = json.NewDecoder(resp.Body).Decode(&serverInfo)
 	if err != nil {
 		console.Warn(fmt.Sprintf("Error getting Fission API version: %v", err))
