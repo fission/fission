@@ -34,7 +34,7 @@ func (r *HTTPTrigger) SetupWebhookWithManager(mgr ctrl.Manager) error {
 		Complete()
 }
 
-// Admission webhooks can be added by adding tag: kubebuilder:webhook:path=/mutate-fission-io-v1-httptrigger,mutating=true,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=httptriggers,verbs=create;update,versions=v1,name=mhttptrigger.kb.io,admissionReviewVersions=v1
+// Admission webhooks can be added by adding tag: kubebuilder:webhook:path=/mutate-fission-io-v1-httptrigger,mutating=true,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=httptriggers,verbs=create;update,versions=v1,name=mhttptrigger.fission.io,admissionReviewVersions=v1
 
 var _ webhook.Defaulter = &HTTPTrigger{}
 
@@ -44,7 +44,7 @@ func (r *HTTPTrigger) Default() {
 }
 
 // user change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
-//+kubebuilder:webhook:path=/validate-fission-io-v1-httptrigger,mutating=false,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=httptriggers,verbs=create;update,versions=v1,name=vhttptrigger.kb.io,admissionReviewVersions=v1
+//+kubebuilder:webhook:path=/validate-fission-io-v1-httptrigger,mutating=false,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=httptriggers,verbs=create;update,versions=v1,name=vhttptrigger.fission.io,admissionReviewVersions=v1
 
 var _ webhook.Validator = &HTTPTrigger{}
 

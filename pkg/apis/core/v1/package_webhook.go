@@ -38,18 +38,19 @@ func (r *Package) SetupWebhookWithManager(mgr ctrl.Manager) error {
 		Complete()
 }
 
-// Admission webhooks can be added by adding tag: kubebuilder:webhook:path=/mutate-fission-io-v1-package,mutating=true,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=packages,verbs=create;update,versions=v1,name=mpackage.kb.io,admissionReviewVersions=v1
+//+kubebuilder:webhook:path=/mutate-fission-io-v1-package,mutating=true,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=packages,verbs=create;update,versions=v1,name=mpackage.fission.io,admissionReviewVersions=v1
 
 var _ webhook.Defaulter = &Package{}
 
 // Default implements webhook.Defaulter so a webhook will be registered for the type
 func (r *Package) Default() {
 	packagelog.Debug("default", zap.String("name", r.Name))
+	r.Status.BuildStatus = BuildStatusSucceeded
 
 }
 
 // user change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
-//+kubebuilder:webhook:path=/validate-fission-io-v1-package,mutating=false,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=packages,verbs=create;update,versions=v1,name=vpackage.kb.io,admissionReviewVersions=v1
+//+kubebuilder:webhook:path=/validate-fission-io-v1-package,mutating=false,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=packages,verbs=create,versions=v1,name=vpackage.fission.io,admissionReviewVersions=v1
 
 var _ webhook.Validator = &Package{}
 

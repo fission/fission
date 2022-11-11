@@ -5,6 +5,43 @@
 
 {{- $certManagerEnabled := $.Values.webhook.certManager.enabled }}
 
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  creationTimestamp: null
+  name: mutating-webhook-configuration
+  {{- if $certManagerEnabled }}
+  annotations:
+    cert-manager.io/inject-ca-from: "{{ .Release.Namespace }}/fission-webhook-cert"
+  {{- end }}
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    {{- if $certManagerEnabled }}
+    caBundle: Cg==
+    {{- else }}
+    caBundle: {{ ternary (b64enc $caCert) (b64enc (trim $crtPEM)) (empty $crtPEM) }}
+    {{- end }}
+    service:
+      name: webhook-service
+      namespace:  {{ .Release.Namespace }}
+      path: /mutate-fission-io-v1-package
+  failurePolicy: Fail
+  name: mpackage.fission.io
+  rules:
+  - apiGroups:
+    - fission.io
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    resources:
+    - packages
+  sideEffects: None
+---
+
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
@@ -28,7 +65,7 @@ webhooks:
       namespace:  {{ .Release.Namespace }}
       path: /validate-fission-io-v1-canaryconfig
   failurePolicy: Fail
-  name: vcanaryconfig.kb.io
+  name: vcanaryconfig.fission.io
   rules:
   - apiGroups:
     - fission.io
@@ -53,7 +90,7 @@ webhooks:
       namespace:  {{ .Release.Namespace }}
       path: /validate-fission-io-v1-environment
   failurePolicy: Fail
-  name: venvironment.kb.io
+  name: venvironment.fission.io
   rules:
   - apiGroups:
     - fission.io
@@ -78,7 +115,7 @@ webhooks:
       namespace:  {{ .Release.Namespace }}
       path: /validate-fission-io-v1-function
   failurePolicy: Fail
-  name: vfunction.kb.io
+  name: vfunction.fission.io
   rules:
   - apiGroups:
     - fission.io
@@ -103,7 +140,7 @@ webhooks:
       namespace:  {{ .Release.Namespace }}
       path: /validate-fission-io-v1-httptrigger
   failurePolicy: Fail
-  name: vhttptrigger.kb.io
+  name: vhttptrigger.fission.io
   rules:
   - apiGroups:
     - fission.io
@@ -128,7 +165,7 @@ webhooks:
       namespace:  {{ .Release.Namespace }}
       path: /validate-fission-io-v1-kuberneteswatchtrigger
   failurePolicy: Fail
-  name: vkuberneteswatchtrigger.kb.io
+  name: vkuberneteswatchtrigger.fission.io
   rules:
   - apiGroups:
     - fission.io
@@ -153,7 +190,7 @@ webhooks:
       namespace:  {{ .Release.Namespace }}
       path: /validate-fission-io-v1-messagequeuetrigger
   failurePolicy: Fail
-  name: vmessagequeuetrigger.kb.io
+  name: vmessagequeuetrigger.fission.io
   rules:
   - apiGroups:
     - fission.io
@@ -178,7 +215,7 @@ webhooks:
       namespace:  {{ .Release.Namespace }}
       path: /validate-fission-io-v1-package
   failurePolicy: Fail
-  name: vpackage.kb.io
+  name: vpackage.fission.io
   rules:
   - apiGroups:
     - fission.io
@@ -203,7 +240,7 @@ webhooks:
       namespace:  {{ .Release.Namespace }}
       path: /validate-fission-io-v1-timetrigger
   failurePolicy: Fail
-  name: vtimetrigger.kb.io
+  name: vtimetrigger.fission.io
   rules:
   - apiGroups:
     - fission.io
