@@ -35,6 +35,9 @@ spec:
         - mountPath: /tmp/k8s-webhook-server/serving-certs
           name: serving-certs
           readOnly: true
+        ports:
+          - containerPort: 8080
+            name: metrics
       volumes:
       - name: serving-certs
         secret:

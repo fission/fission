@@ -44,7 +44,7 @@ func (r *Environment) Default() {
 }
 
 // user: change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
-//+kubebuilder:webhook:path=/validate-fission-io-v1-environment,mutating=false,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=environments,verbs=create;update,versions=v1,name=venvironment.fission.io,admissionReviewVersions=v1
+//+kubebuilder:webhook:path=/validate-fission-io-v1-environment,mutating=false,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=environments,verbs=create,versions=v1,name=venvironment.fission.io,admissionReviewVersions=v1
 
 var _ webhook.Validator = &Environment{}
 
@@ -62,8 +62,6 @@ func (r *Environment) ValidateCreate() error {
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
 func (r *Environment) ValidateUpdate(old runtime.Object) error {
 	environmentlog.Debug("validate update", zap.String("name", r.Name))
-
-	// TODO(user): fill in your validation logic upon object update.
 	return nil
 }
 

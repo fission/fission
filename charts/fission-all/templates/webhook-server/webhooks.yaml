@@ -37,6 +37,7 @@ webhooks:
     - v1
     operations:
     - CREATE
+    - UPDATE
     resources:
     - packages
   sideEffects: None
@@ -63,31 +64,6 @@ webhooks:
     service:
       name: webhook-service
       namespace:  {{ .Release.Namespace }}
-      path: /validate-fission-io-v1-canaryconfig
-  failurePolicy: Fail
-  name: vcanaryconfig.fission.io
-  rules:
-  - apiGroups:
-    - fission.io
-    apiVersions:
-    - v1
-    operations:
-    - CREATE
-    - UPDATE
-    resources:
-    - canaryconfigs
-  sideEffects: None
-- admissionReviewVersions:
-  - v1
-  clientConfig:
-    {{- if $certManagerEnabled }}
-    caBundle: Cg==
-    {{- else }}
-    caBundle: {{ ternary (b64enc $caCert) (b64enc (trim $crtPEM)) (empty $crtPEM) }}
-    {{- end }}
-    service:
-      name: webhook-service
-      namespace:  {{ .Release.Namespace }}
       path: /validate-fission-io-v1-environment
   failurePolicy: Fail
   name: venvironment.fission.io
@@ -98,7 +74,6 @@ webhooks:
     - v1
     operations:
     - CREATE
-    - UPDATE
     resources:
     - environments
   sideEffects: None
