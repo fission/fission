@@ -101,6 +101,7 @@ jobs:
           sudo chmod +x /usr/local/bin/fission
 
       - name: Build and Install Fission
+        timeout-minutes: 10
         run: |
           kubectl create ns fission
           make create-crds
