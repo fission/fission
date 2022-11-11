@@ -4,6 +4,12 @@
 {{- $keyPEM := include "webhook.keyPEM" . -}}
 
 {{- $certManagerEnabled := $.Values.webhook.certManager.enabled }}
+{{- $caBundleValue := "" -}}
+{{- if $certManagerEnabled }}
+{{- $caBundleValue = "Cg==" -}}
+{{- else }}
+{{- $caBundleValue = ternary (b64enc $caCert) (b64enc (trim $crtPEM)) (empty $crtPEM)  -}}
+{{- end }}
 
 ---
 apiVersion: admissionregistration.k8s.io/v1
@@ -19,11 +25,7 @@ webhooks:
 - admissionReviewVersions:
   - v1
   clientConfig:
-    {{- if $certManagerEnabled }}
-    caBundle: Cg==
-    {{- else }}
-    caBundle: {{ ternary (b64enc $caCert) (b64enc (trim $crtPEM)) (empty $crtPEM) }}
-    {{- end }}
+    caBundle: {{ $caBundleValue }}
     service:
       name: webhook-service
       namespace:  {{ .Release.Namespace }}
@@ -56,11 +58,7 @@ webhooks:
 - admissionReviewVersions:
   - v1
   clientConfig:
-    {{- if $certManagerEnabled }}
-    caBundle: Cg==
-    {{- else }}
-    caBundle: {{ ternary (b64enc $caCert) (b64enc (trim $crtPEM)) (empty $crtPEM) }}
-    {{- end }}
+    caBundle: {{ $caBundleValue }}
     service:
       name: webhook-service
       namespace:  {{ .Release.Namespace }}
@@ -80,11 +78,7 @@ webhooks:
 - admissionReviewVersions:
   - v1
   clientConfig:
-    {{- if $certManagerEnabled }}
-    caBundle: Cg==
-    {{- else }}
-    caBundle: {{ ternary (b64enc $caCert) (b64enc (trim $crtPEM)) (empty $crtPEM) }}
-    {{- end }}
+    caBundle: {{ $caBundleValue }}
     service:
       name: webhook-service
       namespace:  {{ .Release.Namespace }}
@@ -105,11 +99,7 @@ webhooks:
 - admissionReviewVersions:
   - v1
   clientConfig:
-    {{- if $certManagerEnabled }}
-    caBundle: Cg==
-    {{- else }}
-    caBundle: {{ ternary (b64enc $caCert) (b64enc (trim $crtPEM)) (empty $crtPEM) }}
-    {{- end }}
+    caBundle: {{ $caBundleValue }}
     service:
       name: webhook-service
       namespace:  {{ .Release.Namespace }}
@@ -130,11 +120,7 @@ webhooks:
 - admissionReviewVersions:
   - v1
   clientConfig:
-    {{- if $certManagerEnabled }}
-    caBundle: Cg==
-    {{- else }}
-    caBundle: {{ ternary (b64enc $caCert) (b64enc (trim $crtPEM)) (empty $crtPEM) }}
-    {{- end }}
+    caBundle: {{ $caBundleValue }}
     service:
       name: webhook-service
       namespace:  {{ .Release.Namespace }}
@@ -155,11 +141,7 @@ webhooks:
 - admissionReviewVersions:
   - v1
   clientConfig:
-    {{- if $certManagerEnabled }}
-    caBundle: Cg==
-    {{- else }}
-    caBundle: {{ ternary (b64enc $caCert) (b64enc (trim $crtPEM)) (empty $crtPEM) }}
-    {{- end }}
+    caBundle: {{ $caBundleValue }}
     service:
       name: webhook-service
       namespace:  {{ .Release.Namespace }}
@@ -180,11 +162,7 @@ webhooks:
 - admissionReviewVersions:
   - v1
   clientConfig:
-    {{- if $certManagerEnabled }}
-    caBundle: Cg==
-    {{- else }}
-    caBundle: {{ ternary (b64enc $caCert) (b64enc (trim $crtPEM)) (empty $crtPEM) }}
-    {{- end }}
+    caBundle: {{ $caBundleValue }}
     service:
       name: webhook-service
       namespace:  {{ .Release.Namespace }}
@@ -205,11 +183,7 @@ webhooks:
 - admissionReviewVersions:
   - v1
   clientConfig:
-    {{- if $certManagerEnabled }}
-    caBundle: Cg==
-    {{- else }}
-    caBundle: {{ ternary (b64enc $caCert) (b64enc (trim $crtPEM)) (empty $crtPEM) }}
-    {{- end }}
+    caBundle: {{ $caBundleValue }}
     service:
       name: webhook-service
       namespace:  {{ .Release.Namespace }}

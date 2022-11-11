@@ -84,6 +84,6 @@ This template generates the image name for the deployment depending on the value
 {{/*
 Define the svc's name
 */}}
-{{- define "fission.svc" -}}
+{{- define "fission-webhook.svc" -}}
 {{- printf "webhook-service" -}}
 {{- end -}}
