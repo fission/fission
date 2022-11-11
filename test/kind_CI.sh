@@ -15,6 +15,7 @@ echo "source test_utils done"
 dump_system_info
 
 export FUNCTION_NAMESPACE=fission-function
+export BUILDER_NAMESPACE=fission-builder
 export FISSION_NAMESPACE=fission
 export FISSION_ROUTER=127.0.0.1:8888
 export NODE_RUNTIME_IMAGE=fission/node-env-14

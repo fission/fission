@@ -16,7 +16,7 @@ ENV=python-${TEST_ID}
 FN=foo-${TEST_ID}
 RESOURCE_NS=default # Change to test-specific namespace once we support namespaced CRDs
 FUNCTION_NS=${FUNCTION_NAMESPACE:-fission-function}
-BUILDER_NS=fission-builder
+BUILDER_NS=${BUILDER_NAMESPACE:-fission-builder}
 
 # fs
 ENV_SPEC_FILE=${tmp_dir}/${ENV}.yaml
