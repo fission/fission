@@ -113,9 +113,10 @@ func makeEnvironmentWatcher(
 	return envWatcher
 }
 
-func (env *environmentWatcher) getLabelForDeploymentOwner() map[string]string {
+func (env *environmentWatcher) getDeploymentLabels(envName string) map[string]string {
 	return map[string]string{
 		LABEL_DEPLOYMENT_OWNER: BUILDER_MGR,
+		LABEL_ENV_NAME:         envName,
 	}
 }
 
@@ -202,7 +203,7 @@ func (envw *environmentWatcher) getNamespace(env *fv1.Environment) string {
 
 func (envw *environmentWatcher) DeleteBuilderService(ctx context.Context, env *fv1.Environment) {
 	ns := envw.getNamespace(env)
-	svcList, err := envw.getBuilderServiceList(ctx, envw.getLabelForDeploymentOwner(), ns)
+	svcList, err := envw.getBuilderServiceList(ctx, envw.getDeploymentLabels(env.ObjectMeta.Name), ns)
 	if err != nil {
 		envw.logger.Error("error getting the builder service list", zap.Error(err))
 	}
@@ -227,7 +228,7 @@ func (envw *environmentWatcher) DeleteBuilderService(ctx context.Context, env *f
 
 func (envw *environmentWatcher) DeleteBuilderDeployment(ctx context.Context, env *fv1.Environment) {
 	ns := envw.getNamespace(env)
-	deployList, err := envw.getBuilderDeploymentList(ctx, envw.getLabelForDeploymentOwner(), ns)
+	deployList, err := envw.getBuilderDeploymentList(ctx, envw.getDeploymentLabels(env.ObjectMeta.Name), ns)
 	if err != nil {
 		envw.logger.Error("error getting the builder deployment list", zap.Error(err))
 	}
