@@ -1,0 +1,7 @@
+{{- include "fission-role-generator" (merge (dict "namespace" .Values.defaultNamespace "component" "executor") .) }}
+
+{{- if not .Values.singleDefaultNamespace }}
+{{- range $namespace := $.Values.additionalFissionNamespaces }}
+{{ include "fission-role-generator" (merge (dict "namespace" $namespace "component" "executor") $) }}
+{{- end }}
+{{- end }}
