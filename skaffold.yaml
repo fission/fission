@@ -63,6 +63,7 @@ deploy:
         buildermgr.securityContext.enabled: true
         controller.securityContext.enabled: true
         kubewatcher.securityContext.enabled: true
+        webhook.securityContext.enabled: true
         storagesvc.securityContext.enabled: true
       wait: true
     flags:

@@ -80,3 +80,10 @@ This template generates the image name for the deployment depending on the value
   value: {{ .Values.defaultNamespace }}  
 {{- end }}
 {{- end }}
+
+{{/*
+Define the svc's name
+*/}}
+{{- define "fission-webhook.svc" -}}
+{{- printf "webhook-service" -}}
+{{- end -}}

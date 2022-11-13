@@ -71,6 +71,13 @@ generate-crds: controller-gen-install
 	paths=./pkg/apis/core/v1  \
 	output:crd:artifacts:config=crds/v1
 
+### Webhook generation: it generates webhook configs with help of kubebuilder:webhook tag
+generate-webhooks: controller-gen-install
+	controller-gen webhook \
+	 paths=./pkg/apis/core/v1 \
+	 output:dir=charts/fission-all/templates/webhook-server
+
+
 create-crds:
 	@kubectl create -k crds/v1
 
