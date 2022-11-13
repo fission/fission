@@ -62,30 +62,6 @@ webhooks:
     service:
       name: webhook-service
       namespace:  {{ .Release.Namespace }}
-<<<<<<< HEAD
-=======
-      path: /validate-fission-io-v1-canaryconfig
-  failurePolicy: Fail
-  name: vcanaryconfig.fission.io
-  rules:
-  - apiGroups:
-    - fission.io
-    apiVersions:
-    - v1
-    operations:
-    - CREATE
-    - UPDATE
-    resources:
-    - canaryconfigs
-  sideEffects: None
-- admissionReviewVersions:
-  - v1
-  clientConfig:
-    caBundle: {{ $caBundleValue }}
-    service:
-      name: webhook-service
-      namespace:  {{ .Release.Namespace }}
->>>>>>> Service name and caBundle fixes (#2614)
       path: /validate-fission-io-v1-environment
   failurePolicy: Fail
   name: venvironment.fission.io
