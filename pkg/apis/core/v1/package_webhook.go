@@ -45,7 +45,7 @@ var _ webhook.Defaulter = &Package{}
 // Default implements webhook.Defaulter so a webhook will be registered for the type
 func (r *Package) Default() {
 	packagelog.Debug("default", zap.String("name", r.Name))
-	if r.Status.BuildStatus != "" {
+	if r.Status.BuildStatus == "" {
 		r.Status.BuildStatus = BuildStatusPending
 	}
 }
