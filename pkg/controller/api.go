@@ -67,7 +67,7 @@ type (
 	}
 )
 
-func MakeAPI(logger *zap.Logger, featureStatus map[string]string) (*API, error) {
+func MakeAPI(logger *zap.Logger) (*API, error) {
 	api, err := makeCRDBackedAPI(logger)
 
 	u := os.Getenv("STORAGE_SERVICE_URL")
@@ -97,8 +97,6 @@ func MakeAPI(logger *zap.Logger, featureStatus map[string]string) (*API, error) 
 	} else {
 		api.functionNamespace = "fission-function"
 	}
-
-	api.featureStatus = featureStatus
 
 	return api, err
 }

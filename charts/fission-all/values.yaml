@@ -359,35 +359,7 @@ controller:
     runAsNonRoot: true
     fsGroup: 10001
     runAsUser: 10001
-    runAsGroup: 10001
-
-## canaryconfig is the component that the client talks to.
-## It contains canaryconfig feature and there handlings
-##
-canaryconfig:
-  ## Pod resources as:
-  ##  resources:
-  ##    limits:
-  ##      cpu: <tbd>
-  ##      memory: <tbd>
-  ##    requests:
-  ##      cpu: <tbd>
-  ##      memory: <tbd>
-  ##
-  resources: {}
-
-  ## Security Context
-  ## It holds pod-level and container level security configuration.
-  ## This is an experimental section, please verify before enabling in production.
-  ## Ref: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#security-context-1
-  securityContext:
-    enabled: false
-    ## Mark it false, if you want to stop the non root user validation
-    runAsNonRoot: true
-    fsGroup: 10001
-    runAsUser: 10001
-    runAsGroup: 10001
-  
+    runAsGroup: 10001 
 
 ## webhook is the component that validates API calls.
 ## It contains validation and mutation for functions, triggers, environments, Kubernetes event watches, etc. 
@@ -729,10 +701,33 @@ prometheus:
   ##
   serviceEndpoint: ""
 
-## set this flag to true if you need canary deployment feature
-##
+
 canaryDeployment:
+## set this flag to true if you need canary deployment feature
   enabled: false
+
+  ## Pod resources as:
+  ##  resources:
+  ##    limits:
+  ##      cpu: <tbd>
+  ##      memory: <tbd>
+  ##    requests:
+  ##      cpu: <tbd>
+  ##      memory: <tbd>
+  ##
+  resources: {}
+
+  ## Security Context
+  ## It holds pod-level and container level security configuration.
+  ## This is an experimental section, please verify before enabling in production.
+  ## Ref: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#security-context-1
+  securityContext:
+    enabled: false
+    ## Mark it false, if you want to stop the non root user validation
+    runAsNonRoot: true
+    fsGroup: 10001
+    runAsUser: 10001
+    runAsGroup: 10001
 
 ## Enable authentication for fission function invocation via Fission router
 ##

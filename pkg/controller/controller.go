@@ -27,7 +27,7 @@ import (
 func Start(ctx context.Context, logger *zap.Logger, port int, unitTestFlag bool) {
 	cLogger := logger.Named("controller")
 
-	fc, kc, apiExtClient, _, err := crd.MakeFissionClient()
+	fc, _, apiExtClient, _, err := crd.MakeFissionClient()
 	if err != nil {
 		cLogger.Fatal("failed to connect to k8s API", zap.Error(err))
 	}
@@ -42,12 +42,7 @@ func Start(ctx context.Context, logger *zap.Logger, port int, unitTestFlag bool)
 		cLogger.Fatal("error waiting for CRDs", zap.Error(err))
 	}
 
-	featureStatus, err := ConfigureFeatures(ctx, cLogger, unitTestFlag, fc, kc)
-	if err != nil {
-		cLogger.Error("error configuring features - proceeding without optional features", zap.Error(err))
-	}
-
-	api, err := MakeAPI(cLogger, featureStatus)
+	api, err := MakeAPI(cLogger)
 	if err != nil {
 		cLogger.Fatal("failed to start controller", zap.Error(err))
 	}

@@ -23,8 +23,8 @@ spec:
         prometheus.io/path: "/metrics"
         prometheus.io/port: "8080"
     spec:
-      {{- if .Values.canaryconfig.securityContext.enabled }}
-      securityContext: {{- omit .Values.canaryconfig.securityContext "enabled" | toYaml | nindent 8 }}
+      {{- if .Values.canaryDeployment.securityContext.enabled }}
+      securityContext: {{- omit .Values.canaryDeployment.securityContext "enabled" | toYaml | nindent 8 }}
       {{- end }}
       containers:
       - name: canaryconfig
@@ -44,7 +44,7 @@ spec:
               fieldPath: metadata.namespace
         {{- include "opentelemtry.envs" . | indent 8 }}
         resources:
-          {{- toYaml .Values.canaryconfig.resources | nindent 10 }}
+          {{- toYaml .Values.canaryDeployment.resources | nindent 10 }}
         {{- if .Values.terminationMessagePath }}
         terminationMessagePath: {{ .Values.terminationMessagePath }}
         {{- end }}
