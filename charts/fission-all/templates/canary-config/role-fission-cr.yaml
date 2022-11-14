@@ -1,0 +1,9 @@
+{{- if .Values.canaryDeployment.enabled }}
+{{- include "fission-role-generator" (merge (dict "namespace" .Values.defaultNamespace "component" "canaryconfig") .) }}
+
+{{- if not .Values.singleDefaultNamespace }}
+{{- range $namespace := $.Values.additionalFissionNamespaces }}
+{{ include "fission-role-generator" (merge (dict "namespace" $namespace "component" "canaryconfig") $) }}
+{{- end }}
+{{- end }}
+{{- end -}}

@@ -1,0 +1,14 @@
+{{- if .Values.canaryDeployment.enabled }}
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: {{ .Release.Name }}-canaryconfig
+subjects:
+  - kind: ServiceAccount
+    name: fission-canaryconfig
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: ClusterRole
+  name: {{ .Release.Name }}-canaryconfig
+  apiGroup: rbac.authorization.k8s.io
+{{- end -}}

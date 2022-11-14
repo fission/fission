@@ -32,6 +32,7 @@ import (
 	k8sCache "k8s.io/client-go/tools/cache"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	"github.com/fission/fission/pkg/utils"
 )
@@ -549,4 +550,19 @@ func (canaryCfgMgr *canaryConfigMgr) updateCanaryConfig(ctx context.Context, old
 func getEnvValue(envVar string) string {
 	envVarSplit := strings.Split(envVar, "=")
 	return envVarSplit[1]
+}
+
+func StartCanaryServer(ctx context.Context, logger *zap.Logger, port int, unitTestFlag bool) error {
+	cLogger := logger.Named("CanaryServer")
+
+	fc, kc, _, _, err := crd.MakeFissionClient()
+	if err != nil {
+		cLogger.Fatal("failed to connect to k8s API", zap.Error(err))
+	}
+
+	err = ConfigureFeatures(ctx, cLogger, unitTestFlag, fc, kc)
+	if err != nil {
+		cLogger.Error("error configuring features - proceeding without optional features", zap.Error(err))
+	}
+	return err
 }
