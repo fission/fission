@@ -135,7 +135,7 @@ func (pkgw *packageWatcher) build(ctx context.Context, srcpkg *fv1.Package) {
 		for _, item := range items {
 			pod := item.(*apiv1.Pod)
 
-			builderNs := env.ObjectMeta.Namespace
+			builderNs := FissionNS.GetNamespace(env.ObjectMeta.Namespace, fv1.BuilderNamespace)
 
 			// Filter non-matching pods
 			if pod.ObjectMeta.Labels[LABEL_ENV_NAME] != env.ObjectMeta.Name ||

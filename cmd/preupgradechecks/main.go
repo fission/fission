@@ -23,14 +23,6 @@ import (
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
 
-func getStringArgWithDefault(arg interface{}, defaultValue string) string {
-	if arg != nil {
-		return arg.(string)
-	} else {
-		return defaultValue
-	}
-}
-
 func main() {
 	logger := loggerfactory.GetLogger()
 	defer logger.Sync()

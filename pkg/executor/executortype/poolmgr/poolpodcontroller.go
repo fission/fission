@@ -371,7 +371,7 @@ func (p *PoolPodController) envDeleteQueueProcessFunc(ctx context.Context) bool 
 	p.logger.Debug("env delete request processing")
 	p.gpm.cleanupPool(ctx, env)
 	specializePodLables := getSpecializedPodLabels(env)
-	specializedPods, err := p.podLister.Pods(env.ObjectMeta.Namespace).List(labels.SelectorFromSet(specializePodLables))
+	specializedPods, err := p.podLister.Pods(FissionNS.ResolveNamespace(env.ObjectMeta.Namespace, fv1.FunctionNamespace)).List(labels.SelectorFromSet(specializePodLables))
 	if err != nil {
 		p.logger.Error("failed to list specialized pods", zap.Error(err))
 		p.envDeleteQueue.Forget(obj)
