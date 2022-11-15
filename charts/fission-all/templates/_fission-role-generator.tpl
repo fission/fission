@@ -41,6 +41,10 @@ metadata:
 {{- if eq "timer" .component }}
 {{- include "timer-rules" . }}
 {{- end }}
+{{- if eq "canaryconfig" .component }}
+{{- include "canaryconfig-rules" . }}
+{{- end }}
+
 ---
 kind: RoleBinding
 apiVersion: rbac.authorization.k8s.io/v1

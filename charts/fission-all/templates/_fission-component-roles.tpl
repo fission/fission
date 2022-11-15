@@ -170,3 +170,16 @@ rules:
   - patch
   - delete
 {{- end }}
+{{- define "canaryconfig-rules" }}
+rules:
+- apiGroups:
+  - fission.io
+  resources:
+  - canaryconfigs
+  - httptriggers
+  verbs:
+  - list
+  - watch
+  - get
+  - update
+{{- end }}

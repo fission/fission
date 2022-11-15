@@ -1,0 +1,81 @@
+{{- if .Values.canaryDeployment.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: canaryconfig
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: canaryconfig
+    application: fission-canaryconfig
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      svc: canaryconfig
+      application: fission-canaryconfig
+  template:
+    metadata:
+      labels:
+        svc: canaryconfig
+        application: fission-canaryconfig
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "8080"
+    spec:
+      {{- if .Values.canaryDeployment.securityContext.enabled }}
+      securityContext: {{- omit .Values.canaryDeployment.securityContext "enabled" | toYaml | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: canaryconfig
+        image: {{ include "fission-bundleImage" . | quote }}
+        imagePullPolicy: {{ .Values.pullPolicy }}
+        command: ["/fission-bundle"]
+        args: ["--canaryConfig"]
+        env:
+        - name: DEBUG_ENV
+          value: {{ .Values.debugEnv | quote }}
+        - name: PPROF_ENABLED
+          value: {{ .Values.pprof.enabled | quote }}
+        {{- include "fission-resource-namespace.envs" . | indent 8 }} 
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        {{- include "opentelemtry.envs" . | indent 8 }}
+        resources:
+          {{- toYaml .Values.canaryDeployment.resources | nindent 10 }}
+        {{- if .Values.terminationMessagePath }}
+        terminationMessagePath: {{ .Values.terminationMessagePath }}
+        {{- end }}
+        {{- if .Values.terminationMessagePolicy }}
+        terminationMessagePolicy: {{ .Values.terminationMessagePolicy }}
+        {{- end }}
+        volumeMounts:
+        - name: config-volume
+          mountPath: /etc/config/config.yaml
+          subPath: config.yaml
+        ports:
+          - containerPort: 8080
+            name: metrics
+        {{- if .Values.pprof.enabled }}
+          - containerPort: 6060
+            name: pprof
+        {{- end }}
+  
+      serviceAccountName: fission-canaryconfig
+      volumes:
+      - name: config-volume
+        configMap:
+          name: feature-config
+{{- if .Values.priorityClassName }}
+      priorityClassName: {{ .Values.priorityClassName }}
+{{- end }}
+    {{- with .Values.imagePullSecrets }}
+      imagePullSecrets: 
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+{{- if .Values.extraCoreComponentPodConfig }}
+{{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
+{{- end }}
+{{- end -}}
