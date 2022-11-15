@@ -1,3 +1,4 @@
+{{- if or (.Values.controller.enabled) (.Values.influxdb.enabled) }}
 {{- if .Values.serviceMonitor.enabled }}
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
@@ -19,4 +20,5 @@ spec:
       svc: controller
   endpoints:
   - targetPort: 8080
+{{- end -}}
 {{- end -}}

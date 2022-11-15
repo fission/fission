@@ -338,6 +338,7 @@ buildermgr:
 ## It contains CRUD APIs for functions, triggers, environments, Kubernetes event watches, etc. and proxy APIs to internal 3rd-party services.
 ##
 controller:
+  enabled: false
   ## Pod resources as:
   ##  resources:
   ##    limits:
