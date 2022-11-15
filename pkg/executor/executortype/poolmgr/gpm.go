@@ -59,8 +59,7 @@ import (
 )
 
 var (
-	_         executortype.ExecutorType = &GenericPoolManager{}
-	FissionNS *utils.FissionNamespace
+	_ executortype.ExecutorType = &GenericPoolManager{}
 )
 
 type requestType int
@@ -77,6 +76,7 @@ type (
 		pools            map[string]*GenericPool
 		kubernetesClient kubernetes.Interface
 		metricsClient    metricsclient.Interface
+		nsResolver       *utils.NamespaceResolver
 
 		fissionClient  versioned.Interface
 		functionEnv    *cache.Cache
@@ -139,7 +139,6 @@ func MakeGenericPoolManager(ctx context.Context,
 		enableIstio = istio
 	}
 
-	FissionNS = utils.GetFissionNamespaces()
 	poolPodC := NewPoolPodController(ctx, gpmLogger, kubernetesClient,
 		enableIstio, funcInformer, pkgInformer, envInformer, rsInformer, podInformer)
 
@@ -147,6 +146,7 @@ func MakeGenericPoolManager(ctx context.Context,
 		logger:                     gpmLogger,
 		pools:                      make(map[string]*GenericPool),
 		kubernetesClient:           kubernetesClient,
+		nsResolver:                 utils.GetFissionNamespaces(),
 		metricsClient:              metricsClient,
 		fissionClient:              fissionClient,
 		functionEnv:                cache.MakeCache(10*time.Second, 0),
@@ -200,7 +200,7 @@ func (gpm *GenericPoolManager) GetFuncSvc(ctx context.Context, fn *fv1.Function)
 	}
 
 	if created {
-		logger.Info("created pool for the environment", zap.String("env", env.ObjectMeta.Name), zap.String("namespace", FissionNS.ResolveNamespace(env.ObjectMeta.Namespace, fv1.FunctionNamespace)))
+		logger.Info("created pool for the environment", zap.String("env", env.ObjectMeta.Name), zap.String("namespace", gpm.nsResolver.ResolveNamespace(gpm.nsResolver.FunctionNamespace)))
 	}
 
 	// from GenericPool -> get one function container
@@ -280,7 +280,7 @@ func (gpm *GenericPoolManager) RefreshFuncPods(ctx context.Context, logger *zap.
 	}
 
 	if created {
-		gpm.logger.Info("created pool for the environment", zap.String("env", env.ObjectMeta.Name), zap.String("namespace", FissionNS.ResolveNamespace(env.ObjectMeta.Namespace, fv1.FunctionNamespace)))
+		gpm.logger.Info("created pool for the environment", zap.String("env", env.ObjectMeta.Name), zap.String("namespace", gpm.nsResolver.ResolveNamespace(gpm.nsResolver.FunctionNamespace)))
 	}
 
 	funcSvc, err := gp.fsCache.GetByFunction(&f.ObjectMeta)
@@ -336,7 +336,7 @@ func (gpm *GenericPoolManager) AdoptExistingResources(ctx context.Context) {
 						gpm.logger.Error("adopt pool failed", zap.Error(err))
 					}
 					if created {
-						gpm.logger.Info("created pool for the environment", zap.String("env", env.ObjectMeta.Name), zap.String("namespace", FissionNS.ResolveNamespace(env.ObjectMeta.Namespace, fv1.FunctionNamespace)))
+						gpm.logger.Info("created pool for the environment", zap.String("env", env.ObjectMeta.Name), zap.String("namespace", gpm.nsResolver.ResolveNamespace(gpm.nsResolver.FunctionNamespace)))
 					}
 				}()
 			}
@@ -485,7 +485,7 @@ func (gpm *GenericPoolManager) service() {
 			if !ok {
 				// To support backward compatibility, if envs are created in default ns, we go ahead
 				// and create pools in fission-function ns as earlier.
-				ns := FissionNS.GetNamespace(req.env.ObjectMeta.Namespace, fv1.FunctionNamespace)
+				ns := gpm.nsResolver.GetFunctionNS(req.env.ObjectMeta.Namespace)
 				pool = MakeGenericPool(gpm.logger, gpm.fissionClient, gpm.kubernetesClient,
 					gpm.metricsClient, req.env, ns, gpm.fsCache,
 					gpm.fetcherConfig, gpm.instanceID, gpm.enableIstio, gpm.podSpecPatch)

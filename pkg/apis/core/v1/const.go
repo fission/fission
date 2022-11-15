@@ -166,8 +166,6 @@ const (
 )
 
 const (
-	BuilderNamespace       = "fission-builder"
-	FunctionNamespace      = "fission-function"
 	ENV_FUNCTION_NAMESPACE = "FISSION_FUNCTION_NAMEPSACE"
 	ENV_BUILDER_NAMESPACE  = "FISSION_BUILDER_NAMESPACE"
 	ENV_DEFAULT_NAMESPACE  = "FISSION_DEFAULT_NAMESPACE"

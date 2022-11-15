@@ -58,8 +58,7 @@ import (
 )
 
 var (
-	_         executortype.ExecutorType = &Container{}
-	FissionNS *utils.FissionNamespace
+	_ executortype.ExecutorType = &Container{}
 )
 
 type (
@@ -70,6 +69,7 @@ type (
 		kubernetesClient kubernetes.Interface
 		fissionClient    versioned.Interface
 		instanceID       string
+		nsResolver       *utils.NamespaceResolver
 		// fetcherConfig    *fetcherConfig.Config
 
 		runtimeImagePullPolicy apiv1.PullPolicy
@@ -118,6 +118,7 @@ func MakeContainer(
 		fissionClient:    fissionClient,
 		kubernetesClient: kubernetesClient,
 		instanceID:       instanceID,
+		nsResolver:       utils.GetFissionNamespaces(),
 
 		fsCache:   fscache.MakeFunctionServiceCache(logger),
 		throttler: throttler.MakeThrottler(1 * time.Minute),
@@ -130,7 +131,6 @@ func MakeContainer(
 		hpaops:                     hpautils.NewHpaOperations(logger, kubernetesClient, instanceID),
 	}
 
-	FissionNS = utils.GetFissionNamespaces()
 	caaf.deplLister = deplInformer.Lister()
 	caaf.deplListerSynced = deplInformer.Informer().HasSynced
 
@@ -384,7 +384,7 @@ func (caaf *Container) fnCreate(ctx context.Context, fn *fv1.Function) (*fscache
 
 	// to support backward compatibility, if the function was created in default ns, we fall back to creating the
 	// deployment of the function in fission-function ns
-	ns := FissionNS.GetNamespace(fn.ObjectMeta.Namespace, fv1.FunctionNamespace)
+	ns := caaf.nsResolver.GetFunctionNS(fn.ObjectMeta.Namespace)
 
 	// Envoy(istio-proxy) returns 404 directly before istio pilot
 	// propagates latest Envoy-specific configuration.
@@ -498,7 +498,7 @@ func (caaf *Container) updateFunction(ctx context.Context, oldFn *fv1.Function, 
 	if !reflect.DeepEqual(oldFn.Spec.InvokeStrategy, newFn.Spec.InvokeStrategy) {
 		// to support backward compatibility, if the function was created in default ns, we fall back to creating the
 		// deployment of the function in fission-function ns, so cleaning up resources there
-		ns := FissionNS.GetNamespace(newFn.ObjectMeta.Namespace, fv1.FunctionNamespace)
+		ns := caaf.nsResolver.GetFunctionNS(newFn.ObjectMeta.Namespace)
 
 		fsvc, err := caaf.fsCache.GetByFunctionUID(newFn.ObjectMeta.UID)
 		if err != nil {
@@ -594,7 +594,7 @@ func (caaf *Container) updateFuncDeployment(ctx context.Context, fn *fv1.Functio
 
 	// to support backward compatibility, if the function was created in default ns, we fall back to creating the
 	// deployment of the function in fission-function ns
-	ns := FissionNS.GetNamespace(fn.ObjectMeta.Namespace, fv1.FunctionNamespace)
+	ns := caaf.nsResolver.GetFunctionNS(fn.ObjectMeta.Namespace)
 
 	existingDepl, err := caaf.kubernetesClient.AppsV1().Deployments(ns).Get(ctx, fnObjName, metav1.GetOptions{})
 	if err != nil {
@@ -644,7 +644,7 @@ func (caaf *Container) fnDelete(ctx context.Context, fn *fv1.Function) error {
 
 	// to support backward compatibility, if the function was created in default ns, we fall back to creating the
 	// deployment of the function in fission-function ns, so cleaning up resources there
-	ns := FissionNS.GetNamespace(fn.ObjectMeta.Namespace, fv1.FunctionNamespace)
+	ns := caaf.nsResolver.GetFunctionNS(fn.ObjectMeta.Namespace)
 
 	err = caaf.cleanupContainer(ctx, ns, objName)
 	multierr = multierror.Append(multierr, err)

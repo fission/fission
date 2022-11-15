@@ -7,53 +7,47 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-type FissionNamespace struct {
+type NamespaceResolver struct {
 	FunctionNamespace string
 	BuiderNamespace   string
 	DefaultNamespace  string
 }
 
-func (fn *FissionNamespace) GetNamespace(namespace, kind string) string {
-	if fn.FunctionNamespace == "" || fn.BuiderNamespace == "" {
-		return fn.DefaultNamespace
+func (nsr *NamespaceResolver) GetBuilderNS(namespace string) string {
+	if nsr.FunctionNamespace == "" || nsr.BuiderNamespace == "" {
+		return nsr.DefaultNamespace
 	}
+
 	var ns string
-	switch kind {
-	case v1.BuilderNamespace:
-		ns = fn.BuiderNamespace
-		if namespace != metav1.NamespaceDefault {
-			ns = namespace
-		}
-	case v1.FunctionNamespace:
-		ns = fn.FunctionNamespace
-		if namespace != metav1.NamespaceDefault {
-			ns = namespace
-		}
-	default:
-		panic("unknown kind: " + kind)
+	ns = nsr.BuiderNamespace
+	if namespace != metav1.NamespaceDefault {
+		ns = namespace
 	}
 	return ns
 }
 
-func (fn *FissionNamespace) ResolveNamespace(namespace, kind string) string {
-	if fn.FunctionNamespace == "" || fn.BuiderNamespace == "" {
-		return namespace
+func (nsr *NamespaceResolver) GetFunctionNS(namespace string) string {
+	if nsr.FunctionNamespace == "" || nsr.BuiderNamespace == "" {
+		return nsr.DefaultNamespace
 	}
-	var ns string
-	switch kind {
-	case v1.BuilderNamespace:
-		ns = fn.BuiderNamespace
-	case v1.FunctionNamespace:
-		ns = fn.FunctionNamespace
-	default:
-		panic("unknown kind: " + kind)
+
+	ns := nsr.FunctionNamespace
+	if namespace != metav1.NamespaceDefault {
+		ns = namespace
 	}
 	return ns
+}
+
+func (nsr *NamespaceResolver) ResolveNamespace(namespace string) string {
+	if nsr.FunctionNamespace == "" || nsr.BuiderNamespace == "" {
+		return nsr.DefaultNamespace
+	}
+	return namespace
 }
 
 // GetFissionNamespaces => return all fission core component namespaces
-func GetFissionNamespaces() *FissionNamespace {
-	return &FissionNamespace{
+func GetFissionNamespaces() *NamespaceResolver {
+	return &NamespaceResolver{
 		FunctionNamespace: os.Getenv(v1.ENV_FUNCTION_NAMESPACE),
 		BuiderNamespace:   os.Getenv(v1.ENV_FUNCTION_NAMESPACE),
 		DefaultNamespace:  os.Getenv(v1.ENV_DEFAULT_NAMESPACE),

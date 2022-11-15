@@ -32,8 +32,6 @@ import (
 	"github.com/fission/fission/pkg/utils"
 )
 
-var FissionNS *utils.FissionNamespace
-
 // Start the buildermgr service.
 func Start(ctx context.Context, logger *zap.Logger, storageSvcUrl string) error {
 	bmLogger := logger.Named("builder_manager")
@@ -73,7 +71,5 @@ func Start(ctx context.Context, logger *zap.Logger, storageSvcUrl string) error 
 		kubernetesClient, storageSvcUrl, podInformer,
 		utils.GetInformersForNamespaces(fissionClient, time.Minute*30, fv1.PackagesResource))
 	pkgWatcher.Run(ctx)
-
-	FissionNS = utils.GetFissionNamespaces()
 	return nil
 }

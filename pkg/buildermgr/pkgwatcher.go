@@ -39,6 +39,7 @@ type (
 	packageWatcher struct {
 		logger        *zap.Logger
 		fissionClient versioned.Interface
+		nsResolver    *utils.NamespaceResolver
 		k8sClient     kubernetes.Interface
 		podInformer   k8sCache.SharedIndexInformer
 		pkgInformer   map[string]k8sCache.SharedIndexInformer
@@ -54,6 +55,7 @@ func makePackageWatcher(logger *zap.Logger, fissionClient versioned.Interface, k
 		logger:        logger.Named("package_watcher"),
 		fissionClient: fissionClient,
 		k8sClient:     k8sClientSet,
+		nsResolver:    utils.GetFissionNamespaces(),
 		podInformer:   podInformer,
 		pkgInformer:   pkgInformer,
 		storageSvcUrl: storageSvcUrl,
@@ -135,7 +137,7 @@ func (pkgw *packageWatcher) build(ctx context.Context, srcpkg *fv1.Package) {
 		for _, item := range items {
 			pod := item.(*apiv1.Pod)
 
-			builderNs := FissionNS.GetNamespace(env.ObjectMeta.Namespace, fv1.BuilderNamespace)
+			builderNs := pkgw.nsResolver.GetBuilderNS(env.ObjectMeta.Namespace)
 
 			// Filter non-matching pods
 			if pod.ObjectMeta.Labels[LABEL_ENV_NAME] != env.ObjectMeta.Name ||

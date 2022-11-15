@@ -66,6 +66,7 @@ type (
 		cache                  map[string]*builderInfo
 		fissionClient          versioned.Interface
 		kubernetesClient       kubernetes.Interface
+		nsResolver             *utils.NamespaceResolver
 		fetcherConfig          *fetcherConfig.Config
 		builderImagePullPolicy apiv1.PullPolicy
 		useIstio               bool
@@ -99,6 +100,7 @@ func makeEnvironmentWatcher(
 		cache:                  make(map[string]*builderInfo),
 		fissionClient:          fissionClient,
 		kubernetesClient:       kubernetesClient,
+		nsResolver:             utils.GetFissionNamespaces(),
 		builderImagePullPolicy: builderImagePullPolicy,
 		useIstio:               useIstio,
 		fetcherConfig:          fetcherConfig,
@@ -157,7 +159,7 @@ func (envw *environmentWatcher) AddUpdateBuilder(ctx context.Context, env *fv1.E
 	//builder is not supported with v1 interface and ignore env without builder image
 	if env.Spec.Version != 1 && len(env.Spec.Builder.Image) != 0 {
 		if _, ok := envw.cache[crd.CacheKeyUID(&env.ObjectMeta)]; !ok {
-			builderInfo, err := envw.createBuilder(ctx, env, FissionNS.GetNamespace(env.ObjectMeta.Namespace, fv1.BuilderNamespace))
+			builderInfo, err := envw.createBuilder(ctx, env, envw.nsResolver.GetBuilderNS(env.ObjectMeta.Namespace))
 			if err != nil {
 				envw.logger.Error("error creating builder service", zap.Error(err))
 				return
@@ -166,7 +168,7 @@ func (envw *environmentWatcher) AddUpdateBuilder(ctx context.Context, env *fv1.E
 		} else {
 			envw.DeleteBuilder(ctx, env)
 			// once older builder deleted then add new builder service
-			builderInfo, err := envw.createBuilder(ctx, env, FissionNS.GetNamespace(env.ObjectMeta.Namespace, fv1.BuilderNamespace))
+			builderInfo, err := envw.createBuilder(ctx, env, envw.nsResolver.GetBuilderNS(env.ObjectMeta.Namespace))
 			if err != nil {
 				envw.logger.Error("error updating builder service", zap.Error(err))
 				return
@@ -181,14 +183,14 @@ func (envw *environmentWatcher) DeleteBuilder(ctx context.Context, env *fv1.Envi
 		envw.DeleteBuilderService(ctx, env)
 		envw.DeleteBuilderDeployment(ctx, env)
 		delete(envw.cache, crd.CacheKeyUID(&env.ObjectMeta))
-		envw.logger.Info("builder service deleted", zap.String("env_name", env.ObjectMeta.Name), zap.String("namespace", FissionNS.GetNamespace(env.ObjectMeta.Namespace, fv1.BuilderNamespace)))
+		envw.logger.Info("builder service deleted", zap.String("env_name", env.ObjectMeta.Name), zap.String("namespace", envw.nsResolver.GetBuilderNS(env.ObjectMeta.Namespace)))
 	} else {
-		envw.logger.Debug("builder service not found", zap.String("env_name", env.ObjectMeta.Name), zap.String("namespace", FissionNS.GetNamespace(env.ObjectMeta.Namespace, fv1.BuilderNamespace)))
+		envw.logger.Debug("builder service not found", zap.String("env_name", env.ObjectMeta.Name), zap.String("namespace", envw.nsResolver.GetBuilderNS(env.ObjectMeta.Namespace)))
 	}
 }
 
 func (envw *environmentWatcher) DeleteBuilderService(ctx context.Context, env *fv1.Environment) {
-	ns := FissionNS.GetNamespace(env.ObjectMeta.Namespace, fv1.BuilderNamespace)
+	ns := envw.nsResolver.GetBuilderNS(env.ObjectMeta.Namespace)
 	svcList, err := envw.getBuilderServiceList(ctx, envw.getLabelForDeploymentOwner(), ns)
 	if err != nil {
 		envw.logger.Error("error getting the builder service list", zap.Error(err))
@@ -213,7 +215,7 @@ func (envw *environmentWatcher) DeleteBuilderService(ctx context.Context, env *f
 }
 
 func (envw *environmentWatcher) DeleteBuilderDeployment(ctx context.Context, env *fv1.Environment) {
-	ns := FissionNS.GetNamespace(env.ObjectMeta.Namespace, fv1.BuilderNamespace)
+	ns := envw.nsResolver.GetBuilderNS(env.ObjectMeta.Namespace)
 	deployList, err := envw.getBuilderDeploymentList(ctx, envw.getLabelForDeploymentOwner(), ns)
 	if err != nil {
 		envw.logger.Error("error getting the builder deployment list", zap.Error(err))
