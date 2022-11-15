@@ -19,7 +19,6 @@ package function
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -62,7 +61,7 @@ func (opts *LogSubCommand) do(input cli.Input) error {
 	}
 
 	server, err := util.GetApplicationUrl(input.Context(), opts.Client(), "application=fission-api")
-	if err != nil && !strings.Contains(err.Error(), "no available pod for port-forwarding with label selector") {
+	if err != nil {
 		return err
 	}
 
