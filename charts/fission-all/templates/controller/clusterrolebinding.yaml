@@ -1,3 +1,4 @@
+{{- if or (.Values.controller.enabled) (.Values.influxdb.enabled) }}
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
@@ -10,3 +11,4 @@ roleRef:
   kind: ClusterRole
   name: {{ .Release.Name }}-controller
   apiGroup: rbac.authorization.k8s.io
+{{- end -}}

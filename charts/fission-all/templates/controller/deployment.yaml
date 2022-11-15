@@ -1,3 +1,4 @@
+{{- if or (.Values.controller.enabled) (.Values.influxdb.enabled) }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -94,3 +95,4 @@ spec:
 {{- if .Values.extraCoreComponentPodConfig }}
 {{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
 {{- end }}
+{{- end -}}

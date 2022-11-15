@@ -65,6 +65,7 @@ deploy:
         kubewatcher.securityContext.enabled: true
         webhook.securityContext.enabled: true
         storagesvc.securityContext.enabled: true
+        controller.enabled: false
       wait: true
     flags:
       install:
