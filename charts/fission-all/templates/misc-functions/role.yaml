@@ -8,7 +8,7 @@ can be used
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  namespace: {{ .Values.defaultNamespace }}
+  namespace: {{ template "fission-function-ns" . }}
   name: {{ .Release.Name }}-event-fetcher
 rules:
 - apiGroups:
