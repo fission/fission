@@ -1,11 +1,24 @@
 {{- if .Values.createNamespace }}
-{{- if not (lookup "v1" "Namespace" .Values.defaultNamespace "") }}
+{{- if and (not (eq .Values.functionNamespace "default")) (not (eq .Values.functionNamespace ""))}}
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: {{ .Values.defaultNamespace }}
+  name: {{ template "fission-function-ns" . }}
   labels:
     name: fission-function
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    {{- if .Values.enableIstio }}
+    istio-injection: enabled
+    {{- end }}
+{{- end -}}
+---
+{{- if and (not (eq .Values.builderNamespace "default")) (not (eq .Values.builderNamespace ""))}}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ template "fission-builder-ns" . }}
+  labels:
+    name: fission-builder
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
     {{- if .Values.enableIstio }}
     istio-injection: enabled
