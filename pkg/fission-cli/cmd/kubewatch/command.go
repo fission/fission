@@ -31,7 +31,7 @@ func Commands() *cobra.Command {
 	}
 	wrapper.SetFlags(createCmd, flag.FlagSet{
 		Required: []flag.Flag{flag.KwFnName},
-		Optional: []flag.Flag{flag.KwName, flag.KwObjType, flag.KwNamespace, flag.NamespaceFunction, flag.SpecSave, flag.SpecDry},
+		Optional: []flag.Flag{flag.KwName, flag.KwObjType, flag.NamespaceFunction, flag.SpecSave, flag.SpecDry},
 		// TODO: add label selector flag
 		// flag.KwLabelsFlag
 	})
