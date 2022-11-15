@@ -552,7 +552,7 @@ func getEnvValue(envVar string) string {
 	return envVarSplit[1]
 }
 
-func StartCanaryServer(ctx context.Context, logger *zap.Logger, port int, unitTestFlag bool) error {
+func StartCanaryServer(ctx context.Context, logger *zap.Logger, unitTestFlag bool) error {
 	cLogger := logger.Named("CanaryServer")
 
 	fc, kc, _, _, err := crd.MakeFissionClient()

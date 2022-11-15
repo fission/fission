@@ -31,7 +31,7 @@ spec:
         image: {{ include "fission-bundleImage" . | quote }}
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
-        args: ["--canaryConfigPort", "8888"]
+        args: ["--canaryConfig"]
         env:
         - name: DEBUG_ENV
           value: {{ .Values.debugEnv | quote }}
@@ -58,8 +58,6 @@ spec:
         ports:
           - containerPort: 8080
             name: metrics
-          - containerPort: 8888
-            name: http
         {{- if .Values.pprof.enabled }}
           - containerPort: 6060
             name: pprof

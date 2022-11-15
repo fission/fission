@@ -54,8 +54,8 @@ func runController(ctx context.Context, logger *zap.Logger, port int) {
 	controller.Start(ctx, logger, port, false)
 }
 
-func runCanaryConfigServer(ctx context.Context, logger *zap.Logger, port int) error {
-	return canaryconfigmgr.StartCanaryServer(ctx, logger, port, false)
+func runCanaryConfigServer(ctx context.Context, logger *zap.Logger) error {
+	return canaryconfigmgr.StartCanaryServer(ctx, logger, false)
 }
 
 func runRouter(ctx context.Context, logger *zap.Logger, port int, executorUrl string) {
@@ -178,7 +178,7 @@ Use it to start one or more of the fission servers:
 
 Usage:
   fission-bundle --controllerPort=<port>
-  fission-bundle --canaryConfigPort=<port>
+  fission-bundle --canaryConfig
   fission-bundle --routerPort=<port> [--executorUrl=<url>]
   fission-bundle --executorPort=<port> [--namespace=<namespace>] [--fission-namespace=<namespace>]
   fission-bundle --kubewatcher [--routerUrl=<url>]
@@ -192,7 +192,7 @@ Usage:
   fission-bundle --version
 Options:
   --controllerPort=<port>         Port that the controller should listen on.
-  --canaryConfigPort=<port>		  Port that the canary config server should listen on.
+  --canaryConfig		  		  Start canary config server.
   --webhookPort=<port>             Port that the webhook should listen on.
   --routerPort=<port>             Port that the router should listen on.
   --executorPort=<port>           Port that the executor should listen on.
@@ -253,9 +253,8 @@ Options:
 		return
 	}
 
-	if arguments["--canaryConfigPort"] != nil {
-		port := getPort(logger, arguments["--canaryConfigPort"])
-		err := runCanaryConfigServer(ctx, logger, port)
+	if arguments["--canaryConfig"] == true {
+		err := runCanaryConfigServer(ctx, logger)
 		if err != nil {
 			logger.Error("canary config server exited with error: ", zap.Error(err))
 			return
