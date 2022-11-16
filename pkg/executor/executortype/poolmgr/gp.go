@@ -62,7 +62,6 @@ type (
 		env                      *fv1.Environment
 		deployment               *appsv1.Deployment            // kubernetes deployment
 		namespace                string                        // namespace to keep our resources
-		functionNamespace        string                        // fallback namespace for fission functions
 		podReadyTimeout          time.Duration                 // timeout for generic pods to become ready
 		fsCache                  *fscache.FunctionServiceCache // cache funcSvc's by function, address and podname
 		useSvc                   bool                          // create k8s service for specialized pods
@@ -92,7 +91,6 @@ func MakeGenericPool(
 	metricsClient metricsclient.Interface,
 	env *fv1.Environment,
 	namespace string,
-	functionNamespace string,
 	fsCache *fscache.FunctionServiceCache,
 	fetcherConfig *fetcherConfig.Config,
 	instanceID string,
@@ -122,7 +120,6 @@ func MakeGenericPool(
 		kubernetesClient:         kubernetesClient,
 		metricsClient:            metricsClient,
 		namespace:                namespace,
-		functionNamespace:        functionNamespace,
 		podReadyTimeout:          podReadyTimeout,
 		fsCache:                  fsCache,
 		fetcherConfig:            fetcherConfig,
@@ -446,7 +443,7 @@ func (gp *GenericPool) createSvc(ctx context.Context, name string, labels map[st
 }
 
 func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
-	logger := otelUtils.LoggerWithTraceID(ctx, gp.logger).With(zap.String("function", fn.ObjectMeta.Name), zap.String("functionNamespace", fn.ObjectMeta.Namespace),
+	logger := otelUtils.LoggerWithTraceID(ctx, gp.logger).With(zap.String("function", fn.ObjectMeta.Name), zap.String("namespace", fn.ObjectMeta.Namespace),
 		zap.String("env", fn.Spec.Environment.Name), zap.String("envNamespace", fn.Spec.Environment.Namespace))
 
 	logger.Info("choosing pod from pool")

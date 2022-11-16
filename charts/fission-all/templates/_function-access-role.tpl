@@ -61,7 +61,7 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: fission-fetcher
-    namespace: {{ .Values.functionNamespace }}
+    namespace: {{template "fission-function-ns" . }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -75,5 +75,5 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: fission-builder
-    namespace: {{ .Values.builderNamespace }}
+    namespace: {{ template "fission-builder-ns" . }}
 {{- end -}}

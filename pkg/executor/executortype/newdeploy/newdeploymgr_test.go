@@ -30,6 +30,7 @@ import (
 const (
 	defaultNamespace  string = "default"
 	functionNamespace string = "fission-function"
+	builderNamespace  string = "fission-builder"
 	envName           string = "newdeploy-test-env"
 	functionName      string = "newdeploy-test-func"
 	configmapName     string = "newdeploy-test-configmap"
@@ -80,13 +81,19 @@ func TestRefreshFuncPods(t *testing.T) {
 		t.Fatalf("Error creating fetcher config: %s", err)
 	}
 
-	executor, err := MakeNewDeploy(ctx, logger, fissionClient, kubernetesClient, functionNamespace, fetcherConfig, "test",
+	executor, err := MakeNewDeploy(ctx, logger, fissionClient, kubernetesClient, fetcherConfig, "test",
 		funcInformer, envInformer, deployInformer, svcInformer, podSpecPatch)
 	if err != nil {
 		t.Fatalf("new deploy manager creation failed: %s", err)
 	}
 
 	ndm := executor.(*NewDeploy)
+
+	nsResolver := utils.NamespaceResolver{
+		FunctionNamespace: functionNamespace,
+		BuiderNamespace:   builderNamespace,
+	}
+	ndm.nsResolver = &nsResolver
 
 	go ndm.Run(ctx)
 	t.Log("New deploy manager started")

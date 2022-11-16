@@ -1,24 +1,29 @@
 {{- if .Values.createNamespace }}
+{{- if and (ne .Values.functionNamespace "default") (ne .Values.functionNamespace "") }}
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: {{ .Values.functionNamespace }}
+  name: {{ template "fission-function-ns" . }}
   labels:
     name: fission-function
-    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
     {{- if .Values.enableIstio }}
     istio-injection: enabled
     {{- end }}
+{{- end}}
 
 ---
+
+{{- if and (ne .Values.builderNamespace "default") (ne .Values.builderNamespace "") }}
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: {{ .Values.builderNamespace }}
+  name: {{ template "fission-builder-ns" . }}
   labels:
     name: fission-builder
-    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
     {{- if .Values.enableIstio }}
     istio-injection: enabled
     {{- end }}
+{{- end }}
 {{- end }}

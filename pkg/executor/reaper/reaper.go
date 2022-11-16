@@ -184,7 +184,8 @@ func CleanupHpa(ctx context.Context, logger *zap.Logger, client kubernetes.Inter
 
 // CleanupRoleBindings periodically lists rolebindings across all namespaces and removes Service Accounts from them or
 // deletes the rolebindings completely if there are no Service Accounts in a rolebinding object.
-func CleanupRoleBindings(ctx context.Context, logger *zap.Logger, client kubernetes.Interface, fissionClient versioned.Interface, functionNs, envBuilderNs string, cleanupRoleBindingInterval time.Duration) {
+func CleanupRoleBindings(ctx context.Context, logger *zap.Logger, client kubernetes.Interface, fissionClient versioned.Interface, cleanupRoleBindingInterval time.Duration) {
+	nsResolver := utils.DefaultNSResolver()
 	for {
 		// some sleep before the next reaper iteration
 		time.Sleep(cleanupRoleBindingInterval)
@@ -238,8 +239,8 @@ func CleanupRoleBindings(ctx context.Context, logger *zap.Logger, client kuberne
 				// so now we need to look for the objects in default namespace.
 				saNs := subj.Namespace
 				isInReservedNS := false
-				if subj.Namespace == functionNs ||
-					subj.Namespace == envBuilderNs {
+				if subj.Namespace == nsResolver.FunctionNamespace ||
+					subj.Namespace == nsResolver.BuiderNamespace {
 					saNs = metav1.NamespaceDefault
 					isInReservedNS = true
 				}
@@ -249,7 +250,8 @@ func CleanupRoleBindings(ctx context.Context, logger *zap.Logger, client kuberne
 				for _, fn := range funcList.Items {
 					if fn.Spec.Environment.Namespace == saNs ||
 						//  For the case that the environment is created in the reserved namespace.
-						(isInReservedNS && (fn.Spec.Environment.Namespace == functionNs || fn.Spec.Environment.Namespace == envBuilderNs)) {
+						(isInReservedNS && (fn.Spec.Environment.Namespace == nsResolver.FunctionNamespace ||
+							fn.Spec.Environment.Namespace == nsResolver.BuiderNamespace)) {
 						funcEnvReference = true
 						break
 					}

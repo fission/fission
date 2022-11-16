@@ -34,6 +34,7 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/logdb"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	"github.com/fission/fission/pkg/info"
+	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/httpserver"
 	"github.com/fission/fission/pkg/utils/metrics"
 	"github.com/fission/fission/pkg/utils/otel"
@@ -91,12 +92,8 @@ func MakeAPI(logger *zap.Logger) (*API, error) {
 		api.workflowApiUrl = "http://workflows-apiserver"
 	}
 
-	fnNs := os.Getenv("FISSION_FUNCTION_NAMESPACE")
-	if len(fnNs) > 0 {
-		api.functionNamespace = fnNs
-	} else {
-		api.functionNamespace = "fission-function"
-	}
+	nsResolver := utils.DefaultNSResolver()
+	api.functionNamespace = nsResolver.ResolveNamespace(os.Getenv(utils.ENV_FUNCTION_NAMESPACE))
 
 	return api, err
 }

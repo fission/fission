@@ -59,7 +59,9 @@ import (
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
-var _ executortype.ExecutorType = &NewDeploy{}
+var (
+	_ executortype.ExecutorType = &NewDeploy{}
+)
 
 type (
 	// NewDeploy represents an ExecutorType
@@ -70,9 +72,9 @@ type (
 		fissionClient    versioned.Interface
 		instanceID       string
 		fetcherConfig    *fetcherConfig.Config
+		nsResolver       *utils.NamespaceResolver
 
 		runtimeImagePullPolicy apiv1.PullPolicy
-		namespace              string
 		useIstio               bool
 
 		fsCache *fscache.FunctionServiceCache // cache funcSvc's by function, address and pod name
@@ -100,7 +102,6 @@ func MakeNewDeploy(
 	logger *zap.Logger,
 	fissionClient versioned.Interface,
 	kubernetesClient kubernetes.Interface,
-	namespace string,
 	fetcherConfig *fetcherConfig.Config,
 	instanceID string,
 	funcInformer map[string]finformerv1.FunctionInformer,
@@ -124,10 +125,9 @@ func MakeNewDeploy(
 		fissionClient:    fissionClient,
 		kubernetesClient: kubernetesClient,
 		instanceID:       instanceID,
-
-		namespace: namespace,
-		fsCache:   fscache.MakeFunctionServiceCache(logger),
-		throttler: throttler.MakeThrottler(1 * time.Minute),
+		fsCache:          fscache.MakeFunctionServiceCache(logger),
+		throttler:        throttler.MakeThrottler(1 * time.Minute),
+		nsResolver:       utils.DefaultNSResolver(),
 
 		fetcherConfig:          fetcherConfig,
 		runtimeImagePullPolicy: utils.GetImagePullPolicy(os.Getenv("RUNTIME_IMAGE_PULL_POLICY")),
@@ -428,10 +428,7 @@ func (deploy *NewDeploy) fnCreate(ctx context.Context, fn *fv1.Function) (*fscac
 
 	// to support backward compatibility, if the function was created in default ns, we fall back to creating the
 	// deployment of the function in fission-function ns
-	ns := deploy.namespace
-	if fn.ObjectMeta.Namespace != metav1.NamespaceDefault {
-		ns = fn.ObjectMeta.Namespace
-	}
+	ns := deploy.nsResolver.GetFunctionNS(fn.ObjectMeta.Namespace)
 
 	// Envoy(istio-proxy) returns 404 directly before istio pilot
 	// propagates latest Envoy-specific configuration.
@@ -549,10 +546,7 @@ func (deploy *NewDeploy) updateFunction(ctx context.Context, oldFn *fv1.Function
 
 		// to support backward compatibility, if the function was created in default ns, we fall back to creating the
 		// deployment of the function in fission-function ns, so cleaning up resources there
-		ns := deploy.namespace
-		if newFn.ObjectMeta.Namespace != metav1.NamespaceDefault {
-			ns = newFn.ObjectMeta.Namespace
-		}
+		ns := deploy.nsResolver.GetFunctionNS(newFn.ObjectMeta.Namespace)
 
 		fsvc, err := deploy.fsCache.GetByFunctionUID(newFn.ObjectMeta.UID)
 		if err != nil {
@@ -654,10 +648,7 @@ func (deploy *NewDeploy) updateFuncDeployment(ctx context.Context, fn *fv1.Funct
 
 	// to support backward compatibility, if the function was created in default ns, we fall back to creating the
 	// deployment of the function in fission-function ns
-	ns := deploy.namespace
-	if fn.ObjectMeta.Namespace != metav1.NamespaceDefault {
-		ns = fn.ObjectMeta.Namespace
-	}
+	ns := deploy.nsResolver.GetFunctionNS(fn.ObjectMeta.Namespace)
 
 	existingDepl, err := deploy.kubernetesClient.AppsV1().Deployments(ns).Get(ctx, fnObjName, metav1.GetOptions{})
 	if err != nil {
@@ -708,10 +699,7 @@ func (deploy *NewDeploy) fnDelete(ctx context.Context, fn *fv1.Function) error {
 
 	// to support backward compatibility, if the function was created in default ns, we fall back to creating the
 	// deployment of the function in fission-function ns, so cleaning up resources there
-	ns := deploy.namespace
-	if fn.ObjectMeta.Namespace != metav1.NamespaceDefault {
-		ns = fn.ObjectMeta.Namespace
-	}
+	ns := deploy.nsResolver.GetFunctionNS(fn.ObjectMeta.Namespace)
 
 	err = deploy.cleanupNewdeploy(ctx, ns, objName)
 	multierr = multierror.Append(multierr, err)
