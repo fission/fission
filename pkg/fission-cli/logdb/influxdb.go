@@ -18,6 +18,7 @@ package logdb
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -40,8 +41,8 @@ const (
 	INFLUXDB_URL      = "http://influxdb:8086/query"
 )
 
-func NewInfluxDB(logDBOptions LogDBOptions) (InfluxDB, error) {
-	server, err := util.GetApplicationUrl(logDBOptions.CTX, logDBOptions.Client, "application=fission-api")
+func NewInfluxDB(ctx context.Context, logDBOptions LogDBOptions) (InfluxDB, error) {
+	server, err := util.GetApplicationUrl(ctx, logDBOptions.Client, "application=fission-api")
 	if err != nil {
 		return InfluxDB{}, err
 	}

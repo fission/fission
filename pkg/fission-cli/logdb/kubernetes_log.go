@@ -36,7 +36,6 @@ import (
 )
 
 type LogDBOptions struct {
-	CTX    context.Context
 	Client cmd.Client
 }
 
@@ -50,9 +49,9 @@ func (k kubernetesLogs) GetLogs(logFilter LogFilter) (podLogs *bytes.Buffer, err
 	return podLogs, err
 }
 
-func NewKubernetesEndpoint(logDBOptions LogDBOptions) (kubernetesLogs, error) {
+func NewKubernetesEndpoint(ctx context.Context, logDBOptions LogDBOptions) (kubernetesLogs, error) {
 	return kubernetesLogs{
-		ctx:    logDBOptions.CTX,
+		ctx:    ctx,
 		client: logDBOptions.Client}, nil
 }
 

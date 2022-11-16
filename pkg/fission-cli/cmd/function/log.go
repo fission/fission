@@ -62,12 +62,11 @@ func (opts *LogSubCommand) do(input cli.Input) error {
 	}
 
 	logDBOptions := logdb.LogDBOptions{
-		CTX:    input.Context(),
 		Client: opts.Client(),
 	}
 
 	// request the controller to establish a proxy server to the database.
-	logDB, err := logdb.GetLogDB(dbType, logDBOptions)
+	logDB, err := logdb.GetLogDB(dbType, input.Context(), logDBOptions)
 	if err != nil {
 		return errors.Wrapf(err, "failed to get log database")
 	}

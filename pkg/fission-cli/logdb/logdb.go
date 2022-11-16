@@ -18,6 +18,7 @@ package logdb
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"time"
 
@@ -75,12 +76,12 @@ func ByTimestamp(entries []LogEntry, desc bool) ByTimestampSort {
 	return ByTimestampSort{entries, desc}
 }
 
-func GetLogDB(dbType string, logDBOptions LogDBOptions) (LogDatabase, error) {
+func GetLogDB(dbType string, ctx context.Context, logDBOptions LogDBOptions) (LogDatabase, error) {
 	switch dbType {
 	case INFLUXDB:
-		return NewInfluxDB(logDBOptions)
+		return NewInfluxDB(ctx, logDBOptions)
 	case KUBERNETES:
-		return NewKubernetesEndpoint(logDBOptions)
+		return NewKubernetesEndpoint(ctx, logDBOptions)
 	}
 	return nil, fmt.Errorf("log database type is incorrect, now only support %s", INFLUXDB)
 }
