@@ -62,8 +62,8 @@ func runRouter(ctx context.Context, logger *zap.Logger, port int, executorUrl st
 	router.Start(ctx, logger, port, executorUrl)
 }
 
-func runExecutor(ctx context.Context, logger *zap.Logger, port int, defaultNamespace string) error {
-	return executor.StartExecutor(ctx, logger, defaultNamespace, port)
+func runExecutor(ctx context.Context, logger *zap.Logger, port int) error {
+	return executor.StartExecutor(ctx, logger, port)
 }
 
 func runKubeWatcher(ctx context.Context, logger *zap.Logger, routerUrl string) error {
@@ -232,8 +232,6 @@ Options:
 		defer shutdown(ctx)
 	}
 
-	defaultNs := getStringArgWithDefault(arguments["--namespace"], "fission-function")
-
 	executorUrl := getStringArgWithDefault(arguments["--executorUrl"], "http://executor.fission")
 	routerUrl := getStringArgWithDefault(arguments["--routerUrl"], "http://router.fission")
 	storageSvcUrl := getStringArgWithDefault(arguments["--storageSvcUrl"], "http://storagesvc.fission")
@@ -269,7 +267,7 @@ Options:
 
 	if arguments["--executorPort"] != nil {
 		port := getPort(logger, arguments["--executorPort"])
-		err = runExecutor(ctx, logger, port, defaultNs)
+		err = runExecutor(ctx, logger, port)
 		if err != nil {
 			logger.Error("executor exited", zap.Error(err))
 			return

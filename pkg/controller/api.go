@@ -30,11 +30,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
-	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/fission-cli/logdb"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	"github.com/fission/fission/pkg/info"
+	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/httpserver"
 	"github.com/fission/fission/pkg/utils/metrics"
 	"github.com/fission/fission/pkg/utils/otel"
@@ -92,11 +92,8 @@ func MakeAPI(logger *zap.Logger) (*API, error) {
 		api.workflowApiUrl = "http://workflows-apiserver"
 	}
 
-	if os.Getenv(fv1.ENV_BUILDER_NAMESPACE) == "" || os.Getenv(fv1.ENV_FUNCTION_NAMESPACE) == "" {
-		api.functionNamespace = os.Getenv(fv1.ENV_DEFAULT_NAMESPACE)
-	} else {
-		api.functionNamespace = os.Getenv(fv1.ENV_FUNCTION_NAMESPACE)
-	}
+	nsResolver := utils.GetFissionNamespaces()
+	api.functionNamespace = nsResolver.ResolveNamespace(os.Getenv(utils.ENV_FUNCTION_NAMESPACE))
 
 	return api, err
 }

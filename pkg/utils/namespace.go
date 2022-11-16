@@ -3,8 +3,13 @@ package utils
 import (
 	"os"
 
-	v1 "github.com/fission/fission/pkg/apis/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+const (
+	ENV_FUNCTION_NAMESPACE string = "FISSION_FUNCTION_NAMESPACE"
+	ENV_BUILDER_NAMESPACE  string = "FISSION_BUILDER_NAMESPACE"
+	ENV_DEFAULT_NAMESPACE  string = "FISSION_DEFAULT_NAMESPACE"
 )
 
 type NamespaceResolver struct {
@@ -15,7 +20,7 @@ type NamespaceResolver struct {
 
 func (nsr *NamespaceResolver) GetBuilderNS(namespace string) string {
 	if nsr.FunctionNamespace == "" || nsr.BuiderNamespace == "" {
-		return nsr.DefaultNamespace
+		return namespace
 	}
 
 	var ns string
@@ -28,7 +33,7 @@ func (nsr *NamespaceResolver) GetBuilderNS(namespace string) string {
 
 func (nsr *NamespaceResolver) GetFunctionNS(namespace string) string {
 	if nsr.FunctionNamespace == "" || nsr.BuiderNamespace == "" {
-		return nsr.DefaultNamespace
+		return namespace
 	}
 
 	ns := nsr.FunctionNamespace
@@ -48,8 +53,8 @@ func (nsr *NamespaceResolver) ResolveNamespace(namespace string) string {
 // GetFissionNamespaces => return all fission core component namespaces
 func GetFissionNamespaces() *NamespaceResolver {
 	return &NamespaceResolver{
-		FunctionNamespace: os.Getenv(v1.ENV_FUNCTION_NAMESPACE),
-		BuiderNamespace:   os.Getenv(v1.ENV_FUNCTION_NAMESPACE),
-		DefaultNamespace:  os.Getenv(v1.ENV_DEFAULT_NAMESPACE),
+		FunctionNamespace: os.Getenv(ENV_FUNCTION_NAMESPACE),
+		BuiderNamespace:   os.Getenv(ENV_BUILDER_NAMESPACE),
+		DefaultNamespace:  os.Getenv(ENV_DEFAULT_NAMESPACE),
 	}
 }

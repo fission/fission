@@ -30,6 +30,7 @@ import (
 const (
 	defaultNamespace  string = "default"
 	functionNamespace string = "fission-function"
+	builderNamespace  string = "fission-builder"
 	envName           string = "newdeploy-test-env"
 	functionName      string = "newdeploy-test-func"
 	configmapName     string = "newdeploy-test-configmap"
@@ -78,6 +79,16 @@ func TestRefreshFuncPods(t *testing.T) {
 	fetcherConfig, err := fetcherConfig.MakeFetcherConfig("/userfunc")
 	if err != nil {
 		t.Fatalf("Error creating fetcher config: %s", err)
+	}
+
+	err = os.Setenv(utils.ENV_BUILDER_NAMESPACE, builderNamespace)
+	if err != nil {
+		t.Fatalf("Error while setting %s environment variable : %s", utils.ENV_BUILDER_NAMESPACE, err)
+	}
+
+	err = os.Setenv(utils.ENV_FUNCTION_NAMESPACE, functionNamespace)
+	if err != nil {
+		t.Fatalf("Error while setting %s environment variable : %s", utils.ENV_FUNCTION_NAMESPACE, err)
 	}
 
 	executor, err := MakeNewDeploy(ctx, logger, fissionClient, kubernetesClient, fetcherConfig, "test",
