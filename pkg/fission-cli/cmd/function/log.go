@@ -19,6 +19,8 @@ package function
 import (
 	"context"
 	"fmt"
+	"io"
+	"os"
 	"time"
 
 	"github.com/pkg/errors"
@@ -28,7 +30,6 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/logdb"
-	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type LogSubCommand struct {
@@ -60,13 +61,13 @@ func (opts *LogSubCommand) do(input cli.Input) error {
 		return errors.Wrap(err, "error getting function")
 	}
 
-	server, err := util.GetApplicationUrl(input.Context(), opts.Client(), "application=fission-api")
-	if err != nil {
-		return err
+	logDBOptions := logdb.LogDBOptions{
+		CTX:    input.Context(),
+		Client: opts.Client(),
 	}
 
 	// request the controller to establish a proxy server to the database.
-	logDB, err := logdb.GetLogDB(dbType, server)
+	logDB, err := logdb.GetLogDB(dbType, logDBOptions)
 	if err != nil {
 		return errors.Wrapf(err, "failed to get log database")
 	}
@@ -77,31 +78,35 @@ func (opts *LogSubCommand) do(input cli.Input) error {
 
 	go func(ctx context.Context, requestChan, responseChan chan struct{}) {
 		t := time.Unix(0, 0*int64(time.Millisecond))
+		detail := input.Bool(flagkey.FnLogDetail)
 		for {
 			select {
 			case <-requestChan:
 				logFilter := logdb.LogFilter{
-					Pod:         fnPod,
-					Function:    f.ObjectMeta.Name,
-					FuncUid:     string(f.ObjectMeta.UID),
-					Since:       t,
-					Reverse:     logReverseQuery,
-					RecordLimit: recordLimit,
+					Pod:            fnPod,
+					Function:       f.ObjectMeta.Name,
+					FuncUid:        string(f.ObjectMeta.UID),
+					Since:          t,
+					Reverse:        logReverseQuery,
+					RecordLimit:    recordLimit,
+					FunctionObject: f,
+					Details:        detail,
 				}
-				logEntries, err := logDB.GetLogs(logFilter)
+
+				buf, err := logDB.GetLogs(logFilter)
 				if err != nil {
 					fmt.Printf("Error querying logs: %v", err)
 					responseChan <- struct{}{}
 					return
 				}
-				for _, logEntry := range logEntries {
-					if input.Bool(flagkey.FnLogDetail) {
-						fmt.Printf("Timestamp: %s\nNamespace: %s\nFunction Name: %s\nFunction ID: %s\nPod: %s\nContainer: %s\nStream: %s\nLog: %s\n---\n",
-							logEntry.Timestamp, logEntry.Namespace, logEntry.FuncName, logEntry.FuncUid, logEntry.Pod, logEntry.Container, logEntry.Stream, logEntry.Message)
-					} else {
-						fmt.Printf("[%s] %s\n", logEntry.Timestamp, logEntry.Message)
-					}
-					t = logEntry.Timestamp
+				_, err = io.Copy(os.Stdout, buf)
+				if err != nil {
+					return
+				}
+
+				t = time.Now().UTC()            // next time fetch values from this time
+				if dbType == logdb.KUBERNETES { //in case of Kubernetes log we print pods info only once. And then print new logs
+					detail = false
 				}
 				responseChan <- struct{}{}
 			case <-ctx.Done():
