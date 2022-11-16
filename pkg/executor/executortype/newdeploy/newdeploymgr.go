@@ -127,7 +127,7 @@ func MakeNewDeploy(
 		instanceID:       instanceID,
 		fsCache:          fscache.MakeFunctionServiceCache(logger),
 		throttler:        throttler.MakeThrottler(1 * time.Minute),
-		nsResolver:       utils.GetFissionNamespaces(),
+		nsResolver:       utils.DefaultNSResolver(),
 
 		fetcherConfig:          fetcherConfig,
 		runtimeImagePullPolicy: utils.GetImagePullPolicy(os.Getenv("RUNTIME_IMAGE_PULL_POLICY")),

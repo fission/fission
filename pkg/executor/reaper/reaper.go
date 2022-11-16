@@ -185,7 +185,7 @@ func CleanupHpa(ctx context.Context, logger *zap.Logger, client kubernetes.Inter
 // CleanupRoleBindings periodically lists rolebindings across all namespaces and removes Service Accounts from them or
 // deletes the rolebindings completely if there are no Service Accounts in a rolebinding object.
 func CleanupRoleBindings(ctx context.Context, logger *zap.Logger, client kubernetes.Interface, fissionClient versioned.Interface, cleanupRoleBindingInterval time.Duration) {
-	nsResolver := utils.GetFissionNamespaces()
+	nsResolver := utils.DefaultNSResolver()
 	for {
 		// some sleep before the next reaper iteration
 		time.Sleep(cleanupRoleBindingInterval)

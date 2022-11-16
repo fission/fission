@@ -18,17 +18,25 @@ type NamespaceResolver struct {
 	DefaultNamespace  string
 }
 
+var nsResolver *NamespaceResolver
+
+func init() {
+	nsResolver = &NamespaceResolver{
+		FunctionNamespace: os.Getenv(ENV_FUNCTION_NAMESPACE),
+		BuiderNamespace:   os.Getenv(ENV_BUILDER_NAMESPACE),
+		DefaultNamespace:  os.Getenv(ENV_DEFAULT_NAMESPACE),
+	}
+}
+
 func (nsr *NamespaceResolver) GetBuilderNS(namespace string) string {
 	if nsr.FunctionNamespace == "" || nsr.BuiderNamespace == "" {
 		return namespace
 	}
 
-	var ns string
-	ns = nsr.BuiderNamespace
 	if namespace != metav1.NamespaceDefault {
-		ns = namespace
+		return namespace
 	}
-	return ns
+	return nsr.BuiderNamespace
 }
 
 func (nsr *NamespaceResolver) GetFunctionNS(namespace string) string {
@@ -36,11 +44,10 @@ func (nsr *NamespaceResolver) GetFunctionNS(namespace string) string {
 		return namespace
 	}
 
-	ns := nsr.FunctionNamespace
 	if namespace != metav1.NamespaceDefault {
-		ns = namespace
+		return namespace
 	}
-	return ns
+	return nsr.FunctionNamespace
 }
 
 func (nsr *NamespaceResolver) ResolveNamespace(namespace string) string {
@@ -51,10 +58,6 @@ func (nsr *NamespaceResolver) ResolveNamespace(namespace string) string {
 }
 
 // GetFissionNamespaces => return all fission core component namespaces
-func GetFissionNamespaces() *NamespaceResolver {
-	return &NamespaceResolver{
-		FunctionNamespace: os.Getenv(ENV_FUNCTION_NAMESPACE),
-		BuiderNamespace:   os.Getenv(ENV_BUILDER_NAMESPACE),
-		DefaultNamespace:  os.Getenv(ENV_DEFAULT_NAMESPACE),
-	}
+func DefaultNSResolver() *NamespaceResolver {
+	return nsResolver
 }

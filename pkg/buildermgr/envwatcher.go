@@ -100,7 +100,7 @@ func makeEnvironmentWatcher(
 		cache:                  make(map[string]*builderInfo),
 		fissionClient:          fissionClient,
 		kubernetesClient:       kubernetesClient,
-		nsResolver:             utils.GetFissionNamespaces(),
+		nsResolver:             utils.DefaultNSResolver(),
 		builderImagePullPolicy: builderImagePullPolicy,
 		useIstio:               useIstio,
 		fetcherConfig:          fetcherConfig,

@@ -55,7 +55,7 @@ func makePackageWatcher(logger *zap.Logger, fissionClient versioned.Interface, k
 		logger:        logger.Named("package_watcher"),
 		fissionClient: fissionClient,
 		k8sClient:     k8sClientSet,
-		nsResolver:    utils.GetFissionNamespaces(),
+		nsResolver:    utils.DefaultNSResolver(),
 		podInformer:   podInformer,
 		pkgInformer:   pkgInformer,
 		storageSvcUrl: storageSvcUrl,

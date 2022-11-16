@@ -81,16 +81,6 @@ func TestRefreshFuncPods(t *testing.T) {
 		t.Fatalf("Error creating fetcher config: %s", err)
 	}
 
-	err = os.Setenv(utils.ENV_BUILDER_NAMESPACE, builderNamespace)
-	if err != nil {
-		t.Fatalf("Error while setting %s environment variable : %s", utils.ENV_BUILDER_NAMESPACE, err)
-	}
-
-	err = os.Setenv(utils.ENV_FUNCTION_NAMESPACE, functionNamespace)
-	if err != nil {
-		t.Fatalf("Error while setting %s environment variable : %s", utils.ENV_FUNCTION_NAMESPACE, err)
-	}
-
 	executor, err := MakeNewDeploy(ctx, logger, fissionClient, kubernetesClient, fetcherConfig, "test",
 		funcInformer, envInformer, deployInformer, svcInformer, podSpecPatch)
 	if err != nil {
@@ -98,6 +88,12 @@ func TestRefreshFuncPods(t *testing.T) {
 	}
 
 	ndm := executor.(*NewDeploy)
+
+	nsResolver := utils.NamespaceResolver{
+		FunctionNamespace: functionNamespace,
+		BuiderNamespace:   builderNamespace,
+	}
+	ndm.nsResolver = &nsResolver
 
 	go ndm.Run(ctx)
 	t.Log("New deploy manager started")

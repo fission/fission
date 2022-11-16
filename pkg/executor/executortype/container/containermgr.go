@@ -118,7 +118,7 @@ func MakeContainer(
 		fissionClient:    fissionClient,
 		kubernetesClient: kubernetesClient,
 		instanceID:       instanceID,
-		nsResolver:       utils.GetFissionNamespaces(),
+		nsResolver:       utils.DefaultNSResolver(),
 
 		fsCache:   fscache.MakeFunctionServiceCache(logger),
 		throttler: throttler.MakeThrottler(1 * time.Minute),
