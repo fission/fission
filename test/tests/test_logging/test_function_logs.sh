@@ -50,12 +50,12 @@ log "Grabbing logs, should have 4 calls in logs"
 
 sleep 60
 
-fission function logs --name $fn --detail > $tmp_dir/logfile
+fission function logs --name $fn --detail --pod-namespace fission-function > $tmp_dir/logfile
 
 size=$(wc -c < $tmp_dir/logfile)
 if [ $size == 0 ]
 then
-    fission function logs --name $fn --detail > $tmp_dir/logfile
+    fission function logs --name $fn --detail --pod-namespace fission-function > $tmp_dir/logfile
 fi
 
 log "---function logs---"

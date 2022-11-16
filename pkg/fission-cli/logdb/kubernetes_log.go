@@ -33,6 +33,7 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
+	"github.com/fission/fission/pkg/fission-cli/console"
 )
 
 type LogDBOptions struct {
@@ -57,14 +58,13 @@ func NewKubernetesEndpoint(ctx context.Context, logDBOptions LogDBOptions) (kube
 
 // FunctionPodLogs : Get logs for a function directly from pod
 func GetFunctionPodLogs(ctx context.Context, client cmd.Client, logFilter LogFilter) (podLogs *bytes.Buffer, err error) {
-	podNs := "fission-function"
 
 	f := logFilter.FunctionObject
-	// TODO: validate this
-	if f.Namespace != v1.NamespaceDefault {
-		podNs = f.Namespace
-	}
 
+	podNs := f.Namespace
+	if logFilter.PodNamespace != "" {
+		podNs = logFilter.PodNamespace
+	}
 	// Get function Pods first
 	selector := map[string]string{
 		fv1.FUNCTION_UID:          string(f.ObjectMeta.UID),
@@ -87,6 +87,7 @@ func GetFunctionPodLogs(ctx context.Context, client cmd.Client, logFilter LogFil
 	})
 
 	if len(pods) <= 0 {
+		console.Warn("version<1.18 used fission-function as pod's default namespace. Specify appropriate namespace with --pod-namespace tag.")
 		return podLogs, errors.New("no active pods found")
 
 	}

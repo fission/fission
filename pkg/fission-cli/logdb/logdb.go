@@ -36,6 +36,7 @@ type LogDatabase interface {
 
 type LogFilter struct {
 	Pod            string
+	PodNamespace   string
 	Function       string
 	FuncUid        string
 	Since          time.Time
