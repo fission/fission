@@ -51,7 +51,6 @@ func (k kubernetesLogs) GetLogs(ctx context.Context, logFilter LogFilter) (podLo
 
 func NewKubernetesEndpoint(logDBOptions LogDBOptions) (kubernetesLogs, error) {
 	return kubernetesLogs{
-		// ctx:    ctx,
 		client: logDBOptions.Client}, nil
 }
 
