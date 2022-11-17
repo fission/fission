@@ -17,6 +17,8 @@ limitations under the License.
 package v1
 
 import (
+	"fmt"
+
 	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -50,6 +52,20 @@ var _ webhook.Validator = &Function{}
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type
 func (r *Function) ValidateCreate() error {
 	functionlog.Debug("validate create", zap.String("name", r.Name))
+
+	for _, cnfMap := range r.Spec.ConfigMaps {
+		if cnfMap.Namespace != r.ObjectMeta.Namespace {
+			err := fmt.Errorf("ConfigMap's [%s] and function's Namespace [%s] are different. ConfigMap needs to be present in the same namespace as function", cnfMap.Namespace, r.ObjectMeta.Namespace)
+			return AggregateValidationErrors("Function", err)
+		}
+	}
+	for _, secret := range r.Spec.Secrets {
+		if secret.Namespace != r.ObjectMeta.Namespace {
+			err := fmt.Errorf("secret  [%s] and function's Namespace [%s] are different. Secret needs to be present in the same namespace as function", secret.Namespace, r.ObjectMeta.Namespace)
+			return AggregateValidationErrors("Function", err)
+		}
+	}
+
 	err := r.Validate()
 	if err != nil {
 		return AggregateValidationErrors("Function", err)
@@ -60,6 +76,20 @@ func (r *Function) ValidateCreate() error {
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
 func (r *Function) ValidateUpdate(old runtime.Object) error {
 	functionlog.Debug("validate update", zap.String("name", r.Name))
+
+	for _, cnfMap := range r.Spec.ConfigMaps {
+		if cnfMap.Namespace != r.ObjectMeta.Namespace {
+			err := fmt.Errorf("ConfigMap's [%s] and function's Namespace [%s] are different. ConfigMap needs to be present in the same namespace as function", cnfMap.Namespace, r.ObjectMeta.Namespace)
+			return AggregateValidationErrors("Function", err)
+		}
+	}
+	for _, secret := range r.Spec.Secrets {
+		if secret.Namespace != r.ObjectMeta.Namespace {
+			err := fmt.Errorf("secret  [%s] and function's Namespace [%s] are different. Secret needs to be present in the same namespace as function", secret.Namespace, r.ObjectMeta.Namespace)
+			return AggregateValidationErrors("Function", err)
+		}
+	}
+
 	err := r.Validate()
 	if err != nil {
 		return AggregateValidationErrors("Function", err)
