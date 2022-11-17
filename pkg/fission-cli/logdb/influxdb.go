@@ -62,7 +62,7 @@ func makeIndexMap(cols []string) map[string]int {
 	return indexMap
 }
 
-func (influx InfluxDB) GetLogs(filter LogFilter) (output *bytes.Buffer, err error) {
+func (influx InfluxDB) GetLogs(ctx context.Context, filter LogFilter) (output *bytes.Buffer, err error) {
 	timestamp := filter.Since.UnixNano()
 	var queryCmd string
 

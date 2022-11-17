@@ -41,18 +41,17 @@ type LogDBOptions struct {
 }
 
 type kubernetesLogs struct {
-	ctx    context.Context
 	client cmd.Client
 }
 
-func (k kubernetesLogs) GetLogs(logFilter LogFilter) (podLogs *bytes.Buffer, err error) {
-	podLogs, err = GetFunctionPodLogs(k.ctx, k.client, logFilter)
+func (k kubernetesLogs) GetLogs(ctx context.Context, logFilter LogFilter) (podLogs *bytes.Buffer, err error) {
+	podLogs, err = GetFunctionPodLogs(ctx, k.client, logFilter)
 	return podLogs, err
 }
 
-func NewKubernetesEndpoint(ctx context.Context, logDBOptions LogDBOptions) (kubernetesLogs, error) {
+func NewKubernetesEndpoint(logDBOptions LogDBOptions) (kubernetesLogs, error) {
 	return kubernetesLogs{
-		ctx:    ctx,
+		// ctx:    ctx,
 		client: logDBOptions.Client}, nil
 }
 

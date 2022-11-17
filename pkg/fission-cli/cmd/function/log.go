@@ -93,7 +93,7 @@ func (opts *LogSubCommand) do(input cli.Input) error {
 					Details:        detail,
 				}
 
-				buf, err := logDB.GetLogs(logFilter)
+				buf, err := logDB.GetLogs(ctx, logFilter)
 				if err != nil {
 					fmt.Printf("Error querying logs: %v", err)
 					responseChan <- struct{}{}

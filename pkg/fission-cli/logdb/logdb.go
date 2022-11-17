@@ -31,7 +31,7 @@ const (
 )
 
 type LogDatabase interface {
-	GetLogs(LogFilter) (*bytes.Buffer, error)
+	GetLogs(context.Context, LogFilter) (*bytes.Buffer, error)
 }
 
 type LogFilter struct {
@@ -82,7 +82,7 @@ func GetLogDB(dbType string, ctx context.Context, logDBOptions LogDBOptions) (Lo
 	case INFLUXDB:
 		return NewInfluxDB(ctx, logDBOptions)
 	case KUBERNETES:
-		return NewKubernetesEndpoint(ctx, logDBOptions)
+		return NewKubernetesEndpoint(logDBOptions)
 	}
 	return nil, fmt.Errorf("log database type is incorrect, now only support %s", INFLUXDB)
 }
