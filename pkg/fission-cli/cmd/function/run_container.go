@@ -123,18 +123,6 @@ func (opts *RunContainerSubCommand) complete(input cli.Input) error {
 
 	if len(secretNames) > 0 {
 		// check the referenced secret is in the same ns as the function, if not give a warning.
-		if !toSpec { // TODO: workaround in order not to block users from creating function spec, remove it.
-			for _, secretName := range secretNames {
-				err := util.SecretExists(input.Context(), &metav1.ObjectMeta{Namespace: fnNamespace, Name: secretName}, opts.Client().KubernetesClient)
-				if err != nil {
-					if kerrors.IsNotFound(err) {
-						console.Warn(fmt.Sprintf("Secret %s not found in Namespace: %s. Secret needs to be present in the same namespace as function", secretName, fnNamespace))
-					} else {
-						return errors.Wrapf(err, "error checking secret %s", secretName)
-					}
-				}
-			}
-		}
 		for _, secretName := range secretNames {
 			newSecret := fv1.SecretReference{
 				Name:      secretName,
@@ -145,20 +133,6 @@ func (opts *RunContainerSubCommand) complete(input cli.Input) error {
 	}
 
 	if len(cfgMapNames) > 0 {
-		// check the referenced cfgmap is in the same ns as the function, if not give a warning.
-		if !toSpec {
-			for _, cfgMapName := range cfgMapNames {
-				err := util.ConfigMapExists(input.Context(), &metav1.ObjectMeta{Namespace: fnNamespace, Name: cfgMapName}, opts.Client().KubernetesClient)
-
-				if err != nil {
-					if kerrors.IsNotFound(err) {
-						console.Warn(fmt.Sprintf("ConfigMap %s not found in Namespace: %s. ConfigMap needs to be present in the same namespace as function", cfgMapName, fnNamespace))
-					} else {
-						return errors.Wrapf(err, "error checking configmap %s", cfgMapName)
-					}
-				}
-			}
-		}
 		for _, cfgMapName := range cfgMapNames {
 			newCfgMap := fv1.ConfigMapReference{
 				Name:      cfgMapName,

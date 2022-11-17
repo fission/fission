@@ -25,7 +25,6 @@ import (
 
 	multierror "github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/yaml"
 
@@ -398,21 +397,6 @@ func (fr *FissionResources) Validate(input cli.Input, client cmd.Client) ([]stri
 			}
 		}
 
-		for _, cm := range f.Spec.ConfigMaps {
-
-			err := util.ConfigMapExists(input.Context(), &metav1.ObjectMeta{Namespace: cm.Namespace, Name: cm.Name}, client.KubernetesClient)
-			if k8serrors.IsNotFound(err) {
-				warnings = append(warnings, fmt.Sprintf("Configmap %s is referred in the spec but not present in the cluster", cm.Name))
-			}
-		}
-
-		for _, s := range f.Spec.Secrets {
-			err := util.SecretExists(input.Context(), &metav1.ObjectMeta{Namespace: s.Namespace, Name: s.Name}, client.KubernetesClient)
-
-			if k8serrors.IsNotFound(err) {
-				warnings = append(warnings, fmt.Sprintf("Secret %s is referred in the spec but not present in the cluster", s.Name))
-			}
-		}
 		result = multierror.Append(result, f.Validate())
 	}
 
