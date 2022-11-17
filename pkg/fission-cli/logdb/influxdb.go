@@ -17,6 +17,8 @@ limitations under the License.
 package logdb
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -31,6 +33,7 @@ import (
 	"github.com/pkg/errors"
 
 	ferror "github.com/fission/fission/pkg/error"
+	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 const (
@@ -38,8 +41,12 @@ const (
 	INFLUXDB_URL      = "http://influxdb:8086/query"
 )
 
-func NewInfluxDB(serverURL string) (InfluxDB, error) {
-	return InfluxDB{endpoint: serverURL}, nil
+func NewInfluxDB(ctx context.Context, logDBOptions LogDBOptions) (InfluxDB, error) {
+	server, err := util.GetApplicationUrl(ctx, logDBOptions.Client, "application=fission-api")
+	if err != nil {
+		return InfluxDB{}, err
+	}
+	return InfluxDB{endpoint: server}, nil
 }
 
 type InfluxDB struct {
@@ -55,7 +62,7 @@ func makeIndexMap(cols []string) map[string]int {
 	return indexMap
 }
 
-func (influx InfluxDB) GetLogs(filter LogFilter) ([]LogEntry, error) {
+func (influx InfluxDB) GetLogs(ctx context.Context, filter LogFilter) (output *bytes.Buffer, err error) {
 	timestamp := filter.Since.UnixNano()
 	var queryCmd string
 
@@ -133,7 +140,23 @@ func (influx InfluxDB) GetLogs(filter LogFilter) ([]LogEntry, error) {
 
 	sort.Sort(ByTimestamp(logEntries, filter.Reverse))
 
-	return logEntries, nil
+	output = new(bytes.Buffer)
+	for _, logEntry := range logEntries {
+		if filter.Details {
+			msg := fmt.Sprintf("Timestamp: %s\nNamespace: %s\nFunction Name: %s\nFunction ID: %s\nPod: %s\nContainer: %s\nStream: %s\nLog: %s\n---\n",
+				logEntry.Timestamp, logEntry.Namespace, logEntry.FuncName, logEntry.FuncUid, logEntry.Pod, logEntry.Container, logEntry.Stream, logEntry.Message)
+			if _, err := output.WriteString(msg); err != nil {
+				return output, errors.Wrapf(err, "error copying pod log")
+			}
+		} else {
+			msg := fmt.Sprintf("[%s] %s\n", logEntry.Timestamp, logEntry.Message)
+			if _, err := output.WriteString(msg); err != nil {
+				return output, errors.Wrapf(err, "error copying pod log")
+			}
+		}
+	}
+
+	return output, nil
 }
 
 func (influx InfluxDB) query(query influxdbClient.Query) (*influxdbClient.Response, error) {

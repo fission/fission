@@ -17,25 +17,33 @@ limitations under the License.
 package logdb
 
 import (
+	"bytes"
+	"context"
 	"fmt"
 	"time"
+
+	v1 "github.com/fission/fission/pkg/apis/core/v1"
 )
 
 const (
-	INFLUXDB = "influxdb"
+	INFLUXDB   = "influxdb"
+	KUBERNETES = "kubernetes"
 )
 
 type LogDatabase interface {
-	GetLogs(LogFilter) ([]LogEntry, error)
+	GetLogs(context.Context, LogFilter) (*bytes.Buffer, error)
 }
 
 type LogFilter struct {
-	Pod         string
-	Function    string
-	FuncUid     string
-	Since       time.Time
-	Reverse     bool
-	RecordLimit int
+	Pod            string
+	PodNamespace   string
+	Function       string
+	FuncUid        string
+	Since          time.Time
+	Reverse        bool
+	RecordLimit    int
+	FunctionObject *v1.Function
+	Details        bool
 }
 
 type LogEntry struct {
@@ -69,10 +77,12 @@ func ByTimestamp(entries []LogEntry, desc bool) ByTimestampSort {
 	return ByTimestampSort{entries, desc}
 }
 
-func GetLogDB(dbType string, serverURL string) (LogDatabase, error) {
+func GetLogDB(dbType string, ctx context.Context, logDBOptions LogDBOptions) (LogDatabase, error) {
 	switch dbType {
 	case INFLUXDB:
-		return NewInfluxDB(serverURL)
+		return NewInfluxDB(ctx, logDBOptions)
+	case KUBERNETES:
+		return NewKubernetesEndpoint(logDBOptions)
 	}
 	return nil, fmt.Errorf("log database type is incorrect, now only support %s", INFLUXDB)
 }

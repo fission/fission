@@ -41,6 +41,7 @@ const (
 	Namespace            = "namespace"
 	ForceNamespace       = "force-namespace"
 	AllNamespaces        = "all-namespaces"
+	NamespacePod         = "pod-namespace"
 	ForceDelete          = "force"
 
 	RuntimeMincpu    = "mincpu"
