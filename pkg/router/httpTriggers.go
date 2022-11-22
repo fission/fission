@@ -22,6 +22,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bep/debounce"
 	"github.com/gorilla/mux"
 	"go.uber.org/zap"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
@@ -60,6 +61,7 @@ type HTTPTriggerSet struct {
 	isDebugEnv                 bool
 	svcAddrUpdateThrottler     *throttler.Throttler
 	unTapServiceTimeout        time.Duration
+	syncDebouncer              func(func())
 }
 
 func makeHTTPTriggerSet(logger *zap.Logger, fmap *functionServiceMap, fissionClient versioned.Interface,
@@ -77,6 +79,7 @@ func makeHTTPTriggerSet(logger *zap.Logger, fmap *functionServiceMap, fissionCli
 		isDebugEnv:                 isDebugEnv,
 		svcAddrUpdateThrottler:     actionThrottler,
 		unTapServiceTimeout:        unTapServiceTimeout,
+		syncDebouncer:              debounce.New(time.Millisecond * 20),
 	}
 	httpTriggerSet.triggerInformer = utils.GetInformersForNamespaces(fissionClient, time.Minute*30, fv1.HttpTriggerResource)
 	httpTriggerSet.funcInformer = utils.GetInformersForNamespaces(fissionClient, time.Minute*30, fv1.FunctionResource)
@@ -368,7 +371,9 @@ func (ts *HTTPTriggerSet) runInformer(ctx context.Context, informer map[string]k
 }
 
 func (ts *HTTPTriggerSet) syncTriggers() {
-	ts.updateRouterRequestChannel <- struct{}{}
+	ts.syncDebouncer(func() {
+		ts.updateRouterRequestChannel <- struct{}{}
+	})
 }
 
 func (ts *HTTPTriggerSet) updateRouter() {
