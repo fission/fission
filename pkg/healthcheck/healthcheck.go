@@ -153,12 +153,6 @@ func (hc *HealthChecker) allCategories() []*Category {
 			FissionServices,
 			[]Checker{
 				{
-					successMsg: "controller is running fine",
-					check: func(ctx context.Context, input cli.Input, client cmd.Client) error {
-						return hc.CheckServiceStatus(ctx, hc.fissionNamespace, "controller")
-					},
-				},
-				{
 					successMsg: "executor is running fine",
 					check: func(ctx context.Context, input cli.Input, client cmd.Client) error {
 						return hc.CheckServiceStatus(ctx, hc.fissionNamespace, "executor")
