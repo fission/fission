@@ -91,7 +91,7 @@ jobs:
           helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
           helm repo update
           kubectl create ns monitoring
-          helm install monitoring prometheus-community/prometheus -n monitoring
+          helm install prometheus prometheus-community/prometheus -n monitoring
 
       - name: Build and Install Fission CLI
         run: |
@@ -133,6 +133,12 @@ jobs:
         run: |
           kind export logs --name kind kind-logs
 
+      - name: Backup prometheus data
+        timeout-minutes: 10
+        if: ${{ always() }}
+        run: |
+          TRACE=1 ./hack/backup-prometheus.sh
+
       - name: Archive fission dump
         timeout-minutes: 10
         if: ${{ failure() || cancelled() }}
@@ -140,6 +146,15 @@ jobs:
         with:
           name: fission-dump-${{ github.run_id }}-${{ matrix.kindversion }}
           path: fission-dump/*.zip
+          retention-days: 5
+
+      - name: Archive prometheus dump
+        timeout-minutes: 10
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v3
+        with:
+          name: prom-dump-${{ github.run_id }}-${{ matrix.kindversion }}
+          path: /tmp/prometheus/*
           retention-days: 5
 
       - name: Archive kind logs
