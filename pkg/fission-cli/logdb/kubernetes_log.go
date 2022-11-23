@@ -23,7 +23,6 @@ import (
 	"io"
 	"sort"
 	"strconv"
-	"strings"
 
 	"github.com/pkg/errors"
 	v1 "k8s.io/api/core/v1"
@@ -101,7 +100,6 @@ func GetFunctionPodLogs(ctx context.Context, client cmd.Client, logFilter LogFil
 
 func streamContainerLog(ctx context.Context, kubernetesClient kubernetes.Interface, pod *v1.Pod, logFilter LogFilter) (output *bytes.Buffer, err error) {
 
-	seq := strings.Repeat("=", 35)
 	output = new(bytes.Buffer)
 
 	for _, container := range pod.Spec.Containers {
@@ -121,9 +119,8 @@ func streamContainerLog(ctx context.Context, kubernetesClient kubernetes.Interfa
 
 		if logFilter.Details {
 			fn := logFilter.FunctionObject
-			msg := fmt.Sprintf("\n%v\nFunction: %v\nEnvironment: %v\nNamespace: %v\nPod: %v\nContainer: %v\nNode: %v\n%v\n", seq,
-				fn.ObjectMeta.Name, fn.Spec.Environment.Name, pod.Namespace, pod.Name, container.Name, pod.Spec.NodeName, seq)
-
+			msg := fmt.Sprintf("\n=== Function=%s Environment=%s Namespace=%s Pod=%s Container=%s Node=%s\n",
+				fn.ObjectMeta.Name, fn.Spec.Environment.Name, pod.Namespace, pod.Name, container.Name, pod.Spec.NodeName)
 			if _, err := output.WriteString(msg); err != nil {
 				return output, errors.Wrapf(err, "error copying pod log")
 			}
