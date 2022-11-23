@@ -659,6 +659,11 @@ func (gpm *GenericPoolManager) doIdleObjectReaper(ctx context.Context) {
 		return
 	}
 
+	countByFunction := make(map[k8sTypes.UID]int)
+	for _, fsvc := range funcSvcs {
+		countByFunction[fsvc.Function.UID]++
+	}
+
 	for i := range funcSvcs {
 		fsvc := funcSvcs[i]
 
@@ -685,6 +690,20 @@ func (gpm *GenericPoolManager) doIdleObjectReaper(ctx context.Context) {
 		if fn, ok := fnList[fsvc.Function.UID]; ok {
 			if fn.Spec.IdleTimeout != nil {
 				idlePodReapTime = time.Duration(*fn.Spec.IdleTimeout) * time.Second
+			}
+		}
+
+		concurrency := 1
+		if fn, ok := fnList[fsvc.Function.UID]; ok {
+			concurrency = fn.Spec.Concurrency
+		}
+
+		// If we have more function services running than concurrency should allow
+		// set the idlePodReapTime to 0 to force this service to be deleted and decrement the concurrent counter
+		if count, ok := countByFunction[fsvc.Function.UID]; ok {
+			if count > concurrency {
+				idlePodReapTime = 0
+				countByFunction[fsvc.Function.UID]--
 			}
 		}
 
