@@ -31,7 +31,7 @@ const (
 )
 
 type LogDatabase interface {
-	GetLogs(context.Context, LogFilter) (*bytes.Buffer, error)
+	GetLogs(context.Context, LogFilter, *bytes.Buffer) error
 }
 
 type LogFilter struct {
@@ -44,6 +44,7 @@ type LogFilter struct {
 	RecordLimit    int
 	FunctionObject *v1.Function
 	Details        bool
+	WarnUser       bool
 }
 
 type LogEntry struct {

@@ -17,6 +17,7 @@ limitations under the License.
 package function
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"os"
@@ -74,6 +75,7 @@ func (opts *LogSubCommand) do(input cli.Input) error {
 	requestChan := make(chan struct{})
 	responseChan := make(chan struct{})
 	ctx := input.Context()
+	warn := true
 
 	go func(ctx context.Context, requestChan, responseChan chan struct{}) {
 		t := time.Unix(0, 0*int64(time.Millisecond))
@@ -91,12 +93,17 @@ func (opts *LogSubCommand) do(input cli.Input) error {
 					RecordLimit:    recordLimit,
 					FunctionObject: f,
 					Details:        detail,
+					WarnUser:       warn,
 				}
 
-				buf, err := logDB.GetLogs(ctx, logFilter)
+				buf := new(bytes.Buffer)
+				err = logDB.GetLogs(ctx, logFilter, buf)
 				t = time.Now().UTC() // next time fetch values from this time
 				if err != nil {
 					console.Verbose(2, "error querying logs: %s", err)
+					if dbType == logdb.KUBERNETES { //in case of Kubernetes log we print pod namespace warning once
+						warn = false
+					}
 					responseChan <- struct{}{}
 					continue
 				}

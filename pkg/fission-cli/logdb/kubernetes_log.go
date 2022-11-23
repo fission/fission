@@ -43,9 +43,9 @@ type kubernetesLogs struct {
 	client cmd.Client
 }
 
-func (k kubernetesLogs) GetLogs(ctx context.Context, logFilter LogFilter) (podLogs *bytes.Buffer, err error) {
-	podLogs, err = GetFunctionPodLogs(ctx, k.client, logFilter)
-	return podLogs, err
+func (k kubernetesLogs) GetLogs(ctx context.Context, logFilter LogFilter, podLogs *bytes.Buffer) (err error) {
+	err = GetFunctionPodLogs(ctx, k.client, logFilter, podLogs)
+	return err
 }
 
 func NewKubernetesEndpoint(logDBOptions LogDBOptions) (kubernetesLogs, error) {
@@ -54,7 +54,7 @@ func NewKubernetesEndpoint(logDBOptions LogDBOptions) (kubernetesLogs, error) {
 }
 
 // FunctionPodLogs : Get logs for a function directly from pod
-func GetFunctionPodLogs(ctx context.Context, client cmd.Client, logFilter LogFilter) (podLogs *bytes.Buffer, err error) {
+func GetFunctionPodLogs(ctx context.Context, client cmd.Client, logFilter LogFilter, podLogs *bytes.Buffer) (err error) {
 
 	f := logFilter.FunctionObject
 
@@ -72,7 +72,7 @@ func GetFunctionPodLogs(ctx context.Context, client cmd.Client, logFilter LogFil
 		LabelSelector: labels.Set(selector).AsSelector().String(),
 	})
 	if err != nil {
-		return podLogs, err
+		return err
 	}
 
 	// Get the logs for last Pod executed
@@ -84,25 +84,27 @@ func GetFunctionPodLogs(ctx context.Context, client cmd.Client, logFilter LogFil
 	})
 
 	if len(pods) <= 0 {
-		console.Warn("version<1.18 used fission-function as pod's default namespace. Specify appropriate namespace with --pod-namespace tag.")
-		return podLogs, errors.New("no active pods found")
+		if logFilter.WarnUser {
+			console.Warn("version<1.18 used fission-function as pod's default namespace. Specify appropriate namespace with --pod-namespace tag.")
+		}
+		return errors.New("no active pods found")
 
 	}
 
 	// get the pod with highest resource version
-	podLogs, err = streamContainerLog(ctx, client.KubernetesClient, &pods[0], logFilter)
+	err = streamContainerLog(ctx, client.KubernetesClient, &pods[0], logFilter, podLogs)
 	if err != nil {
-		return podLogs, errors.Wrapf(err, "error getting container logs")
-
+		return errors.Wrapf(err, "error getting container logs")
 	}
-	return podLogs, err
+	return err
 }
 
-func streamContainerLog(ctx context.Context, kubernetesClient kubernetes.Interface, pod *v1.Pod, logFilter LogFilter) (output *bytes.Buffer, err error) {
-
-	output = new(bytes.Buffer)
-
+func streamContainerLog(ctx context.Context, kubernetesClient kubernetes.Interface, pod *v1.Pod, logFilter LogFilter, output *bytes.Buffer) (err error) {
+	FETCHER := "fetcher"
 	for _, container := range pod.Spec.Containers {
+		if container.Name == FETCHER {
+			continue
+		}
 		tailLines := int64(logFilter.RecordLimit)
 		sinceTime := metav1.NewTime(logFilter.Since)
 		podLogOpts := v1.PodLogOptions{Container: container.Name, // Only the env container, not fetcher
@@ -114,7 +116,7 @@ func streamContainerLog(ctx context.Context, kubernetesClient kubernetes.Interfa
 
 		podLogs, err := podLogsReq.Stream(ctx)
 		if err != nil {
-			return output, errors.Wrapf(err, "error streaming pod log")
+			return errors.Wrapf(err, "error streaming pod log")
 		}
 
 		if logFilter.Details {
@@ -122,17 +124,17 @@ func streamContainerLog(ctx context.Context, kubernetesClient kubernetes.Interfa
 			msg := fmt.Sprintf("\n=== Function=%s Environment=%s Namespace=%s Pod=%s Container=%s Node=%s\n",
 				fn.ObjectMeta.Name, fn.Spec.Environment.Name, pod.Namespace, pod.Name, container.Name, pod.Spec.NodeName)
 			if _, err := output.WriteString(msg); err != nil {
-				return output, errors.Wrapf(err, "error copying pod log")
+				return errors.Wrapf(err, "error copying pod log")
 			}
 		}
 
 		_, err = io.Copy(output, podLogs)
 		if err != nil {
-			return output, errors.Wrapf(err, "error copying pod log")
+			return errors.Wrapf(err, "error copying pod log")
 		}
 
 		podLogs.Close()
 	}
 
-	return output, nil
+	return nil
 }
