@@ -3,7 +3,7 @@ set -eu
 
 ns="fission"
 ROOT=$(pwd)
-PREV_STABLE_VERSION=1.13.1
+PREV_STABLE_VERSION=v1.16.3
 HELM_VARS_PREV_RELEASE="routerServiceType=NodePort,analytics=false"
 HELM_VARS_LATEST_RELEASE="routerServiceType=NodePort,repository=docker.io/library,image=fission-bundle,pullPolicy=IfNotPresent,imageTag=latest,fetcher.image=docker.io/library/fetcher,fetcher.imageTag=latest,postInstallReportImage=reporter,preUpgradeChecks.image=preupgradechecks,preUpgradeChecks.imageTag=latest,analytics=false"
 
