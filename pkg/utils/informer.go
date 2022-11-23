@@ -26,7 +26,7 @@ func GetNamespaces() []string {
 	envValue := os.Getenv(additionalNamespaces)
 	if len(envValue) == 0 {
 		return []string{
-			metav1.NamespaceAll,
+			metav1.NamespaceDefault,
 		}
 	}
 
