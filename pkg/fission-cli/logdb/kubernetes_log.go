@@ -75,27 +75,37 @@ func GetFunctionPodLogs(ctx context.Context, client cmd.Client, logFilter LogFil
 		return err
 	}
 
-	// Get the logs for last Pod executed
-	pods := podList.Items
-	sort.Slice(pods, func(i, j int) bool {
-		rv1, _ := strconv.ParseInt(pods[i].ObjectMeta.ResourceVersion, 10, 32)
-		rv2, _ := strconv.ParseInt(pods[j].ObjectMeta.ResourceVersion, 10, 32)
-		return rv1 > rv2
-	})
-
-	if len(pods) <= 0 {
+	if len(podList.Items) <= 0 {
 		if logFilter.WarnUser {
 			console.Warn("version<1.18 used fission-function as pod's default namespace. Specify appropriate namespace with --pod-namespace tag.")
 		}
 		return errors.New("no active pods found")
-
 	}
 
-	// get the pod with highest resource version
-	err = streamContainerLog(ctx, client.KubernetesClient, &pods[0], logFilter, podLogs)
-	if err != nil {
-		return errors.Wrapf(err, "error getting container logs")
+	pods := podList.Items
+	if logFilter.AllPods {
+		for _, pod := range pods {
+			// get the pod with highest resource version
+			err = streamContainerLog(ctx, client.KubernetesClient, &pod, logFilter, podLogs)
+			if err != nil {
+				return errors.Wrapf(err, "error getting container logs")
+			}
+		}
+	} else {
+		// Get the logs for last Pod executed
+		sort.Slice(pods, func(i, j int) bool {
+			rv1, _ := strconv.ParseInt(pods[i].ObjectMeta.ResourceVersion, 10, 32)
+			rv2, _ := strconv.ParseInt(pods[j].ObjectMeta.ResourceVersion, 10, 32)
+			return rv1 > rv2
+		})
+
+		// get the pod with highest resource version
+		err = streamContainerLog(ctx, client.KubernetesClient, &pods[0], logFilter, podLogs)
+		if err != nil {
+			return errors.Wrapf(err, "error getting container logs")
+		}
 	}
+
 	return err
 }
 

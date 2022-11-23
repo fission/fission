@@ -133,7 +133,7 @@ func Commands() *cobra.Command {
 		Required: []flag.Flag{flag.FnName},
 		Optional: []flag.Flag{
 			flag.FnLogFollow, flag.FnLogReverseQuery, flag.FnLogCount,
-			flag.FnLogDetail, flag.FnLogPod, flag.NamespaceFunction, flag.FnLogDBType, flag.NamespacePod},
+			flag.FnLogDetail, flag.FnLogPod, flag.NamespaceFunction, flag.FnLogDBType, flag.NamespacePod, flag.FnLogAllPods},
 	})
 
 	testCmd := &cobra.Command{

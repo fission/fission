@@ -84,6 +84,7 @@ const (
 	FnOnceOnly              = "onceonly"
 	FnSubPath               = "subpath"
 	FnGracePeriod           = "graceperiod"
+	FnLogAllPods            = "all-pods"
 
 	HtName              = resourceName
 	HtMethod            = "method"

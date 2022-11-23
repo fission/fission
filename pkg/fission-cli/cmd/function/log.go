@@ -52,6 +52,7 @@ func (opts *LogSubCommand) do(input cli.Input) error {
 
 	logReverseQuery := !input.Bool(flagkey.FnLogFollow) && input.Bool(flagkey.FnLogReverseQuery)
 
+	allPods := input.Bool(flagkey.FnLogAllPods)
 	recordLimit := input.Int(flagkey.FnLogCount)
 	if recordLimit <= 0 {
 		recordLimit = 1000
@@ -94,6 +95,7 @@ func (opts *LogSubCommand) do(input cli.Input) error {
 					FunctionObject: f,
 					Details:        detail,
 					WarnUser:       warn,
+					AllPods:        allPods,
 				}
 
 				buf := new(bytes.Buffer)

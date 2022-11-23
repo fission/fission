@@ -45,6 +45,7 @@ type LogFilter struct {
 	FunctionObject *v1.Function
 	Details        bool
 	WarnUser       bool
+	AllPods        bool
 }
 
 type LogEntry struct {
