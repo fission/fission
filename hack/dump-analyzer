@@ -106,7 +106,7 @@ function prometheus_run() {
     prom_context
     TSDB_PATH=$PROM_CONTEXT/prometheus
     ETC_PROM=$PROM_CONTEXT/etc/prometheus
-    ./prometheus \
+    prometheus \
         --web.console.templates=$ETC_PROM/consoles \
         --web.console.libraries=$ETC_PROM/console_libraries \
         --storage.tsdb.retention.time=10d \
@@ -128,13 +128,16 @@ Options:
     -x [run_id]     Download and extract dump locally
     -l [run_id]    List dump files for a run
     -k [run_id]    List kind exports in a run
-    -p [run_id]    Run prometheus with the dump
 
     Following options required DUMP_CONTEXT variable set.
 
     -i              Display dump info
     -r              Find all race conditions in dump
-    -e              Find all errors in logs"
+    -e              Find all errors in logs
+
+    Following options require PROM_CONTEXT to be set.
+
+    -p             Run prometheus with the dump"
     exit 3
 }
 

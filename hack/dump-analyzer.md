@@ -1,9 +1,35 @@
 # Dump analyzer
 
+## Usage
+
+```text
+./hack/dump-analyzer -h
+showing usage!
+./dump-analyzer [OPTIONS]
+Utilities related to fission dump analysis
+
+Options:
+    -h              Show usage
+    -x [run_id]     Download and extract dump locally
+    -l [run_id]    List dump files for a run
+    -k [run_id]    List kind exports in a run
+
+    Following options required DUMP_CONTEXT variable set.
+
+    -i              Display dump info
+    -r              Find all race conditions in dump
+    -e              Find all errors in logs
+
+    Following options require PROM_CONTEXT to be set.
+
+    -p             Run prometheus with the dump
+
+```
+
 ## Downloading dump
 
 ```sh
-$ ./dump-analyzer -x 3179903728
+$ ./hack/dump-analyzer -x 3179903728
 ! mkdir -p .dumps/3179903728
 .dumps/3179903728
 ! gh run download 3179903728 -R fission/fission -D .dumps/3179903728
@@ -15,7 +41,7 @@ $ ./dump-analyzer -x 3179903728
 ## Check all dumps
 
 ```sh
-./dump-analyzer -l 3179903728
+./hack/dump-analyzer -l 3179903728
 ==== .dumps/3179903728/extract/4b24c3db-b5d8-43a7-858d-48746530d29e2534094304 ====
 -- Fission Version --
 client:
@@ -48,7 +74,7 @@ To explore specific dump set `DUMP_CONTEXT` environment variable.
 ```sh
 $ export DUMP_CONTEXT=.dumps/3179903728/extract/4b24c3db-b5d8-43a7-858d-48746530d29e2534094304
 
-$ ./dump-analyzer -i
+$ ./hack/dump-analyzer -i
 Dump context: .dumps/3179903728/extract/4b24c3db-b5d8-43a7-858d-48746530d29e2534094304
 ! cat .dumps/3179903728/extract/4b24c3db-b5d8-43a7-858d-48746530d29e2534094304/fission-version/fission-version.txt
 client:
@@ -73,7 +99,7 @@ minor: "21"
 platform: linux/amd64
 
 # See all errors in the dump
-$ ./dump-analyzer -e
+$ ./hack/dump-analyzer -e
 
 # If you want to see error in specific dump you can also grep
 
@@ -87,7 +113,7 @@ $ ack "string" $DUMP_CONTEXT
 ## Kind logs
 
 ```sh
- ./dump-analyzer -k 3179903728
+ ./hack/dump-analyzer -k 3179903728
 ==== .dumps/3179903728/kind-logs-3179903728-v1.20.15 ====
 kind v0.14.0 go1.18.2 linux/amd64
 
@@ -96,4 +122,12 @@ kind v0.14.0 go1.18.2 linux/amd64
 
 ==== .dumps/3179903728/kind-logs-3179903728-v1.21.12 ====
 kind v0.14.0 go1.18.2 linux/amd64
+```
+
+## Prometheus with dump
+
+```sh
+$ export DUMP_CONTEXT=.dumps/3539792658/prom-dump-3539792658-v1.21.14
+$ ./hack/dump-analyzer -p
+# Visit localhost:9090
 ```
