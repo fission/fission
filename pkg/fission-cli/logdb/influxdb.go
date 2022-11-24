@@ -22,8 +22,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
-	"path"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -159,17 +158,19 @@ func (influx InfluxDB) GetLogs(ctx context.Context, filter LogFilter, output *by
 }
 
 func (influx InfluxDB) query(query influxdbClient.Query) (*influxdbClient.Response, error) {
-	queryURL, err := url.Parse(influx.endpoint)
-	if err != nil {
-		return nil, err
-	}
-	// connect to controller first, then controller will redirect our query command
-	// to influxdb and proxy back the db response.
-	queryURL.Path = path.Clean(fmt.Sprintf("%s/proxy/%s", queryURL.Path, INFLUXDB))
-	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+
+	dbType := INFLUXDB
+	// retrieve db auth config from the env
+	url := os.Getenv(fmt.Sprintf("%s_URL", dbType))
+
+	username := os.Getenv(fmt.Sprintf("%s_USERNAME", dbType))
+	password := os.Getenv(fmt.Sprintf("%s_PASSWORD", dbType))
+
+	req, err := http.NewRequest(http.MethodPost, url, nil)
 	if err != nil {
 		return nil, errors.Wrap(err, "error creating request for log proxy")
 	}
+	req.SetBasicAuth(username, password)
 
 	parametersBytes, err := json.Marshal(query.Parameters)
 	if err != nil {
