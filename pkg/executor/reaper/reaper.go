@@ -363,7 +363,8 @@ func CleanupRoleBindings(ctx context.Context, logger *zap.Logger, client kuberne
 			return nil
 		}
 		for _, namespace := range GetReaperNamespace() {
-			cleanupRoleBindings(namespace) //ignore err
+			//ignore error
+			cleanupRoleBindings(namespace) //nolint errcheck
 		}
 	}
 }
