@@ -32,7 +32,7 @@ import (
 
 	"github.com/fission/fission/pkg/utils/httpserver"
 	"github.com/fission/fission/pkg/utils/metrics"
-	"github.com/fission/fission/pkg/utils/otel"
+	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
 type (
@@ -67,15 +67,16 @@ func getStorageLocation(config *storageConfig) (stow.Location, error) {
 }
 
 func (ss *StorageService) listItems(w http.ResponseWriter, r *http.Request) {
+	logger := otelUtils.LoggerWithTraceID(r.Context(), ss.logger)
 	// get all archives on storage
 	// out of them, there may be some just created but not referenced by packages yet.
 	// need to filter them out.
 	archivesInStorage, err := ss.storageClient.getItemIDsWithFilter(ss.storageClient.filterAllItems, false)
 	if err != nil {
-		ss.logger.Error("error getting items from storage", zap.Error(err))
+		logger.Error("error getting items from storage", zap.Error(err))
 		return
 	}
-	ss.logger.Debug("archives in storage", zap.Strings("archives", archivesInStorage))
+	logger.Debug("archives in storage", zap.Strings("archives", archivesInStorage))
 
 	// respond with the list of items
 	resp, err := json.Marshal(archivesInStorage)
@@ -85,7 +86,7 @@ func (ss *StorageService) listItems(w http.ResponseWriter, r *http.Request) {
 	}
 	_, err = w.Write(resp)
 	if err != nil {
-		ss.logger.Error(
+		logger.Error(
 			"error writing HTTP response",
 			zap.Error(err),
 		)
@@ -94,6 +95,8 @@ func (ss *StorageService) listItems(w http.ResponseWriter, r *http.Request) {
 
 // Handle multipart file uploads.
 func (ss *StorageService) uploadHandler(w http.ResponseWriter, r *http.Request) {
+	logger := otelUtils.LoggerWithTraceID(r.Context(), ss.logger)
+
 	// handle upload
 	err := r.ParseMultipartForm(0)
 	if err != nil {
@@ -113,7 +116,7 @@ func (ss *StorageService) uploadHandler(w http.ResponseWriter, r *http.Request) 
 
 	fileSizeS, ok := r.Header["X-File-Size"]
 	if !ok {
-		ss.logger.Error("upload is missing the 'X-File-Size' header",
+		logger.Error("upload is missing the 'X-File-Size' header",
 			zap.String("filename", handler.Filename))
 		http.Error(w, "missing X-File-Size header", http.StatusBadRequest)
 		return
@@ -121,7 +124,7 @@ func (ss *StorageService) uploadHandler(w http.ResponseWriter, r *http.Request) 
 
 	fileSize, err := strconv.Atoi(fileSizeS[0])
 	if err != nil {
-		ss.logger.Error("error parsing 'X-File-Size' header",
+		logger.Error("error parsing 'X-File-Size' header",
 			zap.Error(err),
 			zap.Strings("header", fileSizeS),
 			zap.String("filename", handler.Filename))
@@ -130,12 +133,12 @@ func (ss *StorageService) uploadHandler(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// TODO: allow headers to add more metadata (e.g. environment and function metadata)
-	ss.logger.Debug("handling upload",
+	logger.Debug("handling upload",
 		zap.String("filename", handler.Filename))
 
 	id, err := ss.storageClient.putFile(file, int64(fileSize))
 	if err != nil {
-		ss.logger.Error("error saving uploaded file",
+		logger.Error("error saving uploaded file",
 			zap.Error(err),
 			zap.String("filename", handler.Filename))
 		http.Error(w, "Error saving uploaded file", http.StatusInternalServerError)
@@ -150,7 +153,7 @@ func (ss *StorageService) uploadHandler(w http.ResponseWriter, r *http.Request) 
 	}
 	resp, err := json.Marshal(ur)
 	if err != nil {
-		ss.logger.Error("error marshaling uploaded file response",
+		logger.Error("error marshaling uploaded file response",
 			zap.Error(err),
 			zap.String("filename", handler.Filename))
 		http.Error(w, "Error marshaling response", http.StatusInternalServerError)
@@ -158,7 +161,7 @@ func (ss *StorageService) uploadHandler(w http.ResponseWriter, r *http.Request) 
 	}
 	_, err = w.Write(resp)
 	if err != nil {
-		ss.logger.Error(
+		logger.Error(
 			"error writing HTTP response",
 			zap.Error(err),
 			zap.String("filename", handler.Filename),
@@ -203,6 +206,8 @@ func (ss *StorageService) deleteHandler(w http.ResponseWriter, r *http.Request) 
 }
 
 func (ss *StorageService) downloadHandler(w http.ResponseWriter, r *http.Request) {
+	logger := otelUtils.LoggerWithTraceID(r.Context(), ss.logger)
+
 	// get id from request
 	fileId, err := ss.getIdFromRequest(r)
 	if err != nil {
@@ -214,7 +219,7 @@ func (ss *StorageService) downloadHandler(w http.ResponseWriter, r *http.Request
 	// stream it to response
 	err = ss.storageClient.copyFileToStream(fileId, w)
 	if err != nil {
-		ss.logger.Error("error getting file from storage client", zap.Error(err), zap.String("file_id", fileId))
+		logger.Error("error getting file from storage client", zap.Error(err), zap.String("file_id", fileId))
 		if err == ErrNotFound {
 			http.Error(w, "Error retrieving item: not found", http.StatusNotFound)
 		} else if err == ErrRetrievingItem {
@@ -271,7 +276,7 @@ func (ss *StorageService) Start(ctx context.Context, port int) {
 	r.HandleFunc("/v1/archive", ss.infoHandler).Methods("HEAD")
 	r.HandleFunc("/healthz", ss.healthHandler).Methods("GET")
 
-	handler := otel.GetHandlerWithOTEL(r, "fission-storagesvc", otel.UrlsToIgnore("/healthz"))
+	handler := otelUtils.GetHandlerWithOTEL(r, "fission-storagesvc", otelUtils.UrlsToIgnore("/healthz"))
 	httpserver.StartServer(ctx, ss.logger, "storagesvc", fmt.Sprintf("%d", port), handler)
 }
 
