@@ -41,10 +41,12 @@ const (
 )
 
 func NewInfluxDB(ctx context.Context, logDBOptions LogDBOptions) (InfluxDB, error) {
-	server, err := util.GetApplicationUrl(ctx, logDBOptions.Client, "application=fission-api")
+	// Portforward to the influxdb
+	localRouterPort, err := util.SetupPortForward(ctx, logDBOptions.Client, util.GetFissionNamespace(), "svc=influxdb")
 	if err != nil {
 		return InfluxDB{}, err
 	}
+	server := "http://127.0.0.1:" + localRouterPort + "/query"
 	return InfluxDB{endpoint: server}, nil
 }
 
@@ -88,7 +90,7 @@ func (influx InfluxDB) GetLogs(ctx context.Context, filter LogFilter, output *by
 
 	query := influxdbClient.NewQueryWithParameters(queryCmd, INFLUXDB_DATABASE, "", parameters)
 	logEntries := []LogEntry{}
-	response, err := influx.query(query)
+	response, err := influx.query(ctx, query)
 	if err != nil {
 		return err
 	}
@@ -157,12 +159,16 @@ func (influx InfluxDB) GetLogs(ctx context.Context, filter LogFilter, output *by
 	return nil
 }
 
-func (influx InfluxDB) query(query influxdbClient.Query) (*influxdbClient.Response, error) {
+func (influx InfluxDB) query(ctx context.Context, query influxdbClient.Query) (*influxdbClient.Response, error) {
 
 	dbType := INFLUXDB
 	// retrieve db auth config from the env
 	url := os.Getenv(fmt.Sprintf("%s_URL", dbType))
 
+	if url == "" {
+		// set up default database url
+		url = influx.endpoint
+	}
 	username := os.Getenv(fmt.Sprintf("%s_USERNAME", dbType))
 	password := os.Getenv(fmt.Sprintf("%s_PASSWORD", dbType))
 
