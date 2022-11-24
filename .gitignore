@@ -37,3 +37,6 @@ manifest/
 coverage.txt
 
 cosign.key
+
+# Dumps
+.dumps/

@@ -66,6 +66,13 @@ deploy:
         webhook.securityContext.enabled: true
         storagesvc.securityContext.enabled: true
         controller.enabled: false
+        serviceMonitor.enabled: false
+        podMonitor.enabled: false
+        serviceMonitor.namespace: monitoring
+        podMonitor.namespace: monitoring
+        serviceMonitor.additionalPodMonitorLabels.release: prometheus
+        podMonitor.additionalPodMonitorLabels.release: prometheus
+        grafana.dashboards.enabled: false
       wait: true
     flags:
       install:
@@ -118,7 +125,16 @@ profiles:
     value: true
   - op: replace
     path: /deploy/helm/releases/0/setValues/prometheus.serviceEndpoint
-    value: "http://prometheus-operated.monitoring.svc.cluster.local"
+    value: "http://prometheus-operated.monitoring.svc.cluster.local:9090"
+  - op: replace
+    path: /deploy/helm/releases/0/setValues/podMonitor.enabled
+    value: true
+  - op: replace
+    path: /deploy/helm/releases/0/setValues/serviceMonitor.enabled
+    value: true
+  - op: replace
+    path: /deploy/helm/releases/0/setValues/grafana.dashboards.enabled
+    value: true
 - name: kind-opentelemetry
   patches:
   - op: replace

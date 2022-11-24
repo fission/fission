@@ -532,29 +532,29 @@ kafka:
 # The following components expose Prometheus metrics and have servicemonitors in this chart (disabled by default)
 # Controller, router, executor, storage svc
 serviceMonitor:
-  enabled: true
+  enabled: false
   ##namespace in which you want to deploy servicemonitor
   ##
-  namespace: monitoring
+  namespace: ""
   ## Map of additional labels to add to the ServiceMonitor resources
   #  to allow selecting specific ServiceMonitors
   #  in case of multiple prometheus deployments
-  additionalServiceMonitorLabels:
-    release: "prometheus"
+  additionalServiceMonitorLabels: {}
+  #  release: "monitoring"
   #  key: "value"
 
 # The following components expose Prometheus metrics and have podmonitors in this chart (disabled by default)
 # 
 podMonitor:
-  enabled: true
+  enabled: false
   ##namespace in which you want to deploy podmonitor
   ##
-  namespace: monitoring
+  namespace: ""
   ## Map of additional labels to add to the PodMonitor resources
   #  to allow selecting specific PodMonitor
   #  in case of multiple prometheus deployments
-  additionalPodMonitorLabels:
-    release: "prometheus"
+  additionalPodMonitorLabels: {}
+  #  release: "monitoring"
   #  key: "value"
 
 ## Persist data to a persistent volume.
@@ -903,4 +903,4 @@ grafana:
   namespace: monitoring
   dashboards:
     ## Disabled by default. switch to true to deploy them
-    enable: true
+    enable: false
