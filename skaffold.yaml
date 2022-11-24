@@ -67,10 +67,10 @@ deploy:
         storagesvc.securityContext.enabled: true
         controller.enabled: false
         serviceMonitor.enabled: false
-        podMonitor.enabled: false
         serviceMonitor.namespace: monitoring
+        serviceMonitor.additionalServiceMonitorLabels.release: prometheus
+        podMonitor.enabled: false
         podMonitor.namespace: monitoring
-        serviceMonitor.additionalPodMonitorLabels.release: prometheus
         podMonitor.additionalPodMonitorLabels.release: prometheus
         grafana.dashboards.enabled: false
       wait: true
