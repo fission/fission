@@ -71,7 +71,7 @@ func CleanupKubeObject(ctx context.Context, logger *zap.Logger, kubeClient kuber
 
 // CleanupDeployments deletes deployment(s) for a given instanceID
 func CleanupDeployments(ctx context.Context, logger *zap.Logger, client kubernetes.Interface, instanceID string, listOps metav1.ListOptions) error {
-	for _, namespace := range GetNamespaces() {
+	cleanupDeployments := func(namespace string) error {
 		deploymentList, err := client.AppsV1().Deployments(namespace).List(ctx, listOps)
 		if err != nil {
 			return err
@@ -94,6 +94,12 @@ func CleanupDeployments(ctx context.Context, logger *zap.Logger, client kubernet
 				// ignore err
 			}
 		}
+		return nil
+	}
+	for _, namespace := range GetReaperNamespace() {
+		if err := cleanupDeployments(namespace); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -101,7 +107,7 @@ func CleanupDeployments(ctx context.Context, logger *zap.Logger, client kubernet
 
 // CleanupPods deletes pod(s) for a given instanceID
 func CleanupPods(ctx context.Context, logger *zap.Logger, client kubernetes.Interface, instanceID string, listOps metav1.ListOptions) error {
-	for _, namespace := range GetNamespaces() {
+	cleanupPods := func(namespace string) error {
 		podList, err := client.CoreV1().Pods(namespace).List(ctx, listOps)
 		if err != nil {
 			return err
@@ -124,6 +130,13 @@ func CleanupPods(ctx context.Context, logger *zap.Logger, client kubernetes.Inte
 				// ignore err
 			}
 		}
+		return nil
+	}
+
+	for _, namespace := range GetReaperNamespace() {
+		if err := cleanupPods(namespace); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -131,7 +144,7 @@ func CleanupPods(ctx context.Context, logger *zap.Logger, client kubernetes.Inte
 
 // CleanupServices deletes service(s) for a given instanceID
 func CleanupServices(ctx context.Context, logger *zap.Logger, client kubernetes.Interface, instanceID string, listOps metav1.ListOptions) error {
-	for _, namespace := range GetNamespaces() {
+	cleanupServices := func(namespace string) error {
 		svcList, err := client.CoreV1().Services(namespace).List(ctx, listOps)
 		if err != nil {
 			return err
@@ -154,6 +167,13 @@ func CleanupServices(ctx context.Context, logger *zap.Logger, client kubernetes.
 				// ignore err
 			}
 		}
+		return nil
+	}
+
+	for _, namespace := range GetReaperNamespace() {
+		if err := cleanupServices(namespace); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -161,7 +181,7 @@ func CleanupServices(ctx context.Context, logger *zap.Logger, client kubernetes.
 
 // CleanupHpa deletes horizontal pod autoscaler(s) for a given instanceID
 func CleanupHpa(ctx context.Context, logger *zap.Logger, client kubernetes.Interface, instanceID string, listOps metav1.ListOptions) error {
-	for _, namespace := range GetNamespaces() {
+	cleanupHpa := func(namespace string) error {
 		hpaList, err := client.AutoscalingV2beta2().HorizontalPodAutoscalers(namespace).List(ctx, listOps)
 		if err != nil {
 			return err
@@ -185,6 +205,13 @@ func CleanupHpa(ctx context.Context, logger *zap.Logger, client kubernetes.Inter
 				// ignore err
 			}
 		}
+		return nil
+	}
+
+	for _, namespace := range GetReaperNamespace() {
+		if err := cleanupHpa(namespace); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -200,13 +227,13 @@ func CleanupRoleBindings(ctx context.Context, logger *zap.Logger, client kuberne
 
 		logger.Debug("starting cleanupRoleBindings cycle")
 
-		for _, namespace := range GetNamespaces() {
+		cleanupRoleBindings := func(namespace string) error {
 			// get all rolebindings ( just to be efficient, one call to kubernetes )
 			rbList, err := client.RbacV1().RoleBindings(namespace).List(ctx, metav1.ListOptions{})
 			if err != nil {
 				// something wrong, but next iteration hopefully succeeds
 				logger.Error("error listing role bindings in all namespaces", zap.Error(err))
-				continue
+				return err
 			}
 
 			// go through each role-binding object and do the cleanup necessary
@@ -333,11 +360,15 @@ func CleanupRoleBindings(ctx context.Context, logger *zap.Logger, client kuberne
 					}
 				}
 			}
+			return nil
+		}
+		for _, namespace := range GetReaperNamespace() {
+			cleanupRoleBindings(namespace) //ignore err
 		}
 	}
 }
 
-func GetNamespaces() []string {
+func GetReaperNamespace() []string {
 	additionalNS := utils.GetNamespaces()
 	//to support backward compatibility we need to cleanup deployment and rolebinding created in function, buidler and default namespace as well
 	fissionNS := utils.DefaultNSResolver()
