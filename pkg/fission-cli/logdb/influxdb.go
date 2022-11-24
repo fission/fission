@@ -62,7 +62,7 @@ func makeIndexMap(cols []string) map[string]int {
 	return indexMap
 }
 
-func (influx InfluxDB) GetLogs(ctx context.Context, filter LogFilter) (output *bytes.Buffer, err error) {
+func (influx InfluxDB) GetLogs(ctx context.Context, filter LogFilter, output *bytes.Buffer) (err error) {
 	timestamp := filter.Since.UnixNano()
 	var queryCmd string
 
@@ -91,7 +91,7 @@ func (influx InfluxDB) GetLogs(ctx context.Context, filter LogFilter) (output *b
 	logEntries := []LogEntry{}
 	response, err := influx.query(query)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	for _, r := range response.Results {
 		for _, series := range r.Series {
@@ -115,11 +115,11 @@ func (influx InfluxDB) GetLogs(ctx context.Context, filter LogFilter) (output *b
 			for _, row := range series.Values {
 				t, err := time.Parse(time.RFC3339, row[0].(string))
 				if err != nil {
-					return nil, err
+					return err
 				}
 				seqNum, err := strconv.Atoi(row[seq].(string))
 				if err != nil {
-					return nil, err
+					return err
 				}
 				entry := LogEntry{
 					//The attributes of the LogEntry are selected as relative to their position in InfluxDB's line protocol response
@@ -140,23 +140,22 @@ func (influx InfluxDB) GetLogs(ctx context.Context, filter LogFilter) (output *b
 
 	sort.Sort(ByTimestamp(logEntries, filter.Reverse))
 
-	output = new(bytes.Buffer)
 	for _, logEntry := range logEntries {
 		if filter.Details {
 			msg := fmt.Sprintf("Timestamp: %s\nNamespace: %s\nFunction Name: %s\nFunction ID: %s\nPod: %s\nContainer: %s\nStream: %s\nLog: %s\n---\n",
 				logEntry.Timestamp, logEntry.Namespace, logEntry.FuncName, logEntry.FuncUid, logEntry.Pod, logEntry.Container, logEntry.Stream, logEntry.Message)
 			if _, err := output.WriteString(msg); err != nil {
-				return output, errors.Wrapf(err, "error copying pod log")
+				return errors.Wrapf(err, "error copying pod log")
 			}
 		} else {
 			msg := fmt.Sprintf("[%s] %s\n", logEntry.Timestamp, logEntry.Message)
 			if _, err := output.WriteString(msg); err != nil {
-				return output, errors.Wrapf(err, "error copying pod log")
+				return errors.Wrapf(err, "error copying pod log")
 			}
 		}
 	}
 
-	return output, nil
+	return nil
 }
 
 func (influx InfluxDB) query(query influxdbClient.Query) (*influxdbClient.Response, error) {

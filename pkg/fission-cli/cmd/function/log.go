@@ -17,8 +17,8 @@ limitations under the License.
 package function
 
 import (
+	"bytes"
 	"context"
-	"fmt"
 	"io"
 	"os"
 	"time"
@@ -28,6 +28,7 @@ import (
 
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
+	"github.com/fission/fission/pkg/fission-cli/console"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/logdb"
 )
@@ -51,6 +52,7 @@ func (opts *LogSubCommand) do(input cli.Input) error {
 
 	logReverseQuery := !input.Bool(flagkey.FnLogFollow) && input.Bool(flagkey.FnLogReverseQuery)
 
+	allPods := input.Bool(flagkey.FnLogAllPods)
 	recordLimit := input.Int(flagkey.FnLogCount)
 	if recordLimit <= 0 {
 		recordLimit = 1000
@@ -74,6 +76,7 @@ func (opts *LogSubCommand) do(input cli.Input) error {
 	requestChan := make(chan struct{})
 	responseChan := make(chan struct{})
 	ctx := input.Context()
+	warn := true
 
 	go func(ctx context.Context, requestChan, responseChan chan struct{}) {
 		t := time.Unix(0, 0*int64(time.Millisecond))
@@ -91,20 +94,28 @@ func (opts *LogSubCommand) do(input cli.Input) error {
 					RecordLimit:    recordLimit,
 					FunctionObject: f,
 					Details:        detail,
+					WarnUser:       warn,
+					AllPods:        allPods,
 				}
 
-				buf, err := logDB.GetLogs(ctx, logFilter)
+				buf := new(bytes.Buffer)
+				err = logDB.GetLogs(ctx, logFilter, buf)
+				t = time.Now().UTC() // next time fetch values from this time
 				if err != nil {
-					fmt.Printf("Error querying logs: %v", err)
+					console.Verbose(2, "error querying logs: %s", err)
+					if dbType == logdb.KUBERNETES { //in case of Kubernetes log we print pod namespace warning once
+						warn = false
+					}
 					responseChan <- struct{}{}
-					return
+					continue
 				}
 				_, err = io.Copy(os.Stdout, buf)
 				if err != nil {
-					return
+					console.Verbose(2, "eror copying logs: %s", err)
+					responseChan <- struct{}{}
+					continue
 				}
 
-				t = time.Now().UTC()            // next time fetch values from this time
 				if dbType == logdb.KUBERNETES { //in case of Kubernetes log we print pods info only once. And then print new logs
 					detail = false
 				}
