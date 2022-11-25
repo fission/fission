@@ -18,6 +18,7 @@ package builder
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -34,6 +35,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/fission/fission/pkg/info"
+	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
 const (
@@ -72,10 +74,12 @@ func MakeBuilder(logger *zap.Logger, sharedVolumePath string) *Builder {
 }
 
 func (builder *Builder) VersionHandler(w http.ResponseWriter, r *http.Request) {
+	logger := otelUtils.LoggerWithTraceID(r.Context(), builder.logger)
+
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	_, err := w.Write([]byte(info.BuildInfo().String()))
 	if err != nil {
-		builder.logger.Error(
+		logger.Error(
 			"error writing response",
 			zap.Error(err),
 		)
@@ -83,38 +87,40 @@ func (builder *Builder) VersionHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (builder *Builder) Handler(w http.ResponseWriter, r *http.Request) {
+	logger := otelUtils.LoggerWithTraceID(r.Context(), builder.logger)
+
 	if r.Method != "POST" {
 		e := "method not allowed"
-		builder.logger.Error(e, zap.String("http_method", r.Method))
-		builder.reply(w, "", fmt.Sprintf("%s: %s", e, r.Method), http.StatusMethodNotAllowed)
+		logger.Error(e, zap.String("http_method", r.Method))
+		builder.reply(r.Context(), w, "", fmt.Sprintf("%s: %s", e, r.Method), http.StatusMethodNotAllowed)
 		return
 	}
 
 	startTime := time.Now()
 	defer func() {
 		elapsed := time.Since(startTime)
-		builder.logger.Info("build request complete", zap.Duration("elapsed_time", elapsed))
+		logger.Info("build request complete", zap.Duration("elapsed_time", elapsed))
 	}()
 
 	// parse request
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		e := "error reading request body"
-		builder.logger.Error(e, zap.Error(err))
-		builder.reply(w, "", fmt.Sprintf("%s: %s", e, err.Error()), http.StatusInternalServerError)
+		logger.Error(e, zap.Error(err))
+		builder.reply(r.Context(), w, "", fmt.Sprintf("%s: %s", e, err.Error()), http.StatusInternalServerError)
 		return
 	}
 	var req PackageBuildRequest
 	err = json.Unmarshal(body, &req)
 	if err != nil {
 		e := "error parsing json body"
-		builder.logger.Error(e, zap.Error(err))
-		builder.reply(w, "", fmt.Sprintf("%s: %s", e, err.Error()), http.StatusBadRequest)
+		logger.Error(e, zap.Error(err))
+		builder.reply(r.Context(), w, "", fmt.Sprintf("%s: %s", e, err.Error()), http.StatusBadRequest)
 		return
 	}
-	builder.logger.Info("builder received request", zap.Any("request", req))
+	logger.Info("builder received request", zap.Any("request", req))
 
-	builder.logger.Debug("starting build")
+	logger.Debug("starting build")
 	srcPkgPath := filepath.Join(builder.sharedVolumePath, req.SrcPkgFilename)
 	deployPkgFilename := fmt.Sprintf("%s-%s", req.SrcPkgFilename, strings.ToLower(uniuri.NewLen(6)))
 	deployPkgPath := filepath.Join(builder.sharedVolumePath, deployPkgFilename)
@@ -134,21 +140,22 @@ func (builder *Builder) Handler(w http.ResponseWriter, r *http.Request) {
 			buildArgs = append(buildArgs, args[i])
 		}
 	}
-	buildLogs, err := builder.build(buildCmd, buildArgs, srcPkgPath, deployPkgPath)
+	buildLogs, err := builder.build(r.Context(), buildCmd, buildArgs, srcPkgPath, deployPkgPath)
 	if err != nil {
 		e := "error building source package"
-		builder.logger.Error(e, zap.Error(err))
+		logger.Error(e, zap.Error(err))
 
 		// append error at the end of build logs
 		buildLogs += fmt.Sprintf("%s: %s\n", e, err.Error())
-		builder.reply(w, deployPkgFilename, buildLogs, http.StatusInternalServerError)
+		builder.reply(r.Context(), w, deployPkgFilename, buildLogs, http.StatusInternalServerError)
 		return
 	}
 
-	builder.reply(w, deployPkgFilename, buildLogs, http.StatusOK)
+	builder.reply(r.Context(), w, deployPkgFilename, buildLogs, http.StatusOK)
 }
 
-func (builder *Builder) reply(w http.ResponseWriter, pkgFilename string, buildLogs string, statusCode int) {
+func (builder *Builder) reply(ctx context.Context, w http.ResponseWriter, pkgFilename string, buildLogs string, statusCode int) {
+	logger := otelUtils.LoggerWithTraceID(ctx, builder.logger)
 	resp := PackageBuildResponse{
 		ArtifactFilename: pkgFilename,
 		BuildLogs:        buildLogs,
@@ -167,14 +174,16 @@ func (builder *Builder) reply(w http.ResponseWriter, pkgFilename string, buildLo
 	w.WriteHeader(statusCode)
 	_, err = w.Write(rBody)
 	if err != nil {
-		builder.logger.Error(
+		logger.Error(
 			"error writing response",
 			zap.Error(err),
 		)
 	}
 }
 
-func (builder *Builder) build(command string, args []string, srcPkgPath string, deployPkgPath string) (string, error) {
+func (builder *Builder) build(ctx context.Context, command string, args []string, srcPkgPath string, deployPkgPath string) (string, error) {
+	logger := otelUtils.LoggerWithTraceID(ctx, builder.logger)
+
 	cmd := exec.Command(command, args...)
 
 	fi, err := os.Stat(srcPkgPath)
@@ -204,7 +213,7 @@ func (builder *Builder) build(command string, args []string, srcPkgPath string, 
 	}
 
 	// Init logs
-	builder.logger.Info("building source package", zap.String("command", command), zap.Strings("args", args), zap.Strings("env", cmd.Env))
+	logger.Info("building source package", zap.String("command", command), zap.Strings("args", args), zap.Strings("env", cmd.Env))
 
 	out := io.MultiReader(stdout, stderr)
 	scanner := bufio.NewScanner(out)
