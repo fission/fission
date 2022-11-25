@@ -64,6 +64,20 @@ func makePackageWatcher(logger *zap.Logger, fissionClient versioned.Interface, k
 	return pkgw
 }
 
+func (pkgw *packageWatcher) buildCacheKey(obj metav1.ObjectMeta) string {
+	return fmt.Sprintf("%s-%s-%s", obj.Namespace, obj.Name, obj.ResourceVersion)
+}
+
+func (pkgw *packageWatcher) buildWithCache(ctx context.Context, srcpkg *fv1.Package) {
+	// Ignore duplicate build requests
+	_, err := pkgw.buildCache.Set(pkgw.buildCacheKey(srcpkg.ObjectMeta), srcpkg)
+	if err != nil {
+		pkgw.logger.Info("package build cache set error", zap.Error(err))
+		return
+	}
+	go pkgw.build(ctx, srcpkg)
+}
+
 // build helps to update package status, checks environment builder pod status and
 // dispatches buildPackage to build source package into deployment package.
 // Following is the steps build function takes to complete the whole process.
@@ -75,13 +89,8 @@ func makePackageWatcher(logger *zap.Logger, fissionClient versioned.Interface, k
 // 6. Update package status to succeed state
 // *. Update package status to failed state,if any one of steps above failed/time out
 func (pkgw *packageWatcher) build(ctx context.Context, srcpkg *fv1.Package) {
-	// Ignore duplicate build requests
-	key := fmt.Sprintf("%v-%v", srcpkg.ObjectMeta.Name, srcpkg.ObjectMeta.ResourceVersion)
-	_, err := pkgw.buildCache.Set(key, srcpkg)
-	if err != nil {
-		return
-	}
 	defer func() {
+		key := pkgw.buildCacheKey(srcpkg.ObjectMeta)
 		err := pkgw.buildCache.Delete(key)
 		if err != nil {
 			pkgw.logger.Error("error deleting key from cache", zap.String("key", key), zap.Error(err))
@@ -290,7 +299,7 @@ func (pkgw *packageWatcher) packageInformerHandler(ctx context.Context) k8sCache
 		}
 		// Only build pending state packages.
 		if pkg.Status.BuildStatus == fv1.BuildStatusPending {
-			go pkgw.build(ctx, pkg)
+			pkgw.buildWithCache(ctx, pkg)
 		}
 	}
 	return k8sCache.ResourceEventHandlerFuncs{
