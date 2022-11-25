@@ -118,9 +118,6 @@ profiles:
     path: /deploy/helm/releases/0/setValues/routerServiceType
     value: NodePort
   - op: replace
-    path: /deploy/helm/releases/0/setValues/influxdb.enabled
-    value: true
-  - op: replace
     path: /deploy/helm/releases/0/setValues/canaryDeployment.enabled
     value: true
   - op: replace

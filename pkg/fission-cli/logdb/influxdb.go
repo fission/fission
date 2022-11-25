@@ -22,8 +22,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
-	"path"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -42,11 +41,20 @@ const (
 )
 
 func NewInfluxDB(ctx context.Context, logDBOptions LogDBOptions) (InfluxDB, error) {
-	server, err := util.GetApplicationUrl(ctx, logDBOptions.Client, "application=fission-api")
-	if err != nil {
-		return InfluxDB{}, err
+
+	dbType := INFLUXDB
+	// retrieve db auth config from the env
+	url := os.Getenv(fmt.Sprintf("%s_URL", dbType))
+	if url == "" {
+		// Portforward to the influxdb
+		localRouterPort, err := util.SetupPortForward(ctx, logDBOptions.Client, util.GetFissionNamespace(), "svc=influxdb")
+		if err != nil {
+			return InfluxDB{}, err
+		}
+		url = "http://127.0.0.1:" + localRouterPort + "/query"
 	}
-	return InfluxDB{endpoint: server}, nil
+
+	return InfluxDB{endpoint: url}, nil
 }
 
 type InfluxDB struct {
@@ -89,7 +97,7 @@ func (influx InfluxDB) GetLogs(ctx context.Context, filter LogFilter, output *by
 
 	query := influxdbClient.NewQueryWithParameters(queryCmd, INFLUXDB_DATABASE, "", parameters)
 	logEntries := []LogEntry{}
-	response, err := influx.query(query)
+	response, err := influx.query(ctx, query)
 	if err != nil {
 		return err
 	}
@@ -158,18 +166,16 @@ func (influx InfluxDB) GetLogs(ctx context.Context, filter LogFilter, output *by
 	return nil
 }
 
-func (influx InfluxDB) query(query influxdbClient.Query) (*influxdbClient.Response, error) {
-	queryURL, err := url.Parse(influx.endpoint)
-	if err != nil {
-		return nil, err
-	}
-	// connect to controller first, then controller will redirect our query command
-	// to influxdb and proxy back the db response.
-	queryURL.Path = path.Clean(fmt.Sprintf("%s/proxy/%s", queryURL.Path, INFLUXDB))
-	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+func (influx InfluxDB) query(ctx context.Context, query influxdbClient.Query) (*influxdbClient.Response, error) {
+
+	username := os.Getenv(fmt.Sprintf("%s_USERNAME", INFLUXDB))
+	password := os.Getenv(fmt.Sprintf("%s_PASSWORD", INFLUXDB))
+
+	req, err := http.NewRequest(http.MethodPost, influx.endpoint, nil)
 	if err != nil {
 		return nil, errors.Wrap(err, "error creating request for log proxy")
 	}
+	req.SetBasicAuth(username, password)
 
 	parametersBytes, err := json.Marshal(query.Parameters)
 	if err != nil {

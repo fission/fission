@@ -1,5 +1,5 @@
 #!/bin/bash
-set -euo pipefail
+# set -euo pipefail
 source $(dirname $0)/../utils.sh
 
 TEST_ID=$(generate_test_id)
@@ -51,13 +51,12 @@ get_archive_url_from_package() {
     url=`kubectl -n default get package $1 -ojsonpath='{.spec.deployment.url}'`
 }
 
+urldecode() { : "${*//+/ }"; echo -e "${_//%/\\x}"; }
+
 get_archive_from_storage() {
-    storage_service_url=$1
-    controller_ip=$CONTROLLER_IP
-    controller_proxy_url=`echo $storage_service_url | sed -e "s/storagesvc.$FISSION_NAMESPACE/$controller_ip\/proxy\/storage/"`
-    log "controller_proxy_url=$controller_proxy_url"
-    http_status=`curl --retry 5 -sw "%{http_code}" $controller_proxy_url -o /dev/null`
-    echo "http_status: $http_status"
+    # storage_service_url=$1
+    archive_url=$( urldecode $1)
+    fission archive list | grep $(echo "$archive_url" |cut -d= -f 2)| wc -l
 }
 
 #1. declare trap to cleanup for EXIT
@@ -94,18 +93,18 @@ main() {
     log "deleted packages : $pkg_1 $pkg_2"
 
     # curl on the archive url
-    get_archive_from_storage $url_1
-    log "http_status for $url_1 : $http_status"
-    if [ "$http_status" -ne "200" ]; then
-        log "Archive $url_1 absent on storage, while expected to be present"
+    archiveCount=$(get_archive_from_storage $url_1)
+    log "recieved archive status for $url_1"
+    if [[ $archiveCount -eq 0 ]]; then
+        log "archive not found"
         exit 1
     fi
 
     # curl on the archive url
-    get_archive_from_storage $url_2
-    log "http_status for $url_2 : $http_status"
-    if [ "$http_status" -ne "200" ]; then
-        log "Archive $url_2 absent on storage, while expected to be present"
+     archiveCount=$(get_archive_from_storage $url_2)
+     log "recieved archive status for $url_2 "
+    if [[ $archiveCount -eq 0 ]]; then
+        log "archive not found"
         exit 1
     fi
 
@@ -114,20 +113,20 @@ main() {
     sleep 300
 
     # curl on the archive url
-    get_archive_from_storage $url_1
-    log "http_status for $url_1 : $http_status"
-    if [ "$http_status" -ne "404" ]; then
-        log "Archive $url_1 should have been recycled, but curl returned $http_status, while expected status is 404."
+    archiveCount=$(get_archive_from_storage $url_1) 
+    if [[ $archiveCount -ne 0 ]]; then
+        log "archive found"
         exit 1
     fi
+    log "archive pruned for $url_1 "
 
     # curl on the archive url
-    get_archive_from_storage $url_2
-    log "http_status for $url_2 : $http_status"
-    if [ "$http_status" -ne "404" ]; then
-        log "Archive $url_2 should have been recycled, but curl returned $http_status, while expected status is 404."
+    archiveCount=$(get_archive_from_storage $url_2)
+    if [[ $archiveCount -ne 0 ]]; then
+        log "archive found"
         exit 1
     fi
+    log "archive pruned for $url_2 "
 
     log "Test archive pruner PASSED"
 }
