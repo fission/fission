@@ -216,7 +216,7 @@ Options:
 	ctx := signals.SetupSignalHandler()
 	profile.ProfileIfEnabled(ctx, logger)
 
-	version := fmt.Sprintf("Fission Bundle Version: %v", info.BuildInfo().String())
+	version := fmt.Sprintf("Fission Bundle Version: %s", info.BuildInfo().String())
 	arguments, err := docopt.ParseArgs(usage, nil, version)
 	if err != nil {
 		logger.Error("failed to parse arguments", zap.Error(err))
