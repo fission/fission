@@ -51,14 +51,18 @@ get_archive_url_from_package() {
     url=`kubectl -n default get package $1 -ojsonpath='{.spec.deployment.url}'`
 }
 
+urldecode() { : "${*//+/ }"; echo -e "${_//%/\\x}"; }
+
 get_archive_from_storage() {
     storage_service_url=$1
-    controller_ip=$CONTROLLER_IP
-    controller_proxy_url=`echo $storage_service_url | sed -e "s/storagesvc.$FISSION_NAMESPACE/$controller_ip\/proxy\/storage/"`
-    log "controller_proxy_url=$controller_proxy_url"
-    http_status=`curl --retry 5 -sw "%{http_code}" $controller_proxy_url -o /dev/null`
-    echo "http_status: $http_status"
-}
+    archive_url=$( urldecode $storage_service_url)
+    # echo $y
+    old_ifs="$IFS"
+    IFS="?"
+    set -- $archive_url
+    IFS=$old_ifs
+    echo `fission archive get-url --$2`
+    }
 
 #1. declare trap to cleanup for EXIT
 #2. create an archive with large files such that total size of archive is > 256KB
@@ -95,19 +99,11 @@ main() {
 
     # curl on the archive url
     get_archive_from_storage $url_1
-    log "http_status for $url_1 : $http_status"
-    if [ "$http_status" -ne "200" ]; then
-        log "Archive $url_1 absent on storage, while expected to be present"
-        exit 1
-    fi
+    log "recieved archive status for $url_1 "
 
     # curl on the archive url
     get_archive_from_storage $url_2
-    log "http_status for $url_2 : $http_status"
-    if [ "$http_status" -ne "200" ]; then
-        log "Archive $url_2 absent on storage, while expected to be present"
-        exit 1
-    fi
+     log "recieved archive status for $url_1 "
 
     # archivePruner is set to run every minute for test. In production, its set to run every hour.
     log "waiting for packages to get recycled"
@@ -115,19 +111,11 @@ main() {
 
     # curl on the archive url
     get_archive_from_storage $url_1
-    log "http_status for $url_1 : $http_status"
-    if [ "$http_status" -ne "404" ]; then
-        log "Archive $url_1 should have been recycled, but curl returned $http_status, while expected status is 404."
-        exit 1
-    fi
+    log "recieved archive status for $url_1 "
 
     # curl on the archive url
     get_archive_from_storage $url_2
-    log "http_status for $url_2 : $http_status"
-    if [ "$http_status" -ne "404" ]; then
-        log "Archive $url_2 should have been recycled, but curl returned $http_status, while expected status is 404."
-        exit 1
-    fi
+     log "recieved archive status for $url_1 "
 
     log "Test archive pruner PASSED"
 }
