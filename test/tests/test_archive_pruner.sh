@@ -1,5 +1,5 @@
 #!/bin/bash
-set -euo pipefail
+# set -euo pipefail
 source $(dirname $0)/../utils.sh
 
 TEST_ID=$(generate_test_id)
@@ -54,15 +54,10 @@ get_archive_url_from_package() {
 urldecode() { : "${*//+/ }"; echo -e "${_//%/\\x}"; }
 
 get_archive_from_storage() {
-    storage_service_url=$1
-    archive_url=$( urldecode $storage_service_url)
-    # echo $y
-    old_ifs="$IFS"
-    IFS="?"
-    set -- $archive_url
-    IFS=$old_ifs
-    echo `fission archive get-url --$2`
-    }
+    # storage_service_url=$1
+    archive_url=$( urldecode $1)
+    fission archive list | grep $(echo "$archive_url" |cut -d= -f 2)| wc -l
+}
 
 #1. declare trap to cleanup for EXIT
 #2. create an archive with large files such that total size of archive is > 256KB
@@ -98,24 +93,40 @@ main() {
     log "deleted packages : $pkg_1 $pkg_2"
 
     # curl on the archive url
-    get_archive_from_storage $url_1
-    log "recieved archive status for $url_1 "
+    archiveCount=$(get_archive_from_storage $url_1)
+    log "recieved archive status for $url_1"
+    if [[ $archiveCount -eq 0 ]]; then
+        log "archive not found"
+        exit 1
+    fi
 
     # curl on the archive url
-    get_archive_from_storage $url_2
-     log "recieved archive status for $url_1 "
+     archiveCount=$(get_archive_from_storage $url_2)
+     log "recieved archive status for $url_2 "
+    if [[ $archiveCount -eq 0 ]]; then
+        log "archive not found"
+        exit 1
+    fi
 
     # archivePruner is set to run every minute for test. In production, its set to run every hour.
     log "waiting for packages to get recycled"
     sleep 300
 
     # curl on the archive url
-    get_archive_from_storage $url_1
-    log "recieved archive status for $url_1 "
+    archiveCount=$(get_archive_from_storage $url_1) 
+    if [[ $archiveCount -ne 0 ]]; then
+        log "archive found"
+        exit 1
+    fi
+    log "archive pruned for $url_1 "
 
     # curl on the archive url
-    get_archive_from_storage $url_2
-     log "recieved archive status for $url_1 "
+    archiveCount=$(get_archive_from_storage $url_2)
+    if [[ $archiveCount -ne 0 ]]; then
+        log "archive found"
+        exit 1
+    fi
+    log "archive pruned for $url_2 "
 
     log "Test archive pruner PASSED"
 }
