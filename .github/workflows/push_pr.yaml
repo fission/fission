@@ -91,7 +91,8 @@ jobs:
           helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
           helm repo update
           kubectl create ns monitoring
-          helm install prometheus prometheus-community/kube-prometheus-stack -n monitoring
+          helm install prometheus prometheus-community/kube-prometheus-stack -n monitoring \
+          --set grafana.enabled=false --set alertmanager.enabled=false
 
       - name: Build and Install Fission CLI
         run: |
