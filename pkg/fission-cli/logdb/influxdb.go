@@ -41,13 +41,20 @@ const (
 )
 
 func NewInfluxDB(ctx context.Context, logDBOptions LogDBOptions) (InfluxDB, error) {
-	// Portforward to the influxdb
-	localRouterPort, err := util.SetupPortForward(ctx, logDBOptions.Client, util.GetFissionNamespace(), "svc=influxdb")
-	if err != nil {
-		return InfluxDB{}, err
+
+	dbType := INFLUXDB
+	// retrieve db auth config from the env
+	url := os.Getenv(fmt.Sprintf("%s_URL", dbType))
+	if url == "" {
+		// Portforward to the influxdb
+		localRouterPort, err := util.SetupPortForward(ctx, logDBOptions.Client, util.GetFissionNamespace(), "svc=influxdb")
+		if err != nil {
+			return InfluxDB{}, err
+		}
+		url = "http://127.0.0.1:" + localRouterPort + "/query"
 	}
-	server := "http://127.0.0.1:" + localRouterPort + "/query"
-	return InfluxDB{endpoint: server}, nil
+
+	return InfluxDB{endpoint: url}, nil
 }
 
 type InfluxDB struct {
@@ -161,18 +168,10 @@ func (influx InfluxDB) GetLogs(ctx context.Context, filter LogFilter, output *by
 
 func (influx InfluxDB) query(ctx context.Context, query influxdbClient.Query) (*influxdbClient.Response, error) {
 
-	dbType := INFLUXDB
-	// retrieve db auth config from the env
-	url := os.Getenv(fmt.Sprintf("%s_URL", dbType))
+	username := os.Getenv(fmt.Sprintf("%s_USERNAME", INFLUXDB))
+	password := os.Getenv(fmt.Sprintf("%s_PASSWORD", INFLUXDB))
 
-	if url == "" {
-		// set up default database url
-		url = influx.endpoint
-	}
-	username := os.Getenv(fmt.Sprintf("%s_USERNAME", dbType))
-	password := os.Getenv(fmt.Sprintf("%s_PASSWORD", dbType))
-
-	req, err := http.NewRequest(http.MethodPost, url, nil)
+	req, err := http.NewRequest(http.MethodPost, influx.endpoint, nil)
 	if err != nil {
 		return nil, errors.Wrap(err, "error creating request for log proxy")
 	}
