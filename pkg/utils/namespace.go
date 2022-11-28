@@ -80,6 +80,14 @@ func (nsr *NamespaceResolver) GetBuilderNS(namespace string) string {
 	return nsr.BuiderNamespace
 }
 
+func (nsr *NamespaceResolver) GetBuilderResourceNS() map[string]string {
+	if nsr.BuiderNamespace != "" {
+		nsr.FissionResourceNS[nsr.BuiderNamespace] = nsr.BuiderNamespace
+		return nsResolver.FissionResourceNS
+	}
+	return nsr.FissionResourceNS
+}
+
 func (nsr *NamespaceResolver) GetFunctionNS(namespace string) string {
 	if nsr.FunctionNamespace == "" || nsr.BuiderNamespace == "" {
 		return namespace
@@ -91,11 +99,27 @@ func (nsr *NamespaceResolver) GetFunctionNS(namespace string) string {
 	return nsr.FunctionNamespace
 }
 
+func (nsr *NamespaceResolver) GetFuncResourceNS() map[string]string {
+	if nsr.FunctionNamespace != "" {
+		nsr.FissionResourceNS[nsr.FunctionNamespace] = nsr.FunctionNamespace
+		return nsResolver.FissionResourceNS
+	}
+	return nsr.FissionResourceNS
+}
+
 func (nsr *NamespaceResolver) ResolveNamespace(namespace string) string {
 	if nsr.FunctionNamespace == "" || nsr.BuiderNamespace == "" {
 		return nsr.DefaultNamespace
 	}
 	return namespace
+}
+
+func (nsr *NamespaceResolver) GetDefaultResourceNS() map[string]string {
+	if nsr.DefaultNamespace != "" {
+		nsr.FissionResourceNS[nsr.DefaultNamespace] = nsr.DefaultNamespace
+		return nsResolver.FissionResourceNS
+	}
+	return nsr.FissionResourceNS
 }
 
 // GetFissionNamespaces => return all fission core component namespaces
