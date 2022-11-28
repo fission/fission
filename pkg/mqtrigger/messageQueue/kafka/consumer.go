@@ -106,8 +106,8 @@ func (ch MqtConsumerGroupHandler) ConsumeClaim(session sarama.ConsumerGroupSessi
 	topic := claim.Topic()
 	partition := string(claim.Partition())
 
-	// initially set metrics to -1
-	mqtrigger.SetMessageLagCount(trigger, triggerNamespace, topic, partition, -1)
+	// initially set message lag count
+	mqtrigger.SetMessageLagCount(trigger, triggerNamespace, topic, partition, claim.HighWaterMarkOffset()-claim.InitialOffset())
 
 	// Do not move the code below to a goroutine.
 	// The `ConsumeClaim` itself is called within a goroutine
