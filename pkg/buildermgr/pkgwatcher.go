@@ -39,7 +39,7 @@ type (
 	packageWatcher struct {
 		logger        *zap.Logger
 		fissionClient versioned.Interface
-		nsResolver    *utils.NamespaceResolver
+		nsResolver    *utils.FissionNS
 		k8sClient     kubernetes.Interface
 		podInformer   k8sCache.SharedIndexInformer
 		pkgInformer   map[string]k8sCache.SharedIndexInformer
@@ -55,7 +55,7 @@ func makePackageWatcher(logger *zap.Logger, fissionClient versioned.Interface, k
 		logger:        logger.Named("package_watcher"),
 		fissionClient: fissionClient,
 		k8sClient:     k8sClientSet,
-		nsResolver:    utils.DefaultNSResolver(),
+		nsResolver:    utils.GetNamespaces(),
 		podInformer:   podInformer,
 		pkgInformer:   pkgInformer,
 		storageSvcUrl: storageSvcUrl,

@@ -76,7 +76,7 @@ type (
 		pools            map[string]*GenericPool
 		kubernetesClient kubernetes.Interface
 		metricsClient    metricsclient.Interface
-		nsResolver       *utils.NamespaceResolver
+		nsResolver       *utils.FissionNS
 
 		fissionClient  versioned.Interface
 		functionEnv    *cache.Cache
@@ -146,7 +146,7 @@ func MakeGenericPoolManager(ctx context.Context,
 		logger:                     gpmLogger,
 		pools:                      make(map[string]*GenericPool),
 		kubernetesClient:           kubernetesClient,
-		nsResolver:                 utils.DefaultNSResolver(),
+		nsResolver:                 utils.GetNamespaces(),
 		metricsClient:              metricsClient,
 		fissionClient:              fissionClient,
 		functionEnv:                cache.MakeCache(10*time.Second, 0),
@@ -317,7 +317,7 @@ func (gpm *GenericPoolManager) AdoptExistingResources(ctx context.Context) {
 	envMap := make(map[string]fv1.Environment)
 	wg := &sync.WaitGroup{}
 
-	for _, namespace := range utils.GetNamespaces() {
+	for _, namespace := range utils.GetNamespaces().ResourceNS {
 		envs, err := gpm.fissionClient.CoreV1().Environments(namespace).List(ctx, metav1.ListOptions{})
 		if err != nil {
 			gpm.logger.Error("error getting environment list", zap.Error(err))
@@ -351,7 +351,7 @@ func (gpm *GenericPoolManager) AdoptExistingResources(ctx context.Context) {
 		fv1.EXECUTOR_TYPE: string(fv1.ExecutorTypePoolmgr),
 	}
 
-	for _, namespace := range utils.GetNamespaces() {
+	for _, namespace := range utils.GetNamespaces().ResourceNS {
 		podList, err := gpm.kubernetesClient.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
 			LabelSelector: labels.Set(l).AsSelector().String(),
 		})
@@ -588,7 +588,7 @@ func (gpm *GenericPoolManager) idleObjectReaper(ctx context.Context) {
 
 func (gpm *GenericPoolManager) doIdleObjectReaper(ctx context.Context) {
 	envList := make(map[k8sTypes.UID]struct{})
-	for _, namespace := range utils.GetNamespaces() {
+	for _, namespace := range utils.GetNamespaces().ResourceNS {
 		envs, err := gpm.fissionClient.CoreV1().Environments(namespace).List(ctx, metav1.ListOptions{})
 		if err != nil {
 			gpm.logger.Error("failed to get environment list", zap.Error(err), zap.String("namespace", namespace))
@@ -601,7 +601,7 @@ func (gpm *GenericPoolManager) doIdleObjectReaper(ctx context.Context) {
 	}
 
 	fnList := make(map[k8sTypes.UID]fv1.Function)
-	for _, namespace := range utils.GetNamespaces() {
+	for _, namespace := range utils.GetNamespaces().ResourceNS {
 		fns, err := gpm.fissionClient.CoreV1().Functions(namespace).List(ctx, metav1.ListOptions{})
 		if err != nil {
 			gpm.logger.Error("failed to get environment list", zap.Error(err), zap.String("namespace", namespace))

@@ -2,33 +2,56 @@ package utils
 
 import (
 	"os"
+	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
-	ENV_FUNCTION_NAMESPACE string = "FISSION_FUNCTION_NAMESPACE"
-	ENV_BUILDER_NAMESPACE  string = "FISSION_BUILDER_NAMESPACE"
-	ENV_DEFAULT_NAMESPACE  string = "FISSION_DEFAULT_NAMESPACE"
+	ENV_FUNCTION_NAMESPACE   string = "FISSION_FUNCTION_NAMESPACE"
+	ENV_BUILDER_NAMESPACE    string = "FISSION_BUILDER_NAMESPACE"
+	ENV_DEFAULT_NAMESPACE    string = "FISSION_DEFAULT_NAMESPACE"
+	ENV_ADDITIONAL_NAMESPACE string = "FISSION_RESOURCE_NAMESPACES"
 )
 
-type NamespaceResolver struct {
+type FissionNS struct {
 	FunctionNamespace string
 	BuiderNamespace   string
 	DefaultNamespace  string
+	ResourceNS        []string
 }
 
-var nsResolver *NamespaceResolver
+var fissionNS *FissionNS
 
 func init() {
-	nsResolver = &NamespaceResolver{
+	fissionNS = &FissionNS{
 		FunctionNamespace: os.Getenv(ENV_FUNCTION_NAMESPACE),
 		BuiderNamespace:   os.Getenv(ENV_BUILDER_NAMESPACE),
 		DefaultNamespace:  os.Getenv(ENV_DEFAULT_NAMESPACE),
+		ResourceNS:        getNamespaces(),
 	}
 }
 
-func (nsr *NamespaceResolver) GetBuilderNS(namespace string) string {
+func getNamespaces() []string {
+	envValue := os.Getenv(ENV_ADDITIONAL_NAMESPACE)
+	if len(envValue) == 0 {
+		return []string{
+			metav1.NamespaceDefault,
+		}
+	}
+
+	namespaces := make([]string, 0)
+	lstNamespaces := strings.Split(envValue, ",")
+	for _, namespace := range lstNamespaces {
+		//check to handle string with additional comma at the end of string. eg- ns1,ns2,
+		if namespace != "" {
+			namespaces = append(namespaces, namespace)
+		}
+	}
+	return namespaces
+}
+
+func (nsr *FissionNS) GetBuilderNS(namespace string) string {
 	if nsr.FunctionNamespace == "" || nsr.BuiderNamespace == "" {
 		return namespace
 	}
@@ -39,7 +62,7 @@ func (nsr *NamespaceResolver) GetBuilderNS(namespace string) string {
 	return nsr.BuiderNamespace
 }
 
-func (nsr *NamespaceResolver) GetFunctionNS(namespace string) string {
+func (nsr *FissionNS) GetFunctionNS(namespace string) string {
 	if nsr.FunctionNamespace == "" || nsr.BuiderNamespace == "" {
 		return namespace
 	}
@@ -50,7 +73,7 @@ func (nsr *NamespaceResolver) GetFunctionNS(namespace string) string {
 	return nsr.FunctionNamespace
 }
 
-func (nsr *NamespaceResolver) ResolveNamespace(namespace string) string {
+func (nsr *FissionNS) ResolveNamespace(namespace string) string {
 	if nsr.FunctionNamespace == "" || nsr.BuiderNamespace == "" {
 		return nsr.DefaultNamespace
 	}
@@ -58,6 +81,6 @@ func (nsr *NamespaceResolver) ResolveNamespace(namespace string) string {
 }
 
 // GetFissionNamespaces => return all fission core component namespaces
-func DefaultNSResolver() *NamespaceResolver {
-	return nsResolver
+func GetNamespaces() *FissionNS {
+	return fissionNS
 }

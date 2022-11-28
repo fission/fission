@@ -92,7 +92,7 @@ func MakeAPI(logger *zap.Logger) (*API, error) {
 		api.workflowApiUrl = "http://workflows-apiserver"
 	}
 
-	nsResolver := utils.DefaultNSResolver()
+	nsResolver := utils.GetNamespaces()
 	api.functionNamespace = nsResolver.ResolveNamespace(os.Getenv(utils.ENV_FUNCTION_NAMESPACE))
 
 	return api, err

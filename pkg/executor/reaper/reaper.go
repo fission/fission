@@ -220,7 +220,7 @@ func CleanupHpa(ctx context.Context, logger *zap.Logger, client kubernetes.Inter
 // CleanupRoleBindings periodically lists rolebindings across all namespaces and removes Service Accounts from them or
 // deletes the rolebindings completely if there are no Service Accounts in a rolebinding object.
 func CleanupRoleBindings(ctx context.Context, logger *zap.Logger, client kubernetes.Interface, fissionClient versioned.Interface, cleanupRoleBindingInterval time.Duration) {
-	nsResolver := utils.DefaultNSResolver()
+	nsResolver := utils.GetNamespaces()
 	for {
 		// some sleep before the next reaper iteration
 		time.Sleep(cleanupRoleBindingInterval)
@@ -369,18 +369,23 @@ func CleanupRoleBindings(ctx context.Context, logger *zap.Logger, client kuberne
 	}
 }
 
-func GetReaperNamespace() []string {
-	additionalNS := utils.GetNamespaces()
+func GetReaperNamespace() map[string]string {
+	ns := utils.GetNamespaces()
 	//to support backward compatibility we need to cleanup deployment and rolebinding created in function, buidler and default namespace as well
-	fissionNS := utils.DefaultNSResolver()
-	if fissionNS.FunctionNamespace != "" {
-		additionalNS = append(additionalNS, fissionNS.FunctionNamespace)
+	if ns.FunctionNamespace != "" {
+		ns.ResourceNS = append(ns.ResourceNS, ns.FunctionNamespace)
 	}
-	if fissionNS.BuiderNamespace != "" {
-		additionalNS = append(additionalNS, fissionNS.BuiderNamespace)
+	if ns.BuiderNamespace != "" {
+		ns.ResourceNS = append(ns.ResourceNS, ns.BuiderNamespace)
 	}
-	if fissionNS.DefaultNamespace != "" {
-		additionalNS = append(additionalNS, fissionNS.DefaultNamespace)
+	if ns.DefaultNamespace != "" {
+		ns.ResourceNS = append(ns.ResourceNS, ns.DefaultNamespace)
 	}
-	return additionalNS
+
+	//remove duplicate namespaces
+	namespaces := make(map[string]string, len(ns.ResourceNS))
+	for _, ns := range namespaces {
+		namespaces[ns] = ns
+	}
+	return namespaces
 }

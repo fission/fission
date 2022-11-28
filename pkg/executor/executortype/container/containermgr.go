@@ -69,7 +69,7 @@ type (
 		kubernetesClient kubernetes.Interface
 		fissionClient    versioned.Interface
 		instanceID       string
-		nsResolver       *utils.NamespaceResolver
+		nsResolver       *utils.FissionNS
 		// fetcherConfig    *fetcherConfig.Config
 
 		runtimeImagePullPolicy apiv1.PullPolicy
@@ -118,7 +118,7 @@ func MakeContainer(
 		fissionClient:    fissionClient,
 		kubernetesClient: kubernetesClient,
 		instanceID:       instanceID,
-		nsResolver:       utils.DefaultNSResolver(),
+		nsResolver:       utils.GetNamespaces(),
 
 		fsCache:   fscache.MakeFunctionServiceCache(logger),
 		throttler: throttler.MakeThrottler(1 * time.Minute),
@@ -242,7 +242,7 @@ func (caaf *Container) RefreshFuncPods(ctx context.Context, logger *zap.Logger, 
 
 	funcLabels := caaf.getDeployLabels(f.ObjectMeta)
 
-	nsResolver := utils.DefaultNSResolver()
+	nsResolver := utils.GetNamespaces()
 	dep, err := caaf.kubernetesClient.AppsV1().Deployments(nsResolver.GetFunctionNS(f.ObjectMeta.Namespace)).List(ctx, metav1.ListOptions{
 		LabelSelector: labels.Set(funcLabels).AsSelector().String(),
 	})
@@ -274,7 +274,7 @@ func (caaf *Container) RefreshFuncPods(ctx context.Context, logger *zap.Logger, 
 func (caaf *Container) AdoptExistingResources(ctx context.Context) {
 	wg := &sync.WaitGroup{}
 
-	for _, namepsace := range utils.GetNamespaces() {
+	for _, namepsace := range utils.GetNamespaces().ResourceNS {
 		fnList, err := caaf.fissionClient.CoreV1().Functions(namepsace).List(ctx, metav1.ListOptions{})
 		if err != nil {
 			caaf.logger.Error("error getting function list", zap.Error(err))

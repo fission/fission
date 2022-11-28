@@ -1,8 +1,6 @@
 package utils
 
 import (
-	"os"
-	"strings"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -20,30 +18,9 @@ import (
 	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
 )
 
-const additionalNamespaces string = "FISSION_RESOURCE_NAMESPACES"
-
-func GetNamespaces() []string {
-	envValue := os.Getenv(additionalNamespaces)
-	if len(envValue) == 0 {
-		return []string{
-			metav1.NamespaceDefault,
-		}
-	}
-
-	informerNS := make([]string, 0)
-	lstNamespaces := strings.Split(envValue, ",")
-	for _, namespace := range lstNamespaces {
-		//check to handle string with additional comma at the end of string. eg- ns1,ns2,
-		if namespace != "" {
-			informerNS = append(informerNS, namespace)
-		}
-	}
-	return informerNS
-}
-
 func GetInformersForNamespaces(client versioned.Interface, defaultSync time.Duration, kind string) map[string]cache.SharedIndexInformer {
 	informers := make(map[string]cache.SharedIndexInformer)
-	for _, ns := range GetNamespaces() {
+	for _, ns := range GetNamespaces().ResourceNS {
 		factory := genInformer.NewFilteredSharedInformerFactory(client, defaultSync, ns, nil).Core().V1()
 		switch kind {
 		case fv1.CanaryConfigResource:
