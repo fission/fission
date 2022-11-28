@@ -83,7 +83,7 @@ func (pruner *ArchivePruner) getOrphanArchives(ctx context.Context) {
 	var archiveID string
 
 	// get all pkgs from kubernetes
-	for _, namespace := range utils.GetNamespaces().ResourceNS {
+	for _, namespace := range utils.DefaultNSResolver().FissionResourceNS {
 		pkgList, err := pruner.crdClient.CoreV1().Packages(namespace).List(ctx, metav1.ListOptions{})
 		if err != nil {
 			pruner.logger.Error("error getting package list from kubernetes", zap.Error(err))

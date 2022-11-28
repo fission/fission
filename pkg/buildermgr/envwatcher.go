@@ -66,7 +66,7 @@ type (
 		cache                  map[string]*builderInfo
 		fissionClient          versioned.Interface
 		kubernetesClient       kubernetes.Interface
-		nsResolver             *utils.FissionNS
+		nsResolver             *utils.NamespaceResolver
 		fetcherConfig          *fetcherConfig.Config
 		builderImagePullPolicy apiv1.PullPolicy
 		useIstio               bool
@@ -100,7 +100,7 @@ func makeEnvironmentWatcher(
 		cache:                  make(map[string]*builderInfo),
 		fissionClient:          fissionClient,
 		kubernetesClient:       kubernetesClient,
-		nsResolver:             utils.GetNamespaces(),
+		nsResolver:             utils.DefaultNSResolver(),
 		builderImagePullPolicy: builderImagePullPolicy,
 		useIstio:               useIstio,
 		fetcherConfig:          fetcherConfig,

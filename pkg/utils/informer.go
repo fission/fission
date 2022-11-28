@@ -20,7 +20,7 @@ import (
 
 func GetInformersForNamespaces(client versioned.Interface, defaultSync time.Duration, kind string) map[string]cache.SharedIndexInformer {
 	informers := make(map[string]cache.SharedIndexInformer)
-	for _, ns := range GetNamespaces().ResourceNS {
+	for _, ns := range DefaultNSResolver().FissionResourceNS {
 		factory := genInformer.NewFilteredSharedInformerFactory(client, defaultSync, ns, nil).Core().V1()
 		switch kind {
 		case fv1.CanaryConfigResource:

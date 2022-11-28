@@ -89,7 +89,7 @@ func TestRefreshFuncPods(t *testing.T) {
 
 	ndm := executor.(*NewDeploy)
 
-	nsResolver := utils.FissionNS{
+	nsResolver := utils.NamespaceResolver{
 		FunctionNamespace: functionNamespace,
 		BuiderNamespace:   builderNamespace,
 		DefaultNamespace:  defaultNamespace,

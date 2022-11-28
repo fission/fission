@@ -290,7 +290,7 @@ func StartExecutor(ctx context.Context, logger *zap.Logger, port int) error {
 	envInformer := make(map[string]finformerv1.EnvironmentInformer, 0)
 	pkgInformer := make(map[string]finformerv1.PackageInformer, 0)
 
-	for _, ns := range utils.GetNamespaces().ResourceNS {
+	for _, ns := range utils.DefaultNSResolver().FissionResourceNS {
 		factory := genInformer.NewFilteredSharedInformerFactory(fissionClient, time.Minute*30, ns, nil)
 		funcInformer[ns] = factory.Core().V1().Functions()
 		envInformer[ns] = factory.Core().V1().Environments()
@@ -369,7 +369,7 @@ func StartExecutor(ctx context.Context, logger *zap.Logger, port int) error {
 	configMapInformer := make(map[string]k8sInformersv1.ConfigMapInformer, 0)
 	secretInformer := make(map[string]k8sInformersv1.SecretInformer, 0)
 
-	for _, ns := range utils.GetNamespaces().ResourceNS {
+	for _, ns := range utils.DefaultNSResolver().FissionResourceNS {
 		factory := k8sInformers.NewFilteredSharedInformerFactory(kubernetesClient, time.Minute*30, ns, nil)
 		configMapInformer[ns] = factory.Core().V1().ConfigMaps()
 		secretInformer[ns] = factory.Core().V1().Secrets()

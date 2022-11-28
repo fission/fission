@@ -6,7 +6,7 @@ func TestNamespaceResolver(t *testing.T) {
 	t.Run("GetBuilderNS", func(t *testing.T) {
 		for _, test := range []struct {
 			name              string
-			namespaceResolver *FissionNS
+			namespaceResolver *NamespaceResolver
 			namespace         string
 			expected          string
 		}{
@@ -47,7 +47,7 @@ func TestNamespaceResolver(t *testing.T) {
 	t.Run("GetFunctionNS", func(t *testing.T) {
 		for _, test := range []struct {
 			name              string
-			namespaceResolver *FissionNS
+			namespaceResolver *NamespaceResolver
 			namespace         string
 			expected          string
 		}{
@@ -88,7 +88,7 @@ func TestNamespaceResolver(t *testing.T) {
 	t.Run("ResolveNamespace", func(t *testing.T) {
 		for _, test := range []struct {
 			name              string
-			namespaceResolver *FissionNS
+			namespaceResolver *NamespaceResolver
 			namespace         string
 			expected          string
 		}{
@@ -115,8 +115,8 @@ func TestNamespaceResolver(t *testing.T) {
 	})
 }
 
-func getFissionNamespaces(builderNS, functionNS, defaultNS string) *FissionNS {
-	return &FissionNS{
+func getFissionNamespaces(builderNS, functionNS, defaultNS string) *NamespaceResolver {
+	return &NamespaceResolver{
 		FunctionNamespace: functionNS,
 		BuiderNamespace:   builderNS,
 		DefaultNamespace:  defaultNS,

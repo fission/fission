@@ -48,7 +48,7 @@ type (
 		logger           *zap.Logger
 		kubernetesClient kubernetes.Interface
 		enableIstio      bool
-		nsResolver       *utils.FissionNS
+		nsResolver       *utils.NamespaceResolver
 
 		envLister       map[string]flisterv1.EnvironmentLister
 		envListerSynced map[string]k8sCache.InformerSynced
@@ -79,7 +79,7 @@ func NewPoolPodController(ctx context.Context, logger *zap.Logger,
 	logger = logger.Named("pool_pod_controller")
 	p := &PoolPodController{
 		logger:               logger,
-		nsResolver:           utils.GetNamespaces(),
+		nsResolver:           utils.DefaultNSResolver(),
 		kubernetesClient:     kubernetesClient,
 		enableIstio:          enableIstio,
 		envLister:            make(map[string]flisterv1.EnvironmentLister, 0),

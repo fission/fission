@@ -4,6 +4,9 @@ import (
 	"os"
 	"strings"
 
+	"github.com/fission/fission/pkg/utils/loggerfactory"
+	"go.uber.org/zap"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -14,44 +17,59 @@ const (
 	ENV_ADDITIONAL_NAMESPACE string = "FISSION_RESOURCE_NAMESPACES"
 )
 
-type FissionNS struct {
+type NamespaceResolver struct {
 	FunctionNamespace string
 	BuiderNamespace   string
 	DefaultNamespace  string
-	ResourceNS        []string
+	FissionResourceNS map[string]string
+	Logger            *zap.Logger
 }
 
-var fissionNS *FissionNS
+var nsResolver *NamespaceResolver
 
 func init() {
-	fissionNS = &FissionNS{
+	nsResolver = &NamespaceResolver{
 		FunctionNamespace: os.Getenv(ENV_FUNCTION_NAMESPACE),
 		BuiderNamespace:   os.Getenv(ENV_BUILDER_NAMESPACE),
 		DefaultNamespace:  os.Getenv(ENV_DEFAULT_NAMESPACE),
-		ResourceNS:        getNamespaces(),
+		FissionResourceNS: getNamespaces(),
+		Logger:            loggerfactory.GetLogger(),
 	}
+
+	// convert namespaces from map to slice
+	listNamespaces := func(namespaces map[string]string) []string {
+		ns := make([]string, 0)
+		for _, namespace := range namespaces {
+			ns = append(ns, namespace)
+		}
+		return ns
+	}
+	nsResolver.Logger.Debug("namespaces", zap.String("function_namespace", nsResolver.FunctionNamespace),
+		zap.String("builder_namespace", nsResolver.BuiderNamespace),
+		zap.String("default_namespace", nsResolver.DefaultNamespace),
+		zap.Any("fission_resource_namespace", listNamespaces(nsResolver.FissionResourceNS)))
 }
 
-func getNamespaces() []string {
+func getNamespaces() map[string]string {
 	envValue := os.Getenv(ENV_ADDITIONAL_NAMESPACE)
 	if len(envValue) == 0 {
-		return []string{
-			metav1.NamespaceDefault,
+		return map[string]string{
+			metav1.NamespaceDefault: metav1.NamespaceDefault,
 		}
 	}
 
-	namespaces := make([]string, 0)
 	lstNamespaces := strings.Split(envValue, ",")
+	namespaces := make(map[string]string, len(lstNamespaces))
 	for _, namespace := range lstNamespaces {
 		//check to handle string with additional comma at the end of string. eg- ns1,ns2,
 		if namespace != "" {
-			namespaces = append(namespaces, namespace)
+			namespaces[namespace] = namespace
 		}
 	}
 	return namespaces
 }
 
-func (nsr *FissionNS) GetBuilderNS(namespace string) string {
+func (nsr *NamespaceResolver) GetBuilderNS(namespace string) string {
 	if nsr.FunctionNamespace == "" || nsr.BuiderNamespace == "" {
 		return namespace
 	}
@@ -62,7 +80,7 @@ func (nsr *FissionNS) GetBuilderNS(namespace string) string {
 	return nsr.BuiderNamespace
 }
 
-func (nsr *FissionNS) GetFunctionNS(namespace string) string {
+func (nsr *NamespaceResolver) GetFunctionNS(namespace string) string {
 	if nsr.FunctionNamespace == "" || nsr.BuiderNamespace == "" {
 		return namespace
 	}
@@ -73,7 +91,7 @@ func (nsr *FissionNS) GetFunctionNS(namespace string) string {
 	return nsr.FunctionNamespace
 }
 
-func (nsr *FissionNS) ResolveNamespace(namespace string) string {
+func (nsr *NamespaceResolver) ResolveNamespace(namespace string) string {
 	if nsr.FunctionNamespace == "" || nsr.BuiderNamespace == "" {
 		return nsr.DefaultNamespace
 	}
@@ -81,6 +99,6 @@ func (nsr *FissionNS) ResolveNamespace(namespace string) string {
 }
 
 // GetFissionNamespaces => return all fission core component namespaces
-func GetNamespaces() *FissionNS {
-	return fissionNS
+func DefaultNSResolver() *NamespaceResolver {
+	return nsResolver
 }

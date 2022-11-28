@@ -72,7 +72,7 @@ type (
 		fissionClient    versioned.Interface
 		instanceID       string
 		fetcherConfig    *fetcherConfig.Config
-		nsResolver       *utils.FissionNS
+		nsResolver       *utils.NamespaceResolver
 
 		runtimeImagePullPolicy apiv1.PullPolicy
 		useIstio               bool
@@ -127,7 +127,7 @@ func MakeNewDeploy(
 		instanceID:       instanceID,
 		fsCache:          fscache.MakeFunctionServiceCache(logger),
 		throttler:        throttler.MakeThrottler(1 * time.Minute),
-		nsResolver:       utils.GetNamespaces(),
+		nsResolver:       utils.DefaultNSResolver(),
 
 		fetcherConfig:          fetcherConfig,
 		runtimeImagePullPolicy: utils.GetImagePullPolicy(os.Getenv("RUNTIME_IMAGE_PULL_POLICY")),
@@ -292,7 +292,7 @@ func (deploy *NewDeploy) RefreshFuncPods(ctx context.Context, logger *zap.Logger
 func (deploy *NewDeploy) AdoptExistingResources(ctx context.Context) {
 	wg := &sync.WaitGroup{}
 
-	for _, namepsace := range utils.GetNamespaces().ResourceNS {
+	for _, namepsace := range utils.DefaultNSResolver().FissionResourceNS {
 		fnList, err := deploy.fissionClient.CoreV1().Functions(namepsace).List(ctx, metav1.ListOptions{})
 		if err != nil {
 			deploy.logger.Error("error getting function list", zap.Error(err))
@@ -769,7 +769,7 @@ func (deploy *NewDeploy) idleObjectReaper(ctx context.Context) {
 
 func (deploy *NewDeploy) doIdleObjectReaper(ctx context.Context) {
 	envList := make(map[k8sTypes.UID]struct{})
-	for _, namespace := range utils.GetNamespaces().ResourceNS {
+	for _, namespace := range utils.DefaultNSResolver().FissionResourceNS {
 		envs, err := deploy.fissionClient.CoreV1().Environments(namespace).List(ctx, metav1.ListOptions{})
 		if err != nil {
 			deploy.logger.Fatal("failed to get environment list", zap.Error(err), zap.String("namespace", namespace))
