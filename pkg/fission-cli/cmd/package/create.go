@@ -18,6 +18,8 @@ package _package
 
 import (
 	"fmt"
+	"io"
+	"os"
 	"path"
 	"strings"
 	"time"
@@ -25,7 +27,9 @@ import (
 	"github.com/dchest/uniuri"
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
@@ -34,6 +38,7 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/console"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
+	"github.com/fission/fission/pkg/utils"
 )
 
 type CreateSubCommand struct {
@@ -221,7 +226,7 @@ func CreatePackage(input cli.Input, client cmd.Client, pkgName string, pkgNamesp
 			return nil, errors.Wrap(err, "error saving package spec")
 		}
 		return &pkg.ObjectMeta, nil
-	} else {
+	} else if !input.Bool(flagkey.SpecSave) {
 		pkg.ObjectMeta.Namespace = pkgNamespace
 
 		pkgMetadata, err := client.FissionClientSet.CoreV1().Packages(pkgNamespace).Create(input.Context(), pkg, metav1.CreateOptions{})
@@ -229,6 +234,37 @@ func CreatePackage(input cli.Input, client cmd.Client, pkgName string, pkgNamesp
 			return nil, errors.Wrap(err, "error creating package")
 		}
 		fmt.Printf("Package '%v' created\n", pkgMetadata.GetName())
-		return &pkgMetadata.ObjectMeta, nil
+		pkg.ObjectMeta = pkgMetadata.ObjectMeta
 	}
+
+	if input.Bool(flagkey.StreamLog) {
+		ns := "fission"
+		// Get function Pods first
+		selector := map[string]string{
+			utils.Service: utils.BuilMgr,
+		}
+		pod, err := client.KubernetesClient.CoreV1().Pods(ns).List(input.Context(), metav1.ListOptions{
+			LabelSelector: labels.Set(selector).AsSelector().String(),
+		})
+		if err != nil {
+			return &pkg.ObjectMeta, err
+		}
+		cTime := time.Now().UTC()
+		currentTime := metav1.NewTime(cTime)
+		req := client.KubernetesClient.CoreV1().Pods(ns).GetLogs(pod.Items[0].Name, &v1.PodLogOptions{
+			SinceTime: &currentTime,
+			Follow:    true,
+		})
+		podLogs, err := req.Stream(input.Context())
+		if err != nil {
+			return &pkg.ObjectMeta, errors.Errorf("error in opening stream %s", err.Error())
+		}
+		defer podLogs.Close()
+
+		_, err = io.Copy(os.Stdout, podLogs)
+		if err != nil {
+			return &pkg.ObjectMeta, errors.Errorf("error in copy information from podLogs to buf")
+		}
+	}
+	return &pkg.ObjectMeta, nil
 }
