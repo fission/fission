@@ -33,13 +33,13 @@ func TestFunctionServiceMap(t *testing.T) {
 	panicIf(err)
 
 	m := makeFunctionServiceMap(logger, 0)
-	fn := &metav1.ObjectMeta{Name: "foo", Namespace: metav1.NamespaceDefault}
+	fn := metav1.ObjectMeta{Name: "foo", Namespace: metav1.NamespaceDefault}
 	u, err := url.Parse("/foo012")
 	if err != nil {
 		t.Errorf("can't parse url")
 	}
 
-	m.assign(fn, u)
+	m.assign(fn, *u)
 
 	v, err := m.lookup(fn)
 	if err != nil {

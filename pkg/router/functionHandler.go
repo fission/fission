@@ -604,7 +604,7 @@ func (fh functionHandler) unTapService(ctx context.Context, fn *fv1.Function, se
 // getServiceEntryFromCache returns service url entry returns from cache
 func (fh functionHandler) getServiceEntryFromCache() (serviceUrl *url.URL, err error) {
 	// cache lookup to get serviceUrl
-	serviceUrl, err = fh.fmap.lookup(&fh.function.ObjectMeta)
+	serviceUrl, err = fh.fmap.lookup(fh.function.ObjectMeta)
 	if err != nil {
 		var errMsg string
 
@@ -626,12 +626,12 @@ func (fh functionHandler) getServiceEntryFromCache() (serviceUrl *url.URL, err e
 
 // addServiceEntryToCache add service url entry to cache
 func (fh functionHandler) addServiceEntryToCache(serviceURL *url.URL) {
-	fh.fmap.assign(&fh.function.ObjectMeta, serviceURL)
+	fh.fmap.assign(fh.function.ObjectMeta, *serviceURL)
 }
 
 // removeServiceEntryFromCache removes service url entry from cache
 func (fh functionHandler) removeServiceEntryFromCache() {
-	err := fh.fmap.remove(&fh.function.ObjectMeta)
+	err := fh.fmap.remove(fh.function.ObjectMeta)
 	if err != nil {
 		fh.logger.Error("Error removing key:", zap.Error(err))
 	}
