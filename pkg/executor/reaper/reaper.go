@@ -372,9 +372,6 @@ func CleanupRoleBindings(ctx context.Context, logger *zap.Logger, client kuberne
 func GetReaperNamespace() map[string]string {
 	ns := utils.DefaultNSResolver()
 	//to support backward compatibility we need to cleanup deployment and rolebinding created in function, buidler and default namespace as well
-	ns.FissionResourceNS = ns.GetFuncResourceNS()
-	ns.FissionResourceNS = ns.GetBuilderResourceNS()
-	ns.FissionResourceNS = ns.GetDefaultResourceNS()
-
-	return ns.FissionResourceNS
+	fissionResourceNs := ns.FissionNSWithOptions(utils.WithBuilderNs(), utils.WithFunctionNs(), utils.WithDefaultNs())
+	return fissionResourceNs
 }
