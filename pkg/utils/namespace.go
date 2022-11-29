@@ -52,7 +52,7 @@ func init() {
 		zap.Any("fission_resource_namespace", listNamespaces(nsResolver.FissionResourceNS)))
 }
 
-//listNamespaces => convert namespaces from map to slice
+// listNamespaces => convert namespaces from map to slice
 func listNamespaces(namespaces map[string]string) []string {
 	ns := make([]string, 0)
 	for _, namespace := range namespaces {

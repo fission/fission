@@ -11,8 +11,6 @@ import (
 	"k8s.io/client-go/tools/cache"
 	metricsapi "k8s.io/metrics/pkg/apis/metrics"
 
-	v1 "github.com/fission/fission/pkg/apis/core/v1"
-
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
@@ -56,8 +54,8 @@ func GetInformerFactoryByReadyPod(client kubernetes.Interface, namespace string,
 	return informerFactory, nil
 }
 
-func GetInformerFactoryByExecutor(client kubernetes.Interface, executorType v1.ExecutorType, defaultResync time.Duration) (k8sInformers.SharedInformerFactory, error) {
-	executorLabel, err := labels.NewRequirement(v1.EXECUTOR_TYPE, selection.DoubleEquals, []string{string(executorType)})
+func GetInformerFactoryByExecutor(client kubernetes.Interface, executorType fv1.ExecutorType, defaultResync time.Duration) (k8sInformers.SharedInformerFactory, error) {
+	executorLabel, err := labels.NewRequirement(fv1.EXECUTOR_TYPE, selection.DoubleEquals, []string{string(executorType)})
 	if err != nil {
 		return nil, err
 	}

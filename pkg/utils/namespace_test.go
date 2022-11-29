@@ -1,6 +1,8 @@
 package utils
 
-import "testing"
+import (
+	"testing"
+)
 
 func TestNamespaceResolver(t *testing.T) {
 	t.Run("GetBuilderNS", func(t *testing.T) {
