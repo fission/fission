@@ -45,7 +45,7 @@ type (
 
 func makecanaryConfigCancelFuncMap() *canaryConfigCancelFuncMap {
 	return &canaryConfigCancelFuncMap{
-		cache: cache.MakeCache(0, 0),
+		cache: cache.MakeCache(0),
 	}
 }
 

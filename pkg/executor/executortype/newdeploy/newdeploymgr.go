@@ -125,7 +125,7 @@ func MakeNewDeploy(
 		fissionClient:    fissionClient,
 		kubernetesClient: kubernetesClient,
 		instanceID:       instanceID,
-		fsCache:          fscache.MakeFunctionServiceCache(logger),
+		fsCache:          fscache.MakeFunctionServiceCache(ctx, logger),
 		throttler:        throttler.MakeThrottler(1 * time.Minute),
 		nsResolver:       utils.DefaultNSResolver(),
 

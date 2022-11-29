@@ -73,7 +73,7 @@ const (
 
 func makeFunctionReferenceResolver(logger *zap.Logger, funcInformer map[string]k8sCache.SharedIndexInformer) *functionReferenceResolver {
 	frr := &functionReferenceResolver{
-		refCache:     cache.MakeCache(time.Minute, 0),
+		refCache:     cache.MakeCache(time.Minute),
 		funcInformer: funcInformer,
 		logger:       logger.Named("function_ref_resolver"),
 	}

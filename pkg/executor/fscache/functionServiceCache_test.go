@@ -28,7 +28,10 @@ func TestFunctionServiceCache(t *testing.T) {
 	logger, err := config.Build()
 	panicIf(err)
 
-	fsc := MakeFunctionServiceCache(logger)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	fsc := MakeFunctionServiceCache(ctx, logger)
 	if fsc == nil {
 		log.Panicf("error creating cache")
 	}
@@ -130,7 +133,10 @@ func TestFunctionServiceNewCache(t *testing.T) {
 	logger, err := zap.NewDevelopment()
 	panicIf(err)
 
-	fsc := MakeFunctionServiceCache(logger)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	fsc := MakeFunctionServiceCache(ctx, logger)
 	if fsc == nil {
 		log.Panicf("error creating cache")
 	}
@@ -183,9 +189,6 @@ func TestFunctionServiceNewCache(t *testing.T) {
 			UID:  "1212",
 		},
 	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	fsc.AddFunc(ctx, *fsvc)
 	_, active, err := fsc.GetFuncSvc(ctx, fsvc.Function, 5)

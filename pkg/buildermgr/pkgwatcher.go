@@ -59,7 +59,7 @@ func makePackageWatcher(logger *zap.Logger, fissionClient versioned.Interface, k
 		podInformer:   podInformer,
 		pkgInformer:   pkgInformer,
 		storageSvcUrl: storageSvcUrl,
-		buildCache:    cache.MakeCache(0, 0),
+		buildCache:    cache.MakeCache(0),
 	}
 	return pkgw
 }

@@ -120,7 +120,7 @@ func MakeContainer(
 		instanceID:       instanceID,
 		nsResolver:       utils.DefaultNSResolver(),
 
-		fsCache:   fscache.MakeFunctionServiceCache(logger),
+		fsCache:   fscache.MakeFunctionServiceCache(ctx, logger),
 		throttler: throttler.MakeThrottler(1 * time.Minute),
 
 		runtimeImagePullPolicy: utils.GetImagePullPolicy(os.Getenv("RUNTIME_IMAGE_PULL_POLICY")),

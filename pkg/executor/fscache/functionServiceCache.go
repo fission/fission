@@ -107,67 +107,72 @@ func IsNameExistError(err error) bool {
 }
 
 // MakeFunctionServiceCache starts and returns an instance of FunctionServiceCache.
-func MakeFunctionServiceCache(logger *zap.Logger) *FunctionServiceCache {
+func MakeFunctionServiceCache(ctx context.Context, logger *zap.Logger) *FunctionServiceCache {
 	fsc := &FunctionServiceCache{
 		logger:            logger.Named("function_service_cache"),
-		byFunction:        cache.MakeCache(0, 0),
-		byAddress:         cache.MakeCache(0, 0),
-		byFunctionUID:     cache.MakeCache(0, 0),
+		byFunction:        cache.MakeCache(0),
+		byAddress:         cache.MakeCache(0),
+		byFunctionUID:     cache.MakeCache(0),
 		connFunctionCache: poolcache.NewPoolCache(logger.Named("conn_function_cache")),
 		requestChannel:    make(chan *fscRequest),
 	}
-	go fsc.service()
+	go fsc.service(ctx)
 	return fsc
 }
 
-func (fsc *FunctionServiceCache) service() {
+func (fsc *FunctionServiceCache) service(ctx context.Context) {
 	for {
-		req := <-fsc.requestChannel
-		resp := &fscResponse{}
-		switch req.requestType {
-		case TOUCH:
-			// update atime for this function svc
-			resp.error = fsc._touchByAddress(req.address)
-		case LISTOLD:
-			// get svcs idle for > req.age
-			fscs := fsc.byFunctionUID.Copy()
-			funcObjects := make([]*FuncSvc, 0)
-			for _, funcSvc := range fscs {
-				mI := funcSvc.(metav1.ObjectMeta)
-				fsvcI, err := fsc.byFunction.Get(crd.CacheKey(&mI))
-				if err != nil {
-					fsc.logger.Error("error while getting service", zap.Any("error", err))
-					return
+		select {
+		case <-ctx.Done():
+			fsc.logger.Info("context is done, exiting function service cache service")
+			return
+		case req := <-fsc.requestChannel:
+			resp := &fscResponse{}
+			switch req.requestType {
+			case TOUCH:
+				// update atime for this function svc
+				resp.error = fsc._touchByAddress(req.address)
+			case LISTOLD:
+				// get svcs idle for > req.age
+				fscs := fsc.byFunctionUID.Copy()
+				funcObjects := make([]*FuncSvc, 0)
+				for _, funcSvc := range fscs {
+					mI := funcSvc.(metav1.ObjectMeta)
+					fsvcI, err := fsc.byFunction.Get(crd.CacheKey(&mI))
+					if err != nil {
+						fsc.logger.Error("error while getting service", zap.Any("error", err))
+						return
+					}
+					fsvc := fsvcI.(*FuncSvc)
+					if time.Since(fsvc.Atime) > req.age {
+						funcObjects = append(funcObjects, fsvc)
+					}
 				}
-				fsvc := fsvcI.(*FuncSvc)
-				if time.Since(fsvc.Atime) > req.age {
-					funcObjects = append(funcObjects, fsvc)
+				resp.objects = funcObjects
+			case LOG:
+				fsc.logger.Info("dumping function service cache")
+				funcCopy := fsc.byFunction.Copy()
+				info := []string{}
+				for key, fsvcI := range funcCopy {
+					fsvc := fsvcI.(*FuncSvc)
+					for _, kubeObj := range fsvc.KubernetesObjects {
+						info = append(info, fmt.Sprintf("%v\t%v\t%v", key, kubeObj.Kind, kubeObj.Name))
+					}
 				}
-			}
-			resp.objects = funcObjects
-		case LOG:
-			fsc.logger.Info("dumping function service cache")
-			funcCopy := fsc.byFunction.Copy()
-			info := []string{}
-			for key, fsvcI := range funcCopy {
-				fsvc := fsvcI.(*FuncSvc)
-				for _, kubeObj := range fsvc.KubernetesObjects {
-					info = append(info, fmt.Sprintf("%v\t%v\t%v", key, kubeObj.Kind, kubeObj.Name))
+				fsc.logger.Info("function service cache", zap.Int("item_count", len(funcCopy)), zap.Strings("cache", info))
+			case LISTOLDPOOL:
+				fscs := fsc.connFunctionCache.ListAvailableValue()
+				funcObjects := make([]*FuncSvc, 0)
+				for _, funcSvc := range fscs {
+					if fsvc, ok := funcSvc.(*FuncSvc); ok && time.Since(fsvc.Atime) > req.age {
+						funcObjects = append(funcObjects, fsvc)
+					}
 				}
-			}
-			fsc.logger.Info("function service cache", zap.Int("item_count", len(funcCopy)), zap.Strings("cache", info))
-		case LISTOLDPOOL:
-			fscs := fsc.connFunctionCache.ListAvailableValue()
-			funcObjects := make([]*FuncSvc, 0)
-			for _, funcSvc := range fscs {
-				if fsvc, ok := funcSvc.(*FuncSvc); ok && time.Since(fsvc.Atime) > req.age {
-					funcObjects = append(funcObjects, fsvc)
-				}
-			}
-			resp.objects = funcObjects
+				resp.objects = funcObjects
 
+			}
+			req.responseChannel <- resp
 		}
-		req.responseChannel <- resp
 	}
 }
 

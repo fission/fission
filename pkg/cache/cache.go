@@ -42,7 +42,6 @@ type (
 	Cache struct {
 		cache          map[interface{}]*Value
 		ctimeExpiry    time.Duration
-		atimeExpiry    time.Duration
 		requestChannel chan *request
 	}
 
@@ -65,22 +64,18 @@ func (c *Cache) IsOld(v *Value) bool {
 		return true
 	}
 
-	if (c.atimeExpiry != time.Duration(0)) && (time.Since(v.atime) > c.atimeExpiry) {
-		return true
-	}
-
 	return false
 }
 
-func MakeCache(ctimeExpiry, atimeExpiry time.Duration) *Cache {
+func MakeCache(ctimeExpiry time.Duration) *Cache {
+
 	c := &Cache{
 		cache:          make(map[interface{}]*Value),
 		ctimeExpiry:    ctimeExpiry,
-		atimeExpiry:    atimeExpiry,
 		requestChannel: make(chan *request),
 	}
 	go c.service()
-	if ctimeExpiry != time.Duration(0) || atimeExpiry != time.Duration(0) {
+	if ctimeExpiry != time.Duration(0) {
 		go c.expiryService()
 	}
 	return c

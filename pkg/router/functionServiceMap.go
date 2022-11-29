@@ -44,7 +44,7 @@ type (
 func makeFunctionServiceMap(logger *zap.Logger, expiry time.Duration) *functionServiceMap {
 	return &functionServiceMap{
 		logger: logger.Named("function_service_map"),
-		cache:  cache.MakeCache(expiry, 0),
+		cache:  cache.MakeCache(expiry),
 	}
 }
 
