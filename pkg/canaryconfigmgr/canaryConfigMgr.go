@@ -160,7 +160,7 @@ func (canaryCfgMgr *canaryConfigMgr) addCanaryConfig(ctx context.Context, canary
 		CancelFunc: &cancel,
 		Ticker:     ticker,
 	}
-	err = canaryCfgMgr.canaryCfgCancelFuncMap.assign(&canaryConfig.ObjectMeta, cacheValue)
+	err = canaryCfgMgr.canaryCfgCancelFuncMap.assign(canaryConfig.ObjectMeta, cacheValue)
 	if err != nil {
 		canaryCfgMgr.logger.Error("error caching canary config",
 			zap.Error(err),
@@ -183,7 +183,7 @@ func (canaryCfgMgr *canaryConfigMgr) processCanaryConfig(ctx *context.Context, c
 				zap.String("name", canaryConfig.ObjectMeta.Name),
 				zap.String("namespace", canaryConfig.ObjectMeta.Namespace),
 				zap.String("version", canaryConfig.ObjectMeta.ResourceVersion))
-			err := canaryCfgMgr.canaryCfgCancelFuncMap.remove(&canaryConfig.ObjectMeta)
+			err := canaryCfgMgr.canaryCfgCancelFuncMap.remove(canaryConfig.ObjectMeta)
 			if err != nil {
 				canaryCfgMgr.logger.Error("error removing canary config",
 					zap.Error(err),
@@ -210,7 +210,7 @@ func (canaryCfgMgr *canaryConfigMgr) processCanaryConfig(ctx *context.Context, c
 				zap.String("name", canaryConfig.ObjectMeta.Name),
 				zap.String("namespace", canaryConfig.ObjectMeta.Namespace),
 				zap.String("version", canaryConfig.ObjectMeta.ResourceVersion))
-			err := canaryCfgMgr.canaryCfgCancelFuncMap.remove(&canaryConfig.ObjectMeta)
+			err := canaryCfgMgr.canaryCfgCancelFuncMap.remove(canaryConfig.ObjectMeta)
 			if err != nil {
 				canaryCfgMgr.logger.Error("error removing canary config from map",
 					zap.Error(err),
@@ -225,7 +225,7 @@ func (canaryCfgMgr *canaryConfigMgr) processCanaryConfig(ctx *context.Context, c
 
 func (canaryCfgMgr *canaryConfigMgr) RollForwardOrBack(ctx context.Context, canaryConfig *fv1.CanaryConfig, quit chan struct{}, ticker *time.Ticker) {
 	// handle race between delete event and notification on ticker.C
-	_, err := canaryCfgMgr.canaryCfgCancelFuncMap.lookup(&canaryConfig.ObjectMeta)
+	_, err := canaryCfgMgr.canaryCfgCancelFuncMap.lookup(canaryConfig.ObjectMeta)
 	if err != nil {
 		canaryCfgMgr.logger.Info("no need of processing the config, not in cache anymore",
 			zap.String("name", canaryConfig.ObjectMeta.Name),
@@ -497,7 +497,7 @@ func (canaryCfgMgr *canaryConfigMgr) reSyncCanaryConfigs(ctx context.Context) {
 	for _, informer := range canaryCfgMgr.canaryConfigInformer {
 		for _, obj := range informer.GetStore().List() {
 			canaryConfig := obj.(*fv1.CanaryConfig)
-			_, err := canaryCfgMgr.canaryCfgCancelFuncMap.lookup(&canaryConfig.ObjectMeta)
+			_, err := canaryCfgMgr.canaryCfgCancelFuncMap.lookup(canaryConfig.ObjectMeta)
 			if err != nil && canaryConfig.Status.Status == fv1.CanaryConfigStatusPending {
 				canaryCfgMgr.logger.Debug("adding canary config from resync loop",
 					zap.String("name", canaryConfig.ObjectMeta.Name),
@@ -516,7 +516,7 @@ func (canaryCfgMgr *canaryConfigMgr) deleteCanaryConfig(canaryConfig *fv1.Canary
 		zap.String("name", canaryConfig.ObjectMeta.Name),
 		zap.String("namespace", canaryConfig.ObjectMeta.Namespace),
 		zap.String("version", canaryConfig.ObjectMeta.ResourceVersion))
-	canaryProcessingInfo, err := canaryCfgMgr.canaryCfgCancelFuncMap.lookup(&canaryConfig.ObjectMeta)
+	canaryProcessingInfo, err := canaryCfgMgr.canaryCfgCancelFuncMap.lookup(canaryConfig.ObjectMeta)
 	if err != nil {
 		canaryCfgMgr.logger.Error("lookup of canary config for deletion failed",
 			zap.Error(err),
@@ -535,7 +535,7 @@ func (canaryCfgMgr *canaryConfigMgr) updateCanaryConfig(ctx context.Context, old
 	// before removing the object from cache, we need to get it's cancel func and cancel it
 	canaryCfgMgr.deleteCanaryConfig(oldCanaryConfig)
 
-	err := canaryCfgMgr.canaryCfgCancelFuncMap.remove(&oldCanaryConfig.ObjectMeta)
+	err := canaryCfgMgr.canaryCfgCancelFuncMap.remove(oldCanaryConfig.ObjectMeta)
 	if err != nil {
 		canaryCfgMgr.logger.Error("error removing canary config from map",
 			zap.Error(err),

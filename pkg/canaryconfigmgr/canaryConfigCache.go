@@ -18,23 +18,16 @@ package canaryconfigmgr
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	"github.com/fission/fission/pkg/cache"
+	cache "k8s.io/client-go/tools/cache"
 )
 
 type (
 	canaryConfigCancelFuncMap struct {
-		cache *cache.Cache // map[metadataKey]*context.Context
-	}
-
-	// metav1.ObjectMeta is not hashable, so we make a hashable copy
-	// of the subset of its fields that are identifiable.
-	metadataKey struct {
-		Name      string
-		Namespace string
+		cache cache.ThreadSafeStore // map[metadataKey]*context.Context
 	}
 
 	CanaryProcessingInfo struct {
@@ -45,34 +38,41 @@ type (
 
 func makecanaryConfigCancelFuncMap() *canaryConfigCancelFuncMap {
 	return &canaryConfigCancelFuncMap{
-		cache: cache.MakeCache(0),
+		cache: cache.NewThreadSafeStore(cache.Indexers{}, cache.Indices{}),
 	}
 }
 
-func keyFromMetadata(m *metav1.ObjectMeta) metadataKey {
-	return metadataKey{
-		Name:      m.Name,
-		Namespace: m.Namespace,
-	}
-}
-
-func (cancelFuncMap *canaryConfigCancelFuncMap) lookup(f *metav1.ObjectMeta) (*CanaryProcessingInfo, error) {
-	mk := keyFromMetadata(f)
-	item, err := cancelFuncMap.cache.Get(mk)
+func (cancelFuncMap *canaryConfigCancelFuncMap) lookup(f metav1.ObjectMeta) (*CanaryProcessingInfo, error) {
+	mk, err := cache.MetaNamespaceKeyFunc(f)
 	if err != nil {
 		return nil, err
+	}
+	item, exists := cancelFuncMap.cache.Get(mk)
+	if !exists {
+		return nil, fmt.Errorf("error looking up canaryConfig %s", mk)
 	}
 	value := item.(*CanaryProcessingInfo)
 	return value, nil
 }
 
-func (cancelFuncMap *canaryConfigCancelFuncMap) assign(f *metav1.ObjectMeta, value *CanaryProcessingInfo) error {
-	mk := keyFromMetadata(f)
-	_, err := cancelFuncMap.cache.Set(mk, value)
-	return err
+func (cancelFuncMap *canaryConfigCancelFuncMap) assign(f metav1.ObjectMeta, value *CanaryProcessingInfo) error {
+	mk, err := cache.MetaNamespaceKeyFunc(f)
+	if err != nil {
+		return err
+	}
+	_, exists := cancelFuncMap.cache.Get(mk)
+	if exists {
+		return fmt.Errorf("error assigning canaryConfig %s", mk)
+	}
+	cancelFuncMap.cache.Add(mk, value)
+	return nil
 }
 
-func (cancelFuncMap *canaryConfigCancelFuncMap) remove(f *metav1.ObjectMeta) error {
-	mk := keyFromMetadata(f)
-	return cancelFuncMap.cache.Delete(mk)
+func (cancelFuncMap *canaryConfigCancelFuncMap) remove(f metav1.ObjectMeta) error {
+	mk, err := cache.MetaNamespaceKeyFunc(f)
+	if err != nil {
+		return err
+	}
+	cancelFuncMap.cache.Delete(mk)
+	return nil
 }
