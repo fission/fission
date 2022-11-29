@@ -92,6 +92,7 @@ func TestRefreshFuncPods(t *testing.T) {
 	nsResolver := utils.NamespaceResolver{
 		FunctionNamespace: functionNamespace,
 		BuiderNamespace:   builderNamespace,
+		DefaultNamespace:  defaultNamespace,
 	}
 	ndm.nsResolver = &nsResolver
 
