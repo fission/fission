@@ -101,13 +101,14 @@ func (opts *DumpSubCommand) do(input cli.Input) error {
 		"fission-function-pod-log":         resources.NewKubernetesPodLogDumper(k8sClient, "executorType in (poolmgr, newdeploy)"),
 
 		// CRD resources
-		"fission-crd-packages":     resources.NewCrdDumper(opts.Client(), resources.CrdPackage),
-		"fission-crd-environments": resources.NewCrdDumper(opts.Client(), resources.CrdEnvironment),
-		"fission-crd-functions":    resources.NewCrdDumper(opts.Client(), resources.CrdFunction),
-		"fission-crd-httptriggers": resources.NewCrdDumper(opts.Client(), resources.CrdHttpTrigger),
-		"fission-crd-kubewatchers": resources.NewCrdDumper(opts.Client(), resources.CrdKubeWatcher),
-		"fission-crd-mqtriggers":   resources.NewCrdDumper(opts.Client(), resources.CrdMessageQueueTrigger),
-		"fission-crd-timetriggers": resources.NewCrdDumper(opts.Client(), resources.CrdTimeTrigger),
+		"fission-crd-packages":      resources.NewCrdDumper(opts.Client(), resources.CrdPackage),
+		"fission-crd-environments":  resources.NewCrdDumper(opts.Client(), resources.CrdEnvironment),
+		"fission-crd-functions":     resources.NewCrdDumper(opts.Client(), resources.CrdFunction),
+		"fission-crd-httptriggers":  resources.NewCrdDumper(opts.Client(), resources.CrdHttpTrigger),
+		"fission-crd-kubewatchers":  resources.NewCrdDumper(opts.Client(), resources.CrdKubeWatcher),
+		"fission-crd-mqtriggers":    resources.NewCrdDumper(opts.Client(), resources.CrdMessageQueueTrigger),
+		"fission-crd-timetriggers":  resources.NewCrdDumper(opts.Client(), resources.CrdTimeTrigger),
+		"fission-crd-canaryconfigs": resources.NewCrdDumper(opts.Client(), resources.CrdCanaryConfig),
 	}
 
 	dumpName := fmt.Sprintf("%v_%v", DUMP_ARCHIVE_PREFIX, time.Now().Unix())
