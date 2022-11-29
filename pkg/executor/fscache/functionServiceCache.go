@@ -22,16 +22,15 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel/attribute"
 	"go.uber.org/zap"
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	cache "k8s.io/client-go/tools/cache"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
-	"github.com/fission/fission/pkg/cache"
 	"github.com/fission/fission/pkg/crd"
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/executor/metrics"
@@ -68,12 +67,12 @@ type (
 	// FunctionServiceCache represents the function service cache
 	FunctionServiceCache struct {
 		logger            *zap.Logger
-		byFunction        *cache.Cache     // function-key -> funcSvc  : map[string]*funcSvc
-		byAddress         *cache.Cache     // address      -> function : map[string]metav1.ObjectMeta
-		byFunctionUID     *cache.Cache     // function uid -> function : map[string]metav1.ObjectMeta
-		connFunctionCache *poolcache.Cache // function-key -> funcSvc : map[string]*funcSvc
-		PodToFsvc         sync.Map         // pod-name -> funcSvc: map[string]*FuncSvc
-		WebsocketFsvc     sync.Map         // funcSvc-name -> bool: map[string]bool
+		byFunction        cache.ThreadSafeStore // function-key -> funcSvc  : map[string]*funcSvc
+		byAddress         cache.ThreadSafeStore // address      -> function : map[string]metav1.ObjectMeta
+		byFunctionUID     cache.ThreadSafeStore // function uid -> function : map[string]metav1.ObjectMeta
+		connFunctionCache *poolcache.Cache      // function-key -> funcSvc : map[string]*funcSvc
+		PodToFsvc         sync.Map              // pod-name -> funcSvc: map[string]*FuncSvc
+		WebsocketFsvc     sync.Map              // funcSvc-name -> bool: map[string]bool
 		requestChannel    chan *fscRequest
 	}
 
@@ -110,9 +109,9 @@ func IsNameExistError(err error) bool {
 func MakeFunctionServiceCache(ctx context.Context, logger *zap.Logger) *FunctionServiceCache {
 	fsc := &FunctionServiceCache{
 		logger:            logger.Named("function_service_cache"),
-		byFunction:        cache.MakeCache(0),
-		byAddress:         cache.MakeCache(0),
-		byFunctionUID:     cache.MakeCache(0),
+		byFunction:        cache.NewThreadSafeStore(cache.Indexers{}, cache.Indices{}),
+		byAddress:         cache.NewThreadSafeStore(cache.Indexers{}, cache.Indices{}),
+		byFunctionUID:     cache.NewThreadSafeStore(cache.Indexers{}, cache.Indices{}),
 		connFunctionCache: poolcache.NewPoolCache(logger.Named("conn_function_cache")),
 		requestChannel:    make(chan *fscRequest),
 	}
@@ -134,13 +133,13 @@ func (fsc *FunctionServiceCache) service(ctx context.Context) {
 				resp.error = fsc._touchByAddress(req.address)
 			case LISTOLD:
 				// get svcs idle for > req.age
-				fscs := fsc.byFunctionUID.Copy()
+				fscs := fsc.byFunctionUID.List()
 				funcObjects := make([]*FuncSvc, 0)
 				for _, funcSvc := range fscs {
 					mI := funcSvc.(metav1.ObjectMeta)
-					fsvcI, err := fsc.byFunction.Get(crd.CacheKey(&mI))
-					if err != nil {
-						fsc.logger.Error("error while getting service", zap.Any("error", err))
+					fsvcI, exists := fsc.byFunction.Get(crd.CacheKey(&mI))
+					if !exists {
+						fsc.logger.Error("error while getting service")
 						return
 					}
 					fsvc := fsvcI.(*FuncSvc)
@@ -151,7 +150,7 @@ func (fsc *FunctionServiceCache) service(ctx context.Context) {
 				resp.objects = funcObjects
 			case LOG:
 				fsc.logger.Info("dumping function service cache")
-				funcCopy := fsc.byFunction.Copy()
+				funcCopy := fsc.byFunction.List()
 				info := []string{}
 				for key, fsvcI := range funcCopy {
 					fsvc := fsvcI.(*FuncSvc)
@@ -180,9 +179,9 @@ func (fsc *FunctionServiceCache) service(ctx context.Context) {
 func (fsc *FunctionServiceCache) GetByFunction(m *metav1.ObjectMeta) (*FuncSvc, error) {
 	key := crd.CacheKey(m)
 
-	fsvcI, err := fsc.byFunction.Get(key)
-	if err != nil {
-		return nil, err
+	fsvcI, exists := fsc.byFunction.Get(key)
+	if !exists {
+		return nil, fmt.Errorf("function service not found for function %s", key)
 	}
 
 	// update atime
@@ -213,16 +212,16 @@ func (fsc *FunctionServiceCache) GetFuncSvc(ctx context.Context, m *metav1.Objec
 
 // GetByFunctionUID gets a function service from cache using function UUID.
 func (fsc *FunctionServiceCache) GetByFunctionUID(uid types.UID) (*FuncSvc, error) {
-	mI, err := fsc.byFunctionUID.Get(uid)
-	if err != nil {
-		return nil, err
+	mI, exists := fsc.byFunctionUID.Get(string(uid))
+	if !exists {
+		return nil, fmt.Errorf("function service not found")
 	}
 
 	m := mI.(metav1.ObjectMeta)
 
-	fsvcI, err := fsc.byFunction.Get(crd.CacheKey(&m))
-	if err != nil {
-		return nil, err
+	fsvcI, exists := fsc.byFunction.Get(crd.CacheKey(&m))
+	if !exists {
+		return nil, fmt.Errorf("function service not found")
 	}
 
 	// update atime
@@ -253,46 +252,31 @@ func (fsc *FunctionServiceCache) MarkAvailable(key string, svcHost string) {
 
 // Add adds a function service to cache if it does not exist already.
 func (fsc *FunctionServiceCache) Add(fsvc FuncSvc) (*FuncSvc, error) {
-	existing, err := fsc.byFunction.Set(crd.CacheKey(fsvc.Function), &fsvc)
-	if err != nil {
-		if IsNameExistError(err) {
-			f := existing.(*FuncSvc)
-			err2 := fsc.TouchByAddress(f.Address)
-			if err2 != nil {
-				return nil, err2
-			}
-			fCopy := *f
-			return &fCopy, nil
+	funcKey := crd.CacheKey(fsvc.Function)
+	existing, exists := fsc.byFunction.Get(funcKey)
+	if exists {
+		f := existing.(*FuncSvc)
+		err2 := fsc.TouchByAddress(f.Address)
+		if err2 != nil {
+			return nil, err2
 		}
-		return nil, err
+		fCopy := *f
+		return &fCopy, nil
+	} else {
+		fsc.byFunction.Add(funcKey, &fsvc)
 	}
+
 	now := time.Now()
 	fsvc.Ctime = now
 	fsvc.Atime = now
 
 	// Add to byAddress cache. Ignore NameExists errors
 	// because of multiple-specialization. See issue #331.
-	_, err = fsc.byAddress.Set(fsvc.Address, *fsvc.Function)
-	if err != nil {
-		if IsNameExistError(err) {
-			err = nil
-		} else {
-			err = errors.Wrap(err, "error caching fsvc")
-		}
-		return nil, err
-	}
+	fsc.byAddress.Add(fsvc.Address, *fsvc.Function)
 
-	// Add to byFunctionUID cache. Ignore NameExists errors
+	// Add to byFunctionUID cache. Ignore errors
 	// because of multiple-specialization. See issue #331.
-	_, err = fsc.byFunctionUID.Set(fsvc.Function.UID, *fsvc.Function)
-	if err != nil {
-		if IsNameExistError(err) {
-			err = nil
-		} else {
-			err = errors.Wrap(err, "error caching fsvc by function uid")
-		}
-		return nil, err
-	}
+	fsc.byFunctionUID.Add(string(fsvc.Function.UID), *fsvc.Function)
 
 	return nil, nil
 }
@@ -310,14 +294,14 @@ func (fsc *FunctionServiceCache) TouchByAddress(address string) error {
 }
 
 func (fsc *FunctionServiceCache) _touchByAddress(address string) error {
-	mI, err := fsc.byAddress.Get(address)
-	if err != nil {
-		return err
+	mI, exists := fsc.byAddress.Get(address)
+	if !exists {
+		return fmt.Errorf("function service not found for address %s", address)
 	}
 	m := mI.(metav1.ObjectMeta)
-	fsvcI, err := fsc.byFunction.Get(crd.CacheKey(&m))
-	if err != nil {
-		return err
+	fsvcI, exists := fsc.byFunction.Get(crd.CacheKey(&m))
+	if !exists {
+		return fmt.Errorf("function service not found for function %s", crd.CacheKey(&m))
 	}
 	fsvc := fsvcI.(*FuncSvc)
 	fsvc.Atime = time.Now()
@@ -326,34 +310,9 @@ func (fsc *FunctionServiceCache) _touchByAddress(address string) error {
 
 // DeleteEntry deletes a function service from cache.
 func (fsc *FunctionServiceCache) DeleteEntry(fsvc *FuncSvc) {
-	msg := "error deleting function service"
-	err := fsc.byFunction.Delete(crd.CacheKey(fsvc.Function))
-	if err != nil {
-		fsc.logger.Error(
-			msg,
-			zap.String("function", fsvc.Function.Name),
-			zap.Error(err),
-		)
-	}
-
-	err = fsc.byAddress.Delete(fsvc.Address)
-	if err != nil {
-		fsc.logger.Error(
-			msg,
-			zap.String("function", fsvc.Function.Name),
-			zap.Error(err),
-		)
-	}
-
-	err = fsc.byFunctionUID.Delete(fsvc.Function.UID)
-	if err != nil {
-		fsc.logger.Error(
-			msg,
-			zap.String("function", fsvc.Function.Name),
-			zap.Error(err),
-		)
-	}
-
+	fsc.byFunction.Delete(crd.CacheKey(fsvc.Function))
+	fsc.byAddress.Delete(fsvc.Address)
+	fsc.byFunctionUID.Delete(string(fsvc.Function.UID))
 	metrics.FuncRunningSummary.WithLabelValues(fsvc.Function.Name, fsvc.Function.Namespace).Observe(fsvc.Atime.Sub(fsvc.Ctime).Seconds())
 }
 
