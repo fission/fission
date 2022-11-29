@@ -166,7 +166,7 @@ executor:
   ## This is an experimental section, please verify before enabling in production.
   ## Ref: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#security-context-1
   securityContext:
-    enabled: false
+    enabled: true
     ## Mark it false, if you want to stop the non root user validation
     runAsNonRoot: true
     fsGroup: 10001
@@ -303,7 +303,7 @@ router:
   ## This is an experimental section, please verify before enabling in production.
   ## Ref: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#security-context-1
   securityContext:
-    enabled: false
+    enabled: true
     ## Mark it false, if you want to stop the non root user validation
     runAsNonRoot: true
     fsGroup: 10001
@@ -329,7 +329,7 @@ buildermgr:
   ## This is an experimental section, please verify before enabling in production.
   ## Ref: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#security-context-1
   securityContext:
-    enabled: false
+    enabled: true
     ## Mark it false, if you want to stop the non root user validation
     runAsNonRoot: true
     fsGroup: 10001
@@ -357,7 +357,7 @@ controller:
   ## This is an experimental section, please verify before enabling in production.
   ## Ref: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#security-context-1
   securityContext:
-    enabled: false
+    enabled: true
     ## Mark it false, if you want to stop the non root user validation
     runAsNonRoot: true
     fsGroup: 10001
@@ -394,7 +394,7 @@ webhook:
   ## This is an experimental section, please verify before enabling in production.
   ## Ref: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#security-context-1
   securityContext:
-    enabled: false
+    enabled: true
     ## Mark it false, if you want to stop the non root user validation
     runAsNonRoot: true
     fsGroup: 10001
@@ -421,7 +421,7 @@ kubewatcher:
   ## This is an experimental section, please verify before enabling in production.
   ## Ref: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#security-context-1
   securityContext:
-    enabled: false
+    enabled: true
     ## Mark it false, if you want to stop the non root user validation
     runAsNonRoot: true
     fsGroup: 10001
@@ -453,7 +453,7 @@ storagesvc:
   ## This is an experimental section, please verify before enabling in production.
   ## Ref: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#security-context-1
   securityContext:
-    enabled: false
+    enabled: true
     ## Mark it false, if you want to stop the non root user validation
     runAsNonRoot: true
     fsGroup: 10001
@@ -480,7 +480,7 @@ timer:
   ## This is an experimental section, please verify before enabling in production.
   ## Ref: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#security-context-1
   securityContext:
-    enabled: false
+    enabled: true
     ## Mark it false, if you want to stop the non root user validation
     runAsNonRoot: true
     fsGroup: 10001
@@ -725,7 +725,7 @@ canaryDeployment:
   ## This is an experimental section, please verify before enabling in production.
   ## Ref: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#security-context-1
   securityContext:
-    enabled: false
+    enabled: true
     ## Mark it false, if you want to stop the non root user validation
     runAsNonRoot: true
     fsGroup: 10001
