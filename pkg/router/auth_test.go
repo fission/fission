@@ -9,8 +9,10 @@ import (
 	"net/http"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/gorilla/mux"
+	"k8s.io/apimachinery/pkg/util/wait"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	config "github.com/fission/fission/pkg/featureconfig"
@@ -102,6 +104,22 @@ func TestRouterAuth(t *testing.T) {
 			Body:       "Unauthorized: malformed token\n",
 			AuthReq:    false,
 		},
+	}
+
+	backOff := wait.Backoff{Duration: 1 * time.Second, Cap: 20 * time.Second, Steps: 5}
+
+	condition := func() (bool, error) {
+		_, err := http.Post("http://localhost:8990/auth/login", "application/json", responseBody)
+		if err != nil {
+			return false, nil
+		}
+
+		return true, nil
+	}
+
+	err := wait.ExponentialBackoff(backOff, condition)
+	if err != nil {
+		t.Error(err)
 	}
 
 	loginResp, err := http.Post("http://localhost:8990/auth/login", "application/json", responseBody)
