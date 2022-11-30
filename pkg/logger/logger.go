@@ -27,6 +27,7 @@ import (
 
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/util/wait"
 	k8sCache "k8s.io/client-go/tools/cache"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -171,10 +172,12 @@ func Start(ctx context.Context, logger *zap.Logger) {
 		log.Fatalf("Error starting pod watcher: %v", err)
 	}
 
+	var wg wait.Group
 	for _, podInformer := range utils.GetK8sInformersForNamespaces(kubernetesClient, time.Minute*30, fv1.Pods) {
 		podInformer.AddEventHandler(podInformerHandlers(logger))
-		podInformer.Run(ctx.Done())
+		wg.StartWithChannel(ctx.Done(), podInformer.Run)
 	}
+	wg.Wait()
 
 	logger.Error("Stop watching pod changes")
 }
