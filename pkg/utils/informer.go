@@ -44,6 +44,31 @@ func GetInformersForNamespaces(client versioned.Interface, defaultSync time.Dura
 	return informers
 }
 
+func GetK8sInformersForNamespaces(client kubernetes.Interface, defaultSync time.Duration, kind string) map[string]cache.SharedIndexInformer {
+	informers := make(map[string]cache.SharedIndexInformer)
+	namespaces := DefaultNSResolver()
+	for _, ns := range namespaces.FissionNSWithOptions(WithBuilderNs(), WithFunctionNs(), WithDefaultNs()) {
+		factory := k8sInformers.NewSharedInformerFactoryWithOptions(client, defaultSync, k8sInformers.WithNamespace(ns))
+		switch kind {
+		case fv1.Deployments:
+			informers[ns] = factory.Apps().V1().Deployments().Informer()
+		case fv1.ReplicaSets:
+			informers[ns] = factory.Apps().V1().ReplicaSets().Informer()
+		case fv1.Pods:
+			informers[ns] = factory.Core().V1().Pods().Informer()
+		case fv1.Services:
+			informers[ns] = factory.Core().V1().Services().Informer()
+		case fv1.ConfigMaps:
+			informers[ns] = factory.Core().V1().ConfigMaps().Informer()
+		case fv1.Secrets:
+			informers[ns] = factory.Core().V1().Secrets().Informer()
+		default:
+			panic("Unknown kind: " + kind)
+		}
+	}
+	return informers
+}
+
 func GetInformerFactoryByReadyPod(client kubernetes.Interface, namespace string, labelSelector *metav1.LabelSelector) (k8sInformers.SharedInformerFactory, error) {
 	informerFactory := k8sInformers.NewSharedInformerFactoryWithOptions(client, 0,
 		k8sInformers.WithNamespace(namespace),

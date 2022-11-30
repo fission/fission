@@ -164,3 +164,12 @@ const (
 	PackagesResource        = "packages"
 	TimeTriggerResource     = "timetriggers"
 )
+
+const (
+	Pods        = "pods"
+	Deployments = "deployments"
+	ReplicaSets = "replicasets"
+	Services    = "services"
+	ConfigMaps  = "configmaps"
+	Secrets     = "secrets"
+)
