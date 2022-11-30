@@ -242,7 +242,8 @@ func (caaf *Container) RefreshFuncPods(ctx context.Context, logger *zap.Logger, 
 
 	funcLabels := caaf.getDeployLabels(f.ObjectMeta)
 
-	dep, err := caaf.kubernetesClient.AppsV1().Deployments(metav1.NamespaceAll).List(ctx, metav1.ListOptions{
+	nsResolver := utils.DefaultNSResolver()
+	dep, err := caaf.kubernetesClient.AppsV1().Deployments(nsResolver.GetFunctionNS(f.ObjectMeta.Namespace)).List(ctx, metav1.ListOptions{
 		LabelSelector: labels.Set(funcLabels).AsSelector().String(),
 	})
 	if err != nil {
@@ -273,7 +274,7 @@ func (caaf *Container) RefreshFuncPods(ctx context.Context, logger *zap.Logger, 
 func (caaf *Container) AdoptExistingResources(ctx context.Context) {
 	wg := &sync.WaitGroup{}
 
-	for _, namepsace := range utils.GetNamespaces() {
+	for _, namepsace := range utils.DefaultNSResolver().FissionResourceNS {
 		fnList, err := caaf.fissionClient.CoreV1().Functions(namepsace).List(ctx, metav1.ListOptions{})
 		if err != nil {
 			caaf.logger.Error("error getting function list", zap.Error(err))

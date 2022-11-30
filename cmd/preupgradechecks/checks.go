@@ -123,7 +123,7 @@ func (client *PreUpgradeTaskClient) VerifyFunctionSpecReferences(ctx context.Con
 	var fList *fv1.FunctionList
 	errs := &multierror.Error{}
 
-	for _, namespace := range utils.GetNamespaces() {
+	for _, namespace := range utils.DefaultNSResolver().FissionResourceNS {
 		for i := 0; i < maxRetries; i++ {
 			fList, err = client.fissionClient.CoreV1().Functions(namespace).List(ctx, metav1.ListOptions{})
 			if err == nil {
