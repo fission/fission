@@ -36,6 +36,8 @@ const (
 	CrdKubeWatcher         = "KubeWatcher"
 	CrdMessageQueueTrigger = "MessageQueue"
 	CrdTimeTrigger         = "TimeTrigger"
+
+	CrdCanaryConfig = "CanaryConfig"
 )
 
 type CrdDumper struct {
@@ -128,6 +130,18 @@ func (res CrdDumper) Dump(ctx context.Context, dumpDir string) {
 
 	case CrdTimeTrigger:
 		items, err := res.client.FissionClientSet.CoreV1().TimeTriggers(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
+		if err != nil {
+			console.Warn(fmt.Sprintf("Error getting %v list: %v", res.crdType, err))
+			return
+		}
+
+		for _, item := range items.Items {
+			f := getFileName(dumpDir, item.ObjectMeta)
+			writeToFile(f, item)
+		}
+
+	case CrdCanaryConfig:
+		items, err := res.client.FissionClientSet.CoreV1().CanaryConfigs(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
 		if err != nil {
 			console.Warn(fmt.Sprintf("Error getting %v list: %v", res.crdType, err))
 			return

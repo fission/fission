@@ -26,6 +26,7 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
+	"github.com/fission/fission/pkg/fission-cli/console"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
@@ -96,7 +97,7 @@ func (hc *HealthChecker) CheckKubeVersion() (err error) {
 	return nil
 }
 
-func (hc *HealthChecker) CheckServiceStatus(ctx context.Context, namespace string, name string) (err error) {
+func (hc *HealthChecker) CheckServiceStatus(ctx context.Context, namespace, name, svcName string) (err error) {
 	depl, err := hc.kubeAPI.AppsV1().Deployments(namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to get %s deployment status", name)
@@ -106,7 +107,7 @@ func (hc *HealthChecker) CheckServiceStatus(ctx context.Context, namespace strin
 		return fmt.Errorf("%s deployment is not running", name)
 	}
 
-	_, err = hc.kubeAPI.CoreV1().Services(namespace).Get(ctx, name, metav1.GetOptions{})
+	_, err = hc.kubeAPI.CoreV1().Services(namespace).Get(ctx, svcName, metav1.GetOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to get %s service status", name)
 	}
@@ -119,6 +120,9 @@ func (hc *HealthChecker) CheckFissionVersion(ctx context.Context, input cli.Inpu
 
 	clientVersion := ver.Client["fission/core"].Version
 	serverVersion := ver.Server["fission/core"].Version
+
+	console.Verbose(2, "clientVersion: %s", clientVersion)
+	console.Verbose(2, "serverVersion: %s", serverVersion)
 
 	if clientVersion != serverVersion {
 		return fmt.Errorf("client version %s does not match with server version %s", clientVersion, serverVersion)
@@ -155,19 +159,30 @@ func (hc *HealthChecker) allCategories() []*Category {
 				{
 					successMsg: "executor is running fine",
 					check: func(ctx context.Context, input cli.Input, client cmd.Client) error {
-						return hc.CheckServiceStatus(ctx, hc.fissionNamespace, "executor")
+						return hc.CheckServiceStatus(ctx, hc.fissionNamespace, "executor", "executor")
 					},
 				},
 				{
 					successMsg: "router is running fine",
 					check: func(ctx context.Context, input cli.Input, client cmd.Client) error {
-						return hc.CheckServiceStatus(ctx, hc.fissionNamespace, "router")
+						return hc.CheckServiceStatus(ctx, hc.fissionNamespace, "router", "router")
 					},
 				},
 				{
 					successMsg: "storagesvc is running fine",
 					check: func(ctx context.Context, input cli.Input, client cmd.Client) error {
-						return hc.CheckServiceStatus(ctx, hc.fissionNamespace, "storagesvc")
+						return hc.CheckServiceStatus(ctx, hc.fissionNamespace, "storagesvc", "storagesvc")
+					},
+				},
+				{
+					successMsg: "webhook is running fine",
+					check: func(ctx context.Context, input cli.Input, client cmd.Client) error {
+						err := hc.CheckServiceStatus(ctx, hc.fissionNamespace, "webhook", "webhook-service")
+						if err != nil {
+							console.Errorf("Error found: %s", err.Error())
+						}
+
+						return err
 					},
 				},
 			},
