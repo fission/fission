@@ -17,89 +17,68 @@ limitations under the License.
 package router
 
 import (
-	"fmt"
 	"net/url"
 	"time"
 
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	cache "k8s.io/client-go/tools/cache"
+
+	"github.com/fission/fission/pkg/cache"
 )
 
 type (
 	functionServiceMap struct {
 		logger *zap.Logger
-		cache  cache.Store // map[metadataKey]*url.URL
+		cache  *cache.Cache // map[metadataKey]*url.URL
 	}
 
 	// metav1.ObjectMeta is not hashable, so we make a hashable copy
 	// of the subset of its fields that are identifiable.
-	functionServiceMapObj struct {
-		meta metav1.ObjectMeta
-		url  url.URL
+	metadataKey struct {
+		Name            string
+		Namespace       string
+		ResourceVersion string
 	}
 )
 
 func makeFunctionServiceMap(logger *zap.Logger, expiry time.Duration) *functionServiceMap {
 	return &functionServiceMap{
 		logger: logger.Named("function_service_map"),
-		cache:  cache.NewTTLStore(keyFromMetadata, expiry),
+		cache:  cache.MakeCache(expiry),
 	}
 }
 
-type ExplicitKey string
-
-func keyFromMetadata(obj interface{}) (string, error) {
-
-	mk, ok := obj.(functionServiceMapObj)
-	if !ok {
-		return "", fmt.Errorf("expected functionServiceMapObj, got %T", obj)
+func keyFromMetadata(m *metav1.ObjectMeta) *metadataKey {
+	return &metadataKey{
+		Name:            m.Name,
+		Namespace:       m.Namespace,
+		ResourceVersion: m.ResourceVersion,
 	}
-	return fmt.Sprintf("%s/%s/%s", mk.meta.Name, mk.meta.Namespace, mk.meta.ResourceVersion), nil
 }
 
-func (fmap *functionServiceMap) lookup(f metav1.ObjectMeta) (*url.URL, error) {
-	item, exists, err := fmap.cache.Get(functionServiceMapObj{meta: f})
+func (fmap *functionServiceMap) lookup(f *metav1.ObjectMeta) (*url.URL, error) {
+	mk := keyFromMetadata(f)
+	item, err := fmap.cache.Get(*mk)
 	if err != nil {
 		return nil, err
 	}
-	if !exists {
-		return nil, fmt.Errorf("error looking up function %s/%s/%s", f.Name, f.Namespace, f.ResourceVersion)
-	}
-	u, ok := item.(functionServiceMapObj)
-	if !ok {
-		return nil, fmt.Errorf("expected functionServiceMapObj, got %T", item)
-	}
-	return &u.url, nil
+	u := item.(*url.URL)
+	return u, nil
 }
 
-func (fmap *functionServiceMap) assign(f metav1.ObjectMeta, serviceURL url.URL) {
-	old, exists, err := fmap.cache.Get(functionServiceMapObj{meta: f})
+func (fmap *functionServiceMap) assign(f *metav1.ObjectMeta, serviceURL *url.URL) {
+	mk := keyFromMetadata(f)
+	old, err := fmap.cache.Set(*mk, serviceURL)
 	if err != nil {
-		fmap.logger.Error("error looking up function", zap.Error(err))
-	}
-	if exists {
-		u, ok := old.(functionServiceMapObj)
-		if !ok {
-			fmap.logger.Error("expected functionServiceMapObj, got %T", zap.Any("old", old))
-		}
-		if u.url.String() == serviceURL.String() {
-			// No change, so don't update the cache.
+		if *serviceURL == *(old.(*url.URL)) {
 			return
 		}
-		fmap.logger.Error("function already exists in functionServiceMap, overwriting",
-			zap.String("function", f.Name),
-			zap.String("namespace", f.Namespace),
-			zap.String("resourceVersion", f.ResourceVersion))
+		fmap.logger.Error("error caching service url for function with a different value", zap.Error(err))
 		// ignore error
-	} else {
-		err := fmap.cache.Add(functionServiceMapObj{meta: f, url: serviceURL})
-		if err != nil {
-			fmap.logger.Error("error adding function to functionServiceMap", zap.Error(err))
-		}
 	}
 }
 
-func (fmap *functionServiceMap) remove(f metav1.ObjectMeta) error {
-	return fmap.cache.Delete(functionServiceMapObj{meta: f})
+func (fmap *functionServiceMap) remove(f *metav1.ObjectMeta) error {
+	mk := keyFromMetadata(f)
+	return fmap.cache.Delete(*mk)
 }
