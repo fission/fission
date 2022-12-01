@@ -122,6 +122,7 @@ func MakeFunctionServiceCache(logger *zap.Logger) *FunctionServiceCache {
 }
 
 func (fsc *FunctionServiceCache) Run(ctx context.Context) {
+	fsc.wg.StartWithContext(ctx, fsc.connFunctionCache.Run)
 	fsc.wg.StartWithContext(ctx, fsc.service)
 	fsc.wg.Wait()
 }

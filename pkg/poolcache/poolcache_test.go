@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/apimachinery/pkg/util/wait"
 
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
@@ -17,10 +18,13 @@ func checkErr(err error) {
 }
 
 func TestPoolCache(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	logger := loggerfactory.GetLogger()
 	c := NewPoolCache(logger)
+	var wg wait.Group
+	ctx, cancel := context.WithCancel(context.Background())
+	wg.StartWithContext(ctx, c.Run)
+	defer wg.Wait()
+	defer cancel()
 
 	c.SetValue(ctx, "func", "ip", "value", resource.MustParse("45m"))
 

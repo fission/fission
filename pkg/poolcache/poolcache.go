@@ -24,6 +24,7 @@ import (
 
 	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/apimachinery/pkg/util/wait"
 
 	ferror "github.com/fission/fission/pkg/error"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
@@ -53,6 +54,7 @@ type (
 		cache          map[interface{}]map[interface{}]*value
 		requestChannel chan *request
 		logger         *zap.Logger
+		wg             wait.Group
 	}
 
 	request struct {
@@ -79,99 +81,117 @@ func NewPoolCache(logger *zap.Logger) *Cache {
 		cache:          make(map[interface{}]map[interface{}]*value),
 		requestChannel: make(chan *request),
 		logger:         logger,
+		wg:             wait.Group{},
 	}
-	go c.service()
 	return c
 }
 
-func (c *Cache) service() {
-	for {
-		req := <-c.requestChannel
-		resp := &response{}
-		switch req.requestType {
-		case getValue:
-			values, ok := c.cache[req.function]
-			found := false
-			if !ok {
-				resp.error = ferror.MakeError(ferror.ErrorNotFound,
-					fmt.Sprintf("function Name '%v' not found", req.function))
-			} else {
-				for addr := range values {
-					if values[addr].activeRequests < req.requestsPerPod && values[addr].currentCPUUsage.Cmp(values[addr].cpuLimit) < 1 {
-						// mark active
-						values[addr].activeRequests++
-						if c.logger.Core().Enabled(zap.DebugLevel) {
-							otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Increase active requests with getValue", zap.String("function", req.function.(string)), zap.String("address", addr.(string)), zap.Int("activeRequests", values[addr].activeRequests))
-						}
-						resp.value = values[addr].val
-						found = true
-						break
+func (c *Cache) Run(ctx context.Context) {
+	defer c.wg.Wait()
+	c.wg.StartWithContext(ctx, c.service)
+}
+
+func (c *Cache) processReq(req *request) *response {
+	resp := &response{}
+	switch req.requestType {
+	case getValue:
+		values, ok := c.cache[req.function]
+		found := false
+		if !ok {
+			resp.error = ferror.MakeError(ferror.ErrorNotFound,
+				fmt.Sprintf("function Name '%v' not found", req.function))
+		} else {
+			for addr := range values {
+				if values[addr].activeRequests < req.requestsPerPod && values[addr].currentCPUUsage.Cmp(values[addr].cpuLimit) < 1 {
+					// mark active
+					values[addr].activeRequests++
+					if c.logger.Core().Enabled(zap.DebugLevel) {
+						otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Increase active requests with getValue", zap.String("function", req.function.(string)), zap.String("address", addr.(string)), zap.Int("activeRequests", values[addr].activeRequests))
 					}
+					resp.value = values[addr].val
+					found = true
+					break
 				}
-				if !found {
-					resp.error = ferror.MakeError(ferror.ErrorNotFound, fmt.Sprintf("function '%v' all functions are busy", req.function))
+			}
+			if !found {
+				resp.error = ferror.MakeError(ferror.ErrorNotFound, fmt.Sprintf("function '%v' all functions are busy", req.function))
+			}
+			resp.totalActive = len(values)
+		}
+	case setValue:
+		if _, ok := c.cache[req.function]; !ok {
+			c.cache[req.function] = make(map[interface{}]*value)
+		}
+		if _, ok := c.cache[req.function][req.address]; !ok {
+			c.cache[req.function][req.address] = &value{}
+		}
+		c.cache[req.function][req.address].val = req.value
+		c.cache[req.function][req.address].activeRequests++
+		if c.logger.Core().Enabled(zap.DebugLevel) {
+			otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Increase active requests with setValue", zap.String("function", req.function.(string)), zap.String("address", req.address.(string)), zap.Int("activeRequests", c.cache[req.function][req.address].activeRequests))
+		}
+		c.cache[req.function][req.address].cpuLimit = req.cpuUsage
+		resp = nil
+	case listAvailableValue:
+		vals := make([]interface{}, 0)
+		for key1, values := range c.cache {
+			for key2, value := range values {
+				debugLevel := c.logger.Core().Enabled(zap.DebugLevel)
+				if debugLevel {
+					otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Reading active requests", zap.String("function", key1.(string)), zap.String("address", key2.(string)), zap.Int("activeRequests", value.activeRequests))
 				}
-				resp.totalActive = len(values)
-			}
-			req.responseChannel <- resp
-		case setValue:
-			if _, ok := c.cache[req.function]; !ok {
-				c.cache[req.function] = make(map[interface{}]*value)
-			}
-			if _, ok := c.cache[req.function][req.address]; !ok {
-				c.cache[req.function][req.address] = &value{}
-			}
-			c.cache[req.function][req.address].val = req.value
-			c.cache[req.function][req.address].activeRequests++
-			if c.logger.Core().Enabled(zap.DebugLevel) {
-				otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Increase active requests with setValue", zap.String("function", req.function.(string)), zap.String("address", req.address.(string)), zap.Int("activeRequests", c.cache[req.function][req.address].activeRequests))
-			}
-			c.cache[req.function][req.address].cpuLimit = req.cpuUsage
-		case listAvailableValue:
-			vals := make([]interface{}, 0)
-			for key1, values := range c.cache {
-				for key2, value := range values {
-					debugLevel := c.logger.Core().Enabled(zap.DebugLevel)
+				if value.activeRequests == 0 {
 					if debugLevel {
-						otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Reading active requests", zap.String("function", key1.(string)), zap.String("address", key2.(string)), zap.Int("activeRequests", value.activeRequests))
+						otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Function service with no active requests", zap.String("function", key1.(string)), zap.String("address", key2.(string)), zap.Int("activeRequests", value.activeRequests))
 					}
-					if value.activeRequests == 0 {
-						if debugLevel {
-							otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Function service with no active requests", zap.String("function", key1.(string)), zap.String("address", key2.(string)), zap.Int("activeRequests", value.activeRequests))
-						}
-						vals = append(vals, value.val)
-					}
+					vals = append(vals, value.val)
 				}
 			}
-			resp.allValues = vals
-			req.responseChannel <- resp
-		case setCPUUtilization:
-			if _, ok := c.cache[req.function]; !ok {
-				c.cache[req.function] = make(map[interface{}]*value)
-			}
-			if _, ok := c.cache[req.function][req.address]; ok {
-				c.cache[req.function][req.address].currentCPUUsage = req.cpuUsage
-			}
-		case markAvailable:
-			if _, ok := c.cache[req.function]; ok {
-				if _, ok = c.cache[req.function][req.address]; ok {
-					if c.cache[req.function][req.address].activeRequests > 0 {
-						c.cache[req.function][req.address].activeRequests--
-						if c.logger.Core().Enabled(zap.DebugLevel) {
-							otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Decrease active requests", zap.String("function", req.function.(string)), zap.String("address", req.address.(string)), zap.Int("activeRequests", c.cache[req.function][req.address].activeRequests))
-						}
-					} else {
-						otelUtils.LoggerWithTraceID(req.ctx, c.logger).Error("Invalid request to decrease active requests", zap.String("function", req.function.(string)), zap.String("address", req.address.(string)), zap.Int("activeRequests", c.cache[req.function][req.address].activeRequests))
+		}
+		resp.allValues = vals
+	case setCPUUtilization:
+		if _, ok := c.cache[req.function]; !ok {
+			c.cache[req.function] = make(map[interface{}]*value)
+		}
+		if _, ok := c.cache[req.function][req.address]; ok {
+			c.cache[req.function][req.address].currentCPUUsage = req.cpuUsage
+		}
+		resp = nil
+	case markAvailable:
+		if _, ok := c.cache[req.function]; ok {
+			if _, ok = c.cache[req.function][req.address]; ok {
+				if c.cache[req.function][req.address].activeRequests > 0 {
+					c.cache[req.function][req.address].activeRequests--
+					if c.logger.Core().Enabled(zap.DebugLevel) {
+						otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Decrease active requests", zap.String("function", req.function.(string)), zap.String("address", req.address.(string)), zap.Int("activeRequests", c.cache[req.function][req.address].activeRequests))
 					}
+				} else {
+					otelUtils.LoggerWithTraceID(req.ctx, c.logger).Error("Invalid request to decrease active requests", zap.String("function", req.function.(string)), zap.String("address", req.address.(string)), zap.Int("activeRequests", c.cache[req.function][req.address].activeRequests))
 				}
 			}
-		case deleteValue:
-			delete(c.cache[req.function], req.address)
-			req.responseChannel <- resp
-		default:
-			resp.error = ferror.MakeError(ferror.ErrorInvalidArgument,
-				fmt.Sprintf("invalid request type: %v", req.requestType))
-			req.responseChannel <- resp
+		}
+		resp = nil
+	case deleteValue:
+		delete(c.cache[req.function], req.address)
+	default:
+		resp.error = ferror.MakeError(ferror.ErrorInvalidArgument,
+			fmt.Sprintf("invalid request type: %v", req.requestType))
+
+	}
+	return resp
+}
+
+func (c *Cache) service(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			c.logger.Info("shutting down pool cache")
+			return
+		case req := <-c.requestChannel:
+			resp := c.processReq(req)
+			if resp != nil {
+				req.responseChannel <- resp
+			}
 		}
 	}
 }

@@ -147,12 +147,12 @@ func MakeContainer(
 
 // Run start the function along with an object reaper.
 func (caaf *Container) Run(ctx context.Context) {
+	defer caaf.wg.Wait()
 	caaf.wg.StartWithContext(ctx, caaf.fsCache.Run)
 	if ok := k8sCache.WaitForCacheSync(ctx.Done(), caaf.deplListerSynced, caaf.svcListerSynced); !ok {
 		caaf.logger.Fatal("failed to wait for caches to sync")
 	}
 	caaf.wg.StartWithContext(ctx, caaf.idleObjectReaper)
-	caaf.wg.Wait()
 }
 
 // GetTypeName returns the executor type name.
@@ -277,6 +277,7 @@ func (caaf *Container) RefreshFuncPods(ctx context.Context, logger *zap.Logger, 
 // AdoptExistingResources attempts to adopt resources for functions in all namespaces.
 func (caaf *Container) AdoptExistingResources(ctx context.Context) {
 	wg := &wait.Group{}
+	defer wg.Wait()
 
 	for _, namepsace := range utils.DefaultNSResolver().FissionResourceNS {
 		fnList, err := caaf.fissionClient.CoreV1().Functions(namepsace).List(ctx, metav1.ListOptions{})
@@ -299,8 +300,6 @@ func (caaf *Container) AdoptExistingResources(ctx context.Context) {
 			}
 		}
 	}
-
-	wg.Wait()
 }
 
 // CleanupOldExecutorObjects cleans orphaned resources.

@@ -12,6 +12,7 @@ import (
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/wait"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 )
@@ -28,14 +29,17 @@ func TestFunctionServiceCache(t *testing.T) {
 	logger, err := config.Build()
 	panicIf(err)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	fsc := MakeFunctionServiceCache(logger)
 	if fsc == nil {
 		log.Panicf("error creating cache")
 	}
-	go fsc.Run(ctx)
+	var wg wait.Group
+
+	ctx, cancel := context.WithCancel(context.Background())
+	wg.StartWithContext(ctx, fsc.Run)
+	defer wg.Wait()
+	defer cancel()
+
 	var fsvc *FuncSvc
 	now := time.Now()
 
@@ -133,14 +137,15 @@ func TestFunctionServiceNewCache(t *testing.T) {
 	logger, err := zap.NewDevelopment()
 	panicIf(err)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	fsc := MakeFunctionServiceCache(logger)
 	if fsc == nil {
 		log.Panicf("error creating cache")
 	}
-	go fsc.Run(ctx)
+	var wg wait.Group
+	ctx, cancel := context.WithCancel(context.Background())
+	wg.StartWithContext(ctx, fsc.Run)
+	defer wg.Wait()
+	defer cancel()
 
 	var fsvc *FuncSvc
 	now := time.Now()
