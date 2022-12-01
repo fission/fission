@@ -41,7 +41,7 @@ type (
 		fissionClient versioned.Interface
 		nsResolver    *utils.NamespaceResolver
 		k8sClient     kubernetes.Interface
-		podInformer   k8sCache.SharedIndexInformer
+		podInformer   map[string]k8sCache.SharedIndexInformer
 		pkgInformer   map[string]k8sCache.SharedIndexInformer
 		storageSvcUrl string
 		buildCache    *cache.Cache
@@ -49,7 +49,7 @@ type (
 )
 
 func makePackageWatcher(logger *zap.Logger, fissionClient versioned.Interface, k8sClientSet kubernetes.Interface,
-	storageSvcUrl string, podInformer k8sCache.SharedIndexInformer,
+	storageSvcUrl string, podInformer,
 	pkgInformer map[string]k8sCache.SharedIndexInformer) *packageWatcher {
 	pkgw := &packageWatcher{
 		logger:        logger.Named("package_watcher"),
@@ -124,6 +124,8 @@ func (pkgw *packageWatcher) build(ctx context.Context, srcpkg *fv1.Package) {
 
 	// Create a new BackOff for health check on environment builder pod
 	healthCheckBackOff := utils.NewDefaultBackOff()
+	builderNs := pkgw.nsResolver.GetBuilderNS(env.ObjectMeta.Namespace)
+
 	//if err != nil {
 	//	pkgw.logger.Error("Unable to create BackOff for Health Check", zap.Error(err))
 	//}
@@ -131,7 +133,7 @@ func (pkgw *packageWatcher) build(ctx context.Context, srcpkg *fv1.Package) {
 	for healthCheckBackOff.NextExists() {
 		// Informer store is not able to use label to find the pod,
 		// iterate all available environment builders.
-		items := pkgw.podInformer.GetStore().List()
+		items := pkgw.podInformer[builderNs].GetStore().List()
 		if err != nil {
 			pkgw.logger.Error("error retrieving pod information for environment", zap.Error(err), zap.String("environment", env.ObjectMeta.Name))
 			return
@@ -145,8 +147,6 @@ func (pkgw *packageWatcher) build(ctx context.Context, srcpkg *fv1.Package) {
 
 		for _, item := range items {
 			pod := item.(*apiv1.Pod)
-
-			builderNs := pkgw.nsResolver.GetBuilderNS(env.ObjectMeta.Namespace)
 
 			// Filter non-matching pods
 			if pod.ObjectMeta.Labels[LABEL_ENV_NAME] != env.ObjectMeta.Name ||
@@ -327,7 +327,9 @@ func (pkgw *packageWatcher) packageInformerHandler(ctx context.Context) k8sCache
 
 func (pkgw *packageWatcher) Run(ctx context.Context) {
 	go metrics.ServeMetrics(ctx, pkgw.logger)
-	go pkgw.podInformer.Run(ctx.Done())
+	for _, podInformer := range pkgw.podInformer {
+		go podInformer.Run(ctx.Done())
+	}
 	for _, pkgInformer := range pkgw.pkgInformer {
 		pkgInformer.AddEventHandler(pkgw.packageInformerHandler(ctx))
 		go pkgInformer.Run(ctx.Done())
