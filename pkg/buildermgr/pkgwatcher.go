@@ -124,6 +124,8 @@ func (pkgw *packageWatcher) build(ctx context.Context, srcpkg *fv1.Package) {
 
 	// Create a new BackOff for health check on environment builder pod
 	healthCheckBackOff := utils.NewDefaultBackOff()
+	builderNs := pkgw.nsResolver.GetBuilderNS(env.ObjectMeta.Namespace)
+
 	//if err != nil {
 	//	pkgw.logger.Error("Unable to create BackOff for Health Check", zap.Error(err))
 	//}
@@ -131,148 +133,138 @@ func (pkgw *packageWatcher) build(ctx context.Context, srcpkg *fv1.Package) {
 	for healthCheckBackOff.NextExists() {
 		// Informer store is not able to use label to find the pod,
 		// iterate all available environment builders.
-		buildPkg := func(podInformer k8sCache.SharedIndexInformer) bool {
-			items := podInformer.GetStore().List()
-			if err != nil {
-				pkgw.logger.Error("error retrieving pod information for environment", zap.Error(err), zap.String("environment", env.ObjectMeta.Name))
-				return true
-			}
-
-			if len(items) == 0 {
-				pkgw.logger.Info("builder pod does not exist for environment, will retry again later", zap.String("environment", pkg.Spec.Environment.Name))
-				time.Sleep(healthCheckBackOff.GetCurrentBackoffDuration())
-			}
-
-			for _, item := range items {
-				pod := item.(*apiv1.Pod)
-
-				builderNs := pkgw.nsResolver.GetBuilderNS(env.ObjectMeta.Namespace)
-
-				// Filter non-matching pods
-				if pod.ObjectMeta.Labels[LABEL_ENV_NAME] != env.ObjectMeta.Name ||
-					pod.ObjectMeta.Labels[LABEL_ENV_NAMESPACE] != builderNs ||
-					pod.ObjectMeta.Labels[LABEL_ENV_RESOURCEVERSION] != env.ObjectMeta.ResourceVersion {
-					continue
-				}
-
-				// Pod may become "Running" state but still failed at health check, so use
-				// pod.Status.ContainerStatuses instead of pod.Status.Phase to check pod readiness states.
-				podIsReady := true
-
-				for _, cStatus := range pod.Status.ContainerStatuses {
-					podIsReady = podIsReady && cStatus.Ready
-				}
-
-				if !podIsReady {
-					pkgw.logger.Info("builder pod is not ready for environment, will retry again later", zap.String("environment", pkg.Spec.Environment.Name))
-					time.Sleep(healthCheckBackOff.GetCurrentBackoffDuration())
-					break
-				}
-
-				// Add the package getter rolebinding to builder sa
-				// we continue here if role binding was not setup successfully. this is because without this, the fetcher won't be able to fetch the source pkg into the container and
-				// the build will fail eventually
-				err := utils.SetupRoleBinding(ctx, pkgw.logger, pkgw.k8sClient, fv1.PackageGetterRB, pkg.ObjectMeta.Namespace, utils.GetPackageGetterCR(), fv1.ClusterRole, fv1.FissionBuilderSA, builderNs)
-				if err != nil {
-					pkgw.logger.Error("error setting up role binding for package",
-						zap.Error(err),
-						zap.String("role_binding", fv1.PackageGetterRB),
-						zap.String("package_name", pkg.ObjectMeta.Name),
-						zap.String("package_namespace", pkg.ObjectMeta.Namespace))
-					continue
-				} else {
-					pkgw.logger.Info("setup rolebinding for sa package",
-						zap.String("sa", fmt.Sprintf("%s.%s", fv1.FissionBuilderSA, builderNs)),
-						zap.String("package", fmt.Sprintf("%s.%s", pkg.ObjectMeta.Name, pkg.ObjectMeta.Namespace)))
-				}
-
-				uploadResp, buildLogs, err := buildPackage(ctx, pkgw.logger, pkgw.fissionClient, builderNs, pkgw.storageSvcUrl, pkg)
-				if err != nil {
-					pkgw.logger.Error("error building package", zap.Error(err), zap.String("package_name", pkg.ObjectMeta.Name))
-					_, er := updatePackage(ctx, pkgw.logger, pkgw.fissionClient, pkg, fv1.BuildStatusFailed, buildLogs, nil)
-					if er != nil {
-						pkgw.logger.Error(
-							"error updating package",
-							zap.String("package_name", pkg.ObjectMeta.Name),
-							zap.String("resource_version", pkg.ObjectMeta.ResourceVersion),
-							zap.Error(er),
-						)
-					}
-					return false
-				}
-
-				pkgw.logger.Info("starting package info update", zap.String("package_name", pkg.ObjectMeta.Name))
-
-				fnList, err := pkgw.fissionClient.CoreV1().
-					Functions(pkg.Namespace).List(ctx, metav1.ListOptions{})
-				if err != nil {
-					e := "error getting function list"
-					pkgw.logger.Error(e, zap.Error(err))
-					buildLogs += fmt.Sprintf("%s: %v\n", e, err)
-					_, er := updatePackage(ctx, pkgw.logger, pkgw.fissionClient, pkg, fv1.BuildStatusFailed, buildLogs, nil)
-					if er != nil {
-						pkgw.logger.Error(
-							"error updating package",
-							zap.String("package_name", pkg.ObjectMeta.Name),
-							zap.String("resource_version", pkg.ObjectMeta.ResourceVersion),
-							zap.Error(er),
-						)
-					}
-				}
-
-				// A package may be used by multiple functions. Update
-				// functions with old package resource version
-				for _, fn := range fnList.Items {
-					if fn.Spec.Package.PackageRef.Name == pkg.ObjectMeta.Name &&
-						fn.Spec.Package.PackageRef.Namespace == pkg.ObjectMeta.Namespace &&
-						fn.Spec.Package.PackageRef.ResourceVersion != pkg.ObjectMeta.ResourceVersion {
-						fn.Spec.Package.PackageRef.ResourceVersion = pkg.ObjectMeta.ResourceVersion
-						// update CRD
-						_, err = pkgw.fissionClient.CoreV1().Functions(fn.ObjectMeta.Namespace).Update(ctx, &fn, metav1.UpdateOptions{})
-						if err != nil {
-							e := "error updating function package resource version"
-							pkgw.logger.Error(e, zap.Error(err))
-							buildLogs += fmt.Sprintf("%s: %v\n", e, err)
-							_, er := updatePackage(ctx, pkgw.logger, pkgw.fissionClient, pkg, fv1.BuildStatusFailed, buildLogs, nil)
-							if er != nil {
-								pkgw.logger.Error(
-									"error updating package",
-									zap.String("package_name", pkg.ObjectMeta.Name),
-									zap.String("resource_version", pkg.ObjectMeta.ResourceVersion),
-									zap.Error(er),
-								)
-							}
-							return false
-						}
-					}
-				}
-
-				_, err = updatePackage(ctx, pkgw.logger, pkgw.fissionClient, pkg,
-					fv1.BuildStatusSucceeded, buildLogs, uploadResp)
-				if err != nil {
-					pkgw.logger.Error("error updating package info", zap.Error(err), zap.String("package_name", pkg.ObjectMeta.Name))
-					_, er := updatePackage(ctx, pkgw.logger, pkgw.fissionClient, pkg, fv1.BuildStatusFailed, buildLogs, nil)
-					if er != nil {
-						pkgw.logger.Error(
-							"error updating package",
-							zap.String("package_name", pkg.ObjectMeta.Name),
-							zap.String("resource_version", pkg.ObjectMeta.ResourceVersion),
-							zap.Error(er),
-						)
-					}
-					return false
-				}
-
-				pkgw.logger.Info("completed package build request", zap.String("package_name", pkg.ObjectMeta.Name))
-				return false
-			}
-			return true
+		items := pkgw.podInformer[builderNs].GetStore().List()
+		if err != nil {
+			pkgw.logger.Error("error retrieving pod information for environment", zap.Error(err), zap.String("environment", env.ObjectMeta.Name))
+			return
 		}
 
-		for _, podInformer := range pkgw.podInformer {
-			if isContinue := buildPkg(podInformer); !isContinue {
+		if len(items) == 0 {
+			pkgw.logger.Info("builder pod does not exist for environment, will retry again later", zap.String("environment", pkg.Spec.Environment.Name))
+			time.Sleep(healthCheckBackOff.GetCurrentBackoffDuration())
+			continue
+		}
+
+		for _, item := range items {
+			pod := item.(*apiv1.Pod)
+
+			// Filter non-matching pods
+			if pod.ObjectMeta.Labels[LABEL_ENV_NAME] != env.ObjectMeta.Name ||
+				pod.ObjectMeta.Labels[LABEL_ENV_NAMESPACE] != builderNs ||
+				pod.ObjectMeta.Labels[LABEL_ENV_RESOURCEVERSION] != env.ObjectMeta.ResourceVersion {
+				continue
+			}
+
+			// Pod may become "Running" state but still failed at health check, so use
+			// pod.Status.ContainerStatuses instead of pod.Status.Phase to check pod readiness states.
+			podIsReady := true
+
+			for _, cStatus := range pod.Status.ContainerStatuses {
+				podIsReady = podIsReady && cStatus.Ready
+			}
+
+			if !podIsReady {
+				pkgw.logger.Info("builder pod is not ready for environment, will retry again later", zap.String("environment", pkg.Spec.Environment.Name))
+				time.Sleep(healthCheckBackOff.GetCurrentBackoffDuration())
+				break
+			}
+
+			// Add the package getter rolebinding to builder sa
+			// we continue here if role binding was not setup successfully. this is because without this, the fetcher won't be able to fetch the source pkg into the container and
+			// the build will fail eventually
+			err := utils.SetupRoleBinding(ctx, pkgw.logger, pkgw.k8sClient, fv1.PackageGetterRB, pkg.ObjectMeta.Namespace, utils.GetPackageGetterCR(), fv1.ClusterRole, fv1.FissionBuilderSA, builderNs)
+			if err != nil {
+				pkgw.logger.Error("error setting up role binding for package",
+					zap.Error(err),
+					zap.String("role_binding", fv1.PackageGetterRB),
+					zap.String("package_name", pkg.ObjectMeta.Name),
+					zap.String("package_namespace", pkg.ObjectMeta.Namespace))
+				continue
+			} else {
+				pkgw.logger.Info("setup rolebinding for sa package",
+					zap.String("sa", fmt.Sprintf("%s.%s", fv1.FissionBuilderSA, builderNs)),
+					zap.String("package", fmt.Sprintf("%s.%s", pkg.ObjectMeta.Name, pkg.ObjectMeta.Namespace)))
+			}
+
+			uploadResp, buildLogs, err := buildPackage(ctx, pkgw.logger, pkgw.fissionClient, builderNs, pkgw.storageSvcUrl, pkg)
+			if err != nil {
+				pkgw.logger.Error("error building package", zap.Error(err), zap.String("package_name", pkg.ObjectMeta.Name))
+				_, er := updatePackage(ctx, pkgw.logger, pkgw.fissionClient, pkg, fv1.BuildStatusFailed, buildLogs, nil)
+				if er != nil {
+					pkgw.logger.Error(
+						"error updating package",
+						zap.String("package_name", pkg.ObjectMeta.Name),
+						zap.String("resource_version", pkg.ObjectMeta.ResourceVersion),
+						zap.Error(er),
+					)
+				}
 				return
 			}
+
+			pkgw.logger.Info("starting package info update", zap.String("package_name", pkg.ObjectMeta.Name))
+
+			fnList, err := pkgw.fissionClient.CoreV1().
+				Functions(pkg.Namespace).List(ctx, metav1.ListOptions{})
+			if err != nil {
+				e := "error getting function list"
+				pkgw.logger.Error(e, zap.Error(err))
+				buildLogs += fmt.Sprintf("%s: %v\n", e, err)
+				_, er := updatePackage(ctx, pkgw.logger, pkgw.fissionClient, pkg, fv1.BuildStatusFailed, buildLogs, nil)
+				if er != nil {
+					pkgw.logger.Error(
+						"error updating package",
+						zap.String("package_name", pkg.ObjectMeta.Name),
+						zap.String("resource_version", pkg.ObjectMeta.ResourceVersion),
+						zap.Error(er),
+					)
+				}
+			}
+
+			// A package may be used by multiple functions. Update
+			// functions with old package resource version
+			for _, fn := range fnList.Items {
+				if fn.Spec.Package.PackageRef.Name == pkg.ObjectMeta.Name &&
+					fn.Spec.Package.PackageRef.Namespace == pkg.ObjectMeta.Namespace &&
+					fn.Spec.Package.PackageRef.ResourceVersion != pkg.ObjectMeta.ResourceVersion {
+					fn.Spec.Package.PackageRef.ResourceVersion = pkg.ObjectMeta.ResourceVersion
+					// update CRD
+					_, err = pkgw.fissionClient.CoreV1().Functions(fn.ObjectMeta.Namespace).Update(ctx, &fn, metav1.UpdateOptions{})
+					if err != nil {
+						e := "error updating function package resource version"
+						pkgw.logger.Error(e, zap.Error(err))
+						buildLogs += fmt.Sprintf("%s: %v\n", e, err)
+						_, er := updatePackage(ctx, pkgw.logger, pkgw.fissionClient, pkg, fv1.BuildStatusFailed, buildLogs, nil)
+						if er != nil {
+							pkgw.logger.Error(
+								"error updating package",
+								zap.String("package_name", pkg.ObjectMeta.Name),
+								zap.String("resource_version", pkg.ObjectMeta.ResourceVersion),
+								zap.Error(er),
+							)
+						}
+						return
+					}
+				}
+			}
+
+			_, err = updatePackage(ctx, pkgw.logger, pkgw.fissionClient, pkg,
+				fv1.BuildStatusSucceeded, buildLogs, uploadResp)
+			if err != nil {
+				pkgw.logger.Error("error updating package info", zap.Error(err), zap.String("package_name", pkg.ObjectMeta.Name))
+				_, er := updatePackage(ctx, pkgw.logger, pkgw.fissionClient, pkg, fv1.BuildStatusFailed, buildLogs, nil)
+				if er != nil {
+					pkgw.logger.Error(
+						"error updating package",
+						zap.String("package_name", pkg.ObjectMeta.Name),
+						zap.String("resource_version", pkg.ObjectMeta.ResourceVersion),
+						zap.Error(er),
+					)
+				}
+				return
+			}
+
+			pkgw.logger.Info("completed package build request", zap.String("package_name", pkg.ObjectMeta.Name))
+			return
 		}
 		time.Sleep(healthCheckBackOff.GetNext())
 	}
