@@ -42,7 +42,7 @@ func makecanaryConfigCancelFuncMap() *canaryConfigCancelFuncMap {
 	}
 }
 
-func (cancelFuncMap *canaryConfigCancelFuncMap) lookup(f metav1.ObjectMeta) (*CanaryProcessingInfo, error) {
+func (cancelFuncMap *canaryConfigCancelFuncMap) lookup(f metav1.Object) (*CanaryProcessingInfo, error) {
 	mk, err := cache.MetaNamespaceKeyFunc(f)
 	if err != nil {
 		return nil, err
@@ -55,7 +55,7 @@ func (cancelFuncMap *canaryConfigCancelFuncMap) lookup(f metav1.ObjectMeta) (*Ca
 	return value, nil
 }
 
-func (cancelFuncMap *canaryConfigCancelFuncMap) assign(f metav1.ObjectMeta, value *CanaryProcessingInfo) error {
+func (cancelFuncMap *canaryConfigCancelFuncMap) assign(f metav1.Object, value *CanaryProcessingInfo) error {
 	mk, err := cache.MetaNamespaceKeyFunc(f)
 	if err != nil {
 		return err
@@ -68,7 +68,7 @@ func (cancelFuncMap *canaryConfigCancelFuncMap) assign(f metav1.ObjectMeta, valu
 	return nil
 }
 
-func (cancelFuncMap *canaryConfigCancelFuncMap) remove(f metav1.ObjectMeta) error {
+func (cancelFuncMap *canaryConfigCancelFuncMap) remove(f metav1.Object) error {
 	mk, err := cache.MetaNamespaceKeyFunc(f)
 	if err != nil {
 		return err
