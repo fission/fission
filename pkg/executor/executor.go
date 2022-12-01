@@ -29,6 +29,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	apiv1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/util/wait"
 	k8sInformers "k8s.io/client-go/informers"
 	k8sInformersv1 "k8s.io/client-go/informers/core/v1"
 	k8sCache "k8s.io/client-go/tools/cache"
@@ -64,6 +65,8 @@ type (
 
 		requestChan chan *createFuncServiceRequest
 		fsCreateWg  sync.Map
+
+		wg wait.Group
 	}
 
 	createFuncServiceRequest struct {
@@ -80,31 +83,26 @@ type (
 
 // MakeExecutor returns an Executor for given ExecutorType(s).
 func MakeExecutor(ctx context.Context, logger *zap.Logger, cms *cms.ConfigSecretController,
-	fissionClient versioned.Interface, types map[fv1.ExecutorType]executortype.ExecutorType,
-	informers ...k8sCache.SharedIndexInformer) (*Executor, error) {
-	executor := &Executor{
+	fissionClient versioned.Interface, types map[fv1.ExecutorType]executortype.ExecutorType) *Executor {
+	return &Executor{
 		logger:        logger.Named("executor"),
 		cms:           cms,
 		fissionClient: fissionClient,
 		executorTypes: types,
 
 		requestChan: make(chan *createFuncServiceRequest),
+
+		wg: wait.Group{},
+	}
+}
+
+func (executor *Executor) Run(ctx context.Context) {
+	for _, et := range executor.executorTypes {
+		executor.wg.StartWithContext(ctx, et.Run)
 	}
 
-	// Run all informers
-	for _, informer := range informers {
-		go informer.Run(ctx.Done())
-	}
-
-	for _, et := range types {
-		go func(et executortype.ExecutorType) {
-			et.Run(ctx)
-		}(et)
-	}
-
-	go executor.serveCreateFuncServices()
-
-	return executor, nil
+	executor.wg.StartWithContext(ctx, executor.serveCreateFuncServices)
+	executor.wg.Wait()
 }
 
 // All non-cached function service requests go through this goroutine
@@ -113,106 +111,112 @@ func MakeExecutor(ctx context.Context, logger *zap.Logger, cms *cms.ConfigSecret
 // get specialized. In other words, it ensures that when there's an
 // ongoing request for a certain function, all other requests wait for
 // that request to complete.
-func (executor *Executor) serveCreateFuncServices() {
+func (executor *Executor) serveCreateFuncServices(ctx context.Context) {
 	for {
-		req := <-executor.requestChan
-		fnMetadata := &req.function.ObjectMeta
+		select {
+		case <-ctx.Done():
+			executor.logger.Info("Shutting down serveCreateFuncServices")
+			return
 
-		if req.function.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypePoolmgr {
-			go func() {
-				buffer := 10 // add some buffer time for specialization
-				specializationTimeout := req.function.Spec.InvokeStrategy.ExecutionStrategy.SpecializationTimeout
+		case req := <-executor.requestChan:
+			fnMetadata := &req.function.ObjectMeta
 
-				// set minimum specialization timeout to avoid illegal input and
-				// compatibility problem when applying old spec file that doesn't
-				// have specialization timeout field.
-				if specializationTimeout < fv1.DefaultSpecializationTimeOut {
-					specializationTimeout = fv1.DefaultSpecializationTimeOut
-				}
+			if req.function.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypePoolmgr {
+				go func() {
+					buffer := 10 // add some buffer time for specialization
+					specializationTimeout := req.function.Spec.InvokeStrategy.ExecutionStrategy.SpecializationTimeout
 
-				fnSpecializationTimeoutContext, cancel := context.WithTimeout(req.context,
-					time.Duration(specializationTimeout+buffer)*time.Second)
-				defer cancel()
+					// set minimum specialization timeout to avoid illegal input and
+					// compatibility problem when applying old spec file that doesn't
+					// have specialization timeout field.
+					if specializationTimeout < fv1.DefaultSpecializationTimeOut {
+						specializationTimeout = fv1.DefaultSpecializationTimeOut
+					}
 
-				fsvc, err := executor.createServiceForFunction(fnSpecializationTimeoutContext, req.function)
-				req.respChan <- &createFuncServiceResponse{
-					funcSvc: fsvc,
-					err:     err,
-				}
-			}()
-			continue
-		}
+					fnSpecializationTimeoutContext, cancel := context.WithTimeout(req.context,
+						time.Duration(specializationTimeout+buffer)*time.Second)
+					defer cancel()
 
-		// Cache miss -- is this first one to request the func?
-		wg, found := executor.fsCreateWg.Load(crd.CacheKey(fnMetadata))
-		if !found {
-			// create a waitgroup for other requests for
-			// the same function to wait on
-			wg := &sync.WaitGroup{}
-			wg.Add(1)
-			executor.fsCreateWg.Store(crd.CacheKey(fnMetadata), wg)
-
-			// launch a goroutine for each request, to parallelize
-			// the specialization of different functions
-			go func() {
-				// Control overall specialization time by setting function
-				// specialization time to context. The reason not to use
-				// context from router requests is because a request maybe
-				// canceled for unknown reasons and let executor keeps
-				// spawning pods that never finish specialization process.
-				// Also, even a request failed, a specialized function pod
-				// still can serve other subsequent requests.
-
-				buffer := 10 // add some buffer time for specialization
-				specializationTimeout := req.function.Spec.InvokeStrategy.ExecutionStrategy.SpecializationTimeout
-
-				// set minimum specialization timeout to avoid illegal input and
-				// compatibility problem when applying old spec file that doesn't
-				// have specialization timeout field.
-				if specializationTimeout < fv1.DefaultSpecializationTimeOut {
-					specializationTimeout = fv1.DefaultSpecializationTimeOut
-				}
-
-				fnSpecializationTimeoutContext, cancel := context.WithTimeout(req.context,
-					time.Duration(specializationTimeout+buffer)*time.Second)
-				defer cancel()
-
-				fsvc, err := executor.createServiceForFunction(fnSpecializationTimeoutContext, req.function)
-				req.respChan <- &createFuncServiceResponse{
-					funcSvc: fsvc,
-					err:     err,
-				}
-				executor.fsCreateWg.Delete(crd.CacheKey(fnMetadata))
-				wg.Done()
-			}()
-		} else {
-			// There's an existing request for this function, wait for it to finish
-			go func() {
-				executor.logger.Debug("waiting for concurrent request for the same function",
-					zap.Any("function", fnMetadata))
-				wg, ok := wg.(*sync.WaitGroup)
-				if !ok {
-					err := fmt.Errorf("could not convert value to workgroup for function %v in namespace %v", fnMetadata.Name, fnMetadata.Namespace)
+					fsvc, err := executor.createServiceForFunction(fnSpecializationTimeoutContext, req.function)
 					req.respChan <- &createFuncServiceResponse{
-						funcSvc: nil,
+						funcSvc: fsvc,
 						err:     err,
 					}
-				}
-				wg.Wait()
+				}()
+				continue
+			}
 
-				// get the function service from the cache
-				fsvc, err := executor.getFunctionServiceFromCache(req.context, req.function)
+			// Cache miss -- is this first one to request the func?
+			wg, found := executor.fsCreateWg.Load(crd.CacheKey(fnMetadata))
+			if !found {
+				// create a waitgroup for other requests for
+				// the same function to wait on
+				wg := &sync.WaitGroup{}
+				wg.Add(1)
+				executor.fsCreateWg.Store(crd.CacheKey(fnMetadata), wg)
 
-				// fsCache return error when the entry does not exist/expire.
-				// It normally happened if there are multiple requests are
-				// waiting for the same function and executor failed to cre-
-				// ate service for function.
-				err = errors.Wrapf(err, "error getting service for function %v in namespace %v", fnMetadata.Name, fnMetadata.Namespace)
-				req.respChan <- &createFuncServiceResponse{
-					funcSvc: fsvc,
-					err:     err,
-				}
-			}()
+				// launch a goroutine for each request, to parallelize
+				// the specialization of different functions
+				go func() {
+					// Control overall specialization time by setting function
+					// specialization time to context. The reason not to use
+					// context from router requests is because a request maybe
+					// canceled for unknown reasons and let executor keeps
+					// spawning pods that never finish specialization process.
+					// Also, even a request failed, a specialized function pod
+					// still can serve other subsequent requests.
+
+					buffer := 10 // add some buffer time for specialization
+					specializationTimeout := req.function.Spec.InvokeStrategy.ExecutionStrategy.SpecializationTimeout
+
+					// set minimum specialization timeout to avoid illegal input and
+					// compatibility problem when applying old spec file that doesn't
+					// have specialization timeout field.
+					if specializationTimeout < fv1.DefaultSpecializationTimeOut {
+						specializationTimeout = fv1.DefaultSpecializationTimeOut
+					}
+
+					fnSpecializationTimeoutContext, cancel := context.WithTimeout(req.context,
+						time.Duration(specializationTimeout+buffer)*time.Second)
+					defer cancel()
+
+					fsvc, err := executor.createServiceForFunction(fnSpecializationTimeoutContext, req.function)
+					req.respChan <- &createFuncServiceResponse{
+						funcSvc: fsvc,
+						err:     err,
+					}
+					executor.fsCreateWg.Delete(crd.CacheKey(fnMetadata))
+					wg.Done()
+				}()
+			} else {
+				// There's an existing request for this function, wait for it to finish
+				go func() {
+					executor.logger.Debug("waiting for concurrent request for the same function",
+						zap.Any("function", fnMetadata))
+					wg, ok := wg.(*sync.WaitGroup)
+					if !ok {
+						err := fmt.Errorf("could not convert value to workgroup for function %v in namespace %v", fnMetadata.Name, fnMetadata.Namespace)
+						req.respChan <- &createFuncServiceResponse{
+							funcSvc: nil,
+							err:     err,
+						}
+					}
+					wg.Wait()
+
+					// get the function service from the cache
+					fsvc, err := executor.getFunctionServiceFromCache(req.context, req.function)
+
+					// fsCache return error when the entry does not exist/expire.
+					// It normally happened if there are multiple requests are
+					// waiting for the same function and executor failed to cre-
+					// ate service for function.
+					err = errors.Wrapf(err, "error getting service for function %v in namespace %v", fnMetadata.Name, fnMetadata.Namespace)
+					req.respChan <- &createFuncServiceResponse{
+						funcSvc: fsvc,
+						err:     err,
+					}
+				}()
+			}
 		}
 	}
 }
@@ -351,16 +355,15 @@ func StartExecutor(ctx context.Context, logger *zap.Logger, port int) error {
 
 	adoptExistingResources, _ := strconv.ParseBool(os.Getenv("ADOPT_EXISTING_RESOURCES"))
 
-	wg := &sync.WaitGroup{}
+	wg := &wait.Group{}
 	for _, et := range executorTypes {
-		wg.Add(1)
-		go func(et executortype.ExecutorType) {
-			defer wg.Done()
+		wg.Start(func() {
 			if adoptExistingResources {
 				et.AdoptExistingResources(ctx)
 			}
 			et.CleanupOldExecutorObjects(ctx)
-		}(et)
+
+		})
 	}
 	// set hard timeout for resource adoption
 	// TODO: use context to control the waiting time once kubernetes client supports it.
@@ -402,16 +405,25 @@ func StartExecutor(ctx context.Context, logger *zap.Logger, port int) error {
 		cnmDeplInformer.Informer(),
 		cnmSvcInformer.Informer(),
 	)
-	api, err := MakeExecutor(ctx, logger, cms, fissionClient, executorTypes,
-		fissionInformers...,
-	)
-	if err != nil {
-		return err
+	api := MakeExecutor(ctx, logger, cms, fissionClient, executorTypes)
+
+	wg2 := &wait.Group{}
+
+	// Run all informers
+	for _, informer := range fissionInformers {
+		wg2.StartWithChannel(ctx.Done(), informer.Run)
 	}
 
-	go reaper.CleanupRoleBindings(ctx, logger, kubernetesClient, fissionClient, time.Minute*30)
-	go metrics.ServeMetrics(ctx, logger)
-	go api.Serve(ctx, port)
-
+	wg2.StartWithContext(ctx, api.Run)
+	wg2.Start(func() {
+		reaper.CleanupRoleBindings(ctx, logger, kubernetesClient, fissionClient, time.Minute*30)
+	})
+	wg2.Start(func() {
+		metrics.ServeMetrics(ctx, logger)
+	})
+	wg2.Start(func() {
+		api.Serve(ctx, port)
+	})
+	wg2.Wait()
 	return nil
 }

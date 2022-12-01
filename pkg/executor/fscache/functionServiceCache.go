@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
 	cache "k8s.io/client-go/tools/cache"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -74,6 +75,7 @@ type (
 		PodToFsvc         sync.Map              // pod-name -> funcSvc: map[string]*FuncSvc
 		WebsocketFsvc     sync.Map              // funcSvc-name -> bool: map[string]bool
 		requestChannel    chan *fscRequest
+		wg                wait.Group
 	}
 
 	fscRequest struct {
@@ -106,7 +108,7 @@ func IsNameExistError(err error) bool {
 }
 
 // MakeFunctionServiceCache starts and returns an instance of FunctionServiceCache.
-func MakeFunctionServiceCache(ctx context.Context, logger *zap.Logger) *FunctionServiceCache {
+func MakeFunctionServiceCache(logger *zap.Logger) *FunctionServiceCache {
 	fsc := &FunctionServiceCache{
 		logger:            logger.Named("function_service_cache"),
 		byFunction:        cache.NewThreadSafeStore(cache.Indexers{}, cache.Indices{}),
@@ -114,9 +116,14 @@ func MakeFunctionServiceCache(ctx context.Context, logger *zap.Logger) *Function
 		byFunctionUID:     cache.NewThreadSafeStore(cache.Indexers{}, cache.Indices{}),
 		connFunctionCache: poolcache.NewPoolCache(logger.Named("conn_function_cache")),
 		requestChannel:    make(chan *fscRequest),
+		wg:                wait.Group{},
 	}
-	go fsc.service(ctx)
 	return fsc
+}
+
+func (fsc *FunctionServiceCache) Run(ctx context.Context) {
+	fsc.wg.StartWithContext(ctx, fsc.service)
+	fsc.wg.Wait()
 }
 
 func (fsc *FunctionServiceCache) service(ctx context.Context) {
@@ -194,9 +201,7 @@ func (fsc *FunctionServiceCache) GetByFunction(m *metav1.ObjectMeta) (*FuncSvc, 
 
 // GetFuncSvc gets a function service from pool cache using function key and returns number of active instances of function pod
 func (fsc *FunctionServiceCache) GetFuncSvc(ctx context.Context, m *metav1.ObjectMeta, requestsPerPod int) (*FuncSvc, int, error) {
-	key := crd.CacheKey(m)
-
-	fsvcI, active, err := fsc.connFunctionCache.GetValue(ctx, key, requestsPerPod)
+	fsvcI, active, err := fsc.connFunctionCache.GetValue(ctx, crd.CacheKey(m), requestsPerPod)
 	if err != nil {
 		fsc.logger.Info("Not found in Cache")
 		return nil, active, err

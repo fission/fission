@@ -23,7 +23,6 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	multierror "github.com/hashicorp/go-multierror"
@@ -89,6 +88,8 @@ type (
 
 		hpaops                     *hpautils.HpaOperations
 		objectReaperIntervalSecond time.Duration
+
+		wg wait.Group
 	}
 )
 
@@ -120,7 +121,7 @@ func MakeContainer(
 		instanceID:       instanceID,
 		nsResolver:       utils.DefaultNSResolver(),
 
-		fsCache:   fscache.MakeFunctionServiceCache(ctx, logger),
+		fsCache:   fscache.MakeFunctionServiceCache(logger),
 		throttler: throttler.MakeThrottler(1 * time.Minute),
 
 		runtimeImagePullPolicy: utils.GetImagePullPolicy(os.Getenv("RUNTIME_IMAGE_PULL_POLICY")),
@@ -129,6 +130,7 @@ func MakeContainer(
 		defaultIdlePodReapTime:     1 * time.Minute,
 		objectReaperIntervalSecond: time.Duration(executorUtils.GetObjectReaperInterval(logger, fv1.ExecutorTypeContainer, 5)) * time.Second,
 		hpaops:                     hpautils.NewHpaOperations(logger, kubernetesClient, instanceID),
+		wg:                         wait.Group{},
 	}
 
 	caaf.deplLister = deplInformer.Lister()
@@ -145,10 +147,12 @@ func MakeContainer(
 
 // Run start the function along with an object reaper.
 func (caaf *Container) Run(ctx context.Context) {
+	caaf.wg.StartWithContext(ctx, caaf.fsCache.Run)
 	if ok := k8sCache.WaitForCacheSync(ctx.Done(), caaf.deplListerSynced, caaf.svcListerSynced); !ok {
 		caaf.logger.Fatal("failed to wait for caches to sync")
 	}
-	go caaf.idleObjectReaper(ctx)
+	caaf.wg.StartWithContext(ctx, caaf.idleObjectReaper)
+	caaf.wg.Wait()
 }
 
 // GetTypeName returns the executor type name.
@@ -272,7 +276,7 @@ func (caaf *Container) RefreshFuncPods(ctx context.Context, logger *zap.Logger, 
 
 // AdoptExistingResources attempts to adopt resources for functions in all namespaces.
 func (caaf *Container) AdoptExistingResources(ctx context.Context) {
-	wg := &sync.WaitGroup{}
+	wg := &wait.Group{}
 
 	for _, namepsace := range utils.DefaultNSResolver().FissionResourceNS {
 		fnList, err := caaf.fissionClient.CoreV1().Functions(namepsace).List(ctx, metav1.ListOptions{})
@@ -284,17 +288,14 @@ func (caaf *Container) AdoptExistingResources(ctx context.Context) {
 		for i := range fnList.Items {
 			fn := &fnList.Items[i]
 			if fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypeContainer {
-				wg.Add(1)
-				go func() {
-					defer wg.Done()
-
+				wg.Start(func() {
 					_, err = caaf.fnCreate(ctx, fn)
 					if err != nil {
 						caaf.logger.Warn("failed to adopt resources for function", zap.Error(err))
 						return
 					}
 					caaf.logger.Info("adopt resources for function", zap.String("function", fn.ObjectMeta.Name))
-				}()
+				})
 			}
 		}
 	}

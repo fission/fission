@@ -224,7 +224,7 @@ func (p *PoolPodController) enqueueEnvDelete(obj interface{}) {
 	p.envDeleteQueue.Add(env)
 }
 
-func (p *PoolPodController) Run(ctx context.Context, stopCh <-chan struct{}) {
+func (p *PoolPodController) Run(ctx context.Context) {
 	defer utilruntime.HandleCrash()
 	defer p.envCreateUpdateQueue.ShutDown()
 	defer p.envDeleteQueue.ShutDown()
@@ -237,16 +237,16 @@ func (p *PoolPodController) Run(ctx context.Context, stopCh <-chan struct{}) {
 	for _, synced := range p.envListerSynced {
 		waitSynced = append(waitSynced, synced)
 	}
-	if ok := k8sCache.WaitForCacheSync(stopCh, waitSynced...); !ok {
+	if ok := k8sCache.WaitForCacheSync(ctx.Done(), waitSynced...); !ok {
 		p.logger.Fatal("failed to wait for caches to sync")
 	}
 	for i := 0; i < 4; i++ {
-		go wait.Until(p.workerRun(ctx, "envCreateUpdate", p.envCreateUpdateQueueProcessFunc), time.Second, stopCh)
+		go wait.Until(p.workerRun(ctx, "envCreateUpdate", p.envCreateUpdateQueueProcessFunc), time.Second, ctx.Done())
 	}
-	go wait.Until(p.workerRun(ctx, "envDeleteQueue", p.envDeleteQueueProcessFunc), time.Second, stopCh)
-	go wait.Until(p.workerRun(ctx, "spCleanupPodQueue", p.spCleanupPodQueueProcessFunc), time.Second, stopCh)
+	go wait.Until(p.workerRun(ctx, "envDeleteQueue", p.envDeleteQueueProcessFunc), time.Second, ctx.Done())
+	go wait.Until(p.workerRun(ctx, "spCleanupPodQueue", p.spCleanupPodQueueProcessFunc), time.Second, ctx.Done())
 	p.logger.Info("Started workers for poolPodController")
-	<-stopCh
+	<-ctx.Done()
 	p.logger.Info("Shutting down workers for poolPodController")
 }
 

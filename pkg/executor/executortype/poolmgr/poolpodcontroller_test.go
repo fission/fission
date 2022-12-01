@@ -93,7 +93,7 @@ func TestPoolPodControllerPodCleanup(t *testing.T) {
 	gpm := executor.(*GenericPoolManager)
 	ppc.InjectGpm(gpm)
 
-	go ppc.Run(ctx, ctx.Done())
+	go ppc.Run(ctx)
 
 	podInformer := gpmPodInformer.Informer()
 

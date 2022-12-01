@@ -21,12 +21,12 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 
 	"go.uber.org/zap"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/yaml"
 
@@ -49,7 +49,7 @@ func ApplyImagePullSecret(secret string, podspec apiv1.PodSpec) *apiv1.PodSpec {
 }
 
 // WaitTimeout starts a wait group with timeout
-func WaitTimeout(wg *sync.WaitGroup, timeout time.Duration) {
+func WaitTimeout(wg *wait.Group, timeout time.Duration) {
 	waitCh := make(chan struct{})
 	go func() {
 		defer close(waitCh)

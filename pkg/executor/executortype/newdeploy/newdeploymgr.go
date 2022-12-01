@@ -93,6 +93,8 @@ type (
 
 		podSpecPatch               *apiv1.PodSpec
 		objectReaperIntervalSecond time.Duration
+
+		wg wait.Group
 	}
 )
 
@@ -125,7 +127,7 @@ func MakeNewDeploy(
 		fissionClient:    fissionClient,
 		kubernetesClient: kubernetesClient,
 		instanceID:       instanceID,
-		fsCache:          fscache.MakeFunctionServiceCache(ctx, logger),
+		fsCache:          fscache.MakeFunctionServiceCache(logger),
 		throttler:        throttler.MakeThrottler(1 * time.Minute),
 		nsResolver:       utils.DefaultNSResolver(),
 
@@ -138,6 +140,8 @@ func MakeNewDeploy(
 		hpaops:                     hpautils.NewHpaOperations(logger, kubernetesClient, instanceID),
 
 		podSpecPatch: podSpecPatch,
+
+		wg: wait.Group{},
 	}
 
 	nd.deplLister = deplInformer.Lister()
@@ -157,10 +161,12 @@ func MakeNewDeploy(
 
 // Run start the function and environment controller along with an object reaper.
 func (deploy *NewDeploy) Run(ctx context.Context) {
+	deploy.wg.StartWithContext(ctx, deploy.fsCache.Run)
 	if ok := k8sCache.WaitForCacheSync(ctx.Done(), deploy.deplListerSynced, deploy.svcListerSynced); !ok {
 		deploy.logger.Fatal("failed to wait for caches to sync")
 	}
-	go deploy.idleObjectReaper(ctx)
+	deploy.wg.StartWithContext(ctx, deploy.idleObjectReaper)
+	deploy.wg.Wait()
 }
 
 // GetTypeName returns the executor type name.

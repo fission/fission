@@ -31,11 +31,11 @@ func TestFunctionServiceCache(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	fsc := MakeFunctionServiceCache(ctx, logger)
+	fsc := MakeFunctionServiceCache(logger)
 	if fsc == nil {
 		log.Panicf("error creating cache")
 	}
-
+	go fsc.Run(ctx)
 	var fsvc *FuncSvc
 	now := time.Now()
 
@@ -136,10 +136,11 @@ func TestFunctionServiceNewCache(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	fsc := MakeFunctionServiceCache(ctx, logger)
+	fsc := MakeFunctionServiceCache(logger)
 	if fsc == nil {
 		log.Panicf("error creating cache")
 	}
+	go fsc.Run(ctx)
 
 	var fsvc *FuncSvc
 	now := time.Now()

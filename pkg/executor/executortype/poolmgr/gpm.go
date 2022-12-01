@@ -99,6 +99,8 @@ type (
 
 		podSpecPatch               *apiv1.PodSpec
 		objectReaperIntervalSecond time.Duration
+
+		wg wait.Group
 	}
 	request struct {
 		requestType
@@ -150,7 +152,7 @@ func MakeGenericPoolManager(ctx context.Context,
 		metricsClient:              metricsClient,
 		fissionClient:              fissionClient,
 		functionEnv:                cache.MakeCache(10 * time.Second),
-		fsCache:                    fscache.MakeFunctionServiceCache(ctx, gpmLogger),
+		fsCache:                    fscache.MakeFunctionServiceCache(gpmLogger),
 		instanceID:                 instanceID,
 		requestChannel:             make(chan *request),
 		defaultIdlePodReapTime:     2 * time.Minute,
@@ -159,6 +161,8 @@ func MakeGenericPoolManager(ctx context.Context,
 		poolPodC:                   poolPodC,
 		podSpecPatch:               podSpecPatch,
 		objectReaperIntervalSecond: time.Duration(executorUtils.GetObjectReaperInterval(logger, fv1.ExecutorTypePoolmgr, 5)) * time.Second,
+
+		wg: wait.Group{},
 	}
 	gpm.podLister = podInformer.Lister()
 	gpm.podListerSynced = podInformer.Informer().HasSynced
@@ -172,12 +176,18 @@ func (gpm *GenericPoolManager) Run(ctx context.Context) {
 	if ok := k8sCache.WaitForCacheSync(ctx.Done(), gpm.podListerSynced); !ok {
 		gpm.logger.Fatal("failed to wait for caches to sync")
 	}
-	go gpm.service()
+	gpm.wg.StartWithContext(ctx, gpm.fsCache.Run)
+	gpm.wg.StartWithContext(ctx, gpm.service)
 	gpm.poolPodC.InjectGpm(gpm)
-	go gpm.WebsocketStartEventChecker(ctx, gpm.kubernetesClient)
-	go gpm.NoActiveConnectionEventChecker(ctx, gpm.kubernetesClient)
-	go gpm.idleObjectReaper(ctx)
-	go gpm.poolPodC.Run(ctx, ctx.Done())
+	gpm.wg.StartWithContext(ctx, func(ctx context.Context) {
+		gpm.WebsocketStartEventChecker(ctx, gpm.kubernetesClient)
+	})
+	gpm.wg.StartWithContext(ctx, func(ctx context.Context) {
+		gpm.NoActiveConnectionEventChecker(ctx, gpm.kubernetesClient)
+	})
+	gpm.wg.StartWithContext(ctx, gpm.idleObjectReaper)
+	gpm.wg.StartWithContext(ctx, gpm.poolPodC.Run)
+	gpm.wg.Wait()
 }
 
 func (gpm *GenericPoolManager) GetTypeName(ctx context.Context) fv1.ExecutorType {
@@ -473,52 +483,57 @@ func (gpm *GenericPoolManager) CleanupOldExecutorObjects(ctx context.Context) {
 	}
 }
 
-func (gpm *GenericPoolManager) service() {
+func (gpm *GenericPoolManager) service(ctx context.Context) {
 	for {
-		req := <-gpm.requestChannel
-		switch req.requestType {
-		case GET_POOL:
-			// just because they are missing in the cache, we end up creating another duplicate pool.
-			var err error
-			created := false
-			pool, ok := gpm.pools[crd.CacheKeyUID(&req.env.ObjectMeta)]
-			if !ok {
-				// To support backward compatibility, if envs are created in default ns, we go ahead
-				// and create pools in fission-function ns as earlier.
-				ns := gpm.nsResolver.GetFunctionNS(req.env.ObjectMeta.Namespace)
-				pool = MakeGenericPool(gpm.logger, gpm.fissionClient, gpm.kubernetesClient,
-					gpm.metricsClient, req.env, ns, gpm.fsCache,
-					gpm.fetcherConfig, gpm.instanceID, gpm.enableIstio, gpm.podSpecPatch)
-				err = pool.setup(req.ctx)
-				if err != nil {
-					req.responseChannel <- &response{error: err}
-					continue
+		select {
+		case <-ctx.Done():
+			gpm.logger.Info("Stopping generic pool manager service")
+			return
+		case req := <-gpm.requestChannel:
+			switch req.requestType {
+			case GET_POOL:
+				// just because they are missing in the cache, we end up creating another duplicate pool.
+				var err error
+				created := false
+				pool, ok := gpm.pools[crd.CacheKeyUID(&req.env.ObjectMeta)]
+				if !ok {
+					// To support backward compatibility, if envs are created in default ns, we go ahead
+					// and create pools in fission-function ns as earlier.
+					ns := gpm.nsResolver.GetFunctionNS(req.env.ObjectMeta.Namespace)
+					pool = MakeGenericPool(gpm.logger, gpm.fissionClient, gpm.kubernetesClient,
+						gpm.metricsClient, req.env, ns, gpm.fsCache,
+						gpm.fetcherConfig, gpm.instanceID, gpm.enableIstio, gpm.podSpecPatch)
+					err = pool.setup(req.ctx)
+					if err != nil {
+						req.responseChannel <- &response{error: err}
+						continue
+					}
+					gpm.pools[crd.CacheKeyUID(&req.env.ObjectMeta)] = pool
+					created = true
 				}
-				gpm.pools[crd.CacheKeyUID(&req.env.ObjectMeta)] = pool
-				created = true
-			}
-			req.responseChannel <- &response{pool: pool, created: created}
-		case CLEANUP_POOL:
-			env := *req.env
-			gpm.logger.Info("destroying pool",
-				zap.String("environment", env.ObjectMeta.Name),
-				zap.String("namespace", env.ObjectMeta.Namespace))
-
-			key := crd.CacheKeyUID(&req.env.ObjectMeta)
-			pool, ok := gpm.pools[key]
-			if !ok {
-				gpm.logger.Error("Could not find pool", zap.String("environment", env.ObjectMeta.Name), zap.String("namespace", env.ObjectMeta.Namespace))
-				return
-			}
-			delete(gpm.pools, key)
-			err := pool.destroy(req.ctx)
-			if err != nil {
-				gpm.logger.Error("failed to destroy pool",
+				req.responseChannel <- &response{pool: pool, created: created}
+			case CLEANUP_POOL:
+				env := *req.env
+				gpm.logger.Info("destroying pool",
 					zap.String("environment", env.ObjectMeta.Name),
-					zap.String("namespace", env.ObjectMeta.Namespace),
-					zap.Error(err))
+					zap.String("namespace", env.ObjectMeta.Namespace))
+
+				key := crd.CacheKeyUID(&req.env.ObjectMeta)
+				pool, ok := gpm.pools[key]
+				if !ok {
+					gpm.logger.Error("Could not find pool", zap.String("environment", env.ObjectMeta.Name), zap.String("namespace", env.ObjectMeta.Namespace))
+					return
+				}
+				delete(gpm.pools, key)
+				err := pool.destroy(req.ctx)
+				if err != nil {
+					gpm.logger.Error("failed to destroy pool",
+						zap.String("environment", env.ObjectMeta.Name),
+						zap.String("namespace", env.ObjectMeta.Namespace),
+						zap.Error(err))
+				}
+				// no response, caller doesn't wait
 			}
-			// no response, caller doesn't wait
 		}
 	}
 }
