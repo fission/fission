@@ -35,8 +35,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
-	appsinformers "k8s.io/client-go/informers/apps/v1"
-	coreinformers "k8s.io/client-go/informers/core/v1"
+	k8sInformers "k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	appslisters "k8s.io/client-go/listers/apps/v1"
 	corelisters "k8s.io/client-go/listers/core/v1"
@@ -81,11 +80,11 @@ type (
 
 		defaultIdlePodReapTime time.Duration
 
-		deplLister appslisters.DeploymentLister
-		svcLister  corelisters.ServiceLister
+		deplLister map[string]appslisters.DeploymentLister
+		svcLister  map[string]corelisters.ServiceLister
 
-		deplListerSynced k8sCache.InformerSynced
-		svcListerSynced  k8sCache.InformerSynced
+		deplListerSynced map[string]k8sCache.InformerSynced
+		svcListerSynced  map[string]k8sCache.InformerSynced
 
 		hpaops                     *hpautils.HpaOperations
 		objectReaperIntervalSecond time.Duration
@@ -100,8 +99,7 @@ func MakeContainer(
 	kubernetesClient kubernetes.Interface,
 	instanceID string,
 	funcInformer map[string]finformerv1.FunctionInformer,
-	deplInformer appsinformers.DeploymentInformer,
-	svcInformer coreinformers.ServiceInformer,
+	deplInformerFactory, svcInformerFactory map[string]k8sInformers.SharedInformerFactory,
 ) (executortype.ExecutorType, error) {
 	enableIstio := false
 	if len(os.Getenv("ENABLE_ISTIO")) > 0 {
@@ -131,11 +129,13 @@ func MakeContainer(
 		hpaops:                     hpautils.NewHpaOperations(logger, kubernetesClient, instanceID),
 	}
 
-	caaf.deplLister = deplInformer.Lister()
-	caaf.deplListerSynced = deplInformer.Informer().HasSynced
+	for _, ns := range caaf.nsResolver.FissionNSWithOptions(utils.WithBuilderNs(), utils.WithFunctionNs(), utils.WithDefaultNs()) {
+		caaf.deplLister[ns] = deplInformerFactory[ns].Apps().V1().Deployments().Lister()
+		caaf.deplListerSynced[ns] = deplInformerFactory[ns].Apps().V1().Deployments().Informer().HasSynced
 
-	caaf.svcLister = svcInformer.Lister()
-	caaf.svcListerSynced = svcInformer.Informer().HasSynced
+		caaf.svcLister[ns] = svcInformerFactory[ns].Core().V1().Services().Lister()
+		caaf.deplListerSynced[ns] = svcInformerFactory[ns].Core().V1().Services().Informer().HasSynced
+	}
 
 	for _, informer := range funcInformer {
 		informer.Informer().AddEventHandler(caaf.FuncInformerHandler(ctx))
@@ -145,8 +145,10 @@ func MakeContainer(
 
 // Run start the function along with an object reaper.
 func (caaf *Container) Run(ctx context.Context) {
-	if ok := k8sCache.WaitForCacheSync(ctx.Done(), caaf.deplListerSynced, caaf.svcListerSynced); !ok {
-		caaf.logger.Fatal("failed to wait for caches to sync")
+	for _, ns := range caaf.nsResolver.FissionNSWithOptions(utils.WithBuilderNs(), utils.WithFunctionNs(), utils.WithDefaultNs()) {
+		if ok := k8sCache.WaitForCacheSync(ctx.Done(), caaf.deplListerSynced[ns], caaf.svcListerSynced[ns]); !ok {
+			caaf.logger.Fatal("failed to wait for caches to sync")
+		}
 	}
 	go caaf.idleObjectReaper(ctx)
 }
@@ -214,7 +216,7 @@ func (caaf *Container) IsValid(ctx context.Context, fsvc *fscache.FuncSvc) bool 
 	}
 	for _, obj := range fsvc.KubernetesObjects {
 		if strings.ToLower(obj.Kind) == "service" {
-			_, err := caaf.svcLister.Services(obj.Namespace).Get(obj.Name)
+			_, err := caaf.svcLister[obj.Namespace].Services(obj.Namespace).Get(obj.Name)
 			if err != nil {
 				if !k8sErrs.IsNotFound(err) {
 					logger.Error("error validating function service", zap.String("function", fsvc.Function.Name), zap.Error(err))
@@ -222,7 +224,7 @@ func (caaf *Container) IsValid(ctx context.Context, fsvc *fscache.FuncSvc) bool 
 				return false
 			}
 		} else if strings.ToLower(obj.Kind) == "deployment" {
-			currentDeploy, err := caaf.deplLister.Deployments(obj.Namespace).Get(obj.Name)
+			currentDeploy, err := caaf.deplLister[obj.Namespace].Deployments(obj.Namespace).Get(obj.Name)
 			if err != nil {
 				if !k8sErrs.IsNotFound(err) {
 					logger.Error("error validating function deployment", zap.String("function", fsvc.Function.Name), zap.Error(err))

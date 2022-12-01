@@ -37,8 +37,7 @@ import (
 	k8sTypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/apimachinery/pkg/watch"
-	appsinformers "k8s.io/client-go/informers/apps/v1"
-	coreinformers "k8s.io/client-go/informers/core/v1"
+	k8sInformers "k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	corelisters "k8s.io/client-go/listers/core/v1"
 	k8sCache "k8s.io/client-go/tools/cache"
@@ -88,10 +87,10 @@ type (
 		fetcherConfig *fetcherConfig.Config
 
 		// podLister can list/get pods from the shared informer's store
-		podLister corelisters.PodLister
+		podLister map[string]corelisters.PodLister
 
 		// podListerSynced returns true if the pod store has been synced at least once.
-		podListerSynced k8sCache.InformerSynced
+		podListerSynced map[string]k8sCache.InformerSynced
 
 		defaultIdlePodReapTime time.Duration
 
@@ -123,8 +122,7 @@ func MakeGenericPoolManager(ctx context.Context,
 	funcInformer map[string]finformerv1.FunctionInformer,
 	pkgInformer map[string]finformerv1.PackageInformer,
 	envInformer map[string]finformerv1.EnvironmentInformer,
-	podInformer coreinformers.PodInformer,
-	rsInformer appsinformers.ReplicaSetInformer,
+	podInformerFactory, rsInformerFactory map[string]k8sInformers.SharedInformerFactory,
 	podSpecPatch *apiv1.PodSpec,
 ) (executortype.ExecutorType, error) {
 
@@ -140,7 +138,7 @@ func MakeGenericPoolManager(ctx context.Context,
 	}
 
 	poolPodC := NewPoolPodController(ctx, gpmLogger, kubernetesClient,
-		enableIstio, funcInformer, pkgInformer, envInformer, rsInformer, podInformer)
+		enableIstio, funcInformer, pkgInformer, envInformer, rsInformerFactory, podInformerFactory)
 
 	gpm := &GenericPoolManager{
 		logger:                     gpmLogger,
@@ -160,8 +158,11 @@ func MakeGenericPoolManager(ctx context.Context,
 		podSpecPatch:               podSpecPatch,
 		objectReaperIntervalSecond: time.Duration(executorUtils.GetObjectReaperInterval(logger, fv1.ExecutorTypePoolmgr, 5)) * time.Second,
 	}
-	gpm.podLister = podInformer.Lister()
-	gpm.podListerSynced = podInformer.Informer().HasSynced
+
+	for _, ns := range gpm.nsResolver.FissionNSWithOptions(utils.WithBuilderNs(), utils.WithFunctionNs(), utils.WithDefaultNs()) {
+		gpm.podLister[ns] = podInformerFactory[ns].Core().V1().Pods().Lister()
+		gpm.podListerSynced[ns] = podInformerFactory[ns].Core().V1().Pods().Informer().HasSynced
+	}
 
 	gpm.logger.Debug("inside MakeGenericPoolManager")
 
@@ -169,8 +170,10 @@ func MakeGenericPoolManager(ctx context.Context,
 }
 
 func (gpm *GenericPoolManager) Run(ctx context.Context) {
-	if ok := k8sCache.WaitForCacheSync(ctx.Done(), gpm.podListerSynced); !ok {
-		gpm.logger.Fatal("failed to wait for caches to sync")
+	for _, ns := range gpm.nsResolver.FissionNSWithOptions(utils.WithBuilderNs(), utils.WithFunctionNs(), utils.WithDefaultNs()) {
+		if ok := k8sCache.WaitForCacheSync(ctx.Done(), gpm.podListerSynced[ns]); !ok {
+			gpm.logger.Fatal("failed to wait for caches to sync")
+		}
 	}
 	go gpm.service()
 	gpm.poolPodC.InjectGpm(gpm)
@@ -246,7 +249,7 @@ func (gpm *GenericPoolManager) IsValid(ctx context.Context, fsvc *fscache.FuncSv
 	otelUtils.SpanTrackEvent(ctx, "IsValid", fscache.GetAttributesForFuncSvc(fsvc)...)
 	for _, obj := range fsvc.KubernetesObjects {
 		if strings.ToLower(obj.Kind) == "pod" {
-			pod, err := gpm.podLister.Pods(obj.Namespace).Get(obj.Name)
+			pod, err := gpm.podLister[obj.Namespace].Pods(obj.Namespace).Get(obj.Name)
 			if err == nil && utils.IsReadyPod(pod) {
 				// Normally, the address format is http://[pod-ip]:[port], however, if the
 				// Istio is enabled the address format changes to http://[svc-name]:[port].

@@ -29,8 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
-	appsinformers "k8s.io/client-go/informers/apps/v1"
-	coreinformers "k8s.io/client-go/informers/core/v1"
+	k8sInformers "k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	corelisters "k8s.io/client-go/listers/core/v1"
 	k8sCache "k8s.io/client-go/tools/cache"
@@ -54,10 +53,10 @@ type (
 		envListerSynced map[string]k8sCache.InformerSynced
 
 		// podLister can list/get pods from the shared informer's store
-		podLister corelisters.PodLister
+		podLister map[string]corelisters.PodLister
 
 		// podListerSynced returns true if the pod store has been synced at least once.
-		podListerSynced k8sCache.InformerSynced
+		podListerSynced map[string]k8sCache.InformerSynced
 
 		envCreateUpdateQueue workqueue.RateLimitingInterface
 		envDeleteQueue       workqueue.RateLimitingInterface
@@ -74,8 +73,8 @@ func NewPoolPodController(ctx context.Context, logger *zap.Logger,
 	funcInformer map[string]finformerv1.FunctionInformer,
 	pkgInformer map[string]finformerv1.PackageInformer,
 	envInformer map[string]finformerv1.EnvironmentInformer,
-	rsInformer appsinformers.ReplicaSetInformer,
-	podInformer coreinformers.PodInformer) *PoolPodController {
+	rsInformerFactory,
+	podInformerFactory map[string]k8sInformers.SharedInformerFactory) *PoolPodController {
 	logger = logger.Named("pool_pod_controller")
 	p := &PoolPodController{
 		logger:               logger,
@@ -103,14 +102,17 @@ func NewPoolPodController(ctx context.Context, logger *zap.Logger,
 		p.envLister[ns] = informer.Lister()
 		p.envListerSynced[ns] = informer.Informer().HasSynced
 	}
-	rsInformer.Informer().AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
-		AddFunc:    p.handleRSAdd,
-		UpdateFunc: p.handleRSUpdate,
-		DeleteFunc: p.handleRSDelete,
-	})
 
-	p.podLister = podInformer.Lister()
-	p.podListerSynced = podInformer.Informer().HasSynced
+	for _, ns := range p.nsResolver.FissionNSWithOptions(utils.WithBuilderNs(), utils.WithFunctionNs(), utils.WithDefaultNs()) {
+		rsInformerFactory[ns].Apps().V1().ReplicaSets().Informer().AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
+			AddFunc:    p.handleRSAdd,
+			UpdateFunc: p.handleRSUpdate,
+			DeleteFunc: p.handleRSDelete,
+		})
+		p.podLister[ns] = podInformerFactory[ns].Core().V1().Pods().Lister()
+		p.podListerSynced[ns] = podInformerFactory[ns].Core().V1().Pods().Informer().HasSynced
+	}
+
 	p.logger.Info("pool pod controller handlers registered")
 	return p
 }
@@ -138,7 +140,7 @@ func (p *PoolPodController) processRS(rs *apps.ReplicaSet) {
 		return
 	}
 	rsLabelMap["managed"] = "false"
-	specializedPods, err := p.podLister.Pods(rs.Namespace).List(labels.SelectorFromSet(rsLabelMap))
+	specializedPods, err := p.podLister[rs.Namespace].Pods(rs.Namespace).List(labels.SelectorFromSet(rsLabelMap))
 	if err != nil {
 		logger.Error("Failed to list specialized pods", zap.Error(err))
 	}
@@ -233,7 +235,9 @@ func (p *PoolPodController) Run(ctx context.Context, stopCh <-chan struct{}) {
 	p.logger.Info("Waiting for informer caches to sync")
 
 	waitSynced := make([]k8sCache.InformerSynced, 0)
-	waitSynced = append(waitSynced, p.podListerSynced)
+	for _, ns := range p.nsResolver.FissionNSWithOptions(utils.WithBuilderNs(), utils.WithFunctionNs(), utils.WithDefaultNs()) {
+		waitSynced = append(waitSynced, p.podListerSynced[ns])
+	}
 	for _, synced := range p.envListerSynced {
 		waitSynced = append(waitSynced, synced)
 	}
@@ -373,7 +377,8 @@ func (p *PoolPodController) envDeleteQueueProcessFunc(ctx context.Context) bool 
 	p.logger.Debug("env delete request processing")
 	p.gpm.cleanupPool(ctx, env)
 	specializePodLables := getSpecializedPodLabels(env)
-	specializedPods, err := p.podLister.Pods(p.nsResolver.ResolveNamespace(p.nsResolver.FunctionNamespace)).List(labels.SelectorFromSet(specializePodLables))
+	ns := p.nsResolver.ResolveNamespace(p.nsResolver.FunctionNamespace)
+	specializedPods, err := p.podLister[ns].Pods(ns).List(labels.SelectorFromSet(specializePodLables))
 	if err != nil {
 		p.logger.Error("failed to list specialized pods", zap.Error(err))
 		p.envDeleteQueue.Forget(obj)
@@ -413,7 +418,7 @@ func (p *PoolPodController) spCleanupPodQueueProcessFunc(ctx context.Context) bo
 		p.spCleanupPodQueue.Forget(key)
 		return false
 	}
-	pod, err := p.podLister.Pods(namespace).Get(name)
+	pod, err := p.podLister[namespace].Pods(namespace).Get(name)
 	if apierrors.IsNotFound(err) {
 		p.logger.Info("pod not found", zap.String("key", key))
 		p.spCleanupPodQueue.Forget(key)

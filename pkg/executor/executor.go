@@ -29,8 +29,6 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	apiv1 "k8s.io/api/core/v1"
-	k8sInformers "k8s.io/client-go/informers"
-	k8sInformersv1 "k8s.io/client-go/informers/core/v1"
 	k8sCache "k8s.io/client-go/tools/cache"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -297,49 +295,49 @@ func StartExecutor(ctx context.Context, logger *zap.Logger, port int) error {
 		pkgInformer[ns] = factory.Core().V1().Packages()
 	}
 
-	gpmInformerFactory, err := utils.GetInformerFactoryByExecutor(kubernetesClient, fv1.ExecutorTypePoolmgr, time.Minute*30)
+	executorLabel, err := utils.GetInformerLabelByExecutor(fv1.ExecutorTypePoolmgr)
 	if err != nil {
 		return err
 	}
-	gpmPodInformer := gpmInformerFactory.Core().V1().Pods()
-	gpmRsInformer := gpmInformerFactory.Apps().V1().ReplicaSets()
+	gpmPodInformerFactory := utils.GetInformerFactoryByExecutor(kubernetesClient, executorLabel, time.Minute*30, fv1.Pods)
+	gpmRsInformerFactory := utils.GetInformerFactoryByExecutor(kubernetesClient, executorLabel, time.Minute*30, fv1.ReplicaSets)
 	gpm, err := poolmgr.MakeGenericPoolManager(ctx,
 		logger,
 		fissionClient, kubernetesClient, metricsClient,
 		fetcherConfig, executorInstanceID,
 		funcInformer, pkgInformer, envInformer,
-		gpmPodInformer, gpmRsInformer, podSpecPatch)
+		gpmPodInformerFactory, gpmRsInformerFactory, podSpecPatch)
 	if err != nil {
 		return errors.Wrap(err, "pool manager creation failed")
 	}
 
-	ndmInformerFactory, err := utils.GetInformerFactoryByExecutor(kubernetesClient, fv1.ExecutorTypeNewdeploy, time.Minute*30)
+	executorLabel, err = utils.GetInformerLabelByExecutor(fv1.ExecutorTypeNewdeploy)
 	if err != nil {
 		return err
 	}
-	ndmDeplInformer := ndmInformerFactory.Apps().V1().Deployments()
-	ndmSvcInformer := ndmInformerFactory.Core().V1().Services()
+	ndmDeplInformerFactory := utils.GetInformerFactoryByExecutor(kubernetesClient, executorLabel, time.Minute*30, fv1.Deployments)
+	ndmSvcInformerFactory := utils.GetInformerFactoryByExecutor(kubernetesClient, executorLabel, time.Minute*30, fv1.Services)
 	ndm, err := newdeploy.MakeNewDeploy(ctx,
 		logger,
 		fissionClient, kubernetesClient,
 		fetcherConfig, executorInstanceID,
 		funcInformer, envInformer,
-		ndmDeplInformer, ndmSvcInformer, podSpecPatch)
+		ndmDeplInformerFactory, ndmSvcInformerFactory, podSpecPatch)
 	if err != nil {
 		return errors.Wrap(err, "new deploy manager creation failed")
 	}
 
-	cnmInformerFactory, err := utils.GetInformerFactoryByExecutor(kubernetesClient, fv1.ExecutorTypeContainer, time.Minute*30)
+	executorLabel, err = utils.GetInformerLabelByExecutor(fv1.ExecutorTypeContainer)
 	if err != nil {
 		return err
 	}
-	cnmDeplInformer := cnmInformerFactory.Apps().V1().Deployments()
-	cnmSvcInformer := cnmInformerFactory.Core().V1().Services()
+	cnmDeplInformerFactory := utils.GetInformerFactoryByExecutor(kubernetesClient, executorLabel, time.Minute*30, fv1.Deployments)
+	cnmSvcInformerFactory := utils.GetInformerFactoryByExecutor(kubernetesClient, executorLabel, time.Minute*30, fv1.Services)
 	cnm, err := container.MakeContainer(
 		ctx, logger,
 		fissionClient, kubernetesClient,
 		executorInstanceID, funcInformer,
-		cnmDeplInformer, cnmSvcInformer)
+		cnmDeplInformerFactory, cnmSvcInformerFactory)
 	if err != nil {
 		return errors.Wrap(err, "container manager creation failed")
 	}
@@ -366,15 +364,8 @@ func StartExecutor(ctx context.Context, logger *zap.Logger, port int) error {
 	// TODO: use context to control the waiting time once kubernetes client supports it.
 	util.WaitTimeout(wg, 30*time.Second)
 
-	configMapInformer := make(map[string]k8sInformersv1.ConfigMapInformer, 0)
-	secretInformer := make(map[string]k8sInformersv1.SecretInformer, 0)
-
-	for _, ns := range utils.DefaultNSResolver().FissionResourceNS {
-		factory := k8sInformers.NewFilteredSharedInformerFactory(kubernetesClient, time.Minute*30, ns, nil)
-		configMapInformer[ns] = factory.Core().V1().ConfigMaps()
-		secretInformer[ns] = factory.Core().V1().Secrets()
-	}
-
+	configMapInformer := utils.GetK8sInformersForNamespaces(kubernetesClient, time.Minute*30, fv1.ConfigMaps)
+	secretInformer := utils.GetK8sInformersForNamespaces(kubernetesClient, time.Minute*30, fv1.Secrets)
 	cms := cms.MakeConfigSecretController(ctx, logger, fissionClient, kubernetesClient, executorTypes, configMapInformer, secretInformer)
 
 	fissionInformers := make([]k8sCache.SharedIndexInformer, 0)
@@ -388,20 +379,30 @@ func StartExecutor(ctx context.Context, logger *zap.Logger, port int) error {
 		fissionInformers = append(fissionInformers, informer.Informer())
 	}
 	for _, informer := range configMapInformer {
-		fissionInformers = append(fissionInformers, informer.Informer())
+		fissionInformers = append(fissionInformers, informer)
 	}
 	for _, informer := range secretInformer {
-		fissionInformers = append(fissionInformers, informer.Informer())
+		fissionInformers = append(fissionInformers, informer)
+	}
+	for _, informerFactory := range gpmPodInformerFactory {
+		fissionInformers = append(fissionInformers, informerFactory.Core().V1().Pods().Informer())
+	}
+	for _, informerFactory := range gpmRsInformerFactory {
+		fissionInformers = append(fissionInformers, informerFactory.Apps().V1().ReplicaSets().Informer())
+	}
+	for _, informerFactory := range ndmDeplInformerFactory {
+		fissionInformers = append(fissionInformers, informerFactory.Apps().V1().Deployments().Informer())
+	}
+	for _, informerFactory := range ndmSvcInformerFactory {
+		fissionInformers = append(fissionInformers, informerFactory.Core().V1().Services().Informer())
+	}
+	for _, informerFactory := range cnmDeplInformerFactory {
+		fissionInformers = append(fissionInformers, informerFactory.Apps().V1().Deployments().Informer())
+	}
+	for _, informerFactory := range cnmSvcInformerFactory {
+		fissionInformers = append(fissionInformers, informerFactory.Core().V1().Services().Informer())
 	}
 
-	fissionInformers = append(fissionInformers,
-		gpmPodInformer.Informer(),
-		gpmRsInformer.Informer(),
-		ndmDeplInformer.Informer(),
-		ndmSvcInformer.Informer(),
-		cnmDeplInformer.Informer(),
-		cnmSvcInformer.Informer(),
-	)
 	api, err := MakeExecutor(ctx, logger, cms, fissionClient, executorTypes,
 		fissionInformers...,
 	)
