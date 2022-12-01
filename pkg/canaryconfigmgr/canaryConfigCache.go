@@ -27,7 +27,7 @@ import (
 
 type (
 	canaryConfigCancelFuncMap struct {
-		cache cache.Store // map[metadataKey]*context.Context
+		cache cache.ThreadSafeStore // map[metadataKey]*context.Context
 	}
 
 	CanaryProcessingInfo struct {
@@ -38,33 +38,41 @@ type (
 
 func makecanaryConfigCancelFuncMap() *canaryConfigCancelFuncMap {
 	return &canaryConfigCancelFuncMap{
-		cache: cache.NewStore(cache.MetaNamespaceKeyFunc),
+		cache: cache.NewThreadSafeStore(cache.Indexers{}, cache.Indices{}),
 	}
 }
 
 func (cancelFuncMap *canaryConfigCancelFuncMap) lookup(f metav1.Object) (*CanaryProcessingInfo, error) {
-	item, exists, err := cancelFuncMap.cache.Get(f)
+	mk, err := cache.MetaNamespaceKeyFunc(f)
 	if err != nil {
 		return nil, err
 	}
+	item, exists := cancelFuncMap.cache.Get(mk)
 	if !exists {
-		return nil, fmt.Errorf("error looking up canaryConfig %s/%s", f.GetNamespace(), f.GetName())
+		return nil, fmt.Errorf("error looking up canaryConfig %s", mk)
 	}
 	value := item.(*CanaryProcessingInfo)
 	return value, nil
 }
 
 func (cancelFuncMap *canaryConfigCancelFuncMap) assign(f metav1.Object, value *CanaryProcessingInfo) error {
-	_, exists, err := cancelFuncMap.cache.Get(f)
+	mk, err := cache.MetaNamespaceKeyFunc(f)
 	if err != nil {
 		return err
 	}
+	_, exists := cancelFuncMap.cache.Get(mk)
 	if exists {
-		return fmt.Errorf("error assigning canaryConfig %s/%s", f.GetNamespace(), f.GetName())
+		return fmt.Errorf("error assigning canaryConfig %s", mk)
 	}
-	return cancelFuncMap.cache.Add(f)
+	cancelFuncMap.cache.Add(mk, value)
+	return nil
 }
 
 func (cancelFuncMap *canaryConfigCancelFuncMap) remove(f metav1.Object) error {
-	return cancelFuncMap.cache.Delete(f)
+	mk, err := cache.MetaNamespaceKeyFunc(f)
+	if err != nil {
+		return err
+	}
+	cancelFuncMap.cache.Delete(mk)
+	return nil
 }
