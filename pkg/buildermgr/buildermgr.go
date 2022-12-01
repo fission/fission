@@ -23,7 +23,6 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	apiv1 "k8s.io/api/core/v1"
-	k8sInformers "k8s.io/client-go/informers"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
@@ -65,10 +64,9 @@ func Start(ctx context.Context, logger *zap.Logger, storageSvcUrl string) error 
 	envWatcher := makeEnvironmentWatcher(ctx, bmLogger, fissionClient, kubernetesClient, fetcherConfig, podSpecPatch)
 	envWatcher.Run(ctx)
 
-	k8sInformerFactory := k8sInformers.NewSharedInformerFactory(kubernetesClient, time.Minute*30)
-	podInformer := k8sInformerFactory.Core().V1().Pods().Informer()
 	pkgWatcher := makePackageWatcher(bmLogger, fissionClient,
-		kubernetesClient, storageSvcUrl, podInformer,
+		kubernetesClient, storageSvcUrl,
+		utils.GetK8sInformersForNamespaces(kubernetesClient, time.Minute*30, fv1.Pods),
 		utils.GetInformersForNamespaces(fissionClient, time.Minute*30, fv1.PackagesResource))
 	pkgWatcher.Run(ctx)
 	return nil
