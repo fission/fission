@@ -55,13 +55,12 @@ func TestRefreshFuncPods(t *testing.T) {
 	envInformer := map[string]finformerv1.EnvironmentInformer{
 		metav1.NamespaceAll: informerFactory.Core().V1().Environments(),
 	}
-	newDeployInformerFactory, err := utils.GetInformerFactoryByExecutor(kubernetesClient, fv1.ExecutorTypeNewdeploy, time.Minute*30)
-	if err != nil {
-		t.Fatalf("Error creating informer factory: %s", err)
-	}
 
-	deployInformer := newDeployInformerFactory.Apps().V1().Deployments()
-	svcInformer := newDeployInformerFactory.Core().V1().Services()
+	executorLabel, err := utils.GetInformerLabelByExecutor(fv1.ExecutorTypeNewdeploy)
+	if err != nil {
+		t.Fatalf("Error creating labels for informer: %s", err)
+	}
+	ndmInformerFactory := utils.GetInformerFactoryByExecutor(kubernetesClient, executorLabel, time.Minute*30)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -82,7 +81,7 @@ func TestRefreshFuncPods(t *testing.T) {
 	}
 
 	executor, err := MakeNewDeploy(ctx, logger, fissionClient, kubernetesClient, fetcherConfig, "test",
-		funcInformer, envInformer, deployInformer, svcInformer, podSpecPatch)
+		funcInformer, envInformer, ndmInformerFactory, podSpecPatch)
 	if err != nil {
 		t.Fatalf("new deploy manager creation failed: %s", err)
 	}
@@ -99,15 +98,27 @@ func TestRefreshFuncPods(t *testing.T) {
 	go ndm.Run(ctx)
 	t.Log("New deploy manager started")
 
-	runInformers(ctx, []k8sCache.SharedIndexInformer{
+	informer := []k8sCache.SharedIndexInformer{
 		envInformer[metav1.NamespaceAll].Informer(),
 		funcInformer[metav1.NamespaceAll].Informer(),
-		deployInformer.Informer(),
-		svcInformer.Informer(),
-	})
+	}
+	for _, informerFactory := range ndmInformerFactory {
+		informer = append(informer, informerFactory.Apps().V1().Deployments().Informer())
+		informer = append(informer, informerFactory.Core().V1().Services().Informer())
+	}
+
+	runInformers(ctx, informer)
 	t.Log("Informers required for new deploy manager started")
 
-	if ok := k8sCache.WaitForCacheSync(ctx.Done(), ndm.deplListerSynced, ndm.svcListerSynced); !ok {
+	waitSynced := make([]k8sCache.InformerSynced, 0)
+	for _, deplListerSynced := range ndm.deplListerSynced {
+		waitSynced = append(waitSynced, deplListerSynced)
+	}
+	for _, svcListerSynced := range ndm.svcListerSynced {
+		waitSynced = append(waitSynced, svcListerSynced)
+	}
+
+	if ok := k8sCache.WaitForCacheSync(ctx.Done(), waitSynced...); !ok {
 		t.Fatal("Timed out waiting for caches to sync")
 	}
 

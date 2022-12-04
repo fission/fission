@@ -21,8 +21,8 @@ import (
 
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	informerv1 "k8s.io/client-go/informers/core/v1"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/cache"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/executor/executortype"
@@ -41,18 +41,18 @@ type (
 // MakeConfigSecretController makes a controller for configmaps and secrets which changes related functions
 func MakeConfigSecretController(ctx context.Context, logger *zap.Logger, fissionClient versioned.Interface,
 	kubernetesClient kubernetes.Interface, types map[fv1.ExecutorType]executortype.ExecutorType,
-	configmapInformer map[string]informerv1.ConfigMapInformer,
-	secretInformer map[string]informerv1.SecretInformer) *ConfigSecretController {
+	configmapInformer,
+	secretInformer map[string]cache.SharedIndexInformer) *ConfigSecretController {
 	logger.Debug("Creating ConfigMap & Secret Controller")
 	cmsController := &ConfigSecretController{
 		logger:        logger,
 		fissionClient: fissionClient,
 	}
 	for _, informer := range configmapInformer {
-		informer.Informer().AddEventHandler(ConfigMapEventHandlers(ctx, logger, fissionClient, kubernetesClient, types))
+		informer.AddEventHandler(ConfigMapEventHandlers(ctx, logger, fissionClient, kubernetesClient, types))
 	}
 	for _, informer := range secretInformer {
-		informer.Informer().AddEventHandler(SecretEventHandlers(ctx, logger, fissionClient, kubernetesClient, types))
+		informer.AddEventHandler(SecretEventHandlers(ctx, logger, fissionClient, kubernetesClient, types))
 	}
 
 	return cmsController

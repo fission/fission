@@ -36,8 +36,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
-	appsinformers "k8s.io/client-go/informers/apps/v1"
-	coreinformers "k8s.io/client-go/informers/core/v1"
+	k8sInformers "k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	appslisters "k8s.io/client-go/listers/apps/v1"
 	corelisters "k8s.io/client-go/listers/core/v1"
@@ -83,11 +82,11 @@ type (
 
 		defaultIdlePodReapTime time.Duration
 
-		deplLister appslisters.DeploymentLister
-		svcLister  corelisters.ServiceLister
+		deplLister map[string]appslisters.DeploymentLister
+		svcLister  map[string]corelisters.ServiceLister
 
-		deplListerSynced k8sCache.InformerSynced
-		svcListerSynced  k8sCache.InformerSynced
+		deplListerSynced map[string]k8sCache.InformerSynced
+		svcListerSynced  map[string]k8sCache.InformerSynced
 
 		hpaops *hpautils.HpaOperations
 
@@ -106,8 +105,7 @@ func MakeNewDeploy(
 	instanceID string,
 	funcInformer map[string]finformerv1.FunctionInformer,
 	envInformer map[string]finformerv1.EnvironmentInformer,
-	deplInformer appsinformers.DeploymentInformer,
-	svcInformer coreinformers.ServiceInformer,
+	ndmInformerFactory map[string]k8sInformers.SharedInformerFactory,
 	podSpecPatch *apiv1.PodSpec,
 ) (executortype.ExecutorType, error) {
 	enableIstio := false
@@ -137,15 +135,19 @@ func MakeNewDeploy(
 		objectReaperIntervalSecond: time.Duration(executorUtils.GetObjectReaperInterval(logger, fv1.ExecutorTypeNewdeploy, 5)) * time.Second,
 		hpaops:                     hpautils.NewHpaOperations(logger, kubernetesClient, instanceID),
 
-		podSpecPatch: podSpecPatch,
+		podSpecPatch:     podSpecPatch,
+		deplLister:       make(map[string]appslisters.DeploymentLister),
+		deplListerSynced: make(map[string]k8sCache.InformerSynced),
+		svcLister:        make(map[string]corelisters.ServiceLister),
+		svcListerSynced:  make(map[string]k8sCache.InformerSynced),
 	}
 
-	nd.deplLister = deplInformer.Lister()
-	nd.deplListerSynced = deplInformer.Informer().HasSynced
-
-	nd.svcLister = svcInformer.Lister()
-	nd.svcListerSynced = svcInformer.Informer().HasSynced
-
+	for ns, informerFactory := range ndmInformerFactory {
+		nd.deplLister[ns] = informerFactory.Apps().V1().Deployments().Lister()
+		nd.deplListerSynced[ns] = informerFactory.Apps().V1().Deployments().Informer().HasSynced
+		nd.svcLister[ns] = informerFactory.Core().V1().Services().Lister()
+		nd.svcListerSynced[ns] = informerFactory.Core().V1().Services().Informer().HasSynced
+	}
 	for _, fnInformer := range funcInformer {
 		fnInformer.Informer().AddEventHandler(nd.FunctionEventHandlers(ctx))
 	}
@@ -157,7 +159,15 @@ func MakeNewDeploy(
 
 // Run start the function and environment controller along with an object reaper.
 func (deploy *NewDeploy) Run(ctx context.Context) {
-	if ok := k8sCache.WaitForCacheSync(ctx.Done(), deploy.deplListerSynced, deploy.svcListerSynced); !ok {
+	waitSynced := make([]k8sCache.InformerSynced, 0)
+	for _, deplListerSynced := range deploy.deplListerSynced {
+		waitSynced = append(waitSynced, deplListerSynced)
+	}
+	for _, svcListerSynced := range deploy.svcListerSynced {
+		waitSynced = append(waitSynced, svcListerSynced)
+	}
+
+	if ok := k8sCache.WaitForCacheSync(ctx.Done(), waitSynced...); !ok {
 		deploy.logger.Fatal("failed to wait for caches to sync")
 	}
 	go deploy.idleObjectReaper(ctx)
@@ -222,7 +232,7 @@ func (deploy *NewDeploy) IsValid(ctx context.Context, fsvc *fscache.FuncSvc) boo
 	}
 	for _, obj := range fsvc.KubernetesObjects {
 		if strings.ToLower(obj.Kind) == "service" {
-			_, err := deploy.svcLister.Services(obj.Namespace).Get(obj.Name)
+			_, err := deploy.svcLister[obj.Namespace].Services(obj.Namespace).Get(obj.Name)
 			if err != nil {
 				if !k8sErrs.IsNotFound(err) {
 					logger.Error("error validating function service", zap.String("function", fsvc.Function.Name), zap.Error(err))
@@ -231,7 +241,7 @@ func (deploy *NewDeploy) IsValid(ctx context.Context, fsvc *fscache.FuncSvc) boo
 			}
 
 		} else if strings.ToLower(obj.Kind) == "deployment" {
-			currentDeploy, err := deploy.deplLister.Deployments(obj.Namespace).Get(obj.Name)
+			currentDeploy, err := deploy.deplLister[obj.Namespace].Deployments(obj.Namespace).Get(obj.Name)
 			if err != nil {
 				if !k8sErrs.IsNotFound(err) {
 					logger.Error("error validating function deployment", zap.String("function", fsvc.Function.Name), zap.Error(err))

@@ -69,6 +69,22 @@ func GetK8sInformersForNamespaces(client kubernetes.Interface, defaultSync time.
 	return informers
 }
 
+func GetInformerFactoryByExecutor(client kubernetes.Interface, labels labels.Selector, defaultResync time.Duration) map[string]k8sInformers.SharedInformerFactory {
+	informerFactory := make(map[string]k8sInformers.SharedInformerFactory)
+
+	namespaces := DefaultNSResolver()
+	for _, ns := range namespaces.FissionNSWithOptions(WithBuilderNs(), WithFunctionNs(), WithDefaultNs()) {
+		factory := k8sInformers.NewSharedInformerFactoryWithOptions(client, defaultResync,
+			k8sInformers.WithTweakListOptions(func(options *metav1.ListOptions) {
+				options.LabelSelector = labels.String()
+			}),
+			k8sInformers.WithNamespace(ns))
+
+		informerFactory[ns] = factory
+	}
+	return informerFactory
+}
+
 func GetInformerFactoryByReadyPod(client kubernetes.Interface, namespace string, labelSelector *metav1.LabelSelector) (k8sInformers.SharedInformerFactory, error) {
 	informerFactory := k8sInformers.NewSharedInformerFactoryWithOptions(client, 0,
 		k8sInformers.WithNamespace(namespace),
@@ -79,20 +95,16 @@ func GetInformerFactoryByReadyPod(client kubernetes.Interface, namespace string,
 	return informerFactory, nil
 }
 
-func GetInformerFactoryByExecutor(client kubernetes.Interface, executorType fv1.ExecutorType, defaultResync time.Duration) (k8sInformers.SharedInformerFactory, error) {
+func GetInformerLabelByExecutor(executorType fv1.ExecutorType) (labels.Selector, error) {
 	executorLabel, err := labels.NewRequirement(fv1.EXECUTOR_TYPE, selection.DoubleEquals, []string{string(executorType)})
 	if err != nil {
 		return nil, err
 	}
 	labelSelector := labels.NewSelector()
 	labelSelector.Add(*executorLabel)
-	informerFactory := k8sInformers.NewSharedInformerFactoryWithOptions(client, defaultResync,
-		k8sInformers.WithTweakListOptions(func(options *metav1.ListOptions) {
-			options.LabelSelector = labelSelector.String()
-		}))
-	return informerFactory, nil
-}
 
+	return labelSelector, nil
+}
 func SupportedMetricsAPIVersionAvailable(discoveredAPIGroups *metav1.APIGroupList) bool {
 	var supportedMetricsAPIVersions = []string{
 		"v1beta1",
