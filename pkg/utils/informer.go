@@ -69,7 +69,7 @@ func GetK8sInformersForNamespaces(client kubernetes.Interface, defaultSync time.
 	return informers
 }
 
-func GetInformerFactoryByExecutor(client kubernetes.Interface, labels labels.Selector, defaultResync time.Duration, kind string) map[string]k8sInformers.SharedInformerFactory {
+func GetInformerFactoryByExecutor(client kubernetes.Interface, labels labels.Selector, defaultResync time.Duration) map[string]k8sInformers.SharedInformerFactory {
 	informerFactory := make(map[string]k8sInformers.SharedInformerFactory)
 
 	namespaces := DefaultNSResolver()

@@ -299,14 +299,13 @@ func StartExecutor(ctx context.Context, logger *zap.Logger, port int) error {
 	if err != nil {
 		return err
 	}
-	gpmPodInformerFactory := utils.GetInformerFactoryByExecutor(kubernetesClient, executorLabel, time.Minute*30, fv1.Pods)
-	gpmRsInformerFactory := utils.GetInformerFactoryByExecutor(kubernetesClient, executorLabel, time.Minute*30, fv1.ReplicaSets)
+	gpmInformerFactory := utils.GetInformerFactoryByExecutor(kubernetesClient, executorLabel, time.Minute*30)
 	gpm, err := poolmgr.MakeGenericPoolManager(ctx,
 		logger,
 		fissionClient, kubernetesClient, metricsClient,
 		fetcherConfig, executorInstanceID,
 		funcInformer, pkgInformer, envInformer,
-		gpmPodInformerFactory, gpmRsInformerFactory, podSpecPatch)
+		gpmInformerFactory, podSpecPatch)
 	if err != nil {
 		return errors.Wrap(err, "pool manager creation failed")
 	}
@@ -315,14 +314,13 @@ func StartExecutor(ctx context.Context, logger *zap.Logger, port int) error {
 	if err != nil {
 		return err
 	}
-	ndmDeplInformerFactory := utils.GetInformerFactoryByExecutor(kubernetesClient, executorLabel, time.Minute*30, fv1.Deployments)
-	ndmSvcInformerFactory := utils.GetInformerFactoryByExecutor(kubernetesClient, executorLabel, time.Minute*30, fv1.Services)
+	ndmInformerFactory := utils.GetInformerFactoryByExecutor(kubernetesClient, executorLabel, time.Minute*30)
 	ndm, err := newdeploy.MakeNewDeploy(ctx,
 		logger,
 		fissionClient, kubernetesClient,
 		fetcherConfig, executorInstanceID,
 		funcInformer, envInformer,
-		ndmDeplInformerFactory, ndmSvcInformerFactory, podSpecPatch)
+		ndmInformerFactory, podSpecPatch)
 	if err != nil {
 		return errors.Wrap(err, "new deploy manager creation failed")
 	}
@@ -331,13 +329,12 @@ func StartExecutor(ctx context.Context, logger *zap.Logger, port int) error {
 	if err != nil {
 		return err
 	}
-	cnmDeplInformerFactory := utils.GetInformerFactoryByExecutor(kubernetesClient, executorLabel, time.Minute*30, fv1.Deployments)
-	cnmSvcInformerFactory := utils.GetInformerFactoryByExecutor(kubernetesClient, executorLabel, time.Minute*30, fv1.Services)
+	cnmInformerFactory := utils.GetInformerFactoryByExecutor(kubernetesClient, executorLabel, time.Minute*30)
 	cnm, err := container.MakeContainer(
 		ctx, logger,
 		fissionClient, kubernetesClient,
 		executorInstanceID, funcInformer,
-		cnmDeplInformerFactory, cnmSvcInformerFactory)
+		cnmInformerFactory)
 	if err != nil {
 		return errors.Wrap(err, "container manager creation failed")
 	}
@@ -384,22 +381,16 @@ func StartExecutor(ctx context.Context, logger *zap.Logger, port int) error {
 	for _, informer := range secretInformer {
 		fissionInformers = append(fissionInformers, informer)
 	}
-	for _, informerFactory := range gpmPodInformerFactory {
+	for _, informerFactory := range gpmInformerFactory {
 		fissionInformers = append(fissionInformers, informerFactory.Core().V1().Pods().Informer())
-	}
-	for _, informerFactory := range gpmRsInformerFactory {
 		fissionInformers = append(fissionInformers, informerFactory.Apps().V1().ReplicaSets().Informer())
 	}
-	for _, informerFactory := range ndmDeplInformerFactory {
+	for _, informerFactory := range ndmInformerFactory {
 		fissionInformers = append(fissionInformers, informerFactory.Apps().V1().Deployments().Informer())
-	}
-	for _, informerFactory := range ndmSvcInformerFactory {
 		fissionInformers = append(fissionInformers, informerFactory.Core().V1().Services().Informer())
 	}
-	for _, informerFactory := range cnmDeplInformerFactory {
+	for _, informerFactory := range cnmInformerFactory {
 		fissionInformers = append(fissionInformers, informerFactory.Apps().V1().Deployments().Informer())
-	}
-	for _, informerFactory := range cnmSvcInformerFactory {
 		fissionInformers = append(fissionInformers, informerFactory.Core().V1().Services().Informer())
 	}
 

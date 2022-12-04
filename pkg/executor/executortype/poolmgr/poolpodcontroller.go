@@ -73,8 +73,7 @@ func NewPoolPodController(ctx context.Context, logger *zap.Logger,
 	funcInformer map[string]finformerv1.FunctionInformer,
 	pkgInformer map[string]finformerv1.PackageInformer,
 	envInformer map[string]finformerv1.EnvironmentInformer,
-	rsInformerFactory,
-	podInformerFactory map[string]k8sInformers.SharedInformerFactory) *PoolPodController {
+	gpmInformerFactory map[string]k8sInformers.SharedInformerFactory) *PoolPodController {
 	logger = logger.Named("pool_pod_controller")
 	p := &PoolPodController{
 		logger:               logger,
@@ -83,6 +82,8 @@ func NewPoolPodController(ctx context.Context, logger *zap.Logger,
 		enableIstio:          enableIstio,
 		envLister:            make(map[string]flisterv1.EnvironmentLister, 0),
 		envListerSynced:      make(map[string]k8sCache.InformerSynced, 0),
+		podLister:            make(map[string]corelisters.PodLister),
+		podListerSynced:      make(map[string]k8sCache.InformerSynced),
 		envCreateUpdateQueue: workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "EnvAddUpdateQueue"),
 		envDeleteQueue:       workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "EnvDeleteQueue"),
 		spCleanupPodQueue:    workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "SpecializedPodCleanupQueue"),
@@ -102,15 +103,14 @@ func NewPoolPodController(ctx context.Context, logger *zap.Logger,
 		p.envLister[ns] = informer.Lister()
 		p.envListerSynced[ns] = informer.Informer().HasSynced
 	}
-
-	for _, ns := range p.nsResolver.FissionNSWithOptions(utils.WithBuilderNs(), utils.WithFunctionNs(), utils.WithDefaultNs()) {
-		rsInformerFactory[ns].Apps().V1().ReplicaSets().Informer().AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
+	for ns, informerFactory := range gpmInformerFactory {
+		informerFactory.Apps().V1().ReplicaSets().Informer().AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
 			AddFunc:    p.handleRSAdd,
 			UpdateFunc: p.handleRSUpdate,
 			DeleteFunc: p.handleRSDelete,
 		})
-		p.podLister[ns] = podInformerFactory[ns].Core().V1().Pods().Lister()
-		p.podListerSynced[ns] = podInformerFactory[ns].Core().V1().Pods().Informer().HasSynced
+		p.podLister[ns] = informerFactory.Core().V1().Pods().Lister()
+		p.podListerSynced[ns] = informerFactory.Core().V1().Pods().Informer().HasSynced
 	}
 
 	p.logger.Info("pool pod controller handlers registered")
@@ -235,8 +235,8 @@ func (p *PoolPodController) Run(ctx context.Context, stopCh <-chan struct{}) {
 	p.logger.Info("Waiting for informer caches to sync")
 
 	waitSynced := make([]k8sCache.InformerSynced, 0)
-	for _, ns := range p.nsResolver.FissionNSWithOptions(utils.WithBuilderNs(), utils.WithFunctionNs(), utils.WithDefaultNs()) {
-		waitSynced = append(waitSynced, p.podListerSynced[ns])
+	for _, synced := range p.podListerSynced {
+		waitSynced = append(waitSynced, synced)
 	}
 	for _, synced := range p.envListerSynced {
 		waitSynced = append(waitSynced, synced)

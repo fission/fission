@@ -61,19 +61,17 @@ func TestPoolPodControllerPodCleanup(t *testing.T) {
 		metav1.NamespaceAll: informerFactory.Core().V1().Environments(),
 	}
 
-	gpmInformerFactory, err := utils.GetInformerFactoryByExecutor(kubernetesClient, fv1.ExecutorTypePoolmgr, time.Minute*30)
+	executorLabel, err := utils.GetInformerLabelByExecutor(fv1.ExecutorTypePoolmgr)
 	if err != nil {
-		t.Fatalf("Error creating informer factory: %v", err)
+		t.Fatalf("Error creating labels for informer: %v", err)
 	}
-	gpmPodInformer := gpmInformerFactory.Core().V1().Pods()
-	gpmRsInformer := gpmInformerFactory.Apps().V1().ReplicaSets()
+	gpmInformerFactory := utils.GetInformerFactoryByExecutor(kubernetesClient, executorLabel, time.Minute*30)
 
 	ppc := NewPoolPodController(ctx, logger, kubernetesClient, false,
 		funcInformer,
 		pkgInformer,
 		envInformer,
-		gpmRsInformer,
-		gpmPodInformer)
+		gpmInformerFactory)
 
 	executorInstanceID := strings.ToLower(uniuri.NewLen(8))
 	metricsClient := metricsclient.NewSimpleClientset()
@@ -86,7 +84,7 @@ func TestPoolPodControllerPodCleanup(t *testing.T) {
 		fissionClient, kubernetesClient, metricsClient,
 		fetcherConfig, executorInstanceID,
 		funcInformer, pkgInformer, envInformer,
-		gpmPodInformer, gpmRsInformer, nil)
+		gpmInformerFactory, nil)
 	if err != nil {
 		t.Fatalf("Error creating generic pool manager: %v", err)
 	}
@@ -95,15 +93,18 @@ func TestPoolPodControllerPodCleanup(t *testing.T) {
 
 	go ppc.Run(ctx, ctx.Done())
 
-	podInformer := gpmPodInformer.Informer()
-
-	runInformers(ctx, []k8sCache.SharedIndexInformer{
+	informers := []k8sCache.SharedIndexInformer{
 		funcInformer[metav1.NamespaceAll].Informer(),
 		pkgInformer[metav1.NamespaceAll].Informer(),
 		envInformer[metav1.NamespaceAll].Informer(),
-		podInformer,
-		gpmRsInformer.Informer(),
-	})
+	}
+
+	for _, informerFactory := range gpmInformerFactory {
+		informers = append(informers, informerFactory.Core().V1().Pods().Informer())
+		informers = append(informers, informerFactory.Apps().V1().ReplicaSets().Informer())
+	}
+
+	runInformers(ctx, informers)
 
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -124,7 +125,7 @@ func TestPoolPodControllerPodCleanup(t *testing.T) {
 	found := false
 	for found == false && time.Since(start) < time.Second*5 {
 		t.Log("Waiting for pod to be added to pool")
-		pod, err := ppc.podLister.Pods(pod.Namespace).Get(pod.Name)
+		pod, err := ppc.podLister[pod.Namespace].Pods(pod.Namespace).Get(pod.Name)
 		if err == nil {
 			found = true
 			t.Logf("Found pod %#v", pod.ObjectMeta)

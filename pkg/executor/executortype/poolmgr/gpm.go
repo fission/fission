@@ -122,7 +122,7 @@ func MakeGenericPoolManager(ctx context.Context,
 	funcInformer map[string]finformerv1.FunctionInformer,
 	pkgInformer map[string]finformerv1.PackageInformer,
 	envInformer map[string]finformerv1.EnvironmentInformer,
-	podInformerFactory, rsInformerFactory map[string]k8sInformers.SharedInformerFactory,
+	gpmInformerFactory map[string]k8sInformers.SharedInformerFactory,
 	podSpecPatch *apiv1.PodSpec,
 ) (executortype.ExecutorType, error) {
 
@@ -138,7 +138,7 @@ func MakeGenericPoolManager(ctx context.Context,
 	}
 
 	poolPodC := NewPoolPodController(ctx, gpmLogger, kubernetesClient,
-		enableIstio, funcInformer, pkgInformer, envInformer, rsInformerFactory, podInformerFactory)
+		enableIstio, funcInformer, pkgInformer, envInformer, gpmInformerFactory)
 
 	gpm := &GenericPoolManager{
 		logger:                     gpmLogger,
@@ -157,11 +157,12 @@ func MakeGenericPoolManager(ctx context.Context,
 		poolPodC:                   poolPodC,
 		podSpecPatch:               podSpecPatch,
 		objectReaperIntervalSecond: time.Duration(executorUtils.GetObjectReaperInterval(logger, fv1.ExecutorTypePoolmgr, 5)) * time.Second,
+		podLister:                  make(map[string]corelisters.PodLister),
+		podListerSynced:            make(map[string]k8sCache.InformerSynced),
 	}
-
-	for _, ns := range gpm.nsResolver.FissionNSWithOptions(utils.WithBuilderNs(), utils.WithFunctionNs(), utils.WithDefaultNs()) {
-		gpm.podLister[ns] = podInformerFactory[ns].Core().V1().Pods().Lister()
-		gpm.podListerSynced[ns] = podInformerFactory[ns].Core().V1().Pods().Informer().HasSynced
+	for ns, informerFactory := range gpmInformerFactory {
+		gpm.podLister[ns] = informerFactory.Core().V1().Pods().Lister()
+		gpm.podListerSynced[ns] = informerFactory.Core().V1().Pods().Informer().HasSynced
 	}
 
 	gpm.logger.Debug("inside MakeGenericPoolManager")
@@ -170,8 +171,8 @@ func MakeGenericPoolManager(ctx context.Context,
 }
 
 func (gpm *GenericPoolManager) Run(ctx context.Context) {
-	for _, ns := range gpm.nsResolver.FissionNSWithOptions(utils.WithBuilderNs(), utils.WithFunctionNs(), utils.WithDefaultNs()) {
-		if ok := k8sCache.WaitForCacheSync(ctx.Done(), gpm.podListerSynced[ns]); !ok {
+	for _, podListerSynced := range gpm.podListerSynced {
+		if ok := k8sCache.WaitForCacheSync(ctx.Done(), podListerSynced); !ok {
 			gpm.logger.Fatal("failed to wait for caches to sync")
 		}
 	}

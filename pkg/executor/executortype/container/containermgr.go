@@ -99,7 +99,7 @@ func MakeContainer(
 	kubernetesClient kubernetes.Interface,
 	instanceID string,
 	funcInformer map[string]finformerv1.FunctionInformer,
-	deplInformerFactory, svcInformerFactory map[string]k8sInformers.SharedInformerFactory,
+	cnmInformerFactory map[string]k8sInformers.SharedInformerFactory,
 ) (executortype.ExecutorType, error) {
 	enableIstio := false
 	if len(os.Getenv("ENABLE_ISTIO")) > 0 {
@@ -127,16 +127,18 @@ func MakeContainer(
 		defaultIdlePodReapTime:     1 * time.Minute,
 		objectReaperIntervalSecond: time.Duration(executorUtils.GetObjectReaperInterval(logger, fv1.ExecutorTypeContainer, 5)) * time.Second,
 		hpaops:                     hpautils.NewHpaOperations(logger, kubernetesClient, instanceID),
+		deplLister:                 make(map[string]appslisters.DeploymentLister),
+		deplListerSynced:           make(map[string]k8sCache.InformerSynced),
+		svcLister:                  make(map[string]corelisters.ServiceLister),
+		svcListerSynced:            make(map[string]k8sCache.InformerSynced),
 	}
 
-	for _, ns := range caaf.nsResolver.FissionNSWithOptions(utils.WithBuilderNs(), utils.WithFunctionNs(), utils.WithDefaultNs()) {
-		caaf.deplLister[ns] = deplInformerFactory[ns].Apps().V1().Deployments().Lister()
-		caaf.deplListerSynced[ns] = deplInformerFactory[ns].Apps().V1().Deployments().Informer().HasSynced
-
-		caaf.svcLister[ns] = svcInformerFactory[ns].Core().V1().Services().Lister()
-		caaf.deplListerSynced[ns] = svcInformerFactory[ns].Core().V1().Services().Informer().HasSynced
+	for ns, informerFactory := range cnmInformerFactory {
+		caaf.deplLister[ns] = informerFactory.Apps().V1().Deployments().Lister()
+		caaf.deplListerSynced[ns] = informerFactory.Apps().V1().Deployments().Informer().HasSynced
+		caaf.svcLister[ns] = informerFactory.Core().V1().Services().Lister()
+		caaf.svcListerSynced[ns] = informerFactory.Core().V1().Services().Informer().HasSynced
 	}
-
 	for _, informer := range funcInformer {
 		informer.Informer().AddEventHandler(caaf.FuncInformerHandler(ctx))
 	}
@@ -145,10 +147,16 @@ func MakeContainer(
 
 // Run start the function along with an object reaper.
 func (caaf *Container) Run(ctx context.Context) {
-	for _, ns := range caaf.nsResolver.FissionNSWithOptions(utils.WithBuilderNs(), utils.WithFunctionNs(), utils.WithDefaultNs()) {
-		if ok := k8sCache.WaitForCacheSync(ctx.Done(), caaf.deplListerSynced[ns], caaf.svcListerSynced[ns]); !ok {
-			caaf.logger.Fatal("failed to wait for caches to sync")
-		}
+	waitSynced := make([]k8sCache.InformerSynced, 0)
+	for _, deplListerSynced := range caaf.deplListerSynced {
+		waitSynced = append(waitSynced, deplListerSynced)
+	}
+	for _, svcListerSynced := range caaf.svcListerSynced {
+		waitSynced = append(waitSynced, svcListerSynced)
+	}
+
+	if ok := k8sCache.WaitForCacheSync(ctx.Done(), waitSynced...); !ok {
+		caaf.logger.Fatal("failed to wait for caches to sync")
 	}
 	go caaf.idleObjectReaper(ctx)
 }

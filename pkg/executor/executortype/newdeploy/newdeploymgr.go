@@ -105,7 +105,7 @@ func MakeNewDeploy(
 	instanceID string,
 	funcInformer map[string]finformerv1.FunctionInformer,
 	envInformer map[string]finformerv1.EnvironmentInformer,
-	deplInformerFactory, svcInformerFactory map[string]k8sInformers.SharedInformerFactory,
+	ndmInformerFactory map[string]k8sInformers.SharedInformerFactory,
 	podSpecPatch *apiv1.PodSpec,
 ) (executortype.ExecutorType, error) {
 	enableIstio := false
@@ -135,17 +135,19 @@ func MakeNewDeploy(
 		objectReaperIntervalSecond: time.Duration(executorUtils.GetObjectReaperInterval(logger, fv1.ExecutorTypeNewdeploy, 5)) * time.Second,
 		hpaops:                     hpautils.NewHpaOperations(logger, kubernetesClient, instanceID),
 
-		podSpecPatch: podSpecPatch,
+		podSpecPatch:     podSpecPatch,
+		deplLister:       make(map[string]appslisters.DeploymentLister),
+		deplListerSynced: make(map[string]k8sCache.InformerSynced),
+		svcLister:        make(map[string]corelisters.ServiceLister),
+		svcListerSynced:  make(map[string]k8sCache.InformerSynced),
 	}
 
-	for _, ns := range nd.nsResolver.FissionNSWithOptions(utils.WithBuilderNs(), utils.WithFunctionNs(), utils.WithDefaultNs()) {
-		nd.deplLister[ns] = deplInformerFactory[ns].Apps().V1().Deployments().Lister()
-		nd.deplListerSynced[ns] = deplInformerFactory[ns].Apps().V1().Deployments().Informer().HasSynced
-
-		nd.svcLister[ns] = svcInformerFactory[ns].Core().V1().Services().Lister()
-		nd.deplListerSynced[ns] = svcInformerFactory[ns].Core().V1().Services().Informer().HasSynced
+	for ns, informerFactory := range ndmInformerFactory {
+		nd.deplLister[ns] = informerFactory.Apps().V1().Deployments().Lister()
+		nd.deplListerSynced[ns] = informerFactory.Apps().V1().Deployments().Informer().HasSynced
+		nd.svcLister[ns] = informerFactory.Core().V1().Services().Lister()
+		nd.svcListerSynced[ns] = informerFactory.Core().V1().Services().Informer().HasSynced
 	}
-
 	for _, fnInformer := range funcInformer {
 		fnInformer.Informer().AddEventHandler(nd.FunctionEventHandlers(ctx))
 	}
@@ -157,10 +159,16 @@ func MakeNewDeploy(
 
 // Run start the function and environment controller along with an object reaper.
 func (deploy *NewDeploy) Run(ctx context.Context) {
-	for _, ns := range deploy.nsResolver.FissionNSWithOptions(utils.WithBuilderNs(), utils.WithFunctionNs(), utils.WithDefaultNs()) {
-		if ok := k8sCache.WaitForCacheSync(ctx.Done(), deploy.deplListerSynced[ns], deploy.svcListerSynced[ns]); !ok {
-			deploy.logger.Fatal("failed to wait for caches to sync")
-		}
+	waitSynced := make([]k8sCache.InformerSynced, 0)
+	for _, deplListerSynced := range deploy.deplListerSynced {
+		waitSynced = append(waitSynced, deplListerSynced)
+	}
+	for _, svcListerSynced := range deploy.svcListerSynced {
+		waitSynced = append(waitSynced, svcListerSynced)
+	}
+
+	if ok := k8sCache.WaitForCacheSync(ctx.Done(), waitSynced...); !ok {
+		deploy.logger.Fatal("failed to wait for caches to sync")
 	}
 	go deploy.idleObjectReaper(ctx)
 }
