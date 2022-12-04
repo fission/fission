@@ -1,7 +1,7 @@
 ####################################
 # This file can be used with Skaffold (https://github.com/GoogleContainerTools/skaffold) to
 # build and deploy Fission to Kubernetes cluster.
-# Skaffold version v2.0.2 is used for this configuration.
+# Skaffold version v2.0.3 is used for this configuration.
 ############## Usage ##############
 # Skaffold CLI should be installed on your machine.
 # For building & deploying to Cloud Provider
