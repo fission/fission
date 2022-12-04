@@ -1,7 +1,7 @@
 ####################################
 # This file can be used with Skaffold (https://github.com/GoogleContainerTools/skaffold) to
 # build and deploy Fission to Kubernetes cluster.
-# Skaffold version v1.31.0 is used for this configuration.
+# Skaffold version v2.0.2 is used for this configuration.
 ############## Usage ##############
 # Skaffold CLI should be installed on your machine.
 # For building & deploying to Cloud Provider
@@ -10,7 +10,7 @@
 # For building & deploying to Kind cluster use Kind profile
 # $ `skaffold run -p kind`
 ####################################
-apiVersion: skaffold/v2beta22
+apiVersion: skaffold/v4beta1
 kind: Config
 build:
   artifacts:
@@ -22,51 +22,8 @@ build:
     context: dist/pre-upgrade-checks_linux_amd64_v1
   - image: reporter
     context: dist/reporter_linux_amd64_v1
-deploy:
+manifests:
   helm:
-    releases:
-    - name: fission
-      chartPath: ./charts/fission-all
-      valuesFiles:
-      - ./charts/fission-all/values.yaml
-      artifactOverrides:
-        fetcher.image: fetcher
-        image: fission-bundle
-        postInstallReportImage: reporter
-        preUpgradeChecks.image: pre-upgrade-checks
-      namespace: fission
-      setValues:
-        analytics: false
-        debugEnv: false
-        fetcher.imageTag: ""
-        imageTag: ""
-        preUpgradeChecks.imageTag: ""
-        namespace: fission
-        pprof.enabled: false
-        canaryDeployment.enabled: false
-        influxdb.enabled: false
-        storagesvc.archivePruner.enabled: true
-        storagesvc.archivePruner.interval: "60"
-        runtimePodSpec.enabled: false
-        builderPodSpec.enabled: false
-        repository: index.docker.io
-        routerServiceType: LoadBalancer
-        openTelemetry.otlpCollectorEndpoint: ""
-        openTelemetry.otlpInsecure: true
-        prometheus.serviceEndpoint: ""
-        priorityClassName: system-cluster-critical
-        # Use /var/log directory for kind logs export
-        terminationMessagePath: /var/log/termination-log
-        terminationMessagePolicy: FallbackToLogsOnError
-        controller.enabled: false
-        serviceMonitor.enabled: false
-        serviceMonitor.namespace: monitoring
-        serviceMonitor.additionalServiceMonitorLabels.release: prometheus
-        podMonitor.enabled: false
-        podMonitor.namespace: monitoring
-        podMonitor.additionalPodMonitorLabels.release: prometheus
-        grafana.dashboards.enabled: false
-      wait: true
     flags:
       install:
       - --timeout=3m
@@ -76,66 +33,110 @@ deploy:
       - --timeout=3m
       - --install
       - --debug
+    releases:
+    - name: fission
+      chartPath: ./charts/fission-all
+      valuesFiles:
+      - ./charts/fission-all/values.yaml
+      namespace: fission
+      setValues:
+        analytics: "false"
+        builderPodSpec.enabled: "false"
+        canaryDeployment.enabled: "false"
+        controller.enabled: "false"
+        debugEnv: "false"
+        fetcher.imageTag: ""
+        grafana.dashboards.enabled: "false"
+        imageTag: ""
+        influxdb.enabled: "false"
+        namespace: fission
+        openTelemetry.otlpCollectorEndpoint: ""
+        openTelemetry.otlpInsecure: "true"
+        podMonitor.additionalPodMonitorLabels.release: prometheus
+        podMonitor.enabled: "false"
+        podMonitor.namespace: monitoring
+        pprof.enabled: "false"
+        preUpgradeChecks.imageTag: ""
+        priorityClassName: system-cluster-critical
+        prometheus.serviceEndpoint: ""
+        repository: index.docker.io
+        routerServiceType: LoadBalancer
+        runtimePodSpec.enabled: "false"
+        serviceMonitor.additionalServiceMonitorLabels.release: prometheus
+        serviceMonitor.enabled: "false"
+        serviceMonitor.namespace: monitoring
+        storagesvc.archivePruner.enabled: "true"
+        storagesvc.archivePruner.interval: "60"
+        terminationMessagePath: /var/log/termination-log
+        terminationMessagePolicy: FallbackToLogsOnError
+      setValueTemplates:
+        fetcher.image: '{{.IMAGE_FULLY_QUALIFIED_fetcher}}'
+        image: '{{.IMAGE_FULLY_QUALIFIED_fission_bundle}}'
+        postInstallReportImage: '{{.IMAGE_FULLY_QUALIFIED_reporter}}'
+        preUpgradeChecks.image: '{{.IMAGE_FULLY_QUALIFIED_pre_upgrade_checks}}'
+      wait: true
+deploy:
+  helm: {}
 profiles:
 - name: kind
   patches:
   - op: replace
-    path: /deploy/helm/releases/0/setValues/repository
+    path: /manifests/helm/releases/0/setValues/repository
     value: ""
   - op: replace
-    path: /deploy/helm/releases/0/setValues/routerServiceType
+    path: /manifests/helm/releases/0/setValues/routerServiceType
     value: NodePort
 - name: kind-debug
   patches:
   - op: replace
-    path: /deploy/helm/releases/0/setValues/repository
+    path: /manifests/helm/releases/0/setValues/repository
     value: ""
   - op: replace
-    path: /deploy/helm/releases/0/setValues/routerServiceType
+    path: /manifests/helm/releases/0/setValues/routerServiceType
     value: NodePort
   - op: replace
-    path: /deploy/helm/releases/0/setValues/debugEnv
+    path: /manifests/helm/releases/0/setValues/debugEnv
     value: true
   - op: replace
-    path: /deploy/helm/releases/0/setValues/pprof.enabled
+    path: /manifests/helm/releases/0/setValues/pprof.enabled
     value: true
 - name: kind-ci
   patches:
   - op: replace
-    path: /deploy/helm/releases/0/setValues/repository
+    path: /manifests/helm/releases/0/setValues/repository
     value: ""
   - op: replace
-    path: /deploy/helm/releases/0/setValues/storagesvc.archivePruner.interval
+    path: /manifests/helm/releases/0/setValues/storagesvc.archivePruner.interval
     value: 1
   - op: replace
-    path: /deploy/helm/releases/0/setValues/routerServiceType
+    path: /manifests/helm/releases/0/setValues/routerServiceType
     value: NodePort
   - op: replace
-    path: /deploy/helm/releases/0/setValues/canaryDeployment.enabled
+    path: /manifests/helm/releases/0/setValues/canaryDeployment.enabled
     value: true
   - op: replace
-    path: /deploy/helm/releases/0/setValues/prometheus.serviceEndpoint
-    value: "http://prometheus-operated.monitoring.svc.cluster.local:9090"
+    path: /manifests/helm/releases/0/setValues/prometheus.serviceEndpoint
+    value: http://prometheus-operated.monitoring.svc.cluster.local:9090
   - op: replace
-    path: /deploy/helm/releases/0/setValues/podMonitor.enabled
+    path: /manifests/helm/releases/0/setValues/podMonitor.enabled
     value: true
   - op: replace
-    path: /deploy/helm/releases/0/setValues/serviceMonitor.enabled
+    path: /manifests/helm/releases/0/setValues/serviceMonitor.enabled
     value: true
   - op: replace
-    path: /deploy/helm/releases/0/setValues/grafana.dashboards.enabled
+    path: /manifests/helm/releases/0/setValues/grafana.dashboards.enabled
     value: true
 - name: kind-opentelemetry
   patches:
   - op: replace
-    path: /deploy/helm/releases/0/setValues/repository
+    path: /manifests/helm/releases/0/setValues/repository
     value: ""
   - op: replace
-    path: /deploy/helm/releases/0/setValues/routerServiceType
+    path: /manifests/helm/releases/0/setValues/routerServiceType
     value: NodePort
   - op: replace
-    path: /deploy/helm/releases/0/setValues/pprof.enabled
+    path: /manifests/helm/releases/0/setValues/pprof.enabled
     value: true
   - op: replace
-    path: /deploy/helm/releases/0/setValues/openTelemetry.otlpCollectorEndpoint
-    value: "otel-collector.opentelemetry-operator-system.svc:4317"
+    path: /manifests/helm/releases/0/setValues/openTelemetry.otlpCollectorEndpoint
+    value: otel-collector.opentelemetry-operator-system.svc:4317
