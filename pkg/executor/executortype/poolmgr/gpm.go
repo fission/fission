@@ -683,6 +683,7 @@ func (gpm *GenericPoolManager) WebsocketStartEventChecker(ctx context.Context, k
 	stopper := make(chan struct{})
 	defer close(stopper)
 
+	var wg wait.Group
 	for _, informer := range utils.GetInformerEventChecker(ctx, kubeClient, "WsConnectionStarted") {
 		informer.AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
@@ -701,8 +702,9 @@ func (gpm *GenericPoolManager) WebsocketStartEventChecker(ctx context.Context, k
 				}
 			},
 		})
-		informer.Run(stopper)
+		wg.StartWithChannel(stopper, informer.Run)
 	}
+	wg.Wait()
 }
 
 // NoActiveConnectionEventChecker checks if the pod has emitted an inactive event
@@ -710,6 +712,7 @@ func (gpm *GenericPoolManager) NoActiveConnectionEventChecker(ctx context.Contex
 	stopper := make(chan struct{})
 	defer close(stopper)
 
+	var wg wait.Group
 	for _, informer := range utils.GetInformerEventChecker(ctx, kubeClient, "WsConnectionStarted") {
 		informer.AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
@@ -739,6 +742,7 @@ func (gpm *GenericPoolManager) NoActiveConnectionEventChecker(ctx context.Contex
 
 			},
 		})
-		informer.Run(stopper)
+		wg.StartWithChannel(stopper, informer.Run)
 	}
+	wg.Wait()
 }
