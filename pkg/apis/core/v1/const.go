@@ -151,7 +151,7 @@ const (
 
 	PackageGetterRB = "package-getter-binding"
 
-	ClusterRole = "ClusterRole"
+	Role = "Role"
 )
 
 const (

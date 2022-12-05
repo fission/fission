@@ -18,7 +18,7 @@ import (
 const (
 	namespace      string = "testns"
 	serviceAccount string = "testSA"
-	clusterRole    string = "testClusterRole"
+	role           string = "testClusterRole"
 	rolebinding    string = "testRolebinding"
 )
 
@@ -32,11 +32,11 @@ func TestSetupRoleBinding(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error creating service account: %s", err.Error())
 	}
-	_, err = createClusterRole(ctx, clusterRole, kubernetesClient)
+	_, err = createRole(ctx, role, namespace, kubernetesClient)
 	if err != nil {
 		t.Fatalf("Error creating cluster role: %s", err.Error())
 	}
-	err = SetupRoleBinding(ctx, logger, kubernetesClient, rolebinding, namespace, clusterRole, fv1.ClusterRole, serviceAccount, namespace)
+	err = SetupRoleBinding(ctx, logger, kubernetesClient, rolebinding, namespace, role, fv1.Role, serviceAccount, namespace)
 	assert.Nil(t, err, "error should be nil and new role binding will get created")
 
 	//case 2 => rolebinding exists but service account doesn't exists
@@ -44,23 +44,23 @@ func TestSetupRoleBinding(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error deleting service account: %s", err.Error())
 	}
-	err = SetupRoleBinding(ctx, logger, kubernetesClient, rolebinding, namespace, clusterRole, fv1.ClusterRole, serviceAccount, namespace)
+	err = SetupRoleBinding(ctx, logger, kubernetesClient, rolebinding, namespace, role, fv1.Role, serviceAccount, namespace)
 	assert.Nil(t, err, "error should be nil and service account should add in rolebinding")
 
 	//case 3 => rolebinding, cluster role and service account, all exists
-	err = SetupRoleBinding(ctx, logger, kubernetesClient, rolebinding, namespace, clusterRole, fv1.ClusterRole, serviceAccount, namespace)
+	err = SetupRoleBinding(ctx, logger, kubernetesClient, rolebinding, namespace, role, fv1.Role, serviceAccount, namespace)
 	assert.Nil(t, err, "error should be nil and nothing to add")
 
 	//case 4 => This must fail, if there is change in cluster-role-name
-	err = SetupRoleBinding(ctx, logger, kubernetesClient, rolebinding, namespace, "invalid-cluster-name", fv1.ClusterRole, serviceAccount, namespace)
+	err = SetupRoleBinding(ctx, logger, kubernetesClient, rolebinding, namespace, "invalid-cluster-name", fv1.Role, serviceAccount, namespace)
 	assert.NotNil(t, err)
 	assert.Equal(t, err.Error(), fmt.Sprintf("rolebinding %s in namespace %s exists with different roleref, retry by deleting existing rolebinding", rolebinding, namespace))
 }
 
-func createClusterRole(ctx context.Context, clusterRole string, kubernetesClient *fake.Clientset) (*v1.ClusterRole, error) {
-	objRole := MakeClusterRoleObj(clusterRole)
+func createRole(ctx context.Context, role string, rolens string, kubernetesClient *fake.Clientset) (*v1.Role, error) {
+	objRole := MakeRoleObj(role)
 	var err error
-	objRole, err = kubernetesClient.RbacV1().ClusterRoles().Create(ctx, objRole, metav1.CreateOptions{})
+	objRole, err = kubernetesClient.RbacV1().Roles(rolens).Create(ctx, objRole, metav1.CreateOptions{})
 	return objRole, err
 }
 
@@ -72,10 +72,10 @@ func createServiceAccount(ctx context.Context, kubernetesClient *fake.Clientset)
 }
 
 // MakeClusterRoleObj returns a ClusterRole object
-func MakeClusterRoleObj(clusterRoleName string) *v1.ClusterRole {
-	return &v1.ClusterRole{
+func MakeRoleObj(roleName string) *v1.Role {
+	return &v1.Role{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: clusterRoleName,
+			Name: roleName,
 		},
 	}
 }

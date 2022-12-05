@@ -69,7 +69,7 @@ func FunctionEventHandlers(ctx context.Context, logger *zap.Logger, kubernetesCl
 			// setup rolebinding is tried, if it fails, we don't return. we just log an error and move on, because :
 			// 1. not all functions have secrets and/or configmaps, so things will work without this rolebinding in that case.
 			// 2. on the contrary, when the route is tried, the env fetcher logs will show a 403 forbidden message and same will be relayed to executor.
-			err := utils.SetupRoleBinding(ctx, logger, kubernetesClient, fv1.SecretConfigMapGetterRB, fn.ObjectMeta.Namespace, utils.GetSecretConfigMapGetterCR(), fv1.ClusterRole, fv1.FissionFetcherSA, envNs)
+			err := utils.SetupRoleBinding(ctx, logger, kubernetesClient, fv1.SecretConfigMapGetterRB, fn.ObjectMeta.Namespace, utils.GetSecretConfigMapGetterCR(), fv1.Role, fv1.FissionFetcherSA, envNs)
 			if err != nil {
 				logger.Error("error creating rolebinding", zap.Error(err), zap.String("role_binding", fv1.SecretConfigMapGetterRB))
 			} else {
@@ -182,7 +182,7 @@ func FunctionEventHandlers(ctx context.Context, logger *zap.Logger, kubernetesCl
 					envNs = newFunc.Spec.Environment.Namespace
 				}
 				err := utils.SetupRoleBinding(ctx, logger, kubernetesClient, fv1.SecretConfigMapGetterRB,
-					newFunc.ObjectMeta.Namespace, utils.GetSecretConfigMapGetterCR(), fv1.ClusterRole,
+					newFunc.ObjectMeta.Namespace, utils.GetSecretConfigMapGetterCR(), fv1.Role,
 					fv1.FissionFetcherSA, envNs)
 
 				if err != nil {
