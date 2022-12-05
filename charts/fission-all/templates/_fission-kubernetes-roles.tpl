@@ -435,15 +435,8 @@ rules:
   - list
 {{- end }}
 {{- define "preupgrade-kuberules" }}
-rules:
-- apiGroups:
-  - apiextensions.k8s.io
-  resources:
-  - customresourcedefinitions
-  verbs:
-  - get
-  - list
-  - watch
+# TODO: Kept for future in case preupgrade needs any permissions in the future
+rules: []
 {{- end }}
 {{- define "router-kuberules" }}
 rules:
