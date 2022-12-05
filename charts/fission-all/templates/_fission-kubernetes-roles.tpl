@@ -42,12 +42,6 @@ rules:
   - update
   - patch
   - delete
-- apiGroups:
-  - rbac.authorization.k8s.io
-  resources:
-  - clusterroles
-  verbs:
-  - bind
 {{- end }}
 {{- define "canaryconfig-kuberules" }}
 rules:
@@ -193,12 +187,6 @@ rules:
   - patch
   - delete
 - apiGroups:
-  - rbac.authorization.k8s.io
-  resources:
-  - clusterroles
-  verbs:
-  - bind
-- apiGroups:
   - metrics.k8s.io
   resources:
   - pods
@@ -264,12 +252,6 @@ rules:
   - update
   - patch
   - delete
-- apiGroups:
-  - rbac.authorization.k8s.io
-  resources:
-  - clusterroles
-  verbs:
-  - bind
 {{- end }}
 {{- define "kafka-kuberules" }}
 rules:
@@ -324,12 +306,6 @@ rules:
   - update
   - patch
   - delete
-- apiGroups:
-  - rbac.authorization.k8s.io
-  resources:
-  - clusterroles
-  verbs:
-  - bind
 {{- end }}
 {{- define "keda-kuberules" }}
 rules:
@@ -384,12 +360,6 @@ rules:
   - update
   - patch
   - delete
-- apiGroups:
-  - rbac.authorization.k8s.io
-  resources:
-  - clusterroles
-  verbs:
-  - bind
 - apiGroups:
   - keda.sh
   resources:
@@ -489,12 +459,6 @@ rules:
   - update
   - patch
   - delete
-- apiGroups:
-  - rbac.authorization.k8s.io
-  resources:
-  - clusterroles
-  verbs:
-  - bind
 {{- end }}
 {{- define "timer-kuberules" }}
 rules:
