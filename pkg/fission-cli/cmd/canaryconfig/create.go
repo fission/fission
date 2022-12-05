@@ -127,6 +127,6 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 		return errors.Wrap(err, "error creating canary config")
 	}
 
-	fmt.Printf("canary config '%v' created\n", opts.canary.ObjectMeta.Name)
+	fmt.Printf("canary config '%s' created\n", opts.canary.ObjectMeta.Name)
 	return nil
 }
