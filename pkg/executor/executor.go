@@ -38,7 +38,6 @@ import (
 	"github.com/fission/fission/pkg/executor/executortype/newdeploy"
 	"github.com/fission/fission/pkg/executor/executortype/poolmgr"
 	"github.com/fission/fission/pkg/executor/fscache"
-	"github.com/fission/fission/pkg/executor/reaper"
 	"github.com/fission/fission/pkg/executor/util"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
@@ -394,7 +393,6 @@ func StartExecutor(ctx context.Context, logger *zap.Logger, port int) error {
 		return err
 	}
 
-	go reaper.CleanupRoleBindings(ctx, logger, kubernetesClient, fissionClient, time.Minute*30)
 	go metrics.ServeMetrics(ctx, logger)
 	go api.Serve(ctx, port)
 

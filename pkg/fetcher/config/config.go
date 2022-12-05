@@ -1,10 +1,8 @@
 package container
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 
@@ -14,7 +12,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/client-go/kubernetes"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fetcher"
@@ -89,16 +86,6 @@ func MakeFetcherConfig(sharedMountPath string) (*Config, error) {
 		sharedCfgMapPath:       "/configs",
 		serviceAccount:         fv1.FissionFetcherSA,
 	}, nil
-}
-
-func (cfg *Config) SetupServiceAccount(ctx context.Context, kubernetesClient kubernetes.Interface, namespace string, context interface{}) error {
-	_, err := utils.SetupSA(ctx, kubernetesClient, fv1.FissionFetcherSA, namespace)
-	if err != nil {
-		log.Printf("Error : %v creating %s in ns : %s for: %#v", err, fv1.FissionFetcherSA, namespace, context)
-		return err
-	}
-
-	return nil
 }
 
 func (cfg *Config) SharedMountPath() string {

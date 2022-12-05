@@ -91,9 +91,6 @@ func NewPoolPodController(ctx context.Context, logger *zap.Logger,
 	for _, informer := range funcInformer {
 		informer.Informer().AddEventHandler(FunctionEventHandlers(ctx, p.logger, p.kubernetesClient, p.nsResolver.ResolveNamespace(p.nsResolver.FunctionNamespace), p.enableIstio))
 	}
-	for _, informer := range pkgInformer {
-		informer.Informer().AddEventHandler(PackageEventHandlers(ctx, p.logger, p.kubernetesClient, p.nsResolver.ResolveNamespace(p.nsResolver.FunctionNamespace)))
-	}
 	for ns, informer := range envInformer {
 		informer.Informer().AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
 			AddFunc:    p.enqueueEnvAdd,

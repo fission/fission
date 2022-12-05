@@ -34,7 +34,6 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/executor/util"
-	"github.com/fission/fission/pkg/utils"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
@@ -91,10 +90,6 @@ func (deploy *NewDeploy) createOrGetDeployment(ctx context.Context, fn *fv1.Func
 
 		return existingDepl, err
 	} else if k8s_err.IsNotFound(err) {
-		err := deploy.setupRBACObjs(ctx, deployNamespace, fn)
-		if err != nil {
-			return nil, err
-		}
 
 		depl, err := deploy.kubernetesClient.AppsV1().Deployments(deployNamespace).Create(ctx, deployment, metav1.CreateOptions{})
 		if err != nil {
@@ -116,47 +111,6 @@ func (deploy *NewDeploy) createOrGetDeployment(ctx context.Context, fn *fv1.Func
 		return depl, err
 	}
 	return nil, err
-}
-
-func (deploy *NewDeploy) setupRBACObjs(ctx context.Context, deployNamespace string, fn *fv1.Function) error {
-	// create fetcher SA in this ns, if not already created
-	err := deploy.fetcherConfig.SetupServiceAccount(ctx, deploy.kubernetesClient, deployNamespace, fn.ObjectMeta)
-	if err != nil {
-		deploy.logger.Error("error creating fission fetcher service account for function",
-			zap.Error(err),
-			zap.String("service_account_name", fv1.FissionFetcherSA),
-			zap.String("service_account_namespace", deployNamespace),
-			zap.String("function_name", fn.ObjectMeta.Name),
-			zap.String("function_namespace", fn.ObjectMeta.Namespace))
-		return err
-	}
-
-	// create a cluster role binding for the fetcher SA, if not already created, granting access to do a get on packages in any ns
-	err = utils.SetupRoleBinding(ctx, deploy.logger, deploy.kubernetesClient, fv1.PackageGetterRB, fn.Spec.Package.PackageRef.Namespace, utils.GetPackageGetterCR(), fv1.Role, fv1.FissionFetcherSA, deployNamespace)
-	if err != nil {
-		deploy.logger.Error("error creating role binding for function",
-			zap.Error(err),
-			zap.String("role_binding", fv1.PackageGetterRB),
-			zap.String("function_name", fn.ObjectMeta.Name),
-			zap.String("function_namespace", fn.ObjectMeta.Namespace))
-		return err
-	}
-
-	// create rolebinding in function namespace for fetcherSA.envNamespace to be able to get secrets and configmaps
-	err = utils.SetupRoleBinding(ctx, deploy.logger, deploy.kubernetesClient, fv1.SecretConfigMapGetterRB, fn.ObjectMeta.Namespace, utils.GetSecretConfigMapGetterCR(), fv1.Role, fv1.FissionFetcherSA, deployNamespace)
-	if err != nil {
-		deploy.logger.Error("error creating role binding for function",
-			zap.Error(err),
-			zap.String("role_binding", fv1.SecretConfigMapGetterRB),
-			zap.String("function_name", fn.ObjectMeta.Name),
-			zap.String("function_namespace", fn.ObjectMeta.Namespace))
-		return err
-	}
-
-	deploy.logger.Info("set up all RBAC objects for function",
-		zap.String("function_name", fn.ObjectMeta.Name),
-		zap.String("function_namespace", fn.ObjectMeta.Namespace))
-	return nil
 }
 
 func (deploy *NewDeploy) updateDeployment(ctx context.Context, deployment *appsv1.Deployment, ns string) error {
