@@ -93,8 +93,6 @@ rules:
   - configmaps
   verbs:
   - get
-  - watch
-  - list
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
@@ -108,5 +106,4 @@ rules:
   - packages
   verbs:
   - get
-  - list
 {{- end -}}
