@@ -4,7 +4,7 @@ metadata:
   name: {{ .Release.Name }}-secret-configmap-getter
 rules:
   - apiGroups:
-      - "*"
+      - ""
     resources:
       - secrets
       - configmaps
@@ -20,7 +20,7 @@ metadata:
   name: {{ .Release.Name }}-package-getter
 rules:
   - apiGroups:
-      - "*"
+      - fission.io
     resources:
       - packages
     verbs:
