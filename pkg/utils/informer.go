@@ -1,11 +1,16 @@
 package utils
 
 import (
+	"context"
+	"fmt"
 	"time"
 
+	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/selection"
+	"k8s.io/apimachinery/pkg/watch"
 	k8sInformers "k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
@@ -65,6 +70,28 @@ func GetK8sInformersForNamespaces(client kubernetes.Interface, defaultSync time.
 		default:
 			panic("Unknown kind: " + kind)
 		}
+	}
+	return informers
+}
+
+func GetInformerEventChecker(ctx context.Context, client kubernetes.Interface, reason string) map[string]cache.SharedInformer {
+	informers := make(map[string]cache.SharedInformer)
+	namespaces := DefaultNSResolver()
+	for _, ns := range namespaces.FissionNSWithOptions(WithBuilderNs(), WithFunctionNs(), WithDefaultNs()) {
+		informers[ns] = cache.NewSharedInformer(
+			&cache.ListWatch{
+				ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
+					options.FieldSelector = fmt.Sprintf("involvedObject.kind=Pod,type=Normal,reason=%s", reason)
+					return client.CoreV1().Events(ns).List(ctx, options)
+				},
+				WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
+					options.FieldSelector = fmt.Sprintf("involvedObject.kind=Pod,type=Normal,reason=%s", reason)
+					return client.CoreV1().Events(ns).Watch(ctx, options)
+				},
+			},
+			&apiv1.Event{},
+			0,
+		)
 	}
 	return informers
 }
