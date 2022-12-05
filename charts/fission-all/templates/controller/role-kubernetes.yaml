@@ -5,9 +5,9 @@
 {{ include "kubernetes-role-generator" (merge (dict "namespace" $namespace "component" "controller") $) }}
 {{- end }}
 {{- if .Values.builderNamespace -}}
-{{ include "kubernetes-role-generator" (merge (dict "namespace" .Values.builderNamespace "component" "buildermgr") $) }}
+{{ include "kubernetes-role-generator" (merge (dict "namespace" .Values.builderNamespace "component" "controller") $) }}
 {{- end }}
 {{- if .Values.functionNamespace -}}
-{{ include "kubernetes-role-generator" (merge (dict "namespace" .Values.builderNamespace "component" "buildermgr") $) }}
+{{ include "kubernetes-role-generator" (merge (dict "namespace" .Values.functionNamespace "component" "controller") $) }}
 {{- end }}
 {{- end }}
