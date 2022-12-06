@@ -146,12 +146,6 @@ const (
 const (
 	FissionBuilderSA = "fission-builder"
 	FissionFetcherSA = "fission-fetcher"
-
-	SecretConfigMapGetterRB = "secret-configmap-getter-binding"
-
-	PackageGetterRB = "package-getter-binding"
-
-	Role = "Role"
 )
 
 const (
