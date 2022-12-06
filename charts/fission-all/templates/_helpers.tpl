@@ -100,6 +100,6 @@ Define the svc's name
 {{- if .Values.builderNamespace -}}
 {{- printf "%s" .Values.builderNamespace -}}
 {{- else -}}
-{{- printf "%s" .Values.builderNamespace -}}
+{{- printf "%s" .Values.defaultNamespace -}}
 {{- end -}}
 {{- end -}}
