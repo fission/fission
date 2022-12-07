@@ -35,7 +35,7 @@ func (opts *CheckSubCommand) do(input cli.Input) error {
 	if input.IsSet(flagkey.PreCheckOnly) {
 		checks = append(checks, healthcheck.Kubernetes)
 	} else {
-		checks = append(checks, healthcheck.FissionServices, healthcheck.FissionVersion)
+		checks = append(checks, healthcheck.FissionServices, healthcheck.FissionVersion, healthcheck.FissionServiceAccount)
 	}
 
 	hc := healthcheck.NewHealthChecker(opts.Client(), checks)

@@ -28,14 +28,16 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/console"
 	"github.com/fission/fission/pkg/fission-cli/util"
+	"github.com/fission/fission/pkg/utils"
 )
 
 type CategoryID string
 
 const (
-	Kubernetes      CategoryID = "kubernetes"
-	FissionServices CategoryID = "fission-services"
-	FissionVersion  CategoryID = "fission-version"
+	Kubernetes            CategoryID = "kubernetes"
+	FissionServices       CategoryID = "fission-services"
+	FissionVersion        CategoryID = "fission-version"
+	FissionServiceAccount CategoryID = "fission-service-account"
 )
 
 var (
@@ -131,6 +133,10 @@ func (hc *HealthChecker) CheckFissionVersion(ctx context.Context, input cli.Inpu
 	return nil
 }
 
+func (hc *HealthChecker) CheckFissionServiceAccount(ctx context.Context, input cli.Input, client cmd.Client) error {
+	return utils.CheckServiceAccountExistsWithPermissions(ctx, hc.kubeAPI)
+}
+
 func NewCategory(id CategoryID, checkers []Checker, enabled bool) *Category {
 	return &Category{
 		ID:       id,
@@ -195,6 +201,18 @@ func (hc *HealthChecker) allCategories() []*Category {
 					successMsg: "fission is up-to-date",
 					check: func(ctx context.Context, input cli.Input, client cmd.Client) error {
 						return hc.CheckFissionVersion(ctx, input, client)
+					},
+				},
+			},
+			false,
+		),
+		NewCategory(
+			FissionServiceAccount,
+			[]Checker{
+				{
+					successMsg: "fission service account is present with correct permissions",
+					check: func(ctx context.Context, input cli.Input, client cmd.Client) error {
+						return hc.CheckFissionServiceAccount(ctx, input, client)
 					},
 				},
 			},
