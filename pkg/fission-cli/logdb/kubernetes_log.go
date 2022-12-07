@@ -79,7 +79,7 @@ func GetFunctionPodLogs(ctx context.Context, client cmd.Client, logFilter LogFil
 
 	if len(podList.Items) <= 0 {
 		if logFilter.WarnUser {
-			console.Warn("version<1.18 used fission-function as pod's default namespace. Specify appropriate namespace with --pod-namespace tag or export an environment variable for function-namespace FISSION_FUNCTION_NAMESPACE")
+			console.Warn("version<1.18 used fission-function as pod's default namespace. Specify appropriate namespace with --pod-namespace tag or export an environment variable for function-namespace FUNCTION_NAMESPACE")
 		}
 		return errors.New("no active pods found")
 	}
