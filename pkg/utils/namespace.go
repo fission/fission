@@ -42,7 +42,7 @@ func init() {
 		FunctionNamespace: os.Getenv(ENV_FUNCTION_NAMESPACE),
 		BuiderNamespace:   os.Getenv(ENV_BUILDER_NAMESPACE),
 		DefaultNamespace:  os.Getenv(ENV_DEFAULT_NAMESPACE),
-		FissionResourceNS: getNamespaces(),
+		FissionResourceNS: GetNamespaces(),
 		Logger:            loggerfactory.GetLogger(),
 	}
 
@@ -106,27 +106,33 @@ func (nsr *NamespaceResolver) FissionNSWithOptions(option ...option) map[string]
 	return fissionResourceNS
 }
 
-func getNamespaces() map[string]string {
-	envValue := os.Getenv(ENV_ADDITIONAL_NAMESPACE)
-	if len(envValue) == 0 {
-		return map[string]string{
-			metav1.NamespaceDefault: metav1.NamespaceDefault,
+func GetNamespaces() map[string]string {
+	namespaces := make(map[string]string)
+
+	envValue := os.Getenv(ENV_DEFAULT_NAMESPACE)
+	if len(envValue) > 0 {
+		namespaces[envValue] = envValue
+	}
+
+	envValue = os.Getenv(ENV_ADDITIONAL_NAMESPACE)
+	if len(envValue) > 0 {
+		lstNamespaces := strings.Split(envValue, ",")
+		for _, namespace := range lstNamespaces {
+			//check to handle string with additional comma at the end of string. eg- ns1,ns2,
+			if namespace != "" {
+				namespaces[namespace] = namespace
+			}
 		}
 	}
 
-	lstNamespaces := strings.Split(envValue, ",")
-	namespaces := make(map[string]string, len(lstNamespaces))
-	for _, namespace := range lstNamespaces {
-		//check to handle string with additional comma at the end of string. eg- ns1,ns2,
-		if namespace != "" {
-			namespaces[namespace] = namespace
-		}
+	if len(namespaces) == 0 {
+		namespaces[metav1.NamespaceDefault] = metav1.NamespaceDefault
 	}
 	return namespaces
 }
 
 func (nsr *NamespaceResolver) GetBuilderNS(namespace string) string {
-	if nsr.FunctionNamespace == "" || nsr.BuiderNamespace == "" {
+	if nsr.BuiderNamespace == "" {
 		return namespace
 	}
 
@@ -137,7 +143,7 @@ func (nsr *NamespaceResolver) GetBuilderNS(namespace string) string {
 }
 
 func (nsr *NamespaceResolver) GetFunctionNS(namespace string) string {
-	if nsr.FunctionNamespace == "" || nsr.BuiderNamespace == "" {
+	if nsr.FunctionNamespace == "" {
 		return namespace
 	}
 
