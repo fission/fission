@@ -50,6 +50,8 @@ manifests:
         imageTag: ""
         influxdb.enabled: "false"
         namespace: fission
+        builderNamespace: "fission-builder"
+        functionNamespace: "fission-function"
         openTelemetry.otlpCollectorEndpoint: ""
         openTelemetry.otlpInsecure: "true"
         podMonitor.additionalPodMonitorLabels.release: prometheus
@@ -126,6 +128,38 @@ profiles:
   - op: replace
     path: /manifests/helm/releases/0/setValues/grafana.dashboards.enabled
     value: true
+- name: kind-ci-old
+  patches:
+  - op: replace
+    path: /manifests/helm/releases/0/setValues/repository
+    value: ""
+  - op: replace
+    path: /manifests/helm/releases/0/setValues/storagesvc.archivePruner.interval
+    value: 1
+  - op: replace
+    path: /manifests/helm/releases/0/setValues/routerServiceType
+    value: NodePort
+  - op: replace
+    path: /manifests/helm/releases/0/setValues/canaryDeployment.enabled
+    value: true
+  - op: replace
+    path: /manifests/helm/releases/0/setValues/prometheus.serviceEndpoint
+    value: http://prometheus-operated.monitoring.svc.cluster.local:9090
+  - op: replace
+    path: /manifests/helm/releases/0/setValues/podMonitor.enabled
+    value: true
+  - op: replace
+    path: /manifests/helm/releases/0/setValues/serviceMonitor.enabled
+    value: true
+  - op: replace
+    path: /manifests/helm/releases/0/setValues/grafana.dashboards.enabled
+    value: true
+  - op: replace
+    path: /manifests/helm/releases/0/setValues/builderNamespace
+    value: fission-builder
+  - op: replace
+    path: /manifests/helm/releases/0/setValues/functionNamespace
+    value: fission-function    
 - name: kind-opentelemetry
   patches:
   - op: replace
