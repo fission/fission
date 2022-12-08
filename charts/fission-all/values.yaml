@@ -73,13 +73,13 @@ defaultNamespace: default
 ## if builderNamespace is set to empty then builder resources will be created in the same namespace as the Fission resources.
 ## This is different from the release namespace.
 ##
-builderNamespace: "fission-builder"
+builderNamespace: ""
 
 ## functionNamespace represents the namespace in which Fission Function resources will be created.
 ## if functionNamespace is set to empty then function resources will be created in the same namespace as the Fission resources.
 ## This is different from the release namespace.
 ##
-functionNamespace: "fission-function"
+functionNamespace: ""
 
 ## If true, fission will only watch for fission custom resources created in the `defaultNamespace` above.
 ##

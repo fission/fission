@@ -50,8 +50,8 @@ manifests:
         imageTag: ""
         influxdb.enabled: "false"
         namespace: fission
-        builderNamespace: "default"
-        functionNamespace: "default"
+        builderNamespace: ""
+        functionNamespace: ""
         openTelemetry.otlpCollectorEndpoint: ""
         openTelemetry.otlpInsecure: "true"
         podMonitor.additionalPodMonitorLabels.release: prometheus
