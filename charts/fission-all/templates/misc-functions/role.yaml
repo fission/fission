@@ -28,10 +28,3 @@ rules:
 {{ include "fissionFunction.roles" (merge (dict "namespace" $namespace) $) }}
 {{- end }}
 {{- end }}
-
-{{ include "functionPod.roles" (merge (dict "namespace" .Values.defaultNamespace) .) }}
-{{- if not .Values.singleDefaultNamespace }}
-{{- range $namespace := $.Values.additionalFissionNamespaces }}
-{{ include "functionPod.roles" (merge (dict "namespace" $namespace) $) }}
-{{- end }}
-{{- end }}

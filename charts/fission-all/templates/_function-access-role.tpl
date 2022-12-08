@@ -77,33 +77,3 @@ subjects:
     name: fission-builder
     namespace: {{ template "fission-builder-ns" . }}
 {{- end -}}
-
-{{- define "functionPod.roles" }}
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: {{ .Release.Name }}-secret-configmap-getter
-  namespace: {{ .namespace }}
-rules:
-- apiGroups:
-  - ""
-  resources:
-  - secrets
-  - configmaps
-  verbs:
-  - get
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: {{ .Release.Name }}-package-getter
-  namespace: {{ .namespace }}
-rules:
-- apiGroups:
-  - fission.io
-  resources:
-  - packages
-  verbs:
-  - get
-{{- end -}}
