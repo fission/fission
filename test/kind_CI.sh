@@ -14,9 +14,9 @@ echo "source test_utils done"
 
 dump_system_info
 
-export FUNCTION_NAMESPACE=default
-export BUILDER_NAMESPACE=default
-export FISSION_NAMESPACE=fission
+export FUNCTION_NAMESPACE=${FUNCTION_NAMESPACE:-default}
+export BUILDER_NAMESPACE=${BUILDER_NAMESPACE:-default}
+export FISSION_NAMESPACE=${FISSION_NAMESPACE:-fission}
 export FISSION_ROUTER=127.0.0.1:8888
 export NODE_RUNTIME_IMAGE=fission/node-env-14
 export NODE_BUILDER_IMAGE=fission/node-builder-14
@@ -31,6 +31,11 @@ export JVM_JERSEY_BUILDER_IMAGE=fission/jvm-jersey-builder
 export TS_RUNTIME_IMAGE=fission/tensorflow-serving-env
 export CONTROLLER_IP=127.0.0.1:8889
 export FISSION_NATS_STREAMING_URL=http://defaultFissionAuthToken@127.0.0.1:8890
+
+echo "Variables set"
+echo "FUNCTION_NAMESPACE: $FUNCTION_NAMESPACE"
+echo "BUILDER_NAMESPACE: $BUILDER_NAMESPACE"
+echo "FISSION_NAMESPACE: $FISSION_NAMESPACE"
 
 echo "Pulling env and builder images"
 docker pull -q $NODE_RUNTIME_IMAGE && kind load docker-image $NODE_RUNTIME_IMAGE --name kind

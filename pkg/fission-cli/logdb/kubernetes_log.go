@@ -33,6 +33,7 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/console"
+	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type LogDBOptions struct {
@@ -68,7 +69,8 @@ func GetFunctionPodLogs(ctx context.Context, client cmd.Client, logFilter LogFil
 		fv1.ENVIRONMENT_NAME:      f.Spec.Environment.Name,
 		fv1.ENVIRONMENT_NAMESPACE: f.Spec.Environment.Namespace,
 	}
-	podList, err := client.KubernetesClient.CoreV1().Pods(podNs).List(ctx, metav1.ListOptions{
+
+	podList, err := client.KubernetesClient.CoreV1().Pods(util.ResolveFunctionNS(podNs)).List(ctx, metav1.ListOptions{
 		LabelSelector: labels.Set(selector).AsSelector().String(),
 	})
 	if err != nil {
@@ -77,7 +79,7 @@ func GetFunctionPodLogs(ctx context.Context, client cmd.Client, logFilter LogFil
 
 	if len(podList.Items) <= 0 {
 		if logFilter.WarnUser {
-			console.Warn("version<1.18 used fission-function as pod's default namespace. Specify appropriate namespace with --pod-namespace tag.")
+			console.Warn("version<1.18 used fission-function as pod's default namespace. Specify appropriate namespace with --pod-namespace tag or export an environment variable for function-namespace FUNCTION_NAMESPACE")
 		}
 		return errors.New("no active pods found")
 	}

@@ -55,6 +55,16 @@ func GetFissionNamespace() string {
 	return fissionNamespace
 }
 
+func ResolveFunctionNS(namespace string) string {
+	if namespace != metav1.NamespaceDefault {
+		return namespace
+	}
+	if len(os.Getenv(ENV_FUNCTION_NAMESPACE)) > 0 {
+		return os.Getenv(ENV_FUNCTION_NAMESPACE)
+	}
+	return namespace
+}
+
 func GetApplicationUrl(ctx context.Context, client cmd.Client, selector string) (string, error) {
 	var serverUrl string
 	// Use FISSION_URL env variable if set; otherwise, port-forward to controller.
