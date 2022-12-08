@@ -13,12 +13,6 @@ rules:
   - watch
   - patch
 - apiGroups:
-  - ""
-  resources:
-  - configmaps
-  verbs:
-  - get
-- apiGroups:
   - apps
   resources:
   - deployments
@@ -43,19 +37,6 @@ rules:
   - services
   verbs:
   - list
-- apiGroups:
-  - ""
-  resources:
-  - configmaps
-  - secrets
-  verbs:
-  - get
-- apiGroups:
-  - ""
-  resources:
-  - namespaces
-  verbs:
-  - get
 - apiGroups:
   - ""
   resources:
@@ -364,27 +345,6 @@ rules: []
 {{- end }}
 {{- define "router-kuberules" }}
 rules:
-- apiGroups:
-  - ""
-  resources:
-  - pods
-  - services
-  - replicationcontrollers
-  - events
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - watch
-  - patch
-- apiGroups:
-  - ""
-  resources:
-  - configmaps
-  - secrets
-  verbs:
-  - get
 - apiGroups:
   - networking.k8s.io
   resources:
