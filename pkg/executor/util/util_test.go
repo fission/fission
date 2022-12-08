@@ -17,57 +17,45 @@ limitations under the License.
 package util
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"reflect"
 	"testing"
 
-	apiv1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes/fake"
+	"github.com/google/go-cmp/cmp"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
+	apiv1 "k8s.io/api/core/v1"
 )
 
 func TestGetSpecFromConfigMap(t *testing.T) {
-
-	kubeClient := fake.NewSimpleClientset()
-
-	var permissionNum int64 = 10001
-	var runAsNonRoot bool = true
-
-	configMapData := make(map[string]string, 0)
+	runtimePodSpecPath := "runtime-podspec-patch.yaml"
+	tempDir := t.TempDir()
 	specPatch := `
 securityContext:
   fsGroup: 10001
   runAsGroup: 10001
   runAsNonRoot: true
   runAsUser: 10001`
-
-	configMapData["spec"] = specPatch
-
-	testConfigMap := apiv1.ConfigMap{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "ConfigMap",
-			APIVersion: "v1",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-config-map",
-			Namespace: "fission",
-		},
-		Data: configMapData,
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	configmap, err := kubeClient.CoreV1().ConfigMaps("fission").Create(ctx, &testConfigMap, metav1.CreateOptions{})
+	err := os.WriteFile(tempDir+"/"+runtimePodSpecPath, []byte(specPatch), 0644)
 	if err != nil {
-		t.Errorf("Error creating configmap %v", err)
+		t.Errorf("Error writing to file %s", err)
+	}
+	specPatch2 := `
+securityContext2:
+securityContext:
+  fsGroup: "invalida_input"
+  runAsGroup: 10001
+  runAsNonRoot: true
+  runAsUser: 10001`
+	err = os.WriteFile(tempDir+"/"+runtimePodSpecPath+"2", []byte(specPatch2), 0644)
+	if err != nil {
+		t.Errorf("Error writing to file %s", err)
 	}
 
-	t.Logf("Configmap: %v", configmap.Data)
+	var permissionNum int64 = 10001
+	var runAsNonRoot bool = true
 
 	testSpecPatch := apiv1.PodSpec{
 		SecurityContext: &apiv1.PodSecurityContext{
@@ -79,42 +67,41 @@ securityContext:
 	}
 	tests := []struct {
 		name    string
-		cm      string
-		cmns    string
+		path    string
 		want    *apiv1.PodSpec
 		wantErr bool
 	}{
 		{
-			name:    "Configmap exists",
-			cm:      "test-config-map",
-			cmns:    "fission",
+			name:    "File exists with valid data",
+			path:    tempDir + "/" + runtimePodSpecPath,
 			want:    &testSpecPatch,
 			wantErr: false,
 		},
 		{
-			name:    "Configmap does not exists",
-			cm:      "wrongname",
-			cmns:    "fission",
+			name:    "File with invalid data",
+			path:    tempDir + "/" + runtimePodSpecPath + "2",
 			want:    nil,
 			wantErr: true,
 		},
 		{
-			name:    "Wrong namespace",
-			cm:      "test-config-map",
-			cmns:    "fissio",
+			name:    "File does not exist",
+			path:    tempDir + "/" + "notexist",
 			want:    nil,
 			wantErr: true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := GetSpecFromConfigMap(ctx, kubeClient, tt.cm, tt.cmns)
+			got, err := GetSpecFromConfigMap(tt.path)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("GetSpecFromConfigMap() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
+			if err != nil {
+				return
+			}
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("GetSpecFromConfigMap() got = %v, want %v", got, tt.want)
+				t.Errorf("GetSpecFromConfigMap() diff = %s", cmp.Diff(tt.want, got))
 			}
 		})
 	}

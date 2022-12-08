@@ -4,6 +4,6 @@ kind: ConfigMap
 metadata:
   name: builder-podspec-patch
 data: 
-  spec: |
+  builder-podspec-patch.yaml: |
     {{- toYaml .Values.builderPodSpec.podSpec | nindent 4 }}
 {{- end -}}

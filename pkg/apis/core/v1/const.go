@@ -67,8 +67,8 @@ const (
 )
 
 const (
-	RuntimePodSpecConfigmap = "runtime-podspec-patch"
-	BuilderPodSpecConfigmap = "builder-podspec-patch"
+	RuntimePodSpecPath = "/etc/fission/runtime-podspec-patch.yaml"
+	BuilderPodSpecPath = "/etc/fission/builder-podspec-patch.yaml"
 )
 
 const (

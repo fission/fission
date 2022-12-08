@@ -18,7 +18,6 @@ import (
 	k8sCache "k8s.io/client-go/tools/cache"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
-	"github.com/fission/fission/pkg/executor/util"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	fClient "github.com/fission/fission/pkg/generated/clientset/versioned/fake"
 	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
@@ -65,23 +64,13 @@ func TestRefreshFuncPods(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	err = BuildConfigMap(ctx, kubernetesClient, functionNamespace, fv1.RuntimePodSpecConfigmap, map[string]string{})
-	if err != nil {
-		t.Fatalf("Error building configmap: %s", err)
-	}
-
-	podSpecPatch, err := util.GetSpecFromConfigMap(ctx, kubernetesClient, fv1.RuntimePodSpecConfigmap, functionNamespace)
-	if err != nil {
-		t.Fatalf("Error creating pod spec: %s", err)
-	}
-
 	fetcherConfig, err := fetcherConfig.MakeFetcherConfig("/userfunc")
 	if err != nil {
 		t.Fatalf("Error creating fetcher config: %s", err)
 	}
 
 	executor, err := MakeNewDeploy(ctx, logger, fissionClient, kubernetesClient, fetcherConfig, "test",
-		funcInformer, envInformer, ndmInformerFactory, podSpecPatch)
+		funcInformer, envInformer, ndmInformerFactory, nil)
 	if err != nil {
 		t.Fatalf("new deploy manager creation failed: %s", err)
 	}

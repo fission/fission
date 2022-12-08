@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -119,18 +120,14 @@ func ConvertConfigSecrets(ctx context.Context, fn *fv1.Function, kc kubernetes.I
 	return envFromSources, nil
 }
 
-func GetSpecFromConfigMap(ctx context.Context, kubeClient kubernetes.Interface, cm string, cmns string) (*apiv1.PodSpec, error) {
-
-	podSpecPatch, err := kubeClient.CoreV1().ConfigMaps(cmns).Get(ctx, cm, metav1.GetOptions{})
+func GetSpecFromConfigMap(filePath string) (*apiv1.PodSpec, error) {
+	content, err := os.ReadFile(filePath)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error reading YAML file %s: %w", filePath, err)
 	}
-
-	var additionalSpec apiv1.PodSpec
-
-	err = yaml.Unmarshal([]byte(podSpecPatch.Data["spec"]), &additionalSpec)
-
-	return &additionalSpec, err
+	additionalSpec := &apiv1.PodSpec{}
+	err = yaml.UnmarshalStrict(content, &additionalSpec)
+	return additionalSpec, err
 }
 
 func GetObjectReaperInterval(logger *zap.Logger, executorType fv1.ExecutorType, defaultReaperInterval uint) uint {
