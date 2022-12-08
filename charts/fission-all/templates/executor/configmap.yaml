@@ -4,6 +4,6 @@ kind: ConfigMap
 metadata:
   name: runtime-podspec-patch
 data: 
-  spec: |
+  runtime-podspec-patch.yaml: |
     {{- toYaml .Values.runtimePodSpec.podSpec | nindent 4 }}
 {{- end -}}

@@ -216,17 +216,6 @@ func IsZip(filename string) (bool, error) {
 	return archiver.DefaultZip.Match(f)
 }
 
-// GetCurrentNamespace returns Kubernetes namespace of current Pod
-func GetCurrentNamespace() (string, error) {
-
-	// This file contains the namespace and can be found in each container.
-	body, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
-	if err != nil {
-		return "", err
-	}
-	return string(body), nil
-}
-
 func GetStringValueFromEnv(envVar string) (string, error) {
 	v := os.Getenv(envVar)
 	if v == "" {

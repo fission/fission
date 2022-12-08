@@ -28,7 +28,6 @@ import (
 	"github.com/dchest/uniuri"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	apiv1 "k8s.io/api/core/v1"
 	k8sCache "k8s.io/client-go/tools/cache"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -271,15 +270,9 @@ func StartExecutor(ctx context.Context, logger *zap.Logger, port int) error {
 
 	executorInstanceID := strings.ToLower(uniuri.NewLen(8))
 
-	var podSpecPatch *apiv1.PodSpec
-	namespace, err := utils.GetCurrentNamespace()
+	podSpecPatch, err := util.GetSpecFromConfigMap(fv1.RuntimePodSpecPath)
 	if err != nil {
-		logger.Warn("Current namespace not found %s", zap.Error(err))
-	} else {
-		podSpecPatch, err = util.GetSpecFromConfigMap(ctx, kubernetesClient, fv1.RuntimePodSpecConfigmap, namespace)
-		if err != nil {
-			logger.Warn("Either configmap is not found or error reading data %v", zap.Error(err))
-		}
+		logger.Warn("error reading data for pod spec patch", zap.String("path", fv1.RuntimePodSpecPath), zap.Error(err))
 	}
 
 	logger.Info("Starting executor", zap.String("instanceID", executorInstanceID))
