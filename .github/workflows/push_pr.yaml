@@ -290,7 +290,7 @@ jobs:
         if: ${{ failure() || cancelled() }}
         uses: actions/upload-artifact@v3
         with:
-          name: fission-dump-${{ github.run_id }}-${{ matrix.kindversion }}
+          name: fission-dump-${{ github.run_id }}-${{ github.job_id }}-${{ matrix.kindversion }}
           path: fission-dump/*.zip
           retention-days: 5
 
@@ -299,7 +299,7 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@v3
         with:
-          name: prom-dump-${{ github.run_id }}-${{ matrix.kindversion }}
+          name: prom-dump-${{ github.run_id }}-${{ github.job_id }}-${{ matrix.kindversion }}
           path: /tmp/prometheus/*
           retention-days: 5
 
@@ -308,6 +308,6 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@v3
         with:
-          name: kind-logs-${{ github.run_id }}-${{ matrix.kindversion }}
+          name: kind-logs-${{ github.run_id }}-${{ github.job_id }}-${{ matrix.kindversion }}
           path: kind-logs/*
           retention-days: 5
