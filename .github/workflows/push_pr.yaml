@@ -166,7 +166,9 @@ jobs:
           name: kind-logs-${{ github.run_id }}-${{ matrix.kindversion }}
           path: kind-logs/*
           retention-days: 5
-  # Job to ensure backward compatibility if function and builder pods are created inside functionNamespace and builderNamespace
+
+  # Job to ensure backward compatibility if function and builder pods are created
+  # inside functionNamespace and builderNamespace
   integration-test-old:
     runs-on: ${{ matrix.os }}
     if: ${{ contains(github.event.pull_request.labels.*.name, 'run-old-ci') }}
@@ -260,7 +262,10 @@ jobs:
 
       - name: Integration tests
         timeout-minutes: 90
-        run: ./test/kind_CI.sh
+        run: |
+          export FUNCTION_NAMESPACE=fission-function
+          export BUILDER_NAMESPACE=fission-builder
+          ./test/kind_CI.sh
 
       - name: Collect Fission Dump
         timeout-minutes: 5

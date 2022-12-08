@@ -50,8 +50,8 @@ manifests:
         imageTag: ""
         influxdb.enabled: "false"
         namespace: fission
-        builderNamespace: "fission-builder"
-        functionNamespace: "fission-function"
+        builderNamespace: "default"
+        functionNamespace: "default"
         openTelemetry.otlpCollectorEndpoint: ""
         openTelemetry.otlpInsecure: "true"
         podMonitor.additionalPodMonitorLabels.release: prometheus
@@ -159,7 +159,7 @@ profiles:
     value: fission-builder
   - op: replace
     path: /manifests/helm/releases/0/setValues/functionNamespace
-    value: fission-function    
+    value: fission-function
 - name: kind-opentelemetry
   patches:
   - op: replace
