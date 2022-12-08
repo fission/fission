@@ -19,7 +19,6 @@ package reaper
 import (
 	"context"
 	"strings"
-	"time"
 
 	"go.uber.org/zap"
 	apiv1 "k8s.io/api/core/v1"
@@ -27,7 +26,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
-	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	"github.com/fission/fission/pkg/utils"
 )
 
@@ -215,158 +213,6 @@ func CleanupHpa(ctx context.Context, logger *zap.Logger, client kubernetes.Inter
 	}
 
 	return nil
-}
-
-// CleanupRoleBindings periodically lists rolebindings across all namespaces and removes Service Accounts from them or
-// deletes the rolebindings completely if there are no Service Accounts in a rolebinding object.
-func CleanupRoleBindings(ctx context.Context, logger *zap.Logger, client kubernetes.Interface, fissionClient versioned.Interface, cleanupRoleBindingInterval time.Duration) {
-	nsResolver := utils.DefaultNSResolver()
-	for {
-		// some sleep before the next reaper iteration
-		time.Sleep(cleanupRoleBindingInterval)
-
-		logger.Debug("starting cleanupRoleBindings cycle")
-
-		cleanupRoleBindings := func(namespace string) error {
-			// get all rolebindings ( just to be efficient, one call to kubernetes )
-			rbList, err := client.RbacV1().RoleBindings(namespace).List(ctx, metav1.ListOptions{})
-			if err != nil {
-				// something wrong, but next iteration hopefully succeeds
-				logger.Error("error listing role bindings in all namespaces", zap.Error(err))
-				return err
-			}
-
-			// go through each role-binding object and do the cleanup necessary
-			for _, roleBinding := range rbList.Items {
-				// ignore role-bindings in kube-system namespace
-				if roleBinding.Namespace == "kube-system" {
-					continue
-				}
-
-				// ignore role-bindings not created by fission
-				if roleBinding.Name != fv1.PackageGetterRB && roleBinding.Name != fv1.SecretConfigMapGetterRB {
-					continue
-				}
-
-				// in order to find out if there are any functions that need this role-binding in role-binding namespace,
-				// we can list the functions once per role-binding.
-				funcList, err := fissionClient.CoreV1().Functions(roleBinding.Namespace).List(ctx, metav1.ListOptions{})
-				if err != nil {
-					logger.Error("error fetching function list in namespace", zap.Error(err), zap.String("namespace", roleBinding.Namespace))
-					continue
-				}
-
-				// final map of service accounts that can be removed from this roleBinding object
-				// using a map here instead of a list so the code in RemoveSAFromRoleBindingWithRetries is efficient.
-				saToRemove := make(map[string]bool)
-
-				// the following flags are needed to decide if any of the service accounts can be removed from role-bindings depending on the functions that need them.
-				// ndmFunc denotes if there's at least one function that has executor type New deploy Manager
-				// funcEnvReference denotes if there's at least one function that has reference to an environment in the SA Namespace for the SA in question
-				var ndmFunc, funcEnvReference bool
-
-				// iterate through each subject in the role-binding and check if there are any references to them
-				for _, subj := range roleBinding.Subjects {
-					ndmFunc = false
-					funcEnvReference = false
-
-					// this is the reverse of what we're doing in setting up of role-bindings. if objects are created in default ns,
-					// the SA namespace will have the value of "fission-function"/"fission-builder" depending on the SA.
-					// so now we need to look for the objects in default namespace.
-					saNs := subj.Namespace
-					isInReservedNS := false
-					if subj.Namespace == nsResolver.FunctionNamespace ||
-						subj.Namespace == nsResolver.BuiderNamespace {
-						saNs = metav1.NamespaceDefault
-						isInReservedNS = true
-					}
-
-					// go through each function and find out if there's either at least one function with env reference in the same namespace as the Service Account in this iteration
-					// or at least one function using ndm executor in the role-binding namespace and set the corresponding flags
-					for _, fn := range funcList.Items {
-						if fn.Spec.Environment.Namespace == saNs ||
-							//  For the case that the environment is created in the reserved namespace.
-							(isInReservedNS && (fn.Spec.Environment.Namespace == nsResolver.FunctionNamespace ||
-								fn.Spec.Environment.Namespace == nsResolver.BuiderNamespace)) {
-							funcEnvReference = true
-							break
-						}
-
-						if fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypeNewdeploy {
-							ndmFunc = true
-							break
-						}
-					}
-
-					// if its a package-getter-rb, we have 2 kinds of SAs and each of them is handled differently
-					// else if its a secret-configmap-rb, we have only one SA which is fission-fetcher
-					if roleBinding.Name == fv1.PackageGetterRB {
-						// check if there is an env obj in saNs
-						envList, err := fissionClient.CoreV1().Environments(saNs).List(ctx, metav1.ListOptions{})
-						if err != nil {
-							logger.Error("error fetching environment list in service account namespace", zap.Error(err), zap.String("namespace", saNs))
-							continue
-						}
-
-						// if the SA in this iteration is fission-builder, then we need to only check
-						// if either there's at least one env object in the SA's namespace, or,
-						// if there's at least one function in the role-binding namespace with env reference
-						// to the SA's namespace.
-						// if neither, then we can remove this SA from this role-binding
-						if subj.Name == fv1.FissionBuilderSA {
-							if len(envList.Items) == 0 && !funcEnvReference {
-								saToRemove[utils.MakeSAMapKey(subj.Name, subj.Namespace)] = true
-							}
-						}
-
-						// if the SA in this iteration is fission-fetcher, then in addition to above checks,
-						// we also need to check if there's at least one function with executor type New deploy
-						// in the rolebinding's namespace.
-						// if none of them are true, then remove this SA from this role-binding
-						if subj.Name == fv1.FissionFetcherSA {
-							if len(envList.Items) == 0 && !ndmFunc && !funcEnvReference {
-								// remove SA from rolebinding
-								saToRemove[utils.MakeSAMapKey(subj.Name, subj.Namespace)] = true
-							}
-						}
-					} else if roleBinding.Name == fv1.SecretConfigMapGetterRB {
-						// if there's not even one function in the role-binding's namespace and there's not even
-						// one function with env reference to the SA's namespace, then remove that SA
-						// from this role-binding
-						if !ndmFunc && !funcEnvReference {
-							saToRemove[utils.MakeSAMapKey(subj.Name, subj.Namespace)] = true
-						}
-					}
-				}
-
-				// finally, make a call to RemoveSAFromRoleBindingWithRetries for all the service accounts that need to be removed
-				// for the role-binding in this iteration
-				if len(saToRemove) != 0 {
-					logger.Debug("removing service accounts from role binding",
-						zap.Any("service_accounts", saToRemove),
-						zap.String("role_binding_name", roleBinding.Name),
-						zap.String("role_binding_namespace", roleBinding.Namespace))
-
-					// call this once in the end for each role-binding
-					err = utils.RemoveSAFromRoleBindingWithRetries(ctx, logger, client, roleBinding.Name, roleBinding.Namespace, saToRemove)
-					if err != nil {
-						// if there's an error, we just log it and proceed with the next role-binding, hoping that this role-binding
-						// will be processed in next iteration.
-						logger.Debug("error removing service account from role binding",
-							zap.Error(err),
-							zap.Any("service_accounts", saToRemove),
-							zap.String("role_binding_name", roleBinding.Name),
-							zap.String("role_binding_namespace", roleBinding.Namespace))
-					}
-				}
-			}
-			return nil
-		}
-		for _, namespace := range GetReaperNamespace() {
-			//ignore error
-			cleanupRoleBindings(namespace) //nolint errcheck
-		}
-	}
 }
 
 func GetReaperNamespace() map[string]string {

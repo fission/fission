@@ -24,7 +24,7 @@ rules:
   resources:
   - packages
   verbs:
-  - "get"
+  - get
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
@@ -37,7 +37,7 @@ rules:
   resources:
   - packages
   verbs:
-  - "get"
+  - get
 - apiGroups:
   - ""
   resources:

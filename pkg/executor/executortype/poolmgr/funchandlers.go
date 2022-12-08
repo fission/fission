@@ -65,21 +65,6 @@ func FunctionEventHandlers(ctx context.Context, logger *zap.Logger, kubernetesCl
 				envNs = fn.Spec.Environment.Namespace
 			}
 
-			// TODO : Just bring to your attention during review :
-			// setup rolebinding is tried, if it fails, we don't return. we just log an error and move on, because :
-			// 1. not all functions have secrets and/or configmaps, so things will work without this rolebinding in that case.
-			// 2. on the contrary, when the route is tried, the env fetcher logs will show a 403 forbidden message and same will be relayed to executor.
-			err := utils.SetupRoleBinding(ctx, logger, kubernetesClient, fv1.SecretConfigMapGetterRB, fn.ObjectMeta.Namespace, utils.GetSecretConfigMapGetterCR(), fv1.ClusterRole, fv1.FissionFetcherSA, envNs)
-			if err != nil {
-				logger.Error("error creating rolebinding", zap.Error(err), zap.String("role_binding", fv1.SecretConfigMapGetterRB))
-			} else {
-				logger.Debug("successfully set up rolebinding for fetcher service account for function",
-					zap.String("service_account", fv1.FissionFetcherSA),
-					zap.String("service_account_namepsace", envNs),
-					zap.String("function_name", fn.ObjectMeta.Name),
-					zap.String("function_namespace", fn.ObjectMeta.Namespace))
-			}
-
 			if istioEnabled {
 				// create a same name service for function
 				// since istio only allows the traffic to service
@@ -120,7 +105,7 @@ func FunctionEventHandlers(ctx context.Context, logger *zap.Logger, kubernetesCl
 				}
 
 				// create function istio service if it does not exist
-				_, err = kubernetesClient.CoreV1().Services(envNs).Create(ctx, &svc, metav1.CreateOptions{})
+				_, err := kubernetesClient.CoreV1().Services(envNs).Create(ctx, &svc, metav1.CreateOptions{})
 				if err != nil && !kerrors.IsAlreadyExists(err) {
 					logger.Error("error creating istio service for function",
 						zap.Error(err),
@@ -154,45 +139,6 @@ func FunctionEventHandlers(ctx context.Context, logger *zap.Logger, kubernetesCl
 						zap.String("service_name", svcName),
 						zap.String("function_name", fn.ObjectMeta.Name))
 
-				}
-			}
-		},
-
-		UpdateFunc: func(oldObj, newObj interface{}) {
-			oldFunc := oldObj.(*fv1.Function)
-			newFunc := newObj.(*fv1.Function)
-
-			if oldFunc.ObjectMeta.ResourceVersion == newFunc.ObjectMeta.ResourceVersion {
-				return
-			}
-
-			envChanged := (oldFunc.Spec.Environment.Namespace != newFunc.Spec.Environment.Namespace)
-
-			executorTypeChangedToPM := (oldFunc.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType != fv1.ExecutorTypePoolmgr &&
-				newFunc.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypePoolmgr)
-
-			// if a func's env reference gets updated and the newly referenced env is in a different ns,
-			// we need to create a rolebinding in func's ns so that the fetcher-sa in env ns has access
-			// to fetch secrets and config maps from the func's ns.
-			// similarly if executorType changed to Pool Manager, we now need a rolebinding in the func ns for fetcher sa
-			// present in env ns because for newdeploy, the fetcher sa is in function namespace
-			if envChanged || executorTypeChangedToPM {
-				envNs := fissionfnNamespace
-				if newFunc.Spec.Environment.Namespace != metav1.NamespaceDefault {
-					envNs = newFunc.Spec.Environment.Namespace
-				}
-				err := utils.SetupRoleBinding(ctx, logger, kubernetesClient, fv1.SecretConfigMapGetterRB,
-					newFunc.ObjectMeta.Namespace, utils.GetSecretConfigMapGetterCR(), fv1.ClusterRole,
-					fv1.FissionFetcherSA, envNs)
-
-				if err != nil {
-					logger.Error("error creating rolebinding", zap.Error(err), zap.String("role_binding", fv1.SecretConfigMapGetterRB))
-				} else {
-					logger.Debug("successfully set up rolebinding for fetcher service account for function",
-						zap.String("service_account", fv1.FissionFetcherSA),
-						zap.String("service_account_namepsace", envNs),
-						zap.String("function_name", newFunc.ObjectMeta.Name),
-						zap.String("function_namespace", newFunc.ObjectMeta.Namespace))
 				}
 			}
 		},

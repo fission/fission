@@ -71,7 +71,6 @@ func NewPoolPodController(ctx context.Context, logger *zap.Logger,
 	kubernetesClient kubernetes.Interface,
 	enableIstio bool,
 	funcInformer map[string]finformerv1.FunctionInformer,
-	pkgInformer map[string]finformerv1.PackageInformer,
 	envInformer map[string]finformerv1.EnvironmentInformer,
 	gpmInformerFactory map[string]k8sInformers.SharedInformerFactory) *PoolPodController {
 	logger = logger.Named("pool_pod_controller")
@@ -90,9 +89,6 @@ func NewPoolPodController(ctx context.Context, logger *zap.Logger,
 	}
 	for _, informer := range funcInformer {
 		informer.Informer().AddEventHandler(FunctionEventHandlers(ctx, p.logger, p.kubernetesClient, p.nsResolver.ResolveNamespace(p.nsResolver.FunctionNamespace), p.enableIstio))
-	}
-	for _, informer := range pkgInformer {
-		informer.Informer().AddEventHandler(PackageEventHandlers(ctx, p.logger, p.kubernetesClient, p.nsResolver.ResolveNamespace(p.nsResolver.FunctionNamespace)))
 	}
 	for ns, informer := range envInformer {
 		informer.Informer().AddEventHandler(k8sCache.ResourceEventHandlerFuncs{

@@ -3,10 +3,8 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - configmaps
   - pods
   - services
-  - serviceaccounts
   verbs:
   - create
   - delete
@@ -30,24 +28,6 @@ rules:
   - get
   - list
   - watch
-- apiGroups:
-  - rbac.authorization.k8s.io
-  resources:
-  - rolebindings
-  verbs:
-  - create
-  - get
-  - list
-  - watch
-  - update
-  - patch
-  - delete
-- apiGroups:
-  - rbac.authorization.k8s.io
-  resources:
-  - clusterroles
-  verbs:
-  - bind
 {{- end }}
 {{- define "canaryconfig-kuberules" }}
 rules:
@@ -57,20 +37,6 @@ rules:
   - services
   verbs:
   - list
-- apiGroups:
-  - ""
-  resources:
-  - configmaps
-  - secrets
-  verbs:
-  - get
-- apiGroups:
-  - ""
-  resources:
-  - namespaces
-  verbs:
-  - get
-  - create
 - apiGroups:
   - ""
   resources:
@@ -109,7 +75,6 @@ rules:
   - namespaces
   verbs:
   - get
-  - create
 - apiGroups:
   - ""
   resources:
@@ -132,11 +97,8 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - configmaps
   - pods
-  - secrets
   - services
-  - serviceaccounts
   - replicationcontrollers
   - events
   verbs:
@@ -146,6 +108,15 @@ rules:
   - list
   - watch
   - patch
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  - secrets
+  verbs:
+  - get
+  - list
+  - watch
 - apiGroups:
   - apps
   resources:
@@ -181,24 +152,6 @@ rules:
   - patch
   - delete
 - apiGroups:
-  - rbac.authorization.k8s.io
-  resources:
-  - rolebindings
-  verbs:
-  - create
-  - get
-  - list
-  - watch
-  - update
-  - patch
-  - delete
-- apiGroups:
-  - rbac.authorization.k8s.io
-  resources:
-  - clusterroles
-  verbs:
-  - bind
-- apiGroups:
   - metrics.k8s.io
   resources:
   - pods
@@ -226,16 +179,12 @@ rules:
   - pods
   - secrets
   - services
-  - serviceaccounts
   - replicationcontrollers
   - events
   verbs:
-  - create
-  - delete
   - get
   - list
   - watch
-  - patch
 - apiGroups:
   - batch
   resources:
@@ -252,24 +201,6 @@ rules:
   - get
   - list
   - watch
-- apiGroups:
-  - rbac.authorization.k8s.io
-  resources:
-  - rolebindings
-  verbs:
-  - create
-  - get
-  - list
-  - watch
-  - update
-  - patch
-  - delete
-- apiGroups:
-  - rbac.authorization.k8s.io
-  resources:
-  - clusterroles
-  verbs:
-  - bind
 {{- end }}
 {{- define "kafka-kuberules" }}
 rules:
@@ -280,7 +211,6 @@ rules:
   - pods
   - secrets
   - services
-  - serviceaccounts
   - replicationcontrollers
   - events
   verbs:
@@ -290,6 +220,13 @@ rules:
   - list
   - watch
   - patch
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  - secrets
+  verbs:
+  - get
 - apiGroups:
   - apps
   resources:
@@ -312,35 +249,14 @@ rules:
   - get
   - list
   - watch
-- apiGroups:
-  - rbac.authorization.k8s.io
-  resources:
-  - rolebindings
-  verbs:
-  - create
-  - get
-  - list
-  - watch
-  - update
-  - patch
-  - delete
-- apiGroups:
-  - rbac.authorization.k8s.io
-  resources:
-  - clusterroles
-  verbs:
-  - bind
 {{- end }}
 {{- define "keda-kuberules" }}
 rules:
 - apiGroups:
   - ""
   resources:
-  - configmaps
   - pods
-  - secrets
   - services
-  - serviceaccounts
   - replicationcontrollers
   - events
   verbs:
@@ -350,6 +266,13 @@ rules:
   - list
   - watch
   - patch
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  - secrets
+  verbs:
+  - get
 - apiGroups:
   - apps
   resources:
@@ -372,24 +295,6 @@ rules:
   - get
   - list
   - watch
-- apiGroups:
-  - rbac.authorization.k8s.io
-  resources:
-  - rolebindings
-  verbs:
-  - create
-  - get
-  - list
-  - watch
-  - update
-  - patch
-  - delete
-- apiGroups:
-  - rbac.authorization.k8s.io
-  resources:
-  - clusterroles
-  verbs:
-  - bind
 - apiGroups:
   - keda.sh
   resources:
@@ -441,23 +346,6 @@ rules: []
 {{- define "router-kuberules" }}
 rules:
 - apiGroups:
-  - ""
-  resources:
-  - configmaps
-  - pods
-  - secrets
-  - services
-  - serviceaccounts
-  - replicationcontrollers
-  - events
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - watch
-  - patch
-- apiGroups:
   - networking.k8s.io
   resources:
   - ingresses
@@ -477,40 +365,7 @@ rules:
   - get
   - list
   - watch
-- apiGroups:
-  - rbac.authorization.k8s.io
-  resources:
-  - rolebindings
-  verbs:
-  - create
-  - get
-  - list
-  - watch
-  - update
-  - patch
-  - delete
-- apiGroups:
-  - rbac.authorization.k8s.io
-  resources:
-  - clusterroles
-  verbs:
-  - bind
 {{- end }}
 {{- define "timer-kuberules" }}
-rules:
-- apiGroups:
-  - fission.io
-  resources:
-  - environments
-  - functions
-  - packages
-  - timetriggers
-  verbs:
-  - create
-  - get
-  - list
-  - watch
-  - update
-  - patch
-  - delete
+rules: []
 {{- end }}

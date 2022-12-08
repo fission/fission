@@ -118,7 +118,6 @@ func MakeGenericPoolManager(ctx context.Context,
 	fetcherConfig *fetcherConfig.Config,
 	instanceID string,
 	funcInformer map[string]finformerv1.FunctionInformer,
-	pkgInformer map[string]finformerv1.PackageInformer,
 	envInformer map[string]finformerv1.EnvironmentInformer,
 	gpmInformerFactory map[string]k8sInformers.SharedInformerFactory,
 	podSpecPatch *apiv1.PodSpec,
@@ -136,7 +135,7 @@ func MakeGenericPoolManager(ctx context.Context,
 	}
 
 	poolPodC := NewPoolPodController(ctx, gpmLogger, kubernetesClient,
-		enableIstio, funcInformer, pkgInformer, envInformer, gpmInformerFactory)
+		enableIstio, funcInformer, envInformer, gpmInformerFactory)
 
 	gpm := &GenericPoolManager{
 		logger:                     gpmLogger,

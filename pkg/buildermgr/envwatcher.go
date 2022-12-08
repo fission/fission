@@ -268,12 +268,6 @@ func (envw *environmentWatcher) createBuilder(ctx context.Context, env *fv1.Envi
 	}
 	// there should be only one deploy in deployList
 	if len(deployList) == 0 {
-		// create builder SA in this ns, if not already created
-		_, err := utils.SetupSA(ctx, envw.kubernetesClient, fv1.FissionBuilderSA, ns)
-		if err != nil {
-			return nil, errors.Wrapf(err, "error creating %q in ns: %s", fv1.FissionBuilderSA, ns)
-		}
-
 		deploy, err = envw.createBuilderDeployment(ctx, env, ns)
 		if err != nil {
 			return nil, errors.Wrap(err, fmt.Sprintf("error creating builder deployment for environment in namespace %s %s", env.ObjectMeta.Name, ns))

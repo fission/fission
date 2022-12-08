@@ -138,14 +138,8 @@ func MakeGenericPool(
 }
 
 func (gp *GenericPool) setup(ctx context.Context) error {
-	// create fetcher SA in this ns, if not already created
-	err := gp.fetcherConfig.SetupServiceAccount(ctx, gp.kubernetesClient, gp.namespace, nil)
-	if err != nil {
-		return errors.Wrapf(err, "error creating fetcher service account in namespace %q", gp.namespace)
-	}
-
 	// create the pool
-	err = gp.createPoolDeployment(ctx, gp.env)
+	err := gp.createPoolDeployment(ctx, gp.env)
 	if err != nil {
 		return err
 	}

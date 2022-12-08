@@ -38,7 +38,6 @@ import (
 	"github.com/fission/fission/pkg/executor/executortype/newdeploy"
 	"github.com/fission/fission/pkg/executor/executortype/poolmgr"
 	"github.com/fission/fission/pkg/executor/fscache"
-	"github.com/fission/fission/pkg/executor/reaper"
 	"github.com/fission/fission/pkg/executor/util"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
@@ -279,13 +278,11 @@ func StartExecutor(ctx context.Context, logger *zap.Logger, port int) error {
 
 	funcInformer := make(map[string]finformerv1.FunctionInformer, 0)
 	envInformer := make(map[string]finformerv1.EnvironmentInformer, 0)
-	pkgInformer := make(map[string]finformerv1.PackageInformer, 0)
 
 	for _, ns := range utils.DefaultNSResolver().FissionResourceNS {
 		factory := genInformer.NewFilteredSharedInformerFactory(fissionClient, time.Minute*30, ns, nil)
 		funcInformer[ns] = factory.Core().V1().Functions()
 		envInformer[ns] = factory.Core().V1().Environments()
-		pkgInformer[ns] = factory.Core().V1().Packages()
 	}
 
 	executorLabel, err := utils.GetInformerLabelByExecutor(fv1.ExecutorTypePoolmgr)
@@ -297,7 +294,7 @@ func StartExecutor(ctx context.Context, logger *zap.Logger, port int) error {
 		logger,
 		fissionClient, kubernetesClient, metricsClient,
 		fetcherConfig, executorInstanceID,
-		funcInformer, pkgInformer, envInformer,
+		funcInformer, envInformer,
 		gpmInformerFactory, podSpecPatch)
 	if err != nil {
 		return errors.Wrap(err, "pool manager creation failed")
@@ -365,9 +362,6 @@ func StartExecutor(ctx context.Context, logger *zap.Logger, port int) error {
 	for _, informer := range envInformer {
 		fissionInformers = append(fissionInformers, informer.Informer())
 	}
-	for _, informer := range pkgInformer {
-		fissionInformers = append(fissionInformers, informer.Informer())
-	}
 	for _, informer := range configMapInformer {
 		fissionInformers = append(fissionInformers, informer)
 	}
@@ -394,7 +388,6 @@ func StartExecutor(ctx context.Context, logger *zap.Logger, port int) error {
 		return err
 	}
 
-	go reaper.CleanupRoleBindings(ctx, logger, kubernetesClient, fissionClient, time.Minute*30)
 	go metrics.ServeMetrics(ctx, logger)
 	go api.Serve(ctx, port)
 
