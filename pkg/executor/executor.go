@@ -278,13 +278,11 @@ func StartExecutor(ctx context.Context, logger *zap.Logger, port int) error {
 
 	funcInformer := make(map[string]finformerv1.FunctionInformer, 0)
 	envInformer := make(map[string]finformerv1.EnvironmentInformer, 0)
-	pkgInformer := make(map[string]finformerv1.PackageInformer, 0)
 
 	for _, ns := range utils.DefaultNSResolver().FissionResourceNS {
 		factory := genInformer.NewFilteredSharedInformerFactory(fissionClient, time.Minute*30, ns, nil)
 		funcInformer[ns] = factory.Core().V1().Functions()
 		envInformer[ns] = factory.Core().V1().Environments()
-		pkgInformer[ns] = factory.Core().V1().Packages()
 	}
 
 	executorLabel, err := utils.GetInformerLabelByExecutor(fv1.ExecutorTypePoolmgr)
@@ -296,7 +294,7 @@ func StartExecutor(ctx context.Context, logger *zap.Logger, port int) error {
 		logger,
 		fissionClient, kubernetesClient, metricsClient,
 		fetcherConfig, executorInstanceID,
-		funcInformer, pkgInformer, envInformer,
+		funcInformer, envInformer,
 		gpmInformerFactory, podSpecPatch)
 	if err != nil {
 		return errors.Wrap(err, "pool manager creation failed")
@@ -362,9 +360,6 @@ func StartExecutor(ctx context.Context, logger *zap.Logger, port int) error {
 		fissionInformers = append(fissionInformers, informer.Informer())
 	}
 	for _, informer := range envInformer {
-		fissionInformers = append(fissionInformers, informer.Informer())
-	}
-	for _, informer := range pkgInformer {
 		fissionInformers = append(fissionInformers, informer.Informer())
 	}
 	for _, informer := range configMapInformer {

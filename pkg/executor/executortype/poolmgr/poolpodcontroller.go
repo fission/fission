@@ -71,7 +71,6 @@ func NewPoolPodController(ctx context.Context, logger *zap.Logger,
 	kubernetesClient kubernetes.Interface,
 	enableIstio bool,
 	funcInformer map[string]finformerv1.FunctionInformer,
-	pkgInformer map[string]finformerv1.PackageInformer,
 	envInformer map[string]finformerv1.EnvironmentInformer,
 	gpmInformerFactory map[string]k8sInformers.SharedInformerFactory) *PoolPodController {
 	logger = logger.Named("pool_pod_controller")
