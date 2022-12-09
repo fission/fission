@@ -42,7 +42,6 @@ import (
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
-	finformerv1 "github.com/fission/fission/pkg/generated/informers/externalversions/core/v1"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/metrics"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
@@ -276,13 +275,9 @@ func StartExecutor(ctx context.Context, logger *zap.Logger, port int) error {
 
 	logger.Info("Starting executor", zap.String("instanceID", executorInstanceID))
 
-	funcInformer := make(map[string]finformerv1.FunctionInformer, 0)
-	envInformer := make(map[string]finformerv1.EnvironmentInformer, 0)
-
+	finformerFactory := make(map[string]genInformer.SharedInformerFactory, 0)
 	for _, ns := range utils.DefaultNSResolver().FissionResourceNS {
-		factory := genInformer.NewFilteredSharedInformerFactory(fissionClient, time.Minute*30, ns, nil)
-		funcInformer[ns] = factory.Core().V1().Functions()
-		envInformer[ns] = factory.Core().V1().Environments()
+		finformerFactory[ns] = genInformer.NewFilteredSharedInformerFactory(fissionClient, time.Minute*30, ns, nil)
 	}
 
 	executorLabel, err := utils.GetInformerLabelByExecutor(fv1.ExecutorTypePoolmgr)
@@ -294,7 +289,7 @@ func StartExecutor(ctx context.Context, logger *zap.Logger, port int) error {
 		logger,
 		fissionClient, kubernetesClient, metricsClient,
 		fetcherConfig, executorInstanceID,
-		funcInformer, envInformer,
+		finformerFactory,
 		gpmInformerFactory, podSpecPatch)
 	if err != nil {
 		return errors.Wrap(err, "pool manager creation failed")
@@ -309,7 +304,7 @@ func StartExecutor(ctx context.Context, logger *zap.Logger, port int) error {
 		logger,
 		fissionClient, kubernetesClient,
 		fetcherConfig, executorInstanceID,
-		funcInformer, envInformer,
+		finformerFactory,
 		ndmInformerFactory, podSpecPatch)
 	if err != nil {
 		return errors.Wrap(err, "new deploy manager creation failed")
@@ -323,7 +318,7 @@ func StartExecutor(ctx context.Context, logger *zap.Logger, port int) error {
 	cnm, err := container.MakeContainer(
 		ctx, logger,
 		fissionClient, kubernetesClient,
-		executorInstanceID, funcInformer,
+		executorInstanceID, finformerFactory,
 		cnmInformerFactory)
 	if err != nil {
 		return errors.Wrap(err, "container manager creation failed")
@@ -356,29 +351,23 @@ func StartExecutor(ctx context.Context, logger *zap.Logger, port int) error {
 	cms := cms.MakeConfigSecretController(ctx, logger, fissionClient, kubernetesClient, executorTypes, configMapInformer, secretInformer)
 
 	fissionInformers := make([]k8sCache.SharedIndexInformer, 0)
-	for _, informer := range funcInformer {
-		fissionInformers = append(fissionInformers, informer.Informer())
-	}
-	for _, informer := range envInformer {
-		fissionInformers = append(fissionInformers, informer.Informer())
-	}
 	for _, informer := range configMapInformer {
 		fissionInformers = append(fissionInformers, informer)
 	}
 	for _, informer := range secretInformer {
 		fissionInformers = append(fissionInformers, informer)
 	}
+	for _, factory := range finformerFactory {
+		factory.Start(ctx.Done())
+	}
 	for _, informerFactory := range gpmInformerFactory {
-		fissionInformers = append(fissionInformers, informerFactory.Core().V1().Pods().Informer())
-		fissionInformers = append(fissionInformers, informerFactory.Apps().V1().ReplicaSets().Informer())
+		informerFactory.Start(ctx.Done())
 	}
 	for _, informerFactory := range ndmInformerFactory {
-		fissionInformers = append(fissionInformers, informerFactory.Apps().V1().Deployments().Informer())
-		fissionInformers = append(fissionInformers, informerFactory.Core().V1().Services().Informer())
+		informerFactory.Start(ctx.Done())
 	}
 	for _, informerFactory := range cnmInformerFactory {
-		fissionInformers = append(fissionInformers, informerFactory.Apps().V1().Deployments().Informer())
-		fissionInformers = append(fissionInformers, informerFactory.Core().V1().Services().Informer())
+		informerFactory.Start(ctx.Done())
 	}
 
 	api, err := MakeExecutor(ctx, logger, cms, fissionClient, executorTypes,

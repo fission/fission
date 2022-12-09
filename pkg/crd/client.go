@@ -33,6 +33,7 @@ import (
 	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
 
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
+	"github.com/fission/fission/pkg/utils"
 )
 
 // GetKubernetesClient gets a kubernetes client using the kubeconfig file at the
@@ -91,9 +92,13 @@ func MakeFissionClient() (versioned.Interface, kubernetes.Interface, apiextensio
 // WaitForCRDs does a timeout to check if CRDs have been installed
 func WaitForCRDs(ctx context.Context, logger *zap.Logger, fissionClient versioned.Interface) error {
 	logger.Info("Waiting for CRDs to be installed")
+	defaultNs := utils.DefaultNSResolver().DefaultNamespace
+	if defaultNs == "" {
+		defaultNs = metav1.NamespaceDefault
+	}
 	start := time.Now()
 	for {
-		fi := fissionClient.CoreV1().Functions(metav1.NamespaceDefault)
+		fi := fissionClient.CoreV1().Functions(defaultNs)
 		_, err := fi.List(ctx, metav1.ListOptions{})
 		if err != nil {
 			time.Sleep(100 * time.Millisecond)

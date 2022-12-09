@@ -51,7 +51,7 @@ import (
 	hpautils "github.com/fission/fission/pkg/executor/util/hpa"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
-	finformerv1 "github.com/fission/fission/pkg/generated/informers/externalversions/core/v1"
+	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
 	"github.com/fission/fission/pkg/throttler"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/maps"
@@ -103,8 +103,7 @@ func MakeNewDeploy(
 	kubernetesClient kubernetes.Interface,
 	fetcherConfig *fetcherConfig.Config,
 	instanceID string,
-	funcInformer map[string]finformerv1.FunctionInformer,
-	envInformer map[string]finformerv1.EnvironmentInformer,
+	finformerFactory map[string]genInformer.SharedInformerFactory,
 	ndmInformerFactory map[string]k8sInformers.SharedInformerFactory,
 	podSpecPatch *apiv1.PodSpec,
 ) (executortype.ExecutorType, error) {
@@ -148,11 +147,11 @@ func MakeNewDeploy(
 		nd.svcLister[ns] = informerFactory.Core().V1().Services().Lister()
 		nd.svcListerSynced[ns] = informerFactory.Core().V1().Services().Informer().HasSynced
 	}
-	for _, fnInformer := range funcInformer {
-		fnInformer.Informer().AddEventHandler(nd.FunctionEventHandlers(ctx))
+	for _, factory := range finformerFactory {
+		factory.Core().V1().Functions().Informer().AddEventHandler(nd.FunctionEventHandlers(ctx))
 	}
-	for _, envInformer := range envInformer {
-		envInformer.Informer().AddEventHandler(nd.EnvEventHandlers(ctx))
+	for _, factory := range finformerFactory {
+		factory.Core().V1().Environments().Informer().AddEventHandler(nd.EnvEventHandlers(ctx))
 	}
 	return nd, nil
 }

@@ -21,7 +21,6 @@ import (
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	fClient "github.com/fission/fission/pkg/generated/clientset/versioned/fake"
 	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
-	finformerv1 "github.com/fission/fission/pkg/generated/informers/externalversions/core/v1"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
@@ -35,25 +34,13 @@ const (
 	configmapName     string = "newdeploy-test-configmap"
 )
 
-func runInformers(ctx context.Context, informers []k8sCache.SharedIndexInformer) {
-	// Run all informers
-	for _, informer := range informers {
-		go informer.Run(ctx.Done())
-	}
-}
-
 func TestRefreshFuncPods(t *testing.T) {
 	os.Setenv("DEBUG_ENV", "true")
 	logger := loggerfactory.GetLogger()
 	kubernetesClient := fake.NewSimpleClientset()
 	fissionClient := fClient.NewSimpleClientset()
-	informerFactory := genInformer.NewSharedInformerFactory(fissionClient, time.Minute*30)
-	funcInformer := map[string]finformerv1.FunctionInformer{
-		metav1.NamespaceAll: informerFactory.Core().V1().Functions(),
-	}
-	envInformer := map[string]finformerv1.EnvironmentInformer{
-		metav1.NamespaceAll: informerFactory.Core().V1().Environments(),
-	}
+	factory := make(map[string]genInformer.SharedInformerFactory, 0)
+	factory[metav1.NamespaceAll] = genInformer.NewSharedInformerFactory(fissionClient, time.Minute*30)
 
 	executorLabel, err := utils.GetInformerLabelByExecutor(fv1.ExecutorTypeNewdeploy)
 	if err != nil {
@@ -70,7 +57,7 @@ func TestRefreshFuncPods(t *testing.T) {
 	}
 
 	executor, err := MakeNewDeploy(ctx, logger, fissionClient, kubernetesClient, fetcherConfig, "test",
-		funcInformer, envInformer, ndmInformerFactory, nil)
+		factory, ndmInformerFactory, nil)
 	if err != nil {
 		t.Fatalf("new deploy manager creation failed: %s", err)
 	}
@@ -87,16 +74,13 @@ func TestRefreshFuncPods(t *testing.T) {
 	go ndm.Run(ctx)
 	t.Log("New deploy manager started")
 
-	informer := []k8sCache.SharedIndexInformer{
-		envInformer[metav1.NamespaceAll].Informer(),
-		funcInformer[metav1.NamespaceAll].Informer(),
+	for _, f := range factory {
+		f.Start(ctx.Done())
 	}
 	for _, informerFactory := range ndmInformerFactory {
-		informer = append(informer, informerFactory.Apps().V1().Deployments().Informer())
-		informer = append(informer, informerFactory.Core().V1().Services().Informer())
+		informerFactory.Start(ctx.Done())
 	}
 
-	runInformers(ctx, informer)
 	t.Log("Informers required for new deploy manager started")
 
 	waitSynced := make([]k8sCache.InformerSynced, 0)
