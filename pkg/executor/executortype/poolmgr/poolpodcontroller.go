@@ -86,8 +86,10 @@ func NewPoolPodController(ctx context.Context, logger *zap.Logger,
 		envDeleteQueue:       workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "EnvDeleteQueue"),
 		spCleanupPodQueue:    workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "SpecializedPodCleanupQueue"),
 	}
-	for _, factory := range finformerFactory {
-		factory.Core().V1().Functions().Informer().AddEventHandler(FunctionEventHandlers(ctx, p.logger, p.kubernetesClient, p.nsResolver.ResolveNamespace(p.nsResolver.FunctionNamespace), p.enableIstio))
+	if p.enableIstio {
+		for _, factory := range finformerFactory {
+			factory.Core().V1().Functions().Informer().AddEventHandler(FunctionEventHandlers(ctx, p.logger, p.kubernetesClient, p.nsResolver.ResolveNamespace(p.nsResolver.FunctionNamespace), p.enableIstio))
+		}
 	}
 	for ns, informer := range finformerFactory {
 		informer.Core().V1().Environments().Informer().AddEventHandler(k8sCache.ResourceEventHandlerFuncs{

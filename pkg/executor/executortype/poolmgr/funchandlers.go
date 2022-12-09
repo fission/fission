@@ -59,12 +59,6 @@ func FunctionEventHandlers(ctx context.Context, logger *zap.Logger, kubernetesCl
 				return
 			}
 
-			// create or update role-binding
-			envNs := fissionfnNamespace
-			if fn.Spec.Environment.Namespace != metav1.NamespaceDefault {
-				envNs = fn.Spec.Environment.Namespace
-			}
-
 			if istioEnabled {
 				// create a same name service for function
 				// since istio only allows the traffic to service
@@ -74,6 +68,7 @@ func FunctionEventHandlers(ctx context.Context, logger *zap.Logger, kubernetesCl
 				}
 
 				svcName := utils.GetFunctionIstioServiceName(fn.ObjectMeta.Name, fn.ObjectMeta.Namespace)
+				envNs := utils.DefaultNSResolver().GetFunctionNS(fn.Spec.Environment.Namespace)
 
 				// service for accepting user traffic
 				svc := apiv1.Service{
@@ -124,12 +119,9 @@ func FunctionEventHandlers(ctx context.Context, logger *zap.Logger, kubernetesCl
 				return
 			}
 
-			envNs := fissionfnNamespace
-			if fn.Spec.Environment.Namespace != metav1.NamespaceDefault {
-				envNs = fn.Spec.Environment.Namespace
-			}
-
 			if istioEnabled {
+				envNs := utils.DefaultNSResolver().GetFunctionNS(fn.Spec.Environment.Namespace)
+
 				svcName := utils.GetFunctionIstioServiceName(fn.ObjectMeta.Name, fn.ObjectMeta.Namespace)
 				// delete function istio service
 				err := kubernetesClient.CoreV1().Services(envNs).Delete(ctx, svcName, metav1.DeleteOptions{})
