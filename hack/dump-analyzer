@@ -30,6 +30,7 @@ function prom_context() {
     if [ -z "$PROM_CONTEXT" ]; then
         exit_error "PROM_CONTEXT not set"
     fi
+    echo "Prometheus context: $PROM_CONTEXT"
 }
 
 function list_context() {
@@ -113,7 +114,7 @@ function prometheus_run() {
         --config.file=$ETC_PROM/config_out/prometheus.env.yaml \
         --storage.tsdb.path=${TSDB_PATH}/ \
         --web.enable-lifecycle \
-        --web.listen-address=127.0.0.1:9090 \
+        --web.listen-address=127.0.0.1:${PROM_PORT:-9090} \
         --web.route-prefix=/ \
         --storage.tsdb.wal-compression \
         --web.config.file=$ETC_PROM/web_config/web-config.yaml
@@ -185,6 +186,10 @@ while getopts ${optstring} arg; do
         list_kind
         ;;
     p)
+        ARG_PROM_CONTEXT=$2
+        if [ ! -z "$ARG_PROM_CONTEXT" ]; then
+            PROM_CONTEXT=$ARG_PROM_CONTEXT
+        fi
         prometheus_run
         ;;
     :)

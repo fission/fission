@@ -127,7 +127,21 @@ kind v0.14.0 go1.18.2 linux/amd64
 ## Prometheus with dump
 
 ```sh
-$ export DUMP_CONTEXT=.dumps/3539792658/prom-dump-3539792658-v1.21.14
+$ export PROM_CONTEXT=.dumps/3539792658/prom-dump-3539792658-v1.21.14
 $ ./hack/dump-analyzer -p
 # Visit localhost:9090
+```
+
+To pass dump path directly without setting PROM_CONTEXT,
+
+```sh
+$ ./hack/dump-analyzer -p .dumps/3539792658/prom-dump-3539792658-v1.21.14
+# Visit localhost:9090
+```
+
+You can also run prometheus with multiple dumps,
+
+```sh
+PROM_PORT=9091 ./hack/dump-analyzer -p .dumps/3539792658/prom-dump-3539792658-v1.21.14
+# Visit localhost:9091
 ```
