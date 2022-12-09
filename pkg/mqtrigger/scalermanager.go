@@ -217,7 +217,7 @@ func getEnvVarlist(ctx context.Context, mqt *fv1.MessageQueueTrigger, routerURL 
 	// Add Auth Fields
 	secretName := mqt.Spec.Secret
 	if len(secretName) > 0 {
-		secret, err := kubeClient.CoreV1().Secrets(apiv1.NamespaceDefault).Get(ctx, secretName, metav1.GetOptions{})
+		secret, err := kubeClient.CoreV1().Secrets(mqt.Namespace).Get(ctx, secretName, metav1.GetOptions{})
 		if err != nil {
 			return nil, err
 		}
@@ -304,7 +304,7 @@ func checkAndUpdateTriggerFields(mqt, newMqt *fv1.MessageQueueTrigger) bool {
 }
 
 func getAuthTriggerSpec(ctx context.Context, mqt *fv1.MessageQueueTrigger, authenticationRef string, kubeClient kubernetes.Interface) (*unstructured.Unstructured, error) {
-	secret, err := kubeClient.CoreV1().Secrets(apiv1.NamespaceDefault).Get(ctx, mqt.Spec.Secret, metav1.GetOptions{})
+	secret, err := kubeClient.CoreV1().Secrets(mqt.Namespace).Get(ctx, mqt.Spec.Secret, metav1.GetOptions{})
 	if err != nil {
 		return nil, err
 	}
