@@ -30,6 +30,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 	k8sCache "k8s.io/client-go/tools/cache"
 
@@ -72,6 +73,7 @@ type (
 		useIstio               bool
 		podSpecPatch           *apiv1.PodSpec
 		envWatchInformer       map[string]k8sCache.SharedIndexInformer
+		createServiceAccount   bool
 	}
 )
 
@@ -106,6 +108,7 @@ func makeEnvironmentWatcher(
 		fetcherConfig:          fetcherConfig,
 		podSpecPatch:           podSpecPatch,
 		envWatchInformer:       utils.GetInformersForNamespaces(fissionClient, time.Minute*30, fv1.EnvironmentResource),
+		createServiceAccount:   utils.CreateServiceAccount(),
 	}
 
 	envWatcher.EnvWatchEventHandlers(ctx)
@@ -131,6 +134,36 @@ func (envw *environmentWatcher) getLabels(envName string, envNamespace string, e
 func (envw *environmentWatcher) Run(ctx context.Context) {
 	for _, informer := range envw.envWatchInformer {
 		go informer.Run(ctx.Done())
+	}
+
+	if envw.createServiceAccount {
+		go envw.doBuilderCheck(ctx, utils.GetSAInterval())
+	}
+}
+
+func (envw *environmentWatcher) doBuilderCheck(ctx context.Context, interval time.Duration) {
+	wait.UntilWithContext(ctx, envw.checkBuilder, interval)
+}
+
+func (envw *environmentWatcher) checkBuilder(ctx context.Context) {
+	selector := map[string]string{LABEL_DEPLOYMENT_OWNER: BUILDER_MGR}
+	for _, ns := range envw.nsResolver.FissionResourceNS {
+		namespace := envw.nsResolver.GetBuilderNS(ns)
+		selector[LABEL_ENV_NAMESPACE] = namespace
+		deployList, err := envw.getBuilderDeploymentList(ctx, selector, namespace)
+		if err != nil {
+			envw.logger.Error("error while getting builder deployment",
+				zap.String("namespace", namespace),
+				zap.Error(err))
+			continue
+		}
+		if len(deployList) == 0 {
+			envw.logger.Info("no builder deployment found", zap.String("namspace", namespace))
+		} else if len(deployList) > 1 {
+			envw.logger.Info("found more than one builder deployment", zap.String("namspace", namespace))
+		} else {
+			utils.SetupSAAndRoleBindings(ctx, envw.kubernetesClient, envw.logger, utils.BuilderSAName, namespace)
+		}
 	}
 }
 
