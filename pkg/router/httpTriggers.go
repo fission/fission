@@ -39,7 +39,6 @@ import (
 	"github.com/fission/fission/pkg/throttler"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/metrics"
-	"github.com/fission/fission/pkg/utils/otel"
 )
 
 // HTTPTriggerSet represents an HTTP trigger set
@@ -200,12 +199,7 @@ func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) *mux.Router 
 			}
 		}
 
-		var handler http.Handler
-		if trigger.Spec.Prefix != nil && *trigger.Spec.Prefix != "" {
-			handler = otel.GetHandlerWithOTEL(http.HandlerFunc(fh.handler), *trigger.Spec.Prefix)
-		} else {
-			handler = otel.GetHandlerWithOTEL(http.HandlerFunc(fh.handler), trigger.Spec.RelativeURL)
-		}
+		handler := http.HandlerFunc(fh.handler)
 
 		if trigger.Spec.Prefix != nil && *trigger.Spec.Prefix != "" {
 			prefix := *trigger.Spec.Prefix
@@ -269,11 +263,9 @@ func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) *mux.Router 
 			unTapServiceTimeout:    ts.unTapServiceTimeout,
 		}
 
-		var handler http.Handler
 		internalRoute := utils.UrlForFunction(fn.ObjectMeta.Name, fn.ObjectMeta.Namespace)
 		internalPrefixRoute := internalRoute + "/"
-		handler = otel.GetHandlerWithOTEL(http.HandlerFunc(fh.handler), internalRoute)
-
+		handler := http.HandlerFunc(fh.handler)
 		muxRouter.Handle(internalRoute, handler)
 		muxRouter.PathPrefix(internalPrefixRoute).Handler(handler)
 		ts.logger.Debug("add internal handler and prefix route for function", zap.String("router", internalRoute), zap.Any("function", fn))
