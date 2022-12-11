@@ -50,7 +50,7 @@ import (
 	executorUtils "github.com/fission/fission/pkg/executor/util"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
-	finformerv1 "github.com/fission/fission/pkg/generated/informers/externalversions/core/v1"
+	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
 	"github.com/fission/fission/pkg/utils"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
@@ -117,8 +117,7 @@ func MakeGenericPoolManager(ctx context.Context,
 	metricsClient metricsclient.Interface,
 	fetcherConfig *fetcherConfig.Config,
 	instanceID string,
-	funcInformer map[string]finformerv1.FunctionInformer,
-	envInformer map[string]finformerv1.EnvironmentInformer,
+	finformerFactory map[string]genInformer.SharedInformerFactory,
 	gpmInformerFactory map[string]k8sInformers.SharedInformerFactory,
 	podSpecPatch *apiv1.PodSpec,
 ) (executortype.ExecutorType, error) {
@@ -135,7 +134,7 @@ func MakeGenericPoolManager(ctx context.Context,
 	}
 
 	poolPodC := NewPoolPodController(ctx, gpmLogger, kubernetesClient,
-		enableIstio, funcInformer, envInformer, gpmInformerFactory)
+		enableIstio, finformerFactory, gpmInformerFactory)
 
 	gpm := &GenericPoolManager{
 		logger:                     gpmLogger,

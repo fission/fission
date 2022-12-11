@@ -37,7 +37,7 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/executor/fscache"
-	finformerv1 "github.com/fission/fission/pkg/generated/informers/externalversions/core/v1"
+	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
 	flisterv1 "github.com/fission/fission/pkg/generated/listers/core/v1"
 	"github.com/fission/fission/pkg/utils"
 )
@@ -70,8 +70,7 @@ type (
 func NewPoolPodController(ctx context.Context, logger *zap.Logger,
 	kubernetesClient kubernetes.Interface,
 	enableIstio bool,
-	funcInformer map[string]finformerv1.FunctionInformer,
-	envInformer map[string]finformerv1.EnvironmentInformer,
+	finformerFactory map[string]genInformer.SharedInformerFactory,
 	gpmInformerFactory map[string]k8sInformers.SharedInformerFactory) *PoolPodController {
 	logger = logger.Named("pool_pod_controller")
 	p := &PoolPodController{
@@ -87,17 +86,19 @@ func NewPoolPodController(ctx context.Context, logger *zap.Logger,
 		envDeleteQueue:       workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "EnvDeleteQueue"),
 		spCleanupPodQueue:    workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "SpecializedPodCleanupQueue"),
 	}
-	for _, informer := range funcInformer {
-		informer.Informer().AddEventHandler(FunctionEventHandlers(ctx, p.logger, p.kubernetesClient, p.nsResolver.ResolveNamespace(p.nsResolver.FunctionNamespace), p.enableIstio))
+	if p.enableIstio {
+		for _, factory := range finformerFactory {
+			factory.Core().V1().Functions().Informer().AddEventHandler(FunctionEventHandlers(ctx, p.logger, p.kubernetesClient, p.nsResolver.ResolveNamespace(p.nsResolver.FunctionNamespace), p.enableIstio))
+		}
 	}
-	for ns, informer := range envInformer {
-		informer.Informer().AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
+	for ns, informer := range finformerFactory {
+		informer.Core().V1().Environments().Informer().AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
 			AddFunc:    p.enqueueEnvAdd,
 			UpdateFunc: p.enqueueEnvUpdate,
 			DeleteFunc: p.enqueueEnvDelete,
 		})
-		p.envLister[ns] = informer.Lister()
-		p.envListerSynced[ns] = informer.Informer().HasSynced
+		p.envLister[ns] = informer.Core().V1().Environments().Lister()
+		p.envListerSynced[ns] = informer.Core().V1().Environments().Informer().HasSynced
 	}
 	for ns, informerFactory := range gpmInformerFactory {
 		informerFactory.Apps().V1().ReplicaSets().Informer().AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
@@ -105,8 +106,8 @@ func NewPoolPodController(ctx context.Context, logger *zap.Logger,
 			UpdateFunc: p.handleRSUpdate,
 			DeleteFunc: p.handleRSDelete,
 		})
-		p.podLister[ns] = informerFactory.Core().V1().Pods().Lister()
 		p.podListerSynced[ns] = informerFactory.Core().V1().Pods().Informer().HasSynced
+		p.podLister[ns] = informerFactory.Core().V1().Pods().Lister()
 	}
 
 	p.logger.Info("pool pod controller handlers registered")

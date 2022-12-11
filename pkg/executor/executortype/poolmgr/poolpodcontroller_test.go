@@ -32,17 +32,9 @@ import (
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	fClient "github.com/fission/fission/pkg/generated/clientset/versioned/fake"
 	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
-	finformerv1 "github.com/fission/fission/pkg/generated/informers/externalversions/core/v1"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
-
-func runInformers(ctx context.Context, informers []k8sCache.SharedIndexInformer) {
-	// Run all informers
-	for _, informer := range informers {
-		go informer.Run(ctx.Done())
-	}
-}
 
 func TestPoolPodControllerPodCleanup(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -50,16 +42,8 @@ func TestPoolPodControllerPodCleanup(t *testing.T) {
 	logger := loggerfactory.GetLogger()
 	kubernetesClient := fake.NewSimpleClientset()
 	fissionClient := fClient.NewSimpleClientset()
-	informerFactory := genInformer.NewSharedInformerFactory(fissionClient, time.Minute*30)
-	funcInformer := map[string]finformerv1.FunctionInformer{
-		metav1.NamespaceAll: informerFactory.Core().V1().Functions(),
-	}
-	pkgInformer := map[string]finformerv1.PackageInformer{
-		metav1.NamespaceAll: informerFactory.Core().V1().Packages(),
-	}
-	envInformer := map[string]finformerv1.EnvironmentInformer{
-		metav1.NamespaceAll: informerFactory.Core().V1().Environments(),
-	}
+	factory := make(map[string]genInformer.SharedInformerFactory, 0)
+	factory[metav1.NamespaceDefault] = genInformer.NewFilteredSharedInformerFactory(fissionClient, time.Minute*30, metav1.NamespaceDefault, nil)
 
 	executorLabel, err := utils.GetInformerLabelByExecutor(fv1.ExecutorTypePoolmgr)
 	if err != nil {
@@ -68,9 +52,7 @@ func TestPoolPodControllerPodCleanup(t *testing.T) {
 	gpmInformerFactory := utils.GetInformerFactoryByExecutor(kubernetesClient, executorLabel, time.Minute*30)
 
 	ppc := NewPoolPodController(ctx, logger, kubernetesClient, false,
-		funcInformer,
-		envInformer,
-		gpmInformerFactory)
+		factory, gpmInformerFactory)
 
 	executorInstanceID := strings.ToLower(uniuri.NewLen(8))
 	metricsClient := metricsclient.NewSimpleClientset()
@@ -82,8 +64,7 @@ func TestPoolPodControllerPodCleanup(t *testing.T) {
 		logger,
 		fissionClient, kubernetesClient, metricsClient,
 		fetcherConfig, executorInstanceID,
-		funcInformer, envInformer,
-		gpmInformerFactory, nil)
+		factory, gpmInformerFactory, nil)
 	if err != nil {
 		t.Fatalf("Error creating generic pool manager: %v", err)
 	}
@@ -92,23 +73,18 @@ func TestPoolPodControllerPodCleanup(t *testing.T) {
 
 	go ppc.Run(ctx, ctx.Done())
 
-	informers := []k8sCache.SharedIndexInformer{
-		funcInformer[metav1.NamespaceAll].Informer(),
-		pkgInformer[metav1.NamespaceAll].Informer(),
-		envInformer[metav1.NamespaceAll].Informer(),
+	for _, f := range factory {
+		f.Start(ctx.Done())
 	}
 
 	for _, informerFactory := range gpmInformerFactory {
-		informers = append(informers, informerFactory.Core().V1().Pods().Informer())
-		informers = append(informers, informerFactory.Apps().V1().ReplicaSets().Informer())
+		informerFactory.Start(ctx.Done())
 	}
-
-	runInformers(ctx, informers)
 
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-pod",
-			Namespace: "test-different-namespace",
+			Namespace: metav1.NamespaceDefault,
 		},
 		Status: corev1.PodStatus{
 			Phase: corev1.PodRunning,

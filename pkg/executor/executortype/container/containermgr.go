@@ -49,7 +49,7 @@ import (
 	executorUtils "github.com/fission/fission/pkg/executor/util"
 	hpautils "github.com/fission/fission/pkg/executor/util/hpa"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
-	finformerv1 "github.com/fission/fission/pkg/generated/informers/externalversions/core/v1"
+	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
 	"github.com/fission/fission/pkg/throttler"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/maps"
@@ -98,7 +98,7 @@ func MakeContainer(
 	fissionClient versioned.Interface,
 	kubernetesClient kubernetes.Interface,
 	instanceID string,
-	funcInformer map[string]finformerv1.FunctionInformer,
+	finformerFactory map[string]genInformer.SharedInformerFactory,
 	cnmInformerFactory map[string]k8sInformers.SharedInformerFactory,
 ) (executortype.ExecutorType, error) {
 	enableIstio := false
@@ -139,8 +139,8 @@ func MakeContainer(
 		caaf.svcLister[ns] = informerFactory.Core().V1().Services().Lister()
 		caaf.svcListerSynced[ns] = informerFactory.Core().V1().Services().Informer().HasSynced
 	}
-	for _, informer := range funcInformer {
-		informer.Informer().AddEventHandler(caaf.FuncInformerHandler(ctx))
+	for _, factory := range finformerFactory {
+		factory.Core().V1().Functions().Informer().AddEventHandler(caaf.FuncInformerHandler(ctx))
 	}
 	return caaf, nil
 }
