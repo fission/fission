@@ -103,15 +103,6 @@ createNamespace: true
 ##
 enableIstio: false
 
-## enableCreateSA enables fission to create service account, roles and rolebinding for builder and fetcher.
-##
-enableCreateSA: false
-
-## createSAInterval indicates the time interval in minutes, after that fission will create service account for builder and fetcher.
-## createSAInterval will be applicable only if enableCreateSA value is set to true.
-## default timing will be 30 minutes.
-SAInterval: 30
-
 ## fetcher is a light weight component that helps in running functions.
 ## fetcher helps in fetching function source code/build and uploading it when function is invoked.
 ##
@@ -202,6 +193,13 @@ executor:
     ##
     ## objectReaperInterval: 5
 
+  serviceAccountCheck:
+    ## enables fission to create service account, roles and rolebinding for missing permission for builder and fetcher.
+    enable: false
+    ## indicates the time interval in minutes, after that fission will create service account, roles and rolebinding for builder and fetcher.
+    ## interval will be applicable only if enable value is set to true.
+    ## default timing will be 30 minutes.
+    interval: 30  
 ## router is responsible for routing function calls to the appropriate function.
 ##
 router:

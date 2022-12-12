@@ -3,156 +3,201 @@ package utils
 import (
 	"context"
 	"fmt"
+	"os"
+	"strconv"
+	"time"
 
+	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
 
 	"go.uber.org/zap"
+	appsv1 "k8s.io/api/apps/v1"
 	authorizationv1 "k8s.io/api/authorization/v1"
 	v1 "k8s.io/api/core/v1"
 	rbac "k8s.io/api/rbac/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 )
 
 const (
-	FetcherSAName string = "fission-fetcher"
-	BuilderSAName string = "fission-builder"
+	FetcherSAName          string = "fission-fetcher"
+	BuilderSAName          string = "fission-builder"
+	ENV_CREATE_SA          string = "SERVICEACCOUNT_CHECK_ENABLED"
+	ENV_SA_INTERVAL        string = "SERVICEACCOUNT_CHECK_INTERVAL"
+	LABEL_ENV_NAMESPACE    string = "envNamespace"
+	LABEL_DEPLOYMENT_OWNER string = "owner"
+	BUILDER_MGR            string = "buildermgr"
 )
 
 type PermissionCheck struct {
-	gvr  schema.GroupVersionResource
-	verb string
+	gvr    *schema.GroupVersionResource
+	verb   string
+	exists bool
+}
+
+type ServiceAccount struct {
+	KubernetesClient kubernetes.Interface
+	Logger           *zap.Logger
+	SAName           string
+	NSResolver       *NamespaceResolver
 }
 
 type ServiceAccountPermissionCheck struct {
 	sa          string
-	permissions []PermissionCheck
+	permissions []*PermissionCheck
 }
 
 var (
-	fetcherCheck = ServiceAccountPermissionCheck{
+	fetcherCheck = &ServiceAccountPermissionCheck{
 		sa: FetcherSAName,
-		permissions: []PermissionCheck{
+		permissions: []*PermissionCheck{
 			{
-				gvr:  schema.GroupVersionResource{Group: "", Version: "v1", Resource: "pods"},
+				gvr:  &schema.GroupVersionResource{Group: "", Version: "v1", Resource: "pods"},
 				verb: "list",
 			},
 			{
-				gvr:  schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"},
+				gvr:  &schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"},
 				verb: "get",
 			},
 			{
-				gvr:  schema.GroupVersionResource{Group: "", Version: "v1", Resource: "secrets"},
+				gvr:  &schema.GroupVersionResource{Group: "", Version: "v1", Resource: "secrets"},
 				verb: "get",
 			},
 			{
-				gvr:  schema.GroupVersionResource{Group: "fission.io", Version: "v1", Resource: "packages"},
+				gvr:  &schema.GroupVersionResource{Group: "fission.io", Version: "v1", Resource: "packages"},
 				verb: "get",
 			},
 			{
-				gvr:  schema.GroupVersionResource{Group: "fission.io", Version: "v1", Resource: "events"},
+				gvr:  &schema.GroupVersionResource{Group: "fission.io", Version: "v1", Resource: "events"},
 				verb: "create",
 			},
 		},
 	}
-	builderCheck = ServiceAccountPermissionCheck{
+	builderCheck = &ServiceAccountPermissionCheck{
 		sa: BuilderSAName,
-		permissions: []PermissionCheck{
+		permissions: []*PermissionCheck{
 			{
-				gvr:  schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"},
+				gvr:  &schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"},
 				verb: "get",
 			},
 			{
-				gvr:  schema.GroupVersionResource{Group: "", Version: "v1", Resource: "secrets"},
+				gvr:  &schema.GroupVersionResource{Group: "", Version: "v1", Resource: "secrets"},
 				verb: "get",
 			},
 			{
-				gvr:  schema.GroupVersionResource{Group: "fission.io", Version: "v1", Resource: "packages"},
+				gvr:  &schema.GroupVersionResource{Group: "fission.io", Version: "v1", Resource: "packages"},
 				verb: "get",
 			},
 		},
 	}
 )
 
+func (sa *ServiceAccount) DoBuilderCheck(ctx context.Context, interval time.Duration) {
+	wait.UntilWithContext(ctx, sa.checkBuilder, interval)
+}
+
+func (sa *ServiceAccount) DoFetcherCheck(ctx context.Context, interval time.Duration) {
+	wait.UntilWithContext(ctx, sa.checkFetcher, interval)
+}
+
+func (sa *ServiceAccount) checkBuilder(ctx context.Context) {
+	selector := map[string]string{LABEL_DEPLOYMENT_OWNER: BUILDER_MGR}
+	for _, ns := range sa.NSResolver.FissionResourceNS {
+		namespace := sa.NSResolver.GetBuilderNS(ns)
+		selector[LABEL_ENV_NAMESPACE] = namespace
+		deployList, err := sa.getBuilderDeploymentList(ctx, selector, namespace)
+		if err != nil {
+			sa.Logger.Error("error while getting builder deployment",
+				zap.String("namespace", namespace),
+				zap.Error(err))
+			continue
+		}
+		if len(deployList) == 0 {
+			sa.Logger.Info("no builder deployment found", zap.String("namspace", namespace))
+		} else if len(deployList) > 1 {
+			sa.Logger.Info("found more than one builder deployment", zap.String("namspace", namespace))
+		} else {
+			SetupSAAndRoleBindings(ctx, sa.KubernetesClient, sa.Logger, sa.SAName, namespace)
+		}
+	}
+}
+
+func (sa *ServiceAccount) checkFetcher(ctx context.Context) {
+	for _, ns := range sa.NSResolver.FissionResourceNS {
+		namespace := sa.NSResolver.GetFunctionNS(ns)
+		SetupSAAndRoleBindings(ctx, sa.KubernetesClient, sa.Logger, sa.SAName, namespace)
+	}
+}
+
+func (sa *ServiceAccount) getBuilderDeploymentList(ctx context.Context, sel map[string]string, ns string) ([]appsv1.Deployment, error) {
+	deployList, err := sa.KubernetesClient.AppsV1().Deployments(ns).List(
+		ctx,
+		metav1.ListOptions{
+			LabelSelector: labels.Set(sel).AsSelector().String(),
+		})
+	if err != nil {
+		return nil, errors.Wrap(err, "error getting builder deployment list")
+	}
+	return deployList.Items, nil
+}
+
 func SetupSAAndRoleBindings(ctx context.Context, client kubernetes.Interface, logger *zap.Logger, SAName string, namespace string) {
-	if saObj, err := IsSAExists(ctx, client, SAName, namespace); err == nil {
-		// if SA exists then check for permission and create role and rolebinding accordingly
-		logger.Debug("SA exists",
-			zap.String("SA_name", saObj.Name),
-			zap.String("namespace", saObj.Namespace))
-		if SAName == BuilderSAName {
-			CheckPermissions(ctx, client, logger, saObj, builderCheck.permissions)
-		} else {
-			CheckPermissions(ctx, client, logger, saObj, fetcherCheck.permissions)
-		}
-	} else if err != nil && k8serrors.IsNotFound(err) {
-		// if SA not exists then create SA first
-		if sa, err := SetupSA(ctx, client, SAName, namespace); err != nil {
-			// return if got any error while creating SA
-			logger.Error("error while creating service account",
-				zap.String("SA Name", SAName),
-				zap.String("namespace", namespace))
-			return
-		} else {
-			// service account created successfully, setup role and rolebinding for newly created SA
-			// we don't need to check permissions for newly created SA.
-			logger.Debug("SA created successfully, now creating role and rolebinding",
-				zap.String("SA name", sa.Name),
-				zap.String("SA namespace", sa.Namespace))
-			if SAName == BuilderSAName {
-				for _, permission := range builderCheck.permissions {
-					SetupRoleAndBinding(ctx, client, logger, permission, sa)
-				}
-			} else {
-				for _, permission := range fetcherCheck.permissions {
-					SetupRoleAndBinding(ctx, client, logger, permission, sa)
-				}
-			}
-		}
-	} else {
-		logger.Error("error occured while getting service account",
-			zap.String("SA Name", SAName),
+	SAObj, err := CreateGetSA(ctx, client, SAName, namespace)
+	if err != nil {
+		logger.Error("error while creating or getting service account",
+			zap.String("SA_name", SAName),
 			zap.String("namespace", namespace))
 		return
 	}
-}
 
-func CheckPermissions(ctx context.Context, client kubernetes.Interface, logger *zap.Logger, sa *v1.ServiceAccount, permissions []PermissionCheck) {
-	logger.Debug("checking SA permission",
-		zap.String("SA_Name", sa.Name),
-		zap.String("namespace", sa.Namespace))
+	var permissions []*PermissionCheck
+	var rules []rbac.PolicyRule
+	if SAName == BuilderSAName {
+		permissions = builderCheck.permissions
+	} else {
+		permissions = fetcherCheck.permissions
+	}
 
 	for _, permission := range permissions {
-		isPermissionExists, err := CheckPermission(ctx, client, sa, permission.gvr, permission.verb)
+		permission.exists, err = CheckPermission(ctx, client, SAObj, permission.gvr, permission.verb)
 		if err != nil {
-			// some error occure while checking permission, log error and continue checking for other permissions
+			//  some error occurred while checking permission
+			//  now assume permission not exists and will add this permission in rules, insted of return
 			logger.Error("error while checking permission",
-				zap.String("SA_Name", sa.Name),
-				zap.String("resource", permission.gvr.Resource),
-				zap.String("namespace", sa.Namespace),
-				zap.String("error", err.Error()))
-		} else if !isPermissionExists {
-			// permission not exists, create role and rolebinding accordingly
-			logger.Debug("permission not exists, creating role and rolebinding",
-				zap.String("SA_Name", sa.Name),
-				zap.String("resource", permission.gvr.Resource),
-				zap.String("namespace", sa.Namespace))
-			SetupRoleAndBinding(ctx, client, logger, permission, sa)
+				zap.String("SA_name", SAObj.Name),
+				zap.String("namespace", SAObj.Namespace))
 		}
-		// do nothing as permission already exists
+		if !permission.exists {
+			rules = append(rules, rbac.PolicyRule{
+				APIGroups: []string{permission.gvr.Group},
+				Resources: []string{permission.gvr.Resource},
+				Verbs:     []string{permission.verb},
+			})
+		}
+	}
+
+	if len(rules) > 0 {
+		// permission not exists, setup roles for the same
+		role, err := SetupRoles(ctx, client, logger, SAObj, rules)
+		if err != nil {
+			return
+		}
+		SetupRoleBinding(ctx, client, logger, SAObj, role)
 	}
 }
 
-func SetupRoleAndBinding(ctx context.Context, client kubernetes.Interface, logger *zap.Logger, permission PermissionCheck, sa *v1.ServiceAccount) {
+func SetupRoles(ctx context.Context, client kubernetes.Interface, logger *zap.Logger, sa *v1.ServiceAccount, rules []rbac.PolicyRule) (*rbac.Role, error) {
 	roleName, err := GetRoleAndRoleBindingName(fmt.Sprintf("%s-role", sa.Name))
 	if err != nil {
 		logger.Error("error while generating role name",
 			zap.String("SA_Name", sa.Name),
 			zap.String("namespace", sa.Namespace),
 			zap.String("error", err.Error()))
-		return
+		return nil, err
 	}
 
 	logger.Debug("creating role",
@@ -165,13 +210,7 @@ func SetupRoleAndBinding(ctx context.Context, client kubernetes.Interface, logge
 			Name:      roleName,
 			Namespace: sa.Namespace,
 		},
-		Rules: []rbac.PolicyRule{
-			{
-				APIGroups: []string{permission.gvr.Group},
-				Resources: []string{permission.gvr.Resource},
-				Verbs:     []string{permission.verb},
-			},
-		},
+		Rules: rules,
 	}
 	role, err := client.RbacV1().Roles(sa.Namespace).Create(ctx, roleObj, metav1.CreateOptions{})
 	if err != nil {
@@ -179,13 +218,16 @@ func SetupRoleAndBinding(ctx context.Context, client kubernetes.Interface, logge
 			zap.String("SA_Name", sa.Name),
 			zap.String("namespace", sa.Namespace),
 			zap.String("error", err.Error()))
-		return
+		return nil, err
 	}
-	logger.Info("role created successfully",
+	logger.Debug("role created successfully",
 		zap.String("role_name", role.Name),
 		zap.String("namespace", role.Namespace),
 		zap.String("SA_Name", sa.Name))
+	return role, nil
+}
 
+func SetupRoleBinding(ctx context.Context, client kubernetes.Interface, logger *zap.Logger, sa *v1.ServiceAccount, role *rbac.Role) {
 	roleBindingName, err := GetRoleAndRoleBindingName(fmt.Sprintf("%s-rolebinding", sa.Name))
 	if err != nil {
 		logger.Error("error while generating rolebinding name",
@@ -194,7 +236,6 @@ func SetupRoleAndBinding(ctx context.Context, client kubernetes.Interface, logge
 			zap.String("error", err.Error()))
 		return
 	}
-
 	logger.Debug("creating role binding",
 		zap.String("rolebinding_name", roleBindingName),
 		zap.String("SA_Name", sa.Name),
@@ -214,7 +255,7 @@ func SetupRoleAndBinding(ctx context.Context, client kubernetes.Interface, logge
 		},
 		RoleRef: rbac.RoleRef{
 			Kind: "Role",
-			Name: roleName,
+			Name: role.Name,
 		},
 	}
 	roleBinding, err := client.RbacV1().RoleBindings(sa.Namespace).Create(context.TODO(), roleBindingObj, metav1.CreateOptions{})
@@ -231,7 +272,7 @@ func SetupRoleAndBinding(ctx context.Context, client kubernetes.Interface, logge
 		zap.String("SA_Name", sa.Name))
 }
 
-func CheckPermission(ctx context.Context, client kubernetes.Interface, sa *v1.ServiceAccount, gvr schema.GroupVersionResource, verb string) (bool, error) {
+func CheckPermission(ctx context.Context, client kubernetes.Interface, sa *v1.ServiceAccount, gvr *schema.GroupVersionResource, verb string) (bool, error) {
 	sar := authorizationv1.SubjectAccessReview{
 		Spec: authorizationv1.SubjectAccessReviewSpec{
 			ResourceAttributes: &authorizationv1.ResourceAttributes{
@@ -255,21 +296,15 @@ func CheckPermission(ctx context.Context, client kubernetes.Interface, sa *v1.Se
 	return true, nil
 }
 
-// SetupSA create service account
-func SetupSA(ctx context.Context, k8sClient kubernetes.Interface, SAName, ns string) (*v1.ServiceAccount, error) {
-	saObj := &v1.ServiceAccount{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: ns,
-			Name:      SAName,
-		},
+// CreateGetSA => create service account if not exists else get it.
+func CreateGetSA(ctx context.Context, k8sClient kubernetes.Interface, SAName, ns string) (*v1.ServiceAccount, error) {
+	saObj, err := k8sClient.CoreV1().ServiceAccounts(ns).Get(ctx, SAName, metav1.GetOptions{})
+	if err != nil && k8serrors.IsNotFound(err) {
+		saObj, err = k8sClient.CoreV1().ServiceAccounts(ns).Create(ctx, saObj, metav1.CreateOptions{})
+		if err != nil {
+			return nil, err
+		}
 	}
-	sa, err := k8sClient.CoreV1().ServiceAccounts(ns).Create(ctx, saObj, metav1.CreateOptions{})
-	return sa, err
-}
-
-// IsSAExists check whether service account exists or not in namespace
-func IsSAExists(ctx context.Context, k8sClient kubernetes.Interface, sa, ns string) (*v1.ServiceAccount, error) {
-	saObj, err := k8sClient.CoreV1().ServiceAccounts(ns).Get(ctx, sa, metav1.GetOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -283,4 +318,28 @@ func GetRoleAndRoleBindingName(name string) (string, error) {
 		return "", nil
 	}
 	return fmt.Sprintf("%s-%s", name, id.String()[:6]), nil
+}
+
+func CreateServiceAccount() bool {
+	if createSA, err := strconv.ParseBool(os.Getenv(ENV_CREATE_SA)); err != nil {
+		return createSA
+	}
+	return false
+}
+
+func GetSAInterval() time.Duration {
+	SAInterval, err := GetUIntValueFromEnv(ENV_SA_INTERVAL)
+	if err != nil {
+		return time.Duration(30) * time.Minute
+	}
+	return time.Duration(SAInterval) * time.Minute
+}
+
+func GetSAObj(k8sclient kubernetes.Interface, logger *zap.Logger, saName string) *ServiceAccount {
+	return &ServiceAccount{
+		SAName:           saName,
+		KubernetesClient: k8sclient,
+		Logger:           logger,
+		NSResolver:       DefaultNSResolver(),
+	}
 }

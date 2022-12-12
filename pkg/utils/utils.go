@@ -28,7 +28,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/mholt/archiver/v3"
 	"github.com/pkg/errors"
@@ -38,11 +37,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
-)
-
-const (
-	ENV_CREATE_SA   string = "CREATE_SA"
-	ENV_SA_INTERVAL string = "SA_INTERVAL"
 )
 
 func UrlForFunction(name, namespace string) string {
@@ -142,20 +136,6 @@ func FileSize(filePath string) (int64, error) {
 		return 0, err
 	}
 	return info.Size(), err
-}
-
-func CreateServiceAccount() bool {
-	if createSA, err := strconv.ParseBool(os.Getenv(ENV_CREATE_SA)); err != nil {
-		return createSA
-	}
-	return false
-}
-
-func GetSAInterval() time.Duration {
-	if SAInterval, err := GetUIntValueFromEnv(ENV_SA_INTERVAL); err != nil {
-		return time.Duration(SAInterval) * time.Minute
-	}
-	return time.Duration(30) * time.Minute
 }
 
 func GetFileChecksum(fileName string) (*fv1.Checksum, error) {

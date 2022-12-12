@@ -60,13 +60,7 @@ spec:
         - name: PPROF_ENABLED
           value: {{ .Values.pprof.enabled | quote }}
         - name: HELM_RELEASE_NAME
-          value: {{ .Release.Name | quote }}
-        {{- if .Values.enableCreateSA }}
-        - name: CREATE_SA
-          value: {{ .Values.enableCreateSA }}  
-        - name: SA_INTERVAL
-          value: {{ .Values.SAInterval }}
-        {{- end }}  
+          value: {{ .Release.Name | quote }} 
         {{- include "fission-resource-namespace.envs" . | indent 8 }}
         {{- include "opentelemtry.envs" . | indent 8 }}
         {{- if .Values.builderPodSpec.enabled }}
