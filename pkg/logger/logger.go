@@ -167,7 +167,9 @@ func Start(ctx context.Context, logger *zap.Logger) {
 		}
 	}
 	go symlinkReaper(logger)
-	_, kubernetesClient, _, _, err := crd.MakeFissionClient()
+
+	clientGen := crd.NewClientGenerator()
+	kubernetesClient, err := clientGen.GetKubernetesClient()
 	if err != nil {
 		log.Fatalf("Error starting pod watcher: %v", err)
 	}

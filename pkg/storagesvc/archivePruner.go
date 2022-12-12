@@ -26,6 +26,7 @@ import (
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	"github.com/fission/fission/pkg/utils"
+	"github.com/pkg/errors"
 )
 
 type ArchivePruner struct {
@@ -39,14 +40,15 @@ type ArchivePruner struct {
 const defaultPruneInterval int = 60 // in minutes
 
 func MakeArchivePruner(logger *zap.Logger, stowClient *StowClient, pruneInterval time.Duration) (*ArchivePruner, error) {
-	crdClient, _, _, _, err := crd.MakeFissionClient()
+	clientGen := crd.NewClientGenerator()
+	fissionClient, err := clientGen.GetFissionClient()
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "failed to get fission client")
 	}
 
 	return &ArchivePruner{
 		logger:        logger.Named("archive_pruner"),
-		crdClient:     crdClient,
+		crdClient:     fissionClient,
 		archiveChan:   make(chan string),
 		stowClient:    stowClient,
 		pruneInterval: pruneInterval,

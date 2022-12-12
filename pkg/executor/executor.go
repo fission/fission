@@ -251,9 +251,18 @@ func (executor *Executor) getFunctionServiceFromCache(ctx context.Context, fn *f
 // StartExecutor Starts executor and the executor components such as Poolmgr,
 // deploymgr and potential future executor types
 func StartExecutor(ctx context.Context, logger *zap.Logger, port int) error {
-	fissionClient, kubernetesClient, _, metricsClient, err := crd.MakeFissionClient()
+	clientGen := crd.NewClientGenerator()
+	fissionClient, err := clientGen.GetFissionClient()
 	if err != nil {
-		return errors.Wrap(err, "failed to get kubernetes client")
+		return errors.Wrap(err, "error making the fission client")
+	}
+	kubernetesClient, err := clientGen.GetKubernetesClient()
+	if err != nil {
+		return errors.Wrap(err, "error making the kube client")
+	}
+	metricsClient, err := clientGen.GetMetricsClient()
+	if err != nil {
+		logger.Error("error making the metrics client", zap.Error(err))
 	}
 
 	err = crd.WaitForCRDs(ctx, logger, fissionClient)

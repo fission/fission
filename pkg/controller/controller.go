@@ -27,9 +27,18 @@ import (
 func Start(ctx context.Context, logger *zap.Logger, port int, unitTestFlag bool) {
 	cLogger := logger.Named("controller")
 
-	fc, _, apiExtClient, _, err := crd.MakeFissionClient()
+	clientGen := crd.NewClientGenerator()
+	fissionClient, err := clientGen.GetFissionClient()
 	if err != nil {
-		cLogger.Fatal("failed to connect to k8s API", zap.Error(err))
+		cLogger.Fatal("failed to get fission client", zap.Error(err))
+	}
+	apiExtClient, err := clientGen.GetApiExtensionsClient()
+	if err != nil {
+		cLogger.Fatal("failed to get api extension client client", zap.Error(err))
+	}
+	kubeClient, err := clientGen.GetKubernetesClient()
+	if err != nil {
+		cLogger.Fatal("failed to get kubernetes client", zap.Error(err))
 	}
 
 	err = crd.EnsureFissionCRDs(ctx, cLogger, apiExtClient)
@@ -37,12 +46,12 @@ func Start(ctx context.Context, logger *zap.Logger, port int, unitTestFlag bool)
 		cLogger.Fatal("failed to find fission CRDs", zap.Error(err))
 	}
 
-	err = crd.WaitForCRDs(ctx, logger, fc)
+	err = crd.WaitForCRDs(ctx, logger, fissionClient)
 	if err != nil {
 		cLogger.Fatal("error waiting for CRDs", zap.Error(err))
 	}
 
-	api, err := MakeAPI(cLogger)
+	api, err := MakeAPI(cLogger, fissionClient, kubeClient)
 	if err != nil {
 		cLogger.Fatal("failed to start controller", zap.Error(err))
 	}

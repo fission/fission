@@ -115,9 +115,18 @@ func TestExecutor(t *testing.T) {
 
 	// connect to k8s
 	// and get CRD client
-	fissionClient, kubeClient, apiExtClient, _, err := crd.MakeFissionClient()
+	clientGen := crd.NewClientGenerator()
+	fissionClient, err := clientGen.GetFissionClient()
 	if err != nil {
-		log.Panicf("failed to connect: %v", err)
+		log.Panicf("failed to connect: %s", err)
+	}
+	kubeClient, err := clientGen.GetKubernetesClient()
+	if err != nil {
+		log.Panicf("failed to connect: %s", err)
+	}
+	apiExtClient, err := clientGen.GetApiExtensionsClient()
+	if err != nil {
+		log.Panicf("failed to connect: %s", err)
 	}
 
 	ctx := context.Background()

@@ -36,10 +36,7 @@ import (
 	"github.com/fission/fission/pkg/utils"
 )
 
-// GetKubernetesClient gets a kubernetes client using the kubeconfig file at the
-// environment var $KUBECONFIG, or an in-cluster config if that's
-// undefined.
-func GetKubernetesClient() (*rest.Config, kubernetes.Interface, apiextensionsclient.Interface, metricsclient.Interface, error) {
+func GetRestConfig() (*rest.Config, error) {
 	var config *rest.Config
 	var err error
 
@@ -49,44 +46,82 @@ func GetKubernetesClient() (*rest.Config, kubernetes.Interface, apiextensionscli
 	if len(kubeConfig) != 0 {
 		config, err = clientcmd.BuildConfigFromFlags("", kubeConfig)
 		if err != nil {
-			return nil, nil, nil, nil, err
+			return nil, err
 		}
 	} else {
 		config, err = rest.InClusterConfig()
 		if err != nil {
-			return nil, nil, nil, nil, err
+			return nil, err
 		}
 	}
 
-	// creates the clientset
-	clientset, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		return nil, nil, nil, nil, err
-	}
-
-	apiExtClientset, err := apiextensionsclient.NewForConfig(config)
-	if err != nil {
-		return nil, nil, nil, nil, err
-	}
-
-	metricsClient, _ := metricsclient.NewForConfig(config)
-
-	return config, clientset, apiExtClientset, metricsClient, nil
+	return config, nil
 }
 
-func MakeFissionClient() (versioned.Interface, kubernetes.Interface, apiextensionsclient.Interface, metricsclient.Interface, error) {
-	config, kubeClient, apiExtClient, metricsClient, err := GetKubernetesClient()
-	if err != nil {
-		return nil, nil, nil, nil, err
+type ClientGenerator struct {
+	restConfig *rest.Config
+}
+
+func (cg *ClientGenerator) getRestConfig() (*rest.Config, error) {
+	if cg.restConfig != nil {
+		return cg.restConfig, nil
 	}
 
-	// make a CRD REST client with the config
-	crdClient, err := versioned.NewForConfig(config)
+	var err error
+	cg.restConfig, err = GetRestConfig()
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, err
 	}
 
-	return crdClient, kubeClient, apiExtClient, metricsClient, nil
+	return cg.restConfig, nil
+}
+
+func (cg *ClientGenerator) GetFissionClient() (versioned.Interface, error) {
+	config, err := cg.getRestConfig()
+	if err != nil {
+		return nil, err
+	}
+	return versioned.NewForConfig(config)
+}
+
+func (cg *ClientGenerator) GetKubernetesClient() (kubernetes.Interface, error) {
+	config, err := cg.getRestConfig()
+	if err != nil {
+		return nil, err
+	}
+	return kubernetes.NewForConfig(config)
+}
+
+func (cg *ClientGenerator) GetApiExtensionsClient() (apiextensionsclient.Interface, error) {
+	config, err := cg.getRestConfig()
+	if err != nil {
+		return nil, err
+	}
+	return apiextensionsclient.NewForConfig(config)
+}
+
+func (cg *ClientGenerator) GetMetricsClient() (metricsclient.Interface, error) {
+	config, err := cg.getRestConfig()
+	if err != nil {
+		return nil, err
+	}
+	return metricsclient.NewForConfig(config)
+}
+
+func (cg *ClientGenerator) GetDynamicClient() (dynamic.Interface, error) {
+	config, err := cg.getRestConfig()
+	if err != nil {
+		return nil, err
+	}
+	return dynamic.NewForConfig(config)
+}
+
+func NewClientGenerator() *ClientGenerator {
+	return &ClientGenerator{}
+}
+
+func NewClientGeneratorWithRestConfig(restConfig *rest.Config) *ClientGenerator {
+	return &ClientGenerator{restConfig: restConfig}
 }
 
 // WaitForCRDs does a timeout to check if CRDs have been installed
@@ -114,23 +149,11 @@ func WaitForCRDs(ctx context.Context, logger *zap.Logger, fissionClient versione
 
 // GetDynamicClient creates and returns new dynamic client or returns an error
 func GetDynamicClient() (dynamic.Interface, error) {
-	var config *rest.Config
-	var err error
-
-	// get the config, either from kubeconfig or using our
-	// in-cluster service account
-	kubeConfig := os.Getenv("KUBECONFIG")
-	if len(kubeConfig) != 0 {
-		config, err = clientcmd.BuildConfigFromFlags("", kubeConfig)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		config, err = rest.InClusterConfig()
-		if err != nil {
-			return nil, err
-		}
+	config, err := GetRestConfig()
+	if err != nil {
+		return nil, err
 	}
+
 	dynamicClient, err := dynamic.NewForConfig(config)
 	if err != nil {
 		return nil, err

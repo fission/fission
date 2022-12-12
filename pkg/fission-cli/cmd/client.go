@@ -27,6 +27,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
+	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/fission-cli/console"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 )
@@ -118,13 +119,15 @@ func NewClient(opts ClientOptions) (*Client, error) {
 		return nil, err
 	}
 	client.RestConfig = restConfig
-	clientset, err := kubernetes.NewForConfig(restConfig)
+
+	clientGen := crd.NewClientGeneratorWithRestConfig(restConfig)
+	clientset, err := clientGen.GetKubernetesClient()
 	if err != nil {
 		return nil, err
 	}
 	client.KubernetesClient = clientset
 
-	fissionClientset, err := versioned.NewForConfig(restConfig)
+	fissionClientset, err := clientGen.GetFissionClient()
 	if err != nil {
 		return nil, err
 	}

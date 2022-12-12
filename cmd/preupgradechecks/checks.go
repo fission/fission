@@ -52,9 +52,18 @@ const (
 )
 
 func makePreUpgradeTaskClient(logger *zap.Logger) (*PreUpgradeTaskClient, error) {
-	fissionClient, k8sClient, apiExtClient, _, err := crd.MakeFissionClient()
+	clientGen := crd.NewClientGenerator()
+	fissionClient, err := clientGen.GetFissionClient()
 	if err != nil {
-		return nil, errors.Wrap(err, "error making fission client")
+		return nil, errors.Wrap(err, "failed to get fission client")
+	}
+	k8sClient, err := clientGen.GetKubernetesClient()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get kubernetes client")
+	}
+	apiExtClient, err := clientGen.GetApiExtensionsClient()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get apiextensions client")
 	}
 
 	return &PreUpgradeTaskClient{

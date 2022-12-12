@@ -68,8 +68,8 @@ type (
 	}
 )
 
-func MakeAPI(logger *zap.Logger) (*API, error) {
-	api, err := makeCRDBackedAPI(logger)
+func MakeAPI(logger *zap.Logger, fissionClient versioned.Interface, kubernetesClient kubernetes.Interface) (*API, error) {
+	api, err := makeCRDBackedAPI(logger, fissionClient, kubernetesClient)
 
 	u := os.Getenv("STORAGE_SERVICE_URL")
 	if len(u) > 0 {

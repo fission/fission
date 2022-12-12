@@ -90,9 +90,14 @@ func serve(ctx context.Context, logger *zap.Logger, port int,
 func Start(ctx context.Context, logger *zap.Logger, port int, executorURL string) {
 	fmap := makeFunctionServiceMap(logger, time.Minute)
 
-	fissionClient, kubeClient, _, _, err := crd.MakeFissionClient()
+	clientGen := crd.NewClientGenerator()
+	fissionClient, err := clientGen.GetFissionClient()
 	if err != nil {
-		logger.Fatal("error connecting to kubernetes API", zap.Error(err))
+		logger.Fatal("error making the fission client", zap.Error(err))
+	}
+	kubeClient, err := clientGen.GetKubernetesClient()
+	if err != nil {
+		logger.Fatal("error making the kube client", zap.Error(err))
 	}
 
 	err = crd.WaitForCRDs(ctx, logger, fissionClient)
