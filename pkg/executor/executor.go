@@ -386,15 +386,7 @@ func StartExecutor(ctx context.Context, logger *zap.Logger, port int) error {
 		return err
 	}
 
-	enableSA := utils.CreateServiceAccount()
-	if enableSA {
-		interval := utils.GetSAInterval()
-		builderSA := utils.GetSAObj(kubernetesClient, logger, utils.BuilderSAName)
-		fetcherSA := utils.GetSAObj(kubernetesClient, logger, utils.FetcherSAName)
-
-		go builderSA.DoBuilderCheck(ctx, interval)
-		go fetcherSA.DoFetcherCheck(ctx, interval)
-	}
+	utils.CreateMissingPermissionForSA(ctx, kubernetesClient, logger)
 
 	go metrics.ServeMetrics(ctx, logger)
 	go api.Serve(ctx, port)
