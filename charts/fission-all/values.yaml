@@ -199,7 +199,7 @@ executor:
     ## indicates the time interval in minutes, after that fission will create service account, roles and rolebinding for builder and fetcher.
     ## interval will be applicable only if enable value is set to true.
     ## default timing will be 30 minutes.
-    interval: 1  
+    interval: 30  
 ## router is responsible for routing function calls to the appropriate function.
 ##
 router:
