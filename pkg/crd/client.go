@@ -55,6 +55,12 @@ func GetRestConfig() (*rest.Config, error) {
 		}
 	}
 
+	// TODO: add env var to control this
+	// set the QPS and Burst to a higher value to avoid throttling
+	// default values are 5 and 10 respectively
+	config.QPS = 100
+	config.Burst = 200
+
 	return config, nil
 }
 
@@ -72,7 +78,6 @@ func (cg *ClientGenerator) getRestConfig() (*rest.Config, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	return cg.restConfig, nil
 }
 
