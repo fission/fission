@@ -117,7 +117,7 @@ rules:
   - get
   - list
   - watch
-{{- if .Values.serviceAccountCheck.enabled }}  
+{{- if .Values.executor.serviceAccountCheck.enabled }}  
 - apiGroups:
   - ""
   resources:
