@@ -223,7 +223,7 @@ func setupRoleBinding(ctx context.Context, client kubernetes.Interface, logger *
 			Name: role.Name,
 		},
 	}
-	roleBinding, err := client.RbacV1().RoleBindings(sa.Namespace).Create(context.TODO(), roleBindingObj, metav1.CreateOptions{})
+	roleBinding, err := client.RbacV1().RoleBindings(sa.Namespace).Create(ctx, roleBindingObj, metav1.CreateOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("error while creating rolebinding for sa %s in namespace %s error: %s", sa.Name, sa.Namespace, err.Error())
 	}
