@@ -50,7 +50,8 @@ var (
 )
 
 func getScaledObjectClient(namespace string) (dynamic.ResourceInterface, error) {
-	dynamicClient, err := crd.GetDynamicClient()
+	clientGen := crd.NewClientGenerator()
+	dynamicClient, err := clientGen.GetDynamicClient()
 	if err != nil {
 		return nil, err
 	}
@@ -58,7 +59,8 @@ func getScaledObjectClient(namespace string) (dynamic.ResourceInterface, error) 
 }
 
 func getAuthTriggerClient(namespace string) (dynamic.ResourceInterface, error) {
-	dynamicClient, err := crd.GetDynamicClient()
+	clientGen := crd.NewClientGenerator()
+	dynamicClient, err := clientGen.GetDynamicClient()
 	if err != nil {
 		return nil, err
 	}
@@ -149,10 +151,16 @@ func mqTriggerEventHandlers(ctx context.Context, logger *zap.Logger, kubeClient 
 // StartScalerManager watches for changes in MessageQueueTrigger and,
 // Based on changes, it Creates, Updates and Deletes Objects of Kind ScaledObjects, AuthenticationTriggers and Deployments
 func StartScalerManager(ctx context.Context, logger *zap.Logger, routerURL string) error {
-	fissionClient, kubeClient, _, _, err := crd.MakeFissionClient()
+	clientGen := crd.NewClientGenerator()
+	fissionClient, err := clientGen.GetFissionClient()
 	if err != nil {
-		return err
+		return errors.Wrap(err, "failed to get fission client")
 	}
+	kubeClient, err := clientGen.GetKubernetesClient()
+	if err != nil {
+		return errors.Wrap(err, "failed to get kubernetes client")
+	}
+
 	err = crd.WaitForCRDs(ctx, logger, fissionClient)
 	if err != nil {
 		return errors.Wrap(err, "error waiting for CRDs")

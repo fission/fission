@@ -17,8 +17,8 @@ limitations under the License.
 package metrics
 
 import (
+	"github.com/fission/fission/pkg/utils/metrics"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
 var (
@@ -26,14 +26,14 @@ var (
 	// function_uid: the function's version id
 	// function_address: the address of the pod from which the function was called
 	functionLabels = []string{"function_name", "function_namespace"}
-	ColdStarts     = promauto.NewCounterVec(
+	ColdStarts     = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "fission_function_cold_starts_total",
 			Help: "How many cold starts are made by function_name, function_namespace.",
 		},
 		functionLabels,
 	)
-	FuncRunningSummary = promauto.NewSummaryVec(
+	FuncRunningSummary = prometheus.NewSummaryVec(
 		prometheus.SummaryOpts{
 			Name:       "fission_function_running_seconds",
 			Help:       "The running time (last access - create) in seconds of the function.",
@@ -41,7 +41,7 @@ var (
 		},
 		functionLabels,
 	)
-	FuncError = promauto.NewCounterVec(
+	FuncError = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "fission_function_cold_start_errors_total",
 			Help: "Count of fission cold start errors",
@@ -49,3 +49,10 @@ var (
 		functionLabels,
 	)
 )
+
+func init() {
+	registry := metrics.Registry
+	registry.MustRegister(ColdStarts)
+	registry.MustRegister(FuncRunningSummary)
+	registry.MustRegister(FuncError)
+}

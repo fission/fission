@@ -18,15 +18,12 @@ package controller
 
 import (
 	"go.uber.org/zap"
+	"k8s.io/client-go/kubernetes"
 
-	"github.com/fission/fission/pkg/crd"
+	"github.com/fission/fission/pkg/generated/clientset/versioned"
 )
 
-func makeCRDBackedAPI(logger *zap.Logger) (*API, error) {
-	fissionClient, kubernetesClient, _, _, err := crd.MakeFissionClient()
-	if err != nil {
-		return nil, err
-	}
+func makeCRDBackedAPI(logger *zap.Logger, fissionClient versioned.Interface, kubernetesClient kubernetes.Interface) (*API, error) {
 	return &API{
 		logger:           logger.Named("api"),
 		fissionClient:    fissionClient,

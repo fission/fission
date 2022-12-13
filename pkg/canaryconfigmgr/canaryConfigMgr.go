@@ -555,12 +555,17 @@ func getEnvValue(envVar string) string {
 func StartCanaryServer(ctx context.Context, logger *zap.Logger, unitTestFlag bool) error {
 	cLogger := logger.Named("CanaryServer")
 
-	fc, kc, _, _, err := crd.MakeFissionClient()
+	clientGen := crd.NewClientGenerator()
+	fissionClient, err := clientGen.GetFissionClient()
 	if err != nil {
-		cLogger.Fatal("failed to connect to k8s API", zap.Error(err))
+		return errors.Wrap(err, "failed to get fission client")
+	}
+	kubernetesClient, err := clientGen.GetKubernetesClient()
+	if err != nil {
+		return errors.Wrap(err, "failed to get kubernetes client")
 	}
 
-	err = ConfigureFeatures(ctx, cLogger, unitTestFlag, fc, kc)
+	err = ConfigureFeatures(ctx, cLogger, unitTestFlag, fissionClient, kubernetesClient)
 	if err != nil {
 		cLogger.Error("error configuring features - proceeding without optional features", zap.Error(err))
 	}
