@@ -19,7 +19,6 @@ package crd
 import (
 	"context"
 	"errors"
-	"os"
 	"time"
 
 	"go.uber.org/zap"
@@ -29,40 +28,12 @@ import (
 	"k8s.io/client-go/kubernetes"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
 	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
+	"sigs.k8s.io/controller-runtime/pkg/client/config"
 
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	"github.com/fission/fission/pkg/utils"
 )
-
-func GetRestConfig() (*rest.Config, error) {
-	var config *rest.Config
-	var err error
-
-	// get the config, either from kubeconfig or using our
-	// in-cluster service account
-	kubeConfig := os.Getenv("KUBECONFIG")
-	if len(kubeConfig) != 0 {
-		config, err = clientcmd.BuildConfigFromFlags("", kubeConfig)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		config, err = rest.InClusterConfig()
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	// TODO: add env var to control this
-	// set the QPS and Burst to a higher value to avoid throttling
-	// default values are 5 and 10 respectively
-	config.QPS = 100
-	config.Burst = 200
-
-	return config, nil
-}
 
 type ClientGenerator struct {
 	restConfig *rest.Config
@@ -74,7 +45,7 @@ func (cg *ClientGenerator) getRestConfig() (*rest.Config, error) {
 	}
 
 	var err error
-	cg.restConfig, err = GetRestConfig()
+	cg.restConfig, err = config.GetConfig()
 	if err != nil {
 		return nil, err
 	}
@@ -150,18 +121,4 @@ func WaitForCRDs(ctx context.Context, logger *zap.Logger, fissionClient versione
 			return errors.New("timeout waiting for CRDs")
 		}
 	}
-}
-
-// GetDynamicClient creates and returns new dynamic client or returns an error
-func GetDynamicClient() (dynamic.Interface, error) {
-	config, err := GetRestConfig()
-	if err != nil {
-		return nil, err
-	}
-
-	dynamicClient, err := dynamic.NewForConfig(config)
-	if err != nil {
-		return nil, err
-	}
-	return dynamicClient, nil
 }

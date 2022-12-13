@@ -50,7 +50,8 @@ var (
 )
 
 func getScaledObjectClient(namespace string) (dynamic.ResourceInterface, error) {
-	dynamicClient, err := crd.GetDynamicClient()
+	clientGen := crd.NewClientGenerator()
+	dynamicClient, err := clientGen.GetDynamicClient()
 	if err != nil {
 		return nil, err
 	}
@@ -58,7 +59,8 @@ func getScaledObjectClient(namespace string) (dynamic.ResourceInterface, error) 
 }
 
 func getAuthTriggerClient(namespace string) (dynamic.ResourceInterface, error) {
-	dynamicClient, err := crd.GetDynamicClient()
+	clientGen := crd.NewClientGenerator()
+	dynamicClient, err := clientGen.GetDynamicClient()
 	if err != nil {
 		return nil, err
 	}
