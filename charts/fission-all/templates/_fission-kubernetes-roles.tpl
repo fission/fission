@@ -117,6 +117,7 @@ rules:
   - get
   - list
   - watch
+{{- if .Values.serviceAccountCheck.enabled }}  
 - apiGroups:
   - ""
   resources:
@@ -136,7 +137,8 @@ rules:
   - rolebindings
   - roles
   verbs:
-  - create    
+  - create
+{{- end }}      
 - apiGroups:
   - apps
   resources:
