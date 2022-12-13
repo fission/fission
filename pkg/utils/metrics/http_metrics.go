@@ -22,7 +22,6 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 
 	"github.com/fission/fission/pkg/router/util"
 )
@@ -33,14 +32,14 @@ type ResponseWriterWrapper struct {
 }
 
 var (
-	httpRequestsTotal = promauto.NewCounterVec(
+	httpRequestsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "http_requests_total",
 			Help: "Number of requests by path, method and status code.",
 		},
 		[]string{"path", "method", "code"},
 	)
-	httpRequestDuration = promauto.NewSummaryVec(
+	httpRequestDuration = prometheus.NewSummaryVec(
 		prometheus.SummaryOpts{
 			Name:       "http_requests_duration_seconds",
 			Help:       "Time taken to serve the request by path and method.",
@@ -48,7 +47,7 @@ var (
 		},
 		[]string{"path", "method"},
 	)
-	httpRequestInFlight = promauto.NewGaugeVec(
+	httpRequestInFlight = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "http_requests_in_flight",
 			Help: "Number of requests currently being served by path and method.",
@@ -56,6 +55,12 @@ var (
 		[]string{"path", "method"},
 	)
 )
+
+func init() {
+	Registry.MustRegister(httpRequestsTotal)
+	Registry.MustRegister(httpRequestDuration)
+	Registry.MustRegister(httpRequestInFlight)
+}
 
 func (rw *ResponseWriterWrapper) WriteHeader(statuscode int) {
 	rw.statusCode = statuscode

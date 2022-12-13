@@ -23,6 +23,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
+	"sigs.k8s.io/controller-runtime/pkg/metrics"
 
 	"github.com/fission/fission/pkg/utils/httpserver"
 )
@@ -32,7 +33,17 @@ func ServeMetrics(ctx context.Context, logger *zap.Logger) {
 	if metricsAddr == "" {
 		metricsAddr = "8080"
 	}
+	err := metrics.Registry.Register(Registry)
+	if err != nil {
+		logger.Error("failed to register metrics", zap.Error(err))
+	}
 	mux := http.NewServeMux()
-	mux.Handle("/metrics", promhttp.Handler())
+	mux.Handle("/metrics", promhttp.HandlerFor(
+		metrics.Registry,
+		promhttp.HandlerOpts{
+			// Opt into OpenMetrics to support exemplars.
+			EnableOpenMetrics: true,
+		},
+	))
 	httpserver.StartServer(ctx, logger, "metrics", metricsAddr, mux)
 }

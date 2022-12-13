@@ -2,7 +2,8 @@ package router
 
 import (
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
+
+	"github.com/fission/fission/pkg/utils/metrics"
 )
 
 var (
@@ -15,21 +16,21 @@ var (
 	// code: http status code
 	// path: the client call the function on which http path
 	// method: the function's http method
-	functionCalls = promauto.NewCounterVec(
+	functionCalls = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "fission_function_calls_total",
 			Help: "Count of Fission function calls",
 		},
 		labelsStrings,
 	)
-	functionCallErrors = promauto.NewCounterVec(
+	functionCallErrors = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "fission_function_errors_total",
 			Help: "Count of Fission function errors",
 		},
 		labelsStrings,
 	)
-	functionCallOverhead = promauto.NewSummaryVec(
+	functionCallOverhead = prometheus.NewSummaryVec(
 		prometheus.SummaryOpts{
 			Name:       "fission_function_overhead_seconds",
 			Help:       "The function call delay caused by fission.",
@@ -38,3 +39,10 @@ var (
 		labelsStrings,
 	)
 )
+
+func init() {
+	registry := metrics.Registry
+	registry.MustRegister(functionCalls)
+	registry.MustRegister(functionCallErrors)
+	registry.MustRegister(functionCallOverhead)
+}
