@@ -21,7 +21,7 @@ import (
 
 	"github.com/pkg/errors"
 	uuid "github.com/satori/go.uuid"
-	asv2beta2 "k8s.io/api/autoscaling/v2beta2"
+	asv2 "k8s.io/api/autoscaling/v2"
 	apiv1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -525,7 +525,7 @@ func getExecutionStrategy(fnExecutor fv1.ExecutorType, input cli.Input) (strateg
 			if err != nil {
 				return nil, err
 			}
-			strategy.Metrics = []asv2beta2.MetricSpec{hpa.ConvertTargetCPUToCustomMetric(int32(targetCPU))}
+			strategy.Metrics = []asv2.MetricSpec{hpa.ConvertTargetCPUToCustomMetric(int32(targetCPU))}
 		}
 	}
 
@@ -618,7 +618,7 @@ func updateExecutionStrategy(input cli.Input, existingExecutionStrategy *fv1.Exe
 			if err != nil {
 				return nil, err
 			}
-			strategy.Metrics = []asv2beta2.MetricSpec{hpa.ConvertTargetCPUToCustomMetric(int32(targetCPU))}
+			strategy.Metrics = []asv2.MetricSpec{hpa.ConvertTargetCPUToCustomMetric(int32(targetCPU))}
 		}
 
 	}

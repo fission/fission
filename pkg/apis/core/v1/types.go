@@ -17,7 +17,7 @@ limitations under the License.
 package v1
 
 import (
-	asv2beta2 "k8s.io/api/autoscaling/v2beta2"
+	asv2 "k8s.io/api/autoscaling/v2"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -465,12 +465,12 @@ type (
 		// created for the function.
 		// Applicable for executor type newdeploy and container.
 		// +optional
-		Metrics []asv2beta2.MetricSpec `json:"hpaMetrics,omitempty"`
+		Metrics []asv2.MetricSpec `json:"hpaMetrics,omitempty"`
 
 		// hpaBehavior is the behavior of HPA when scaling in up/down direction.
 		// Applicable for executor type newdeploy and container.
 		// +optional
-		Behavior *asv2beta2.HorizontalPodAutoscalerBehavior `json:"hpaBehavior,omitempty"`
+		Behavior *asv2.HorizontalPodAutoscalerBehavior `json:"hpaBehavior,omitempty"`
 	}
 
 	// FunctionReferenceType refers to type of Function

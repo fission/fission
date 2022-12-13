@@ -21,7 +21,7 @@ import (
 
 	"go.uber.org/zap"
 	appsv1 "k8s.io/api/apps/v1"
-	asv2beta2 "k8s.io/api/autoscaling/v2beta2"
+	asv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
 	k8s_err "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -51,21 +51,21 @@ func NewHpaOperations(logger *zap.Logger, kubernetesClient kubernetes.Interface,
 	}
 }
 
-func ConvertTargetCPUToCustomMetric(targetCPUVal int32) asv2beta2.MetricSpec {
-	return asv2beta2.MetricSpec{
-		Type: asv2beta2.ResourceMetricSourceType,
-		Resource: &asv2beta2.ResourceMetricSource{
+func ConvertTargetCPUToCustomMetric(targetCPUVal int32) asv2.MetricSpec {
+	return asv2.MetricSpec{
+		Type: asv2.ResourceMetricSourceType,
+		Resource: &asv2.ResourceMetricSource{
 			Name: corev1.ResourceCPU,
-			Target: asv2beta2.MetricTarget{
-				Type:               asv2beta2.UtilizationMetricType,
+			Target: asv2.MetricTarget{
+				Type:               asv2.UtilizationMetricType,
 				AverageUtilization: &targetCPUVal,
 			},
 		},
 	}
 }
 
-func getScaleTargetRef(deployment *appsv1.Deployment) asv2beta2.CrossVersionObjectReference {
-	return asv2beta2.CrossVersionObjectReference{
+func getScaleTargetRef(deployment *appsv1.Deployment) asv2.CrossVersionObjectReference {
+	return asv2.CrossVersionObjectReference{
 		APIVersion: DeploymentVersion,
 		Kind:       DeploymentKind,
 		Name:       deployment.ObjectMeta.Name,
@@ -73,7 +73,7 @@ func getScaleTargetRef(deployment *appsv1.Deployment) asv2beta2.CrossVersionObje
 }
 
 func (hpaops *HpaOperations) CreateOrGetHpa(ctx context.Context, hpaName string, execStrategy *fv1.ExecutionStrategy,
-	depl *appsv1.Deployment, deployLabels map[string]string, deployAnnotations map[string]string) (*asv2beta2.HorizontalPodAutoscaler, error) {
+	depl *appsv1.Deployment, deployLabels map[string]string, deployAnnotations map[string]string) (*asv2.HorizontalPodAutoscaler, error) {
 
 	if depl == nil {
 		return nil, errors.New("failed to create HPA, found empty deployment")
@@ -89,7 +89,7 @@ func (hpaops *HpaOperations) CreateOrGetHpa(ctx context.Context, hpaName string,
 		maxRepl = minRepl
 	}
 	targetCPU := int32(execStrategy.TargetCPUPercent) // nolint: staticcheck
-	var hpaMetrics []asv2beta2.MetricSpec
+	var hpaMetrics []asv2.MetricSpec
 	if targetCPU > 0 && targetCPU < 100 {
 		hpaMetrics = append(hpaMetrics, ConvertTargetCPUToCustomMetric(targetCPU))
 	}
@@ -98,13 +98,13 @@ func (hpaops *HpaOperations) CreateOrGetHpa(ctx context.Context, hpaName string,
 		hpaMetrics = append(hpaMetrics, execStrategy.Metrics...)
 	}
 
-	hpa := &asv2beta2.HorizontalPodAutoscaler{
+	hpa := &asv2.HorizontalPodAutoscaler{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        hpaName,
 			Labels:      deployLabels,
 			Annotations: deployAnnotations,
 		},
-		Spec: asv2beta2.HorizontalPodAutoscalerSpec{
+		Spec: asv2.HorizontalPodAutoscalerSpec{
 			ScaleTargetRef: getScaleTargetRef(depl),
 			MinReplicas:    &minRepl,
 			MaxReplicas:    maxRepl,
@@ -120,7 +120,7 @@ func (hpaops *HpaOperations) CreateOrGetHpa(ctx context.Context, hpaName string,
 			existingHpa.Annotations = hpa.Annotations
 			existingHpa.Labels = hpa.Labels
 			existingHpa.Spec = hpa.Spec
-			existingHpa, err = hpaops.kubernetesClient.AutoscalingV2beta2().HorizontalPodAutoscalers(depl.ObjectMeta.Namespace).Update(ctx, existingHpa, metav1.UpdateOptions{})
+			existingHpa, err = hpaops.kubernetesClient.AutoscalingV2().HorizontalPodAutoscalers(depl.ObjectMeta.Namespace).Update(ctx, existingHpa, metav1.UpdateOptions{})
 			if err != nil {
 				logger.Warn("error adopting HPA", zap.Error(err),
 					zap.String("HPA", hpaName), zap.String("ns", depl.ObjectMeta.Namespace))
@@ -129,10 +129,10 @@ func (hpaops *HpaOperations) CreateOrGetHpa(ctx context.Context, hpaName string,
 		}
 		return existingHpa, err
 	} else if k8s_err.IsNotFound(err) {
-		cHpa, err := hpaops.kubernetesClient.AutoscalingV2beta2().HorizontalPodAutoscalers(depl.ObjectMeta.Namespace).Create(ctx, hpa, metav1.CreateOptions{})
+		cHpa, err := hpaops.kubernetesClient.AutoscalingV2().HorizontalPodAutoscalers(depl.ObjectMeta.Namespace).Create(ctx, hpa, metav1.CreateOptions{})
 		if err != nil {
 			if k8s_err.IsAlreadyExists(err) {
-				cHpa, err = hpaops.kubernetesClient.AutoscalingV2beta2().HorizontalPodAutoscalers(depl.ObjectMeta.Namespace).Get(ctx, hpaName, metav1.GetOptions{})
+				cHpa, err = hpaops.kubernetesClient.AutoscalingV2().HorizontalPodAutoscalers(depl.ObjectMeta.Namespace).Get(ctx, hpaName, metav1.GetOptions{})
 			}
 			if err != nil {
 				return nil, err
@@ -144,15 +144,15 @@ func (hpaops *HpaOperations) CreateOrGetHpa(ctx context.Context, hpaName string,
 	return nil, err
 }
 
-func (hpaops *HpaOperations) GetHpa(ctx context.Context, ns, name string) (*asv2beta2.HorizontalPodAutoscaler, error) {
-	return hpaops.kubernetesClient.AutoscalingV2beta2().HorizontalPodAutoscalers(ns).Get(ctx, name, metav1.GetOptions{})
+func (hpaops *HpaOperations) GetHpa(ctx context.Context, ns, name string) (*asv2.HorizontalPodAutoscaler, error) {
+	return hpaops.kubernetesClient.AutoscalingV2().HorizontalPodAutoscalers(ns).Get(ctx, name, metav1.GetOptions{})
 }
 
-func (hpaops *HpaOperations) UpdateHpa(ctx context.Context, hpa *asv2beta2.HorizontalPodAutoscaler) error {
-	_, err := hpaops.kubernetesClient.AutoscalingV2beta2().HorizontalPodAutoscalers(hpa.ObjectMeta.Namespace).Update(ctx, hpa, metav1.UpdateOptions{})
+func (hpaops *HpaOperations) UpdateHpa(ctx context.Context, hpa *asv2.HorizontalPodAutoscaler) error {
+	_, err := hpaops.kubernetesClient.AutoscalingV2().HorizontalPodAutoscalers(hpa.ObjectMeta.Namespace).Update(ctx, hpa, metav1.UpdateOptions{})
 	return err
 }
 
 func (hpaops *HpaOperations) DeleteHpa(ctx context.Context, ns string, name string) error {
-	return hpaops.kubernetesClient.AutoscalingV2beta2().HorizontalPodAutoscalers(ns).Delete(ctx, name, metav1.DeleteOptions{})
+	return hpaops.kubernetesClient.AutoscalingV2().HorizontalPodAutoscalers(ns).Delete(ctx, name, metav1.DeleteOptions{})
 }

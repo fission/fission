@@ -21,7 +21,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	asv2beta2 "k8s.io/api/autoscaling/v2beta2"
+	asv2 "k8s.io/api/autoscaling/v2"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/executor/util/hpa"
@@ -277,7 +277,7 @@ func TestGetInvokeStrategy(t *testing.T) {
 					ExecutorType:          fv1.ExecutorTypeNewdeploy,
 					MinScale:              DEFAULT_MIN_SCALE,
 					MaxScale:              DEFAULT_MIN_SCALE,
-					Metrics:               []asv2beta2.MetricSpec{hpa.ConvertTargetCPUToCustomMetric(50)},
+					Metrics:               []asv2.MetricSpec{hpa.ConvertTargetCPUToCustomMetric(50)},
 					SpecializationTimeout: fv1.DefaultSpecializationTimeOut,
 				},
 			},
@@ -295,7 +295,7 @@ func TestGetInvokeStrategy(t *testing.T) {
 					ExecutorType:          fv1.ExecutorTypeNewdeploy,
 					MinScale:              2,
 					MaxScale:              5,
-					Metrics:               []asv2beta2.MetricSpec{hpa.ConvertTargetCPUToCustomMetric(88)},
+					Metrics:               []asv2.MetricSpec{hpa.ConvertTargetCPUToCustomMetric(88)},
 					SpecializationTimeout: fv1.DefaultSpecializationTimeOut,
 				},
 			},
@@ -305,7 +305,7 @@ func TestGetInvokeStrategy(t *testing.T) {
 					ExecutorType:          fv1.ExecutorTypeNewdeploy,
 					MinScale:              2,
 					MaxScale:              5,
-					Metrics:               []asv2beta2.MetricSpec{hpa.ConvertTargetCPUToCustomMetric(20)},
+					Metrics:               []asv2.MetricSpec{hpa.ConvertTargetCPUToCustomMetric(20)},
 					SpecializationTimeout: fv1.DefaultSpecializationTimeOut,
 				},
 			},
