@@ -390,7 +390,6 @@ func (deploy *NewDeploy) waitForDeploy(ctx context.Context, depl *appsv1.Deploym
 	}
 
 	logger := otelUtils.LoggerWithTraceID(ctx, deploy.logger)
-	backOff := 1
 	for i := 0; i < specializationTimeout; i++ {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
@@ -410,8 +409,7 @@ func (deploy *NewDeploy) waitForDeploy(ctx context.Context, depl *appsv1.Deploym
 			otelUtils.SpanTrackEvent(ctx, "deploymentAvailable", otelUtils.GetAttributesForDeployment(latestDepl)...)
 			return latestDepl, err
 		}
-		time.Sleep(time.Second * time.Duration(backOff))
-		backOff = backOff * 2
+		time.Sleep(time.Second)
 	}
 
 	logger.Error("Deployment provision failed within timeout window",
