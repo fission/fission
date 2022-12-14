@@ -14,12 +14,6 @@ rules:
   verbs:
   - get
 - apiGroups:
-  - ""
-  resources:
-  - pods
-  verbs:
-  - list
-- apiGroups:
   - fission.io
   resources:
   - packages
@@ -50,7 +44,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   namespace: {{ .namespace }}
-  name: {{ .Release.Name }}-event-fetcher
+  name: {{ .Release.Name }}-fission-fetcher-websocket
 rules:
 - apiGroups:
   - ""
@@ -62,7 +56,13 @@ rules:
   - "watch"
   - "create"
   - "update"
-  - "patch"  
+  - "patch"
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - get  
 {{- end -}}
 
 {{- define "fissionFunction.rolebindings" }}
@@ -111,7 +111,7 @@ metadata:
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: {{ .Release.Name }}-event-fetcher
+  name: {{ .Release.Name }}-fission-fetcher-websocket
 subjects:
   - kind: ServiceAccount
     name: fission-fetcher
