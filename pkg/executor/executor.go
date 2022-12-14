@@ -386,6 +386,8 @@ func StartExecutor(ctx context.Context, logger *zap.Logger, port int) error {
 		return err
 	}
 
+	utils.CreateMissingPermissionForSA(ctx, kubernetesClient, logger)
+
 	go metrics.ServeMetrics(ctx, logger)
 	go api.Serve(ctx, port)
 
