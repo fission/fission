@@ -4,24 +4,6 @@ Need to use merge function to pass in the current scope so that ".Release" value
 can be used
  */}}
 {{ include "fissionFunction.roles" (merge (dict "namespace" .Values.defaultNamespace) .) }}
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  namespace: {{ template "fission-function-ns" . }}
-  name: {{ .Release.Name }}-event-fetcher
-rules:
-- apiGroups:
-  - ""
-  resources:
-  - "events"
-  verbs:
-  - "get"
-  - "list"
-  - "watch"
-  - "create"
-  - "update"
-  - "patch"
 
 {{- if not .Values.singleDefaultNamespace }}
 {{- range $namespace := $.Values.additionalFissionNamespaces }}

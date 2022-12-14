@@ -767,22 +767,21 @@ func (fetcher *Fetcher) WsStartHandler(w http.ResponseWriter, r *http.Request) {
 		logger.Error("Error creating recorder", zap.Error(err))
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
-	pods, err := fetcher.kubeClient.CoreV1().Pods(fetcher.Info.Namespace).List(ctx, metav1.ListOptions{
-		FieldSelector: "metadata.name=" + fetcher.Info.Name,
-	})
+
+	pod, err := fetcher.kubeClient.CoreV1().Pods(fetcher.Info.Namespace).Get(ctx, fetcher.Info.Name, metav1.GetOptions{})
 	if err != nil {
 		logger.Error("Failed to get the pod", zap.Error(err))
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
-	for _, pod := range pods.Items {
-		ref, err := reference.GetReference(scheme.Scheme, &pod)
-		if err != nil {
-			logger.Error("Could not get reference for pod", zap.Error(err))
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-		rec.Event(ref, corev1.EventTypeNormal, "WsConnectionStarted", "Websocket connection has been formed on this pod")
-		logger.Info("Sent websocket initiation event")
+
+	ref, err := reference.GetReference(scheme.Scheme, pod)
+	if err != nil {
+		logger.Error("Could not get reference for pod", zap.Error(err))
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
+	rec.Event(ref, corev1.EventTypeNormal, "WsConnectionStarted", "Websocket connection has been formed on this pod")
+	logger.Info("Sent websocket initiation event")
+
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -801,24 +800,22 @@ func (fetcher *Fetcher) WsEndHandler(w http.ResponseWriter, r *http.Request) {
 		logger.Error("Error creating recorder", zap.Error(err))
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
-	pods, err := fetcher.kubeClient.CoreV1().Pods(fetcher.Info.Namespace).List(ctx, metav1.ListOptions{
-		FieldSelector: "metadata.name=" + fetcher.Info.Name,
-	})
+	pod, err := fetcher.kubeClient.CoreV1().Pods(fetcher.Info.Namespace).Get(ctx, fetcher.Info.Name, metav1.GetOptions{})
 	if err != nil {
 		logger.Error("Failed to get the pod", zap.Error(err))
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
-	for _, pod := range pods.Items {
-		// There will only be one time since we've used field selector
-		ref, err := reference.GetReference(scheme.Scheme, &pod)
-		if err != nil {
-			logger.Error("Could not get reference for pod", zap.Error(err))
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-		// We could use Eventf and supply the amount of time the connection was inactive although, in case of multiple connections, it doesn't make sense
-		rec.Event(ref, corev1.EventTypeNormal, "NoActiveConnections", "Connection has been inactive")
-		logger.Info("Sent no active connections event")
+
+	// There will only be one time since we've used field selector
+	ref, err := reference.GetReference(scheme.Scheme, pod)
+	if err != nil {
+		logger.Error("Could not get reference for pod", zap.Error(err))
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
+	// We could use Eventf and supply the amount of time the connection was inactive although, in case of multiple connections, it doesn't make sense
+	rec.Event(ref, corev1.EventTypeNormal, "NoActiveConnections", "Connection has been inactive")
+	logger.Info("Sent no active connections event")
+
 	w.WriteHeader(http.StatusOK)
 }
 
