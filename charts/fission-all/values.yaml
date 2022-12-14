@@ -65,7 +65,6 @@ routerPort: 31314
 ## This is different from the release namespace.
 ## Please consider setting `singleDefaultNamespace` and `additionalFissionNamespaces` if you want
 ## more than one namespace to be used for Fission custom resources.
-## Fission will watch the defaultNamespace only if `singleDefaultNamespace` is true.
 ##
 defaultNamespace: default
 
@@ -81,12 +80,7 @@ builderNamespace: ""
 ##
 functionNamespace: ""
 
-## If true, fission will only watch for fission custom resources created in the `defaultNamespace` above.
-##
-singleDefaultNamespace: true
-
 ## Fission will watch the following namespaces along with the `defaultNamespace` for fission custom resources.
-## Only works if `singleDefaultNamespace` is false.
 ## additionalFissionNamespaces: 
 ## - namespace1
 ## - namespace2
