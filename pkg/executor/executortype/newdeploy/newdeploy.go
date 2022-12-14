@@ -402,7 +402,7 @@ func (deploy *NewDeploy) waitForDeploy(ctx context.Context, depl *appsv1.Deploym
 				return nil, err
 			}
 		}
-		logger.Info("Waiting for deployment to be ready", zap.Int("replicas", int(latestDepl.Status.AvailableReplicas)))
+		logger.Debug("Waiting for deployment to be ready", zap.Int("replicas", int(latestDepl.Status.AvailableReplicas)))
 		// TODO check for imagePullerror
 		// use AvailableReplicas here is better than ReadyReplicas
 		// since the pods may not be able to serve network traffic yet.

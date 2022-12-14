@@ -433,10 +433,15 @@ func (deploy *NewDeploy) fnCreate(ctx context.Context, fn *fv1.Function) (*fscac
 				zap.String("namespace", ns), zap.String("name", name))
 		}
 	}
+
 	env, err := deploy.envLister[fn.Spec.Environment.Namespace].Environments(fn.Spec.Environment.Namespace).Get(fn.Spec.Environment.Name)
 	if err != nil {
-		deploy.logger.Error("error getting environment for function", zap.Error(err), zap.Any("function", fn))
-		return nil, err
+		env, err = deploy.fissionClient.CoreV1().Environments(fn.Spec.Environment.Namespace).Get(ctx, fn.Spec.Environment.Name, metav1.GetOptions{})
+		if err != nil {
+			deploy.logger.Error("error getting environment for function", zap.Error(err), zap.Any("function", fn),
+				zap.String("environment_name", fn.Spec.Environment.Name), zap.String("environment_namespace", fn.Spec.Environment.Namespace))
+			return nil, err
+		}
 	}
 
 	objName := deploy.getObjName(fn)

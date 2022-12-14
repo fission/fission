@@ -366,6 +366,15 @@ func StartExecutor(ctx context.Context, logger *zap.Logger, port int) error {
 	for _, informer := range secretInformer {
 		fissionInformers = append(fissionInformers, informer)
 	}
+
+	api, err := MakeExecutor(ctx, logger, cms, fissionClient, executorTypes,
+		fissionInformers...,
+	)
+	if err != nil {
+		return err
+	}
+
+	// Start informer factories
 	for _, factory := range finformerFactory {
 		factory.Start(ctx.Done())
 	}
@@ -377,13 +386,6 @@ func StartExecutor(ctx context.Context, logger *zap.Logger, port int) error {
 	}
 	for _, informerFactory := range cnmInformerFactory {
 		informerFactory.Start(ctx.Done())
-	}
-
-	api, err := MakeExecutor(ctx, logger, cms, fissionClient, executorTypes,
-		fissionInformers...,
-	)
-	if err != nil {
-		return err
 	}
 
 	utils.CreateMissingPermissionForSA(ctx, kubernetesClient, logger)
