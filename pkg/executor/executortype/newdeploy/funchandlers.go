@@ -30,8 +30,11 @@ func (deploy *NewDeploy) FunctionEventHandlers(ctx context.Context) k8sCache.Res
 			// TODO: A workaround to process items in parallel. We should use workqueue ("k8s.io/client-go/util/workqueue")
 			// and worker pattern to process items instead of moving process to another goroutine.
 			// example: https://github.com/kubernetes/kubernetes/blob/master/pkg/controller/job/job_controller.go
+			fn := obj.(*fv1.Function)
+			if fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType != fv1.ExecutorTypeNewdeploy {
+				return
+			}
 			go func() {
-				fn := obj.(*fv1.Function)
 				deploy.logger.Debug("create deployment for function", zap.Any("fn", fn.ObjectMeta), zap.Any("fnspec", fn.Spec))
 				_, err := deploy.createFunction(ctx, fn)
 				if err != nil {
@@ -44,6 +47,9 @@ func (deploy *NewDeploy) FunctionEventHandlers(ctx context.Context) k8sCache.Res
 		},
 		DeleteFunc: func(obj interface{}) {
 			fn := obj.(*fv1.Function)
+			if fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType != fv1.ExecutorTypeNewdeploy {
+				return
+			}
 			go func() {
 				err := deploy.deleteFunction(ctx, fn)
 				if err != nil {
@@ -56,6 +62,9 @@ func (deploy *NewDeploy) FunctionEventHandlers(ctx context.Context) k8sCache.Res
 		UpdateFunc: func(oldObj interface{}, newObj interface{}) {
 			oldFn := oldObj.(*fv1.Function)
 			newFn := newObj.(*fv1.Function)
+			if newFn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType != fv1.ExecutorTypeNewdeploy {
+				return
+			}
 			go func() {
 				err := deploy.updateFunction(ctx, oldFn, newFn)
 				if err != nil {
