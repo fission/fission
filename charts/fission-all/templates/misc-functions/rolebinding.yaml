@@ -5,7 +5,7 @@ can be used
  */}}
 {{ include "fissionFunction.rolebindings" (merge (dict "namespace" .Values.defaultNamespace) .) }}
 
-{{- if not .Values.singleDefaultNamespace }}
+{{- if gt (len .Values.additionalFissionNamespaces) 0 }}
 {{- range $namespace := $.Values.additionalFissionNamespaces }}
 {{ include "fissionFunction.rolebindings" (merge (dict "namespace" $namespace) $) }}
 {{- end }}

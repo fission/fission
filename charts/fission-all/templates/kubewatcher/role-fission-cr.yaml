@@ -1,6 +1,6 @@
 {{- include "fission-role-generator" (merge (dict "namespace" .Values.defaultNamespace "component" "kubewatcher") .) }}
 
-{{- if not .Values.singleDefaultNamespace }}
+{{- if gt (len .Values.additionalFissionNamespaces) 0 }}
 {{- range $namespace := $.Values.additionalFissionNamespaces }}
 {{ include "fission-role-generator" (merge (dict "namespace" $namespace "component" "kubewatcher") $) }}
 {{- end }}
