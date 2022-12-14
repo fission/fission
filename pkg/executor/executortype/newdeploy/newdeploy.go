@@ -50,15 +50,14 @@ func (deploy *NewDeploy) createOrGetDeployment(ctx context.Context, fn *fv1.Func
 		minScale = 1
 	}
 
-	deployment, err := deploy.getDeploymentSpec(ctx, fn, env, &minScale, deployName, deployNamespace, deployLabels, deployAnnotations)
-	if err != nil {
-		return nil, err
-	}
-
-	existingDepl, err := deploy.kubernetesClient.AppsV1().Deployments(deployNamespace).Get(ctx, deployName, metav1.GetOptions{})
+	existingDepl, err := deploy.deplLister[deployNamespace].Deployments(deployNamespace).Get(deployName)
 	if err == nil {
 		// Try to adopt orphan deployment created by the old executor.
 		if existingDepl.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL] != deploy.instanceID {
+			deployment, err := deploy.getDeploymentSpec(ctx, fn, env, &minScale, deployName, deployNamespace, deployLabels, deployAnnotations)
+			if err != nil {
+				return nil, err
+			}
 			existingDepl.Annotations = deployment.Annotations
 			existingDepl.Labels = deployment.Labels
 			existingDepl.Spec.Template.Spec.Containers = deployment.Spec.Template.Spec.Containers
@@ -89,8 +88,11 @@ func (deploy *NewDeploy) createOrGetDeployment(ctx context.Context, fn *fv1.Func
 		}
 
 		return existingDepl, err
-	} else if k8s_err.IsNotFound(err) {
-
+	} else {
+		deployment, err := deploy.getDeploymentSpec(ctx, fn, env, &minScale, deployName, deployNamespace, deployLabels, deployAnnotations)
+		if err != nil {
+			return nil, err
+		}
 		depl, err := deploy.kubernetesClient.AppsV1().Deployments(deployNamespace).Create(ctx, deployment, metav1.CreateOptions{})
 		if err != nil {
 			if k8s_err.IsAlreadyExists(err) {
@@ -110,7 +112,6 @@ func (deploy *NewDeploy) createOrGetDeployment(ctx context.Context, fn *fv1.Func
 		}
 		return depl, err
 	}
-	return nil, err
 }
 
 func (deploy *NewDeploy) updateDeployment(ctx context.Context, deployment *appsv1.Deployment, ns string) error {
@@ -345,7 +346,7 @@ func (deploy *NewDeploy) createOrGetSvc(ctx context.Context, deployLabels map[st
 		},
 	}
 
-	existingSvc, err := deploy.kubernetesClient.CoreV1().Services(svcNamespace).Get(ctx, svcName, metav1.GetOptions{})
+	existingSvc, err := deploy.svcLister[svcNamespace].Services(svcNamespace).Get(svcName)
 	if err == nil {
 		// to adopt orphan service
 		if existingSvc.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL] != deploy.instanceID {
@@ -362,21 +363,18 @@ func (deploy *NewDeploy) createOrGetSvc(ctx context.Context, deployLabels map[st
 			}
 		}
 		return existingSvc, err
-	} else if k8s_err.IsNotFound(err) {
+	} else {
 		svc, err := deploy.kubernetesClient.CoreV1().Services(svcNamespace).Create(ctx, service, metav1.CreateOptions{})
+		if k8s_err.IsAlreadyExists(err) {
+			svc, err = deploy.kubernetesClient.CoreV1().Services(svcNamespace).Get(ctx, svcName, metav1.GetOptions{})
+		}
 		if err != nil {
-			if k8s_err.IsAlreadyExists(err) {
-				svc, err = deploy.kubernetesClient.CoreV1().Services(svcNamespace).Get(ctx, svcName, metav1.GetOptions{})
-			}
-			if err != nil {
-				return nil, err
-			}
+			return nil, err
 		}
 		otelUtils.SpanTrackEvent(ctx, "createdService", otelUtils.GetAttributesForSvc(svc)...)
 
 		return svc, nil
 	}
-	return nil, err
 }
 
 func (deploy *NewDeploy) deleteSvc(ctx context.Context, ns string, name string) error {
@@ -392,12 +390,19 @@ func (deploy *NewDeploy) waitForDeploy(ctx context.Context, depl *appsv1.Deploym
 	}
 
 	logger := otelUtils.LoggerWithTraceID(ctx, deploy.logger)
-
+	backOff := 1
 	for i := 0; i < specializationTimeout; i++ {
-		latestDepl, err = deploy.kubernetesClient.AppsV1().Deployments(depl.ObjectMeta.Namespace).Get(ctx, depl.Name, metav1.GetOptions{})
-		if err != nil {
-			return nil, err
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
 		}
+		latestDepl, err = deploy.deplLister[depl.ObjectMeta.Namespace].Deployments(depl.ObjectMeta.Namespace).Get(depl.Name)
+		if err != nil {
+			latestDepl, err = deploy.kubernetesClient.AppsV1().Deployments(depl.ObjectMeta.Namespace).Get(ctx, depl.Name, metav1.GetOptions{})
+			if err != nil {
+				return nil, err
+			}
+		}
+		logger.Info("Waiting for deployment to be ready", zap.Int("replicas", int(latestDepl.Status.AvailableReplicas)))
 		// TODO check for imagePullerror
 		// use AvailableReplicas here is better than ReadyReplicas
 		// since the pods may not be able to serve network traffic yet.
@@ -405,7 +410,8 @@ func (deploy *NewDeploy) waitForDeploy(ctx context.Context, depl *appsv1.Deploym
 			otelUtils.SpanTrackEvent(ctx, "deploymentAvailable", otelUtils.GetAttributesForDeployment(latestDepl)...)
 			return latestDepl, err
 		}
-		time.Sleep(time.Second)
+		time.Sleep(time.Second * time.Duration(backOff))
+		backOff = backOff * 2
 	}
 
 	logger.Error("Deployment provision failed within timeout window",
@@ -446,6 +452,12 @@ func (deploy *NewDeploy) cleanupNewdeploy(ctx context.Context, ns string, name s
 			zap.String("function_name", name),
 			zap.String("function_namespace", ns))
 		result = multierror.Append(result, err)
+	}
+	if err == nil {
+		deploy.logger.Info("deleted deployment for newdeploy function",
+
+			zap.String("function_name", name),
+			zap.String("function_namespace", ns))
 	}
 
 	return result.ErrorOrNil()

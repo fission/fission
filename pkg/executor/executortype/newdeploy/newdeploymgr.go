@@ -52,6 +52,7 @@ import (
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
+	flisterv1 "github.com/fission/fission/pkg/generated/listers/core/v1"
 	"github.com/fission/fission/pkg/throttler"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/maps"
@@ -84,9 +85,11 @@ type (
 
 		deplLister map[string]appslisters.DeploymentLister
 		svcLister  map[string]corelisters.ServiceLister
+		envLister  map[string]flisterv1.EnvironmentLister
 
 		deplListerSynced map[string]k8sCache.InformerSynced
 		svcListerSynced  map[string]k8sCache.InformerSynced
+		envListerSynced  map[string]k8sCache.InformerSynced
 
 		hpaops *hpautils.HpaOperations
 
@@ -139,6 +142,8 @@ func MakeNewDeploy(
 		deplListerSynced: make(map[string]k8sCache.InformerSynced),
 		svcLister:        make(map[string]corelisters.ServiceLister),
 		svcListerSynced:  make(map[string]k8sCache.InformerSynced),
+		envLister:        make(map[string]flisterv1.EnvironmentLister),
+		envListerSynced:  make(map[string]k8sCache.InformerSynced),
 	}
 
 	for ns, informerFactory := range ndmInformerFactory {
@@ -147,11 +152,12 @@ func MakeNewDeploy(
 		nd.svcLister[ns] = informerFactory.Core().V1().Services().Lister()
 		nd.svcListerSynced[ns] = informerFactory.Core().V1().Services().Informer().HasSynced
 	}
-	for _, factory := range finformerFactory {
+	for ns, factory := range finformerFactory {
 		factory.Core().V1().Functions().Informer().AddEventHandler(nd.FunctionEventHandlers(ctx))
-	}
-	for _, factory := range finformerFactory {
 		factory.Core().V1().Environments().Informer().AddEventHandler(nd.EnvEventHandlers(ctx))
+
+		nd.envLister[ns] = factory.Core().V1().Environments().Lister()
+		nd.envListerSynced[ns] = factory.Core().V1().Environments().Informer().HasSynced
 	}
 	return nd, nil
 }
@@ -164,6 +170,9 @@ func (deploy *NewDeploy) Run(ctx context.Context) {
 	}
 	for _, svcListerSynced := range deploy.svcListerSynced {
 		waitSynced = append(waitSynced, svcListerSynced)
+	}
+	for _, envListerSynced := range deploy.envListerSynced {
+		waitSynced = append(waitSynced, envListerSynced)
 	}
 
 	if ok := k8sCache.WaitForCacheSync(ctx.Done(), waitSynced...); !ok {
@@ -424,10 +433,9 @@ func (deploy *NewDeploy) fnCreate(ctx context.Context, fn *fv1.Function) (*fscac
 				zap.String("namespace", ns), zap.String("name", name))
 		}
 	}
-	env, err := deploy.fissionClient.CoreV1().
-		Environments(fn.Spec.Environment.Namespace).
-		Get(ctx, fn.Spec.Environment.Name, metav1.GetOptions{})
+	env, err := deploy.envLister[fn.Spec.Environment.Namespace].Environments(fn.Spec.Environment.Namespace).Get(fn.Spec.Environment.Name)
 	if err != nil {
+		deploy.logger.Error("error getting environment for function", zap.Error(err), zap.Any("function", fn))
 		return nil, err
 	}
 

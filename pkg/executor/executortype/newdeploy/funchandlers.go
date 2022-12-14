@@ -17,6 +17,7 @@ package newdeploy
 
 import (
 	"context"
+	"time"
 
 	"go.uber.org/zap"
 	k8sCache "k8s.io/client-go/tools/cache"
@@ -32,8 +33,14 @@ func (deploy *NewDeploy) FunctionEventHandlers(ctx context.Context) k8sCache.Res
 			// example: https://github.com/kubernetes/kubernetes/blob/master/pkg/controller/job/job_controller.go
 			go func() {
 				fn := obj.(*fv1.Function)
+				specializationTimeout := fn.Spec.InvokeStrategy.ExecutionStrategy.SpecializationTimeout
+				if specializationTimeout < fv1.DefaultSpecializationTimeOut {
+					specializationTimeout = fv1.DefaultSpecializationTimeOut
+				}
+				ctx2, cancel := context.WithTimeout(ctx, time.Duration(specializationTimeout)*time.Second)
+				defer cancel()
 				deploy.logger.Debug("create deployment for function", zap.Any("fn", fn.ObjectMeta), zap.Any("fnspec", fn.Spec))
-				_, err := deploy.createFunction(ctx, fn)
+				_, err := deploy.createFunction(ctx2, fn)
 				if err != nil {
 					deploy.logger.Error("error eager creating function",
 						zap.Error(err),
@@ -57,7 +64,13 @@ func (deploy *NewDeploy) FunctionEventHandlers(ctx context.Context) k8sCache.Res
 			oldFn := oldObj.(*fv1.Function)
 			newFn := newObj.(*fv1.Function)
 			go func() {
-				err := deploy.updateFunction(ctx, oldFn, newFn)
+				specializationTimeout := newFn.Spec.InvokeStrategy.ExecutionStrategy.SpecializationTimeout
+				if specializationTimeout < fv1.DefaultSpecializationTimeOut {
+					specializationTimeout = fv1.DefaultSpecializationTimeOut
+				}
+				ctx2, cancel := context.WithTimeout(ctx, time.Duration(specializationTimeout)*time.Second)
+				defer cancel()
+				err := deploy.updateFunction(ctx2, oldFn, newFn)
 				if err != nil {
 					deploy.logger.Error("error updating function",
 						zap.Error(err),

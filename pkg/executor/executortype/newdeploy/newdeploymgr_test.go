@@ -26,12 +26,10 @@ import (
 )
 
 const (
-	defaultNamespace  string = "default"
-	functionNamespace string = "fission-function"
-	builderNamespace  string = "fission-builder"
-	envName           string = "newdeploy-test-env"
-	functionName      string = "newdeploy-test-func"
-	configmapName     string = "newdeploy-test-configmap"
+	defaultNamespace string = "default"
+	envName          string = "newdeploy-test-env"
+	functionName     string = "newdeploy-test-func"
+	configmapName    string = "newdeploy-test-configmap"
 )
 
 func TestRefreshFuncPods(t *testing.T) {
@@ -40,7 +38,7 @@ func TestRefreshFuncPods(t *testing.T) {
 	kubernetesClient := fake.NewSimpleClientset()
 	fissionClient := fClient.NewSimpleClientset()
 	factory := make(map[string]genInformer.SharedInformerFactory, 0)
-	factory[metav1.NamespaceAll] = genInformer.NewSharedInformerFactory(fissionClient, time.Minute*30)
+	factory[metav1.NamespaceDefault] = genInformer.NewSharedInformerFactory(fissionClient, time.Minute*30)
 
 	executorLabel, err := utils.GetInformerLabelByExecutor(fv1.ExecutorTypeNewdeploy)
 	if err != nil {
@@ -64,12 +62,7 @@ func TestRefreshFuncPods(t *testing.T) {
 
 	ndm := executor.(*NewDeploy)
 
-	nsResolver := utils.NamespaceResolver{
-		FunctionNamespace: functionNamespace,
-		BuiderNamespace:   builderNamespace,
-		DefaultNamespace:  defaultNamespace,
-	}
-	ndm.nsResolver = &nsResolver
+	ndm.nsResolver = utils.DefaultNSResolver()
 
 	go ndm.Run(ctx)
 	t.Log("New deploy manager started")
@@ -89,6 +82,9 @@ func TestRefreshFuncPods(t *testing.T) {
 	}
 	for _, svcListerSynced := range ndm.svcListerSynced {
 		waitSynced = append(waitSynced, svcListerSynced)
+	}
+	for _, envListerSynced := range ndm.envListerSynced {
+		waitSynced = append(waitSynced, envListerSynced)
 	}
 
 	if ok := k8sCache.WaitForCacheSync(ctx.Done(), waitSynced...); !ok {
@@ -137,7 +133,8 @@ func TestRefreshFuncPods(t *testing.T) {
 			},
 			InvokeStrategy: fv1.InvokeStrategy{
 				ExecutionStrategy: fv1.ExecutionStrategy{
-					ExecutorType: fv1.ExecutorTypeNewdeploy,
+					ExecutorType:          fv1.ExecutorTypeNewdeploy,
+					SpecializationTimeout: 10,
 				},
 			},
 		},
@@ -156,7 +153,7 @@ func TestRefreshFuncPods(t *testing.T) {
 	ctx2, cancel2 := context.WithCancel(context.Background())
 	wait.Until(func() {
 		t.Log("Checking for deployment")
-		ret, err := kubernetesClient.AppsV1().Deployments(functionNamespace).List(ctx2, metav1.ListOptions{})
+		ret, err := kubernetesClient.AppsV1().Deployments(defaultNamespace).List(ctx2, metav1.ListOptions{})
 		if err != nil {
 			t.Fatalf("Error getting deployment: %s", err)
 		}
