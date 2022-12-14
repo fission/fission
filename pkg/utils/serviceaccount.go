@@ -52,7 +52,7 @@ var (
 		permissions: []*PermissionCheck{
 			{
 				gvr:  &schema.GroupVersionResource{Group: "", Version: "v1", Resource: "pods"},
-				verb: "list",
+				verb: "get",
 			},
 			{
 				gvr:  &schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"},
