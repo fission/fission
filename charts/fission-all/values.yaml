@@ -192,8 +192,9 @@ executor:
     enabled: true
     ## indicates the time interval in minutes, after that fission will create service account, roles and rolebinding for builder and fetcher.
     ## interval will be applicable only if enable value is set to true.
-    ## default timing will be 30 minutes.
-    interval: 30  
+    ## default timing will be 0 minutes. That means check will run only once.
+    ## if you want to run check every 30 minutes then set interval to 30.
+    interval: 0
 ## router is responsible for routing function calls to the appropriate function.
 ##
 router:
