@@ -97,7 +97,12 @@ func CreateMissingPermissionForSA(ctx context.Context, kubernetesClient kubernet
 		interval := getSAInterval()
 		logger.Debug("interval value", zap.Any("interval", interval))
 		sa := getSAObj(ctx, kubernetesClient, logger)
-		go sa.doSACheck(ctx, interval)
+		logger.Info("Starting service account check", zap.Any("interval", interval))
+		if interval > 0 {
+			go wait.UntilWithContext(ctx, sa.runSACheck, interval)
+		} else {
+			sa.runSACheck(ctx)
+		}
 	}
 }
 
@@ -110,10 +115,6 @@ func getSAObj(ctx context.Context, kubernetesClient kubernetes.Interface, logger
 	saObj.permissions = append(saObj.permissions, fetcherCheck)
 	saObj.permissions = append(saObj.permissions, builderCheck)
 	return saObj
-}
-
-func (sa *ServiceAccount) doSACheck(ctx context.Context, interval time.Duration) {
-	wait.UntilWithContext(ctx, sa.runSACheck, interval)
 }
 
 func (sa *ServiceAccount) runSACheck(ctx context.Context) {
@@ -133,7 +134,7 @@ func setupSAAndRoleBindings(ctx context.Context, client kubernetes.Interface, lo
 	SAObj, err := createGetSA(ctx, client, ps.saName, namespace)
 	if err != nil {
 		logger.Error("error while creating or getting service account",
-			zap.String("SA_name", ps.saName),
+			zap.String("sa_name", ps.saName),
 			zap.String("namespace", namespace),
 			zap.Error(err))
 		return
@@ -179,7 +180,7 @@ func setupSAAndRoleBindings(ctx context.Context, client kubernetes.Interface, lo
 func setupRoles(ctx context.Context, client kubernetes.Interface, logger *zap.Logger, sa *v1.ServiceAccount, rules []rbac.PolicyRule, suffix string) (*rbac.Role, error) {
 	logger.Debug("creating role",
 		zap.String("role_name", fmt.Sprintf("%s-role-%s", sa.Name, suffix)),
-		zap.String("SA_Name", sa.Name),
+		zap.String("sa_name", sa.Name),
 		zap.String("namespace", sa.Namespace))
 
 	roleObj := &rbac.Role{
@@ -193,17 +194,17 @@ func setupRoles(ctx context.Context, client kubernetes.Interface, logger *zap.Lo
 	if err != nil {
 		return nil, fmt.Errorf("error while creating role for sa %s in namespace %s error: %s", sa.Name, sa.Namespace, err.Error())
 	}
-	logger.Debug("role created successfully",
+	logger.Info("role created successfully",
 		zap.String("role_name", role.Name),
 		zap.String("namespace", role.Namespace),
-		zap.String("SA_Name", sa.Name))
+		zap.String("sa_name", sa.Name))
 	return role, nil
 }
 
 func setupRoleBinding(ctx context.Context, client kubernetes.Interface, logger *zap.Logger, sa *v1.ServiceAccount, role *rbac.Role, suffix string) (*rbac.RoleBinding, error) {
 	logger.Debug("creating role binding",
 		zap.String("rolebinding_name", fmt.Sprintf("%s-rolebinding-%s", sa.Name, suffix)),
-		zap.String("SA_Name", sa.Name),
+		zap.String("sa_name", sa.Name),
 		zap.String("namespace", sa.Namespace))
 
 	roleBindingObj := &rbac.RoleBinding{
@@ -227,16 +228,19 @@ func setupRoleBinding(ctx context.Context, client kubernetes.Interface, logger *
 	if err != nil {
 		return nil, fmt.Errorf("error while creating rolebinding for sa %s in namespace %s error: %s", sa.Name, sa.Namespace, err.Error())
 	}
-	logger.Debug("role binding created successfully",
+	logger.Info("role binding created successfully",
 		zap.String("rolebinding_name", roleBinding.Name),
 		zap.String("namespace", roleBinding.Namespace),
-		zap.String("SA_Name", sa.Name))
+		zap.String("sa_name", sa.Name))
 	return roleBinding, nil
 }
 
 func checkPermission(ctx context.Context, client kubernetes.Interface, sa *v1.ServiceAccount, gvr *schema.GroupVersionResource, verb string) (bool, error) {
 	user := fmt.Sprintf("system:serviceaccount:%s:%s", sa.Namespace, sa.Name)
 	sar := authorizationv1.LocalSubjectAccessReview{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: sa.Namespace,
+		},
 		Spec: authorizationv1.SubjectAccessReviewSpec{
 			ResourceAttributes: &authorizationv1.ResourceAttributes{
 				Namespace: sa.Namespace,
@@ -298,9 +302,6 @@ func createServiceAccount() bool {
 }
 
 func getSAInterval() time.Duration {
-	SAInterval, err := GetUIntValueFromEnv(ENV_SA_INTERVAL)
-	if err != nil {
-		return time.Duration(30) * time.Minute
-	}
+	SAInterval, _ := GetUIntValueFromEnv(ENV_SA_INTERVAL)
 	return time.Duration(SAInterval) * time.Minute
 }
