@@ -17,7 +17,7 @@ limitations under the License.
 package timer
 
 import (
-	"github.com/robfig/cron"
+	"github.com/robfig/cron/v3"
 	"go.uber.org/zap"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -54,7 +54,10 @@ func MakeTimer(logger *zap.Logger, publisher publisher.Publisher) *Timer {
 }
 
 func (timer *Timer) newCron(t fv1.TimeTrigger) *cron.Cron {
-	c := cron.New()
+	c := cron.New(
+		cron.WithParser(
+			cron.NewParser(
+				cron.SecondOptional | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)))
 	c.AddFunc(t.Spec.Cron, func() { //nolint: errCheck
 		headers := map[string]string{
 			"X-Fission-Timer-Name": t.Name,

@@ -17,7 +17,6 @@ limitations under the License.
 package v1
 
 import (
-	"github.com/robfig/cron"
 	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -59,7 +58,7 @@ func (r *TimeTrigger) ValidateCreate() error {
 		return err
 	}
 
-	_, err = cron.Parse(r.Spec.Cron)
+	err = IsValidCronSpec(r.Spec.Cron)
 	if err != nil {
 		err = ferror.MakeError(ferror.ErrorInvalidArgument, "TimeTrigger cron spec is not valid")
 		return err
@@ -76,7 +75,7 @@ func (r *TimeTrigger) ValidateUpdate(old runtime.Object) error {
 		return err
 	}
 
-	_, err = cron.Parse(r.Spec.Cron)
+	err = IsValidCronSpec(r.Spec.Cron)
 	if err != nil {
 		err = ferror.MakeError(ferror.ErrorInvalidArgument, "TimeTrigger cron spec is not valid")
 		return err
