@@ -61,14 +61,12 @@ func (ws *TimerSync) AddUpdateTimeTrigger(timeTrigger *fv1.TimeTrigger) {
 	ws.logger.Debug("cron event")
 
 	if item, ok := ws.timer.triggers[crd.CacheKeyUID(&timeTrigger.ObjectMeta)]; ok {
-		if item.trigger.Spec.Cron != timeTrigger.Spec.Cron {
-			if item.cron != nil {
-				item.cron.Stop()
-			}
-			item.trigger = *timeTrigger
-			item.cron = ws.timer.newCron(*timeTrigger)
-			logger.Debug("cron updated")
+		if item.cron != nil {
+			item.cron.Stop()
 		}
+		item.trigger = *timeTrigger
+		item.cron = ws.timer.newCron(*timeTrigger)
+		logger.Debug("cron updated")
 	} else {
 		ws.timer.triggers[crd.CacheKeyUID(&timeTrigger.ObjectMeta)] = &timerTriggerWithCron{
 			trigger: *timeTrigger,
