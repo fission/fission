@@ -96,12 +96,11 @@ func (ws *TimerSync) TimeTriggerEventHandlers(ctx context.Context) {
 				timeTrigger := obj.(*fv1.TimeTrigger)
 				ws.AddUpdateTimeTrigger(timeTrigger)
 			},
-			UpdateFunc: func(_ interface{}, obj interface{}) {
-				timeTrigger := obj.(*fv1.TimeTrigger)
-				if item, ok := ws.timer.triggers[crd.CacheKeyUID(&timeTrigger.ObjectMeta)]; ok {
-					if item.trigger.ObjectMeta.ResourceVersion != timeTrigger.ObjectMeta.ResourceVersion {
-						ws.AddUpdateTimeTrigger(timeTrigger)
-					}
+			UpdateFunc: func(oldObj interface{}, newObj interface{}) {
+				oldTimeTrigger := oldObj.(*fv1.TimeTrigger)
+				newTimeTrigger := newObj.(*fv1.TimeTrigger)
+				if oldTimeTrigger.ObjectMeta.ResourceVersion != newTimeTrigger.ObjectMeta.ResourceVersion {
+					ws.AddUpdateTimeTrigger(newTimeTrigger)
 				}
 			},
 			DeleteFunc: func(obj interface{}) {
