@@ -24,6 +24,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/hashicorp/go-multierror"
@@ -71,30 +72,51 @@ func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *htt
 		if requestsPerpod == 0 {
 			requestsPerpod = 1
 		}
-		fsvc, active, err := et.GetFuncSvcFromPoolCache(ctx, fn, requestsPerpod)
-		// check if its a cache hit (check if there is already specialized function pod that can serve another request)
-		if err == nil {
-			// if a pod is already serving request then it already exists else validated
-			logger.Debug("from cache", zap.Int("active", active))
-			if et.IsValid(ctx, fsvc) {
-				// Cached, return svc address
-				logger.Debug("served from cache", zap.String("name", fsvc.Name), zap.String("address", fsvc.Address))
-				executor.writeResponse(w, fsvc.Address, fn.ObjectMeta.Name)
+
+		var duration time.Duration = 50
+		for {
+			fsvc, active, err := et.GetFuncSvcFromPoolCache(ctx, fn, requestsPerpod)
+			// check if its a cache hit (check if there is already specialized function pod that can serve another request)
+			if err == nil {
+				// if a pod is already serving request then it already exists else validated
+				logger.Debug("from cache", zap.Int("active", active))
+				if et.IsValid(ctx, fsvc) {
+					// Cached, return svc address
+					logger.Debug("served from cache", zap.String("name", fsvc.Name), zap.String("address", fsvc.Address))
+					executor.writeResponse(w, fsvc.Address, fn.ObjectMeta.Name)
+					return
+				}
+				logger.Debug("deleting cache entry for invalid address",
+					zap.String("function_name", fn.ObjectMeta.Name),
+					zap.String("function_namespace", fn.ObjectMeta.Namespace),
+					zap.String("address", fsvc.Address))
+				et.DeleteFuncSvcFromCache(ctx, fsvc)
+				active--
+			}
+
+			if active >= concurrency {
+				errMsg := fmt.Sprintf("max concurrency reached for %v. All %v instance are active", fn.ObjectMeta.Name, concurrency)
+				logger.Error("error occurred", zap.String("error", errMsg))
+				http.Error(w, html.EscapeString(errMsg), http.StatusTooManyRequests)
 				return
 			}
-			logger.Debug("deleting cache entry for invalid address",
-				zap.String("function_name", fn.ObjectMeta.Name),
-				zap.String("function_namespace", fn.ObjectMeta.Namespace),
-				zap.String("address", fsvc.Address))
-			et.DeleteFuncSvcFromCache(ctx, fsvc)
-			active--
-		}
-
-		if active >= concurrency {
-			errMsg := fmt.Sprintf("max concurrency reached for %v. All %v instance are active", fn.ObjectMeta.Name, concurrency)
-			logger.Error("error occurred", zap.String("error", errMsg))
-			http.Error(w, html.EscapeString(errMsg), http.StatusTooManyRequests)
-			return
+			if requestsPerpod > 1 {
+				logger.Debug("rpp is greater than 1")
+				if podInSpecilisation, exists := executor.fnPodSpecilization[fn.ObjectMeta.Name]; exists && podInSpecilisation > 0 {
+					time.Sleep(time.Millisecond * duration)
+					duration *= 2
+					if duration > 2000 {
+						duration = 2000
+					}
+					logger.Debug("sleeping for few seconds")
+					// pod is getting specialised, need to wait
+					continue
+				}
+				break
+			} else {
+				logger.Debug("rpp is 1 or smaller than 1")
+				break
+			}
 		}
 	} else if t == fv1.ExecutorTypeNewdeploy || t == fv1.ExecutorTypeContainer {
 		fsvc, err := et.GetFuncSvcFromCache(ctx, fn)
@@ -112,7 +134,9 @@ func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *htt
 		}
 	}
 
+	executor.fnPodSpecilization[fn.ObjectMeta.Name]++
 	serviceName, err := executor.getServiceForFunction(ctx, fn)
+	delete(executor.fnPodSpecilization, fn.ObjectMeta.Name)
 	if err != nil {
 		code, msg := ferror.GetHTTPError(err)
 		logger.Error("error getting service for function",

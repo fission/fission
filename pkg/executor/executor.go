@@ -28,6 +28,7 @@ import (
 	"github.com/dchest/uniuri"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"golang.org/x/time/rate"
 	k8sCache "k8s.io/client-go/tools/cache"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -57,10 +58,17 @@ type (
 
 		fissionClient versioned.Interface
 
-		requestChan chan *createFuncServiceRequest
-		fsCreateWg  sync.Map
+		requestChan        chan *createFuncServiceRequest
+		limitFuncCall      map[string]*rate.Limiter
+		requestBucket      map[string][]*RequestBucket
+		fsCreateWg         sync.Map
+		fnPodSpecilization map[string]int
 	}
 
+	RequestBucket struct {
+		isFirstRequest bool
+		function       *fv1.Function
+	}
 	createFuncServiceRequest struct {
 		context  context.Context
 		function *fv1.Function
@@ -83,7 +91,10 @@ func MakeExecutor(ctx context.Context, logger *zap.Logger, cms *cms.ConfigSecret
 		fissionClient: fissionClient,
 		executorTypes: types,
 
-		requestChan: make(chan *createFuncServiceRequest),
+		requestChan:        make(chan *createFuncServiceRequest),
+		requestBucket:      make(map[string][]*RequestBucket),
+		limitFuncCall:      make(map[string]*rate.Limiter),
+		fnPodSpecilization: make(map[string]int),
 	}
 
 	// Run all informers
