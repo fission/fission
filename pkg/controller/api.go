@@ -65,6 +65,7 @@ type (
 		httpURL  string
 		username string
 		password string
+		token    string
 	}
 )
 
@@ -156,10 +157,12 @@ func (api *API) getLogDBConfig(dbType string) logDBConfig {
 	}
 	username := os.Getenv(fmt.Sprintf("%s_USERNAME", dbType))
 	password := os.Getenv(fmt.Sprintf("%s_PASSWORD", dbType))
+	token := os.Getenv(fmt.Sprintf("%s_TOKEN", dbType))
 	return logDBConfig{
 		httpURL:  url,
 		username: username,
 		password: password,
+		token:    token,
 	}
 }
 

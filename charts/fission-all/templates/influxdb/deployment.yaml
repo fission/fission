@@ -39,16 +39,29 @@ spec:
         env:
         - name: INFLUXDB_DB
           value: fissionFunctionLog
-        - name: INFLUXDB_ADMIN_USER
+        - name: DOCKER_INFLUXDB_INIT_USERNAME
           valueFrom:
             secretKeyRef:
               name: influxdb
               key: username
-        - name: INFLUXDB_ADMIN_PASSWORD
+        - name: DOCKER_INFLUXDB_INIT_PASSWORD
           valueFrom:
             secretKeyRef:
               name: influxdb
               key: password
+        - name: DOCKER_INFLUXDB_INIT_ORG
+          value: fission
+        - name: DOCKER_INFLUXDB_INIT_BUCKET
+          value: fission
+        - name: DOCKER_INFLUXDB_INIT_RETENTION
+          value: {{ .Values.influxdb.logRetention }}
+        - name: DOCKER_INFLUXDB_INIT_MODE
+          value: setup
+        - name: DOCKER_INFLUXDB_INIT_ADMIN_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: influxdb
+              key: token
 {{- if .Values.extraCoreComponentPodConfig }}
 {{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
 {{- end }}

@@ -36,6 +36,8 @@ import (
 )
 
 const (
+	INFLUXDB_BUCKET   = "fission"
+	INFLUXDB_ORG      = "fission"
 	INFLUXDB_DATABASE = "fissionFunctionLog"
 	INFLUXDB_URL      = "http://influxdb:8086/query"
 )
