@@ -42,7 +42,7 @@ func (opts *ShowSubCommand) run(flaginput cli.Input) error {
 	cronSpec := flaginput.String(flagkey.TtCron)
 
 	if len(cronSpec) == 0 {
-		return errors.New("need a cron spec like '0 30 * * * *', '@every 1h30m', or '@hourly'; use --cron")
+		return errors.New("need a cron spec like '0 30 * * * *', '*/2 * * * *', '@every 1h30m', or '@hourly'; use --cron")
 	}
 
 	t := util.GetServerInfo(flaginput, opts.Client()).ServerTime.CurrentTime.UTC()

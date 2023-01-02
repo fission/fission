@@ -25,7 +25,7 @@ import (
 	"strings"
 
 	"github.com/hashicorp/go-multierror"
-	"github.com/robfig/cron"
+	"github.com/robfig/cron/v3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/validation"
 
@@ -170,7 +170,8 @@ func ValidateKubeReference(refName string, name string, namespace string) error 
 }
 
 func IsValidCronSpec(spec string) error {
-	_, err := cron.Parse(spec)
+	cronSpecParser := cron.NewParser(cron.SecondOptional | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
+	_, err := cronSpecParser.Parse(spec)
 	return err
 }
 

@@ -23,7 +23,7 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 
 	"github.com/pkg/errors"
-	"github.com/robfig/cron"
+	"github.com/robfig/cron/v3"
 	uuid "github.com/satori/go.uuid"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -74,7 +74,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) (err error) {
 
 	cronSpec := input.String(flagkey.TtCron)
 	if len(cronSpec) == 0 {
-		return errors.New("Need a cron spec like '0 30 * * * *', '@every 1h30m', or '@hourly'; use --cron")
+		return errors.New("Need a cron spec like '30 * * * *', '@every 1h30m', or '@hourly'; use --cron")
 	}
 
 	if input.Bool(flagkey.SpecSave) {
@@ -160,7 +160,8 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 }
 
 func getCronNextNActivationTime(cronSpec string, serverTime time.Time, round int) error {
-	sched, err := cron.Parse(cronSpec)
+	cronSpecParser := cron.NewParser(cron.SecondOptional | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
+	sched, err := cronSpecParser.Parse(cronSpec)
 	if err != nil {
 		return err
 	}

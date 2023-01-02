@@ -25,7 +25,6 @@ import (
 	restful "github.com/emicklei/go-restful/v3"
 	"github.com/go-openapi/spec"
 	"github.com/gorilla/mux"
-	"github.com/robfig/cron"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -135,7 +134,7 @@ func (a *API) TimeTriggerApiCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// validate
-	_, err = cron.Parse(t.Spec.Cron)
+	err = fv1.IsValidCronSpec(t.Spec.Cron)
 	if err != nil {
 		err = ferror.MakeError(ferror.ErrorInvalidArgument, "TimeTrigger cron spec is not valid")
 		a.respondWithError(w, err)
@@ -211,7 +210,7 @@ func (a *API) TimeTriggerApiUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = cron.Parse(t.Spec.Cron)
+	err = fv1.IsValidCronSpec(t.Spec.Cron)
 	if err != nil {
 		err = ferror.MakeError(ferror.ErrorInvalidArgument, "TimeTrigger cron spec is not valid")
 		a.respondWithError(w, err)
