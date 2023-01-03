@@ -189,10 +189,10 @@ func (fsc *FunctionServiceCache) GetByFunction(m *metav1.ObjectMeta) (*FuncSvc, 
 }
 
 // GetFuncSvc gets a function service from pool cache using function key and returns number of active instances of function pod
-func (fsc *FunctionServiceCache) GetFuncSvc(ctx context.Context, m *metav1.ObjectMeta, requestsPerPod int) (*FuncSvc, int, error) {
+func (fsc *FunctionServiceCache) GetFuncSvc(ctx context.Context, m *metav1.ObjectMeta, requestsPerPod, activePods, activeRequest int) (*FuncSvc, int, error) {
 	key := crd.CacheKey(m)
 
-	fsvcI, active, err := fsc.connFunctionCache.GetValue(ctx, key, requestsPerPod)
+	fsvcI, active, err := fsc.connFunctionCache.GetValue(ctx, key, requestsPerPod, activePods, activeRequest)
 	if err != nil {
 		fsc.logger.Info("Not found in Cache")
 		return nil, active, err
@@ -204,6 +204,18 @@ func (fsc *FunctionServiceCache) GetFuncSvc(ctx context.Context, m *metav1.Objec
 
 	fsvcCopy := *fsvc
 	return &fsvcCopy, active, nil
+}
+
+func (fsc *FunctionServiceCache) GetFuncPods(ctx context.Context, m *metav1.ObjectMeta) (map[string]*poolcache.Value, error) {
+	key := crd.CacheKey(m)
+
+	fnPods, err := fsc.connFunctionCache.GetPods(ctx, key)
+	if err != nil {
+		fsc.logger.Info("Not found in Cache")
+		return nil, err
+	}
+
+	return fnPods.(map[string]*poolcache.Value), nil
 }
 
 // GetByFunctionUID gets a function service from cache using function UUID.

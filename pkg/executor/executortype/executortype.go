@@ -23,6 +23,7 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/executor/fscache"
+	"github.com/fission/fission/pkg/poolcache"
 )
 
 type ExecutorType interface {
@@ -39,7 +40,10 @@ type ExecutorType interface {
 	GetFuncSvcFromCache(context.Context, *fv1.Function) (*fscache.FuncSvc, error)
 
 	// GetFuncSvcFromPoolCache retrieves function service and number of active instances after filtering on requestsPerPod and CPULimit
-	GetFuncSvcFromPoolCache(ctx context.Context, fn *fv1.Function, requestsPerPod int) (*fscache.FuncSvc, int, error)
+	GetFuncSvcFromPoolCache(ctx context.Context, fn *fv1.Function, requestsPerPod, activePods, activeRequest int) (*fscache.FuncSvc, int, error)
+
+	// GetFuncSvcFromPoolCache retrieves function service and number of active instances after filtering on requestsPerPod and CPULimit
+	GetFuncPodsFromPoolCache(ctx context.Context, fn *fv1.Function) (map[string]*poolcache.Value, error)
 
 	// DeleteFuncSvcFromCache deletes function service entry in cache.
 	DeleteFuncSvcFromCache(context.Context, *fscache.FuncSvc)

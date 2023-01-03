@@ -51,6 +51,7 @@ import (
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
+	"github.com/fission/fission/pkg/poolcache"
 	"github.com/fission/fission/pkg/utils"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
@@ -215,9 +216,14 @@ func (gpm *GenericPoolManager) GetFuncSvcFromCache(ctx context.Context, fn *fv1.
 	return nil, nil
 }
 
-func (gpm *GenericPoolManager) GetFuncSvcFromPoolCache(ctx context.Context, fn *fv1.Function, requestsPerPod int) (*fscache.FuncSvc, int, error) {
+func (gpm *GenericPoolManager) GetFuncSvcFromPoolCache(ctx context.Context, fn *fv1.Function, requestsPerPod, activePods, activeRequest int) (*fscache.FuncSvc, int, error) {
 	otelUtils.SpanTrackEvent(ctx, "GetFuncSvcFromPoolCache", otelUtils.GetAttributesForFunction(fn)...)
-	return gpm.fsCache.GetFuncSvc(ctx, &fn.ObjectMeta, requestsPerPod)
+	return gpm.fsCache.GetFuncSvc(ctx, &fn.ObjectMeta, requestsPerPod, activePods, activeRequest)
+}
+
+func (gpm *GenericPoolManager) GetFuncPodsFromPoolCache(ctx context.Context, fn *fv1.Function) (map[string]*poolcache.Value, error) {
+	otelUtils.SpanTrackEvent(ctx, "GetFuncSvcFromPoolCache", otelUtils.GetAttributesForFunction(fn)...)
+	return gpm.fsCache.GetFuncPods(ctx, &fn.ObjectMeta)
 }
 
 func (gpm *GenericPoolManager) DeleteFuncSvcFromCache(ctx context.Context, fsvc *fscache.FuncSvc) {

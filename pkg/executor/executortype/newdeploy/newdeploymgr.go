@@ -52,6 +52,7 @@ import (
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
+	"github.com/fission/fission/pkg/poolcache"
 	"github.com/fission/fission/pkg/throttler"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/maps"
@@ -200,9 +201,13 @@ func (deploy *NewDeploy) UnTapService(ctx context.Context, key string, svcHost s
 }
 
 // GetFuncSvcFromPoolCache has not been implemented for NewDeployment
-func (deploy *NewDeploy) GetFuncSvcFromPoolCache(ctx context.Context, fn *fv1.Function, requestsPerPod int) (*fscache.FuncSvc, int, error) {
+func (deploy *NewDeploy) GetFuncSvcFromPoolCache(ctx context.Context, fn *fv1.Function, requestsPerPod, activePods, activeRequest int) (*fscache.FuncSvc, int, error) {
 	// Not Implemented for NewDeployment. Will be used when support of concurrent specialization of same function is added.
 	return nil, 0, nil
+}
+
+func (deploy *NewDeploy) GetFuncPodsFromPoolCache(ctx context.Context, fn *fv1.Function) (map[string]*poolcache.Value, error) {
+	return nil, nil
 }
 
 // TapService makes a TouchByAddress request to the cache.

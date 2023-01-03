@@ -62,9 +62,12 @@ type (
 	}
 
 	createFuncServiceRequest struct {
-		context  context.Context
-		function *fv1.Function
-		respChan chan *createFuncServiceResponse
+		context         context.Context
+		function        *fv1.Function
+		respChan        chan *createFuncServiceResponse
+		fnActivePods    int
+		fnActiveRequest int
+		executorType    executortype.ExecutorType
 	}
 
 	createFuncServiceResponse struct {
@@ -113,7 +116,23 @@ func (executor *Executor) serveCreateFuncServices() {
 		req := <-executor.requestChan
 		fnMetadata := &req.function.ObjectMeta
 
+		executor.logger.Info("request received")
 		if req.function.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypePoolmgr {
+			fsvc, _, err := req.executorType.GetFuncSvcFromPoolCache(req.context, req.function, req.function.Spec.RequestsPerPod, req.fnActivePods, req.fnActiveRequest)
+			if err == nil {
+				executor.logger.Info("serving from cache")
+				req.respChan <- &createFuncServiceResponse{
+					funcSvc: fsvc,
+					err:     err,
+				}
+			}
+			if req.fnActivePods >= req.function.Spec.Concurrency {
+				errMsg := fmt.Sprintf("max concurrency reached for %v. All %v instance are active", req.function.ObjectMeta.Name, req.function.Spec.Concurrency)
+				req.respChan <- &createFuncServiceResponse{
+					funcSvc: fsvc,
+					err:     errors.New(errMsg),
+				}
+			}
 			go func() {
 				buffer := 10 // add some buffer time for specialization
 				specializationTimeout := req.function.Spec.InvokeStrategy.ExecutionStrategy.SpecializationTimeout
@@ -130,6 +149,7 @@ func (executor *Executor) serveCreateFuncServices() {
 				defer cancel()
 
 				fsvc, err := executor.createServiceForFunction(fnSpecializationTimeoutContext, req.function)
+				executor.logger.Info("sending response to channel in goroutine")
 				req.respChan <- &createFuncServiceResponse{
 					funcSvc: fsvc,
 					err:     err,
@@ -173,6 +193,7 @@ func (executor *Executor) serveCreateFuncServices() {
 				defer cancel()
 
 				fsvc, err := executor.createServiceForFunction(fnSpecializationTimeoutContext, req.function)
+				executor.logger.Info("sending response to channel in waitgroup")
 				req.respChan <- &createFuncServiceResponse{
 					funcSvc: fsvc,
 					err:     err,

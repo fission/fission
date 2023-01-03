@@ -33,6 +33,8 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/executor/client"
+	"github.com/fission/fission/pkg/executor/executortype"
+	"github.com/fission/fission/pkg/executor/fscache"
 	"github.com/fission/fission/pkg/utils/httpserver"
 	"github.com/fission/fission/pkg/utils/metrics"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
@@ -53,7 +55,10 @@ func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *htt
 		http.Error(w, "Failed to parse request", http.StatusBadRequest)
 		return
 	}
-
+	var (
+		activePods    int
+		activeRequest int
+	)
 	t := fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType
 	et := executor.executorTypes[t]
 	logger := otelUtils.LoggerWithTraceID(ctx, executor.logger)
@@ -71,31 +76,49 @@ func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *htt
 		if requestsPerpod == 0 {
 			requestsPerpod = 1
 		}
-		fsvc, active, err := et.GetFuncSvcFromPoolCache(ctx, fn, requestsPerpod)
-		// check if its a cache hit (check if there is already specialized function pod that can serve another request)
-		if err == nil {
-			// if a pod is already serving request then it already exists else validated
-			logger.Debug("from cache", zap.Int("active", active))
-			if et.IsValid(ctx, fsvc) {
-				// Cached, return svc address
-				logger.Debug("served from cache", zap.String("name", fsvc.Name), zap.String("address", fsvc.Address))
-				executor.writeResponse(w, fsvc.Address, fn.ObjectMeta.Name)
-				return
-			}
-			logger.Debug("deleting cache entry for invalid address",
-				zap.String("function_name", fn.ObjectMeta.Name),
-				zap.String("function_namespace", fn.ObjectMeta.Namespace),
-				zap.String("address", fsvc.Address))
-			et.DeleteFuncSvcFromCache(ctx, fsvc)
-			active--
-		}
 
-		if active >= concurrency {
-			errMsg := fmt.Sprintf("max concurrency reached for %v. All %v instance are active", fn.ObjectMeta.Name, concurrency)
-			logger.Error("error occurred", zap.String("error", errMsg))
-			http.Error(w, html.EscapeString(errMsg), http.StatusTooManyRequests)
-			return
+		pods, err := et.GetFuncPodsFromPoolCache(ctx, fn)
+		if err == nil {
+			// logger.Error("error occurred", zap.String("error", err.Error()))
+			// http.Error(w, html.EscapeString(err.Error()), http.StatusNotFound)
+			// return
+			logger.Debug("function found", zap.String("function", fn.ObjectMeta.Name))
+			for _, val := range pods {
+				if et.IsValid(ctx, val.Val.(*fscache.FuncSvc)) {
+					logger.Debug("increasing active pod and active request", zap.String("function", fn.ObjectMeta.Name))
+					activePods++
+					activeRequest += val.ActiveRequests
+				} else {
+					logger.Debug("deleting invalid address for function", zap.String("function", fn.ObjectMeta.Name))
+					et.DeleteFuncSvcFromCache(ctx, val.Val.(*fscache.FuncSvc))
+				}
+			}
 		}
+		// fsvc, active, err := et.GetFuncSvcFromPoolCache(ctx, fn, requestsPerpod)
+		// check if its a cache hit (check if there is already specialized function pod that can serve another request)
+		// if err == nil {
+		// 	// if a pod is already serving request then it already exists else validated
+		// 	logger.Debug("from cache", zap.Int("active", active))
+		// 	if et.IsValid(ctx, fsvc) {
+		// 		// Cached, return svc address
+		// 		logger.Debug("served from cache", zap.String("name", fsvc.Name), zap.String("address", fsvc.Address))
+		// 		executor.writeResponse(w, fsvc.Address, fn.ObjectMeta.Name)
+		// 		return
+		// 	}
+		// 	logger.Debug("deleting cache entry for invalid address",
+		// 		zap.String("function_name", fn.ObjectMeta.Name),
+		// 		zap.String("function_namespace", fn.ObjectMeta.Namespace),
+		// 		zap.String("address", fsvc.Address))
+		// 	et.DeleteFuncSvcFromCache(ctx, fsvc)
+		// 	active--
+		// }
+
+		// if active >= concurrency {
+		// 	errMsg := fmt.Sprintf("max concurrency reached for %v. All %v instance are active", fn.ObjectMeta.Name, concurrency)
+		// 	logger.Error("error occurred", zap.String("error", errMsg))
+		// 	http.Error(w, html.EscapeString(errMsg), http.StatusTooManyRequests)
+		// 	return
+		// }
 	} else if t == fv1.ExecutorTypeNewdeploy || t == fv1.ExecutorTypeContainer {
 		fsvc, err := et.GetFuncSvcFromCache(ctx, fn)
 		if err == nil {
@@ -112,7 +135,8 @@ func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *htt
 		}
 	}
 
-	serviceName, err := executor.getServiceForFunction(ctx, fn)
+	logger.Debug("service not found, creaing one", zap.String("function", fn.ObjectMeta.Name))
+	serviceName, err := executor.getServiceForFunction(ctx, fn, activePods, activeRequest, et)
 	if err != nil {
 		code, msg := ferror.GetHTTPError(err)
 		logger.Error("error getting service for function",
@@ -145,12 +169,15 @@ func (executor *Executor) writeResponse(w http.ResponseWriter, serviceName strin
 // stale addresses are not returned to the router.
 // To make it optimal, plan is to add an eager cache invalidator function that watches for pod deletion events and
 // invalidates the cache entry if the pod address was cached.
-func (executor *Executor) getServiceForFunction(ctx context.Context, fn *fv1.Function) (string, error) {
+func (executor *Executor) getServiceForFunction(ctx context.Context, fn *fv1.Function, activePods, activeRequest int, et executortype.ExecutorType) (string, error) {
 	respChan := make(chan *createFuncServiceResponse)
 	executor.requestChan <- &createFuncServiceRequest{
-		context:  ctx,
-		function: fn,
-		respChan: respChan,
+		context:         ctx,
+		function:        fn,
+		fnActivePods:    activePods,
+		fnActiveRequest: activeRequest,
+		executorType:    et,
+		respChan:        respChan,
 	}
 	resp := <-respChan
 	if resp.err != nil {

@@ -50,6 +50,7 @@ import (
 	hpautils "github.com/fission/fission/pkg/executor/util/hpa"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
+	"github.com/fission/fission/pkg/poolcache"
 	"github.com/fission/fission/pkg/throttler"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/maps"
@@ -194,9 +195,13 @@ func (caaf *Container) DeleteFuncSvcFromCache(ctx context.Context, fsvc *fscache
 }
 
 // GetFuncSvcFromPoolCache has not been implemented for Container Functions
-func (caaf *Container) GetFuncSvcFromPoolCache(ctx context.Context, fn *fv1.Function, requestsPerPod int) (*fscache.FuncSvc, int, error) {
+func (caaf *Container) GetFuncSvcFromPoolCache(ctx context.Context, fn *fv1.Function, requestsPerPod, activePods, activeRequest int) (*fscache.FuncSvc, int, error) {
 	// Not Implemented for NewDeployment. Will be used when support of concurrent specialization of same function is added.
 	return nil, 0, nil
+}
+
+func (caaf *Container) GetFuncPodsFromPoolCache(ctx context.Context, fn *fv1.Function) (map[string]*poolcache.Value, error) {
+	return nil, nil
 }
 
 // TapService makes a TouchByAddress request to the cache.
