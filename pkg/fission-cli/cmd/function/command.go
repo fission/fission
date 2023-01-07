@@ -173,6 +173,7 @@ func Commands() *cobra.Command {
 			flag.RunTimeMinCPU, flag.RunTimeMaxCPU, flag.RunTimeMinMemory,
 			flag.RunTimeMaxMemory, flag.ReplicasMin,
 			flag.ReplicasMax, flag.RunTimeTargetCPU,
+			flag.RunImagePullSecret,
 
 			flag.NamespaceFunction, flag.SpecSave, flag.SpecDry,
 		},

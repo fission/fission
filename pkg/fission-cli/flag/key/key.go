@@ -44,11 +44,12 @@ const (
 	NamespacePod         = "pod-namespace"
 	ForceDelete          = "force"
 
-	RuntimeMincpu    = "mincpu"
-	RuntimeMaxcpu    = "maxcpu"
-	RuntimeMinmemory = "minmemory"
-	RuntimeMaxmemory = "maxmemory"
-	RuntimeTargetcpu = "targetcpu"
+	RuntimeMincpu      = "mincpu"
+	RuntimeMaxcpu      = "maxcpu"
+	RuntimeMinmemory   = "minmemory"
+	RuntimeMaxmemory   = "maxmemory"
+	RuntimeTargetcpu   = "targetcpu"
+	RunImagePullSecret = "imagepullsecret"
 
 	ReplicasMinscale = "minscale"
 	ReplicasMaxscale = "maxscale"
