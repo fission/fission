@@ -106,6 +106,8 @@ func (opts *RunContainerSubCommand) complete(input cli.Input) error {
 		console.Warn("grace period must be a non-negative integer, using default value (6 mins)")
 	}
 
+	pullSecret := []apiv1.LocalObjectReference{{Name: input.String(flagkey.RunImagePullSecret)}}
+
 	var imageName string
 	var port int
 	var command, args string
@@ -208,6 +210,7 @@ func (opts *RunContainerSubCommand) complete(input cli.Input) error {
 	opts.function.Spec.PodSpec = &apiv1.PodSpec{
 		Containers:                    []apiv1.Container{*container},
 		TerminationGracePeriodSeconds: &fnGracePeriod,
+		ImagePullSecrets:              pullSecret,
 	}
 
 	return nil
