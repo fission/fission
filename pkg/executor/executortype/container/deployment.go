@@ -139,7 +139,7 @@ func (cn *Container) waitForDeploy(ctx context.Context, depl *appsv1.Deployment,
 	}
 
 	for i := 0; i < specializationTimeout; i++ {
-		latestDepl, err := cn.kubernetesClient.AppsV1().Deployments(depl.ObjectMeta.Namespace).Get(ctx, depl.Name, metav1.GetOptions{})
+		latestDepl, err = cn.kubernetesClient.AppsV1().Deployments(depl.ObjectMeta.Namespace).Get(ctx, depl.Name, metav1.GetOptions{})
 		if err != nil {
 			return nil, err
 		}
