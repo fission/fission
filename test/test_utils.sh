@@ -74,9 +74,9 @@ build_and_push_go_mod_cache_image() {
     gcloud_login
 
     if ! gcloud docker -- pull $image_tag >/dev/null 2>&1 ; then
-      docker build -q -t $image_tag -f $ROOT/cmd/fission-bundle/Dockerfile.fission-bundle --target godep --build-arg GITCOMMIT=$(getGitCommit) --build-arg BUILDDATE=$(getDate) --build-arg BUILDVERSION=$(getVersion) .
+      docker build -q -t $image_tag -f $ROOT/cmd/fission-bundle/Dockerfile --target godep --build-arg GITCOMMIT=$(getGitCommit) --build-arg BUILDDATE=$(getDate) --build-arg BUILDVERSION=$(getVersion) .
     else
-      docker build -q -t $image_tag -f $ROOT/cmd/fission-bundle/Dockerfile.fission-bundle --cache-from ${image_tag} --target godep --build-arg GITCOMMIT=$(getGitCommit) --build-arg BUILDDATE=$(getDate) --build-arg BUILDVERSION=$(getVersion) .
+      docker build -q -t $image_tag -f $ROOT/cmd/fission-bundle/Dockerfile --cache-from ${image_tag} --target godep --build-arg GITCOMMIT=$(getGitCommit) --build-arg BUILDDATE=$(getDate) --build-arg BUILDVERSION=$(getVersion) .
     fi
 
     gcloud docker -- push $image_tag &
@@ -88,7 +88,7 @@ build_and_push_pre_upgrade_check_image() {
     cache_image=$2
     travis_fold_start build_and_push_pre_upgrade_check_image $image_tag
 
-    docker build -q -t $image_tag -f $ROOT/cmd/preupgradechecks/Dockerfile.fission-preupgradechecks --cache-from ${cache_image} --build-arg GITCOMMIT=$(getGitCommit) --build-arg BUILDDATE=$(getDate) --build-arg BUILDVERSION=$(getVersion) .
+    docker build -q -t $image_tag -f $ROOT/cmd/preupgradechecks/Dockerfile --cache-from ${cache_image} --build-arg GITCOMMIT=$(getGitCommit) --build-arg BUILDDATE=$(getDate) --build-arg BUILDVERSION=$(getVersion) .
 
     gcloud_login
 
@@ -101,7 +101,7 @@ build_and_push_fission_bundle() {
     cache_image=$2
     travis_fold_start build_and_push_fission_bundle $image_tag
 
-    docker build -q -t $image_tag -f $ROOT/cmd/fission-bundle/Dockerfile.fission-bundle --cache-from ${cache_image} --build-arg GITCOMMIT=$(getGitCommit) --build-arg BUILDDATE=$(getDate) --build-arg BUILDVERSION=$(getVersion) .
+    docker build -q -t $image_tag -f $ROOT/cmd/fission-bundle/Dockerfile --cache-from ${cache_image} --build-arg GITCOMMIT=$(getGitCommit) --build-arg BUILDDATE=$(getDate) --build-arg BUILDVERSION=$(getVersion) .
 
     gcloud_login
 
@@ -114,7 +114,7 @@ build_and_push_fetcher() {
     cache_image=$2
     travis_fold_start build_and_push_fetcher $image_tag
 
-    docker build -q -t $image_tag -f $ROOT/cmd/fetcher/Dockerfile.fission-fetcher --cache-from ${cache_image} --build-arg GITCOMMIT=$(getGitCommit) --build-arg BUILDDATE=$(getDate) --build-arg BUILDVERSION=$(getVersion) .
+    docker build -q -t $image_tag -f $ROOT/cmd/fetcher/Dockerfile --cache-from ${cache_image} --build-arg GITCOMMIT=$(getGitCommit) --build-arg BUILDDATE=$(getDate) --build-arg BUILDVERSION=$(getVersion) .
 
     gcloud_login
 
@@ -128,7 +128,7 @@ build_and_push_builder() {
     cache_image=$2
     travis_fold_start build_and_push_builder $image_tag
 
-    docker build -q -t $image_tag -f $ROOT/cmd/builder/Dockerfile.fission-builder --cache-from ${cache_image} --build-arg GITCOMMIT=$(getGitCommit) --build-arg BUILDDATE=$(getDate) --build-arg BUILDVERSION=$(getVersion) .
+    docker build -q -t $image_tag -f $ROOT/cmd/builder/Dockerfile --cache-from ${cache_image} --build-arg GITCOMMIT=$(getGitCommit) --build-arg BUILDDATE=$(getDate) --build-arg BUILDVERSION=$(getVersion) .
 
     gcloud_login
 

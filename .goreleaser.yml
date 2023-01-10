@@ -84,7 +84,7 @@ dockers:
     image_templates:
       - "fission/builder:latest-amd64"
       - "fission/builder:{{ .Tag }}-amd64"
-    dockerfile: cmd/builder/Dockerfile.fission-builder
+    dockerfile: cmd/builder/Dockerfile
     build_flag_templates:
       - "--platform=linux/amd64"
       - "--label=org.opencontainers.image.created={{.Date}}"
@@ -96,28 +96,28 @@ dockers:
     image_templates:
       - "fission/fetcher:latest-amd64"
       - "fission/fetcher:{{ .Tag }}-amd64"
-    dockerfile: cmd/fetcher/Dockerfile.fission-fetcher
+    dockerfile: cmd/fetcher/Dockerfile
   - <<: *docker-amd64
     ids:
       - fission-bundle
     image_templates:
       - "fission/fission-bundle:latest-amd64"
       - "fission/fission-bundle:{{ .Tag }}-amd64"
-    dockerfile: cmd/fission-bundle/Dockerfile.fission-bundle
+    dockerfile: cmd/fission-bundle/Dockerfile
   - <<: *docker-amd64
     ids:
       - pre-upgrade-checks
     image_templates:
       - "fission/pre-upgrade-checks:latest-amd64"
       - "fission/pre-upgrade-checks:{{ .Tag }}-amd64"
-    dockerfile: cmd/preupgradechecks/Dockerfile.fission-preupgradechecks
+    dockerfile: cmd/preupgradechecks/Dockerfile
   - <<: *docker-amd64
     ids:
       - reporter
     image_templates:
       - "fission/reporter:latest-amd64"
       - "fission/reporter:{{ .Tag }}-amd64"
-    dockerfile: cmd/reporter/Dockerfile.reporter
+    dockerfile: cmd/reporter/Dockerfile
   - &docker-arm64
     use: buildx
     goos: linux
@@ -127,7 +127,7 @@ dockers:
     image_templates:
       - "fission/builder:latest-arm64"
       - "fission/builder:{{ .Tag }}-arm64"
-    dockerfile: cmd/builder/Dockerfile.fission-builder
+    dockerfile: cmd/builder/Dockerfile
     build_flag_templates:
       - "--platform=linux/arm64"
       - "--label=org.opencontainers.image.created={{.Date}}"
@@ -139,28 +139,28 @@ dockers:
     image_templates:
       - "fission/fetcher:latest-arm64"
       - "fission/fetcher:{{ .Tag }}-arm64"
-    dockerfile: cmd/fetcher/Dockerfile.fission-fetcher
+    dockerfile: cmd/fetcher/Dockerfile
   - <<: *docker-arm64
     ids:
       - fission-bundle
     image_templates:
       - "fission/fission-bundle:latest-arm64"
       - "fission/fission-bundle:{{ .Tag }}-arm64"
-    dockerfile: cmd/fission-bundle/Dockerfile.fission-bundle
+    dockerfile: cmd/fission-bundle/Dockerfile
   - <<: *docker-arm64
     ids:
       - pre-upgrade-checks
     image_templates:
       - "fission/pre-upgrade-checks:latest-arm64"
       - "fission/pre-upgrade-checks:{{ .Tag }}-arm64"
-    dockerfile: cmd/preupgradechecks/Dockerfile.fission-preupgradechecks
+    dockerfile: cmd/preupgradechecks/Dockerfile
   - <<: *docker-arm64
     ids:
       - reporter
     image_templates:
       - "fission/reporter:latest-arm64"
       - "fission/reporter:{{ .Tag }}-arm64"
-    dockerfile: cmd/reporter/Dockerfile.reporter
+    dockerfile: cmd/reporter/Dockerfile
   - &docker-armv7
     use: buildx
     goos: linux
@@ -171,7 +171,7 @@ dockers:
     image_templates:
       - "fission/builder:latest-armv7"
       - "fission/builder:{{ .Tag }}-armv7"
-    dockerfile: cmd/builder/Dockerfile.fission-builder
+    dockerfile: cmd/builder/Dockerfile
     build_flag_templates:
       - "--platform=linux/arm/v7"
       - "--label=org.opencontainers.image.created={{.Date}}"
@@ -183,28 +183,28 @@ dockers:
     image_templates:
       - "fission/fetcher:latest-armv7"
       - "fission/fetcher:{{ .Tag }}-armv7"
-    dockerfile: cmd/fetcher/Dockerfile.fission-fetcher
+    dockerfile: cmd/fetcher/Dockerfile
   - <<: *docker-armv7
     ids:
       - fission-bundle
     image_templates:
       - "fission/fission-bundle:latest-armv7"
       - "fission/fission-bundle:{{ .Tag }}-armv7"
-    dockerfile: cmd/fission-bundle/Dockerfile.fission-bundle
+    dockerfile: cmd/fission-bundle/Dockerfile
   - <<: *docker-armv7
     ids:
       - pre-upgrade-checks
     image_templates:
       - "fission/pre-upgrade-checks:latest-armv7"
       - "fission/pre-upgrade-checks:{{ .Tag }}-armv7"
-    dockerfile: cmd/preupgradechecks/Dockerfile.fission-preupgradechecks
+    dockerfile: cmd/preupgradechecks/Dockerfile
   - <<: *docker-armv7
     ids:
       - reporter
     image_templates:
       - "fission/reporter:latest-armv7"
       - "fission/reporter:{{ .Tag }}-armv7"
-    dockerfile: cmd/reporter/Dockerfile.reporter
+    dockerfile: cmd/reporter/Dockerfile
 docker_manifests:
   - name_template: fission/builder:{{ .Tag }}
     image_templates:

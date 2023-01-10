@@ -112,11 +112,11 @@ all-generators: codegen generate-crds generate-swagger-doc generate-cli-docs gen
 
 skaffold-prebuild:
 	@GOOS=linux GOARCH=amd64 GORELEASER_CURRENT_TAG=$(VERSION) goreleaser build --snapshot --rm-dist --single-target
-	@cp -v cmd/builder/Dockerfile.fission-builder dist/builder_linux_amd64_v1/Dockerfile
-	@cp -v cmd/fetcher/Dockerfile.fission-fetcher dist/fetcher_linux_amd64_v1/Dockerfile
-	@cp -v cmd/fission-bundle/Dockerfile.fission-bundle dist/fission-bundle_linux_amd64_v1/Dockerfile
-	@cp -v cmd/reporter/Dockerfile.reporter dist/reporter_linux_amd64_v1/Dockerfile
-	@cp -v cmd/preupgradechecks/Dockerfile.fission-preupgradechecks dist/pre-upgrade-checks_linux_amd64_v1/Dockerfile
+	@cp -v cmd/builder/Dockerfile dist/builder_linux_amd64_v1/Dockerfile
+	@cp -v cmd/fetcher/Dockerfile dist/fetcher_linux_amd64_v1/Dockerfile
+	@cp -v cmd/fission-bundle/Dockerfile dist/fission-bundle_linux_amd64_v1/Dockerfile
+	@cp -v cmd/reporter/Dockerfile dist/reporter_linux_amd64_v1/Dockerfile
+	@cp -v cmd/preupgradechecks/Dockerfile dist/pre-upgrade-checks_linux_amd64_v1/Dockerfile
 
 skaffold-deploy: skaffold-prebuild
 	skaffold run -p $(SKAFFOLD_PROFILE)
