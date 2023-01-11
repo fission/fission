@@ -1,0 +1,38 @@
+{{- if .Values.openTelemetry.collector.enabled -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "opentelemetry-collector.fullname" . }}
+  labels:
+    {{- include "opentelemetry-collector.labels" . | nindent 4 }}
+  {{- include "opentelemetry-collector.annotations" . | nindent 2 }}
+spec:
+{{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+{{- end }}
+  selector:
+    matchLabels:
+      {{- include "opentelemetry-collector.selectorLabels" . | nindent 6 }}
+      {{- include "opentelemetry-collector.component" . | nindent 6 }}
+  strategy:
+    {{- if eq .Values.rollout.strategy "RollingUpdate" }}
+    {{- with .Values.rollout.rollingUpdate }}
+    rollingUpdate:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    {{- end }}
+    type: {{ .Values.rollout.strategy }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- include "opentelemetry-collector.podAnnotations" . | nindent 8 }}
+      labels:
+        {{- include "opentelemetry-collector.selectorLabels" . | nindent 8 }}
+        {{- include "opentelemetry-collector.component" . | nindent 8 }}
+        {{- include "opentelemetry-collector.podLabels" . | nindent 8 }}
+    spec:
+      {{- $podValues := deepCopy .Values }}
+      {{- $podData := dict "Values" $podValues "configmapSuffix" "" "isAgent" false }}
+      {{- include "opentelemetry-collector.pod" ($podData | mustMergeOverwrite (deepCopy .)) | nindent 6 }}
+{{- end }}
