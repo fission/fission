@@ -50,16 +50,21 @@ type (
 	}
 	// Cache is simple cache having two keys [function][address] mapped to value and requestChannel for operation on it
 	Cache struct {
-		cache          map[interface{}]map[interface{}]*value
+		cache          map[string]*function
 		requestChannel chan *request
 		logger         *zap.Logger
 	}
 
+	function struct {
+		totalCap   int
+		virtualCap int
+		address    map[string]*value
+	}
 	request struct {
 		requestType
 		ctx             context.Context
-		function        interface{}
-		address         interface{}
+		function        string
+		address         string
 		value           interface{}
 		requestsPerPod  int
 		cpuUsage        resource.Quantity
@@ -76,7 +81,8 @@ type (
 // NewPoolCache create a Cache object
 func NewPoolCache(logger *zap.Logger) *Cache {
 	c := &Cache{
-		cache:          make(map[interface{}]map[interface{}]*value),
+		// cache:          make(map[interface{}]map[interface{}]*value),
+		cache:          make(map[string]*function),
 		requestChannel: make(chan *request),
 		logger:         logger,
 	}
@@ -96,14 +102,14 @@ func (c *Cache) service() {
 				resp.error = ferror.MakeError(ferror.ErrorNotFound,
 					fmt.Sprintf("function Name '%v' not found", req.function))
 			} else {
-				for addr := range values {
-					if values[addr].activeRequests < req.requestsPerPod && values[addr].currentCPUUsage.Cmp(values[addr].cpuLimit) < 1 {
+				for addr := range values.address {
+					if values.address[addr].activeRequests < req.requestsPerPod && values.address[addr].currentCPUUsage.Cmp(values.address[addr].cpuLimit) < 1 {
 						// mark active
-						values[addr].activeRequests++
+						values.address[addr].activeRequests++
 						if c.logger.Core().Enabled(zap.DebugLevel) {
-							otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Increase active requests with getValue", zap.String("function", req.function.(string)), zap.String("address", addr.(string)), zap.Int("activeRequests", values[addr].activeRequests))
+							otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Increase active requests with getValue", zap.String("function", req.function), zap.String("address", addr), zap.Int("activeRequests", values.address[addr].activeRequests))
 						}
-						resp.value = values[addr].val
+						resp.value = values.address[addr].val
 						found = true
 						break
 					}
@@ -111,33 +117,36 @@ func (c *Cache) service() {
 				if !found {
 					resp.error = ferror.MakeError(ferror.ErrorNotFound, fmt.Sprintf("function '%v' all functions are busy", req.function))
 				}
-				resp.totalActive = len(values)
+				resp.totalActive = len(values.address)
 			}
 			req.responseChannel <- resp
 		case setValue:
 			if _, ok := c.cache[req.function]; !ok {
-				c.cache[req.function] = make(map[interface{}]*value)
+				// c.cache[req.function] = make(map[interface{}]*value)
+				c.cache[req.function] = &function{address: make(map[string]*value)}
 			}
-			if _, ok := c.cache[req.function][req.address]; !ok {
-				c.cache[req.function][req.address] = &value{}
+			if _, ok := c.cache[req.function].address[req.address]; !ok {
+				c.cache[req.function].address[req.address] = &value{}
 			}
-			c.cache[req.function][req.address].val = req.value
-			c.cache[req.function][req.address].activeRequests++
+			c.cache[req.function].address[req.address].val = req.value
+			c.cache[req.function].address[req.address].activeRequests++
+			c.cache[req.function].totalCap += req.requestsPerPod
+			c.cache[req.function].virtualCap++
 			if c.logger.Core().Enabled(zap.DebugLevel) {
-				otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Increase active requests with setValue", zap.String("function", req.function.(string)), zap.String("address", req.address.(string)), zap.Int("activeRequests", c.cache[req.function][req.address].activeRequests))
+				otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Increase active requests with setValue", zap.String("function", req.function), zap.String("address", req.address), zap.Int("activeRequests", c.cache[req.function].address[req.address].activeRequests))
 			}
-			c.cache[req.function][req.address].cpuLimit = req.cpuUsage
+			c.cache[req.function].address[req.address].cpuLimit = req.cpuUsage
 		case listAvailableValue:
 			vals := make([]interface{}, 0)
 			for key1, values := range c.cache {
-				for key2, value := range values {
+				for key2, value := range values.address {
 					debugLevel := c.logger.Core().Enabled(zap.DebugLevel)
 					if debugLevel {
-						otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Reading active requests", zap.String("function", key1.(string)), zap.String("address", key2.(string)), zap.Int("activeRequests", value.activeRequests))
+						otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Reading active requests", zap.String("function", key1), zap.String("address", key2), zap.Int("activeRequests", value.activeRequests))
 					}
 					if value.activeRequests == 0 {
 						if debugLevel {
-							otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Function service with no active requests", zap.String("function", key1.(string)), zap.String("address", key2.(string)), zap.Int("activeRequests", value.activeRequests))
+							otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Function service with no active requests", zap.String("function", key1), zap.String("address", key2), zap.Int("activeRequests", value.activeRequests))
 						}
 						vals = append(vals, value.val)
 					}
@@ -147,26 +156,27 @@ func (c *Cache) service() {
 			req.responseChannel <- resp
 		case setCPUUtilization:
 			if _, ok := c.cache[req.function]; !ok {
-				c.cache[req.function] = make(map[interface{}]*value)
+				c.cache[req.function] = &function{address: make(map[string]*value)}
 			}
-			if _, ok := c.cache[req.function][req.address]; ok {
-				c.cache[req.function][req.address].currentCPUUsage = req.cpuUsage
+			if _, ok := c.cache[req.function].address[req.address]; ok {
+				c.cache[req.function].address[req.address].currentCPUUsage = req.cpuUsage
 			}
 		case markAvailable:
 			if _, ok := c.cache[req.function]; ok {
-				if _, ok = c.cache[req.function][req.address]; ok {
-					if c.cache[req.function][req.address].activeRequests > 0 {
-						c.cache[req.function][req.address].activeRequests--
+				if _, ok = c.cache[req.function].address[req.address]; ok {
+					if c.cache[req.function].address[req.address].activeRequests > 0 {
+						c.cache[req.function].address[req.address].activeRequests--
+						c.cache[req.function].virtualCap--
 						if c.logger.Core().Enabled(zap.DebugLevel) {
-							otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Decrease active requests", zap.String("function", req.function.(string)), zap.String("address", req.address.(string)), zap.Int("activeRequests", c.cache[req.function][req.address].activeRequests))
+							otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Decrease active requests", zap.String("function", req.function), zap.String("address", req.address), zap.Int("activeRequests", c.cache[req.function].address[req.address].activeRequests))
 						}
 					} else {
-						otelUtils.LoggerWithTraceID(req.ctx, c.logger).Error("Invalid request to decrease active requests", zap.String("function", req.function.(string)), zap.String("address", req.address.(string)), zap.Int("activeRequests", c.cache[req.function][req.address].activeRequests))
+						otelUtils.LoggerWithTraceID(req.ctx, c.logger).Error("Invalid request to decrease active requests", zap.String("function", req.function), zap.String("address", req.address), zap.Int("activeRequests", c.cache[req.function].address[req.address].activeRequests))
 					}
 				}
 			}
 		case deleteValue:
-			delete(c.cache[req.function], req.address)
+			delete(c.cache[req.function].address, req.address)
 			req.responseChannel <- resp
 		default:
 			resp.error = ferror.MakeError(ferror.ErrorInvalidArgument,
@@ -177,7 +187,7 @@ func (c *Cache) service() {
 }
 
 // GetValue returns a value interface with status inActive else return error
-func (c *Cache) GetValue(ctx context.Context, function interface{}, requestsPerPod int) (interface{}, int, error) {
+func (c *Cache) GetValue(ctx context.Context, function string, requestsPerPod int) (interface{}, int, error) {
 	respChannel := make(chan *response)
 	c.requestChannel <- &request{
 		ctx:             ctx,
@@ -202,7 +212,7 @@ func (c *Cache) ListAvailableValue() []interface{} {
 }
 
 // SetValue marks the value at key [function][address] as active(begin used)
-func (c *Cache) SetValue(ctx context.Context, function, address, value interface{}, cpuLimit resource.Quantity) {
+func (c *Cache) SetValue(ctx context.Context, function, address string, value interface{}, cpuLimit resource.Quantity) {
 	respChannel := make(chan *response)
 	c.requestChannel <- &request{
 		ctx:             ctx,
@@ -216,7 +226,7 @@ func (c *Cache) SetValue(ctx context.Context, function, address, value interface
 }
 
 // SetCPUUtilization updates/sets the CPU utilization limit for the pod
-func (c *Cache) SetCPUUtilization(function, address interface{}, cpuUsage resource.Quantity) {
+func (c *Cache) SetCPUUtilization(function, address string, cpuUsage resource.Quantity) {
 	c.requestChannel <- &request{
 		requestType:     setCPUUtilization,
 		function:        function,
@@ -227,7 +237,7 @@ func (c *Cache) SetCPUUtilization(function, address interface{}, cpuUsage resour
 }
 
 // MarkAvailable marks the value at key [function][address] as available
-func (c *Cache) MarkAvailable(function, address interface{}) {
+func (c *Cache) MarkAvailable(function, address string) {
 	respChannel := make(chan *response)
 	c.requestChannel <- &request{
 		requestType:     markAvailable,
@@ -238,7 +248,7 @@ func (c *Cache) MarkAvailable(function, address interface{}) {
 }
 
 // DeleteValue deletes the value at key composed of [function][address]
-func (c *Cache) DeleteValue(ctx context.Context, function, address interface{}) error {
+func (c *Cache) DeleteValue(ctx context.Context, function, address string) error {
 	respChannel := make(chan *response)
 	c.requestChannel <- &request{
 		ctx:             ctx,

@@ -31,7 +31,6 @@ import (
 	"go.uber.org/zap"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
-	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/executor/client"
 	"github.com/fission/fission/pkg/utils/httpserver"
 	"github.com/fission/fission/pkg/utils/metrics"
@@ -39,6 +38,7 @@ import (
 )
 
 func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *http.Request) {
+	// executor.httpReqQueue.PushBack(&httpRequest{request: r, respWriter: w, context: r.Context()})
 	ctx := r.Context()
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -54,75 +54,94 @@ func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *htt
 		return
 	}
 
-	t := fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType
-	et := executor.executorTypes[t]
-	logger := otelUtils.LoggerWithTraceID(ctx, executor.logger)
-
-	// Check function -> svc cache
-	logger.Debug("checking for cached function service",
-		zap.String("function_name", fn.ObjectMeta.Name),
-		zap.String("function_namespace", fn.ObjectMeta.Namespace))
-	if t == fv1.ExecutorTypePoolmgr && !fn.Spec.OnceOnly {
-		concurrency := fn.Spec.Concurrency
-		if concurrency == 0 {
-			concurrency = 500
-		}
-		requestsPerpod := fn.Spec.RequestsPerPod
-		if requestsPerpod == 0 {
-			requestsPerpod = 1
-		}
-		fsvc, active, err := et.GetFuncSvcFromPoolCache(ctx, fn, requestsPerpod)
-		// check if its a cache hit (check if there is already specialized function pod that can serve another request)
-		if err == nil {
-			// if a pod is already serving request then it already exists else validated
-			logger.Debug("from cache", zap.Int("active", active))
-			if et.IsValid(ctx, fsvc) {
-				// Cached, return svc address
-				logger.Debug("served from cache", zap.String("name", fsvc.Name), zap.String("address", fsvc.Address))
-				executor.writeResponse(w, fsvc.Address, fn.ObjectMeta.Name)
-				return
-			}
-			logger.Debug("deleting cache entry for invalid address",
-				zap.String("function_name", fn.ObjectMeta.Name),
-				zap.String("function_namespace", fn.ObjectMeta.Namespace),
-				zap.String("address", fsvc.Address))
-			et.DeleteFuncSvcFromCache(ctx, fsvc)
-			active--
-		}
-
-		if active >= concurrency {
-			errMsg := fmt.Sprintf("max concurrency reached for %v. All %v instance are active", fn.ObjectMeta.Name, concurrency)
-			logger.Error("error occurred", zap.String("error", errMsg))
-			http.Error(w, html.EscapeString(errMsg), http.StatusTooManyRequests)
-			return
-		}
-	} else if t == fv1.ExecutorTypeNewdeploy || t == fv1.ExecutorTypeContainer {
-		fsvc, err := et.GetFuncSvcFromCache(ctx, fn)
-		if err == nil {
-			if et.IsValid(ctx, fsvc) {
-				// Cached, return svc address
-				executor.writeResponse(w, fsvc.Address, fn.ObjectMeta.Name)
-				return
-			}
-			logger.Debug("deleting cache entry for invalid address",
-				zap.String("function_name", fn.ObjectMeta.Name),
-				zap.String("function_namespace", fn.ObjectMeta.Namespace),
-				zap.String("address", fsvc.Address))
-			et.DeleteFuncSvcFromCache(ctx, fsvc)
-		}
+	executor.logger.Debug("function request received")
+	respChan := make(chan *fnServiceRespChan)
+	executor.fnSvcReqChan <- &fnServiceReq{
+		fn:       fn,
+		context:  ctx,
+		respChan: respChan,
 	}
-
-	serviceName, err := executor.getServiceForFunction(ctx, fn)
-	if err != nil {
-		code, msg := ferror.GetHTTPError(err)
-		logger.Error("error getting service for function",
-			zap.Error(err),
-			zap.String("function", fn.ObjectMeta.Name),
-			zap.String("fission_http_error", msg))
-		http.Error(w, msg, code)
+	resp := <-respChan
+	executor.logger.Debug("function service response received")
+	if resp.err != nil {
+		executor.logger.Debug("error for service", zap.String("error", resp.err.msg))
+		// code, msg := ferror.GetHTTPError(err)
+		http.Error(w, html.EscapeString(resp.err.msg), resp.err.code)
 		return
 	}
-	executor.writeResponse(w, serviceName, fn.ObjectMeta.Name)
+	executor.logger.Debug("sending response successfully")
+	executor.writeResponse(w, resp.svcAddress, fn.ObjectMeta.Name)
+	return
+
+	// t := fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType
+	// et := executor.executorTypes[t]
+	// logger := otelUtils.LoggerWithTraceID(ctx, executor.logger)
+
+	// // Check function -> svc cache
+	// logger.Debug("checking for cached function service",
+	// 	zap.String("function_name", fn.ObjectMeta.Name),
+	// 	zap.String("function_namespace", fn.ObjectMeta.Namespace))
+	// if t == fv1.ExecutorTypePoolmgr && !fn.Spec.OnceOnly {
+	// 	concurrency := fn.Spec.Concurrency
+	// 	if concurrency == 0 {
+	// 		concurrency = 500
+	// 	}
+	// 	requestsPerpod := fn.Spec.RequestsPerPod
+	// 	if requestsPerpod == 0 {
+	// 		requestsPerpod = 1
+	// 	}
+	// 	fsvc, active, err := et.GetFuncSvcFromPoolCache(ctx, fn, requestsPerpod)
+	// 	// check if its a cache hit (check if there is already specialized function pod that can serve another request)
+	// 	if err == nil {
+	// 		// if a pod is already serving request then it already exists else validated
+	// 		logger.Debug("from cache", zap.Int("active", active))
+	// 		if et.IsValid(ctx, fsvc) {
+	// 			// Cached, return svc address
+	// 			logger.Debug("served from cache", zap.String("name", fsvc.Name), zap.String("address", fsvc.Address))
+	// 			executor.writeResponse(w, fsvc.Address, fn.ObjectMeta.Name)
+	// 			return
+	// 		}
+	// 		logger.Debug("deleting cache entry for invalid address",
+	// 			zap.String("function_name", fn.ObjectMeta.Name),
+	// 			zap.String("function_namespace", fn.ObjectMeta.Namespace),
+	// 			zap.String("address", fsvc.Address))
+	// 		et.DeleteFuncSvcFromCache(ctx, fsvc)
+	// 		active--
+	// 	}
+
+	// 	if active >= concurrency {
+	// 		errMsg := fmt.Sprintf("max concurrency reached for %v. All %v instance are active", fn.ObjectMeta.Name, concurrency)
+	// 		logger.Error("error occurred", zap.String("error", errMsg))
+	// 		http.Error(w, html.EscapeString(errMsg), http.StatusTooManyRequests)
+	// 		return
+	// 	}
+	// } else if t == fv1.ExecutorTypeNewdeploy || t == fv1.ExecutorTypeContainer {
+	// 	fsvc, err := et.GetFuncSvcFromCache(ctx, fn)
+	// 	if err == nil {
+	// 		if et.IsValid(ctx, fsvc) {
+	// 			// Cached, return svc address
+	// 			executor.writeResponse(w, fsvc.Address, fn.ObjectMeta.Name)
+	// 			return
+	// 		}
+	// 		logger.Debug("deleting cache entry for invalid address",
+	// 			zap.String("function_name", fn.ObjectMeta.Name),
+	// 			zap.String("function_namespace", fn.ObjectMeta.Namespace),
+	// 			zap.String("address", fsvc.Address))
+	// 		et.DeleteFuncSvcFromCache(ctx, fsvc)
+	// 	}
+	// }
+
+	// serviceName, err := executor.getServiceForFunction(ctx, fn)
+	// if err != nil {
+	// 	code, msg := ferror.GetHTTPError(err)
+	// 	logger.Error("error getting service for function",
+	// 		zap.Error(err),
+	// 		zap.String("function", fn.ObjectMeta.Name),
+	// 		zap.String("fission_http_error", msg))
+	// 	http.Error(w, msg, code)
+	// 	return
+	// }
+	// executor.writeResponse(w, serviceName, fn.ObjectMeta.Name)
 }
 
 func (executor *Executor) writeResponse(w http.ResponseWriter, serviceName string, fnName string) {

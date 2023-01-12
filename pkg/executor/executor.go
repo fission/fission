@@ -17,8 +17,10 @@ limitations under the License.
 package executor
 
 import (
+	"container/list"
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -32,6 +34,7 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
+	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/executor/cms"
 	"github.com/fission/fission/pkg/executor/executortype"
 	"github.com/fission/fission/pkg/executor/executortype/container"
@@ -57,8 +60,10 @@ type (
 
 		fissionClient versioned.Interface
 
-		requestChan chan *createFuncServiceRequest
-		fsCreateWg  sync.Map
+		requestChan  chan *createFuncServiceRequest
+		fnSvcReqChan chan *fnServiceReq
+		fsCreateWg   sync.Map
+		httpReqQueue *list.List
 	}
 
 	createFuncServiceRequest struct {
@@ -70,6 +75,22 @@ type (
 	createFuncServiceResponse struct {
 		funcSvc *fscache.FuncSvc
 		err     error
+	}
+
+	fnServiceReq struct {
+		fn       *fv1.Function
+		context  context.Context
+		respChan chan *fnServiceRespChan
+	}
+
+	fnServiceRespChan struct {
+		svcAddress string
+		err        *Err
+	}
+
+	Err struct {
+		msg  string
+		code int
 	}
 )
 
@@ -83,7 +104,9 @@ func MakeExecutor(ctx context.Context, logger *zap.Logger, cms *cms.ConfigSecret
 		fissionClient: fissionClient,
 		executorTypes: types,
 
-		requestChan: make(chan *createFuncServiceRequest),
+		requestChan:  make(chan *createFuncServiceRequest),
+		fnSvcReqChan: make(chan *fnServiceReq),
+		httpReqQueue: list.New(),
 	}
 
 	// Run all informers
@@ -98,9 +121,146 @@ func MakeExecutor(ctx context.Context, logger *zap.Logger, cms *cms.ConfigSecret
 	}
 
 	go executor.serveCreateFuncServices()
+	go executor.getSVCForFunctionAPI()
+
+	// sh:=list.New()
 
 	return executor, nil
 }
+
+func (executor *Executor) getSVCForFunctionAPI() {
+	for {
+		executor.logger.Debug("waiting for request to be received")
+		req := <-executor.fnSvcReqChan
+		executor.logger.Debug("request received on a channel")
+		// select {
+		// case svcReq := <-executor.httpReqChan:
+		// 	//todo
+		// 	executor.logger.Debug("svc request", zap.String("context", svcReq.request.Method))
+		// 	// case <-executor.httpReqChan.
+		// }
+		var serviceFound bool
+		t := req.fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType
+		et := executor.executorTypes[t]
+		logger := otelUtils.LoggerWithTraceID(req.context, executor.logger)
+
+		// Check function -> svc cache
+		logger.Debug("checking for cached function service",
+			zap.String("function_name", req.fn.ObjectMeta.Name),
+			zap.String("function_namespace", req.fn.ObjectMeta.Namespace))
+		if t == fv1.ExecutorTypePoolmgr && !req.fn.Spec.OnceOnly {
+			concurrency := req.fn.Spec.Concurrency
+			if concurrency == 0 {
+				concurrency = 500
+			}
+			requestsPerpod := req.fn.Spec.RequestsPerPod
+			if requestsPerpod == 0 {
+				requestsPerpod = 1
+			}
+			fsvc, active, err := et.GetFuncSvcFromPoolCache(req.context, req.fn, requestsPerpod)
+			// check if its a cache hit (check if there is already specialized function pod that can serve another request)
+			if err == nil {
+				// if a pod is already serving request then it already exists else validated
+				logger.Debug("from cache", zap.Int("active", active))
+				if et.IsValid(req.context, fsvc) {
+					// Cached, return svc address
+					logger.Debug("served from cache", zap.String("name", fsvc.Name), zap.String("address", fsvc.Address))
+					serviceFound = true
+					req.respChan <- &fnServiceRespChan{svcAddress: fsvc.Address, err: nil}
+					// executor.writeResponse(w, fsvc.Address, req.fn.ObjectMeta.Name)
+					// return
+				} else {
+					logger.Debug("deleting cache entry for invalid address",
+						zap.String("function_name", req.fn.ObjectMeta.Name),
+						zap.String("function_namespace", req.fn.ObjectMeta.Namespace),
+						zap.String("address", fsvc.Address))
+					et.DeleteFuncSvcFromCache(req.context, fsvc)
+					active--
+				}
+			}
+
+			if !serviceFound {
+				if active >= concurrency {
+					errMsg := fmt.Sprintf("max concurrency reached for %v. All %v instance are active", req.fn.ObjectMeta.Name, concurrency)
+					logger.Error("error occurred", zap.String("error", errMsg))
+					// http.Error(w, html.EscapeString(errMsg), http.StatusTooManyRequests)
+					req.respChan <- &fnServiceRespChan{err: &Err{msg: errMsg, code: http.StatusTooManyRequests}}
+					// return
+				} else {
+					serviceName, err := executor.getServiceForFunction(req.context, req.fn)
+					if err != nil {
+						code, msg := ferror.GetHTTPError(err)
+						logger.Error("error getting service for function",
+							zap.Error(err),
+							zap.String("function", req.fn.ObjectMeta.Name),
+							zap.String("fission_http_error", msg))
+						req.respChan <- &fnServiceRespChan{err: &Err{msg: msg, code: code}}
+						// http.Error(w, msg, code)
+						// return
+					} else {
+						// executor.writeResponse(w, serviceName, req.fn.ObjectMeta.Name)
+						req.respChan <- &fnServiceRespChan{svcAddress: serviceName, err: nil}
+						// return
+					}
+				}
+			}
+		} else if t == fv1.ExecutorTypeNewdeploy || t == fv1.ExecutorTypeContainer {
+			fsvc, err := et.GetFuncSvcFromCache(req.context, req.fn)
+			if err == nil {
+				if et.IsValid(req.context, fsvc) {
+					// Cached, return svc address
+					// executor.writeResponse(w, fsvc.Address, req.fn.ObjectMeta.Name)
+					serviceFound = true
+					req.respChan <- &fnServiceRespChan{svcAddress: fsvc.Address, err: nil}
+					// return
+				} else {
+					logger.Debug("deleting cache entry for invalid address",
+						zap.String("function_name", req.fn.ObjectMeta.Name),
+						zap.String("function_namespace", req.fn.ObjectMeta.Namespace),
+						zap.String("address", fsvc.Address))
+					et.DeleteFuncSvcFromCache(req.context, fsvc)
+				}
+			}
+			if !serviceFound {
+				serviceName, err := executor.getServiceForFunction(req.context, req.fn)
+				if err != nil {
+					code, msg := ferror.GetHTTPError(err)
+					logger.Error("error getting service for function",
+						zap.Error(err),
+						zap.String("function", req.fn.ObjectMeta.Name),
+						zap.String("fission_http_error", msg))
+					req.respChan <- &fnServiceRespChan{err: &Err{msg: msg, code: code}}
+					// http.Error(w, msg, code)
+					// return
+				} else {
+					// executor.writeResponse(w, serviceName, req.fn.ObjectMeta.Name)
+					req.respChan <- &fnServiceRespChan{svcAddress: serviceName, err: nil}
+					// return
+				}
+
+			}
+		}
+
+		// serviceName, err := executor.getServiceForFunction(req.context, req.fn)
+		// if err != nil {
+		// 	code, msg := ferror.GetHTTPError(err)
+		// 	logger.Error("error getting service for function",
+		// 		zap.Error(err),
+		// 		zap.String("function", req.fn.ObjectMeta.Name),
+		// 		zap.String("fission_http_error", msg))
+		// 	req.respChan <- &fnServiceRespChan{err: &Err{msg: msg, code: code}}
+		// 	// http.Error(w, msg, code)
+		// 	// return
+		// } else {
+		// 	// executor.writeResponse(w, serviceName, req.fn.ObjectMeta.Name)
+		// 	req.respChan <- &fnServiceRespChan{svcAddress: serviceName, err: nil}
+		// 	// return
+		// }
+
+	}
+}
+
+// func (executor *Executor) getFunctionAPI()
 
 // All non-cached function service requests go through this goroutine
 // serially. It parallelizes requests for different functions, and

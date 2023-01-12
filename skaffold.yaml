@@ -44,7 +44,7 @@ manifests:
         builderPodSpec.enabled: "false"
         canaryDeployment.enabled: "false"
         controller.enabled: "false"
-        debugEnv: "false"
+        debugEnv: "true"
         fetcher.imageTag: ""
         grafana.dashboards.enabled: "false"
         imageTag: ""
