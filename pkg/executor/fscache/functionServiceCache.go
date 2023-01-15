@@ -35,7 +35,6 @@ import (
 	"github.com/fission/fission/pkg/crd"
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/executor/metrics"
-	"github.com/fission/fission/pkg/poolcache"
 )
 
 type fscRequestType int
@@ -68,12 +67,12 @@ type (
 	// FunctionServiceCache represents the function service cache
 	FunctionServiceCache struct {
 		logger            *zap.Logger
-		byFunction        *cache.Cache     // function-key -> funcSvc  : map[string]*funcSvc
-		byAddress         *cache.Cache     // address      -> function : map[string]metav1.ObjectMeta
-		byFunctionUID     *cache.Cache     // function uid -> function : map[string]metav1.ObjectMeta
-		connFunctionCache *poolcache.Cache // function-key -> funcSvc : map[string]*funcSvc
-		PodToFsvc         sync.Map         // pod-name -> funcSvc: map[string]*FuncSvc
-		WebsocketFsvc     sync.Map         // funcSvc-name -> bool: map[string]bool
+		byFunction        *cache.Cache // function-key -> funcSvc  : map[string]*funcSvc
+		byAddress         *cache.Cache // address      -> function : map[string]metav1.ObjectMeta
+		byFunctionUID     *cache.Cache // function uid -> function : map[string]metav1.ObjectMeta
+		connFunctionCache *PoolCache   // function-key -> funcSvc : map[string]*funcSvc
+		PodToFsvc         sync.Map     // pod-name -> funcSvc: map[string]*FuncSvc
+		WebsocketFsvc     sync.Map     // funcSvc-name -> bool: map[string]bool
 		requestChannel    chan *fscRequest
 	}
 
@@ -113,7 +112,7 @@ func MakeFunctionServiceCache(logger *zap.Logger) *FunctionServiceCache {
 		byFunction:        cache.MakeCache(0, 0),
 		byAddress:         cache.MakeCache(0, 0),
 		byFunctionUID:     cache.MakeCache(0, 0),
-		connFunctionCache: poolcache.NewPoolCache(logger.Named("conn_function_cache")),
+		connFunctionCache: NewPoolCache(logger.Named("conn_function_cache")),
 		requestChannel:    make(chan *fscRequest),
 	}
 	go fsc.service()
@@ -159,8 +158,8 @@ func (fsc *FunctionServiceCache) service() {
 		case LISTOLDPOOL:
 			fscs := fsc.connFunctionCache.ListAvailableValue()
 			funcObjects := make([]*FuncSvc, 0)
-			for _, funcSvc := range fscs {
-				if fsvc, ok := funcSvc.(*FuncSvc); ok && time.Since(fsvc.Atime) > req.age {
+			for _, fsvc := range fscs {
+				if time.Since(fsvc.Atime) > req.age {
 					funcObjects = append(funcObjects, fsvc)
 				}
 			}
@@ -192,14 +191,13 @@ func (fsc *FunctionServiceCache) GetByFunction(m *metav1.ObjectMeta) (*FuncSvc, 
 func (fsc *FunctionServiceCache) GetFuncSvc(ctx context.Context, m *metav1.ObjectMeta, requestsPerPod int) (*FuncSvc, int, error) {
 	key := crd.CacheKey(m)
 
-	fsvcI, active, err := fsc.connFunctionCache.GetValue(ctx, key, requestsPerPod)
+	fsvc, active, err := fsc.connFunctionCache.GetSvcValue(ctx, key, requestsPerPod)
 	if err != nil {
 		fsc.logger.Info("Not found in Cache")
 		return nil, active, err
 	}
 
 	// update atime
-	fsvc := fsvcI.(*FuncSvc)
 	fsvc.Atime = time.Now()
 
 	fsvcCopy := *fsvc
@@ -230,7 +228,7 @@ func (fsc *FunctionServiceCache) GetByFunctionUID(uid types.UID) (*FuncSvc, erro
 
 // AddFunc adds a function service to pool cache.
 func (fsc *FunctionServiceCache) AddFunc(ctx context.Context, fsvc FuncSvc) {
-	fsc.connFunctionCache.SetValue(ctx, crd.CacheKey(fsvc.Function), fsvc.Address, &fsvc, fsvc.CPULimit)
+	fsc.connFunctionCache.SetSvcValue(ctx, crd.CacheKey(fsvc.Function), fsvc.Address, &fsvc, fsvc.CPULimit)
 	now := time.Now()
 	fsvc.Ctime = now
 	fsvc.Atime = now
