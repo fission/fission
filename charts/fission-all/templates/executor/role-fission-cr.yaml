@@ -5,3 +5,9 @@
 {{ include "fission-role-generator" (merge (dict "namespace" $namespace "component" "executor") $) }}
 {{- end }}
 {{- end }}
+{{- if .Values.builderNamespace -}}
+{{ include "fission-role-generator" (merge (dict "namespace" .Values.builderNamespace "component" "executor") $) }}
+{{- end }}
+{{- if .Values.functionNamespace -}}
+{{ include "fission-role-generator" (merge (dict "namespace" .Values.functionNamespace "component" "executor") $) }}
+{{- end }}
