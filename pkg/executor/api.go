@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"html"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 
@@ -33,9 +34,11 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/executor/client"
+	pb "github.com/fission/fission/pkg/executor/proto"
 	"github.com/fission/fission/pkg/utils/httpserver"
 	"github.com/fission/fission/pkg/utils/metrics"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
+	"google.golang.org/grpc"
 )
 
 func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *http.Request) {
@@ -266,4 +269,28 @@ func (executor *Executor) Serve(ctx context.Context, port int) {
 	handler := otelUtils.GetHandlerWithOTEL(executor.GetHandler(), "fission-executor", otelUtils.UrlsToIgnore("/healthz"))
 	httpserver.StartServer(ctx, executor.logger, "executor", fmt.Sprintf("%d", port), handler)
 
+}
+
+type server struct {
+	pb.UnimplementedEchoServer
+}
+
+func (s *server) UnaryEcho(ctx context.Context, req *pb.EchoRequest) (*pb.EchoResponse, error) {
+	return &pb.EchoResponse{Message: req.Message}, nil
+}
+
+func ServeGRPC() {
+	port := 50051
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	if err != nil {
+		fmt.Println("grpc failed to listen to port")
+		return
+	}
+
+	s := grpc.NewServer()
+	pb.RegisterEchoServer(s, &server{})
+	fmt.Printf("server listening at %v", lis.Addr())
+	if err := s.Serve(lis); err != nil {
+		fmt.Printf("failed to serve: %v", err)
+	}
 }

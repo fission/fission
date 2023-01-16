@@ -104,6 +104,15 @@ func Start(ctx context.Context, logger *zap.Logger, port int, executorURL string
 	if err != nil {
 		logger.Fatal("error waiting for CRDs", zap.Error(err))
 	}
+	logger.Info(fmt.Sprintf("Executor URL: %s", executorURL))
+	addr := "executor.fission:50051"
+	grpcExecutor := executorClient.MakeGrpcClient(addr)
+	s, err := grpcExecutor.CallUnaryEcho("Hello World")
+	if err != nil {
+		logger.Error(err.Error())
+	} else {
+		logger.Info(s)
+	}
 
 	executor := executorClient.MakeClient(logger, executorURL)
 

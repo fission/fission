@@ -20,19 +20,22 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/url"
 	"strings"
 	"time"
 
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	ferror "github.com/fission/fission/pkg/error"
+	pb "github.com/fission/fission/pkg/executor/proto"
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.uber.org/zap"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	fv1 "github.com/fission/fission/pkg/apis/core/v1"
-	ferror "github.com/fission/fission/pkg/error"
 )
 
 type (
@@ -202,4 +205,32 @@ func (c *Client) _tapService(ctx context.Context, tapSvcReqs []TapServiceRequest
 		return ferror.MakeErrorFromHTTP(resp)
 	}
 	return nil
+}
+
+type GrpcClient struct {
+	echoClient pb.EchoClient
+}
+
+func MakeGrpcClient(addr string) *GrpcClient {
+	conn, err := grpc.Dial(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		fmt.Printf("did not connect: %v", err)
+	}
+
+	ec := pb.NewEchoClient(conn)
+	c := &GrpcClient{
+		echoClient: ec,
+	}
+	return c
+}
+
+func (c *GrpcClient) CallUnaryEcho(message string) (string, error) {
+	ctx := context.Background()
+	er := pb.EchoRequest{Message: message}
+	r, err := c.echoClient.UnaryEcho(ctx, &er)
+	if err != nil {
+		return "", err
+	}
+	s := "Echo: " + r.GetMessage()
+	return s, nil
 }

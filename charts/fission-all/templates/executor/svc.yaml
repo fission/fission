@@ -10,5 +10,9 @@ spec:
   ports:
     - port: 80
       targetPort: 8888
+      name: http
+    - port: 50051
+      targetPort: 50051
+      name: grpc
   selector:
     svc: executor

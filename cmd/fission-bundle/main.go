@@ -63,6 +63,7 @@ func runRouter(ctx context.Context, logger *zap.Logger, port int, executorUrl st
 }
 
 func runExecutor(ctx context.Context, logger *zap.Logger, port int) error {
+	go executor.ServeGRPC()
 	return executor.StartExecutor(ctx, logger, port)
 }
 
