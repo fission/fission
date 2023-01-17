@@ -146,7 +146,7 @@ func setupSAAndRoleBindings(ctx context.Context, client kubernetes.Interface, lo
 		permission.exists, err = checkPermission(ctx, client, SAObj, permission.gvr, permission.verb)
 		if err != nil {
 			//  some error occurred while checking permission, log error as warning message and continue to create new permissions
-			logger.Warn(err.Error())
+			logger.Info(err.Error())
 		}
 		if !permission.exists {
 			logger.Info("creating new permission",
