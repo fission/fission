@@ -145,11 +145,17 @@ func setupSAAndRoleBindings(ctx context.Context, client kubernetes.Interface, lo
 	for _, permission := range ps.permissions {
 		permission.exists, err = checkPermission(ctx, client, SAObj, permission.gvr, permission.verb)
 		if err != nil {
-			//  some error occurred while checking permission
-			//  now assume permission not exists and will add this permission in rules, insted of return
-			logger.Error("error while checking permission", zap.Error(err))
+			//  some error occurred while checking permission, log error as warning message and continue to create new permissions
+			logger.Info(err.Error())
 		}
 		if !permission.exists {
+			logger.Info("creating new permission",
+				zap.String("service_account", SAObj.Name),
+				zap.String("namespace", SAObj.Namespace),
+				zap.String("group", permission.gvr.Group),
+				zap.String("resource", permission.gvr.Resource),
+				zap.String("verb", permission.verb))
+
 			rules = append(rules, rbac.PolicyRule{
 				APIGroups: []string{permission.gvr.Group},
 				Resources: []string{permission.gvr.Resource},

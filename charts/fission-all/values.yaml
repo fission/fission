@@ -63,8 +63,7 @@ routerPort: 31314
 
 ## defaultNamespace represents the namespace in which Fission custom resources will be created by the Fission user.
 ## This is different from the release namespace.
-## Please consider setting `singleDefaultNamespace` and `additionalFissionNamespaces` if you want
-## more than one namespace to be used for Fission custom resources.
+## Please consider setting `additionalFissionNamespaces` if you want more than one namespace to be used for Fission custom resources.
 ##
 defaultNamespace: default
 
