@@ -70,7 +70,7 @@ func (gp *GenericPool) genDeploymentSpec(env *fv1.Environment) (*appsv1.Deployme
 	// Use long terminationGracePeriodSeconds for connection draining in case that
 	// pod still runs user functions.
 	gracePeriodSeconds := int64(6 * 60)
-	if env.Spec.TerminationGracePeriod > 0 {
+	if env.Spec.TerminationGracePeriod >= 0 {
 		gracePeriodSeconds = env.Spec.TerminationGracePeriod
 	}
 

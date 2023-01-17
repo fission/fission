@@ -136,7 +136,7 @@ func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function
 	}
 
 	gracePeriodSeconds := int64(6 * 60)
-	if env.Spec.TerminationGracePeriod > 0 {
+	if env.Spec.TerminationGracePeriod >= 0 {
 		gracePeriodSeconds = env.Spec.TerminationGracePeriod
 	}
 
