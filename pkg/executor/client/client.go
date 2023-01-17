@@ -46,6 +46,7 @@ type (
 		tappedByURL map[string]TapServiceRequest
 		requestChan chan TapServiceRequest
 		httpClient  *retryablehttp.Client
+		grpcClient  pb.EchoClient
 	}
 
 	// TapServiceRequest represents
@@ -60,12 +61,22 @@ type (
 func MakeClient(logger *zap.Logger, executorURL string) *Client {
 	hc := retryablehttp.NewClient()
 	hc.HTTPClient.Transport = otelhttp.NewTransport(hc.HTTPClient.Transport)
+
+	addr := "executor.fission:50051" // Hardcoded. To be removed.
+	conn, err := grpc.Dial(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		logger.Error(fmt.Sprintf("grpc client did not connect: %v", err))
+	}
+
+	ec := pb.NewEchoClient(conn)
+
 	c := &Client{
 		logger:      logger.Named("executor_client"),
 		executorURL: strings.TrimSuffix(executorURL, "/"),
 		tappedByURL: make(map[string]TapServiceRequest),
 		requestChan: make(chan TapServiceRequest, 100),
 		httpClient:  hc,
+		grpcClient:  ec,
 	}
 	go c.service()
 	return c
@@ -207,27 +218,9 @@ func (c *Client) _tapService(ctx context.Context, tapSvcReqs []TapServiceRequest
 	return nil
 }
 
-type GrpcClient struct {
-	echoClient pb.EchoClient
-}
-
-func MakeGrpcClient(addr string) *GrpcClient {
-	conn, err := grpc.Dial(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		fmt.Printf("did not connect: %v", err)
-	}
-
-	ec := pb.NewEchoClient(conn)
-	c := &GrpcClient{
-		echoClient: ec,
-	}
-	return c
-}
-
-func (c *GrpcClient) CallUnaryEcho(message string) (string, error) {
-	ctx := context.Background()
+func (c *Client) CallUnaryEcho(ctx context.Context, message string) (string, error) {
 	er := pb.EchoRequest{Message: message}
-	r, err := c.echoClient.UnaryEcho(ctx, &er)
+	r, err := c.grpcClient.UnaryEcho(ctx, &er)
 	if err != nil {
 		return "", err
 	}

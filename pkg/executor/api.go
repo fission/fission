@@ -271,26 +271,24 @@ func (executor *Executor) Serve(ctx context.Context, port int) {
 
 }
 
-type server struct {
-	pb.UnimplementedEchoServer
-}
-
-func (s *server) UnaryEcho(ctx context.Context, req *pb.EchoRequest) (*pb.EchoResponse, error) {
-	return &pb.EchoResponse{Message: req.Message}, nil
-}
-
-func ServeGRPC() {
-	port := 50051
+func (executor *Executor) ServeGRPC(logger *zap.Logger) {
+	port := 50051 // Hardcoded. To be removed.
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
-		fmt.Println("grpc failed to listen to port")
+		logger.Error(fmt.Sprintf("grpc failed to listen to port: %d", port), zap.Error(err))
 		return
 	}
 
 	s := grpc.NewServer()
-	pb.RegisterEchoServer(s, &server{})
-	fmt.Printf("server listening at %v", lis.Addr())
+	pb.RegisterEchoServer(s, executor)
+	logger.Info(fmt.Sprintf("grpc server listening: %v", lis.Addr()))
+
 	if err := s.Serve(lis); err != nil {
-		fmt.Printf("failed to serve: %v", err)
+		logger.Error(fmt.Sprintf("grpc failed to serve: %v", err))
+		return
 	}
+}
+
+func (executor *Executor) UnaryEcho(ctx context.Context, req *pb.EchoRequest) (*pb.EchoResponse, error) {
+	return &pb.EchoResponse{Message: req.Message}, nil
 }
