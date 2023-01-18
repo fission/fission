@@ -50,8 +50,17 @@ import (
 	"github.com/fission/fission/pkg/utils"
 )
 
+const (
+	ENV_FISSION_NAMESPACE  string = "FISSION_NAMESPACE"
+	ENV_FISSION_URL        string = "FISSION_URL"
+	ENV_FISSION_AUTH_TOKEN string = "FISSION_AUTH_TOKEN"
+	localhostURL           string = "http://127.0.0.1:"
+	authHeader             string = "Authorization"
+	tokenType              string = "Bearer"
+)
+
 func GetFissionNamespace() string {
-	fissionNamespace := os.Getenv("FISSION_NAMESPACE")
+	fissionNamespace := os.Getenv(ENV_FISSION_NAMESPACE)
 	return fissionNamespace
 }
 
@@ -68,14 +77,14 @@ func ResolveFunctionNS(namespace string) string {
 func GetApplicationUrl(ctx context.Context, client cmd.Client, selector string) (string, error) {
 	var serverUrl string
 	// Use FISSION_URL env variable if set; otherwise, port-forward to controller.
-	fissionUrl := os.Getenv("FISSION_URL")
+	fissionUrl := os.Getenv(ENV_FISSION_URL)
 	if len(fissionUrl) == 0 {
 		fissionNamespace := GetFissionNamespace()
 		localPort, err := SetupPortForward(ctx, client, fissionNamespace, selector)
 		if err != nil {
 			return "", err
 		}
-		serverUrl = "http://127.0.0.1:" + localPort
+		serverUrl = fmt.Sprintf("%s%s", localhostURL, localPort)
 	} else {
 		serverUrl = fissionUrl
 	}
@@ -167,13 +176,27 @@ func GetServerInfo(input cli.Input, cmdClient cmd.Client) *info.ServerInfo {
 		return &serverInfo
 	}
 	// make request
-	resp, err := http.Get(serverURL.String() + "/_version")
+	req, err := http.NewRequestWithContext(input.Context(), "GET", fmt.Sprintf("%s%s", serverURL.String(), "/_version"), nil)
+	if err != nil {
+		console.Warn("could not create http request")
+		return &serverInfo
+	}
+
+	req.Header.Add(authHeader, fmt.Sprintf("%s %s", tokenType, os.Getenv(ENV_FISSION_AUTH_TOKEN)))
+	client := &http.Client{}
+	resp, err := client.Do(req)
 	if err != nil {
 		console.Warn("could not get data from server")
 		return &serverInfo
 	}
 
 	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusUnauthorized {
+		// display user a warning message to set environment variable FISSION_AUTH_TOKEN
+		if len(os.Getenv(ENV_FISSION_AUTH_TOKEN)) <= 0 {
+			console.Warn(fmt.Sprintf("Please consider setting %s as environment variable, if authentication is enabled", ENV_FISSION_AUTH_TOKEN))
+		}
+	}
 	if resp.StatusCode != http.StatusOK {
 		msg := fmt.Sprintf("HTTP error %v", resp.StatusCode)
 		console.Warn(msg)
@@ -196,7 +219,7 @@ func getRouterURL(ctx context.Context, cmdClient cmd.Client) (serverURL *url.URL
 		return serverURL, err
 	}
 
-	serverURL, err = url.Parse("http://127.0.0.1:" + localRouterPort)
+	serverURL, err = url.Parse(fmt.Sprintf("%s%s", localhostURL, localRouterPort))
 	if err != nil {
 		return serverURL, err
 	}
@@ -445,7 +468,7 @@ func GetStorageURL(ctx context.Context, client cmd.Client) (*url.URL, error) {
 		return nil, err
 	}
 
-	serverURL, err := url.Parse("http://127.0.0.1:" + storageLocalPort)
+	serverURL, err := url.Parse(fmt.Sprintf("%s%s", localhostURL, storageLocalPort))
 	if err != nil {
 		return nil, err
 	}
