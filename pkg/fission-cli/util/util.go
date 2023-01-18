@@ -184,11 +184,6 @@ func GetServerInfo(input cli.Input, cmdClient cmd.Client) *info.ServerInfo {
 	}
 
 	req.Header.Add(authHeader, fmt.Sprintf("%s %s", tokenType, os.Getenv(ENV_FISSION_AUTH_TOKEN)))
-	// display user a warning message to set environment variable FISSION_AUTH_TOKEN
-	if len(os.Getenv(ENV_FISSION_AUTH_TOKEN)) <= 0 {
-		console.Warn(fmt.Sprintf("Please consider setting %s as environment variable, if authentication is enabled", ENV_FISSION_AUTH_TOKEN))
-	}
-
 	resp, err := client.Do(req)
 	if err != nil {
 		console.Warn("could not get data from server")
@@ -196,6 +191,12 @@ func GetServerInfo(input cli.Input, cmdClient cmd.Client) *info.ServerInfo {
 	}
 
 	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusUnauthorized {
+		// display user a warning message to set environment variable FISSION_AUTH_TOKEN
+		if len(os.Getenv(ENV_FISSION_AUTH_TOKEN)) <= 0 {
+			console.Warn(fmt.Sprintf("Please consider setting %s as environment variable, if authentication is enabled", ENV_FISSION_AUTH_TOKEN))
+		}
+	}
 	if resp.StatusCode != http.StatusOK {
 		msg := fmt.Sprintf("HTTP error %v", resp.StatusCode)
 		console.Warn(msg)
