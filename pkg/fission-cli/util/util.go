@@ -176,14 +176,14 @@ func GetServerInfo(input cli.Input, cmdClient cmd.Client) *info.ServerInfo {
 		return &serverInfo
 	}
 	// make request
-	client := &http.Client{}
-	req, err := http.NewRequest("GET", fmt.Sprintf("%s%s", serverURL.String(), "/_version"), nil)
+	req, err := http.NewRequestWithContext(input.Context(), "GET", fmt.Sprintf("%s%s", serverURL.String(), "/_version"), nil)
 	if err != nil {
 		console.Warn("could not create http request")
 		return &serverInfo
 	}
 
 	req.Header.Add(authHeader, fmt.Sprintf("%s %s", tokenType, os.Getenv(ENV_FISSION_AUTH_TOKEN)))
+	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
 		console.Warn("could not get data from server")
