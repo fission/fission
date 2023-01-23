@@ -14,7 +14,7 @@ routerServiceType: LoadBalancer
 ## repository represents base repository for images used in the chart.
 ## Keep it empty for using existing local image
 ##
-repository: ghcr.io
+repository: index.docker.io
 
 ## image represents the base image fission-bundle used by multiple Fission components.
 ## We alter arguments to the image to run a particular component.

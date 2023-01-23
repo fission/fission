@@ -48,9 +48,9 @@ This template generates the image name for the deployment depending on the value
   {{- end }}
 {{- else -}}
   {{- if eq .Values.imageTag "" -}}
-    {{- printf "ghcr.io" -}}/{{ .Values.image }}
+    {{ .Values.image }}
   {{- else -}}
-    {{- printf "ghcr.io" -}}/{{ .Values.image }}:{{ .Values.imageTag }}
+    {{ .Values.image }}:{{ .Values.imageTag }}
   {{- end }}
 {{- end }}
 {{- end -}}
