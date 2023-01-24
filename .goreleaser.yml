@@ -82,11 +82,13 @@ dockers:
     ids:
       - builder
     image_templates:
+      - "fission/builder:latest-amd64"
+      - "fission/builder:{{ .Tag }}-amd64"
       - "ghcr.io/fission/builder:latest-amd64"
       - "ghcr.io/fission/builder:{{ .Tag }}-amd64"
     dockerfile: cmd/builder/Dockerfile
     build_flag_templates:
-      - "--org.opencontainers.image.source={{.GitURL}}"
+      - "--label=org.opencontainers.image.source={{.GitURL}}"
       - "--platform=linux/amd64"
       - "--label=org.opencontainers.image.created={{.Date}}"
       - "--label=org.opencontainers.image.revision={{.FullCommit}}"
@@ -95,38 +97,46 @@ dockers:
     ids:
       - fetcher
     image_templates:
+      - "fission/fetcher:latest-amd64"
+      - "fission/fetcher:{{ .Tag }}-amd64"
       - "ghcr.io/fission/fetcher:latest-amd64"
       - "ghcr.io/fission/fetcher:{{ .Tag }}-amd64"
     dockerfile: cmd/fetcher/Dockerfile
     build_flag_templates:
-      - "--org.opencontainers.image.source={{.GitURL}}"
+      - "--label=org.opencontainers.image.source={{.GitURL}}"
   - <<: *docker-amd64
     ids:
       - fission-bundle
     image_templates:
+      - "fission/fission-bundle:latest-amd64"
+      - "fission/fission-bundle:{{ .Tag }}-amd64"
       - "ghcr.io/fission/fission-bundle:latest-amd64"
       - "ghcr.io/fission/fission-bundle:{{ .Tag }}-amd64"
     dockerfile: cmd/fission-bundle/Dockerfile
     build_flag_templates:
-      - "--org.opencontainers.image.source={{.GitURL}}"
+      - "--label=org.opencontainers.image.source={{.GitURL}}"
   - <<: *docker-amd64
     ids:
       - pre-upgrade-checks
     image_templates:
+      - "fission/pre-upgrade-checks:latest-amd64"
+      - "fission/pre-upgrade-checks:{{ .Tag }}-amd64"
       - "ghcr.io/fission/pre-upgrade-checks:latest-amd64"
       - "ghcr.io/fission/pre-upgrade-checks:{{ .Tag }}-amd64"
     dockerfile: cmd/preupgradechecks/Dockerfile
     build_flag_templates:
-      - "--org.opencontainers.image.source={{.GitURL}}"
+      - "--label=org.opencontainers.image.source={{.GitURL}}"
   - <<: *docker-amd64
     ids:
       - reporter
     image_templates:
+      - "fission/reporter:latest-amd64"
+      - "fission/reporter:{{ .Tag }}-amd64"
       - "ghcr.io/fission/reporter:latest-amd64"
       - "ghcr.io/fission/reporter:{{ .Tag }}-amd64"
     dockerfile: cmd/reporter/Dockerfile
     build_flag_templates:
-      - "--org.opencontainers.image.source={{.GitURL}}"
+      - "--label=org.opencontainers.image.source={{.GitURL}}"
   - &docker-arm64
     use: buildx
     goos: linux
@@ -134,11 +144,13 @@ dockers:
     ids:
       - builder
     image_templates:
+      - "fission/builder:latest-arm64"
+      - "fission/builder:{{ .Tag }}-arm64"
       - "ghcr.io/fission/builder:latest-arm64"
       - "ghcr.io/fission/builder:{{ .Tag }}-arm64"
     dockerfile: cmd/builder/Dockerfile
     build_flag_templates:
-      - "--org.opencontainers.image.source={{.GitURL}}"
+      - "--label=org.opencontainers.image.source={{.GitURL}}"
       - "--platform=linux/arm64"
       - "--label=org.opencontainers.image.created={{.Date}}"
       - "--label=org.opencontainers.image.revision={{.FullCommit}}"
@@ -147,38 +159,46 @@ dockers:
     ids:
       - fetcher
     image_templates:
+      - "fission/fetcher:latest-arm64"
+      - "fission/fetcher:{{ .Tag }}-arm64"
       - "ghcr.io/fission/fetcher:latest-arm64"
       - "ghcr.io/fission/fetcher:{{ .Tag }}-arm64"
     dockerfile: cmd/fetcher/Dockerfile
     build_flag_templates:
-      - "--org.opencontainers.image.source={{.GitURL}}"
+      - "--label=org.opencontainers.image.source={{.GitURL}}"
   - <<: *docker-arm64
     ids:
       - fission-bundle
     image_templates:
+      - "fission/fission-bundle:latest-arm64"
+      - "fission/fission-bundle:{{ .Tag }}-arm64"
       - "ghcr.io/fission/fission-bundle:latest-arm64"
       - "ghcr.io/fission/fission-bundle:{{ .Tag }}-arm64"
     dockerfile: cmd/fission-bundle/Dockerfile
     build_flag_templates:
-      - "--org.opencontainers.image.source={{.GitURL}}"
+      - "--label=org.opencontainers.image.source={{.GitURL}}"
   - <<: *docker-arm64
     ids:
       - pre-upgrade-checks
     image_templates:
+      - "fission/pre-upgrade-checks:latest-arm64"
+      - "fission/pre-upgrade-checks:{{ .Tag }}-arm64"
       - "ghcr.io/fission/pre-upgrade-checks:latest-arm64"
       - "ghcr.io/fission/pre-upgrade-checks:{{ .Tag }}-arm64"
     dockerfile: cmd/preupgradechecks/Dockerfile
     build_flag_templates:
-      - "--org.opencontainers.image.source={{.GitURL}}"
+      - "--label=org.opencontainers.image.source={{.GitURL}}"
   - <<: *docker-arm64
     ids:
       - reporter
     image_templates:
+      - "fission/reporter:latest-arm64"
+      - "fission/reporter:{{ .Tag }}-arm64"
       - "ghcr.io/fission/reporter:latest-arm64"
       - "ghcr.io/fission/reporter:{{ .Tag }}-arm64"
     dockerfile: cmd/reporter/Dockerfile
     build_flag_templates:
-      - "--org.opencontainers.image.source={{.GitURL}}"
+      - "--label=org.opencontainers.image.source={{.GitURL}}"
   - &docker-armv7
     use: buildx
     goos: linux
@@ -187,11 +207,13 @@ dockers:
     ids:
       - builder
     image_templates:
+      - "fission/builder:latest-armv7"
+      - "fission/builder:{{ .Tag }}-armv7"
       - "ghcr.io/fission/builder:latest-armv7"
       - "ghcr.io/fission/builder:{{ .Tag }}-armv7"
     dockerfile: cmd/builder/Dockerfile
     build_flag_templates:
-      - "--org.opencontainers.image.source={{.GitURL}}"
+      - "--label=org.opencontainers.image.source={{.GitURL}}"
       - "--platform=linux/arm/v7"
       - "--label=org.opencontainers.image.created={{.Date}}"
       - "--label=org.opencontainers.image.revision={{.FullCommit}}"
@@ -200,89 +222,147 @@ dockers:
     ids:
       - fetcher
     image_templates:
+      - "fission/fetcher:latest-armv7"
+      - "fission/fetcher:{{ .Tag }}-armv7"
       - "ghcr.io/fission/fetcher:latest-armv7"
       - "ghcr.io/fission/fetcher:{{ .Tag }}-armv7"
     dockerfile: cmd/fetcher/Dockerfile
     build_flag_templates:
-      - "--org.opencontainers.image.source={{.GitURL}}"
+      - "--label=org.opencontainers.image.source={{.GitURL}}"
   - <<: *docker-armv7
     ids:
       - fission-bundle
     image_templates:
+      - "fission/fission-bundle:latest-armv7"
+      - "fission/fission-bundle:{{ .Tag }}-armv7"
       - "ghcr.io/fission/fission-bundle:latest-armv7"
       - "ghcr.io/fission/fission-bundle:{{ .Tag }}-armv7"
     dockerfile: cmd/fission-bundle/Dockerfile
     build_flag_templates:
-      - "--org.opencontainers.image.source={{.GitURL}}"
+      - "--label=org.opencontainers.image.source={{.GitURL}}"
   - <<: *docker-armv7
     ids:
       - pre-upgrade-checks
     image_templates:
+      - "fission/pre-upgrade-checks:latest-armv7"
+      - "fission/pre-upgrade-checks:{{ .Tag }}-armv7"
       - "ghcr.io/fission/pre-upgrade-checks:latest-armv7"
       - "ghcr.io/fission/pre-upgrade-checks:{{ .Tag }}-armv7"
     dockerfile: cmd/preupgradechecks/Dockerfile
     build_flag_templates:
-      - "--org.opencontainers.image.source={{.GitURL}}"
+      - "--label=org.opencontainers.image.source={{.GitURL}}"
   - <<: *docker-armv7
     ids:
       - reporter
     image_templates:
+      - "fission/reporter:latest-armv7"
+      - "fission/reporter:{{ .Tag }}-armv7"
       - "ghcr.io/fission/reporter:latest-armv7"
       - "ghcr.io/fission/reporter:{{ .Tag }}-armv7"
     dockerfile: cmd/reporter/Dockerfile
     build_flag_templates:
-      - "--org.opencontainers.image.source={{.GitURL}}"
+      - "--label=org.opencontainers.image.source={{.GitURL}}"
 docker_manifests:
-  - name_template: fission/builder:{{ .Tag }}
+  - name_template: ghcr.io/fission/builder:{{ .Tag }}
     image_templates:
       - ghcr.io/fission/builder:{{ .Tag }}-amd64
       - ghcr.io/fission/builder:{{ .Tag }}-arm64
       - ghcr.io/fission/builder:{{ .Tag }}-armv7
-  - name_template: fission/fetcher:{{ .Tag }}
+  - name_template: fission/builder:{{ .Tag }}
+    image_templates:
+      - fission/builder:{{ .Tag }}-amd64
+      - fission/builder:{{ .Tag }}-arm64
+      - fission/builder:{{ .Tag }}-armv7
+  - name_template: ghcr.io/fission/fetcher:{{ .Tag }}
     image_templates:
       - ghcr.io/fission/fetcher:{{ .Tag }}-amd64
       - ghcr.io/fission/fetcher:{{ .Tag }}-arm64
       - ghcr.io/fission/fetcher:{{ .Tag }}-armv7
-  - name_template: fission/fission-bundle:{{ .Tag }}
+  - name_template: fission/fetcher:{{ .Tag }}
+    image_templates:
+      - fission/fetcher:{{ .Tag }}-amd64
+      - fission/fetcher:{{ .Tag }}-arm64
+      - fission/fetcher:{{ .Tag }}-armv7
+  - name_template: ghcr.io/fission/fission-bundle:{{ .Tag }}
     image_templates:
       - ghcr.io/fission/fission-bundle:{{ .Tag }}-amd64
       - ghcr.io/fission/fission-bundle:{{ .Tag }}-arm64
       - ghcr.io/fission/fission-bundle:{{ .Tag }}-armv7
-  - name_template: fission/pre-upgrade-checks:{{ .Tag }}
+  - name_template: fission/fission-bundle:{{ .Tag }}
+    image_templates:
+      - fission/fission-bundle:{{ .Tag }}-amd64
+      - fission/fission-bundle:{{ .Tag }}-arm64
+      - fission/fission-bundle:{{ .Tag }}-armv7
+  - name_template: ghcr.io/fission/pre-upgrade-checks:{{ .Tag }}
     image_templates:
       - ghcr.io/fission/pre-upgrade-checks:{{ .Tag }}-amd64
       - ghcr.io/fission/pre-upgrade-checks:{{ .Tag }}-arm64
       - ghcr.io/fission/pre-upgrade-checks:{{ .Tag }}-armv7
-  - name_template: fission/reporter:{{ .Tag }}
+  - name_template: fission/pre-upgrade-checks:{{ .Tag }}
+    image_templates:
+      - fission/pre-upgrade-checks:{{ .Tag }}-amd64
+      - fission/pre-upgrade-checks:{{ .Tag }}-arm64
+      - fission/pre-upgrade-checks:{{ .Tag }}-armv7
+  - name_template: ghcr.io/fission/reporter:{{ .Tag }}
     image_templates:
       - ghcr.io/fission/reporter:{{ .Tag }}-amd64
       - ghcr.io/fission/reporter:{{ .Tag }}-arm64
       - ghcr.io/fission/reporter:{{ .Tag }}-armv7
-  - name_template: fission/builder:latest
+  - name_template: fission/reporter:{{ .Tag }}
+    image_templates:
+      - fission/reporter:{{ .Tag }}-amd64
+      - fission/reporter:{{ .Tag }}-arm64
+      - fission/reporter:{{ .Tag }}-armv7
+  - name_template: ghcr.io/fission/builder:latest
     image_templates:
       - ghcr.io/fission/builder:latest-amd64
       - ghcr.io/fission/builder:latest-arm64
       - ghcr.io/fission/builder:latest-armv7
-  - name_template: fission/fetcher:latest
+  - name_template: fission/builder:latest
+    image_templates:
+      - fission/builder:latest-amd64
+      - fission/builder:latest-arm64
+      - fission/builder:latest-armv7
+  - name_template: ghcr.io/fission/fetcher:latest
     image_templates:
       - ghcr.io/fission/fetcher:latest-amd64
       - ghcr.io/fission/fetcher:latest-arm64
       - ghcr.io/fission/fetcher:latest-armv7
-  - name_template: fission/fission-bundle:latest
+  - name_template: fission/fetcher:latest
+    image_templates:
+      - fission/fetcher:latest-amd64
+      - fission/fetcher:latest-arm64
+      - fission/fetcher:latest-armv7 
+  - name_template: ghcr.io/fission/fission-bundle:latest
     image_templates:
       - ghcr.io/fission/fission-bundle:latest-amd64
       - ghcr.io/fission/fission-bundle:latest-arm64
       - ghcr.io/fission/fission-bundle:latest-armv7
-  - name_template: fission/pre-upgrade-checks:latest
+  - name_template: fission/fission-bundle:latest
+    image_templates:
+      - fission/fission-bundle:latest-amd64
+      - fission/fission-bundle:latest-arm64
+      - fission/fission-bundle:latest-armv7
+  - name_template: ghcr.io/fission/pre-upgrade-checks:latest
     image_templates:
       - ghcr.io/fission/pre-upgrade-checks:latest-amd64
       - ghcr.io/fission/pre-upgrade-checks:latest-arm64
       - ghcr.io/fission/pre-upgrade-checks:latest-armv7
-  - name_template: fission/reporter:latest
+  - name_template: fission/pre-upgrade-checks:latest
+    image_templates:
+      - fission/pre-upgrade-checks:latest-amd64
+      - fission/pre-upgrade-checks:latest-arm64
+      - fission/pre-upgrade-checks:latest-armv7
+  - name_template: ghcr.io/fission/reporter:latest
     image_templates:
       - ghcr.io/fission/reporter:latest-amd64
       - ghcr.io/fission/reporter:latest-arm64
       - ghcr.io/fission/reporter:latest-armv7
+  - name_template: fission/reporter:latest
+    image_templates:
+      - fission/reporter:latest-amd64
+      - fission/reporter:latest-arm64
+      - fission/reporter:latest-armv7
 changelog:
   skip: false
 archives:
