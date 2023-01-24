@@ -35,6 +35,7 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -46,7 +47,7 @@ type (
 		tappedByURL map[string]TapServiceRequest
 		requestChan chan TapServiceRequest
 		httpClient  *retryablehttp.Client
-		grpcClient  pb.EchoClient
+		grpcClient  pb.ExecutorClient
 	}
 
 	// TapServiceRequest represents
@@ -68,7 +69,7 @@ func MakeClient(logger *zap.Logger, executorURL string) *Client {
 		logger.Error(fmt.Sprintf("grpc client did not connect: %v", err))
 	}
 
-	ec := pb.NewEchoClient(conn)
+	ec := pb.NewExecutorClient(conn)
 
 	c := &Client{
 		logger:      logger.Named("executor_client"),
@@ -218,6 +219,18 @@ func (c *Client) _tapService(ctx context.Context, tapSvcReqs []TapServiceRequest
 	return nil
 }
 
+func (c *Client) GetServiceForFunctionGRPC(ctx context.Context, fn *fv1.Function) (string, error) {
+	fmt.Println("SHUBHAM: CODE REACHED HERE")
+	svc, err := c.grpcClient.GetServiceForFunction(ctx, fn)
+	status, ok := status.FromError(err)
+	if !ok {
+		return "", errors.Wrap(status.Err(), status.Message())
+	}
+	fmt.Printf("SHUBHAM: %s\n", svc.GetUrl())
+	return svc.GetUrl(), nil
+}
+
+// Client for testing purpose. Will be removed.
 func (c *Client) CallUnaryEcho(ctx context.Context, message string) (string, error) {
 	er := pb.EchoRequest{Message: message}
 	r, err := c.grpcClient.UnaryEcho(ctx, &er)

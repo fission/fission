@@ -62,7 +62,7 @@ type (
 		fsCreateWg  sync.Map
 
 		// Grpc Server
-		pb.UnimplementedEchoServer
+		pb.UnimplementedExecutorServer
 	}
 
 	createFuncServiceRequest struct {

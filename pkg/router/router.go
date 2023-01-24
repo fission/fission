@@ -106,12 +106,6 @@ func Start(ctx context.Context, logger *zap.Logger, port int, executorURL string
 	}
 
 	executor := executorClient.MakeClient(logger, executorURL)
-	resp, err := executor.CallUnaryEcho(ctx, "Shubham!")
-	if err != nil {
-		logger.Error("grpc failed to call", zap.Error(err))
-	} else {
-		logger.Info("successfully called grpc", zap.String("result", resp))
-	}
 
 	timeoutStr := os.Getenv("ROUTER_ROUND_TRIP_TIMEOUT")
 	timeout, err := time.ParseDuration(timeoutStr)

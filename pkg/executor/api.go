@@ -39,6 +39,8 @@ import (
 	"github.com/fission/fission/pkg/utils/metrics"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *http.Request) {
@@ -280,7 +282,7 @@ func (executor *Executor) ServeGRPC(logger *zap.Logger) {
 	}
 
 	s := grpc.NewServer()
-	pb.RegisterEchoServer(s, executor)
+	pb.RegisterExecutorServer(s, executor)
 	logger.Info(fmt.Sprintf("grpc server listening: %v", lis.Addr()))
 
 	if err := s.Serve(lis); err != nil {
@@ -289,6 +291,80 @@ func (executor *Executor) ServeGRPC(logger *zap.Logger) {
 	}
 }
 
+func (executor *Executor) GetServiceForFunction(ctx context.Context, fn *fv1.Function) (*pb.Service, error) {
+	logger := otelUtils.LoggerWithTraceID(ctx, executor.logger)
+	t := fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType
+	logger.Info(fmt.Sprintf("SHUBHAM!: %s", t))
+	svc := &pb.Service{}
+	et := executor.executorTypes[t]
+
+	// Check function -> svc cache
+	logger.Debug("checking for cached function service",
+		zap.String("function_name", fn.ObjectMeta.Name),
+		zap.String("function_namespace", fn.ObjectMeta.Namespace))
+	if t == fv1.ExecutorTypePoolmgr && !fn.Spec.OnceOnly {
+		concurrency := fn.Spec.Concurrency
+		if concurrency == 0 {
+			concurrency = 500
+		}
+		requestsPerpod := fn.Spec.RequestsPerPod
+		if requestsPerpod == 0 {
+			requestsPerpod = 1
+		}
+		fsvc, active, err := et.GetFuncSvcFromPoolCache(ctx, fn, requestsPerpod)
+		// check if its a cache hit (check if there is already specialized function pod that can serve another request)
+		if err == nil {
+			// if a pod is already serving request then it already exists else validated
+			logger.Debug("from cache", zap.Int("active", active))
+			if et.IsValid(ctx, fsvc) {
+				// Cached, return svc address
+				logger.Debug("served from cache", zap.String("name", fsvc.Name), zap.String("address", fsvc.Address))
+				svc.Url = fsvc.Address
+				return svc, nil
+			}
+			logger.Debug("deleting cache entry for invalid address",
+				zap.String("function_name", fn.ObjectMeta.Name),
+				zap.String("function_namespace", fn.ObjectMeta.Namespace),
+				zap.String("address", fsvc.Address))
+			et.DeleteFuncSvcFromCache(ctx, fsvc)
+			active--
+		}
+
+		if active >= concurrency {
+			errMsg := fmt.Sprintf("max concurrency reached for %v. All %v instance are active", fn.ObjectMeta.Name, concurrency)
+			logger.Error("error occurred", zap.String("error", errMsg))
+			return svc, status.Error(codes.Unavailable, errMsg)
+		}
+	} else if t == fv1.ExecutorTypeNewdeploy || t == fv1.ExecutorTypeContainer {
+		fsvc, err := et.GetFuncSvcFromCache(ctx, fn)
+		if err == nil {
+			if et.IsValid(ctx, fsvc) {
+				// Cached, return svc address
+				svc.Url = fsvc.Address
+				return svc, nil
+			}
+			logger.Debug("deleting cache entry for invalid address",
+				zap.String("function_name", fn.ObjectMeta.Name),
+				zap.String("function_namespace", fn.ObjectMeta.Namespace),
+				zap.String("address", fsvc.Address))
+			et.DeleteFuncSvcFromCache(ctx, fsvc)
+		}
+	}
+
+	serviceName, err := executor.getServiceForFunction(ctx, fn)
+	if err != nil {
+		_, msg := ferror.GetHTTPError(err)
+		logger.Error("error getting service for function",
+			zap.Error(err),
+			zap.String("function", fn.ObjectMeta.Name),
+			zap.String("fission_grpc_error", msg))
+		return svc, status.Error(codes.Unimplemented, msg)
+	}
+	svc.Url = serviceName
+	return svc, nil
+}
+
+// Service just for testing purpose. Will be removed.
 func (executor *Executor) UnaryEcho(ctx context.Context, req *pb.EchoRequest) (*pb.EchoResponse, error) {
 	return &pb.EchoResponse{Message: req.Message}, nil
 }

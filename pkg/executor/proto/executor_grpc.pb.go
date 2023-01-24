@@ -2,12 +2,13 @@
 // versions:
 // - protoc-gen-go-grpc v1.2.0
 // - protoc             v3.21.12
-// source: proto/executor.proto
+// source: pkg/executor/proto/executor.proto
 
 package proto
 
 import (
 	context "context"
+	v1 "github.com/fission/fission/pkg/apis/core/v1"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -18,88 +19,124 @@ import (
 // Requires gRPC-Go v1.32.0 or later.
 const _ = grpc.SupportPackageIsVersion7
 
-// EchoClient is the client API for Echo service.
+// ExecutorClient is the client API for Executor service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
-type EchoClient interface {
+type ExecutorClient interface {
 	UnaryEcho(ctx context.Context, in *EchoRequest, opts ...grpc.CallOption) (*EchoResponse, error)
+	GetServiceForFunction(ctx context.Context, in *v1.Function, opts ...grpc.CallOption) (*Service, error)
 }
 
-type echoClient struct {
+type executorClient struct {
 	cc grpc.ClientConnInterface
 }
 
-func NewEchoClient(cc grpc.ClientConnInterface) EchoClient {
-	return &echoClient{cc}
+func NewExecutorClient(cc grpc.ClientConnInterface) ExecutorClient {
+	return &executorClient{cc}
 }
 
-func (c *echoClient) UnaryEcho(ctx context.Context, in *EchoRequest, opts ...grpc.CallOption) (*EchoResponse, error) {
+func (c *executorClient) UnaryEcho(ctx context.Context, in *EchoRequest, opts ...grpc.CallOption) (*EchoResponse, error) {
 	out := new(EchoResponse)
-	err := c.cc.Invoke(ctx, "/proto.Echo/UnaryEcho", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/proto.Executor/UnaryEcho", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-// EchoServer is the server API for Echo service.
-// All implementations must embed UnimplementedEchoServer
+func (c *executorClient) GetServiceForFunction(ctx context.Context, in *v1.Function, opts ...grpc.CallOption) (*Service, error) {
+	out := new(Service)
+	err := c.cc.Invoke(ctx, "/proto.Executor/GetServiceForFunction", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// ExecutorServer is the server API for Executor service.
+// All implementations must embed UnimplementedExecutorServer
 // for forward compatibility
-type EchoServer interface {
+type ExecutorServer interface {
 	UnaryEcho(context.Context, *EchoRequest) (*EchoResponse, error)
-	mustEmbedUnimplementedEchoServer()
+	GetServiceForFunction(context.Context, *v1.Function) (*Service, error)
+	mustEmbedUnimplementedExecutorServer()
 }
 
-// UnimplementedEchoServer must be embedded to have forward compatible implementations.
-type UnimplementedEchoServer struct {
+// UnimplementedExecutorServer must be embedded to have forward compatible implementations.
+type UnimplementedExecutorServer struct {
 }
 
-func (UnimplementedEchoServer) UnaryEcho(context.Context, *EchoRequest) (*EchoResponse, error) {
+func (UnimplementedExecutorServer) UnaryEcho(context.Context, *EchoRequest) (*EchoResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UnaryEcho not implemented")
 }
-func (UnimplementedEchoServer) mustEmbedUnimplementedEchoServer() {}
+func (UnimplementedExecutorServer) GetServiceForFunction(context.Context, *v1.Function) (*Service, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetServiceForFunction not implemented")
+}
+func (UnimplementedExecutorServer) mustEmbedUnimplementedExecutorServer() {}
 
-// UnsafeEchoServer may be embedded to opt out of forward compatibility for this service.
-// Use of this interface is not recommended, as added methods to EchoServer will
+// UnsafeExecutorServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to ExecutorServer will
 // result in compilation errors.
-type UnsafeEchoServer interface {
-	mustEmbedUnimplementedEchoServer()
+type UnsafeExecutorServer interface {
+	mustEmbedUnimplementedExecutorServer()
 }
 
-func RegisterEchoServer(s grpc.ServiceRegistrar, srv EchoServer) {
-	s.RegisterService(&Echo_ServiceDesc, srv)
+func RegisterExecutorServer(s grpc.ServiceRegistrar, srv ExecutorServer) {
+	s.RegisterService(&Executor_ServiceDesc, srv)
 }
 
-func _Echo_UnaryEcho_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Executor_UnaryEcho_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(EchoRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(EchoServer).UnaryEcho(ctx, in)
+		return srv.(ExecutorServer).UnaryEcho(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/proto.Echo/UnaryEcho",
+		FullMethod: "/proto.Executor/UnaryEcho",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(EchoServer).UnaryEcho(ctx, req.(*EchoRequest))
+		return srv.(ExecutorServer).UnaryEcho(ctx, req.(*EchoRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-// Echo_ServiceDesc is the grpc.ServiceDesc for Echo service.
+func _Executor_GetServiceForFunction_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(v1.Function)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ExecutorServer).GetServiceForFunction(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/proto.Executor/GetServiceForFunction",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ExecutorServer).GetServiceForFunction(ctx, req.(*v1.Function))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// Executor_ServiceDesc is the grpc.ServiceDesc for Executor service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
-var Echo_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "proto.Echo",
-	HandlerType: (*EchoServer)(nil),
+var Executor_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "proto.Executor",
+	HandlerType: (*ExecutorServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
 			MethodName: "UnaryEcho",
-			Handler:    _Echo_UnaryEcho_Handler,
+			Handler:    _Executor_UnaryEcho_Handler,
+		},
+		{
+			MethodName: "GetServiceForFunction",
+			Handler:    _Executor_GetServiceForFunction_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "proto/executor.proto",
+	Metadata: "pkg/executor/proto/executor.proto",
 }
