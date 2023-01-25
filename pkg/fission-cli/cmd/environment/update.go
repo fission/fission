@@ -29,6 +29,7 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
+	"github.com/fission/fission/pkg/fission-cli/cmd/spec"
 	"github.com/fission/fission/pkg/fission-cli/console"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
@@ -78,7 +79,20 @@ func (opts *UpdateSubCommand) complete(input cli.Input) (err error) {
 }
 
 func (opts *UpdateSubCommand) run(input cli.Input) error {
+	m := opts.env.ObjectMeta
+	if input.Bool(flagkey.SpecSave) {
+		err := opts.env.Validate()
+		if err != nil {
+			return fv1.AggregateValidationErrors("Environment", err)
+		}
 
+		specFile := fmt.Sprintf("env-%s.yaml", m.Name)
+		err = spec.SpecSave(*opts.env, specFile, true)
+		if err != nil {
+			return errors.Wrap(err, "error saving environment spec")
+		}
+		return nil
+	}
 	enew, err := opts.Client().FissionClientSet.CoreV1().Environments(opts.env.ObjectMeta.Namespace).Update(input.Context(), opts.env, metav1.UpdateOptions{})
 	if err != nil {
 		return errors.Wrap(err, "error updating environment")

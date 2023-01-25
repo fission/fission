@@ -363,7 +363,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 	}
 
 	if input.Bool(flagkey.SpecSave) {
-		err := spec.SpecSave(*opts.function, opts.specFile)
+		err := spec.SpecSave(*opts.function, opts.specFile, false)
 		if err != nil {
 			return errors.Wrap(err, "error saving function spec")
 		}

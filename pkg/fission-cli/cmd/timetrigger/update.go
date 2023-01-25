@@ -25,6 +25,7 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
+	"github.com/fission/fission/pkg/fission-cli/cmd/spec"
 	"github.com/fission/fission/pkg/fission-cli/console"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
@@ -86,6 +87,18 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 }
 
 func (opts *UpdateSubCommand) run(input cli.Input) error {
+	if input.Bool(flagkey.SpecSave) {
+		err := opts.trigger.Validate()
+		if err != nil {
+			return fv1.AggregateValidationErrors("TimeTrigger", err)
+		}
+		specFile := fmt.Sprintf("timetrigger-%s.yaml", opts.trigger.ObjectMeta.Name)
+		err = spec.SpecSave(*opts.trigger, specFile, true)
+		if err != nil {
+			return errors.Wrap(err, "error saving time trigger spec")
+		}
+		return nil
+	}
 	_, err := opts.Client().FissionClientSet.CoreV1().TimeTriggers(opts.trigger.ObjectMeta.Namespace).Update(input.Context(), opts.trigger, metav1.UpdateOptions{})
 	if err != nil {
 		return errors.Wrap(err, "error updating Time trigger")

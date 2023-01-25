@@ -27,6 +27,7 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	_package "github.com/fission/fission/pkg/fission-cli/cmd/package"
+	"github.com/fission/fission/pkg/fission-cli/cmd/spec"
 	"github.com/fission/fission/pkg/fission-cli/console"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
@@ -35,6 +36,7 @@ import (
 type UpdateSubCommand struct {
 	cmd.CommandActioner
 	function *fv1.Function
+	specFile string
 }
 
 func Update(input cli.Input) error {
@@ -54,6 +56,9 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 	_, fnNamespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceFunction)
 	if err != nil {
 		return errors.Wrap(err, "error in updating function ")
+	}
+	if input.Bool(flagkey.SpecSave) {
+		opts.specFile = fmt.Sprintf("function-%s.yaml", fnName)
 	}
 
 	function, err := opts.Client().FissionClientSet.CoreV1().Functions(fnNamespace).Get(input.Context(), input.String(flagkey.FnName), metav1.GetOptions{})
@@ -193,7 +198,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 		return errors.Errorf("Package is used by multiple functions, use --%v to force update", flagkey.PkgForce)
 	}
 
-	newPkgMeta, err := _package.UpdatePackage(input, opts.Client(), pkg)
+	newPkgMeta, err := _package.UpdatePackage(input, opts.Client(), opts.specFile, pkg)
 	if err != nil {
 		return errors.Wrap(err, fmt.Sprintf("error updating package '%v'", pkgName))
 	}
@@ -243,6 +248,17 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 }
 
 func (opts *UpdateSubCommand) run(input cli.Input) error {
+	if input.Bool(flagkey.SpecSave) {
+		err := opts.function.Validate()
+		if err != nil {
+			return fv1.AggregateValidationErrors("Function", err)
+		}
+		err = spec.SpecSave(*opts.function, opts.specFile, false)
+		if err != nil {
+			return errors.Wrap(err, "error saving function spec")
+		}
+		return nil
+	}
 	_, err := opts.Client().FissionClientSet.CoreV1().Functions(opts.function.Namespace).Update(input.Context(), opts.function, metav1.UpdateOptions{})
 	if err != nil {
 		return errors.Wrap(err, "error updating function")
