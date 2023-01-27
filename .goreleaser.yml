@@ -104,6 +104,10 @@ dockers:
     dockerfile: cmd/fetcher/Dockerfile
     build_flag_templates:
       - "--label=org.opencontainers.image.source={{.GitURL}}"
+      - "--platform=linux/amd64"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Tag}}"
   - <<: *docker-amd64
     ids:
       - fission-bundle
@@ -115,6 +119,10 @@ dockers:
     dockerfile: cmd/fission-bundle/Dockerfile
     build_flag_templates:
       - "--label=org.opencontainers.image.source={{.GitURL}}"
+      - "--platform=linux/amd64"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Tag}}"
   - <<: *docker-amd64
     ids:
       - pre-upgrade-checks
@@ -126,6 +134,10 @@ dockers:
     dockerfile: cmd/preupgradechecks/Dockerfile
     build_flag_templates:
       - "--label=org.opencontainers.image.source={{.GitURL}}"
+      - "--platform=linux/amd64"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Tag}}"
   - <<: *docker-amd64
     ids:
       - reporter
@@ -137,6 +149,10 @@ dockers:
     dockerfile: cmd/reporter/Dockerfile
     build_flag_templates:
       - "--label=org.opencontainers.image.source={{.GitURL}}"
+      - "--platform=linux/amd64"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Tag}}"
   - &docker-arm64
     use: buildx
     goos: linux
@@ -166,6 +182,10 @@ dockers:
     dockerfile: cmd/fetcher/Dockerfile
     build_flag_templates:
       - "--label=org.opencontainers.image.source={{.GitURL}}"
+      - "--platform=linux/arm64"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Tag}}"
   - <<: *docker-arm64
     ids:
       - fission-bundle
@@ -177,6 +197,10 @@ dockers:
     dockerfile: cmd/fission-bundle/Dockerfile
     build_flag_templates:
       - "--label=org.opencontainers.image.source={{.GitURL}}"
+      - "--platform=linux/arm64"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Tag}}"
   - <<: *docker-arm64
     ids:
       - pre-upgrade-checks
@@ -188,6 +212,10 @@ dockers:
     dockerfile: cmd/preupgradechecks/Dockerfile
     build_flag_templates:
       - "--label=org.opencontainers.image.source={{.GitURL}}"
+      - "--platform=linux/arm64"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Tag}}"
   - <<: *docker-arm64
     ids:
       - reporter
@@ -199,6 +227,10 @@ dockers:
     dockerfile: cmd/reporter/Dockerfile
     build_flag_templates:
       - "--label=org.opencontainers.image.source={{.GitURL}}"
+      - "--platform=linux/arm64"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Tag}}"
   - &docker-armv7
     use: buildx
     goos: linux
@@ -229,6 +261,10 @@ dockers:
     dockerfile: cmd/fetcher/Dockerfile
     build_flag_templates:
       - "--label=org.opencontainers.image.source={{.GitURL}}"
+      - "--platform=linux/arm/v7"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Tag}}"
   - <<: *docker-armv7
     ids:
       - fission-bundle
@@ -240,6 +276,10 @@ dockers:
     dockerfile: cmd/fission-bundle/Dockerfile
     build_flag_templates:
       - "--label=org.opencontainers.image.source={{.GitURL}}"
+      - "--platform=linux/arm/v7"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Tag}}"
   - <<: *docker-armv7
     ids:
       - pre-upgrade-checks
@@ -251,6 +291,10 @@ dockers:
     dockerfile: cmd/preupgradechecks/Dockerfile
     build_flag_templates:
       - "--label=org.opencontainers.image.source={{.GitURL}}"
+      - "--platform=linux/arm/v7"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Tag}}"
   - <<: *docker-armv7
     ids:
       - reporter
@@ -262,6 +306,10 @@ dockers:
     dockerfile: cmd/reporter/Dockerfile
     build_flag_templates:
       - "--label=org.opencontainers.image.source={{.GitURL}}"
+      - "--platform=linux/arm/v7"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Tag}}"
 docker_manifests:
   - name_template: ghcr.io/fission/builder:{{ .Tag }}
     image_templates:
