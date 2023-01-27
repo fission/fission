@@ -31,7 +31,7 @@ func (gp *GenericPool) readyPodEventHandlers() k8sCache.ResourceEventHandlerFunc
 
 func (gp *GenericPool) setupReadyPodController() error {
 	gp.readyPodQueue = workqueue.NewDelayingQueue()
-	informerFactory, err := utils.GetInformerFactoryByReadyPod(gp.kubernetesClient, gp.namespace, gp.deployment.Spec.Selector)
+	informerFactory, err := utils.GetInformerFactoryByReadyPod(gp.kubernetesClient, gp.fnNamespace, gp.deployment.Spec.Selector)
 	if err != nil {
 		return err
 	}
