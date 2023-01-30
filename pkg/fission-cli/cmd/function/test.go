@@ -56,7 +56,7 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 		return errors.Wrap(err, "error in testing function ")
 	}
 
-	function, err := opts.Client().FissionClientSet.CoreV1().Functions(namespace).Get(input.Context(), input.String(flagkey.FnName), metav1.GetOptions{})
+	function, err := opts.Client().FissionClientSet.CoreV1().Functions(namespace).Get(input.Context(), fnName, metav1.GetOptions{})
 	if err != nil {
 		return errors.Wrap(err, fmt.Sprintf("read function '%v'", fnName))
 	}
