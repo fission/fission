@@ -50,14 +50,19 @@ func Test(input cli.Input) error {
 }
 
 func (opts *TestSubCommand) do(input cli.Input) error {
-
+	fnName := input.String(flagkey.FnName)
 	_, namespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceFunction)
 	if err != nil {
 		return errors.Wrap(err, "error in testing function ")
 	}
 
+	function, err := opts.Client().FissionClientSet.CoreV1().Functions(namespace).Get(input.Context(), input.String(flagkey.FnName), metav1.GetOptions{})
+	if err != nil {
+		return errors.Wrap(err, fmt.Sprintf("read function '%v'", fnName))
+	}
+
 	m := &metav1.ObjectMeta{
-		Name:      input.String(flagkey.FnName),
+		Name:      fnName,
 		Namespace: namespace,
 	}
 	routerURL := os.Getenv("FISSION_ROUTER")
@@ -109,12 +114,11 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 
 	var ctx context.Context
 
-	testTimeout := input.Duration(flagkey.FnTestTimeout)
-	if testTimeout <= 0*time.Second {
+	if time.Duration(function.Spec.FunctionTimeout) <= 0*time.Second {
 		ctx = input.Context()
 	} else {
 		var closeCtx context.CancelFunc
-		ctx, closeCtx = context.WithTimeout(input.Context(), input.Duration(flagkey.FnTestTimeout))
+		ctx, closeCtx = context.WithTimeout(input.Context(), time.Duration(function.Spec.FunctionTimeout)*time.Second)
 		defer closeCtx()
 	}
 
