@@ -26,11 +26,7 @@ spec:
       restartPolicy: Never
       containers:
         - name: post-install-job
-        {{- if .Values.imageTag }}
-          image: {{ .Values.postInstallReportImage }}:{{ .Values.imageTag }}
-        {{- else }}
-          image: {{ .Values.postInstallReportImage }}
-        {{- end }}
+          image: {{ include "reporterImage" . | quote }}
           imagePullPolicy: {{ .Values.pullPolicy }}
           command: [ "/reporter" ]
           args: ["event", "-c", "fission-use", "-a", "yaml-post-install", "-l", "{{ .Chart.Name }}-{{ .Chart.Version }}"]

@@ -25,11 +25,7 @@ spec:
     spec:
       containers:
       - name: mqtrigger
-      {{- if eq .Values.imageTag "" }}
-        image: "{{ .Values.image }}"
-      {{- else }}
-        image: "{{ .Values.image }}:{{ .Values.imageTag }}"
-      {{- end }}
+        image: {{ include "fission-bundleImage" . | quote }}
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
         args: ["--mqt", "--routerUrl", "http://router.{{ .Release.Namespace }}"]

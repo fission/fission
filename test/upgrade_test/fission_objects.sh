@@ -5,7 +5,7 @@ ns="fission"
 ROOT=$(pwd)
 PREV_STABLE_VERSION=v1.16.3
 HELM_VARS_PREV_RELEASE="routerServiceType=NodePort,analytics=false"
-HELM_VARS_LATEST_RELEASE="routerServiceType=NodePort,repository=ghcr.io,image=fission-bundle,pullPolicy=IfNotPresent,imageTag=latest,fetcher.image=ghcr.io/fetcher,fetcher.imageTag=latest,postInstallReportImage=reporter,preUpgradeChecks.image=preupgradechecks,preUpgradeChecks.imageTag=latest,analytics=false"
+HELM_VARS_LATEST_RELEASE="routerServiceType=NodePort,repository=ghcr.io,image=fission/fission-bundle,pullPolicy=IfNotPresent,imageTag=latest,fetcher.image=fission/fetcher,fetcher.imageTag=latest,postInstallReportImage=fission/reporter,preUpgradeChecks.image=fission/pre-upgrade-checks,preUpgradeChecks.imageTag=latest,analytics=false"
 
 doit() {
     echo "! $*"

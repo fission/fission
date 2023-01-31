@@ -55,6 +55,22 @@ This template generates the image name for the deployment depending on the value
 {{- end }}
 {{- end -}}
 
+{{- define "reporterImage" -}}
+{{- if .Values.repository -}}
+  {{- if eq .Values.imageTag "" -}}
+    {{ .Values.repository }}/{{ .Values.postInstallReportImage }}
+  {{- else -}}
+    {{ .Values.repository }}/{{ .Values.postInstallReportImage }}:{{ .Values.imageTag }}
+  {{- end }}
+{{- else -}}
+  {{- if eq .Values.imageTag "" -}}
+    {{ .Values.postInstallReportImage }}
+  {{- else -}}
+    {{ .Values.postInstallReportImage }}:{{ .Values.imageTag }}
+  {{- end }}
+{{- end }}
+{{- end -}}
+
 {{- define "opentelemtry.envs" }}
 - name: OTEL_EXPORTER_OTLP_ENDPOINT
   value: "{{ .Values.openTelemetry.otlpCollectorEndpoint }}"
