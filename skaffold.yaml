@@ -61,7 +61,7 @@ manifests:
         preUpgradeChecks.imageTag: ""
         priorityClassName: system-cluster-critical
         prometheus.serviceEndpoint: ""
-        repository: index.docker.io
+        repository: ghcr.io
         routerServiceType: LoadBalancer
         runtimePodSpec.enabled: "false"
         serviceMonitor.additionalServiceMonitorLabels.release: prometheus
