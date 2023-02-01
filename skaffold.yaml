@@ -106,7 +106,7 @@ profiles:
   patches:
   - op: replace
     path: /manifests/helm/releases/0/setValues/repository
-    value: "ghcr.io"
+    value: ""
   - op: replace
     path: /manifests/helm/releases/0/setValues/storagesvc.archivePruner.interval
     value: 1
@@ -132,7 +132,7 @@ profiles:
   patches:
   - op: replace
     path: /manifests/helm/releases/0/setValues/repository
-    value: "ghcr.io"
+    value: ""
   - op: replace
     path: /manifests/helm/releases/0/setValues/storagesvc.archivePruner.interval
     value: 1
