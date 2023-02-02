@@ -468,7 +468,7 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 
 		sel := map[string]string{
 			"functionName": fn.ObjectMeta.Name,
-			"functionUid":  string(fn.ObjectMeta.UID),
+			"functionUID":  string(fn.ObjectMeta.UID),
 		}
 		podList, err := gp.kubernetesClient.CoreV1().Pods(gp.namespace).List(ctx, metav1.ListOptions{
 			LabelSelector: labels.Set(sel).AsSelector().String(),
