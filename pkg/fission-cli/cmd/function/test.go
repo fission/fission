@@ -112,13 +112,26 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 		functionUrl.RawQuery = query.Encode()
 	}
 
-	var ctx context.Context
+	var (
+		ctx        context.Context
+		reqTimeout time.Duration
+	)
 
-	if time.Duration(function.Spec.FunctionTimeout) <= 0*time.Second {
+	fnTestTimeout := input.Duration(flagkey.FnTestTimeout)
+	fnSpecTimeout := time.Duration(function.Spec.FunctionTimeout)
+
+	if input.IsSet(flagkey.FnTestTimeout) && (fnTestTimeout < fnSpecTimeout) {
+		reqTimeout = fnTestTimeout
+		console.Warn("timeout specified using flag is less than the actual functionTimeout specified for function")
+	} else {
+		reqTimeout = fnSpecTimeout
+	}
+
+	if reqTimeout <= 0*time.Second {
 		ctx = input.Context()
 	} else {
 		var closeCtx context.CancelFunc
-		ctx, closeCtx = context.WithTimeout(input.Context(), time.Duration(function.Spec.FunctionTimeout)*time.Second)
+		ctx, closeCtx = context.WithTimeout(input.Context(), reqTimeout*time.Second)
 		defer closeCtx()
 	}
 
