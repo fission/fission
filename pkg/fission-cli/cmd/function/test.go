@@ -58,7 +58,7 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 
 	function, err := opts.Client().FissionClientSet.CoreV1().Functions(namespace).Get(input.Context(), fnName, metav1.GetOptions{})
 	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("read function '%v'", fnName))
+		return errors.Wrap(err, fmt.Sprintf("read function '%s'", fnName))
 	}
 
 	m := &metav1.ObjectMeta{
@@ -122,7 +122,7 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 
 	if input.IsSet(flagkey.FnTestTimeout) && (fnTestTimeout < fnSpecTimeout) {
 		reqTimeout = fnTestTimeout
-		console.Warn("timeout specified using flag is less than the actual functionTimeout specified for function")
+		console.Warn(fmt.Sprintf("timeout specified is less than functionTimeout %d Overriding value to %d", fnTestTimeout, fnSpecTimeout))
 	} else {
 		reqTimeout = fnSpecTimeout
 	}
