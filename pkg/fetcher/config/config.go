@@ -297,7 +297,18 @@ func (cfg *Config) addFetcherToPodSpecWithCommand(podSpec *apiv1.PodSpec, mainCo
 		}
 
 		found = true
-		container.VolumeMounts = append(container.VolumeMounts, mounts...)
+
+		// use a readonly version of the mounts so that the fetcher is the only container with write access to the shared volumes
+		readOnlyMounts := make([]apiv1.VolumeMount, len(mounts))
+		for ix, mount := range mounts {
+			readOnlyMounts[ix] = apiv1.VolumeMount{
+				Name:      mount.Name,
+				MountPath: mount.MountPath,
+				ReadOnly:  true,
+			}
+		}
+
+		container.VolumeMounts = append(container.VolumeMounts, readOnlyMounts...)
 		podSpec.Containers[ix] = container
 	}
 	if !found {
