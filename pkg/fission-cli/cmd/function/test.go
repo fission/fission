@@ -50,14 +50,19 @@ func Test(input cli.Input) error {
 }
 
 func (opts *TestSubCommand) do(input cli.Input) error {
-
+	fnName := input.String(flagkey.FnName)
 	_, namespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceFunction)
 	if err != nil {
 		return errors.Wrap(err, "error in testing function ")
 	}
 
+	function, err := opts.Client().FissionClientSet.CoreV1().Functions(namespace).Get(input.Context(), fnName, metav1.GetOptions{})
+	if err != nil {
+		return errors.Wrap(err, fmt.Sprintf("read function '%s'", fnName))
+	}
+
 	m := &metav1.ObjectMeta{
-		Name:      input.String(flagkey.FnName),
+		Name:      fnName,
 		Namespace: namespace,
 	}
 	routerURL := os.Getenv("FISSION_ROUTER")
@@ -107,14 +112,26 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 		functionUrl.RawQuery = query.Encode()
 	}
 
-	var ctx context.Context
+	var (
+		ctx        context.Context
+		reqTimeout time.Duration
+	)
 
-	testTimeout := input.Duration(flagkey.FnTestTimeout)
-	if testTimeout <= 0*time.Second {
+	fnTestTimeout := input.Duration(flagkey.FnTestTimeout)
+	fnSpecTimeout := time.Duration(function.Spec.FunctionTimeout)
+
+	if input.IsSet(flagkey.FnTestTimeout) && (fnTestTimeout < fnSpecTimeout) {
+		reqTimeout = fnTestTimeout
+		console.Warn(fmt.Sprintf("timeout specified is less than functionTimeout %d Overriding value to %d", fnTestTimeout, fnSpecTimeout))
+	} else {
+		reqTimeout = fnSpecTimeout
+	}
+
+	if reqTimeout <= 0*time.Second {
 		ctx = input.Context()
 	} else {
 		var closeCtx context.CancelFunc
-		ctx, closeCtx = context.WithTimeout(input.Context(), input.Duration(flagkey.FnTestTimeout))
+		ctx, closeCtx = context.WithTimeout(input.Context(), reqTimeout*time.Second)
 		defer closeCtx()
 	}
 
