@@ -26,6 +26,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -63,6 +64,7 @@ type (
 		fissionClient    versioned.Interface
 		kubeClient       kubernetes.Interface
 		httpClient       *http.Client
+		isSpecialized    *atomic.Bool
 		Info             PodInfo
 	}
 	PodInfo struct {
@@ -110,6 +112,40 @@ func MakeFetcher(logger *zap.Logger, clientGen crd.ClientGeneratorInterface, sha
 		return nil, errors.Wrap(err, "error reading pod namespace from downward volume")
 	}
 
+	hasFiles := func(dir string) (bool, error) {
+		f, err := os.Open(dir)
+		if err != nil {
+			return false, err
+		}
+		defer f.Close()
+
+		_, err = f.Readdirnames(1)
+		if err == io.EOF {
+			return false, nil
+		}
+		return true, err
+	}
+
+	userFuncHasFiles, err := hasFiles(sharedVolumePath)
+	if err != nil {
+		return nil, err
+	}
+
+	secretsHasFiles, err := hasFiles(sharedSecretPath)
+	if err != nil {
+		return nil, err
+	}
+
+	configMapsHasFiles, err := hasFiles(sharedConfigPath)
+	if err != nil {
+		return nil, err
+	}
+
+	// if any of the directories have files, then the pod has already been specialized.
+	// we made these volumes read only for the sandbox here: pkg/fetcher/config/config.go:323
+	isSpecialized := &atomic.Bool{}
+	isSpecialized.Store(userFuncHasFiles || secretsHasFiles || configMapsHasFiles)
+
 	hc := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
 	return &Fetcher{
 		logger:           fLogger,
@@ -118,6 +154,7 @@ func MakeFetcher(logger *zap.Logger, clientGen crd.ClientGeneratorInterface, sha
 		sharedConfigPath: sharedConfigPath,
 		fissionClient:    fissionClient,
 		kubeClient:       kubeClient,
+		isSpecialized:    isSpecialized,
 		Info: PodInfo{
 			Name:      string(name),
 			Namespace: string(namespace),
@@ -171,6 +208,12 @@ func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
 		logger.Info("fetch request done", zap.Duration("elapsed_time", elapsed))
 	}()
 
+	if fetcher.isSpecialized.Load() {
+		logger.Warn("fetch request received on specialized pod")
+		w.WriteHeader(http.StatusTeapot)
+		return
+	}
+
 	// parse request
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -221,6 +264,12 @@ func (fetcher *Fetcher) SpecializeHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 	logger := otelUtils.LoggerWithTraceID(ctx, fetcher.logger)
+
+	if fetcher.isSpecialized.Load() {
+		logger.Warn("specialize request received on specialized pod")
+		w.WriteHeader(http.StatusTeapot)
+		return
+	}
 
 	// parse request
 	body, err := io.ReadAll(r.Body)
@@ -504,6 +553,12 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 		logger.Info("upload request done", zap.Duration("elapsed_time", elapsed))
 	}()
 
+	if fetcher.isSpecialized.Load() {
+		logger.Warn("upload request received on specialized pod")
+		w.WriteHeader(http.StatusTeapot)
+		return
+	}
+
 	// parse request
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -722,6 +777,7 @@ func (fetcher *Fetcher) SpecializePod(ctx context.Context, fetchReq FunctionFetc
 		if err == nil && resp.StatusCode < 300 {
 			// Success
 			resp.Body.Close()
+			fetcher.isSpecialized.Store(true)
 			return nil
 		}
 
