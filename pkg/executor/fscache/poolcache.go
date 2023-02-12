@@ -36,6 +36,8 @@ const (
 	markAvailable
 	deleteValue
 	setCPUUtilization
+	specializationStart
+	specializationEnd
 )
 
 type (
@@ -47,12 +49,13 @@ type (
 		cpuLimit        resource.Quantity // if currentCPUUsage is more than cpuLimit cache miss occurs in getValue request
 	}
 	funcSvcGroup struct {
-		svcs map[string]*funcSvcInfo
+		specializationInProgress uint64
+		svcs                     map[string]*funcSvcInfo
 	}
 	// PoolCache implements a simple cache implementation having values mapped by two keys [function][address].
 	// As of now PoolCache is only used by poolmanager executor
 	PoolCache struct {
-		cache          map[string]funcSvcGroup
+		cache          map[string]*funcSvcGroup
 		requestChannel chan *request
 		logger         *zap.Logger
 	}
@@ -79,7 +82,7 @@ type (
 
 func NewPoolCache(logger *zap.Logger) *PoolCache {
 	c := &PoolCache{
-		cache:          make(map[string]funcSvcGroup),
+		cache:          make(map[string]*funcSvcGroup),
 		requestChannel: make(chan *request),
 		logger:         logger,
 	}
@@ -119,7 +122,7 @@ func (c *PoolCache) service() {
 			req.responseChannel <- resp
 		case setValue:
 			if _, ok := c.cache[req.function]; !ok {
-				c.cache[req.function] = funcSvcGroup{
+				c.cache[req.function] = &funcSvcGroup{
 					svcs: make(map[string]*funcSvcInfo),
 				}
 			}
@@ -132,6 +135,20 @@ func (c *PoolCache) service() {
 				otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Increase active requests with setValue", zap.String("function", req.function), zap.String("address", req.address), zap.Int("activeRequests", c.cache[req.function].svcs[req.address].activeRequests))
 			}
 			c.cache[req.function].svcs[req.address].cpuLimit = req.cpuUsage
+		case specializationStart:
+			if _, ok := c.cache[req.function]; !ok {
+				c.cache[req.function] = &funcSvcGroup{
+					svcs: make(map[string]*funcSvcInfo),
+				}
+			}
+			c.cache[req.function].specializationInProgress = c.cache[req.function].specializationInProgress + 1
+		case specializationEnd:
+			if _, ok := c.cache[req.function]; !ok {
+				c.cache[req.function] = &funcSvcGroup{
+					svcs: make(map[string]*funcSvcInfo),
+				}
+			}
+			c.cache[req.function].specializationInProgress = c.cache[req.function].specializationInProgress - 1
 		case listAvailableValue:
 			vals := make([]*FuncSvc, 0)
 			for key1, values := range c.cache {
@@ -152,7 +169,7 @@ func (c *PoolCache) service() {
 			req.responseChannel <- resp
 		case setCPUUtilization:
 			if _, ok := c.cache[req.function]; !ok {
-				c.cache[req.function] = funcSvcGroup{
+				c.cache[req.function] = &funcSvcGroup{
 					svcs: make(map[string]*funcSvcInfo),
 				}
 			}
@@ -206,6 +223,22 @@ func (c *PoolCache) ListAvailableValue() []*FuncSvc {
 	}
 	resp := <-respChannel
 	return resp.allValues
+}
+
+func (c *PoolCache) SpecializationStart(ctx context.Context, function string) {
+	c.requestChannel <- &request{
+		ctx:         ctx,
+		requestType: specializationStart,
+		function:    function,
+	}
+}
+
+func (c *PoolCache) SpecializationEnd(ctx context.Context, function string) {
+	c.requestChannel <- &request{
+		ctx:         ctx,
+		requestType: specializationEnd,
+		function:    function,
+	}
 }
 
 // SetValue marks the value at key [function][address] as active(begin used)

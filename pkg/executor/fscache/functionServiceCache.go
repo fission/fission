@@ -226,6 +226,14 @@ func (fsc *FunctionServiceCache) GetByFunctionUID(uid types.UID) (*FuncSvc, erro
 	return &fsvcCopy, nil
 }
 
+func (fsc *FunctionServiceCache) SpecializationStart(ctx context.Context, function *metav1.ObjectMeta) {
+	fsc.connFunctionCache.SpecializationStart(ctx, crd.CacheKey(function))
+}
+
+func (fsc *FunctionServiceCache) SpecializationEnd(ctx context.Context, function *metav1.ObjectMeta) {
+	fsc.connFunctionCache.SpecializationEnd(ctx, crd.CacheKey(function))
+}
+
 // AddFunc adds a function service to pool cache.
 func (fsc *FunctionServiceCache) AddFunc(ctx context.Context, fsvc FuncSvc) {
 	fsc.connFunctionCache.SetSvcValue(ctx, crd.CacheKey(fsvc.Function), fsvc.Address, &fsvc, fsvc.CPULimit)
