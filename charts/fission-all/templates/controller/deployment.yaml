@@ -7,17 +7,20 @@ metadata:
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
     svc: controller
     application: fission-api
+    component: fission-core
 spec:
   replicas: 1
   selector:
     matchLabels:
       svc: controller
       application: fission-api
+      component: fission-core
   template:
     metadata:
       labels:
         svc: controller
         application: fission-api
+        component: fission-core
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/path: "/metrics"
