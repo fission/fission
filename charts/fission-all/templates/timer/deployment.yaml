@@ -5,15 +5,18 @@ metadata:
   labels:
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
     svc: timer
+    part-of: fission
 spec:
   replicas: 1
   selector:
     matchLabels:
       svc: timer
+      part-of: fission
   template:
     metadata:
       labels:
         svc: timer
+        part-of: fission
     spec:
       {{- if .Values.timer.securityContext.enabled }}
       securityContext: {{- omit .Values.timer.securityContext "enabled" | toYaml | nindent 8 }}

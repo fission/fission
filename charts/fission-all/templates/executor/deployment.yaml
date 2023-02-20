@@ -5,18 +5,18 @@ metadata:
   labels:
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
     svc: executor
-    component: fission-core
+    part-of: fission
 spec:
   replicas: 1
   selector:
     matchLabels:
       svc: executor
-      component: fission-core
+      part-of: fission
   template:
     metadata:
       labels:
         svc: executor
-        component: fission-core
+        part-of: fission
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/path: "/metrics"

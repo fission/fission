@@ -7,17 +7,20 @@ metadata:
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
     svc: mqtrigger-keda
     messagequeue: keda
+    part-of: fission
 spec:
   replicas: 1
   selector:
     matchLabels:
       svc: mqtrigger-keda
       messagequeue: keda
+      part-of: fission
   template:
     metadata:
       labels:
         svc: mqtrigger-keda
         messagequeue: keda
+        part-of: fission
     spec:
       containers:
       - name:  mqtrigger-keda

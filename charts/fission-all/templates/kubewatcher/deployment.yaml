@@ -5,15 +5,18 @@ metadata:
   labels:
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
     svc: kubewatcher
+    part-of: fission
 spec:
   replicas: 1
   selector:
     matchLabels:
       svc: kubewatcher
+      part-of: fission
   template:
     metadata:
       labels:
         svc: kubewatcher
+        part-of: fission
     spec:
       {{- if .Values.kubewatcher.securityContext.enabled }}
       securityContext: {{- omit .Values.kubewatcher.securityContext "enabled" | toYaml | nindent 8 }}

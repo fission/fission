@@ -18,13 +18,13 @@ spec:
     matchLabels:
       application: fission-router
       svc: router
-      component: fission-core
+      part-of: fission
   template:
     metadata:
       labels:
         application: fission-router
         svc: router
-        component: fission-core
+        part-of: fission
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/path: "/metrics"
