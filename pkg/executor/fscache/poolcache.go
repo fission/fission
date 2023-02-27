@@ -47,7 +47,6 @@ type (
 	}
 
 	funcSvcGroup struct {
-		specializationInProgress uint64
 		svcs                     map[string]*funcSvcInfo
 	}
 
