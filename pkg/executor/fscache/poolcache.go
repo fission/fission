@@ -47,7 +47,7 @@ type (
 	}
 
 	funcSvcGroup struct {
-		svcs                     map[string]*funcSvcInfo
+		svcs map[string]*funcSvcInfo
 	}
 
 	// PoolCache implements a simple cache implementation having values mapped by two keys [function][address].
