@@ -253,7 +253,6 @@ func (c *PoolCache) GetVirtualCapacity(ctx context.Context, function string, req
 	return resp.totalActive, resp.totalInSpecialize, resp.totalRequests
 }
 
-
 // ListAvailableValue returns a list of the available function services stored in the Cache
 func (c *PoolCache) ListAvailableValue() []*FuncSvc {
 	respChannel := make(chan *response)
@@ -265,7 +264,7 @@ func (c *PoolCache) ListAvailableValue() []*FuncSvc {
 	return resp.allValues
 }
 
-//SpecializationStart starts the specilization
+// SpecializationStart starts the specilization
 func (c *PoolCache) SpecializationStart(ctx context.Context, function string) {
 	c.requestChannel <- &request{
 		ctx:         ctx,

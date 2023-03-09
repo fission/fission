@@ -150,11 +150,11 @@ func (executor *Executor) writeResponse(w http.ResponseWriter, serviceName strin
 func (executor *Executor) getServiceForFunction(ctx context.Context, fn *fv1.Function, requestsPerPod int, concurrency int) (string, error) {
 	respChan := make(chan *createFuncServiceResponse)
 	executor.requestChan <- &createFuncServiceRequest{
-		context:  ctx,
-		function: fn,
+		context:       ctx,
+		function:      fn,
 		requestPerPod: requestsPerPod,
 		concurrency:   concurrency,
-		respChan: respChan,
+		respChan:      respChan,
 	}
 	resp := <-respChan
 	if resp.err != nil {

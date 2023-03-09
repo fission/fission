@@ -216,7 +216,6 @@ func (deploy *NewDeploy) ReduceFunctionsCount(ctx context.Context, fn *fv1.Funct
 // SpecializationStart has not been implemented for NewDeployment
 func (deploy *NewDeploy) SpecializationStart(context.Context, *fv1.Function) {}
 
-
 // TapService makes a TouchByAddress request to the cache.
 func (deploy *NewDeploy) TapService(ctx context.Context, svcHost string) error {
 	otelUtils.SpanTrackEvent(ctx, "TapService")

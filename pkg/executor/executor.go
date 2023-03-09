@@ -57,9 +57,9 @@ type (
 
 		fissionClient versioned.Interface
 
-		requestChan chan *createFuncServiceRequest
+		requestChan    chan *createFuncServiceRequest
 		specializeChan chan *waitSpecializationRequest
-		fsCreateWg  sync.Map
+		fsCreateWg     sync.Map
 	}
 
 	waitSpecializationRequest struct {
@@ -70,11 +70,11 @@ type (
 	}
 
 	createFuncServiceRequest struct {
-		context  context.Context
-		function *fv1.Function
+		context       context.Context
+		function      *fv1.Function
 		requestPerPod int
 		concurrency   int
-		respChan chan *createFuncServiceResponse
+		respChan      chan *createFuncServiceResponse
 	}
 
 	createFuncServiceResponse struct {
@@ -93,7 +93,7 @@ func MakeExecutor(ctx context.Context, logger *zap.Logger, cms *cms.ConfigSecret
 		fissionClient: fissionClient,
 		executorTypes: types,
 
-		requestChan: make(chan *createFuncServiceRequest),
+		requestChan:    make(chan *createFuncServiceRequest),
 		specializeChan: make(chan *waitSpecializationRequest),
 	}
 
@@ -304,7 +304,6 @@ func (executor *Executor) checkSpecializationFinished() {
 		}
 	}
 }
-
 
 func (executor *Executor) createServiceForFunction(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
 	logger := otelUtils.LoggerWithTraceID(ctx, executor.logger)
