@@ -205,6 +205,18 @@ func (deploy *NewDeploy) GetFuncSvcFromPoolCache(ctx context.Context, fn *fv1.Fu
 	return nil, 0, nil
 }
 
+// GetVirtualCapacity has not been implemented for NewDeployment
+func (deploy *NewDeploy) GetVirtualCapacity(ctx context.Context, fn *fv1.Function, requestsPerPod int) (int, int, int) {
+	return 0, 0, 0
+}
+
+// ReduceFunctionsCount has not been implemented for NewDeployment
+func (deploy *NewDeploy) ReduceFunctionsCount(ctx context.Context, fn *fv1.Function) {}
+
+// SpecializationStart has not been implemented for NewDeployment
+func (deploy *NewDeploy) SpecializationStart(context.Context, *fv1.Function) {}
+
+
 // TapService makes a TouchByAddress request to the cache.
 func (deploy *NewDeploy) TapService(ctx context.Context, svcHost string) error {
 	otelUtils.SpanTrackEvent(ctx, "TapService")

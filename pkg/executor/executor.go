@@ -58,12 +58,22 @@ type (
 		fissionClient versioned.Interface
 
 		requestChan chan *createFuncServiceRequest
+		specializeChan chan *waitSpecializationRequest
 		fsCreateWg  sync.Map
+	}
+
+	waitSpecializationRequest struct {
+		context       context.Context
+		function      *fv1.Function
+		requestPerPod int
+		respChan      chan *createFuncServiceResponse
 	}
 
 	createFuncServiceRequest struct {
 		context  context.Context
 		function *fv1.Function
+		requestPerPod int
+		concurrency   int
 		respChan chan *createFuncServiceResponse
 	}
 
@@ -84,6 +94,7 @@ func MakeExecutor(ctx context.Context, logger *zap.Logger, cms *cms.ConfigSecret
 		executorTypes: types,
 
 		requestChan: make(chan *createFuncServiceRequest),
+		specializeChan: make(chan *waitSpecializationRequest),
 	}
 
 	// Run all informers
@@ -98,8 +109,22 @@ func MakeExecutor(ctx context.Context, logger *zap.Logger, cms *cms.ConfigSecret
 	}
 
 	go executor.serveCreateFuncServices()
+	go executor.checkSpecializationFinished()
 
 	return executor, nil
+}
+
+func (executor *Executor) isNewSpecializationNeeded(requestsPerPod int, specializing int, active int, totalRequests int) bool {
+	if totalRequests <= requestsPerPod && specializing > 0 {
+		return false
+	} else if specializing*requestsPerPod > totalRequests {
+		return false
+	}
+	return true
+}
+
+func (executor *Executor) isReqCapacityMoreThanPermissible(specializing int, active int, concurrency int) bool {
+	return specializing*active < concurrency
 }
 
 // All non-cached function service requests go through this goroutine
@@ -115,6 +140,45 @@ func (executor *Executor) serveCreateFuncServices() {
 
 		if req.function.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypePoolmgr {
 			go func() {
+				t := req.function.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType
+				e, ok := executor.executorTypes[t]
+				if !ok {
+					req.respChan <- &createFuncServiceResponse{
+						funcSvc: nil,
+						err:     errors.Errorf("Unknown executor type '%v'", t),
+					}
+					return
+				}
+				virtualCapacityContext, cancel := context.WithTimeout(req.context, 5*time.Second)
+				defer cancel()
+				active, specializing, totalRequests := e.GetVirtualCapacity(virtualCapacityContext, req.function, req.requestPerPod)
+				if executor.isNewSpecializationNeeded(req.requestPerPod, specializing, active, totalRequests) {
+					if executor.isReqCapacityMoreThanPermissible(specializing, active, req.concurrency) {
+						e.SpecializationStart(virtualCapacityContext, req.function)
+					} else {
+						errMsg := errors.Errorf("max concurrency reached for %v. All %v instance are active", req.function.ObjectMeta.Name, req.concurrency)
+						executor.logger.Error("error occurred", zap.String("error", errMsg.Error()))
+						req.respChan <- &createFuncServiceResponse{
+							funcSvc: nil,
+							err:     errMsg,
+						}
+						return
+					}
+				} else {
+					respChan := make(chan *createFuncServiceResponse)
+					executor.specializeChan <- &waitSpecializationRequest{
+						context:       virtualCapacityContext,
+						function:      req.function,
+						requestPerPod: req.requestPerPod,
+						respChan:      respChan,
+					}
+					resp := <-respChan
+					req.respChan <- &createFuncServiceResponse{
+						funcSvc: resp.funcSvc,
+						err:     resp.err,
+					}
+					return
+				}
 				buffer := 10 // add some buffer time for specialization
 				specializationTimeout := req.function.Spec.InvokeStrategy.ExecutionStrategy.SpecializationTimeout
 
@@ -211,6 +275,36 @@ func (executor *Executor) serveCreateFuncServices() {
 		}
 	}
 }
+
+func (executor *Executor) checkSpecializationFinished() {
+	for {
+		req := <-executor.specializeChan
+		// wg := &sync.WaitGroup{}
+		if req.function.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypePoolmgr {
+			// wg.Add(1)
+			go func() {
+				// defer wg.Done()
+				t := req.function.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType
+				e := executor.executorTypes[t]
+				for {
+					fsvc, active, err := e.GetFuncSvcFromPoolCache(req.context, req.function, req.requestPerPod)
+					executor.logger.Debug("inside check specialization finished", zap.Any("fsvc", fsvc), zap.Any("active", active), zap.Any("err", err))
+					if err == nil {
+						e.ReduceFunctionsCount(req.context, req.function)
+						req.respChan <- &createFuncServiceResponse{
+							funcSvc: fsvc,
+							err:     err,
+						}
+						break
+					}
+					continue
+				}
+			}()
+			// wg.Wait()
+		}
+	}
+}
+
 
 func (executor *Executor) createServiceForFunction(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
 	logger := otelUtils.LoggerWithTraceID(ctx, executor.logger)

@@ -36,6 +36,9 @@ const (
 	markAvailable
 	deleteValue
 	setCPUUtilization
+	specializationStart
+	getVirtualCapacity
+	reduceFunctionsCount
 )
 
 type (
@@ -47,7 +50,9 @@ type (
 	}
 
 	funcSvcGroup struct {
-		svcs map[string]*funcSvcInfo
+		specializationInProgress int
+		functions                int
+		svcs                     map[string]*funcSvcInfo
 	}
 
 	// PoolCache implements a simple cache implementation having values mapped by two keys [function][address].
@@ -70,9 +75,11 @@ type (
 	}
 	response struct {
 		error
-		allValues   []*FuncSvc
-		value       *FuncSvc
-		totalActive int
+		allValues         []*FuncSvc
+		value             *FuncSvc
+		totalActive       int
+		totalInSpecialize int
+		totalRequests     int
 	}
 )
 
@@ -134,6 +141,15 @@ func (c *PoolCache) service() {
 				otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Increase active requests with setValue", zap.String("function", req.function), zap.String("address", req.address), zap.Int("activeRequests", c.cache[req.function].svcs[req.address].activeRequests))
 			}
 			c.cache[req.function].svcs[req.address].cpuLimit = req.cpuUsage
+			c.cache[req.function].functions = c.cache[req.function].functions - 1
+			c.cache[req.function].specializationInProgress = c.cache[req.function].specializationInProgress - 1
+		case specializationStart:
+			if _, ok := c.cache[req.function]; !ok {
+				c.cache[req.function] = &funcSvcGroup{
+					svcs: make(map[string]*funcSvcInfo),
+				}
+			}
+			c.cache[req.function].specializationInProgress = c.cache[req.function].specializationInProgress + 1
 		case listAvailableValue:
 			vals := make([]*FuncSvc, 0)
 			for key1, values := range c.cache {
@@ -174,6 +190,20 @@ func (c *PoolCache) service() {
 					}
 				}
 			}
+		case getVirtualCapacity:
+			if _, ok := c.cache[req.function]; ok {
+				resp.totalActive = len(c.cache[req.function].svcs)
+				resp.totalInSpecialize = c.cache[req.function].specializationInProgress
+				c.cache[req.function].functions = c.cache[req.function].functions + 1
+				resp.totalRequests = c.cache[req.function].functions
+			} else {
+				resp.totalActive = 0
+				resp.totalInSpecialize = 0
+				resp.totalRequests = 0
+			}
+			req.responseChannel <- resp
+		case reduceFunctionsCount:
+			c.cache[req.function].functions = c.cache[req.function].functions - 1
 		case deleteValue:
 			delete(c.cache[req.function].svcs, req.address)
 			req.responseChannel <- resp
@@ -199,6 +229,31 @@ func (c *PoolCache) GetSvcValue(ctx context.Context, function string, requestsPe
 	return resp.value, resp.totalActive, resp.error
 }
 
+// ReduceFunctionsCount reduces the function count waiting to be served
+func (c *PoolCache) ReduceFunctionsCount(ctx context.Context, function string) {
+	respChannel := make(chan *response)
+	c.requestChannel <- &request{
+		ctx:             ctx,
+		requestType:     reduceFunctionsCount,
+		function:        function,
+		responseChannel: respChannel,
+	}
+}
+
+// GetVirtualCapacity gets the total active, in specialization and total requests waiting to be served
+func (c *PoolCache) GetVirtualCapacity(ctx context.Context, function string, requestsPerPod int) (int, int, int) {
+	respChannel := make(chan *response)
+	c.requestChannel <- &request{
+		requestType:     getVirtualCapacity,
+		function:        function,
+		responseChannel: respChannel,
+		requestsPerPod:  requestsPerPod,
+	}
+	resp := <-respChannel
+	return resp.totalActive, resp.totalInSpecialize, resp.totalRequests
+}
+
+
 // ListAvailableValue returns a list of the available function services stored in the Cache
 func (c *PoolCache) ListAvailableValue() []*FuncSvc {
 	respChannel := make(chan *response)
@@ -208,6 +263,15 @@ func (c *PoolCache) ListAvailableValue() []*FuncSvc {
 	}
 	resp := <-respChannel
 	return resp.allValues
+}
+
+//SpecializationStart starts the specilization
+func (c *PoolCache) SpecializationStart(ctx context.Context, function string) {
+	c.requestChannel <- &request{
+		ctx:         ctx,
+		requestType: specializationStart,
+		function:    function,
+	}
 }
 
 // SetValue marks the value at key [function][address] as active(begin used)

@@ -234,6 +234,20 @@ func (fsc *FunctionServiceCache) AddFunc(ctx context.Context, fsvc FuncSvc) {
 	fsvc.Atime = now
 }
 
+// SpecializationStart starts the specialization
+func (fsc *FunctionServiceCache) SpecializationStart(ctx context.Context, function *metav1.ObjectMeta) {
+	fsc.connFunctionCache.SpecializationStart(ctx, crd.CacheKey(function))
+}
+
+// GetVirtualCapacity gets the capacity that the pool can serve
+func (fsc *FunctionServiceCache) GetVirtualCapacity(ctx context.Context, function *metav1.ObjectMeta, requestsPerPod int) (int, int, int) {
+	return fsc.connFunctionCache.GetVirtualCapacity(ctx, crd.CacheKey(function), requestsPerPod)
+}
+
+func (fsc *FunctionServiceCache) ReduceFunctionsCount(ctx context.Context, function *metav1.ObjectMeta) {
+	fsc.connFunctionCache.ReduceFunctionsCount(ctx, crd.CacheKey(function))
+}
+
 // SetCPUUtilizaton updates/sets CPUutilization in the pool cache
 func (fsc *FunctionServiceCache) SetCPUUtilizaton(key string, svcHost string, cpuUsage resource.Quantity) {
 	fsc.connFunctionCache.SetCPUUtilization(key, svcHost, cpuUsage)
