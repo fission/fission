@@ -123,8 +123,8 @@ func (executor *Executor) isNewSpecializationNeeded(requestsPerPod int, speciali
 	return true
 }
 
-func (executor *Executor) isReqCapacityMoreThanPermissible(specializing int, active int, concurrency int) bool {
-	return specializing*active < concurrency
+func (executor *Executor) isReqCapacityLessThanPermissible(specializing int, active int, concurrency int) bool {
+	return specializing+active < concurrency
 }
 
 // All non-cached function service requests go through this goroutine
@@ -153,7 +153,7 @@ func (executor *Executor) serveCreateFuncServices() {
 				defer cancel()
 				active, specializing, totalRequests := e.GetVirtualCapacity(virtualCapacityContext, req.function, req.requestPerPod)
 				if executor.isNewSpecializationNeeded(req.requestPerPod, specializing, active, totalRequests) {
-					if executor.isReqCapacityMoreThanPermissible(specializing, active, req.concurrency) {
+					if executor.isReqCapacityLessThanPermissible(specializing, active, req.concurrency) {
 						e.SpecializationStart(virtualCapacityContext, req.function)
 					} else {
 						errMsg := errors.Errorf("max concurrency reached for %v. All %v instance are active", req.function.ObjectMeta.Name, req.concurrency)

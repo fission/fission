@@ -107,6 +107,8 @@ func (c *PoolCache) service() {
 				resp.error = ferror.MakeError(ferror.ErrorNotFound,
 					fmt.Sprintf("function Name '%v' not found", req.function))
 			} else {
+				c.logger.Info("------- >> ", zap.Any("specializationInProgress", funcSvcGroup.specializationInProgress),
+			zap.Any("specialized", len(funcSvcGroup.svcs)))
 				for addr := range funcSvcGroup.svcs {
 					if funcSvcGroup.svcs[addr].activeRequests < req.requestsPerPod &&
 						funcSvcGroup.svcs[addr].currentCPUUsage.Cmp(funcSvcGroup.svcs[addr].cpuLimit) < 1 {
