@@ -40,8 +40,9 @@
 
 --------------
 
-Fission is a fast serverless framework for Kubernetes with a focus on
-developer productivity and high performance.
+Fission is an open-source, Kubernetes-native serverless framework that simplifies the deployment of functions and applications on Kubernetes. With Fission, developers can easily create and deploy serverless functions that can be triggered by a variety of events, such as HTTP requests, messages from a message queue, or scheduled tasks.
+
+Fission provides a simple, easy-to-use interface for developers to create serverless functions in their language of choice, without having to worry about the underlying infrastructure. The framework also offers automatic scaling, so functions can scale up or down based on demand, without any additional configuration.
 
 Fission operates on _just the code_: Docker and Kubernetes are
 abstracted away under normal operation, though you can use both to
