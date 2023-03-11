@@ -205,13 +205,13 @@ func (gp *GenericPool) createPoolDeployment(ctx context.Context, env *fv1.Enviro
 		ObjectMeta: deploymentMeta,
 		Spec:       *deploymentSpec,
 	}
-	depl, err := gp.kubernetesClient.AppsV1().Deployments(gp.namespace).Get(ctx, deployment.Name, metav1.GetOptions{})
+	depl, err := gp.kubernetesClient.AppsV1().Deployments(gp.fnNamespace).Get(ctx, deployment.Name, metav1.GetOptions{})
 	if err == nil {
 		if depl.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL] != gp.instanceID {
 			deployment.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL] = gp.instanceID
 			// Update with the latest deployment spec. Kubernetes will trigger
 			// rolling update if spec is different from the one in the cluster.
-			depl, err = gp.kubernetesClient.AppsV1().Deployments(gp.namespace).Update(ctx, deployment, metav1.UpdateOptions{})
+			depl, err = gp.kubernetesClient.AppsV1().Deployments(gp.fnNamespace).Update(ctx, deployment, metav1.UpdateOptions{})
 		}
 		gp.deployment = depl
 		return err
@@ -220,7 +220,7 @@ func (gp *GenericPool) createPoolDeployment(ctx context.Context, env *fv1.Enviro
 		return err
 	}
 
-	depl, err = gp.kubernetesClient.AppsV1().Deployments(gp.namespace).Create(ctx, deployment, metav1.CreateOptions{})
+	depl, err = gp.kubernetesClient.AppsV1().Deployments(gp.fnNamespace).Create(ctx, deployment, metav1.CreateOptions{})
 	if err != nil {
 		gp.logger.Error("error creating deployment in kubernetes", zap.Error(err), zap.String("deployment", deployment.Name))
 		return err
@@ -256,7 +256,7 @@ func (gp *GenericPool) updatePoolDeployment(ctx context.Context, env *fv1.Enviro
 	}
 	newDeployment.Spec.Replicas = &poolsize
 
-	depl, err := gp.kubernetesClient.AppsV1().Deployments(gp.namespace).Update(ctx, newDeployment, metav1.UpdateOptions{})
+	depl, err := gp.kubernetesClient.AppsV1().Deployments(gp.fnNamespace).Update(ctx, newDeployment, metav1.UpdateOptions{})
 	if err != nil {
 		logger.Error("error updating deployment in kubernetes", zap.Error(err), zap.String("deployment", depl.Name))
 		return err
