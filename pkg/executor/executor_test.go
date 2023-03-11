@@ -101,7 +101,6 @@ func createSvc(ctx context.Context, kubeClient kubernetes.Interface, ns string, 
 func TestExecutor(t *testing.T) {
 	// run in a random namespace so we can have concurrent tests
 	// on a given cluster
-	rand.Seed(time.Now().UTC().UnixNano())
 	testID := rand.Intn(999)
 	fissionNs := fmt.Sprintf("test-%v", testID)
 	functionNs := fmt.Sprintf("test-function-%v", testID)

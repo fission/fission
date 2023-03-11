@@ -111,11 +111,6 @@ type (
 	}
 )
 
-func init() {
-	// just seeding the random number for getting the canary function
-	rand.Seed(time.Now().UnixNano())
-}
-
 func (w *fakeCloseReadCloser) Close() error {
 	return nil
 }
