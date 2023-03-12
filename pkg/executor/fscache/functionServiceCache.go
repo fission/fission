@@ -244,8 +244,8 @@ func (fsc *FunctionServiceCache) MarkAvailable(key string, svcHost string) {
 	fsc.connFunctionCache.MarkAvailable(key, svcHost)
 }
 
-func (fsc *FunctionServiceCache) SpecializationStart(key string) {
-	fsc.connFunctionCache.SpecializationStart(key)
+func (fsc *FunctionServiceCache) SpecializationStart(key string, concurrency int) error {
+	return fsc.connFunctionCache.SpecializationStart(key, concurrency)
 }
 
 func (fsc *FunctionServiceCache) SpecializationEnd(key string) {

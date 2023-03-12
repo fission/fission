@@ -190,7 +190,14 @@ func (gpm *GenericPoolManager) GetFuncSvc(ctx context.Context, fn *fv1.Function)
 	otelUtils.SpanTrackEvent(ctx, "GetFuncSvc", otelUtils.GetAttributesForFunction(fn)...)
 	logger := otelUtils.LoggerWithTraceID(ctx, gpm.logger)
 	key := crd.CacheKey(&fn.ObjectMeta)
-	gpm.fsCache.SpecializationStart(key)
+	concurrency := fn.Spec.Concurrency
+	if concurrency == 0 {
+		concurrency = 500
+	}
+	err := gpm.fsCache.SpecializationStart(key, concurrency)
+	if err != nil {
+		return nil, err
+	}
 	defer gpm.fsCache.SpecializationEnd(key)
 
 	// from Func -> get Env

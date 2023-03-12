@@ -137,7 +137,7 @@ func (c *PoolCache) service() {
 				continue
 			}
 
-			if len(funcSvcGroup.svcs) >= req.concurrency {
+			if req.concurrency > 0 && len(funcSvcGroup.svcs) >= req.concurrency {
 				// TODO: Consider specialization in progress as well
 				resp.error = ferror.MakeError(ferror.ErrorTooManyRequests, fmt.Sprintf("function '%s' concurrency '%d' limit reached", req.function, req.concurrency))
 			} else {
@@ -170,7 +170,13 @@ func (c *PoolCache) service() {
 					svcs: make(map[string]*funcSvcInfo),
 				}
 			}
+			if req.concurrency > 0 && (len(c.cache[req.function].svcs)+c.cache[req.function].specializationInProgress) >= req.concurrency {
+				resp.error = ferror.MakeError(ferror.ErrorTooManyRequests, fmt.Sprintf("function '%s' concurrency '%d' limit reached", req.function, req.concurrency))
+				req.responseChannel <- resp
+				continue
+			}
 			c.cache[req.function].specializationInProgress++
+			req.responseChannel <- resp
 		case specializationEnd:
 			if _, ok := c.cache[req.function]; !ok {
 				c.cache[req.function] = &funcSvcGroup{
@@ -287,13 +293,16 @@ func (c *PoolCache) SetCPUUtilization(function, address string, cpuUsage resourc
 	}
 }
 
-func (c *PoolCache) SpecializationStart(function string) {
+func (c *PoolCache) SpecializationStart(function string, concurrency int) error {
 	respChannel := make(chan *response)
 	c.requestChannel <- &request{
 		requestType:     specializationStart,
 		function:        function,
+		concurrency:     concurrency,
 		responseChannel: respChannel,
 	}
+	resp := <-respChannel
+	return resp.error
 }
 
 func (c *PoolCache) SpecializationEnd(function string) {
