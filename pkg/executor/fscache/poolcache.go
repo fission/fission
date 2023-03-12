@@ -36,6 +36,8 @@ const (
 	markAvailable
 	deleteValue
 	setCPUUtilization
+	specializationStart
+	specializationEnd
 )
 
 type (
@@ -47,7 +49,9 @@ type (
 	}
 
 	funcSvcGroup struct {
-		svcs map[string]*funcSvcInfo
+		specializationInProgress int
+		svcWaiting               int
+		svcs                     map[string]*funcSvcInfo
 	}
 
 	// PoolCache implements a simple cache implementation having values mapped by two keys [function][address].
@@ -65,14 +69,17 @@ type (
 		address         string
 		value           *FuncSvc
 		requestsPerPod  int
+		concurrency     int
 		cpuUsage        resource.Quantity
 		responseChannel chan *response
 	}
 	response struct {
 		error
-		allValues   []*FuncSvc
-		value       *FuncSvc
-		totalActive int
+		allValues []*FuncSvc
+		value     *FuncSvc
+		// totalActive              int
+		specializationInProgress int
+		svcWaiting               int
 	}
 )
 
@@ -95,28 +102,39 @@ func (c *PoolCache) service() {
 		switch req.requestType {
 		case getValue:
 			funcSvcGroup, ok := c.cache[req.function]
-			found := false
 			if !ok {
 				resp.error = ferror.MakeError(ferror.ErrorNotFound,
 					fmt.Sprintf("function Name '%v' not found", req.function))
-			} else {
-				for addr := range funcSvcGroup.svcs {
-					if funcSvcGroup.svcs[addr].activeRequests < req.requestsPerPod &&
-						funcSvcGroup.svcs[addr].currentCPUUsage.Cmp(funcSvcGroup.svcs[addr].cpuLimit) < 1 {
-						// mark active
-						funcSvcGroup.svcs[addr].activeRequests++
-						if c.logger.Core().Enabled(zap.DebugLevel) {
-							otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Increase active requests with getValue", zap.String("function", req.function), zap.String("address", addr), zap.Int("activeRequests", funcSvcGroup.svcs[addr].activeRequests))
-						}
-						resp.value = funcSvcGroup.svcs[addr].val
-						found = true
-						break
+				req.responseChannel <- resp
+				continue
+			}
+
+			found := false
+			for addr := range funcSvcGroup.svcs {
+				if funcSvcGroup.svcs[addr].activeRequests < req.requestsPerPod &&
+					funcSvcGroup.svcs[addr].currentCPUUsage.Cmp(funcSvcGroup.svcs[addr].cpuLimit) < 1 {
+					// mark active
+					funcSvcGroup.svcs[addr].activeRequests++
+					if c.logger.Core().Enabled(zap.DebugLevel) {
+						otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Increase active requests with getValue", zap.String("function", req.function), zap.String("address", addr), zap.Int("activeRequests", funcSvcGroup.svcs[addr].activeRequests))
 					}
+					resp.value = funcSvcGroup.svcs[addr].val
+					found = true
+					break
 				}
-				if !found {
-					resp.error = ferror.MakeError(ferror.ErrorNotFound, fmt.Sprintf("function '%v' all functions are busy", req.function))
-				}
-				resp.totalActive = len(funcSvcGroup.svcs)
+			}
+			resp.specializationInProgress = funcSvcGroup.specializationInProgress
+			resp.svcWaiting = funcSvcGroup.svcWaiting
+			if found {
+				req.responseChannel <- resp
+				continue
+			}
+
+			if req.concurrency >= len(funcSvcGroup.svcs) {
+				resp.error = ferror.MakeError(ferror.ErrorTooManyRequests, fmt.Sprintf("function '%s' concurrency '%d' limit reached", req.function, req.concurrency))
+			} else {
+				funcSvcGroup.svcWaiting++
+				resp.error = ferror.MakeError(ferror.ErrorNotFound, fmt.Sprintf("function '%s' all functions are busy", req.function))
 			}
 			req.responseChannel <- resp
 		case setValue:
@@ -129,11 +147,28 @@ func (c *PoolCache) service() {
 				c.cache[req.function].svcs[req.address] = &funcSvcInfo{}
 			}
 			c.cache[req.function].svcs[req.address].val = req.value
+			c.cache[req.function].svcWaiting--
 			c.cache[req.function].svcs[req.address].activeRequests++
 			if c.logger.Core().Enabled(zap.DebugLevel) {
 				otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Increase active requests with setValue", zap.String("function", req.function), zap.String("address", req.address), zap.Int("activeRequests", c.cache[req.function].svcs[req.address].activeRequests))
 			}
 			c.cache[req.function].svcs[req.address].cpuLimit = req.cpuUsage
+		case specializationStart:
+			if _, ok := c.cache[req.function]; !ok {
+				c.cache[req.function] = &funcSvcGroup{
+					svcs: make(map[string]*funcSvcInfo),
+				}
+			}
+			c.cache[req.function].specializationInProgress++
+		case specializationEnd:
+			if _, ok := c.cache[req.function]; !ok {
+				c.cache[req.function] = &funcSvcGroup{
+					svcs: make(map[string]*funcSvcInfo),
+				}
+			}
+			if c.cache[req.function].specializationInProgress > 0 {
+				c.cache[req.function].specializationInProgress--
+			}
 		case listAvailableValue:
 			vals := make([]*FuncSvc, 0)
 			for key1, values := range c.cache {
@@ -186,7 +221,7 @@ func (c *PoolCache) service() {
 }
 
 // GetValue returns a function service with status in Active else return error
-func (c *PoolCache) GetSvcValue(ctx context.Context, function string, requestsPerPod int) (*FuncSvc, int, error) {
+func (c *PoolCache) GetSvcValue(ctx context.Context, function string, requestsPerPod int, concurrency int) (*FuncSvc, error) {
 	respChannel := make(chan *response)
 	c.requestChannel <- &request{
 		ctx:             ctx,
@@ -196,7 +231,7 @@ func (c *PoolCache) GetSvcValue(ctx context.Context, function string, requestsPe
 		responseChannel: respChannel,
 	}
 	resp := <-respChannel
-	return resp.value, resp.totalActive, resp.error
+	return resp.value, resp.error
 }
 
 // ListAvailableValue returns a list of the available function services stored in the Cache
@@ -232,6 +267,24 @@ func (c *PoolCache) SetCPUUtilization(function, address string, cpuUsage resourc
 		address:         address,
 		cpuUsage:        cpuUsage,
 		responseChannel: make(chan *response),
+	}
+}
+
+func (c *PoolCache) SpecializationStart(function string) {
+	respChannel := make(chan *response)
+	c.requestChannel <- &request{
+		requestType:     specializationStart,
+		function:        function,
+		responseChannel: respChannel,
+	}
+}
+
+func (c *PoolCache) SpecializationEnd(function string) {
+	respChannel := make(chan *response)
+	c.requestChannel <- &request{
+		requestType:     specializationEnd,
+		function:        function,
+		responseChannel: respChannel,
 	}
 }
 

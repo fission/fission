@@ -71,11 +71,10 @@ func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *htt
 		if requestsPerpod == 0 {
 			requestsPerpod = 1
 		}
-		fsvc, active, err := et.GetFuncSvcFromPoolCache(ctx, fn, requestsPerpod)
+		fsvc, err := et.GetFuncSvcFromPoolCache(ctx, fn, requestsPerpod, concurrency)
 		// check if its a cache hit (check if there is already specialized function pod that can serve another request)
 		if err == nil {
 			// if a pod is already serving request then it already exists else validated
-			logger.Debug("from cache", zap.Int("active", active))
 			if et.IsValid(ctx, fsvc) {
 				// Cached, return svc address
 				logger.Debug("served from cache", zap.String("name", fsvc.Name), zap.String("address", fsvc.Address))
@@ -87,14 +86,18 @@ func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *htt
 				zap.String("function_namespace", fn.ObjectMeta.Namespace),
 				zap.String("address", fsvc.Address))
 			et.DeleteFuncSvcFromCache(ctx, fsvc)
-			active--
-		}
+		} else {
+			code, msg := ferror.GetHTTPError(err)
+			if code == http.StatusNotFound {
+				logger.Debug("cache miss", zap.String("function_name", fn.ObjectMeta.Name))
+			} else {
+				logger.Error("error getting service for function",
+					zap.Error(err),
+					zap.String("function_name", fn.ObjectMeta.Name))
+				http.Error(w, msg, code)
+				return
+			}
 
-		if active >= concurrency {
-			errMsg := fmt.Sprintf("max concurrency reached for %v. All %v instance are active", fn.ObjectMeta.Name, concurrency)
-			logger.Error("error occurred", zap.String("error", errMsg))
-			http.Error(w, html.EscapeString(errMsg), http.StatusTooManyRequests)
-			return
 		}
 	} else if t == fv1.ExecutorTypeNewdeploy || t == fv1.ExecutorTypeContainer {
 		fsvc, err := et.GetFuncSvcFromCache(ctx, fn)

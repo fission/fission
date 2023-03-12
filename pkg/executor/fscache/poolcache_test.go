@@ -43,15 +43,16 @@ func TestPoolCache(t *testing.T) {
 
 	c.MarkAvailable("func", "ip")
 
-	_, active, err := c.GetSvcValue(ctx, "func", 5)
-	if active != 1 {
-		log.Panicln("Expected 1 active, found", active)
-	}
+	concurrency := 10
+	_, err := c.GetSvcValue(ctx, "func", 5, concurrency)
+	// if active != 1 {
+	// 	log.Panicln("Expected 1 active, found", active)
+	// }
 	checkErr(err)
 
 	checkErr(c.DeleteValue(ctx, "func", "ip"))
 
-	_, _, err = c.GetSvcValue(ctx, "func", 5)
+	_, err = c.GetSvcValue(ctx, "func", 5, concurrency)
 	if err == nil {
 		log.Panicf("found deleted element")
 	}
@@ -61,12 +62,12 @@ func TestPoolCache(t *testing.T) {
 	}, resource.MustParse("3m"))
 	c.SetCPUUtilization("cpulimit", "100", resource.MustParse("4m"))
 
-	_, _, err = c.GetSvcValue(ctx, "cpulimit", 5)
+	_, err = c.GetSvcValue(ctx, "cpulimit", 5, concurrency)
 
 	if err == nil {
 		log.Panicf("received pod address with higher CPU usage than limit")
 	}
 	c.SetCPUUtilization("cpulimit", "100", resource.MustParse("2m"))
-	_, _, err = c.GetSvcValue(ctx, "cpulimit", 5)
+	_, err = c.GetSvcValue(ctx, "cpulimit", 5, concurrency)
 	checkErr(err)
 }

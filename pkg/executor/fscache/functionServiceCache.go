@@ -188,20 +188,20 @@ func (fsc *FunctionServiceCache) GetByFunction(m *metav1.ObjectMeta) (*FuncSvc, 
 }
 
 // GetFuncSvc gets a function service from pool cache using function key and returns number of active instances of function pod
-func (fsc *FunctionServiceCache) GetFuncSvc(ctx context.Context, m *metav1.ObjectMeta, requestsPerPod int) (*FuncSvc, int, error) {
+func (fsc *FunctionServiceCache) GetFuncSvc(ctx context.Context, m *metav1.ObjectMeta, requestsPerPod int, concurrency int) (*FuncSvc, error) {
 	key := crd.CacheKey(m)
 
-	fsvc, active, err := fsc.connFunctionCache.GetSvcValue(ctx, key, requestsPerPod)
+	fsvc, err := fsc.connFunctionCache.GetSvcValue(ctx, key, requestsPerPod, concurrency)
 	if err != nil {
 		fsc.logger.Info("Not found in Cache")
-		return nil, active, err
+		return nil, err
 	}
 
 	// update atime
 	fsvc.Atime = time.Now()
 
 	fsvcCopy := *fsvc
-	return &fsvcCopy, active, nil
+	return &fsvcCopy, nil
 }
 
 // GetByFunctionUID gets a function service from cache using function UUID.
@@ -242,6 +242,14 @@ func (fsc *FunctionServiceCache) SetCPUUtilizaton(key string, svcHost string, cp
 // MarkAvailable marks the value at key [function][address] as available.
 func (fsc *FunctionServiceCache) MarkAvailable(key string, svcHost string) {
 	fsc.connFunctionCache.MarkAvailable(key, svcHost)
+}
+
+func (fsc *FunctionServiceCache) SpecializationStart(key string) {
+	fsc.connFunctionCache.SpecializationStart(key)
+}
+
+func (fsc *FunctionServiceCache) SpecializationEnd(key string) {
+	fsc.connFunctionCache.SpecializationEnd(key)
 }
 
 // Add adds a function service to cache if it does not exist already.

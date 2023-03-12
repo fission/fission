@@ -200,9 +200,9 @@ func (deploy *NewDeploy) UnTapService(ctx context.Context, key string, svcHost s
 }
 
 // GetFuncSvcFromPoolCache has not been implemented for NewDeployment
-func (deploy *NewDeploy) GetFuncSvcFromPoolCache(ctx context.Context, fn *fv1.Function, requestsPerPod int) (*fscache.FuncSvc, int, error) {
+func (deploy *NewDeploy) GetFuncSvcFromPoolCache(ctx context.Context, fn *fv1.Function, requestsPerPod int, concurrency int) (*fscache.FuncSvc, error) {
 	// Not Implemented for NewDeployment. Will be used when support of concurrent specialization of same function is added.
-	return nil, 0, nil
+	return nil, nil
 }
 
 // TapService makes a TouchByAddress request to the cache.
