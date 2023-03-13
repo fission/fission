@@ -52,6 +52,7 @@ type (
 		specializationInProgress int
 		svcWaiting               int
 		svcs                     map[string]*funcSvcInfo
+		// queue                    []*svcWait
 	}
 
 	// PoolCache implements a simple cache implementation having values mapped by two keys [function][address].
@@ -81,8 +82,21 @@ type (
 		specializationInProgress int
 		svcWaiting               int
 		capacity                 int
+		svcWaitValue             *svcWait
+	}
+
+	svcWait struct {
+		svcChannel chan *FuncSvc
+		ctx        context.Context
 	}
 )
+
+func NewFuncSvcGroup() *funcSvcGroup {
+	return &funcSvcGroup{
+		svcs: make(map[string]*funcSvcInfo),
+		// queue: make([]*svcWait, 0),
+	}
+}
 
 // NewPoolCache create a Cache object
 
@@ -137,20 +151,26 @@ func (c *PoolCache) service() {
 				continue
 			}
 
-			if req.concurrency > 0 && len(funcSvcGroup.svcs) >= req.concurrency {
+			if req.concurrency > 0 && len(funcSvcGroup.svcs)+funcSvcGroup.specializationInProgress >= req.concurrency {
 				// TODO: Consider specialization in progress as well
 				resp.error = ferror.MakeError(ferror.ErrorTooManyRequests, fmt.Sprintf("function '%s' concurrency '%d' limit reached", req.function, req.concurrency))
 			} else {
 				funcSvcGroup.svcWaiting++
 				resp.capacity = capacity - 1
 				resp.error = ferror.MakeError(ferror.ErrorNotFound, fmt.Sprintf("function '%s' all functions are busy", req.function))
+				if capacity > 0 {
+					svcWait := &svcWait{
+						svcChannel: make(chan *FuncSvc),
+						ctx:        req.ctx,
+					}
+					resp.svcWaitValue = svcWait
+					// funcSvcGroup.queue = append(funcSvcGroup.queue, svcWait)
+				}
 			}
 			req.responseChannel <- resp
 		case setValue:
 			if _, ok := c.cache[req.function]; !ok {
-				c.cache[req.function] = &funcSvcGroup{
-					svcs: make(map[string]*funcSvcInfo),
-				}
+				c.cache[req.function] = NewFuncSvcGroup()
 			}
 			if _, ok := c.cache[req.function].svcs[req.address]; !ok {
 				c.cache[req.function].svcs[req.address] = &funcSvcInfo{}
@@ -166,9 +186,7 @@ func (c *PoolCache) service() {
 			c.cache[req.function].svcs[req.address].cpuLimit = req.cpuUsage
 		case specializationStart:
 			if _, ok := c.cache[req.function]; !ok {
-				c.cache[req.function] = &funcSvcGroup{
-					svcs: make(map[string]*funcSvcInfo),
-				}
+				c.cache[req.function] = NewFuncSvcGroup()
 			}
 			if req.concurrency > 0 && (len(c.cache[req.function].svcs)+c.cache[req.function].specializationInProgress) >= req.concurrency {
 				resp.error = ferror.MakeError(ferror.ErrorTooManyRequests, fmt.Sprintf("function '%s' concurrency '%d' limit reached", req.function, req.concurrency))
@@ -179,9 +197,7 @@ func (c *PoolCache) service() {
 			req.responseChannel <- resp
 		case specializationEnd:
 			if _, ok := c.cache[req.function]; !ok {
-				c.cache[req.function] = &funcSvcGroup{
-					svcs: make(map[string]*funcSvcInfo),
-				}
+				c.cache[req.function] = NewFuncSvcGroup()
 			}
 			if c.cache[req.function].specializationInProgress > 0 {
 				c.cache[req.function].specializationInProgress--
@@ -206,9 +222,7 @@ func (c *PoolCache) service() {
 			req.responseChannel <- resp
 		case setCPUUtilization:
 			if _, ok := c.cache[req.function]; !ok {
-				c.cache[req.function] = &funcSvcGroup{
-					svcs: make(map[string]*funcSvcInfo),
-				}
+				c.cache[req.function] = NewFuncSvcGroup()
 			}
 			if _, ok := c.cache[req.function].svcs[req.address]; ok {
 				c.cache[req.function].svcs[req.address].currentCPUUsage = req.cpuUsage
@@ -254,6 +268,14 @@ func (c *PoolCache) GetSvcValue(ctx context.Context, function string, requestsPe
 		zap.Int("specializationInProgress", resp.specializationInProgress),
 		zap.Int("capacity", resp.capacity),
 	)
+	if resp.svcWaitValue != nil {
+		select {
+		case <-ctx.Done():
+			return resp.value, ctx.Err()
+		case funcSvc := <-resp.svcWaitValue.svcChannel:
+			return funcSvc, nil
+		}
+	}
 	return resp.value, resp.error
 }
 
