@@ -58,17 +58,8 @@ type (
 		fissionClient versioned.Interface
 
 		requestChan    chan *createFuncServiceRequest
-		specializeChan chan *waitSpecializationRequest
 		fsCreateWg     sync.Map
 	}
-
-	waitSpecializationRequest struct {
-		context       context.Context
-		function      *fv1.Function
-		requestPerPod int
-		respChan      chan *createFuncServiceResponse
-	}
-
 	createFuncServiceRequest struct {
 		context       context.Context
 		function      *fv1.Function
@@ -94,7 +85,6 @@ func MakeExecutor(ctx context.Context, logger *zap.Logger, cms *cms.ConfigSecret
 		executorTypes: types,
 
 		requestChan:    make(chan *createFuncServiceRequest),
-		specializeChan: make(chan *waitSpecializationRequest),
 	}
 
 	// Run all informers
@@ -111,19 +101,6 @@ func MakeExecutor(ctx context.Context, logger *zap.Logger, cms *cms.ConfigSecret
 	go executor.serveCreateFuncServices()
 
 	return executor, nil
-}
-
-func (executor *Executor) isNewSpecializationNeeded(requestsPerPod int, specializing int, active int, totalRequests int) bool {
-	if totalRequests <= requestsPerPod && specializing > 0 {
-		return false
-	} else if specializing*requestsPerPod > totalRequests {
-		return false
-	}
-	return true
-}
-
-func (executor *Executor) isReqCapacityLessThanPermissible(specializing int, active int, concurrency int) bool {
-	return specializing+active < concurrency
 }
 
 // All non-cached function service requests go through this goroutine
