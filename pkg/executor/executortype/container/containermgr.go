@@ -194,18 +194,10 @@ func (caaf *Container) DeleteFuncSvcFromCache(ctx context.Context, fsvc *fscache
 }
 
 // GetFuncSvcFromPoolCache has not been implemented for Container Functions
-func (caaf *Container) GetFuncSvcFromPoolCache(ctx context.Context, fn *fv1.Function, requestsPerPod int) (*fscache.FuncSvc, int, error) {
+func (caaf *Container) GetFuncSvcFromPoolCache(ctx context.Context, fn *fv1.Function, requestsPerPod int, concurrency int) (*fscache.FuncSvc, error) {
 	// Not Implemented for NewDeployment. Will be used when support of concurrent specialization of same function is added.
-	return nil, 0, nil
+	return nil, nil
 }
-
-// GetVirtualCapacity has not been implemented for NewDeployment
-func (caaf *Container) GetVirtualCapacity(ctx context.Context, fn *fv1.Function, requestsPerPod int) (int, int, int) {
-	return 0, 0, 0
-}
-
-// ReduceFunctionsCount has not been implemented for NewDeployment
-func (caaf *Container) ReduceFunctionsCount(ctx context.Context, fn *fv1.Function) {}
 
 // SpecializationStart has not been implemented for NewDeployment
 func (caaf *Container) SpecializationStart(context.Context, *fv1.Function) {}

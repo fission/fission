@@ -188,20 +188,20 @@ func (fsc *FunctionServiceCache) GetByFunction(m *metav1.ObjectMeta) (*FuncSvc, 
 }
 
 // GetFuncSvc gets a function service from pool cache using function key and returns number of active instances of function pod
-func (fsc *FunctionServiceCache) GetFuncSvc(ctx context.Context, m *metav1.ObjectMeta, requestsPerPod int) (*FuncSvc, int, error) {
+func (fsc *FunctionServiceCache) GetFuncSvc(ctx context.Context, m *metav1.ObjectMeta, requestsPerPod int, concurrency int) (*FuncSvc, error) {
 	key := crd.CacheKey(m)
 
-	fsvc, active, err := fsc.connFunctionCache.GetSvcValue(ctx, key, requestsPerPod)
+	fsvc, err := fsc.connFunctionCache.GetSvcValue(ctx, key, requestsPerPod, concurrency)
 	if err != nil {
 		fsc.logger.Info("Not found in Cache")
-		return nil, active, err
+		return nil, err
 	}
 
 	// update atime
 	fsvc.Atime = time.Now()
 
 	fsvcCopy := *fsvc
-	return &fsvcCopy, active, nil
+	return &fsvcCopy, nil
 }
 
 // GetByFunctionUID gets a function service from cache using function UUID.
@@ -235,17 +235,12 @@ func (fsc *FunctionServiceCache) AddFunc(ctx context.Context, fsvc FuncSvc) {
 }
 
 // SpecializationStart starts the specialization
-func (fsc *FunctionServiceCache) SpecializationStart(ctx context.Context, function *metav1.ObjectMeta) {
-	fsc.connFunctionCache.SpecializationStart(ctx, crd.CacheKey(function))
+func (fsc *FunctionServiceCache) SpecializationStart(key string, concurrency int) error {
+	return fsc.connFunctionCache.SpecializationStart(key, concurrency)
 }
 
-// GetVirtualCapacity gets the capacity that the pool can serve
-func (fsc *FunctionServiceCache) GetVirtualCapacity(ctx context.Context, function *metav1.ObjectMeta, requestsPerPod int) (int, int, int) {
-	return fsc.connFunctionCache.GetVirtualCapacity(ctx, crd.CacheKey(function), requestsPerPod)
-}
-
-func (fsc *FunctionServiceCache) ReduceFunctionsCount(ctx context.Context, function *metav1.ObjectMeta) {
-	fsc.connFunctionCache.ReduceFunctionsCount(ctx, crd.CacheKey(function))
+func (fsc *FunctionServiceCache) SpecializationEnd(key string) {
+	fsc.connFunctionCache.SpecializationEnd(key)
 }
 
 // SetCPUUtilizaton updates/sets CPUutilization in the pool cache

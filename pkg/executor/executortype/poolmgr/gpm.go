@@ -189,6 +189,16 @@ func (gpm *GenericPoolManager) GetTypeName(ctx context.Context) fv1.ExecutorType
 func (gpm *GenericPoolManager) GetFuncSvc(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
 	otelUtils.SpanTrackEvent(ctx, "GetFuncSvc", otelUtils.GetAttributesForFunction(fn)...)
 	logger := otelUtils.LoggerWithTraceID(ctx, gpm.logger)
+	key := crd.CacheKey(&fn.ObjectMeta)
+	concurrency := fn.Spec.Concurrency
+	if concurrency == 0 {
+		concurrency = 500
+	}
+	err := gpm.fsCache.SpecializationStart(key, concurrency)
+	if err != nil {
+		return nil, err
+	}
+	defer gpm.fsCache.SpecializationEnd(key)
 	// from Func -> get Env
 	logger.Debug("getting environment for function", zap.String("function", fn.ObjectMeta.Name))
 	env, err := gpm.getFunctionEnv(ctx, fn)
@@ -215,24 +225,9 @@ func (gpm *GenericPoolManager) GetFuncSvcFromCache(ctx context.Context, fn *fv1.
 	return nil, nil
 }
 
-func (gpm *GenericPoolManager) GetFuncSvcFromPoolCache(ctx context.Context, fn *fv1.Function, requestsPerPod int) (*fscache.FuncSvc, int, error) {
+func (gpm *GenericPoolManager) GetFuncSvcFromPoolCache(ctx context.Context, fn *fv1.Function, requestsPerPod int, concurrency int) (*fscache.FuncSvc, error) {
 	otelUtils.SpanTrackEvent(ctx, "GetFuncSvcFromPoolCache", otelUtils.GetAttributesForFunction(fn)...)
-	return gpm.fsCache.GetFuncSvc(ctx, &fn.ObjectMeta, requestsPerPod)
-}
-
-func (gpm *GenericPoolManager) GetVirtualCapacity(ctx context.Context, fn *fv1.Function, requestsPerPod int) (int, int, int) {
-	otelUtils.SpanTrackEvent(ctx, "GetVirtualCapacity", otelUtils.GetAttributesForFunction(fn)...)
-	return gpm.fsCache.GetVirtualCapacity(ctx, &fn.ObjectMeta, requestsPerPod)
-}
-
-func (gpm *GenericPoolManager) ReduceFunctionsCount(ctx context.Context, fn *fv1.Function) {
-	otelUtils.SpanTrackEvent(ctx, "GetVirtualCapacity", otelUtils.GetAttributesForFunction(fn)...)
-	gpm.fsCache.ReduceFunctionsCount(ctx, &fn.ObjectMeta)
-}
-
-func (gpm *GenericPoolManager) SpecializationStart(ctx context.Context, fn *fv1.Function) {
-	otelUtils.SpanTrackEvent(ctx, "GetVirtualCapacity", otelUtils.GetAttributesForFunction(fn)...)
-	gpm.fsCache.SpecializationStart(ctx, &fn.ObjectMeta)
+	return gpm.fsCache.GetFuncSvc(ctx, &fn.ObjectMeta, requestsPerPod, concurrency)
 }
 
 func (gpm *GenericPoolManager) DeleteFuncSvcFromCache(ctx context.Context, fsvc *fscache.FuncSvc) {
