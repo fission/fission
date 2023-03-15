@@ -52,6 +52,7 @@ type (
 		specializationInProgress int
 		svcWaiting               int
 		svcs                     map[string]*funcSvcInfo
+		queue                    []*svcWait
 	}
 
 	// PoolCache implements a simple cache implementation having values mapped by two keys [function][address].
@@ -81,6 +82,7 @@ type (
 		svcWaiting               int
 		capacity                 int
 		svcWaitValue             *svcWait
+		queue                    []*svcWait
 	}
 	svcWait struct {
 		svcChannel chan *FuncSvc
@@ -102,8 +104,8 @@ func NewPoolCache(logger *zap.Logger) *PoolCache {
 
 func NewFuncSvcGroup() *funcSvcGroup {
 	return &funcSvcGroup{
-		svcs: make(map[string]*funcSvcInfo),
-		// queue: make([]*svcWait, 0),
+		svcs:  make(map[string]*funcSvcInfo),
+		queue: make([]*svcWait, 0),
 	}
 }
 
@@ -148,7 +150,6 @@ func (c *PoolCache) service() {
 			}
 
 			if req.concurrency > 0 && len(funcSvcGroup.svcs)+funcSvcGroup.specializationInProgress >= req.concurrency {
-				// TODO: Consider specialization in progress as well
 				resp.error = ferror.MakeError(ferror.ErrorTooManyRequests, fmt.Sprintf("function '%s' concurrency '%d' limit reached", req.function, req.concurrency))
 			} else {
 				funcSvcGroup.svcWaiting++
@@ -160,7 +161,10 @@ func (c *PoolCache) service() {
 						ctx:        req.ctx,
 					}
 					resp.svcWaitValue = svcWait
-					// funcSvcGroup.queue = append(funcSvcGroup.queue, svcWait)
+					funcSvcGroup.queue = append(funcSvcGroup.queue, svcWait)
+					c.logger.Info("inside get svc value case", zap.Any("funcSvcGroup.queue", funcSvcGroup.queue),
+						zap.Any("svcWait", svcWait.ctx))
+					resp.queue = funcSvcGroup.queue
 				}
 			}
 			req.responseChannel <- resp
@@ -263,7 +267,9 @@ func (c *PoolCache) GetSvcValue(ctx context.Context, function string, requestsPe
 		zap.Int("svcWaiting", resp.svcWaiting),
 		zap.Int("specializationInProgress", resp.specializationInProgress),
 		zap.Int("capacity", resp.capacity),
+		zap.Any("queue", resp.queue),
 	)
+
 	if resp.svcWaitValue != nil {
 		select {
 		case <-ctx.Done():

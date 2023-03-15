@@ -57,8 +57,8 @@ type (
 
 		fissionClient versioned.Interface
 
-		requestChan    chan *createFuncServiceRequest
-		fsCreateWg     sync.Map
+		requestChan chan *createFuncServiceRequest
+		fsCreateWg  sync.Map
 	}
 	createFuncServiceRequest struct {
 		context       context.Context
@@ -84,7 +84,7 @@ func MakeExecutor(ctx context.Context, logger *zap.Logger, cms *cms.ConfigSecret
 		fissionClient: fissionClient,
 		executorTypes: types,
 
-		requestChan:    make(chan *createFuncServiceRequest),
+		requestChan: make(chan *createFuncServiceRequest),
 	}
 
 	// Run all informers
