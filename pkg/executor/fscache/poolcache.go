@@ -52,7 +52,7 @@ type (
 		specializationInProgress int
 		svcWaiting               int
 		svcs                     map[string]*funcSvcInfo
-		queue                    []*svcWait
+		queue                    *Queue
 	}
 
 	// PoolCache implements a simple cache implementation having values mapped by two keys [function][address].
@@ -104,7 +104,7 @@ func NewPoolCache(logger *zap.Logger) *PoolCache {
 func NewFuncSvcGroup() *funcSvcGroup {
 	return &funcSvcGroup{
 		svcs:  make(map[string]*funcSvcInfo),
-		queue: make([]*svcWait, 0),
+		queue: NewQueue(),
 	}
 }
 
@@ -160,10 +160,7 @@ func (c *PoolCache) service() {
 						ctx:        req.ctx,
 					}
 					resp.svcWaitValue = svcWait
-					// funcSvcGroup.queue = append(funcSvcGroup.queue, svcWait)
-					c.logger.Info("inside get svc value case", zap.Any("funcSvcGroup.queue", funcSvcGroup.queue),
-						zap.Any("svcWait", svcWait.ctx))
-					// resp.queue = funcSvcGroup.queue
+					funcSvcGroup.queue.Push(svcWait)
 				}
 			}
 			req.responseChannel <- resp
@@ -176,8 +173,9 @@ func (c *PoolCache) service() {
 			}
 			c.cache[req.function].svcs[req.address].val = req.value
 			if c.cache[req.function].svcWaiting > 0 {
+				c.logger.Info("total svc waiting", zap.Any("svcWaiting", c.cache[req.function].svcWaiting))
 				c.cache[req.function].svcWaiting--
-
+				c.logger.Info("getting length of queue in cache", zap.Int("queue length", c.cache[req.function].queue.Len()))
 			}
 			c.cache[req.function].svcs[req.address].activeRequests++
 			if c.logger.Core().Enabled(zap.DebugLevel) {

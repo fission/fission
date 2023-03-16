@@ -72,7 +72,7 @@ func TestQueuePopWithConcurrentRequest(t *testing.T) {
 	noOfPop := 15
 
 	var wg sync.WaitGroup
-	wg.Add(noOfPush+noOfPop)
+	wg.Add(noOfPush + noOfPop)
 
 	for i := 0; i < noOfPush; i++ {
 		go func() {
@@ -93,7 +93,7 @@ func TestQueuePopWithConcurrentRequest(t *testing.T) {
 	}
 
 	wg.Wait()
-	
+
 	if q.Len() != 5 {
 		t.Errorf("Expected queue length to be 5, got %d", q.Len())
 	}
