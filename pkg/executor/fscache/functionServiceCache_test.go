@@ -187,7 +187,7 @@ func TestFunctionServiceNewCache(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	fsc.AddFunc(ctx, *fsvc)
+	fsc.AddFunc(ctx, *fsvc, 10)
 	concurrency := 10
 	_, err = fsc.GetFuncSvc(ctx, fsvc.Function, 5, concurrency)
 	if err != nil {

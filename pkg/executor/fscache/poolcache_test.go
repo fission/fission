@@ -24,15 +24,15 @@ func TestPoolCache(t *testing.T) {
 
 	c.SetSvcValue(ctx, "func", "ip", &FuncSvc{
 		Name: "value",
-	}, resource.MustParse("45m"))
+	}, resource.MustParse("45m"), 10)
 
 	c.SetSvcValue(ctx, "func2", "ip2", &FuncSvc{
 		Name: "value2",
-	}, resource.MustParse("50m"))
+	}, resource.MustParse("50m"), 10)
 
 	c.SetSvcValue(ctx, "func2", "ip22", &FuncSvc{
 		Name: "value22",
-	}, resource.MustParse("33m"))
+	}, resource.MustParse("33m"), 10)
 
 	checkErr(c.DeleteValue(ctx, "func2", "ip2"))
 
@@ -56,7 +56,7 @@ func TestPoolCache(t *testing.T) {
 
 	c.SetSvcValue(ctx, "cpulimit", "100", &FuncSvc{
 		Name: "value",
-	}, resource.MustParse("3m"))
+	}, resource.MustParse("3m"), 10)
 	c.SetCPUUtilization("cpulimit", "100", resource.MustParse("4m"))
 
 	_, err = c.GetSvcValue(ctx, "cpulimit", 5, concurrency)

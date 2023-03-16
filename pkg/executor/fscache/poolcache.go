@@ -53,6 +53,7 @@ type (
 		svcWaiting               int
 		svcs                     map[string]*funcSvcInfo
 		queue                    *Queue
+		requestsPerPod           int
 	}
 
 	// PoolCache implements a simple cache implementation having values mapped by two keys [function][address].
@@ -103,8 +104,8 @@ func NewPoolCache(logger *zap.Logger) *PoolCache {
 
 func NewFuncSvcGroup() *funcSvcGroup {
 	return &funcSvcGroup{
-		svcs:  make(map[string]*funcSvcInfo),
-		queue: NewQueue(),
+		svcs:           make(map[string]*funcSvcInfo),
+		queue:          NewQueue(),
 	}
 }
 
@@ -172,12 +173,24 @@ func (c *PoolCache) service() {
 				c.cache[req.function].svcs[req.address] = &funcSvcInfo{}
 			}
 			c.cache[req.function].svcs[req.address].val = req.value
-			if c.cache[req.function].svcWaiting > 0 {
-				c.logger.Info("total svc waiting", zap.Any("svcWaiting", c.cache[req.function].svcWaiting))
-				c.cache[req.function].svcWaiting--
-				c.logger.Info("getting length of queue in cache", zap.Int("queue length", c.cache[req.function].queue.Len()))
-			}
 			c.cache[req.function].svcs[req.address].activeRequests++
+			if c.cache[req.function].svcWaiting > 0 {
+				c.logger.Info("getting length of queue in cache", zap.Int("queue length", c.cache[req.function].queue.Len()))
+				c.cache[req.function].svcWaiting--
+				svcCapacity := req.requestsPerPod - c.cache[req.function].svcs[req.address].activeRequests
+				queueLen := c.cache[req.function].queue.Len()
+				if svcCapacity > queueLen {
+					svcCapacity = queueLen
+				}
+				for i := 0; i < svcCapacity; i++ {
+					go func(i int) {
+						popped := c.cache[req.function].queue.Pop()
+						if popped != nil {
+							popped.svcChannel <- req.value
+						}
+					}(i)
+				}
+			}
 			if c.logger.Core().Enabled(zap.DebugLevel) {
 				otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Increase active requests with setValue", zap.String("function", req.function), zap.String("address", req.address), zap.Int("activeRequests", c.cache[req.function].svcs[req.address].activeRequests))
 			}
@@ -311,7 +324,7 @@ func (c *PoolCache) SpecializationEnd(function string) {
 }
 
 // SetValue marks the value at key [function][address] as active(begin used)
-func (c *PoolCache) SetSvcValue(ctx context.Context, function, address string, value *FuncSvc, cpuLimit resource.Quantity) {
+func (c *PoolCache) SetSvcValue(ctx context.Context, function, address string, value *FuncSvc, cpuLimit resource.Quantity, requestsPerPod int) {
 	respChannel := make(chan *response)
 	c.requestChannel <- &request{
 		ctx:             ctx,
@@ -320,6 +333,7 @@ func (c *PoolCache) SetSvcValue(ctx context.Context, function, address string, v
 		address:         address,
 		value:           value,
 		cpuUsage:        cpuLimit,
+		requestsPerPod:  requestsPerPod,
 		responseChannel: respChannel,
 	}
 }
