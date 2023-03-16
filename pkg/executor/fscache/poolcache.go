@@ -82,7 +82,6 @@ type (
 		svcWaiting               int
 		capacity                 int
 		svcWaitValue             *svcWait
-		queue                    []*svcWait
 	}
 	svcWait struct {
 		svcChannel chan *FuncSvc
@@ -161,10 +160,10 @@ func (c *PoolCache) service() {
 						ctx:        req.ctx,
 					}
 					resp.svcWaitValue = svcWait
-					funcSvcGroup.queue = append(funcSvcGroup.queue, svcWait)
+					// funcSvcGroup.queue = append(funcSvcGroup.queue, svcWait)
 					c.logger.Info("inside get svc value case", zap.Any("funcSvcGroup.queue", funcSvcGroup.queue),
 						zap.Any("svcWait", svcWait.ctx))
-					resp.queue = funcSvcGroup.queue
+					// resp.queue = funcSvcGroup.queue
 				}
 			}
 			req.responseChannel <- resp
@@ -178,6 +177,7 @@ func (c *PoolCache) service() {
 			c.cache[req.function].svcs[req.address].val = req.value
 			if c.cache[req.function].svcWaiting > 0 {
 				c.cache[req.function].svcWaiting--
+
 			}
 			c.cache[req.function].svcs[req.address].activeRequests++
 			if c.logger.Core().Enabled(zap.DebugLevel) {
@@ -267,7 +267,6 @@ func (c *PoolCache) GetSvcValue(ctx context.Context, function string, requestsPe
 		zap.Int("svcWaiting", resp.svcWaiting),
 		zap.Int("specializationInProgress", resp.specializationInProgress),
 		zap.Int("capacity", resp.capacity),
-		zap.Any("queue", resp.queue),
 	)
 
 	if resp.svcWaitValue != nil {
