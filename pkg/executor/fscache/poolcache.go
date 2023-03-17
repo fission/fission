@@ -180,6 +180,7 @@ func (c *PoolCache) service() {
 					if popped != nil {
 						if popped.ctx.Err() == nil {
 							popped.svcChannel <- req.value
+							c.cache[req.function].svcs[req.address].activeRequests++
 						}
 					}
 					c.cache[req.function].svcWaiting--
