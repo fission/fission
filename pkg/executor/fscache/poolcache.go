@@ -79,8 +79,6 @@ type (
 		allValues                []*FuncSvc
 		value                    *FuncSvc
 		specializationInProgress int
-		svcWaiting               int
-		capacity                 int
 		svcWaitValue             *svcWait
 	}
 	svcWait struct {
@@ -139,9 +137,7 @@ func (c *PoolCache) service() {
 				}
 			}
 			resp.specializationInProgress = funcSvcGroup.specializationInProgress
-			resp.svcWaiting = funcSvcGroup.svcWaiting
 			capacity := ((funcSvcGroup.specializationInProgress + len(funcSvcGroup.svcs)) * req.requestsPerPod) - (totalActiveRequests + funcSvcGroup.svcWaiting)
-			resp.capacity = capacity
 
 			if found {
 				req.responseChannel <- resp
@@ -152,7 +148,6 @@ func (c *PoolCache) service() {
 				resp.error = ferror.MakeError(ferror.ErrorTooManyRequests, fmt.Sprintf("function '%s' concurrency '%d' limit reached", req.function, req.concurrency))
 			} else {
 				funcSvcGroup.svcWaiting++
-				resp.capacity = capacity - 1
 				resp.error = ferror.MakeError(ferror.ErrorNotFound, fmt.Sprintf("function '%s' all functions are busy", req.function))
 				if capacity > 0 {
 					svcWait := &svcWait{
@@ -174,7 +169,6 @@ func (c *PoolCache) service() {
 			c.cache[req.function].svcs[req.address].val = req.value
 			c.cache[req.function].svcs[req.address].activeRequests++
 			if c.cache[req.function].svcWaiting > 0 {
-				c.logger.Info("getting length of queue in cache", zap.Int("queue length", c.cache[req.function].queue.Len()))
 				c.cache[req.function].svcWaiting--
 				svcCapacity := req.requestsPerPod - c.cache[req.function].svcs[req.address].activeRequests
 				queueLen := c.cache[req.function].queue.Len()
@@ -182,14 +176,17 @@ func (c *PoolCache) service() {
 					svcCapacity = queueLen
 				}
 				for i := 0; i < svcCapacity; i++ {
-					go func(i int) {
-						popped := c.cache[req.function].queue.Pop()
-						if popped != nil {
-							if popped.ctx.Err() == nil {
-								popped.svcChannel <- req.value
-							}
+					popped := c.cache[req.function].queue.Pop()
+					if popped != nil {
+						if popped.ctx.Err() == nil {
+							popped.svcChannel <- req.value
 						}
-					}(i)
+					}
+					c.cache[req.function].svcWaiting--
+					c.logger.Info("??? inside set svc value", zap.Any("svcWaiting", c.cache[req.function].svcWaiting),
+						zap.Any("queue length", c.cache[req.function].queue.Len()),
+						zap.Any("specialization in progress", c.cache[req.function].specializationInProgress),
+						zap.Any("value of i", i))
 				}
 			}
 			if c.logger.Core().Enabled(zap.DebugLevel) {
@@ -275,17 +272,14 @@ func (c *PoolCache) GetSvcValue(ctx context.Context, function string, requestsPe
 		responseChannel: respChannel,
 	}
 	resp := <-respChannel
-	// c.logger.Info("SSS GetSvcValue", zap.Int("requestsPerPod", requestsPerPod), zap.Int("concurrency", concurrency),
-	// 	zap.Int("svcWaiting", resp.svcWaiting),
-	// 	zap.Int("specializationInProgress", resp.specializationInProgress),
-	// 	zap.Int("capacity", resp.capacity),
-	// )
 
 	if resp.svcWaitValue != nil {
 		select {
 		case <-ctx.Done():
+			c.logger.Info(" ### Inside ctx done")
 			return resp.value, ctx.Err()
 		case funcSvc := <-resp.svcWaitValue.svcChannel:
+			c.logger.Info(" ### inside other case")
 			return funcSvc, nil
 		}
 	}
