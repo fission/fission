@@ -53,7 +53,6 @@ type (
 		svcWaiting               int
 		svcs                     map[string]*funcSvcInfo
 		queue                    *Queue
-		requestsPerPod           int
 	}
 
 	// PoolCache implements a simple cache implementation having values mapped by two keys [function][address].
@@ -104,8 +103,8 @@ func NewPoolCache(logger *zap.Logger) *PoolCache {
 
 func NewFuncSvcGroup() *funcSvcGroup {
 	return &funcSvcGroup{
-		svcs:           make(map[string]*funcSvcInfo),
-		queue:          NewQueue(),
+		svcs:  make(map[string]*funcSvcInfo),
+		queue: NewQueue(),
 	}
 }
 
@@ -186,7 +185,9 @@ func (c *PoolCache) service() {
 					go func(i int) {
 						popped := c.cache[req.function].queue.Pop()
 						if popped != nil {
-							popped.svcChannel <- req.value
+							if popped.ctx.Err() == nil {
+								popped.svcChannel <- req.value
+							}
 						}
 					}(i)
 				}
@@ -274,11 +275,11 @@ func (c *PoolCache) GetSvcValue(ctx context.Context, function string, requestsPe
 		responseChannel: respChannel,
 	}
 	resp := <-respChannel
-	c.logger.Info("SSS GetSvcValue", zap.Int("requestsPerPod", requestsPerPod), zap.Int("concurrency", concurrency),
-		zap.Int("svcWaiting", resp.svcWaiting),
-		zap.Int("specializationInProgress", resp.specializationInProgress),
-		zap.Int("capacity", resp.capacity),
-	)
+	// c.logger.Info("SSS GetSvcValue", zap.Int("requestsPerPod", requestsPerPod), zap.Int("concurrency", concurrency),
+	// 	zap.Int("svcWaiting", resp.svcWaiting),
+	// 	zap.Int("specializationInProgress", resp.specializationInProgress),
+	// 	zap.Int("capacity", resp.capacity),
+	// )
 
 	if resp.svcWaitValue != nil {
 		select {
