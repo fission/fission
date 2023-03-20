@@ -61,11 +61,9 @@ type (
 		fsCreateWg  sync.Map
 	}
 	createFuncServiceRequest struct {
-		context       context.Context
-		function      *fv1.Function
-		requestPerPod int
-		concurrency   int
-		respChan      chan *createFuncServiceResponse
+		context  context.Context
+		function *fv1.Function
+		respChan chan *createFuncServiceResponse
 	}
 
 	createFuncServiceResponse struct {

@@ -863,3 +863,17 @@ type (
 func (a Archive) IsEmpty() bool {
 	return len(a.Literal) == 0 && len(a.URL) == 0
 }
+
+func (fn Function) GetConcurrency() int {
+	if fn.Spec.Concurrency == 0 {
+		return 500
+	}
+	return fn.Spec.Concurrency
+}
+
+func (fn Function) GetRequestPerPod() int {
+	if fn.Spec.RequestsPerPod == 0 {
+		return 1
+	}
+	return fn.Spec.RequestsPerPod
+}
