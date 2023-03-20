@@ -143,7 +143,8 @@ func (c *PoolCache) service() {
 				req.responseChannel <- resp
 				continue
 			}
-
+			// concurrency should not be set to zero and
+			//sum of sprcialization in progress and specialized pods should be less then req.concurrency
 			if req.concurrency > 0 && len(funcSvcGroup.svcs)+funcSvcGroup.specializationInProgress >= req.concurrency {
 				resp.error = ferror.MakeError(ferror.ErrorTooManyRequests, fmt.Sprintf("function '%s' concurrency '%d' limit reached", req.function, req.concurrency))
 			} else {
@@ -184,10 +185,6 @@ func (c *PoolCache) service() {
 						}
 					}
 					c.cache[req.function].svcWaiting--
-					c.logger.Info("??? inside set svc value", zap.Any("svcWaiting", c.cache[req.function].svcWaiting),
-						zap.Any("queue length", c.cache[req.function].queue.Len()),
-						zap.Any("specialization in progress", c.cache[req.function].specializationInProgress),
-						zap.Any("value of i", i))
 				}
 			}
 			if c.logger.Core().Enabled(zap.DebugLevel) {
@@ -198,6 +195,8 @@ func (c *PoolCache) service() {
 			if _, ok := c.cache[req.function]; !ok {
 				c.cache[req.function] = NewFuncSvcGroup()
 			}
+			// concurrency should not be set to zero and
+			//sum of sprcialization in progress and specialized pods should be less then req.concurrency
 			if req.concurrency > 0 && (len(c.cache[req.function].svcs)+c.cache[req.function].specializationInProgress) >= req.concurrency {
 				resp.error = ferror.MakeError(ferror.ErrorTooManyRequests, fmt.Sprintf("function '%s' concurrency '%d' limit reached", req.function, req.concurrency))
 				req.responseChannel <- resp
@@ -277,10 +276,8 @@ func (c *PoolCache) GetSvcValue(ctx context.Context, function string, requestsPe
 	if resp.svcWaitValue != nil {
 		select {
 		case <-ctx.Done():
-			c.logger.Info(" ### Inside ctx done")
 			return resp.value, ctx.Err()
 		case funcSvc := <-resp.svcWaitValue.svcChannel:
-			c.logger.Info(" ### inside other case")
 			return funcSvc, nil
 		}
 	}
