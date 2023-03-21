@@ -76,10 +76,9 @@ type (
 	}
 	response struct {
 		error
-		allValues                []*FuncSvc
-		value                    *FuncSvc
-		specializationInProgress int
-		svcWaitValue             *svcWait
+		allValues    []*FuncSvc
+		value        *FuncSvc
+		svcWaitValue *svcWait
 	}
 	svcWait struct {
 		svcChannel chan *FuncSvc
@@ -136,7 +135,6 @@ func (c *PoolCache) service() {
 					break
 				}
 			}
-			resp.specializationInProgress = funcSvcGroup.specializationInProgress
 			capacity := ((funcSvcGroup.specializationInProgress + len(funcSvcGroup.svcs)) * req.requestsPerPod) - (totalActiveRequests + funcSvcGroup.svcWaiting)
 
 			if found {

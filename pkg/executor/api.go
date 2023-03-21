@@ -63,7 +63,7 @@ func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *htt
 		zap.String("function_name", fn.ObjectMeta.Name),
 		zap.String("function_namespace", fn.ObjectMeta.Namespace))
 	if t == fv1.ExecutorTypePoolmgr && !fn.Spec.OnceOnly {
-		fsvc, err := et.GetFuncSvcFromPoolCache(ctx, fn)
+		fsvc, err := et.GetFuncSvcFromCache(ctx, fn)
 		// check if its a cache hit (check if there is already specialized function pod that can serve another request)
 		if err == nil {
 			// if a pod is already serving request then it already exists else validated
