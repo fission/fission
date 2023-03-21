@@ -145,7 +145,7 @@ func (c *PoolCache) service() {
 			}
 			// concurrency should not be set to zero and
 			//sum of sprcialization in progress and specialized pods should be less then req.concurrency
-			if req.concurrency > 0 && len(funcSvcGroup.svcs)+funcSvcGroup.specializationInProgress >= req.concurrency {
+			if req.concurrency > 0 && len(funcSvcGroup.svcs)+funcSvcGroup.specializationInProgress > req.concurrency {
 				resp.error = ferror.MakeError(ferror.ErrorTooManyRequests, fmt.Sprintf("function '%s' concurrency '%d' limit reached", req.function, req.concurrency))
 			} else {
 				funcSvcGroup.svcWaiting++
