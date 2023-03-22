@@ -181,6 +181,7 @@ func (c *PoolCache) service() {
 							popped.svcChannel <- req.value
 							c.cache[req.function].svcs[req.address].activeRequests++
 						}
+						close(popped.svcChannel)
 					}
 					c.cache[req.function].svcWaiting--
 				}

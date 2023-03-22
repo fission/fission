@@ -193,12 +193,6 @@ func (caaf *Container) DeleteFuncSvcFromCache(ctx context.Context, fsvc *fscache
 	caaf.fsCache.DeleteEntry(fsvc)
 }
 
-// GetFuncSvcFromPoolCache has not been implemented for Container Functions
-func (caaf *Container) GetFuncSvcFromPoolCache(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
-	// Not Implemented for NewDeployment. Will be used when support of concurrent specialization of same function is added.
-	return nil, nil
-}
-
 // TapService makes a TouchByAddress request to the cache.
 func (caaf *Container) TapService(ctx context.Context, svcHost string) error {
 	err := caaf.fsCache.TouchByAddress(svcHost)
