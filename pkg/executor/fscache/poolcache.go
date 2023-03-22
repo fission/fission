@@ -174,14 +174,17 @@ func (c *PoolCache) service() {
 				if svcCapacity > queueLen {
 					svcCapacity = queueLen
 				}
-				for i := 0; i < svcCapacity; i++ {
+				for i := 0; i < svcCapacity; {
 					popped := c.cache[req.function].queue.Pop()
 					if popped != nil {
 						if popped.ctx.Err() == nil {
 							popped.svcChannel <- req.value
 							c.cache[req.function].svcs[req.address].activeRequests++
+							i++
 						}
 						close(popped.svcChannel)
+					} else {
+						break
 					}
 					c.cache[req.function].svcWaiting--
 				}
