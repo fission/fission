@@ -711,7 +711,7 @@ func (gpm *GenericPoolManager) NoActiveConnectionEventChecker(ctx context.Contex
 	defer close(stopper)
 
 	var wg wait.Group
-	for _, informer := range utils.GetInformerEventChecker(ctx, kubeClient, "WsConnectionStarted") {
+	for _, informer := range utils.GetInformerEventChecker(ctx, kubeClient, "NoActiveConnections") {
 		informer.AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
 				mObj := obj.(metav1.Object)
