@@ -49,10 +49,9 @@ type (
 	}
 
 	funcSvcGroup struct {
-		specializationInProgress int
-		svcWaiting               int
-		svcs                     map[string]*funcSvcInfo
-		queue                    *Queue
+		svcWaiting int
+		svcs       map[string]*funcSvcInfo
+		queue      *Queue
 	}
 
 	// PoolCache implements a simple cache implementation having values mapped by two keys [function][address].
@@ -113,6 +112,8 @@ func (c *PoolCache) service() {
 		case getValue:
 			funcSvcGroup, ok := c.cache[req.function]
 			if !ok {
+				c.cache[req.function] = NewFuncSvcGroup()
+				c.cache[req.function].svcWaiting++
 				resp.error = ferror.MakeError(ferror.ErrorNotFound,
 					fmt.Sprintf("function Name '%v' not found", req.function))
 				req.responseChannel <- resp
@@ -135,20 +136,20 @@ func (c *PoolCache) service() {
 					break
 				}
 			}
-			capacity := ((funcSvcGroup.specializationInProgress + len(funcSvcGroup.svcs)) * req.requestsPerPod) - (totalActiveRequests + funcSvcGroup.svcWaiting)
-
+			specializationInProgress := funcSvcGroup.svcWaiting - funcSvcGroup.queue.Len()
+			capacity := ((specializationInProgress + len(funcSvcGroup.svcs)) * req.requestsPerPod) - (totalActiveRequests + funcSvcGroup.svcWaiting)
 			if found {
 				req.responseChannel <- resp
 				continue
 			}
 			// concurrency should not be set to zero and
-			//sum of sprcialization in progress and specialized pods should be less then req.concurrency
-			if req.concurrency > 0 && len(funcSvcGroup.svcs)+funcSvcGroup.specializationInProgress > req.concurrency {
+			//sum of specialization in progress and specialized pods should be less then req.concurrency
+			if req.concurrency > 0 && (specializationInProgress+len(funcSvcGroup.svcs)) >= req.concurrency {
 				resp.error = ferror.MakeError(ferror.ErrorTooManyRequests, fmt.Sprintf("function '%s' concurrency '%d' limit reached", req.function, req.concurrency))
 			} else {
 				funcSvcGroup.svcWaiting++
 				resp.error = ferror.MakeError(ferror.ErrorNotFound, fmt.Sprintf("function '%s' all functions are busy", req.function))
-				if capacity > 0 {
+				if capacity > 1 {
 					svcWait := &svcWait{
 						svcChannel: make(chan *FuncSvc),
 						ctx:        req.ctx,
@@ -174,7 +175,7 @@ func (c *PoolCache) service() {
 				if svcCapacity > queueLen {
 					svcCapacity = queueLen
 				}
-				for i := 0; i < svcCapacity; {
+				for i := 0; i <= svcCapacity; {
 					popped := c.cache[req.function].queue.Pop()
 					if popped != nil {
 						if popped.ctx.Err() == nil {
@@ -193,26 +194,6 @@ func (c *PoolCache) service() {
 				otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Increase active requests with setValue", zap.String("function", req.function), zap.String("address", req.address), zap.Int("activeRequests", c.cache[req.function].svcs[req.address].activeRequests))
 			}
 			c.cache[req.function].svcs[req.address].cpuLimit = req.cpuUsage
-		case specializationStart:
-			if _, ok := c.cache[req.function]; !ok {
-				c.cache[req.function] = NewFuncSvcGroup()
-			}
-			// concurrency should not be set to zero and
-			//sum of sprcialization in progress and specialized pods should be less then req.concurrency
-			if req.concurrency > 0 && (len(c.cache[req.function].svcs)+c.cache[req.function].specializationInProgress) >= req.concurrency {
-				resp.error = ferror.MakeError(ferror.ErrorTooManyRequests, fmt.Sprintf("function '%s' concurrency '%d' limit reached", req.function, req.concurrency))
-				req.responseChannel <- resp
-				continue
-			}
-			c.cache[req.function].specializationInProgress++
-			req.responseChannel <- resp
-		case specializationEnd:
-			if _, ok := c.cache[req.function]; !ok {
-				c.cache[req.function] = NewFuncSvcGroup()
-			}
-			if c.cache[req.function].specializationInProgress > 0 {
-				c.cache[req.function].specializationInProgress--
-			}
 		case listAvailableValue:
 			vals := make([]*FuncSvc, 0)
 			for key1, values := range c.cache {
@@ -295,27 +276,6 @@ func (c *PoolCache) ListAvailableValue() []*FuncSvc {
 	}
 	resp := <-respChannel
 	return resp.allValues
-}
-
-func (c *PoolCache) SpecializationStart(function string, concurrency int) error {
-	respChannel := make(chan *response)
-	c.requestChannel <- &request{
-		requestType:     specializationStart,
-		function:        function,
-		concurrency:     concurrency,
-		responseChannel: respChannel,
-	}
-	resp := <-respChannel
-	return resp.error
-}
-
-func (c *PoolCache) SpecializationEnd(function string) {
-	respChannel := make(chan *response)
-	c.requestChannel <- &request{
-		requestType:     specializationEnd,
-		function:        function,
-		responseChannel: respChannel,
-	}
 }
 
 // SetValue marks the value at key [function][address] as active(begin used)

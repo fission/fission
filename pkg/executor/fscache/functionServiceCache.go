@@ -234,15 +234,6 @@ func (fsc *FunctionServiceCache) AddFunc(ctx context.Context, fsvc FuncSvc, requ
 	fsvc.Atime = now
 }
 
-// SpecializationStart starts the specialization
-func (fsc *FunctionServiceCache) SpecializationStart(key string, concurrency int) error {
-	return fsc.connFunctionCache.SpecializationStart(key, concurrency)
-}
-
-func (fsc *FunctionServiceCache) SpecializationEnd(key string) {
-	fsc.connFunctionCache.SpecializationEnd(key)
-}
-
 // SetCPUUtilizaton updates/sets CPUutilization in the pool cache
 func (fsc *FunctionServiceCache) SetCPUUtilizaton(key string, svcHost string, cpuUsage resource.Quantity) {
 	fsc.connFunctionCache.SetCPUUtilization(key, svcHost, cpuUsage)
