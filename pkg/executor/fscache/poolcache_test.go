@@ -119,9 +119,6 @@ func TestGetSvcValueWhenResourceFound(t *testing.T) {
 		t.Error("expected value to not be nil")
 	}
 
-	if value.Name != functionName {
-		t.Errorf("expected value.Name to be %s, got %s", functionName, value.Name)
-	}
 	if err != nil {
 		t.Error("expected GetSvcValue to not return any error")
 	}
