@@ -17,6 +17,8 @@ limitations under the License.
 package timer
 
 import (
+	"context"
+
 	"github.com/robfig/cron/v3"
 	"go.uber.org/zap"
 
@@ -66,7 +68,7 @@ func (timer *Timer) newCron(t fv1.TimeTrigger) *cron.Cron {
 		// with the addition of multi-tenancy, the users can create functions in any namespace. however,
 		// the triggers can only be created in the same namespace as the function.
 		// so essentially, function namespace = trigger namespace.
-		(*timer.publisher).Publish("", headers, utils.UrlForFunction(t.Spec.FunctionReference.Name, t.Namespace))
+		(*timer.publisher).Publish(context.Background(), "", headers, utils.UrlForFunction(t.Spec.FunctionReference.Name, t.Namespace))
 	})
 	c.Start()
 	timer.logger.Info("started cron for time trigger", zap.String("trigger_name", t.Name), zap.String("trigger_namespace", t.Namespace), zap.String("cron", t.Spec.Cron))

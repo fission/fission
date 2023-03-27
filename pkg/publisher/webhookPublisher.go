@@ -18,12 +18,17 @@ package publisher
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"net/http"
 	"strings"
 	"time"
 
+	otelUtils "github.com/fission/fission/pkg/utils/otel"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel"
 	"go.uber.org/zap"
+	"golang.org/x/net/context/ctxhttp"
 )
 
 type (
@@ -37,8 +42,10 @@ type (
 		retryDelay time.Duration
 
 		baseURL string
+		timeout time.Duration
 	}
 	publishRequest struct {
+		ctx        context.Context
 		body       string
 		headers    map[string]string
 		target     string
@@ -54,6 +61,8 @@ func MakeWebhookPublisher(logger *zap.Logger, baseURL string) *WebhookPublisher 
 		baseURL:        baseURL,
 		requestChannel: make(chan *publishRequest, 32), // buffered channel
 		// TODO make this configurable
+		timeout: 60 * time.Minute,
+		// TODO make this configurable
 		maxRetries: 10,
 		retryDelay: 500 * time.Millisecond,
 	}
@@ -62,9 +71,14 @@ func MakeWebhookPublisher(logger *zap.Logger, baseURL string) *WebhookPublisher 
 }
 
 // Publish sends a request to the target with payload having given body and headers
-func (p *WebhookPublisher) Publish(body string, headers map[string]string, target string) {
+func (p *WebhookPublisher) Publish(ctx context.Context, body string, headers map[string]string, target string) {
+	tracer := otel.Tracer("WebhookPublisher")
+	ctx, span := tracer.Start(ctx, "WebhookPublisher/Publish")
+	defer span.End()
+
 	// serializing the request gives user a guarantee that the request is sent in sequence order
 	p.requestChannel <- &publishRequest{
+		ctx:        ctx,
 		body:       body,
 		headers:    headers,
 		target:     target,
@@ -89,7 +103,7 @@ func (p *WebhookPublisher) makeHTTPRequest(r *publishRequest) {
 
 	// log once for this request
 	defer func() {
-		if ce := p.logger.Check(level, msg); ce != nil {
+		if ce := otelUtils.LoggerWithTraceID(r.ctx, p.logger).Check(level, msg); ce != nil {
 			ce.Write(fields...)
 		}
 	}()
@@ -107,7 +121,9 @@ func (p *WebhookPublisher) makeHTTPRequest(r *publishRequest) {
 		req.Header.Set(k, v)
 	}
 	// Make the request
-	resp, err := http.DefaultClient.Do(req)
+	ctx, cancel := context.WithTimeout(r.ctx, p.timeout)
+	defer cancel()
+	resp, err := ctxhttp.Do(ctx, otelhttp.DefaultClient, req)
 	if err != nil {
 		fields = append(fields, zap.Error(err), zap.Any("request", r))
 	} else {
