@@ -39,7 +39,7 @@ import (
 
 type fscRequestType int
 
-//type executorType int
+// type executorType int
 
 // FunctionServiceCache Request Types
 const (
@@ -188,20 +188,20 @@ func (fsc *FunctionServiceCache) GetByFunction(m *metav1.ObjectMeta) (*FuncSvc, 
 }
 
 // GetFuncSvc gets a function service from pool cache using function key and returns number of active instances of function pod
-func (fsc *FunctionServiceCache) GetFuncSvc(ctx context.Context, m *metav1.ObjectMeta, requestsPerPod int) (*FuncSvc, int, error) {
+func (fsc *FunctionServiceCache) GetFuncSvc(ctx context.Context, m *metav1.ObjectMeta, concurrency, requestsPerPod int) (*FuncSvc, error) {
 	key := crd.CacheKey(m)
 
-	fsvc, active, err := fsc.connFunctionCache.GetSvcValue(ctx, key, requestsPerPod)
+	fsvc, err := fsc.connFunctionCache.GetSvcValue(ctx, key, concurrency, requestsPerPod)
 	if err != nil {
-		fsc.logger.Info("Not found in Cache")
-		return nil, active, err
+		fsc.logger.Info("Not found in Cache", zap.Error(err))
+		return nil, err
 	}
 
 	// update atime
 	fsvc.Atime = time.Now()
 
 	fsvcCopy := *fsvc
-	return &fsvcCopy, active, nil
+	return &fsvcCopy, nil
 }
 
 // GetByFunctionUID gets a function service from cache using function UUID.

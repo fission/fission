@@ -26,7 +26,10 @@ import (
 	"sync"
 	"time"
 
+	ferror "github.com/fission/fission/pkg/error"
+	"github.com/fission/fission/pkg/throttler"
 	"github.com/hashicorp/go-multierror"
+	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel/attribute"
 	"go.uber.org/zap"
 	apiv1 "k8s.io/api/core/v1"
@@ -78,6 +81,7 @@ type (
 		fissionClient  versioned.Interface
 		functionEnv    *cache.Cache
 		fsCache        *fscache.FunctionServiceCache
+		throttler      *throttler.Throttler
 		instanceID     string
 		requestChannel chan *request
 
@@ -145,6 +149,7 @@ func MakeGenericPoolManager(ctx context.Context,
 		fissionClient:              fissionClient,
 		functionEnv:                cache.MakeCache(10*time.Second, 0),
 		fsCache:                    fscache.MakeFunctionServiceCache(gpmLogger),
+		throttler:                  throttler.MakeThrottler(time.Minute),
 		instanceID:                 instanceID,
 		requestChannel:             make(chan *request),
 		defaultIdlePodReapTime:     2 * time.Minute,
@@ -187,6 +192,51 @@ func (gpm *GenericPoolManager) GetTypeName(ctx context.Context) fv1.ExecutorType
 }
 
 func (gpm *GenericPoolManager) GetFuncSvc(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
+	logger := otelUtils.LoggerWithTraceID(ctx, gpm.logger)
+	if fn.Spec.OnceOnly {
+		return gpm.getFuncSvc(ctx, fn)
+	}
+
+	svc, _, err := gpm.GetFuncSvcFromPoolCache(ctx, fn, fn.Spec.RequestsPerPod)
+	if err == nil || ferror.IsTooManyRequests(err) {
+		// direct return when get svc succeed or the error is too many requests
+		return svc, err
+	}
+
+	var retryCount int
+RETRY:
+	// avoid specialize multi pods at the same time, because it will overflow the Concurrency
+	fnSvcObj, err := gpm.throttler.RunOnceStrict(fn.GetName(), func(ableToCreate bool) (interface{}, error) {
+		if ableToCreate {
+			return gpm.getFuncSvc(ctx, fn)
+		}
+
+		svc, _, err := gpm.GetFuncSvcFromPoolCache(ctx, fn, fn.Spec.RequestsPerPod)
+		return svc, err
+	})
+	if ferror.IsNotFound(err) && retryCount < 3 {
+		// retry three times for the burst traffic
+		retryCount++
+		goto RETRY
+	} else if err != nil {
+		e := "error creating k8s resources for function"
+		logger.Error(e,
+			zap.Error(err),
+			zap.String("function_name", fn.ObjectMeta.Name),
+			zap.String("function_namespace", fn.ObjectMeta.Namespace))
+		return nil, errors.Wrapf(err, "%s %s_%s", e, fn.ObjectMeta.Name, fn.ObjectMeta.Namespace)
+	}
+
+	fnSvc, ok := fnSvcObj.(*fscache.FuncSvc)
+	if !ok {
+		logger.Panic("receive unknown object while creating function - expected pointer of function service object")
+	}
+
+	otelUtils.SpanTrackEvent(ctx, "fnSvcResponse", fscache.GetAttributesForFuncSvc(fnSvc)...)
+	return fnSvc, err
+}
+
+func (gpm *GenericPoolManager) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
 	otelUtils.SpanTrackEvent(ctx, "GetFuncSvc", otelUtils.GetAttributesForFunction(fn)...)
 	logger := otelUtils.LoggerWithTraceID(ctx, gpm.logger)
 	// from Func -> get Env
@@ -216,8 +266,30 @@ func (gpm *GenericPoolManager) GetFuncSvcFromCache(ctx context.Context, fn *fv1.
 }
 
 func (gpm *GenericPoolManager) GetFuncSvcFromPoolCache(ctx context.Context, fn *fv1.Function, requestsPerPod int) (*fscache.FuncSvc, int, error) {
+	logger := otelUtils.LoggerWithTraceID(ctx, gpm.logger)
 	otelUtils.SpanTrackEvent(ctx, "GetFuncSvcFromPoolCache", otelUtils.GetAttributesForFunction(fn)...)
-	return gpm.fsCache.GetFuncSvc(ctx, &fn.ObjectMeta, requestsPerPod)
+
+	concurrency := fn.Spec.Concurrency
+	if concurrency == 0 {
+		concurrency = 500
+	}
+	if requestsPerPod == 0 {
+		requestsPerPod = 1
+	}
+
+	fnSvc, err := gpm.fsCache.GetFuncSvc(ctx, &fn.ObjectMeta, concurrency, requestsPerPod)
+	if err != nil {
+		return nil, 0, err
+	} else if !gpm.IsValid(ctx, fnSvc) {
+		logger.Debug("deleting cache entry for invalid address",
+			zap.String("function_name", fn.ObjectMeta.Name),
+			zap.String("function_namespace", fn.ObjectMeta.Namespace),
+			zap.String("address", fnSvc.Address))
+		gpm.DeleteFuncSvcFromCache(ctx, fnSvc)
+		return fnSvc, 0, fmt.Errorf("deleting cache entry for invalid address: %v", fnSvc.Address)
+	}
+
+	return fnSvc, 0, nil
 }
 
 func (gpm *GenericPoolManager) DeleteFuncSvcFromCache(ctx context.Context, fsvc *fscache.FuncSvc) {

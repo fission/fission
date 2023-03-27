@@ -188,18 +188,15 @@ func TestFunctionServiceNewCache(t *testing.T) {
 	defer cancel()
 
 	fsc.AddFunc(ctx, *fsvc)
-	_, active, err := fsc.GetFuncSvc(ctx, fsvc.Function, 5)
+	_, err = fsc.GetFuncSvc(ctx, fsvc.Function, 1, 5)
 	if err != nil {
 		logger.Panic("received error while retrieving value from cache")
-	}
-	if active != 1 {
-		logger.Panic(fmt.Sprintln("active instances not matched expected 1, found ", active))
 	}
 
 	key := fmt.Sprintf("%v_%v", fn.ObjectMeta.UID, fn.ObjectMeta.ResourceVersion)
 	fsc.MarkAvailable(key, fsvc.Address)
 
-	_, _, err = fsc.GetFuncSvc(ctx, fsvc.Function, 5)
+	_, err = fsc.GetFuncSvc(ctx, fsvc.Function, 1, 5)
 	if err != nil {
 		logger.Panic("received error while retrieving value from cache")
 	}

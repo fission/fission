@@ -17,6 +17,7 @@ limitations under the License.
 package error
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -106,8 +107,8 @@ func (err Error) Description() string {
 func GetHTTPError(err error) (int, string) {
 	var msg string
 	var code int
-	fe, ok := err.(Error)
-	if ok {
+	var fe Error
+	if errors.As(err, &fe) {
 		code = fe.HTTPStatus()
 		msg = fe.Message
 	} else {
@@ -118,11 +119,21 @@ func GetHTTPError(err error) (int, string) {
 }
 
 func IsNotFound(err error) bool {
-	fe, ok := err.(Error)
-	if !ok {
+	var fe Error
+	if !errors.As(err, &fe) {
 		return false
 	}
+
 	return fe.Code == ErrorNotFound
+}
+
+func IsTooManyRequests(err error) bool {
+	var fe Error
+	if !errors.As(err, &fe) {
+		return false
+	}
+
+	return fe.Code == ErrorTooManyRequests
 }
 
 const (

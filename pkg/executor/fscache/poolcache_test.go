@@ -2,8 +2,10 @@ package fscache
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"testing"
+	"time"
 
 	"k8s.io/apimachinery/pkg/api/resource"
 
@@ -43,15 +45,12 @@ func TestPoolCache(t *testing.T) {
 
 	c.MarkAvailable("func", "ip")
 
-	_, active, err := c.GetSvcValue(ctx, "func", 5)
-	if active != 1 {
-		log.Panicln("Expected 1 active, found", active)
-	}
+	_, err := c.GetSvcValue(ctx, "func", 1, 5)
 	checkErr(err)
 
 	checkErr(c.DeleteValue(ctx, "func", "ip"))
 
-	_, _, err = c.GetSvcValue(ctx, "func", 5)
+	_, err = c.GetSvcValue(ctx, "func", 1, 5)
 	if err == nil {
 		log.Panicf("found deleted element")
 	}
@@ -61,12 +60,29 @@ func TestPoolCache(t *testing.T) {
 	}, resource.MustParse("3m"))
 	c.SetCPUUtilization("cpulimit", "100", resource.MustParse("4m"))
 
-	_, _, err = c.GetSvcValue(ctx, "cpulimit", 5)
+	_, err = c.GetSvcValue(ctx, "cpulimit", 1, 5)
 
 	if err == nil {
 		log.Panicf("received pod address with higher CPU usage than limit")
 	}
 	c.SetCPUUtilization("cpulimit", "100", resource.MustParse("2m"))
-	_, _, err = c.GetSvcValue(ctx, "cpulimit", 5)
+	_, err = c.GetSvcValue(ctx, "cpulimit", 1, 5)
 	checkErr(err)
+}
+
+func TestSetGetValue(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	logger := loggerfactory.GetLogger()
+	c := NewPoolCache(logger)
+
+	for i := 0; i < 10; i++ {
+		go c.SetSvcValue(ctx, "aaa", "bbb", &FuncSvc{Name: "value"}, resource.MustParse("2m"))
+		go func() {
+			v, err := c.GetSvcValue(ctx, "aaa", 3, 10)
+			fmt.Println(err, v)
+		}()
+	}
+
+	time.Sleep(time.Second * 10)
 }

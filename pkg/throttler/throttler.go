@@ -185,6 +185,17 @@ func (tr *Throttler) service() {
 
 func (tr *Throttler) RunOnce(resourceKey string,
 	callbackFunc func(bool) (interface{}, error)) (interface{}, error) {
+	return tr.runOnce(resourceKey, callbackFunc, false)
+}
+
+// RunOnceStrict same as RunOnce, but it owns better strict lock, only the firstGoroutine allowed to delete the lock
+func (tr *Throttler) RunOnceStrict(resourceKey string,
+	callbackFunc func(bool) (interface{}, error)) (interface{}, error) {
+	return tr.runOnce(resourceKey, callbackFunc, true)
+}
+
+func (tr *Throttler) runOnce(resourceKey string,
+	callbackFunc func(bool) (interface{}, error), strictLock bool) (interface{}, error) {
 
 	ch := make(chan *response)
 	tr.requestChan <- &request{
@@ -200,17 +211,17 @@ func (tr *Throttler) RunOnce(resourceKey string,
 		if err != nil {
 			return nil, err
 		}
-	}
-
-	// release actionLock so that other goroutines can take over the responsibility if failed.
-	defer func() {
-		go func() {
-			tr.requestChan <- &request{
-				requestType: DELETE,
-				resourceKey: resourceKey,
-			}
+	} else if strictLock {
+		// release actionLock so that other goroutines can take over the responsibility if failed.
+		defer func() {
+			go func() {
+				tr.requestChan <- &request{
+					requestType: DELETE,
+					resourceKey: resourceKey,
+				}
+			}()
 		}()
-	}()
+	}
 
 	return callbackFunc(resp.firstGoroutine)
 }

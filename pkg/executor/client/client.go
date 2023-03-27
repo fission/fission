@@ -21,6 +21,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"net/http"
 	"net/url"
 	"strings"
 	"time"
@@ -57,6 +58,14 @@ type (
 func MakeClient(logger *zap.Logger, executorURL string) *Client {
 	hc := retryablehttp.NewClient()
 	hc.HTTPClient.Transport = otelhttp.NewTransport(hc.HTTPClient.Transport)
+	hc.CheckRetry = func(ctx context.Context, resp *http.Response, err error) (bool, error) {
+		// ignore retry for the 429 to avoid the requests being hanging
+		if resp != nil && resp.StatusCode == http.StatusTooManyRequests {
+			return false, err
+		}
+
+		return retryablehttp.DefaultRetryPolicy(ctx, resp, err)
+	}
 	c := &Client{
 		logger:      logger.Named("executor_client"),
 		executorURL: strings.TrimSuffix(executorURL, "/"),

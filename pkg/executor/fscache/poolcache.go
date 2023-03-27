@@ -67,12 +67,12 @@ type (
 		requestsPerPod  int
 		cpuUsage        resource.Quantity
 		responseChannel chan *response
+		concurrency     int
 	}
 	response struct {
 		error
-		allValues   []*FuncSvc
-		value       *FuncSvc
-		totalActive int
+		allValues []*FuncSvc
+		value     *FuncSvc
 	}
 )
 
@@ -95,11 +95,11 @@ func (c *PoolCache) service() {
 		switch req.requestType {
 		case getValue:
 			funcSvcGroup, ok := c.cache[req.function]
-			found := false
 			if !ok {
 				resp.error = ferror.MakeError(ferror.ErrorNotFound,
 					fmt.Sprintf("function Name '%v' not found", req.function))
 			} else {
+				found := false
 				for addr := range funcSvcGroup.svcs {
 					if funcSvcGroup.svcs[addr].activeRequests < req.requestsPerPod &&
 						funcSvcGroup.svcs[addr].currentCPUUsage.Cmp(funcSvcGroup.svcs[addr].cpuLimit) < 1 {
@@ -113,10 +113,13 @@ func (c *PoolCache) service() {
 						break
 					}
 				}
-				if !found {
+
+				activePods := len(funcSvcGroup.svcs)
+				if !found && activePods >= req.concurrency {
+					resp.error = ferror.MakeError(ferror.ErrorTooManyRequests, fmt.Sprintf("max concurrency reached for %v. All %v instance are active", req.function, req.concurrency))
+				} else if !found {
 					resp.error = ferror.MakeError(ferror.ErrorNotFound, fmt.Sprintf("function '%v' all functions are busy", req.function))
 				}
-				resp.totalActive = len(funcSvcGroup.svcs)
 			}
 			req.responseChannel <- resp
 		case setValue:
@@ -134,6 +137,7 @@ func (c *PoolCache) service() {
 				otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Increase active requests with setValue", zap.String("function", req.function), zap.String("address", req.address), zap.Int("activeRequests", c.cache[req.function].svcs[req.address].activeRequests))
 			}
 			c.cache[req.function].svcs[req.address].cpuLimit = req.cpuUsage
+			req.responseChannel <- resp
 		case listAvailableValue:
 			vals := make([]*FuncSvc, 0)
 			for key1, values := range c.cache {
@@ -185,18 +189,19 @@ func (c *PoolCache) service() {
 	}
 }
 
-// GetValue returns a function service with status in Active else return error
-func (c *PoolCache) GetSvcValue(ctx context.Context, function string, requestsPerPod int) (*FuncSvc, int, error) {
+// GetSvcValue returns a function service with status in Active else return error
+func (c *PoolCache) GetSvcValue(ctx context.Context, function string, concurrency, requestsPerPod int) (*FuncSvc, error) {
 	respChannel := make(chan *response)
 	c.requestChannel <- &request{
 		ctx:             ctx,
 		requestType:     getValue,
 		function:        function,
+		concurrency:     concurrency,
 		requestsPerPod:  requestsPerPod,
 		responseChannel: respChannel,
 	}
 	resp := <-respChannel
-	return resp.value, resp.totalActive, resp.error
+	return resp.value, resp.error
 }
 
 // ListAvailableValue returns a list of the available function services stored in the Cache
@@ -222,6 +227,7 @@ func (c *PoolCache) SetSvcValue(ctx context.Context, function, address string, v
 		cpuUsage:        cpuLimit,
 		responseChannel: respChannel,
 	}
+	<-respChannel
 }
 
 // SetCPUUtilization updates/sets the CPU utilization limit for the pod
