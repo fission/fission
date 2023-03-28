@@ -22,7 +22,11 @@ func TestPublisher(t *testing.T) {
 
 	ctx := context.Background()
 	logger := loggerfactory.GetLogger()
-	otelUtils.InitProvider(ctx, logger, fnName)
+	shutdown, err := otelUtils.InitProvider(ctx, logger, fnName)
+	assert.NoError(t, err)
+	if shutdown != nil {
+		defer shutdown(ctx)
+	}
 
 	wp := MakeWebhookPublisher(logger, s.URL)
 	wp.Publish(ctx, "", map[string]string{"X-Fission-Test": "aaa"}, fnName)
