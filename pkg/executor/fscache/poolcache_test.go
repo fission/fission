@@ -3,9 +3,11 @@ package fscache
 import (
 	"context"
 	"log"
+	"reflect"
 	"testing"
 	"time"
 
+	fuzz "github.com/AdaLogics/go-fuzz-headers"
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -272,4 +274,47 @@ func TestSetValueWhen2SvcWaiting(t *testing.T) {
 	if c.cache[functionName].svcs[addr].activeRequests != 3 {
 		t.Errorf("expected active requests to be 3, but got %d", c.cache[functionName].svcs[addr].activeRequests)
 	}
+}
+
+func FuzzGetSvcValueAndSetSvcValue(f *testing.F) {
+	f.Fuzz(func(t *testing.T, data []byte) {
+		f := fuzz.NewConsumer(data)
+		function, err := f.GetString()
+		if err != nil {
+			return
+		}
+		address, err := f.GetString()
+		if err != nil {
+			return
+		}
+		rpp, err := f.GetInt()
+		if err != nil {
+			return
+		}
+		concurrency, err := f.GetInt()
+		if err != nil {
+			return
+		}
+		funcSvc := &FuncSvc{}
+		err = f.GenerateStruct(funcSvc)
+		if err != nil {
+			return
+		}
+		resource := resource.Quantity{}
+		err = f.GenerateStruct(resource)
+		if err != nil {
+			return
+		}
+		p := NewPoolCache(loggerfactory.GetLogger())
+		val, err := p.GetSvcValue(context.Background(), function, rpp, concurrency)
+		if err != nil {
+			return
+		}
+		p.SetSvcValue(context.Background(), function, address, funcSvc, resource, rpp)
+		if !reflect.DeepEqual(val, funcSvc) {
+			t.Logf("val: %+v", val)
+			t.Logf("funcSvc: %+v", funcSvc)
+			t.Fatalf("Got wrong value")
+		}
+	})
 }
