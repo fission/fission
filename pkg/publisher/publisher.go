@@ -16,13 +16,15 @@ limitations under the License.
 
 package publisher
 
+import "context"
+
 type (
 	// Publisher interface wraps the Publish method that publishes an request
 	// with given "body" and "headers" to given "target"
 	Publisher interface {
-		// Publish an request to a "target". Target's meaning depends on the
+		// Publish a request to a "target". Target's meaning depends on the
 		// publisher: it's a URL in the case of a webhook publisher, or a queue
 		// name in a queue-based publisher such as NATS.
-		Publish(body string, headers map[string]string, target string)
+		Publish(ctx context.Context, body string, headers map[string]string, target string)
 	}
 )
