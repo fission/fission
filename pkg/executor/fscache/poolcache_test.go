@@ -2,13 +2,17 @@ package fscache
 
 import (
 	"context"
+	"fmt"
 	"log"
-	"reflect"
+	"net/http"
+	"sync"
+	"sync/atomic"
 	"testing"
 
-	fuzz "github.com/AdaLogics/go-fuzz-headers"
+	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/api/resource"
 
+	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
 
@@ -84,45 +88,107 @@ func TestPoolCache(t *testing.T) {
 	c.SetCPUUtilization("cpulimit", "100", resource.MustParse("4m"))
 }
 
-func FuzzGetSvcValueAndSetSvcValue(f *testing.F) {
-	f.Fuzz(func(t *testing.T, data []byte) {
-		f := fuzz.NewConsumer(data)
-		function, err := f.GetString()
-		if err != nil {
-			return
-		}
-		address, err := f.GetString()
-		if err != nil {
-			return
-		}
-		rpp, err := f.GetInt()
-		if err != nil {
-			return
-		}
-		concurrency, err := f.GetInt()
-		if err != nil {
-			return
-		}
-		funcSvc := &FuncSvc{}
-		err = f.GenerateStruct(funcSvc)
-		if err != nil {
-			return
-		}
-		resource := resource.Quantity{}
-		err = f.GenerateStruct(resource)
-		if err != nil {
-			return
-		}
-		p := NewPoolCache(loggerfactory.GetLogger())
-		val, err := p.GetSvcValue(context.Background(), function, rpp, concurrency)
-		if err != nil {
-			return
-		}
-		p.SetSvcValue(context.Background(), function, address, funcSvc, resource, rpp)
-		if !reflect.DeepEqual(val, funcSvc) {
-			t.Logf("val: %+v", val)
-			t.Logf("funcSvc: %+v", funcSvc)
-			t.Fatalf("Got wrong value")
-		}
-	})
+func TestPoolCacheRequests(t *testing.T) {
+
+	type structForTest struct {
+		name           string
+		requests       int
+		concurrency    int
+		rpp            int
+		simultaneous   int
+		failedRequests int
+	}
+
+	for _, tt := range []structForTest{
+		{
+			name:        "test1",
+			requests:    1,
+			concurrency: 1,
+			rpp:         1,
+		},
+		{
+			name:        "test2",
+			requests:    2,
+			concurrency: 2,
+			rpp:         1,
+		},
+		{
+			name:        "test3",
+			requests:    300,
+			concurrency: 5,
+			rpp:         60,
+		},
+
+		{
+			name:           "test4",
+			requests:       6,
+			concurrency:    1,
+			rpp:            5,
+			failedRequests: 1,
+		},
+		{
+			name:           "test5",
+			requests:       6,
+			concurrency:    5,
+			rpp:            1,
+			failedRequests: 1,
+		},
+		{
+			name:           "test6",
+			requests:       300,
+			concurrency:    5,
+			rpp:            60,
+			simultaneous:   30,
+			failedRequests: 0,
+		},
+		{
+			name:           "test7",
+			requests:       310,
+			concurrency:    5,
+			rpp:            60,
+			simultaneous:   30,
+			failedRequests: 10,
+		},
+	} {
+		t.Run(fmt.Sprintf("scenario-%s", tt.name), func(t *testing.T) {
+			var failedRequests, svcCounter uint64
+			p := NewPoolCache(loggerfactory.GetLogger())
+			wg := sync.WaitGroup{}
+			simultaneous := tt.simultaneous
+			if simultaneous == 0 {
+				simultaneous = 1
+			}
+			for i := 1; i <= tt.requests; i++ {
+				wg.Add(1)
+				go func(reqno int) {
+					defer wg.Done()
+					svc, err := p.GetSvcValue(context.Background(), "func", tt.rpp, tt.concurrency)
+					if err != nil {
+						code, _ := ferror.GetHTTPError(err)
+						if code == http.StatusNotFound {
+							p.SetSvcValue(context.Background(), "func", fmt.Sprintf("svc-%d", svcCounter), &FuncSvc{
+								Name: "value",
+							}, resource.MustParse("45m"), tt.rpp)
+							atomic.AddUint64(&svcCounter, 1)
+						} else {
+							t.Log(reqno, "=>", err)
+							atomic.AddUint64(&failedRequests, 1)
+						}
+					} else {
+						if svc == nil {
+							t.Log(reqno, "=>", "svc is nil")
+							atomic.AddUint64(&failedRequests, 1)
+						}
+					}
+				}(i)
+				if i%simultaneous == 0 {
+					wg.Wait()
+				}
+			}
+			wg.Wait()
+
+			require.Equal(t, tt.failedRequests, int(atomic.LoadUint64(&failedRequests)))
+			require.Equal(t, tt.concurrency, int(atomic.LoadUint64(&svcCounter)))
+		})
+	}
 }

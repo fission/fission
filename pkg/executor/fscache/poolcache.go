@@ -134,27 +134,31 @@ func (c *PoolCache) service() {
 					break
 				}
 			}
-			specializationInProgress := funcSvcGroup.svcWaiting - funcSvcGroup.queue.Len()
-			capacity := ((specializationInProgress + len(funcSvcGroup.svcs)) * req.requestsPerPod) - (totalActiveRequests + funcSvcGroup.svcWaiting)
 			if found {
 				req.responseChannel <- resp
 				continue
 			}
+			specializationInProgress := funcSvcGroup.svcWaiting - funcSvcGroup.queue.Len()
+			capacity := ((specializationInProgress + len(funcSvcGroup.svcs)) * req.requestsPerPod) - (totalActiveRequests + funcSvcGroup.svcWaiting)
+			if capacity > 1 {
+				funcSvcGroup.svcWaiting++
+				svcWait := &svcWait{
+					svcChannel: make(chan *FuncSvc),
+					ctx:        req.ctx,
+				}
+				resp.svcWaitValue = svcWait
+				funcSvcGroup.queue.Push(svcWait)
+				req.responseChannel <- resp
+				continue
+			}
+
 			// concurrency should not be set to zero and
 			//sum of specialization in progress and specialized pods should be less then req.concurrency
 			if req.concurrency > 0 && (specializationInProgress+len(funcSvcGroup.svcs)) >= req.concurrency {
-				resp.error = ferror.MakeError(ferror.ErrorTooManyRequests, fmt.Sprintf("function '%s' concurrency '%d' limit reached", req.function, req.concurrency))
+				resp.error = ferror.MakeError(ferror.ErrorTooManyRequests, fmt.Sprintf("function '%s' concurrency '%d' limit reached. in_progress %d ready %d", req.function, req.concurrency, specializationInProgress, len(funcSvcGroup.svcs)))
 			} else {
 				funcSvcGroup.svcWaiting++
 				resp.error = ferror.MakeError(ferror.ErrorNotFound, fmt.Sprintf("function '%s' all functions are busy", req.function))
-				if capacity > 1 {
-					svcWait := &svcWait{
-						svcChannel: make(chan *FuncSvc),
-						ctx:        req.ctx,
-					}
-					resp.svcWaitValue = svcWait
-					funcSvcGroup.queue.Push(svcWait)
-				}
 			}
 			req.responseChannel <- resp
 		case setValue:
