@@ -25,6 +25,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/fission/fission/pkg/crd"
 	"github.com/gorilla/mux"
 	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
@@ -148,9 +149,12 @@ func (executor *Executor) getServiceForFunction(ctx context.Context, fn *fv1.Fun
 		respChan: respChan,
 	}
 	resp := <-respChan
-	if resp.err != nil {
-		return "", resp.err
+	if errors.Is(ctx.Err(), context.Canceled) {
+		et := executor.executorTypes[resp.funcSvc.Executor]
+		et.UnTapService(ctx, crd.CacheKey(resp.funcSvc.Function), resp.funcSvc.Address)
+		return "", ferror.MakeError(499, "client leave early in the process of getServiceForFunction")
 	}
+
 	return resp.funcSvc.Address, resp.err
 }
 
