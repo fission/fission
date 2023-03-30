@@ -125,7 +125,6 @@ func (c *PoolCache) service() {
 					funcSvcGroup.svcs[addr].currentCPUUsage.Cmp(funcSvcGroup.svcs[addr].cpuLimit) < 1 {
 					// mark active
 					funcSvcGroup.svcs[addr].activeRequests++
-					totalActiveRequests++
 					if c.logger.Core().Enabled(zap.DebugLevel) {
 						otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Increase active requests with getValue", zap.String("function", req.function), zap.String("address", addr), zap.Int("activeRequests", funcSvcGroup.svcs[addr].activeRequests))
 					}
@@ -140,7 +139,7 @@ func (c *PoolCache) service() {
 			}
 			specializationInProgress := funcSvcGroup.svcWaiting - funcSvcGroup.queue.Len()
 			capacity := ((specializationInProgress + len(funcSvcGroup.svcs)) * req.requestsPerPod) - (totalActiveRequests + funcSvcGroup.svcWaiting)
-			if capacity > 1 {
+			if capacity > 0 {
 				funcSvcGroup.svcWaiting++
 				svcWait := &svcWait{
 					svcChannel: make(chan *FuncSvc),
@@ -155,7 +154,7 @@ func (c *PoolCache) service() {
 			// concurrency should not be set to zero and
 			//sum of specialization in progress and specialized pods should be less then req.concurrency
 			if req.concurrency > 0 && (specializationInProgress+len(funcSvcGroup.svcs)) >= req.concurrency {
-				resp.error = ferror.MakeError(ferror.ErrorTooManyRequests, fmt.Sprintf("function '%s' concurrency '%d' limit reached. in_progress %d ready %d", req.function, req.concurrency, specializationInProgress, len(funcSvcGroup.svcs)))
+				resp.error = ferror.MakeError(ferror.ErrorTooManyRequests, fmt.Sprintf("function '%s' concurrency '%d' limit reached.", req.function, req.concurrency))
 			} else {
 				funcSvcGroup.svcWaiting++
 				resp.error = ferror.MakeError(ferror.ErrorNotFound, fmt.Sprintf("function '%s' all functions are busy", req.function))
@@ -170,26 +169,24 @@ func (c *PoolCache) service() {
 			}
 			c.cache[req.function].svcs[req.address].val = req.value
 			c.cache[req.function].svcs[req.address].activeRequests++
-			if c.cache[req.function].svcWaiting > 0 {
+			c.cache[req.function].svcWaiting--
+			svcCapacity := req.requestsPerPod - c.cache[req.function].svcs[req.address].activeRequests
+			queueLen := c.cache[req.function].queue.Len()
+			if svcCapacity > queueLen {
+				svcCapacity = queueLen
+			}
+			for i := 0; i <= svcCapacity; {
+				popped := c.cache[req.function].queue.Pop()
+				if popped == nil {
+					break
+				}
+				if popped.ctx.Err() == nil {
+					popped.svcChannel <- req.value
+					c.cache[req.function].svcs[req.address].activeRequests++
+					i++
+				}
+				close(popped.svcChannel)
 				c.cache[req.function].svcWaiting--
-				svcCapacity := req.requestsPerPod - c.cache[req.function].svcs[req.address].activeRequests
-				queueLen := c.cache[req.function].queue.Len()
-				if svcCapacity > queueLen {
-					svcCapacity = queueLen
-				}
-				for i := 0; i <= svcCapacity; {
-					popped := c.cache[req.function].queue.Pop()
-					if popped == nil {
-						break
-					}
-					if popped.ctx.Err() == nil {
-						popped.svcChannel <- req.value
-						c.cache[req.function].svcs[req.address].activeRequests++
-						i++
-					}
-					close(popped.svcChannel)
-					c.cache[req.function].svcWaiting--
-				}
 			}
 			if c.logger.Core().Enabled(zap.DebugLevel) {
 				otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Increase active requests with setValue", zap.String("function", req.function), zap.String("address", req.address), zap.Int("activeRequests", c.cache[req.function].svcs[req.address].activeRequests))

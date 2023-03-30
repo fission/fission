@@ -134,12 +134,11 @@ func TestPoolCacheRequests(t *testing.T) {
 			failedRequests: 1,
 		},
 		{
-			name:           "test6",
-			requests:       300,
-			concurrency:    5,
-			rpp:            60,
-			simultaneous:   30,
-			failedRequests: 0,
+			name:         "test6",
+			requests:     300,
+			concurrency:  5,
+			rpp:          60,
+			simultaneous: 30,
 		},
 		{
 			name:           "test7",
@@ -148,6 +147,13 @@ func TestPoolCacheRequests(t *testing.T) {
 			rpp:            60,
 			simultaneous:   30,
 			failedRequests: 10,
+		},
+		{
+			name:         "test8",
+			requests:     10,
+			concurrency:  10,
+			rpp:          1,
+			simultaneous: 10,
 		},
 	} {
 		t.Run(fmt.Sprintf("scenario-%s", tt.name), func(t *testing.T) {
