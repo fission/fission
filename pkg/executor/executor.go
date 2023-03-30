@@ -60,7 +60,6 @@ type (
 		requestChan chan *createFuncServiceRequest
 		fsCreateWg  sync.Map
 	}
-
 	createFuncServiceRequest struct {
 		context  context.Context
 		function *fv1.Function

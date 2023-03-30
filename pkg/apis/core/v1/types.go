@@ -22,6 +22,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const (
+	DefaultConcurrency    = 500
+	DefaultRequestsPerPod = 1
+)
+
 //
 // To add a Fission CRD type:
 //   1. Create a "spec" type, for everything in the type except metadata
@@ -862,4 +867,18 @@ type (
 // IsEmpty checks if the archive byte and litreal are of length 0
 func (a Archive) IsEmpty() bool {
 	return len(a.Literal) == 0 && len(a.URL) == 0
+}
+
+func (fn Function) GetConcurrency() int {
+	if fn.Spec.Concurrency == 0 {
+		return DefaultConcurrency
+	}
+	return fn.Spec.Concurrency
+}
+
+func (fn Function) GetRequestPerPod() int {
+	if fn.Spec.RequestsPerPod == 0 {
+		return DefaultRequestsPerPod
+	}
+	return fn.Spec.RequestsPerPod
 }
