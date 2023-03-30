@@ -169,24 +169,26 @@ func (c *PoolCache) service() {
 			}
 			c.cache[req.function].svcs[req.address].val = req.value
 			c.cache[req.function].svcs[req.address].activeRequests++
-			c.cache[req.function].svcWaiting--
-			svcCapacity := req.requestsPerPod - c.cache[req.function].svcs[req.address].activeRequests
-			queueLen := c.cache[req.function].queue.Len()
-			if svcCapacity > queueLen {
-				svcCapacity = queueLen
-			}
-			for i := 0; i <= svcCapacity; {
-				popped := c.cache[req.function].queue.Pop()
-				if popped == nil {
-					break
-				}
-				if popped.ctx.Err() == nil {
-					popped.svcChannel <- req.value
-					c.cache[req.function].svcs[req.address].activeRequests++
-					i++
-				}
-				close(popped.svcChannel)
+			if c.cache[req.function].svcWaiting > 0 {
 				c.cache[req.function].svcWaiting--
+				svcCapacity := req.requestsPerPod - c.cache[req.function].svcs[req.address].activeRequests
+				queueLen := c.cache[req.function].queue.Len()
+				if svcCapacity > queueLen {
+					svcCapacity = queueLen
+				}
+				for i := 0; i <= svcCapacity; {
+					popped := c.cache[req.function].queue.Pop()
+					if popped == nil {
+						break
+					}
+					if popped.ctx.Err() == nil {
+						popped.svcChannel <- req.value
+						c.cache[req.function].svcs[req.address].activeRequests++
+						i++
+					}
+					close(popped.svcChannel)
+					c.cache[req.function].svcWaiting--
+				}
 			}
 			if c.logger.Core().Enabled(zap.DebugLevel) {
 				otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Increase active requests with setValue", zap.String("function", req.function), zap.String("address", req.address), zap.Int("activeRequests", c.cache[req.function].svcs[req.address].activeRequests))
