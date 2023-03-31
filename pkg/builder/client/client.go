@@ -21,10 +21,9 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"net/http"
 	"strings"
-	"time"
 
+	"github.com/hashicorp/go-retryablehttp"
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.uber.org/zap"
@@ -39,12 +38,13 @@ type (
 	Client struct {
 		logger     *zap.Logger
 		url        string
-		httpClient *http.Client
+		httpClient *retryablehttp.Client
 	}
 )
 
 func MakeClient(logger *zap.Logger, builderUrl string) *Client {
-	hc := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
+	hc := retryablehttp.NewClient()
+	hc.HTTPClient.Transport = otelhttp.NewTransport(hc.HTTPClient.Transport)
 	return &Client{
 		logger:     logger.Named("builder_client"),
 		url:        strings.TrimSuffix(builderUrl, "/"),
@@ -60,27 +60,10 @@ func (c *Client) Build(ctx context.Context, req *builder.PackageBuildRequest) (*
 		return nil, errors.Wrap(err, "error marshaling json")
 	}
 
-	maxRetries := 20
-	var resp *http.Response
-
-	for i := 0; i < maxRetries; i++ {
-		resp, err = ctxhttp.Post(ctx, c.httpClient, c.url, "application/json", bytes.NewReader(body))
-		if err == nil {
-			if resp.StatusCode == 200 {
-				break
-			}
-			err = ferror.MakeErrorFromHTTP(resp)
-		}
-
-		if i < maxRetries-1 {
-			time.Sleep(50 * time.Duration(2*i) * time.Millisecond)
-			logger.Error("error building package, retrying", zap.Error(err))
-			continue
-		}
-
-		return nil, err
+	resp, err := ctxhttp.Post(ctx, c.httpClient.StandardClient(), c.url, "application/json", bytes.NewReader(body))
+	if err != nil {
+		return nil, ferror.MakeErrorFromHTTP(resp)
 	}
-
 	defer resp.Body.Close()
 
 	rBody, err := io.ReadAll(resp.Body)
