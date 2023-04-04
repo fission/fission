@@ -46,6 +46,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/fission/fission/pkg/router/accesslog"
 	"github.com/gorilla/mux"
 	"go.opentelemetry.io/otel"
 	"go.uber.org/zap"
@@ -62,10 +63,13 @@ import (
 
 // request url ---[trigger]---> Function(name, deployment) ----[deployment]----> Function(name, uid) ----[pool mgr]---> k8s service url
 
-func router(ctx context.Context, logger *zap.Logger, httpTriggerSet *HTTPTriggerSet) *mutableRouter {
+func router(ctx context.Context, logger *zap.Logger, httpTriggerSet *HTTPTriggerSet, displayAccessLog bool) *mutableRouter {
 	var mr *mutableRouter
 	mux := mux.NewRouter()
 	mux.Use(metrics.HTTPMetricMiddleware)
+	if displayAccessLog {
+		mux.Use(accesslog.Logger(logger))
+	}
 
 	// see issue https://github.com/fission/fission/issues/1317
 	useEncodedPath, _ := strconv.ParseBool(os.Getenv("USE_ENCODED_PATH"))
@@ -81,7 +85,7 @@ func router(ctx context.Context, logger *zap.Logger, httpTriggerSet *HTTPTrigger
 
 func serve(ctx context.Context, logger *zap.Logger, port int,
 	httpTriggerSet *HTTPTriggerSet, displayAccessLog bool) {
-	mr := router(ctx, logger, httpTriggerSet)
+	mr := router(ctx, logger, httpTriggerSet, displayAccessLog)
 	handler := otelUtils.GetHandlerWithOTEL(mr, "fission-router", otelUtils.UrlsToIgnore("/router-healthz"))
 	httpserver.StartServer(ctx, logger, "router", fmt.Sprintf("%d", port), handler)
 }
