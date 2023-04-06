@@ -15,9 +15,7 @@ func Logger(logger *zap.Logger) mux.MiddlewareFunc {
 	return func(next http.Handler) http.Handler {
 		return handlers.CustomLoggingHandler(os.Stdout, next, func(w io.Writer, params handlers.LogFormatterParams) {
 			ctx := params.Request.Context()
-			// TODO(@saltbo): refactor the functionHandler code to inject upstream data
-			// upstream := newUpstreamFrom(ctx)
-
+			upstream := newUpstreamFrom(ctx)
 			logger := otelUtils.LoggerWithTraceID(ctx, logger)
 			logger.With(
 				zap.String("host", params.Request.Host),
@@ -27,10 +25,10 @@ func Logger(logger *zap.Logger) mux.MiddlewareFunc {
 				zap.Int("status", params.StatusCode),
 				zap.Int64("request_length", params.Request.ContentLength),
 				zap.Int("body_bytes_sent", params.Size),
-				// zap.String("upstream_addr", upstream.Addr),
-				// zap.Int("upstream_response_length", upstream.ResponseLength),
-				// zap.Int("upstream_response_time", upstream.ResponseTime),
-				// zap.Int("upstream_status", upstream.ResponseStatus),
+				zap.String("upstream_addr", upstream.Addr),
+				zap.Int64("upstream_response_length", upstream.ResponseLength),
+				zap.Int64("upstream_response_time", upstream.ResponseTime),
+				zap.Int("upstream_status", upstream.ResponseStatus),
 			).Info(params.URL.Path)
 		})
 	}

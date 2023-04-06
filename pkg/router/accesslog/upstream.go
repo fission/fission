@@ -2,6 +2,8 @@ package accesslog
 
 import (
 	"context"
+	"net/http"
+	"time"
 )
 
 type upstreamKey string
@@ -10,12 +12,12 @@ const upstreamCtxKey upstreamKey = "upstream"
 
 type Upstream struct {
 	Addr           string
-	ResponseLength int
-	ResponseTime   int
+	ResponseLength int64
+	ResponseTime   int64
 	ResponseStatus int
 }
 
-func NewUpstream() *Upstream {
+func emptyUpstream() *Upstream {
 	return &Upstream{
 		Addr:           "-",
 		ResponseLength: -1,
@@ -27,11 +29,30 @@ func NewUpstream() *Upstream {
 func newUpstreamFrom(ctx context.Context) *Upstream {
 	u, ok := ctx.Value(upstreamCtxKey).(*Upstream)
 	if !ok {
-		u = NewUpstream()
+		u = emptyUpstream()
 	}
 	return u
 }
 
 func WithUpstream(ctx context.Context, u *Upstream) context.Context {
 	return context.WithValue(ctx, upstreamCtxKey, u)
+}
+
+type UpstreamRoundTrip struct {
+	http.RoundTripper
+}
+
+func NewUpstreamRoundTrip(roundTripper http.RoundTripper) *UpstreamRoundTrip {
+	return &UpstreamRoundTrip{RoundTripper: roundTripper}
+}
+
+func (u *UpstreamRoundTrip) RoundTrip(req *http.Request) (*http.Response, error) {
+	ctx := req.Context()
+	startAt := time.Now()
+	uInfo := &Upstream{Addr: req.URL.String()}
+	resp, err := u.RoundTripper.RoundTrip(req.WithContext(WithUpstream(ctx, uInfo)))
+	uInfo.ResponseLength = resp.ContentLength
+	uInfo.ResponseStatus = resp.StatusCode
+	uInfo.ResponseTime = time.Since(startAt).Milliseconds()
+	return resp, err
 }

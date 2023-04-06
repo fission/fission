@@ -29,6 +29,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fission/fission/pkg/router/accesslog"
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.uber.org/zap"
@@ -478,7 +479,7 @@ func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *h
 
 	proxy := &httputil.ReverseProxy{
 		Director:     director,
-		Transport:    rrt,
+		Transport:    accesslog.NewUpstreamRoundTrip(rrt),
 		ErrorHandler: fh.getProxyErrorHandler(start, rrt),
 		ModifyResponse: func(resp *http.Response) error {
 			go fh.collectFunctionMetric(start, rrt, request, resp)
