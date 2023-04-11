@@ -1,0 +1,125 @@
+{{- if .Values.logger.enabled }}
+{{- if .Values.logger.podSecurityPolicy.enabled }}
+apiVersion: policy/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  name: {{ .Release.Name }}-fission-logger-privileged
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: logger
+spec:
+  privileged: true
+  seLinux:
+    rule: RunAsAny
+  supplementalGroups:
+    rule: RunAsAny
+  runAsUser:
+    rule: RunAsAny
+  fsGroup:
+    rule: RunAsAny
+  volumes:
+    - '*'
+  {{- if .Values.logger.podSecurityPolicy.additionalCapabilities }}
+  allowedCapabilities:
+  {{- range .Values.logger.podSecurityPolicy.additionalCapabilities }}
+    - {{ . }}
+  {{- end }}
+  {{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: psp:{{ .Release.Name }}-fission-logger-privileged
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: logger
+rules:
+  - apiGroups: ['policy']
+    resources: ['podsecuritypolicies']
+    verbs:     ['use']
+    resourceNames:
+      - {{ .Release.Name }}-fission-logger-privileged
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: psp:{{ .Release.Name }}-fission-logger-privileged
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: logger
+roleRef:
+  kind:     Role
+  name:     psp:{{ .Release.Name }}-fission-logger-privileged
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+  - kind:      ServiceAccount
+    name:      default
+    namespace: {{ .Release.Namespace }}
+{{- end }}
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: logger
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: logger
+spec:
+  selector:
+    matchLabels:
+      svc: logger
+  template:
+    metadata:
+      labels:
+        svc: logger
+    spec:
+      initContainers:
+        - name: init
+          image: {{ .Values.busyboxImage | quote }}
+          imagePullPolicy: {{ .Values.pullPolicy }}
+          command: ['mkdir', '-p', '/var/log/fission']
+          volumeMounts:
+            - name: container-log
+              mountPath: /var/log/
+              readOnly: false
+{{- if .Values.logger.enableSecurityContext }}
+          securityContext:
+            privileged: true
+{{- end }}
+      containers:
+        - name: logger
+          image: {{ include "fission-bundleImage" . | quote }}
+          imagePullPolicy: {{ .Values.pullPolicy }}
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: spec.nodeName
+          command: ["/fission-bundle"]
+          args: ["--logger"]
+          volumeMounts:
+            - name: container-log
+              mountPath: /var/log/
+              readOnly: false
+            - name: docker-log
+              mountPath: /var/lib/docker/containers
+              readOnly: true
+{{- if .Values.logger.enableSecurityContext }}
+          securityContext:
+            privileged: true
+{{- end }}
+      volumes:
+        - name: container-log
+          hostPath:
+            path: /var/log/
+        - name: docker-log
+          hostPath:
+            path: /var/lib/docker/containers
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+  updateStrategy:
+    type: RollingUpdate
+{{- end }}
