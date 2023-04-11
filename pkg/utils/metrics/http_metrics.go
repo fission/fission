@@ -67,6 +67,12 @@ func (rw *ResponseWriterWrapper) WriteHeader(statuscode int) {
 	rw.ResponseWriter.WriteHeader(statuscode)
 }
 
+func (rw *ResponseWriterWrapper) Flush() {
+	if f, ok := rw.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
 func HTTPMetricMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if util.IsWebsocketRequest(r) {
