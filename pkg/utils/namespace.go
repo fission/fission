@@ -20,7 +20,7 @@ const (
 type (
 	NamespaceResolver struct {
 		FunctionNamespace string
-		BuiderNamespace   string
+		BuilderNamespace  string
 		DefaultNamespace  string
 		FissionResourceNS map[string]string
 		Logger            *zap.Logger
@@ -40,14 +40,14 @@ var nsResolver *NamespaceResolver
 func init() {
 	nsResolver = &NamespaceResolver{
 		FunctionNamespace: os.Getenv(ENV_FUNCTION_NAMESPACE),
-		BuiderNamespace:   os.Getenv(ENV_BUILDER_NAMESPACE),
+		BuilderNamespace:  os.Getenv(ENV_BUILDER_NAMESPACE),
 		DefaultNamespace:  os.Getenv(ENV_DEFAULT_NAMESPACE),
 		FissionResourceNS: GetNamespaces(),
 		Logger:            loggerfactory.GetLogger(),
 	}
 
 	nsResolver.Logger.Debug("namespaces", zap.String("function_namespace", nsResolver.FunctionNamespace),
-		zap.String("builder_namespace", nsResolver.BuiderNamespace),
+		zap.String("builder_namespace", nsResolver.BuilderNamespace),
 		zap.String("default_namespace", nsResolver.DefaultNamespace),
 		zap.Any("fission_resource_namespace", listNamespaces(nsResolver.FissionResourceNS)))
 }
@@ -96,8 +96,8 @@ func (nsr *NamespaceResolver) FissionNSWithOptions(option ...option) map[string]
 	if options.functionNS && nsr.FunctionNamespace != "" {
 		fissionResourceNS[nsr.FunctionNamespace] = nsr.FunctionNamespace
 	}
-	if options.builderNS && nsr.BuiderNamespace != "" {
-		fissionResourceNS[nsr.BuiderNamespace] = nsr.BuiderNamespace
+	if options.builderNS && nsr.BuilderNamespace != "" {
+		fissionResourceNS[nsr.BuilderNamespace] = nsr.BuilderNamespace
 	}
 	if options.defaultNs && nsr.DefaultNamespace != "" {
 		fissionResourceNS[nsr.DefaultNamespace] = nsr.DefaultNamespace
@@ -118,7 +118,7 @@ func GetNamespaces() map[string]string {
 	if len(envValue) > 0 {
 		lstNamespaces := strings.Split(envValue, ",")
 		for _, namespace := range lstNamespaces {
-			//check to handle string with additional comma at the end of string. eg- ns1,ns2,
+			// check to handle string with additional comma at the end of string. eg- ns1,ns2,
 			if namespace != "" {
 				namespaces[namespace] = namespace
 			}
@@ -132,14 +132,14 @@ func GetNamespaces() map[string]string {
 }
 
 func (nsr *NamespaceResolver) GetBuilderNS(namespace string) string {
-	if nsr.BuiderNamespace == "" {
+	if nsr.BuilderNamespace == "" {
 		return namespace
 	}
 
 	if namespace != metav1.NamespaceDefault {
 		return namespace
 	}
-	return nsr.BuiderNamespace
+	return nsr.BuilderNamespace
 }
 
 func (nsr *NamespaceResolver) GetFunctionNS(namespace string) string {
@@ -154,7 +154,7 @@ func (nsr *NamespaceResolver) GetFunctionNS(namespace string) string {
 }
 
 func (nsr *NamespaceResolver) ResolveNamespace(namespace string) string {
-	if nsr.FunctionNamespace == "" || nsr.BuiderNamespace == "" {
+	if nsr.FunctionNamespace == "" || nsr.BuilderNamespace == "" {
 		return nsr.DefaultNamespace
 	}
 	return namespace

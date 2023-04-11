@@ -226,7 +226,7 @@ func TestNamespaceResolver(t *testing.T) {
 func getFissionNamespaces(builderNS, functionNS, defaultNS string) *NamespaceResolver {
 	return &NamespaceResolver{
 		FunctionNamespace: functionNS,
-		BuiderNamespace:   builderNS,
+		BuilderNamespace:  builderNS,
 		DefaultNamespace:  defaultNS,
 	}
 }
