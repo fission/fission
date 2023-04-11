@@ -579,7 +579,7 @@ logger:
     tag: 1.8.8
     ## Enable InfluxDB
     influxdb:
-      enabled: false
+      enabled: true
       image: influxdb:1.8
       adminUser: admin
     ## Specify custom output configurations for Fluent Bit by uncommenting customOutput and
