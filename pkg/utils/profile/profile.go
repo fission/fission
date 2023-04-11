@@ -25,7 +25,6 @@ package profile
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
@@ -35,26 +34,18 @@ import (
 	"github.com/fission/fission/pkg/utils/httpserver"
 )
 
-func getPprofAddr() string {
-	pprofHost := os.Getenv("PPROF_HOST")
-	if pprofHost == "" {
-		pprofHost = "localhost"
-	}
-	pprofPort := os.Getenv("PPROF_PORT")
-	if pprofPort == "" {
-		pprofPort = "6060"
-	}
-	return fmt.Sprintf("%s:%s", pprofHost, pprofPort)
-}
-
 func ProfileIfEnabled(ctx context.Context, logger *zap.Logger) {
 	enablePprof := os.Getenv("PPROF_ENABLED")
 	if enablePprof != "true" {
 		return
 	}
+	pprofPort := os.Getenv("PPROF_PORT")
+	if pprofPort == "" {
+		pprofPort = "6060"
+	}
 
 	pprofMux := http.DefaultServeMux
 	http.DefaultServeMux = http.NewServeMux()
 
-	go httpserver.StartServer(ctx, logger, "pprof", getPprofAddr(), pprofMux)
+	go httpserver.StartServer(ctx, logger, "pprof", pprofPort, pprofMux)
 }
