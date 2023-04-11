@@ -1,43 +1,4 @@
 {{- if .Values.logger.enabled }}
-# Logger & Fluentbit deployment for Fission
-#
-# Requires:
-# - service account: fission-svc
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: {{ .Release.Name }}-fission-fluentbit
-data:
-{{- if .Files.Get "config/fluentbit.conf" }}
-  fluentbit.conf: |
-{{ .Files.Get "config/fluentbit.conf" | indent 3 }}
-{{ else }}
-{{ fail "invalid chart" }}
-{{- end }}
-  output-influxdb.conf: |
-{{- if .Values.logger.fluentbit.influxdb.enabled }}
-{{ .Files.Get "config/output-influxdb.conf" | indent 3 }}
-{{ else }}
-# intentionally empty, as influxdb is not enabled
-{{- end }}
-  output-custom.conf: |
-{{- if .Values.logger.fluentbit.customOutput }}
-{{ tpl .Values.logger.fluentbit.customOutput . | indent 3 }}
-{{ else }}
-{{- end }}
-{{- if .Files.Get "config/parsers.conf" }}
-  parsers.conf: |
-{{ .Files.Get "config/parsers.conf" | indent 3 }}
-{{ else }}
-{{ fail "invalid chart" }}
-{{- end }}
----
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: fission-fluentbit
-  namespace: {{ .Release.Namespace }}
----
 {{- if .Values.logger.podSecurityPolicy.enabled }}
 apiVersion: policy/v1beta1
 kind: PodSecurityPolicy
@@ -116,15 +77,15 @@ spec:
         - name: init
           image: {{ .Values.busyboxImage | quote }}
           imagePullPolicy: {{ .Values.pullPolicy }}
-          command: [ 'mkdir', '-p', '/var/log/fission' ]
+          command: ['mkdir', '-p', '/var/log/fission']
           volumeMounts:
             - name: container-log
               mountPath: /var/log/
               readOnly: false
-      {{- if .Values.logger.enableSecurityContext }}
+{{- if .Values.logger.enableSecurityContext }}
           securityContext:
             privileged: true
-      {{- end }}
+{{- end }}
       containers:
         - name: logger
           image: {{ include "fission-bundleImage" . | quote }}
@@ -148,72 +109,6 @@ spec:
           securityContext:
             privileged: true
 {{- end }}
-        - name: fluentbit
-{{- if .Values.repository }}
-          image: "{{ .Values.logger.fluentbit.repository }}/{{ .Values.logger.fluentbit.image }}:{{ .Values.logger.fluentbit.tag }}"
-{{ else }}
-          image: "{{ .Values.logger.fluentbit.image }}:{{ .Values.logger.fluentbit.tag }}"
-{{- end }}
-          imagePullPolicy: {{ .Values.pullPolicy }}
-          # CMD ["/fluent-bit/bin/fluent-bit", "-c", "/fluent-bit/etc/fluent-bit.conf"]
-          command: ["/fluent-bit/bin/fluent-bit", "-c", "/fluent-bit/etc/fluentbit.conf"]
-          env:
-{{- if .Values.logger.fluentbit.influxdb.enabled }}
-            - name: INFLUXDB_ADDRESS
-              value: influxdb
-            - name: INFLUXDB_PORT
-              value: "8086"
-            - name: INFLUXDB_DBNAME
-              value: "fissionFunctionLog"
-            - name: INFLUXDB_USERNAME
-              valueFrom:
-                secretKeyRef:
-                  name: influxdb
-                  key: username
-            - name: INFLUXDB_PASSWD
-              valueFrom:
-                secretKeyRef:
-                  name: influxdb
-                  key: password
-{{- end }}
-            - name: SERVICE_FLUSH_INTERVAL
-              value: "5"
-            - name: INPUT_REFRESH_INTERVAL
-              value: "10"
-            - name: INPUT_MEM_BUF_LIMIT
-              value: "5MB"
-            - name: LOG_PATH
-              value: /var/log/fission/*.log
-{{- if .Values.logger.fluentbit.extraEnv.public }}
-{{- range $key, $value := .Values.logger.fluentbit.extraEnv.public }}
-            - name: {{ $key }}
-              value: {{ quote $value }}
-{{- end }}
-{{- end }}
-{{- if .Values.logger.fluentbit.extraEnv.sensitive }}
-{{- range $key, $val := .Values.logger.fluentbit.extraEnv.sensitive }}
-            - name: {{ $key }}
-              valueFrom:
-                secretKeyRef:
-                  name: {{ $.Release.Name }}-fission-fluentbit-secret
-                  key: {{ $key }}
-{{- end}}
-{{- end}}
-{{- if .Values.logger.enableSecurityContext }}
-          securityContext:
-            privileged: true
-{{- end }}
-          volumeMounts:
-            - name: container-log
-              mountPath: /var/log/
-              readOnly: false
-            - name: docker-log
-              mountPath: /var/lib/docker/containers
-              readOnly: true
-            - name: fluentbit-config
-              mountPath: /fluent-bit/etc/
-              readOnly: true
-      serviceAccountName: fission-fluentbit
       volumes:
         - name: container-log
           hostPath:
@@ -221,12 +116,8 @@ spec:
         - name: docker-log
           hostPath:
             path: /var/lib/docker/containers
-        # Fluentbit config location: /fluent-bit/etc/*.conf
-        - name: fluentbit-config
-          configMap:
-            name: {{ .Release.Name }}-fission-fluentbit
       {{- with .Values.imagePullSecrets }}
-      imagePullSecrets: 
+      imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
   updateStrategy:
