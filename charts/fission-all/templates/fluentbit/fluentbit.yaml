@@ -85,6 +85,21 @@ spec:
 {{- end }}
             - name: LOG_PATH
               value: /var/log/fission/*.log
+{{- if .Values.logger.fluentbit.extraEnv.public }}
+{{- range $key, $value := .Values.logger.fluentbit.env.public }}
+            - name: {{ $key }}
+              value: {{ quote $value }}
+{{- end }}
+{{- end }}
+{{- if .Values.logger.fluentbit.extraEnv.sensitive }}
+{{- range $key, $val := .Values.logger.fluentbit.env.sensitive }}
+            - name: {{ $key }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $.Release.Name }}-fission-fluentbit-secret
+                  key: {{ $key }}
+{{- end}}
+{{- end}}
 {{- if .Values.logger.enableSecurityContext }}
           securityContext:
             privileged: true

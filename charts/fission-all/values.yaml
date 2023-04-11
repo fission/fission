@@ -567,13 +567,19 @@ analyticsNonHelmInstall: false
 ##
 gaTrackingID: UA-196546703-1
 
-## Logger config
-## This would be used if influxdb is enabled
-##
+## Logger configura
 logger:
   enabled: false
   fluentbit:
     enabled: false
+    # Extra environment variables to pass to the fluent-bit container
+    extraEnv:
+      public:
+#      - name: EXAMPLE
+#        value: "example"
+      sensitive:
+#      - name: EXAMPLE
+#        value: "example"
     repository: index.docker.io
     image: fluent/fluent-bit
     tag: 1.8.8
