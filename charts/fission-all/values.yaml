@@ -582,8 +582,10 @@ logger:
       enabled: false
       image: influxdb:1.8
       adminUser: admin
-    customOutput: |
-      # Specify custom output(s) here
+    ## Specify custom output configurations for Fluent Bit by uncommenting customOutput and
+    # adding your custom settings
+    #customOutput: |
+
 
     ## Fluent-bit writes/reads it’s own sqlite database to record a history of tracked
     ## files and a state of offsets, this is very useful to resume a state if the ser-

@@ -20,6 +20,11 @@ data:
 {{ else }}
 # intentionally empty, as influxdb is not enabled
 {{- end }}
+  output-custom.conf: |
+{{- if .Values.logger.fluentbit.customOutput }}
+{{ tpl .Values.logger.fluentbit.customOutput . | indent 3 }}
+{{ else }}
+{{- end }}
 {{- if .Files.Get "config/parsers.conf" }}
   parsers.conf: |
 {{ .Files.Get "config/parsers.conf" | indent 3 }}
