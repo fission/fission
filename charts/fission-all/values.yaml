@@ -571,7 +571,6 @@ gaTrackingID: UA-196546703-1
 logger:
   enabled: false
   fluentbit:
-    enabled: false
     # Extra environment variables to pass to the fluent-bit container
     extraEnv:
       public:
@@ -597,13 +596,13 @@ logger:
     ##     Match *
     customOutput: null
 
-    ## Fluent-bit writes/reads it’s own sqlite database to record a history of tracked
-    ## files and a state of offsets, this is very useful to resume a state if the ser-
-    ## vice is restarted. For Kubernetes environment with constraints like OpenShift,
-    ## the containers are limited to write hostPath volume. Hence, we have to enable
-    ## security context and set privileged to true.
-    ##
-    enableSecurityContext: false
+  ## Fluent-bit writes/reads it’s own sqlite database to record a history of tracked
+  ## files and a state of offsets, this is very useful to resume a state if the ser-
+  ## vice is restarted. For Kubernetes environment with constraints like OpenShift,
+  ## the containers are limited to write hostPath volume. Hence, we have to enable
+  ## security context and set privileged to true.
+  ##
+  enableSecurityContext: false
 
   ## Enable PodSecurityPolicies to allow privileged container
   ## Only required in some clusters and when enableSecurityContext is true
