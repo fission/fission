@@ -1,4 +1,4 @@
-{{- if .Values.logger.fluentbit.enabled }}
+{{- if .Values.logger.enabled }}
 {{- include "kubernetes-role-generator" (merge (dict "namespace" .Values.defaultNamespace "component" "fluentbit") .) }}
 
 {{- if gt (len .Values.additionalFissionNamespaces) 0 }}
