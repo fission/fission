@@ -211,6 +211,9 @@ router:
   ## deployAsDaemonSet decides whether to deploy router as a DaemonSet or a Deployment.
   ##
   deployAsDaemonSet: false
+  ## replicas decides how many router pods to deploy. Only used when deployAsDaemonSet is false.
+  ##
+  replicas: 1
   ## svcAddressMaxRetries is the max times for router to retry with a specific function service address
   ##
   svcAddressMaxRetries: 5
