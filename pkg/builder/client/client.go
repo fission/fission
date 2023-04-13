@@ -62,7 +62,7 @@ func (c *Client) Build(ctx context.Context, req *builder.PackageBuildRequest) (*
 
 	resp, err := ctxhttp.Post(ctx, c.httpClient.StandardClient(), c.url, "application/json", bytes.NewReader(body))
 	if err != nil {
-		return nil, ferror.MakeErrorFromHTTP(resp)
+		return nil, err
 	}
 	defer resp.Body.Close()
 
