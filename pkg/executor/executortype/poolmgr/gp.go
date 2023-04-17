@@ -96,8 +96,8 @@ func MakeGenericPool(
 	fetcherConfig *fetcherConfig.Config,
 	instanceID string,
 	enableIstio bool,
-	podSpecPatch *apiv1.PodSpec) *GenericPool {
-
+	podSpecPatch *apiv1.PodSpec,
+) *GenericPool {
 	gpLogger := logger.Named("generic_pool")
 
 	podReadyTimeoutStr := os.Getenv("POD_READY_TIMEOUT")
@@ -272,6 +272,23 @@ func (gp *GenericPool) choosePod(ctx context.Context, newLabels map[string]strin
 			return "", nil, errors.New("readypod controller is not running")
 		}
 		key = item.(string)
+
+		select {
+		case <-ctx.Done():
+			gp.readyPodQueue.Done(key)
+			gp.readyPodQueue.Add(key)
+			logger.Error("context cancelled before getting key", zap.String("key", key))
+			return "", nil, errors.New("context cancelled before getting key")
+		default:
+			deadline, ok := ctx.Deadline()
+			if ok && time.Until(deadline) < 3*time.Second {
+				gp.readyPodQueue.Done(key)
+				gp.readyPodQueue.Add(key)
+				logger.Error("context is to close to deadline after getting key", zap.String("key", key), zap.Stringer("deadline", time.Until(deadline)))
+				return "", nil, fmt.Errorf("context is %s from deadline after getting key", time.Until(deadline))
+			}
+		}
+
 		logger.Debug("got key from the queue", zap.String("key", key))
 		namespace, name, err := cache.SplitMetaNamespaceKey(key)
 		if err != nil {
@@ -443,7 +460,6 @@ func (gp *GenericPool) specializePod(ctx context.Context, pod *apiv1.Pod, fn *fv
 			} else {
 				return err
 			}
-
 		}
 	}
 	// specialize pod with service
