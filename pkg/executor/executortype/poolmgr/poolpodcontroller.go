@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+	"golang.org/x/time/rate"
 	apps "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -69,11 +70,19 @@ type (
 	}
 )
 
+func cleanupPodRateLimiter() workqueue.RateLimiter {
+	return workqueue.NewMaxOfRateLimiter(
+		workqueue.NewItemExponentialFailureRateLimiter(time.Second, 60*time.Second),
+		&workqueue.BucketRateLimiter{Limiter: rate.NewLimiter(rate.Limit(1), 5)},
+	)
+}
+
 func NewPoolPodController(ctx context.Context, logger *zap.Logger,
 	kubernetesClient kubernetes.Interface,
 	enableIstio bool,
 	finformerFactory map[string]genInformer.SharedInformerFactory,
-	gpmInformerFactory map[string]k8sInformers.SharedInformerFactory) (*PoolPodController, error) {
+	gpmInformerFactory map[string]k8sInformers.SharedInformerFactory,
+) (*PoolPodController, error) {
 	logger = logger.Named("pool_pod_controller")
 	p := &PoolPodController{
 		logger:               logger,
@@ -86,7 +95,7 @@ func NewPoolPodController(ctx context.Context, logger *zap.Logger,
 		podListerSynced:      make(map[string]k8sCache.InformerSynced),
 		envCreateUpdateQueue: workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "EnvAddUpdateQueue"),
 		envDeleteQueue:       workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "EnvDeleteQueue"),
-		spCleanupPodQueue:    workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "SpecializedPodCleanupQueue"),
+		spCleanupPodQueue:    workqueue.NewNamedRateLimitingQueue(cleanupPodRateLimiter(), "SpecializedPodCleanupQueue"),
 	}
 	if p.enableIstio {
 		for _, factory := range finformerFactory {
@@ -178,7 +187,7 @@ func (p *PoolPodController) processRS(rs *apps.ReplicaSet) {
 			logger.Error("Failed to get key for pod", zap.Error(err))
 			continue
 		}
-		p.spCleanupPodQueue.Add(key)
+		p.spCleanupPodQueue.AddRateLimited(key)
 	}
 }
 
