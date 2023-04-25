@@ -73,7 +73,7 @@ type (
 func cleanupPodRateLimiter() workqueue.RateLimiter {
 	return workqueue.NewMaxOfRateLimiter(
 		workqueue.NewItemExponentialFailureRateLimiter(time.Second, 60*time.Second),
-		&workqueue.BucketRateLimiter{Limiter: rate.NewLimiter(rate.Limit(1), 5)},
+		&workqueue.BucketRateLimiter{Limiter: rate.NewLimiter(rate.Limit(1), 1)},
 	)
 }
 
@@ -162,7 +162,12 @@ func (p *PoolPodController) processRS(rs *apps.ReplicaSet) {
 		return
 	}
 	logger := p.logger.With(zap.String("rs", rs.Name), zap.String("namespace", rs.Namespace))
-	logger.Debug("replica set has zero replica count")
+
+	// wait for unspecialized pods to finish booting before beginning to cleanup specialized ones
+	delay := 15 * time.Second
+	logger.Info("replica set has zero replica count, delaying before cleanup", zap.Stringer("delay", delay))
+	time.Sleep(delay)
+
 	// List all specialized pods and schedule for cleanup
 	rsLabelMap, err := metav1.LabelSelectorAsMap(rs.Spec.Selector)
 	if err != nil {
@@ -197,7 +202,7 @@ func (p *PoolPodController) handleRSAdd(obj interface{}) {
 		p.logger.Error("unexpected type when adding rs to pool pod controller", zap.Any("obj", obj))
 		return
 	}
-	p.processRS(rs)
+	go p.processRS(rs)
 }
 
 func (p *PoolPodController) handleRSUpdate(oldObj interface{}, newObj interface{}) {
@@ -206,7 +211,7 @@ func (p *PoolPodController) handleRSUpdate(oldObj interface{}, newObj interface{
 		p.logger.Error("unexpected type when updating rs to pool pod controller", zap.Any("obj", newObj))
 		return
 	}
-	p.processRS(rs)
+	go p.processRS(rs)
 }
 
 func (p *PoolPodController) handleRSDelete(obj interface{}) {
@@ -223,7 +228,7 @@ func (p *PoolPodController) handleRSDelete(obj interface{}) {
 			return
 		}
 	}
-	p.processRS(rs)
+	go p.processRS(rs)
 }
 
 func (p *PoolPodController) enqueueEnvAdd(obj interface{}) {
