@@ -2,7 +2,6 @@ package container
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 
@@ -269,25 +268,6 @@ func (cfg *Config) addFetcherToPodSpecWithCommand(podSpec *apiv1.PodSpec, mainCo
 			},
 		},
 		Env: otel.OtelEnvForContainer(),
-	}
-
-	// Pod is removed from endpoints list for service when it's
-	// state became "Termination". We used preStop hook as the
-	// workaround for connection draining since pod maybe shutdown
-	// before grace period expires.
-	// https://kubernetes.io/docs/concepts/workloads/pods/pod/#termination-of-pods
-	// https://github.com/kubernetes/kubernetes/issues/47576#issuecomment-308900172
-	if podSpec.TerminationGracePeriodSeconds != nil {
-		c.Lifecycle = &apiv1.Lifecycle{
-			PreStop: &apiv1.LifecycleHandler{
-				Exec: &apiv1.ExecAction{
-					Command: []string{
-						"/bin/sleep",
-						fmt.Sprintf("%v", *podSpec.TerminationGracePeriodSeconds),
-					},
-				},
-			},
-		}
 	}
 
 	found := false

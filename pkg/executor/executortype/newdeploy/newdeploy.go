@@ -38,8 +38,8 @@ import (
 )
 
 func (deploy *NewDeploy) createOrGetDeployment(ctx context.Context, fn *fv1.Function, env *fv1.Environment,
-	deployName string, deployLabels map[string]string, deployAnnotations map[string]string, deployNamespace string) (*appsv1.Deployment, error) {
-
+	deployName string, deployLabels map[string]string, deployAnnotations map[string]string, deployNamespace string,
+) (*appsv1.Deployment, error) {
 	specializationTimeout := fn.Spec.InvokeStrategy.ExecutionStrategy.SpecializationTimeout
 	minScale := int32(fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale)
 
@@ -128,8 +128,8 @@ func (deploy *NewDeploy) deleteDeployment(ctx context.Context, ns string, name s
 }
 
 func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function, env *fv1.Environment, targetReplicas *int32,
-	deployName string, deployNamespace string, deployLabels map[string]string, deployAnnotations map[string]string) (*appsv1.Deployment, error) {
-
+	deployName string, deployNamespace string, deployLabels map[string]string, deployAnnotations map[string]string,
+) (*appsv1.Deployment, error) {
 	replicas := int32(fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale)
 	if targetReplicas != nil {
 		replicas = *targetReplicas
@@ -190,12 +190,14 @@ func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function
 		Image:                  env.Spec.Runtime.Image,
 		ImagePullPolicy:        deploy.runtimeImagePullPolicy,
 		TerminationMessagePath: "/dev/termination-log",
+		// if the pod is specialized (i.e. has secrets), wait 60 seconds for the routers endpoint cache to expire before shutting down
 		Lifecycle: &apiv1.Lifecycle{
 			PreStop: &apiv1.LifecycleHandler{
 				Exec: &apiv1.ExecAction{
 					Command: []string{
-						"/bin/sleep",
-						fmt.Sprintf("%d", gracePeriodSeconds),
+						"bash",
+						"-c",
+						"test $(ls /secrets/) && sleep 63 || exit 0",
 					},
 				},
 			},
