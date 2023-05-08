@@ -216,7 +216,7 @@ func CreatePackage(input cli.Input, client cmd.Client, pkgName string, pkgNamesp
 			return &pkg.ObjectMeta, nil
 		}
 
-		err = spec.SpecSave(*pkg, specFile)
+		err = spec.SpecSave(*pkg, specFile, false)
 		if err != nil {
 			return nil, errors.Wrap(err, "error saving package spec")
 		}

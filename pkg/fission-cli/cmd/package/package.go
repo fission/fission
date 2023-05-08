@@ -174,7 +174,7 @@ func CreateArchive(client cmd.Client, input cli.Input, includeFiles []string, no
 				aus.Name = oldAus.Name
 			} else {
 				// save the uploadspec
-				err := spec.SpecSave(*aus, specFile)
+				err := spec.SpecSave(*aus, specFile, false)
 				if err != nil {
 					return nil, errors.Wrap(err, "error saving archive spec")
 				}

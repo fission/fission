@@ -28,7 +28,9 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
+	"github.com/fission/fission/pkg/fission-cli/cmd/spec"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
+	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type UpdateSubCommand struct {
@@ -61,6 +63,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) (err error) {
 }
 
 func (opts *UpdateSubCommand) run(input cli.Input) error {
+	pkgName := input.String(flagkey.PkgName)
 	pkg, err := opts.Client().FissionClientSet.CoreV1().Packages(opts.pkgNamespace).Get(input.Context(), opts.pkgName, metav1.GetOptions{})
 	if err != nil {
 		return err
@@ -79,8 +82,8 @@ func (opts *UpdateSubCommand) run(input cli.Input) error {
 	if !forceUpdate && len(fnList) > 1 {
 		return errors.Errorf("package is used by multiple functions, use --%v to force update", flagkey.PkgForce)
 	}
-
-	newPkgMeta, err := UpdatePackage(input, opts.Client(), pkg)
+	specFile := fmt.Sprintf("package-%s.yaml", pkgName)
+	newPkgMeta, err := UpdatePackage(input, opts.Client(), specFile, pkg)
 	if err != nil {
 		return errors.Wrap(err, "error updating package")
 	}
@@ -95,7 +98,7 @@ func (opts *UpdateSubCommand) run(input cli.Input) error {
 	return nil
 }
 
-func UpdatePackage(input cli.Input, client cmd.Client, pkg *fv1.Package) (*metav1.ObjectMeta, error) {
+func UpdatePackage(input cli.Input, client cmd.Client, specFile string, pkg *fv1.Package) (*metav1.ObjectMeta, error) {
 	envName := input.String(flagkey.PkgEnvironment)
 	srcArchiveFiles := input.StringSlice(flagkey.PkgSrcArchive)
 	deployArchiveFiles := input.StringSlice(flagkey.PkgDeployArchive)
@@ -172,6 +175,27 @@ func UpdatePackage(input cli.Input, client cmd.Client, pkg *fv1.Package) (*metav
 			BuildStatus:         fv1.BuildStatusPending,
 			LastUpdateTimestamp: metav1.Time{Time: time.Now().UTC()},
 		}
+	}
+
+	if input.Bool(flagkey.SpecSave) {
+		// if a package with the same spec exists, don't create a new spec file
+		fr, err := spec.ReadSpecs(util.GetSpecDir(input), util.GetSpecIgnore(input), false)
+		if err != nil {
+			return nil, errors.Wrap(err, "error reading specs")
+		}
+
+		obj := fr.SpecExists(pkg, true, true)
+		if obj != nil {
+			pkg := obj.(*fv1.Package)
+			fmt.Printf("Re-using previously created package %s\n", pkg.ObjectMeta.Name)
+			return &pkg.ObjectMeta, nil
+		}
+
+		err = spec.SpecSave(*pkg, specFile, true)
+		if err != nil {
+			return nil, errors.Wrap(err, "error saving package spec")
+		}
+		return &pkg.ObjectMeta, nil
 	}
 
 	newPkgMeta, err := client.FissionClientSet.CoreV1().Packages(pkg.ObjectMeta.Namespace).Update(input.Context(), pkg, metav1.UpdateOptions{})

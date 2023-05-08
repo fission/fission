@@ -100,7 +100,7 @@ func (opts *CreateSubCommand) run(input cli.Input) (err error) {
 		}
 
 		specFile := fmt.Sprintf("env-%v.yaml", m.Name)
-		err = spec.SpecSave(*opts.env, specFile)
+		err = spec.SpecSave(*opts.env, specFile, false)
 		if err != nil {
 			return errors.Wrap(err, "error saving environment spec")
 		}
