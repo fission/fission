@@ -41,7 +41,7 @@ var (
 		},
 		functionLabels,
 	)
-	FuncError = prometheus.NewCounterVec(
+	ColdStartsError = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "fission_function_cold_start_errors_total",
 			Help: "Count of fission cold start errors",
@@ -54,5 +54,5 @@ func init() {
 	registry := metrics.Registry
 	registry.MustRegister(ColdStarts)
 	registry.MustRegister(FuncRunningSummary)
-	registry.MustRegister(FuncError)
+	registry.MustRegister(ColdStartsError)
 }

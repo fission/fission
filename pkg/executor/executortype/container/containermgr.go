@@ -457,7 +457,7 @@ func (caaf *Container) fnCreate(ctx context.Context, fn *fv1.Function) (*fscache
 	_, err = caaf.fsCache.Add(*fsvc)
 	if err != nil {
 		caaf.logger.Error("error adding function to cache", zap.Error(err), zap.Any("function", fsvc.Function))
-		metrics.FuncError.WithLabelValues(fn.ObjectMeta.Name, fn.ObjectMeta.Namespace).Inc()
+		metrics.ColdStartsError.WithLabelValues(fn.ObjectMeta.Name, fn.ObjectMeta.Namespace).Inc()
 		return fsvc, err
 	}
 
