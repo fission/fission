@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package proto;
+
+option go_package = "github.com/fission/fission/pkg/executor/proto";
+import "pkg/apis/core/v1/generated.proto";
+
+message EchoRequest {
+    string message = 1;
+}
+
+message EchoResponse {
+    string message = 1;
+}
+
+message Service {
+    string url = 1;
+}
+
+service Executor {
+    rpc UnaryEcho (EchoRequest) returns (EchoResponse); // For testing purpose. Will be removed.
+    rpc GetServiceForFunction (v1.Function) returns (Service);
+}

@@ -647,7 +647,13 @@ func (fh functionHandler) getServiceEntryFromExecutor(ctx context.Context) (serv
 		fContext = ctx
 	}
 
-	service, err := fh.executor.GetServiceForFunction(fContext, fh.function)
+	service, err := fh.executor.GetServiceForFunctionGRPC(fContext, fh.function)
+	/* resp, err := fh.executor.CallUnaryEcho(ctx, "Shubham!!")
+	if err != nil {
+		logger.Error("error from CallUnaryEcho", zap.Error(err))
+	} else {
+		logger.Info("response from CallUnaryEcho", zap.String("response", resp))
+	} */
 	if err != nil {
 		statusCode, errMsg := ferror.GetHTTPError(err)
 		logger.Error("error from GetServiceForFunction",

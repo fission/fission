@@ -38,6 +38,7 @@ import (
 	"github.com/fission/fission/pkg/executor/executortype/newdeploy"
 	"github.com/fission/fission/pkg/executor/executortype/poolmgr"
 	"github.com/fission/fission/pkg/executor/fscache"
+	pb "github.com/fission/fission/pkg/executor/proto"
 	"github.com/fission/fission/pkg/executor/util"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
@@ -59,6 +60,9 @@ type (
 
 		requestChan chan *createFuncServiceRequest
 		fsCreateWg  sync.Map
+
+		// Grpc Server
+		pb.UnimplementedExecutorServer
 	}
 	createFuncServiceRequest struct {
 		context  context.Context
@@ -389,6 +393,7 @@ func StartExecutor(ctx context.Context, logger *zap.Logger, port int) error {
 
 	go metrics.ServeMetrics(ctx, logger)
 	go api.Serve(ctx, port)
+	go api.ServeGRPC(logger)
 
 	return nil
 }

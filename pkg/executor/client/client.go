@@ -20,19 +20,23 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/url"
 	"strings"
 	"time"
 
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	ferror "github.com/fission/fission/pkg/error"
+	pb "github.com/fission/fission/pkg/executor/proto"
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.uber.org/zap"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	fv1 "github.com/fission/fission/pkg/apis/core/v1"
-	ferror "github.com/fission/fission/pkg/error"
 )
 
 type (
@@ -43,6 +47,7 @@ type (
 		tappedByURL map[string]TapServiceRequest
 		requestChan chan TapServiceRequest
 		httpClient  *retryablehttp.Client
+		grpcClient  pb.ExecutorClient
 	}
 
 	// TapServiceRequest represents
@@ -57,12 +62,22 @@ type (
 func MakeClient(logger *zap.Logger, executorURL string) *Client {
 	hc := retryablehttp.NewClient()
 	hc.HTTPClient.Transport = otelhttp.NewTransport(hc.HTTPClient.Transport)
+
+	addr := "executor.fission:50051" // Hardcoded. To be removed.
+	conn, err := grpc.Dial(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		logger.Error(fmt.Sprintf("grpc client did not connect: %v", err))
+	}
+
+	ec := pb.NewExecutorClient(conn)
+
 	c := &Client{
 		logger:      logger.Named("executor_client"),
 		executorURL: strings.TrimSuffix(executorURL, "/"),
 		tappedByURL: make(map[string]TapServiceRequest),
 		requestChan: make(chan TapServiceRequest, 100),
 		httpClient:  hc,
+		grpcClient:  ec,
 	}
 	go c.service()
 	return c
@@ -202,4 +217,26 @@ func (c *Client) _tapService(ctx context.Context, tapSvcReqs []TapServiceRequest
 		return ferror.MakeErrorFromHTTP(resp)
 	}
 	return nil
+}
+
+func (c *Client) GetServiceForFunctionGRPC(ctx context.Context, fn *fv1.Function) (string, error) {
+	fmt.Println("SHUBHAM: CODE REACHED HERE")
+	svc, err := c.grpcClient.GetServiceForFunction(ctx, fn)
+	status, ok := status.FromError(err)
+	if !ok {
+		return "", errors.Wrap(status.Err(), status.Message())
+	}
+	fmt.Printf("SHUBHAM: %s\n", svc.GetUrl())
+	return svc.GetUrl(), nil
+}
+
+// Client for testing purpose. Will be removed.
+func (c *Client) CallUnaryEcho(ctx context.Context, message string) (string, error) {
+	er := pb.EchoRequest{Message: message}
+	r, err := c.grpcClient.UnaryEcho(ctx, &er)
+	if err != nil {
+		return "", err
+	}
+	s := "Echo: " + r.GetMessage()
+	return s, nil
 }

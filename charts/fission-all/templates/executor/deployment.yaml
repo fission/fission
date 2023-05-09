@@ -114,6 +114,8 @@ spec:
           name: metrics
         - containerPort: 8888
           name: http
+        - containerPort: 50051
+          name: grpc
         {{- if .Values.pprof.enabled }}
         - containerPort: 6060
           name: pprof
