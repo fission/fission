@@ -149,7 +149,7 @@ func (executor *Executor) getServiceForFunction(ctx context.Context, fn *fv1.Fun
 		respChan: respChan,
 	}
 	resp := <-respChan
-	if errors.Is(ctx.Err(), context.Canceled) {
+	if resp.funcSvc != nil && errors.Is(ctx.Err(), context.Canceled) {
 		et := executor.executorTypes[resp.funcSvc.Executor]
 		et.UnTapService(ctx, crd.CacheKey(resp.funcSvc.Function), resp.funcSvc.Address)
 		return "", ferror.MakeError(499, "client leave early in the process of getServiceForFunction")
