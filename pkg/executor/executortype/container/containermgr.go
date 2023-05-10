@@ -782,3 +782,7 @@ func getDeploymentObj(kubeobjs []apiv1.ObjectReference) *apiv1.ObjectReference {
 	}
 	return nil
 }
+
+func (caaf *Container) DumpFnSvcCache(ctx context.Context) error {
+	return nil
+}

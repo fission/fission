@@ -36,6 +36,7 @@ const (
 	markAvailable
 	deleteValue
 	setCPUUtilization
+	getFnSvcGroup
 )
 
 type (
@@ -74,6 +75,7 @@ type (
 	response struct {
 		error
 		allValues    []*FuncSvc
+		FnSvcGroup   map[string]*funcSvcGroup
 		value        *FuncSvc
 		svcWaitValue *svcWait
 	}
@@ -235,6 +237,9 @@ func (c *PoolCache) service() {
 		case deleteValue:
 			delete(c.cache[req.function].svcs, req.address)
 			req.responseChannel <- resp
+		case getFnSvcGroup:
+			resp.FnSvcGroup = c.cache
+			req.responseChannel <- resp
 		default:
 			resp.error = ferror.MakeError(ferror.ErrorInvalidArgument,
 				fmt.Sprintf("invalid request type: %v", req.requestType))
@@ -327,4 +332,14 @@ func (c *PoolCache) DeleteValue(ctx context.Context, function, address string) e
 	}
 	resp := <-respChannel
 	return resp.error
+}
+
+func (c *PoolCache) GetFnSvcGroup(ctx context.Context) map[string]*funcSvcGroup {
+	respChannel := make(chan *response)
+	c.requestChannel <- &request{
+		requestType:     getFnSvcGroup,
+		responseChannel: respChannel,
+	}
+	resp := <-respChannel
+	return resp.FnSvcGroup
 }

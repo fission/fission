@@ -17,12 +17,16 @@ limitations under the License.
 package fscache
 
 import (
+	"bufio"
 	"context"
 	"fmt"
+	"os"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/pkg/errors"
+	uuid "github.com/satori/go.uuid"
 	"go.opentelemetry.io/otel/attribute"
 	"go.uber.org/zap"
 	apiv1 "k8s.io/api/core/v1"
@@ -47,6 +51,11 @@ const (
 	LISTOLD
 	LOG
 	LISTOLDPOOL
+)
+
+const (
+	path     string = "/tmp"
+	fileName string = "dump"
 )
 
 type (
@@ -168,6 +177,73 @@ func (fsc *FunctionServiceCache) service() {
 		}
 		req.responseChannel <- resp
 	}
+}
+
+// DumpFnSvcCache => dump function service cache data to /tmp directory of executor pod.
+func (fsc *FunctionServiceCache) DumpFnSvcCache(ctx context.Context) error {
+	fsc.logger.Info("dumping function service group cache")
+	fnSvcGroup := fsc.connFunctionCache.GetFnSvcGroup(ctx)
+
+	if len(fnSvcGroup) == 0 {
+		return ferror.MakeError(ferror.ErrorNotFound, "function service not found")
+	}
+	info := []string{}
+	for fn, fnSvcGroup := range fnSvcGroup {
+		for addr, fnSvc := range fnSvcGroup.svcs {
+			info = append(info, fmt.Sprintf("function_name:%s\tfn_svc_address:%s\tactive_req:%d\tcurrent_cpu_usage:%v\tcpu_limit:%v",
+				fn, addr, fnSvc.activeRequests, fnSvc.currentCPUUsage, fnSvc.cpuLimit))
+		}
+	}
+
+	if err := dumpData(info, fsc.logger); err != nil {
+		fsc.logger.Error("error while dumping function service group cache", zap.Error(err))
+		return err
+	}
+
+	fsc.logger.Info("dumped function service group cache")
+	return nil
+}
+
+// check whether /tmp dir exists or not
+// if not exists then create /tmp dir and then dump data to a file, if exists then dump data directly to a file
+// new file will be created on every request with unique id
+func dumpData(data []string, logger *zap.Logger) error {
+	logger.Debug("started dumping data")
+	writeData := func(data []string) error {
+		uid, err := uuid.NewV4()
+		if err != nil {
+			return ferror.MakeError(ferror.ErrorInternal, fmt.Sprintf("error while generating UID %s", err.Error()))
+		}
+		// always create a new file with random id under /tmp directory => /tmp/dump_718b5b6e.txt
+		file, err := os.Create(fmt.Sprintf("%s/%s_%s.txt", path, fileName, strings.Split(uid.String(), "-")[0]))
+		defer file.Close()
+		if err != nil {
+			return ferror.MakeError(ferror.ErrorInternal, fmt.Sprintf("error while creating file %s", err.Error()))
+		}
+
+		datawriter := bufio.NewWriter(file)
+		defer datawriter.Flush()
+
+		for _, str := range data {
+			_, _ = datawriter.WriteString(str + "\n")
+		}
+
+		return nil
+	}
+
+	// check whether /tmp dir exists or not
+	_, err := os.Stat(path)
+	if err == nil {
+		return writeData(data)
+	}
+	if os.IsNotExist(err) {
+		// create /tmp dire with read and write permission
+		if err := os.Mkdir(path, 0755); err != nil {
+			return ferror.MakeError(ferror.ErrorInternal, fmt.Sprintf("error while creating directory %s", err.Error()))
+		}
+		return writeData(data)
+	}
+	return ferror.MakeError(ferror.ErrorInternal, fmt.Sprintf("error while dumping data %s", err.Error()))
 }
 
 // GetByFunction gets a function service from cache using function key.
