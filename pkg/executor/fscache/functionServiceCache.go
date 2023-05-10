@@ -187,13 +187,22 @@ func (fsc *FunctionServiceCache) DumpFnSvcCache(ctx context.Context) error {
 	if len(fnSvcGroup) == 0 {
 		return ferror.MakeError(ferror.ErrorNotFound, "function service not found")
 	}
+	fsc.logger.Debug("dump func svc", zap.Int("lenght", len(fnSvcGroup)), zap.Any("fn svc", fnSvcGroup))
 	info := []string{}
-	for fn, fnSvcGroup := range fnSvcGroup {
-		for addr, fnSvc := range fnSvcGroup.svcs {
-			info = append(info, fmt.Sprintf("function_name:%s\tfn_svc_address:%s\tactive_req:%d\tcurrent_cpu_usage:%v\tcpu_limit:%v",
-				fn, addr, fnSvc.activeRequests, fnSvc.currentCPUUsage, fnSvc.cpuLimit))
+	for _, fnSvcGrp := range fnSvcGroup {
+		data := fmt.Sprintf("svc_waiting:%d\tqueue_len:%d", fnSvcGrp.svcWaiting, fnSvcGrp.queue.Len())
+		fsc.logger.Debug("inside fnSvcGroup", zap.Any("func svc", fnSvcGrp), zap.Int("svc_wait", fnSvcGrp.svcWaiting), zap.Int("len_queue", fnSvcGrp.queue.Len()))
+		for addr, fnSvc := range fnSvcGrp.svcs {
+			// info = append(info, fmt.Sprintf("function_name:%s\tfn_svc_address:%s\tactive_req:%d\tsvc_waiting:%d\tqueue_len:%d\tcurrent_cpu_usage:%v\tcpu_limit:%v",
+			// 	fnSvc.val.Function.Name, addr, fnSvc.activeRequests, fnSvcGrp.svcWaiting, fnSvcGrp.queue.Len(), fnSvc.currentCPUUsage, fnSvc.cpuLimit))
+			data = fmt.Sprintf("%s\tfunction_name:%s\tfn_svc_address:%s\tcurrent_cpu_usage:%v\tcpu_limit:%v",
+				data, fnSvc.val.Function.Name, addr, fnSvc.currentCPUUsage, fnSvc.cpuLimit)
+			fsc.logger.Debug("dump data info", zap.Any("data info", info))
 		}
+		info = append(info, data)
 	}
+
+	fsc.logger.Debug("dump data", zap.Any("data", info))
 
 	if err := dumpData(info, fsc.logger); err != nil {
 		fsc.logger.Error("error while dumping function service group cache", zap.Error(err))
@@ -216,18 +225,18 @@ func dumpData(data []string, logger *zap.Logger) error {
 		}
 		// always create a new file with random id under /tmp directory => /tmp/dump_718b5b6e.txt
 		file, err := os.Create(fmt.Sprintf("%s/%s_%s.txt", path, fileName, strings.Split(uid.String(), "-")[0]))
-		defer file.Close()
 		if err != nil {
 			return ferror.MakeError(ferror.ErrorInternal, fmt.Sprintf("error while creating file %s", err.Error()))
 		}
 
 		datawriter := bufio.NewWriter(file)
-		defer datawriter.Flush()
 
 		for _, str := range data {
 			_, _ = datawriter.WriteString(str + "\n")
 		}
 
+		datawriter.Flush()
+		file.Close()
 		return nil
 	}
 
@@ -237,7 +246,7 @@ func dumpData(data []string, logger *zap.Logger) error {
 		return writeData(data)
 	}
 	if os.IsNotExist(err) {
-		// create /tmp dire with read and write permission
+		// create /tmp dir with read and write permission
 		if err := os.Mkdir(path, 0755); err != nil {
 			return ferror.MakeError(ferror.ErrorInternal, fmt.Sprintf("error while creating directory %s", err.Error()))
 		}
