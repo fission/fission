@@ -226,6 +226,14 @@ func (gp *GenericPool) updateCPUUtilizationSvc(ctx context.Context) {
 // returns the key and pod API object.
 func (gp *GenericPool) choosePod(ctx context.Context, newLabels map[string]string) (string, *apiv1.Pod, error) {
 	startTime := time.Now()
+	podTimeout := startTime.Add(gp.podReadyTimeout)
+	deadline, ok := ctx.Deadline()
+	if ok {
+		deadline = deadline.Add(-1 * time.Second)
+		if deadline.Before(podTimeout) {
+			podTimeout = deadline
+		}
+	}
 	expoDelay := 100 * time.Millisecond
 	logger := otelUtils.LoggerWithTraceID(ctx, gp.logger)
 	if !cache.WaitForCacheSync(ctx.Done(), gp.readyPodListerSynced) {
@@ -234,9 +242,13 @@ func (gp *GenericPool) choosePod(ctx context.Context, newLabels map[string]strin
 	}
 	for {
 		// Retries took too long, error out.
-		if time.Since(startTime) > gp.podReadyTimeout {
-			logger.Error("timed out waiting for pod", zap.Any("labels", newLabels), zap.Duration("timeout", gp.podReadyTimeout))
+		if time.Now().After(podTimeout) {
+			logger.Error("timed out waiting for pod", zap.Any("labels", newLabels), zap.Duration("timeout", podTimeout.Sub(startTime)))
 			return "", nil, errors.New("timeout: waited too long to get a ready pod")
+		}
+		if ctx.Err() != nil {
+			logger.Error("context canceled while waiting for pod", zap.Any("labels", newLabels), zap.Duration("timeout", podTimeout.Sub(startTime)))
+			return "", nil, fmt.Errorf("context canceled while waiting for pod: %w", ctx.Err())
 		}
 
 		var chosenPod *apiv1.Pod

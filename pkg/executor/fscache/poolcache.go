@@ -39,6 +39,7 @@ const (
 	deleteValue
 	setCPUUtilization
 	logFuncSvc
+	markSpecializationFailure
 )
 
 type (
@@ -236,6 +237,14 @@ func (c *PoolCache) service() {
 					}
 				}
 			}
+		case markSpecializationFailure:
+			if c.cache[req.function].svcWaiting > c.cache[req.function].queue.Len() {
+				c.cache[req.function].svcWaiting--
+				if c.cache[req.function].svcWaiting == c.cache[req.function].queue.Len() {
+					expiredRequests := c.cache[req.function].queue.Expired()
+					c.cache[req.function].svcWaiting = c.cache[req.function].svcWaiting - expiredRequests
+				}
+			}
 		case deleteValue:
 			delete(c.cache[req.function].svcs, req.address)
 			req.responseChannel <- resp
@@ -347,6 +356,7 @@ func (c *PoolCache) DeleteValue(ctx context.Context, function, address string) e
 	return resp.error
 }
 
+
 func (c *PoolCache) LogFnSvcGroup(ctx context.Context, file io.Writer) *response {
 	respChannel := make(chan *response)
 	c.requestChannel <- &request{
@@ -356,4 +366,13 @@ func (c *PoolCache) LogFnSvcGroup(ctx context.Context, file io.Writer) *response
 	}
 	resp := <-respChannel
 	return resp
+}
+
+// ReduceSpecializationInProgress reduces the svcWaiting count
+func (c *PoolCache) MarkSpecializationFailure(function string) {
+	c.requestChannel <- &request{
+		requestType:     markSpecializationFailure,
+		function:        function,
+		responseChannel: make(chan *response),
+	}
 }

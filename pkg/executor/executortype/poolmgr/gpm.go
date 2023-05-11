@@ -252,6 +252,14 @@ func (gpm *GenericPoolManager) TapService(ctx context.Context, svcHost string) e
 	return nil
 }
 
+func (gpm *GenericPoolManager) MarkSpecializationFailure(ctx context.Context, key string) {
+	otelUtils.SpanTrackEvent(ctx, "MarkSpecializationFailure",
+		attribute.KeyValue{Key: "key", Value: attribute.StringValue(key)})
+	logger := otelUtils.LoggerWithTraceID(ctx, gpm.logger)
+	logger.Info("marking specialization failure", zap.Any("key", key))
+	gpm.fsCache.MarkSpecializationFailure(key)
+}
+
 // IsValid checks if pod is not deleted and that it has the address passed as the argument. Also checks that all the
 // containers in it are reporting a ready status for the healthCheck.
 func (gpm *GenericPoolManager) IsValid(ctx context.Context, fsvc *fscache.FuncSvc) bool {
