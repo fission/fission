@@ -26,6 +26,7 @@ import (
 	"strings"
 
 	"github.com/fission/fission/pkg/crd"
+	"github.com/fission/fission/pkg/executor/fscache"
 	"github.com/gorilla/mux"
 	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
@@ -149,10 +150,29 @@ func (executor *Executor) getServiceForFunction(ctx context.Context, fn *fv1.Fun
 		respChan: respChan,
 	}
 	resp := <-respChan
-	if resp.funcSvc != nil && errors.Is(ctx.Err(), context.Canceled) {
-		et := executor.executorTypes[resp.funcSvc.Executor]
-		et.UnTapService(ctx, crd.CacheKey(resp.funcSvc.Function), resp.funcSvc.Address)
+
+	// UnTap compensation Logic in abnormal cases
+	unTapFuncSvc := func(funcSvc *fscache.FuncSvc) {
+		if resp.funcSvc == nil {
+			return
+		}
+
+		et, ok := executor.executorTypes[funcSvc.Executor]
+		if !ok {
+			executor.logger.Error("unknown executor type received in function service", zap.Any("executor", funcSvc.Executor))
+			return
+		}
+		et.UnTapService(ctx, crd.CacheKey(funcSvc.Function), resp.funcSvc.Address)
+	}
+	// for client cancel because of timeout or net error, etc.
+	if errors.Is(ctx.Err(), context.Canceled) {
+		unTapFuncSvc(resp.funcSvc)
 		return "", ferror.MakeError(499, "client leave early in the process of getServiceForFunction")
+	}
+	// for error because over the rpp or concurrency, etc
+	if resp.err != nil {
+		unTapFuncSvc(resp.funcSvc)
+		return "", resp.err
 	}
 
 	return resp.funcSvc.Address, resp.err
