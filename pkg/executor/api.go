@@ -150,28 +150,24 @@ func (executor *Executor) getServiceForFunction(ctx context.Context, fn *fv1.Fun
 		respChan: respChan,
 	}
 	resp := <-respChan
-	et, ok := executor.executorTypes[fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType]
-	unTapFunc := func(funcSvc *fscache.FuncSvc) {
-		if ok {
+	cleanUp := func(funcSvc *fscache.FuncSvc) {
+		et, ok := executor.executorTypes[fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType]
+		if !ok {
+			executor.logger.Error("unknown executor type received in function service", zap.Any("executor", funcSvc.Executor))
+			return
+		}
+		if funcSvc != nil {
 			et.UnTapService(ctx, crd.CacheKey(funcSvc.Function), resp.funcSvc.Address)
 		} else {
-			executor.logger.Error("unknown executor type received in function service", zap.Any("executor", funcSvc.Executor))
+			et.MarkSpecializationFailure(ctx, crd.CacheKey(&fn.ObjectMeta))
 		}
 	}
 	if errors.Is(ctx.Err(), context.Canceled) {
-		if resp.funcSvc != nil {
-			unTapFunc(resp.funcSvc)
-		} else {
-			et.MarkSpecializationFailure(ctx, crd.CacheKey(&fn.ObjectMeta))
-		}
+		cleanUp(resp.funcSvc)
 		return "", ferror.MakeError(499, "client leave early in the process of getServiceForFunction")
 	}
 	if resp.err != nil {
-		if resp.funcSvc != nil {
-			unTapFunc(resp.funcSvc)
-		} else {
-			et.MarkSpecializationFailure(ctx, crd.CacheKey(&fn.ObjectMeta))
-		}
+		cleanUp(resp.funcSvc)
 		return "", resp.err
 	}
 	return resp.funcSvc.Address, resp.err

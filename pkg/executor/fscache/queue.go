@@ -46,11 +46,11 @@ func (q *Queue) Expired() int {
 	svcExpired := []*list.Element{}
 	for item := q.items.Front(); item != nil; item = item.Next() {
 		svcWait, ok := item.Value.(*svcWait)
-		close(svcWait.svcChannel)
 		if !ok {
 			continue
 		}
 		if svcWait.ctx.Err() != nil {
+			close(svcWait.svcChannel)
 			svcExpired = append(svcExpired, item)
 			expired = expired + 1
 		}
