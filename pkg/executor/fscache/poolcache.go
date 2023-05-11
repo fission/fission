@@ -19,6 +19,8 @@ package fscache
 import (
 	"context"
 	"fmt"
+	"io"
+	"os"
 
 	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -36,7 +38,7 @@ const (
 	markAvailable
 	deleteValue
 	setCPUUtilization
-	getFnSvcGroup
+	logFuncSvc
 )
 
 type (
@@ -66,6 +68,7 @@ type (
 		ctx             context.Context
 		function        string
 		address         string
+		file            *os.File
 		value           *FuncSvc
 		requestsPerPod  int
 		cpuUsage        resource.Quantity
@@ -74,8 +77,8 @@ type (
 	}
 	response struct {
 		error
-		allValues    []*FuncSvc
-		FnSvcGroup   map[string]*funcSvcGroup
+		allValues []*FuncSvc
+		// FnSvcGroup   io.Writer
 		value        *FuncSvc
 		svcWaitValue *svcWait
 	}
@@ -237,9 +240,17 @@ func (c *PoolCache) service() {
 		case deleteValue:
 			delete(c.cache[req.function].svcs, req.address)
 			req.responseChannel <- resp
-		case getFnSvcGroup:
-			resp.FnSvcGroup = c.cache
-			req.responseChannel <- resp
+		case logFuncSvc:
+			var info io.Writer = req.file
+			defer req.file.Close()
+			for _, fnSvcGrp := range c.cache {
+				data := fmt.Sprintf("svc_waiting:%d\tqueue_len:%d", fnSvcGrp.svcWaiting, fnSvcGrp.queue.Len())
+				for addr, fnSvc := range fnSvcGrp.svcs {
+					data = fmt.Sprintf("%s\tfunction_name:%s\tfn_svc_address:%s\tcurrent_cpu_usage:%v\tcpu_limit:%v",
+						data, fnSvc.val.Function.Name, addr, fnSvc.currentCPUUsage, fnSvc.cpuLimit)
+				}
+				info.Write([]byte(data + "\n"))
+			}
 		default:
 			resp.error = ferror.MakeError(ferror.ErrorInvalidArgument,
 				fmt.Sprintf("invalid request type: %v", req.requestType))
@@ -334,12 +345,9 @@ func (c *PoolCache) DeleteValue(ctx context.Context, function, address string) e
 	return resp.error
 }
 
-func (c *PoolCache) GetFnSvcGroup(ctx context.Context) map[string]*funcSvcGroup {
-	respChannel := make(chan *response)
+func (c *PoolCache) LogFnSvcGroup(ctx context.Context, file *os.File) {
 	c.requestChannel <- &request{
-		requestType:     getFnSvcGroup,
-		responseChannel: respChannel,
+		requestType: logFuncSvc,
+		file:        file,
 	}
-	resp := <-respChannel
-	return resp.FnSvcGroup
 }

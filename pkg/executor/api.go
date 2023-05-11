@@ -244,11 +244,11 @@ func (executor *Executor) unTapService(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-// dumpFunctionService => dump function service for pool cache
-func (executor *Executor) dumpFunctionService(w http.ResponseWriter, r *http.Request) {
+// dumpDebugInfo => dump function service for pool cache
+func (executor *Executor) dumpDebugInfo(w http.ResponseWriter, r *http.Request) {
 	// currently we are considering dumping function only for pool manager
 	et := executor.executorTypes[fv1.ExecutorTypePoolmgr]
-	if err := et.DumpFnSvcCache(r.Context()); err != nil {
+	if err := et.DumpDebugInfo(r.Context()); err != nil {
 		code, msg := ferror.GetHTTPError(err)
 		http.Error(w, msg, code)
 		return
@@ -267,7 +267,7 @@ func (executor *Executor) GetHandler() http.Handler {
 	r.HandleFunc("/v2/tapServices", executor.tapServices).Methods("POST")
 	r.HandleFunc("/healthz", executor.healthHandler).Methods("GET")
 	r.HandleFunc("/v2/unTapService", executor.unTapService).Methods("POST")
-	r.HandleFunc("/v2/dumpFunctionService", executor.dumpFunctionService).Methods("GET")
+	r.HandleFunc("/v2/debugInfo", executor.dumpDebugInfo).Methods("GET")
 	return r
 }
 

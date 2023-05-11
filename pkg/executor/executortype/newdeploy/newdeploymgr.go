@@ -885,6 +885,6 @@ func (deploy *NewDeploy) scaleDeployment(ctx context.Context, deplNS string, dep
 	return err
 }
 
-func (deploy *NewDeploy) DumpFnSvcCache(ctx context.Context) error {
+func (deploy *NewDeploy) DumpDebugInfo(ctx context.Context) error {
 	return nil
 }

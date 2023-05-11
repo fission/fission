@@ -755,6 +755,6 @@ func (gpm *GenericPoolManager) NoActiveConnectionEventChecker(ctx context.Contex
 	wg.Wait()
 }
 
-func (gpm *GenericPoolManager) DumpFnSvcCache(ctx context.Context) error {
-	return gpm.fsCache.DumpFnSvcCache(ctx)
+func (gpm *GenericPoolManager) DumpDebugInfo(ctx context.Context) error {
+	return gpm.fsCache.DumpDebugInfo(ctx, "poolmgr")
 }
