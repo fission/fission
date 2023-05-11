@@ -31,8 +31,10 @@ import (
 	"go.uber.org/zap"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/crd"
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/executor/client"
+	"github.com/fission/fission/pkg/executor/fscache"
 	"github.com/fission/fission/pkg/utils/httpserver"
 	"github.com/fission/fission/pkg/utils/metrics"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
@@ -148,7 +150,24 @@ func (executor *Executor) getServiceForFunction(ctx context.Context, fn *fv1.Fun
 		respChan: respChan,
 	}
 	resp := <-respChan
+	cleanUp := func(funcSvc *fscache.FuncSvc) {
+		et, ok := executor.executorTypes[fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType]
+		if !ok {
+			executor.logger.Error("unknown executor type received in function service", zap.Any("executor", funcSvc.Executor))
+			return
+		}
+		if funcSvc != nil {
+			et.UnTapService(ctx, crd.CacheKey(funcSvc.Function), resp.funcSvc.Address)
+		} else {
+			et.MarkSpecializationFailure(ctx, crd.CacheKey(&fn.ObjectMeta))
+		}
+	}
+	if errors.Is(ctx.Err(), context.Canceled) {
+		cleanUp(resp.funcSvc)
+		return "", ferror.MakeError(499, "client leave early in the process of getServiceForFunction")
+	}
 	if resp.err != nil {
+		cleanUp(resp.funcSvc)
 		return "", resp.err
 	}
 	return resp.funcSvc.Address, resp.err

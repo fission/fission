@@ -199,6 +199,11 @@ func (deploy *NewDeploy) UnTapService(ctx context.Context, key string, svcHost s
 	// Not Implemented for NewDeployment. Will be used when support of concurrent specialization of same function is added.
 }
 
+// MarkSpecializationFailure has not been implemented for NewDeployment.
+func (deploy *NewDeploy) MarkSpecializationFailure(ctx context.Context, key string) {
+	// Not Implemented for NewDeployment. Will be used when support of concurrent specialization of same function is added.
+}
+
 // TapService makes a TouchByAddress request to the cache.
 func (deploy *NewDeploy) TapService(ctx context.Context, svcHost string) error {
 	otelUtils.SpanTrackEvent(ctx, "TapService")
