@@ -244,11 +244,11 @@ func (c *PoolCache) service() {
 			for _, fnSvcGrp := range c.cache {
 				datawriter.WriteString(fmt.Sprintf("svc_waiting:%d\tqueue_len:%d", fnSvcGrp.svcWaiting, fnSvcGrp.queue.Len()))
 				if len(fnSvcGrp.svcs) == 0 {
-					datawriter.WriteString("\n") // nolint errcheck
+					datawriter.WriteString("\n") //nolint: errCheck
 				}
 				for addr, fnSvc := range fnSvcGrp.svcs {
 					datawriter.WriteString(fmt.Sprintf("\tfunction_name:%s\tfn_svc_address:%s\tactive_req:%d\tcurrent_cpu_usage:%v\tcpu_limit:%v\n",
-						fnSvc.val.Function.Name, addr, fnSvc.activeRequests, fnSvc.currentCPUUsage, fnSvc.cpuLimit)) // nolint errcheck
+						fnSvc.val.Function.Name, addr, fnSvc.activeRequests, fnSvc.currentCPUUsage, fnSvc.cpuLimit)) //nolint: errCheck
 				}
 			}
 			datawriter.Flush() // don't put this in defer statement
