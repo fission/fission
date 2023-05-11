@@ -37,7 +37,7 @@ import (
 )
 
 const (
-	path string = "/tmp/fission-executor-dump"
+	dumpFileName string = "fission-dump"
 )
 
 // ApplyImagePullSecret applies image pull secret to the give pod spec.
@@ -158,38 +158,15 @@ func getExecutorEnvVarName(executor fv1.ExecutorType) string {
 	return strings.ToUpper(string(executor)) + "_OBJECT_REAPER_INTERVAL"
 }
 
-func CreateDirAndFile(fileName string, logger *zap.Logger) (*os.File, error) {
-	createFile := func(fileName string) (*os.File, error) {
-		time := time.Now().Unix()
-		// always create a new file with random id under /tmp/fission-executor-dump directory => /tmp/fission-executor-dump/fileName_718b5b6e.txt
-		file, err := os.Create(fmt.Sprintf("%s/%s_%d.txt", path, fileName, time))
-		if err != nil {
-			return nil, ferror.MakeError(ferror.ErrorInternal, fmt.Sprintf("error while creating file %s", err.Error()))
-		}
-		return file, nil
+// CreateDumpFile => create dump file inside temp directory
+func CreateDumpFile(logger *zap.Logger) (*os.File, error) {
+	dumpPath := os.TempDir()
+	logger.Info("creating dump file", zap.String("dump_path", dumpPath))
+
+	file, err := os.Create(fmt.Sprintf("%s/%s-%d.txt", dumpPath, dumpFileName, time.Now().Unix()))
+	if err != nil {
+		return nil, ferror.MakeError(ferror.ErrorInternal, fmt.Sprintf("error while creating file %s", err.Error()))
 	}
 
-	if fileName == "" {
-		return nil, ferror.MakeError(ferror.ErrorInternal, "file name can't be empty")
-	}
-
-	// check whether /tmp/fission-executor-dump dir exists or not
-	_, err := os.Stat(path)
-	if err == nil {
-		logger.Info("dir already present, creating file", zap.String("dir", path))
-		return createFile(fileName)
-	}
-
-	if os.IsNotExist(err) {
-		// create /tmp/fission-executor-dump dir with read and write permission
-		logger.Debug("dir not exists, creating dir", zap.String("dir", path))
-		if err := os.Mkdir(path, 0755); err != nil {
-			logger.Debug("error while creating dir", zap.String("dir", path))
-			return nil, ferror.MakeError(ferror.ErrorInternal, fmt.Sprintf("error while creating directory %s", err.Error()))
-		}
-		logger.Info("dir created successfully, creating file", zap.String("dir", path))
-		return createFile(fileName)
-	}
-
-	return nil, ferror.MakeError(ferror.ErrorInternal, fmt.Sprintf("error while creating dir/file %s", err.Error()))
+	return file, nil
 }

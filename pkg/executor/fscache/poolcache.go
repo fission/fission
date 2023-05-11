@@ -17,10 +17,10 @@ limitations under the License.
 package fscache
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"io"
-	"os"
 
 	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -68,7 +68,7 @@ type (
 		ctx             context.Context
 		function        string
 		address         string
-		file            *os.File
+		dumpWriter      io.Writer
 		value           *FuncSvc
 		requestsPerPod  int
 		cpuUsage        resource.Quantity
@@ -77,8 +77,7 @@ type (
 	}
 	response struct {
 		error
-		allValues []*FuncSvc
-		// FnSvcGroup   io.Writer
+		allValues    []*FuncSvc
 		value        *FuncSvc
 		svcWaitValue *svcWait
 	}
@@ -241,16 +240,17 @@ func (c *PoolCache) service() {
 			delete(c.cache[req.function].svcs, req.address)
 			req.responseChannel <- resp
 		case logFuncSvc:
-			var info io.Writer = req.file
-			defer req.file.Close()
+			datawriter := bufio.NewWriter(req.dumpWriter)
 			for _, fnSvcGrp := range c.cache {
 				data := fmt.Sprintf("svc_waiting:%d\tqueue_len:%d", fnSvcGrp.svcWaiting, fnSvcGrp.queue.Len())
 				for addr, fnSvc := range fnSvcGrp.svcs {
 					data = fmt.Sprintf("%s\tfunction_name:%s\tfn_svc_address:%s\tcurrent_cpu_usage:%v\tcpu_limit:%v",
 						data, fnSvc.val.Function.Name, addr, fnSvc.currentCPUUsage, fnSvc.cpuLimit)
 				}
-				info.Write([]byte(data + "\n"))
+				datawriter.WriteString(data + "\n") // nolint errcheck
 			}
+			datawriter.Flush() // don't put this in defer statement
+			req.responseChannel <- resp
 		default:
 			resp.error = ferror.MakeError(ferror.ErrorInvalidArgument,
 				fmt.Sprintf("invalid request type: %v", req.requestType))
@@ -345,9 +345,13 @@ func (c *PoolCache) DeleteValue(ctx context.Context, function, address string) e
 	return resp.error
 }
 
-func (c *PoolCache) LogFnSvcGroup(ctx context.Context, file *os.File) {
+func (c *PoolCache) LogFnSvcGroup(ctx context.Context, file io.Writer) *response {
+	respChannel := make(chan *response)
 	c.requestChannel <- &request{
-		requestType: logFuncSvc,
-		file:        file,
+		requestType:     logFuncSvc,
+		dumpWriter:      file,
+		responseChannel: respChannel,
 	}
+	resp := <-respChannel
+	return resp
 }

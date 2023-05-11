@@ -756,5 +756,5 @@ func (gpm *GenericPoolManager) NoActiveConnectionEventChecker(ctx context.Contex
 }
 
 func (gpm *GenericPoolManager) DumpDebugInfo(ctx context.Context) error {
-	return gpm.fsCache.DumpDebugInfo(ctx, "poolmgr")
+	return gpm.fsCache.DumpDebugInfo(ctx)
 }

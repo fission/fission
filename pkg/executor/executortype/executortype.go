@@ -38,7 +38,7 @@ type ExecutorType interface {
 	// GetFuncSvcFromCache retrieves function service from cache.
 	GetFuncSvcFromCache(context.Context, *fv1.Function) (*fscache.FuncSvc, error)
 
-	// DumpDebugInfo dump function service cache to /tmp directory of executor pod.
+	// DumpDebugInfo dump function service cache to temporary directory of executor pod.
 	DumpDebugInfo(context.Context) error
 
 	// DeleteFuncSvcFromCache deletes function service entry in cache.

@@ -171,18 +171,19 @@ func (fsc *FunctionServiceCache) service() {
 	}
 }
 
-// DumpDebugInfo => dump function service cache data to /tmp directory of executor pod.
-func (fsc *FunctionServiceCache) DumpDebugInfo(ctx context.Context, fileName string) error {
+// DumpDebugInfo => dump function service cache data to temporary directory of executor pod.
+func (fsc *FunctionServiceCache) DumpDebugInfo(ctx context.Context) error {
 	fsc.logger.Info("dumping function service")
 
-	file, err := util.CreateDirAndFile(fileName, fsc.logger)
+	file, err := util.CreateDumpFile(fsc.logger)
+	defer file.Close()
+
 	if err != nil {
-		file.Close()
 		fsc.logger.Error("error while creating file/dir", zap.String("error", err.Error()))
 		return err
 	}
 
-	fsc.connFunctionCache.LogFnSvcGroup(ctx, file)
+	_ = fsc.connFunctionCache.LogFnSvcGroup(ctx, file)
 
 	fsc.logger.Info("dumped function service")
 	return nil
