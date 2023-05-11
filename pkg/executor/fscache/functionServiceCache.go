@@ -176,7 +176,7 @@ func (fsc *FunctionServiceCache) DumpDebugInfo(ctx context.Context) error {
 	fsc.logger.Info("dumping function service")
 
 	file, err := util.CreateDumpFile(fsc.logger)
-	file.Close() // nolint errcheck
+	defer file.Close() // nolint errcheck
 
 	if err != nil {
 		fsc.logger.Error("error while creating file/dir", zap.String("error", err.Error()))
