@@ -176,9 +176,9 @@ func (fsc *FunctionServiceCache) DumpDebugInfo(ctx context.Context) error {
 	fsc.logger.Info("dumping function service")
 
 	file, err := util.CreateDumpFile(fsc.logger)
-	defer file.Close()
 
 	if err != nil {
+		file.Close()
 		fsc.logger.Error("error while creating file/dir", zap.String("error", err.Error()))
 		return err
 	}
@@ -186,6 +186,7 @@ func (fsc *FunctionServiceCache) DumpDebugInfo(ctx context.Context) error {
 	_ = fsc.connFunctionCache.LogFnSvcGroup(ctx, file)
 
 	fsc.logger.Info("dumped function service")
+	file.Close()
 	return nil
 }
 

@@ -242,12 +242,14 @@ func (c *PoolCache) service() {
 		case logFuncSvc:
 			datawriter := bufio.NewWriter(req.dumpWriter)
 			for _, fnSvcGrp := range c.cache {
-				data := fmt.Sprintf("svc_waiting:%d\tqueue_len:%d", fnSvcGrp.svcWaiting, fnSvcGrp.queue.Len())
-				for addr, fnSvc := range fnSvcGrp.svcs {
-					data = fmt.Sprintf("%s\tfunction_name:%s\tfn_svc_address:%s\tcurrent_cpu_usage:%v\tcpu_limit:%v",
-						data, fnSvc.val.Function.Name, addr, fnSvc.currentCPUUsage, fnSvc.cpuLimit)
+				datawriter.WriteString(fmt.Sprintf("svc_waiting:%d\tqueue_len:%d", fnSvcGrp.svcWaiting, fnSvcGrp.queue.Len()))
+				if len(fnSvcGrp.svcs) == 0 {
+					datawriter.WriteString("\n") // nolint errcheck
 				}
-				datawriter.WriteString(data + "\n") // nolint errcheck
+				for addr, fnSvc := range fnSvcGrp.svcs {
+					datawriter.WriteString(fmt.Sprintf("\tfunction_name:%s\tfn_svc_address:%s\tactive_req:%d\tcurrent_cpu_usage:%v\tcpu_limit:%v\n",
+						fnSvc.val.Function.Name, addr, fnSvc.activeRequests, fnSvc.currentCPUUsage, fnSvc.cpuLimit)) // nolint errcheck
+				}
 			}
 			datawriter.Flush() // don't put this in defer statement
 			req.responseChannel <- resp
