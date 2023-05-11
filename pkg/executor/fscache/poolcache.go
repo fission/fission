@@ -260,7 +260,8 @@ func (c *PoolCache) service() {
 						fnSvc.val.Function.Name, addr, fnSvc.activeRequests, fnSvc.currentCPUUsage, fnSvc.cpuLimit)) // nolint: errCheck
 				}
 			}
-			datawriter.Flush() // don't put this in defer statement
+			// don't put this in defer statement
+			datawriter.Flush() // nolint: errCheck
 			req.responseChannel <- resp
 		default:
 			resp.error = ferror.MakeError(ferror.ErrorInvalidArgument,
