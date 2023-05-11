@@ -762,3 +762,7 @@ func (gpm *GenericPoolManager) NoActiveConnectionEventChecker(ctx context.Contex
 	}
 	wg.Wait()
 }
+
+func (gpm *GenericPoolManager) DumpDebugInfo(ctx context.Context) error {
+	return gpm.fsCache.DumpDebugInfo(ctx)
+}

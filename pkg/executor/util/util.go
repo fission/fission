@@ -32,7 +32,12 @@ import (
 	"sigs.k8s.io/yaml"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/utils"
+)
+
+const (
+	dumpFileName string = "fission-dump"
 )
 
 // ApplyImagePullSecret applies image pull secret to the give pod spec.
@@ -151,4 +156,17 @@ func GetObjectReaperInterval(logger *zap.Logger, executorType fv1.ExecutorType, 
 
 func getExecutorEnvVarName(executor fv1.ExecutorType) string {
 	return strings.ToUpper(string(executor)) + "_OBJECT_REAPER_INTERVAL"
+}
+
+// CreateDumpFile => create dump file inside temp directory
+func CreateDumpFile(logger *zap.Logger) (*os.File, error) {
+	dumpPath := os.TempDir()
+	logger.Info("creating dump file", zap.String("dump_path", dumpPath))
+
+	file, err := os.Create(fmt.Sprintf("%s/%s-%d.txt", dumpPath, dumpFileName, time.Now().Unix()))
+	if err != nil {
+		return nil, ferror.MakeError(ferror.ErrorInternal, fmt.Sprintf("error while creating file %s", err.Error()))
+	}
+
+	return file, nil
 }

@@ -17,8 +17,10 @@ limitations under the License.
 package fscache
 
 import (
+	"bufio"
 	"context"
 	"fmt"
+	"io"
 
 	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -37,6 +39,7 @@ const (
 	deleteValue
 	setCPUUtilization
 	markSpecializationFailure
+	logFuncSvc
 )
 
 type (
@@ -66,6 +69,7 @@ type (
 		ctx             context.Context
 		function        string
 		address         string
+		dumpWriter      io.Writer
 		value           *FuncSvc
 		requestsPerPod  int
 		cpuUsage        resource.Quantity
@@ -244,6 +248,20 @@ func (c *PoolCache) service() {
 		case deleteValue:
 			delete(c.cache[req.function].svcs, req.address)
 			req.responseChannel <- resp
+		case logFuncSvc:
+			datawriter := bufio.NewWriter(req.dumpWriter)
+			for _, fnSvcGrp := range c.cache {
+				datawriter.WriteString(fmt.Sprintf("svc_waiting:%d\tqueue_len:%d", fnSvcGrp.svcWaiting, fnSvcGrp.queue.Len()))
+				if len(fnSvcGrp.svcs) == 0 {
+					datawriter.WriteString("\n") // nolint: errCheck
+				}
+				for addr, fnSvc := range fnSvcGrp.svcs {
+					datawriter.WriteString(fmt.Sprintf("\tfunction_name:%s\tfn_svc_address:%s\tactive_req:%d\tcurrent_cpu_usage:%v\tcpu_limit:%v\n",
+						fnSvc.val.Function.Name, addr, fnSvc.activeRequests, fnSvc.currentCPUUsage, fnSvc.cpuLimit)) // nolint: errCheck
+				}
+			}
+			datawriter.Flush() // don't put this in defer statement
+			req.responseChannel <- resp
 		default:
 			resp.error = ferror.MakeError(ferror.ErrorInvalidArgument,
 				fmt.Sprintf("invalid request type: %v", req.requestType))
@@ -345,4 +363,15 @@ func (c *PoolCache) MarkSpecializationFailure(function string) {
 		function:        function,
 		responseChannel: make(chan *response),
 	}
+}
+
+func (c *PoolCache) LogFnSvcGroup(ctx context.Context, file io.Writer) *response {
+	respChannel := make(chan *response)
+	c.requestChannel <- &request{
+		requestType:     logFuncSvc,
+		dumpWriter:      file,
+		responseChannel: respChannel,
+	}
+	resp := <-respChannel
+	return resp
 }

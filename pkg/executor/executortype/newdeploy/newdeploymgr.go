@@ -889,3 +889,7 @@ func (deploy *NewDeploy) scaleDeployment(ctx context.Context, deplNS string, dep
 	}, metav1.UpdateOptions{})
 	return err
 }
+
+func (deploy *NewDeploy) DumpDebugInfo(ctx context.Context) error {
+	return nil
+}
