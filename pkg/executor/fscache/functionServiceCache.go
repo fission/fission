@@ -244,8 +244,8 @@ func (fsc *FunctionServiceCache) MarkAvailable(key string, svcHost string) {
 	fsc.connFunctionCache.MarkAvailable(key, svcHost)
 }
 
-func (fsc *FunctionServiceCache) ReduceSpecializationInProgress(key string) {
-	fsc.connFunctionCache.ReduceSpecializationInProgress(key)
+func (fsc *FunctionServiceCache) MarkSpecializationFailure(key string) {
+	fsc.connFunctionCache.MarkSpecializationFailure(key)
 }
 
 // Add adds a function service to cache if it does not exist already.

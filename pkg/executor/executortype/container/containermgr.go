@@ -177,8 +177,8 @@ func (caaf *Container) UnTapService(ctx context.Context, key string, svcHost str
 	// Not Implemented for CaaF.
 }
 
-// ReduceSpecializationInProgress has not been implemented for CaaF.
-func (caaf *Container) ReduceSpecializationInProgress(ctx context.Context, key string) {
+// MarkSpecializationFailure has not been implemented for CaaF.
+func (caaf *Container) MarkSpecializationFailure(ctx context.Context, key string) {
 	// Not Implemented for CaaF.
 }
 

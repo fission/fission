@@ -199,8 +199,8 @@ func (deploy *NewDeploy) UnTapService(ctx context.Context, key string, svcHost s
 	// Not Implemented for NewDeployment. Will be used when support of concurrent specialization of same function is added.
 }
 
-// ReduceSpecializationInProgress has not been implemented for NewDeployment.
-func (deploy *NewDeploy) ReduceSpecializationInProgress(ctx context.Context, key string) {
+// MarkSpecializationFailure has not been implemented for NewDeployment.
+func (deploy *NewDeploy) MarkSpecializationFailure(ctx context.Context, key string) {
 	// Not Implemented for NewDeployment. Will be used when support of concurrent specialization of same function is added.
 }
 

@@ -3,20 +3,16 @@ package fscache
 import (
 	"container/list"
 	"sync"
-
-	"go.uber.org/zap"
 )
 
 type Queue struct {
-	items  *list.List
-	mutex  sync.Mutex
-	logger *zap.Logger
+	items *list.List
+	mutex sync.Mutex
 }
 
-func NewQueue(logger *zap.Logger) *Queue {
+func NewQueue() *Queue {
 	return &Queue{
-		items:  list.New(),
-		logger: logger,
+		items: list.New(),
 	}
 }
 
@@ -50,6 +46,7 @@ func (q *Queue) Expired() int {
 	svcExpired := []*list.Element{}
 	for item := q.items.Front(); item != nil; item = item.Next() {
 		svcWait, ok := item.Value.(*svcWait)
+		close(svcWait.svcChannel)
 		if !ok {
 			continue
 		}

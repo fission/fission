@@ -49,7 +49,7 @@ type ExecutorType interface {
 	UnTapService(ctx context.Context, key string, svcHost string)
 
 	// ReduceSpecializationInProgress updates the svcWaiting count in funcSvcGroup
-	ReduceSpecializationInProgress(ctx context.Context, key string)
+	MarkSpecializationFailure(ctx context.Context, key string)
 
 	// IsValid returns true if a function service is valid. Different executor types
 	// use distinct ways to examine the function service.

@@ -162,7 +162,7 @@ func (executor *Executor) getServiceForFunction(ctx context.Context, fn *fv1.Fun
 		if resp.funcSvc != nil {
 			unTapFunc(resp.funcSvc)
 		} else {
-			et.ReduceSpecializationInProgress(ctx, crd.CacheKey(&fn.ObjectMeta))
+			et.MarkSpecializationFailure(ctx, crd.CacheKey(&fn.ObjectMeta))
 		}
 		return "", ferror.MakeError(499, "client leave early in the process of getServiceForFunction")
 	}
@@ -170,7 +170,7 @@ func (executor *Executor) getServiceForFunction(ctx context.Context, fn *fv1.Fun
 		if resp.funcSvc != nil {
 			unTapFunc(resp.funcSvc)
 		} else {
-			et.ReduceSpecializationInProgress(ctx, crd.CacheKey(&fn.ObjectMeta))
+			et.MarkSpecializationFailure(ctx, crd.CacheKey(&fn.ObjectMeta))
 		}
 		return "", resp.err
 	}

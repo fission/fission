@@ -36,7 +36,7 @@ const (
 	markAvailable
 	deleteValue
 	setCPUUtilization
-	reduceSpecializationInProgress
+	markSpecializationFailure
 )
 
 type (
@@ -96,10 +96,10 @@ func NewPoolCache(logger *zap.Logger) *PoolCache {
 	return c
 }
 
-func NewFuncSvcGroup(logger *zap.Logger) *funcSvcGroup {
+func NewFuncSvcGroup() *funcSvcGroup {
 	return &funcSvcGroup{
 		svcs:  make(map[string]*funcSvcInfo),
-		queue: NewQueue(logger),
+		queue: NewQueue(),
 	}
 }
 
@@ -111,7 +111,7 @@ func (c *PoolCache) service() {
 		case getValue:
 			funcSvcGroup, ok := c.cache[req.function]
 			if !ok {
-				c.cache[req.function] = NewFuncSvcGroup(c.logger)
+				c.cache[req.function] = NewFuncSvcGroup()
 				c.cache[req.function].svcWaiting++
 				resp.error = ferror.MakeError(ferror.ErrorNotFound,
 					fmt.Sprintf("function Name '%v' not found", req.function))
@@ -163,7 +163,7 @@ func (c *PoolCache) service() {
 			req.responseChannel <- resp
 		case setValue:
 			if _, ok := c.cache[req.function]; !ok {
-				c.cache[req.function] = NewFuncSvcGroup(c.logger)
+				c.cache[req.function] = NewFuncSvcGroup()
 			}
 			if _, ok := c.cache[req.function].svcs[req.address]; !ok {
 				c.cache[req.function].svcs[req.address] = &funcSvcInfo{}
@@ -215,7 +215,7 @@ func (c *PoolCache) service() {
 			req.responseChannel <- resp
 		case setCPUUtilization:
 			if _, ok := c.cache[req.function]; !ok {
-				c.cache[req.function] = NewFuncSvcGroup(c.logger)
+				c.cache[req.function] = NewFuncSvcGroup()
 			}
 			if _, ok := c.cache[req.function].svcs[req.address]; ok {
 				c.cache[req.function].svcs[req.address].currentCPUUsage = req.cpuUsage
@@ -233,7 +233,7 @@ func (c *PoolCache) service() {
 					}
 				}
 			}
-		case reduceSpecializationInProgress:
+		case markSpecializationFailure:
 			if c.cache[req.function].svcWaiting > c.cache[req.function].queue.Len() {
 				c.cache[req.function].svcWaiting--
 				if c.cache[req.function].svcWaiting == c.cache[req.function].queue.Len() {
@@ -339,9 +339,9 @@ func (c *PoolCache) DeleteValue(ctx context.Context, function, address string) e
 }
 
 // ReduceSpecializationInProgress reduces the svcWaiting count
-func (c *PoolCache) ReduceSpecializationInProgress(function string) {
+func (c *PoolCache) MarkSpecializationFailure(function string) {
 	c.requestChannel <- &request{
-		requestType:     reduceSpecializationInProgress,
+		requestType:     markSpecializationFailure,
 		function:        function,
 		responseChannel: make(chan *response),
 	}
