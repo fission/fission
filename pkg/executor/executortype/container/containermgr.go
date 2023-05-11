@@ -177,6 +177,11 @@ func (caaf *Container) UnTapService(ctx context.Context, key string, svcHost str
 	// Not Implemented for CaaF.
 }
 
+// ReduceSpecializationInProgress has not been implemented for CaaF.
+func (caaf *Container) ReduceSpecializationInProgress(ctx context.Context, key string) {
+	// Not Implemented for CaaF.
+}
+
 // GetFuncSvc returns a function service; error otherwise.
 func (caaf *Container) GetFuncSvc(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
 	return caaf.createFunction(ctx, fn)

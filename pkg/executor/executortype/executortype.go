@@ -48,6 +48,9 @@ type ExecutorType interface {
 	// UnTapService updates the isActive to false
 	UnTapService(ctx context.Context, key string, svcHost string)
 
+	// ReduceSpecializationInProgress updates the svcWaiting count in funcSvcGroup
+	ReduceSpecializationInProgress(ctx context.Context, key string)
+
 	// IsValid returns true if a function service is valid. Different executor types
 	// use distinct ways to examine the function service.
 	IsValid(context.Context, *fscache.FuncSvc) bool

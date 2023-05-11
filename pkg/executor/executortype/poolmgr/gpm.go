@@ -252,6 +252,12 @@ func (gpm *GenericPoolManager) TapService(ctx context.Context, svcHost string) e
 	return nil
 }
 
+func (gpm *GenericPoolManager) ReduceSpecializationInProgress(ctx context.Context, key string) {
+	otelUtils.SpanTrackEvent(ctx, "ReduceSpecializationInProgress",
+		attribute.KeyValue{Key: "key", Value: attribute.StringValue(key)})
+	gpm.fsCache.ReduceSpecializationInProgress(key)
+}
+
 // IsValid checks if pod is not deleted and that it has the address passed as the argument. Also checks that all the
 // containers in it are reporting a ready status for the healthCheck.
 func (gpm *GenericPoolManager) IsValid(ctx context.Context, fsvc *fscache.FuncSvc) bool {

@@ -1,19 +1,22 @@
 package fscache
 
 import (
+	"context"
 	"sync"
 	"testing"
+
+	"go.uber.org/zap"
 )
 
 func TestNewQueue(t *testing.T) {
-	q := NewQueue()
+	q := NewQueue(&zap.Logger{})
 	if q == nil {
 		t.Error("NewQueue returned nil")
 	}
 }
 
 func TestQueuePushWithSingleRequest(t *testing.T) {
-	q := NewQueue()
+	q := NewQueue(&zap.Logger{})
 	item := &svcWait{
 		svcChannel: make(chan *FuncSvc),
 		ctx:        nil,
@@ -25,7 +28,7 @@ func TestQueuePushWithSingleRequest(t *testing.T) {
 }
 
 func TestQueuePopWithSingleRequest(t *testing.T) {
-	q := NewQueue()
+	q := NewQueue(&zap.Logger{})
 	item := &svcWait{
 		svcChannel: make(chan *FuncSvc),
 		ctx:        nil,
@@ -44,7 +47,7 @@ func TestQueuePopWithSingleRequest(t *testing.T) {
 }
 
 func TestQueuePushWithConcurrentRequest(t *testing.T) {
-	q := NewQueue()
+	q := NewQueue(&zap.Logger{})
 	noOfRequests := 20
 	var wg sync.WaitGroup
 	wg.Add(noOfRequests)
@@ -67,7 +70,7 @@ func TestQueuePushWithConcurrentRequest(t *testing.T) {
 }
 
 func TestQueuePopWithConcurrentRequest(t *testing.T) {
-	q := NewQueue()
+	q := NewQueue(&zap.Logger{})
 	noOfPush := 20
 	noOfPop := 15
 
@@ -100,7 +103,7 @@ func TestQueuePopWithConcurrentRequest(t *testing.T) {
 }
 
 func TestQueueLen(t *testing.T) {
-	q := NewQueue()
+	q := NewQueue(&zap.Logger{})
 	if q.Len() != 0 {
 		t.Errorf("Expected queue length to be 0, got %d", q.Len())
 	}
@@ -111,5 +114,28 @@ func TestQueueLen(t *testing.T) {
 	q.Push(item)
 	if q.Len() != 1 {
 		t.Errorf("Expected queue length to be 1, got %d", q.Len())
+	}
+}
+
+func TestExpired(t *testing.T) {
+	q := NewQueue(&zap.Logger{})
+	if q.Expired() != 0 {
+		t.Errorf("Expected Expired to return 0, got %d", q.Expired())
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	item := &svcWait{
+		svcChannel: make(chan *FuncSvc),
+		ctx:        ctx,
+	}
+	q.Push(item)
+	if q.Len() != 1 {
+		t.Errorf("Expected queue length to be 1, got %d", q.Len())
+	}
+	cancel()
+	if q.Expired() != 1 {
+		t.Errorf("Expected Expired to return 1, got %d", q.Expired())
+	}
+	if q.Len() != 0 {
+		t.Errorf("Expected queue length to be 0, got %d", q.Len())
 	}
 }

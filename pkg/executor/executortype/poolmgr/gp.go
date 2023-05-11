@@ -226,7 +226,7 @@ func (gp *GenericPool) updateCPUUtilizationSvc(ctx context.Context) {
 // returns the key and pod API object.
 func (gp *GenericPool) choosePod(ctx context.Context, newLabels map[string]string) (string, *apiv1.Pod, error) {
 	startTime := time.Now()
-	var podTimeout = startTime.Add(gp.podReadyTimeout)
+	podTimeout := startTime.Add(gp.podReadyTimeout)
 	deadline, ok := ctx.Deadline()
 	if ok {
 		deadline = deadline.Add(-1 * time.Second)

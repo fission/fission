@@ -36,6 +36,7 @@ const (
 	markAvailable
 	deleteValue
 	setCPUUtilization
+	reduceSpecializationInProgress
 )
 
 type (
@@ -95,10 +96,10 @@ func NewPoolCache(logger *zap.Logger) *PoolCache {
 	return c
 }
 
-func NewFuncSvcGroup() *funcSvcGroup {
+func NewFuncSvcGroup(logger *zap.Logger) *funcSvcGroup {
 	return &funcSvcGroup{
 		svcs:  make(map[string]*funcSvcInfo),
-		queue: NewQueue(),
+		queue: NewQueue(logger),
 	}
 }
 
@@ -110,7 +111,7 @@ func (c *PoolCache) service() {
 		case getValue:
 			funcSvcGroup, ok := c.cache[req.function]
 			if !ok {
-				c.cache[req.function] = NewFuncSvcGroup()
+				c.cache[req.function] = NewFuncSvcGroup(c.logger)
 				c.cache[req.function].svcWaiting++
 				resp.error = ferror.MakeError(ferror.ErrorNotFound,
 					fmt.Sprintf("function Name '%v' not found", req.function))
@@ -162,7 +163,7 @@ func (c *PoolCache) service() {
 			req.responseChannel <- resp
 		case setValue:
 			if _, ok := c.cache[req.function]; !ok {
-				c.cache[req.function] = NewFuncSvcGroup()
+				c.cache[req.function] = NewFuncSvcGroup(c.logger)
 			}
 			if _, ok := c.cache[req.function].svcs[req.address]; !ok {
 				c.cache[req.function].svcs[req.address] = &funcSvcInfo{}
@@ -214,7 +215,7 @@ func (c *PoolCache) service() {
 			req.responseChannel <- resp
 		case setCPUUtilization:
 			if _, ok := c.cache[req.function]; !ok {
-				c.cache[req.function] = NewFuncSvcGroup()
+				c.cache[req.function] = NewFuncSvcGroup(c.logger)
 			}
 			if _, ok := c.cache[req.function].svcs[req.address]; ok {
 				c.cache[req.function].svcs[req.address].currentCPUUsage = req.cpuUsage
@@ -230,6 +231,14 @@ func (c *PoolCache) service() {
 					} else {
 						otelUtils.LoggerWithTraceID(req.ctx, c.logger).Error("Invalid request to decrease active requests", zap.String("function", req.function), zap.String("address", req.address), zap.Int("activeRequests", c.cache[req.function].svcs[req.address].activeRequests))
 					}
+				}
+			}
+		case reduceSpecializationInProgress:
+			if c.cache[req.function].svcWaiting > c.cache[req.function].queue.Len() {
+				c.cache[req.function].svcWaiting--
+				if c.cache[req.function].svcWaiting == c.cache[req.function].queue.Len() {
+					expiredRequests := c.cache[req.function].queue.Expired()
+					c.cache[req.function].svcWaiting = c.cache[req.function].svcWaiting - expiredRequests
 				}
 			}
 		case deleteValue:
@@ -327,4 +336,13 @@ func (c *PoolCache) DeleteValue(ctx context.Context, function, address string) e
 	}
 	resp := <-respChannel
 	return resp.error
+}
+
+// ReduceSpecializationInProgress reduces the svcWaiting count
+func (c *PoolCache) ReduceSpecializationInProgress(function string) {
+	c.requestChannel <- &request{
+		requestType:     reduceSpecializationInProgress,
+		function:        function,
+		responseChannel: make(chan *response),
+	}
 }

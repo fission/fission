@@ -150,9 +150,8 @@ func (executor *Executor) getServiceForFunction(ctx context.Context, fn *fv1.Fun
 		respChan: respChan,
 	}
 	resp := <-respChan
-
+	et, ok := executor.executorTypes[fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType]
 	unTapFunc := func(funcSvc *fscache.FuncSvc) {
-		et, ok := executor.executorTypes[funcSvc.Executor]
 		if ok {
 			et.UnTapService(ctx, crd.CacheKey(funcSvc.Function), resp.funcSvc.Address)
 		} else {
@@ -162,12 +161,16 @@ func (executor *Executor) getServiceForFunction(ctx context.Context, fn *fv1.Fun
 	if errors.Is(ctx.Err(), context.Canceled) {
 		if resp.funcSvc != nil {
 			unTapFunc(resp.funcSvc)
+		} else {
+			et.ReduceSpecializationInProgress(ctx, crd.CacheKey(&fn.ObjectMeta))
 		}
 		return "", ferror.MakeError(499, "client leave early in the process of getServiceForFunction")
 	}
 	if resp.err != nil {
 		if resp.funcSvc != nil {
 			unTapFunc(resp.funcSvc)
+		} else {
+			et.ReduceSpecializationInProgress(ctx, crd.CacheKey(&fn.ObjectMeta))
 		}
 		return "", resp.err
 	}
