@@ -17,8 +17,10 @@ limitations under the License.
 package fscache
 
 import (
+	"bufio"
 	"context"
 	"fmt"
+	"io"
 
 	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -37,6 +39,7 @@ const (
 	deleteValue
 	setCPUUtilization
 	markSpecializationFailure
+	logFuncSvc
 )
 
 type (
@@ -66,6 +69,7 @@ type (
 		ctx             context.Context
 		function        string
 		address         string
+		dumpWriter      io.Writer
 		value           *FuncSvc
 		requestsPerPod  int
 		cpuUsage        resource.Quantity
@@ -244,6 +248,48 @@ func (c *PoolCache) service() {
 		case deleteValue:
 			delete(c.cache[req.function].svcs, req.address)
 			req.responseChannel <- resp
+		case logFuncSvc:
+			datawriter := bufio.NewWriter(req.dumpWriter)
+
+			writefnSvcGrp := func(svcGrp *funcSvcGroup) error {
+				_, err := datawriter.WriteString(fmt.Sprintf("svc_waiting:%d\tqueue_len:%d", svcGrp.svcWaiting, svcGrp.queue.Len()))
+				if err != nil {
+					return err
+				}
+
+				if len(svcGrp.svcs) == 0 {
+					_, err := datawriter.WriteString("\n")
+					if err != nil {
+						return err
+					}
+				}
+
+				for addr, fnSvc := range svcGrp.svcs {
+					_, err := datawriter.WriteString(fmt.Sprintf("\tfunction_name:%s\tfn_svc_address:%s\tactive_req:%d\tcurrent_cpu_usage:%v\tcpu_limit:%v\n",
+						fnSvc.val.Function.Name, addr, fnSvc.activeRequests, fnSvc.currentCPUUsage, fnSvc.cpuLimit))
+					if err != nil {
+						return err
+					}
+				}
+				return nil
+			}
+
+			for _, fnSvcGrp := range c.cache {
+				err := writefnSvcGrp(fnSvcGrp)
+				if err != nil {
+					resp.error = err
+					break
+				}
+			}
+			err := datawriter.Flush()
+			if err != nil {
+				if resp.error == nil {
+					resp.error = err
+				} else {
+					resp.error = fmt.Errorf("%v, %v", resp.error, err)
+				}
+			}
+			req.responseChannel <- resp
 		default:
 			resp.error = ferror.MakeError(ferror.ErrorInvalidArgument,
 				fmt.Sprintf("invalid request type: %v", req.requestType))
@@ -345,4 +391,15 @@ func (c *PoolCache) MarkSpecializationFailure(function string) {
 		function:        function,
 		responseChannel: make(chan *response),
 	}
+}
+
+func (c *PoolCache) LogFnSvcGroup(ctx context.Context, file io.Writer) error {
+	respChannel := make(chan *response)
+	c.requestChannel <- &request{
+		requestType:     logFuncSvc,
+		dumpWriter:      file,
+		responseChannel: respChannel,
+	}
+	resp := <-respChannel
+	return resp.error
 }
