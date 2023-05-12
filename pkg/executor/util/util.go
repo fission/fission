@@ -32,7 +32,6 @@ import (
 	"sigs.k8s.io/yaml"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
-	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/utils"
 )
 
@@ -163,10 +162,5 @@ func CreateDumpFile(logger *zap.Logger) (*os.File, error) {
 	dumpPath := os.TempDir()
 	logger.Info("creating dump file", zap.String("dump_path", dumpPath))
 
-	file, err := os.Create(fmt.Sprintf("%s/%s-%d.txt", dumpPath, dumpFileName, time.Now().Unix()))
-	if err != nil {
-		return nil, ferror.MakeError(ferror.ErrorInternal, fmt.Sprintf("error while creating file %s", err.Error()))
-	}
-
-	return file, nil
+	return os.Create(fmt.Sprintf("%s/%s-%d.txt", dumpPath, dumpFileName, time.Now().Unix()))
 }

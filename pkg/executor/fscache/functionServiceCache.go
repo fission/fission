@@ -182,7 +182,11 @@ func (fsc *FunctionServiceCache) DumpDebugInfo(ctx context.Context) error {
 	}
 	defer file.Close()
 
-	_ = fsc.connFunctionCache.LogFnSvcGroup(ctx, file)
+	err = fsc.connFunctionCache.LogFnSvcGroup(ctx, file)
+	if err != nil {
+		fsc.logger.Error("error while logging function service group", zap.String("error", err.Error()))
+		return err
+	}
 
 	fsc.logger.Info("dumped function service")
 	return nil

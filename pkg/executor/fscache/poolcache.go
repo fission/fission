@@ -250,18 +250,45 @@ func (c *PoolCache) service() {
 			req.responseChannel <- resp
 		case logFuncSvc:
 			datawriter := bufio.NewWriter(req.dumpWriter)
-			for _, fnSvcGrp := range c.cache {
-				datawriter.WriteString(fmt.Sprintf("svc_waiting:%d\tqueue_len:%d", fnSvcGrp.svcWaiting, fnSvcGrp.queue.Len()))
-				if len(fnSvcGrp.svcs) == 0 {
-					datawriter.WriteString("\n") // nolint: errCheck
+
+			writefnSvcGrp := func(svcGrp *funcSvcGroup) error {
+				_, err := datawriter.WriteString(fmt.Sprintf("svc_waiting:%d\tqueue_len:%d", svcGrp.svcWaiting, svcGrp.queue.Len()))
+				if err != nil {
+					return err
 				}
-				for addr, fnSvc := range fnSvcGrp.svcs {
-					datawriter.WriteString(fmt.Sprintf("\tfunction_name:%s\tfn_svc_address:%s\tactive_req:%d\tcurrent_cpu_usage:%v\tcpu_limit:%v\n",
-						fnSvc.val.Function.Name, addr, fnSvc.activeRequests, fnSvc.currentCPUUsage, fnSvc.cpuLimit)) // nolint: errCheck
+
+				if len(svcGrp.svcs) == 0 {
+					_, err := datawriter.WriteString("\n")
+					if err != nil {
+						return err
+					}
+				}
+
+				for addr, fnSvc := range svcGrp.svcs {
+					_, err := datawriter.WriteString(fmt.Sprintf("\tfunction_name:%s\tfn_svc_address:%s\tactive_req:%d\tcurrent_cpu_usage:%v\tcpu_limit:%v\n",
+						fnSvc.val.Function.Name, addr, fnSvc.activeRequests, fnSvc.currentCPUUsage, fnSvc.cpuLimit))
+					if err != nil {
+						return err
+					}
+				}
+				return nil
+			}
+
+			for _, fnSvcGrp := range c.cache {
+				err := writefnSvcGrp(fnSvcGrp)
+				if err != nil {
+					resp.error = err
+					break
 				}
 			}
-			// don't put this in defer statement
-			datawriter.Flush() // nolint: errCheck
+			err := datawriter.Flush()
+			if err != nil {
+				if resp.error == nil {
+					resp.error = err
+				} else {
+					resp.error = fmt.Errorf("%v, %v", resp.error, err)
+				}
+			}
 			req.responseChannel <- resp
 		default:
 			resp.error = ferror.MakeError(ferror.ErrorInvalidArgument,
@@ -366,7 +393,7 @@ func (c *PoolCache) MarkSpecializationFailure(function string) {
 	}
 }
 
-func (c *PoolCache) LogFnSvcGroup(ctx context.Context, file io.Writer) *response {
+func (c *PoolCache) LogFnSvcGroup(ctx context.Context, file io.Writer) error {
 	respChannel := make(chan *response)
 	c.requestChannel <- &request{
 		requestType:     logFuncSvc,
@@ -374,5 +401,5 @@ func (c *PoolCache) LogFnSvcGroup(ctx context.Context, file io.Writer) *response
 		responseChannel: respChannel,
 	}
 	resp := <-respChannel
-	return resp
+	return resp.error
 }
