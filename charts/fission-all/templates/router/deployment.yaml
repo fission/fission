@@ -12,7 +12,7 @@ metadata:
     application: fission-router
 spec:
 {{- if not .Values.router.deployAsDaemonSet }}
-  replicas: 1
+  replicas: {{ .Values.router.replicas | default 1 }}
 {{- end }}
   selector:
     matchLabels:
