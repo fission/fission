@@ -7,34 +7,34 @@ require (
 	github.com/bep/debounce v1.2.1
 	github.com/dchest/uniuri v1.2.0
 	github.com/docopt/docopt-go v0.0.0-20180111231733-ee0de3bc6815
-	github.com/dustin/go-humanize v1.0.0
+	github.com/dustin/go-humanize v1.0.1
 	github.com/elastic/crd-ref-docs v0.0.8
 	github.com/emicklei/go-restful-openapi/v2 v2.9.1
-	github.com/emicklei/go-restful/v3 v3.10.1
+	github.com/emicklei/go-restful/v3 v3.10.2
 	github.com/fatih/color v1.13.0
 	github.com/fsnotify/fsnotify v1.6.0
 	github.com/go-git/go-git/v5 v5.4.2
-	github.com/go-openapi/spec v0.20.7
-	github.com/golang-jwt/jwt/v4 v4.4.3
+	github.com/go-openapi/spec v0.20.9
+	github.com/golang-jwt/jwt/v4 v4.5.0
 	github.com/google/go-cmp v0.5.9
 	github.com/gorilla/mux v1.8.0
 	github.com/graymeta/stow v0.2.8
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/hashicorp/go-retryablehttp v0.7.1
-	github.com/imdario/mergo v0.3.13
-	github.com/influxdata/influxdb v1.11.0
+	github.com/imdario/mergo v0.3.15
+	github.com/influxdata/influxdb v1.11.1
 	github.com/mholt/archiver/v3 v3.5.1
 	github.com/minio/minio-go v6.0.14+incompatible
 	github.com/ory/dockertest v3.3.5+incompatible
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.14.0
 	github.com/prometheus/common v0.37.0
-	github.com/robfig/cron/v3 v3.0.0
+	github.com/robfig/cron/v3 v3.0.1
 	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06
 	github.com/satori/go.uuid v1.2.1-0.20181028125025-b2ce2384e17b
 	github.com/spf13/cobra v1.6.1
 	github.com/spf13/pflag v1.0.5
-	github.com/stretchr/testify v1.8.1
+	github.com/stretchr/testify v1.8.2
 	github.com/wcharczuk/go-chart v2.0.1+incompatible
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.37.0
 	go.opentelemetry.io/contrib/propagators/autoprop v0.37.0
