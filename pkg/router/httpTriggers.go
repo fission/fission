@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/bep/debounce"
+	"github.com/fission/fission/pkg/router/accesslog"
 	"github.com/gorilla/mux"
 	"go.uber.org/zap"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
@@ -58,13 +59,13 @@ type HTTPTriggerSet struct {
 	updateRouterRequestChannel chan struct{}
 	tsRoundTripperParams       *tsRoundTripperParams
 	isDebugEnv                 bool
+	displayAccessLog           bool
 	svcAddrUpdateThrottler     *throttler.Throttler
 	unTapServiceTimeout        time.Duration
 	syncDebouncer              func(func())
 }
 
-func makeHTTPTriggerSet(logger *zap.Logger, fmap *functionServiceMap, fissionClient versioned.Interface,
-	kubeClient kubernetes.Interface, executor *executorClient.Client, params *tsRoundTripperParams, isDebugEnv bool, unTapServiceTimeout time.Duration, actionThrottler *throttler.Throttler) *HTTPTriggerSet {
+func makeHTTPTriggerSet(logger *zap.Logger, fmap *functionServiceMap, fissionClient versioned.Interface, kubeClient kubernetes.Interface, executor *executorClient.Client, params *tsRoundTripperParams, isDebugEnv bool, displayAccessLog bool, unTapServiceTimeout time.Duration, actionThrottler *throttler.Throttler) *HTTPTriggerSet {
 
 	httpTriggerSet := &HTTPTriggerSet{
 		logger:                     logger.Named("http_trigger_set"),
@@ -76,6 +77,7 @@ func makeHTTPTriggerSet(logger *zap.Logger, fmap *functionServiceMap, fissionCli
 		updateRouterRequestChannel: make(chan struct{}, 10), // use buffer channel
 		tsRoundTripperParams:       params,
 		isDebugEnv:                 isDebugEnv,
+		displayAccessLog:           displayAccessLog,
 		svcAddrUpdateThrottler:     actionThrottler,
 		unTapServiceTimeout:        unTapServiceTimeout,
 		syncDebouncer:              debounce.New(time.Millisecond * 20),
@@ -135,6 +137,9 @@ func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) *mux.Router 
 	muxRouter.Use(metrics.HTTPMetricMiddleware)
 	if featureConfig.AuthConfig.IsEnabled {
 		muxRouter.Use(authMiddleware(featureConfig))
+	}
+	if ts.displayAccessLog {
+		muxRouter.Use(accesslog.Logger(ts.logger))
 	}
 
 	// HTTP triggers setup by the user

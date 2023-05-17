@@ -46,7 +46,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/fission/fission/pkg/router/accesslog"
 	"github.com/gorilla/mux"
 	"go.opentelemetry.io/otel"
 	"go.uber.org/zap"
@@ -63,13 +62,10 @@ import (
 
 // request url ---[trigger]---> Function(name, deployment) ----[deployment]----> Function(name, uid) ----[pool mgr]---> k8s service url
 
-func router(ctx context.Context, logger *zap.Logger, httpTriggerSet *HTTPTriggerSet, displayAccessLog bool) *mutableRouter {
+func router(ctx context.Context, logger *zap.Logger, httpTriggerSet *HTTPTriggerSet) *mutableRouter {
 	var mr *mutableRouter
 	mux := mux.NewRouter()
 	mux.Use(metrics.HTTPMetricMiddleware)
-	if displayAccessLog {
-		mux.Use(accesslog.Logger(logger))
-	}
 
 	// see issue https://github.com/fission/fission/issues/1317
 	useEncodedPath, _ := strconv.ParseBool(os.Getenv("USE_ENCODED_PATH"))
@@ -83,9 +79,8 @@ func router(ctx context.Context, logger *zap.Logger, httpTriggerSet *HTTPTrigger
 	return mr
 }
 
-func serve(ctx context.Context, logger *zap.Logger, port int,
-	httpTriggerSet *HTTPTriggerSet, displayAccessLog bool) {
-	mr := router(ctx, logger, httpTriggerSet, displayAccessLog)
+func serve(ctx context.Context, logger *zap.Logger, port int, httpTriggerSet *HTTPTriggerSet) {
+	mr := router(ctx, logger, httpTriggerSet)
 	handler := otelUtils.GetHandlerWithOTEL(mr, "fission-router", otelUtils.UrlsToIgnore("/router-healthz"))
 	httpserver.StartServer(ctx, logger, "router", fmt.Sprintf("%d", port), handler)
 }
@@ -211,7 +206,7 @@ func Start(ctx context.Context, logger *zap.Logger, port int, executorURL string
 		keepAliveTime:     keepAliveTime,
 		maxRetries:        maxRetries,
 		svcAddrRetryCount: svcAddrRetryCount,
-	}, isDebugEnv, unTapServiceTimeout, throttler.MakeThrottler(svcAddrUpdateTimeout))
+	}, isDebugEnv, displayAccessLog, unTapServiceTimeout, throttler.MakeThrottler(svcAddrUpdateTimeout))
 
 	go metrics.ServeMetrics(ctx, logger)
 
@@ -221,5 +216,5 @@ func Start(ctx context.Context, logger *zap.Logger, port int, executorURL string
 	ctx, span := tracer.Start(ctx, "router/Start")
 	defer span.End()
 
-	serve(ctx, logger, port, triggers, displayAccessLog)
+	serve(ctx, logger, port, triggers)
 }

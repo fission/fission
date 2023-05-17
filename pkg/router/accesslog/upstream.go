@@ -51,6 +51,10 @@ func (u *UpstreamRoundTrip) RoundTrip(req *http.Request) (*http.Response, error)
 	startAt := time.Now()
 	uInfo := &Upstream{Addr: req.URL.String()}
 	resp, err := u.RoundTripper.RoundTrip(req.WithContext(WithUpstream(ctx, uInfo)))
+	if err != nil {
+		return resp, err
+	}
+
 	uInfo.ResponseLength = resp.ContentLength
 	uInfo.ResponseStatus = resp.StatusCode
 	uInfo.ResponseTime = time.Since(startAt).Milliseconds()
