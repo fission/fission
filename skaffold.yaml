@@ -45,6 +45,7 @@ manifests:
         canaryDeployment.enabled: "false"
         controller.enabled: "false"
         debugEnv: "false"
+        router.displayAccessLog: "true"
         fetcher.imageTag: ""
         grafana.dashboards.enabled: "false"
         imageTag: ""

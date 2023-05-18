@@ -79,8 +79,7 @@ func router(ctx context.Context, logger *zap.Logger, httpTriggerSet *HTTPTrigger
 	return mr
 }
 
-func serve(ctx context.Context, logger *zap.Logger, port int,
-	httpTriggerSet *HTTPTriggerSet, displayAccessLog bool) {
+func serve(ctx context.Context, logger *zap.Logger, port int, httpTriggerSet *HTTPTriggerSet) {
 	mr := router(ctx, logger, httpTriggerSet)
 	handler := otelUtils.GetHandlerWithOTEL(mr, "fission-router", otelUtils.UrlsToIgnore("/router-healthz"))
 	httpserver.StartServer(ctx, logger, "router", fmt.Sprintf("%d", port), handler)
@@ -207,7 +206,7 @@ func Start(ctx context.Context, logger *zap.Logger, port int, executorURL string
 		keepAliveTime:     keepAliveTime,
 		maxRetries:        maxRetries,
 		svcAddrRetryCount: svcAddrRetryCount,
-	}, isDebugEnv, unTapServiceTimeout, throttler.MakeThrottler(svcAddrUpdateTimeout))
+	}, isDebugEnv, displayAccessLog, unTapServiceTimeout, throttler.MakeThrottler(svcAddrUpdateTimeout))
 
 	go metrics.ServeMetrics(ctx, logger)
 
@@ -217,5 +216,5 @@ func Start(ctx context.Context, logger *zap.Logger, port int, executorURL string
 	ctx, span := tracer.Start(ctx, "router/Start")
 	defer span.End()
 
-	serve(ctx, logger, port, triggers, displayAccessLog)
+	serve(ctx, logger, port, triggers)
 }
