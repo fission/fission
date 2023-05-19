@@ -44,6 +44,7 @@ type (
 
 func MakeClient(logger *zap.Logger, builderUrl string) *Client {
 	hc := retryablehttp.NewClient()
+	hc.Logger = logger
 	hc.ErrorHandler = retryablehttp.PassthroughErrorHandler
 	hc.HTTPClient.Transport = otelhttp.NewTransport(hc.HTTPClient.Transport)
 	return &Client{
