@@ -176,6 +176,12 @@ spec:
                   name: influxdb
                   key: password
 {{- end }}
+            - name: SERVICE_FLUSH_INTERVAL
+              value: "5"
+            - name: INPUT_REFRESH_INTERVAL
+              value: "10"
+            - name: INPUT_MEM_BUF_LIMIT
+              value: "5MB"
             - name: LOG_PATH
               value: /var/log/fission/*.log
 {{- if .Values.logger.fluentbit.extraEnv.public }}
