@@ -35,6 +35,7 @@ import (
 	"github.com/fission/fission/pkg/crd"
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/executor/metrics"
+	"github.com/fission/fission/pkg/executor/util"
 )
 
 type fscRequestType int
@@ -170,6 +171,27 @@ func (fsc *FunctionServiceCache) service() {
 	}
 }
 
+// DumpDebugInfo => dump function service cache data to temporary directory of executor pod.
+func (fsc *FunctionServiceCache) DumpDebugInfo(ctx context.Context) error {
+	fsc.logger.Info("dumping function service")
+
+	file, err := util.CreateDumpFile(fsc.logger)
+	if err != nil {
+		fsc.logger.Error("error while creating file/dir", zap.String("error", err.Error()))
+		return err
+	}
+	defer file.Close()
+
+	err = fsc.connFunctionCache.LogFnSvcGroup(ctx, file)
+	if err != nil {
+		fsc.logger.Error("error while logging function service group", zap.String("error", err.Error()))
+		return err
+	}
+
+	fsc.logger.Info("dumped function service")
+	return nil
+}
+
 // GetByFunction gets a function service from cache using function key.
 func (fsc *FunctionServiceCache) GetByFunction(m *metav1.ObjectMeta) (*FuncSvc, error) {
 	key := crd.CacheKey(m)
@@ -242,6 +264,10 @@ func (fsc *FunctionServiceCache) SetCPUUtilizaton(key string, svcHost string, cp
 // MarkAvailable marks the value at key [function][address] as available.
 func (fsc *FunctionServiceCache) MarkAvailable(key string, svcHost string) {
 	fsc.connFunctionCache.MarkAvailable(key, svcHost)
+}
+
+func (fsc *FunctionServiceCache) MarkSpecializationFailure(key string) {
+	fsc.connFunctionCache.MarkSpecializationFailure(key)
 }
 
 // Add adds a function service to cache if it does not exist already.

@@ -26,6 +26,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/fission/fission/pkg/executor/metrics"
 	"github.com/hashicorp/go-multierror"
 	"go.opentelemetry.io/otel/attribute"
 	"go.uber.org/zap"
@@ -186,7 +187,16 @@ func (gpm *GenericPoolManager) GetTypeName(ctx context.Context) fv1.ExecutorType
 	return fv1.ExecutorTypePoolmgr
 }
 
-func (gpm *GenericPoolManager) GetFuncSvc(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
+func (gpm *GenericPoolManager) GetFuncSvc(ctx context.Context, fn *fv1.Function) (fnSvc *fscache.FuncSvc, fErr error) {
+	defer func() {
+		if fErr != nil {
+			metrics.ColdStartsError.WithLabelValues(fn.ObjectMeta.Name, fn.ObjectMeta.Namespace).Inc()
+			return
+		}
+
+		metrics.ColdStarts.WithLabelValues(fn.ObjectMeta.Name, fn.ObjectMeta.Namespace).Inc()
+	}()
+
 	otelUtils.SpanTrackEvent(ctx, "GetFuncSvc", otelUtils.GetAttributesForFunction(fn)...)
 	logger := otelUtils.LoggerWithTraceID(ctx, gpm.logger)
 
@@ -194,12 +204,14 @@ func (gpm *GenericPoolManager) GetFuncSvc(ctx context.Context, fn *fv1.Function)
 	logger.Debug("getting environment for function", zap.String("function", fn.ObjectMeta.Name))
 	env, err := gpm.getFunctionEnv(ctx, fn)
 	if err != nil {
-		return nil, err
+		fErr = err
+		return
 	}
 
 	pool, created, err := gpm.getPool(ctx, env)
 	if err != nil {
-		return nil, err
+		fErr = err
+		return
 	}
 
 	if created {
@@ -209,7 +221,8 @@ func (gpm *GenericPoolManager) GetFuncSvc(ctx context.Context, fn *fv1.Function)
 	// from GenericPool -> get one function container
 	// (this also adds to the cache)
 	logger.Debug("getting function service from pool", zap.String("function", fn.ObjectMeta.Name))
-	return pool.getFuncSvc(ctx, fn)
+	fnSvc, fErr = pool.getFuncSvc(ctx, fn)
+	return fnSvc, fErr
 }
 
 func (gpm *GenericPoolManager) GetFuncSvcFromCache(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
@@ -237,6 +250,14 @@ func (gpm *GenericPoolManager) TapService(ctx context.Context, svcHost string) e
 		return err
 	}
 	return nil
+}
+
+func (gpm *GenericPoolManager) MarkSpecializationFailure(ctx context.Context, key string) {
+	otelUtils.SpanTrackEvent(ctx, "MarkSpecializationFailure",
+		attribute.KeyValue{Key: "key", Value: attribute.StringValue(key)})
+	logger := otelUtils.LoggerWithTraceID(ctx, gpm.logger)
+	logger.Info("marking specialization failure", zap.Any("key", key))
+	gpm.fsCache.MarkSpecializationFailure(key)
 }
 
 // IsValid checks if pod is not deleted and that it has the address passed as the argument. Also checks that all the
@@ -740,4 +761,8 @@ func (gpm *GenericPoolManager) NoActiveConnectionEventChecker(ctx context.Contex
 		wg.StartWithChannel(stopper, informer.Run)
 	}
 	wg.Wait()
+}
+
+func (gpm *GenericPoolManager) DumpDebugInfo(ctx context.Context) error {
+	return gpm.fsCache.DumpDebugInfo(ctx)
 }

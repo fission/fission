@@ -177,6 +177,11 @@ func (caaf *Container) UnTapService(ctx context.Context, key string, svcHost str
 	// Not Implemented for CaaF.
 }
 
+// MarkSpecializationFailure has not been implemented for CaaF.
+func (caaf *Container) MarkSpecializationFailure(ctx context.Context, key string) {
+	// Not Implemented for CaaF.
+}
+
 // GetFuncSvc returns a function service; error otherwise.
 func (caaf *Container) GetFuncSvc(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
 	return caaf.createFunction(ctx, fn)
@@ -457,7 +462,7 @@ func (caaf *Container) fnCreate(ctx context.Context, fn *fv1.Function) (*fscache
 	_, err = caaf.fsCache.Add(*fsvc)
 	if err != nil {
 		caaf.logger.Error("error adding function to cache", zap.Error(err), zap.Any("function", fsvc.Function))
-		metrics.FuncError.WithLabelValues(fn.ObjectMeta.Name, fn.ObjectMeta.Namespace).Inc()
+		metrics.ColdStartsError.WithLabelValues(fn.ObjectMeta.Name, fn.ObjectMeta.Namespace).Inc()
 		return fsvc, err
 	}
 
@@ -780,5 +785,9 @@ func getDeploymentObj(kubeobjs []apiv1.ObjectReference) *apiv1.ObjectReference {
 			return &kubeobj
 		}
 	}
+	return nil
+}
+
+func (caaf *Container) DumpDebugInfo(ctx context.Context) error {
 	return nil
 }

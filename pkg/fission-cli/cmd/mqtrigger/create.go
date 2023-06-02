@@ -203,7 +203,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 
 	if input.Bool(flagkey.SpecSave) {
 		specFile := fmt.Sprintf("mqtrigger-%v.yaml", opts.trigger.ObjectMeta.Name)
-		err := spec.SpecSave(*opts.trigger, specFile)
+		err := spec.SpecSave(*opts.trigger, specFile, false)
 		if err != nil {
 			return errors.Wrap(err, "error saving message queue trigger spec")
 		}

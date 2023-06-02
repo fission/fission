@@ -199,6 +199,11 @@ func (deploy *NewDeploy) UnTapService(ctx context.Context, key string, svcHost s
 	// Not Implemented for NewDeployment. Will be used when support of concurrent specialization of same function is added.
 }
 
+// MarkSpecializationFailure has not been implemented for NewDeployment.
+func (deploy *NewDeploy) MarkSpecializationFailure(ctx context.Context, key string) {
+	// Not Implemented for NewDeployment. Will be used when support of concurrent specialization of same function is added.
+}
+
 // TapService makes a TouchByAddress request to the cache.
 func (deploy *NewDeploy) TapService(ctx context.Context, svcHost string) error {
 	otelUtils.SpanTrackEvent(ctx, "TapService")
@@ -500,7 +505,7 @@ func (deploy *NewDeploy) fnCreate(ctx context.Context, fn *fv1.Function) (*fscac
 	_, err = deploy.fsCache.Add(*fsvc)
 	if err != nil {
 		deploy.logger.Error("error adding function to cache", zap.Error(err), zap.Any("function", fsvc.Function))
-		metrics.FuncError.WithLabelValues(fn.ObjectMeta.Name, fn.ObjectMeta.Namespace).Inc()
+		metrics.ColdStartsError.WithLabelValues(fn.ObjectMeta.Name, fn.ObjectMeta.Namespace).Inc()
 		return fsvc, err
 	}
 
@@ -883,4 +888,8 @@ func (deploy *NewDeploy) scaleDeployment(ctx context.Context, deplNS string, dep
 		},
 	}, metav1.UpdateOptions{})
 	return err
+}
+
+func (deploy *NewDeploy) DumpDebugInfo(ctx context.Context) error {
+	return nil
 }

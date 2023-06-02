@@ -127,7 +127,7 @@ func MapKey(m *metav1.ObjectMeta) string {
 }
 
 // save saves object encoded value to spec file under given spec directory
-func save(data []byte, specDir string, specFile string) error {
+func save(data []byte, specDir string, specFile string, truncate bool) error {
 	// verify
 	if _, err := os.Stat(filepath.Join(specDir, "fission-deployment-config.yaml")); os.IsNotExist(err) {
 		return errors.Wrap(err, "Couldn't find specs, run `fission spec init` first")
@@ -137,6 +137,9 @@ func save(data []byte, specDir string, specFile string) error {
 	// check if the file is new
 	newFile := false
 	if _, err := os.Stat(filename); os.IsNotExist(err) {
+		if truncate {
+			return errors.Errorf("spec file does not exists")
+		}
 		newFile = true
 	}
 
@@ -147,11 +150,19 @@ func save(data []byte, specDir string, specFile string) error {
 	}
 	defer f.Close()
 
-	// if we're appending, add a yaml document separator
-	if !newFile {
-		_, err = f.Write([]byte("\n---\n"))
+	if truncate {
+		err = f.Truncate(0)
 		if err != nil {
-			return errors.Wrap(err, "couldn't write to spec file")
+			return errors.Wrap(err, "couldn't truncate the spec file")
+		}
+
+	} else {
+		// if we're appending, add a yaml document separator
+		if !newFile {
+			_, err = f.Write([]byte("\n---\n"))
+			if err != nil {
+				return errors.Wrap(err, "couldn't write to spec file")
+			}
 		}
 	}
 
@@ -164,7 +175,7 @@ func save(data []byte, specDir string, specFile string) error {
 }
 
 // called from `fission * create --spec`
-func SpecSave(resource interface{}, specFile string) error {
+func SpecSave(resource interface{}, specFile string, update bool) error {
 	var specDir = "specs"
 
 	meta, kind, data, err := crdToYaml(resource)
@@ -186,7 +197,11 @@ func SpecSave(resource interface{}, specFile string) error {
 		return errors.Errorf("same name resource (%v) already exists in namespace (%v)", meta.Name, meta.Namespace)
 	}
 
-	err = save(data, specDir, specFile)
+	truncate := false
+	if update {
+		truncate = true
+	}
+	err = save(data, specDir, specFile, truncate)
 	if err != nil {
 		return err
 	}

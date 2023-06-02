@@ -47,7 +47,6 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/executor/fscache"
-	"github.com/fission/fission/pkg/executor/metrics"
 	fetcherClient "github.com/fission/fission/pkg/fetcher/client"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
@@ -227,6 +226,14 @@ func (gp *GenericPool) updateCPUUtilizationSvc(ctx context.Context) {
 // returns the key and pod API object.
 func (gp *GenericPool) choosePod(ctx context.Context, newLabels map[string]string) (string, *apiv1.Pod, error) {
 	startTime := time.Now()
+	podTimeout := startTime.Add(gp.podReadyTimeout)
+	deadline, ok := ctx.Deadline()
+	if ok {
+		deadline = deadline.Add(-1 * time.Second)
+		if deadline.Before(podTimeout) {
+			podTimeout = deadline
+		}
+	}
 	expoDelay := 100 * time.Millisecond
 	logger := otelUtils.LoggerWithTraceID(ctx, gp.logger)
 	if !cache.WaitForCacheSync(ctx.Done(), gp.readyPodListerSynced) {
@@ -235,9 +242,13 @@ func (gp *GenericPool) choosePod(ctx context.Context, newLabels map[string]strin
 	}
 	for {
 		// Retries took too long, error out.
-		if time.Since(startTime) > gp.podReadyTimeout {
-			logger.Error("timed out waiting for pod", zap.Any("labels", newLabels), zap.Duration("timeout", gp.podReadyTimeout))
+		if time.Now().After(podTimeout) {
+			logger.Error("timed out waiting for pod", zap.Any("labels", newLabels), zap.Duration("timeout", podTimeout.Sub(startTime)))
 			return "", nil, errors.New("timeout: waited too long to get a ready pod")
+		}
+		if ctx.Err() != nil {
+			logger.Error("context canceled while waiting for pod", zap.Any("labels", newLabels), zap.Duration("timeout", podTimeout.Sub(startTime)))
+			return "", nil, fmt.Errorf("context canceled while waiting for pod: %w", ctx.Err())
 		}
 
 		var chosenPod *apiv1.Pod
@@ -517,7 +528,7 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 		// Remove old versions function pods
 		for _, pod := range podList.Items {
 			// Delete pod no matter what status it is
-			gp.kubernetesClient.CoreV1().Pods(gp.fnNamespace).Delete(ctx, pod.ObjectMeta.Name, metav1.DeleteOptions{}) //nolint errcheck
+			gp.kubernetesClient.CoreV1().Pods(gp.fnNamespace).Delete(ctx, pod.ObjectMeta.Name, metav1.DeleteOptions{}) // nolint errcheck
 		}
 	}
 
@@ -613,7 +624,6 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 	gp.fsCache.PodToFsvc.Store(pod.GetObjectMeta().GetName(), fsvc)
 	gp.podFSVCMap.Store(pod.ObjectMeta.Name, []interface{}{crd.CacheKey(fsvc.Function), fsvc.Address})
 	gp.fsCache.AddFunc(ctx, *fsvc, fn.GetRequestPerPod())
-	metrics.ColdStarts.WithLabelValues(fn.ObjectMeta.Name, fn.ObjectMeta.Namespace).Inc()
 
 	logger.Info("added function service",
 		zap.String("pod", pod.ObjectMeta.Name),

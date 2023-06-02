@@ -38,6 +38,9 @@ type ExecutorType interface {
 	// GetFuncSvcFromCache retrieves function service from cache.
 	GetFuncSvcFromCache(context.Context, *fv1.Function) (*fscache.FuncSvc, error)
 
+	// DumpDebugInfo dump function service cache to temporary directory of executor pod.
+	DumpDebugInfo(context.Context) error
+
 	// DeleteFuncSvcFromCache deletes function service entry in cache.
 	DeleteFuncSvcFromCache(context.Context, *fscache.FuncSvc)
 
@@ -47,6 +50,9 @@ type ExecutorType interface {
 
 	// UnTapService updates the isActive to false
 	UnTapService(ctx context.Context, key string, svcHost string)
+
+	// ReduceSpecializationInProgress updates the svcWaiting count in funcSvcGroup
+	MarkSpecializationFailure(ctx context.Context, key string)
 
 	// IsValid returns true if a function service is valid. Different executor types
 	// use distinct ways to examine the function service.

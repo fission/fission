@@ -44,6 +44,7 @@ type (
 
 func MakeClient(logger *zap.Logger, builderUrl string) *Client {
 	hc := retryablehttp.NewClient()
+	hc.ErrorHandler = retryablehttp.PassthroughErrorHandler
 	hc.HTTPClient.Transport = otelhttp.NewTransport(hc.HTTPClient.Transport)
 	return &Client{
 		logger:     logger.Named("builder_client"),
@@ -62,7 +63,7 @@ func (c *Client) Build(ctx context.Context, req *builder.PackageBuildRequest) (*
 
 	resp, err := ctxhttp.Post(ctx, c.httpClient.StandardClient(), c.url, "application/json", bytes.NewReader(body))
 	if err != nil {
-		return nil, ferror.MakeErrorFromHTTP(resp)
+		return nil, err
 	}
 	defer resp.Body.Close()
 
