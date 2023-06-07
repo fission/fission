@@ -20,7 +20,11 @@ data:
 {{ else }}
 # intentionally empty, as influxdb is not enabled
 {{- end }}
-  output-custom.conf: |
+  extra-config.conf: |
+{{- if .Values.logger.fluentbit.extraConfig }}
+{{ tpl .Values.logger.fluentbit.extraConfig . | indent 3 }}
+{{ else }}
+{{- end }}
 {{- if .Values.logger.fluentbit.customOutput }}
 {{ tpl .Values.logger.fluentbit.customOutput . | indent 3 }}
 {{ else }}
