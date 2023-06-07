@@ -654,6 +654,14 @@ logger:
       enabled: true
       image: influxdb:1.8
       adminUser: admin
+    ## Specify extra configuration for Fluent Bit by uncommenting customOutput and
+    ## adding your extra settings
+    ## example:
+    ## extraConfig: |
+    ##   [OUTPUT]
+    ##     Name  stdout
+    ##     Match *
+    extraConfig: null
     ## Specify custom output configurations for Fluent Bit by uncommenting customOutput and
     ## adding your custom settings
     ## example:

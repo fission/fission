@@ -1,6 +1,6 @@
 apiVersion: v2
 name: fission-all
-version: v1.19.0
+version: 1.19.0-neofix-1
 appVersion: v1.19.0
 description: Fission is a fast serverless framework for Kubernetes.
 home: https://fission.io/
