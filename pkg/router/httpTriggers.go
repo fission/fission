@@ -20,6 +20,7 @@ import (
 	"context"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/bep/debounce"
@@ -57,6 +58,7 @@ type HTTPTriggerSet struct {
 	functions                  []fv1.Function
 	funcInformer               map[string]k8sCache.SharedIndexInformer
 	updateRouterRequestChannel chan struct{}
+	hasFunctionsAndTriggers    atomic.Bool
 	tsRoundTripperParams       *tsRoundTripperParams
 	isDebugEnv                 bool
 	svcAddrUpdateThrottler     *throttler.Throttler
@@ -65,8 +67,8 @@ type HTTPTriggerSet struct {
 }
 
 func makeHTTPTriggerSet(logger *zap.Logger, fmap *functionServiceMap, fissionClient versioned.Interface,
-	kubeClient kubernetes.Interface, executor eclient.ClientInterface, params *tsRoundTripperParams, isDebugEnv bool, unTapServiceTimeout time.Duration, actionThrottler *throttler.Throttler) (*HTTPTriggerSet, error) {
-
+	kubeClient kubernetes.Interface, executor eclient.ClientInterface, params *tsRoundTripperParams, isDebugEnv bool, unTapServiceTimeout time.Duration, actionThrottler *throttler.Throttler,
+) (*HTTPTriggerSet, error) {
 	httpTriggerSet := &HTTPTriggerSet{
 		logger:                     logger.Named("http_trigger_set"),
 		functionServiceMap:         fmap,
@@ -142,7 +144,6 @@ func versionHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) (*mux.Router, error) {
-
 	featureConfig, err := config.GetFeatureConfig(ts.logger)
 	if err != nil {
 		return nil, err
@@ -297,6 +298,15 @@ func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) (*mux.Router
 
 	// Healthz endpoint for the router.
 	muxRouter.HandleFunc("/router-healthz", routerHealthHandler).Methods("GET")
+	// Startup endpoint for the router.
+	muxRouter.HandleFunc("/router-startup", func(w http.ResponseWriter, r *http.Request) {
+		if ts.hasFunctionsAndTriggers.Load() {
+			w.WriteHeader(http.StatusOK)
+		} else {
+			w.WriteHeader(http.StatusServiceUnavailable)
+		}
+	}).Methods("GET")
+
 	// version of application.
 	muxRouter.HandleFunc("/_version", versionHandler).Methods("GET")
 
@@ -424,5 +434,10 @@ func (ts *HTTPTriggerSet) updateRouter(ctx context.Context) {
 			continue
 		}
 		ts.mutableRouter.updateRouter(router)
+
+		if !ts.hasFunctionsAndTriggers.Load() && len(ts.triggers) > 0 && len(ts.functions) > 0 {
+			// let the startup probe know that the router is ready
+			ts.hasFunctionsAndTriggers.Store(true)
+		}
 	}
 }
