@@ -623,7 +623,7 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 
 	gp.fsCache.PodToFsvc.Store(pod.GetObjectMeta().GetName(), fsvc)
 	gp.podFSVCMap.Store(pod.ObjectMeta.Name, []interface{}{crd.CacheKey(fsvc.Function), fsvc.Address})
-	gp.fsCache.AddFunc(ctx, *fsvc, fn.GetRequestPerPod())
+	gp.fsCache.AddFunc(ctx, *fsvc, fn.GetRequestPerPod(), fn.GetRetainPods())
 
 	logger.Info("added function service",
 		zap.String("pod", pod.ObjectMeta.Name),

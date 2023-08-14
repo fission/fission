@@ -52,6 +52,7 @@ type (
 
 	funcSvcGroup struct {
 		svcWaiting int
+		svcRetain  int
 		svcs       map[string]*funcSvcInfo
 		queue      *Queue
 	}
@@ -75,6 +76,7 @@ type (
 		cpuUsage        resource.Quantity
 		responseChannel chan *response
 		concurrency     int
+		svcsRetain      int
 	}
 	response struct {
 		error
@@ -172,6 +174,7 @@ func (c *PoolCache) service() {
 			if _, ok := c.cache[req.function].svcs[req.address]; !ok {
 				c.cache[req.function].svcs[req.address] = &funcSvcInfo{}
 			}
+			c.cache[req.function].svcRetain = req.svcsRetain
 			c.cache[req.function].svcs[req.address].val = req.value
 			c.cache[req.function].svcs[req.address].activeRequests++
 			if c.cache[req.function].svcWaiting > 0 {
@@ -202,16 +205,21 @@ func (c *PoolCache) service() {
 		case listAvailableValue:
 			vals := make([]*FuncSvc, 0)
 			for key1, values := range c.cache {
+				svcCleanQuota := len(values.svcs) - values.svcRetain
+				if svcCleanQuota <= 0 {
+					continue
+				}
 				for key2, value := range values.svcs {
 					debugLevel := c.logger.Core().Enabled(zap.DebugLevel)
 					if debugLevel {
 						otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Reading active requests", zap.String("function", key1), zap.String("address", key2), zap.Int("activeRequests", value.activeRequests))
 					}
-					if value.activeRequests == 0 {
+					if value.activeRequests == 0 && svcCleanQuota > 0 {
 						if debugLevel {
 							otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Function service with no active requests", zap.String("function", key1), zap.String("address", key2), zap.Int("activeRequests", value.activeRequests))
 						}
 						vals = append(vals, value.val)
+						svcCleanQuota--
 					}
 				}
 			}
@@ -334,7 +342,7 @@ func (c *PoolCache) ListAvailableValue() []*FuncSvc {
 }
 
 // SetValue marks the value at key [function][address] as active(begin used)
-func (c *PoolCache) SetSvcValue(ctx context.Context, function, address string, value *FuncSvc, cpuLimit resource.Quantity, requestsPerPod int) {
+func (c *PoolCache) SetSvcValue(ctx context.Context, function, address string, value *FuncSvc, cpuLimit resource.Quantity, requestsPerPod, svcsRetain int) {
 	respChannel := make(chan *response)
 	c.requestChannel <- &request{
 		ctx:             ctx,
@@ -344,6 +352,7 @@ func (c *PoolCache) SetSvcValue(ctx context.Context, function, address string, v
 		value:           value,
 		cpuUsage:        cpuLimit,
 		requestsPerPod:  requestsPerPod,
+		svcsRetain:      svcsRetain,
 		responseChannel: respChannel,
 	}
 }

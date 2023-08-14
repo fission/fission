@@ -38,7 +38,7 @@ func TestPoolCache(t *testing.T) {
 
 	c.SetSvcValue(ctx, "func", "ip", &FuncSvc{
 		Name: "value",
-	}, resource.MustParse("45m"), 10)
+	}, resource.MustParse("45m"), 10, 0)
 
 	// should not return any error since we added a svc
 	_, err = c.GetSvcValue(ctx, "func", requestsPerPod, concurrency)
@@ -46,7 +46,7 @@ func TestPoolCache(t *testing.T) {
 
 	c.SetSvcValue(ctx, "func", "ip", &FuncSvc{
 		Name: "value",
-	}, resource.MustParse("45m"), 10)
+	}, resource.MustParse("45m"), 10, 0)
 
 	// should return err since all functions are busy
 	_, err = c.GetSvcValue(ctx, "func", requestsPerPod, concurrency)
@@ -56,15 +56,15 @@ func TestPoolCache(t *testing.T) {
 
 	c.SetSvcValue(ctx, "func", "ip", &FuncSvc{
 		Name: "value",
-	}, resource.MustParse("45m"), 10)
+	}, resource.MustParse("45m"), 10, 0)
 
 	c.SetSvcValue(ctx, "func2", "ip2", &FuncSvc{
 		Name: "value2",
-	}, resource.MustParse("50m"), 10)
+	}, resource.MustParse("50m"), 10, 0)
 
 	c.SetSvcValue(ctx, "func2", "ip22", &FuncSvc{
 		Name: "value22",
-	}, resource.MustParse("33m"), 10)
+	}, resource.MustParse("33m"), 10, 0)
 
 	checkErr(c.DeleteValue(ctx, "func2", "ip2"))
 
@@ -84,7 +84,7 @@ func TestPoolCache(t *testing.T) {
 
 	c.SetSvcValue(ctx, "cpulimit", "100", &FuncSvc{
 		Name: "value",
-	}, resource.MustParse("3m"), 10)
+	}, resource.MustParse("3m"), 10, 0)
 	c.SetCPUUtilization("cpulimit", "100", resource.MustParse("4m"))
 }
 
@@ -174,7 +174,7 @@ func TestPoolCacheRequests(t *testing.T) {
 						if code == http.StatusNotFound {
 							p.SetSvcValue(context.Background(), "func", fmt.Sprintf("svc-%d", svcCounter), &FuncSvc{
 								Name: "value",
-							}, resource.MustParse("45m"), tt.rpp)
+							}, resource.MustParse("45m"), tt.rpp, 0)
 							atomic.AddUint64(&svcCounter, 1)
 						} else {
 							t.Log(reqno, "=>", err)
