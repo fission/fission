@@ -47,7 +47,7 @@ create_fission_objects() {
     if fission env create --name nodejs --image fission/node-env:latest; then
         echo "Successfully created function environment"
     else
-        echo "Environemnt creation failed"
+        echo "Environment creation failed"
         exit 1
     fi
 
