@@ -162,6 +162,10 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 		function.Spec.RequestsPerPod = input.Int(flagkey.FnRequestsPerPod)
 	}
 
+	if input.IsSet(flagkey.FnRetainPods) {
+		function.Spec.RetainPods = input.Int(flagkey.FnRetainPods)
+	}
+
 	if input.IsSet(flagkey.FnOnceOnly) {
 		function.Spec.OnceOnly = input.Bool(flagkey.FnOnceOnly)
 	}
