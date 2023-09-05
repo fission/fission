@@ -148,10 +148,16 @@ func MakeNewDeploy(
 		nd.svcListerSynced[ns] = informerFactory.Core().V1().Services().Informer().HasSynced
 	}
 	for _, factory := range finformerFactory {
-		factory.Core().V1().Functions().Informer().AddEventHandler(nd.FunctionEventHandlers(ctx))
+		_, err := factory.Core().V1().Functions().Informer().AddEventHandler(nd.FunctionEventHandlers(ctx))
+		if err != nil {
+			return nil, err
+		}
 	}
 	for _, factory := range finformerFactory {
-		factory.Core().V1().Environments().Informer().AddEventHandler(nd.EnvEventHandlers(ctx))
+		_, err := factory.Core().V1().Environments().Informer().AddEventHandler(nd.EnvEventHandlers(ctx))
+		if err != nil {
+			return nil, err
+		}
 	}
 	return nd, nil
 }

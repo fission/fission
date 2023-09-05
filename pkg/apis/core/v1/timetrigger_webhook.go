@@ -21,6 +21,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
@@ -50,42 +51,42 @@ func (r *TimeTrigger) Default() {
 var _ webhook.Validator = &TimeTrigger{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type
-func (r *TimeTrigger) ValidateCreate() error {
+func (r *TimeTrigger) ValidateCreate() (admission.Warnings, error) {
 	timetriggerlog.Debug("validate create", zap.String("name", r.Name))
 	err := r.Validate()
 	if err != nil {
 		err = AggregateValidationErrors("TimeTrigger", err)
-		return err
+		return nil, err
 	}
 
 	err = IsValidCronSpec(r.Spec.Cron)
 	if err != nil {
 		err = ferror.MakeError(ferror.ErrorInvalidArgument, "TimeTrigger cron spec is not valid")
-		return err
+		return nil, err
 	}
-	return nil
+	return nil, nil
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
-func (r *TimeTrigger) ValidateUpdate(old runtime.Object) error {
+func (r *TimeTrigger) ValidateUpdate(old runtime.Object) (admission.Warnings, error) {
 	timetriggerlog.Debug("validate update", zap.String("name", r.Name))
 	err := r.Validate()
 	if err != nil {
 		err = AggregateValidationErrors("TimeTrigger", err)
-		return err
+		return nil, err
 	}
 
 	err = IsValidCronSpec(r.Spec.Cron)
 	if err != nil {
 		err = ferror.MakeError(ferror.ErrorInvalidArgument, "TimeTrigger cron spec is not valid")
-		return err
+		return nil, err
 	}
 
-	return nil
+	return nil, nil
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type
-func (r *TimeTrigger) ValidateDelete() error {
+func (r *TimeTrigger) ValidateDelete() (admission.Warnings, error) {
 	timetriggerlog.Debug("validate delete", zap.String("name", r.Name))
-	return nil
+	return nil, nil
 }

@@ -24,6 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
@@ -56,43 +57,43 @@ func (r *Package) Default() {
 var _ webhook.Validator = &Package{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type
-func (r *Package) ValidateCreate() error {
+func (r *Package) ValidateCreate() (admission.Warnings, error) {
 	packagelog.Debug("validate create", zap.String("name", r.Name))
 	err := r.Validate()
 	if err != nil {
 		err = AggregateValidationErrors("Package", err)
-		return err
+		return nil, err
 	}
 
 	// Ensure size limits
 	if len(r.Spec.Source.Literal) > int(ArchiveLiteralSizeLimit) {
 		err := ferror.MakeError(ferror.ErrorInvalidArgument,
 			fmt.Sprintf("Package literal larger than %s", humanize.Bytes(uint64(ArchiveLiteralSizeLimit))))
-		return err
+		return nil, err
 	}
 	if len(r.Spec.Deployment.Literal) > int(ArchiveLiteralSizeLimit) {
 		err := ferror.MakeError(ferror.ErrorInvalidArgument,
 			fmt.Sprintf("Package literal larger than %s", humanize.Bytes(uint64(ArchiveLiteralSizeLimit))))
-		return err
+		return nil, err
 	}
-	return nil
+	return nil, nil
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
-func (r *Package) ValidateUpdate(old runtime.Object) error {
+func (r *Package) ValidateUpdate(old runtime.Object) (admission.Warnings, error) {
 	packagelog.Debug("validate update", zap.String("name", r.Name))
 	err := r.Validate()
 
 	if err != nil {
 		err = AggregateValidationErrors("Package", err)
-		return err
+		return nil, err
 	}
 
-	return nil
+	return nil, nil
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type
-func (r *Package) ValidateDelete() error {
+func (r *Package) ValidateDelete() (admission.Warnings, error) {
 	packagelog.Debug("validate delete", zap.String("name", r.Name))
-	return nil
+	return nil, nil
 }

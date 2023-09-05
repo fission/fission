@@ -91,8 +91,8 @@ func runBuilderMgr(ctx context.Context, logger *zap.Logger, storageSvcUrl string
 	return buildermgr.Start(ctx, logger, storageSvcUrl)
 }
 
-func runLogger(ctx context.Context, logger *zap.Logger) {
-	functionLogger.Start(ctx, logger)
+func runLogger(ctx context.Context, logger *zap.Logger) error {
+	return functionLogger.Start(ctx, logger)
 }
 
 func getPort(logger *zap.Logger, portArg interface{}) int {
@@ -315,8 +315,10 @@ Options:
 	}
 
 	if arguments["--logger"] == true {
-		runLogger(ctx, logger)
-		logger.Error("logger exited")
+		err = runLogger(ctx, logger)
+		if err != nil {
+			logger.Error("logger exited", zap.Error(err))
+		}
 		return
 	}
 

@@ -167,7 +167,10 @@ func StartScalerManager(ctx context.Context, logger *zap.Logger, routerURL strin
 	}
 
 	for _, informer := range utils.GetInformersForNamespaces(fissionClient, time.Minute*30, fv1.MessageQueueResource) {
-		informer.AddEventHandler(mqTriggerEventHandlers(ctx, logger, kubeClient, routerURL))
+		_, err := informer.AddEventHandler(mqTriggerEventHandlers(ctx, logger, kubeClient, routerURL))
+		if err != nil {
+			return err
+		}
 		go informer.Run(ctx.Done())
 		if ok := k8sCache.WaitForCacheSync(ctx.Done(), informer.HasSynced); !ok {
 			logger.Fatal("failed to wait for caches to sync")

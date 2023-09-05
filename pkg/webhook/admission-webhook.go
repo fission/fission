@@ -27,6 +27,8 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	v1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
@@ -45,12 +47,18 @@ func Start(ctx context.Context, logger *zap.Logger, port int) (err error) {
 	if metricsAddr == "" {
 		metricsAddr = ":8080"
 	}
+
+	mgrOpt := manager.Options{
+		Scheme: scheme.Scheme,
+		Metrics: metricsserver.Options{
+			BindAddress: metricsAddr,
+		},
+		WebhookServer: webhook.NewServer(webhook.Options{
+			Port: port,
+		}),
+	}
 	// Setup a Manager
-	mgr, err := manager.New(config.GetConfigOrDie(), manager.Options{
-		Scheme:             scheme.Scheme,
-		Port:               port,
-		MetricsBindAddress: metricsAddr,
-	})
+	mgr, err := manager.New(config.GetConfigOrDie(), mgrOpt)
 	if err != nil {
 		wLogger.Error("unable to set up overall controller manager", zap.Error(err))
 		return err

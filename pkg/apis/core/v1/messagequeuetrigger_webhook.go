@@ -21,6 +21,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
@@ -49,29 +50,29 @@ func (r *MessageQueueTrigger) Default() {
 var _ webhook.Validator = &MessageQueueTrigger{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type
-func (r *MessageQueueTrigger) ValidateCreate() error {
+func (r *MessageQueueTrigger) ValidateCreate() (admission.Warnings, error) {
 	messagequeuetriggerlog.Debug("validate create", zap.String("name", r.Name))
 	err := r.Validate()
 	if err != nil {
 		err = AggregateValidationErrors("MessageQueueTrigger", err)
-		return err
+		return nil, err
 	}
-	return nil
+	return nil, nil
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
-func (r *MessageQueueTrigger) ValidateUpdate(old runtime.Object) error {
+func (r *MessageQueueTrigger) ValidateUpdate(old runtime.Object) (admission.Warnings, error) {
 	messagequeuetriggerlog.Debug("validate update", zap.String("name", r.Name))
 	err := r.Validate()
 	if err != nil {
 		err = AggregateValidationErrors("MessageQueueTrigger", err)
-		return err
+		return nil, err
 	}
-	return nil
+	return nil, nil
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type
-func (r *MessageQueueTrigger) ValidateDelete() error {
+func (r *MessageQueueTrigger) ValidateDelete() (admission.Warnings, error) {
 	messagequeuetriggerlog.Debug("validate delete", zap.String("name", r.Name))
-	return nil
+	return nil, nil
 }

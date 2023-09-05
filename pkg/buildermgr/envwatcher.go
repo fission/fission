@@ -23,7 +23,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
@@ -81,7 +80,7 @@ func makeEnvironmentWatcher(
 	fissionClient versioned.Interface,
 	kubernetesClient kubernetes.Interface,
 	fetcherConfig *fetcherConfig.Config,
-	podSpecPatch *apiv1.PodSpec) *environmentWatcher {
+	podSpecPatch *apiv1.PodSpec) (*environmentWatcher, error) {
 
 	useIstio := false
 	enableIstio := os.Getenv("ENABLE_ISTIO")
@@ -108,8 +107,11 @@ func makeEnvironmentWatcher(
 		envWatchInformer:       utils.GetInformersForNamespaces(fissionClient, time.Minute*30, fv1.EnvironmentResource),
 	}
 
-	envWatcher.EnvWatchEventHandlers(ctx)
-	return envWatcher
+	err := envWatcher.EnvWatchEventHandlers(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return envWatcher, nil
 }
 
 func (env *environmentWatcher) getDeploymentLabels(envName string) map[string]string {
@@ -134,9 +136,9 @@ func (envw *environmentWatcher) Run(ctx context.Context) {
 	}
 }
 
-func (envw *environmentWatcher) EnvWatchEventHandlers(ctx context.Context) {
+func (envw *environmentWatcher) EnvWatchEventHandlers(ctx context.Context) error {
 	for _, informer := range envw.envWatchInformer {
-		informer.AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
+		_, err := informer.AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
 				envObj := obj.(*fv1.Environment)
 				envw.AddUpdateBuilder(ctx, envObj)
@@ -153,7 +155,11 @@ func (envw *environmentWatcher) EnvWatchEventHandlers(ctx context.Context) {
 				envw.DeleteBuilder(ctx, envObj)
 			},
 		})
+		if err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 func (envw *environmentWatcher) AddUpdateBuilder(ctx context.Context, env *fv1.Environment) {
@@ -252,9 +258,7 @@ func (envw *environmentWatcher) createBuilder(ctx context.Context, env *fv1.Envi
 	if len(svcList) == 0 {
 		svc, err = envw.createBuilderService(ctx, env, ns)
 		if err != nil {
-			return nil, errors.Wrap(err,
-				fmt.Sprintf("error creating builder service for environment in namespace %s %s", env.ObjectMeta.Name, ns))
-
+			return nil, fmt.Errorf("error creating builder service for environment in namespace %s %s: %w", env.ObjectMeta.Name, ns, err)
 		}
 	} else if len(svcList) == 1 {
 		svc = &svcList[0]
@@ -270,8 +274,7 @@ func (envw *environmentWatcher) createBuilder(ctx context.Context, env *fv1.Envi
 	if len(deployList) == 0 {
 		deploy, err = envw.createBuilderDeployment(ctx, env, ns)
 		if err != nil {
-			return nil, errors.Wrap(err, fmt.Sprintf("error creating builder deployment for environment in namespace %s %s", env.ObjectMeta.Name, ns))
-
+			return nil, fmt.Errorf("error creating builder deployment for environment in namespace %s %s: %w", env.ObjectMeta.Name, ns, err)
 		}
 	} else if len(deployList) == 1 {
 		deploy = &deployList[0]
@@ -291,7 +294,7 @@ func (envw *environmentWatcher) deleteBuilderServiceByName(ctx context.Context, 
 		Services(namespace).
 		Delete(ctx, name, delOpt)
 	if err != nil {
-		return errors.Wrapf(err, "error deleting builder service %s.%s", name, namespace)
+		return fmt.Errorf("error deleting builder service %s.%s: %w", name, namespace, err)
 	}
 	return nil
 }
@@ -301,7 +304,7 @@ func (envw *environmentWatcher) deleteBuilderDeploymentByName(ctx context.Contex
 		Deployments(namespace).
 		Delete(ctx, name, delOpt)
 	if err != nil {
-		return errors.Wrapf(err, "error deleting builder deployment %s.%s", name, namespace)
+		return fmt.Errorf("error deleting builder deployment %s.%s: %w", name, namespace, err)
 	}
 	return nil
 }
@@ -313,7 +316,7 @@ func (envw *environmentWatcher) getBuilderServiceList(ctx context.Context, sel m
 			LabelSelector: labels.Set(sel).AsSelector().String(),
 		})
 	if err != nil {
-		return nil, errors.Wrap(err, "error getting builder service list")
+		return nil, fmt.Errorf("error getting builder service list for namespace %s: %w", ns, err)
 	}
 	return svcList.Items, nil
 }
@@ -367,7 +370,7 @@ func (envw *environmentWatcher) getBuilderDeploymentList(ctx context.Context, se
 			LabelSelector: labels.Set(sel).AsSelector().String(),
 		})
 	if err != nil {
-		return nil, errors.Wrap(err, "error getting builder deployment list")
+		return nil, fmt.Errorf("error getting builder deployment list for namespace %s: %w", ns, err)
 	}
 	return deployList.Items, nil
 }

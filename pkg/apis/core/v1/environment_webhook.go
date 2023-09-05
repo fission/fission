@@ -21,6 +21,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
@@ -49,24 +50,24 @@ func (r *Environment) Default() {
 var _ webhook.Validator = &Environment{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type
-func (r *Environment) ValidateCreate() error {
+func (r *Environment) ValidateCreate() (admission.Warnings, error) {
 	environmentlog.Debug("validate create", zap.String("name", r.Name))
 	err := r.Validate()
 	if err != nil {
 		err = AggregateValidationErrors("Environment", err)
-		return err
+		return nil, err
 	}
-	return nil
+	return nil, nil
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
-func (r *Environment) ValidateUpdate(old runtime.Object) error {
+func (r *Environment) ValidateUpdate(old runtime.Object) (admission.Warnings, error) {
 	environmentlog.Debug("validate update", zap.String("name", r.Name))
-	return nil
+	return nil, nil
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type
-func (r *Environment) ValidateDelete() error {
+func (r *Environment) ValidateDelete() (admission.Warnings, error) {
 	environmentlog.Debug("validate delete", zap.String("name", r.Name))
-	return nil
+	return nil, nil
 }

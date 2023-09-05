@@ -64,7 +64,7 @@ type HTTPTriggerSet struct {
 }
 
 func makeHTTPTriggerSet(logger *zap.Logger, fmap *functionServiceMap, fissionClient versioned.Interface,
-	kubeClient kubernetes.Interface, executor *executorClient.Client, params *tsRoundTripperParams, isDebugEnv bool, unTapServiceTimeout time.Duration, actionThrottler *throttler.Throttler) *HTTPTriggerSet {
+	kubeClient kubernetes.Interface, executor *executorClient.Client, params *tsRoundTripperParams, isDebugEnv bool, unTapServiceTimeout time.Duration, actionThrottler *throttler.Throttler) (*HTTPTriggerSet, error) {
 
 	httpTriggerSet := &HTTPTriggerSet{
 		logger:                     logger.Named("http_trigger_set"),
@@ -82,9 +82,15 @@ func makeHTTPTriggerSet(logger *zap.Logger, fmap *functionServiceMap, fissionCli
 	}
 	httpTriggerSet.triggerInformer = utils.GetInformersForNamespaces(fissionClient, time.Minute*30, fv1.HttpTriggerResource)
 	httpTriggerSet.funcInformer = utils.GetInformersForNamespaces(fissionClient, time.Minute*30, fv1.FunctionResource)
-	httpTriggerSet.addTriggerHandlers()
-	httpTriggerSet.addFunctionHandlers()
-	return httpTriggerSet
+	err := httpTriggerSet.addTriggerHandlers()
+	if err != nil {
+		return nil, err
+	}
+	err = httpTriggerSet.addFunctionHandlers()
+	if err != nil {
+		return nil, err
+	}
+	return httpTriggerSet, nil
 }
 
 func (ts *HTTPTriggerSet) subscribeRouter(ctx context.Context, mr *mutableRouter) {
@@ -290,9 +296,9 @@ func (ts *HTTPTriggerSet) updateTriggerStatusFailed(ht *fv1.HTTPTrigger, err err
 	// TODO
 }
 
-func (ts *HTTPTriggerSet) addTriggerHandlers() {
+func (ts *HTTPTriggerSet) addTriggerHandlers() error {
 	for _, triggerInformer := range ts.triggerInformer {
-		triggerInformer.AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
+		_, err := triggerInformer.AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
 				trigger := obj.(*fv1.HTTPTrigger)
 				go createIngress(context.Background(), ts.logger, trigger, ts.kubeClient)
@@ -315,13 +321,17 @@ func (ts *HTTPTriggerSet) addTriggerHandlers() {
 				ts.syncTriggers()
 			},
 		})
+		if err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
-func (ts *HTTPTriggerSet) addFunctionHandlers() {
+func (ts *HTTPTriggerSet) addFunctionHandlers() error {
 	for _, funcInformer := range ts.funcInformer {
 
-		funcInformer.AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
+		_, err := funcInformer.AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
 				ts.syncTriggers()
 			},
@@ -353,7 +363,11 @@ func (ts *HTTPTriggerSet) addFunctionHandlers() {
 				ts.syncTriggers()
 			},
 		})
+		if err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 func (ts *HTTPTriggerSet) runInformer(ctx context.Context, informer map[string]k8sCache.SharedIndexInformer) {

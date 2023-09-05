@@ -38,15 +38,18 @@ type (
 	}
 )
 
-func MakeTimerSync(ctx context.Context, logger *zap.Logger, fissionClient versioned.Interface, timer *Timer) *TimerSync {
+func MakeTimerSync(ctx context.Context, logger *zap.Logger, fissionClient versioned.Interface, timer *Timer) (*TimerSync, error) {
 	ws := &TimerSync{
 		logger:        logger.Named("timer_sync"),
 		fissionClient: fissionClient,
 		timer:         timer,
 	}
 	ws.timeTriggerInformer = utils.GetInformersForNamespaces(fissionClient, time.Minute*30, fv1.TimeTriggerResource)
-	ws.TimeTriggerEventHandlers(ctx)
-	return ws
+	err := ws.TimeTriggerEventHandlers(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return ws, nil
 }
 
 func (ws *TimerSync) Run(ctx context.Context) {
@@ -89,9 +92,9 @@ func (ws *TimerSync) DeleteTimeTrigger(timeTrigger *fv1.TimeTrigger) {
 	}
 }
 
-func (ws *TimerSync) TimeTriggerEventHandlers(ctx context.Context) {
+func (ws *TimerSync) TimeTriggerEventHandlers(ctx context.Context) error {
 	for _, informer := range ws.timeTriggerInformer {
-		informer.AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
+		_, err := informer.AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
 				timeTrigger := obj.(*fv1.TimeTrigger)
 				ws.AddUpdateTimeTrigger(timeTrigger)
@@ -108,5 +111,9 @@ func (ws *TimerSync) TimeTriggerEventHandlers(ctx context.Context) {
 				ws.DeleteTimeTrigger(timeTrigger)
 			},
 		})
+		if err != nil {
+			return err
+		}
 	}
+	return nil
 }

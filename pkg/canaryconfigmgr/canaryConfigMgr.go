@@ -18,13 +18,13 @@ package canaryconfigmgr
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
 	"strings"
 	"time"
 
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -78,7 +78,7 @@ func MakeCanaryConfigMgr(ctx context.Context, logger *zap.Logger, fissionClient 
 
 	_, err := url.Parse(prometheusSvc)
 	if err != nil {
-		return nil, errors.Errorf("prometheus service url not found/invalid, can't create canary config manager: %v", prometheusSvc)
+		return nil, fmt.Errorf("prometheus service url not found/invalid, can't create canary config manager: %s", prometheusSvc)
 	}
 
 	promClient, err := MakePrometheusClient(logger, prometheusSvc)
@@ -94,13 +94,16 @@ func MakeCanaryConfigMgr(ctx context.Context, logger *zap.Logger, fissionClient 
 		canaryCfgCancelFuncMap: makecanaryConfigCancelFuncMap(),
 	}
 	configMgr.canaryConfigInformer = utils.GetInformersForNamespaces(fissionClient, time.Minute*30, fv1.CanaryConfigResource)
-	configMgr.CanaryConfigEventHandlers(ctx)
+	err = configMgr.CanaryConfigEventHandlers(ctx)
+	if err != nil {
+		return nil, err
+	}
 	return configMgr, nil
 }
 
-func (canaryCfgMgr *canaryConfigMgr) CanaryConfigEventHandlers(ctx context.Context) {
+func (canaryCfgMgr *canaryConfigMgr) CanaryConfigEventHandlers(ctx context.Context) error {
 	for _, informer := range canaryCfgMgr.canaryConfigInformer {
-		informer.AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
+		_, err := informer.AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
 				canaryConfig := obj.(*fv1.CanaryConfig)
 				if canaryConfig.Status.Status == fv1.CanaryConfigStatusPending {
@@ -126,7 +129,11 @@ func (canaryCfgMgr *canaryConfigMgr) CanaryConfigEventHandlers(ctx context.Conte
 
 			},
 		})
+		if err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 func (canaryCfgMgr *canaryConfigMgr) Run(ctx context.Context) {
@@ -374,9 +381,8 @@ func (canaryCfgMgr *canaryConfigMgr) updateHttpTriggerWithRetries(ctx context.Co
 	for i := 0; i < maxRetries; i++ {
 		triggerObj, err := canaryCfgMgr.fissionClient.CoreV1().HTTPTriggers(triggerNamespace).Get(ctx, triggerName, metav1.GetOptions{})
 		if err != nil {
-			e := "error getting http trigger object"
-			canaryCfgMgr.logger.Error(e, zap.Error(err), zap.String("trigger_name", triggerName), zap.String("trigger_namespace", triggerNamespace))
-			return errors.Wrap(err, e)
+			canaryCfgMgr.logger.Error("error getting http trigger object", zap.Error(err), zap.String("trigger_name", triggerName), zap.String("trigger_namespace", triggerNamespace))
+			return fmt.Errorf("error getting http trigger object: %w", err)
 		}
 
 		triggerObj.Spec.FunctionReference.FunctionWeights = fnWeights
@@ -394,11 +400,11 @@ func (canaryCfgMgr *canaryConfigMgr) updateHttpTriggerWithRetries(ctx context.Co
 			continue
 		default:
 			e := "error updating http trigger"
-			canaryCfgMgr.logger.Error(e,
+			canaryCfgMgr.logger.Error("error updating http trigger",
 				zap.Error(err),
 				zap.String("trigger_name", triggerName),
 				zap.String("trigger_namespace", triggerNamespace))
-			return errors.Wrapf(err, "%s: %s.%s", e, triggerName, triggerNamespace)
+			return fmt.Errorf("%s: %s.%s %w", e, triggerName, triggerNamespace, err)
 		}
 	}
 
@@ -415,7 +421,7 @@ func (canaryCfgMgr *canaryConfigMgr) updateCanaryConfigStatusWithRetries(ctx con
 				zap.String("name", cfgName),
 				zap.String("namespace", cfgNamespace),
 				zap.String("status", status))
-			return errors.Wrap(err, e)
+			return fmt.Errorf("%s: %s.%s %w", e, cfgName, cfgNamespace, err)
 		}
 
 		canaryCfgMgr.logger.Info("updating status of canary config",
@@ -444,7 +450,7 @@ func (canaryCfgMgr *canaryConfigMgr) updateCanaryConfigStatusWithRetries(ctx con
 				zap.Error(err),
 				zap.String("name", cfgName),
 				zap.String("namespace", cfgNamespace))
-			return errors.Wrapf(err, "%s: %s.%s", e, cfgName, cfgNamespace)
+			return fmt.Errorf("%s: %s.%s %w", e, cfgName, cfgNamespace, err)
 		}
 	}
 
@@ -558,11 +564,11 @@ func StartCanaryServer(ctx context.Context, logger *zap.Logger, unitTestFlag boo
 	clientGen := crd.NewClientGenerator()
 	fissionClient, err := clientGen.GetFissionClient()
 	if err != nil {
-		return errors.Wrap(err, "failed to get fission client")
+		return fmt.Errorf("failed to get fission client: %w", err)
 	}
 	kubernetesClient, err := clientGen.GetKubernetesClient()
 	if err != nil {
-		return errors.Wrap(err, "failed to get kubernetes client")
+		return fmt.Errorf("failed to get kubernetes client: %w", err)
 	}
 
 	err = ConfigureFeatures(ctx, cLogger, unitTestFlag, fissionClient, kubernetesClient)

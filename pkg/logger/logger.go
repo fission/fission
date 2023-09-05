@@ -19,7 +19,6 @@ package logger
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -157,7 +156,7 @@ func symlinkReaper(zapLogger *zap.Logger) {
 	}
 }
 
-func Start(ctx context.Context, logger *zap.Logger) {
+func Start(ctx context.Context, logger *zap.Logger) error {
 	if _, err := os.Stat(fissionSymlinkPath); os.IsNotExist(err) {
 		logger.Info("symlink path not exist, create it",
 			zap.String("fissionSymlinkPath", fissionSymlinkPath))
@@ -171,15 +170,19 @@ func Start(ctx context.Context, logger *zap.Logger) {
 	clientGen := crd.NewClientGenerator()
 	kubernetesClient, err := clientGen.GetKubernetesClient()
 	if err != nil {
-		log.Fatalf("Error starting pod watcher: %v", err)
+		return err
 	}
 
 	var wg wait.Group
 	for _, podInformer := range utils.GetK8sInformersForNamespaces(kubernetesClient, time.Minute*30, fv1.Pods) {
-		podInformer.AddEventHandler(podInformerHandlers(logger))
+		_, err := podInformer.AddEventHandler(podInformerHandlers(logger))
+		if err != nil {
+			return err
+		}
 		wg.StartWithChannel(ctx.Done(), podInformer.Run)
 	}
 	wg.Wait()
 
 	logger.Error("Stop watching pod changes")
+	return nil
 }

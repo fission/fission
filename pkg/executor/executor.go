@@ -356,7 +356,10 @@ func StartExecutor(ctx context.Context, logger *zap.Logger, port int) error {
 
 	configMapInformer := utils.GetK8sInformersForNamespaces(kubernetesClient, time.Minute*30, fv1.ConfigMaps)
 	secretInformer := utils.GetK8sInformersForNamespaces(kubernetesClient, time.Minute*30, fv1.Secrets)
-	cms := cms.MakeConfigSecretController(ctx, logger, fissionClient, kubernetesClient, executorTypes, configMapInformer, secretInformer)
+	cms, err := cms.MakeConfigSecretController(ctx, logger, fissionClient, kubernetesClient, executorTypes, configMapInformer, secretInformer)
+	if err != nil {
+		return fmt.Errorf("error creating configmap and secret controller: %w", err)
+	}
 
 	fissionInformers := make([]k8sCache.SharedIndexInformer, 0)
 	for _, informer := range configMapInformer {

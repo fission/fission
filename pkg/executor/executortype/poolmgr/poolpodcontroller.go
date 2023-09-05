@@ -71,7 +71,7 @@ func NewPoolPodController(ctx context.Context, logger *zap.Logger,
 	kubernetesClient kubernetes.Interface,
 	enableIstio bool,
 	finformerFactory map[string]genInformer.SharedInformerFactory,
-	gpmInformerFactory map[string]k8sInformers.SharedInformerFactory) *PoolPodController {
+	gpmInformerFactory map[string]k8sInformers.SharedInformerFactory) (*PoolPodController, error) {
 	logger = logger.Named("pool_pod_controller")
 	p := &PoolPodController{
 		logger:               logger,
@@ -88,30 +88,39 @@ func NewPoolPodController(ctx context.Context, logger *zap.Logger,
 	}
 	if p.enableIstio {
 		for _, factory := range finformerFactory {
-			factory.Core().V1().Functions().Informer().AddEventHandler(FunctionEventHandlers(ctx, p.logger, p.kubernetesClient, p.nsResolver.ResolveNamespace(p.nsResolver.FunctionNamespace), p.enableIstio))
+			_, err := factory.Core().V1().Functions().Informer().AddEventHandler(FunctionEventHandlers(ctx, p.logger, p.kubernetesClient, p.nsResolver.ResolveNamespace(p.nsResolver.FunctionNamespace), p.enableIstio))
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	for ns, informer := range finformerFactory {
-		informer.Core().V1().Environments().Informer().AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
+		_, err := informer.Core().V1().Environments().Informer().AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
 			AddFunc:    p.enqueueEnvAdd,
 			UpdateFunc: p.enqueueEnvUpdate,
 			DeleteFunc: p.enqueueEnvDelete,
 		})
+		if err != nil {
+			return nil, err
+		}
 		p.envLister[ns] = informer.Core().V1().Environments().Lister()
 		p.envListerSynced[ns] = informer.Core().V1().Environments().Informer().HasSynced
 	}
 	for ns, informerFactory := range gpmInformerFactory {
-		informerFactory.Apps().V1().ReplicaSets().Informer().AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
+		_, err := informerFactory.Apps().V1().ReplicaSets().Informer().AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
 			AddFunc:    p.handleRSAdd,
 			UpdateFunc: p.handleRSUpdate,
 			DeleteFunc: p.handleRSDelete,
 		})
+		if err != nil {
+			return nil, err
+		}
 		p.podListerSynced[ns] = informerFactory.Core().V1().Pods().Informer().HasSynced
 		p.podLister[ns] = informerFactory.Core().V1().Pods().Lister()
 	}
 
 	p.logger.Info("pool pod controller handlers registered")
-	return p
+	return p, nil
 }
 
 func (p *PoolPodController) InjectGpm(gpm *GenericPoolManager) {

@@ -42,20 +42,26 @@ type (
 func MakeConfigSecretController(ctx context.Context, logger *zap.Logger, fissionClient versioned.Interface,
 	kubernetesClient kubernetes.Interface, types map[fv1.ExecutorType]executortype.ExecutorType,
 	configmapInformer,
-	secretInformer map[string]cache.SharedIndexInformer) *ConfigSecretController {
+	secretInformer map[string]cache.SharedIndexInformer) (*ConfigSecretController, error) {
 	logger.Debug("Creating ConfigMap & Secret Controller")
 	cmsController := &ConfigSecretController{
 		logger:        logger,
 		fissionClient: fissionClient,
 	}
 	for _, informer := range configmapInformer {
-		informer.AddEventHandler(ConfigMapEventHandlers(ctx, logger, fissionClient, kubernetesClient, types))
+		_, err := informer.AddEventHandler(ConfigMapEventHandlers(ctx, logger, fissionClient, kubernetesClient, types))
+		if err != nil {
+			return nil, err
+		}
 	}
 	for _, informer := range secretInformer {
-		informer.AddEventHandler(SecretEventHandlers(ctx, logger, fissionClient, kubernetesClient, types))
+		_, err := informer.AddEventHandler(SecretEventHandlers(ctx, logger, fissionClient, kubernetesClient, types))
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	return cmsController
+	return cmsController, nil
 }
 
 func refreshPods(ctx context.Context, logger *zap.Logger, funcs []fv1.Function, types map[fv1.ExecutorType]executortype.ExecutorType) {

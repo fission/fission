@@ -51,8 +51,11 @@ func TestPoolPodControllerPodCleanup(t *testing.T) {
 	}
 	gpmInformerFactory := utils.GetInformerFactoryByExecutor(kubernetesClient, executorLabel, time.Minute*30)
 
-	ppc := NewPoolPodController(ctx, logger, kubernetesClient, false,
+	ppc, err := NewPoolPodController(ctx, logger, kubernetesClient, false,
 		factory, gpmInformerFactory)
+	if err != nil {
+		t.Fatalf("Error creating pool pod controller: %v", err)
+	}
 
 	executorInstanceID := strings.ToLower(uniuri.NewLen(8))
 	metricsClient := metricsclient.NewSimpleClientset()
