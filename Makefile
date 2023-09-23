@@ -64,7 +64,7 @@ codegen: controller-gen-install
 
 ### CRDs
 controller-gen-install:
-	go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.10.0
+	go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.13.0
 
 generate-crds: controller-gen-install
 	controller-gen crd \
@@ -99,7 +99,7 @@ generate-cli-docs:
 	go run tools/cmd-docs/main.go -o "../fission.io/content/en/docs/reference/fission-cli"
 
 install-crd-ref-docs:
-	go install github.com/elastic/crd-ref-docs@v0.0.8
+	go install github.com/elastic/crd-ref-docs@v0.0.9
 
 generate-crd-ref-docs: install-crd-ref-docs
 	# crd-ref-docs: https://github.com/elastic/crd-ref-docs

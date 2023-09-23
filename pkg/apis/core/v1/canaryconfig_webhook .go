@@ -21,6 +21,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
@@ -50,19 +51,19 @@ func (r *CanaryConfig) Default() {
 var _ webhook.Validator = &CanaryConfig{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type
-func (r *CanaryConfig) ValidateCreate() error {
+func (r *CanaryConfig) ValidateCreate() (admission.Warnings, error) {
 	canaryconfiglog.Debug("validate create", zap.String("name", r.Name))
-	return nil
+	return nil, nil
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
-func (r *CanaryConfig) ValidateUpdate(old runtime.Object) error {
+func (r *CanaryConfig) ValidateUpdate(old runtime.Object) (admission.Warnings, error) {
 	canaryconfiglog.Debug("validate update", zap.String("name", r.Name))
-	return nil
+	return nil, nil
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type
-func (r *CanaryConfig) ValidateDelete() error {
+func (r *CanaryConfig) ValidateDelete() (admission.Warnings, error) {
 	canaryconfiglog.Debug("validate delete", zap.String("name", r.Name))
-	return nil
+	return nil, nil
 }

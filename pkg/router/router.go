@@ -200,7 +200,7 @@ func Start(ctx context.Context, logger *zap.Logger, port int, executorURL string
 			zap.Bool("default", displayAccessLog))
 	}
 
-	triggers := makeHTTPTriggerSet(logger.Named("triggerset"), fmap, fissionClient, kubeClient, executor, &tsRoundTripperParams{
+	triggers, err := makeHTTPTriggerSet(logger.Named("triggerset"), fmap, fissionClient, kubeClient, executor, &tsRoundTripperParams{
 		timeout:           timeout,
 		timeoutExponent:   timeoutExponent,
 		disableKeepAlive:  disableKeepAlive,
@@ -208,7 +208,9 @@ func Start(ctx context.Context, logger *zap.Logger, port int, executorURL string
 		maxRetries:        maxRetries,
 		svcAddrRetryCount: svcAddrRetryCount,
 	}, isDebugEnv, unTapServiceTimeout, throttler.MakeThrottler(svcAddrUpdateTimeout))
-
+	if err != nil {
+		logger.Fatal("error making HTTP trigger set", zap.Error(err))
+	}
 	go metrics.ServeMetrics(ctx, logger)
 
 	logger.Info("starting router", zap.Int("port", port))

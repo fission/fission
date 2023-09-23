@@ -134,9 +134,11 @@ func MakeGenericPoolManager(ctx context.Context,
 		enableIstio = istio
 	}
 
-	poolPodC := NewPoolPodController(ctx, gpmLogger, kubernetesClient,
+	poolPodC, err := NewPoolPodController(ctx, gpmLogger, kubernetesClient,
 		enableIstio, finformerFactory, gpmInformerFactory)
-
+	if err != nil {
+		return nil, err
+	}
 	gpm := &GenericPoolManager{
 		logger:                     gpmLogger,
 		pools:                      make(map[string]*GenericPool),
@@ -177,8 +179,8 @@ func (gpm *GenericPoolManager) Run(ctx context.Context) {
 	}
 	go gpm.service()
 	gpm.poolPodC.InjectGpm(gpm)
-	go gpm.WebsocketStartEventChecker(ctx, gpm.kubernetesClient)
-	go gpm.NoActiveConnectionEventChecker(ctx, gpm.kubernetesClient)
+	go gpm.WebsocketStartEventChecker(ctx, gpm.kubernetesClient)     //nolint:errcheck
+	go gpm.NoActiveConnectionEventChecker(ctx, gpm.kubernetesClient) //nolint:errcheck
 	go gpm.idleObjectReaper(ctx)
 	go gpm.poolPodC.Run(ctx, ctx.Done())
 }
@@ -205,13 +207,13 @@ func (gpm *GenericPoolManager) GetFuncSvc(ctx context.Context, fn *fv1.Function)
 	env, err := gpm.getFunctionEnv(ctx, fn)
 	if err != nil {
 		fErr = err
-		return
+		return nil, fErr
 	}
 
 	pool, created, err := gpm.getPool(ctx, env)
 	if err != nil {
 		fErr = err
-		return
+		return nil, fErr
 	}
 
 	if created {
@@ -695,13 +697,13 @@ func (gpm *GenericPoolManager) doIdleObjectReaper(ctx context.Context) {
 }
 
 // WebsocketStartEventChecker checks if the pod has emitted a websocket connection start event
-func (gpm *GenericPoolManager) WebsocketStartEventChecker(ctx context.Context, kubeClient kubernetes.Interface) {
+func (gpm *GenericPoolManager) WebsocketStartEventChecker(ctx context.Context, kubeClient kubernetes.Interface) error {
 	stopper := make(chan struct{})
 	defer close(stopper)
 
 	var wg wait.Group
 	for _, informer := range utils.GetInformerEventChecker(ctx, kubeClient, "WsConnectionStarted") {
-		informer.AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
+		_, err := informer.AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
 				mObj := obj.(metav1.Object)
 				gpm.logger.Info("Websocket event detected for pod",
@@ -718,19 +720,23 @@ func (gpm *GenericPoolManager) WebsocketStartEventChecker(ctx context.Context, k
 				}
 			},
 		})
+		if err != nil {
+			return err
+		}
 		wg.StartWithChannel(stopper, informer.Run)
 	}
 	wg.Wait()
+	return nil
 }
 
 // NoActiveConnectionEventChecker checks if the pod has emitted an inactive event
-func (gpm *GenericPoolManager) NoActiveConnectionEventChecker(ctx context.Context, kubeClient kubernetes.Interface) {
+func (gpm *GenericPoolManager) NoActiveConnectionEventChecker(ctx context.Context, kubeClient kubernetes.Interface) error {
 	stopper := make(chan struct{})
 	defer close(stopper)
 
 	var wg wait.Group
 	for _, informer := range utils.GetInformerEventChecker(ctx, kubeClient, "NoActiveConnections") {
-		informer.AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
+		_, err := informer.AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
 				mObj := obj.(metav1.Object)
 				gpm.logger.Info("Inactive event detected for pod",
@@ -758,9 +764,13 @@ func (gpm *GenericPoolManager) NoActiveConnectionEventChecker(ctx context.Contex
 
 			},
 		})
+		if err != nil {
+			return err
+		}
 		wg.StartWithChannel(stopper, informer.Run)
 	}
 	wg.Wait()
+	return nil
 }
 
 func (gpm *GenericPoolManager) DumpDebugInfo(ctx context.Context) error {

@@ -78,16 +78,20 @@ func MakeMessageQueueTriggerManager(logger *zap.Logger,
 	return &mqTriggerMgr
 }
 
-func (mqt *MessageQueueTriggerManager) Run(ctx context.Context) {
+func (mqt *MessageQueueTriggerManager) Run(ctx context.Context) error {
 	go mqt.service()
 	for _, informer := range utils.GetInformersForNamespaces(mqt.fissionClient, time.Minute*30, fv1.MessageQueueResource) {
-		informer.AddEventHandler(mqt.mqtInformerHandlers())
+		_, err := informer.AddEventHandler(mqt.mqtInformerHandlers())
+		if err != nil {
+			return err
+		}
 		go informer.Run(ctx.Done())
 		if ok := k8sCache.WaitForCacheSync(ctx.Done(), informer.HasSynced); !ok {
 			mqt.logger.Fatal("failed to wait for caches to sync")
 		}
 	}
 	go metrics.ServeMetrics(ctx, mqt.logger)
+	return nil
 }
 
 func (mqt *MessageQueueTriggerManager) service() {

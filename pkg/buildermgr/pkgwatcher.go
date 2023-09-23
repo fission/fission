@@ -308,15 +308,20 @@ func (pkgw *packageWatcher) packageInformerHandler(ctx context.Context) k8sCache
 	}
 }
 
-func (pkgw *packageWatcher) Run(ctx context.Context) {
+func (pkgw *packageWatcher) Run(ctx context.Context) error {
 	go metrics.ServeMetrics(ctx, pkgw.logger)
 	for _, podInformer := range pkgw.podInformer {
 		go podInformer.Run(ctx.Done())
 	}
 	for _, pkgInformer := range pkgw.pkgInformer {
-		pkgInformer.AddEventHandler(pkgw.packageInformerHandler(ctx))
+		_, err := pkgInformer.AddEventHandler(pkgw.packageInformerHandler(ctx))
+		if err != nil {
+			pkgw.logger.Fatal("error adding package informer handler", zap.Error(err))
+			return err
+		}
 		go pkgInformer.Run(ctx.Done())
 	}
+	return nil
 }
 
 // setInitialBuildStatus sets initial build status to a package if it is empty.

@@ -140,7 +140,10 @@ func MakeContainer(
 		caaf.svcListerSynced[ns] = informerFactory.Core().V1().Services().Informer().HasSynced
 	}
 	for _, factory := range finformerFactory {
-		factory.Core().V1().Functions().Informer().AddEventHandler(caaf.FuncInformerHandler(ctx))
+		_, err := factory.Core().V1().Functions().Informer().AddEventHandler(caaf.FuncInformerHandler(ctx))
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to add event handler for function informer")
+		}
 	}
 	return caaf, nil
 }

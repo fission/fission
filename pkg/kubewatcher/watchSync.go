@@ -37,15 +37,18 @@ type (
 	}
 )
 
-func MakeWatchSync(ctx context.Context, logger *zap.Logger, client versioned.Interface, kubeWatcher *KubeWatcher) *WatchSync {
+func MakeWatchSync(ctx context.Context, logger *zap.Logger, client versioned.Interface, kubeWatcher *KubeWatcher) (*WatchSync, error) {
 	ws := &WatchSync{
 		logger:      logger.Named("watch_sync"),
 		client:      client,
 		kubeWatcher: kubeWatcher,
 	}
 	ws.kubeWatcherInformer = utils.GetInformersForNamespaces(client, time.Minute*30, fv1.KubernetesWatchResource)
-	ws.KubeWatcherEventHandlers(ctx)
-	return ws
+	err := ws.KubeWatcherEventHandlers(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return ws, nil
 }
 
 func (ws *WatchSync) Run(ctx context.Context) {
@@ -54,9 +57,9 @@ func (ws *WatchSync) Run(ctx context.Context) {
 	}
 }
 
-func (ws *WatchSync) KubeWatcherEventHandlers(ctx context.Context) {
+func (ws *WatchSync) KubeWatcherEventHandlers(ctx context.Context) error {
 	for _, informer := range ws.kubeWatcherInformer {
-		informer.AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
+		_, err := informer.AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
 				objKubeWatcher := obj.(*fv1.KubernetesWatchTrigger)
 				ws.kubeWatcher.addWatch(ctx, objKubeWatcher) //nolint: errCheck
@@ -66,5 +69,9 @@ func (ws *WatchSync) KubeWatcherEventHandlers(ctx context.Context) {
 				ws.kubeWatcher.removeWatch(objKubeWatcher) //nolint: errCheck
 			},
 		})
+		if err != nil {
+			return err
+		}
 	}
+	return nil
 }

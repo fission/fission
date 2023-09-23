@@ -59,13 +59,19 @@ func Start(ctx context.Context, logger *zap.Logger, storageSvcUrl string) error 
 		logger.Warn("error reading data for pod spec patch", zap.String("path", fv1.BuilderPodSpecPath), zap.Error(err))
 	}
 
-	envWatcher := makeEnvironmentWatcher(ctx, bmLogger, fissionClient, kubernetesClient, fetcherConfig, podSpecPatch)
+	envWatcher, err := makeEnvironmentWatcher(ctx, bmLogger, fissionClient, kubernetesClient, fetcherConfig, podSpecPatch)
 	envWatcher.Run(ctx)
+	if err != nil {
+		return err
+	}
 
 	pkgWatcher := makePackageWatcher(bmLogger, fissionClient,
 		kubernetesClient, storageSvcUrl,
 		utils.GetK8sInformersForNamespaces(kubernetesClient, time.Minute*30, fv1.Pods),
 		utils.GetInformersForNamespaces(fissionClient, time.Minute*30, fv1.PackagesResource))
-	pkgWatcher.Run(ctx)
+	err = pkgWatcher.Run(ctx)
+	if err != nil {
+		return err
+	}
 	return nil
 }

@@ -39,8 +39,10 @@ func Start(ctx context.Context, logger *zap.Logger, routerUrl string) error {
 	}
 
 	poster := publisher.MakeWebhookPublisher(logger, routerUrl)
-	timerSync := MakeTimerSync(ctx, logger, fissionClient, MakeTimer(logger, poster))
+	timerSync, err := MakeTimerSync(ctx, logger, fissionClient, MakeTimer(logger, poster))
+	if err != nil {
+		return errors.Wrap(err, "error making timer sync")
+	}
 	timerSync.Run(ctx)
-
 	return nil
 }
