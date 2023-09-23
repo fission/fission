@@ -20,8 +20,8 @@ import (
 	"fmt"
 	"reflect"
 
+	"dario.cat/mergo"
 	"github.com/hashicorp/go-multierror"
-	"github.com/imdario/mergo"
 	apiv1 "k8s.io/api/core/v1"
 )
 
