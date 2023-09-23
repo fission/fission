@@ -89,6 +89,12 @@ This template generates the image name for the deployment depending on the value
 {{- end }}
 
 {{- define "fission-resource-namespace.envs" }}
+- name: FISSION_BUILDER_NAMESPACE
+  value: "{{ .Values.builderNamespace }}"
+- name: FISSION_FUNCTION_NAMESPACE
+  value: "{{ .Values.functionNamespace }}"
+- name: FISSION_DEFAULT_NAMESPACE
+  value: "{{ .Values.defaultNamespace }}"
 - name: FISSION_RESOURCE_NAMESPACES
 {{- if gt (len .Values.additionalFissionNamespaces) 0 }}
   value: "{{ .Values.defaultNamespace }},{{ join "," .Values.additionalFissionNamespaces }}"

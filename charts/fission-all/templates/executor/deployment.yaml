@@ -37,12 +37,6 @@ spec:
         {{- end }}
         - name: FETCHER_IMAGE_PULL_POLICY
           value: "{{ .Values.pullPolicy }}"
-        - name: FISSION_BUILDER_NAMESPACE
-          value: "{{ .Values.builderNamespace }}"
-        - name: FISSION_FUNCTION_NAMESPACE
-          value: "{{ .Values.functionNamespace }}"
-        - name: FISSION_DEFAULT_NAMESPACE
-          value: "{{ .Values.defaultNamespace }}"
         - name: RUNTIME_IMAGE_PULL_POLICY
           value: "{{ .Values.pullPolicy }}"
         - name: ADOPT_EXISTING_RESOURCES
