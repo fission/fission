@@ -61,7 +61,7 @@ type (
 	// PoolCache implements a simple cache implementation having values mapped by two keys [function][address].
 	// As of now PoolCache is only used by poolmanager executor
 	PoolCache struct {
-		cache          map[crd.CacheKeyWithGen]*funcSvcGroup
+		cache          map[crd.CacheKeyURG]*funcSvcGroup
 		requestChannel chan *request
 		logger         *zap.Logger
 	}
@@ -69,7 +69,7 @@ type (
 	request struct {
 		requestType
 		ctx             context.Context
-		function        crd.CacheKeyWithGen
+		function        crd.CacheKeyURG
 		address         string
 		dumpWriter      io.Writer
 		value           *FuncSvc
@@ -95,7 +95,7 @@ type (
 
 func NewPoolCache(logger *zap.Logger) *PoolCache {
 	c := &PoolCache{
-		cache:          make(map[crd.CacheKeyWithGen]*funcSvcGroup),
+		cache:          make(map[crd.CacheKeyURG]*funcSvcGroup),
 		requestChannel: make(chan *request),
 		logger:         logger,
 	}
@@ -308,7 +308,7 @@ func (c *PoolCache) service() {
 }
 
 // GetValue returns a function service with status in Active else return error
-func (c *PoolCache) GetSvcValue(ctx context.Context, function crd.CacheKeyWithGen, requestsPerPod int, concurrency int) (*FuncSvc, error) {
+func (c *PoolCache) GetSvcValue(ctx context.Context, function crd.CacheKeyURG, requestsPerPod int, concurrency int) (*FuncSvc, error) {
 	respChannel := make(chan *response)
 	c.requestChannel <- &request{
 		ctx:             ctx,
@@ -343,7 +343,7 @@ func (c *PoolCache) ListAvailableValue() []*FuncSvc {
 }
 
 // SetValue marks the value at key [function][address] as active(begin used)
-func (c *PoolCache) SetSvcValue(ctx context.Context, function crd.CacheKeyWithGen, address string, value *FuncSvc, cpuLimit resource.Quantity, requestsPerPod, svcsRetain int) {
+func (c *PoolCache) SetSvcValue(ctx context.Context, function crd.CacheKeyURG, address string, value *FuncSvc, cpuLimit resource.Quantity, requestsPerPod, svcsRetain int) {
 	respChannel := make(chan *response)
 	c.requestChannel <- &request{
 		ctx:             ctx,
@@ -359,7 +359,7 @@ func (c *PoolCache) SetSvcValue(ctx context.Context, function crd.CacheKeyWithGe
 }
 
 // SetCPUUtilization updates/sets the CPU utilization limit for the pod
-func (c *PoolCache) SetCPUUtilization(function crd.CacheKeyWithGen, address string, cpuUsage resource.Quantity) {
+func (c *PoolCache) SetCPUUtilization(function crd.CacheKeyURG, address string, cpuUsage resource.Quantity) {
 	c.requestChannel <- &request{
 		requestType:     setCPUUtilization,
 		function:        function,
@@ -370,7 +370,7 @@ func (c *PoolCache) SetCPUUtilization(function crd.CacheKeyWithGen, address stri
 }
 
 // MarkAvailable marks the value at key [function][address] as available
-func (c *PoolCache) MarkAvailable(function crd.CacheKeyWithGen, address string) {
+func (c *PoolCache) MarkAvailable(function crd.CacheKeyURG, address string) {
 	respChannel := make(chan *response)
 	c.requestChannel <- &request{
 		requestType:     markAvailable,
@@ -381,7 +381,7 @@ func (c *PoolCache) MarkAvailable(function crd.CacheKeyWithGen, address string) 
 }
 
 // DeleteValue deletes the value at key composed of [function][address]
-func (c *PoolCache) DeleteValue(ctx context.Context, function crd.CacheKeyWithGen, address string) error {
+func (c *PoolCache) DeleteValue(ctx context.Context, function crd.CacheKeyURG, address string) error {
 	respChannel := make(chan *response)
 	c.requestChannel <- &request{
 		ctx:             ctx,
@@ -395,7 +395,7 @@ func (c *PoolCache) DeleteValue(ctx context.Context, function crd.CacheKeyWithGe
 }
 
 // ReduceSpecializationInProgress reduces the svcWaiting count
-func (c *PoolCache) MarkSpecializationFailure(function crd.CacheKeyWithGen) {
+func (c *PoolCache) MarkSpecializationFailure(function crd.CacheKeyURG) {
 	c.requestChannel <- &request{
 		requestType:     markSpecializationFailure,
 		function:        function,

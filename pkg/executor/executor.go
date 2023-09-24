@@ -138,13 +138,13 @@ func (executor *Executor) serveCreateFuncServices() {
 		}
 
 		// Cache miss -- is this first one to request the func?
-		wg, found := executor.fsCreateWg.Load(crd.CacheKey(fnMetadata))
+		wg, found := executor.fsCreateWg.Load(crd.CacheKeyURFromMeta(fnMetadata))
 		if !found {
 			// create a waitgroup for other requests for
 			// the same function to wait on
 			wg := &sync.WaitGroup{}
 			wg.Add(1)
-			executor.fsCreateWg.Store(crd.CacheKey(fnMetadata), wg)
+			executor.fsCreateWg.Store(crd.CacheKeyURFromMeta(fnMetadata), wg)
 
 			// launch a goroutine for each request, to parallelize
 			// the specialization of different functions
@@ -176,7 +176,7 @@ func (executor *Executor) serveCreateFuncServices() {
 					funcSvc: fsvc,
 					err:     err,
 				}
-				executor.fsCreateWg.Delete(crd.CacheKey(fnMetadata))
+				executor.fsCreateWg.Delete(crd.CacheKeyURFromMeta(fnMetadata))
 				wg.Done()
 			}()
 		} else {

@@ -31,10 +31,10 @@ func TestPoolCache(t *testing.T) {
 	concurrency := 5
 	requestsPerPod := 2
 
-	keyFunc := crd.CacheKeyWithGen{
+	keyFunc := crd.CacheKeyURG{
 		UID: "func",
 	}
-	keyFunc2 := crd.CacheKeyWithGen{
+	keyFunc2 := crd.CacheKeyURG{
 		UID: "func2",
 	}
 
@@ -97,7 +97,7 @@ func TestPoolCache(t *testing.T) {
 }
 
 func TestPoolCacheRequests(t *testing.T) {
-	key := crd.CacheKeyWithGen{
+	key := crd.CacheKeyURG{
 		UID: "func",
 	}
 	type structForTest struct {
