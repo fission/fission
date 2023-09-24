@@ -237,9 +237,10 @@ func (gpm *GenericPoolManager) DeleteFuncSvcFromCache(ctx context.Context, fsvc 
 	gpm.fsCache.DeleteFunctionSvc(ctx, fsvc)
 }
 
-func (gpm *GenericPoolManager) UnTapService(ctx context.Context, key string, svcHost string) {
+func (gpm *GenericPoolManager) UnTapService(ctx context.Context, fnMeta *metav1.ObjectMeta, svcHost string) {
+	key := crd.CacheKeyWithGenFromMeta(fnMeta)
 	otelUtils.SpanTrackEvent(ctx, "UnTapService",
-		attribute.KeyValue{Key: "key", Value: attribute.StringValue(key)},
+		attribute.KeyValue{Key: "key", Value: attribute.StringValue(key.String())},
 		attribute.KeyValue{Key: "svcHost", Value: attribute.StringValue(svcHost)})
 	gpm.fsCache.MarkAvailable(key, svcHost)
 }
@@ -254,9 +255,10 @@ func (gpm *GenericPoolManager) TapService(ctx context.Context, svcHost string) e
 	return nil
 }
 
-func (gpm *GenericPoolManager) MarkSpecializationFailure(ctx context.Context, key string) {
+func (gpm *GenericPoolManager) MarkSpecializationFailure(ctx context.Context, fnMeta *metav1.ObjectMeta) {
+	key := crd.CacheKeyWithGenFromMeta(fnMeta)
 	otelUtils.SpanTrackEvent(ctx, "MarkSpecializationFailure",
-		attribute.KeyValue{Key: "key", Value: attribute.StringValue(key)})
+		attribute.KeyValue{Key: "key", Value: attribute.StringValue(key.String())})
 	logger := otelUtils.LoggerWithTraceID(ctx, gpm.logger)
 	logger.Info("marking specialization failure", zap.Any("key", key))
 	gpm.fsCache.MarkSpecializationFailure(key)

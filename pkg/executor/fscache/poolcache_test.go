@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/api/resource"
 
+	"github.com/fission/fission/pkg/crd"
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
@@ -30,66 +31,75 @@ func TestPoolCache(t *testing.T) {
 	concurrency := 5
 	requestsPerPod := 2
 
+	keyFunc := crd.CacheKeyWithGen{
+		UID: "func",
+	}
+	keyFunc2 := crd.CacheKeyWithGen{
+		UID: "func2",
+	}
+
 	// should return err since no svc is present
-	_, err := c.GetSvcValue(ctx, "func", requestsPerPod, concurrency)
+	_, err := c.GetSvcValue(ctx, keyFunc, requestsPerPod, concurrency)
 	if err == nil {
 		log.Panicf("found value when expected it to be nil")
 	}
 
-	c.SetSvcValue(ctx, "func", "ip", &FuncSvc{
+	c.SetSvcValue(ctx, keyFunc, "ip", &FuncSvc{
 		Name: "value",
 	}, resource.MustParse("45m"), 10, 0)
 
 	// should not return any error since we added a svc
-	_, err = c.GetSvcValue(ctx, "func", requestsPerPod, concurrency)
+	_, err = c.GetSvcValue(ctx, keyFunc, requestsPerPod, concurrency)
 	checkErr(err)
 
-	c.SetSvcValue(ctx, "func", "ip", &FuncSvc{
+	c.SetSvcValue(ctx, keyFunc, "ip", &FuncSvc{
 		Name: "value",
 	}, resource.MustParse("45m"), 10, 0)
 
 	// should return err since all functions are busy
-	_, err = c.GetSvcValue(ctx, "func", requestsPerPod, concurrency)
+	_, err = c.GetSvcValue(ctx, keyFunc, requestsPerPod, concurrency)
 	if err == nil {
 		log.Panicf("found value when expected it to be nil")
 	}
 
-	c.SetSvcValue(ctx, "func", "ip", &FuncSvc{
+	c.SetSvcValue(ctx, keyFunc, "ip", &FuncSvc{
 		Name: "value",
 	}, resource.MustParse("45m"), 10, 0)
 
-	c.SetSvcValue(ctx, "func2", "ip2", &FuncSvc{
+	c.SetSvcValue(ctx, keyFunc2, "ip2", &FuncSvc{
 		Name: "value2",
 	}, resource.MustParse("50m"), 10, 0)
 
-	c.SetSvcValue(ctx, "func2", "ip22", &FuncSvc{
+	c.SetSvcValue(ctx, keyFunc2, "ip22", &FuncSvc{
 		Name: "value22",
 	}, resource.MustParse("33m"), 10, 0)
 
-	checkErr(c.DeleteValue(ctx, "func2", "ip2"))
+	checkErr(c.DeleteValue(ctx, keyFunc2, "ip2"))
 
 	cc := c.ListAvailableValue()
 	if len(cc) != 0 {
 		log.Panicf("expected 0 available items")
 	}
 
-	c.MarkAvailable("func", "ip")
+	c.MarkAvailable(keyFunc, "ip")
 
-	checkErr(c.DeleteValue(ctx, "func", "ip"))
+	checkErr(c.DeleteValue(ctx, keyFunc, "ip"))
 
-	_, err = c.GetSvcValue(ctx, "func", requestsPerPod, concurrency)
+	_, err = c.GetSvcValue(ctx, keyFunc, requestsPerPod, concurrency)
 	if err == nil {
 		log.Panicf("found deleted element")
 	}
 
-	c.SetSvcValue(ctx, "cpulimit", "100", &FuncSvc{
+	c.SetSvcValue(ctx, keyFunc, "100", &FuncSvc{
 		Name: "value",
 	}, resource.MustParse("3m"), 10, 0)
-	c.SetCPUUtilization("cpulimit", "100", resource.MustParse("4m"))
+	c.SetCPUUtilization(keyFunc, "100", resource.MustParse("4m"))
 }
 
 func TestPoolCacheRequests(t *testing.T) {
-
+	key := crd.CacheKeyWithGen{
+		UID: "func",
+	}
 	type structForTest struct {
 		name           string
 		requests       int
@@ -168,11 +178,11 @@ func TestPoolCacheRequests(t *testing.T) {
 				wg.Add(1)
 				go func(reqno int) {
 					defer wg.Done()
-					svc, err := p.GetSvcValue(context.Background(), "func", tt.rpp, tt.concurrency)
+					svc, err := p.GetSvcValue(context.Background(), key, tt.rpp, tt.concurrency)
 					if err != nil {
 						code, _ := ferror.GetHTTPError(err)
 						if code == http.StatusNotFound {
-							p.SetSvcValue(context.Background(), "func", fmt.Sprintf("svc-%d", svcCounter), &FuncSvc{
+							p.SetSvcValue(context.Background(), key, fmt.Sprintf("svc-%d", svcCounter), &FuncSvc{
 								Name: "value",
 							}, resource.MustParse("45m"), tt.rpp, 0)
 							atomic.AddUint64(&svcCounter, 1)

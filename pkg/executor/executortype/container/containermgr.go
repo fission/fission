@@ -176,12 +176,12 @@ func (caaf *Container) GetTotalAvailable(fn *fv1.Function) int {
 }
 
 // UnTapService has not been implemented for CaaF.
-func (caaf *Container) UnTapService(ctx context.Context, key string, svcHost string) {
+func (caaf *Container) UnTapService(ctx context.Context, fnMeta *metav1.ObjectMeta, svcHost string) {
 	// Not Implemented for CaaF.
 }
 
 // MarkSpecializationFailure has not been implemented for CaaF.
-func (caaf *Container) MarkSpecializationFailure(ctx context.Context, key string) {
+func (caaf *Container) MarkSpecializationFailure(ctx context.Context, fnMeta *metav1.ObjectMeta) {
 	// Not Implemented for CaaF.
 }
 

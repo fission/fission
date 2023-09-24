@@ -2,7 +2,6 @@ package fscache
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"testing"
 	"time"
@@ -15,6 +14,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/crd"
 )
 
 func panicIf(err error) {
@@ -164,7 +164,8 @@ func TestFunctionServiceNewCache(t *testing.T) {
 	_, err = fsc.GetFuncSvc(ctx, fsvc.Function, 5, concurrency)
 	require.NoError(t, err)
 
-	key := fmt.Sprintf("%v_%v", fn.ObjectMeta.UID, fn.ObjectMeta.ResourceVersion)
+	//key := fmt.Sprintf("%v_%v", cancel.UID, fn.ObjectMeta.ResourceVersion)
+	key := crd.CacheKeyWithGenFromMeta(&fn.ObjectMeta)
 	fsc.MarkAvailable(key, fsvc.Address)
 
 	_, err = fsc.GetFuncSvc(ctx, fsvc.Function, 5, concurrency)

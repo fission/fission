@@ -20,6 +20,7 @@ import (
 	"fmt"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 // CacheKey : Given metadata, create a key that uniquely identifies the contents
@@ -37,4 +38,22 @@ func CacheKey(metadata *metav1.ObjectMeta) string {
 // UIDs are unique, we don't use resource version here
 func CacheKeyUID(metadata *metav1.ObjectMeta) string {
 	return fmt.Sprintf("%v", metadata.UID)
+}
+
+type CacheKeyWithGen struct {
+	UID             types.UID
+	ResourceVersion string
+	Generation      int64
+}
+
+func (ck CacheKeyWithGen) String() string {
+	return fmt.Sprintf("%v_%v_%v", ck.UID, ck.ResourceVersion, ck.Generation)
+}
+
+func CacheKeyWithGenFromMeta(metadata *metav1.ObjectMeta) CacheKeyWithGen {
+	return CacheKeyWithGen{
+		UID:             metadata.UID,
+		ResourceVersion: metadata.ResourceVersion,
+		Generation:      metadata.Generation,
+	}
 }

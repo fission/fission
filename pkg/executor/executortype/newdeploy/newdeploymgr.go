@@ -201,12 +201,12 @@ func (deploy *NewDeploy) DeleteFuncSvcFromCache(ctx context.Context, fsvc *fscac
 }
 
 // UnTapService has not been implemented for NewDeployment.
-func (deploy *NewDeploy) UnTapService(ctx context.Context, key string, svcHost string) {
+func (deploy *NewDeploy) UnTapService(ctx context.Context, fnMeta *metav1.ObjectMeta, svcHost string) {
 	// Not Implemented for NewDeployment. Will be used when support of concurrent specialization of same function is added.
 }
 
 // MarkSpecializationFailure has not been implemented for NewDeployment.
-func (deploy *NewDeploy) MarkSpecializationFailure(ctx context.Context, key string) {
+func (deploy *NewDeploy) MarkSpecializationFailure(ctx context.Context, fnMeta *metav1.ObjectMeta) {
 	// Not Implemented for NewDeployment. Will be used when support of concurrent specialization of same function is added.
 }
 
