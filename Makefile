@@ -51,7 +51,7 @@ test-run: code-checks
 
 ### Binaries
 build-fission-cli:
-	@GOOS=$(GOOS) GOARCH=$(GOARCH) GOAMD64=$(GOAMD64) GORELEASER_CURRENT_TAG=$(VERSION) goreleaser build --snapshot --rm-dist --single-target --id fission-cli
+	@GOOS=$(GOOS) GOARCH=$(GOARCH) GOAMD64=$(GOAMD64) GORELEASER_CURRENT_TAG=$(VERSION) goreleaser build --snapshot --clean --single-target --id fission-cli
 
 install-fission-cli:
 	# TODO: Fix this hack, replace v1 with GOAMD64
@@ -111,7 +111,7 @@ generate-crd-ref-docs: install-crd-ref-docs
 all-generators: codegen generate-crds generate-swagger-doc generate-cli-docs generate-crd-ref-docs
 
 skaffold-prebuild:
-	@GOOS=linux GOARCH=amd64 GORELEASER_CURRENT_TAG=$(VERSION) goreleaser build --snapshot --rm-dist --single-target
+	@GOOS=linux GOARCH=amd64 GORELEASER_CURRENT_TAG=$(VERSION) goreleaser build --snapshot --clean --single-target
 	@cp -v cmd/builder/Dockerfile dist/builder_linux_amd64_v1/Dockerfile
 	@cp -v cmd/fetcher/Dockerfile dist/fetcher_linux_amd64_v1/Dockerfile
 	@cp -v cmd/fission-bundle/Dockerfile dist/fission-bundle_linux_amd64_v1/Dockerfile
