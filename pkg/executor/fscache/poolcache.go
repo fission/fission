@@ -24,6 +24,7 @@ import (
 
 	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/fission/fission/pkg/crd"
 	ferror "github.com/fission/fission/pkg/error"
@@ -205,8 +206,26 @@ func (c *PoolCache) service() {
 			c.cache[req.function].svcs[req.address].cpuLimit = req.cpuUsage
 		case listAvailableValue:
 			vals := make([]*FuncSvc, 0)
+			latestFuncGen := make(map[types.UID]int64)
+
+			// find the latest generation of each function
+			for key := range c.cache {
+				if currentFuncGen, ok := latestFuncGen[key.UID]; ok {
+					if key.Generation > currentFuncGen {
+						latestFuncGen[key.UID] = key.Generation
+					}
+				} else {
+					latestFuncGen[key.UID] = key.Generation
+				}
+			}
+
 			for key1, values := range c.cache {
-				svcCleanQuota := len(values.svcs) - values.svcRetain
+				svcRetain := values.svcRetain
+				// if the function is not latest generation, then we don't need to retain any pods
+				if latestFuncGen[key1.UID] != key1.Generation {
+					svcRetain = 0
+				}
+				svcCleanQuota := len(values.svcs) - svcRetain
 				if svcCleanQuota <= 0 {
 					continue
 				}
