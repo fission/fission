@@ -136,7 +136,7 @@ func (fsc *FunctionServiceCache) service() {
 				mI := funcSvc.(metav1.ObjectMeta)
 				fsvcI, err := fsc.byFunction.Get(crd.CacheKeyURFromMeta(&mI))
 				if err != nil {
-					fsc.logger.Error("error while getting service", zap.Any("error", err))
+					fsc.logger.Error("error while getting service", zap.String("error", err.Error()))
 					return
 				}
 				fsvc := fsvcI.(*FuncSvc)
@@ -256,8 +256,8 @@ func (fsc *FunctionServiceCache) AddFunc(ctx context.Context, fsvc FuncSvc, requ
 	fsvc.Atime = now
 }
 
-func (fsc *FunctionServiceCache) MarkFuncSvcDeleted(key crd.CacheKeyURG) {
-	fsc.connFunctionCache.MarkFuncSvcDeleted(key)
+func (fsc *FunctionServiceCache) MarkFuncDeleted(key crd.CacheKeyURG) {
+	fsc.connFunctionCache.MarkFuncDeleted(key)
 }
 
 // SetCPUUtilizaton updates/sets CPUutilization in the pool cache
@@ -386,8 +386,8 @@ func (fsc *FunctionServiceCache) DeleteFunctionSvc(ctx context.Context, fsvc *Fu
 	if err != nil {
 		fsc.logger.Error(
 			"error deleting function service",
-			zap.Any("function", fsvc.Function.Name),
-			zap.Any("address", fsvc.Address),
+			zap.String("function", fsvc.Function.Name),
+			zap.String("address", fsvc.Address),
 			zap.Error(err),
 		)
 	}

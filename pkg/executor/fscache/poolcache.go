@@ -137,7 +137,7 @@ func (c *PoolCache) service() {
 					// mark active
 					funcSvcGroup.svcs[addr].activeRequests++
 					if c.logger.Core().Enabled(zap.DebugLevel) {
-						otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Increase active requests with getValue", zap.Any("function", req.function), zap.String("address", addr), zap.Int("activeRequests", funcSvcGroup.svcs[addr].activeRequests))
+						otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Increase active requests with getValue", zap.String("function", req.function.String()), zap.String("address", addr), zap.Int("activeRequests", funcSvcGroup.svcs[addr].activeRequests))
 					}
 					resp.value = funcSvcGroup.svcs[addr].val
 					found = true
@@ -203,7 +203,7 @@ func (c *PoolCache) service() {
 				}
 			}
 			if c.logger.Core().Enabled(zap.DebugLevel) {
-				otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Increase active requests with setValue", zap.Any("function", req.function), zap.String("address", req.address), zap.Int("activeRequests", c.cache[req.function].svcs[req.address].activeRequests))
+				otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Increase active requests with setValue", zap.String("function", req.function.String()), zap.String("address", req.address), zap.Int("activeRequests", c.cache[req.function].svcs[req.address].activeRequests))
 			}
 			c.cache[req.function].svcs[req.address].cpuLimit = req.cpuUsage
 		case markDeleted:
@@ -241,11 +241,11 @@ func (c *PoolCache) service() {
 				for key2, value := range values.svcs {
 					debugLevel := c.logger.Core().Enabled(zap.DebugLevel)
 					if debugLevel {
-						otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Reading active requests", zap.Any("function", key1), zap.String("address", key2), zap.Int("activeRequests", value.activeRequests))
+						otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Reading active requests", zap.String("function", key1.String()), zap.String("address", key2), zap.Int("activeRequests", value.activeRequests))
 					}
 					if value.activeRequests == 0 && svcCleanQuota > 0 {
 						if debugLevel {
-							otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Function service with no active requests", zap.Any("function", key1), zap.String("address", key2), zap.Int("activeRequests", value.activeRequests))
+							otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Function service with no active requests", zap.String("function", key1.String()), zap.String("address", key2), zap.Int("activeRequests", value.activeRequests))
 						}
 						vals = append(vals, value.val)
 						svcCleanQuota--
@@ -267,10 +267,10 @@ func (c *PoolCache) service() {
 					if c.cache[req.function].svcs[req.address].activeRequests > 0 {
 						c.cache[req.function].svcs[req.address].activeRequests--
 						if c.logger.Core().Enabled(zap.DebugLevel) {
-							otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Decrease active requests", zap.Any("function", req.function), zap.String("address", req.address), zap.Int("activeRequests", c.cache[req.function].svcs[req.address].activeRequests))
+							otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Decrease active requests", zap.String("function", req.function.String()), zap.String("address", req.address), zap.Int("activeRequests", c.cache[req.function].svcs[req.address].activeRequests))
 						}
 					} else {
-						otelUtils.LoggerWithTraceID(req.ctx, c.logger).Error("Invalid request to decrease active requests", zap.Any("function", req.function), zap.String("address", req.address), zap.Int("activeRequests", c.cache[req.function].svcs[req.address].activeRequests))
+						otelUtils.LoggerWithTraceID(req.ctx, c.logger).Error("Invalid request to decrease active requests", zap.String("function", req.function.String()), zap.String("address", req.address), zap.Int("activeRequests", c.cache[req.function].svcs[req.address].activeRequests))
 					}
 				}
 			}
@@ -285,7 +285,7 @@ func (c *PoolCache) service() {
 		case deleteValue:
 			if funcSvcGroup, ok := c.cache[req.function]; ok {
 				delete(c.cache[req.function].svcs, req.address)
-				if funcSvcGroup.deleted && len(funcSvcGroup.svcs) == 0 {
+				if funcSvcGroup.deleted && len(c.cache[req.function].svcs) == 0 {
 					delete(c.cache, req.function)
 				}
 			}
@@ -340,7 +340,7 @@ func (c *PoolCache) service() {
 	}
 }
 
-func (c *PoolCache) MarkFuncSvcDeleted(function crd.CacheKeyURG) {
+func (c *PoolCache) MarkFuncDeleted(function crd.CacheKeyURG) {
 	c.requestChannel <- &request{
 		requestType: markDeleted,
 		function:    function,

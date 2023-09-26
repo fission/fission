@@ -97,7 +97,7 @@ func NewPoolPodController(ctx context.Context, logger *zap.Logger,
 	}
 	for _, factory := range finformerFactory {
 		_, err := factory.Core().V1().Functions().Informer().AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
-			DeleteFunc: p.handleFuncSvcDelete,
+			DeleteFunc: p.handleFuncDelete,
 		})
 		if err != nil {
 			return nil, err
@@ -142,9 +142,9 @@ func IsPodActive(p *v1.Pod) bool {
 		p.DeletionTimestamp == nil
 }
 
-func (p *PoolPodController) handleFuncSvcDelete(obj interface{}) {
+func (p *PoolPodController) handleFuncDelete(obj interface{}) {
 	fn := obj.(*fv1.Function)
-	p.gpm.fsCache.MarkFuncSvcDeleted(crd.CacheKeyURGFromMeta(&fn.ObjectMeta))
+	p.gpm.fsCache.MarkFuncDeleted(crd.CacheKeyURGFromMeta(&fn.ObjectMeta))
 }
 
 func (p *PoolPodController) processRS(rs *apps.ReplicaSet) {
