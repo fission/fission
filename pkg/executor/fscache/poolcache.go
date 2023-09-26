@@ -42,6 +42,7 @@ const (
 	setCPUUtilization
 	markSpecializationFailure
 	logFuncSvc
+	markDeleted
 )
 
 type (
@@ -57,6 +58,7 @@ type (
 		svcRetain  int
 		svcs       map[string]*funcSvcInfo
 		queue      *Queue
+		deleted    bool
 	}
 
 	// PoolCache implements a simple cache implementation having values mapped by two keys [function][address].
@@ -204,6 +206,13 @@ func (c *PoolCache) service() {
 				otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Increase active requests with setValue", zap.Any("function", req.function), zap.String("address", req.address), zap.Int("activeRequests", c.cache[req.function].svcs[req.address].activeRequests))
 			}
 			c.cache[req.function].svcs[req.address].cpuLimit = req.cpuUsage
+		case markDeleted:
+			for key := range c.cache {
+				if key.UID == req.function.UID {
+					c.cache[key].deleted = true
+					break
+				}
+			}
 		case listAvailableValue:
 			vals := make([]*FuncSvc, 0)
 			latestFuncGen := make(map[types.UID]int64)
@@ -222,7 +231,7 @@ func (c *PoolCache) service() {
 			for key1, values := range c.cache {
 				svcRetain := values.svcRetain
 				// if the function is not latest generation, then we don't need to retain any pods
-				if latestFuncGen[key1.UID] != key1.Generation {
+				if latestFuncGen[key1.UID] != key1.Generation || values.deleted {
 					svcRetain = 0
 				}
 				svcCleanQuota := len(values.svcs) - svcRetain
@@ -274,7 +283,12 @@ func (c *PoolCache) service() {
 				}
 			}
 		case deleteValue:
-			delete(c.cache[req.function].svcs, req.address)
+			if funcSvcGroup, ok := c.cache[req.function]; ok {
+				delete(c.cache[req.function].svcs, req.address)
+				if funcSvcGroup.deleted && len(funcSvcGroup.svcs) == 0 {
+					delete(c.cache, req.function)
+				}
+			}
 			req.responseChannel <- resp
 		case logFuncSvc:
 			datawriter := bufio.NewWriter(req.dumpWriter)
@@ -323,6 +337,13 @@ func (c *PoolCache) service() {
 				fmt.Sprintf("invalid request type: %v", req.requestType))
 			req.responseChannel <- resp
 		}
+	}
+}
+
+func (c *PoolCache) MarkFuncSvcDeleted(function crd.CacheKeyURG) {
+	c.requestChannel <- &request{
+		requestType: markDeleted,
+		function:    function,
 	}
 }
 

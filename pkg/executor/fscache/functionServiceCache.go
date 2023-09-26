@@ -256,6 +256,10 @@ func (fsc *FunctionServiceCache) AddFunc(ctx context.Context, fsvc FuncSvc, requ
 	fsvc.Atime = now
 }
 
+func (fsc *FunctionServiceCache) MarkFuncSvcDeleted(key crd.CacheKeyURG) {
+	fsc.connFunctionCache.MarkFuncSvcDeleted(key)
+}
+
 // SetCPUUtilizaton updates/sets CPUutilization in the pool cache
 func (fsc *FunctionServiceCache) SetCPUUtilizaton(key crd.CacheKeyURG, svcHost string, cpuUsage resource.Quantity) {
 	fsc.connFunctionCache.SetCPUUtilization(key, svcHost, cpuUsage)
