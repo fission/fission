@@ -82,6 +82,7 @@ func TestPoolCache(t *testing.T) {
 	}
 
 	c.MarkAvailable(keyFunc, "ip")
+	c.MarkFuncDeleted(keyFunc)
 
 	checkErr(c.DeleteValue(ctx, keyFunc, "ip"))
 
@@ -98,15 +99,18 @@ func TestPoolCache(t *testing.T) {
 
 func TestPoolCacheRequests(t *testing.T) {
 	key := crd.CacheKeyURG{
-		UID: "func",
+		UID:        "func",
+		Generation: 1,
 	}
 	type structForTest struct {
-		name           string
-		requests       int
-		concurrency    int
-		rpp            int
-		simultaneous   int
-		failedRequests int
+		name             string
+		requests         int
+		concurrency      int
+		rpp              int
+		simultaneous     int
+		failedRequests   int
+		retainPods       int
+		generationUpdate bool
 	}
 
 	for _, tt := range []structForTest{
@@ -128,7 +132,6 @@ func TestPoolCacheRequests(t *testing.T) {
 			concurrency: 5,
 			rpp:         60,
 		},
-
 		{
 			name:           "test4",
 			requests:       6,
@@ -159,11 +162,19 @@ func TestPoolCacheRequests(t *testing.T) {
 			failedRequests: 10,
 		},
 		{
-			name:         "test8",
-			requests:     10,
-			concurrency:  10,
-			rpp:          1,
-			simultaneous: 10,
+			name:        "test9",
+			requests:    2,
+			concurrency: 2,
+			rpp:         1,
+			retainPods:  1,
+		},
+		{
+			name:             "test10",
+			requests:         10,
+			concurrency:      5,
+			rpp:              2,
+			retainPods:       2,
+			generationUpdate: true,
 		},
 	} {
 		t.Run(fmt.Sprintf("scenario-%s", tt.name), func(t *testing.T) {
@@ -184,7 +195,7 @@ func TestPoolCacheRequests(t *testing.T) {
 						if code == http.StatusNotFound {
 							p.SetSvcValue(context.Background(), key, fmt.Sprintf("svc-%d", svcCounter), &FuncSvc{
 								Name: "value",
-							}, resource.MustParse("45m"), tt.rpp, 0)
+							}, resource.MustParse("45m"), tt.rpp, tt.retainPods)
 							atomic.AddUint64(&svcCounter, 1)
 						} else {
 							t.Log(reqno, "=>", err)
@@ -205,6 +216,31 @@ func TestPoolCacheRequests(t *testing.T) {
 
 			require.Equal(t, tt.failedRequests, int(atomic.LoadUint64(&failedRequests)))
 			require.Equal(t, tt.concurrency, int(atomic.LoadUint64(&svcCounter)))
+
+			for i := 0; i < tt.concurrency; i++ {
+				for j := 0; j < tt.rpp; j++ {
+					wg.Add(1)
+					go func(i int) {
+						defer wg.Done()
+						p.MarkAvailable(key, fmt.Sprintf("svc-%d", i))
+					}(i)
+				}
+			}
+			wg.Wait()
+			if tt.generationUpdate {
+				newKey := crd.CacheKeyURG{
+					UID:        "func",
+					Generation: 2,
+				}
+				p.SetSvcValue(context.Background(), newKey, fmt.Sprintf("svc-%d", svcCounter), &FuncSvc{
+					Name: "value",
+				}, resource.MustParse("45m"), tt.rpp, tt.retainPods)
+				funcSvc := p.ListAvailableValue()
+				require.Equal(t, tt.concurrency, len(funcSvc))
+			} else {
+				funcSvc := p.ListAvailableValue()
+				require.Equal(t, tt.concurrency-tt.retainPods, len(funcSvc))
+			}
 		})
 	}
 }
