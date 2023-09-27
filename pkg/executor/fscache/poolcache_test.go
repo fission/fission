@@ -27,7 +27,6 @@ func TestPoolCache(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	logger := loggerfactory.GetLogger()
-	c := NewPoolCache(logger)
 	concurrency := 5
 	requestsPerPod := 2
 
@@ -38,63 +37,102 @@ func TestPoolCache(t *testing.T) {
 		UID: "func2",
 	}
 
-	// should return err since no svc is present
-	_, err := c.GetSvcValue(ctx, keyFunc, requestsPerPod, concurrency)
-	if err == nil {
-		log.Panicf("found value when expected it to be nil")
-	}
+	t.Run("Test create new svc ", func(t *testing.T) {
+		c1 := NewPoolCache(logger)
 
-	c.SetSvcValue(ctx, keyFunc, "ip", &FuncSvc{
-		Name: "value",
-	}, resource.MustParse("45m"), 10, 0)
+		// should return err since no svc is present
+		_, err := c1.GetSvcValue(ctx, keyFunc, requestsPerPod, concurrency)
+		if err == nil {
+			log.Panicf("found value when expected it to be nil")
+		}
 
-	// should not return any error since we added a svc
-	_, err = c.GetSvcValue(ctx, keyFunc, requestsPerPod, concurrency)
-	checkErr(err)
+		c1.SetSvcValue(ctx, keyFunc, "ip", &FuncSvc{
+			Name: "value",
+		}, resource.MustParse("45m"), 10, 0)
 
-	c.SetSvcValue(ctx, keyFunc, "ip", &FuncSvc{
-		Name: "value",
-	}, resource.MustParse("45m"), 10, 0)
+		// should not return any error since we added a svc
+		_, err = c1.GetSvcValue(ctx, keyFunc, requestsPerPod, concurrency)
+		checkErr(err)
+	})
 
-	// should return err since all functions are busy
-	_, err = c.GetSvcValue(ctx, keyFunc, requestsPerPod, concurrency)
-	if err == nil {
-		log.Panicf("found value when expected it to be nil")
-	}
+	t.Run("Test return error when functions are busy", func(t *testing.T) {
+		c2 := NewPoolCache(logger)
+		c2.SetSvcValue(ctx, keyFunc, "ip", &FuncSvc{
+			Name: "value",
+		}, resource.MustParse("45m"), 10, 0)
+		c2.SetSvcValue(ctx, keyFunc, "ip", &FuncSvc{
+			Name: "value",
+		}, resource.MustParse("45m"), 10, 0)
+		// should return err since all functions are busy
+		_, err := c2.GetSvcValue(ctx, keyFunc, requestsPerPod, concurrency)
+		if err == nil {
+			log.Panicf("found value when expected it to be nil")
+		}
+	})
 
-	c.SetSvcValue(ctx, keyFunc, "ip", &FuncSvc{
-		Name: "value",
-	}, resource.MustParse("45m"), 10, 0)
+	t.Run("Test does not list available values when a function svc is deleted", func(t *testing.T) {
+		c3 := NewPoolCache(logger)
+		c3.SetSvcValue(ctx, keyFunc, "ip", &FuncSvc{
+			Name: "value",
+		}, resource.MustParse("45m"), 10, 0)
 
-	c.SetSvcValue(ctx, keyFunc2, "ip2", &FuncSvc{
-		Name: "value2",
-	}, resource.MustParse("50m"), 10, 0)
+		c3.SetSvcValue(ctx, keyFunc2, "ip2", &FuncSvc{
+			Name: "value2",
+		}, resource.MustParse("50m"), 10, 0)
 
-	c.SetSvcValue(ctx, keyFunc2, "ip22", &FuncSvc{
-		Name: "value22",
-	}, resource.MustParse("33m"), 10, 0)
+		checkErr(c3.DeleteValue(ctx, keyFunc2, "ip2"))
 
-	checkErr(c.DeleteValue(ctx, keyFunc2, "ip2"))
+		cc := c3.ListAvailableValue()
+		if len(cc) != 0 {
+			log.Panicf("expected 0 available items")
+		}
+		_, err := c3.GetSvcValue(ctx, keyFunc2, requestsPerPod, concurrency)
+		if err == nil {
+			log.Panicf("found deleted element")
+		}
+	})
 
-	cc := c.ListAvailableValue()
-	if len(cc) != 0 {
-		log.Panicf("expected 0 available items")
-	}
+	t.Run("Test return error when current CPU usage is more then permissible", func(t *testing.T) {
+		c4 := NewPoolCache(logger)
+		_, err := c4.GetSvcValue(ctx, keyFunc, requestsPerPod, concurrency)
+		if err == nil {
+			log.Panicf("found value when expected it to be nil")
+		}
 
-	c.MarkAvailable(keyFunc, "ip")
-	c.MarkFuncDeleted(keyFunc)
+		c4.SetSvcValue(ctx, keyFunc, "ip", &FuncSvc{
+			Name: "value",
+		}, resource.MustParse("45m"), 10, 0)
 
-	checkErr(c.DeleteValue(ctx, keyFunc, "ip"))
+		// should not return any error since we added a svc
+		_, err = c4.GetSvcValue(ctx, keyFunc, requestsPerPod, concurrency)
+		checkErr(err)
 
-	_, err = c.GetSvcValue(ctx, keyFunc, requestsPerPod, concurrency)
-	if err == nil {
-		log.Panicf("found deleted element")
-	}
+		c4.SetCPUUtilization(keyFunc, "ip", resource.MustParse("4m"))
 
-	c.SetSvcValue(ctx, keyFunc, "100", &FuncSvc{
-		Name: "value",
-	}, resource.MustParse("3m"), 10, 0)
-	c.SetCPUUtilization(keyFunc, "100", resource.MustParse("4m"))
+		_, err = c4.GetSvcValue(ctx, keyFunc, requestsPerPod, concurrency)
+		if err == nil {
+			log.Panicf("found value when expected it to be nil")
+		}
+	})
+
+	t.Run("Test function should not exist when mark deleted is called", func(t *testing.T) {
+		c5 := NewPoolCache(logger)
+		c5.SetSvcValue(ctx, keyFunc, "ip", &FuncSvc{
+			Name: "value",
+		}, resource.MustParse("45m"), 10, 0)
+
+		// should not return any error since we added a svc
+		_, err := c5.GetSvcValue(ctx, keyFunc, requestsPerPod, concurrency)
+		checkErr(err)
+
+		c5.MarkFuncDeleted(keyFunc)
+		checkErr(c5.DeleteValue(ctx, keyFunc, "ip"))
+
+		_, err = c5.GetSvcValue(ctx, keyFunc, requestsPerPod, concurrency)
+		if err == nil {
+			log.Panicf("found value when expected it to be nil")
+		}
+	})
 }
 
 func TestPoolCacheRequests(t *testing.T) {
@@ -162,14 +200,14 @@ func TestPoolCacheRequests(t *testing.T) {
 			failedRequests: 10,
 		},
 		{
-			name:        "test9",
+			name:        "test8",
 			requests:    2,
 			concurrency: 2,
 			rpp:         1,
 			retainPods:  1,
 		},
 		{
-			name:             "test10",
+			name:             "test9",
 			requests:         10,
 			concurrency:      5,
 			rpp:              2,
