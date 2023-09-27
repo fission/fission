@@ -86,6 +86,7 @@ const (
 	FnSubPath               = "subpath"
 	FnGracePeriod           = "graceperiod"
 	FnLogAllPods            = "all-pods"
+	FnRetainPods            = "retainpods"
 
 	HtName              = resourceName
 	HtMethod            = "method"

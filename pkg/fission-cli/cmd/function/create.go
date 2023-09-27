@@ -104,6 +104,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	}
 
 	requestsPerPod := input.Int(flagkey.FnRequestsPerPod)
+	retainPods := input.Int(flagkey.FnRetainPods)
 
 	fnOnceOnly := input.Bool(flagkey.FnOnceOnly)
 
@@ -306,6 +307,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 			IdleTimeout:     &fnIdleTimeout,
 			Concurrency:     fnConcurrency,
 			RequestsPerPod:  requestsPerPod,
+			RetainPods:      retainPods,
 			OnceOnly:        fnOnceOnly,
 		},
 	}

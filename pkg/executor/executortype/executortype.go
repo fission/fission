@@ -21,6 +21,8 @@ import (
 
 	"go.uber.org/zap"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/executor/fscache"
 )
@@ -49,10 +51,10 @@ type ExecutorType interface {
 	TapService(ctx context.Context, serviceUrl string) error
 
 	// UnTapService updates the isActive to false
-	UnTapService(ctx context.Context, key string, svcHost string)
+	UnTapService(ctx context.Context, fnMeta *metav1.ObjectMeta, svcHost string)
 
 	// ReduceSpecializationInProgress updates the svcWaiting count in funcSvcGroup
-	MarkSpecializationFailure(ctx context.Context, key string)
+	MarkSpecializationFailure(ctx context.Context, fnMeta *metav1.ObjectMeta)
 
 	// IsValid returns true if a function service is valid. Different executor types
 	// use distinct ways to examine the function service.

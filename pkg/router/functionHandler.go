@@ -684,7 +684,7 @@ func (fh functionHandler) getServiceEntry(ctx context.Context) (svcURL *url.URL,
 
 	fnMeta := &fh.function.ObjectMeta
 	recordObj, err := fh.svcAddrUpdateThrottler.RunOnce(
-		crd.CacheKey(fnMeta),
+		crd.CacheKeyURFromMeta(fnMeta).String(),
 		func(firstToTheLock bool) (interface{}, error) {
 			if !firstToTheLock {
 				svcURL, err := fh.getServiceEntryFromCache()

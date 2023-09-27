@@ -21,6 +21,7 @@ import (
 
 	"github.com/robfig/cron/v3"
 	"go.uber.org/zap"
+	"k8s.io/apimachinery/pkg/types"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/publisher"
@@ -36,7 +37,7 @@ const (
 type (
 	Timer struct {
 		logger    *zap.Logger
-		triggers  map[string]*timerTriggerWithCron
+		triggers  map[types.UID]*timerTriggerWithCron
 		publisher *publisher.Publisher
 	}
 
@@ -49,7 +50,7 @@ type (
 func MakeTimer(logger *zap.Logger, publisher publisher.Publisher) *Timer {
 	timer := &Timer{
 		logger:    logger.Named("timer"),
-		triggers:  make(map[string]*timerTriggerWithCron),
+		triggers:  make(map[types.UID]*timerTriggerWithCron),
 		publisher: &publisher,
 	}
 	return timer

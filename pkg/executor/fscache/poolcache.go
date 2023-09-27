@@ -24,7 +24,9 @@ import (
 
 	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/apimachinery/pkg/types"
 
+	"github.com/fission/fission/pkg/crd"
 	ferror "github.com/fission/fission/pkg/error"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
@@ -40,6 +42,7 @@ const (
 	setCPUUtilization
 	markSpecializationFailure
 	logFuncSvc
+	markDeleted
 )
 
 type (
@@ -52,14 +55,16 @@ type (
 
 	funcSvcGroup struct {
 		svcWaiting int
+		svcRetain  int
 		svcs       map[string]*funcSvcInfo
 		queue      *Queue
+		deleted    bool
 	}
 
 	// PoolCache implements a simple cache implementation having values mapped by two keys [function][address].
 	// As of now PoolCache is only used by poolmanager executor
 	PoolCache struct {
-		cache          map[string]*funcSvcGroup
+		cache          map[crd.CacheKeyURG]*funcSvcGroup
 		requestChannel chan *request
 		logger         *zap.Logger
 	}
@@ -67,7 +72,7 @@ type (
 	request struct {
 		requestType
 		ctx             context.Context
-		function        string
+		function        crd.CacheKeyURG
 		address         string
 		dumpWriter      io.Writer
 		value           *FuncSvc
@@ -75,6 +80,7 @@ type (
 		cpuUsage        resource.Quantity
 		responseChannel chan *response
 		concurrency     int
+		svcsRetain      int
 	}
 	response struct {
 		error
@@ -92,7 +98,7 @@ type (
 
 func NewPoolCache(logger *zap.Logger) *PoolCache {
 	c := &PoolCache{
-		cache:          make(map[string]*funcSvcGroup),
+		cache:          make(map[crd.CacheKeyURG]*funcSvcGroup),
 		requestChannel: make(chan *request),
 		logger:         logger,
 	}
@@ -131,7 +137,7 @@ func (c *PoolCache) service() {
 					// mark active
 					funcSvcGroup.svcs[addr].activeRequests++
 					if c.logger.Core().Enabled(zap.DebugLevel) {
-						otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Increase active requests with getValue", zap.String("function", req.function), zap.String("address", addr), zap.Int("activeRequests", funcSvcGroup.svcs[addr].activeRequests))
+						otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Increase active requests with getValue", zap.String("function", req.function.String()), zap.String("address", addr), zap.Int("activeRequests", funcSvcGroup.svcs[addr].activeRequests))
 					}
 					resp.value = funcSvcGroup.svcs[addr].val
 					found = true
@@ -172,6 +178,7 @@ func (c *PoolCache) service() {
 			if _, ok := c.cache[req.function].svcs[req.address]; !ok {
 				c.cache[req.function].svcs[req.address] = &funcSvcInfo{}
 			}
+			c.cache[req.function].svcRetain = req.svcsRetain
 			c.cache[req.function].svcs[req.address].val = req.value
 			c.cache[req.function].svcs[req.address].activeRequests++
 			if c.cache[req.function].svcWaiting > 0 {
@@ -196,22 +203,52 @@ func (c *PoolCache) service() {
 				}
 			}
 			if c.logger.Core().Enabled(zap.DebugLevel) {
-				otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Increase active requests with setValue", zap.String("function", req.function), zap.String("address", req.address), zap.Int("activeRequests", c.cache[req.function].svcs[req.address].activeRequests))
+				otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Increase active requests with setValue", zap.String("function", req.function.String()), zap.String("address", req.address), zap.Int("activeRequests", c.cache[req.function].svcs[req.address].activeRequests))
 			}
 			c.cache[req.function].svcs[req.address].cpuLimit = req.cpuUsage
+		case markDeleted:
+			for key := range c.cache {
+				if key.UID == req.function.UID {
+					c.cache[key].deleted = true
+					break
+				}
+			}
 		case listAvailableValue:
 			vals := make([]*FuncSvc, 0)
+			latestFuncGen := make(map[types.UID]int64)
+
+			// find the latest generation of each function
+			for key := range c.cache {
+				if currentFuncGen, ok := latestFuncGen[key.UID]; ok {
+					if key.Generation > currentFuncGen {
+						latestFuncGen[key.UID] = key.Generation
+					}
+				} else {
+					latestFuncGen[key.UID] = key.Generation
+				}
+			}
+
 			for key1, values := range c.cache {
+				svcRetain := values.svcRetain
+				// if the function is not latest generation, then we don't need to retain any pods
+				if latestFuncGen[key1.UID] != key1.Generation || values.deleted {
+					svcRetain = 0
+				}
+				svcCleanQuota := len(values.svcs) - svcRetain
+				if svcCleanQuota <= 0 {
+					continue
+				}
 				for key2, value := range values.svcs {
 					debugLevel := c.logger.Core().Enabled(zap.DebugLevel)
 					if debugLevel {
-						otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Reading active requests", zap.String("function", key1), zap.String("address", key2), zap.Int("activeRequests", value.activeRequests))
+						otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Reading active requests", zap.String("function", key1.String()), zap.String("address", key2), zap.Int("activeRequests", value.activeRequests))
 					}
-					if value.activeRequests == 0 {
+					if value.activeRequests == 0 && svcCleanQuota > 0 {
 						if debugLevel {
-							otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Function service with no active requests", zap.String("function", key1), zap.String("address", key2), zap.Int("activeRequests", value.activeRequests))
+							otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Function service with no active requests", zap.String("function", key1.String()), zap.String("address", key2), zap.Int("activeRequests", value.activeRequests))
 						}
 						vals = append(vals, value.val)
+						svcCleanQuota--
 					}
 				}
 			}
@@ -230,10 +267,10 @@ func (c *PoolCache) service() {
 					if c.cache[req.function].svcs[req.address].activeRequests > 0 {
 						c.cache[req.function].svcs[req.address].activeRequests--
 						if c.logger.Core().Enabled(zap.DebugLevel) {
-							otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Decrease active requests", zap.String("function", req.function), zap.String("address", req.address), zap.Int("activeRequests", c.cache[req.function].svcs[req.address].activeRequests))
+							otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Decrease active requests", zap.String("function", req.function.String()), zap.String("address", req.address), zap.Int("activeRequests", c.cache[req.function].svcs[req.address].activeRequests))
 						}
 					} else {
-						otelUtils.LoggerWithTraceID(req.ctx, c.logger).Error("Invalid request to decrease active requests", zap.String("function", req.function), zap.String("address", req.address), zap.Int("activeRequests", c.cache[req.function].svcs[req.address].activeRequests))
+						otelUtils.LoggerWithTraceID(req.ctx, c.logger).Error("Invalid request to decrease active requests", zap.String("function", req.function.String()), zap.String("address", req.address), zap.Int("activeRequests", c.cache[req.function].svcs[req.address].activeRequests))
 					}
 				}
 			}
@@ -246,7 +283,12 @@ func (c *PoolCache) service() {
 				}
 			}
 		case deleteValue:
-			delete(c.cache[req.function].svcs, req.address)
+			if funcSvcGroup, ok := c.cache[req.function]; ok {
+				delete(c.cache[req.function].svcs, req.address)
+				if funcSvcGroup.deleted && len(c.cache[req.function].svcs) == 0 {
+					delete(c.cache, req.function)
+				}
+			}
 			req.responseChannel <- resp
 		case logFuncSvc:
 			datawriter := bufio.NewWriter(req.dumpWriter)
@@ -298,8 +340,15 @@ func (c *PoolCache) service() {
 	}
 }
 
+func (c *PoolCache) MarkFuncDeleted(function crd.CacheKeyURG) {
+	c.requestChannel <- &request{
+		requestType: markDeleted,
+		function:    function,
+	}
+}
+
 // GetValue returns a function service with status in Active else return error
-func (c *PoolCache) GetSvcValue(ctx context.Context, function string, requestsPerPod int, concurrency int) (*FuncSvc, error) {
+func (c *PoolCache) GetSvcValue(ctx context.Context, function crd.CacheKeyURG, requestsPerPod int, concurrency int) (*FuncSvc, error) {
 	respChannel := make(chan *response)
 	c.requestChannel <- &request{
 		ctx:             ctx,
@@ -334,7 +383,7 @@ func (c *PoolCache) ListAvailableValue() []*FuncSvc {
 }
 
 // SetValue marks the value at key [function][address] as active(begin used)
-func (c *PoolCache) SetSvcValue(ctx context.Context, function, address string, value *FuncSvc, cpuLimit resource.Quantity, requestsPerPod int) {
+func (c *PoolCache) SetSvcValue(ctx context.Context, function crd.CacheKeyURG, address string, value *FuncSvc, cpuLimit resource.Quantity, requestsPerPod, svcsRetain int) {
 	respChannel := make(chan *response)
 	c.requestChannel <- &request{
 		ctx:             ctx,
@@ -344,12 +393,13 @@ func (c *PoolCache) SetSvcValue(ctx context.Context, function, address string, v
 		value:           value,
 		cpuUsage:        cpuLimit,
 		requestsPerPod:  requestsPerPod,
+		svcsRetain:      svcsRetain,
 		responseChannel: respChannel,
 	}
 }
 
 // SetCPUUtilization updates/sets the CPU utilization limit for the pod
-func (c *PoolCache) SetCPUUtilization(function, address string, cpuUsage resource.Quantity) {
+func (c *PoolCache) SetCPUUtilization(function crd.CacheKeyURG, address string, cpuUsage resource.Quantity) {
 	c.requestChannel <- &request{
 		requestType:     setCPUUtilization,
 		function:        function,
@@ -360,7 +410,7 @@ func (c *PoolCache) SetCPUUtilization(function, address string, cpuUsage resourc
 }
 
 // MarkAvailable marks the value at key [function][address] as available
-func (c *PoolCache) MarkAvailable(function, address string) {
+func (c *PoolCache) MarkAvailable(function crd.CacheKeyURG, address string) {
 	respChannel := make(chan *response)
 	c.requestChannel <- &request{
 		requestType:     markAvailable,
@@ -371,7 +421,7 @@ func (c *PoolCache) MarkAvailable(function, address string) {
 }
 
 // DeleteValue deletes the value at key composed of [function][address]
-func (c *PoolCache) DeleteValue(ctx context.Context, function, address string) error {
+func (c *PoolCache) DeleteValue(ctx context.Context, function crd.CacheKeyURG, address string) error {
 	respChannel := make(chan *response)
 	c.requestChannel <- &request{
 		ctx:             ctx,
@@ -385,7 +435,7 @@ func (c *PoolCache) DeleteValue(ctx context.Context, function, address string) e
 }
 
 // ReduceSpecializationInProgress reduces the svcWaiting count
-func (c *PoolCache) MarkSpecializationFailure(function string) {
+func (c *PoolCache) MarkSpecializationFailure(function crd.CacheKeyURG) {
 	c.requestChannel <- &request{
 		requestType:     markSpecializationFailure,
 		function:        function,

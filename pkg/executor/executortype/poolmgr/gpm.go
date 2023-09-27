@@ -71,7 +71,7 @@ type (
 	GenericPoolManager struct {
 		logger *zap.Logger
 
-		pools            map[string]*GenericPool
+		pools            map[k8sTypes.UID]*GenericPool
 		kubernetesClient kubernetes.Interface
 		metricsClient    metricsclient.Interface
 		nsResolver       *utils.NamespaceResolver
@@ -141,7 +141,7 @@ func MakeGenericPoolManager(ctx context.Context,
 	}
 	gpm := &GenericPoolManager{
 		logger:                     gpmLogger,
-		pools:                      make(map[string]*GenericPool),
+		pools:                      make(map[k8sTypes.UID]*GenericPool),
 		kubernetesClient:           kubernetesClient,
 		nsResolver:                 utils.DefaultNSResolver(),
 		metricsClient:              metricsClient,
@@ -237,9 +237,10 @@ func (gpm *GenericPoolManager) DeleteFuncSvcFromCache(ctx context.Context, fsvc 
 	gpm.fsCache.DeleteFunctionSvc(ctx, fsvc)
 }
 
-func (gpm *GenericPoolManager) UnTapService(ctx context.Context, key string, svcHost string) {
+func (gpm *GenericPoolManager) UnTapService(ctx context.Context, fnMeta *metav1.ObjectMeta, svcHost string) {
+	key := crd.CacheKeyURGFromMeta(fnMeta)
 	otelUtils.SpanTrackEvent(ctx, "UnTapService",
-		attribute.KeyValue{Key: "key", Value: attribute.StringValue(key)},
+		attribute.KeyValue{Key: "key", Value: attribute.StringValue(key.String())},
 		attribute.KeyValue{Key: "svcHost", Value: attribute.StringValue(svcHost)})
 	gpm.fsCache.MarkAvailable(key, svcHost)
 }
@@ -254,9 +255,10 @@ func (gpm *GenericPoolManager) TapService(ctx context.Context, svcHost string) e
 	return nil
 }
 
-func (gpm *GenericPoolManager) MarkSpecializationFailure(ctx context.Context, key string) {
+func (gpm *GenericPoolManager) MarkSpecializationFailure(ctx context.Context, fnMeta *metav1.ObjectMeta) {
+	key := crd.CacheKeyURGFromMeta(fnMeta)
 	otelUtils.SpanTrackEvent(ctx, "MarkSpecializationFailure",
-		attribute.KeyValue{Key: "key", Value: attribute.StringValue(key)})
+		attribute.KeyValue{Key: "key", Value: attribute.StringValue(key.String())})
 	logger := otelUtils.LoggerWithTraceID(ctx, gpm.logger)
 	logger.Info("marking specialization failure", zap.Any("key", key))
 	gpm.fsCache.MarkSpecializationFailure(key)
@@ -503,7 +505,7 @@ func (gpm *GenericPoolManager) service() {
 			// just because they are missing in the cache, we end up creating another duplicate pool.
 			var err error
 			created := false
-			pool, ok := gpm.pools[crd.CacheKeyUID(&req.env.ObjectMeta)]
+			pool, ok := gpm.pools[crd.CacheKeyUIDFromMeta(&req.env.ObjectMeta)]
 			if !ok {
 				// To support backward compatibility, if envs are created in default ns, we go ahead
 				// and create pools in fission-function ns as earlier.
@@ -516,7 +518,7 @@ func (gpm *GenericPoolManager) service() {
 					req.responseChannel <- &response{error: err}
 					continue
 				}
-				gpm.pools[crd.CacheKeyUID(&req.env.ObjectMeta)] = pool
+				gpm.pools[crd.CacheKeyUIDFromMeta(&req.env.ObjectMeta)] = pool
 				created = true
 			}
 			req.responseChannel <- &response{pool: pool, created: created}
@@ -526,7 +528,7 @@ func (gpm *GenericPoolManager) service() {
 				zap.String("environment", env.ObjectMeta.Name),
 				zap.String("namespace", env.ObjectMeta.Namespace))
 
-			key := crd.CacheKeyUID(&req.env.ObjectMeta)
+			key := crd.CacheKeyUIDFromMeta(&req.env.ObjectMeta)
 			pool, ok := gpm.pools[key]
 			if !ok {
 				gpm.logger.Error("Could not find pool", zap.String("environment", env.ObjectMeta.Name), zap.String("namespace", env.ObjectMeta.Namespace))
@@ -573,7 +575,7 @@ func (gpm *GenericPoolManager) getFunctionEnv(ctx context.Context, fn *fv1.Funct
 
 	// Cached ?
 	// TODO: the cache should be able to search by <env name, fn namespace> instead of function metadata.
-	result, err := gpm.functionEnv.Get(crd.CacheKey(&fn.ObjectMeta))
+	result, err := gpm.functionEnv.Get(crd.CacheKeyURFromMeta(&fn.ObjectMeta))
 	if err == nil {
 		env = result.(*fv1.Environment)
 		return env, nil
@@ -591,7 +593,7 @@ func (gpm *GenericPoolManager) getFunctionEnv(ctx context.Context, fn *fv1.Funct
 
 	// cache for future lookups
 	m := fn.ObjectMeta
-	_, err = gpm.functionEnv.Set(crd.CacheKey(&m), env)
+	_, err = gpm.functionEnv.Set(crd.CacheKeyURFromMeta(&m), env)
 	if err != nil {
 		gpm.logger.Error(
 			"failed to set the key",

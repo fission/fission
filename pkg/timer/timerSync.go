@@ -63,7 +63,7 @@ func (ws *TimerSync) AddUpdateTimeTrigger(timeTrigger *fv1.TimeTrigger) {
 
 	ws.logger.Debug("cron event")
 
-	if item, ok := ws.timer.triggers[crd.CacheKeyUID(&timeTrigger.ObjectMeta)]; ok {
+	if item, ok := ws.timer.triggers[crd.CacheKeyUIDFromMeta(&timeTrigger.ObjectMeta)]; ok {
 		if item.cron != nil {
 			item.cron.Stop()
 		}
@@ -71,7 +71,7 @@ func (ws *TimerSync) AddUpdateTimeTrigger(timeTrigger *fv1.TimeTrigger) {
 		item.cron = ws.timer.newCron(*timeTrigger)
 		logger.Debug("cron updated")
 	} else {
-		ws.timer.triggers[crd.CacheKeyUID(&timeTrigger.ObjectMeta)] = &timerTriggerWithCron{
+		ws.timer.triggers[crd.CacheKeyUIDFromMeta(&timeTrigger.ObjectMeta)] = &timerTriggerWithCron{
 			trigger: *timeTrigger,
 			cron:    ws.timer.newCron(*timeTrigger),
 		}
@@ -82,12 +82,12 @@ func (ws *TimerSync) AddUpdateTimeTrigger(timeTrigger *fv1.TimeTrigger) {
 func (ws *TimerSync) DeleteTimeTrigger(timeTrigger *fv1.TimeTrigger) {
 	logger := ws.logger.With(zap.String("trigger_name", timeTrigger.Name), zap.String("trigger_namespace", timeTrigger.Namespace))
 
-	if item, ok := ws.timer.triggers[crd.CacheKeyUID(&timeTrigger.ObjectMeta)]; ok {
+	if item, ok := ws.timer.triggers[crd.CacheKeyUIDFromMeta(&timeTrigger.ObjectMeta)]; ok {
 		if item.cron != nil {
 			item.cron.Stop()
 			logger.Info("cron for time trigger stopped")
 		}
-		delete(ws.timer.triggers, crd.CacheKeyUID(&timeTrigger.ObjectMeta))
+		delete(ws.timer.triggers, crd.CacheKeyUIDFromMeta(&timeTrigger.ObjectMeta))
 		logger.Debug("cron deleted")
 	}
 }

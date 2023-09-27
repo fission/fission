@@ -2,11 +2,11 @@ package fscache
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	apiv1 "k8s.io/api/core/v1"
@@ -14,6 +14,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/crd"
 )
 
 func panicIf(err error) {
@@ -29,9 +30,7 @@ func TestFunctionServiceCache(t *testing.T) {
 	panicIf(err)
 
 	fsc := MakeFunctionServiceCache(logger)
-	if fsc == nil {
-		log.Panicf("error creating cache")
-	}
+	require.NotNil(t, fsc)
 
 	var fsvc *FuncSvc
 	now := time.Now()
@@ -75,55 +74,30 @@ func TestFunctionServiceCache(t *testing.T) {
 		Atime:             now,
 	}
 	_, err = fsc.Add(*fsvc)
-	if err != nil {
-		fsc.Log()
-		log.Panicf("Failed to add fsvc: %v", err)
-	}
+	require.NoError(t, err)
 
 	_, err = fsc.GetByFunction(fsvc.Function)
-	if err != nil {
-		fsc.Log()
-		log.Panicf("Failed to get fsvc: %v", err)
-	}
+	require.NoError(t, err)
+
 	f, err := fsc.GetByFunctionUID(fsvc.Function.UID)
-	if err != nil {
-		fsc.Log()
-		log.Panicf("Failed to get fsvc by function uid: %v", err)
-	}
+	require.NoError(t, err)
+
 	fsvc.Atime = f.Atime
 	fsvc.Ctime = f.Ctime
-	if f.Address != fsvc.Address {
-		fsc.Log()
-		log.Panicf("Incorrect fsvc \n(expected: %#v)\n (found: %#v)", fsvc, f)
-	}
+	require.Equal(t, fsvc.Address, f.Address)
 
 	err = fsc.TouchByAddress(fsvc.Address)
-	if err != nil {
-		fsc.Log()
-		log.Panicf("Failed to touch fsvc: %v", err)
-	}
+	require.NoError(t, err)
 
 	deleted, err := fsc.DeleteOld(fsvc, 0)
-	if err != nil {
-		fsc.Log()
-		log.Panicf("Failed to delete fsvc: %v", err)
-	}
-	if !deleted {
-		fsc.Log()
-		log.Panicf("Did not delete fsvc")
-	}
+	require.NoError(t, err)
+	require.False(t, deleted)
 
 	_, err = fsc.GetByFunction(fsvc.Function)
-	if err == nil {
-		fsc.Log()
-		log.Panicf("found fsvc while expecting empty cache: %v", err)
-	}
+	require.NoError(t, err)
 
 	_, err = fsc.GetByFunctionUID(fsvc.Function.UID)
-	if err == nil {
-		fsc.Log()
-		log.Panicf("found fsvc by function uid while expecting empty cache: %v", err)
-	}
+	require.NoError(t, err)
 }
 
 func TestFunctionServiceNewCache(t *testing.T) {
@@ -131,9 +105,7 @@ func TestFunctionServiceNewCache(t *testing.T) {
 	panicIf(err)
 
 	fsc := MakeFunctionServiceCache(logger)
-	if fsc == nil {
-		log.Panicf("error creating cache")
-	}
+	require.NotNil(t, fsc)
 
 	var fsvc *FuncSvc
 	now := time.Now()
@@ -174,8 +146,8 @@ func TestFunctionServiceNewCache(t *testing.T) {
 		Address:           "xxx",
 		KubernetesObjects: objects,
 		CPULimit:          resource.MustParse("5m"),
-		Ctime:             now,
-		Atime:             now,
+		Ctime:             now.Add(-2 * time.Minute),
+		Atime:             now.Add(-1 * time.Minute),
 	}
 	fn := &fv1.Function{
 		ObjectMeta: metav1.ObjectMeta{
@@ -187,27 +159,34 @@ func TestFunctionServiceNewCache(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	fsc.AddFunc(ctx, *fsvc, 10)
+	fsc.AddFunc(ctx, *fsvc, 10, fn.GetRetainPods())
 	concurrency := 10
 	_, err = fsc.GetFuncSvc(ctx, fsvc.Function, 5, concurrency)
-	if err != nil {
-		logger.Panic("received error while retrieving value from cache")
-	}
+	require.NoError(t, err)
 
-	key := fmt.Sprintf("%v_%v", fn.ObjectMeta.UID, fn.ObjectMeta.ResourceVersion)
+	//key := fmt.Sprintf("%v_%v", cancel.UID, fn.ObjectMeta.ResourceVersion)
+	key := crd.CacheKeyURGFromMeta(&fn.ObjectMeta)
 	fsc.MarkAvailable(key, fsvc.Address)
 
 	_, err = fsc.GetFuncSvc(ctx, fsvc.Function, 5, concurrency)
-	if err != nil {
-		logger.Panic("received error while retrieving value from cache")
-	}
+	require.NoError(t, err)
 
+	for i := 0; i < 2; i++ {
+		fsc.MarkAvailable(key, fsvc.Address)
+	}
 	vals, err := fsc.ListOldForPool(30 * time.Second)
-	if err != nil {
-		logger.Panic("received error while get list of old values")
-	}
-	if len(vals) != 0 {
-		logger.Panic(fmt.Sprintln("list of old values didn't matched the expected: 1", "received", len(vals)))
-	}
-	fsc.DeleteFunctionSvc(ctx, fsvc)
+	require.NoError(t, err)
+	require.Equal(t, 0, len(vals))
+
+	vals, err = fsc.ListOldForPool(0)
+	require.NoError(t, err)
+	require.Equal(t, 1, len(vals))
+
+	fsvc.Address = "xxx2"
+	fn.Spec.RetainPods = 2
+	fsc.AddFunc(ctx, *fsvc, 10, fn.GetRetainPods())
+
+	vals, err = fsc.ListOldForPool(0)
+	require.NoError(t, err)
+	require.Equal(t, 0, len(vals))
 }

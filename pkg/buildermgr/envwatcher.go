@@ -28,6 +28,7 @@ import (
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 	k8sCache "k8s.io/client-go/tools/cache"
@@ -62,7 +63,7 @@ type (
 
 	environmentWatcher struct {
 		logger                 *zap.Logger
-		cache                  map[string]*builderInfo
+		cache                  map[types.UID]*builderInfo
 		fissionClient          versioned.Interface
 		kubernetesClient       kubernetes.Interface
 		nsResolver             *utils.NamespaceResolver
@@ -96,7 +97,7 @@ func makeEnvironmentWatcher(
 
 	envWatcher := &environmentWatcher{
 		logger:                 logger.Named("environment_watcher"),
-		cache:                  make(map[string]*builderInfo),
+		cache:                  make(map[types.UID]*builderInfo),
 		fissionClient:          fissionClient,
 		kubernetesClient:       kubernetesClient,
 		nsResolver:             utils.DefaultNSResolver(),
@@ -165,13 +166,13 @@ func (envw *environmentWatcher) EnvWatchEventHandlers(ctx context.Context) error
 func (envw *environmentWatcher) AddUpdateBuilder(ctx context.Context, env *fv1.Environment) {
 	//builder is not supported with v1 interface and ignore env without builder image
 	if env.Spec.Version != 1 && len(env.Spec.Builder.Image) != 0 {
-		if _, ok := envw.cache[crd.CacheKeyUID(&env.ObjectMeta)]; !ok {
+		if _, ok := envw.cache[crd.CacheKeyUIDFromMeta(&env.ObjectMeta)]; !ok {
 			builderInfo, err := envw.createBuilder(ctx, env, envw.nsResolver.GetBuilderNS(env.ObjectMeta.Namespace))
 			if err != nil {
 				envw.logger.Error("error creating builder service", zap.Error(err))
 				return
 			}
-			envw.cache[crd.CacheKeyUID(&env.ObjectMeta)] = builderInfo
+			envw.cache[crd.CacheKeyUIDFromMeta(&env.ObjectMeta)] = builderInfo
 		} else {
 			envw.DeleteBuilder(ctx, env)
 			// once older builder deleted then add new builder service
@@ -180,16 +181,16 @@ func (envw *environmentWatcher) AddUpdateBuilder(ctx context.Context, env *fv1.E
 				envw.logger.Error("error updating builder service", zap.Error(err))
 				return
 			}
-			envw.cache[crd.CacheKeyUID(&env.ObjectMeta)] = builderInfo
+			envw.cache[crd.CacheKeyUIDFromMeta(&env.ObjectMeta)] = builderInfo
 		}
 	}
 }
 
 func (envw *environmentWatcher) DeleteBuilder(ctx context.Context, env *fv1.Environment) {
-	if _, ok := envw.cache[crd.CacheKeyUID(&env.ObjectMeta)]; ok {
+	if _, ok := envw.cache[crd.CacheKeyUIDFromMeta(&env.ObjectMeta)]; ok {
 		envw.DeleteBuilderService(ctx, env)
 		envw.DeleteBuilderDeployment(ctx, env)
-		delete(envw.cache, crd.CacheKeyUID(&env.ObjectMeta))
+		delete(envw.cache, crd.CacheKeyUIDFromMeta(&env.ObjectMeta))
 		envw.logger.Info("builder service deleted", zap.String("env_name", env.ObjectMeta.Name), zap.String("namespace", envw.nsResolver.GetBuilderNS(env.ObjectMeta.Namespace)))
 	} else {
 		envw.logger.Debug("builder service not found", zap.String("env_name", env.ObjectMeta.Name), zap.String("namespace", envw.nsResolver.GetBuilderNS(env.ObjectMeta.Namespace)))
@@ -204,7 +205,7 @@ func (envw *environmentWatcher) DeleteBuilderService(ctx context.Context, env *f
 	}
 	for _, svc := range svcList {
 		envName := svc.ObjectMeta.Labels[LABEL_ENV_NAME]
-		if _, ok := envw.cache[crd.CacheKeyUID(&env.ObjectMeta)]; ok {
+		if _, ok := envw.cache[crd.CacheKeyUIDFromMeta(&env.ObjectMeta)]; ok {
 			err := envw.deleteBuilderServiceByName(ctx, svc.ObjectMeta.Name, svc.ObjectMeta.Namespace)
 			if err != nil {
 				envw.logger.Error("error removing builder service", zap.Error(err),
@@ -228,7 +229,7 @@ func (envw *environmentWatcher) DeleteBuilderDeployment(ctx context.Context, env
 		envw.logger.Error("error getting the builder deployment list", zap.Error(err))
 	}
 	for _, deploy := range deployList {
-		if _, ok := envw.cache[crd.CacheKeyUID(&env.ObjectMeta)]; ok {
+		if _, ok := envw.cache[crd.CacheKeyUIDFromMeta(&env.ObjectMeta)]; ok {
 			err := envw.deleteBuilderDeploymentByName(ctx, deploy.ObjectMeta.Name, deploy.ObjectMeta.Namespace)
 			if err != nil {
 				envw.logger.Error("error removing builder deployment", zap.Error(err),

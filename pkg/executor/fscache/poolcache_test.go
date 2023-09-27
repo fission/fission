@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/api/resource"
 
+	"github.com/fission/fission/pkg/crd"
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
@@ -26,77 +27,128 @@ func TestPoolCache(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	logger := loggerfactory.GetLogger()
-	c := NewPoolCache(logger)
 	concurrency := 5
 	requestsPerPod := 2
 
-	// should return err since no svc is present
-	_, err := c.GetSvcValue(ctx, "func", requestsPerPod, concurrency)
-	if err == nil {
-		log.Panicf("found value when expected it to be nil")
+	keyFunc := crd.CacheKeyURG{
+		UID: "func",
+	}
+	keyFunc2 := crd.CacheKeyURG{
+		UID: "func2",
 	}
 
-	c.SetSvcValue(ctx, "func", "ip", &FuncSvc{
-		Name: "value",
-	}, resource.MustParse("45m"), 10)
+	t.Run("Test create new svc ", func(t *testing.T) {
+		c1 := NewPoolCache(logger)
 
-	// should not return any error since we added a svc
-	_, err = c.GetSvcValue(ctx, "func", requestsPerPod, concurrency)
-	checkErr(err)
+		// should return err since no svc is present
+		_, err := c1.GetSvcValue(ctx, keyFunc, requestsPerPod, concurrency)
+		if err == nil {
+			log.Panicf("found value when expected it to be nil")
+		}
 
-	c.SetSvcValue(ctx, "func", "ip", &FuncSvc{
-		Name: "value",
-	}, resource.MustParse("45m"), 10)
+		c1.SetSvcValue(ctx, keyFunc, "ip", &FuncSvc{
+			Name: "value",
+		}, resource.MustParse("45m"), 10, 0)
 
-	// should return err since all functions are busy
-	_, err = c.GetSvcValue(ctx, "func", requestsPerPod, concurrency)
-	if err == nil {
-		log.Panicf("found value when expected it to be nil")
-	}
+		// should not return any error since we added a svc
+		_, err = c1.GetSvcValue(ctx, keyFunc, requestsPerPod, concurrency)
+		checkErr(err)
+	})
 
-	c.SetSvcValue(ctx, "func", "ip", &FuncSvc{
-		Name: "value",
-	}, resource.MustParse("45m"), 10)
+	t.Run("Test return error when functions are busy", func(t *testing.T) {
+		c2 := NewPoolCache(logger)
+		c2.SetSvcValue(ctx, keyFunc, "ip", &FuncSvc{
+			Name: "value",
+		}, resource.MustParse("45m"), 10, 0)
+		c2.SetSvcValue(ctx, keyFunc, "ip", &FuncSvc{
+			Name: "value",
+		}, resource.MustParse("45m"), 10, 0)
+		// should return err since all functions are busy
+		_, err := c2.GetSvcValue(ctx, keyFunc, requestsPerPod, concurrency)
+		if err == nil {
+			log.Panicf("found value when expected it to be nil")
+		}
+	})
 
-	c.SetSvcValue(ctx, "func2", "ip2", &FuncSvc{
-		Name: "value2",
-	}, resource.MustParse("50m"), 10)
+	t.Run("Test does not list available values when a function svc is deleted", func(t *testing.T) {
+		c3 := NewPoolCache(logger)
+		c3.SetSvcValue(ctx, keyFunc, "ip", &FuncSvc{
+			Name: "value",
+		}, resource.MustParse("45m"), 10, 0)
 
-	c.SetSvcValue(ctx, "func2", "ip22", &FuncSvc{
-		Name: "value22",
-	}, resource.MustParse("33m"), 10)
+		c3.SetSvcValue(ctx, keyFunc2, "ip2", &FuncSvc{
+			Name: "value2",
+		}, resource.MustParse("50m"), 10, 0)
 
-	checkErr(c.DeleteValue(ctx, "func2", "ip2"))
+		checkErr(c3.DeleteValue(ctx, keyFunc2, "ip2"))
 
-	cc := c.ListAvailableValue()
-	if len(cc) != 0 {
-		log.Panicf("expected 0 available items")
-	}
+		cc := c3.ListAvailableValue()
+		if len(cc) != 0 {
+			log.Panicf("expected 0 available items")
+		}
+		_, err := c3.GetSvcValue(ctx, keyFunc2, requestsPerPod, concurrency)
+		if err == nil {
+			log.Panicf("found deleted element")
+		}
+	})
 
-	c.MarkAvailable("func", "ip")
+	t.Run("Test return error when current CPU usage is more then permissible", func(t *testing.T) {
+		c4 := NewPoolCache(logger)
+		_, err := c4.GetSvcValue(ctx, keyFunc, requestsPerPod, concurrency)
+		if err == nil {
+			log.Panicf("found value when expected it to be nil")
+		}
 
-	checkErr(c.DeleteValue(ctx, "func", "ip"))
+		c4.SetSvcValue(ctx, keyFunc, "ip", &FuncSvc{
+			Name: "value",
+		}, resource.MustParse("45m"), 10, 0)
 
-	_, err = c.GetSvcValue(ctx, "func", requestsPerPod, concurrency)
-	if err == nil {
-		log.Panicf("found deleted element")
-	}
+		// should not return any error since we added a svc
+		_, err = c4.GetSvcValue(ctx, keyFunc, requestsPerPod, concurrency)
+		checkErr(err)
 
-	c.SetSvcValue(ctx, "cpulimit", "100", &FuncSvc{
-		Name: "value",
-	}, resource.MustParse("3m"), 10)
-	c.SetCPUUtilization("cpulimit", "100", resource.MustParse("4m"))
+		c4.SetCPUUtilization(keyFunc, "ip", resource.MustParse("4m"))
+
+		_, err = c4.GetSvcValue(ctx, keyFunc, requestsPerPod, concurrency)
+		if err == nil {
+			log.Panicf("found value when expected it to be nil")
+		}
+	})
+
+	t.Run("Test function should not exist when mark deleted is called", func(t *testing.T) {
+		c5 := NewPoolCache(logger)
+		c5.SetSvcValue(ctx, keyFunc, "ip", &FuncSvc{
+			Name: "value",
+		}, resource.MustParse("45m"), 10, 0)
+
+		// should not return any error since we added a svc
+		_, err := c5.GetSvcValue(ctx, keyFunc, requestsPerPod, concurrency)
+		checkErr(err)
+
+		c5.MarkFuncDeleted(keyFunc)
+		checkErr(c5.DeleteValue(ctx, keyFunc, "ip"))
+
+		_, err = c5.GetSvcValue(ctx, keyFunc, requestsPerPod, concurrency)
+		if err == nil {
+			log.Panicf("found value when expected it to be nil")
+		}
+	})
 }
 
 func TestPoolCacheRequests(t *testing.T) {
-
+	key := crd.CacheKeyURG{
+		UID:        "func",
+		Generation: 1,
+	}
 	type structForTest struct {
-		name           string
-		requests       int
-		concurrency    int
-		rpp            int
-		simultaneous   int
-		failedRequests int
+		name             string
+		requests         int
+		concurrency      int
+		rpp              int
+		simultaneous     int
+		failedRequests   int
+		retainPods       int
+		generationUpdate bool
 	}
 
 	for _, tt := range []structForTest{
@@ -118,7 +170,6 @@ func TestPoolCacheRequests(t *testing.T) {
 			concurrency: 5,
 			rpp:         60,
 		},
-
 		{
 			name:           "test4",
 			requests:       6,
@@ -149,11 +200,19 @@ func TestPoolCacheRequests(t *testing.T) {
 			failedRequests: 10,
 		},
 		{
-			name:         "test8",
-			requests:     10,
-			concurrency:  10,
-			rpp:          1,
-			simultaneous: 10,
+			name:        "test8",
+			requests:    2,
+			concurrency: 2,
+			rpp:         1,
+			retainPods:  1,
+		},
+		{
+			name:             "test9",
+			requests:         10,
+			concurrency:      5,
+			rpp:              2,
+			retainPods:       2,
+			generationUpdate: true,
 		},
 	} {
 		t.Run(fmt.Sprintf("scenario-%s", tt.name), func(t *testing.T) {
@@ -168,13 +227,13 @@ func TestPoolCacheRequests(t *testing.T) {
 				wg.Add(1)
 				go func(reqno int) {
 					defer wg.Done()
-					svc, err := p.GetSvcValue(context.Background(), "func", tt.rpp, tt.concurrency)
+					svc, err := p.GetSvcValue(context.Background(), key, tt.rpp, tt.concurrency)
 					if err != nil {
 						code, _ := ferror.GetHTTPError(err)
 						if code == http.StatusNotFound {
-							p.SetSvcValue(context.Background(), "func", fmt.Sprintf("svc-%d", svcCounter), &FuncSvc{
+							p.SetSvcValue(context.Background(), key, fmt.Sprintf("svc-%d", svcCounter), &FuncSvc{
 								Name: "value",
-							}, resource.MustParse("45m"), tt.rpp)
+							}, resource.MustParse("45m"), tt.rpp, tt.retainPods)
 							atomic.AddUint64(&svcCounter, 1)
 						} else {
 							t.Log(reqno, "=>", err)
@@ -195,6 +254,31 @@ func TestPoolCacheRequests(t *testing.T) {
 
 			require.Equal(t, tt.failedRequests, int(atomic.LoadUint64(&failedRequests)))
 			require.Equal(t, tt.concurrency, int(atomic.LoadUint64(&svcCounter)))
+
+			for i := 0; i < tt.concurrency; i++ {
+				for j := 0; j < tt.rpp; j++ {
+					wg.Add(1)
+					go func(i int) {
+						defer wg.Done()
+						p.MarkAvailable(key, fmt.Sprintf("svc-%d", i))
+					}(i)
+				}
+			}
+			wg.Wait()
+			if tt.generationUpdate {
+				newKey := crd.CacheKeyURG{
+					UID:        "func",
+					Generation: 2,
+				}
+				p.SetSvcValue(context.Background(), newKey, fmt.Sprintf("svc-%d", svcCounter), &FuncSvc{
+					Name: "value",
+				}, resource.MustParse("45m"), tt.rpp, tt.retainPods)
+				funcSvc := p.ListAvailableValue()
+				require.Equal(t, tt.concurrency, len(funcSvc))
+			} else {
+				funcSvc := p.ListAvailableValue()
+				require.Equal(t, tt.concurrency-tt.retainPods, len(funcSvc))
+			}
 		})
 	}
 }

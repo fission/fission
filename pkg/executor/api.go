@@ -31,7 +31,6 @@ import (
 	"go.uber.org/zap"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
-	"github.com/fission/fission/pkg/crd"
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/executor/client"
 	"github.com/fission/fission/pkg/executor/fscache"
@@ -157,9 +156,9 @@ func (executor *Executor) getServiceForFunction(ctx context.Context, fn *fv1.Fun
 			return
 		}
 		if funcSvc != nil {
-			et.UnTapService(ctx, crd.CacheKey(funcSvc.Function), resp.funcSvc.Address)
+			et.UnTapService(ctx, funcSvc.Function, resp.funcSvc.Address)
 		} else {
-			et.MarkSpecializationFailure(ctx, crd.CacheKey(&fn.ObjectMeta))
+			et.MarkSpecializationFailure(ctx, &fn.ObjectMeta)
 		}
 	}
 	if errors.Is(ctx.Err(), context.Canceled) {
@@ -248,7 +247,6 @@ func (executor *Executor) unTapService(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to parse request", http.StatusBadRequest)
 		return
 	}
-	key := fmt.Sprintf("%v_%v", tapSvcReq.FnMetadata.UID, tapSvcReq.FnMetadata.ResourceVersion)
 	t := tapSvcReq.FnExecutorType
 	if t != fv1.ExecutorTypePoolmgr {
 		msg := fmt.Sprintf("Unknown executor type '%v'", t)
@@ -258,7 +256,7 @@ func (executor *Executor) unTapService(w http.ResponseWriter, r *http.Request) {
 
 	et := executor.executorTypes[t]
 
-	et.UnTapService(ctx, key, tapSvcReq.ServiceURL)
+	et.UnTapService(ctx, &tapSvcReq.FnMetadata, tapSvcReq.ServiceURL)
 
 	w.WriteHeader(http.StatusOK)
 }

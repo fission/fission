@@ -36,6 +36,7 @@ import (
 	"k8s.io/client-go/util/workqueue"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/executor/fscache"
 	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
 	flisterv1 "github.com/fission/fission/pkg/generated/listers/core/v1"
@@ -94,6 +95,14 @@ func NewPoolPodController(ctx context.Context, logger *zap.Logger,
 			}
 		}
 	}
+	for _, factory := range finformerFactory {
+		_, err := factory.Core().V1().Functions().Informer().AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
+			DeleteFunc: p.handleFuncDelete,
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
 	for ns, informer := range finformerFactory {
 		_, err := informer.Core().V1().Environments().Informer().AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
 			AddFunc:    p.enqueueEnvAdd,
@@ -131,6 +140,11 @@ func IsPodActive(p *v1.Pod) bool {
 	return v1.PodSucceeded != p.Status.Phase &&
 		v1.PodFailed != p.Status.Phase &&
 		p.DeletionTimestamp == nil
+}
+
+func (p *PoolPodController) handleFuncDelete(obj interface{}) {
+	fn := obj.(*fv1.Function)
+	p.gpm.fsCache.MarkFuncDeleted(crd.CacheKeyURGFromMeta(&fn.ObjectMeta))
 }
 
 func (p *PoolPodController) processRS(rs *apps.ReplicaSet) {

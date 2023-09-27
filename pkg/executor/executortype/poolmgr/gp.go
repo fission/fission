@@ -202,7 +202,7 @@ func (gp *GenericPool) updateCPUUtilizationSvc(ctx context.Context) {
 			if value, ok := gp.podFSVCMap.Load(val.ObjectMeta.Name); ok {
 				if valArray, ok1 := value.([]interface{}); ok1 {
 					function, address := valArray[0], valArray[1]
-					gp.fsCache.SetCPUUtilizaton(function.(string), address.(string), p)
+					gp.fsCache.SetCPUUtilizaton(function.(crd.CacheKeyURG), address.(string), p)
 					gp.logger.Info(fmt.Sprintf("updated function %s, address %s, cpuUsage %+v", function.(string), address.(string), p))
 				}
 			}
@@ -622,8 +622,8 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 	}
 
 	gp.fsCache.PodToFsvc.Store(pod.GetObjectMeta().GetName(), fsvc)
-	gp.podFSVCMap.Store(pod.ObjectMeta.Name, []interface{}{crd.CacheKey(fsvc.Function), fsvc.Address})
-	gp.fsCache.AddFunc(ctx, *fsvc, fn.GetRequestPerPod())
+	gp.podFSVCMap.Store(pod.ObjectMeta.Name, []interface{}{crd.CacheKeyURGFromMeta(fsvc.Function), fsvc.Address})
+	gp.fsCache.AddFunc(ctx, *fsvc, fn.GetRequestPerPod(), fn.GetRetainPods())
 
 	logger.Info("added function service",
 		zap.String("pod", pod.ObjectMeta.Name),

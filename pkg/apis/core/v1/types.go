@@ -399,6 +399,11 @@ type (
 		// +optional
 		OnceOnly bool `json:"onceOnly,omitempty"`
 
+		// RetainPods specifies the number of specialized pods that should be retained after serving requests
+		// This is optional. If not specified default value will be taken as 0
+		// +optional
+		RetainPods int `json:"retainPods,omitempty"`
+
 		// Podspec specifies podspec to use for executor type container based functions
 		// Different arguments mentioned for container based function are populated inside a pod.
 		// +optional
@@ -874,6 +879,10 @@ func (fn Function) GetConcurrency() int {
 		return DefaultConcurrency
 	}
 	return fn.Spec.Concurrency
+}
+
+func (fn Function) GetRetainPods() int {
+	return fn.Spec.RetainPods
 }
 
 func (fn Function) GetRequestPerPod() int {
