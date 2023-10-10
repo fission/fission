@@ -56,7 +56,7 @@ func CleanupKubeObject(ctx context.Context, logger *zap.Logger, kubeClient kuber
 		}
 
 	case "horizontalpodautoscaler":
-		err := kubeClient.AutoscalingV2beta2().HorizontalPodAutoscalers(kubeobj.Namespace).Delete(ctx, kubeobj.Name, metav1.DeleteOptions{})
+		err := kubeClient.AutoscalingV2().HorizontalPodAutoscalers(kubeobj.Namespace).Delete(ctx, kubeobj.Name, metav1.DeleteOptions{})
 		if err != nil {
 			logger.Error("error cleaning up horizontalpodautoscaler", zap.Error(err), zap.String("horizontalpodautoscaler", kubeobj.Name))
 		}
@@ -180,7 +180,7 @@ func CleanupServices(ctx context.Context, logger *zap.Logger, client kubernetes.
 // CleanupHpa deletes horizontal pod autoscaler(s) for a given instanceID
 func CleanupHpa(ctx context.Context, logger *zap.Logger, client kubernetes.Interface, instanceID string, listOps metav1.ListOptions) error {
 	cleanupHpa := func(namespace string) error {
-		hpaList, err := client.AutoscalingV2beta2().HorizontalPodAutoscalers(namespace).List(ctx, listOps)
+		hpaList, err := client.AutoscalingV2().HorizontalPodAutoscalers(namespace).List(ctx, listOps)
 		if err != nil {
 			return err
 		}
@@ -193,7 +193,7 @@ func CleanupHpa(ctx context.Context, logger *zap.Logger, client kubernetes.Inter
 			}
 			if ok && id != instanceID {
 				logger.Info("cleaning up HPA", zap.String("hpa", hpa.ObjectMeta.Name))
-				err := client.AutoscalingV2beta2().HorizontalPodAutoscalers(hpa.ObjectMeta.Namespace).Delete(ctx, hpa.ObjectMeta.Name, metav1.DeleteOptions{})
+				err := client.AutoscalingV2().HorizontalPodAutoscalers(hpa.ObjectMeta.Namespace).Delete(ctx, hpa.ObjectMeta.Name, metav1.DeleteOptions{})
 				if err != nil {
 					logger.Error("error cleaning up HPA",
 						zap.Error(err),
