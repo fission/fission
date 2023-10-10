@@ -99,15 +99,15 @@ func KubifyName(old string) string {
 	newName := strings.ToLower(old)
 
 	// replace disallowed chars with '-'
-	inv, _ := regexp.Compile("[^-a-z0-9]")
+	inv := regexp.MustCompile("[^-a-z0-9]")
 	newName = string(inv.ReplaceAll([]byte(newName), []byte("-")))
 
 	// trim leading non-alphabetic
-	leadingnonalpha, _ := regexp.Compile("^[^a-z]+")
+	leadingnonalpha := regexp.MustCompile("^[^a-z]+")
 	newName = string(leadingnonalpha.ReplaceAll([]byte(newName), []byte{}))
 
 	// trim trailing
-	trailing, _ := regexp.Compile("[^a-z0-9]+$")
+	trailing := regexp.MustCompile("[^a-z0-9]+$")
 	newName = string(trailing.ReplaceAll([]byte(newName), []byte{}))
 
 	// truncate to length
