@@ -23,7 +23,7 @@ on:
 
 env:
   HELM_VERSION: v3.10.1
-  KIND_VERSION: v0.17.0
+  KIND_VERSION: v0.20.0
 
 jobs:
   upgrade-test:
@@ -32,7 +32,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        kindimage: ["kindest/node:v1.19.16"]
+        kindimage: ["kindest/node:v1.23.17"]
         os: [ubuntu-latest]
     steps:
       - name: Checkout action sources
