@@ -22,7 +22,7 @@ import (
 
 	"github.com/dchest/uniuri"
 	appsv1 "k8s.io/api/apps/v1"
-	asv2beta2 "k8s.io/api/autoscaling/v2beta2"
+	asv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
@@ -33,13 +33,13 @@ import (
 
 func TestConvertTargetCPUToCustomMetric(t *testing.T) {
 	metricSpec := ConvertTargetCPUToCustomMetric(50)
-	if metricSpec.Type != asv2beta2.ResourceMetricSourceType {
+	if metricSpec.Type != asv2.ResourceMetricSourceType {
 		t.Errorf("Expected metric type to be Resource, got %v", metricSpec.Type)
 	}
 	if metricSpec.Resource.Name != corev1.ResourceCPU {
 		t.Errorf("Expected metric name to be cpu, got %v", metricSpec.Resource.Name)
 	}
-	if metricSpec.Resource.Target.Type != asv2beta2.UtilizationMetricType {
+	if metricSpec.Resource.Target.Type != asv2.UtilizationMetricType {
 		t.Errorf("Expected metric target type to be Utilization, got %v", metricSpec.Resource.Target.Type)
 	}
 	if metricSpec.Resource.Target.AverageUtilization == nil {
@@ -92,13 +92,13 @@ func TestHpaOps(t *testing.T) {
 	if hpa.Spec.MaxReplicas != 5 {
 		t.Errorf("Expected max replicas to be 5, got %v", hpa.Spec.MaxReplicas)
 	}
-	if hpa.Spec.Metrics[0].Type != asv2beta2.ResourceMetricSourceType {
+	if hpa.Spec.Metrics[0].Type != asv2.ResourceMetricSourceType {
 		t.Errorf("Expected metric type to be Resource, got %v", hpa.Spec.Metrics[0].Type)
 	}
 	if hpa.Spec.Metrics[0].Resource.Name != corev1.ResourceCPU {
 		t.Errorf("Expected metric name to be cpu, got %v", hpa.Spec.Metrics[0].Resource.Name)
 	}
-	if hpa.Spec.Metrics[0].Resource.Target.Type != asv2beta2.UtilizationMetricType {
+	if hpa.Spec.Metrics[0].Resource.Target.Type != asv2.UtilizationMetricType {
 		t.Errorf("Expected metric target type to be Utilization, got %v", hpa.Spec.Metrics[0].Resource.Target.Type)
 	}
 	if hpa.Spec.Metrics[0].Resource.Target.AverageUtilization == nil {

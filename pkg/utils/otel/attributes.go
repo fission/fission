@@ -6,7 +6,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	appsv1 "k8s.io/api/apps/v1"
-	asv2beta2 "k8s.io/api/autoscaling/v2beta2"
+	asv2 "k8s.io/api/autoscaling/v2"
 
 	apiv1 "k8s.io/api/core/v1"
 
@@ -77,7 +77,7 @@ func GetAttributesForDeployment(deployment *appsv1.Deployment) []attribute.KeyVa
 	}
 }
 
-func GetAttributesForHPA(hpa *asv2beta2.HorizontalPodAutoscaler) []attribute.KeyValue {
+func GetAttributesForHPA(hpa *asv2.HorizontalPodAutoscaler) []attribute.KeyValue {
 	if hpa == nil {
 		return []attribute.KeyValue{}
 	}
