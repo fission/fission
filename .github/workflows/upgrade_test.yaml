@@ -55,6 +55,7 @@ jobs:
         with:
           node_image: ${{ matrix.kindimage }}
           version: ${{ env.KIND_VERSION }}
+          cluster_name: ${{ env.KIND_CLUSTER_NAME }}
 
       - name: Install GoReleaser
         uses: goreleaser/goreleaser-action@v5

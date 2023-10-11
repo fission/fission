@@ -8,6 +8,7 @@ on:
 env:
   KIND_VERSION: v0.20.0
   KIND_NODE_IMAGE_TAG: v1.23.17
+  KIND_CLUSTER_NAME: kind
 
 jobs:
   create-draft-release:
@@ -39,19 +40,20 @@ jobs:
           node_image: kindest/node:${{ env.KIND_NODE_IMAGE_TAG }}
           version: ${{ env.KIND_VERSION }}
           config: kind.yaml
+          cluster_name: ${{ env.KIND_CLUSTER_NAME }}
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v2
+        uses: docker/setup-qemu-action@v3
 
       - name: Login to ghcr.io
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Login to docker.io
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
