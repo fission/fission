@@ -22,7 +22,7 @@ on:
   workflow_dispatch:
 
 env:
-  HELM_VERSION: v3.10.1
+  HELM_VERSION: v3.13.0
   KIND_VERSION: v0.20.0
 
 jobs:
@@ -37,16 +37,16 @@ jobs:
         os: [ubuntu-latest]
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: setup go
-        uses: actions/setup-go@v3
+        uses: actions/setup-go@v4
         with:
           go-version-file: "go.mod"
           cache: true
 
       - name: Checkout sources
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: fission/examples
           path: examples
@@ -57,9 +57,9 @@ jobs:
           version: ${{ env.HELM_VERSION }}
 
       - name: Kind Cluster
-        uses: engineerd/setup-kind@v0.5.0
+        uses: helm/kind-action@v1.8.0
         with:
-          image: kindest/node:${{ matrix.kindversion }}
+          node_image: kindest/node:${{ matrix.kindversion }}
           version: ${{ env.KIND_VERSION }}
           config: kind.yaml
 
@@ -82,7 +82,7 @@ jobs:
           skaffold version
 
       - name: Install GoReleaser
-        uses: goreleaser/goreleaser-action@v3
+        uses: goreleaser/goreleaser-action@v5
         with:
           install-only: true
 
@@ -179,16 +179,16 @@ jobs:
         os: [ubuntu-latest]
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: setup go
-        uses: actions/setup-go@v3
+        uses: actions/setup-go@v4
         with:
           go-version-file: "go.mod"
           cache: true
 
       - name: Checkout sources
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: fission/examples
           path: examples
@@ -199,9 +199,9 @@ jobs:
           version: ${{ env.HELM_VERSION }}
 
       - name: Kind Cluster
-        uses: engineerd/setup-kind@v0.5.0
+        uses: helm/kind-action@v1.8.0
         with:
-          image: kindest/node:${{ matrix.kindversion }}
+          node_image: kindest/node:${{ matrix.kindversion }}
           version: ${{ env.KIND_VERSION }}
           config: kind.yaml
 
@@ -224,7 +224,7 @@ jobs:
           skaffold version
 
       - name: Install GoReleaser
-        uses: goreleaser/goreleaser-action@v3
+        uses: goreleaser/goreleaser-action@v5
         with:
           install-only: true
 
