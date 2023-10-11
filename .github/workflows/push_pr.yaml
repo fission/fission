@@ -24,6 +24,7 @@ on:
 env:
   HELM_VERSION: v3.13.0
   KIND_VERSION: v0.20.0
+  KIND_CLUSTER_NAME: kind
 
 jobs:
   # Job to run change detection
@@ -61,14 +62,15 @@ jobs:
         with:
           node_image: kindest/node:${{ matrix.kindversion }}
           version: ${{ env.KIND_VERSION }}
+          cluster_name: ${{ env.KIND_CLUSTER_NAME }}
           config: kind.yaml
 
       - name: Configuring and testing the Installation
         run: |
-          kubectl cluster-info --context kind-kind
+          kubectl cluster-info --context kind-${{ env.KIND_CLUSTER_NAME }}
           kubectl get nodes
           sudo apt-get install -y apache2-utils
-          kubectl config use-context kind-kind
+          kubectl config use-context kind-${{ env.KIND_CLUSTER_NAME }}
           kubectl config view
 
       - name: Helm chart lint
@@ -132,7 +134,7 @@ jobs:
         timeout-minutes: 10
         if: ${{ always() }}
         run: |
-          kind export logs --name kind kind-logs
+          kind export logs --name ${{ env.KIND_CLUSTER_NAME }} kind-logs
 
       - name: Backup prometheus data
         timeout-minutes: 10
@@ -203,14 +205,15 @@ jobs:
         with:
           node_image: kindest/node:${{ matrix.kindversion }}
           version: ${{ env.KIND_VERSION }}
+          cluster_name: ${{ env.KIND_CLUSTER_NAME }}
           config: kind.yaml
 
       - name: Configuring and testing the Installation
         run: |
-          kubectl cluster-info --context kind-kind
+          kubectl cluster-info --context kind-${{ env.KIND_CLUSTER_NAME }}
           kubectl get nodes
           sudo apt-get install -y apache2-utils
-          kubectl config use-context kind-kind
+          kubectl config use-context kind-${{ env.KIND_CLUSTER_NAME }}
           kubectl config view
 
       - name: Helm chart lint

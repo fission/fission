@@ -24,6 +24,7 @@ on:
 env:
   HELM_VERSION: v3.13.0
   KIND_VERSION: v0.20.0
+  KIND_CLUSTER_NAME: kind
 
 jobs:
   upgrade-test:
@@ -62,10 +63,10 @@ jobs:
 
       - name: Setup kubectl & fetch node information
         run: |
-          kubectl cluster-info --context kind-kind
+          kubectl cluster-info --context kind-${{ env.KIND_CLUSTER_NAME }}
           kubectl get nodes
           kubectl get storageclasses.storage.k8s.io
-          kubectl config use-context kind-kind
+          kubectl config use-context kind-${{ env.KIND_CLUSTER_NAME }}
           kubectl config set-context --current --namespace=default
           kubectl config view
 
@@ -99,7 +100,7 @@ jobs:
       - name: Kind export logs
         if: ${{ always() }}
         run: |
-          kind export logs --name kind kind-logs
+          kind export logs --name ${{ env.KIND_CLUSTER_NAME }} kind-logs
 
       - name: Archive fission dump
         if: ${{ failure() || cancelled() }}
