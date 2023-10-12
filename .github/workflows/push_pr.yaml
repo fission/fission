@@ -22,8 +22,9 @@ on:
   workflow_dispatch:
 
 env:
-  HELM_VERSION: v3.10.1
+  HELM_VERSION: v3.13.0
   KIND_VERSION: v0.20.0
+  KIND_CLUSTER_NAME: kind
 
 jobs:
   # Job to run change detection
@@ -37,16 +38,16 @@ jobs:
         os: [ubuntu-latest]
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: setup go
-        uses: actions/setup-go@v3
+        uses: actions/setup-go@v4
         with:
           go-version-file: "go.mod"
           cache: true
 
       - name: Checkout sources
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: fission/examples
           path: examples
@@ -57,18 +58,19 @@ jobs:
           version: ${{ env.HELM_VERSION }}
 
       - name: Kind Cluster
-        uses: engineerd/setup-kind@v0.5.0
+        uses: helm/kind-action@v1.8.0
         with:
-          image: kindest/node:${{ matrix.kindversion }}
+          node_image: kindest/node:${{ matrix.kindversion }}
           version: ${{ env.KIND_VERSION }}
+          cluster_name: ${{ env.KIND_CLUSTER_NAME }}
           config: kind.yaml
 
       - name: Configuring and testing the Installation
         run: |
-          kubectl cluster-info --context kind-kind
+          kubectl cluster-info --context kind-${{ env.KIND_CLUSTER_NAME }}
           kubectl get nodes
           sudo apt-get install -y apache2-utils
-          kubectl config use-context kind-kind
+          kubectl config use-context kind-${{ env.KIND_CLUSTER_NAME }}
           kubectl config view
 
       - name: Helm chart lint
@@ -82,7 +84,7 @@ jobs:
           skaffold version
 
       - name: Install GoReleaser
-        uses: goreleaser/goreleaser-action@v3
+        uses: goreleaser/goreleaser-action@v5
         with:
           install-only: true
 
@@ -132,7 +134,7 @@ jobs:
         timeout-minutes: 10
         if: ${{ always() }}
         run: |
-          kind export logs --name kind kind-logs
+          kind export logs --name ${{ env.KIND_CLUSTER_NAME }} kind-logs
 
       - name: Backup prometheus data
         timeout-minutes: 10
@@ -179,16 +181,16 @@ jobs:
         os: [ubuntu-latest]
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: setup go
-        uses: actions/setup-go@v3
+        uses: actions/setup-go@v4
         with:
           go-version-file: "go.mod"
           cache: true
 
       - name: Checkout sources
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: fission/examples
           path: examples
@@ -199,18 +201,19 @@ jobs:
           version: ${{ env.HELM_VERSION }}
 
       - name: Kind Cluster
-        uses: engineerd/setup-kind@v0.5.0
+        uses: helm/kind-action@v1.8.0
         with:
-          image: kindest/node:${{ matrix.kindversion }}
+          node_image: kindest/node:${{ matrix.kindversion }}
           version: ${{ env.KIND_VERSION }}
+          cluster_name: ${{ env.KIND_CLUSTER_NAME }}
           config: kind.yaml
 
       - name: Configuring and testing the Installation
         run: |
-          kubectl cluster-info --context kind-kind
+          kubectl cluster-info --context kind-${{ env.KIND_CLUSTER_NAME }}
           kubectl get nodes
           sudo apt-get install -y apache2-utils
-          kubectl config use-context kind-kind
+          kubectl config use-context kind-${{ env.KIND_CLUSTER_NAME }}
           kubectl config view
 
       - name: Helm chart lint
@@ -224,7 +227,7 @@ jobs:
           skaffold version
 
       - name: Install GoReleaser
-        uses: goreleaser/goreleaser-action@v3
+        uses: goreleaser/goreleaser-action@v5
         with:
           install-only: true
 

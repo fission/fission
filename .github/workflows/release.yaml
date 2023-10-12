@@ -8,18 +8,19 @@ on:
 env:
   KIND_VERSION: v0.20.0
   KIND_NODE_IMAGE_TAG: v1.23.17
+  KIND_CLUSTER_NAME: kind
 
 jobs:
   create-draft-release:
     runs-on: ubuntu-latest
     steps:
       - name: Check out code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
       - name: Setup go
-        uses: actions/setup-go@v3
+        uses: actions/setup-go@v4
         with:
           go-version-file: "go.mod"
           cache: true
@@ -29,29 +30,30 @@ jobs:
         run: echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
 
       - name: Install GoReleaser
-        uses: goreleaser/goreleaser-action@v3
+        uses: goreleaser/goreleaser-action@v5
         with:
           install-only: true
 
       - name: Kind Clutser
-        uses: engineerd/setup-kind@v0.5.0
+        uses: helm/kind-action@v1.8.0
         with:
-          image: kindest/node:${{ env.KIND_NODE_IMAGE_TAG }}
+          node_image: kindest/node:${{ env.KIND_NODE_IMAGE_TAG }}
           version: ${{ env.KIND_VERSION }}
           config: kind.yaml
+          cluster_name: ${{ env.KIND_CLUSTER_NAME }}
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v2
+        uses: docker/setup-qemu-action@v3
 
       - name: Login to ghcr.io
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Login to docker.io
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -76,7 +78,7 @@ jobs:
         shell: bash
 
       - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v3
+        uses: goreleaser/goreleaser-action@v5
         with:
           version: latest
           args: release
