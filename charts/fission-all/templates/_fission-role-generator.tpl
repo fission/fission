@@ -14,9 +14,6 @@ metadata:
 {{- if eq "buildermgr" .component }}
 {{- include "buildermgr-rules" . }}
 {{- end }}
-{{- if eq "controller" .component }}
-{{- include "controller-rules" . }}
-{{- end }}
 {{- if eq "executor" .component }}
 {{- include "executor-rules" . }}
 {{- end }}

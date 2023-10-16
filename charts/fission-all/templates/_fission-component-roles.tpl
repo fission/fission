@@ -15,28 +15,6 @@ rules:
   - patch
   - delete
 {{- end }}
-{{- define "controller-rules" }}
-rules:
-- apiGroups:
-  - fission.io
-  resources:
-  - canaryconfigs
-  - environments
-  - functions
-  - httptriggers
-  - kuberneteswatchtriggers
-  - messagequeuetriggers
-  - packages
-  - timetriggers
-  verbs:
-  - create
-  - get
-  - list
-  - watch
-  - update
-  - patch
-  - delete
-{{- end }}
 {{- define "executor-rules" }}
 rules:
 - apiGroups:

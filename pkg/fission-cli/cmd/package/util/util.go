@@ -30,7 +30,6 @@ import (
 	uuid "github.com/satori/go.uuid"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
-	"github.com/fission/fission/pkg/controller/client"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/util"
 	storageSvcClient "github.com/fission/fission/pkg/storagesvc/client"
@@ -236,23 +235,6 @@ func WriteArchiveToFile(fileName string, reader io.Reader) error {
 	}
 
 	return nil
-}
-
-// DownloadStoragesvcURL downloads and return archive content with given storage service url
-func DownloadStoragesvcURL(client client.Interface, fileUrl string) (io.ReadCloser, error) {
-	u, err := url.ParseRequestURI(fileUrl)
-	if err != nil {
-		return nil, err
-	}
-
-	// replace in-cluster storage service host with controller server url
-	fileDownloadUrl := strings.TrimSuffix(client.ServerURL(), "/") + "/proxy/storage/" + u.RequestURI()
-	reader, err := DownloadURL(fileDownloadUrl)
-	if err != nil {
-		return nil, errors.Wrapf(err, fmt.Sprintf("error downloading from storage service url: %v", fileUrl))
-	}
-
-	return reader, nil
 }
 
 // PrintPackageSummary prints package information and build logs.
