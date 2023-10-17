@@ -110,9 +110,7 @@ func getStringArgWithDefault(arg interface{}, defaultValue string) string {
 func getServiceName(arguments map[string]interface{}) string {
 	serviceName := "Fission-Unknown"
 
-	if arguments["--controllerPort"] != nil {
-		serviceName = "Fission-Controller"
-	} else if arguments["--routerPort"] != nil {
+	if arguments["--routerPort"] != nil {
 		serviceName = "Fission-Router"
 	} else if arguments["--executorPort"] != nil {
 		serviceName = "Fission-Executor"

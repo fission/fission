@@ -78,15 +78,15 @@ func (opts *DumpSubCommand) do(input cli.Input) error {
 
 		// fission component logs & spec
 		"fission-components-svc-spec": resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesService,
-			"svc in (buildermgr, controller, executor, influxdb, kubewatcher, logger, mqtrigger, router, storagesvc, timer)"),
+			"svc in (buildermgr, executor, influxdb, kubewatcher, logger, mqtrigger, router, storagesvc, timer)"),
 		"fission-components-deployment-spec": resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesDeployment,
-			"svc in (buildermgr, controller, executor, influxdb, kubewatcher, logger, mqtrigger, router, storagesvc, timer)"),
+			"svc in (buildermgr, executor, influxdb, kubewatcher, logger, mqtrigger, router, storagesvc, timer)"),
 		"fission-components-daemonset-spec": resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesDaemonSet,
-			"svc in (buildermgr, controller, executor, influxdb, kubewatcher, logger, mqtrigger, router, storagesvc, timer)"),
+			"svc in (buildermgr, executor, influxdb, kubewatcher, logger, mqtrigger, router, storagesvc, timer)"),
 		"fission-components-pod-spec": resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesPod,
-			"svc in (buildermgr, controller, executor, influxdb, kubewatcher, logger, mqtrigger, router, storagesvc, timer)"),
+			"svc in (buildermgr, executor, influxdb, kubewatcher, logger, mqtrigger, router, storagesvc, timer)"),
 		"fission-components-pod-log": resources.NewKubernetesPodLogDumper(k8sClient,
-			"svc in (buildermgr, controller, executor, influxdb, kubewatcher, logger, mqtrigger, router, storagesvc, timer)"),
+			"svc in (buildermgr, executor, influxdb, kubewatcher, logger, mqtrigger, router, storagesvc, timer)"),
 
 		// fission builder logs & spec
 		"fission-builder-svc-spec":        resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesService, "owner=buildermgr"),

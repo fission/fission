@@ -22,7 +22,7 @@ Its job is to:
 
   1. Keep track of HTTP triggers and their mappings to functions
 
-     Use the controller API to get and watch this state.
+     Use the Kubernetes API to get and watch this state.
 
   2. Given a function, get a reference to a routable function run service
 
