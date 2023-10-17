@@ -19,6 +19,7 @@ package newdeploy
 import (
 	"context"
 	"fmt"
+	"maps"
 	"os"
 	"reflect"
 	"strconv"
@@ -54,7 +55,6 @@ import (
 	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
 	"github.com/fission/fission/pkg/throttler"
 	"github.com/fission/fission/pkg/utils"
-	"github.com/fission/fission/pkg/utils/maps"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
@@ -756,14 +756,14 @@ func (deploy *NewDeploy) getDeployLabels(fnMeta metav1.ObjectMeta, envMeta metav
 		fv1.FUNCTION_NAMESPACE:    fnMeta.Namespace,
 		fv1.FUNCTION_UID:          string(fnMeta.UID),
 	}
-	maps.MergeStringMap(deployLabels, envMeta.Labels)
-	maps.MergeStringMap(deployLabels, fnMeta.Labels)
+	maps.Copy(deployLabels, envMeta.Labels)
+	maps.Copy(deployLabels, fnMeta.Labels)
 	return deployLabels
 }
 
 func (deploy *NewDeploy) getDeployAnnotations(fnMeta metav1.ObjectMeta, envMeta metav1.ObjectMeta) map[string]string {
-	deployAnnotations := maps.CopyStringMap(envMeta.Annotations)
-	maps.MergeStringMap(deployAnnotations, fnMeta.Annotations)
+	deployAnnotations := maps.Clone(envMeta.Annotations)
+	maps.Copy(deployAnnotations, fnMeta.Annotations)
 	deployAnnotations[fv1.EXECUTOR_INSTANCEID_LABEL] = deploy.instanceID
 	deployAnnotations[fv1.FUNCTION_RESOURCE_VERSION] = fnMeta.ResourceVersion
 	return deployAnnotations

@@ -19,6 +19,7 @@ package container
 import (
 	"context"
 	"fmt"
+	"maps"
 	"os"
 	"reflect"
 	"strconv"
@@ -52,7 +53,6 @@ import (
 	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
 	"github.com/fission/fission/pkg/throttler"
 	"github.com/fission/fission/pkg/utils"
-	"github.com/fission/fission/pkg/utils/maps"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
@@ -691,7 +691,7 @@ func (caaf *Container) getObjName(fn *fv1.Function) string {
 }
 
 func (caaf *Container) getDeployLabels(fnMeta metav1.ObjectMeta) map[string]string {
-	deployLabels := maps.CopyStringMap(fnMeta.Labels)
+	deployLabels := maps.Clone(fnMeta.Labels)
 	deployLabels[fv1.EXECUTOR_TYPE] = string(fv1.ExecutorTypeContainer)
 	deployLabels[fv1.FUNCTION_NAME] = fnMeta.Name
 	deployLabels[fv1.FUNCTION_NAMESPACE] = fnMeta.Namespace
@@ -700,7 +700,7 @@ func (caaf *Container) getDeployLabels(fnMeta metav1.ObjectMeta) map[string]stri
 }
 
 func (caaf *Container) getDeployAnnotations(fnMeta metav1.ObjectMeta) map[string]string {
-	deployAnnotations := maps.CopyStringMap(fnMeta.Annotations)
+	deployAnnotations := maps.Clone(fnMeta.Annotations)
 	deployAnnotations[fv1.EXECUTOR_INSTANCEID_LABEL] = caaf.instanceID
 	deployAnnotations[fv1.FUNCTION_RESOURCE_VERSION] = fnMeta.ResourceVersion
 	return deployAnnotations

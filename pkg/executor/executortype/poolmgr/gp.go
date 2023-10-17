@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"math"
 	"net"
 	"os"
@@ -51,7 +52,6 @@ import (
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	"github.com/fission/fission/pkg/utils"
-	"github.com/fission/fission/pkg/utils/maps"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
@@ -152,7 +152,7 @@ func (gp *GenericPool) setup(ctx context.Context) error {
 }
 
 func (gp *GenericPool) getEnvironmentPoolLabels(env *fv1.Environment) map[string]string {
-	envLabels := maps.CopyStringMap(env.ObjectMeta.Labels)
+	envLabels := maps.Clone(env.ObjectMeta.Labels)
 	envLabels[fv1.EXECUTOR_TYPE] = string(fv1.ExecutorTypePoolmgr)
 	envLabels[fv1.ENVIRONMENT_NAME] = env.ObjectMeta.Name
 	envLabels[fv1.ENVIRONMENT_NAMESPACE] = env.ObjectMeta.Namespace
@@ -162,7 +162,7 @@ func (gp *GenericPool) getEnvironmentPoolLabels(env *fv1.Environment) map[string
 }
 
 func (gp *GenericPool) getDeployAnnotations(env *fv1.Environment) map[string]string {
-	deployAnnotations := maps.CopyStringMap(env.Annotations)
+	deployAnnotations := maps.Clone(env.Annotations)
 	deployAnnotations[fv1.EXECUTOR_INSTANCEID_LABEL] = gp.instanceID
 	return deployAnnotations
 }
