@@ -30,7 +30,6 @@ import (
 	"github.com/fission/fission/cmd/fission-bundle/mqtrigger"
 	"github.com/fission/fission/pkg/buildermgr"
 	"github.com/fission/fission/pkg/canaryconfigmgr"
-	"github.com/fission/fission/pkg/controller"
 	"github.com/fission/fission/pkg/executor"
 	"github.com/fission/fission/pkg/info"
 	"github.com/fission/fission/pkg/kubewatcher"
@@ -48,10 +47,6 @@ import (
 // runWebhook starts admission webhook server
 func runWebhook(ctx context.Context, logger *zap.Logger, port int) error {
 	return webhook.Start(ctx, logger, port)
-}
-
-func runController(ctx context.Context, logger *zap.Logger, port int) {
-	controller.Start(ctx, logger, port, false)
 }
 
 func runCanaryConfigServer(ctx context.Context, logger *zap.Logger) error {
@@ -115,9 +110,7 @@ func getStringArgWithDefault(arg interface{}, defaultValue string) string {
 func getServiceName(arguments map[string]interface{}) string {
 	serviceName := "Fission-Unknown"
 
-	if arguments["--controllerPort"] != nil {
-		serviceName = "Fission-Controller"
-	} else if arguments["--routerPort"] != nil {
+	if arguments["--routerPort"] != nil {
 		serviceName = "Fission-Router"
 	} else if arguments["--executorPort"] != nil {
 		serviceName = "Fission-Executor"
@@ -155,18 +148,17 @@ func main() {
 	// TODO: fix the lint error. Error checking here is causing all components to crash with error "logtostderr not found"
 	flag.Set("logtostderr", "true") //nolint: errcheck
 
-	usage := `fission-bundle: Package of all fission microservices: controller, router, executor.
+	usage := `fission-bundle: Package of all fission microservices: router, executor.
 
 Use it to start one or more of the fission servers:
 
- Controller is a stateless API frontend for fission resources.
 
  Pool manager maintains a pool of generalized function containers, and
  specializes them on-demand. Executor must be run from a pod in a
  Kubernetes cluster.
 
  Router implements HTTP triggers: it routes to running instances,
- working with the controller and executor.
+ working with the executor.
 
  Kubewatcher implements Kubernetes Watch triggers: it watches
  Kubernetes resources and invokes functions described in the
@@ -177,7 +169,6 @@ Use it to start one or more of the fission servers:
  backends.
 
 Usage:
-  fission-bundle --controllerPort=<port>
   fission-bundle --canaryConfig
   fission-bundle --routerPort=<port> [--executorUrl=<url>]
   fission-bundle --executorPort=<port> [--namespace=<namespace>] [--fission-namespace=<namespace>]
@@ -191,7 +182,6 @@ Usage:
   fission-bundle --logger
   fission-bundle --version
 Options:
-  --controllerPort=<port>         Port that the controller should listen on.
   --canaryConfig		  		  Start canary config server.
   --webhookPort=<port>             Port that the webhook should listen on.
   --routerPort=<port>             Port that the router should listen on.
@@ -240,13 +230,6 @@ Options:
 		port := getPort(logger, arguments["--webhookPort"])
 		err = runWebhook(ctx, logger, port)
 		logger.Error("webhook server exited:", zap.Error(err))
-		return
-	}
-
-	if arguments["--controllerPort"] != nil {
-		port := getPort(logger, arguments["--controllerPort"])
-		runController(ctx, logger, port)
-		logger.Error("controller exited")
 		return
 	}
 

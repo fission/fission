@@ -17,9 +17,6 @@ metadata:
 {{- if eq "canaryconfig" .component }}
 {{- include "canaryconfig-kuberules" . }}
 {{- end }}
-{{- if eq "controller" .component }}
-{{- include "controller-kuberules" . }}
-{{- end }}
 {{- if eq "fluentbit" .component }}
 {{- include "fluentbit-kuberules" . }}
 {{- end }}

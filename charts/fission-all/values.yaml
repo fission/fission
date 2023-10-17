@@ -1,7 +1,7 @@
 ## Fission chart configuration
 ##
 
-## serviceType to consider while creating Fission Controller service.
+## serviceType to consider while creating Fission webhook service.
 ## For minikube/kind, set this to NodePort, elsewhere use LoadBalancer or ClusterIP.
 ##
 serviceType: ClusterIP
@@ -52,10 +52,6 @@ terminationMessagePath: /dev/termination-log
 ## router.terminationMessagePolicy takes precedence over this value for router.
 ##
 terminationMessagePolicy: File
-
-## controllerPort represents the port at which the Fission controller service should be exposed.
-##
-controllerPort: 31313
 
 ## routerPort represents the port at which the Fission Router service should be exposed.
 ##
@@ -340,34 +336,6 @@ buildermgr:
     runAsUser: 10001
     runAsGroup: 10001
 
-## controller is the component that the client talks to.
-## It contains CRUD APIs for functions, triggers, environments, Kubernetes event watches, etc. and proxy APIs to internal 3rd-party services.
-##
-controller:
-  enabled: false
-  ## Pod resources as:
-  ##  resources:
-  ##    limits:
-  ##      cpu: <tbd>
-  ##      memory: <tbd>
-  ##    requests:
-  ##      cpu: <tbd>
-  ##      memory: <tbd>
-  ##
-  resources: {}
-
-  ## Security Context
-  ## It holds pod-level and container level security configuration.
-  ## This is an experimental section, please verify before enabling in production.
-  ## Ref: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#security-context-1
-  securityContext:
-    enabled: true
-    ## Mark it false, if you want to stop the non root user validation
-    runAsNonRoot: true
-    fsGroup: 10001
-    runAsUser: 10001
-    runAsGroup: 10001 
-
 ## webhook is the component that validates API calls.
 ## It contains validation and mutation for functions, triggers, environments, Kubernetes event watches, etc. 
 ##
@@ -534,7 +502,7 @@ kafka:
   # version: "0.11.2.0"
 
 # The following components expose Prometheus metrics and have servicemonitors in this chart (disabled by default)
-# Controller, router, executor, storage svc
+# router, executor, storage svc
 serviceMonitor:
   enabled: false
   ##namespace in which you want to deploy servicemonitor
