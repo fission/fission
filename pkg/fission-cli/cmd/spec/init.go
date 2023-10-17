@@ -22,7 +22,6 @@ import (
 	"path/filepath"
 
 	"github.com/pkg/errors"
-	uuid "github.com/satori/go.uuid"
 	"sigs.k8s.io/yaml"
 
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
@@ -30,6 +29,7 @@ import (
 	spectypes "github.com/fission/fission/pkg/fission-cli/cmd/spec/types"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
+	"github.com/fission/fission/pkg/utils/uuid"
 )
 
 type InitSubCommand struct {
@@ -66,11 +66,7 @@ func (opts *InitSubCommand) complete(input cli.Input) error {
 
 	deployID := input.String(flagkey.SpecDeployID)
 	if len(deployID) == 0 {
-		id, err := uuid.NewV4()
-		if err != nil {
-			return errors.Wrap(err, "error generating UUID")
-		}
-		deployID = id.String()
+		deployID = uuid.NewString()
 	}
 
 	// Create spec dir

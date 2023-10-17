@@ -20,7 +20,6 @@ import (
 	"fmt"
 
 	"github.com/pkg/errors"
-	uuid "github.com/satori/go.uuid"
 	asv2 "k8s.io/api/autoscaling/v2"
 	apiv1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -37,6 +36,7 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/console"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
+	"github.com/fission/fission/pkg/utils/uuid"
 )
 
 const (
@@ -217,11 +217,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		}
 
 		buildcmd := input.String(flagkey.PkgBuildCmd)
-		id, err := uuid.NewV4()
-		if err != nil {
-			return errors.Wrap(err, "error generating uuid")
-		}
-		pkgName := generatePackageName(fnName, id.String())
+		pkgName := generatePackageName(fnName, uuid.NewString())
 
 		// create new package in the same namespace as the function.
 		pkgMetadata, err = _package.CreatePackage(input, opts.Client(), pkgName, fnNamespace, envName,
@@ -401,11 +397,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 		}
 	}
 
-	id, err := uuid.NewV4()
-	if err != nil {
-		return errors.Wrap(err, "error generating UUID")
-	}
-	triggerName := id.String()
+	triggerName := uuid.NewString()
 	ht := &fv1.HTTPTrigger{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      triggerName,

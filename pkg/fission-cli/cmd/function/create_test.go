@@ -3,7 +3,7 @@ package function
 import (
 	"testing"
 
-	uuid "github.com/satori/go.uuid"
+	"github.com/fission/fission/pkg/utils/uuid"
 )
 
 func TestGeneratePackageName(t *testing.T) {
@@ -29,11 +29,7 @@ func TestGeneratePackageName(t *testing.T) {
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			id, err := uuid.NewV4()
-			if err != nil {
-				t.Fatal(err)
-			}
-			pkgName := generatePackageName(test.fnName, id.String())
+			pkgName := generatePackageName(test.fnName, uuid.NewString())
 			if len(pkgName) > test.expected {
 				t.Errorf("expected len of package to be %v, got %v", test.expected, len(pkgName))
 			}

@@ -31,12 +31,12 @@ import (
 
 	"github.com/mholt/archiver/v3"
 	"github.com/pkg/errors"
-	uuid "github.com/satori/go.uuid"
 	"golang.org/x/net/context/ctxhttp"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/utils/uuid"
 )
 
 func UrlForFunction(name, namespace string) string {
@@ -60,11 +60,7 @@ func GetFunctionIstioServiceName(fnName, fnNamespace string) string {
 
 // GetTempDir creates and return a temporary directory
 func GetTempDir() (string, error) {
-	id, err := uuid.NewV4()
-	if err != nil {
-		return "", err
-	}
-	tmpDir := id.String()
+	tmpDir := uuid.NewString()
 	dir, err := os.MkdirTemp("", tmpDir)
 	return dir, err
 }

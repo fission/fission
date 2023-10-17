@@ -27,7 +27,6 @@ import (
 	"github.com/dchest/uniuri"
 	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
-	uuid "github.com/satori/go.uuid"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -40,6 +39,7 @@ import (
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
 	"github.com/fission/fission/pkg/utils"
+	"github.com/fission/fission/pkg/utils/uuid"
 )
 
 // CreateArchive returns a fv1.Archive made from an archive .  If specFile, then
@@ -124,11 +124,7 @@ func CreateArchive(client cmd.Client, input cli.Input, includeFiles []string, no
 				return nil, err
 			}
 
-			id, err := uuid.NewV4()
-			if err != nil {
-				return nil, err
-			}
-			file := filepath.Join(tmpDir, id.String())
+			file := filepath.Join(tmpDir, uuid.NewString())
 			err = utils.DownloadUrl(input.Context(), http.DefaultClient, fileURL, file)
 			if err != nil {
 				return nil, errors.Wrap(err, "error downloading file from the given URL")

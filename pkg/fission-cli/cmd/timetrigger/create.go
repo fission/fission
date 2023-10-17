@@ -21,10 +21,10 @@ import (
 	"time"
 
 	"github.com/fission/fission/pkg/fission-cli/cmd"
+	"github.com/fission/fission/pkg/utils/uuid"
 
 	"github.com/pkg/errors"
 	"github.com/robfig/cron/v3"
-	uuid "github.com/satori/go.uuid"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -55,11 +55,7 @@ func (opts *CreateSubCommand) do(input cli.Input) error {
 func (opts *CreateSubCommand) complete(input cli.Input) (err error) {
 	name := input.String(flagkey.TtName)
 	if len(name) == 0 {
-		id, err := uuid.NewV4()
-		if err != nil {
-			return err
-		}
-		name = id.String()
+		name = uuid.NewString()
 	}
 
 	fnName := input.String(flagkey.TtFnName)

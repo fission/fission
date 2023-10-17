@@ -3,9 +3,9 @@ package storagesvc
 import (
 	"os"
 
+	"github.com/fission/fission/pkg/utils/uuid"
 	"github.com/graymeta/stow"
 	_ "github.com/graymeta/stow/local"
-	uuid "github.com/satori/go.uuid"
 )
 
 type localStorage struct {
@@ -35,11 +35,7 @@ func (ls localStorage) getStorageType() StorageType {
 func (ls localStorage) getUploadFileName() (string, error) {
 	// This is not the item ID (that's returned by Put)
 	// should we just use handler.Filename? what are the constraints here?
-	id, err := uuid.NewV4()
-	if err != nil {
-		return "", err
-	}
-	return id.String(), err
+	return uuid.NewString(), nil
 }
 
 func (ls localStorage) getSubDir() string {

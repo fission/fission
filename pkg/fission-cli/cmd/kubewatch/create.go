@@ -20,7 +20,6 @@ import (
 	"fmt"
 
 	"github.com/pkg/errors"
-	uuid "github.com/satori/go.uuid"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -30,6 +29,7 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/console"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
+	"github.com/fission/fission/pkg/utils/uuid"
 )
 
 type CreateSubCommand struct {
@@ -53,11 +53,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	watchName := input.String(flagkey.KwName)
 	if len(watchName) == 0 {
 		console.Warn(fmt.Sprintf("--%v will be soon marked as required flag, see 'help' for details", flagkey.MqtName))
-		id, err := uuid.NewV4()
-		if err != nil {
-			return errors.Wrap(err, "error generating uuid")
-		}
-		watchName = id.String()
+		watchName = uuid.NewString()
 	}
 	fnName := input.String(flagkey.KwFnName)
 
