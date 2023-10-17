@@ -161,6 +161,7 @@ const (
 	PkgOutput         = Output
 	PkgStatus         = "status"
 	PkgOrphan         = "orphan"
+	StreamLog         = "streamlog"
 
 	SpecSave             = "spec"
 	SpecDir              = "specdir"
