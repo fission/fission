@@ -27,13 +27,13 @@ import (
 	"text/tabwriter"
 
 	"github.com/pkg/errors"
-	uuid "github.com/satori/go.uuid"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/util"
 	storageSvcClient "github.com/fission/fission/pkg/storagesvc/client"
 	"github.com/fission/fission/pkg/utils"
+	"github.com/fission/fission/pkg/utils/uuid"
 )
 
 func UploadArchiveFile(ctx context.Context, client cmd.Client, fileName string) (*fv1.Archive, error) {
@@ -141,11 +141,7 @@ func DownloadToTempFile(fileUrl string) (string, error) {
 		return "", errors.Wrapf(err, "error creating temp directory %v", tmpDir)
 	}
 
-	id, err := uuid.NewV4()
-	if err != nil {
-		return "", errors.Wrapf(err, "error generating UUID")
-	}
-	tmpFilename := id.String()
+	tmpFilename := uuid.NewString()
 	destination := filepath.Join(tmpDir, tmpFilename)
 
 	err = WriteArchiveToFile(destination, reader)
@@ -209,11 +205,8 @@ func WriteArchiveToFile(fileName string, reader io.Reader) error {
 	if err != nil {
 		return err
 	}
-	id, err := uuid.NewV4()
-	if err != nil {
-		return err
-	}
-	tmpFileName := id.String()
+
+	tmpFileName := uuid.NewString()
 
 	path := filepath.Join(tmpDir, tmpFileName+".tmp")
 	w, err := os.Create(path)

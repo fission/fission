@@ -6,7 +6,8 @@ import (
 
 	"github.com/graymeta/stow"
 	"github.com/graymeta/stow/s3"
-	uuid "github.com/satori/go.uuid"
+
+	"github.com/fission/fission/pkg/utils/uuid"
 )
 
 type (
@@ -54,11 +55,8 @@ func (ss s3Storage) getSubDir() string {
 }
 
 func (ss s3Storage) getUploadFileName() (string, error) {
-	id, err := uuid.NewV4()
-	if err != nil {
-		return "", err
-	}
-	return path.Join(ss.subDir, id.String()), nil
+	id := uuid.NewString()
+	return path.Join(ss.subDir, id), nil
 }
 
 func (ss s3Storage) dial() (stow.Location, error) {

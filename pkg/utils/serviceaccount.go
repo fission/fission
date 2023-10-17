@@ -7,8 +7,6 @@ import (
 	"strconv"
 	"time"
 
-	uuid "github.com/satori/go.uuid"
-
 	"go.uber.org/zap"
 	authorizationv1 "k8s.io/api/authorization/v1"
 	v1 "k8s.io/api/core/v1"
@@ -18,6 +16,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
+
+	"github.com/fission/fission/pkg/utils/uuid"
 )
 
 const (
@@ -292,11 +292,8 @@ func createGetSA(ctx context.Context, k8sClient kubernetes.Interface, SAName, ns
 
 // generateSuffix generates a random string of 6 characters
 func generateSuffix() (string, error) {
-	id, err := uuid.NewV4()
-	if err != nil {
-		return "", nil
-	}
-	return id.String()[:6], nil
+	id := uuid.NewString()
+	return id[:6], nil
 }
 
 func createServiceAccount() bool {

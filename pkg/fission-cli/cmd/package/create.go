@@ -24,7 +24,6 @@ import (
 
 	"github.com/dchest/uniuri"
 	"github.com/pkg/errors"
-	uuid "github.com/satori/go.uuid"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -34,6 +33,7 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/console"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
+	"github.com/fission/fission/pkg/utils/uuid"
 )
 
 type CreateSubCommand struct {
@@ -179,11 +179,7 @@ func CreatePackage(input cli.Input, client cmd.Client, pkgName string, pkgNamesp
 	}
 
 	if len(pkgName) == 0 {
-		id, err := uuid.NewV4()
-		if err != nil {
-			return nil, errors.Wrap(err, "error generating UUID")
-		}
-		pkgName = strings.ToLower(id.String())
+		pkgName = strings.ToLower(uuid.NewString())
 	}
 
 	pkg := &fv1.Package{
