@@ -47,6 +47,7 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel"
 	"go.uber.org/zap"
 
@@ -87,22 +88,21 @@ func serve(ctx context.Context, logger *zap.Logger, port int,
 }
 
 // Start starts a router
-func Start(ctx context.Context, logger *zap.Logger, port int, executorURL string) {
+func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, port int, executorURL string) error {
 	fmap := makeFunctionServiceMap(logger, time.Minute)
 
-	clientGen := crd.NewClientGenerator()
 	fissionClient, err := clientGen.GetFissionClient()
 	if err != nil {
-		logger.Fatal("error making the fission client", zap.Error(err))
+		return errors.Wrap(err, "error making the fission client")
 	}
 	kubeClient, err := clientGen.GetKubernetesClient()
 	if err != nil {
-		logger.Fatal("error making the kube client", zap.Error(err))
+		return errors.Wrap(err, "error making the kube client")
 	}
 
 	err = crd.WaitForCRDs(ctx, logger, fissionClient)
 	if err != nil {
-		logger.Fatal("error waiting for CRDs", zap.Error(err))
+		return errors.Wrap(err, "error waiting for CRDs")
 	}
 
 	executor := executorClient.MakeClient(logger, executorURL)
@@ -110,50 +110,37 @@ func Start(ctx context.Context, logger *zap.Logger, port int, executorURL string
 	timeoutStr := os.Getenv("ROUTER_ROUND_TRIP_TIMEOUT")
 	timeout, err := time.ParseDuration(timeoutStr)
 	if err != nil {
-		logger.Fatal("failed to parse timeout duration from 'ROUTER_ROUND_TRIP_TIMEOUT'",
-			zap.Error(err),
-			zap.String("value", timeoutStr))
+		return errors.Wrap(err, fmt.Sprintf("failed to parse timeout duration value('%s') from 'ROUTER_ROUND_TRIP_TIMEOUT'", timeoutStr))
 	}
 
 	timeoutExponentStr := os.Getenv("ROUTER_ROUNDTRIP_TIMEOUT_EXPONENT")
 	timeoutExponent, err := strconv.Atoi(timeoutExponentStr)
 	if err != nil {
-		logger.Fatal("failed to parse timeout exponent from 'ROUTER_ROUNDTRIP_TIMEOUT_EXPONENT'",
-			zap.Error(err),
-			zap.String("value", timeoutExponentStr))
+		return errors.Wrap(err, fmt.Sprintf("failed to parse timeout exponent value('%s') from 'ROUTER_ROUNDTRIP_TIMEOUT_EXPONENT'", timeoutExponentStr))
 	}
 
 	keepAliveTimeStr := os.Getenv("ROUTER_ROUND_TRIP_KEEP_ALIVE_TIME")
 	keepAliveTime, err := time.ParseDuration(keepAliveTimeStr)
 	if err != nil {
-		logger.Fatal("failed to parse keep alive duration from 'ROUTER_ROUND_TRIP_KEEP_ALIVE_TIME'",
-			zap.Error(err),
-			zap.String("value", keepAliveTimeStr))
+		return errors.Wrap(err, fmt.Sprintf("failed to parse keep alive duration value('%s') from 'ROUTER_ROUND_TRIP_KEEP_ALIVE_TIME'", keepAliveTimeStr))
 	}
 
 	disableKeepAliveStr := os.Getenv("ROUTER_ROUND_TRIP_DISABLE_KEEP_ALIVE")
 	disableKeepAlive, err := strconv.ParseBool(disableKeepAliveStr)
 	if err != nil {
-		disableKeepAlive = true
-		logger.Fatal("failed to parse enable keep alive from 'ROUTER_ROUND_TRIP_DISABLE_KEEP_ALIVE'",
-			zap.Error(err),
-			zap.String("value", disableKeepAliveStr))
+		return errors.Wrap(err, fmt.Sprintf("failed to parse enable keep alive value('%s') from 'ROUTER_ROUND_TRIP_DISABLE_KEEP_ALIVE'", disableKeepAliveStr))
 	}
 
 	maxRetriesStr := os.Getenv("ROUTER_ROUND_TRIP_MAX_RETRIES")
 	maxRetries, err := strconv.Atoi(maxRetriesStr)
 	if err != nil {
-		logger.Fatal("failed to parse max retries from 'ROUTER_ROUND_TRIP_MAX_RETRIES'",
-			zap.Error(err),
-			zap.String("value", maxRetriesStr))
+		return errors.Wrap(err, fmt.Sprintf("failed to parse max retries value('%s') from 'ROUTER_ROUND_TRIP_MAX_RETRIES'", maxRetriesStr))
 	}
 
 	isDebugEnvStr := os.Getenv("DEBUG_ENV")
 	isDebugEnv, err := strconv.ParseBool(isDebugEnvStr)
 	if err != nil {
-		logger.Fatal("failed to parse debug env from 'DEBUG_ENV'",
-			zap.Error(err),
-			zap.String("value", isDebugEnvStr))
+		return errors.Wrap(err, fmt.Sprintf("failed to parse debug env value('%s') from 'DEBUG_ENV'", isDebugEnvStr))
 	}
 
 	// svcAddrRetryCount is the max times for RetryingRoundTripper to retry with a specific service address
@@ -209,7 +196,7 @@ func Start(ctx context.Context, logger *zap.Logger, port int, executorURL string
 		svcAddrRetryCount: svcAddrRetryCount,
 	}, isDebugEnv, unTapServiceTimeout, throttler.MakeThrottler(svcAddrUpdateTimeout))
 	if err != nil {
-		logger.Fatal("error making HTTP trigger set", zap.Error(err))
+		return errors.Wrap(err, "error making HTTP trigger set")
 	}
 	go metrics.ServeMetrics(ctx, logger)
 
@@ -219,5 +206,6 @@ func Start(ctx context.Context, logger *zap.Logger, port int, executorURL string
 	ctx, span := tracer.Start(ctx, "router/Start")
 	defer span.End()
 
-	serve(ctx, logger, port, triggers, displayAccessLog)
+	go serve(ctx, logger, port, triggers, displayAccessLog)
+	return nil
 }

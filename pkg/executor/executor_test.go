@@ -182,7 +182,7 @@ func TestExecutor(t *testing.T) {
 
 	// create poolmgr
 	port := 9999
-	err = StartExecutor(ctx, logger, port)
+	err = StartExecutor(ctx, crd.NewClientGenerator(), logger, port)
 	if err != nil {
 		log.Panicf("failed to start poolmgr: %v", err)
 	}

@@ -35,9 +35,19 @@ import (
 	"github.com/fission/fission/pkg/utils"
 )
 
-type ClientGenerator struct {
-	restConfig *rest.Config
-}
+type (
+	ClientGeneratorInterface interface {
+		GetFissionClient() (versioned.Interface, error)
+		GetKubernetesClient() (kubernetes.Interface, error)
+		GetApiExtensionsClient() (apiextensionsclient.Interface, error)
+		GetMetricsClient() (metricsclient.Interface, error)
+		GetDynamicClient() (dynamic.Interface, error)
+	}
+
+	ClientGenerator struct {
+		restConfig *rest.Config
+	}
+)
 
 func (cg *ClientGenerator) getRestConfig() (*rest.Config, error) {
 	if cg.restConfig != nil {
