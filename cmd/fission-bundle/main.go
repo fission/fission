@@ -54,8 +54,8 @@ func runCanaryConfigServer(ctx context.Context, logger *zap.Logger) error {
 	return canaryconfigmgr.StartCanaryServer(ctx, logger, false)
 }
 
-func runRouter(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, port int, executorUrl string) {
-	router.Start(ctx, clientGen, logger, port, executorUrl)
+func runRouter(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, port int, executorUrl string) error {
+	return router.Start(ctx, clientGen, logger, port, executorUrl)
 }
 
 func runExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, port int) error {
@@ -245,9 +245,11 @@ Options:
 
 	if arguments["--routerPort"] != nil {
 		port := getPort(logger, arguments["--routerPort"])
-		runRouter(ctx, clientGen, logger, port, executorUrl)
-		logger.Error("router exited")
-		return
+		err = runRouter(ctx, clientGen, logger, port, executorUrl)
+		if err != nil {
+			logger.Error("router exited", zap.Error(err))
+			return
+		}
 	}
 
 	if arguments["--executorPort"] != nil {
