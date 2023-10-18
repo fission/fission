@@ -31,10 +31,9 @@ import (
 )
 
 // Start the buildermgr service.
-func Start(ctx context.Context, logger *zap.Logger, storageSvcUrl string) error {
+func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, storageSvcUrl string) error {
 	bmLogger := logger.Named("builder_manager")
 
-	clientGen := crd.NewClientGenerator()
 	fissionClient, err := clientGen.GetFissionClient()
 	if err != nil {
 		return errors.Wrap(err, "failed to get fission client")

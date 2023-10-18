@@ -87,10 +87,9 @@ func serve(ctx context.Context, logger *zap.Logger, port int,
 }
 
 // Start starts a router
-func Start(ctx context.Context, logger *zap.Logger, port int, executorURL string) {
+func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, port int, executorURL string) {
 	fmap := makeFunctionServiceMap(logger, time.Minute)
 
-	clientGen := crd.NewClientGenerator()
 	fissionClient, err := clientGen.GetFissionClient()
 	if err != nil {
 		logger.Fatal("error making the fission client", zap.Error(err))

@@ -30,6 +30,7 @@ import (
 	"github.com/fission/fission/cmd/fission-bundle/mqtrigger"
 	"github.com/fission/fission/pkg/buildermgr"
 	"github.com/fission/fission/pkg/canaryconfigmgr"
+	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/executor"
 	"github.com/fission/fission/pkg/info"
 	"github.com/fission/fission/pkg/kubewatcher"
@@ -53,12 +54,12 @@ func runCanaryConfigServer(ctx context.Context, logger *zap.Logger) error {
 	return canaryconfigmgr.StartCanaryServer(ctx, logger, false)
 }
 
-func runRouter(ctx context.Context, logger *zap.Logger, port int, executorUrl string) {
-	router.Start(ctx, logger, port, executorUrl)
+func runRouter(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, port int, executorUrl string) {
+	router.Start(ctx, clientGen, logger, port, executorUrl)
 }
 
-func runExecutor(ctx context.Context, logger *zap.Logger, port int) error {
-	return executor.StartExecutor(ctx, logger, port)
+func runExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, port int) error {
+	return executor.StartExecutor(ctx, clientGen, logger, port)
 }
 
 func runKubeWatcher(ctx context.Context, logger *zap.Logger, routerUrl string) error {
@@ -82,8 +83,8 @@ func runStorageSvc(ctx context.Context, logger *zap.Logger, port int, storage st
 	return storagesvc.Start(ctx, logger, storage, port)
 }
 
-func runBuilderMgr(ctx context.Context, logger *zap.Logger, storageSvcUrl string) error {
-	return buildermgr.Start(ctx, logger, storageSvcUrl)
+func runBuilderMgr(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, storageSvcUrl string) error {
+	return buildermgr.Start(ctx, clientGen, logger, storageSvcUrl)
 }
 
 func runLogger(ctx context.Context, logger *zap.Logger) error {
@@ -225,6 +226,7 @@ Options:
 	executorUrl := getStringArgWithDefault(arguments["--executorUrl"], "http://executor.fission")
 	routerUrl := getStringArgWithDefault(arguments["--routerUrl"], "http://router.fission")
 	storageSvcUrl := getStringArgWithDefault(arguments["--storageSvcUrl"], "http://storagesvc.fission")
+	clientGen := crd.NewClientGenerator()
 
 	if arguments["--webhookPort"] != nil {
 		port := getPort(logger, arguments["--webhookPort"])
@@ -243,14 +245,14 @@ Options:
 
 	if arguments["--routerPort"] != nil {
 		port := getPort(logger, arguments["--routerPort"])
-		runRouter(ctx, logger, port, executorUrl)
+		runRouter(ctx, clientGen, logger, port, executorUrl)
 		logger.Error("router exited")
 		return
 	}
 
 	if arguments["--executorPort"] != nil {
 		port := getPort(logger, arguments["--executorPort"])
-		err = runExecutor(ctx, logger, port)
+		err = runExecutor(ctx, clientGen, logger, port)
 		if err != nil {
 			logger.Error("executor exited", zap.Error(err))
 			return
@@ -290,7 +292,7 @@ Options:
 	}
 
 	if arguments["--builderMgr"] == true {
-		err = runBuilderMgr(ctx, logger, storageSvcUrl)
+		err = runBuilderMgr(ctx, clientGen, logger, storageSvcUrl)
 		if err != nil {
 			logger.Error("builder manager exited", zap.Error(err))
 			return
