@@ -4,7 +4,7 @@
 
 ## Prerequisites
 
-- Kubernetes 1.19+
+- Kubernetes 1.23+
 - Helm 3+
 
 ## Get Repo Info
@@ -92,6 +92,25 @@ _See [helm upgrade](https://helm.sh/docs/helm/helm_upgrade/) for command documen
 ### Upgrading an existing Release to a new major version
 
 A major chart version change (like v1.2.3 -> v2.0.0) indicates that there is an incompatible breaking change needing manual actions.
+
+### Upgrade from 1.18.x to 1.20.x
+
+We have removed controller service from fission-all chart.
+
+### Upgrade from 1.17.x to 1.18.x
+
+With 1.18.x, we have major change in the way we are deploying Fission.
+We have added parameters `defaultNamespace`, `additionalFissionNamespaces`, `functionNamespace` and `builderNamespace` to manage the namespaces.
+We watch and manage specific namespaces for Fission resources configured via `defaultNamespace` and `additionalFissionNamespaces` parameters.
+You dont need to worry about `builderNamespace` and `functionNamespace` parameters, unless you want to consider legacy Fission resources.
+
+Please refer to [core changes](https://fission.io/docs/releases/v1.18.0/#fission-core-changes) for more details.
+
+### Upgrade from 1.16.x to 1.17.x
+
+By default, Fission runs with the default security context. This means that it will be run as root. We have added settings in Helm chart for securityContext across all services in Fission. You can enable recommended securityContext settings during Fission installation.
+
+Please refer to [security context settings](https://fission.io/docs/releases/v1.17.0/#security-context-setting-for-fission-installation) for more details.
 
 ### Upgrade from 1.15.x to 1.16.x
 

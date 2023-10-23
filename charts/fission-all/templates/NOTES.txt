@@ -11,14 +11,20 @@ Windows:
 
 2. You're ready to use Fission!
 
+{{- if gt (len .Values.additionalFissionNamespaces) 0 }}
+  You can create fission resources in the namespaces "{{ .Values.defaultNamespace }},{{ join "," .Values.additionalFissionNamespaces }}"
+{{- else }}
+  You can create fission resources in the namespace "{{ .Values.defaultNamespace }}"
+{{- end }}
+
   # Create an environment
-  $ fission env create --name nodejs --image fission/node-env
+  $ fission env create --name nodejs --image fission/node-env --namespace {{ .Values.defaultNamespace }}
 
   # Get a hello world
   $ curl https://raw.githubusercontent.com/fission/examples/master/nodejs/hello.js > hello.js
 
   # Register this function with Fission
-  $ fission function create --name hello --env nodejs --code hello.js
+  $ fission function create --name hello --env nodejs --code hello.js --namespace {{ .Values.defaultNamespace }}
 
 {{- if .Values.authentication.enabled }}
 
@@ -29,6 +35,6 @@ Windows:
 {{- end }}
 
   # Run this function
-  $ fission function test --name hello
+  $ fission function test --name hello --namespace {{ .Values.defaultNamespace }}
   Hello, world!
 
