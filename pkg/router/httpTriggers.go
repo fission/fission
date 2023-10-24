@@ -93,21 +93,26 @@ func makeHTTPTriggerSet(logger *zap.Logger, fmap *functionServiceMap, fissionCli
 	return httpTriggerSet, nil
 }
 
-func (ts *HTTPTriggerSet) subscribeRouter(ctx context.Context, mr *mutableRouter) {
+func (ts *HTTPTriggerSet) subscribeRouter(ctx context.Context, mr *mutableRouter) error {
 	resolver := makeFunctionReferenceResolver(ts.logger, ts.funcInformer)
 	ts.resolver = resolver
 	ts.mutableRouter = mr
 
 	if ts.fissionClient == nil {
 		// Used in tests only.
-		mr.updateRouter(ts.getRouter(nil))
+		router, err := ts.getRouter(nil)
+		if err != nil {
+			return err
+		}
+		mr.updateRouter(router)
 		ts.logger.Info("skipping continuous trigger updates")
-		return
+		return nil
 	}
 	go ts.updateRouter()
 	go ts.syncTriggers()
 	go ts.runInformer(ctx, ts.funcInformer)
 	go ts.runInformer(ctx, ts.triggerInformer)
+	return nil
 }
 
 func defaultHomeHandler(w http.ResponseWriter, r *http.Request) {
@@ -133,9 +138,12 @@ func versionHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) *mux.Router {
+func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) (*mux.Router, error) {
 
-	featureConfig, _ := config.GetFeatureConfig()
+	featureConfig, err := config.GetFeatureConfig()
+	if err != nil {
+		return nil, err
+	}
 
 	muxRouter := mux.NewRouter()
 	muxRouter.Use(metrics.HTTPMetricMiddleware)
@@ -289,7 +297,7 @@ func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) *mux.Router 
 	// version of application.
 	muxRouter.HandleFunc("/_version", versionHandler).Methods("GET")
 
-	return muxRouter
+	return muxRouter, nil
 }
 
 func (ts *HTTPTriggerSet) updateTriggerStatusFailed(ht *fv1.HTTPTrigger, err error) {
@@ -408,6 +416,11 @@ func (ts *HTTPTriggerSet) updateRouter() {
 		ts.functions = allfunctions
 
 		// make a new router and use it
-		ts.mutableRouter.updateRouter(ts.getRouter(functionTimeout))
+		router, err := ts.getRouter(functionTimeout)
+		if err != nil {
+			ts.logger.Error("error updating router", zap.Error(err))
+			continue
+		}
+		ts.mutableRouter.updateRouter(router)
 	}
 }

@@ -309,7 +309,7 @@ func (pkgw *packageWatcher) packageInformerHandler(ctx context.Context) k8sCache
 }
 
 func (pkgw *packageWatcher) Run(ctx context.Context) error {
-	go metrics.ServeMetrics(ctx, pkgw.logger)
+	go metrics.ServeMetrics(ctx, "buildermgr", pkgw.logger)
 	for _, podInformer := range pkgw.podInformer {
 		go podInformer.Run(ctx.Done())
 	}

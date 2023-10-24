@@ -295,7 +295,7 @@ func Start(ctx context.Context, logger *zap.Logger, storage Storage, port int) e
 
 	// create http handlers
 	storageService := MakeStorageService(logger, storageClient, port)
-	go metrics.ServeMetrics(ctx, logger)
+	go metrics.ServeMetrics(ctx, "storagesvc", logger)
 	go storageService.Start(ctx, port)
 
 	// enablePruner prevents storagesvc unit test from needing to talk to kubernetes

@@ -90,7 +90,7 @@ func (mqt *MessageQueueTriggerManager) Run(ctx context.Context) error {
 			mqt.logger.Fatal("failed to wait for caches to sync")
 		}
 	}
-	go metrics.ServeMetrics(ctx, mqt.logger)
+	go metrics.ServeMetrics(ctx, "mqtrigger", mqt.logger)
 	return nil
 }
 

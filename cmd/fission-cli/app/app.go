@@ -49,7 +49,7 @@ const (
 `
 )
 
-func App() *cobra.Command {
+func App(clientOptions cmd.ClientOptions) *cobra.Command {
 	cobra.EnableCommandSorting = false
 
 	rootCmd := &cobra.Command{
@@ -59,9 +59,7 @@ func App() *cobra.Command {
 		PersistentPreRunE: wrapper.Wrapper(
 			func(input cli.Input) error {
 				console.Verbosity = input.Int(flagkey.Verbosity)
-				clientOptions := cmd.ClientOptions{
-					KubeContext: input.String(flagkey.KubeContext),
-				}
+				clientOptions.KubeContext = input.String(flagkey.KubeContext)
 				// TODO: use fake rest client for offline spec generation
 				// if input.IsSet(flagkey.ClientOnly) || input.IsSet(flagkey.PreCheckOnly) {
 				// }

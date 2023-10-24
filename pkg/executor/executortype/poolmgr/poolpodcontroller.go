@@ -398,7 +398,13 @@ func (p *PoolPodController) envDeleteQueueProcessFunc(ctx context.Context) bool 
 	p.gpm.cleanupPool(ctx, env)
 	specializePodLables := getSpecializedPodLabels(env)
 	ns := p.nsResolver.ResolveNamespace(p.nsResolver.FunctionNamespace)
-	specializedPods, err := p.podLister[ns].Pods(ns).List(labels.SelectorFromSet(specializePodLables))
+	podLister, ok := p.podLister[ns]
+	if !ok {
+		p.logger.Error("no pod lister found for namespace", zap.String("namespace", ns))
+		p.envDeleteQueue.Forget(obj)
+		return false
+	}
+	specializedPods, err := podLister.Pods(ns).List(labels.SelectorFromSet(specializePodLables))
 	if err != nil {
 		p.logger.Error("failed to list specialized pods", zap.Error(err))
 		p.envDeleteQueue.Forget(obj)

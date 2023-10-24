@@ -28,7 +28,7 @@ import (
 	"github.com/fission/fission/pkg/utils/httpserver"
 )
 
-func ServeMetrics(ctx context.Context, logger *zap.Logger) {
+func ServeMetrics(ctx context.Context, parent string, logger *zap.Logger) {
 	metricsAddr := os.Getenv("METRICS_ADDR")
 	if metricsAddr == "" {
 		metricsAddr = "8080"
@@ -45,5 +45,5 @@ func ServeMetrics(ctx context.Context, logger *zap.Logger) {
 			EnableOpenMetrics: true,
 		},
 	))
-	httpserver.StartServer(ctx, logger, "metrics", metricsAddr, mux)
+	httpserver.StartServer(ctx, logger, parent+"/metrics", metricsAddr, mux)
 }

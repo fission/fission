@@ -127,3 +127,10 @@ release:
 	@./hack/release.sh $(VERSION)
 	@./hack/release-tag.sh $(VERSION)
 	@./hack/changelog.sh
+
+## Envtest
+install-envtest:
+	go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
+
+setup-envtest:
+	setup-envtest -p path use 1.23.x
