@@ -101,7 +101,7 @@ func TestRouterAuth(t *testing.T) {
 		{
 			URL:        "http://localhost:8990/test",
 			StatusCode: http.StatusUnauthorized,
-			Body:       "Unauthorized: malformed token\n",
+			Body:       "unauthorized: malformed token\n",
 			AuthReq:    false,
 		},
 	}
