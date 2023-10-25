@@ -51,8 +51,7 @@ const (
 	MqtCRD      = "messagequeuetriggers.fission.io"
 )
 
-func makePreUpgradeTaskClient(logger *zap.Logger) (*PreUpgradeTaskClient, error) {
-	clientGen := crd.NewClientGenerator()
+func makePreUpgradeTaskClient(clientGen crd.ClientGeneratorInterface, logger *zap.Logger) (*PreUpgradeTaskClient, error) {
 	fissionClient, err := clientGen.GetFissionClient()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get fission client")

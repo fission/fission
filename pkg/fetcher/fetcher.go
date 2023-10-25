@@ -75,7 +75,7 @@ func makeVolumeDir(dirPath string) error {
 	return os.MkdirAll(dirPath, os.ModeDir|0750)
 }
 
-func MakeFetcher(logger *zap.Logger, sharedVolumePath string, sharedSecretPath string, sharedConfigPath string) (*Fetcher, error) {
+func MakeFetcher(logger *zap.Logger, clientGen crd.ClientGeneratorInterface, sharedVolumePath string, sharedSecretPath string, sharedConfigPath string) (*Fetcher, error) {
 	fLogger := logger.Named("fetcher")
 	err := makeVolumeDir(sharedVolumePath)
 	if err != nil {
@@ -90,7 +90,6 @@ func MakeFetcher(logger *zap.Logger, sharedVolumePath string, sharedSecretPath s
 		fLogger.Fatal("error creating shared config directory", zap.Error(err), zap.String("directory", sharedConfigPath))
 	}
 
-	clientGen := crd.NewClientGenerator()
 	fissionClient, err := clientGen.GetFissionClient()
 	if err != nil {
 		return nil, errors.Wrap(err, "error making the fission client")

@@ -156,7 +156,7 @@ func symlinkReaper(zapLogger *zap.Logger) {
 	}
 }
 
-func Start(ctx context.Context, logger *zap.Logger) error {
+func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger) error {
 	if _, err := os.Stat(fissionSymlinkPath); os.IsNotExist(err) {
 		logger.Info("symlink path not exist, create it",
 			zap.String("fissionSymlinkPath", fissionSymlinkPath))
@@ -167,7 +167,6 @@ func Start(ctx context.Context, logger *zap.Logger) error {
 	}
 	go symlinkReaper(logger)
 
-	clientGen := crd.NewClientGenerator()
 	kubernetesClient, err := clientGen.GetKubernetesClient()
 	if err != nil {
 		return err

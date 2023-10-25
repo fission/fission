@@ -20,6 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 
 	"github.com/fission/fission/cmd/fetcher/app"
+	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 	"github.com/fission/fission/pkg/utils/profile"
 )
@@ -31,5 +32,5 @@ func main() {
 
 	ctx := signals.SetupSignalHandler()
 	profile.ProfileIfEnabled(ctx, logger)
-	app.Run(ctx, logger)
+	app.Run(ctx, crd.NewClientGenerator(), logger)
 }

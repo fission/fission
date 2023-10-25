@@ -50,8 +50,8 @@ func runWebhook(ctx context.Context, logger *zap.Logger, port int) error {
 	return webhook.Start(ctx, logger, port)
 }
 
-func runCanaryConfigServer(ctx context.Context, logger *zap.Logger) error {
-	return canaryconfigmgr.StartCanaryServer(ctx, logger, false)
+func runCanaryConfigServer(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger) error {
+	return canaryconfigmgr.StartCanaryServer(ctx, clientGen, logger, false)
 }
 
 func runRouter(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, port int, executorUrl string) error {
@@ -62,21 +62,21 @@ func runExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, lo
 	return executor.StartExecutor(ctx, clientGen, logger, port)
 }
 
-func runKubeWatcher(ctx context.Context, logger *zap.Logger, routerUrl string) error {
-	return kubewatcher.Start(ctx, logger, routerUrl)
+func runKubeWatcher(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, routerUrl string) error {
+	return kubewatcher.Start(ctx, clientGen, logger, routerUrl)
 }
 
-func runTimer(ctx context.Context, logger *zap.Logger, routerUrl string) error {
-	return timer.Start(ctx, logger, routerUrl)
+func runTimer(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, routerUrl string) error {
+	return timer.Start(ctx, clientGen, logger, routerUrl)
 }
 
-func runMessageQueueMgr(ctx context.Context, logger *zap.Logger, routerUrl string) error {
-	return mqtrigger.Start(ctx, logger, routerUrl)
+func runMessageQueueMgr(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, routerUrl string) error {
+	return mqtrigger.Start(ctx, clientGen, logger, routerUrl)
 }
 
 // KEDA based MessageQueue Trigger Manager
-func runMQManager(ctx context.Context, logger *zap.Logger, routerURL string) error {
-	return mqt.StartScalerManager(ctx, logger, routerURL)
+func runMQManager(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, routerURL string) error {
+	return mqt.StartScalerManager(ctx, clientGen, logger, routerURL)
 }
 
 func runStorageSvc(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, port int, storage storagesvc.Storage) error {
@@ -87,8 +87,8 @@ func runBuilderMgr(ctx context.Context, clientGen crd.ClientGeneratorInterface, 
 	return buildermgr.Start(ctx, clientGen, logger, storageSvcUrl)
 }
 
-func runLogger(ctx context.Context, logger *zap.Logger) error {
-	return functionLogger.Start(ctx, logger)
+func runLogger(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger) error {
+	return functionLogger.Start(ctx, clientGen, logger)
 }
 
 func getPort(logger *zap.Logger, portArg interface{}) int {
@@ -236,7 +236,7 @@ Options:
 	}
 
 	if arguments["--canaryConfig"] == true {
-		err := runCanaryConfigServer(ctx, logger)
+		err := runCanaryConfigServer(ctx, clientGen, logger)
 		if err != nil {
 			logger.Error("canary config server exited with error: ", zap.Error(err))
 			return
@@ -262,7 +262,7 @@ Options:
 	}
 
 	if arguments["--kubewatcher"] == true {
-		err = runKubeWatcher(ctx, logger, routerUrl)
+		err = runKubeWatcher(ctx, clientGen, logger, routerUrl)
 		if err != nil {
 			logger.Error("kubewatcher exited", zap.Error(err))
 			return
@@ -270,7 +270,7 @@ Options:
 	}
 
 	if arguments["--timer"] == true {
-		err = runTimer(ctx, logger, routerUrl)
+		err = runTimer(ctx, clientGen, logger, routerUrl)
 		if err != nil {
 			logger.Error("timer exited", zap.Error(err))
 			return
@@ -278,7 +278,7 @@ Options:
 	}
 
 	if arguments["--mqt"] == true {
-		err = runMessageQueueMgr(ctx, logger, routerUrl)
+		err = runMessageQueueMgr(ctx, clientGen, logger, routerUrl)
 		if err != nil {
 			logger.Error("message queue manager exited", zap.Error(err))
 			return
@@ -286,7 +286,7 @@ Options:
 	}
 
 	if arguments["--mqt_keda"] == true {
-		err = runMQManager(ctx, logger, routerUrl)
+		err = runMQManager(ctx, clientGen, logger, routerUrl)
 		if err != nil {
 			logger.Error("mqt scaler manager exited", zap.Error(err))
 			return
@@ -302,7 +302,7 @@ Options:
 	}
 
 	if arguments["--logger"] == true {
-		err = runLogger(ctx, logger)
+		err = runLogger(ctx, clientGen, logger)
 		if err != nil {
 			logger.Error("logger exited", zap.Error(err))
 		}
