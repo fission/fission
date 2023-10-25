@@ -39,8 +39,7 @@ type ArchivePruner struct {
 
 const defaultPruneInterval int = 60 // in minutes
 
-func MakeArchivePruner(logger *zap.Logger, stowClient *StowClient, pruneInterval time.Duration) (*ArchivePruner, error) {
-	clientGen := crd.NewClientGenerator()
+func MakeArchivePruner(logger *zap.Logger, clientGen crd.ClientGeneratorInterface, stowClient *StowClient, pruneInterval time.Duration) (*ArchivePruner, error) {
 	fissionClient, err := clientGen.GetFissionClient()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get fission client")

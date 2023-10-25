@@ -90,7 +90,7 @@ func (f *Framework) Start(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("error toggling metric address: %v", err)
 	}
-	err = storagesvc.Start(ctx, f.logger, storagesvc.NewLocalStorage(storageDir), f.storageSvcPort)
+	err = storagesvc.Start(ctx, clientGen, f.logger, storagesvc.NewLocalStorage(storageDir), f.storageSvcPort)
 	if err != nil {
 		return fmt.Errorf("error starting storage service: %v", err)
 	}

@@ -79,8 +79,8 @@ func runMQManager(ctx context.Context, logger *zap.Logger, routerURL string) err
 	return mqt.StartScalerManager(ctx, logger, routerURL)
 }
 
-func runStorageSvc(ctx context.Context, logger *zap.Logger, port int, storage storagesvc.Storage) error {
-	return storagesvc.Start(ctx, logger, storage, port)
+func runStorageSvc(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, port int, storage storagesvc.Storage) error {
+	return storagesvc.Start(ctx, clientGen, logger, storage, port)
 }
 
 func runBuilderMgr(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, storageSvcUrl string) error {
@@ -319,7 +319,7 @@ Options:
 		} else if arguments["--storageType"] == string(storagesvc.StorageTypeLocal) {
 			storage = storagesvc.NewLocalStorage("/fission")
 		}
-		err := runStorageSvc(ctx, logger, port, storage)
+		err := runStorageSvc(ctx, clientGen, logger, port, storage)
 		if err != nil {
 			logger.Error("storage service exited", zap.Error(err))
 			return
