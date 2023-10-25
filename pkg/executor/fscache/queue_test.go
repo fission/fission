@@ -86,6 +86,8 @@ func TestQueuePopWithConcurrentRequest(t *testing.T) {
 		}()
 	}
 
+	wg.Wait()
+
 	for i := 0; i < noOfPop; i++ {
 		go func() {
 			defer wg.Done()

@@ -23,8 +23,6 @@ require (
 	github.com/influxdata/influxdb v1.11.2
 	github.com/mholt/archiver/v3 v3.5.1
 	github.com/minio/minio-go v6.0.14+incompatible
-	github.com/onsi/ginkgo/v2 v2.11.0
-	github.com/onsi/gomega v1.27.10
 	github.com/ory/dockertest v3.3.5+incompatible
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.17.0
@@ -96,7 +94,6 @@ require (
 	github.com/go-openapi/jsonpointer v0.19.6 // indirect
 	github.com/go-openapi/jsonreference v0.20.2 // indirect
 	github.com/go-openapi/swag v0.22.3 // indirect
-	github.com/go-task/slim-sprig v0.0.0-20230315185526-52ccab3ef572 // indirect
 	github.com/gobuffalo/flect v1.0.2 // indirect
 	github.com/goccy/go-yaml v1.11.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
@@ -106,7 +103,6 @@ require (
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/google/gnostic-models v0.6.8 // indirect
 	github.com/google/gofuzz v1.2.0 // indirect
-	github.com/google/pprof v0.0.0-20210720184732-4bb14d4b1be1 // indirect
 	github.com/gotestyourself/gotestyourself v2.2.0+incompatible // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.16.0 // indirect
 	github.com/hashicorp/errwrap v1.0.0 // indirect
