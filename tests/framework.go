@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 
@@ -163,6 +164,7 @@ func (f *Framework) Stop() error {
 func (f *Framework) ExecCommand(ctx context.Context, args ...string) (string, error) {
 	cmd := app.App(cmd.ClientOptions{
 		RestConfig: f.config,
+		Namespace:  metav1.NamespaceDefault,
 	})
 	cmd.SilenceErrors = true // use our own error message printer
 	cmd.SetArgs(args)

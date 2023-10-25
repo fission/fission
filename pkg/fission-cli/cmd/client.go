@@ -35,11 +35,10 @@ import (
 type (
 	ClientOptions struct {
 		KubeContext string
+		Namespace   string
 		RestConfig  *rest.Config
 	}
 	Client struct {
-		//Options          ClientOptions
-		ClientConfig     clientcmd.ClientConfig
 		RestConfig       *rest.Config
 		FissionClientSet versioned.Interface
 		KubernetesClient kubernetes.Interface
@@ -100,18 +99,23 @@ func GetClientConfig(kubeContext string) (clientcmd.ClientConfig, error) {
 
 func NewClient(opts ClientOptions) (*Client, error) {
 	client := &Client{}
-	cmdConfig, err := GetClientConfig(opts.KubeContext)
-	if err != nil {
-		return nil, err
+	var err error
+	var cmdConfig clientcmd.ClientConfig
+	if len(opts.Namespace) > 0 {
+		client.Namespace = opts.Namespace
+	} else {
+		cmdConfig, err = GetClientConfig(opts.KubeContext)
+		if err != nil {
+			return nil, err
+		}
+		namespace, _, err := cmdConfig.Namespace()
+		if err != nil {
+			return nil, err
+		}
+		client.Namespace = namespace
 	}
-	client.ClientConfig = cmdConfig
 
-	namespace, _, err := cmdConfig.Namespace()
-	if err != nil {
-		return nil, err
-	}
-	client.Namespace = namespace
-	console.Verbose(2, "Kubeconfig default namespace %q", namespace)
+	console.Verbose(2, "Kubeconfig default namespace %q", client.Namespace)
 
 	if opts.RestConfig != nil {
 		client.RestConfig = opts.RestConfig
