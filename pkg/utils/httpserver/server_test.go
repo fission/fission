@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/gorilla/mux"
+	"github.com/hashicorp/go-retryablehttp"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
@@ -46,9 +47,10 @@ func TestStartServer(t *testing.T) {
 			Body:       "404 page not found\n",
 		},
 	}
+	client := retryablehttp.NewClient()
 	for _, test := range tests {
 		t.Run(test.Name, func(t *testing.T) {
-			resp, err := http.Get(test.URL)
+			resp, err := client.Get(test.URL)
 			require.NoError(t, err, "failed to make get request %s", test.URL)
 			defer resp.Body.Close()
 			require.Equal(t, test.StatusCode, resp.StatusCode)
