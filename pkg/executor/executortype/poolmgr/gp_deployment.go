@@ -196,6 +196,10 @@ func (gp *GenericPool) genDeploymentSpec(env *fv1.Environment) (*appsv1.Deployme
 // A pool is a deployment of generic containers for an env.  This
 // creates the pool but doesn't wait for any pods to be ready.
 func (gp *GenericPool) createPoolDeployment(ctx context.Context, env *fv1.Environment) error {
+	// avoid create/update/delete pool deployment at the same time
+	gp.lock.Lock()
+	defer gp.lock.Unlock()
+
 	deploymentMeta := gp.genDeploymentMeta(env)
 	deploymentSpec, err := gp.genDeploymentSpec(env)
 	if err != nil {
@@ -233,6 +237,9 @@ func (gp *GenericPool) createPoolDeployment(ctx context.Context, env *fv1.Enviro
 }
 
 func (gp *GenericPool) updatePoolDeployment(ctx context.Context, env *fv1.Environment) error {
+	// avoid create/update/delete pool deployment at the same time
+	gp.lock.Lock()
+	defer gp.lock.Unlock()
 	logger := gp.logger.With(zap.String("env", env.Name), zap.String("namespace", env.Namespace))
 	if gp.env.ObjectMeta.ResourceVersion == env.ObjectMeta.ResourceVersion {
 		logger.Debug("env resource version matching with pool env")
