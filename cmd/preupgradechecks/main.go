@@ -20,6 +20,7 @@ import (
 	"go.uber.org/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 
+	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
 
@@ -27,7 +28,7 @@ func main() {
 	logger := loggerfactory.GetLogger()
 	defer logger.Sync()
 
-	crdBackedClient, err := makePreUpgradeTaskClient(logger)
+	crdBackedClient, err := makePreUpgradeTaskClient(crd.NewClientGenerator(), logger)
 	if err != nil {
 		logger.Fatal("error creating a crd client, please retry helm upgrade",
 			zap.Error(err))

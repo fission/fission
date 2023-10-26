@@ -28,6 +28,7 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.uber.org/zap"
 
+	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/fetcher"
 	"github.com/fission/fission/pkg/utils/httpserver"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
@@ -37,7 +38,7 @@ var (
 	readyToServe uint32
 )
 
-func Run(ctx context.Context, logger *zap.Logger) {
+func Run(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger) {
 	flag.Usage = fetcherUsage
 	specializeOnStart := flag.Bool("specialize-on-startup", false, "Flag to activate specialize process at pod startup")
 	specializePayload := flag.String("specialize-request", "", "JSON payload for specialize request")
@@ -72,7 +73,7 @@ func Run(ctx context.Context, logger *zap.Logger) {
 	ctx, span := tracer.Start(ctx, "fetcher/Run")
 	defer span.End()
 
-	f, err := fetcher.MakeFetcher(logger, dir, *secretDir, *configDir)
+	f, err := fetcher.MakeFetcher(logger, clientGen, dir, *secretDir, *configDir)
 	if err != nil {
 		logger.Fatal("error making fetcher", zap.Error(err))
 	}

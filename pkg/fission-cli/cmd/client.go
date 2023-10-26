@@ -35,10 +35,10 @@ import (
 type (
 	ClientOptions struct {
 		KubeContext string
+		Namespace   string
+		RestConfig  *rest.Config
 	}
 	Client struct {
-		Options          ClientOptions
-		ClientConfig     clientcmd.ClientConfig
 		RestConfig       *rest.Config
 		FissionClientSet versioned.Interface
 		KubernetesClient kubernetes.Interface
@@ -98,29 +98,36 @@ func GetClientConfig(kubeContext string) (clientcmd.ClientConfig, error) {
 }
 
 func NewClient(opts ClientOptions) (*Client, error) {
-	client := &Client{
-		Options: opts,
+	client := &Client{}
+	var err error
+	var cmdConfig clientcmd.ClientConfig
+	if len(opts.Namespace) > 0 {
+		client.Namespace = opts.Namespace
+	} else {
+		cmdConfig, err = GetClientConfig(opts.KubeContext)
+		if err != nil {
+			return nil, err
+		}
+		namespace, _, err := cmdConfig.Namespace()
+		if err != nil {
+			return nil, err
+		}
+		client.Namespace = namespace
 	}
-	cmdConfig, err := GetClientConfig(opts.KubeContext)
-	if err != nil {
-		return nil, err
-	}
-	client.ClientConfig = cmdConfig
 
-	namespace, _, err := cmdConfig.Namespace()
-	if err != nil {
-		return nil, err
-	}
-	client.Namespace = namespace
-	console.Verbose(2, "Kubeconfig default namespace %q", namespace)
+	console.Verbose(2, "Kubeconfig default namespace %q", client.Namespace)
 
-	restConfig, err := cmdConfig.ClientConfig()
-	if err != nil {
-		return nil, err
+	if opts.RestConfig != nil {
+		client.RestConfig = opts.RestConfig
+	} else {
+		restConfig, err := cmdConfig.ClientConfig()
+		if err != nil {
+			return nil, err
+		}
+		client.RestConfig = restConfig
 	}
-	client.RestConfig = restConfig
 
-	clientGen := crd.NewClientGeneratorWithRestConfig(restConfig)
+	clientGen := crd.NewClientGeneratorWithRestConfig(client.RestConfig)
 	clientset, err := clientGen.GetKubernetesClient()
 	if err != nil {
 		return nil, err

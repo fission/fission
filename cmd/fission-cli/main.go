@@ -20,11 +20,12 @@ import (
 	"os"
 
 	"github.com/fission/fission/cmd/fission-cli/app"
+	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/console"
 )
 
 func main() {
-	cmd := app.App()
+	cmd := app.App(cmd.ClientOptions{})
 	cmd.SilenceErrors = true // use our own error message printer
 
 	err := cmd.Execute()

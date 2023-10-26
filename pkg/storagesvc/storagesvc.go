@@ -30,6 +30,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/utils/httpserver"
 	"github.com/fission/fission/pkg/utils/metrics"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
@@ -281,7 +282,7 @@ func (ss *StorageService) Start(ctx context.Context, port int) {
 }
 
 // Start runs storage service
-func Start(ctx context.Context, logger *zap.Logger, storage Storage, port int) error {
+func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, storage Storage, port int) error {
 	enablePruner, err := strconv.ParseBool(os.Getenv("PRUNE_ENABLED"))
 	if err != nil {
 		logger.Warn("PRUNE_ENABLED value not set. Enabling archive pruner by default.", zap.Error(err))
@@ -295,7 +296,7 @@ func Start(ctx context.Context, logger *zap.Logger, storage Storage, port int) e
 
 	// create http handlers
 	storageService := MakeStorageService(logger, storageClient, port)
-	go metrics.ServeMetrics(ctx, logger)
+	go metrics.ServeMetrics(ctx, "storagesvc", logger)
 	go storageService.Start(ctx, port)
 
 	// enablePruner prevents storagesvc unit test from needing to talk to kubernetes
@@ -305,7 +306,7 @@ func Start(ctx context.Context, logger *zap.Logger, storage Storage, port int) e
 		if err != nil {
 			pruneInterval = defaultPruneInterval
 		}
-		pruner, err := MakeArchivePruner(logger, storageClient, time.Duration(pruneInterval))
+		pruner, err := MakeArchivePruner(logger, clientGen, storageClient, time.Duration(pruneInterval))
 		if err != nil {
 			return errors.Wrap(err, "Error creating archivePruner")
 		}

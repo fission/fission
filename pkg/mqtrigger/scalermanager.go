@@ -49,25 +49,15 @@ var (
 	matchAllCap   = regexp.MustCompile("([a-z0-9])([A-Z])")
 )
 
-func getScaledObjectClient(namespace string) (dynamic.ResourceInterface, error) {
-	clientGen := crd.NewClientGenerator()
-	dynamicClient, err := clientGen.GetDynamicClient()
-	if err != nil {
-		return nil, err
-	}
-	return dynamicClient.Resource(scaledObjectGVR).Namespace(namespace), nil
+func getScaledObjectClient(client dynamic.Interface, namespace string) dynamic.ResourceInterface {
+	return client.Resource(scaledObjectGVR).Namespace(namespace)
 }
 
-func getAuthTriggerClient(namespace string) (dynamic.ResourceInterface, error) {
-	clientGen := crd.NewClientGenerator()
-	dynamicClient, err := clientGen.GetDynamicClient()
-	if err != nil {
-		return nil, err
-	}
-	return dynamicClient.Resource(authTriggerGVR).Namespace(namespace), nil
+func getAuthTriggerClient(client dynamic.Interface, namespace string) dynamic.ResourceInterface {
+	return client.Resource(authTriggerGVR).Namespace(namespace)
 }
 
-func mqTriggerEventHandlers(ctx context.Context, logger *zap.Logger, kubeClient kubernetes.Interface, routerURL string) k8sCache.ResourceEventHandlerFuncs {
+func mqTriggerEventHandlers(ctx context.Context, logger *zap.Logger, kubeClient kubernetes.Interface, dynamicClient dynamic.Interface, routerURL string) k8sCache.ResourceEventHandlerFuncs {
 	return k8sCache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			go func() {
@@ -80,7 +70,7 @@ func mqTriggerEventHandlers(ctx context.Context, logger *zap.Logger, kubeClient 
 				authenticationRef := ""
 				if len(mqt.Spec.Secret) > 0 {
 					authenticationRef = fmt.Sprintf("%s-auth-trigger", mqt.ObjectMeta.Name)
-					err := createAuthTrigger(ctx, mqt, authenticationRef, kubeClient)
+					err := createAuthTrigger(ctx, dynamicClient, mqt, authenticationRef, kubeClient)
 					if err != nil {
 						logger.Error("Failed to create Authentication Trigger", zap.Error(err))
 						return
@@ -90,7 +80,7 @@ func mqTriggerEventHandlers(ctx context.Context, logger *zap.Logger, kubeClient 
 				if err := createDeployment(ctx, mqt, routerURL, kubeClient); err != nil {
 					logger.Error("Failed to create Deployment", zap.Error(err))
 					if len(authenticationRef) > 0 {
-						err = deleteAuthTrigger(ctx, authenticationRef, mqt.ObjectMeta.Namespace)
+						err = deleteAuthTrigger(ctx, dynamicClient, authenticationRef, mqt.ObjectMeta.Namespace)
 						if err != nil {
 							logger.Error("Failed to delete Authentication Trigger", zap.Error(err))
 						}
@@ -98,10 +88,10 @@ func mqTriggerEventHandlers(ctx context.Context, logger *zap.Logger, kubeClient 
 					return
 				}
 
-				if err := createScaledObject(ctx, mqt, authenticationRef); err != nil {
+				if err := createScaledObject(ctx, dynamicClient, mqt, authenticationRef); err != nil {
 					logger.Error("Failed to create ScaledObject", zap.Error(err))
 					if len(authenticationRef) > 0 {
-						if err = deleteAuthTrigger(ctx, authenticationRef, mqt.ObjectMeta.Namespace); err != nil {
+						if err = deleteAuthTrigger(ctx, dynamicClient, authenticationRef, mqt.ObjectMeta.Namespace); err != nil {
 							logger.Error("Failed to delete Authentication Trigger", zap.Error(err))
 						}
 					}
@@ -127,7 +117,7 @@ func mqTriggerEventHandlers(ctx context.Context, logger *zap.Logger, kubeClient 
 				authenticationRef := ""
 				if len(newMqt.Spec.Secret) > 0 && newMqt.Spec.Secret != mqt.Spec.Secret {
 					authenticationRef = fmt.Sprintf("%s-auth-trigger", mqt.ObjectMeta.Name)
-					if err := updateAuthTrigger(ctx, mqt, authenticationRef, kubeClient); err != nil {
+					if err := updateAuthTrigger(ctx, dynamicClient, mqt, authenticationRef, kubeClient); err != nil {
 						logger.Error("Failed to update Authentication Trigger", zap.Error(err))
 						return
 					}
@@ -138,7 +128,7 @@ func mqTriggerEventHandlers(ctx context.Context, logger *zap.Logger, kubeClient 
 					return
 				}
 
-				if err := updateScaledObject(ctx, mqt, authenticationRef); err != nil {
+				if err := updateScaledObject(ctx, dynamicClient, mqt, authenticationRef); err != nil {
 					logger.Error("Failed to Update ScaledObject", zap.Error(err))
 					return
 				}
@@ -150,8 +140,7 @@ func mqTriggerEventHandlers(ctx context.Context, logger *zap.Logger, kubeClient 
 
 // StartScalerManager watches for changes in MessageQueueTrigger and,
 // Based on changes, it Creates, Updates and Deletes Objects of Kind ScaledObjects, AuthenticationTriggers and Deployments
-func StartScalerManager(ctx context.Context, logger *zap.Logger, routerURL string) error {
-	clientGen := crd.NewClientGenerator()
+func StartScalerManager(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, routerURL string) error {
 	fissionClient, err := clientGen.GetFissionClient()
 	if err != nil {
 		return errors.Wrap(err, "failed to get fission client")
@@ -160,6 +149,10 @@ func StartScalerManager(ctx context.Context, logger *zap.Logger, routerURL strin
 	if err != nil {
 		return errors.Wrap(err, "failed to get kubernetes client")
 	}
+	dynamicClient, err := clientGen.GetDynamicClient()
+	if err != nil {
+		return errors.Wrap(err, "failed to get dynamic client")
+	}
 
 	err = crd.WaitForCRDs(ctx, logger, fissionClient)
 	if err != nil {
@@ -167,7 +160,7 @@ func StartScalerManager(ctx context.Context, logger *zap.Logger, routerURL strin
 	}
 
 	for _, informer := range utils.GetInformersForNamespaces(fissionClient, time.Minute*30, fv1.MessageQueueResource) {
-		_, err := informer.AddEventHandler(mqTriggerEventHandlers(ctx, logger, kubeClient, routerURL))
+		_, err := informer.AddEventHandler(mqTriggerEventHandlers(ctx, logger, kubeClient, dynamicClient, routerURL))
 		if err != nil {
 			return err
 		}
@@ -352,15 +345,12 @@ func getAuthTriggerSpec(ctx context.Context, mqt *fv1.MessageQueueTrigger, authe
 	return authTriggerObj, nil
 }
 
-func createAuthTrigger(ctx context.Context, mqt *fv1.MessageQueueTrigger, authenticationRef string, kubeClient kubernetes.Interface) error {
+func createAuthTrigger(ctx context.Context, client dynamic.Interface, mqt *fv1.MessageQueueTrigger, authenticationRef string, kubeClient kubernetes.Interface) error {
 	authTriggerObj, err := getAuthTriggerSpec(ctx, mqt, authenticationRef, kubeClient)
 	if err != nil {
 		return err
 	}
-	authTriggerClient, err := getAuthTriggerClient(mqt.ObjectMeta.Namespace)
-	if err != nil {
-		return err
-	}
+	authTriggerClient := getAuthTriggerClient(client, mqt.ObjectMeta.Namespace)
 	_, err = authTriggerClient.Create(ctx, authTriggerObj, metav1.CreateOptions{})
 	if err != nil {
 		return err
@@ -368,11 +358,8 @@ func createAuthTrigger(ctx context.Context, mqt *fv1.MessageQueueTrigger, authen
 	return nil
 }
 
-func updateAuthTrigger(ctx context.Context, mqt *fv1.MessageQueueTrigger, authenticationRef string, kubeClient kubernetes.Interface) error {
-	authTriggerClient, err := getAuthTriggerClient(mqt.ObjectMeta.Namespace)
-	if err != nil {
-		return err
-	}
+func updateAuthTrigger(ctx context.Context, client dynamic.Interface, mqt *fv1.MessageQueueTrigger, authenticationRef string, kubeClient kubernetes.Interface) error {
+	authTriggerClient := getAuthTriggerClient(client, mqt.ObjectMeta.Namespace)
 	oldAuthTriggerObj, err := authTriggerClient.Get(ctx, authenticationRef, metav1.GetOptions{})
 	if err != nil {
 		return err
@@ -391,12 +378,9 @@ func updateAuthTrigger(ctx context.Context, mqt *fv1.MessageQueueTrigger, authen
 	return nil
 }
 
-func deleteAuthTrigger(ctx context.Context, name, namespace string) error {
-	authTriggerClient, err := getAuthTriggerClient(namespace)
-	if err != nil {
-		return err
-	}
-	err = authTriggerClient.Delete(ctx, name, metav1.DeleteOptions{})
+func deleteAuthTrigger(ctx context.Context, client dynamic.Interface, name, namespace string) error {
+	authTriggerClient := getAuthTriggerClient(client, namespace)
+	err := authTriggerClient.Delete(ctx, name, metav1.DeleteOptions{})
 	if err != nil {
 		return err
 	}
@@ -536,24 +520,18 @@ func getScaledObject(mqt *fv1.MessageQueueTrigger, authenticationRef string) *un
 	}
 }
 
-func createScaledObject(ctx context.Context, mqt *fv1.MessageQueueTrigger, authenticationRef string) error {
+func createScaledObject(ctx context.Context, client dynamic.Interface, mqt *fv1.MessageQueueTrigger, authenticationRef string) error {
 	scaledObject := getScaledObject(mqt, authenticationRef)
-	kedaClient, err := getScaledObjectClient(mqt.ObjectMeta.Namespace)
-	if err != nil {
-		return err
-	}
-	_, err = kedaClient.Create(ctx, scaledObject, metav1.CreateOptions{})
+	kedaClient := getScaledObjectClient(client, mqt.ObjectMeta.Namespace)
+	_, err := kedaClient.Create(ctx, scaledObject, metav1.CreateOptions{})
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func updateScaledObject(ctx context.Context, mqt *fv1.MessageQueueTrigger, authenticationRef string) error {
-	kedaClient, err := getScaledObjectClient(mqt.ObjectMeta.Namespace)
-	if err != nil {
-		return err
-	}
+func updateScaledObject(ctx context.Context, client dynamic.Interface, mqt *fv1.MessageQueueTrigger, authenticationRef string) error {
+	kedaClient := getScaledObjectClient(client, mqt.ObjectMeta.Namespace)
 	oldScaledObject, err := kedaClient.Get(ctx, mqt.ObjectMeta.Name, metav1.GetOptions{})
 	if err != nil {
 		return err

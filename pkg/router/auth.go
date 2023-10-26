@@ -18,16 +18,16 @@ import (
 )
 
 var (
-	malformedToken = errors.New("Unauthorized: malformed token")
-	expiredToken   = errors.New("Unauthorized: token is either expired or not active yet")
-	invalidCreds   = errors.New("Unauthorized: invalid username or password")
+	errMalformedToken = errors.New("unauthorized: malformed token")
+	errExpiredToken   = errors.New("unauthorized: token is either expired or not active yet")
+	errInvalidCreds   = errors.New("unauthorized: invalid username or password")
 )
 
 func checkAuthToken(r *http.Request) error {
 	authHeader := strings.Split(r.Header.Get("Authorization"), "Bearer ")
 	if len(authHeader) != 2 || len(authHeader[1]) == 0 {
 		// malformed token
-		return malformedToken
+		return errMalformedToken
 	}
 
 	jwtToken := authHeader[1]
@@ -43,17 +43,17 @@ func checkAuthToken(r *http.Request) error {
 	if ve, ok := err.(*jwt.ValidationError); ok {
 		if ve.Errors&jwt.ValidationErrorMalformed != 0 {
 			// malformed token
-			err = malformedToken
+			err = errMalformedToken
 		} else if ve.Errors&(jwt.ValidationErrorExpired|jwt.ValidationErrorNotValidYet) != 0 {
 			// token is either expired or not active yet
-			err = expiredToken
+			err = errExpiredToken
 		} else {
-			err = fmt.Errorf("Unauthorized: %w", err)
+			err = fmt.Errorf("unauthorized: %w", err)
 		}
 	}
 
 	if err == nil {
-		err = errors.New("Unauthorized: invalid token")
+		err = errors.New("unauthorized: invalid token")
 	}
 
 	return err
@@ -83,17 +83,17 @@ type AuthConf struct {
 func parseAuthConf(auth *AuthConf) error {
 	username, ok := os.LookupEnv("AUTH_USERNAME")
 	if !ok || len(username) == 0 {
-		return fmt.Errorf("Username not configured  or invalid")
+		return fmt.Errorf("username not configured  or invalid")
 	}
 
 	password, ok := os.LookupEnv("AUTH_PASSWORD")
 	if !ok || len(password) == 0 {
-		return fmt.Errorf("Password not configured or invalid")
+		return fmt.Errorf("password not configured or invalid")
 	}
 
 	signingKey, ok := os.LookupEnv("JWT_SIGNING_KEY")
 	if !ok || len(signingKey) == 0 {
-		return fmt.Errorf("Signing key not configured or invalid")
+		return fmt.Errorf("signing key not configured or invalid")
 	}
 
 	auth.username = username
@@ -138,7 +138,7 @@ func authLoginHandler(featureConfig *config.FeatureConfig) func(w http.ResponseW
 		rat := &fv1.RouterAuthToken{}
 
 		if t.Username != auth.username || t.Password != auth.password {
-			http.Error(w, invalidCreds.Error(), http.StatusUnauthorized)
+			http.Error(w, errInvalidCreds.Error(), http.StatusUnauthorized)
 			return
 		}
 

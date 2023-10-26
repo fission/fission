@@ -558,10 +558,9 @@ func getEnvValue(envVar string) string {
 	return envVarSplit[1]
 }
 
-func StartCanaryServer(ctx context.Context, logger *zap.Logger, unitTestFlag bool) error {
+func StartCanaryServer(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, unitTestFlag bool) error {
 	cLogger := logger.Named("CanaryServer")
 
-	clientGen := crd.NewClientGenerator()
 	fissionClient, err := clientGen.GetFissionClient()
 	if err != nil {
 		return fmt.Errorf("failed to get fission client: %w", err)

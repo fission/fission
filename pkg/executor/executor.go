@@ -390,7 +390,7 @@ func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, 
 
 	utils.CreateMissingPermissionForSA(ctx, kubernetesClient, logger)
 
-	go metrics.ServeMetrics(ctx, logger)
+	go metrics.ServeMetrics(ctx, "executor", logger)
 	go api.Serve(ctx, port)
 
 	return nil

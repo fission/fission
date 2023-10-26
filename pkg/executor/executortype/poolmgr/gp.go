@@ -59,6 +59,7 @@ type (
 	// GenericPool represents a generic environment pool
 	GenericPool struct {
 		logger                   *zap.Logger
+		lock                     sync.Mutex
 		env                      *fv1.Environment
 		deployment               *appsv1.Deployment            // kubernetes deployment
 		fnNamespace              string                        // namespace to keep our resources
@@ -130,6 +131,7 @@ func MakeGenericPool(
 		instanceID:               instanceID,
 		podFSVCMap:               sync.Map{},
 		podSpecPatch:             podSpecPatch,
+		lock:                     sync.Mutex{},
 	}
 
 	gp.runtimeImagePullPolicy = utils.GetImagePullPolicy(os.Getenv("RUNTIME_IMAGE_PULL_POLICY"))
@@ -643,6 +645,8 @@ func (gp *GenericPool) getPercent(cpuUsage resource.Quantity, percentage float64
 
 // destroys the pool -- the deployment, replicaset and pods
 func (gp *GenericPool) destroy(ctx context.Context) error {
+	gp.lock.Lock()
+	defer gp.lock.Unlock()
 	close(gp.stopReadyPodControllerCh)
 
 	deletePropagation := metav1.DeletePropagationBackground

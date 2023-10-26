@@ -535,12 +535,14 @@ func (gpm *GenericPoolManager) service() {
 				return
 			}
 			delete(gpm.pools, key)
-			err := pool.destroy(req.ctx)
-			if err != nil {
-				gpm.logger.Error("failed to destroy pool",
-					zap.String("environment", env.ObjectMeta.Name),
-					zap.String("namespace", env.ObjectMeta.Namespace),
-					zap.Error(err))
+			if pool != nil {
+				err := pool.destroy(req.ctx)
+				if err != nil {
+					gpm.logger.Error("failed to destroy pool",
+						zap.String("environment", env.ObjectMeta.Name),
+						zap.String("namespace", env.ObjectMeta.Namespace),
+						zap.Error(err))
+				}
 			}
 			// no response, caller doesn't wait
 		}

@@ -48,10 +48,11 @@ func SetupPortForward(ctx context.Context, client cmd.Client, namespace, labelSe
 	console.Verbose(2, "Setting up port forward to %s in namespace %s",
 		labelSelector, namespace)
 
-	localPort, err := findFreePort()
+	lcPort, err := utils.FindFreePort()
 	if err != nil {
 		return "", errors.Wrap(err, "error finding unused port")
 	}
+	localPort := strconv.Itoa(lcPort)
 
 	var waitDuration time.Duration = 50
 
@@ -101,22 +102,6 @@ func SetupPortForward(ctx context.Context, client cmd.Client, namespace, labelSe
 	console.Verbose(2, "Port forward from local port %v started", localPort)
 
 	return localPort, nil
-}
-
-func findFreePort() (string, error) {
-	listener, err := net.Listen("tcp", ":0")
-	if err != nil {
-		return "", err
-	}
-
-	port := strconv.Itoa(listener.Addr().(*net.TCPAddr).Port)
-
-	err = listener.Close()
-	if err != nil {
-		return "", err
-	}
-
-	return port, nil
 }
 
 // runPortForward creates a local port forward to the specified pod

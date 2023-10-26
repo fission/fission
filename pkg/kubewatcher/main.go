@@ -26,8 +26,7 @@ import (
 	"github.com/fission/fission/pkg/publisher"
 )
 
-func Start(ctx context.Context, logger *zap.Logger, routerUrl string) error {
-	clientGen := crd.NewClientGenerator()
+func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, routerUrl string) error {
 	fissionClient, err := clientGen.GetFissionClient()
 	if err != nil {
 		return errors.Wrap(err, "failed to get fission client")

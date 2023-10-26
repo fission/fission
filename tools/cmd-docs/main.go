@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra/doc"
 
 	"github.com/fission/fission/cmd/fission-cli/app"
+	"github.com/fission/fission/pkg/fission-cli/cmd"
 )
 
 const fmTemplate = `---
@@ -40,9 +41,9 @@ func main() {
 		Use:   "fission-cli-docs",
 		Short: "Generate docs for fission-cli",
 		Long:  "Generate docs for fission-cli",
-		Run: func(cmd *cobra.Command, args []string) {
+		Run: func(command *cobra.Command, args []string) {
 			log.Printf("Generating docs in directory %s", outdir)
-			fissionApp := app.App()
+			fissionApp := app.App(cmd.ClientOptions{})
 			fissionApp.DisableAutoGenTag = true
 			fissionApp.Short = "Serverless framework for Kubernetes"
 			err := doc.GenMarkdownTreeCustom(fissionApp, outdir, filePrepender, linkHandler)
