@@ -56,4 +56,48 @@ func TestFissionCLI(t *testing.T) {
 			require.Error(t, err)
 		})
 	})
+
+	t.Run("function", func(t *testing.T) {
+
+		envName := "test-func-env"
+		testFuncName := "hello"
+
+		t.Run("create", func(t *testing.T) {
+
+			_, err = cli.ExecCommand(f, ctx, "env", "create", "--name", envName, "--image", "fission/python-env")
+			require.NoError(t, err)
+
+			_, err := cli.ExecCommand(f, ctx, "function", "create", "--name", testFuncName, "--code", "./hello.js", "--env", envName)
+			require.NoError(t, err)
+
+			testFunc, err := fissionClient.CoreV1().Functions(metav1.NamespaceDefault).Get(ctx, testFuncName, metav1.GetOptions{})
+			require.NoError(t, err)
+			require.NotNil(t, testFunc)
+			require.Equal(t, testFuncName, testFunc.Name)
+			require.Equal(t, envName, testFunc.Spec.Environment.Name)
+		})
+
+		t.Run("update", func(t *testing.T) {
+			_, err := cli.ExecCommand(f, ctx, "function", "update", "--name", testFuncName, "--labels", "env=test")
+			require.NoError(t, err)
+
+			testFunc, err := fissionClient.CoreV1().Functions(metav1.NamespaceDefault).Get(ctx, testFuncName, metav1.GetOptions{})
+			require.NoError(t, err)
+			require.NotNil(t, testFunc)
+			require.Equal(t, testFuncName, testFunc.Name)
+			require.NotNil(t, testFunc.Labels)
+			require.Equal(t, "test", testFunc.Labels["env"])
+		})
+
+		t.Run("delete", func(t *testing.T) {
+			_, err := cli.ExecCommand(f, ctx, "function", "delete", "--name", testFuncName)
+			require.NoError(t, err)
+
+			_, err = fissionClient.CoreV1().Functions(metav1.NamespaceDefault).Get(ctx, testFuncName, metav1.GetOptions{})
+			require.Error(t, err)
+			_, err = cli.ExecCommand(f, ctx, "env", "delete", "--name", envName)
+			require.NoError(t, err)
+		})
+
+	})
 }
