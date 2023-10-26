@@ -2,8 +2,6 @@ package cli_test
 
 import (
 	"context"
-	"path"
-	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -64,16 +62,12 @@ func TestFissionCLI(t *testing.T) {
 		envName := "test-func-env"
 		testFuncName := "hello"
 
-		_, filename, _, ok := runtime.Caller(0)
-		require.True(t, ok)
-
-		helloFuncFilePath := path.Join(path.Dir(filename), "hello.js")
-
-		_, err = cli.ExecCommand(f, ctx, "env", "create", "--name", envName, "--image", "fission/python-env")
-		require.NoError(t, err)
-
 		t.Run("create", func(t *testing.T) {
-			_, err := cli.ExecCommand(f, ctx, "function", "create", "--name", testFuncName, "--code", helloFuncFilePath, "--env", envName)
+
+			_, err = cli.ExecCommand(f, ctx, "env", "create", "--name", envName, "--image", "fission/python-env")
+			require.NoError(t, err)
+
+			_, err := cli.ExecCommand(f, ctx, "function", "create", "--name", testFuncName, "--code", "./hello.js", "--env", envName)
 			require.NoError(t, err)
 
 			testFunc, err := fissionClient.CoreV1().Functions(metav1.NamespaceDefault).Get(ctx, testFuncName, metav1.GetOptions{})
@@ -101,9 +95,9 @@ func TestFissionCLI(t *testing.T) {
 
 			_, err = fissionClient.CoreV1().Functions(metav1.NamespaceDefault).Get(ctx, testFuncName, metav1.GetOptions{})
 			require.Error(t, err)
+			_, err = cli.ExecCommand(f, ctx, "env", "delete", "--name", envName)
+			require.NoError(t, err)
 		})
 
-		_, err := cli.ExecCommand(f, ctx, "env", "delete", "--name", envName)
-		require.NoError(t, err)
 	})
 }
