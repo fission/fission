@@ -277,7 +277,7 @@ func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, 
 	executorInstanceID := strings.ToLower(uniuri.NewLen(8))
 
 	podSpecPatch, err := util.GetSpecFromConfigMap(fv1.RuntimePodSpecPath)
-	if err != nil {
+	if err != nil && !os.IsNotExist(err) {
 		logger.Warn("error reading data for pod spec patch", zap.String("path", fv1.RuntimePodSpecPath), zap.Error(err))
 	}
 

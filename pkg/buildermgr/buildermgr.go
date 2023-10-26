@@ -18,6 +18,7 @@ package buildermgr
 
 import (
 	"context"
+	"os"
 	"time"
 
 	"github.com/pkg/errors"
@@ -54,7 +55,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *
 	}
 
 	podSpecPatch, err := util.GetSpecFromConfigMap(fv1.BuilderPodSpecPath)
-	if err != nil {
+	if err != nil && !os.IsNotExist(err) {
 		logger.Warn("error reading data for pod spec patch", zap.String("path", fv1.BuilderPodSpecPath), zap.Error(err))
 	}
 

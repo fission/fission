@@ -22,6 +22,18 @@ func StartServices(ctx context.Context, f *framework.Framework) error {
 	if err != nil {
 		return fmt.Errorf("error toggling metric address: %v", err)
 	}
+
+	// namespace settings for components
+	os.Setenv("FISSION_BUILDER_NAMESPACE", "")
+	os.Setenv("FISSION_FUNCTION_NAMESPACE", "")
+	os.Setenv("FISSION_DEFAULT_NAMESPACE", "default")
+	os.Setenv("FISSION_RESOURCE_NAMESPACES", "default")
+	utils.DefaultNSResolver().DefaultNamespace = "default"
+	utils.DefaultNSResolver().FissionResourceNS = map[string]string{
+		"default": "default",
+	}
+
+	os.Setenv("POD_READY_TIMEOUT", "300s")
 	err = executor.StartExecutor(ctx, f.ClientGen(), f.Logger(), executorPort)
 	if err != nil {
 		return fmt.Errorf("error starting executor: %v", err)
