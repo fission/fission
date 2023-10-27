@@ -18,9 +18,9 @@ package container
 
 import (
 	"context"
+	"errors"
 	"strconv"
 
-	multierror "github.com/hashicorp/go-multierror"
 	"go.uber.org/zap"
 	apiv1 "k8s.io/api/core/v1"
 	k8s_err "k8s.io/apimachinery/pkg/api/errors"
@@ -66,7 +66,7 @@ func (cn *Container) getResources(fn *fv1.Function) apiv1.ResourceRequirements {
 
 // cleanupContainer cleans all kubernetes objects related to function
 func (cn *Container) cleanupContainer(ctx context.Context, ns string, name string) error {
-	result := &multierror.Error{}
+	var result error
 
 	err := cn.deleteSvc(ctx, ns, name)
 	if err != nil && !k8s_err.IsNotFound(err) {
@@ -74,7 +74,7 @@ func (cn *Container) cleanupContainer(ctx context.Context, ns string, name strin
 			zap.Error(err),
 			zap.String("function_name", name),
 			zap.String("function_namespace", ns))
-		result = multierror.Append(result, err)
+		result = errors.Join(result, err)
 	}
 
 	err = cn.hpaops.DeleteHpa(ctx, ns, name)
@@ -83,7 +83,7 @@ func (cn *Container) cleanupContainer(ctx context.Context, ns string, name strin
 			zap.Error(err),
 			zap.String("function_name", name),
 			zap.String("function_namespace", ns))
-		result = multierror.Append(result, err)
+		result = errors.Join(result, err)
 	}
 
 	err = cn.deleteDeployment(ctx, ns, name)
@@ -92,10 +92,10 @@ func (cn *Container) cleanupContainer(ctx context.Context, ns string, name strin
 			zap.Error(err),
 			zap.String("function_name", name),
 			zap.String("function_namespace", ns))
-		result = multierror.Append(result, err)
+		result = errors.Join(result, err)
 	}
 
-	return result.ErrorOrNil()
+	return result
 }
 
 // referencedResourcesRVSum returns the sum of resource version of all resources the function references to.

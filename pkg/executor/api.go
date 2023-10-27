@@ -19,6 +19,7 @@ package executor
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html"
 	"io"
@@ -26,8 +27,6 @@ import (
 	"strings"
 
 	"github.com/gorilla/mux"
-	"github.com/hashicorp/go-multierror"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -201,27 +200,26 @@ func (executor *Executor) tapServices(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	errs := &multierror.Error{}
+	var errs error
 	for _, req := range tapSvcReqs {
 		svcHost := strings.TrimPrefix(req.ServiceURL, "http://")
 
 		et, exists := executor.executorTypes[req.FnExecutorType]
 		if !exists {
-			errs = multierror.Append(errs,
-				errors.Errorf("error tapping service due to unknown executor type '%v' found",
+			errs = errors.Join(errs,
+				fmt.Errorf("error tapping service due to unknown executor type '%s' found",
 					req.FnExecutorType))
 			continue
 		}
 
 		err = et.TapService(ctx, svcHost)
 		if err != nil {
-			errs = multierror.Append(errs,
-				errors.Wrapf(err, "'%v' failed to tap function '%v' in '%v' with service url '%v'",
-					req.FnMetadata.Name, req.FnMetadata.Namespace, req.ServiceURL, req.FnExecutorType))
+			errs = errors.Join(errs,
+				fmt.Errorf("error tapping function '%s/%s' with executor '%s' and service url '%s': %w", req.FnMetadata.Namespace, req.FnMetadata.Name, req.FnExecutorType, req.ServiceURL, err))
 		}
 	}
 
-	if errs.ErrorOrNil() != nil {
+	if errs != nil {
 		logger.Error("error tapping function service", zap.Error(errs))
 		http.Error(w, "Not found", http.StatusNotFound)
 		return
@@ -249,7 +247,7 @@ func (executor *Executor) unTapService(w http.ResponseWriter, r *http.Request) {
 	}
 	t := tapSvcReq.FnExecutorType
 	if t != fv1.ExecutorTypePoolmgr {
-		msg := fmt.Sprintf("Unknown executor type '%v'", t)
+		msg := fmt.Sprintf("Unknown executor type '%s'", t)
 		http.Error(w, html.EscapeString(msg), http.StatusBadRequest)
 		return
 	}

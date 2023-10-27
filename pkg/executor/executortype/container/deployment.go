@@ -231,7 +231,7 @@ func (cn *Container) getDeploymentSpec(ctx context.Context, fn *fv1.Function, ta
 				Exec: &apiv1.ExecAction{
 					Command: []string{
 						"/bin/sleep",
-						fmt.Sprintf("%v", gracePeriodSeconds),
+						fmt.Sprintf("%d", gracePeriodSeconds),
 					},
 				},
 			},
@@ -239,7 +239,7 @@ func (cn *Container) getDeploymentSpec(ctx context.Context, fn *fv1.Function, ta
 		Env: []apiv1.EnvVar{
 			{
 				Name:  fv1.ResourceVersionCount,
-				Value: fmt.Sprintf("%v", rvCount),
+				Value: fmt.Sprintf("%d", rvCount),
 			},
 		},
 		EnvFrom: envFromSources,

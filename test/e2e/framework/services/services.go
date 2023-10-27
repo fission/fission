@@ -100,5 +100,6 @@ func StartServices(ctx context.Context, f *framework.Framework) error {
 	f.ServiceInfo["router"] = framework.ServiceInfo{
 		Port: routerPort,
 	}
+	os.Setenv("FISSION_ROUTER_URL", fmt.Sprintf("http://localhost:%d", routerPort))
 	return nil
 }
