@@ -131,7 +131,7 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 		ctx = input.Context()
 	} else {
 		var closeCtx context.CancelFunc
-		ctx, closeCtx = context.WithTimeout(input.Context(), reqTimeout*time.Second)
+		ctx, closeCtx = context.WithTimeoutCause(input.Context(), reqTimeout*time.Second, fmt.Errorf("function request timeout (%d)s exceeded", reqTimeout))
 		defer closeCtx()
 	}
 

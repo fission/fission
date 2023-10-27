@@ -19,6 +19,7 @@ package publisher
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -121,7 +122,7 @@ func (p *WebhookPublisher) makeHTTPRequest(r *publishRequest) {
 		req.Header.Set(k, v)
 	}
 	// Make the request
-	ctx, cancel := context.WithTimeout(r.ctx, p.timeout)
+	ctx, cancel := context.WithTimeoutCause(r.ctx, p.timeout, fmt.Errorf("webhook request timed out (%f)s exceeded ", p.timeout.Seconds()))
 	defer cancel()
 	resp, err := ctxhttp.Do(ctx, otelhttp.DefaultClient, req)
 	if err != nil {

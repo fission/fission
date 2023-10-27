@@ -19,6 +19,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"os"
@@ -97,7 +98,7 @@ func (t *Tracker) SendEvent(ctx context.Context, e Event) error {
 	if err != nil {
 		return err
 	}
-	ctx, cancel := context.WithTimeout(req.Context(), HTTP_TIMEOUT)
+	ctx, cancel := context.WithTimeoutCause(req.Context(), HTTP_TIMEOUT, fmt.Errorf("tracker request timeout (%f)s exceeded", HTTP_TIMEOUT.Seconds()))
 	defer cancel()
 
 	req = req.WithContext(ctx)

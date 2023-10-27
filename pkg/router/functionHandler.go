@@ -415,7 +415,7 @@ func (roundTripper *RetryingRoundTripper) setContext(req *http.Request) *http.Re
 	// that user aborts connection before timeout. Otherwise,
 	// the request won't be canceled until the deadline exceeded
 	// which may be a potential security issue.
-	ctx, closeCtx := context.WithTimeout(req.Context(), roundTripper.funcTimeout)
+	ctx, closeCtx := context.WithTimeoutCause(req.Context(), roundTripper.funcTimeout, fmt.Errorf("roundtripper timeout (%f)s exceeded", roundTripper.funcTimeout.Seconds()))
 	roundTripper.closeContextFunc = &closeCtx
 
 	return req.WithContext(ctx)
@@ -581,7 +581,7 @@ func (roundTripper RetryingRoundTripper) addForwardedHostHeader(req *http.Reques
 // unTapservice marks the serviceURL in executor's cache as inactive, so that it can be reused
 func (fh functionHandler) unTapService(ctx context.Context, fn *fv1.Function, serviceUrl *url.URL) error {
 	fh.logger.Debug("UnTapService Called")
-	ctx, cancel := context.WithTimeout(ctx, fh.unTapServiceTimeout)
+	ctx, cancel := context.WithTimeoutCause(ctx, fh.unTapServiceTimeout, fmt.Errorf("unTapService timeout (%f)s exceeded", fh.unTapServiceTimeout.Seconds()))
 	defer cancel()
 	err := fh.executor.UnTapService(ctx, fn.ObjectMeta, fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType, serviceUrl)
 	if err != nil {
@@ -640,7 +640,7 @@ func (fh functionHandler) getServiceEntryFromExecutor(ctx context.Context) (serv
 	var fContext context.Context
 	if fh.function.Spec.FunctionTimeout > 0 {
 		timeout := time.Second * time.Duration(fh.function.Spec.FunctionTimeout)
-		f, cancel := context.WithTimeout(ctx, timeout)
+		f, cancel := context.WithTimeoutCause(ctx, timeout, fmt.Errorf("function service entry timeout (%f)s exceeded", timeout.Seconds()))
 		fContext = f
 		defer cancel()
 	} else {
