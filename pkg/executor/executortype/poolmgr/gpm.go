@@ -398,7 +398,7 @@ func (gpm *GenericPoolManager) AdoptExistingResources(ctx context.Context) {
 				// avoid too many requests arrive Kubernetes API server at the same time.
 				time.Sleep(time.Duration(rand.Intn(30)) * time.Millisecond)
 
-				patch := fmt.Sprintf(`{"metadata":{"annotations":{"%v":"%v"}}}`, fv1.EXECUTOR_INSTANCEID_LABEL, gpm.instanceID)
+				patch := fmt.Sprintf(`{"metadata":{"annotations":{"%s":"%s"}}}`, fv1.EXECUTOR_INSTANCEID_LABEL, gpm.instanceID)
 				pod, err = gpm.kubernetesClient.CoreV1().Pods(pod.Namespace).Patch(ctx, pod.Name, k8sTypes.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
 				if err != nil {
 					// just log the error since it won't affect the function serving

@@ -54,15 +54,15 @@ func makePreUpgradeTaskClient(clientGen crd.ClientGeneratorInterface, logger *za
 	var err error
 	fissionClient, err := clientGen.GetFissionClient()
 	if err != nil {
-		return nil, errors.Join(err, errors.New("failed to get fission client"))
+		return nil, fmt.Errorf("failed to get fission client: %w", err)
 	}
 	k8sClient, err := clientGen.GetKubernetesClient()
 	if err != nil {
-		return nil, errors.Join(err, errors.New("failed to get kubernetes client"))
+		return nil, fmt.Errorf("failed to get kubernetes client: %w", err)
 	}
 	apiExtClient, err := clientGen.GetApiExtensionsClient()
 	if err != nil {
-		return nil, errors.Join(err, errors.New("failed to get apiextensions client"))
+		return nil, fmt.Errorf("failed to get apiextensions client: %w", err)
 	}
 
 	return &PreUpgradeTaskClient{

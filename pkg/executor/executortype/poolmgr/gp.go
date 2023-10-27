@@ -302,7 +302,7 @@ func (gp *GenericPool) choosePod(ctx context.Context, newLabels map[string]strin
 			annotations := gp.getDeployAnnotations(gp.env)
 			annotationPatch, _ := json.Marshal(annotations)
 
-			patch := fmt.Sprintf(`{"metadata":{"annotations":%s, "labels":%s}}`, string(annotationPatch), string(labelPatch))
+			patch := fmt.Sprintf(`{"metadata":{"annotations":%v, "labels":%v}}`, string(annotationPatch), string(labelPatch))
 			logger.Info("relabel pod", zap.String("pod", patch))
 			newPod, err := gp.kubernetesClient.CoreV1().Pods(chosenPod.Namespace).Patch(ctx, chosenPod.Name, k8sTypes.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
 			if err != nil && errors.Is(err, context.Canceled) {
@@ -575,7 +575,7 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 
 	otelUtils.SpanTrackEvent(ctx, "addFunctionLabel", otelUtils.GetAttributesForPod(pod)...)
 	// patch svc-host and resource version to the pod annotations for new executor to adopt the pod
-	patch := fmt.Sprintf(`{"metadata":{"annotations":{"%v":"%v","%v":"%v"}}}`,
+	patch := fmt.Sprintf(`{"metadata":{"annotations":{"%s":"%s","%s":"%s"}}}`,
 		fv1.ANNOTATION_SVC_HOST, svcHost, fv1.FUNCTION_RESOURCE_VERSION, fn.ObjectMeta.ResourceVersion)
 	p, err := gp.kubernetesClient.CoreV1().Pods(pod.Namespace).Patch(ctx, pod.Name, k8sTypes.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
 	if err != nil {
