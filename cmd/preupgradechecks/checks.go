@@ -18,11 +18,10 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
-	multierror "github.com/hashicorp/go-multierror"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
@@ -52,17 +51,18 @@ const (
 )
 
 func makePreUpgradeTaskClient(clientGen crd.ClientGeneratorInterface, logger *zap.Logger) (*PreUpgradeTaskClient, error) {
+	var err error
 	fissionClient, err := clientGen.GetFissionClient()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get fission client")
+		return nil, fmt.Errorf("failed to get fission client: %w", err)
 	}
 	k8sClient, err := clientGen.GetKubernetesClient()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get kubernetes client")
+		return nil, fmt.Errorf("failed to get kubernetes client: %w", err)
 	}
 	apiExtClient, err := clientGen.GetApiExtensionsClient()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get apiextensions client")
+		return nil, fmt.Errorf("failed to get apiextensions client: %w", err)
 	}
 
 	return &PreUpgradeTaskClient{
@@ -129,7 +129,7 @@ func (client *PreUpgradeTaskClient) VerifyFunctionSpecReferences(ctx context.Con
 
 	var err error
 	var fList *fv1.FunctionList
-	errs := &multierror.Error{}
+	var errs error
 
 	for _, namespace := range utils.DefaultNSResolver().FissionResourceNS {
 		for i := 0; i < maxRetries; i++ {
@@ -150,24 +150,25 @@ func (client *PreUpgradeTaskClient) VerifyFunctionSpecReferences(ctx context.Con
 			secrets := fn.Spec.Secrets
 			for _, secret := range secrets {
 				if secret.Namespace != "" && secret.Namespace != fn.ObjectMeta.Namespace {
-					errs = multierror.Append(errs, fmt.Errorf("function : %s.%s cannot reference a secret : %s in namespace : %s", fn.ObjectMeta.Name, fn.ObjectMeta.Namespace, secret.Name, secret.Namespace))
+					errs = errors.Join(errs, fmt.Errorf("function : %s.%s cannot reference a secret : %s in namespace : %s", fn.ObjectMeta.Name, fn.ObjectMeta.Namespace, secret.Name, secret.Namespace))
 				}
 			}
 
 			configmaps := fn.Spec.ConfigMaps
 			for _, configmap := range configmaps {
 				if configmap.Namespace != "" && configmap.Namespace != fn.ObjectMeta.Namespace {
-					errs = multierror.Append(errs, fmt.Errorf("function : %s.%s cannot reference a configmap : %s in namespace : %s", fn.ObjectMeta.Name, fn.ObjectMeta.Namespace, configmap.Name, configmap.Namespace))
+					errs = errors.Join(errs, fmt.Errorf("function : %s.%s cannot reference a configmap : %s in namespace : %s", fn.ObjectMeta.Name, fn.ObjectMeta.Namespace, configmap.Name, configmap.Namespace))
+
 				}
 			}
 
 			if fn.Spec.Package.PackageRef.Namespace != "" && fn.Spec.Package.PackageRef.Namespace != fn.ObjectMeta.Namespace {
-				errs = multierror.Append(errs, fmt.Errorf("function : %s.%s cannot reference a package : %s in namespace : %s", fn.ObjectMeta.Name, fn.ObjectMeta.Namespace, fn.Spec.Package.PackageRef.Name, fn.Spec.Package.PackageRef.Namespace))
+				errs = errors.Join(errs, fmt.Errorf("function : %s.%s cannot reference a package : %s in namespace : %s", fn.ObjectMeta.Name, fn.ObjectMeta.Namespace, fn.Spec.Package.PackageRef.Name, fn.Spec.Package.PackageRef.Namespace))
 			}
 		}
 	}
 
-	if errs.ErrorOrNil() != nil {
+	if errs != nil {
 		client.logger.Fatal("installation failed",
 			zap.Error(errs),
 			zap.String("summary", "a function cannot reference secrets, configmaps and packages outside it's own namespace"))

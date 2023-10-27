@@ -140,7 +140,7 @@ func versionHandler(w http.ResponseWriter, r *http.Request) {
 
 func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) (*mux.Router, error) {
 
-	featureConfig, err := config.GetFeatureConfig()
+	featureConfig, err := config.GetFeatureConfig(ts.logger)
 	if err != nil {
 		return nil, err
 	}

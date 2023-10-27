@@ -62,6 +62,13 @@ func CacheKeyURFromMeta(metadata *metav1.ObjectMeta) CacheKeyUR {
 	}
 }
 
+func CacheKeyURFromObject(obj metav1.Object) CacheKeyUR {
+	return CacheKeyUR{
+		UID:             obj.GetUID(),
+		ResourceVersion: obj.GetResourceVersion(),
+	}
+}
+
 // CacheKeyURGFromMeta : Given metadata, create a key that uniquely identifies the contents
 // of the object. Since resourceVersion changes on every update and
 // UIDs are unique, uid+resourceVersion identifies the

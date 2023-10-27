@@ -18,6 +18,7 @@ package container
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"reflect"
@@ -26,8 +27,6 @@ import (
 	"sync"
 	"time"
 
-	multierror "github.com/hashicorp/go-multierror"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	apiv1 "k8s.io/api/core/v1"
 	k8sErrs "k8s.io/apimachinery/pkg/api/errors"
@@ -142,7 +141,7 @@ func MakeContainer(
 	for _, factory := range finformerFactory {
 		_, err := factory.Core().V1().Functions().Informer().AddEventHandler(caaf.FuncInformerHandler(ctx))
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to add event handler for function informer")
+			return nil, fmt.Errorf("failed to add event handler for function informer: %w", err)
 		}
 	}
 	return caaf, nil
@@ -269,7 +268,7 @@ func (caaf *Container) RefreshFuncPods(ctx context.Context, logger *zap.Logger, 
 			return err
 		}
 
-		patch := fmt.Sprintf(`{"spec" : {"template": {"spec":{"containers":[{"name": "%s", "env":[{"name": "%s", "value": "%v"}]}]}}}}`,
+		patch := fmt.Sprintf(`{"spec" : {"template": {"spec":{"containers":[{"name": "%s", "env":[{"name": "%s", "value": "%d"}]}]}}}}`,
 			f.ObjectMeta.Name, fv1.ResourceVersionCount, rvCount)
 
 		_, err = caaf.kubernetesClient.AppsV1().Deployments(deployment.ObjectMeta.Namespace).Patch(ctx, deployment.ObjectMeta.Name,
@@ -318,29 +317,29 @@ func (caaf *Container) AdoptExistingResources(ctx context.Context) {
 func (caaf *Container) CleanupOldExecutorObjects(ctx context.Context) {
 	caaf.logger.Info("CaaF starts to clean orphaned resources", zap.String("instanceID", caaf.instanceID))
 
-	errs := &multierror.Error{}
+	var errs error
 	listOpts := metav1.ListOptions{
 		LabelSelector: labels.Set(map[string]string{fv1.EXECUTOR_TYPE: string(fv1.ExecutorTypeContainer)}).AsSelector().String(),
 	}
 
 	err := reaper.CleanupHpa(ctx, caaf.logger, caaf.kubernetesClient, caaf.instanceID, listOpts)
 	if err != nil {
-		errs = multierror.Append(errs, err)
+		errs = errors.Join(errs, err)
 	}
 
 	err = reaper.CleanupDeployments(ctx, caaf.logger, caaf.kubernetesClient, caaf.instanceID, listOpts)
 	if err != nil {
-		errs = multierror.Append(errs, err)
+		errs = errors.Join(errs, err)
 	}
 
 	err = reaper.CleanupServices(ctx, caaf.logger, caaf.kubernetesClient, caaf.instanceID, listOpts)
 	if err != nil {
-		errs = multierror.Append(errs, err)
+		errs = errors.Join(errs, err)
 	}
 
-	if errs.ErrorOrNil() != nil {
+	if errs != nil {
 		// TODO retry reaper; logged and ignored for now
-		caaf.logger.Error("Failed to cleanup old executor objects", zap.Error(err))
+		caaf.logger.Error("Failed to cleanup old executor objects", zap.Error(errs))
 	}
 }
 
@@ -361,7 +360,7 @@ func (caaf *Container) createFunction(ctx context.Context, fn *fv1.Function) (*f
 			zap.Error(err),
 			zap.String("function_name", fn.ObjectMeta.Name),
 			zap.String("function_namespace", fn.ObjectMeta.Namespace))
-		return nil, errors.Wrapf(err, "%s %s_%s", e, fn.ObjectMeta.Name, fn.ObjectMeta.Namespace)
+		return nil, fmt.Errorf("error creating k8s resources for function %s/%s: %w", fn.ObjectMeta.Namespace, fn.ObjectMeta.Name, err)
 	}
 
 	fsvc, ok := fsvcObj.(*fscache.FuncSvc)
@@ -378,7 +377,7 @@ func (caaf *Container) deleteFunction(ctx context.Context, fn *fv1.Function) err
 	}
 	err := caaf.fnDelete(ctx, fn)
 	if err != nil {
-		err = errors.Wrapf(err, "error deleting kubernetes objects of function %v", fn.ObjectMeta)
+		return fmt.Errorf("error deleting kubernetes objects of function %s: %w", k8sCache.MetaObjectToName(fn), err)
 	}
 	return err
 }
@@ -408,22 +407,22 @@ func (caaf *Container) fnCreate(ctx context.Context, fn *fv1.Function) (*fscache
 	if err != nil {
 		caaf.logger.Error("error creating service", zap.Error(err), zap.String("service", objName))
 		go cleanupFunc(ns, objName)
-		return nil, errors.Wrapf(err, "error creating service %v", objName)
+		return nil, fmt.Errorf("error creating service %s: %w", objName, err)
 	}
-	svcAddress := fmt.Sprintf("%v.%v", svc.Name, svc.Namespace)
+	svcAddress := fmt.Sprintf("%s.%s", svc.Name, svc.Namespace)
 
 	depl, err := caaf.createOrGetDeployment(ctx, fn, objName, deployLabels, deployAnnotations, ns)
 	if err != nil {
 		caaf.logger.Error("error creating deployment", zap.Error(err), zap.String("deployment", objName))
 		go cleanupFunc(ns, objName)
-		return nil, errors.Wrapf(err, "error creating deployment %v", objName)
+		return nil, fmt.Errorf("error creating deployment %s: %w", objName, err)
 	}
 
 	hpa, err := caaf.hpaops.CreateOrGetHpa(ctx, objName, &fn.Spec.InvokeStrategy.ExecutionStrategy, depl, deployLabels, deployAnnotations)
 	if err != nil {
 		caaf.logger.Error("error creating HPA", zap.Error(err), zap.String("hpa", objName))
 		go cleanupFunc(ns, objName)
-		return nil, errors.Wrapf(err, "error creating the HPA %v", objName)
+		return nil, fmt.Errorf("error creating HPA %s: %w", objName, err)
 	}
 
 	kubeObjRefs := []apiv1.ObjectReference{
@@ -515,8 +514,7 @@ func (caaf *Container) updateFunction(ctx context.Context, oldFn *fv1.Function, 
 
 		fsvc, err := caaf.fsCache.GetByFunctionUID(newFn.ObjectMeta.UID)
 		if err != nil {
-			err = errors.Wrapf(err, "error updating function due to unable to find function service cache: %v", oldFn)
-			return err
+			return fmt.Errorf("error updating function due to unable to find function service cache %s: %w", k8sCache.MetaObjectToName(oldFn), err)
 		}
 
 		hpa, err := caaf.hpaops.GetHpa(ctx, ns, fsvc.Name)
@@ -596,8 +594,7 @@ func (caaf *Container) updateFuncDeployment(ctx context.Context, fn *fv1.Functio
 
 	fsvc, err := caaf.fsCache.GetByFunctionUID(fn.ObjectMeta.UID)
 	if err != nil {
-		err = errors.Wrapf(err, "error updating function due to unable to find function service cache: %v", fn)
-		return err
+		return fmt.Errorf("error updating function due to unable to find function service cache %s: %w", k8sCache.MetaObjectToName(fn), err)
 	}
 	fnObjName := fsvc.Name
 
@@ -634,7 +631,7 @@ func (caaf *Container) updateFuncDeployment(ctx context.Context, fn *fv1.Functio
 }
 
 func (caaf *Container) fnDelete(ctx context.Context, fn *fv1.Function) error {
-	multierr := &multierror.Error{}
+	var multierr error
 
 	// GetByFunction uses resource version as part of cache key, however,
 	// the resource version in function metadata will be changed when a function
@@ -643,16 +640,14 @@ func (caaf *Container) fnDelete(ctx context.Context, fn *fv1.Function) error {
 	// fsvc entry.
 	fsvc, err := caaf.fsCache.GetByFunctionUID(fn.ObjectMeta.UID)
 	if err != nil {
-		err = errors.Wrap(err, fmt.Sprintf("fsvc not found in cache: %v", fn.ObjectMeta))
-		return err
+		return fmt.Errorf("fsvc not found in cache %s: %w", k8sCache.MetaObjectToName(fn), err)
 	}
 
 	objName := fsvc.Name
 
 	_, err = caaf.fsCache.DeleteOld(fsvc, time.Second*0)
 	if err != nil {
-		multierr = multierror.Append(multierr,
-			errors.Wrapf(err, "error deleting the function from cache"))
+		multierr = errors.Join(multierr, fmt.Errorf("error deleting function from cache: %w", err))
 	}
 
 	// to support backward compatibility, if the function was created in default ns, we fall back to creating the
@@ -660,9 +655,8 @@ func (caaf *Container) fnDelete(ctx context.Context, fn *fv1.Function) error {
 	ns := caaf.nsResolver.GetFunctionNS(fn.ObjectMeta.Namespace)
 
 	err = caaf.cleanupContainer(ctx, ns, objName)
-	multierr = multierror.Append(multierr, err)
-
-	return multierr.ErrorOrNil()
+	multierr = errors.Join(multierr, err)
+	return multierr
 }
 
 // getObjName returns a unique name for kubernetes objects of function

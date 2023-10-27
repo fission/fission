@@ -35,7 +35,7 @@ func ConfigureFeatures(ctx context.Context, logger *zap.Logger, unitTestMode boo
 	}
 
 	// get the featureConfig from config map mounted onto the file system
-	featureConfig, err := config.GetFeatureConfig()
+	featureConfig, err := config.GetFeatureConfig(logger)
 	if err != nil {
 		logger.Error("error getting feature config", zap.Error(err))
 		return err

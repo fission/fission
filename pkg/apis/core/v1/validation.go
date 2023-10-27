@@ -129,25 +129,24 @@ func ValidateKubeLabel(field string, labels map[string]string) error {
 }
 
 func ValidateKubePort(field string, port int) error {
-	result := &multierror.Error{}
+	var err error
 
 	e := validation.IsValidPortNum(port)
 	if len(e) > 0 {
-		result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, field, port, e...))
+		err = errors.Join(err, MakeValidationErr(ErrorInvalidValue, field, port, e...))
 	}
-
-	return result.ErrorOrNil()
+	return err
 }
 
 func ValidateKubeName(field string, val string) error {
-	result := &multierror.Error{}
+	var err error
 
 	e := validation.IsDNS1123Label(val)
 	if len(e) > 0 {
-		result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, field, val, e...))
+		err = errors.Join(err, MakeValidationErr(ErrorInvalidValue, field, val, e...))
 	}
 
-	return result.ErrorOrNil()
+	return err
 }
 
 // validateNS is to match the k8s behaviour. Where it is not mandatory to provide a NS. And so we validate it if user has provided one.

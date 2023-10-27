@@ -114,7 +114,7 @@ func (gp *GenericPool) genDeploymentSpec(env *fv1.Environment) (*appsv1.Deployme
 				Exec: &apiv1.ExecAction{
 					Command: []string{
 						"/bin/sleep",
-						fmt.Sprintf("%v", gracePeriodSeconds),
+						fmt.Sprintf("%d", gracePeriodSeconds),
 					},
 				},
 			},
@@ -151,12 +151,11 @@ func (gp *GenericPool) genDeploymentSpec(env *fv1.Environment) (*appsv1.Deployme
 	}
 
 	if gp.podSpecPatch != nil {
-
 		updatedPodSpec, err := util.MergePodSpec(&pod.Spec, gp.podSpecPatch)
 		if err == nil {
 			pod.Spec = *updatedPodSpec
 		} else {
-			gp.logger.Warn("Failed to merge the specs: %v", zap.Error(err))
+			gp.logger.Warn("Failed to merge the specs", zap.Error(err))
 		}
 	}
 

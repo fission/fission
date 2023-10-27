@@ -21,11 +21,20 @@ import (
 	"fmt"
 	"os"
 
+	"go.uber.org/zap"
 	"sigs.k8s.io/yaml"
 )
 
 // GetFeatureConfig reads the configMap file and unmarshals the config into a feature config struct
-func GetFeatureConfig() (*FeatureConfig, error) {
+func GetFeatureConfig(logger *zap.Logger) (*FeatureConfig, error) {
+	featureConfig := &FeatureConfig{}
+
+	// check if the file exists
+	if _, err := os.Stat(FeatureConfigFile); os.IsNotExist(err) {
+		logger.Warn("using empty feature config as file not found", zap.String("configPath", FeatureConfigFile))
+		return featureConfig, nil
+	}
+
 	// read the file
 	b64EncodedContent, err := os.ReadFile(FeatureConfigFile)
 	if err != nil {
@@ -39,7 +48,6 @@ func GetFeatureConfig() (*FeatureConfig, error) {
 	}
 
 	// unmarshal into feature config
-	featureConfig := &FeatureConfig{}
 	err = yaml.Unmarshal(yamlContent, featureConfig)
 	if err != nil {
 		return nil, fmt.Errorf("error unmarshalling YAML config %v", err)

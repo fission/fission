@@ -18,11 +18,11 @@ package newdeploy
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"time"
 
-	multierror "github.com/hashicorp/go-multierror"
 	"go.uber.org/zap"
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
@@ -195,7 +195,7 @@ func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function
 				Exec: &apiv1.ExecAction{
 					Command: []string{
 						"/bin/sleep",
-						fmt.Sprintf("%v", gracePeriodSeconds),
+						fmt.Sprintf("%d", gracePeriodSeconds),
 					},
 				},
 			},
@@ -238,7 +238,7 @@ func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function
 		if err == nil {
 			pod.Spec = *updatedPodSpec
 		} else {
-			deploy.logger.Warn("Failed to merge the specs: %v", zap.Error(err))
+			deploy.logger.Warn("Failed to merge the specs", zap.Error(err))
 		}
 	}
 
@@ -419,7 +419,7 @@ func (deploy *NewDeploy) waitForDeploy(ctx context.Context, depl *appsv1.Deploym
 
 // cleanupNewdeploy cleans all kubernetes objects related to function
 func (deploy *NewDeploy) cleanupNewdeploy(ctx context.Context, ns string, name string) error {
-	result := &multierror.Error{}
+	var result error
 
 	err := deploy.deleteSvc(ctx, ns, name)
 	if err != nil && !k8s_err.IsNotFound(err) {
@@ -427,7 +427,7 @@ func (deploy *NewDeploy) cleanupNewdeploy(ctx context.Context, ns string, name s
 			zap.Error(err),
 			zap.String("function_name", name),
 			zap.String("function_namespace", ns))
-		result = multierror.Append(result, err)
+		result = errors.Join(result, err)
 	}
 
 	err = deploy.hpaops.DeleteHpa(ctx, ns, name)
@@ -436,7 +436,7 @@ func (deploy *NewDeploy) cleanupNewdeploy(ctx context.Context, ns string, name s
 			zap.Error(err),
 			zap.String("function_name", name),
 			zap.String("function_namespace", ns))
-		result = multierror.Append(result, err)
+		result = errors.Join(result, err)
 	}
 
 	err = deploy.deleteDeployment(ctx, ns, name)
@@ -445,10 +445,10 @@ func (deploy *NewDeploy) cleanupNewdeploy(ctx context.Context, ns string, name s
 			zap.Error(err),
 			zap.String("function_name", name),
 			zap.String("function_namespace", ns))
-		result = multierror.Append(result, err)
+		result = errors.Join(result, err)
 	}
 
-	return result.ErrorOrNil()
+	return result
 }
 
 // referencedResourcesRVSum returns the sum of resource version of all resources the function references to.

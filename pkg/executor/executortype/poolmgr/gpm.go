@@ -18,6 +18,7 @@ package poolmgr
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/rand"
 	"os"
@@ -27,7 +28,6 @@ import (
 	"time"
 
 	"github.com/fission/fission/pkg/executor/metrics"
-	"github.com/hashicorp/go-multierror"
 	"go.opentelemetry.io/otel/attribute"
 	"go.uber.org/zap"
 	apiv1 "k8s.io/api/core/v1"
@@ -366,7 +366,7 @@ func (gpm *GenericPoolManager) AdoptExistingResources(ctx context.Context) {
 			}
 
 			// create environment map for later use
-			key := fmt.Sprintf("%v/%v", env.ObjectMeta.Namespace, env.ObjectMeta.Name)
+			key := fmt.Sprintf("%s/%s", env.ObjectMeta.Namespace, env.ObjectMeta.Name)
 			envMap[key] = env
 		}
 	}
@@ -398,7 +398,7 @@ func (gpm *GenericPoolManager) AdoptExistingResources(ctx context.Context) {
 				// avoid too many requests arrive Kubernetes API server at the same time.
 				time.Sleep(time.Duration(rand.Intn(30)) * time.Millisecond)
 
-				patch := fmt.Sprintf(`{"metadata":{"annotations":{"%v":"%v"}}}`, fv1.EXECUTOR_INSTANCEID_LABEL, gpm.instanceID)
+				patch := fmt.Sprintf(`{"metadata":{"annotations":{"%s":"%s"}}}`, fv1.EXECUTOR_INSTANCEID_LABEL, gpm.instanceID)
 				pod, err = gpm.kubernetesClient.CoreV1().Pods(pod.Namespace).Patch(ctx, pod.Name, k8sTypes.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
 				if err != nil {
 					// just log the error since it won't affect the function serving
@@ -419,7 +419,7 @@ func (gpm *GenericPoolManager) AdoptExistingResources(ctx context.Context) {
 				envName, ok5 := pod.Labels[fv1.ENVIRONMENT_NAME]
 				envNS, ok6 := pod.Labels[fv1.ENVIRONMENT_NAMESPACE]
 				svcHost, ok7 := pod.Annotations[fv1.ANNOTATION_SVC_HOST]
-				env, ok8 := envMap[fmt.Sprintf("%v/%v", envNS, envName)]
+				env, ok8 := envMap[fmt.Sprintf("%s/%s", envNS, envName)]
 
 				if !(ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7 && ok8) {
 					gpm.logger.Warn("failed to adopt pod for function due to lack of necessary information",
@@ -476,22 +476,22 @@ func (gpm *GenericPoolManager) AdoptExistingResources(ctx context.Context) {
 func (gpm *GenericPoolManager) CleanupOldExecutorObjects(ctx context.Context) {
 	gpm.logger.Info("Poolmanager starts to clean orphaned resources", zap.String("instanceID", gpm.instanceID))
 
-	errs := &multierror.Error{}
+	var errs error
 	listOpts := metav1.ListOptions{
 		LabelSelector: labels.Set(map[string]string{fv1.EXECUTOR_TYPE: string(fv1.ExecutorTypePoolmgr)}).AsSelector().String(),
 	}
 
 	err := reaper.CleanupDeployments(ctx, gpm.logger, gpm.kubernetesClient, gpm.instanceID, listOpts)
 	if err != nil {
-		errs = multierror.Append(errs, err)
+		errs = errors.Join(errs, err)
 	}
 
 	err = reaper.CleanupPods(ctx, gpm.logger, gpm.kubernetesClient, gpm.instanceID, listOpts)
 	if err != nil {
-		errs = multierror.Append(errs, err)
+		errs = errors.Join(errs, err)
 	}
 
-	if errs.ErrorOrNil() != nil {
+	if errs != nil {
 		// TODO retry reaper; logged and ignored for now
 		gpm.logger.Error("Failed to cleanup old executor objects", zap.Error(err))
 	}

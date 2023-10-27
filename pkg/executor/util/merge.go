@@ -17,11 +17,11 @@ limitations under the License.
 package util
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 
 	"dario.cat/mergo"
-	"github.com/hashicorp/go-multierror"
 	apiv1 "k8s.io/api/core/v1"
 )
 
@@ -40,18 +40,18 @@ func MergeContainer(dst *apiv1.Container, src *apiv1.Container) (*apiv1.Containe
 	// to prevent any modification to the original obj
 	dstC := *dst
 
-	errs := &multierror.Error{}
+	var errs error
 	err := mergo.Merge(&dstC, src, mergo.WithAppendSlice, mergo.WithOverride)
 	if err != nil {
 		return nil, err
 	}
-	errs = multierror.Append(errs,
+	errs = errors.Join(errs,
 		checkSliceConflicts("Name", dstC.Ports),
 		checkSliceConflicts("Name", dstC.Env),
 		checkSliceConflicts("Name", dstC.VolumeMounts),
 		checkSliceConflicts("Name", dstC.VolumeDevices))
 
-	return &dstC, errs.ErrorOrNil()
+	return &dstC, errs
 }
 
 // MergePodSpec updates srcPodSpec with targetPodSpec fields if not empty
@@ -60,21 +60,21 @@ func MergePodSpec(srcPodSpec *apiv1.PodSpec, targetPodSpec *apiv1.PodSpec) (*api
 		return srcPodSpec, nil
 	}
 
-	multierr := &multierror.Error{}
+	var multierr error
 
 	// Get item from spec, if they exist in deployment - merge, else append
 	// Same pattern for all lists (Mergo can not handle lists)
 	// TODO: At some point this is better done with generics/reflection?
 	cList, err := mergeContainerList(srcPodSpec.Containers, targetPodSpec.Containers)
 	if err != nil {
-		multierr = multierror.Append(multierr, err)
+		multierr = errors.Join(multierr, err)
 	} else {
 		srcPodSpec.Containers = cList
 	}
 
 	cList, err = mergeContainerList(srcPodSpec.InitContainers, targetPodSpec.InitContainers)
 	if err != nil {
-		multierr = multierror.Append(multierr, err)
+		multierr = errors.Join(multierr, err)
 	} else {
 		srcPodSpec.InitContainers = cList
 	}
@@ -82,7 +82,7 @@ func MergePodSpec(srcPodSpec *apiv1.PodSpec, targetPodSpec *apiv1.PodSpec) (*api
 	// For volumes - if duplicate exist, throw error
 	vols, err := mergeVolumeLists(srcPodSpec.Volumes, targetPodSpec.Volumes)
 	if err != nil {
-		multierr = multierror.Append(multierr, err)
+		multierr = errors.Join(multierr, err)
 	} else {
 		srcPodSpec.Volumes = vols
 	}
@@ -192,14 +192,14 @@ func MergePodSpec(srcPodSpec *apiv1.PodSpec, targetPodSpec *apiv1.PodSpec) (*api
 
 	err = mergo.Merge(&srcPodSpec.NodeSelector, targetPodSpec.NodeSelector)
 	if err != nil {
-		multierr = multierror.Append(multierr, err)
+		multierr = errors.Join(multierr, err)
 	}
 
-	return srcPodSpec, multierr.ErrorOrNil()
+	return srcPodSpec, multierr
 }
 
 func mergeContainerList(dst []apiv1.Container, src []apiv1.Container) ([]apiv1.Container, error) {
-	errs := &multierror.Error{}
+	var errs error
 
 	list := append(dst, src...)
 	containers := make(map[string]*apiv1.Container, len(list))
@@ -210,7 +210,7 @@ func mergeContainerList(dst []apiv1.Container, src []apiv1.Container) ([]apiv1.C
 			newC, err := MergeContainer(container, &c)
 			if err != nil {
 				// record the error and continue
-				errs = multierror.Append(errs, err)
+				errs = errors.Join(errs, err)
 			} else {
 				containers[c.Name] = newC
 			}
@@ -224,8 +224,8 @@ func mergeContainerList(dst []apiv1.Container, src []apiv1.Container) ([]apiv1.C
 		containerList = append(containerList, *c)
 	}
 
-	if errs.ErrorOrNil() != nil {
-		return nil, errs.ErrorOrNil()
+	if errs != nil {
+		return nil, errs
 	}
 
 	return containerList, nil
@@ -252,7 +252,7 @@ func checkSliceConflicts(field string, objs interface{}) (err error) {
 		return fmt.Errorf("not a slice type: %v", reflect.TypeOf(objs))
 	}
 
-	errs := &multierror.Error{}
+	var errs error
 	names := make(map[string]struct{})
 
 	s := reflect.ValueOf(objs)
@@ -281,10 +281,10 @@ func checkSliceConflicts(field string, objs interface{}) (err error) {
 
 		_, ok := names[f.String()]
 		if ok {
-			errs = multierror.Append(errs, fmt.Errorf("duplicate name in %v: %v", objType, f.String()))
+			errs = errors.Join(errs, fmt.Errorf("duplicate name in %v: %v", objType, f.String()))
 		} else {
 			names[f.String()] = struct{}{}
 		}
 	}
-	return errs.ErrorOrNil()
+	return errs
 }

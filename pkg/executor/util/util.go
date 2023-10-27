@@ -125,6 +125,10 @@ func ConvertConfigSecrets(ctx context.Context, fn *fv1.Function, kc kubernetes.I
 }
 
 func GetSpecFromConfigMap(filePath string) (*apiv1.PodSpec, error) {
+	// check if file exists
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		return nil, err
+	}
 	content, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("error reading YAML file %s: %w", filePath, err)

@@ -19,6 +19,7 @@ package fscache
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 
@@ -124,7 +125,7 @@ func (c *PoolCache) service() {
 				c.cache[req.function] = NewFuncSvcGroup()
 				c.cache[req.function].svcWaiting++
 				resp.error = ferror.MakeError(ferror.ErrorNotFound,
-					fmt.Sprintf("function Name '%v' not found", req.function))
+					fmt.Sprintf("function Name '%s' not found", req.function))
 				req.responseChannel <- resp
 				continue
 			}
@@ -325,11 +326,7 @@ func (c *PoolCache) service() {
 			}
 			err := datawriter.Flush()
 			if err != nil {
-				if resp.error == nil {
-					resp.error = err
-				} else {
-					resp.error = fmt.Errorf("%v, %v", resp.error, err)
-				}
+				resp.error = errors.Join(resp.error, err)
 			}
 			req.responseChannel <- resp
 		default:
