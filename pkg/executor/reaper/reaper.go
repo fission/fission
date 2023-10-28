@@ -22,6 +22,7 @@ import (
 
 	"go.uber.org/zap"
 	apiv1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
@@ -39,25 +40,25 @@ func CleanupKubeObject(ctx context.Context, logger *zap.Logger, kubeClient kuber
 	switch strings.ToLower(kubeobj.Kind) {
 	case "pod":
 		err := kubeClient.CoreV1().Pods(kubeobj.Namespace).Delete(ctx, kubeobj.Name, metav1.DeleteOptions{})
-		if err != nil {
+		if err != nil && !k8serrors.IsNotFound(err) {
 			logger.Error("error cleaning up pod", zap.Error(err), zap.String("pod", kubeobj.Name))
 		}
 
 	case "service":
 		err := kubeClient.CoreV1().Services(kubeobj.Namespace).Delete(ctx, kubeobj.Name, metav1.DeleteOptions{})
-		if err != nil {
+		if err != nil && !k8serrors.IsNotFound(err) {
 			logger.Error("error cleaning up service", zap.Error(err), zap.String("service", kubeobj.Name))
 		}
 
 	case "deployment":
 		err := kubeClient.AppsV1().Deployments(kubeobj.Namespace).Delete(ctx, kubeobj.Name, delOpt)
-		if err != nil {
+		if err != nil && !k8serrors.IsNotFound(err) {
 			logger.Error("error cleaning up deployment", zap.Error(err), zap.String("deployment", kubeobj.Name))
 		}
 
 	case "horizontalpodautoscaler":
 		err := kubeClient.AutoscalingV2().HorizontalPodAutoscalers(kubeobj.Namespace).Delete(ctx, kubeobj.Name, metav1.DeleteOptions{})
-		if err != nil {
+		if err != nil && !k8serrors.IsNotFound(err) {
 			logger.Error("error cleaning up horizontalpodautoscaler", zap.Error(err), zap.String("horizontalpodautoscaler", kubeobj.Name))
 		}
 

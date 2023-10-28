@@ -20,7 +20,6 @@ import (
 	"context"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/bep/debounce"
@@ -47,7 +46,6 @@ type HTTPTriggerSet struct {
 	*functionServiceMap
 	*mutableRouter
 
-	wg                         sync.WaitGroup
 	logger                     *zap.Logger
 	fissionClient              versioned.Interface
 	kubeClient                 kubernetes.Interface
@@ -81,7 +79,6 @@ func makeHTTPTriggerSet(logger *zap.Logger, fmap *functionServiceMap, fissionCli
 		svcAddrUpdateThrottler:     actionThrottler,
 		unTapServiceTimeout:        unTapServiceTimeout,
 		syncDebouncer:              debounce.New(time.Millisecond * 20),
-		wg:                         sync.WaitGroup{},
 	}
 	httpTriggerSet.triggerInformer = utils.GetInformersForNamespaces(fissionClient, time.Minute*30, fv1.HttpTriggerResource)
 	httpTriggerSet.funcInformer = utils.GetInformersForNamespaces(fissionClient, time.Minute*30, fv1.FunctionResource)
