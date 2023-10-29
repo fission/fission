@@ -126,8 +126,8 @@ func (executor *Executor) serveCreateFuncServices() {
 					specializationTimeout = fv1.DefaultSpecializationTimeOut
 				}
 
-				fnSpecializationTimeoutContext, cancel := context.WithTimeout(req.context,
-					time.Duration(specializationTimeout+buffer)*time.Second)
+				fnSpecializationTimeoutContext, cancel := context.WithTimeoutCause(req.context,
+					time.Duration(specializationTimeout+buffer)*time.Second, fmt.Errorf("function specialization timeout (%d)s exceeded", specializationTimeout+buffer))
 				defer cancel()
 
 				fsvc, err := executor.createServiceForFunction(fnSpecializationTimeoutContext, req.function)
@@ -169,8 +169,8 @@ func (executor *Executor) serveCreateFuncServices() {
 					specializationTimeout = fv1.DefaultSpecializationTimeOut
 				}
 
-				fnSpecializationTimeoutContext, cancel := context.WithTimeout(req.context,
-					time.Duration(specializationTimeout+buffer)*time.Second)
+				fnSpecializationTimeoutContext, cancel := context.WithTimeoutCause(req.context,
+					time.Duration(specializationTimeout+buffer)*time.Second, fmt.Errorf("function specialization timeout (%d)s exceeded", specializationTimeout+buffer))
 				defer cancel()
 
 				fsvc, err := executor.createServiceForFunction(fnSpecializationTimeoutContext, req.function)
