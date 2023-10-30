@@ -114,6 +114,8 @@ func (executor *Executor) serveCreateFuncServices() {
 
 		if req.function.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypePoolmgr {
 			go func() {
+				executor.logger.Debug("inside the serveCreateFuncServices for the executor for poolMgr")
+
 				buffer := 10 // add some buffer time for specialization
 				specializationTimeout := req.function.Spec.InvokeStrategy.ExecutionStrategy.SpecializationTimeout
 
@@ -124,10 +126,14 @@ func (executor *Executor) serveCreateFuncServices() {
 					specializationTimeout = fv1.DefaultSpecializationTimeOut
 				}
 
+				executor.logger.Debug("serveCreateFuncServices Timeouts poolMgr", zap.Int("specializationTimeout", specializationTimeout), zap.Int("defaultSpecTimeout", fv1.DefaultSpecializationTimeOut), zap.Int("set timeout", specializationTimeout), zap.Int("fnSpecTimeoutContext", specializationTimeout+buffer*int(time.Second)) )
+
+
 				fnSpecializationTimeoutContext, cancel := context.WithTimeout(req.context,
 					time.Duration(specializationTimeout+buffer)*time.Second)
 				defer cancel()
 
+				executor.logger.Debug("calling createServiceForFunctionTimeout with the fnSpecTimeoutContext for fn poolMgr", zap.Any("func", req.function))
 				fsvc, err := executor.createServiceForFunction(fnSpecializationTimeoutContext, req.function)
 				req.respChan <- &createFuncServiceResponse{
 					funcSvc: fsvc,
@@ -140,6 +146,8 @@ func (executor *Executor) serveCreateFuncServices() {
 		// Cache miss -- is this first one to request the func?
 		wg, found := executor.fsCreateWg.Load(crd.CacheKey(fnMetadata))
 		if !found {
+
+			executor.logger.Debug("inside the serveCreateFuncServices for the executor for cacheMiss")
 			// create a waitgroup for other requests for
 			// the same function to wait on
 			wg := &sync.WaitGroup{}
@@ -171,11 +179,16 @@ func (executor *Executor) serveCreateFuncServices() {
 					time.Duration(specializationTimeout+buffer)*time.Second)
 				defer cancel()
 
+
+				executor.logger.Debug("serveCreateFuncServices Timeouts cacheMiss", zap.Int("specializationTimeout", specializationTimeout), zap.Int("defaultSpecTimeout", fv1.DefaultSpecializationTimeOut), zap.Int("set timeout", specializationTimeout), zap.Int("fnSpecTimeoutContext", specializationTimeout+buffer*int(time.Second)) )
+				executor.logger.Debug("calling createServiceForFunctionTimeout with the fnSpecTimeoutContext for fn cacheMiss", zap.Any("func", req.function))
+
 				fsvc, err := executor.createServiceForFunction(fnSpecializationTimeoutContext, req.function)
 				req.respChan <- &createFuncServiceResponse{
 					funcSvc: fsvc,
 					err:     err,
 				}
+
 				executor.fsCreateWg.Delete(crd.CacheKey(fnMetadata))
 				wg.Done()
 			}()
@@ -223,6 +236,8 @@ func (executor *Executor) createServiceForFunction(ctx context.Context, fn *fv1.
 	if !ok {
 		return nil, errors.Errorf("Unknown executor type '%v'", t)
 	}
+
+	executor.logger.Debug("about to getFuncSvc for context", zap.Any("fn", fn))
 
 	fsvc, fsvcErr := e.GetFuncSvc(ctx, fn)
 	if fsvcErr != nil {

@@ -143,6 +143,8 @@ func (executor *Executor) writeResponse(w http.ResponseWriter, serviceName strin
 // To make it optimal, plan is to add an eager cache invalidator function that watches for pod deletion events and
 // invalidates the cache entry if the pod address was cached.
 func (executor *Executor) getServiceForFunction(ctx context.Context, fn *fv1.Function) (string, error) {
+	executor.logger.Debug("beginning to execute the getServiceForFunction in the executor")
+
 	respChan := make(chan *createFuncServiceResponse)
 	executor.requestChan <- &createFuncServiceRequest{
 		context:  ctx,
@@ -150,6 +152,9 @@ func (executor *Executor) getServiceForFunction(ctx context.Context, fn *fv1.Fun
 		respChan: respChan,
 	}
 	resp := <-respChan
+
+	executor.logger.Debug("recieved the response for respChan %v", zap.Any("response", resp))
+
 	cleanUp := func(funcSvc *fscache.FuncSvc) {
 		et, ok := executor.executorTypes[fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType]
 		if !ok {
@@ -170,6 +175,8 @@ func (executor *Executor) getServiceForFunction(ctx context.Context, fn *fv1.Fun
 		cleanUp(resp.funcSvc)
 		return "", resp.err
 	}
+
+	executor.logger.Debug("got the funcSvc from the getServiceFromFunction API", zap.Any("funcSvc", resp.funcSvc.Address))
 	return resp.funcSvc.Address, resp.err
 }
 
