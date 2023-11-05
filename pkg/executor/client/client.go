@@ -36,8 +36,14 @@ import (
 )
 
 type (
-	// Client is wrapper on a HTTP client.
-	Client struct {
+	// ClientInterface is the interface for executor client.
+	ClientInterface interface {
+		GetServiceForFunction(ctx context.Context, fn *fv1.Function) (string, error)
+		TapService(fnMeta metav1.ObjectMeta, executorType fv1.ExecutorType, serviceURL url.URL)
+		UnTapService(ctx context.Context, fnMeta metav1.ObjectMeta, executorType fv1.ExecutorType, serviceURL *url.URL) error
+	}
+	// client is wrapper on a HTTP client.
+	client struct {
 		logger      *zap.Logger
 		executorURL string
 		tappedByURL map[string]TapServiceRequest
@@ -54,10 +60,10 @@ type (
 )
 
 // MakeClient initializes and returns a Client instance.
-func MakeClient(logger *zap.Logger, executorURL string) *Client {
+func MakeClient(logger *zap.Logger, executorURL string) ClientInterface {
 	hc := retryablehttp.NewClient()
 	hc.HTTPClient.Transport = otelhttp.NewTransport(hc.HTTPClient.Transport)
-	c := &Client{
+	c := &client{
 		logger:      logger.Named("executor_client"),
 		executorURL: strings.TrimSuffix(executorURL, "/"),
 		tappedByURL: make(map[string]TapServiceRequest),
@@ -69,7 +75,7 @@ func MakeClient(logger *zap.Logger, executorURL string) *Client {
 }
 
 // GetServiceForFunction returns the service name for a given function.
-func (c *Client) GetServiceForFunction(ctx context.Context, fn *fv1.Function) (string, error) {
+func (c *client) GetServiceForFunction(ctx context.Context, fn *fv1.Function) (string, error) {
 	executorURL := c.executorURL + "/v2/getServiceForFunction"
 
 	body, err := json.Marshal(fn)
@@ -102,7 +108,7 @@ func (c *Client) GetServiceForFunction(ctx context.Context, fn *fv1.Function) (s
 }
 
 // UnTapService sends a request to /v2/unTapService.
-func (c *Client) UnTapService(ctx context.Context, fnMeta metav1.ObjectMeta, executorType fv1.ExecutorType, serviceURL *url.URL) error {
+func (c *client) UnTapService(ctx context.Context, fnMeta metav1.ObjectMeta, executorType fv1.ExecutorType, serviceURL *url.URL) error {
 	url := c.executorURL + "/v2/unTapService"
 	tapSvc := TapServiceRequest{
 		FnMetadata:     fnMeta,
@@ -133,7 +139,7 @@ func (c *Client) UnTapService(ctx context.Context, fnMeta metav1.ObjectMeta, exe
 	return nil
 }
 
-func (c *Client) service() {
+func (c *client) service() {
 	ticker := time.NewTicker(time.Second * 5)
 	for {
 		select {
@@ -163,7 +169,7 @@ func (c *Client) service() {
 }
 
 // TapService sends a TapServiceRequest over the request channel.
-func (c *Client) TapService(fnMeta metav1.ObjectMeta, executorType fv1.ExecutorType, serviceURL url.URL) {
+func (c *client) TapService(fnMeta metav1.ObjectMeta, executorType fv1.ExecutorType, serviceURL url.URL) {
 	c.requestChan <- TapServiceRequest{
 		FnMetadata: metav1.ObjectMeta{
 			Name:            fnMeta.Name,
@@ -178,7 +184,7 @@ func (c *Client) TapService(fnMeta metav1.ObjectMeta, executorType fv1.ExecutorT
 	}
 }
 
-func (c *Client) _tapService(ctx context.Context, tapSvcReqs []TapServiceRequest) error {
+func (c *client) _tapService(ctx context.Context, tapSvcReqs []TapServiceRequest) error {
 	executorURL := c.executorURL + "/v2/tapServices"
 
 	body, err := json.Marshal(tapSvcReqs)

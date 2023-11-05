@@ -36,16 +36,24 @@ import (
 )
 
 type (
-	Client struct {
+	ClientInterface interface {
+		Upload(ctx context.Context, filePath string, metadata *map[string]string) (string, error)
+		GetUrl(id string) string
+		List(ctx context.Context) ([]string, error)
+		Download(ctx context.Context, id string, filePath string) error
+		GetFile(ctx context.Context, id string) (*http.Response, error)
+		Delete(ctx context.Context, id string) error
+	}
+	client struct {
 		url        string
 		httpClient *http.Client
 	}
 )
 
 // Client creates a storage service client.
-func MakeClient(url string) *Client {
+func MakeClient(url string) ClientInterface {
 	hc := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
-	return &Client{
+	return &client{
 		url:        strings.TrimSuffix(url, "/") + "/v1",
 		httpClient: hc,
 	}
@@ -54,7 +62,7 @@ func MakeClient(url string) *Client {
 // Upload sends the local file pointed to by filePath to the storage
 // service, along with the metadata.  It returns a file ID that can be
 // used to retrieve the file.
-func (c *Client) Upload(ctx context.Context, filePath string, metadata *map[string]string) (string, error) {
+func (c *client) Upload(ctx context.Context, filePath string, metadata *map[string]string) (string, error) {
 	fi, err := os.Stat(filePath)
 	if err != nil {
 		return "", err
@@ -112,11 +120,11 @@ func (c *Client) Upload(ctx context.Context, filePath string, metadata *map[stri
 }
 
 // GetUrl returns an HTTP URL that can be used to download the file pointed to by ID
-func (c *Client) GetUrl(id string) string {
+func (c *client) GetUrl(id string) string {
 	return fmt.Sprintf("%v/archive?id=%v", c.url, url.PathEscape(id))
 }
 
-func (c *Client) List(ctx context.Context) ([]string, error) {
+func (c *client) List(ctx context.Context) ([]string, error) {
 	req, err := http.NewRequest(http.MethodGet, c.url+"/archive", nil)
 	if err != nil {
 		return []string{}, err
@@ -145,7 +153,7 @@ func (c *Client) List(ctx context.Context) ([]string, error) {
 
 // Download fetches the file identified by ID to the local file path.
 // filePath must not exist.
-func (c *Client) Download(ctx context.Context, id string, filePath string) error {
+func (c *client) Download(ctx context.Context, id string, filePath string) error {
 	// url for id
 	url := c.GetUrl(id)
 
@@ -187,7 +195,7 @@ func (c *Client) Download(ctx context.Context, id string, filePath string) error
 
 // Download fetches the file identified by ID to the local file path.
 // filePath must not exist.
-func (c *Client) GetFile(ctx context.Context, id string) (resp *http.Response, err error) {
+func (c *client) GetFile(ctx context.Context, id string) (resp *http.Response, err error) {
 	// url for id
 	url := c.GetUrl(id)
 
@@ -200,7 +208,7 @@ func (c *Client) GetFile(ctx context.Context, id string) (resp *http.Response, e
 	return resp, err
 }
 
-func (c *Client) Delete(ctx context.Context, id string) error {
+func (c *client) Delete(ctx context.Context, id string) error {
 	url := c.GetUrl(id)
 
 	req, err := http.NewRequest(http.MethodDelete, url, nil)

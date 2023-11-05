@@ -7,6 +7,7 @@ import (
 
 	"github.com/fission/fission/pkg/buildermgr"
 	"github.com/fission/fission/pkg/executor"
+	eclient "github.com/fission/fission/pkg/executor/client"
 	"github.com/fission/fission/pkg/router"
 	"github.com/fission/fission/pkg/storagesvc"
 	"github.com/fission/fission/pkg/utils"
@@ -93,7 +94,8 @@ func StartServices(ctx context.Context, f *framework.Framework) error {
 	if err != nil {
 		return fmt.Errorf("error toggling metric address: %v", err)
 	}
-	err = router.Start(ctx, f.ClientGen(), f.Logger(), routerPort, fmt.Sprintf("http://localhost:%d", executorPort))
+	executor := eclient.MakeClient(f.Logger(), fmt.Sprintf("http://localhost:%d", executorPort))
+	err = router.Start(ctx, f.ClientGen(), f.Logger(), routerPort, executor)
 	if err != nil {
 		return fmt.Errorf("error starting router: %v", err)
 	}

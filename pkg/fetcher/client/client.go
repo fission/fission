@@ -19,45 +19,50 @@ import (
 )
 
 type (
-	Client struct {
+	ClientInterface interface {
+		Specialize(context.Context, *fetcher.FunctionSpecializeRequest) error
+		Fetch(context.Context, *fetcher.FunctionFetchRequest) error
+		Upload(context.Context, *fetcher.ArchiveUploadRequest) (*fetcher.ArchiveUploadResponse, error)
+	}
+	client struct {
 		logger     *zap.Logger
 		url        string
 		httpClient *http.Client
 	}
 )
 
-func MakeClient(logger *zap.Logger, fetcherUrl string) *Client {
+func MakeClient(logger *zap.Logger, fetcherUrl string) ClientInterface {
 	hc := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
-	return &Client{
+	return &client{
 		logger:     logger.Named("fetcher_client"),
 		url:        strings.TrimSuffix(fetcherUrl, "/"),
 		httpClient: hc,
 	}
 }
 
-func (c *Client) getSpecializeUrl() string {
+func (c *client) getSpecializeUrl() string {
 	return c.url + "/specialize"
 }
 
-func (c *Client) getFetchUrl() string {
+func (c *client) getFetchUrl() string {
 	return c.url + "/fetch"
 }
 
-func (c *Client) getUploadUrl() string {
+func (c *client) getUploadUrl() string {
 	return c.url + "/upload"
 }
 
-func (c *Client) Specialize(ctx context.Context, req *fetcher.FunctionSpecializeRequest) error {
+func (c *client) Specialize(ctx context.Context, req *fetcher.FunctionSpecializeRequest) error {
 	_, err := sendRequest(c.logger, ctx, c.httpClient, req, c.getSpecializeUrl())
 	return err
 }
 
-func (c *Client) Fetch(ctx context.Context, fr *fetcher.FunctionFetchRequest) error {
+func (c *client) Fetch(ctx context.Context, fr *fetcher.FunctionFetchRequest) error {
 	_, err := sendRequest(c.logger, ctx, c.httpClient, fr, c.getFetchUrl())
 	return err
 }
 
-func (c *Client) Upload(ctx context.Context, fr *fetcher.ArchiveUploadRequest) (*fetcher.ArchiveUploadResponse, error) {
+func (c *client) Upload(ctx context.Context, fr *fetcher.ArchiveUploadRequest) (*fetcher.ArchiveUploadResponse, error) {
 	body, err := sendRequest(c.logger, ctx, c.httpClient, fr, c.getUploadUrl())
 	if err != nil {
 		return nil, err

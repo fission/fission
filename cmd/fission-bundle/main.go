@@ -32,6 +32,7 @@ import (
 	"github.com/fission/fission/pkg/canaryconfigmgr"
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/executor"
+	eclient "github.com/fission/fission/pkg/executor/client"
 	"github.com/fission/fission/pkg/info"
 	"github.com/fission/fission/pkg/kubewatcher"
 	functionLogger "github.com/fission/fission/pkg/logger"
@@ -55,7 +56,7 @@ func runCanaryConfigServer(ctx context.Context, clientGen crd.ClientGeneratorInt
 }
 
 func runRouter(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, port int, executorUrl string) error {
-	return router.Start(ctx, clientGen, logger, port, executorUrl)
+	return router.Start(ctx, clientGen, logger, port, eclient.MakeClient(logger, executorUrl))
 }
 
 func runExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, port int) error {

@@ -44,7 +44,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *
 		return errors.Wrap(err, "failed to get kubernetes client")
 	}
 
-	err = crd.WaitForCRDs(ctx, logger, fissionClient)
+	err = crd.WaitForFunctionCRDs(ctx, logger, fissionClient)
 	if err != nil {
 		return errors.Wrap(err, "error waiting for CRDs")
 	}

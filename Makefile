@@ -99,7 +99,7 @@ generate-cli-docs:
 	go run tools/cmd-docs/main.go -o "../fission.io/content/en/docs/reference/fission-cli"
 
 install-crd-ref-docs:
-	go install github.com/elastic/crd-ref-docs@v0.0.9
+	go install github.com/elastic/crd-ref-docs@v0.0.10
 
 generate-crd-ref-docs: install-crd-ref-docs
 	# crd-ref-docs: https://github.com/elastic/crd-ref-docs

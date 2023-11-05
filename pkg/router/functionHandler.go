@@ -38,7 +38,7 @@ import (
 	"github.com/fission/fission/pkg/crd"
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/error/network"
-	executorClient "github.com/fission/fission/pkg/executor/client"
+	eclient "github.com/fission/fission/pkg/executor/client"
 	"github.com/fission/fission/pkg/throttler"
 	"github.com/fission/fission/pkg/utils"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
@@ -56,7 +56,7 @@ type (
 	functionHandler struct {
 		logger                   *zap.Logger
 		fmap                     *functionServiceMap
-		executor                 *executorClient.Client
+		executor                 eclient.ClientInterface
 		function                 *fv1.Function
 		httpTrigger              *fv1.HTTPTrigger
 		functionMap              map[string]*fv1.Function

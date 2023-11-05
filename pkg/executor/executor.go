@@ -266,7 +266,7 @@ func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, 
 		logger.Error("error making the metrics client", zap.Error(err))
 	}
 
-	err = crd.WaitForCRDs(ctx, logger, fissionClient)
+	err = crd.WaitForFunctionCRDs(ctx, logger, fissionClient)
 	if err != nil {
 		return errors.Wrap(err, "error waiting for CRDs")
 	}

@@ -35,25 +35,29 @@ import (
 )
 
 type (
-	Client struct {
+	ClientInterface interface {
+		Build(context.Context, *builder.PackageBuildRequest) (*builder.PackageBuildResponse, error)
+	}
+
+	client struct {
 		logger     *zap.Logger
 		url        string
 		httpClient *retryablehttp.Client
 	}
 )
 
-func MakeClient(logger *zap.Logger, builderUrl string) *Client {
+func MakeClient(logger *zap.Logger, builderUrl string) ClientInterface {
 	hc := retryablehttp.NewClient()
 	hc.ErrorHandler = retryablehttp.PassthroughErrorHandler
 	hc.HTTPClient.Transport = otelhttp.NewTransport(hc.HTTPClient.Transport)
-	return &Client{
+	return &client{
 		logger:     logger.Named("builder_client"),
 		url:        strings.TrimSuffix(builderUrl, "/"),
 		httpClient: hc,
 	}
 }
 
-func (c *Client) Build(ctx context.Context, req *builder.PackageBuildRequest) (*builder.PackageBuildResponse, error) {
+func (c *client) Build(ctx context.Context, req *builder.PackageBuildRequest) (*builder.PackageBuildResponse, error) {
 	logger := otelUtils.LoggerWithTraceID(ctx, c.logger)
 
 	body, err := json.Marshal(req)
