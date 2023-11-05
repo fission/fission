@@ -4,7 +4,7 @@ go 1.21
 
 require (
 	dario.cat/mergo v1.0.0
-	github.com/IBM/sarama v1.41.3
+	github.com/IBM/sarama v1.42.0
 	github.com/bep/debounce v1.2.1
 	github.com/dchest/uniuri v1.2.0
 	github.com/docopt/docopt-go v0.0.0-20180111231733-ee0de3bc6815
@@ -16,7 +16,7 @@ require (
 	github.com/golang-jwt/jwt/v4 v4.5.0
 	github.com/google/go-cmp v0.6.0
 	github.com/google/uuid v1.4.0
-	github.com/gorilla/mux v1.8.0
+	github.com/gorilla/mux v1.8.1
 	github.com/graymeta/stow v0.2.8
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/hashicorp/go-retryablehttp v0.7.4
@@ -29,7 +29,7 @@ require (
 	github.com/prometheus/common v0.45.0
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06
-	github.com/spf13/cobra v1.7.0
+	github.com/spf13/cobra v1.8.0
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.8.4
 	github.com/wcharczuk/go-chart v2.0.1+incompatible
@@ -71,7 +71,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/cloudflare/circl v1.3.3 // indirect
 	github.com/containerd/continuity v0.2.2 // indirect
-	github.com/cpuguy83/go-md2man/v2 v2.0.2 // indirect
+	github.com/cpuguy83/go-md2man/v2 v2.0.3 // indirect
 	github.com/cyphar/filepath-securejoin v0.2.4 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/docker/go-connections v0.4.0 // indirect
