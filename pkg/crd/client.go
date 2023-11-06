@@ -18,7 +18,7 @@ package crd
 
 import (
 	"context"
-	"errors"
+	"fmt"
 	"time"
 
 	"go.uber.org/zap"
@@ -110,13 +110,13 @@ func NewClientGeneratorWithRestConfig(restConfig *rest.Config) *ClientGenerator 
 	return &ClientGenerator{restConfig: restConfig}
 }
 
-// WaitForCRDs does a timeout to check if CRDs have been installed
-func WaitForCRDs(ctx context.Context, logger *zap.Logger, fissionClient versioned.Interface) error {
-	logger.Info("Waiting for CRDs to be installed")
+// WaitForFunctionCRDs does a timeout to check if CRDs have been installed
+func WaitForFunctionCRDs(ctx context.Context, logger *zap.Logger, fissionClient versioned.Interface) error {
 	defaultNs := utils.DefaultNSResolver().DefaultNamespace
 	if defaultNs == "" {
 		defaultNs = metav1.NamespaceDefault
 	}
+	logger.Info("Checking function CRD access", zap.String("namespace", defaultNs), zap.String("timeout", "30s"))
 	start := time.Now()
 	for {
 		fi := fissionClient.CoreV1().Functions(defaultNs)
@@ -128,7 +128,7 @@ func WaitForCRDs(ctx context.Context, logger *zap.Logger, fissionClient versione
 		}
 
 		if time.Since(start) > 30*time.Second {
-			return errors.New("timeout waiting for CRDs")
+			return fmt.Errorf("timeout waiting for function CRD access")
 		}
 	}
 }

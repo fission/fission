@@ -154,7 +154,7 @@ func StartScalerManager(ctx context.Context, clientGen crd.ClientGeneratorInterf
 		return errors.Wrap(err, "failed to get dynamic client")
 	}
 
-	err = crd.WaitForCRDs(ctx, logger, fissionClient)
+	err = crd.WaitForFunctionCRDs(ctx, logger, fissionClient)
 	if err != nil {
 		return errors.Wrap(err, "error waiting for CRDs")
 	}

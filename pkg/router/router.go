@@ -52,7 +52,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/fission/fission/pkg/crd"
-	executorClient "github.com/fission/fission/pkg/executor/client"
+	eclient "github.com/fission/fission/pkg/executor/client"
 	"github.com/fission/fission/pkg/throttler"
 	"github.com/fission/fission/pkg/utils/httpserver"
 	"github.com/fission/fission/pkg/utils/metrics"
@@ -98,7 +98,7 @@ func serve(ctx context.Context, logger *zap.Logger, port int,
 }
 
 // Start starts a router
-func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, port int, executorURL string) error {
+func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, port int, executor eclient.ClientInterface) error {
 	fmap := makeFunctionServiceMap(logger, time.Minute)
 
 	fissionClient, err := clientGen.GetFissionClient()
@@ -110,12 +110,10 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *
 		return errors.Wrap(err, "error making the kube client")
 	}
 
-	err = crd.WaitForCRDs(ctx, logger, fissionClient)
+	err = crd.WaitForFunctionCRDs(ctx, logger, fissionClient)
 	if err != nil {
 		return errors.Wrap(err, "error waiting for CRDs")
 	}
-
-	executor := executorClient.MakeClient(logger, executorURL)
 
 	timeoutStr := os.Getenv("ROUTER_ROUND_TRIP_TIMEOUT")
 	timeout, err := time.ParseDuration(timeoutStr)
