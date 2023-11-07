@@ -287,7 +287,7 @@ func (executor *Executor) GetHandler() http.Handler {
 }
 
 // Serve starts an HTTP server.
-func (executor *Executor) Serve(ctx context.Context, mgr manager.Manager, port int) {
+func (executor *Executor) Serve(ctx context.Context, mgr manager.Interface, port int) {
 	handler := otelUtils.GetHandlerWithOTEL(executor.GetHandler(), "fission-executor", otelUtils.UrlsToIgnore("/healthz"))
 	httpserver.StartServer(ctx, executor.logger, mgr, "executor", fmt.Sprintf("%d", port), handler)
 }

@@ -29,7 +29,7 @@ import (
 	"github.com/fission/fission/pkg/utils/manager"
 )
 
-func ServeMetrics(ctx context.Context, parent string, logger *zap.Logger, mgr manager.Manager) {
+func ServeMetrics(ctx context.Context, parent string, logger *zap.Logger, mgr manager.Interface) {
 	metricsAddr := os.Getenv("METRICS_ADDR")
 	if metricsAddr == "" {
 		metricsAddr = "8080"

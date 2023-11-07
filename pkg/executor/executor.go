@@ -252,7 +252,7 @@ func (executor *Executor) getFunctionServiceFromCache(ctx context.Context, fn *f
 
 // StartExecutor Starts executor and the executor components such as Poolmgr,
 // deploymgr and potential future executor types
-func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Manager, port int) error {
+func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Interface, port int) error {
 
 	fissionClient, err := clientGen.GetFissionClient()
 	if err != nil {

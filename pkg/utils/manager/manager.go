@@ -6,9 +6,11 @@ import (
 	"time"
 )
 
-// Manager keeps track of the go routines in the system and can be used to gracefully shutdown the
+var _ Interface = &GroupManager{}
+
+// Interface keeps track of the go routines in the system and can be used to gracefully shutdown the
 // the system by waiting for completion of go routines added to it.
-type Manager interface {
+type Interface interface {
 	// Add will start a go routine for the given "function" and adds it to the list of go routines
 	// and will also remove the "function" from the list when it completes
 	Add(ctx context.Context, function func(context.Context))
@@ -20,16 +22,16 @@ type Manager interface {
 	WaitWithTimeout(timeout time.Duration) error
 }
 
-type GoRoutineManager struct {
+type GroupManager struct {
 	wg sync.WaitGroup
 }
 
-func New() Manager {
-	return &GoRoutineManager{
+func New() Interface {
+	return &GroupManager{
 		wg: sync.WaitGroup{},
 	}
 }
-func (g *GoRoutineManager) Add(ctx context.Context, f func(context.Context)) {
+func (g *GroupManager) Add(ctx context.Context, f func(context.Context)) {
 	g.wg.Add(1)
 	go func() {
 		defer g.wg.Done()
@@ -37,11 +39,11 @@ func (g *GoRoutineManager) Add(ctx context.Context, f func(context.Context)) {
 	}()
 }
 
-func (g *GoRoutineManager) Wait() {
+func (g *GroupManager) Wait() {
 	g.wg.Wait()
 }
 
-func (g *GoRoutineManager) WaitWithTimeout(timeout time.Duration) error {
+func (g *GroupManager) WaitWithTimeout(timeout time.Duration) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 

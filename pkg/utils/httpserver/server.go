@@ -10,7 +10,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func StartServer(ctx context.Context, log *zap.Logger, mgr manager.Manager, svc string, port string, handler http.Handler) {
+func StartServer(ctx context.Context, log *zap.Logger, mgr manager.Interface, svc string, port string, handler http.Handler) {
 	if !strings.Contains(port, ":") {
 		port = fmt.Sprintf(":%s", port)
 	}

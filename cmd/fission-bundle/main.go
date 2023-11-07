@@ -56,11 +56,11 @@ func runCanaryConfigServer(ctx context.Context, clientGen crd.ClientGeneratorInt
 	return canaryconfigmgr.StartCanaryServer(ctx, clientGen, logger, false)
 }
 
-func runRouter(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Manager, port int, executorUrl string) error {
+func runRouter(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Interface, port int, executorUrl string) error {
 	return router.Start(ctx, clientGen, logger, mgr, port, eclient.MakeClient(logger, executorUrl))
 }
 
-func runExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Manager, port int) error {
+func runExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Interface, port int) error {
 	return executor.StartExecutor(ctx, clientGen, logger, mgr, port)
 }
 
@@ -72,7 +72,7 @@ func runTimer(ctx context.Context, clientGen crd.ClientGeneratorInterface, logge
 	return timer.Start(ctx, clientGen, logger, routerUrl)
 }
 
-func runMessageQueueMgr(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Manager, routerUrl string) error {
+func runMessageQueueMgr(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Interface, routerUrl string) error {
 	return mqtrigger.Start(ctx, clientGen, logger, mgr, routerUrl)
 }
 
@@ -81,11 +81,11 @@ func runMQManager(ctx context.Context, clientGen crd.ClientGeneratorInterface, l
 	return mqt.StartScalerManager(ctx, clientGen, logger, routerURL)
 }
 
-func runStorageSvc(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Manager, port int, storage storagesvc.Storage) error {
+func runStorageSvc(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Interface, port int, storage storagesvc.Storage) error {
 	return storagesvc.Start(ctx, clientGen, logger, storage, mgr, port)
 }
 
-func runBuilderMgr(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Manager, storageSvcUrl string) error {
+func runBuilderMgr(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Interface, storageSvcUrl string) error {
 	return buildermgr.Start(ctx, clientGen, logger, mgr, storageSvcUrl)
 }
 

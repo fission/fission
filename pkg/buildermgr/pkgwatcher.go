@@ -309,7 +309,7 @@ func (pkgw *packageWatcher) packageInformerHandler(ctx context.Context) k8sCache
 	}
 }
 
-func (pkgw *packageWatcher) Run(ctx context.Context, mgr manager.Manager) error {
+func (pkgw *packageWatcher) Run(ctx context.Context, mgr manager.Interface) error {
 
 	mgr.Add(ctx, func(ctx context.Context) {
 		metrics.ServeMetrics(ctx, "buildermgr", pkgw.logger, mgr)

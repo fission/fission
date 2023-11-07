@@ -15,7 +15,7 @@ import (
 	"github.com/fission/fission/test/e2e/framework"
 )
 
-func StartServices(ctx context.Context, f *framework.Framework, mgr manager.Manager) error {
+func StartServices(ctx context.Context, f *framework.Framework, mgr manager.Interface) error {
 
 	executorPort, err := utils.FindFreePort()
 	if err != nil {

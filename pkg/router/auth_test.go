@@ -60,6 +60,10 @@ func GetRouterWithAuth() *mux.Router {
 }
 
 func TestRouterAuth(t *testing.T) {
+
+	mgr := manager.New()
+	defer mgr.Wait()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	teardown := setup(t)
@@ -67,9 +71,9 @@ func TestRouterAuth(t *testing.T) {
 	logger := loggerfactory.GetLogger()
 	testmux := GetRouterWithAuth()
 
-	mgr := manager.New()
-
-	go httpserver.StartServer(ctx, logger, mgr, "test", "8990", testmux)
+	mgr.Add(ctx, func(ctx context.Context) {
+		httpserver.StartServer(ctx, logger, mgr, "test", "8990", testmux)
+	})
 
 	postBody, _ := json.Marshal(map[string]string{
 		"username": "Foo",

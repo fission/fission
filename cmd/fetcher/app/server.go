@@ -39,7 +39,7 @@ var (
 	readyToServe uint32
 )
 
-func Run(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Manager) {
+func Run(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Interface) {
 	flag.Usage = fetcherUsage
 	specializeOnStart := flag.Bool("specialize-on-startup", false, "Flag to activate specialize process at pod startup")
 	specializePayload := flag.String("specialize-request", "", "JSON payload for specialize request")

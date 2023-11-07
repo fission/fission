@@ -35,7 +35,7 @@ import (
 	"github.com/fission/fission/pkg/utils/manager"
 )
 
-func ProfileIfEnabled(ctx context.Context, logger *zap.Logger, mgr manager.Manager) {
+func ProfileIfEnabled(ctx context.Context, logger *zap.Logger, mgr manager.Interface) {
 	enablePprof := os.Getenv("PPROF_ENABLED")
 	if enablePprof != "true" {
 		return

@@ -28,7 +28,7 @@ import (
 )
 
 // Usage: builder <shared volume path>
-func Run(ctx context.Context, logger *zap.Logger, mgr manager.Manager, shareVolume string) {
+func Run(ctx context.Context, logger *zap.Logger, mgr manager.Interface, shareVolume string) {
 	builder := builder.MakeBuilder(logger, shareVolume)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", builder.Handler)

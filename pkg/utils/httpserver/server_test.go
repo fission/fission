@@ -16,6 +16,9 @@ import (
 )
 
 func TestStartServer(t *testing.T) {
+	mgr := manager.New()
+	defer mgr.Wait()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	logger := loggerfactory.GetLogger()
@@ -27,8 +30,10 @@ func TestStartServer(t *testing.T) {
 			logger.Error("failed to write response", zap.Error(err))
 		}
 	}))
-	mgr := manager.New()
-	go StartServer(ctx, logger, mgr, "test", "8999", m)
+
+	mgr.Add(ctx, func(ctx context.Context) {
+		StartServer(ctx, logger, mgr, "test", "8999", m)
+	})
 
 	tests := []struct {
 		Name       string

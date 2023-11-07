@@ -87,7 +87,7 @@ func router(ctx context.Context, logger *zap.Logger, httpTriggerSet *HTTPTrigger
 	return mr, nil
 }
 
-func serve(ctx context.Context, logger *zap.Logger, mgr manager.Manager, port int,
+func serve(ctx context.Context, logger *zap.Logger, mgr manager.Interface, port int,
 	httpTriggerSet *HTTPTriggerSet, displayAccessLog bool) error {
 	mr, err := router(ctx, logger, httpTriggerSet)
 	if err != nil {
@@ -101,7 +101,7 @@ func serve(ctx context.Context, logger *zap.Logger, mgr manager.Manager, port in
 }
 
 // Start starts a router
-func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Manager, port int, executor eclient.ClientInterface) error {
+func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Interface, port int, executor eclient.ClientInterface) error {
 	fmap := makeFunctionServiceMap(logger, time.Minute)
 
 	fissionClient, err := clientGen.GetFissionClient()

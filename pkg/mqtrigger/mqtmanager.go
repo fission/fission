@@ -79,7 +79,7 @@ func MakeMessageQueueTriggerManager(logger *zap.Logger,
 	return &mqTriggerMgr
 }
 
-func (mqt *MessageQueueTriggerManager) Run(ctx context.Context, mgr manager.Manager) error {
+func (mqt *MessageQueueTriggerManager) Run(ctx context.Context, mgr manager.Interface) error {
 	go mqt.service()
 	for _, informer := range utils.GetInformersForNamespaces(mqt.fissionClient, time.Minute*30, fv1.MessageQueueResource) {
 		_, err := informer.AddEventHandler(mqt.mqtInformerHandlers())
