@@ -43,6 +43,7 @@ import (
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
 	"github.com/fission/fission/pkg/utils"
+	"github.com/fission/fission/pkg/utils/manager"
 	"github.com/fission/fission/pkg/utils/metrics"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
@@ -251,7 +252,7 @@ func (executor *Executor) getFunctionServiceFromCache(ctx context.Context, fn *f
 
 // StartExecutor Starts executor and the executor components such as Poolmgr,
 // deploymgr and potential future executor types
-func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, port int) error {
+func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Manager, port int) error {
 
 	fissionClient, err := clientGen.GetFissionClient()
 	if err != nil {
@@ -392,8 +393,13 @@ func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, 
 
 	utils.CreateMissingPermissionForSA(ctx, kubernetesClient, logger)
 
-	go metrics.ServeMetrics(ctx, "executor", logger)
-	go api.Serve(ctx, port)
+	mgr.Add(ctx, func(ctx context.Context) {
+		metrics.ServeMetrics(ctx, "executor", logger, mgr)
+	})
+
+	mgr.Add(ctx, func(ctx context.Context) {
+		api.Serve(ctx, mgr, port)
+	})
 
 	return nil
 }

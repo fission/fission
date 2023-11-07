@@ -55,6 +55,7 @@ import (
 	eclient "github.com/fission/fission/pkg/executor/client"
 	"github.com/fission/fission/pkg/throttler"
 	"github.com/fission/fission/pkg/utils/httpserver"
+	"github.com/fission/fission/pkg/utils/manager"
 	"github.com/fission/fission/pkg/utils/metrics"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
@@ -86,19 +87,21 @@ func router(ctx context.Context, logger *zap.Logger, httpTriggerSet *HTTPTrigger
 	return mr, nil
 }
 
-func serve(ctx context.Context, logger *zap.Logger, port int,
+func serve(ctx context.Context, logger *zap.Logger, mgr manager.Manager, port int,
 	httpTriggerSet *HTTPTriggerSet, displayAccessLog bool) error {
 	mr, err := router(ctx, logger, httpTriggerSet)
 	if err != nil {
 		return errors.Wrap(err, "error making router")
 	}
 	handler := otelUtils.GetHandlerWithOTEL(mr, "fission-router", otelUtils.UrlsToIgnore("/router-healthz"))
-	go httpserver.StartServer(ctx, logger, "router", fmt.Sprintf("%d", port), handler)
+	mgr.Add(ctx, func(ctx context.Context) {
+		httpserver.StartServer(ctx, logger, mgr, "router", fmt.Sprintf("%d", port), handler)
+	})
 	return nil
 }
 
 // Start starts a router
-func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, port int, executor eclient.ClientInterface) error {
+func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Manager, port int, executor eclient.ClientInterface) error {
 	fmap := makeFunctionServiceMap(logger, time.Minute)
 
 	fissionClient, err := clientGen.GetFissionClient()
@@ -206,7 +209,10 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *
 	if err != nil {
 		return errors.Wrap(err, "error making HTTP trigger set")
 	}
-	go metrics.ServeMetrics(ctx, "router", logger)
+
+	mgr.Add(ctx, func(ctx context.Context) {
+		metrics.ServeMetrics(ctx, "router", logger, mgr)
+	})
 
 	logger.Info("starting router", zap.Int("port", port))
 
@@ -214,5 +220,5 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *
 	ctx, span := tracer.Start(ctx, "router/Start")
 	defer span.End()
 
-	return serve(ctx, logger, port, triggers, displayAccessLog)
+	return serve(ctx, logger, mgr, port, triggers, displayAccessLog)
 }

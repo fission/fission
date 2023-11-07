@@ -34,6 +34,7 @@ import (
 	"github.com/fission/fission/pkg/executor/client"
 	"github.com/fission/fission/pkg/executor/fscache"
 	"github.com/fission/fission/pkg/utils/httpserver"
+	"github.com/fission/fission/pkg/utils/manager"
 	"github.com/fission/fission/pkg/utils/metrics"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
@@ -286,8 +287,7 @@ func (executor *Executor) GetHandler() http.Handler {
 }
 
 // Serve starts an HTTP server.
-func (executor *Executor) Serve(ctx context.Context, port int) {
+func (executor *Executor) Serve(ctx context.Context, mgr manager.Manager, port int) {
 	handler := otelUtils.GetHandlerWithOTEL(executor.GetHandler(), "fission-executor", otelUtils.UrlsToIgnore("/healthz"))
-	httpserver.StartServer(ctx, executor.logger, "executor", fmt.Sprintf("%d", port), handler)
-
+	httpserver.StartServer(ctx, executor.logger, mgr, "executor", fmt.Sprintf("%d", port), handler)
 }

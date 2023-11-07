@@ -32,6 +32,7 @@ import (
 
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/utils/httpserver"
+	"github.com/fission/fission/pkg/utils/manager"
 	"github.com/fission/fission/pkg/utils/metrics"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
@@ -267,7 +268,7 @@ func MakeStorageService(logger *zap.Logger, storageClient *StowClient, port int)
 	}
 }
 
-func (ss *StorageService) Start(ctx context.Context, port int) {
+func (ss *StorageService) Start(ctx context.Context, mgr manager.Manager, port int) {
 	r := mux.NewRouter()
 	r.Use(metrics.HTTPMetricMiddleware)
 	r.HandleFunc("/v1/archive", ss.uploadHandler).Methods("POST")
@@ -278,11 +279,11 @@ func (ss *StorageService) Start(ctx context.Context, port int) {
 	r.HandleFunc("/healthz", ss.healthHandler).Methods("GET")
 
 	handler := otelUtils.GetHandlerWithOTEL(r, "fission-storagesvc", otelUtils.UrlsToIgnore("/healthz"))
-	httpserver.StartServer(ctx, ss.logger, "storagesvc", fmt.Sprintf("%d", port), handler)
+	httpserver.StartServer(ctx, ss.logger, mgr, "storagesvc", fmt.Sprintf("%d", port), handler)
 }
 
 // Start runs storage service
-func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, storage Storage, port int) error {
+func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, storage Storage, mgr manager.Manager, port int) error {
 	enablePruner, err := strconv.ParseBool(os.Getenv("PRUNE_ENABLED"))
 	if err != nil {
 		logger.Warn("PRUNE_ENABLED value not set. Enabling archive pruner by default.", zap.Error(err))
@@ -296,8 +297,13 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *
 
 	// create http handlers
 	storageService := MakeStorageService(logger, storageClient, port)
-	go metrics.ServeMetrics(ctx, "storagesvc", logger)
-	go storageService.Start(ctx, port)
+	mgr.Add(ctx, func(ctx context.Context) {
+		metrics.ServeMetrics(ctx, "storagesvc", logger, mgr)
+	})
+
+	mgr.Add(ctx, func(ctx context.Context) {
+		storageService.Start(ctx, mgr, port)
+	})
 
 	// enablePruner prevents storagesvc unit test from needing to talk to kubernetes
 	if enablePruner {

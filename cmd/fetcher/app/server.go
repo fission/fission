@@ -31,6 +31,7 @@ import (
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/fetcher"
 	"github.com/fission/fission/pkg/utils/httpserver"
+	"github.com/fission/fission/pkg/utils/manager"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
@@ -38,7 +39,7 @@ var (
 	readyToServe uint32
 )
 
-func Run(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger) {
+func Run(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Manager) {
 	flag.Usage = fetcherUsage
 	specializeOnStart := flag.Bool("specialize-on-startup", false, "Flag to activate specialize process at pod startup")
 	specializePayload := flag.String("specialize-request", "", "JSON payload for specialize request")
@@ -120,7 +121,7 @@ func Run(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *za
 	logger.Info("fetcher ready to receive requests")
 
 	handler := otelUtils.GetHandlerWithOTEL(mux, "fission-fetcher", otelUtils.UrlsToIgnore("/healthz", "/readiness-healthz"))
-	httpserver.StartServer(ctx, logger, "fetcher", "8000", handler)
+	httpserver.StartServer(ctx, logger, mgr, "fetcher", "8000", handler)
 }
 
 func fetcherUsage() {

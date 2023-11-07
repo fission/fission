@@ -41,6 +41,7 @@ import (
 	"github.com/fission/fission/pkg/storagesvc"
 	"github.com/fission/fission/pkg/timer"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
+	"github.com/fission/fission/pkg/utils/manager"
 	"github.com/fission/fission/pkg/utils/otel"
 	"github.com/fission/fission/pkg/utils/profile"
 	"github.com/fission/fission/pkg/webhook"
@@ -55,12 +56,12 @@ func runCanaryConfigServer(ctx context.Context, clientGen crd.ClientGeneratorInt
 	return canaryconfigmgr.StartCanaryServer(ctx, clientGen, logger, false)
 }
 
-func runRouter(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, port int, executorUrl string) error {
-	return router.Start(ctx, clientGen, logger, port, eclient.MakeClient(logger, executorUrl))
+func runRouter(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Manager, port int, executorUrl string) error {
+	return router.Start(ctx, clientGen, logger, mgr, port, eclient.MakeClient(logger, executorUrl))
 }
 
-func runExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, port int) error {
-	return executor.StartExecutor(ctx, clientGen, logger, port)
+func runExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Manager, port int) error {
+	return executor.StartExecutor(ctx, clientGen, logger, mgr, port)
 }
 
 func runKubeWatcher(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, routerUrl string) error {
@@ -71,8 +72,8 @@ func runTimer(ctx context.Context, clientGen crd.ClientGeneratorInterface, logge
 	return timer.Start(ctx, clientGen, logger, routerUrl)
 }
 
-func runMessageQueueMgr(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, routerUrl string) error {
-	return mqtrigger.Start(ctx, clientGen, logger, routerUrl)
+func runMessageQueueMgr(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Manager, routerUrl string) error {
+	return mqtrigger.Start(ctx, clientGen, logger, mgr, routerUrl)
 }
 
 // KEDA based MessageQueue Trigger Manager
@@ -80,12 +81,12 @@ func runMQManager(ctx context.Context, clientGen crd.ClientGeneratorInterface, l
 	return mqt.StartScalerManager(ctx, clientGen, logger, routerURL)
 }
 
-func runStorageSvc(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, port int, storage storagesvc.Storage) error {
-	return storagesvc.Start(ctx, clientGen, logger, storage, port)
+func runStorageSvc(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Manager, port int, storage storagesvc.Storage) error {
+	return storagesvc.Start(ctx, clientGen, logger, storage, mgr, port)
 }
 
-func runBuilderMgr(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, storageSvcUrl string) error {
-	return buildermgr.Start(ctx, clientGen, logger, storageSvcUrl)
+func runBuilderMgr(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Manager, storageSvcUrl string) error {
+	return buildermgr.Start(ctx, clientGen, logger, mgr, storageSvcUrl)
 }
 
 func runLogger(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger) error {
@@ -140,6 +141,9 @@ func exitWithSync(logger *zap.Logger) {
 }
 
 func main() {
+	mgr := manager.New()
+	defer mgr.Wait()
+
 	var err error
 
 	// From https://github.com/containous/traefik/pull/1817/files
@@ -206,7 +210,7 @@ Options:
 	defer exitWithSync(logger)
 
 	ctx := signals.SetupSignalHandler()
-	profile.ProfileIfEnabled(ctx, logger)
+	profile.ProfileIfEnabled(ctx, logger, mgr)
 
 	version := fmt.Sprintf("Fission Bundle Version: %s", info.BuildInfo().String())
 	arguments, err := docopt.ParseArgs(usage, nil, version)
@@ -246,7 +250,7 @@ Options:
 
 	if arguments["--routerPort"] != nil {
 		port := getPort(logger, arguments["--routerPort"])
-		err = runRouter(ctx, clientGen, logger, port, executorUrl)
+		err = runRouter(ctx, clientGen, logger, mgr, port, executorUrl)
 		if err != nil {
 			logger.Error("router exited", zap.Error(err))
 			return
@@ -255,7 +259,7 @@ Options:
 
 	if arguments["--executorPort"] != nil {
 		port := getPort(logger, arguments["--executorPort"])
-		err = runExecutor(ctx, clientGen, logger, port)
+		err = runExecutor(ctx, clientGen, logger, mgr, port)
 		if err != nil {
 			logger.Error("executor exited", zap.Error(err))
 			return
@@ -279,7 +283,7 @@ Options:
 	}
 
 	if arguments["--mqt"] == true {
-		err = runMessageQueueMgr(ctx, clientGen, logger, routerUrl)
+		err = runMessageQueueMgr(ctx, clientGen, logger, mgr, routerUrl)
 		if err != nil {
 			logger.Error("message queue manager exited", zap.Error(err))
 			return
@@ -295,7 +299,7 @@ Options:
 	}
 
 	if arguments["--builderMgr"] == true {
-		err = runBuilderMgr(ctx, clientGen, logger, storageSvcUrl)
+		err = runBuilderMgr(ctx, clientGen, logger, mgr, storageSvcUrl)
 		if err != nil {
 			logger.Error("builder manager exited", zap.Error(err))
 			return
@@ -320,7 +324,7 @@ Options:
 		} else if arguments["--storageType"] == string(storagesvc.StorageTypeLocal) {
 			storage = storagesvc.NewLocalStorage("/fission")
 		}
-		err := runStorageSvc(ctx, clientGen, logger, port, storage)
+		err := runStorageSvc(ctx, clientGen, logger, mgr, port, storage)
 		if err != nil {
 			logger.Error("storage service exited", zap.Error(err))
 			return

@@ -35,6 +35,7 @@ import (
 
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/storagesvc"
+	"github.com/fission/fission/pkg/utils/manager"
 )
 
 const (
@@ -85,6 +86,9 @@ func runMinioDockerContainer(pool *dockertest.Pool) *dockertest.Resource {
 func TestS3StorageService(t *testing.T) {
 	fmt.Println("Test S3 Storage service")
 	var minioClient *minio.Client
+
+	mgr := manager.New()
+	defer mgr.Wait()
 
 	// Start minio docker container
 	pool, err := dockertest.NewPool("")
@@ -139,7 +143,7 @@ func TestS3StorageService(t *testing.T) {
 	storage := storagesvc.NewS3Storage()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	_ = storagesvc.Start(ctx, crd.NewClientGenerator(), logger, storage, port)
+	_ = storagesvc.Start(ctx, crd.NewClientGenerator(), logger, storage, mgr, port)
 
 	time.Sleep(time.Second)
 	client := MakeClient(fmt.Sprintf("http://localhost:%v/", 8081))
@@ -205,6 +209,9 @@ func TestLocalStorageService(t *testing.T) {
 	testID := uniuri.NewLen(8)
 	port := 8082
 
+	mgr := manager.New()
+	defer mgr.Wait()
+
 	config := zap.NewDevelopmentConfig()
 	config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
 	logger, err := config.Build()
@@ -217,7 +224,7 @@ func TestLocalStorageService(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	os.Setenv("METRICS_ADDR", "8083")
-	_ = storagesvc.Start(ctx, crd.NewClientGenerator(), logger, storage, port)
+	_ = storagesvc.Start(ctx, crd.NewClientGenerator(), logger, storage, mgr, port)
 
 	time.Sleep(time.Second)
 	client := MakeClient(fmt.Sprintf("http://localhost:%v/", port))

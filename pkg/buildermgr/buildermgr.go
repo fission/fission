@@ -29,10 +29,11 @@ import (
 	"github.com/fission/fission/pkg/executor/util"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	"github.com/fission/fission/pkg/utils"
+	"github.com/fission/fission/pkg/utils/manager"
 )
 
 // Start the buildermgr service.
-func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, storageSvcUrl string) error {
+func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Manager, storageSvcUrl string) error {
 	bmLogger := logger.Named("builder_manager")
 
 	fissionClient, err := clientGen.GetFissionClient()
@@ -69,7 +70,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *
 		kubernetesClient, storageSvcUrl,
 		utils.GetK8sInformersForNamespaces(kubernetesClient, time.Minute*30, fv1.Pods),
 		utils.GetInformersForNamespaces(fissionClient, time.Minute*30, fv1.PackagesResource))
-	err = pkgWatcher.Run(ctx)
+	err = pkgWatcher.Run(ctx, mgr)
 	if err != nil {
 		return err
 	}

@@ -12,6 +12,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/fission/fission/pkg/utils/loggerfactory"
+	"github.com/fission/fission/pkg/utils/manager"
 )
 
 func TestStartServer(t *testing.T) {
@@ -26,7 +27,8 @@ func TestStartServer(t *testing.T) {
 			logger.Error("failed to write response", zap.Error(err))
 		}
 	}))
-	go StartServer(ctx, logger, "test", "8999", m)
+	mgr := manager.New()
+	go StartServer(ctx, logger, mgr, "test", "8999", m)
 
 	tests := []struct {
 		Name       string

@@ -28,6 +28,7 @@ import (
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	"github.com/fission/fission/pkg/mqtrigger/messageQueue"
 	"github.com/fission/fission/pkg/utils"
+	"github.com/fission/fission/pkg/utils/manager"
 	"github.com/fission/fission/pkg/utils/metrics"
 )
 
@@ -78,7 +79,7 @@ func MakeMessageQueueTriggerManager(logger *zap.Logger,
 	return &mqTriggerMgr
 }
 
-func (mqt *MessageQueueTriggerManager) Run(ctx context.Context) error {
+func (mqt *MessageQueueTriggerManager) Run(ctx context.Context, mgr manager.Manager) error {
 	go mqt.service()
 	for _, informer := range utils.GetInformersForNamespaces(mqt.fissionClient, time.Minute*30, fv1.MessageQueueResource) {
 		_, err := informer.AddEventHandler(mqt.mqtInformerHandlers())
@@ -90,7 +91,9 @@ func (mqt *MessageQueueTriggerManager) Run(ctx context.Context) error {
 			mqt.logger.Fatal("failed to wait for caches to sync")
 		}
 	}
-	go metrics.ServeMetrics(ctx, "mqtrigger", mqt.logger)
+	mgr.Add(ctx, func(ctx context.Context) {
+		metrics.ServeMetrics(ctx, "mqtrigger", mqt.logger, mgr)
+	})
 	return nil
 }
 

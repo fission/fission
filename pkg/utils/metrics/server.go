@@ -26,9 +26,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 
 	"github.com/fission/fission/pkg/utils/httpserver"
+	"github.com/fission/fission/pkg/utils/manager"
 )
 
-func ServeMetrics(ctx context.Context, parent string, logger *zap.Logger) {
+func ServeMetrics(ctx context.Context, parent string, logger *zap.Logger, mgr manager.Manager) {
 	metricsAddr := os.Getenv("METRICS_ADDR")
 	if metricsAddr == "" {
 		metricsAddr = "8080"
@@ -45,5 +46,5 @@ func ServeMetrics(ctx context.Context, parent string, logger *zap.Logger) {
 			EnableOpenMetrics: true,
 		},
 	))
-	httpserver.StartServer(ctx, logger, parent+"/metrics", metricsAddr, mux)
+	httpserver.StartServer(ctx, logger, mgr, parent+"/metrics", metricsAddr, mux)
 }

@@ -28,6 +28,7 @@ import (
 	"go.uber.org/zap/zapcore"
 
 	"github.com/fission/fission/pkg/utils/httpserver"
+	"github.com/fission/fission/pkg/utils/manager"
 	"github.com/fission/fission/pkg/utils/metrics"
 )
 
@@ -80,8 +81,11 @@ func TestMutableMux(t *testing.T) {
 	mr := newMutableRouter(logger, muxRouter)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	mgr := manager.New()
+
 	// start http server
-	go httpserver.StartServer(ctx, logger, "router", "3333", mr)
+	go httpserver.StartServer(ctx, logger, mgr, "router", "3333", mr)
 
 	// continuously make requests, panic if any fails
 	time.Sleep(100 * time.Millisecond)
