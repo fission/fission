@@ -32,6 +32,7 @@ import (
 	"github.com/fission/fission/pkg/cache"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	"github.com/fission/fission/pkg/utils"
+	"github.com/fission/fission/pkg/utils/manager"
 	"github.com/fission/fission/pkg/utils/metrics"
 )
 
@@ -308,8 +309,12 @@ func (pkgw *packageWatcher) packageInformerHandler(ctx context.Context) k8sCache
 	}
 }
 
-func (pkgw *packageWatcher) Run(ctx context.Context) error {
-	go metrics.ServeMetrics(ctx, "buildermgr", pkgw.logger)
+func (pkgw *packageWatcher) Run(ctx context.Context, mgr manager.Interface) error {
+
+	mgr.Add(ctx, func(ctx context.Context) {
+		metrics.ServeMetrics(ctx, "buildermgr", pkgw.logger, mgr)
+	})
+
 	for _, podInformer := range pkgw.podInformer {
 		go podInformer.Run(ctx.Done())
 	}

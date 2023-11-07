@@ -22,15 +22,21 @@ import (
 	"github.com/fission/fission/cmd/fetcher/app"
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
+	"github.com/fission/fission/pkg/utils/manager"
 	"github.com/fission/fission/pkg/utils/profile"
 )
 
 // Usage: fetcher <shared volume path>
 func main() {
+
+	mgr := manager.New()
+	defer mgr.Wait()
+
 	logger := loggerfactory.GetLogger()
 	defer logger.Sync()
 
 	ctx := signals.SetupSignalHandler()
-	profile.ProfileIfEnabled(ctx, logger)
-	app.Run(ctx, crd.NewClientGenerator(), logger)
+	profile.ProfileIfEnabled(ctx, logger, mgr)
+
+	app.Run(ctx, crd.NewClientGenerator(), logger, mgr)
 }

@@ -32,9 +32,10 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/fission/fission/pkg/utils/httpserver"
+	"github.com/fission/fission/pkg/utils/manager"
 )
 
-func ProfileIfEnabled(ctx context.Context, logger *zap.Logger) {
+func ProfileIfEnabled(ctx context.Context, logger *zap.Logger, mgr manager.Interface) {
 	enablePprof := os.Getenv("PPROF_ENABLED")
 	if enablePprof != "true" {
 		return
@@ -47,5 +48,7 @@ func ProfileIfEnabled(ctx context.Context, logger *zap.Logger) {
 	pprofMux := http.DefaultServeMux
 	http.DefaultServeMux = http.NewServeMux()
 
-	go httpserver.StartServer(ctx, logger, "pprof", pprofPort, pprofMux)
+	mgr.Add(ctx, func(ctx context.Context) {
+		httpserver.StartServer(ctx, logger, mgr, "pprof", pprofPort, pprofMux)
+	})
 }

@@ -24,10 +24,11 @@ import (
 
 	builder "github.com/fission/fission/pkg/builder"
 	"github.com/fission/fission/pkg/utils/httpserver"
+	"github.com/fission/fission/pkg/utils/manager"
 )
 
 // Usage: builder <shared volume path>
-func Run(ctx context.Context, logger *zap.Logger, shareVolume string) {
+func Run(ctx context.Context, logger *zap.Logger, mgr manager.Interface, shareVolume string) {
 	builder := builder.MakeBuilder(logger, shareVolume)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", builder.Handler)
@@ -35,5 +36,5 @@ func Run(ctx context.Context, logger *zap.Logger, shareVolume string) {
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	httpserver.StartServer(ctx, logger, "builder", "8001", mux)
+	httpserver.StartServer(ctx, logger, mgr, "builder", "8001", mux)
 }

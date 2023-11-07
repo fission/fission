@@ -18,6 +18,7 @@ import (
 	config "github.com/fission/fission/pkg/featureconfig"
 	"github.com/fission/fission/pkg/utils/httpserver"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
+	"github.com/fission/fission/pkg/utils/manager"
 	"github.com/fission/fission/pkg/utils/metrics"
 )
 
@@ -59,6 +60,10 @@ func GetRouterWithAuth() *mux.Router {
 }
 
 func TestRouterAuth(t *testing.T) {
+
+	mgr := manager.New()
+	defer mgr.Wait()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	teardown := setup(t)
@@ -66,7 +71,9 @@ func TestRouterAuth(t *testing.T) {
 	logger := loggerfactory.GetLogger()
 	testmux := GetRouterWithAuth()
 
-	go httpserver.StartServer(ctx, logger, "test", "8990", testmux)
+	mgr.Add(ctx, func(ctx context.Context) {
+		httpserver.StartServer(ctx, logger, mgr, "test", "8990", testmux)
+	})
 
 	postBody, _ := json.Marshal(map[string]string{
 		"username": "Foo",

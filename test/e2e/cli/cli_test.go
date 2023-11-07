@@ -8,19 +8,24 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	v1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/utils/manager"
 	"github.com/fission/fission/test/e2e/framework"
 	"github.com/fission/fission/test/e2e/framework/cli"
 	"github.com/fission/fission/test/e2e/framework/services"
 )
 
 func TestFissionCLI(t *testing.T) {
+
+	mgr := manager.New()
+	defer mgr.Wait()
+
 	f := framework.NewFramework()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	err := f.Start(ctx)
 	require.NoError(t, err)
 
-	err = services.StartServices(ctx, f)
+	err = services.StartServices(ctx, f, mgr)
 	require.NoError(t, err)
 
 	fissionClient, err := f.ClientGen().GetFissionClient()

@@ -11,10 +11,12 @@ import (
 	"github.com/fission/fission/pkg/router"
 	"github.com/fission/fission/pkg/storagesvc"
 	"github.com/fission/fission/pkg/utils"
+	"github.com/fission/fission/pkg/utils/manager"
 	"github.com/fission/fission/test/e2e/framework"
 )
 
-func StartServices(ctx context.Context, f *framework.Framework) error {
+func StartServices(ctx context.Context, f *framework.Framework, mgr manager.Interface) error {
+
 	executorPort, err := utils.FindFreePort()
 	if err != nil {
 		return fmt.Errorf("error finding unused port: %v", err)
@@ -35,7 +37,7 @@ func StartServices(ctx context.Context, f *framework.Framework) error {
 	}
 
 	os.Setenv("POD_READY_TIMEOUT", "300s")
-	err = executor.StartExecutor(ctx, f.ClientGen(), f.Logger(), executorPort)
+	err = executor.StartExecutor(ctx, f.ClientGen(), f.Logger(), mgr, executorPort)
 	if err != nil {
 		return fmt.Errorf("error starting executor: %v", err)
 	}
@@ -58,7 +60,7 @@ func StartServices(ctx context.Context, f *framework.Framework) error {
 	if err != nil {
 		return fmt.Errorf("error toggling metric address: %v", err)
 	}
-	err = storagesvc.Start(ctx, f.ClientGen(), f.Logger(), storagesvc.NewLocalStorage(storageDir), storageSvcPort)
+	err = storagesvc.Start(ctx, f.ClientGen(), f.Logger(), storagesvc.NewLocalStorage(storageDir), mgr, storageSvcPort)
 	if err != nil {
 		return fmt.Errorf("error starting storage service: %v", err)
 	}
@@ -69,7 +71,7 @@ func StartServices(ctx context.Context, f *framework.Framework) error {
 	if err != nil {
 		return fmt.Errorf("error toggling metric address: %v", err)
 	}
-	err = buildermgr.Start(ctx, f.ClientGen(), f.Logger(), fmt.Sprintf("http://localhost:%d", storageSvcPort))
+	err = buildermgr.Start(ctx, f.ClientGen(), f.Logger(), mgr, fmt.Sprintf("http://localhost:%d", storageSvcPort))
 	if err != nil {
 		return fmt.Errorf("error starting builder manager: %v", err)
 	}
@@ -95,7 +97,7 @@ func StartServices(ctx context.Context, f *framework.Framework) error {
 		return fmt.Errorf("error toggling metric address: %v", err)
 	}
 	executor := eclient.MakeClient(f.Logger(), fmt.Sprintf("http://localhost:%d", executorPort))
-	err = router.Start(ctx, f.ClientGen(), f.Logger(), routerPort, executor)
+	err = router.Start(ctx, f.ClientGen(), f.Logger(), mgr, routerPort, executor)
 	if err != nil {
 		return fmt.Errorf("error starting router: %v", err)
 	}

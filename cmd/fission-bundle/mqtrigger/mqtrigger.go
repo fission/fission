@@ -32,9 +32,10 @@ import (
 	"github.com/fission/fission/pkg/mqtrigger/factory"
 	"github.com/fission/fission/pkg/mqtrigger/messageQueue"
 	_ "github.com/fission/fission/pkg/mqtrigger/messageQueue/kafka"
+	"github.com/fission/fission/pkg/utils/manager"
 )
 
-func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, routerUrl string) error {
+func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Interface, routerUrl string) error {
 	fissionClient, err := clientGen.GetFissionClient()
 	if err != nil {
 		return errors.Wrap(err, "failed to get fission client")
@@ -73,7 +74,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *
 		logger.Fatal("failed to connect to remote message queue server", zap.Error(err))
 	}
 	mqtMgr := mqtrigger.MakeMessageQueueTriggerManager(logger, fissionClient, mqType, mq)
-	err = mqtMgr.Run(ctx)
+	err = mqtMgr.Run(ctx, mgr)
 	if err != nil {
 		return err
 	}
