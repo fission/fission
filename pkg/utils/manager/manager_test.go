@@ -53,6 +53,8 @@ func TestAddAndWaitWithTimeout(t *testing.T) {
 	err := mgr.WaitWithTimeout(1 * time.Second)
 	require.NotNil(t, err, "manager WaitWithTimeout did not return an error when timeout exceeded")
 
+	mgr = New()
+
 	expectedValue := 11
 	mgr.Add(context.Background(), func(ctx context.Context) {
 		time.Sleep(100 * time.Millisecond)
