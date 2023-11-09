@@ -74,7 +74,7 @@ type (
 )
 
 // MakeExecutor returns an Executor for given ExecutorType(s).
-func MakeExecutor(ctx context.Context, logger *zap.Logger, cms *cms.ConfigSecretController,
+func MakeExecutor(ctx context.Context, logger *zap.Logger, mgr manager.Interface, cms *cms.ConfigSecretController,
 	fissionClient versioned.Interface, types map[fv1.ExecutorType]executortype.ExecutorType,
 	informers ...k8sCache.SharedIndexInformer) (*Executor, error) {
 	executor := &Executor{
@@ -88,17 +88,20 @@ func MakeExecutor(ctx context.Context, logger *zap.Logger, cms *cms.ConfigSecret
 
 	// Run all informers
 	for _, informer := range informers {
-		go informer.Run(ctx.Done())
+		mgr.Add(ctx, func(ctx context.Context) {
+			informer.Run(ctx.Done())
+		})
 	}
 
 	for _, et := range types {
-		go func(et executortype.ExecutorType) {
-			et.Run(ctx)
-		}(et)
+		et := et
+		mgr.Add(ctx, func(ctx context.Context) {
+			et.Run(ctx, mgr)
+		})
 	}
-
-	go executor.serveCreateFuncServices()
-
+	mgr.Add(ctx, func(ctx context.Context) {
+		executor.serveCreateFuncServices(ctx)
+	})
 	return executor, nil
 }
 
@@ -108,9 +111,14 @@ func MakeExecutor(ctx context.Context, logger *zap.Logger, cms *cms.ConfigSecret
 // get specialized. In other words, it ensures that when there's an
 // ongoing request for a certain function, all other requests wait for
 // that request to complete.
-func (executor *Executor) serveCreateFuncServices() {
+func (executor *Executor) serveCreateFuncServices(ctx context.Context) {
 	for {
-		req := <-executor.requestChan
+		var req *createFuncServiceRequest
+		select {
+		case <-ctx.Done():
+			return
+		case req = <-executor.requestChan:
+		}
 		function := req.function
 		fnName := k8sCache.MetaObjectToName(function)
 		fnkeyUR := crd.CacheKeyURFromObject(function)
@@ -384,14 +392,14 @@ func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, 
 		informerFactory.Start(ctx.Done())
 	}
 
-	api, err := MakeExecutor(ctx, logger, cms, fissionClient, executorTypes,
+	api, err := MakeExecutor(ctx, logger, mgr, cms, fissionClient, executorTypes,
 		fissionInformers...,
 	)
 	if err != nil {
 		return err
 	}
 
-	utils.CreateMissingPermissionForSA(ctx, kubernetesClient, logger)
+	utils.CreateMissingPermissionForSA(ctx, kubernetesClient, logger, mgr)
 
 	mgr.Add(ctx, func(ctx context.Context) {
 		metrics.ServeMetrics(ctx, "executor", logger, mgr)

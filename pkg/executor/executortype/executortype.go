@@ -25,11 +25,12 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/executor/fscache"
+	"github.com/fission/fission/pkg/utils/manager"
 )
 
 type ExecutorType interface {
 	// Run runs background job.
-	Run(context.Context)
+	Run(context.Context, manager.Interface)
 
 	// GetTypeName returns the name of executor type
 	GetTypeName(context.Context) fv1.ExecutorType

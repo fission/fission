@@ -21,6 +21,7 @@ import (
 	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
+	"github.com/fission/fission/pkg/utils/manager"
 	"github.com/fission/fission/pkg/utils/uuid"
 )
 
@@ -35,6 +36,8 @@ const (
 
 func TestRefreshFuncPods(t *testing.T) {
 	os.Setenv("DEBUG_ENV", "true")
+	mgr := manager.New()
+	defer mgr.Wait()
 	logger := loggerfactory.GetLogger()
 	kubernetesClient := fake.NewSimpleClientset()
 	fissionClient := fClient.NewSimpleClientset()
@@ -70,7 +73,9 @@ func TestRefreshFuncPods(t *testing.T) {
 	}
 	ndm.nsResolver = &nsResolver
 
-	go ndm.Run(ctx)
+	mgr.Add(ctx, func(ctx context.Context) {
+		ndm.Run(ctx, mgr)
+	})
 	t.Log("New deploy manager started")
 
 	for _, f := range factory {

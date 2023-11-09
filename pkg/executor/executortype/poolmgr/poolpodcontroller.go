@@ -41,6 +41,7 @@ import (
 	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
 	flisterv1 "github.com/fission/fission/pkg/generated/listers/core/v1"
 	"github.com/fission/fission/pkg/utils"
+	"github.com/fission/fission/pkg/utils/manager"
 )
 
 type (
@@ -246,7 +247,7 @@ func (p *PoolPodController) enqueueEnvDelete(obj interface{}) {
 	p.envDeleteQueue.Add(env)
 }
 
-func (p *PoolPodController) Run(ctx context.Context, stopCh <-chan struct{}) {
+func (p *PoolPodController) Run(ctx context.Context, stopCh <-chan struct{}, mgr manager.Interface) {
 	defer utilruntime.HandleCrash()
 	defer p.envCreateUpdateQueue.ShutDown()
 	defer p.envDeleteQueue.ShutDown()
@@ -265,10 +266,16 @@ func (p *PoolPodController) Run(ctx context.Context, stopCh <-chan struct{}) {
 		p.logger.Fatal("failed to wait for caches to sync")
 	}
 	for i := 0; i < 4; i++ {
-		go wait.Until(p.workerRun(ctx, "envCreateUpdate", p.envCreateUpdateQueueProcessFunc), time.Second, stopCh)
+		mgr.Add(ctx, func(ctx context.Context) {
+			wait.Until(p.workerRun(ctx, "envCreateUpdate", p.envCreateUpdateQueueProcessFunc), time.Second, stopCh)
+		})
 	}
-	go wait.Until(p.workerRun(ctx, "envDeleteQueue", p.envDeleteQueueProcessFunc), time.Second, stopCh)
-	go wait.Until(p.workerRun(ctx, "spCleanupPodQueue", p.spCleanupPodQueueProcessFunc), time.Second, stopCh)
+	mgr.Add(ctx, func(ctx context.Context) {
+		wait.Until(p.workerRun(ctx, "envDeleteQueue", p.envDeleteQueueProcessFunc), time.Second, stopCh)
+	})
+	mgr.Add(ctx, func(ctx context.Context) {
+		wait.Until(p.workerRun(ctx, "spCleanupPodQueue", p.spCleanupPodQueueProcessFunc), time.Second, stopCh)
+	})
 	p.logger.Info("Started workers for poolPodController")
 	<-stopCh
 	p.logger.Info("Shutting down workers for poolPodController")

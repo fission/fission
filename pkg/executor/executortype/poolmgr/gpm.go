@@ -53,6 +53,7 @@ import (
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
 	"github.com/fission/fission/pkg/utils"
+	"github.com/fission/fission/pkg/utils/manager"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
@@ -169,7 +170,7 @@ func MakeGenericPoolManager(ctx context.Context,
 	return gpm, nil
 }
 
-func (gpm *GenericPoolManager) Run(ctx context.Context) {
+func (gpm *GenericPoolManager) Run(ctx context.Context, mgr manager.Interface) {
 	waitSynced := make([]k8sCache.InformerSynced, 0)
 	for _, podListerSynced := range gpm.podListerSynced {
 		waitSynced = append(waitSynced, podListerSynced)
@@ -181,8 +182,12 @@ func (gpm *GenericPoolManager) Run(ctx context.Context) {
 	gpm.poolPodC.InjectGpm(gpm)
 	go gpm.WebsocketStartEventChecker(ctx, gpm.kubernetesClient)     //nolint:errcheck
 	go gpm.NoActiveConnectionEventChecker(ctx, gpm.kubernetesClient) //nolint:errcheck
-	go gpm.idleObjectReaper(ctx)
-	go gpm.poolPodC.Run(ctx, ctx.Done())
+	mgr.Add(ctx, func(ctx context.Context) {
+		gpm.idleObjectReaper(ctx)
+	})
+	mgr.Add(ctx, func(ctx context.Context) {
+		gpm.poolPodC.Run(ctx, ctx.Done(), mgr)
+	})
 }
 
 func (gpm *GenericPoolManager) GetTypeName(ctx context.Context) fv1.ExecutorType {

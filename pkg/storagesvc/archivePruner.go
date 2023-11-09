@@ -26,6 +26,7 @@ import (
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	"github.com/fission/fission/pkg/utils"
+	"github.com/fission/fission/pkg/utils/manager"
 	"github.com/pkg/errors"
 )
 
@@ -142,9 +143,11 @@ func (pruner *ArchivePruner) getOrphanArchives(ctx context.Context) {
 // Start starts a go routine that listens to a channel for archive IDs that need to deleted.
 // Also wakes up at regular intervals to make a list of archive IDs that need to be reaped
 // and sends them over to the channel for deletion
-func (pruner *ArchivePruner) Start(ctx context.Context) {
+func (pruner *ArchivePruner) Start(ctx context.Context, mgr manager.Interface) {
 	ticker := time.NewTicker(pruner.pruneInterval * time.Minute)
-	go pruner.pruneArchives()
+	mgr.Add(ctx, func(_ context.Context) {
+		pruner.pruneArchives()
+	})
 	for range ticker.C {
 		// This method fetches unused archive IDs and sends them to archiveChannel for deletion
 		// silencing the errors, hoping they go away in next iteration.

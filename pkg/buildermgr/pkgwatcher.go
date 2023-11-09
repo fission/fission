@@ -314,18 +314,15 @@ func (pkgw *packageWatcher) Run(ctx context.Context, mgr manager.Interface) erro
 	mgr.Add(ctx, func(ctx context.Context) {
 		metrics.ServeMetrics(ctx, "buildermgr", pkgw.logger, mgr)
 	})
-
-	for _, podInformer := range pkgw.podInformer {
-		go podInformer.Run(ctx.Done())
-	}
+	mgr.AddInformers(ctx, pkgw.podInformer)
 	for _, pkgInformer := range pkgw.pkgInformer {
 		_, err := pkgInformer.AddEventHandler(pkgw.packageInformerHandler(ctx))
 		if err != nil {
 			pkgw.logger.Fatal("error adding package informer handler", zap.Error(err))
 			return err
 		}
-		go pkgInformer.Run(ctx.Done())
 	}
+	mgr.AddInformers(ctx, pkgw.pkgInformer)
 	return nil
 }
 

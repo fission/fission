@@ -64,7 +64,7 @@ import (
 
 // request url ---[trigger]---> Function(name, deployment) ----[deployment]----> Function(name, uid) ----[pool mgr]---> k8s service url
 
-func router(ctx context.Context, logger *zap.Logger, httpTriggerSet *HTTPTriggerSet) (*mutableRouter, error) {
+func router(ctx context.Context, logger *zap.Logger, mgr manager.Interface, httpTriggerSet *HTTPTriggerSet) (*mutableRouter, error) {
 	var mr *mutableRouter
 	mux := mux.NewRouter()
 	mux.Use(metrics.HTTPMetricMiddleware)
@@ -80,7 +80,7 @@ func router(ctx context.Context, logger *zap.Logger, httpTriggerSet *HTTPTrigger
 		mr = newMutableRouter(logger, mux)
 	}
 
-	err = httpTriggerSet.subscribeRouter(ctx, mr)
+	err = httpTriggerSet.subscribeRouter(ctx, mgr, mr)
 	if err != nil {
 		return nil, err
 	}
@@ -89,7 +89,7 @@ func router(ctx context.Context, logger *zap.Logger, httpTriggerSet *HTTPTrigger
 
 func serve(ctx context.Context, logger *zap.Logger, mgr manager.Interface, port int,
 	httpTriggerSet *HTTPTriggerSet, displayAccessLog bool) error {
-	mr, err := router(ctx, logger, httpTriggerSet)
+	mr, err := router(ctx, logger, mgr, httpTriggerSet)
 	if err != nil {
 		return errors.Wrap(err, "error making router")
 	}

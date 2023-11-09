@@ -38,6 +38,7 @@ import (
 	"github.com/fission/fission/pkg/info"
 	"github.com/fission/fission/pkg/throttler"
 	"github.com/fission/fission/pkg/utils"
+	"github.com/fission/fission/pkg/utils/manager"
 	"github.com/fission/fission/pkg/utils/metrics"
 )
 
@@ -93,7 +94,7 @@ func makeHTTPTriggerSet(logger *zap.Logger, fmap *functionServiceMap, fissionCli
 	return httpTriggerSet, nil
 }
 
-func (ts *HTTPTriggerSet) subscribeRouter(ctx context.Context, mr *mutableRouter) error {
+func (ts *HTTPTriggerSet) subscribeRouter(ctx context.Context, mgr manager.Interface, mr *mutableRouter) error {
 	resolver := makeFunctionReferenceResolver(ts.logger, ts.funcInformer)
 	ts.resolver = resolver
 	ts.mutableRouter = mr
@@ -108,10 +109,12 @@ func (ts *HTTPTriggerSet) subscribeRouter(ctx context.Context, mr *mutableRouter
 		ts.logger.Info("skipping continuous trigger updates")
 		return nil
 	}
-	go ts.updateRouter()
-	go ts.syncTriggers()
-	go ts.runInformer(ctx, ts.funcInformer)
-	go ts.runInformer(ctx, ts.triggerInformer)
+	mgr.Add(ctx, func(ctx context.Context) {
+		ts.updateRouter(ctx)
+	})
+	ts.syncTriggers()
+	mgr.AddInformers(ctx, ts.funcInformer)
+	mgr.AddInformers(ctx, ts.triggerInformer)
 	return nil
 }
 
@@ -378,20 +381,19 @@ func (ts *HTTPTriggerSet) addFunctionHandlers() error {
 	return nil
 }
 
-func (ts *HTTPTriggerSet) runInformer(ctx context.Context, informer map[string]k8sCache.SharedIndexInformer) {
-	for _, inf := range informer {
-		go inf.Run(ctx.Done())
-	}
-}
-
 func (ts *HTTPTriggerSet) syncTriggers() {
 	ts.syncDebouncer(func() {
 		ts.updateRouterRequestChannel <- struct{}{}
 	})
 }
 
-func (ts *HTTPTriggerSet) updateRouter() {
-	for range ts.updateRouterRequestChannel {
+func (ts *HTTPTriggerSet) updateRouter(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ts.updateRouterRequestChannel:
+		}
 		// get triggers
 		alltriggers := make([]fv1.HTTPTrigger, 0)
 		for _, triggerInformer := range ts.triggerInformer {

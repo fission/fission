@@ -10,15 +10,18 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 
 	"github.com/fission/fission/pkg/utils/loggerfactory"
+	"github.com/fission/fission/pkg/utils/manager"
 )
 
 func TestServiceAccountCheck(t *testing.T) {
+	mgr := manager.New()
+	defer mgr.Wait()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	kubernetesClient := fake.NewSimpleClientset()
 	logger := loggerfactory.GetLogger()
 	os.Setenv(ENV_CREATE_SA, "true")
-	CreateMissingPermissionForSA(ctx, kubernetesClient, logger)
+	CreateMissingPermissionForSA(ctx, kubernetesClient, logger, mgr)
 
 	// Get rolebinding for a service account
 	rolebindings, err := kubernetesClient.RbacV1().RoleBindings("default").List(ctx, metav1.ListOptions{})

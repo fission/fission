@@ -53,6 +53,7 @@ import (
 	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
 	"github.com/fission/fission/pkg/throttler"
 	"github.com/fission/fission/pkg/utils"
+	"github.com/fission/fission/pkg/utils/manager"
 	"github.com/fission/fission/pkg/utils/maps"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
@@ -162,7 +163,7 @@ func MakeNewDeploy(
 }
 
 // Run start the function and environment controller along with an object reaper.
-func (deploy *NewDeploy) Run(ctx context.Context) {
+func (deploy *NewDeploy) Run(ctx context.Context, mgr manager.Interface) {
 	waitSynced := make([]k8sCache.InformerSynced, 0)
 	for _, deplListerSynced := range deploy.deplListerSynced {
 		waitSynced = append(waitSynced, deplListerSynced)
@@ -174,7 +175,9 @@ func (deploy *NewDeploy) Run(ctx context.Context) {
 	if ok := k8sCache.WaitForCacheSync(ctx.Done(), waitSynced...); !ok {
 		deploy.logger.Fatal("failed to wait for caches to sync")
 	}
-	go deploy.idleObjectReaper(ctx)
+	mgr.Add(ctx, func(ctx context.Context) {
+		deploy.idleObjectReaper(ctx)
+	})
 }
 
 // GetTypeName returns the executor type name.

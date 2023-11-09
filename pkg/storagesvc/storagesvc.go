@@ -316,7 +316,9 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *
 		if err != nil {
 			return errors.Wrap(err, "Error creating archivePruner")
 		}
-		go pruner.Start(ctx)
+		mgr.Add(ctx, func(ctx context.Context) {
+			pruner.Start(ctx, mgr)
+		})
 	}
 
 	logger.Info("storage service started")
