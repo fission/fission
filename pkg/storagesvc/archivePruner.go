@@ -56,17 +56,23 @@ func MakeArchivePruner(logger *zap.Logger, clientGen crd.ClientGeneratorInterfac
 }
 
 // pruneArchives listens to archiveChannel for archive ids that need to be deleted
-func (pruner *ArchivePruner) pruneArchives() {
+func (pruner *ArchivePruner) pruneArchives(ctx context.Context) {
 	pruner.logger.Debug("listening to archiveChannel to prune archives")
-	for archiveID := range pruner.archiveChan {
-		pruner.logger.Info("sending delete request for archive",
-			zap.String("archive_id", archiveID))
-		if err := pruner.stowClient.removeFileByID(archiveID); err != nil {
-			// logging the error and continuing with other deletions.
-			// hopefully this archive will be deleted in the next iteration.
-			pruner.logger.Error("ignoring error while deleting archive",
-				zap.Error(err),
+	for {
+		select {
+		case archiveID := <-pruner.archiveChan:
+			pruner.logger.Info("sending delete request for archive",
 				zap.String("archive_id", archiveID))
+			if err := pruner.stowClient.removeFileByID(archiveID); err != nil {
+				// logging the error and continuing with other deletions.
+				// hopefully this archive will be deleted in the next iteration.
+				pruner.logger.Error("ignoring error while deleting archive",
+					zap.Error(err),
+					zap.String("archive_id", archiveID))
+			}
+		case <-ctx.Done():
+			pruner.logger.Info("stopped listening to archiveChannel to prune archives, context cancelled")
+			return
 		}
 	}
 }
@@ -145,12 +151,17 @@ func (pruner *ArchivePruner) getOrphanArchives(ctx context.Context) {
 // and sends them over to the channel for deletion
 func (pruner *ArchivePruner) Start(ctx context.Context, mgr manager.Interface) {
 	ticker := time.NewTicker(pruner.pruneInterval * time.Minute)
-	mgr.Add(ctx, func(_ context.Context) {
-		pruner.pruneArchives()
+	mgr.Add(ctx, func(ctx context.Context) {
+		pruner.pruneArchives(ctx)
 	})
-	for range ticker.C {
-		// This method fetches unused archive IDs and sends them to archiveChannel for deletion
-		// silencing the errors, hoping they go away in next iteration.
-		pruner.getOrphanArchives(ctx)
+	for {
+		select {
+		case <-ticker.C:
+			// This method fetches unused archive IDs and sends them to archiveChannel for deletion
+			// silencing the errors, hoping they go away in next iteration.
+			pruner.getOrphanArchives(ctx)
+		case <-ctx.Done():
+			return
+		}
 	}
 }
