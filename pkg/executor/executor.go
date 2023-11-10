@@ -88,6 +88,7 @@ func MakeExecutor(ctx context.Context, logger *zap.Logger, mgr manager.Interface
 
 	// Run all informers
 	for _, informer := range informers {
+		informer := informer
 		mgr.Add(ctx, func(ctx context.Context) {
 			informer.Run(ctx.Done())
 		})
