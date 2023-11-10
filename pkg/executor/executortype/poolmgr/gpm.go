@@ -180,8 +180,13 @@ func (gpm *GenericPoolManager) Run(ctx context.Context, mgr manager.Interface) {
 	}
 	go gpm.service()
 	gpm.poolPodC.InjectGpm(gpm)
-	go gpm.WebsocketStartEventChecker(ctx, gpm.kubernetesClient)     //nolint:errcheck
-	go gpm.NoActiveConnectionEventChecker(ctx, gpm.kubernetesClient) //nolint:errcheck
+
+	mgr.Add(ctx, func(ctx context.Context) {
+		gpm.WebsocketStartEventChecker(ctx, gpm.kubernetesClient) //nolint:errcheck
+	})
+	mgr.Add(ctx, func(ctx context.Context) {
+		gpm.NoActiveConnectionEventChecker(ctx, gpm.kubernetesClient) //nolint:errcheck
+	})
 	mgr.Add(ctx, func(ctx context.Context) {
 		gpm.idleObjectReaper(ctx)
 	})

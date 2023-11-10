@@ -17,7 +17,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/fission/fission/pkg/utils/manager"
 	"github.com/fission/fission/pkg/utils/uuid"
 )
 
@@ -92,7 +91,7 @@ var (
 	}
 )
 
-func CreateMissingPermissionForSA(ctx context.Context, kubernetesClient kubernetes.Interface, logger *zap.Logger, mgr manager.Interface) {
+func CreateMissingPermissionForSA(ctx context.Context, kubernetesClient kubernetes.Interface, logger *zap.Logger) {
 	enableSA := createServiceAccount()
 	if enableSA {
 		interval := getSAInterval()
@@ -100,9 +99,7 @@ func CreateMissingPermissionForSA(ctx context.Context, kubernetesClient kubernet
 		sa := getSAObj(ctx, kubernetesClient, logger)
 		logger.Info("Starting service account check", zap.Any("interval", interval))
 		if interval > 0 {
-			mgr.Add(ctx, func(context.Context) {
-				wait.UntilWithContext(ctx, sa.runSACheck, interval)
-			})
+			go wait.UntilWithContext(ctx, sa.runSACheck, interval)
 		} else {
 			sa.runSACheck(ctx)
 		}

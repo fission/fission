@@ -400,7 +400,7 @@ func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, 
 		return err
 	}
 
-	utils.CreateMissingPermissionForSA(ctx, kubernetesClient, logger, mgr)
+	utils.CreateMissingPermissionForSA(ctx, kubernetesClient, logger)
 
 	mgr.Add(ctx, func(ctx context.Context) {
 		metrics.ServeMetrics(ctx, "executor", logger, mgr)
