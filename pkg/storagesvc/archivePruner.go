@@ -71,6 +71,7 @@ func (pruner *ArchivePruner) pruneArchives(ctx context.Context) {
 					zap.String("archive_id", archiveID))
 			}
 		case <-ctx.Done():
+			close(pruner.archiveChan)
 			pruner.logger.Info("stopped listening to archiveChannel to prune archives, context cancelled")
 			return
 		}
@@ -161,6 +162,7 @@ func (pruner *ArchivePruner) Start(ctx context.Context, mgr manager.Interface) {
 			// silencing the errors, hoping they go away in next iteration.
 			pruner.getOrphanArchives(ctx)
 		case <-ctx.Done():
+			ticker.Stop()
 			return
 		}
 	}
