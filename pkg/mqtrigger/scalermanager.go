@@ -25,6 +25,7 @@ import (
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/executor/util"
 	"github.com/fission/fission/pkg/utils"
+	"github.com/fission/fission/pkg/utils/manager"
 )
 
 var (
@@ -140,7 +141,7 @@ func mqTriggerEventHandlers(ctx context.Context, logger *zap.Logger, kubeClient 
 
 // StartScalerManager watches for changes in MessageQueueTrigger and,
 // Based on changes, it Creates, Updates and Deletes Objects of Kind ScaledObjects, AuthenticationTriggers and Deployments
-func StartScalerManager(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, routerURL string) error {
+func StartScalerManager(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Interface, routerURL string) error {
 	fissionClient, err := clientGen.GetFissionClient()
 	if err != nil {
 		return errors.Wrap(err, "failed to get fission client")
@@ -164,7 +165,9 @@ func StartScalerManager(ctx context.Context, clientGen crd.ClientGeneratorInterf
 		if err != nil {
 			return err
 		}
-		go informer.Run(ctx.Done())
+		mgr.Add(ctx, func(ctx context.Context) {
+			informer.Run(ctx.Done())
+		})
 		if ok := k8sCache.WaitForCacheSync(ctx.Done(), informer.HasSynced); !ok {
 			logger.Fatal("failed to wait for caches to sync")
 		}

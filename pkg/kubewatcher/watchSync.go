@@ -26,6 +26,7 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	"github.com/fission/fission/pkg/utils"
+	"github.com/fission/fission/pkg/utils/manager"
 )
 
 type (
@@ -51,10 +52,8 @@ func MakeWatchSync(ctx context.Context, logger *zap.Logger, client versioned.Int
 	return ws, nil
 }
 
-func (ws *WatchSync) Run(ctx context.Context) {
-	for _, informer := range ws.kubeWatcherInformer {
-		go informer.Run(ctx.Done())
-	}
+func (ws *WatchSync) Run(ctx context.Context, mgr manager.Interface) {
+	mgr.AddInformers(ctx, ws.kubeWatcherInformer)
 }
 
 func (ws *WatchSync) KubeWatcherEventHandlers(ctx context.Context) error {

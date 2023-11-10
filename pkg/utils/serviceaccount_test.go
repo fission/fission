@@ -10,9 +10,12 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 
 	"github.com/fission/fission/pkg/utils/loggerfactory"
+	"github.com/fission/fission/pkg/utils/manager"
 )
 
 func TestServiceAccountCheck(t *testing.T) {
+	mgr := manager.New()
+	defer mgr.Wait()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	kubernetesClient := fake.NewSimpleClientset()

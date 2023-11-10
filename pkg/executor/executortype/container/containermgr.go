@@ -51,6 +51,7 @@ import (
 	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
 	"github.com/fission/fission/pkg/throttler"
 	"github.com/fission/fission/pkg/utils"
+	"github.com/fission/fission/pkg/utils/manager"
 	"github.com/fission/fission/pkg/utils/maps"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
@@ -148,7 +149,7 @@ func MakeContainer(
 }
 
 // Run start the function along with an object reaper.
-func (caaf *Container) Run(ctx context.Context) {
+func (caaf *Container) Run(ctx context.Context, mgr manager.Interface) {
 	waitSynced := make([]k8sCache.InformerSynced, 0)
 	for _, deplListerSynced := range caaf.deplListerSynced {
 		waitSynced = append(waitSynced, deplListerSynced)
@@ -160,7 +161,9 @@ func (caaf *Container) Run(ctx context.Context) {
 	if ok := k8sCache.WaitForCacheSync(ctx.Done(), waitSynced...); !ok {
 		caaf.logger.Fatal("failed to wait for caches to sync")
 	}
-	go caaf.idleObjectReaper(ctx)
+	mgr.Add(ctx, func(ctx context.Context) {
+		caaf.idleObjectReaper(ctx)
+	})
 }
 
 // GetTypeName returns the executor type name.

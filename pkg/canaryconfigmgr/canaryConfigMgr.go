@@ -35,6 +35,7 @@ import (
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	"github.com/fission/fission/pkg/utils"
+	"github.com/fission/fission/pkg/utils/manager"
 )
 
 const (
@@ -136,10 +137,8 @@ func (canaryCfgMgr *canaryConfigMgr) CanaryConfigEventHandlers(ctx context.Conte
 	return nil
 }
 
-func (canaryCfgMgr *canaryConfigMgr) Run(ctx context.Context) {
-	for _, informer := range canaryCfgMgr.canaryConfigInformer {
-		go informer.Run(ctx.Done())
-	}
+func (canaryCfgMgr *canaryConfigMgr) Run(ctx context.Context, mgr manager.Interface) {
+	mgr.AddInformers(ctx, canaryCfgMgr.canaryConfigInformer)
 	canaryCfgMgr.logger.Info("started canary configmgr controller")
 }
 
@@ -558,7 +557,7 @@ func getEnvValue(envVar string) string {
 	return envVarSplit[1]
 }
 
-func StartCanaryServer(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, unitTestFlag bool) error {
+func StartCanaryServer(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Interface, unitTestFlag bool) error {
 	cLogger := logger.Named("CanaryServer")
 
 	fissionClient, err := clientGen.GetFissionClient()
@@ -570,7 +569,7 @@ func StartCanaryServer(ctx context.Context, clientGen crd.ClientGeneratorInterfa
 		return fmt.Errorf("failed to get kubernetes client: %w", err)
 	}
 
-	err = ConfigureFeatures(ctx, cLogger, unitTestFlag, fissionClient, kubernetesClient)
+	err = ConfigureFeatures(ctx, cLogger, unitTestFlag, fissionClient, kubernetesClient, mgr)
 	if err != nil {
 		cLogger.Error("error configuring features - proceeding without optional features", zap.Error(err))
 	}

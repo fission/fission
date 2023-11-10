@@ -27,6 +27,7 @@ import (
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	"github.com/fission/fission/pkg/utils"
+	"github.com/fission/fission/pkg/utils/manager"
 )
 
 type (
@@ -52,10 +53,8 @@ func MakeTimerSync(ctx context.Context, logger *zap.Logger, fissionClient versio
 	return ws, nil
 }
 
-func (ws *TimerSync) Run(ctx context.Context) {
-	for _, informer := range ws.timeTriggerInformer {
-		go informer.Run(ctx.Done())
-	}
+func (ws *TimerSync) Run(ctx context.Context, mgr manager.Interface) {
+	mgr.AddInformers(ctx, ws.timeTriggerInformer)
 }
 
 func (ws *TimerSync) AddUpdateTimeTrigger(timeTrigger *fv1.TimeTrigger) {

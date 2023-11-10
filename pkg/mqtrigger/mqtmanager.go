@@ -86,7 +86,9 @@ func (mqt *MessageQueueTriggerManager) Run(ctx context.Context, mgr manager.Inte
 		if err != nil {
 			return err
 		}
-		go informer.Run(ctx.Done())
+		mgr.Add(ctx, func(ctx context.Context) {
+			informer.Run(ctx.Done())
+		})
 		if ok := k8sCache.WaitForCacheSync(ctx.Done(), informer.HasSynced); !ok {
 			mqt.logger.Fatal("failed to wait for caches to sync")
 		}

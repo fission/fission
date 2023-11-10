@@ -39,6 +39,7 @@ import (
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	"github.com/fission/fission/pkg/utils"
+	"github.com/fission/fission/pkg/utils/manager"
 )
 
 const (
@@ -131,10 +132,8 @@ func (envw *environmentWatcher) getLabels(envName string, envNamespace string, e
 	}
 }
 
-func (envw *environmentWatcher) Run(ctx context.Context) {
-	for _, informer := range envw.envWatchInformer {
-		go informer.Run(ctx.Done())
-	}
+func (envw *environmentWatcher) Run(ctx context.Context, mgr manager.Interface) {
+	mgr.AddInformers(ctx, envw.envWatchInformer)
 }
 
 func (envw *environmentWatcher) EnvWatchEventHandlers(ctx context.Context) error {

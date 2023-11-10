@@ -80,7 +80,7 @@ func Run(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *za
 	}
 
 	// do specialization in other goroutine to prevent blocking in newdeploy
-	go func() {
+	mgr.Add(ctx, func(_ context.Context) {
 		if *specializeOnStart {
 			var specializeReq fetcher.FunctionSpecializeRequest
 
@@ -95,7 +95,7 @@ func Run(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *za
 			}
 		}
 		atomic.StoreUint32(&readyToServe, 1)
-	}()
+	})
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/fetch", f.FetchHandler)

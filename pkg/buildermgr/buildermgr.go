@@ -61,10 +61,10 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *
 	}
 
 	envWatcher, err := makeEnvironmentWatcher(ctx, bmLogger, fissionClient, kubernetesClient, fetcherConfig, podSpecPatch)
-	envWatcher.Run(ctx)
 	if err != nil {
 		return err
 	}
+	envWatcher.Run(ctx, mgr)
 
 	pkgWatcher := makePackageWatcher(bmLogger, fissionClient,
 		kubernetesClient, storageSvcUrl,
