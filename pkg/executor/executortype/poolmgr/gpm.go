@@ -182,10 +182,16 @@ func (gpm *GenericPoolManager) Run(ctx context.Context, mgr manager.Interface) {
 	gpm.poolPodC.InjectGpm(gpm)
 
 	mgr.Add(ctx, func(ctx context.Context) {
-		gpm.WebsocketStartEventChecker(ctx, gpm.kubernetesClient) //nolint:errcheck
+		err := gpm.WebsocketStartEventChecker(ctx, gpm.kubernetesClient)
+		if err != nil {
+			gpm.logger.Error("error in checking websocket start event from pod: ", zap.Error(err))
+		}
 	})
 	mgr.Add(ctx, func(ctx context.Context) {
-		gpm.NoActiveConnectionEventChecker(ctx, gpm.kubernetesClient) //nolint:errcheck
+		err := gpm.NoActiveConnectionEventChecker(ctx, gpm.kubernetesClient) //nolint:errcheck
+		if err != nil {
+			gpm.logger.Error("error in checking inactive event from pod: ", zap.Error(err))
+		}
 	})
 	mgr.Add(ctx, func(ctx context.Context) {
 		gpm.idleObjectReaper(ctx)
