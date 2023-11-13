@@ -1,9 +1,6 @@
 ignore:
   - "charts"
-  - "demos"
-  - "Documentation"
-  - "examples"
-  - "test"
+  - "test/tests"
   - "tools"
   - "pkg/apis/genclient"
 coverage:
