@@ -8,8 +8,11 @@ import (
 	"github.com/fission/fission/pkg/buildermgr"
 	"github.com/fission/fission/pkg/executor"
 	eclient "github.com/fission/fission/pkg/executor/client"
+	"github.com/fission/fission/pkg/kubewatcher"
+	"github.com/fission/fission/pkg/mqtrigger"
 	"github.com/fission/fission/pkg/router"
 	"github.com/fission/fission/pkg/storagesvc"
+	"github.com/fission/fission/pkg/timer"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/manager"
 	"github.com/fission/fission/test/e2e/framework"
@@ -104,6 +107,25 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr manager.Inte
 	f.ServiceInfo["router"] = framework.ServiceInfo{
 		Port: routerPort,
 	}
-	os.Setenv("FISSION_ROUTER_URL", fmt.Sprintf("http://localhost:%d", routerPort))
+	routerURL := fmt.Sprintf("http://localhost:%d", routerPort)
+	os.Setenv("FISSION_ROUTER_URL", routerURL)
+
+	err = timer.Start(ctx, f.ClientGen(), f.Logger(), mgr, routerURL)
+	if err != nil {
+		return fmt.Errorf("error starting timer: %v", err)
+	}
+	f.ServiceInfo["timer"] = framework.ServiceInfo{}
+
+	err = mqtrigger.StartScalerManager(ctx, f.ClientGen(), f.Logger(), mgr, routerURL)
+	if err != nil {
+		return fmt.Errorf("error starting mqt scaler manager: %v", err)
+	}
+	f.ServiceInfo["mqtrigger-keda"] = framework.ServiceInfo{}
+
+	err = kubewatcher.Start(ctx, f.ClientGen(), f.Logger(), mgr, routerURL)
+	if err != nil {
+		return fmt.Errorf("error starting kubewatcher: %v", err)
+	}
+	f.ServiceInfo["kubewatcher"] = framework.ServiceInfo{}
 	return nil
 }
