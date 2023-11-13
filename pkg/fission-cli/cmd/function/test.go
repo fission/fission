@@ -164,13 +164,13 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 		return nil
 	}
 
-	console.Errorf("Error calling function %s: %d; Please try again or fix the error: %s\n", m.Name, resp.StatusCode, string(body))
-	err = printPodLogs(input.Context(), opts.Client(), m)
+	console.Errorf("calling function %s: %d; Please try again or fix the error: %s\n", m.Name, resp.StatusCode, string(body))
+	err = util.FunctionPodLogs(input.Context(), m.Name, m.Namespace, opts.Client())
 	if err != nil {
-		console.Errorf("Error getting function logs from controller: %v. Try to get logs from log database.", err)
+		console.Errorf("getting function logs: %v. Try to get logs from log database.", err)
 		err = Log(input)
 		if err != nil {
-			return errors.Wrapf(err, "error retrieving function log from log database")
+			console.Errorf("getting function logs from log database: %v", err)
 		}
 	}
 	return errors.New("error getting function response")
@@ -235,14 +235,4 @@ func doHTTPRequest(ctx context.Context, url string, headers []string, method, bo
 	}
 
 	return resp, nil
-}
-
-func printPodLogs(ctx context.Context, client cmd.Client, fnMeta *metav1.ObjectMeta) error {
-	err := util.FunctionPodLogs(ctx, fnMeta.Name, fnMeta.Namespace, client)
-
-	if err != nil {
-		return errors.Wrap(err, "error executing get logs request")
-	}
-
-	return nil
 }

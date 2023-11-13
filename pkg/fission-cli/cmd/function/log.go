@@ -70,7 +70,7 @@ func (opts *LogSubCommand) do(input cli.Input) error {
 	// request the controller to establish a proxy server to the database.
 	logDB, err := logdb.GetLogDB(dbType, input.Context(), logDBOptions)
 	if err != nil {
-		return errors.Wrapf(err, "failed to get log database")
+		return errors.Wrapf(err, "failed to get log from %s", dbType)
 	}
 
 	requestChan := make(chan struct{})

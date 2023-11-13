@@ -122,20 +122,20 @@ func TestFissionCLI(t *testing.T) {
 			require.Equal(t, v1.ExecutorTypePoolmgr, testFunc.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType)
 		})
 
-		// t.Run("test/poolmgr", func(t *testing.T) {
-		// 	_, err := cli.ExecCommand(f, ctx, "function", "test", "--name", testFuncName)
-		// 	require.NoError(t, err)
-		// })
+		t.Run("test/poolmgr", func(t *testing.T) {
+			_, err := cli.ExecCommand(f, ctx, "function", "test", "--name", testFuncName)
+			require.Error(t, err)
+		})
 
-		// t.Run("test/newdeploy", func(t *testing.T) {
-		// 	_, err := cli.ExecCommand(f, ctx, "function", "test", "--name", testFuncNd)
-		// 	require.NoError(t, err)
-		// })
+		t.Run("test/newdeploy", func(t *testing.T) {
+			_, err := cli.ExecCommand(f, ctx, "function", "test", "--name", testFuncNd)
+			require.Error(t, err)
+		})
 
-		// t.Run("test/container", func(t *testing.T) {
-		// 	_, err := cli.ExecCommand(f, ctx, "function", "test", "--name", testFuncCn)
-		// 	require.NoError(t, err)
-		// })
+		t.Run("test/container", func(t *testing.T) {
+			_, err := cli.ExecCommand(f, ctx, "function", "test", "--name", testFuncCn)
+			require.Error(t, err)
+		})
 
 		t.Run("delete/newdeploy", func(t *testing.T) {
 			_, err := cli.ExecCommand(f, ctx, "function", "delete", "--name", testFuncNd)

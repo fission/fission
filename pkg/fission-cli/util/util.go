@@ -582,8 +582,7 @@ func FunctionPodLogs(ctx context.Context, fnName, ns string, client cmd.Client) 
 	})
 
 	if len(pods) <= 0 {
-		return errors.New("no active pods found")
-
+		return errors.New("no active pods found for function in namespace " + podNs)
 	}
 
 	// get the pod with highest resource version
