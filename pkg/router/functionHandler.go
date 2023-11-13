@@ -705,6 +705,10 @@ func (fh functionHandler) getServiceEntry(ctx context.Context) (svcURL *url.URL,
 		},
 	)
 
+	if recordObj == nil {
+		return nil, false, fmt.Errorf("empty service entry: %w", err)
+	}
+
 	record, ok := recordObj.(svcEntryRecord)
 	if !ok {
 		return nil, false, fmt.Errorf("unexpected type of recordObj %T: %w", recordObj, err)

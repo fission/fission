@@ -203,9 +203,18 @@ func (gp *GenericPool) updateCPUUtilizationSvc(ctx context.Context) {
 			}
 			if value, ok := gp.podFSVCMap.Load(val.ObjectMeta.Name); ok {
 				if valArray, ok1 := value.([]interface{}); ok1 {
-					function, address := valArray[0], valArray[1]
-					gp.fsCache.SetCPUUtilizaton(function.(crd.CacheKeyURG), address.(string), p)
-					gp.logger.Info(fmt.Sprintf("updated function %s, address %s, cpuUsage %+v", function.(string), address.(string), p))
+					function, ok2 := valArray[0].(crd.CacheKeyURG)
+					if !ok2 {
+						gp.logger.Error("failed to convert function to type", zap.Any("function", function))
+						return
+					}
+					address, ok2 := valArray[1].(string)
+					if !ok2 {
+						gp.logger.Error("failed to convert address to string", zap.Any("address", address))
+						return
+					}
+					gp.fsCache.SetCPUUtilizaton(function, address, p)
+					gp.logger.Info("updated function cpu usage", zap.Any("function", function), zap.String("address", address), zap.Any("cpuUsage", p))
 				}
 			}
 		}
