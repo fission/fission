@@ -43,6 +43,21 @@ func TestFissionCLI(t *testing.T) {
 			require.Equal(t, "fission/python-env", env.Spec.Runtime.Image)
 		})
 
+		t.Run("list", func(t *testing.T) {
+			_, err := cli.ExecCommand(f, ctx, "env", "list")
+			require.NoError(t, err)
+		})
+
+		t.Run("get", func(t *testing.T) {
+			_, err := cli.ExecCommand(f, ctx, "env", "get", "--name", "test-env")
+			require.NoError(t, err)
+		})
+
+		t.Run("pods", func(t *testing.T) {
+			_, err := cli.ExecCommand(f, ctx, "env", "pods", "--name", "test-env")
+			require.NoError(t, err)
+		})
+
 		t.Run("update", func(t *testing.T) {
 			_, err := cli.ExecCommand(f, ctx, "env", "update", "--name", "test-env", "--image", "fission/python-env:v2")
 			require.NoError(t, err)
@@ -137,6 +152,26 @@ func TestFissionCLI(t *testing.T) {
 			require.Error(t, err)
 		})
 
+		t.Run("list", func(t *testing.T) {
+			_, err := cli.ExecCommand(f, ctx, "function", "list")
+			require.NoError(t, err)
+		})
+
+		t.Run("get/poolmgr", func(t *testing.T) {
+			_, err := cli.ExecCommand(f, ctx, "function", "get", "--name", testFuncName)
+			require.NoError(t, err)
+		})
+
+		t.Run("getmeta/poolmgr", func(t *testing.T) {
+			_, err := cli.ExecCommand(f, ctx, "function", "getmeta", "--name", testFuncName)
+			require.NoError(t, err)
+		})
+
+		t.Run("pods/poolmgr", func(t *testing.T) {
+			_, err := cli.ExecCommand(f, ctx, "function", "pods", "--name", testFuncName)
+			require.NoError(t, err)
+		})
+
 		t.Run("delete/newdeploy", func(t *testing.T) {
 			_, err := cli.ExecCommand(f, ctx, "function", "delete", "--name", testFuncNd)
 			require.NoError(t, err)
@@ -213,4 +248,117 @@ func TestFissionCLI(t *testing.T) {
 
 	})
 
+	t.Run("timetrigger", func(t *testing.T) {
+
+		t.Run("create", func(t *testing.T) {
+			// create env and function first
+			_, err := cli.ExecCommand(f, ctx, "env", "create", "--name", "test-func-env", "--image", "fission/python-env")
+			require.NoError(t, err)
+			_, err = cli.ExecCommand(f, ctx, "function", "create", "--name", "test-func", "--code", "./hello.js", "--env", "test-func-env")
+			require.NoError(t, err)
+
+			_, err = cli.ExecCommand(f, ctx, "timetrigger", "create", "--name", "test-tt", "--function", "test-func", "--cron", "@every 1m")
+			require.NoError(t, err)
+
+			tt, err := fissionClient.CoreV1().TimeTriggers(metav1.NamespaceDefault).Get(ctx, "test-tt", metav1.GetOptions{})
+			require.NoError(t, err)
+			require.NotNil(t, tt)
+			require.Equal(t, "test-tt", tt.Name)
+			require.Equal(t, "test-func", tt.Spec.FunctionReference.Name)
+			require.Equal(t, "@every 1m", tt.Spec.Cron)
+		})
+
+		t.Run("list", func(t *testing.T) {
+			_, err := cli.ExecCommand(f, ctx, "timetrigger", "list")
+			require.NoError(t, err)
+		})
+
+		t.Run("showschedule", func(t *testing.T) {
+			_, err := cli.ExecCommand(f, ctx, "timetrigger", "showschedule", "--cron", "@every 1m")
+			require.NoError(t, err)
+		})
+
+		t.Run("update", func(t *testing.T) {
+			_, err := cli.ExecCommand(f, ctx, "timetrigger", "update", "--name", "test-tt", "--cron", "@every 2m")
+			require.NoError(t, err)
+
+			tt, err := fissionClient.CoreV1().TimeTriggers(metav1.NamespaceDefault).Get(ctx, "test-tt", metav1.GetOptions{})
+			require.NoError(t, err)
+			require.NotNil(t, tt)
+			require.Equal(t, "test-tt", tt.Name)
+			require.Equal(t, "test-func", tt.Spec.FunctionReference.Name)
+			require.Equal(t, "@every 2m", tt.Spec.Cron)
+		})
+
+		t.Run("delete", func(t *testing.T) {
+			_, err := cli.ExecCommand(f, ctx, "timetrigger", "delete", "--name", "test-tt")
+			require.NoError(t, err)
+
+			_, err = fissionClient.CoreV1().TimeTriggers(metav1.NamespaceDefault).Get(ctx, "test-tt", metav1.GetOptions{})
+			require.Error(t, err)
+
+			_, err = cli.ExecCommand(f, ctx, "function", "delete", "--name", "test-func")
+			require.NoError(t, err)
+
+			_, err = cli.ExecCommand(f, ctx, "env", "delete", "--name", "test-func-env")
+			require.NoError(t, err)
+		})
+	})
+
+	t.Run("mqtrigger", func(t *testing.T) {
+
+		t.Run("create", func(t *testing.T) {
+			// create env and function first
+			_, err := cli.ExecCommand(f, ctx, "env", "create", "--name", "test-func-env", "--image", "fission/python-env")
+			require.NoError(t, err)
+			_, err = cli.ExecCommand(f, ctx, "function", "create", "--name", "test-func", "--code", "./hello.js", "--env", "test-func-env")
+			require.NoError(t, err)
+
+			_, err = cli.ExecCommand(f, ctx, "mqtrigger", "create", "--name", "test-mqtrigger", "--function", "test-func", "--mqtype", "kafka", "--topic", "test-topic", "--resptopic", "test-resp-topic")
+			require.NoError(t, err)
+
+			mqt, err := fissionClient.CoreV1().MessageQueueTriggers(metav1.NamespaceDefault).Get(ctx, "test-mqtrigger", metav1.GetOptions{})
+			require.NoError(t, err)
+			require.NotNil(t, mqt)
+			require.Equal(t, "test-mqtrigger", mqt.Name)
+			require.Equal(t, "test-func", mqt.Spec.FunctionReference.Name)
+			require.Equal(t, "test-topic", mqt.Spec.Topic)
+			require.Equal(t, "test-resp-topic", mqt.Spec.ResponseTopic)
+		})
+
+		t.Run("list", func(t *testing.T) {
+			_, err := cli.ExecCommand(f, ctx, "mqtrigger", "list")
+			require.NoError(t, err)
+		})
+
+		t.Run("delete", func(t *testing.T) {
+			_, err := cli.ExecCommand(f, ctx, "mqtrigger", "delete", "--name", "test-mqtrigger")
+			require.NoError(t, err)
+
+			_, err = fissionClient.CoreV1().MessageQueueTriggers(metav1.NamespaceDefault).Get(ctx, "test-mqtrigger", metav1.GetOptions{})
+			require.Error(t, err)
+
+			_, err = cli.ExecCommand(f, ctx, "function", "delete", "--name", "test-func")
+			require.NoError(t, err)
+
+			_, err = cli.ExecCommand(f, ctx, "env", "delete", "--name", "test-func-env")
+			require.NoError(t, err)
+		})
+
+	})
+
+	t.Run("check", func(t *testing.T) {
+		_, err := cli.ExecCommand(f, ctx, "check")
+		require.NoError(t, err)
+	})
+
+	t.Run("version", func(t *testing.T) {
+		_, err := cli.ExecCommand(f, ctx, "version")
+		require.NoError(t, err)
+	})
+
+	t.Run("support-dump", func(t *testing.T) {
+		_, err := cli.ExecCommand(f, ctx, "support", "dump")
+		require.NoError(t, err)
+	})
 }
