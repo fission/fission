@@ -26,6 +26,7 @@ import (
 	docopt "github.com/docopt/docopt-go"
 	"go.uber.org/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
+	cnwebhook "sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	"github.com/fission/fission/cmd/fission-bundle/mqtrigger"
 	"github.com/fission/fission/pkg/buildermgr"
@@ -49,7 +50,9 @@ import (
 
 // runWebhook starts admission webhook server
 func runWebhook(ctx context.Context, logger *zap.Logger, port int) error {
-	return webhook.Start(ctx, logger, port)
+	return webhook.Start(ctx, logger, cnwebhook.Options{
+		Port: port,
+	})
 }
 
 func runCanaryConfigServer(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Interface) error {

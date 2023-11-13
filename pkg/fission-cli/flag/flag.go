@@ -68,7 +68,6 @@ const (
 
 var (
 	GlobalVerbosity = Flag{Type: Int, Name: flagkey.Verbosity, Short: "v", Usage: "CLI verbosity (0 is quiet, 1 is the default, 2 is verbose)", DefaultValue: 1}
-	GlobalServer    = Flag{Type: String, Name: flagkey.Server, Usage: "Server URL"}
 
 	ClientOnly = Flag{Type: Bool, Name: flagkey.ClientOnly, Usage: "If set, the CLI won't connect to remote server"}
 

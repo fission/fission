@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"time"
 
 	"go.uber.org/zap"
@@ -32,7 +33,31 @@ type Framework struct {
 	ServiceInfo map[string]ServiceInfo
 }
 
+func NewWebhookOptions() (*envtest.WebhookInstallOptions, error) {
+	webhookPort, err := utils.FindFreePort()
+	if err != nil {
+		return nil, fmt.Errorf("error finding unused port: %v", err)
+	}
+	_, filename, _, _ := runtime.Caller(0) //nolint
+	root := filepath.Dir(filename)
+
+	options := &envtest.WebhookInstallOptions{
+		LocalServingHost: "localhost",
+		LocalServingPort: webhookPort,
+		Paths:            []string{filepath.Join(root, "webhook-manifest.yaml")},
+	}
+	err = options.PrepWithoutInstalling()
+	if err != nil {
+		return nil, fmt.Errorf("error preparing webhook install options: %v", err)
+	}
+	return options, nil
+}
+
 func NewFramework() *Framework {
+	webhookOptions, err := NewWebhookOptions()
+	if err != nil {
+		panic(err)
+	}
 	return &Framework{
 		logger: loggerfactory.GetLogger(),
 		env: &envtest.Environment{
@@ -41,10 +66,15 @@ func NewFramework() *Framework {
 			CRDInstallOptions: envtest.CRDInstallOptions{
 				MaxTime: 60 * time.Second,
 			},
+			WebhookInstallOptions: *webhookOptions,
 			BinaryAssetsDirectory: os.Getenv("KUBEBUILDER_ASSETS"),
 		},
 		ServiceInfo: make(map[string]ServiceInfo),
 	}
+}
+
+func (f *Framework) GetEnv() *envtest.Environment {
+	return f.env
 }
 
 func (f *Framework) Start(ctx context.Context) error {

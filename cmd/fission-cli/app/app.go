@@ -81,7 +81,7 @@ func App(clientOptions cmd.ClientOptions) *cobra.Command {
 	})
 
 	wrapper.SetFlags(rootCmd, flag.FlagSet{
-		Global: []flag.Flag{flag.GlobalServer, flag.GlobalVerbosity, flag.KubeContext, flag.Namespace},
+		Global: []flag.Flag{flag.GlobalVerbosity, flag.KubeContext, flag.Namespace},
 	})
 
 	groups := helptemplate.CommandGroups{}

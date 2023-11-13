@@ -18,6 +18,7 @@ package webhook
 
 import (
 	"context"
+	"fmt"
 	"os"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
@@ -39,7 +40,7 @@ type WebhookInjector interface {
 	SetupWebhookWithManager(mgr manager.Manager) error
 }
 
-func Start(ctx context.Context, logger *zap.Logger, port int) (err error) {
+func Start(ctx context.Context, logger *zap.Logger, options webhook.Options) (err error) {
 
 	wLogger := logger.Named("webhook")
 
@@ -47,15 +48,15 @@ func Start(ctx context.Context, logger *zap.Logger, port int) (err error) {
 	if metricsAddr == "" {
 		metricsAddr = ":8080"
 	}
-
+	if metricsAddr[0] != ':' {
+		metricsAddr = fmt.Sprintf(":%s", metricsAddr)
+	}
 	mgrOpt := manager.Options{
 		Scheme: scheme.Scheme,
 		Metrics: metricsserver.Options{
 			BindAddress: metricsAddr,
 		},
-		WebhookServer: webhook.NewServer(webhook.Options{
-			Port: port,
-		}),
+		WebhookServer: webhook.NewServer(options),
 	}
 	// Setup a Manager
 	mgr, err := manager.New(config.GetConfigOrDie(), mgrOpt)

@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"os"
 
+	"go.uber.org/zap"
+	cnwebhook "sigs.k8s.io/controller-runtime/pkg/webhook"
+
 	"github.com/fission/fission/pkg/buildermgr"
 	"github.com/fission/fission/pkg/executor"
 	eclient "github.com/fission/fission/pkg/executor/client"
@@ -15,10 +18,29 @@ import (
 	"github.com/fission/fission/pkg/timer"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/manager"
+	"github.com/fission/fission/pkg/webhook"
 	"github.com/fission/fission/test/e2e/framework"
 )
 
 func StartServices(ctx context.Context, f *framework.Framework, mgr manager.Interface) error {
+	env := f.GetEnv()
+	webhookPort := env.WebhookInstallOptions.LocalServingPort
+	err := f.ToggleMetricAddr()
+	if err != nil {
+		return fmt.Errorf("error toggling metric address: %v", err)
+	}
+	mgr.Add(ctx, func(ctx context.Context) {
+		err = webhook.Start(ctx, f.Logger(), cnwebhook.Options{
+			Port:    webhookPort,
+			CertDir: env.WebhookInstallOptions.LocalServingCertDir,
+		})
+		if err != nil {
+			f.Logger().Fatal("error starting webhook", zap.Error(err))
+		}
+	})
+	f.ServiceInfo["webhook"] = framework.ServiceInfo{
+		Port: webhookPort,
+	}
 
 	executorPort, err := utils.FindFreePort()
 	if err != nil {

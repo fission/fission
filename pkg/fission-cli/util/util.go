@@ -226,26 +226,6 @@ func getRouterURL(ctx context.Context, cmdClient cmd.Client) (serverURL *url.URL
 	return serverURL, err
 }
 
-func GetServerURL(input cli.Input, client cmd.Client) (serverUrl string, err error) {
-	serverUrl = input.GlobalString(flagkey.Server)
-	if len(serverUrl) == 0 {
-		// starts local portforwarder etc.
-		serverUrl, err = GetApplicationUrl(input.Context(), client, "application=fission-api")
-		if err != nil {
-			return "", err
-		}
-	}
-
-	isHTTPS := strings.Index(serverUrl, "https://") == 0
-	isHTTP := strings.Index(serverUrl, "http://") == 0
-
-	if !(isHTTP || isHTTPS) {
-		serverUrl = "http://" + serverUrl
-	}
-
-	return serverUrl, nil
-}
-
 func GetResourceReqs(input cli.Input, resReqs *v1.ResourceRequirements) (*v1.ResourceRequirements, error) {
 	r := &v1.ResourceRequirements{}
 
