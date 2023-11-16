@@ -124,7 +124,7 @@ func (client *PreUpgradeTaskClient) LatestSchemaApplied(ctx context.Context) err
 
 // VerifyFunctionSpecReferences verifies that a function references secrets, configmaps, pkgs in its own namespace and
 // outputs a list of functions that don't adhere to this requirement.
-func (client *PreUpgradeTaskClient) VerifyFunctionSpecReferences(ctx context.Context) {
+func (client *PreUpgradeTaskClient) VerifyFunctionSpecReferences(ctx context.Context) error {
 	client.logger.Info("verifying function spec references for all functions in the cluster")
 
 	var err error
@@ -140,9 +140,11 @@ func (client *PreUpgradeTaskClient) VerifyFunctionSpecReferences(ctx context.Con
 		}
 
 		if err != nil {
-			client.logger.Fatal("error listing functions after max retries",
+			client.logger.Error("error listing functions after max retries",
 				zap.Error(err),
 				zap.Int("max_retries", maxRetries))
+			errs = errors.Join(errs, fmt.Errorf("error listing functions in namespace : %s", namespace))
+			continue
 		}
 
 		// check that all secrets, configmaps, packages are in the same namespace
@@ -169,10 +171,8 @@ func (client *PreUpgradeTaskClient) VerifyFunctionSpecReferences(ctx context.Con
 	}
 
 	if errs != nil {
-		client.logger.Fatal("installation failed",
-			zap.Error(errs),
-			zap.String("summary", "a function cannot reference secrets, configmaps and packages outside it's own namespace"))
+		return errs
 	}
-
 	client.logger.Info("function spec references verified")
+	return nil
 }

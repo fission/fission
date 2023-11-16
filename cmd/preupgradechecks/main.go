@@ -45,5 +45,8 @@ func main() {
 	if err != nil {
 		logger.Fatal("New CRDs are not applied", zap.Error(err))
 	}
-	crdBackedClient.VerifyFunctionSpecReferences(ctx)
+	err = crdBackedClient.VerifyFunctionSpecReferences(ctx)
+	if err != nil {
+		logger.Fatal("Function spec references are not valid", zap.Error(err))
+	}
 }
