@@ -120,7 +120,7 @@ func (f *Framework) Stop() error {
 
 func (f *Framework) AddServiceInfo(name string, info ServiceInfo) {
 	f.serviceInfo[name] = info
-	fmt.Println("Added service", name, "with info", info)
+	f.logger.Info("Added service", zap.String("name", name), zap.Any("info", info))
 }
 
 func (f *Framework) GetServiceURL(name string) (string, error) {
@@ -135,7 +135,6 @@ func (f *Framework) GetServiceURL(name string) (string, error) {
 }
 
 func (f *Framework) CheckService(name string) error {
-	fmt.Println("Checking service", name)
 	_, err := f.GetServiceURL(name)
 	if err != nil {
 		return err

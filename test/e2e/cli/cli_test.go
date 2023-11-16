@@ -2,12 +2,10 @@ package cli_test
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 
@@ -31,15 +29,10 @@ func TestFissionCLI(t *testing.T) {
 	require.NoError(t, err)
 
 	err = services.StartServices(ctx, f, mgr)
-	if err != nil {
-		f.Logger().Error("error starting services", zap.Error(err))
-		f.Logger().Sync()
-	}
 	require.NoError(t, err)
 
 	err = wait.PollUntilContextTimeout(ctx, time.Second*5, time.Second*50, true, func(_ context.Context) (bool, error) {
 		if err := f.CheckService("webhook"); err != nil {
-			fmt.Println("waiting for webhook service...", err)
 			return false, nil
 		}
 		return true, nil

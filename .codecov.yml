@@ -1,6 +1,6 @@
 ignore:
   - "charts"
-  - "test/tests"
+  - "test/"
   - "tools"
   - "pkg/apis/genclient"
 coverage:
