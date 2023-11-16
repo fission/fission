@@ -17,15 +17,15 @@ func TestPreUpgradeTaskClient(t *testing.T) {
 	err := f.Start(ctx)
 	require.NoError(t, err)
 
-	crdBackedClient, err := makePreUpgradeTaskClient(f.ClientGen(), f.Logger())
+	preupgradeClient, err := makePreUpgradeTaskClient(f.ClientGen(), f.Logger())
 	require.NoError(t, err)
 
-	crd := crdBackedClient.GetFunctionCRD(ctx)
+	crd := preupgradeClient.GetFunctionCRD(ctx)
 	require.NotNil(t, crd)
 
-	err = crdBackedClient.LatestSchemaApplied(ctx)
+	err = preupgradeClient.LatestSchemaApplied(ctx)
 	require.NoError(t, err)
 
-	err = crdBackedClient.VerifyFunctionSpecReferences(ctx)
+	err = preupgradeClient.VerifyFunctionSpecReferences(ctx)
 	require.NoError(t, err)
 }

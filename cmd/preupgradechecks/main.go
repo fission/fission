@@ -28,24 +28,24 @@ func main() {
 	logger := loggerfactory.GetLogger()
 	defer logger.Sync()
 
-	crdBackedClient, err := makePreUpgradeTaskClient(crd.NewClientGenerator(), logger)
+	ctx := signals.SetupSignalHandler()
+
+	preupgradeClient, err := makePreUpgradeTaskClient(crd.NewClientGenerator(), logger)
 	if err != nil {
 		logger.Fatal("error creating a crd client, please retry helm upgrade",
 			zap.Error(err))
 	}
 
-	ctx := signals.SetupSignalHandler()
-	crd := crdBackedClient.GetFunctionCRD(ctx)
+	crd := preupgradeClient.GetFunctionCRD(ctx)
 	if crd == nil {
 		logger.Info("nothing to do since CRDs are not present on the cluster")
 		return
 	}
-
-	err = crdBackedClient.LatestSchemaApplied(ctx)
+	err = preupgradeClient.LatestSchemaApplied(ctx)
 	if err != nil {
 		logger.Fatal("New CRDs are not applied", zap.Error(err))
 	}
-	err = crdBackedClient.VerifyFunctionSpecReferences(ctx)
+	err = preupgradeClient.VerifyFunctionSpecReferences(ctx)
 	if err != nil {
 		logger.Fatal("Function spec references are not valid", zap.Error(err))
 	}

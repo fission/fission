@@ -2,6 +2,7 @@ package cli_test
 
 import (
 	"context"
+	"os"
 	"testing"
 	"time"
 
@@ -370,6 +371,47 @@ func TestFissionCLI(t *testing.T) {
 
 	t.Run("support-dump", func(t *testing.T) {
 		_, err := cli.ExecCommand(f, ctx, "support", "dump")
+		require.NoError(t, err)
+	})
+
+	t.Run("spec", func(t *testing.T) {
+		// check if specs directory exists and delete it
+		if info, err := os.Stat("specs"); err == nil && info.IsDir() {
+			err = os.RemoveAll("specs")
+			require.NoError(t, err)
+		}
+
+		_, err := cli.ExecCommand(f, ctx, "spec", "init")
+		require.NoError(t, err)
+
+		// create resources
+		_, err = cli.ExecCommand(f, ctx, "env", "create", "--name", "test-func-env", "--image", "fission/python-env", "--spec")
+		require.NoError(t, err)
+		_, err = cli.ExecCommand(f, ctx, "function", "create", "--name", "test-func", "--code", "./hello.js", "--env", "test-func-env", "--spec")
+		require.NoError(t, err)
+		// _, err = cli.ExecCommand(f, ctx, "httptrigger", "create", "--name", "test-httptrigger", "--function", "test-func", "--url", "/hello", "--spec")
+		// require.NoError(t, err)
+
+		_, err = cli.ExecCommand(f, ctx, "spec", "validate")
+		require.NoError(t, err)
+
+		_, err = cli.ExecCommand(f, ctx, "spec", "apply")
+		require.NoError(t, err)
+		fn, err := fissionClient.CoreV1().Functions(metav1.NamespaceDefault).Get(ctx, "test-func", metav1.GetOptions{})
+		require.NoError(t, err)
+		require.NotNil(t, fn)
+		require.Equal(t, "test-func", fn.Name)
+
+		_, err = cli.ExecCommand(f, ctx, "spec", "list")
+		require.NoError(t, err)
+
+		_, err = cli.ExecCommand(f, ctx, "spec", "destroy")
+		require.NoError(t, err)
+		_, err = fissionClient.CoreV1().Functions(metav1.NamespaceDefault).Get(ctx, "test-func", metav1.GetOptions{})
+		require.Error(t, err)
+
+		// cleanup specs directory
+		err = os.RemoveAll("specs")
 		require.NoError(t, err)
 	})
 }
