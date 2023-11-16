@@ -2,10 +2,13 @@ package cli_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/wait"
 
 	v1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/utils/manager"
@@ -26,6 +29,15 @@ func TestFissionCLI(t *testing.T) {
 	require.NoError(t, err)
 
 	err = services.StartServices(ctx, f, mgr)
+	require.NoError(t, err)
+
+	err = wait.PollUntilContextTimeout(ctx, time.Second*5, time.Second*50, true, func(_ context.Context) (bool, error) {
+		if err := f.CheckService("webhook"); err != nil {
+			fmt.Println("waiting for webhook service...", err)
+			return false, nil
+		}
+		return true, nil
+	})
 	require.NoError(t, err)
 
 	fissionClient, err := f.ClientGen().GetFissionClient()

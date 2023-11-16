@@ -38,9 +38,7 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr manager.Inte
 			f.Logger().Fatal("error starting webhook", zap.Error(err))
 		}
 	})
-	f.ServiceInfo["webhook"] = framework.ServiceInfo{
-		Port: webhookPort,
-	}
+	f.AddServiceInfo("webhook", framework.ServiceInfo{Port: webhookPort})
 
 	executorPort, err := utils.FindFreePort()
 	if err != nil {
@@ -66,9 +64,7 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr manager.Inte
 	if err != nil {
 		return fmt.Errorf("error starting executor: %v", err)
 	}
-	f.ServiceInfo["executor"] = framework.ServiceInfo{
-		Port: executorPort,
-	}
+	f.AddServiceInfo("executor", framework.ServiceInfo{Port: executorPort})
 
 	os.Setenv("PRUNE_ENABLED", "true")
 	os.Setenv("PRUNE_INTERVAL", "60")
@@ -89,9 +85,7 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr manager.Inte
 	if err != nil {
 		return fmt.Errorf("error starting storage service: %v", err)
 	}
-	f.ServiceInfo["storagesvc"] = framework.ServiceInfo{
-		Port: storageSvcPort,
-	}
+	f.AddServiceInfo("storagesvc", framework.ServiceInfo{Port: storageSvcPort})
 	err = f.ToggleMetricAddr()
 	if err != nil {
 		return fmt.Errorf("error toggling metric address: %v", err)
@@ -100,7 +94,7 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr manager.Inte
 	if err != nil {
 		return fmt.Errorf("error starting builder manager: %v", err)
 	}
-	f.ServiceInfo["buildermgr"] = framework.ServiceInfo{}
+	f.AddServiceInfo("buildermgr", framework.ServiceInfo{})
 
 	os.Setenv("ROUTER_ROUND_TRIP_TIMEOUT", "50ms")
 	os.Setenv("ROUTER_ROUNDTRIP_TIMEOUT_EXPONENT", "2")
@@ -126,9 +120,8 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr manager.Inte
 	if err != nil {
 		return fmt.Errorf("error starting router: %v", err)
 	}
-	f.ServiceInfo["router"] = framework.ServiceInfo{
-		Port: routerPort,
-	}
+	f.AddServiceInfo("router", framework.ServiceInfo{Port: routerPort})
+
 	routerURL := fmt.Sprintf("http://localhost:%d", routerPort)
 	os.Setenv("FISSION_ROUTER_URL", routerURL)
 
@@ -136,18 +129,18 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr manager.Inte
 	if err != nil {
 		return fmt.Errorf("error starting timer: %v", err)
 	}
-	f.ServiceInfo["timer"] = framework.ServiceInfo{}
+	f.AddServiceInfo("timer", framework.ServiceInfo{})
 
 	err = mqtrigger.StartScalerManager(ctx, f.ClientGen(), f.Logger(), mgr, routerURL)
 	if err != nil {
 		return fmt.Errorf("error starting mqt scaler manager: %v", err)
 	}
-	f.ServiceInfo["mqtrigger-keda"] = framework.ServiceInfo{}
+	f.AddServiceInfo("mqtrigger-keda", framework.ServiceInfo{})
 
 	err = kubewatcher.Start(ctx, f.ClientGen(), f.Logger(), mgr, routerURL)
 	if err != nil {
 		return fmt.Errorf("error starting kubewatcher: %v", err)
 	}
-	f.ServiceInfo["kubewatcher"] = framework.ServiceInfo{}
+	f.AddServiceInfo("kubewatcher", framework.ServiceInfo{})
 	return nil
 }

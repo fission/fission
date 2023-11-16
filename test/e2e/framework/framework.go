@@ -2,10 +2,13 @@ package framework
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"time"
 
 	"go.uber.org/zap"
@@ -30,7 +33,7 @@ type Framework struct {
 	env         *envtest.Environment
 	config      *rest.Config
 	logger      *zap.Logger
-	ServiceInfo map[string]ServiceInfo
+	serviceInfo map[string]ServiceInfo
 }
 
 func NewWebhookOptions() (*envtest.WebhookInstallOptions, error) {
@@ -69,7 +72,7 @@ func NewFramework() *Framework {
 			WebhookInstallOptions: *webhookOptions,
 			BinaryAssetsDirectory: os.Getenv("KUBEBUILDER_ASSETS"),
 		},
-		ServiceInfo: make(map[string]ServiceInfo),
+		serviceInfo: make(map[string]ServiceInfo),
 	}
 }
 
@@ -112,5 +115,44 @@ func (f *Framework) Stop() error {
 	if err != nil {
 		return fmt.Errorf("error stopping test env: %v", err)
 	}
+	return nil
+}
+
+func (f *Framework) AddServiceInfo(name string, info ServiceInfo) {
+	f.serviceInfo[name] = info
+	fmt.Println("Added service", name, "with info", info)
+}
+
+func (f *Framework) GetServiceURL(name string) (string, error) {
+	info, ok := f.serviceInfo[name]
+	if !ok {
+		return "", fmt.Errorf("service %s not found", name)
+	}
+	if info.Port == 0 {
+		return "", fmt.Errorf("service %s port not set", name)
+	}
+	return fmt.Sprintf("http://localhost:%d", info.Port), nil
+}
+
+func (f *Framework) CheckService(name string) error {
+	fmt.Println("Checking service", name)
+	_, err := f.GetServiceURL(name)
+	if err != nil {
+		return err
+	}
+	config := &tls.Config{
+		InsecureSkipVerify: true, //nolint:gosec // config is used to connect to our own webhook port.
+	}
+
+	d := &net.Dialer{Timeout: 10 * time.Second}
+	conn, err := tls.DialWithDialer(d, "tcp", net.JoinHostPort("localhost", strconv.Itoa(f.serviceInfo[name].Port)), config)
+	if err != nil {
+		return fmt.Errorf("webhook server is not reachable: %w", err)
+	}
+
+	if err := conn.Close(); err != nil {
+		return fmt.Errorf("webhook server is not reachable: closing connection: %w", err)
+	}
+
 	return nil
 }
