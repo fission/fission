@@ -170,7 +170,7 @@ func GetVersion(ctx context.Context, input cli.Input, cmdClient cmd.Client) info
 func GetServerInfo(input cli.Input, cmdClient cmd.Client) *info.ServerInfo {
 
 	var serverInfo info.ServerInfo
-	serverURL, err := getRouterURL(input.Context(), cmdClient)
+	serverURL, err := GetRouterURL(input.Context(), cmdClient)
 	if err != nil {
 		console.Warn("could not connect to server")
 		return &serverInfo
@@ -212,7 +212,12 @@ func GetServerInfo(input cli.Input, cmdClient cmd.Client) *info.ServerInfo {
 	return &serverInfo
 }
 
-func getRouterURL(ctx context.Context, cmdClient cmd.Client) (serverURL *url.URL, err error) {
+func GetRouterURL(ctx context.Context, cmdClient cmd.Client) (serverURL *url.URL, err error) {
+	routerURL := os.Getenv("FISSION_ROUTER_URL")
+	if len(routerURL) > 0 {
+		return url.Parse(routerURL)
+	}
+
 	// Portforward to the fission router
 	localRouterPort, err := SetupPortForward(ctx, cmdClient, GetFissionNamespace(), "application=fission-router")
 	if err != nil {
