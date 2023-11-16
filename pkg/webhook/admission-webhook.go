@@ -24,10 +24,13 @@ import (
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 
+	"github.com/go-logr/zapr"
 	"go.uber.org/zap"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	"k8s.io/client-go/rest"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
@@ -41,8 +44,9 @@ type WebhookInjector interface {
 }
 
 func Start(ctx context.Context, restConfig *rest.Config, logger *zap.Logger, options webhook.Options) (err error) {
-
 	wLogger := logger.Named("webhook")
+	zaprLogger := zapr.NewLogger(logger)
+	log.SetLogger(zaprLogger)
 
 	metricsAddr := os.Getenv("METRICS_ADDR")
 	if metricsAddr == "" {
@@ -57,6 +61,7 @@ func Start(ctx context.Context, restConfig *rest.Config, logger *zap.Logger, opt
 			BindAddress: metricsAddr,
 		},
 		WebhookServer: webhook.NewServer(options),
+		Logger:        zaprLogger,
 	}
 	// Setup a Manager
 	mgr, err := manager.New(restConfig, mgrOpt)
