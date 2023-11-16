@@ -122,6 +122,7 @@ func WaitForFunctionCRDs(ctx context.Context, logger *zap.Logger, fissionClient 
 		fi := fissionClient.CoreV1().Functions(defaultNs)
 		_, err := fi.List(ctx, metav1.ListOptions{})
 		if err != nil {
+			fmt.Println("waiting for function CRD access", err)
 			time.Sleep(100 * time.Millisecond)
 		} else {
 			return nil
