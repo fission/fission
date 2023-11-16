@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 
 	"github.com/pkg/errors"
@@ -30,6 +29,7 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
+	"github.com/fission/fission/pkg/fission-cli/console"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
@@ -64,26 +64,19 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 
 	jsonValue, _ := json.Marshal(values)
 
-	// Portforward to the fission router
-	localRouterPort, err := util.SetupPortForward(input.Context(), opts.Client(), util.GetFissionNamespace(), "application=fission-router")
-	if err != nil {
-		return err
-	}
-
 	authURI, _ := os.LookupEnv("FISSION_AUTH_URI")
-
 	if input.IsSet(flagkey.TokAuthURI) {
 		authURI = input.String(flagkey.TokAuthURI)
 	}
-
 	if len(authURI) == 0 {
 		authURI = util.FISSION_AUTH_URI
 	}
-
-	relativeURL, _ := url.Parse(authURI)
-	serverURL, _ := url.Parse("http://127.0.0.1:" + localRouterPort)
-	authAuthenticatorUrl := serverURL.ResolveReference(relativeURL)
-
+	routerURL, err := util.GetRouterURL(input.Context(), opts.Client())
+	if err != nil {
+		return errors.Wrap(err, "error getting router URL")
+	}
+	authAuthenticatorUrl := routerURL.JoinPath(authURI)
+	console.Verbose(2, "Auth URI: %s", authAuthenticatorUrl.String())
 	resp, err := http.Post(authAuthenticatorUrl.String(), "application/json", bytes.NewBuffer(jsonValue))
 	if err != nil {
 		return err
