@@ -27,7 +27,6 @@ import (
 	"github.com/go-logr/zapr"
 	"go.uber.org/zap"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
-	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
@@ -35,6 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	v1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
 	//+kubebuilder:scaffold:imports
 )
@@ -43,7 +43,7 @@ type WebhookInjector interface {
 	SetupWebhookWithManager(mgr manager.Manager) error
 }
 
-func Start(ctx context.Context, restConfig *rest.Config, logger *zap.Logger, options webhook.Options) (err error) {
+func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, options webhook.Options) (err error) {
 	wLogger := logger.Named("webhook")
 	zaprLogger := zapr.NewLogger(logger)
 	log.SetLogger(zaprLogger)
@@ -62,6 +62,11 @@ func Start(ctx context.Context, restConfig *rest.Config, logger *zap.Logger, opt
 		},
 		WebhookServer: webhook.NewServer(options),
 		Logger:        zaprLogger,
+	}
+	restConfig, err := clientGen.GetRestConfig()
+	if err != nil {
+		wLogger.Error("unable to get rest config", zap.Error(err))
+		return err
 	}
 	// Setup a Manager
 	mgr, err := manager.New(restConfig, mgrOpt)

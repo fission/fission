@@ -31,7 +31,7 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr manager.Inte
 		return fmt.Errorf("error toggling metric address: %v", err)
 	}
 	mgr.Add(ctx, func(ctx context.Context) {
-		err = webhook.Start(ctx, f.RestConfig(), f.Logger(), cnwebhook.Options{
+		err = webhook.Start(ctx, f.ClientGen(), f.Logger(), cnwebhook.Options{
 			Port:    webhookPort,
 			CertDir: env.WebhookInstallOptions.LocalServingCertDir,
 		})

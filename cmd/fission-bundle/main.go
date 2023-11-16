@@ -25,7 +25,6 @@ import (
 
 	docopt "github.com/docopt/docopt-go"
 	"go.uber.org/zap"
-	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 	cnwebhook "sigs.k8s.io/controller-runtime/pkg/webhook"
 
@@ -50,8 +49,8 @@ import (
 )
 
 // runWebhook starts admission webhook server
-func runWebhook(ctx context.Context, restConfig *rest.Config, logger *zap.Logger, port int) error {
-	return webhook.Start(ctx, restConfig, logger, cnwebhook.Options{
+func runWebhook(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, port int) error {
+	return webhook.Start(ctx, clientGen, logger, cnwebhook.Options{
 		Port: port,
 	})
 }
@@ -239,12 +238,7 @@ Options:
 
 	if arguments["--webhookPort"] != nil {
 		port := getPort(logger, arguments["--webhookPort"])
-		restConfig, err := clientGen.GetRestConfig()
-		if err != nil {
-			logger.Error("error getting rest config", zap.Error(err))
-			return
-		}
-		err = runWebhook(ctx, restConfig, logger, port)
+		err = runWebhook(ctx, clientGen, logger, port)
 		logger.Error("webhook server exited:", zap.Error(err))
 		return
 	}
