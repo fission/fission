@@ -18,19 +18,23 @@ package webhook
 
 import (
 	"context"
+	"fmt"
 	"os"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 
+	"github.com/go-logr/zapr"
 	"go.uber.org/zap"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
-	"sigs.k8s.io/controller-runtime/pkg/client/config"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	v1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
 	//+kubebuilder:scaffold:imports
 )
@@ -39,26 +43,33 @@ type WebhookInjector interface {
 	SetupWebhookWithManager(mgr manager.Manager) error
 }
 
-func Start(ctx context.Context, logger *zap.Logger, port int) (err error) {
-
+func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, options webhook.Options) (err error) {
 	wLogger := logger.Named("webhook")
+	zaprLogger := zapr.NewLogger(logger)
+	log.SetLogger(zaprLogger)
 
 	metricsAddr := os.Getenv("METRICS_ADDR")
 	if metricsAddr == "" {
 		metricsAddr = ":8080"
 	}
-
+	if metricsAddr[0] != ':' {
+		metricsAddr = fmt.Sprintf(":%s", metricsAddr)
+	}
 	mgrOpt := manager.Options{
 		Scheme: scheme.Scheme,
 		Metrics: metricsserver.Options{
 			BindAddress: metricsAddr,
 		},
-		WebhookServer: webhook.NewServer(webhook.Options{
-			Port: port,
-		}),
+		WebhookServer: webhook.NewServer(options),
+		Logger:        zaprLogger,
+	}
+	restConfig, err := clientGen.GetRestConfig()
+	if err != nil {
+		wLogger.Error("unable to get rest config", zap.Error(err))
+		return err
 	}
 	// Setup a Manager
-	mgr, err := manager.New(config.GetConfigOrDie(), mgrOpt)
+	mgr, err := manager.New(restConfig, mgrOpt)
 	if err != nil {
 		wLogger.Error("unable to set up overall controller manager", zap.Error(err))
 		return err

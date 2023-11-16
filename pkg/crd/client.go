@@ -37,6 +37,7 @@ import (
 
 type (
 	ClientGeneratorInterface interface {
+		GetRestConfig() (*rest.Config, error)
 		GetFissionClient() (versioned.Interface, error)
 		GetKubernetesClient() (kubernetes.Interface, error)
 		GetApiExtensionsClient() (apiextensionsclient.Interface, error)
@@ -60,6 +61,10 @@ func (cg *ClientGenerator) getRestConfig() (*rest.Config, error) {
 		return nil, err
 	}
 	return cg.restConfig, nil
+}
+
+func (cg *ClientGenerator) GetRestConfig() (*rest.Config, error) {
+	return cg.getRestConfig()
 }
 
 func (cg *ClientGenerator) GetFissionClient() (versioned.Interface, error) {
@@ -121,11 +126,10 @@ func WaitForFunctionCRDs(ctx context.Context, logger *zap.Logger, fissionClient 
 	for {
 		fi := fissionClient.CoreV1().Functions(defaultNs)
 		_, err := fi.List(ctx, metav1.ListOptions{})
-		if err != nil {
-			time.Sleep(100 * time.Millisecond)
-		} else {
+		if err == nil {
 			return nil
 		}
+		time.Sleep(100 * time.Millisecond)
 
 		if time.Since(start) > 30*time.Second {
 			return fmt.Errorf("timeout waiting for function CRD access")

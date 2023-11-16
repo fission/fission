@@ -66,31 +66,21 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 		Namespace: namespace,
 	}
 
-	routerURL := os.Getenv("FISSION_ROUTER_URL")
-	if len(routerURL) == 0 {
-		// Portforward to the fission router
-		localRouterPort, err := util.SetupPortForward(input.Context(), opts.Client(), util.GetFissionNamespace(), "application=fission-router")
-		if err != nil {
-			return err
-		}
-		routerURL = "http://127.0.0.1:" + localRouterPort
+	routerURL, err := util.GetRouterURL(input.Context(), opts.Client())
+	if err != nil {
+		return errors.Wrap(err, "error getting router URL")
 	}
-	fnURL := routerURL + util.UrlForFunction(m.Name, m.Namespace)
+	fnURI := util.UrlForFunction(m.Name, m.Namespace)
 	if input.IsSet(flagkey.FnSubPath) {
 		subPath := input.String(flagkey.FnSubPath)
 		if !strings.HasPrefix(subPath, "/") {
-			fnURL = fnURL + "/" + subPath
+			fnURI = fnURI + "/" + subPath
 		} else {
-			fnURL = fnURL + subPath
+			fnURI = fnURI + subPath
 		}
 	}
-
-	functionUrl, err := url.Parse(fnURL)
-	if err != nil {
-		return err
-	}
-
-	console.Verbose(2, "Function test url: %v", functionUrl.String())
+	fnURL := routerURL.JoinPath(fnURI)
+	console.Verbose(2, "Function test url: %v", fnURL.String())
 
 	queryParams := input.StringSlice(flagkey.FnTestQuery)
 	if len(queryParams) > 0 {
@@ -109,7 +99,7 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 			}
 			query.Set(key, value)
 		}
-		functionUrl.RawQuery = query.Encode()
+		fnURL.RawQuery = query.Encode()
 	}
 
 	var (
@@ -145,7 +135,7 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 	if err != nil {
 		return err
 	}
-	resp, err := doHTTPRequest(ctx, functionUrl.String(),
+	resp, err := doHTTPRequest(ctx, fnURL.String(),
 		input.StringSlice(flagkey.FnTestHeader),
 		method,
 		input.String(flagkey.FnTestBody))
