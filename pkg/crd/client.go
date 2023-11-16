@@ -37,6 +37,7 @@ import (
 
 type (
 	ClientGeneratorInterface interface {
+		GetRestConfig() (*rest.Config, error)
 		GetFissionClient() (versioned.Interface, error)
 		GetKubernetesClient() (kubernetes.Interface, error)
 		GetApiExtensionsClient() (apiextensionsclient.Interface, error)
@@ -60,6 +61,10 @@ func (cg *ClientGenerator) getRestConfig() (*rest.Config, error) {
 		return nil, err
 	}
 	return cg.restConfig, nil
+}
+
+func (cg *ClientGenerator) GetRestConfig() (*rest.Config, error) {
+	return cg.getRestConfig()
 }
 
 func (cg *ClientGenerator) GetFissionClient() (versioned.Interface, error) {

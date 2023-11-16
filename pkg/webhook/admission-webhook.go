@@ -26,7 +26,7 @@ import (
 
 	"go.uber.org/zap"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
-	"sigs.k8s.io/controller-runtime/pkg/client/config"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
@@ -40,7 +40,7 @@ type WebhookInjector interface {
 	SetupWebhookWithManager(mgr manager.Manager) error
 }
 
-func Start(ctx context.Context, logger *zap.Logger, options webhook.Options) (err error) {
+func Start(ctx context.Context, restConfig *rest.Config, logger *zap.Logger, options webhook.Options) (err error) {
 
 	wLogger := logger.Named("webhook")
 
@@ -59,7 +59,7 @@ func Start(ctx context.Context, logger *zap.Logger, options webhook.Options) (er
 		WebhookServer: webhook.NewServer(options),
 	}
 	// Setup a Manager
-	mgr, err := manager.New(config.GetConfigOrDie(), mgrOpt)
+	mgr, err := manager.New(restConfig, mgrOpt)
 	if err != nil {
 		wLogger.Error("unable to set up overall controller manager", zap.Error(err))
 		return err
