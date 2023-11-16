@@ -23,6 +23,7 @@ func TestFissionCLI(t *testing.T) {
 	defer mgr.Wait()
 
 	f := framework.NewFramework()
+	defer f.Logger().Sync()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	err := f.Start(ctx)
