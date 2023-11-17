@@ -19,16 +19,14 @@ import (
 )
 
 func TestFissionCLI(t *testing.T) {
-
 	mgr := manager.New()
-	defer mgr.Wait()
-
 	f := framework.NewFramework()
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	err := f.Start(ctx)
 	require.NoError(t, err)
 	defer func() {
+		cancel()
+		mgr.Wait()
 		err = f.Stop()
 		require.NoError(t, err)
 	}()
