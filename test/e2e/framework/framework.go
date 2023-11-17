@@ -20,11 +20,6 @@ import (
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
 
-const (
-	EXECUTOR_URL   = "http://executor.fission"
-	STORAGESVC_URL = "http://storagesvc.fission"
-)
-
 type ServiceInfo struct {
 	Port int
 }
@@ -61,10 +56,14 @@ func NewFramework() *Framework {
 	if err != nil {
 		panic(err)
 	}
+	_, filename, _, _ := runtime.Caller(0) //nolint
+	root := filepath.Dir(filename)
+	crdPath := filepath.Join(root, "..", "..", "..", "crds", "v1")
+
 	return &Framework{
 		logger: loggerfactory.GetLogger(),
 		env: &envtest.Environment{
-			CRDDirectoryPaths:     []string{filepath.Join("../../..", "crds", "v1")},
+			CRDDirectoryPaths:     []string{crdPath},
 			ErrorIfCRDPathMissing: true,
 			CRDInstallOptions: envtest.CRDInstallOptions{
 				MaxTime: 60 * time.Second,
@@ -111,9 +110,11 @@ func (f *Framework) ClientGen() *crd.ClientGenerator {
 }
 
 func (f *Framework) Stop() error {
+	f.logger.Info("Stopping test env")
+	_ = f.logger.Sync()
 	err := f.env.Stop()
 	if err != nil {
-		return fmt.Errorf("error stopping test env: %v", err)
+		return fmt.Errorf("error stopping test env: %w", err)
 	}
 	return nil
 }

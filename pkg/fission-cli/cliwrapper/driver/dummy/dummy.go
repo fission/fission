@@ -18,6 +18,8 @@ package dummy
 
 import (
 	"context"
+	"io"
+	"os"
 	"time"
 
 	fCli "github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
@@ -168,4 +170,12 @@ func (u Cli) Duration(key string) time.Duration {
 		return 0
 	}
 	return val.(time.Duration)
+}
+
+func (u Cli) Stdout() io.Writer {
+	return os.Stdout
+}
+
+func (u Cli) Stderr() io.Writer {
+	return os.Stderr
 }

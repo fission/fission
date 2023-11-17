@@ -18,6 +18,7 @@ package cli
 
 import (
 	"context"
+	"io"
 	"time"
 )
 
@@ -76,5 +77,11 @@ type (
 
 		// Duration returns time duration of given flag.
 		Duration(key string) time.Duration
+
+		// Stdout returns io.Writer for stdout.
+		Stdout() io.Writer
+
+		// Stderr returns io.Writer for stderr.
+		Stderr() io.Writer
 	}
 )

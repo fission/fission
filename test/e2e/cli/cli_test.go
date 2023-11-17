@@ -2,6 +2,8 @@ package cli_test
 
 import (
 	"context"
+	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -17,16 +19,17 @@ import (
 )
 
 func TestFissionCLI(t *testing.T) {
-
 	mgr := manager.New()
-	defer mgr.Wait()
-
 	f := framework.NewFramework()
-	defer f.Logger().Sync()
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	err := f.Start(ctx)
 	require.NoError(t, err)
+	defer func() {
+		cancel()
+		mgr.Wait()
+		err = f.Stop()
+		require.NoError(t, err)
+	}()
 
 	err = services.StartServices(ctx, f, mgr)
 	require.NoError(t, err)
@@ -220,7 +223,7 @@ func TestFissionCLI(t *testing.T) {
 			_, err = cli.ExecCommand(f, ctx, "function", "create", "--name", "test-func", "--code", "./hello.js", "--env", "test-func-env")
 			require.NoError(t, err)
 
-			_, err = cli.ExecCommand(f, ctx, "httptrigger", "create", "--name", "test-httptrigger", "--function", "test-func", "--url", "/hello")
+			_, err = cli.ExecCommand(f, ctx, "httptrigger", "create", "--name", "test-httptrigger", "--function", "test-func", "--url", "/hello", "--createingress")
 			require.NoError(t, err)
 
 			ht, err := fissionClient.CoreV1().HTTPTriggers(metav1.NamespaceDefault).Get(ctx, "test-httptrigger", metav1.GetOptions{})
@@ -370,6 +373,76 @@ func TestFissionCLI(t *testing.T) {
 
 	t.Run("support-dump", func(t *testing.T) {
 		_, err := cli.ExecCommand(f, ctx, "support", "dump")
+		require.NoError(t, err)
+
+		err = os.RemoveAll("fission-dump")
+		require.NoError(t, err)
+	})
+
+	t.Run("archive", func(t *testing.T) {
+		out, err := cli.ExecCommand(f, ctx, "archive", "upload", "--name", "hello.js")
+		require.NoError(t, err)
+		require.Contains(t, out, "File successfully uploaded with ID")
+		id := out[len("File successfully uploaded with ID: "):]
+		// split string by / and get the last element
+		id = strings.Split(id, "/")[len(strings.Split(id, "/"))-1]
+		id = strings.Trim(id, "\n")
+
+		_, err = cli.ExecCommand(f, ctx, "archive", "list")
+		require.NoError(t, err)
+
+		_, err = cli.ExecCommand(f, ctx, "archive", "get-url", "--id", id)
+		require.NoError(t, err)
+
+		_, err = cli.ExecCommand(f, ctx, "archive", "download", "--id", id)
+		require.NoError(t, err)
+
+		_, err = cli.ExecCommand(f, ctx, "archive", "delete", "--id", id)
+		require.NoError(t, err)
+	})
+
+	t.Run("spec", func(t *testing.T) {
+		// check if specs directory exists and delete it
+		if info, err := os.Stat("specs"); err == nil && info.IsDir() {
+			err = os.RemoveAll("specs")
+			require.NoError(t, err)
+		}
+
+		_, err := cli.ExecCommand(f, ctx, "spec", "init")
+		require.NoError(t, err)
+
+		// create resources
+		_, err = cli.ExecCommand(f, ctx, "env", "create", "--name", "test-func-env", "--image", "fission/python-env", "--spec")
+		require.NoError(t, err)
+		_, err = cli.ExecCommand(f, ctx, "function", "create", "--name", "test-func", "--code", "./hello.js", "--env", "test-func-env", "--spec")
+		require.NoError(t, err)
+		_, err = cli.ExecCommand(f, ctx, "httptrigger", "create", "--name", "test-httptrigger", "--function", "test-func", "--url", "/hello", "--spec", "--createingress")
+		require.NoError(t, err)
+		_, err = cli.ExecCommand(f, ctx, "timetrigger", "create", "--name", "test-tt", "--function", "test-func", "--cron", "@every 1m", "--spec")
+		require.NoError(t, err)
+		_, err = cli.ExecCommand(f, ctx, "mqtrigger", "create", "--name", "test-mqtrigger", "--function", "test-func", "--mqtype", "kafka", "--topic", "test-topic", "--resptopic", "test-resp-topic", "--spec")
+		require.NoError(t, err)
+
+		_, err = cli.ExecCommand(f, ctx, "spec", "validate")
+		require.NoError(t, err)
+
+		_, err = cli.ExecCommand(f, ctx, "spec", "apply")
+		require.NoError(t, err)
+		fn, err := fissionClient.CoreV1().Functions(metav1.NamespaceDefault).Get(ctx, "test-func", metav1.GetOptions{})
+		require.NoError(t, err)
+		require.NotNil(t, fn)
+		require.Equal(t, "test-func", fn.Name)
+
+		_, err = cli.ExecCommand(f, ctx, "spec", "list")
+		require.NoError(t, err)
+
+		_, err = cli.ExecCommand(f, ctx, "spec", "destroy")
+		require.NoError(t, err)
+		_, err = fissionClient.CoreV1().Functions(metav1.NamespaceDefault).Get(ctx, "test-func", metav1.GetOptions{})
+		require.Error(t, err)
+
+		// cleanup specs directory
+		err = os.RemoveAll("specs")
 		require.NoError(t, err)
 	})
 }
