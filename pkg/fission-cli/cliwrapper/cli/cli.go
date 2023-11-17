@@ -78,10 +78,10 @@ type (
 		// Duration returns time duration of given flag.
 		Duration(key string) time.Duration
 
-		// OutOrStdout returns io.Writer for stdout.
-		OutOrStdout() io.Writer
+		// Stdout returns io.Writer for stdout.
+		Stdout() io.Writer
 
-		// OutOrStderr returns io.Writer for stderr.
-		OutOrStderr() io.Writer
+		// Stderr returns io.Writer for stderr.
+		Stderr() io.Writer
 	}
 )

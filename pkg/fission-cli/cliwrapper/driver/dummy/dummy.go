@@ -172,10 +172,10 @@ func (u Cli) Duration(key string) time.Duration {
 	return val.(time.Duration)
 }
 
-func (u Cli) OutOrStdout() io.Writer {
+func (u Cli) Stdout() io.Writer {
 	return os.Stdout
 }
 
-func (u Cli) OutOrStderr() io.Writer {
+func (u Cli) Stderr() io.Writer {
 	return os.Stderr
 }
