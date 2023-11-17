@@ -111,13 +111,10 @@ func (f *Framework) ClientGen() *crd.ClientGenerator {
 
 func (f *Framework) Stop() error {
 	f.logger.Info("Stopping test env")
-	err := f.logger.Sync()
+	_ = f.logger.Sync()
+	err := f.env.Stop()
 	if err != nil {
-		return fmt.Errorf("error syncing logger: %v", err)
-	}
-	err = f.env.Stop()
-	if err != nil {
-		return fmt.Errorf("error stopping test env: %v", err)
+		return fmt.Errorf("error stopping test env: %w", err)
 	}
 	return nil
 }
