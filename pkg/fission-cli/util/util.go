@@ -448,6 +448,10 @@ func ApplyLabelsAndAnnotations(input cli.Input, objectMeta *metav1.ObjectMeta) e
 }
 
 func GetStorageURL(ctx context.Context, client cmd.Client) (*url.URL, error) {
+	storagesvcURL := os.Getenv("FISSION_STORAGESVC_URL")
+	if len(storagesvcURL) > 0 {
+		return url.Parse(storagesvcURL)
+	}
 	storageLocalPort, err := SetupPortForward(ctx, client, GetFissionNamespace(), "application=fission-storage")
 	if err != nil {
 		return nil, err
@@ -505,28 +509,6 @@ func ConfigMapExists(ctx context.Context, m *metav1.ObjectMeta, kClient kubernet
 
 	_, err := kClient.CoreV1().ConfigMaps(m.Namespace).Get(ctx, m.Name, metav1.GetOptions{})
 	return err
-}
-
-func GetSvcName(ctx context.Context, kClient kubernetes.Interface, application string) (string, error) {
-	var podNamespace = os.Getenv("POD_NAMESPACE")
-	if podNamespace == "" {
-		podNamespace = "fission"
-	}
-
-	appLabelSelector := "application=" + application
-
-	services, err := kClient.CoreV1().Services(podNamespace).List(ctx, metav1.ListOptions{
-		LabelSelector: appLabelSelector,
-	})
-	if err != nil {
-		return "", err
-	}
-
-	if len(services.Items) > 1 || len(services.Items) == 0 {
-		return "", errors.Errorf("more than one service found for application=%s", application)
-	}
-	service := services.Items[0]
-	return service.Name + "." + podNamespace, nil
 }
 
 // FunctionPodLogs : Get logs for a function directly from pod

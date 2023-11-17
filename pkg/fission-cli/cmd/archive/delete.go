@@ -50,7 +50,7 @@ func (opts *DeleteSubCommand) do(input cli.Input) error {
 		return err
 	}
 
-	fmt.Printf("Deleted archive with id: %s", archiveID)
+	fmt.Printf("Deleted archive with id: %s\n", archiveID)
 
 	return nil
 }

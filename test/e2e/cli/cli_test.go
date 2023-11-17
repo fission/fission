@@ -3,6 +3,7 @@ package cli_test
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -23,11 +24,14 @@ func TestFissionCLI(t *testing.T) {
 	defer mgr.Wait()
 
 	f := framework.NewFramework()
-	defer f.Logger().Sync()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	err := f.Start(ctx)
 	require.NoError(t, err)
+	defer func() {
+		err = f.Stop()
+		require.NoError(t, err)
+	}()
 
 	err = services.StartServices(ctx, f, mgr)
 	require.NoError(t, err)
@@ -371,6 +375,31 @@ func TestFissionCLI(t *testing.T) {
 
 	t.Run("support-dump", func(t *testing.T) {
 		_, err := cli.ExecCommand(f, ctx, "support", "dump")
+		require.NoError(t, err)
+
+		err = os.RemoveAll("fission-dump")
+		require.NoError(t, err)
+	})
+
+	t.Run("archive", func(t *testing.T) {
+		out, err := cli.ExecCommand(f, ctx, "archive", "upload", "--name", "hello.js")
+		require.NoError(t, err)
+		require.Contains(t, out, "File successfully uploaded with ID")
+		id := out[len("File successfully uploaded with ID: "):]
+		// split string by / and get the last element
+		id = strings.Split(id, "/")[len(strings.Split(id, "/"))-1]
+		id = strings.Trim(id, "\n")
+
+		_, err = cli.ExecCommand(f, ctx, "archive", "list")
+		require.NoError(t, err)
+
+		_, err = cli.ExecCommand(f, ctx, "archive", "get-url", "--id", id)
+		require.NoError(t, err)
+
+		_, err = cli.ExecCommand(f, ctx, "archive", "download", "--id", id)
+		require.NoError(t, err)
+
+		_, err = cli.ExecCommand(f, ctx, "archive", "delete", "--id", id)
 		require.NoError(t, err)
 	})
 

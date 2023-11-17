@@ -51,7 +51,6 @@ func UploadArchiveFile(ctx context.Context, client cmd.Client, fileName string) 
 			return nil, err
 		}
 	} else {
-
 		storagesvcURL, err := util.GetStorageURL(ctx, client)
 		if err != nil {
 			return nil, errors.Wrapf(err, "error getting fission storage service URL")
@@ -105,12 +104,11 @@ func getArchiveURL(ctx context.Context, client cmd.Client, archiveID string, ser
 	storageType := resp.Header.Get("X-FISSION-STORAGETYPE")
 
 	if storageType == "local" {
-		storageSvc, err := util.GetSvcName(ctx, client.KubernetesClient, "fission-storage")
+		storagesvcURL, err := util.GetStorageURL(ctx, client)
 		if err != nil {
 			return "", err
 		}
-		storagesvcURL := "http://" + storageSvc
-		client := storageSvcClient.MakeClient(storagesvcURL)
+		client := storageSvcClient.MakeClient(storagesvcURL.String())
 		return client.GetUrl(archiveID), nil
 	} else if storageType == "s3" {
 		storageBucket := resp.Header.Get("X-FISSION-BUCKET")
@@ -166,23 +164,19 @@ func DownloadURL(fileUrl string) (io.ReadCloser, error) {
 
 func DownloadStrorageURL(ctx context.Context, client cmd.Client, fileUrl string) (io.ReadCloser, error) {
 	var resp *http.Response
-	storageSvc, err := util.GetSvcName(ctx, client.KubernetesClient, "fission-storage")
+	storagesvcURL, err := util.GetStorageURL(ctx, client)
 	if err != nil {
 		return nil, err
 	}
 
-	if strings.HasPrefix(fileUrl, "http://"+storageSvc+"/v1/archive?id=") {
+	if strings.HasPrefix(fileUrl, storagesvcURL.String()+"/v1/archive?id=") {
 		url, err := url.Parse(fileUrl)
 		if err != nil {
 			return nil, err
 		}
 		id := url.Query().Get("id")
-		storageAccessURL, err := util.GetStorageURL(ctx, client)
-		if err != nil {
-			return nil, err
-		}
 
-		client := storageSvcClient.MakeClient(storageAccessURL.String())
+		client := storageSvcClient.MakeClient(storagesvcURL.String())
 		resp, err = client.GetFile(ctx, id)
 		if err != nil {
 			return nil, err

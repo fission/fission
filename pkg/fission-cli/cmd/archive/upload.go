@@ -49,7 +49,6 @@ func (opts *UploadSubCommand) do(input cli.Input) error {
 		return err
 	}
 
-	fmt.Printf("File successfully uploaded with ID: %s ", archiveID)
-
+	fmt.Fprintf(input.OutOrStdout(), "File successfully uploaded with ID: %s\n", archiveID)
 	return nil
 }

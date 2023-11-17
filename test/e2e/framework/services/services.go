@@ -87,6 +87,11 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr manager.Inte
 		return fmt.Errorf("error starting storage service: %v", err)
 	}
 	f.AddServiceInfo("storagesvc", framework.ServiceInfo{Port: storageSvcPort})
+	storagesvcURL, err := f.GetServiceURL("storagesvc")
+	if err != nil {
+		return fmt.Errorf("error getting storage service URL: %v", err)
+	}
+	os.Setenv("FISSION_STORAGESVC_URL", storagesvcURL)
 	err = f.ToggleMetricAddr()
 	if err != nil {
 		return fmt.Errorf("error toggling metric address: %v", err)
@@ -122,8 +127,10 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr manager.Inte
 		return fmt.Errorf("error starting router: %v", err)
 	}
 	f.AddServiceInfo("router", framework.ServiceInfo{Port: routerPort})
-
-	routerURL := fmt.Sprintf("http://localhost:%d", routerPort)
+	routerURL, err := f.GetServiceURL("router")
+	if err != nil {
+		return fmt.Errorf("error getting router URL: %v", err)
+	}
 	os.Setenv("FISSION_ROUTER_URL", routerURL)
 
 	err = timer.Start(ctx, f.ClientGen(), f.Logger(), mgr, routerURL)

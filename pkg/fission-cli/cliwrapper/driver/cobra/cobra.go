@@ -19,6 +19,7 @@ package cobra
 import (
 	"context"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
@@ -310,4 +311,12 @@ func (u Cli) GlobalInt64Slice(key string) []int64 {
 func (u Cli) Duration(key string) time.Duration {
 	v, _ := u.c.Flags().GetDuration(key)
 	return v
+}
+
+func (u Cli) OutOrStdout() io.Writer {
+	return u.c.OutOrStdout()
+}
+
+func (u Cli) OutOrStderr() io.Writer {
+	return u.c.OutOrStderr()
 }
