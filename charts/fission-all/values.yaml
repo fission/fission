@@ -459,48 +459,6 @@ timer:
     runAsUser: 10001
     runAsGroup: 10001
 
-## Kafka: enable and configure the details
-##
-kafka:
-  enabled: false
-  ## note: below link is only for reference.
-  ## Please use the brokers link for your kafka here.
-  ##
-  brokers: "broker.kafka:9092" # or your-bootstrap-server.kafka:9092/9093
-  ## Sample config for authentication
-  ## authentication:
-  ##   tls:
-  ##     enabled: true
-  ##     caCert: 'auth/kafka/ca.crt'
-  ##     userCert: 'auth/kafka/user.crt'
-  ##     userKey: 'auth/kafka/user.key'
-  ##
-  authentication:
-    tls:
-      enabled: false
-      ## InsecureSkipVerify controls whether a client verifies the server's certificate chain and host name.
-      ## Warning: Setting this to true, makes TLS susceptible to man-in-the-middle attacks
-      ##
-      insecureSkipVerify: false
-      ## path to certificate containing public key of CA authority
-      ##
-      caCert: ""
-      ## path to certificate containing public key of the user signed by CA authority
-      ##
-      userCert: ""
-      ## path to private key of the user
-      ##
-      userKey: ""
-
-  ## version of Kafka broker
-  ## For 0.x it must be a string in the format
-  ## "major.minor.veryMinor.patch" example: 0.8.2.0
-  ## For 1.x it must be a string in the format
-  ## "major.major.veryMinor" example: 2.0.1
-  ## Should be >= 0.11.2.0 to enable Kafka record headers support
-  ##
-  # version: "0.11.2.0"
-
 # The following components expose Prometheus metrics and have servicemonitors in this chart (disabled by default)
 # router, executor, storage svc
 serviceMonitor:

@@ -312,7 +312,7 @@ func (MessageQueueTriggerList) SwaggerDoc() map[string]string {
 var map_MessageQueueTriggerSpec = map[string]string{
 	"":                 "MessageQueueTriggerSpec defines a binding from a topic in a message queue to a function.",
 	"functionref":      "The reference to a function for message queue trigger to invoke with when receiving messages from subscribed topic.",
-	"messageQueueType": "Type of message queue (NATS, Kafka, AzureQueue)",
+	"messageQueueType": "Type of message queue",
 	"topic":            "Subscribed topic",
 	"respTopic":        "Topic for message queue trigger to sent response from function.",
 	"errorTopic":       "Topic to collect error response sent from function",
