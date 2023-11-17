@@ -124,15 +124,6 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 
 	// For Specs, the spec validate checks for function reference
 	if input.Bool(flagkey.SpecSave) {
-
-		htTrigger, err := opts.Client().FissionClientSet.CoreV1().HTTPTriggers(m.Namespace).Get(input.Context(), m.Name, metav1.GetOptions{})
-		if err != nil && !kerrors.IsNotFound(err) {
-			return err
-		}
-		if htTrigger.Name != "" && htTrigger.Namespace != "" {
-			return errors.New("duplicate trigger exists, choose a different name or leave it empty for fission to auto-generate it")
-		}
-
 		specDir := util.GetSpecDir(input)
 		specIgnore := util.GetSpecIgnore(input)
 		fr, err := spec.ReadSpecs(specDir, specIgnore, false)

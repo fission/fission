@@ -221,7 +221,7 @@ func TestFissionCLI(t *testing.T) {
 			_, err = cli.ExecCommand(f, ctx, "function", "create", "--name", "test-func", "--code", "./hello.js", "--env", "test-func-env")
 			require.NoError(t, err)
 
-			_, err = cli.ExecCommand(f, ctx, "httptrigger", "create", "--name", "test-httptrigger", "--function", "test-func", "--url", "/hello")
+			_, err = cli.ExecCommand(f, ctx, "httptrigger", "create", "--name", "test-httptrigger", "--function", "test-func", "--url", "/hello", "--createingress")
 			require.NoError(t, err)
 
 			ht, err := fissionClient.CoreV1().HTTPTriggers(metav1.NamespaceDefault).Get(ctx, "test-httptrigger", metav1.GetOptions{})
@@ -389,8 +389,12 @@ func TestFissionCLI(t *testing.T) {
 		require.NoError(t, err)
 		_, err = cli.ExecCommand(f, ctx, "function", "create", "--name", "test-func", "--code", "./hello.js", "--env", "test-func-env", "--spec")
 		require.NoError(t, err)
-		// _, err = cli.ExecCommand(f, ctx, "httptrigger", "create", "--name", "test-httptrigger", "--function", "test-func", "--url", "/hello", "--spec")
-		// require.NoError(t, err)
+		_, err = cli.ExecCommand(f, ctx, "httptrigger", "create", "--name", "test-httptrigger", "--function", "test-func", "--url", "/hello", "--spec", "--createingress")
+		require.NoError(t, err)
+		_, err = cli.ExecCommand(f, ctx, "timetrigger", "create", "--name", "test-tt", "--function", "test-func", "--cron", "@every 1m", "--spec")
+		require.NoError(t, err)
+		_, err = cli.ExecCommand(f, ctx, "mqtrigger", "create", "--name", "test-mqtrigger", "--function", "test-func", "--mqtype", "kafka", "--topic", "test-topic", "--resptopic", "test-resp-topic", "--spec")
+		require.NoError(t, err)
 
 		_, err = cli.ExecCommand(f, ctx, "spec", "validate")
 		require.NoError(t, err)
