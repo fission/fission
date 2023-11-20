@@ -96,7 +96,6 @@ type (
 )
 
 // NewPoolCache create a Cache object
-
 func NewPoolCache(logger *zap.Logger) *PoolCache {
 	c := &PoolCache{
 		cache:          make(map[crd.CacheKeyURG]*funcSvcGroup),
@@ -149,8 +148,19 @@ func (c *PoolCache) service() {
 				req.responseChannel <- resp
 				continue
 			}
-			specializationInProgress := funcSvcGroup.svcWaiting - funcSvcGroup.queue.Len()
-			capacity := ((specializationInProgress + len(funcSvcGroup.svcs)) * req.requestsPerPod) - (totalActiveRequests + funcSvcGroup.svcWaiting)
+			concurrencyUsed := len(funcSvcGroup.svcs) + (funcSvcGroup.svcWaiting - funcSvcGroup.queue.Len())
+			fmt.Println("cused", concurrencyUsed, "svcsLen", len(funcSvcGroup.svcs), "svcWaiting", funcSvcGroup.svcWaiting, "queue", funcSvcGroup.queue.Len())
+			// if concurrency is available then be aggressive and use it
+			if req.concurrency > 0 && concurrencyUsed < req.concurrency {
+				funcSvcGroup.svcWaiting++
+				resp.error = ferror.MakeError(ferror.ErrorNotFound, fmt.Sprintf("function '%s' not found", req.function))
+				req.responseChannel <- resp
+				continue
+			}
+			// if no concurrency is available then check if there is any capacity in the existing pods
+			// in pods in specialization in progress.
+			// if specialization doesnt complete within request then request will be timeout
+			capacity := (concurrencyUsed * req.requestsPerPod) - (totalActiveRequests + funcSvcGroup.svcWaiting)
 			if capacity > 0 {
 				funcSvcGroup.svcWaiting++
 				svcWait := &svcWait{
@@ -165,7 +175,7 @@ func (c *PoolCache) service() {
 
 			// concurrency should not be set to zero and
 			//sum of specialization in progress and specialized pods should be less then req.concurrency
-			if req.concurrency > 0 && (specializationInProgress+len(funcSvcGroup.svcs)) >= req.concurrency {
+			if req.concurrency > 0 && concurrencyUsed >= req.concurrency {
 				resp.error = ferror.MakeError(ferror.ErrorTooManyRequests, fmt.Sprintf("function '%s' concurrency '%d' limit reached.", req.function, req.concurrency))
 			} else {
 				funcSvcGroup.svcWaiting++
