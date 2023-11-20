@@ -149,7 +149,6 @@ func (c *PoolCache) service() {
 				continue
 			}
 			concurrencyUsed := len(funcSvcGroup.svcs) + (funcSvcGroup.svcWaiting - funcSvcGroup.queue.Len())
-			fmt.Println("cused", concurrencyUsed, "svcsLen", len(funcSvcGroup.svcs), "svcWaiting", funcSvcGroup.svcWaiting, "queue", funcSvcGroup.queue.Len())
 			// if concurrency is available then be aggressive and use it
 			if req.concurrency > 0 && concurrencyUsed < req.concurrency {
 				funcSvcGroup.svcWaiting++

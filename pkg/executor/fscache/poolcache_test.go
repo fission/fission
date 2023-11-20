@@ -245,9 +245,10 @@ func TestPoolCacheRequests(t *testing.T) {
 						if svc == nil {
 							t.Log(reqno, "=>", "svc is nil")
 							atomic.AddUint64(&failedRequests, 1)
-						} else {
-							t.Log(reqno, "=>", svc.Name)
 						}
+						// } else {
+						// 	t.Log(reqno, "=>", svc.Name)
+						// }
 					}
 				}(reqno)
 				if reqno%simultaneous == 0 {
