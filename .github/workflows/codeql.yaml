@@ -25,18 +25,18 @@ jobs:
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip-ci') }}
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
 
       - name: setup go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@93397bea11091df50f3d7e59dc26a7711a8bcfbe # v4.1.0
         with:
           go-version-file: "go.mod"
           cache: true
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v2
+        uses: github/codeql-action/init@66b90a5db151a8042fa97405c6cf843bbe433f7b # v2.22.7
         with:
           languages: go
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v2
+        uses: github/codeql-action/analyze@66b90a5db151a8042fa97405c6cf843bbe433f7b # v2.22.7
