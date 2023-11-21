@@ -26,9 +26,6 @@ metadata:
 {{- if eq "kubewatcher" .component }}
 {{- include "kubewatcher-kuberules" . }}
 {{- end }}
-{{- if eq "kafka" .component }}
-{{- include "kafka-kuberules" . }}
-{{- end }}
 {{- if eq "keda" .component }}
 {{- include "keda-kuberules" . }}
 {{- end }}

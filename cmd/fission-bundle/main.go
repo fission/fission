@@ -28,7 +28,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 	cnwebhook "sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	"github.com/fission/fission/cmd/fission-bundle/mqtrigger"
 	"github.com/fission/fission/pkg/buildermgr"
 	"github.com/fission/fission/pkg/canaryconfigmgr"
 	"github.com/fission/fission/pkg/crd"
@@ -73,10 +72,6 @@ func runKubeWatcher(ctx context.Context, clientGen crd.ClientGeneratorInterface,
 
 func runTimer(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Interface, routerUrl string) error {
 	return timer.Start(ctx, clientGen, logger, mgr, routerUrl)
-}
-
-func runMessageQueueMgr(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Interface, routerUrl string) error {
-	return mqtrigger.Start(ctx, clientGen, logger, mgr, routerUrl)
 }
 
 // KEDA based MessageQueue Trigger Manager
@@ -124,8 +119,6 @@ func getServiceName(arguments map[string]interface{}) string {
 		serviceName = "Fission-KubeWatcher"
 	} else if arguments["--timer"] == true {
 		serviceName = "Fission-Timer"
-	} else if arguments["--mqt"] == true {
-		serviceName = "Fission-MessageQueueTrigger"
 	} else if arguments["--builderMgr"] == true {
 		serviceName = "Fission-BuilderMgr"
 	} else if arguments["--storageServicePort"] != nil {
@@ -185,7 +178,6 @@ Usage:
   fission-bundle --storageServicePort=<port> --storageType=<storateType>
   fission-bundle --builderMgr [--storageSvcUrl=<url>] [--envbuilder-namespace=<namespace>]
   fission-bundle --timer [--routerUrl=<url>]
-  fission-bundle --mqt   [--routerUrl=<url>]
   fission-bundle --mqt_keda [--routerUrl=<url>]
   fission-bundle --webhookPort=<port>
   fission-bundle --logger
@@ -204,7 +196,6 @@ Options:
   --namespace=<namespace>         Kubernetes namespace in which to run function containers. Defaults to 'fission-function'.
   --kubewatcher                   Start Kubernetes events watcher.
   --timer                         Start Timer.
-  --mqt                           Start message queue trigger.
   --mqt_keda					  Start message queue trigger of kind KEDA
   --builderMgr                    Start builder manager.
   --version                       Print version information
@@ -281,14 +272,6 @@ Options:
 		err = runTimer(ctx, clientGen, logger, mgr, routerUrl)
 		if err != nil {
 			logger.Error("timer exited", zap.Error(err))
-			return
-		}
-	}
-
-	if arguments["--mqt"] == true {
-		err = runMessageQueueMgr(ctx, clientGen, logger, mgr, routerUrl)
-		if err != nil {
-			logger.Error("message queue manager exited", zap.Error(err))
 			return
 		}
 	}
