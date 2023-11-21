@@ -5,6 +5,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"go.opentelemetry.io/contrib/propagators/autoprop"
 	"go.opentelemetry.io/otel"
@@ -96,6 +97,12 @@ func InitProvider(ctx context.Context, logger *zap.Logger, serviceName string) (
 	otel.SetTextMapPropagator(autoprop.NewTextMapPropagator())
 	// Shutdown will flush any remaining spans and shut down the exporter.
 	return func(ctx context.Context) {
+		if ctx.Err() != nil {
+			// if the context is already cancelled, create a new one with a timeout of 30 seconds
+			ctxwithTimeout, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			ctx = ctxwithTimeout
+		}
 		err := tracerProvider.Shutdown(ctx)
 		if err != nil && logger != nil {
 			logger.Error("error shutting down trace provider", zap.Error(err))
