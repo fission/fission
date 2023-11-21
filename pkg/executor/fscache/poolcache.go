@@ -121,6 +121,7 @@ func (c *PoolCache) service() {
 		case getValue:
 			funcSvcGroup, ok := c.cache[req.function]
 			if !ok {
+				// first request for this function, create a new group
 				c.cache[req.function] = NewFuncSvcGroup()
 				c.cache[req.function].svcWaiting++
 				resp.error = ferror.MakeError(ferror.ErrorNotFound,
@@ -130,6 +131,7 @@ func (c *PoolCache) service() {
 			}
 			found := false
 			totalActiveRequests := 0
+			// check if any specialized pod is available
 			for addr := range funcSvcGroup.svcs {
 				totalActiveRequests += funcSvcGroup.svcs[addr].activeRequests
 				if funcSvcGroup.svcs[addr].activeRequests < req.requestsPerPod &&
@@ -144,20 +146,20 @@ func (c *PoolCache) service() {
 					break
 				}
 			}
+			// if specialized pod is available then return svc
 			if found {
 				req.responseChannel <- resp
 				continue
 			}
 			concurrencyUsed := len(funcSvcGroup.svcs) + (funcSvcGroup.svcWaiting - funcSvcGroup.queue.Len())
-			// if concurrency is available then be aggressive and use it
+			// if concurrency is available then be aggressive and use it as we are not sure if specialization will complete for other requests
 			if req.concurrency > 0 && concurrencyUsed < req.concurrency {
 				funcSvcGroup.svcWaiting++
 				resp.error = ferror.MakeError(ferror.ErrorNotFound, fmt.Sprintf("function '%s' not found", req.function))
 				req.responseChannel <- resp
 				continue
 			}
-			// if no concurrency is available then check if there is any capacity in the existing pods
-			// in pods in specialization in progress.
+			// if no concurrency is available then check if there is any virtual capacity in the existing pods to serve the request in future
 			// if specialization doesnt complete within request then request will be timeout
 			capacity := (concurrencyUsed * req.requestsPerPod) - (totalActiveRequests + funcSvcGroup.svcWaiting)
 			if capacity > 0 {
@@ -173,7 +175,7 @@ func (c *PoolCache) service() {
 			}
 
 			// concurrency should not be set to zero and
-			//sum of specialization in progress and specialized pods should be less then req.concurrency
+			// sum of specialization in progress and specialized pods should be less then req.concurrency
 			if req.concurrency > 0 && concurrencyUsed >= req.concurrency {
 				resp.error = ferror.MakeError(ferror.ErrorTooManyRequests, fmt.Sprintf("function '%s' concurrency '%d' limit reached.", req.function, req.concurrency))
 			} else {
