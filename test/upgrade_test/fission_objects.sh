@@ -68,7 +68,7 @@ test_fission_objects() {
     echo "-----------------###############################--------------------"
     echo "                   Running fission object tests"
     echo "-----------------###############################--------------------"
-    if fission function test --name hello; then
+    if fission function test -v 2 --name hello; then
         echo "----------------------**********************-------------------------"
         echo "                           Test success"
         echo "----------------------**********************-------------------------"
