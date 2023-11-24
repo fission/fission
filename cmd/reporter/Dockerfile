@@ -1,4 +1,3 @@
-FROM alpine:3.18
-RUN apk add --update ca-certificates
+FROM cgr.dev/chainguard/static:latest
 COPY reporter /
 ENTRYPOINT ["/reporter"]
