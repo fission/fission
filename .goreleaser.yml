@@ -436,6 +436,7 @@ signs:
     - '--output-certificate=${certificate}'
     - '--output-signature=${signature}'
     - '${artifact}'
+    - '--yes' # needed for cosign 2.0.0+
 
 # signs our docker image
 # https://goreleaser.com/customization/docker_sign
