@@ -65,7 +65,7 @@ create_fission_objects() {
 test_fission_objects() {
     doit fission env list
     doit fission function list
-    doit fission version -v 2
+    doit fission check -v 2
     echo "-----------------###############################--------------------"
     echo "                   Running fission object tests"
     echo "-----------------###############################--------------------"
