@@ -112,12 +112,12 @@ func MergePodSpec(srcPodSpec *apiv1.PodSpec, targetPodSpec *apiv1.PodSpec) (*api
 		srcPodSpec.EnableServiceLinks = targetPodSpec.EnableServiceLinks
 	}
 
-	//TODO - Security context should be merged instead of overriding.
+	// TODO - Security context should be merged instead of overriding.
 	if targetPodSpec.SecurityContext != nil {
 		srcPodSpec.SecurityContext = targetPodSpec.SecurityContext
 	}
 
-	//TODO - Affinity should be merged instead of overriding.
+	// TODO - Affinity should be merged instead of overriding.
 	if targetPodSpec.Affinity != nil {
 		srcPodSpec.Affinity = targetPodSpec.Affinity
 	}

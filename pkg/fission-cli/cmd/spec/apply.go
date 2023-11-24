@@ -517,7 +517,7 @@ func localArchiveFromSpec(specDir string, aus *spectypes.ArchiveUploadSpec) (*fv
 	// to do a filepath.Walk and call path.Match on each path...
 	files := make([]string, 0)
 
-	//checking if file is a zip
+	// checking if file is a zip
 	if match, _ := utils.IsZip(aus.IncludeGlobs[0]); match && len(aus.IncludeGlobs) == 1 {
 		files = append(files, aus.IncludeGlobs[0])
 	} else {
@@ -560,7 +560,7 @@ func localArchiveFromSpec(specDir string, aus *spectypes.ArchiveUploadSpec) (*fv
 		}
 		archiveFileName = archiveFile.Name()
 
-		//This instance is required to allow overwriting and not changing DefaultZip
+		// This instance is required to allow overwriting and not changing DefaultZip
 		zipOverwrite := archiver.Zip{OverwriteExisting: true}
 		err = zipOverwrite.Archive(files, archiveFileName)
 		if err != nil {

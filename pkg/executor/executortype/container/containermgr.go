@@ -430,7 +430,7 @@ func (caaf *Container) fnCreate(ctx context.Context, fn *fv1.Function) (*fscache
 
 	kubeObjRefs := []apiv1.ObjectReference{
 		{
-			//obj.TypeMeta.Kind does not work hence this, needs investigation and a fix
+			// obj.TypeMeta.Kind does not work hence this, needs investigation and a fix
 			Kind:            "deployment",
 			Name:            depl.ObjectMeta.Name,
 			APIVersion:      depl.TypeMeta.APIVersion,

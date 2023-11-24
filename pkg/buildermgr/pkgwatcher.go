@@ -127,7 +127,7 @@ func (pkgw *packageWatcher) build(ctx context.Context, srcpkg *fv1.Package) {
 	healthCheckBackOff := utils.NewDefaultBackOff()
 	builderNs := pkgw.nsResolver.GetBuilderNS(env.ObjectMeta.Namespace)
 
-	//if err != nil {
+	// if err != nil {
 	//	pkgw.logger.Error("Unable to create BackOff for Health Check", zap.Error(err))
 	//}
 	// Do health check for environment builder pod

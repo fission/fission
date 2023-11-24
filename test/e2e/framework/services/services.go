@@ -112,7 +112,7 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr manager.Inte
 	os.Setenv("ROUTER_UNTAP_SERVICE_TIMEOUT", "3600s")
 	os.Setenv("USE_ENCODED_PATH", "false")
 	os.Setenv("DISPLAY_ACCESS_LOG", "true")
-	//os.Setenv("DEBUG_ENV", "false")
+	// os.Setenv("DEBUG_ENV", "false")
 	routerPort, err := utils.FindFreePort()
 	if err != nil {
 		return fmt.Errorf("error finding unused port: %v", err)

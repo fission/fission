@@ -40,7 +40,7 @@ import (
 
 type fscRequestType int
 
-//type executorType int
+// type executorType int
 
 // FunctionServiceCache Request Types
 const (

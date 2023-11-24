@@ -79,7 +79,7 @@ func (influx InfluxDB) GetLogs(ctx context.Context, filter LogFilter, output *by
 	parameters := make(map[string]interface{})
 	parameters["funcuid"] = filter.FuncUid
 	parameters["time"] = timestamp
-	//the parameters above are only for the where clause and do not work with LIMIT
+	// the parameters above are only for the where clause and do not work with LIMIT
 
 	orderCondition := " order by \"time\" asc"
 	if filter.Reverse {
@@ -104,7 +104,7 @@ func (influx InfluxDB) GetLogs(ctx context.Context, filter LogFilter, output *by
 	for _, r := range response.Results {
 		for _, series := range r.Series {
 
-			//create map of columns to row indices
+			// create map of columns to row indices
 			indexMap := makeIndexMap(series.Columns)
 
 			// TODO: Remove fallback indexes. Some of index's name changed in fluent-bit, here we add extra fallbackIndexes to address compatibility problem.
@@ -130,16 +130,16 @@ func (influx InfluxDB) GetLogs(ctx context.Context, filter LogFilter, output *by
 					return err
 				}
 				entry := LogEntry{
-					//The attributes of the LogEntry are selected as relative to their position in InfluxDB's line protocol response
+					// The attributes of the LogEntry are selected as relative to their position in InfluxDB's line protocol response
 					Timestamp: t,
 					Container: getEntryValue(row, container, container_1),
 					FuncName:  getEntryValue(row, functionName, -1),
 					FuncUid:   getEntryValue(row, funcuid, funcuid_1, funcuid_2),
-					Message:   strings.TrimSuffix(getEntryValue(row, logMessage, -1), "\n"), //log field
+					Message:   strings.TrimSuffix(getEntryValue(row, logMessage, -1), "\n"), // log field
 					Namespace: getEntryValue(row, nameSpace, -1),
 					Pod:       getEntryValue(row, podName, -1),
 					Stream:    getEntryValue(row, stream, -1),
-					Sequence:  seqNum, //sequence tag
+					Sequence:  seqNum, // sequence tag
 				}
 				logEntries = append(logEntries, entry)
 			}
