@@ -348,7 +348,7 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 		}
 	}
 
-	//checking if file is a zip
+	// checking if file is a zip
 	if match, _ := utils.IsZip(tmpPath); match && !req.KeepArchive {
 		// unarchive tmp file to a tmp unarchive path
 		tmpUnarchivePath := filepath.Join(fetcher.sharedVolumePath, uuid.NewString())

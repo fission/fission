@@ -37,8 +37,6 @@ create_archive
 uploadResp=$(fission ar upload --name "$tmp_dir"/test-deploy-pkg.zip)
 filename=$(echo "$uploadResp" | cut -d':' -f2 | tr -d ' ')
 
-kubectl exec -i "$podname" -n fission -- /bin/sh -c "ls $filename"
-
 # Test for list
 listResp=$(fission ar list)
 

@@ -63,8 +63,9 @@ create_fission_objects() {
 }
 
 test_fission_objects() {
-    fission env list
-    fission function list
+    doit fission env list
+    doit fission function list
+    doit fission check -v 2
     echo "-----------------###############################--------------------"
     echo "                   Running fission object tests"
     echo "-----------------###############################--------------------"
@@ -111,6 +112,7 @@ install_current_release() {
     doit helm dependency update "$ROOT"/charts/fission-all
     doit make update-crds
     doit helm upgrade --debug --wait --namespace $ns --set $HELM_VARS_LATEST_RELEASE fission "$ROOT"/charts/fission-all
+    doit kubectl rollout status deployment/router -n $ns --watch --timeout 2m
 }
 
 "$@"

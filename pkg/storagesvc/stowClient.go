@@ -37,7 +37,7 @@ type (
 		storage Storage
 	}
 
-	//StowClient is the wrapper client for stow (Cloud storage abstraction package)
+	// StowClient is the wrapper client for stow (Cloud storage abstraction package)
 	StowClient struct {
 		logger    *zap.Logger
 		config    *storageConfig

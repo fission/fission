@@ -43,7 +43,7 @@ func getPoolName(env *fv1.Environment) string {
 		return a
 	}
 
-	//To fit the 63 character limit
+	// To fit the 63 character limit
 	if len(env.ObjectMeta.Name)+len(env.ObjectMeta.Namespace) < 37 {
 		envPodName = env.ObjectMeta.Name + "-" + env.ObjectMeta.Namespace
 	} else {

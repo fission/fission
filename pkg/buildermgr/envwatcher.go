@@ -163,7 +163,7 @@ func (envw *environmentWatcher) EnvWatchEventHandlers(ctx context.Context) error
 }
 
 func (envw *environmentWatcher) AddUpdateBuilder(ctx context.Context, env *fv1.Environment) {
-	//builder is not supported with v1 interface and ignore env without builder image
+	// builder is not supported with v1 interface and ignore env without builder image
 	if env.Spec.Version != 1 && len(env.Spec.Builder.Image) != 0 {
 		if _, ok := envw.cache[crd.CacheKeyUIDFromMeta(&env.ObjectMeta)]; !ok {
 			builderInfo, err := envw.createBuilder(ctx, env, envw.nsResolver.GetBuilderNS(env.ObjectMeta.Namespace))

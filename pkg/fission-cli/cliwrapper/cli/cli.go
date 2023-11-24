@@ -26,7 +26,7 @@ type (
 	Input interface {
 		Context() context.Context
 
-		//Parse(input interface{}) error
+		// Parse(input interface{}) error
 
 		// IsSet checks whether a flag has been set by the user
 		IsSet(key string) bool

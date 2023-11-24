@@ -103,7 +103,7 @@ func (opts *LogSubCommand) do(input cli.Input) error {
 				t = time.Now().UTC() // next time fetch values from this time
 				if err != nil {
 					console.Verbose(2, "error querying logs: %s", err)
-					if dbType == logdb.KUBERNETES { //in case of Kubernetes log we print pod namespace warning once
+					if dbType == logdb.KUBERNETES { // in case of Kubernetes log we print pod namespace warning once
 						warn = false
 					}
 					responseChan <- struct{}{}
@@ -116,7 +116,7 @@ func (opts *LogSubCommand) do(input cli.Input) error {
 					continue
 				}
 
-				if dbType == logdb.KUBERNETES { //in case of Kubernetes log we print pods info only once. And then print new logs
+				if dbType == logdb.KUBERNETES { // in case of Kubernetes log we print pods info only once. And then print new logs
 					detail = false
 				}
 				responseChan <- struct{}{}

@@ -337,7 +337,7 @@ func (es ExecutionStrategy) Validate() error {
 		}
 
 		// TODO Add validation warning
-		//if es.SpecializationTimeout < 120 {
+		// if es.SpecializationTimeout < 120 {
 		//	result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "ExecutionStrategy.SpecializationTimeout", es.SpecializationTimeout, "SpecializationTimeout must be a value equal to or greater than 120"))
 		//}
 	}
