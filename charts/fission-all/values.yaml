@@ -745,29 +745,29 @@ mqt_keda:
   enabled: true
   connector_images:
     kafka:
-      image: fission/keda-kafka-http-connector
-      tag: v0.12
-    rabbitmq:
-      image: fission/keda-rabbitmq-http-connector
-      tag: v0.10
-    awskinesis:
-      image: fission/keda-aws-kinesis-http-connector
-      tag: v0.10
-    aws_sqs:
-      image: fission/keda-aws-sqs-http-connector
-      tag: v0.11
-    nats_steaming:
-      image: fission/keda-nats-streaming-http-connector
+      image: ghcr.io/fission/keda-kafka-http-connector
       tag: v0.13
+    rabbitmq:
+      image: ghcr.io/fission/keda-rabbitmq-http-connector
+      tag: v0.11
+    awskinesis:
+      image: ghcr.io/fission/keda-aws-kinesis-http-connector
+      tag: v0.11
+    aws_sqs:
+      image: ghcr.io/fission/keda-aws-sqs-http-connector
+      tag: v0.12
+    nats_steaming:
+      image: ghcr.io/fission/keda-nats-streaming-http-connector
+      tag: v0.14
     nats_jetstream:
-      image: fission/keda-nats-jetstream-http-connector
-      tag: v0.4
+      image: ghcr.io/fission/keda-nats-jetstream-http-connector
+      tag: v0.5
     gcp_pubsub:
-      image: fission/keda-gcp-pubsub-http-connector
-      tag: v0.6
+      image: ghcr.io/fission/keda-gcp-pubsub-http-connector
+      tag: v0.7
     redis:
-      image: fission/keda-redis-http-connector
-      tag: v0.3
+      image: ghcr.io/fission/keda-redis-http-connector
+      tag: v0.4
 
   ## Pod resources as:
   ##  resources:
