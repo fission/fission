@@ -449,3 +449,4 @@ docker_signs:
     - 'sign'
     - '--key=cosign.key'
     - '${artifact}'
+    - '--yes' # needed for cosign 2.0.0+
