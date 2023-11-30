@@ -71,10 +71,19 @@ rules:
   - pods
   - services
   - replicationcontrollers
-  - events
   verbs:
   - create
   - delete
+  - get
+  - list
+  - watch
+  - patch
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
   - get
   - list
   - watch
@@ -203,10 +212,19 @@ rules:
   - pods
   - services
   - replicationcontrollers
-  - events
   verbs:
   - create
   - delete
+  - get
+  - list
+  - watch
+  - patch
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
   - get
   - list
   - watch
