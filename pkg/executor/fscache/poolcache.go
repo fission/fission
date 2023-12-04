@@ -287,16 +287,15 @@ func (c *PoolCache) service() {
 				}
 			}
 		case markSpecializationFailure:
-			funcSvcGroup, ok := c.cache[req.function]
-			if !ok || funcSvcGroup == nil {
-				break
+			if _, ok := c.cache[req.function]; !ok {
+				c.cache[req.function] = NewFuncSvcGroup()
 			}
 
-			if funcSvcGroup.svcWaiting > funcSvcGroup.queue.Len() {
-				funcSvcGroup.svcWaiting--
-				if funcSvcGroup.svcWaiting == funcSvcGroup.queue.Len() {
-					expiredRequests := funcSvcGroup.queue.Expired()
-					funcSvcGroup.svcWaiting = funcSvcGroup.svcWaiting - expiredRequests
+			if c.cache[req.function].svcWaiting > c.cache[req.function].queue.Len() {
+				c.cache[req.function].svcWaiting--
+				if c.cache[req.function].svcWaiting == c.cache[req.function].queue.Len() {
+					expiredRequests := c.cache[req.function].queue.Expired()
+					c.cache[req.function].svcWaiting = c.cache[req.function].svcWaiting - expiredRequests
 				}
 			}
 		case deleteValue:
