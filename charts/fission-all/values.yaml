@@ -682,7 +682,7 @@ authentication:
   ## jwtSigningKey is the signing key used for
   ## signing the JWT token
   ##
-  jwtSigningKey: serverless
+  jwtSigningKey: 
   ## jwtExpiryTime is the JWT expiry time
   ## in seconds
   ## default '120'
