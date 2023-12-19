@@ -39,7 +39,7 @@ var (
 	readyToServe uint32
 )
 
-func Run(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Interface) {
+func Run(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Interface, port string, podInfoMountDir string) {
 	flag.Usage = fetcherUsage
 	specializeOnStart := flag.Bool("specialize-on-startup", false, "Flag to activate specialize process at pod startup")
 	specializePayload := flag.String("specialize-request", "", "JSON payload for specialize request")
@@ -74,7 +74,7 @@ func Run(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *za
 	ctx, span := tracer.Start(ctx, "fetcher/Run")
 	defer span.End()
 
-	f, err := fetcher.MakeFetcher(logger, clientGen, dir, *secretDir, *configDir)
+	f, err := fetcher.MakeFetcher(logger, clientGen, dir, *secretDir, *configDir, podInfoMountDir)
 	if err != nil {
 		logger.Fatal("error making fetcher", zap.Error(err))
 	}
@@ -121,7 +121,7 @@ func Run(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *za
 	logger.Info("fetcher ready to receive requests")
 
 	handler := otelUtils.GetHandlerWithOTEL(mux, "fission-fetcher", otelUtils.UrlsToIgnore("/healthz", "/readiness-healthz"))
-	httpserver.StartServer(ctx, logger, mgr, "fetcher", "8000", handler)
+	httpserver.StartServer(ctx, logger, mgr, "fetcher", port, handler)
 }
 
 func fetcherUsage() {

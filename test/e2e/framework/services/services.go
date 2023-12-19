@@ -69,33 +69,22 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr manager.Inte
 
 	os.Setenv("PRUNE_ENABLED", "true")
 	os.Setenv("PRUNE_INTERVAL", "60")
-	storageDir, err := os.MkdirTemp("/tmp", "storagesvc")
+
+	err = f.ToggleMetricAddr()
 	if err != nil {
-		return fmt.Errorf("error creating temp directory: %v", err)
+		return fmt.Errorf("error toggling metric address: %v", err)
 	}
 
-	storageSvcPort, err := utils.FindFreePort()
-	if err != nil {
-		return fmt.Errorf("error finding unused port: %v", err)
-	}
 	err = f.ToggleMetricAddr()
 	if err != nil {
 		return fmt.Errorf("error toggling metric address: %v", err)
 	}
-	err = storagesvc.Start(ctx, f.ClientGen(), f.Logger(), storagesvc.NewLocalStorage(storageDir), mgr, storageSvcPort)
+
+	storageSvcPort, err := StartStorageSvc(ctx, f, mgr)
 	if err != nil {
-		return fmt.Errorf("error starting storage service: %v", err)
+		return err
 	}
-	f.AddServiceInfo("storagesvc", framework.ServiceInfo{Port: storageSvcPort})
-	storagesvcURL, err := f.GetServiceURL("storagesvc")
-	if err != nil {
-		return fmt.Errorf("error getting storage service URL: %v", err)
-	}
-	os.Setenv("FISSION_STORAGESVC_URL", storagesvcURL)
-	err = f.ToggleMetricAddr()
-	if err != nil {
-		return fmt.Errorf("error toggling metric address: %v", err)
-	}
+
 	err = buildermgr.Start(ctx, f.ClientGen(), f.Logger(), mgr, fmt.Sprintf("http://localhost:%d", storageSvcPort))
 	if err != nil {
 		return fmt.Errorf("error starting builder manager: %v", err)
@@ -121,6 +110,7 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr manager.Inte
 	if err != nil {
 		return fmt.Errorf("error toggling metric address: %v", err)
 	}
+
 	executor := eclient.MakeClient(f.Logger(), fmt.Sprintf("http://localhost:%d", executorPort))
 	err = router.Start(ctx, f.ClientGen(), f.Logger(), mgr, routerPort, executor)
 	if err != nil {
@@ -152,4 +142,29 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr manager.Inte
 	f.AddServiceInfo("kubewatcher", framework.ServiceInfo{})
 
 	return nil
+}
+
+func StartStorageSvc(ctx context.Context, f *framework.Framework, mgr manager.Interface) (storageSvcPort int, err error) {
+	storageDir, err := os.MkdirTemp("/tmp", "storagesvc")
+	if err != nil {
+		return 0, fmt.Errorf("error creating temp directory: %v", err)
+	}
+
+	storageSvcPort, err = utils.FindFreePort()
+	if err != nil {
+		return storageSvcPort, fmt.Errorf("error finding unused port: %v", err)
+	}
+
+	err = storagesvc.Start(ctx, f.ClientGen(), f.Logger(), storagesvc.NewLocalStorage(storageDir), mgr, storageSvcPort)
+	if err != nil {
+		return storageSvcPort, fmt.Errorf("error starting storage service: %v", err)
+	}
+	f.AddServiceInfo("storagesvc", framework.ServiceInfo{Port: storageSvcPort})
+	storagesvcURL, err := f.GetServiceURL("storagesvc")
+	if err != nil {
+		return storageSvcPort, fmt.Errorf("error getting storage service URL: %v", err)
+	}
+	os.Setenv("FISSION_STORAGESVC_URL", storagesvcURL)
+
+	return storageSvcPort, nil
 }
