@@ -34,7 +34,7 @@ type Framework struct {
 func NewWebhookOptions() (*envtest.WebhookInstallOptions, error) {
 	webhookPort, err := utils.FindFreePort()
 	if err != nil {
-		return nil, fmt.Errorf("error finding unused port: %v", err)
+		return nil, fmt.Errorf("error finding unused port: %w", err)
 	}
 	_, filename, _, _ := runtime.Caller(0) //nolint
 	root := filepath.Dir(filename)
@@ -46,7 +46,7 @@ func NewWebhookOptions() (*envtest.WebhookInstallOptions, error) {
 	}
 	err = options.PrepWithoutInstalling()
 	if err != nil {
-		return nil, fmt.Errorf("error preparing webhook install options: %v", err)
+		return nil, fmt.Errorf("error preparing webhook install options: %w", err)
 	}
 	return options, nil
 }
@@ -83,7 +83,7 @@ func (f *Framework) Start(ctx context.Context) error {
 	var err error
 	f.config, err = f.env.Start()
 	if err != nil {
-		return fmt.Errorf("error starting test env: %v", err)
+		return fmt.Errorf("error starting test env: %w", err)
 	}
 	return nil
 }
@@ -91,7 +91,7 @@ func (f *Framework) Start(ctx context.Context) error {
 func (f *Framework) ToggleMetricAddr() error {
 	port, err := utils.FindFreePort()
 	if err != nil {
-		return fmt.Errorf("error finding unused port: %v", err)
+		return fmt.Errorf("error finding unused port: %w", err)
 	}
 	os.Setenv("METRICS_ADDR", fmt.Sprint(port))
 	return nil

@@ -28,7 +28,7 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr manager.Inte
 	webhookPort := env.WebhookInstallOptions.LocalServingPort
 	err := f.ToggleMetricAddr()
 	if err != nil {
-		return fmt.Errorf("error toggling metric address: %v", err)
+		return fmt.Errorf("error toggling metric address: %w", err)
 	}
 	mgr.Add(ctx, func(ctx context.Context) {
 		err = webhook.Start(ctx, f.ClientGen(), f.Logger(), cnwebhook.Options{
@@ -43,11 +43,11 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr manager.Inte
 
 	executorPort, err := utils.FindFreePort()
 	if err != nil {
-		return fmt.Errorf("error finding unused port: %v", err)
+		return fmt.Errorf("error finding unused port: %w", err)
 	}
 	err = f.ToggleMetricAddr()
 	if err != nil {
-		return fmt.Errorf("error toggling metric address: %v", err)
+		return fmt.Errorf("error toggling metric address: %w", err)
 	}
 
 	// namespace settings for components
@@ -63,7 +63,7 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr manager.Inte
 	os.Setenv("POD_READY_TIMEOUT", "300s")
 	err = executor.StartExecutor(ctx, f.ClientGen(), f.Logger(), mgr, executorPort)
 	if err != nil {
-		return fmt.Errorf("error starting executor: %v", err)
+		return fmt.Errorf("error starting executor: %w", err)
 	}
 	f.AddServiceInfo("executor", framework.ServiceInfo{Port: executorPort})
 
@@ -72,12 +72,12 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr manager.Inte
 
 	err = f.ToggleMetricAddr()
 	if err != nil {
-		return fmt.Errorf("error toggling metric address: %v", err)
+		return fmt.Errorf("error toggling metric address: %w", err)
 	}
 
 	err = f.ToggleMetricAddr()
 	if err != nil {
-		return fmt.Errorf("error toggling metric address: %v", err)
+		return fmt.Errorf("error toggling metric address: %w", err)
 	}
 
 	storageSvcPort, err := StartStorageSvc(ctx, f, mgr)
@@ -87,7 +87,7 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr manager.Inte
 
 	err = buildermgr.Start(ctx, f.ClientGen(), f.Logger(), mgr, fmt.Sprintf("http://localhost:%d", storageSvcPort))
 	if err != nil {
-		return fmt.Errorf("error starting builder manager: %v", err)
+		return fmt.Errorf("error starting builder manager: %w", err)
 	}
 	f.AddServiceInfo("buildermgr", framework.ServiceInfo{})
 
@@ -104,40 +104,40 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr manager.Inte
 	// os.Setenv("DEBUG_ENV", "false")
 	routerPort, err := utils.FindFreePort()
 	if err != nil {
-		return fmt.Errorf("error finding unused port: %v", err)
+		return fmt.Errorf("error finding unused port: %w", err)
 	}
 	err = f.ToggleMetricAddr()
 	if err != nil {
-		return fmt.Errorf("error toggling metric address: %v", err)
+		return fmt.Errorf("error toggling metric address: %w", err)
 	}
 
 	executor := eclient.MakeClient(f.Logger(), fmt.Sprintf("http://localhost:%d", executorPort))
 	err = router.Start(ctx, f.ClientGen(), f.Logger(), mgr, routerPort, executor)
 	if err != nil {
-		return fmt.Errorf("error starting router: %v", err)
+		return fmt.Errorf("error starting router: %w", err)
 	}
 	f.AddServiceInfo("router", framework.ServiceInfo{Port: routerPort})
 	routerURL, err := f.GetServiceURL("router")
 	if err != nil {
-		return fmt.Errorf("error getting router URL: %v", err)
+		return fmt.Errorf("error getting router URL: %w", err)
 	}
 	os.Setenv("FISSION_ROUTER_URL", routerURL)
 
 	err = timer.Start(ctx, f.ClientGen(), f.Logger(), mgr, routerURL)
 	if err != nil {
-		return fmt.Errorf("error starting timer: %v", err)
+		return fmt.Errorf("error starting timer: %w", err)
 	}
 	f.AddServiceInfo("timer", framework.ServiceInfo{})
 
 	err = mqtrigger.StartScalerManager(ctx, f.ClientGen(), f.Logger(), mgr, routerURL)
 	if err != nil {
-		return fmt.Errorf("error starting mqt scaler manager: %v", err)
+		return fmt.Errorf("error starting mqt scaler manager: %w", err)
 	}
 	f.AddServiceInfo("mqtrigger-keda", framework.ServiceInfo{})
 
 	err = kubewatcher.Start(ctx, f.ClientGen(), f.Logger(), mgr, routerURL)
 	if err != nil {
-		return fmt.Errorf("error starting kubewatcher: %v", err)
+		return fmt.Errorf("error starting kubewatcher: %w", err)
 	}
 	f.AddServiceInfo("kubewatcher", framework.ServiceInfo{})
 
@@ -147,22 +147,22 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr manager.Inte
 func StartStorageSvc(ctx context.Context, f *framework.Framework, mgr manager.Interface) (storageSvcPort int, err error) {
 	storageDir, err := os.MkdirTemp("/tmp", "storagesvc")
 	if err != nil {
-		return 0, fmt.Errorf("error creating temp directory: %v", err)
+		return 0, fmt.Errorf("error creating temp directory: %w", err)
 	}
 
 	storageSvcPort, err = utils.FindFreePort()
 	if err != nil {
-		return storageSvcPort, fmt.Errorf("error finding unused port: %v", err)
+		return storageSvcPort, fmt.Errorf("error finding unused port: %w", err)
 	}
 
 	err = storagesvc.Start(ctx, f.ClientGen(), f.Logger(), storagesvc.NewLocalStorage(storageDir), mgr, storageSvcPort)
 	if err != nil {
-		return storageSvcPort, fmt.Errorf("error starting storage service: %v", err)
+		return storageSvcPort, fmt.Errorf("error starting storage service: %w", err)
 	}
 	f.AddServiceInfo("storagesvc", framework.ServiceInfo{Port: storageSvcPort})
 	storagesvcURL, err := f.GetServiceURL("storagesvc")
 	if err != nil {
-		return storageSvcPort, fmt.Errorf("error getting storage service URL: %v", err)
+		return storageSvcPort, fmt.Errorf("error getting storage service URL: %w", err)
 	}
 	os.Setenv("FISSION_STORAGESVC_URL", storagesvcURL)
 
