@@ -75,7 +75,8 @@ func makeVolumeDir(dirPath string) error {
 	return os.MkdirAll(dirPath, os.ModeDir|0750)
 }
 
-func MakeFetcher(logger *zap.Logger, clientGen crd.ClientGeneratorInterface, sharedVolumePath string, sharedSecretPath string, sharedConfigPath string) (*Fetcher, error) {
+func MakeFetcher(logger *zap.Logger, clientGen crd.ClientGeneratorInterface, sharedVolumePath string, sharedSecretPath string,
+	sharedConfigPath string, podInfoMountDir string) (*Fetcher, error) {
 	fLogger := logger.Named("fetcher")
 	err := makeVolumeDir(sharedVolumePath)
 	if err != nil {
@@ -99,12 +100,12 @@ func MakeFetcher(logger *zap.Logger, clientGen crd.ClientGeneratorInterface, sha
 		return nil, errors.Wrap(err, "error making the kube client")
 	}
 
-	name, err := os.ReadFile(fv1.PodInfoMount + "/name")
+	name, err := os.ReadFile(podInfoMountDir + "/name")
 	if err != nil {
 		return nil, errors.Wrap(err, "error reading pod name from downward volume")
 	}
 
-	namespace, err := os.ReadFile(fv1.PodInfoMount + "/namespace")
+	namespace, err := os.ReadFile(podInfoMountDir + "/namespace")
 	if err != nil {
 		return nil, errors.Wrap(err, "error reading pod namespace from downward volume")
 	}
