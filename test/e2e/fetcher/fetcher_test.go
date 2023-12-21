@@ -177,7 +177,7 @@ func (f *FetcherTestSuite) SetupSuite() {
 	})
 
 	f.storagesvcURL, err = f.framework.GetServiceURL("storagesvc")
-	require.NoError(f.T(), err, "error getting storage service URL: %v", err)
+	require.NoError(f.T(), err, "error getting storage service URL: %w", err)
 
 }
 
@@ -207,7 +207,7 @@ func (f *FetcherTestSuite) TestFetcherDeploymentType() {
 
 		return false, nil
 	})
-	require.NoError(f.T(), err, "error while waiting for package build to succeed:%v", err)
+	require.NoError(f.T(), err, "error while waiting for package build to succeed:%w", err)
 
 	_, err = cli.ExecCommand(f.framework, f.ctx, "function", "create", "--name", testDeployFuncName, "--pkg", testDeployPkg, "--entrypoint", "hello.main")
 	require.NoError(f.T(), err)
@@ -258,7 +258,7 @@ func (f *FetcherTestSuite) TestFetcherURLType() {
 
 		return false, nil
 	})
-	require.NoError(f.T(), err, "error while waiting for package build to succeed:%v", err)
+	require.NoError(f.T(), err, "error while waiting for package build to succeed:%w", err)
 
 	_, err = cli.ExecCommand(f.framework, f.ctx, "function", "create", "--name", testDeployFuncName, "--pkg", testDeployPkg, "--entrypoint", "hello.main")
 	require.NoError(f.T(), err)
@@ -379,7 +379,7 @@ func (f *FetcherTestSuite) TestFetcherSpecialize() {
 
 		return false, nil
 	})
-	require.NoError(f.T(), err, "error while waiting for package build to succeed:%v", err)
+	require.NoError(f.T(), err, "error while waiting for package build to succeed:%w", err)
 
 	_, err = cli.ExecCommand(f.framework, f.ctx, "function", "create", "--name", testDeployFuncName, "--pkg", testDeployPkg, "--entrypoint", "hello.main")
 	require.NoError(f.T(), err)
@@ -509,40 +509,40 @@ func (f *FetcherTestSuite) TearDownSuite() {
 	require.NoError(f.T(), err, "error removing fetcher cfgMaps directory")
 
 	err = os.RemoveAll(f.secretsDir)
-	require.NoError(f.T(), err, "error removing fetcher shared vol directory")
+	require.NoError(f.T(), err, "error removing fetcher secrets vol directory")
 }
 
 func (f *FetcherTestSuite) createFetcherTestDirs() error {
 
 	cfgMapsDir, err := os.MkdirTemp("/tmp", "fetcher-cfgmaps")
 	if err != nil {
-		return fmt.Errorf("error creating temp directory for config maps: %v", err)
+		return fmt.Errorf("error creating temp directory for config maps: %w", err)
 	}
 
 	f.cfgMapsDir = cfgMapsDir
 
 	secretsDir, err := os.MkdirTemp("/tmp", "fetcher-secrets")
 	if err != nil {
-		return fmt.Errorf("error creating temp directory for config maps: %v", err)
+		return fmt.Errorf("error creating temp directory for config maps: %w", err)
 	}
 
 	f.secretsDir = secretsDir
 
 	shareVolDir, err := os.MkdirTemp("/tmp", "fetcher-shared")
 	if err != nil {
-		return fmt.Errorf("error creating temp directory for config maps: %v", err)
+		return fmt.Errorf("error creating temp directory for config maps: %w", err)
 	}
 	f.sharedVolDir = shareVolDir
 
 	file, err := os.Create(shareVolDir + "/hello.js")
 	if err != nil {
-		return fmt.Errorf("error creating test file in shared volume directory: %v", err)
+		return fmt.Errorf("error creating test file in shared volume directory: %w", err)
 	}
 	defer file.Close()
 
 	_, err = file.Write([]byte(testFileData))
 	if err != nil {
-		return fmt.Errorf("error writing data to test file in shared volume directory: %v", err)
+		return fmt.Errorf("error writing data to test file in shared volume directory: %w", err)
 	}
 
 	return nil
@@ -552,31 +552,31 @@ func (f *FetcherTestSuite) setupPodInfoMountDir() error {
 
 	podInfoDir, err := os.MkdirTemp("/tmp", "fetcher-pod-info")
 	if err != nil {
-		return fmt.Errorf("error creating temp directory for fetcher pod info: %v", err)
+		return fmt.Errorf("error creating temp directory for fetcher pod info: %w", err)
 	}
 
 	f.podInfoDir = podInfoDir
 
 	podNameFile, err := os.Create(podInfoDir + "/name")
 	if err != nil {
-		return fmt.Errorf("error creating name file in fetcher pod info directory: %v", err)
+		return fmt.Errorf("error creating name file in fetcher pod info directory: %w", err)
 	}
 	defer podNameFile.Close()
 
 	_, err = podNameFile.Write([]byte("test"))
 	if err != nil {
-		return fmt.Errorf("error writing data in name file in fetcher pod info directory: %v", err)
+		return fmt.Errorf("error writing data in name file in fetcher pod info directory: %w", err)
 	}
 
 	podNamespaceFile, err := os.Create(podInfoDir + "/namespace")
 	if err != nil {
-		return fmt.Errorf("error creating namespace file in fetcher pod info directory: %v", err)
+		return fmt.Errorf("error creating namespace file in fetcher pod info directory: %w", err)
 	}
 	defer podNamespaceFile.Close()
 
 	_, err = podNamespaceFile.Write([]byte("test-ns"))
 	if err != nil {
-		return fmt.Errorf("error writing data in namespace file in fetcher pod info directory: %v", err)
+		return fmt.Errorf("error writing data in namespace file in fetcher pod info directory: %w", err)
 	}
 
 	return nil
