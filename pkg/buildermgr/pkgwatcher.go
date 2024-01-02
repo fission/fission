@@ -30,6 +30,7 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/cache"
+	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/manager"
@@ -45,7 +46,7 @@ type (
 		podInformer   map[string]k8sCache.SharedIndexInformer
 		pkgInformer   map[string]k8sCache.SharedIndexInformer
 		storageSvcUrl string
-		buildCache    *cache.Cache
+		buildCache    *cache.Cache[crd.CacheKeyUR, *fv1.Package]
 	}
 )
 
@@ -60,13 +61,13 @@ func makePackageWatcher(logger *zap.Logger, fissionClient versioned.Interface, k
 		podInformer:   podInformer,
 		pkgInformer:   pkgInformer,
 		storageSvcUrl: storageSvcUrl,
-		buildCache:    cache.MakeCache(0, 0),
+		buildCache:    cache.MakeCache[crd.CacheKeyUR, *fv1.Package](0, 0),
 	}
 	return pkgw
 }
 
-func (pkgw *packageWatcher) buildCacheKey(obj metav1.ObjectMeta) string {
-	return fmt.Sprintf("%s-%s-%s", obj.Namespace, obj.Name, obj.ResourceVersion)
+func (pkgw *packageWatcher) buildCacheKey(obj metav1.ObjectMeta) crd.CacheKeyUR {
+	return crd.CacheKeyURFromMeta(&obj)
 }
 
 func (pkgw *packageWatcher) buildWithCache(ctx context.Context, srcpkg *fv1.Package) {
@@ -90,33 +91,33 @@ func (pkgw *packageWatcher) buildWithCache(ctx context.Context, srcpkg *fv1.Pack
 // 6. Update package status to succeed state
 // *. Update package status to failed state,if any one of steps above failed/time out
 func (pkgw *packageWatcher) build(ctx context.Context, srcpkg *fv1.Package) {
+	key := pkgw.buildCacheKey(srcpkg.ObjectMeta)
+	logger := pkgw.logger.With(zap.String("package", srcpkg.Name), zap.String("namespace", srcpkg.Namespace), zap.String("resource_version", srcpkg.ResourceVersion), zap.String("key", key.String()))
+
 	defer func() {
-		key := pkgw.buildCacheKey(srcpkg.ObjectMeta)
 		err := pkgw.buildCache.Delete(key)
 		if err != nil {
-			pkgw.logger.Error("error deleting key from cache", zap.String("key", key), zap.Error(err))
+			logger.Error("error deleting key from cache", zap.Any("key", key), zap.Error(err))
 		}
 	}()
 
-	pkgw.logger.Info("starting build for package", zap.String("package_name", srcpkg.ObjectMeta.Name), zap.String("resource_version", srcpkg.ObjectMeta.ResourceVersion))
+	logger.Info("starting build for package")
 
-	pkg, err := updatePackage(ctx, pkgw.logger, pkgw.fissionClient, srcpkg, fv1.BuildStatusRunning, "", nil)
+	pkg, err := updatePackage(ctx, logger, pkgw.fissionClient, srcpkg, fv1.BuildStatusRunning, "", nil)
 	if err != nil {
-		pkgw.logger.Error("error setting package pending state", zap.Error(err))
+		logger.Error("error setting package pending state", zap.Error(err))
 		return
 	}
 
 	env, err := pkgw.fissionClient.CoreV1().Environments(pkg.Spec.Environment.Namespace).Get(ctx, pkg.Spec.Environment.Name, metav1.GetOptions{})
 	if k8serrors.IsNotFound(err) {
 		e := "environment does not exist"
-		pkgw.logger.Error(e, zap.String("environment", pkg.Spec.Environment.Name))
-		_, er := updatePackage(ctx, pkgw.logger, pkgw.fissionClient, pkg,
+		logger.Error(e, zap.String("environment", pkg.Spec.Environment.Name))
+		_, er := updatePackage(ctx, logger, pkgw.fissionClient, pkg,
 			fv1.BuildStatusFailed, fmt.Sprintf("%s: %q", e, pkg.Spec.Environment.Name), nil)
 		if er != nil {
-			pkgw.logger.Error(
+			logger.Error(
 				"error updating package",
-				zap.String("package_name", pkg.ObjectMeta.Name),
-				zap.String("resource_version", pkg.ObjectMeta.ResourceVersion),
 				zap.Error(er),
 			)
 		}
@@ -127,6 +128,8 @@ func (pkgw *packageWatcher) build(ctx context.Context, srcpkg *fv1.Package) {
 	healthCheckBackOff := utils.NewDefaultBackOff()
 	builderNs := pkgw.nsResolver.GetBuilderNS(env.ObjectMeta.Namespace)
 
+	logger = logger.With(zap.String("environment", env.Name), zap.String("builder_namespace", builderNs), zap.String("environment_namespace", env.Namespace))
+
 	// if err != nil {
 	//	pkgw.logger.Error("Unable to create BackOff for Health Check", zap.Error(err))
 	//}
@@ -136,12 +139,12 @@ func (pkgw *packageWatcher) build(ctx context.Context, srcpkg *fv1.Package) {
 		// iterate all available environment builders.
 		items := pkgw.podInformer[builderNs].GetStore().List()
 		if err != nil {
-			pkgw.logger.Error("error retrieving pod information for environment", zap.Error(err), zap.String("environment", env.ObjectMeta.Name))
+			logger.Error("error retrieving pod information for environment", zap.Error(err))
 			return
 		}
 
 		if len(items) == 0 {
-			pkgw.logger.Info("builder pod does not exist for environment, will retry again later", zap.String("environment", pkg.Spec.Environment.Name))
+			logger.Info("builder pod does not exist for environment, will retry again later")
 			time.Sleep(healthCheckBackOff.GetCurrentBackoffDuration())
 			continue
 		}
@@ -165,27 +168,22 @@ func (pkgw *packageWatcher) build(ctx context.Context, srcpkg *fv1.Package) {
 			}
 
 			if !podIsReady {
-				pkgw.logger.Info("builder pod is not ready for environment, will retry again later", zap.String("environment", pkg.Spec.Environment.Name))
+				logger.Info("builder pod is not ready for environment, will retry again later")
 				time.Sleep(healthCheckBackOff.GetCurrentBackoffDuration())
 				break
 			}
 
 			uploadResp, buildLogs, err := buildPackage(ctx, pkgw.logger, pkgw.fissionClient, builderNs, pkgw.storageSvcUrl, pkg)
 			if err != nil {
-				pkgw.logger.Error("error building package", zap.Error(err), zap.String("package_name", pkg.ObjectMeta.Name))
-				_, er := updatePackage(ctx, pkgw.logger, pkgw.fissionClient, pkg, fv1.BuildStatusFailed, buildLogs, nil)
+				logger.Error("error building package", zap.Error(err))
+				_, er := updatePackage(ctx, logger, pkgw.fissionClient, pkg, fv1.BuildStatusFailed, buildLogs, nil)
 				if er != nil {
-					pkgw.logger.Error(
-						"error updating package",
-						zap.String("package_name", pkg.ObjectMeta.Name),
-						zap.String("resource_version", pkg.ObjectMeta.ResourceVersion),
-						zap.Error(er),
-					)
+					logger.Error("error updating package", zap.Error(er))
 				}
 				return
 			}
 
-			pkgw.logger.Info("starting package info update", zap.String("package_name", pkg.ObjectMeta.Name))
+			logger.Info("starting package info update")
 
 			fnList, err := pkgw.fissionClient.CoreV1().
 				Functions(pkg.Namespace).List(ctx, metav1.ListOptions{})
@@ -197,8 +195,6 @@ func (pkgw *packageWatcher) build(ctx context.Context, srcpkg *fv1.Package) {
 				if er != nil {
 					pkgw.logger.Error(
 						"error updating package",
-						zap.String("package_name", pkg.ObjectMeta.Name),
-						zap.String("resource_version", pkg.ObjectMeta.ResourceVersion),
 						zap.Error(er),
 					)
 				}
@@ -215,57 +211,41 @@ func (pkgw *packageWatcher) build(ctx context.Context, srcpkg *fv1.Package) {
 					_, err = pkgw.fissionClient.CoreV1().Functions(fn.ObjectMeta.Namespace).Update(ctx, &fn, metav1.UpdateOptions{})
 					if err != nil {
 						e := "error updating function package resource version"
-						pkgw.logger.Error(e, zap.Error(err))
+						logger.Error(e, zap.Error(err))
 						buildLogs += fmt.Sprintf("%s: %v\n", e, err)
-						_, er := updatePackage(ctx, pkgw.logger, pkgw.fissionClient, pkg, fv1.BuildStatusFailed, buildLogs, nil)
+						_, er := updatePackage(ctx, logger, pkgw.fissionClient, pkg, fv1.BuildStatusFailed, buildLogs, nil)
 						if er != nil {
-							pkgw.logger.Error(
-								"error updating package",
-								zap.String("package_name", pkg.ObjectMeta.Name),
-								zap.String("resource_version", pkg.ObjectMeta.ResourceVersion),
-								zap.Error(er),
-							)
+							logger.Error("error updating package", zap.Error(er))
 						}
 						return
 					}
 				}
 			}
 
-			_, err = updatePackage(ctx, pkgw.logger, pkgw.fissionClient, pkg,
+			_, err = updatePackage(ctx, logger, pkgw.fissionClient, pkg,
 				fv1.BuildStatusSucceeded, buildLogs, uploadResp)
 			if err != nil {
-				pkgw.logger.Error("error updating package info", zap.Error(err), zap.String("package_name", pkg.ObjectMeta.Name))
-				_, er := updatePackage(ctx, pkgw.logger, pkgw.fissionClient, pkg, fv1.BuildStatusFailed, buildLogs, nil)
+				logger.Error("error updating package info", zap.Error(err))
+				_, er := updatePackage(ctx, logger, pkgw.fissionClient, pkg, fv1.BuildStatusFailed, buildLogs, nil)
 				if er != nil {
-					pkgw.logger.Error(
-						"error updating package",
-						zap.String("package_name", pkg.ObjectMeta.Name),
-						zap.String("resource_version", pkg.ObjectMeta.ResourceVersion),
-						zap.Error(er),
-					)
+					logger.Error("error updating package", zap.Error(er))
 				}
 				return
 			}
 
-			pkgw.logger.Info("completed package build request", zap.String("package_name", pkg.ObjectMeta.Name))
+			logger.Info("completed package build request")
 			return
 		}
 		time.Sleep(healthCheckBackOff.GetNext())
 	}
 	// build timeout
-	_, err = updatePackage(ctx, pkgw.logger, pkgw.fissionClient, pkg,
+	_, err = updatePackage(ctx, logger, pkgw.fissionClient, pkg,
 		fv1.BuildStatusFailed, "Build timeout due to environment builder not ready", nil)
 	if err != nil {
-		pkgw.logger.Error(
-			"error updating package",
-			zap.String("package_name", pkg.ObjectMeta.Name),
-			zap.String("resource_version", pkg.ObjectMeta.ResourceVersion),
-			zap.Error(err),
-		)
+		logger.Error("error updating package", zap.Error(err))
 	}
 
-	pkgw.logger.Error("max retries exceeded in building source package, timeout due to environment builder not ready",
-		zap.String("package", fmt.Sprintf("%s.%s", pkg.ObjectMeta.Name, pkg.ObjectMeta.Namespace)))
+	logger.Error("max retries exceeded in building source package, timeout due to environment builder not ready")
 }
 
 func (pkgw *packageWatcher) packageInformerHandler(ctx context.Context) k8sCache.ResourceEventHandlerFuncs {

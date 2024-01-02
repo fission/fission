@@ -78,7 +78,7 @@ type (
 		nsResolver       *utils.NamespaceResolver
 
 		fissionClient  versioned.Interface
-		functionEnv    *cache.Cache
+		functionEnv    *cache.Cache[crd.CacheKeyUR, *fv1.Environment]
 		fsCache        *fscache.FunctionServiceCache
 		instanceID     string
 		requestChannel chan *request
@@ -147,7 +147,7 @@ func MakeGenericPoolManager(ctx context.Context,
 		nsResolver:                 utils.DefaultNSResolver(),
 		metricsClient:              metricsClient,
 		fissionClient:              fissionClient,
-		functionEnv:                cache.MakeCache(10*time.Second, 0),
+		functionEnv:                cache.MakeCache[crd.CacheKeyUR, *fv1.Environment](10*time.Second, 0),
 		fsCache:                    fscache.MakeFunctionServiceCache(gpmLogger),
 		instanceID:                 instanceID,
 		requestChannel:             make(chan *request),
@@ -595,8 +595,7 @@ func (gpm *GenericPoolManager) getFunctionEnv(ctx context.Context, fn *fv1.Funct
 	// TODO: the cache should be able to search by <env name, fn namespace> instead of function metadata.
 	result, err := gpm.functionEnv.Get(crd.CacheKeyURFromMeta(&fn.ObjectMeta))
 	if err == nil {
-		env = result.(*fv1.Environment)
-		return env, nil
+		return result, nil
 	}
 
 	// Get env from controller
