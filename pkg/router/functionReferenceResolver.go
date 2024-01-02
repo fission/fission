@@ -215,9 +215,5 @@ func (frr *functionReferenceResolver) delete(namespace string, triggerName, trig
 }
 
 func (frr *functionReferenceResolver) copy() map[namespacedTriggerReference]resolveResult {
-	cache := make(map[namespacedTriggerReference]resolveResult)
-	for k, v := range frr.refCache.Copy() {
-		cache[k] = v
-	}
-	return cache
+	return frr.refCache.Copy()
 }
