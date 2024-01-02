@@ -27,7 +27,7 @@ import (
 
 type (
 	canaryConfigCancelFuncMap struct {
-		cache *cache.Cache[metadataKey, *CanaryProcessingInfo] // map[metadataKey]*context.Context
+		cache *cache.Cache[metadataKey, *CanaryProcessingInfo]
 	}
 
 	// metav1.ObjectMeta is not hashable, so we make a hashable copy

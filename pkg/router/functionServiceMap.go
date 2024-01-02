@@ -29,7 +29,7 @@ import (
 type (
 	functionServiceMap struct {
 		logger *zap.Logger
-		cache  *cache.Cache[metadataKey, *url.URL] // map[metadataKey]*url.URL
+		cache  *cache.Cache[metadataKey, *url.URL]
 	}
 
 	// metav1.ObjectMeta is not hashable, so we make a hashable copy

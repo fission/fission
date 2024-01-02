@@ -68,12 +68,12 @@ type (
 	// FunctionServiceCache represents the function service cache
 	FunctionServiceCache struct {
 		logger            *zap.Logger
-		byFunction        *cache.Cache[crd.CacheKeyUR, *FuncSvc]     // function-key -> funcSvc  : map[string]*funcSvc
-		byAddress         *cache.Cache[string, metav1.ObjectMeta]    // address      -> function : map[string]metav1.ObjectMeta
-		byFunctionUID     *cache.Cache[types.UID, metav1.ObjectMeta] // function uid -> function : map[string]metav1.ObjectMeta
-		connFunctionCache *PoolCache                                 // function-key -> funcSvc : map[string]*funcSvc
-		PodToFsvc         sync.Map                                   // pod-name -> funcSvc: map[string]*FuncSvc
-		WebsocketFsvc     sync.Map                                   // funcSvc-name -> bool: map[string]bool
+		byFunction        *cache.Cache[crd.CacheKeyUR, *FuncSvc]
+		byAddress         *cache.Cache[string, metav1.ObjectMeta]
+		byFunctionUID     *cache.Cache[types.UID, metav1.ObjectMeta]
+		connFunctionCache *PoolCache // function-key -> funcSvc : map[string]*funcSvc
+		PodToFsvc         sync.Map   // pod-name -> funcSvc: map[string]*FuncSvc
+		WebsocketFsvc     sync.Map   // funcSvc-name -> bool: map[string]bool
 		requestChannel    chan *fscRequest
 	}
 
