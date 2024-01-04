@@ -34,33 +34,33 @@ const (
 )
 
 type (
-	Value struct {
+	Value[V any] struct {
 		ctime time.Time
 		atime time.Time
-		value interface{}
+		value V
 	}
-	Cache struct {
-		cache          map[interface{}]*Value
+	Cache[K comparable, V any] struct {
+		cache          map[K]*Value[V]
 		ctimeExpiry    time.Duration
 		atimeExpiry    time.Duration
-		requestChannel chan *request
+		requestChannel chan *request[K, V]
 	}
 
-	request struct {
+	request[K comparable, V any] struct {
 		requestType
-		key             interface{}
-		value           interface{}
-		responseChannel chan *response
+		key             K
+		value           V
+		responseChannel chan *response[K, V]
 	}
-	response struct {
+	response[K comparable, V any] struct {
 		error
-		existingValue interface{}
-		mapCopy       map[interface{}]interface{}
-		value         interface{}
+		existingValue V
+		mapCopy       map[K]V
+		value         V
 	}
 )
 
-func (c *Cache) IsOld(v *Value) bool {
+func (c *Cache[K, V]) IsOld(v *Value[V]) bool {
 	if (c.ctimeExpiry != time.Duration(0)) && (time.Since(v.ctime) > c.ctimeExpiry) {
 		return true
 	}
@@ -72,12 +72,12 @@ func (c *Cache) IsOld(v *Value) bool {
 	return false
 }
 
-func MakeCache(ctimeExpiry, atimeExpiry time.Duration) *Cache {
-	c := &Cache{
-		cache:          make(map[interface{}]*Value),
+func MakeCache[K comparable, V any](ctimeExpiry, atimeExpiry time.Duration) *Cache[K, V] {
+	c := &Cache[K, V]{
+		cache:          make(map[K]*Value[V]),
 		ctimeExpiry:    ctimeExpiry,
 		atimeExpiry:    atimeExpiry,
-		requestChannel: make(chan *request),
+		requestChannel: make(chan *request[K, V]),
 	}
 	go c.service()
 	if ctimeExpiry != time.Duration(0) || atimeExpiry != time.Duration(0) {
@@ -86,10 +86,10 @@ func MakeCache(ctimeExpiry, atimeExpiry time.Duration) *Cache {
 	return c
 }
 
-func (c *Cache) service() {
+func (c *Cache[K, V]) service() {
 	for {
 		req := <-c.requestChannel
-		resp := &response{}
+		resp := &response[K, V]{}
 		switch req.requestType {
 		case GET:
 			val, ok := c.cache[req.key]
@@ -115,7 +115,7 @@ func (c *Cache) service() {
 				resp.existingValue = val.value
 				resp.error = ferror.MakeError(ferror.ErrorNameExists, "key already exists")
 			} else {
-				c.cache[req.key] = &Value{
+				c.cache[req.key] = &Value[V]{
 					value: req.value,
 					ctime: now,
 					atime: now,
@@ -133,7 +133,7 @@ func (c *Cache) service() {
 			}
 			// no response
 		case COPY:
-			resp.mapCopy = make(map[interface{}]interface{})
+			resp.mapCopy = make(map[K]V)
 			for k, v := range c.cache {
 				resp.mapCopy[k] = v.value
 			}
@@ -146,9 +146,9 @@ func (c *Cache) service() {
 	}
 }
 
-func (c *Cache) Get(key interface{}) (interface{}, error) {
-	respChannel := make(chan *response)
-	c.requestChannel <- &request{
+func (c *Cache[K, V]) Get(key K) (V, error) {
+	respChannel := make(chan *response[K, V])
+	c.requestChannel <- &request[K, V]{
 		requestType:     GET,
 		key:             key,
 		responseChannel: respChannel,
@@ -159,9 +159,9 @@ func (c *Cache) Get(key interface{}) (interface{}, error) {
 
 // if key exists in the cache, the new value is NOT set; instead an
 // error and the old value are returned
-func (c *Cache) Set(key interface{}, value interface{}) (interface{}, error) {
-	respChannel := make(chan *response)
-	c.requestChannel <- &request{
+func (c *Cache[K, V]) Set(key K, value V) (V, error) {
+	respChannel := make(chan *response[K, V])
+	c.requestChannel <- &request[K, V]{
 		requestType:     SET,
 		key:             key,
 		value:           value,
@@ -171,9 +171,9 @@ func (c *Cache) Set(key interface{}, value interface{}) (interface{}, error) {
 	return resp.existingValue, resp.error
 }
 
-func (c *Cache) Delete(key interface{}) error {
-	respChannel := make(chan *response)
-	c.requestChannel <- &request{
+func (c *Cache[K, V]) Delete(key K) error {
+	respChannel := make(chan *response[K, V])
+	c.requestChannel <- &request[K, V]{
 		requestType:     DELETE,
 		key:             key,
 		responseChannel: respChannel,
@@ -182,9 +182,9 @@ func (c *Cache) Delete(key interface{}) error {
 	return resp.error
 }
 
-func (c *Cache) Copy() map[interface{}]interface{} {
-	respChannel := make(chan *response)
-	c.requestChannel <- &request{
+func (c *Cache[K, V]) Copy() map[K]V {
+	respChannel := make(chan *response[K, V])
+	c.requestChannel <- &request[K, V]{
 		requestType:     COPY,
 		responseChannel: respChannel,
 	}
@@ -192,10 +192,10 @@ func (c *Cache) Copy() map[interface{}]interface{} {
 	return resp.mapCopy
 }
 
-func (c *Cache) expiryService() {
+func (c *Cache[K, V]) expiryService() {
 	for {
 		time.Sleep(time.Minute)
-		c.requestChannel <- &request{
+		c.requestChannel <- &request[K, V]{
 			requestType: EXPIRE,
 		}
 	}

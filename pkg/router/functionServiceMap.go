@@ -29,7 +29,7 @@ import (
 type (
 	functionServiceMap struct {
 		logger *zap.Logger
-		cache  *cache.Cache // map[metadataKey]*url.URL
+		cache  *cache.Cache[metadataKey, *url.URL]
 	}
 
 	// metav1.ObjectMeta is not hashable, so we make a hashable copy
@@ -44,7 +44,7 @@ type (
 func makeFunctionServiceMap(logger *zap.Logger, expiry time.Duration) *functionServiceMap {
 	return &functionServiceMap{
 		logger: logger.Named("function_service_map"),
-		cache:  cache.MakeCache(expiry, 0),
+		cache:  cache.MakeCache[metadataKey, *url.URL](expiry, 0),
 	}
 }
 
@@ -62,15 +62,14 @@ func (fmap *functionServiceMap) lookup(f *metav1.ObjectMeta) (*url.URL, error) {
 	if err != nil {
 		return nil, err
 	}
-	u := item.(*url.URL)
-	return u, nil
+	return item, nil
 }
 
 func (fmap *functionServiceMap) assign(f *metav1.ObjectMeta, serviceURL *url.URL) {
 	mk := keyFromMetadata(f)
 	old, err := fmap.cache.Set(*mk, serviceURL)
 	if err != nil {
-		if *serviceURL == *(old.(*url.URL)) {
+		if *serviceURL == *old {
 			return
 		}
 		fmap.logger.Error("error caching service url for function with a different value", zap.Error(err))

@@ -34,7 +34,7 @@ type (
 	// reference into a resolveResult
 	functionReferenceResolver struct {
 		// FunctionReference -> function metadata
-		refCache     *cache.Cache
+		refCache     *cache.Cache[namespacedTriggerReference, resolveResult]
 		funcInformer map[string]k8sCache.SharedIndexInformer
 		logger       *zap.Logger
 		// store    k8sCache.Store
@@ -73,7 +73,7 @@ const (
 
 func makeFunctionReferenceResolver(logger *zap.Logger, funcInformer map[string]k8sCache.SharedIndexInformer) *functionReferenceResolver {
 	frr := &functionReferenceResolver{
-		refCache:     cache.MakeCache(time.Minute, 0),
+		refCache:     cache.MakeCache[namespacedTriggerReference, resolveResult](time.Minute, 0),
 		funcInformer: funcInformer,
 		logger:       logger.Named("function_ref_resolver"),
 	}
@@ -89,9 +89,8 @@ func (frr *functionReferenceResolver) resolve(trigger fv1.HTTPTrigger) (*resolve
 	}
 
 	// check cache
-	rrInt, err := frr.refCache.Get(nfr)
+	result, err := frr.refCache.Get(nfr)
 	if err == nil {
-		result := rrInt.(resolveResult)
 		return &result, nil
 	}
 
@@ -216,11 +215,5 @@ func (frr *functionReferenceResolver) delete(namespace string, triggerName, trig
 }
 
 func (frr *functionReferenceResolver) copy() map[namespacedTriggerReference]resolveResult {
-	cache := make(map[namespacedTriggerReference]resolveResult)
-	for k, v := range frr.refCache.Copy() {
-		key := k.(namespacedTriggerReference)
-		val := v.(resolveResult)
-		cache[key] = val
-	}
-	return cache
+	return frr.refCache.Copy()
 }

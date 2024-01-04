@@ -29,7 +29,7 @@ func checkErr(err error) {
 }
 
 func TestCache(t *testing.T) {
-	c := MakeCache(100*time.Millisecond, 100*time.Millisecond)
+	c := MakeCache[string, string](100*time.Millisecond, 100*time.Millisecond)
 
 	_, err := c.Set("a", "b")
 	checkErr(err)

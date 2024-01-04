@@ -27,7 +27,7 @@ import (
 
 type (
 	canaryConfigCancelFuncMap struct {
-		cache *cache.Cache // map[metadataKey]*context.Context
+		cache *cache.Cache[metadataKey, *CanaryProcessingInfo]
 	}
 
 	// metav1.ObjectMeta is not hashable, so we make a hashable copy
@@ -45,7 +45,7 @@ type (
 
 func makecanaryConfigCancelFuncMap() *canaryConfigCancelFuncMap {
 	return &canaryConfigCancelFuncMap{
-		cache: cache.MakeCache(0, 0),
+		cache: cache.MakeCache[metadataKey, *CanaryProcessingInfo](0, 0),
 	}
 }
 
@@ -62,8 +62,7 @@ func (cancelFuncMap *canaryConfigCancelFuncMap) lookup(f *metav1.ObjectMeta) (*C
 	if err != nil {
 		return nil, err
 	}
-	value := item.(*CanaryProcessingInfo)
-	return value, nil
+	return item, nil
 }
 
 func (cancelFuncMap *canaryConfigCancelFuncMap) assign(f *metav1.ObjectMeta, value *CanaryProcessingInfo) error {

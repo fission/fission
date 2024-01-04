@@ -68,12 +68,12 @@ type (
 	// FunctionServiceCache represents the function service cache
 	FunctionServiceCache struct {
 		logger            *zap.Logger
-		byFunction        *cache.Cache // function-key -> funcSvc  : map[string]*funcSvc
-		byAddress         *cache.Cache // address      -> function : map[string]metav1.ObjectMeta
-		byFunctionUID     *cache.Cache // function uid -> function : map[string]metav1.ObjectMeta
-		connFunctionCache *PoolCache   // function-key -> funcSvc : map[string]*funcSvc
-		PodToFsvc         sync.Map     // pod-name -> funcSvc: map[string]*FuncSvc
-		WebsocketFsvc     sync.Map     // funcSvc-name -> bool: map[string]bool
+		byFunction        *cache.Cache[crd.CacheKeyUR, *FuncSvc]
+		byAddress         *cache.Cache[string, metav1.ObjectMeta]
+		byFunctionUID     *cache.Cache[types.UID, metav1.ObjectMeta]
+		connFunctionCache *PoolCache // function-key -> funcSvc : map[string]*funcSvc
+		PodToFsvc         sync.Map   // pod-name -> funcSvc: map[string]*FuncSvc
+		WebsocketFsvc     sync.Map   // funcSvc-name -> bool: map[string]bool
 		requestChannel    chan *fscRequest
 	}
 
@@ -110,9 +110,9 @@ func IsNameExistError(err error) bool {
 func MakeFunctionServiceCache(logger *zap.Logger) *FunctionServiceCache {
 	fsc := &FunctionServiceCache{
 		logger:            logger.Named("function_service_cache"),
-		byFunction:        cache.MakeCache(0, 0),
-		byAddress:         cache.MakeCache(0, 0),
-		byFunctionUID:     cache.MakeCache(0, 0),
+		byFunction:        cache.MakeCache[crd.CacheKeyUR, *FuncSvc](0, 0),
+		byAddress:         cache.MakeCache[string, metav1.ObjectMeta](0, 0),
+		byFunctionUID:     cache.MakeCache[types.UID, metav1.ObjectMeta](0, 0),
 		connFunctionCache: NewPoolCache(logger.Named("conn_function_cache")),
 		requestChannel:    make(chan *fscRequest),
 	}
@@ -132,14 +132,12 @@ func (fsc *FunctionServiceCache) service() {
 			// get svcs idle for > req.age
 			fscs := fsc.byFunctionUID.Copy()
 			funcObjects := make([]*FuncSvc, 0)
-			for _, funcSvc := range fscs {
-				mI := funcSvc.(metav1.ObjectMeta)
-				fsvcI, err := fsc.byFunction.Get(crd.CacheKeyURFromMeta(&mI))
+			for _, m := range fscs {
+				fsvc, err := fsc.byFunction.Get(crd.CacheKeyURFromMeta(&m))
 				if err != nil {
 					fsc.logger.Error("error while getting service", zap.String("error", err.Error()))
 					return
 				}
-				fsvc := fsvcI.(*FuncSvc)
 				if time.Since(fsvc.Atime) > req.age {
 					funcObjects = append(funcObjects, fsvc)
 				}
@@ -149,8 +147,7 @@ func (fsc *FunctionServiceCache) service() {
 			fsc.logger.Info("dumping function service cache")
 			funcCopy := fsc.byFunction.Copy()
 			info := []string{}
-			for key, fsvcI := range funcCopy {
-				fsvc := fsvcI.(*FuncSvc)
+			for key, fsvc := range funcCopy {
 				for _, kubeObj := range fsvc.KubernetesObjects {
 					info = append(info, fmt.Sprintf("%v\t%v\t%v", key, kubeObj.Kind, kubeObj.Name))
 				}
@@ -196,13 +193,12 @@ func (fsc *FunctionServiceCache) DumpDebugInfo(ctx context.Context) error {
 func (fsc *FunctionServiceCache) GetByFunction(m *metav1.ObjectMeta) (*FuncSvc, error) {
 	key := crd.CacheKeyURFromMeta(m)
 
-	fsvcI, err := fsc.byFunction.Get(key)
+	fsvc, err := fsc.byFunction.Get(key)
 	if err != nil {
 		return nil, err
 	}
 
 	// update atime
-	fsvc := fsvcI.(*FuncSvc)
 	fsvc.Atime = time.Now()
 
 	fsvcCopy := *fsvc
@@ -228,20 +224,17 @@ func (fsc *FunctionServiceCache) GetFuncSvc(ctx context.Context, m *metav1.Objec
 
 // GetByFunctionUID gets a function service from cache using function UUID.
 func (fsc *FunctionServiceCache) GetByFunctionUID(uid types.UID) (*FuncSvc, error) {
-	mI, err := fsc.byFunctionUID.Get(uid)
+	m, err := fsc.byFunctionUID.Get(uid)
 	if err != nil {
 		return nil, err
 	}
 
-	m := mI.(metav1.ObjectMeta)
-
-	fsvcI, err := fsc.byFunction.Get(crd.CacheKeyURFromMeta(&m))
+	fsvc, err := fsc.byFunction.Get(crd.CacheKeyURFromMeta(&m))
 	if err != nil {
 		return nil, err
 	}
 
 	// update atime
-	fsvc := fsvcI.(*FuncSvc)
 	fsvc.Atime = time.Now()
 
 	fsvcCopy := *fsvc
@@ -279,12 +272,11 @@ func (fsc *FunctionServiceCache) Add(fsvc FuncSvc) (*FuncSvc, error) {
 	existing, err := fsc.byFunction.Set(crd.CacheKeyURFromMeta(fsvc.Function), &fsvc)
 	if err != nil {
 		if IsNameExistError(err) {
-			f := existing.(*FuncSvc)
-			err2 := fsc.TouchByAddress(f.Address)
+			err2 := fsc.TouchByAddress(existing.Address)
 			if err2 != nil {
 				return nil, err2
 			}
-			fCopy := *f
+			fCopy := *existing
 			return &fCopy, nil
 		}
 		return nil, err
@@ -333,16 +325,14 @@ func (fsc *FunctionServiceCache) TouchByAddress(address string) error {
 }
 
 func (fsc *FunctionServiceCache) _touchByAddress(address string) error {
-	mI, err := fsc.byAddress.Get(address)
+	m, err := fsc.byAddress.Get(address)
 	if err != nil {
 		return err
 	}
-	m := mI.(metav1.ObjectMeta)
-	fsvcI, err := fsc.byFunction.Get(crd.CacheKeyURFromMeta(&m))
+	fsvc, err := fsc.byFunction.Get(crd.CacheKeyURFromMeta(&m))
 	if err != nil {
 		return err
 	}
-	fsvc := fsvcI.(*FuncSvc)
 	fsvc.Atime = time.Now()
 	return nil
 }
