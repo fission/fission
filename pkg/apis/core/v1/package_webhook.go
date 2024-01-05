@@ -47,7 +47,16 @@ var _ webhook.Defaulter = &Package{}
 func (r *Package) Default() {
 	packagelog.Debug("default", zap.String("name", r.Name))
 	if r.Status.BuildStatus == "" {
-		r.Status.BuildStatus = BuildStatusPending
+		if !r.Spec.Deployment.IsEmpty() {
+			// deployment package exists
+			r.Status.BuildStatus = BuildStatusNone
+		} else if !r.Spec.Source.IsEmpty() {
+			// source package with no deployment is a pending build
+			r.Status.BuildStatus = BuildStatusPending
+		} else {
+			r.Status.BuildStatus = BuildStatusFailed // empty package
+			r.Status.BuildLog = "Both source and deployment are empty"
+		}
 	}
 }
 
