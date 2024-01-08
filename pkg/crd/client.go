@@ -35,6 +35,11 @@ import (
 	"github.com/fission/fission/pkg/utils"
 )
 
+const (
+	EnvKubeClientQps   = "KUBE_CLIENT_QPS"
+	EnvKubeClientBurst = "KUBE_CLIENT_BURST"
+)
+
 type (
 	ClientGeneratorInterface interface {
 		GetRestConfig() (*rest.Config, error)
@@ -60,6 +65,20 @@ func (cg *ClientGenerator) getRestConfig() (*rest.Config, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	qps, _ := utils.GetUIntValueFromEnv(EnvKubeClientQps)
+	burst, _ := utils.GetUIntValueFromEnv(EnvKubeClientBurst)
+
+	// Set QPS and Burst to higher values to avoid throttling
+	if qps == 0 {
+		qps = 200
+	}
+	if burst == 0 {
+		burst = 500
+	}
+	cg.restConfig.QPS = float32(qps)
+	cg.restConfig.Burst = int(burst)
+
 	return cg.restConfig, nil
 }
 
