@@ -162,3 +162,48 @@ func TestGetUIntValueFromEnv(t *testing.T) {
 		})
 	}
 }
+
+func TestGetIntValueFromEnv(t *testing.T) {
+	varName := "TEST_VAR"
+	tests := []struct {
+		name    string
+		value   string
+		want    int
+		wantErr bool
+	}{
+		{
+			name:    "empty string case",
+			value:   "",
+			want:    0,
+			wantErr: true,
+		},
+		{
+			name:    "string case",
+			value:   "test string",
+			want:    0,
+			wantErr: true,
+		},
+		{
+			name:    "not int case",
+			value:   "-100",
+			want:    -100,
+			wantErr: false,
+		},
+		{
+			name:    "int case",
+			value:   "7",
+			want:    7,
+			wantErr: false,
+		}}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			os.Setenv(varName, tt.value)
+			got, err := GetIntValueFromEnv(varName)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("GetIntValueFromEnv() error = %v, wantErr %v, got %d", err, tt.wantErr, got)
+				return
+			}
+		})
+	}
+}

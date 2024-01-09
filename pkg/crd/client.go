@@ -67,7 +67,7 @@ func (cg *ClientGenerator) getRestConfig() (*rest.Config, error) {
 	}
 
 	qps, _ := utils.GetUIntValueFromEnv(EnvKubeClientQps)
-	burst, _ := utils.GetUIntValueFromEnv(EnvKubeClientBurst)
+	burst, _ := utils.GetIntValueFromEnv(EnvKubeClientBurst)
 
 	// Set QPS and Burst to higher values to avoid throttling
 	if qps == 0 {
@@ -77,7 +77,7 @@ func (cg *ClientGenerator) getRestConfig() (*rest.Config, error) {
 		burst = 500
 	}
 	cg.restConfig.QPS = float32(qps)
-	cg.restConfig.Burst = int(burst)
+	cg.restConfig.Burst = burst
 
 	return cg.restConfig, nil
 }
