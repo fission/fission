@@ -232,6 +232,18 @@ func GetUIntValueFromEnv(envVar string) (uint, error) {
 	return uint(value), nil
 }
 
+func GetIntValueFromEnv(envVar string) (int, error) {
+	s, err := GetStringValueFromEnv(envVar)
+	if err != nil {
+		return 0, err
+	}
+	value, err := strconv.Atoi(s)
+	if err != nil {
+		return 0, err
+	}
+	return value, nil
+}
+
 func FindFreePort() (int, error) {
 	listener, err := net.Listen("tcp", ":0")
 	if err != nil {

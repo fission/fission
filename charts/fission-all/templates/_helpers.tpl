@@ -103,6 +103,13 @@ This template generates the image name for the deployment depending on the value
 {{- end }}
 {{- end }}
 
+{{- define "kube_client.envs" }}
+- name: KUBE_CLIENT_QPS
+  value: "{{ .Values.kubernetesClientQPS }}"
+- name: KUBE_CLIENT_BURST
+  value: "{{ .Values.kubernetesClientBurst }}"
+{{- end}}
+
 {{/*
 Define the svc's name
 */}}
