@@ -64,7 +64,7 @@ codegen: controller-gen-install
 
 ### CRDs
 controller-gen-install:
-	go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.13.0
+	go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.14.0
 
 generate-crds: controller-gen-install
 	controller-gen crd \
