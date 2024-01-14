@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.13.0
+    controller-gen.kubebuilder.io/version: v0.14.0
   name: kuberneteswatchtriggers.fission.io
 spec:
   group: fission.io
@@ -21,14 +21,19 @@ spec:
           invokes functions.
         properties:
           apiVersion:
-            description: 'APIVersion defines the versioned schema of this representation
-              of an object. Servers should convert recognized schemas to the latest
-              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
             type: string
           kind:
-            description: 'Kind is a string value representing the REST resource this
-              object represents. Servers may infer this from the endpoint the client
-              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
             type: string
           metadata:
             type: object
@@ -36,27 +41,31 @@ spec:
             description: KubernetesWatchTriggerSpec defines spec of KuberenetesWatchTrigger
             properties:
               functionref:
-                description: The reference to a function for kubewatcher to invoke
-                  with when receiving events.
+                description: |-
+                  The reference to a function for kubewatcher to invoke with
+                  when receiving events.
                 properties:
                   functionweights:
                     additionalProperties:
                       type: integer
-                    description: Function Reference by weight. this map contains function
-                      name as key and its weight as the value. This is for canary
-                      upgrade purpose.
+                    description: |-
+                      Function Reference by weight. this map contains function name as key and its weight
+                      as the value. This is for canary upgrade purpose.
                     nullable: true
                     type: object
                   name:
                     description: Name of the function.
                     type: string
                   type:
-                    description: 'Type indicates whether this function reference is
-                      by name or selector. For now, the only supported reference type
-                      is by "name".  Future reference types: * Function by label or
-                      annotation * Branch or tag of a versioned function * A "rolling
-                      upgrade" from one version of a function to another Available
-                      value: - name - function-weights'
+                    description: |-
+                      Type indicates whether this function reference is by name or selector. For now,
+                      the only supported reference type is by "name".  Future reference types:
+                        * Function by label or annotation
+                        * Branch or tag of a versioned function
+                        * A "rolling upgrade" from one version of a function to another
+                      Available value:
+                      - name
+                      - function-weights
                     type: string
                 required:
                 - name

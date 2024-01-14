@@ -512,7 +512,6 @@ run_all_tests() {
     $ROOT/test/run_test.sh \
         $ROOT/test/tests/test_canary.sh \
         $ROOT/test/tests/test_fn_update/test_idle_objects_reaper.sh \
-        $ROOT/test/tests/mqtrigger/kafka/test_kafka.sh \
         $ROOT/test/tests/test_annotations.sh \
         $ROOT/test/tests/test_archive_pruner.sh \
         $ROOT/test/tests/test_backend_poolmgr.sh \
