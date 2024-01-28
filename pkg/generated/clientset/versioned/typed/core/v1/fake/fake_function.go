@@ -20,11 +20,13 @@ package fake
 
 import (
 	"context"
+	json "encoding/json"
+	"fmt"
 
-	corev1 "github.com/fission/fission/pkg/apis/core/v1"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	v1 "github.com/fission/fission/pkg/apis/core/v1"
+	corev1 "github.com/fission/fission/pkg/generated/applyconfiguration/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	labels "k8s.io/apimachinery/pkg/labels"
-	schema "k8s.io/apimachinery/pkg/runtime/schema"
 	types "k8s.io/apimachinery/pkg/types"
 	watch "k8s.io/apimachinery/pkg/watch"
 	testing "k8s.io/client-go/testing"
@@ -36,25 +38,25 @@ type FakeFunctions struct {
 	ns   string
 }
 
-var functionsResource = schema.GroupVersionResource{Group: "fission.io", Version: "v1", Resource: "functions"}
+var functionsResource = v1.SchemeGroupVersion.WithResource("functions")
 
-var functionsKind = schema.GroupVersionKind{Group: "fission.io", Version: "v1", Kind: "Function"}
+var functionsKind = v1.SchemeGroupVersion.WithKind("Function")
 
 // Get takes name of the _function, and returns the corresponding function object, and an error if there is any.
-func (c *FakeFunctions) Get(ctx context.Context, name string, options v1.GetOptions) (result *corev1.Function, err error) {
+func (c *FakeFunctions) Get(ctx context.Context, name string, options metav1.GetOptions) (result *v1.Function, err error) {
 	obj, err := c.Fake.
-		Invokes(testing.NewGetAction(functionsResource, c.ns, name), &corev1.Function{})
+		Invokes(testing.NewGetAction(functionsResource, c.ns, name), &v1.Function{})
 
 	if obj == nil {
 		return nil, err
 	}
-	return obj.(*corev1.Function), err
+	return obj.(*v1.Function), err
 }
 
 // List takes label and field selectors, and returns the list of Functions that match those selectors.
-func (c *FakeFunctions) List(ctx context.Context, opts v1.ListOptions) (result *corev1.FunctionList, err error) {
+func (c *FakeFunctions) List(ctx context.Context, opts metav1.ListOptions) (result *v1.FunctionList, err error) {
 	obj, err := c.Fake.
-		Invokes(testing.NewListAction(functionsResource, functionsKind, c.ns, opts), &corev1.FunctionList{})
+		Invokes(testing.NewListAction(functionsResource, functionsKind, c.ns, opts), &v1.FunctionList{})
 
 	if obj == nil {
 		return nil, err
@@ -64,8 +66,8 @@ func (c *FakeFunctions) List(ctx context.Context, opts v1.ListOptions) (result *
 	if label == nil {
 		label = labels.Everything()
 	}
-	list := &corev1.FunctionList{ListMeta: obj.(*corev1.FunctionList).ListMeta}
-	for _, item := range obj.(*corev1.FunctionList).Items {
+	list := &v1.FunctionList{ListMeta: obj.(*v1.FunctionList).ListMeta}
+	for _, item := range obj.(*v1.FunctionList).Items {
 		if label.Matches(labels.Set(item.Labels)) {
 			list.Items = append(list.Items, item)
 		}
@@ -74,57 +76,79 @@ func (c *FakeFunctions) List(ctx context.Context, opts v1.ListOptions) (result *
 }
 
 // Watch returns a watch.Interface that watches the requested functions.
-func (c *FakeFunctions) Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error) {
+func (c *FakeFunctions) Watch(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error) {
 	return c.Fake.
 		InvokesWatch(testing.NewWatchAction(functionsResource, c.ns, opts))
 
 }
 
 // Create takes the representation of a _function and creates it.  Returns the server's representation of the function, and an error, if there is any.
-func (c *FakeFunctions) Create(ctx context.Context, _function *corev1.Function, opts v1.CreateOptions) (result *corev1.Function, err error) {
+func (c *FakeFunctions) Create(ctx context.Context, _function *v1.Function, opts metav1.CreateOptions) (result *v1.Function, err error) {
 	obj, err := c.Fake.
-		Invokes(testing.NewCreateAction(functionsResource, c.ns, _function), &corev1.Function{})
+		Invokes(testing.NewCreateAction(functionsResource, c.ns, _function), &v1.Function{})
 
 	if obj == nil {
 		return nil, err
 	}
-	return obj.(*corev1.Function), err
+	return obj.(*v1.Function), err
 }
 
 // Update takes the representation of a _function and updates it. Returns the server's representation of the function, and an error, if there is any.
-func (c *FakeFunctions) Update(ctx context.Context, _function *corev1.Function, opts v1.UpdateOptions) (result *corev1.Function, err error) {
+func (c *FakeFunctions) Update(ctx context.Context, _function *v1.Function, opts metav1.UpdateOptions) (result *v1.Function, err error) {
 	obj, err := c.Fake.
-		Invokes(testing.NewUpdateAction(functionsResource, c.ns, _function), &corev1.Function{})
+		Invokes(testing.NewUpdateAction(functionsResource, c.ns, _function), &v1.Function{})
 
 	if obj == nil {
 		return nil, err
 	}
-	return obj.(*corev1.Function), err
+	return obj.(*v1.Function), err
 }
 
 // Delete takes name of the _function and deletes it. Returns an error if one occurs.
-func (c *FakeFunctions) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
+func (c *FakeFunctions) Delete(ctx context.Context, name string, opts metav1.DeleteOptions) error {
 	_, err := c.Fake.
-		Invokes(testing.NewDeleteActionWithOptions(functionsResource, c.ns, name, opts), &corev1.Function{})
+		Invokes(testing.NewDeleteActionWithOptions(functionsResource, c.ns, name, opts), &v1.Function{})
 
 	return err
 }
 
 // DeleteCollection deletes a collection of objects.
-func (c *FakeFunctions) DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error {
+func (c *FakeFunctions) DeleteCollection(ctx context.Context, opts metav1.DeleteOptions, listOpts metav1.ListOptions) error {
 	action := testing.NewDeleteCollectionAction(functionsResource, c.ns, listOpts)
 
-	_, err := c.Fake.Invokes(action, &corev1.FunctionList{})
+	_, err := c.Fake.Invokes(action, &v1.FunctionList{})
 	return err
 }
 
 // Patch applies the patch and returns the patched function.
-func (c *FakeFunctions) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *corev1.Function, err error) {
+func (c *FakeFunctions) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, subresources ...string) (result *v1.Function, err error) {
 	obj, err := c.Fake.
-		Invokes(testing.NewPatchSubresourceAction(functionsResource, c.ns, name, pt, data, subresources...), &corev1.Function{})
+		Invokes(testing.NewPatchSubresourceAction(functionsResource, c.ns, name, pt, data, subresources...), &v1.Function{})
 
 	if obj == nil {
 		return nil, err
 	}
-	return obj.(*corev1.Function), err
+	return obj.(*v1.Function), err
+}
+
+// Apply takes the given apply declarative configuration, applies it and returns the applied function.
+func (c *FakeFunctions) Apply(ctx context.Context, _function *corev1.FunctionApplyConfiguration, opts metav1.ApplyOptions) (result *v1.Function, err error) {
+	if _function == nil {
+		return nil, fmt.Errorf("_function provided to Apply must not be nil")
+	}
+	data, err := json.Marshal(_function)
+	if err != nil {
+		return nil, err
+	}
+	name := _function.Name
+	if name == nil {
+		return nil, fmt.Errorf("_function.Name must be provided to Apply")
+	}
+	obj, err := c.Fake.
+		Invokes(testing.NewPatchSubresourceAction(functionsResource, c.ns, *name, types.ApplyPatchType, data), &v1.Function{})
+
+	if obj == nil {
+		return nil, err
+	}
+	return obj.(*v1.Function), err
 }

@@ -20,9 +20,12 @@ package v1
 
 import (
 	"context"
+	json "encoding/json"
+	"fmt"
 	"time"
 
 	v1 "github.com/fission/fission/pkg/apis/core/v1"
+	corev1 "github.com/fission/fission/pkg/generated/applyconfiguration/core/v1"
 	scheme "github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	types "k8s.io/apimachinery/pkg/types"
@@ -46,6 +49,7 @@ type MessageQueueTriggerInterface interface {
 	List(ctx context.Context, opts metav1.ListOptions) (*v1.MessageQueueTriggerList, error)
 	Watch(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error)
 	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, subresources ...string) (result *v1.MessageQueueTrigger, err error)
+	Apply(ctx context.Context, _messageQueueTrigger *corev1.MessageQueueTriggerApplyConfiguration, opts metav1.ApplyOptions) (result *v1.MessageQueueTrigger, err error)
 	MessageQueueTriggerExpansion
 }
 
@@ -171,6 +175,32 @@ func (c *messageQueueTriggers) Patch(ctx context.Context, name string, pt types.
 		Name(name).
 		SubResource(subresources...).
 		VersionedParams(&opts, scheme.ParameterCodec).
+		Body(data).
+		Do(ctx).
+		Into(result)
+	return
+}
+
+// Apply takes the given apply declarative configuration, applies it and returns the applied messageQueueTrigger.
+func (c *messageQueueTriggers) Apply(ctx context.Context, _messageQueueTrigger *corev1.MessageQueueTriggerApplyConfiguration, opts metav1.ApplyOptions) (result *v1.MessageQueueTrigger, err error) {
+	if _messageQueueTrigger == nil {
+		return nil, fmt.Errorf("_messageQueueTrigger provided to Apply must not be nil")
+	}
+	patchOpts := opts.ToPatchOptions()
+	data, err := json.Marshal(_messageQueueTrigger)
+	if err != nil {
+		return nil, err
+	}
+	name := _messageQueueTrigger.Name
+	if name == nil {
+		return nil, fmt.Errorf("_messageQueueTrigger.Name must be provided to Apply")
+	}
+	result = &v1.MessageQueueTrigger{}
+	err = c.client.Patch(types.ApplyPatchType).
+		Namespace(c.ns).
+		Resource("messagequeuetriggers").
+		Name(*name).
+		VersionedParams(&patchOpts, scheme.ParameterCodec).
 		Body(data).
 		Do(ctx).
 		Into(result)

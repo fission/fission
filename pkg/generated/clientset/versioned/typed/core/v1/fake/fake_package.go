@@ -20,11 +20,13 @@ package fake
 
 import (
 	"context"
+	json "encoding/json"
+	"fmt"
 
-	corev1 "github.com/fission/fission/pkg/apis/core/v1"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	v1 "github.com/fission/fission/pkg/apis/core/v1"
+	corev1 "github.com/fission/fission/pkg/generated/applyconfiguration/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	labels "k8s.io/apimachinery/pkg/labels"
-	schema "k8s.io/apimachinery/pkg/runtime/schema"
 	types "k8s.io/apimachinery/pkg/types"
 	watch "k8s.io/apimachinery/pkg/watch"
 	testing "k8s.io/client-go/testing"
@@ -36,25 +38,25 @@ type FakePackages struct {
 	ns   string
 }
 
-var packagesResource = schema.GroupVersionResource{Group: "fission.io", Version: "v1", Resource: "packages"}
+var packagesResource = v1.SchemeGroupVersion.WithResource("packages")
 
-var packagesKind = schema.GroupVersionKind{Group: "fission.io", Version: "v1", Kind: "Package"}
+var packagesKind = v1.SchemeGroupVersion.WithKind("Package")
 
 // Get takes name of the _package, and returns the corresponding package object, and an error if there is any.
-func (c *FakePackages) Get(ctx context.Context, name string, options v1.GetOptions) (result *corev1.Package, err error) {
+func (c *FakePackages) Get(ctx context.Context, name string, options metav1.GetOptions) (result *v1.Package, err error) {
 	obj, err := c.Fake.
-		Invokes(testing.NewGetAction(packagesResource, c.ns, name), &corev1.Package{})
+		Invokes(testing.NewGetAction(packagesResource, c.ns, name), &v1.Package{})
 
 	if obj == nil {
 		return nil, err
 	}
-	return obj.(*corev1.Package), err
+	return obj.(*v1.Package), err
 }
 
 // List takes label and field selectors, and returns the list of Packages that match those selectors.
-func (c *FakePackages) List(ctx context.Context, opts v1.ListOptions) (result *corev1.PackageList, err error) {
+func (c *FakePackages) List(ctx context.Context, opts metav1.ListOptions) (result *v1.PackageList, err error) {
 	obj, err := c.Fake.
-		Invokes(testing.NewListAction(packagesResource, packagesKind, c.ns, opts), &corev1.PackageList{})
+		Invokes(testing.NewListAction(packagesResource, packagesKind, c.ns, opts), &v1.PackageList{})
 
 	if obj == nil {
 		return nil, err
@@ -64,8 +66,8 @@ func (c *FakePackages) List(ctx context.Context, opts v1.ListOptions) (result *c
 	if label == nil {
 		label = labels.Everything()
 	}
-	list := &corev1.PackageList{ListMeta: obj.(*corev1.PackageList).ListMeta}
-	for _, item := range obj.(*corev1.PackageList).Items {
+	list := &v1.PackageList{ListMeta: obj.(*v1.PackageList).ListMeta}
+	for _, item := range obj.(*v1.PackageList).Items {
 		if label.Matches(labels.Set(item.Labels)) {
 			list.Items = append(list.Items, item)
 		}
@@ -74,69 +76,114 @@ func (c *FakePackages) List(ctx context.Context, opts v1.ListOptions) (result *c
 }
 
 // Watch returns a watch.Interface that watches the requested packages.
-func (c *FakePackages) Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error) {
+func (c *FakePackages) Watch(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error) {
 	return c.Fake.
 		InvokesWatch(testing.NewWatchAction(packagesResource, c.ns, opts))
 
 }
 
 // Create takes the representation of a _package and creates it.  Returns the server's representation of the package, and an error, if there is any.
-func (c *FakePackages) Create(ctx context.Context, _package *corev1.Package, opts v1.CreateOptions) (result *corev1.Package, err error) {
+func (c *FakePackages) Create(ctx context.Context, _package *v1.Package, opts metav1.CreateOptions) (result *v1.Package, err error) {
 	obj, err := c.Fake.
-		Invokes(testing.NewCreateAction(packagesResource, c.ns, _package), &corev1.Package{})
+		Invokes(testing.NewCreateAction(packagesResource, c.ns, _package), &v1.Package{})
 
 	if obj == nil {
 		return nil, err
 	}
-	return obj.(*corev1.Package), err
+	return obj.(*v1.Package), err
 }
 
 // Update takes the representation of a _package and updates it. Returns the server's representation of the package, and an error, if there is any.
-func (c *FakePackages) Update(ctx context.Context, _package *corev1.Package, opts v1.UpdateOptions) (result *corev1.Package, err error) {
+func (c *FakePackages) Update(ctx context.Context, _package *v1.Package, opts metav1.UpdateOptions) (result *v1.Package, err error) {
 	obj, err := c.Fake.
-		Invokes(testing.NewUpdateAction(packagesResource, c.ns, _package), &corev1.Package{})
+		Invokes(testing.NewUpdateAction(packagesResource, c.ns, _package), &v1.Package{})
 
 	if obj == nil {
 		return nil, err
 	}
-	return obj.(*corev1.Package), err
+	return obj.(*v1.Package), err
 }
 
 // UpdateStatus was generated because the type contains a Status member.
 // Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-func (c *FakePackages) UpdateStatus(ctx context.Context, _package *corev1.Package, opts v1.UpdateOptions) (*corev1.Package, error) {
+func (c *FakePackages) UpdateStatus(ctx context.Context, _package *v1.Package, opts metav1.UpdateOptions) (*v1.Package, error) {
 	obj, err := c.Fake.
-		Invokes(testing.NewUpdateSubresourceAction(packagesResource, "status", c.ns, _package), &corev1.Package{})
+		Invokes(testing.NewUpdateSubresourceAction(packagesResource, "status", c.ns, _package), &v1.Package{})
 
 	if obj == nil {
 		return nil, err
 	}
-	return obj.(*corev1.Package), err
+	return obj.(*v1.Package), err
 }
 
 // Delete takes name of the _package and deletes it. Returns an error if one occurs.
-func (c *FakePackages) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
+func (c *FakePackages) Delete(ctx context.Context, name string, opts metav1.DeleteOptions) error {
 	_, err := c.Fake.
-		Invokes(testing.NewDeleteActionWithOptions(packagesResource, c.ns, name, opts), &corev1.Package{})
+		Invokes(testing.NewDeleteActionWithOptions(packagesResource, c.ns, name, opts), &v1.Package{})
 
 	return err
 }
 
 // DeleteCollection deletes a collection of objects.
-func (c *FakePackages) DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error {
+func (c *FakePackages) DeleteCollection(ctx context.Context, opts metav1.DeleteOptions, listOpts metav1.ListOptions) error {
 	action := testing.NewDeleteCollectionAction(packagesResource, c.ns, listOpts)
 
-	_, err := c.Fake.Invokes(action, &corev1.PackageList{})
+	_, err := c.Fake.Invokes(action, &v1.PackageList{})
 	return err
 }
 
 // Patch applies the patch and returns the patched package.
-func (c *FakePackages) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *corev1.Package, err error) {
+func (c *FakePackages) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, subresources ...string) (result *v1.Package, err error) {
 	obj, err := c.Fake.
-		Invokes(testing.NewPatchSubresourceAction(packagesResource, c.ns, name, pt, data, subresources...), &corev1.Package{})
+		Invokes(testing.NewPatchSubresourceAction(packagesResource, c.ns, name, pt, data, subresources...), &v1.Package{})
 
 	if obj == nil {
 		return nil, err
 	}
-	return obj.(*corev1.Package), err
+	return obj.(*v1.Package), err
+}
+
+// Apply takes the given apply declarative configuration, applies it and returns the applied package.
+func (c *FakePackages) Apply(ctx context.Context, _package *corev1.PackageApplyConfiguration, opts metav1.ApplyOptions) (result *v1.Package, err error) {
+	if _package == nil {
+		return nil, fmt.Errorf("_package provided to Apply must not be nil")
+	}
+	data, err := json.Marshal(_package)
+	if err != nil {
+		return nil, err
+	}
+	name := _package.Name
+	if name == nil {
+		return nil, fmt.Errorf("_package.Name must be provided to Apply")
+	}
+	obj, err := c.Fake.
+		Invokes(testing.NewPatchSubresourceAction(packagesResource, c.ns, *name, types.ApplyPatchType, data), &v1.Package{})
+
+	if obj == nil {
+		return nil, err
+	}
+	return obj.(*v1.Package), err
+}
+
+// ApplyStatus was generated because the type contains a Status member.
+// Add a +genclient:noStatus comment above the type to avoid generating ApplyStatus().
+func (c *FakePackages) ApplyStatus(ctx context.Context, _package *corev1.PackageApplyConfiguration, opts metav1.ApplyOptions) (result *v1.Package, err error) {
+	if _package == nil {
+		return nil, fmt.Errorf("_package provided to Apply must not be nil")
+	}
+	data, err := json.Marshal(_package)
+	if err != nil {
+		return nil, err
+	}
+	name := _package.Name
+	if name == nil {
+		return nil, fmt.Errorf("_package.Name must be provided to Apply")
+	}
+	obj, err := c.Fake.
+		Invokes(testing.NewPatchSubresourceAction(packagesResource, c.ns, *name, types.ApplyPatchType, data, "status"), &v1.Package{})
+
+	if obj == nil {
+		return nil, err
+	}
+	return obj.(*v1.Package), err
 }
