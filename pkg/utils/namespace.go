@@ -11,10 +11,11 @@ import (
 )
 
 const (
-	ENV_FUNCTION_NAMESPACE   string = "FISSION_FUNCTION_NAMESPACE"
-	ENV_BUILDER_NAMESPACE    string = "FISSION_BUILDER_NAMESPACE"
-	ENV_DEFAULT_NAMESPACE    string = "FISSION_DEFAULT_NAMESPACE"
-	ENV_ADDITIONAL_NAMESPACE string = "FISSION_RESOURCE_NAMESPACES"
+	ENV_FUNCTION_NAMESPACE        string = "FISSION_FUNCTION_NAMESPACE"
+	ENV_BUILDER_NAMESPACE         string = "FISSION_BUILDER_NAMESPACE"
+	ENV_DEFAULT_NAMESPACE         string = "FISSION_DEFAULT_NAMESPACE"
+	ENV_ADDITIONAL_NAMESPACE      string = "FISSION_RESOURCE_NAMESPACES"
+	ENV_FISSION_ON_ALL_NAMESPACES string = "FISSION_ON_ALL_NAMESPACES"
 )
 
 type (
@@ -24,6 +25,7 @@ type (
 		DefaultNamespace  string
 		FissionResourceNS map[string]string
 		Logger            *zap.Logger
+		allNamespaces     bool
 	}
 
 	options struct {
@@ -38,12 +40,15 @@ type (
 var nsResolver *NamespaceResolver
 
 func init() {
+	allNamespaces := strings.ToLower(os.Getenv(ENV_FISSION_ON_ALL_NAMESPACES)) == "true"
+
 	nsResolver = &NamespaceResolver{
 		FunctionNamespace: os.Getenv(ENV_FUNCTION_NAMESPACE),
 		BuilderNamespace:  os.Getenv(ENV_BUILDER_NAMESPACE),
 		DefaultNamespace:  os.Getenv(ENV_DEFAULT_NAMESPACE),
-		FissionResourceNS: GetNamespaces(),
+		FissionResourceNS: GetNamespaces(allNamespaces),
 		Logger:            loggerfactory.GetLogger(),
+		allNamespaces:     allNamespaces,
 	}
 
 	nsResolver.Logger.Debug("namespaces", zap.String("function_namespace", nsResolver.FunctionNamespace),
@@ -89,6 +94,12 @@ func (nsr *NamespaceResolver) FissionNSWithOptions(option ...option) map[string]
 	}
 
 	fissionResourceNS := make(map[string]string)
+
+	if nsr.allNamespaces {
+		fissionResourceNS[metav1.NamespaceAll] = metav1.NamespaceAll
+		return fissionResourceNS
+	}
+
 	for k, v := range nsr.FissionResourceNS {
 		fissionResourceNS[k] = v
 	}
@@ -106,8 +117,13 @@ func (nsr *NamespaceResolver) FissionNSWithOptions(option ...option) map[string]
 	return fissionResourceNS
 }
 
-func GetNamespaces() map[string]string {
+func GetNamespaces(allNamespaces bool) map[string]string {
 	namespaces := make(map[string]string)
+
+	if allNamespaces {
+		namespaces[metav1.NamespaceAll] = metav1.NamespaceAll
+		return namespaces
+	}
 
 	envValue := os.Getenv(ENV_DEFAULT_NAMESPACE)
 	if len(envValue) > 0 {
@@ -154,6 +170,9 @@ func (nsr *NamespaceResolver) GetFunctionNS(namespace string) string {
 }
 
 func (nsr *NamespaceResolver) ResolveNamespace(namespace string) string {
+	if nsr.allNamespaces {
+		return metav1.NamespaceAll
+	}
 	if nsr.FunctionNamespace == "" || nsr.BuilderNamespace == "" {
 		return nsr.DefaultNamespace
 	}

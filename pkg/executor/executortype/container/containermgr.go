@@ -288,8 +288,8 @@ func (caaf *Container) RefreshFuncPods(ctx context.Context, logger *zap.Logger, 
 func (caaf *Container) AdoptExistingResources(ctx context.Context) {
 	wg := &sync.WaitGroup{}
 
-	for _, namepsace := range utils.DefaultNSResolver().FissionResourceNS {
-		fnList, err := caaf.fissionClient.CoreV1().Functions(namepsace).List(ctx, metav1.ListOptions{})
+	for _, namespace := range utils.DefaultNSResolver().FissionResourceNS {
+		fnList, err := caaf.fissionClient.CoreV1().Functions(namespace).List(ctx, metav1.ListOptions{})
 		if err != nil {
 			caaf.logger.Error("error getting function list", zap.Error(err))
 			return

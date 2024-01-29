@@ -1,9 +1,11 @@
 {{- if .Values.canaryDeployment.enabled }}
 {{- include "kubernetes-role-generator" (merge (dict "namespace" .Values.defaultNamespace "component" "canaryconfig") .) }}
 
-{{- if gt (len .Values.additionalFissionNamespaces) 0 }}
-{{- range $namespace := $.Values.additionalFissionNamespaces }}
-{{ include "kubernetes-role-generator" (merge (dict "namespace" $namespace "component" "canaryconfig") $) }}
-{{- end }}
+{{- if not .Values.fissionOnAllNamespaces -}}
+  {{- if gt (len .Values.additionalFissionNamespaces) 0 }}
+  {{- range $namespace := $.Values.additionalFissionNamespaces }}
+  {{ include "kubernetes-role-generator" (merge (dict "namespace" $namespace "component" "canaryconfig") $) }}
+  {{- end }}
+  {{- end }}
 {{- end }}
 {{- end }}

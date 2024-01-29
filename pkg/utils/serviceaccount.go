@@ -33,6 +33,7 @@ type (
 		logger           *zap.Logger
 		nsResolver       *NamespaceResolver
 		permissions      []*ServiceAccountPermissions
+		namespace        string
 	}
 
 	ServiceAccountPermissions struct {
@@ -91,13 +92,13 @@ var (
 	}
 )
 
-func CreateMissingPermissionForSA(ctx context.Context, kubernetesClient kubernetes.Interface, logger *zap.Logger) {
+func CreateMissingPermissionForSA(ctx context.Context, kubernetesClient kubernetes.Interface, logger *zap.Logger, namespace string) {
 	enableSA := createServiceAccount()
 	if enableSA {
 		interval := getSAInterval()
 		logger.Debug("interval value", zap.Any("interval", interval))
-		sa := getSAObj(ctx, kubernetesClient, logger)
-		logger.Info("Starting service account check", zap.Any("interval", interval))
+		sa := getSAObj(ctx, kubernetesClient, logger, namespace)
+		logger.Info("Starting service account check", zap.Any("interval", interval), zap.String("ns", namespace))
 		if interval > 0 {
 			go wait.UntilWithContext(ctx, sa.runSACheck, interval)
 		} else {
@@ -106,11 +107,12 @@ func CreateMissingPermissionForSA(ctx context.Context, kubernetesClient kubernet
 	}
 }
 
-func getSAObj(ctx context.Context, kubernetesClient kubernetes.Interface, logger *zap.Logger) *ServiceAccount {
+func getSAObj(ctx context.Context, kubernetesClient kubernetes.Interface, logger *zap.Logger, namespace string) *ServiceAccount {
 	saObj := &ServiceAccount{
 		kubernetesClient: kubernetesClient,
 		logger:           logger,
 		nsResolver:       DefaultNSResolver(),
+		namespace:        namespace,
 	}
 	saObj.permissions = append(saObj.permissions, fetcherCheck)
 	saObj.permissions = append(saObj.permissions, builderCheck)
@@ -118,7 +120,13 @@ func getSAObj(ctx context.Context, kubernetesClient kubernetes.Interface, logger
 }
 
 func (sa *ServiceAccount) runSACheck(ctx context.Context) {
-	for _, ns := range sa.nsResolver.FissionResourceNS {
+	namespaces := sa.nsResolver.FissionResourceNS
+	// First env in new namespace needs to create SA + permissions
+	if sa.namespace != "" {
+		namespaces = make(map[string]string)
+		namespaces[sa.namespace] = sa.namespace
+	}
+	for _, ns := range namespaces {
 		for _, permission := range sa.permissions {
 			if permission.saName == BuilderSAName {
 				ns = sa.nsResolver.GetBuilderNS(ns)
@@ -131,6 +139,7 @@ func (sa *ServiceAccount) runSACheck(ctx context.Context) {
 }
 
 func setupSAAndRoleBindings(ctx context.Context, client kubernetes.Interface, logger *zap.Logger, namespace string, ps *ServiceAccountPermissions) {
+	logger.Info("creating service account " + namespace + "/" + ps.saName)
 	SAObj, err := createGetSA(ctx, client, ps.saName, namespace)
 	if err != nil {
 		logger.Error("error while creating or getting service account",

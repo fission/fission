@@ -29,6 +29,7 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/executor/util"
+	"github.com/fission/fission/pkg/utils"
 )
 
 // getPoolName returns a unique name of an environment
@@ -198,6 +199,8 @@ func (gp *GenericPool) createPoolDeployment(ctx context.Context, env *fv1.Enviro
 	// avoid create/update/delete pool deployment at the same time
 	gp.lock.Lock()
 	defer gp.lock.Unlock()
+
+	utils.CreateMissingPermissionForSA(ctx, gp.kubernetesClient, gp.logger, gp.fnNamespace)
 
 	deploymentMeta := gp.genDeploymentMeta(env)
 	deploymentSpec, err := gp.genDeploymentSpec(env)

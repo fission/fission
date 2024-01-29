@@ -21,7 +21,7 @@ func TestServiceAccountCheck(t *testing.T) {
 	kubernetesClient := fake.NewSimpleClientset()
 	logger := loggerfactory.GetLogger()
 	os.Setenv(ENV_CREATE_SA, "true")
-	CreateMissingPermissionForSA(ctx, kubernetesClient, logger)
+	CreateMissingPermissionForSA(ctx, kubernetesClient, logger, "default")
 
 	// Get rolebinding for a service account
 	rolebindings, err := kubernetesClient.RbacV1().RoleBindings("default").List(ctx, metav1.ListOptions{})

@@ -1,7 +1,7 @@
 {{- define "fission-role-generator" }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
+kind: {{ if .Values.fissionOnAllNamespaces }}Cluster{{- end }}Role
 metadata:
 {{- if eq "preupgrade" .component }}
   annotations:
@@ -10,7 +10,9 @@ metadata:
     helm.sh/hook-weight: "-2"
 {{- end }}
   name: "{{ .Release.Name }}-{{ .component }}-fission-cr"
+  {{- if not .Values.fissionOnAllNamespaces }}
   namespace: {{ .namespace }}
+  {{- end }}
 {{- if eq "buildermgr" .component }}
 {{- include "buildermgr-rules" . }}
 {{- end }}
@@ -40,7 +42,7 @@ metadata:
 {{- end }}
 
 ---
-kind: RoleBinding
+kind: {{ if .Values.fissionOnAllNamespaces }}Cluster{{- end }}RoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
 {{- if eq "preupgrade" .component }}
@@ -49,13 +51,15 @@ metadata:
     helm.sh/hook-delete-policy: before-hook-creation
 {{- end }}
   name: "{{ .Release.Name }}-{{ .component }}-fission-cr"
+  {{- if not .Values.fissionOnAllNamespaces }}
   namespace: {{ .namespace }}
+  {{- end }}
 subjects:
   - kind: ServiceAccount
     name: "fission-{{ .component }}"
     namespace: {{ .Release.Namespace }}
 roleRef:
-  kind: Role
+  kind: {{ if .Values.fissionOnAllNamespaces }}Cluster{{- end }}Role
   name: "{{ .Release.Name }}-{{ .component }}-fission-cr"
   apiGroup: rbac.authorization.k8s.io
 {{- end }}

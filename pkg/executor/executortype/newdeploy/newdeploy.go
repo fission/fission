@@ -34,6 +34,7 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/executor/util"
+	"github.com/fission/fission/pkg/utils"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
@@ -90,6 +91,7 @@ func (deploy *NewDeploy) createOrGetDeployment(ctx context.Context, fn *fv1.Func
 
 		return existingDepl, err
 	} else if k8s_err.IsNotFound(err) {
+		utils.CreateMissingPermissionForSA(ctx, deploy.kubernetesClient, deploy.logger, deployNamespace)
 
 		depl, err := deploy.kubernetesClient.AppsV1().Deployments(deployNamespace).Create(ctx, deployment, metav1.CreateOptions{})
 		if err != nil {

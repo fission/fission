@@ -1,10 +1,12 @@
 {{- define "fissionFunction.roles" }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
+kind: {{ if .Values.fissionOnAllNamespaces }}Cluster{{- end }}Role
 metadata:
   name: {{ .Release.Name }}-fission-fetcher
+  {{- if not .Values.fissionOnAllNamespaces }}
   namespace: {{ .namespace }}
+  {{- end }}
 rules:
 - apiGroups:
   - ""
@@ -21,10 +23,12 @@ rules:
   - get
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
+kind: {{ if .Values.fissionOnAllNamespaces }}Cluster{{- end }}Role
 metadata:
   name: {{ .Release.Name }}-fission-builder
+  {{- if not .Values.fissionOnAllNamespaces }}
   namespace: {{ .namespace }}
+  {{- end }}
 rules:
 - apiGroups:
   - fission.io
@@ -41,10 +45,12 @@ rules:
   - get
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
+kind: {{ if .Values.fissionOnAllNamespaces }}Cluster{{- end }}Role
 metadata:
-  namespace: {{ .namespace }}
   name: {{ .Release.Name }}-fission-fetcher-websocket
+  {{- if not .Values.fissionOnAllNamespaces }}
+  namespace: {{ .namespace }}
+  {{- end }}
 rules:
 - apiGroups:
   - ""
@@ -68,13 +74,15 @@ rules:
 {{- define "fissionFunction.rolebindings" }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
+kind: {{ if .Values.fissionOnAllNamespaces }}Cluster{{- end }}RoleBinding
 metadata:
   name: {{ .Release.Name }}-fission-fetcher
+  {{- if not .Values.fissionOnAllNamespaces }}
   namespace: {{ .namespace }}
+  {{- end }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
-  kind: Role
+  kind: {{ if .Values.fissionOnAllNamespaces }}Cluster{{- end }}Role
   name: {{ .Release.Name }}-fission-fetcher
 subjects:
   - kind: ServiceAccount
@@ -86,13 +94,15 @@ subjects:
     {{- end }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
+kind: {{ if .Values.fissionOnAllNamespaces }}Cluster{{- end }}RoleBinding
 metadata:
   name: {{ .Release.Name }}-fission-builder
+  {{- if not .Values.fissionOnAllNamespaces }}
   namespace: {{ .namespace }}
+  {{- end }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
-  kind: Role
+  kind: {{ if .Values.fissionOnAllNamespaces }}Cluster{{- end }}Role
   name: {{ .Release.Name }}-fission-builder
 subjects:
   - kind: ServiceAccount
@@ -104,13 +114,15 @@ subjects:
     {{- end }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
+kind: {{ if .Values.fissionOnAllNamespaces }}Cluster{{- end }}RoleBinding
 metadata:
   name: {{ .Release.Name }}-fission-fetcher-websocket
+  {{- if not .Values.fissionOnAllNamespaces }}
   namespace: {{ .namespace }}
+  {{- end }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
-  kind: Role
+  kind: {{ if .Values.fissionOnAllNamespaces }}Cluster{{- end }}Role
   name: {{ .Release.Name }}-fission-fetcher-websocket
 subjects:
   - kind: ServiceAccount
