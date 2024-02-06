@@ -20,11 +20,13 @@ package fake
 
 import (
 	"context"
+	json "encoding/json"
+	"fmt"
 
-	corev1 "github.com/fission/fission/pkg/apis/core/v1"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	v1 "github.com/fission/fission/pkg/apis/core/v1"
+	corev1 "github.com/fission/fission/pkg/generated/applyconfiguration/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	labels "k8s.io/apimachinery/pkg/labels"
-	schema "k8s.io/apimachinery/pkg/runtime/schema"
 	types "k8s.io/apimachinery/pkg/types"
 	watch "k8s.io/apimachinery/pkg/watch"
 	testing "k8s.io/client-go/testing"
@@ -36,25 +38,25 @@ type FakeTimeTriggers struct {
 	ns   string
 }
 
-var timetriggersResource = schema.GroupVersionResource{Group: "fission.io", Version: "v1", Resource: "timetriggers"}
+var timetriggersResource = v1.SchemeGroupVersion.WithResource("timetriggers")
 
-var timetriggersKind = schema.GroupVersionKind{Group: "fission.io", Version: "v1", Kind: "TimeTrigger"}
+var timetriggersKind = v1.SchemeGroupVersion.WithKind("TimeTrigger")
 
 // Get takes name of the _timeTrigger, and returns the corresponding timeTrigger object, and an error if there is any.
-func (c *FakeTimeTriggers) Get(ctx context.Context, name string, options v1.GetOptions) (result *corev1.TimeTrigger, err error) {
+func (c *FakeTimeTriggers) Get(ctx context.Context, name string, options metav1.GetOptions) (result *v1.TimeTrigger, err error) {
 	obj, err := c.Fake.
-		Invokes(testing.NewGetAction(timetriggersResource, c.ns, name), &corev1.TimeTrigger{})
+		Invokes(testing.NewGetAction(timetriggersResource, c.ns, name), &v1.TimeTrigger{})
 
 	if obj == nil {
 		return nil, err
 	}
-	return obj.(*corev1.TimeTrigger), err
+	return obj.(*v1.TimeTrigger), err
 }
 
 // List takes label and field selectors, and returns the list of TimeTriggers that match those selectors.
-func (c *FakeTimeTriggers) List(ctx context.Context, opts v1.ListOptions) (result *corev1.TimeTriggerList, err error) {
+func (c *FakeTimeTriggers) List(ctx context.Context, opts metav1.ListOptions) (result *v1.TimeTriggerList, err error) {
 	obj, err := c.Fake.
-		Invokes(testing.NewListAction(timetriggersResource, timetriggersKind, c.ns, opts), &corev1.TimeTriggerList{})
+		Invokes(testing.NewListAction(timetriggersResource, timetriggersKind, c.ns, opts), &v1.TimeTriggerList{})
 
 	if obj == nil {
 		return nil, err
@@ -64,8 +66,8 @@ func (c *FakeTimeTriggers) List(ctx context.Context, opts v1.ListOptions) (resul
 	if label == nil {
 		label = labels.Everything()
 	}
-	list := &corev1.TimeTriggerList{ListMeta: obj.(*corev1.TimeTriggerList).ListMeta}
-	for _, item := range obj.(*corev1.TimeTriggerList).Items {
+	list := &v1.TimeTriggerList{ListMeta: obj.(*v1.TimeTriggerList).ListMeta}
+	for _, item := range obj.(*v1.TimeTriggerList).Items {
 		if label.Matches(labels.Set(item.Labels)) {
 			list.Items = append(list.Items, item)
 		}
@@ -74,57 +76,79 @@ func (c *FakeTimeTriggers) List(ctx context.Context, opts v1.ListOptions) (resul
 }
 
 // Watch returns a watch.Interface that watches the requested timeTriggers.
-func (c *FakeTimeTriggers) Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error) {
+func (c *FakeTimeTriggers) Watch(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error) {
 	return c.Fake.
 		InvokesWatch(testing.NewWatchAction(timetriggersResource, c.ns, opts))
 
 }
 
 // Create takes the representation of a _timeTrigger and creates it.  Returns the server's representation of the timeTrigger, and an error, if there is any.
-func (c *FakeTimeTriggers) Create(ctx context.Context, _timeTrigger *corev1.TimeTrigger, opts v1.CreateOptions) (result *corev1.TimeTrigger, err error) {
+func (c *FakeTimeTriggers) Create(ctx context.Context, _timeTrigger *v1.TimeTrigger, opts metav1.CreateOptions) (result *v1.TimeTrigger, err error) {
 	obj, err := c.Fake.
-		Invokes(testing.NewCreateAction(timetriggersResource, c.ns, _timeTrigger), &corev1.TimeTrigger{})
+		Invokes(testing.NewCreateAction(timetriggersResource, c.ns, _timeTrigger), &v1.TimeTrigger{})
 
 	if obj == nil {
 		return nil, err
 	}
-	return obj.(*corev1.TimeTrigger), err
+	return obj.(*v1.TimeTrigger), err
 }
 
 // Update takes the representation of a _timeTrigger and updates it. Returns the server's representation of the timeTrigger, and an error, if there is any.
-func (c *FakeTimeTriggers) Update(ctx context.Context, _timeTrigger *corev1.TimeTrigger, opts v1.UpdateOptions) (result *corev1.TimeTrigger, err error) {
+func (c *FakeTimeTriggers) Update(ctx context.Context, _timeTrigger *v1.TimeTrigger, opts metav1.UpdateOptions) (result *v1.TimeTrigger, err error) {
 	obj, err := c.Fake.
-		Invokes(testing.NewUpdateAction(timetriggersResource, c.ns, _timeTrigger), &corev1.TimeTrigger{})
+		Invokes(testing.NewUpdateAction(timetriggersResource, c.ns, _timeTrigger), &v1.TimeTrigger{})
 
 	if obj == nil {
 		return nil, err
 	}
-	return obj.(*corev1.TimeTrigger), err
+	return obj.(*v1.TimeTrigger), err
 }
 
 // Delete takes name of the _timeTrigger and deletes it. Returns an error if one occurs.
-func (c *FakeTimeTriggers) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
+func (c *FakeTimeTriggers) Delete(ctx context.Context, name string, opts metav1.DeleteOptions) error {
 	_, err := c.Fake.
-		Invokes(testing.NewDeleteActionWithOptions(timetriggersResource, c.ns, name, opts), &corev1.TimeTrigger{})
+		Invokes(testing.NewDeleteActionWithOptions(timetriggersResource, c.ns, name, opts), &v1.TimeTrigger{})
 
 	return err
 }
 
 // DeleteCollection deletes a collection of objects.
-func (c *FakeTimeTriggers) DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error {
+func (c *FakeTimeTriggers) DeleteCollection(ctx context.Context, opts metav1.DeleteOptions, listOpts metav1.ListOptions) error {
 	action := testing.NewDeleteCollectionAction(timetriggersResource, c.ns, listOpts)
 
-	_, err := c.Fake.Invokes(action, &corev1.TimeTriggerList{})
+	_, err := c.Fake.Invokes(action, &v1.TimeTriggerList{})
 	return err
 }
 
 // Patch applies the patch and returns the patched timeTrigger.
-func (c *FakeTimeTriggers) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *corev1.TimeTrigger, err error) {
+func (c *FakeTimeTriggers) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, subresources ...string) (result *v1.TimeTrigger, err error) {
 	obj, err := c.Fake.
-		Invokes(testing.NewPatchSubresourceAction(timetriggersResource, c.ns, name, pt, data, subresources...), &corev1.TimeTrigger{})
+		Invokes(testing.NewPatchSubresourceAction(timetriggersResource, c.ns, name, pt, data, subresources...), &v1.TimeTrigger{})
 
 	if obj == nil {
 		return nil, err
 	}
-	return obj.(*corev1.TimeTrigger), err
+	return obj.(*v1.TimeTrigger), err
+}
+
+// Apply takes the given apply declarative configuration, applies it and returns the applied timeTrigger.
+func (c *FakeTimeTriggers) Apply(ctx context.Context, _timeTrigger *corev1.TimeTriggerApplyConfiguration, opts metav1.ApplyOptions) (result *v1.TimeTrigger, err error) {
+	if _timeTrigger == nil {
+		return nil, fmt.Errorf("_timeTrigger provided to Apply must not be nil")
+	}
+	data, err := json.Marshal(_timeTrigger)
+	if err != nil {
+		return nil, err
+	}
+	name := _timeTrigger.Name
+	if name == nil {
+		return nil, fmt.Errorf("_timeTrigger.Name must be provided to Apply")
+	}
+	obj, err := c.Fake.
+		Invokes(testing.NewPatchSubresourceAction(timetriggersResource, c.ns, *name, types.ApplyPatchType, data), &v1.TimeTrigger{})
+
+	if obj == nil {
+		return nil, err
+	}
+	return obj.(*v1.TimeTrigger), err
 }

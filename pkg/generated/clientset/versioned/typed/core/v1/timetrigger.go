@@ -20,9 +20,12 @@ package v1
 
 import (
 	"context"
+	json "encoding/json"
+	"fmt"
 	"time"
 
 	v1 "github.com/fission/fission/pkg/apis/core/v1"
+	corev1 "github.com/fission/fission/pkg/generated/applyconfiguration/core/v1"
 	scheme "github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	types "k8s.io/apimachinery/pkg/types"
@@ -46,6 +49,7 @@ type TimeTriggerInterface interface {
 	List(ctx context.Context, opts metav1.ListOptions) (*v1.TimeTriggerList, error)
 	Watch(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error)
 	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, subresources ...string) (result *v1.TimeTrigger, err error)
+	Apply(ctx context.Context, _timeTrigger *corev1.TimeTriggerApplyConfiguration, opts metav1.ApplyOptions) (result *v1.TimeTrigger, err error)
 	TimeTriggerExpansion
 }
 
@@ -171,6 +175,32 @@ func (c *timeTriggers) Patch(ctx context.Context, name string, pt types.PatchTyp
 		Name(name).
 		SubResource(subresources...).
 		VersionedParams(&opts, scheme.ParameterCodec).
+		Body(data).
+		Do(ctx).
+		Into(result)
+	return
+}
+
+// Apply takes the given apply declarative configuration, applies it and returns the applied timeTrigger.
+func (c *timeTriggers) Apply(ctx context.Context, _timeTrigger *corev1.TimeTriggerApplyConfiguration, opts metav1.ApplyOptions) (result *v1.TimeTrigger, err error) {
+	if _timeTrigger == nil {
+		return nil, fmt.Errorf("_timeTrigger provided to Apply must not be nil")
+	}
+	patchOpts := opts.ToPatchOptions()
+	data, err := json.Marshal(_timeTrigger)
+	if err != nil {
+		return nil, err
+	}
+	name := _timeTrigger.Name
+	if name == nil {
+		return nil, fmt.Errorf("_timeTrigger.Name must be provided to Apply")
+	}
+	result = &v1.TimeTrigger{}
+	err = c.client.Patch(types.ApplyPatchType).
+		Namespace(c.ns).
+		Resource("timetriggers").
+		Name(*name).
+		VersionedParams(&patchOpts, scheme.ParameterCodec).
 		Body(data).
 		Do(ctx).
 		Into(result)

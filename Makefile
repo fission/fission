@@ -23,6 +23,7 @@ COMMITSHA ?= $(shell git rev-parse HEAD)
 GOOS ?= $(shell go env GOOS)
 GOARCH ?= $(shell go env GOARCH)
 GOAMD64 ?= $(shell go env GOAMD64)
+GOPATH ?= $(shell go env GOPATH)
 
 FISSION-CLI-SUFFIX :=
 ifeq ($(GOOS), windows)
@@ -59,7 +60,7 @@ install-fission-cli:
 
 ### Codegen
 codegen: controller-gen-install
-	@controller-gen object:headerFile="hack/boilerplate.txt" paths="./..."
+	$(GOPATH)/bin/controller-gen object:headerFile="hack/boilerplate.txt" paths="./..."
 	@./hack/update-codegen.sh
 
 ### CRDs
@@ -67,13 +68,13 @@ controller-gen-install:
 	go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.14.0
 
 generate-crds: controller-gen-install
-	controller-gen crd \
+	$(GOPATH)/bin/controller-gen crd \
 	paths=./pkg/apis/core/v1  \
 	output:crd:artifacts:config=crds/v1
 
 ### Webhook generation: it generates webhook configs with help of kubebuilder:webhook tag
 generate-webhooks: controller-gen-install
-	controller-gen webhook \
+	$(GOPATH)/bin/controller-gen webhook \
 	 paths=./pkg/apis/core/v1 \
 	 output:dir=charts/fission-all/templates/webhook-server
 
@@ -103,7 +104,7 @@ install-crd-ref-docs:
 
 generate-crd-ref-docs: install-crd-ref-docs
 	# crd-ref-docs: https://github.com/elastic/crd-ref-docs
-	crd-ref-docs --source-path=pkg/apis/core/v1 --config=tools/crd-ref-docs/config.yaml --renderer markdown
+	$(GOPATH)/bin/crd-ref-docs --source-path=pkg/apis/core/v1 --config=tools/crd-ref-docs/config.yaml --renderer markdown
 	cp tools/crd-ref-docs/header.md crd_docs.md
 	cat out.md >> crd_docs.md && rm out.md
 	mv crd_docs.md ../fission.io/content/en/docs/reference/crd-reference.md

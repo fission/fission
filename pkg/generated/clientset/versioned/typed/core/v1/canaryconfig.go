@@ -20,9 +20,12 @@ package v1
 
 import (
 	"context"
+	json "encoding/json"
+	"fmt"
 	"time"
 
 	v1 "github.com/fission/fission/pkg/apis/core/v1"
+	corev1 "github.com/fission/fission/pkg/generated/applyconfiguration/core/v1"
 	scheme "github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	types "k8s.io/apimachinery/pkg/types"
@@ -47,6 +50,8 @@ type CanaryConfigInterface interface {
 	List(ctx context.Context, opts metav1.ListOptions) (*v1.CanaryConfigList, error)
 	Watch(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error)
 	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, subresources ...string) (result *v1.CanaryConfig, err error)
+	Apply(ctx context.Context, _canaryConfig *corev1.CanaryConfigApplyConfiguration, opts metav1.ApplyOptions) (result *v1.CanaryConfig, err error)
+	ApplyStatus(ctx context.Context, _canaryConfig *corev1.CanaryConfigApplyConfiguration, opts metav1.ApplyOptions) (result *v1.CanaryConfig, err error)
 	CanaryConfigExpansion
 }
 
@@ -188,6 +193,62 @@ func (c *canaryConfigs) Patch(ctx context.Context, name string, pt types.PatchTy
 		Name(name).
 		SubResource(subresources...).
 		VersionedParams(&opts, scheme.ParameterCodec).
+		Body(data).
+		Do(ctx).
+		Into(result)
+	return
+}
+
+// Apply takes the given apply declarative configuration, applies it and returns the applied canaryConfig.
+func (c *canaryConfigs) Apply(ctx context.Context, _canaryConfig *corev1.CanaryConfigApplyConfiguration, opts metav1.ApplyOptions) (result *v1.CanaryConfig, err error) {
+	if _canaryConfig == nil {
+		return nil, fmt.Errorf("_canaryConfig provided to Apply must not be nil")
+	}
+	patchOpts := opts.ToPatchOptions()
+	data, err := json.Marshal(_canaryConfig)
+	if err != nil {
+		return nil, err
+	}
+	name := _canaryConfig.Name
+	if name == nil {
+		return nil, fmt.Errorf("_canaryConfig.Name must be provided to Apply")
+	}
+	result = &v1.CanaryConfig{}
+	err = c.client.Patch(types.ApplyPatchType).
+		Namespace(c.ns).
+		Resource("canaryconfigs").
+		Name(*name).
+		VersionedParams(&patchOpts, scheme.ParameterCodec).
+		Body(data).
+		Do(ctx).
+		Into(result)
+	return
+}
+
+// ApplyStatus was generated because the type contains a Status member.
+// Add a +genclient:noStatus comment above the type to avoid generating ApplyStatus().
+func (c *canaryConfigs) ApplyStatus(ctx context.Context, _canaryConfig *corev1.CanaryConfigApplyConfiguration, opts metav1.ApplyOptions) (result *v1.CanaryConfig, err error) {
+	if _canaryConfig == nil {
+		return nil, fmt.Errorf("_canaryConfig provided to Apply must not be nil")
+	}
+	patchOpts := opts.ToPatchOptions()
+	data, err := json.Marshal(_canaryConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	name := _canaryConfig.Name
+	if name == nil {
+		return nil, fmt.Errorf("_canaryConfig.Name must be provided to Apply")
+	}
+
+	result = &v1.CanaryConfig{}
+	err = c.client.Patch(types.ApplyPatchType).
+		Namespace(c.ns).
+		Resource("canaryconfigs").
+		Name(*name).
+		SubResource("status").
+		VersionedParams(&patchOpts, scheme.ParameterCodec).
 		Body(data).
 		Do(ctx).
 		Into(result)
