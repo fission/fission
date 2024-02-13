@@ -49,10 +49,9 @@ manifests:
         imageTag: ""
         influxdb.enabled: "false"
         namespace: fission
-        builderNamespace: "builder"
-        functionNamespace: "function"
-        additionalNamespaces: ["test"]
-        fissionOnAllNamespaces: "true"
+        builderNamespace: ""
+        functionNamespace: ""
+        fissionOnAllNamespaces: "false"
         openTelemetry.otlpCollectorEndpoint: ""
         openTelemetry.otlpInsecure: "true"
         podMonitor.additionalPodMonitorLabels.release: prometheus
@@ -65,7 +64,6 @@ manifests:
         repository: ghcr.io
         routerServiceType: LoadBalancer
         runtimePodSpec.enabled: "false"
-        executor.serviceAccountCheck.enabled: "true"
         serviceMonitor.additionalServiceMonitorLabels.release: prometheus
         serviceMonitor.enabled: "false"
         serviceMonitor.namespace: monitoring

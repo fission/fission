@@ -67,24 +67,24 @@ defaultNamespace: default
 ## if builderNamespace is set to empty then builder resources will be created in the same namespace as the Fission resources.
 ## This is different from the release namespace.
 ##
-builderNamespace: "builder"
+builderNamespace: ""
 
 ## functionNamespace represents the namespace in which Fission Function resources will be created.
 ## if functionNamespace is set to empty then function resources will be created in the same namespace as the Fission resources.
 ## This is different from the release namespace.
 ##
-functionNamespace: "functions"
+functionNamespace: ""
 
 ## Fission will watch the following namespaces along with the `defaultNamespace` for fission custom resources.
 ## additionalFissionNamespaces: 
 ## - namespace1
 ## - namespace2
 ## - namespace3
-additionalFissionNamespaces: ["test"]
+additionalFissionNamespaces: []
 
 ## Allows to create functions and environments on all namespaces in the cluster. This overwrites additionalFissionNamespaces setting
 ## Setting this requires executor.serviceAccountCheck.enabled to be true in order to create service accounts and permissions when creating environments and functions
-fissionOnAllNamespaces: true
+fissionOnAllNamespaces: false
 
 ## createNamespace decides to create namespaces by the chart.
 ## If set to true, functionNamespace and builderNamespace namespaces mentioned above will be created by the chart.
