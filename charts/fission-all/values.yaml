@@ -195,7 +195,7 @@ executor:
 
   serviceAccountCheck:
     ## enables fission to create service account, roles and rolebinding for missing permission for builder and fetcher.
-    enabled: false
+    enabled: true
     ## indicates the time interval in minutes, after that fission will create service account, roles and rolebinding for builder and fetcher.
     ## interval will be applicable only if enable value is set to true.
     ## default timing will be 0 minutes. That means check will run only once.
