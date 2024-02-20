@@ -168,6 +168,148 @@ jobs:
           path: kind-logs/*
           retention-days: 5
 
+  integration-test-all-ns:
+    runs-on: ${{ matrix.os }}
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip-ci') }}
+    strategy:
+      fail-fast: false
+      matrix:
+        kindversion: ["v1.23.17", "v1.25.11", "v1.27.3"]
+        os: [ubuntu-latest]
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: setup go
+        uses: actions/setup-go@93397bea11091df50f3d7e59dc26a7711a8bcfbe # v4.1.0
+        with:
+          go-version-file: "go.mod"
+          cache: true
+
+      - name: Checkout sources
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+        with:
+          repository: fission/examples
+          path: examples
+
+      - name: Helm installation
+        uses: Azure/setup-helm@5119fcb9089d432beecbf79bb2c7915207344b78 # v3.5
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Kind Cluster
+        uses: helm/kind-action@dda0770415bac9fc20092cacbc54aa298604d140 # v1.8.0
+        with:
+          node_image: kindest/node:${{ matrix.kindversion }}
+          version: ${{ env.KIND_VERSION }}
+          cluster_name: ${{ env.KIND_CLUSTER_NAME }}
+          config: kind.yaml
+
+      - name: Configuring and testing the Installation
+        run: |
+          kubectl cluster-info --context kind-${{ env.KIND_CLUSTER_NAME }}
+          kubectl get nodes
+          sudo apt-get install -y apache2-utils
+          kubectl config use-context kind-${{ env.KIND_CLUSTER_NAME }}
+          kubectl config view
+
+      - name: Helm chart lint
+        run: |
+          helm lint charts/fission-all/
+
+      - name: Install Skaffold
+        run: |
+          curl -Lo skaffold https://storage.googleapis.com/skaffold/releases/v2.0.3/skaffold-linux-amd64
+          sudo install skaffold /usr/local/bin/
+          skaffold version
+
+      - name: Install GoReleaser
+        uses: goreleaser/goreleaser-action@7ec5c2b0c6cdda6e8bbb49444bc797dd33d74dd8 # v5.0.0
+        with:
+          install-only: true
+
+      - name: Setup Prometheus Stack
+        run: |
+          helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+          helm repo update
+          kubectl create ns monitoring
+          helm install prometheus prometheus-community/kube-prometheus-stack -n monitoring \
+          --version 45.28.0 --set grafana.enabled=false --set alertmanager.enabled=false
+
+      - name: Build and Install Fission CLI
+        run: |
+          make debug-vars
+          make build-fission-cli
+          sudo make install-fission-cli
+          sudo chmod +x /usr/local/bin/fission
+
+      - name: Build and Install Fission
+        timeout-minutes: 10
+        run: |
+          kubectl create ns fission
+          make create-crds
+          SKAFFOLD_PROFILE=kind-ci-all-ns make skaffold-deploy
+
+      - name: Port-forward fission components
+        run: |
+          kubectl port-forward svc/router 8888:80 -nfission &
+
+      - name: Get fission version
+        timeout-minutes: 10
+        run: |
+          fission version
+
+      - name: Integration tests
+        timeout-minutes: 90
+        run: |
+          export TEST_ALL_NAMESPACES=1
+          ./test/kind_CI.sh
+
+      - name: Collect Fission Dump
+        timeout-minutes: 5
+        if: ${{ always() }}
+        run: |
+          command -v fission && fission support dump
+
+      - name: Kind export logs
+        timeout-minutes: 10
+        if: ${{ always() }}
+        run: |
+          kind export logs --name ${{ env.KIND_CLUSTER_NAME }} kind-logs
+
+      - name: Backup prometheus data
+        timeout-minutes: 10
+        if: ${{ always() }}
+        run: |
+          TRACE=1 ./hack/backup-prometheus.sh
+
+      - name: Archive fission dump
+        timeout-minutes: 10
+        if: ${{ failure() || cancelled() }}
+        uses: actions/upload-artifact@a8a3f3ad30e3422c9c7b888a15615d19a852ae32 # v3.1.3
+        with:
+          name: fission-dump-${{ github.run_id }}-${{ matrix.kindversion }}
+          path: fission-dump/*.zip
+          retention-days: 5
+
+      - name: Archive prometheus dump
+        timeout-minutes: 10
+        if: ${{ always() }}
+        uses: actions/upload-artifact@a8a3f3ad30e3422c9c7b888a15615d19a852ae32 # v3.1.3
+        with:
+          name: prom-dump-${{ github.run_id }}-${{ matrix.kindversion }}
+          path: /tmp/prometheus/*
+          retention-days: 5
+
+      - name: Archive kind logs
+        timeout-minutes: 10
+        if: ${{ always() }}
+        uses: actions/upload-artifact@a8a3f3ad30e3422c9c7b888a15615d19a852ae32 # v3.1.3
+        with:
+          name: kind-logs-${{ github.run_id }}-${{ matrix.kindversion }}
+          path: kind-logs/*
+          retention-days: 5
+
   # Job to ensure backward compatibility if function and builder pods are created
   # inside functionNamespace and builderNamespace
   integration-test-old:
