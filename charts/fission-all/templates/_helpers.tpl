@@ -101,7 +101,7 @@ This template generates the image name for the deployment depending on the value
 {{- else }}
   value: {{ .Values.defaultNamespace }}  
 {{- end }}
-{{- if .Values.fissionOnAllNamespaces }}
+{{ if .Values.fissionOnAllNamespaces -}}
 - name: FISSION_ON_ALL_NAMESPACES
   value: "true"
 {{- end }}
