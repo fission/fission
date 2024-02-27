@@ -248,7 +248,7 @@ jobs:
         run: |
           kubectl create ns fission
           make create-crds
-          SKAFFOLD_PROFILE=kind-ci-all-ns make skaffold-deploy
+          SKAFFOLD_PROFILE=kind-ci,all-ns make skaffold-deploy
 
       - name: Port-forward fission components
         run: |

@@ -15,14 +15,14 @@ mkdir -p $tmp_dir
 env=nodejs-$TEST_ID
 valid_fn_name=hello-$TEST_ID
 invalid_fn_name=errhello-$TEST_ID
-namespace=$(test -n "${TEST_ALL_NAMESPACES}" && echo "custom-ns" || echo "default")
+namespace=$(test -n "${TEST_ALL_NAMESPACES:-}" && echo "custom-ns" || echo "default")
 
 cleanup() {
     echo "previous response" $?
     log "Cleaning up..."
     clean_resource_by_id $TEST_ID
     rm -rf $tmp_dir
-    if [ -n "${TEST_ALL_NAMESPACES}" ]; then
+    if [ -n "${TEST_ALL_NAMESPACES:-}" ]; then
       kubectl delete namespace custom-ns --ignore-not-found
     fi
 }
@@ -33,7 +33,7 @@ else
     log "TEST_NOCLEANUP is set; not cleaning up test artifacts afterwards."
 fi
 
-if [ -n "${TEST_ALL_NAMESPACES}" ]; then
+if [ -n "${TEST_ALL_NAMESPACES:-}" ]; then
   log "Creating namespace 'custom-ns'"
   kubectl create namespace custom-ns
 fi
