@@ -152,7 +152,8 @@ func (p *PoolPodController) processRS(rs *apps.ReplicaSet) {
 	if *(rs.Spec.Replicas) != 0 {
 		return
 	}
-	logger := p.logger.With(zap.String("rs", rs.Name), zap.String("namespace", rs.Namespace))
+	namespace := p.nsResolver.ResolveNamespace(rs.Namespace)
+	logger := p.logger.With(zap.String("rs", rs.Name), zap.String("namespace", namespace))
 	logger.Debug("replica set has zero replica count")
 	// List all specialized pods and schedule for cleanup
 	rsLabelMap, err := metav1.LabelSelectorAsMap(rs.Spec.Selector)
@@ -161,7 +162,7 @@ func (p *PoolPodController) processRS(rs *apps.ReplicaSet) {
 		return
 	}
 	rsLabelMap["managed"] = "false"
-	specializedPods, err := p.podLister[rs.Namespace].Pods(rs.Namespace).List(labels.SelectorFromSet(rsLabelMap))
+	specializedPods, err := p.podLister[namespace].Pods(namespace).List(labels.SelectorFromSet(rsLabelMap))
 	if err != nil {
 		logger.Error("Failed to list specialized pods", zap.Error(err))
 	}
@@ -302,6 +303,10 @@ func (p *PoolPodController) getEnvLister(namespace string) (flisterv1.Environmen
 		if ns == namespace {
 			return lister, nil
 		}
+	}
+	lister, ok = p.envLister[metav1.NamespaceAll] // cluster wide listener
+	if ok {
+		return lister, nil
 	}
 	p.logger.Error("no environment lister found for namespace", zap.String("namespace", namespace))
 	return nil, fmt.Errorf("no environment lister found for namespace %s", namespace)

@@ -51,6 +51,7 @@ manifests:
         namespace: fission
         builderNamespace: ""
         functionNamespace: ""
+        fissionOnAllNamespaces: "false"
         openTelemetry.otlpCollectorEndpoint: ""
         openTelemetry.otlpInsecure: "true"
         podMonitor.additionalPodMonitorLabels.release: prometheus
@@ -126,6 +127,11 @@ profiles:
     value: true
   - op: replace
     path: /manifests/helm/releases/0/setValues/grafana.dashboards.enabled
+    value: true
+- name: all-ns
+  patches:
+  - op: replace
+    path: /manifests/helm/releases/0/setValues/fissionOnAllNamespaces
     value: true
 - name: kind-ci-old
   patches:

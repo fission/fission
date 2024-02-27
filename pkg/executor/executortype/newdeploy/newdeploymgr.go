@@ -237,8 +237,9 @@ func (deploy *NewDeploy) IsValid(ctx context.Context, fsvc *fscache.FuncSvc) boo
 		return false
 	}
 	for _, obj := range fsvc.KubernetesObjects {
+		namespace := deploy.nsResolver.ResolveNamespace(obj.Namespace)
 		if strings.ToLower(obj.Kind) == "service" {
-			_, err := deploy.svcLister[obj.Namespace].Services(obj.Namespace).Get(obj.Name)
+			_, err := deploy.svcLister[namespace].Services(namespace).Get(obj.Name)
 			if err != nil {
 				if !k8sErrs.IsNotFound(err) {
 					logger.Error("error validating function service", zap.String("function", fsvc.Function.Name), zap.Error(err))
@@ -247,7 +248,7 @@ func (deploy *NewDeploy) IsValid(ctx context.Context, fsvc *fscache.FuncSvc) boo
 			}
 
 		} else if strings.ToLower(obj.Kind) == "deployment" {
-			currentDeploy, err := deploy.deplLister[obj.Namespace].Deployments(obj.Namespace).Get(obj.Name)
+			currentDeploy, err := deploy.deplLister[namespace].Deployments(namespace).Get(obj.Name)
 			if err != nil {
 				if !k8sErrs.IsNotFound(err) {
 					logger.Error("error validating function deployment", zap.String("function", fsvc.Function.Name), zap.Error(err))

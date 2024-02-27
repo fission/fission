@@ -214,7 +214,7 @@ func TestNamespaceResolver(t *testing.T) {
 				if err != nil {
 					t.Fatalf("error setting environment Variable %s", err.Error())
 				}
-				ns := GetNamespaces()
+				ns := GetNamespaces(false)
 				if test.expected != len(ns) {
 					t.Errorf("expected length of namespace %d, got %d", test.expected, len(ns))
 				}
