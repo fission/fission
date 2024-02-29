@@ -87,8 +87,10 @@ func (opts *GetSubCommand) run(input cli.Input) error {
 	}
 
 	var reader io.Reader
-	archive := pkg.Spec.Source
-	if opts.archiveType == "deploy" {
+	var archive fv1.Archive
+	if opts.archiveType == "source" {
+		archive = pkg.Spec.Source
+	} else if opts.archiveType == "deploy" {
 		archive = pkg.Spec.Deployment
 	}
 
