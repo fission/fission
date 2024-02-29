@@ -40,19 +40,15 @@ type GetSubCommand struct {
 	name        string
 	namespace   string
 	output      string
-	archiveType string
+	archiveType int
 }
 
 func GetSrc(input cli.Input) error {
-	opts := &GetSubCommand{}
-	opts.archiveType = "source"
-	return opts.do(input)
+	return (&GetSubCommand{}).do(input)
 }
 
 func GetDeploy(input cli.Input) error {
-	opts := &GetSubCommand{}
-	opts.archiveType = "deploy"
-	return opts.do(input)
+	return (&GetSubCommand{}).do(input)
 }
 
 func (opts *GetSubCommand) do(input cli.Input) error {
@@ -72,12 +68,6 @@ func (opts *GetSubCommand) complete(input cli.Input) (err error) {
 	opts.output = input.String(flagkey.PkgOutput)
 	return nil
 }
-	// Set archiveType based on the command called
-	if input.Bool(flagkey.PkgSrc) {
-		opts.archiveType = "source"
-	} else if input.Bool(flagkey.PkgDeploy) {
-		opts.archiveType = "deploy"
-	}
 
 func (opts *GetSubCommand) run(input cli.Input) error {
 
@@ -87,10 +77,8 @@ func (opts *GetSubCommand) run(input cli.Input) error {
 	}
 
 	var reader io.Reader
-	var archive fv1.Archive
-	if opts.archiveType == "source" {
-		archive = pkg.Spec.Source
-	} else if opts.archiveType == "deploy" {
+	archive := pkg.Spec.Source
+	if opts.archiveType == deployArchive {
 		archive = pkg.Spec.Deployment
 	}
 
