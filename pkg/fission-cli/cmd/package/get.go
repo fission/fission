@@ -50,7 +50,9 @@ func GetSrc(input cli.Input) error {
 }
 
 func GetDeploy(input cli.Input) error {
-	return (&GetSubCommand{}).do(input)
+	opts := &GetSubCommand{}
+	opts.archiveType = "deploy"
+	return opts.do(input)
 }
 
 func (opts *GetSubCommand) do(input cli.Input) error {
