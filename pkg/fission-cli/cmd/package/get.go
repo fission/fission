@@ -44,7 +44,9 @@ type GetSubCommand struct {
 }
 
 func GetSrc(input cli.Input) error {
-	return (&GetSubCommand{}).do(input)
+	opts := &GetSubCommand{}
+	opts.archiveType = "source"
+	return opts.do(input)
 }
 
 func GetDeploy(input cli.Input) error {
