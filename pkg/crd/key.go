@@ -42,7 +42,7 @@ func (ck CacheKeyURG) String() string {
 	return fmt.Sprintf("%v_%v_%v", ck.UID, ck.ResourceVersion, ck.Generation)
 }
 
-// CacheKeyForUID create a key that uniquely identifies the
+// CacheKeyUIDFromMeta create a key that uniquely identifies the
 // of the object. Since resourceVersion changes on every update and
 // UIDs are unique, we don't use resource version here
 func CacheKeyUIDFromMeta(metadata *metav1.ObjectMeta) types.UID {

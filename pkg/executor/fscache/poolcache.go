@@ -355,7 +355,7 @@ func (c *PoolCache) MarkFuncDeleted(function crd.CacheKeyURG) {
 	}
 }
 
-// GetValue returns a function service with status in Active else return error
+// GetSvcValue returns a function service with status in Active else return error
 func (c *PoolCache) GetSvcValue(ctx context.Context, function crd.CacheKeyURG, requestsPerPod int, concurrency int) (*FuncSvc, error) {
 	respChannel := make(chan *response)
 	c.requestChannel <- &request{
@@ -390,7 +390,7 @@ func (c *PoolCache) ListAvailableValue() []*FuncSvc {
 	return resp.allValues
 }
 
-// SetValue marks the value at key [function][address] as active(begin used)
+// SetSvcValue marks the value at key [function][address] as active(begin used)
 func (c *PoolCache) SetSvcValue(ctx context.Context, function crd.CacheKeyURG, address string, value *FuncSvc, cpuLimit resource.Quantity, requestsPerPod, svcsRetain int) {
 	respChannel := make(chan *response)
 	c.requestChannel <- &request{
