@@ -207,6 +207,7 @@ func WriteArchiveToFile(fileName string, reader io.Reader) error {
 	if err != nil {
 		return err
 	}
+	defer w.Close()
 	_, err = io.Copy(w, reader)
 	if err != nil {
 		return err
