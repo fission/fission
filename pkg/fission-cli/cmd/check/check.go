@@ -18,6 +18,7 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/healthcheck"
+	"github.com/pkg/errors"
 )
 
 type CheckSubCommand struct {
@@ -32,13 +33,18 @@ func (opts *CheckSubCommand) do(input cli.Input) error {
 
 	checks := []healthcheck.CategoryID{}
 
+	userProvidedNS, _, err := opts.GetResourceNamespace(input, flagkey.NamespaceFunction)
+	if err != nil {
+		return errors.Wrap(err, "error retrieving user provided namespace information")
+	}
+
 	if input.IsSet(flagkey.PreCheckOnly) {
 		checks = append(checks, healthcheck.Kubernetes)
 	} else {
 		checks = append(checks, healthcheck.FissionServices, healthcheck.FissionVersion)
 	}
 
-	hc := healthcheck.NewHealthChecker(opts.Client(), checks)
+	hc := healthcheck.NewHealthChecker(opts.Client(), checks, userProvidedNS)
 
 	healthcheck.RunChecks(input.Context(), input, opts.Client(), hc)
 	return nil
