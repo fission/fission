@@ -14,6 +14,8 @@ limitations under the License.
 package check
 
 import (
+	"fmt"
+
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
@@ -32,13 +34,18 @@ func (opts *CheckSubCommand) do(input cli.Input) error {
 
 	checks := []healthcheck.CategoryID{}
 
+	userProvidedNS, _, err := opts.GetResourceNamespace(input, flagkey.Namespace)
+	if err != nil {
+		return fmt.Errorf("error retrieving user provided namespace information: %w", err)
+	}
+
 	if input.IsSet(flagkey.PreCheckOnly) {
 		checks = append(checks, healthcheck.Kubernetes)
 	} else {
 		checks = append(checks, healthcheck.FissionServices, healthcheck.FissionVersion)
 	}
 
-	hc := healthcheck.NewHealthChecker(opts.Client(), checks)
+	hc := healthcheck.NewHealthChecker(opts.Client(), checks, userProvidedNS)
 
 	healthcheck.RunChecks(input.Context(), input, opts.Client(), hc)
 	return nil

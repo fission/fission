@@ -18,11 +18,12 @@ package util
 
 // fission-cli options
 const (
-	SPEC_IGNORE_FILE    = ".specignore"
-	COMMIT_LABEL        = "commit"
-	FISSION_AUTH_URI    = "/auth/login"
-	FISSION_AUTH_TOKEN  = "FISSION_AUTH_TOKEN"
-	FISSION_STORAGE_URI = "/v1/archive"
+	SPEC_IGNORE_FILE          = ".specignore"
+	COMMIT_LABEL              = "commit"
+	FISSION_AUTH_URI          = "/auth/login"
+	FISSION_AUTH_TOKEN        = "FISSION_AUTH_TOKEN"
+	FISSION_STORAGE_URI       = "/v1/archive"
+	FISSION_DEFAULT_NAMESPACE = "fission"
 )
 
 const (

@@ -366,6 +366,11 @@ func TestFissionCLI(t *testing.T) {
 		require.NoError(t, err)
 	})
 
+	t.Run("check --namespace", func(t *testing.T) {
+		_, err := cli.ExecCommand(f, ctx, "check", "--namespace", "default")
+		require.NoError(t, err)
+	})
+
 	t.Run("version", func(t *testing.T) {
 		_, err := cli.ExecCommand(f, ctx, "version")
 		require.NoError(t, err)

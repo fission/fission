@@ -203,10 +203,14 @@ func (hc *HealthChecker) allCategories() []*Category {
 	}
 }
 
-func NewHealthChecker(cmd cmd.Client, categoryIDs []CategoryID) *HealthChecker {
+func NewHealthChecker(cmd cmd.Client, categoryIDs []CategoryID, fissionNamespace string) *HealthChecker {
+	if fissionNamespace == "" {
+		fissionNamespace = util.FISSION_DEFAULT_NAMESPACE
+	}
+
 	hc := &HealthChecker{
 		kubeAPI:          cmd.KubernetesClient,
-		fissionNamespace: "fission",
+		fissionNamespace: fissionNamespace,
 	}
 
 	hc.categories = hc.allCategories()
