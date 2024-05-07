@@ -1,6 +1,6 @@
 module github.com/fission/fission
 
-go 1.22
+go 1.22.2
 
 require (
 	dario.cat/mergo v1.0.0
