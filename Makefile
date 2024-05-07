@@ -60,8 +60,8 @@ install-fission-cli:
 
 ### Codegen
 codegen: controller-gen-install
-	$(GOPATH)/bin/controller-gen object:headerFile="hack/boilerplate.txt" paths="./..."
 	@./hack/update-codegen.sh
+	$(GOPATH)/bin/controller-gen object:headerFile="hack/boilerplate.txt" paths="./..."
 
 ### CRDs
 controller-gen-install:
@@ -131,7 +131,7 @@ release:
 
 ## Envtest
 install-envtest:
-	go install sigs.k8s.io/controller-runtime/tools/setup-envtest@v0.18.2
+	go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
 
 setup-envtest:
 	setup-envtest -p path use 1.23.x
