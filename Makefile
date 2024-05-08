@@ -60,12 +60,12 @@ install-fission-cli:
 
 ### Codegen
 codegen: controller-gen-install
-	$(GOPATH)/bin/controller-gen object:headerFile="hack/boilerplate.txt" paths="./..."
 	@./hack/update-codegen.sh
+	$(GOPATH)/bin/controller-gen object:headerFile="hack/boilerplate.txt" paths="./..."
 
 ### CRDs
 controller-gen-install:
-	go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.14.0
+	go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.15.0
 
 generate-crds: controller-gen-install
 	$(GOPATH)/bin/controller-gen crd \
@@ -100,7 +100,7 @@ generate-cli-docs:
 	go run tools/cmd-docs/main.go -o "../fission.io/content/en/docs/reference/fission-cli"
 
 install-crd-ref-docs:
-	go install github.com/elastic/crd-ref-docs@v0.0.10
+	go install github.com/elastic/crd-ref-docs@v0.0.12
 
 generate-crd-ref-docs: install-crd-ref-docs
 	# crd-ref-docs: https://github.com/elastic/crd-ref-docs
