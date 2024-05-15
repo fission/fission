@@ -6,8 +6,8 @@ on:
       - v2.**
 
 env:
-  KIND_VERSION: v0.20.0
-  KIND_NODE_IMAGE_TAG: v1.23.17
+  KIND_VERSION: v0.23.0
+  KIND_NODE_IMAGE_TAG: v1.25.16
   KIND_CLUSTER_NAME: kind
 
 jobs:
@@ -35,7 +35,7 @@ jobs:
           install-only: true
 
       - name: Kind Clutser
-        uses: helm/kind-action@dda0770415bac9fc20092cacbc54aa298604d140 # v1.8.0
+        uses: helm/kind-action@0025e74a8c7512023d06dc019c617aa3cf561fde # v1.10.0
         with:
           node_image: kindest/node:${{ env.KIND_NODE_IMAGE_TAG }}
           version: ${{ env.KIND_VERSION }}

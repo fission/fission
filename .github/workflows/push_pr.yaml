@@ -23,7 +23,7 @@ on:
 
 env:
   HELM_VERSION: v3.13.0
-  KIND_VERSION: v0.20.0
+  KIND_VERSION: v0.23.0
   KIND_CLUSTER_NAME: kind
 
 jobs:
@@ -34,7 +34,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        kindversion: ["v1.23.17", "v1.25.11", "v1.27.3"]
+        kindversion: ["v1.25.16", "v1.27.13", "v1.30.0"]
         os: [ubuntu-latest]
     steps:
       - name: Checkout sources
@@ -58,7 +58,7 @@ jobs:
           version: ${{ env.HELM_VERSION }}
 
       - name: Kind Cluster
-        uses: helm/kind-action@dda0770415bac9fc20092cacbc54aa298604d140 # v1.8.0
+        uses: helm/kind-action@0025e74a8c7512023d06dc019c617aa3cf561fde # v1.10.0
         with:
           node_image: kindest/node:${{ matrix.kindversion }}
           version: ${{ env.KIND_VERSION }}
@@ -200,7 +200,7 @@ jobs:
           version: ${{ env.HELM_VERSION }}
 
       - name: Kind Cluster
-        uses: helm/kind-action@dda0770415bac9fc20092cacbc54aa298604d140 # v1.8.0
+        uses: helm/kind-action@0025e74a8c7512023d06dc019c617aa3cf561fde # v1.10.0
         with:
           node_image: kindest/node:${{ matrix.kindversion }}
           version: ${{ env.KIND_VERSION }}
