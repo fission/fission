@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"text/tabwriter"
@@ -217,7 +218,8 @@ func WriteArchiveToFile(fileName string, reader io.Reader) error {
 		return err
 	}
 
-	err = os.Rename(path, fileName)
+	cmd := exec.Command("mv", path, fileName)
+	_, err = cmd.Output()
 	if err != nil {
 		return err
 	}
