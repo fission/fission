@@ -29,10 +29,7 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	pkgutil "github.com/fission/fission/pkg/fission-cli/cmd/package/util"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
-)
-
-const (
-	deployArchive = iota
+	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type GetSubCommand struct {
@@ -40,15 +37,19 @@ type GetSubCommand struct {
 	name        string
 	namespace   string
 	output      string
-	archiveType int
+	archiveType string
 }
 
 func GetSrc(input cli.Input) error {
-	return (&GetSubCommand{}).do(input)
+	opts := &GetSubCommand{}
+	opts.archiveType = util.SOURCE_ARCHIVE
+	return opts.do(input)
 }
 
 func GetDeploy(input cli.Input) error {
-	return (&GetSubCommand{}).do(input)
+	opts := &GetSubCommand{}
+	opts.archiveType = util.DEPLOY_ARCHIVE
+	return opts.do(input)
 }
 
 func (opts *GetSubCommand) do(input cli.Input) error {
@@ -78,13 +79,13 @@ func (opts *GetSubCommand) run(input cli.Input) error {
 
 	var reader io.Reader
 	archive := pkg.Spec.Source
-	if opts.archiveType == deployArchive {
+	if opts.archiveType == util.DEPLOY_ARCHIVE || archive.Type == "" {
 		archive = pkg.Spec.Deployment
 	}
 
-	if pkg.Spec.Deployment.Type == fv1.ArchiveTypeLiteral {
+	if archive.Type == fv1.ArchiveTypeLiteral {
 		reader = bytes.NewReader(archive.Literal)
-	} else if pkg.Spec.Deployment.Type == fv1.ArchiveTypeUrl {
+	} else if archive.Type == fv1.ArchiveTypeUrl {
 
 		readCloser, err := pkgutil.DownloadStrorageURL(input.Context(), opts.Client(), archive.URL)
 		if err != nil {

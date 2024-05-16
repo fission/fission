@@ -24,6 +24,8 @@ const (
 	FISSION_AUTH_TOKEN        = "FISSION_AUTH_TOKEN"
 	FISSION_STORAGE_URI       = "/v1/archive"
 	FISSION_DEFAULT_NAMESPACE = "fission"
+	SOURCE_ARCHIVE            = "source"
+	DEPLOY_ARCHIVE            = "deploy"
 )
 
 const (
