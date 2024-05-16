@@ -923,7 +923,7 @@ func applyEnvironments(ctx context.Context, fclient cmd.Client, fr *FissionResou
 		for _, o := range objs {
 			_, wanted := desired[mapKey(&o.ObjectMeta)]
 			if !wanted {
-				err := fclient.FissionClientSet.CoreV1().Environments(o.ObjectMeta.Namespace).Delete(ctx, o.ObjectMeta.Namespace, metav1.DeleteOptions{})
+				err := fclient.FissionClientSet.CoreV1().Environments(o.ObjectMeta.Namespace).Delete(ctx, o.ObjectMeta.Name, metav1.DeleteOptions{})
 				if err != nil {
 					return nil, nil, err
 				}
