@@ -454,6 +454,7 @@ func TestFissionCLI(t *testing.T) {
 	t.Run("package", func(t *testing.T) {
 		testPkgName := "test-pkg"
 		envName := "test-env"
+		envName2 := "test-env-2"
 
 		t.Run("create", func(t *testing.T) {
 			_, err := cli.ExecCommand(f, ctx, "env", "create", "--name", envName, "--image", "fission/python-env")
@@ -495,17 +496,17 @@ func TestFissionCLI(t *testing.T) {
 		})
 
 		t.Run("update", func(t *testing.T) {
-			_, err := cli.ExecCommand(f, ctx, "env", "create", "--name", "test-env-2", "--image", "fission/python-env:v2")
+			_, err := cli.ExecCommand(f, ctx, "env", "create", "--name", envName2, "--image", "fission/python-env:v2")
 			require.NoError(t, err)
 
-			_, err = cli.ExecCommand(f, ctx, "pkg", "update", "--name", testPkgName, "--code", "./hello.js", "--env", "test-env-2")
+			_, err = cli.ExecCommand(f, ctx, "pkg", "update", "--name", testPkgName, "--code", "./hello.js", "--env", envName2)
 			require.NoError(t, err)
 
 			pkg, err := fissionClient.CoreV1().Packages(metav1.NamespaceDefault).Get(ctx, testPkgName, metav1.GetOptions{})
 			require.NoError(t, err)
 			require.NotNil(t, pkg)
 			require.Equal(t, testPkgName, pkg.Name)
-			require.Equal(t, "test-env-2", pkg.Spec.Environment.Name)
+			require.Equal(t, envName2, pkg.Spec.Environment.Name)
 		})
 
 		t.Run("delete", func(t *testing.T) {
@@ -514,6 +515,12 @@ func TestFissionCLI(t *testing.T) {
 
 			_, err = fissionClient.CoreV1().Packages(metav1.NamespaceDefault).Get(ctx, testPkgName, metav1.GetOptions{})
 			require.Error(t, err)
+
+			_, err = cli.ExecCommand(f, ctx, "env", "delete", "--name", envName)
+			require.NoError(t, err)
+
+			_, err = cli.ExecCommand(f, ctx, "env", "delete", "--name", envName2)
+			require.NoError(t, err)
 		})
 	})
 }
