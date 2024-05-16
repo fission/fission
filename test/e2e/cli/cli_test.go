@@ -450,4 +450,70 @@ func TestFissionCLI(t *testing.T) {
 		err = os.RemoveAll("specs")
 		require.NoError(t, err)
 	})
+
+	t.Run("package", func(t *testing.T) {
+		testPkgName := "test-pkg"
+		envName := "test-env"
+
+		t.Run("create", func(t *testing.T) {
+			_, err := cli.ExecCommand(f, ctx, "env", "create", "--name", envName, "--image", "fission/python-env")
+			require.NoError(t, err)
+
+			_, err = cli.ExecCommand(f, ctx, "pkg", "create", "--name", testPkgName, "--code", "./hello.js", "--env", envName)
+			require.NoError(t, err)
+
+			pkg, err := fissionClient.CoreV1().Packages(metav1.NamespaceDefault).Get(ctx, testPkgName, metav1.GetOptions{})
+			require.NoError(t, err)
+			require.NotNil(t, pkg)
+			require.Equal(t, testPkgName, pkg.Name)
+			require.Equal(t, envName, pkg.Spec.Environment.Name)
+		})
+
+		t.Run("list", func(t *testing.T) {
+			_, err := cli.ExecCommand(f, ctx, "pkg", "list")
+			require.NoError(t, err)
+		})
+
+		t.Run("info", func(t *testing.T) {
+			_, err := cli.ExecCommand(f, ctx, "pkg", "info", "--name", testPkgName)
+			require.NoError(t, err)
+		})
+
+		t.Run("getsrc", func(t *testing.T) {
+			_, err := cli.ExecCommand(f, ctx, "pkg", "getsrc", "--name", testPkgName)
+			require.NoError(t, err)
+		})
+
+		t.Run("getdeploy", func(t *testing.T) {
+			_, err := cli.ExecCommand(f, ctx, "pkg", "getdeploy", "--name", testPkgName)
+			require.NoError(t, err)
+		})
+
+		t.Run("rebuild", func(t *testing.T) {
+			_, err := cli.ExecCommand(f, ctx, "pkg", "rebuild", "--name", testPkgName)
+			require.Error(t, err)
+		})
+
+		t.Run("update", func(t *testing.T) {
+			_, err := cli.ExecCommand(f, ctx, "env", "create", "--name", "test-env-2", "--image", "fission/python-env:v2")
+			require.NoError(t, err)
+
+			_, err = cli.ExecCommand(f, ctx, "pkg", "update", "--name", testPkgName, "--code", "./hello.js", "--env", "test-env-2")
+			require.NoError(t, err)
+
+			pkg, err := fissionClient.CoreV1().Packages(metav1.NamespaceDefault).Get(ctx, testPkgName, metav1.GetOptions{})
+			require.NoError(t, err)
+			require.NotNil(t, pkg)
+			require.Equal(t, testPkgName, pkg.Name)
+			require.Equal(t, "test-env-2", pkg.Spec.Environment.Name)
+		})
+
+		t.Run("delete", func(t *testing.T) {
+			_, err := cli.ExecCommand(f, ctx, "pkg", "delete", "--name", testPkgName)
+			require.NoError(t, err)
+
+			_, err = fissionClient.CoreV1().Packages(metav1.NamespaceDefault).Get(ctx, testPkgName, metav1.GetOptions{})
+			require.Error(t, err)
+		})
+	})
 }
