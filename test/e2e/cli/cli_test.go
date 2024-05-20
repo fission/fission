@@ -46,6 +46,7 @@ func TestFissionCLI(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("environment", func(t *testing.T) {
+		defaultEnvVersion := 3
 		t.Run("create", func(t *testing.T) {
 			_, err := cli.ExecCommand(f, ctx, "env", "create", "--name", "test-env", "--image", "fission/python-env")
 			require.NoError(t, err)
@@ -55,6 +56,7 @@ func TestFissionCLI(t *testing.T) {
 			require.NotNil(t, env)
 			require.Equal(t, "test-env", env.Name)
 			require.Equal(t, "fission/python-env", env.Spec.Runtime.Image)
+			require.Equal(t, defaultEnvVersion, env.Spec.Version)
 		})
 
 		t.Run("list", func(t *testing.T) {

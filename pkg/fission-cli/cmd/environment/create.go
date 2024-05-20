@@ -138,11 +138,6 @@ func createEnvironmentFromCmd(input cli.Input) (*fv1.Environment, error) {
 		envVersion = 1
 	}
 
-	if input.IsSet(flagkey.EnvPoolsize) {
-		// TODO: remove silently version 3 assignment, we need to warn user to set it explicitly.
-		envVersion = 3
-	}
-
 	if !input.IsSet(flagkey.EnvPoolsize) {
 		console.Info("poolsize setting default to 3")
 	}
@@ -154,10 +149,6 @@ func createEnvironmentFromCmd(input cli.Input) (*fv1.Environment, error) {
 
 	envBuilderImg := input.String(flagkey.EnvBuilderImage)
 	if len(envBuilderImg) > 0 {
-		if !input.IsSet(flagkey.EnvVersion) {
-			// TODO: remove set env version to 2 silently, we need to warn user to set it explicitly.
-			envVersion = 2
-		}
 		if len(envBuildCmd) == 0 {
 			envBuildCmd = "build"
 		}
