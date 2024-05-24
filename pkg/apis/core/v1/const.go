@@ -81,6 +81,10 @@ const (
 )
 
 const (
+	MessageQueueTypeKafka = "kafka"
+)
+
+const (
 	// FunctionReferenceFunctionName means that the function
 	// reference is simply by function name.
 	FunctionReferenceTypeFunctionName = "name"

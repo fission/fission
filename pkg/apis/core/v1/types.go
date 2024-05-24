@@ -751,7 +751,7 @@ type (
 		// +optional
 		FunctionReference FunctionReference `json:"functionref"`
 
-		// Type of message queue
+		// Type of message queue (NATS, Kafka, AzureQueue)
 		// +optional
 		MessageQueueType MessageQueueType `json:"messageQueueType"`
 
