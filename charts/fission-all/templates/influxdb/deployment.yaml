@@ -1,4 +1,4 @@
-{{- if .Values.influxdb.enabled }}
+{{- if .Values.logger.fluentbit.influxdb.enabled }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -34,7 +34,7 @@ spec:
     spec:
       containers:
       - name: influxdb
-        image: {{ .Values.influxdb.image | quote }}
+        image: {{ .Values.logger.fluentbit.influxdb.image | quote }}
         imagePullPolicy: {{ .Values.pullPolicy }}
         env:
         - name: INFLUXDB_DB

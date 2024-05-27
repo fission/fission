@@ -609,14 +609,42 @@ analyticsNonHelmInstall: false
 ##
 gaTrackingID: UA-196546703-1
 
-## Logger config
-## This would be used if influxdb is enabled
-##
+## Logger configura
 logger:
-  influxdbAdmin: "admin"
-  fluentdImageRepository: index.docker.io
-  fluentdImage: fluent/fluent-bit
-  fluentdImageTag: 1.8.8
+  enabled: false
+  fluentbit:
+    # Extra environment variables to pass to the fluent-bit container
+    extraEnv:
+      public:
+#      - name: EXAMPLE
+#        value: "example"
+      sensitive:
+#      - name: EXAMPLE
+#        value: "example"
+    repository: index.docker.io
+    image: fluent/fluent-bit
+    tag: 1.8.8
+    ## Enable InfluxDB
+    influxdb:
+      enabled: true
+      image: influxdb:1.8
+      adminUser: admin
+    ## Specify extra configuration for Fluent Bit by uncommenting customOutput and
+    ## adding your extra settings
+    ## example:
+    ## extraConfig: |
+    ##   [OUTPUT]
+    ##     Name  stdout
+    ##     Match *
+    extraConfig: null
+    ## Specify custom output configurations for Fluent Bit by uncommenting customOutput and
+    ## adding your custom settings
+    ## example:
+    ## customOutput: |
+    ##   [OUTPUT]
+    ##     Name  stdout
+    ##     Match *
+    customOutput: null
 
   ## Fluent-bit writes/reads it’s own sqlite database to record a history of tracked
   ## files and a state of offsets, this is very useful to resume a state if the ser-
@@ -639,11 +667,8 @@ logger:
     #- NET_RAW
     #- NET_ADMIN
 
-## Enable InfluxDB
-##
-influxdb:
-  enabled: false
-  image: influxdb:1.8
+
+
 
 ## Allow user to override busybox image used in fluent-bit init container
 ##

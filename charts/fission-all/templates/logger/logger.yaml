@@ -1,5 +1,5 @@
-{{- if .Values.influxdb.enabled }}
-# Fluentbit deployment for Fission
+{{- if .Values.logger.enabled }}
+# Logger & Fluentbit deployment for Fission
 #
 # Requires:
 # - service account: fission-svc
@@ -14,14 +14,35 @@ data:
 {{ else }}
 {{ fail "invalid chart" }}
 {{- end }}
+  output-influxdb.conf: |
+{{- if .Values.logger.fluentbit.influxdb.enabled }}
+{{ .Files.Get "config/output-influxdb.conf" | indent 3 }}
+{{ else }}
+# intentionally empty, as influxdb is not enabled
+{{- end }}
+  extra-config.conf: |
+{{- if .Values.logger.fluentbit.extraConfig }}
+{{ tpl .Values.logger.fluentbit.extraConfig . | indent 3 }}
+{{ else }}
+{{- end }}
+{{- if .Values.logger.fluentbit.customOutput }}
+{{ tpl .Values.logger.fluentbit.customOutput . | indent 3 }}
+{{ else }}
+{{- end }}
 {{- if .Files.Get "config/parsers.conf" }}
   parsers.conf: |
 {{ .Files.Get "config/parsers.conf" | indent 3 }}
 {{ else }}
 {{ fail "invalid chart" }}
 {{- end }}
-{{- if .Values.logger.podSecurityPolicy.enabled }}
 ---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fission-fluentbit
+  namespace: {{ .Release.Namespace }}
+---
+{{- if .Values.logger.podSecurityPolicy.enabled }}
 apiVersion: policy/v1beta1
 kind: PodSecurityPolicy
 metadata:
@@ -40,11 +61,11 @@ spec:
   fsGroup:
     rule: RunAsAny
   volumes:
-  - '*'
+    - '*'
   {{- if .Values.logger.podSecurityPolicy.additionalCapabilities }}
   allowedCapabilities:
   {{- range .Values.logger.podSecurityPolicy.additionalCapabilities }}
-  - {{ . }}
+    - {{ . }}
   {{- end }}
   {{- end }}
 ---
@@ -56,11 +77,11 @@ metadata:
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
     svc: logger
 rules:
-- apiGroups: ['policy']
-  resources: ['podsecuritypolicies']
-  verbs:     ['use']
-  resourceNames:
-  - {{ .Release.Name }}-fission-logger-privileged
+  - apiGroups: ['policy']
+    resources: ['podsecuritypolicies']
+    verbs:     ['use']
+    resourceNames:
+      - {{ .Release.Name }}-fission-logger-privileged
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -74,9 +95,9 @@ roleRef:
   name:     psp:{{ .Release.Name }}-fission-logger-privileged
   apiGroup: rbac.authorization.k8s.io
 subjects:
-- kind:      ServiceAccount
-  name:      default
-  namespace: {{ .Release.Namespace }}
+  - kind:      ServiceAccount
+    name:      default
+    namespace: {{ .Release.Namespace }}
 {{- end }}
 ---
 apiVersion: apps/v1
@@ -99,15 +120,15 @@ spec:
         - name: init
           image: {{ .Values.busyboxImage | quote }}
           imagePullPolicy: {{ .Values.pullPolicy }}
-          command: ['mkdir', '-p', '/var/log/fission']
+          command: [ 'mkdir', '-p', '/var/log/fission' ]
           volumeMounts:
             - name: container-log
               mountPath: /var/log/
               readOnly: false
-{{- if .Values.logger.enableSecurityContext }}
+      {{- if .Values.logger.enableSecurityContext }}
           securityContext:
             privileged: true
-{{- end }}
+      {{- end }}
       containers:
         - name: logger
           image: {{ include "fission-bundleImage" . | quote }}
@@ -133,14 +154,15 @@ spec:
 {{- end }}
         - name: fluentbit
 {{- if .Values.repository }}
-          image: "{{ .Values.logger.fluentdImageRepository }}/{{ .Values.logger.fluentdImage }}:{{ .Values.logger.fluentdImageTag }}"
+          image: "{{ .Values.logger.fluentbit.repository }}/{{ .Values.logger.fluentbit.image }}:{{ .Values.logger.fluentbit.tag }}"
 {{ else }}
-          image: "{{ .Values.logger.fluentdImage }}:{{ .Values.logger.fluentdImageTag }}"
+          image: "{{ .Values.logger.fluentbit.image }}:{{ .Values.logger.fluentbit.tag }}"
 {{- end }}
           imagePullPolicy: {{ .Values.pullPolicy }}
           # CMD ["/fluent-bit/bin/fluent-bit", "-c", "/fluent-bit/etc/fluent-bit.conf"]
           command: ["/fluent-bit/bin/fluent-bit", "-c", "/fluent-bit/etc/fluentbit.conf"]
           env:
+{{- if .Values.logger.fluentbit.influxdb.enabled }}
             - name: INFLUXDB_ADDRESS
               value: influxdb
             - name: INFLUXDB_PORT
@@ -157,8 +179,30 @@ spec:
                 secretKeyRef:
                   name: influxdb
                   key: password
+{{- end }}
+            - name: SERVICE_FLUSH_INTERVAL
+              value: "5"
+            - name: INPUT_REFRESH_INTERVAL
+              value: "10"
+            - name: INPUT_MEM_BUF_LIMIT
+              value: "5MB"
             - name: LOG_PATH
               value: /var/log/fission/*.log
+{{- if .Values.logger.fluentbit.extraEnv.public }}
+{{- range $key, $value := .Values.logger.fluentbit.extraEnv.public }}
+            - name: {{ $key }}
+              value: {{ quote $value }}
+{{- end }}
+{{- end }}
+{{- if .Values.logger.fluentbit.extraEnv.sensitive }}
+{{- range $key, $val := .Values.logger.fluentbit.extraEnv.sensitive }}
+            - name: {{ $key }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $.Release.Name }}-fission-fluentbit-secret
+                  key: {{ $key }}
+{{- end}}
+{{- end}}
 {{- if .Values.logger.enableSecurityContext }}
           securityContext:
             privileged: true
