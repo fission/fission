@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package mqtrigger
+package messageQueue
 
 import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -22,6 +22,12 @@ import (
 
 type (
 	Subscription interface{}
+
+	Config struct {
+		MQType  string
+		Url     string
+		Secrets map[string][]byte
+	}
 
 	MessageQueue interface {
 		Subscribe(trigger *fv1.MessageQueueTrigger) (Subscription, error)
