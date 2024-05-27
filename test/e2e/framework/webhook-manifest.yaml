@@ -28,7 +28,7 @@ webhooks:
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
-  name: validating-webhook-configuration
+  name: fission-validating-webhooks
 webhooks:
 - admissionReviewVersions:
   - v1

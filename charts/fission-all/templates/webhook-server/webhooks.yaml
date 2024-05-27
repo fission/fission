@@ -49,7 +49,7 @@ apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
   creationTimestamp: null
-  name: validating-webhook-configuration
+  name: fission-validating-webhooks
   {{- if $certManagerEnabled }}
   annotations:
     cert-manager.io/inject-ca-from: "{{ .Release.Namespace }}/fission-webhook-cert"
