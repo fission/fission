@@ -93,7 +93,7 @@ spec:
                 description: Maximum times for message queue trigger to retry
                 type: integer
               messageQueueType:
-                description: Type of message queue
+                description: Type of message queue (NATS, Kafka, AzureQueue)
                 type: string
               metadata:
                 additionalProperties:

@@ -217,7 +217,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 
 func checkMQTopicAvailability(mqType fv1.MessageQueueType, mqtKind string, topics ...string) error {
 	for _, t := range topics {
-		if len(t) > 0 && !validator.IsValidTopic(mqtKind) {
+		if len(t) > 0 && !validator.IsValidTopic((string)(mqType), t, mqtKind) {
 			return errors.Errorf("invalid topic for %s: %s", mqType, t)
 		}
 	}

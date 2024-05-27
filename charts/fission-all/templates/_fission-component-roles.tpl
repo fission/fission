@@ -50,6 +50,24 @@ rules:
   - patch
   - delete
 {{- end }}
+{{- define "kafka-rules" }}
+rules:
+- apiGroups:
+  - fission.io
+  resources:
+  - environments
+  - functions
+  - messagequeuetriggers
+  - packages
+  verbs:
+  - create
+  - get
+  - list
+  - watch
+  - update
+  - patch
+  - delete
+{{- end }}
 {{- define "keda-rules" }}
 rules:
 - apiGroups:
