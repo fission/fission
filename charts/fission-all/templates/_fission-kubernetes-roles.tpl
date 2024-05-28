@@ -354,6 +354,8 @@ rules:
 # TODO: Kept for future in case preupgrade needs any permissions in the future
 rules: []
 {{- end }}
+# TODO: Currently, router needs ingress related permissions only.
+# In future if router's permissions are modified then check the configured namespace.
 {{- define "router-kuberules" }}
 rules:
 - apiGroups:
