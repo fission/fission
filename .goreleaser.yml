@@ -12,6 +12,12 @@ release:
     - glob: ./manifest/charts/*
     - glob: ./manifest/yamls/*
 
+variables:
+  fetcherDescription: Fetcher is a lightweight component used by environment and builder pods. Fetcher helps in fetch and upload of source/deployment packages and specializing environments.
+  builderDescription: The builder assists in building the fission function source code for deployment.
+  reporterDescription: The reporter gathers information that assists in improving fission.
+  preUpgradeChecksDescription: Preupgradechecks ensures that Fission is ready for the targeted version upgrade by performing checks beforehand.
+  fissionBundleDescription: fission-bundle is a component which is a single binary for all components. Most server side components running on server side are fission-bundle binary wrapped in container and used with different arguments.
 before:
   hooks:
     - go mod tidy
@@ -88,6 +94,7 @@ dockers:
       - "ghcr.io/fission/builder:{{ .Tag }}-amd64"
     dockerfile: cmd/builder/Dockerfile
     build_flag_templates:
+      - "--label=org.opencontainers.image.description={{.Var.builderDescription}}"
       - "--label=org.opencontainers.image.source={{.GitURL}}"
       - "--platform=linux/amd64"
       - "--label=org.opencontainers.image.created={{.Date}}"
@@ -103,6 +110,7 @@ dockers:
       - "ghcr.io/fission/fetcher:{{ .Tag }}-amd64"
     dockerfile: cmd/fetcher/Dockerfile
     build_flag_templates:
+      - "--label=org.opencontainers.image.description={{.Var.fetcherDescription}}"
       - "--label=org.opencontainers.image.source={{.GitURL}}"
       - "--platform=linux/amd64"
       - "--label=org.opencontainers.image.created={{.Date}}"
@@ -118,6 +126,7 @@ dockers:
       - "ghcr.io/fission/fission-bundle:{{ .Tag }}-amd64"
     dockerfile: cmd/fission-bundle/Dockerfile
     build_flag_templates:
+      - "--label=org.opencontainers.image.description={{.Var.fissionBundleDescription}}"
       - "--label=org.opencontainers.image.source={{.GitURL}}"
       - "--platform=linux/amd64"
       - "--label=org.opencontainers.image.created={{.Date}}"
@@ -133,6 +142,7 @@ dockers:
       - "ghcr.io/fission/pre-upgrade-checks:{{ .Tag }}-amd64"
     dockerfile: cmd/preupgradechecks/Dockerfile
     build_flag_templates:
+      - "--label=org.opencontainers.image.description={{.Var.preUpgradeChecksDescription}}"
       - "--label=org.opencontainers.image.source={{.GitURL}}"
       - "--platform=linux/amd64"
       - "--label=org.opencontainers.image.created={{.Date}}"
@@ -148,6 +158,7 @@ dockers:
       - "ghcr.io/fission/reporter:{{ .Tag }}-amd64"
     dockerfile: cmd/reporter/Dockerfile
     build_flag_templates:
+      - "--label=org.opencontainers.image.description={{.Var.reporterDescription}}"
       - "--label=org.opencontainers.image.source={{.GitURL}}"
       - "--platform=linux/amd64"
       - "--label=org.opencontainers.image.created={{.Date}}"
@@ -166,6 +177,7 @@ dockers:
       - "ghcr.io/fission/builder:{{ .Tag }}-arm64"
     dockerfile: cmd/builder/Dockerfile
     build_flag_templates:
+      - "--label=org.opencontainers.image.description={{.Var.builderDescription}}"
       - "--label=org.opencontainers.image.source={{.GitURL}}"
       - "--platform=linux/arm64"
       - "--label=org.opencontainers.image.created={{.Date}}"
@@ -181,6 +193,7 @@ dockers:
       - "ghcr.io/fission/fetcher:{{ .Tag }}-arm64"
     dockerfile: cmd/fetcher/Dockerfile
     build_flag_templates:
+      - "--label=org.opencontainers.image.description={{.Var.fetcherDescription}}"
       - "--label=org.opencontainers.image.source={{.GitURL}}"
       - "--platform=linux/arm64"
       - "--label=org.opencontainers.image.created={{.Date}}"
@@ -196,6 +209,7 @@ dockers:
       - "ghcr.io/fission/fission-bundle:{{ .Tag }}-arm64"
     dockerfile: cmd/fission-bundle/Dockerfile
     build_flag_templates:
+      - "--label=org.opencontainers.image.description={{.Var.fissionBundleDescription}}"
       - "--label=org.opencontainers.image.source={{.GitURL}}"
       - "--platform=linux/arm64"
       - "--label=org.opencontainers.image.created={{.Date}}"
@@ -211,6 +225,7 @@ dockers:
       - "ghcr.io/fission/pre-upgrade-checks:{{ .Tag }}-arm64"
     dockerfile: cmd/preupgradechecks/Dockerfile
     build_flag_templates:
+      - "--label=org.opencontainers.image.description={{.Var.preUpgradeChecksDescription}}"
       - "--label=org.opencontainers.image.source={{.GitURL}}"
       - "--platform=linux/arm64"
       - "--label=org.opencontainers.image.created={{.Date}}"
@@ -226,6 +241,7 @@ dockers:
       - "ghcr.io/fission/reporter:{{ .Tag }}-arm64"
     dockerfile: cmd/reporter/Dockerfile
     build_flag_templates:
+      - "--label=org.opencontainers.image.description={{.Var.reporterDescription}}"
       - "--label=org.opencontainers.image.source={{.GitURL}}"
       - "--platform=linux/arm64"
       - "--label=org.opencontainers.image.created={{.Date}}"
@@ -245,6 +261,7 @@ dockers:
       - "ghcr.io/fission/builder:{{ .Tag }}-armv7"
     dockerfile: cmd/builder/Dockerfile
     build_flag_templates:
+      - "--label=org.opencontainers.image.description={{.Var.builderDescription}}"
       - "--label=org.opencontainers.image.source={{.GitURL}}"
       - "--platform=linux/arm/v7"
       - "--label=org.opencontainers.image.created={{.Date}}"
@@ -260,6 +277,7 @@ dockers:
       - "ghcr.io/fission/fetcher:{{ .Tag }}-armv7"
     dockerfile: cmd/fetcher/Dockerfile
     build_flag_templates:
+      - "--label=org.opencontainers.image.description={{.Var.fetcherDescription}}"
       - "--label=org.opencontainers.image.source={{.GitURL}}"
       - "--platform=linux/arm/v7"
       - "--label=org.opencontainers.image.created={{.Date}}"
@@ -275,6 +293,7 @@ dockers:
       - "ghcr.io/fission/fission-bundle:{{ .Tag }}-armv7"
     dockerfile: cmd/fission-bundle/Dockerfile
     build_flag_templates:
+      - "--label=org.opencontainers.image.description={{.Var.fissionBundleDescription}}"
       - "--label=org.opencontainers.image.source={{.GitURL}}"
       - "--platform=linux/arm/v7"
       - "--label=org.opencontainers.image.created={{.Date}}"
@@ -290,6 +309,7 @@ dockers:
       - "ghcr.io/fission/pre-upgrade-checks:{{ .Tag }}-armv7"
     dockerfile: cmd/preupgradechecks/Dockerfile
     build_flag_templates:
+      - "--label=org.opencontainers.image.description={{.Var.preUpgradeChecksDescription}}"
       - "--label=org.opencontainers.image.source={{.GitURL}}"
       - "--platform=linux/arm/v7"
       - "--label=org.opencontainers.image.created={{.Date}}"
@@ -305,6 +325,7 @@ dockers:
       - "ghcr.io/fission/reporter:{{ .Tag }}-armv7"
     dockerfile: cmd/reporter/Dockerfile
     build_flag_templates:
+      - "--label=org.opencontainers.image.description={{.Var.reporterDescription}}"
       - "--label=org.opencontainers.image.source={{.GitURL}}"
       - "--platform=linux/arm/v7"
       - "--label=org.opencontainers.image.created={{.Date}}"
