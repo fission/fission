@@ -13,10 +13,10 @@ release:
     - glob: ./manifest/yamls/*
 
 variables:
-  fetcherDescription: Fetcher is a very lightweight component and all of related logic is in fetcher package itself. Fetcher helps in fetching and uploading code and in specializing environments.
-  builderDescription: Builder builds the source code into executable binary files.
-  reporterDescription: Reporter reports fission events to analytics service.
-  preUpgradeChecksDescription: preupgradechecks is a small independent component to do pre-install upgrade tasks.
+  fetcherDescription: Fetcher is a lightweight component used by environment and builder pods. Fetcher helps in fetch and upload of source/deployment packages and specializing environments.
+  builderDescription: The builder assists in building the fission function source code for deployment.
+  reporterDescription: The reporter gathers information that assists in improving fission.
+  preUpgradeChecksDescription: Preupgradechecks ensures that Fission is ready for the targeted version upgrade by performing checks beforehand.
   fissionBundleDescription: fission-bundle is a component which is a single binary for all components. Most server side components running on server side are fission-bundle binary wrapped in container and used with different arguments.
 before:
   hooks:
