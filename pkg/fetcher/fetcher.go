@@ -611,12 +611,16 @@ func (fetcher *Fetcher) archive(src string, dst string) error {
 	} else {
 		files = append(files, src)
 	}
-	return archiver.DefaultZip.Archive(files, dst)
+	zip := archiver.NewZip()
+	defer zip.Close()
+	return zip.Archive(files, dst)
 }
 
 // unarchive is a function that unzips a zip file to destination
 func (fetcher *Fetcher) unarchive(src string, dst string) error {
-	err := archiver.DefaultZip.Unarchive(src, dst)
+	zip := archiver.NewZip()
+	defer zip.Close()
+	err := zip.Unarchive(src, dst)
 	if err != nil {
 		return fmt.Errorf("failed to unzip file: %w", err)
 	}
