@@ -195,29 +195,21 @@ func DownloadStrorageURL(ctx context.Context, client cmd.Client, fileUrl string)
 }
 
 func WriteArchiveToFile(fileName string, reader io.Reader) error {
-	tmpDir, err := utils.GetTempDir()
+	// Create the target file directly
+	file, err := os.Create(fileName)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	// Copy data from the reader to the target file
+	_, err = io.Copy(file, reader)
 	if err != nil {
 		return err
 	}
 
-	tmpFileName := uuid.NewString()
-
-	path := filepath.Join(tmpDir, tmpFileName+".tmp")
-	w, err := os.Create(path)
-	if err != nil {
-		return err
-	}
-	defer w.Close()
-	_, err = io.Copy(w, reader)
-	if err != nil {
-		return err
-	}
-	err = os.Chmod(path, 0644)
-	if err != nil {
-		return err
-	}
-
-	err = os.Rename(path, fileName)
+	// Change the permissions of the target file
+	err = os.Chmod(fileName, 0644)
 	if err != nil {
 		return err
 	}
