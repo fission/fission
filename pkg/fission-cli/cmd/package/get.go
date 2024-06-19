@@ -71,7 +71,6 @@ func (opts *GetSubCommand) complete(input cli.Input) (err error) {
 }
 
 func (opts *GetSubCommand) run(input cli.Input) error {
-
 	pkg, err := opts.Client().FissionClientSet.CoreV1().Packages(opts.namespace).Get(input.Context(), opts.name, metav1.GetOptions{})
 	if err != nil {
 		return err
@@ -79,7 +78,7 @@ func (opts *GetSubCommand) run(input cli.Input) error {
 
 	var reader io.Reader
 	archive := pkg.Spec.Source
-	if opts.archiveType == util.DEPLOY_ARCHIVE || archive.Type == "" {
+	if (opts.archiveType == util.DEPLOY_ARCHIVE || archive.Type == "") && (pkg.Spec.Deployment.Type != "") {
 		archive = pkg.Spec.Deployment
 	}
 
