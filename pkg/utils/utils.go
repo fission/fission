@@ -171,12 +171,20 @@ func IsURL(str string) bool {
 	return strings.HasPrefix(str, "http://") || strings.HasPrefix(str, "https://")
 }
 
+func isHttp2xxSuccessful(status int) bool {
+	return status >= 200 && status < 300
+}
+
 func DownloadUrl(ctx context.Context, httpClient *http.Client, url string, localPath string) error {
 	resp, err := ctxhttp.Get(ctx, httpClient, url)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
+
+	if !isHttp2xxSuccessful(resp.StatusCode) {
+		return errors.New(resp.Status)
+	}
 
 	w, err := os.Create(localPath)
 	if err != nil {
