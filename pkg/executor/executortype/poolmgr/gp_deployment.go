@@ -62,6 +62,14 @@ func (gp *GenericPool) genDeploymentMeta(env *fv1.Environment) metav1.ObjectMeta
 		Name:        getPoolName(env),
 		Labels:      deployLabels,
 		Annotations: deployAnnotations,
+		OwnerReferences: []metav1.OwnerReference{
+			{
+				APIVersion: "fission.io/v1",
+				Kind:       "Environment",
+				Name:       env.GetName(),
+				UID:        env.GetUID(),
+			},
+		},
 	}
 }
 
