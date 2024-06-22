@@ -27,6 +27,7 @@ import (
 	apiv1 "k8s.io/api/core/v1"
 	k8s_err "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -270,12 +271,11 @@ func (cn *Container) getDeploymentSpec(ctx context.Context, fn *fv1.Function, ta
 			Labels:      deployLabels,
 			Annotations: deployAnnotations,
 			OwnerReferences: []metav1.OwnerReference{
-				{
-					APIVersion: "fission.io/v1",
-					Kind:       "Function",
-					Name:       fn.GetName(),
-					UID:        fn.GetUID(),
-				},
+				*metav1.NewControllerRef(fn, schema.GroupVersionKind{
+					Group:   "fission.io",
+					Version: "v1",
+					Kind:    "Function",
+				}),
 			},
 		},
 		Spec: appsv1.DeploymentSpec{

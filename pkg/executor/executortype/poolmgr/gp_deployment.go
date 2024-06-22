@@ -26,6 +26,7 @@ import (
 	apiv1 "k8s.io/api/core/v1"
 	k8sErrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/executor/util"
@@ -63,12 +64,11 @@ func (gp *GenericPool) genDeploymentMeta(env *fv1.Environment) metav1.ObjectMeta
 		Labels:      deployLabels,
 		Annotations: deployAnnotations,
 		OwnerReferences: []metav1.OwnerReference{
-			{
-				APIVersion: "fission.io/v1",
-				Kind:       "Environment",
-				Name:       env.GetName(),
-				UID:        env.GetUID(),
-			},
+			*metav1.NewControllerRef(env, schema.GroupVersionKind{
+				Group:   "fission.io",
+				Version: "v1",
+				Kind:    "Environment",
+			}),
 		},
 	}
 }

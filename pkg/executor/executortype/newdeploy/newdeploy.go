@@ -29,6 +29,7 @@ import (
 	k8s_err "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 
@@ -251,12 +252,11 @@ func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function
 			Labels:      deployLabels,
 			Annotations: deployAnnotations,
 			OwnerReferences: []metav1.OwnerReference{
-				{
-					APIVersion: "fission.io/v1",
-					Kind:       "Function",
-					Name:       fn.GetName(),
-					UID:        fn.GetUID(),
-				},
+				*metav1.NewControllerRef(fn, schema.GroupVersionKind{
+					Group:   "fission.io",
+					Version: "v1",
+					Kind:    "Function",
+				}),
 			},
 		},
 		Spec: appsv1.DeploymentSpec{
@@ -340,12 +340,11 @@ func (deploy *NewDeploy) createOrGetSvc(ctx context.Context, fn *fv1.Function, d
 			Labels:      deployLabels,
 			Annotations: deployAnnotations,
 			OwnerReferences: []metav1.OwnerReference{
-				{
-					APIVersion: "fission.io/v1",
-					Kind:       "Function",
-					Name:       fn.GetName(),
-					UID:        fn.GetUID(),
-				},
+				*metav1.NewControllerRef(fn, schema.GroupVersionKind{
+					Group:   "fission.io",
+					Version: "v1",
+					Kind:    "Function",
+				}),
 			},
 		},
 		Spec: apiv1.ServiceSpec{
