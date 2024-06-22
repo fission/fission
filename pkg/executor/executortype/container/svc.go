@@ -54,6 +54,14 @@ func (cn *Container) createOrGetSvc(ctx context.Context, fn *fv1.Function, deplo
 			Name:        svcName,
 			Labels:      deployLabels,
 			Annotations: deployAnnotations,
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion: "fission.io/v1",
+					Kind:       "Function",
+					Name:       fn.GetName(),
+					UID:        fn.GetUID(),
+				},
+			},
 		},
 		Spec: apiv1.ServiceSpec{
 			Ports: []apiv1.ServicePort{
@@ -74,6 +82,7 @@ func (cn *Container) createOrGetSvc(ctx context.Context, fn *fv1.Function, deplo
 		if existingSvc.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL] != cn.instanceID {
 			existingSvc.Annotations = service.Annotations
 			existingSvc.Labels = service.Labels
+			existingSvc.OwnerReferences = service.OwnerReferences
 			existingSvc.Spec.Ports = service.Spec.Ports
 			existingSvc.Spec.Selector = service.Spec.Selector
 			existingSvc.Spec.Type = service.Spec.Type

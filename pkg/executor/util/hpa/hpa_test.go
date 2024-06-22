@@ -25,6 +25,7 @@ import (
 	asv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/uuid"
 	"k8s.io/client-go/kubernetes/fake"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -67,7 +68,14 @@ func TestHpaOps(t *testing.T) {
 		"test-annotation": "test-annotation-value",
 	}
 	// Test CreateHPA
-	hpa, err := hpaops.CreateOrGetHpa(ctx, "test-hpa",
+	hpa, err := hpaops.CreateOrGetHpa(ctx,
+		&fv1.Function{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test-fn",
+				UID:  uuid.NewUUID(),
+			},
+		},
+		"test-hpa",
 		&fv1.ExecutionStrategy{
 			ExecutorType:          fv1.ExecutorTypeNewdeploy,
 			MinScale:              1,

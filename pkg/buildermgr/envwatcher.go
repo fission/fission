@@ -329,6 +329,14 @@ func (envw *environmentWatcher) createBuilderService(ctx context.Context, env *f
 			Namespace: ns,
 			Name:      name,
 			Labels:    sel,
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion: "fission.io/v1",
+					Kind:       "Environment",
+					Name:       env.GetName(),
+					UID:        env.GetUID(),
+				},
+			},
 		},
 		Spec: apiv1.ServiceSpec{
 			Selector: sel,
@@ -440,6 +448,14 @@ func (envw *environmentWatcher) createBuilderDeployment(ctx context.Context, env
 			Namespace: ns,
 			Name:      name,
 			Labels:    sel,
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion: "fission.io/v1",
+					Kind:       "Environment",
+					Name:       env.GetName(),
+					UID:        env.GetUID(),
+				},
+			},
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,

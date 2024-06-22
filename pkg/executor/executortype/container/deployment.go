@@ -86,6 +86,7 @@ func (cn *Container) createOrGetDeployment(ctx context.Context, fn *fv1.Function
 	if existingDepl.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL] != cn.instanceID {
 		existingDepl.Annotations = deployment.Annotations
 		existingDepl.Labels = deployment.Labels
+		existingDepl.OwnerReferences = deployment.OwnerReferences
 		existingDepl.Spec.Template.Spec.Containers = deployment.Spec.Template.Spec.Containers
 		existingDepl.Spec.Template.Spec.ServiceAccountName = deployment.Spec.Template.Spec.ServiceAccountName
 		existingDepl.Spec.Template.Spec.TerminationGracePeriodSeconds = deployment.Spec.Template.Spec.TerminationGracePeriodSeconds
@@ -268,6 +269,14 @@ func (cn *Container) getDeploymentSpec(ctx context.Context, fn *fv1.Function, ta
 			Name:        deployName,
 			Labels:      deployLabels,
 			Annotations: deployAnnotations,
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion: "fission.io/v1",
+					Kind:       "Function",
+					Name:       fn.GetName(),
+					UID:        fn.GetUID(),
+				},
+			},
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,
