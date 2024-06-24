@@ -20,7 +20,7 @@ require (
 	github.com/gorilla/mux v1.8.1
 	github.com/graymeta/stow v0.2.8
 	github.com/hashicorp/go-multierror v1.1.1
-	github.com/hashicorp/go-retryablehttp v0.7.5
+	github.com/hashicorp/go-retryablehttp v0.7.7
 	github.com/influxdata/influxdb v1.11.5
 	github.com/mholt/archiver/v3 v3.5.1
 	github.com/minio/minio-go v6.0.14+incompatible
