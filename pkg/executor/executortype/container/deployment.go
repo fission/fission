@@ -27,6 +27,7 @@ import (
 	apiv1 "k8s.io/api/core/v1"
 	k8s_err "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -86,6 +87,7 @@ func (cn *Container) createOrGetDeployment(ctx context.Context, fn *fv1.Function
 	if existingDepl.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL] != cn.instanceID {
 		existingDepl.Annotations = deployment.Annotations
 		existingDepl.Labels = deployment.Labels
+		existingDepl.OwnerReferences = deployment.OwnerReferences
 		existingDepl.Spec.Template.Spec.Containers = deployment.Spec.Template.Spec.Containers
 		existingDepl.Spec.Template.Spec.ServiceAccountName = deployment.Spec.Template.Spec.ServiceAccountName
 		existingDepl.Spec.Template.Spec.TerminationGracePeriodSeconds = deployment.Spec.Template.Spec.TerminationGracePeriodSeconds
@@ -268,6 +270,13 @@ func (cn *Container) getDeploymentSpec(ctx context.Context, fn *fv1.Function, ta
 			Name:        deployName,
 			Labels:      deployLabels,
 			Annotations: deployAnnotations,
+			OwnerReferences: []metav1.OwnerReference{
+				*metav1.NewControllerRef(fn, schema.GroupVersionKind{
+					Group:   "fission.io",
+					Version: "v1",
+					Kind:    "Function",
+				}),
+			},
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,

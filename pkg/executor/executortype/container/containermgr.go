@@ -421,7 +421,7 @@ func (caaf *Container) fnCreate(ctx context.Context, fn *fv1.Function) (*fscache
 		return nil, fmt.Errorf("error creating deployment %s: %w", objName, err)
 	}
 
-	hpa, err := caaf.hpaops.CreateOrGetHpa(ctx, objName, &fn.Spec.InvokeStrategy.ExecutionStrategy, depl, deployLabels, deployAnnotations)
+	hpa, err := caaf.hpaops.CreateOrGetHpa(ctx, fn, objName, &fn.Spec.InvokeStrategy.ExecutionStrategy, depl, deployLabels, deployAnnotations)
 	if err != nil {
 		caaf.logger.Error("error creating HPA", zap.Error(err), zap.String("hpa", objName))
 		go cleanupFunc(ns, objName)

@@ -24,6 +24,7 @@ import (
 	apiv1 "k8s.io/api/core/v1"
 	k8s_err "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -54,6 +55,13 @@ func (cn *Container) createOrGetSvc(ctx context.Context, fn *fv1.Function, deplo
 			Name:        svcName,
 			Labels:      deployLabels,
 			Annotations: deployAnnotations,
+			OwnerReferences: []metav1.OwnerReference{
+				*metav1.NewControllerRef(fn, schema.GroupVersionKind{
+					Group:   "fission.io",
+					Version: "v1",
+					Kind:    "Function",
+				}),
+			},
 		},
 		Spec: apiv1.ServiceSpec{
 			Ports: []apiv1.ServicePort{
@@ -74,6 +82,7 @@ func (cn *Container) createOrGetSvc(ctx context.Context, fn *fv1.Function, deplo
 		if existingSvc.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL] != cn.instanceID {
 			existingSvc.Annotations = service.Annotations
 			existingSvc.Labels = service.Labels
+			existingSvc.OwnerReferences = service.OwnerReferences
 			existingSvc.Spec.Ports = service.Spec.Ports
 			existingSvc.Spec.Selector = service.Spec.Selector
 			existingSvc.Spec.Type = service.Spec.Type

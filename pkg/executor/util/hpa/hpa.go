@@ -25,6 +25,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	k8s_err "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -72,7 +73,7 @@ func getScaleTargetRef(deployment *appsv1.Deployment) asv2.CrossVersionObjectRef
 	}
 }
 
-func (hpaops *HpaOperations) CreateOrGetHpa(ctx context.Context, hpaName string, execStrategy *fv1.ExecutionStrategy,
+func (hpaops *HpaOperations) CreateOrGetHpa(ctx context.Context, fn *fv1.Function, hpaName string, execStrategy *fv1.ExecutionStrategy,
 	depl *appsv1.Deployment, deployLabels map[string]string, deployAnnotations map[string]string) (*asv2.HorizontalPodAutoscaler, error) {
 
 	if depl == nil {
@@ -103,6 +104,13 @@ func (hpaops *HpaOperations) CreateOrGetHpa(ctx context.Context, hpaName string,
 			Name:        hpaName,
 			Labels:      deployLabels,
 			Annotations: deployAnnotations,
+			OwnerReferences: []metav1.OwnerReference{
+				*metav1.NewControllerRef(fn, schema.GroupVersionKind{
+					Group:   "fission.io",
+					Version: "v1",
+					Kind:    "Function",
+				}),
+			},
 		},
 		Spec: asv2.HorizontalPodAutoscalerSpec{
 			ScaleTargetRef: getScaleTargetRef(depl),
@@ -119,6 +127,7 @@ func (hpaops *HpaOperations) CreateOrGetHpa(ctx context.Context, hpaName string,
 		if existingHpa.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL] != hpaops.instanceID {
 			existingHpa.Annotations = hpa.Annotations
 			existingHpa.Labels = hpa.Labels
+			existingHpa.OwnerReferences = hpa.OwnerReferences
 			existingHpa.Spec = hpa.Spec
 			existingHpa, err = hpaops.kubernetesClient.AutoscalingV2().HorizontalPodAutoscalers(depl.ObjectMeta.Namespace).Update(ctx, existingHpa, metav1.UpdateOptions{})
 			if err != nil {

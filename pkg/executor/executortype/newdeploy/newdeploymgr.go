@@ -451,7 +451,7 @@ func (deploy *NewDeploy) fnCreate(ctx context.Context, fn *fv1.Function) (*fscac
 	// Since newdeploy waits for pods of deployment to be ready,
 	// change the order of kubeObject creation (create service first,
 	// then deployment) to take advantage of waiting time.
-	svc, err := deploy.createOrGetSvc(ctx, deployLabels, deployAnnotations, objName, ns)
+	svc, err := deploy.createOrGetSvc(ctx, fn, deployLabels, deployAnnotations, objName, ns)
 	if err != nil {
 		deploy.logger.Error("error creating service", zap.Error(err), zap.String("service", objName))
 		go cleanupFunc(context.Background(), ns, objName)
@@ -466,7 +466,7 @@ func (deploy *NewDeploy) fnCreate(ctx context.Context, fn *fv1.Function) (*fscac
 		return nil, fmt.Errorf("error creating deployment %s: %w", objName, err)
 	}
 
-	hpa, err := deploy.hpaops.CreateOrGetHpa(ctx, objName, &fn.Spec.InvokeStrategy.ExecutionStrategy, depl, deployLabels, deployAnnotations)
+	hpa, err := deploy.hpaops.CreateOrGetHpa(ctx, fn, objName, &fn.Spec.InvokeStrategy.ExecutionStrategy, depl, deployLabels, deployAnnotations)
 	if err != nil {
 		deploy.logger.Error("error creating HPA", zap.Error(err), zap.String("hpa", objName))
 		go cleanupFunc(context.Background(), ns, objName)

@@ -28,6 +28,7 @@ import (
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
@@ -329,6 +330,13 @@ func (envw *environmentWatcher) createBuilderService(ctx context.Context, env *f
 			Namespace: ns,
 			Name:      name,
 			Labels:    sel,
+			OwnerReferences: []metav1.OwnerReference{
+				*metav1.NewControllerRef(env, schema.GroupVersionKind{
+					Group:   "fission.io",
+					Version: "v1",
+					Kind:    "Environment",
+				}),
+			},
 		},
 		Spec: apiv1.ServiceSpec{
 			Selector: sel,
@@ -440,6 +448,13 @@ func (envw *environmentWatcher) createBuilderDeployment(ctx context.Context, env
 			Namespace: ns,
 			Name:      name,
 			Labels:    sel,
+			OwnerReferences: []metav1.OwnerReference{
+				*metav1.NewControllerRef(env, schema.GroupVersionKind{
+					Group:   "fission.io",
+					Version: "v1",
+					Kind:    "Environment",
+				}),
+			},
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,

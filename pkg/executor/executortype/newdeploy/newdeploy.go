@@ -29,6 +29,7 @@ import (
 	k8s_err "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 
@@ -61,6 +62,7 @@ func (deploy *NewDeploy) createOrGetDeployment(ctx context.Context, fn *fv1.Func
 		if existingDepl.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL] != deploy.instanceID {
 			existingDepl.Annotations = deployment.Annotations
 			existingDepl.Labels = deployment.Labels
+			existingDepl.OwnerReferences = deployment.OwnerReferences
 			existingDepl.Spec.Template.Spec.Containers = deployment.Spec.Template.Spec.Containers
 			existingDepl.Spec.Template.Spec.ServiceAccountName = deployment.Spec.Template.Spec.ServiceAccountName
 			existingDepl.Spec.Template.Spec.TerminationGracePeriodSeconds = deployment.Spec.Template.Spec.TerminationGracePeriodSeconds
@@ -249,6 +251,13 @@ func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function
 			Name:        deployName,
 			Labels:      deployLabels,
 			Annotations: deployAnnotations,
+			OwnerReferences: []metav1.OwnerReference{
+				*metav1.NewControllerRef(fn, schema.GroupVersionKind{
+					Group:   "fission.io",
+					Version: "v1",
+					Kind:    "Function",
+				}),
+			},
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,
@@ -323,13 +332,20 @@ func (deploy *NewDeploy) getResources(env *fv1.Environment, fn *fv1.Function) ap
 	return resources
 }
 
-func (deploy *NewDeploy) createOrGetSvc(ctx context.Context, deployLabels map[string]string, deployAnnotations map[string]string, svcName string, svcNamespace string) (*apiv1.Service, error) {
+func (deploy *NewDeploy) createOrGetSvc(ctx context.Context, fn *fv1.Function, deployLabels map[string]string, deployAnnotations map[string]string, svcName string, svcNamespace string) (*apiv1.Service, error) {
 	logger := otelUtils.LoggerWithTraceID(ctx, deploy.logger)
 	service := &apiv1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        svcName,
 			Labels:      deployLabels,
 			Annotations: deployAnnotations,
+			OwnerReferences: []metav1.OwnerReference{
+				*metav1.NewControllerRef(fn, schema.GroupVersionKind{
+					Group:   "fission.io",
+					Version: "v1",
+					Kind:    "Function",
+				}),
+			},
 		},
 		Spec: apiv1.ServiceSpec{
 			Ports: []apiv1.ServicePort{
@@ -351,6 +367,7 @@ func (deploy *NewDeploy) createOrGetSvc(ctx context.Context, deployLabels map[st
 		if existingSvc.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL] != deploy.instanceID {
 			existingSvc.Annotations = service.Annotations
 			existingSvc.Labels = service.Labels
+			existingSvc.OwnerReferences = service.OwnerReferences
 			existingSvc.Spec.Ports = service.Spec.Ports
 			existingSvc.Spec.Selector = service.Spec.Selector
 			existingSvc.Spec.Type = service.Spec.Type
