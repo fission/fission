@@ -154,12 +154,23 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 		function.Spec.IdleTimeout = &fnTimeout
 	}
 
+	executorType, err := getExecutorType(input)
+	if err != nil {
+		return err
+	}
+
 	if input.IsSet(flagkey.FnConcurrency) {
 		function.Spec.Concurrency = input.Int(flagkey.FnConcurrency)
+		if string(executorType) != string(fv1.ExecutorTypePoolmgr) {
+			console.Warn("--concurrency is only valid for executortype; `poolmgr`. Check `fission function create --help`")
+		}
 	}
 
 	if input.IsSet(flagkey.FnRequestsPerPod) {
 		function.Spec.RequestsPerPod = input.Int(flagkey.FnRequestsPerPod)
+		if string(executorType) != string(fv1.ExecutorTypePoolmgr) {
+			console.Warn("--requestsperpod is only valid for executortype; `poolmgr`. Check `fission function create --help`")
+		}
 	}
 
 	if input.IsSet(flagkey.FnRetainPods) {
@@ -168,6 +179,9 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 
 	if input.IsSet(flagkey.FnOnceOnly) {
 		function.Spec.OnceOnly = input.Bool(flagkey.FnOnceOnly)
+		if string(executorType) != string(fv1.ExecutorTypePoolmgr) {
+			console.Warn("--onceonly is only valid for executortype; `poolmgr`. Check `fission function create --help`")
+		}
 	}
 	if len(pkgName) == 0 {
 		pkgName = function.Spec.Package.PackageRef.Name
