@@ -98,15 +98,29 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 
 	fnIdleTimeout := input.Int(flagkey.FnIdleTimeout)
 
+	executorType, err := getExecutorType(input)
+	if err != nil {
+		return err
+	}
+
 	fnConcurrency := DEFAULT_CONCURRENCY
 	if input.IsSet(flagkey.FnConcurrency) {
 		fnConcurrency = input.Int(flagkey.FnConcurrency)
+		if string(executorType) != string(fv1.ExecutorTypePoolmgr) {
+			console.Warn("--concurrency is only valid for executortype; `poolmgr`. Check `fission function create --help`")
+		}
 	}
 
 	requestsPerPod := input.Int(flagkey.FnRequestsPerPod)
+	if input.IsSet(flagkey.FnRequestsPerPod) && string(executorType) != string(fv1.ExecutorTypePoolmgr) {
+		console.Warn("--requestsperpod is only valid for executortype; `poolmgr`. Check `fission function create --help`")
+	}
 	retainPods := input.Int(flagkey.FnRetainPods)
 
 	fnOnceOnly := input.Bool(flagkey.FnOnceOnly)
+	if input.IsSet(flagkey.FnOnceOnly) && string(executorType) != string(fv1.ExecutorTypePoolmgr) {
+		console.Warn("--onceonly is only valid for executortype; `poolmgr`. Check `fission function create --help`")
+	}
 
 	pkgName := input.String(flagkey.FnPackageName)
 
