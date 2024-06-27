@@ -98,7 +98,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 
 	fnIdleTimeout := input.Int(flagkey.FnIdleTimeout)
 
-	executorType, err := getExecutorType(input)
+	err = executorTypeNotPoolManager(input, fv1.ExecutorTypePoolmgr)
 	if err != nil {
 		return err
 	}
@@ -106,21 +106,12 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	fnConcurrency := DEFAULT_CONCURRENCY
 	if input.IsSet(flagkey.FnConcurrency) {
 		fnConcurrency = input.Int(flagkey.FnConcurrency)
-		if string(executorType) != string(fv1.ExecutorTypePoolmgr) {
-			console.Warn("--concurrency is only valid for executortype; `poolmgr`. Check `fission function create --help`")
-		}
 	}
 
 	requestsPerPod := input.Int(flagkey.FnRequestsPerPod)
-	if input.IsSet(flagkey.FnRequestsPerPod) && string(executorType) != string(fv1.ExecutorTypePoolmgr) {
-		console.Warn("--requestsperpod is only valid for executortype; `poolmgr`. Check `fission function create --help`")
-	}
 	retainPods := input.Int(flagkey.FnRetainPods)
 
 	fnOnceOnly := input.Bool(flagkey.FnOnceOnly)
-	if input.IsSet(flagkey.FnOnceOnly) && string(executorType) != string(fv1.ExecutorTypePoolmgr) {
-		console.Warn("--onceonly is only valid for executortype; `poolmgr`. Check `fission function create --help`")
-	}
 
 	pkgName := input.String(flagkey.FnPackageName)
 
@@ -459,6 +450,33 @@ func getInvokeStrategy(input cli.Input, existingInvokeStrategy *fv1.InvokeStrate
 		ExecutionStrategy: *es,
 		StrategyType:      fv1.StrategyTypeExecution,
 	}, nil
+}
+
+// Show warning when --con, --rpp and --yolo flags are used with executortype other than `poolmgr`.
+// These flags are specifically introduced for executortype `poolmgr`.
+func executorTypeNotPoolManager(input cli.Input, existingExecutorType fv1.ExecutorType) error {
+	var isNotPoolManager bool
+	if input.IsSet(flagkey.EnvExecutorType) {
+		executorType, err := getExecutorType(input)
+		if err != nil {
+			return err
+		}
+		isNotPoolManager = (string(executorType) != string(fv1.ExecutorTypePoolmgr))
+	} else {
+		isNotPoolManager = (string(existingExecutorType) != string(fv1.ExecutorTypePoolmgr))
+	}
+
+	if input.IsSet(flagkey.FnConcurrency) && isNotPoolManager {
+		console.Warn("--concurrency is only valid for executortype; `poolmgr`. Check `fission function create --help`")
+	}
+	if input.IsSet(flagkey.FnRequestsPerPod) && isNotPoolManager {
+		console.Warn("--requestsperpod is only valid for executortype; `poolmgr`. Check `fission function create --help`")
+	}
+	if input.IsSet(flagkey.FnOnceOnly) && isNotPoolManager {
+		console.Warn("--onceonly is only valid for executortype; `poolmgr`. Check `fission function create --help`")
+	}
+
+	return nil
 }
 
 func getExecutorType(input cli.Input) (executorType fv1.ExecutorType, err error) {
