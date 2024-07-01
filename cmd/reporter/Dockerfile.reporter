@@ -1,4 +1,4 @@
-FROM alpine:3.17
+FROM alpine:3
 RUN apk add --update ca-certificates
 COPY reporter /
 ENTRYPOINT ["/reporter"]
