@@ -154,6 +154,11 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 		function.Spec.IdleTimeout = &fnTimeout
 	}
 
+	err = checkExecutorPoolManager(input, function.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType)
+	if err != nil {
+		return err
+	}
+
 	if input.IsSet(flagkey.FnConcurrency) {
 		function.Spec.Concurrency = input.Int(flagkey.FnConcurrency)
 	}
