@@ -154,7 +154,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 		function.Spec.IdleTimeout = &fnTimeout
 	}
 
-	err = executorTypeNotPoolManager(input, function.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType)
+	err = checkExecutorPoolManager(input, function.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType)
 	if err != nil {
 		return err
 	}

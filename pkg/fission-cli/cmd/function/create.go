@@ -98,7 +98,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 
 	fnIdleTimeout := input.Int(flagkey.FnIdleTimeout)
 
-	err = executorTypeNotPoolManager(input, fv1.ExecutorTypePoolmgr)
+	err = checkExecutorPoolManager(input, fv1.ExecutorTypePoolmgr)
 	if err != nil {
 		return err
 	}
@@ -454,7 +454,7 @@ func getInvokeStrategy(input cli.Input, existingInvokeStrategy *fv1.InvokeStrate
 
 // Show warning when --con, --rpp and --yolo flags are used with executortype other than `poolmgr`.
 // These flags are specifically introduced for executortype `poolmgr`.
-func executorTypeNotPoolManager(input cli.Input, existingExecutorType fv1.ExecutorType) error {
+func checkExecutorPoolManager(input cli.Input, existingExecutorType fv1.ExecutorType) error {
 	var isNotPoolManager bool
 	if input.IsSet(flagkey.EnvExecutorType) {
 		executorType, err := getExecutorType(input)
