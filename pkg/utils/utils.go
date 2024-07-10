@@ -267,3 +267,23 @@ func FindFreePort() (int, error) {
 
 	return port, nil
 }
+
+func DeleteOldPackages(pkgPath, pkgType string) error {
+	var file string
+	if pkgType == "DEPLOY_PKG" {
+		file = pkgPath + ".zip"
+	} else if pkgType == "SRC_PKG" {
+		file = pkgPath + ".tmp"
+	}
+
+	err := os.RemoveAll(pkgPath)
+	if err != nil {
+		return err
+	}
+	err = os.Remove(file)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}

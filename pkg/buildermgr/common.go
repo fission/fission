@@ -96,6 +96,11 @@ func buildPackage(ctx context.Context, logger *zap.Logger, fissionClient version
 			buildLogs = buildResp.BuildLogs
 		}
 		buildLogs += fmt.Sprintf("%v\n", e)
+
+		err = cleanPackage(ctx, builderC, srcPkgFilename)
+		if err != nil {
+			buildLogs += fmt.Sprintf("%v\n", err)
+		}
 		return nil, buildLogs, ferror.MakeError(http.StatusInternalServerError, e)
 	}
 
@@ -118,7 +123,27 @@ func buildPackage(ctx context.Context, logger *zap.Logger, fissionClient version
 		return nil, buildResp.BuildLogs, ferror.MakeError(http.StatusInternalServerError, e)
 	}
 
+	logger.Info("cleaning src pkg from builder storage", zap.String("source_package", srcPkgFilename))
+
+	err = cleanPackage(ctx, builderC, srcPkgFilename)
+	if err != nil {
+		buildResp.BuildLogs += fmt.Sprintf("%v\n", err)
+	}
+
 	return uploadResp, buildResp.BuildLogs, nil
+}
+
+func cleanPackage(ctx context.Context, builderClient builderClient.ClientInterface, srcPkgFileName string) error {
+	pkgCleanReq := &builder.PackageCleanRequest{
+		SrcPkgFilename: srcPkgFileName,
+	}
+
+	err := builderClient.Clean(ctx, pkgCleanReq)
+	if err != nil {
+		return errors.Wrap(err, "error cleaning src pkg from builder storage")
+	}
+
+	return nil
 }
 
 func updatePackage(ctx context.Context, logger *zap.Logger, fissionClient versioned.Interface,

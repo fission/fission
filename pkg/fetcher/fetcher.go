@@ -584,6 +584,13 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 		logger.Error(e, zap.Error(err))
 		http.Error(w, fmt.Sprintf("%s: %v", e, err), http.StatusInternalServerError)
 	}
+
+	// delete src pkg
+	err = utils.DeleteOldPackages(srcFilepath, "DEPLOY_PKG")
+	if err != nil {
+		e := "error deleting deploy package after upload"
+		logger.Error(e, zap.Error(err))
+	}
 }
 
 func (fetcher *Fetcher) rename(src string, dst string) error {

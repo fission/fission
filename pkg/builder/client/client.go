@@ -21,6 +21,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"net/http"
 	"strings"
 
 	"github.com/hashicorp/go-retryablehttp"
@@ -37,6 +38,7 @@ import (
 type (
 	ClientInterface interface {
 		Build(context.Context, *builder.PackageBuildRequest) (*builder.PackageBuildResponse, error)
+		Clean(context.Context, *builder.PackageCleanRequest) error
 	}
 
 	client struct {
@@ -55,6 +57,10 @@ func MakeClient(logger *zap.Logger, builderUrl string) ClientInterface {
 		url:        strings.TrimSuffix(builderUrl, "/"),
 		httpClient: hc,
 	}
+}
+
+func (c *client) getCleanUrl() string {
+	return c.url + "/clean"
 }
 
 func (c *client) Build(ctx context.Context, req *builder.PackageBuildRequest) (*builder.PackageBuildResponse, error) {
@@ -85,4 +91,26 @@ func (c *client) Build(ctx context.Context, req *builder.PackageBuildRequest) (*
 	}
 
 	return &pkgBuildResp, ferror.MakeErrorFromHTTP(resp)
+}
+
+func (c *client) Clean(ctx context.Context, req *builder.PackageCleanRequest) error {
+	logger := otelUtils.LoggerWithTraceID(ctx, c.logger)
+
+	body, err := json.Marshal(req)
+	if err != nil {
+		return errors.Wrap(err, "error marshaling json")
+	}
+
+	resp, err := ctxhttp.Post(ctx, c.httpClient.StandardClient(), c.getCleanUrl(), "application/json", bytes.NewReader(body))
+	if err != nil {
+		logger.Error("error creating delete request", zap.Error(err))
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return ferror.MakeErrorFromHTTP(resp)
+	}
+
+	return nil
 }
