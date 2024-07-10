@@ -60,6 +60,15 @@ func buildPackage(ctx context.Context, logger *zap.Logger, fissionClient version
 	fetcherC := fetcherClient.MakeClient(logger, fmt.Sprintf("http://%v:8000", svcName))
 	builderC := builderClient.MakeClient(logger, fmt.Sprintf("http://%v:8001", svcName))
 
+	defer func() {
+		logger.Info("cleaning src pkg from builder storage", zap.String("source_package", srcPkgFilename))
+		errC := cleanPackage(ctx, builderC, srcPkgFilename)
+		if errC != nil {
+			m := "error cleaning src pkg from builder storage"
+			logger.Error(m, zap.Error(errC))
+		}
+	}()
+
 	fetchReq := &fetcher.FunctionFetchRequest{
 		FetchType:   fv1.FETCH_SOURCE,
 		Package:     pkg.ObjectMeta,
@@ -96,11 +105,6 @@ func buildPackage(ctx context.Context, logger *zap.Logger, fissionClient version
 			buildLogs = buildResp.BuildLogs
 		}
 		buildLogs += fmt.Sprintf("%v\n", e)
-
-		err = cleanPackage(ctx, builderC, srcPkgFilename)
-		if err != nil {
-			buildLogs += fmt.Sprintf("%v\n", err)
-		}
 		return nil, buildLogs, ferror.MakeError(http.StatusInternalServerError, e)
 	}
 
@@ -123,13 +127,6 @@ func buildPackage(ctx context.Context, logger *zap.Logger, fissionClient version
 		return nil, buildResp.BuildLogs, ferror.MakeError(http.StatusInternalServerError, e)
 	}
 
-	logger.Info("cleaning src pkg from builder storage", zap.String("source_package", srcPkgFilename))
-
-	err = cleanPackage(ctx, builderC, srcPkgFilename)
-	if err != nil {
-		buildResp.BuildLogs += fmt.Sprintf("%v\n", err)
-	}
-
 	return uploadResp, buildResp.BuildLogs, nil
 }
 
@@ -140,7 +137,7 @@ func cleanPackage(ctx context.Context, builderClient builderClient.ClientInterfa
 
 	err := builderClient.Clean(ctx, pkgCleanReq)
 	if err != nil {
-		return errors.Wrap(err, "error cleaning src pkg from builder storage")
+		return err
 	}
 
 	return nil
