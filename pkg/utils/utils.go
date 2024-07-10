@@ -269,6 +269,11 @@ func FindFreePort() (int, error) {
 }
 
 func DeleteOldPackages(pkgPath, pkgType string) error {
+	sharedVolumePath := "/packages"
+	if !strings.HasPrefix(pkgPath, sharedVolumePath) {
+		return fmt.Errorf("invalid shared volume path: %s", pkgPath)
+	}
+
 	var file string
 	if pkgType == "DEPLOY_PKG" {
 		file = pkgPath + ".zip"
