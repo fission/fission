@@ -168,4 +168,51 @@ func TestBuilder(t *testing.T) {
 			})
 		}
 	})
+
+	// Test CleanHandler
+	t.Run("CleanHandler", func(t *testing.T) {
+
+		for _, test := range []struct {
+			name             string
+			cleanRequest     *PackageCleanRequest
+			sharedVolumePath string
+			expected         *PackageBuildResponse
+			status           int
+		}{
+			{
+				name: "should fail deleting src pkg",
+				cleanRequest: &PackageCleanRequest{
+					SrcPkgFilename: "test2",
+				},
+				expected: &PackageBuildResponse{
+					ArtifactFilename: "test2",
+					BuildLogs:        "",
+				},
+				status: http.StatusInternalServerError,
+			},
+		} {
+			t.Run(test.name, func(t *testing.T) {
+				_, err := os.MkdirTemp(dir, test.cleanRequest.SrcPkgFilename)
+				if err != nil {
+					t.Fatal(err)
+				}
+				srcFile, err := os.Create(dir + "/" + test.cleanRequest.SrcPkgFilename)
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer srcFile.Close()
+				body, err := json.Marshal(test.cleanRequest)
+				if err != nil {
+					t.Fatal(err)
+				}
+				w := httptest.NewRecorder()
+				r := httptest.NewRequest(http.MethodPost, "/clean", bytes.NewReader(body))
+				builder.Clean(w, r)
+				resp := w.Result()
+				if resp.StatusCode != test.status {
+					t.Errorf("expected status code %d, got %d", test.status, resp.StatusCode)
+				}
+			})
+		}
+	})
 }
