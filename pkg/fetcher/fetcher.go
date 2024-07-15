@@ -525,6 +525,14 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 	srcFilepath := filepath.Join(fetcher.sharedVolumePath, req.Filename)
 	dstFilepath := filepath.Join(fetcher.sharedVolumePath, zipFilename)
 
+	defer func() {
+		errC := utils.DeleteOldPackages(srcFilepath, "DEPLOY_PKG")
+		if errC != nil {
+			m := "error deleting deploy package after upload"
+			logger.Error(m, zap.Error(errC))
+		}
+	}()
+
 	if req.ArchivePackage {
 		err = fetcher.archive(srcFilepath, dstFilepath)
 		if err != nil {
@@ -584,6 +592,7 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 		logger.Error(e, zap.Error(err))
 		http.Error(w, fmt.Sprintf("%s: %v", e, err), http.StatusInternalServerError)
 	}
+
 }
 
 func (fetcher *Fetcher) rename(src string, dst string) error {

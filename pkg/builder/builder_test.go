@@ -168,4 +168,50 @@ func TestBuilder(t *testing.T) {
 			})
 		}
 	})
+
+	// Test CleanHandler
+	t.Run("CleanHandler", func(t *testing.T) {
+		for _, test := range []struct {
+			name           string
+			srcPkgFilename string
+			handler        func(w http.ResponseWriter, r *http.Request)
+			status         int
+		}{
+			{
+				name:           "should fail deleting src pkg: invalid shared volume path",
+				srcPkgFilename: "test2",
+				handler: func(w http.ResponseWriter, r *http.Request) {
+					builder.Clean(w, r)
+				},
+				status: http.StatusInternalServerError,
+			},
+			{
+				name:           "should fail deleting src pkg: method not allowed",
+				srcPkgFilename: "test3",
+				handler: func(w http.ResponseWriter, r *http.Request) {
+					builder.Handler(w, r)
+				},
+				status: http.StatusMethodNotAllowed,
+			},
+		} {
+			t.Run(test.name, func(t *testing.T) {
+				_, err := os.MkdirTemp(dir, test.srcPkgFilename)
+				if err != nil {
+					t.Fatal(err)
+				}
+				srcFile, err := os.Create(dir + "/" + test.srcPkgFilename)
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer srcFile.Close()
+				w := httptest.NewRecorder()
+				r := httptest.NewRequest(http.MethodDelete, "/clean/"+test.srcPkgFilename, http.NoBody)
+				test.handler(w, r)
+				resp := w.Result()
+				if resp.StatusCode != test.status {
+					t.Errorf("expected status code %d, got %d", test.status, resp.StatusCode)
+				}
+			})
+		}
+	})
 }

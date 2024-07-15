@@ -60,6 +60,15 @@ func buildPackage(ctx context.Context, logger *zap.Logger, fissionClient version
 	fetcherC := fetcherClient.MakeClient(logger, fmt.Sprintf("http://%v:8000", svcName))
 	builderC := builderClient.MakeClient(logger, fmt.Sprintf("http://%v:8001", svcName))
 
+	defer func() {
+		logger.Info("cleaning src pkg from builder storage", zap.String("source_package", srcPkgFilename))
+		errC := cleanPackage(ctx, builderC, srcPkgFilename)
+		if errC != nil {
+			m := "error cleaning src pkg from builder storage"
+			logger.Error(m, zap.Error(errC))
+		}
+	}()
+
 	fetchReq := &fetcher.FunctionFetchRequest{
 		FetchType:   fv1.FETCH_SOURCE,
 		Package:     pkg.ObjectMeta,
@@ -119,6 +128,15 @@ func buildPackage(ctx context.Context, logger *zap.Logger, fissionClient version
 	}
 
 	return uploadResp, buildResp.BuildLogs, nil
+}
+
+func cleanPackage(ctx context.Context, builderClient builderClient.ClientInterface, srcPkgFileName string) error {
+	err := builderClient.Clean(ctx, srcPkgFileName)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func updatePackage(ctx context.Context, logger *zap.Logger, fissionClient versioned.Interface,

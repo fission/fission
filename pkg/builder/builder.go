@@ -35,6 +35,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/fission/fission/pkg/info"
+	"github.com/fission/fission/pkg/utils"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
@@ -152,6 +153,38 @@ func (builder *Builder) Handler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	builder.reply(r.Context(), w, deployPkgFilename, buildLogs, http.StatusOK)
+}
+
+func (builder *Builder) Clean(w http.ResponseWriter, r *http.Request) {
+	logger := otelUtils.LoggerWithTraceID(r.Context(), builder.logger)
+
+	if r.Method != "DELETE" {
+		e := "method not allowed"
+		logger.Error(e, zap.String("http_method", r.Method))
+		builder.reply(r.Context(), w, "", fmt.Sprintf("%s: %s", e, r.Method), http.StatusMethodNotAllowed)
+		return
+	}
+
+	startTime := time.Now()
+	defer func() {
+		elapsed := time.Since(startTime)
+		logger.Info("clean request complete", zap.Duration("elapsed_time", elapsed))
+	}()
+
+	srcPkgFilename := r.URL.Query().Get("name")
+	srcPkgPath := filepath.Join(builder.sharedVolumePath, srcPkgFilename)
+
+	logger.Info("builder received clean request", zap.Any("source_package", srcPkgFilename))
+
+	err := utils.DeleteOldPackages(srcPkgPath, envSrcPkg)
+	if err != nil {
+		e := "error deleting src package after build"
+		logger.Error(e, zap.Error(err))
+		builder.reply(r.Context(), w, srcPkgFilename, "", http.StatusInternalServerError)
+		return
+	}
+
+	builder.reply(r.Context(), w, srcPkgFilename, "", http.StatusOK)
 }
 
 func (builder *Builder) reply(ctx context.Context, w http.ResponseWriter, pkgFilename string, buildLogs string, statusCode int) {

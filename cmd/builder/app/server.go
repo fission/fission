@@ -32,6 +32,7 @@ func Run(ctx context.Context, logger *zap.Logger, mgr manager.Interface, shareVo
 	builder := builder.MakeBuilder(logger, shareVolume)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", builder.Handler)
+	mux.HandleFunc("/clean", builder.Clean)
 	mux.HandleFunc("/version", builder.VersionHandler)
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)

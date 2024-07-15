@@ -21,6 +21,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"net/http"
 	"strings"
 
 	"github.com/hashicorp/go-retryablehttp"
@@ -37,6 +38,7 @@ import (
 type (
 	ClientInterface interface {
 		Build(context.Context, *builder.PackageBuildRequest) (*builder.PackageBuildResponse, error)
+		Clean(context.Context, string) error
 	}
 
 	client struct {
@@ -55,6 +57,10 @@ func MakeClient(logger *zap.Logger, builderUrl string) ClientInterface {
 		url:        strings.TrimSuffix(builderUrl, "/"),
 		httpClient: hc,
 	}
+}
+
+func (c *client) getCleanUrl(srcPkgFilename string) string {
+	return c.url + "/clean" + "?name=" + srcPkgFilename
 }
 
 func (c *client) Build(ctx context.Context, req *builder.PackageBuildRequest) (*builder.PackageBuildResponse, error) {
@@ -85,4 +91,30 @@ func (c *client) Build(ctx context.Context, req *builder.PackageBuildRequest) (*
 	}
 
 	return &pkgBuildResp, ferror.MakeErrorFromHTTP(resp)
+}
+
+func (c *client) Clean(ctx context.Context, srcPkgFilename string) error {
+	logger := otelUtils.LoggerWithTraceID(ctx, c.logger)
+
+	req, err := http.NewRequest(http.MethodDelete, c.getCleanUrl(srcPkgFilename), http.NoBody)
+	if err != nil {
+		return errors.Wrap(err, "failed to create http request for clean api")
+	}
+
+	resp, err := ctxhttp.Do(ctx, c.httpClient.StandardClient(), req)
+	if err != nil {
+		logger.Error("error sending clean request", zap.Error(err))
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusMethodNotAllowed {
+		return nil
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return ferror.MakeErrorFromHTTP(resp)
+	}
+
+	return nil
 }
