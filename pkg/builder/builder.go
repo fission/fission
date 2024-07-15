@@ -61,10 +61,6 @@ type (
 		BuildLogs        string `json:"buildLogs"`
 	}
 
-	PackageCleanRequest struct {
-		SrcPkgFilename string `json:"srcPkgFilename"`
-	}
-
 	Builder struct {
 		logger           *zap.Logger
 		sharedVolumePath string
@@ -162,7 +158,7 @@ func (builder *Builder) Handler(w http.ResponseWriter, r *http.Request) {
 func (builder *Builder) Clean(w http.ResponseWriter, r *http.Request) {
 	logger := otelUtils.LoggerWithTraceID(r.Context(), builder.logger)
 
-	if r.Method != "POST" {
+	if r.Method != "DELETE" {
 		e := "method not allowed"
 		logger.Error(e, zap.String("http_method", r.Method))
 		builder.reply(r.Context(), w, "", fmt.Sprintf("%s: %s", e, r.Method), http.StatusMethodNotAllowed)
@@ -175,36 +171,20 @@ func (builder *Builder) Clean(w http.ResponseWriter, r *http.Request) {
 		logger.Info("clean request complete", zap.Duration("elapsed_time", elapsed))
 	}()
 
-	// parse request
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		e := "error reading request body"
-		logger.Error(e, zap.Error(err))
-		builder.reply(r.Context(), w, "", fmt.Sprintf("%s: %s", e, err.Error()), http.StatusInternalServerError)
-		return
-	}
-	var req PackageCleanRequest
-	err = json.Unmarshal(body, &req)
-	if err != nil {
-		e := "error parsing json body"
-		logger.Error(e, zap.Error(err))
-		builder.reply(r.Context(), w, "", fmt.Sprintf("%s: %s", e, err.Error()), http.StatusBadRequest)
-		return
-	}
+	srcPkgFilename := r.URL.Query().Get("name")
+	srcPkgPath := filepath.Join(builder.sharedVolumePath, srcPkgFilename)
 
-	srcPkgPath := filepath.Join(builder.sharedVolumePath, req.SrcPkgFilename)
+	logger.Info("builder received clean request", zap.Any("source_package", srcPkgFilename))
 
-	logger.Info("builder received clean request", zap.Any("request", req))
-
-	err = utils.DeleteOldPackages(srcPkgPath, envSrcPkg)
+	err := utils.DeleteOldPackages(srcPkgPath, envSrcPkg)
 	if err != nil {
 		e := "error deleting src package after build"
 		logger.Error(e, zap.Error(err))
-		builder.reply(r.Context(), w, req.SrcPkgFilename, "", http.StatusInternalServerError)
+		builder.reply(r.Context(), w, srcPkgFilename, "", http.StatusInternalServerError)
 		return
 	}
 
-	builder.reply(r.Context(), w, req.SrcPkgFilename, "", http.StatusOK)
+	builder.reply(r.Context(), w, srcPkgFilename, "", http.StatusOK)
 }
 
 func (builder *Builder) reply(ctx context.Context, w http.ResponseWriter, pkgFilename string, buildLogs string, statusCode int) {

@@ -268,6 +268,10 @@ func FindFreePort() (int, error) {
 	return port, nil
 }
 
+// DeleteOldPackages deletes src and built deployment packages from builder's storage.
+// The function also verifies that sharedVolumePath for builder and fetcher containers
+// is /packages. A source_package contains a directory and a .tmp file while a deployment
+// package contains a directory and a .zip file.
 func DeleteOldPackages(pkgPath, pkgType string) error {
 	sharedVolumePath := "/packages"
 	if !strings.HasPrefix(pkgPath, sharedVolumePath) {

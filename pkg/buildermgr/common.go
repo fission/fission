@@ -131,11 +131,7 @@ func buildPackage(ctx context.Context, logger *zap.Logger, fissionClient version
 }
 
 func cleanPackage(ctx context.Context, builderClient builderClient.ClientInterface, srcPkgFileName string) error {
-	pkgCleanReq := &builder.PackageCleanRequest{
-		SrcPkgFilename: srcPkgFileName,
-	}
-
-	err := builderClient.Clean(ctx, pkgCleanReq)
+	err := builderClient.Clean(ctx, srcPkgFileName)
 	if err != nil {
 		return err
 	}
