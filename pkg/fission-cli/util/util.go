@@ -511,6 +511,23 @@ func ConfigMapExists(ctx context.Context, m *metav1.ObjectMeta, kClient kubernet
 	return err
 }
 
+func GetSvcName(ctx context.Context, kClient kubernetes.Interface, application string) (string, error) {
+	appLabelSelector := "application=" + application
+
+	services, err := kClient.CoreV1().Services("").List(ctx, metav1.ListOptions{
+		LabelSelector: appLabelSelector,
+	})
+	if err != nil {
+		return "", err
+	}
+
+	if len(services.Items) > 1 || len(services.Items) == 0 {
+		return "", errors.Errorf("more than one service found for application=%s", application)
+	}
+	service := services.Items[0]
+	return service.Name + "." + service.Namespace, nil
+}
+
 // FunctionPodLogs : Get logs for a function directly from pod
 func FunctionPodLogs(ctx context.Context, fnName, ns string, client cmd.Client) (err error) {
 
