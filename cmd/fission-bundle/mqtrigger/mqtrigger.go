@@ -22,16 +22,19 @@ import (
 	"os"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
+	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
 	"github.com/fission/fission/pkg/mqtrigger"
 	"github.com/fission/fission/pkg/mqtrigger/factory"
 	"github.com/fission/fission/pkg/mqtrigger/messageQueue"
 	_ "github.com/fission/fission/pkg/mqtrigger/messageQueue/kafka"
+	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/manager"
 )
 
@@ -73,11 +76,24 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *
 	if err != nil {
 		logger.Fatal("failed to connect to remote message queue server", zap.Error(err))
 	}
-	mqtMgr := mqtrigger.MakeMessageQueueTriggerManager(logger, fissionClient, mqType, mq)
-	err = mqtMgr.Run(ctx, mgr)
+
+	finformerFactory := make(map[string]genInformer.SharedInformerFactory, 0)
+	for _, ns := range utils.DefaultNSResolver().FissionResourceNS {
+		finformerFactory[ns] = genInformer.NewFilteredSharedInformerFactory(fissionClient, time.Minute*30, ns, nil)
+	}
+
+	mqtMgr, err := mqtrigger.MakeMessageQueueTriggerManager(logger, fissionClient, mqType, finformerFactory, mq)
 	if err != nil {
 		return err
 	}
+
+	// Start informer factory
+	for _, factory := range finformerFactory {
+		factory.Start(ctx.Done())
+	}
+
+	mqtMgr.Run(ctx, ctx.Done(), mgr)
+
 	return nil
 }
 

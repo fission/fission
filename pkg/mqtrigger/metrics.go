@@ -45,6 +45,13 @@ var (
 		},
 		[]string{"trigger_name", "trigger_namespace", "topic", "partition"},
 	)
+	mqtCount = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "fission_mqt_created",
+			Help: "Total number of mqt currently",
+		},
+		[]string{},
+	)
 )
 
 func IncreaseSubscriptionCount() {
@@ -63,9 +70,18 @@ func SetMessageLagCount(trigname, trignamespace, topic, partition string, lag in
 	messageLagCount.WithLabelValues(trigname, trignamespace, topic, partition).Set(float64(lag))
 }
 
+func IncreaseMqtCount() {
+	mqtCount.WithLabelValues().Inc()
+}
+
+func DecreaseMqtCount() {
+	mqtCount.WithLabelValues().Dec()
+}
+
 func init() {
 	registry := metrics.Registry
 	registry.MustRegister(subscriptionCount)
 	registry.MustRegister(messageCount)
 	registry.MustRegister(messageLagCount)
+	registry.MustRegister(mqtCount)
 }
