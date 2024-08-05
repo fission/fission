@@ -92,8 +92,8 @@ func MakeMessageQueueTriggerManager(logger *zap.Logger,
 		mqtListerSynced:            make(map[string]k8sCache.InformerSynced, 0),
 		messageQueueType:           mqType,
 		messageQueue:               messageQueue,
-		mqTriggerCreateUpdateQueue: workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "EnvAddUpdateQueue"),
-		mqTriggerDeleteQueue:       workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "EnvDeleteQueue"),
+		mqTriggerCreateUpdateQueue: workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "MqtAddUpdateQueue"),
+		mqTriggerDeleteQueue:       workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "MqtDeleteQueue"),
 	}
 
 	for ns, informer := range finformerFactory {
@@ -112,7 +112,7 @@ func MakeMessageQueueTriggerManager(logger *zap.Logger,
 	return &mqTriggerMgr, nil
 }
 
-func (mqt *MessageQueueTriggerManager) Run(ctx context.Context, stopCh <-chan struct{}, mgr manager.Interface, informers ...k8sCache.SharedIndexInformer) error {
+func (mqt *MessageQueueTriggerManager) Run(ctx context.Context, stopCh <-chan struct{}, mgr manager.Interface) {
 	defer utilruntime.HandleCrash()
 	defer mqt.mqTriggerCreateUpdateQueue.ShutDown()
 	defer mqt.mqTriggerDeleteQueue.ShutDown()
@@ -120,11 +120,6 @@ func (mqt *MessageQueueTriggerManager) Run(ctx context.Context, stopCh <-chan st
 
 	mqt.logger.Info("Waiting for informer caches to sync")
 
-	for _, informer := range informers {
-		mgr.Add(ctx, func(ctx context.Context) {
-			informer.Run(ctx.Done())
-		})
-	}
 	waitSynced := make([]k8sCache.InformerSynced, 0)
 	for _, synced := range mqt.mqtListerSynced {
 		waitSynced = append(waitSynced, synced)
@@ -145,7 +140,9 @@ func (mqt *MessageQueueTriggerManager) Run(ctx context.Context, stopCh <-chan st
 	mgr.Add(ctx, func(ctx context.Context) {
 		metrics.ServeMetrics(ctx, "mqtrigger", mqt.logger, mgr)
 	})
-	return nil
+
+	<-stopCh
+	mqt.logger.Info("Shutting down workers for messageQueueTriggerManager")
 }
 
 func (mqt *MessageQueueTriggerManager) service() {
@@ -359,36 +356,11 @@ func (mqt *MessageQueueTriggerManager) mqTriggerDeleteQueueProcessFunc(ctx conte
 	if quit {
 		return false
 	}
-	key := obj.(string)
 	defer mqt.mqTriggerDeleteQueue.Done(obj)
-
-	namespace, name, err := k8sCache.SplitMetaNamespaceKey(key)
-	if err != nil {
-		mqt.logger.Error("error splitting key", zap.Error(err))
-		mqt.mqTriggerDeleteQueue.Forget(key)
-		return false
-	}
-	mqTriggerLister, err := mqt.getMqtLister(namespace)
-	if err != nil {
-		mqt.logger.Error("error getting messagequeuetrigger lister", zap.Error(err))
-		mqt.mqTriggerDeleteQueue.Forget(key)
-		return false
-	}
-	mqTrigger, err := mqTriggerLister.MessageQueueTriggers(namespace).Get(name)
-	if apierrors.IsNotFound(err) {
-		mqt.logger.Info("mqt not found", zap.String("key", key))
-		mqt.mqTriggerDeleteQueue.Forget(key)
-		return false
-	}
-
-	if err != nil {
-		if mqt.mqTriggerDeleteQueue.NumRequeues(key) < maxRetries {
-			mqt.mqTriggerDeleteQueue.AddRateLimited(key)
-			mqt.logger.Error("error getting mqt, retrying", zap.Error(err))
-		} else {
-			mqt.mqTriggerDeleteQueue.Forget(key)
-			mqt.logger.Error("error getting mqt, retrying, max retries reached", zap.Error(err))
-		}
+	mqTrigger, ok := obj.(*fv1.MessageQueueTrigger)
+	if !ok {
+		mqt.logger.Error("unexpected type when deleting mqt to message queue trigger manager", zap.Any("obj", obj))
+		mqt.mqTriggerDeleteQueue.Forget(obj)
 		return false
 	}
 
@@ -397,17 +369,17 @@ func (mqt *MessageQueueTriggerManager) mqTriggerDeleteQueueProcessFunc(ctx conte
 	triggerSubscription := mqt.getTriggerSubscription(mqTrigger)
 	if triggerSubscription == nil {
 		mqt.logger.Info("Unsubscribe failed", zap.String("trigger_name", mqTrigger.ObjectMeta.Name))
-		mqt.mqTriggerDeleteQueue.Forget(key)
+		mqt.mqTriggerDeleteQueue.Forget(obj)
 		return false
 	}
 
-	err = mqt.messageQueue.Unsubscribe(triggerSubscription.subscription)
+	err := mqt.messageQueue.Unsubscribe(triggerSubscription.subscription)
 	if err != nil {
-		if mqt.mqTriggerDeleteQueue.NumRequeues(key) < maxRetries {
-			mqt.mqTriggerDeleteQueue.AddRateLimited(key)
+		if mqt.mqTriggerDeleteQueue.NumRequeues(obj) < maxRetries {
+			mqt.mqTriggerDeleteQueue.AddRateLimited(obj)
 			mqt.logger.Error("failed to unsubscribe from message queue trigger, retrying", zap.Error(err), zap.String("trigger_name", mqTrigger.ObjectMeta.Name))
 		} else {
-			mqt.mqTriggerDeleteQueue.Forget(key)
+			mqt.mqTriggerDeleteQueue.Forget(obj)
 			mqt.logger.Error("failed to unsubscribe from message queue trigger, max retries reached", zap.Error(err))
 		}
 		return false
@@ -415,17 +387,17 @@ func (mqt *MessageQueueTriggerManager) mqTriggerDeleteQueueProcessFunc(ctx conte
 
 	err = mqt.delTriggerSubscription(mqTrigger)
 	if err != nil {
-		if mqt.mqTriggerDeleteQueue.NumRequeues(key) < maxRetries {
-			mqt.mqTriggerDeleteQueue.AddRateLimited(key)
-			mqt.logger.Error("error deleting mqt, retrying", zap.String("key", key), zap.Error(err))
+		if mqt.mqTriggerDeleteQueue.NumRequeues(obj) < maxRetries {
+			mqt.mqTriggerDeleteQueue.AddRateLimited(obj)
+			mqt.logger.Error("error deleting mqt, retrying", zap.Any("obj", obj), zap.Error(err))
 		} else {
-			mqt.mqTriggerDeleteQueue.Forget(key)
+			mqt.mqTriggerDeleteQueue.Forget(obj)
 			mqt.logger.Error("deleting message queue trigger failed, max retries reached", zap.Error(err), zap.String("trigger_name", mqTrigger.ObjectMeta.Name))
 		}
 		return false
 	}
 
-	mqt.mqTriggerDeleteQueue.Forget(key)
+	mqt.mqTriggerDeleteQueue.Forget(obj)
 	mqt.logger.Info("message queue trigger deleted", zap.String("trigger_name", mqTrigger.ObjectMeta.Name))
-	return true
+	return false
 }

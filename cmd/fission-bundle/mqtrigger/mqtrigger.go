@@ -26,7 +26,6 @@ import (
 
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	k8sCache "k8s.io/client-go/tools/cache"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
@@ -88,17 +87,13 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *
 		return err
 	}
 
-	informers := make([]k8sCache.SharedIndexInformer, 0)
 	// Start informer factory
 	for _, factory := range finformerFactory {
-		informer := factory.Core().V1().MessageQueueTriggers().Informer()
-		informers = append(informers, informer)
+		factory.Start(ctx.Done())
 	}
 
-	err = mqtMgr.Run(ctx, ctx.Done(), mgr, informers...)
-	if err != nil {
-		return err
-	}
+	mqtMgr.Run(ctx, ctx.Done(), mgr)
+
 	return nil
 }
 
