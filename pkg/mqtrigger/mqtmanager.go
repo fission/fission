@@ -98,9 +98,15 @@ func MakeMessageQueueTriggerManager(logger *zap.Logger,
 
 	for ns, informer := range finformerFactory {
 		_, err := informer.Core().V1().MessageQueueTriggers().Informer().AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
-			AddFunc:    mqTriggerMgr.enqueueMqtAdd,
+			AddFunc: func(obj interface{}) {
+				IncreaseMqtCount()
+				mqTriggerMgr.enqueueMqtAdd(obj)
+			},
 			UpdateFunc: mqTriggerMgr.enqueueMqtUpdate,
-			DeleteFunc: mqTriggerMgr.enqueueMqtDelete,
+			DeleteFunc: func(obj interface{}) {
+				mqTriggerMgr.enqueueMqtDelete(obj)
+				DecreaseMqtCount()
+			},
 		})
 		if err != nil {
 			return nil, err
@@ -334,7 +340,6 @@ func (mqt *MessageQueueTriggerManager) mqTriggerCreateUpdateQueueProcessFunc(ctx
 	}
 
 	mqt.logger.Debug("Added mqt", zap.Any("trigger: ", mqTrigger.ObjectMeta))
-	IncreaseMqtCount()
 	err = mqt.RegisterTrigger(mqTrigger)
 	if err != nil {
 		if mqt.mqTriggerCreateUpdateQueue.NumRequeues(key) < maxRetries {
@@ -365,7 +370,6 @@ func (mqt *MessageQueueTriggerManager) mqTriggerDeleteQueueProcessFunc(ctx conte
 	}
 
 	mqt.logger.Debug("Delete mqt", zap.Any("trigger: ", mqTrigger.ObjectMeta))
-	DecreaseMqtCount()
 	triggerSubscription := mqt.getTriggerSubscription(mqTrigger)
 	if triggerSubscription == nil {
 		mqt.logger.Info("Unsubscribe failed", zap.String("trigger_name", mqTrigger.ObjectMeta.Name))
