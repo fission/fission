@@ -2,6 +2,8 @@ module github.com/fission/fission
 
 go 1.22.2
 
+replace github.com/IBM/sarama v1.43.2 => github.com/Shopify/sarama v1.35.0
+
 require (
 	dario.cat/mergo v1.0.0
 	github.com/IBM/sarama v1.43.2
