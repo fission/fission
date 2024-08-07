@@ -45,6 +45,20 @@ var (
 		},
 		[]string{"trigger_name", "trigger_namespace", "topic", "partition"},
 	)
+	triggerStatus = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "fission_mqt_trigger_status",
+			Help: "Status of a trigger",
+		},
+		[]string{"trigger_name", "trigger_namespace"},
+	)
+	mqtInprocessCount = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "fission_mqt_inprocess",
+			Help: "Total number of mqt in process",
+		},
+		[]string{},
+	)
 )
 
 func IncreaseSubscriptionCount() {
@@ -53,6 +67,22 @@ func IncreaseSubscriptionCount() {
 
 func DecreaseSubscriptionCount() {
 	subscriptionCount.WithLabelValues().Dec()
+}
+
+func SetTriggerStatus(trigname, trignamespace string) {
+	triggerStatus.WithLabelValues(trigname, trignamespace).Inc()
+}
+
+func ResetTriggerStatus(trigname, trignamespace string) {
+	triggerStatus.WithLabelValues(trigname, trignamespace).Dec()
+}
+
+func IncreaseInprocessCount() {
+	mqtInprocessCount.WithLabelValues().Inc()
+}
+
+func DecreaseInprocessCount() {
+	mqtInprocessCount.WithLabelValues().Dec()
 }
 
 func IncreaseMessageCount(trigname, trignamespace string) {
@@ -68,4 +98,6 @@ func init() {
 	registry.MustRegister(subscriptionCount)
 	registry.MustRegister(messageCount)
 	registry.MustRegister(messageLagCount)
+	registry.MustRegister(mqtInprocessCount)
+	registry.MustRegister(triggerStatus)
 }
