@@ -47,15 +47,15 @@ var (
 	)
 	triggerStatus = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "fission_mqt_trigger_status",
-			Help: "Status of a trigger",
+			Name: "fission_mqt_status",
+			Help: "Status of an individual trigger 1 if processing otherwise 0",
 		},
 		[]string{"trigger_name", "trigger_namespace"},
 	)
 	mqtInprocessCount = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "fission_mqt_inprocess",
-			Help: "Total number of mqt in process",
+			Help: "Total number of MQTs in active processing",
 		},
 		[]string{},
 	)
