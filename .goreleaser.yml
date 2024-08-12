@@ -36,9 +36,6 @@ builds:
     goarch:
       - amd64
       - arm64
-      - arm
-    goarm:
-      - 7
     binary: builder
     dir: ./cmd/builder
   - <<: *build-linux
@@ -60,12 +57,6 @@ builds:
     ignore:
       - goos: windows
         goarch: arm64
-      - goos: darwin
-        goarch: arm
-        goarm: 7
-      - goos: windows
-        goarch: arm
-        goarm: 7
   - <<: *build-linux
     id: pre-upgrade-checks
     binary: pre-upgrade-checks
