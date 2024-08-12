@@ -132,8 +132,7 @@ func createEnvironmentFromCmd(input cli.Input) (*fv1.Environment, error) {
 	pullSecret := input.String(flagkey.EnvImagePullSecret)
 
 	envVersion := input.Int(flagkey.EnvVersion)
-	// Environment API interface version is not specified and
-	// builder image is empty, set default interface version
+
 	if envVersion == 0 {
 		envVersion = 1
 	}

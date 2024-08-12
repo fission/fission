@@ -97,9 +97,6 @@ func (opts *UpdateSubCommand) run(input cli.Input) error {
 	if err != nil {
 		return errors.Wrap(err, "error updating environment")
 	}
-	if err != nil {
-		return errors.Wrap(err, "error updating environment")
-	}
 
 	fmt.Printf("environment '%v' updated\n", enew.ObjectMeta.Name)
 	return nil
