@@ -98,15 +98,9 @@ func MakeMessageQueueTriggerManager(logger *zap.Logger,
 
 	for ns, informer := range finformerFactory {
 		_, err := informer.Core().V1().MessageQueueTriggers().Informer().AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
-			AddFunc: func(obj interface{}) {
-				IncreaseMqtCount()
-				mqTriggerMgr.enqueueMqtAdd(obj)
-			},
+			AddFunc:    mqTriggerMgr.enqueueMqtAdd,
 			UpdateFunc: mqTriggerMgr.enqueueMqtUpdate,
-			DeleteFunc: func(obj interface{}) {
-				mqTriggerMgr.enqueueMqtDelete(obj)
-				DecreaseMqtCount()
-			},
+			DeleteFunc: mqTriggerMgr.enqueueMqtDelete,
 		})
 		if err != nil {
 			return nil, err
