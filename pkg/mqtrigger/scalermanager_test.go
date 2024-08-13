@@ -10,11 +10,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	kedav1alpha1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
 )
 
 func Test_toEnvVar(t *testing.T) {
@@ -438,55 +438,52 @@ func Test_getAuthTriggerSpec(t *testing.T) {
 
 	authenticationRef := fmt.Sprintf("%s-auth-trigger", mqt1.ObjectMeta.Name)
 
-	expectedAuthTriggerObj := &unstructured.Unstructured{
-		Object: map[string]interface{}{
-			"kind":       "TriggerAuthentication",
-			"apiVersion": apiVersion,
-			"metadata": map[string]interface{}{
-				"name":      authenticationRef,
-				"namespace": mqt1.ObjectMeta.Namespace,
-				"ownerReferences": []interface{}{
-					map[string]interface{}{
-						"kind":               "MessageQueueTrigger",
-						"apiVersion":         "fission.io/v1",
-						"name":               mqt1.ObjectMeta.Name,
-						"uid":                mqt1.ObjectMeta.UID,
-						"blockOwnerDeletion": true,
-					},
+	blockOwnerDeletion := true
+	expectedAuthTriggerObj := &kedav1alpha1.TriggerAuthentication{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      authenticationRef,
+			Namespace: mqt1.ObjectMeta.Namespace,
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					Kind:               "MessageQueueTrigger",
+					APIVersion:         "fission.io/v1",
+					Name:               mqt1.ObjectMeta.Name,
+					UID:                mqt1.ObjectMeta.UID,
+					BlockOwnerDeletion: &blockOwnerDeletion,
 				},
 			},
-			"spec": map[string]interface{}{
-				"secretTargetRef": []interface{}{
-					map[string]interface{}{
-						"name":      mqt1.Spec.Secret,
-						"parameter": "authMode",
-						"key":       "authMode",
-					},
-					map[string]interface{}{
-						"name":      mqt1.Spec.Secret,
-						"parameter": "username",
-						"key":       "username",
-					},
-					map[string]interface{}{
-						"name":      mqt1.Spec.Secret,
-						"parameter": "password",
-						"key":       "password",
-					},
-					map[string]interface{}{
-						"name":      mqt1.Spec.Secret,
-						"parameter": "ca",
-						"key":       "ca",
-					},
-					map[string]interface{}{
-						"name":      mqt1.Spec.Secret,
-						"parameter": "cert",
-						"key":       "cert",
-					},
-					map[string]interface{}{
-						"name":      mqt1.Spec.Secret,
-						"parameter": "key",
-						"key":       "key",
-					},
+		},
+		Spec: kedav1alpha1.TriggerAuthenticationSpec{
+			SecretTargetRef: []kedav1alpha1.AuthSecretTargetRef{
+				{
+					Name:      mqt1.Spec.Secret,
+					Parameter: "authMode",
+					Key:       "authMode",
+				},
+				{
+					Name:      mqt1.Spec.Secret,
+					Parameter: "username",
+					Key:       "username",
+				},
+				{
+					Name:      mqt1.Spec.Secret,
+					Parameter: "password",
+					Key:       "password",
+				},
+				{
+					Name:      mqt1.Spec.Secret,
+					Parameter: "ca",
+					Key:       "ca",
+				},
+				{
+					Name:      mqt1.Spec.Secret,
+					Parameter: "cert",
+					Key:       "cert",
+				},
+				{
+					Name:      mqt1.Spec.Secret,
+					Parameter: "key",
+					Key:       "key",
 				},
 			},
 		},
@@ -532,7 +529,7 @@ func Test_getAuthTriggerSpec(t *testing.T) {
 	tests := []struct {
 		name    string
 		args    args
-		want    *unstructured.Unstructured
+		want    *kedav1alpha1.TriggerAuthentication
 		wantErr bool
 	}{
 		{"With secret", args{mqt1, authenticationRef, kubeClient}, expectedAuthTriggerObj, false},
@@ -549,21 +546,22 @@ func Test_getAuthTriggerSpec(t *testing.T) {
 				return
 			}
 
-			gotSpec := got.Object["spec"].(map[string]interface{})["secretTargetRef"].([]interface{})
+			gotSpec := got.Spec.SecretTargetRef
+			//gotSpec := got.Object["spec"].(map[string]interface{})["secretTargetRef"].([]interface{})
 
 			sort.Slice(gotSpec, func(i, j int) bool {
-				return gotSpec[i].(map[string]interface{})["parameter"].(string) < gotSpec[j].(map[string]interface{})["parameter"].(string)
+				return gotSpec[i].Parameter < gotSpec[j].Parameter
 			})
 
-			wantSpec := tt.want.Object["spec"].(map[string]interface{})["secretTargetRef"].([]interface{})
+			wantSpec := tt.want.Spec.SecretTargetRef
 
 			sort.Slice(wantSpec, func(i, j int) bool {
-				return wantSpec[i].(map[string]interface{})["parameter"].(string) < wantSpec[j].(map[string]interface{})["parameter"].(string)
+				return wantSpec[i].Parameter < wantSpec[j].Parameter
 			})
 
-			if !reflect.DeepEqual(got.Object["kind"], tt.want.Object["kind"]) &&
-				!reflect.DeepEqual(got.Object["apiVersion"], tt.want.Object["apiVersion"]) &&
-				!reflect.DeepEqual(got.Object["metadata"], tt.want.Object["metadata"]) &&
+			if !reflect.DeepEqual(got.Kind, tt.want.Kind) &&
+				!reflect.DeepEqual(got.APIVersion, tt.want.APIVersion) &&
+				!reflect.DeepEqual(got.ObjectMeta, tt.want.ObjectMeta) &&
 				!reflect.DeepEqual(gotSpec, wantSpec) {
 				t.Errorf("getAuthTriggerSpec() = %v, want %v", got, tt.want)
 			}
