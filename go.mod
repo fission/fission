@@ -22,7 +22,7 @@ require (
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/hashicorp/go-retryablehttp v0.7.7
 	github.com/influxdata/influxdb v1.11.5
-	github.com/kedacore/keda/v2 v2.15.1
+	github.com/kedacore/keda/v2 v2.15.0
 	github.com/mholt/archiver/v3 v3.5.1
 	github.com/minio/minio-go v6.0.14+incompatible
 	github.com/ory/dockertest v3.3.5+incompatible
@@ -47,7 +47,7 @@ require (
 	google.golang.org/grpc v1.65.0
 	k8s.io/api v0.30.0
 	k8s.io/apiextensions-apiserver v0.30.0
-	k8s.io/apimachinery v0.31.0-beta.0
+	k8s.io/apimachinery v0.30.0
 	k8s.io/client-go v0.30.0
 	k8s.io/code-generator v0.30.0
 	k8s.io/metrics v0.30.0
@@ -89,7 +89,6 @@ require (
 	github.com/evanphx/json-patch/v5 v5.9.0 // indirect
 	github.com/expr-lang/expr v1.16.9 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
-	github.com/fxamacker/cbor/v2 v2.7.0 // indirect
 	github.com/go-git/gcfg v1.5.1-0.20230307220236-3a3c6141e376 // indirect
 	github.com/go-git/go-billy/v5 v5.5.0 // indirect
 	github.com/go-ini/ini v1.66.4 // indirect
@@ -155,7 +154,6 @@ require (
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/skeema/knownhosts v1.2.2 // indirect
 	github.com/ulikunitz/xz v0.5.9 // indirect
-	github.com/x448/float16 v0.8.4 // indirect
 	github.com/xanzy/ssh-agent v0.3.3 // indirect
 	github.com/xi2/xz v0.0.0-20171230120015-48954b6210f8 // indirect
 	go.opentelemetry.io/contrib/propagators/aws v1.26.0 // indirect
