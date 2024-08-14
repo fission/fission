@@ -107,9 +107,6 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	}
 
 	methods := input.StringSlice(flagkey.HtMethod)
-	if len(methods) == 0 {
-		return errors.New("HTTP methods not mentioned")
-	}
 
 	for _, method := range methods {
 		_, err := GetMethod(method)
@@ -166,7 +163,6 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		}
 	}
 
-	createIngress := input.Bool(flagkey.HtIngress)
 	ingressConfig, err := GetIngressConfig(
 		input.StringSlice(flagkey.HtIngressAnnotation), input.String(flagkey.HtIngressRule),
 		input.String(flagkey.HtIngressTLS), fallbackURL, nil)
@@ -174,24 +170,18 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		return errors.Wrap(err, "error parsing ingress configuration")
 	}
 
-	host := input.String(flagkey.HtHost)
-
 	opts.trigger = &fv1.HTTPTrigger{
 		ObjectMeta: m,
 		Spec: fv1.HTTPTriggerSpec{
-			Host:              host,
+			Host:              input.String(flagkey.HtHost),
 			RelativeURL:       triggerUrl,
 			Methods:           methods,
 			FunctionReference: *functionRef,
-			CreateIngress:     createIngress,
+			CreateIngress:     input.Bool(flagkey.HtIngress),
 			IngressConfig:     *ingressConfig,
 			Prefix:            &prefix,
 			KeepPrefix:        input.Bool(flagkey.HtKeepPrefix),
 		},
-	}
-
-	if input.IsSet(flagkey.HtKeepPrefix) {
-		opts.trigger.Spec.KeepPrefix = input.Bool(flagkey.HtKeepPrefix)
 	}
 
 	return nil
