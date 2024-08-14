@@ -42,6 +42,7 @@ const (
 	ADD_TRIGGER requestType = iota
 	DELETE_TRIGGER
 	GET_TRIGGER_SUBSCRIPTION
+	UPDATE_TRIGGER_SUBSCRIPTION
 )
 
 type (
@@ -166,6 +167,14 @@ func (mqt *MessageQueueTriggerManager) service() {
 				IncreaseSubscriptionCount()
 			}
 			req.respChan <- resp
+		case UPDATE_TRIGGER_SUBSCRIPTION:
+			if _, ok := mqt.triggers[k]; ok {
+				mqt.triggers[k] = req.triggerSub
+				mqt.logger.Debug("updated trigger subscription", zap.String("key", k))
+			} else {
+				resp.err = errors.New("trigger subscription does not exists")
+			}
+			req.respChan <- resp
 		case GET_TRIGGER_SUBSCRIPTION:
 			if _, ok := mqt.triggers[k]; !ok {
 				resp.err = errors.New("trigger does not exist")
@@ -198,6 +207,11 @@ func (mqt *MessageQueueTriggerManager) getTriggerSubscription(trigger *fv1.Messa
 	return resp.triggerSub
 }
 
+func (mqt *MessageQueueTriggerManager) updateTriggerSubscription(triggerSub *triggerSubscription) error {
+	resp := mqt.makeRequest(UPDATE_TRIGGER_SUBSCRIPTION, triggerSub)
+	return resp.err
+}
+
 func (mqt *MessageQueueTriggerManager) checkTriggerSubscription(trigger *fv1.MessageQueueTrigger) bool {
 	return mqt.getTriggerSubscription(trigger) != nil
 }
@@ -207,10 +221,54 @@ func (mqt *MessageQueueTriggerManager) delTriggerSubscription(trigger *fv1.Messa
 	return resp.err
 }
 
+func (mqt *MessageQueueTriggerManager) updateTrigger(trigger *fv1.MessageQueueTrigger) error {
+	oldTriggerSubscription := mqt.getTriggerSubscription(trigger)
+	if oldTriggerSubscription == nil {
+		mqt.logger.Info("Trigger subscrption does not exist", zap.String("trigger_name", trigger.ObjectMeta.Name))
+		return errors.New("trigger does not exist")
+	}
+
+	// unsubscribe the messagequeue
+	err := mqt.messageQueue.Unsubscribe(oldTriggerSubscription.subscription)
+	if err != nil {
+		mqt.logger.Warn("failed to unsubscribe from message queue trigger", zap.Error(err), zap.String("trigger_name", trigger.ObjectMeta.Name))
+		return err
+	}
+
+	// subscribe using the updated message queue trigger
+	sub, err := mqt.messageQueue.Subscribe(trigger)
+	if err != nil {
+		mqt.logger.Warn("failed to re-subscribe to message queue trigger", zap.Error(err), zap.String("trigger_name", trigger.ObjectMeta.Name))
+		return err
+	}
+	if sub == nil {
+		mqt.logger.Warn("subscription is nil", zap.String("trigger_name", trigger.ObjectMeta.Name))
+		return nil
+	}
+	newTriggerSubscription := triggerSubscription{
+		trigger:      *trigger,
+		subscription: sub,
+	}
+
+	// update our list
+	err = mqt.updateTriggerSubscription(&newTriggerSubscription)
+	if err != nil {
+		mqt.logger.Fatal("updating message queue trigger failed", zap.Error(err), zap.String("trigger_name", trigger.ObjectMeta.Name))
+		return err
+	}
+	mqt.logger.Info("message queue trigger updated", zap.String("trigger_name", trigger.ObjectMeta.Name))
+	return nil
+}
+
 func (mqt *MessageQueueTriggerManager) RegisterTrigger(trigger *fv1.MessageQueueTrigger) error {
 	isPresent := mqt.checkTriggerSubscription(trigger)
 	if isPresent {
-		mqt.logger.Debug("message queue trigger already registered", zap.String("trigger_name", trigger.ObjectMeta.Name))
+		mqt.logger.Debug("updating message queue trigger", zap.String("trigger_name", trigger.ObjectMeta.Name))
+		err := mqt.updateTrigger(trigger)
+		if err != nil {
+			mqt.logger.Error("error updating messagequeuetrigger", zap.Error(err))
+			return err
+		}
 		return nil
 	}
 
