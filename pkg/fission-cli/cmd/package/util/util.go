@@ -104,11 +104,12 @@ func getArchiveURL(ctx context.Context, client cmd.Client, archiveID string, ser
 	storageType := resp.Header.Get("X-FISSION-STORAGETYPE")
 
 	if storageType == "local" {
-		storagesvcURL, err := util.GetStorageURL(ctx, client)
+		storageSvc, err := util.GetSvcName(ctx, client.KubernetesClient, "fission-storage")
 		if err != nil {
 			return "", err
 		}
-		client := storageSvcClient.MakeClient(storagesvcURL.String())
+		storagesvcURL := "http://" + storageSvc
+		client := storageSvcClient.MakeClient(storagesvcURL)
 		return client.GetUrl(archiveID), nil
 	} else if storageType == "s3" {
 		storageBucket := resp.Header.Get("X-FISSION-BUCKET")
