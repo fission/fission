@@ -24,7 +24,6 @@ import (
 	"go.uber.org/zap"
 	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	"k8s.io/client-go/rest"
@@ -33,6 +32,7 @@ import (
 
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	"github.com/fission/fission/pkg/utils"
+	kedaClient "github.com/kedacore/keda/v2/pkg/generated/clientset/versioned"
 )
 
 const (
@@ -47,7 +47,7 @@ type (
 		GetKubernetesClient() (kubernetes.Interface, error)
 		GetApiExtensionsClient() (apiextensionsclient.Interface, error)
 		GetMetricsClient() (metricsclient.Interface, error)
-		GetDynamicClient() (dynamic.Interface, error)
+		GetKedaClient() (kedaClient.Interface, error)
 	}
 
 	ClientGenerator struct {
@@ -118,12 +118,12 @@ func (cg *ClientGenerator) GetMetricsClient() (metricsclient.Interface, error) {
 	return metricsclient.NewForConfig(config)
 }
 
-func (cg *ClientGenerator) GetDynamicClient() (dynamic.Interface, error) {
+func (cg *ClientGenerator) GetKedaClient() (kedaClient.Interface, error) {
 	config, err := cg.getRestConfig()
 	if err != nil {
 		return nil, err
 	}
-	return dynamic.NewForConfig(config)
+	return kedaClient.NewForConfig(config)
 }
 
 func NewClientGenerator() *ClientGenerator {

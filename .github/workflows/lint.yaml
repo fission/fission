@@ -18,7 +18,7 @@ on:
   workflow_dispatch:
 
 env:
-  GOLANGCI_LINT_VERSION: v1.55.2
+  GOLANGCI_LINT_VERSION: v1.57.0
   GOLANGCI_LINT_TIMEOUT: 5m
 
 jobs:
@@ -43,6 +43,7 @@ jobs:
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@3a919529898de77ec3da873e3063ca4b10e7f5cc # v3.7.0
         with:
+          skip-cache: true
           version: ${{ env.GOLANGCI_LINT_VERSION }}
           args: --timeout=${{ env.GOLANGCI_LINT_TIMEOUT }}
 
