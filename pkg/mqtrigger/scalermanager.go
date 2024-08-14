@@ -41,45 +41,30 @@ func mqTriggerEventHandlers(ctx context.Context, logger *zap.Logger, kubeClient 
 					return
 				}
 				logger.Debug("Create deployment for Scaler Object", zap.Any("mqt", mqt.ObjectMeta), zap.Any("mqt.Spec", mqt.Spec))
-
-				authenticationRef := ""
-				if len(mqt.Spec.Secret) > 0 {
-					authenticationRef = fmt.Sprintf("%s-auth-trigger", mqt.ObjectMeta.Name)
-					err := createAuthTrigger(ctx, kedaClient, mqt, authenticationRef, kubeClient)
-					if err != nil {
-						logger.Error("Failed to create Authentication Trigger", zap.Error(err))
-						return
-					}
-				}
-
-				if err := createDeployment(ctx, mqt, routerURL, kubeClient); err != nil {
-					logger.Error("Failed to create Deployment", zap.Error(err))
-					if len(authenticationRef) > 0 {
-						err = deleteAuthTrigger(ctx, kedaClient, authenticationRef, mqt.ObjectMeta.Namespace)
-						if err != nil {
-							logger.Error("Failed to delete Authentication Trigger", zap.Error(err))
-						}
-					}
-					return
-				}
-
-				if err := createScaledObject(ctx, kedaClient, mqt, authenticationRef); err != nil {
-					logger.Error("Failed to create ScaledObject", zap.Error(err))
-					if len(authenticationRef) > 0 {
-						if err = deleteAuthTrigger(ctx, kedaClient, authenticationRef, mqt.ObjectMeta.Namespace); err != nil {
-							logger.Error("Failed to delete Authentication Trigger", zap.Error(err))
-						}
-					}
-					if err = deleteDeployment(ctx, mqt.ObjectMeta.Name, mqt.ObjectMeta.Namespace, kubeClient); err != nil {
-						logger.Error("Failed to delete Deployment", zap.Error(err))
-					}
-				}
+				createKedaObjects(ctx, logger, kedaClient, kubeClient, mqt, routerURL)
 			}()
 		},
 		UpdateFunc: func(obj interface{}, newObj interface{}) {
 			go func() {
 				mqt := obj.(*fv1.MessageQueueTrigger)
 				newMqt := newObj.(*fv1.MessageQueueTrigger)
+				mqtkindKedaToFission := (mqt.Spec.MqtKind == "keda" && newMqt.Spec.MqtKind == "fission")
+				mqtkindFissionToKeda := (mqt.Spec.MqtKind == "fission" && newMqt.Spec.MqtKind == "keda")
+				// If mqtkind is updated to fission from keda then
+				// delete keda objects previously created for mqtkind keda.
+				if mqtkindKedaToFission {
+					logger.Debug("Mqtkind updated to fission from keda, cleanup keda objects", zap.Any("mqt", newMqt.ObjectMeta), zap.Any("mqt.Spec", newMqt.Spec))
+					cleanupKedaObjects(ctx, logger, kedaClient, kubeClient, mqt)
+					return
+				}
+				// If mqtkind is updated to keda from fission then
+				// create keda objects
+				if mqtkindFissionToKeda {
+					logger.Debug("Mqtkind changed to keda from fission, create keda objects", zap.Any("mqt", newMqt.ObjectMeta), zap.Any("mqt.Spec", newMqt.Spec))
+					createKedaObjects(ctx, logger, kedaClient, kubeClient, newMqt, routerURL)
+					return
+				}
+
 				updated := checkAndUpdateTriggerFields(mqt, newMqt)
 				if mqt.Spec.MqtKind == "fission" {
 					return
@@ -282,6 +267,63 @@ func checkAndUpdateTriggerFields(mqt, newMqt *fv1.MessageQueueTrigger) bool {
 	}
 
 	return updated
+}
+
+func createKedaObjects(ctx context.Context, logger *zap.Logger, kedaClient kedaClient.Interface, kubeClient kubernetes.Interface, mqt *fv1.MessageQueueTrigger, routerURL string) {
+	authenticationRef := ""
+	if len(mqt.Spec.Secret) > 0 {
+		authenticationRef = fmt.Sprintf("%s-auth-trigger", mqt.ObjectMeta.Name)
+		err := createAuthTrigger(ctx, kedaClient, mqt, authenticationRef, kubeClient)
+		if err != nil {
+			logger.Error("Failed to create Authentication Trigger", zap.Error(err))
+			return
+		}
+	}
+
+	if err := createDeployment(ctx, mqt, routerURL, kubeClient); err != nil {
+		logger.Error("Failed to create Deployment", zap.Error(err))
+		if len(authenticationRef) > 0 {
+			err = deleteAuthTrigger(ctx, kedaClient, authenticationRef, mqt.ObjectMeta.Namespace)
+			if err != nil {
+				logger.Error("Failed to delete Authentication Trigger", zap.Error(err))
+			}
+		}
+		return
+	}
+
+	if err := createScaledObject(ctx, kedaClient, mqt, authenticationRef); err != nil {
+		logger.Error("Failed to create ScaledObject", zap.Error(err))
+		if len(authenticationRef) > 0 {
+			if err = deleteAuthTrigger(ctx, kedaClient, authenticationRef, mqt.ObjectMeta.Namespace); err != nil {
+				logger.Error("Failed to delete Authentication Trigger", zap.Error(err))
+			}
+		}
+		if err = deleteDeployment(ctx, mqt.ObjectMeta.Name, mqt.ObjectMeta.Namespace, kubeClient); err != nil {
+			logger.Error("Failed to delete Deployment", zap.Error(err))
+		}
+	}
+}
+
+func cleanupKedaObjects(ctx context.Context, logger *zap.Logger, kedaClient kedaClient.Interface, kubeClient kubernetes.Interface, mqt *fv1.MessageQueueTrigger) {
+	authenticationRef := ""
+	if len(mqt.Spec.Secret) > 0 {
+		authenticationRef = fmt.Sprintf("%s-auth-trigger", mqt.ObjectMeta.Name)
+	}
+
+	if len(authenticationRef) > 0 {
+		err := deleteAuthTrigger(ctx, kedaClient, authenticationRef, mqt.ObjectMeta.Namespace)
+		if err != nil {
+			logger.Error("Failed to delete Authentication Trigger", zap.Error(err))
+		}
+	}
+
+	if err := deleteDeployment(ctx, mqt.ObjectMeta.Name, mqt.ObjectMeta.Namespace, kubeClient); err != nil {
+		logger.Error("Failed to delete Deployment", zap.Error(err))
+	}
+
+	if err := deleteScaledObject(ctx, kedaClient, mqt.ObjectMeta.Name, mqt.ObjectMeta.Namespace); err != nil {
+		logger.Error("Failed to delete ScaledObject", zap.Error(err))
+	}
 }
 
 func getAuthTriggerSpec(ctx context.Context, mqt *fv1.MessageQueueTrigger, authenticationRef string, kubeClient kubernetes.Interface) (*kedav1alpha1.TriggerAuthentication, error) {
@@ -512,6 +554,14 @@ func updateScaledObject(ctx context.Context, client kedaClient.Interface, mqt *f
 	scaledObject.SetResourceVersion(resourceVersion)
 
 	_, err = client.KedaV1alpha1().ScaledObjects(mqt.ObjectMeta.Namespace).Update(ctx, scaledObject, metav1.UpdateOptions{})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func deleteScaledObject(ctx context.Context, client kedaClient.Interface, name, namespace string) error {
+	err := client.KedaV1alpha1().ScaledObjects(namespace).Delete(ctx, name, metav1.DeleteOptions{})
 	if err != nil {
 		return err
 	}
