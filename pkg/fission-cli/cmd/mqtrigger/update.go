@@ -128,7 +128,8 @@ func (opts *UpdateSubCommand) complete(input cli.Input) (err error) {
 	}
 
 	if input.IsSet(flagkey.MqtMetadata) {
-		updated = updated || util.UpdateMapFromStringSlice(&mqt.Spec.Metadata, metadataParams)
+		_ = util.UpdateMapFromStringSlice(&mqt.Spec.Metadata, metadataParams)
+		updated = true
 	}
 	if input.IsSet(flagkey.MqtSecret) {
 		mqt.Spec.Secret = secret
