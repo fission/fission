@@ -134,12 +134,14 @@ func GetClientConfig(kubeContext string) (clientcmd.ClientConfig, error) {
 		return clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, overrides), nil
 	}
 
-	console.Warn("Could not load kubeconfig, falling back to in-cluster config")
+	console.Verbose(2, "Could not load kubeconfig, falling back to in-cluster config")
 
 	inClusterConfig, err := InClusterConfig()
 	if err != nil {
 		return nil, err
 	}
+
+	console.Verbose(2, "InClusterConfig correct")
 
 	apiConfig := &api.Config{
 		Clusters: map[string]*api.Cluster{
