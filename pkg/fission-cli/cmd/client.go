@@ -19,6 +19,7 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -26,6 +27,8 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/tools/clientcmd/api"
+	"k8s.io/client-go/util/cert"
 
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/fission-cli/console"
@@ -84,17 +87,84 @@ func getLoadingRules() (loadingRules *clientcmd.ClientConfigLoadingRules, err er
 	return loadingRules, nil
 }
 
-func GetClientConfig(kubeContext string) (clientcmd.ClientConfig, error) {
-	loadingRules, err := getLoadingRules()
+// InClusterConfig returns a config object which uses the service account
+// kubernetes gives to pods. It's intended for clients that expect to be
+// running inside a pod running on kubernetes. It will return ErrNotInCluster
+// if called from a process not running in a kubernetes environment.
+func InClusterConfig() (*rest.Config, error) {
+	const (
+		tokenFile  = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+		rootCAFile = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+	)
+	host, port := os.Getenv("KUBERNETES_SERVICE_HOST"), os.Getenv("KUBERNETES_SERVICE_PORT")
+	if len(host) == 0 || len(port) == 0 {
+		return nil, fmt.Errorf("unable to load in-cluster configuration, KUBERNETES_SERVICE_HOST and KUBERNETES_SERVICE_PORT must be defined")
+	}
+
+	token, err := os.ReadFile(tokenFile)
 	if err != nil {
 		return nil, err
 	}
-	overrides := &clientcmd.ConfigOverrides{}
-	if len(kubeContext) > 0 {
-		console.Verbose(2, "Using kubeconfig context %q", kubeContext)
-		overrides.CurrentContext = kubeContext
+
+	tlsClientConfig := rest.TLSClientConfig{}
+
+	if _, err := cert.NewPool(rootCAFile); err != nil {
+		return nil, fmt.Errorf("failed to load root CA config from %s: %v", rootCAFile, err)
+	} else {
+		tlsClientConfig.CAFile = rootCAFile
 	}
-	return clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, overrides), nil
+
+	config := &rest.Config{
+		Host:            "https://" + net.JoinHostPort(host, port),
+		TLSClientConfig: tlsClientConfig,
+		BearerToken:     string(token),
+		BearerTokenFile: tokenFile,
+	}
+	return config, nil
+}
+
+func GetClientConfig(kubeContext string) (clientcmd.ClientConfig, error) {
+	loadingRules, err := getLoadingRules()
+	if err == nil {
+		overrides := &clientcmd.ConfigOverrides{}
+		if len(kubeContext) > 0 {
+			console.Verbose(2, "Using kubeconfig context %q", kubeContext)
+			overrides.CurrentContext = kubeContext
+		}
+		return clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, overrides), nil
+	}
+
+	console.Warn("Could not load kubeconfig, falling back to in-cluster config")
+
+	inClusterConfig, err := InClusterConfig()
+	if err != nil {
+		return nil, err
+	}
+
+	apiConfig := &api.Config{
+		Clusters: map[string]*api.Cluster{
+			"default": {
+				Server:                   inClusterConfig.Host,
+				CertificateAuthority:     inClusterConfig.TLSClientConfig.CAFile,
+				CertificateAuthorityData: inClusterConfig.TLSClientConfig.CAData,
+			},
+		},
+		AuthInfos: map[string]*api.AuthInfo{
+			"default": {
+				Token:     inClusterConfig.BearerToken,
+				TokenFile: inClusterConfig.BearerTokenFile,
+			},
+		},
+		Contexts: map[string]*api.Context{
+			"default": {
+				Cluster:  "default",
+				AuthInfo: "default",
+			},
+		},
+		CurrentContext: "default",
+	}
+
+	return clientcmd.NewDefaultClientConfig(*apiConfig, &clientcmd.ConfigOverrides{}), nil
 }
 
 func NewClient(opts ClientOptions) (*Client, error) {
