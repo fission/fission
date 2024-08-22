@@ -121,17 +121,6 @@ func NewClient(opts ClientOptions) (*Client, error) {
 		}
 	}
 
-	if cmdConfig == nil {
-		console.Verbose(2, "Using in-cluster config")
-		restConfig, err = rest.InClusterConfig()
-		if err != nil {
-			return nil, err
-		}
-
-		client.Namespace = getInClusterConfigamespace()
-		console.Verbose(2, "In-cluster config default namespace %q", client.Namespace)
-	}
-
 	if opts.RestConfig != nil {
 		client.RestConfig = opts.RestConfig
 	} else if cmdConfig != nil {
@@ -141,7 +130,15 @@ func NewClient(opts ClientOptions) (*Client, error) {
 		}
 		client.RestConfig = restConfig
 	} else {
+		console.Verbose(2, "Using in-cluster config")
+		restConfig, err = rest.InClusterConfig()
+		if err != nil {
+			return nil, err
+		}
+
 		client.RestConfig = restConfig
+		client.Namespace = getInClusterConfigamespace()
+		console.Verbose(2, "In-cluster config default namespace %q", client.Namespace)
 	}
 
 	clientGen := crd.NewClientGeneratorWithRestConfig(client.RestConfig)
