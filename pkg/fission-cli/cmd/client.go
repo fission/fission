@@ -22,6 +22,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"strings"
 
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -101,29 +102,45 @@ func NewClient(opts ClientOptions) (*Client, error) {
 	client := &Client{}
 	var err error
 	var cmdConfig clientcmd.ClientConfig
+	var restConfig *rest.Config
 	if len(opts.Namespace) > 0 {
 		client.Namespace = opts.Namespace
 	} else {
 		cmdConfig, err = GetClientConfig(opts.KubeContext)
 		if err != nil {
-			return nil, err
+			console.Verbose(2, err.Error())
 		}
-		namespace, _, err := cmdConfig.Namespace()
+
+		if cmdConfig != nil {
+			namespace, _, err := cmdConfig.Namespace()
+			if err != nil {
+				return nil, err
+			}
+			client.Namespace = namespace
+			console.Verbose(2, "Kubeconfig default namespace %q", namespace)
+		}
+	}
+
+	if cmdConfig == nil {
+		console.Verbose(2, "Using in-cluster config")
+		restConfig, err = rest.InClusterConfig()
 		if err != nil {
 			return nil, err
 		}
-		client.Namespace = namespace
-	}
 
-	console.Verbose(2, "Kubeconfig default namespace %q", client.Namespace)
+		client.Namespace = getInClusterConfigamespace()
+		console.Verbose(2, "In-cluster config default namespace %q", client.Namespace)
+	}
 
 	if opts.RestConfig != nil {
 		client.RestConfig = opts.RestConfig
-	} else {
+	} else if cmdConfig != nil {
 		restConfig, err := cmdConfig.ClientConfig()
 		if err != nil {
 			return nil, err
 		}
+		client.RestConfig = restConfig
+	} else {
 		client.RestConfig = restConfig
 	}
 
@@ -141,4 +158,22 @@ func NewClient(opts ClientOptions) (*Client, error) {
 	client.FissionClientSet = fissionClientset
 
 	return client, nil
+}
+
+// Fetch default namespace for inClusterConfig
+func getInClusterConfigamespace() string {
+	// This way assumes you've set the POD_NAMESPACE environment variable using the downward API.
+	// This check has to be done first for backwards compatibility with the way InClusterConfig was originally set up
+	if ns, ok := os.LookupEnv("POD_NAMESPACE"); ok {
+		return ns
+	}
+
+	// Fall back to the namespace associated with the service account token, if available
+	if data, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace"); err == nil {
+		if ns := strings.TrimSpace(string(data)); len(ns) > 0 {
+			return ns
+		}
+	}
+
+	return "default"
 }
