@@ -102,7 +102,6 @@ func NewClient(opts ClientOptions) (*Client, error) {
 	client := &Client{}
 	var err error
 	var cmdConfig clientcmd.ClientConfig
-	var restConfig *rest.Config
 	if len(opts.Namespace) > 0 {
 		client.Namespace = opts.Namespace
 	} else {
@@ -131,13 +130,14 @@ func NewClient(opts ClientOptions) (*Client, error) {
 		client.RestConfig = restConfig
 	} else {
 		console.Verbose(2, "Using in-cluster config")
-		restConfig, err = rest.InClusterConfig()
+		restConfig, err := rest.InClusterConfig()
 		if err != nil {
-			return nil, err
+			return nil, errors.New("couldn't find kubeconfig file " +
+				"and unable to load in-cluster configuration.")
 		}
 
 		client.RestConfig = restConfig
-		client.Namespace = getInClusterConfigamespace()
+		client.Namespace = getInClusterConfigNamespace()
 		console.Verbose(2, "In-cluster config default namespace %q", client.Namespace)
 	}
 
@@ -158,7 +158,7 @@ func NewClient(opts ClientOptions) (*Client, error) {
 }
 
 // Fetch default namespace for inClusterConfig
-func getInClusterConfigamespace() string {
+func getInClusterConfigNamespace() string {
 	// This way assumes you've set the POD_NAMESPACE environment variable using the downward API.
 	// This check has to be done first for backwards compatibility with the way InClusterConfig was originally set up
 	if ns, ok := os.LookupEnv("POD_NAMESPACE"); ok {
