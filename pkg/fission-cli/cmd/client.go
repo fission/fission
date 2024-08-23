@@ -100,14 +100,14 @@ func GetClientConfig(kubeContext string) (clientcmd.ClientConfig, error) {
 
 func NewClient(opts ClientOptions) (*Client, error) {
 	client := &Client{}
-	var err error
+	var err1 error
 	var cmdConfig clientcmd.ClientConfig
 	if len(opts.Namespace) > 0 {
 		client.Namespace = opts.Namespace
 	} else {
-		cmdConfig, err = GetClientConfig(opts.KubeContext)
-		if err != nil {
-			console.Verbose(2, err.Error())
+		cmdConfig, err1 = GetClientConfig(opts.KubeContext)
+		if err1 != nil {
+			console.Verbose(2, err1.Error())
 		}
 
 		if cmdConfig != nil {
@@ -130,10 +130,9 @@ func NewClient(opts ClientOptions) (*Client, error) {
 		client.RestConfig = restConfig
 	} else {
 		console.Verbose(2, "Using in-cluster config")
-		restConfig, err := rest.InClusterConfig()
-		if err != nil {
-			return nil, errors.New("couldn't find kubeconfig file " +
-				"and unable to load in-cluster configuration.")
+		restConfig, err2 := rest.InClusterConfig()
+		if err2 != nil {
+			return nil, errors.Join(err1, err2)
 		}
 
 		client.RestConfig = restConfig
