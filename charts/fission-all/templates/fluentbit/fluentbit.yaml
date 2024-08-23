@@ -107,7 +107,6 @@ spec:
 {{- if .Values.logger.enableSecurityContext }}
           securityContext:
             privileged: true
-            runAsUser: 0
 {{- end }}
       containers:
         - name: logger
@@ -131,6 +130,7 @@ spec:
 {{- if .Values.logger.enableSecurityContext }}
           securityContext:
             privileged: true
+            runAsUser: 0
 {{- end }}
         - name: fluentbit
 {{- if .Values.repository }}
