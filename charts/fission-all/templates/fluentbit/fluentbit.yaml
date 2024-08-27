@@ -99,7 +99,11 @@ spec:
         - name: init
           image: {{ .Values.busyboxImage | quote }}
           imagePullPolicy: {{ .Values.pullPolicy }}
-          command: ['mkdir', '-p', '/var/log/fission']
+          command: 
+            - "/bin/sh"
+            - "-c"
+            # create the log directory and allow others read/write access
+            - "mkdir -p /var/log/fission && chmod o+wr /var/log/fission"
           volumeMounts:
             - name: container-log
               mountPath: /var/log/
@@ -130,7 +134,6 @@ spec:
 {{- if .Values.logger.enableSecurityContext }}
           securityContext:
             privileged: true
-            runAsUser: 0
 {{- end }}
         - name: fluentbit
 {{- if .Values.repository }}
