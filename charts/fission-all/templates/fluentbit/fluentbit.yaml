@@ -118,6 +118,7 @@ spec:
                 fieldRef:
                   apiVersion: v1
                   fieldPath: spec.nodeName
+            {{- include "fission-resource-namespace.envs" . | indent 12 }}
           command: ["/fission-bundle"]
           args: ["--logger"]
           volumeMounts:
