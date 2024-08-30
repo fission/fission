@@ -108,7 +108,7 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 	)
 
 	fnTestTimeout := input.Duration(flagkey.FnTestTimeout)
-	fnSpecTimeout := time.Duration(function.Spec.FunctionTimeout)
+	fnSpecTimeout := time.Duration(function.Spec.FunctionTimeout) * time.Second
 
 	if input.IsSet(flagkey.FnTestTimeout) && (fnTestTimeout < fnSpecTimeout) {
 		reqTimeout = fnTestTimeout
@@ -121,7 +121,7 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 		ctx = input.Context()
 	} else {
 		var closeCtx context.CancelFunc
-		ctx, closeCtx = context.WithTimeoutCause(input.Context(), reqTimeout*time.Second, fmt.Errorf("function request timeout (%d)s exceeded", reqTimeout))
+		ctx, closeCtx = context.WithTimeoutCause(input.Context(), reqTimeout, fmt.Errorf("function request timeout (%d)s exceeded", reqTimeout))
 		defer closeCtx()
 	}
 
