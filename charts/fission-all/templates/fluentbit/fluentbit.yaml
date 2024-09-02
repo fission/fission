@@ -128,10 +128,8 @@ spec:
             - name: docker-log
               mountPath: /var/lib/docker/containers
               readOnly: true
-{{- if .Values.logger.enableSecurityContext }}
           securityContext:
-            privileged: true
-{{- end }}
+            {{- toYaml .Values.logger.securityContext | nindent 12 }}
         - name: fluentbit
 {{- if .Values.repository }}
           image: "{{ .Values.logger.fluentdImageRepository }}/{{ .Values.logger.fluentdImage }}:{{ .Values.logger.fluentdImageTag }}"
