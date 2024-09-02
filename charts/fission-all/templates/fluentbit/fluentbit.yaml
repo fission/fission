@@ -99,11 +99,7 @@ spec:
         - name: init
           image: {{ .Values.busyboxImage | quote }}
           imagePullPolicy: {{ .Values.pullPolicy }}
-          command: 
-            - "/bin/sh"
-            - "-c"
-            # create the log directory and allow others read/write access
-            - "mkdir -p /var/log/fission && chmod o+wr /var/log/fission"
+          command: ['mkdir', '-p', '/var/log/fission']
           volumeMounts:
             - name: container-log
               mountPath: /var/log/
@@ -131,10 +127,8 @@ spec:
             - name: docker-log
               mountPath: /var/lib/docker/containers
               readOnly: true
-{{- if .Values.logger.enableSecurityContext }}
           securityContext:
-            privileged: true
-{{- end }}
+            {{- toYaml .Values.logger.securityContext | nindent 12 }}
         - name: fluentbit
 {{- if .Values.repository }}
           image: "{{ .Values.logger.fluentdImageRepository }}/{{ .Values.logger.fluentdImage }}:{{ .Values.logger.fluentdImageTag }}"

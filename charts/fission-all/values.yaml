@@ -620,11 +620,22 @@ logger:
 
   ## Fluent-bit writes/reads it’s own sqlite database to record a history of tracked
   ## files and a state of offsets, this is very useful to resume a state if the ser-
-  ## vice is restarted. For Kubernetes environment with constraints like OpenShift,
+  ## vice is restarted.
+  ##
+  ## For Kubernetes environment with constraints like OpenShift,
   ## the containers are limited to write hostPath volume. Hence, we have to enable
   ## security context and set privileged to true.
   ##
-  enableSecurityContext: false
+  ## The user ID in runAsUser should have access to the `/var/log` and
+  ## `/var/lib/docker/containers` directories on your host.
+  ## On many hosts, this user might be root ,i.e., `runAsUser: 0`.
+  ## Although it is recommended not to use root user for security reasons.
+  ##
+  ## The `/var/log` and `/var/lib/docker/containers` directories on host are mounted
+  ## to logger container with volumeType `HostPath`.
+  securityContext: {}
+    # privileged: true
+    # runAsUser: 0
 
   ## Enable PodSecurityPolicies to allow privileged container
   ## Only required in some clusters and when enableSecurityContext is true
