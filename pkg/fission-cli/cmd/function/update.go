@@ -67,16 +67,11 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 	}
 
 	envName := input.String(flagkey.FnEnvironmentName)
-	envNamespace := input.String(flagkey.NamespaceEnvironment)
 	// if the new env specified is the same as the old one, no need to update package
 	// same is true for all update parameters, but, for now, we don't check all of them - because, its ok to
 	// re-write the object with same old values, we just end up getting a new resource version for the object.
 	if len(envName) > 0 && envName == function.Spec.Environment.Name {
 		envName = ""
-	}
-
-	if envNamespace == function.Spec.Environment.Namespace {
-		envNamespace = ""
 	}
 
 	pkgName := input.String(flagkey.FnPackageName)
@@ -131,10 +126,6 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 
 	if len(envName) > 0 {
 		function.Spec.Environment.Name = envName
-	}
-
-	if len(envNamespace) > 0 {
-		function.Spec.Environment.Namespace = envNamespace
 	}
 
 	if len(entrypoint) > 0 {
