@@ -30,6 +30,10 @@ import (
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
 
+const (
+	updatedTopicName = "new-topic"
+)
+
 type mqtConsumer struct {
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -96,7 +100,31 @@ func TestMqtManager(t *testing.T) {
 	if getSub.trigger.ObjectMeta.Name != trigger.ObjectMeta.Name {
 		t.Errorf("getTriggerSubscription should return triggerSub with trigger name %s", trigger.ObjectMeta.Name)
 	}
+	trigger.Spec.Topic = updatedTopicName
 	getSub.subscription.(mqtConsumer).cancel()
+	newSub, err := msgQueue.Subscribe(&trigger)
+	if err != nil {
+		t.Errorf("Subscribe should not return error")
+	}
+	newTriggerSub := triggerSubscription{
+		trigger:      trigger,
+		subscription: newSub,
+	}
+	err = mgr.updateTriggerSubscription(&newTriggerSub)
+	if err != nil {
+		t.Errorf("updateTriggerSubscription should not return error")
+	}
+	if !mgr.checkTriggerSubscription(&trigger) {
+		t.Errorf("checkTrigger should return true")
+	}
+	getNewSub := mgr.getTriggerSubscription(&trigger)
+	if getNewSub == nil {
+		t.Fatal("getTriggerSubscription should return triggerSub")
+	}
+	if getNewSub.trigger.Spec.Topic != updatedTopicName {
+		t.Errorf("getTriggerSubscription returns trigger with incorrect topic-name, expected %s got %s", updatedTopicName, getNewSub.trigger.Spec.Topic)
+	}
+	getNewSub.subscription.(mqtConsumer).cancel()
 	err = mgr.delTriggerSubscription(&trigger)
 	if err != nil {
 		t.Errorf("delTriggerSubscription should not return error")

@@ -15,7 +15,6 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
 	"go.uber.org/zap"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	apiv1 "k8s.io/api/core/v1"
 )
@@ -55,7 +54,6 @@ func getTraceExporter(ctx context.Context, logger *zap.Logger) (*otlptrace.Expor
 
 	grpcOpts := []otlptracegrpc.Option{
 		otlptracegrpc.WithEndpoint(otelConfig.endpoint),
-		otlptracegrpc.WithDialOption(grpc.WithBlock()),
 	}
 	if otelConfig.insecure {
 		grpcOpts = append(grpcOpts, otlptracegrpc.WithInsecure())
