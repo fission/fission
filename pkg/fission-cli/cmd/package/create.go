@@ -155,7 +155,7 @@ func CreatePackage(input cli.Input, client cmd.Client, pkgName string, pkgNamesp
 		}
 		deployment, err := CreateArchive(client, input, deployArchiveFiles, noZip, insecure, deployChecksum, specDir, specFile)
 		if err != nil {
-			return nil, errors.Wrap(err, "error creating source archive")
+			return nil, errors.Wrap(err, "error creating deploy archive")
 		}
 		pkgSpec.Deployment = *deployment
 		if len(pkgName) == 0 {
@@ -165,7 +165,7 @@ func CreatePackage(input cli.Input, client cmd.Client, pkgName string, pkgNamesp
 	if len(srcArchiveFiles) > 0 {
 		source, err := CreateArchive(client, input, srcArchiveFiles, false, insecure, srcChecksum, specDir, specFile)
 		if err != nil {
-			return nil, errors.Wrap(err, "error creating deploy archive")
+			return nil, errors.Wrap(err, "error creating source archive")
 		}
 		pkgSpec.Source = *source
 		pkgStatus = fv1.BuildStatusPending // set package build status to pending
