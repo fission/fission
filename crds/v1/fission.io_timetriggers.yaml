@@ -73,6 +73,14 @@ spec:
                 - name
                 - type
                 type: object
+              method:
+                description: HTTP Method for trigger
+                type: string
+              subpath:
+                description: |-
+                  Subpath to trigger a specific route if function
+                  internally supports routing.
+                type: string
             required:
             - cron
             - functionref

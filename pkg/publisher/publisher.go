@@ -25,6 +25,6 @@ type (
 		// Publish a request to a "target". Target's meaning depends on the
 		// publisher: it's a URL in the case of a webhook publisher, or a queue
 		// name in a queue-based publisher such as NATS.
-		Publish(ctx context.Context, body string, headers map[string]string, target string)
+		Publish(ctx context.Context, body string, headers map[string]string, method, target string)
 	}
 )

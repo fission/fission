@@ -821,6 +821,13 @@ type (
 
 		// The reference to function
 		FunctionReference `json:"functionref"`
+
+		// HTTP Method for trigger
+		Method string `json:"method,omitempty"`
+
+		// Subpath to trigger a specific route if function
+		// internally supports routing.
+		Subpath string `json:"subpath,omitempty"`
 	}
 	// FailureType refers to the type of failure
 	FailureType string

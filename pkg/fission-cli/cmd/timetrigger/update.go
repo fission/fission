@@ -77,8 +77,18 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 		updated = true
 	}
 
+	if input.IsSet(flagkey.TtMethod) {
+		tt.Spec.Method = input.String(flagkey.TtMethod)
+		updated = true
+	}
+
+	if input.IsSet(flagkey.FnSubPath) {
+		tt.Spec.Subpath = input.String(flagkey.FnSubPath)
+		updated = true
+	}
+
 	if !updated {
-		return errors.New("nothing to update. Use --cron or --function")
+		return errors.New("nothing to update. Use --cron or --function or --method or --subpath")
 	}
 
 	opts.trigger = tt

@@ -428,6 +428,8 @@ var map_TimeTriggerSpec = map[string]string{
 	"":            "TimeTriggerSpec invokes the specific function at a time or times specified by a cron string.",
 	"cron":        "Cron schedule",
 	"functionref": "The reference to function",
+	"method":      "HTTP Method for trigger",
+	"subpath":     "Subpath to trigger a specific route if function internally supports routing.",
 }
 
 func (TimeTriggerSpec) SwaggerDoc() map[string]string {

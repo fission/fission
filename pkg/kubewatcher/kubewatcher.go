@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"reflect"
 	"strings"
 	"sync/atomic"
@@ -268,7 +269,7 @@ func (ws *watchSubscription) eventDispatchLoop(ctx context.Context) {
 		// the triggers can only be created in the same namespace as the function.
 		// so essentially, function namespace = trigger namespace.
 		url := utils.UrlForFunction(ws.watch.Spec.FunctionReference.Name, ws.watch.ObjectMeta.Namespace)
-		ws.publisher.Publish(ctx, buf.String(), headers, url)
+		ws.publisher.Publish(ctx, buf.String(), headers, http.MethodPost, url)
 	}
 }
 

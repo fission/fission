@@ -54,10 +54,10 @@ func (opts *ListSubCommand) do(input cli.Input) (err error) {
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 
-	fmt.Fprintf(w, "%v\t%v\t%v\n", "NAME", "CRON", "FUNCTION_NAME")
+	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\n", "NAME", "CRON", "FUNCTION_NAME", "METHOD", "SUBPATH")
 	for _, tt := range tts.Items {
-		fmt.Fprintf(w, "%v\t%v\t%v\n",
-			tt.ObjectMeta.Name, tt.Spec.Cron, tt.Spec.FunctionReference.Name)
+		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\n",
+			tt.ObjectMeta.Name, tt.Spec.Cron, tt.Spec.FunctionReference.Name, tt.Spec.Method, tt.Spec.Subpath)
 	}
 	w.Flush()
 
