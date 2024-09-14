@@ -32,7 +32,6 @@ import (
 
 	ignore "github.com/sabhiram/go-gitignore"
 
-	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -535,7 +534,7 @@ func FunctionPodLogs(ctx context.Context, fnName, ns string, client cmd.Client) 
 
 	if len(ns) == 0 {
 		ns = metav1.NamespaceDefault
-	} else if ns != metav1.NamespaceDefault {
+	} else {
 		podNs = ns
 	}
 
