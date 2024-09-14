@@ -66,10 +66,7 @@ func (opts *UpdateSubCommand) run(input cli.Input) error {
 	pkgName := input.String(flagkey.PkgName)
 	pkg, err := opts.Client().FissionClientSet.CoreV1().Packages(opts.pkgNamespace).Get(input.Context(), opts.pkgName, metav1.GetOptions{})
 	if err != nil {
-		return err
-	}
-	if err != nil {
-		return errors.Wrap(err, "get package")
+		return errors.Wrap(err, "error getting package")
 	}
 
 	forceUpdate := input.Bool(flagkey.PkgForce)
