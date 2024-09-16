@@ -27,6 +27,8 @@ import (
 type TimeTriggerSpecApplyConfiguration struct {
 	Cron                                 *string `json:"cron,omitempty"`
 	*FunctionReferenceApplyConfiguration `json:"functionref,omitempty"`
+	Method                               *string `json:"method,omitempty"`
+	Subpath                              *string `json:"subpath,omitempty"`
 }
 
 // TimeTriggerSpecApplyConfiguration constructs an declarative configuration of the TimeTriggerSpec type for use with
@@ -80,4 +82,20 @@ func (b *TimeTriggerSpecApplyConfiguration) ensureFunctionReferenceApplyConfigur
 	if b.FunctionReferenceApplyConfiguration == nil {
 		b.FunctionReferenceApplyConfiguration = &FunctionReferenceApplyConfiguration{}
 	}
+}
+
+// WithMethod sets the Method field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Method field is set to the value of the last call.
+func (b *TimeTriggerSpecApplyConfiguration) WithMethod(value string) *TimeTriggerSpecApplyConfiguration {
+	b.Method = &value
+	return b
+}
+
+// WithSubpath sets the Subpath field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Subpath field is set to the value of the last call.
+func (b *TimeTriggerSpecApplyConfiguration) WithSubpath(value string) *TimeTriggerSpecApplyConfiguration {
+	b.Subpath = &value
+	return b
 }

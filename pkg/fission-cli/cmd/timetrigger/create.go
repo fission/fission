@@ -116,6 +116,8 @@ func (opts *CreateSubCommand) complete(input cli.Input) (err error) {
 				Type: fv1.FunctionReferenceTypeFunctionName,
 				Name: fnName,
 			},
+			Method:  input.String(flagkey.TtMethod),
+			Subpath: input.String(flagkey.FnSubPath),
 		},
 	}
 

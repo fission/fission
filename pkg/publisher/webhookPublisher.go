@@ -49,6 +49,7 @@ type (
 		ctx        context.Context
 		body       string
 		headers    map[string]string
+		method     string
 		target     string
 		retries    int
 		retryDelay time.Duration
@@ -72,7 +73,7 @@ func MakeWebhookPublisher(logger *zap.Logger, baseURL string) *WebhookPublisher 
 }
 
 // Publish sends a request to the target with payload having given body and headers
-func (p *WebhookPublisher) Publish(ctx context.Context, body string, headers map[string]string, target string) {
+func (p *WebhookPublisher) Publish(ctx context.Context, body string, headers map[string]string, method, target string) {
 	tracer := otel.Tracer("WebhookPublisher")
 	ctx, span := tracer.Start(ctx, "WebhookPublisher/Publish")
 	defer span.End()
@@ -82,6 +83,7 @@ func (p *WebhookPublisher) Publish(ctx context.Context, body string, headers map
 		ctx:        ctx,
 		body:       body,
 		headers:    headers,
+		method:     method,
 		target:     target,
 		retries:    p.maxRetries,
 		retryDelay: p.retryDelay,
@@ -98,7 +100,7 @@ func (p *WebhookPublisher) svc() {
 func (p *WebhookPublisher) makeHTTPRequest(r *publishRequest) {
 	url := p.baseURL + "/" + strings.TrimPrefix(r.target, "/")
 
-	msg := "making HTTP request"
+	msg := fmt.Sprintf("making HTTP %s request", r.method)
 	level := zap.ErrorLevel
 	fields := []zap.Field{zap.String("url", url), zap.String("type", "publish_request")}
 
@@ -113,7 +115,7 @@ func (p *WebhookPublisher) makeHTTPRequest(r *publishRequest) {
 	buf.WriteString(r.body)
 
 	// Create request
-	req, err := http.NewRequest(http.MethodPost, url, &buf)
+	req, err := http.NewRequest(r.method, url, &buf)
 	if err != nil {
 		fields = append(fields, zap.Error(err))
 		return

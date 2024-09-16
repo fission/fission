@@ -110,6 +110,7 @@ const (
 	TtCron   = "cron"
 	TtFnName = "function"
 	TtRound  = "round"
+	TtMethod = "method"
 
 	MqtName            = resourceName
 	MqtFnName          = "function"

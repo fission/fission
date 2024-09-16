@@ -821,6 +821,17 @@ type (
 
 		// The reference to function
 		FunctionReference `json:"functionref"`
+
+		// HTTP Method for trigger, ex : GET, POST, PUT, DELETE, HEAD (default: "POST")
+		// +kubebuilder:default:="POST"
+		// +optional
+		Method string `json:"method,omitempty"`
+
+		// Subpath to trigger a specific route if function
+		// internally supports routing, (default: "/")
+		// +kubebuilder:default:="/"
+		// +optional
+		Subpath string `json:"subpath,omitempty"`
 	}
 	// FailureType refers to the type of failure
 	FailureType string
