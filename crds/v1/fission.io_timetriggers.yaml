@@ -74,12 +74,15 @@ spec:
                 - type
                 type: object
               method:
-                description: HTTP Method for trigger
+                default: POST
+                description: 'HTTP Method for trigger, ex : GET, POST, PUT, DELETE,
+                  HEAD (default: "POST")'
                 type: string
               subpath:
+                default: /
                 description: |-
                   Subpath to trigger a specific route if function
-                  internally supports routing.
+                  internally supports routing, (default: "/")
                 type: string
             required:
             - cron

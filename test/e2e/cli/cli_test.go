@@ -282,6 +282,8 @@ func TestFissionCLI(t *testing.T) {
 			require.Equal(t, "test-tt", tt.Name)
 			require.Equal(t, "test-func", tt.Spec.FunctionReference.Name)
 			require.Equal(t, "@every 1m", tt.Spec.Cron)
+			require.Equal(t, "POST", tt.Spec.Method)
+			require.Equal(t, "/", tt.Spec.Subpath)
 		})
 
 		t.Run("list", func(t *testing.T) {
@@ -295,7 +297,7 @@ func TestFissionCLI(t *testing.T) {
 		})
 
 		t.Run("update", func(t *testing.T) {
-			_, err := cli.ExecCommand(f, ctx, "timetrigger", "update", "--name", "test-tt", "--cron", "@every 2m")
+			_, err := cli.ExecCommand(f, ctx, "timetrigger", "update", "--name", "test-tt", "--cron", "@every 2m", "--method", "GET", "--subpath", "/api/v1/fetch")
 			require.NoError(t, err)
 
 			tt, err := fissionClient.CoreV1().TimeTriggers(metav1.NamespaceDefault).Get(ctx, "test-tt", metav1.GetOptions{})
@@ -304,6 +306,8 @@ func TestFissionCLI(t *testing.T) {
 			require.Equal(t, "test-tt", tt.Name)
 			require.Equal(t, "test-func", tt.Spec.FunctionReference.Name)
 			require.Equal(t, "@every 2m", tt.Spec.Cron)
+			require.Equal(t, "GET", tt.Spec.Method)
+			require.Equal(t, "/api/v1/fetch", tt.Spec.Subpath)
 		})
 
 		t.Run("delete", func(t *testing.T) {

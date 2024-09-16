@@ -108,11 +108,6 @@ func (opts *CreateSubCommand) complete(input cli.Input) (err error) {
 		}
 	}
 
-	subPath := "/"
-	if input.IsSet(flagkey.FnSubPath) {
-		subPath = input.String(flagkey.FnSubPath)
-	}
-
 	opts.trigger = &fv1.TimeTrigger{
 		ObjectMeta: m,
 		Spec: fv1.TimeTriggerSpec{
@@ -122,7 +117,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) (err error) {
 				Name: fnName,
 			},
 			Method:  input.String(flagkey.TtMethod),
-			Subpath: subPath,
+			Subpath: input.String(flagkey.FnSubPath),
 		},
 	}
 

@@ -157,7 +157,7 @@ var (
 	TtCron   = Flag{Type: String, Name: flagkey.TtCron, Usage: "Time trigger cron spec with each asterisk representing respectively second, minute, hour, the day of the month, month and day of the week. Also supports readable formats like '@every 5m', '@hourly'"}
 	TtFnName = Flag{Type: String, Name: flagkey.TtFnName, Usage: "Function name"}
 	TtRound  = Flag{Type: Int, Name: flagkey.TtRound, Usage: "Get next N rounds of invocation time", DefaultValue: 1}
-	TtMethod = Flag{Type: String, Name: flagkey.TtMethod, Usage: "HTTP Methods: GET,POST,PUT,DELETE,HEAD.", DefaultValue: http.MethodPost}
+	TtMethod = Flag{Type: String, Name: flagkey.TtMethod, Usage: "HTTP Methods: GET,POST,PUT,DELETE,HEAD."}
 
 	MqtName            = Flag{Type: String, Name: flagkey.MqtName, Usage: "Message queue trigger name"}
 	MqtFnName          = Flag{Type: String, Name: flagkey.MqtFnName, Usage: "Function name"}
