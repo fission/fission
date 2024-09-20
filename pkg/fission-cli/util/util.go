@@ -542,13 +542,13 @@ func FunctionPodLogs(ctx context.Context, fnName, ns string, client cmd.Client) 
 	// Get function Pods first
 	var selector map[string]string
 	if f.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType != fv1.ExecutorTypeContainer {
-		selector := map[string]string{
+		selector = map[string]string{
 			fv1.FUNCTION_UID:          string(f.ObjectMeta.UID),
 			fv1.ENVIRONMENT_NAME:      f.Spec.Environment.Name,
 			fv1.ENVIRONMENT_NAMESPACE: f.Spec.Environment.Namespace,
 		}
 	} else {
-		selector := map[string]string{
+		selector = map[string]string{
 			fv1.FUNCTION_UID: string(f.ObjectMeta.UID),
 		}
 	}
