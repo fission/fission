@@ -32,7 +32,6 @@ import (
 
 	ignore "github.com/sabhiram/go-gitignore"
 
-	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -530,13 +529,8 @@ func GetSvcName(ctx context.Context, kClient kubernetes.Interface, application s
 
 // FunctionPodLogs : Get logs for a function directly from pod
 func FunctionPodLogs(ctx context.Context, fnName, ns string, client cmd.Client) (err error) {
-
-	podNs := "fission-function"
-
 	if len(ns) == 0 {
 		ns = metav1.NamespaceDefault
-	} else if ns != metav1.NamespaceDefault {
-		podNs = ns
 	}
 
 	f, err := client.FissionClientSet.CoreV1().Functions(ns).Get(ctx, fnName, metav1.GetOptions{})
@@ -545,12 +539,20 @@ func FunctionPodLogs(ctx context.Context, fnName, ns string, client cmd.Client) 
 	}
 
 	// Get function Pods first
-	selector := map[string]string{
-		fv1.FUNCTION_UID:          string(f.ObjectMeta.UID),
-		fv1.ENVIRONMENT_NAME:      f.Spec.Environment.Name,
-		fv1.ENVIRONMENT_NAMESPACE: f.Spec.Environment.Namespace,
+	var selector map[string]string
+	if f.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType != fv1.ExecutorTypeContainer {
+		selector := map[string]string{
+			fv1.FUNCTION_UID:          string(f.ObjectMeta.UID),
+			fv1.ENVIRONMENT_NAME:      f.Spec.Environment.Name,
+			fv1.ENVIRONMENT_NAMESPACE: f.Spec.Environment.Namespace,
+		}
+	} else {
+		selector := map[string]string{
+			fv1.FUNCTION_UID: string(f.ObjectMeta.UID),
+		}
 	}
-	podList, err := client.KubernetesClient.CoreV1().Pods(podNs).List(ctx, metav1.ListOptions{
+
+	podList, err := client.KubernetesClient.CoreV1().Pods(ns).List(ctx, metav1.ListOptions{
 		LabelSelector: labels.Set(selector).AsSelector().String(),
 	})
 	if err != nil {
@@ -566,7 +568,7 @@ func FunctionPodLogs(ctx context.Context, fnName, ns string, client cmd.Client) 
 	})
 
 	if len(pods) <= 0 {
-		return errors.New("no active pods found for function in namespace " + podNs)
+		return errors.New("no active pods found for function in namespace " + ns)
 	}
 
 	// get the pod with highest resource version
