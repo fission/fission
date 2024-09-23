@@ -63,10 +63,17 @@ func GetFunctionPodLogs(ctx context.Context, client cmd.Client, logFilter LogFil
 		podNs = logFilter.PodNamespace
 	}
 	// Get function Pods first
-	selector := map[string]string{
-		fv1.FUNCTION_UID:          string(f.ObjectMeta.UID),
-		fv1.ENVIRONMENT_NAME:      f.Spec.Environment.Name,
-		fv1.ENVIRONMENT_NAMESPACE: f.Spec.Environment.Namespace,
+	var selector map[string]string
+	if f.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType != fv1.ExecutorTypeContainer {
+		selector = map[string]string{
+			fv1.FUNCTION_UID:          string(f.ObjectMeta.UID),
+			fv1.ENVIRONMENT_NAME:      f.Spec.Environment.Name,
+			fv1.ENVIRONMENT_NAMESPACE: f.Spec.Environment.Namespace,
+		}
+	} else {
+		selector = map[string]string{
+			fv1.FUNCTION_UID: string(f.ObjectMeta.UID),
+		}
 	}
 
 	podNs = util.ResolveFunctionNS(podNs)
