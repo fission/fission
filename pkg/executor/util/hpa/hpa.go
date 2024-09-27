@@ -18,6 +18,7 @@ package hpa
 import (
 	"context"
 	"errors"
+	"os"
 
 	"go.uber.org/zap"
 	appsv1 "k8s.io/api/apps/v1"
@@ -29,6 +30,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/utils"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
@@ -99,18 +101,23 @@ func (hpaops *HpaOperations) CreateOrGetHpa(ctx context.Context, fn *fv1.Functio
 		hpaMetrics = append(hpaMetrics, execStrategy.Metrics...)
 	}
 
+	var ownerReferences []metav1.OwnerReference
+	if os.Getenv(utils.ENV_DISABLE_OWNER_REFERENCES) == "false" {
+		ownerReferences = []metav1.OwnerReference{
+			*metav1.NewControllerRef(fn, schema.GroupVersionKind{
+				Group:   "fission.io",
+				Version: "v1",
+				Kind:    "Function",
+			}),
+		}
+	}
+
 	hpa := &asv2.HorizontalPodAutoscaler{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        hpaName,
-			Labels:      deployLabels,
-			Annotations: deployAnnotations,
-			OwnerReferences: []metav1.OwnerReference{
-				*metav1.NewControllerRef(fn, schema.GroupVersionKind{
-					Group:   "fission.io",
-					Version: "v1",
-					Kind:    "Function",
-				}),
-			},
+			Name:            hpaName,
+			Labels:          deployLabels,
+			Annotations:     deployAnnotations,
+			OwnerReferences: ownerReferences,
 		},
 		Spec: asv2.HorizontalPodAutoscalerSpec{
 			ScaleTargetRef: getScaleTargetRef(depl),

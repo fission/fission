@@ -19,6 +19,7 @@ package poolmgr
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
 	"go.uber.org/zap"
@@ -30,6 +31,7 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/executor/util"
+	"github.com/fission/fission/pkg/utils"
 )
 
 // getPoolName returns a unique name of an environment
@@ -59,17 +61,22 @@ func getPoolName(env *fv1.Environment) string {
 func (gp *GenericPool) genDeploymentMeta(env *fv1.Environment) metav1.ObjectMeta {
 	deployLabels := gp.getEnvironmentPoolLabels(env)
 	deployAnnotations := gp.getDeployAnnotations(env)
-	return metav1.ObjectMeta{
-		Name:        getPoolName(env),
-		Labels:      deployLabels,
-		Annotations: deployAnnotations,
-		OwnerReferences: []metav1.OwnerReference{
+
+	var ownerReferences []metav1.OwnerReference
+	if os.Getenv(utils.ENV_DISABLE_OWNER_REFERENCES) == "false" {
+		ownerReferences = []metav1.OwnerReference{
 			*metav1.NewControllerRef(env, schema.GroupVersionKind{
 				Group:   "fission.io",
 				Version: "v1",
 				Kind:    "Environment",
 			}),
-		},
+		}
+	}
+	return metav1.ObjectMeta{
+		Name:            getPoolName(env),
+		Labels:          deployLabels,
+		Annotations:     deployAnnotations,
+		OwnerReferences: ownerReferences,
 	}
 }
 

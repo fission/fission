@@ -76,6 +76,8 @@ spec:
           value: {{ .Values.executor.serviceAccountCheck.enabled | quote }}  
         - name: SERVICEACCOUNT_CHECK_INTERVAL
           value: {{ .Values.executor.serviceAccountCheck.interval | quote }}
+        - name: DISABLE_OWNER_REFERENCES
+          value: {{ .Values.disableOwnerReference | quote }}
         {{- end}}  
         {{- include "fission-resource-namespace.envs" . | indent 8 }}
         {{- include "kube_client.envs" . | indent 8 }}

@@ -88,6 +88,13 @@ additionalFissionNamespaces: []
 ##
 createNamespace: true
 
+## disableOwnerReference decides to set OwnerReference to K8s resources like deployment, services, hpa etc. created by Fission.
+## If set to true, the K8s resources created by Fission will not have OwnerReference set.
+## Set to false if you want to add OwnerReference to K8s resources created by Fission.
+##
+## Set to true if you are using cross namespace meaning `builderNamespace` and `functionNamespace` are set.
+disableOwnerReference: false
+
 ## enableIstio indicates whether to enable istio integration.
 ##
 enableIstio: false

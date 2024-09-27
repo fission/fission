@@ -325,18 +325,22 @@ func (envw *environmentWatcher) getBuilderServiceList(ctx context.Context, sel m
 func (envw *environmentWatcher) createBuilderService(ctx context.Context, env *fv1.Environment, ns string) (*apiv1.Service, error) {
 	name := fmt.Sprintf("%v-%v", env.ObjectMeta.Name, env.ObjectMeta.ResourceVersion)
 	sel := envw.getLabels(env.ObjectMeta.Name, ns, env.ObjectMeta.ResourceVersion)
+	var ownerReferences []metav1.OwnerReference
+	if os.Getenv(utils.ENV_DISABLE_OWNER_REFERENCES) == "false" {
+		ownerReferences = []metav1.OwnerReference{
+			*metav1.NewControllerRef(env, schema.GroupVersionKind{
+				Group:   "fission.io",
+				Version: "v1",
+				Kind:    "Environment",
+			}),
+		}
+	}
 	service := apiv1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Namespace: ns,
-			Name:      name,
-			Labels:    sel,
-			OwnerReferences: []metav1.OwnerReference{
-				*metav1.NewControllerRef(env, schema.GroupVersionKind{
-					Group:   "fission.io",
-					Version: "v1",
-					Kind:    "Environment",
-				}),
-			},
+			Namespace:       ns,
+			Name:            name,
+			Labels:          sel,
+			OwnerReferences: ownerReferences,
 		},
 		Spec: apiv1.ServiceSpec{
 			Selector: sel,
@@ -443,18 +447,23 @@ func (envw *environmentWatcher) createBuilderDeployment(ctx context.Context, env
 
 	pod.Spec = *(util.ApplyImagePullSecret(env.Spec.ImagePullSecret, pod.Spec))
 
+	var ownerReferences []metav1.OwnerReference
+	if os.Getenv(utils.ENV_DISABLE_OWNER_REFERENCES) == "false" {
+		ownerReferences = []metav1.OwnerReference{
+			*metav1.NewControllerRef(env, schema.GroupVersionKind{
+				Group:   "fission.io",
+				Version: "v1",
+				Kind:    "Environment",
+			}),
+		}
+	}
+
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Namespace: ns,
-			Name:      name,
-			Labels:    sel,
-			OwnerReferences: []metav1.OwnerReference{
-				*metav1.NewControllerRef(env, schema.GroupVersionKind{
-					Group:   "fission.io",
-					Version: "v1",
-					Kind:    "Environment",
-				}),
-			},
+			Namespace:       ns,
+			Name:            name,
+			Labels:          sel,
+			OwnerReferences: ownerReferences,
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,

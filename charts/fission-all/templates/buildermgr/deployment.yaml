@@ -51,6 +51,8 @@ spec:
           value: {{ .Values.fetcher.resource.mem.limits | quote }}
         - name: DEBUG_ENV
           value: {{ .Values.debugEnv | quote }}
+        - name: DISABLE_OWNER_REFERENCES
+          value: {{ .Values.disableOwnerReference | quote }}
         - name: PPROF_ENABLED
           value: {{ .Values.pprof.enabled | quote }}
         - name: HELM_RELEASE_NAME

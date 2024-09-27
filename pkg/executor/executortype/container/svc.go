@@ -19,6 +19,7 @@ package container
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"go.uber.org/zap"
 	apiv1 "k8s.io/api/core/v1"
@@ -28,6 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/utils"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
@@ -50,18 +52,23 @@ func (cn *Container) createOrGetSvc(ctx context.Context, fn *fv1.Function, deplo
 		return nil, err
 	}
 	logger := otelUtils.LoggerWithTraceID(ctx, cn.logger)
+	var ownerReferences []metav1.OwnerReference
+	if os.Getenv(utils.ENV_DISABLE_OWNER_REFERENCES) == "false" {
+		ownerReferences = []metav1.OwnerReference{
+			*metav1.NewControllerRef(fn, schema.GroupVersionKind{
+				Group:   "fission.io",
+				Version: "v1",
+				Kind:    "Function",
+			}),
+		}
+	}
+
 	service := &apiv1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        svcName,
-			Labels:      deployLabels,
-			Annotations: deployAnnotations,
-			OwnerReferences: []metav1.OwnerReference{
-				*metav1.NewControllerRef(fn, schema.GroupVersionKind{
-					Group:   "fission.io",
-					Version: "v1",
-					Kind:    "Function",
-				}),
-			},
+			Name:            svcName,
+			Labels:          deployLabels,
+			Annotations:     deployAnnotations,
+			OwnerReferences: ownerReferences,
 		},
 		Spec: apiv1.ServiceSpec{
 			Ports: []apiv1.ServicePort{
