@@ -18,7 +18,6 @@ package hpa
 import (
 	"context"
 	"errors"
-	"os"
 
 	"go.uber.org/zap"
 	appsv1 "k8s.io/api/apps/v1"
@@ -41,16 +40,18 @@ const (
 )
 
 type HpaOperations struct {
-	logger           *zap.Logger
-	kubernetesClient kubernetes.Interface
-	instanceID       string
+	logger                *zap.Logger
+	kubernetesClient      kubernetes.Interface
+	instanceID            string
+	enableOwnerReferences bool
 }
 
 func NewHpaOperations(logger *zap.Logger, kubernetesClient kubernetes.Interface, instanceID string) *HpaOperations {
 	return &HpaOperations{
-		logger:           logger,
-		kubernetesClient: kubernetesClient,
-		instanceID:       instanceID,
+		logger:                logger,
+		kubernetesClient:      kubernetesClient,
+		instanceID:            instanceID,
+		enableOwnerReferences: utils.IsOwnerReferencesEnabled(),
 	}
 }
 
@@ -102,7 +103,7 @@ func (hpaops *HpaOperations) CreateOrGetHpa(ctx context.Context, fn *fv1.Functio
 	}
 
 	var ownerReferences []metav1.OwnerReference
-	if os.Getenv(utils.ENV_DISABLE_OWNER_REFERENCES) == "false" {
+	if hpaops.enableOwnerReferences {
 		ownerReferences = []metav1.OwnerReference{
 			*metav1.NewControllerRef(fn, schema.GroupVersionKind{
 				Group:   "fission.io",

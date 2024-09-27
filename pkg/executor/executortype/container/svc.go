@@ -19,7 +19,6 @@ package container
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"go.uber.org/zap"
 	apiv1 "k8s.io/api/core/v1"
@@ -29,7 +28,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
-	"github.com/fission/fission/pkg/utils"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
@@ -53,7 +51,7 @@ func (cn *Container) createOrGetSvc(ctx context.Context, fn *fv1.Function, deplo
 	}
 	logger := otelUtils.LoggerWithTraceID(ctx, cn.logger)
 	var ownerReferences []metav1.OwnerReference
-	if os.Getenv(utils.ENV_DISABLE_OWNER_REFERENCES) == "false" {
+	if cn.enableOwnerReferences {
 		ownerReferences = []metav1.OwnerReference{
 			*metav1.NewControllerRef(fn, schema.GroupVersionKind{
 				Group:   "fission.io",

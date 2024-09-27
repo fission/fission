@@ -88,6 +88,8 @@ type (
 
 		hpaops                     *hpautils.HpaOperations
 		objectReaperIntervalSecond time.Duration
+
+		enableOwnerReferences bool
 	}
 )
 
@@ -131,6 +133,8 @@ func MakeContainer(
 		deplListerSynced:           make(map[string]k8sCache.InformerSynced),
 		svcLister:                  make(map[string]corelisters.ServiceLister),
 		svcListerSynced:            make(map[string]k8sCache.InformerSynced),
+
+		enableOwnerReferences: utils.IsOwnerReferencesEnabled(),
 	}
 
 	for ns, informerFactory := range cnmInformerFactory {

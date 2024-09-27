@@ -19,7 +19,6 @@ package container
 import (
 	"context"
 	"fmt"
-	"os"
 	"time"
 
 	"go.uber.org/zap"
@@ -33,7 +32,6 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/executor/util"
-	"github.com/fission/fission/pkg/utils"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
@@ -268,7 +266,7 @@ func (cn *Container) getDeploymentSpec(ctx context.Context, fn *fv1.Function, ta
 	pod.Spec = *(util.ApplyImagePullSecret("", pod.Spec))
 
 	var ownerReferences []metav1.OwnerReference
-	if os.Getenv(utils.ENV_DISABLE_OWNER_REFERENCES) == "false" {
+	if cn.enableOwnerReferences {
 		ownerReferences = []metav1.OwnerReference{
 			*metav1.NewControllerRef(fn, schema.GroupVersionKind{
 				Group:   "fission.io",

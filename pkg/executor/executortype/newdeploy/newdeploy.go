@@ -20,7 +20,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"strconv"
 	"time"
 
@@ -36,7 +35,6 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/executor/util"
-	"github.com/fission/fission/pkg/utils"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
@@ -249,7 +247,7 @@ func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function
 	pod.Spec = *(util.ApplyImagePullSecret(env.Spec.ImagePullSecret, pod.Spec))
 
 	var ownerReferences []metav1.OwnerReference
-	if os.Getenv(utils.ENV_DISABLE_OWNER_REFERENCES) == "false" {
+	if deploy.enableOwnerReferences {
 		ownerReferences = []metav1.OwnerReference{
 			*metav1.NewControllerRef(fn, schema.GroupVersionKind{
 				Group:   "fission.io",
@@ -342,7 +340,7 @@ func (deploy *NewDeploy) getResources(env *fv1.Environment, fn *fv1.Function) ap
 func (deploy *NewDeploy) createOrGetSvc(ctx context.Context, fn *fv1.Function, deployLabels map[string]string, deployAnnotations map[string]string, svcName string, svcNamespace string) (*apiv1.Service, error) {
 	logger := otelUtils.LoggerWithTraceID(ctx, deploy.logger)
 	var ownerReferences []metav1.OwnerReference
-	if os.Getenv(utils.ENV_DISABLE_OWNER_REFERENCES) == "false" {
+	if deploy.enableOwnerReferences {
 		ownerReferences = []metav1.OwnerReference{
 			*metav1.NewControllerRef(fn, schema.GroupVersionKind{
 				Group:   "fission.io",

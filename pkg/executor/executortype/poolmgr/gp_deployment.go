@@ -19,7 +19,6 @@ package poolmgr
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 
 	"go.uber.org/zap"
@@ -31,7 +30,6 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/executor/util"
-	"github.com/fission/fission/pkg/utils"
 )
 
 // getPoolName returns a unique name of an environment
@@ -63,7 +61,7 @@ func (gp *GenericPool) genDeploymentMeta(env *fv1.Environment) metav1.ObjectMeta
 	deployAnnotations := gp.getDeployAnnotations(env)
 
 	var ownerReferences []metav1.OwnerReference
-	if os.Getenv(utils.ENV_DISABLE_OWNER_REFERENCES) == "false" {
+	if gp.enableOwnerReferences {
 		ownerReferences = []metav1.OwnerReference{
 			*metav1.NewControllerRef(env, schema.GroupVersionKind{
 				Group:   "fission.io",

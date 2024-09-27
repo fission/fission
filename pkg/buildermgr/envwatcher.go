@@ -74,6 +74,7 @@ type (
 		useIstio               bool
 		podSpecPatch           *apiv1.PodSpec
 		envWatchInformer       map[string]k8sCache.SharedIndexInformer
+		enableOwnerReferences  bool
 	}
 )
 
@@ -108,6 +109,7 @@ func makeEnvironmentWatcher(
 		fetcherConfig:          fetcherConfig,
 		podSpecPatch:           podSpecPatch,
 		envWatchInformer:       utils.GetInformersForNamespaces(fissionClient, time.Minute*30, fv1.EnvironmentResource),
+		enableOwnerReferences:  utils.IsOwnerReferencesEnabled(),
 	}
 
 	err := envWatcher.EnvWatchEventHandlers(ctx)
@@ -326,7 +328,7 @@ func (envw *environmentWatcher) createBuilderService(ctx context.Context, env *f
 	name := fmt.Sprintf("%v-%v", env.ObjectMeta.Name, env.ObjectMeta.ResourceVersion)
 	sel := envw.getLabels(env.ObjectMeta.Name, ns, env.ObjectMeta.ResourceVersion)
 	var ownerReferences []metav1.OwnerReference
-	if os.Getenv(utils.ENV_DISABLE_OWNER_REFERENCES) == "false" {
+	if envw.enableOwnerReferences {
 		ownerReferences = []metav1.OwnerReference{
 			*metav1.NewControllerRef(env, schema.GroupVersionKind{
 				Group:   "fission.io",
@@ -448,7 +450,7 @@ func (envw *environmentWatcher) createBuilderDeployment(ctx context.Context, env
 	pod.Spec = *(util.ApplyImagePullSecret(env.Spec.ImagePullSecret, pod.Spec))
 
 	var ownerReferences []metav1.OwnerReference
-	if os.Getenv(utils.ENV_DISABLE_OWNER_REFERENCES) == "false" {
+	if envw.enableOwnerReferences {
 		ownerReferences = []metav1.OwnerReference{
 			*metav1.NewControllerRef(env, schema.GroupVersionKind{
 				Group:   "fission.io",

@@ -60,6 +60,8 @@ type (
 
 		requestChan chan *createFuncServiceRequest
 		fsCreateWg  sync.Map
+
+		enableOwnerReferences bool
 	}
 	createFuncServiceRequest struct {
 		context  context.Context

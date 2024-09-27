@@ -300,3 +300,8 @@ func DeleteOldPackages(pkgPath, pkgType string) error {
 
 	return nil
 }
+
+func IsOwnerReferencesEnabled() bool {
+	disableOwnerReference, _ := strconv.ParseBool(os.Getenv(ENV_DISABLE_OWNER_REFERENCES))
+	return !disableOwnerReference
+}
