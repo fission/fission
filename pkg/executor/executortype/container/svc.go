@@ -50,18 +50,23 @@ func (cn *Container) createOrGetSvc(ctx context.Context, fn *fv1.Function, deplo
 		return nil, err
 	}
 	logger := otelUtils.LoggerWithTraceID(ctx, cn.logger)
+	var ownerReferences []metav1.OwnerReference
+	if cn.enableOwnerReferences {
+		ownerReferences = []metav1.OwnerReference{
+			*metav1.NewControllerRef(fn, schema.GroupVersionKind{
+				Group:   "fission.io",
+				Version: "v1",
+				Kind:    "Function",
+			}),
+		}
+	}
+
 	service := &apiv1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        svcName,
-			Labels:      deployLabels,
-			Annotations: deployAnnotations,
-			OwnerReferences: []metav1.OwnerReference{
-				*metav1.NewControllerRef(fn, schema.GroupVersionKind{
-					Group:   "fission.io",
-					Version: "v1",
-					Kind:    "Function",
-				}),
-			},
+			Name:            svcName,
+			Labels:          deployLabels,
+			Annotations:     deployAnnotations,
+			OwnerReferences: ownerReferences,
 		},
 		Spec: apiv1.ServiceSpec{
 			Ports: []apiv1.ServicePort{

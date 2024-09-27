@@ -265,18 +265,22 @@ func (cn *Container) getDeploymentSpec(ctx context.Context, fn *fv1.Function, ta
 
 	pod.Spec = *(util.ApplyImagePullSecret("", pod.Spec))
 
+	var ownerReferences []metav1.OwnerReference
+	if cn.enableOwnerReferences {
+		ownerReferences = []metav1.OwnerReference{
+			*metav1.NewControllerRef(fn, schema.GroupVersionKind{
+				Group:   "fission.io",
+				Version: "v1",
+				Kind:    "Function",
+			}),
+		}
+	}
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        deployName,
-			Labels:      deployLabels,
-			Annotations: deployAnnotations,
-			OwnerReferences: []metav1.OwnerReference{
-				*metav1.NewControllerRef(fn, schema.GroupVersionKind{
-					Group:   "fission.io",
-					Version: "v1",
-					Kind:    "Function",
-				}),
-			},
+			Name:            deployName,
+			Labels:          deployLabels,
+			Annotations:     deployAnnotations,
+			OwnerReferences: ownerReferences,
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,

@@ -246,18 +246,23 @@ func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function
 
 	pod.Spec = *(util.ApplyImagePullSecret(env.Spec.ImagePullSecret, pod.Spec))
 
+	var ownerReferences []metav1.OwnerReference
+	if deploy.enableOwnerReferences {
+		ownerReferences = []metav1.OwnerReference{
+			*metav1.NewControllerRef(fn, schema.GroupVersionKind{
+				Group:   "fission.io",
+				Version: "v1",
+				Kind:    "Function",
+			}),
+		}
+	}
+
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        deployName,
-			Labels:      deployLabels,
-			Annotations: deployAnnotations,
-			OwnerReferences: []metav1.OwnerReference{
-				*metav1.NewControllerRef(fn, schema.GroupVersionKind{
-					Group:   "fission.io",
-					Version: "v1",
-					Kind:    "Function",
-				}),
-			},
+			Name:            deployName,
+			Labels:          deployLabels,
+			Annotations:     deployAnnotations,
+			OwnerReferences: ownerReferences,
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,
@@ -334,18 +339,23 @@ func (deploy *NewDeploy) getResources(env *fv1.Environment, fn *fv1.Function) ap
 
 func (deploy *NewDeploy) createOrGetSvc(ctx context.Context, fn *fv1.Function, deployLabels map[string]string, deployAnnotations map[string]string, svcName string, svcNamespace string) (*apiv1.Service, error) {
 	logger := otelUtils.LoggerWithTraceID(ctx, deploy.logger)
+	var ownerReferences []metav1.OwnerReference
+	if deploy.enableOwnerReferences {
+		ownerReferences = []metav1.OwnerReference{
+			*metav1.NewControllerRef(fn, schema.GroupVersionKind{
+				Group:   "fission.io",
+				Version: "v1",
+				Kind:    "Function",
+			}),
+		}
+	}
+
 	service := &apiv1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        svcName,
-			Labels:      deployLabels,
-			Annotations: deployAnnotations,
-			OwnerReferences: []metav1.OwnerReference{
-				*metav1.NewControllerRef(fn, schema.GroupVersionKind{
-					Group:   "fission.io",
-					Version: "v1",
-					Kind:    "Function",
-				}),
-			},
+			Name:            svcName,
+			Labels:          deployLabels,
+			Annotations:     deployAnnotations,
+			OwnerReferences: ownerReferences,
 		},
 		Spec: apiv1.ServiceSpec{
 			Ports: []apiv1.ServicePort{

@@ -59,17 +59,22 @@ func getPoolName(env *fv1.Environment) string {
 func (gp *GenericPool) genDeploymentMeta(env *fv1.Environment) metav1.ObjectMeta {
 	deployLabels := gp.getEnvironmentPoolLabels(env)
 	deployAnnotations := gp.getDeployAnnotations(env)
-	return metav1.ObjectMeta{
-		Name:        getPoolName(env),
-		Labels:      deployLabels,
-		Annotations: deployAnnotations,
-		OwnerReferences: []metav1.OwnerReference{
+
+	var ownerReferences []metav1.OwnerReference
+	if gp.enableOwnerReferences {
+		ownerReferences = []metav1.OwnerReference{
 			*metav1.NewControllerRef(env, schema.GroupVersionKind{
 				Group:   "fission.io",
 				Version: "v1",
 				Kind:    "Environment",
 			}),
-		},
+		}
+	}
+	return metav1.ObjectMeta{
+		Name:            getPoolName(env),
+		Labels:          deployLabels,
+		Annotations:     deployAnnotations,
+		OwnerReferences: ownerReferences,
 	}
 }
 

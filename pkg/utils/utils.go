@@ -39,6 +39,10 @@ import (
 	"github.com/fission/fission/pkg/utils/uuid"
 )
 
+const (
+	ENV_DISABLE_OWNER_REFERENCES string = "DISABLE_OWNER_REFERENCES"
+)
+
 func UrlForFunction(name, namespace string) string {
 	prefix := "/fission-function"
 	if namespace != metav1.NamespaceDefault {
@@ -295,4 +299,9 @@ func DeleteOldPackages(pkgPath, pkgType string) error {
 	}
 
 	return nil
+}
+
+func IsOwnerReferencesEnabled() bool {
+	disableOwnerReference, _ := strconv.ParseBool(os.Getenv(ENV_DISABLE_OWNER_REFERENCES))
+	return !disableOwnerReference
 }

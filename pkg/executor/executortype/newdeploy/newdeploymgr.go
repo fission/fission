@@ -92,6 +92,8 @@ type (
 
 		podSpecPatch               *apiv1.PodSpec
 		objectReaperIntervalSecond time.Duration
+
+		enableOwnerReferences bool
 	}
 )
 
@@ -139,6 +141,8 @@ func MakeNewDeploy(
 		deplListerSynced: make(map[string]k8sCache.InformerSynced),
 		svcLister:        make(map[string]corelisters.ServiceLister),
 		svcListerSynced:  make(map[string]k8sCache.InformerSynced),
+
+		enableOwnerReferences: utils.IsOwnerReferencesEnabled(),
 	}
 
 	for ns, informerFactory := range ndmInformerFactory {

@@ -79,6 +79,7 @@ type (
 		poolInstanceID           string // small random string to uniquify pod names
 		instanceID               string // poolmgr instance id
 		podSpecPatch             *apiv1.PodSpec
+		enableOwnerReferences    bool
 		// TODO: move this field into fsCache
 		podFSVCMap sync.Map
 	}
@@ -131,6 +132,7 @@ func MakeGenericPool(
 		instanceID:               instanceID,
 		podFSVCMap:               sync.Map{},
 		podSpecPatch:             podSpecPatch,
+		enableOwnerReferences:    utils.IsOwnerReferencesEnabled(),
 		lock:                     sync.Mutex{},
 	}
 

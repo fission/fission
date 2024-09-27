@@ -29,6 +29,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/utils"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
@@ -39,16 +40,18 @@ const (
 )
 
 type HpaOperations struct {
-	logger           *zap.Logger
-	kubernetesClient kubernetes.Interface
-	instanceID       string
+	logger                *zap.Logger
+	kubernetesClient      kubernetes.Interface
+	instanceID            string
+	enableOwnerReferences bool
 }
 
 func NewHpaOperations(logger *zap.Logger, kubernetesClient kubernetes.Interface, instanceID string) *HpaOperations {
 	return &HpaOperations{
-		logger:           logger,
-		kubernetesClient: kubernetesClient,
-		instanceID:       instanceID,
+		logger:                logger,
+		kubernetesClient:      kubernetesClient,
+		instanceID:            instanceID,
+		enableOwnerReferences: utils.IsOwnerReferencesEnabled(),
 	}
 }
 
@@ -99,18 +102,23 @@ func (hpaops *HpaOperations) CreateOrGetHpa(ctx context.Context, fn *fv1.Functio
 		hpaMetrics = append(hpaMetrics, execStrategy.Metrics...)
 	}
 
+	var ownerReferences []metav1.OwnerReference
+	if hpaops.enableOwnerReferences {
+		ownerReferences = []metav1.OwnerReference{
+			*metav1.NewControllerRef(fn, schema.GroupVersionKind{
+				Group:   "fission.io",
+				Version: "v1",
+				Kind:    "Function",
+			}),
+		}
+	}
+
 	hpa := &asv2.HorizontalPodAutoscaler{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        hpaName,
-			Labels:      deployLabels,
-			Annotations: deployAnnotations,
-			OwnerReferences: []metav1.OwnerReference{
-				*metav1.NewControllerRef(fn, schema.GroupVersionKind{
-					Group:   "fission.io",
-					Version: "v1",
-					Kind:    "Function",
-				}),
-			},
+			Name:            hpaName,
+			Labels:          deployLabels,
+			Annotations:     deployAnnotations,
+			OwnerReferences: ownerReferences,
 		},
 		Spec: asv2.HorizontalPodAutoscalerSpec{
 			ScaleTargetRef: getScaleTargetRef(depl),
