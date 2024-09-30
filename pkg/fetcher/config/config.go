@@ -301,7 +301,7 @@ func (cfg *Config) addFetcherToPodSpecWithCommand(podSpec *apiv1.PodSpec, mainCo
 		podSpec.Containers[ix] = container
 	}
 	if !found {
-		existingContainerNames := make([]string, len(podSpec.Containers))
+		existingContainerNames := make([]string, 0, len(podSpec.Containers))
 		for _, existingContainer := range podSpec.Containers {
 			existingContainerNames = append(existingContainerNames, existingContainer.Name)
 		}
