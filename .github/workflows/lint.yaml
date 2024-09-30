@@ -18,7 +18,7 @@ on:
   workflow_dispatch:
 
 env:
-  GOLANGCI_LINT_VERSION: v1.57.0
+  GOLANGCI_LINT_VERSION: v1.61.0
   GOLANGCI_LINT_TIMEOUT: 5m
 
 jobs:

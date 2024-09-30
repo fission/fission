@@ -426,7 +426,7 @@ func (gp *GenericPool) specializePod(ctx context.Context, pod *apiv1.Pod, fn *fv
 					zap.String("configmap_namespace", cm.Namespace),
 					zap.String("function_name", fn.ObjectMeta.Name),
 					zap.String("function_namespace", gp.fnNamespace))
-				return fmt.Errorf(fmt.Sprintf("configmap %s must be in same namespace as function namespace", cm.Name))
+				return fmt.Errorf("configmap %s must be in same namespace as function namespace", cm.Name)
 			} else {
 				return err
 			}
@@ -441,7 +441,7 @@ func (gp *GenericPool) specializePod(ctx context.Context, pod *apiv1.Pod, fn *fv
 					zap.String("secret_namespace", sec.Namespace),
 					zap.String("function_name", fn.ObjectMeta.Name),
 					zap.String("function_namespace", gp.fnNamespace))
-				return fmt.Errorf(fmt.Sprintf("secret %s must be in same namespace as function namespace", sec.Name))
+				return fmt.Errorf("secret %s must be in same namespace as function namespace", sec.Name)
 			} else {
 				return err
 			}
