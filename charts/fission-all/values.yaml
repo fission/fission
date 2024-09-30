@@ -67,11 +67,15 @@ defaultNamespace: default
 ## if builderNamespace is set to empty then builder resources will be created in the same namespace as the Fission resources.
 ## This is different from the release namespace.
 ##
+## Note: This parameter is deprecated and will be removed in future fission releases.
+##
 builderNamespace: ""
 
 ## functionNamespace represents the namespace in which Fission Function resources will be created.
 ## if functionNamespace is set to empty then function resources will be created in the same namespace as the Fission resources.
 ## This is different from the release namespace.
+##
+## Note: This parameter is deprecated and will be removed in future fission releases.
 ##
 functionNamespace: ""
 
@@ -93,6 +97,9 @@ createNamespace: true
 ## Set to false if you want to add OwnerReference to K8s resources created by Fission.
 ##
 ## Set to true if you are using cross namespace meaning `builderNamespace` and `functionNamespace` are set.
+##
+## Note: This flag is temporary addition and would be removed in future fission releases.
+##
 disableOwnerReference: false
 
 ## enableIstio indicates whether to enable istio integration.
