@@ -200,7 +200,7 @@ func (ch *MqtConsumerGroupHandler) kafkaMsgHandler(msg *sarama.ConsumerMessage) 
 		errorString := fmt.Sprintf("request exceed retries: %v", ch.trigger.Spec.MaxRetries)
 		errorHeaders := generateErrorHeaders(errorString)
 		errorHandler(ch.logger, ch.trigger, ch.producer, ch.fnUrl,
-			fmt.Errorf(errorString), errorHeaders)
+			fmt.Errorf("%s", errorString), errorHeaders)
 		return
 	}
 	defer resp.Body.Close()
@@ -215,7 +215,7 @@ func (ch *MqtConsumerGroupHandler) kafkaMsgHandler(msg *sarama.ConsumerMessage) 
 		errorString := "request body error: " + string(body)
 		errorHeaders := generateErrorHeaders(errorString)
 		errorHandler(ch.logger, ch.trigger, ch.producer, ch.fnUrl,
-			errors.Wrapf(err, errorString), errorHeaders)
+			errors.Wrapf(err, "%s", errorString), errorHeaders)
 		return
 	}
 	if resp.StatusCode != 200 {
