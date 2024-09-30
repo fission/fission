@@ -1,3 +1,5 @@
+{{ template "deprecationWarnings" . }}
+
 1. Install the client CLI.
 
 Mac:
