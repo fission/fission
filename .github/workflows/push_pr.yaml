@@ -79,7 +79,7 @@ jobs:
 
       - name: Install Skaffold
         run: |
-          curl -Lo skaffold https://storage.googleapis.com/skaffold/releases/v2.0.3/skaffold-linux-amd64
+          curl -Lo skaffold https://storage.googleapis.com/skaffold/releases/v2.13.2/skaffold-linux-amd64
           sudo install skaffold /usr/local/bin/
           skaffold version
 
@@ -222,7 +222,7 @@ jobs:
 
       - name: Install Skaffold
         run: |
-          curl -Lo skaffold https://storage.googleapis.com/skaffold/releases/v2.0.3/skaffold-linux-amd64
+          curl -Lo skaffold https://storage.googleapis.com/skaffold/releases/v2.13.2/skaffold-linux-amd64
           sudo install skaffold /usr/local/bin/
           skaffold version
 
