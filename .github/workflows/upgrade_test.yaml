@@ -58,10 +58,10 @@ jobs:
           cluster_name: ${{ env.KIND_CLUSTER_NAME }}
 
       - name: Install GoReleaser
-        uses: goreleaser/goreleaser-action@7ec5c2b0c6cdda6e8bbb49444bc797dd33d74dd8 # v5.0.0
+        uses: goreleaser/goreleaser-action@286f3b13b1b49da4ac219696163fb8c1c93e1200 # v6.0.0
         with:
           install-only: true
-          version: "~> v1"
+          version: "~> v2"
 
       - name: Setup kubectl & fetch node information
         run: |

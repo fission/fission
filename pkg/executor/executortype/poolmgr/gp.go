@@ -75,7 +75,7 @@ type (
 		stopReadyPodControllerCh chan struct{}
 		readyPodLister           corelisters.PodLister
 		readyPodListerSynced     cache.InformerSynced
-		readyPodQueue            workqueue.DelayingInterface
+		readyPodQueue            workqueue.TypedDelayingInterface[string]
 		poolInstanceID           string // small random string to uniquify pod names
 		instanceID               string // poolmgr instance id
 		podSpecPatch             *apiv1.PodSpec
@@ -265,15 +265,13 @@ func (gp *GenericPool) choosePod(ctx context.Context, newLabels map[string]strin
 		}
 
 		var chosenPod *apiv1.Pod
-		var key string
 
 		otelUtils.SpanTrackEvent(ctx, "waitForPod", otelUtils.MapToAttributes(newLabels)...)
-		item, quit := gp.readyPodQueue.Get()
+		key, quit := gp.readyPodQueue.Get()
 		if quit {
 			logger.Error("readypod controller is not running")
 			return "", nil, errors.New("readypod controller is not running")
 		}
-		key = item.(string)
 		logger.Debug("got key from the queue", zap.String("key", key))
 		namespace, name, err := cache.SplitMetaNamespaceKey(key)
 		if err != nil {

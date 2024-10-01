@@ -59,8 +59,8 @@ type (
 		mqtLister       map[string]flisterv1.MessageQueueTriggerLister
 		mqtListerSynced map[string]k8sCache.InformerSynced
 
-		mqTriggerCreateUpdateQueue workqueue.RateLimitingInterface
-		mqTriggerDeleteQueue       workqueue.RateLimitingInterface
+		mqTriggerCreateUpdateQueue workqueue.TypedRateLimitingInterface[string]
+		mqTriggerDeleteQueue       workqueue.TypedRateLimitingInterface[*fv1.MessageQueueTrigger]
 	}
 
 	triggerSubscription struct {
@@ -93,8 +93,8 @@ func MakeMessageQueueTriggerManager(logger *zap.Logger,
 		mqtListerSynced:            make(map[string]k8sCache.InformerSynced, 0),
 		messageQueueType:           mqType,
 		messageQueue:               messageQueue,
-		mqTriggerCreateUpdateQueue: workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "MqtAddUpdateQueue"),
-		mqTriggerDeleteQueue:       workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "MqtDeleteQueue"),
+		mqTriggerCreateUpdateQueue: workqueue.NewTypedRateLimitingQueueWithConfig(workqueue.DefaultTypedControllerRateLimiter[string](), workqueue.TypedRateLimitingQueueConfig[string]{Name: "MqtAddUpdateQueue"}),
+		mqTriggerDeleteQueue:       workqueue.NewTypedRateLimitingQueueWithConfig(workqueue.DefaultTypedControllerRateLimiter[*fv1.MessageQueueTrigger](), workqueue.TypedRateLimitingQueueConfig[*fv1.MessageQueueTrigger]{Name: "MqtDeleteQueue"}),
 	}
 
 	for ns, informer := range finformerFactory {
@@ -354,11 +354,10 @@ func (mqt *MessageQueueTriggerManager) getMqtLister(namespace string) (flisterv1
 
 func (mqt *MessageQueueTriggerManager) mqTriggerCreateUpdateQueueProcessFunc(ctx context.Context) bool {
 	maxRetries := 3
-	obj, quit := mqt.mqTriggerCreateUpdateQueue.Get()
+	key, quit := mqt.mqTriggerCreateUpdateQueue.Get()
 	if quit {
 		return false
 	}
-	key := obj.(string)
 	defer mqt.mqTriggerCreateUpdateQueue.Done(key)
 
 	namespace, name, err := k8sCache.SplitMetaNamespaceKey(key)
@@ -409,33 +408,27 @@ func (mqt *MessageQueueTriggerManager) mqTriggerCreateUpdateQueueProcessFunc(ctx
 
 func (mqt *MessageQueueTriggerManager) mqTriggerDeleteQueueProcessFunc(ctx context.Context) bool {
 	maxRetries := 3
-	obj, quit := mqt.mqTriggerDeleteQueue.Get()
+	mqTrigger, quit := mqt.mqTriggerDeleteQueue.Get()
 	if quit {
 		return false
 	}
-	defer mqt.mqTriggerDeleteQueue.Done(obj)
-	mqTrigger, ok := obj.(*fv1.MessageQueueTrigger)
-	if !ok {
-		mqt.logger.Error("unexpected type when deleting mqt to message queue trigger manager", zap.Any("obj", obj))
-		mqt.mqTriggerDeleteQueue.Forget(obj)
-		return false
-	}
+	defer mqt.mqTriggerDeleteQueue.Done(mqTrigger)
 
 	mqt.logger.Debug("Delete mqt", zap.Any("trigger: ", mqTrigger.ObjectMeta))
 	triggerSubscription := mqt.getTriggerSubscription(mqTrigger)
 	if triggerSubscription == nil {
 		mqt.logger.Info("Unsubscribe failed", zap.String("trigger_name", mqTrigger.ObjectMeta.Name))
-		mqt.mqTriggerDeleteQueue.Forget(obj)
+		mqt.mqTriggerDeleteQueue.Forget(mqTrigger)
 		return false
 	}
 
 	err := mqt.messageQueue.Unsubscribe(triggerSubscription.subscription)
 	if err != nil {
-		if mqt.mqTriggerDeleteQueue.NumRequeues(obj) < maxRetries {
-			mqt.mqTriggerDeleteQueue.AddRateLimited(obj)
+		if mqt.mqTriggerDeleteQueue.NumRequeues(mqTrigger) < maxRetries {
+			mqt.mqTriggerDeleteQueue.AddRateLimited(mqTrigger)
 			mqt.logger.Error("failed to unsubscribe from message queue trigger, retrying", zap.Error(err), zap.String("trigger_name", mqTrigger.ObjectMeta.Name))
 		} else {
-			mqt.mqTriggerDeleteQueue.Forget(obj)
+			mqt.mqTriggerDeleteQueue.Forget(mqTrigger)
 			mqt.logger.Error("failed to unsubscribe from message queue trigger, max retries reached", zap.Error(err))
 		}
 		return false
@@ -443,17 +436,17 @@ func (mqt *MessageQueueTriggerManager) mqTriggerDeleteQueueProcessFunc(ctx conte
 
 	err = mqt.delTriggerSubscription(mqTrigger)
 	if err != nil {
-		if mqt.mqTriggerDeleteQueue.NumRequeues(obj) < maxRetries {
-			mqt.mqTriggerDeleteQueue.AddRateLimited(obj)
-			mqt.logger.Error("error deleting mqt, retrying", zap.Any("obj", obj), zap.Error(err))
+		if mqt.mqTriggerDeleteQueue.NumRequeues(mqTrigger) < maxRetries {
+			mqt.mqTriggerDeleteQueue.AddRateLimited(mqTrigger)
+			mqt.logger.Error("error deleting mqt, retrying", zap.Any("obj", mqTrigger), zap.Error(err))
 		} else {
-			mqt.mqTriggerDeleteQueue.Forget(obj)
+			mqt.mqTriggerDeleteQueue.Forget(mqTrigger)
 			mqt.logger.Error("deleting message queue trigger failed, max retries reached", zap.Error(err), zap.String("trigger_name", mqTrigger.ObjectMeta.Name))
 		}
 		return false
 	}
 
-	mqt.mqTriggerDeleteQueue.Forget(obj)
+	mqt.mqTriggerDeleteQueue.Forget(mqTrigger)
 	mqt.logger.Info("message queue trigger deleted", zap.String("trigger_name", mqTrigger.ObjectMeta.Name))
 	return false
 }

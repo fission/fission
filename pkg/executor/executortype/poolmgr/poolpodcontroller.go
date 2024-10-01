@@ -60,10 +60,10 @@ type (
 		// podListerSynced returns true if the pod store has been synced at least once.
 		podListerSynced map[string]k8sCache.InformerSynced
 
-		envCreateUpdateQueue workqueue.RateLimitingInterface
-		envDeleteQueue       workqueue.RateLimitingInterface
+		envCreateUpdateQueue workqueue.TypedRateLimitingInterface[string]
+		envDeleteQueue       workqueue.TypedRateLimitingInterface[*fv1.Environment]
 
-		spCleanupPodQueue workqueue.RateLimitingInterface
+		spCleanupPodQueue workqueue.TypedRateLimitingInterface[string]
 
 		gpm *GenericPoolManager
 	}
@@ -84,9 +84,9 @@ func NewPoolPodController(ctx context.Context, logger *zap.Logger,
 		envListerSynced:      make(map[string]k8sCache.InformerSynced, 0),
 		podLister:            make(map[string]corelisters.PodLister),
 		podListerSynced:      make(map[string]k8sCache.InformerSynced),
-		envCreateUpdateQueue: workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "EnvAddUpdateQueue"),
-		envDeleteQueue:       workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "EnvDeleteQueue"),
-		spCleanupPodQueue:    workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "SpecializedPodCleanupQueue"),
+		envCreateUpdateQueue: workqueue.NewTypedRateLimitingQueueWithConfig[string](workqueue.DefaultTypedControllerRateLimiter[string](), workqueue.TypedRateLimitingQueueConfig[string]{Name: "EnvAddUpdateQueue"}),
+		envDeleteQueue:       workqueue.NewTypedRateLimitingQueueWithConfig[*fv1.Environment](workqueue.DefaultTypedControllerRateLimiter[*fv1.Environment](), workqueue.TypedRateLimitingQueueConfig[*fv1.Environment]{Name: "EnvDeleteQueue"}),
+		spCleanupPodQueue:    workqueue.NewTypedRateLimitingQueueWithConfig[string](workqueue.DefaultTypedControllerRateLimiter[string](), workqueue.TypedRateLimitingQueueConfig[string]{Name: "SpecializedPodCleanupQueue"}),
 	}
 	if p.enableIstio {
 		for _, factory := range finformerFactory {
@@ -337,11 +337,10 @@ func (p *PoolPodController) envCreateUpdateQueueProcessFunc(ctx context.Context)
 		return nil
 	}
 
-	obj, quit := p.envCreateUpdateQueue.Get()
+	key, quit := p.envCreateUpdateQueue.Get()
 	if quit {
 		return true
 	}
-	key := obj.(string)
 	defer p.envCreateUpdateQueue.Done(key)
 
 	namespace, name, err := k8sCache.SplitMetaNamespaceKey(key)
@@ -390,17 +389,11 @@ func (p *PoolPodController) envCreateUpdateQueueProcessFunc(ctx context.Context)
 }
 
 func (p *PoolPodController) envDeleteQueueProcessFunc(ctx context.Context) bool {
-	obj, quit := p.envDeleteQueue.Get()
+	env, quit := p.envDeleteQueue.Get()
 	if quit {
 		return true
 	}
-	defer p.envDeleteQueue.Done(obj)
-	env, ok := obj.(*fv1.Environment)
-	if !ok {
-		p.logger.Error("unexpected type when deleting env to pool pod controller", zap.Any("obj", obj))
-		p.envDeleteQueue.Forget(obj)
-		return false
-	}
+	defer p.envDeleteQueue.Done(env)
 	p.logger.Debug("env delete request processing")
 	p.gpm.cleanupPool(ctx, env)
 	specializePodLables := getSpecializedPodLabels(env)
@@ -408,17 +401,17 @@ func (p *PoolPodController) envDeleteQueueProcessFunc(ctx context.Context) bool 
 	podLister, ok := p.podLister[ns]
 	if !ok {
 		p.logger.Error("no pod lister found for namespace", zap.String("namespace", ns))
-		p.envDeleteQueue.Forget(obj)
+		p.envDeleteQueue.Forget(env)
 		return false
 	}
 	specializedPods, err := podLister.Pods(ns).List(labels.SelectorFromSet(specializePodLables))
 	if err != nil {
 		p.logger.Error("failed to list specialized pods", zap.Error(err))
-		p.envDeleteQueue.Forget(obj)
+		p.envDeleteQueue.Forget(env)
 		return false
 	}
 	if len(specializedPods) == 0 {
-		p.envDeleteQueue.Forget(obj)
+		p.envDeleteQueue.Forget(env)
 		return false
 	}
 	p.logger.Info("specialized pods identified for cleanup after env delete", zap.String("env", env.ObjectMeta.Name), zap.String("namespace", env.ObjectMeta.Namespace), zap.Int("count", len(specializedPods)))
@@ -433,17 +426,16 @@ func (p *PoolPodController) envDeleteQueueProcessFunc(ctx context.Context) bool 
 		}
 		p.spCleanupPodQueue.Add(key)
 	}
-	p.envDeleteQueue.Forget(obj)
+	p.envDeleteQueue.Forget(env)
 	return false
 }
 
 func (p *PoolPodController) spCleanupPodQueueProcessFunc(ctx context.Context) bool {
 	maxRetries := 3
-	obj, quit := p.spCleanupPodQueue.Get()
+	key, quit := p.spCleanupPodQueue.Get()
 	if quit {
 		return true
 	}
-	key := obj.(string)
 	defer p.spCleanupPodQueue.Done(key)
 	namespace, name, err := k8sCache.SplitMetaNamespaceKey(key)
 	if err != nil {

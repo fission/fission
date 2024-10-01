@@ -1,3 +1,5 @@
+version: 2
+
 project_name: fission
 release:
   github:
@@ -16,7 +18,7 @@ before:
   hooks:
     - go mod tidy
 snapshot:
-  name_template: "{{ .Tag }}"
+  version_template: "{{ .Tag }}"
 builds:
   - &build-linux
     id: builder
@@ -314,7 +316,7 @@ docker_manifests:
       - fission/reporter:latest-amd64
       - fission/reporter:latest-arm64
 changelog:
-  skip: false
+  disable: true
 archives:
   - id: fission
     builds:
