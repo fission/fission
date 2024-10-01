@@ -21,7 +21,10 @@ package applyconfiguration
 import (
 	v1 "github.com/fission/fission/pkg/apis/core/v1"
 	corev1 "github.com/fission/fission/pkg/generated/applyconfiguration/core/v1"
+	internal "github.com/fission/fission/pkg/generated/applyconfiguration/internal"
+	runtime "k8s.io/apimachinery/pkg/runtime"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"
+	testing "k8s.io/client-go/testing"
 )
 
 // ForKind returns an apply configuration type for the given GroupVersionKind, or nil if no
@@ -94,4 +97,8 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 
 	}
 	return nil
+}
+
+func NewTypeConverter(scheme *runtime.Scheme) *testing.TypeConverter {
+	return &testing.TypeConverter{Scheme: scheme, TypeResolver: internal.Parser()}
 }

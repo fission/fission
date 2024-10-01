@@ -23,7 +23,7 @@ import (
 	apicorev1 "k8s.io/api/core/v1"
 )
 
-// MessageQueueTriggerSpecApplyConfiguration represents an declarative configuration of the MessageQueueTriggerSpec type for use
+// MessageQueueTriggerSpecApplyConfiguration represents a declarative configuration of the MessageQueueTriggerSpec type for use
 // with apply.
 type MessageQueueTriggerSpecApplyConfiguration struct {
 	FunctionReference *FunctionReferenceApplyConfiguration `json:"functionref,omitempty"`
@@ -43,7 +43,7 @@ type MessageQueueTriggerSpecApplyConfiguration struct {
 	PodSpec           *apicorev1.PodSpec                   `json:"podspec,omitempty"`
 }
 
-// MessageQueueTriggerSpecApplyConfiguration constructs an declarative configuration of the MessageQueueTriggerSpec type for use with
+// MessageQueueTriggerSpecApplyConfiguration constructs a declarative configuration of the MessageQueueTriggerSpec type for use with
 // apply.
 func MessageQueueTriggerSpec() *MessageQueueTriggerSpecApplyConfiguration {
 	return &MessageQueueTriggerSpecApplyConfiguration{}

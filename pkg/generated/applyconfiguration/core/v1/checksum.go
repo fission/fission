@@ -22,14 +22,14 @@ import (
 	v1 "github.com/fission/fission/pkg/apis/core/v1"
 )
 
-// ChecksumApplyConfiguration represents an declarative configuration of the Checksum type for use
+// ChecksumApplyConfiguration represents a declarative configuration of the Checksum type for use
 // with apply.
 type ChecksumApplyConfiguration struct {
 	Type *v1.ChecksumType `json:"type,omitempty"`
 	Sum  *string          `json:"sum,omitempty"`
 }
 
-// ChecksumApplyConfiguration constructs an declarative configuration of the Checksum type for use with
+// ChecksumApplyConfiguration constructs a declarative configuration of the Checksum type for use with
 // apply.
 func Checksum() *ChecksumApplyConfiguration {
 	return &ChecksumApplyConfiguration{}

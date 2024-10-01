@@ -24,7 +24,7 @@ import (
 	v1 "k8s.io/client-go/applyconfigurations/meta/v1"
 )
 
-// CanaryConfigApplyConfiguration represents an declarative configuration of the CanaryConfig type for use
+// CanaryConfigApplyConfiguration represents a declarative configuration of the CanaryConfig type for use
 // with apply.
 type CanaryConfigApplyConfiguration struct {
 	v1.TypeMetaApplyConfiguration    `json:",inline"`
@@ -33,7 +33,7 @@ type CanaryConfigApplyConfiguration struct {
 	Status                           *CanaryConfigStatusApplyConfiguration `json:"status,omitempty"`
 }
 
-// CanaryConfig constructs an declarative configuration of the CanaryConfig type for use with
+// CanaryConfig constructs a declarative configuration of the CanaryConfig type for use with
 // apply.
 func CanaryConfig(name, namespace string) *CanaryConfigApplyConfiguration {
 	b := &CanaryConfigApplyConfiguration{}
@@ -216,4 +216,10 @@ func (b *CanaryConfigApplyConfiguration) WithSpec(value *CanaryConfigSpecApplyCo
 func (b *CanaryConfigApplyConfiguration) WithStatus(value *CanaryConfigStatusApplyConfiguration) *CanaryConfigApplyConfiguration {
 	b.Status = value
 	return b
+}
+
+// GetName retrieves the value of the Name field in the declarative configuration.
+func (b *CanaryConfigApplyConfiguration) GetName() *string {
+	b.ensureObjectMetaApplyConfigurationExists()
+	return b.Name
 }

@@ -24,7 +24,7 @@ import (
 	v1 "k8s.io/client-go/applyconfigurations/meta/v1"
 )
 
-// PackageApplyConfiguration represents an declarative configuration of the Package type for use
+// PackageApplyConfiguration represents a declarative configuration of the Package type for use
 // with apply.
 type PackageApplyConfiguration struct {
 	v1.TypeMetaApplyConfiguration    `json:",inline"`
@@ -33,7 +33,7 @@ type PackageApplyConfiguration struct {
 	Status                           *PackageStatusApplyConfiguration `json:"status,omitempty"`
 }
 
-// Package constructs an declarative configuration of the Package type for use with
+// Package constructs a declarative configuration of the Package type for use with
 // apply.
 func Package(name, namespace string) *PackageApplyConfiguration {
 	b := &PackageApplyConfiguration{}
@@ -216,4 +216,10 @@ func (b *PackageApplyConfiguration) WithSpec(value *PackageSpecApplyConfiguratio
 func (b *PackageApplyConfiguration) WithStatus(value *PackageStatusApplyConfiguration) *PackageApplyConfiguration {
 	b.Status = value
 	return b
+}
+
+// GetName retrieves the value of the Name field in the declarative configuration.
+func (b *PackageApplyConfiguration) GetName() *string {
+	b.ensureObjectMetaApplyConfigurationExists()
+	return b.Name
 }

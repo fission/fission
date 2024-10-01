@@ -24,7 +24,7 @@ import (
 	v1 "k8s.io/client-go/applyconfigurations/meta/v1"
 )
 
-// TimeTriggerApplyConfiguration represents an declarative configuration of the TimeTrigger type for use
+// TimeTriggerApplyConfiguration represents a declarative configuration of the TimeTrigger type for use
 // with apply.
 type TimeTriggerApplyConfiguration struct {
 	v1.TypeMetaApplyConfiguration    `json:",inline"`
@@ -32,7 +32,7 @@ type TimeTriggerApplyConfiguration struct {
 	Spec                             *TimeTriggerSpecApplyConfiguration `json:"spec,omitempty"`
 }
 
-// TimeTrigger constructs an declarative configuration of the TimeTrigger type for use with
+// TimeTrigger constructs a declarative configuration of the TimeTrigger type for use with
 // apply.
 func TimeTrigger(name, namespace string) *TimeTriggerApplyConfiguration {
 	b := &TimeTriggerApplyConfiguration{}
@@ -207,4 +207,10 @@ func (b *TimeTriggerApplyConfiguration) ensureObjectMetaApplyConfigurationExists
 func (b *TimeTriggerApplyConfiguration) WithSpec(value *TimeTriggerSpecApplyConfiguration) *TimeTriggerApplyConfiguration {
 	b.Spec = value
 	return b
+}
+
+// GetName retrieves the value of the Name field in the declarative configuration.
+func (b *TimeTriggerApplyConfiguration) GetName() *string {
+	b.ensureObjectMetaApplyConfigurationExists()
+	return b.Name
 }

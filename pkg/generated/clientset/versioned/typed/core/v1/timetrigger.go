@@ -20,9 +20,6 @@ package v1
 
 import (
 	"context"
-	json "encoding/json"
-	"fmt"
-	"time"
 
 	v1 "github.com/fission/fission/pkg/apis/core/v1"
 	corev1 "github.com/fission/fission/pkg/generated/applyconfiguration/core/v1"
@@ -30,7 +27,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	types "k8s.io/apimachinery/pkg/types"
 	watch "k8s.io/apimachinery/pkg/watch"
-	rest "k8s.io/client-go/rest"
+	gentype "k8s.io/client-go/gentype"
 )
 
 // TimeTriggersGetter has a method to return a TimeTriggerInterface.
@@ -55,154 +52,18 @@ type TimeTriggerInterface interface {
 
 // timeTriggers implements TimeTriggerInterface
 type timeTriggers struct {
-	client rest.Interface
-	ns     string
+	*gentype.ClientWithListAndApply[*v1.TimeTrigger, *v1.TimeTriggerList, *corev1.TimeTriggerApplyConfiguration]
 }
 
 // newTimeTriggers returns a TimeTriggers
 func newTimeTriggers(c *CoreV1Client, namespace string) *timeTriggers {
 	return &timeTriggers{
-		client: c.RESTClient(),
-		ns:     namespace,
+		gentype.NewClientWithListAndApply[*v1.TimeTrigger, *v1.TimeTriggerList, *corev1.TimeTriggerApplyConfiguration](
+			"timetriggers",
+			c.RESTClient(),
+			scheme.ParameterCodec,
+			namespace,
+			func() *v1.TimeTrigger { return &v1.TimeTrigger{} },
+			func() *v1.TimeTriggerList { return &v1.TimeTriggerList{} }),
 	}
-}
-
-// Get takes name of the _timeTrigger, and returns the corresponding timeTrigger object, and an error if there is any.
-func (c *timeTriggers) Get(ctx context.Context, name string, options metav1.GetOptions) (result *v1.TimeTrigger, err error) {
-	result = &v1.TimeTrigger{}
-	err = c.client.Get().
-		Namespace(c.ns).
-		Resource("timetriggers").
-		Name(name).
-		VersionedParams(&options, scheme.ParameterCodec).
-		Do(ctx).
-		Into(result)
-	return
-}
-
-// List takes label and field selectors, and returns the list of TimeTriggers that match those selectors.
-func (c *timeTriggers) List(ctx context.Context, opts metav1.ListOptions) (result *v1.TimeTriggerList, err error) {
-	var timeout time.Duration
-	if opts.TimeoutSeconds != nil {
-		timeout = time.Duration(*opts.TimeoutSeconds) * time.Second
-	}
-	result = &v1.TimeTriggerList{}
-	err = c.client.Get().
-		Namespace(c.ns).
-		Resource("timetriggers").
-		VersionedParams(&opts, scheme.ParameterCodec).
-		Timeout(timeout).
-		Do(ctx).
-		Into(result)
-	return
-}
-
-// Watch returns a watch.Interface that watches the requested timeTriggers.
-func (c *timeTriggers) Watch(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error) {
-	var timeout time.Duration
-	if opts.TimeoutSeconds != nil {
-		timeout = time.Duration(*opts.TimeoutSeconds) * time.Second
-	}
-	opts.Watch = true
-	return c.client.Get().
-		Namespace(c.ns).
-		Resource("timetriggers").
-		VersionedParams(&opts, scheme.ParameterCodec).
-		Timeout(timeout).
-		Watch(ctx)
-}
-
-// Create takes the representation of a _timeTrigger and creates it.  Returns the server's representation of the timeTrigger, and an error, if there is any.
-func (c *timeTriggers) Create(ctx context.Context, _timeTrigger *v1.TimeTrigger, opts metav1.CreateOptions) (result *v1.TimeTrigger, err error) {
-	result = &v1.TimeTrigger{}
-	err = c.client.Post().
-		Namespace(c.ns).
-		Resource("timetriggers").
-		VersionedParams(&opts, scheme.ParameterCodec).
-		Body(_timeTrigger).
-		Do(ctx).
-		Into(result)
-	return
-}
-
-// Update takes the representation of a _timeTrigger and updates it. Returns the server's representation of the timeTrigger, and an error, if there is any.
-func (c *timeTriggers) Update(ctx context.Context, _timeTrigger *v1.TimeTrigger, opts metav1.UpdateOptions) (result *v1.TimeTrigger, err error) {
-	result = &v1.TimeTrigger{}
-	err = c.client.Put().
-		Namespace(c.ns).
-		Resource("timetriggers").
-		Name(_timeTrigger.Name).
-		VersionedParams(&opts, scheme.ParameterCodec).
-		Body(_timeTrigger).
-		Do(ctx).
-		Into(result)
-	return
-}
-
-// Delete takes name of the _timeTrigger and deletes it. Returns an error if one occurs.
-func (c *timeTriggers) Delete(ctx context.Context, name string, opts metav1.DeleteOptions) error {
-	return c.client.Delete().
-		Namespace(c.ns).
-		Resource("timetriggers").
-		Name(name).
-		Body(&opts).
-		Do(ctx).
-		Error()
-}
-
-// DeleteCollection deletes a collection of objects.
-func (c *timeTriggers) DeleteCollection(ctx context.Context, opts metav1.DeleteOptions, listOpts metav1.ListOptions) error {
-	var timeout time.Duration
-	if listOpts.TimeoutSeconds != nil {
-		timeout = time.Duration(*listOpts.TimeoutSeconds) * time.Second
-	}
-	return c.client.Delete().
-		Namespace(c.ns).
-		Resource("timetriggers").
-		VersionedParams(&listOpts, scheme.ParameterCodec).
-		Timeout(timeout).
-		Body(&opts).
-		Do(ctx).
-		Error()
-}
-
-// Patch applies the patch and returns the patched timeTrigger.
-func (c *timeTriggers) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, subresources ...string) (result *v1.TimeTrigger, err error) {
-	result = &v1.TimeTrigger{}
-	err = c.client.Patch(pt).
-		Namespace(c.ns).
-		Resource("timetriggers").
-		Name(name).
-		SubResource(subresources...).
-		VersionedParams(&opts, scheme.ParameterCodec).
-		Body(data).
-		Do(ctx).
-		Into(result)
-	return
-}
-
-// Apply takes the given apply declarative configuration, applies it and returns the applied timeTrigger.
-func (c *timeTriggers) Apply(ctx context.Context, _timeTrigger *corev1.TimeTriggerApplyConfiguration, opts metav1.ApplyOptions) (result *v1.TimeTrigger, err error) {
-	if _timeTrigger == nil {
-		return nil, fmt.Errorf("_timeTrigger provided to Apply must not be nil")
-	}
-	patchOpts := opts.ToPatchOptions()
-	data, err := json.Marshal(_timeTrigger)
-	if err != nil {
-		return nil, err
-	}
-	name := _timeTrigger.Name
-	if name == nil {
-		return nil, fmt.Errorf("_timeTrigger.Name must be provided to Apply")
-	}
-	result = &v1.TimeTrigger{}
-	err = c.client.Patch(types.ApplyPatchType).
-		Namespace(c.ns).
-		Resource("timetriggers").
-		Name(*name).
-		VersionedParams(&patchOpts, scheme.ParameterCodec).
-		Body(data).
-		Do(ctx).
-		Into(result)
-	return
 }

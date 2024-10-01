@@ -23,7 +23,7 @@ import (
 	apicorev1 "k8s.io/api/core/v1"
 )
 
-// EnvironmentSpecApplyConfiguration represents an declarative configuration of the EnvironmentSpec type for use
+// EnvironmentSpecApplyConfiguration represents a declarative configuration of the EnvironmentSpec type for use
 // with apply.
 type EnvironmentSpecApplyConfiguration struct {
 	Version                      *int                                 `json:"version,omitempty"`
@@ -38,7 +38,7 @@ type EnvironmentSpecApplyConfiguration struct {
 	ImagePullSecret              *string                              `json:"imagepullsecret,omitempty"`
 }
 
-// EnvironmentSpecApplyConfiguration constructs an declarative configuration of the EnvironmentSpec type for use with
+// EnvironmentSpecApplyConfiguration constructs a declarative configuration of the EnvironmentSpec type for use with
 // apply.
 func EnvironmentSpec() *EnvironmentSpecApplyConfiguration {
 	return &EnvironmentSpecApplyConfiguration{}

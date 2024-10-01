@@ -20,8 +20,8 @@ package v1
 
 import (
 	v1 "github.com/fission/fission/pkg/apis/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/client-go/listers"
 	"k8s.io/client-go/tools/cache"
 )
 
@@ -38,25 +38,17 @@ type MessageQueueTriggerLister interface {
 
 // messageQueueTriggerLister implements the MessageQueueTriggerLister interface.
 type messageQueueTriggerLister struct {
-	indexer cache.Indexer
+	listers.ResourceIndexer[*v1.MessageQueueTrigger]
 }
 
 // NewMessageQueueTriggerLister returns a new MessageQueueTriggerLister.
 func NewMessageQueueTriggerLister(indexer cache.Indexer) MessageQueueTriggerLister {
-	return &messageQueueTriggerLister{indexer: indexer}
-}
-
-// List lists all MessageQueueTriggers in the indexer.
-func (s *messageQueueTriggerLister) List(selector labels.Selector) (ret []*v1.MessageQueueTrigger, err error) {
-	err = cache.ListAll(s.indexer, selector, func(m interface{}) {
-		ret = append(ret, m.(*v1.MessageQueueTrigger))
-	})
-	return ret, err
+	return &messageQueueTriggerLister{listers.New[*v1.MessageQueueTrigger](indexer, v1.Resource("messagequeuetrigger"))}
 }
 
 // MessageQueueTriggers returns an object that can list and get MessageQueueTriggers.
 func (s *messageQueueTriggerLister) MessageQueueTriggers(namespace string) MessageQueueTriggerNamespaceLister {
-	return messageQueueTriggerNamespaceLister{indexer: s.indexer, namespace: namespace}
+	return messageQueueTriggerNamespaceLister{listers.NewNamespaced[*v1.MessageQueueTrigger](s.ResourceIndexer, namespace)}
 }
 
 // MessageQueueTriggerNamespaceLister helps list and get MessageQueueTriggers.
@@ -74,26 +66,5 @@ type MessageQueueTriggerNamespaceLister interface {
 // messageQueueTriggerNamespaceLister implements the MessageQueueTriggerNamespaceLister
 // interface.
 type messageQueueTriggerNamespaceLister struct {
-	indexer   cache.Indexer
-	namespace string
-}
-
-// List lists all MessageQueueTriggers in the indexer for a given namespace.
-func (s messageQueueTriggerNamespaceLister) List(selector labels.Selector) (ret []*v1.MessageQueueTrigger, err error) {
-	err = cache.ListAllByNamespace(s.indexer, s.namespace, selector, func(m interface{}) {
-		ret = append(ret, m.(*v1.MessageQueueTrigger))
-	})
-	return ret, err
-}
-
-// Get retrieves the MessageQueueTrigger from the indexer for a given namespace and name.
-func (s messageQueueTriggerNamespaceLister) Get(name string) (*v1.MessageQueueTrigger, error) {
-	obj, exists, err := s.indexer.GetByKey(s.namespace + "/" + name)
-	if err != nil {
-		return nil, err
-	}
-	if !exists {
-		return nil, errors.NewNotFound(v1.Resource("messagequeuetrigger"), name)
-	}
-	return obj.(*v1.MessageQueueTrigger), nil
+	listers.ResourceIndexer[*v1.MessageQueueTrigger]
 }

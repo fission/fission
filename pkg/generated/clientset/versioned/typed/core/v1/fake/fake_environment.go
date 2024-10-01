@@ -44,22 +44,24 @@ var environmentsKind = v1.SchemeGroupVersion.WithKind("Environment")
 
 // Get takes name of the _environment, and returns the corresponding environment object, and an error if there is any.
 func (c *FakeEnvironments) Get(ctx context.Context, name string, options metav1.GetOptions) (result *v1.Environment, err error) {
+	emptyResult := &v1.Environment{}
 	obj, err := c.Fake.
-		Invokes(testing.NewGetAction(environmentsResource, c.ns, name), &v1.Environment{})
+		Invokes(testing.NewGetActionWithOptions(environmentsResource, c.ns, name, options), emptyResult)
 
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1.Environment), err
 }
 
 // List takes label and field selectors, and returns the list of Environments that match those selectors.
 func (c *FakeEnvironments) List(ctx context.Context, opts metav1.ListOptions) (result *v1.EnvironmentList, err error) {
+	emptyResult := &v1.EnvironmentList{}
 	obj, err := c.Fake.
-		Invokes(testing.NewListAction(environmentsResource, environmentsKind, c.ns, opts), &v1.EnvironmentList{})
+		Invokes(testing.NewListActionWithOptions(environmentsResource, environmentsKind, c.ns, opts), emptyResult)
 
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 
 	label, _, _ := testing.ExtractFromListOptions(opts)
@@ -78,28 +80,30 @@ func (c *FakeEnvironments) List(ctx context.Context, opts metav1.ListOptions) (r
 // Watch returns a watch.Interface that watches the requested environments.
 func (c *FakeEnvironments) Watch(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error) {
 	return c.Fake.
-		InvokesWatch(testing.NewWatchAction(environmentsResource, c.ns, opts))
+		InvokesWatch(testing.NewWatchActionWithOptions(environmentsResource, c.ns, opts))
 
 }
 
 // Create takes the representation of a _environment and creates it.  Returns the server's representation of the environment, and an error, if there is any.
 func (c *FakeEnvironments) Create(ctx context.Context, _environment *v1.Environment, opts metav1.CreateOptions) (result *v1.Environment, err error) {
+	emptyResult := &v1.Environment{}
 	obj, err := c.Fake.
-		Invokes(testing.NewCreateAction(environmentsResource, c.ns, _environment), &v1.Environment{})
+		Invokes(testing.NewCreateActionWithOptions(environmentsResource, c.ns, _environment, opts), emptyResult)
 
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1.Environment), err
 }
 
 // Update takes the representation of a _environment and updates it. Returns the server's representation of the environment, and an error, if there is any.
 func (c *FakeEnvironments) Update(ctx context.Context, _environment *v1.Environment, opts metav1.UpdateOptions) (result *v1.Environment, err error) {
+	emptyResult := &v1.Environment{}
 	obj, err := c.Fake.
-		Invokes(testing.NewUpdateAction(environmentsResource, c.ns, _environment), &v1.Environment{})
+		Invokes(testing.NewUpdateActionWithOptions(environmentsResource, c.ns, _environment, opts), emptyResult)
 
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1.Environment), err
 }
@@ -114,7 +118,7 @@ func (c *FakeEnvironments) Delete(ctx context.Context, name string, opts metav1.
 
 // DeleteCollection deletes a collection of objects.
 func (c *FakeEnvironments) DeleteCollection(ctx context.Context, opts metav1.DeleteOptions, listOpts metav1.ListOptions) error {
-	action := testing.NewDeleteCollectionAction(environmentsResource, c.ns, listOpts)
+	action := testing.NewDeleteCollectionActionWithOptions(environmentsResource, c.ns, opts, listOpts)
 
 	_, err := c.Fake.Invokes(action, &v1.EnvironmentList{})
 	return err
@@ -122,11 +126,12 @@ func (c *FakeEnvironments) DeleteCollection(ctx context.Context, opts metav1.Del
 
 // Patch applies the patch and returns the patched environment.
 func (c *FakeEnvironments) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, subresources ...string) (result *v1.Environment, err error) {
+	emptyResult := &v1.Environment{}
 	obj, err := c.Fake.
-		Invokes(testing.NewPatchSubresourceAction(environmentsResource, c.ns, name, pt, data, subresources...), &v1.Environment{})
+		Invokes(testing.NewPatchSubresourceActionWithOptions(environmentsResource, c.ns, name, pt, data, opts, subresources...), emptyResult)
 
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1.Environment), err
 }
@@ -144,11 +149,12 @@ func (c *FakeEnvironments) Apply(ctx context.Context, _environment *corev1.Envir
 	if name == nil {
 		return nil, fmt.Errorf("_environment.Name must be provided to Apply")
 	}
+	emptyResult := &v1.Environment{}
 	obj, err := c.Fake.
-		Invokes(testing.NewPatchSubresourceAction(environmentsResource, c.ns, *name, types.ApplyPatchType, data), &v1.Environment{})
+		Invokes(testing.NewPatchSubresourceActionWithOptions(environmentsResource, c.ns, *name, types.ApplyPatchType, data, opts.ToPatchOptions()), emptyResult)
 
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1.Environment), err
 }

@@ -22,7 +22,7 @@ import (
 	v1 "github.com/fission/fission/pkg/apis/core/v1"
 )
 
-// CanaryConfigSpecApplyConfiguration represents an declarative configuration of the CanaryConfigSpec type for use
+// CanaryConfigSpecApplyConfiguration represents a declarative configuration of the CanaryConfigSpec type for use
 // with apply.
 type CanaryConfigSpecApplyConfiguration struct {
 	Trigger                 *string         `json:"trigger,omitempty"`
@@ -34,7 +34,7 @@ type CanaryConfigSpecApplyConfiguration struct {
 	FailureType             *v1.FailureType `json:"failureType,omitempty"`
 }
 
-// CanaryConfigSpecApplyConfiguration constructs an declarative configuration of the CanaryConfigSpec type for use with
+// CanaryConfigSpecApplyConfiguration constructs a declarative configuration of the CanaryConfigSpec type for use with
 // apply.
 func CanaryConfigSpec() *CanaryConfigSpecApplyConfiguration {
 	return &CanaryConfigSpecApplyConfiguration{}

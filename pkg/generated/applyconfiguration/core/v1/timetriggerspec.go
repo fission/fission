@@ -22,7 +22,7 @@ import (
 	corev1 "github.com/fission/fission/pkg/apis/core/v1"
 )
 
-// TimeTriggerSpecApplyConfiguration represents an declarative configuration of the TimeTriggerSpec type for use
+// TimeTriggerSpecApplyConfiguration represents a declarative configuration of the TimeTriggerSpec type for use
 // with apply.
 type TimeTriggerSpecApplyConfiguration struct {
 	Cron                                 *string `json:"cron,omitempty"`
@@ -31,7 +31,7 @@ type TimeTriggerSpecApplyConfiguration struct {
 	Subpath                              *string `json:"subpath,omitempty"`
 }
 
-// TimeTriggerSpecApplyConfiguration constructs an declarative configuration of the TimeTriggerSpec type for use with
+// TimeTriggerSpecApplyConfiguration constructs a declarative configuration of the TimeTriggerSpec type for use with
 // apply.
 func TimeTriggerSpec() *TimeTriggerSpecApplyConfiguration {
 	return &TimeTriggerSpecApplyConfiguration{}

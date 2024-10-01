@@ -44,22 +44,24 @@ var httptriggersKind = v1.SchemeGroupVersion.WithKind("HTTPTrigger")
 
 // Get takes name of the _hTTPTrigger, and returns the corresponding hTTPTrigger object, and an error if there is any.
 func (c *FakeHTTPTriggers) Get(ctx context.Context, name string, options metav1.GetOptions) (result *v1.HTTPTrigger, err error) {
+	emptyResult := &v1.HTTPTrigger{}
 	obj, err := c.Fake.
-		Invokes(testing.NewGetAction(httptriggersResource, c.ns, name), &v1.HTTPTrigger{})
+		Invokes(testing.NewGetActionWithOptions(httptriggersResource, c.ns, name, options), emptyResult)
 
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1.HTTPTrigger), err
 }
 
 // List takes label and field selectors, and returns the list of HTTPTriggers that match those selectors.
 func (c *FakeHTTPTriggers) List(ctx context.Context, opts metav1.ListOptions) (result *v1.HTTPTriggerList, err error) {
+	emptyResult := &v1.HTTPTriggerList{}
 	obj, err := c.Fake.
-		Invokes(testing.NewListAction(httptriggersResource, httptriggersKind, c.ns, opts), &v1.HTTPTriggerList{})
+		Invokes(testing.NewListActionWithOptions(httptriggersResource, httptriggersKind, c.ns, opts), emptyResult)
 
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 
 	label, _, _ := testing.ExtractFromListOptions(opts)
@@ -78,28 +80,30 @@ func (c *FakeHTTPTriggers) List(ctx context.Context, opts metav1.ListOptions) (r
 // Watch returns a watch.Interface that watches the requested hTTPTriggers.
 func (c *FakeHTTPTriggers) Watch(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error) {
 	return c.Fake.
-		InvokesWatch(testing.NewWatchAction(httptriggersResource, c.ns, opts))
+		InvokesWatch(testing.NewWatchActionWithOptions(httptriggersResource, c.ns, opts))
 
 }
 
 // Create takes the representation of a _hTTPTrigger and creates it.  Returns the server's representation of the hTTPTrigger, and an error, if there is any.
 func (c *FakeHTTPTriggers) Create(ctx context.Context, _hTTPTrigger *v1.HTTPTrigger, opts metav1.CreateOptions) (result *v1.HTTPTrigger, err error) {
+	emptyResult := &v1.HTTPTrigger{}
 	obj, err := c.Fake.
-		Invokes(testing.NewCreateAction(httptriggersResource, c.ns, _hTTPTrigger), &v1.HTTPTrigger{})
+		Invokes(testing.NewCreateActionWithOptions(httptriggersResource, c.ns, _hTTPTrigger, opts), emptyResult)
 
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1.HTTPTrigger), err
 }
 
 // Update takes the representation of a _hTTPTrigger and updates it. Returns the server's representation of the hTTPTrigger, and an error, if there is any.
 func (c *FakeHTTPTriggers) Update(ctx context.Context, _hTTPTrigger *v1.HTTPTrigger, opts metav1.UpdateOptions) (result *v1.HTTPTrigger, err error) {
+	emptyResult := &v1.HTTPTrigger{}
 	obj, err := c.Fake.
-		Invokes(testing.NewUpdateAction(httptriggersResource, c.ns, _hTTPTrigger), &v1.HTTPTrigger{})
+		Invokes(testing.NewUpdateActionWithOptions(httptriggersResource, c.ns, _hTTPTrigger, opts), emptyResult)
 
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1.HTTPTrigger), err
 }
@@ -114,7 +118,7 @@ func (c *FakeHTTPTriggers) Delete(ctx context.Context, name string, opts metav1.
 
 // DeleteCollection deletes a collection of objects.
 func (c *FakeHTTPTriggers) DeleteCollection(ctx context.Context, opts metav1.DeleteOptions, listOpts metav1.ListOptions) error {
-	action := testing.NewDeleteCollectionAction(httptriggersResource, c.ns, listOpts)
+	action := testing.NewDeleteCollectionActionWithOptions(httptriggersResource, c.ns, opts, listOpts)
 
 	_, err := c.Fake.Invokes(action, &v1.HTTPTriggerList{})
 	return err
@@ -122,11 +126,12 @@ func (c *FakeHTTPTriggers) DeleteCollection(ctx context.Context, opts metav1.Del
 
 // Patch applies the patch and returns the patched hTTPTrigger.
 func (c *FakeHTTPTriggers) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, subresources ...string) (result *v1.HTTPTrigger, err error) {
+	emptyResult := &v1.HTTPTrigger{}
 	obj, err := c.Fake.
-		Invokes(testing.NewPatchSubresourceAction(httptriggersResource, c.ns, name, pt, data, subresources...), &v1.HTTPTrigger{})
+		Invokes(testing.NewPatchSubresourceActionWithOptions(httptriggersResource, c.ns, name, pt, data, opts, subresources...), emptyResult)
 
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1.HTTPTrigger), err
 }
@@ -144,11 +149,12 @@ func (c *FakeHTTPTriggers) Apply(ctx context.Context, _hTTPTrigger *corev1.HTTPT
 	if name == nil {
 		return nil, fmt.Errorf("_hTTPTrigger.Name must be provided to Apply")
 	}
+	emptyResult := &v1.HTTPTrigger{}
 	obj, err := c.Fake.
-		Invokes(testing.NewPatchSubresourceAction(httptriggersResource, c.ns, *name, types.ApplyPatchType, data), &v1.HTTPTrigger{})
+		Invokes(testing.NewPatchSubresourceActionWithOptions(httptriggersResource, c.ns, *name, types.ApplyPatchType, data, opts.ToPatchOptions()), emptyResult)
 
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1.HTTPTrigger), err
 }

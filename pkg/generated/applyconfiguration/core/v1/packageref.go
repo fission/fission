@@ -18,7 +18,7 @@ limitations under the License.
 
 package v1
 
-// PackageRefApplyConfiguration represents an declarative configuration of the PackageRef type for use
+// PackageRefApplyConfiguration represents a declarative configuration of the PackageRef type for use
 // with apply.
 type PackageRefApplyConfiguration struct {
 	Namespace       *string `json:"namespace,omitempty"`
@@ -26,7 +26,7 @@ type PackageRefApplyConfiguration struct {
 	ResourceVersion *string `json:"resourceversion,omitempty"`
 }
 
-// PackageRefApplyConfiguration constructs an declarative configuration of the PackageRef type for use with
+// PackageRefApplyConfiguration constructs a declarative configuration of the PackageRef type for use with
 // apply.
 func PackageRef() *PackageRefApplyConfiguration {
 	return &PackageRefApplyConfiguration{}

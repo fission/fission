@@ -22,7 +22,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-// FunctionSpecApplyConfiguration represents an declarative configuration of the FunctionSpec type for use
+// FunctionSpecApplyConfiguration represents a declarative configuration of the FunctionSpec type for use
 // with apply.
 type FunctionSpecApplyConfiguration struct {
 	Environment     *EnvironmentReferenceApplyConfiguration `json:"environment,omitempty"`
@@ -40,7 +40,7 @@ type FunctionSpecApplyConfiguration struct {
 	PodSpec         *corev1.PodSpec                         `json:"podspec,omitempty"`
 }
 
-// FunctionSpecApplyConfiguration constructs an declarative configuration of the FunctionSpec type for use with
+// FunctionSpecApplyConfiguration constructs a declarative configuration of the FunctionSpec type for use with
 // apply.
 func FunctionSpec() *FunctionSpecApplyConfiguration {
 	return &FunctionSpecApplyConfiguration{}

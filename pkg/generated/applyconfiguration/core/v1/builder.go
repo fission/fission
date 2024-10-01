@@ -22,7 +22,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 )
 
-// BuilderApplyConfiguration represents an declarative configuration of the Builder type for use
+// BuilderApplyConfiguration represents a declarative configuration of the Builder type for use
 // with apply.
 type BuilderApplyConfiguration struct {
 	Image     *string       `json:"image,omitempty"`
@@ -31,7 +31,7 @@ type BuilderApplyConfiguration struct {
 	PodSpec   *v1.PodSpec   `json:"podspec,omitempty"`
 }
 
-// BuilderApplyConfiguration constructs an declarative configuration of the Builder type for use with
+// BuilderApplyConfiguration constructs a declarative configuration of the Builder type for use with
 // apply.
 func Builder() *BuilderApplyConfiguration {
 	return &BuilderApplyConfiguration{}

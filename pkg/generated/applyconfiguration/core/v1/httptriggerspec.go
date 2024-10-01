@@ -18,7 +18,7 @@ limitations under the License.
 
 package v1
 
-// HTTPTriggerSpecApplyConfiguration represents an declarative configuration of the HTTPTriggerSpec type for use
+// HTTPTriggerSpecApplyConfiguration represents a declarative configuration of the HTTPTriggerSpec type for use
 // with apply.
 type HTTPTriggerSpecApplyConfiguration struct {
 	Host              *string                              `json:"host,omitempty"`
@@ -32,7 +32,7 @@ type HTTPTriggerSpecApplyConfiguration struct {
 	IngressConfig     *IngressConfigApplyConfiguration     `json:"ingressconfig,omitempty"`
 }
 
-// HTTPTriggerSpecApplyConfiguration constructs an declarative configuration of the HTTPTriggerSpec type for use with
+// HTTPTriggerSpecApplyConfiguration constructs a declarative configuration of the HTTPTriggerSpec type for use with
 // apply.
 func HTTPTriggerSpec() *HTTPTriggerSpecApplyConfiguration {
 	return &HTTPTriggerSpecApplyConfiguration{}

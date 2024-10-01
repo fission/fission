@@ -18,7 +18,7 @@ limitations under the License.
 
 package v1
 
-// IngressConfigApplyConfiguration represents an declarative configuration of the IngressConfig type for use
+// IngressConfigApplyConfiguration represents a declarative configuration of the IngressConfig type for use
 // with apply.
 type IngressConfigApplyConfiguration struct {
 	Annotations map[string]string `json:"annotations,omitempty"`
@@ -27,7 +27,7 @@ type IngressConfigApplyConfiguration struct {
 	TLS         *string           `json:"tls,omitempty"`
 }
 
-// IngressConfigApplyConfiguration constructs an declarative configuration of the IngressConfig type for use with
+// IngressConfigApplyConfiguration constructs a declarative configuration of the IngressConfig type for use with
 // apply.
 func IngressConfig() *IngressConfigApplyConfiguration {
 	return &IngressConfigApplyConfiguration{}

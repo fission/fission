@@ -18,7 +18,7 @@ limitations under the License.
 
 package v1
 
-// PackageSpecApplyConfiguration represents an declarative configuration of the PackageSpec type for use
+// PackageSpecApplyConfiguration represents a declarative configuration of the PackageSpec type for use
 // with apply.
 type PackageSpecApplyConfiguration struct {
 	Environment  *EnvironmentReferenceApplyConfiguration `json:"environment,omitempty"`
@@ -27,7 +27,7 @@ type PackageSpecApplyConfiguration struct {
 	BuildCommand *string                                 `json:"buildcmd,omitempty"`
 }
 
-// PackageSpecApplyConfiguration constructs an declarative configuration of the PackageSpec type for use with
+// PackageSpecApplyConfiguration constructs a declarative configuration of the PackageSpec type for use with
 // apply.
 func PackageSpec() *PackageSpecApplyConfiguration {
 	return &PackageSpecApplyConfiguration{}

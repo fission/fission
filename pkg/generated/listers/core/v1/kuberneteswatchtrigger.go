@@ -20,8 +20,8 @@ package v1
 
 import (
 	v1 "github.com/fission/fission/pkg/apis/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/client-go/listers"
 	"k8s.io/client-go/tools/cache"
 )
 
@@ -38,25 +38,17 @@ type KubernetesWatchTriggerLister interface {
 
 // kubernetesWatchTriggerLister implements the KubernetesWatchTriggerLister interface.
 type kubernetesWatchTriggerLister struct {
-	indexer cache.Indexer
+	listers.ResourceIndexer[*v1.KubernetesWatchTrigger]
 }
 
 // NewKubernetesWatchTriggerLister returns a new KubernetesWatchTriggerLister.
 func NewKubernetesWatchTriggerLister(indexer cache.Indexer) KubernetesWatchTriggerLister {
-	return &kubernetesWatchTriggerLister{indexer: indexer}
-}
-
-// List lists all KubernetesWatchTriggers in the indexer.
-func (s *kubernetesWatchTriggerLister) List(selector labels.Selector) (ret []*v1.KubernetesWatchTrigger, err error) {
-	err = cache.ListAll(s.indexer, selector, func(m interface{}) {
-		ret = append(ret, m.(*v1.KubernetesWatchTrigger))
-	})
-	return ret, err
+	return &kubernetesWatchTriggerLister{listers.New[*v1.KubernetesWatchTrigger](indexer, v1.Resource("kuberneteswatchtrigger"))}
 }
 
 // KubernetesWatchTriggers returns an object that can list and get KubernetesWatchTriggers.
 func (s *kubernetesWatchTriggerLister) KubernetesWatchTriggers(namespace string) KubernetesWatchTriggerNamespaceLister {
-	return kubernetesWatchTriggerNamespaceLister{indexer: s.indexer, namespace: namespace}
+	return kubernetesWatchTriggerNamespaceLister{listers.NewNamespaced[*v1.KubernetesWatchTrigger](s.ResourceIndexer, namespace)}
 }
 
 // KubernetesWatchTriggerNamespaceLister helps list and get KubernetesWatchTriggers.
@@ -74,26 +66,5 @@ type KubernetesWatchTriggerNamespaceLister interface {
 // kubernetesWatchTriggerNamespaceLister implements the KubernetesWatchTriggerNamespaceLister
 // interface.
 type kubernetesWatchTriggerNamespaceLister struct {
-	indexer   cache.Indexer
-	namespace string
-}
-
-// List lists all KubernetesWatchTriggers in the indexer for a given namespace.
-func (s kubernetesWatchTriggerNamespaceLister) List(selector labels.Selector) (ret []*v1.KubernetesWatchTrigger, err error) {
-	err = cache.ListAllByNamespace(s.indexer, s.namespace, selector, func(m interface{}) {
-		ret = append(ret, m.(*v1.KubernetesWatchTrigger))
-	})
-	return ret, err
-}
-
-// Get retrieves the KubernetesWatchTrigger from the indexer for a given namespace and name.
-func (s kubernetesWatchTriggerNamespaceLister) Get(name string) (*v1.KubernetesWatchTrigger, error) {
-	obj, exists, err := s.indexer.GetByKey(s.namespace + "/" + name)
-	if err != nil {
-		return nil, err
-	}
-	if !exists {
-		return nil, errors.NewNotFound(v1.Resource("kuberneteswatchtrigger"), name)
-	}
-	return obj.(*v1.KubernetesWatchTrigger), nil
+	listers.ResourceIndexer[*v1.KubernetesWatchTrigger]
 }

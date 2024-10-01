@@ -24,7 +24,7 @@ import (
 	v1 "k8s.io/client-go/applyconfigurations/meta/v1"
 )
 
-// EnvironmentApplyConfiguration represents an declarative configuration of the Environment type for use
+// EnvironmentApplyConfiguration represents a declarative configuration of the Environment type for use
 // with apply.
 type EnvironmentApplyConfiguration struct {
 	v1.TypeMetaApplyConfiguration    `json:",inline"`
@@ -32,7 +32,7 @@ type EnvironmentApplyConfiguration struct {
 	Spec                             *EnvironmentSpecApplyConfiguration `json:"spec,omitempty"`
 }
 
-// Environment constructs an declarative configuration of the Environment type for use with
+// Environment constructs a declarative configuration of the Environment type for use with
 // apply.
 func Environment(name, namespace string) *EnvironmentApplyConfiguration {
 	b := &EnvironmentApplyConfiguration{}
@@ -207,4 +207,10 @@ func (b *EnvironmentApplyConfiguration) ensureObjectMetaApplyConfigurationExists
 func (b *EnvironmentApplyConfiguration) WithSpec(value *EnvironmentSpecApplyConfiguration) *EnvironmentApplyConfiguration {
 	b.Spec = value
 	return b
+}
+
+// GetName retrieves the value of the Name field in the declarative configuration.
+func (b *EnvironmentApplyConfiguration) GetName() *string {
+	b.ensureObjectMetaApplyConfigurationExists()
+	return b.Name
 }
