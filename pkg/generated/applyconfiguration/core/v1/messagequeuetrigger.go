@@ -24,7 +24,7 @@ import (
 	v1 "k8s.io/client-go/applyconfigurations/meta/v1"
 )
 
-// MessageQueueTriggerApplyConfiguration represents an declarative configuration of the MessageQueueTrigger type for use
+// MessageQueueTriggerApplyConfiguration represents a declarative configuration of the MessageQueueTrigger type for use
 // with apply.
 type MessageQueueTriggerApplyConfiguration struct {
 	v1.TypeMetaApplyConfiguration    `json:",inline"`
@@ -32,7 +32,7 @@ type MessageQueueTriggerApplyConfiguration struct {
 	Spec                             *MessageQueueTriggerSpecApplyConfiguration `json:"spec,omitempty"`
 }
 
-// MessageQueueTrigger constructs an declarative configuration of the MessageQueueTrigger type for use with
+// MessageQueueTrigger constructs a declarative configuration of the MessageQueueTrigger type for use with
 // apply.
 func MessageQueueTrigger(name, namespace string) *MessageQueueTriggerApplyConfiguration {
 	b := &MessageQueueTriggerApplyConfiguration{}
@@ -207,4 +207,10 @@ func (b *MessageQueueTriggerApplyConfiguration) ensureObjectMetaApplyConfigurati
 func (b *MessageQueueTriggerApplyConfiguration) WithSpec(value *MessageQueueTriggerSpecApplyConfiguration) *MessageQueueTriggerApplyConfiguration {
 	b.Spec = value
 	return b
+}
+
+// GetName retrieves the value of the Name field in the declarative configuration.
+func (b *MessageQueueTriggerApplyConfiguration) GetName() *string {
+	b.ensureObjectMetaApplyConfigurationExists()
+	return b.Name
 }

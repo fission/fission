@@ -22,7 +22,7 @@ import (
 	v1 "github.com/fission/fission/pkg/apis/core/v1"
 )
 
-// FunctionReferenceApplyConfiguration represents an declarative configuration of the FunctionReference type for use
+// FunctionReferenceApplyConfiguration represents a declarative configuration of the FunctionReference type for use
 // with apply.
 type FunctionReferenceApplyConfiguration struct {
 	Type            *v1.FunctionReferenceType `json:"type,omitempty"`
@@ -30,7 +30,7 @@ type FunctionReferenceApplyConfiguration struct {
 	FunctionWeights map[string]int            `json:"functionweights,omitempty"`
 }
 
-// FunctionReferenceApplyConfiguration constructs an declarative configuration of the FunctionReference type for use with
+// FunctionReferenceApplyConfiguration constructs a declarative configuration of the FunctionReference type for use with
 // apply.
 func FunctionReference() *FunctionReferenceApplyConfiguration {
 	return &FunctionReferenceApplyConfiguration{}

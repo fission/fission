@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.15.0
+    controller-gen.kubebuilder.io/version: v0.16.3
   name: httptriggers.fission.io
 spec:
   group: fission.io
@@ -76,14 +76,11 @@ spec:
                 type: object
               host:
                 description: |-
-                  TODO: remove this field since we have IngressConfig already
                   Deprecated: the original idea of this field is not for setting Ingress.
                   Since we have IngressConfig now, remove Host after couple releases.
                 type: string
               ingressconfig:
-                description: |-
-                  TODO: make IngressConfig an independent Fission resource
-                  IngressConfig for router to set up Ingress.
+                description: IngressConfig for router to set up Ingress.
                 properties:
                   annotations:
                     additionalProperties:

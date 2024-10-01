@@ -79,15 +79,15 @@ jobs:
 
       - name: Install Skaffold
         run: |
-          curl -Lo skaffold https://storage.googleapis.com/skaffold/releases/v2.0.3/skaffold-linux-amd64
+          curl -Lo skaffold https://storage.googleapis.com/skaffold/releases/v2.13.2/skaffold-linux-amd64
           sudo install skaffold /usr/local/bin/
           skaffold version
 
       - name: Install GoReleaser
-        uses: goreleaser/goreleaser-action@7ec5c2b0c6cdda6e8bbb49444bc797dd33d74dd8 # v5.0.0
+        uses: goreleaser/goreleaser-action@286f3b13b1b49da4ac219696163fb8c1c93e1200 # v6.0.0
         with:
           install-only: true
-          version: "~> v1"
+          version: "~> v2"
 
       - name: Setup Prometheus Stack
         run: |
@@ -222,15 +222,15 @@ jobs:
 
       - name: Install Skaffold
         run: |
-          curl -Lo skaffold https://storage.googleapis.com/skaffold/releases/v2.0.3/skaffold-linux-amd64
+          curl -Lo skaffold https://storage.googleapis.com/skaffold/releases/v2.13.2/skaffold-linux-amd64
           sudo install skaffold /usr/local/bin/
           skaffold version
 
       - name: Install GoReleaser
-        uses: goreleaser/goreleaser-action@7ec5c2b0c6cdda6e8bbb49444bc797dd33d74dd8 # v5.0.0
+        uses: goreleaser/goreleaser-action@286f3b13b1b49da4ac219696163fb8c1c93e1200 # v6.0.0
         with:
           install-only: true
-          version: "~> v1"
+          version: "~> v2"
 
       - name: Setup Prometheus Stack
         run: |

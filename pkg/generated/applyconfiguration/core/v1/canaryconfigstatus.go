@@ -18,13 +18,13 @@ limitations under the License.
 
 package v1
 
-// CanaryConfigStatusApplyConfiguration represents an declarative configuration of the CanaryConfigStatus type for use
+// CanaryConfigStatusApplyConfiguration represents a declarative configuration of the CanaryConfigStatus type for use
 // with apply.
 type CanaryConfigStatusApplyConfiguration struct {
 	Status *string `json:"status,omitempty"`
 }
 
-// CanaryConfigStatusApplyConfiguration constructs an declarative configuration of the CanaryConfigStatus type for use with
+// CanaryConfigStatusApplyConfiguration constructs a declarative configuration of the CanaryConfigStatus type for use with
 // apply.
 func CanaryConfigStatus() *CanaryConfigStatusApplyConfiguration {
 	return &CanaryConfigStatusApplyConfiguration{}

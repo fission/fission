@@ -44,22 +44,24 @@ var messagequeuetriggersKind = v1.SchemeGroupVersion.WithKind("MessageQueueTrigg
 
 // Get takes name of the _messageQueueTrigger, and returns the corresponding messageQueueTrigger object, and an error if there is any.
 func (c *FakeMessageQueueTriggers) Get(ctx context.Context, name string, options metav1.GetOptions) (result *v1.MessageQueueTrigger, err error) {
+	emptyResult := &v1.MessageQueueTrigger{}
 	obj, err := c.Fake.
-		Invokes(testing.NewGetAction(messagequeuetriggersResource, c.ns, name), &v1.MessageQueueTrigger{})
+		Invokes(testing.NewGetActionWithOptions(messagequeuetriggersResource, c.ns, name, options), emptyResult)
 
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1.MessageQueueTrigger), err
 }
 
 // List takes label and field selectors, and returns the list of MessageQueueTriggers that match those selectors.
 func (c *FakeMessageQueueTriggers) List(ctx context.Context, opts metav1.ListOptions) (result *v1.MessageQueueTriggerList, err error) {
+	emptyResult := &v1.MessageQueueTriggerList{}
 	obj, err := c.Fake.
-		Invokes(testing.NewListAction(messagequeuetriggersResource, messagequeuetriggersKind, c.ns, opts), &v1.MessageQueueTriggerList{})
+		Invokes(testing.NewListActionWithOptions(messagequeuetriggersResource, messagequeuetriggersKind, c.ns, opts), emptyResult)
 
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 
 	label, _, _ := testing.ExtractFromListOptions(opts)
@@ -78,28 +80,30 @@ func (c *FakeMessageQueueTriggers) List(ctx context.Context, opts metav1.ListOpt
 // Watch returns a watch.Interface that watches the requested messageQueueTriggers.
 func (c *FakeMessageQueueTriggers) Watch(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error) {
 	return c.Fake.
-		InvokesWatch(testing.NewWatchAction(messagequeuetriggersResource, c.ns, opts))
+		InvokesWatch(testing.NewWatchActionWithOptions(messagequeuetriggersResource, c.ns, opts))
 
 }
 
 // Create takes the representation of a _messageQueueTrigger and creates it.  Returns the server's representation of the messageQueueTrigger, and an error, if there is any.
 func (c *FakeMessageQueueTriggers) Create(ctx context.Context, _messageQueueTrigger *v1.MessageQueueTrigger, opts metav1.CreateOptions) (result *v1.MessageQueueTrigger, err error) {
+	emptyResult := &v1.MessageQueueTrigger{}
 	obj, err := c.Fake.
-		Invokes(testing.NewCreateAction(messagequeuetriggersResource, c.ns, _messageQueueTrigger), &v1.MessageQueueTrigger{})
+		Invokes(testing.NewCreateActionWithOptions(messagequeuetriggersResource, c.ns, _messageQueueTrigger, opts), emptyResult)
 
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1.MessageQueueTrigger), err
 }
 
 // Update takes the representation of a _messageQueueTrigger and updates it. Returns the server's representation of the messageQueueTrigger, and an error, if there is any.
 func (c *FakeMessageQueueTriggers) Update(ctx context.Context, _messageQueueTrigger *v1.MessageQueueTrigger, opts metav1.UpdateOptions) (result *v1.MessageQueueTrigger, err error) {
+	emptyResult := &v1.MessageQueueTrigger{}
 	obj, err := c.Fake.
-		Invokes(testing.NewUpdateAction(messagequeuetriggersResource, c.ns, _messageQueueTrigger), &v1.MessageQueueTrigger{})
+		Invokes(testing.NewUpdateActionWithOptions(messagequeuetriggersResource, c.ns, _messageQueueTrigger, opts), emptyResult)
 
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1.MessageQueueTrigger), err
 }
@@ -114,7 +118,7 @@ func (c *FakeMessageQueueTriggers) Delete(ctx context.Context, name string, opts
 
 // DeleteCollection deletes a collection of objects.
 func (c *FakeMessageQueueTriggers) DeleteCollection(ctx context.Context, opts metav1.DeleteOptions, listOpts metav1.ListOptions) error {
-	action := testing.NewDeleteCollectionAction(messagequeuetriggersResource, c.ns, listOpts)
+	action := testing.NewDeleteCollectionActionWithOptions(messagequeuetriggersResource, c.ns, opts, listOpts)
 
 	_, err := c.Fake.Invokes(action, &v1.MessageQueueTriggerList{})
 	return err
@@ -122,11 +126,12 @@ func (c *FakeMessageQueueTriggers) DeleteCollection(ctx context.Context, opts me
 
 // Patch applies the patch and returns the patched messageQueueTrigger.
 func (c *FakeMessageQueueTriggers) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, subresources ...string) (result *v1.MessageQueueTrigger, err error) {
+	emptyResult := &v1.MessageQueueTrigger{}
 	obj, err := c.Fake.
-		Invokes(testing.NewPatchSubresourceAction(messagequeuetriggersResource, c.ns, name, pt, data, subresources...), &v1.MessageQueueTrigger{})
+		Invokes(testing.NewPatchSubresourceActionWithOptions(messagequeuetriggersResource, c.ns, name, pt, data, opts, subresources...), emptyResult)
 
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1.MessageQueueTrigger), err
 }
@@ -144,11 +149,12 @@ func (c *FakeMessageQueueTriggers) Apply(ctx context.Context, _messageQueueTrigg
 	if name == nil {
 		return nil, fmt.Errorf("_messageQueueTrigger.Name must be provided to Apply")
 	}
+	emptyResult := &v1.MessageQueueTrigger{}
 	obj, err := c.Fake.
-		Invokes(testing.NewPatchSubresourceAction(messagequeuetriggersResource, c.ns, *name, types.ApplyPatchType, data), &v1.MessageQueueTrigger{})
+		Invokes(testing.NewPatchSubresourceActionWithOptions(messagequeuetriggersResource, c.ns, *name, types.ApplyPatchType, data, opts.ToPatchOptions()), emptyResult)
 
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1.MessageQueueTrigger), err
 }

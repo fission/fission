@@ -22,7 +22,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 )
 
-// RuntimeApplyConfiguration represents an declarative configuration of the Runtime type for use
+// RuntimeApplyConfiguration represents a declarative configuration of the Runtime type for use
 // with apply.
 type RuntimeApplyConfiguration struct {
 	Image     *string       `json:"image,omitempty"`
@@ -30,7 +30,7 @@ type RuntimeApplyConfiguration struct {
 	PodSpec   *v1.PodSpec   `json:"podspec,omitempty"`
 }
 
-// RuntimeApplyConfiguration constructs an declarative configuration of the Runtime type for use with
+// RuntimeApplyConfiguration constructs a declarative configuration of the Runtime type for use with
 // apply.
 func Runtime() *RuntimeApplyConfiguration {
 	return &RuntimeApplyConfiguration{}

@@ -24,7 +24,7 @@ import (
 	v1 "k8s.io/client-go/applyconfigurations/meta/v1"
 )
 
-// HTTPTriggerApplyConfiguration represents an declarative configuration of the HTTPTrigger type for use
+// HTTPTriggerApplyConfiguration represents a declarative configuration of the HTTPTrigger type for use
 // with apply.
 type HTTPTriggerApplyConfiguration struct {
 	v1.TypeMetaApplyConfiguration    `json:",inline"`
@@ -32,7 +32,7 @@ type HTTPTriggerApplyConfiguration struct {
 	Spec                             *HTTPTriggerSpecApplyConfiguration `json:"spec,omitempty"`
 }
 
-// HTTPTrigger constructs an declarative configuration of the HTTPTrigger type for use with
+// HTTPTrigger constructs a declarative configuration of the HTTPTrigger type for use with
 // apply.
 func HTTPTrigger(name, namespace string) *HTTPTriggerApplyConfiguration {
 	b := &HTTPTriggerApplyConfiguration{}
@@ -207,4 +207,10 @@ func (b *HTTPTriggerApplyConfiguration) ensureObjectMetaApplyConfigurationExists
 func (b *HTTPTriggerApplyConfiguration) WithSpec(value *HTTPTriggerSpecApplyConfiguration) *HTTPTriggerApplyConfiguration {
 	b.Spec = value
 	return b
+}
+
+// GetName retrieves the value of the Name field in the declarative configuration.
+func (b *HTTPTriggerApplyConfiguration) GetName() *string {
+	b.ensureObjectMetaApplyConfigurationExists()
+	return b.Name
 }

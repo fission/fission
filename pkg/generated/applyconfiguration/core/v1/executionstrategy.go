@@ -23,7 +23,7 @@ import (
 	v2 "k8s.io/api/autoscaling/v2"
 )
 
-// ExecutionStrategyApplyConfiguration represents an declarative configuration of the ExecutionStrategy type for use
+// ExecutionStrategyApplyConfiguration represents a declarative configuration of the ExecutionStrategy type for use
 // with apply.
 type ExecutionStrategyApplyConfiguration struct {
 	ExecutorType          *v1.ExecutorType                    `json:"ExecutorType,omitempty"`
@@ -35,7 +35,7 @@ type ExecutionStrategyApplyConfiguration struct {
 	Behavior              *v2.HorizontalPodAutoscalerBehavior `json:"hpaBehavior,omitempty"`
 }
 
-// ExecutionStrategyApplyConfiguration constructs an declarative configuration of the ExecutionStrategy type for use with
+// ExecutionStrategyApplyConfiguration constructs a declarative configuration of the ExecutionStrategy type for use with
 // apply.
 func ExecutionStrategy() *ExecutionStrategyApplyConfiguration {
 	return &ExecutionStrategyApplyConfiguration{}

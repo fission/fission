@@ -23,7 +23,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// PackageStatusApplyConfiguration represents an declarative configuration of the PackageStatus type for use
+// PackageStatusApplyConfiguration represents a declarative configuration of the PackageStatus type for use
 // with apply.
 type PackageStatusApplyConfiguration struct {
 	BuildStatus         *v1.BuildStatus `json:"buildstatus,omitempty"`
@@ -31,7 +31,7 @@ type PackageStatusApplyConfiguration struct {
 	LastUpdateTimestamp *metav1.Time    `json:"lastUpdateTimestamp,omitempty"`
 }
 
-// PackageStatusApplyConfiguration constructs an declarative configuration of the PackageStatus type for use with
+// PackageStatusApplyConfiguration constructs a declarative configuration of the PackageStatus type for use with
 // apply.
 func PackageStatus() *PackageStatusApplyConfiguration {
 	return &PackageStatusApplyConfiguration{}

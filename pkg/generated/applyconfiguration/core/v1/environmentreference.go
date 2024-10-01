@@ -18,14 +18,14 @@ limitations under the License.
 
 package v1
 
-// EnvironmentReferenceApplyConfiguration represents an declarative configuration of the EnvironmentReference type for use
+// EnvironmentReferenceApplyConfiguration represents a declarative configuration of the EnvironmentReference type for use
 // with apply.
 type EnvironmentReferenceApplyConfiguration struct {
 	Namespace *string `json:"namespace,omitempty"`
 	Name      *string `json:"name,omitempty"`
 }
 
-// EnvironmentReferenceApplyConfiguration constructs an declarative configuration of the EnvironmentReference type for use with
+// EnvironmentReferenceApplyConfiguration constructs a declarative configuration of the EnvironmentReference type for use with
 // apply.
 func EnvironmentReference() *EnvironmentReferenceApplyConfiguration {
 	return &EnvironmentReferenceApplyConfiguration{}

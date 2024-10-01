@@ -18,14 +18,14 @@ limitations under the License.
 
 package v1
 
-// ConfigMapReferenceApplyConfiguration represents an declarative configuration of the ConfigMapReference type for use
+// ConfigMapReferenceApplyConfiguration represents a declarative configuration of the ConfigMapReference type for use
 // with apply.
 type ConfigMapReferenceApplyConfiguration struct {
 	Namespace *string `json:"namespace,omitempty"`
 	Name      *string `json:"name,omitempty"`
 }
 
-// ConfigMapReferenceApplyConfiguration constructs an declarative configuration of the ConfigMapReference type for use with
+// ConfigMapReferenceApplyConfiguration constructs a declarative configuration of the ConfigMapReference type for use with
 // apply.
 func ConfigMapReference() *ConfigMapReferenceApplyConfiguration {
 	return &ConfigMapReferenceApplyConfiguration{}

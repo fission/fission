@@ -24,7 +24,7 @@ import (
 	v1 "k8s.io/client-go/applyconfigurations/meta/v1"
 )
 
-// FunctionApplyConfiguration represents an declarative configuration of the Function type for use
+// FunctionApplyConfiguration represents a declarative configuration of the Function type for use
 // with apply.
 type FunctionApplyConfiguration struct {
 	v1.TypeMetaApplyConfiguration    `json:",inline"`
@@ -32,7 +32,7 @@ type FunctionApplyConfiguration struct {
 	Spec                             *FunctionSpecApplyConfiguration `json:"spec,omitempty"`
 }
 
-// Function constructs an declarative configuration of the Function type for use with
+// Function constructs a declarative configuration of the Function type for use with
 // apply.
 func Function(name, namespace string) *FunctionApplyConfiguration {
 	b := &FunctionApplyConfiguration{}
@@ -207,4 +207,10 @@ func (b *FunctionApplyConfiguration) ensureObjectMetaApplyConfigurationExists() 
 func (b *FunctionApplyConfiguration) WithSpec(value *FunctionSpecApplyConfiguration) *FunctionApplyConfiguration {
 	b.Spec = value
 	return b
+}
+
+// GetName retrieves the value of the Name field in the declarative configuration.
+func (b *FunctionApplyConfiguration) GetName() *string {
+	b.ensureObjectMetaApplyConfigurationExists()
+	return b.Name
 }

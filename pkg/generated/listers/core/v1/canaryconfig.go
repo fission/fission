@@ -20,8 +20,8 @@ package v1
 
 import (
 	v1 "github.com/fission/fission/pkg/apis/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/client-go/listers"
 	"k8s.io/client-go/tools/cache"
 )
 
@@ -38,25 +38,17 @@ type CanaryConfigLister interface {
 
 // canaryConfigLister implements the CanaryConfigLister interface.
 type canaryConfigLister struct {
-	indexer cache.Indexer
+	listers.ResourceIndexer[*v1.CanaryConfig]
 }
 
 // NewCanaryConfigLister returns a new CanaryConfigLister.
 func NewCanaryConfigLister(indexer cache.Indexer) CanaryConfigLister {
-	return &canaryConfigLister{indexer: indexer}
-}
-
-// List lists all CanaryConfigs in the indexer.
-func (s *canaryConfigLister) List(selector labels.Selector) (ret []*v1.CanaryConfig, err error) {
-	err = cache.ListAll(s.indexer, selector, func(m interface{}) {
-		ret = append(ret, m.(*v1.CanaryConfig))
-	})
-	return ret, err
+	return &canaryConfigLister{listers.New[*v1.CanaryConfig](indexer, v1.Resource("canaryconfig"))}
 }
 
 // CanaryConfigs returns an object that can list and get CanaryConfigs.
 func (s *canaryConfigLister) CanaryConfigs(namespace string) CanaryConfigNamespaceLister {
-	return canaryConfigNamespaceLister{indexer: s.indexer, namespace: namespace}
+	return canaryConfigNamespaceLister{listers.NewNamespaced[*v1.CanaryConfig](s.ResourceIndexer, namespace)}
 }
 
 // CanaryConfigNamespaceLister helps list and get CanaryConfigs.
@@ -74,26 +66,5 @@ type CanaryConfigNamespaceLister interface {
 // canaryConfigNamespaceLister implements the CanaryConfigNamespaceLister
 // interface.
 type canaryConfigNamespaceLister struct {
-	indexer   cache.Indexer
-	namespace string
-}
-
-// List lists all CanaryConfigs in the indexer for a given namespace.
-func (s canaryConfigNamespaceLister) List(selector labels.Selector) (ret []*v1.CanaryConfig, err error) {
-	err = cache.ListAllByNamespace(s.indexer, s.namespace, selector, func(m interface{}) {
-		ret = append(ret, m.(*v1.CanaryConfig))
-	})
-	return ret, err
-}
-
-// Get retrieves the CanaryConfig from the indexer for a given namespace and name.
-func (s canaryConfigNamespaceLister) Get(name string) (*v1.CanaryConfig, error) {
-	obj, exists, err := s.indexer.GetByKey(s.namespace + "/" + name)
-	if err != nil {
-		return nil, err
-	}
-	if !exists {
-		return nil, errors.NewNotFound(v1.Resource("canaryconfig"), name)
-	}
-	return obj.(*v1.CanaryConfig), nil
+	listers.ResourceIndexer[*v1.CanaryConfig]
 }

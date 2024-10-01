@@ -20,8 +20,8 @@ package v1
 
 import (
 	v1 "github.com/fission/fission/pkg/apis/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/client-go/listers"
 	"k8s.io/client-go/tools/cache"
 )
 
@@ -38,25 +38,17 @@ type TimeTriggerLister interface {
 
 // timeTriggerLister implements the TimeTriggerLister interface.
 type timeTriggerLister struct {
-	indexer cache.Indexer
+	listers.ResourceIndexer[*v1.TimeTrigger]
 }
 
 // NewTimeTriggerLister returns a new TimeTriggerLister.
 func NewTimeTriggerLister(indexer cache.Indexer) TimeTriggerLister {
-	return &timeTriggerLister{indexer: indexer}
-}
-
-// List lists all TimeTriggers in the indexer.
-func (s *timeTriggerLister) List(selector labels.Selector) (ret []*v1.TimeTrigger, err error) {
-	err = cache.ListAll(s.indexer, selector, func(m interface{}) {
-		ret = append(ret, m.(*v1.TimeTrigger))
-	})
-	return ret, err
+	return &timeTriggerLister{listers.New[*v1.TimeTrigger](indexer, v1.Resource("timetrigger"))}
 }
 
 // TimeTriggers returns an object that can list and get TimeTriggers.
 func (s *timeTriggerLister) TimeTriggers(namespace string) TimeTriggerNamespaceLister {
-	return timeTriggerNamespaceLister{indexer: s.indexer, namespace: namespace}
+	return timeTriggerNamespaceLister{listers.NewNamespaced[*v1.TimeTrigger](s.ResourceIndexer, namespace)}
 }
 
 // TimeTriggerNamespaceLister helps list and get TimeTriggers.
@@ -74,26 +66,5 @@ type TimeTriggerNamespaceLister interface {
 // timeTriggerNamespaceLister implements the TimeTriggerNamespaceLister
 // interface.
 type timeTriggerNamespaceLister struct {
-	indexer   cache.Indexer
-	namespace string
-}
-
-// List lists all TimeTriggers in the indexer for a given namespace.
-func (s timeTriggerNamespaceLister) List(selector labels.Selector) (ret []*v1.TimeTrigger, err error) {
-	err = cache.ListAllByNamespace(s.indexer, s.namespace, selector, func(m interface{}) {
-		ret = append(ret, m.(*v1.TimeTrigger))
-	})
-	return ret, err
-}
-
-// Get retrieves the TimeTrigger from the indexer for a given namespace and name.
-func (s timeTriggerNamespaceLister) Get(name string) (*v1.TimeTrigger, error) {
-	obj, exists, err := s.indexer.GetByKey(s.namespace + "/" + name)
-	if err != nil {
-		return nil, err
-	}
-	if !exists {
-		return nil, errors.NewNotFound(v1.Resource("timetrigger"), name)
-	}
-	return obj.(*v1.TimeTrigger), nil
+	listers.ResourceIndexer[*v1.TimeTrigger]
 }

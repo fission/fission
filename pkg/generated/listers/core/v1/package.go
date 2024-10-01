@@ -20,8 +20,8 @@ package v1
 
 import (
 	v1 "github.com/fission/fission/pkg/apis/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/client-go/listers"
 	"k8s.io/client-go/tools/cache"
 )
 
@@ -38,25 +38,17 @@ type PackageLister interface {
 
 // packageLister implements the PackageLister interface.
 type packageLister struct {
-	indexer cache.Indexer
+	listers.ResourceIndexer[*v1.Package]
 }
 
 // NewPackageLister returns a new PackageLister.
 func NewPackageLister(indexer cache.Indexer) PackageLister {
-	return &packageLister{indexer: indexer}
-}
-
-// List lists all Packages in the indexer.
-func (s *packageLister) List(selector labels.Selector) (ret []*v1.Package, err error) {
-	err = cache.ListAll(s.indexer, selector, func(m interface{}) {
-		ret = append(ret, m.(*v1.Package))
-	})
-	return ret, err
+	return &packageLister{listers.New[*v1.Package](indexer, v1.Resource("package"))}
 }
 
 // Packages returns an object that can list and get Packages.
 func (s *packageLister) Packages(namespace string) PackageNamespaceLister {
-	return packageNamespaceLister{indexer: s.indexer, namespace: namespace}
+	return packageNamespaceLister{listers.NewNamespaced[*v1.Package](s.ResourceIndexer, namespace)}
 }
 
 // PackageNamespaceLister helps list and get Packages.
@@ -74,26 +66,5 @@ type PackageNamespaceLister interface {
 // packageNamespaceLister implements the PackageNamespaceLister
 // interface.
 type packageNamespaceLister struct {
-	indexer   cache.Indexer
-	namespace string
-}
-
-// List lists all Packages in the indexer for a given namespace.
-func (s packageNamespaceLister) List(selector labels.Selector) (ret []*v1.Package, err error) {
-	err = cache.ListAllByNamespace(s.indexer, s.namespace, selector, func(m interface{}) {
-		ret = append(ret, m.(*v1.Package))
-	})
-	return ret, err
-}
-
-// Get retrieves the Package from the indexer for a given namespace and name.
-func (s packageNamespaceLister) Get(name string) (*v1.Package, error) {
-	obj, exists, err := s.indexer.GetByKey(s.namespace + "/" + name)
-	if err != nil {
-		return nil, err
-	}
-	if !exists {
-		return nil, errors.NewNotFound(v1.Resource("package"), name)
-	}
-	return obj.(*v1.Package), nil
+	listers.ResourceIndexer[*v1.Package]
 }

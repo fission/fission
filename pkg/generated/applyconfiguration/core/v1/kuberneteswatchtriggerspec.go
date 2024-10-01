@@ -18,7 +18,7 @@ limitations under the License.
 
 package v1
 
-// KubernetesWatchTriggerSpecApplyConfiguration represents an declarative configuration of the KubernetesWatchTriggerSpec type for use
+// KubernetesWatchTriggerSpecApplyConfiguration represents a declarative configuration of the KubernetesWatchTriggerSpec type for use
 // with apply.
 type KubernetesWatchTriggerSpecApplyConfiguration struct {
 	Namespace         *string                              `json:"namespace,omitempty"`
@@ -27,7 +27,7 @@ type KubernetesWatchTriggerSpecApplyConfiguration struct {
 	FunctionReference *FunctionReferenceApplyConfiguration `json:"functionref,omitempty"`
 }
 
-// KubernetesWatchTriggerSpecApplyConfiguration constructs an declarative configuration of the KubernetesWatchTriggerSpec type for use with
+// KubernetesWatchTriggerSpecApplyConfiguration constructs a declarative configuration of the KubernetesWatchTriggerSpec type for use with
 // apply.
 func KubernetesWatchTriggerSpec() *KubernetesWatchTriggerSpecApplyConfiguration {
 	return &KubernetesWatchTriggerSpecApplyConfiguration{}

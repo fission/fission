@@ -44,22 +44,24 @@ var functionsKind = v1.SchemeGroupVersion.WithKind("Function")
 
 // Get takes name of the _function, and returns the corresponding function object, and an error if there is any.
 func (c *FakeFunctions) Get(ctx context.Context, name string, options metav1.GetOptions) (result *v1.Function, err error) {
+	emptyResult := &v1.Function{}
 	obj, err := c.Fake.
-		Invokes(testing.NewGetAction(functionsResource, c.ns, name), &v1.Function{})
+		Invokes(testing.NewGetActionWithOptions(functionsResource, c.ns, name, options), emptyResult)
 
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1.Function), err
 }
 
 // List takes label and field selectors, and returns the list of Functions that match those selectors.
 func (c *FakeFunctions) List(ctx context.Context, opts metav1.ListOptions) (result *v1.FunctionList, err error) {
+	emptyResult := &v1.FunctionList{}
 	obj, err := c.Fake.
-		Invokes(testing.NewListAction(functionsResource, functionsKind, c.ns, opts), &v1.FunctionList{})
+		Invokes(testing.NewListActionWithOptions(functionsResource, functionsKind, c.ns, opts), emptyResult)
 
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 
 	label, _, _ := testing.ExtractFromListOptions(opts)
@@ -78,28 +80,30 @@ func (c *FakeFunctions) List(ctx context.Context, opts metav1.ListOptions) (resu
 // Watch returns a watch.Interface that watches the requested functions.
 func (c *FakeFunctions) Watch(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error) {
 	return c.Fake.
-		InvokesWatch(testing.NewWatchAction(functionsResource, c.ns, opts))
+		InvokesWatch(testing.NewWatchActionWithOptions(functionsResource, c.ns, opts))
 
 }
 
 // Create takes the representation of a _function and creates it.  Returns the server's representation of the function, and an error, if there is any.
 func (c *FakeFunctions) Create(ctx context.Context, _function *v1.Function, opts metav1.CreateOptions) (result *v1.Function, err error) {
+	emptyResult := &v1.Function{}
 	obj, err := c.Fake.
-		Invokes(testing.NewCreateAction(functionsResource, c.ns, _function), &v1.Function{})
+		Invokes(testing.NewCreateActionWithOptions(functionsResource, c.ns, _function, opts), emptyResult)
 
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1.Function), err
 }
 
 // Update takes the representation of a _function and updates it. Returns the server's representation of the function, and an error, if there is any.
 func (c *FakeFunctions) Update(ctx context.Context, _function *v1.Function, opts metav1.UpdateOptions) (result *v1.Function, err error) {
+	emptyResult := &v1.Function{}
 	obj, err := c.Fake.
-		Invokes(testing.NewUpdateAction(functionsResource, c.ns, _function), &v1.Function{})
+		Invokes(testing.NewUpdateActionWithOptions(functionsResource, c.ns, _function, opts), emptyResult)
 
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1.Function), err
 }
@@ -114,7 +118,7 @@ func (c *FakeFunctions) Delete(ctx context.Context, name string, opts metav1.Del
 
 // DeleteCollection deletes a collection of objects.
 func (c *FakeFunctions) DeleteCollection(ctx context.Context, opts metav1.DeleteOptions, listOpts metav1.ListOptions) error {
-	action := testing.NewDeleteCollectionAction(functionsResource, c.ns, listOpts)
+	action := testing.NewDeleteCollectionActionWithOptions(functionsResource, c.ns, opts, listOpts)
 
 	_, err := c.Fake.Invokes(action, &v1.FunctionList{})
 	return err
@@ -122,11 +126,12 @@ func (c *FakeFunctions) DeleteCollection(ctx context.Context, opts metav1.Delete
 
 // Patch applies the patch and returns the patched function.
 func (c *FakeFunctions) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, subresources ...string) (result *v1.Function, err error) {
+	emptyResult := &v1.Function{}
 	obj, err := c.Fake.
-		Invokes(testing.NewPatchSubresourceAction(functionsResource, c.ns, name, pt, data, subresources...), &v1.Function{})
+		Invokes(testing.NewPatchSubresourceActionWithOptions(functionsResource, c.ns, name, pt, data, opts, subresources...), emptyResult)
 
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1.Function), err
 }
@@ -144,11 +149,12 @@ func (c *FakeFunctions) Apply(ctx context.Context, _function *corev1.FunctionApp
 	if name == nil {
 		return nil, fmt.Errorf("_function.Name must be provided to Apply")
 	}
+	emptyResult := &v1.Function{}
 	obj, err := c.Fake.
-		Invokes(testing.NewPatchSubresourceAction(functionsResource, c.ns, *name, types.ApplyPatchType, data), &v1.Function{})
+		Invokes(testing.NewPatchSubresourceActionWithOptions(functionsResource, c.ns, *name, types.ApplyPatchType, data, opts.ToPatchOptions()), emptyResult)
 
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1.Function), err
 }

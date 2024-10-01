@@ -20,9 +20,6 @@ package v1
 
 import (
 	"context"
-	json "encoding/json"
-	"fmt"
-	"time"
 
 	v1 "github.com/fission/fission/pkg/apis/core/v1"
 	corev1 "github.com/fission/fission/pkg/generated/applyconfiguration/core/v1"
@@ -30,7 +27,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	types "k8s.io/apimachinery/pkg/types"
 	watch "k8s.io/apimachinery/pkg/watch"
-	rest "k8s.io/client-go/rest"
+	gentype "k8s.io/client-go/gentype"
 )
 
 // PackagesGetter has a method to return a PackageInterface.
@@ -43,6 +40,7 @@ type PackagesGetter interface {
 type PackageInterface interface {
 	Create(ctx context.Context, _package *v1.Package, opts metav1.CreateOptions) (*v1.Package, error)
 	Update(ctx context.Context, _package *v1.Package, opts metav1.UpdateOptions) (*v1.Package, error)
+	// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
 	UpdateStatus(ctx context.Context, _package *v1.Package, opts metav1.UpdateOptions) (*v1.Package, error)
 	Delete(ctx context.Context, name string, opts metav1.DeleteOptions) error
 	DeleteCollection(ctx context.Context, opts metav1.DeleteOptions, listOpts metav1.ListOptions) error
@@ -51,206 +49,25 @@ type PackageInterface interface {
 	Watch(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error)
 	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, subresources ...string) (result *v1.Package, err error)
 	Apply(ctx context.Context, _package *corev1.PackageApplyConfiguration, opts metav1.ApplyOptions) (result *v1.Package, err error)
+	// Add a +genclient:noStatus comment above the type to avoid generating ApplyStatus().
 	ApplyStatus(ctx context.Context, _package *corev1.PackageApplyConfiguration, opts metav1.ApplyOptions) (result *v1.Package, err error)
 	PackageExpansion
 }
 
 // packages implements PackageInterface
 type packages struct {
-	client rest.Interface
-	ns     string
+	*gentype.ClientWithListAndApply[*v1.Package, *v1.PackageList, *corev1.PackageApplyConfiguration]
 }
 
 // newPackages returns a Packages
 func newPackages(c *CoreV1Client, namespace string) *packages {
 	return &packages{
-		client: c.RESTClient(),
-		ns:     namespace,
+		gentype.NewClientWithListAndApply[*v1.Package, *v1.PackageList, *corev1.PackageApplyConfiguration](
+			"packages",
+			c.RESTClient(),
+			scheme.ParameterCodec,
+			namespace,
+			func() *v1.Package { return &v1.Package{} },
+			func() *v1.PackageList { return &v1.PackageList{} }),
 	}
-}
-
-// Get takes name of the _package, and returns the corresponding package object, and an error if there is any.
-func (c *packages) Get(ctx context.Context, name string, options metav1.GetOptions) (result *v1.Package, err error) {
-	result = &v1.Package{}
-	err = c.client.Get().
-		Namespace(c.ns).
-		Resource("packages").
-		Name(name).
-		VersionedParams(&options, scheme.ParameterCodec).
-		Do(ctx).
-		Into(result)
-	return
-}
-
-// List takes label and field selectors, and returns the list of Packages that match those selectors.
-func (c *packages) List(ctx context.Context, opts metav1.ListOptions) (result *v1.PackageList, err error) {
-	var timeout time.Duration
-	if opts.TimeoutSeconds != nil {
-		timeout = time.Duration(*opts.TimeoutSeconds) * time.Second
-	}
-	result = &v1.PackageList{}
-	err = c.client.Get().
-		Namespace(c.ns).
-		Resource("packages").
-		VersionedParams(&opts, scheme.ParameterCodec).
-		Timeout(timeout).
-		Do(ctx).
-		Into(result)
-	return
-}
-
-// Watch returns a watch.Interface that watches the requested packages.
-func (c *packages) Watch(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error) {
-	var timeout time.Duration
-	if opts.TimeoutSeconds != nil {
-		timeout = time.Duration(*opts.TimeoutSeconds) * time.Second
-	}
-	opts.Watch = true
-	return c.client.Get().
-		Namespace(c.ns).
-		Resource("packages").
-		VersionedParams(&opts, scheme.ParameterCodec).
-		Timeout(timeout).
-		Watch(ctx)
-}
-
-// Create takes the representation of a _package and creates it.  Returns the server's representation of the package, and an error, if there is any.
-func (c *packages) Create(ctx context.Context, _package *v1.Package, opts metav1.CreateOptions) (result *v1.Package, err error) {
-	result = &v1.Package{}
-	err = c.client.Post().
-		Namespace(c.ns).
-		Resource("packages").
-		VersionedParams(&opts, scheme.ParameterCodec).
-		Body(_package).
-		Do(ctx).
-		Into(result)
-	return
-}
-
-// Update takes the representation of a _package and updates it. Returns the server's representation of the package, and an error, if there is any.
-func (c *packages) Update(ctx context.Context, _package *v1.Package, opts metav1.UpdateOptions) (result *v1.Package, err error) {
-	result = &v1.Package{}
-	err = c.client.Put().
-		Namespace(c.ns).
-		Resource("packages").
-		Name(_package.Name).
-		VersionedParams(&opts, scheme.ParameterCodec).
-		Body(_package).
-		Do(ctx).
-		Into(result)
-	return
-}
-
-// UpdateStatus was generated because the type contains a Status member.
-// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-func (c *packages) UpdateStatus(ctx context.Context, _package *v1.Package, opts metav1.UpdateOptions) (result *v1.Package, err error) {
-	result = &v1.Package{}
-	err = c.client.Put().
-		Namespace(c.ns).
-		Resource("packages").
-		Name(_package.Name).
-		SubResource("status").
-		VersionedParams(&opts, scheme.ParameterCodec).
-		Body(_package).
-		Do(ctx).
-		Into(result)
-	return
-}
-
-// Delete takes name of the _package and deletes it. Returns an error if one occurs.
-func (c *packages) Delete(ctx context.Context, name string, opts metav1.DeleteOptions) error {
-	return c.client.Delete().
-		Namespace(c.ns).
-		Resource("packages").
-		Name(name).
-		Body(&opts).
-		Do(ctx).
-		Error()
-}
-
-// DeleteCollection deletes a collection of objects.
-func (c *packages) DeleteCollection(ctx context.Context, opts metav1.DeleteOptions, listOpts metav1.ListOptions) error {
-	var timeout time.Duration
-	if listOpts.TimeoutSeconds != nil {
-		timeout = time.Duration(*listOpts.TimeoutSeconds) * time.Second
-	}
-	return c.client.Delete().
-		Namespace(c.ns).
-		Resource("packages").
-		VersionedParams(&listOpts, scheme.ParameterCodec).
-		Timeout(timeout).
-		Body(&opts).
-		Do(ctx).
-		Error()
-}
-
-// Patch applies the patch and returns the patched package.
-func (c *packages) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, subresources ...string) (result *v1.Package, err error) {
-	result = &v1.Package{}
-	err = c.client.Patch(pt).
-		Namespace(c.ns).
-		Resource("packages").
-		Name(name).
-		SubResource(subresources...).
-		VersionedParams(&opts, scheme.ParameterCodec).
-		Body(data).
-		Do(ctx).
-		Into(result)
-	return
-}
-
-// Apply takes the given apply declarative configuration, applies it and returns the applied package.
-func (c *packages) Apply(ctx context.Context, _package *corev1.PackageApplyConfiguration, opts metav1.ApplyOptions) (result *v1.Package, err error) {
-	if _package == nil {
-		return nil, fmt.Errorf("_package provided to Apply must not be nil")
-	}
-	patchOpts := opts.ToPatchOptions()
-	data, err := json.Marshal(_package)
-	if err != nil {
-		return nil, err
-	}
-	name := _package.Name
-	if name == nil {
-		return nil, fmt.Errorf("_package.Name must be provided to Apply")
-	}
-	result = &v1.Package{}
-	err = c.client.Patch(types.ApplyPatchType).
-		Namespace(c.ns).
-		Resource("packages").
-		Name(*name).
-		VersionedParams(&patchOpts, scheme.ParameterCodec).
-		Body(data).
-		Do(ctx).
-		Into(result)
-	return
-}
-
-// ApplyStatus was generated because the type contains a Status member.
-// Add a +genclient:noStatus comment above the type to avoid generating ApplyStatus().
-func (c *packages) ApplyStatus(ctx context.Context, _package *corev1.PackageApplyConfiguration, opts metav1.ApplyOptions) (result *v1.Package, err error) {
-	if _package == nil {
-		return nil, fmt.Errorf("_package provided to Apply must not be nil")
-	}
-	patchOpts := opts.ToPatchOptions()
-	data, err := json.Marshal(_package)
-	if err != nil {
-		return nil, err
-	}
-
-	name := _package.Name
-	if name == nil {
-		return nil, fmt.Errorf("_package.Name must be provided to Apply")
-	}
-
-	result = &v1.Package{}
-	err = c.client.Patch(types.ApplyPatchType).
-		Namespace(c.ns).
-		Resource("packages").
-		Name(*name).
-		SubResource("status").
-		VersionedParams(&patchOpts, scheme.ParameterCodec).
-		Body(data).
-		Do(ctx).
-		Into(result)
-	return
 }

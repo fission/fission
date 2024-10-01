@@ -22,7 +22,7 @@ import (
 	v1 "github.com/fission/fission/pkg/apis/core/v1"
 )
 
-// ArchiveApplyConfiguration represents an declarative configuration of the Archive type for use
+// ArchiveApplyConfiguration represents a declarative configuration of the Archive type for use
 // with apply.
 type ArchiveApplyConfiguration struct {
 	Type     *v1.ArchiveType             `json:"type,omitempty"`
@@ -31,7 +31,7 @@ type ArchiveApplyConfiguration struct {
 	Checksum *ChecksumApplyConfiguration `json:"checksum,omitempty"`
 }
 
-// ArchiveApplyConfiguration constructs an declarative configuration of the Archive type for use with
+// ArchiveApplyConfiguration constructs a declarative configuration of the Archive type for use with
 // apply.
 func Archive() *ArchiveApplyConfiguration {
 	return &ArchiveApplyConfiguration{}

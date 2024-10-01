@@ -22,14 +22,14 @@ import (
 	corev1 "github.com/fission/fission/pkg/apis/core/v1"
 )
 
-// InvokeStrategyApplyConfiguration represents an declarative configuration of the InvokeStrategy type for use
+// InvokeStrategyApplyConfiguration represents a declarative configuration of the InvokeStrategy type for use
 // with apply.
 type InvokeStrategyApplyConfiguration struct {
 	ExecutionStrategy *ExecutionStrategyApplyConfiguration `json:"ExecutionStrategy,omitempty"`
 	StrategyType      *corev1.StrategyType                 `json:"StrategyType,omitempty"`
 }
 
-// InvokeStrategyApplyConfiguration constructs an declarative configuration of the InvokeStrategy type for use with
+// InvokeStrategyApplyConfiguration constructs a declarative configuration of the InvokeStrategy type for use with
 // apply.
 func InvokeStrategy() *InvokeStrategyApplyConfiguration {
 	return &InvokeStrategyApplyConfiguration{}

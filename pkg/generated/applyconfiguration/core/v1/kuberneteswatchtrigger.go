@@ -24,7 +24,7 @@ import (
 	v1 "k8s.io/client-go/applyconfigurations/meta/v1"
 )
 
-// KubernetesWatchTriggerApplyConfiguration represents an declarative configuration of the KubernetesWatchTrigger type for use
+// KubernetesWatchTriggerApplyConfiguration represents a declarative configuration of the KubernetesWatchTrigger type for use
 // with apply.
 type KubernetesWatchTriggerApplyConfiguration struct {
 	v1.TypeMetaApplyConfiguration    `json:",inline"`
@@ -32,7 +32,7 @@ type KubernetesWatchTriggerApplyConfiguration struct {
 	Spec                             *KubernetesWatchTriggerSpecApplyConfiguration `json:"spec,omitempty"`
 }
 
-// KubernetesWatchTrigger constructs an declarative configuration of the KubernetesWatchTrigger type for use with
+// KubernetesWatchTrigger constructs a declarative configuration of the KubernetesWatchTrigger type for use with
 // apply.
 func KubernetesWatchTrigger(name, namespace string) *KubernetesWatchTriggerApplyConfiguration {
 	b := &KubernetesWatchTriggerApplyConfiguration{}
@@ -207,4 +207,10 @@ func (b *KubernetesWatchTriggerApplyConfiguration) ensureObjectMetaApplyConfigur
 func (b *KubernetesWatchTriggerApplyConfiguration) WithSpec(value *KubernetesWatchTriggerSpecApplyConfiguration) *KubernetesWatchTriggerApplyConfiguration {
 	b.Spec = value
 	return b
+}
+
+// GetName retrieves the value of the Name field in the declarative configuration.
+func (b *KubernetesWatchTriggerApplyConfiguration) GetName() *string {
+	b.ensureObjectMetaApplyConfigurationExists()
+	return b.Name
 }

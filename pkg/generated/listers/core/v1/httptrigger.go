@@ -20,8 +20,8 @@ package v1
 
 import (
 	v1 "github.com/fission/fission/pkg/apis/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/client-go/listers"
 	"k8s.io/client-go/tools/cache"
 )
 
@@ -38,25 +38,17 @@ type HTTPTriggerLister interface {
 
 // hTTPTriggerLister implements the HTTPTriggerLister interface.
 type hTTPTriggerLister struct {
-	indexer cache.Indexer
+	listers.ResourceIndexer[*v1.HTTPTrigger]
 }
 
 // NewHTTPTriggerLister returns a new HTTPTriggerLister.
 func NewHTTPTriggerLister(indexer cache.Indexer) HTTPTriggerLister {
-	return &hTTPTriggerLister{indexer: indexer}
-}
-
-// List lists all HTTPTriggers in the indexer.
-func (s *hTTPTriggerLister) List(selector labels.Selector) (ret []*v1.HTTPTrigger, err error) {
-	err = cache.ListAll(s.indexer, selector, func(m interface{}) {
-		ret = append(ret, m.(*v1.HTTPTrigger))
-	})
-	return ret, err
+	return &hTTPTriggerLister{listers.New[*v1.HTTPTrigger](indexer, v1.Resource("httptrigger"))}
 }
 
 // HTTPTriggers returns an object that can list and get HTTPTriggers.
 func (s *hTTPTriggerLister) HTTPTriggers(namespace string) HTTPTriggerNamespaceLister {
-	return hTTPTriggerNamespaceLister{indexer: s.indexer, namespace: namespace}
+	return hTTPTriggerNamespaceLister{listers.NewNamespaced[*v1.HTTPTrigger](s.ResourceIndexer, namespace)}
 }
 
 // HTTPTriggerNamespaceLister helps list and get HTTPTriggers.
@@ -74,26 +66,5 @@ type HTTPTriggerNamespaceLister interface {
 // hTTPTriggerNamespaceLister implements the HTTPTriggerNamespaceLister
 // interface.
 type hTTPTriggerNamespaceLister struct {
-	indexer   cache.Indexer
-	namespace string
-}
-
-// List lists all HTTPTriggers in the indexer for a given namespace.
-func (s hTTPTriggerNamespaceLister) List(selector labels.Selector) (ret []*v1.HTTPTrigger, err error) {
-	err = cache.ListAllByNamespace(s.indexer, s.namespace, selector, func(m interface{}) {
-		ret = append(ret, m.(*v1.HTTPTrigger))
-	})
-	return ret, err
-}
-
-// Get retrieves the HTTPTrigger from the indexer for a given namespace and name.
-func (s hTTPTriggerNamespaceLister) Get(name string) (*v1.HTTPTrigger, error) {
-	obj, exists, err := s.indexer.GetByKey(s.namespace + "/" + name)
-	if err != nil {
-		return nil, err
-	}
-	if !exists {
-		return nil, errors.NewNotFound(v1.Resource("httptrigger"), name)
-	}
-	return obj.(*v1.HTTPTrigger), nil
+	listers.ResourceIndexer[*v1.HTTPTrigger]
 }

@@ -18,14 +18,14 @@ limitations under the License.
 
 package v1
 
-// FunctionPackageRefApplyConfiguration represents an declarative configuration of the FunctionPackageRef type for use
+// FunctionPackageRefApplyConfiguration represents a declarative configuration of the FunctionPackageRef type for use
 // with apply.
 type FunctionPackageRefApplyConfiguration struct {
 	PackageRef   *PackageRefApplyConfiguration `json:"packageref,omitempty"`
 	FunctionName *string                       `json:"functionName,omitempty"`
 }
 
-// FunctionPackageRefApplyConfiguration constructs an declarative configuration of the FunctionPackageRef type for use with
+// FunctionPackageRefApplyConfiguration constructs a declarative configuration of the FunctionPackageRef type for use with
 // apply.
 func FunctionPackageRef() *FunctionPackageRefApplyConfiguration {
 	return &FunctionPackageRefApplyConfiguration{}
