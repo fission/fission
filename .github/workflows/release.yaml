@@ -27,7 +27,7 @@ jobs:
 
       - name: Get the version
         id: get_version
-        run: echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
+        run: echo "VERSION=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_OUTPUT
 
       - name: Install GoReleaser
         uses: goreleaser/goreleaser-action@286f3b13b1b49da4ac219696163fb8c1c93e1200 # v6.0.0
@@ -35,7 +35,7 @@ jobs:
           install-only: true
           version: "~> v2"
 
-      - name: Kind Clutser
+      - name: Kind Cluster
         uses: helm/kind-action@0025e74a8c7512023d06dc019c617aa3cf561fde # v1.10.0
         with:
           node_image: kindest/node:${{ env.KIND_NODE_IMAGE_TAG }}

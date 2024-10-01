@@ -50,7 +50,7 @@ jobs:
         with:
           version: ${{ env.HELM_VERSION }}
 
-      - name: Setup Kind Clutser
+      - name: Setup Kind Cluster
         uses: helm/kind-action@0025e74a8c7512023d06dc019c617aa3cf561fde # v1.10.0
         with:
           node_image: kindest/node:${{ matrix.kindversion }}
