@@ -293,7 +293,7 @@ func DeleteOldPackages(pkgPath, pkgType string) error {
 	if err != nil {
 		return err
 	}
-	err = os.Remove(file)
+	err = os.RemoveAll(file)
 	if err != nil {
 		return err
 	}
