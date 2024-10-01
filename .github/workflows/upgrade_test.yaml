@@ -33,7 +33,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        kindimage: ["kindest/node:v1.25.16"]
+        kindversion: ["v1.25.16"]
         os: [ubuntu-latest]
     steps:
       - name: Checkout action sources
@@ -53,7 +53,7 @@ jobs:
       - name: Setup Kind Clutser
         uses: helm/kind-action@0025e74a8c7512023d06dc019c617aa3cf561fde # v1.10.0
         with:
-          node_image: ${{ matrix.kindimage }}
+          node_image: kindest/node:${{ matrix.kindversion }}
           version: ${{ env.KIND_VERSION }}
           cluster_name: ${{ env.KIND_CLUSTER_NAME }}
 
