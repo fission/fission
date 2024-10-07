@@ -181,14 +181,30 @@ func createEnvironmentFromCmd(input cli.Input) (*fv1.Environment, error) {
 			Runtime: fv1.Runtime{
 				Image: envImg,
 				Container: &apiv1.Container{
-					Env: runtimeEnvList,
+					Name: envName,
+					Env:  runtimeEnvList,
+				},
+				PodSpec: &apiv1.PodSpec{
+					Containers: []apiv1.Container{
+						{
+							Name: envName,
+						},
+					},
 				},
 			},
 			Builder: fv1.Builder{
 				Image:   envBuilderImg,
 				Command: envBuildCmd,
 				Container: &apiv1.Container{
-					Env: builderEnvList,
+					Name: fv1.BuilderContainerName,
+					Env:  builderEnvList,
+				},
+				PodSpec: &apiv1.PodSpec{
+					Containers: []apiv1.Container{
+						{
+							Name: fv1.BuilderContainerName,
+						},
+					},
 				},
 			},
 			Poolsize:                     poolsize,
