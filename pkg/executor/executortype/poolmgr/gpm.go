@@ -548,7 +548,7 @@ func (gpm *GenericPoolManager) service() {
 			pool, ok := gpm.pools[key]
 			if !ok {
 				gpm.logger.Error("Could not find pool", zap.String("environment", env.ObjectMeta.Name), zap.String("namespace", env.ObjectMeta.Namespace))
-				return
+				continue
 			}
 			delete(gpm.pools, key)
 			if pool != nil {
