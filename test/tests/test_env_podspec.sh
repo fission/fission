@@ -12,7 +12,6 @@ tmp_dir="/tmp/test-$TEST_ID"
 mkdir -p $tmp_dir
 
 ENV=python-${TEST_ID}
-FN=foo-${TEST_ID}
 RESOURCE_NS=default # Change to test-specific namespace once we support namespaced CRDs
 FUNCTION_NS=${FUNCTION_NAMESPACE:-fission-function}
 BUILDER_NS=${BUILDER_NAMESPACE:-fission-builder}
@@ -62,7 +61,8 @@ function retry {
   done
 }
 
-# Deploy environment (using kubectl because the Fission cli does not support the container arguments)
+# Deploy environment (using kubectl because the Fission cli does not support the podSpec arguments)
+# Positive test
 echo "Writing environment config to $ENV_SPEC_FILE"
 cat > $ENV_SPEC_FILE <<- EOM
 apiVersion: fission.io/v1
@@ -129,4 +129,83 @@ else
     echo "--- End Runtime Env ---"
     status=5
 fi
+
+if [ ${status} -eq 5 ] ; then
+    exit ${status}
+
+# Deploy environment (using kubectl because the Fission cli does not support the podSpec arguments)
+# Negative test
+#
+# Valid builder and runtime container names are `builder` and `envName` respectively. If any other name
+# is used for them either in podSpec or container spec or both specs then `builder` and `runtime` 
+# deployments will not be created
+
+NEW_ENV=python-new-${TEST_ID}
+echo "Writing environment config to $ENV_SPEC_FILE"
+cat > $ENV_SPEC_FILE <<- EOM
+apiVersion: fission.io/v1
+kind: Environment
+metadata:
+  name: ${NEW_ENV}
+  namespace: ${RESOURCE_NS}
+spec:
+  builder:
+    command: build
+    container:
+      name: builder
+    image: ${PYTHON_BUILDER_IMAGE}
+    podspec:
+      containers:
+      - name: builder-test
+      initContainers:
+      - name: init
+        image: alpine
+        command:
+        - "sleep"
+        - "1"
+  runtime:
+    container:
+      name: ${ENV}
+      resources: {}
+    image: ${PYTHON_RUNTIME_IMAGE}
+    podspec:
+      containers:
+      - name: runtime-test
+      initContainers:
+      - name: init
+        image: alpine
+        command:
+        - "sleep"
+        - "1"
+  version: 3
+  poolsize: 1
+EOM
+log_exec kubectl -n ${RESOURCE_NS} apply -f ${ENV_SPEC_FILE}
+
+timeout 90 bash -c "wait_for_builder $ENV"
+log "environment is ready"
+
+# Verify that no builder pod exists
+status=0
+if kubectl --namespace ${BUILDER_NS} get po -l envName=${ENV} | wc -l | grep 0 ; then
+    log "Builder pod does not exist"
+else
+    log "Builder pod exists"
+    echo "--- Builder Env ---"
+    kubectl --namespace ${BUILDER_NS} get pod -l envName=go -ojson
+    echo "--- End Builder Env ---"
+    status=5
+fi
+
+# Verify that no runtime pod exists
+if kubectl --namespace ${FUNCTION_NS} get po -l environmentName=${ENV} -ojsonpath='{range .items[0]}{@.status.initContainerStatuses[0].state.terminated.reason}{end}' | grep Completed ; then
+    log "Runtime pod does not exist"
+else
+    log "Runtime pod exist"
+    echo "--- Runtime Env ---"
+    kubectl --namespace ${BUILDER_NS} get po -l environmentName==go -ojson
+    echo "--- End Runtime Env ---"
+    status=5
+fi
+
 exit ${status}
