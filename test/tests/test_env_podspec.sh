@@ -41,22 +41,6 @@ else
     log "TEST_NOCLEANUP is set; not cleaning up test artifacts afterwards."
 fi
 
-wait_for_builder() {
-    env=$1
-    JSONPATH='{range .items[*]}{@.metadata.name}:{range @.status.conditions[*]}{@.type}={@.status};{end}{end}'
-
-    # wait for tiller ready
-    set +e
-    while true; do
-      echo $env
-      kubectl get pod -l envName=$env -n $BUILDER_NS -o jsonpath="$JSONPATH" | grep "Ready=True"
-      if [[ $? -eq 0 ]]; then
-          break
-      fi
-      sleep 1
-    done
-    set -e
-}
 
 # retry function adapted from:
 # https://unix.stackexchange.com/questions/82598/how-do-i-write-a-retry-logic-in-script-to-keep-retrying-to-run-it-upto-5-times/82610
