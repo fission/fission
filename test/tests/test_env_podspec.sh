@@ -132,6 +132,7 @@ fi
 
 if [ ${status} -eq 5 ] ; then
     exit ${status}
+fi
 
 # Deploy environment (using kubectl because the Fission cli does not support the podSpec arguments)
 # Negative test
@@ -165,7 +166,7 @@ spec:
         - "1"
   runtime:
     container:
-      name: ${ENV}
+      name: ${NEW_ENV}
       resources: {}
     image: ${PYTHON_RUNTIME_IMAGE}
     podspec:
@@ -182,30 +183,30 @@ spec:
 EOM
 log_exec kubectl -n ${RESOURCE_NS} apply -f ${ENV_SPEC_FILE}
 
-timeout 90 bash -c "wait_for_builder $ENV"
-log "environment is ready"
+sleep 15
+log "environment is created"
 
 # Verify that no builder pod exists
 status=0
-if kubectl --namespace ${BUILDER_NS} get po -l envName=${ENV} | wc -l | grep 0 ; then
-    log "Builder pod does not exist"
-else
+if kubectl --namespace ${BUILDER_NS} get po -l envName=${NEW_ENV} | wc -l | grep 0 ; then
     log "Builder pod exists"
     echo "--- Builder Env ---"
-    kubectl --namespace ${BUILDER_NS} get pod -l envName=go -ojson
+    kubectl --namespace ${BUILDER_NS} get pod -l envName=${NEW_ENV} -ojson
     echo "--- End Builder Env ---"
     status=5
+else
+    log "Builder pod does not exist"
 fi
 
 # Verify that no runtime pod exists
-if kubectl --namespace ${FUNCTION_NS} get po -l environmentName=${ENV} -ojsonpath='{range .items[0]}{@.status.initContainerStatuses[0].state.terminated.reason}{end}' | grep Completed ; then
-    log "Runtime pod does not exist"
-else
+if kubectl --namespace ${FUNCTION_NS} get po -l environmentName=${NEW_ENV} | wc -l | grep 0 ; then
     log "Runtime pod exist"
     echo "--- Runtime Env ---"
-    kubectl --namespace ${BUILDER_NS} get po -l environmentName==go -ojson
+    kubectl --namespace ${FUNCTION_NS} get po -l environmentName==${NEW_ENV} -ojson
     echo "--- End Runtime Env ---"
     status=5
+else
+    log "Runtime pod does not exist"
 fi
 
 exit ${status}
