@@ -517,6 +517,7 @@ run_all_tests() {
         $ROOT/test/tests/test_backend_poolmgr.sh \
         $ROOT/test/tests/test_buildermgr.sh \
         $ROOT/test/tests/test_env_vars.sh \
+        $ROOT/test/tests/test_env_podspec.sh \
         $ROOT/test/tests/test_environments/test_python_env.sh \
         $ROOT/test/tests/test_function_test/test_fn_test.sh \
         $ROOT/test/tests/test_function_update.sh \
