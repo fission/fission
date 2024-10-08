@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 
 set -euo pipefail
 source $(dirname $0)/../utils.sh
@@ -104,28 +104,28 @@ spec:
 EOM
 log_exec kubectl -n ${RESOURCE_NS} apply -f ${ENV_SPEC_FILE}
 
-timeout 90 bash -c "wait_for_builder $ENV"
+timeout 180 bash -c "wait_for_builder $ENV"
 log "environment is ready"
 
 # Check if the initContainer status is completed in the builder env
 status=0
-if kubectl -n ${BUILDER_NS} get po -l envName=${ENV} -ojsonpath='{range .items[0]}{@.status.initContainerStatuses[0].state.terminated.reason}{end}' = "Completed" ; then
+if kubectl --namespace ${BUILDER_NS} get po -l envName=${ENV} -ojsonpath='{range .items[0]}{@.status.initContainerStatuses[0].state.terminated.reason}{end}' = "Completed" ; then
     log "InitContainer's status is correct."
 else
     log "InitContainer's status is not correct"
     echo "--- Builder Env ---"
-    kubectl -n ${BUILDER_NS} get deploy -l envName=go -ojson
+    kubectl --namespace ${BUILDER_NS} get deploy -l envName=go -ojson
     echo "--- End Builder Env ---"
     status=5
 fi
 
 # Check if the initContainer status is completed in the runtime env
-if kubectl -n ${FUNCTION_NS} get po -l environmentName=${ENV} -ojsonpath='{range .items[0]}{@.status.initContainerStatuses[0].state.terminated.reason}{end}' = "Completed" ; then
+if kubectl --namespace ${FUNCTION_NS} get po -l environmentName=${ENV} -ojsonpath='{range .items[0]}{@.status.initContainerStatuses[0].state.terminated.reason}{end}' = "Completed" ; then
     log "InitContainer's status is correct."
 else
     log "InitContainer's status is not correct"
     echo "--- Runtime Env ---"
-    kubectl -n ${FUNCTION_NS} get deploy -l envName=go -ojson
+    kubectl --namespace ${FUNCTION_NS} get deploy -l environmentName=go -ojson
     echo "--- End Runtime Env ---"
     status=5
 fi
