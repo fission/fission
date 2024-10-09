@@ -167,3 +167,7 @@ const (
 	ConfigMaps  = "configmaps"
 	Secrets     = "secrets"
 )
+
+const (
+	BuilderContainerName = "builder"
+)

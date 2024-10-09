@@ -403,7 +403,7 @@ func (envw *environmentWatcher) createBuilderDeployment(ctx context.Context, env
 	}
 
 	container, err := util.MergeContainer(&apiv1.Container{
-		Name:                   "builder",
+		Name:                   fv1.BuilderContainerName,
 		Image:                  env.Spec.Builder.Image,
 		ImagePullPolicy:        envw.builderImagePullPolicy,
 		TerminationMessagePath: "/dev/termination-log",
