@@ -29,7 +29,7 @@ set +x
 echo "" > coverage.txt
 
 make install-envtest
-KUBEBUILDER_ASSETS=$(setup-envtest -p path use 1.23.x)
+KUBEBUILDER_ASSETS=$(setup-envtest -p path use 1.30.x)
 export KUBEBUILDER_ASSETS
 
 # The executor unit test only works with NodePort-type services for
