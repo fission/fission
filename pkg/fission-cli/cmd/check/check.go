@@ -36,7 +36,7 @@ func (opts *CheckSubCommand) do(input cli.Input) error {
 
 	userProvidedNS, _, err := opts.GetResourceNamespace(input, flagkey.Namespace)
 	if err != nil {
-		return fmt.Errorf("error retrieving user provided namespace information: %w", err)
+		return fmt.Errorf("error retrieving user provided namespace: %w", err)
 	}
 
 	if input.IsSet(flagkey.PreCheckOnly) {

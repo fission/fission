@@ -134,4 +134,4 @@ install-envtest:
 	go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
 
 setup-envtest:
-	setup-envtest -p path use 1.23.x
+	setup-envtest -p path use 1.30.x
