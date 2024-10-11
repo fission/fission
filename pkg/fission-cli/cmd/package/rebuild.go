@@ -58,10 +58,7 @@ func (opts *RebuildSubCommand) complete(input cli.Input) (err error) {
 func (opts *RebuildSubCommand) run(input cli.Input) error {
 	pkg, err := opts.Client().FissionClientSet.CoreV1().Packages(opts.namespace).Get(input.Context(), opts.name, metav1.GetOptions{})
 	if err != nil {
-		return err
-	}
-	if err != nil {
-		return errors.Wrap(err, "find package")
+		return errors.Wrapf(err, "package %s not found", opts.name)
 	}
 
 	if pkg.Status.BuildStatus != fv1.BuildStatusFailed {
