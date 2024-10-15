@@ -36,6 +36,7 @@ import (
 	eclient "github.com/fission/fission/pkg/executor/client"
 	"github.com/fission/fission/pkg/info"
 	"github.com/fission/fission/pkg/kubewatcher"
+	"github.com/fission/fission/pkg/leaderelection"
 	functionLogger "github.com/fission/fission/pkg/logger"
 	mqt "github.com/fission/fission/pkg/mqtrigger"
 	"github.com/fission/fission/pkg/router"
@@ -45,6 +46,7 @@ import (
 	"github.com/fission/fission/pkg/utils/manager"
 	"github.com/fission/fission/pkg/utils/otel"
 	"github.com/fission/fission/pkg/utils/profile"
+	"github.com/fission/fission/pkg/utils/uuid"
 	"github.com/fission/fission/pkg/webhook"
 )
 
@@ -64,7 +66,16 @@ func runRouter(ctx context.Context, clientGen crd.ClientGeneratorInterface, logg
 }
 
 func runExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Interface, port int) error {
-	return executor.StartExecutor(ctx, clientGen, logger, mgr, port)
+	lock, err := leaderelection.CreateLeaseLockObject(ctx, "executor", uuid.NewString())
+	if err != nil {
+		return err
+	}
+
+	leaderelection.RunLeaderElection(ctx, logger, lock, func() error {
+		return executor.StartExecutor(ctx, clientGen, logger, mgr, port)
+	})
+
+	return nil
 }
 
 func runKubeWatcher(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Interface, routerUrl string) error {
