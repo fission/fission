@@ -46,7 +46,6 @@ import (
 	"github.com/fission/fission/pkg/utils/manager"
 	"github.com/fission/fission/pkg/utils/otel"
 	"github.com/fission/fission/pkg/utils/profile"
-	"github.com/fission/fission/pkg/utils/uuid"
 	"github.com/fission/fission/pkg/webhook"
 )
 
@@ -65,17 +64,14 @@ func runRouter(ctx context.Context, clientGen crd.ClientGeneratorInterface, logg
 	return router.Start(ctx, clientGen, logger, mgr, port, eclient.MakeClient(logger, executorUrl))
 }
 
-func runExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Interface, port int) error {
-	lock, err := leaderelection.CreateLeaseLockObject(ctx, "executor", uuid.NewString())
-	if err != nil {
-		return err
-	}
-
-	leaderelection.RunLeaderElection(ctx, logger, lock, func() error {
+func runExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Interface, port int, leaderElection bool) error {
+	if leaderElection {
+		return leaderelection.RunLeaderElection(ctx, logger, "executor", clientGen, func() error {
+			return executor.StartExecutor(ctx, clientGen, logger, mgr, port)
+		})
+	} else {
 		return executor.StartExecutor(ctx, clientGen, logger, mgr, port)
-	})
-
-	return nil
+	}
 }
 
 func runKubeWatcher(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Interface, routerUrl string) error {
@@ -191,7 +187,7 @@ Use it to start one or more of the fission servers:
 Usage:
   fission-bundle --canaryConfig
   fission-bundle --routerPort=<port> [--executorUrl=<url>]
-  fission-bundle --executorPort=<port> [--namespace=<namespace>] [--fission-namespace=<namespace>]
+  fission-bundle --executorPort=<port> [--namespace=<namespace>] [--fission-namespace=<namespace>] [--leaderElection]
   fission-bundle --kubewatcher [--routerUrl=<url>]
   fission-bundle --storageServicePort=<port> --storageType=<storateType>
   fission-bundle --builderMgr [--storageSvcUrl=<url>] [--envbuilder-namespace=<namespace>]
@@ -218,6 +214,7 @@ Options:
   --mqt                           Start message queue trigger.
   --mqt_keda					  Start message queue trigger of kind KEDA
   --builderMgr                    Start builder manager.
+  --leaderElection                Run leader elecion.
   --version                       Print version information
 `
 	logger := loggerfactory.GetLogger()
@@ -273,10 +270,18 @@ Options:
 
 	if arguments["--executorPort"] != nil {
 		port := getPort(logger, arguments["--executorPort"])
-		err = runExecutor(ctx, clientGen, logger, mgr, port)
-		if err != nil {
-			logger.Error("executor exited", zap.Error(err))
-			return
+		if arguments["--leaderElection"] == true {
+			err = runExecutor(ctx, clientGen, logger, mgr, port, true)
+			if err != nil {
+				logger.Error("executor exited", zap.Error(err))
+				return
+			}
+		} else {
+			err = runExecutor(ctx, clientGen, logger, mgr, port, false)
+			if err != nil {
+				logger.Error("executor exited", zap.Error(err))
+				return
+			}
 		}
 	}
 

@@ -6,7 +6,11 @@ metadata:
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
     svc: executor
 spec:
+  {{- if .Values.executor.leaderElection.enabled }}
+  replicas: {{ .Values.executor.leaderElection.replicas }}
+  {{- else }}
   replicas: 1
+  {{- end }}
   selector:
     matchLabels:
       svc: executor
@@ -27,7 +31,11 @@ spec:
         image: {{ include "fission-bundleImage" . | quote }}
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
+        {{- if .Values.executor.leaderElection.enabled }}
+        args: ["--leaderElection", "--executorPort", "8888"]
+        {{- else }}
         args: ["--executorPort", "8888"]
+        {{- end }}
         env:
         - name: FETCHER_IMAGE
         {{- if eq .Values.fetcher.imageTag "" }}

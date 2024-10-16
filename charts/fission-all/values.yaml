@@ -203,6 +203,10 @@ executor:
     ##
     ## objectReaperInterval: 5
 
+  leaderElection:
+    enabled: false
+    replicas: 2
+
   serviceAccountCheck:
     ## enables fission to create service account, roles and rolebinding for missing permission for builder and fetcher.
     enabled: true

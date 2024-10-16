@@ -22,7 +22,6 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
-	"strings"
 
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -31,6 +30,7 @@ import (
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/fission-cli/console"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
+	"github.com/fission/fission/pkg/utils"
 )
 
 type (
@@ -136,7 +136,7 @@ func NewClient(opts ClientOptions) (*Client, error) {
 		}
 
 		client.RestConfig = restConfig
-		client.Namespace = getInClusterConfigNamespace()
+		client.Namespace = utils.GetInClusterConfigNamespace()
 		console.Verbose(2, "In-cluster config default namespace %q", client.Namespace)
 	}
 
@@ -154,22 +154,4 @@ func NewClient(opts ClientOptions) (*Client, error) {
 	client.FissionClientSet = fissionClientset
 
 	return client, nil
-}
-
-// Fetch default namespace for inClusterConfig
-func getInClusterConfigNamespace() string {
-	// This way assumes you've set the POD_NAMESPACE environment variable using the downward API.
-	// This check has to be done first for backwards compatibility with the way InClusterConfig was originally set up
-	if ns, ok := os.LookupEnv("POD_NAMESPACE"); ok {
-		return ns
-	}
-
-	// Fall back to the namespace associated with the service account token, if available
-	if data, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace"); err == nil {
-		if ns := strings.TrimSpace(string(data)); len(ns) > 0 {
-			return ns
-		}
-	}
-
-	return "default"
 }

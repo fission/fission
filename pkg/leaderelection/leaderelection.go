@@ -2,42 +2,34 @@ package leaderelection
 
 import (
 	"context"
-	"fmt"
 	"os"
+	"sync"
 	"time"
 
+	"github.com/fission/fission/pkg/crd"
+	"github.com/fission/fission/pkg/utils"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/leaderelection"
 	"k8s.io/client-go/tools/leaderelection/resourcelock"
 )
 
-const inClusterNamespacePath = "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
-
 type LeaderElection interface {
-	// CreateLeaseLockObject will fetch K8s config using InClusterConfig
-	// and will create a `Lease` K8s object using pod_name, pod_namespace and unique id
-	CreateLeaseLockObject(ctx context.Context, leaseLockName, id string) (*resourcelock.LeaseLock, error)
-
 	// Start the leader election code loop
 	RunLeaderElection(ctx context.Context, logger *zap.Logger, lock *resourcelock.LeaseLock, function func() error)
 }
 
-func CreateLeaseLockObject(ctx context.Context, leaseLockName, id string) (*resourcelock.LeaseLock, error) {
-
-	client, err := getK8sClient()
+// CreateLeaseLockObject will fetch K8s config using InClusterConfig
+// and will create a `Lease` K8s object using pod_name and pod_namespace
+func createLeaseLockObject(leaseLockName string, clientGen crd.ClientGeneratorInterface) (*resourcelock.LeaseLock, error) {
+	identity := os.Getenv("HOSTNAME")
+	client, err := clientGen.GetKubernetesClient()
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed loading K8s client")
 	}
 
-	leaseLockNamespace, err := getInClusterNamespace()
-	if err != nil {
-		return nil, errors.Wrapf(err, "unable to find leader election namespace: %v", err)
-	}
-
+	leaseLockNamespace := utils.GetInClusterConfigNamespace()
 	lock := &resourcelock.LeaseLock{
 		LeaseMeta: metav1.ObjectMeta{
 			Name:      leaseLockName,
@@ -45,16 +37,22 @@ func CreateLeaseLockObject(ctx context.Context, leaseLockName, id string) (*reso
 		},
 		Client: client.CoordinationV1(),
 		LockConfig: resourcelock.ResourceLockConfig{
-			Identity: id,
+			Identity: identity,
 		},
 	}
 
 	return lock, nil
 }
 
-func RunLeaderElection(ctx context.Context, logger *zap.Logger, lock *resourcelock.LeaseLock, f func() error) {
+func RunLeaderElection(ctx context.Context, logger *zap.Logger, leaseLockName string, clientGen crd.ClientGeneratorInterface, f func() error) error {
+	logger.Info("starting leader election")
+	lock, err := createLeaseLockObject("executor", clientGen)
+	if err != nil {
+		return err
+	}
+
 	identity := lock.LockConfig.Identity
-	leaderelection.RunOrDie(ctx, leaderelection.LeaderElectionConfig{
+	leConfig := leaderelection.LeaderElectionConfig{
 		Lock: lock,
 		// IMPORTANT: you MUST ensure that any code you have that
 		// is protected by the lease must terminate **before**
@@ -63,9 +61,9 @@ func RunLeaderElection(ctx context.Context, logger *zap.Logger, lock *resourcelo
 		// get elected before your background loop finished, violating
 		// the stated goal of the lease.
 		ReleaseOnCancel: true,
-		LeaseDuration:   15 * time.Second,
-		RenewDeadline:   10 * time.Second,
-		RetryPeriod:     2 * time.Second,
+		LeaseDuration:   10 * time.Second,
+		RenewDeadline:   5 * time.Second,
+		RetryPeriod:     1 * time.Second,
 		Callbacks: leaderelection.LeaderCallbacks{
 			OnStartedLeading: func(ctx context.Context) {
 				logger.Info("started leading", zap.String("identity", identity))
@@ -76,7 +74,6 @@ func RunLeaderElection(ctx context.Context, logger *zap.Logger, lock *resourcelo
 			},
 			OnStoppedLeading: func() {
 				logger.Info("leader lost", zap.String("identity", identity))
-				os.Exit(0)
 			},
 			OnNewLeader: func(leaderIdentity string) {
 				logger.Info("new leader elected", zap.String("leaderIdentity", leaderIdentity))
@@ -84,41 +81,24 @@ func RunLeaderElection(ctx context.Context, logger *zap.Logger, lock *resourcelo
 					return
 				}
 				logger.Info("waiting for leader election", zap.String("identity", identity))
-				<-ctx.Done()
 			},
 		},
-	})
-}
-
-func getK8sClient() (*kubernetes.Clientset, error) {
-	// Use in-cluster config
-	config, err := rest.InClusterConfig()
-	if err != nil {
-		return nil, errors.Wrap(err, "failed loading InClusterConfig")
 	}
 
-	// Create a clientset
-	clientset, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed creating clientset")
-	}
+	ctxle, cancel := context.WithCancel(ctx)
+	defer cancel()
 
-	return clientset, nil
-}
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
 
-func getInClusterNamespace() (string, error) {
-	// Check whether the namespace file exists.
-	// If not, we are not running in cluster so can't guess the namespace.
-	if _, err := os.Stat(inClusterNamespacePath); os.IsNotExist(err) {
-		return "", fmt.Errorf("not running in-cluster, please specify LeaderElectionNamespace")
-	} else if err != nil {
-		return "", fmt.Errorf("error checking namespace file: %w", err)
-	}
+	go func() {
+		defer wg.Done()
+		leaderelection.RunOrDie(ctxle, leConfig)
+	}()
 
-	// Load the namespace file and return its content
-	namespace, err := os.ReadFile(inClusterNamespacePath)
-	if err != nil {
-		return "", fmt.Errorf("error reading namespace file: %w", err)
-	}
-	return string(namespace), nil
+	wg.Wait()
+	cancel()
+
+	logger.Info("stopped leader election loop")
+	return nil
 }
