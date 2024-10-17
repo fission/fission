@@ -97,6 +97,16 @@ rules:
   - get
   - list
   - watch
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - create
+  - get
+  - delete
+  - patch
+  - update
 {{- if .Values.executor.serviceAccountCheck.enabled }}  
 - apiGroups:
   - ""
