@@ -123,7 +123,7 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr manager.Inte
 	}
 	os.Setenv("FISSION_ROUTER_URL", routerURL)
 
-	err = timer.Start(ctx, f.ClientGen(), f.Logger(), mgr, routerURL)
+	err = timer.Start(ctx, f.ClientGen(), routerURL)
 	if err != nil {
 		return fmt.Errorf("error starting timer: %w", err)
 	}

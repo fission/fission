@@ -71,8 +71,8 @@ func runKubeWatcher(ctx context.Context, clientGen crd.ClientGeneratorInterface,
 	return kubewatcher.Start(ctx, clientGen, logger, mgr, routerUrl)
 }
 
-func runTimer(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Interface, routerUrl string) error {
-	return timer.Start(ctx, clientGen, logger, mgr, routerUrl)
+func runTimer(ctx context.Context, clientGen crd.ClientGeneratorInterface, routerUrl string) error {
+	return timer.Start(ctx, clientGen, routerUrl)
 }
 
 func runMessageQueueMgr(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Interface, routerUrl string) error {
@@ -277,7 +277,7 @@ Options:
 	}
 
 	if arguments["--timer"] == true {
-		err = runTimer(ctx, clientGen, logger, mgr, routerUrl)
+		err = runTimer(ctx, clientGen, routerUrl)
 		if err != nil {
 			logger.Error("timer exited", zap.Error(err))
 			return

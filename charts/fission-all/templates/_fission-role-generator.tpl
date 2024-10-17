@@ -1,7 +1,7 @@
 {{- define "fission-role-generator" }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
+kind: ClusterRole
 metadata:
 {{- if eq "preupgrade" .component }}
   annotations:
@@ -43,7 +43,7 @@ metadata:
 {{- end }}
 
 ---
-kind: RoleBinding
+kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
 {{- if eq "preupgrade" .component }}
@@ -58,7 +58,7 @@ subjects:
     name: "fission-{{ .component }}"
     namespace: {{ .Release.Namespace }}
 roleRef:
-  kind: Role
+  kind: ClusterRole
   name: "{{ .Release.Name }}-{{ .component }}-fission-cr"
   apiGroup: rbac.authorization.k8s.io
 {{- end }}
