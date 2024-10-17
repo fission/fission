@@ -203,6 +203,7 @@ executor:
     ##
     ## objectReaperInterval: 5
 
+  ## Enables running multiple replicas of executor for high avilability.
   leaderElection:
     enabled: false
     replicas: 2

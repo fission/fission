@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dchest/uniuri"
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/pkg/errors"
@@ -24,6 +25,10 @@ type LeaderElection interface {
 // and will create a `Lease` K8s object using pod_name and pod_namespace
 func createLeaseLockObject(leaseLockName string, clientGen crd.ClientGeneratorInterface) (*resourcelock.LeaseLock, error) {
 	identity := os.Getenv("HOSTNAME")
+	if identity == "" {
+		identity = uniuri.NewLen(6)
+	}
+
 	client, err := clientGen.GetKubernetesClient()
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed loading K8s client")
@@ -46,7 +51,7 @@ func createLeaseLockObject(leaseLockName string, clientGen crd.ClientGeneratorIn
 
 func RunLeaderElection(ctx context.Context, logger *zap.Logger, leaseLockName string, clientGen crd.ClientGeneratorInterface, f func() error) error {
 	logger.Info("starting leader election")
-	lock, err := createLeaseLockObject("executor", clientGen)
+	lock, err := createLeaseLockObject(leaseLockName, clientGen)
 	if err != nil {
 		return err
 	}
