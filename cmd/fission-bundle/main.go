@@ -270,18 +270,12 @@ Options:
 
 	if arguments["--executorPort"] != nil {
 		port := getPort(logger, arguments["--executorPort"])
-		if arguments["--leaderElection"] == true {
-			err = runExecutor(ctx, clientGen, logger, mgr, port, true)
-			if err != nil {
-				logger.Error("executor exited", zap.Error(err))
-				return
-			}
-		} else {
-			err = runExecutor(ctx, clientGen, logger, mgr, port, false)
-			if err != nil {
-				logger.Error("executor exited", zap.Error(err))
-				return
-			}
+		leaderElection := arguments["--leaderElection"].(bool)
+
+		err = runExecutor(ctx, clientGen, logger, mgr, port, leaderElection)
+		if err != nil {
+			logger.Error("executor exited", zap.Error(err))
+			return
 		}
 	}
 

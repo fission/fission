@@ -11,6 +11,10 @@ spec:
   {{- else }}
   replicas: 1
   {{- end }}
+  {{- if .Values.executor.leaderElection.enabled }}
+  strategy:
+    type: Recreate
+  {{- end }}
   selector:
     matchLabels:
       svc: executor
