@@ -131,12 +131,6 @@ func (r *reconcileTimer) reconcileDeleteTimeTrigger(ctx context.Context, tt *fv1
 	}
 }
 
-func (r *reconcileTimer) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&fv1.TimeTrigger{}).
-		Complete(r)
-}
-
 func (r *reconcileTimer) newCron(ctx context.Context, t fv1.TimeTrigger) *cron.Cron {
 	log := log.FromContext(ctx)
 
@@ -158,4 +152,10 @@ func (r *reconcileTimer) newCron(ctx context.Context, t fv1.TimeTrigger) *cron.C
 	c.Start()
 	log.Info("started cron for time trigger", "trigger_name", t.Name, "trigger_namespace", t.Namespace, "cron", t.Spec.Cron)
 	return c
+}
+
+func (r *reconcileTimer) SetupWithManager(mgr ctrl.Manager) error {
+	return ctrl.NewControllerManagedBy(mgr).
+		For(&fv1.TimeTrigger{}).
+		Complete(r)
 }

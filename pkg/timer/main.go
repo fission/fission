@@ -58,6 +58,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, routerUr
 
 	mgr, err := ctrl.NewManager(config, manager.Options{
 		Scheme: scheme,
+		Cache:  getCacheOptions(),
 	})
 	if err != nil {
 		logger.Error(err, "unable to set up overall controller manager")
@@ -73,7 +74,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, routerUr
 		publisher: publisher,
 		triggers:  make(map[types.UID]*timerTriggerWithCron),
 	}).SetupWithManager(mgr); err != nil {
-		logger.Error(err, "unable to create controller", "controller", "timer")
+		logger.Error(err, "unable to create controller", "controller", "timetrigger")
 	}
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
