@@ -19,19 +19,21 @@ package timer
 import (
 	"context"
 
+	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/publisher"
+	"github.com/fission/fission/pkg/utils/loggerfactory"
+	"github.com/go-logr/zapr"
 )
 
 var (
@@ -41,19 +43,22 @@ var (
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(fv1.AddToScheme(scheme))
-	log.SetLogger(zap.New())
 }
 
-func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, routerUrl string, enableLeaderElection bool) error {
-	logger := log.Log.WithName("timer")
+func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, routerUrl string, enableLeaderElection bool, metricsAddr string) error {
+	logger := loggerfactory.GetLogger()
+
+	zaprLogger := zapr.NewLogger(logger)
+	log.SetLogger(zaprLogger)
+
 	logger.Info("setting up manager")
-
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
 	config, err := clientGen.GetRestConfig()
 	if err != nil {
-		logger.Error(err, "failed getting config")
+		logger.Error("failed getting config", zap.Error(err))
+	}
+
+	mgrMetrics := metricsserver.Options{
+		BindAddress: metricsAddr,
 	}
 
 	mgr, err := ctrl.NewManager(config, manager.Options{
@@ -61,13 +66,14 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, routerUr
 		Cache:            getCacheOptions(),
 		LeaderElection:   enableLeaderElection,
 		LeaderElectionID: "timer",
+		Metrics:          mgrMetrics,
 	})
 	if err != nil {
-		logger.Error(err, "unable to set up overall controller manager")
-		cancel()
+		logger.Error("unable to set up overall controller manager", zap.Error(err))
+		return err
 	}
 
-	publisher := publisher.MakeWebhookPublisher(zap.NewRaw(), routerUrl)
+	publisher := publisher.MakeWebhookPublisher(logger, routerUrl)
 
 	logger.Info("Setting up controller")
 	if err = (&reconcileTimer{
@@ -76,24 +82,14 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, routerUr
 		publisher: publisher,
 		triggers:  make(map[types.UID]*timerTriggerWithCron),
 	}).SetupWithManager(mgr); err != nil {
-		logger.Error(err, "unable to create controller", "controller", "timetrigger")
-	}
-
-	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
-		logger.Error(err, "unable to set up health check")
-		cancel()
-	}
-	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
-		logger.Error(err, "unable to set up ready check")
-		cancel()
+		logger.Error("unable to create controller", zap.String("controller", "timetrigger"), zap.Error(err))
+		return err
 	}
 
 	logger.Info("starting manager")
-	err = mgr.Start(ctx)
-	if err != nil {
-		logger.Error(err, "problem running manager")
-		cancel()
+	if err = mgr.Start(ctx); err != nil {
+		logger.Error("problem running manager", zap.Error(err))
+		return err
 	}
-
 	return nil
 }

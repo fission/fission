@@ -72,7 +72,7 @@ func runKubeWatcher(ctx context.Context, clientGen crd.ClientGeneratorInterface,
 }
 
 func runTimer(ctx context.Context, clientGen crd.ClientGeneratorInterface, routerUrl string, enableLeaderElection bool) error {
-	return timer.Start(ctx, clientGen, routerUrl, enableLeaderElection)
+	return timer.Start(ctx, clientGen, routerUrl, enableLeaderElection, "")
 }
 
 func runMessageQueueMgr(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Interface, routerUrl string) error {
