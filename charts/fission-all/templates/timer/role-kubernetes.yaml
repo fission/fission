@@ -1,4 +1,5 @@
 {{- include "kubernetes-role-generator" (merge (dict "namespace" .Values.defaultNamespace "component" "timer") .) }}
+{{- include "kubernetes-role-generator" (merge (dict "namespace" .Release.Namespace "component" "timer") .) }}
 
 {{- if gt (len .Values.additionalFissionNamespaces) 0 }}
 {{- range $namespace := $.Values.additionalFissionNamespaces }}

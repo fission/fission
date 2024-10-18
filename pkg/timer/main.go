@@ -44,7 +44,7 @@ func init() {
 	log.SetLogger(zap.New())
 }
 
-func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, routerUrl string) error {
+func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, routerUrl string, enableLeaderElection bool) error {
 	logger := log.Log.WithName("timer")
 	logger.Info("setting up manager")
 
@@ -57,8 +57,10 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, routerUr
 	}
 
 	mgr, err := ctrl.NewManager(config, manager.Options{
-		Scheme: scheme,
-		Cache:  getCacheOptions(),
+		Scheme:           scheme,
+		Cache:            getCacheOptions(),
+		LeaderElection:   enableLeaderElection,
+		LeaderElectionID: "timer",
 	})
 	if err != nil {
 		logger.Error(err, "unable to set up overall controller manager")
