@@ -170,7 +170,7 @@ func DownloadStrorageURL(ctx context.Context, client cmd.Client, fileUrl string)
 		return nil, err
 	}
 
-	if strings.HasPrefix(fileUrl, storagesvcURL.String()+"/v1/archive?id=") {
+	if !strings.HasPrefix(fileUrl, storagesvcURL.String()+"/v1/archive?id=") {
 		url, err := url.Parse(fileUrl)
 		if err != nil {
 			return nil, err
