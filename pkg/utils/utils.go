@@ -305,3 +305,12 @@ func IsOwnerReferencesEnabled() bool {
 	disableOwnerReference, _ := strconv.ParseBool(os.Getenv(ENV_DISABLE_OWNER_REFERENCES))
 	return !disableOwnerReference
 }
+
+// ValidateFilePathComponent checks if the filename is valid to prevent directory traversal attacks.
+func ValidateFilePathComponent(filename string) bool {
+	// Validate the filename to prevent directory traversal attacks
+	if len(filename) == 0 || strings.Contains(filename, "/") || strings.Contains(filename, "\\") || strings.Contains(filename, "..") {
+		return false
+	}
+	return true
+}

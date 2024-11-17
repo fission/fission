@@ -121,6 +121,12 @@ func (builder *Builder) Handler(w http.ResponseWriter, r *http.Request) {
 	}
 	logger.Info("builder received request", zap.Any("request", req))
 
+	if !utils.ValidateFilePathComponent(req.SrcPkgFilename) {
+		e := "invalid source package filename"
+		logger.Error(e, zap.String("filename", req.SrcPkgFilename))
+		builder.reply(r.Context(), w, "", e, http.StatusBadRequest)
+		return
+	}
 	logger.Debug("starting build")
 	srcPkgPath := filepath.Join(builder.sharedVolumePath, req.SrcPkgFilename)
 	deployPkgFilename := fmt.Sprintf("%s-%s", req.SrcPkgFilename, strings.ToLower(uniuri.NewLen(6)))

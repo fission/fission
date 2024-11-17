@@ -253,9 +253,9 @@ func (fetcher *Fetcher) SpecializeHandler(w http.ResponseWriter, r *http.Request
 func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req FunctionFetchRequest) (int, error) {
 	logger := otelUtils.LoggerWithTraceID(ctx, fetcher.logger)
 
-	// check that the requested filename is not an empty string and error out if so
-	if len(req.Filename) == 0 {
-		e := "fetch request received for an empty file name"
+	// check that the requested filename is not an empty string and doest not contain any path traversal
+	if !utils.ValidateFilePathComponent(req.Filename) {
+		e := "fetch request received for an invalid file name"
 		logger.Error(e, zap.Any("request", req))
 		return http.StatusBadRequest, errors.New(fmt.Sprintf("%s, request: %v", e, req))
 	}
@@ -406,6 +406,11 @@ func (fetcher *Fetcher) FetchSecretsAndCfgMaps(ctx context.Context, secrets []fv
 				return httpCode, errors.New(e)
 			}
 
+			if !utils.ValidateFilePathComponent(secret.Namespace) && !utils.ValidateFilePathComponent(secret.Name) {
+				e := "fetch request received for an invalid secret name or namespace"
+				logger.Error(e, zap.Any("request", secret))
+				return http.StatusBadRequest, errors.New(fmt.Sprintf("%s, request: %v", e, secret))
+			}
 			secretPath := filepath.Join(secret.Namespace, secret.Name)
 			secretDir := filepath.Join(fetcher.sharedSecretPath, secretPath)
 			err = os.MkdirAll(secretDir, os.ModeDir|0750)
@@ -452,6 +457,12 @@ func (fetcher *Fetcher) FetchSecretsAndCfgMaps(ctx context.Context, secrets []fv
 					zap.String("config_map_namespace", config.Namespace))
 
 				return httpCode, errors.New(e)
+			}
+
+			if !utils.ValidateFilePathComponent(config.Namespace) && !utils.ValidateFilePathComponent(config.Name) {
+				e := "fetch request received for an invalid configmap name or namespace"
+				logger.Error(e, zap.Any("request", config))
+				return http.StatusBadRequest, errors.New(fmt.Sprintf("%s, request: %v", e, config))
 			}
 
 			configPath := filepath.Join(config.Namespace, config.Name)
@@ -519,6 +530,13 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+
+	if !utils.ValidateFilePathComponent(req.Filename) {
+		logger.Error("invalid filename in request", zap.String("filename", req.Filename))
+		http.Error(w, "Invalid file name", http.StatusBadRequest)
+		return
+	}
+
 	logger.Info("fetcher received upload request", zap.Any("request", req))
 
 	zipFilename := req.Filename + ".zip"
