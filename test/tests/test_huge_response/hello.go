@@ -1,7 +1,6 @@
 package main
 
 import (
-	"html"
 	"io"
 	"log"
 	"net/http"
@@ -14,7 +13,7 @@ func Handler(w http.ResponseWriter, r *http.Request) { //nolint:golint,unused,de
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	_, err = w.Write([]byte(html.EscapeString(string(bytes))))
+	_, err = w.Write(bytes)
 	if err != nil {
 		log.Fatal(err)
 	}
