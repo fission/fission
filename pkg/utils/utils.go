@@ -180,6 +180,10 @@ func isHttp2xxSuccessful(status int) bool {
 }
 
 func DownloadUrl(ctx context.Context, httpClient *http.Client, url string, localPath string) error {
+	// validate local path for directory traversal attacks
+	if filepath.Clean(localPath) != localPath {
+		return errors.Errorf("invalid local path: %s", localPath)
+	}
 	resp, err := ctxhttp.Get(ctx, httpClient, url)
 	if err != nil {
 		return err
@@ -308,9 +312,15 @@ func IsOwnerReferencesEnabled() bool {
 
 // ValidateFilePathComponent checks if the filename is valid to prevent directory traversal attacks.
 func ValidateFilePathComponent(filename string) bool {
-	// Validate the filename to prevent directory traversal attacks
-	if len(filename) == 0 || strings.Contains(filename, "/") || strings.Contains(filename, "\\") || strings.Contains(filename, "..") {
-		return false
+	return len(filename) > 0 && !containsInvalidChars(filename)
+}
+
+func containsInvalidChars(filename string) bool {
+	invalidChars := []string{"/", "\\", ".."}
+	for _, char := range invalidChars {
+		if strings.Contains(filename, char) {
+			return true
+		}
 	}
-	return true
+	return false
 }
