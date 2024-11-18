@@ -304,16 +304,18 @@ func (gp *GenericPool) choosePod(ctx context.Context, newLabels map[string]strin
 			// Relabel.  If the pod already got picked and
 			// modified, this should fail; in that case just
 			// retry.
-			labelPatch, _ := json.Marshal(newLabels)
-
 			// Append executor instance id to pod annotations to
 			// indicate this pod is managed by this executor.
 			annotations := gp.getDeployAnnotations(gp.env)
-			annotationPatch, _ := json.Marshal(annotations)
-
-			patch := fmt.Sprintf(`{"metadata":{"annotations":%v, "labels":%v}}`, string(annotationPatch), string(labelPatch))
-			logger.Info("relabel pod", zap.String("pod", patch))
-			newPod, err := gp.kubernetesClient.CoreV1().Pods(chosenPod.Namespace).Patch(ctx, chosenPod.Name, k8sTypes.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
+			patch := map[string]interface{}{
+				"metadata": map[string]interface{}{
+					"annotations": annotations,
+					"labels":      newLabels,
+				},
+			}
+			patchBytes, _ := json.Marshal(patch)
+			logger.Info("relabel pod", zap.String("pod", string((patchBytes))))
+			newPod, err := gp.kubernetesClient.CoreV1().Pods(chosenPod.Namespace).Patch(ctx, chosenPod.Name, k8sTypes.StrategicMergePatchType, patchBytes, metav1.PatchOptions{})
 			if err != nil && errors.Is(err, context.Canceled) {
 				// ending retry loop when the request canceled
 				gp.readyPodQueue.Done(key)

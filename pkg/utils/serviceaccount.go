@@ -96,7 +96,7 @@ func CreateMissingPermissionForSA(ctx context.Context, kubernetesClient kubernet
 	if enableSA {
 		interval := getSAInterval()
 		logger.Debug("interval value", zap.Any("interval", interval))
-		sa := getSAObj(ctx, kubernetesClient, logger)
+		sa := getSAObj(kubernetesClient, logger)
 		logger.Info("Starting service account check", zap.Any("interval", interval))
 		if interval > 0 {
 			go wait.UntilWithContext(ctx, sa.runSACheck, interval)
@@ -106,7 +106,7 @@ func CreateMissingPermissionForSA(ctx context.Context, kubernetesClient kubernet
 	}
 }
 
-func getSAObj(ctx context.Context, kubernetesClient kubernetes.Interface, logger *zap.Logger) *ServiceAccount {
+func getSAObj(kubernetesClient kubernetes.Interface, logger *zap.Logger) *ServiceAccount {
 	saObj := &ServiceAccount{
 		kubernetesClient: kubernetesClient,
 		logger:           logger,
