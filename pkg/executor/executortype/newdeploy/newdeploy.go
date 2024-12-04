@@ -281,10 +281,17 @@ func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function
 		},
 	}
 
+
+	// If custom runtime container name - default env name
+	mainContainerName := env.ObjectMeta.Name
+	if env.Spec.Runtime.Container != nil && env.Spec.Runtime.Container.Name != "" {
+		mainContainerName = env.Spec.Runtime.Container.Name
+	}
+
 	// Order of merging is important here - first fetcher, then containers and lastly pod spec
 	err = deploy.fetcherConfig.AddSpecializingFetcherToPodSpec(
 		&deployment.Spec.Template.Spec,
-		env.ObjectMeta.Name,
+		mainContainerName,
 		fn,
 		env,
 	)
