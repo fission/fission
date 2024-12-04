@@ -189,8 +189,14 @@ func (gp *GenericPool) genDeploymentSpec(env *fv1.Environment) (*appsv1.Deployme
 		Template: pod,
 	}
 
+	// If custom runtime container name - default env name
+	mainContainerName := env.ObjectMeta.Name
+	if env.Spec.Runtime.Container != nil && env.Spec.Runtime.Container.Name != "" {
+		mainContainerName = env.Spec.Runtime.Container.Name
+	}
+
 	// Order of merging is important here - first fetcher, then containers and lastly pod spec
-	err = gp.fetcherConfig.AddFetcherToPodSpec(&deploymentSpec.Template.Spec, env.ObjectMeta.Name)
+	err = gp.fetcherConfig.AddFetcherToPodSpec(&deploymentSpec.Template.Spec, mainContainerName)
 	if err != nil {
 		return nil, err
 	}
