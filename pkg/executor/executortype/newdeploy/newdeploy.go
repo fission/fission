@@ -281,7 +281,6 @@ func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function
 		},
 	}
 
-
 	// If custom runtime container name - default env name
 	mainContainerName := env.ObjectMeta.Name
 	if env.Spec.Runtime.Container != nil && env.Spec.Runtime.Container.Name != "" {
