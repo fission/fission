@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+    branches-ignore:
+      - dependabot/**
     paths:
       - "**.go"
       - "charts/**"
@@ -19,7 +21,6 @@ on:
       - "test/**"
       - go.mod
       - go.sum
-  workflow_dispatch:
 
 env:
   HELM_VERSION: v3.13.0
