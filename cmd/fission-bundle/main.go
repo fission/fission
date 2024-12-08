@@ -161,7 +161,6 @@ func main() {
 
 Use it to start one or more of the fission servers:
 
-
  Pool manager maintains a pool of generalized function containers, and
  specializes them on-demand. Executor must be run from a pod in a
  Kubernetes cluster.

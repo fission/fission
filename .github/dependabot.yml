@@ -34,18 +34,3 @@ updates:
     directory: /
     schedule:
       interval: daily
-
-  - package-ecosystem: docker
-    directory: /test/benchmark
-    schedule:
-      interval: daily
-
-  - package-ecosystem: npm
-    directory: /test/tests/test_environments/node_src/test-case-4
-    schedule:
-      interval: daily
-
-  - package-ecosystem: gomod
-    directory: /test/tests/websocket
-    schedule:
-      interval: daily
