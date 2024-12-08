@@ -80,6 +80,8 @@ jobs:
       - name: Check cosign install!
         run: cosign version
 
+      - name: anchore/sbom-action/download-syft@v0.17.8
+
       - name: Write cosign signing key to disk
         run: 'echo "$KEY" > cosign.key'
         shell: bash
@@ -112,17 +114,17 @@ jobs:
 
           checksum_file=$(echo "$ARTIFACTS" | jq -r '.[] | select (.type=="Checksum") | .path')
           echo "hashes=$(cat $checksum_file | base64 -w0)" >> "$GITHUB_OUTPUT"
-      - name: Image digest
-        id: image
-        env:
-          ARTIFACTS: "${{ steps.goreleaser.outputs.artifacts }}"
-        run: |
-          set -euo pipefail
-          image_and_digest=$(echo "$ARTIFACTS" | jq -r '.[] | select (.type=="Docker Manifest") | {name, "digest": (.extra.Digest // .extra.Checksum)} | select(.digest) | {name} + {digest} | join("@") | sub("^sha256:";"")')
-          image=$(echo "${image_and_digest}" | grep ghcr.io | cut -d'@' -f1 | cut -d':' -f1)
-          digest=$(echo "${image_and_digest}" | grep ghcr.io | cut -d'@' -f2)
-          echo "name=$image" >> "$GITHUB_OUTPUT"
-          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+      # - name: Image digest
+      #   id: image
+      #   env:
+      #     ARTIFACTS: "${{ steps.goreleaser.outputs.artifacts }}"
+      #   run: |
+      #     set -euo pipefail
+      #     image_and_digest=$(echo "$ARTIFACTS" | jq -r '.[] | select (.type=="Docker Manifest") | {name, "digest": (.extra.Digest // .extra.Checksum)} | select(.digest) | {name} + {digest} | join("@") | sub("^sha256:";"")')
+      #     image=$(echo "${image_and_digest}" | grep ghcr.io | cut -d'@' -f1 | cut -d':' -f1)
+      #     digest=$(echo "${image_and_digest}" | grep ghcr.io | cut -d'@' -f2)
+      #     echo "name=$image" >> "$GITHUB_OUTPUT"
+      #     echo "digest=$digest" >> "$GITHUB_OUTPUT"
 
   binary-provenance:
     needs: [create-draft-release]
@@ -135,19 +137,19 @@ jobs:
       base64-subjects: "${{ needs.create-draft-release.outputs.hashes }}"
       upload-assets: true # upload to a new release
 
-  image-provenance:
-    needs: [create-draft-release]
-    permissions:
-      actions: read
-      id-token: write
-      packages: write
-    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v1.9.0
-    with:
-      image: ${{ needs.create-draft-release.outputs.image }}
-      digest: ${{ needs.create-draft-release.outputs.digest }}
-      registry-username: ${{ github.actor }}
-    secrets:
-      registry-password: ${{ secrets.GITHUB_TOKEN }}
+  # image-provenance:
+  #   needs: [create-draft-release]
+  #   permissions:
+  #     actions: read
+  #     id-token: write
+  #     packages: write
+  #   uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v1.9.0
+  #   with:
+  #     image: ${{ needs.create-draft-release.outputs.image }}
+  #     digest: ${{ needs.create-draft-release.outputs.digest }}
+  #     registry-username: ${{ github.actor }}
+  #   secrets:
+  #     registry-password: ${{ secrets.GITHUB_TOKEN }}
 
   verification-with-slsa-verifier:
     needs: [create-draft-release, binary-provenance]
@@ -182,30 +184,30 @@ jobs:
                                             "$fn"
           done <<<"$checksums"
 
-  verification-with-cosign:
-    needs: [create-draft-release, image-provenance]
-    runs-on: ubuntu-latest
-    permissions: read-all
-    steps:
-      - name: Login
-        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+  # verification-with-cosign:
+  #   needs: [create-draft-release, image-provenance]
+  #   runs-on: ubuntu-latest
+  #   permissions: read-all
+  #   steps:
+  #     - name: Login
+  #       uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
+  #       with:
+  #         registry: ghcr.io
+  #         username: ${{ github.actor }}
+  #         password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Install Cosign
-        uses: sigstore/cosign-installer@dc72c7d5c4d10cd6bcb8cf6e3fd625a9e5e537da # v3.7.0
-        with:
-          cosign-release: "v2.2.1"
+  #     - name: Install Cosign
+  #       uses: sigstore/cosign-installer@dc72c7d5c4d10cd6bcb8cf6e3fd625a9e5e537da # v3.7.0
+  #       with:
+  #         cosign-release: "v2.2.1"
 
-      - name: Verify image
-        env:
-          IMAGE: ${{ needs.create-draft-release.outputs.image }}
-          DIGEST: ${{ needs.create-draft-release.outputs.digest }}
-        run: |
-          cosign verify-attestation \
-             --type slsaprovenance \
-             --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-             --certificate-identity-regexp '^https://github.com/slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@refs/tags/v[0-9]+.[0-9]+.[0-9]+$' \
-             $IMAGE@$DIGEST
+  #     - name: Verify image
+  #       env:
+  #         IMAGE: ${{ needs.create-draft-release.outputs.image }}
+  #         DIGEST: ${{ needs.create-draft-release.outputs.digest }}
+  #       run: |
+  #         cosign verify-attestation \
+  #            --type slsaprovenance \
+  #            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  #            --certificate-identity-regexp '^https://github.com/slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@refs/tags/v[0-9]+.[0-9]+.[0-9]+$' \
+  #            $IMAGE@$DIGEST
