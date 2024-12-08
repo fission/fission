@@ -15,7 +15,6 @@ on:
       - "**.go"
       - go.mod
       - go.sum
-  workflow_dispatch:
 
 env:
   GOLANGCI_LINT_VERSION: v1.61.0
