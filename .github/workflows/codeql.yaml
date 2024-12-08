@@ -4,17 +4,9 @@ on:
   push:
     branches:
       - main
-    paths:
-      - '**.go'
-      - go.mod
-      - go.sum
   pull_request:
     branches:
       - main
-    paths:
-      - '**.go'
-      - go.mod
-      - go.sum
   schedule:
     - cron: "0 0 * * 0"
   workflow_dispatch:
