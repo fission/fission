@@ -6,7 +6,11 @@ metadata:
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
     svc: timer
 spec:
+  {{- if .Values.timer.leaderElection.enabled }}
+  replicas: {{ .Values.timer.leaderElection.replicas }}
+  {{- else }}
   replicas: 1
+  {{- end }}
   selector:
     matchLabels:
       svc: timer
@@ -23,7 +27,11 @@ spec:
         image: {{ include "fission-bundleImage" . | quote }}
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
+        {{- if .Values.timer.leaderElection.enabled }}
+        args: ["--timer", "--leaderElection", "--routerUrl", "http://router.{{ .Release.Namespace }}"]
+        {{- else }}
         args: ["--timer", "--routerUrl", "http://router.{{ .Release.Namespace }}"]
+        {{- end }}
         env:
         - name: DEBUG_ENV
           value: {{ .Values.debugEnv | quote }}
