@@ -80,7 +80,7 @@ jobs:
       - name: Check cosign install!
         run: cosign version
 
-      - name: anchore/sbom-action/download-syft@v0.17.8
+      - uses: anchore/sbom-action/download-syft@v0.17.8
 
       - name: Write cosign signing key to disk
         run: 'echo "$KEY" > cosign.key'
