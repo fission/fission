@@ -1,0 +1,51 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: daily
+
+  - package-ecosystem: docker
+    directory: /cmd/builder
+    schedule:
+      interval: daily
+
+  - package-ecosystem: docker
+    directory: /cmd/fetcher
+    schedule:
+      interval: daily
+
+  - package-ecosystem: docker
+    directory: /cmd/fission-bundle
+    schedule:
+      interval: daily
+
+  - package-ecosystem: docker
+    directory: /cmd/preupgradechecks
+    schedule:
+      interval: daily
+
+  - package-ecosystem: docker
+    directory: /cmd/reporter
+    schedule:
+      interval: daily
+
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: daily
+
+  - package-ecosystem: docker
+    directory: /test/benchmark
+    schedule:
+      interval: daily
+
+  - package-ecosystem: npm
+    directory: /test/tests/test_environments/node_src/test-case-4
+    schedule:
+      interval: daily
+
+  - package-ecosystem: gomod
+    directory: /test/tests/websocket
+    schedule:
+      interval: daily
