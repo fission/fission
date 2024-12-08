@@ -1,0 +1,36 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: daily
+
+  - package-ecosystem: docker
+    directory: /cmd/builder
+    schedule:
+      interval: daily
+
+  - package-ecosystem: docker
+    directory: /cmd/fetcher
+    schedule:
+      interval: daily
+
+  - package-ecosystem: docker
+    directory: /cmd/fission-bundle
+    schedule:
+      interval: daily
+
+  - package-ecosystem: docker
+    directory: /cmd/preupgradechecks
+    schedule:
+      interval: daily
+
+  - package-ecosystem: docker
+    directory: /cmd/reporter
+    schedule:
+      interval: daily
+
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: daily
