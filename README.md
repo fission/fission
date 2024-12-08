@@ -36,6 +36,9 @@
   <a href="https://github.com/fission/fission">
     <img alt="GitHub Repo stars" src="https://img.shields.io/github/stars/fission/fission?style=social">
   </a>
+  <a herf="https://scorecard.dev/viewer/?uri=github.com/fission/fission">
+    <image alt="OpenSSF Scorecard" src="https://api.scorecard.dev/projects/github.com/fission/fission/badge">
+  </a>
 </p>
 
 --------------
