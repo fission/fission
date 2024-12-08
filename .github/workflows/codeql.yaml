@@ -2,8 +2,9 @@ name: Code Scanning
 
 on:
   push:
-    branches-ignore:
-      - dependabot/**
+    branches:
+      - main
+      - '!dependabot/**'
   pull_request:
     branches:
       - main
