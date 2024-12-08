@@ -10,13 +10,16 @@ env:
   KIND_NODE_IMAGE_TAG: v1.25.16
   KIND_CLUSTER_NAME: kind
 
-permissions:
-  contents: read
 
 jobs:
   create-draft-release:
+    outputs:
+      hashes: ${{ steps.binary.outputs.hashes }}
+      # image: ${{ steps.image.outputs.name }}
+      # digest: ${{ steps.image.outputs.digest }}
     permissions:
       contents: write  # for goreleaser/goreleaser-action to create a GitHub release
+      packages: write    # for goreleaser/goreleaser-action to upload artifacts to GitHub Packages
     runs-on: ubuntu-latest
     steps:
       - name: Harden Runner
@@ -77,6 +80,8 @@ jobs:
       - name: Check cosign install!
         run: cosign version
 
+      - uses: anchore/sbom-action/download-syft@v0.17.8
+
       - name: Write cosign signing key to disk
         run: 'echo "$KEY" > cosign.key'
         shell: bash
@@ -90,6 +95,7 @@ jobs:
         shell: bash
 
       - name: Run GoReleaser
+        id: goreleaser
         uses: goreleaser/goreleaser-action@286f3b13b1b49da4ac219696163fb8c1c93e1200 # v6.0.0
         with:
           version: "~> v2"
@@ -99,5 +105,110 @@ jobs:
           GORELEASER_CURRENT_TAG: ${{ steps.get_version.outputs.VERSION }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DOCKER_CLI_EXPERIMENTAL: "enabled"
+      - name: Generate binary hashes
+        id: binary
+        env:
+          ARTIFACTS: "${{ steps.goreleaser.outputs.artifacts }}"
+        run: |
+          set -euo pipefail
 
-    #ToDo - Verify and upload releases
+          checksum_file=$(echo "$ARTIFACTS" | jq -r '.[] | select (.type=="Checksum") | .path')
+          echo "hashes=$(cat $checksum_file | base64 -w0)" >> "$GITHUB_OUTPUT"
+      # - name: Image digest
+      #   id: image
+      #   env:
+      #     ARTIFACTS: "${{ steps.goreleaser.outputs.artifacts }}"
+      #   run: |
+      #     set -euo pipefail
+      #     image_and_digest=$(echo "$ARTIFACTS" | jq -r '.[] | select (.type=="Docker Manifest") | {name, "digest": (.extra.Digest // .extra.Checksum)} | select(.digest) | {name} + {digest} | join("@") | sub("^sha256:";"")')
+      #     image=$(echo "${image_and_digest}" | grep ghcr.io | cut -d'@' -f1 | cut -d':' -f1)
+      #     digest=$(echo "${image_and_digest}" | grep ghcr.io | cut -d'@' -f2)
+      #     echo "name=$image" >> "$GITHUB_OUTPUT"
+      #     echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
+  binary-provenance:
+    needs: [create-draft-release]
+    permissions:
+      actions: read # To read the workflow path.
+      id-token: write # To sign the provenance.
+      contents: write # To add assets to a release.
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.0.0
+    with:
+      base64-subjects: "${{ needs.create-draft-release.outputs.hashes }}"
+      provenance-name: "fission.intoto.jsonl"
+      upload-assets: true # upload to a new release
+
+  # image-provenance:
+  #   needs: [create-draft-release]
+  #   permissions:
+  #     actions: read
+  #     id-token: write
+  #     packages: write
+  #   uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v1.9.0
+  #   with:
+  #     image: ${{ needs.create-draft-release.outputs.image }}
+  #     digest: ${{ needs.create-draft-release.outputs.digest }}
+  #     registry-username: ${{ github.actor }}
+  #   secrets:
+  #     registry-password: ${{ secrets.GITHUB_TOKEN }}
+
+  # verification-with-slsa-verifier:
+  #   needs: [create-draft-release, binary-provenance]
+  #   runs-on: ubuntu-latest
+  #   permissions: read-all
+  #   steps:
+  #     - name: Install the verifier
+  #       uses: slsa-framework/slsa-verifier/actions/installer@v2.6.0
+
+  #     - name: Download assets
+  #       env:
+  #         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  #         PROVENANCE: "${{ needs.binary-provenance.outputs.provenance-name }}"
+  #       run: |
+  #         set -euo pipefail
+  #         gh -R "$GITHUB_REPOSITORY" release download "$GITHUB_REF_NAME" -p "*.tar.gz"
+  #         gh -R "$GITHUB_REPOSITORY" release download "$GITHUB_REF_NAME" -p "*.zip"
+  #         gh -R "$GITHUB_REPOSITORY" release download "$GITHUB_REF_NAME" -p "$PROVENANCE"
+  #     - name: Verify assets
+  #       env:
+  #         CHECKSUMS: ${{ needs.create-draft-release.outputs.hashes }}
+  #         PROVENANCE: "${{ needs.binary-provenance.outputs.provenance-name }}"
+  #       run: |
+  #         set -euo pipefail
+  #         checksums=$(echo "$CHECKSUMS" | base64 -d)
+  #         while read -r line; do
+  #             fn=$(echo $line | cut -d ' ' -f2)
+  #             echo "Verifying $fn"
+  #             slsa-verifier verify-artifact --provenance-path "$PROVENANCE" \
+  #                                           --source-uri "github.com/$GITHUB_REPOSITORY" \
+  #                                           --source-tag "$GITHUB_REF_NAME" \
+  #                                           "$fn"
+  #         done <<<"$checksums"
+
+  # verification-with-cosign:
+  #   needs: [create-draft-release, image-provenance]
+  #   runs-on: ubuntu-latest
+  #   permissions: read-all
+  #   steps:
+  #     - name: Login
+  #       uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
+  #       with:
+  #         registry: ghcr.io
+  #         username: ${{ github.actor }}
+  #         password: ${{ secrets.GITHUB_TOKEN }}
+
+  #     - name: Install Cosign
+  #       uses: sigstore/cosign-installer@dc72c7d5c4d10cd6bcb8cf6e3fd625a9e5e537da # v3.7.0
+  #       with:
+  #         cosign-release: "v2.2.1"
+
+  #     - name: Verify image
+  #       env:
+  #         IMAGE: ${{ needs.create-draft-release.outputs.image }}
+  #         DIGEST: ${{ needs.create-draft-release.outputs.digest }}
+  #       run: |
+  #         cosign verify-attestation \
+  #            --type slsaprovenance \
+  #            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  #            --certificate-identity-regexp '^https://github.com/slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@refs/tags/v[0-9]+.[0-9]+.[0-9]+$' \
+  #            $IMAGE@$DIGEST
