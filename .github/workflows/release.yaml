@@ -118,9 +118,9 @@ jobs:
           ARTIFACTS: "${{ steps.goreleaser.outputs.artifacts }}"
         run: |
           set -euo pipefail
-          image_and_digest=$(echo "$ARTIFACTS" | jq -r '.[] | select (.type=="Docker Manifest") | .path')
-          image=$(echo "${image_and_digest}" | cut -d'@' -f1 | cut -d':' -f1)
-          digest=$(echo "${image_and_digest}" | cut -d'@' -f2)
+          image_and_digest=$(echo "$ARTIFACTS" | jq -r '.[] | select (.type=="Docker Manifest") | {name, "digest": (.extra.Digest // .extra.Checksum)} | select(.digest) | {name} + {digest} | join("@") | sub("^sha256:";"")')
+          image=$(echo "${image_and_digest}" | grep ghcr.io | cut -d'@' -f1 | cut -d':' -f1)
+          digest=$(echo "${image_and_digest}" | grep ghcr.io | cut -d'@' -f2)
           echo "name=$image" >> "$GITHUB_OUTPUT"
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
 
@@ -155,7 +155,7 @@ jobs:
     permissions: read-all
     steps:
       - name: Install the verifier
-        uses: slsa-framework/slsa-verifier/actions/installer@v2.4.0
+        uses: slsa-framework/slsa-verifier/actions/installer@v2.6.0
 
       - name: Download assets
         env:
@@ -208,4 +208,4 @@ jobs:
              --type slsaprovenance \
              --certificate-oidc-issuer https://token.actions.githubusercontent.com \
              --certificate-identity-regexp '^https://github.com/slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@refs/tags/v[0-9]+.[0-9]+.[0-9]+$' \
-             $IMAGE@$DIGESTleaser.outputs.artifacts }}"
+             $IMAGE@$DIGEST
