@@ -354,5 +354,5 @@ docker_signs:
     - '--key=cosign.key'
     - '${artifact}'
     - '--yes' # needed for cosign 2.0.0+
-sbom:
+sboms:
   - artifacts: archive
