@@ -17,6 +17,7 @@ jobs:
   create-draft-release:
     permissions:
       contents: write  # for goreleaser/goreleaser-action to create a GitHub release
+      packages: write    # for goreleaser/goreleaser-action to upload artifacts to GitHub Packages
     runs-on: ubuntu-latest
     steps:
       - name: Harden Runner
@@ -90,6 +91,7 @@ jobs:
         shell: bash
 
       - name: Run GoReleaser
+        id: run-goreleaser
         uses: goreleaser/goreleaser-action@286f3b13b1b49da4ac219696163fb8c1c93e1200 # v6.0.0
         with:
           version: "~> v2"
@@ -99,5 +101,27 @@ jobs:
           GORELEASER_CURRENT_TAG: ${{ steps.get_version.outputs.VERSION }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DOCKER_CLI_EXPERIMENTAL: "enabled"
+
+      - name: Generate subject for provenance
+        id: generate_subject
+        env:
+          ARTIFACTS: "${{ steps.run-goreleaser.outputs.artifacts }}"
+        run: |
+          set -euo pipefail
+
+          hashes=$(echo $ARTIFACTS | jq --raw-output '.[] | {name, "digest": (.extra.Digest // .extra.Checksum)} | select(.digest) | {digest} + {name} | join("  ") | sub("^sha256:";"")' | base64 -w0)
+          if test "$hashes" = ""; then # goreleaser < v1.13.0
+            checksum_file=$(echo "$ARTIFACTS" | jq -r '.[] | select (.type=="Checksum") | .path')
+            hashes=$(cat $checksum_file | base64 -w0)
+          fi
+          echo "hashes=$hashes" >> $GITHUB_OUTPUT
+
+      - name: goreleaser provenance
+        if: github.repository == 'fisson/fission'
+        uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.0.0
+        with:
+          base64-subjects: "${{ steps.generate_subject.outputs.hashes }}"
+          provenance-name: "fission.intoto.jsonl"
+          upload-assets: true
 
     #ToDo - Verify and upload releases
