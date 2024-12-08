@@ -38,6 +38,8 @@ spec:
         ports:
           - containerPort: 8080
             name: metrics
+        resources:
+          {{- toYaml .Values.webhook.resources | nindent 10 }}
       volumes:
       - name: serving-certs
         secret:
