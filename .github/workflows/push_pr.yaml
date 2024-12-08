@@ -1,96 +1,44 @@
-name: Fission CI
-
+name: Create Draft release
 on:
   push:
-    branches:
-      - main
-    branches-ignore:
-      - dependabot/**
-    paths:
-      - "**.go"
-      - "charts/**"
-      - "test/**"
-      - go.mod
-      - go.sum
-  pull_request:
-    branches:
-      - main
-    paths:
-      - "**.go"
-      - "charts/**"
-      - "test/**"
-      - go.mod
-      - go.sum
+    tags:
+      - v1.**
+      - v2.**
 
 env:
-  HELM_VERSION: v3.13.0
   KIND_VERSION: v0.23.0
+  KIND_NODE_IMAGE_TAG: v1.25.16
   KIND_CLUSTER_NAME: kind
 
 permissions:
   contents: read
 
 jobs:
-  # Job to run change detection
-  integration-test:
-    runs-on: ${{ matrix.os }}
-    if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip-ci') }}
-    strategy:
-      fail-fast: false
-      matrix:
-        kindversion: ["v1.25.16", "v1.27.13", "v1.30.0"]
-        os: [ubuntu-latest]
+  create-draft-release:
+    permissions:
+      contents: write  # for goreleaser/goreleaser-action to create a GitHub release
+      packages: write    # for goreleaser/goreleaser-action to upload artifacts to GitHub Packages
+    runs-on: ubuntu-latest
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@0080882f6c36860b6ba35c610c98ce87d4e2f26f # v2.10.2
         with:
           egress-policy: audit
 
-      - name: Checkout sources
+      - name: Check out code
         uses: actions/checkout@d632683dd7b4114ad314bca15554477dd762a938 # v4.2.0
+        with:
+          fetch-depth: 0
 
-      - name: setup go
+      - name: Setup go
         uses: actions/setup-go@41dfa10bad2bb2ae585af6ee5bb4d7d973ad74ed # v5.1.0
         with:
           go-version-file: "go.mod"
           cache: true
 
-      - name: Checkout sources
-        uses: actions/checkout@d632683dd7b4114ad314bca15554477dd762a938 # v4.2.0
-        with:
-          repository: fission/examples
-          path: examples
-
-      - name: Helm installation
-        uses: Azure/setup-helm@fe7b79cd5ee1e45176fcad797de68ecaf3ca4814 # v4.2.0
-        with:
-          version: ${{ env.HELM_VERSION }}
-
-      - name: Kind Cluster
-        uses: helm/kind-action@0025e74a8c7512023d06dc019c617aa3cf561fde # v1.10.0
-        with:
-          node_image: kindest/node:${{ matrix.kindversion }}
-          version: ${{ env.KIND_VERSION }}
-          cluster_name: ${{ env.KIND_CLUSTER_NAME }}
-          config: kind.yaml
-
-      - name: Configuring and testing the Installation
-        run: |
-          kubectl cluster-info --context kind-${{ env.KIND_CLUSTER_NAME }}
-          kubectl get nodes
-          sudo apt-get install -y apache2-utils
-          kubectl config use-context kind-${{ env.KIND_CLUSTER_NAME }}
-          kubectl config view
-
-      - name: Helm chart lint
-        run: |
-          helm lint charts/fission-all/
-
-      - name: Install Skaffold
-        run: |
-          curl -Lo skaffold https://storage.googleapis.com/skaffold/releases/v2.13.2/skaffold-linux-amd64
-          sudo install skaffold /usr/local/bin/
-          skaffold version
+      - name: Get the version
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_OUTPUT
 
       - name: Install GoReleaser
         uses: goreleaser/goreleaser-action@286f3b13b1b49da4ac219696163fb8c1c93e1200 # v6.0.0
@@ -98,233 +46,82 @@ jobs:
           install-only: true
           version: "~> v2"
 
-      - name: Setup Prometheus Stack
-        run: |
-          helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-          helm repo update
-          kubectl create ns monitoring
-          helm install prometheus prometheus-community/kube-prometheus-stack -n monitoring \
-          --version 45.28.0 --set grafana.enabled=false --set alertmanager.enabled=false
-
-      - name: Build and Install Fission CLI
-        run: |
-          make debug-vars
-          make build-fission-cli
-          sudo make install-fission-cli
-          sudo chmod +x /usr/local/bin/fission
-
-      - name: Build and Install Fission
-        timeout-minutes: 10
-        run: |
-          kubectl create ns fission
-          make create-crds
-          SKAFFOLD_PROFILE=kind-ci make skaffold-deploy
-
-      - name: Port-forward fission components
-        run: |
-          kubectl port-forward svc/router 8888:80 -nfission &
-
-      - name: Get fission version
-        timeout-minutes: 10
-        run: |
-          fission version
-
-      - name: Integration tests
-        timeout-minutes: 90
-        run: ./test/kind_CI.sh
-
-      - name: Collect Fission Dump
-        timeout-minutes: 5
-        if: ${{ always() }}
-        run: |
-          command -v fission && fission support dump
-
-      - name: Kind export logs
-        timeout-minutes: 10
-        if: ${{ always() }}
-        run: |
-          kind export logs --name ${{ env.KIND_CLUSTER_NAME }} kind-logs
-
-      - name: Backup prometheus data
-        timeout-minutes: 10
-        if: ${{ always() }}
-        run: |
-          TRACE=1 ./hack/backup-prometheus.sh
-
-      - name: Archive fission dump
-        timeout-minutes: 10
-        if: ${{ failure() || cancelled() }}
-        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
-        with:
-          name: fission-dump-${{ github.run_id }}-${{ matrix.kindversion }}
-          path: fission-dump/*.zip
-          retention-days: 5
-
-      - name: Archive prometheus dump
-        timeout-minutes: 10
-        if: ${{ always() }}
-        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
-        with:
-          name: prom-dump-${{ github.run_id }}-${{ matrix.kindversion }}
-          path: /tmp/prometheus/*
-          retention-days: 5
-
-      - name: Archive kind logs
-        timeout-minutes: 10
-        if: ${{ always() }}
-        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
-        with:
-          name: kind-logs-${{ github.run_id }}-${{ matrix.kindversion }}
-          path: kind-logs/*
-          retention-days: 5
-
-  # Job to ensure backward compatibility if function and builder pods are created
-  # inside functionNamespace and builderNamespace
-  integration-test-old:
-    runs-on: ${{ matrix.os }}
-    if: ${{ contains(github.event.pull_request.labels.*.name, 'run-old-ci') }}
-    strategy:
-      fail-fast: false
-      matrix:
-        kindversion: ["v1.19.16"]
-        os: [ubuntu-latest]
-    steps:
-      - name: Harden Runner
-        uses: step-security/harden-runner@0080882f6c36860b6ba35c610c98ce87d4e2f26f # v2.10.2
-        with:
-          egress-policy: audit
-
-      - name: Checkout sources
-        uses: actions/checkout@d632683dd7b4114ad314bca15554477dd762a938 # v4.2.0
-
-      - name: setup go
-        uses: actions/setup-go@41dfa10bad2bb2ae585af6ee5bb4d7d973ad74ed # v5.1.0
-        with:
-          go-version-file: "go.mod"
-          cache: true
-
-      - name: Checkout sources
-        uses: actions/checkout@d632683dd7b4114ad314bca15554477dd762a938 # v4.2.0
-        with:
-          repository: fission/examples
-          path: examples
-
-      - name: Helm installation
-        uses: Azure/setup-helm@fe7b79cd5ee1e45176fcad797de68ecaf3ca4814 # v4.2.0
-        with:
-          version: ${{ env.HELM_VERSION }}
-
       - name: Kind Cluster
         uses: helm/kind-action@0025e74a8c7512023d06dc019c617aa3cf561fde # v1.10.0
         with:
-          node_image: kindest/node:${{ matrix.kindversion }}
+          node_image: kindest/node:${{ env.KIND_NODE_IMAGE_TAG }}
           version: ${{ env.KIND_VERSION }}
-          cluster_name: ${{ env.KIND_CLUSTER_NAME }}
           config: kind.yaml
+          cluster_name: ${{ env.KIND_CLUSTER_NAME }}
 
-      - name: Configuring and testing the Installation
-        run: |
-          kubectl cluster-info --context kind-${{ env.KIND_CLUSTER_NAME }}
-          kubectl get nodes
-          sudo apt-get install -y apache2-utils
-          kubectl config use-context kind-${{ env.KIND_CLUSTER_NAME }}
-          kubectl config view
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@49b3bc8e6bdd4a60e6116a5414239cba5943d3cf # v3.2.0
 
-      - name: Helm chart lint
-        run: |
-          helm lint charts/fission-all/
+      - name: Login to ghcr.io
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Install Skaffold
-        run: |
-          curl -Lo skaffold https://storage.googleapis.com/skaffold/releases/v2.13.2/skaffold-linux-amd64
-          sudo install skaffold /usr/local/bin/
-          skaffold version
+      - name: Login to docker.io
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Install GoReleaser
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@dc72c7d5c4d10cd6bcb8cf6e3fd625a9e5e537da # v3.7.0
+        with:
+          cosign-release: "v2.2.1"
+
+      - name: Check cosign install!
+        run: cosign version
+
+      - name: Write cosign signing key to disk
+        run: 'echo "$KEY" > cosign.key'
+        shell: bash
+        env:
+          KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+
+      - name: Generate yaml for manifest, Minikube and Openshift installation
+        run: ${GITHUB_WORKSPACE}/hack/build-yaml.sh $VERSION
+        env:
+          VERSION: ${{ steps.get_version.outputs.VERSION }}
+        shell: bash
+
+      - name: Run GoReleaser
+        id: run-goreleaser
         uses: goreleaser/goreleaser-action@286f3b13b1b49da4ac219696163fb8c1c93e1200 # v6.0.0
         with:
-          install-only: true
           version: "~> v2"
+          args: release
+        env:
+          COSIGN_PWD: ${{ secrets.COSIGN_PWD }}
+          GORELEASER_CURRENT_TAG: ${{ steps.get_version.outputs.VERSION }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DOCKER_CLI_EXPERIMENTAL: "enabled"
 
-      - name: Setup Prometheus Stack
+      - name: Generate subject for provenance
+        id: generate_subject
+        env:
+          ARTIFACTS: "${{ steps.run-goreleaser.outputs.artifacts }}"
         run: |
-          helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-          helm repo update
-          kubectl create ns monitoring
-          helm install prometheus prometheus-community/kube-prometheus-stack -n monitoring \
-          --version 45.28.0 --set grafana.enabled=false --set alertmanager.enabled=false
+          set -euo pipefail
 
-      - name: Build and Install Fission CLI
-        run: |
-          make debug-vars
-          make build-fission-cli
-          sudo make install-fission-cli
-          sudo chmod +x /usr/local/bin/fission
+          hashes=$(echo $ARTIFACTS | jq --raw-output '.[] | {name, "digest": (.extra.Digest // .extra.Checksum)} | select(.digest) | {digest} + {name} | join("  ") | sub("^sha256:";"")' | base64 -w0)
+          if test "$hashes" = ""; then # goreleaser < v1.13.0
+            checksum_file=$(echo "$ARTIFACTS" | jq -r '.[] | select (.type=="Checksum") | .path')
+            hashes=$(cat $checksum_file | base64 -w0)
+          fi
+          echo "hashes=$hashes" >> $GITHUB_OUTPUT
 
-      - name: Build and Install Fission
-        timeout-minutes: 10
-        run: |
-          kubectl create ns fission
-          make create-crds
-          SKAFFOLD_PROFILE=kind-ci-old make skaffold-deploy
-
-      - name: Port-forward fission components
-        run: |
-          kubectl port-forward svc/router 8888:80 -nfission &
-
-      - name: Get fission version
-        timeout-minutes: 10
-        run: |
-          fission version
-
-      - name: Integration tests
-        timeout-minutes: 90
-        run: |
-          export FUNCTION_NAMESPACE=fission-function
-          export BUILDER_NAMESPACE=fission-builder
-          ./test/kind_CI.sh
-
-      - name: Collect Fission Dump
-        timeout-minutes: 5
-        if: ${{ always() }}
-        run: |
-          command -v fission && fission support dump
-
-      - name: Kind export logs
-        timeout-minutes: 10
-        if: ${{ always() }}
-        run: |
-          kind export logs --name kind kind-logs
-
-      - name: Backup prometheus data
-        timeout-minutes: 10
-        if: ${{ always() }}
-        run: |
-          TRACE=1 ./hack/backup-prometheus.sh
-
-      - name: Archive fission dump
-        timeout-minutes: 10
-        if: ${{ failure() || cancelled() }}
-        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+      - name: goreleaser provenance
+        if: github.repository == 'fisson/fission'
+        uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.0.0
         with:
-          name: fission-dump-${{ github.run_id }}-${{ matrix.kindversion }}
-          path: fission-dump/*.zip
-          retention-days: 5
+          base64-subjects: "${{ steps.generate_subject.outputs.hashes }}"
+          provenance-name: "fission.intoto.jsonl"
+          upload-assets: true
 
-      - name: Archive prometheus dump
-        timeout-minutes: 10
-        if: ${{ always() }}
-        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
-        with:
-          name: prom-dump-${{ github.run_id }}-${{ matrix.kindversion }}
-          path: /tmp/prometheus/*
-          retention-days: 5
-
-      - name: Archive kind logs
-        timeout-minutes: 10
-        if: ${{ always() }}
-        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
-        with:
-          name: kind-logs-${{ github.run_id }}-${{ matrix.kindversion }}
-          path: kind-logs/*
-          retention-days: 5
+    #ToDo - Verify and upload releases
