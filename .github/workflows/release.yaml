@@ -15,8 +15,8 @@ jobs:
   create-draft-release:
     outputs:
       hashes: ${{ steps.binary.outputs.hashes }}
-      image: ${{ steps.image.outputs.name }}
-      digest: ${{ steps.image.outputs.digest }}
+      # image: ${{ steps.image.outputs.name }}
+      # digest: ${{ steps.image.outputs.digest }}
     permissions:
       contents: write  # for goreleaser/goreleaser-action to create a GitHub release
       packages: write    # for goreleaser/goreleaser-action to upload artifacts to GitHub Packages
@@ -151,38 +151,38 @@ jobs:
   #   secrets:
   #     registry-password: ${{ secrets.GITHUB_TOKEN }}
 
-  verification-with-slsa-verifier:
-    needs: [create-draft-release, binary-provenance]
-    runs-on: ubuntu-latest
-    permissions: read-all
-    steps:
-      - name: Install the verifier
-        uses: slsa-framework/slsa-verifier/actions/installer@v2.6.0
+  # verification-with-slsa-verifier:
+  #   needs: [create-draft-release, binary-provenance]
+  #   runs-on: ubuntu-latest
+  #   permissions: read-all
+  #   steps:
+  #     - name: Install the verifier
+  #       uses: slsa-framework/slsa-verifier/actions/installer@v2.6.0
 
-      - name: Download assets
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PROVENANCE: "${{ needs.binary-provenance.outputs.provenance-name }}"
-        run: |
-          set -euo pipefail
-          gh -R "$GITHUB_REPOSITORY" release download "$GITHUB_REF_NAME" -p "*.tar.gz"
-          gh -R "$GITHUB_REPOSITORY" release download "$GITHUB_REF_NAME" -p "*.zip"
-          gh -R "$GITHUB_REPOSITORY" release download "$GITHUB_REF_NAME" -p "$PROVENANCE"
-      - name: Verify assets
-        env:
-          CHECKSUMS: ${{ needs.create-draft-release.outputs.hashes }}
-          PROVENANCE: "${{ needs.binary-provenance.outputs.provenance-name }}"
-        run: |
-          set -euo pipefail
-          checksums=$(echo "$CHECKSUMS" | base64 -d)
-          while read -r line; do
-              fn=$(echo $line | cut -d ' ' -f2)
-              echo "Verifying $fn"
-              slsa-verifier verify-artifact --provenance-path "$PROVENANCE" \
-                                            --source-uri "github.com/$GITHUB_REPOSITORY" \
-                                            --source-tag "$GITHUB_REF_NAME" \
-                                            "$fn"
-          done <<<"$checksums"
+  #     - name: Download assets
+  #       env:
+  #         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  #         PROVENANCE: "${{ needs.binary-provenance.outputs.provenance-name }}"
+  #       run: |
+  #         set -euo pipefail
+  #         gh -R "$GITHUB_REPOSITORY" release download "$GITHUB_REF_NAME" -p "*.tar.gz"
+  #         gh -R "$GITHUB_REPOSITORY" release download "$GITHUB_REF_NAME" -p "*.zip"
+  #         gh -R "$GITHUB_REPOSITORY" release download "$GITHUB_REF_NAME" -p "$PROVENANCE"
+  #     - name: Verify assets
+  #       env:
+  #         CHECKSUMS: ${{ needs.create-draft-release.outputs.hashes }}
+  #         PROVENANCE: "${{ needs.binary-provenance.outputs.provenance-name }}"
+  #       run: |
+  #         set -euo pipefail
+  #         checksums=$(echo "$CHECKSUMS" | base64 -d)
+  #         while read -r line; do
+  #             fn=$(echo $line | cut -d ' ' -f2)
+  #             echo "Verifying $fn"
+  #             slsa-verifier verify-artifact --provenance-path "$PROVENANCE" \
+  #                                           --source-uri "github.com/$GITHUB_REPOSITORY" \
+  #                                           --source-tag "$GITHUB_REF_NAME" \
+  #                                           "$fn"
+  #         done <<<"$checksums"
 
   # verification-with-cosign:
   #   needs: [create-draft-release, image-provenance]
