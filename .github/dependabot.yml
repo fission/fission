@@ -3,34 +3,40 @@ updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: daily
+      interval: weekly
+    open-pull-requests-limit: 5
 
   - package-ecosystem: docker
     directory: /cmd/builder
     schedule:
-      interval: daily
+      interval: weekly
 
   - package-ecosystem: docker
     directory: /cmd/fetcher
     schedule:
-      interval: daily
+      interval: weekly
 
   - package-ecosystem: docker
     directory: /cmd/fission-bundle
     schedule:
-      interval: daily
+      interval: weekly
 
   - package-ecosystem: docker
     directory: /cmd/preupgradechecks
     schedule:
-      interval: daily
+      interval: weekly
 
   - package-ecosystem: docker
     directory: /cmd/reporter
     schedule:
-      interval: daily
+      interval: weekly
 
   - package-ecosystem: gomod
     directory: /
     schedule:
-      interval: daily
+      interval: weekly
+    open-pull-requests-limit: 10
+    groups:
+      global:
+        patterns:
+          - "*"
