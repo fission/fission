@@ -66,7 +66,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 func (opts *CreateSubCommand) run(input cli.Input) (err error) {
 	m := opts.env.ObjectMeta
 
-	envList, err := opts.Client().FissionClientSet.CoreV1().Environments(m.Namespace).List(input.Context(), metav1.ListOptions{})
+	envList, err := opts.Client().FissionClientSet.CoreV1().Environments(input.String(flagkey.Namespace)).List(input.Context(), metav1.ListOptions{})
 	if err != nil {
 		return err
 	} else if len(envList.Items) > 0 {
