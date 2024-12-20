@@ -266,7 +266,7 @@ func (u Cli) Int64(key string) int64 {
 
 func (u Cli) Int64Slice(key string) []int64 {
 	v, _ := u.c.Flags().GetIntSlice(key)
-	vals := make([]int64, len(v))
+	vals := make([]int64, 0, len(v))
 	for _, i := range v {
 		vals = append(vals, int64(i))
 	}
