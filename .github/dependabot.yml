@@ -5,37 +5,31 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    groups:
+      global:
+        patterns:
+          - "*"
 
   - package-ecosystem: docker
-    directory: /cmd/builder
+    directories:
+      - /cmd/builder
+      - /cmd/fetcher
+      - /cmd/fission-bundle
+      - /cmd/preupgradechecks
+      - /cmd/reporter
     schedule:
       interval: weekly
-
-  - package-ecosystem: docker
-    directory: /cmd/fetcher
-    schedule:
-      interval: weekly
-
-  - package-ecosystem: docker
-    directory: /cmd/fission-bundle
-    schedule:
-      interval: weekly
-
-  - package-ecosystem: docker
-    directory: /cmd/preupgradechecks
-    schedule:
-      interval: weekly
-
-  - package-ecosystem: docker
-    directory: /cmd/reporter
-    schedule:
-      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      all-docker:
+        patterns:
+          - ".*"
 
   - package-ecosystem: gomod
     directory: /
     schedule:
       interval: weekly
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 5
     groups:
       global:
         patterns:
