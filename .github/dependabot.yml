@@ -6,7 +6,7 @@ updates:
       interval: weekly
     open-pull-requests-limit: 5
     groups:
-      global:
+      github-actions:
         patterns:
           - "*"
 
@@ -21,9 +21,9 @@ updates:
       interval: weekly
     open-pull-requests-limit: 5
     groups:
-      all-docker:
+      docker-images:
         patterns:
-          - ".*"
+          - "*"
 
   - package-ecosystem: gomod
     directory: /
@@ -31,6 +31,6 @@ updates:
       interval: weekly
     open-pull-requests-limit: 5
     groups:
-      global:
+      go-dependencies:
         patterns:
           - "*"
