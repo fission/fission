@@ -81,6 +81,7 @@ dockers:
       - "ghcr.io/sanketsudake/builder:{{ .Tag }}-amd64"
     dockerfile: cmd/builder/Dockerfile
     build_flag_templates:
+      - "--sbom=true"
       - "--label=org.opencontainers.image.description=The builder assists in building the fission function source code for deployment."
       - "--label=org.opencontainers.image.source={{.GitURL}}"
       - "--platform=linux/amd64"
@@ -97,6 +98,7 @@ dockers:
       - "ghcr.io/sanketsudake/fetcher:{{ .Tag }}-amd64"
     dockerfile: cmd/fetcher/Dockerfile
     build_flag_templates:
+      - "--sbom=true"
       - "--label=org.opencontainers.image.description=Fetcher is a lightweight component used by environment and builder pods. Fetcher helps in fetch and upload of source/deployment packages and specializing environments."
       - "--label=org.opencontainers.image.source={{.GitURL}}"
       - "--platform=linux/amd64"
@@ -113,6 +115,7 @@ dockers:
       - "ghcr.io/sanketsudake/fission-bundle:{{ .Tag }}-amd64"
     dockerfile: cmd/fission-bundle/Dockerfile
     build_flag_templates:
+      - "--sbom=true"
       - "--label=org.opencontainers.image.description=fission-bundle is a component which is a single binary for all components. Most server side components running on server side are fission-bundle binary wrapped in container and used with different arguments."
       - "--label=org.opencontainers.image.source={{.GitURL}}"
       - "--platform=linux/amd64"
@@ -129,6 +132,7 @@ dockers:
       - "ghcr.io/sanketsudake/pre-upgrade-checks:{{ .Tag }}-amd64"
     dockerfile: cmd/preupgradechecks/Dockerfile
     build_flag_templates:
+      - "--sbom=true"
       - "--label=org.opencontainers.image.description=Preupgradechecks ensures that Fission is ready for the targeted version upgrade by performing checks beforehand."
       - "--label=org.opencontainers.image.source={{.GitURL}}"
       - "--platform=linux/amd64"
@@ -145,6 +149,7 @@ dockers:
       - "ghcr.io/sanketsudake/reporter:{{ .Tag }}-amd64"
     dockerfile: cmd/reporter/Dockerfile
     build_flag_templates:
+      - "--sbom=true"
       - "--label=org.opencontainers.image.description=The reporter gathers information that assists in improving fission."
       - "--label=org.opencontainers.image.source={{.GitURL}}"
       - "--platform=linux/amd64"
@@ -164,6 +169,7 @@ dockers:
       - "ghcr.io/sanketsudake/builder:{{ .Tag }}-arm64"
     dockerfile: cmd/builder/Dockerfile
     build_flag_templates:
+      - "--sbom=true"
       - "--label=org.opencontainers.image.description=The builder assists in building the fission function source code for deployment."
       - "--label=org.opencontainers.image.source={{.GitURL}}"
       - "--platform=linux/arm64"
@@ -180,6 +186,7 @@ dockers:
       - "ghcr.io/sanketsudake/fetcher:{{ .Tag }}-arm64"
     dockerfile: cmd/fetcher/Dockerfile
     build_flag_templates:
+      - "--sbom=true"
       - "--label=org.opencontainers.image.description=Fetcher is a lightweight component used by environment and builder pods. Fetcher helps in fetch and upload of source/deployment packages and specializing environments."
       - "--label=org.opencontainers.image.source={{.GitURL}}"
       - "--platform=linux/arm64"
@@ -196,6 +203,7 @@ dockers:
       - "ghcr.io/sanketsudake/fission-bundle:{{ .Tag }}-arm64"
     dockerfile: cmd/fission-bundle/Dockerfile
     build_flag_templates:
+      - "--sbom=true"
       - "--label=org.opencontainers.image.description=fission-bundle is a component which is a single binary for all components. Most server side components running on server side are fission-bundle binary wrapped in container and used with different arguments."
       - "--label=org.opencontainers.image.source={{.GitURL}}"
       - "--platform=linux/arm64"
@@ -212,6 +220,7 @@ dockers:
       - "ghcr.io/sanketsudake/pre-upgrade-checks:{{ .Tag }}-arm64"
     dockerfile: cmd/preupgradechecks/Dockerfile
     build_flag_templates:
+      - "--sbom=true"
       - "--label=org.opencontainers.image.description=Preupgradechecks ensures that Fission is ready for the targeted version upgrade by performing checks beforehand."
       - "--label=org.opencontainers.image.source={{.GitURL}}"
       - "--platform=linux/arm64"
@@ -228,6 +237,7 @@ dockers:
       - "ghcr.io/sanketsudake/reporter:{{ .Tag }}-arm64"
     dockerfile: cmd/reporter/Dockerfile
     build_flag_templates:
+      - "--sbom=true"
       - "--label=org.opencontainers.image.description=The reporter gathers information that assists in improving fission."
       - "--label=org.opencontainers.image.source={{.GitURL}}"
       - "--platform=linux/arm64"
