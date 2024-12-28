@@ -71,7 +71,7 @@ jobs:
       - name: Login to docker.io
         uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          username: tripples
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Install Cosign
@@ -183,7 +183,7 @@ jobs:
     with:
       image: ${{ fromJson(toJson(matrix)).image }}
       digest: ${{ fromJson(toJson(matrix)).checksum }}
-      registry-username: ${{ secrets.DOCKERHUB_USERNAME }}
+      registry-username: tripples
     secrets:
       registry-password: ${{ secrets.DOCKERHUB_TOKEN }}
 
