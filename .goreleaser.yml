@@ -3,7 +3,7 @@ version: 2
 project_name: fission
 release:
   github:
-    owner: fission
+    owner: sanketsudake
     name: fission
   prerelease: true
   draft: true
@@ -75,10 +75,10 @@ dockers:
     ids:
       - builder
     image_templates:
-      - "docker.io/fission/builder:latest-amd64"
-      - "docker.io/fission/builder:{{ .Tag }}-amd64"
-      - "ghcr.io/fission/builder:latest-amd64"
-      - "ghcr.io/fission/builder:{{ .Tag }}-amd64"
+      - "docker.io/tripples/builder:latest-amd64"
+      - "docker.io/tripples/builder:{{ .Tag }}-amd64"
+      - "ghcr.io/sanketsudake/builder:latest-amd64"
+      - "ghcr.io/sanketsudake/builder:{{ .Tag }}-amd64"
     dockerfile: cmd/builder/Dockerfile
     build_flag_templates:
       - "--label=org.opencontainers.image.description=The builder assists in building the fission function source code for deployment."
@@ -91,10 +91,10 @@ dockers:
     ids:
       - fetcher
     image_templates:
-      - "docker.io/fission/fetcher:latest-amd64"
-      - "docker.io/fission/fetcher:{{ .Tag }}-amd64"
-      - "ghcr.io/fission/fetcher:latest-amd64"
-      - "ghcr.io/fission/fetcher:{{ .Tag }}-amd64"
+      - "docker.io/tripples/fetcher:latest-amd64"
+      - "docker.io/tripples/fetcher:{{ .Tag }}-amd64"
+      - "ghcr.io/sanketsudake/fetcher:latest-amd64"
+      - "ghcr.io/sanketsudake/fetcher:{{ .Tag }}-amd64"
     dockerfile: cmd/fetcher/Dockerfile
     build_flag_templates:
       - "--label=org.opencontainers.image.description=Fetcher is a lightweight component used by environment and builder pods. Fetcher helps in fetch and upload of source/deployment packages and specializing environments."
@@ -107,10 +107,10 @@ dockers:
     ids:
       - fission-bundle
     image_templates:
-      - "docker.io/fission/fission-bundle:latest-amd64"
-      - "docker.io/fission/fission-bundle:{{ .Tag }}-amd64"
-      - "ghcr.io/fission/fission-bundle:latest-amd64"
-      - "ghcr.io/fission/fission-bundle:{{ .Tag }}-amd64"
+      - "docker.io/tripples/fission-bundle:latest-amd64"
+      - "docker.io/tripples/fission-bundle:{{ .Tag }}-amd64"
+      - "ghcr.io/sanketsudake/fission-bundle:latest-amd64"
+      - "ghcr.io/sanketsudake/fission-bundle:{{ .Tag }}-amd64"
     dockerfile: cmd/fission-bundle/Dockerfile
     build_flag_templates:
       - "--label=org.opencontainers.image.description=fission-bundle is a component which is a single binary for all components. Most server side components running on server side are fission-bundle binary wrapped in container and used with different arguments."
@@ -123,10 +123,10 @@ dockers:
     ids:
       - pre-upgrade-checks
     image_templates:
-      - "docker.io/fission/pre-upgrade-checks:latest-amd64"
-      - "docker.io/fission/pre-upgrade-checks:{{ .Tag }}-amd64"
-      - "ghcr.io/fission/pre-upgrade-checks:latest-amd64"
-      - "ghcr.io/fission/pre-upgrade-checks:{{ .Tag }}-amd64"
+      - "docker.io/tripples/pre-upgrade-checks:latest-amd64"
+      - "docker.io/tripples/pre-upgrade-checks:{{ .Tag }}-amd64"
+      - "ghcr.io/sanketsudake/pre-upgrade-checks:latest-amd64"
+      - "ghcr.io/sanketsudake/pre-upgrade-checks:{{ .Tag }}-amd64"
     dockerfile: cmd/preupgradechecks/Dockerfile
     build_flag_templates:
       - "--label=org.opencontainers.image.description=Preupgradechecks ensures that Fission is ready for the targeted version upgrade by performing checks beforehand."
@@ -139,10 +139,10 @@ dockers:
     ids:
       - reporter
     image_templates:
-      - "docker.io/fission/reporter:latest-amd64"
-      - "docker.io/fission/reporter:{{ .Tag }}-amd64"
-      - "ghcr.io/fission/reporter:latest-amd64"
-      - "ghcr.io/fission/reporter:{{ .Tag }}-amd64"
+      - "docker.io/tripples/reporter:latest-amd64"
+      - "docker.io/tripples/reporter:{{ .Tag }}-amd64"
+      - "ghcr.io/sanketsudake/reporter:latest-amd64"
+      - "ghcr.io/sanketsudake/reporter:{{ .Tag }}-amd64"
     dockerfile: cmd/reporter/Dockerfile
     build_flag_templates:
       - "--label=org.opencontainers.image.description=The reporter gathers information that assists in improving fission."
@@ -158,10 +158,10 @@ dockers:
     ids:
       - builder
     image_templates:
-      - "docker.io/fission/builder:latest-arm64"
-      - "docker.io/fission/builder:{{ .Tag }}-arm64"
-      - "ghcr.io/fission/builder:latest-arm64"
-      - "ghcr.io/fission/builder:{{ .Tag }}-arm64"
+      - "docker.io/tripples/builder:latest-arm64"
+      - "docker.io/tripples/builder:{{ .Tag }}-arm64"
+      - "ghcr.io/sanketsudake/builder:latest-arm64"
+      - "ghcr.io/sanketsudake/builder:{{ .Tag }}-arm64"
     dockerfile: cmd/builder/Dockerfile
     build_flag_templates:
       - "--label=org.opencontainers.image.description=The builder assists in building the fission function source code for deployment."
@@ -174,10 +174,10 @@ dockers:
     ids:
       - fetcher
     image_templates:
-      - "docker.io/fission/fetcher:latest-arm64"
-      - "docker.io/fission/fetcher:{{ .Tag }}-arm64"
-      - "ghcr.io/fission/fetcher:latest-arm64"
-      - "ghcr.io/fission/fetcher:{{ .Tag }}-arm64"
+      - "docker.io/tripples/fetcher:latest-arm64"
+      - "docker.io/tripples/fetcher:{{ .Tag }}-arm64"
+      - "ghcr.io/sanketsudake/fetcher:latest-arm64"
+      - "ghcr.io/sanketsudake/fetcher:{{ .Tag }}-arm64"
     dockerfile: cmd/fetcher/Dockerfile
     build_flag_templates:
       - "--label=org.opencontainers.image.description=Fetcher is a lightweight component used by environment and builder pods. Fetcher helps in fetch and upload of source/deployment packages and specializing environments."
@@ -190,10 +190,10 @@ dockers:
     ids:
       - fission-bundle
     image_templates:
-      - "docker.io/fission/fission-bundle:latest-arm64"
-      - "docker.io/fission/fission-bundle:{{ .Tag }}-arm64"
-      - "ghcr.io/fission/fission-bundle:latest-arm64"
-      - "ghcr.io/fission/fission-bundle:{{ .Tag }}-arm64"
+      - "docker.io/tripples/fission-bundle:latest-arm64"
+      - "docker.io/tripples/fission-bundle:{{ .Tag }}-arm64"
+      - "ghcr.io/sanketsudake/fission-bundle:latest-arm64"
+      - "ghcr.io/sanketsudake/fission-bundle:{{ .Tag }}-arm64"
     dockerfile: cmd/fission-bundle/Dockerfile
     build_flag_templates:
       - "--label=org.opencontainers.image.description=fission-bundle is a component which is a single binary for all components. Most server side components running on server side are fission-bundle binary wrapped in container and used with different arguments."
@@ -206,10 +206,10 @@ dockers:
     ids:
       - pre-upgrade-checks
     image_templates:
-      - "docker.io/fission/pre-upgrade-checks:latest-arm64"
-      - "docker.io/fission/pre-upgrade-checks:{{ .Tag }}-arm64"
-      - "ghcr.io/fission/pre-upgrade-checks:latest-arm64"
-      - "ghcr.io/fission/pre-upgrade-checks:{{ .Tag }}-arm64"
+      - "docker.io/tripples/pre-upgrade-checks:latest-arm64"
+      - "docker.io/tripples/pre-upgrade-checks:{{ .Tag }}-arm64"
+      - "ghcr.io/sanketsudake/pre-upgrade-checks:latest-arm64"
+      - "ghcr.io/sanketsudake/pre-upgrade-checks:{{ .Tag }}-arm64"
     dockerfile: cmd/preupgradechecks/Dockerfile
     build_flag_templates:
       - "--label=org.opencontainers.image.description=Preupgradechecks ensures that Fission is ready for the targeted version upgrade by performing checks beforehand."
@@ -222,10 +222,10 @@ dockers:
     ids:
       - reporter
     image_templates:
-      - "docker.io/fission/reporter:latest-arm64"
-      - "docker.io/fission/reporter:{{ .Tag }}-arm64"
-      - "ghcr.io/fission/reporter:latest-arm64"
-      - "ghcr.io/fission/reporter:{{ .Tag }}-arm64"
+      - "docker.io/tripples/reporter:latest-arm64"
+      - "docker.io/tripples/reporter:{{ .Tag }}-arm64"
+      - "ghcr.io/sanketsudake/reporter:latest-arm64"
+      - "ghcr.io/sanketsudake/reporter:{{ .Tag }}-arm64"
     dockerfile: cmd/reporter/Dockerfile
     build_flag_templates:
       - "--label=org.opencontainers.image.description=The reporter gathers information that assists in improving fission."
@@ -235,86 +235,86 @@ dockers:
       - "--label=org.opencontainers.image.revision={{.FullCommit}}"
       - "--label=org.opencontainers.image.version={{.Tag}}"
 docker_manifests:
-  - name_template: ghcr.io/fission/builder:{{ .Tag }}
+  - name_template: ghcr.io/sanketsudake/builder:{{ .Tag }}
     image_templates:
-      - ghcr.io/fission/builder:{{ .Tag }}-amd64
-      - ghcr.io/fission/builder:{{ .Tag }}-arm64
+      - ghcr.io/sanketsudake/builder:{{ .Tag }}-amd64
+      - ghcr.io/sanketsudake/builder:{{ .Tag }}-arm64
   - name_template: fission/builder:{{ .Tag }}
     image_templates:
-      - docker.io/fission/builder:{{ .Tag }}-amd64
-      - docker.io/fission/builder:{{ .Tag }}-arm64
-  - name_template: ghcr.io/fission/fetcher:{{ .Tag }}
+      - docker.io/tripples/builder:{{ .Tag }}-amd64
+      - docker.io/tripples/builder:{{ .Tag }}-arm64
+  - name_template: ghcr.io/sanketsudake/fetcher:{{ .Tag }}
     image_templates:
-      - ghcr.io/fission/fetcher:{{ .Tag }}-amd64
-      - ghcr.io/fission/fetcher:{{ .Tag }}-arm64
+      - ghcr.io/sanketsudake/fetcher:{{ .Tag }}-amd64
+      - ghcr.io/sanketsudake/fetcher:{{ .Tag }}-arm64
   - name_template: fission/fetcher:{{ .Tag }}
     image_templates:
-      - docker.io/fission/fetcher:{{ .Tag }}-amd64
-      - docker.io/fission/fetcher:{{ .Tag }}-arm64
-  - name_template: ghcr.io/fission/fission-bundle:{{ .Tag }}
+      - docker.io/tripples/fetcher:{{ .Tag }}-amd64
+      - docker.io/tripples/fetcher:{{ .Tag }}-arm64
+  - name_template: ghcr.io/sanketsudake/fission-bundle:{{ .Tag }}
     image_templates:
-      - ghcr.io/fission/fission-bundle:{{ .Tag }}-amd64
-      - ghcr.io/fission/fission-bundle:{{ .Tag }}-arm64
+      - ghcr.io/sanketsudake/fission-bundle:{{ .Tag }}-amd64
+      - ghcr.io/sanketsudake/fission-bundle:{{ .Tag }}-arm64
   - name_template: fission/fission-bundle:{{ .Tag }}
     image_templates:
-      - docker.io/fission/fission-bundle:{{ .Tag }}-amd64
-      - docker.io/fission/fission-bundle:{{ .Tag }}-arm64
-  - name_template: ghcr.io/fission/pre-upgrade-checks:{{ .Tag }}
+      - docker.io/tripples/fission-bundle:{{ .Tag }}-amd64
+      - docker.io/tripples/fission-bundle:{{ .Tag }}-arm64
+  - name_template: ghcr.io/sanketsudake/pre-upgrade-checks:{{ .Tag }}
     image_templates:
-      - ghcr.io/fission/pre-upgrade-checks:{{ .Tag }}-amd64
-      - ghcr.io/fission/pre-upgrade-checks:{{ .Tag }}-arm64
+      - ghcr.io/sanketsudake/pre-upgrade-checks:{{ .Tag }}-amd64
+      - ghcr.io/sanketsudake/pre-upgrade-checks:{{ .Tag }}-arm64
   - name_template: fission/pre-upgrade-checks:{{ .Tag }}
     image_templates:
-      - docker.io/fission/pre-upgrade-checks:{{ .Tag }}-amd64
-      - docker.io/fission/pre-upgrade-checks:{{ .Tag }}-arm64
-  - name_template: ghcr.io/fission/reporter:{{ .Tag }}
+      - docker.io/tripples/pre-upgrade-checks:{{ .Tag }}-amd64
+      - docker.io/tripples/pre-upgrade-checks:{{ .Tag }}-arm64
+  - name_template: ghcr.io/sanketsudake/reporter:{{ .Tag }}
     image_templates:
-      - ghcr.io/fission/reporter:{{ .Tag }}-amd64
-      - ghcr.io/fission/reporter:{{ .Tag }}-arm64
+      - ghcr.io/sanketsudake/reporter:{{ .Tag }}-amd64
+      - ghcr.io/sanketsudake/reporter:{{ .Tag }}-arm64
   - name_template: fission/reporter:{{ .Tag }}
     image_templates:
-      - docker.io/fission/reporter:{{ .Tag }}-amd64
-      - docker.io/fission/reporter:{{ .Tag }}-arm64
-  - name_template: ghcr.io/fission/builder:latest
+      - docker.io/tripples/reporter:{{ .Tag }}-amd64
+      - docker.io/tripples/reporter:{{ .Tag }}-arm64
+  - name_template: ghcr.io/sanketsudake/builder:latest
     image_templates:
-      - ghcr.io/fission/builder:latest-amd64
-      - ghcr.io/fission/builder:latest-arm64
+      - ghcr.io/sanketsudake/builder:latest-amd64
+      - ghcr.io/sanketsudake/builder:latest-arm64
   - name_template: fission/builder:latest
     image_templates:
-      - docker.io/fission/builder:latest-amd64
-      - docker.io/fission/builder:latest-arm64
-  - name_template: ghcr.io/fission/fetcher:latest
+      - docker.io/tripples/builder:latest-amd64
+      - docker.io/tripples/builder:latest-arm64
+  - name_template: ghcr.io/sanketsudake/fetcher:latest
     image_templates:
-      - ghcr.io/fission/fetcher:latest-amd64
-      - ghcr.io/fission/fetcher:latest-arm64
+      - ghcr.io/sanketsudake/fetcher:latest-amd64
+      - ghcr.io/sanketsudake/fetcher:latest-arm64
   - name_template: fission/fetcher:latest
     image_templates:
-      - docker.io/fission/fetcher:latest-amd64
-      - docker.io/fission/fetcher:latest-arm64
-  - name_template: ghcr.io/fission/fission-bundle:latest
+      - docker.io/tripples/fetcher:latest-amd64
+      - docker.io/tripples/fetcher:latest-arm64
+  - name_template: ghcr.io/sanketsudake/fission-bundle:latest
     image_templates:
-      - ghcr.io/fission/fission-bundle:latest-amd64
-      - ghcr.io/fission/fission-bundle:latest-arm64
+      - ghcr.io/sanketsudake/fission-bundle:latest-amd64
+      - ghcr.io/sanketsudake/fission-bundle:latest-arm64
   - name_template: fission/fission-bundle:latest
     image_templates:
-      - docker.io/fission/fission-bundle:latest-amd64
-      - docker.io/fission/fission-bundle:latest-arm64
-  - name_template: ghcr.io/fission/pre-upgrade-checks:latest
+      - docker.io/tripples/fission-bundle:latest-amd64
+      - docker.io/tripples/fission-bundle:latest-arm64
+  - name_template: ghcr.io/sanketsudake/pre-upgrade-checks:latest
     image_templates:
-      - ghcr.io/fission/pre-upgrade-checks:latest-amd64
-      - ghcr.io/fission/pre-upgrade-checks:latest-arm64
+      - ghcr.io/sanketsudake/pre-upgrade-checks:latest-amd64
+      - ghcr.io/sanketsudake/pre-upgrade-checks:latest-arm64
   - name_template: fission/pre-upgrade-checks:latest
     image_templates:
-      - docker.io/fission/pre-upgrade-checks:latest-amd64
-      - docker.io/fission/pre-upgrade-checks:latest-arm64
-  - name_template: ghcr.io/fission/reporter:latest
+      - docker.io/tripples/pre-upgrade-checks:latest-amd64
+      - docker.io/tripples/pre-upgrade-checks:latest-arm64
+  - name_template: ghcr.io/sanketsudake/reporter:latest
     image_templates:
-      - ghcr.io/fission/reporter:latest-amd64
-      - ghcr.io/fission/reporter:latest-arm64
+      - ghcr.io/sanketsudake/reporter:latest-amd64
+      - ghcr.io/sanketsudake/reporter:latest-arm64
   - name_template: fission/reporter:latest
     image_templates:
-      - docker.io/fission/reporter:latest-amd64
-      - docker.io/fission/reporter:latest-arm64
+      - docker.io/tripples/reporter:latest-amd64
+      - docker.io/tripples/reporter:latest-arm64
 changelog:
   disable: true
 archives:
