@@ -1,12 +1,12 @@
 version: 2
 
 env:
-  - GHCR_REPO=ghcr.io/sanketsudake
+  - GHCR_REPO=ghcr.io/fission
 
 project_name: fission
 release:
   github:
-    owner: sanketsudake
+    owner: fission
     name: fission
   prerelease: "true"
   draft: true
