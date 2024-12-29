@@ -78,8 +78,8 @@ dockers:
     ids:
       - builder
     image_templates:
-      - "{{ .Env.GITHUB_REPOSITORY }}/builder:latest-amd64"
-      - "{{ .Env.GITHUB_REPOSITORY }}/builder:{{ .Tag }}-amd64"
+      - "{{ .Env.GHCR_REPO }}/builder:latest-amd64"
+      - "{{ .Env.GHCR_REPO }}/builder:{{ .Tag }}-amd64"
     dockerfile: cmd/builder/Dockerfile
     build_flag_templates:
       - "--label=org.opencontainers.image.description=The builder assists in building the fission function source code for deployment."
@@ -95,8 +95,8 @@ dockers:
     ids:
       - fetcher
     image_templates:
-      - "{{ .Env.GITHUB_REPOSITORY }}/fetcher:latest-amd64"
-      - "{{ .Env.GITHUB_REPOSITORY }}/fetcher:{{ .Tag }}-amd64"
+      - "{{ .Env.GHCR_REPO }}/fetcher:latest-amd64"
+      - "{{ .Env.GHCR_REPO }}/fetcher:{{ .Tag }}-amd64"
     dockerfile: cmd/fetcher/Dockerfile
     build_flag_templates:
       - "--label=org.opencontainers.image.description=Fetcher is a lightweight component used by environment and builder pods. Fetcher helps in fetch and upload of source/deployment packages and specializing environments."
@@ -112,8 +112,8 @@ dockers:
     ids:
       - fission-bundle
     image_templates:
-      - "{{ .Env.GITHUB_REPOSITORY }}/fission-bundle:latest-amd64"
-      - "{{ .Env.GITHUB_REPOSITORY }}/fission-bundle:{{ .Tag }}-amd64"
+      - "{{ .Env.GHCR_REPO }}/fission-bundle:latest-amd64"
+      - "{{ .Env.GHCR_REPO }}/fission-bundle:{{ .Tag }}-amd64"
     dockerfile: cmd/fission-bundle/Dockerfile
     build_flag_templates:
       - "--label=org.opencontainers.image.description=fission-bundle is a component which is a single binary for all components. Most server side components running on server side are fission-bundle binary wrapped in container and used with different arguments."
@@ -129,8 +129,8 @@ dockers:
     ids:
       - pre-upgrade-checks
     image_templates:
-      - "{{ .Env.GITHUB_REPOSITORY }}/pre-upgrade-checks:latest-amd64"
-      - "{{ .Env.GITHUB_REPOSITORY }}/pre-upgrade-checks:{{ .Tag }}-amd64"
+      - "{{ .Env.GHCR_REPO }}/pre-upgrade-checks:latest-amd64"
+      - "{{ .Env.GHCR_REPO }}/pre-upgrade-checks:{{ .Tag }}-amd64"
     dockerfile: cmd/preupgradechecks/Dockerfile
     build_flag_templates:
       - "--label=org.opencontainers.image.description=Preupgradechecks ensures that Fission is ready for the targeted version upgrade by performing checks beforehand."
@@ -146,8 +146,8 @@ dockers:
     ids:
       - reporter
     image_templates:
-      - "{{ .Env.GITHUB_REPOSITORY }}/reporter:latest-amd64"
-      - "{{ .Env.GITHUB_REPOSITORY }}/reporter:{{ .Tag }}-amd64"
+      - "{{ .Env.GHCR_REPO }}/reporter:latest-amd64"
+      - "{{ .Env.GHCR_REPO }}/reporter:{{ .Tag }}-amd64"
     dockerfile: cmd/reporter/Dockerfile
     build_flag_templates:
       - "--label=org.opencontainers.image.description=The reporter gathers information that assists in improving fission."
@@ -166,8 +166,8 @@ dockers:
     ids:
       - builder
     image_templates:
-      - "{{ .Env.GITHUB_REPOSITORY }}/builder:latest-arm64"
-      - "{{ .Env.GITHUB_REPOSITORY }}/builder:{{ .Tag }}-arm64"
+      - "{{ .Env.GHCR_REPO }}/builder:latest-arm64"
+      - "{{ .Env.GHCR_REPO }}/builder:{{ .Tag }}-arm64"
     dockerfile: cmd/builder/Dockerfile
     build_flag_templates:
       - "--label=org.opencontainers.image.description=The builder assists in building the fission function source code for deployment."
@@ -183,8 +183,8 @@ dockers:
     ids:
       - fetcher
     image_templates:
-      - "{{ .Env.GITHUB_REPOSITORY }}/fetcher:latest-arm64"
-      - "{{ .Env.GITHUB_REPOSITORY }}/fetcher:{{ .Tag }}-arm64"
+      - "{{ .Env.GHCR_REPO }}/fetcher:latest-arm64"
+      - "{{ .Env.GHCR_REPO }}/fetcher:{{ .Tag }}-arm64"
     dockerfile: cmd/fetcher/Dockerfile
     build_flag_templates:
       - "--label=org.opencontainers.image.description=Fetcher is a lightweight component used by environment and builder pods. Fetcher helps in fetch and upload of source/deployment packages and specializing environments."
@@ -200,8 +200,8 @@ dockers:
     ids:
       - fission-bundle
     image_templates:
-      - "{{ .Env.GITHUB_REPOSITORY }}/fission-bundle:latest-arm64"
-      - "{{ .Env.GITHUB_REPOSITORY }}/fission-bundle:{{ .Tag }}-arm64"
+      - "{{ .Env.GHCR_REPO }}/fission-bundle:latest-arm64"
+      - "{{ .Env.GHCR_REPO }}/fission-bundle:{{ .Tag }}-arm64"
     dockerfile: cmd/fission-bundle/Dockerfile
     build_flag_templates:
       - "--label=org.opencontainers.image.description=fission-bundle is a component which is a single binary for all components. Most server side components running on server side are fission-bundle binary wrapped in container and used with different arguments."
@@ -217,8 +217,8 @@ dockers:
     ids:
       - pre-upgrade-checks
     image_templates:
-      - "{{ .Env.GITHUB_REPOSITORY }}/pre-upgrade-checks:latest-arm64"
-      - "{{ .Env.GITHUB_REPOSITORY }}/pre-upgrade-checks:{{ .Tag }}-arm64"
+      - "{{ .Env.GHCR_REPO }}/pre-upgrade-checks:latest-arm64"
+      - "{{ .Env.GHCR_REPO }}/pre-upgrade-checks:{{ .Tag }}-arm64"
     dockerfile: cmd/preupgradechecks/Dockerfile
     build_flag_templates:
       - "--label=org.opencontainers.image.description=Preupgradechecks ensures that Fission is ready for the targeted version upgrade by performing checks beforehand."
@@ -234,8 +234,8 @@ dockers:
     ids:
       - reporter
     image_templates:
-      - "{{ .Env.GITHUB_REPOSITORY }}/reporter:latest-arm64"
-      - "{{ .Env.GITHUB_REPOSITORY }}/reporter:{{ .Tag }}-arm64"
+      - "{{ .Env.GHCR_REPO }}/reporter:latest-arm64"
+      - "{{ .Env.GHCR_REPO }}/reporter:{{ .Tag }}-arm64"
     dockerfile: cmd/reporter/Dockerfile
     build_flag_templates:
       - "--label=org.opencontainers.image.description=The reporter gathers information that assists in improving fission."
@@ -248,46 +248,46 @@ dockers:
       - "--label=org.opencontainers.image.vendor=Fission"
       - "--label=org.opencontainers.image.url=https://fission.io/"
 docker_manifests:
-  - name_template: "{{ .Env.GITHUB_REPOSITORY }}/builder:{{ .Tag }}"
+  - name_template: "{{ .Env.GHCR_REPO }}/builder:{{ .Tag }}"
     image_templates:
-      - "{{ .Env.GITHUB_REPOSITORY }}/builder:{{ .Tag }}-amd64"
-      - "{{ .Env.GITHUB_REPOSITORY }}/builder:{{ .Tag }}-arm64"
-  - name_template: "{{ .Env.GITHUB_REPOSITORY }}/fetcher:{{ .Tag }}"
+      - "{{ .Env.GHCR_REPO }}/builder:{{ .Tag }}-amd64"
+      - "{{ .Env.GHCR_REPO }}/builder:{{ .Tag }}-arm64"
+  - name_template: "{{ .Env.GHCR_REPO }}/fetcher:{{ .Tag }}"
     image_templates:
-      - "{{ .Env.GITHUB_REPOSITORY }}/fetcher:{{ .Tag }}-amd64"
-      - "{{ .Env.GITHUB_REPOSITORY }}/fetcher:{{ .Tag }}-arm64"
-  - name_template: "{{ .Env.GITHUB_REPOSITORY }}/fission-bundle:{{ .Tag }}"
+      - "{{ .Env.GHCR_REPO }}/fetcher:{{ .Tag }}-amd64"
+      - "{{ .Env.GHCR_REPO }}/fetcher:{{ .Tag }}-arm64"
+  - name_template: "{{ .Env.GHCR_REPO }}/fission-bundle:{{ .Tag }}"
     image_templates:
-      - "{{ .Env.GITHUB_REPOSITORY }}/fission-bundle:{{ .Tag }}-amd64"
-      - "{{ .Env.GITHUB_REPOSITORY }}/fission-bundle:{{ .Tag }}-arm64"
-  - name_template: "{{ .Env.GITHUB_REPOSITORY }}/pre-upgrade-checks:{{ .Tag }}"
+      - "{{ .Env.GHCR_REPO }}/fission-bundle:{{ .Tag }}-amd64"
+      - "{{ .Env.GHCR_REPO }}/fission-bundle:{{ .Tag }}-arm64"
+  - name_template: "{{ .Env.GHCR_REPO }}/pre-upgrade-checks:{{ .Tag }}"
     image_templates:
-      - "{{ .Env.GITHUB_REPOSITORY }}/pre-upgrade-checks:{{ .Tag }}-amd64"
-      - "{{ .Env.GITHUB_REPOSITORY }}/pre-upgrade-checks:{{ .Tag }}-arm64"
-  - name_template: "{{ .Env.GITHUB_REPOSITORY }}/reporter:{{ .Tag }}"
+      - "{{ .Env.GHCR_REPO }}/pre-upgrade-checks:{{ .Tag }}-amd64"
+      - "{{ .Env.GHCR_REPO }}/pre-upgrade-checks:{{ .Tag }}-arm64"
+  - name_template: "{{ .Env.GHCR_REPO }}/reporter:{{ .Tag }}"
     image_templates:
-      - "{{ .Env.GITHUB_REPOSITORY }}/reporter:{{ .Tag }}-amd64"
-      - "{{ .Env.GITHUB_REPOSITORY }}/reporter:{{ .Tag }}-arm64"
-  - name_template: "{{ .Env.GITHUB_REPOSITORY }}/builder:latest"
+      - "{{ .Env.GHCR_REPO }}/reporter:{{ .Tag }}-amd64"
+      - "{{ .Env.GHCR_REPO }}/reporter:{{ .Tag }}-arm64"
+  - name_template: "{{ .Env.GHCR_REPO }}/builder:latest"
     image_templates:
-      - "{{ .Env.GITHUB_REPOSITORY }}/builder:latest-amd64"
-      - "{{ .Env.GITHUB_REPOSITORY }}/builder:latest-arm64"
-  - name_template: "{{ .Env.GITHUB_REPOSITORY }}/fetcher:latest"
+      - "{{ .Env.GHCR_REPO }}/builder:latest-amd64"
+      - "{{ .Env.GHCR_REPO }}/builder:latest-arm64"
+  - name_template: "{{ .Env.GHCR_REPO }}/fetcher:latest"
     image_templates:
-      - "{{ .Env.GITHUB_REPOSITORY }}/fetcher:latest-amd64"
-      - "{{ .Env.GITHUB_REPOSITORY }}/fetcher:latest-arm64"
-  - name_template: "{{ .Env.GITHUB_REPOSITORY }}/fission-bundle:latest"
+      - "{{ .Env.GHCR_REPO }}/fetcher:latest-amd64"
+      - "{{ .Env.GHCR_REPO }}/fetcher:latest-arm64"
+  - name_template: "{{ .Env.GHCR_REPO }}/fission-bundle:latest"
     image_templates:
-      - "{{ .Env.GITHUB_REPOSITORY }}/fission-bundle:latest-amd64"
-      - "{{ .Env.GITHUB_REPOSITORY }}/fission-bundle:latest-arm64"
-  - name_template: "{{ .Env.GITHUB_REPOSITORY }}/pre-upgrade-checks:latest"
+      - "{{ .Env.GHCR_REPO }}/fission-bundle:latest-amd64"
+      - "{{ .Env.GHCR_REPO }}/fission-bundle:latest-arm64"
+  - name_template: "{{ .Env.GHCR_REPO }}/pre-upgrade-checks:latest"
     image_templates:
-      - "{{ .Env.GITHUB_REPOSITORY }}/pre-upgrade-checks:latest-amd64"
-      - "{{ .Env.GITHUB_REPOSITORY }}/pre-upgrade-checks:latest-arm64"
-  - name_template: "{{ .Env.GITHUB_REPOSITORY }}/reporter:latest"
+      - "{{ .Env.GHCR_REPO }}/pre-upgrade-checks:latest-amd64"
+      - "{{ .Env.GHCR_REPO }}/pre-upgrade-checks:latest-arm64"
+  - name_template: "{{ .Env.GHCR_REPO }}/reporter:latest"
     image_templates:
-      - "{{ .Env.GITHUB_REPOSITORY }}/reporter:latest-amd64"
-      - "{{ .Env.GITHUB_REPOSITORY }}/reporter:latest-arm64"
+      - "{{ .Env.GHCR_REPO }}/reporter:latest-amd64"
+      - "{{ .Env.GHCR_REPO }}/reporter:latest-arm64"
 changelog:
   disable: true
 archives:
