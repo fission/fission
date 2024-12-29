@@ -13,10 +13,10 @@ env:
 
 jobs:
   create-draft-release:
+    name: Create Draft Release with Goreleaser
     outputs:
       hashes: ${{ steps.binary.outputs.hashes }}
       ghcr_images: ${{ steps.image.outputs.ghcr_images }}
-      docker_images: ${{ steps.image.outputs.docker_images }}
       version: ${{ steps.get_version.outputs.VERSION }}
     permissions:
       contents: write # for goreleaser/goreleaser-action to create a GitHub release
@@ -68,12 +68,6 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Login to docker.io
-        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
-        with:
-          username: fission
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
       - name: Install Cosign
         uses: sigstore/cosign-installer@dc72c7d5c4d10cd6bcb8cf6e3fd625a9e5e537da # v3.7.0
         with:
@@ -100,6 +94,7 @@ jobs:
           GORELEASER_CURRENT_TAG: ${{ steps.get_version.outputs.VERSION }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DOCKER_CLI_EXPERIMENTAL: "enabled"
+
       - name: Generate binary hashes
         id: binary
         env:
@@ -109,6 +104,7 @@ jobs:
 
           checksum_file=$(echo "$ARTIFACTS" | jq -r '.[] | select (.type=="Checksum") | .path')
           echo "hashes=$(cat $checksum_file | base64 -w0)" >> "$GITHUB_OUTPUT"
+
       - name: Image digest
         id: image
         env:
@@ -127,19 +123,9 @@ jobs:
                   }
               )')
           echo "ghcr_images=$ghcr_images" >> "$GITHUB_OUTPUT"
-          docker_images=$(echo "${image_and_digest}" | grep -v ghcr.io | jq -R -s -c '
-            split("\n")
-            | map(select(. != ""))
-            | map(
-                split("@")
-                | {
-                    "image": .[0] | split(":")[0],
-                    "checksum": .[1]
-                  }
-              )')
-          echo "docker_images=$docker_images" >> "$GITHUB_OUTPUT"
 
   binary-provenance:
+    name: Create Binary Provenance
     needs: [create-draft-release]
     permissions:
       actions: read # To read the workflow path.
@@ -153,6 +139,7 @@ jobs:
       draft-release: true # create a draft release
 
   image-provenance-ghcr:
+    name: Create Image Provenance
     needs: [create-draft-release]
     strategy:
       matrix:
@@ -169,24 +156,51 @@ jobs:
     secrets:
       registry-password: ${{ secrets.GITHUB_TOKEN }}
 
-  image-provenance-docker:
+  image-sbom-ghcr:
+    name: Create SBOM for container images
+    # Goreleaser does not support generating SBOM for container images.
     needs: [create-draft-release]
+    runs-on: ubuntu-latest
     strategy:
       matrix:
-        include: ${{ fromJson(needs.create-draft-release.outputs.docker_images) }}
+        include: ${{ fromJson(needs.create-draft-release.outputs.ghcr_images) }}
     permissions:
-      actions: read
+      actions: write
       id-token: write
       packages: write
-    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v2.0.0 # Do not use commit hash
-    with:
-      image: ${{ fromJson(toJson(matrix)).image }}
-      digest: ${{ fromJson(toJson(matrix)).checksum }}
-      registry-username: fission
-    secrets:
-      registry-password: ${{ secrets.DOCKERHUB_TOKEN }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Run Trivy in fs mode to generate SBOM
+        uses: aquasecurity/trivy-action@18f2510ee396bbf400402947b394f2dd8c87dbb0 # v0.29.0
+        with:
+          scan-type: "fs"
+          format: "spdx-json"
+          output: "spdx.sbom.json"
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@dc72c7d5c4d10cd6bcb8cf6e3fd625a9e5e537da # v3.7.0
+        with:
+          cosign-release: ${{ env.COSIGN_VERSION }}
+      - name: Sign image and sbom
+        env:
+          IMAGE: ${{ fromJson(toJson(matrix)).image }}
+          DIGEST: ${{ fromJson(toJson(matrix)).checksum }}
+        run: |
+          #!/usr/bin/env bash
+          set -euo pipefail
+          cosign attach sbom --sbom spdx.sbom.json $IMAGE@$DIGEST
+          cosign sign -a git_sha=$GITHUB_SHA --attachment sbom $IMAGE@$DIGEST --yes
 
-  verification-with-slsa-verifier:
+  binary-provenance-verification-with-slsa-verifier:
+    name : Verify Binary Provenance
     needs: [create-draft-release, binary-provenance]
     runs-on: ubuntu-latest
     permissions:
@@ -227,7 +241,8 @@ jobs:
                                             "$fn"
           done <<<"$checksums"
 
-  verification-with-cosign-ghcr:
+  image-provenance-verification-with-cosign:
+    name: Verify Image Provenance
     needs: [create-draft-release, image-provenance-ghcr]
     strategy:
       matrix:
