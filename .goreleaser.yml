@@ -1,12 +1,12 @@
 version: 2
 
 env:
-  - GHCR_REPO=ghcr.io/fission
+  - GHCR_REPO=ghcr.io/sanketsudake
 
 project_name: fission
 release:
   github:
-    owner: fission
+    owner: sanketsudake
     name: fission
   prerelease: "true"
   draft: true
@@ -88,6 +88,9 @@ dockers:
       - "--label=org.opencontainers.image.created={{.Date}}"
       - "--label=org.opencontainers.image.revision={{.FullCommit}}"
       - "--label=org.opencontainers.image.version={{.Tag}}"
+      - "--label=org.opencontainers.image.authors=The Fission Authors https://fission.io/"
+      - "--label=org.opencontainers.image.vendor=Fission"
+      - "--label=org.opencontainers.image.url=https://fission.io/"
   - <<: *docker-amd64
     ids:
       - fetcher
@@ -102,6 +105,9 @@ dockers:
       - "--label=org.opencontainers.image.created={{.Date}}"
       - "--label=org.opencontainers.image.revision={{.FullCommit}}"
       - "--label=org.opencontainers.image.version={{.Tag}}"
+      - "--label=org.opencontainers.image.authors=The Fission Authors https://fission.io/"
+      - "--label=org.opencontainers.image.vendor=Fission"
+      - "--label=org.opencontainers.image.url=https://fission.io/"
   - <<: *docker-amd64
     ids:
       - fission-bundle
@@ -116,6 +122,9 @@ dockers:
       - "--label=org.opencontainers.image.created={{.Date}}"
       - "--label=org.opencontainers.image.revision={{.FullCommit}}"
       - "--label=org.opencontainers.image.version={{.Tag}}"
+      - "--label=org.opencontainers.image.authors=The Fission Authors https://fission.io/"
+      - "--label=org.opencontainers.image.vendor=Fission"
+      - "--label=org.opencontainers.image.url=https://fission.io/"
   - <<: *docker-amd64
     ids:
       - pre-upgrade-checks
@@ -130,6 +139,9 @@ dockers:
       - "--label=org.opencontainers.image.created={{.Date}}"
       - "--label=org.opencontainers.image.revision={{.FullCommit}}"
       - "--label=org.opencontainers.image.version={{.Tag}}"
+      - "--label=org.opencontainers.image.authors=The Fission Authors https://fission.io/"
+      - "--label=org.opencontainers.image.vendor=Fission"
+      - "--label=org.opencontainers.image.url=https://fission.io/"
   - <<: *docker-amd64
     ids:
       - reporter
@@ -144,6 +156,9 @@ dockers:
       - "--label=org.opencontainers.image.created={{.Date}}"
       - "--label=org.opencontainers.image.revision={{.FullCommit}}"
       - "--label=org.opencontainers.image.version={{.Tag}}"
+      - "--label=org.opencontainers.image.authors=The Fission Authors https://fission.io/"
+      - "--label=org.opencontainers.image.vendor=Fission"
+      - "--label=org.opencontainers.image.url=https://fission.io/"
   - &docker-arm64
     use: buildx
     goos: linux
@@ -161,6 +176,9 @@ dockers:
       - "--label=org.opencontainers.image.created={{.Date}}"
       - "--label=org.opencontainers.image.revision={{.FullCommit}}"
       - "--label=org.opencontainers.image.version={{.Tag}}"
+      - "--label=org.opencontainers.image.authors=The Fission Authors https://fission.io/"
+      - "--label=org.opencontainers.image.vendor=Fission"
+      - "--label=org.opencontainers.image.url=https://fission.io/"
   - <<: *docker-arm64
     ids:
       - fetcher
@@ -175,6 +193,9 @@ dockers:
       - "--label=org.opencontainers.image.created={{.Date}}"
       - "--label=org.opencontainers.image.revision={{.FullCommit}}"
       - "--label=org.opencontainers.image.version={{.Tag}}"
+      - "--label=org.opencontainers.image.authors=The Fission Authors https://fission.io/"
+      - "--label=org.opencontainers.image.vendor=Fission"
+      - "--label=org.opencontainers.image.url=https://fission.io/"
   - <<: *docker-arm64
     ids:
       - fission-bundle
@@ -189,6 +210,9 @@ dockers:
       - "--label=org.opencontainers.image.created={{.Date}}"
       - "--label=org.opencontainers.image.revision={{.FullCommit}}"
       - "--label=org.opencontainers.image.version={{.Tag}}"
+      - "--label=org.opencontainers.image.authors=The Fission Authors https://fission.io/"
+      - "--label=org.opencontainers.image.vendor=Fission"
+      - "--label=org.opencontainers.image.url=https://fission.io/"
   - <<: *docker-arm64
     ids:
       - pre-upgrade-checks
@@ -203,6 +227,9 @@ dockers:
       - "--label=org.opencontainers.image.created={{.Date}}"
       - "--label=org.opencontainers.image.revision={{.FullCommit}}"
       - "--label=org.opencontainers.image.version={{.Tag}}"
+      - "--label=org.opencontainers.image.authors=The Fission Authors https://fission.io/"
+      - "--label=org.opencontainers.image.vendor=Fission"
+      - "--label=org.opencontainers.image.url=https://fission.io/"
   - <<: *docker-arm64
     ids:
       - reporter
@@ -217,6 +244,9 @@ dockers:
       - "--label=org.opencontainers.image.created={{.Date}}"
       - "--label=org.opencontainers.image.revision={{.FullCommit}}"
       - "--label=org.opencontainers.image.version={{.Tag}}"
+      - "--label=org.opencontainers.image.authors=The Fission Authors https://fission.io/"
+      - "--label=org.opencontainers.image.vendor=Fission"
+      - "--label=org.opencontainers.image.url=https://fission.io/"
 docker_manifests:
   - name_template: "{{ .Env.GITHUB_REPOSITORY }}/builder:{{ .Tag }}"
     image_templates:
