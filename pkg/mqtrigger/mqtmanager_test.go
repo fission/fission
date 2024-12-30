@@ -96,12 +96,13 @@ func TestMqtManager(t *testing.T) {
 	getSub := mgr.getTriggerSubscription(&trigger)
 	if getSub == nil {
 		t.Fatal("getTriggerSubscription should return triggerSub")
+		return
 	}
 	if getSub.trigger.ObjectMeta.Name != trigger.ObjectMeta.Name {
 		t.Errorf("getTriggerSubscription should return triggerSub with trigger name %s", trigger.ObjectMeta.Name)
 	}
-	trigger.Spec.Topic = updatedTopicName
 	getSub.subscription.(mqtConsumer).cancel()
+	trigger.Spec.Topic = updatedTopicName
 	newSub, err := msgQueue.Subscribe(&trigger)
 	if err != nil {
 		t.Errorf("Subscribe should not return error")
@@ -120,6 +121,7 @@ func TestMqtManager(t *testing.T) {
 	getNewSub := mgr.getTriggerSubscription(&trigger)
 	if getNewSub == nil {
 		t.Fatal("getTriggerSubscription should return triggerSub")
+		return
 	}
 	if getNewSub.trigger.Spec.Topic != updatedTopicName {
 		t.Errorf("getTriggerSubscription returns trigger with incorrect topic-name, expected %s got %s", updatedTopicName, getNewSub.trigger.Spec.Topic)
