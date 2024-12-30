@@ -91,7 +91,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) (err error) {
 			return err
 		}
 		if !exists {
-			console.Warn(fmt.Sprintf("TimeTrigger '%v' references unknown Function '%v', please create it before applying spec",
+			console.Warn(fmt.Sprintf("TimeTrigger '%s' references unknown Function '%s', please create it before applying spec",
 				name, fnName))
 		}
 	}

@@ -9,17 +9,19 @@ env:
   KIND_VERSION: v0.23.0
   KIND_NODE_IMAGE_TAG: v1.25.16
   KIND_CLUSTER_NAME: kind
-
+  COSIGN_VERSION: v2.4.1
 
 jobs:
   create-draft-release:
+    name: Create Draft Release with Goreleaser
     outputs:
       hashes: ${{ steps.binary.outputs.hashes }}
-      # image: ${{ steps.image.outputs.name }}
-      # digest: ${{ steps.image.outputs.digest }}
+      ghcr_images: ${{ steps.image.outputs.ghcr_images }}
+      version: ${{ steps.get_version.outputs.VERSION }}
     permissions:
-      contents: write  # for goreleaser/goreleaser-action to create a GitHub release
-      packages: write    # for goreleaser/goreleaser-action to upload artifacts to GitHub Packages
+      contents: write # for goreleaser/goreleaser-action to create a GitHub release
+      packages: write # for goreleaser/goreleaser-action to upload artifacts to GitHub Packages
+      id-token: write # for cosign to sign the image and binary
     runs-on: ubuntu-latest
     steps:
       - name: Harden Runner
@@ -66,27 +68,15 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Login to docker.io
-        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
       - name: Install Cosign
         uses: sigstore/cosign-installer@dc72c7d5c4d10cd6bcb8cf6e3fd625a9e5e537da # v3.7.0
         with:
-          cosign-release: "v2.2.1"
+          cosign-release: ${{ env.COSIGN_VERSION }}
 
       - name: Check cosign install!
         run: cosign version
 
-      - uses: anchore/sbom-action/download-syft@v0.17.9
-
-      - name: Write cosign signing key to disk
-        run: 'echo "$KEY" > cosign.key'
-        shell: bash
-        env:
-          KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+      - uses: anchore/sbom-action/download-syft@df80a981bc6edbc4e220a492d3cbe9f5547a6e75 #v0.17.9
 
       - name: Generate yaml for manifest, Minikube and Openshift installation
         run: ${GITHUB_WORKSPACE}/hack/build-yaml.sh $VERSION
@@ -101,10 +91,10 @@ jobs:
           version: "~> v2"
           args: release
         env:
-          COSIGN_PWD: ${{ secrets.COSIGN_PWD }}
           GORELEASER_CURRENT_TAG: ${{ steps.get_version.outputs.VERSION }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DOCKER_CLI_EXPERIMENTAL: "enabled"
+
       - name: Generate binary hashes
         id: binary
         env:
@@ -114,101 +104,172 @@ jobs:
 
           checksum_file=$(echo "$ARTIFACTS" | jq -r '.[] | select (.type=="Checksum") | .path')
           echo "hashes=$(cat $checksum_file | base64 -w0)" >> "$GITHUB_OUTPUT"
-      # - name: Image digest
-      #   id: image
-      #   env:
-      #     ARTIFACTS: "${{ steps.goreleaser.outputs.artifacts }}"
-      #   run: |
-      #     set -euo pipefail
-      #     image_and_digest=$(echo "$ARTIFACTS" | jq -r '.[] | select (.type=="Docker Manifest") | {name, "digest": (.extra.Digest // .extra.Checksum)} | select(.digest) | {name} + {digest} | join("@") | sub("^sha256:";"")')
-      #     image=$(echo "${image_and_digest}" | grep ghcr.io | cut -d'@' -f1 | cut -d':' -f1)
-      #     digest=$(echo "${image_and_digest}" | grep ghcr.io | cut -d'@' -f2)
-      #     echo "name=$image" >> "$GITHUB_OUTPUT"
-      #     echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
+      - name: Image digest
+        id: image
+        env:
+          ARTIFACTS: "${{ steps.goreleaser.outputs.artifacts }}"
+        run: |
+          set -euo pipefail
+          image_and_digest=$(echo "$ARTIFACTS" | jq -r '.[] | select (.type=="Docker Manifest") | {name, "digest": (.extra.Digest // .extra.Checksum)} | select(.digest) | {name} + {digest} | join("@") | sub("^sha256:";"")' | grep -v latest)
+          ghcr_images=$(echo "${image_and_digest}" | grep ghcr.io | jq -R -s -c '
+            split("\n")
+            | map(select(. != ""))
+            | map(
+                split("@")
+                | {
+                    "image": .[0] | split(":")[0],
+                    "checksum": .[1]
+                  }
+              )')
+          echo "ghcr_images=$ghcr_images" >> "$GITHUB_OUTPUT"
 
   binary-provenance:
+    name: Create Binary Provenance
     needs: [create-draft-release]
     permissions:
       actions: read # To read the workflow path.
       id-token: write # To sign the provenance.
       contents: write # To add assets to a release.
-    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.0.0
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.0.0  # Do not use commit hash
     with:
       base64-subjects: "${{ needs.create-draft-release.outputs.hashes }}"
-      provenance-name: "fission.intoto.jsonl"
+      provenance-name: "fission_${{ needs.create-draft-release.outputs.version }}.intoto.jsonl"
       upload-assets: true # upload to a new release
+      draft-release: true # create a draft release
 
-  # image-provenance:
-  #   needs: [create-draft-release]
-  #   permissions:
-  #     actions: read
-  #     id-token: write
-  #     packages: write
-  #   uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v1.9.0
-  #   with:
-  #     image: ${{ needs.create-draft-release.outputs.image }}
-  #     digest: ${{ needs.create-draft-release.outputs.digest }}
-  #     registry-username: ${{ github.actor }}
-  #   secrets:
-  #     registry-password: ${{ secrets.GITHUB_TOKEN }}
+  image-provenance-ghcr:
+    name: Create Image Provenance
+    needs: [create-draft-release]
+    strategy:
+      matrix:
+        include: ${{ fromJson(needs.create-draft-release.outputs.ghcr_images) }}
+    permissions:
+      actions: read
+      id-token: write
+      packages: write
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v2.0.0 # Do not use commit hash
+    with:
+      image: ${{ fromJson(toJson(matrix)).image }}
+      digest: ${{ fromJson(toJson(matrix)).checksum }}
+      registry-username: ${{ github.actor }}
+    secrets:
+      registry-password: ${{ secrets.GITHUB_TOKEN }}
 
-  # verification-with-slsa-verifier:
-  #   needs: [create-draft-release, binary-provenance]
-  #   runs-on: ubuntu-latest
-  #   permissions: read-all
-  #   steps:
-  #     - name: Install the verifier
-  #       uses: slsa-framework/slsa-verifier/actions/installer@v2.6.0
+  image-sbom-ghcr:
+    name: Create SBOM for container images
+    # Goreleaser does not support generating SBOM for container images.
+    needs: [create-draft-release]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include: ${{ fromJson(needs.create-draft-release.outputs.ghcr_images) }}
+    permissions:
+      actions: write
+      id-token: write
+      packages: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Run Trivy in fs mode to generate SBOM
+        uses: aquasecurity/trivy-action@18f2510ee396bbf400402947b394f2dd8c87dbb0 # v0.29.0
+        with:
+          scan-type: "fs"
+          format: "spdx-json"
+          output: "spdx.sbom.json"
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@dc72c7d5c4d10cd6bcb8cf6e3fd625a9e5e537da # v3.7.0
+        with:
+          cosign-release: ${{ env.COSIGN_VERSION }}
+      - name: Sign image and sbom
+        env:
+          IMAGE: ${{ fromJson(toJson(matrix)).image }}
+          DIGEST: ${{ fromJson(toJson(matrix)).checksum }}
+        run: |
+          #!/usr/bin/env bash
+          set -euo pipefail
+          cosign attach sbom --sbom spdx.sbom.json $IMAGE@$DIGEST
+          cosign sign -a git_sha=$GITHUB_SHA --attachment sbom $IMAGE@$DIGEST --yes
 
-  #     - name: Download assets
-  #       env:
-  #         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  #         PROVENANCE: "${{ needs.binary-provenance.outputs.provenance-name }}"
-  #       run: |
-  #         set -euo pipefail
-  #         gh -R "$GITHUB_REPOSITORY" release download "$GITHUB_REF_NAME" -p "*.tar.gz"
-  #         gh -R "$GITHUB_REPOSITORY" release download "$GITHUB_REF_NAME" -p "*.zip"
-  #         gh -R "$GITHUB_REPOSITORY" release download "$GITHUB_REF_NAME" -p "$PROVENANCE"
-  #     - name: Verify assets
-  #       env:
-  #         CHECKSUMS: ${{ needs.create-draft-release.outputs.hashes }}
-  #         PROVENANCE: "${{ needs.binary-provenance.outputs.provenance-name }}"
-  #       run: |
-  #         set -euo pipefail
-  #         checksums=$(echo "$CHECKSUMS" | base64 -d)
-  #         while read -r line; do
-  #             fn=$(echo $line | cut -d ' ' -f2)
-  #             echo "Verifying $fn"
-  #             slsa-verifier verify-artifact --provenance-path "$PROVENANCE" \
-  #                                           --source-uri "github.com/$GITHUB_REPOSITORY" \
-  #                                           --source-tag "$GITHUB_REF_NAME" \
-  #                                           "$fn"
-  #         done <<<"$checksums"
+  binary-provenance-verification-with-slsa-verifier:
+    name : Verify Binary Provenance
+    needs: [create-draft-release, binary-provenance]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # To download the assets from draft release.
+    steps:
+      - name: Install the verifier
+        uses: slsa-framework/slsa-verifier/actions/installer@3714a2a4684014deb874a0e737dffa0ee02dd647 # v2.6.0
 
-  # verification-with-cosign:
-  #   needs: [create-draft-release, image-provenance]
-  #   runs-on: ubuntu-latest
-  #   permissions: read-all
-  #   steps:
-  #     - name: Login
-  #       uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
-  #       with:
-  #         registry: ghcr.io
-  #         username: ${{ github.actor }}
-  #         password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Download assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PROVENANCE: ${{ needs.binary-provenance.outputs.provenance-name }}
+          VERSION: ${{ needs.create-draft-release.outputs.version }}
+        run: |
+          set -euo pipefail
+          echo "repo=$GITHUB_REPOSITORY"
+          echo "ref=$VERSION"
+          gh -R "$GITHUB_REPOSITORY" release download "$VERSION" -p "$PROVENANCE"
 
-  #     - name: Install Cosign
-  #       uses: sigstore/cosign-installer@dc72c7d5c4d10cd6bcb8cf6e3fd625a9e5e537da # v3.7.0
-  #       with:
-  #         cosign-release: "v2.2.1"
+      - name: Verify assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CHECKSUMS: ${{ needs.create-draft-release.outputs.hashes }}
+          PROVENANCE: ${{ needs.binary-provenance.outputs.provenance-name }}
+          VERSION: ${{ needs.create-draft-release.outputs.version }}
+        run: |
+          set -euo pipefail
+          echo "CHECKSUMS=$CHECKSUMS"
+          echo "PROVENANCE=$PROVENANCE"
+          checksums=$(echo "$CHECKSUMS" | base64 -d)
+          while read -r line; do
+              fn=$(echo $line | cut -d ' ' -f2)
+              echo "Verifying $fn"
+              gh -R "$GITHUB_REPOSITORY" release download "$VERSION" -p "$fn"
+              slsa-verifier verify-artifact --provenance-path "$PROVENANCE" \
+                                            --source-uri "github.com/$GITHUB_REPOSITORY" \
+                                            --source-tag "$VERSION" \
+                                            "$fn"
+          done <<<"$checksums"
 
-  #     - name: Verify image
-  #       env:
-  #         IMAGE: ${{ needs.create-draft-release.outputs.image }}
-  #         DIGEST: ${{ needs.create-draft-release.outputs.digest }}
-  #       run: |
-  #         cosign verify-attestation \
-  #            --type slsaprovenance \
-  #            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  #            --certificate-identity-regexp '^https://github.com/slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@refs/tags/v[0-9]+.[0-9]+.[0-9]+$' \
-  #            $IMAGE@$DIGEST
+  image-provenance-verification-with-cosign:
+    name: Verify Image Provenance
+    needs: [create-draft-release, image-provenance-ghcr]
+    strategy:
+      matrix:
+        include: ${{ fromJson(needs.create-draft-release.outputs.ghcr_images) }}
+    runs-on: ubuntu-latest
+    permissions: read-all
+    steps:
+      - name: Login
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@dc72c7d5c4d10cd6bcb8cf6e3fd625a9e5e537da # v3.7.0
+        with:
+          cosign-release: ${{ env.COSIGN_VERSION }}
+
+      - name: Verify image
+        env:
+          IMAGE: ${{ fromJson(toJson(matrix)).image }}
+          DIGEST: ${{ fromJson(toJson(matrix)).checksum }}
+        run: |
+          echo "Verifying $IMAGE@$DIGEST"
+          cosign verify-attestation \
+             --type slsaprovenance \
+             --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+             --certificate-identity-regexp '^https://github.com/slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@refs/tags/v[0-9]+.[0-9]+.[0-9]+$' \
+             $IMAGE@$DIGEST
