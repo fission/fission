@@ -84,9 +84,9 @@ func NewPoolPodController(ctx context.Context, logger *zap.Logger,
 		envListerSynced:      make(map[string]k8sCache.InformerSynced, 0),
 		podLister:            make(map[string]corelisters.PodLister),
 		podListerSynced:      make(map[string]k8sCache.InformerSynced),
-		envCreateUpdateQueue: workqueue.NewTypedRateLimitingQueueWithConfig[string](workqueue.DefaultTypedControllerRateLimiter[string](), workqueue.TypedRateLimitingQueueConfig[string]{Name: "EnvAddUpdateQueue"}),
-		envDeleteQueue:       workqueue.NewTypedRateLimitingQueueWithConfig[*fv1.Environment](workqueue.DefaultTypedControllerRateLimiter[*fv1.Environment](), workqueue.TypedRateLimitingQueueConfig[*fv1.Environment]{Name: "EnvDeleteQueue"}),
-		spCleanupPodQueue:    workqueue.NewTypedRateLimitingQueueWithConfig[string](workqueue.DefaultTypedControllerRateLimiter[string](), workqueue.TypedRateLimitingQueueConfig[string]{Name: "SpecializedPodCleanupQueue"}),
+		envCreateUpdateQueue: workqueue.NewTypedRateLimitingQueueWithConfig(workqueue.DefaultTypedControllerRateLimiter[string](), workqueue.TypedRateLimitingQueueConfig[string]{Name: "EnvAddUpdateQueue"}),
+		envDeleteQueue:       workqueue.NewTypedRateLimitingQueueWithConfig(workqueue.DefaultTypedControllerRateLimiter[*fv1.Environment](), workqueue.TypedRateLimitingQueueConfig[*fv1.Environment]{Name: "EnvDeleteQueue"}),
+		spCleanupPodQueue:    workqueue.NewTypedRateLimitingQueueWithConfig(workqueue.DefaultTypedControllerRateLimiter[string](), workqueue.TypedRateLimitingQueueConfig[string]{Name: "SpecializedPodCleanupQueue"}),
 	}
 	if p.enableIstio {
 		for _, factory := range finformerFactory {

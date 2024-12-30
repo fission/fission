@@ -33,7 +33,9 @@ func (gp *GenericPool) setupReadyPodController() error {
 	// avoid concurrent access to gp.deployment
 	gp.lock.Lock()
 	defer gp.lock.Unlock()
-	gp.readyPodQueue = workqueue.NewTypedDelayingQueue[string]()
+	gp.readyPodQueue = workqueue.NewTypedDelayingQueueWithConfig(workqueue.TypedDelayingQueueConfig[string]{
+		Name: "readyPodQueue",
+	})
 	informerFactory, err := utils.GetInformerFactoryByReadyPod(gp.kubernetesClient, gp.fnNamespace, gp.deployment.Spec.Selector)
 	if err != nil {
 		return err
