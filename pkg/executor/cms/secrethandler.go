@@ -57,13 +57,18 @@ func SecretEventHandlers(ctx context.Context, logger *zap.Logger, fissionClient 
 			oldS := oldObj.(*apiv1.Secret)
 			newS := newObj.(*apiv1.Secret)
 			if oldS.ObjectMeta.ResourceVersion != newS.ObjectMeta.ResourceVersion {
-				logger.Debug("Secret changed",
-					zap.String("configmap_name", newS.ObjectMeta.Name),
-					zap.String("configmap_namespace", newS.ObjectMeta.Namespace))
 				funcs, err := getSecretRelatedFuncs(ctx, logger, &newS.ObjectMeta, fissionClient)
 				if err != nil {
 					logger.Error("Failed to get functions related to secret", zap.String("secret_name", newS.ObjectMeta.Name), zap.String("secret_namespace", newS.ObjectMeta.Namespace))
 				}
+
+				if len(funcs) == 0 {
+					return
+				}
+
+				logger.Debug("Secret changed",
+					zap.String("secret_name", newS.ObjectMeta.Name),
+					zap.String("secret_namespace", newS.ObjectMeta.Namespace))
 				refreshPods(ctx, logger, funcs, types)
 			}
 		},
