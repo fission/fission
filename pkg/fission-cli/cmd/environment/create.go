@@ -64,7 +64,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 // run write the resource to a spec file or create a fission CRD with remote fission server.
 // It also prints warning/error if necessary.
 func (opts *CreateSubCommand) run(input cli.Input) (err error) {
-	
+
 	userDefinedNS, currentNS, err := opts.GetResourceNamespace(input, flagkey.NamespaceEnvironment)
 	if err != nil {
 		return fv1.AggregateValidationErrors("Environment", err)
