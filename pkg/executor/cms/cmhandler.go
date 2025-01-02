@@ -58,13 +58,18 @@ func ConfigMapEventHandlers(ctx context.Context, logger *zap.Logger, fissionClie
 			oldCm := oldObj.(*apiv1.ConfigMap)
 			newCm := newObj.(*apiv1.ConfigMap)
 			if oldCm.ObjectMeta.ResourceVersion != newCm.ObjectMeta.ResourceVersion {
-				logger.Debug("Configmap changed",
-					zap.String("configmap_name", newCm.ObjectMeta.Name),
-					zap.String("configmap_namespace", newCm.ObjectMeta.Namespace))
 				funcs, err := getConfigmapRelatedFuncs(ctx, logger, &newCm.ObjectMeta, fissionClient)
 				if err != nil {
 					logger.Error("Failed to get functions related to configmap", zap.String("configmap_name", newCm.ObjectMeta.Name), zap.String("configmap_namespace", newCm.ObjectMeta.Namespace))
 				}
+
+				if len(funcs) == 0 {
+					return
+				}
+
+				logger.Debug("Configmap changed",
+					zap.String("configmap_name", newCm.ObjectMeta.Name),
+					zap.String("configmap_namespace", newCm.ObjectMeta.Namespace))
 				refreshPods(ctx, logger, funcs, types)
 			}
 		},
