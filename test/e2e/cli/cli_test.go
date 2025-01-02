@@ -314,6 +314,10 @@ func TestFissionCLI(t *testing.T) {
 			_, err := cli.ExecCommand(f, ctx, "timetrigger", "delete", "--name", "test-tt")
 			require.NoError(t, err)
 
+			// TimeTrigger object will not be deleted until finalizer is removed.
+			// Hence waiting for 2 seconds.
+			time.Sleep(2 * time.Second)
+
 			_, err = fissionClient.CoreV1().TimeTriggers(metav1.NamespaceDefault).Get(ctx, "test-tt", metav1.GetOptions{})
 			require.Error(t, err)
 
