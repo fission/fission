@@ -142,7 +142,7 @@ func (opts *DumpSubCommand) do(input cli.Input) error {
 	if !nozip {
 		defer os.RemoveAll(tempDir)
 		path := filepath.Join(outputDir, fmt.Sprintf("%v.zip", dumpName))
-		_, err := utils.MakeZipArchive(path, tempDir)
+		_, err := utils.MakeZipArchiveWithGlobs(input.Context(), path, tempDir)
 		if err != nil {
 			fmt.Printf("Error creating archive for dump files: %v", err)
 			return err

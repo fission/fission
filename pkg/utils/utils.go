@@ -29,7 +29,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/mholt/archiver/v3"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context/ctxhttp"
 	apiv1 "k8s.io/api/core/v1"
@@ -86,21 +85,6 @@ func FindAllGlobs(paths ...string) ([]string, error) {
 		// xxx handle excludeGlobs here
 	}
 	return files, nil
-}
-
-func MakeZipArchive(targetName string, globs ...string) (string, error) {
-	files, err := FindAllGlobs(globs...)
-	if err != nil {
-		return "", err
-	}
-
-	// zip up the file list
-	err = archiver.DefaultZip.Archive(files, targetName)
-	if err != nil {
-		return "", err
-	}
-
-	return filepath.Abs(targetName)
 }
 
 // RemoveZeroBytes remove empty byte(\x00) from input byte slice and return a new byte slice
@@ -217,15 +201,6 @@ func DownloadUrl(ctx context.Context, httpClient *http.Client, url string, local
 	}
 
 	return nil
-}
-
-func IsZip(filename string) (bool, error) {
-	f, err := os.Open(filename)
-	if err != nil {
-		return false, nil
-	}
-	defer f.Close()
-	return archiver.DefaultZip.Match(f)
 }
 
 func GetStringValueFromEnv(envVar string) (string, error) {
