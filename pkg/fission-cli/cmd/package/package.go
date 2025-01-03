@@ -185,7 +185,7 @@ func CreateArchive(client cmd.Client, input cli.Input, includeFiles []string, no
 		return &archive, nil
 	}
 
-	archivePath, err := makeArchiveFile("", includeFiles, noZip)
+	archivePath, err := makeArchiveFile(input.Context(), "", includeFiles, noZip)
 	if err != nil {
 		return nil, err
 	}
@@ -200,7 +200,7 @@ func CreateArchive(client cmd.Client, input cli.Input, includeFiles []string, no
 // returned as-is with no zipping.  (This is used for compatibility
 // with v1 envs.)  noZip is IGNORED if there is more than one input
 // file.
-func makeArchiveFile(archiveNameHint string, archiveInput []string, noZip bool) (string, error) {
+func makeArchiveFile(ctx context.Context, archiveNameHint string, archiveInput []string, noZip bool) (string, error) {
 
 	// Unique name for the archive
 	archiveFileName := archiveName(archiveNameHint, archiveInput) + ".zip"
@@ -219,7 +219,7 @@ func makeArchiveFile(archiveNameHint string, archiveInput []string, noZip bool) 
 		}
 
 		// if it's an existing zip file OR we're not supposed to zip it, don't do anything
-		if match, _ := utils.IsZip(files[0]); match || noZip {
+		if match, _ := utils.IsZip(ctx, files[0]); match || noZip {
 			return files[0], nil
 		}
 	}
@@ -230,7 +230,7 @@ func makeArchiveFile(archiveNameHint string, archiveInput []string, noZip bool) 
 		return "", errors.Wrap(err, "error create temporary archive directory")
 	}
 
-	archivePath, err := utils.MakeZipArchive(filepath.Join(tmpDir, archiveFileName), archiveInput...)
+	archivePath, err := utils.MakeZipArchiveWithGlobs(ctx, filepath.Join(tmpDir, archiveFileName), archiveInput...)
 	if err != nil {
 		return "", errors.Wrap(err, "create archive file")
 	}
