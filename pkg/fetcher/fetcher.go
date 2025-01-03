@@ -29,7 +29,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/mholt/archiver/v3"
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.uber.org/zap"
@@ -350,10 +349,10 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 	}
 
 	// checking if file is a zip
-	if match, _ := utils.IsZip(tmpPath); match && !req.KeepArchive {
+	if match, _ := utils.IsZip(ctx, tmpPath); match && !req.KeepArchive {
 		// unarchive tmp file to a tmp unarchive path
 		tmpUnarchivePath := filepath.Join(fetcher.sharedVolumePath, uuid.NewString())
-		err := fetcher.unarchive(tmpPath, tmpUnarchivePath)
+		err := utils.Unarchive(ctx, tmpPath, tmpUnarchivePath)
 		if err != nil {
 			logger.Error("error unarchive",
 				zap.Error(err),
@@ -552,7 +551,7 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	if req.ArchivePackage {
-		err = fetcher.archive(srcFilepath, dstFilepath)
+		err = utils.Archive(ctx, srcFilepath, dstFilepath)
 		if err != nil {
 			e := "error archiving zip file"
 			logger.Error(e, zap.Error(err), zap.String("source", srcFilepath), zap.String("destination", dstFilepath))
@@ -617,39 +616,6 @@ func (fetcher *Fetcher) rename(src string, dst string) error {
 	err := os.Rename(src, dst)
 	if err != nil {
 		return errors.Wrap(err, "failed to move file")
-	}
-	return nil
-}
-
-// archive zips the contents of directory at src into a new zip file
-// at dst (note that the contents are zipped, not the directory itself).
-func (fetcher *Fetcher) archive(src string, dst string) error {
-	var files []string
-	target, err := os.Stat(src)
-	if err != nil {
-		return errors.Wrap(err, "failed to zip file")
-	}
-	if target.IsDir() {
-		// list all
-		fs, _ := os.ReadDir(src)
-		for _, f := range fs {
-			files = append(files, filepath.Join(src, f.Name()))
-		}
-	} else {
-		files = append(files, src)
-	}
-	zip := archiver.NewZip()
-	defer zip.Close()
-	return zip.Archive(files, dst)
-}
-
-// unarchive is a function that unzips a zip file to destination
-func (fetcher *Fetcher) unarchive(src string, dst string) error {
-	zip := archiver.NewZip()
-	defer zip.Close()
-	err := zip.Unarchive(src, dst)
-	if err != nil {
-		return fmt.Errorf("failed to unzip file: %w", err)
 	}
 	return nil
 }

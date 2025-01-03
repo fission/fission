@@ -176,7 +176,7 @@ func (opts *DestroySubCommand) insertNSToResource(input cli.Input, fr *FissionRe
 	return result.ErrorOrNil()
 }
 
-func deleteResources(ctx context.Context, fclient cmd.Client, fr *FissionResources, forceDelete bool) error {
+func deleteResources(ctx context.Context, fclient cmd.Client, fr *FissionResources, _ bool) error {
 
 	var err error
 

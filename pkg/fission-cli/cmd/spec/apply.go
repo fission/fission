@@ -27,7 +27,6 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/go-git/go-git/v5"
-	"github.com/mholt/archiver/v3"
 	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -358,7 +357,7 @@ func applyArchives(input cli.Input, fclient cmd.Client, specDir string, fr *Fiss
 
 	// create archives locally and calculate checksums
 	for _, aus := range fr.ArchiveUploadSpecs {
-		ar, err := localArchiveFromSpec(specDir, &aus)
+		ar, err := localArchiveFromSpec(input.Context(), specDir, &aus)
 		if err != nil {
 			return err
 		}
@@ -501,7 +500,7 @@ func applyResources(input cli.Input, fclient cmd.Client, specDir string, fr *Fis
 
 // localArchiveFromSpec creates an archive on the local filesystem from the given spec,
 // and returns its path and checksum.
-func localArchiveFromSpec(specDir string, aus *spectypes.ArchiveUploadSpec) (*fv1.Archive, error) {
+func localArchiveFromSpec(ctx context.Context, specDir string, aus *spectypes.ArchiveUploadSpec) (*fv1.Archive, error) {
 	// get root dir
 	var rootDir string
 
@@ -518,7 +517,7 @@ func localArchiveFromSpec(specDir string, aus *spectypes.ArchiveUploadSpec) (*fv
 	files := make([]string, 0)
 
 	// checking if file is a zip
-	if match, _ := utils.IsZip(aus.IncludeGlobs[0]); match && len(aus.IncludeGlobs) == 1 {
+	if match, _ := utils.IsZip(ctx, aus.IncludeGlobs[0]); match && len(aus.IncludeGlobs) == 1 {
 		files = append(files, aus.IncludeGlobs[0])
 	} else {
 		for _, relativeGlob := range aus.IncludeGlobs {
@@ -560,9 +559,7 @@ func localArchiveFromSpec(specDir string, aus *spectypes.ArchiveUploadSpec) (*fv
 		}
 		archiveFileName = archiveFile.Name()
 
-		// This instance is required to allow overwriting and not changing DefaultZip
-		zipOverwrite := archiver.Zip{OverwriteExisting: true}
-		err = zipOverwrite.Archive(files, archiveFileName)
+		_, err = utils.MakeZipArchiveWithGlobs(ctx, archiveFileName, files...)
 		if err != nil {
 			return nil, err
 		}
