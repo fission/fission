@@ -64,16 +64,6 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 // run write the resource to a spec file or create a fission CRD with remote fission server.
 // It also prints warning/error if necessary.
 func (opts *CreateSubCommand) run(input cli.Input) (err error) {
-	m := opts.env.ObjectMeta
-
-	envList, err := opts.Client().FissionClientSet.CoreV1().Environments(m.Namespace).List(input.Context(), metav1.ListOptions{})
-	if err != nil {
-		return err
-	} else if len(envList.Items) > 0 {
-		console.Verbose(2, "%d environment(s) are present in the %s namespace.  "+
-			"These environments are not isolated from each other; use separate namespaces if you need isolation.",
-			len(envList.Items), m.Namespace)
-	}
 
 	userDefinedNS, currentNS, err := opts.GetResourceNamespace(input, flagkey.NamespaceEnvironment)
 	if err != nil {
@@ -81,6 +71,15 @@ func (opts *CreateSubCommand) run(input cli.Input) (err error) {
 	}
 	// we use user provided NS in spec. While creating actual record we use the current context's NS.
 	opts.env.ObjectMeta.Namespace = userDefinedNS
+
+	envList, err := opts.Client().FissionClientSet.CoreV1().Environments(opts.env.ObjectMeta.Namespace).List(input.Context(), metav1.ListOptions{})
+	if err != nil {
+		return err
+	} else if len(envList.Items) > 0 {
+		console.Verbose(2, "%d environment(s) are present in the %s namespace.  "+
+			"These environments are not isolated from each other; use separate namespaces if you need isolation.",
+			len(envList.Items), opts.env.ObjectMeta.Namespace)
+	}
 
 	// if we're writing a spec, don't call the API
 	// save to spec file or display the spec to console
@@ -99,7 +98,7 @@ func (opts *CreateSubCommand) run(input cli.Input) (err error) {
 			return fv1.AggregateValidationErrors("Environment", err)
 		}
 
-		specFile := fmt.Sprintf("env-%v.yaml", m.Name)
+		specFile := fmt.Sprintf("env-%v.yaml", opts.env.ObjectMeta.Name)
 		err = spec.SpecSave(*opts.env, specFile, false)
 		if err != nil {
 			return errors.Wrap(err, "error saving environment spec")
@@ -114,7 +113,7 @@ func (opts *CreateSubCommand) run(input cli.Input) (err error) {
 		return errors.Wrap(err, "error creating resource")
 	}
 
-	fmt.Printf("environment '%v' created\n", m.Name)
+	fmt.Printf("environment '%v' created\n", opts.env.ObjectMeta.Name)
 	return nil
 }
 
