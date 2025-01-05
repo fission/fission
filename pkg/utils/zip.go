@@ -61,10 +61,10 @@ func Archive(ctx context.Context, src string, dst string) error {
 	if err != nil {
 		return fmt.Errorf("failed to get source directory info: %w", err)
 	}
-	if !srcInfo.IsDir() {
-		_, err = MakeZipArchiveWithGlobs(ctx, dst, src)
+	if srcInfo.IsDir() {
+		src = src + "/*"
 	}
-	_, err = MakeZipArchiveWithGlobs(ctx, dst, src+"/*")
+	_, err = MakeZipArchiveWithGlobs(ctx, dst, src)
 	return err
 }
 
