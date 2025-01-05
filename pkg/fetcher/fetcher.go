@@ -253,22 +253,22 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 	logger := otelUtils.LoggerWithTraceID(ctx, fetcher.logger)
 
 	// check that the requested filename is not an empty string and doest not contain any path traversal
-	if !utils.ValidateFilePathComponent(req.Filename) {
-		e := "fetch request received for an invalid file name"
-		logger.Error(e, zap.Any("request", req))
-		return http.StatusBadRequest, errors.New(fmt.Sprintf("%s, request: %v", e, req))
+	filename, err := utils.ValidateFilePathComponent(req.Filename)
+	if err != nil {
+		logger.Error(err.Error(), zap.String("filename", req.Filename))
+		return http.StatusBadRequest, errors.New(fmt.Sprintf("%s, request: %v", err, req))
 	}
 
 	// verify first if the file already exists.
-	if _, err := os.Stat(filepath.Join(fetcher.sharedVolumePath, req.Filename)); err == nil {
+	if _, err := os.Stat(filepath.Join(fetcher.sharedVolumePath, filename)); err == nil {
 		logger.Info("requested file already exists at shared volume - skipping fetch",
-			zap.String("requested_file", req.Filename),
+			zap.String("requested_file", filename),
 			zap.String("shared_volume_path", fetcher.sharedVolumePath))
 		otelUtils.SpanTrackEvent(ctx, "packageAlreadyExists", otelUtils.GetAttributesForPackage(pkg)...)
 		return http.StatusOK, nil
 	}
 
-	tmpFile := req.Filename + ".tmp"
+	tmpFile := filename + ".tmp"
 	tmpPath := filepath.Join(fetcher.sharedVolumePath, tmpFile)
 
 	if req.FetchType == fv1.FETCH_URL {
@@ -365,8 +365,8 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 	}
 
 	// move tmp file to requested filename
-	renamePath := filepath.Join(fetcher.sharedVolumePath, req.Filename)
-	err := fetcher.rename(tmpPath, renamePath)
+	renamePath := filepath.Join(fetcher.sharedVolumePath, filename)
+	err = fetcher.rename(tmpPath, renamePath)
 	if err != nil {
 		logger.Error("error renaming file",
 			zap.Error(err),
@@ -405,13 +405,17 @@ func (fetcher *Fetcher) FetchSecretsAndCfgMaps(ctx context.Context, secrets []fv
 				return httpCode, errors.New(e)
 			}
 
-			if !utils.ValidateFilePathComponent(secret.Namespace) && !utils.ValidateFilePathComponent(secret.Name) {
-				e := "fetch request received for an invalid secret name or namespace"
-				logger.Error(e, zap.Any("request", secret))
-				return http.StatusBadRequest, errors.New(fmt.Sprintf("%s, request: %v", e, secret))
+			secretName, err := utils.ValidateFilePathComponent(secret.Name)
+			if err != nil {
+				logger.Error(err.Error(), zap.String("secret_name", secret.Name))
+				return http.StatusBadRequest, errors.New(fmt.Sprintf("%s, request: %v", err, secret))
 			}
-			secretPath := filepath.Join(secret.Namespace, secret.Name)
-			secretDir := filepath.Join(fetcher.sharedSecretPath, secretPath)
+			secretNamespace, err := utils.ValidateFilePathComponent(secret.Namespace)
+			if err != nil {
+				logger.Error(err.Error(), zap.String("secret_namespace", secret.Namespace))
+				return http.StatusBadRequest, errors.New(fmt.Sprintf("%s, request: %v", err, secret))
+			}
+			secretDir := filepath.Join(fetcher.sharedSecretPath, secretNamespace, secretName)
 			err = os.MkdirAll(secretDir, os.ModeDir|0750)
 			if err != nil {
 				e := "failed to create directory for secret"
@@ -458,14 +462,20 @@ func (fetcher *Fetcher) FetchSecretsAndCfgMaps(ctx context.Context, secrets []fv
 				return httpCode, errors.New(e)
 			}
 
-			if !utils.ValidateFilePathComponent(config.Namespace) && !utils.ValidateFilePathComponent(config.Name) {
-				e := "fetch request received for an invalid configmap name or namespace"
-				logger.Error(e, zap.Any("request", config))
-				return http.StatusBadRequest, errors.New(fmt.Sprintf("%s, request: %v", e, config))
+			configName, err := utils.ValidateFilePathComponent(config.Name)
+			if err != nil {
+				logger.Error(err.Error(), zap.String("config_map_name", config.Name))
+				return http.StatusBadRequest, errors.New(fmt.Sprintf("%s, request: %v", err,
+					config))
+			}
+			configNamespace, err := utils.ValidateFilePathComponent(config.Namespace)
+			if err != nil {
+				logger.Error(err.Error(), zap.String("config_map_namespace", config.Namespace))
+				return http.StatusBadRequest, errors.New(fmt.Sprintf("%s, request: %v", err,
+					config))
 			}
 
-			configPath := filepath.Join(config.Namespace, config.Name)
-			configDir := filepath.Join(fetcher.sharedConfigPath, configPath)
+			configDir := filepath.Join(fetcher.sharedConfigPath, configNamespace, configName)
 			err = os.MkdirAll(configDir, os.ModeDir|0750)
 			if err != nil {
 				e := "failed to create directory for configmap"
@@ -530,16 +540,17 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !utils.ValidateFilePathComponent(req.Filename) {
-		logger.Error("invalid filename in request", zap.String("filename", req.Filename))
-		http.Error(w, "Invalid file name", http.StatusBadRequest)
+	filename, err := utils.ValidateFilePathComponent(req.Filename)
+	if err != nil {
+		logger.Error(err.Error(), zap.String("filename", req.Filename))
+		http.Error(w, fmt.Sprintf("%s: %v", err, req.Filename), http.StatusBadRequest)
 		return
 	}
 
 	logger.Info("fetcher received upload request", zap.Any("request", req))
 
-	zipFilename := req.Filename + ".zip"
-	srcFilepath := filepath.Join(fetcher.sharedVolumePath, req.Filename)
+	zipFilename := filename + ".zip"
+	srcFilepath := filepath.Join(fetcher.sharedVolumePath, filename)
 	dstFilepath := filepath.Join(fetcher.sharedVolumePath, zipFilename)
 
 	defer func() {

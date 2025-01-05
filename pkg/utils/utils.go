@@ -286,8 +286,14 @@ func IsOwnerReferencesEnabled() bool {
 }
 
 // ValidateFilePathComponent checks if the filename is valid to prevent directory traversal attacks.
-func ValidateFilePathComponent(filename string) bool {
-	return len(filename) > 0 && !containsInvalidChars(filename)
+func ValidateFilePathComponent(filename string) (string, error) {
+	if len(filename) == 0 {
+		return "", errors.New("filename is empty")
+	}
+	if containsInvalidChars(filename) {
+		return "", errors.New("filename contains invalid characters")
+	}
+	return filename, nil
 }
 
 func containsInvalidChars(filename string) bool {

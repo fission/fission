@@ -57,7 +57,14 @@ func MakeZipArchiveWithGlobs(ctx context.Context, targetName string, globs ...st
 // Archive zips the contents of directory at src into a new zip file
 // at dst (note that the contents are zipped, not the directory itself).
 func Archive(ctx context.Context, src string, dst string) error {
-	_, err := MakeZipArchiveWithGlobs(ctx, dst, src+"/*")
+	srcInfo, err := os.Stat(src)
+	if err != nil {
+		return fmt.Errorf("failed to get source directory info: %w", err)
+	}
+	if !srcInfo.IsDir() {
+		_, err = MakeZipArchiveWithGlobs(ctx, dst, src)
+	}
+	_, err = MakeZipArchiveWithGlobs(ctx, dst, src+"/*")
 	return err
 }
 
