@@ -168,6 +168,16 @@ func TestArchiveUnarchive(t *testing.T) {
 				return
 			}
 
+			// Test is valid zip file
+			isZip, err := IsZip(ctx, zipFile.Name())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !isZip {
+				t.Errorf("Archive() did not create a valid zip file")
+				return
+			}
+
 			// Test Unarchive
 			err = Unarchive(ctx, zipFile.Name(), extractDir)
 			if (err != nil) != tt.wantErr {

@@ -19,7 +19,7 @@ func IsZip(ctx context.Context, filename string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	if result.ByName && result.ByStream {
+	if result.ByName || result.ByStream {
 		return true, nil
 	}
 	return false, nil
