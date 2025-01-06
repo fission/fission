@@ -19,15 +19,15 @@ limitations under the License.
 package v1
 
 import (
-	v1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 )
 
 // RuntimeApplyConfiguration represents a declarative configuration of the Runtime type for use
 // with apply.
 type RuntimeApplyConfiguration struct {
-	Image     *string       `json:"image,omitempty"`
-	Container *v1.Container `json:"container,omitempty"`
-	PodSpec   *v1.PodSpec   `json:"podspec,omitempty"`
+	Image     *string           `json:"image,omitempty"`
+	Container *corev1.Container `json:"container,omitempty"`
+	PodSpec   *corev1.PodSpec   `json:"podspec,omitempty"`
 }
 
 // RuntimeApplyConfiguration constructs a declarative configuration of the Runtime type for use with
@@ -47,7 +47,7 @@ func (b *RuntimeApplyConfiguration) WithImage(value string) *RuntimeApplyConfigu
 // WithContainer sets the Container field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the Container field is set to the value of the last call.
-func (b *RuntimeApplyConfiguration) WithContainer(value v1.Container) *RuntimeApplyConfiguration {
+func (b *RuntimeApplyConfiguration) WithContainer(value corev1.Container) *RuntimeApplyConfiguration {
 	b.Container = &value
 	return b
 }
@@ -55,7 +55,7 @@ func (b *RuntimeApplyConfiguration) WithContainer(value v1.Container) *RuntimeAp
 // WithPodSpec sets the PodSpec field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the PodSpec field is set to the value of the last call.
-func (b *RuntimeApplyConfiguration) WithPodSpec(value v1.PodSpec) *RuntimeApplyConfiguration {
+func (b *RuntimeApplyConfiguration) WithPodSpec(value corev1.PodSpec) *RuntimeApplyConfiguration {
 	b.PodSpec = &value
 	return b
 }

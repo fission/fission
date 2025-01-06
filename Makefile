@@ -59,22 +59,19 @@ install-fission-cli:
 	mv dist/fission-cli_$(GOOS)_$(GOARCH)_v1/fission$(FISSION-CLI-SUFFIX) /usr/local/bin/fission
 
 ### Codegen
-codegen: controller-gen-install
+codegen:
 	@./hack/update-codegen.sh
-	$(GOPATH)/bin/controller-gen object:headerFile="hack/boilerplate.txt" paths="./..."
+	go run sigs.k8s.io/controller-tools/cmd/controller-gen object:headerFile="hack/boilerplate.txt" paths="./..."
 
 ### CRDs
-controller-gen-install:
-	go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.16.3
-
-generate-crds: controller-gen-install
-	$(GOPATH)/bin/controller-gen crd \
+generate-crds:
+	go run sigs.k8s.io/controller-tools/cmd/controller-gen crd \
 	paths=./pkg/apis/core/v1  \
 	output:crd:artifacts:config=crds/v1
 
 ### Webhook generation: it generates webhook configs with help of kubebuilder:webhook tag
-generate-webhooks: controller-gen-install
-	$(GOPATH)/bin/controller-gen webhook \
+generate-webhooks:
+	go run sigs.k8s.io/controller-tools/cmd/controller-gen webhook \
 	 paths=./pkg/apis/core/v1 \
 	 output:dir=charts/fission-all/templates/webhook-server
 
@@ -99,12 +96,9 @@ generate-swagger-doc:
 generate-cli-docs:
 	go run tools/cmd-docs/main.go -o "../fission.io/content/en/docs/reference/fission-cli"
 
-install-crd-ref-docs:
-	go install github.com/elastic/crd-ref-docs@v0.1.0
-
-generate-crd-ref-docs: install-crd-ref-docs
+generate-crd-ref-docs:
 	# crd-ref-docs: https://github.com/elastic/crd-ref-docs
-	$(GOPATH)/bin/crd-ref-docs --source-path=pkg/apis/core/v1 --config=tools/crd-ref-docs/config.yaml --renderer markdown
+	go run github.com/elastic/crd-ref-docs --source-path=pkg/apis/core/v1 --config=tools/crd-ref-docs/config.yaml --renderer markdown
 	cp tools/crd-ref-docs/header.md crd_docs.md
 	cat out.md >> crd_docs.md && rm out.md
 	mv crd_docs.md ../fission.io/content/en/docs/reference/crd-reference.md

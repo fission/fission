@@ -19,10 +19,10 @@ limitations under the License.
 package v1
 
 import (
-	"context"
+	context "context"
 
-	v1 "github.com/fission/fission/pkg/apis/core/v1"
-	corev1 "github.com/fission/fission/pkg/generated/applyconfiguration/core/v1"
+	corev1 "github.com/fission/fission/pkg/apis/core/v1"
+	applyconfigurationcorev1 "github.com/fission/fission/pkg/generated/applyconfiguration/core/v1"
 	scheme "github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	types "k8s.io/apimachinery/pkg/types"
@@ -38,36 +38,37 @@ type PackagesGetter interface {
 
 // PackageInterface has methods to work with Package resources.
 type PackageInterface interface {
-	Create(ctx context.Context, _package *v1.Package, opts metav1.CreateOptions) (*v1.Package, error)
-	Update(ctx context.Context, _package *v1.Package, opts metav1.UpdateOptions) (*v1.Package, error)
+	Create(ctx context.Context, _package *corev1.Package, opts metav1.CreateOptions) (*corev1.Package, error)
+	Update(ctx context.Context, _package *corev1.Package, opts metav1.UpdateOptions) (*corev1.Package, error)
 	// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-	UpdateStatus(ctx context.Context, _package *v1.Package, opts metav1.UpdateOptions) (*v1.Package, error)
+	UpdateStatus(ctx context.Context, _package *corev1.Package, opts metav1.UpdateOptions) (*corev1.Package, error)
 	Delete(ctx context.Context, name string, opts metav1.DeleteOptions) error
 	DeleteCollection(ctx context.Context, opts metav1.DeleteOptions, listOpts metav1.ListOptions) error
-	Get(ctx context.Context, name string, opts metav1.GetOptions) (*v1.Package, error)
-	List(ctx context.Context, opts metav1.ListOptions) (*v1.PackageList, error)
+	Get(ctx context.Context, name string, opts metav1.GetOptions) (*corev1.Package, error)
+	List(ctx context.Context, opts metav1.ListOptions) (*corev1.PackageList, error)
 	Watch(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error)
-	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, subresources ...string) (result *v1.Package, err error)
-	Apply(ctx context.Context, _package *corev1.PackageApplyConfiguration, opts metav1.ApplyOptions) (result *v1.Package, err error)
+	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, subresources ...string) (result *corev1.Package, err error)
+	Apply(ctx context.Context, _package *applyconfigurationcorev1.PackageApplyConfiguration, opts metav1.ApplyOptions) (result *corev1.Package, err error)
 	// Add a +genclient:noStatus comment above the type to avoid generating ApplyStatus().
-	ApplyStatus(ctx context.Context, _package *corev1.PackageApplyConfiguration, opts metav1.ApplyOptions) (result *v1.Package, err error)
+	ApplyStatus(ctx context.Context, _package *applyconfigurationcorev1.PackageApplyConfiguration, opts metav1.ApplyOptions) (result *corev1.Package, err error)
 	PackageExpansion
 }
 
 // packages implements PackageInterface
 type packages struct {
-	*gentype.ClientWithListAndApply[*v1.Package, *v1.PackageList, *corev1.PackageApplyConfiguration]
+	*gentype.ClientWithListAndApply[*corev1.Package, *corev1.PackageList, *applyconfigurationcorev1.PackageApplyConfiguration]
 }
 
 // newPackages returns a Packages
 func newPackages(c *CoreV1Client, namespace string) *packages {
 	return &packages{
-		gentype.NewClientWithListAndApply[*v1.Package, *v1.PackageList, *corev1.PackageApplyConfiguration](
+		gentype.NewClientWithListAndApply[*corev1.Package, *corev1.PackageList, *applyconfigurationcorev1.PackageApplyConfiguration](
 			"packages",
 			c.RESTClient(),
 			scheme.ParameterCodec,
 			namespace,
-			func() *v1.Package { return &v1.Package{} },
-			func() *v1.PackageList { return &v1.PackageList{} }),
+			func() *corev1.Package { return &corev1.Package{} },
+			func() *corev1.PackageList { return &corev1.PackageList{} },
+		),
 	}
 }

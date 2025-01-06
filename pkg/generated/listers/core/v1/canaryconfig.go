@@ -19,10 +19,10 @@ limitations under the License.
 package v1
 
 import (
-	v1 "github.com/fission/fission/pkg/apis/core/v1"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/client-go/listers"
-	"k8s.io/client-go/tools/cache"
+	corev1 "github.com/fission/fission/pkg/apis/core/v1"
+	labels "k8s.io/apimachinery/pkg/labels"
+	listers "k8s.io/client-go/listers"
+	cache "k8s.io/client-go/tools/cache"
 )
 
 // CanaryConfigLister helps list CanaryConfigs.
@@ -30,7 +30,7 @@ import (
 type CanaryConfigLister interface {
 	// List lists all CanaryConfigs in the indexer.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1.CanaryConfig, err error)
+	List(selector labels.Selector) (ret []*corev1.CanaryConfig, err error)
 	// CanaryConfigs returns an object that can list and get CanaryConfigs.
 	CanaryConfigs(namespace string) CanaryConfigNamespaceLister
 	CanaryConfigListerExpansion
@@ -38,17 +38,17 @@ type CanaryConfigLister interface {
 
 // canaryConfigLister implements the CanaryConfigLister interface.
 type canaryConfigLister struct {
-	listers.ResourceIndexer[*v1.CanaryConfig]
+	listers.ResourceIndexer[*corev1.CanaryConfig]
 }
 
 // NewCanaryConfigLister returns a new CanaryConfigLister.
 func NewCanaryConfigLister(indexer cache.Indexer) CanaryConfigLister {
-	return &canaryConfigLister{listers.New[*v1.CanaryConfig](indexer, v1.Resource("canaryconfig"))}
+	return &canaryConfigLister{listers.New[*corev1.CanaryConfig](indexer, corev1.Resource("canaryconfig"))}
 }
 
 // CanaryConfigs returns an object that can list and get CanaryConfigs.
 func (s *canaryConfigLister) CanaryConfigs(namespace string) CanaryConfigNamespaceLister {
-	return canaryConfigNamespaceLister{listers.NewNamespaced[*v1.CanaryConfig](s.ResourceIndexer, namespace)}
+	return canaryConfigNamespaceLister{listers.NewNamespaced[*corev1.CanaryConfig](s.ResourceIndexer, namespace)}
 }
 
 // CanaryConfigNamespaceLister helps list and get CanaryConfigs.
@@ -56,15 +56,15 @@ func (s *canaryConfigLister) CanaryConfigs(namespace string) CanaryConfigNamespa
 type CanaryConfigNamespaceLister interface {
 	// List lists all CanaryConfigs in the indexer for a given namespace.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1.CanaryConfig, err error)
+	List(selector labels.Selector) (ret []*corev1.CanaryConfig, err error)
 	// Get retrieves the CanaryConfig from the indexer for a given namespace and name.
 	// Objects returned here must be treated as read-only.
-	Get(name string) (*v1.CanaryConfig, error)
+	Get(name string) (*corev1.CanaryConfig, error)
 	CanaryConfigNamespaceListerExpansion
 }
 
 // canaryConfigNamespaceLister implements the CanaryConfigNamespaceLister
 // interface.
 type canaryConfigNamespaceLister struct {
-	listers.ResourceIndexer[*v1.CanaryConfig]
+	listers.ResourceIndexer[*corev1.CanaryConfig]
 }

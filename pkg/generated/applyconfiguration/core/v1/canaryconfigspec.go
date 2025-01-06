@@ -19,19 +19,19 @@ limitations under the License.
 package v1
 
 import (
-	v1 "github.com/fission/fission/pkg/apis/core/v1"
+	corev1 "github.com/fission/fission/pkg/apis/core/v1"
 )
 
 // CanaryConfigSpecApplyConfiguration represents a declarative configuration of the CanaryConfigSpec type for use
 // with apply.
 type CanaryConfigSpecApplyConfiguration struct {
-	Trigger                 *string         `json:"trigger,omitempty"`
-	NewFunction             *string         `json:"newfunction,omitempty"`
-	OldFunction             *string         `json:"oldfunction,omitempty"`
-	WeightIncrement         *int            `json:"weightincrement,omitempty"`
-	WeightIncrementDuration *string         `json:"duration,omitempty"`
-	FailureThreshold        *int            `json:"failurethreshold,omitempty"`
-	FailureType             *v1.FailureType `json:"failureType,omitempty"`
+	Trigger                 *string             `json:"trigger,omitempty"`
+	NewFunction             *string             `json:"newfunction,omitempty"`
+	OldFunction             *string             `json:"oldfunction,omitempty"`
+	WeightIncrement         *int                `json:"weightincrement,omitempty"`
+	WeightIncrementDuration *string             `json:"duration,omitempty"`
+	FailureThreshold        *int                `json:"failurethreshold,omitempty"`
+	FailureType             *corev1.FailureType `json:"failureType,omitempty"`
 }
 
 // CanaryConfigSpecApplyConfiguration constructs a declarative configuration of the CanaryConfigSpec type for use with
@@ -91,7 +91,7 @@ func (b *CanaryConfigSpecApplyConfiguration) WithFailureThreshold(value int) *Ca
 // WithFailureType sets the FailureType field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the FailureType field is set to the value of the last call.
-func (b *CanaryConfigSpecApplyConfiguration) WithFailureType(value v1.FailureType) *CanaryConfigSpecApplyConfiguration {
+func (b *CanaryConfigSpecApplyConfiguration) WithFailureType(value corev1.FailureType) *CanaryConfigSpecApplyConfiguration {
 	b.FailureType = &value
 	return b
 }

@@ -19,10 +19,10 @@ limitations under the License.
 package v1
 
 import (
-	"context"
+	context "context"
 
-	v1 "github.com/fission/fission/pkg/apis/core/v1"
-	corev1 "github.com/fission/fission/pkg/generated/applyconfiguration/core/v1"
+	corev1 "github.com/fission/fission/pkg/apis/core/v1"
+	applyconfigurationcorev1 "github.com/fission/fission/pkg/generated/applyconfiguration/core/v1"
 	scheme "github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	types "k8s.io/apimachinery/pkg/types"
@@ -38,32 +38,33 @@ type MessageQueueTriggersGetter interface {
 
 // MessageQueueTriggerInterface has methods to work with MessageQueueTrigger resources.
 type MessageQueueTriggerInterface interface {
-	Create(ctx context.Context, _messageQueueTrigger *v1.MessageQueueTrigger, opts metav1.CreateOptions) (*v1.MessageQueueTrigger, error)
-	Update(ctx context.Context, _messageQueueTrigger *v1.MessageQueueTrigger, opts metav1.UpdateOptions) (*v1.MessageQueueTrigger, error)
+	Create(ctx context.Context, _messageQueueTrigger *corev1.MessageQueueTrigger, opts metav1.CreateOptions) (*corev1.MessageQueueTrigger, error)
+	Update(ctx context.Context, _messageQueueTrigger *corev1.MessageQueueTrigger, opts metav1.UpdateOptions) (*corev1.MessageQueueTrigger, error)
 	Delete(ctx context.Context, name string, opts metav1.DeleteOptions) error
 	DeleteCollection(ctx context.Context, opts metav1.DeleteOptions, listOpts metav1.ListOptions) error
-	Get(ctx context.Context, name string, opts metav1.GetOptions) (*v1.MessageQueueTrigger, error)
-	List(ctx context.Context, opts metav1.ListOptions) (*v1.MessageQueueTriggerList, error)
+	Get(ctx context.Context, name string, opts metav1.GetOptions) (*corev1.MessageQueueTrigger, error)
+	List(ctx context.Context, opts metav1.ListOptions) (*corev1.MessageQueueTriggerList, error)
 	Watch(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error)
-	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, subresources ...string) (result *v1.MessageQueueTrigger, err error)
-	Apply(ctx context.Context, _messageQueueTrigger *corev1.MessageQueueTriggerApplyConfiguration, opts metav1.ApplyOptions) (result *v1.MessageQueueTrigger, err error)
+	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, subresources ...string) (result *corev1.MessageQueueTrigger, err error)
+	Apply(ctx context.Context, _messageQueueTrigger *applyconfigurationcorev1.MessageQueueTriggerApplyConfiguration, opts metav1.ApplyOptions) (result *corev1.MessageQueueTrigger, err error)
 	MessageQueueTriggerExpansion
 }
 
 // messageQueueTriggers implements MessageQueueTriggerInterface
 type messageQueueTriggers struct {
-	*gentype.ClientWithListAndApply[*v1.MessageQueueTrigger, *v1.MessageQueueTriggerList, *corev1.MessageQueueTriggerApplyConfiguration]
+	*gentype.ClientWithListAndApply[*corev1.MessageQueueTrigger, *corev1.MessageQueueTriggerList, *applyconfigurationcorev1.MessageQueueTriggerApplyConfiguration]
 }
 
 // newMessageQueueTriggers returns a MessageQueueTriggers
 func newMessageQueueTriggers(c *CoreV1Client, namespace string) *messageQueueTriggers {
 	return &messageQueueTriggers{
-		gentype.NewClientWithListAndApply[*v1.MessageQueueTrigger, *v1.MessageQueueTriggerList, *corev1.MessageQueueTriggerApplyConfiguration](
+		gentype.NewClientWithListAndApply[*corev1.MessageQueueTrigger, *corev1.MessageQueueTriggerList, *applyconfigurationcorev1.MessageQueueTriggerApplyConfiguration](
 			"messagequeuetriggers",
 			c.RESTClient(),
 			scheme.ParameterCodec,
 			namespace,
-			func() *v1.MessageQueueTrigger { return &v1.MessageQueueTrigger{} },
-			func() *v1.MessageQueueTriggerList { return &v1.MessageQueueTriggerList{} }),
+			func() *corev1.MessageQueueTrigger { return &corev1.MessageQueueTrigger{} },
+			func() *corev1.MessageQueueTriggerList { return &corev1.MessageQueueTriggerList{} },
+		),
 	}
 }

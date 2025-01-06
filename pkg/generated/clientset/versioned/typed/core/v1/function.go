@@ -19,10 +19,10 @@ limitations under the License.
 package v1
 
 import (
-	"context"
+	context "context"
 
-	v1 "github.com/fission/fission/pkg/apis/core/v1"
-	corev1 "github.com/fission/fission/pkg/generated/applyconfiguration/core/v1"
+	corev1 "github.com/fission/fission/pkg/apis/core/v1"
+	applyconfigurationcorev1 "github.com/fission/fission/pkg/generated/applyconfiguration/core/v1"
 	scheme "github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	types "k8s.io/apimachinery/pkg/types"
@@ -38,32 +38,33 @@ type FunctionsGetter interface {
 
 // FunctionInterface has methods to work with Function resources.
 type FunctionInterface interface {
-	Create(ctx context.Context, _function *v1.Function, opts metav1.CreateOptions) (*v1.Function, error)
-	Update(ctx context.Context, _function *v1.Function, opts metav1.UpdateOptions) (*v1.Function, error)
+	Create(ctx context.Context, _function *corev1.Function, opts metav1.CreateOptions) (*corev1.Function, error)
+	Update(ctx context.Context, _function *corev1.Function, opts metav1.UpdateOptions) (*corev1.Function, error)
 	Delete(ctx context.Context, name string, opts metav1.DeleteOptions) error
 	DeleteCollection(ctx context.Context, opts metav1.DeleteOptions, listOpts metav1.ListOptions) error
-	Get(ctx context.Context, name string, opts metav1.GetOptions) (*v1.Function, error)
-	List(ctx context.Context, opts metav1.ListOptions) (*v1.FunctionList, error)
+	Get(ctx context.Context, name string, opts metav1.GetOptions) (*corev1.Function, error)
+	List(ctx context.Context, opts metav1.ListOptions) (*corev1.FunctionList, error)
 	Watch(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error)
-	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, subresources ...string) (result *v1.Function, err error)
-	Apply(ctx context.Context, _function *corev1.FunctionApplyConfiguration, opts metav1.ApplyOptions) (result *v1.Function, err error)
+	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, subresources ...string) (result *corev1.Function, err error)
+	Apply(ctx context.Context, _function *applyconfigurationcorev1.FunctionApplyConfiguration, opts metav1.ApplyOptions) (result *corev1.Function, err error)
 	FunctionExpansion
 }
 
 // functions implements FunctionInterface
 type functions struct {
-	*gentype.ClientWithListAndApply[*v1.Function, *v1.FunctionList, *corev1.FunctionApplyConfiguration]
+	*gentype.ClientWithListAndApply[*corev1.Function, *corev1.FunctionList, *applyconfigurationcorev1.FunctionApplyConfiguration]
 }
 
 // newFunctions returns a Functions
 func newFunctions(c *CoreV1Client, namespace string) *functions {
 	return &functions{
-		gentype.NewClientWithListAndApply[*v1.Function, *v1.FunctionList, *corev1.FunctionApplyConfiguration](
+		gentype.NewClientWithListAndApply[*corev1.Function, *corev1.FunctionList, *applyconfigurationcorev1.FunctionApplyConfiguration](
 			"functions",
 			c.RESTClient(),
 			scheme.ParameterCodec,
 			namespace,
-			func() *v1.Function { return &v1.Function{} },
-			func() *v1.FunctionList { return &v1.FunctionList{} }),
+			func() *corev1.Function { return &corev1.Function{} },
+			func() *corev1.FunctionList { return &corev1.FunctionList{} },
+		),
 	}
 }

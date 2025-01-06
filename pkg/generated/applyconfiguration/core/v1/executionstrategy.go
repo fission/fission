@@ -19,14 +19,14 @@ limitations under the License.
 package v1
 
 import (
-	v1 "github.com/fission/fission/pkg/apis/core/v1"
+	corev1 "github.com/fission/fission/pkg/apis/core/v1"
 	v2 "k8s.io/api/autoscaling/v2"
 )
 
 // ExecutionStrategyApplyConfiguration represents a declarative configuration of the ExecutionStrategy type for use
 // with apply.
 type ExecutionStrategyApplyConfiguration struct {
-	ExecutorType          *v1.ExecutorType                    `json:"ExecutorType,omitempty"`
+	ExecutorType          *corev1.ExecutorType                `json:"ExecutorType,omitempty"`
 	MinScale              *int                                `json:"MinScale,omitempty"`
 	MaxScale              *int                                `json:"MaxScale,omitempty"`
 	TargetCPUPercent      *int                                `json:"TargetCPUPercent,omitempty"`
@@ -44,7 +44,7 @@ func ExecutionStrategy() *ExecutionStrategyApplyConfiguration {
 // WithExecutorType sets the ExecutorType field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the ExecutorType field is set to the value of the last call.
-func (b *ExecutionStrategyApplyConfiguration) WithExecutorType(value v1.ExecutorType) *ExecutionStrategyApplyConfiguration {
+func (b *ExecutionStrategyApplyConfiguration) WithExecutorType(value corev1.ExecutorType) *ExecutionStrategyApplyConfiguration {
 	b.ExecutorType = &value
 	return b
 }

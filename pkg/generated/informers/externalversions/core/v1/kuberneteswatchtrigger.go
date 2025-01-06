@@ -19,13 +19,13 @@ limitations under the License.
 package v1
 
 import (
-	"context"
+	context "context"
 	time "time"
 
-	corev1 "github.com/fission/fission/pkg/apis/core/v1"
+	apiscorev1 "github.com/fission/fission/pkg/apis/core/v1"
 	versioned "github.com/fission/fission/pkg/generated/clientset/versioned"
 	internalinterfaces "github.com/fission/fission/pkg/generated/informers/externalversions/internalinterfaces"
-	v1 "github.com/fission/fission/pkg/generated/listers/core/v1"
+	corev1 "github.com/fission/fission/pkg/generated/listers/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	watch "k8s.io/apimachinery/pkg/watch"
@@ -36,7 +36,7 @@ import (
 // KubernetesWatchTriggers.
 type KubernetesWatchTriggerInformer interface {
 	Informer() cache.SharedIndexInformer
-	Lister() v1.KubernetesWatchTriggerLister
+	Lister() corev1.KubernetesWatchTriggerLister
 }
 
 type kubernetesWatchTriggerInformer struct {
@@ -71,7 +71,7 @@ func NewFilteredKubernetesWatchTriggerInformer(client versioned.Interface, names
 				return client.CoreV1().KubernetesWatchTriggers(namespace).Watch(context.TODO(), options)
 			},
 		},
-		&corev1.KubernetesWatchTrigger{},
+		&apiscorev1.KubernetesWatchTrigger{},
 		resyncPeriod,
 		indexers,
 	)
@@ -82,9 +82,9 @@ func (f *kubernetesWatchTriggerInformer) defaultInformer(client versioned.Interf
 }
 
 func (f *kubernetesWatchTriggerInformer) Informer() cache.SharedIndexInformer {
-	return f.factory.InformerFor(&corev1.KubernetesWatchTrigger{}, f.defaultInformer)
+	return f.factory.InformerFor(&apiscorev1.KubernetesWatchTrigger{}, f.defaultInformer)
 }
 
-func (f *kubernetesWatchTriggerInformer) Lister() v1.KubernetesWatchTriggerLister {
-	return v1.NewKubernetesWatchTriggerLister(f.Informer().GetIndexer())
+func (f *kubernetesWatchTriggerInformer) Lister() corev1.KubernetesWatchTriggerLister {
+	return corev1.NewKubernetesWatchTriggerLister(f.Informer().GetIndexer())
 }

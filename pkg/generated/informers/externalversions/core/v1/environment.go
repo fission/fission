@@ -19,13 +19,13 @@ limitations under the License.
 package v1
 
 import (
-	"context"
+	context "context"
 	time "time"
 
-	corev1 "github.com/fission/fission/pkg/apis/core/v1"
+	apiscorev1 "github.com/fission/fission/pkg/apis/core/v1"
 	versioned "github.com/fission/fission/pkg/generated/clientset/versioned"
 	internalinterfaces "github.com/fission/fission/pkg/generated/informers/externalversions/internalinterfaces"
-	v1 "github.com/fission/fission/pkg/generated/listers/core/v1"
+	corev1 "github.com/fission/fission/pkg/generated/listers/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	watch "k8s.io/apimachinery/pkg/watch"
@@ -36,7 +36,7 @@ import (
 // Environments.
 type EnvironmentInformer interface {
 	Informer() cache.SharedIndexInformer
-	Lister() v1.EnvironmentLister
+	Lister() corev1.EnvironmentLister
 }
 
 type environmentInformer struct {
@@ -71,7 +71,7 @@ func NewFilteredEnvironmentInformer(client versioned.Interface, namespace string
 				return client.CoreV1().Environments(namespace).Watch(context.TODO(), options)
 			},
 		},
-		&corev1.Environment{},
+		&apiscorev1.Environment{},
 		resyncPeriod,
 		indexers,
 	)
@@ -82,9 +82,9 @@ func (f *environmentInformer) defaultInformer(client versioned.Interface, resync
 }
 
 func (f *environmentInformer) Informer() cache.SharedIndexInformer {
-	return f.factory.InformerFor(&corev1.Environment{}, f.defaultInformer)
+	return f.factory.InformerFor(&apiscorev1.Environment{}, f.defaultInformer)
 }
 
-func (f *environmentInformer) Lister() v1.EnvironmentLister {
-	return v1.NewEnvironmentLister(f.Informer().GetIndexer())
+func (f *environmentInformer) Lister() corev1.EnvironmentLister {
+	return corev1.NewEnvironmentLister(f.Informer().GetIndexer())
 }

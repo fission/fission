@@ -19,13 +19,13 @@ limitations under the License.
 package v1
 
 import (
-	"context"
+	context "context"
 	time "time"
 
-	corev1 "github.com/fission/fission/pkg/apis/core/v1"
+	apiscorev1 "github.com/fission/fission/pkg/apis/core/v1"
 	versioned "github.com/fission/fission/pkg/generated/clientset/versioned"
 	internalinterfaces "github.com/fission/fission/pkg/generated/informers/externalversions/internalinterfaces"
-	v1 "github.com/fission/fission/pkg/generated/listers/core/v1"
+	corev1 "github.com/fission/fission/pkg/generated/listers/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	watch "k8s.io/apimachinery/pkg/watch"
@@ -36,7 +36,7 @@ import (
 // MessageQueueTriggers.
 type MessageQueueTriggerInformer interface {
 	Informer() cache.SharedIndexInformer
-	Lister() v1.MessageQueueTriggerLister
+	Lister() corev1.MessageQueueTriggerLister
 }
 
 type messageQueueTriggerInformer struct {
@@ -71,7 +71,7 @@ func NewFilteredMessageQueueTriggerInformer(client versioned.Interface, namespac
 				return client.CoreV1().MessageQueueTriggers(namespace).Watch(context.TODO(), options)
 			},
 		},
-		&corev1.MessageQueueTrigger{},
+		&apiscorev1.MessageQueueTrigger{},
 		resyncPeriod,
 		indexers,
 	)
@@ -82,9 +82,9 @@ func (f *messageQueueTriggerInformer) defaultInformer(client versioned.Interface
 }
 
 func (f *messageQueueTriggerInformer) Informer() cache.SharedIndexInformer {
-	return f.factory.InformerFor(&corev1.MessageQueueTrigger{}, f.defaultInformer)
+	return f.factory.InformerFor(&apiscorev1.MessageQueueTrigger{}, f.defaultInformer)
 }
 
-func (f *messageQueueTriggerInformer) Lister() v1.MessageQueueTriggerLister {
-	return v1.NewMessageQueueTriggerLister(f.Informer().GetIndexer())
+func (f *messageQueueTriggerInformer) Lister() corev1.MessageQueueTriggerLister {
+	return corev1.NewMessageQueueTriggerLister(f.Informer().GetIndexer())
 }

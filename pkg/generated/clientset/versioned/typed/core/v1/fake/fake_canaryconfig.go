@@ -19,179 +19,33 @@ limitations under the License.
 package fake
 
 import (
-	"context"
-	json "encoding/json"
-	"fmt"
-
 	v1 "github.com/fission/fission/pkg/apis/core/v1"
 	corev1 "github.com/fission/fission/pkg/generated/applyconfiguration/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	labels "k8s.io/apimachinery/pkg/labels"
-	types "k8s.io/apimachinery/pkg/types"
-	watch "k8s.io/apimachinery/pkg/watch"
-	testing "k8s.io/client-go/testing"
+	typedcorev1 "github.com/fission/fission/pkg/generated/clientset/versioned/typed/core/v1"
+	gentype "k8s.io/client-go/gentype"
 )
 
-// FakeCanaryConfigs implements CanaryConfigInterface
-type FakeCanaryConfigs struct {
+// fakeCanaryConfigs implements CanaryConfigInterface
+type fakeCanaryConfigs struct {
+	*gentype.FakeClientWithListAndApply[*v1.CanaryConfig, *v1.CanaryConfigList, *corev1.CanaryConfigApplyConfiguration]
 	Fake *FakeCoreV1
-	ns   string
 }
 
-var canaryconfigsResource = v1.SchemeGroupVersion.WithResource("canaryconfigs")
-
-var canaryconfigsKind = v1.SchemeGroupVersion.WithKind("CanaryConfig")
-
-// Get takes name of the _canaryConfig, and returns the corresponding canaryConfig object, and an error if there is any.
-func (c *FakeCanaryConfigs) Get(ctx context.Context, name string, options metav1.GetOptions) (result *v1.CanaryConfig, err error) {
-	emptyResult := &v1.CanaryConfig{}
-	obj, err := c.Fake.
-		Invokes(testing.NewGetActionWithOptions(canaryconfigsResource, c.ns, name, options), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
+func newFakeCanaryConfigs(fake *FakeCoreV1, namespace string) typedcorev1.CanaryConfigInterface {
+	return &fakeCanaryConfigs{
+		gentype.NewFakeClientWithListAndApply[*v1.CanaryConfig, *v1.CanaryConfigList, *corev1.CanaryConfigApplyConfiguration](
+			fake.Fake,
+			namespace,
+			v1.SchemeGroupVersion.WithResource("canaryconfigs"),
+			v1.SchemeGroupVersion.WithKind("CanaryConfig"),
+			func() *v1.CanaryConfig { return &v1.CanaryConfig{} },
+			func() *v1.CanaryConfigList { return &v1.CanaryConfigList{} },
+			func(dst, src *v1.CanaryConfigList) { dst.ListMeta = src.ListMeta },
+			func(list *v1.CanaryConfigList) []*v1.CanaryConfig { return gentype.ToPointerSlice(list.Items) },
+			func(list *v1.CanaryConfigList, items []*v1.CanaryConfig) {
+				list.Items = gentype.FromPointerSlice(items)
+			},
+		),
+		fake,
 	}
-	return obj.(*v1.CanaryConfig), err
-}
-
-// List takes label and field selectors, and returns the list of CanaryConfigs that match those selectors.
-func (c *FakeCanaryConfigs) List(ctx context.Context, opts metav1.ListOptions) (result *v1.CanaryConfigList, err error) {
-	emptyResult := &v1.CanaryConfigList{}
-	obj, err := c.Fake.
-		Invokes(testing.NewListActionWithOptions(canaryconfigsResource, canaryconfigsKind, c.ns, opts), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
-	}
-
-	label, _, _ := testing.ExtractFromListOptions(opts)
-	if label == nil {
-		label = labels.Everything()
-	}
-	list := &v1.CanaryConfigList{ListMeta: obj.(*v1.CanaryConfigList).ListMeta}
-	for _, item := range obj.(*v1.CanaryConfigList).Items {
-		if label.Matches(labels.Set(item.Labels)) {
-			list.Items = append(list.Items, item)
-		}
-	}
-	return list, err
-}
-
-// Watch returns a watch.Interface that watches the requested canaryConfigs.
-func (c *FakeCanaryConfigs) Watch(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error) {
-	return c.Fake.
-		InvokesWatch(testing.NewWatchActionWithOptions(canaryconfigsResource, c.ns, opts))
-
-}
-
-// Create takes the representation of a _canaryConfig and creates it.  Returns the server's representation of the canaryConfig, and an error, if there is any.
-func (c *FakeCanaryConfigs) Create(ctx context.Context, _canaryConfig *v1.CanaryConfig, opts metav1.CreateOptions) (result *v1.CanaryConfig, err error) {
-	emptyResult := &v1.CanaryConfig{}
-	obj, err := c.Fake.
-		Invokes(testing.NewCreateActionWithOptions(canaryconfigsResource, c.ns, _canaryConfig, opts), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1.CanaryConfig), err
-}
-
-// Update takes the representation of a _canaryConfig and updates it. Returns the server's representation of the canaryConfig, and an error, if there is any.
-func (c *FakeCanaryConfigs) Update(ctx context.Context, _canaryConfig *v1.CanaryConfig, opts metav1.UpdateOptions) (result *v1.CanaryConfig, err error) {
-	emptyResult := &v1.CanaryConfig{}
-	obj, err := c.Fake.
-		Invokes(testing.NewUpdateActionWithOptions(canaryconfigsResource, c.ns, _canaryConfig, opts), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1.CanaryConfig), err
-}
-
-// UpdateStatus was generated because the type contains a Status member.
-// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-func (c *FakeCanaryConfigs) UpdateStatus(ctx context.Context, _canaryConfig *v1.CanaryConfig, opts metav1.UpdateOptions) (result *v1.CanaryConfig, err error) {
-	emptyResult := &v1.CanaryConfig{}
-	obj, err := c.Fake.
-		Invokes(testing.NewUpdateSubresourceActionWithOptions(canaryconfigsResource, "status", c.ns, _canaryConfig, opts), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1.CanaryConfig), err
-}
-
-// Delete takes name of the _canaryConfig and deletes it. Returns an error if one occurs.
-func (c *FakeCanaryConfigs) Delete(ctx context.Context, name string, opts metav1.DeleteOptions) error {
-	_, err := c.Fake.
-		Invokes(testing.NewDeleteActionWithOptions(canaryconfigsResource, c.ns, name, opts), &v1.CanaryConfig{})
-
-	return err
-}
-
-// DeleteCollection deletes a collection of objects.
-func (c *FakeCanaryConfigs) DeleteCollection(ctx context.Context, opts metav1.DeleteOptions, listOpts metav1.ListOptions) error {
-	action := testing.NewDeleteCollectionActionWithOptions(canaryconfigsResource, c.ns, opts, listOpts)
-
-	_, err := c.Fake.Invokes(action, &v1.CanaryConfigList{})
-	return err
-}
-
-// Patch applies the patch and returns the patched canaryConfig.
-func (c *FakeCanaryConfigs) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, subresources ...string) (result *v1.CanaryConfig, err error) {
-	emptyResult := &v1.CanaryConfig{}
-	obj, err := c.Fake.
-		Invokes(testing.NewPatchSubresourceActionWithOptions(canaryconfigsResource, c.ns, name, pt, data, opts, subresources...), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1.CanaryConfig), err
-}
-
-// Apply takes the given apply declarative configuration, applies it and returns the applied canaryConfig.
-func (c *FakeCanaryConfigs) Apply(ctx context.Context, _canaryConfig *corev1.CanaryConfigApplyConfiguration, opts metav1.ApplyOptions) (result *v1.CanaryConfig, err error) {
-	if _canaryConfig == nil {
-		return nil, fmt.Errorf("_canaryConfig provided to Apply must not be nil")
-	}
-	data, err := json.Marshal(_canaryConfig)
-	if err != nil {
-		return nil, err
-	}
-	name := _canaryConfig.Name
-	if name == nil {
-		return nil, fmt.Errorf("_canaryConfig.Name must be provided to Apply")
-	}
-	emptyResult := &v1.CanaryConfig{}
-	obj, err := c.Fake.
-		Invokes(testing.NewPatchSubresourceActionWithOptions(canaryconfigsResource, c.ns, *name, types.ApplyPatchType, data, opts.ToPatchOptions()), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1.CanaryConfig), err
-}
-
-// ApplyStatus was generated because the type contains a Status member.
-// Add a +genclient:noStatus comment above the type to avoid generating ApplyStatus().
-func (c *FakeCanaryConfigs) ApplyStatus(ctx context.Context, _canaryConfig *corev1.CanaryConfigApplyConfiguration, opts metav1.ApplyOptions) (result *v1.CanaryConfig, err error) {
-	if _canaryConfig == nil {
-		return nil, fmt.Errorf("_canaryConfig provided to Apply must not be nil")
-	}
-	data, err := json.Marshal(_canaryConfig)
-	if err != nil {
-		return nil, err
-	}
-	name := _canaryConfig.Name
-	if name == nil {
-		return nil, fmt.Errorf("_canaryConfig.Name must be provided to Apply")
-	}
-	emptyResult := &v1.CanaryConfig{}
-	obj, err := c.Fake.
-		Invokes(testing.NewPatchSubresourceActionWithOptions(canaryconfigsResource, c.ns, *name, types.ApplyPatchType, data, opts.ToPatchOptions(), "status"), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1.CanaryConfig), err
 }

@@ -19,8 +19,8 @@ limitations under the License.
 package versioned
 
 import (
-	"fmt"
-	"net/http"
+	fmt "fmt"
+	http "net/http"
 
 	corev1 "github.com/fission/fission/pkg/generated/clientset/versioned/typed/core/v1"
 	discovery "k8s.io/client-go/discovery"

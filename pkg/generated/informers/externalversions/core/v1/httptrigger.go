@@ -19,13 +19,13 @@ limitations under the License.
 package v1
 
 import (
-	"context"
+	context "context"
 	time "time"
 
-	corev1 "github.com/fission/fission/pkg/apis/core/v1"
+	apiscorev1 "github.com/fission/fission/pkg/apis/core/v1"
 	versioned "github.com/fission/fission/pkg/generated/clientset/versioned"
 	internalinterfaces "github.com/fission/fission/pkg/generated/informers/externalversions/internalinterfaces"
-	v1 "github.com/fission/fission/pkg/generated/listers/core/v1"
+	corev1 "github.com/fission/fission/pkg/generated/listers/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	watch "k8s.io/apimachinery/pkg/watch"
@@ -36,7 +36,7 @@ import (
 // HTTPTriggers.
 type HTTPTriggerInformer interface {
 	Informer() cache.SharedIndexInformer
-	Lister() v1.HTTPTriggerLister
+	Lister() corev1.HTTPTriggerLister
 }
 
 type hTTPTriggerInformer struct {
@@ -71,7 +71,7 @@ func NewFilteredHTTPTriggerInformer(client versioned.Interface, namespace string
 				return client.CoreV1().HTTPTriggers(namespace).Watch(context.TODO(), options)
 			},
 		},
-		&corev1.HTTPTrigger{},
+		&apiscorev1.HTTPTrigger{},
 		resyncPeriod,
 		indexers,
 	)
@@ -82,9 +82,9 @@ func (f *hTTPTriggerInformer) defaultInformer(client versioned.Interface, resync
 }
 
 func (f *hTTPTriggerInformer) Informer() cache.SharedIndexInformer {
-	return f.factory.InformerFor(&corev1.HTTPTrigger{}, f.defaultInformer)
+	return f.factory.InformerFor(&apiscorev1.HTTPTrigger{}, f.defaultInformer)
 }
 
-func (f *hTTPTriggerInformer) Lister() v1.HTTPTriggerLister {
-	return v1.NewHTTPTriggerLister(f.Informer().GetIndexer())
+func (f *hTTPTriggerInformer) Lister() corev1.HTTPTriggerLister {
+	return corev1.NewHTTPTriggerLister(f.Informer().GetIndexer())
 }

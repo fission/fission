@@ -19,10 +19,10 @@ limitations under the License.
 package v1
 
 import (
-	v1 "github.com/fission/fission/pkg/apis/core/v1"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/client-go/listers"
-	"k8s.io/client-go/tools/cache"
+	corev1 "github.com/fission/fission/pkg/apis/core/v1"
+	labels "k8s.io/apimachinery/pkg/labels"
+	listers "k8s.io/client-go/listers"
+	cache "k8s.io/client-go/tools/cache"
 )
 
 // PackageLister helps list Packages.
@@ -30,7 +30,7 @@ import (
 type PackageLister interface {
 	// List lists all Packages in the indexer.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1.Package, err error)
+	List(selector labels.Selector) (ret []*corev1.Package, err error)
 	// Packages returns an object that can list and get Packages.
 	Packages(namespace string) PackageNamespaceLister
 	PackageListerExpansion
@@ -38,17 +38,17 @@ type PackageLister interface {
 
 // packageLister implements the PackageLister interface.
 type packageLister struct {
-	listers.ResourceIndexer[*v1.Package]
+	listers.ResourceIndexer[*corev1.Package]
 }
 
 // NewPackageLister returns a new PackageLister.
 func NewPackageLister(indexer cache.Indexer) PackageLister {
-	return &packageLister{listers.New[*v1.Package](indexer, v1.Resource("package"))}
+	return &packageLister{listers.New[*corev1.Package](indexer, corev1.Resource("package"))}
 }
 
 // Packages returns an object that can list and get Packages.
 func (s *packageLister) Packages(namespace string) PackageNamespaceLister {
-	return packageNamespaceLister{listers.NewNamespaced[*v1.Package](s.ResourceIndexer, namespace)}
+	return packageNamespaceLister{listers.NewNamespaced[*corev1.Package](s.ResourceIndexer, namespace)}
 }
 
 // PackageNamespaceLister helps list and get Packages.
@@ -56,15 +56,15 @@ func (s *packageLister) Packages(namespace string) PackageNamespaceLister {
 type PackageNamespaceLister interface {
 	// List lists all Packages in the indexer for a given namespace.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1.Package, err error)
+	List(selector labels.Selector) (ret []*corev1.Package, err error)
 	// Get retrieves the Package from the indexer for a given namespace and name.
 	// Objects returned here must be treated as read-only.
-	Get(name string) (*v1.Package, error)
+	Get(name string) (*corev1.Package, error)
 	PackageNamespaceListerExpansion
 }
 
 // packageNamespaceLister implements the PackageNamespaceLister
 // interface.
 type packageNamespaceLister struct {
-	listers.ResourceIndexer[*v1.Package]
+	listers.ResourceIndexer[*corev1.Package]
 }

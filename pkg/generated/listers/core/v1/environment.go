@@ -19,10 +19,10 @@ limitations under the License.
 package v1
 
 import (
-	v1 "github.com/fission/fission/pkg/apis/core/v1"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/client-go/listers"
-	"k8s.io/client-go/tools/cache"
+	corev1 "github.com/fission/fission/pkg/apis/core/v1"
+	labels "k8s.io/apimachinery/pkg/labels"
+	listers "k8s.io/client-go/listers"
+	cache "k8s.io/client-go/tools/cache"
 )
 
 // EnvironmentLister helps list Environments.
@@ -30,7 +30,7 @@ import (
 type EnvironmentLister interface {
 	// List lists all Environments in the indexer.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1.Environment, err error)
+	List(selector labels.Selector) (ret []*corev1.Environment, err error)
 	// Environments returns an object that can list and get Environments.
 	Environments(namespace string) EnvironmentNamespaceLister
 	EnvironmentListerExpansion
@@ -38,17 +38,17 @@ type EnvironmentLister interface {
 
 // environmentLister implements the EnvironmentLister interface.
 type environmentLister struct {
-	listers.ResourceIndexer[*v1.Environment]
+	listers.ResourceIndexer[*corev1.Environment]
 }
 
 // NewEnvironmentLister returns a new EnvironmentLister.
 func NewEnvironmentLister(indexer cache.Indexer) EnvironmentLister {
-	return &environmentLister{listers.New[*v1.Environment](indexer, v1.Resource("environment"))}
+	return &environmentLister{listers.New[*corev1.Environment](indexer, corev1.Resource("environment"))}
 }
 
 // Environments returns an object that can list and get Environments.
 func (s *environmentLister) Environments(namespace string) EnvironmentNamespaceLister {
-	return environmentNamespaceLister{listers.NewNamespaced[*v1.Environment](s.ResourceIndexer, namespace)}
+	return environmentNamespaceLister{listers.NewNamespaced[*corev1.Environment](s.ResourceIndexer, namespace)}
 }
 
 // EnvironmentNamespaceLister helps list and get Environments.
@@ -56,15 +56,15 @@ func (s *environmentLister) Environments(namespace string) EnvironmentNamespaceL
 type EnvironmentNamespaceLister interface {
 	// List lists all Environments in the indexer for a given namespace.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1.Environment, err error)
+	List(selector labels.Selector) (ret []*corev1.Environment, err error)
 	// Get retrieves the Environment from the indexer for a given namespace and name.
 	// Objects returned here must be treated as read-only.
-	Get(name string) (*v1.Environment, error)
+	Get(name string) (*corev1.Environment, error)
 	EnvironmentNamespaceListerExpansion
 }
 
 // environmentNamespaceLister implements the EnvironmentNamespaceLister
 // interface.
 type environmentNamespaceLister struct {
-	listers.ResourceIndexer[*v1.Environment]
+	listers.ResourceIndexer[*corev1.Environment]
 }

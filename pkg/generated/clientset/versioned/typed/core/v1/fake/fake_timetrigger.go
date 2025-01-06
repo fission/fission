@@ -19,142 +19,31 @@ limitations under the License.
 package fake
 
 import (
-	"context"
-	json "encoding/json"
-	"fmt"
-
 	v1 "github.com/fission/fission/pkg/apis/core/v1"
 	corev1 "github.com/fission/fission/pkg/generated/applyconfiguration/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	labels "k8s.io/apimachinery/pkg/labels"
-	types "k8s.io/apimachinery/pkg/types"
-	watch "k8s.io/apimachinery/pkg/watch"
-	testing "k8s.io/client-go/testing"
+	typedcorev1 "github.com/fission/fission/pkg/generated/clientset/versioned/typed/core/v1"
+	gentype "k8s.io/client-go/gentype"
 )
 
-// FakeTimeTriggers implements TimeTriggerInterface
-type FakeTimeTriggers struct {
+// fakeTimeTriggers implements TimeTriggerInterface
+type fakeTimeTriggers struct {
+	*gentype.FakeClientWithListAndApply[*v1.TimeTrigger, *v1.TimeTriggerList, *corev1.TimeTriggerApplyConfiguration]
 	Fake *FakeCoreV1
-	ns   string
 }
 
-var timetriggersResource = v1.SchemeGroupVersion.WithResource("timetriggers")
-
-var timetriggersKind = v1.SchemeGroupVersion.WithKind("TimeTrigger")
-
-// Get takes name of the _timeTrigger, and returns the corresponding timeTrigger object, and an error if there is any.
-func (c *FakeTimeTriggers) Get(ctx context.Context, name string, options metav1.GetOptions) (result *v1.TimeTrigger, err error) {
-	emptyResult := &v1.TimeTrigger{}
-	obj, err := c.Fake.
-		Invokes(testing.NewGetActionWithOptions(timetriggersResource, c.ns, name, options), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
+func newFakeTimeTriggers(fake *FakeCoreV1, namespace string) typedcorev1.TimeTriggerInterface {
+	return &fakeTimeTriggers{
+		gentype.NewFakeClientWithListAndApply[*v1.TimeTrigger, *v1.TimeTriggerList, *corev1.TimeTriggerApplyConfiguration](
+			fake.Fake,
+			namespace,
+			v1.SchemeGroupVersion.WithResource("timetriggers"),
+			v1.SchemeGroupVersion.WithKind("TimeTrigger"),
+			func() *v1.TimeTrigger { return &v1.TimeTrigger{} },
+			func() *v1.TimeTriggerList { return &v1.TimeTriggerList{} },
+			func(dst, src *v1.TimeTriggerList) { dst.ListMeta = src.ListMeta },
+			func(list *v1.TimeTriggerList) []*v1.TimeTrigger { return gentype.ToPointerSlice(list.Items) },
+			func(list *v1.TimeTriggerList, items []*v1.TimeTrigger) { list.Items = gentype.FromPointerSlice(items) },
+		),
+		fake,
 	}
-	return obj.(*v1.TimeTrigger), err
-}
-
-// List takes label and field selectors, and returns the list of TimeTriggers that match those selectors.
-func (c *FakeTimeTriggers) List(ctx context.Context, opts metav1.ListOptions) (result *v1.TimeTriggerList, err error) {
-	emptyResult := &v1.TimeTriggerList{}
-	obj, err := c.Fake.
-		Invokes(testing.NewListActionWithOptions(timetriggersResource, timetriggersKind, c.ns, opts), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
-	}
-
-	label, _, _ := testing.ExtractFromListOptions(opts)
-	if label == nil {
-		label = labels.Everything()
-	}
-	list := &v1.TimeTriggerList{ListMeta: obj.(*v1.TimeTriggerList).ListMeta}
-	for _, item := range obj.(*v1.TimeTriggerList).Items {
-		if label.Matches(labels.Set(item.Labels)) {
-			list.Items = append(list.Items, item)
-		}
-	}
-	return list, err
-}
-
-// Watch returns a watch.Interface that watches the requested timeTriggers.
-func (c *FakeTimeTriggers) Watch(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error) {
-	return c.Fake.
-		InvokesWatch(testing.NewWatchActionWithOptions(timetriggersResource, c.ns, opts))
-
-}
-
-// Create takes the representation of a _timeTrigger and creates it.  Returns the server's representation of the timeTrigger, and an error, if there is any.
-func (c *FakeTimeTriggers) Create(ctx context.Context, _timeTrigger *v1.TimeTrigger, opts metav1.CreateOptions) (result *v1.TimeTrigger, err error) {
-	emptyResult := &v1.TimeTrigger{}
-	obj, err := c.Fake.
-		Invokes(testing.NewCreateActionWithOptions(timetriggersResource, c.ns, _timeTrigger, opts), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1.TimeTrigger), err
-}
-
-// Update takes the representation of a _timeTrigger and updates it. Returns the server's representation of the timeTrigger, and an error, if there is any.
-func (c *FakeTimeTriggers) Update(ctx context.Context, _timeTrigger *v1.TimeTrigger, opts metav1.UpdateOptions) (result *v1.TimeTrigger, err error) {
-	emptyResult := &v1.TimeTrigger{}
-	obj, err := c.Fake.
-		Invokes(testing.NewUpdateActionWithOptions(timetriggersResource, c.ns, _timeTrigger, opts), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1.TimeTrigger), err
-}
-
-// Delete takes name of the _timeTrigger and deletes it. Returns an error if one occurs.
-func (c *FakeTimeTriggers) Delete(ctx context.Context, name string, opts metav1.DeleteOptions) error {
-	_, err := c.Fake.
-		Invokes(testing.NewDeleteActionWithOptions(timetriggersResource, c.ns, name, opts), &v1.TimeTrigger{})
-
-	return err
-}
-
-// DeleteCollection deletes a collection of objects.
-func (c *FakeTimeTriggers) DeleteCollection(ctx context.Context, opts metav1.DeleteOptions, listOpts metav1.ListOptions) error {
-	action := testing.NewDeleteCollectionActionWithOptions(timetriggersResource, c.ns, opts, listOpts)
-
-	_, err := c.Fake.Invokes(action, &v1.TimeTriggerList{})
-	return err
-}
-
-// Patch applies the patch and returns the patched timeTrigger.
-func (c *FakeTimeTriggers) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, subresources ...string) (result *v1.TimeTrigger, err error) {
-	emptyResult := &v1.TimeTrigger{}
-	obj, err := c.Fake.
-		Invokes(testing.NewPatchSubresourceActionWithOptions(timetriggersResource, c.ns, name, pt, data, opts, subresources...), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1.TimeTrigger), err
-}
-
-// Apply takes the given apply declarative configuration, applies it and returns the applied timeTrigger.
-func (c *FakeTimeTriggers) Apply(ctx context.Context, _timeTrigger *corev1.TimeTriggerApplyConfiguration, opts metav1.ApplyOptions) (result *v1.TimeTrigger, err error) {
-	if _timeTrigger == nil {
-		return nil, fmt.Errorf("_timeTrigger provided to Apply must not be nil")
-	}
-	data, err := json.Marshal(_timeTrigger)
-	if err != nil {
-		return nil, err
-	}
-	name := _timeTrigger.Name
-	if name == nil {
-		return nil, fmt.Errorf("_timeTrigger.Name must be provided to Apply")
-	}
-	emptyResult := &v1.TimeTrigger{}
-	obj, err := c.Fake.
-		Invokes(testing.NewPatchSubresourceActionWithOptions(timetriggersResource, c.ns, *name, types.ApplyPatchType, data, opts.ToPatchOptions()), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1.TimeTrigger), err
 }

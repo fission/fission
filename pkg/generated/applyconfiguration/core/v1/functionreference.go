@@ -19,15 +19,15 @@ limitations under the License.
 package v1
 
 import (
-	v1 "github.com/fission/fission/pkg/apis/core/v1"
+	corev1 "github.com/fission/fission/pkg/apis/core/v1"
 )
 
 // FunctionReferenceApplyConfiguration represents a declarative configuration of the FunctionReference type for use
 // with apply.
 type FunctionReferenceApplyConfiguration struct {
-	Type            *v1.FunctionReferenceType `json:"type,omitempty"`
-	Name            *string                   `json:"name,omitempty"`
-	FunctionWeights map[string]int            `json:"functionweights,omitempty"`
+	Type            *corev1.FunctionReferenceType `json:"type,omitempty"`
+	Name            *string                       `json:"name,omitempty"`
+	FunctionWeights map[string]int                `json:"functionweights,omitempty"`
 }
 
 // FunctionReferenceApplyConfiguration constructs a declarative configuration of the FunctionReference type for use with
@@ -39,7 +39,7 @@ func FunctionReference() *FunctionReferenceApplyConfiguration {
 // WithType sets the Type field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the Type field is set to the value of the last call.
-func (b *FunctionReferenceApplyConfiguration) WithType(value v1.FunctionReferenceType) *FunctionReferenceApplyConfiguration {
+func (b *FunctionReferenceApplyConfiguration) WithType(value corev1.FunctionReferenceType) *FunctionReferenceApplyConfiguration {
 	b.Type = &value
 	return b
 }
