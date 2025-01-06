@@ -252,24 +252,26 @@ func (fetcher *Fetcher) SpecializeHandler(w http.ResponseWriter, r *http.Request
 func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req FunctionFetchRequest) (int, error) {
 	logger := otelUtils.LoggerWithTraceID(ctx, fetcher.logger)
 
-	// check that the requested filename is not an empty string and doest not contain any path traversal
-	filename, err := utils.ValidateFilePathComponent(req.Filename)
+	storePath, err := utils.SanitizeFilePath(filepath.Join(fetcher.sharedVolumePath, req.Filename), fetcher.sharedVolumePath)
 	if err != nil {
 		logger.Error(err.Error(), zap.String("filename", req.Filename))
 		return http.StatusBadRequest, errors.New(fmt.Sprintf("%s, request: %v", err, req))
 	}
 
 	// verify first if the file already exists.
-	if _, err := os.Stat(filepath.Join(fetcher.sharedVolumePath, filename)); err == nil {
+	if _, err := os.Stat(storePath); err == nil {
 		logger.Info("requested file already exists at shared volume - skipping fetch",
-			zap.String("requested_file", filename),
+			zap.String("requested_file", req.Filename),
 			zap.String("shared_volume_path", fetcher.sharedVolumePath))
 		otelUtils.SpanTrackEvent(ctx, "packageAlreadyExists", otelUtils.GetAttributesForPackage(pkg)...)
 		return http.StatusOK, nil
 	}
 
-	tmpFile := filename + ".tmp"
-	tmpPath := filepath.Join(fetcher.sharedVolumePath, tmpFile)
+	tmpPath, err := utils.SanitizeFilePath(storePath+".tmp", fetcher.sharedVolumePath)
+	if err != nil {
+		logger.Error(err.Error(), zap.String("filename", req.Filename))
+		return http.StatusBadRequest, errors.New(fmt.Sprintf("%s, request: %v", err, req))
+	}
 
 	if req.FetchType == fv1.FETCH_URL {
 		otelUtils.SpanTrackEvent(ctx, "fetch_url", otelUtils.MapToAttributes(map[string]string{
@@ -365,18 +367,17 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 	}
 
 	// move tmp file to requested filename
-	renamePath := filepath.Join(fetcher.sharedVolumePath, filename)
-	err = fetcher.rename(tmpPath, renamePath)
+	err = fetcher.rename(tmpPath, storePath)
 	if err != nil {
 		logger.Error("error renaming file",
 			zap.Error(err),
 			zap.String("original_path", tmpPath),
-			zap.String("rename_path", renamePath))
+			zap.String("rename_path", storePath))
 		return http.StatusInternalServerError, err
 	}
 
 	otelUtils.SpanTrackEvent(ctx, "packageFetched", otelUtils.GetAttributesForPackage(pkg)...)
-	logger.Info("successfully placed", zap.String("location", renamePath))
+	logger.Info("successfully placed", zap.String("location", storePath))
 	return http.StatusOK, nil
 }
 
@@ -405,17 +406,12 @@ func (fetcher *Fetcher) FetchSecretsAndCfgMaps(ctx context.Context, secrets []fv
 				return httpCode, errors.New(e)
 			}
 
-			secretName, err := utils.ValidateFilePathComponent(secret.Name)
+			secretDir, err := utils.SanitizeFilePath(filepath.Join(fetcher.sharedSecretPath, secret.Namespace, secret.Name), fetcher.sharedSecretPath)
 			if err != nil {
-				logger.Error(err.Error(), zap.String("secret_name", secret.Name))
+				logger.Error(err.Error(), zap.String("directory", secretDir), zap.String("secret_name", secret.Name), zap.String("secret_namespace", secret.Namespace))
 				return http.StatusBadRequest, errors.New(fmt.Sprintf("%s, request: %v", err, secret))
 			}
-			secretNamespace, err := utils.ValidateFilePathComponent(secret.Namespace)
-			if err != nil {
-				logger.Error(err.Error(), zap.String("secret_namespace", secret.Namespace))
-				return http.StatusBadRequest, errors.New(fmt.Sprintf("%s, request: %v", err, secret))
-			}
-			secretDir := filepath.Join(fetcher.sharedSecretPath, secretNamespace, secretName)
+
 			err = os.MkdirAll(secretDir, os.ModeDir|0750)
 			if err != nil {
 				e := "failed to create directory for secret"
@@ -462,20 +458,13 @@ func (fetcher *Fetcher) FetchSecretsAndCfgMaps(ctx context.Context, secrets []fv
 				return httpCode, errors.New(e)
 			}
 
-			configName, err := utils.ValidateFilePathComponent(config.Name)
+			configDir, err := utils.SanitizeFilePath(filepath.Join(fetcher.sharedSecretPath, config.Namespace, config.Name), fetcher.sharedConfigPath)
 			if err != nil {
-				logger.Error(err.Error(), zap.String("config_map_name", config.Name))
-				return http.StatusBadRequest, errors.New(fmt.Sprintf("%s, request: %v", err,
-					config))
-			}
-			configNamespace, err := utils.ValidateFilePathComponent(config.Namespace)
-			if err != nil {
-				logger.Error(err.Error(), zap.String("config_map_namespace", config.Namespace))
+				logger.Error(err.Error(), zap.String("directory", configDir), zap.String("config_map_name", config.Name), zap.String("config_map_namespace", config.Namespace))
 				return http.StatusBadRequest, errors.New(fmt.Sprintf("%s, request: %v", err,
 					config))
 			}
 
-			configDir := filepath.Join(fetcher.sharedConfigPath, configNamespace, configName)
 			err = os.MkdirAll(configDir, os.ModeDir|0750)
 			if err != nil {
 				e := "failed to create directory for configmap"
@@ -540,18 +529,20 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	filename, err := utils.ValidateFilePathComponent(req.Filename)
+	logger.Info("fetcher received upload request", zap.Any("request", req))
+
+	srcFilepath, err := utils.SanitizeFilePath(filepath.Join(fetcher.sharedVolumePath, req.Filename), fetcher.sharedVolumePath)
 	if err != nil {
-		logger.Error(err.Error(), zap.String("filename", req.Filename))
+		logger.Error("error sanitizing file path", zap.Error(err))
 		http.Error(w, fmt.Sprintf("%s: %v", err, req.Filename), http.StatusBadRequest)
 		return
 	}
-
-	logger.Info("fetcher received upload request", zap.Any("request", req))
-
-	zipFilename := filename + ".zip"
-	srcFilepath := filepath.Join(fetcher.sharedVolumePath, filename)
-	dstFilepath := filepath.Join(fetcher.sharedVolumePath, zipFilename)
+	dstFilepath, err := utils.SanitizeFilePath(filepath.Join(fetcher.sharedVolumePath, req.Filename+".zip"), fetcher.sharedVolumePath)
+	if err != nil {
+		logger.Error("error sanitizing file path", zap.Error(err))
+		http.Error(w, fmt.Sprintf("%s: %v", err, req.Filename), http.StatusBadRequest)
+		return
+	}
 
 	defer func() {
 		errC := utils.DeleteOldPackages(srcFilepath, "DEPLOY_PKG")

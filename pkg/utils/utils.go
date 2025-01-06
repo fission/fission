@@ -285,23 +285,19 @@ func IsOwnerReferencesEnabled() bool {
 	return !disableOwnerReference
 }
 
-// ValidateFilePathComponent checks if the filename is valid to prevent directory traversal attacks.
-func ValidateFilePathComponent(filename string) (string, error) {
-	if len(filename) == 0 {
-		return "", errors.New("filename is empty")
+// SanitizeFilePath checks if the path is valid to prevent directory traversal attacks.
+func SanitizeFilePath(path string, safedir string) (string, error) {
+	if len(path) == 0 {
+		return "", errors.New("path is empty")
 	}
-	if containsInvalidChars(filename) {
-		return "", errors.New("filename contains invalid characters")
+	// get normalized path and check for directory traversal attacks
+	normalizedPath := filepath.Clean(path)
+	if normalizedPath != path {
+		return "", errors.New("invalid path")
 	}
-	return filename, nil
-}
-
-func containsInvalidChars(filename string) bool {
-	invalidChars := []string{"/", "\\", ".."}
-	for _, char := range invalidChars {
-		if strings.Contains(filename, char) {
-			return true
-		}
+	// check if the path is under the safe directory
+	if len(safedir) > 0 && !strings.HasPrefix(normalizedPath, safedir) {
+		return "", errors.New("path is not under safe directory")
 	}
-	return false
+	return normalizedPath, nil
 }
