@@ -19,10 +19,10 @@ limitations under the License.
 package v1
 
 import (
-	"context"
+	context "context"
 
-	v1 "github.com/fission/fission/pkg/apis/core/v1"
-	corev1 "github.com/fission/fission/pkg/generated/applyconfiguration/core/v1"
+	corev1 "github.com/fission/fission/pkg/apis/core/v1"
+	applyconfigurationcorev1 "github.com/fission/fission/pkg/generated/applyconfiguration/core/v1"
 	scheme "github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	types "k8s.io/apimachinery/pkg/types"
@@ -38,32 +38,33 @@ type EnvironmentsGetter interface {
 
 // EnvironmentInterface has methods to work with Environment resources.
 type EnvironmentInterface interface {
-	Create(ctx context.Context, _environment *v1.Environment, opts metav1.CreateOptions) (*v1.Environment, error)
-	Update(ctx context.Context, _environment *v1.Environment, opts metav1.UpdateOptions) (*v1.Environment, error)
+	Create(ctx context.Context, _environment *corev1.Environment, opts metav1.CreateOptions) (*corev1.Environment, error)
+	Update(ctx context.Context, _environment *corev1.Environment, opts metav1.UpdateOptions) (*corev1.Environment, error)
 	Delete(ctx context.Context, name string, opts metav1.DeleteOptions) error
 	DeleteCollection(ctx context.Context, opts metav1.DeleteOptions, listOpts metav1.ListOptions) error
-	Get(ctx context.Context, name string, opts metav1.GetOptions) (*v1.Environment, error)
-	List(ctx context.Context, opts metav1.ListOptions) (*v1.EnvironmentList, error)
+	Get(ctx context.Context, name string, opts metav1.GetOptions) (*corev1.Environment, error)
+	List(ctx context.Context, opts metav1.ListOptions) (*corev1.EnvironmentList, error)
 	Watch(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error)
-	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, subresources ...string) (result *v1.Environment, err error)
-	Apply(ctx context.Context, _environment *corev1.EnvironmentApplyConfiguration, opts metav1.ApplyOptions) (result *v1.Environment, err error)
+	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, subresources ...string) (result *corev1.Environment, err error)
+	Apply(ctx context.Context, _environment *applyconfigurationcorev1.EnvironmentApplyConfiguration, opts metav1.ApplyOptions) (result *corev1.Environment, err error)
 	EnvironmentExpansion
 }
 
 // environments implements EnvironmentInterface
 type environments struct {
-	*gentype.ClientWithListAndApply[*v1.Environment, *v1.EnvironmentList, *corev1.EnvironmentApplyConfiguration]
+	*gentype.ClientWithListAndApply[*corev1.Environment, *corev1.EnvironmentList, *applyconfigurationcorev1.EnvironmentApplyConfiguration]
 }
 
 // newEnvironments returns a Environments
 func newEnvironments(c *CoreV1Client, namespace string) *environments {
 	return &environments{
-		gentype.NewClientWithListAndApply[*v1.Environment, *v1.EnvironmentList, *corev1.EnvironmentApplyConfiguration](
+		gentype.NewClientWithListAndApply[*corev1.Environment, *corev1.EnvironmentList, *applyconfigurationcorev1.EnvironmentApplyConfiguration](
 			"environments",
 			c.RESTClient(),
 			scheme.ParameterCodec,
 			namespace,
-			func() *v1.Environment { return &v1.Environment{} },
-			func() *v1.EnvironmentList { return &v1.EnvironmentList{} }),
+			func() *corev1.Environment { return &corev1.Environment{} },
+			func() *corev1.EnvironmentList { return &corev1.EnvironmentList{} },
+		),
 	}
 }

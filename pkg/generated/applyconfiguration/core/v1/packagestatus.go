@@ -19,16 +19,16 @@ limitations under the License.
 package v1
 
 import (
-	v1 "github.com/fission/fission/pkg/apis/core/v1"
+	corev1 "github.com/fission/fission/pkg/apis/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // PackageStatusApplyConfiguration represents a declarative configuration of the PackageStatus type for use
 // with apply.
 type PackageStatusApplyConfiguration struct {
-	BuildStatus         *v1.BuildStatus `json:"buildstatus,omitempty"`
-	BuildLog            *string         `json:"buildlog,omitempty"`
-	LastUpdateTimestamp *metav1.Time    `json:"lastUpdateTimestamp,omitempty"`
+	BuildStatus         *corev1.BuildStatus `json:"buildstatus,omitempty"`
+	BuildLog            *string             `json:"buildlog,omitempty"`
+	LastUpdateTimestamp *metav1.Time        `json:"lastUpdateTimestamp,omitempty"`
 }
 
 // PackageStatusApplyConfiguration constructs a declarative configuration of the PackageStatus type for use with
@@ -40,7 +40,7 @@ func PackageStatus() *PackageStatusApplyConfiguration {
 // WithBuildStatus sets the BuildStatus field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the BuildStatus field is set to the value of the last call.
-func (b *PackageStatusApplyConfiguration) WithBuildStatus(value v1.BuildStatus) *PackageStatusApplyConfiguration {
+func (b *PackageStatusApplyConfiguration) WithBuildStatus(value corev1.BuildStatus) *PackageStatusApplyConfiguration {
 	b.BuildStatus = &value
 	return b
 }

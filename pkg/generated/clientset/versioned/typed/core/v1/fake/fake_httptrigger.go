@@ -19,142 +19,31 @@ limitations under the License.
 package fake
 
 import (
-	"context"
-	json "encoding/json"
-	"fmt"
-
 	v1 "github.com/fission/fission/pkg/apis/core/v1"
 	corev1 "github.com/fission/fission/pkg/generated/applyconfiguration/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	labels "k8s.io/apimachinery/pkg/labels"
-	types "k8s.io/apimachinery/pkg/types"
-	watch "k8s.io/apimachinery/pkg/watch"
-	testing "k8s.io/client-go/testing"
+	typedcorev1 "github.com/fission/fission/pkg/generated/clientset/versioned/typed/core/v1"
+	gentype "k8s.io/client-go/gentype"
 )
 
-// FakeHTTPTriggers implements HTTPTriggerInterface
-type FakeHTTPTriggers struct {
+// fakeHTTPTriggers implements HTTPTriggerInterface
+type fakeHTTPTriggers struct {
+	*gentype.FakeClientWithListAndApply[*v1.HTTPTrigger, *v1.HTTPTriggerList, *corev1.HTTPTriggerApplyConfiguration]
 	Fake *FakeCoreV1
-	ns   string
 }
 
-var httptriggersResource = v1.SchemeGroupVersion.WithResource("httptriggers")
-
-var httptriggersKind = v1.SchemeGroupVersion.WithKind("HTTPTrigger")
-
-// Get takes name of the _hTTPTrigger, and returns the corresponding hTTPTrigger object, and an error if there is any.
-func (c *FakeHTTPTriggers) Get(ctx context.Context, name string, options metav1.GetOptions) (result *v1.HTTPTrigger, err error) {
-	emptyResult := &v1.HTTPTrigger{}
-	obj, err := c.Fake.
-		Invokes(testing.NewGetActionWithOptions(httptriggersResource, c.ns, name, options), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
+func newFakeHTTPTriggers(fake *FakeCoreV1, namespace string) typedcorev1.HTTPTriggerInterface {
+	return &fakeHTTPTriggers{
+		gentype.NewFakeClientWithListAndApply[*v1.HTTPTrigger, *v1.HTTPTriggerList, *corev1.HTTPTriggerApplyConfiguration](
+			fake.Fake,
+			namespace,
+			v1.SchemeGroupVersion.WithResource("httptriggers"),
+			v1.SchemeGroupVersion.WithKind("HTTPTrigger"),
+			func() *v1.HTTPTrigger { return &v1.HTTPTrigger{} },
+			func() *v1.HTTPTriggerList { return &v1.HTTPTriggerList{} },
+			func(dst, src *v1.HTTPTriggerList) { dst.ListMeta = src.ListMeta },
+			func(list *v1.HTTPTriggerList) []*v1.HTTPTrigger { return gentype.ToPointerSlice(list.Items) },
+			func(list *v1.HTTPTriggerList, items []*v1.HTTPTrigger) { list.Items = gentype.FromPointerSlice(items) },
+		),
+		fake,
 	}
-	return obj.(*v1.HTTPTrigger), err
-}
-
-// List takes label and field selectors, and returns the list of HTTPTriggers that match those selectors.
-func (c *FakeHTTPTriggers) List(ctx context.Context, opts metav1.ListOptions) (result *v1.HTTPTriggerList, err error) {
-	emptyResult := &v1.HTTPTriggerList{}
-	obj, err := c.Fake.
-		Invokes(testing.NewListActionWithOptions(httptriggersResource, httptriggersKind, c.ns, opts), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
-	}
-
-	label, _, _ := testing.ExtractFromListOptions(opts)
-	if label == nil {
-		label = labels.Everything()
-	}
-	list := &v1.HTTPTriggerList{ListMeta: obj.(*v1.HTTPTriggerList).ListMeta}
-	for _, item := range obj.(*v1.HTTPTriggerList).Items {
-		if label.Matches(labels.Set(item.Labels)) {
-			list.Items = append(list.Items, item)
-		}
-	}
-	return list, err
-}
-
-// Watch returns a watch.Interface that watches the requested hTTPTriggers.
-func (c *FakeHTTPTriggers) Watch(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error) {
-	return c.Fake.
-		InvokesWatch(testing.NewWatchActionWithOptions(httptriggersResource, c.ns, opts))
-
-}
-
-// Create takes the representation of a _hTTPTrigger and creates it.  Returns the server's representation of the hTTPTrigger, and an error, if there is any.
-func (c *FakeHTTPTriggers) Create(ctx context.Context, _hTTPTrigger *v1.HTTPTrigger, opts metav1.CreateOptions) (result *v1.HTTPTrigger, err error) {
-	emptyResult := &v1.HTTPTrigger{}
-	obj, err := c.Fake.
-		Invokes(testing.NewCreateActionWithOptions(httptriggersResource, c.ns, _hTTPTrigger, opts), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1.HTTPTrigger), err
-}
-
-// Update takes the representation of a _hTTPTrigger and updates it. Returns the server's representation of the hTTPTrigger, and an error, if there is any.
-func (c *FakeHTTPTriggers) Update(ctx context.Context, _hTTPTrigger *v1.HTTPTrigger, opts metav1.UpdateOptions) (result *v1.HTTPTrigger, err error) {
-	emptyResult := &v1.HTTPTrigger{}
-	obj, err := c.Fake.
-		Invokes(testing.NewUpdateActionWithOptions(httptriggersResource, c.ns, _hTTPTrigger, opts), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1.HTTPTrigger), err
-}
-
-// Delete takes name of the _hTTPTrigger and deletes it. Returns an error if one occurs.
-func (c *FakeHTTPTriggers) Delete(ctx context.Context, name string, opts metav1.DeleteOptions) error {
-	_, err := c.Fake.
-		Invokes(testing.NewDeleteActionWithOptions(httptriggersResource, c.ns, name, opts), &v1.HTTPTrigger{})
-
-	return err
-}
-
-// DeleteCollection deletes a collection of objects.
-func (c *FakeHTTPTriggers) DeleteCollection(ctx context.Context, opts metav1.DeleteOptions, listOpts metav1.ListOptions) error {
-	action := testing.NewDeleteCollectionActionWithOptions(httptriggersResource, c.ns, opts, listOpts)
-
-	_, err := c.Fake.Invokes(action, &v1.HTTPTriggerList{})
-	return err
-}
-
-// Patch applies the patch and returns the patched hTTPTrigger.
-func (c *FakeHTTPTriggers) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, subresources ...string) (result *v1.HTTPTrigger, err error) {
-	emptyResult := &v1.HTTPTrigger{}
-	obj, err := c.Fake.
-		Invokes(testing.NewPatchSubresourceActionWithOptions(httptriggersResource, c.ns, name, pt, data, opts, subresources...), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1.HTTPTrigger), err
-}
-
-// Apply takes the given apply declarative configuration, applies it and returns the applied hTTPTrigger.
-func (c *FakeHTTPTriggers) Apply(ctx context.Context, _hTTPTrigger *corev1.HTTPTriggerApplyConfiguration, opts metav1.ApplyOptions) (result *v1.HTTPTrigger, err error) {
-	if _hTTPTrigger == nil {
-		return nil, fmt.Errorf("_hTTPTrigger provided to Apply must not be nil")
-	}
-	data, err := json.Marshal(_hTTPTrigger)
-	if err != nil {
-		return nil, err
-	}
-	name := _hTTPTrigger.Name
-	if name == nil {
-		return nil, fmt.Errorf("_hTTPTrigger.Name must be provided to Apply")
-	}
-	emptyResult := &v1.HTTPTrigger{}
-	obj, err := c.Fake.
-		Invokes(testing.NewPatchSubresourceActionWithOptions(httptriggersResource, c.ns, *name, types.ApplyPatchType, data, opts.ToPatchOptions()), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1.HTTPTrigger), err
 }

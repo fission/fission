@@ -7,7 +7,7 @@ GOPATH=$(go env GOPATH)
 SCRIPT_ROOT=$(dirname "${BASH_SOURCE[0]}")/..
 CODEGEN_PKG=${CODEGEN_PKG:-$(
 	cd "${SCRIPT_ROOT}"
-	ls -d -1 ${SCRIPT_ROOT}/../code-generator 2>/dev/null || echo $GOPATH/pkg/mod/k8s.io/code-generator@v0.30.0
+	ls -d -1 ${SCRIPT_ROOT}/../code-generator 2>/dev/null || echo $GOPATH/pkg/mod/k8s.io/code-generator@v0.32.0
 )}
 OUTDIR="${SCRIPT_ROOT}/pkg/generated"
 

@@ -50,7 +50,7 @@ func (b *TimeTriggerSpecApplyConfiguration) WithCron(value string) *TimeTriggerS
 // If called multiple times, the Type field is set to the value of the last call.
 func (b *TimeTriggerSpecApplyConfiguration) WithType(value corev1.FunctionReferenceType) *TimeTriggerSpecApplyConfiguration {
 	b.ensureFunctionReferenceApplyConfigurationExists()
-	b.Type = &value
+	b.FunctionReferenceApplyConfiguration.Type = &value
 	return b
 }
 
@@ -59,7 +59,7 @@ func (b *TimeTriggerSpecApplyConfiguration) WithType(value corev1.FunctionRefere
 // If called multiple times, the Name field is set to the value of the last call.
 func (b *TimeTriggerSpecApplyConfiguration) WithName(value string) *TimeTriggerSpecApplyConfiguration {
 	b.ensureFunctionReferenceApplyConfigurationExists()
-	b.Name = &value
+	b.FunctionReferenceApplyConfiguration.Name = &value
 	return b
 }
 
@@ -69,11 +69,11 @@ func (b *TimeTriggerSpecApplyConfiguration) WithName(value string) *TimeTriggerS
 // overwriting an existing map entries in FunctionWeights field with the same key.
 func (b *TimeTriggerSpecApplyConfiguration) WithFunctionWeights(entries map[string]int) *TimeTriggerSpecApplyConfiguration {
 	b.ensureFunctionReferenceApplyConfigurationExists()
-	if b.FunctionWeights == nil && len(entries) > 0 {
-		b.FunctionWeights = make(map[string]int, len(entries))
+	if b.FunctionReferenceApplyConfiguration.FunctionWeights == nil && len(entries) > 0 {
+		b.FunctionReferenceApplyConfiguration.FunctionWeights = make(map[string]int, len(entries))
 	}
 	for k, v := range entries {
-		b.FunctionWeights[k] = v
+		b.FunctionReferenceApplyConfiguration.FunctionWeights[k] = v
 	}
 	return b
 }

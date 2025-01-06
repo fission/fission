@@ -19,10 +19,10 @@ limitations under the License.
 package v1
 
 import (
-	v1 "github.com/fission/fission/pkg/apis/core/v1"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/client-go/listers"
-	"k8s.io/client-go/tools/cache"
+	corev1 "github.com/fission/fission/pkg/apis/core/v1"
+	labels "k8s.io/apimachinery/pkg/labels"
+	listers "k8s.io/client-go/listers"
+	cache "k8s.io/client-go/tools/cache"
 )
 
 // KubernetesWatchTriggerLister helps list KubernetesWatchTriggers.
@@ -30,7 +30,7 @@ import (
 type KubernetesWatchTriggerLister interface {
 	// List lists all KubernetesWatchTriggers in the indexer.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1.KubernetesWatchTrigger, err error)
+	List(selector labels.Selector) (ret []*corev1.KubernetesWatchTrigger, err error)
 	// KubernetesWatchTriggers returns an object that can list and get KubernetesWatchTriggers.
 	KubernetesWatchTriggers(namespace string) KubernetesWatchTriggerNamespaceLister
 	KubernetesWatchTriggerListerExpansion
@@ -38,17 +38,17 @@ type KubernetesWatchTriggerLister interface {
 
 // kubernetesWatchTriggerLister implements the KubernetesWatchTriggerLister interface.
 type kubernetesWatchTriggerLister struct {
-	listers.ResourceIndexer[*v1.KubernetesWatchTrigger]
+	listers.ResourceIndexer[*corev1.KubernetesWatchTrigger]
 }
 
 // NewKubernetesWatchTriggerLister returns a new KubernetesWatchTriggerLister.
 func NewKubernetesWatchTriggerLister(indexer cache.Indexer) KubernetesWatchTriggerLister {
-	return &kubernetesWatchTriggerLister{listers.New[*v1.KubernetesWatchTrigger](indexer, v1.Resource("kuberneteswatchtrigger"))}
+	return &kubernetesWatchTriggerLister{listers.New[*corev1.KubernetesWatchTrigger](indexer, corev1.Resource("kuberneteswatchtrigger"))}
 }
 
 // KubernetesWatchTriggers returns an object that can list and get KubernetesWatchTriggers.
 func (s *kubernetesWatchTriggerLister) KubernetesWatchTriggers(namespace string) KubernetesWatchTriggerNamespaceLister {
-	return kubernetesWatchTriggerNamespaceLister{listers.NewNamespaced[*v1.KubernetesWatchTrigger](s.ResourceIndexer, namespace)}
+	return kubernetesWatchTriggerNamespaceLister{listers.NewNamespaced[*corev1.KubernetesWatchTrigger](s.ResourceIndexer, namespace)}
 }
 
 // KubernetesWatchTriggerNamespaceLister helps list and get KubernetesWatchTriggers.
@@ -56,15 +56,15 @@ func (s *kubernetesWatchTriggerLister) KubernetesWatchTriggers(namespace string)
 type KubernetesWatchTriggerNamespaceLister interface {
 	// List lists all KubernetesWatchTriggers in the indexer for a given namespace.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1.KubernetesWatchTrigger, err error)
+	List(selector labels.Selector) (ret []*corev1.KubernetesWatchTrigger, err error)
 	// Get retrieves the KubernetesWatchTrigger from the indexer for a given namespace and name.
 	// Objects returned here must be treated as read-only.
-	Get(name string) (*v1.KubernetesWatchTrigger, error)
+	Get(name string) (*corev1.KubernetesWatchTrigger, error)
 	KubernetesWatchTriggerNamespaceListerExpansion
 }
 
 // kubernetesWatchTriggerNamespaceLister implements the KubernetesWatchTriggerNamespaceLister
 // interface.
 type kubernetesWatchTriggerNamespaceLister struct {
-	listers.ResourceIndexer[*v1.KubernetesWatchTrigger]
+	listers.ResourceIndexer[*corev1.KubernetesWatchTrigger]
 }

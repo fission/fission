@@ -19,10 +19,10 @@ limitations under the License.
 package v1
 
 import (
-	v1 "github.com/fission/fission/pkg/apis/core/v1"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/client-go/listers"
-	"k8s.io/client-go/tools/cache"
+	corev1 "github.com/fission/fission/pkg/apis/core/v1"
+	labels "k8s.io/apimachinery/pkg/labels"
+	listers "k8s.io/client-go/listers"
+	cache "k8s.io/client-go/tools/cache"
 )
 
 // FunctionLister helps list Functions.
@@ -30,7 +30,7 @@ import (
 type FunctionLister interface {
 	// List lists all Functions in the indexer.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1.Function, err error)
+	List(selector labels.Selector) (ret []*corev1.Function, err error)
 	// Functions returns an object that can list and get Functions.
 	Functions(namespace string) FunctionNamespaceLister
 	FunctionListerExpansion
@@ -38,17 +38,17 @@ type FunctionLister interface {
 
 // functionLister implements the FunctionLister interface.
 type functionLister struct {
-	listers.ResourceIndexer[*v1.Function]
+	listers.ResourceIndexer[*corev1.Function]
 }
 
 // NewFunctionLister returns a new FunctionLister.
 func NewFunctionLister(indexer cache.Indexer) FunctionLister {
-	return &functionLister{listers.New[*v1.Function](indexer, v1.Resource("function"))}
+	return &functionLister{listers.New[*corev1.Function](indexer, corev1.Resource("function"))}
 }
 
 // Functions returns an object that can list and get Functions.
 func (s *functionLister) Functions(namespace string) FunctionNamespaceLister {
-	return functionNamespaceLister{listers.NewNamespaced[*v1.Function](s.ResourceIndexer, namespace)}
+	return functionNamespaceLister{listers.NewNamespaced[*corev1.Function](s.ResourceIndexer, namespace)}
 }
 
 // FunctionNamespaceLister helps list and get Functions.
@@ -56,15 +56,15 @@ func (s *functionLister) Functions(namespace string) FunctionNamespaceLister {
 type FunctionNamespaceLister interface {
 	// List lists all Functions in the indexer for a given namespace.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1.Function, err error)
+	List(selector labels.Selector) (ret []*corev1.Function, err error)
 	// Get retrieves the Function from the indexer for a given namespace and name.
 	// Objects returned here must be treated as read-only.
-	Get(name string) (*v1.Function, error)
+	Get(name string) (*corev1.Function, error)
 	FunctionNamespaceListerExpansion
 }
 
 // functionNamespaceLister implements the FunctionNamespaceLister
 // interface.
 type functionNamespaceLister struct {
-	listers.ResourceIndexer[*v1.Function]
+	listers.ResourceIndexer[*corev1.Function]
 }

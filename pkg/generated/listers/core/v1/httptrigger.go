@@ -19,10 +19,10 @@ limitations under the License.
 package v1
 
 import (
-	v1 "github.com/fission/fission/pkg/apis/core/v1"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/client-go/listers"
-	"k8s.io/client-go/tools/cache"
+	corev1 "github.com/fission/fission/pkg/apis/core/v1"
+	labels "k8s.io/apimachinery/pkg/labels"
+	listers "k8s.io/client-go/listers"
+	cache "k8s.io/client-go/tools/cache"
 )
 
 // HTTPTriggerLister helps list HTTPTriggers.
@@ -30,7 +30,7 @@ import (
 type HTTPTriggerLister interface {
 	// List lists all HTTPTriggers in the indexer.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1.HTTPTrigger, err error)
+	List(selector labels.Selector) (ret []*corev1.HTTPTrigger, err error)
 	// HTTPTriggers returns an object that can list and get HTTPTriggers.
 	HTTPTriggers(namespace string) HTTPTriggerNamespaceLister
 	HTTPTriggerListerExpansion
@@ -38,17 +38,17 @@ type HTTPTriggerLister interface {
 
 // hTTPTriggerLister implements the HTTPTriggerLister interface.
 type hTTPTriggerLister struct {
-	listers.ResourceIndexer[*v1.HTTPTrigger]
+	listers.ResourceIndexer[*corev1.HTTPTrigger]
 }
 
 // NewHTTPTriggerLister returns a new HTTPTriggerLister.
 func NewHTTPTriggerLister(indexer cache.Indexer) HTTPTriggerLister {
-	return &hTTPTriggerLister{listers.New[*v1.HTTPTrigger](indexer, v1.Resource("httptrigger"))}
+	return &hTTPTriggerLister{listers.New[*corev1.HTTPTrigger](indexer, corev1.Resource("httptrigger"))}
 }
 
 // HTTPTriggers returns an object that can list and get HTTPTriggers.
 func (s *hTTPTriggerLister) HTTPTriggers(namespace string) HTTPTriggerNamespaceLister {
-	return hTTPTriggerNamespaceLister{listers.NewNamespaced[*v1.HTTPTrigger](s.ResourceIndexer, namespace)}
+	return hTTPTriggerNamespaceLister{listers.NewNamespaced[*corev1.HTTPTrigger](s.ResourceIndexer, namespace)}
 }
 
 // HTTPTriggerNamespaceLister helps list and get HTTPTriggers.
@@ -56,15 +56,15 @@ func (s *hTTPTriggerLister) HTTPTriggers(namespace string) HTTPTriggerNamespaceL
 type HTTPTriggerNamespaceLister interface {
 	// List lists all HTTPTriggers in the indexer for a given namespace.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1.HTTPTrigger, err error)
+	List(selector labels.Selector) (ret []*corev1.HTTPTrigger, err error)
 	// Get retrieves the HTTPTrigger from the indexer for a given namespace and name.
 	// Objects returned here must be treated as read-only.
-	Get(name string) (*v1.HTTPTrigger, error)
+	Get(name string) (*corev1.HTTPTrigger, error)
 	HTTPTriggerNamespaceListerExpansion
 }
 
 // hTTPTriggerNamespaceLister implements the HTTPTriggerNamespaceLister
 // interface.
 type hTTPTriggerNamespaceLister struct {
-	listers.ResourceIndexer[*v1.HTTPTrigger]
+	listers.ResourceIndexer[*corev1.HTTPTrigger]
 }

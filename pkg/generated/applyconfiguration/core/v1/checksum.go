@@ -19,14 +19,14 @@ limitations under the License.
 package v1
 
 import (
-	v1 "github.com/fission/fission/pkg/apis/core/v1"
+	corev1 "github.com/fission/fission/pkg/apis/core/v1"
 )
 
 // ChecksumApplyConfiguration represents a declarative configuration of the Checksum type for use
 // with apply.
 type ChecksumApplyConfiguration struct {
-	Type *v1.ChecksumType `json:"type,omitempty"`
-	Sum  *string          `json:"sum,omitempty"`
+	Type *corev1.ChecksumType `json:"type,omitempty"`
+	Sum  *string              `json:"sum,omitempty"`
 }
 
 // ChecksumApplyConfiguration constructs a declarative configuration of the Checksum type for use with
@@ -38,7 +38,7 @@ func Checksum() *ChecksumApplyConfiguration {
 // WithType sets the Type field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the Type field is set to the value of the last call.
-func (b *ChecksumApplyConfiguration) WithType(value v1.ChecksumType) *ChecksumApplyConfiguration {
+func (b *ChecksumApplyConfiguration) WithType(value corev1.ChecksumType) *ChecksumApplyConfiguration {
 	b.Type = &value
 	return b
 }

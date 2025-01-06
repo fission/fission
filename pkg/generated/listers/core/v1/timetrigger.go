@@ -19,10 +19,10 @@ limitations under the License.
 package v1
 
 import (
-	v1 "github.com/fission/fission/pkg/apis/core/v1"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/client-go/listers"
-	"k8s.io/client-go/tools/cache"
+	corev1 "github.com/fission/fission/pkg/apis/core/v1"
+	labels "k8s.io/apimachinery/pkg/labels"
+	listers "k8s.io/client-go/listers"
+	cache "k8s.io/client-go/tools/cache"
 )
 
 // TimeTriggerLister helps list TimeTriggers.
@@ -30,7 +30,7 @@ import (
 type TimeTriggerLister interface {
 	// List lists all TimeTriggers in the indexer.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1.TimeTrigger, err error)
+	List(selector labels.Selector) (ret []*corev1.TimeTrigger, err error)
 	// TimeTriggers returns an object that can list and get TimeTriggers.
 	TimeTriggers(namespace string) TimeTriggerNamespaceLister
 	TimeTriggerListerExpansion
@@ -38,17 +38,17 @@ type TimeTriggerLister interface {
 
 // timeTriggerLister implements the TimeTriggerLister interface.
 type timeTriggerLister struct {
-	listers.ResourceIndexer[*v1.TimeTrigger]
+	listers.ResourceIndexer[*corev1.TimeTrigger]
 }
 
 // NewTimeTriggerLister returns a new TimeTriggerLister.
 func NewTimeTriggerLister(indexer cache.Indexer) TimeTriggerLister {
-	return &timeTriggerLister{listers.New[*v1.TimeTrigger](indexer, v1.Resource("timetrigger"))}
+	return &timeTriggerLister{listers.New[*corev1.TimeTrigger](indexer, corev1.Resource("timetrigger"))}
 }
 
 // TimeTriggers returns an object that can list and get TimeTriggers.
 func (s *timeTriggerLister) TimeTriggers(namespace string) TimeTriggerNamespaceLister {
-	return timeTriggerNamespaceLister{listers.NewNamespaced[*v1.TimeTrigger](s.ResourceIndexer, namespace)}
+	return timeTriggerNamespaceLister{listers.NewNamespaced[*corev1.TimeTrigger](s.ResourceIndexer, namespace)}
 }
 
 // TimeTriggerNamespaceLister helps list and get TimeTriggers.
@@ -56,15 +56,15 @@ func (s *timeTriggerLister) TimeTriggers(namespace string) TimeTriggerNamespaceL
 type TimeTriggerNamespaceLister interface {
 	// List lists all TimeTriggers in the indexer for a given namespace.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1.TimeTrigger, err error)
+	List(selector labels.Selector) (ret []*corev1.TimeTrigger, err error)
 	// Get retrieves the TimeTrigger from the indexer for a given namespace and name.
 	// Objects returned here must be treated as read-only.
-	Get(name string) (*v1.TimeTrigger, error)
+	Get(name string) (*corev1.TimeTrigger, error)
 	TimeTriggerNamespaceListerExpansion
 }
 
 // timeTriggerNamespaceLister implements the TimeTriggerNamespaceLister
 // interface.
 type timeTriggerNamespaceLister struct {
-	listers.ResourceIndexer[*v1.TimeTrigger]
+	listers.ResourceIndexer[*corev1.TimeTrigger]
 }

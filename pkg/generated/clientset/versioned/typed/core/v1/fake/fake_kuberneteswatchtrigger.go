@@ -19,142 +19,35 @@ limitations under the License.
 package fake
 
 import (
-	"context"
-	json "encoding/json"
-	"fmt"
-
 	v1 "github.com/fission/fission/pkg/apis/core/v1"
 	corev1 "github.com/fission/fission/pkg/generated/applyconfiguration/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	labels "k8s.io/apimachinery/pkg/labels"
-	types "k8s.io/apimachinery/pkg/types"
-	watch "k8s.io/apimachinery/pkg/watch"
-	testing "k8s.io/client-go/testing"
+	typedcorev1 "github.com/fission/fission/pkg/generated/clientset/versioned/typed/core/v1"
+	gentype "k8s.io/client-go/gentype"
 )
 
-// FakeKubernetesWatchTriggers implements KubernetesWatchTriggerInterface
-type FakeKubernetesWatchTriggers struct {
+// fakeKubernetesWatchTriggers implements KubernetesWatchTriggerInterface
+type fakeKubernetesWatchTriggers struct {
+	*gentype.FakeClientWithListAndApply[*v1.KubernetesWatchTrigger, *v1.KubernetesWatchTriggerList, *corev1.KubernetesWatchTriggerApplyConfiguration]
 	Fake *FakeCoreV1
-	ns   string
 }
 
-var kuberneteswatchtriggersResource = v1.SchemeGroupVersion.WithResource("kuberneteswatchtriggers")
-
-var kuberneteswatchtriggersKind = v1.SchemeGroupVersion.WithKind("KubernetesWatchTrigger")
-
-// Get takes name of the _kubernetesWatchTrigger, and returns the corresponding kubernetesWatchTrigger object, and an error if there is any.
-func (c *FakeKubernetesWatchTriggers) Get(ctx context.Context, name string, options metav1.GetOptions) (result *v1.KubernetesWatchTrigger, err error) {
-	emptyResult := &v1.KubernetesWatchTrigger{}
-	obj, err := c.Fake.
-		Invokes(testing.NewGetActionWithOptions(kuberneteswatchtriggersResource, c.ns, name, options), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
+func newFakeKubernetesWatchTriggers(fake *FakeCoreV1, namespace string) typedcorev1.KubernetesWatchTriggerInterface {
+	return &fakeKubernetesWatchTriggers{
+		gentype.NewFakeClientWithListAndApply[*v1.KubernetesWatchTrigger, *v1.KubernetesWatchTriggerList, *corev1.KubernetesWatchTriggerApplyConfiguration](
+			fake.Fake,
+			namespace,
+			v1.SchemeGroupVersion.WithResource("kuberneteswatchtriggers"),
+			v1.SchemeGroupVersion.WithKind("KubernetesWatchTrigger"),
+			func() *v1.KubernetesWatchTrigger { return &v1.KubernetesWatchTrigger{} },
+			func() *v1.KubernetesWatchTriggerList { return &v1.KubernetesWatchTriggerList{} },
+			func(dst, src *v1.KubernetesWatchTriggerList) { dst.ListMeta = src.ListMeta },
+			func(list *v1.KubernetesWatchTriggerList) []*v1.KubernetesWatchTrigger {
+				return gentype.ToPointerSlice(list.Items)
+			},
+			func(list *v1.KubernetesWatchTriggerList, items []*v1.KubernetesWatchTrigger) {
+				list.Items = gentype.FromPointerSlice(items)
+			},
+		),
+		fake,
 	}
-	return obj.(*v1.KubernetesWatchTrigger), err
-}
-
-// List takes label and field selectors, and returns the list of KubernetesWatchTriggers that match those selectors.
-func (c *FakeKubernetesWatchTriggers) List(ctx context.Context, opts metav1.ListOptions) (result *v1.KubernetesWatchTriggerList, err error) {
-	emptyResult := &v1.KubernetesWatchTriggerList{}
-	obj, err := c.Fake.
-		Invokes(testing.NewListActionWithOptions(kuberneteswatchtriggersResource, kuberneteswatchtriggersKind, c.ns, opts), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
-	}
-
-	label, _, _ := testing.ExtractFromListOptions(opts)
-	if label == nil {
-		label = labels.Everything()
-	}
-	list := &v1.KubernetesWatchTriggerList{ListMeta: obj.(*v1.KubernetesWatchTriggerList).ListMeta}
-	for _, item := range obj.(*v1.KubernetesWatchTriggerList).Items {
-		if label.Matches(labels.Set(item.Labels)) {
-			list.Items = append(list.Items, item)
-		}
-	}
-	return list, err
-}
-
-// Watch returns a watch.Interface that watches the requested kubernetesWatchTriggers.
-func (c *FakeKubernetesWatchTriggers) Watch(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error) {
-	return c.Fake.
-		InvokesWatch(testing.NewWatchActionWithOptions(kuberneteswatchtriggersResource, c.ns, opts))
-
-}
-
-// Create takes the representation of a _kubernetesWatchTrigger and creates it.  Returns the server's representation of the kubernetesWatchTrigger, and an error, if there is any.
-func (c *FakeKubernetesWatchTriggers) Create(ctx context.Context, _kubernetesWatchTrigger *v1.KubernetesWatchTrigger, opts metav1.CreateOptions) (result *v1.KubernetesWatchTrigger, err error) {
-	emptyResult := &v1.KubernetesWatchTrigger{}
-	obj, err := c.Fake.
-		Invokes(testing.NewCreateActionWithOptions(kuberneteswatchtriggersResource, c.ns, _kubernetesWatchTrigger, opts), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1.KubernetesWatchTrigger), err
-}
-
-// Update takes the representation of a _kubernetesWatchTrigger and updates it. Returns the server's representation of the kubernetesWatchTrigger, and an error, if there is any.
-func (c *FakeKubernetesWatchTriggers) Update(ctx context.Context, _kubernetesWatchTrigger *v1.KubernetesWatchTrigger, opts metav1.UpdateOptions) (result *v1.KubernetesWatchTrigger, err error) {
-	emptyResult := &v1.KubernetesWatchTrigger{}
-	obj, err := c.Fake.
-		Invokes(testing.NewUpdateActionWithOptions(kuberneteswatchtriggersResource, c.ns, _kubernetesWatchTrigger, opts), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1.KubernetesWatchTrigger), err
-}
-
-// Delete takes name of the _kubernetesWatchTrigger and deletes it. Returns an error if one occurs.
-func (c *FakeKubernetesWatchTriggers) Delete(ctx context.Context, name string, opts metav1.DeleteOptions) error {
-	_, err := c.Fake.
-		Invokes(testing.NewDeleteActionWithOptions(kuberneteswatchtriggersResource, c.ns, name, opts), &v1.KubernetesWatchTrigger{})
-
-	return err
-}
-
-// DeleteCollection deletes a collection of objects.
-func (c *FakeKubernetesWatchTriggers) DeleteCollection(ctx context.Context, opts metav1.DeleteOptions, listOpts metav1.ListOptions) error {
-	action := testing.NewDeleteCollectionActionWithOptions(kuberneteswatchtriggersResource, c.ns, opts, listOpts)
-
-	_, err := c.Fake.Invokes(action, &v1.KubernetesWatchTriggerList{})
-	return err
-}
-
-// Patch applies the patch and returns the patched kubernetesWatchTrigger.
-func (c *FakeKubernetesWatchTriggers) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, subresources ...string) (result *v1.KubernetesWatchTrigger, err error) {
-	emptyResult := &v1.KubernetesWatchTrigger{}
-	obj, err := c.Fake.
-		Invokes(testing.NewPatchSubresourceActionWithOptions(kuberneteswatchtriggersResource, c.ns, name, pt, data, opts, subresources...), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1.KubernetesWatchTrigger), err
-}
-
-// Apply takes the given apply declarative configuration, applies it and returns the applied kubernetesWatchTrigger.
-func (c *FakeKubernetesWatchTriggers) Apply(ctx context.Context, _kubernetesWatchTrigger *corev1.KubernetesWatchTriggerApplyConfiguration, opts metav1.ApplyOptions) (result *v1.KubernetesWatchTrigger, err error) {
-	if _kubernetesWatchTrigger == nil {
-		return nil, fmt.Errorf("_kubernetesWatchTrigger provided to Apply must not be nil")
-	}
-	data, err := json.Marshal(_kubernetesWatchTrigger)
-	if err != nil {
-		return nil, err
-	}
-	name := _kubernetesWatchTrigger.Name
-	if name == nil {
-		return nil, fmt.Errorf("_kubernetesWatchTrigger.Name must be provided to Apply")
-	}
-	emptyResult := &v1.KubernetesWatchTrigger{}
-	obj, err := c.Fake.
-		Invokes(testing.NewPatchSubresourceActionWithOptions(kuberneteswatchtriggersResource, c.ns, *name, types.ApplyPatchType, data, opts.ToPatchOptions()), emptyResult)
-
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1.KubernetesWatchTrigger), err
 }

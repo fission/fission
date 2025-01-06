@@ -19,13 +19,13 @@ limitations under the License.
 package v1
 
 import (
-	"context"
+	context "context"
 	time "time"
 
-	corev1 "github.com/fission/fission/pkg/apis/core/v1"
+	apiscorev1 "github.com/fission/fission/pkg/apis/core/v1"
 	versioned "github.com/fission/fission/pkg/generated/clientset/versioned"
 	internalinterfaces "github.com/fission/fission/pkg/generated/informers/externalversions/internalinterfaces"
-	v1 "github.com/fission/fission/pkg/generated/listers/core/v1"
+	corev1 "github.com/fission/fission/pkg/generated/listers/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	watch "k8s.io/apimachinery/pkg/watch"
@@ -36,7 +36,7 @@ import (
 // Functions.
 type FunctionInformer interface {
 	Informer() cache.SharedIndexInformer
-	Lister() v1.FunctionLister
+	Lister() corev1.FunctionLister
 }
 
 type functionInformer struct {
@@ -71,7 +71,7 @@ func NewFilteredFunctionInformer(client versioned.Interface, namespace string, r
 				return client.CoreV1().Functions(namespace).Watch(context.TODO(), options)
 			},
 		},
-		&corev1.Function{},
+		&apiscorev1.Function{},
 		resyncPeriod,
 		indexers,
 	)
@@ -82,9 +82,9 @@ func (f *functionInformer) defaultInformer(client versioned.Interface, resyncPer
 }
 
 func (f *functionInformer) Informer() cache.SharedIndexInformer {
-	return f.factory.InformerFor(&corev1.Function{}, f.defaultInformer)
+	return f.factory.InformerFor(&apiscorev1.Function{}, f.defaultInformer)
 }
 
-func (f *functionInformer) Lister() v1.FunctionLister {
-	return v1.NewFunctionLister(f.Informer().GetIndexer())
+func (f *functionInformer) Lister() corev1.FunctionLister {
+	return corev1.NewFunctionLister(f.Informer().GetIndexer())
 }

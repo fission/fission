@@ -19,10 +19,10 @@ limitations under the License.
 package v1
 
 import (
-	v1 "github.com/fission/fission/pkg/apis/core/v1"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/client-go/listers"
-	"k8s.io/client-go/tools/cache"
+	corev1 "github.com/fission/fission/pkg/apis/core/v1"
+	labels "k8s.io/apimachinery/pkg/labels"
+	listers "k8s.io/client-go/listers"
+	cache "k8s.io/client-go/tools/cache"
 )
 
 // MessageQueueTriggerLister helps list MessageQueueTriggers.
@@ -30,7 +30,7 @@ import (
 type MessageQueueTriggerLister interface {
 	// List lists all MessageQueueTriggers in the indexer.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1.MessageQueueTrigger, err error)
+	List(selector labels.Selector) (ret []*corev1.MessageQueueTrigger, err error)
 	// MessageQueueTriggers returns an object that can list and get MessageQueueTriggers.
 	MessageQueueTriggers(namespace string) MessageQueueTriggerNamespaceLister
 	MessageQueueTriggerListerExpansion
@@ -38,17 +38,17 @@ type MessageQueueTriggerLister interface {
 
 // messageQueueTriggerLister implements the MessageQueueTriggerLister interface.
 type messageQueueTriggerLister struct {
-	listers.ResourceIndexer[*v1.MessageQueueTrigger]
+	listers.ResourceIndexer[*corev1.MessageQueueTrigger]
 }
 
 // NewMessageQueueTriggerLister returns a new MessageQueueTriggerLister.
 func NewMessageQueueTriggerLister(indexer cache.Indexer) MessageQueueTriggerLister {
-	return &messageQueueTriggerLister{listers.New[*v1.MessageQueueTrigger](indexer, v1.Resource("messagequeuetrigger"))}
+	return &messageQueueTriggerLister{listers.New[*corev1.MessageQueueTrigger](indexer, corev1.Resource("messagequeuetrigger"))}
 }
 
 // MessageQueueTriggers returns an object that can list and get MessageQueueTriggers.
 func (s *messageQueueTriggerLister) MessageQueueTriggers(namespace string) MessageQueueTriggerNamespaceLister {
-	return messageQueueTriggerNamespaceLister{listers.NewNamespaced[*v1.MessageQueueTrigger](s.ResourceIndexer, namespace)}
+	return messageQueueTriggerNamespaceLister{listers.NewNamespaced[*corev1.MessageQueueTrigger](s.ResourceIndexer, namespace)}
 }
 
 // MessageQueueTriggerNamespaceLister helps list and get MessageQueueTriggers.
@@ -56,15 +56,15 @@ func (s *messageQueueTriggerLister) MessageQueueTriggers(namespace string) Messa
 type MessageQueueTriggerNamespaceLister interface {
 	// List lists all MessageQueueTriggers in the indexer for a given namespace.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v1.MessageQueueTrigger, err error)
+	List(selector labels.Selector) (ret []*corev1.MessageQueueTrigger, err error)
 	// Get retrieves the MessageQueueTrigger from the indexer for a given namespace and name.
 	// Objects returned here must be treated as read-only.
-	Get(name string) (*v1.MessageQueueTrigger, error)
+	Get(name string) (*corev1.MessageQueueTrigger, error)
 	MessageQueueTriggerNamespaceListerExpansion
 }
 
 // messageQueueTriggerNamespaceLister implements the MessageQueueTriggerNamespaceLister
 // interface.
 type messageQueueTriggerNamespaceLister struct {
-	listers.ResourceIndexer[*v1.MessageQueueTrigger]
+	listers.ResourceIndexer[*corev1.MessageQueueTrigger]
 }

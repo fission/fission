@@ -19,13 +19,13 @@ limitations under the License.
 package v1
 
 import (
-	v1 "github.com/fission/fission/pkg/apis/core/v1"
+	corev1 "github.com/fission/fission/pkg/apis/core/v1"
 )
 
 // ArchiveApplyConfiguration represents a declarative configuration of the Archive type for use
 // with apply.
 type ArchiveApplyConfiguration struct {
-	Type     *v1.ArchiveType             `json:"type,omitempty"`
+	Type     *corev1.ArchiveType         `json:"type,omitempty"`
 	Literal  []byte                      `json:"literal,omitempty"`
 	URL      *string                     `json:"url,omitempty"`
 	Checksum *ChecksumApplyConfiguration `json:"checksum,omitempty"`
@@ -40,7 +40,7 @@ func Archive() *ArchiveApplyConfiguration {
 // WithType sets the Type field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the Type field is set to the value of the last call.
-func (b *ArchiveApplyConfiguration) WithType(value v1.ArchiveType) *ArchiveApplyConfiguration {
+func (b *ArchiveApplyConfiguration) WithType(value corev1.ArchiveType) *ArchiveApplyConfiguration {
 	b.Type = &value
 	return b
 }

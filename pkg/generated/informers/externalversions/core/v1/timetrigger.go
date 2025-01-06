@@ -19,13 +19,13 @@ limitations under the License.
 package v1
 
 import (
-	"context"
+	context "context"
 	time "time"
 
-	corev1 "github.com/fission/fission/pkg/apis/core/v1"
+	apiscorev1 "github.com/fission/fission/pkg/apis/core/v1"
 	versioned "github.com/fission/fission/pkg/generated/clientset/versioned"
 	internalinterfaces "github.com/fission/fission/pkg/generated/informers/externalversions/internalinterfaces"
-	v1 "github.com/fission/fission/pkg/generated/listers/core/v1"
+	corev1 "github.com/fission/fission/pkg/generated/listers/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	watch "k8s.io/apimachinery/pkg/watch"
@@ -36,7 +36,7 @@ import (
 // TimeTriggers.
 type TimeTriggerInformer interface {
 	Informer() cache.SharedIndexInformer
-	Lister() v1.TimeTriggerLister
+	Lister() corev1.TimeTriggerLister
 }
 
 type timeTriggerInformer struct {
@@ -71,7 +71,7 @@ func NewFilteredTimeTriggerInformer(client versioned.Interface, namespace string
 				return client.CoreV1().TimeTriggers(namespace).Watch(context.TODO(), options)
 			},
 		},
-		&corev1.TimeTrigger{},
+		&apiscorev1.TimeTrigger{},
 		resyncPeriod,
 		indexers,
 	)
@@ -82,9 +82,9 @@ func (f *timeTriggerInformer) defaultInformer(client versioned.Interface, resync
 }
 
 func (f *timeTriggerInformer) Informer() cache.SharedIndexInformer {
-	return f.factory.InformerFor(&corev1.TimeTrigger{}, f.defaultInformer)
+	return f.factory.InformerFor(&apiscorev1.TimeTrigger{}, f.defaultInformer)
 }
 
-func (f *timeTriggerInformer) Lister() v1.TimeTriggerLister {
-	return v1.NewTimeTriggerLister(f.Informer().GetIndexer())
+func (f *timeTriggerInformer) Lister() corev1.TimeTriggerLister {
+	return corev1.NewTimeTriggerLister(f.Informer().GetIndexer())
 }

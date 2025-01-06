@@ -29,35 +29,35 @@ type FakeCoreV1 struct {
 }
 
 func (c *FakeCoreV1) CanaryConfigs(namespace string) v1.CanaryConfigInterface {
-	return &FakeCanaryConfigs{c, namespace}
+	return newFakeCanaryConfigs(c, namespace)
 }
 
 func (c *FakeCoreV1) Environments(namespace string) v1.EnvironmentInterface {
-	return &FakeEnvironments{c, namespace}
+	return newFakeEnvironments(c, namespace)
 }
 
 func (c *FakeCoreV1) Functions(namespace string) v1.FunctionInterface {
-	return &FakeFunctions{c, namespace}
+	return newFakeFunctions(c, namespace)
 }
 
 func (c *FakeCoreV1) HTTPTriggers(namespace string) v1.HTTPTriggerInterface {
-	return &FakeHTTPTriggers{c, namespace}
+	return newFakeHTTPTriggers(c, namespace)
 }
 
 func (c *FakeCoreV1) KubernetesWatchTriggers(namespace string) v1.KubernetesWatchTriggerInterface {
-	return &FakeKubernetesWatchTriggers{c, namespace}
+	return newFakeKubernetesWatchTriggers(c, namespace)
 }
 
 func (c *FakeCoreV1) MessageQueueTriggers(namespace string) v1.MessageQueueTriggerInterface {
-	return &FakeMessageQueueTriggers{c, namespace}
+	return newFakeMessageQueueTriggers(c, namespace)
 }
 
 func (c *FakeCoreV1) Packages(namespace string) v1.PackageInterface {
-	return &FakePackages{c, namespace}
+	return newFakePackages(c, namespace)
 }
 
 func (c *FakeCoreV1) TimeTriggers(namespace string) v1.TimeTriggerInterface {
-	return &FakeTimeTriggers{c, namespace}
+	return newFakeTimeTriggers(c, namespace)
 }
 
 // RESTClient returns a RESTClient that is used to communicate

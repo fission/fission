@@ -19,16 +19,16 @@ limitations under the License.
 package v1
 
 import (
-	v1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 )
 
 // BuilderApplyConfiguration represents a declarative configuration of the Builder type for use
 // with apply.
 type BuilderApplyConfiguration struct {
-	Image     *string       `json:"image,omitempty"`
-	Command   *string       `json:"command,omitempty"`
-	Container *v1.Container `json:"container,omitempty"`
-	PodSpec   *v1.PodSpec   `json:"podspec,omitempty"`
+	Image     *string           `json:"image,omitempty"`
+	Command   *string           `json:"command,omitempty"`
+	Container *corev1.Container `json:"container,omitempty"`
+	PodSpec   *corev1.PodSpec   `json:"podspec,omitempty"`
 }
 
 // BuilderApplyConfiguration constructs a declarative configuration of the Builder type for use with
@@ -56,7 +56,7 @@ func (b *BuilderApplyConfiguration) WithCommand(value string) *BuilderApplyConfi
 // WithContainer sets the Container field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the Container field is set to the value of the last call.
-func (b *BuilderApplyConfiguration) WithContainer(value v1.Container) *BuilderApplyConfiguration {
+func (b *BuilderApplyConfiguration) WithContainer(value corev1.Container) *BuilderApplyConfiguration {
 	b.Container = &value
 	return b
 }
@@ -64,7 +64,7 @@ func (b *BuilderApplyConfiguration) WithContainer(value v1.Container) *BuilderAp
 // WithPodSpec sets the PodSpec field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the PodSpec field is set to the value of the last call.
-func (b *BuilderApplyConfiguration) WithPodSpec(value v1.PodSpec) *BuilderApplyConfiguration {
+func (b *BuilderApplyConfiguration) WithPodSpec(value corev1.PodSpec) *BuilderApplyConfiguration {
 	b.PodSpec = &value
 	return b
 }

@@ -19,10 +19,10 @@ limitations under the License.
 package v1
 
 import (
-	"context"
+	context "context"
 
-	v1 "github.com/fission/fission/pkg/apis/core/v1"
-	corev1 "github.com/fission/fission/pkg/generated/applyconfiguration/core/v1"
+	corev1 "github.com/fission/fission/pkg/apis/core/v1"
+	applyconfigurationcorev1 "github.com/fission/fission/pkg/generated/applyconfiguration/core/v1"
 	scheme "github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	types "k8s.io/apimachinery/pkg/types"
@@ -38,32 +38,33 @@ type KubernetesWatchTriggersGetter interface {
 
 // KubernetesWatchTriggerInterface has methods to work with KubernetesWatchTrigger resources.
 type KubernetesWatchTriggerInterface interface {
-	Create(ctx context.Context, _kubernetesWatchTrigger *v1.KubernetesWatchTrigger, opts metav1.CreateOptions) (*v1.KubernetesWatchTrigger, error)
-	Update(ctx context.Context, _kubernetesWatchTrigger *v1.KubernetesWatchTrigger, opts metav1.UpdateOptions) (*v1.KubernetesWatchTrigger, error)
+	Create(ctx context.Context, _kubernetesWatchTrigger *corev1.KubernetesWatchTrigger, opts metav1.CreateOptions) (*corev1.KubernetesWatchTrigger, error)
+	Update(ctx context.Context, _kubernetesWatchTrigger *corev1.KubernetesWatchTrigger, opts metav1.UpdateOptions) (*corev1.KubernetesWatchTrigger, error)
 	Delete(ctx context.Context, name string, opts metav1.DeleteOptions) error
 	DeleteCollection(ctx context.Context, opts metav1.DeleteOptions, listOpts metav1.ListOptions) error
-	Get(ctx context.Context, name string, opts metav1.GetOptions) (*v1.KubernetesWatchTrigger, error)
-	List(ctx context.Context, opts metav1.ListOptions) (*v1.KubernetesWatchTriggerList, error)
+	Get(ctx context.Context, name string, opts metav1.GetOptions) (*corev1.KubernetesWatchTrigger, error)
+	List(ctx context.Context, opts metav1.ListOptions) (*corev1.KubernetesWatchTriggerList, error)
 	Watch(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error)
-	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, subresources ...string) (result *v1.KubernetesWatchTrigger, err error)
-	Apply(ctx context.Context, _kubernetesWatchTrigger *corev1.KubernetesWatchTriggerApplyConfiguration, opts metav1.ApplyOptions) (result *v1.KubernetesWatchTrigger, err error)
+	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, subresources ...string) (result *corev1.KubernetesWatchTrigger, err error)
+	Apply(ctx context.Context, _kubernetesWatchTrigger *applyconfigurationcorev1.KubernetesWatchTriggerApplyConfiguration, opts metav1.ApplyOptions) (result *corev1.KubernetesWatchTrigger, err error)
 	KubernetesWatchTriggerExpansion
 }
 
 // kubernetesWatchTriggers implements KubernetesWatchTriggerInterface
 type kubernetesWatchTriggers struct {
-	*gentype.ClientWithListAndApply[*v1.KubernetesWatchTrigger, *v1.KubernetesWatchTriggerList, *corev1.KubernetesWatchTriggerApplyConfiguration]
+	*gentype.ClientWithListAndApply[*corev1.KubernetesWatchTrigger, *corev1.KubernetesWatchTriggerList, *applyconfigurationcorev1.KubernetesWatchTriggerApplyConfiguration]
 }
 
 // newKubernetesWatchTriggers returns a KubernetesWatchTriggers
 func newKubernetesWatchTriggers(c *CoreV1Client, namespace string) *kubernetesWatchTriggers {
 	return &kubernetesWatchTriggers{
-		gentype.NewClientWithListAndApply[*v1.KubernetesWatchTrigger, *v1.KubernetesWatchTriggerList, *corev1.KubernetesWatchTriggerApplyConfiguration](
+		gentype.NewClientWithListAndApply[*corev1.KubernetesWatchTrigger, *corev1.KubernetesWatchTriggerList, *applyconfigurationcorev1.KubernetesWatchTriggerApplyConfiguration](
 			"kuberneteswatchtriggers",
 			c.RESTClient(),
 			scheme.ParameterCodec,
 			namespace,
-			func() *v1.KubernetesWatchTrigger { return &v1.KubernetesWatchTrigger{} },
-			func() *v1.KubernetesWatchTriggerList { return &v1.KubernetesWatchTriggerList{} }),
+			func() *corev1.KubernetesWatchTrigger { return &corev1.KubernetesWatchTrigger{} },
+			func() *corev1.KubernetesWatchTriggerList { return &corev1.KubernetesWatchTriggerList{} },
+		),
 	}
 }

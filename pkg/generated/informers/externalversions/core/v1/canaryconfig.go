@@ -19,13 +19,13 @@ limitations under the License.
 package v1
 
 import (
-	"context"
+	context "context"
 	time "time"
 
-	corev1 "github.com/fission/fission/pkg/apis/core/v1"
+	apiscorev1 "github.com/fission/fission/pkg/apis/core/v1"
 	versioned "github.com/fission/fission/pkg/generated/clientset/versioned"
 	internalinterfaces "github.com/fission/fission/pkg/generated/informers/externalversions/internalinterfaces"
-	v1 "github.com/fission/fission/pkg/generated/listers/core/v1"
+	corev1 "github.com/fission/fission/pkg/generated/listers/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	watch "k8s.io/apimachinery/pkg/watch"
@@ -36,7 +36,7 @@ import (
 // CanaryConfigs.
 type CanaryConfigInformer interface {
 	Informer() cache.SharedIndexInformer
-	Lister() v1.CanaryConfigLister
+	Lister() corev1.CanaryConfigLister
 }
 
 type canaryConfigInformer struct {
@@ -71,7 +71,7 @@ func NewFilteredCanaryConfigInformer(client versioned.Interface, namespace strin
 				return client.CoreV1().CanaryConfigs(namespace).Watch(context.TODO(), options)
 			},
 		},
-		&corev1.CanaryConfig{},
+		&apiscorev1.CanaryConfig{},
 		resyncPeriod,
 		indexers,
 	)
@@ -82,9 +82,9 @@ func (f *canaryConfigInformer) defaultInformer(client versioned.Interface, resyn
 }
 
 func (f *canaryConfigInformer) Informer() cache.SharedIndexInformer {
-	return f.factory.InformerFor(&corev1.CanaryConfig{}, f.defaultInformer)
+	return f.factory.InformerFor(&apiscorev1.CanaryConfig{}, f.defaultInformer)
 }
 
-func (f *canaryConfigInformer) Lister() v1.CanaryConfigLister {
-	return v1.NewCanaryConfigLister(f.Informer().GetIndexer())
+func (f *canaryConfigInformer) Lister() corev1.CanaryConfigLister {
+	return corev1.NewCanaryConfigLister(f.Informer().GetIndexer())
 }
