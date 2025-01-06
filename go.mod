@@ -12,7 +12,7 @@ require (
 	github.com/elastic/crd-ref-docs v0.1.0
 	github.com/fatih/color v1.18.0
 	github.com/fsnotify/fsnotify v1.8.0
-	github.com/go-git/go-git/v5 v5.13.0
+	github.com/go-git/go-git/v5 v5.13.1
 	github.com/go-logr/zapr v1.3.0
 	github.com/golang-jwt/jwt/v4 v4.5.1
 	github.com/google/go-cmp v0.6.0
@@ -52,8 +52,8 @@ require (
 	k8s.io/code-generator v0.32.0
 	k8s.io/metrics v0.32.0
 	sigs.k8s.io/controller-runtime v0.19.3
-	sigs.k8s.io/controller-tools v0.16.5
-	sigs.k8s.io/structured-merge-diff/v4 v4.4.2
+	sigs.k8s.io/controller-tools v0.17.0
+	sigs.k8s.io/structured-merge-diff/v4 v4.5.0
 	sigs.k8s.io/yaml v1.4.0
 )
 
@@ -75,7 +75,7 @@ require (
 	github.com/cloudflare/circl v1.3.7 // indirect
 	github.com/containerd/continuity v0.2.2 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.4 // indirect
-	github.com/cyphar/filepath-securejoin v0.2.5 // indirect
+	github.com/cyphar/filepath-securejoin v0.3.6 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/docker/go-connections v0.4.0 // indirect
 	github.com/docker/go-units v0.4.0 // indirect
@@ -90,7 +90,7 @@ require (
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/fxamacker/cbor/v2 v2.7.0 // indirect
 	github.com/go-git/gcfg v1.5.1-0.20230307220236-3a3c6141e376 // indirect
-	github.com/go-git/go-billy/v5 v5.6.0 // indirect
+	github.com/go-git/go-billy/v5 v5.6.1 // indirect
 	github.com/go-ini/ini v1.66.4 // indirect
 	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
