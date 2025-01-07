@@ -300,7 +300,7 @@ func SanitizeFilePath(path string, safedir string) (string, error) {
 	}
 	// check if the path is under the safe directory
 	if !strings.HasPrefix(normalizedPath, safedir) {
-		return "", errors.New("path is not under safe directory")
+		return "", fmt.Errorf("path %s is not under the safe directory %s", normalizedPath, safedir)
 	}
 	return normalizedPath, nil
 }

@@ -458,7 +458,7 @@ func (fetcher *Fetcher) FetchSecretsAndCfgMaps(ctx context.Context, secrets []fv
 				return httpCode, errors.New(e)
 			}
 
-			configDir, err := utils.SanitizeFilePath(filepath.Join(fetcher.sharedSecretPath, config.Namespace, config.Name), fetcher.sharedConfigPath)
+			configDir, err := utils.SanitizeFilePath(filepath.Join(fetcher.sharedConfigPath, config.Namespace, config.Name), fetcher.sharedConfigPath)
 			if err != nil {
 				logger.Error(err.Error(), zap.String("directory", configDir), zap.String("config_map_name", config.Name), zap.String("config_map_namespace", config.Namespace))
 				return http.StatusBadRequest, errors.New(fmt.Sprintf("%s, request: %v", err,
