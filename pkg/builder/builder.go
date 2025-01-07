@@ -122,7 +122,12 @@ func (builder *Builder) Handler(w http.ResponseWriter, r *http.Request) {
 	logger.Info("builder received request", zap.Any("request", req))
 
 	logger.Debug("starting build")
-	srcPkgPath := filepath.Join(builder.sharedVolumePath, req.SrcPkgFilename)
+	srcPkgPath, err := utils.SanitizeFilePath(filepath.Join(builder.sharedVolumePath, req.SrcPkgFilename), builder.sharedVolumePath)
+	if err != nil {
+		logger.Error(err.Error(), zap.String("filename", req.SrcPkgFilename))
+		builder.reply(r.Context(), w, "", err.Error(), http.StatusBadRequest)
+		return
+	}
 	deployPkgFilename := fmt.Sprintf("%s-%s", req.SrcPkgFilename, strings.ToLower(uniuri.NewLen(6)))
 	deployPkgPath, err := utils.SanitizeFilePath(filepath.Join(builder.sharedVolumePath, deployPkgFilename), builder.sharedVolumePath)
 	if err != nil {
