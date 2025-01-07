@@ -30,7 +30,9 @@ func MakeZipArchiveWithGlobs(ctx context.Context, targetName string, globs ...st
 	if err != nil {
 		return "", err
 	}
-
+	if len(globFiles) == 0 {
+		return "", fmt.Errorf("no files found for globs: %v", globs)
+	}
 	files := make(map[string]string, len(globFiles))
 	for _, file := range globFiles {
 		files[file] = ""
@@ -85,7 +87,7 @@ func Unarchive(ctx context.Context, src string, dst string) error {
 		}
 
 		// check if parent directory exists for the file
-		if err := os.MkdirAll(filepath.Dir(destPath), os.ModeDir|0750); err != nil {
+		if err := os.MkdirAll(filepath.Dir(destPath), os.ModeDir|0755); err != nil {
 			return fmt.Errorf("failed to create parent directory: %w", err)
 		}
 
@@ -97,11 +99,15 @@ func Unarchive(ctx context.Context, src string, dst string) error {
 		defer rc.Close()
 
 		// Create file in destination
-		destFile, err := os.OpenFile(destPath, os.O_CREATE|os.O_WRONLY, f.Mode())
+		destFile, err := os.Create(destPath)
 		if err != nil {
 			return fmt.Errorf("failed to create file in destination: %w", err)
 		}
 		defer destFile.Close()
+		err = destFile.Chmod(f.Mode())
+		if err != nil {
+			return fmt.Errorf("failed to set file permissions: %w", err)
+		}
 
 		// Copy file contents
 		_, err = io.Copy(destFile, rc)

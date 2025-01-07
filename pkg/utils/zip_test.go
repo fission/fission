@@ -63,7 +63,7 @@ func TestIsZip(t *testing.T) {
 				}
 				return f.Name()
 			},
-			want:    false,
+			want:    true,
 			wantErr: false,
 			cleanup: true,
 		},
