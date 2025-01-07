@@ -288,7 +288,10 @@ func IsOwnerReferencesEnabled() bool {
 // SanitizeFilePath checks if the path is valid to prevent directory traversal attacks.
 func SanitizeFilePath(path string, safedir string) (string, error) {
 	if len(path) == 0 {
-		return "", errors.New("path is empty")
+		return "", errors.New("invalid path")
+	}
+	if len(safedir) == 0 {
+		return "", errors.New("invalid safe directory")
 	}
 	// get normalized path and check for directory traversal attacks
 	normalizedPath := filepath.Clean(path)
@@ -296,7 +299,7 @@ func SanitizeFilePath(path string, safedir string) (string, error) {
 		return "", errors.New("invalid path")
 	}
 	// check if the path is under the safe directory
-	if len(safedir) > 0 && !strings.HasPrefix(normalizedPath, safedir) {
+	if !strings.HasPrefix(normalizedPath, safedir) {
 		return "", errors.New("path is not under safe directory")
 	}
 	return normalizedPath, nil
