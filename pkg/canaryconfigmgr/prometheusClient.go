@@ -63,7 +63,7 @@ func (promApiClient *PrometheusApiClient) GetFunctionFailurePercentage(ctx conte
 	}
 
 	if reqs <= 0 {
-		return -1, fmt.Errorf("no requests to this url %v and method %v in the window: %v", path, methods, window)
+		return -1, fmt.Errorf("no requests to this url %s and method %v in the window: %s", path, methods, window)
 	}
 
 	// next, get a total count of errored out requests to this function in the same window
