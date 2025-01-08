@@ -29,7 +29,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/mholt/archiver/v3"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context/ctxhttp"
 	apiv1 "k8s.io/api/core/v1"
@@ -86,21 +85,6 @@ func FindAllGlobs(paths ...string) ([]string, error) {
 		// xxx handle excludeGlobs here
 	}
 	return files, nil
-}
-
-func MakeZipArchive(targetName string, globs ...string) (string, error) {
-	files, err := FindAllGlobs(globs...)
-	if err != nil {
-		return "", err
-	}
-
-	// zip up the file list
-	err = archiver.DefaultZip.Archive(files, targetName)
-	if err != nil {
-		return "", err
-	}
-
-	return filepath.Abs(targetName)
 }
 
 // RemoveZeroBytes remove empty byte(\x00) from input byte slice and return a new byte slice
@@ -219,15 +203,6 @@ func DownloadUrl(ctx context.Context, httpClient *http.Client, url string, local
 	return nil
 }
 
-func IsZip(filename string) (bool, error) {
-	f, err := os.Open(filename)
-	if err != nil {
-		return false, nil
-	}
-	defer f.Close()
-	return archiver.DefaultZip.Match(f)
-}
-
 func GetStringValueFromEnv(envVar string) (string, error) {
 	v := os.Getenv(envVar)
 	if v == "" {
@@ -310,17 +285,22 @@ func IsOwnerReferencesEnabled() bool {
 	return !disableOwnerReference
 }
 
-// ValidateFilePathComponent checks if the filename is valid to prevent directory traversal attacks.
-func ValidateFilePathComponent(filename string) bool {
-	return len(filename) > 0 && !containsInvalidChars(filename)
-}
-
-func containsInvalidChars(filename string) bool {
-	invalidChars := []string{"/", "\\", ".."}
-	for _, char := range invalidChars {
-		if strings.Contains(filename, char) {
-			return true
-		}
+// SanitizeFilePath checks if the path is valid to prevent directory traversal attacks.
+func SanitizeFilePath(path string, safedir string) (string, error) {
+	if len(path) == 0 {
+		return "", errors.New("invalid path")
 	}
-	return false
+	if len(safedir) == 0 {
+		return "", errors.New("invalid safe directory")
+	}
+	// get normalized path and check for directory traversal attacks
+	normalizedPath := filepath.Clean(path)
+	if normalizedPath != path {
+		return "", errors.New("invalid path")
+	}
+	// check if the path is under the safe directory
+	if !strings.HasPrefix(normalizedPath, safedir) {
+		return "", fmt.Errorf("path %s is not under the safe directory %s", normalizedPath, safedir)
+	}
+	return normalizedPath, nil
 }

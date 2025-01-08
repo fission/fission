@@ -29,7 +29,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/mholt/archiver/v3"
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.uber.org/zap"
@@ -253,15 +252,14 @@ func (fetcher *Fetcher) SpecializeHandler(w http.ResponseWriter, r *http.Request
 func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req FunctionFetchRequest) (int, error) {
 	logger := otelUtils.LoggerWithTraceID(ctx, fetcher.logger)
 
-	// check that the requested filename is not an empty string and doest not contain any path traversal
-	if !utils.ValidateFilePathComponent(req.Filename) {
-		e := "fetch request received for an invalid file name"
-		logger.Error(e, zap.Any("request", req))
-		return http.StatusBadRequest, errors.New(fmt.Sprintf("%s, request: %v", e, req))
+	storePath, err := utils.SanitizeFilePath(filepath.Join(fetcher.sharedVolumePath, req.Filename), fetcher.sharedVolumePath)
+	if err != nil {
+		logger.Error(err.Error(), zap.String("filename", req.Filename))
+		return http.StatusBadRequest, errors.New(fmt.Sprintf("%s, request: %v", err, req))
 	}
 
 	// verify first if the file already exists.
-	if _, err := os.Stat(filepath.Join(fetcher.sharedVolumePath, req.Filename)); err == nil {
+	if _, err := os.Stat(storePath); err == nil {
 		logger.Info("requested file already exists at shared volume - skipping fetch",
 			zap.String("requested_file", req.Filename),
 			zap.String("shared_volume_path", fetcher.sharedVolumePath))
@@ -269,8 +267,11 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 		return http.StatusOK, nil
 	}
 
-	tmpFile := req.Filename + ".tmp"
-	tmpPath := filepath.Join(fetcher.sharedVolumePath, tmpFile)
+	tmpPath, err := utils.SanitizeFilePath(storePath+".tmp", fetcher.sharedVolumePath)
+	if err != nil {
+		logger.Error(err.Error(), zap.String("filename", req.Filename))
+		return http.StatusBadRequest, errors.New(fmt.Sprintf("%s, request: %v", err, req))
+	}
 
 	if req.FetchType == fv1.FETCH_URL {
 		otelUtils.SpanTrackEvent(ctx, "fetch_url", otelUtils.MapToAttributes(map[string]string{
@@ -350,10 +351,10 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 	}
 
 	// checking if file is a zip
-	if match, _ := utils.IsZip(tmpPath); match && !req.KeepArchive {
+	if match, _ := utils.IsZip(ctx, tmpPath); match && !req.KeepArchive {
 		// unarchive tmp file to a tmp unarchive path
 		tmpUnarchivePath := filepath.Join(fetcher.sharedVolumePath, uuid.NewString())
-		err := fetcher.unarchive(tmpPath, tmpUnarchivePath)
+		err := utils.Unarchive(ctx, tmpPath, tmpUnarchivePath)
 		if err != nil {
 			logger.Error("error unarchive",
 				zap.Error(err),
@@ -366,18 +367,17 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 	}
 
 	// move tmp file to requested filename
-	renamePath := filepath.Join(fetcher.sharedVolumePath, req.Filename)
-	err := fetcher.rename(tmpPath, renamePath)
+	err = fetcher.rename(tmpPath, storePath)
 	if err != nil {
 		logger.Error("error renaming file",
 			zap.Error(err),
 			zap.String("original_path", tmpPath),
-			zap.String("rename_path", renamePath))
+			zap.String("rename_path", storePath))
 		return http.StatusInternalServerError, err
 	}
 
 	otelUtils.SpanTrackEvent(ctx, "packageFetched", otelUtils.GetAttributesForPackage(pkg)...)
-	logger.Info("successfully placed", zap.String("location", renamePath))
+	logger.Info("successfully placed", zap.String("location", storePath))
 	return http.StatusOK, nil
 }
 
@@ -406,13 +406,12 @@ func (fetcher *Fetcher) FetchSecretsAndCfgMaps(ctx context.Context, secrets []fv
 				return httpCode, errors.New(e)
 			}
 
-			if !utils.ValidateFilePathComponent(secret.Namespace) && !utils.ValidateFilePathComponent(secret.Name) {
-				e := "fetch request received for an invalid secret name or namespace"
-				logger.Error(e, zap.Any("request", secret))
-				return http.StatusBadRequest, errors.New(fmt.Sprintf("%s, request: %v", e, secret))
+			secretDir, err := utils.SanitizeFilePath(filepath.Join(fetcher.sharedSecretPath, secret.Namespace, secret.Name), fetcher.sharedSecretPath)
+			if err != nil {
+				logger.Error(err.Error(), zap.String("directory", secretDir), zap.String("secret_name", secret.Name), zap.String("secret_namespace", secret.Namespace))
+				return http.StatusBadRequest, errors.New(fmt.Sprintf("%s, request: %v", err, secret))
 			}
-			secretPath := filepath.Join(secret.Namespace, secret.Name)
-			secretDir := filepath.Join(fetcher.sharedSecretPath, secretPath)
+
 			err = os.MkdirAll(secretDir, os.ModeDir|0750)
 			if err != nil {
 				e := "failed to create directory for secret"
@@ -459,14 +458,13 @@ func (fetcher *Fetcher) FetchSecretsAndCfgMaps(ctx context.Context, secrets []fv
 				return httpCode, errors.New(e)
 			}
 
-			if !utils.ValidateFilePathComponent(config.Namespace) && !utils.ValidateFilePathComponent(config.Name) {
-				e := "fetch request received for an invalid configmap name or namespace"
-				logger.Error(e, zap.Any("request", config))
-				return http.StatusBadRequest, errors.New(fmt.Sprintf("%s, request: %v", e, config))
+			configDir, err := utils.SanitizeFilePath(filepath.Join(fetcher.sharedConfigPath, config.Namespace, config.Name), fetcher.sharedConfigPath)
+			if err != nil {
+				logger.Error(err.Error(), zap.String("directory", configDir), zap.String("config_map_name", config.Name), zap.String("config_map_namespace", config.Namespace))
+				return http.StatusBadRequest, errors.New(fmt.Sprintf("%s, request: %v", err,
+					config))
 			}
 
-			configPath := filepath.Join(config.Namespace, config.Name)
-			configDir := filepath.Join(fetcher.sharedConfigPath, configPath)
 			err = os.MkdirAll(configDir, os.ModeDir|0750)
 			if err != nil {
 				e := "failed to create directory for configmap"
@@ -531,17 +529,20 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !utils.ValidateFilePathComponent(req.Filename) {
-		logger.Error("invalid filename in request", zap.String("filename", req.Filename))
-		http.Error(w, "Invalid file name", http.StatusBadRequest)
-		return
-	}
-
 	logger.Info("fetcher received upload request", zap.Any("request", req))
 
-	zipFilename := req.Filename + ".zip"
-	srcFilepath := filepath.Join(fetcher.sharedVolumePath, req.Filename)
-	dstFilepath := filepath.Join(fetcher.sharedVolumePath, zipFilename)
+	srcFilepath, err := utils.SanitizeFilePath(filepath.Join(fetcher.sharedVolumePath, req.Filename), fetcher.sharedVolumePath)
+	if err != nil {
+		logger.Error("error sanitizing file path", zap.Error(err))
+		http.Error(w, fmt.Sprintf("%s: %v", err, req.Filename), http.StatusBadRequest)
+		return
+	}
+	dstFilepath, err := utils.SanitizeFilePath(filepath.Join(fetcher.sharedVolumePath, req.Filename+".zip"), fetcher.sharedVolumePath)
+	if err != nil {
+		logger.Error("error sanitizing file path", zap.Error(err))
+		http.Error(w, fmt.Sprintf("%s: %v", err, req.Filename), http.StatusBadRequest)
+		return
+	}
 
 	defer func() {
 		errC := utils.DeleteOldPackages(srcFilepath, "DEPLOY_PKG")
@@ -552,7 +553,7 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	if req.ArchivePackage {
-		err = fetcher.archive(srcFilepath, dstFilepath)
+		err = utils.Archive(ctx, srcFilepath, dstFilepath)
 		if err != nil {
 			e := "error archiving zip file"
 			logger.Error(e, zap.Error(err), zap.String("source", srcFilepath), zap.String("destination", dstFilepath))
@@ -617,39 +618,6 @@ func (fetcher *Fetcher) rename(src string, dst string) error {
 	err := os.Rename(src, dst)
 	if err != nil {
 		return errors.Wrap(err, "failed to move file")
-	}
-	return nil
-}
-
-// archive zips the contents of directory at src into a new zip file
-// at dst (note that the contents are zipped, not the directory itself).
-func (fetcher *Fetcher) archive(src string, dst string) error {
-	var files []string
-	target, err := os.Stat(src)
-	if err != nil {
-		return errors.Wrap(err, "failed to zip file")
-	}
-	if target.IsDir() {
-		// list all
-		fs, _ := os.ReadDir(src)
-		for _, f := range fs {
-			files = append(files, filepath.Join(src, f.Name()))
-		}
-	} else {
-		files = append(files, src)
-	}
-	zip := archiver.NewZip()
-	defer zip.Close()
-	return zip.Archive(files, dst)
-}
-
-// unarchive is a function that unzips a zip file to destination
-func (fetcher *Fetcher) unarchive(src string, dst string) error {
-	zip := archiver.NewZip()
-	defer zip.Close()
-	err := zip.Unarchive(src, dst)
-	if err != nil {
-		return fmt.Errorf("failed to unzip file: %w", err)
 	}
 	return nil
 }
