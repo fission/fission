@@ -22,8 +22,8 @@ on:
       - go.sum
 
 env:
-  HELM_VERSION: v3.13.0
-  KIND_VERSION: v0.23.0
+  HELM_VERSION: v3.16.4
+  KIND_VERSION: v0.26.0
   KIND_CLUSTER_NAME: kind
 
 permissions:
@@ -36,8 +36,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        kindversion: ["v1.25.16"]
-        os: [ubuntu-latest]
+        kindversion: ["v1.28.15"]
+        os: [ubuntu-24.04]
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@0080882f6c36860b6ba35c610c98ce87d4e2f26f # v2.10.2

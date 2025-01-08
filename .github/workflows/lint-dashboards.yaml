@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   lint-dashboards:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip-ci') }}
     steps:
       - name: Harden Runner
