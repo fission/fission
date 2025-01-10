@@ -165,12 +165,14 @@ func DownloadURL(fileUrl string) (io.ReadCloser, error) {
 
 func DownloadStrorageURL(ctx context.Context, client cmd.Client, fileUrl string) (io.ReadCloser, error) {
 	var resp *http.Response
-	storagesvcURL, err := util.GetStorageURL(ctx, client)
-	if err != nil {
-		return nil, err
-	}
+	var err error
 
-	if !strings.HasPrefix(fileUrl, storagesvcURL.String()+"/v1/archive?id=") {
+	if strings.Contains(fileUrl, "/v1/archive?id=") {
+		storagesvcURL, err := util.GetStorageURL(ctx, client)
+		if err != nil {
+			return nil, err
+		}
+
 		url, err := url.Parse(fileUrl)
 		if err != nil {
 			return nil, err
