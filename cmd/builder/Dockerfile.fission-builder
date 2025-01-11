@@ -1,4 +1,4 @@
-FROM alpine:3.17
+FROM alpine:3.21.2
 RUN apk add --update ca-certificates
 COPY builder /builder
 ENTRYPOINT ["/builder"]
