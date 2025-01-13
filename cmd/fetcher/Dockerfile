@@ -1,3 +1,3 @@
-FROM cgr.dev/chainguard/static:latest@sha256:f96b5a60658dfee0cae426972afecad6ea6930fa28e6d8ef7096a7bdf35d6498
+FROM cgr.dev/chainguard/static:latest@sha256:7e1e8a0ed6ebd521f2acfb326a4ae61c2f9b91e5c209dcd0f0e4a5934418a5ec
 COPY fetcher /
 ENTRYPOINT ["/fetcher"]
