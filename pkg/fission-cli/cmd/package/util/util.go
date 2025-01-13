@@ -167,7 +167,12 @@ func DownloadStrorageURL(ctx context.Context, client cmd.Client, fileUrl string)
 	var resp *http.Response
 	var err error
 
-	if strings.Contains(fileUrl, "/v1/archive?id=") {
+	valid, err := validArchiveURL(fileUrl)
+	if err != nil {
+		return nil, err
+	}
+
+	if valid {
 		storagesvcURL, err := util.GetStorageURL(ctx, client)
 		if err != nil {
 			return nil, err
@@ -230,4 +235,29 @@ func PrintPackageSummary(writer io.Writer, pkg *fv1.Package) {
 	fmt.Fprintf(w, "%v\t%v\n", "Status:", pkg.Status.BuildStatus)
 	fmt.Fprintf(w, "%v\n%v", "Build Logs:", buildlog)
 	w.Flush()
+}
+
+// validArchiveURL checks if the given URL is a valid archive URL
+func validArchiveURL(urlStr string) (bool, error) {
+	// Parse the URL string into a URL object
+	parsedURL, err := url.Parse(urlStr)
+	if err != nil {
+		return false, fmt.Errorf("failed to parse URL: %v", err)
+	}
+
+	// Check if the path starts with /v1/archive
+	if !strings.HasPrefix(parsedURL.Path, "/v1/archive") {
+		return false, nil
+	}
+
+	// Get query parameters
+	queryParams := parsedURL.Query()
+
+	// Check if 'id' parameter exists
+	if queryParams.Get("id") == "" {
+		return false, nil
+	}
+
+	// URL matches all criteria
+	return true, nil
 }
