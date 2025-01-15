@@ -69,7 +69,7 @@ func MakeFetcherConfig(sharedMountPath string) (*Config, error) {
 
 	fetcherImage := os.Getenv("FETCHER_IMAGE")
 	if len(fetcherImage) == 0 {
-		fetcherImage = "fission/fetcher"
+		fetcherImage = "ghcr.io/fission/fetcher"
 	}
 
 	fetcherImagePullPolicy := os.Getenv("FETCHER_IMAGE_PULL_POLICY")

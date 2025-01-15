@@ -30,11 +30,7 @@ spec:
         args: ["--executorPort", "8888"]
         env:
         - name: FETCHER_IMAGE
-        {{- if eq .Values.fetcher.imageTag "" }}
-          value: "{{ .Values.fetcher.image }}"
-        {{- else }}
-          value: "{{ .Values.fetcher.image }}:{{ .Values.fetcher.imageTag }}"
-        {{- end }}
+          value: {{ include "fetcherImage" . | quote }}
         - name: FETCHER_IMAGE_PULL_POLICY
           value: "{{ .Values.pullPolicy }}"
         - name: RUNTIME_IMAGE_PULL_POLICY

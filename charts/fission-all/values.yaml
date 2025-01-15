@@ -117,6 +117,10 @@ kubernetesClientBurst: 500
 ## fetcher helps in fetching function source code/build and uploading it when function is invoked.
 ##
 fetcher:
+  ## repository represents the repository of the fetcher component.
+  ##
+  ## By default, it is empty, which means global repository will be used.
+  repository: ""
   ## image represents the image of the fetcher component.
   image: fission/fetcher
   ## imageTag represents the tag of the image of the fetcher component.
