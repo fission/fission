@@ -72,25 +72,14 @@ This template generates the image name for the deployment depending on the value
 {{- end -}}
 
 {{- define "fetcherImage" -}}
-{{- if .Values.fetcher.repository -}}
-  {{- if eq .Values.fetcher.imageTag "" }}
-    {{ .Values.fetcher.repository }}/{{ .Values.fetcher.image }}
-  {{- else }}
-    {{ .Values.fetcher.repository }}/{{ .Values.fetcher.image }}:{{ .Values.fetcher.imageTag }}
-  {{- end }}
-{{- else if .Values.repository -}}
-  {{- if eq .Values.fetcher.imageTag "" }}
-    {{ .Values.repository }}/{{ .Values.fetcher.image }}
-  {{- else }}
-    {{ .Values.repository }}/{{ .Values.fetcher.image }}:{{ .Values.fetcher.imageTag }}
-  {{- end }}
+{{- $repository := .Values.fetcher.repository | default .Values.repository -}}
+{{- $image := .Values.fetcher.image -}}
+{{- $tag := .Values.fetcher.imageTag -}}
+{{- if $repository -}}
+{{- printf "%s/%s%s" $repository $image (ne $tag "" | ternary (printf ":%s" $tag) "") -}}
 {{- else -}}
-  {{- if eq .Values.fetcher.imageTag "" }}
-    {{ .Values.fetcher.image }}
-  {{- else }}
-    {{ .Values.fetcher.image }}:{{ .Values.fetcher.imageTag }}
-  {{- end }}
-{{- end }}
+{{- printf "%s%s" $image (ne $tag "" | ternary (printf ":%s" $tag) "") -}}
+{{- end -}}
 {{- end -}}
 
 {{- define "opentelemtry.envs" }}
