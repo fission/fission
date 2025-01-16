@@ -28,11 +28,7 @@ spec:
       restartPolicy: Never
       containers:
       - name: pre-upgrade-job
-      {{- if .Values.preUpgradeChecks.imageTag }}
-        image: {{ .Values.preUpgradeChecks.image }}:{{ .Values.preUpgradeChecks.imageTag }}
-      {{- else }}
-        image: {{ .Values.preUpgradeChecks.image }}
-      {{- end }}
+        image: {{ include "preUpgradeChecksImage" . | quote }}
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: [ "/pre-upgrade-checks" ]
         env:

@@ -37,49 +37,37 @@ auth:
 {{- end -}}
 
 {{/*
-This template generates the image name for the deployment depending on the value of "repository" field in values.yaml file.
+Helper template to construct image names with repository and tag
 */}}
-{{- define "fission-bundleImage" -}}
-{{- if .Values.repository -}}
-  {{- if eq .Values.imageTag "" -}}
-    {{ .Values.repository }}/{{ .Values.image }}
-  {{- else -}}
-    {{ .Values.repository }}/{{ .Values.image }}:{{ .Values.imageTag }}
-  {{- end }}
-{{- else -}}
-  {{- if eq .Values.imageTag "" -}}
-    {{ .Values.image }}
-  {{- else -}}
-    {{ .Values.image }}:{{ .Values.imageTag }}
-  {{- end }}
-{{- end }}
-{{- end -}}
-
-{{- define "reporterImage" -}}
-{{- if .Values.repository -}}
-  {{- if eq .Values.imageTag "" -}}
-    {{ .Values.repository }}/{{ .Values.postInstallReportImage }}
-  {{- else -}}
-    {{ .Values.repository }}/{{ .Values.postInstallReportImage }}:{{ .Values.imageTag }}
-  {{- end }}
-{{- else -}}
-  {{- if eq .Values.imageTag "" -}}
-    {{ .Values.postInstallReportImage }}
-  {{- else -}}
-    {{ .Values.postInstallReportImage }}:{{ .Values.imageTag }}
-  {{- end }}
-{{- end }}
-{{- end -}}
-
-{{- define "fetcherImage" -}}
-{{- $repository := .Values.fetcher.repository | default .Values.repository -}}
-{{- $image := .Values.fetcher.image -}}
-{{- $tag := .Values.fetcher.imageTag -}}
+{{- define "imageWithTag" -}}
+{{- $repository := index . 0 -}}
+{{- $image := index . 1 -}}
+{{- $tag := index . 2 -}}
 {{- if $repository -}}
 {{- printf "%s/%s%s" $repository $image (ne $tag "" | ternary (printf ":%s" $tag) "") -}}
 {{- else -}}
 {{- printf "%s%s" $image (ne $tag "" | ternary (printf ":%s" $tag) "") -}}
 {{- end -}}
+{{- end -}}
+
+{{- define "fission-bundleImage" -}}
+{{- $args := list .Values.repository .Values.image .Values.imageTag -}}
+{{- include "imageWithTag" $args -}}
+{{- end -}}
+
+{{- define "reporterImage" -}}
+{{- $args := list .Values.repository .Values.postInstallReportImage .Values.imageTag -}}
+{{- include "imageWithTag" $args -}}
+{{- end -}}
+
+{{- define "fetcherImage" -}}
+{{- $args := list (.Values.fetcher.repository | default .Values.repository) .Values.fetcher.image .Values.fetcher.imageTag -}}
+{{- include "imageWithTag" $args -}}
+{{- end -}}
+
+{{- define "preUpgradeChecksImage" -}}
+{{- $args := list (.Values.preUpgradeChecks.repository | default .Values.repository) .Values.preUpgradeChecks.image .Values.preUpgradeChecks.imageTag -}}
+{{- include "imageWithTag" $args -}}
 {{- end -}}
 
 {{- define "opentelemtry.envs" }}
