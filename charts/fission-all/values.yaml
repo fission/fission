@@ -117,6 +117,10 @@ kubernetesClientBurst: 500
 ## fetcher helps in fetching function source code/build and uploading it when function is invoked.
 ##
 fetcher:
+  ## repository represents the repository of the fetcher component.
+  ##
+  ## By default, it is empty, which means global repository will be used.
+  repository: ""
   ## image represents the image of the fetcher component.
   image: fission/fetcher
   ## imageTag represents the tag of the image of the fetcher component.
@@ -683,6 +687,10 @@ preUpgradeChecks:
   ## Run pre-install/pre-upgrade checks if true
   ##
   enabled: true
+  ## Repository for pre-install/pre-upgrade checks image
+  ## By default it uses the global repository
+  ##
+  repository: ""
   ## pre-install/pre-upgrade checks live in this image
   ##
   image: fission/pre-upgrade-checks
