@@ -191,8 +191,12 @@ func (gp *GenericPool) genDeploymentSpec(env *fv1.Environment) (*appsv1.Deployme
 
 	// If custom runtime container name - default env name
 	mainContainerName := env.ObjectMeta.Name
-	if env.Spec.Runtime.Container != nil && env.Spec.Runtime.Container.Name != "" {
-		mainContainerName = env.Spec.Runtime.Container.Name
+	if env.Spec.Runtime.Container != nil && env.Spec.Runtime.Container.Name != "" && env.Spec.Runtime.PodSpec != nil {
+		if util.DoesContainerExistInPodSpec(env.Spec.Runtime.Container.Name, env.Spec.Runtime.PodSpec) {
+			mainContainerName = env.Spec.Runtime.Container.Name
+		} else {
+			return nil, fmt.Errorf("runtime container %s not found in pod spec", env.Spec.Runtime.Container.Name)
+		}
 	}
 
 	// Order of merging is important here - first fetcher, then containers and lastly pod spec
