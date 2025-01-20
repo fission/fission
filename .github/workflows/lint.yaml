@@ -32,7 +32,7 @@ jobs:
     # if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip-ci') }}
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@c95a14d0e5bab51a9f56296a4eb0e416910cd350 # v2.10.3
+        uses: step-security/harden-runner@cb605e52c26070c328afc4562f0b4ada7618a84e # v2.10.4
         with:
           egress-policy: audit
 
@@ -51,7 +51,7 @@ jobs:
           go mod download
 
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@971e284b6050e8a5849b72094c50ab08da042db8 # v6.1.1
+        uses: golangci/golangci-lint-action@ec5d18412c0aeab7936cb16880d708ba2a64e1ae # v6.2.0
         with:
           skip-cache: true
           version: ${{ env.GOLANGCI_LINT_VERSION }}
