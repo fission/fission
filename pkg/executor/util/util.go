@@ -168,3 +168,13 @@ func CreateDumpFile(logger *zap.Logger) (*os.File, error) {
 
 	return os.Create(fmt.Sprintf("%s/%s-%d.txt", dumpPath, dumpFileName, time.Now().Unix()))
 }
+
+// DoesContainerExistInPodSpec checks if the container with the given name exists in the pod spec
+func DoesContainerExistInPodSpec(containerName string, podSpec *apiv1.PodSpec) bool {
+	for _, container := range podSpec.Containers {
+		if container.Name == containerName {
+			return true
+		}
+	}
+	return false
+}

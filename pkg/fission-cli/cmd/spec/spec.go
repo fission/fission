@@ -30,6 +30,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	executorUtil "github.com/fission/fission/pkg/executor/util"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/cmd/spec/types"
@@ -489,6 +490,11 @@ func (fr *FissionResources) Validate(input cli.Input, client cmd.Client) ([]stri
 		environments[fmt.Sprintf("%s:%s", e.ObjectMeta.Name, e.ObjectMeta.Namespace)] = struct{}{}
 		if ((e.Spec.Runtime.Container != nil) && (e.Spec.Runtime.PodSpec != nil)) || ((e.Spec.Builder.Container != nil) && (e.Spec.Builder.PodSpec != nil)) {
 			warnings = append(warnings, "You have provided both - container spec and pod spec and while merging the pod spec will take precedence.")
+			if e.Spec.Runtime.Container.Name != "" && e.Spec.Runtime.PodSpec != nil {
+				if !executorUtil.DoesContainerExistInPodSpec(e.Spec.Runtime.Container.Name, e.Spec.Runtime.PodSpec) {
+					result = multierror.Append(result, fmt.Errorf("runtime container %s does not exist in the pod spec", e.Spec.Runtime.Container.Name))
+				}
+			}
 		}
 		// Unlike CLI can change the environment version silently,
 		// we have to warn the user to modify spec file when this takes place.
