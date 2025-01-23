@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1
+package webhook
 
 import (
 	"fmt"
@@ -26,16 +26,19 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
+	v1 "github.com/fission/fission/pkg/apis/core/v1"
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
+
+type Package struct{}
 
 // log is for logging in this package.
 var packagelog = loggerfactory.GetLogger().Named("package-resource")
 
 func (r *Package) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewWebhookManagedBy(mgr).
-		For(r).
+		For(&v1.Package{}).
 		Complete()
 }
 

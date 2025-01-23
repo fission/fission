@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1
+package webhook
 
 import (
 	"go.uber.org/zap"
@@ -23,15 +23,18 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
+	v1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
+
+type HTTPTrigger struct{}
 
 // log is for logging in this package.
 var httptriggerlog = loggerfactory.GetLogger().Named("httptrigger-resource")
 
 func (r *HTTPTrigger) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewWebhookManagedBy(mgr).
-		For(r).
+		For(&v1.HTTPTrigger{}).
 		Complete()
 }
 
