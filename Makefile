@@ -72,7 +72,7 @@ generate-crds:
 ### Webhook generation: it generates webhook configs with help of kubebuilder:webhook tag
 generate-webhooks:
 	go run sigs.k8s.io/controller-tools/cmd/controller-gen webhook \
-	 paths=./pkg/apis/core/v1 \
+	 paths=./pkg/webhook \
 	 output:dir=charts/fission-all/templates/webhook-server
 
 
