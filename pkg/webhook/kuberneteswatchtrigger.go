@@ -83,7 +83,7 @@ func (r *KubernetesWatchTrigger) ValidateDelete(_ context.Context, _ runtime.Obj
 	return nil, nil
 }
 
-func (r *KubernetesWatchTrigger) validate(old *v1.KubernetesWatchTrigger, new *v1.KubernetesWatchTrigger) error {
+func (r *KubernetesWatchTrigger) validate(_ *v1.KubernetesWatchTrigger, new *v1.KubernetesWatchTrigger) error {
 	if err := new.Validate(); err != nil {
 		err = v1.AggregateValidationErrors("Watch", err)
 	}

@@ -83,7 +83,7 @@ func (r *Function) ValidateDelete(_ context.Context, _ runtime.Object) (admissio
 	return nil, nil
 }
 
-func (r *Function) validate(old *v1.Function, new *v1.Function) error {
+func (r *Function) validate(_ *v1.Function, new *v1.Function) error {
 	for _, cnfMap := range new.Spec.ConfigMaps {
 		if cnfMap.Namespace != new.Namespace {
 			err := fmt.Errorf("ConfigMap's [%s] and function's Namespace [%s] are different. ConfigMap needs to be present in the same namespace as function", cnfMap.Namespace, new.Namespace)

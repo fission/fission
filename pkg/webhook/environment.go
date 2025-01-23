@@ -83,7 +83,7 @@ func (r *Environment) ValidateDelete(_ context.Context, _ runtime.Object) (admis
 	return nil, nil
 }
 
-func (r *Environment) validate(old *v1.Environment, new *v1.Environment) error {
+func (r *Environment) validate(_ *v1.Environment, new *v1.Environment) error {
 	if err := new.Validate(); err != nil {
 		err = v1.AggregateValidationErrors("Environment", err)
 		return err

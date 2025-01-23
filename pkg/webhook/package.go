@@ -102,7 +102,7 @@ func (r *Package) ValidateDelete(_ context.Context, _ runtime.Object) (admission
 	return nil, nil
 }
 
-func (r *Package) validate(old *v1.Package, new *v1.Package) error {
+func (r *Package) validate(_ *v1.Package, new *v1.Package) error {
 	err := new.Validate()
 	if err != nil {
 		return v1.AggregateValidationErrors("Package", err)
