@@ -19,7 +19,6 @@ package webhook
 import (
 	"context"
 
-	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
@@ -48,7 +47,7 @@ var _ webhook.CustomDefaulter = &HTTPTrigger{}
 
 // Default implements webhook.Defaulter so a webhook will be registered for the type
 func (r *HTTPTrigger) Default(_ context.Context, obj runtime.Object) error {
-	httptriggerlog.Debug("default", zap.String("name", r.Name))
+	// httptriggerlog.Debug("default", zap.String("name", r.Name))
 }
 
 // user change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
@@ -58,7 +57,7 @@ var _ webhook.CustomValidator = &HTTPTrigger{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type
 func (t *HTTPTrigger) ValidateCreate(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
-	httptriggerlog.Debug("validate create", zap.String("name", t.Name))
+	// httptriggerlog.Debug("validate create", zap.String("name", t.Name))
 	err := t.Validate()
 	if err != nil {
 		err = AggregateValidationErrors("HTTPTrigger", err)
@@ -69,7 +68,7 @@ func (t *HTTPTrigger) ValidateCreate(_ context.Context, obj runtime.Object) (adm
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
 func (r *HTTPTrigger) ValidateUpdate(_ context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
-	httptriggerlog.Debug("validate update", zap.String("name", r.Name))
+	// httptriggerlog.Debug("validate update", zap.String("name", r.Name))
 	err := r.Validate()
 	if err != nil {
 		err = AggregateValidationErrors("HTTPTrigger", err)
@@ -81,7 +80,7 @@ func (r *HTTPTrigger) ValidateUpdate(_ context.Context, oldObj, newObj runtime.O
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type
 func (r *HTTPTrigger) ValidateDelete(_ context.Context, _ runtime.Object) (admission.Warnings, error) {
-	httptriggerlog.Debug("validate delete", zap.String("name", r.Name))
+	// httptriggerlog.Debug("validate delete", zap.String("name", r.Name))
 
 	return nil, nil
 }

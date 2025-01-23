@@ -21,7 +21,6 @@ import (
 	"fmt"
 
 	"github.com/dustin/go-humanize"
-	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
@@ -51,7 +50,7 @@ var _ webhook.CustomDefaulter = &Package{}
 
 // Default implements webhook.Defaulter so a webhook will be registered for the type
 func (r *Package) Default(_ context.Context, obj runtime.Object) error {
-	packagelog.Debug("default", zap.String("name", r.Name))
+	// packagelog.Debug("default", zap.String("name", r.Name))
 	if r.Status.BuildStatus == "" {
 		if !r.Spec.Deployment.IsEmpty() {
 			// deployment package exists
@@ -73,7 +72,7 @@ var _ webhook.CustomValidator = &Package{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type
 func (r *Package) ValidateCreate(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
-	packagelog.Debug("validate create", zap.String("name", r.Name))
+	// packagelog.Debug("validate create", zap.String("name", r.Name))
 	err := r.Validate()
 	if err != nil {
 		err = AggregateValidationErrors("Package", err)
@@ -96,7 +95,7 @@ func (r *Package) ValidateCreate(_ context.Context, obj runtime.Object) (admissi
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
 func (r *Package) ValidateUpdate(_ context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
-	packagelog.Debug("validate update", zap.String("name", r.Name))
+	// packagelog.Debug("validate update", zap.String("name", r.Name))
 	err := r.Validate()
 
 	if err != nil {
@@ -109,6 +108,6 @@ func (r *Package) ValidateUpdate(_ context.Context, oldObj, newObj runtime.Objec
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type
 func (r *Package) ValidateDelete(_ context.Context, _ runtime.Object) (admission.Warnings, error) {
-	packagelog.Debug("validate delete", zap.String("name", r.Name))
+	// packagelog.Debug("validate delete", zap.String("name", r.Name))
 	return nil, nil
 }

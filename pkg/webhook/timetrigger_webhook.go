@@ -19,7 +19,6 @@ package webhook
 import (
 	"context"
 
-	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
@@ -49,7 +48,7 @@ var _ webhook.CustomDefaulter = &TimeTrigger{}
 
 // Default implements webhook.Defaulter so a webhook will be registered for the type
 func (r *TimeTrigger) Default(_ context.Context, obj runtime.Object) error {
-	timetriggerlog.Debug("default", zap.String("name", r.Name))
+	// timetriggerlog.Debug("default", zap.String("name", r.Name))
 }
 
 // user change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
@@ -59,7 +58,7 @@ var _ webhook.CustomValidator = &TimeTrigger{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type
 func (r *TimeTrigger) ValidateCreate(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
-	timetriggerlog.Debug("validate create", zap.String("name", r.Name))
+	// timetriggerlog.Debug("validate create", zap.String("name", r.Name))
 	err := r.Validate()
 	if err != nil {
 		err = AggregateValidationErrors("TimeTrigger", err)
@@ -76,7 +75,7 @@ func (r *TimeTrigger) ValidateCreate(_ context.Context, obj runtime.Object) (adm
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
 func (r *TimeTrigger) ValidateUpdate(_ context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
-	timetriggerlog.Debug("validate update", zap.String("name", r.Name))
+	// timetriggerlog.Debug("validate update", zap.String("name", r.Name))
 	err := r.Validate()
 	if err != nil {
 		err = AggregateValidationErrors("TimeTrigger", err)
@@ -94,6 +93,6 @@ func (r *TimeTrigger) ValidateUpdate(_ context.Context, oldObj, newObj runtime.O
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type
 func (r *TimeTrigger) ValidateDelete(_ context.Context, _ runtime.Object) (admission.Warnings, error) {
-	timetriggerlog.Debug("validate delete", zap.String("name", r.Name))
+	// timetriggerlog.Debug("validate delete", zap.String("name", r.Name))
 	return nil, nil
 }

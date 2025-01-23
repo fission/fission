@@ -19,7 +19,6 @@ package webhook
 import (
 	"context"
 
-	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
@@ -49,7 +48,7 @@ var _ webhook.CustomDefaulter = &CanaryConfig{}
 
 // Default implements webhook.Defaulter so a webhook will be registered for the type
 func (r *CanaryConfig) Default(_ context.Context, obj runtime.Object) error {
-	canaryconfiglog.Debug("default", zap.String("name", r.Name))
+	// canaryconfiglog.Debug("default", zap.String("name", r.Name))
 }
 
 // user can change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
@@ -59,18 +58,18 @@ var _ webhook.CustomValidator = &CanaryConfig{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type
 func (r *CanaryConfig) ValidateCreate(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
-	canaryconfiglog.Debug("validate create", zap.String("name", r.Name))
+	// canaryconfiglog.Debug("validate create", zap.String("name", r.Name))
 	return nil, nil
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
 func (r *CanaryConfig) ValidateUpdate(_ context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
-	canaryconfiglog.Debug("validate update", zap.String("name", r.Name))
+	// canaryconfiglog.Debug("validate update", zap.String("name", r.Name))
 	return nil, nil
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type
 func (r *CanaryConfig) ValidateDelete(_ context.Context, _ runtime.Object) (admission.Warnings, error) {
-	canaryconfiglog.Debug("validate delete", zap.String("name", r.Name))
+	// canaryconfiglog.Debug("validate delete", zap.String("name", r.Name))
 	return nil, nil
 }

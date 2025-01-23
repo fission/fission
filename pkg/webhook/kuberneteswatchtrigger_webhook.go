@@ -19,7 +19,6 @@ package webhook
 import (
 	"context"
 
-	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
@@ -48,7 +47,7 @@ var _ webhook.CustomDefaulter = &KubernetesWatchTrigger{}
 
 // Default implements webhook.Defaulter so a webhook will be registered for the type
 func (r *KubernetesWatchTrigger) Default(_ context.Context, obj runtime.Object) error {
-	kuberneteswatchtriggerlog.Debug("default", zap.String("name", r.Name))
+	// kuberneteswatchtriggerlog.Debug("default", zap.String("name", r.Name))
 }
 
 // user: change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
@@ -58,7 +57,7 @@ var _ webhook.CustomValidator = &KubernetesWatchTrigger{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type
 func (r *KubernetesWatchTrigger) ValidateCreate(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
-	kuberneteswatchtriggerlog.Debug("validate create", zap.String("name", r.Name))
+	// kuberneteswatchtriggerlog.Debug("validate create", zap.String("name", r.Name))
 	err := r.Validate()
 	if err != nil {
 		err = AggregateValidationErrors("Watch", err)
@@ -75,6 +74,6 @@ func (r *KubernetesWatchTrigger) ValidateUpdate(_ context.Context, oldObj, newOb
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type
 func (r *KubernetesWatchTrigger) ValidateDelete(_ context.Context, _ runtime.Object) (admission.Warnings, error) {
-	kuberneteswatchtriggerlog.Debug("validate delete", zap.String("name", r.Name))
+	// kuberneteswatchtriggerlog.Debug("validate delete", zap.String("name", r.Name))
 	return nil, nil
 }

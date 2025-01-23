@@ -19,7 +19,6 @@ package webhook
 import (
 	"context"
 
-	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
@@ -48,7 +47,7 @@ var _ webhook.CustomDefaulter = &MessageQueueTrigger{}
 
 // Default implements webhook.Defaulter so a webhook will be registered for the type
 func (r *MessageQueueTrigger) Default(_ context.Context, obj runtime.Object) error {
-	messagequeuetriggerlog.Debug("default", zap.String("name", r.Name))
+	// messagequeuetriggerlog.Debug("default", zap.String("name", r.Name))
 }
 
 // user change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
@@ -58,7 +57,7 @@ var _ webhook.CustomValidator = &MessageQueueTrigger{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type
 func (r *MessageQueueTrigger) ValidateCreate(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
-	messagequeuetriggerlog.Debug("validate create", zap.String("name", r.Name))
+	// messagequeuetriggerlog.Debug("validate create", zap.String("name", r.Name))
 	err := r.Validate()
 	if err != nil {
 		err = AggregateValidationErrors("MessageQueueTrigger", err)
@@ -69,7 +68,7 @@ func (r *MessageQueueTrigger) ValidateCreate(_ context.Context, obj runtime.Obje
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
 func (r *MessageQueueTrigger) ValidateUpdate(_ context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
-	messagequeuetriggerlog.Debug("validate update", zap.String("name", r.Name))
+	// messagequeuetriggerlog.Debug("validate update", zap.String("name", r.Name))
 	err := r.Validate()
 	if err != nil {
 		err = AggregateValidationErrors("MessageQueueTrigger", err)
@@ -80,6 +79,6 @@ func (r *MessageQueueTrigger) ValidateUpdate(_ context.Context, oldObj, newObj r
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type
 func (r *MessageQueueTrigger) ValidateDelete(_ context.Context, _ runtime.Object) (admission.Warnings, error) {
-	messagequeuetriggerlog.Debug("validate delete", zap.String("name", r.Name))
+	// messagequeuetriggerlog.Debug("validate delete", zap.String("name", r.Name))
 	return nil, nil
 }

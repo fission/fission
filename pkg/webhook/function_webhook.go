@@ -20,7 +20,6 @@ import (
 	"context"
 	"fmt"
 
-	"go.uber.org/zap"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -64,7 +63,7 @@ var _ webhook.CustomValidator = &Function{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type
 func (r *Function) ValidateCreate(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
-	functionlog.Debug("validate create", zap.String("name", r.Name))
+	// functionlog.Debug("validate create", zap.String("name", r.Name))
 
 	for _, cnfMap := range r.Spec.ConfigMaps {
 		if cnfMap.Namespace != r.ObjectMeta.Namespace {
@@ -88,7 +87,7 @@ func (r *Function) ValidateCreate(_ context.Context, obj runtime.Object) (admiss
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
 func (r *Function) ValidateUpdate(_ context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
-	functionlog.Debug("validate update", zap.String("name", r.Name))
+	// functionlog.Debug("validate update", zap.String("name", r.Name))
 
 	for _, cnfMap := range r.Spec.ConfigMaps {
 		if cnfMap.Namespace != r.ObjectMeta.Namespace {
@@ -112,6 +111,6 @@ func (r *Function) ValidateUpdate(_ context.Context, oldObj, newObj runtime.Obje
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type
 func (r *Function) ValidateDelete(_ context.Context, _ runtime.Object) (admission.Warnings, error) {
-	functionlog.Debug("validate delete", zap.String("name", r.Name))
+	// functionlog.Debug("validate delete", zap.String("name", r.Name))
 	return nil, nil
 }

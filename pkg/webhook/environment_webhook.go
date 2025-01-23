@@ -19,7 +19,6 @@ package webhook
 import (
 	"context"
 
-	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
@@ -48,7 +47,7 @@ var _ webhook.CustomDefaulter = &Environment{}
 
 // Default implements webhook.Defaulter so a webhook will be registered for the type
 func (r *Environment) Default(_ context.Context, obj runtime.Object) error {
-	environmentlog.Debug("default", zap.String("name", r.Name))
+	// environmentlog.Debug("default", zap.String("name", r.Name))
 }
 
 // user: change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
@@ -58,7 +57,7 @@ var _ webhook.CustomValidator = &Environment{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type
 func (r *Environment) ValidateCreate(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
-	environmentlog.Debug("validate create", zap.String("name", r.Name))
+	// environmentlog.Debug("validate create", zap.String("name", r.Name))
 	err := r.Validate()
 	if err != nil {
 		err = AggregateValidationErrors("Environment", err)
@@ -69,12 +68,12 @@ func (r *Environment) ValidateCreate(_ context.Context, obj runtime.Object) (adm
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
 func (r *Environment) ValidateUpdate(_ context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
-	environmentlog.Debug("validate update", zap.String("name", r.Name))
+	// environmentlog.Debug("validate update", zap.String("name", r.Name))
 	return nil, nil
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type
 func (r *Environment) ValidateDelete(_ context.Context, _ runtime.Object) (admission.Warnings, error) {
-	environmentlog.Debug("validate delete", zap.String("name", r.Name))
+	// environmentlog.Debug("validate delete", zap.String("name", r.Name))
 	return nil, nil
 }
