@@ -33,7 +33,6 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	v1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
 	//+kubebuilder:scaffold:imports
@@ -78,14 +77,14 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *
 	// Setup webhooks
 
 	webhookInjectors := []WebhookInjector{
-		&v1.CanaryConfig{},
-		&v1.Environment{},
-		&v1.Package{},
-		&v1.Function{},
-		&v1.HTTPTrigger{},
-		&v1.MessageQueueTrigger{},
-		&v1.TimeTrigger{},
-		&v1.KubernetesWatchTrigger{},
+		&CanaryConfig{},
+		&Environment{},
+		&Package{},
+		&Function{},
+		&HTTPTrigger{},
+		&MessageQueueTrigger{},
+		&TimeTrigger{},
+		&KubernetesWatchTrigger{},
 	}
 
 	for _, injector := range webhookInjectors {
