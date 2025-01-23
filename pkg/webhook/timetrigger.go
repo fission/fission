@@ -18,14 +18,16 @@ package webhook
 
 import (
 	"context"
+	"fmt"
 
+	"go.uber.org/zap"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	v1 "github.com/fission/fission/pkg/apis/core/v1"
-	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
 
@@ -46,9 +48,9 @@ func (r *TimeTrigger) SetupWebhookWithManager(mgr ctrl.Manager) error {
 
 var _ webhook.CustomDefaulter = &TimeTrigger{}
 
-// Default implements webhook.Defaulter so a webhook will be registered for the type
+// Default implements webhook.CustomDefaulter so a webhook will be registered for the type
 func (r *TimeTrigger) Default(_ context.Context, obj runtime.Object) error {
-	// timetriggerlog.Debug("default", zap.String("name", r.Name))
+	return nil
 }
 
 // user change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
@@ -56,43 +58,35 @@ func (r *TimeTrigger) Default(_ context.Context, obj runtime.Object) error {
 
 var _ webhook.CustomValidator = &TimeTrigger{}
 
-// ValidateCreate implements webhook.Validator so a webhook will be registered for the type
+// ValidateCreate implements webhook.CustomValidator so a webhook will be registered for the type
 func (r *TimeTrigger) ValidateCreate(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
-	// timetriggerlog.Debug("validate create", zap.String("name", r.Name))
-	err := r.Validate()
-	if err != nil {
-		err = AggregateValidationErrors("TimeTrigger", err)
-		return nil, err
+	new, ok := obj.(*v1.TimeTrigger)
+	if !ok {
+		return nil, apierrors.NewBadRequest(fmt.Sprintf("expected a TimeTrigger but got a %T", obj))
 	}
-
-	err = IsValidCronSpec(r.Spec.Cron)
-	if err != nil {
-		err = ferror.MakeError(ferror.ErrorInvalidArgument, "TimeTrigger cron spec is not valid")
-		return nil, err
-	}
-	return nil, nil
+	timetriggerlog.Debug("validate create", zap.String("name", new.Name))
+	return nil, r.validate(nil, new)
 }
 
-// ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
+// ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type
 func (r *TimeTrigger) ValidateUpdate(_ context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
-	// timetriggerlog.Debug("validate update", zap.String("name", r.Name))
-	err := r.Validate()
-	if err != nil {
-		err = AggregateValidationErrors("TimeTrigger", err)
-		return nil, err
+	new, ok := newObj.(*v1.TimeTrigger)
+	if !ok {
+		return nil, apierrors.NewBadRequest(fmt.Sprintf("expected a TimeTrigger but got a %T", newObj))
 	}
+	timetriggerlog.Debug("validate update", zap.String("name", new.Name))
+	return nil, r.validate(nil, new)
+}
 
-	err = IsValidCronSpec(r.Spec.Cron)
-	if err != nil {
-		err = ferror.MakeError(ferror.ErrorInvalidArgument, "TimeTrigger cron spec is not valid")
-		return nil, err
-	}
-
+// ValidateDelete implements webhook.CustomValidator so a webhook will be registered for the type
+func (r *TimeTrigger) ValidateDelete(_ context.Context, _ runtime.Object) (admission.Warnings, error) {
 	return nil, nil
 }
 
-// ValidateDelete implements webhook.Validator so a webhook will be registered for the type
-func (r *TimeTrigger) ValidateDelete(_ context.Context, _ runtime.Object) (admission.Warnings, error) {
-	// timetriggerlog.Debug("validate delete", zap.String("name", r.Name))
-	return nil, nil
+func (r *TimeTrigger) validate(old *v1.TimeTrigger, new *v1.TimeTrigger) error {
+	if err := new.Validate(); err != nil {
+		err = v1.AggregateValidationErrors("TimeTrigger", err)
+	}
+
+	return nil
 }

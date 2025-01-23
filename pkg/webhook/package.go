@@ -21,6 +21,8 @@ import (
 	"fmt"
 
 	"github.com/dustin/go-humanize"
+	"go.uber.org/zap"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
@@ -48,21 +50,26 @@ func (r *Package) SetupWebhookWithManager(mgr ctrl.Manager) error {
 
 var _ webhook.CustomDefaulter = &Package{}
 
-// Default implements webhook.Defaulter so a webhook will be registered for the type
+// Default implements webhook.CustomDefaulter so a webhook will be registered for the type
 func (r *Package) Default(_ context.Context, obj runtime.Object) error {
-	// packagelog.Debug("default", zap.String("name", r.Name))
-	if r.Status.BuildStatus == "" {
-		if !r.Spec.Deployment.IsEmpty() {
+	new, ok := obj.(*v1.Package)
+	if !ok {
+		return apierrors.NewBadRequest(fmt.Sprintf("expected a Package but got a %T", obj))
+	}
+	packagelog.Debug("default", zap.String("name", new.Name))
+	if new.Status.BuildStatus == "" {
+		if !new.Spec.Deployment.IsEmpty() {
 			// deployment package exists
-			r.Status.BuildStatus = BuildStatusNone
-		} else if !r.Spec.Source.IsEmpty() {
+			new.Status.BuildStatus = v1.BuildStatusNone
+		} else if !new.Spec.Source.IsEmpty() {
 			// source package with no deployment is a pending build
-			r.Status.BuildStatus = BuildStatusPending
+			new.Status.BuildStatus = v1.BuildStatusPending
 		} else {
-			r.Status.BuildStatus = BuildStatusFailed // empty package
-			r.Status.BuildLog = "Both source and deployment are empty"
+			new.Status.BuildStatus = v1.BuildStatusFailed // empty package
+			new.Status.BuildLog = "Both source and deployment are empty"
 		}
 	}
+	return nil
 }
 
 // user change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
@@ -70,44 +77,45 @@ func (r *Package) Default(_ context.Context, obj runtime.Object) error {
 
 var _ webhook.CustomValidator = &Package{}
 
-// ValidateCreate implements webhook.Validator so a webhook will be registered for the type
+// ValidateCreate implements webhook.CustomValidator so a webhook will be registered for the type
 func (r *Package) ValidateCreate(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
-	// packagelog.Debug("validate create", zap.String("name", r.Name))
-	err := r.Validate()
+	new, ok := obj.(*v1.Package)
+	if !ok {
+		return nil, apierrors.NewBadRequest(fmt.Sprintf("expected a Package but got a %T", obj))
+	}
+	packagelog.Debug("validate create", zap.String("name", new.Name))
+	return nil, r.validate(nil, new)
+}
+
+// ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type
+func (r *Package) ValidateUpdate(_ context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
+	new, ok := newObj.(*v1.Package)
+	if !ok {
+		return nil, apierrors.NewBadRequest(fmt.Sprintf("expected a Package but got a %T", newObj))
+	}
+	packagelog.Debug("validate update", zap.String("name", new.Name))
+	return nil, r.validate(nil, new)
+}
+
+// ValidateDelete implements webhook.CustomValidator so a webhook will be registered for the type
+func (r *Package) ValidateDelete(_ context.Context, _ runtime.Object) (admission.Warnings, error) {
+	return nil, nil
+}
+
+func (r *Package) validate(old *v1.Package, new *v1.Package) error {
+	err := new.Validate()
 	if err != nil {
-		err = AggregateValidationErrors("Package", err)
-		return nil, err
+		return v1.AggregateValidationErrors("Package", err)
 	}
 
 	// Ensure size limits
-	if len(r.Spec.Source.Literal) > int(ArchiveLiteralSizeLimit) {
-		err := ferror.MakeError(ferror.ErrorInvalidArgument,
-			fmt.Sprintf("Package literal larger than %s", humanize.Bytes(uint64(ArchiveLiteralSizeLimit))))
-		return nil, err
+	if len(new.Spec.Source.Literal) > int(v1.ArchiveLiteralSizeLimit) {
+		return ferror.MakeError(ferror.ErrorInvalidArgument,
+			fmt.Sprintf("Package literal larger than %s", humanize.Bytes(uint64(v1.ArchiveLiteralSizeLimit))))
 	}
-	if len(r.Spec.Deployment.Literal) > int(ArchiveLiteralSizeLimit) {
-		err := ferror.MakeError(ferror.ErrorInvalidArgument,
-			fmt.Sprintf("Package literal larger than %s", humanize.Bytes(uint64(ArchiveLiteralSizeLimit))))
-		return nil, err
+	if len(new.Spec.Deployment.Literal) > int(v1.ArchiveLiteralSizeLimit) {
+		return ferror.MakeError(ferror.ErrorInvalidArgument,
+			fmt.Sprintf("Package literal larger than %s", humanize.Bytes(uint64(v1.ArchiveLiteralSizeLimit))))
 	}
-	return nil, nil
-}
-
-// ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
-func (r *Package) ValidateUpdate(_ context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
-	// packagelog.Debug("validate update", zap.String("name", r.Name))
-	err := r.Validate()
-
-	if err != nil {
-		err = AggregateValidationErrors("Package", err)
-		return nil, err
-	}
-
-	return nil, nil
-}
-
-// ValidateDelete implements webhook.Validator so a webhook will be registered for the type
-func (r *Package) ValidateDelete(_ context.Context, _ runtime.Object) (admission.Warnings, error) {
-	// packagelog.Debug("validate delete", zap.String("name", r.Name))
-	return nil, nil
+	return nil
 }

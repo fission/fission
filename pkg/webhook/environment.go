@@ -18,7 +18,10 @@ package webhook
 
 import (
 	"context"
+	"fmt"
 
+	"go.uber.org/zap"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
@@ -45,9 +48,9 @@ func (r *Environment) SetupWebhookWithManager(mgr ctrl.Manager) error {
 
 var _ webhook.CustomDefaulter = &Environment{}
 
-// Default implements webhook.Defaulter so a webhook will be registered for the type
+// Default implements webhook.CustomDefaulter so a webhook will be registered for the type
 func (r *Environment) Default(_ context.Context, obj runtime.Object) error {
-	// environmentlog.Debug("default", zap.String("name", r.Name))
+	return nil
 }
 
 // user: change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
@@ -55,25 +58,35 @@ func (r *Environment) Default(_ context.Context, obj runtime.Object) error {
 
 var _ webhook.CustomValidator = &Environment{}
 
-// ValidateCreate implements webhook.Validator so a webhook will be registered for the type
+// ValidateCreate implements webhook.CustomValidator so a webhook will be registered for the type
 func (r *Environment) ValidateCreate(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
-	// environmentlog.Debug("validate create", zap.String("name", r.Name))
-	err := r.Validate()
-	if err != nil {
-		err = AggregateValidationErrors("Environment", err)
-		return nil, err
+	new, ok := obj.(*v1.Environment)
+	if !ok {
+		return nil, apierrors.NewBadRequest(fmt.Sprintf("expected a Environment but got a %T", obj))
 	}
-	return nil, nil
+	environmentlog.Debug("validate create", zap.String("name", new.Name))
+	return nil, r.validate(nil, new)
 }
 
-// ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
+// ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type
 func (r *Environment) ValidateUpdate(_ context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
-	// environmentlog.Debug("validate update", zap.String("name", r.Name))
+	new, ok := newObj.(*v1.Environment)
+	if !ok {
+		return nil, apierrors.NewBadRequest(fmt.Sprintf("expected a Environment but got a %T", newObj))
+	}
+	environmentlog.Debug("validate update", zap.String("name", new.Name))
+	return nil, r.validate(nil, new)
+}
+
+// ValidateDelete implements webhook.CustomValidator so a webhook will be registered for the type
+func (r *Environment) ValidateDelete(_ context.Context, _ runtime.Object) (admission.Warnings, error) {
 	return nil, nil
 }
 
-// ValidateDelete implements webhook.Validator so a webhook will be registered for the type
-func (r *Environment) ValidateDelete(_ context.Context, _ runtime.Object) (admission.Warnings, error) {
-	// environmentlog.Debug("validate delete", zap.String("name", r.Name))
-	return nil, nil
+func (r *Environment) validate(old *v1.Environment, new *v1.Environment) error {
+	if err := new.Validate(); err != nil {
+		err = v1.AggregateValidationErrors("Environment", err)
+		return err
+	}
+	return nil
 }

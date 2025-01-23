@@ -18,7 +18,10 @@ package webhook
 
 import (
 	"context"
+	"fmt"
 
+	"go.uber.org/zap"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
@@ -45,9 +48,9 @@ func (r *MessageQueueTrigger) SetupWebhookWithManager(mgr ctrl.Manager) error {
 
 var _ webhook.CustomDefaulter = &MessageQueueTrigger{}
 
-// Default implements webhook.Defaulter so a webhook will be registered for the type
+// Default implements webhook.CustomDefaulter so a webhook will be registered for the type
 func (r *MessageQueueTrigger) Default(_ context.Context, obj runtime.Object) error {
-	// messagequeuetriggerlog.Debug("default", zap.String("name", r.Name))
+	return nil
 }
 
 // user change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
@@ -55,30 +58,34 @@ func (r *MessageQueueTrigger) Default(_ context.Context, obj runtime.Object) err
 
 var _ webhook.CustomValidator = &MessageQueueTrigger{}
 
-// ValidateCreate implements webhook.Validator so a webhook will be registered for the type
+// ValidateCreate implements webhook.CustomValidator so a webhook will be registered for the type
 func (r *MessageQueueTrigger) ValidateCreate(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
-	// messagequeuetriggerlog.Debug("validate create", zap.String("name", r.Name))
-	err := r.Validate()
-	if err != nil {
-		err = AggregateValidationErrors("MessageQueueTrigger", err)
-		return nil, err
+	new, ok := obj.(*v1.MessageQueueTrigger)
+	if !ok {
+		return nil, apierrors.NewBadRequest(fmt.Sprintf("expected a MessageQueueTrigger but got a %T", obj))
 	}
-	return nil, nil
+	messagequeuetriggerlog.Debug("validate create", zap.String("name", new.Name))
+	return nil, r.validate(nil, new)
 }
 
-// ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
+// ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type
 func (r *MessageQueueTrigger) ValidateUpdate(_ context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
-	// messagequeuetriggerlog.Debug("validate update", zap.String("name", r.Name))
-	err := r.Validate()
-	if err != nil {
-		err = AggregateValidationErrors("MessageQueueTrigger", err)
-		return nil, err
+	new, ok := newObj.(*v1.MessageQueueTrigger)
+	if !ok {
+		return nil, apierrors.NewBadRequest(fmt.Sprintf("expected a MessageQueueTrigger but got a %T", newObj))
 	}
+	messagequeuetriggerlog.Debug("validate update", zap.String("name", new.Name))
+	return nil, r.validate(nil, new)
+}
+
+// ValidateDelete implements webhook.CustomValidator so a webhook will be registered for the type
+func (r *MessageQueueTrigger) ValidateDelete(_ context.Context, _ runtime.Object) (admission.Warnings, error) {
 	return nil, nil
 }
 
-// ValidateDelete implements webhook.Validator so a webhook will be registered for the type
-func (r *MessageQueueTrigger) ValidateDelete(_ context.Context, _ runtime.Object) (admission.Warnings, error) {
-	// messagequeuetriggerlog.Debug("validate delete", zap.String("name", r.Name))
-	return nil, nil
+func (r *MessageQueueTrigger) validate(old *v1.MessageQueueTrigger, new *v1.MessageQueueTrigger) error {
+	if err := new.Validate(); err != nil {
+		err = v1.AggregateValidationErrors("MessageQueueTrigger", err)
+	}
+	return nil
 }

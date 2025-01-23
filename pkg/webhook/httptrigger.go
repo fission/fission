@@ -18,7 +18,10 @@ package webhook
 
 import (
 	"context"
+	"fmt"
 
+	"go.uber.org/zap"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
@@ -45,9 +48,9 @@ func (r *HTTPTrigger) SetupWebhookWithManager(mgr ctrl.Manager) error {
 
 var _ webhook.CustomDefaulter = &HTTPTrigger{}
 
-// Default implements webhook.Defaulter so a webhook will be registered for the type
+// Default implements webhook.CustomDefaulter so a webhook will be registered for the type
 func (r *HTTPTrigger) Default(_ context.Context, obj runtime.Object) error {
-	// httptriggerlog.Debug("default", zap.String("name", r.Name))
+	return nil
 }
 
 // user change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
@@ -55,32 +58,34 @@ func (r *HTTPTrigger) Default(_ context.Context, obj runtime.Object) error {
 
 var _ webhook.CustomValidator = &HTTPTrigger{}
 
-// ValidateCreate implements webhook.Validator so a webhook will be registered for the type
-func (t *HTTPTrigger) ValidateCreate(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
-	// httptriggerlog.Debug("validate create", zap.String("name", t.Name))
-	err := t.Validate()
-	if err != nil {
-		err = AggregateValidationErrors("HTTPTrigger", err)
-		return nil, err
+// ValidateCreate implements webhook.CustomValidator so a webhook will be registered for the type
+func (r *HTTPTrigger) ValidateCreate(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
+	new, ok := obj.(*v1.HTTPTrigger)
+	if !ok {
+		return nil, apierrors.NewBadRequest(fmt.Sprintf("expected a HTTPTrigger but got a %T", obj))
 	}
-	return nil, nil
+	httptriggerlog.Debug("validate create", zap.String("name", new.Name))
+	return nil, r.validate(nil, new)
 }
 
-// ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
+// ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type
 func (r *HTTPTrigger) ValidateUpdate(_ context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
-	// httptriggerlog.Debug("validate update", zap.String("name", r.Name))
-	err := r.Validate()
-	if err != nil {
-		err = AggregateValidationErrors("HTTPTrigger", err)
-		return nil, err
+	new, ok := newObj.(*v1.HTTPTrigger)
+	if !ok {
+		return nil, apierrors.NewBadRequest(fmt.Sprintf("expected a HTTPTrigger but got a %T", newObj))
 	}
+	httptriggerlog.Debug("validate update", zap.String("name", new.Name))
+	return nil, r.validate(nil, new)
+}
 
+// ValidateDelete implements webhook.CustomValidator so a webhook will be registered for the type
+func (r *HTTPTrigger) ValidateDelete(_ context.Context, _ runtime.Object) (admission.Warnings, error) {
 	return nil, nil
 }
 
-// ValidateDelete implements webhook.Validator so a webhook will be registered for the type
-func (r *HTTPTrigger) ValidateDelete(_ context.Context, _ runtime.Object) (admission.Warnings, error) {
-	// httptriggerlog.Debug("validate delete", zap.String("name", r.Name))
-
-	return nil, nil
+func (r *HTTPTrigger) validate(old *v1.HTTPTrigger, new *v1.HTTPTrigger) error {
+	if err := new.Validate(); err != nil {
+		err = v1.AggregateValidationErrors("HTTPTrigger", err)
+	}
+	return nil
 }
