@@ -40,7 +40,7 @@ func (r *KubernetesWatchTrigger) SetupWebhookWithManager(mgr ctrl.Manager) error
 
 // Admission webhooks can be added by adding tag: kubebuilder:webhook:path=/mutate-fission-io-v1-kuberneteswatchtrigger,mutating=true,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=kuberneteswatchtriggers,verbs=create;update,versions=v1,name=mkuberneteswatchtrigger.fission.io,admissionReviewVersions=v1
 
-var _ webhook.Defaulter = &KubernetesWatchTrigger{}
+var _ webhook.CustomDefaulter = &KubernetesWatchTrigger{}
 
 // Default implements webhook.Defaulter so a webhook will be registered for the type
 func (r *KubernetesWatchTrigger) Default() {
@@ -50,7 +50,7 @@ func (r *KubernetesWatchTrigger) Default() {
 // user: change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
 //+kubebuilder:webhook:path=/validate-fission-io-v1-kuberneteswatchtrigger,mutating=false,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=kuberneteswatchtriggers,verbs=create,versions=v1,name=vkuberneteswatchtrigger.fission.io,admissionReviewVersions=v1
 
-var _ webhook.Validator = &KubernetesWatchTrigger{}
+var _ webhook.CustomValidator = &KubernetesWatchTrigger{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type
 func (r *KubernetesWatchTrigger) ValidateCreate() (admission.Warnings, error) {

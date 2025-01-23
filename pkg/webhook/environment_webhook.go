@@ -40,7 +40,7 @@ func (r *Environment) SetupWebhookWithManager(mgr ctrl.Manager) error {
 
 // Admission webhooks can be added by adding tag: kubebuilder:webhook:path=/mutate-fission-io-v1-environment,mutating=true,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=environments,verbs=create;update,versions=v1,name=menvironment.fission.io,admissionReviewVersions=v1
 
-var _ webhook.Defaulter = &Environment{}
+var _ webhook.CustomDefaulter = &Environment{}
 
 // Default implements webhook.Defaulter so a webhook will be registered for the type
 func (r *Environment) Default() {
@@ -50,7 +50,7 @@ func (r *Environment) Default() {
 // user: change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
 //+kubebuilder:webhook:path=/validate-fission-io-v1-environment,mutating=false,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=environments,verbs=create,versions=v1,name=venvironment.fission.io,admissionReviewVersions=v1
 
-var _ webhook.Validator = &Environment{}
+var _ webhook.CustomValidator = &Environment{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type
 func (r *Environment) ValidateCreate() (admission.Warnings, error) {

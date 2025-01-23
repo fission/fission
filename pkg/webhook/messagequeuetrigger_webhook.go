@@ -40,7 +40,7 @@ func (r *MessageQueueTrigger) SetupWebhookWithManager(mgr ctrl.Manager) error {
 
 // Admission webhooks can be added by adding tag: kubebuilder:webhook:path=/mutate-fission-io-v1-messagequeuetrigger,mutating=true,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=messagequeuetriggers,verbs=create;update,versions=v1,name=mmessagequeuetrigger.fission.io,admissionReviewVersions=v1
 
-var _ webhook.Defaulter = &MessageQueueTrigger{}
+var _ webhook.CustomDefaulter = &MessageQueueTrigger{}
 
 // Default implements webhook.Defaulter so a webhook will be registered for the type
 func (r *MessageQueueTrigger) Default() {
@@ -50,7 +50,7 @@ func (r *MessageQueueTrigger) Default() {
 // user change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
 //+kubebuilder:webhook:path=/validate-fission-io-v1-messagequeuetrigger,mutating=false,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=messagequeuetriggers,verbs=create;update,versions=v1,name=vmessagequeuetrigger.fission.io,admissionReviewVersions=v1
 
-var _ webhook.Validator = &MessageQueueTrigger{}
+var _ webhook.CustomValidator = &MessageQueueTrigger{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type
 func (r *MessageQueueTrigger) ValidateCreate() (admission.Warnings, error) {

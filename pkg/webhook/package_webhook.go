@@ -44,7 +44,7 @@ func (r *Package) SetupWebhookWithManager(mgr ctrl.Manager) error {
 
 //+kubebuilder:webhook:path=/mutate-fission-io-v1-package,mutating=true,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=packages,verbs=create;update,versions=v1,name=mpackage.fission.io,admissionReviewVersions=v1
 
-var _ webhook.Defaulter = &Package{}
+var _ webhook.CustomDefaulter = &Package{}
 
 // Default implements webhook.Defaulter so a webhook will be registered for the type
 func (r *Package) Default() {
@@ -66,7 +66,7 @@ func (r *Package) Default() {
 // user change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
 //+kubebuilder:webhook:path=/validate-fission-io-v1-package,mutating=false,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=packages,verbs=create;update,versions=v1,name=vpackage.fission.io,admissionReviewVersions=v1
 
-var _ webhook.Validator = &Package{}
+var _ webhook.CustomValidator = &Package{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type
 func (r *Package) ValidateCreate() (admission.Warnings, error) {
