@@ -85,7 +85,7 @@ func (r *HTTPTrigger) ValidateDelete(_ context.Context, _ runtime.Object) (admis
 
 func (r *HTTPTrigger) validate(_ *v1.HTTPTrigger, new *v1.HTTPTrigger) error {
 	if err := new.Validate(); err != nil {
-		err = v1.AggregateValidationErrors("HTTPTrigger", err)
+		return v1.AggregateValidationErrors("HTTPTrigger", err)
 	}
 	return nil
 }

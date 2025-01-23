@@ -85,7 +85,7 @@ func (r *TimeTrigger) ValidateDelete(_ context.Context, _ runtime.Object) (admis
 
 func (r *TimeTrigger) validate(_ *v1.TimeTrigger, new *v1.TimeTrigger) error {
 	if err := new.Validate(); err != nil {
-		err = v1.AggregateValidationErrors("TimeTrigger", err)
+		return v1.AggregateValidationErrors("TimeTrigger", err)
 	}
 
 	return nil

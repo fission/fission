@@ -85,7 +85,7 @@ func (r *MessageQueueTrigger) ValidateDelete(_ context.Context, _ runtime.Object
 
 func (r *MessageQueueTrigger) validate(_ *v1.MessageQueueTrigger, new *v1.MessageQueueTrigger) error {
 	if err := new.Validate(); err != nil {
-		err = v1.AggregateValidationErrors("MessageQueueTrigger", err)
+		return v1.AggregateValidationErrors("MessageQueueTrigger", err)
 	}
 	return nil
 }
