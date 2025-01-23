@@ -17,6 +17,8 @@ limitations under the License.
 package webhook
 
 import (
+	"context"
+
 	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -35,6 +37,8 @@ var kuberneteswatchtriggerlog = loggerfactory.GetLogger().Named("kuberneteswatch
 func (r *KubernetesWatchTrigger) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewWebhookManagedBy(mgr).
 		For(&v1.KubernetesWatchTrigger{}).
+		WithDefaulter(r).
+		WithValidator(r).
 		Complete()
 }
 
@@ -43,7 +47,7 @@ func (r *KubernetesWatchTrigger) SetupWebhookWithManager(mgr ctrl.Manager) error
 var _ webhook.CustomDefaulter = &KubernetesWatchTrigger{}
 
 // Default implements webhook.Defaulter so a webhook will be registered for the type
-func (r *KubernetesWatchTrigger) Default() {
+func (r *KubernetesWatchTrigger) Default(_ context.Context, obj runtime.Object) error {
 	kuberneteswatchtriggerlog.Debug("default", zap.String("name", r.Name))
 }
 
@@ -53,7 +57,7 @@ func (r *KubernetesWatchTrigger) Default() {
 var _ webhook.CustomValidator = &KubernetesWatchTrigger{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type
-func (r *KubernetesWatchTrigger) ValidateCreate() (admission.Warnings, error) {
+func (r *KubernetesWatchTrigger) ValidateCreate(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
 	kuberneteswatchtriggerlog.Debug("validate create", zap.String("name", r.Name))
 	err := r.Validate()
 	if err != nil {
@@ -64,13 +68,13 @@ func (r *KubernetesWatchTrigger) ValidateCreate() (admission.Warnings, error) {
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
-func (r *KubernetesWatchTrigger) ValidateUpdate(old runtime.Object) (admission.Warnings, error) {
+func (r *KubernetesWatchTrigger) ValidateUpdate(_ context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
 	// WATCH UPDATE NOT IMPLEMENTED
 	return nil, nil
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type
-func (r *KubernetesWatchTrigger) ValidateDelete() (admission.Warnings, error) {
+func (r *KubernetesWatchTrigger) ValidateDelete(_ context.Context, _ runtime.Object) (admission.Warnings, error) {
 	kuberneteswatchtriggerlog.Debug("validate delete", zap.String("name", r.Name))
 	return nil, nil
 }

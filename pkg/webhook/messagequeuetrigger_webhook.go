@@ -17,6 +17,8 @@ limitations under the License.
 package webhook
 
 import (
+	"context"
+
 	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -35,6 +37,8 @@ var messagequeuetriggerlog = loggerfactory.GetLogger().Named("messagequeuetrigge
 func (r *MessageQueueTrigger) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewWebhookManagedBy(mgr).
 		For(&v1.MessageQueueTrigger{}).
+		WithDefaulter(r).
+		WithValidator(r).
 		Complete()
 }
 
@@ -43,7 +47,7 @@ func (r *MessageQueueTrigger) SetupWebhookWithManager(mgr ctrl.Manager) error {
 var _ webhook.CustomDefaulter = &MessageQueueTrigger{}
 
 // Default implements webhook.Defaulter so a webhook will be registered for the type
-func (r *MessageQueueTrigger) Default() {
+func (r *MessageQueueTrigger) Default(_ context.Context, obj runtime.Object) error {
 	messagequeuetriggerlog.Debug("default", zap.String("name", r.Name))
 }
 
@@ -53,7 +57,7 @@ func (r *MessageQueueTrigger) Default() {
 var _ webhook.CustomValidator = &MessageQueueTrigger{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type
-func (r *MessageQueueTrigger) ValidateCreate() (admission.Warnings, error) {
+func (r *MessageQueueTrigger) ValidateCreate(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
 	messagequeuetriggerlog.Debug("validate create", zap.String("name", r.Name))
 	err := r.Validate()
 	if err != nil {
@@ -64,7 +68,7 @@ func (r *MessageQueueTrigger) ValidateCreate() (admission.Warnings, error) {
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
-func (r *MessageQueueTrigger) ValidateUpdate(old runtime.Object) (admission.Warnings, error) {
+func (r *MessageQueueTrigger) ValidateUpdate(_ context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
 	messagequeuetriggerlog.Debug("validate update", zap.String("name", r.Name))
 	err := r.Validate()
 	if err != nil {
@@ -75,7 +79,7 @@ func (r *MessageQueueTrigger) ValidateUpdate(old runtime.Object) (admission.Warn
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type
-func (r *MessageQueueTrigger) ValidateDelete() (admission.Warnings, error) {
+func (r *MessageQueueTrigger) ValidateDelete(_ context.Context, _ runtime.Object) (admission.Warnings, error) {
 	messagequeuetriggerlog.Debug("validate delete", zap.String("name", r.Name))
 	return nil, nil
 }

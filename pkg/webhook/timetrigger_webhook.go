@@ -17,6 +17,8 @@ limitations under the License.
 package webhook
 
 import (
+	"context"
+
 	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -36,6 +38,8 @@ var timetriggerlog = loggerfactory.GetLogger().Named("timetrigger-resource")
 func (r *TimeTrigger) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewWebhookManagedBy(mgr).
 		For(&v1.TimeTrigger{}).
+		WithDefaulter(r).
+		WithValidator(r).
 		Complete()
 }
 
@@ -44,7 +48,7 @@ func (r *TimeTrigger) SetupWebhookWithManager(mgr ctrl.Manager) error {
 var _ webhook.CustomDefaulter = &TimeTrigger{}
 
 // Default implements webhook.Defaulter so a webhook will be registered for the type
-func (r *TimeTrigger) Default() {
+func (r *TimeTrigger) Default(_ context.Context, obj runtime.Object) error {
 	timetriggerlog.Debug("default", zap.String("name", r.Name))
 }
 
@@ -54,7 +58,7 @@ func (r *TimeTrigger) Default() {
 var _ webhook.CustomValidator = &TimeTrigger{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type
-func (r *TimeTrigger) ValidateCreate() (admission.Warnings, error) {
+func (r *TimeTrigger) ValidateCreate(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
 	timetriggerlog.Debug("validate create", zap.String("name", r.Name))
 	err := r.Validate()
 	if err != nil {
@@ -71,7 +75,7 @@ func (r *TimeTrigger) ValidateCreate() (admission.Warnings, error) {
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
-func (r *TimeTrigger) ValidateUpdate(old runtime.Object) (admission.Warnings, error) {
+func (r *TimeTrigger) ValidateUpdate(_ context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
 	timetriggerlog.Debug("validate update", zap.String("name", r.Name))
 	err := r.Validate()
 	if err != nil {
@@ -89,7 +93,7 @@ func (r *TimeTrigger) ValidateUpdate(old runtime.Object) (admission.Warnings, er
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type
-func (r *TimeTrigger) ValidateDelete() (admission.Warnings, error) {
+func (r *TimeTrigger) ValidateDelete(_ context.Context, _ runtime.Object) (admission.Warnings, error) {
 	timetriggerlog.Debug("validate delete", zap.String("name", r.Name))
 	return nil, nil
 }

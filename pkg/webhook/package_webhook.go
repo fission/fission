@@ -17,6 +17,7 @@ limitations under the License.
 package webhook
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/dustin/go-humanize"
@@ -39,6 +40,8 @@ var packagelog = loggerfactory.GetLogger().Named("package-resource")
 func (r *Package) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewWebhookManagedBy(mgr).
 		For(&v1.Package{}).
+		WithDefaulter(r).
+		WithValidator(r).
 		Complete()
 }
 
@@ -47,7 +50,7 @@ func (r *Package) SetupWebhookWithManager(mgr ctrl.Manager) error {
 var _ webhook.CustomDefaulter = &Package{}
 
 // Default implements webhook.Defaulter so a webhook will be registered for the type
-func (r *Package) Default() {
+func (r *Package) Default(_ context.Context, obj runtime.Object) error {
 	packagelog.Debug("default", zap.String("name", r.Name))
 	if r.Status.BuildStatus == "" {
 		if !r.Spec.Deployment.IsEmpty() {
@@ -69,7 +72,7 @@ func (r *Package) Default() {
 var _ webhook.CustomValidator = &Package{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type
-func (r *Package) ValidateCreate() (admission.Warnings, error) {
+func (r *Package) ValidateCreate(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
 	packagelog.Debug("validate create", zap.String("name", r.Name))
 	err := r.Validate()
 	if err != nil {
@@ -92,7 +95,7 @@ func (r *Package) ValidateCreate() (admission.Warnings, error) {
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
-func (r *Package) ValidateUpdate(old runtime.Object) (admission.Warnings, error) {
+func (r *Package) ValidateUpdate(_ context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
 	packagelog.Debug("validate update", zap.String("name", r.Name))
 	err := r.Validate()
 
@@ -105,7 +108,7 @@ func (r *Package) ValidateUpdate(old runtime.Object) (admission.Warnings, error)
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type
-func (r *Package) ValidateDelete() (admission.Warnings, error) {
+func (r *Package) ValidateDelete(_ context.Context, _ runtime.Object) (admission.Warnings, error) {
 	packagelog.Debug("validate delete", zap.String("name", r.Name))
 	return nil, nil
 }

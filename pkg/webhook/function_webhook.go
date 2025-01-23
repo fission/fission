@@ -39,6 +39,8 @@ var functionlog = loggerfactory.GetLogger().Named("function-resource")
 func (r *Function) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewWebhookManagedBy(mgr).
 		For(&v1.Function{}).
+		WithDefaulter(r).
+		WithValidator(r).
 		Complete()
 }
 
@@ -61,7 +63,7 @@ func (r *Function) Default(_ context.Context, obj runtime.Object) error {
 var _ webhook.CustomValidator = &Function{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type
-func (r *Function) ValidateCreate() (admission.Warnings, error) {
+func (r *Function) ValidateCreate(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
 	functionlog.Debug("validate create", zap.String("name", r.Name))
 
 	for _, cnfMap := range r.Spec.ConfigMaps {
@@ -85,7 +87,7 @@ func (r *Function) ValidateCreate() (admission.Warnings, error) {
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
-func (r *Function) ValidateUpdate(old runtime.Object) (admission.Warnings, error) {
+func (r *Function) ValidateUpdate(_ context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
 	functionlog.Debug("validate update", zap.String("name", r.Name))
 
 	for _, cnfMap := range r.Spec.ConfigMaps {
@@ -109,7 +111,7 @@ func (r *Function) ValidateUpdate(old runtime.Object) (admission.Warnings, error
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type
-func (r *Function) ValidateDelete() (admission.Warnings, error) {
+func (r *Function) ValidateDelete(_ context.Context, _ runtime.Object) (admission.Warnings, error) {
 	functionlog.Debug("validate delete", zap.String("name", r.Name))
 	return nil, nil
 }

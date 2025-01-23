@@ -17,6 +17,8 @@ limitations under the License.
 package webhook
 
 import (
+	"context"
+
 	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -35,6 +37,8 @@ var httptriggerlog = loggerfactory.GetLogger().Named("httptrigger-resource")
 func (r *HTTPTrigger) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewWebhookManagedBy(mgr).
 		For(&v1.HTTPTrigger{}).
+		WithDefaulter(r).
+		WithValidator(r).
 		Complete()
 }
 
@@ -43,7 +47,7 @@ func (r *HTTPTrigger) SetupWebhookWithManager(mgr ctrl.Manager) error {
 var _ webhook.CustomDefaulter = &HTTPTrigger{}
 
 // Default implements webhook.Defaulter so a webhook will be registered for the type
-func (r *HTTPTrigger) Default() {
+func (r *HTTPTrigger) Default(_ context.Context, obj runtime.Object) error {
 	httptriggerlog.Debug("default", zap.String("name", r.Name))
 }
 
@@ -53,7 +57,7 @@ func (r *HTTPTrigger) Default() {
 var _ webhook.CustomValidator = &HTTPTrigger{}
 
 // ValidateCreate implements webhook.Validator so a webhook will be registered for the type
-func (t *HTTPTrigger) ValidateCreate() (admission.Warnings, error) {
+func (t *HTTPTrigger) ValidateCreate(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
 	httptriggerlog.Debug("validate create", zap.String("name", t.Name))
 	err := t.Validate()
 	if err != nil {
@@ -64,7 +68,7 @@ func (t *HTTPTrigger) ValidateCreate() (admission.Warnings, error) {
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
-func (r *HTTPTrigger) ValidateUpdate(old runtime.Object) (admission.Warnings, error) {
+func (r *HTTPTrigger) ValidateUpdate(_ context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
 	httptriggerlog.Debug("validate update", zap.String("name", r.Name))
 	err := r.Validate()
 	if err != nil {
@@ -76,7 +80,7 @@ func (r *HTTPTrigger) ValidateUpdate(old runtime.Object) (admission.Warnings, er
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type
-func (r *HTTPTrigger) ValidateDelete() (admission.Warnings, error) {
+func (r *HTTPTrigger) ValidateDelete(_ context.Context, _ runtime.Object) (admission.Warnings, error) {
 	httptriggerlog.Debug("validate delete", zap.String("name", r.Name))
 
 	return nil, nil
