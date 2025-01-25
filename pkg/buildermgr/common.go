@@ -55,10 +55,10 @@ func buildPackage(ctx context.Context, logger *zap.Logger, fissionClient version
 		return nil, e, ferror.MakeError(http.StatusInternalServerError, e)
 	}
 
-	svcName := fmt.Sprintf("%v-%v.%v", env.ObjectMeta.Name, env.ObjectMeta.ResourceVersion, envBuilderNamespace)
-	srcPkgFilename := fmt.Sprintf("%v-%v", pkg.ObjectMeta.Name, strings.ToLower(uniuri.NewLen(6)))
-	fetcherC := fetcherClient.MakeClient(logger, fmt.Sprintf("http://%v:8000", svcName))
-	builderC := builderClient.MakeClient(logger, fmt.Sprintf("http://%v:8001", svcName))
+	svcName := fmt.Sprintf("%s-%s.%s", env.Name, env.ResourceVersion, envBuilderNamespace)
+	srcPkgFilename := fmt.Sprintf("%s-%s", pkg.Name, strings.ToLower(uniuri.NewLen(6)))
+	fetcherC := fetcherClient.MakeClient(logger, fmt.Sprintf("http://%s:8000", svcName))
+	builderC := builderClient.MakeClient(logger, fmt.Sprintf("http://%s:8001", svcName))
 
 	defer func() {
 		logger.Info("cleaning src pkg from builder storage", zap.String("source_package", srcPkgFilename))

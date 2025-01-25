@@ -73,7 +73,7 @@ internal_route_test_1() {
 
 new_deploy_mgr_and_internal_route_test_2() {
     log "Starting new_deploy_mgr_and_internal_route_test_1 with env in default ns"
-    fission env create --name python --image fission/python-env
+    fission env create --name python --image ghcr.io/fission/python-env
     fission fn create --name func5 --env python --code testDir1/hello.py --minscale 1 --maxscale 4 --executortype newdeploy
     sleep 15
 
@@ -88,7 +88,7 @@ new_deploy_mgr_and_internal_route_test_2() {
 
 new_deploy_mgr_and_internal_route_test_1() {
     log "Starting new_deploy_mgr_and_internal_route_test_1 with env and fn in different ns"
-    fission env create --name python --image fission/python-env --envns "ns1-$id"
+    fission env create --name python --image ghcr.io/fission/python-env --envns "ns1-$id"
     fission fn create --name func4 --fns "ns2-$id" --env python --envns "ns1-$id" --code testDir1/hello.py --minscale 1 --maxscale 4 --executortype newdeploy
     sleep 15
 
@@ -103,7 +103,7 @@ new_deploy_mgr_and_internal_route_test_1() {
 
 builder_mgr_test_2() {
     log "Starting builder_mgr_test_2 with env in default ns"
-    fission env create --name python-builder-env --builder fission/python-builder --image fission/python-env
+    fission env create --name python-builder-env --builder fission/python-builder --image ghcr.io/fission/python-env
     sleep 180
 
     # verify the env builder pod came up in fission-builder and env runtime pod came up in fission-function ns
@@ -135,7 +135,7 @@ builder_mgr_test_2() {
 
 builder_mgr_test_1() {
     log "Starting builder_mgr_test_1 with env and fn in different ns"
-    fission env create --name python-builder-env --envns "ns1-$id" --builder fission/python-builder --image fission/python-env
+    fission env create --name python-builder-env --envns "ns1-$id" --builder fission/python-builder --image ghcr.io/fission/python-env
     # we need to wait sufficiently for env pods to be up
     sleep 180
 
@@ -162,7 +162,7 @@ builder_mgr_test_1() {
 pool_mgr_test_2() {
     log "Starting pool_mgr_test_2 with env in default ns"
     fission env delete --name python || true
-    fission env create --name python --image fission/python-env
+    fission env create --name python --image ghcr.io/fission/python-env
     fission fn create --name func2 --fns "ns2-$id" --env python --code testDir1/hello.py
     ht=$(fission route create --function func2 --fns "ns2-$id" --url /func2 | cut -f2 -d' '| tr -d \')
 
@@ -186,7 +186,7 @@ pool_mgr_test_2() {
 
 pool_mgr_test_1() {
     log "Starting pool_mgr_test_1 with env and fn in different ns"
-    fission env create --name python --image fission/python-env --envns "ns1-$id"
+    fission env create --name python --image ghcr.io/fission/python-env --envns "ns1-$id"
     fission fn create --name func1 --fns "ns2-$id" --env python --envns "ns1-$id" --code testDir1/hello.py
     ht=$(fission route create --function func1 --fns "ns2-$id" --url /func1 | cut -f2 -d' '| tr -d \')
 

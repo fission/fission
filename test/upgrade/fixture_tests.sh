@@ -10,7 +10,7 @@ popd
 setup_fission_objects() {
     log "==== Setting up objects for upgrade test ===="
     log "Creating env, function and route"
-    fission env create --name nodejs --image fission/node-env --mincpu 20 --maxcpu 100 --minmemory 128 --maxmemory 256
+    fission env create --name nodejs --image ghcr.io/fission/node-env --mincpu 20 --maxcpu 100 --minmemory 128 --maxmemory 256
 
     fission fn create --name upgradehello --env nodejs --code $ROOT/examples/nodejs/hello.js --executortype poolmgr
 

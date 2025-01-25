@@ -44,7 +44,7 @@ create_fission_objects() {
     echo "                   Preparing for fission object creation"
     echo "-----------------#########################################--------------------"
     echo "Creating function environment."
-    if fission env create --name nodejs --image fission/node-env:latest; then
+    if fission env create --name nodejs --image ghcr.io/fission/node-env; then
         echo "Successfully created function environment"
     else
         echo "Environment creation failed"

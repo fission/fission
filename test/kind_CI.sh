@@ -18,19 +18,45 @@ export FUNCTION_NAMESPACE=${FUNCTION_NAMESPACE:-default}
 export BUILDER_NAMESPACE=${BUILDER_NAMESPACE:-default}
 export FISSION_NAMESPACE=${FISSION_NAMESPACE:-fission}
 export FISSION_ROUTER=127.0.0.1:8888
-export NODE_RUNTIME_IMAGE=fission/node-env-14
-export NODE_BUILDER_IMAGE=fission/node-builder-14
-export PYTHON_RUNTIME_IMAGE=fission/python-env
-export PYTHON_BUILDER_IMAGE=fission/python-builder
-export GO_RUNTIME_IMAGE=fission/go-env-1.16
-export GO_BUILDER_IMAGE=fission/go-builder-1.16
-export JVM_RUNTIME_IMAGE=fission/jvm-env
-export JVM_BUILDER_IMAGE=fission/jvm-builder
-export JVM_JERSEY_RUNTIME_IMAGE=fission/jvm-jersey-env
-export JVM_JERSEY_BUILDER_IMAGE=fission/jvm-jersey-builder
-export TS_RUNTIME_IMAGE=fission/tensorflow-serving-env
+
+# Images used in the tests
+export REPOSITORY=ghcr.io/fission
+export NODE_RUNTIME_IMAGE=${REPOSITORY}/node-env-22
+export NODE_BUILDER_IMAGE=${REPOSITORY}/node-builder-22
+export PYTHON_RUNTIME_IMAGE=${REPOSITORY}/python-env
+export PYTHON_BUILDER_IMAGE=${REPOSITORY}/python-builder
+export GO_RUNTIME_IMAGE=${REPOSITORY}/go-env-1.23
+export GO_BUILDER_IMAGE=${REPOSITORY}/go-builder-1.23
+export JVM_RUNTIME_IMAGE=${REPOSITORY}/jvm-env
+export JVM_BUILDER_IMAGE=${REPOSITORY}/jvm-builder
+export JVM_JERSEY_RUNTIME_IMAGE=${REPOSITORY}/jvm-jersey-env-22
+export JVM_JERSEY_BUILDER_IMAGE=${REPOSITORY}/jvm-jersey-builder-22
+export TS_RUNTIME_IMAGE=${REPOSITORY}/tensorflow-serving-env
+
 export CONTROLLER_IP=127.0.0.1:8889
 export FISSION_NATS_STREAMING_URL=http://defaultFissionAuthToken@127.0.0.1:8890
+
+IMAGES=(
+    "$NODE_RUNTIME_IMAGE"
+    "$NODE_BUILDER_IMAGE"
+    "$PYTHON_RUNTIME_IMAGE"
+    "$PYTHON_BUILDER_IMAGE"
+    "$JVM_RUNTIME_IMAGE"
+    "$JVM_BUILDER_IMAGE"
+    "$JVM_JERSEY_RUNTIME_IMAGE"
+    "$JVM_JERSEY_BUILDER_IMAGE"
+    "$GO_RUNTIME_IMAGE"
+    "$GO_BUILDER_IMAGE"
+    "$TS_RUNTIME_IMAGE"
+)
+
+for IMG in "${IMAGES[@]}"; do
+    if ! docker image inspect "$IMG" &>/dev/null; then
+        echo "Missing image: $IMG"
+    else
+        echo "Found image: $IMG"
+    fi
+done
 
 echo "Variables set"
 echo "FUNCTION_NAMESPACE: $FUNCTION_NAMESPACE"
