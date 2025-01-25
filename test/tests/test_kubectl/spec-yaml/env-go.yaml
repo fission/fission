@@ -7,12 +7,12 @@ metadata:
 spec:
   builder:
     command: build
-    image: fission/go-builder-1.12
+    image: ghcr.io/fission/go-builder-1.23
   imagepullsecret: ""
   keeparchive: false
   poolsize: 3
   resources: {}
   runtime:
-    image: fission/go-env-1.12
+    image: ghcr.io/fission/go-env-1.23
   terminationGracePeriod: 5
   version: 2

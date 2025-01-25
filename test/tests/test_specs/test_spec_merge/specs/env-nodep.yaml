@@ -11,7 +11,7 @@ spec:
   poolsize: 3
   resources: {}
   runtime:
-    image: fission/node-env
+    image: ghcr.io/fission/node-env
     container:
       name: nodep
       volumeMounts:
@@ -23,19 +23,19 @@ spec:
       # A container which will be merged with for pool manager
       containers:
       - name: nodep
-        image: fission/node-env
+        image: ghcr.io/fission/node-env
         volumeMounts:
           - name: funcvol
             mountPath: /etc/funcdata
             readOnly: true
       # A additional container in the pods
       - name: yanode
-        image: fission/node-env
+        image: ghcr.io/fission/node-env
         command: ['sh', '-c', 'sleep 36000000000']
       # Init container before function
       initContainers:
       - name: init-node
-        image: fission/node-env 
+        image: ghcr.io/fission/node-env 
         command: ['sh', '-c', 'cat /etc/infopod/labels']
         volumeMounts:
           - name: infopod

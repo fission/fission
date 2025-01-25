@@ -91,7 +91,7 @@ aggregation &mdash; also helps with ops on your Fission deployment.
 
 ```bash
   # Add the stock NodeJS env to your Fission deployment
-  $ fission env create --name nodejs --image fission/node-env
+  $ fission env create --name nodejs --image ghcr.io/fission/node-env
 
   # Create a function with a javascript one-liner that prints "hello world"
   $ fission function create --name hello --env nodejs --code https://raw.githubusercontent.com/fission/examples/master/nodejs/hello.js

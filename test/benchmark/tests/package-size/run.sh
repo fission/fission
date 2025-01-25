@@ -36,7 +36,7 @@ do
                 version=1
             fi
 
-            fission env create --name python --version ${version} --image fission/python-env --period 5 --mincpu 300 --maxcpu 300 --minmemory 256 --maxmemory 256
+            fission env create --name python --version ${version} --image ghcr.io/fission/python-env --period 5 --mincpu 300 --maxcpu 300 --minmemory 256 --maxmemory 256
 
             trap "fission env delete --name python" EXIT
 

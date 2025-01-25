@@ -28,6 +28,15 @@ mkdir -p func
 cp $ROOT/examples/nodejs/hello.js func/deploy.js
 cp $ROOT/examples/nodejs/hello.js func/source.js
 
+# Create package.json in func directory
+cat <<EOF > func/package.json
+{
+  "name": "hello",
+  "version": "1.0.0",
+  "description": "hello function"
+}
+EOF
+
 fission spec destroy || true
 
 log "Apply specs"
