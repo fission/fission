@@ -36,28 +36,6 @@ export TS_RUNTIME_IMAGE=${REPOSITORY}/tensorflow-serving-env
 export CONTROLLER_IP=127.0.0.1:8889
 export FISSION_NATS_STREAMING_URL=http://defaultFissionAuthToken@127.0.0.1:8890
 
-IMAGES=(
-    "$NODE_RUNTIME_IMAGE"
-    "$NODE_BUILDER_IMAGE"
-    "$PYTHON_RUNTIME_IMAGE"
-    "$PYTHON_BUILDER_IMAGE"
-    "$JVM_RUNTIME_IMAGE"
-    "$JVM_BUILDER_IMAGE"
-    "$JVM_JERSEY_RUNTIME_IMAGE"
-    "$JVM_JERSEY_BUILDER_IMAGE"
-    "$GO_RUNTIME_IMAGE"
-    "$GO_BUILDER_IMAGE"
-    "$TS_RUNTIME_IMAGE"
-)
-
-for IMG in "${IMAGES[@]}"; do
-    if ! docker image inspect "$IMG" &>/dev/null; then
-        echo "Missing image: $IMG"
-    else
-        echo "Found image: $IMG"
-    fi
-done
-
 echo "Variables set"
 echo "FUNCTION_NAMESPACE: $FUNCTION_NAMESPACE"
 echo "BUILDER_NAMESPACE: $BUILDER_NAMESPACE"
