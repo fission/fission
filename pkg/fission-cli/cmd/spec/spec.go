@@ -123,10 +123,6 @@ type (
 	}
 )
 
-func MapKey(m *metav1.ObjectMeta) string {
-	return fmt.Sprintf("%v:%v", m.Namespace, m.Name)
-}
-
 // save saves object encoded value to spec file under given spec directory
 func save(data []byte, specDir string, specFile string, truncate bool) error {
 	// verify
@@ -300,14 +296,14 @@ func (fr *FissionResources) validateFunctionReference(functions map[string]bool,
 			Namespace: namespace,
 			Name:      name,
 		}
-		if _, ok := functions[MapKey(m)]; !ok {
+		if _, ok := functions[util.MapKey(m)]; !ok {
 			return fmt.Errorf("%v: %v '%v' references unknown function '%v'",
 				fr.SourceMap.Locations[kind][meta.Namespace][meta.Name],
 				kind,
 				meta.Name,
 				name)
 		} else {
-			functions[MapKey(m)] = true
+			functions[util.MapKey(m)] = true
 		}
 	}
 	return nil
@@ -334,7 +330,7 @@ func (fr *FissionResources) Validate(input cli.Input, client cmd.Client) ([]stri
 	// index packages, check outgoing refs, mark archives that are referenced
 	packages := make(map[string]bool)
 	for _, p := range fr.Packages {
-		packages[MapKey(&p.ObjectMeta)] = false
+		packages[util.MapKey(&p.ObjectMeta)] = false
 
 		as := map[string]string{
 			"source":     p.Spec.Source.URL,
@@ -376,7 +372,7 @@ func (fr *FissionResources) Validate(input cli.Input, client cmd.Client) ([]stri
 	// index functions, check function package refs, mark referenced packages
 	functions := make(map[string]bool)
 	for _, f := range fr.Functions {
-		functions[MapKey(&f.ObjectMeta)] = false
+		functions[util.MapKey(&f.ObjectMeta)] = false
 
 		if f.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType != fv1.ExecutorTypeContainer {
 			pkgMeta := &metav1.ObjectMeta{
@@ -386,7 +382,7 @@ func (fr *FissionResources) Validate(input cli.Input, client cmd.Client) ([]stri
 
 			// check package ref from function
 			packageRefExists := func() bool {
-				_, ok := packages[MapKey(pkgMeta)]
+				_, ok := packages[util.MapKey(pkgMeta)]
 				return ok
 			}
 
@@ -410,7 +406,7 @@ func (fr *FissionResources) Validate(input cli.Input, client cmd.Client) ([]stri
 					pkgMeta.Namespace,
 					pkgMeta.Name))
 			} else {
-				packages[MapKey(pkgMeta)] = true
+				packages[util.MapKey(pkgMeta)] = true
 			}
 		}
 

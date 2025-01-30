@@ -472,7 +472,7 @@ func CheckHTTPTriggerDuplicates(ctx context.Context, client cmd.Client, t *fv1.H
 		return err
 	}
 	for _, ht := range triggers.Items {
-		if ht.ObjectMeta.UID == t.ObjectMeta.UID {
+		if MapKey(&ht.ObjectMeta) == MapKey(&t.ObjectMeta) {
 			// Same resource. No need to check.
 			continue
 		}
@@ -579,6 +579,10 @@ func FunctionPodLogs(ctx context.Context, fnName, ns string, client cmd.Client) 
 
 	}
 	return err
+}
+
+func MapKey(m *metav1.ObjectMeta) string {
+	return fmt.Sprintf("%v:%v", m.Namespace, m.Name)
 }
 
 func getContainerLog(ctx context.Context, kubernetesClient kubernetes.Interface, fn *fv1.Function, pod *v1.Pod) (err error) {
