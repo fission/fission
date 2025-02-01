@@ -39,6 +39,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"
+	k8sCache "k8s.io/client-go/tools/cache"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
@@ -472,7 +473,7 @@ func CheckHTTPTriggerDuplicates(ctx context.Context, client cmd.Client, t *fv1.H
 		return err
 	}
 	for _, ht := range triggers.Items {
-		if MapKey(&ht.ObjectMeta) == MapKey(&t.ObjectMeta) {
+		if k8sCache.MetaObjectToName(&ht.ObjectMeta).String() == k8sCache.MetaObjectToName(&t.ObjectMeta).String() {
 			// Same resource. No need to check.
 			continue
 		}
@@ -579,10 +580,6 @@ func FunctionPodLogs(ctx context.Context, fnName, ns string, client cmd.Client) 
 
 	}
 	return err
-}
-
-func MapKey(m *metav1.ObjectMeta) string {
-	return fmt.Sprintf("%v:%v", m.Namespace, m.Name)
 }
 
 func getContainerLog(ctx context.Context, kubernetesClient kubernetes.Interface, fn *fv1.Function, pod *v1.Pod) (err error) {
