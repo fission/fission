@@ -27,6 +27,7 @@ import (
 	"github.com/pkg/errors"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	k8sCache "k8s.io/client-go/tools/cache"
 	"sigs.k8s.io/yaml"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -122,10 +123,6 @@ type (
 		Locations map[string](map[string](map[string]Location))
 	}
 )
-
-func MapKey(m *metav1.ObjectMeta) string {
-	return fmt.Sprintf("%v:%v", m.Namespace, m.Name)
-}
 
 // save saves object encoded value to spec file under given spec directory
 func save(data []byte, specDir string, specFile string, truncate bool) error {
@@ -300,14 +297,14 @@ func (fr *FissionResources) validateFunctionReference(functions map[string]bool,
 			Namespace: namespace,
 			Name:      name,
 		}
-		if _, ok := functions[MapKey(m)]; !ok {
+		if _, ok := functions[k8sCache.MetaObjectToName(m).String()]; !ok {
 			return fmt.Errorf("%v: %v '%v' references unknown function '%v'",
 				fr.SourceMap.Locations[kind][meta.Namespace][meta.Name],
 				kind,
 				meta.Name,
 				name)
 		} else {
-			functions[MapKey(m)] = true
+			functions[k8sCache.MetaObjectToName(m).String()] = true
 		}
 	}
 	return nil
@@ -334,7 +331,7 @@ func (fr *FissionResources) Validate(input cli.Input, client cmd.Client) ([]stri
 	// index packages, check outgoing refs, mark archives that are referenced
 	packages := make(map[string]bool)
 	for _, p := range fr.Packages {
-		packages[MapKey(&p.ObjectMeta)] = false
+		packages[k8sCache.MetaObjectToName(&p.ObjectMeta).String()] = false
 
 		as := map[string]string{
 			"source":     p.Spec.Source.URL,
@@ -376,7 +373,7 @@ func (fr *FissionResources) Validate(input cli.Input, client cmd.Client) ([]stri
 	// index functions, check function package refs, mark referenced packages
 	functions := make(map[string]bool)
 	for _, f := range fr.Functions {
-		functions[MapKey(&f.ObjectMeta)] = false
+		functions[k8sCache.MetaObjectToName(&f.ObjectMeta).String()] = false
 
 		if f.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType != fv1.ExecutorTypeContainer {
 			pkgMeta := &metav1.ObjectMeta{
@@ -386,7 +383,7 @@ func (fr *FissionResources) Validate(input cli.Input, client cmd.Client) ([]stri
 
 			// check package ref from function
 			packageRefExists := func() bool {
-				_, ok := packages[MapKey(pkgMeta)]
+				_, ok := packages[k8sCache.MetaObjectToName(pkgMeta).String()]
 				return ok
 			}
 
@@ -410,7 +407,7 @@ func (fr *FissionResources) Validate(input cli.Input, client cmd.Client) ([]stri
 					pkgMeta.Namespace,
 					pkgMeta.Name))
 			} else {
-				packages[MapKey(pkgMeta)] = true
+				packages[k8sCache.MetaObjectToName(pkgMeta).String()] = true
 			}
 		}
 
@@ -434,8 +431,10 @@ func (fr *FissionResources) Validate(input cli.Input, client cmd.Client) ([]stri
 
 	// error on unreferenced packages
 	for key, referenced := range packages {
-		ks := strings.Split(key, ":")
-		namespace, name := ks[0], ks[1]
+		namespace, name, err := k8sCache.SplitMetaNamespaceKey(key)
+		if err != nil {
+			result = multierror.Append(result, fmt.Errorf("failed to check the reference for the package '%s'", key))
+		}
 		if !referenced {
 			warnings = append(warnings, fmt.Sprintf(
 				"%v: package '%v' is not used in any function",

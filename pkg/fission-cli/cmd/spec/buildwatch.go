@@ -23,10 +23,11 @@ import (
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	k8sCache "k8s.io/client-go/tools/cache"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
-	"github.com/fission/fission/pkg/fission-cli/cmd/package/util"
+	pkgUtil "github.com/fission/fission/pkg/fission-cli/cmd/package/util"
 )
 
 type (
@@ -77,7 +78,7 @@ func (w *packageBuildWatcher) watch(ctx context.Context) {
 		keepWaiting := false
 		buildpkgs := make([]fv1.Package, 0)
 		for _, pkg := range pkgs.Items {
-			_, ok := w.pkgMeta[mapKey(&pkg.ObjectMeta)]
+			_, ok := w.pkgMeta[k8sCache.MetaObjectToName(&pkg.ObjectMeta).String()]
 			if !ok {
 				continue
 			}
@@ -101,7 +102,7 @@ func (w *packageBuildWatcher) watch(ctx context.Context) {
 				pkg.Status.BuildStatus == fv1.BuildStatusSucceeded {
 				w.finished[k] = true
 				fmt.Printf("------\n")
-				util.PrintPackageSummary(os.Stdout, &pkg)
+				pkgUtil.PrintPackageSummary(os.Stdout, &pkg)
 				fmt.Printf("------\n")
 			}
 			if pkg.Status.BuildStatus == fv1.BuildStatusFailed {

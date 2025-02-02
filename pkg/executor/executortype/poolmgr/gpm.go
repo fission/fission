@@ -382,7 +382,7 @@ func (gpm *GenericPoolManager) AdoptExistingResources(ctx context.Context) {
 			}
 
 			// create environment map for later use
-			key := fmt.Sprintf("%s/%s", env.ObjectMeta.Namespace, env.ObjectMeta.Name)
+			key := k8sCache.MetaObjectToName(&env.ObjectMeta).String()
 			envMap[key] = env
 		}
 	}

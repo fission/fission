@@ -39,6 +39,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"
+	k8sCache "k8s.io/client-go/tools/cache"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
@@ -472,7 +473,7 @@ func CheckHTTPTriggerDuplicates(ctx context.Context, client cmd.Client, t *fv1.H
 		return err
 	}
 	for _, ht := range triggers.Items {
-		if ht.ObjectMeta.UID == t.ObjectMeta.UID {
+		if k8sCache.MetaObjectToName(&ht.ObjectMeta).String() == k8sCache.MetaObjectToName(&t.ObjectMeta).String() {
 			// Same resource. No need to check.
 			continue
 		}

@@ -29,6 +29,7 @@ import (
 	"github.com/go-git/go-git/v5"
 	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	k8sCache "k8s.io/client-go/tools/cache"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
@@ -449,10 +450,10 @@ func applyResources(input cli.Input, fclient cmd.Client, specDir string, fr *Fis
 		if f.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypeContainer {
 			continue
 		}
-		k := mapKey(&metav1.ObjectMeta{
+		k := k8sCache.MetaObjectToName(&metav1.ObjectMeta{
 			Namespace: f.Spec.Package.PackageRef.Namespace,
 			Name:      f.Spec.Package.PackageRef.Name,
-		})
+		}).String()
 		m, ok := pkgMeta[k]
 		if !ok {
 			// the function references a package that doesn't exist in the
@@ -599,10 +600,6 @@ func localArchiveFromSpec(ctx context.Context, specDir string, aus *spectypes.Ar
 	}
 }
 
-func mapKey(m *metav1.ObjectMeta) string {
-	return fmt.Sprintf("%v:%v", m.Namespace, m.Name)
-}
-
 func applyDeploymentConfig(m *metav1.ObjectMeta, fr *FissionResources) {
 	if m.Annotations == nil {
 		m.Annotations = make(map[string]string)
@@ -665,7 +662,7 @@ func applyPackages(ctx context.Context, fclient cmd.Client, fr *FissionResources
 	// index
 	existent := make(map[string]fv1.Package)
 	for _, obj := range objs {
-		existent[mapKey(&obj.ObjectMeta)] = obj
+		existent[k8sCache.MetaObjectToName(&obj.ObjectMeta).String()] = obj
 	}
 	metadataMap := make(map[string]metav1.ObjectMeta)
 
@@ -678,13 +675,13 @@ func applyPackages(ctx context.Context, fclient cmd.Client, fr *FissionResources
 	for _, o := range fr.Packages {
 		// apply deploymentConfig so we can find our objects on future apply invocations
 		applyDeploymentConfig(&o.ObjectMeta, fr)
-		console.Verbose(2, fmt.Sprintf("Package is here '%s','%s','%s','%s'", o.Namespace, o.Name, o.Spec.Environment.Namespace, o.Spec.Environment.Name))
+		console.Verbose(2, fmt.Sprintf("Package is here '%s','%s/%s'", k8sCache.MetaObjectToName(&o.ObjectMeta).String(), o.Spec.Environment.Namespace, o.Spec.Environment.Name))
 
 		// index desired state
-		desired[mapKey(&o.ObjectMeta)] = true
+		desired[k8sCache.MetaObjectToName(&o.ObjectMeta).String()] = true
 
 		// exists?
-		existingObj, ok := existent[mapKey(&o.ObjectMeta)]
+		existingObj, ok := existent[k8sCache.MetaObjectToName(&o.ObjectMeta).String()]
 		if ok {
 			// ok, a resource with the same name exists, is it the same?
 			keep := false
@@ -700,7 +697,7 @@ func applyPackages(ctx context.Context, fclient cmd.Client, fr *FissionResources
 
 			if keep && isObjectMetaEqual(existingObj.ObjectMeta, o.ObjectMeta) && existingObj.Status.BuildStatus == fv1.BuildStatusSucceeded {
 				// nothing to do on the server
-				metadataMap[mapKey(&o.ObjectMeta)] = existingObj.ObjectMeta
+				metadataMap[k8sCache.MetaObjectToName(&o.ObjectMeta).String()] = existingObj.ObjectMeta
 			} else {
 				// update
 				o.ObjectMeta.ResourceVersion = existingObj.ObjectMeta.ResourceVersion
@@ -726,7 +723,7 @@ func applyPackages(ctx context.Context, fclient cmd.Client, fr *FissionResources
 				}
 				ras.Updated = append(ras.Updated, &newmeta.ObjectMeta)
 				// keep track of metadata in case we need to create a reference to it
-				metadataMap[mapKey(&o.ObjectMeta)] = newmeta.ObjectMeta
+				metadataMap[k8sCache.MetaObjectToName(&o.ObjectMeta).String()] = newmeta.ObjectMeta
 			}
 		} else {
 
@@ -736,7 +733,7 @@ func applyPackages(ctx context.Context, fclient cmd.Client, fr *FissionResources
 				return nil, nil, err
 			}
 			ras.Created = append(ras.Created, &newmeta.ObjectMeta)
-			metadataMap[mapKey(&o.ObjectMeta)] = newmeta.ObjectMeta
+			metadataMap[k8sCache.MetaObjectToName(&o.ObjectMeta).String()] = newmeta.ObjectMeta
 		}
 	}
 
@@ -744,14 +741,14 @@ func applyPackages(ctx context.Context, fclient cmd.Client, fr *FissionResources
 	if delete {
 		// objs is already filtered with our UID
 		for _, o := range objs {
-			_, wanted := desired[mapKey(&o.ObjectMeta)]
+			_, wanted := desired[k8sCache.MetaObjectToName(&o.ObjectMeta).String()]
 			if !wanted {
 				err := fclient.FissionClientSet.CoreV1().Packages(o.ObjectMeta.Namespace).Delete(ctx, o.ObjectMeta.Name, metav1.DeleteOptions{})
 				if err != nil {
 					return nil, nil, err
 				}
 				ras.Deleted = append(ras.Deleted, &o.ObjectMeta)
-				fmt.Printf("Deleted %v %v/%v\n", o.TypeMeta.Kind, o.ObjectMeta.Namespace, o.ObjectMeta.Name)
+				fmt.Printf("Deleted %v %v\n", o.TypeMeta.Kind, k8sCache.MetaObjectToName(&o.ObjectMeta).String())
 			}
 		}
 	}
@@ -781,7 +778,7 @@ func applyFunctions(ctx context.Context, fclient cmd.Client, fr *FissionResource
 	// index
 	existent := make(map[string]fv1.Function)
 	for _, obj := range objs {
-		existent[mapKey(&obj.ObjectMeta)] = obj
+		existent[k8sCache.MetaObjectToName(&obj.ObjectMeta).String()] = obj
 	}
 	metadataMap := make(map[string]metav1.ObjectMeta)
 
@@ -796,15 +793,15 @@ func applyFunctions(ctx context.Context, fclient cmd.Client, fr *FissionResource
 		applyDeploymentConfig(&o.ObjectMeta, fr)
 
 		// index desired state
-		desired[mapKey(&o.ObjectMeta)] = true
+		desired[k8sCache.MetaObjectToName(&o.ObjectMeta).String()] = true
 
 		// exists?
-		existingObj, ok := existent[mapKey(&o.ObjectMeta)]
+		existingObj, ok := existent[k8sCache.MetaObjectToName(&o.ObjectMeta).String()]
 		if ok {
 			// ok, a resource with the same name exists, is it the same?
 			if isObjectMetaEqual(existingObj.ObjectMeta, o.ObjectMeta) && reflect.DeepEqual(existingObj.Spec, o.Spec) {
 				// nothing to do on the server
-				metadataMap[mapKey(&o.ObjectMeta)] = existingObj.ObjectMeta
+				metadataMap[k8sCache.MetaObjectToName(&o.ObjectMeta).String()] = existingObj.ObjectMeta
 			} else {
 				// update
 				o.ObjectMeta.ResourceVersion = existingObj.ObjectMeta.ResourceVersion
@@ -814,7 +811,7 @@ func applyFunctions(ctx context.Context, fclient cmd.Client, fr *FissionResource
 				}
 				ras.Updated = append(ras.Updated, &newmeta.ObjectMeta)
 				// keep track of metadata in case we need to create a reference to it
-				metadataMap[mapKey(&o.ObjectMeta)] = newmeta.ObjectMeta
+				metadataMap[k8sCache.MetaObjectToName(&o.ObjectMeta).String()] = newmeta.ObjectMeta
 			}
 		} else {
 			// create
@@ -823,7 +820,7 @@ func applyFunctions(ctx context.Context, fclient cmd.Client, fr *FissionResource
 				return nil, nil, err
 			}
 			ras.Created = append(ras.Created, &newmeta.ObjectMeta)
-			metadataMap[mapKey(&o.ObjectMeta)] = newmeta.ObjectMeta
+			metadataMap[k8sCache.MetaObjectToName(&o.ObjectMeta).String()] = newmeta.ObjectMeta
 		}
 	}
 
@@ -831,14 +828,14 @@ func applyFunctions(ctx context.Context, fclient cmd.Client, fr *FissionResource
 	if delete {
 		// objs is already filtered with our UID
 		for _, o := range objs {
-			_, wanted := desired[mapKey(&o.ObjectMeta)]
+			_, wanted := desired[k8sCache.MetaObjectToName(&o.ObjectMeta).String()]
 			if !wanted {
 				err := fclient.FissionClientSet.CoreV1().Functions(o.ObjectMeta.Namespace).Delete(ctx, o.ObjectMeta.Name, metav1.DeleteOptions{})
 				if err != nil {
 					return nil, nil, err
 				}
 				ras.Deleted = append(ras.Deleted, &o.ObjectMeta)
-				fmt.Printf("Deleted %v %v/%v\n", o.TypeMeta.Kind, o.ObjectMeta.Namespace, o.ObjectMeta.Name)
+				fmt.Printf("Deleted %v %v\n", o.TypeMeta.Kind, k8sCache.MetaObjectToName(&o.ObjectMeta).String())
 			}
 		}
 	}
@@ -868,7 +865,7 @@ func applyEnvironments(ctx context.Context, fclient cmd.Client, fr *FissionResou
 	// index
 	existent := make(map[string]fv1.Environment)
 	for _, obj := range objs {
-		existent[mapKey(&obj.ObjectMeta)] = obj
+		existent[k8sCache.MetaObjectToName(&obj.ObjectMeta).String()] = obj
 	}
 	metadataMap := make(map[string]metav1.ObjectMeta)
 
@@ -883,15 +880,15 @@ func applyEnvironments(ctx context.Context, fclient cmd.Client, fr *FissionResou
 		applyDeploymentConfig(&o.ObjectMeta, fr)
 
 		// index desired state
-		desired[mapKey(&o.ObjectMeta)] = true
+		desired[k8sCache.MetaObjectToName(&o.ObjectMeta).String()] = true
 
 		// exists?
-		existingObj, ok := existent[mapKey(&o.ObjectMeta)]
+		existingObj, ok := existent[k8sCache.MetaObjectToName(&o.ObjectMeta).String()]
 		if ok {
 			// ok, a resource with the same name exists, is it the same?
 			if isObjectMetaEqual(existingObj.ObjectMeta, o.ObjectMeta) && reflect.DeepEqual(existingObj.Spec, o.Spec) {
 				// nothing to do on the server
-				metadataMap[mapKey(&o.ObjectMeta)] = existingObj.ObjectMeta
+				metadataMap[k8sCache.MetaObjectToName(&o.ObjectMeta).String()] = existingObj.ObjectMeta
 			} else {
 				// update
 				o.ObjectMeta.ResourceVersion = existingObj.ObjectMeta.ResourceVersion
@@ -901,7 +898,7 @@ func applyEnvironments(ctx context.Context, fclient cmd.Client, fr *FissionResou
 				}
 				ras.Updated = append(ras.Updated, &newmeta.ObjectMeta)
 				// keep track of metadata in case we need to create a reference to it
-				metadataMap[mapKey(&o.ObjectMeta)] = newmeta.ObjectMeta
+				metadataMap[k8sCache.MetaObjectToName(&o.ObjectMeta).String()] = newmeta.ObjectMeta
 			}
 		} else {
 			// create
@@ -910,7 +907,7 @@ func applyEnvironments(ctx context.Context, fclient cmd.Client, fr *FissionResou
 				return nil, nil, err
 			}
 			ras.Created = append(ras.Created, &newmeta.ObjectMeta)
-			metadataMap[mapKey(&o.ObjectMeta)] = newmeta.ObjectMeta
+			metadataMap[k8sCache.MetaObjectToName(&o.ObjectMeta).String()] = newmeta.ObjectMeta
 		}
 	}
 
@@ -918,14 +915,14 @@ func applyEnvironments(ctx context.Context, fclient cmd.Client, fr *FissionResou
 	if delete {
 		// objs is already filtered with our UID
 		for _, o := range objs {
-			_, wanted := desired[mapKey(&o.ObjectMeta)]
+			_, wanted := desired[k8sCache.MetaObjectToName(&o.ObjectMeta).String()]
 			if !wanted {
 				err := fclient.FissionClientSet.CoreV1().Environments(o.ObjectMeta.Namespace).Delete(ctx, o.ObjectMeta.Name, metav1.DeleteOptions{})
 				if err != nil {
 					return nil, nil, err
 				}
 				ras.Deleted = append(ras.Deleted, &o.ObjectMeta)
-				fmt.Printf("Deleted %v %v/%v\n", o.TypeMeta.Kind, o.ObjectMeta.Namespace, o.ObjectMeta.Name)
+				fmt.Printf("Deleted %v %v\n", o.TypeMeta.Kind, k8sCache.MetaObjectToName(&o.ObjectMeta).String())
 			}
 		}
 	}
@@ -955,7 +952,7 @@ func applyHTTPTriggers(ctx context.Context, fclient cmd.Client, fr *FissionResou
 	// index
 	existent := make(map[string]fv1.HTTPTrigger)
 	for _, obj := range objs {
-		existent[mapKey(&obj.ObjectMeta)] = obj
+		existent[k8sCache.MetaObjectToName(&obj.ObjectMeta).String()] = obj
 	}
 	metadataMap := make(map[string]metav1.ObjectMeta)
 
@@ -970,15 +967,15 @@ func applyHTTPTriggers(ctx context.Context, fclient cmd.Client, fr *FissionResou
 		applyDeploymentConfig(&o.ObjectMeta, fr)
 
 		// index desired state
-		desired[mapKey(&o.ObjectMeta)] = true
+		desired[k8sCache.MetaObjectToName(&o.ObjectMeta).String()] = true
 
 		// exists?
-		existingObj, ok := existent[mapKey(&o.ObjectMeta)]
+		existingObj, ok := existent[k8sCache.MetaObjectToName(&o.ObjectMeta).String()]
 		if ok {
 			// ok, a resource with the same name exists, is it the same?
 			if isObjectMetaEqual(existingObj.ObjectMeta, o.ObjectMeta) && reflect.DeepEqual(existingObj.Spec, o.Spec) {
 				// nothing to do on the server
-				metadataMap[mapKey(&o.ObjectMeta)] = existingObj.ObjectMeta
+				metadataMap[k8sCache.MetaObjectToName(&o.ObjectMeta).String()] = existingObj.ObjectMeta
 			} else {
 
 				err := util.CheckHTTPTriggerDuplicates(ctx, fclient, &o)
@@ -993,7 +990,7 @@ func applyHTTPTriggers(ctx context.Context, fclient cmd.Client, fr *FissionResou
 				}
 				ras.Updated = append(ras.Updated, &newmeta.ObjectMeta)
 				// keep track of metadata in case we need to create a reference to it
-				metadataMap[mapKey(&o.ObjectMeta)] = newmeta.ObjectMeta
+				metadataMap[k8sCache.MetaObjectToName(&o.ObjectMeta).String()] = newmeta.ObjectMeta
 			}
 		} else {
 
@@ -1007,7 +1004,7 @@ func applyHTTPTriggers(ctx context.Context, fclient cmd.Client, fr *FissionResou
 				return nil, nil, err
 			}
 			ras.Created = append(ras.Created, &newmeta.ObjectMeta)
-			metadataMap[mapKey(&o.ObjectMeta)] = newmeta.ObjectMeta
+			metadataMap[k8sCache.MetaObjectToName(&o.ObjectMeta).String()] = newmeta.ObjectMeta
 		}
 	}
 
@@ -1015,14 +1012,14 @@ func applyHTTPTriggers(ctx context.Context, fclient cmd.Client, fr *FissionResou
 	if delete {
 		// objs is already filtered with our UID
 		for _, o := range objs {
-			_, wanted := desired[mapKey(&o.ObjectMeta)]
+			_, wanted := desired[k8sCache.MetaObjectToName(&o.ObjectMeta).String()]
 			if !wanted {
 				err := fclient.FissionClientSet.CoreV1().HTTPTriggers(o.ObjectMeta.Namespace).Delete(ctx, o.ObjectMeta.Name, metav1.DeleteOptions{})
 				if err != nil {
 					return nil, nil, err
 				}
 				ras.Deleted = append(ras.Deleted, &o.ObjectMeta)
-				fmt.Printf("Deleted %v %v/%v\n", o.TypeMeta.Kind, o.ObjectMeta.Namespace, o.ObjectMeta.Name)
+				fmt.Printf("Deleted %v %v\n", o.TypeMeta.Kind, k8sCache.MetaObjectToName(&o.ObjectMeta).String())
 			}
 		}
 	}
@@ -1052,7 +1049,7 @@ func applyKubernetesWatchTriggers(ctx context.Context, fclient cmd.Client, fr *F
 	// index
 	existent := make(map[string]fv1.KubernetesWatchTrigger)
 	for _, obj := range objs {
-		existent[mapKey(&obj.ObjectMeta)] = obj
+		existent[k8sCache.MetaObjectToName(&obj.ObjectMeta).String()] = obj
 	}
 	metadataMap := make(map[string]metav1.ObjectMeta)
 
@@ -1067,15 +1064,15 @@ func applyKubernetesWatchTriggers(ctx context.Context, fclient cmd.Client, fr *F
 		applyDeploymentConfig(&o.ObjectMeta, fr)
 
 		// index desired state
-		desired[mapKey(&o.ObjectMeta)] = true
+		desired[k8sCache.MetaObjectToName(&o.ObjectMeta).String()] = true
 
 		// exists?
-		existingObj, ok := existent[mapKey(&o.ObjectMeta)]
+		existingObj, ok := existent[k8sCache.MetaObjectToName(&o.ObjectMeta).String()]
 		if ok {
 			// ok, a resource with the same name exists, is it the same?
 			if isObjectMetaEqual(existingObj.ObjectMeta, o.ObjectMeta) && reflect.DeepEqual(existingObj.Spec, o.Spec) {
 				// nothing to do on the server
-				metadataMap[mapKey(&o.ObjectMeta)] = existingObj.ObjectMeta
+				metadataMap[k8sCache.MetaObjectToName(&o.ObjectMeta).String()] = existingObj.ObjectMeta
 			} else {
 				// update
 				o.ObjectMeta.ResourceVersion = existingObj.ObjectMeta.ResourceVersion
@@ -1085,7 +1082,7 @@ func applyKubernetesWatchTriggers(ctx context.Context, fclient cmd.Client, fr *F
 				}
 				ras.Updated = append(ras.Updated, &newmeta.ObjectMeta)
 				// keep track of metadata in case we need to create a reference to it
-				metadataMap[mapKey(&o.ObjectMeta)] = newmeta.ObjectMeta
+				metadataMap[k8sCache.MetaObjectToName(&o.ObjectMeta).String()] = newmeta.ObjectMeta
 			}
 		} else {
 			// create
@@ -1094,7 +1091,7 @@ func applyKubernetesWatchTriggers(ctx context.Context, fclient cmd.Client, fr *F
 				return nil, nil, err
 			}
 			ras.Created = append(ras.Created, &newmeta.ObjectMeta)
-			metadataMap[mapKey(&o.ObjectMeta)] = newmeta.ObjectMeta
+			metadataMap[k8sCache.MetaObjectToName(&o.ObjectMeta).String()] = newmeta.ObjectMeta
 		}
 	}
 
@@ -1102,14 +1099,14 @@ func applyKubernetesWatchTriggers(ctx context.Context, fclient cmd.Client, fr *F
 	if delete {
 		// objs is already filtered with our UID
 		for _, o := range objs {
-			_, wanted := desired[mapKey(&o.ObjectMeta)]
+			_, wanted := desired[k8sCache.MetaObjectToName(&o.ObjectMeta).String()]
 			if !wanted {
 				err := fclient.FissionClientSet.CoreV1().KubernetesWatchTriggers(o.ObjectMeta.Namespace).Delete(ctx, o.ObjectMeta.Name, metav1.DeleteOptions{})
 				if err != nil {
 					return nil, nil, err
 				}
 				ras.Deleted = append(ras.Deleted, &o.ObjectMeta)
-				fmt.Printf("Deleted %v %v/%v\n", o.TypeMeta.Kind, o.ObjectMeta.Namespace, o.ObjectMeta.Name)
+				fmt.Printf("Deleted %v %v\n", o.TypeMeta.Kind, k8sCache.MetaObjectToName(&o.ObjectMeta).String())
 			}
 		}
 	}
@@ -1139,7 +1136,7 @@ func applyTimeTriggers(ctx context.Context, fclient cmd.Client, fr *FissionResou
 	// index
 	existent := make(map[string]fv1.TimeTrigger)
 	for _, obj := range objs {
-		existent[mapKey(&obj.ObjectMeta)] = obj
+		existent[k8sCache.MetaObjectToName(&obj.ObjectMeta).String()] = obj
 	}
 	metadataMap := make(map[string]metav1.ObjectMeta)
 
@@ -1154,15 +1151,15 @@ func applyTimeTriggers(ctx context.Context, fclient cmd.Client, fr *FissionResou
 		applyDeploymentConfig(&o.ObjectMeta, fr)
 
 		// index desired state
-		desired[mapKey(&o.ObjectMeta)] = true
+		desired[k8sCache.MetaObjectToName(&o.ObjectMeta).String()] = true
 
 		// exists?
-		existingObj, ok := existent[mapKey(&o.ObjectMeta)]
+		existingObj, ok := existent[k8sCache.MetaObjectToName(&o.ObjectMeta).String()]
 		if ok {
 			// ok, a resource with the same name exists, is it the same?
 			if isObjectMetaEqual(existingObj.ObjectMeta, o.ObjectMeta) && reflect.DeepEqual(existingObj.Spec, o.Spec) {
 				// nothing to do on the server
-				metadataMap[mapKey(&o.ObjectMeta)] = existingObj.ObjectMeta
+				metadataMap[k8sCache.MetaObjectToName(&o.ObjectMeta).String()] = existingObj.ObjectMeta
 			} else {
 				// update
 				o.ObjectMeta.ResourceVersion = existingObj.ObjectMeta.ResourceVersion
@@ -1172,7 +1169,7 @@ func applyTimeTriggers(ctx context.Context, fclient cmd.Client, fr *FissionResou
 				}
 				ras.Updated = append(ras.Updated, &newmeta.ObjectMeta)
 				// keep track of metadata in case we need to create a reference to it
-				metadataMap[mapKey(&o.ObjectMeta)] = newmeta.ObjectMeta
+				metadataMap[k8sCache.MetaObjectToName(&o.ObjectMeta).String()] = newmeta.ObjectMeta
 			}
 		} else {
 			// create
@@ -1181,7 +1178,7 @@ func applyTimeTriggers(ctx context.Context, fclient cmd.Client, fr *FissionResou
 				return nil, nil, err
 			}
 			ras.Created = append(ras.Created, &newmeta.ObjectMeta)
-			metadataMap[mapKey(&o.ObjectMeta)] = newmeta.ObjectMeta
+			metadataMap[k8sCache.MetaObjectToName(&o.ObjectMeta).String()] = newmeta.ObjectMeta
 		}
 	}
 
@@ -1189,14 +1186,14 @@ func applyTimeTriggers(ctx context.Context, fclient cmd.Client, fr *FissionResou
 	if delete {
 		// objs is already filtered with our UID
 		for _, o := range objs {
-			_, wanted := desired[mapKey(&o.ObjectMeta)]
+			_, wanted := desired[k8sCache.MetaObjectToName(&o.ObjectMeta).String()]
 			if !wanted {
 				err := fclient.FissionClientSet.CoreV1().TimeTriggers(o.ObjectMeta.Namespace).Delete(ctx, o.ObjectMeta.Name, metav1.DeleteOptions{})
 				if err != nil {
 					return nil, nil, err
 				}
 				ras.Deleted = append(ras.Deleted, &o.ObjectMeta)
-				fmt.Printf("Deleted %v %v/%v\n", o.TypeMeta.Kind, o.ObjectMeta.Namespace, o.ObjectMeta.Name)
+				fmt.Printf("Deleted %v %v\n", o.TypeMeta.Kind, k8sCache.MetaObjectToName(&o.ObjectMeta).String())
 			}
 		}
 	}
@@ -1226,7 +1223,7 @@ func applyMessageQueueTriggers(ctx context.Context, fclient cmd.Client, fr *Fiss
 	// index
 	existent := make(map[string]fv1.MessageQueueTrigger)
 	for _, obj := range objs {
-		existent[mapKey(&obj.ObjectMeta)] = obj
+		existent[k8sCache.MetaObjectToName(&obj.ObjectMeta).String()] = obj
 	}
 	metadataMap := make(map[string]metav1.ObjectMeta)
 
@@ -1241,15 +1238,15 @@ func applyMessageQueueTriggers(ctx context.Context, fclient cmd.Client, fr *Fiss
 		applyDeploymentConfig(&o.ObjectMeta, fr)
 
 		// index desired state
-		desired[mapKey(&o.ObjectMeta)] = true
+		desired[k8sCache.MetaObjectToName(&o.ObjectMeta).String()] = true
 
 		// exists?
-		existingObj, ok := existent[mapKey(&o.ObjectMeta)]
+		existingObj, ok := existent[k8sCache.MetaObjectToName(&o.ObjectMeta).String()]
 		if ok {
 			// ok, a resource with the same name exists, is it the same?
 			if isObjectMetaEqual(existingObj.ObjectMeta, o.ObjectMeta) && reflect.DeepEqual(existingObj.Spec, o.Spec) {
 				// nothing to do on the server
-				metadataMap[mapKey(&o.ObjectMeta)] = existingObj.ObjectMeta
+				metadataMap[k8sCache.MetaObjectToName(&o.ObjectMeta).String()] = existingObj.ObjectMeta
 			} else {
 				// update
 				o.ObjectMeta.ResourceVersion = existingObj.ObjectMeta.ResourceVersion
@@ -1259,7 +1256,7 @@ func applyMessageQueueTriggers(ctx context.Context, fclient cmd.Client, fr *Fiss
 				}
 				ras.Updated = append(ras.Updated, &newmeta.ObjectMeta)
 				// keep track of metadata in case we need to create a reference to it
-				metadataMap[mapKey(&o.ObjectMeta)] = newmeta.ObjectMeta
+				metadataMap[k8sCache.MetaObjectToName(&o.ObjectMeta).String()] = newmeta.ObjectMeta
 			}
 		} else {
 			// create
@@ -1268,7 +1265,7 @@ func applyMessageQueueTriggers(ctx context.Context, fclient cmd.Client, fr *Fiss
 				return nil, nil, err
 			}
 			ras.Created = append(ras.Created, &newmeta.ObjectMeta)
-			metadataMap[mapKey(&o.ObjectMeta)] = newmeta.ObjectMeta
+			metadataMap[k8sCache.MetaObjectToName(&o.ObjectMeta).String()] = newmeta.ObjectMeta
 		}
 	}
 
@@ -1276,14 +1273,14 @@ func applyMessageQueueTriggers(ctx context.Context, fclient cmd.Client, fr *Fiss
 	if delete {
 		// objs is already filtered with our UID
 		for _, o := range objs {
-			_, wanted := desired[mapKey(&o.ObjectMeta)]
+			_, wanted := desired[k8sCache.MetaObjectToName(&o.ObjectMeta).String()]
 			if !wanted {
 				err := fclient.FissionClientSet.CoreV1().MessageQueueTriggers(o.ObjectMeta.Namespace).Delete(ctx, o.ObjectMeta.Name, metav1.DeleteOptions{})
 				if err != nil {
 					return nil, nil, err
 				}
 				ras.Deleted = append(ras.Deleted, &o.ObjectMeta)
-				fmt.Printf("Deleted %v %v/%v\n", o.TypeMeta.Kind, o.ObjectMeta.Namespace, o.ObjectMeta.Name)
+				fmt.Printf("Deleted %v %v\n", o.TypeMeta.Kind, k8sCache.MetaObjectToName(&o.ObjectMeta).String())
 			}
 		}
 	}

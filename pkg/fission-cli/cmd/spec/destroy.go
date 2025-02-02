@@ -23,6 +23,7 @@ import (
 
 	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	k8sCache "k8s.io/client-go/tools/cache"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
@@ -229,7 +230,7 @@ func destroyHTTPTriggers(ctx context.Context, fclient cmd.Client, fr *FissionRes
 		} else if err != nil {
 			return err
 		}
-		fmt.Printf("Deleted %s %s/%s\n", o.TypeMeta.Kind, o.ObjectMeta.Namespace, o.ObjectMeta.Name)
+		fmt.Printf("Deleted %s %s\n", o.TypeMeta.Kind, k8sCache.MetaObjectToName(&o.ObjectMeta).String())
 	}
 	return nil
 }
@@ -246,7 +247,7 @@ func destroyKubernetesWatchTriggers(ctx context.Context, fclient cmd.Client, fr 
 		} else if err != nil {
 			return err
 		}
-		fmt.Printf("Deleted %s %s/%s\n", o.TypeMeta.Kind, o.ObjectMeta.Namespace, o.ObjectMeta.Name)
+		fmt.Printf("Deleted %s %s\n", o.TypeMeta.Kind, k8sCache.MetaObjectToName(&o.ObjectMeta).String())
 	}
 
 	return nil
@@ -264,7 +265,7 @@ func destroyTimeTriggers(ctx context.Context, fclient cmd.Client, fr *FissionRes
 		} else if err != nil {
 			return err
 		}
-		fmt.Printf("Deleted %s %s/%s\n", o.TypeMeta.Kind, o.ObjectMeta.Namespace, o.ObjectMeta.Name)
+		fmt.Printf("Deleted %s %s\n", o.TypeMeta.Kind, k8sCache.MetaObjectToName(&o.ObjectMeta).String())
 	}
 
 	return nil
@@ -282,7 +283,7 @@ func destroyMessageQueueTriggers(ctx context.Context, fclient cmd.Client, fr *Fi
 		} else if err != nil {
 			return err
 		}
-		fmt.Printf("Deleted %s %s/%s\n", o.TypeMeta.Kind, o.ObjectMeta.Namespace, o.ObjectMeta.Name)
+		fmt.Printf("Deleted %s %s\n", o.TypeMeta.Kind, k8sCache.MetaObjectToName(&o.ObjectMeta).String())
 	}
 
 	return nil
@@ -300,7 +301,7 @@ func destroyFunctions(ctx context.Context, fclient cmd.Client, fr *FissionResour
 		} else if err != nil {
 			return err
 		}
-		fmt.Printf("Deleted %s %s/%s\n", o.TypeMeta.Kind, o.ObjectMeta.Namespace, o.ObjectMeta.Name)
+		fmt.Printf("Deleted %s %s\n", o.TypeMeta.Kind, k8sCache.MetaObjectToName(&o.ObjectMeta).String())
 	}
 
 	return nil
@@ -318,7 +319,7 @@ func destroyPackages(ctx context.Context, fclient cmd.Client, fr *FissionResourc
 		} else if err != nil {
 			return err
 		}
-		fmt.Printf("Deleted %s %s/%s\n", o.TypeMeta.Kind, o.ObjectMeta.Namespace, o.ObjectMeta.Name)
+		fmt.Printf("Deleted %s %s\n", o.TypeMeta.Kind, k8sCache.MetaObjectToName(&o.ObjectMeta).String())
 	}
 
 	return nil
@@ -336,7 +337,7 @@ func destroyEnvironments(ctx context.Context, fclient cmd.Client, fr *FissionRes
 		} else if err != nil {
 			return err
 		}
-		fmt.Printf("Deleted %s %s/%s\n", o.TypeMeta.Kind, o.ObjectMeta.Namespace, o.ObjectMeta.Name)
+		fmt.Printf("Deleted %s %s\n", o.TypeMeta.Kind, k8sCache.MetaObjectToName(&o.ObjectMeta).String())
 	}
 
 	return nil
