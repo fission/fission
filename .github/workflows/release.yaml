@@ -35,7 +35,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup go
-        uses: actions/setup-go@3041bf56c941b39c61721a86cd11f3bb1338122a # v5.2.0
+        uses: actions/setup-go@f111f3307d8850f501ac008e886eec1fd1932a34 # v5.3.0
         with:
           go-version-file: "go.mod"
           cache: true
@@ -76,7 +76,7 @@ jobs:
       - name: Check cosign install!
         run: cosign version
 
-      - uses: anchore/sbom-action/download-syft@df80a981bc6edbc4e220a492d3cbe9f5547a6e75 #v0.17.9
+      - uses: anchore/sbom-action/download-syft@f325610c9f50a54015d37c8d16cb3b0e2c8f4de0 #v0.18.0
 
       - name: Generate yaml for manifest, Minikube and Openshift installation
         run: ${GITHUB_WORKSPACE}/hack/build-yaml.sh $VERSION
