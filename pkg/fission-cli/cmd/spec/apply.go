@@ -177,16 +177,16 @@ func (opts *ApplySubCommand) run(input cli.Input) error {
 			return errors.Wrap(err, "error reading specs")
 		}
 
-		err = opts.insertNamespace(input, fr)
-		if err != nil {
-			return errors.Wrap(err, "error reading specs")
-		}
-
 		if validateSpecs {
 			err = validateForApply(input, fr)
 			if err != nil {
 				return errors.Wrap(err, "abort applying resources")
 			}
+		}
+
+		err = opts.insertNamespace(input, fr)
+		if err != nil {
+			return errors.Wrap(err, "error inserting namespace")
 		}
 
 		err = warnIfDirtyWorkTree(filepath.Clean(specDir + "/.."))
