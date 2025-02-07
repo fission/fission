@@ -380,5 +380,5 @@ rules:
   - watch
 {{- end }}
 {{- define "timer-kuberules" }}
-- rules: []
-  {{- end }}
+rules: []
+{{- end }}
