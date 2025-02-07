@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 
 	"go.uber.org/zap"
 	cnwebhook "sigs.k8s.io/controller-runtime/pkg/webhook"
@@ -123,10 +124,17 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr manager.Inte
 	}
 	os.Setenv("FISSION_ROUTER_URL", routerURL)
 
-	err = timer.Start(ctx, f.ClientGen(), f.Logger(), mgr, routerURL)
+	timerMetricPort, err := utils.FindFreePort()
 	if err != nil {
-		return fmt.Errorf("error starting timer: %w", err)
+		return fmt.Errorf("error finding unused port: %w", err)
 	}
+
+	mgr.Add(ctx, func(ctx context.Context) {
+		err = timer.Start(ctx, f.ClientGen(), routerURL, fmt.Sprintf(":%s", strconv.Itoa(timerMetricPort)))
+		if err != nil {
+			f.Logger().Fatal("error starting timer", zap.Error(err))
+		}
+	})
 	f.AddServiceInfo("timer", framework.ServiceInfo{})
 
 	err = mqtrigger.StartScalerManager(ctx, f.ClientGen(), f.Logger(), mgr, routerURL)

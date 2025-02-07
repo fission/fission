@@ -19,30 +19,76 @@ package timer
 import (
 	"context"
 
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/publisher"
-	"github.com/fission/fission/pkg/utils/manager"
+	"github.com/fission/fission/pkg/utils/loggerfactory"
+	"github.com/go-logr/zapr"
 )
 
-func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Interface, routerUrl string) error {
-	fissionClient, err := clientGen.GetFissionClient()
+var (
+	scheme = runtime.NewScheme()
+)
+
+func init() {
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	utilruntime.Must(fv1.AddToScheme(scheme))
+}
+
+func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, routerUrl string, metricsAddr string) error {
+	logger := loggerfactory.GetLogger()
+
+	zaprLogger := zapr.NewLogger(logger)
+	log.SetLogger(zaprLogger)
+
+	logger.Info("setting up manager")
+	config, err := clientGen.GetRestConfig()
 	if err != nil {
-		return errors.Wrap(err, "failed to get fission client")
+		logger.Error("failed getting config", zap.Error(err))
 	}
 
-	err = crd.WaitForFunctionCRDs(ctx, logger, fissionClient)
-	if err != nil {
-		return errors.Wrap(err, "error waiting for CRDs")
+	mgrMetrics := metricsserver.Options{
+		BindAddress: metricsAddr,
 	}
 
-	poster := publisher.MakeWebhookPublisher(logger, routerUrl)
-	timerSync, err := MakeTimerSync(ctx, logger, fissionClient, MakeTimer(logger, poster))
+	mgr, err := ctrl.NewManager(config, manager.Options{
+		Scheme:           scheme,
+		Cache:            getCacheOptions(),
+		LeaderElectionID: "timer",
+		Metrics:          mgrMetrics,
+	})
 	if err != nil {
-		return errors.Wrap(err, "error making timer sync")
+		logger.Error("unable to set up overall controller manager", zap.Error(err))
+		return err
 	}
-	timerSync.Run(ctx, mgr)
+
+	publisher := publisher.MakeWebhookPublisher(logger, routerUrl)
+
+	logger.Info("Setting up controller")
+	if err = (&reconcileTimer{
+		client:    mgr.GetClient(),
+		scheme:    mgr.GetScheme(),
+		publisher: publisher,
+		triggers:  make(map[types.UID]*timerTriggerWithCron),
+	}).SetupWithManager(mgr); err != nil {
+		logger.Error("unable to create controller", zap.String("controller", "timetrigger"), zap.Error(err))
+		return err
+	}
+
+	logger.Info("starting manager")
+	if err = mgr.Start(ctx); err != nil {
+		logger.Error("problem running manager", zap.Error(err))
+		return err
+	}
 	return nil
 }
