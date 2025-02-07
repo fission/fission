@@ -71,8 +71,8 @@ func runKubeWatcher(ctx context.Context, clientGen crd.ClientGeneratorInterface,
 	return kubewatcher.Start(ctx, clientGen, logger, mgr, routerUrl)
 }
 
-func runTimer(ctx context.Context, clientGen crd.ClientGeneratorInterface, routerUrl string, enableLeaderElection bool) error {
-	return timer.Start(ctx, clientGen, routerUrl, enableLeaderElection, "")
+func runTimer(ctx context.Context, clientGen crd.ClientGeneratorInterface, routerUrl string) error {
+	return timer.Start(ctx, clientGen, routerUrl, "")
 }
 
 func runMessageQueueMgr(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Interface, routerUrl string) error {
@@ -183,7 +183,7 @@ Usage:
   fission-bundle --kubewatcher [--routerUrl=<url>]
   fission-bundle --storageServicePort=<port> --storageType=<storateType>
   fission-bundle --builderMgr [--storageSvcUrl=<url>] [--envbuilder-namespace=<namespace>]
-  fission-bundle --timer [--routerUrl=<url>] [--leaderElection]
+  fission-bundle --timer [--routerUrl=<url>]
   fission-bundle --mqt   [--routerUrl=<url>]
   fission-bundle --mqt_keda [--routerUrl=<url>]
   fission-bundle --webhookPort=<port>
@@ -206,7 +206,6 @@ Options:
   --mqt                           Start message queue trigger.
   --mqt_keda					  Start message queue trigger of kind KEDA
   --builderMgr                    Start builder manager.
-  --leaderElection                Run leader elecion.
   --version                       Print version information
 `
 	logger := loggerfactory.GetLogger()
@@ -278,8 +277,7 @@ Options:
 	}
 
 	if arguments["--timer"] == true {
-		enableLeaderElection := arguments["--leaderElection"].(bool)
-		err = runTimer(ctx, clientGen, routerUrl, enableLeaderElection)
+		err = runTimer(ctx, clientGen, routerUrl)
 		if err != nil {
 			logger.Error("timer exited", zap.Error(err))
 			return

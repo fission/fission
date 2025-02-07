@@ -484,11 +484,6 @@ timer:
     runAsUser: 10001
     runAsGroup: 10001
 
-  ## Enables leader election for timer controller for high availability.
-  leaderElection:
-    enabled: true
-    replicas: 2
-
 ## Kafka: enable and configure the details
 ##
 kafka:

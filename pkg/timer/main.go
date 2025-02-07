@@ -45,7 +45,7 @@ func init() {
 	utilruntime.Must(fv1.AddToScheme(scheme))
 }
 
-func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, routerUrl string, enableLeaderElection bool, metricsAddr string) error {
+func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, routerUrl string, metricsAddr string) error {
 	logger := loggerfactory.GetLogger()
 
 	zaprLogger := zapr.NewLogger(logger)
@@ -64,7 +64,6 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, routerUr
 	mgr, err := ctrl.NewManager(config, manager.Options{
 		Scheme:           scheme,
 		Cache:            getCacheOptions(),
-		LeaderElection:   enableLeaderElection,
 		LeaderElectionID: "timer",
 		Metrics:          mgrMetrics,
 	})

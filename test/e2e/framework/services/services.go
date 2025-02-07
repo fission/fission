@@ -130,7 +130,7 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr manager.Inte
 	}
 
 	mgr.Add(ctx, func(ctx context.Context) {
-		err = timer.Start(ctx, f.ClientGen(), routerURL, false, fmt.Sprintf(":%s", strconv.Itoa(timerMetricPort)))
+		err = timer.Start(ctx, f.ClientGen(), routerURL, fmt.Sprintf(":%s", strconv.Itoa(timerMetricPort)))
 		if err != nil {
 			f.Logger().Fatal("error starting timer", zap.Error(err))
 		}

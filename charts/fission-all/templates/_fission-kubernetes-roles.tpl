@@ -380,24 +380,5 @@ rules:
   - watch
 {{- end }}
 {{- define "timer-kuberules" }}
-rules:
-- apiGroups:
-  - ""
-  resources:
-  - events
-  verbs:
-  - create
-  - get
-  - list
-  - watch
-- apiGroups:
-  - coordination.k8s.io
-  resources:
-  - leases
-  verbs:
-  - create
-  - get
-  - delete
-  - patch
-  - update
-{{- end }}
+- rules: []
+  {{- end }}
