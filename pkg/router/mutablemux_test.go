@@ -69,7 +69,7 @@ func spamServer(quit chan bool) {
 
 func TestMutableMux(t *testing.T) {
 	mgr := manager.New()
-	defer mgr.Wait()
+	t.Cleanup(mgr.Wait)
 
 	// make a simple mutable router
 	log.Print("Create mutable router")

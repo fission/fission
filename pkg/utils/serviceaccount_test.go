@@ -14,7 +14,7 @@ import (
 
 func TestServiceAccountCheck(t *testing.T) {
 	mgr := manager.New()
-	defer mgr.Wait()
+	t.Cleanup(mgr.Wait)
 	ctx := t.Context()
 	kubernetesClient := fake.NewSimpleClientset()
 	logger := loggerfactory.GetLogger()

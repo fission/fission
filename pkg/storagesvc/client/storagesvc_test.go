@@ -87,7 +87,7 @@ func TestS3StorageService(t *testing.T) {
 	var minioClient *minio.Client
 
 	mgr := manager.New()
-	defer mgr.Wait()
+	t.Cleanup(mgr.Wait)
 
 	// Start minio docker container
 	pool, err := dockertest.NewPool("")
@@ -208,7 +208,7 @@ func TestLocalStorageService(t *testing.T) {
 	port := 8082
 
 	mgr := manager.New()
-	defer mgr.Wait()
+	t.Cleanup(mgr.Wait)
 
 	config := zap.NewDevelopmentConfig()
 	config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder

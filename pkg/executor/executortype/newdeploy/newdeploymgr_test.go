@@ -37,7 +37,7 @@ const (
 func TestRefreshFuncPods(t *testing.T) {
 	os.Setenv("DEBUG_ENV", "true")
 	mgr := manager.New()
-	defer mgr.Wait()
+	t.Cleanup(mgr.Wait)
 	logger := loggerfactory.GetLogger()
 	kubernetesClient := fake.NewSimpleClientset()
 	fissionClient := fClient.NewSimpleClientset()

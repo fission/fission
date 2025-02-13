@@ -62,7 +62,7 @@ func GetRouterWithAuth() *mux.Router {
 func TestRouterAuth(t *testing.T) {
 
 	mgr := manager.New()
-	defer mgr.Wait()
+	t.Cleanup(mgr.Wait)
 
 	ctx := t.Context()
 	teardown := setup(t)
