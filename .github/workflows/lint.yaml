@@ -17,7 +17,7 @@ on:
       - go.sum
 
 env:
-  GOLANGCI_LINT_VERSION: v1.63.4
+  GOLANGCI_LINT_VERSION: v1.64.4
   GOLANGCI_LINT_TIMEOUT: 5m
 
 permissions:
@@ -51,7 +51,7 @@ jobs:
           go mod download
 
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@ec5d18412c0aeab7936cb16880d708ba2a64e1ae # v6.2.0
+        uses: golangci/golangci-lint-action@051d91933864810ecd5e2ea2cfd98f6a5bca5347 # v6.3.2
         with:
           skip-cache: true
           version: ${{ env.GOLANGCI_LINT_VERSION }}
