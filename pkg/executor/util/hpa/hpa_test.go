@@ -16,7 +16,6 @@ limitations under the License.
 package hpa
 
 import (
-	"context"
 	"strings"
 	"testing"
 
@@ -58,8 +57,7 @@ func TestHpaOps(t *testing.T) {
 		t.Errorf("Expected instanceID to be %v, got %v", instanceID, hpaops.instanceID)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	deployLabels := map[string]string{
 		"test-label": "test-label-value",

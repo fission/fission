@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"context"
 	"os"
 	"regexp"
 	"testing"
@@ -16,8 +15,7 @@ import (
 func TestServiceAccountCheck(t *testing.T) {
 	mgr := manager.New()
 	defer mgr.Wait()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	kubernetesClient := fake.NewSimpleClientset()
 	logger := loggerfactory.GetLogger()
 	os.Setenv(ENV_CREATE_SA, "true")

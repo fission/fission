@@ -82,8 +82,7 @@ func TestMutableMux(t *testing.T) {
 	panicIf(err)
 
 	mr := newMutableRouter(logger, muxRouter)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	// start http server
 	mgr.Add(ctx, func(ctx context.Context) {

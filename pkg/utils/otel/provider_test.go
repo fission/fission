@@ -1,7 +1,6 @@
 package otel
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"reflect"
@@ -62,8 +61,7 @@ func TestGetTraceExporter(t *testing.T) {
 		t.Errorf("Expected OTEL_EXPORTER_OTLP_INSECURE to be set, got %s", OtelInsecureEnvVar)
 	}
 	logger := loggerfactory.GetLogger()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	tests := []struct {
 		oltpEndpoint string
 		oltpInsecure string

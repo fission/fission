@@ -16,7 +16,6 @@ limitations under the License.
 package poolmgr
 
 import (
-	"context"
 	"strings"
 	"testing"
 	"time"
@@ -40,8 +39,7 @@ import (
 func TestPoolPodControllerPodCleanup(t *testing.T) {
 	mgr := manager.New()
 	defer mgr.Wait()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	logger := loggerfactory.GetLogger()
 	kubernetesClient := fake.NewSimpleClientset()
 	fissionClient := fClient.NewSimpleClientset()

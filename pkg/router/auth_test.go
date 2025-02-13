@@ -64,8 +64,7 @@ func TestRouterAuth(t *testing.T) {
 	mgr := manager.New()
 	defer mgr.Wait()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	teardown := setup(t)
 	defer teardown(t)
 	logger := loggerfactory.GetLogger()

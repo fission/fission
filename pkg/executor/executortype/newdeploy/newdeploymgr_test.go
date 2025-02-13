@@ -50,8 +50,7 @@ func TestRefreshFuncPods(t *testing.T) {
 	}
 	ndmInformerFactory := utils.GetInformerFactoryByExecutor(kubernetesClient, executorLabel, time.Minute*30)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	fetcherConfig, err := fetcherConfig.MakeFetcherConfig("/userfunc")
 	if err != nil {

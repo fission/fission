@@ -24,8 +24,7 @@ func checkErr(err error) {
 }
 
 func TestPoolCache(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	logger := loggerfactory.GetLogger()
 	concurrency := 5
 	requestsPerPod := 2

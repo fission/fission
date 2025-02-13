@@ -1,7 +1,6 @@
 package tracker
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"log"
@@ -14,8 +13,7 @@ import (
 )
 
 func TestTracker(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	t.Run("NewTracker", func(test *testing.T) {
 		for _, test := range []struct {
 			name     string
