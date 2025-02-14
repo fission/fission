@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -12,8 +11,7 @@ import (
 func TestPreUpgradeTaskClient(t *testing.T) {
 	f := framework.NewFramework()
 	defer f.Logger().Sync()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	err := f.Start(ctx)
 	require.NoError(t, err)
 

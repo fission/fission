@@ -1,7 +1,6 @@
 package fscache
 
 import (
-	"context"
 	"log"
 	"testing"
 	"time"
@@ -157,8 +156,7 @@ func TestFunctionServiceNewCache(t *testing.T) {
 		},
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	fsc.AddFunc(ctx, *fsvc, 10, fn.GetRetainPods())
 	concurrency := 10

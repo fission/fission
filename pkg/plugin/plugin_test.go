@@ -17,7 +17,6 @@ limitations under the License.
 package plugin
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -58,8 +57,7 @@ func TestFind(t *testing.T) {
 	}
 	Prefix = ""
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	found, err := Find(ctx, md.Name)
 	os.RemoveAll(testDir)

@@ -17,10 +17,9 @@ import (
 
 func TestStartServer(t *testing.T) {
 	mgr := manager.New()
-	defer mgr.Wait()
+	t.Cleanup(mgr.Wait)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	logger := loggerfactory.GetLogger()
 	m := mux.NewRouter()
 	m.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

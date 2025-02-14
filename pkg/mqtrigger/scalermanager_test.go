@@ -1,7 +1,6 @@
 package mqtrigger
 
 import (
-	"context"
 	"fmt"
 	"reflect"
 	"sort"
@@ -40,8 +39,7 @@ func Test_toEnvVar(t *testing.T) {
 }
 
 func Test_getEnvVarlist(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	// Kafka Test with Valid Secret
 	pollingInterval := int32(30)
 	cooldownPeriod := int32(300)
@@ -373,8 +371,7 @@ func Test_checkAndUpdateTriggerFields(t *testing.T) {
 }
 
 func Test_getAuthTriggerSpec(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	// Valid - with Secret
 	pollingInterval := int32(30)
 	cooldownPeriod := int32(300)

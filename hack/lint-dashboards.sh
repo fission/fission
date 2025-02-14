@@ -12,5 +12,5 @@ DASHBOARD_PATH="$BASE_PATH/charts/fission-all/dashboards/*"
 
 for f in $DASHBOARD_PATH
 do
-    dashboard-linter lint --strict --verbose $f
+    go tool dashboard-linter lint --strict --verbose $f
 done

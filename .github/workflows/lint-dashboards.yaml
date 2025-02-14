@@ -33,10 +33,5 @@ jobs:
         with:
           go-version-file: "go.mod"
 
-      - name: Install dashboard linter
-        run: |
-          go get github.com/grafana/dashboard-linter
-          go install github.com/grafana/dashboard-linter
-
       - name: Run dashboard linter
         run: ./hack/lint-dashboards.sh

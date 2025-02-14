@@ -61,17 +61,17 @@ install-fission-cli:
 ### Codegen
 codegen:
 	@./hack/update-codegen.sh
-	go run sigs.k8s.io/controller-tools/cmd/controller-gen object:headerFile="hack/boilerplate.txt" paths="./..."
+	go tool controller-gen object:headerFile="hack/boilerplate.txt" paths="./..."
 
 ### CRDs
 generate-crds:
-	go run sigs.k8s.io/controller-tools/cmd/controller-gen crd \
+	go tool controller-gen crd \
 	paths=./pkg/apis/core/v1  \
 	output:crd:artifacts:config=crds/v1
 
 ### Webhook generation: it generates webhook configs with help of kubebuilder:webhook tag
 generate-webhooks:
-	go run sigs.k8s.io/controller-tools/cmd/controller-gen webhook \
+	go tool controller-gen webhook \
 	 paths=./pkg/webhook \
 	 output:dir=charts/fission-all/templates/webhook-server
 
@@ -98,7 +98,7 @@ generate-cli-docs:
 
 generate-crd-ref-docs:
 	# crd-ref-docs: https://github.com/elastic/crd-ref-docs
-	go run github.com/elastic/crd-ref-docs --source-path=pkg/apis/core/v1 --config=tools/crd-ref-docs/config.yaml --renderer markdown
+	go tool crd-ref-docs --source-path=pkg/apis/core/v1 --config=tools/crd-ref-docs/config.yaml --renderer markdown
 	cp tools/crd-ref-docs/header.md crd_docs.md
 	cat out.md >> crd_docs.md && rm out.md
 	mv crd_docs.md ../fission.io/content/en/docs/reference/crd-reference.md
@@ -122,10 +122,3 @@ release:
 	@./hack/release.sh $(VERSION)
 	@./hack/release-tag.sh $(VERSION)
 	@./hack/changelog.sh
-
-## Envtest
-install-envtest:
-	go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
-
-setup-envtest:
-	setup-envtest -p path use 1.30.x

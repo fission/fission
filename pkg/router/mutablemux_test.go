@@ -69,7 +69,7 @@ func spamServer(quit chan bool) {
 
 func TestMutableMux(t *testing.T) {
 	mgr := manager.New()
-	defer mgr.Wait()
+	t.Cleanup(mgr.Wait)
 
 	// make a simple mutable router
 	log.Print("Create mutable router")
@@ -82,8 +82,7 @@ func TestMutableMux(t *testing.T) {
 	panicIf(err)
 
 	mr := newMutableRouter(logger, muxRouter)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	// start http server
 	mgr.Add(ctx, func(ctx context.Context) {

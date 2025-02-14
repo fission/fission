@@ -18,7 +18,6 @@ package client
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"io"
 	"log"
@@ -88,7 +87,7 @@ func TestS3StorageService(t *testing.T) {
 	var minioClient *minio.Client
 
 	mgr := manager.New()
-	defer mgr.Wait()
+	t.Cleanup(mgr.Wait)
 
 	// Start minio docker container
 	pool, err := dockertest.NewPool("")
@@ -141,8 +140,7 @@ func TestS3StorageService(t *testing.T) {
 	os.Setenv("STORAGE_S3_REGION", minioRegion)
 
 	storage := storagesvc.NewS3Storage()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	_ = storagesvc.Start(ctx, crd.NewClientGenerator(), logger, storage, mgr, port)
 
 	time.Sleep(time.Second)
@@ -210,7 +208,7 @@ func TestLocalStorageService(t *testing.T) {
 	port := 8082
 
 	mgr := manager.New()
-	defer mgr.Wait()
+	t.Cleanup(mgr.Wait)
 
 	config := zap.NewDevelopmentConfig()
 	config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
@@ -221,8 +219,7 @@ func TestLocalStorageService(t *testing.T) {
 	localPath := fmt.Sprintf("/tmp/%v", testID)
 	_ = os.Mkdir(localPath, os.ModePerm)
 	storage := storagesvc.NewLocalStorage(localPath)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	os.Setenv("METRICS_ADDR", "8083")
 	_ = storagesvc.Start(ctx, crd.NewClientGenerator(), logger, storage, mgr, port)
 
