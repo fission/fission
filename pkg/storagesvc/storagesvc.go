@@ -292,7 +292,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *
 	// create a storage client
 	storageClient, err := MakeStowClient(logger, storage)
 	if err != nil {
-		return errors.Wrap(err, "Error creating stowClient")
+		return fmt.Errorf("Error creating stowClient: %w", err)
 	}
 
 	// create http handlers
@@ -314,7 +314,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *
 		}
 		pruner, err := MakeArchivePruner(logger, clientGen, storageClient, time.Duration(pruneInterval))
 		if err != nil {
-			return errors.Wrap(err, "Error creating archivePruner")
+			return fmt.Errorf("Error creating archivePruner: %w", err)
 		}
 		mgr.Add(ctx, func(ctx context.Context) {
 			pruner.Start(ctx, mgr)

@@ -55,7 +55,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 	fnName := input.String(flagkey.FnName)
 	_, fnNamespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceFunction)
 	if err != nil {
-		return errors.Wrap(err, "error in updating function ")
+		return fmt.Errorf("error in updating function : %w", err)
 	}
 	if input.Bool(flagkey.SpecSave) {
 		opts.specFile = fmt.Sprintf("function-%s.yaml", fnName)
@@ -191,7 +191,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 
 	fnList, err := _package.GetFunctionsByPackage(input.Context(), opts.Client(), pkg.ObjectMeta.Name, pkg.ObjectMeta.Namespace)
 	if err != nil {
-		return errors.Wrap(err, "error getting function list")
+		return fmt.Errorf("error getting function list: %w", err)
 	}
 
 	if !forceUpdate && len(fnList) > 1 {
@@ -217,7 +217,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 		}
 		err = _package.UpdateFunctionPackageResourceVersion(input.Context(), opts.Client(), newPkgMeta, fns...)
 		if err != nil {
-			return errors.Wrap(err, "error updating function package reference resource version")
+			return fmt.Errorf("error updating function package reference resource version: %w", err)
 		}
 	}
 
@@ -255,13 +255,13 @@ func (opts *UpdateSubCommand) run(input cli.Input) error {
 		}
 		err = spec.SpecSave(*opts.function, opts.specFile, false)
 		if err != nil {
-			return errors.Wrap(err, "error saving function spec")
+			return fmt.Errorf("error saving function spec: %w", err)
 		}
 		return nil
 	}
 	_, err := opts.Client().FissionClientSet.CoreV1().Functions(opts.function.Namespace).Update(input.Context(), opts.function, metav1.UpdateOptions{})
 	if err != nil {
-		return errors.Wrap(err, "error updating function")
+		return fmt.Errorf("error updating function: %w", err)
 	}
 
 	fmt.Printf("Function '%v' updated\n", opts.function.ObjectMeta.Name)

@@ -18,8 +18,8 @@ package timer
 
 import (
 	"context"
+	"fmt"
 
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/fission/fission/pkg/crd"
@@ -30,18 +30,18 @@ import (
 func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Interface, routerUrl string) error {
 	fissionClient, err := clientGen.GetFissionClient()
 	if err != nil {
-		return errors.Wrap(err, "failed to get fission client")
+		return fmt.Errorf("failed to get fission client: %w", err)
 	}
 
 	err = crd.WaitForFunctionCRDs(ctx, logger, fissionClient)
 	if err != nil {
-		return errors.Wrap(err, "error waiting for CRDs")
+		return fmt.Errorf("error waiting for CRDs: %w", err)
 	}
 
 	poster := publisher.MakeWebhookPublisher(logger, routerUrl)
 	timerSync, err := MakeTimerSync(ctx, logger, fissionClient, MakeTimer(logger, poster))
 	if err != nil {
-		return errors.Wrap(err, "error making timer sync")
+		return fmt.Errorf("error making timer sync: %w", err)
 	}
 	timerSync.Run(ctx, mgr)
 	return nil

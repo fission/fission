@@ -54,12 +54,12 @@ func (opts *UpdateSubCommand) complete(input cli.Input) (err error) {
 
 	_, triggerNamespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceTrigger)
 	if err != nil {
-		return errors.Wrap(err, "error in deleting function ")
+		return fmt.Errorf("error in deleting function : %w", err)rr)
 	}
 
 	ht, err := opts.Client().FissionClientSet.CoreV1().HTTPTriggers(triggerNamespace).Get(input.Context(), htName, metav1.GetOptions{})
 	if err != nil {
-		return errors.Wrap(err, "error getting HTTP trigger")
+		return fmt.Errorf("error getting HTTP trigger: %w", err)
 	}
 
 	triggerUrl := input.String(flagkey.HtUrl)
@@ -113,7 +113,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) (err error) {
 		// set function reference
 		functionRef, err := setHtFunctionRef(functionList, functionWeightsList)
 		if err != nil {
-			return errors.Wrap(err, "error setting function weight")
+			return fmt.Errorf("error setting function weight: %w", err)
 		}
 
 		ht.Spec.FunctionReference = *functionRef
@@ -138,7 +138,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) (err error) {
 			input.StringSlice(flagkey.HtIngressAnnotation), input.String(flagkey.HtIngressRule),
 			input.String(flagkey.HtIngressTLS), fallbackURL, &ht.Spec.IngressConfig)
 		if err != nil {
-			return errors.Wrap(err, "error parsing ingress configuration")
+			return fmt.Errorf("error parsing ingress configuration: %w", err)
 		}
 		ht.Spec.IngressConfig = *ingress
 	}
@@ -157,18 +157,18 @@ func (opts *UpdateSubCommand) run(input cli.Input) error {
 		specFile := fmt.Sprintf("route-%s.yaml", opts.trigger.ObjectMeta.Name)
 		err = spec.SpecSave(*opts.trigger, specFile, true)
 		if err != nil {
-			return errors.Wrap(err, "error saving HTTP trigger spec")
+			return fmt.Errorf("error saving HTTP trigger spec: %w", err)
 		}
 		return nil
 	}
 	err := util.CheckHTTPTriggerDuplicates(input.Context(), opts.Client(), opts.trigger)
 	if err != nil {
-		return errors.Wrap(err, "Error while creating HTTP Trigger")
+		return fmt.Errorf("Error while creating HTTP Trigger: %w", err)
 	}
 
 	_, err = opts.Client().FissionClientSet.CoreV1().HTTPTriggers(opts.trigger.ObjectMeta.Namespace).Update(input.Context(), opts.trigger, metav1.UpdateOptions{})
 	if err != nil {
-		return errors.Wrap(err, "error updating the HTTP trigger")
+		return fmt.Errorf("error updating the HTTP trigger: %w", err)
 	}
 	fmt.Printf("trigger '%v' updated\n", opts.trigger.ObjectMeta.Name)
 	return nil

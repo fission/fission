@@ -74,7 +74,7 @@ func (opts *DeleteSubCommand) run(input cli.Input) error {
 			if input.Bool(flagkey.IgnoreNotFound) && kerrors.IsNotFound(err) {
 				return nil
 			}
-			return errors.Wrap(err, "find package")
+			return fmt.Errorf("find package: %w", err)
 		}
 
 		fnList, err := GetFunctionsByPackage(input.Context(), opts.Client(), opts.name, opts.namespace)
@@ -96,7 +96,7 @@ func (opts *DeleteSubCommand) run(input cli.Input) error {
 	if opts.deleteOrphans {
 		err := deleteOrphanPkgs(input.Context(), opts.Client(), opts.namespace)
 		if err != nil {
-			return errors.Wrap(err, "deleting orphan packages")
+			return fmt.Errorf("deleting orphan packages: %w", err)
 		}
 		fmt.Println("Orphan packages deleted")
 	}

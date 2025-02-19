@@ -128,7 +128,7 @@ type (
 func save(data []byte, specDir string, specFile string, truncate bool) error {
 	// verify
 	if _, err := os.Stat(filepath.Join(specDir, "fission-deployment-config.yaml")); os.IsNotExist(err) {
-		return errors.Wrap(err, "Couldn't find specs, run `fission spec init` first")
+		return fmt.Errorf("Couldn't find specs, run `fission spec init` first: %w", err)
 	}
 
 	filename := filepath.Join(specDir, specFile)
@@ -144,14 +144,14 @@ func save(data []byte, specDir string, specFile string, truncate bool) error {
 	// open spec file to append or write
 	f, err := os.OpenFile(filename, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
 	if err != nil {
-		return errors.Wrap(err, "couldn't create spec file")
+		return fmt.Errorf("couldn't create spec file: %w", err)
 	}
 	defer f.Close()
 
 	if truncate {
 		err = f.Truncate(0)
 		if err != nil {
-			return errors.Wrap(err, "couldn't truncate the spec file")
+			return fmt.Errorf("couldn't truncate the spec file: %w", err)
 		}
 
 	} else {
@@ -159,7 +159,7 @@ func save(data []byte, specDir string, specFile string, truncate bool) error {
 		if !newFile {
 			_, err = f.Write([]byte("\n---\n"))
 			if err != nil {
-				return errors.Wrap(err, "couldn't write to spec file")
+				return fmt.Errorf("couldn't write to spec file: %w", err)
 			}
 		}
 	}
@@ -167,7 +167,7 @@ func save(data []byte, specDir string, specFile string, truncate bool) error {
 	// write our resource
 	_, err = f.Write(data)
 	if err != nil {
-		return errors.Wrap(err, "couldn't write to spec file")
+		return fmt.Errorf("couldn't write to spec file: %w", err)
 	}
 	return nil
 }
@@ -281,7 +281,7 @@ func crdToYaml(resource interface{}) (metav1.ObjectMeta, string, []byte, error) 
 	}
 
 	if err != nil {
-		return metav1.ObjectMeta{}, "", nil, errors.Wrap(err, "couldn't marshal YAML")
+		return metav1.ObjectMeta{}, "", nil, fmt.Errorf("couldn't marshal YAML: %w", err)
 	}
 
 	return meta, kind, data, nil

@@ -145,14 +145,14 @@ func (opts *ApplySubCommand) run(input cli.Input) error {
 		var err error
 		watcher, err = fsnotify.NewWatcher()
 		if err != nil {
-			return errors.Wrap(err, "error creating file watcher")
+			return fmt.Errorf("error creating file watcher: %w", err)
 		}
 
 		// add watches
 		rootDir := filepath.Clean(specDir + "/..")
 		err = filepath.Walk(rootDir, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
-				return errors.Wrap(err, "error scanning project files")
+				return fmt.Errorf("error scanning project files: %w", err)
 			}
 
 			if ignoreFile(path) {
@@ -166,7 +166,7 @@ func (opts *ApplySubCommand) run(input cli.Input) error {
 			return nil
 		})
 		if err != nil {
-			return errors.Wrap(err, "error scanning files to watch")
+			return fmt.Errorf("error scanning files to watch: %w", err)
 		}
 	}
 
@@ -174,19 +174,19 @@ func (opts *ApplySubCommand) run(input cli.Input) error {
 		// read all specs
 		fr, err := ReadSpecs(specDir, specIgnore, applyCommitLabel)
 		if err != nil {
-			return errors.Wrap(err, "error reading specs")
+			return fmt.Errorf("error reading specs: %w", err)
 		}
 
 		if validateSpecs {
 			err = validateForApply(input, fr)
 			if err != nil {
-				return errors.Wrap(err, "abort applying resources")
+				return fmt.Errorf("abort applying resources: %w", err)
 			}
 		}
 
 		err = opts.insertNamespace(input, fr)
 		if err != nil {
-			return errors.Wrap(err, "error inserting namespace")
+			return fmt.Errorf("error inserting namespace: %w", err)
 		}
 
 		err = warnIfDirtyWorkTree(filepath.Clean(specDir + "/.."))
@@ -197,7 +197,7 @@ func (opts *ApplySubCommand) run(input cli.Input) error {
 		// make changes to the cluster based on the specs
 		pkgMetas, as, err := applyResources(input, opts.Client(), specDir, fr, deleteResources, input.Bool(flagkey.SpecAllowConflicts))
 		if err != nil {
-			return errors.Wrap(err, "error applying specs")
+			return fmt.Errorf("error applying specs: %w", err)
 		}
 		printApplyStatus(as)
 
@@ -239,7 +239,7 @@ func (opts *ApplySubCommand) run(input cli.Input) error {
 
 				err = waitForFileWatcherToSettleDown(watcher)
 				if err != nil {
-					return errors.Wrap(err, "error watching files")
+					return fmt.Errorf("error watching files: %w", err)
 				}
 				break waitloop
 
@@ -247,7 +247,7 @@ func (opts *ApplySubCommand) run(input cli.Input) error {
 				pkgWatchCancel()
 
 				if err != nil {
-					return errors.Wrap(err, "error watching files")
+					return fmt.Errorf("error watching files: %w", err)
 				}
 			}
 		}
@@ -433,13 +433,13 @@ func applyResources(input cli.Input, fclient cmd.Client, specDir string, fr *Fis
 
 	_, ras, err := applyEnvironments(input.Context(), fclient, fr, delete, specAllowConflicts)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "environment apply failed")
+		return nil, nil, fmt.Errorf("environment apply failed: %w", err)
 	}
 	applyStatus["environment"] = *ras
 
 	pkgMeta, ras, err := applyPackages(input.Context(), fclient, fr, delete, specAllowConflicts)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "package apply failed")
+		return nil, nil, fmt.Errorf("package apply failed: %w", err)
 	}
 	applyStatus["package"] = *ras
 
@@ -468,31 +468,31 @@ func applyResources(input cli.Input, fclient cmd.Client, specDir string, fr *Fis
 
 	_, ras, err = applyFunctions(input.Context(), fclient, fr, delete, specAllowConflicts)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "function apply failed")
+		return nil, nil, fmt.Errorf("function apply failed: %w", err)
 	}
 	applyStatus["function"] = *ras
 
 	_, ras, err = applyHTTPTriggers(input.Context(), fclient, fr, delete, specAllowConflicts)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "HTTPTrigger apply failed")
+		return nil, nil, fmt.Errorf("HTTPTrigger apply failed: %w", err)
 	}
 	applyStatus["HTTPTrigger"] = *ras
 
 	_, ras, err = applyKubernetesWatchTriggers(input.Context(), fclient, fr, delete, specAllowConflicts)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "KubernetesWatchTrigger apply failed")
+		return nil, nil, fmt.Errorf("KubernetesWatchTrigger apply failed: %w", err)
 	}
 	applyStatus["KubernetesWatchTrigger"] = *ras
 
 	_, ras, err = applyTimeTriggers(input.Context(), fclient, fr, delete, specAllowConflicts)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "TimeTrigger apply failed")
+		return nil, nil, fmt.Errorf("TimeTrigger apply failed: %w", err)
 	}
 	applyStatus["TimeTrigger"] = *ras
 
 	_, ras, err = applyMessageQueueTriggers(input.Context(), fclient, fr, delete, specAllowConflicts)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "MessageQueueTrigger apply failed")
+		return nil, nil, fmt.Errorf("MessageQueueTrigger apply failed: %w", err)
 	}
 	applyStatus["MessageQueueTrigger"] = *ras
 

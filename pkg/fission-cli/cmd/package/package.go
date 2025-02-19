@@ -87,7 +87,7 @@ func CreateArchive(client cmd.Client, input cli.Input, includeFiles []string, no
 		path := filepath.Join(rootDir, path)
 		files, err := utils.FindAllGlobs(path)
 		if err != nil {
-			errs = multierror.Append(errs, errors.Wrap(err, "error finding all globs"))
+			errs = multierror.Append(errs, fmt.Errorf("error finding all globs: %w", err))
 			continue
 		}
 
@@ -127,12 +127,12 @@ func CreateArchive(client cmd.Client, input cli.Input, includeFiles []string, no
 			file := filepath.Join(tmpDir, uuid.NewString())
 			err = utils.DownloadUrl(input.Context(), http.DefaultClient, fileURL, file)
 			if err != nil {
-				return nil, errors.Wrap(err, "error downloading file from the given URL")
+				return nil, fmt.Errorf("error downloading file from the given URL: %w", err)
 			}
 
 			csum, err = utils.GetFileChecksum(file)
 			if err != nil {
-				return nil, errors.Wrap(err, "error generating file SHA256 checksum")
+				return nil, fmt.Errorf("error generating file SHA256 checksum: %w", err)
 			}
 		}
 
@@ -160,7 +160,7 @@ func CreateArchive(client cmd.Client, input cli.Input, includeFiles []string, no
 			specIgnore := util.GetSpecIgnore(input)
 			fr, err := spec.ReadSpecs(specDir, specIgnore, false)
 			if err != nil {
-				return nil, errors.Wrap(err, "error reading specs")
+				return nil, fmt.Errorf("error reading specs: %w", err)
 			}
 
 			obj := fr.SpecExists(aus, true, true)
@@ -172,7 +172,7 @@ func CreateArchive(client cmd.Client, input cli.Input, includeFiles []string, no
 				// save the uploadspec
 				err := spec.SpecSave(*aus, specFile, false)
 				if err != nil {
-					return nil, errors.Wrap(err, "error saving archive spec")
+					return nil, fmt.Errorf("error saving archive spec: %w", err)
 				}
 			}
 		}
@@ -208,7 +208,7 @@ func makeArchiveFile(ctx context.Context, archiveNameHint string, archiveInput [
 	// Get files from inputs as number of files decide next steps
 	files, err := utils.FindAllGlobs(archiveInput...)
 	if err != nil {
-		return "", errors.Wrap(err, "error finding all globs")
+		return "", fmt.Errorf("error finding all globs: %w", err)
 	}
 
 	// We have one file; if it's a zip file, no need to archive it
@@ -227,12 +227,12 @@ func makeArchiveFile(ctx context.Context, archiveNameHint string, archiveInput [
 	// For anything else, create a new archive
 	tmpDir, err := utils.GetTempDir()
 	if err != nil {
-		return "", errors.Wrap(err, "error create temporary archive directory")
+		return "", fmt.Errorf("error create temporary archive directory: %w", err)
 	}
 
 	archivePath, err := utils.MakeZipArchiveWithGlobs(ctx, filepath.Join(tmpDir, archiveFileName), archiveInput...)
 	if err != nil {
-		return "", errors.Wrap(err, "create archive file")
+		return "", fmt.Errorf("create archive file: %w", err)
 	}
 
 	return archivePath, nil

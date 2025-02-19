@@ -21,7 +21,6 @@ import (
 	"os"
 	"text/tabwriter"
 
-	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
@@ -40,7 +39,7 @@ func List(input cli.Input) error {
 func (opts *ListSubCommand) do(input cli.Input) (err error) {
 	_, ttNs, err := opts.GetResourceNamespace(input, flagkey.NamespaceTrigger)
 	if err != nil {
-		return errors.Wrap(err, "error in deleting function ")
+		return fmt.Errorf("error in deleting function : %w", err)
 	}
 
 	if input.Bool(flagkey.AllNamespaces) {
@@ -49,7 +48,7 @@ func (opts *ListSubCommand) do(input cli.Input) (err error) {
 	tts, err := opts.Client().FissionClientSet.CoreV1().TimeTriggers(ttNs).List(input.Context(), metav1.ListOptions{})
 
 	if err != nil {
-		return errors.Wrap(err, "list Time triggers")
+		return fmt.Errorf("list Time triggers: %w", err)
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)

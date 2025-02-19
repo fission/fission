@@ -20,12 +20,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
 
 	"github.com/hashicorp/go-retryablehttp"
-	"github.com/pkg/errors"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.uber.org/zap"
 	"golang.org/x/net/context/ctxhttp"
@@ -68,26 +68,26 @@ func (c *client) Build(ctx context.Context, req *builder.PackageBuildRequest) (*
 
 	body, err := json.Marshal(req)
 	if err != nil {
-		return nil, errors.Wrap(err, "error marshaling json")
+		return nil, fmt.Errorf("error marshaling json: %w", err)
 	}
 
 	resp, err := ctxhttp.Post(ctx, c.httpClient.StandardClient(), c.url, "application/json", bytes.NewReader(body))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error sending request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	rBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		logger.Error("error reading resp body", zap.Error(err))
-		return nil, err
+		return nil, fmt.Errorf("error reading response body: %w", err)
 	}
 
 	pkgBuildResp := builder.PackageBuildResponse{}
 	err = json.Unmarshal(rBody, &pkgBuildResp)
 	if err != nil {
 		logger.Error("error parsing resp body", zap.Error(err))
-		return nil, err
+		return nil, fmt.Errorf("error parsing response body: %w", err)
 	}
 
 	return &pkgBuildResp, ferror.MakeErrorFromHTTP(resp)
@@ -98,7 +98,7 @@ func (c *client) Clean(ctx context.Context, srcPkgFilename string) error {
 
 	req, err := http.NewRequest(http.MethodDelete, c.getCleanUrl(srcPkgFilename), http.NoBody)
 	if err != nil {
-		return errors.Wrap(err, "failed to create http request for clean api")
+		return fmt.Errorf("error creating http request: %w", err)
 	}
 
 	resp, err := ctxhttp.Do(ctx, c.httpClient.StandardClient(), req)

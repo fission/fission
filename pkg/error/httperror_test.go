@@ -1,20 +1,20 @@
 package error
 
 import (
+	"fmt"
 	"net/http"
 	"testing"
 
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestIsNotFound(t *testing.T) {
 	errs := map[error]bool{
 		nil: false,
-		MakeError(ErrorNotFound, "someone not found"):                                          true,
-		MakeError(ErrorTooManyRequests, "too many requests"):                                   false,
-		errors.Wrap(MakeError(ErrorNotFound, "someone not found"), "other information"):        true,
-		errors.Wrap(MakeError(ErrorTooManyRequests, "too many requests"), "other information"): false,
+		MakeError(ErrorNotFound, "someone not found"):                                             true,
+		MakeError(ErrorTooManyRequests, "too many requests"):                                      false,
+		fmt.Errorf("other information: %w", MakeError(ErrorNotFound, "someone not found")):        true,
+		fmt.Errorf("other information: %w", MakeError(ErrorTooManyRequests, "too many requests")): false,
 	}
 
 	for err, want := range errs {
@@ -25,9 +25,9 @@ func TestIsNotFound(t *testing.T) {
 func TestGetHTTPError(t *testing.T) {
 	errs := map[int]error{
 		http.StatusBadRequest:      MakeError(ErrorInvalidArgument, ""),
-		http.StatusConflict:        errors.Wrap(MakeError(ErrorNameExists, ""), ""),
-		http.StatusNotFound:        errors.Wrap(MakeError(ErrorNotFound, ""), ""),
-		http.StatusTooManyRequests: errors.Wrap(MakeError(ErrorTooManyRequests, "too many requests"), "other information"),
+		http.StatusConflict:        fmt.Errorf("%w", MakeError(ErrorNameExists, "")),
+		http.StatusNotFound:        fmt.Errorf("%w", MakeError(ErrorNotFound, "")),
+		http.StatusTooManyRequests: fmt.Errorf("other information: %w", MakeError(ErrorTooManyRequests, "too many requests")),
 	}
 	for want, err := range errs {
 		code, _ := GetHTTPError(err)

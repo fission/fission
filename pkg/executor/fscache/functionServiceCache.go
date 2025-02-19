@@ -22,7 +22,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel/attribute"
 	"go.uber.org/zap"
 	apiv1 "k8s.io/api/core/v1"
@@ -292,7 +291,7 @@ func (fsc *FunctionServiceCache) Add(fsvc FuncSvc) (*FuncSvc, error) {
 		if IsNameExistError(err) {
 			err = nil
 		} else {
-			err = errors.Wrap(err, "error caching fsvc")
+			err = fmt.Errorf("error caching fsvc: %w", err)
 		}
 		return nil, err
 	}
@@ -304,7 +303,7 @@ func (fsc *FunctionServiceCache) Add(fsvc FuncSvc) (*FuncSvc, error) {
 		if IsNameExistError(err) {
 			err = nil
 		} else {
-			err = errors.Wrap(err, "error caching fsvc by function uid")
+			err = fmt.Errorf("error caching fsvc by function uid: %w", err)
 		}
 		return nil, err
 	}
@@ -381,10 +380,6 @@ func (fsc *FunctionServiceCache) DeleteFunctionSvc(ctx context.Context, fsvc *Fu
 			zap.Error(err),
 		)
 	}
-}
-
-func (fsc *FunctionServiceCache) SetCPUUtilization(key crd.CacheKeyURG, svcHost string, cpuUsage resource.Quantity) {
-	fsc.connFunctionCache.SetCPUUtilization(key, svcHost, cpuUsage)
 }
 
 // DeleteOld deletes aged function service entries from cache.

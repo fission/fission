@@ -17,7 +17,8 @@ limitations under the License.
 package httptrigger
 
 import (
-	"github.com/pkg/errors"
+	"fmt"
+
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -42,7 +43,7 @@ func (opts *ListSubCommand) run(input cli.Input) (err error) {
 
 	_, namespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceTrigger)
 	if err != nil {
-		return errors.Wrap(err, "error in deleting function ")
+		return fmt.Errorf("error in deleting function : %w", err)
 	}
 
 	if input.Bool(flagkey.AllNamespaces) {
@@ -51,7 +52,7 @@ func (opts *ListSubCommand) run(input cli.Input) (err error) {
 	hts, err := opts.Client().FissionClientSet.CoreV1().HTTPTriggers(namespace).List(input.Context(), v1.ListOptions{})
 
 	if err != nil {
-		return errors.Wrap(err, "error listing HTTP triggers")
+		return fmt.Errorf("error listing HTTP triggers: %w", err)
 	}
 
 	filterFunctionName := input.String(flagkey.HtFnName)

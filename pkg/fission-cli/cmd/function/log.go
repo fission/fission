@@ -19,6 +19,7 @@ package function
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"time"
@@ -43,8 +44,8 @@ func Log(input cli.Input) error {
 
 func (opts *LogSubCommand) do(input cli.Input) error {
 	_, namespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceFunction)
-	if err != nil {
-		return errors.Wrap(err, "error in logs for function ")
+	if err !fmt.Errorf("error in logs for function : %w", err)
+		return fmt.Errorf("error in logs for function : %w", err)
 	}
 
 	dbType := input.String(flagkey.FnLogDBType)
@@ -60,7 +61,7 @@ func (opts *LogSubCommand) do(input cli.Input) error {
 
 	f, err := opts.Client().FissionClientSet.CoreV1().Functions(namespace).Get(input.Context(), input.String(flagkey.FnName), metav1.GetOptions{})
 	if err != nil {
-		return errors.Wrap(err, "error getting function")
+		return fmt.Errorf("error getting function: %w", err)
 	}
 
 	logDBOptions := logdb.LogDBOptions{

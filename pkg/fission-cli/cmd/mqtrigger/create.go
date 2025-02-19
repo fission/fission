@@ -60,7 +60,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 
 	userProvidedNS, fnNamespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceFunction)
 	if err != nil {
-		return errors.Wrap(err, "error in deleting function ")
+		return fmt.Errorf("error in deleting function : %w", err)
 	}
 
 	mqtKind := input.String(flagkey.MqtKind)
@@ -201,14 +201,14 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 		specFile := fmt.Sprintf("mqtrigger-%v.yaml", opts.trigger.ObjectMeta.Name)
 		err := spec.SpecSave(*opts.trigger, specFile, false)
 		if err != nil {
-			return errors.Wrap(err, "error saving message queue trigger spec")
+			return fmt.Errorf("error saving message queue trigger spec: %w", err)
 		}
 		return nil
 	}
 
 	_, err := opts.Client().FissionClientSet.CoreV1().MessageQueueTriggers(opts.trigger.ObjectMeta.Namespace).Create(input.Context(), opts.trigger, metav1.CreateOptions{})
 	if err != nil {
-		return errors.Wrap(err, "create message queue trigger")
+		return fmt.Errorf("create message queue trigger: %w", err)
 	}
 
 	fmt.Printf("trigger '%s' created\n", opts.trigger.ObjectMeta.Name)

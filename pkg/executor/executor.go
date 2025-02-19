@@ -26,7 +26,6 @@ import (
 	"time"
 
 	"github.com/dchest/uniuri"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	k8sCache "k8s.io/client-go/tools/cache"
 
@@ -213,7 +212,7 @@ func (executor *Executor) serveCreateFuncServices(ctx context.Context) {
 				// It normally happened if there are multiple requests are
 				// waiting for the same function and executor failed to cre-
 				// ate service for function.
-				err = errors.Wrapf(err, "error getting service for function %s", fnName)
+				err = fmt.Errorf("error getting service for function %s: %w", fnName, err)
 				req.respChan <- &createFuncServiceResponse{
 					funcSvc: fsvc,
 					err:     err,
@@ -233,7 +232,7 @@ func (executor *Executor) createServiceForFunction(ctx context.Context, fn *fv1.
 	t := fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType
 	e, ok := executor.executorTypes[t]
 	if !ok {
-		return nil, errors.Errorf("Unknown executor type '%s'", t)
+		return nil, fmt.Errorf("Unknown executor type '%s'", t)
 	}
 
 	fsvc, fsvcErr := e.GetFuncSvc(ctx, fn)
@@ -243,7 +242,7 @@ func (executor *Executor) createServiceForFunction(ctx context.Context, fn *fv1.
 			zap.Error(fsvcErr),
 			zap.String("function_name", fn.ObjectMeta.Name),
 			zap.String("function_namespace", fn.ObjectMeta.Namespace))
-		fsvcErr = errors.Wrap(fsvcErr, fmt.Sprintf("[%s] %s", fn.ObjectMeta.Name, e))
+		fsvcErr = fmt.Errorf("[%s] %s: %w", fn.ObjectMeta.Name, e, fsvcErr)
 	}
 
 	return fsvc, fsvcErr
@@ -254,7 +253,7 @@ func (executor *Executor) getFunctionServiceFromCache(ctx context.Context, fn *f
 	t := fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType
 	e, ok := executor.executorTypes[t]
 	if !ok {
-		return nil, errors.Errorf("Unknown executor type '%s'", t)
+		return nil, fmt.Errorf("Unknown executor type '%s'", t)
 	}
 	return e.GetFuncSvcFromCache(ctx, fn)
 }
@@ -265,11 +264,11 @@ func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, 
 
 	fissionClient, err := clientGen.GetFissionClient()
 	if err != nil {
-		return errors.Wrap(err, "error making the fission client")
+		return fmt.Errorf("error making the fission client: %w", err)
 	}
 	kubernetesClient, err := clientGen.GetKubernetesClient()
 	if err != nil {
-		return errors.Wrap(err, "error making the kube client")
+		return fmt.Errorf("error making the kube client: %w", err)
 	}
 	metricsClient, err := clientGen.GetMetricsClient()
 	if err != nil {
@@ -278,12 +277,12 @@ func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, 
 
 	err = crd.WaitForFunctionCRDs(ctx, logger, fissionClient)
 	if err != nil {
-		return errors.Wrap(err, "error waiting for CRDs")
+		return fmt.Errorf("error waiting for CRDs: %w", err)
 	}
 
 	fetcherConfig, err := fetcherConfig.MakeFetcherConfig("/userfunc")
 	if err != nil {
-		return errors.Wrap(err, "Error making fetcher config")
+		return fmt.Errorf("Error making fetcher config: %w", err)
 	}
 
 	executorInstanceID := strings.ToLower(uniuri.NewLen(8))
@@ -312,7 +311,7 @@ func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, 
 		finformerFactory,
 		gpmInformerFactory, podSpecPatch)
 	if err != nil {
-		return errors.Wrap(err, "pool manager creation failed")
+		return fmt.Errorf("pool manager creation failed: %w", err)
 	}
 
 	executorLabel, err = utils.GetInformerLabelByExecutor(fv1.ExecutorTypeNewdeploy)
@@ -327,7 +326,7 @@ func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, 
 		finformerFactory,
 		ndmInformerFactory, podSpecPatch)
 	if err != nil {
-		return errors.Wrap(err, "new deploy manager creation failed")
+		return fmt.Errorf("new deploy manager creation failed: %w", err)
 	}
 
 	executorLabel, err = utils.GetInformerLabelByExecutor(fv1.ExecutorTypeContainer)
@@ -341,7 +340,7 @@ func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, 
 		executorInstanceID, finformerFactory,
 		cnmInformerFactory)
 	if err != nil {
-		return errors.Wrap(err, "container manager creation failed")
+		return fmt.Errorf("container manager creation failed: %w", err)
 	}
 
 	executorTypes := make(map[fv1.ExecutorType]executortype.ExecutorType)

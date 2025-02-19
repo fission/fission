@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sCache "k8s.io/client-go/tools/cache"
 
@@ -55,13 +54,13 @@ func (opts *DestroySubCommand) run(input cli.Input) error {
 	// read everything
 	fr, err := ReadSpecs(specDir, specIgnore, false)
 	if err != nil {
-		return errors.Wrap(err, "error reading specs")
+		return fmt.Errorf("error reading specs: %w", err)
 	}
 
 	if !input.Bool(flagkey.ForceDelete) {
 		err = opts.insertNSToResource(input, fr)
 		if err != nil {
-			return errors.Wrap(err, "error adding namespace")
+			return fmt.Errorf("error adding namespace: %w", err)
 		}
 	} else {
 		// if force delete set to true we fetch all resources with our deployment ID and delete them
@@ -72,14 +71,14 @@ func (opts *DestroySubCommand) run(input cli.Input) error {
 		// "apply" the empty state
 		err = forceDeleteResources(input.Context(), opts.Client(), &emptyFr)
 		if err != nil {
-			return errors.Wrap(err, "error deleting resources")
+			return fmt.Errorf("error deleting resources: %w", err)
 		}
 		return nil
 	}
 	forceDelete := input.Bool(flagkey.ForceDelete)
 	err = deleteResources(input.Context(), opts.Client(), fr, forceDelete)
 	if err != nil {
-		return errors.Wrap(err, "error deleting resources")
+		return fmt.Errorf("error deleting resources: %w", err)
 	}
 
 	return nil
@@ -91,37 +90,37 @@ func forceDeleteResources(ctx context.Context, fclient cmd.Client, fr *FissionRe
 
 	_, _, err = applyHTTPTriggers(ctx, fclient, fr, true, false)
 	if err != nil {
-		return errors.Wrap(err, "HTTPTrigger delete failed")
+		return fmt.Errorf("HTTPTrigger delete failed: %w", err)
 	}
 
 	_, _, err = applyKubernetesWatchTriggers(ctx, fclient, fr, true, false)
 	if err != nil {
-		return errors.Wrap(err, "KubernetesWatchTrigger delete failed")
+		return fmt.Errorf("KubernetesWatchTrigger delete failed: %w", err)
 	}
 
 	_, _, err = applyTimeTriggers(ctx, fclient, fr, true, false)
 	if err != nil {
-		return errors.Wrap(err, "TimeTrigger delete failed")
+		return fmt.Errorf("TimeTrigger delete failed: %w", err)
 	}
 
 	_, _, err = applyMessageQueueTriggers(ctx, fclient, fr, true, false)
 	if err != nil {
-		return errors.Wrap(err, "MessageQueueTrigger delete failed")
+		return fmt.Errorf("MessageQueueTrigger delete failed: %w", err)
 	}
 
 	_, _, err = applyFunctions(ctx, fclient, fr, true, false)
 	if err != nil {
-		return errors.Wrap(err, "function delete failed")
+		return fmt.Errorf("function delete failed: %w", err)
 	}
 
 	_, _, err = applyPackages(ctx, fclient, fr, true, false)
 	if err != nil {
-		return errors.Wrap(err, "package delete failed")
+		return fmt.Errorf("package delete failed: %w", err)
 	}
 
 	_, _, err = applyEnvironments(ctx, fclient, fr, true, false)
 	if err != nil {
-		return errors.Wrap(err, "environment delete failed")
+		return fmt.Errorf("environment delete failed: %w", err)
 	}
 
 	return nil
@@ -183,37 +182,37 @@ func deleteResources(ctx context.Context, fclient cmd.Client, fr *FissionResourc
 
 	err = destroyHTTPTriggers(ctx, fclient, fr)
 	if err != nil {
-		return errors.Wrap(err, "HTTPTrigger delete failed")
+		return fmt.Errorf("HTTPTrigger delete failed: %w", err)
 	}
 
 	err = destroyKubernetesWatchTriggers(ctx, fclient, fr)
 	if err != nil {
-		return errors.Wrap(err, "KubernetesWatchTrigger delete failed")
+		return fmt.Errorf("KubernetesWatchTrigger delete failed: %w", err)
 	}
 
 	err = destroyTimeTriggers(ctx, fclient, fr)
 	if err != nil {
-		return errors.Wrap(err, "TimeTrigger delete failed")
+		return fmt.Errorf("TimeTrigger delete failed: %w", err)
 	}
 
 	err = destroyMessageQueueTriggers(ctx, fclient, fr)
 	if err != nil {
-		return errors.Wrap(err, "MessageQueueTrigger delete failed")
+		return fmt.Errorf("MessageQueueTrigger delete failed: %w", err)
 	}
 
 	err = destroyFunctions(ctx, fclient, fr)
 	if err != nil {
-		return errors.Wrap(err, "function delete failed")
+		return fmt.Errorf("function delete failed: %w", err)
 	}
 
 	err = destroyPackages(ctx, fclient, fr)
 	if err != nil {
-		return errors.Wrap(err, "package delete failed")
+		return fmt.Errorf("package delete failed: %w", err)
 	}
 
 	err = destroyEnvironments(ctx, fclient, fr)
 	if err != nil {
-		return errors.Wrap(err, "environment delete failed")
+		return fmt.Errorf("environment delete failed: %w", err)
 	}
 
 	return nil

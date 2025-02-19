@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"github.com/dchest/uniuri"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -162,7 +161,7 @@ func updatePackage(ctx context.Context, logger *zap.Logger, fissionClient versio
 	if err != nil {
 		e := "error updating package"
 		logger.Error(e, zap.Error(err))
-		return nil, errors.Wrap(err, e)
+		return nil, fmt.Errorf("%s: %w", e, err)
 	}
 
 	// return resource version for function to update function package ref

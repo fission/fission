@@ -75,7 +75,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 
 	userProvidedNS, fnNamespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceFunction)
 	if err != nil {
-		return errors.Wrap(err, "error in deleting function ")
+		return fmt.Errorf("error in deleting function : %w", err)
 	}
 
 	triggerUrl := input.String(flagkey.HtUrl)
@@ -167,7 +167,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		input.StringSlice(flagkey.HtIngressAnnotation), input.String(flagkey.HtIngressRule),
 		input.String(flagkey.HtIngressTLS), fallbackURL, nil)
 	if err != nil {
-		return errors.Wrap(err, "error parsing ingress configuration")
+		return fmt.Errorf("error parsing ingress configuration: %w", err)
 	}
 
 	opts.trigger = &fv1.HTTPTrigger{
@@ -198,7 +198,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 		specFile := fmt.Sprintf("route-%v.yaml", opts.trigger.ObjectMeta.Name)
 		err := spec.SpecSave(*opts.trigger, specFile, false)
 		if err != nil {
-			return errors.Wrap(err, "error saving HTTP trigger spec")
+			return fmt.Errorf("error saving HTTP trigger spec: %w", err)
 		}
 		return nil
 	}
@@ -206,12 +206,12 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 	// Ensure we don't have a duplicate HTTP route defined (same URL and method)
 	err := util.CheckHTTPTriggerDuplicates(input.Context(), opts.Client(), opts.trigger)
 	if err != nil {
-		return errors.Wrap(err, "Error while creating HTTP Trigger")
+		return fmt.Errorf("Error while creating HTTP Trigger: %w", err)
 	}
 
 	_, err = opts.Client().FissionClientSet.CoreV1().HTTPTriggers(opts.trigger.Namespace).Create(input.Context(), opts.trigger, metav1.CreateOptions{})
 	if err != nil {
-		return errors.Wrap(err, "create HTTP trigger")
+		return fmt.Errorf("create HTTP trigger: %w", err)
 	}
 
 	fmt.Printf("trigger '%v' created\n", opts.trigger.ObjectMeta.Name)

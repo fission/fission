@@ -17,6 +17,8 @@ limitations under the License.
 package timetrigger
 
 import (
+	"fmt"
+
 	"github.com/pkg/errors"
 
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
@@ -49,7 +51,7 @@ func (opts *ShowSubCommand) run(flaginput cli.Input) error {
 
 	err := getCronNextNActivationTime(cronSpec, t, round)
 	if err != nil {
-		return errors.Wrap(err, "error passing cron spec examination")
+		return fmt.Errorf("error passing cron spec examination: %w", err)
 	}
 
 	return nil

@@ -31,7 +31,6 @@ import (
 	"time"
 
 	"github.com/dchest/uniuri"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/fission/fission/pkg/info"
@@ -206,7 +205,7 @@ func (builder *Builder) reply(ctx context.Context, w http.ResponseWriter, pkgFil
 
 	rBody, err := json.Marshal(resp)
 	if err != nil {
-		e := errors.Wrap(err, "error encoding response body")
+		e := fmt.Errorf("error encoding response body: %w", err)
 		rBody = []byte(fmt.Sprintf(`{"buildLogs": "%s"}`, e.Error()))
 		statusCode = http.StatusInternalServerError
 	}
@@ -247,12 +246,12 @@ func (builder *Builder) build(ctx context.Context, command string, args []string
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		return "", errors.Wrap(err, "error creating stdout pipe for cmd")
+		return "", fmt.Errorf("error creating stdout pipe for cmd: %w", err)
 	}
 
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
-		return "", errors.Wrap(err, "error creating stderr pipe for cmd")
+		return "", fmt.Errorf("error creating stderr pipe for cmd: %w", err)
 	}
 
 	// Init logs
@@ -263,7 +262,7 @@ func (builder *Builder) build(ctx context.Context, command string, args []string
 
 	err = cmd.Start()
 	if err != nil {
-		return "", errors.Wrap(err, "error starting cmd")
+		return "", fmt.Errorf("error starting cmd: %w", err)
 	}
 	fmt.Printf("========= START =========\n")
 	defer fmt.Printf("========= END ===========\n")
@@ -276,14 +275,14 @@ func (builder *Builder) build(ctx context.Context, command string, args []string
 	}
 
 	if err := scanner.Err(); err != nil {
-		scanErr := errors.Wrap(err, "error reading cmd output")
+		scanErr := fmt.Errorf("error reading cmd output: %w", err)
 		fmt.Println(scanErr)
 		return buildLogs, scanErr
 	}
 
 	err = cmd.Wait()
 	if err != nil {
-		cmdErr := errors.Wrapf(err, "error waiting for cmd %q", command)
+		cmdErr := fmt.Errorf("error waiting for cmd %q: %w", command, err)
 		fmt.Println(cmdErr)
 		return buildLogs, cmdErr
 	}

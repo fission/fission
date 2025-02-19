@@ -58,7 +58,7 @@ func (opts *InitSubCommand) complete(input cli.Input) error {
 		// come up with a name using the current dir
 		dir, err := filepath.Abs(".")
 		if err != nil {
-			return errors.Wrap(err, "error getting current working directory")
+			return fmt.Errorf("error getting current working directory: %w", err)
 		}
 		basename := filepath.Base(dir)
 		name = util.KubifyName(basename)
@@ -112,7 +112,7 @@ func (opts *InitSubCommand) run(input cli.Input) error {
 
 	err = writeDeploymentConfig(config, opts.deployConfig)
 	if err != nil {
-		return errors.Wrap(err, "error writing deployment config")
+		return fmt.Errorf("error writing deployment config: %w", err)
 	}
 
 	// Other possible things to do here:

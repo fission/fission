@@ -38,12 +38,12 @@ func GetMeta(input cli.Input) error {
 func (opts *GetMetaSubCommand) do(input cli.Input) error {
 	_, namespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceFunction)
 	if err != nil {
-		return errors.Wrap(err, "error in getting meta function ")
+		return fmt.Errorf("error in getting meta function : %w", err)rr)
 	}
 
 	fn, err := opts.Client().FissionClientSet.CoreV1().Functions(namespace).Get(input.Context(), input.String(flagkey.FnName), metav1.GetOptions{})
 	if err != nil {
-		return errors.Wrap(err, "error getting function")
+		return fmt.Errorf("error getting function: %w", err)
 	}
 
 	fmt.Printf("Name: %v\n", fn.ObjectMeta.Name)

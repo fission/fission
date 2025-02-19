@@ -22,7 +22,6 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
@@ -41,7 +40,7 @@ func List(input cli.Input) error {
 func (opts *ListSubCommand) do(input cli.Input) error {
 	_, namespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceFunction)
 	if err != nil {
-		return errors.Wrap(err, "error in listing function ")
+		return fmt.Errorf("error in listing function : %w", err)
 	}
 
 	if input.Bool(flagkey.AllNamespaces) {
@@ -50,7 +49,7 @@ func (opts *ListSubCommand) do(input cli.Input) error {
 	fns, err := opts.Client().FissionClientSet.CoreV1().Functions(namespace).List(input.Context(), metav1.ListOptions{})
 
 	if err != nil {
-		return errors.Wrap(err, "error listing functions")
+		return fmt.Errorf("error listing functions: %w", err)
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)

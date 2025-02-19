@@ -92,21 +92,21 @@ func MakeFetcher(logger *zap.Logger, clientGen crd.ClientGeneratorInterface, sha
 
 	fissionClient, err := clientGen.GetFissionClient()
 	if err != nil {
-		return nil, errors.Wrap(err, "error making the fission client")
+		return nil, fmt.Errorf("error making the fission client: %w", err)
 	}
 	kubeClient, err := clientGen.GetKubernetesClient()
 	if err != nil {
-		return nil, errors.Wrap(err, "error making the kube client")
+		return nil, fmt.Errorf("error making the kube client: %w", err)
 	}
 
 	name, err := os.ReadFile(podInfoMountDir + "/name")
 	if err != nil {
-		return nil, errors.Wrap(err, "error reading pod name from downward volume")
+		return nil, fmt.Errorf("error reading pod name from downward volume: %w", err)
 	}
 
 	namespace, err := os.ReadFile(podInfoMountDir + "/namespace")
 	if err != nil {
-		return nil, errors.Wrap(err, "error reading pod namespace from downward volume")
+		return nil, fmt.Errorf("error reading pod namespace from downward volume: %w", err)
 	}
 
 	hc := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
@@ -284,7 +284,7 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 		if err != nil {
 			e := "failed to download url"
 			logger.Error(e, zap.Error(err), zap.String("url", req.Url))
-			return http.StatusBadRequest, errors.Wrapf(err, "%s: %s", e, req.Url)
+			return http.StatusBadRequest, fmt.Errorf("%s: %s: %w", e, req.Url, err)
 		}
 	} else {
 		var archive *fv1.Archive
@@ -315,7 +315,7 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 			if err != nil {
 				e := "failed to write file"
 				logger.Error(e, zap.Error(err), zap.String("location", tmpPath))
-				return http.StatusInternalServerError, errors.Wrapf(err, "%s %s", e, tmpPath)
+				return http.StatusInternalServerError, fmt.Errorf("%s %s: %w", e, tmpPath, err)
 			}
 			otelUtils.SpanTrackEvent(ctx, "archiveLiteral", otelUtils.GetAttributesForPackage(pkg)...)
 		} else {
@@ -329,7 +329,7 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 			if err != nil {
 				e := "failed to download url"
 				logger.Error(e, zap.Error(err), zap.String("url", req.Url))
-				return http.StatusBadRequest, errors.Wrapf(err, "%s %s", e, req.Url)
+				return http.StatusBadRequest, fmt.Errorf("%s %s: %w", e, req.Url, err)
 			}
 
 			// check file integrity only if checksum is not empty.
@@ -338,13 +338,13 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 				if err != nil {
 					e := "failed to get checksum"
 					logger.Error(e, zap.Error(err))
-					return http.StatusBadRequest, errors.Wrap(err, e)
+					return http.StatusBadRequest, fmt.Errorf("%s: %w", e, err)
 				}
 				err = verifyChecksum(checksum, &archive.Checksum)
 				if err != nil {
 					e := "failed to verify checksum"
 					logger.Error(e, zap.Error(err))
-					return http.StatusBadRequest, errors.Wrap(err, e)
+					return http.StatusBadRequest, fmt.Errorf("%s: %w", e, err)
 				}
 			}
 		}
@@ -373,7 +373,7 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 			zap.Error(err),
 			zap.String("original_path", tmpPath),
 			zap.String("rename_path", storePath))
-		return http.StatusInternalServerError, err
+		return http.StatusInternalServerError, fmt.Errorf("error renaming file: %w", err)
 	}
 
 	otelUtils.SpanTrackEvent(ctx, "packageFetched", otelUtils.GetAttributesForPackage(pkg)...)
@@ -420,7 +420,7 @@ func (fetcher *Fetcher) FetchSecretsAndCfgMaps(ctx context.Context, secrets []fv
 					zap.String("directory", secretDir),
 					zap.String("secret_name", secret.Name),
 					zap.String("secret_namespace", secret.Namespace))
-				return http.StatusInternalServerError, errors.Wrapf(err, "%s: %s", e, secretDir)
+				return http.StatusInternalServerError, fmt.Errorf("%s: %s: %w", e, secretDir, err)
 			}
 			err = writeSecretOrConfigMap(data.Data, secretDir)
 			if err != nil {
@@ -473,7 +473,7 @@ func (fetcher *Fetcher) FetchSecretsAndCfgMaps(ctx context.Context, secrets []fv
 					zap.String("directory", configDir),
 					zap.String("config_map_name", config.Name),
 					zap.String("config_map_namespace", config.Namespace))
-				return http.StatusInternalServerError, errors.Wrapf(err, "%s: %s", e, configDir)
+				return http.StatusInternalServerError, fmt.Errorf("%s: %s: %w", e, configDir, err)
 			}
 			configMap := make(map[string][]byte)
 			for key, val := range data.Data {
@@ -617,7 +617,7 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 func (fetcher *Fetcher) rename(src string, dst string) error {
 	err := os.Rename(src, dst)
 	if err != nil {
-		return errors.Wrap(err, "failed to move file")
+		return fmt.Errorf("failed to move file: %w", err)
 	}
 	return nil
 }
@@ -673,17 +673,17 @@ func (fetcher *Fetcher) SpecializePod(ctx context.Context, fetchReq FunctionFetc
 
 	pkg, err := fetcher.getPkgInformation(ctx, fetchReq)
 	if err != nil {
-		return errors.Wrap(err, "error getting package information")
+		return fmt.Errorf("error getting package information: %w", err)
 	}
 
 	_, err = fetcher.Fetch(ctx, pkg, fetchReq)
 	if err != nil {
-		return errors.Wrap(err, "error fetching deploy package")
+		return fmt.Errorf("error fetching deploy package: %w", err)
 	}
 
 	_, err = fetcher.FetchSecretsAndCfgMaps(ctx, fetchReq.Secrets, fetchReq.ConfigMaps)
 	if err != nil {
-		return errors.Wrap(err, "error fetching secrets/configs")
+		return fmt.Errorf("error fetching secrets/configs: %w", err)
 	}
 
 	// Specialize the pod
@@ -695,7 +695,7 @@ func (fetcher *Fetcher) SpecializePod(ctx context.Context, fetchReq FunctionFetc
 
 	loadPayload, err := json.Marshal(loadReq)
 	if err != nil {
-		return errors.Wrap(err, "error encoding load request")
+		return fmt.Errorf("error encoding load request: %w", err)
 	}
 
 	// Instead of using "localhost", here we use "127.0.0.1" for
@@ -739,10 +739,10 @@ func (fetcher *Fetcher) SpecializePod(ctx context.Context, fetchReq FunctionFetc
 			err = ferror.MakeErrorFromHTTP(resp)
 		}
 
-		return errors.Wrap(err, "error specializing function pod")
+		return fmt.Errorf("error specializing function pod: %w", err)
 	}
 
-	return errors.Wrapf(err, "error specializing function pod after %v times", maxRetries)
+	return fmt.Errorf("error specializing function pod after %v times: %w", maxRetries, err)
 }
 
 // WsStartHandler is used to generate websocket events in Kubernetes

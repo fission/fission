@@ -60,7 +60,7 @@ func (opts *DeleteSubCommand) complete(input cli.Input) (err error) {
 
 	_, opts.namespace, err = opts.GetResourceNamespace(input, flagkey.NamespaceTrigger)
 	if err != nil {
-		return errors.Wrap(err, "error in deleting function ")
+		return fmt.Errorf("error in deleting function : %w", err)
 	}
 	return nil
 }
@@ -68,7 +68,7 @@ func (opts *DeleteSubCommand) complete(input cli.Input) (err error) {
 func (opts *DeleteSubCommand) run(input cli.Input) error {
 	triggers, err := opts.Client().FissionClientSet.CoreV1().HTTPTriggers(opts.namespace).List(input.Context(), metav1.ListOptions{})
 	if err != nil {
-		return errors.Wrap(err, "error getting HTTP trigger list")
+		return fmt.Errorf("error getting HTTP trigger list: %w", err)
 	}
 
 	var triggersToDelete []string
@@ -99,7 +99,7 @@ func (opts *DeleteSubCommand) run(input cli.Input) error {
 		if input.Bool(flagkey.IgnoreNotFound) && util.IsNotFound(err) {
 			return nil
 		}
-		return errors.Wrap(errs.ErrorOrNil(), "error deleting trigger(s)")
+		return fmt.Errorf("error deleting trigger(s): %w", errs.ErrorOrNil())
 	}
 
 	return nil

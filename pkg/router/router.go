@@ -91,7 +91,7 @@ func serve(ctx context.Context, logger *zap.Logger, mgr manager.Interface, port 
 	httpTriggerSet *HTTPTriggerSet, displayAccessLog bool) error {
 	mr, err := router(ctx, logger, mgr, httpTriggerSet)
 	if err != nil {
-		return errors.Wrap(err, "error making router")
+		return fmt.Errorf("error making router: %w", err)
 	}
 	handler := otelUtils.GetHandlerWithOTEL(mr, "fission-router", otelUtils.UrlsToIgnore("/router-healthz"))
 	mgr.Add(ctx, func(ctx context.Context) {
@@ -106,16 +106,16 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *
 
 	fissionClient, err := clientGen.GetFissionClient()
 	if err != nil {
-		return errors.Wrap(err, "error making the fission client")
+		return fmt.Errorf("error making the fission client: %w", err)
 	}
 	kubeClient, err := clientGen.GetKubernetesClient()
 	if err != nil {
-		return errors.Wrap(err, "error making the kube client")
+		return fmt.Errorf("error making the kube client: %w", err)
 	}
 
 	err = crd.WaitForFunctionCRDs(ctx, logger, fissionClient)
 	if err != nil {
-		return errors.Wrap(err, "error waiting for CRDs")
+		return fmt.Errorf("error waiting for CRDs: %w", err)
 	}
 
 	timeoutStr := os.Getenv("ROUTER_ROUND_TRIP_TIMEOUT")
@@ -207,7 +207,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *
 		svcAddrRetryCount: svcAddrRetryCount,
 	}, isDebugEnv, unTapServiceTimeout, throttler.MakeThrottler(svcAddrUpdateTimeout))
 	if err != nil {
-		return errors.Wrap(err, "error making HTTP trigger set")
+		return fmt.Errorf("error making HTTP trigger set: %w", err)
 	}
 
 	mgr.Add(ctx, func(ctx context.Context) {

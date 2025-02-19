@@ -21,7 +21,6 @@ import (
 	"os"
 	"text/tabwriter"
 
-	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 
@@ -45,12 +44,12 @@ func (opts *ListPodsSubCommand) do(input cli.Input) error {
 	_, namespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceFunction)
 
 	if err != nil {
-		return errors.Wrap(err, "error in finding pod for function ")
+		return fmt.Errorf("error in finding pod for function : %w", err)
 	}
 	// validate function
 	_, err = opts.Client().FissionClientSet.CoreV1().Functions(namespace).Get(input.Context(), input.String(flagkey.FnName), metav1.GetOptions{})
 	if err != nil {
-		return errors.Wrap(err, "error getting function")
+		return fmt.Errorf("error getting function: %w", err)
 	}
 
 	selector := map[string]string{
@@ -64,7 +63,7 @@ func (opts *ListPodsSubCommand) do(input cli.Input) error {
 		LabelSelector: labels.Set(selector).AsSelector().String(),
 	})
 	if err != nil {
-		return errors.Wrap(err, "error listing environments")
+		return fmt.Errorf("error listing environments: %w", err)
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)

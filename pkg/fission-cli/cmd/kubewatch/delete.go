@@ -19,7 +19,6 @@ package kubewatch
 import (
 	"fmt"
 
-	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
@@ -50,7 +49,7 @@ func (opts *DeleteSubCommand) complete(input cli.Input) (err error) {
 	opts.name = input.String(flagkey.KwName)
 	_, opts.namespace, err = opts.GetResourceNamespace(input, flagkey.NamespaceTrigger)
 	if err != nil {
-		return errors.Wrap(err, "error in deleting kubewatch")
+		return fmt.Errorf("error in deleting kubewatch: %w", err)
 	}
 	return nil
 }
@@ -61,7 +60,7 @@ func (opts *DeleteSubCommand) run(input cli.Input) error {
 		if input.Bool(flagkey.IgnoreNotFound) && util.IsNotFound(err) {
 			return nil
 		}
-		return errors.Wrap(err, "error deleting kubewatch")
+		return fmt.Errorf("error deleting kubewatch: %w", err)
 	}
 
 	fmt.Printf("trigger '%v' deleted\n", opts.name)

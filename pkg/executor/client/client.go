@@ -20,13 +20,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/url"
 	"strings"
 	"time"
 
 	"github.com/hashicorp/go-retryablehttp"
-	"github.com/pkg/errors"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -80,18 +80,18 @@ func (c *client) GetServiceForFunction(ctx context.Context, fn *fv1.Function) (s
 
 	body, err := json.Marshal(fn)
 	if err != nil {
-		return "", errors.Wrap(err, "could not marshal request body for getting service for function")
+		return "", fmt.Errorf("could not marshal request body for getting service for function: %w", err)
 	}
 
 	req, err := retryablehttp.NewRequestWithContext(ctx, "POST", executorURL, bytes.NewReader(body))
 	if err != nil {
-		return "", errors.Wrap(err, "could not create request for getting service for function")
+		return "", fmt.Errorf("could not create request for getting service for function: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return "", errors.Wrap(err, "error posting to getting service for function")
+		return "", fmt.Errorf("error posting to getting service for function: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -101,7 +101,7 @@ func (c *client) GetServiceForFunction(ctx context.Context, fn *fv1.Function) (s
 
 	svcName, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", errors.Wrap(err, "error reading response body from getting service for function")
+		return "", fmt.Errorf("error reading response body from getting service for function: %w", err)
 	}
 
 	return string(svcName), nil
@@ -118,17 +118,17 @@ func (c *client) UnTapService(ctx context.Context, fnMeta metav1.ObjectMeta, exe
 
 	body, err := json.Marshal(tapSvc)
 	if err != nil {
-		return errors.Wrap(err, "could not marshal request body for getting service for function")
+		return fmt.Errorf("could not marshal request body for getting service for function: %w", err)
 	}
 	req, err := retryablehttp.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
 	if err != nil {
-		return errors.Wrap(err, "could not create request for untap service for function")
+		return fmt.Errorf("could not create request for untap service for function: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return errors.Wrap(err, "error posting to getting service for function")
+		return fmt.Errorf("error posting to getting service for function: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -194,7 +194,7 @@ func (c *client) _tapService(ctx context.Context, tapSvcReqs []TapServiceRequest
 
 	req, err := retryablehttp.NewRequestWithContext(ctx, "POST", executorURL, bytes.NewReader(body))
 	if err != nil {
-		return errors.Wrap(err, "could not create request for tap service request")
+		return fmt.Errorf("could not create request for tap service request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 

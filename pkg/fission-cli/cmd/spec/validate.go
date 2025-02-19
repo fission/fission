@@ -71,7 +71,7 @@ func (opts *ValidateSubCommand) run(input cli.Input, fr *FissionResources) (err 
 	if fr == nil {
 		fr, err = ReadSpecs(specDir, specIgnore, false)
 		if err != nil {
-			return errors.Wrap(err, "error reading specs")
+			return fmt.Errorf("error reading specs: %w", err)
 		}
 	}
 
@@ -83,12 +83,12 @@ func (opts *ValidateSubCommand) run(input cli.Input, fr *FissionResources) (err 
 	// this does the rest of the checks, like dangling refs
 	warnings, err = fr.Validate(input, opts.Client())
 	if err != nil {
-		return errors.Wrap(err, "error validating specs")
+		return fmt.Errorf("error validating specs: %w", err)
 	}
 
 	err = resourceConflictCheck(input.Context(), opts.Client(), fr, input.Bool(flagkey.SpecAllowConflicts), "")
 	if err != nil {
-		return errors.Wrap(err, "name conflict error")
+		return fmt.Errorf("name conflict error: %w", err)
 	}
 
 	for _, warning := range warnings {

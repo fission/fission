@@ -56,7 +56,7 @@ func (opts *ListSubCommand) run(input cli.Input) error {
 		specIgnore := util.GetSpecIgnore(input)
 		fr, err := ReadSpecs(specDir, specIgnore, false)
 		if err != nil {
-			return errors.Wrap(err, "error reading specs")
+			return fmt.Errorf("error reading specs: %w", err)
 		}
 		deployID = fr.DeploymentConfig.UID
 	}

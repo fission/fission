@@ -57,7 +57,7 @@ func (opts *RunContainerSubCommand) complete(input cli.Input) error {
 
 	_, fnNamespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceFunction)
 	if err != nil {
-		return errors.Wrap(err, "error in running container for function ")
+		return fmt.Errorf("error in running container for function : %w", err)
 	}
 
 	// user wants a spec, create a yaml file with package and function
@@ -228,14 +228,14 @@ func (opts *RunContainerSubCommand) run(input cli.Input) error {
 	if input.Bool(flagkey.SpecSave) {
 		err := spec.SpecSave(*opts.function, opts.specFile, false)
 		if err != nil {
-			return errors.Wrap(err, "error saving function spec")
+			return fmt.Errorf("error saving function spec: %w", err)
 		}
 		return nil
 	}
 
 	_, err := opts.Client().FissionClientSet.CoreV1().Functions(opts.function.ObjectMeta.Namespace).Create(input.Context(), opts.function, metav1.CreateOptions{})
 	if err != nil {
-		return errors.Wrap(err, "error creating function")
+		return fmt.Errorf("error creating function: %w", err)
 	}
 
 	fmt.Printf("function '%v' created\n", opts.function.ObjectMeta.Name)

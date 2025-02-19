@@ -208,7 +208,7 @@ func (client *StowClient) getItemIDsWithFilter(filterFunc filter, filterFuncPara
 	for {
 		items, cursor, err = client.container.Items(client.config.storage.getSubDir(), cursor, PaginationSize)
 		if err != nil {
-			return nil, errors.Wrap(err, "error getting items from container")
+			return nil, fmt.Errorf("error getting items from container: %w", err)
 		}
 
 		for _, item := range items {

@@ -68,7 +68,7 @@ func (opts *RebuildSubCommand) run(input cli.Input) error {
 
 	_, err = updatePackageStatus(input.Context(), opts.Client(), pkg, fv1.BuildStatusPending)
 	if err != nil {
-		return errors.Wrap(err, "update package status")
+		return fmt.Errorf("update package status: %w", err)
 	}
 
 	fmt.Printf("Retrying build for pkg %v. Use \"fission pkg info --name %v\" to view status.\n", pkg.ObjectMeta.Name, pkg.ObjectMeta.Name)

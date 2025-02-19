@@ -53,7 +53,7 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 	fnName := input.String(flagkey.FnName)
 	_, namespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceFunction)
 	if err != nil {
-		return errors.Wrap(err, "error in testing function ")
+		return fmt.Errorf("error in testing function : %w", err)
 	}
 
 	function, err := opts.Client().FissionClientSet.CoreV1().Functions(namespace).Get(input.Context(), fnName, metav1.GetOptions{})
@@ -68,7 +68,7 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 
 	routerURL, err := util.GetRouterURL(input.Context(), opts.Client())
 	if err != nil {
-		return errors.Wrap(err, "error getting router URL")
+		return fmt.Errorf("error getting router URL: %w", err)
 	}
 	fnURI := util.UrlForFunction(m.Name, m.Namespace)
 	if input.IsSet(flagkey.FnSubPath) {
@@ -146,7 +146,7 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return errors.Wrap(err, "error reading response from function")
+		return fmt.Errorf("error reading response from function: %w", err)
 	}
 
 	if resp.StatusCode < 400 {
@@ -186,7 +186,7 @@ func doHTTPRequest(ctx context.Context, url string, headers []string, method, bo
 
 	req, err := http.NewRequest(method, url, strings.NewReader(body))
 	if err != nil {
-		return nil, errors.Wrap(err, "error creating HTTP request")
+		return nil, fmt.Errorf("error creating HTTP request: %w", err)
 	}
 
 	accesstoken, ok := os.LookupEnv(util.FISSION_AUTH_TOKEN)
@@ -213,7 +213,7 @@ func doHTTPRequest(ctx context.Context, url string, headers []string, method, bo
 	hc := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
 	resp, err := hc.Do(req.WithContext(ctx))
 	if err != nil {
-		return nil, errors.Wrap(err, "error executing HTTP request")
+		return nil, fmt.Errorf("error executing HTTP request: %w", err)
 	}
 
 	if console.Verbosity >= 2 {

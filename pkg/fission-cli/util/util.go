@@ -254,7 +254,7 @@ func GetResourceReqs(input cli.Input, resReqs *v1.ResourceRequirements) (*v1.Res
 		mincpu := input.Int(flagkey.RuntimeMincpu)
 		cpuRequest, err := resource.ParseQuantity(strconv.Itoa(mincpu) + "m")
 		if err != nil {
-			e = multierror.Append(e, errors.Wrap(err, "Failed to parse mincpu"))
+			e = multierror.Append(e, fmt.Errorf("Failed to parse mincpu: %w", err))
 		}
 		r.Requests[v1.ResourceCPU] = cpuRequest
 	}
@@ -263,7 +263,7 @@ func GetResourceReqs(input cli.Input, resReqs *v1.ResourceRequirements) (*v1.Res
 		minmem := input.Int(flagkey.RuntimeMinmemory)
 		memRequest, err := resource.ParseQuantity(strconv.Itoa(minmem) + "Mi")
 		if err != nil {
-			e = multierror.Append(e, errors.Wrap(err, "Failed to parse minmemory"))
+			e = multierror.Append(e, fmt.Errorf("Failed to parse minmemory: %w", err))
 		}
 		r.Requests[v1.ResourceMemory] = memRequest
 	}
@@ -272,7 +272,7 @@ func GetResourceReqs(input cli.Input, resReqs *v1.ResourceRequirements) (*v1.Res
 		maxcpu := input.Int(flagkey.RuntimeMaxcpu)
 		cpuLimit, err := resource.ParseQuantity(strconv.Itoa(maxcpu) + "m")
 		if err != nil {
-			e = multierror.Append(e, errors.Wrap(err, "Failed to parse maxcpu"))
+			e = multierror.Append(e, fmt.Errorf("Failed to parse maxcpu: %w", err))
 		}
 		r.Limits[v1.ResourceCPU] = cpuLimit
 	}
@@ -281,7 +281,7 @@ func GetResourceReqs(input cli.Input, resReqs *v1.ResourceRequirements) (*v1.Res
 		maxmem := input.Int(flagkey.RuntimeMaxmemory)
 		memLimit, err := resource.ParseQuantity(strconv.Itoa(maxmem) + "Mi")
 		if err != nil {
-			e = multierror.Append(e, errors.Wrap(err, "Failed to parse maxmemory"))
+			e = multierror.Append(e, fmt.Errorf("Failed to parse maxmemory: %w", err))
 		}
 		r.Limits[v1.ResourceMemory] = memLimit
 	}

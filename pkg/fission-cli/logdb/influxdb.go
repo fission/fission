@@ -173,7 +173,7 @@ func (influx InfluxDB) query(ctx context.Context, query influxdbClient.Query) (*
 
 	req, err := http.NewRequest(http.MethodPost, influx.endpoint, nil)
 	if err != nil {
-		return nil, errors.Wrap(err, "error creating request for log proxy")
+		return nil, fmt.Errorf("error creating request for log proxy: %w", err)
 	}
 	req.SetBasicAuth(username, password)
 

@@ -67,7 +67,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 
 	userProvidedNS, fnNamespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceFunction)
 	if err != nil {
-		return errors.Wrap(err, "error retrieving namespace information")
+		return fmt.Errorf("error retrieving namespace information: %w", err)
 	}
 
 	// user wants a spec, create a yaml file with package and function
@@ -201,7 +201,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 				if e, ok := err.(ferror.Error); ok && e.Code == ferror.ErrorNotFound {
 					console.Warn(fmt.Sprintf("Environment \"%s\" does not exist. Please create the environment before executing the function. \nFor example: `fission env create --name %s --envns %s --image <image>`\n", envName, envName, fnNamespace))
 				} else {
-					return errors.Wrap(err, "error retrieving environment information")
+					return fmt.Errorf("error retrieving environment information: %w", err)
 				}
 			}
 		}
@@ -228,7 +228,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		pkgMetadata, err = _package.CreatePackage(input, opts.Client(), pkgName, fnNamespace, envName,
 			srcArchiveFiles, deployArchiveFiles, buildcmd, specDir, opts.specFile, noZip, userProvidedNS)
 		if err != nil {
-			return errors.Wrap(err, "error creating package")
+			return fmt.Errorf("error creating package: %w", err)
 		}
 	}
 
@@ -368,14 +368,14 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 	if input.Bool(flagkey.SpecSave) {
 		err := spec.SpecSave(*opts.function, opts.specFile, false)
 		if err != nil {
-			return errors.Wrap(err, "error saving function spec")
+			return fmt.Errorf("error saving function spec: %w", err)
 		}
 		return nil
 	}
 
 	_, err := opts.Client().FissionClientSet.CoreV1().Functions(opts.function.ObjectMeta.Namespace).Create(input.Context(), opts.function, metav1.CreateOptions{})
 	if err != nil {
-		return errors.Wrap(err, "error creating function")
+		return fmt.Errorf("error creating function: %w", err)
 	}
 
 	fmt.Printf("function '%s' created\n", opts.function.ObjectMeta.Name)
@@ -420,7 +420,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 	}
 	_, err = opts.Client().FissionClientSet.CoreV1().HTTPTriggers(opts.function.ObjectMeta.Namespace).Create(input.Context(), ht, metav1.CreateOptions{})
 	if err != nil {
-		return errors.Wrap(err, "error creating HTTP trigger")
+		return fmt.Errorf("error creating HTTP trigger: %w", err)
 	}
 
 	fmt.Printf("route created: %s %s -> %s\n", methods, triggerUrl, opts.function.ObjectMeta.Name)

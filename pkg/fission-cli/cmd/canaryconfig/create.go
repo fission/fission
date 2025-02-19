@@ -57,7 +57,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) (err error) {
 
 	_, fnNs, err := opts.GetResourceNamespace(input, flagkey.NamespaceFunction)
 	if err != nil {
-		return errors.Wrap(err, "error in creating canaryconfig")
+		return fmt.Errorf("error in creating canaryconfig: %w", err)
 	}
 	incrementStep := input.Int(flagkey.CanaryWeightIncrement)
 	failureThreshold := input.Int(flagkey.CanaryFailureThreshold)
@@ -66,13 +66,13 @@ func (opts *CreateSubCommand) complete(input cli.Input) (err error) {
 	// check for time parsing
 	_, err = time.ParseDuration(incrementInterval)
 	if err != nil {
-		return errors.Wrap(err, "error parsing time duration")
+		return fmt.Errorf("error parsing time duration: %w", err)
 	}
 
 	// check that the trigger exists in the same namespace.
 	htTrigger, err := opts.Client().FissionClientSet.CoreV1().HTTPTriggers(fnNs).Get(input.Context(), ht, metav1.GetOptions{})
 	if err != nil {
-		return errors.Wrap(err, "error finding http trigger referenced in the canary config")
+		return fmt.Errorf("error finding http trigger referenced in the canary config: %w", err)
 	}
 
 	// check that the trigger has function reference type function weights
@@ -95,7 +95,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) (err error) {
 	fnList := []string{newFunc, oldFunc}
 	err = util.CheckFunctionExistence(input.Context(), opts.Client(), fnList, fnNs)
 	if err != nil {
-		return errors.Wrap(err, "error checking functions existence")
+		return fmt.Errorf("error checking functions existence: %w", err)
 	}
 
 	// finally create canaryCfg in the same namespace as the functions referenced
@@ -124,7 +124,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) (err error) {
 func (opts *CreateSubCommand) run(input cli.Input) error {
 	_, err := opts.Client().FissionClientSet.CoreV1().CanaryConfigs(opts.canary.ObjectMeta.Namespace).Create(input.Context(), opts.canary, metav1.CreateOptions{})
 	if err != nil {
-		return errors.Wrap(err, "error creating canary config")
+		return fmt.Errorf("error creating canary config: %w", err)
 	}
 
 	fmt.Printf("canary config '%s' created\n", opts.canary.ObjectMeta.Name)

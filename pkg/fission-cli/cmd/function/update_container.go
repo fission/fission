@@ -55,7 +55,7 @@ func (opts *UpdateContainerSubCommand) complete(input cli.Input) error {
 
 	_, fnNamespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceFunction)
 	if err != nil {
-		return errors.Wrap(err, "error in updating container for function ")
+		return fmt.Errorf("error in updating container for function : %w", err)
 	}
 
 	function, err := opts.Client().FissionClientSet.CoreV1().Functions(fnNamespace).Get(input.Context(), input.String(flagkey.FnName), metav1.GetOptions{})
@@ -186,7 +186,7 @@ func (opts *UpdateContainerSubCommand) complete(input cli.Input) error {
 func (opts *UpdateContainerSubCommand) run(input cli.Input) error {
 	_, err := opts.Client().FissionClientSet.CoreV1().Functions(opts.function.Namespace).Update(input.Context(), opts.function, metav1.UpdateOptions{})
 	if err != nil {
-		return errors.Wrap(err, "error updating function")
+		return fmt.Errorf("error updating function: %w", err)
 	}
 
 	return nil

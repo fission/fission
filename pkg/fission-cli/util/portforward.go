@@ -50,7 +50,7 @@ func SetupPortForward(ctx context.Context, client cmd.Client, namespace, labelSe
 
 	lcPort, err := utils.FindFreePort()
 	if err != nil {
-		return "", errors.Wrap(err, "error finding unused port")
+		return "", fmt.Errorf("error finding unused port: %w", err)
 	}
 	localPort := strconv.Itoa(lcPort)
 
@@ -202,7 +202,7 @@ func runPortForward(ctx context.Context, client cmd.Client, labelSelector string
 	}
 	fw, err := portforward.New(dialer, ports, stopChannel, readyChannel, outStream, os.Stderr)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "error creating port forwarder")
+		return nil, nil, fmt.Errorf("error creating port forwarder: %w", err)
 	}
 
 	go func() {

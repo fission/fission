@@ -41,7 +41,7 @@ func (opts *DeleteSubCommand) do(input cli.Input) (err error) {
 
 	_, currentContextNS, err := opts.GetResourceNamespace(input, flagkey.NamespaceEnvironment)
 	if err != nil {
-		return errors.Wrap(err, "error creating environment")
+		return fmt.Errorf("error creating environment: %w", err)
 	}
 	console.Verbose(2, "Searching for resource in  %s Namespace", currentContextNS)
 	envName := input.String(flagkey.EnvName)
@@ -49,7 +49,7 @@ func (opts *DeleteSubCommand) do(input cli.Input) (err error) {
 	if !input.Bool(flagkey.EnvForce) {
 		fns, err := opts.Client().FissionClientSet.CoreV1().Functions(metav1.NamespaceAll).List(input.Context(), metav1.ListOptions{})
 		if err != nil {
-			return errors.Wrap(err, "Error getting functions wrt environment.")
+			return fmt.Errorf("Error getting functions wrt environment.: %w", err)
 		}
 
 		for _, fn := range fns.Items {
@@ -65,7 +65,7 @@ func (opts *DeleteSubCommand) do(input cli.Input) (err error) {
 		if input.Bool(flagkey.IgnoreNotFound) && kerrors.IsNotFound(err) {
 			return nil
 		}
-		return errors.Wrap(err, "error deleting environment")
+		return fmt.Errorf("error deleting environment: %w", err)
 	}
 
 	fmt.Printf("environment '%s' deleted\n", envName)

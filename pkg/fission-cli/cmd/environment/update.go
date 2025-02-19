@@ -57,11 +57,11 @@ func (opts *UpdateSubCommand) complete(input cli.Input) (err error) {
 
 	_, currentContextNS, err := opts.GetResourceNamespace(input, flagkey.NamespaceEnvironment)
 	if err != nil {
-		return errors.Wrap(err, "error creating environment")
+		return fmt.Errorf("error creating environment: %w", err)
 	}
 	env, err := opts.Client().FissionClientSet.CoreV1().Environments(currentContextNS).Get(input.Context(), input.String(flagkey.EnvName), metav1.GetOptions{})
 	if err != nil {
-		return errors.Wrap(err, "error finding environment")
+		return fmt.Errorf("error finding environment: %w", err)
 	}
 
 	env, err = updateExistingEnvironmentWithCmd(env, input)
@@ -89,13 +89,13 @@ func (opts *UpdateSubCommand) run(input cli.Input) error {
 		specFile := fmt.Sprintf("env-%s.yaml", m.Name)
 		err = spec.SpecSave(*opts.env, specFile, true)
 		if err != nil {
-			return errors.Wrap(err, "error saving environment spec")
+			return fmt.Errorf("error saving environment spec: %w", err)
 		}
 		return nil
 	}
 	enew, err := opts.Client().FissionClientSet.CoreV1().Environments(opts.env.ObjectMeta.Namespace).Update(input.Context(), opts.env, metav1.UpdateOptions{})
 	if err != nil {
-		return errors.Wrap(err, "error updating environment")
+		return fmt.Errorf("error updating environment: %w", err)
 	}
 
 	fmt.Printf("environment '%v' updated\n", enew.ObjectMeta.Name)
@@ -151,7 +151,7 @@ func updateExistingEnvironmentWithCmd(env *fv1.Environment, input cli.Input) (*f
 		mincpu := input.Int(flagkey.RuntimeMincpu)
 		cpuRequest, err := resource.ParseQuantity(strconv.Itoa(mincpu) + "m")
 		if err != nil {
-			e = multierror.Append(e, errors.Wrap(err, "Failed to parse mincpu"))
+			e = multierror.Append(e, fmt.Errorf("Failed to parse mincpu: %w", err))
 		}
 		env.Spec.Resources.Requests[v1.ResourceCPU] = cpuRequest
 	}
@@ -160,7 +160,7 @@ func updateExistingEnvironmentWithCmd(env *fv1.Environment, input cli.Input) (*f
 		maxcpu := input.Int(flagkey.RuntimeMaxcpu)
 		cpuLimit, err := resource.ParseQuantity(strconv.Itoa(maxcpu) + "m")
 		if err != nil {
-			e = multierror.Append(e, errors.Wrap(err, "Failed to parse maxcpu"))
+			e = multierror.Append(e, fmt.Errorf("Failed to parse maxcpu: %w", err))
 		}
 		env.Spec.Resources.Limits[v1.ResourceCPU] = cpuLimit
 	}
@@ -169,7 +169,7 @@ func updateExistingEnvironmentWithCmd(env *fv1.Environment, input cli.Input) (*f
 		minmem := input.Int(flagkey.RuntimeMinmemory)
 		memRequest, err := resource.ParseQuantity(strconv.Itoa(minmem) + "Mi")
 		if err != nil {
-			e = multierror.Append(e, errors.Wrap(err, "Failed to parse minmemory"))
+			e = multierror.Append(e, fmt.Errorf("Failed to parse minmemory: %w", err))
 		}
 		env.Spec.Resources.Requests[v1.ResourceMemory] = memRequest
 	}
@@ -178,7 +178,7 @@ func updateExistingEnvironmentWithCmd(env *fv1.Environment, input cli.Input) (*f
 		maxmem := input.Int(flagkey.RuntimeMaxmemory)
 		memLimit, err := resource.ParseQuantity(strconv.Itoa(maxmem) + "Mi")
 		if err != nil {
-			e = multierror.Append(e, errors.Wrap(err, "Failed to parse maxmemory"))
+			e = multierror.Append(e, fmt.Errorf("Failed to parse maxmemory: %w", err))
 		}
 		env.Spec.Resources.Limits[v1.ResourceMemory] = memLimit
 	}

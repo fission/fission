@@ -65,7 +65,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) (err error) {
 
 	userProvidedNS, fnNamespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceFunction)
 	if err != nil {
-		return errors.Wrap(err, "error in deleting function ")
+		return fmt.Errorf("error in deleting function : %w", err)
 	}
 
 	cronSpec := input.String(flagkey.TtCron)
@@ -135,14 +135,14 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 		specFile := fmt.Sprintf("timetrigger-%v.yaml", opts.trigger.ObjectMeta.Name)
 		err := spec.SpecSave(*opts.trigger, specFile, false)
 		if err != nil {
-			return errors.Wrap(err, "error saving time trigger spec")
+			return fmt.Errorf("error saving time trigger spec: %w", err)
 		}
 		return nil
 	}
 
 	_, err := opts.Client().FissionClientSet.CoreV1().TimeTriggers(opts.trigger.Namespace).Create(input.Context(), opts.trigger, metav1.CreateOptions{})
 	if err != nil {
-		return errors.Wrap(err, "error creating Time trigger")
+		return fmt.Errorf("error creating Time trigger: %w", err)
 	}
 
 	fmt.Printf("trigger '%v' created\n", opts.trigger.ObjectMeta.Name)
@@ -151,7 +151,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 
 	err = getCronNextNActivationTime(opts.trigger.Spec.Cron, t, 1)
 	if err != nil {
-		return errors.Wrap(err, "error passing cron spec examination")
+		return fmt.Errorf("error passing cron spec examination: %w", err)
 	}
 
 	return nil
