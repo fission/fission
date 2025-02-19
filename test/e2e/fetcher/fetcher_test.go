@@ -18,6 +18,14 @@ import (
 	"github.com/fission/fission/pkg/fetcher/client"
 	storageClient "github.com/fission/fission/pkg/storagesvc/client"
 
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+	"go.uber.org/zap"
+	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/kubernetes"
+
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/httpserver"
@@ -27,13 +35,6 @@ import (
 	"github.com/fission/fission/test/e2e/framework"
 	"github.com/fission/fission/test/e2e/framework/cli"
 	"github.com/fission/fission/test/e2e/framework/services"
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
-	"go.uber.org/zap"
-	v1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/wait"
-	"k8s.io/client-go/kubernetes"
 )
 
 const testFileData = `

@@ -23,10 +23,10 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	apiv1 "k8s.io/api/core/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
-	apiv1 "k8s.io/api/core/v1"
 )
 
 func TestGetSpecFromConfigMap(t *testing.T) {

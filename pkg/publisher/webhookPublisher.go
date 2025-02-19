@@ -25,11 +25,12 @@ import (
 	"strings"
 	"time"
 
-	otelUtils "github.com/fission/fission/pkg/utils/otel"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
 	"go.uber.org/zap"
 	"golang.org/x/net/context/ctxhttp"
+
+	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
 type (

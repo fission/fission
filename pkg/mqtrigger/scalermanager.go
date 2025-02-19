@@ -17,13 +17,14 @@ import (
 	"k8s.io/client-go/kubernetes"
 	k8sCache "k8s.io/client-go/tools/cache"
 
+	kedav1alpha1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
+	kedaClient "github.com/kedacore/keda/v2/pkg/generated/clientset/versioned"
+
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/executor/util"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/manager"
-	kedav1alpha1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
-	kedaClient "github.com/kedacore/keda/v2/pkg/generated/clientset/versioned"
 )
 
 var (

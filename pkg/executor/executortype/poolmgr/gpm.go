@@ -27,7 +27,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/fission/fission/pkg/executor/metrics"
 	"go.opentelemetry.io/otel/attribute"
 	"go.uber.org/zap"
 	apiv1 "k8s.io/api/core/v1"
@@ -47,6 +46,7 @@ import (
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/executor/executortype"
 	"github.com/fission/fission/pkg/executor/fscache"
+	"github.com/fission/fission/pkg/executor/metrics"
 	"github.com/fission/fission/pkg/executor/reaper"
 	executorUtils "github.com/fission/fission/pkg/executor/util"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"

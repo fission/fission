@@ -29,6 +29,10 @@ env:
 permissions:
   contents: read
 
+concurrency:
+  group: fission-ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   # Job to run change detection
   integration-test:

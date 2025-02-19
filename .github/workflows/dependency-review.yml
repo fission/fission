@@ -12,6 +12,10 @@ on: [pull_request]
 permissions:
   contents: read
 
+concurrency:
+  group: fission-dependency-review-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   dependency-review:
     runs-on: ubuntu-24.04

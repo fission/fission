@@ -7,9 +7,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
-	"github.com/stretchr/testify/assert"
 )
 
 func TestPublisher(t *testing.T) {

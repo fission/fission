@@ -28,8 +28,9 @@ linters:
     # - gocritic
 linters-settings:
   errcheck:
-    ignore: go.uber.org/zap:Sync
+    exclude-functions:
+    - (*go.uber.org/zap.Logger).Sync
   goimports:
     # put imports beginning with prefix after 3rd-party packages;
     # it's a comma-separated list of prefixes
-    local: github.com/fission/fission
+    local-prefixes: github.com/fission/fission
