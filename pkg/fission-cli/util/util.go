@@ -32,8 +32,9 @@ import (
 
 	ignore "github.com/sabhiram/go-gitignore"
 
+	"errors"
+
 	"github.com/hashicorp/go-multierror"
-	"github.com/pkg/errors"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -576,7 +577,7 @@ func FunctionPodLogs(ctx context.Context, fnName, ns string, client cmd.Client) 
 	// get the pod with highest resource version
 	err = getContainerLog(ctx, client.KubernetesClient, f, &pods[0])
 	if err != nil {
-		return errors.Wrapf(err, "error getting container logs")
+		return fmt.Errorf("error getting container logs: %w", err)
 
 	}
 	return err
@@ -591,19 +592,19 @@ func getContainerLog(ctx context.Context, kubernetesClient kubernetes.Interface,
 
 		podLogs, err := podLogsReq.Stream(ctx)
 		if err != nil {
-			return errors.Wrapf(err, "error streaming pod log")
+			return fmt.Errorf("error streaming pod log: %w", err)
 		}
 
 		msg := fmt.Sprintf("\n%v\nFunction: %v\nEnvironment: %v\nNamespace: %v\nPod: %v\nContainer: %v\nNode: %v\n%v\n", seq,
 			fn.ObjectMeta.Name, fn.Spec.Environment.Name, pod.Namespace, pod.Name, container.Name, pod.Spec.NodeName, seq)
 
 		if _, err := io.WriteString(os.Stdout, msg); err != nil {
-			return errors.Wrapf(err, "error copying pod log")
+			return fmt.Errorf("error copying pod log: %w", err)
 		}
 
 		_, err = io.Copy(os.Stdout, podLogs)
 		if err != nil {
-			return errors.Wrapf(err, "error copying pod log")
+			return fmt.Errorf("error copying pod log: %w", err)
 		}
 
 		podLogs.Close()

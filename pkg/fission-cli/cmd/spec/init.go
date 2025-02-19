@@ -21,7 +21,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/pkg/errors"
 	"sigs.k8s.io/yaml"
 
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
@@ -73,7 +72,7 @@ func (opts *InitSubCommand) complete(input cli.Input) error {
 	fmt.Printf("Creating fission spec directory '%v'\n", specDir)
 	err := os.MkdirAll(specDir, 0755)
 	if err != nil {
-		return errors.Wrapf(err, "create spec directory '%v'", specDir)
+		return fmt.Errorf("create spec directory '%v': %w", specDir, err)
 	}
 
 	// Write the deployment config

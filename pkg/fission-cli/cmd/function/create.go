@@ -17,9 +17,9 @@ limitations under the License.
 package function
 
 import (
+	"errors"
 	"fmt"
 
-	"github.com/pkg/errors"
 	asv2 "k8s.io/api/autoscaling/v2"
 	apiv1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -141,7 +141,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 
 			fr, err := spec.ReadSpecs(specDir, specIgnore, false)
 			if err != nil {
-				return errors.Wrap(err, fmt.Sprintf("error reading spec in '%s'", specDir))
+				return fmt.Errorf("error reading spec in '%s': %w", specDir, err)
 			}
 
 			obj := fr.SpecExists(&fv1.Package{ // In case of spec I might or might not have the `fnNamespace`, how will I get pkg objectMeta here.
@@ -160,7 +160,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 			// use existing package
 			pkg, err = opts.Client().FissionClientSet.CoreV1().Packages(fnNamespace).Get(input.Context(), pkgName, metav1.GetOptions{})
 			if err != nil {
-				return errors.Wrap(err, fmt.Sprintf("read package in '%s' in Namespace: %s. Package needs to be present in the same namespace as function", pkgName, fnNamespace))
+				return fmt.Errorf("read package in '%s' in Namespace: %s. Package needs to be present in the same namespace as function: %w", pkgName, fnNamespace, err)
 			}
 			pkgMetadata = &pkg.ObjectMeta
 		}
@@ -180,7 +180,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 
 			fr, err := spec.ReadSpecs(specDir, specIgnore, false)
 			if err != nil {
-				return errors.Wrap(err, fmt.Sprintf("error reading spec in '%s'", specDir))
+				return fmt.Errorf("error reading spec in '%s': %w", specDir, err)
 			}
 			exists, err := fr.ExistsInSpecs(fv1.Environment{
 				ObjectMeta: metav1.ObjectMeta{
@@ -244,7 +244,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 					if k8serrors.IsNotFound(err) {
 						console.Warn(fmt.Sprintf("Secret %s not found in Namespace: %s. Secret needs to be present in the same namespace as function", secretName, fnNamespace))
 					} else {
-						return errors.Wrapf(err, "error checking secret %s", secretName)
+						return fmt.Errorf("error checking secret %s: %w", secretName, err)
 					}
 				}
 				newSecret := fv1.SecretReference{
@@ -274,7 +274,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 					if k8serrors.IsNotFound(err) {
 						console.Warn(fmt.Sprintf("ConfigMap %s not found in Namespace: %s. ConfigMap needs to be present in the same namespace as function", cfgMapName, fnNamespace))
 					} else {
-						return errors.Wrapf(err, "error checking configmap %s", cfgMapName)
+						return fmt.Errorf("error checking configmap %s: %w", cfgMapName, err)
 					}
 				}
 				newCfgMap := fv1.ConfigMapReference{

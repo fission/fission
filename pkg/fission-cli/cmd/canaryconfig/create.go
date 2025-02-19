@@ -17,10 +17,10 @@ limitations under the License.
 package canaryconfig
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
-	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"

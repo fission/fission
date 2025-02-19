@@ -47,7 +47,6 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
-	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel"
 	"go.uber.org/zap"
 
@@ -121,37 +120,37 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *
 	timeoutStr := os.Getenv("ROUTER_ROUND_TRIP_TIMEOUT")
 	timeout, err := time.ParseDuration(timeoutStr)
 	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("failed to parse timeout duration value('%s') from 'ROUTER_ROUND_TRIP_TIMEOUT'", timeoutStr))
+		return fmt.Errorf("failed to parse timeout duration value('%s') from 'ROUTER_ROUND_TRIP_TIMEOUT': %w", timeoutStr, err)
 	}
 
 	timeoutExponentStr := os.Getenv("ROUTER_ROUNDTRIP_TIMEOUT_EXPONENT")
 	timeoutExponent, err := strconv.Atoi(timeoutExponentStr)
 	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("failed to parse timeout exponent value('%s') from 'ROUTER_ROUNDTRIP_TIMEOUT_EXPONENT'", timeoutExponentStr))
+		return fmt.Errorf("failed to parse timeout exponent value('%s') from 'ROUTER_ROUNDTRIP_TIMEOUT_EXPONENT': %w", timeoutExponentStr, err)
 	}
 
 	keepAliveTimeStr := os.Getenv("ROUTER_ROUND_TRIP_KEEP_ALIVE_TIME")
 	keepAliveTime, err := time.ParseDuration(keepAliveTimeStr)
 	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("failed to parse keep alive duration value('%s') from 'ROUTER_ROUND_TRIP_KEEP_ALIVE_TIME'", keepAliveTimeStr))
+		return fmt.Errorf("failed to parse keep alive duration value('%s') from 'ROUTER_ROUND_TRIP_KEEP_ALIVE_TIME': %w", keepAliveTimeStr, err)
 	}
 
 	disableKeepAliveStr := os.Getenv("ROUTER_ROUND_TRIP_DISABLE_KEEP_ALIVE")
 	disableKeepAlive, err := strconv.ParseBool(disableKeepAliveStr)
 	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("failed to parse enable keep alive value('%s') from 'ROUTER_ROUND_TRIP_DISABLE_KEEP_ALIVE'", disableKeepAliveStr))
+		return fmt.Errorf("failed to parse enable keep alive value('%s') from 'ROUTER_ROUND_TRIP_DISABLE_KEEP_ALIVE': %w", disableKeepAliveStr, err)
 	}
 
 	maxRetriesStr := os.Getenv("ROUTER_ROUND_TRIP_MAX_RETRIES")
 	maxRetries, err := strconv.Atoi(maxRetriesStr)
 	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("failed to parse max retries value('%s') from 'ROUTER_ROUND_TRIP_MAX_RETRIES'", maxRetriesStr))
+		return fmt.Errorf("failed to parse max retries value('%s') from 'ROUTER_ROUND_TRIP_MAX_RETRIES': %w", maxRetriesStr, err)
 	}
 
 	isDebugEnvStr := os.Getenv("DEBUG_ENV")
 	isDebugEnv, err := strconv.ParseBool(isDebugEnvStr)
 	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("failed to parse debug env value('%s') from 'DEBUG_ENV'", isDebugEnvStr))
+		return fmt.Errorf("failed to parse debug env value('%s') from 'DEBUG_ENV': %w", isDebugEnvStr, err)
 	}
 
 	// svcAddrRetryCount is the max times for RetryingRoundTripper to retry with a specific service address

@@ -17,11 +17,12 @@ limitations under the License.
 package environment
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 
 	"github.com/hashicorp/go-multierror"
-	"github.com/pkg/errors"
+
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -151,7 +152,7 @@ func updateExistingEnvironmentWithCmd(env *fv1.Environment, input cli.Input) (*f
 		mincpu := input.Int(flagkey.RuntimeMincpu)
 		cpuRequest, err := resource.ParseQuantity(strconv.Itoa(mincpu) + "m")
 		if err != nil {
-			e = multierror.Append(e, fmt.Errorf("Failed to parse mincpu: %w", err))
+			e = multierror.Append(e, fmt.Errorf("failed to parse mincpu: %w", err))
 		}
 		env.Spec.Resources.Requests[v1.ResourceCPU] = cpuRequest
 	}

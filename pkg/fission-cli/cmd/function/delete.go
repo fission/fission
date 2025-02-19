@@ -19,7 +19,6 @@ package function
 import (
 	"fmt"
 
-	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
@@ -52,7 +51,7 @@ func (opts *DeleteSubCommand) do(input cli.Input) error {
 		if input.Bool(flagkey.IgnoreNotFound) && util.IsNotFound(err) {
 			return nil
 		}
-		return errors.Wrap(err, fmt.Sprintf("delete function '%s'", m.Name))
+		return fmt.Errorf("delete function '%s': %w", m.Name, err)
 	}
 
 	fmt.Printf("function '%s' deleted\n", m.Name)

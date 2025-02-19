@@ -27,7 +27,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pkg/errors"
+	"errors"
+
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -58,7 +59,7 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 
 	function, err := opts.Client().FissionClientSet.CoreV1().Functions(namespace).Get(input.Context(), fnName, metav1.GetOptions{})
 	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("read function '%s'", fnName))
+		return fmt.Errorf("read function '%s': %w", fnName, err)
 	}
 
 	m := &metav1.ObjectMeta{

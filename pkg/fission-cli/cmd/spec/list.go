@@ -24,7 +24,6 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -83,7 +82,7 @@ func (opts *ListSubCommand) getResource(input cli.Input, namespace string, deplo
 
 	allfn, err = getAllFunctions(input.Context(), opts.Client(), namespace)
 	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("error getting Functions from %s namespaces", printNS))
+		return fmt.Errorf("error getting Functions from %s namespaces: %w", printNS, err)
 	}
 	specfns := getAppliedFunctions(allfn, deployID)
 	ShowFunctions(specfns)
@@ -91,7 +90,7 @@ func (opts *ListSubCommand) getResource(input cli.Input, namespace string, deplo
 	var allenvs []fv1.Environment
 	allenvs, err = getAllEnvironments(input.Context(), opts.Client(), namespace)
 	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("error getting Environments from  %s namespaces", printNS))
+		return fmt.Errorf("error getting Environments from  %s namespaces: %w", printNS, err)
 	}
 	specenvs := getAppliedEnvironments(allenvs, deployID)
 	ShowEnvironments(specenvs)
@@ -99,7 +98,7 @@ func (opts *ListSubCommand) getResource(input cli.Input, namespace string, deplo
 	var pkglists []fv1.Package
 	pkglists, err = getAllPackages(input.Context(), opts.Client(), namespace)
 	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("error getting Packages from  %s namespaces", printNS))
+		return fmt.Errorf("error getting Packages from  %s namespaces: %w", printNS, err)
 	}
 	specPkgs := getAppliedPackages(pkglists, deployID)
 	ShowPackages(specPkgs)
@@ -107,7 +106,7 @@ func (opts *ListSubCommand) getResource(input cli.Input, namespace string, deplo
 	var canaryCfgs []fv1.CanaryConfig
 	canaryCfgs, err = getAllCanaryConfigs(input.Context(), opts.Client(), namespace)
 	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("error getting Canary Config from  %s namespaces", printNS))
+		return fmt.Errorf("error getting Canary Config from  %s namespaces: %w", printNS, err)
 	}
 	specCanaryCfgs := getAppliedCanaryConfigs(canaryCfgs, deployID)
 	ShowCanaryConfigs(specCanaryCfgs)
@@ -115,7 +114,7 @@ func (opts *ListSubCommand) getResource(input cli.Input, namespace string, deplo
 	var hts []fv1.HTTPTrigger
 	hts, err = getAllHTTPTriggers(input.Context(), opts.Client(), namespace)
 	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("error getting HTTP Triggers from  %s namespaces", printNS))
+		return fmt.Errorf("error getting HTTP Triggers from  %s namespaces: %w", printNS, err)
 	}
 	specHTTPTriggers := getAppliedHTTPTriggers(hts, deployID)
 	ShowHTTPTriggers(specHTTPTriggers)
@@ -123,7 +122,7 @@ func (opts *ListSubCommand) getResource(input cli.Input, namespace string, deplo
 	var mqts []fv1.MessageQueueTrigger
 	mqts, err = getAllMessageQueueTriggers(input.Context(), opts.Client(), input.String(flagkey.MqtMQType), namespace)
 	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("error getting MessageQueue Triggers from  %s namespaces", printNS))
+		return fmt.Errorf("error getting MessageQueue Triggers from  %s namespaces: %w", printNS, err)
 	}
 	specMessageQueueTriggers := getAppliedMessageQueueTriggers(mqts, deployID)
 	ShowMQTriggers(specMessageQueueTriggers)
@@ -131,7 +130,7 @@ func (opts *ListSubCommand) getResource(input cli.Input, namespace string, deplo
 	var tts []fv1.TimeTrigger
 	tts, err = getAllTimeTriggers(input.Context(), opts.Client(), namespace)
 	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("error getting Time Triggers from  %s namespaces", printNS))
+		return fmt.Errorf("error getting Time Triggers from  %s namespaces: %w", printNS, err)
 	}
 	specTimeTriggers := getAppliedTimeTriggers(tts, deployID)
 	ShowTimeTriggers(specTimeTriggers)
@@ -139,7 +138,7 @@ func (opts *ListSubCommand) getResource(input cli.Input, namespace string, deplo
 	var kws []fv1.KubernetesWatchTrigger
 	kws, err = getAllKubeWatchTriggers(input.Context(), opts.Client(), namespace)
 	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("error getting Kube Watchers from  %s namespaces", printNS))
+		return fmt.Errorf("error getting Kube Watchers from  %s namespaces: %w", printNS, err)
 	}
 	specKubeWatchers := getSpecKubeWatchers(kws, deployID)
 	ShowAppliedKubeWatchers(specKubeWatchers)

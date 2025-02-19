@@ -19,7 +19,7 @@ package timetrigger
 import (
 	"fmt"
 
-	"github.com/pkg/errors"
+	"errors"
 
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"

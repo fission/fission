@@ -20,7 +20,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/pkg/errors"
+	"errors"
+
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -114,7 +115,7 @@ func deleteOrphanPkgs(ctx context.Context, client cmd.Client, pkgNamespace strin
 	for _, pkg := range pkgList.Items {
 		fnList, err := GetFunctionsByPackage(ctx, client, pkg.ObjectMeta.Name, pkgNamespace)
 		if err != nil {
-			return errors.Wrap(err, fmt.Sprintf("get functions sharing package %s", pkg.ObjectMeta.Name))
+			return fmt.Errorf("get functions sharing package %v: %w", pkg.ObjectMeta.Name, err)
 		}
 		if len(fnList) == 0 {
 			err = deletePackage(ctx, client, pkg.ObjectMeta.Name, pkgNamespace)

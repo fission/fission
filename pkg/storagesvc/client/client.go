@@ -28,7 +28,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/pkg/errors"
+	"errors"
+
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"golang.org/x/net/context/ctxhttp"
 

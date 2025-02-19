@@ -23,7 +23,8 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/utils/uuid"
 
-	"github.com/pkg/errors"
+	"errors"
+
 	"github.com/robfig/cron/v3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -78,7 +79,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) (err error) {
 		specIgnore := util.GetSpecIgnore(input)
 		fr, err := spec.ReadSpecs(specDir, specIgnore, false)
 		if err != nil {
-			return errors.Wrap(err, fmt.Sprintf("error reading spec in '%v'", specDir))
+			return fmt.Errorf("error reading spec in '%v': %w", specDir, err)
 		}
 
 		exists, err := fr.ExistsInSpecs(fv1.Function{

@@ -26,7 +26,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pkg/errors"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/portforward"
@@ -118,7 +117,7 @@ func runPortForward(ctx context.Context, client cmd.Client, labelSelector string
 	podList, err := client.KubernetesClient.CoreV1().Pods(ns).
 		List(ctx, metav1.ListOptions{LabelSelector: labelSelector})
 	if err != nil {
-		return nil, nil, errors.Wrapf(err, "error getting pod for port-forwarding with label selector %v", labelSelector)
+		return nil, nil, fmt.Errorf("error getting pod for port-forwarding with label selector %v: %w", labelSelector, err)
 	} else if len(podList.Items) == 0 {
 		return nil, nil, fmt.Errorf("no available pod for port-forwarding with label selector %v", labelSelector)
 	}
@@ -164,7 +163,7 @@ func runPortForward(ctx context.Context, client cmd.Client, labelSelector string
 	svcs, err := client.KubernetesClient.CoreV1().Services(podNameSpace).
 		List(ctx, metav1.ListOptions{LabelSelector: labelSelector})
 	if err != nil {
-		return nil, nil, errors.Wrapf(err, "Error getting %v service", labelSelector)
+		return nil, nil, fmt.Errorf("Error getting %v service: %w", labelSelector, err)
 	}
 	if len(svcs.Items) == 0 {
 		return nil, nil, fmt.Errorf("Service %v not found", labelSelector)

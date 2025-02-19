@@ -19,6 +19,7 @@ package poolmgr
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"net"
@@ -28,7 +29,6 @@ import (
 	"time"
 
 	"github.com/dchest/uniuri"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"

@@ -21,8 +21,9 @@ import (
 	"os"
 	"strings"
 
+	"errors"
+
 	"github.com/go-git/go-git/v5"
-	"github.com/pkg/errors"
 )
 
 type GitRepo struct {

@@ -23,7 +23,6 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/pkg/errors"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -87,7 +86,7 @@ func (opts *ListSubCommand) run(input cli.Input) (err error) {
 		if opts.listOrphans {
 			fnList, err := GetFunctionsByPackage(input.Context(), opts.Client(), pkg.ObjectMeta.Name, pkg.ObjectMeta.Namespace)
 			if err != nil {
-				return errors.Wrap(err, fmt.Sprintf("get functions sharing package %s", pkg.ObjectMeta.Name))
+				return fmt.Errorf("get functions sharing package %v: %w", pkg.ObjectMeta.Name, err)
 			}
 			if len(fnList) > 0 {
 				show = false

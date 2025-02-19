@@ -22,7 +22,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/pkg/errors"
+	"errors"
+
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -125,7 +126,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		specIgnore := util.GetSpecIgnore(input)
 		fr, err := spec.ReadSpecs(specDir, specIgnore, false)
 		if err != nil {
-			return errors.Wrap(err, fmt.Sprintf("error reading spec in '%v'", specDir))
+			return fmt.Errorf("error reading spec in '%v': %w", specDir, err)
 		}
 		for _, fn := range functionList {
 			exists, err := fr.ExistsInSpecs(fv1.Function{

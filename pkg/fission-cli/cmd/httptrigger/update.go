@@ -20,7 +20,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/pkg/errors"
+	"errors"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -54,7 +55,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) (err error) {
 
 	_, triggerNamespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceTrigger)
 	if err != nil {
-		return fmt.Errorf("error in deleting function : %w", err)rr)
+		return fmt.Errorf("error in deleting function : %w", err)
 	}
 
 	ht, err := opts.Client().FissionClientSet.CoreV1().HTTPTriggers(triggerNamespace).Get(input.Context(), htName, metav1.GetOptions{})

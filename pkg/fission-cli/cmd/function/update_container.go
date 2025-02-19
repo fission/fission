@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/pkg/errors"
 	apiv1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -61,7 +60,7 @@ func (opts *UpdateContainerSubCommand) complete(input cli.Input) error {
 	function, err := opts.Client().FissionClientSet.CoreV1().Functions(fnNamespace).Get(input.Context(), input.String(flagkey.FnName), metav1.GetOptions{})
 
 	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("read function '%v'", fnName))
+		return fmt.Errorf("read function '%v': %w", fnName, err)
 	}
 	if fv1.ExecutorTypeContainer != function.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType {
 		return fmt.Errorf("executor type for function is not %s", fv1.ExecutorTypeContainer)

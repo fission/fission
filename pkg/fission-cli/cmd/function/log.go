@@ -24,7 +24,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
@@ -44,7 +43,7 @@ func Log(input cli.Input) error {
 
 func (opts *LogSubCommand) do(input cli.Input) error {
 	_, namespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceFunction)
-	if err !fmt.Errorf("error in logs for function : %w", err)
+	if err != nil {
 		return fmt.Errorf("error in logs for function : %w", err)
 	}
 
@@ -71,7 +70,7 @@ func (opts *LogSubCommand) do(input cli.Input) error {
 	// request the controller to establish a proxy server to the database.
 	logDB, err := logdb.GetLogDB(dbType, input.Context(), logDBOptions)
 	if err != nil {
-		return errors.Wrapf(err, "failed to get log from %s", dbType)
+		return fmt.Errorf("failed to get log from %s: %w", dbType, err)
 	}
 
 	requestChan := make(chan struct{})

@@ -19,7 +19,8 @@ package mqtrigger
 import (
 	"fmt"
 
-	"github.com/pkg/errors"
+	"errors"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -51,7 +52,7 @@ func (opts *UpdateSubCommand) do(input cli.Input) error {
 func (opts *UpdateSubCommand) complete(input cli.Input) (err error) {
 	_, namespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceTrigger)
 	if err != nil {
-		return fmt.Errorf("error in deleting function : %w", err)rr)
+		return fmt.Errorf("error in deleting function : %w", err)
 	}
 
 	mqt, err := opts.Client().FissionClientSet.CoreV1().MessageQueueTriggers(namespace).Get(input.Context(), input.String(flagkey.MqtName), metav1.GetOptions{})

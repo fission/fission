@@ -26,8 +26,6 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/pkg/errors"
-
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/util"
@@ -53,19 +51,19 @@ func UploadArchiveFile(ctx context.Context, client cmd.Client, fileName string) 
 	} else {
 		storagesvcURL, err := util.GetStorageURL(ctx, client)
 		if err != nil {
-			return nil, errors.Wrapf(err, "error getting fission storage service URL")
+			return nil, fmt.Errorf("error getting fission storage service URL: %w", err)
 		}
 
 		storageClient := storageSvcClient.MakeClient(storagesvcURL.String())
 		// TODO add a progress bar
 		id, err := storageClient.Upload(ctx, fileName, nil)
 		if err != nil {
-			return nil, errors.Wrapf(err, "error uploading to fission storage service")
+			return nil, fmt.Errorf("error uploading to fission storage service: %w", err)
 		}
 
 		archiveURL, err := getArchiveURL(ctx, client, id, storagesvcURL)
 		if err != nil {
-			return nil, errors.Wrapf(err, "could not get URL of archive")
+			return nil, fmt.Errorf("could not get URL of archive: %w", err)
 		}
 
 		archive.Type = fv1.ArchiveTypeUrl
@@ -73,7 +71,7 @@ func UploadArchiveFile(ctx context.Context, client cmd.Client, fileName string) 
 
 		csum, err := utils.GetFileChecksum(fileName)
 		if err != nil {
-			return nil, errors.Wrapf(err, "calculate checksum for file %v", fileName)
+			return nil, fmt.Errorf("calculate checksum for file %v: %w", fileName, err)
 		}
 
 		archive.Checksum = *csum
@@ -121,7 +119,7 @@ func getArchiveURL(ctx context.Context, client cmd.Client, archiveID string, ser
 func GetContents(filePath string) ([]byte, error) {
 	code, err := os.ReadFile(filePath)
 	if err != nil {
-		return nil, errors.Wrapf(err, "error reading %v", filePath)
+		return nil, fmt.Errorf("error reading %v: %w", filePath, err)
 	}
 	return code, nil
 }
@@ -131,13 +129,13 @@ func GetContents(filePath string) ([]byte, error) {
 func DownloadToTempFile(fileUrl string) (string, error) {
 	reader, err := DownloadURL(fileUrl)
 	if err != nil {
-		return "", errors.Wrapf(err, "error downloading from url: %v", fileUrl)
+		return "", fmt.Errorf("error downloading from url: %v: %w", fileUrl, err)
 	}
 	defer reader.Close()
 
 	tmpDir, err := utils.GetTempDir()
 	if err != nil {
-		return "", errors.Wrapf(err, "error creating temp directory %v", tmpDir)
+		return "", fmt.Errorf("error creating temp directory %v: %w", tmpDir, err)
 	}
 
 	tmpFilename := uuid.NewString()
@@ -145,7 +143,7 @@ func DownloadToTempFile(fileUrl string) (string, error) {
 
 	err = WriteArchiveToFile(destination, reader)
 	if err != nil {
-		return "", errors.Wrapf(err, "error writing archive to file %v", destination)
+		return "", fmt.Errorf("error writing archive to file %v: %w", destination, err)
 	}
 
 	return destination, nil

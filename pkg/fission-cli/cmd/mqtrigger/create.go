@@ -19,7 +19,8 @@ package mqtrigger
 import (
 	"fmt"
 
-	"github.com/pkg/errors"
+	"errors"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -130,7 +131,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		specIgnore := util.GetSpecIgnore(input)
 		fr, err := spec.ReadSpecs(specDir, specIgnore, false)
 		if err != nil {
-			return errors.Wrap(err, fmt.Sprintf("error reading spec in '%v'", specDir))
+			return fmt.Errorf("error reading spec in '%v': %w", specDir, err)
 		}
 
 		exists, err := fr.ExistsInSpecs(fv1.Function{

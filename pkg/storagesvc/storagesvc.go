@@ -25,9 +25,10 @@ import (
 	"strconv"
 	"time"
 
+	"errors"
+
 	"github.com/gorilla/mux"
 	"github.com/graymeta/stow"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/fission/fission/pkg/crd"

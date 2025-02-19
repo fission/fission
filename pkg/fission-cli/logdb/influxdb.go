@@ -29,7 +29,6 @@ import (
 	"time"
 
 	influxdbClient "github.com/influxdata/influxdb/client/v2"
-	"github.com/pkg/errors"
 
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/fission-cli/util"
@@ -153,12 +152,12 @@ func (influx InfluxDB) GetLogs(ctx context.Context, filter LogFilter, output *by
 			msg := fmt.Sprintf("Timestamp: %s\nNamespace: %s\nFunction Name: %s\nFunction ID: %s\nPod: %s\nContainer: %s\nStream: %s\nLog: %s\n---\n",
 				logEntry.Timestamp, logEntry.Namespace, logEntry.FuncName, logEntry.FuncUid, logEntry.Pod, logEntry.Container, logEntry.Stream, logEntry.Message)
 			if _, err := output.WriteString(msg); err != nil {
-				return errors.Wrapf(err, "error copying pod log")
+				return fmt.Errorf("error copying pod log: %w", err)
 			}
 		} else {
 			msg := fmt.Sprintf("[%s] %s\n", logEntry.Timestamp, logEntry.Message)
 			if _, err := output.WriteString(msg); err != nil {
-				return errors.Wrapf(err, "error copying pod log")
+				return fmt.Errorf("error copying pod log: %w", err)
 			}
 		}
 	}

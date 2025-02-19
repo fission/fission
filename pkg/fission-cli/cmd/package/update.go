@@ -21,8 +21,9 @@ import (
 	"fmt"
 	"time"
 
+	"errors"
+
 	"github.com/hashicorp/go-multierror"
-	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -213,7 +214,7 @@ func UpdateFunctionPackageResourceVersion(ctx context.Context, client cmd.Client
 		fn.Spec.Package.PackageRef.ResourceVersion = pkgMeta.ResourceVersion
 		_, err := client.FissionClientSet.CoreV1().Functions(fn.ObjectMeta.Namespace).Update(ctx, &fn, metav1.UpdateOptions{})
 		if err != nil {
-			errs = multierror.Append(errs, errors.Wrapf(err, "error updating package resource version of function '%v'", fn.ObjectMeta.Name))
+			errs = multierror.Append(errs, fmt.Errorf("error updating package resource version of function '%v': %w", fn.ObjectMeta.Name, err))
 		}
 	}
 

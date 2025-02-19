@@ -20,7 +20,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/pkg/errors"
+	"errors"
+
 	apiv1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -132,7 +133,7 @@ func (opts *RunContainerSubCommand) complete(input cli.Input) error {
 					if kerrors.IsNotFound(err) {
 						console.Warn(fmt.Sprintf("Secret %s not found in Namespace: %s. Secret needs to be present in the same namespace as function", secretName, fnNamespace))
 					} else {
-						return errors.Wrapf(err, "error checking secret %s", secretName)
+						return fmt.Errorf("error checking secret %s: %w", secretName, err)
 					}
 				}
 			}
@@ -156,7 +157,7 @@ func (opts *RunContainerSubCommand) complete(input cli.Input) error {
 					if kerrors.IsNotFound(err) {
 						console.Warn(fmt.Sprintf("ConfigMap %s not found in Namespace: %s. ConfigMap needs to be present in the same namespace as function", cfgMapName, fnNamespace))
 					} else {
-						return errors.Wrapf(err, "error checking configmap %s", cfgMapName)
+						return fmt.Errorf("error checking configmap %s: %w", cfgMapName, err)
 					}
 				}
 			}

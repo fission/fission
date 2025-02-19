@@ -23,8 +23,9 @@ import (
 	"strconv"
 	"strings"
 
+	"errors"
+
 	"github.com/IBM/sarama"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -215,7 +216,7 @@ func (ch *MqtConsumerGroupHandler) kafkaMsgHandler(msg *sarama.ConsumerMessage) 
 		errorString := "request body error: " + string(body)
 		errorHeaders := generateErrorHeaders(errorString)
 		errorHandler(ch.logger, ch.trigger, ch.producer, ch.fnUrl,
-			errors.Wrap(err, errorString), errorHeaders)
+			fmt.Errorf("%s: %w", errorString, err), errorHeaders)
 		return
 	}
 	if resp.StatusCode != 200 {

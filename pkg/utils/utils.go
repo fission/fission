@@ -29,7 +29,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/pkg/errors"
+	"errors"
+
 	"golang.org/x/net/context/ctxhttp"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -75,7 +76,7 @@ func FindAllGlobs(paths ...string) ([]string, error) {
 		// use absolute path to find files
 		path, err := filepath.Abs(p)
 		if err != nil {
-			return nil, errors.Wrapf(err, "error getting absolute path of path '%s'", p)
+			return nil, fmt.Errorf("error getting absolute path of path '%s': %w", p, err)
 		}
 		globs, err := filepath.Glob(path)
 		if err != nil {

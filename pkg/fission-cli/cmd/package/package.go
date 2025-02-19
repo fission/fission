@@ -24,9 +24,10 @@ import (
 	"path/filepath"
 	"strings"
 
+	"errors"
+
 	"github.com/dchest/uniuri"
 	"github.com/hashicorp/go-multierror"
-	"github.com/pkg/errors"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -54,7 +55,7 @@ func CreateArchive(client cmd.Client, input cli.Input, includeFiles []string, no
 	if len(specFile) > 0 {
 		rootDir, err = filepath.Abs(specDir + "/..")
 		if err != nil {
-			return nil, errors.Wrapf(err, "error getting root directory of spec directory")
+			return nil, fmt.Errorf("error getting root directory of spec directory: %w", err)
 		}
 	}
 	errs := utils.MultiErrorWithFormat()
@@ -75,7 +76,7 @@ func CreateArchive(client cmd.Client, input cli.Input, includeFiles []string, no
 		// Get files from inputs as number of files decide next steps
 		absPath, err := filepath.Abs(path)
 		if err != nil {
-			errs = multierror.Append(errs, errors.Wrapf(err, "error converting path to the absolute path \"%v\"", path))
+			errs = multierror.Append(errs, fmt.Errorf("error converting path to the absolute path \"%v\": %w", path, err))
 			continue
 		}
 
@@ -215,7 +216,7 @@ func makeArchiveFile(ctx context.Context, archiveNameHint string, archiveInput [
 	if len(files) == 1 {
 		// make sure it exists
 		if _, err := os.Stat(files[0]); err != nil {
-			return "", errors.Wrapf(err, "open input file %v", files[0])
+			return "", fmt.Errorf("open input file %v: %w", files[0], err)
 		}
 
 		// if it's an existing zip file OR we're not supposed to zip it, don't do anything

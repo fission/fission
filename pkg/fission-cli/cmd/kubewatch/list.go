@@ -21,7 +21,6 @@ import (
 	"os"
 	"text/tabwriter"
 
-	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	v1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -50,7 +49,7 @@ func (opts *ListSubCommand) do(input cli.Input) error {
 func (opts *ListSubCommand) complete(input cli.Input) (err error) {
 	_, opts.namespace, err = opts.GetResourceNamespace(input, flagkey.NamespaceTrigger)
 	if err != nil {
-		return fmt.Errorf("error listing kubewatchers: %w", err)rr)
+		return fmt.Errorf("error listing kubewatchers: %w", err)
 	}
 	return nil
 }

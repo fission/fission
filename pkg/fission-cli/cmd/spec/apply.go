@@ -27,7 +27,6 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/go-git/go-git/v5"
-	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sCache "k8s.io/client-go/tools/cache"
 
@@ -161,7 +160,7 @@ func (opts *ApplySubCommand) run(input cli.Input) error {
 
 			err = watcher.Add(path)
 			if err != nil {
-				return errors.Wrap(err, fmt.Sprintf("error watching path %v", path))
+				return fmt.Errorf("error watching path %v: %w", path, err)
 			}
 			return nil
 		})
@@ -526,7 +525,7 @@ func localArchiveFromSpec(ctx context.Context, specDir string, aus *spectypes.Ar
 			console.Verbose(2, "try to find globs in path '%v'", absGlob)
 			fs, err := utils.FindAllGlobs(absGlob)
 			if err != nil {
-				return nil, errors.Wrapf(err, "Invalid glob in archive %v: %v", aus.Name, relativeGlob)
+				return nil, fmt.Errorf("Invalid glob in archive %v: %v: %w", aus.Name, relativeGlob, err)
 			}
 			files = append(files, fs...)
 		}

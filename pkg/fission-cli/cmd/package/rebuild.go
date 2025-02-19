@@ -19,7 +19,8 @@ package _package
 import (
 	"fmt"
 
-	"github.com/pkg/errors"
+	"errors"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -58,7 +59,7 @@ func (opts *RebuildSubCommand) complete(input cli.Input) (err error) {
 func (opts *RebuildSubCommand) run(input cli.Input) error {
 	pkg, err := opts.Client().FissionClientSet.CoreV1().Packages(opts.namespace).Get(input.Context(), opts.name, metav1.GetOptions{})
 	if err != nil {
-		return errors.Wrapf(err, "package %s not found", opts.name)
+		return fmt.Errorf("package %s not found: %w", opts.name, err)
 	}
 
 	if pkg.Status.BuildStatus != fv1.BuildStatusFailed {

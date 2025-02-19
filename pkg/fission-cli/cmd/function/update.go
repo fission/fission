@@ -19,7 +19,6 @@ package function
 import (
 	"fmt"
 
-	"github.com/pkg/errors"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -63,7 +62,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 
 	function, err := opts.Client().FissionClientSet.CoreV1().Functions(fnNamespace).Get(input.Context(), input.String(flagkey.FnName), metav1.GetOptions{})
 	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("read function '%v'", fnName))
+		return fmt.Errorf("read function '%v': %w", fnName, err)
 	}
 
 	envName := input.String(flagkey.FnEnvironmentName)
@@ -184,7 +183,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 
 	pkg, err := opts.Client().FissionClientSet.CoreV1().Packages(fnNamespace).Get(input.Context(), pkgName, metav1.GetOptions{})
 	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("read package '%v.%v'. Pkg should be present in the same ns as the function", pkgName, fnNamespace))
+		return fmt.Errorf("read package '%v.%v'. Pkg should be present in the same ns as the function: %w", pkgName, fnNamespace, err)
 	}
 
 	forceUpdate := input.Bool(flagkey.PkgForce)
@@ -195,12 +194,12 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 	}
 
 	if !forceUpdate && len(fnList) > 1 {
-		return fmt.Errorf("Package is used by multiple functions, use --%v to force update", flagkey.PkgForce)
+		return fmt.Errorf("package is used by multiple functions, use --%v to force update", flagkey.PkgForce)
 	}
 
 	newPkgMeta, err := _package.UpdatePackage(input, opts.Client(), opts.specFile, pkg)
 	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("error updating package '%v'", pkgName))
+		return fmt.Errorf("error updating package '%v': %w", pkgName, err)
 	}
 
 	// the package resource version of function has been changed,

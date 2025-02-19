@@ -19,7 +19,6 @@ package function
 import (
 	"fmt"
 
-	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
@@ -38,7 +37,7 @@ func GetMeta(input cli.Input) error {
 func (opts *GetMetaSubCommand) do(input cli.Input) error {
 	_, namespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceFunction)
 	if err != nil {
-		return fmt.Errorf("error in getting meta function : %w", err)rr)
+		return fmt.Errorf("error in getting meta function : %w", err)
 	}
 
 	fn, err := opts.Client().FissionClientSet.CoreV1().Functions(namespace).Get(input.Context(), input.String(flagkey.FnName), metav1.GetOptions{})

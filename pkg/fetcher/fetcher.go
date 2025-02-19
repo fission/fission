@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -29,7 +30,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/pkg/errors"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.uber.org/zap"
 	"golang.org/x/net/context/ctxhttp"
@@ -140,7 +140,7 @@ func writeSecretOrConfigMap(dataMap map[string][]byte, dirPath string) error {
 		writeFilePath := filepath.Join(dirPath, key)
 		err := os.WriteFile(writeFilePath, val, 0750)
 		if err != nil {
-			return errors.Wrapf(err, "Failed to write file %s", writeFilePath)
+			return fmt.Errorf("failed to write file %s: %w", writeFilePath, err)
 		}
 	}
 	return nil
@@ -255,7 +255,7 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 	storePath, err := utils.SanitizeFilePath(filepath.Join(fetcher.sharedVolumePath, req.Filename), fetcher.sharedVolumePath)
 	if err != nil {
 		logger.Error(err.Error(), zap.String("filename", req.Filename))
-		return http.StatusBadRequest, errors.New(fmt.Sprintf("%s, request: %v", err, req))
+		return http.StatusBadRequest, fmt.Errorf("%s, request: %v", err, req)
 	}
 
 	// verify first if the file already exists.
@@ -270,7 +270,7 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 	tmpPath, err := utils.SanitizeFilePath(storePath+".tmp", fetcher.sharedVolumePath)
 	if err != nil {
 		logger.Error(err.Error(), zap.String("filename", req.Filename))
-		return http.StatusBadRequest, errors.New(fmt.Sprintf("%s, request: %v", err, req))
+		return http.StatusBadRequest, fmt.Errorf("%s, request: %v", err, req)
 	}
 
 	if req.FetchType == fv1.FETCH_URL {
