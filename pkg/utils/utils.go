@@ -79,7 +79,7 @@ func FindAllGlobs(paths ...string) ([]string, error) {
 		}
 		globs, err := filepath.Glob(path)
 		if err != nil {
-			return nil, errors.Errorf("invalid glob %s: %s", path, err)
+			return nil, fmt.Errorf("invalid glob %s: %s", path, err)
 		}
 		files = append(files, globs...)
 		// xxx handle excludeGlobs here
@@ -166,7 +166,7 @@ func isHttp2xxSuccessful(status int) bool {
 func DownloadUrl(ctx context.Context, httpClient *http.Client, url string, localPath string) error {
 	// validate local path for directory traversal attacks
 	if filepath.Clean(localPath) != localPath {
-		return errors.Errorf("invalid local path: %s", localPath)
+		return fmt.Errorf("invalid local path: %s", localPath)
 	}
 	resp, err := ctxhttp.Get(ctx, httpClient, url)
 	if err != nil {

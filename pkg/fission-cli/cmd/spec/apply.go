@@ -408,7 +408,7 @@ func applyArchives(input cli.Input, fclient cmd.Client, specDir string, fr *Fiss
 			if strings.HasPrefix(ar.URL, ARCHIVE_URL_PREFIX) {
 				availableAr, ok := archiveFiles[ar.URL]
 				if !ok {
-					return errors.Errorf("unknown archive name %v", strings.TrimPrefix(ar.URL, ARCHIVE_URL_PREFIX))
+					return fmt.Errorf("unknown archive name %v", strings.TrimPrefix(ar.URL, ARCHIVE_URL_PREFIX))
 				}
 				ar.Type = availableAr.Type
 				ar.Literal = availableAr.Literal
@@ -460,7 +460,7 @@ func applyResources(input cli.Input, fclient cmd.Client, specDir string, fr *Fis
 			// spec. It may exist outside the spec, but we're going to treat
 			// that as an error, so that we encourage self-contained specs.
 			// Is there a good use case for non-self contained specs?
-			return nil, nil, errors.Errorf("function %v/%v references package %v/%v, which doesn't exist in the specs",
+			return nil, nil, fmt.Errorf("function %v/%v references package %v/%v, which doesn't exist in the specs",
 				f.ObjectMeta.Namespace, f.ObjectMeta.Name, f.Spec.Package.PackageRef.Namespace, f.Spec.Package.PackageRef.Name)
 		}
 		fr.Functions[i].Spec.Package.PackageRef.ResourceVersion = m.ResourceVersion
@@ -533,7 +533,7 @@ func localArchiveFromSpec(ctx context.Context, specDir string, aus *spectypes.Ar
 	}
 
 	if len(files) == 0 {
-		return nil, errors.Errorf("archive '%v' is empty", aus.Name)
+		return nil, fmt.Errorf("archive '%v' is empty", aus.Name)
 	}
 
 	// if it's just one file, use its path directly
@@ -585,7 +585,7 @@ func localArchiveFromSpec(ctx context.Context, specDir string, aus *spectypes.Ar
 		// checksum
 		csum, err := utils.GetFileChecksum(archiveFileName)
 		if err != nil {
-			return nil, errors.Errorf("failed to calculate archive checksum for %v (%v): %v", aus.Name, archiveFileName, err)
+			return nil, fmt.Errorf("failed to calculate archive checksum for %v (%v): %v", aus.Name, archiveFileName, err)
 		}
 
 		// archive object
@@ -626,7 +626,7 @@ func waitForPackageBuild(ctx context.Context, fclient cmd.Client, pkg *fv1.Packa
 			return pkg, nil
 		}
 		if time.Since(start) > 5*time.Minute {
-			return nil, errors.Errorf("package %v has been building for a while, giving up on waiting for it", pkg.ObjectMeta.Name)
+			return nil, fmt.Errorf("package %v has been building for a while, giving up on waiting for it", pkg.ObjectMeta.Name)
 		}
 
 		// TODO watch instead

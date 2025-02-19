@@ -120,7 +120,7 @@ func runPortForward(ctx context.Context, client cmd.Client, labelSelector string
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, "error getting pod for port-forwarding with label selector %v", labelSelector)
 	} else if len(podList.Items) == 0 {
-		return nil, nil, errors.Errorf("no available pod for port-forwarding with label selector %v", labelSelector)
+		return nil, nil, fmt.Errorf("no available pod for port-forwarding with label selector %v", labelSelector)
 	}
 
 	nsList := make([]string, 0)
@@ -136,7 +136,7 @@ func runPortForward(ctx context.Context, client cmd.Client, labelSelector string
 			namespaces[p.Namespace] = append(namespaces[p.Namespace], &p)
 		}
 		if len(nsList) > 1 {
-			return nil, nil, errors.Errorf("Found %v fission installs, set FISSION_NAMESPACE to one of: %v",
+			return nil, nil, fmt.Errorf("Found %v fission installs, set FISSION_NAMESPACE to one of: %v",
 				len(namespaces), strings.Join(nsList, " "))
 		}
 	}
@@ -146,7 +146,7 @@ func runPortForward(ctx context.Context, client cmd.Client, labelSelector string
 	ns = nsList[0]
 	pods, ok := namespaces[ns]
 	if !ok {
-		return nil, nil, errors.Errorf("Error finding fission install within the given namespace %v, please check FISSION_NAMESPACE is set properly", ns)
+		return nil, nil, fmt.Errorf("Error finding fission install within the given namespace %v, please check FISSION_NAMESPACE is set properly", ns)
 	}
 
 	var podName, podNameSpace string
@@ -167,7 +167,7 @@ func runPortForward(ctx context.Context, client cmd.Client, labelSelector string
 		return nil, nil, errors.Wrapf(err, "Error getting %v service", labelSelector)
 	}
 	if len(svcs.Items) == 0 {
-		return nil, nil, errors.Errorf("Service %v not found", labelSelector)
+		return nil, nil, fmt.Errorf("Service %v not found", labelSelector)
 	}
 	service := &svcs.Items[0]
 
@@ -192,7 +192,7 @@ func runPortForward(ctx context.Context, client cmd.Client, labelSelector string
 	// actually start the port-forwarding process here
 	transport, upgrader, err := spdy.RoundTripperFor(client.RestConfig)
 	if err != nil {
-		return nil, nil, errors.Errorf("Failed to connect to Fission service on Kubernetes")
+		return nil, nil, fmt.Errorf("Failed to connect to Fission service on Kubernetes")
 	}
 	dialer := spdy.NewDialer(upgrader, &http.Client{Transport: transport}, "POST", url)
 

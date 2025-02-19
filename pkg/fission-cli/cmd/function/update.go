@@ -135,7 +135,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 	if input.IsSet(flagkey.FnExecutionTimeout) {
 		fnTimeout := input.Int(flagkey.FnExecutionTimeout)
 		if fnTimeout <= 0 {
-			return errors.Errorf("--%v must be greater than 0", flagkey.FnExecutionTimeout)
+			return fmt.Errorf("--%v must be greater than 0", flagkey.FnExecutionTimeout)
 		}
 		function.Spec.FunctionTimeout = fnTimeout
 	}
@@ -195,7 +195,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 	}
 
 	if !forceUpdate && len(fnList) > 1 {
-		return errors.Errorf("Package is used by multiple functions, use --%v to force update", flagkey.PkgForce)
+		return fmt.Errorf("Package is used by multiple functions, use --%v to force update", flagkey.PkgForce)
 	}
 
 	newPkgMeta, err := _package.UpdatePackage(input, opts.Client(), opts.specFile, pkg)

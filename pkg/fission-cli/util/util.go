@@ -340,7 +340,7 @@ func GetSpecIgnoreParser(specDir, specIgnore string) (ignore.IgnoreParser, error
 	if _, err := os.Stat(specIgnorePath); errors.Is(err, os.ErrNotExist) {
 		// return error if it's custom spec ignore file
 		if specIgnore != SPEC_IGNORE_FILE {
-			return nil, errors.Errorf("Spec ignore file '%s' doesn't exist. "+
+			return nil, fmt.Errorf("Spec ignore file '%s' doesn't exist. "+
 				"Please check the file path: '%s'", specIgnore, specIgnorePath)
 		}
 		return ignore.CompileIgnoreLines(), nil
@@ -423,7 +423,7 @@ func ParseAnnotations(annotations []string) (map[string]string, error) {
 		}
 	}
 	if invalidAnnotations != "" {
-		return nil, errors.Errorf("invalid annotations: %s", invalidAnnotations)
+		return nil, fmt.Errorf("invalid annotations: %s", invalidAnnotations)
 	}
 	return annotationMap, nil
 }
@@ -523,7 +523,7 @@ func GetSvcName(ctx context.Context, kClient kubernetes.Interface, application s
 	}
 
 	if len(services.Items) > 1 || len(services.Items) == 0 {
-		return "", errors.Errorf("more than one service found for application=%s", application)
+		return "", fmt.Errorf("more than one service found for application=%s", application)
 	}
 	service := services.Items[0]
 	return service.Name + "." + service.Namespace, nil

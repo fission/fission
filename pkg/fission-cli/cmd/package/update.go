@@ -77,7 +77,7 @@ func (opts *UpdateSubCommand) run(input cli.Input) error {
 	}
 
 	if !forceUpdate && len(fnList) > 1 {
-		return errors.Errorf("package is used by multiple functions, use --%v to force update", flagkey.PkgForce)
+		return fmt.Errorf("package is used by multiple functions, use --%v to force update", flagkey.PkgForce)
 	}
 	specFile := fmt.Sprintf("package-%s.yaml", pkgName)
 	newPkgMeta, err := UpdatePackage(input, opts.Client(), specFile, pkg)

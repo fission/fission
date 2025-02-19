@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 
 	"github.com/hashicorp/go-multierror"
-	"github.com/pkg/errors"
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -305,7 +304,7 @@ func (cfg *Config) addFetcherToPodSpecWithCommand(podSpec *apiv1.PodSpec, mainCo
 		for _, existingContainer := range podSpec.Containers {
 			existingContainerNames = append(existingContainerNames, existingContainer.Name)
 		}
-		return errors.Errorf("could not find main container '%s' in given PodSpec. Found: %v",
+		return fmt.Errorf("could not find main container '%s' in given PodSpec. Found: %v",
 			mainContainerName,
 			existingContainerNames)
 	}

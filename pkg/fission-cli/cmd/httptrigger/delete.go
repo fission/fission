@@ -20,7 +20,6 @@ import (
 	"fmt"
 
 	"github.com/hashicorp/go-multierror"
-	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
@@ -53,9 +52,9 @@ func (opts *DeleteSubCommand) complete(input cli.Input) (err error) {
 	opts.triggerName = input.String(flagkey.HtName)
 	opts.functionName = input.String(flagkey.HtFnName)
 	if len(opts.triggerName) == 0 && len(opts.functionName) == 0 {
-		return errors.Errorf("need --%v or --%v", flagkey.HtName, flagkey.HtFnName)
+		return fmt.Errorf("need --%v or --%v", flagkey.HtName, flagkey.HtFnName)
 	} else if len(opts.triggerName) > 0 && len(opts.functionName) > 0 {
-		return errors.Errorf("need either of --%v or --%v and not both arguments", flagkey.HtName, flagkey.HtFnName)
+		return fmt.Errorf("need either of --%v or --%v and not both arguments", flagkey.HtName, flagkey.HtFnName)
 	}
 
 	_, opts.namespace, err = opts.GetResourceNamespace(input, flagkey.NamespaceTrigger)

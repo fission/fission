@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sCache "k8s.io/client-go/tools/cache"
@@ -111,7 +110,7 @@ func (frr *functionReferenceResolver) resolve(trigger fv1.HTTPTrigger) (*resolve
 		}
 
 	default:
-		return nil, errors.Errorf("unrecognized function reference type %v", trigger.Spec.FunctionReference.Type)
+		return nil, fmt.Errorf("unrecognized function reference type %v", trigger.Spec.FunctionReference.Type)
 	}
 
 	// cache resolve result
@@ -145,7 +144,7 @@ func (frr *functionReferenceResolver) resolveByName(namespace, name string) (*re
 	}
 	if !isExist {
 		frr.logger.Error("function does not exists", zap.String("name", name), zap.String("namespace", namespace))
-		return nil, errors.Errorf("function %s/%s does not exist", namespace, name)
+		return nil, fmt.Errorf("function %s/%s does not exist", namespace, name)
 	}
 	f := obj.(*fv1.Function)
 

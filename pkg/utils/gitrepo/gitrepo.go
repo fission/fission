@@ -106,13 +106,13 @@ func (g *GitRepo) GetFileCommitLabel(filePath string) (string, error) {
 	}
 
 	if !g.isGitRepo {
-		return "", errors.Errorf(`directory: %s doesn't belong to git repository.`, g.dirPath)
+		return "", fmt.Errorf(`directory: %s doesn't belong to git repository.`, g.dirPath)
 	}
 
 	// filepath in the git repository
 	splitPathList := strings.Split(filePath, g.gitRepoRootPath+string(os.PathSeparator))
 	if len(splitPathList) != 2 {
-		return "", errors.Errorf("error finding the git repository path of %s", filePath)
+		return "", fmt.Errorf("error finding the git repository path of %s", filePath)
 	}
 	gitFilePath := splitPathList[1]
 	gitFileStatus := g.status.File(gitFilePath)

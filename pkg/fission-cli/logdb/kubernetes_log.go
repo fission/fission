@@ -85,7 +85,7 @@ func GetFunctionPodLogs(ctx context.Context, client cmd.Client, logFilter LogFil
 	}
 
 	if len(podList.Items) <= 0 {
-		return errors.Errorf("no active pods found for function in namespace %s", podNs)
+		return fmt.Errorf("no active pods found for function in namespace %s", podNs)
 	}
 
 	pods := podList.Items

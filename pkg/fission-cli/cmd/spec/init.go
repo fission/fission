@@ -101,7 +101,7 @@ func (opts *InitSubCommand) run(input cli.Input) error {
 	config := filepath.Join(specDir, "fission-deployment-config.yaml")
 
 	if _, err := os.Stat(config); err == nil {
-		return errors.Errorf("Spec DeploymentConfig already exists in directory '%v'", specDir)
+		return fmt.Errorf("Spec DeploymentConfig already exists in directory '%v'", specDir)
 	}
 
 	// Add a bit of documentation to the spec dir here

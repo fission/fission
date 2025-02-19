@@ -136,7 +136,7 @@ func save(data []byte, specDir string, specFile string, truncate bool) error {
 	newFile := false
 	if _, err := os.Stat(filename); os.IsNotExist(err) {
 		if truncate {
-			return errors.Errorf("spec file does not exists")
+			return fmt.Errorf("spec file does not exists")
 		}
 		newFile = true
 	}
@@ -192,7 +192,7 @@ func SpecSave(resource interface{}, specFile string, update bool) error {
 	}
 
 	if exists {
-		return errors.Errorf("same name resource (%v) already exists in namespace (%v)", meta.Name, meta.Namespace)
+		return fmt.Errorf("same name resource (%v) already exists in namespace (%v)", meta.Name, meta.Namespace)
 	}
 
 	truncate := false
@@ -277,7 +277,7 @@ func crdToYaml(resource interface{}) (metav1.ObjectMeta, string, []byte, error) 
 		kind = typedres.TypeMeta.Kind
 		data, err = yaml.Marshal(typedres)
 	default:
-		err = errors.Errorf("unknown object type '%v'", typedres)
+		err = fmt.Errorf("unknown object type '%v'", typedres)
 	}
 
 	if err != nil {

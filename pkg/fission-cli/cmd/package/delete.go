@@ -61,7 +61,7 @@ func (opts *DeleteSubCommand) complete(input cli.Input) (err error) {
 	opts.force = input.Bool(flagkey.PkgForce)
 
 	if len(opts.name) == 0 && !opts.deleteOrphans {
-		return errors.Errorf("need --%v or --%v flag", flagkey.PkgName, flagkey.PkgOrphan)
+		return fmt.Errorf("need --%v or --%v flag", flagkey.PkgName, flagkey.PkgOrphan)
 	}
 
 	return nil

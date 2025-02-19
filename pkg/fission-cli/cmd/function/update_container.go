@@ -122,7 +122,7 @@ func (opts *UpdateContainerSubCommand) complete(input cli.Input) error {
 	if input.IsSet(flagkey.FnExecutionTimeout) {
 		fnTimeout := input.Int(flagkey.FnExecutionTimeout)
 		if fnTimeout <= 0 {
-			return errors.Errorf("--%v must be greater than 0", flagkey.FnExecutionTimeout)
+			return fmt.Errorf("--%v must be greater than 0", flagkey.FnExecutionTimeout)
 		}
 		function.Spec.FunctionTimeout = fnTimeout
 	}
@@ -146,7 +146,7 @@ func (opts *UpdateContainerSubCommand) complete(input cli.Input) error {
 	function.Spec.Resources = *resReqs
 
 	if len(function.Spec.PodSpec.Containers) > 1 {
-		return errors.Errorf("function %s has more than one container, only one container is supported", fnName)
+		return fmt.Errorf("function %s has more than one container, only one container is supported", fnName)
 	}
 	container := &function.Spec.PodSpec.Containers[0]
 	if imageName != "" {
@@ -154,7 +154,7 @@ func (opts *UpdateContainerSubCommand) complete(input cli.Input) error {
 	}
 	if port != 0 {
 		if len(container.Ports) > 1 {
-			return errors.Errorf("function %s has more than one port, only one port is supported", fnName)
+			return fmt.Errorf("function %s has more than one port, only one port is supported", fnName)
 		}
 		container.Ports = []apiv1.ContainerPort{
 			{

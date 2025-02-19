@@ -93,7 +93,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 
 	fnTimeout := input.Int(flagkey.FnExecutionTimeout)
 	if fnTimeout <= 0 {
-		return errors.Errorf("--%v must be greater than 0", flagkey.FnExecutionTimeout)
+		return fmt.Errorf("--%v must be greater than 0", flagkey.FnExecutionTimeout)
 	}
 
 	fnIdleTimeout := input.Int(flagkey.FnIdleTimeout)
@@ -119,7 +119,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	cfgMapNames := input.StringSlice(flagkey.FnCfgMap)
 
 	if input.String(flagkey.FnExecutorType) == string(fv1.ExecutorTypeContainer) {
-		return errors.Errorf("this command does not support creating function of executor type container. Check `fission function run-container --help`")
+		return fmt.Errorf("this command does not support creating function of executor type container. Check `fission function run-container --help`")
 	}
 
 	invokeStrategy, err := getInvokeStrategy(input, nil)
@@ -151,7 +151,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 				},
 			}, true, false)
 			if obj == nil {
-				return errors.Errorf("please create package %s spec file with namespace %s before referencing it", pkgName, userProvidedNS)
+				return fmt.Errorf("please create package %s spec file with namespace %s before referencing it", pkgName, userProvidedNS)
 			}
 
 			pkg = obj.(*fv1.Package)
@@ -490,7 +490,7 @@ func getExecutorType(input cli.Input) (executorType fv1.ExecutorType, err error)
 	case string(fv1.ExecutorTypeContainer):
 		executorType = fv1.ExecutorTypeContainer
 	default:
-		err = errors.Errorf("executor type must be one of '%v', '%v' or '%v'", fv1.ExecutorTypePoolmgr, fv1.ExecutorTypeNewdeploy, fv1.ExecutorTypeContainer)
+		err = fmt.Errorf("executor type must be one of '%v', '%v' or '%v'", fv1.ExecutorTypePoolmgr, fv1.ExecutorTypeNewdeploy, fv1.ExecutorTypeContainer)
 	}
 	return executorType, err
 }
@@ -501,7 +501,7 @@ func getExecutionStrategy(fnExecutor fv1.ExecutorType, input cli.Input) (strateg
 	if input.IsSet(flagkey.FnSpecializationTimeout) {
 		specializationTimeout = input.Int(flagkey.FnSpecializationTimeout)
 		if specializationTimeout < fv1.DefaultSpecializationTimeOut {
-			return nil, errors.Errorf("%v must be greater than or equal to 120 seconds", flagkey.FnSpecializationTimeout)
+			return nil, fmt.Errorf("%v must be greater than or equal to 120 seconds", flagkey.FnSpecializationTimeout)
 		}
 	}
 
@@ -529,7 +529,7 @@ func getExecutionStrategy(fnExecutor fv1.ExecutorType, input cli.Input) (strateg
 		if input.IsSet(flagkey.ReplicasMaxscale) {
 			maxScale = input.Int(flagkey.ReplicasMaxscale)
 			if maxScale <= 0 {
-				return nil, errors.Errorf("%v must be greater than 0", flagkey.ReplicasMaxscale)
+				return nil, fmt.Errorf("%v must be greater than 0", flagkey.ReplicasMaxscale)
 			}
 		}
 
@@ -573,7 +573,7 @@ func updateExecutionStrategy(input cli.Input, existingExecutionStrategy *fv1.Exe
 		case string(fv1.ExecutorTypeContainer):
 			fnExecutor = fv1.ExecutorTypeContainer
 		default:
-			return nil, errors.Errorf("executor type must be one of '%v', %v or '%v'", fv1.ExecutorTypePoolmgr, fv1.ExecutorTypeNewdeploy, fv1.ExecutorTypeContainer)
+			return nil, fmt.Errorf("executor type must be one of '%v', %v or '%v'", fv1.ExecutorTypePoolmgr, fv1.ExecutorTypeNewdeploy, fv1.ExecutorTypeContainer)
 		}
 	}
 
@@ -582,7 +582,7 @@ func updateExecutionStrategy(input cli.Input, existingExecutionStrategy *fv1.Exe
 	if input.IsSet(flagkey.FnSpecializationTimeout) {
 		specializationTimeout = input.Int(flagkey.FnSpecializationTimeout)
 		if specializationTimeout < fv1.DefaultSpecializationTimeOut {
-			return nil, errors.Errorf("%v must be greater than or equal to 120 seconds", flagkey.FnSpecializationTimeout)
+			return nil, fmt.Errorf("%v must be greater than or equal to 120 seconds", flagkey.FnSpecializationTimeout)
 		}
 	} else {
 		if specializationTimeout < fv1.DefaultSpecializationTimeOut {
@@ -618,7 +618,7 @@ func updateExecutionStrategy(input cli.Input, existingExecutionStrategy *fv1.Exe
 		if input.IsSet(flagkey.ReplicasMaxscale) {
 			maxScale = input.Int(flagkey.ReplicasMaxscale)
 			if maxScale <= 0 {
-				return nil, errors.Errorf("%v must be greater than 0", flagkey.ReplicasMaxscale)
+				return nil, fmt.Errorf("%v must be greater than 0", flagkey.ReplicasMaxscale)
 			}
 		} else {
 			if maxScale <= 0 {
@@ -655,7 +655,7 @@ func updateExecutionStrategy(input cli.Input, existingExecutionStrategy *fv1.Exe
 func getTargetCPU(input cli.Input) (int, error) {
 	targetCPU := input.Int(flagkey.RuntimeTargetcpu)
 	if targetCPU <= 0 || targetCPU > 100 {
-		return 0, errors.Errorf("%v must be a value between 1 - 100", flagkey.RuntimeTargetcpu)
+		return 0, fmt.Errorf("%v must be a value between 1 - 100", flagkey.RuntimeTargetcpu)
 	}
 	return targetCPU, nil
 }
