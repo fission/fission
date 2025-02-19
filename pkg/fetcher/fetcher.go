@@ -301,7 +301,7 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 					zap.String("package_name", pkg.ObjectMeta.Name),
 					zap.String("package_namespace", pkg.ObjectMeta.Namespace),
 					zap.Any("package_build_status", pkg.Status.BuildStatus))
-				return http.StatusInternalServerError, errors.New(fmt.Sprintf("%s: pkg %s.%s has a status of %s", e, pkg.ObjectMeta.Name, pkg.ObjectMeta.Namespace, pkg.Status.BuildStatus))
+				return http.StatusInternalServerError, fmt.Errorf("%s: pkg %s.%s has a status of %s", e, pkg.ObjectMeta.Name, pkg.ObjectMeta.Namespace, pkg.Status.BuildStatus)
 			}
 			archive = &pkg.Spec.Deployment
 		} else {
@@ -409,7 +409,7 @@ func (fetcher *Fetcher) FetchSecretsAndCfgMaps(ctx context.Context, secrets []fv
 			secretDir, err := utils.SanitizeFilePath(filepath.Join(fetcher.sharedSecretPath, secret.Namespace, secret.Name), fetcher.sharedSecretPath)
 			if err != nil {
 				logger.Error(err.Error(), zap.String("directory", secretDir), zap.String("secret_name", secret.Name), zap.String("secret_namespace", secret.Namespace))
-				return http.StatusBadRequest, errors.New(fmt.Sprintf("%s, request: %v", err, secret))
+				return http.StatusBadRequest, fmt.Errorf("%s, request: %v", err, secret)
 			}
 
 			err = os.MkdirAll(secretDir, os.ModeDir|0750)
@@ -461,8 +461,8 @@ func (fetcher *Fetcher) FetchSecretsAndCfgMaps(ctx context.Context, secrets []fv
 			configDir, err := utils.SanitizeFilePath(filepath.Join(fetcher.sharedConfigPath, config.Namespace, config.Name), fetcher.sharedConfigPath)
 			if err != nil {
 				logger.Error(err.Error(), zap.String("directory", configDir), zap.String("config_map_name", config.Name), zap.String("config_map_namespace", config.Namespace))
-				return http.StatusBadRequest, errors.New(fmt.Sprintf("%s, request: %v", err,
-					config))
+				return http.StatusBadRequest, fmt.Errorf("%s, request: %v", err,
+					config)
 			}
 
 			err = os.MkdirAll(configDir, os.ModeDir|0750)

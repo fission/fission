@@ -207,7 +207,7 @@ func DownloadUrl(ctx context.Context, httpClient *http.Client, url string, local
 func GetStringValueFromEnv(envVar string) (string, error) {
 	v := os.Getenv(envVar)
 	if v == "" {
-		return v, errors.New(fmt.Sprintf("Еnvironment variable %s empty", envVar))
+		return v, fmt.Errorf("environment variable %s empty", envVar)
 	}
 	return v, nil
 }

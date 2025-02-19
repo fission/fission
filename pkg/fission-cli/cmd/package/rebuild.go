@@ -19,8 +19,6 @@ package _package
 import (
 	"fmt"
 
-	"errors"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -63,8 +61,8 @@ func (opts *RebuildSubCommand) run(input cli.Input) error {
 	}
 
 	if pkg.Status.BuildStatus != fv1.BuildStatusFailed {
-		return errors.New(fmt.Sprintf("Package %v is not in %v state.",
-			pkg.ObjectMeta.Name, fv1.BuildStatusFailed))
+		return fmt.Errorf("Package %v is not in %v state.",
+			pkg.ObjectMeta.Name, fv1.BuildStatusFailed)
 	}
 
 	_, err = updatePackageStatus(input.Context(), opts.Client(), pkg, fv1.BuildStatusPending)
