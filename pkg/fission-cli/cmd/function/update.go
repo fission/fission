@@ -19,7 +19,6 @@ package function
 import (
 	"fmt"
 
-	"github.com/pkg/errors"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -55,7 +54,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 	fnName := input.String(flagkey.FnName)
 	_, fnNamespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceFunction)
 	if err != nil {
-		return errors.Wrap(err, "error in updating function ")
+		return fmt.Errorf("error in updating function : %w", err)
 	}
 	if input.Bool(flagkey.SpecSave) {
 		opts.specFile = fmt.Sprintf("function-%s.yaml", fnName)
@@ -63,7 +62,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 
 	function, err := opts.Client().FissionClientSet.CoreV1().Functions(fnNamespace).Get(input.Context(), input.String(flagkey.FnName), metav1.GetOptions{})
 	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("read function '%v'", fnName))
+		return fmt.Errorf("read function '%v': %w", fnName, err)
 	}
 
 	envName := input.String(flagkey.FnEnvironmentName)
@@ -135,7 +134,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 	if input.IsSet(flagkey.FnExecutionTimeout) {
 		fnTimeout := input.Int(flagkey.FnExecutionTimeout)
 		if fnTimeout <= 0 {
-			return errors.Errorf("--%v must be greater than 0", flagkey.FnExecutionTimeout)
+			return fmt.Errorf("--%v must be greater than 0", flagkey.FnExecutionTimeout)
 		}
 		function.Spec.FunctionTimeout = fnTimeout
 	}
@@ -184,23 +183,23 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 
 	pkg, err := opts.Client().FissionClientSet.CoreV1().Packages(fnNamespace).Get(input.Context(), pkgName, metav1.GetOptions{})
 	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("read package '%v.%v'. Pkg should be present in the same ns as the function", pkgName, fnNamespace))
+		return fmt.Errorf("read package '%v.%v'. Pkg should be present in the same ns as the function: %w", pkgName, fnNamespace, err)
 	}
 
 	forceUpdate := input.Bool(flagkey.PkgForce)
 
 	fnList, err := _package.GetFunctionsByPackage(input.Context(), opts.Client(), pkg.ObjectMeta.Name, pkg.ObjectMeta.Namespace)
 	if err != nil {
-		return errors.Wrap(err, "error getting function list")
+		return fmt.Errorf("error getting function list: %w", err)
 	}
 
 	if !forceUpdate && len(fnList) > 1 {
-		return errors.Errorf("Package is used by multiple functions, use --%v to force update", flagkey.PkgForce)
+		return fmt.Errorf("package is used by multiple functions, use --%v to force update", flagkey.PkgForce)
 	}
 
 	newPkgMeta, err := _package.UpdatePackage(input, opts.Client(), opts.specFile, pkg)
 	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("error updating package '%v'", pkgName))
+		return fmt.Errorf("error updating package '%v': %w", pkgName, err)
 	}
 
 	// the package resource version of function has been changed,
@@ -217,7 +216,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 		}
 		err = _package.UpdateFunctionPackageResourceVersion(input.Context(), opts.Client(), newPkgMeta, fns...)
 		if err != nil {
-			return errors.Wrap(err, "error updating function package reference resource version")
+			return fmt.Errorf("error updating function package reference resource version: %w", err)
 		}
 	}
 
@@ -255,13 +254,13 @@ func (opts *UpdateSubCommand) run(input cli.Input) error {
 		}
 		err = spec.SpecSave(*opts.function, opts.specFile, false)
 		if err != nil {
-			return errors.Wrap(err, "error saving function spec")
+			return fmt.Errorf("error saving function spec: %w", err)
 		}
 		return nil
 	}
 	_, err := opts.Client().FissionClientSet.CoreV1().Functions(opts.function.Namespace).Update(input.Context(), opts.function, metav1.UpdateOptions{})
 	if err != nil {
-		return errors.Wrap(err, "error updating function")
+		return fmt.Errorf("error updating function: %w", err)
 	}
 
 	fmt.Printf("Function '%v' updated\n", opts.function.ObjectMeta.Name)

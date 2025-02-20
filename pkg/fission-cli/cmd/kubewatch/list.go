@@ -21,7 +21,6 @@ import (
 	"os"
 	"text/tabwriter"
 
-	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	v1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -50,7 +49,7 @@ func (opts *ListSubCommand) do(input cli.Input) error {
 func (opts *ListSubCommand) complete(input cli.Input) (err error) {
 	_, opts.namespace, err = opts.GetResourceNamespace(input, flagkey.NamespaceTrigger)
 	if err != nil {
-		return errors.Wrap(err, "error listing kubewatchers")
+		return fmt.Errorf("error listing kubewatchers: %w", err)
 	}
 	return nil
 }
@@ -63,7 +62,7 @@ func (opts *ListSubCommand) run(input cli.Input) (err error) {
 	ws, err = opts.Client().FissionClientSet.CoreV1().KubernetesWatchTriggers(opts.namespace).List(input.Context(), metav1.ListOptions{})
 
 	if err != nil {
-		return errors.Wrap(err, "error listing kubewatchers")
+		return fmt.Errorf("error listing kubewatchers: %w", err)
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)

@@ -14,7 +14,8 @@ limitations under the License.
 package app
 
 import (
-	"github.com/pkg/errors"
+	"fmt"
+
 	"github.com/spf13/cobra"
 
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
@@ -65,7 +66,7 @@ func App(clientOptions cmd.ClientOptions) *cobra.Command {
 				// }
 				client, err := cmd.NewClient(clientOptions)
 				if err != nil {
-					return errors.Wrap(err, "failed to get fission client")
+					return fmt.Errorf("failed to get fission client: %w", err)
 				}
 				cmd.SetClientset(*client)
 				return nil

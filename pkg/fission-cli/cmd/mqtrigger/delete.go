@@ -19,7 +19,6 @@ package mqtrigger
 import (
 	"fmt"
 
-	"github.com/pkg/errors"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -49,7 +48,7 @@ func (opts *DeleteSubCommand) complete(input cli.Input) (err error) {
 
 	_, namespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceTrigger)
 	if err != nil {
-		return errors.Wrap(err, "error in deleting function ")
+		return fmt.Errorf("error in deleting function : %w", err)
 	}
 
 	opts.metadata = &metav1.ObjectMeta{
@@ -65,7 +64,7 @@ func (opts *DeleteSubCommand) run(input cli.Input) error {
 		if input.Bool(flagkey.IgnoreNotFound) && kerrors.IsNotFound(err) {
 			return nil
 		}
-		return errors.Wrap(err, "error deleting message queue trigger")
+		return fmt.Errorf("error deleting message queue trigger: %w", err)
 	}
 
 	fmt.Printf("trigger '%v' deleted\n", opts.metadata.Name)

@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
@@ -18,13 +17,14 @@ import (
 	"k8s.io/client-go/kubernetes"
 	k8sCache "k8s.io/client-go/tools/cache"
 
+	kedav1alpha1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
+	kedaClient "github.com/kedacore/keda/v2/pkg/generated/clientset/versioned"
+
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/executor/util"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/manager"
-	kedav1alpha1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
-	kedaClient "github.com/kedacore/keda/v2/pkg/generated/clientset/versioned"
 )
 
 var (
@@ -103,20 +103,20 @@ func mqTriggerEventHandlers(ctx context.Context, logger *zap.Logger, kubeClient 
 func StartScalerManager(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Interface, routerURL string) error {
 	fissionClient, err := clientGen.GetFissionClient()
 	if err != nil {
-		return errors.Wrap(err, "failed to get fission client")
+		return fmt.Errorf("failed to get fission client: %w", err)
 	}
 	kubeClient, err := clientGen.GetKubernetesClient()
 	if err != nil {
-		return errors.Wrap(err, "failed to get kubernetes client")
+		return fmt.Errorf("failed to get kubernetes client: %w", err)
 	}
 	kedaClient, err := clientGen.GetKedaClient()
 	if err != nil {
-		return errors.Wrap(err, "failed to get keda client")
+		return fmt.Errorf("failed to get keda client: %w", err)
 	}
 
 	err = crd.WaitForFunctionCRDs(ctx, logger, fissionClient)
 	if err != nil {
-		return errors.Wrap(err, "error waiting for CRDs")
+		return fmt.Errorf("error waiting for CRDs: %w", err)
 	}
 
 	for _, informer := range utils.GetInformersForNamespaces(fissionClient, time.Minute*30, fv1.MessageQueueResource) {

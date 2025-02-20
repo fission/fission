@@ -23,8 +23,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pkg/errors"
-
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/cmd/support/resources"
@@ -58,12 +56,12 @@ func (opts *DumpSubCommand) do(input cli.Input) error {
 			panic(err)
 		}
 	} else if err != nil {
-		panic(errors.Wrap(err, "Error checking dump directory status"))
+		panic(fmt.Errorf("Error checking dump directory status: %w", err))
 	}
 
 	outputDir, err = filepath.Abs(outputDir)
 	if err != nil {
-		panic(errors.Wrap(err, "Error creating dump directory for dumping files"))
+		panic(fmt.Errorf("Error creating dump directory for dumping files: %w", err))
 	}
 
 	k8sClient := opts.Client().KubernetesClient

@@ -21,7 +21,6 @@ import (
 	"os"
 	"text/tabwriter"
 
-	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 
@@ -44,12 +43,12 @@ func (opts *ListPodsSubCommand) do(input cli.Input) (err error) {
 
 	_, currentNS, err := opts.GetResourceNamespace(input, flagkey.NamespaceEnvironment)
 	if err != nil {
-		return errors.Wrap(err, "error creating environment")
+		return fmt.Errorf("error creating environment: %w", err)
 	}
 
 	_, err = opts.Client().FissionClientSet.CoreV1().Environments(currentNS).Get(input.Context(), input.String(flagkey.EnvName), metav1.GetOptions{})
 	if err != nil {
-		return errors.Wrap(err, "error getting environment")
+		return fmt.Errorf("error getting environment: %w", err)
 	}
 
 	// label selector
@@ -65,7 +64,7 @@ func (opts *ListPodsSubCommand) do(input cli.Input) (err error) {
 		LabelSelector: labels.Set(selector).AsSelector().String(),
 	})
 	if err != nil {
-		return errors.Wrap(err, "error listing environments")
+		return fmt.Errorf("error listing environments: %w", err)
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)

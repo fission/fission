@@ -27,7 +27,6 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/go-git/go-git/v5"
-	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sCache "k8s.io/client-go/tools/cache"
 
@@ -145,14 +144,14 @@ func (opts *ApplySubCommand) run(input cli.Input) error {
 		var err error
 		watcher, err = fsnotify.NewWatcher()
 		if err != nil {
-			return errors.Wrap(err, "error creating file watcher")
+			return fmt.Errorf("error creating file watcher: %w", err)
 		}
 
 		// add watches
 		rootDir := filepath.Clean(specDir + "/..")
 		err = filepath.Walk(rootDir, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
-				return errors.Wrap(err, "error scanning project files")
+				return fmt.Errorf("error scanning project files: %w", err)
 			}
 
 			if ignoreFile(path) {
@@ -161,12 +160,12 @@ func (opts *ApplySubCommand) run(input cli.Input) error {
 
 			err = watcher.Add(path)
 			if err != nil {
-				return errors.Wrap(err, fmt.Sprintf("error watching path %v", path))
+				return fmt.Errorf("error watching path %v: %w", path, err)
 			}
 			return nil
 		})
 		if err != nil {
-			return errors.Wrap(err, "error scanning files to watch")
+			return fmt.Errorf("error scanning files to watch: %w", err)
 		}
 	}
 
@@ -174,19 +173,19 @@ func (opts *ApplySubCommand) run(input cli.Input) error {
 		// read all specs
 		fr, err := ReadSpecs(specDir, specIgnore, applyCommitLabel)
 		if err != nil {
-			return errors.Wrap(err, "error reading specs")
+			return fmt.Errorf("error reading specs: %w", err)
 		}
 
 		if validateSpecs {
 			err = validateForApply(input, fr)
 			if err != nil {
-				return errors.Wrap(err, "abort applying resources")
+				return fmt.Errorf("abort applying resources: %w", err)
 			}
 		}
 
 		err = opts.insertNamespace(input, fr)
 		if err != nil {
-			return errors.Wrap(err, "error inserting namespace")
+			return fmt.Errorf("error inserting namespace: %w", err)
 		}
 
 		err = warnIfDirtyWorkTree(filepath.Clean(specDir + "/.."))
@@ -197,7 +196,7 @@ func (opts *ApplySubCommand) run(input cli.Input) error {
 		// make changes to the cluster based on the specs
 		pkgMetas, as, err := applyResources(input, opts.Client(), specDir, fr, deleteResources, input.Bool(flagkey.SpecAllowConflicts))
 		if err != nil {
-			return errors.Wrap(err, "error applying specs")
+			return fmt.Errorf("error applying specs: %w", err)
 		}
 		printApplyStatus(as)
 
@@ -239,7 +238,7 @@ func (opts *ApplySubCommand) run(input cli.Input) error {
 
 				err = waitForFileWatcherToSettleDown(watcher)
 				if err != nil {
-					return errors.Wrap(err, "error watching files")
+					return fmt.Errorf("error watching files: %w", err)
 				}
 				break waitloop
 
@@ -247,7 +246,7 @@ func (opts *ApplySubCommand) run(input cli.Input) error {
 				pkgWatchCancel()
 
 				if err != nil {
-					return errors.Wrap(err, "error watching files")
+					return fmt.Errorf("error watching files: %w", err)
 				}
 			}
 		}
@@ -408,7 +407,7 @@ func applyArchives(input cli.Input, fclient cmd.Client, specDir string, fr *Fiss
 			if strings.HasPrefix(ar.URL, ARCHIVE_URL_PREFIX) {
 				availableAr, ok := archiveFiles[ar.URL]
 				if !ok {
-					return errors.Errorf("unknown archive name %v", strings.TrimPrefix(ar.URL, ARCHIVE_URL_PREFIX))
+					return fmt.Errorf("unknown archive name %v", strings.TrimPrefix(ar.URL, ARCHIVE_URL_PREFIX))
 				}
 				ar.Type = availableAr.Type
 				ar.Literal = availableAr.Literal
@@ -433,13 +432,13 @@ func applyResources(input cli.Input, fclient cmd.Client, specDir string, fr *Fis
 
 	_, ras, err := applyEnvironments(input.Context(), fclient, fr, delete, specAllowConflicts)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "environment apply failed")
+		return nil, nil, fmt.Errorf("environment apply failed: %w", err)
 	}
 	applyStatus["environment"] = *ras
 
 	pkgMeta, ras, err := applyPackages(input.Context(), fclient, fr, delete, specAllowConflicts)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "package apply failed")
+		return nil, nil, fmt.Errorf("package apply failed: %w", err)
 	}
 	applyStatus["package"] = *ras
 
@@ -460,7 +459,7 @@ func applyResources(input cli.Input, fclient cmd.Client, specDir string, fr *Fis
 			// spec. It may exist outside the spec, but we're going to treat
 			// that as an error, so that we encourage self-contained specs.
 			// Is there a good use case for non-self contained specs?
-			return nil, nil, errors.Errorf("function %v/%v references package %v/%v, which doesn't exist in the specs",
+			return nil, nil, fmt.Errorf("function %v/%v references package %v/%v, which doesn't exist in the specs",
 				f.ObjectMeta.Namespace, f.ObjectMeta.Name, f.Spec.Package.PackageRef.Namespace, f.Spec.Package.PackageRef.Name)
 		}
 		fr.Functions[i].Spec.Package.PackageRef.ResourceVersion = m.ResourceVersion
@@ -468,31 +467,31 @@ func applyResources(input cli.Input, fclient cmd.Client, specDir string, fr *Fis
 
 	_, ras, err = applyFunctions(input.Context(), fclient, fr, delete, specAllowConflicts)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "function apply failed")
+		return nil, nil, fmt.Errorf("function apply failed: %w", err)
 	}
 	applyStatus["function"] = *ras
 
 	_, ras, err = applyHTTPTriggers(input.Context(), fclient, fr, delete, specAllowConflicts)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "HTTPTrigger apply failed")
+		return nil, nil, fmt.Errorf("HTTPTrigger apply failed: %w", err)
 	}
 	applyStatus["HTTPTrigger"] = *ras
 
 	_, ras, err = applyKubernetesWatchTriggers(input.Context(), fclient, fr, delete, specAllowConflicts)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "KubernetesWatchTrigger apply failed")
+		return nil, nil, fmt.Errorf("KubernetesWatchTrigger apply failed: %w", err)
 	}
 	applyStatus["KubernetesWatchTrigger"] = *ras
 
 	_, ras, err = applyTimeTriggers(input.Context(), fclient, fr, delete, specAllowConflicts)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "TimeTrigger apply failed")
+		return nil, nil, fmt.Errorf("TimeTrigger apply failed: %w", err)
 	}
 	applyStatus["TimeTrigger"] = *ras
 
 	_, ras, err = applyMessageQueueTriggers(input.Context(), fclient, fr, delete, specAllowConflicts)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "MessageQueueTrigger apply failed")
+		return nil, nil, fmt.Errorf("MessageQueueTrigger apply failed: %w", err)
 	}
 	applyStatus["MessageQueueTrigger"] = *ras
 
@@ -526,14 +525,14 @@ func localArchiveFromSpec(ctx context.Context, specDir string, aus *spectypes.Ar
 			console.Verbose(2, "try to find globs in path '%v'", absGlob)
 			fs, err := utils.FindAllGlobs(absGlob)
 			if err != nil {
-				return nil, errors.Wrapf(err, "Invalid glob in archive %v: %v", aus.Name, relativeGlob)
+				return nil, fmt.Errorf("Invalid glob in archive %v: %v: %w", aus.Name, relativeGlob, err)
 			}
 			files = append(files, fs...)
 		}
 	}
 
 	if len(files) == 0 {
-		return nil, errors.Errorf("archive '%v' is empty", aus.Name)
+		return nil, fmt.Errorf("archive '%v' is empty", aus.Name)
 	}
 
 	// if it's just one file, use its path directly
@@ -585,7 +584,7 @@ func localArchiveFromSpec(ctx context.Context, specDir string, aus *spectypes.Ar
 		// checksum
 		csum, err := utils.GetFileChecksum(archiveFileName)
 		if err != nil {
-			return nil, errors.Errorf("failed to calculate archive checksum for %v (%v): %v", aus.Name, archiveFileName, err)
+			return nil, fmt.Errorf("failed to calculate archive checksum for %v (%v): %v", aus.Name, archiveFileName, err)
 		}
 
 		// archive object
@@ -626,7 +625,7 @@ func waitForPackageBuild(ctx context.Context, fclient cmd.Client, pkg *fv1.Packa
 			return pkg, nil
 		}
 		if time.Since(start) > 5*time.Minute {
-			return nil, errors.Errorf("package %v has been building for a while, giving up on waiting for it", pkg.ObjectMeta.Name)
+			return nil, fmt.Errorf("package %v has been building for a while, giving up on waiting for it", pkg.ObjectMeta.Name)
 		}
 
 		// TODO watch instead

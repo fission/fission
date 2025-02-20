@@ -20,7 +20,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/pkg/errors"
+	"errors"
+
 	apiv1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -57,7 +58,7 @@ func (opts *RunContainerSubCommand) complete(input cli.Input) error {
 
 	_, fnNamespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceFunction)
 	if err != nil {
-		return errors.Wrap(err, "error in running container for function ")
+		return fmt.Errorf("error in running container for function : %w", err)
 	}
 
 	// user wants a spec, create a yaml file with package and function
@@ -80,7 +81,7 @@ func (opts *RunContainerSubCommand) complete(input cli.Input) error {
 
 	fnTimeout := input.Int(flagkey.FnExecutionTimeout)
 	if fnTimeout <= 0 {
-		return errors.Errorf("--%v must be greater than 0", flagkey.FnExecutionTimeout)
+		return fmt.Errorf("--%v must be greater than 0", flagkey.FnExecutionTimeout)
 	}
 
 	fnIdleTimeout := input.Int(flagkey.FnIdleTimeout)
@@ -132,7 +133,7 @@ func (opts *RunContainerSubCommand) complete(input cli.Input) error {
 					if kerrors.IsNotFound(err) {
 						console.Warn(fmt.Sprintf("Secret %s not found in Namespace: %s. Secret needs to be present in the same namespace as function", secretName, fnNamespace))
 					} else {
-						return errors.Wrapf(err, "error checking secret %s", secretName)
+						return fmt.Errorf("error checking secret %s: %w", secretName, err)
 					}
 				}
 			}
@@ -156,7 +157,7 @@ func (opts *RunContainerSubCommand) complete(input cli.Input) error {
 					if kerrors.IsNotFound(err) {
 						console.Warn(fmt.Sprintf("ConfigMap %s not found in Namespace: %s. ConfigMap needs to be present in the same namespace as function", cfgMapName, fnNamespace))
 					} else {
-						return errors.Wrapf(err, "error checking configmap %s", cfgMapName)
+						return fmt.Errorf("error checking configmap %s: %w", cfgMapName, err)
 					}
 				}
 			}
@@ -228,14 +229,14 @@ func (opts *RunContainerSubCommand) run(input cli.Input) error {
 	if input.Bool(flagkey.SpecSave) {
 		err := spec.SpecSave(*opts.function, opts.specFile, false)
 		if err != nil {
-			return errors.Wrap(err, "error saving function spec")
+			return fmt.Errorf("error saving function spec: %w", err)
 		}
 		return nil
 	}
 
 	_, err := opts.Client().FissionClientSet.CoreV1().Functions(opts.function.ObjectMeta.Namespace).Create(input.Context(), opts.function, metav1.CreateOptions{})
 	if err != nil {
-		return errors.Wrap(err, "error creating function")
+		return fmt.Errorf("error creating function: %w", err)
 	}
 
 	fmt.Printf("function '%v' created\n", opts.function.ObjectMeta.Name)

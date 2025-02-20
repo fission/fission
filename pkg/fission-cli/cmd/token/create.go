@@ -24,8 +24,6 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/pkg/errors"
-
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
@@ -73,7 +71,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 	}
 	routerURL, err := util.GetRouterURL(input.Context(), opts.Client())
 	if err != nil {
-		return errors.Wrap(err, "error getting router URL")
+		return fmt.Errorf("error getting router URL: %w", err)
 	}
 	authAuthenticatorUrl := routerURL.JoinPath(authURI)
 	console.Verbose(2, "Auth URI: %s", authAuthenticatorUrl.String())
@@ -86,7 +84,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return errors.Wrap(err, "error creating token")
+		return fmt.Errorf("error creating token: %w", err)
 	}
 
 	if resp.StatusCode == http.StatusCreated {

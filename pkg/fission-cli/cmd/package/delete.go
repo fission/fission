@@ -20,7 +20,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/pkg/errors"
+	"errors"
+
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -61,7 +62,7 @@ func (opts *DeleteSubCommand) complete(input cli.Input) (err error) {
 	opts.force = input.Bool(flagkey.PkgForce)
 
 	if len(opts.name) == 0 && !opts.deleteOrphans {
-		return errors.Errorf("need --%v or --%v flag", flagkey.PkgName, flagkey.PkgOrphan)
+		return fmt.Errorf("need --%v or --%v flag", flagkey.PkgName, flagkey.PkgOrphan)
 	}
 
 	return nil
@@ -74,7 +75,7 @@ func (opts *DeleteSubCommand) run(input cli.Input) error {
 			if input.Bool(flagkey.IgnoreNotFound) && kerrors.IsNotFound(err) {
 				return nil
 			}
-			return errors.Wrap(err, "find package")
+			return fmt.Errorf("find package: %w", err)
 		}
 
 		fnList, err := GetFunctionsByPackage(input.Context(), opts.Client(), opts.name, opts.namespace)
@@ -96,7 +97,7 @@ func (opts *DeleteSubCommand) run(input cli.Input) error {
 	if opts.deleteOrphans {
 		err := deleteOrphanPkgs(input.Context(), opts.Client(), opts.namespace)
 		if err != nil {
-			return errors.Wrap(err, "deleting orphan packages")
+			return fmt.Errorf("deleting orphan packages: %w", err)
 		}
 		fmt.Println("Orphan packages deleted")
 	}
@@ -114,7 +115,7 @@ func deleteOrphanPkgs(ctx context.Context, client cmd.Client, pkgNamespace strin
 	for _, pkg := range pkgList.Items {
 		fnList, err := GetFunctionsByPackage(ctx, client, pkg.ObjectMeta.Name, pkgNamespace)
 		if err != nil {
-			return errors.Wrap(err, fmt.Sprintf("get functions sharing package %s", pkg.ObjectMeta.Name))
+			return fmt.Errorf("get functions sharing package %v: %w", pkg.ObjectMeta.Name, err)
 		}
 		if len(fnList) == 0 {
 			err = deletePackage(ctx, client, pkg.ObjectMeta.Name, pkgNamespace)

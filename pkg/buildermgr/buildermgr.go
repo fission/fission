@@ -18,10 +18,10 @@ package buildermgr
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"time"
 
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -38,21 +38,21 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *
 
 	fissionClient, err := clientGen.GetFissionClient()
 	if err != nil {
-		return errors.Wrap(err, "failed to get fission client")
+		return fmt.Errorf("failed to get fission client: %w", err)
 	}
 	kubernetesClient, err := clientGen.GetKubernetesClient()
 	if err != nil {
-		return errors.Wrap(err, "failed to get kubernetes client")
+		return fmt.Errorf("failed to get kubernetes client: %w", err)
 	}
 
 	err = crd.WaitForFunctionCRDs(ctx, logger, fissionClient)
 	if err != nil {
-		return errors.Wrap(err, "error waiting for CRDs")
+		return fmt.Errorf("error waiting for CRDs: %w", err)
 	}
 
 	fetcherConfig, err := fetcherConfig.MakeFetcherConfig("/packages")
 	if err != nil {
-		return errors.Wrap(err, "error making fetcher config")
+		return fmt.Errorf("error making fetcher config: %w", err)
 	}
 
 	podSpecPatch, err := util.GetSpecFromConfigMap(fv1.BuilderPodSpecPath)

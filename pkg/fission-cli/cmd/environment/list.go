@@ -21,7 +21,6 @@ import (
 	"os"
 	"text/tabwriter"
 
-	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
@@ -41,7 +40,7 @@ func (opts *ListSubCommand) do(input cli.Input) (err error) {
 
 	_, currentNS, err := opts.GetResourceNamespace(input, flagkey.NamespaceEnvironment)
 	if err != nil {
-		return errors.Wrap(err, "error creating environment")
+		return fmt.Errorf("error creating environment: %w", err)
 	}
 
 	if input.Bool(flagkey.AllNamespaces) {
@@ -50,7 +49,7 @@ func (opts *ListSubCommand) do(input cli.Input) (err error) {
 
 	response, err := opts.Client().FissionClientSet.CoreV1().Environments(currentNS).List(input.Context(), metav1.ListOptions{})
 	if err != nil {
-		return errors.Wrap(err, "error listing environments")
+		return fmt.Errorf("error listing environments: %w", err)
 	}
 
 	envs := response.Items

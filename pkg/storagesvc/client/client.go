@@ -28,7 +28,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/pkg/errors"
+	"errors"
+
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"golang.org/x/net/context/ctxhttp"
 
@@ -160,7 +161,7 @@ func (c *client) Download(ctx context.Context, id string, filePath string) error
 	// quit if file exists
 	_, err := os.Stat(filePath)
 	if err == nil || !os.IsNotExist(err) {
-		return errors.Errorf("file already exists: %v", filePath)
+		return fmt.Errorf("file already exists: %v", filePath)
 	}
 
 	// create
@@ -223,7 +224,7 @@ func (c *client) Delete(ctx context.Context, id string) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return errors.Errorf("HTTP error %v", resp.StatusCode)
+		return fmt.Errorf("HTTP error %v", resp.StatusCode)
 	}
 
 	return nil

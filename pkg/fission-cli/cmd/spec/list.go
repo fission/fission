@@ -24,7 +24,6 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -56,7 +55,7 @@ func (opts *ListSubCommand) run(input cli.Input) error {
 		specIgnore := util.GetSpecIgnore(input)
 		fr, err := ReadSpecs(specDir, specIgnore, false)
 		if err != nil {
-			return errors.Wrap(err, "error reading specs")
+			return fmt.Errorf("error reading specs: %w", err)
 		}
 		deployID = fr.DeploymentConfig.UID
 	}
@@ -83,7 +82,7 @@ func (opts *ListSubCommand) getResource(input cli.Input, namespace string, deplo
 
 	allfn, err = getAllFunctions(input.Context(), opts.Client(), namespace)
 	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("error getting Functions from %s namespaces", printNS))
+		return fmt.Errorf("error getting Functions from %s namespaces: %w", printNS, err)
 	}
 	specfns := getAppliedFunctions(allfn, deployID)
 	ShowFunctions(specfns)
@@ -91,7 +90,7 @@ func (opts *ListSubCommand) getResource(input cli.Input, namespace string, deplo
 	var allenvs []fv1.Environment
 	allenvs, err = getAllEnvironments(input.Context(), opts.Client(), namespace)
 	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("error getting Environments from  %s namespaces", printNS))
+		return fmt.Errorf("error getting Environments from  %s namespaces: %w", printNS, err)
 	}
 	specenvs := getAppliedEnvironments(allenvs, deployID)
 	ShowEnvironments(specenvs)
@@ -99,7 +98,7 @@ func (opts *ListSubCommand) getResource(input cli.Input, namespace string, deplo
 	var pkglists []fv1.Package
 	pkglists, err = getAllPackages(input.Context(), opts.Client(), namespace)
 	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("error getting Packages from  %s namespaces", printNS))
+		return fmt.Errorf("error getting Packages from  %s namespaces: %w", printNS, err)
 	}
 	specPkgs := getAppliedPackages(pkglists, deployID)
 	ShowPackages(specPkgs)
@@ -107,7 +106,7 @@ func (opts *ListSubCommand) getResource(input cli.Input, namespace string, deplo
 	var canaryCfgs []fv1.CanaryConfig
 	canaryCfgs, err = getAllCanaryConfigs(input.Context(), opts.Client(), namespace)
 	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("error getting Canary Config from  %s namespaces", printNS))
+		return fmt.Errorf("error getting Canary Config from  %s namespaces: %w", printNS, err)
 	}
 	specCanaryCfgs := getAppliedCanaryConfigs(canaryCfgs, deployID)
 	ShowCanaryConfigs(specCanaryCfgs)
@@ -115,7 +114,7 @@ func (opts *ListSubCommand) getResource(input cli.Input, namespace string, deplo
 	var hts []fv1.HTTPTrigger
 	hts, err = getAllHTTPTriggers(input.Context(), opts.Client(), namespace)
 	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("error getting HTTP Triggers from  %s namespaces", printNS))
+		return fmt.Errorf("error getting HTTP Triggers from  %s namespaces: %w", printNS, err)
 	}
 	specHTTPTriggers := getAppliedHTTPTriggers(hts, deployID)
 	ShowHTTPTriggers(specHTTPTriggers)
@@ -123,7 +122,7 @@ func (opts *ListSubCommand) getResource(input cli.Input, namespace string, deplo
 	var mqts []fv1.MessageQueueTrigger
 	mqts, err = getAllMessageQueueTriggers(input.Context(), opts.Client(), input.String(flagkey.MqtMQType), namespace)
 	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("error getting MessageQueue Triggers from  %s namespaces", printNS))
+		return fmt.Errorf("error getting MessageQueue Triggers from  %s namespaces: %w", printNS, err)
 	}
 	specMessageQueueTriggers := getAppliedMessageQueueTriggers(mqts, deployID)
 	ShowMQTriggers(specMessageQueueTriggers)
@@ -131,7 +130,7 @@ func (opts *ListSubCommand) getResource(input cli.Input, namespace string, deplo
 	var tts []fv1.TimeTrigger
 	tts, err = getAllTimeTriggers(input.Context(), opts.Client(), namespace)
 	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("error getting Time Triggers from  %s namespaces", printNS))
+		return fmt.Errorf("error getting Time Triggers from  %s namespaces: %w", printNS, err)
 	}
 	specTimeTriggers := getAppliedTimeTriggers(tts, deployID)
 	ShowTimeTriggers(specTimeTriggers)
@@ -139,7 +138,7 @@ func (opts *ListSubCommand) getResource(input cli.Input, namespace string, deplo
 	var kws []fv1.KubernetesWatchTrigger
 	kws, err = getAllKubeWatchTriggers(input.Context(), opts.Client(), namespace)
 	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("error getting Kube Watchers from  %s namespaces", printNS))
+		return fmt.Errorf("error getting Kube Watchers from  %s namespaces: %w", printNS, err)
 	}
 	specKubeWatchers := getSpecKubeWatchers(kws, deployID)
 	ShowAppliedKubeWatchers(specKubeWatchers)
@@ -424,7 +423,7 @@ func ShowAppliedKubeWatchers(ws []fv1.KubernetesWatchTrigger) {
 func getAllFunctions(ctx context.Context, client cmd.Client, namespace string) ([]fv1.Function, error) {
 	fns, err := client.FissionClientSet.CoreV1().Functions(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
-		return nil, errors.Errorf("Unable to get Functions %v", err.Error())
+		return nil, fmt.Errorf("Unable to get Functions %v", err.Error())
 	}
 	return fns.Items, nil
 }
@@ -433,7 +432,7 @@ func getAllFunctions(ctx context.Context, client cmd.Client, namespace string) (
 func getAllEnvironments(ctx context.Context, client cmd.Client, namespace string) ([]fv1.Environment, error) {
 	envs, err := client.FissionClientSet.CoreV1().Environments(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
-		return nil, errors.Errorf("Unable to get Environments %v", err.Error())
+		return nil, fmt.Errorf("Unable to get Environments %v", err.Error())
 	}
 	return envs.Items, nil
 }
@@ -442,7 +441,7 @@ func getAllEnvironments(ctx context.Context, client cmd.Client, namespace string
 func getAllPackages(ctx context.Context, client cmd.Client, namespace string) ([]fv1.Package, error) {
 	pkgList, err := client.FissionClientSet.CoreV1().Packages(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
-		return nil, errors.Errorf("Unable to get Packages %v", err.Error())
+		return nil, fmt.Errorf("Unable to get Packages %v", err.Error())
 	}
 	return pkgList.Items, nil
 }
@@ -451,7 +450,7 @@ func getAllPackages(ctx context.Context, client cmd.Client, namespace string) ([
 func getAllCanaryConfigs(ctx context.Context, client cmd.Client, namespace string) ([]fv1.CanaryConfig, error) {
 	canaryCfgs, err := client.FissionClientSet.CoreV1().CanaryConfigs(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
-		return nil, errors.Errorf("Unable to get Canary Configs %v", err.Error())
+		return nil, fmt.Errorf("Unable to get Canary Configs %v", err.Error())
 	}
 	return canaryCfgs.Items, nil
 }
@@ -460,7 +459,7 @@ func getAllCanaryConfigs(ctx context.Context, client cmd.Client, namespace strin
 func getAllHTTPTriggers(ctx context.Context, client cmd.Client, namespace string) ([]fv1.HTTPTrigger, error) {
 	hts, err := client.FissionClientSet.CoreV1().HTTPTriggers(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
-		return nil, errors.Errorf("Unable to get HTTP Triggers %v", err.Error())
+		return nil, fmt.Errorf("Unable to get HTTP Triggers %v", err.Error())
 	}
 	return hts.Items, nil
 }
@@ -469,7 +468,7 @@ func getAllHTTPTriggers(ctx context.Context, client cmd.Client, namespace string
 func getAllMessageQueueTriggers(ctx context.Context, client cmd.Client, mqttype string, namespace string) ([]fv1.MessageQueueTrigger, error) {
 	mqts, err := client.FissionClientSet.CoreV1().MessageQueueTriggers(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
-		return nil, errors.Errorf("Unable to get MessageQueue Triggers %v", err.Error())
+		return nil, fmt.Errorf("Unable to get MessageQueue Triggers %v", err.Error())
 	}
 	return mqts.Items, nil
 }
@@ -478,7 +477,7 @@ func getAllMessageQueueTriggers(ctx context.Context, client cmd.Client, mqttype 
 func getAllTimeTriggers(ctx context.Context, client cmd.Client, namespace string) ([]fv1.TimeTrigger, error) {
 	tts, err := client.FissionClientSet.CoreV1().TimeTriggers(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
-		return nil, errors.Errorf("Unable to get Time Triggers %v", err.Error())
+		return nil, fmt.Errorf("Unable to get Time Triggers %v", err.Error())
 	}
 	return tts.Items, nil
 }
@@ -487,7 +486,7 @@ func getAllTimeTriggers(ctx context.Context, client cmd.Client, namespace string
 func getAllKubeWatchTriggers(ctx context.Context, client cmd.Client, namespace string) ([]fv1.KubernetesWatchTrigger, error) {
 	ws, err := client.FissionClientSet.CoreV1().KubernetesWatchTriggers(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
-		return nil, errors.Errorf("Unable to get Kube Watchers %v", err.Error())
+		return nil, fmt.Errorf("Unable to get Kube Watchers %v", err.Error())
 	}
 	return ws.Items, nil
 }

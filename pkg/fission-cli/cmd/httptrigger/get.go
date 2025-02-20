@@ -22,7 +22,6 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -46,12 +45,12 @@ func (opts *GetSubCommand) do(input cli.Input) error {
 func (opts *GetSubCommand) run(input cli.Input) (err error) {
 	_, namespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceFunction)
 	if err != nil {
-		return errors.Wrap(err, "error in deleting function ")
+		return fmt.Errorf("error in deleting function : %w", err)
 	}
 
 	ht, err := opts.Client().FissionClientSet.CoreV1().HTTPTriggers(namespace).Get(input.Context(), input.String(flagkey.HtName), metav1.GetOptions{})
 	if err != nil {
-		return errors.Wrap(err, "error getting http trigger")
+		return fmt.Errorf("error getting http trigger: %w", err)
 	}
 
 	printHtSummary([]fv1.HTTPTrigger{*ht})

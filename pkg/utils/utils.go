@@ -29,7 +29,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/pkg/errors"
+	"errors"
+
 	"golang.org/x/net/context/ctxhttp"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -75,11 +76,11 @@ func FindAllGlobs(paths ...string) ([]string, error) {
 		// use absolute path to find files
 		path, err := filepath.Abs(p)
 		if err != nil {
-			return nil, errors.Wrapf(err, "error getting absolute path of path '%s'", p)
+			return nil, fmt.Errorf("error getting absolute path of path '%s': %w", p, err)
 		}
 		globs, err := filepath.Glob(path)
 		if err != nil {
-			return nil, errors.Errorf("invalid glob %s: %s", path, err)
+			return nil, fmt.Errorf("invalid glob %s: %s", path, err)
 		}
 		files = append(files, globs...)
 		// xxx handle excludeGlobs here
@@ -166,7 +167,7 @@ func isHttp2xxSuccessful(status int) bool {
 func DownloadUrl(ctx context.Context, httpClient *http.Client, url string, localPath string) error {
 	// validate local path for directory traversal attacks
 	if filepath.Clean(localPath) != localPath {
-		return errors.Errorf("invalid local path: %s", localPath)
+		return fmt.Errorf("invalid local path: %s", localPath)
 	}
 	resp, err := ctxhttp.Get(ctx, httpClient, url)
 	if err != nil {
@@ -206,7 +207,7 @@ func DownloadUrl(ctx context.Context, httpClient *http.Client, url string, local
 func GetStringValueFromEnv(envVar string) (string, error) {
 	v := os.Getenv(envVar)
 	if v == "" {
-		return v, errors.New(fmt.Sprintf("Еnvironment variable %s empty", envVar))
+		return v, fmt.Errorf("environment variable %s empty", envVar)
 	}
 	return v, nil
 }

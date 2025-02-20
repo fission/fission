@@ -19,7 +19,6 @@ package timetrigger
 import (
 	"fmt"
 
-	"github.com/pkg/errors"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -40,7 +39,7 @@ func (opts *DeleteSubCommand) do(input cli.Input) (err error) {
 
 	_, namespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceTrigger)
 	if err != nil {
-		return errors.Wrap(err, "error in deleting function ")
+		return fmt.Errorf("error in deleting function : %w", err)
 	}
 
 	err = opts.Client().FissionClientSet.CoreV1().TimeTriggers(namespace).Delete(input.Context(), input.String(flagkey.TtName), metav1.DeleteOptions{})
@@ -48,7 +47,7 @@ func (opts *DeleteSubCommand) do(input cli.Input) (err error) {
 		if input.Bool(flagkey.IgnoreNotFound) && kerrors.IsNotFound(err) {
 			return nil
 		}
-		return errors.Wrap(err, "error deleting trigger")
+		return fmt.Errorf("error deleting trigger: %w", err)
 	}
 
 	fmt.Printf("trigger '%v' deleted\n", input.String(flagkey.TtName))

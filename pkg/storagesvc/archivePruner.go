@@ -18,6 +18,7 @@ package storagesvc
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"go.uber.org/zap"
@@ -27,7 +28,6 @@ import (
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/manager"
-	"github.com/pkg/errors"
 )
 
 type ArchivePruner struct {
@@ -43,7 +43,7 @@ const defaultPruneInterval int = 60 // in minutes
 func MakeArchivePruner(logger *zap.Logger, clientGen crd.ClientGeneratorInterface, stowClient *StowClient, pruneInterval time.Duration) (*ArchivePruner, error) {
 	fissionClient, err := clientGen.GetFissionClient()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get fission client")
+		return nil, fmt.Errorf("failed to get fission client: %w", err)
 	}
 
 	return &ArchivePruner{

@@ -20,7 +20,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pkg/errors"
+	"errors"
 )
 
 type throttlerOperationType int

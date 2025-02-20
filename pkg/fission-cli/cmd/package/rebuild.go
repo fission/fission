@@ -19,7 +19,6 @@ package _package
 import (
 	"fmt"
 
-	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -58,17 +57,17 @@ func (opts *RebuildSubCommand) complete(input cli.Input) (err error) {
 func (opts *RebuildSubCommand) run(input cli.Input) error {
 	pkg, err := opts.Client().FissionClientSet.CoreV1().Packages(opts.namespace).Get(input.Context(), opts.name, metav1.GetOptions{})
 	if err != nil {
-		return errors.Wrapf(err, "package %s not found", opts.name)
+		return fmt.Errorf("package %s not found: %w", opts.name, err)
 	}
 
 	if pkg.Status.BuildStatus != fv1.BuildStatusFailed {
-		return errors.New(fmt.Sprintf("Package %v is not in %v state.",
-			pkg.ObjectMeta.Name, fv1.BuildStatusFailed))
+		return fmt.Errorf("Package %v is not in %v state.",
+			pkg.ObjectMeta.Name, fv1.BuildStatusFailed)
 	}
 
 	_, err = updatePackageStatus(input.Context(), opts.Client(), pkg, fv1.BuildStatusPending)
 	if err != nil {
-		return errors.Wrap(err, "update package status")
+		return fmt.Errorf("update package status: %w", err)
 	}
 
 	fmt.Printf("Retrying build for pkg %v. Use \"fission pkg info --name %v\" to view status.\n", pkg.ObjectMeta.Name, pkg.ObjectMeta.Name)

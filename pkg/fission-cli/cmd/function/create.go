@@ -17,9 +17,9 @@ limitations under the License.
 package function
 
 import (
+	"errors"
 	"fmt"
 
-	"github.com/pkg/errors"
 	asv2 "k8s.io/api/autoscaling/v2"
 	apiv1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -67,7 +67,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 
 	userProvidedNS, fnNamespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceFunction)
 	if err != nil {
-		return errors.Wrap(err, "error retrieving namespace information")
+		return fmt.Errorf("error retrieving namespace information: %w", err)
 	}
 
 	// user wants a spec, create a yaml file with package and function
@@ -93,7 +93,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 
 	fnTimeout := input.Int(flagkey.FnExecutionTimeout)
 	if fnTimeout <= 0 {
-		return errors.Errorf("--%v must be greater than 0", flagkey.FnExecutionTimeout)
+		return fmt.Errorf("--%v must be greater than 0", flagkey.FnExecutionTimeout)
 	}
 
 	fnIdleTimeout := input.Int(flagkey.FnIdleTimeout)
@@ -119,7 +119,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	cfgMapNames := input.StringSlice(flagkey.FnCfgMap)
 
 	if input.String(flagkey.FnExecutorType) == string(fv1.ExecutorTypeContainer) {
-		return errors.Errorf("this command does not support creating function of executor type container. Check `fission function run-container --help`")
+		return fmt.Errorf("this command does not support creating function of executor type container. Check `fission function run-container --help`")
 	}
 
 	invokeStrategy, err := getInvokeStrategy(input, nil)
@@ -141,7 +141,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 
 			fr, err := spec.ReadSpecs(specDir, specIgnore, false)
 			if err != nil {
-				return errors.Wrap(err, fmt.Sprintf("error reading spec in '%s'", specDir))
+				return fmt.Errorf("error reading spec in '%s': %w", specDir, err)
 			}
 
 			obj := fr.SpecExists(&fv1.Package{ // In case of spec I might or might not have the `fnNamespace`, how will I get pkg objectMeta here.
@@ -151,7 +151,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 				},
 			}, true, false)
 			if obj == nil {
-				return errors.Errorf("please create package %s spec file with namespace %s before referencing it", pkgName, userProvidedNS)
+				return fmt.Errorf("please create package %s spec file with namespace %s before referencing it", pkgName, userProvidedNS)
 			}
 
 			pkg = obj.(*fv1.Package)
@@ -160,7 +160,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 			// use existing package
 			pkg, err = opts.Client().FissionClientSet.CoreV1().Packages(fnNamespace).Get(input.Context(), pkgName, metav1.GetOptions{})
 			if err != nil {
-				return errors.Wrap(err, fmt.Sprintf("read package in '%s' in Namespace: %s. Package needs to be present in the same namespace as function", pkgName, fnNamespace))
+				return fmt.Errorf("read package in '%s' in Namespace: %s. Package needs to be present in the same namespace as function: %w", pkgName, fnNamespace, err)
 			}
 			pkgMetadata = &pkg.ObjectMeta
 		}
@@ -180,7 +180,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 
 			fr, err := spec.ReadSpecs(specDir, specIgnore, false)
 			if err != nil {
-				return errors.Wrap(err, fmt.Sprintf("error reading spec in '%s'", specDir))
+				return fmt.Errorf("error reading spec in '%s': %w", specDir, err)
 			}
 			exists, err := fr.ExistsInSpecs(fv1.Environment{
 				ObjectMeta: metav1.ObjectMeta{
@@ -201,7 +201,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 				if e, ok := err.(ferror.Error); ok && e.Code == ferror.ErrorNotFound {
 					console.Warn(fmt.Sprintf("Environment \"%s\" does not exist. Please create the environment before executing the function. \nFor example: `fission env create --name %s --envns %s --image <image>`\n", envName, envName, fnNamespace))
 				} else {
-					return errors.Wrap(err, "error retrieving environment information")
+					return fmt.Errorf("error retrieving environment information: %w", err)
 				}
 			}
 		}
@@ -228,7 +228,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		pkgMetadata, err = _package.CreatePackage(input, opts.Client(), pkgName, fnNamespace, envName,
 			srcArchiveFiles, deployArchiveFiles, buildcmd, specDir, opts.specFile, noZip, userProvidedNS)
 		if err != nil {
-			return errors.Wrap(err, "error creating package")
+			return fmt.Errorf("error creating package: %w", err)
 		}
 	}
 
@@ -244,7 +244,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 					if k8serrors.IsNotFound(err) {
 						console.Warn(fmt.Sprintf("Secret %s not found in Namespace: %s. Secret needs to be present in the same namespace as function", secretName, fnNamespace))
 					} else {
-						return errors.Wrapf(err, "error checking secret %s", secretName)
+						return fmt.Errorf("error checking secret %s: %w", secretName, err)
 					}
 				}
 				newSecret := fv1.SecretReference{
@@ -274,7 +274,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 					if k8serrors.IsNotFound(err) {
 						console.Warn(fmt.Sprintf("ConfigMap %s not found in Namespace: %s. ConfigMap needs to be present in the same namespace as function", cfgMapName, fnNamespace))
 					} else {
-						return errors.Wrapf(err, "error checking configmap %s", cfgMapName)
+						return fmt.Errorf("error checking configmap %s: %w", cfgMapName, err)
 					}
 				}
 				newCfgMap := fv1.ConfigMapReference{
@@ -368,14 +368,14 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 	if input.Bool(flagkey.SpecSave) {
 		err := spec.SpecSave(*opts.function, opts.specFile, false)
 		if err != nil {
-			return errors.Wrap(err, "error saving function spec")
+			return fmt.Errorf("error saving function spec: %w", err)
 		}
 		return nil
 	}
 
 	_, err := opts.Client().FissionClientSet.CoreV1().Functions(opts.function.ObjectMeta.Namespace).Create(input.Context(), opts.function, metav1.CreateOptions{})
 	if err != nil {
-		return errors.Wrap(err, "error creating function")
+		return fmt.Errorf("error creating function: %w", err)
 	}
 
 	fmt.Printf("function '%s' created\n", opts.function.ObjectMeta.Name)
@@ -420,7 +420,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 	}
 	_, err = opts.Client().FissionClientSet.CoreV1().HTTPTriggers(opts.function.ObjectMeta.Namespace).Create(input.Context(), ht, metav1.CreateOptions{})
 	if err != nil {
-		return errors.Wrap(err, "error creating HTTP trigger")
+		return fmt.Errorf("error creating HTTP trigger: %w", err)
 	}
 
 	fmt.Printf("route created: %s %s -> %s\n", methods, triggerUrl, opts.function.ObjectMeta.Name)
@@ -490,7 +490,7 @@ func getExecutorType(input cli.Input) (executorType fv1.ExecutorType, err error)
 	case string(fv1.ExecutorTypeContainer):
 		executorType = fv1.ExecutorTypeContainer
 	default:
-		err = errors.Errorf("executor type must be one of '%v', '%v' or '%v'", fv1.ExecutorTypePoolmgr, fv1.ExecutorTypeNewdeploy, fv1.ExecutorTypeContainer)
+		err = fmt.Errorf("executor type must be one of '%v', '%v' or '%v'", fv1.ExecutorTypePoolmgr, fv1.ExecutorTypeNewdeploy, fv1.ExecutorTypeContainer)
 	}
 	return executorType, err
 }
@@ -501,7 +501,7 @@ func getExecutionStrategy(fnExecutor fv1.ExecutorType, input cli.Input) (strateg
 	if input.IsSet(flagkey.FnSpecializationTimeout) {
 		specializationTimeout = input.Int(flagkey.FnSpecializationTimeout)
 		if specializationTimeout < fv1.DefaultSpecializationTimeOut {
-			return nil, errors.Errorf("%v must be greater than or equal to 120 seconds", flagkey.FnSpecializationTimeout)
+			return nil, fmt.Errorf("%v must be greater than or equal to 120 seconds", flagkey.FnSpecializationTimeout)
 		}
 	}
 
@@ -529,7 +529,7 @@ func getExecutionStrategy(fnExecutor fv1.ExecutorType, input cli.Input) (strateg
 		if input.IsSet(flagkey.ReplicasMaxscale) {
 			maxScale = input.Int(flagkey.ReplicasMaxscale)
 			if maxScale <= 0 {
-				return nil, errors.Errorf("%v must be greater than 0", flagkey.ReplicasMaxscale)
+				return nil, fmt.Errorf("%v must be greater than 0", flagkey.ReplicasMaxscale)
 			}
 		}
 
@@ -573,7 +573,7 @@ func updateExecutionStrategy(input cli.Input, existingExecutionStrategy *fv1.Exe
 		case string(fv1.ExecutorTypeContainer):
 			fnExecutor = fv1.ExecutorTypeContainer
 		default:
-			return nil, errors.Errorf("executor type must be one of '%v', %v or '%v'", fv1.ExecutorTypePoolmgr, fv1.ExecutorTypeNewdeploy, fv1.ExecutorTypeContainer)
+			return nil, fmt.Errorf("executor type must be one of '%v', %v or '%v'", fv1.ExecutorTypePoolmgr, fv1.ExecutorTypeNewdeploy, fv1.ExecutorTypeContainer)
 		}
 	}
 
@@ -582,7 +582,7 @@ func updateExecutionStrategy(input cli.Input, existingExecutionStrategy *fv1.Exe
 	if input.IsSet(flagkey.FnSpecializationTimeout) {
 		specializationTimeout = input.Int(flagkey.FnSpecializationTimeout)
 		if specializationTimeout < fv1.DefaultSpecializationTimeOut {
-			return nil, errors.Errorf("%v must be greater than or equal to 120 seconds", flagkey.FnSpecializationTimeout)
+			return nil, fmt.Errorf("%v must be greater than or equal to 120 seconds", flagkey.FnSpecializationTimeout)
 		}
 	} else {
 		if specializationTimeout < fv1.DefaultSpecializationTimeOut {
@@ -618,7 +618,7 @@ func updateExecutionStrategy(input cli.Input, existingExecutionStrategy *fv1.Exe
 		if input.IsSet(flagkey.ReplicasMaxscale) {
 			maxScale = input.Int(flagkey.ReplicasMaxscale)
 			if maxScale <= 0 {
-				return nil, errors.Errorf("%v must be greater than 0", flagkey.ReplicasMaxscale)
+				return nil, fmt.Errorf("%v must be greater than 0", flagkey.ReplicasMaxscale)
 			}
 		} else {
 			if maxScale <= 0 {
@@ -655,7 +655,7 @@ func updateExecutionStrategy(input cli.Input, existingExecutionStrategy *fv1.Exe
 func getTargetCPU(input cli.Input) (int, error) {
 	targetCPU := input.Int(flagkey.RuntimeTargetcpu)
 	if targetCPU <= 0 || targetCPU > 100 {
-		return 0, errors.Errorf("%v must be a value between 1 - 100", flagkey.RuntimeTargetcpu)
+		return 0, fmt.Errorf("%v must be a value between 1 - 100", flagkey.RuntimeTargetcpu)
 	}
 	return targetCPU, nil
 }

@@ -23,7 +23,6 @@ import (
 	"time"
 
 	"github.com/dchest/uniuri"
-	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -56,7 +55,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 	pkgName := input.String(flagkey.PkgName)
 	if len(pkgName) == 0 {
 		if input.Bool(flagkey.SpecSave) && len(input.String(flagkey.PkgName)) == 0 {
-			return errors.Errorf("--%v is necessary when creating spec file", flagkey.PkgName)
+			return fmt.Errorf("--%v is necessary when creating spec file", flagkey.PkgName)
 		} else {
 			console.Warn(fmt.Sprintf("--%v will be soon marked as required flag, see 'help' for details", flagkey.HtName))
 		}
@@ -83,7 +82,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 	}
 
 	if len(srcArchiveFiles) == 0 && len(deployArchiveFiles) == 0 {
-		return errors.Errorf("need --%v or --%v or --%v argument", flagkey.PkgCode, flagkey.PkgSrcArchive, flagkey.PkgDeployArchive)
+		return fmt.Errorf("need --%v or --%v or --%v argument", flagkey.PkgCode, flagkey.PkgSrcArchive, flagkey.PkgDeployArchive)
 	}
 
 	var specDir, specFile string
@@ -91,14 +90,14 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 	if input.Bool(flagkey.SpecSave) {
 		// since package CRD created using --spec, not validate by k8s. So we need to validate it and make sure package name is not more than 63 characters.
 		if len(pkgName) > 63 {
-			return errors.Errorf("error creating package: package name %v, must be no more than 63 characters", pkgName)
+			return fmt.Errorf("error creating package: package name %v, must be no more than 63 characters", pkgName)
 		}
 
 		specDir = util.GetSpecDir(input)
 		specIgnore := util.GetSpecIgnore(input)
 		fr, err := spec.ReadSpecs(specDir, specIgnore, false)
 		if err != nil {
-			return errors.Wrap(err, fmt.Sprintf("error reading spec in '%v'", specDir))
+			return fmt.Errorf("error reading spec in '%v': %w", specDir, err)
 		}
 		exists, err := fr.ExistsInSpecs(fv1.Environment{
 			ObjectMeta: metav1.ObjectMeta{
@@ -155,7 +154,7 @@ func CreatePackage(input cli.Input, client cmd.Client, pkgName string, pkgNamesp
 		}
 		deployment, err := CreateArchive(client, input, deployArchiveFiles, noZip, insecure, deployChecksum, specDir, specFile)
 		if err != nil {
-			return nil, errors.Wrap(err, "error creating deploy archive")
+			return nil, fmt.Errorf("error creating deploy archive: %w", err)
 		}
 		pkgSpec.Deployment = *deployment
 		if len(pkgName) == 0 {
@@ -165,7 +164,7 @@ func CreatePackage(input cli.Input, client cmd.Client, pkgName string, pkgNamesp
 	if len(srcArchiveFiles) > 0 {
 		source, err := CreateArchive(client, input, srcArchiveFiles, false, insecure, srcChecksum, specDir, specFile)
 		if err != nil {
-			return nil, errors.Wrap(err, "error creating source archive")
+			return nil, fmt.Errorf("error creating source archive: %w", err)
 		}
 		pkgSpec.Source = *source
 		pkgStatus = fv1.BuildStatusPending // set package build status to pending
@@ -202,7 +201,7 @@ func CreatePackage(input cli.Input, client cmd.Client, pkgName string, pkgNamesp
 		// if a package with the same spec exists, don't create a new spec file
 		fr, err := spec.ReadSpecs(util.GetSpecDir(input), util.GetSpecIgnore(input), false)
 		if err != nil {
-			return nil, errors.Wrap(err, "error reading specs")
+			return nil, fmt.Errorf("error reading specs: %w", err)
 		}
 
 		obj := fr.SpecExists(pkg, true, true)
@@ -214,7 +213,7 @@ func CreatePackage(input cli.Input, client cmd.Client, pkgName string, pkgNamesp
 
 		err = spec.SpecSave(*pkg, specFile, false)
 		if err != nil {
-			return nil, errors.Wrap(err, "error saving package spec")
+			return nil, fmt.Errorf("error saving package spec: %w", err)
 		}
 		return &pkg.ObjectMeta, nil
 	} else {
@@ -222,7 +221,7 @@ func CreatePackage(input cli.Input, client cmd.Client, pkgName string, pkgNamesp
 
 		pkgMetadata, err := client.FissionClientSet.CoreV1().Packages(pkgNamespace).Create(input.Context(), pkg, metav1.CreateOptions{})
 		if err != nil {
-			return nil, errors.Wrap(err, "error creating package")
+			return nil, fmt.Errorf("error creating package: %w", err)
 		}
 		fmt.Printf("Package '%v' created\n", pkgMetadata.GetName())
 		return &pkgMetadata.ObjectMeta, nil

@@ -29,6 +29,10 @@ env:
 permissions:
   contents: read
 
+concurrency:
+  group: fission-upgrade-test-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   upgrade-test:
     runs-on: ${{ matrix.os }}

@@ -17,9 +17,9 @@ limitations under the License.
 package _package
 
 import (
+	"fmt"
 	"os"
 
-	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -60,7 +60,7 @@ func (opts *InfoSubCommand) complete(input cli.Input) (err error) {
 func (opts *InfoSubCommand) run(input cli.Input) error {
 	pkg, err := opts.Client().FissionClientSet.CoreV1().Packages(opts.namespace).Get(input.Context(), opts.name, metav1.GetOptions{})
 	if err != nil {
-		return errors.Wrapf(err, "error finding package %s", opts.name)
+		return fmt.Errorf("error finding package %s: %w", opts.name, err)
 	}
 
 	pkgutil.PrintPackageSummary(os.Stdout, pkg)

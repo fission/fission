@@ -18,8 +18,8 @@ package kubewatcher
 
 import (
 	"context"
+	"fmt"
 
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/fission/fission/pkg/crd"
@@ -30,23 +30,23 @@ import (
 func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Interface, routerUrl string) error {
 	fissionClient, err := clientGen.GetFissionClient()
 	if err != nil {
-		return errors.Wrap(err, "failed to get fission client")
+		return fmt.Errorf("failed to get fission client: %w", err)
 	}
 	kubeClient, err := clientGen.GetKubernetesClient()
 	if err != nil {
-		return errors.Wrap(err, "failed to get kubernetes client")
+		return fmt.Errorf("failed to get kubernetes client: %w", err)
 	}
 
 	err = crd.WaitForFunctionCRDs(ctx, logger, fissionClient)
 	if err != nil {
-		return errors.Wrap(err, "error waiting for CRDs")
+		return fmt.Errorf("error waiting for CRDs: %w", err)
 	}
 
 	poster := publisher.MakeWebhookPublisher(logger, routerUrl)
 	kubeWatch := MakeKubeWatcher(ctx, logger, kubeClient, poster)
 	ws, err := MakeWatchSync(ctx, logger, fissionClient, kubeWatch)
 	if err != nil {
-		return errors.Wrap(err, "error making watch sync")
+		return fmt.Errorf("error making watch sync: %w", err)
 	}
 	ws.Run(ctx, mgr)
 

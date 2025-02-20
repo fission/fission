@@ -25,7 +25,6 @@ import (
 	"strings"
 
 	"github.com/hashicorp/go-multierror"
-	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
@@ -71,7 +70,7 @@ func (opts *ValidateSubCommand) run(input cli.Input, fr *FissionResources) (err 
 	if fr == nil {
 		fr, err = ReadSpecs(specDir, specIgnore, false)
 		if err != nil {
-			return errors.Wrap(err, "error reading specs")
+			return fmt.Errorf("error reading specs: %w", err)
 		}
 	}
 
@@ -83,12 +82,12 @@ func (opts *ValidateSubCommand) run(input cli.Input, fr *FissionResources) (err 
 	// this does the rest of the checks, like dangling refs
 	warnings, err = fr.Validate(input, opts.Client())
 	if err != nil {
-		return errors.Wrap(err, "error validating specs")
+		return fmt.Errorf("error validating specs: %w", err)
 	}
 
 	err = resourceConflictCheck(input.Context(), opts.Client(), fr, input.Bool(flagkey.SpecAllowConflicts), "")
 	if err != nil {
-		return errors.Wrap(err, "name conflict error")
+		return fmt.Errorf("name conflict error: %w", err)
 	}
 
 	for _, warning := range warnings {
@@ -110,7 +109,7 @@ func resourceConflictCheck(ctx context.Context, c cmd.Client, fr *FissionResourc
 
 	fnList, err := getAllFunctions(ctx, c, namespace)
 	if err != nil {
-		return errors.Errorf("Unable to get Functions %v", err.Error())
+		return fmt.Errorf("Unable to get Functions %v", err.Error())
 	}
 	for _, sObj := range fr.Functions {
 		for _, cObj := range fnList {
@@ -123,7 +122,7 @@ func resourceConflictCheck(ctx context.Context, c cmd.Client, fr *FissionResourc
 
 	envList, err := getAllEnvironments(ctx, c, namespace)
 	if err != nil {
-		return errors.Errorf("Unable to get Environments %v", err.Error())
+		return fmt.Errorf("Unable to get Environments %v", err.Error())
 	}
 	for _, sObj := range fr.Environments {
 		for _, cObj := range envList {
@@ -136,7 +135,7 @@ func resourceConflictCheck(ctx context.Context, c cmd.Client, fr *FissionResourc
 
 	pkgList, err := getAllPackages(ctx, c, namespace)
 	if err != nil {
-		return errors.Errorf("Unable to get Packages %v", err.Error())
+		return fmt.Errorf("Unable to get Packages %v", err.Error())
 	}
 	for _, sObj := range fr.Packages {
 		for _, cObj := range pkgList {
@@ -149,7 +148,7 @@ func resourceConflictCheck(ctx context.Context, c cmd.Client, fr *FissionResourc
 
 	httptriggerList, err := getAllHTTPTriggers(ctx, c, namespace)
 	if err != nil {
-		return errors.Errorf("Unable to get HTTPTrigger %v", err.Error())
+		return fmt.Errorf("Unable to get HTTPTrigger %v", err.Error())
 	}
 	for _, sObj := range fr.HttpTriggers {
 		for _, cObj := range httptriggerList {
@@ -162,7 +161,7 @@ func resourceConflictCheck(ctx context.Context, c cmd.Client, fr *FissionResourc
 
 	mqtriggerList, err := getAllMessageQueueTriggers(ctx, c, "", namespace)
 	if err != nil {
-		return errors.Errorf("Unable to get Message Queue Trigger %v", err.Error())
+		return fmt.Errorf("Unable to get Message Queue Trigger %v", err.Error())
 	}
 	for _, sObj := range fr.MessageQueueTriggers {
 		for _, cObj := range mqtriggerList {
@@ -175,7 +174,7 @@ func resourceConflictCheck(ctx context.Context, c cmd.Client, fr *FissionResourc
 
 	timetriggerList, err := getAllTimeTriggers(ctx, c, namespace)
 	if err != nil {
-		return errors.Errorf("Unable to get Time Trigger %v", err.Error())
+		return fmt.Errorf("Unable to get Time Trigger %v", err.Error())
 	}
 	for _, sObj := range fr.TimeTriggers {
 		for _, cObj := range timetriggerList {
@@ -188,7 +187,7 @@ func resourceConflictCheck(ctx context.Context, c cmd.Client, fr *FissionResourc
 
 	kubewatchtriggerList, err := getAllKubeWatchTriggers(ctx, c, namespace)
 	if err != nil {
-		return errors.Errorf("Unable to get Kubernetes Watch Trigger %v", err.Error())
+		return fmt.Errorf("Unable to get Kubernetes Watch Trigger %v", err.Error())
 	}
 	for _, sObj := range fr.KubernetesWatchTriggers {
 		for _, cObj := range kubewatchtriggerList {
@@ -226,7 +225,7 @@ func ReadSpecs(specDir, specIgnore string, applyCommitLabel bool) (*FissionResou
 
 	// make sure spec directory exists before continue
 	if _, err := os.Stat(specDir); os.IsNotExist(err) {
-		return nil, errors.Errorf("Spec directory %v doesn't exist. "+
+		return nil, fmt.Errorf("Spec directory %v doesn't exist. "+
 			"Please check directory path or run \"fission spec init\" to create it.", specDir)
 	}
 

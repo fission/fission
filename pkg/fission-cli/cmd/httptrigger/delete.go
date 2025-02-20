@@ -20,7 +20,6 @@ import (
 	"fmt"
 
 	"github.com/hashicorp/go-multierror"
-	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
@@ -53,14 +52,14 @@ func (opts *DeleteSubCommand) complete(input cli.Input) (err error) {
 	opts.triggerName = input.String(flagkey.HtName)
 	opts.functionName = input.String(flagkey.HtFnName)
 	if len(opts.triggerName) == 0 && len(opts.functionName) == 0 {
-		return errors.Errorf("need --%v or --%v", flagkey.HtName, flagkey.HtFnName)
+		return fmt.Errorf("need --%v or --%v", flagkey.HtName, flagkey.HtFnName)
 	} else if len(opts.triggerName) > 0 && len(opts.functionName) > 0 {
-		return errors.Errorf("need either of --%v or --%v and not both arguments", flagkey.HtName, flagkey.HtFnName)
+		return fmt.Errorf("need either of --%v or --%v and not both arguments", flagkey.HtName, flagkey.HtFnName)
 	}
 
 	_, opts.namespace, err = opts.GetResourceNamespace(input, flagkey.NamespaceTrigger)
 	if err != nil {
-		return errors.Wrap(err, "error in deleting function ")
+		return fmt.Errorf("error in deleting function : %w", err)
 	}
 	return nil
 }
@@ -68,7 +67,7 @@ func (opts *DeleteSubCommand) complete(input cli.Input) (err error) {
 func (opts *DeleteSubCommand) run(input cli.Input) error {
 	triggers, err := opts.Client().FissionClientSet.CoreV1().HTTPTriggers(opts.namespace).List(input.Context(), metav1.ListOptions{})
 	if err != nil {
-		return errors.Wrap(err, "error getting HTTP trigger list")
+		return fmt.Errorf("error getting HTTP trigger list: %w", err)
 	}
 
 	var triggersToDelete []string
@@ -99,7 +98,7 @@ func (opts *DeleteSubCommand) run(input cli.Input) error {
 		if input.Bool(flagkey.IgnoreNotFound) && util.IsNotFound(err) {
 			return nil
 		}
-		return errors.Wrap(errs.ErrorOrNil(), "error deleting trigger(s)")
+		return fmt.Errorf("error deleting trigger(s): %w", errs.ErrorOrNil())
 	}
 
 	return nil

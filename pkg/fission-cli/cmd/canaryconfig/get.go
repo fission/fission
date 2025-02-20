@@ -21,7 +21,6 @@ import (
 	"os"
 	"text/tabwriter"
 
-	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
@@ -41,12 +40,12 @@ func (opts *GetSubCommand) run(input cli.Input) (err error) {
 
 	_, namespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceCanary)
 	if err != nil {
-		return errors.Wrap(err, "error getting canary config")
+		return fmt.Errorf("error getting canary config: %w", err)
 	}
 
 	canaryCfg, err := opts.Client().FissionClientSet.CoreV1().CanaryConfigs(namespace).Get(input.Context(), input.String(flagkey.CanaryName), metav1.GetOptions{})
 	if err != nil {
-		return errors.Wrap(err, "error getting canary config")
+		return fmt.Errorf("error getting canary config: %w", err)
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)

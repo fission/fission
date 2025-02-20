@@ -21,8 +21,9 @@ import (
 	"fmt"
 	"time"
 
+	"errors"
+
 	"github.com/hashicorp/go-multierror"
-	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -66,29 +67,29 @@ func (opts *UpdateSubCommand) run(input cli.Input) error {
 	pkgName := input.String(flagkey.PkgName)
 	pkg, err := opts.Client().FissionClientSet.CoreV1().Packages(opts.pkgNamespace).Get(input.Context(), opts.pkgName, metav1.GetOptions{})
 	if err != nil {
-		return errors.Wrap(err, "error getting package")
+		return fmt.Errorf("error getting package: %w", err)
 	}
 
 	forceUpdate := input.Bool(flagkey.PkgForce)
 
 	fnList, err := GetFunctionsByPackage(input.Context(), opts.Client(), pkg.ObjectMeta.Name, pkg.ObjectMeta.Namespace)
 	if err != nil {
-		return errors.Wrap(err, "error getting function list")
+		return fmt.Errorf("error getting function list: %w", err)
 	}
 
 	if !forceUpdate && len(fnList) > 1 {
-		return errors.Errorf("package is used by multiple functions, use --%v to force update", flagkey.PkgForce)
+		return fmt.Errorf("package is used by multiple functions, use --%v to force update", flagkey.PkgForce)
 	}
 	specFile := fmt.Sprintf("package-%s.yaml", pkgName)
 	newPkgMeta, err := UpdatePackage(input, opts.Client(), specFile, pkg)
 	if err != nil {
-		return errors.Wrap(err, "error updating package")
+		return fmt.Errorf("error updating package: %w", err)
 	}
 
 	if pkg.ObjectMeta.ResourceVersion != newPkgMeta.ResourceVersion {
 		err = UpdateFunctionPackageResourceVersion(input.Context(), opts.Client(), newPkgMeta, fnList...)
 		if err != nil {
-			return errors.Wrap(err, "error updating function package reference resource version")
+			return fmt.Errorf("error updating function package reference resource version: %w", err)
 		}
 	}
 
@@ -130,7 +131,7 @@ func UpdatePackage(input cli.Input, client cmd.Client, specFile string, pkg *fv1
 	if input.IsSet(flagkey.PkgSrcArchive) {
 		srcArchive, err := CreateArchive(client, input, srcArchiveFiles, noZip, insecure, srcChecksum, "", "")
 		if err != nil {
-			return nil, errors.Wrap(err, "error creating source archive")
+			return nil, fmt.Errorf("error creating source archive: %w", err)
 		}
 		pkg.Spec.Source = *srcArchive
 		needToRebuild = true
@@ -146,7 +147,7 @@ func UpdatePackage(input cli.Input, client cmd.Client, specFile string, pkg *fv1
 	if input.IsSet(flagkey.PkgDeployArchive) || input.IsSet(flagkey.PkgCode) {
 		deployArchive, err := CreateArchive(client, input, deployArchiveFiles, noZip, insecure, deployChecksum, "", "")
 		if err != nil {
-			return nil, errors.Wrap(err, "error creating deploy archive")
+			return nil, fmt.Errorf("error creating deploy archive: %w", err)
 		}
 		pkg.Spec.Deployment = *deployArchive
 		// Users may update the env, envNS and deploy archive at the same time,
@@ -178,7 +179,7 @@ func UpdatePackage(input cli.Input, client cmd.Client, specFile string, pkg *fv1
 		// if a package with the same spec exists, don't create a new spec file
 		fr, err := spec.ReadSpecs(util.GetSpecDir(input), util.GetSpecIgnore(input), false)
 		if err != nil {
-			return nil, errors.Wrap(err, "error reading specs")
+			return nil, fmt.Errorf("error reading specs: %w", err)
 		}
 
 		obj := fr.SpecExists(pkg, true, true)
@@ -190,14 +191,14 @@ func UpdatePackage(input cli.Input, client cmd.Client, specFile string, pkg *fv1
 
 		err = spec.SpecSave(*pkg, specFile, true)
 		if err != nil {
-			return nil, errors.Wrap(err, "error saving package spec")
+			return nil, fmt.Errorf("error saving package spec: %w", err)
 		}
 		return &pkg.ObjectMeta, nil
 	}
 
 	newPkgMeta, err := client.FissionClientSet.CoreV1().Packages(pkg.ObjectMeta.Namespace).Update(input.Context(), pkg, metav1.UpdateOptions{})
 	if err != nil {
-		return nil, errors.Wrap(err, "update package")
+		return nil, fmt.Errorf("update package: %w", err)
 	}
 
 	fmt.Printf("Package '%v' updated\n", newPkgMeta.GetName())
@@ -213,7 +214,7 @@ func UpdateFunctionPackageResourceVersion(ctx context.Context, client cmd.Client
 		fn.Spec.Package.PackageRef.ResourceVersion = pkgMeta.ResourceVersion
 		_, err := client.FissionClientSet.CoreV1().Functions(fn.ObjectMeta.Namespace).Update(ctx, &fn, metav1.UpdateOptions{})
 		if err != nil {
-			errs = multierror.Append(errs, errors.Wrapf(err, "error updating package resource version of function '%v'", fn.ObjectMeta.Name))
+			errs = multierror.Append(errs, fmt.Errorf("error updating package resource version of function '%v': %w", fn.ObjectMeta.Name, err))
 		}
 	}
 

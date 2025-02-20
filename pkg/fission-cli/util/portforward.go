@@ -26,7 +26,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pkg/errors"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/portforward"
@@ -50,7 +49,7 @@ func SetupPortForward(ctx context.Context, client cmd.Client, namespace, labelSe
 
 	lcPort, err := utils.FindFreePort()
 	if err != nil {
-		return "", errors.Wrap(err, "error finding unused port")
+		return "", fmt.Errorf("error finding unused port: %w", err)
 	}
 	localPort := strconv.Itoa(lcPort)
 
@@ -118,9 +117,9 @@ func runPortForward(ctx context.Context, client cmd.Client, labelSelector string
 	podList, err := client.KubernetesClient.CoreV1().Pods(ns).
 		List(ctx, metav1.ListOptions{LabelSelector: labelSelector})
 	if err != nil {
-		return nil, nil, errors.Wrapf(err, "error getting pod for port-forwarding with label selector %v", labelSelector)
+		return nil, nil, fmt.Errorf("error getting pod for port-forwarding with label selector %v: %w", labelSelector, err)
 	} else if len(podList.Items) == 0 {
-		return nil, nil, errors.Errorf("no available pod for port-forwarding with label selector %v", labelSelector)
+		return nil, nil, fmt.Errorf("no available pod for port-forwarding with label selector %v", labelSelector)
 	}
 
 	nsList := make([]string, 0)
@@ -136,7 +135,7 @@ func runPortForward(ctx context.Context, client cmd.Client, labelSelector string
 			namespaces[p.Namespace] = append(namespaces[p.Namespace], &p)
 		}
 		if len(nsList) > 1 {
-			return nil, nil, errors.Errorf("Found %v fission installs, set FISSION_NAMESPACE to one of: %v",
+			return nil, nil, fmt.Errorf("Found %v fission installs, set FISSION_NAMESPACE to one of: %v",
 				len(namespaces), strings.Join(nsList, " "))
 		}
 	}
@@ -146,7 +145,7 @@ func runPortForward(ctx context.Context, client cmd.Client, labelSelector string
 	ns = nsList[0]
 	pods, ok := namespaces[ns]
 	if !ok {
-		return nil, nil, errors.Errorf("Error finding fission install within the given namespace %v, please check FISSION_NAMESPACE is set properly", ns)
+		return nil, nil, fmt.Errorf("Error finding fission install within the given namespace %v, please check FISSION_NAMESPACE is set properly", ns)
 	}
 
 	var podName, podNameSpace string
@@ -164,10 +163,10 @@ func runPortForward(ctx context.Context, client cmd.Client, labelSelector string
 	svcs, err := client.KubernetesClient.CoreV1().Services(podNameSpace).
 		List(ctx, metav1.ListOptions{LabelSelector: labelSelector})
 	if err != nil {
-		return nil, nil, errors.Wrapf(err, "Error getting %v service", labelSelector)
+		return nil, nil, fmt.Errorf("Error getting %v service: %w", labelSelector, err)
 	}
 	if len(svcs.Items) == 0 {
-		return nil, nil, errors.Errorf("Service %v not found", labelSelector)
+		return nil, nil, fmt.Errorf("Service %v not found", labelSelector)
 	}
 	service := &svcs.Items[0]
 
@@ -192,7 +191,7 @@ func runPortForward(ctx context.Context, client cmd.Client, labelSelector string
 	// actually start the port-forwarding process here
 	transport, upgrader, err := spdy.RoundTripperFor(client.RestConfig)
 	if err != nil {
-		return nil, nil, errors.Errorf("Failed to connect to Fission service on Kubernetes")
+		return nil, nil, fmt.Errorf("Failed to connect to Fission service on Kubernetes")
 	}
 	dialer := spdy.NewDialer(upgrader, &http.Client{Transport: transport}, "POST", url)
 
@@ -202,7 +201,7 @@ func runPortForward(ctx context.Context, client cmd.Client, labelSelector string
 	}
 	fw, err := portforward.New(dialer, ports, stopChannel, readyChannel, outStream, os.Stderr)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "error creating port forwarder")
+		return nil, nil, fmt.Errorf("error creating port forwarder: %w", err)
 	}
 
 	go func() {

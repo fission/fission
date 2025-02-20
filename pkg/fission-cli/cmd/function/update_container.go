@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/pkg/errors"
 	apiv1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -55,13 +54,13 @@ func (opts *UpdateContainerSubCommand) complete(input cli.Input) error {
 
 	_, fnNamespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceFunction)
 	if err != nil {
-		return errors.Wrap(err, "error in updating container for function ")
+		return fmt.Errorf("error in updating container for function : %w", err)
 	}
 
 	function, err := opts.Client().FissionClientSet.CoreV1().Functions(fnNamespace).Get(input.Context(), input.String(flagkey.FnName), metav1.GetOptions{})
 
 	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("read function '%v'", fnName))
+		return fmt.Errorf("read function '%v': %w", fnName, err)
 	}
 	if fv1.ExecutorTypeContainer != function.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType {
 		return fmt.Errorf("executor type for function is not %s", fv1.ExecutorTypeContainer)
@@ -122,7 +121,7 @@ func (opts *UpdateContainerSubCommand) complete(input cli.Input) error {
 	if input.IsSet(flagkey.FnExecutionTimeout) {
 		fnTimeout := input.Int(flagkey.FnExecutionTimeout)
 		if fnTimeout <= 0 {
-			return errors.Errorf("--%v must be greater than 0", flagkey.FnExecutionTimeout)
+			return fmt.Errorf("--%v must be greater than 0", flagkey.FnExecutionTimeout)
 		}
 		function.Spec.FunctionTimeout = fnTimeout
 	}
@@ -146,7 +145,7 @@ func (opts *UpdateContainerSubCommand) complete(input cli.Input) error {
 	function.Spec.Resources = *resReqs
 
 	if len(function.Spec.PodSpec.Containers) > 1 {
-		return errors.Errorf("function %s has more than one container, only one container is supported", fnName)
+		return fmt.Errorf("function %s has more than one container, only one container is supported", fnName)
 	}
 	container := &function.Spec.PodSpec.Containers[0]
 	if imageName != "" {
@@ -154,7 +153,7 @@ func (opts *UpdateContainerSubCommand) complete(input cli.Input) error {
 	}
 	if port != 0 {
 		if len(container.Ports) > 1 {
-			return errors.Errorf("function %s has more than one port, only one port is supported", fnName)
+			return fmt.Errorf("function %s has more than one port, only one port is supported", fnName)
 		}
 		container.Ports = []apiv1.ContainerPort{
 			{
@@ -186,7 +185,7 @@ func (opts *UpdateContainerSubCommand) complete(input cli.Input) error {
 func (opts *UpdateContainerSubCommand) run(input cli.Input) error {
 	_, err := opts.Client().FissionClientSet.CoreV1().Functions(opts.function.Namespace).Update(input.Context(), opts.function, metav1.UpdateOptions{})
 	if err != nil {
-		return errors.Wrap(err, "error updating function")
+		return fmt.Errorf("error updating function: %w", err)
 	}
 
 	return nil

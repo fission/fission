@@ -19,11 +19,11 @@ package function
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"time"
 
-	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
@@ -44,7 +44,7 @@ func Log(input cli.Input) error {
 func (opts *LogSubCommand) do(input cli.Input) error {
 	_, namespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceFunction)
 	if err != nil {
-		return errors.Wrap(err, "error in logs for function ")
+		return fmt.Errorf("error in logs for function : %w", err)
 	}
 
 	dbType := input.String(flagkey.FnLogDBType)
@@ -60,7 +60,7 @@ func (opts *LogSubCommand) do(input cli.Input) error {
 
 	f, err := opts.Client().FissionClientSet.CoreV1().Functions(namespace).Get(input.Context(), input.String(flagkey.FnName), metav1.GetOptions{})
 	if err != nil {
-		return errors.Wrap(err, "error getting function")
+		return fmt.Errorf("error getting function: %w", err)
 	}
 
 	logDBOptions := logdb.LogDBOptions{
@@ -70,7 +70,7 @@ func (opts *LogSubCommand) do(input cli.Input) error {
 	// request the controller to establish a proxy server to the database.
 	logDB, err := logdb.GetLogDB(dbType, input.Context(), logDBOptions)
 	if err != nil {
-		return errors.Wrapf(err, "failed to get log from %s", dbType)
+		return fmt.Errorf("failed to get log from %s: %w", dbType, err)
 	}
 
 	requestChan := make(chan struct{})

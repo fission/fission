@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -50,7 +49,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) (err error) {
 	// get the current config
 	_, ns, err := opts.GetResourceNamespace(input, flagkey.NamespaceCanary)
 	if err != nil {
-		return errors.Wrap(err, "error updating canary config")
+		return fmt.Errorf("error updating canary config: %w", err)
 	}
 	incrementStep := input.Int(flagkey.CanaryWeightIncrement)
 	failureThreshold := input.Int(flagkey.CanaryFailureThreshold)
@@ -59,12 +58,12 @@ func (opts *UpdateSubCommand) complete(input cli.Input) (err error) {
 	// check for time parsing
 	_, err = time.ParseDuration(incrementInterval)
 	if err != nil {
-		return errors.Wrap(err, "error parsing time duration")
+		return fmt.Errorf("error parsing time duration: %w", err)
 	}
 
 	canaryCfg, err := opts.Client().FissionClientSet.CoreV1().CanaryConfigs(ns).Get(input.Context(), input.String(flagkey.CanaryName), metav1.GetOptions{})
 	if err != nil {
-		return errors.Wrap(err, "error getting canary config")
+		return fmt.Errorf("error getting canary config: %w", err)
 	}
 
 	var updateNeeded bool
@@ -93,7 +92,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) (err error) {
 func (opts *UpdateSubCommand) run(input cli.Input) error {
 	_, err := opts.Client().FissionClientSet.CoreV1().CanaryConfigs(opts.canary.ObjectMeta.Namespace).Update(input.Context(), opts.canary, metav1.UpdateOptions{})
 	if err != nil {
-		return errors.Wrap(err, "error updating canary config")
+		return fmt.Errorf("error updating canary config: %w", err)
 	}
 	fmt.Printf("canary config '%v' updated\n", opts.canary.ObjectMeta.Name)
 	return nil

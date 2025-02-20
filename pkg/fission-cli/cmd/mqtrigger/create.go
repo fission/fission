@@ -19,7 +19,8 @@ package mqtrigger
 import (
 	"fmt"
 
-	"github.com/pkg/errors"
+	"errors"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -60,7 +61,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 
 	userProvidedNS, fnNamespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceFunction)
 	if err != nil {
-		return errors.Wrap(err, "error in deleting function ")
+		return fmt.Errorf("error in deleting function : %w", err)
 	}
 
 	mqtKind := input.String(flagkey.MqtKind)
@@ -130,7 +131,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		specIgnore := util.GetSpecIgnore(input)
 		fr, err := spec.ReadSpecs(specDir, specIgnore, false)
 		if err != nil {
-			return errors.Wrap(err, fmt.Sprintf("error reading spec in '%v'", specDir))
+			return fmt.Errorf("error reading spec in '%v': %w", specDir, err)
 		}
 
 		exists, err := fr.ExistsInSpecs(fv1.Function{
@@ -201,14 +202,14 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 		specFile := fmt.Sprintf("mqtrigger-%v.yaml", opts.trigger.ObjectMeta.Name)
 		err := spec.SpecSave(*opts.trigger, specFile, false)
 		if err != nil {
-			return errors.Wrap(err, "error saving message queue trigger spec")
+			return fmt.Errorf("error saving message queue trigger spec: %w", err)
 		}
 		return nil
 	}
 
 	_, err := opts.Client().FissionClientSet.CoreV1().MessageQueueTriggers(opts.trigger.ObjectMeta.Namespace).Create(input.Context(), opts.trigger, metav1.CreateOptions{})
 	if err != nil {
-		return errors.Wrap(err, "create message queue trigger")
+		return fmt.Errorf("create message queue trigger: %w", err)
 	}
 
 	fmt.Printf("trigger '%s' created\n", opts.trigger.ObjectMeta.Name)
@@ -218,7 +219,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 func checkMQTopicAvailability(mqType fv1.MessageQueueType, mqtKind string, topics ...string) error {
 	for _, t := range topics {
 		if len(t) > 0 && !validator.IsValidTopic((string)(mqType), t, mqtKind) {
-			return errors.Errorf("invalid topic for %s: %s", mqType, t)
+			return fmt.Errorf("invalid topic for %s: %s", mqType, t)
 		}
 	}
 	return nil

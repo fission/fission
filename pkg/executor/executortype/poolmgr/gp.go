@@ -19,6 +19,7 @@ package poolmgr
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"net"
@@ -28,7 +29,6 @@ import (
 	"time"
 
 	"github.com/dchest/uniuri"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
@@ -320,7 +320,7 @@ func (gp *GenericPool) choosePod(ctx context.Context, newLabels map[string]strin
 				// ending retry loop when the request canceled
 				gp.readyPodQueue.Done(key)
 				gp.readyPodQueue.AddAfter(key, expoDelay)
-				return "", nil, errors.Errorf("failed to relabel pod: %s", err)
+				return "", nil, fmt.Errorf("failed to relabel pod: %s", err)
 			} else if err != nil {
 				logger.Error("failed to relabel pod", zap.Error(err), zap.String("pod", chosenPod.Name), zap.Duration("delay", expoDelay))
 				gp.readyPodQueue.Done(key)
@@ -335,13 +335,13 @@ func (gp *GenericPool) choosePod(ctx context.Context, newLabels map[string]strin
 			// So we have to check both of them to ensure the patch success.
 			for k, v := range newLabels {
 				if newPod.Labels[k] != v {
-					return "", nil, errors.Errorf("value of necessary labels '%s' mismatch: want '%s', get '%v'",
+					return "", nil, fmt.Errorf("value of necessary labels '%s' mismatch: want '%s', get '%v'",
 						k, v, newPod.Labels[k])
 				}
 			}
 			for k, v := range annotations {
 				if newPod.Annotations[k] != v {
-					return "", nil, errors.Errorf("value of necessary annotations '%s' mismatch: want '%s', get '%v'",
+					return "", nil, fmt.Errorf("value of necessary annotations '%s' mismatch: want '%s', get '%v'",
 						k, v, newPod.Annotations[k])
 				}
 			}
@@ -415,7 +415,7 @@ func (gp *GenericPool) specializePod(ctx context.Context, pod *apiv1.Pod, fn *fv
 	// for fetcher we don't need to create a service, just talk to the pod directly
 	podIP := pod.Status.PodIP
 	if len(podIP) == 0 {
-		return errors.Errorf("Pod %s in namespace %s has no IP", pod.ObjectMeta.Name, pod.ObjectMeta.Namespace)
+		return fmt.Errorf("Pod %s in namespace %s has no IP", pod.ObjectMeta.Name, pod.ObjectMeta.Namespace)
 	}
 	for _, cm := range fn.Spec.ConfigMaps {
 		_, err := gp.kubernetesClient.CoreV1().ConfigMaps(gp.fnNamespace).Get(ctx, cm.Name, metav1.GetOptions{})
@@ -571,7 +571,7 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 		}
 		if svc.ObjectMeta.Name != svcName {
 			go gp.scheduleDeletePod(context.Background(), pod.ObjectMeta.Name)
-			return nil, errors.Errorf("sanity check failed for svc %s", svc.ObjectMeta.Name)
+			return nil, fmt.Errorf("sanity check failed for svc %s", svc.ObjectMeta.Name)
 		}
 
 		// the fission router isn't in the same namespace, so return a

@@ -23,6 +23,10 @@ env:
 permissions:
   contents: read
 
+concurrency:
+  group: fission-lint-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   lint:
     permissions:

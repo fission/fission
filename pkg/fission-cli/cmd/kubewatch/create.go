@@ -19,7 +19,6 @@ package kubewatch
 import (
 	"fmt"
 
-	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -59,7 +58,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 
 	_, namespace, err := opts.GetResourceNamespace(input, flagkey.KwNamespace)
 	if err != nil {
-		return errors.Wrap(err, "error in listing function ")
+		return fmt.Errorf("error in listing function : %w", err)
 	}
 
 	objType := input.String(flagkey.KwObjType)
@@ -69,7 +68,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		specIgnore := util.GetSpecIgnore(input)
 		fr, err := spec.ReadSpecs(specDir, specIgnore, false)
 		if err != nil {
-			return errors.Wrap(err, fmt.Sprintf("error reading spec in '%v'", specDir))
+			return fmt.Errorf("error reading spec in '%v': %w", specDir, err)
 		}
 
 		exists, err := fr.ExistsInSpecs(fv1.Function{
@@ -117,14 +116,14 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 		specFile := fmt.Sprintf("kubewatch-%v.yaml", opts.watcher.ObjectMeta.Name)
 		err := spec.SpecSave(*opts.watcher, specFile, false)
 		if err != nil {
-			return errors.Wrap(err, "error saving kubewatch spec")
+			return fmt.Errorf("error saving kubewatch spec: %w", err)
 		}
 		return nil
 	}
 
 	_, err := opts.Client().FissionClientSet.CoreV1().KubernetesWatchTriggers(opts.watcher.ObjectMeta.Namespace).Create(input.Context(), opts.watcher, metav1.CreateOptions{})
 	if err != nil {
-		return errors.Wrap(err, "error creating kubewatch")
+		return fmt.Errorf("error creating kubewatch: %w", err)
 	}
 
 	fmt.Printf("trigger '%v' created\n", opts.watcher.ObjectMeta.Name)

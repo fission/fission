@@ -17,8 +17,9 @@ limitations under the License.
 package metrics
 
 import (
-	"github.com/fission/fission/pkg/utils/metrics"
 	"github.com/prometheus/client_golang/prometheus"
+
+	"github.com/fission/fission/pkg/utils/metrics"
 )
 
 var (

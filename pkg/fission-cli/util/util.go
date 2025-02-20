@@ -32,8 +32,9 @@ import (
 
 	ignore "github.com/sabhiram/go-gitignore"
 
+	"errors"
+
 	"github.com/hashicorp/go-multierror"
-	"github.com/pkg/errors"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -254,7 +255,7 @@ func GetResourceReqs(input cli.Input, resReqs *v1.ResourceRequirements) (*v1.Res
 		mincpu := input.Int(flagkey.RuntimeMincpu)
 		cpuRequest, err := resource.ParseQuantity(strconv.Itoa(mincpu) + "m")
 		if err != nil {
-			e = multierror.Append(e, errors.Wrap(err, "Failed to parse mincpu"))
+			e = multierror.Append(e, fmt.Errorf("Failed to parse mincpu: %w", err))
 		}
 		r.Requests[v1.ResourceCPU] = cpuRequest
 	}
@@ -263,7 +264,7 @@ func GetResourceReqs(input cli.Input, resReqs *v1.ResourceRequirements) (*v1.Res
 		minmem := input.Int(flagkey.RuntimeMinmemory)
 		memRequest, err := resource.ParseQuantity(strconv.Itoa(minmem) + "Mi")
 		if err != nil {
-			e = multierror.Append(e, errors.Wrap(err, "Failed to parse minmemory"))
+			e = multierror.Append(e, fmt.Errorf("Failed to parse minmemory: %w", err))
 		}
 		r.Requests[v1.ResourceMemory] = memRequest
 	}
@@ -272,7 +273,7 @@ func GetResourceReqs(input cli.Input, resReqs *v1.ResourceRequirements) (*v1.Res
 		maxcpu := input.Int(flagkey.RuntimeMaxcpu)
 		cpuLimit, err := resource.ParseQuantity(strconv.Itoa(maxcpu) + "m")
 		if err != nil {
-			e = multierror.Append(e, errors.Wrap(err, "Failed to parse maxcpu"))
+			e = multierror.Append(e, fmt.Errorf("Failed to parse maxcpu: %w", err))
 		}
 		r.Limits[v1.ResourceCPU] = cpuLimit
 	}
@@ -281,7 +282,7 @@ func GetResourceReqs(input cli.Input, resReqs *v1.ResourceRequirements) (*v1.Res
 		maxmem := input.Int(flagkey.RuntimeMaxmemory)
 		memLimit, err := resource.ParseQuantity(strconv.Itoa(maxmem) + "Mi")
 		if err != nil {
-			e = multierror.Append(e, errors.Wrap(err, "Failed to parse maxmemory"))
+			e = multierror.Append(e, fmt.Errorf("Failed to parse maxmemory: %w", err))
 		}
 		r.Limits[v1.ResourceMemory] = memLimit
 	}
@@ -340,7 +341,7 @@ func GetSpecIgnoreParser(specDir, specIgnore string) (ignore.IgnoreParser, error
 	if _, err := os.Stat(specIgnorePath); errors.Is(err, os.ErrNotExist) {
 		// return error if it's custom spec ignore file
 		if specIgnore != SPEC_IGNORE_FILE {
-			return nil, errors.Errorf("Spec ignore file '%s' doesn't exist. "+
+			return nil, fmt.Errorf("Spec ignore file '%s' doesn't exist. "+
 				"Please check the file path: '%s'", specIgnore, specIgnorePath)
 		}
 		return ignore.CompileIgnoreLines(), nil
@@ -423,7 +424,7 @@ func ParseAnnotations(annotations []string) (map[string]string, error) {
 		}
 	}
 	if invalidAnnotations != "" {
-		return nil, errors.Errorf("invalid annotations: %s", invalidAnnotations)
+		return nil, fmt.Errorf("invalid annotations: %s", invalidAnnotations)
 	}
 	return annotationMap, nil
 }
@@ -523,7 +524,7 @@ func GetSvcName(ctx context.Context, kClient kubernetes.Interface, application s
 	}
 
 	if len(services.Items) > 1 || len(services.Items) == 0 {
-		return "", errors.Errorf("more than one service found for application=%s", application)
+		return "", fmt.Errorf("more than one service found for application=%s", application)
 	}
 	service := services.Items[0]
 	return service.Name + "." + service.Namespace, nil
@@ -576,7 +577,7 @@ func FunctionPodLogs(ctx context.Context, fnName, ns string, client cmd.Client) 
 	// get the pod with highest resource version
 	err = getContainerLog(ctx, client.KubernetesClient, f, &pods[0])
 	if err != nil {
-		return errors.Wrapf(err, "error getting container logs")
+		return fmt.Errorf("error getting container logs: %w", err)
 
 	}
 	return err
@@ -591,19 +592,19 @@ func getContainerLog(ctx context.Context, kubernetesClient kubernetes.Interface,
 
 		podLogs, err := podLogsReq.Stream(ctx)
 		if err != nil {
-			return errors.Wrapf(err, "error streaming pod log")
+			return fmt.Errorf("error streaming pod log: %w", err)
 		}
 
 		msg := fmt.Sprintf("\n%v\nFunction: %v\nEnvironment: %v\nNamespace: %v\nPod: %v\nContainer: %v\nNode: %v\n%v\n", seq,
 			fn.ObjectMeta.Name, fn.Spec.Environment.Name, pod.Namespace, pod.Name, container.Name, pod.Spec.NodeName, seq)
 
 		if _, err := io.WriteString(os.Stdout, msg); err != nil {
-			return errors.Wrapf(err, "error copying pod log")
+			return fmt.Errorf("error copying pod log: %w", err)
 		}
 
 		_, err = io.Copy(os.Stdout, podLogs)
 		if err != nil {
-			return errors.Wrapf(err, "error copying pod log")
+			return fmt.Errorf("error copying pod log: %w", err)
 		}
 
 		podLogs.Close()

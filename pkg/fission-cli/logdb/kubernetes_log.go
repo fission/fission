@@ -24,7 +24,6 @@ import (
 	"sort"
 	"strconv"
 
-	"github.com/pkg/errors"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -85,7 +84,7 @@ func GetFunctionPodLogs(ctx context.Context, client cmd.Client, logFilter LogFil
 	}
 
 	if len(podList.Items) <= 0 {
-		return errors.Errorf("no active pods found for function in namespace %s", podNs)
+		return fmt.Errorf("no active pods found for function in namespace %s", podNs)
 	}
 
 	pods := podList.Items
@@ -94,7 +93,7 @@ func GetFunctionPodLogs(ctx context.Context, client cmd.Client, logFilter LogFil
 			// get the pod with highest resource version
 			err = streamContainerLog(ctx, client.KubernetesClient, &pod, logFilter, podLogs)
 			if err != nil {
-				return errors.Wrapf(err, "error getting container logs")
+				return fmt.Errorf("error getting container logs: %w", err)
 			}
 		}
 	} else {
@@ -108,7 +107,7 @@ func GetFunctionPodLogs(ctx context.Context, client cmd.Client, logFilter LogFil
 		// get the pod with highest resource version
 		err = streamContainerLog(ctx, client.KubernetesClient, &pods[0], logFilter, podLogs)
 		if err != nil {
-			return errors.Wrapf(err, "error getting container logs")
+			return fmt.Errorf("error getting container logs: %w", err)
 		}
 	}
 
@@ -132,7 +131,7 @@ func streamContainerLog(ctx context.Context, kubernetesClient kubernetes.Interfa
 
 		podLogs, err := podLogsReq.Stream(ctx)
 		if err != nil {
-			return errors.Wrapf(err, "error streaming pod log")
+			return fmt.Errorf("error streaming pod log: %w", err)
 		}
 
 		if logFilter.Details {
@@ -140,13 +139,13 @@ func streamContainerLog(ctx context.Context, kubernetesClient kubernetes.Interfa
 			msg := fmt.Sprintf("\n=== Function=%s Environment=%s Namespace=%s Pod=%s Container=%s Node=%s\n",
 				fn.ObjectMeta.Name, fn.Spec.Environment.Name, pod.Namespace, pod.Name, container.Name, pod.Spec.NodeName)
 			if _, err := output.WriteString(msg); err != nil {
-				return errors.Wrapf(err, "error copying pod log")
+				return fmt.Errorf("error copying pod log: %w", err)
 			}
 		}
 
 		_, err = io.Copy(output, podLogs)
 		if err != nil {
-			return errors.Wrapf(err, "error copying pod log")
+			return fmt.Errorf("error copying pod log: %w", err)
 		}
 
 		podLogs.Close()

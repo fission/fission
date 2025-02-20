@@ -6,8 +6,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/fission/fission/pkg/utils/manager"
 	"go.uber.org/zap"
+
+	"github.com/fission/fission/pkg/utils/manager"
 )
 
 func StartServer(ctx context.Context, log *zap.Logger, mgr manager.Interface, svc string, port string, handler http.Handler) {

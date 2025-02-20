@@ -18,10 +18,10 @@ package _package
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"os"
 
-	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -88,7 +88,7 @@ func (opts *GetSubCommand) run(input cli.Input) error {
 
 		readCloser, err := pkgutil.DownloadStrorageURL(input.Context(), opts.Client(), archive.URL)
 		if err != nil {
-			return errors.Wrapf(err, "error downloading from storage service url: %s", archive.URL)
+			return fmt.Errorf("error downloading from storage service url: %s: %w", archive.URL, err)
 		}
 
 		defer readCloser.Close()

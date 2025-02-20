@@ -21,7 +21,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/pkg/errors"
 	"sigs.k8s.io/yaml"
 
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
@@ -58,7 +57,7 @@ func (opts *InitSubCommand) complete(input cli.Input) error {
 		// come up with a name using the current dir
 		dir, err := filepath.Abs(".")
 		if err != nil {
-			return errors.Wrap(err, "error getting current working directory")
+			return fmt.Errorf("error getting current working directory: %w", err)
 		}
 		basename := filepath.Base(dir)
 		name = util.KubifyName(basename)
@@ -73,7 +72,7 @@ func (opts *InitSubCommand) complete(input cli.Input) error {
 	fmt.Printf("Creating fission spec directory '%v'\n", specDir)
 	err := os.MkdirAll(specDir, 0755)
 	if err != nil {
-		return errors.Wrapf(err, "create spec directory '%v'", specDir)
+		return fmt.Errorf("create spec directory '%v': %w", specDir, err)
 	}
 
 	// Write the deployment config
@@ -101,7 +100,7 @@ func (opts *InitSubCommand) run(input cli.Input) error {
 	config := filepath.Join(specDir, "fission-deployment-config.yaml")
 
 	if _, err := os.Stat(config); err == nil {
-		return errors.Errorf("Spec DeploymentConfig already exists in directory '%v'", specDir)
+		return fmt.Errorf("Spec DeploymentConfig already exists in directory '%v'", specDir)
 	}
 
 	// Add a bit of documentation to the spec dir here
@@ -112,7 +111,7 @@ func (opts *InitSubCommand) run(input cli.Input) error {
 
 	err = writeDeploymentConfig(config, opts.deployConfig)
 	if err != nil {
-		return errors.Wrap(err, "error writing deployment config")
+		return fmt.Errorf("error writing deployment config: %w", err)
 	}
 
 	// Other possible things to do here:

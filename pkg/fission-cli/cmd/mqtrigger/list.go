@@ -21,7 +21,6 @@ import (
 	"os"
 	"text/tabwriter"
 
-	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
@@ -49,7 +48,7 @@ func (opts *ListSubCommand) do(input cli.Input) error {
 func (opts *ListSubCommand) complete(input cli.Input) (err error) {
 	_, opts.namespace, err = opts.GetResourceNamespace(input, flagkey.NamespaceTrigger)
 	if err != nil {
-		return errors.Wrap(err, "error in deleting function ")
+		return fmt.Errorf("error in deleting function : %w", err)
 	}
 	return nil
 }
@@ -62,7 +61,7 @@ func (opts *ListSubCommand) run(input cli.Input) (err error) {
 	mqts, err := opts.Client().FissionClientSet.CoreV1().MessageQueueTriggers(opts.namespace).List(input.Context(), metav1.ListOptions{})
 
 	if err != nil {
-		return errors.Wrap(err, "error listing message queue triggers")
+		return fmt.Errorf("error listing message queue triggers: %w", err)
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)

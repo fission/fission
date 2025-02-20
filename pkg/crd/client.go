@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"time"
 
+	kedaClient "github.com/kedacore/keda/v2/pkg/generated/clientset/versioned"
 	"go.uber.org/zap"
 	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -32,7 +33,6 @@ import (
 
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	"github.com/fission/fission/pkg/utils"
-	kedaClient "github.com/kedacore/keda/v2/pkg/generated/clientset/versioned"
 )
 
 const (

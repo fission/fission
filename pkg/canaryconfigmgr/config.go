@@ -18,8 +18,8 @@ package canaryconfigmgr
 
 import (
 	"context"
+	"fmt"
 
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"k8s.io/client-go/kubernetes"
 
@@ -47,7 +47,7 @@ func ConfigureFeatures(ctx context.Context, logger *zap.Logger, unitTestMode boo
 	// in the future when new optional features are added, we need to add corresponding feature handlers and invoke them here
 	canaryCfgMgr, err := MakeCanaryConfigMgr(ctx, logger, fissionClient, kubeClient, featureConfig.CanaryConfig.PrometheusSvc)
 	if err != nil {
-		return errors.Wrap(err, "failed to start canary config manager")
+		return fmt.Errorf("failed to start canary config manager: %w", err)
 	}
 	canaryCfgMgr.Run(ctx, mgr)
 

@@ -20,7 +20,6 @@ import (
 	"fmt"
 
 	"github.com/hashicorp/go-multierror"
-	"github.com/pkg/errors"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -101,7 +100,7 @@ func (opts *CreateSubCommand) run(input cli.Input) (err error) {
 		specFile := fmt.Sprintf("env-%v.yaml", opts.env.ObjectMeta.Name)
 		err = spec.SpecSave(*opts.env, specFile, false)
 		if err != nil {
-			return errors.Wrap(err, "error saving environment spec")
+			return fmt.Errorf("error saving environment spec: %w", err)
 		}
 		return nil
 	}
@@ -110,7 +109,7 @@ func (opts *CreateSubCommand) run(input cli.Input) (err error) {
 
 	_, err = opts.Client().FissionClientSet.CoreV1().Environments(opts.env.Namespace).Create(input.Context(), opts.env, metav1.CreateOptions{})
 	if err != nil {
-		return errors.Wrap(err, "error creating resource")
+		return fmt.Errorf("error creating resource: %w", err)
 	}
 
 	fmt.Printf("environment '%v' created\n", opts.env.ObjectMeta.Name)

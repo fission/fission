@@ -19,7 +19,6 @@ package version
 import (
 	"fmt"
 
-	"github.com/pkg/errors"
 	"sigs.k8s.io/yaml"
 
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
@@ -39,7 +38,7 @@ func (opts *VersionSubCommand) do(input cli.Input) error {
 	ver := util.GetVersion(input.Context(), input, opts.Client())
 	bs, err := yaml.Marshal(ver)
 	if err != nil {
-		return errors.Wrap(err, "error formatting versions")
+		return fmt.Errorf("error formatting versions: %w", err)
 	}
 	fmt.Print(string(bs))
 	return nil
