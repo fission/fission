@@ -39,6 +39,9 @@
   <a href="https://scorecard.dev/viewer/?uri=github.com/fission/fission">
     <image alt="OpenSSF Scorecard" src="https://api.scorecard.dev/projects/github.com/fission/fission/badge">
   </a>
+  <a href="https://www.bestpractices.dev/projects/4986">
+    <img src="https://www.bestpractices.dev/projects/4986/badge">
+  </a>
 </p>
 
 --------------
