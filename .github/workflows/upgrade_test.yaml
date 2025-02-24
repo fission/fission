@@ -44,7 +44,7 @@ jobs:
         os: [ubuntu-24.04]
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@cb605e52c26070c328afc4562f0b4ada7618a84e # v2.10.4
+        uses: step-security/harden-runner@4d991eb9b905ef189e4c376166672c3f2f230481 # v2.11.0
         with:
           egress-policy: audit
 
@@ -58,7 +58,7 @@ jobs:
           cache: true
 
       - name: Setup Helm
-        uses: Azure/setup-helm@fe7b79cd5ee1e45176fcad797de68ecaf3ca4814 # v4.2.0
+        uses: Azure/setup-helm@b9e51907a09c216f16ebe8536097933489208112 # v4.3.0
         with:
           version: ${{ env.HELM_VERSION }}
 
@@ -118,7 +118,7 @@ jobs:
 
       - name: Archive fission dump
         if: ${{ failure() || cancelled() }}
-        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4.6.1
         with:
           name: fission-dump-${{ github.run_id }}-${{ matrix.kindversion }}
           path: fission-dump/*.zip
@@ -126,7 +126,7 @@ jobs:
 
       - name: Archive kind logs
         if: ${{ always() }}
-        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4.6.1
         with:
           name: kind-logs-${{ github.run_id }}-${{ matrix.kindversion }}
           path: kind-logs/*
