@@ -26,9 +26,10 @@ import (
 	"time"
 
 	"github.com/dchest/uniuri"
-	"github.com/minio/minio-go"
-	"github.com/ory/dockertest"
-	dc "github.com/ory/dockertest/docker"
+	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
+	"github.com/ory/dockertest/v3"
+	dc "github.com/ory/dockertest/v3/docker"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
@@ -96,14 +97,17 @@ func TestS3StorageService(t *testing.T) {
 	endpoint := fmt.Sprintf("localhost:%s", resource.GetPort("9000/tcp"))
 
 	if err := pool.Retry(func() error {
-		minioClient, err = minio.New(endpoint, minioAccessKeyID, minioSecretAccessKey, false)
+		minioClient, err = minio.New(endpoint, &minio.Options{
+			Creds:  credentials.NewStaticV4(minioAccessKeyID, minioSecretAccessKey, ""),
+			Secure: false,
+		})
 		if err != nil {
 			return err
 		}
 
 		// This is to ensure container is up. Just getting minioClient
 		// isn't sufficient to assume container is up.
-		_, err = minioClient.ListBuckets()
+		_, err = minioClient.ListBuckets(t.Context())
 		if err != nil {
 			return err
 		}
@@ -159,7 +163,7 @@ func TestS3StorageService(t *testing.T) {
 	time.Sleep(10 * time.Second)
 
 	// Retrieve file through minioClient
-	reader, err := minioClient.GetObject(bucketName, fileID, minio.GetObjectOptions{})
+	reader, err := minioClient.GetObject(t.Context(), bucketName, fileID, minio.GetObjectOptions{})
 	failTest(t, err)
 	defer reader.Close()
 
