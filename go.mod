@@ -4,17 +4,17 @@ go 1.24.0
 
 require (
 	dario.cat/mergo v1.0.1
-	github.com/IBM/sarama v1.45.0
+	github.com/IBM/sarama v1.45.1
 	github.com/bep/debounce v1.2.1
 	github.com/dchest/uniuri v1.2.0
 	github.com/docopt/docopt-go v0.0.0-20180111231733-ee0de3bc6815
 	github.com/dustin/go-humanize v1.0.1
 	github.com/fatih/color v1.18.0
 	github.com/fsnotify/fsnotify v1.8.0
-	github.com/go-git/go-git/v5 v5.13.2
+	github.com/go-git/go-git/v5 v5.14.0
 	github.com/go-logr/zapr v1.3.0
 	github.com/golang-jwt/jwt/v4 v4.5.1
-	github.com/google/go-cmp v0.6.0
+	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/mux v1.8.1
 	github.com/graymeta/stow v0.2.8
@@ -91,13 +91,13 @@ require (
 	github.com/census-instrumentation/opencensus-proto v0.4.1 // indirect
 	github.com/cespare/xxhash v1.1.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
-	github.com/cloudflare/circl v1.3.7 // indirect
+	github.com/cloudflare/circl v1.6.0 // indirect
 	github.com/cncf/xds/go v0.0.0-20241213214725-57cfbe6fad57 // indirect
 	github.com/containerd/continuity v0.2.2 // indirect
 	github.com/coreos/go-semver v0.3.1 // indirect
 	github.com/coreos/go-systemd/v22 v22.5.0 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.6 // indirect
-	github.com/cyphar/filepath-securejoin v0.3.6 // indirect
+	github.com/cyphar/filepath-securejoin v0.4.1 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dennwc/varint v1.0.0 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
@@ -232,7 +232,7 @@ require (
 	github.com/sergi/go-diff v1.3.2-0.20230802210424-5b0b94c5c0d3 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
-	github.com/skeema/knownhosts v1.3.0 // indirect
+	github.com/skeema/knownhosts v1.3.1 // indirect
 	github.com/sony/gobreaker v1.0.0 // indirect
 	github.com/sorairolake/lzip-go v0.3.5 // indirect
 	github.com/sourcegraph/conc v0.3.0 // indirect
@@ -269,7 +269,7 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	go4.org v0.0.0-20230225012048-214862532bf5 // indirect
 	go4.org/netipx v0.0.0-20231129151722-fdeea329fbba // indirect
-	golang.org/x/crypto v0.33.0 // indirect
+	golang.org/x/crypto v0.35.0 // indirect
 	golang.org/x/exp v0.0.0-20241217172543-b2144cdd0a67 // indirect
 	golang.org/x/image v0.18.0 // indirect
 	golang.org/x/mod v0.22.0 // indirect
