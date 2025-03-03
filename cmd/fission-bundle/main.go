@@ -21,9 +21,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"strconv"
 
-	docopt "github.com/docopt/docopt-go"
 	"go.uber.org/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 	cnwebhook "sigs.k8s.io/controller-runtime/pkg/webhook"
@@ -48,116 +46,35 @@ import (
 	"github.com/fission/fission/pkg/webhook"
 )
 
-// runWebhook starts admission webhook server
-func runWebhook(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, port int) error {
-	return webhook.Start(ctx, clientGen, logger, cnwebhook.Options{
-		Port: port,
-	})
+// Command line arguments
+type CommandLineArgs struct {
+	// Flags
+	canaryConfig bool
+	kubewatcher  bool
+	timer        bool
+	mqt          bool
+	mqt_keda     bool
+	builderMgr   bool
+	showVersion  bool
+	logger       bool
+
+	// Port values
+	webhookPort        int
+	routerPort         int
+	executorPort       int
+	storageServicePort int
+
+	// URL values
+	executorUrl   string
+	routerUrl     string
+	storageSvcUrl string
+
+	// Other configurations
+	storageType string
 }
 
-func runCanaryConfigServer(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Interface) error {
-	return canaryconfigmgr.StartCanaryServer(ctx, clientGen, logger, mgr, false)
-}
-
-func runRouter(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Interface, port int, executorUrl string) error {
-	return router.Start(ctx, clientGen, logger, mgr, port, eclient.MakeClient(logger, executorUrl))
-}
-
-func runExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Interface, port int) error {
-	return executor.StartExecutor(ctx, clientGen, logger, mgr, port)
-}
-
-func runKubeWatcher(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Interface, routerUrl string) error {
-	return kubewatcher.Start(ctx, clientGen, logger, mgr, routerUrl)
-}
-
-func runTimer(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Interface, routerUrl string) error {
-	return timer.Start(ctx, clientGen, logger, mgr, routerUrl)
-}
-
-func runMessageQueueMgr(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Interface, routerUrl string) error {
-	return mqtrigger.Start(ctx, clientGen, logger, mgr, routerUrl)
-}
-
-// KEDA based MessageQueue Trigger Manager
-func runMQManager(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Interface, routerURL string) error {
-	return mqt.StartScalerManager(ctx, clientGen, logger, mgr, routerURL)
-}
-
-func runStorageSvc(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Interface, port int, storage storagesvc.Storage) error {
-	return storagesvc.Start(ctx, clientGen, logger, storage, mgr, port)
-}
-
-func runBuilderMgr(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Interface, storageSvcUrl string) error {
-	return buildermgr.Start(ctx, clientGen, logger, mgr, storageSvcUrl)
-}
-
-func runLogger(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger) error {
-	return functionLogger.Start(ctx, clientGen, logger)
-}
-
-func getPort(logger *zap.Logger, portArg interface{}) int {
-	portArgStr := portArg.(string)
-	port, err := strconv.Atoi(portArgStr)
-	if err != nil {
-		logger.Fatal("invalid port number", zap.Error(err), zap.String("port", portArgStr))
-	}
-	return port
-}
-
-func getStringArgWithDefault(arg interface{}, defaultValue string) string {
-	if arg != nil {
-		return arg.(string)
-	} else {
-		return defaultValue
-	}
-}
-
-func getServiceName(arguments map[string]interface{}) string {
-	serviceName := "Fission-Unknown"
-
-	if arguments["--routerPort"] != nil {
-		serviceName = "Fission-Router"
-	} else if arguments["--executorPort"] != nil {
-		serviceName = "Fission-Executor"
-	} else if arguments["--kubewatcher"] == true {
-		serviceName = "Fission-KubeWatcher"
-	} else if arguments["--timer"] == true {
-		serviceName = "Fission-Timer"
-	} else if arguments["--mqt"] == true {
-		serviceName = "Fission-MessageQueueTrigger"
-	} else if arguments["--builderMgr"] == true {
-		serviceName = "Fission-BuilderMgr"
-	} else if arguments["--storageServicePort"] != nil {
-		serviceName = "Fission-StorageSvc"
-	} else if arguments["--mqt_keda"] == true {
-		serviceName = "Fission-Keda-MQTrigger"
-	}
-
-	return serviceName
-}
-
-func exitWithSync(logger *zap.Logger) {
-	// Ignore error, safe to ignore as per https://github.com/uber-go/zap/issues/328
-	_ = logger.Sync()
-	os.Exit(1)
-}
-
-func main() {
-	mgr := manager.New()
-	defer mgr.Wait()
-
-	var err error
-
-	// From https://github.com/containous/traefik/pull/1817/files
-	// Tell glog to log into STDERR. Otherwise, we risk
-	// certain kinds of API errors getting logged into a directory not
-	// available in a `FROM scratch` Docker container, causing glog to abort
-	// hard with an exit code > 0.
-	// TODO: fix the lint error. Error checking here is causing all components to crash with error "logtostderr not found"
-	flag.Set("logtostderr", "true") //nolint: errcheck
-
-	usage := `fission-bundle: Package of all fission microservices: router, executor.
+// Usage information
+const usageText string = `fission-bundle: Package of all fission microservices: router, executor.
 
 Use it to start one or more of the fission servers:
 
@@ -197,142 +114,231 @@ Options:
   --storageServicePort=<port>     Port that the storage service should listen on.
   --executorUrl=<url>             Executor URL. Not required if --executorPort is specified.
   --routerUrl=<url>               Router URL.
-  --etcdUrl=<etcdUrl>             Etcd URL.
   --storageSvcUrl=<url>           StorageService URL.
-  --filePath=<filePath>           Directory to store functions in.
-  --namespace=<namespace>         Kubernetes namespace in which to run function containers. Defaults to 'fission-function'.
   --kubewatcher                   Start Kubernetes events watcher.
   --timer                         Start Timer.
   --mqt                           Start message queue trigger.
   --mqt_keda					  Start message queue trigger of kind KEDA
   --builderMgr                    Start builder manager.
-  --version                       Print version information
-`
-	logger := loggerfactory.GetLogger()
-	defer exitWithSync(logger)
+  --version                       Print version information`
 
-	ctx := signals.SetupSignalHandler()
-	profile.ProfileIfEnabled(ctx, logger, mgr)
+func main() {
+	mgr := manager.New()
+	defer mgr.Wait()
 
-	version := fmt.Sprintf("Fission Bundle Version: %s", info.BuildInfo().String())
-	arguments, err := docopt.ParseArgs(usage, nil, version)
-	if err != nil {
-		logger.Error("failed to parse arguments", zap.Error(err))
-		return
+	// Set up command line parsing
+	args := setupCommandLineArgs()
+
+	// Handle version request specially - exit after printing
+	if args.showVersion {
+		fmt.Printf("Fission Bundle Version: %s\n", info.BuildInfo().String())
+		os.Exit(0)
 	}
 
-	shutdown, err := otel.InitProvider(ctx, logger, getServiceName(arguments))
+	// Initialize logger
+	logger := loggerfactory.GetLogger()
+	defer func() {
+		// Ignore error, safe to ignore as per https://github.com/uber-go/zap/issues/328
+		_ = logger.Sync()
+	}()
+
+	// Set up signal handling for graceful shutdown
+	ctx := signals.SetupSignalHandler()
+
+	// Enable profiling if configured
+	profile.ProfileIfEnabled(ctx, logger, mgr)
+
+	// Initialize OpenTelemetry
+	serviceName := getServiceNameFromArgs(args)
+	shutdown, err := otel.InitProvider(ctx, logger, serviceName)
 	if err != nil {
-		logger.Error("error initializing provider for OTLP", zap.Error(err), zap.Any("argument", arguments))
+		logger.Error("error initializing provider for OTLP", zap.Error(err))
 		return
 	}
 	if shutdown != nil {
 		defer shutdown(ctx)
 	}
 
-	executorUrl := getStringArgWithDefault(arguments["--executorUrl"], "http://executor.fission")
-	routerUrl := getStringArgWithDefault(arguments["--routerUrl"], "http://router.fission")
-	storageSvcUrl := getStringArgWithDefault(arguments["--storageSvcUrl"], "http://storagesvc.fission")
+	// Initialize client generator
 	clientGen := crd.NewClientGenerator()
 
-	if arguments["--webhookPort"] != nil {
-		port := getPort(logger, arguments["--webhookPort"])
-		err = runWebhook(ctx, clientGen, logger, port)
+	// Start the appropriate service based on command line arguments
+	startRequestedService(ctx, args, clientGen, logger, mgr)
+
+	<-ctx.Done()
+	logger.Error("exiting")
+}
+
+// setupCommandLineArgs parses command line arguments and returns them
+func setupCommandLineArgs() *CommandLineArgs {
+	args := &CommandLineArgs{}
+
+	// Override the default usage function
+	flag.Usage = func() {
+		fmt.Println(usageText)
+	}
+
+	// Tell glog to log into STDERR
+	flag.Set("logtostderr", "true") //nolint: errcheck
+
+	// Define flags
+	flag.BoolVar(&args.canaryConfig, "canaryConfig", false, "Start canary config server")
+	flag.BoolVar(&args.kubewatcher, "kubewatcher", false, "Start Kubernetes events watcher")
+	flag.BoolVar(&args.timer, "timer", false, "Start Timer")
+	flag.BoolVar(&args.mqt, "mqt", false, "Start message queue trigger")
+	flag.BoolVar(&args.mqt_keda, "mqt_keda", false, "Start message queue trigger of kind KEDA")
+	flag.BoolVar(&args.builderMgr, "builderMgr", false, "Start builder manager")
+	flag.BoolVar(&args.showVersion, "version", false, "Print version information")
+	flag.BoolVar(&args.logger, "logger", false, "Start logger")
+
+	// Port flags
+	flag.IntVar(&args.webhookPort, "webhookPort", 0, "Port that the webhook should listen on")
+	flag.IntVar(&args.routerPort, "routerPort", 0, "Port that the router should listen on")
+	flag.IntVar(&args.executorPort, "executorPort", 0, "Port that the executor should listen on")
+	flag.IntVar(&args.storageServicePort, "storageServicePort", 0, "Port that the storage service should listen on")
+
+	// URL flags
+	flag.StringVar(&args.executorUrl, "executorUrl", "http://executor.fission", "Executor URL")
+	flag.StringVar(&args.routerUrl, "routerUrl", "http://router.fission", "Router URL")
+	flag.StringVar(&args.storageSvcUrl, "storageSvcUrl", "http://storagesvc.fission", "StorageService URL")
+
+	// Other configuration flags
+	flag.StringVar(&args.storageType, "storageType", "", "Type of storage to use")
+
+	// Parse flags
+	flag.Parse()
+
+	return args
+}
+
+// getServiceNameFromArgs determines which service is being started based on command line args
+func getServiceNameFromArgs(args *CommandLineArgs) string {
+	serviceName := "Fission-Unknown"
+
+	if args.routerPort != 0 {
+		serviceName = "Fission-Router"
+	} else if args.executorPort != 0 {
+		serviceName = "Fission-Executor"
+	} else if args.kubewatcher {
+		serviceName = "Fission-KubeWatcher"
+	} else if args.timer {
+		serviceName = "Fission-Timer"
+	} else if args.mqt {
+		serviceName = "Fission-MessageQueueTrigger"
+	} else if args.builderMgr {
+		serviceName = "Fission-BuilderMgr"
+	} else if args.storageServicePort != 0 {
+		serviceName = "Fission-StorageSvc"
+	} else if args.mqt_keda {
+		serviceName = "Fission-Keda-MQTrigger"
+	}
+
+	return serviceName
+}
+
+// startRequestedService starts the service specified by command line arguments
+func startRequestedService(ctx context.Context, args *CommandLineArgs, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Interface) {
+	var err error
+
+	// Start the requested service based on command line arguments
+	if args.webhookPort != 0 {
+		err = webhook.Start(ctx, clientGen, logger, cnwebhook.Options{
+			Port: args.webhookPort,
+		})
 		logger.Error("webhook server exited:", zap.Error(err))
 		return
 	}
 
-	if arguments["--canaryConfig"] == true {
-		err := runCanaryConfigServer(ctx, clientGen, logger, mgr)
+	if args.canaryConfig {
+		err = canaryconfigmgr.StartCanaryServer(ctx, clientGen, logger, mgr, false)
 		if err != nil {
 			logger.Error("canary config server exited with error: ", zap.Error(err))
-			return
 		}
+		return
 	}
 
-	if arguments["--routerPort"] != nil {
-		port := getPort(logger, arguments["--routerPort"])
-		err = runRouter(ctx, clientGen, logger, mgr, port, executorUrl)
+	if args.routerPort != 0 {
+		err = router.Start(ctx, clientGen, logger, mgr, args.routerPort, eclient.MakeClient(logger, args.executorUrl))
 		if err != nil {
 			logger.Error("router exited", zap.Error(err))
-			return
 		}
+		return
 	}
 
-	if arguments["--executorPort"] != nil {
-		port := getPort(logger, arguments["--executorPort"])
-		err = runExecutor(ctx, clientGen, logger, mgr, port)
+	if args.executorPort != 0 {
+		err = executor.StartExecutor(ctx, clientGen, logger, mgr, args.executorPort)
 		if err != nil {
 			logger.Error("executor exited", zap.Error(err))
-			return
 		}
+		return
 	}
 
-	if arguments["--kubewatcher"] == true {
-		err = runKubeWatcher(ctx, clientGen, logger, mgr, routerUrl)
+	if args.kubewatcher {
+		err = kubewatcher.Start(ctx, clientGen, logger, mgr, args.routerUrl)
 		if err != nil {
 			logger.Error("kubewatcher exited", zap.Error(err))
-			return
 		}
+		return
 	}
 
-	if arguments["--timer"] == true {
-		err = runTimer(ctx, clientGen, logger, mgr, routerUrl)
+	if args.timer {
+		err = timer.Start(ctx, clientGen, logger, mgr, args.routerUrl)
 		if err != nil {
 			logger.Error("timer exited", zap.Error(err))
-			return
 		}
+		return
 	}
 
-	if arguments["--mqt"] == true {
-		err = runMessageQueueMgr(ctx, clientGen, logger, mgr, routerUrl)
+	if args.mqt {
+		err = mqtrigger.Start(ctx, clientGen, logger, mgr, args.routerUrl)
 		if err != nil {
 			logger.Error("message queue manager exited", zap.Error(err))
-			return
 		}
+		return
 	}
 
-	if arguments["--mqt_keda"] == true {
-		err = runMQManager(ctx, clientGen, logger, mgr, routerUrl)
+	if args.mqt_keda {
+		err = mqt.StartScalerManager(ctx, clientGen, logger, mgr, args.routerUrl)
 		if err != nil {
 			logger.Error("mqt scaler manager exited", zap.Error(err))
-			return
 		}
+		return
 	}
 
-	if arguments["--builderMgr"] == true {
-		err = runBuilderMgr(ctx, clientGen, logger, mgr, storageSvcUrl)
+	if args.builderMgr {
+		err = buildermgr.Start(ctx, clientGen, logger, mgr, args.storageSvcUrl)
 		if err != nil {
 			logger.Error("builder manager exited", zap.Error(err))
-			return
 		}
+		return
 	}
 
-	if arguments["--logger"] == true {
-		err = runLogger(ctx, clientGen, logger)
+	if args.logger {
+		err = functionLogger.Start(ctx, clientGen, logger)
 		if err != nil {
 			logger.Error("logger exited", zap.Error(err))
 		}
 		return
 	}
 
-	if arguments["--storageServicePort"] != nil {
-		port := getPort(logger, arguments["--storageServicePort"])
+	if args.storageServicePort != 0 {
+		startStorageService(ctx, args, clientGen, logger, mgr)
+		return
+	}
+}
 
-		var storage storagesvc.Storage
+// startStorageService initializes and starts the storage service
+func startStorageService(ctx context.Context, args *CommandLineArgs, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Interface) {
+	var storage storagesvc.Storage
 
-		if arguments["--storageType"] != nil && arguments["--storageType"] == string(storagesvc.StorageTypeS3) {
-			storage = storagesvc.NewS3Storage()
-		} else if arguments["--storageType"] == string(storagesvc.StorageTypeLocal) {
-			storage = storagesvc.NewLocalStorage("/fission")
-		}
-		err := runStorageSvc(ctx, clientGen, logger, mgr, port, storage)
-		if err != nil {
-			logger.Error("storage service exited", zap.Error(err))
-			return
-		}
+	if args.storageType == string(storagesvc.StorageTypeS3) {
+		storage = storagesvc.NewS3Storage()
+	} else if args.storageType == string(storagesvc.StorageTypeLocal) {
+		storage = storagesvc.NewLocalStorage("/fission")
 	}
 
-	<-ctx.Done()
-	logger.Error("exiting")
+	err := storagesvc.Start(ctx, clientGen, logger, storage, mgr, args.storageServicePort)
+	if err != nil {
+		logger.Error("storage service exited", zap.Error(err))
+	}
 }
