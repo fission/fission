@@ -80,7 +80,7 @@ builderNamespace: ""
 functionNamespace: ""
 
 ## Fission will watch the following namespaces along with the `defaultNamespace` for fission custom resources.
-## additionalFissionNamespaces: 
+## additionalFissionNamespaces:
 ## - namespace1
 ## - namespace2
 ## - namespace3
@@ -163,7 +163,7 @@ executor:
   ## This is applicable to Pool Manager executor type only.
   ##
   podReadyTimeout: 300s
-  
+
   ## Pod resources as:
   ##  resources:
   ##    limits:
@@ -336,7 +336,7 @@ router:
     runAsGroup: 10001
 
 ## The builder manager watches the package & environments CRD changes and manages the builds of function source code.
-## 
+##
 buildermgr:
   ## Pod resources as:
   ##  resources:
@@ -362,7 +362,7 @@ buildermgr:
     runAsGroup: 10001
 
 ## webhook is the component that validates API calls.
-## It contains validation and mutation for functions, triggers, environments, Kubernetes event watches, etc. 
+## It contains validation and mutation for functions, triggers, environments, Kubernetes event watches, etc.
 ##
 webhook:
   ## Pod resources as:
@@ -438,6 +438,16 @@ storagesvc:
   ##      memory: <tbd>
   ##
   resources: {}
+
+  ## Deployment strategy defaults to RollingUpdate but use Recreate if new pods fail to
+  ## attach to the volume until the old pod has released it.
+  ## deploymentStrategy:
+  ##   type: Recreate
+  deploymentStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
 
   ## Archive pruner removes archives from storage which are not referenced by any package.
   archivePruner:
@@ -541,7 +551,7 @@ serviceMonitor:
   #  key: "value"
 
 # The following components expose Prometheus metrics and have podmonitors in this chart (disabled by default)
-# 
+#
 podMonitor:
   enabled: false
   ##namespace in which you want to deploy podmonitor
@@ -577,7 +587,7 @@ persistence:
   #   region: <awsRegion>
   ## For Minio and other s3 compatible storage systems set endPoint property
   #   endPoint: <s3StorageUrl>
-  
+
   ## A manually managed Persistent Volume Claim name
   ## Requires persistence.enabled: true
   ## If defined, PVC must be created manually before volume will be bound
@@ -764,12 +774,12 @@ authentication:
   ## jwtSigningKey is the signing key used for
   ## signing the JWT token
   ##
-  jwtSigningKey: 
+  jwtSigningKey:
   ## jwtExpiryTime is the JWT expiry time
   ## in seconds
   ## default '120'
   ##
-  jwtExpiryTime: 
+  jwtExpiryTime:
   ## jwtIssuer is the issuer of JWT
   ## default 'fission'
   ##
@@ -874,7 +884,7 @@ runtimePodSpec:
   ## Setting it false by default so that integration tests pass
   ##
   enabled: false
-  
+
   ## Checkout PodSpec in https://fission.io/docs/reference/crd-reference/#runtime
   ##
   podSpec:
