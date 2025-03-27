@@ -31,7 +31,7 @@ imageTag: v1.21.0
 ##
 pullPolicy: IfNotPresent
 
-## imageppullsecrets 
+## imagepullsecrets
 imagePullSecrets: []
 
 ## priorityClassName represents the priority class name to use for Fission components.
