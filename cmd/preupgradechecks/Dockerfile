@@ -1,3 +1,3 @@
-FROM cgr.dev/chainguard/static:latest@sha256:9276a4ebe6b98cd1bbd53b8139228434a0e4f00d06d39e33688e9bd759986656
+FROM cgr.dev/chainguard/static:latest@sha256:1ff7590cbc50eaaa917c34b092de0720d307f67d6d795e4f749a0b80a2e95a2c
 COPY pre-upgrade-checks /
 ENTRYPOINT ["/pre-upgrade-checks"]
