@@ -38,7 +38,7 @@ type (
 	Timer struct {
 		logger    *zap.Logger
 		triggers  map[types.UID]*timerTriggerWithCron
-		publisher *publisher.Publisher
+		routerUrl string
 	}
 
 	timerTriggerWithCron struct {
@@ -47,17 +47,21 @@ type (
 	}
 )
 
-func MakeTimer(logger *zap.Logger, publisher publisher.Publisher) *Timer {
+func MakeTimer(logger *zap.Logger, routerUrl string) *Timer {
 	timer := &Timer{
 		logger:    logger.Named("timer"),
 		triggers:  make(map[types.UID]*timerTriggerWithCron),
-		publisher: &publisher,
+		routerUrl: routerUrl,
 	}
 	return timer
 }
 
-func (timer *Timer) newCron(t fv1.TimeTrigger) *cron.Cron {
+func (timer *Timer) newCron(t fv1.TimeTrigger, routerUrl string) *cron.Cron {
 	target := utils.UrlForFunction(t.Spec.FunctionReference.Name, t.Namespace) + t.Spec.Subpath
+
+	// create one publisher per-cron timer
+	timerPublisher := publisher.MakeWebhookPublisher(timer.logger, routerUrl)
+
 	c := cron.New(
 		cron.WithParser(
 			cron.NewParser(
@@ -70,7 +74,7 @@ func (timer *Timer) newCron(t fv1.TimeTrigger) *cron.Cron {
 		// with the addition of multi-tenancy, the users can create functions in any namespace. however,
 		// the triggers can only be created in the same namespace as the function.
 		// so essentially, function namespace = trigger namespace.
-		(*timer.publisher).Publish(context.Background(), "", headers, t.Spec.Method, target)
+		(timerPublisher).Publish(context.Background(), "", headers, t.Spec.Method, target)
 	})
 	c.Start()
 	timer.logger.Info("started cron for time trigger", zap.String("trigger_name", t.Name), zap.String("trigger_namespace", t.Namespace), zap.String("cron", t.Spec.Cron))

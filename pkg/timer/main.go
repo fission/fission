@@ -23,7 +23,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/fission/fission/pkg/crd"
-	"github.com/fission/fission/pkg/publisher"
 	"github.com/fission/fission/pkg/utils/manager"
 )
 
@@ -38,8 +37,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *
 		return fmt.Errorf("error waiting for CRDs: %w", err)
 	}
 
-	poster := publisher.MakeWebhookPublisher(logger, routerUrl)
-	timerSync, err := MakeTimerSync(ctx, logger, fissionClient, MakeTimer(logger, poster))
+	timerSync, err := MakeTimerSync(ctx, logger, fissionClient, MakeTimer(logger, routerUrl))
 	if err != nil {
 		return fmt.Errorf("error making timer sync: %w", err)
 	}
