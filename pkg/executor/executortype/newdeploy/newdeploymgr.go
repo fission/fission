@@ -482,7 +482,7 @@ func (deploy *NewDeploy) fnCreate(ctx context.Context, fn *fv1.Function) (*fscac
 			// obj.TypeMeta.Kind does not work hence this, needs investigation and a fix
 			Kind:            "deployment",
 			Name:            depl.ObjectMeta.Name,
-			APIVersion:      depl.TypeMeta.APIVersion,
+			APIVersion:      depl.APIVersion,
 			Namespace:       depl.ObjectMeta.Namespace,
 			ResourceVersion: depl.ObjectMeta.ResourceVersion,
 			UID:             depl.ObjectMeta.UID,
@@ -490,7 +490,7 @@ func (deploy *NewDeploy) fnCreate(ctx context.Context, fn *fv1.Function) (*fscac
 		{
 			Kind:            "service",
 			Name:            svc.ObjectMeta.Name,
-			APIVersion:      svc.TypeMeta.APIVersion,
+			APIVersion:      svc.APIVersion,
 			Namespace:       svc.ObjectMeta.Namespace,
 			ResourceVersion: svc.ObjectMeta.ResourceVersion,
 			UID:             svc.ObjectMeta.UID,
@@ -498,7 +498,7 @@ func (deploy *NewDeploy) fnCreate(ctx context.Context, fn *fv1.Function) (*fscac
 		{
 			Kind:            "horizontalpodautoscaler",
 			Name:            hpa.ObjectMeta.Name,
-			APIVersion:      hpa.TypeMeta.APIVersion,
+			APIVersion:      hpa.APIVersion,
 			Namespace:       hpa.ObjectMeta.Namespace,
 			ResourceVersion: hpa.ObjectMeta.ResourceVersion,
 			UID:             hpa.ObjectMeta.UID,

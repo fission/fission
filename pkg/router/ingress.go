@@ -56,7 +56,7 @@ func deleteIngress(ctx context.Context, logger *zap.Logger, trigger *fv1.HTTPTri
 		return
 	}
 
-	ingress, err := kubeClient.NetworkingV1().Ingresses(podNamespace).Get(ctx, trigger.ObjectMeta.Name, v1.GetOptions{})
+	ingress, err := kubeClient.NetworkingV1().Ingresses(podNamespace).Get(ctx, trigger.Name, v1.GetOptions{})
 	if err != nil && !k8serrors.IsNotFound(err) {
 		logger.Error("failed to get ingress when deleting trigger", zap.Error(err), zap.String("trigger", trigger.ObjectMeta.Name))
 		return

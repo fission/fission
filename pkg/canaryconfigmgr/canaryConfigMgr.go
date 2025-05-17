@@ -461,7 +461,7 @@ func (canaryCfgMgr *canaryConfigMgr) rollback(ctx context.Context, canaryConfig 
 	functionWeights[canaryConfig.Spec.NewFunction] = 0
 	functionWeights[canaryConfig.Spec.OldFunction] = 100
 
-	err := canaryCfgMgr.updateHttpTriggerWithRetries(ctx, trigger.ObjectMeta.Name, trigger.ObjectMeta.Namespace, functionWeights)
+	err := canaryCfgMgr.updateHttpTriggerWithRetries(ctx, trigger.Name, trigger.ObjectMeta.Namespace, functionWeights)
 	if err != nil {
 		return err
 	}
@@ -494,7 +494,7 @@ func (canaryCfgMgr *canaryConfigMgr) rollForward(ctx context.Context, canaryConf
 		zap.String("namespace", canaryConfig.ObjectMeta.Namespace),
 		zap.Any("function_weights", functionWeights))
 
-	err := canaryCfgMgr.updateHttpTriggerWithRetries(ctx, trigger.ObjectMeta.Name, trigger.ObjectMeta.Namespace, functionWeights)
+	err := canaryCfgMgr.updateHttpTriggerWithRetries(ctx, trigger.Name, trigger.ObjectMeta.Namespace, functionWeights)
 	return doneProcessingCanaryConfig, err
 }
 

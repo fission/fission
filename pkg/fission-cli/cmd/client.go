@@ -75,7 +75,7 @@ func getLoadingRules() (loadingRules *clientcmd.ClientConfigLoadingRules, err er
 
 		if _, err := os.Stat(kubeConfigPath); os.IsNotExist(err) {
 			return nil, errors.New("couldn't find kubeconfig file. " +
-				"Set the KUBECONFIG environment variable to your kubeconfig's path.")
+				"Set the KUBECONFIG environment variable to your kubeconfig's path")
 		}
 		loadingRules.ExplicitPath = kubeConfigPath
 		console.Verbose(2, "Using kubeconfig from %q", kubeConfigPath)

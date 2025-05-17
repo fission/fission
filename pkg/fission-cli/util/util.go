@@ -255,7 +255,7 @@ func GetResourceReqs(input cli.Input, resReqs *v1.ResourceRequirements) (*v1.Res
 		mincpu := input.Int(flagkey.RuntimeMincpu)
 		cpuRequest, err := resource.ParseQuantity(strconv.Itoa(mincpu) + "m")
 		if err != nil {
-			e = multierror.Append(e, fmt.Errorf("Failed to parse mincpu: %w", err))
+			e = multierror.Append(e, fmt.Errorf("failed to parse mincpu: %w", err))
 		}
 		r.Requests[v1.ResourceCPU] = cpuRequest
 	}
@@ -264,7 +264,7 @@ func GetResourceReqs(input cli.Input, resReqs *v1.ResourceRequirements) (*v1.Res
 		minmem := input.Int(flagkey.RuntimeMinmemory)
 		memRequest, err := resource.ParseQuantity(strconv.Itoa(minmem) + "Mi")
 		if err != nil {
-			e = multierror.Append(e, fmt.Errorf("Failed to parse minmemory: %w", err))
+			e = multierror.Append(e, fmt.Errorf("failed to parse minmemory: %w", err))
 		}
 		r.Requests[v1.ResourceMemory] = memRequest
 	}
@@ -273,7 +273,7 @@ func GetResourceReqs(input cli.Input, resReqs *v1.ResourceRequirements) (*v1.Res
 		maxcpu := input.Int(flagkey.RuntimeMaxcpu)
 		cpuLimit, err := resource.ParseQuantity(strconv.Itoa(maxcpu) + "m")
 		if err != nil {
-			e = multierror.Append(e, fmt.Errorf("Failed to parse maxcpu: %w", err))
+			e = multierror.Append(e, fmt.Errorf("failed to parse maxcpu: %w", err))
 		}
 		r.Limits[v1.ResourceCPU] = cpuLimit
 	}
@@ -282,7 +282,7 @@ func GetResourceReqs(input cli.Input, resReqs *v1.ResourceRequirements) (*v1.Res
 		maxmem := input.Int(flagkey.RuntimeMaxmemory)
 		memLimit, err := resource.ParseQuantity(strconv.Itoa(maxmem) + "Mi")
 		if err != nil {
-			e = multierror.Append(e, fmt.Errorf("Failed to parse maxmemory: %w", err))
+			e = multierror.Append(e, fmt.Errorf("failed to parse maxmemory: %w", err))
 		}
 		r.Limits[v1.ResourceMemory] = memLimit
 	}
@@ -293,7 +293,7 @@ func GetResourceReqs(input cli.Input, resReqs *v1.ResourceRequirements) (*v1.Res
 	if limitCPU.IsZero() && !requestCPU.IsZero() {
 		r.Limits[v1.ResourceCPU] = requestCPU
 	} else if limitCPU.Cmp(requestCPU) < 0 {
-		e = multierror.Append(e, fmt.Errorf("MinCPU (%v) cannot be greater than MaxCPU (%v)", requestCPU.String(), limitCPU.String()))
+		e = multierror.Append(e, fmt.Errorf("minCPU (%v) cannot be greater than MaxCPU (%v)", requestCPU.String(), limitCPU.String()))
 	}
 
 	limitMem := r.Limits[v1.ResourceMemory]
@@ -302,7 +302,7 @@ func GetResourceReqs(input cli.Input, resReqs *v1.ResourceRequirements) (*v1.Res
 	if limitMem.IsZero() && !requestMem.IsZero() {
 		r.Limits[v1.ResourceMemory] = requestMem
 	} else if limitMem.Cmp(requestMem) < 0 {
-		e = multierror.Append(e, fmt.Errorf("MinMemory (%v) cannot be greater than MaxMemory (%v)", requestMem.String(), limitMem.String()))
+		e = multierror.Append(e, fmt.Errorf("minMemory (%v) cannot be greater than MaxMemory (%v)", requestMem.String(), limitMem.String()))
 	}
 
 	if e.ErrorOrNil() != nil {
@@ -341,7 +341,7 @@ func GetSpecIgnoreParser(specDir, specIgnore string) (ignore.IgnoreParser, error
 	if _, err := os.Stat(specIgnorePath); errors.Is(err, os.ErrNotExist) {
 		// return error if it's custom spec ignore file
 		if specIgnore != SPEC_IGNORE_FILE {
-			return nil, fmt.Errorf("Spec ignore file '%s' doesn't exist. "+
+			return nil, fmt.Errorf("spec ignore file '%s' doesn't exist. "+
 				"Please check the file path: '%s'", specIgnore, specIgnorePath)
 		}
 		return ignore.CompileIgnoreLines(), nil

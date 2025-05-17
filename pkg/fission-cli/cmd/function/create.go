@@ -342,8 +342,8 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 // generatePackageName => will return package name by appending id in function name and will make sure that package name will never be more than length of 63 characters.
 func generatePackageName(fnName string, id string) string {
 	var (
-		lenFnName       int = len(fnName)
-		lenId           int = len(id)
+		lenFnName       = len(fnName)
+		lenId           = len(id)
 		lastIndexOfChar int
 	)
 	if lenFnName+lenId <= 62 {

@@ -39,7 +39,7 @@ func GetRouterWithAuth() *mux.Router {
 		w.WriteHeader(http.StatusOK)
 		_, err := io.WriteString(w, "OK")
 		if err != nil {
-			fmt.Println(fmt.Errorf("Error in writing string: %s", err))
+			fmt.Println(fmt.Errorf("error in writing string: %s", err))
 		}
 	}
 

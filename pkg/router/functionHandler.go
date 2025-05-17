@@ -383,7 +383,7 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 		executingTimeout = executingTimeout * time.Duration(roundTripper.funcHandler.tsRoundTripperParams.timeoutExponent)
 	}
 
-	e := errors.New("Unable to get service url for connection")
+	e := errors.New("unable to get service url for connection")
 	logger.Error(e.Error())
 	return nil, e
 }
@@ -510,11 +510,7 @@ func findCeil(randomNumber int, wtDistrList []functionWeightDistribution) string
 	low := 0
 	high := len(wtDistrList) - 1
 
-	for {
-		if low >= high {
-			break
-		}
-
+	for low < high {
 		mid := low + high/2
 		if randomNumber >= wtDistrList[mid].sumPrefix {
 			low = mid + 1

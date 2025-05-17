@@ -130,7 +130,7 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 	if len(methods) == 0 {
 		return errors.New("HTTP method not mentioned")
 	} else if len(methods) > 1 {
-		return errors.New("More than one HTTP method not supported")
+		return errors.New("more than one HTTP method not supported")
 	}
 	method, err := httptrigger.GetMethod(methods[0])
 	if err != nil {

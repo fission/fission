@@ -53,7 +53,7 @@ const (
 	// StorageTypeS3 is a constant to hold S3 storage type name literal
 	StorageTypeS3 StorageType = "s3"
 	// PaginationSize is a constant to hold no of pages
-	PaginationSize int = 10
+	PaginationSize = 10
 )
 
 var (
@@ -96,7 +96,7 @@ func getOrCreateContainer(loc stow.Location, containerName string, cursor string
 		con, err = getContainer(loc, containerName, stow.CursorStart)
 	}
 	if con == nil && err == nil {
-		err = fmt.Errorf("Storage container %s not found", containerName)
+		err = fmt.Errorf("storage container %s not found", containerName)
 	}
 	return con, err
 }
@@ -105,7 +105,7 @@ func getOrCreateContainer(loc stow.Location, containerName string, cursor string
 func MakeStowClient(logger *zap.Logger, storage Storage) (*StowClient, error) {
 	storageType := getStorageType(storage)
 	if strings.Compare(storageType, "local") == 1 && strings.Compare(storageType, "s3") == 1 {
-		return nil, errors.New("Storage types other than 'local' and 's3' are not implemented")
+		return nil, errors.New("storage types other than 'local' and 's3' are not implemented")
 	}
 
 	config := &storageConfig{

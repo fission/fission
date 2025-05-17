@@ -95,17 +95,17 @@ func forceDeleteResources(ctx context.Context, fclient cmd.Client, fr *FissionRe
 
 	_, _, err = applyKubernetesWatchTriggers(ctx, fclient, fr, true, false)
 	if err != nil {
-		return fmt.Errorf("KubernetesWatchTrigger delete failed: %w", err)
+		return fmt.Errorf("kubernetesWatchTrigger delete failed: %w", err)
 	}
 
 	_, _, err = applyTimeTriggers(ctx, fclient, fr, true, false)
 	if err != nil {
-		return fmt.Errorf("TimeTrigger delete failed: %w", err)
+		return fmt.Errorf("timeTrigger delete failed: %w", err)
 	}
 
 	_, _, err = applyMessageQueueTriggers(ctx, fclient, fr, true, false)
 	if err != nil {
-		return fmt.Errorf("MessageQueueTrigger delete failed: %w", err)
+		return fmt.Errorf("messageQueueTrigger delete failed: %w", err)
 	}
 
 	_, _, err = applyFunctions(ctx, fclient, fr, true, false)
@@ -187,17 +187,17 @@ func deleteResources(ctx context.Context, fclient cmd.Client, fr *FissionResourc
 
 	err = destroyKubernetesWatchTriggers(ctx, fclient, fr)
 	if err != nil {
-		return fmt.Errorf("KubernetesWatchTrigger delete failed: %w", err)
+		return fmt.Errorf("kubernetesWatchTrigger delete failed: %w", err)
 	}
 
 	err = destroyTimeTriggers(ctx, fclient, fr)
 	if err != nil {
-		return fmt.Errorf("TimeTrigger delete failed: %w", err)
+		return fmt.Errorf("timeTrigger delete failed: %w", err)
 	}
 
 	err = destroyMessageQueueTriggers(ctx, fclient, fr)
 	if err != nil {
-		return fmt.Errorf("MessageQueueTrigger delete failed: %w", err)
+		return fmt.Errorf("messageQueueTrigger delete failed: %w", err)
 	}
 
 	err = destroyFunctions(ctx, fclient, fr)
@@ -229,7 +229,7 @@ func destroyHTTPTriggers(ctx context.Context, fclient cmd.Client, fr *FissionRes
 		} else if err != nil {
 			return err
 		}
-		fmt.Printf("Deleted %s %s\n", o.TypeMeta.Kind, k8sCache.MetaObjectToName(&o.ObjectMeta).String())
+		fmt.Printf("Deleted %s %s\n", o.Kind, k8sCache.MetaObjectToName(&o.ObjectMeta).String())
 	}
 	return nil
 }
@@ -246,7 +246,7 @@ func destroyKubernetesWatchTriggers(ctx context.Context, fclient cmd.Client, fr 
 		} else if err != nil {
 			return err
 		}
-		fmt.Printf("Deleted %s %s\n", o.TypeMeta.Kind, k8sCache.MetaObjectToName(&o.ObjectMeta).String())
+		fmt.Printf("Deleted %s %s\n", o.Kind, k8sCache.MetaObjectToName(&o.ObjectMeta).String())
 	}
 
 	return nil
@@ -264,7 +264,7 @@ func destroyTimeTriggers(ctx context.Context, fclient cmd.Client, fr *FissionRes
 		} else if err != nil {
 			return err
 		}
-		fmt.Printf("Deleted %s %s\n", o.TypeMeta.Kind, k8sCache.MetaObjectToName(&o.ObjectMeta).String())
+		fmt.Printf("Deleted %s %s\n", o.Kind, k8sCache.MetaObjectToName(&o.ObjectMeta).String())
 	}
 
 	return nil
@@ -282,7 +282,7 @@ func destroyMessageQueueTriggers(ctx context.Context, fclient cmd.Client, fr *Fi
 		} else if err != nil {
 			return err
 		}
-		fmt.Printf("Deleted %s %s\n", o.TypeMeta.Kind, k8sCache.MetaObjectToName(&o.ObjectMeta).String())
+		fmt.Printf("Deleted %s %s\n", o.Kind, k8sCache.MetaObjectToName(&o.ObjectMeta).String())
 	}
 
 	return nil
@@ -300,7 +300,7 @@ func destroyFunctions(ctx context.Context, fclient cmd.Client, fr *FissionResour
 		} else if err != nil {
 			return err
 		}
-		fmt.Printf("Deleted %s %s\n", o.TypeMeta.Kind, k8sCache.MetaObjectToName(&o.ObjectMeta).String())
+		fmt.Printf("Deleted %s %s\n", o.Kind, k8sCache.MetaObjectToName(&o.ObjectMeta).String())
 	}
 
 	return nil
@@ -318,7 +318,7 @@ func destroyPackages(ctx context.Context, fclient cmd.Client, fr *FissionResourc
 		} else if err != nil {
 			return err
 		}
-		fmt.Printf("Deleted %s %s\n", o.TypeMeta.Kind, k8sCache.MetaObjectToName(&o.ObjectMeta).String())
+		fmt.Printf("Deleted %s %s\n", o.Kind, k8sCache.MetaObjectToName(&o.ObjectMeta).String())
 	}
 
 	return nil
@@ -336,7 +336,7 @@ func destroyEnvironments(ctx context.Context, fclient cmd.Client, fr *FissionRes
 		} else if err != nil {
 			return err
 		}
-		fmt.Printf("Deleted %s %s\n", o.TypeMeta.Kind, k8sCache.MetaObjectToName(&o.ObjectMeta).String())
+		fmt.Printf("Deleted %s %s\n", o.Kind, k8sCache.MetaObjectToName(&o.ObjectMeta).String())
 	}
 
 	return nil

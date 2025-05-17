@@ -55,7 +55,7 @@ securityContext:
 	}
 
 	var permissionNum int64 = 10001
-	var runAsNonRoot bool = true
+	var runAsNonRoot = true
 
 	testSpecPatch := apiv1.PodSpec{
 		SecurityContext: &apiv1.PodSecurityContext{
