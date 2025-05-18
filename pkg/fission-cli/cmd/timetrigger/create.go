@@ -61,7 +61,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) (err error) {
 
 	fnName := input.String(flagkey.TtFnName)
 	if len(fnName) == 0 {
-		return errors.New("Need a function name to create a trigger, use --function")
+		return errors.New("need a function name to create a trigger, use --function")
 	}
 
 	userProvidedNS, fnNamespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceFunction)
@@ -71,7 +71,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) (err error) {
 
 	cronSpec := input.String(flagkey.TtCron)
 	if len(cronSpec) == 0 {
-		return errors.New("Need a cron spec like '30 * * * *', '@every 1h30m', or '@hourly'; use --cron")
+		return errors.New("need a cron spec like '30 * * * *', '@every 1h30m', or '@hourly'; use --cron")
 	}
 
 	if input.Bool(flagkey.SpecSave) {

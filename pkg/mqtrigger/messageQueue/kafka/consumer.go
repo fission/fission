@@ -75,7 +75,7 @@ func NewMqtConsumerGroupHandler(version sarama.KafkaVersion,
 
 // Setup implemented to satisfy the sarama.ConsumerGroupHandler interface
 func (ch MqtConsumerGroupHandler) Setup(session sarama.ConsumerGroupSession) error {
-	mqtrigger.SetTriggerStatus(ch.trigger.ObjectMeta.Name, ch.trigger.ObjectMeta.Namespace)
+	mqtrigger.SetTriggerStatus(ch.trigger.Name, ch.trigger.ObjectMeta.Namespace)
 	mqtrigger.IncreaseInprocessCount()
 	ch.logger.With(
 		zap.String("trigger", ch.trigger.ObjectMeta.Name),
@@ -91,7 +91,7 @@ func (ch MqtConsumerGroupHandler) Setup(session sarama.ConsumerGroupSession) err
 
 // Cleanup implemented to satisfy the sarama.ConsumerGroupHandler interface
 func (ch MqtConsumerGroupHandler) Cleanup(session sarama.ConsumerGroupSession) error {
-	mqtrigger.ResetTriggerStatus(ch.trigger.ObjectMeta.Name, ch.trigger.ObjectMeta.Namespace)
+	mqtrigger.ResetTriggerStatus(ch.trigger.Name, ch.trigger.ObjectMeta.Namespace)
 	mqtrigger.DecreaseInprocessCount()
 	ch.logger.With(
 		zap.String("trigger", ch.trigger.ObjectMeta.Name),

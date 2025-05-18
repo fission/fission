@@ -30,24 +30,24 @@ var (
 )
 
 func Error(msg interface{}) {
-	os.Stderr.WriteString(fmt.Sprintf("%v: %v\n", color.RedString("Error"), trimNewline(msg)))
+	fmt.Fprintf(os.Stderr, "%v: %v\n", color.RedString("Error"), trimNewline(msg))
 }
 
 func Errorf(format string, args ...interface{}) {
 	msg := fmt.Sprintf(format, args...)
-	os.Stderr.WriteString(fmt.Sprintf("%v: %v\n", color.RedString("Error"), trimNewline(msg)))
+	fmt.Fprintf(os.Stderr, "%v: %v\n", color.RedString("Error"), trimNewline(msg))
 }
 
 func Warn(msg interface{}) {
-	os.Stdout.WriteString(fmt.Sprintf("%v: %v\n", color.YellowString("Warning"), trimNewline(msg)))
+	fmt.Fprintf(os.Stdout, "%v: %v\n", color.YellowString("Warning"), trimNewline(msg))
 }
 
 func Info(msg interface{}) {
-	os.Stdout.WriteString(fmt.Sprintf("%v\n", trimNewline(msg)))
+	fmt.Fprintf(os.Stdout, "%v\n", trimNewline(msg))
 }
 
 func Infof(format string, args ...interface{}) {
-	os.Stdout.WriteString(fmt.Sprintf("%v\n", trimNewline(fmt.Sprintf(format, args...))))
+	fmt.Fprintf(os.Stdout, "%v\n", trimNewline(fmt.Sprintf(format, args...)))
 }
 
 func Verbose(verbosityLevel int, format string, args ...interface{}) {

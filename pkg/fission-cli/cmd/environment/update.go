@@ -99,7 +99,7 @@ func (opts *UpdateSubCommand) run(input cli.Input) error {
 		return fmt.Errorf("error updating environment: %w", err)
 	}
 
-	fmt.Printf("environment '%v' updated\n", enew.ObjectMeta.Name)
+	fmt.Printf("environment '%v' updated\n", enew.Name)
 	return nil
 }
 
@@ -161,7 +161,7 @@ func updateExistingEnvironmentWithCmd(env *fv1.Environment, input cli.Input) (*f
 		maxcpu := input.Int(flagkey.RuntimeMaxcpu)
 		cpuLimit, err := resource.ParseQuantity(strconv.Itoa(maxcpu) + "m")
 		if err != nil {
-			e = multierror.Append(e, fmt.Errorf("Failed to parse maxcpu: %w", err))
+			e = multierror.Append(e, fmt.Errorf("failed to parse maxcpu: %w", err))
 		}
 		env.Spec.Resources.Limits[v1.ResourceCPU] = cpuLimit
 	}
@@ -170,7 +170,7 @@ func updateExistingEnvironmentWithCmd(env *fv1.Environment, input cli.Input) (*f
 		minmem := input.Int(flagkey.RuntimeMinmemory)
 		memRequest, err := resource.ParseQuantity(strconv.Itoa(minmem) + "Mi")
 		if err != nil {
-			e = multierror.Append(e, fmt.Errorf("Failed to parse minmemory: %w", err))
+			e = multierror.Append(e, fmt.Errorf("failed to parse minmemory: %w", err))
 		}
 		env.Spec.Resources.Requests[v1.ResourceMemory] = memRequest
 	}
@@ -179,7 +179,7 @@ func updateExistingEnvironmentWithCmd(env *fv1.Environment, input cli.Input) (*f
 		maxmem := input.Int(flagkey.RuntimeMaxmemory)
 		memLimit, err := resource.ParseQuantity(strconv.Itoa(maxmem) + "Mi")
 		if err != nil {
-			e = multierror.Append(e, fmt.Errorf("Failed to parse maxmemory: %w", err))
+			e = multierror.Append(e, fmt.Errorf("failed to parse maxmemory: %w", err))
 		}
 		env.Spec.Resources.Limits[v1.ResourceMemory] = memLimit
 	}
@@ -196,7 +196,7 @@ func updateExistingEnvironmentWithCmd(env *fv1.Environment, input cli.Input) (*f
 	if limitCPU.IsZero() && !requestCPU.IsZero() {
 		env.Spec.Resources.Limits[v1.ResourceCPU] = requestCPU
 	} else if limitCPU.Cmp(requestCPU) < 0 {
-		e = multierror.Append(e, fmt.Errorf("MinCPU (%v) cannot be greater than MaxCPU (%v)", requestCPU.String(), limitCPU.String()))
+		e = multierror.Append(e, fmt.Errorf("minCPU (%v) cannot be greater than MaxCPU (%v)", requestCPU.String(), limitCPU.String()))
 	}
 
 	limitMem := env.Spec.Resources.Limits[v1.ResourceMemory]
@@ -205,7 +205,7 @@ func updateExistingEnvironmentWithCmd(env *fv1.Environment, input cli.Input) (*f
 	if limitMem.IsZero() && !requestMem.IsZero() {
 		env.Spec.Resources.Limits[v1.ResourceMemory] = requestMem
 	} else if limitMem.Cmp(requestMem) < 0 {
-		e = multierror.Append(e, fmt.Errorf("MinMemory (%v) cannot be greater than MaxMemory (%v)", requestMem.String(), limitMem.String()))
+		e = multierror.Append(e, fmt.Errorf("minMemory (%v) cannot be greater than MaxMemory (%v)", requestMem.String(), limitMem.String()))
 	}
 
 	if e.ErrorOrNil() != nil {

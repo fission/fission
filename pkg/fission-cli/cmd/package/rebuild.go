@@ -61,7 +61,7 @@ func (opts *RebuildSubCommand) run(input cli.Input) error {
 	}
 
 	if pkg.Status.BuildStatus != fv1.BuildStatusFailed {
-		return fmt.Errorf("Package %v is not in %v state.",
+		return fmt.Errorf("package %v is not in %v state",
 			pkg.ObjectMeta.Name, fv1.BuildStatusFailed)
 	}
 
@@ -70,7 +70,7 @@ func (opts *RebuildSubCommand) run(input cli.Input) error {
 		return fmt.Errorf("update package status: %w", err)
 	}
 
-	fmt.Printf("Retrying build for pkg %v. Use \"fission pkg info --name %v\" to view status.\n", pkg.ObjectMeta.Name, pkg.ObjectMeta.Name)
+	fmt.Printf("Retrying build for pkg %v. Use \"fission pkg info --name %v\" to view status\n", pkg.ObjectMeta.Name, pkg.ObjectMeta.Name)
 
 	return nil
 }

@@ -298,10 +298,10 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 			if pkg.Status.BuildStatus != fv1.BuildStatusSucceeded && pkg.Status.BuildStatus != fv1.BuildStatusNone {
 				e := fmt.Sprintf("cannot fetch deployment: package build status was not %q", fv1.BuildStatusSucceeded)
 				logger.Error(e,
-					zap.String("package_name", pkg.ObjectMeta.Name),
-					zap.String("package_namespace", pkg.ObjectMeta.Namespace),
+					zap.String("package_name", pkg.Name),
+					zap.String("package_namespace", pkg.Namespace),
 					zap.Any("package_build_status", pkg.Status.BuildStatus))
-				return http.StatusInternalServerError, fmt.Errorf("%s: pkg %s.%s has a status of %s", e, pkg.ObjectMeta.Name, pkg.ObjectMeta.Namespace, pkg.Status.BuildStatus)
+				return http.StatusInternalServerError, fmt.Errorf("%s: pkg %s.%s has a status of %s", e, pkg.Name, pkg.Namespace, pkg.Status.BuildStatus)
 			}
 			archive = &pkg.Spec.Deployment
 		} else {

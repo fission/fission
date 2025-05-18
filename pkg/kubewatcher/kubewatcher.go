@@ -123,23 +123,23 @@ func createKubernetesWatch(ctx context.Context, kubeClient kubernetes.Interface,
 }
 
 func (kw *KubeWatcher) addWatch(ctx context.Context, w *fv1.KubernetesWatchTrigger) error {
-	kw.logger.Info("adding watch", zap.String("name", w.ObjectMeta.Name), zap.Any("function", w.Spec.FunctionReference))
+	kw.logger.Info("adding watch", zap.String("name", w.Name), zap.Any("function", w.Spec.FunctionReference))
 	ws, err := MakeWatchSubscription(ctx, kw.logger.Named("watchsubscription"), w, kw.kubernetesClient, kw.publisher)
 	if err != nil {
 		return err
 	}
-	kw.watches[w.ObjectMeta.UID] = *ws
+	kw.watches[w.UID] = *ws
 	return nil
 }
 
 func (kw *KubeWatcher) removeWatch(w *fv1.KubernetesWatchTrigger) error {
-	kw.logger.Info("removing watch", zap.String("name", w.ObjectMeta.Name), zap.Any("function", w.Spec.FunctionReference))
-	ws, ok := kw.watches[w.ObjectMeta.UID]
+	kw.logger.Info("removing watch", zap.String("name", w.Name), zap.Any("function", w.Spec.FunctionReference))
+	ws, ok := kw.watches[w.UID]
 	if !ok {
 		return ferror.MakeError(ferror.ErrorNotFound,
 			fmt.Sprintf("watch doesn't exist: %v", w.ObjectMeta))
 	}
-	delete(kw.watches, w.ObjectMeta.UID)
+	delete(kw.watches, w.UID)
 	ws.stop()
 	return nil
 }
@@ -198,14 +198,11 @@ func getResourceVersion(obj runtime.Object) (string, error) {
 
 func (ws *watchSubscription) eventDispatchLoop(ctx context.Context) {
 	ws.logger.Info("listening to watch", zap.String("name", ws.watch.ObjectMeta.Name))
-	for {
-		// check watchSubscription is stopped or not before waiting for event
-		// comes from the kubeWatch.ResultChan(). This fix the edge case that
-		// new kubewatch is created in the restartWatch() while the old kubewatch
-		// is being used in watchSubscription.stop().
-		if ws.isStopped() {
-			break
-		}
+	// check watchSubscription is stopped or not before waiting for event
+	// comes from the kubeWatch.ResultChan(). This fix the edge case that
+	// new kubewatch is created in the restartWatch() while the old kubewatch
+	// is being used in watchSubscription.stop().
+	for !ws.isStopped() {
 		ev, more := <-ws.kubeWatch.ResultChan()
 		if !more {
 			if ws.isStopped() {

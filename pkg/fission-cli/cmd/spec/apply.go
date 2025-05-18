@@ -479,19 +479,19 @@ func applyResources(input cli.Input, fclient cmd.Client, specDir string, fr *Fis
 
 	_, ras, err = applyKubernetesWatchTriggers(input.Context(), fclient, fr, delete, specAllowConflicts)
 	if err != nil {
-		return nil, nil, fmt.Errorf("KubernetesWatchTrigger apply failed: %w", err)
+		return nil, nil, fmt.Errorf("kubernetesWatchTrigger apply failed: %w", err)
 	}
 	applyStatus["KubernetesWatchTrigger"] = *ras
 
 	_, ras, err = applyTimeTriggers(input.Context(), fclient, fr, delete, specAllowConflicts)
 	if err != nil {
-		return nil, nil, fmt.Errorf("TimeTrigger apply failed: %w", err)
+		return nil, nil, fmt.Errorf("timeTrigger apply failed: %w", err)
 	}
 	applyStatus["TimeTrigger"] = *ras
 
 	_, ras, err = applyMessageQueueTriggers(input.Context(), fclient, fr, delete, specAllowConflicts)
 	if err != nil {
-		return nil, nil, fmt.Errorf("MessageQueueTrigger apply failed: %w", err)
+		return nil, nil, fmt.Errorf("messageQueueTrigger apply failed: %w", err)
 	}
 	applyStatus["MessageQueueTrigger"] = *ras
 
@@ -525,7 +525,7 @@ func localArchiveFromSpec(ctx context.Context, specDir string, aus *spectypes.Ar
 			console.Verbose(2, "try to find globs in path '%v'", absGlob)
 			fs, err := utils.FindAllGlobs(absGlob)
 			if err != nil {
-				return nil, fmt.Errorf("Invalid glob in archive %v: %v: %w", aus.Name, relativeGlob, err)
+				return nil, fmt.Errorf("invalid glob in archive %v: %v: %w", aus.Name, relativeGlob, err)
 			}
 			files = append(files, fs...)
 		}
@@ -747,7 +747,7 @@ func applyPackages(ctx context.Context, fclient cmd.Client, fr *FissionResources
 					return nil, nil, err
 				}
 				ras.Deleted = append(ras.Deleted, &o.ObjectMeta)
-				fmt.Printf("Deleted %v %v\n", o.TypeMeta.Kind, k8sCache.MetaObjectToName(&o.ObjectMeta).String())
+				fmt.Printf("Deleted %v %v\n", o.Kind, k8sCache.MetaObjectToName(&o.ObjectMeta).String())
 			}
 		}
 	}
@@ -834,7 +834,7 @@ func applyFunctions(ctx context.Context, fclient cmd.Client, fr *FissionResource
 					return nil, nil, err
 				}
 				ras.Deleted = append(ras.Deleted, &o.ObjectMeta)
-				fmt.Printf("Deleted %v %v\n", o.TypeMeta.Kind, k8sCache.MetaObjectToName(&o.ObjectMeta).String())
+				fmt.Printf("Deleted %v %v\n", o.Kind, k8sCache.MetaObjectToName(&o.ObjectMeta).String())
 			}
 		}
 	}
@@ -921,7 +921,7 @@ func applyEnvironments(ctx context.Context, fclient cmd.Client, fr *FissionResou
 					return nil, nil, err
 				}
 				ras.Deleted = append(ras.Deleted, &o.ObjectMeta)
-				fmt.Printf("Deleted %v %v\n", o.TypeMeta.Kind, k8sCache.MetaObjectToName(&o.ObjectMeta).String())
+				fmt.Printf("Deleted %v %v\n", o.Kind, k8sCache.MetaObjectToName(&o.ObjectMeta).String())
 			}
 		}
 	}
@@ -1018,7 +1018,7 @@ func applyHTTPTriggers(ctx context.Context, fclient cmd.Client, fr *FissionResou
 					return nil, nil, err
 				}
 				ras.Deleted = append(ras.Deleted, &o.ObjectMeta)
-				fmt.Printf("Deleted %v %v\n", o.TypeMeta.Kind, k8sCache.MetaObjectToName(&o.ObjectMeta).String())
+				fmt.Printf("Deleted %v %v\n", o.Kind, k8sCache.MetaObjectToName(&o.ObjectMeta).String())
 			}
 		}
 	}
@@ -1105,7 +1105,7 @@ func applyKubernetesWatchTriggers(ctx context.Context, fclient cmd.Client, fr *F
 					return nil, nil, err
 				}
 				ras.Deleted = append(ras.Deleted, &o.ObjectMeta)
-				fmt.Printf("Deleted %v %v\n", o.TypeMeta.Kind, k8sCache.MetaObjectToName(&o.ObjectMeta).String())
+				fmt.Printf("Deleted %v %v\n", o.Kind, k8sCache.MetaObjectToName(&o.ObjectMeta).String())
 			}
 		}
 	}
@@ -1192,7 +1192,7 @@ func applyTimeTriggers(ctx context.Context, fclient cmd.Client, fr *FissionResou
 					return nil, nil, err
 				}
 				ras.Deleted = append(ras.Deleted, &o.ObjectMeta)
-				fmt.Printf("Deleted %v %v\n", o.TypeMeta.Kind, k8sCache.MetaObjectToName(&o.ObjectMeta).String())
+				fmt.Printf("Deleted %v %v\n", o.Kind, k8sCache.MetaObjectToName(&o.ObjectMeta).String())
 			}
 		}
 	}
@@ -1279,7 +1279,7 @@ func applyMessageQueueTriggers(ctx context.Context, fclient cmd.Client, fr *Fiss
 					return nil, nil, err
 				}
 				ras.Deleted = append(ras.Deleted, &o.ObjectMeta)
-				fmt.Printf("Deleted %v %v\n", o.TypeMeta.Kind, k8sCache.MetaObjectToName(&o.ObjectMeta).String())
+				fmt.Printf("Deleted %v %v\n", o.Kind, k8sCache.MetaObjectToName(&o.ObjectMeta).String())
 			}
 		}
 	}

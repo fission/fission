@@ -68,7 +68,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 
 	mqType := (fv1.MessageQueueType)(input.String(flagkey.MqtMQType))
 	if !validator.IsValidMessageQueue((string)(mqType), mqtKind) {
-		return errors.New("Unsupported message queue type")
+		return errors.New("unsupported message queue type")
 	}
 
 	topic := input.String(flagkey.MqtTopic)
@@ -87,7 +87,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	maxRetries := input.Int(flagkey.MqtMaxRetries)
 
 	if maxRetries < 0 {
-		return errors.New("Maximum number of retries must be greater than or equal to 0")
+		return errors.New("maximum number of retries must be greater than or equal to 0")
 	}
 
 	contentType := input.String(flagkey.MqtMsgContentType)
@@ -102,22 +102,22 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 
 	pollingInterval := int32(input.Int(flagkey.MqtPollingInterval))
 	if pollingInterval < 0 {
-		return errors.New("Polling interval must be greater than or equal to 0")
+		return errors.New("polling interval must be greater than or equal to 0")
 	}
 
 	cooldownPeriod := int32(input.Int(flagkey.MqtCooldownPeriod))
 	if cooldownPeriod < 0 {
-		return errors.New("CooldownPeriod interval is the period to wait after the last trigger reported active before scaling the deployment back to 0, it must be greater than or equal to 0")
+		return errors.New("cooldownPeriod interval is the period to wait after the last trigger reported active before scaling the deployment back to 0, it must be greater than or equal to 0")
 	}
 
 	minReplicaCount := int32(input.Int(flagkey.MqtMinReplicaCount))
 	if minReplicaCount < 0 {
-		return errors.New("MinReplicaCount must be greater than or equal to 0")
+		return errors.New("minReplicaCount must be greater than or equal to 0")
 	}
 
 	maxReplicaCount := int32(input.Int(flagkey.MqtMaxReplicaCount))
 	if maxReplicaCount < 0 {
-		return errors.New("MaxReplicaCount must be greater than or equal to 0")
+		return errors.New("maxReplicaCount must be greater than or equal to 0")
 	}
 
 	metadata := make(map[string]string)

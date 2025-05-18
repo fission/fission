@@ -127,7 +127,7 @@ type (
 func save(data []byte, specDir string, specFile string, truncate bool) error {
 	// verify
 	if _, err := os.Stat(filepath.Join(specDir, "fission-deployment-config.yaml")); os.IsNotExist(err) {
-		return fmt.Errorf("Couldn't find specs, run `fission spec init` first: %w", err)
+		return fmt.Errorf("couldn't find specs, run `fission spec init` first: %w", err)
 	}
 
 	filename := filepath.Join(specDir, specFile)
@@ -194,10 +194,7 @@ func SpecSave(resource interface{}, specFile string, update bool) error {
 		return fmt.Errorf("same name resource (%v) already exists in namespace (%v)", meta.Name, meta.Namespace)
 	}
 
-	truncate := false
-	if update {
-		truncate = true
-	}
+	truncate := update
 	err = save(data, specDir, specFile, truncate)
 	if err != nil {
 		return err
@@ -234,46 +231,46 @@ func crdToYaml(resource interface{}) (metav1.ObjectMeta, string, []byte, error) 
 		kind = typedres.Kind
 		data, err = yaml.Marshal(typedres)
 	case fv1.Package:
-		typedres.TypeMeta.APIVersion = fv1.CRD_VERSION
-		typedres.TypeMeta.Kind = "Package"
+		typedres.APIVersion = fv1.CRD_VERSION
+		typedres.Kind = "Package"
 		meta = typedres.ObjectMeta
-		kind = typedres.TypeMeta.Kind
+		kind = typedres.Kind
 		data, err = yaml.Marshal(typedres)
 	case fv1.Function:
-		typedres.TypeMeta.APIVersion = fv1.CRD_VERSION
-		typedres.TypeMeta.Kind = "Function"
+		typedres.APIVersion = fv1.CRD_VERSION
+		typedres.Kind = "Function"
 		meta = typedres.ObjectMeta
-		kind = typedres.TypeMeta.Kind
+		kind = typedres.Kind
 		data, err = yaml.Marshal(typedres)
 	case fv1.Environment:
-		typedres.TypeMeta.APIVersion = fv1.CRD_VERSION
-		typedres.TypeMeta.Kind = "Environment"
+		typedres.APIVersion = fv1.CRD_VERSION
+		typedres.Kind = "Environment"
 		meta = typedres.ObjectMeta
-		kind = typedres.TypeMeta.Kind
+		kind = typedres.Kind
 		data, err = yaml.Marshal(typedres)
 	case fv1.HTTPTrigger:
-		typedres.TypeMeta.APIVersion = fv1.CRD_VERSION
-		typedres.TypeMeta.Kind = "HTTPTrigger"
+		typedres.APIVersion = fv1.CRD_VERSION
+		typedres.Kind = "HTTPTrigger"
 		meta = typedres.ObjectMeta
-		kind = typedres.TypeMeta.Kind
+		kind = typedres.Kind
 		data, err = yaml.Marshal(typedres)
 	case fv1.KubernetesWatchTrigger:
-		typedres.TypeMeta.APIVersion = fv1.CRD_VERSION
-		typedres.TypeMeta.Kind = "KubernetesWatchTrigger"
+		typedres.APIVersion = fv1.CRD_VERSION
+		typedres.Kind = "KubernetesWatchTrigger"
 		meta = typedres.ObjectMeta
-		kind = typedres.TypeMeta.Kind
+		kind = typedres.Kind
 		data, err = yaml.Marshal(typedres)
 	case fv1.MessageQueueTrigger:
-		typedres.TypeMeta.APIVersion = fv1.CRD_VERSION
-		typedres.TypeMeta.Kind = "MessageQueueTrigger"
+		typedres.APIVersion = fv1.CRD_VERSION
+		typedres.Kind = "MessageQueueTrigger"
 		meta = typedres.ObjectMeta
-		kind = typedres.TypeMeta.Kind
+		kind = typedres.Kind
 		data, err = yaml.Marshal(typedres)
 	case fv1.TimeTrigger:
-		typedres.TypeMeta.APIVersion = fv1.CRD_VERSION
-		typedres.TypeMeta.Kind = "TimeTrigger"
+		typedres.APIVersion = fv1.CRD_VERSION
+		typedres.Kind = "TimeTrigger"
 		meta = typedres.ObjectMeta
-		kind = typedres.TypeMeta.Kind
+		kind = typedres.Kind
 		data, err = yaml.Marshal(typedres)
 	default:
 		err = fmt.Errorf("unknown object type '%v'", typedres)
@@ -558,7 +555,7 @@ func (fr *FissionResources) ParseYaml(b []byte, loc *Location, commitLabelVal st
 	var tm types.TypeMeta
 	err := yaml.Unmarshal(b, &tm)
 	if err != nil {
-		return fmt.Errorf("Failed to decode yaml %s: %w", string(b), err)
+		return fmt.Errorf("failed to decode yaml %s: %w", string(b), err)
 	}
 
 	switch tm.Kind {
@@ -566,7 +563,7 @@ func (fr *FissionResources) ParseYaml(b []byte, loc *Location, commitLabelVal st
 		var v fv1.Package
 		err = yaml.Unmarshal(b, &v)
 		if err != nil {
-			return fmt.Errorf("Failed to parse %v in %v: %w", tm.Kind, loc, err)
+			return fmt.Errorf("failed to parse %v in %v: %w", tm.Kind, loc, err)
 		}
 		m = &v.ObjectMeta
 		applyCommitLabel(commitLabelVal, m)
@@ -575,7 +572,7 @@ func (fr *FissionResources) ParseYaml(b []byte, loc *Location, commitLabelVal st
 		var v fv1.Function
 		err = yaml.Unmarshal(b, &v)
 		if err != nil {
-			return fmt.Errorf("Failed to parse %v in %v: %w", tm.Kind, loc, err)
+			return fmt.Errorf("failed to parse %v in %v: %w", tm.Kind, loc, err)
 		}
 		m = &v.ObjectMeta
 		applyCommitLabel(commitLabelVal, m)
@@ -584,7 +581,7 @@ func (fr *FissionResources) ParseYaml(b []byte, loc *Location, commitLabelVal st
 		var v fv1.Environment
 		err = yaml.Unmarshal(b, &v)
 		if err != nil {
-			return fmt.Errorf("Failed to parse %v in %v: %w", tm.Kind, loc, err)
+			return fmt.Errorf("failed to parse %v in %v: %w", tm.Kind, loc, err)
 		}
 		m = &v.ObjectMeta
 		applyCommitLabel(commitLabelVal, m)
@@ -593,7 +590,7 @@ func (fr *FissionResources) ParseYaml(b []byte, loc *Location, commitLabelVal st
 		var v fv1.HTTPTrigger
 		err = yaml.Unmarshal(b, &v)
 		if err != nil {
-			return fmt.Errorf("Failed to parse %v in %v: %w", tm.Kind, loc, err)
+			return fmt.Errorf("failed to parse %v in %v: %w", tm.Kind, loc, err)
 		}
 		m = &v.ObjectMeta
 		applyCommitLabel(commitLabelVal, m)
@@ -602,7 +599,7 @@ func (fr *FissionResources) ParseYaml(b []byte, loc *Location, commitLabelVal st
 		var v fv1.KubernetesWatchTrigger
 		err = yaml.Unmarshal(b, &v)
 		if err != nil {
-			return fmt.Errorf("Failed to parse %v in %v: %w", tm.Kind, loc, err)
+			return fmt.Errorf("failed to parse %v in %v: %w", tm.Kind, loc, err)
 		}
 		m = &v.ObjectMeta
 		applyCommitLabel(commitLabelVal, m)
@@ -611,7 +608,7 @@ func (fr *FissionResources) ParseYaml(b []byte, loc *Location, commitLabelVal st
 		var v fv1.TimeTrigger
 		err = yaml.Unmarshal(b, &v)
 		if err != nil {
-			return fmt.Errorf("Failed to parse %v in %v: %w", tm.Kind, loc, err)
+			return fmt.Errorf("failed to parse %v in %v: %w", tm.Kind, loc, err)
 		}
 		m = &v.ObjectMeta
 		applyCommitLabel(commitLabelVal, m)
@@ -620,7 +617,7 @@ func (fr *FissionResources) ParseYaml(b []byte, loc *Location, commitLabelVal st
 		var v fv1.MessageQueueTrigger
 		err = yaml.Unmarshal(b, &v)
 		if err != nil {
-			return fmt.Errorf("Failed to parse %v in %v: %w", tm.Kind, loc, err)
+			return fmt.Errorf("failed to parse %v in %v: %w", tm.Kind, loc, err)
 		}
 		m = &v.ObjectMeta
 		applyCommitLabel(commitLabelVal, m)
@@ -632,7 +629,7 @@ func (fr *FissionResources) ParseYaml(b []byte, loc *Location, commitLabelVal st
 		var v types.DeploymentConfig
 		err = yaml.Unmarshal(b, &v)
 		if err != nil {
-			return fmt.Errorf("Failed to parse %v in %v: %w", tm.Kind, loc, err)
+			return fmt.Errorf("failed to parse %v in %v: %w", tm.Kind, loc, err)
 		}
 
 		fr.DeploymentConfig = v
@@ -640,7 +637,7 @@ func (fr *FissionResources) ParseYaml(b []byte, loc *Location, commitLabelVal st
 		var v types.ArchiveUploadSpec
 		err = yaml.Unmarshal(b, &v)
 		if err != nil {
-			return fmt.Errorf("Failed to parse %v in %v: %w", tm.Kind, loc, err)
+			return fmt.Errorf("failed to parse %v in %v: %w", tm.Kind, loc, err)
 		}
 
 		m = &metav1.ObjectMeta{

@@ -306,7 +306,7 @@ func (c *PoolCache) service() {
 			datawriter := bufio.NewWriter(req.dumpWriter)
 
 			writefnSvcGrp := func(svcGrp *funcSvcGroup) error {
-				_, err := datawriter.WriteString(fmt.Sprintf("svc_waiting:%d\tqueue_len:%d", svcGrp.svcWaiting, svcGrp.queue.Len()))
+				_, err := fmt.Fprintf(datawriter, "svc_waiting:%d\tqueue_len:%d", svcGrp.svcWaiting, svcGrp.queue.Len())
 				if err != nil {
 					return err
 				}
@@ -319,8 +319,8 @@ func (c *PoolCache) service() {
 				}
 
 				for addr, fnSvc := range svcGrp.svcs {
-					_, err := datawriter.WriteString(fmt.Sprintf("\tfunction_name:%s\tfn_svc_address:%s\tactive_req:%d\tcurrent_cpu_usage:%v\tcpu_limit:%v\n",
-						fnSvc.val.Function.Name, addr, fnSvc.activeRequests, fnSvc.currentCPUUsage, fnSvc.cpuLimit))
+					_, err := fmt.Fprintf(datawriter, "\tfunction_name:%s\tfn_svc_address:%s\tactive_req:%d\tcurrent_cpu_usage:%v\tcpu_limit:%v\n",
+						fnSvc.val.Function.Name, addr, fnSvc.activeRequests, fnSvc.currentCPUUsage, fnSvc.cpuLimit)
 					if err != nil {
 						return err
 					}

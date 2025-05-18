@@ -83,7 +83,7 @@ func makeFunctionReferenceResolver(logger *zap.Logger, funcInformer map[string]k
 func (frr *functionReferenceResolver) resolve(trigger fv1.HTTPTrigger) (*resolveResult, error) {
 	nfr := namespacedTriggerReference{
 		namespace:              trigger.ObjectMeta.Namespace,
-		triggerName:            trigger.ObjectMeta.Name,
+		triggerName:            trigger.Name,
 		triggerResourceVersion: trigger.ObjectMeta.ResourceVersion,
 	}
 

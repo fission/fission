@@ -74,7 +74,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 		if err != nil {
 			console.Warn(err.Error())
 		}
-		tt.Spec.FunctionReference.Name = fnName
+		tt.Spec.Name = fnName
 		updated = true
 	}
 

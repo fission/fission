@@ -436,27 +436,27 @@ func (caaf *Container) fnCreate(ctx context.Context, fn *fv1.Function) (*fscache
 		{
 			// obj.TypeMeta.Kind does not work hence this, needs investigation and a fix
 			Kind:            "deployment",
-			Name:            depl.ObjectMeta.Name,
-			APIVersion:      depl.TypeMeta.APIVersion,
-			Namespace:       depl.ObjectMeta.Namespace,
-			ResourceVersion: depl.ObjectMeta.ResourceVersion,
-			UID:             depl.ObjectMeta.UID,
+			Name:            depl.Name,
+			APIVersion:      depl.APIVersion,
+			Namespace:       depl.Namespace,
+			ResourceVersion: depl.ResourceVersion,
+			UID:             depl.UID,
 		},
 		{
 			Kind:            "service",
-			Name:            svc.ObjectMeta.Name,
-			APIVersion:      svc.TypeMeta.APIVersion,
-			Namespace:       svc.ObjectMeta.Namespace,
-			ResourceVersion: svc.ObjectMeta.ResourceVersion,
-			UID:             svc.ObjectMeta.UID,
+			Name:            svc.Name,
+			APIVersion:      svc.APIVersion,
+			Namespace:       svc.Namespace,
+			ResourceVersion: svc.ResourceVersion,
+			UID:             svc.UID,
 		},
 		{
 			Kind:            "horizontalpodautoscaler",
-			Name:            hpa.ObjectMeta.Name,
-			APIVersion:      hpa.TypeMeta.APIVersion,
-			Namespace:       hpa.ObjectMeta.Namespace,
-			ResourceVersion: hpa.ObjectMeta.ResourceVersion,
-			UID:             hpa.ObjectMeta.UID,
+			Name:            hpa.Name,
+			APIVersion:      hpa.APIVersion,
+			Namespace:       hpa.Namespace,
+			ResourceVersion: hpa.ResourceVersion,
+			UID:             hpa.UID,
 		},
 	}
 
@@ -471,18 +471,18 @@ func (caaf *Container) fnCreate(ctx context.Context, fn *fv1.Function) (*fscache
 	_, err = caaf.fsCache.Add(*fsvc)
 	if err != nil {
 		caaf.logger.Error("error adding function to cache", zap.Error(err), zap.Any("function", fsvc.Function))
-		metrics.ColdStartsError.WithLabelValues(fn.ObjectMeta.Name, fn.ObjectMeta.Namespace).Inc()
+		metrics.ColdStartsError.WithLabelValues(fn.Name, fn.Namespace).Inc()
 		return fsvc, err
 	}
 
-	metrics.ColdStarts.WithLabelValues(fn.ObjectMeta.Name, fn.ObjectMeta.Namespace).Inc()
+	metrics.ColdStarts.WithLabelValues(fn.Name, fn.Namespace).Inc()
 
 	return fsvc, nil
 }
 
 func (caaf *Container) updateFunction(ctx context.Context, oldFn *fv1.Function, newFn *fv1.Function) error {
 
-	if oldFn.ObjectMeta.ResourceVersion == newFn.ObjectMeta.ResourceVersion {
+	if oldFn.ResourceVersion == newFn.ResourceVersion {
 		return nil
 	}
 

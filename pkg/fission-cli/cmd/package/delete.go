@@ -84,7 +84,7 @@ func (opts *DeleteSubCommand) run(input cli.Input) error {
 		}
 
 		if !opts.force && len(fnList) > 0 {
-			return errors.New("Package is used by at least one function, use -f to force delete")
+			return errors.New("package is used by at least one function, use -f to force delete")
 		}
 		err = deletePackage(input.Context(), opts.Client(), opts.name, opts.namespace)
 		if err != nil {

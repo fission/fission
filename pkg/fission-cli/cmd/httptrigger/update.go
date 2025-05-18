@@ -164,7 +164,7 @@ func (opts *UpdateSubCommand) run(input cli.Input) error {
 	}
 	err := util.CheckHTTPTriggerDuplicates(input.Context(), opts.Client(), opts.trigger)
 	if err != nil {
-		return fmt.Errorf("Error while creating HTTP Trigger: %w", err)
+		return fmt.Errorf("error while creating HTTP Trigger: %w", err)
 	}
 
 	_, err = opts.Client().FissionClientSet.CoreV1().HTTPTriggers(opts.trigger.ObjectMeta.Namespace).Update(input.Context(), opts.trigger, metav1.UpdateOptions{})

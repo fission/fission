@@ -57,7 +57,7 @@ func MakeTimer(logger *zap.Logger, publisher publisher.Publisher) *Timer {
 }
 
 func (timer *Timer) newCron(t fv1.TimeTrigger) *cron.Cron {
-	target := utils.UrlForFunction(t.Spec.FunctionReference.Name, t.Namespace) + t.Spec.Subpath
+	target := utils.UrlForFunction(t.Spec.Name, t.Namespace) + t.Spec.Subpath
 	c := cron.New(
 		cron.WithParser(
 			cron.NewParser(

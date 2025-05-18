@@ -49,13 +49,13 @@ func (opts *DeleteSubCommand) do(input cli.Input) (err error) {
 	if !input.Bool(flagkey.EnvForce) {
 		fns, err := opts.Client().FissionClientSet.CoreV1().Functions(metav1.NamespaceAll).List(input.Context(), metav1.ListOptions{})
 		if err != nil {
-			return fmt.Errorf("Error getting functions wrt environment.: %w", err)
+			return fmt.Errorf("error getting functions wrt environment: %w", err)
 		}
 
 		for _, fn := range fns.Items {
 			if fn.Spec.Environment.Name == envName &&
 				fn.Spec.Environment.Namespace == currentContextNS {
-				return errors.New("Environment is used by at least one function.")
+				return errors.New("environment is used by at least one function")
 			}
 		}
 	}

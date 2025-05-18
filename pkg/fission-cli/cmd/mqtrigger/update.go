@@ -143,7 +143,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) (err error) {
 	}
 
 	if !updated {
-		return errors.New("Nothing changed, see 'help' for more details")
+		return errors.New("nothing changed, see 'help' for more details")
 	}
 	opts.trigger = mqt
 

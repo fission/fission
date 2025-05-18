@@ -72,7 +72,7 @@ func refreshPods(ctx context.Context, logger *zap.Logger, funcs []fv1.Function, 
 		if exists {
 			err = et.RefreshFuncPods(ctx, logger, f)
 		} else {
-			err = fmt.Errorf("Unknown executor type '%s'", f.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType)
+			err = fmt.Errorf("unknown executor type '%s'", f.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType)
 		}
 
 		if err != nil {
