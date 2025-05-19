@@ -86,7 +86,7 @@ func (r *Function) ValidateDelete(_ context.Context, _ runtime.Object) (admissio
 func (r *Function) validate(_ *v1.Function, new *v1.Function) error {
 	for _, cnfMap := range new.Spec.ConfigMaps {
 		if cnfMap.Namespace != new.Namespace {
-			err := fmt.Errorf("ConfigMap's [%s] and function's Namespace [%s] are different. ConfigMap needs to be present in the same namespace as function", cnfMap.Namespace, new.Namespace)
+			err := fmt.Errorf("configMap's [%s] and function's Namespace [%s] are different. ConfigMap needs to be present in the same namespace as function", cnfMap.Namespace, new.Namespace)
 			return v1.AggregateValidationErrors("Function", err)
 		}
 	}

@@ -1,36 +1,51 @@
+version: "2"
 linters:
   enable:
-    # Default linter
     - errcheck
-    - gosimple
     - govet
     - ineffassign
-    - staticcheck
-    - typecheck
-    - unused
-    # Additional linters
-    - gofmt
-    - goimports
     - misspell
     - nakedret
-    - unconvert
     - promlinter
-    # Enable in future
-    # - bodyclose
-    # - dogsled
-    # - dupl
-    # - gosec
-    # - nilerr
-    # - prealloc
-    # - revive
-    # - unparam
-    # - wrapcheck
-    # - gocritic
-linters-settings:
-  errcheck:
-    exclude-functions:
-    - (*go.uber.org/zap.Logger).Sync
-  goimports:
-    # put imports beginning with prefix after 3rd-party packages;
-    # it's a comma-separated list of prefixes
-    local-prefixes: github.com/fission/fission
+    - unconvert
+    - unused
+    - staticcheck
+  settings:
+    errcheck:
+      exclude-functions:
+        - (*go.uber.org/zap.Logger).Sync
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+    rules:
+      - linters:
+        - staticcheck
+        text: "QF1008"
+      - linters:
+          - staticcheck
+        text: "QF1001"
+      - linters:
+          - staticcheck
+        text: "QF1003"
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/fission/fission
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

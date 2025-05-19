@@ -31,7 +31,7 @@ func TestGetIngressSpec(t *testing.T) {
 		ingressNS string
 		trigger   *fv1.HTTPTrigger
 	}
-	var pathType v1.PathType = v1.PathTypeImplementationSpecific
+	var pathType = v1.PathTypeImplementationSpecific
 	tests := []struct {
 		name string
 		args args

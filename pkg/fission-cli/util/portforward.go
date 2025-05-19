@@ -135,7 +135,7 @@ func runPortForward(ctx context.Context, client cmd.Client, labelSelector string
 			namespaces[p.Namespace] = append(namespaces[p.Namespace], &p)
 		}
 		if len(nsList) > 1 {
-			return nil, nil, fmt.Errorf("Found %v fission installs, set FISSION_NAMESPACE to one of: %v",
+			return nil, nil, fmt.Errorf("found %v fission installs, set FISSION_NAMESPACE to one of: %v",
 				len(namespaces), strings.Join(nsList, " "))
 		}
 	}
@@ -145,7 +145,7 @@ func runPortForward(ctx context.Context, client cmd.Client, labelSelector string
 	ns = nsList[0]
 	pods, ok := namespaces[ns]
 	if !ok {
-		return nil, nil, fmt.Errorf("Error finding fission install within the given namespace %v, please check FISSION_NAMESPACE is set properly", ns)
+		return nil, nil, fmt.Errorf("error finding fission install within the given namespace %v, please check FISSION_NAMESPACE is set properly", ns)
 	}
 
 	var podName, podNameSpace string
@@ -163,10 +163,10 @@ func runPortForward(ctx context.Context, client cmd.Client, labelSelector string
 	svcs, err := client.KubernetesClient.CoreV1().Services(podNameSpace).
 		List(ctx, metav1.ListOptions{LabelSelector: labelSelector})
 	if err != nil {
-		return nil, nil, fmt.Errorf("Error getting %v service: %w", labelSelector, err)
+		return nil, nil, fmt.Errorf("error getting %v service: %w", labelSelector, err)
 	}
 	if len(svcs.Items) == 0 {
-		return nil, nil, fmt.Errorf("Service %v not found", labelSelector)
+		return nil, nil, fmt.Errorf("service %v not found", labelSelector)
 	}
 	service := &svcs.Items[0]
 
@@ -191,7 +191,7 @@ func runPortForward(ctx context.Context, client cmd.Client, labelSelector string
 	// actually start the port-forwarding process here
 	transport, upgrader, err := spdy.RoundTripperFor(client.RestConfig)
 	if err != nil {
-		return nil, nil, fmt.Errorf("Failed to connect to Fission service on Kubernetes")
+		return nil, nil, fmt.Errorf("failed to connect to Fission service on Kubernetes")
 	}
 	dialer := spdy.NewDialer(upgrader, &http.Client{Transport: transport}, "POST", url)
 

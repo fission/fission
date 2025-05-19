@@ -81,7 +81,7 @@ func CreateArchive(client cmd.Client, input cli.Input, includeFiles []string, no
 		}
 
 		if !strings.HasPrefix(absPath, rootDir) {
-			errs = multierror.Append(errs, fmt.Errorf("The files (%v) should be put under the same parent directory (%v) of spec directory; otherwise, the archive will be empty when applying spec files", path, rootDir))
+			errs = multierror.Append(errs, fmt.Errorf("the files (%v) should be put under the same parent directory (%v) of spec directory; otherwise, the archive will be empty when applying spec files", path, rootDir))
 			continue
 		}
 
@@ -93,7 +93,7 @@ func CreateArchive(client cmd.Client, input cli.Input, includeFiles []string, no
 		}
 
 		if len(files) == 0 {
-			errs = multierror.Append(errs, fmt.Errorf("Error finding any files with path \"%v\"", path))
+			errs = multierror.Append(errs, fmt.Errorf("error finding any files with path \"%v\"", path))
 		}
 	}
 

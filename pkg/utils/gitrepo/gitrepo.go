@@ -41,7 +41,7 @@ type GitRepo struct {
 // accordingly updates the fields of GitRepo struct and returns it
 func NewGitRepo(dirPath string) *GitRepo {
 
-	var g *GitRepo = &GitRepo{}
+	var g = &GitRepo{}
 	var err error
 
 	g.dirPath = dirPath
@@ -102,12 +102,11 @@ The value of the `commit` label for different status of the file is as follows:
 func (g *GitRepo) GetFileCommitLabel(filePath string) (string, error) {
 
 	if !g.setupDone {
-		return "", errors.New(`GitRepo is not setup. It has to be created by calling 'NewGitRepo' function, 
-					then this function has to be called.`)
+		return "", errors.New(`gitrepo is not setup. It has to be created by calling 'NewGitRepo' function, then this function has to be called`)
 	}
 
 	if !g.isGitRepo {
-		return "", fmt.Errorf(`directory: %s doesn't belong to git repository.`, g.dirPath)
+		return "", fmt.Errorf(`directory: %s doesn't belong to git repository`, g.dirPath)
 	}
 
 	// filepath in the git repository

@@ -25,7 +25,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@c6295a65d1254861815972266d5933fd6e532bdf # v2.11.1
+        uses: step-security/harden-runner@0634a2670c59f64b4a01f0f96f84700a4088b9f0 # v2.12.0
         with:
           egress-policy: audit
 
@@ -35,7 +35,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup go
-        uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b # v5.4.0
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
         with:
           go-version-file: "go.mod"
           cache: true
@@ -69,14 +69,14 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install Cosign
-        uses: sigstore/cosign-installer@d7d6bc7722e3daa8354c50bcb52f4837da5e9b6a # v3.8.1
+        uses: sigstore/cosign-installer@3454372f43399081ed03b604cb2d021dabca52bb # v3.8.2
         with:
           cosign-release: ${{ env.COSIGN_VERSION }}
 
       - name: Check cosign install!
         run: cosign version
 
-      - uses: anchore/sbom-action/download-syft@f325610c9f50a54015d37c8d16cb3b0e2c8f4de0 #v0.18.0
+      - uses: anchore/sbom-action/download-syft@9f7302141466aa6482940f15371237e9d9f4c34a #v0.19.0
 
       - name: Generate yaml for manifest, Minikube and Openshift installation
         run: ${GITHUB_WORKSPACE}/hack/build-yaml.sh $VERSION
@@ -186,7 +186,7 @@ jobs:
           format: "spdx-json"
           output: "spdx.sbom.json"
       - name: Install Cosign
-        uses: sigstore/cosign-installer@d7d6bc7722e3daa8354c50bcb52f4837da5e9b6a # v3.8.1
+        uses: sigstore/cosign-installer@3454372f43399081ed03b604cb2d021dabca52bb # v3.8.2
         with:
           cosign-release: ${{ env.COSIGN_VERSION }}
       - name: Sign image and sbom
@@ -258,7 +258,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install Cosign
-        uses: sigstore/cosign-installer@d7d6bc7722e3daa8354c50bcb52f4837da5e9b6a # v3.8.1
+        uses: sigstore/cosign-installer@3454372f43399081ed03b604cb2d021dabca52bb # v3.8.2
         with:
           cosign-release: ${{ env.COSIGN_VERSION }}
 

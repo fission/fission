@@ -224,25 +224,25 @@ func (mqt *MessageQueueTriggerManager) delTriggerSubscription(trigger *fv1.Messa
 func (mqt *MessageQueueTriggerManager) updateTrigger(trigger *fv1.MessageQueueTrigger) error {
 	oldTriggerSubscription := mqt.getTriggerSubscription(trigger)
 	if oldTriggerSubscription == nil {
-		mqt.logger.Info("Trigger subscrption does not exist", zap.String("trigger_name", trigger.ObjectMeta.Name))
+		mqt.logger.Info("Trigger subscrption does not exist", zap.String("trigger_name", trigger.Name))
 		return errors.New("trigger does not exist")
 	}
 
 	// unsubscribe the messagequeue
 	err := mqt.messageQueue.Unsubscribe(oldTriggerSubscription.subscription)
 	if err != nil {
-		mqt.logger.Warn("failed to unsubscribe from message queue trigger", zap.Error(err), zap.String("trigger_name", trigger.ObjectMeta.Name))
+		mqt.logger.Warn("failed to unsubscribe from message queue trigger", zap.Error(err), zap.String("trigger_name", trigger.Name))
 		return err
 	}
 
 	// subscribe using the updated message queue trigger
 	sub, err := mqt.messageQueue.Subscribe(trigger)
 	if err != nil {
-		mqt.logger.Warn("failed to re-subscribe to message queue trigger", zap.Error(err), zap.String("trigger_name", trigger.ObjectMeta.Name))
+		mqt.logger.Warn("failed to re-subscribe to message queue trigger", zap.Error(err), zap.String("trigger_name", trigger.Name))
 		return err
 	}
 	if sub == nil {
-		mqt.logger.Warn("subscription is nil", zap.String("trigger_name", trigger.ObjectMeta.Name))
+		mqt.logger.Warn("subscription is nil", zap.String("trigger_name", trigger.Name))
 		return nil
 	}
 	newTriggerSubscription := triggerSubscription{
@@ -253,17 +253,17 @@ func (mqt *MessageQueueTriggerManager) updateTrigger(trigger *fv1.MessageQueueTr
 	// update our list
 	err = mqt.updateTriggerSubscription(&newTriggerSubscription)
 	if err != nil {
-		mqt.logger.Fatal("updating message queue trigger failed", zap.Error(err), zap.String("trigger_name", trigger.ObjectMeta.Name))
+		mqt.logger.Fatal("updating message queue trigger failed", zap.Error(err), zap.String("trigger_name", trigger.Name))
 		return err
 	}
-	mqt.logger.Info("message queue trigger updated", zap.String("trigger_name", trigger.ObjectMeta.Name))
+	mqt.logger.Info("message queue trigger updated", zap.String("trigger_name", trigger.Name))
 	return nil
 }
 
 func (mqt *MessageQueueTriggerManager) RegisterTrigger(trigger *fv1.MessageQueueTrigger) error {
 	isPresent := mqt.checkTriggerSubscription(trigger)
 	if isPresent {
-		mqt.logger.Debug("updating message queue trigger", zap.String("trigger_name", trigger.ObjectMeta.Name))
+		mqt.logger.Debug("updating message queue trigger", zap.String("trigger_name", trigger.Name))
 		err := mqt.updateTrigger(trigger)
 		if err != nil {
 			mqt.logger.Error("error updating messagequeuetrigger", zap.Error(err))
@@ -275,11 +275,11 @@ func (mqt *MessageQueueTriggerManager) RegisterTrigger(trigger *fv1.MessageQueue
 	// actually subscribe using the message queue client impl
 	sub, err := mqt.messageQueue.Subscribe(trigger)
 	if err != nil {
-		mqt.logger.Warn("failed to subscribe to message queue trigger", zap.Error(err), zap.String("trigger_name", trigger.ObjectMeta.Name))
+		mqt.logger.Warn("failed to subscribe to message queue trigger", zap.Error(err), zap.String("trigger_name", trigger.Name))
 		return err
 	}
 	if sub == nil {
-		mqt.logger.Warn("subscription is nil", zap.String("trigger_name", trigger.ObjectMeta.Name))
+		mqt.logger.Warn("subscription is nil", zap.String("trigger_name", trigger.Name))
 		return nil
 	}
 	triggerSub := triggerSubscription{
@@ -289,10 +289,10 @@ func (mqt *MessageQueueTriggerManager) RegisterTrigger(trigger *fv1.MessageQueue
 	// add to our list
 	err = mqt.addTrigger(&triggerSub)
 	if err != nil {
-		mqt.logger.Fatal("adding message queue trigger failed", zap.Error(err), zap.String("trigger_name", trigger.ObjectMeta.Name))
+		mqt.logger.Fatal("adding message queue trigger failed", zap.Error(err), zap.String("trigger_name", trigger.Name))
 		return err
 	}
-	mqt.logger.Info("message queue trigger created", zap.String("trigger_name", trigger.ObjectMeta.Name))
+	mqt.logger.Info("message queue trigger created", zap.String("trigger_name", trigger.Name))
 	return nil
 }
 

@@ -56,12 +56,12 @@ func (opts *DumpSubCommand) do(input cli.Input) error {
 			panic(err)
 		}
 	} else if err != nil {
-		panic(fmt.Errorf("Error checking dump directory status: %w", err))
+		panic(fmt.Errorf("error checking dump directory status: %w", err))
 	}
 
 	outputDir, err = filepath.Abs(outputDir)
 	if err != nil {
-		panic(fmt.Errorf("Error creating dump directory for dumping files: %w", err))
+		panic(fmt.Errorf("error creating dump directory for dumping files: %w", err))
 	}
 
 	k8sClient := opts.Client().KubernetesClient

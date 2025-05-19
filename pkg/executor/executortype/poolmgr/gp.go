@@ -415,7 +415,7 @@ func (gp *GenericPool) specializePod(ctx context.Context, pod *apiv1.Pod, fn *fv
 	// for fetcher we don't need to create a service, just talk to the pod directly
 	podIP := pod.Status.PodIP
 	if len(podIP) == 0 {
-		return fmt.Errorf("Pod %s in namespace %s has no IP", pod.ObjectMeta.Name, pod.ObjectMeta.Namespace)
+		return fmt.Errorf("pod %s in namespace %s has no IP", pod.ObjectMeta.Name, pod.ObjectMeta.Namespace)
 	}
 	for _, cm := range fn.Spec.ConfigMaps {
 		_, err := gp.kubernetesClient.CoreV1().ConfigMaps(gp.fnNamespace).Get(ctx, cm.Name, metav1.GetOptions{})
@@ -601,7 +601,7 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 		{
 			Kind:            "pod",
 			Name:            pod.ObjectMeta.Name,
-			APIVersion:      pod.TypeMeta.APIVersion,
+			APIVersion:      pod.APIVersion,
 			Namespace:       pod.ObjectMeta.Namespace,
 			ResourceVersion: pod.ObjectMeta.ResourceVersion,
 			UID:             pod.ObjectMeta.UID,

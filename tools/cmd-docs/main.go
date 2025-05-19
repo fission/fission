@@ -27,7 +27,7 @@ var filePrepender = func(filename string) string {
 	name := filepath.Base(filename)
 	base := strings.TrimSuffix(name, path.Ext(name))
 	url := baseURL + strings.ToLower(base) + "/"
-	return fmt.Sprintf(fmTemplate, strings.Replace(base, "_", " ", -1), base, url)
+	return fmt.Sprintf(fmTemplate, strings.ReplaceAll(base, "_", " "), base, url)
 }
 
 var linkHandler = func(name string) string {

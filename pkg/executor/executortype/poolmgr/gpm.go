@@ -458,7 +458,7 @@ func (gpm *GenericPoolManager) AdoptExistingResources(ctx context.Context) {
 						{
 							Kind:            "pod",
 							Name:            pod.Name,
-							APIVersion:      pod.TypeMeta.APIVersion,
+							APIVersion:      pod.APIVersion,
 							Namespace:       pod.ObjectMeta.Namespace,
 							ResourceVersion: pod.ObjectMeta.ResourceVersion,
 							UID:             pod.ObjectMeta.UID,

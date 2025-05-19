@@ -83,7 +83,7 @@ func (l *actionLock) wait() error {
 	case <-ch:
 		return nil
 	case <-time.After(l.timeExpiry):
-		return errors.New("Error waiting for actionLock to be released: Exceeded timeout")
+		return errors.New("error waiting for actionLock to be released: Exceeded timeout")
 	}
 }
 

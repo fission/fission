@@ -207,7 +207,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 	// Ensure we don't have a duplicate HTTP route defined (same URL and method)
 	err := util.CheckHTTPTriggerDuplicates(input.Context(), opts.Client(), opts.trigger)
 	if err != nil {
-		return fmt.Errorf("Error while creating HTTP Trigger: %w", err)
+		return fmt.Errorf("error while creating HTTP Trigger: %w", err)
 	}
 
 	_, err = opts.Client().FissionClientSet.CoreV1().HTTPTriggers(opts.trigger.Namespace).Create(input.Context(), opts.trigger, metav1.CreateOptions{})

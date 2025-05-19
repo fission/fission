@@ -232,7 +232,7 @@ func (executor *Executor) createServiceForFunction(ctx context.Context, fn *fv1.
 	t := fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType
 	e, ok := executor.executorTypes[t]
 	if !ok {
-		return nil, fmt.Errorf("Unknown executor type '%s'", t)
+		return nil, fmt.Errorf("unknown executor type '%s'", t)
 	}
 
 	fsvc, fsvcErr := e.GetFuncSvc(ctx, fn)
@@ -253,7 +253,7 @@ func (executor *Executor) getFunctionServiceFromCache(ctx context.Context, fn *f
 	t := fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType
 	e, ok := executor.executorTypes[t]
 	if !ok {
-		return nil, fmt.Errorf("Unknown executor type '%s'", t)
+		return nil, fmt.Errorf("unknown executor type '%s'", t)
 	}
 	return e.GetFuncSvcFromCache(ctx, fn)
 }
@@ -282,7 +282,7 @@ func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, 
 
 	fetcherConfig, err := fetcherConfig.MakeFetcherConfig("/userfunc")
 	if err != nil {
-		return fmt.Errorf("Error making fetcher config: %w", err)
+		return fmt.Errorf("error making fetcher config: %w", err)
 	}
 
 	executorInstanceID := strings.ToLower(uniuri.NewLen(8))
