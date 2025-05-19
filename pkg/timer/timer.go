@@ -57,7 +57,7 @@ func MakeTimer(logger *zap.Logger, routerUrl string) *Timer {
 }
 
 func (timer *Timer) newCron(t fv1.TimeTrigger, routerUrl string) *cron.Cron {
-	target := utils.UrlForFunction(t.Spec.Name, t.Namespace) + t.Spec.Subpath#
+	target := utils.UrlForFunction(t.Spec.Name, t.Namespace) + t.Spec.Subpath
 
 	// create one publisher per-cron timer
 	timerPublisher := publisher.MakeWebhookPublisher(timer.logger, routerUrl)
