@@ -67,12 +67,12 @@ func (ws *TimerSync) AddUpdateTimeTrigger(timeTrigger *fv1.TimeTrigger) {
 			item.cron.Stop()
 		}
 		item.trigger = *timeTrigger
-		item.cron = ws.timer.newCron(*timeTrigger)
+		item.cron = ws.timer.newCron(*timeTrigger, ws.timer.routerUrl)
 		logger.Debug("cron updated")
 	} else {
 		ws.timer.triggers[crd.CacheKeyUIDFromMeta(&timeTrigger.ObjectMeta)] = &timerTriggerWithCron{
 			trigger: *timeTrigger,
-			cron:    ws.timer.newCron(*timeTrigger),
+			cron:    ws.timer.newCron(*timeTrigger, ws.timer.routerUrl),
 		}
 		logger.Debug("cron added")
 	}
