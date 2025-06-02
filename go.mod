@@ -4,7 +4,7 @@ go 1.24.3
 
 require (
 	dario.cat/mergo v1.0.2
-	github.com/IBM/sarama v1.45.1
+	github.com/IBM/sarama v1.45.2
 	github.com/bep/debounce v1.2.1
 	github.com/dchest/uniuri v1.2.0
 	github.com/dustin/go-humanize v1.0.1
@@ -41,7 +41,7 @@ require (
 	go.opentelemetry.io/otel/trace v1.36.0
 	go.uber.org/zap v1.27.0
 	golang.org/x/net v0.40.0
-	google.golang.org/grpc v1.72.1
+	google.golang.org/grpc v1.72.2
 	k8s.io/api v0.33.1
 	k8s.io/apiextensions-apiserver v0.33.1
 	k8s.io/apimachinery v0.33.1
