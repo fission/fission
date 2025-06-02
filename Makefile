@@ -87,7 +87,7 @@ delete-crds:
 
 ### Cleanup
 clean:
-	@rm -f dist/
+	@rm -fr dist/
 
 ### Misc
 generate-swagger-doc:
