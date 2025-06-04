@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/bep/debounce"
+	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/gorilla/mux"
 	"go.uber.org/zap"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
@@ -42,7 +43,6 @@ import (
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/manager"
 	"github.com/fission/fission/pkg/utils/metrics"
-	"github.com/getkin/kin-openapi/openapi3"
 )
 
 // HTTPTriggerSet represents an HTTP trigger set
