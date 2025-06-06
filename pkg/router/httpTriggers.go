@@ -159,6 +159,13 @@ func versionHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func computeOpenAPIPath(spec fv1.HTTPTriggerSpec) string {
+	if spec.Prefix != nil && *spec.Prefix != "" {
+		return *spec.Prefix
+	}
+	return spec.RelativeURL
+}
+
 func openAPIHandler(w http.ResponseWriter, r *http.Request) {
 	ts, ok := r.Context().Value(httpTriggerSetKey).(*HTTPTriggerSet)
 	if !ok {
@@ -168,13 +175,15 @@ func openAPIHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 
+	type Components struct {
+		Schemas map[string]openapi3.Schema `json:"schemas,omitempty"`
+	}
+
 	type OpenAPISpec struct {
 		OpenAPI    string                       `json:"openapi"`
 		Info       map[string]interface{}       `json:"info"`
 		Paths      map[string]openapi3.PathItem `json:"paths"`
-		Components struct {
-			Schemas map[string]openapi3.Schema `json:"schemas"`
-		} `json:"components"`
+		Components *Components                  `json:"components,omitempty"`
 	}
 
 	spec := OpenAPISpec{
@@ -185,16 +194,11 @@ func openAPIHandler(w http.ResponseWriter, r *http.Request) {
 			"version":     "1.0.0",
 		},
 		Paths: map[string]openapi3.PathItem{},
-		Components: struct {
-			Schemas map[string]openapi3.Schema `json:"schemas"`
-		}{
-			Schemas: map[string]openapi3.Schema{},
-		},
 	}
 
 	for _, trigger := range ts.triggers {
 		if trigger.Spec.OpenAPISpec != nil {
-			spec.Paths[trigger.Spec.RelativeURL] = trigger.Spec.OpenAPISpec.PathItem
+			spec.Paths[computeOpenAPIPath(trigger.Spec)] = trigger.Spec.OpenAPISpec.PathItem
 
 			for name, schema := range trigger.Spec.OpenAPISpec.Schemas {
 				spec.Components.Schemas[name] = schema
@@ -208,8 +212,7 @@ func openAPIHandler(w http.ResponseWriter, r *http.Request) {
 				methods = []string{"POST"}
 			}
 			item := openapi3.PathItem{
-				Summary:     fmt.Sprintf("Trigger: %s", trigger.ObjectMeta.Name),
-				Description: fmt.Sprintf("Function: %s", trigger.Spec.FunctionReference.Name),
+				Summary: fmt.Sprintf("Trigger: %s", trigger.ObjectMeta.Name),
 			}
 			for _, m := range methods {
 				verb := strings.ToLower(m)
@@ -236,7 +239,7 @@ func openAPIHandler(w http.ResponseWriter, r *http.Request) {
 					)
 				}
 			}
-			spec.Paths[trigger.Spec.RelativeURL] = item
+			spec.Paths[computeOpenAPIPath(trigger.Spec)] = item
 		}
 	}
 
