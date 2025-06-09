@@ -76,7 +76,7 @@ jobs:
       - name: Check cosign install!
         run: cosign version
 
-      - uses: anchore/sbom-action/download-syft@9f7302141466aa6482940f15371237e9d9f4c34a #v0.19.0
+      - uses: anchore/sbom-action/download-syft@e11c554f704a0b820cbf8c51673f6945e0731532 #v0.20.0
 
       - name: Generate yaml for manifest, Minikube and Openshift installation
         run: ${GITHUB_WORKSPACE}/hack/build-yaml.sh $VERSION
@@ -180,7 +180,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Run Trivy in fs mode to generate SBOM
-        uses: aquasecurity/trivy-action@6c175e9c4083a92bbca2f9724c8a5e33bc2d97a5 # v0.30.0
+        uses: aquasecurity/trivy-action@76071ef0d7ec797419534a183b498b4d6366cf37 # v0.31.0
         with:
           scan-type: "fs"
           format: "spdx-json"
