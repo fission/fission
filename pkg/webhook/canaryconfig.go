@@ -17,52 +17,27 @@ limitations under the License.
 package webhook
 
 import (
-	"context"
-
-	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
-	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	v1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
 
-type CanaryConfig struct{}
+type CanaryConfig struct {
+	webhook *WebhookTemplate[*v1.CanaryConfig]
+}
+
+func NewCanaryConfig() *CanaryConfig {
+	logger := loggerfactory.GetLogger().Named("canaryconfig-resource")
+	return &CanaryConfig{
+		webhook: NewWebhookTemplate(logger, nil, validateCanaryConfig),
+	}
+}
 
 func (r *CanaryConfig) SetupWebhookWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewWebhookManagedBy(mgr).
-		For(&v1.CanaryConfig{}).
-		WithDefaulter(r).
-		WithValidator(r).
-		Complete()
+	return r.webhook.SetupWebhookWithManager(mgr, &v1.CanaryConfig{})
 }
 
-// Admission webhooks can be added by adding tag: kubebuilder:webhook:path=/mutate-fission-io-v1-canaryconfig,mutating=true,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=canaryconfigs,verbs=create;update,versions=v1,name=mcanaryconfig.fission.io,admissionReviewVersions=v1
-// Refer Makefile -> generate-webhooks to generate config for manifests
-
-var _ webhook.CustomDefaulter = &CanaryConfig{}
-
-// Default implements webhook.CustomDefaulter so a webhook will be registered for the type
-func (r *CanaryConfig) Default(_ context.Context, obj runtime.Object) error {
+func validateCanaryConfig(old, new *v1.CanaryConfig) error {
 	return nil
-}
-
-// user can change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
-// Validation webhooks can be added by adding tag: kubebuilder:webhook:path=/validate-fission-io-v1-canaryconfig,mutating=false,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=canaryconfigs,verbs=create;update,versions=v1,name=vcanaryconfig.fission.io,admissionReviewVersions=v1
-
-var _ webhook.CustomValidator = &CanaryConfig{}
-
-// ValidateCreate implements webhook.CustomValidator so a webhook will be registered for the type
-func (r *CanaryConfig) ValidateCreate(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
-	return nil, nil
-}
-
-// ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type
-func (r *CanaryConfig) ValidateUpdate(_ context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
-	return nil, nil
-}
-
-// ValidateDelete implements webhook.CustomValidator so a webhook will be registered for the type
-func (r *CanaryConfig) ValidateDelete(_ context.Context, _ runtime.Object) (admission.Warnings, error) {
-	return nil, nil
 }
