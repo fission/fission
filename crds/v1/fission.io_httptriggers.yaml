@@ -126,6 +126,9 @@ spec:
                 description: |-
                   A simplified OpenAPI spec that includes nothing more than the method and schema definitions that describe the HTTP trigger.
                   openapi:
+                    servers:
+                      - url: https://api.example.com
+                        description: Production server
                     get:
                       summary: "Get a user"
                       description: "Returns a user by ID"

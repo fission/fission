@@ -182,6 +182,7 @@ func openAPIHandler(w http.ResponseWriter, r *http.Request) {
 	type OpenAPISpec struct {
 		OpenAPI    string                       `json:"openapi"`
 		Info       map[string]interface{}       `json:"info"`
+		Servers    []openapi3.Server            `json:"servers,omitempty"`
 		Paths      map[string]openapi3.PathItem `json:"paths"`
 		Components *Components                  `json:"components,omitempty"`
 	}
@@ -196,11 +197,35 @@ func openAPIHandler(w http.ResponseWriter, r *http.Request) {
 		Paths: map[string]openapi3.PathItem{},
 	}
 
+	// Track unique servers to avoid duplicates
+	serverMap := make(map[string]struct{})
+
 	for _, trigger := range ts.triggers {
 		if trigger.Spec.OpenAPISpec != nil {
-			spec.Paths[computeOpenAPIPath(trigger.Spec)] = trigger.Spec.OpenAPISpec.PathItem
+			path := computeOpenAPIPath(trigger.Spec)
+			spec.Paths[path] = trigger.Spec.OpenAPISpec.PathItem
+
+			// Add server information from ingress config if present
+			if trigger.Spec.IngressConfig.Host != "" {
+				scheme := "http"
+				if trigger.Spec.IngressConfig.TLS != "" {
+					scheme = "https"
+				}
+				serverURL := fmt.Sprintf("%s://%s", scheme, trigger.Spec.IngressConfig.Host)
+				if _, exists := serverMap[serverURL]; !exists {
+					spec.Servers = append(spec.Servers, openapi3.Server{
+						URL: serverURL,
+					})
+					serverMap[serverURL] = struct{}{}
+				}
+			}
 
 			for name, schema := range trigger.Spec.OpenAPISpec.Schemas {
+				if spec.Components == nil {
+					spec.Components = &Components{
+						Schemas: make(map[string]openapi3.Schema),
+					}
+				}
 				spec.Components.Schemas[name] = schema
 			}
 		} else {

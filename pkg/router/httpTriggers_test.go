@@ -184,6 +184,40 @@ func Test_openAPIHandler(t *testing.T) {
 			},
 			want: `{"openapi":"3.0.0","info":{"description":"Auto-generated OpenAPI spec for Fission HTTP Triggers","title":"Fission HTTP Triggers","version":"1.0.0"},"paths":{"/prefix":{"get":{"operationId":"get_dummy","parameters":[{"in":"path","name":"suffix","schema":{"type":"string"}}],"responses":null},"summary":"Trigger: dummy"}}}`,
 		},
+		{
+			name: "test-3",
+			args: args{
+				ts: &HTTPTriggerSet{
+					logger: logger,
+					triggers: []fv1.HTTPTrigger{
+						{
+							ObjectMeta: metav1.ObjectMeta{
+								Name:      "dummy",
+								Namespace: "dummy-bar",
+							},
+							Spec: fv1.HTTPTriggerSpec{
+								Prefix: stringPtr("/prefix"),
+								OpenAPISpec: &fv1.OpenAPISpec{
+									PathItem: openapi3.PathItem{
+										Summary: "Trigger: dummy",
+										Get: &openapi3.Operation{
+											OperationID: "get_dummy",
+										},
+										Servers: openapi3.Servers{
+											{
+												URL:         "https://api.example.com",
+												Description: "Production server",
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			want: `{"openapi":"3.0.0","info":{"description":"Auto-generated OpenAPI spec for Fission HTTP Triggers","title":"Fission HTTP Triggers","version":"1.0.0"},"paths":{"/prefix":{"get":{"operationId":"get_dummy","responses":null},"servers":[{"description":"Production server","url":"https://api.example.com"}],"summary":"Trigger: dummy"}}}`,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

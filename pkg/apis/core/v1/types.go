@@ -711,6 +711,9 @@ type (
 		// +kubebuilder:validation:XPreserveUnknownFields
 		// +kubebuilder:example:
 		// openapi:
+		//   servers:
+		//     - url: https://api.example.com
+		//       description: Production server
 		//   get:
 		//     summary: "Get a user"
 		//     description: "Returns a user by ID"
