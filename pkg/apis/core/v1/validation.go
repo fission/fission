@@ -444,8 +444,8 @@ func (spec HTTPTriggerSpec) Validate() error {
 		}
 	}
 
-	// If OpenAPI spec has server entries, ensure IngressConfig is set
-	if spec.OpenAPISpec != nil && len(spec.OpenAPISpec.Servers) > 0 {
+	// If OpenAPI spec has server entries, ensure IngressConfig is set when CreateIngress is true
+	if spec.CreateIngress && spec.OpenAPISpec != nil && len(spec.OpenAPISpec.Servers) > 0 {
 		if spec.IngressConfig.Host == "" {
 			// Extract host from first server URL
 			serverURL := spec.OpenAPISpec.Servers[0].URL
@@ -457,9 +457,9 @@ func (spec HTTPTriggerSpec) Validate() error {
 				} else {
 					// Set the host in IngressConfig
 					spec.IngressConfig.Host = parsedURL.Host
-					// Set TLS if scheme is https
-					if parsedURL.Scheme == "https" {
-						spec.IngressConfig.TLS = "true"
+
+					if parsedURL.Path != "" {
+						spec.IngressConfig.Path = parsedURL.Path
 					}
 				}
 			}

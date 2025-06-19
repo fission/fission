@@ -211,7 +211,7 @@ func openAPIHandler(w http.ResponseWriter, r *http.Request) {
 				if trigger.Spec.IngressConfig.TLS != "" {
 					scheme = "https"
 				}
-				serverURL := fmt.Sprintf("%s://%s", scheme, trigger.Spec.IngressConfig.Host)
+				serverURL := fmt.Sprintf("%s://%s%s", scheme, trigger.Spec.IngressConfig.Host, trigger.Spec.IngressConfig.Path)
 				if _, exists := serverMap[serverURL]; !exists {
 					spec.Servers = append(spec.Servers, openapi3.Server{
 						URL: serverURL,
