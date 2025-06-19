@@ -295,7 +295,7 @@ func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) (*mux.Router
 	}
 
 	// Add the OpenAPI endpoint
-	muxRouter.Handle("/v2/openapi", withHTTPTriggerSet(ts)(http.HandlerFunc(openAPIHandler))).Methods("GET")
+	muxRouter.Handle("/openapi", withHTTPTriggerSet(ts)(http.HandlerFunc(openAPIHandler))).Methods("GET")
 
 	// HTTP triggers setup by the user
 	homeHandled := false
