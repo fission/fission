@@ -21,12 +21,13 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 )
 
 func Test_withHTTPTriggerSet(t *testing.T) {
