@@ -292,10 +292,11 @@ changelog:
   disable: true
 archives:
   - id: fission
-    builds:
+    ids:
       - fission-cli
     name_template: "{{ .ProjectName }}-{{ .Tag }}-{{ .Os }}-{{ .Arch }}"
-    format: binary
+    formats:
+      - binary
 checksum:
   name_template: "checksums.txt"
   algorithm: sha256
