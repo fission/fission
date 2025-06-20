@@ -17,6 +17,7 @@ limitations under the License.
 package v1
 
 import (
+	"github.com/getkin/kin-openapi/openapi3"
 	asv2 "k8s.io/api/autoscaling/v2"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -653,6 +654,11 @@ type (
 	// Triggers
 	//
 
+	OpenAPISpec struct {
+		openapi3.PathItem `json:",inline"`
+		Schemas           map[string]openapi3.Schema `json:"schemas,omitempty"`
+	}
+
 	// HTTPTriggerSpec is for router to expose user functions at the given URL path.
 	HTTPTriggerSpec struct {
 		// TODO: remove this field since we have IngressConfig already
@@ -697,6 +703,64 @@ type (
 		// IngressConfig for router to set up Ingress.
 		// +optional
 		IngressConfig IngressConfig `json:"ingressconfig"`
+
+		// A simplified OpenAPI spec that includes nothing more than the method and schema definitions that describe the HTTP trigger.
+		// +optional
+		// +kubebuilder:pruning:PreserveUnknownFields
+		// +kubebuilder:validation:Schemaless
+		// +kubebuilder:validation:XPreserveUnknownFields
+		// +kubebuilder:example:
+		// openapi:
+		//   servers:
+		//     - url: https://api.example.com
+		//       description: Production server
+		//   get:
+		//     summary: "Get a user"
+		//     description: "Returns a user by ID"
+		//     parameters:
+		//       - name: id
+		//         in: query
+		//         required: true
+		//         schema:
+		//           type: string
+		//     responses:
+		//       "200":
+		//         description: "Successful response"
+		//         content:
+		//           application/json:
+		//             schema:
+		//               $ref: "#/components/schemas/User"
+		//       "400":
+		//         description: "Bad request"
+		//       "404":
+		//         description: "Not found"
+		//       "500":
+		//         description: "Internal server error"
+		//   schemas:
+		//     User:
+		//       type: object
+		//       properties:
+		//         id:
+		//           type: string
+		//           description: "The ID of the user"
+		//           example: "123"
+		//         name:
+		//           type: string
+		//           description: "The name of the user"
+		//           example: "John Doe"
+		//         age:
+		//           type: integer
+		//           description: "The age of the user"
+		//           minimum: 0
+		//           maximum: 100
+		//           example: 30
+		//         email:
+		//           type: string
+		//           description: "The email of the user"
+		//           example: "john.doe@example.com"
+		//         createdAt:
+		//           type: string
+		OpenAPISpec *OpenAPISpec `json:"openapi,omitempty"`
 	}
 
 	// IngressConfig is for router to set up Ingress.

@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"reflect"
 	"regexp"
 	"strings"
@@ -440,6 +441,28 @@ func (spec HTTPTriggerSpec) Validate() error {
 		e := validation.IsDNS1123Subdomain(spec.Host)
 		if len(e) > 0 {
 			result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "HTTPTriggerSpec.Host", spec.Host, e...))
+		}
+	}
+
+	// If OpenAPI spec has server entries, ensure IngressConfig is set when CreateIngress is true
+	if spec.CreateIngress && spec.OpenAPISpec != nil && len(spec.OpenAPISpec.Servers) > 0 {
+		if spec.IngressConfig.Host == "" {
+			// Extract host from first server URL
+			serverURL := spec.OpenAPISpec.Servers[0].URL
+			if serverURL != "" {
+				// Parse the URL to get the host
+				parsedURL, err := url.Parse(serverURL)
+				if err != nil {
+					result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "HTTPTriggerSpec.OpenAPISpec.Servers[0].URL", serverURL, "invalid URL format"))
+				} else {
+					// Set the host in IngressConfig
+					spec.IngressConfig.Host = parsedURL.Host
+
+					if parsedURL.Path != "" {
+						spec.IngressConfig.Path = parsedURL.Path
+					}
+				}
+			}
 		}
 	}
 

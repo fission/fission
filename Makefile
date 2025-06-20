@@ -48,7 +48,9 @@ code-checks:
 # run basic check scripts
 test-run: code-checks
 	hack/runtests.sh
-	@rm -f coverage.txt
+
+coverage-report:
+	go tool cover -html=coverage.txt -o coverage.html
 
 ### Binaries
 build-fission-cli:
@@ -87,7 +89,7 @@ delete-crds:
 
 ### Cleanup
 clean:
-	@rm -f dist/
+	@rm -fr dist/
 
 ### Misc
 generate-swagger-doc:

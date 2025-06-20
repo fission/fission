@@ -18,11 +18,14 @@ package router
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/bep/debounce"
+	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/gorilla/mux"
 	"go.uber.org/zap"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
@@ -62,6 +65,21 @@ type HTTPTriggerSet struct {
 	svcAddrUpdateThrottler     *throttler.Throttler
 	unTapServiceTimeout        time.Duration
 	syncDebouncer              func(func())
+}
+
+// contextKey is a type for context keys
+type contextKey string
+
+const httpTriggerSetKey contextKey = "httpTriggerSet"
+
+// withHTTPTriggerSet is a middleware that adds the HTTPTriggerSet to the request context
+func withHTTPTriggerSet(ts *HTTPTriggerSet) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := context.WithValue(r.Context(), httpTriggerSetKey, ts)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
 }
 
 func makeHTTPTriggerSet(logger *zap.Logger, fmap *functionServiceMap, fissionClient versioned.Interface,
@@ -141,6 +159,128 @@ func versionHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func computeOpenAPIPath(spec fv1.HTTPTriggerSpec) string {
+	if spec.Prefix != nil && *spec.Prefix != "" {
+		return *spec.Prefix
+	}
+	return spec.RelativeURL
+}
+
+func openAPIHandler(w http.ResponseWriter, r *http.Request) {
+	ts, ok := r.Context().Value(httpTriggerSetKey).(*HTTPTriggerSet)
+	if !ok {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+
+	type Components struct {
+		Schemas map[string]openapi3.Schema `json:"schemas,omitempty"`
+	}
+
+	type OpenAPISpec struct {
+		OpenAPI    string                       `json:"openapi"`
+		Info       map[string]interface{}       `json:"info"`
+		Servers    []openapi3.Server            `json:"servers,omitempty"`
+		Paths      map[string]openapi3.PathItem `json:"paths"`
+		Components *Components                  `json:"components,omitempty"`
+	}
+
+	spec := OpenAPISpec{
+		OpenAPI: "3.0.0",
+		Info: map[string]interface{}{
+			"title":       "Fission HTTP Triggers",
+			"description": "Auto-generated OpenAPI spec for Fission HTTP Triggers",
+			"version":     "1.0.0",
+		},
+		Paths: map[string]openapi3.PathItem{},
+	}
+
+	// Track unique servers to avoid duplicates
+	serverMap := make(map[string]struct{})
+
+	for _, trigger := range ts.triggers {
+		if trigger.Spec.OpenAPISpec != nil {
+			path := computeOpenAPIPath(trigger.Spec)
+			spec.Paths[path] = trigger.Spec.OpenAPISpec.PathItem
+
+			// Add server information from ingress config if present
+			if trigger.Spec.IngressConfig.Host != "" {
+				scheme := "http"
+				if trigger.Spec.IngressConfig.TLS != "" {
+					scheme = "https"
+				}
+				serverURL := fmt.Sprintf("%s://%s%s", scheme, trigger.Spec.IngressConfig.Host, trigger.Spec.IngressConfig.Path)
+				if _, exists := serverMap[serverURL]; !exists {
+					spec.Servers = append(spec.Servers, openapi3.Server{
+						URL: serverURL,
+					})
+					serverMap[serverURL] = struct{}{}
+				}
+			}
+
+			for name, schema := range trigger.Spec.OpenAPISpec.Schemas {
+				if spec.Components == nil {
+					spec.Components = &Components{
+						Schemas: make(map[string]openapi3.Schema),
+					}
+				}
+				spec.Components.Schemas[name] = schema
+			}
+		} else {
+			methods := trigger.Spec.Methods
+			if len(methods) == 0 && trigger.Spec.Method != "" {
+				methods = []string{trigger.Spec.Method}
+			}
+			if len(methods) == 0 {
+				methods = []string{"POST"}
+			}
+			item := openapi3.PathItem{
+				Summary: fmt.Sprintf("Trigger: %s", trigger.ObjectMeta.Name),
+			}
+			for _, m := range methods {
+				verb := strings.ToLower(m)
+				switch verb {
+				case "get":
+					item.Get = openapi3.NewOperation()
+					item.Get.Responses = openapi3.NewResponses(
+						openapi3.WithName("200", openapi3.NewResponse().WithDescription("Successful response")),
+					)
+				case "post":
+					item.Post = openapi3.NewOperation()
+					item.Post.Responses = openapi3.NewResponses(
+						openapi3.WithName("200", openapi3.NewResponse().WithDescription("Successful response")),
+					)
+				case "put":
+					item.Put = openapi3.NewOperation()
+					item.Put.Responses = openapi3.NewResponses(
+						openapi3.WithName("200", openapi3.NewResponse().WithDescription("Successful response")),
+					)
+				case "delete":
+					item.Delete = openapi3.NewOperation()
+					item.Delete.Responses = openapi3.NewResponses(
+						openapi3.WithName("200", openapi3.NewResponse().WithDescription("Successful response")),
+					)
+				}
+			}
+			spec.Paths[computeOpenAPIPath(trigger.Spec)] = item
+		}
+	}
+
+	jsonData, err := json.Marshal(spec)
+	if err != nil {
+		http.Error(w, "Error generating OpenAPI spec", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	_, err = w.Write(jsonData)
+	if err != nil {
+		http.Error(w, "Error writing response", http.StatusInternalServerError)
+		return
+	}
+}
+
 func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) (*mux.Router, error) {
 
 	featureConfig, err := config.GetFeatureConfig(ts.logger)
@@ -153,6 +293,9 @@ func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) (*mux.Router
 	if featureConfig.AuthConfig.IsEnabled {
 		muxRouter.Use(authMiddleware(featureConfig))
 	}
+
+	// Add the OpenAPI endpoint
+	muxRouter.Handle("/openapi", withHTTPTriggerSet(ts)(http.HandlerFunc(openAPIHandler))).Methods("GET")
 
 	// HTTP triggers setup by the user
 	homeHandled := false
@@ -202,17 +345,59 @@ func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) (*mux.Router
 			}
 		}
 
-		methods := trigger.Spec.Methods
-		if len(trigger.Spec.Method) > 0 {
-			present := false
-			for _, m := range trigger.Spec.Methods {
-				if m == trigger.Spec.Method {
-					present = true
-					break
+		// Get methods from OpenAPISpec if available, otherwise use basic configuration
+		var methods []string
+		if trigger.Spec.OpenAPISpec != nil {
+			if trigger.Spec.OpenAPISpec.Connect != nil {
+				methods = append(methods, "CONNECT")
+			}
+			if trigger.Spec.OpenAPISpec.Delete != nil {
+				methods = append(methods, "DELETE")
+			}
+			if trigger.Spec.OpenAPISpec.Get != nil {
+				methods = append(methods, "GET")
+			}
+			if trigger.Spec.OpenAPISpec.Head != nil {
+				methods = append(methods, "HEAD")
+			}
+			if trigger.Spec.OpenAPISpec.Options != nil {
+				methods = append(methods, "OPTIONS")
+			}
+			if trigger.Spec.OpenAPISpec.Patch != nil {
+				methods = append(methods, "PATCH")
+			}
+			if trigger.Spec.OpenAPISpec.Post != nil {
+				methods = append(methods, "POST")
+			}
+			if trigger.Spec.OpenAPISpec.Put != nil {
+				methods = append(methods, "PUT")
+			}
+			if trigger.Spec.OpenAPISpec.Trace != nil {
+				methods = append(methods, "TRACE")
+			}
+
+			if len(methods) == 0 {
+				methods = []string{"POST"}
+			}
+		}
+
+		// Fall back to basic method configuration if no methods found in OpenAPISpec
+		if len(methods) == 0 {
+			methods = trigger.Spec.Methods
+			if len(trigger.Spec.Method) > 0 {
+				present := false
+				for _, m := range trigger.Spec.Methods {
+					if m == trigger.Spec.Method {
+						present = true
+						break
+					}
+				}
+				if !present {
+					methods = append(methods, trigger.Spec.Method)
 				}
 			}
-			if !present {
-				methods = append(methods, trigger.Spec.Method)
+			if len(methods) == 0 {
+				methods = []string{"POST"} // default fallback
 			}
 		}
 
