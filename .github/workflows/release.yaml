@@ -69,7 +69,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install Cosign
-        uses: sigstore/cosign-installer@3454372f43399081ed03b604cb2d021dabca52bb # v3.8.2
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3.9.1
         with:
           cosign-release: ${{ env.COSIGN_VERSION }}
 
@@ -186,7 +186,7 @@ jobs:
           format: "spdx-json"
           output: "spdx.sbom.json"
       - name: Install Cosign
-        uses: sigstore/cosign-installer@3454372f43399081ed03b604cb2d021dabca52bb # v3.8.2
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3.9.1
         with:
           cosign-release: ${{ env.COSIGN_VERSION }}
       - name: Sign image and sbom
@@ -207,7 +207,7 @@ jobs:
       contents: write # To download the assets from draft release.
     steps:
       - name: Install the verifier
-        uses: slsa-framework/slsa-verifier/actions/installer@6657aada084353c65e5dde35394b1a010289fab0 # v2.7.0
+        uses: slsa-framework/slsa-verifier/actions/installer@ea584f4502babc6f60d9bc799dbbb13c1caa9ee6 # v2.7.1
 
       - name: Download assets
         env:
@@ -258,7 +258,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install Cosign
-        uses: sigstore/cosign-installer@3454372f43399081ed03b604cb2d021dabca52bb # v3.8.2
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3.9.1
         with:
           cosign-release: ${{ env.COSIGN_VERSION }}
 
