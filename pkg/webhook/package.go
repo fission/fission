@@ -21,88 +21,43 @@ import (
 	"fmt"
 
 	"github.com/dustin/go-humanize"
-	"go.uber.org/zap"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
-	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	v1 "github.com/fission/fission/pkg/apis/core/v1"
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
 
-type Package struct{}
-
-// log is for logging in this package.
-var packagelog = loggerfactory.GetLogger().Named("package-resource")
-
-func (r *Package) SetupWebhookWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewWebhookManagedBy(mgr).
-		For(&v1.Package{}).
-		WithDefaulter(r).
-		WithValidator(r).
-		Complete()
+type Package struct {
+	webhook *WebhookTemplate[*v1.Package]
 }
 
-//+kubebuilder:webhook:path=/mutate-fission-io-v1-package,mutating=true,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=packages,verbs=create;update,versions=v1,name=mpackage.fission.io,admissionReviewVersions=v1
-
-var _ webhook.CustomDefaulter = &Package{}
-
-// Default implements webhook.CustomDefaulter so a webhook will be registered for the type
-func (r *Package) Default(_ context.Context, obj runtime.Object) error {
-	new, ok := obj.(*v1.Package)
-	if !ok {
-		return apierrors.NewBadRequest(fmt.Sprintf("expected a Package but got a %T", obj))
+func NewPackage() *Package {
+	logger := loggerfactory.GetLogger().Named("package-resource")
+	return &Package{
+		webhook: NewWebhookTemplate(logger, defaultPackage, validatePackage),
 	}
-	packagelog.Debug("default", zap.String("name", new.Name))
+}
+
+func (r *Package) SetupWebhookWithManager(mgr ctrl.Manager) error {
+	return r.webhook.SetupWebhookWithManager(mgr, &v1.Package{})
+}
+
+func defaultPackage(ctx context.Context, new *v1.Package) error {
 	if new.Status.BuildStatus == "" {
 		if !new.Spec.Deployment.IsEmpty() {
-			// deployment package exists
 			new.Status.BuildStatus = v1.BuildStatusNone
 		} else if !new.Spec.Source.IsEmpty() {
-			// source package with no deployment is a pending build
 			new.Status.BuildStatus = v1.BuildStatusPending
 		} else {
-			new.Status.BuildStatus = v1.BuildStatusFailed // empty package
+			new.Status.BuildStatus = v1.BuildStatusFailed
 			new.Status.BuildLog = "Both source and deployment are empty"
 		}
 	}
 	return nil
 }
 
-// user change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
-//+kubebuilder:webhook:path=/validate-fission-io-v1-package,mutating=false,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=packages,verbs=create;update,versions=v1,name=vpackage.fission.io,admissionReviewVersions=v1
-
-var _ webhook.CustomValidator = &Package{}
-
-// ValidateCreate implements webhook.CustomValidator so a webhook will be registered for the type
-func (r *Package) ValidateCreate(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
-	new, ok := obj.(*v1.Package)
-	if !ok {
-		return nil, apierrors.NewBadRequest(fmt.Sprintf("expected a Package but got a %T", obj))
-	}
-	packagelog.Debug("validate create", zap.String("name", new.Name))
-	return nil, r.validate(nil, new)
-}
-
-// ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type
-func (r *Package) ValidateUpdate(_ context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
-	new, ok := newObj.(*v1.Package)
-	if !ok {
-		return nil, apierrors.NewBadRequest(fmt.Sprintf("expected a Package but got a %T", newObj))
-	}
-	packagelog.Debug("validate update", zap.String("name", new.Name))
-	return nil, r.validate(nil, new)
-}
-
-// ValidateDelete implements webhook.CustomValidator so a webhook will be registered for the type
-func (r *Package) ValidateDelete(_ context.Context, _ runtime.Object) (admission.Warnings, error) {
-	return nil, nil
-}
-
-func (r *Package) validate(_ *v1.Package, new *v1.Package) error {
+func validatePackage(old, new *v1.Package) error {
 	err := new.Validate()
 	if err != nil {
 		return v1.AggregateValidationErrors("Package", err)
