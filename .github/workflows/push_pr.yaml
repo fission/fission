@@ -65,7 +65,7 @@ jobs:
           path: examples
 
       - name: Helm installation
-        uses: Azure/setup-helm@b9e51907a09c216f16ebe8536097933489208112 # v4.3.0
+        uses: Azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
         with:
           version: ${{ env.HELM_VERSION }}
 
@@ -213,7 +213,7 @@ jobs:
           path: examples
 
       - name: Helm installation
-        uses: Azure/setup-helm@b9e51907a09c216f16ebe8536097933489208112 # v4.3.0
+        uses: Azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
         with:
           version: ${{ env.HELM_VERSION }}
 
