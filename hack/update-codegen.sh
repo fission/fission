@@ -3,11 +3,10 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
-CODEGEN_PKG_VERSION=$(go list -m k8s.io/code-generator | awk '{ print $5}')
+CODEGEN_PKG_VERSION=$(go list -m -f '{{.Replace.Version}}' k8s.io/code-generator)
 if [ -z "$CODEGEN_PKG_VERSION" ]; then
 	echo "Error: could not determine code-generator version from go.mod"
 	echo "Received output: '$CODEGEN_PKG_VERSION'"
-	echo "Text from go.mod: $(go list -m k8s.io/code-generator)"
 	exit 1
 fi
 GOPATH=$(go env GOPATH)
