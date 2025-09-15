@@ -3,11 +3,18 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
+CODEGEN_PKG_VERSION=$(go list -m -f '{{.Replace.Version}}' k8s.io/code-generator)
+if [ -z "$CODEGEN_PKG_VERSION" ]; then
+	echo "Error: could not determine code-generator version from go.mod"
+	echo "Received output: '$CODEGEN_PKG_VERSION'"
+	exit 1
+fi
 GOPATH=$(go env GOPATH)
+GOMODCACHEPATH=$(go env GOMODCACHE)
 SCRIPT_ROOT=$(dirname "${BASH_SOURCE[0]}")/..
 CODEGEN_PKG=${CODEGEN_PKG:-$(
 	cd "${SCRIPT_ROOT}"
-	ls -d -1 ${SCRIPT_ROOT}/../code-generator 2>/dev/null || echo $GOPATH/pkg/mod/k8s.io/code-generator@v0.32.0
+	echo ${GOMODCACHEPATH}/github.com/fission/code-generator@${CODEGEN_PKG_VERSION}
 )}
 OUTDIR="${SCRIPT_ROOT}/pkg/generated"
 

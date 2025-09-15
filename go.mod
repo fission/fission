@@ -328,3 +328,5 @@ tool (
 	sigs.k8s.io/controller-runtime/tools/setup-envtest
 	sigs.k8s.io/controller-tools/cmd/controller-gen
 )
+
+replace k8s.io/code-generator => github.com/fission/code-generator v0.18.0-alpha.1.0.20250914164041-5cd640227cd4
