@@ -10,10 +10,11 @@ if [ -z "$CODEGEN_PKG_VERSION" ]; then
 	exit 1
 fi
 GOPATH=$(go env GOPATH)
+GOMODCACHEPATH=$(go env GOMODCACHE)
 SCRIPT_ROOT=$(dirname "${BASH_SOURCE[0]}")/..
 CODEGEN_PKG=${CODEGEN_PKG:-$(
 	cd "${SCRIPT_ROOT}"
-	echo $GOPATH/pkg/mod/github.com/fission/code-generator@${CODEGEN_PKG_VERSION}
+	echo ${GOMODCACHEPATH}/github.com/fission/code-generator@${CODEGEN_PKG_VERSION}
 )}
 OUTDIR="${SCRIPT_ROOT}/pkg/generated"
 
