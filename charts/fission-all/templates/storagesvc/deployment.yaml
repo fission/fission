@@ -12,6 +12,12 @@ spec:
     matchLabels:
       svc: storagesvc
       application: fission-storage
+  strategy:
+    type: {{ .Values.storagesvc.deploymentStrategy.type }}
+    {{- if eq .Values.storagesvc.deploymentStrategy.type "RollingUpdate" }}
+    rollingUpdate:
+      {{- toYaml .Values.storagesvc.deploymentStrategy.rollingUpdate | nindent 6}}
+    {{- end }}
   template:
     metadata:
       labels:
@@ -113,7 +119,7 @@ spec:
       priorityClassName: {{ .Values.priorityClassName }}
 {{- end }}
     {{- with .Values.imagePullSecrets }}
-      imagePullSecrets: 
+      imagePullSecrets:
         {{- toYaml . | nindent 8 }}
     {{- end }}
 {{- if .Values.extraCoreComponentPodConfig }}
