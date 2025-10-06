@@ -322,17 +322,14 @@ func (deploy *NewDeploy) AdoptExistingResources(ctx context.Context) {
 		for i := range fnList.Items {
 			fn := &fnList.Items[i]
 			if fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypeNewdeploy {
-				wg.Add(1)
-				go func() {
-					defer wg.Done()
-
+				wg.Go(func() {
 					_, err = deploy.fnCreate(ctx, fn)
 					if err != nil {
 						deploy.logger.Warn("failed to adopt resources for function", zap.Error(err))
 						return
 					}
 					deploy.logger.Info("adopt resources for function", zap.String("function", fn.ObjectMeta.Name))
-				}()
+				})
 			}
 		}
 	}

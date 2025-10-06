@@ -224,32 +224,33 @@ func TestPoolCacheRequests(t *testing.T) {
 			}
 			for i := 1; i <= tt.requests; i++ {
 				reqno := i
-				wg.Add(1)
-				go func(reqno int) {
-					defer wg.Done()
-					svc, err := p.GetSvcValue(context.Background(), key, tt.rpp, tt.concurrency)
-					if err != nil {
-						code, _ := ferror.GetHTTPError(err)
-						if code == http.StatusNotFound {
-							atomic.AddUint64(&svcCounter, 1)
-							address := fmt.Sprintf("svc-%d", atomic.LoadUint64(&svcCounter))
-							p.SetSvcValue(context.Background(), key, address, &FuncSvc{
-								Name: address,
-							}, resource.MustParse("45m"), tt.rpp, tt.retainPods)
+				wg.Go(func() {
+					func(reqno int) {
+						svc, err := p.GetSvcValue(context.Background(), key, tt.rpp, tt.concurrency)
+						if err != nil {
+							code, _ := ferror.GetHTTPError(err)
+							if code == http.StatusNotFound {
+								atomic.AddUint64(&svcCounter, 1)
+								address := fmt.Sprintf("svc-%d", atomic.LoadUint64(&svcCounter))
+								p.SetSvcValue(context.Background(), key, address, &FuncSvc{
+									Name: address,
+								}, resource.MustParse("45m"), tt.rpp, tt.retainPods)
+							} else {
+								t.Log(reqno, "=>", err)
+								atomic.AddUint64(&failedRequests, 1)
+							}
 						} else {
-							t.Log(reqno, "=>", err)
-							atomic.AddUint64(&failedRequests, 1)
+							if svc == nil {
+								t.Log(reqno, "=>", "svc is nil")
+								atomic.AddUint64(&failedRequests, 1)
+							}
+							// } else {
+							// 	t.Log(reqno, "=>", svc.Name)
+							// }
 						}
-					} else {
-						if svc == nil {
-							t.Log(reqno, "=>", "svc is nil")
-							atomic.AddUint64(&failedRequests, 1)
-						}
-						// } else {
-						// 	t.Log(reqno, "=>", svc.Name)
-						// }
-					}
-				}(reqno)
+					}(reqno)
+				})
+
 				if reqno%simultaneous == 0 {
 					wg.Wait()
 				}
@@ -261,12 +262,12 @@ func TestPoolCacheRequests(t *testing.T) {
 
 			for i := 0; i < tt.concurrency; i++ {
 				for j := 0; j < tt.rpp; j++ {
-					wg.Add(1)
 					svcno := i
-					go func(svcno int) {
-						defer wg.Done()
-						p.MarkAvailable(key, fmt.Sprintf("svc-%d", svcno+1))
-					}(svcno)
+					wg.Go(func() {
+						func(svcno int) {
+							p.MarkAvailable(key, fmt.Sprintf("svc-%d", svcno+1))
+						}(svcno)
+					})
 				}
 			}
 			wg.Wait()

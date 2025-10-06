@@ -128,11 +128,11 @@ func (opts *DumpSubCommand) do(input cli.Input) error {
 				panic(err)
 			}
 		}
-		wg.Add(1)
-		go func(res resources.Resource, dir string) {
-			defer wg.Done()
-			res.Dump(input.Context(), dir)
-		}(res, dir)
+		wg.Go(func() {
+			func(res resources.Resource, dir string) {
+				res.Dump(input.Context(), dir)
+			}(res, dir)
+		})
 	}
 
 	wg.Wait()

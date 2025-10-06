@@ -23,9 +23,7 @@ func chunkedHandler(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithCancel(r.Context())
 	ticker := time.NewTicker(time.Second) // We may set it to 10 secs
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for {
 			select {
 			case <-ticker.C:
@@ -37,7 +35,7 @@ func chunkedHandler(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-	}()
+	})
 
 	// Emulate some work
 	time.Sleep(5 * time.Second)

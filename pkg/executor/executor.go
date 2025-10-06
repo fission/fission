@@ -154,12 +154,11 @@ func (executor *Executor) serveCreateFuncServices(ctx context.Context) {
 			// create a waitgroup for other requests for
 			// the same function to wait on
 			wg := &sync.WaitGroup{}
-			wg.Add(1)
 			executor.fsCreateWg.Store(fnkeyUR, wg)
 
 			// launch a goroutine for each request, to parallelize
 			// the specialization of different functions
-			go func() {
+			wg.Go(func() {
 				// Control overall specialization time by setting function
 				// specialization time to context. The reason not to use
 				// context from router requests is because a request maybe
@@ -188,8 +187,7 @@ func (executor *Executor) serveCreateFuncServices(ctx context.Context) {
 					err:     err,
 				}
 				executor.fsCreateWg.Delete(fnkeyUR)
-				wg.Done()
-			}()
+			})
 		} else {
 			// There's an existing request for this function, wait for it to finish
 			go func() {
@@ -352,14 +350,14 @@ func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, 
 
 	wg := &sync.WaitGroup{}
 	for _, et := range executorTypes {
-		wg.Add(1)
-		go func(et executortype.ExecutorType) {
-			defer wg.Done()
-			if adoptExistingResources {
-				et.AdoptExistingResources(ctx)
-			}
-			et.CleanupOldExecutorObjects(ctx)
-		}(et)
+		wg.Go(func() {
+			func(et executortype.ExecutorType) {
+				if adoptExistingResources {
+					et.AdoptExistingResources(ctx)
+				}
+				et.CleanupOldExecutorObjects(ctx)
+			}(et)
+		})
 	}
 	// set hard timeout for resource adoption
 	// TODO: use context to control the waiting time once kubernetes client supports it.
