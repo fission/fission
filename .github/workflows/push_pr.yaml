@@ -157,7 +157,7 @@ jobs:
       - name: Archive fission dump
         timeout-minutes: 10
         if: ${{ failure() || cancelled() }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
           name: fission-dump-${{ github.run_id }}-${{ matrix.kindversion }}
           path: fission-dump/*.zip
@@ -166,7 +166,7 @@ jobs:
       - name: Archive prometheus dump
         timeout-minutes: 10
         if: ${{ always() }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
           name: prom-dump-${{ github.run_id }}-${{ matrix.kindversion }}
           path: /tmp/prometheus/*
@@ -175,7 +175,7 @@ jobs:
       - name: Archive kind logs
         timeout-minutes: 10
         if: ${{ always() }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
           name: kind-logs-${{ github.run_id }}-${{ matrix.kindversion }}
           path: kind-logs/*
@@ -308,7 +308,7 @@ jobs:
       - name: Archive fission dump
         timeout-minutes: 10
         if: ${{ failure() || cancelled() }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
           name: fission-dump-${{ github.run_id }}-${{ matrix.kindversion }}
           path: fission-dump/*.zip
@@ -317,7 +317,7 @@ jobs:
       - name: Archive prometheus dump
         timeout-minutes: 10
         if: ${{ always() }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
           name: prom-dump-${{ github.run_id }}-${{ matrix.kindversion }}
           path: /tmp/prometheus/*
@@ -326,7 +326,7 @@ jobs:
       - name: Archive kind logs
         timeout-minutes: 10
         if: ${{ always() }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
           name: kind-logs-${{ github.run_id }}-${{ matrix.kindversion }}
           path: kind-logs/*
