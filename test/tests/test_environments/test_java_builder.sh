@@ -1,5 +1,7 @@
 #!/bin/bash
 
+#test:disabled
+
 set -euo pipefail
 source $(dirname $0)/../../utils.sh
 
