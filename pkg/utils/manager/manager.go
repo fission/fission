@@ -36,11 +36,9 @@ func New() Interface {
 	}
 }
 func (g *GroupManager) Add(ctx context.Context, f func(context.Context)) {
-	g.wg.Add(1)
-	go func() {
-		defer g.wg.Done()
+	g.wg.Go(func() {
 		f(ctx)
-	}()
+	})
 }
 
 func (g *GroupManager) AddInformers(ctx context.Context, informers map[string]k8sCache.SharedIndexInformer) {

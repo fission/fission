@@ -368,9 +368,7 @@ func (gpm *GenericPoolManager) AdoptExistingResources(ctx context.Context) {
 			env := envs.Items[i]
 
 			if getEnvPoolSize(&env) > 0 {
-				wg.Add(1)
-				go func() {
-					defer wg.Done()
+				wg.Go(func() {
 					_, created, err := gpm.getPool(ctx, &env)
 					if err != nil {
 						gpm.logger.Error("adopt pool failed", zap.Error(err))
@@ -378,7 +376,7 @@ func (gpm *GenericPoolManager) AdoptExistingResources(ctx context.Context) {
 					if created {
 						gpm.logger.Info("created pool for the environment", zap.String("env", env.ObjectMeta.Name), zap.String("namespace", gpm.nsResolver.ResolveNamespace(gpm.nsResolver.FunctionNamespace)))
 					}
-				}()
+				})
 			}
 
 			// create environment map for later use
@@ -407,10 +405,7 @@ func (gpm *GenericPoolManager) AdoptExistingResources(ctx context.Context) {
 				continue
 			}
 
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-
+			wg.Go(func() {
 				// avoid too many requests arrive Kubernetes API server at the same time.
 				time.Sleep(time.Duration(rand.Intn(30)) * time.Millisecond)
 
@@ -482,7 +477,7 @@ func (gpm *GenericPoolManager) AdoptExistingResources(ctx context.Context) {
 
 				gpm.logger.Info("adopt function pod",
 					zap.String("pod", pod.Name), zap.Any("labels", pod.Labels), zap.Any("annotations", pod.Annotations))
-			}()
+			})
 		}
 	}
 

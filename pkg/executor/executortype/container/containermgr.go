@@ -302,17 +302,14 @@ func (caaf *Container) AdoptExistingResources(ctx context.Context) {
 		for i := range fnList.Items {
 			fn := &fnList.Items[i]
 			if fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypeContainer {
-				wg.Add(1)
-				go func() {
-					defer wg.Done()
-
+				wg.Go(func() {
 					_, err = caaf.fnCreate(ctx, fn)
 					if err != nil {
 						caaf.logger.Warn("failed to adopt resources for function", zap.Error(err))
 						return
 					}
 					caaf.logger.Info("adopt resources for function", zap.String("function", fn.ObjectMeta.Name))
-				}()
+				})
 			}
 		}
 	}
