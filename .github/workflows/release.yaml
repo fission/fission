@@ -6,10 +6,10 @@ on:
       - v2.**
 
 env:
-  KIND_VERSION: v0.26.0
+  KIND_VERSION: v0.30.0
   KIND_NODE_IMAGE_TAG: v1.28.15
   KIND_CLUSTER_NAME: kind
-  COSIGN_VERSION: v2.4.1
+  COSIGN_VERSION: v3.0.2
 
 jobs:
   create-draft-release:
