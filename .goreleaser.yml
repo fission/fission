@@ -1,7 +1,7 @@
 version: 2
 
 env:
-  - GHCR_REPO=ghcr.io/fission
+  - GHCR_REPO=ghcr.io/sanketsudake
 
 project_name: fission
 release:
