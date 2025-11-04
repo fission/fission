@@ -175,6 +175,7 @@ signs:
     artifacts: binary
     args:
       - sign-blob
+      - "--bundle=${artifact}.bundle"
       - "--output-signature=${signature}"
       - "--output-certificate=${certificate}"
       - "${artifact}"

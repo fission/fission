@@ -84,11 +84,11 @@ test_fission_objects() {
 build_docker_images() {
     echo "Building new docker images"
     make skaffold-prebuild
-    doit docker build -t fission-bundle dist/fission-bundle_linux_amd64_v1
-    doit docker build -t fetcher dist/fetcher_linux_amd64_v1
-    doit docker build -t builder dist/builder_linux_amd64_v1
-    doit docker build -t reporter dist/reporter_linux_amd64_v1
-    doit docker build -t preupgradechecks dist/pre-upgrade-checks_linux_amd64_v1
+    doit docker buildx build -t fission-bundle dist/fission-bundle_linux_amd64_v1 --platform linux/amd64
+    doit docker buildx build -t fetcher dist/fetcher_linux_amd64_v1 --platform linux/amd64
+    doit docker buildx build -t builder dist/builder_linux_amd64_v1 --platform linux/amd64
+    doit docker buildx build -t reporter dist/reporter_linux_amd64_v1 --platform linux/amd64
+    doit docker buildx build -t preupgradechecks dist/pre-upgrade-checks_linux_amd64_v1 --platform linux/amd64
 }
 
 kind_image_load() {
