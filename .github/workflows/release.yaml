@@ -114,7 +114,7 @@ jobs:
           ARTIFACTS: "${{ steps.goreleaser.outputs.artifacts }}"
         run: |
           set -euo pipefail
-          image_and_digest=$(echo "$ARTIFACTS" | jq -r '.[] | select (.type=="Docker Manifest") | {name, "digest": (.extra.Digest // .extra.Checksum)} | select(.digest) | {name} + {digest} | join("@") | sub("^sha256:";"")' | grep -v latest)
+          image_and_digest=$(echo "$ARTIFACTS" | jq -r '.[] | select (.type=="Docker Image") | {name, "digest": (.extra.Digest // .extra.Checksum)} | select(.digest) | {name} + {digest} | join("@") | sub("^sha256:";"")' | grep -v latest)
           ghcr_images=$(echo "${image_and_digest}" | grep ghcr.io | jq -R -s -c '
             split("\n")
             | map(select(. != ""))
