@@ -170,14 +170,12 @@ signs:
   - id: cosign-binary
     env:
       - COSIGN_EXPERIMENTAL=1
-    certificate: "${artifact}.pem"
+    signature: "${artifact}.sig.bundle"
     cmd: cosign
     artifacts: binary
     args:
       - sign-blob
-      - "--bundle=${artifact}.bundle"
-      - "--output-signature=${signature}"
-      - "--output-certificate=${certificate}"
+      - "--bundle=${signature}"
       - "${artifact}"
       - "--yes" # needed for cosign 2.0.0+
 
