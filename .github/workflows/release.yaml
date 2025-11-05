@@ -274,5 +274,5 @@ jobs:
           cosign verify-attestation \
              --type slsaprovenance \
              --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-             --certificate-identity-regexp '^https://github.com/slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@refs/tags/v[0-9]+.[0-9]+.[0-9]+$' \
+             --certificate-identity-regexp '^https://github.com/sanketsudake/fission/.github/workflows/release.yaml@refs/tags/v[0-9]+.[0-9]+.[0-9]+$' \
              $IMAGE@$DIGEST
