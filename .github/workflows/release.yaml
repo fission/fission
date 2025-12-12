@@ -22,6 +22,7 @@ jobs:
       contents: write # for goreleaser/goreleaser-action to create a GitHub release
       packages: write # for goreleaser/goreleaser-action to upload artifacts to GitHub Packages
       id-token: write # for cosign to sign the image and binary
+      attestations: write # for goreleaser/goreleaser-action to upload attestations
     runs-on: ubuntu-24.04
     steps:
       - name: Harden Runner
