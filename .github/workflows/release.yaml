@@ -140,20 +140,6 @@ jobs:
               )')
           echo "ghcr_images=$ghcr_images" >> "$GITHUB_OUTPUT"
 
-  # binary-provenance:
-  #   name: Create Binary Provenance
-  #   needs: [create-draft-release]
-  #   permissions:
-  #     actions: read # To read the workflow path.
-  #     id-token: write # To sign the provenance.
-  #     contents: write # To add assets to a release.
-  #   uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0  # Do not use commit hash
-  #   with:
-  #     base64-subjects: "${{ needs.create-draft-release.outputs.hashes }}"
-  #     provenance-name: "fission_${{ needs.create-draft-release.outputs.version }}.intoto.jsonl"
-  #     upload-assets: true # upload to a new release
-  #     draft-release: true # create a draft release
-
   # image-provenance-ghcr:
   #   name: Create Image Provenance
   #   needs: [create-draft-release]
@@ -164,13 +150,20 @@ jobs:
   #     actions: read
   #     id-token: write
   #     packages: write
-  #   uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v2.1.0 # Do not use commit hash
-  #   with:
-  #     image: ${{ fromJson(toJson(matrix)).image }}
-  #     digest: ${{ fromJson(toJson(matrix)).checksum }}
-  #     registry-username: ${{ github.actor }}
-  #   secrets:
-  #     registry-password: ${{ secrets.GITHUB_TOKEN }}
+  #     attestations: write
+  #   runs-on: ubuntu-24.04
+  #   steps:
+  #     - name: Login to ghcr.io
+  #       uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
+  #       with:
+  #         registry: ghcr.io
+  #         username: ${{ github.repository_owner }}
+  #         password: ${{ secrets.GITHUB_TOKEN }}
+  #     - uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
+  #       with:
+  #         subject-name: ${{ fromJson(toJson(matrix)).image }}
+  #         subject-digest: ${{ fromJson(toJson(matrix)).checksum }}
+  #         push-to-registry: true
 
   image-sbom-ghcr:
     name: Create SBOM for container images
@@ -184,6 +177,7 @@ jobs:
       actions: write
       id-token: write
       packages: write
+      attestations: write
     steps:
       - name: Checkout code
         uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
@@ -214,6 +208,12 @@ jobs:
           set -euo pipefail
           cosign attach sbom --sbom spdx.sbom.json $IMAGE@$DIGEST
           cosign sign -a git_sha=$GITHUB_SHA --attachment sbom $IMAGE@$DIGEST --yes
+      - name: Attest provenance for image
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
+        with:
+          subject-name: ${{ fromJson(toJson(matrix)).image }}
+          subject-digest: ${{ fromJson(toJson(matrix)).checksum }}
+          push-to-registry: true
 
   # binary-provenance-verification-with-slsa-verifier:
   #   name : Verify Binary Provenance
