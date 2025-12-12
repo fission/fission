@@ -162,7 +162,8 @@ archives:
       - binary
 checksum:
   name_template: "checksums.txt"
-  algorithm: sha256
+docker_digest:
+  name_template: "docker-digests.txt"
 
 # signs the checksum file
 # https://goreleaser.com/customization/sign
