@@ -173,7 +173,7 @@ signs:
       - COSIGN_EXPERIMENTAL=1
     signature: "${artifact}.sig.bundle"
     cmd: cosign
-    artifacts: binary
+    artifacts: all
     args:
       - sign-blob
       - "--bundle=${signature}"
