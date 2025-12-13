@@ -25,6 +25,7 @@ env:
   HELM_VERSION: v3.19.0
   KIND_VERSION: v0.30.0
   KIND_CLUSTER_NAME: kind
+  SKAFFOLD_VERSION: v2.16.1
 
 permissions:
   contents: read
@@ -91,7 +92,7 @@ jobs:
 
       - name: Install Skaffold
         run: |
-          curl -Lo skaffold https://storage.googleapis.com/skaffold/releases/v2.14.0/skaffold-linux-amd64
+          curl -Lo skaffold https://storage.googleapis.com/skaffold/releases/${{ env.SKAFFOLD_VERSION }}/skaffold-linux-amd64
           sudo install skaffold /usr/local/bin/
           skaffold version
 
@@ -239,7 +240,7 @@ jobs:
 
       - name: Install Skaffold
         run: |
-          curl -Lo skaffold https://storage.googleapis.com/skaffold/releases/v2.14.0/skaffold-linux-amd64
+          curl -Lo skaffold https://storage.googleapis.com/skaffold/releases/${{ env.SKAFFOLD_VERSION }}/skaffold-linux-amd64
           sudo install skaffold /usr/local/bin/
           skaffold version
 
