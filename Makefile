@@ -112,6 +112,7 @@ skaffold-prebuild:
 	@cp -v cmd/fission-bundle/Dockerfile dist/fission-bundle_linux_amd64_v1/Dockerfile
 	@cp -v cmd/reporter/Dockerfile dist/reporter_linux_amd64_v1/Dockerfile
 	@cp -v cmd/preupgradechecks/Dockerfile dist/pre-upgrade-checks_linux_amd64_v1/Dockerfile
+	@find dist/ -name 'Dockerfile' -exec sed -i.bak 's|$$TARGETPLATFORM/||g' {} +; find dist/ -name 'Dockerfile.bak' -delete
 
 skaffold-deploy: skaffold-prebuild
 	skaffold run -p $(SKAFFOLD_PROFILE)
