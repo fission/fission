@@ -98,6 +98,10 @@ func (p *WebhookPublisher) svc() {
 	}
 }
 
+var WebhookHttpClient = &http.Client{
+	Transport: otelhttp.NewTransport(http.DefaultTransport),
+}
+
 func (p *WebhookPublisher) makeHTTPRequest(r *publishRequest) {
 	url := p.baseURL + "/" + strings.TrimPrefix(r.target, "/")
 
@@ -127,7 +131,7 @@ func (p *WebhookPublisher) makeHTTPRequest(r *publishRequest) {
 	// Make the request
 	ctx, cancel := context.WithTimeoutCause(r.ctx, p.timeout, fmt.Errorf("webhook request timed out (%f)s exceeded ", p.timeout.Seconds()))
 	defer cancel()
-	resp, err := ctxhttp.Do(ctx, otelhttp.DefaultClient, req)
+	resp, err := ctxhttp.Do(ctx, WebhookHttpClient, req)
 	if err != nil {
 		fields = append(fields, zap.Error(err), zap.Any("request", r))
 	} else {
