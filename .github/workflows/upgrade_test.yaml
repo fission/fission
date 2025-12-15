@@ -23,7 +23,7 @@ on:
 
 env:
   HELM_VERSION: v3.19.0
-  KIND_VERSION: v0.26.0
+  KIND_VERSION: v0.30.0
   KIND_CLUSTER_NAME: kind
 
 permissions:

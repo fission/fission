@@ -22,10 +22,10 @@ on:
       - go.sum
 
 env:
-  HELM_VERSION: v3.19.0
+  HELM_VERSION: v4.0.1
   KIND_VERSION: v0.30.0
   KIND_CLUSTER_NAME: kind
-  SKAFFOLD_VERSION: v2.16.1
+  SKAFFOLD_VERSION: v2.17.0
 
 permissions:
   contents: read
