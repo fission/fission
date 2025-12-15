@@ -4,10 +4,10 @@ updates:
     directory: /
     schedule:
       interval: weekly
-    open-pull-requests-limit: 5
+    open-pull-requests-limit:  5
     groups:
       github-actions:
-        patterns:
+        patterns: 
           - "*"
 
   - package-ecosystem: docker
@@ -20,17 +20,33 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
-    groups:
+    groups: 
       docker-images:
         patterns:
           - "*"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor", "version-update: semver-patch"]
+        # Ignore dependencies in test directories
+        paths:
+          - "*/test/*"
+          - "*/tests/*"
+          - "*/*_test.go"
 
   - package-ecosystem: gomod
     directory: /
     schedule:
       interval: weekly
-    open-pull-requests-limit: 5
+    open-pull-requests-limit:  5
     groups:
       go-dependencies:
-        patterns:
+        patterns: 
           - "*"
+    ignore:
+      - dependency-name:  "*"
+        update-types:  ["version-update:semver-major", "version-update:semver-minor", "version-update:semver-patch"]
+        # Ignore dependencies only used in test files
+        paths:
+          - "*/test/*"
+          - "*/tests/*"
+          - "*/*_test.go"
