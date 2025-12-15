@@ -20,6 +20,8 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    exclude-paths:
+      - "test/**"
     groups:
       docker-images:
         patterns:
@@ -30,7 +32,19 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    exclude-paths:
+      - "test/**"
     groups:
       go-dependencies:
+        patterns:
+          - "*"
+
+  - package-ecosystem: helm
+    directory: /charts/fission-all
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      helm-charts:
         patterns:
           - "*"
