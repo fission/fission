@@ -4,7 +4,7 @@ updates:
     directory: /
     schedule:
       interval: weekly
-    open-pull-requests-limit:  5
+    open-pull-requests-limit: 5
     groups:
       github-actions:
         patterns:
@@ -31,7 +31,7 @@ updates:
     directory: /
     schedule:
       interval: weekly
-    open-pull-requests-limit:  5
+    open-pull-requests-limit: 5
     exclude-paths:
       - "test/*"
     groups:
