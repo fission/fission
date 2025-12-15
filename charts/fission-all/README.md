@@ -4,7 +4,7 @@
 
 ## Prerequisites
 
-- Kubernetes 1.23+
+- Kubernetes 1.28+
 - Helm 3+
 
 ## Get Repo Info
