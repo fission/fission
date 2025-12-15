@@ -33,7 +33,7 @@ updates:
       interval: weekly
     open-pull-requests-limit: 5
     exclude-paths:
-      - "test/*"
+      - "test/**"
     groups:
       go-dependencies:
         patterns:
