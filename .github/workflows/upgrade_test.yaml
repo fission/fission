@@ -40,7 +40,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        kindversion: ["v1.28.15"]
+        kindversion: ["v1.31.12"]
         os: [ubuntu-24.04]
     steps:
       - name: Harden Runner
