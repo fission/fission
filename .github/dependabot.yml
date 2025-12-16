@@ -48,3 +48,15 @@ updates:
       helm-charts:
         patterns:
           - "*"
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    exclude-paths:
+      - "test/**"
+    groups:
+      npm-dependencies:
+        patterns:
+          - "*"
