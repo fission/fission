@@ -3,13 +3,13 @@
 1. Install the client CLI.
 
 Mac:
-  $ curl -Lo fission https://github.com/fission/fission/releases/download/{{ .Chart.Version }}/fission-{{ .Chart.Version }}-darwin-amd64 && chmod +x fission && sudo mv fission /usr/local/bin/
+  $ curl -Lo fission https://github.com/fission/fission/releases/download/{{ .Chart.AppVersion }}/fission-{{ .Chart.AppVersion }}-darwin-amd64 && chmod +x fission && sudo mv fission /usr/local/bin/
 
 Linux:
-  $ curl -Lo fission https://github.com/fission/fission/releases/download/{{ .Chart.Version }}/fission-{{ .Chart.Version }}-linux-amd64 && chmod +x fission && sudo mv fission /usr/local/bin/
+  $ curl -Lo fission https://github.com/fission/fission/releases/download/{{ .Chart.AppVersion }}/fission-{{ .Chart.AppVersion }}-linux-amd64 && chmod +x fission && sudo mv fission /usr/local/bin/
 
 Windows:
-  For Windows, you can use the linux binary on WSL. Or you can download this windows executable: https://github.com/fission/fission/releases/download/{{ .Chart.Version }}/fission-{{ .Chart.Version }}-windows-amd64.exe
+  For Windows, you can use the linux binary on WSL. Or you can download this windows executable: https://github.com/fission/fission/releases/download/{{ .Chart.AppVersion }}/fission-{{ .Chart.AppVersion }}-windows-amd64.exe
 
 2. You're ready to use Fission!
 
