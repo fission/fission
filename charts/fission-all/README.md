@@ -18,14 +18,14 @@ _See [helm repo](https://helm.sh/docs/helm/helm_repo/) for command documentation
 
 ## Install Chart
 
-Replace `{{version}}` with [the latest Fission version](https://github.com/fission/fission/releases/latest).
+Replace `{{appVersion}}` with [the latest Fission version](https://github.com/fission/fission/releases/latest).
 ![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/fission/fission)
 
 ```console
 # Helm
 $ export FISSION_NAMESPACE="fission"
 $ kubectl create namespace $FISSION_NAMESPACE
-$ kubectl create -k "github.com/fission/fission/crds/v1?ref={{version}}"
+$ kubectl create -k "github.com/fission/fission/crds/v1?ref={{appVersion}}"
 $ helm install [RELEASE_NAME] fission-charts/fission-all --namespace fission
 ```
 
@@ -57,9 +57,10 @@ _See [helm uninstall](https://helm.sh/docs/helm/helm_uninstall/) for command doc
 CRDs are not removed by this chart and should be manually cleaned up:
 
 `{{version}}` references the version you used during the installation of chart.
+`{{appVersion}}` references the application version used during the installation of chart.
 
 ```console
-kubectl delete -k "github.com/fission/fission/crds/v1?ref={{version}}"
+kubectl delete -k "github.com/fission/fission/crds/v1?ref={{appVersion}}"
 ```
 
 OR
@@ -74,10 +75,10 @@ kubectl get crds| grep ".fission.io"
 
 CRDs created by this chart are not updated by default and should be manually updated.
 
-`{{version}}` references the version you are upgrading to ![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/fission/fission)
+`{{appVersion}}` references the version you are upgrading to ![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/fission/fission)
 
 ```console
-kubectl replace -k "github.com/fission/fission/crds/v1?ref={{version}}"
+kubectl replace -k "github.com/fission/fission/crds/v1?ref={{appVersion}}"
 ```
 
 ```console
