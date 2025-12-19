@@ -41,6 +41,10 @@ imagePullSecrets: []
 ##
 priorityClassName: ""
 
+## autoscalingApiVersion represents the version of the Autoscaling API to use for HorizontalPodAutoscaler on Fiison components.
+## Refer to https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/
+autoscalingApiVersion: autoscaling/v2
+
 ## terminationMessagePath is the path at which the pod termination message will be written.
 ## executor.terminationMessagePath takes precedence over this value for executor.
 ## router.terminationMessagePath takes precedence over this value for router.
@@ -235,6 +239,27 @@ router:
   ## replicas decides how many router pods to deploy. Only used when deployAsDaemonSet is false.
   ##
   replicas: 1
+  ## autoscaling decides whether to enable HorizontalPodAutoscaler for router.
+  ##
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 10
+    ## metrics is the list of metrics to be used for autoscaling.
+    ## For details, see https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/#support-for-resource-metrics
+    ## metrics:
+    ##   - type: Resource
+    ##     resource:
+    ##       name: cpu
+    ##       target:
+    ##         type: Utilization
+    ##         averageUtilization: 60
+    ##   - type: Resource
+    ##     resource:
+    ##       name: memory
+    ##       target:
+    ##         type: Utilization
+    ##         averageUtilization: 60
   ## svcAddressMaxRetries is the max times for router to retry with a specific function service address
   ##
   svcAddressMaxRetries: 5
