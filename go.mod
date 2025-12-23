@@ -20,7 +20,7 @@ require (
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/hashicorp/go-retryablehttp v0.7.8
 	github.com/influxdata/influxdb v1.12.2
-	github.com/kedacore/keda/v2 v2.18.2
+	github.com/kedacore/keda/v2 v2.18.3
 	github.com/mholt/archives v0.1.5
 	github.com/minio/minio-go/v7 v7.0.97
 	github.com/ory/dockertest/v3 v3.12.0
