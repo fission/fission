@@ -62,7 +62,7 @@ jobs:
         uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
       - name: Login to ghcr.io
         uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
@@ -101,7 +101,7 @@ jobs:
       # Attest binary artifacts
       # https://goreleaser.com/customization/attestations/
       - name: Attest binary artifacts
-        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
+        uses: actions/attest-build-provenance@00014ed6ed5efc5b1ab7f7f34a39eb55d41aa4f8 # v3.1.0
         with:
           subject-checksums: ./dist/checksums.txt
 
@@ -162,7 +162,7 @@ jobs:
           subject-digest: ${{ fromJson(toJson(matrix)).checksum }}
           push-to-registry: true
       - name: Attest provenance for image
-        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
+        uses: actions/attest-build-provenance@00014ed6ed5efc5b1ab7f7f34a39eb55d41aa4f8 # v3.1.0
         with:
           subject-name: ${{ fromJson(toJson(matrix)).image }}
           subject-digest: ${{ fromJson(toJson(matrix)).checksum }}
