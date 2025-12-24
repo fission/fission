@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -22,8 +23,6 @@ import (
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 	"github.com/fission/fission/pkg/utils/manager"
 	"github.com/fission/fission/pkg/utils/uuid"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -151,7 +150,7 @@ func TestRefreshFuncPods(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error getting function: %s", err)
 	}
-	assert.Equal(t, funcRes.ObjectMeta.Name, functionName)
+	require.Equal(t, funcRes.ObjectMeta.Name, functionName)
 
 	ctx2, cancel2 := context.WithCancel(t.Context())
 	wait.Until(func() {
@@ -188,7 +187,7 @@ func TestRefreshFuncPods(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error getting function: %s", err)
 	}
-	assert.Greater(t, len(funcRes.Spec.ConfigMaps), 0)
+	require.Greater(t, len(funcRes.Spec.ConfigMaps), 0)
 
 	err = ndm.RefreshFuncPods(ctx, logger, *funcRes)
 	if err != nil {
@@ -204,28 +203,28 @@ func TestRefreshFuncPods(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error getting deployment: %s", err)
 	}
-	assert.Equal(t, len(dep.Items), 1)
+	require.Equal(t, len(dep.Items), 1)
 
 	cm, err := kubernetesClient.CoreV1().ConfigMaps(defaultNamespace).Get(ctx, configmapName, metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Error getting configmap: %s", err)
 	}
-	assert.Equal(t, cm.ObjectMeta.Name, configmapName)
+	require.Equal(t, cm.ObjectMeta.Name, configmapName)
 	updatedDepl := dep.Items[0]
 	resourceVersionMatch := false
-	assert.Equal(t, len(updatedDepl.Spec.Template.Spec.Containers), 2)
+	require.Equal(t, len(updatedDepl.Spec.Template.Spec.Containers), 2)
 	for _, v := range updatedDepl.Spec.Template.Spec.Containers {
 		if v.Name == envName {
-			assert.Greater(t, len(v.Env), 0)
+			require.Greater(t, len(v.Env), 0)
 			for _, env := range v.Env {
 				if env.Name == fv1.ResourceVersionCount {
-					assert.Equal(t, env.Value, cm.ObjectMeta.ResourceVersion)
+					require.Equal(t, env.Value, cm.ObjectMeta.ResourceVersion)
 					resourceVersionMatch = true
 				}
 			}
 		}
 	}
-	assert.True(t, resourceVersionMatch)
+	require.True(t, resourceVersionMatch)
 }
 
 func FakeResourceVersion() string {
