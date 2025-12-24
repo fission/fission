@@ -31,6 +31,7 @@ const (
 	DELETE
 	EXPIRE
 	COPY
+	UPSERT
 )
 
 type (
@@ -40,10 +41,11 @@ type (
 		value V
 	}
 	Cache[K comparable, V any] struct {
-		cache          map[K]*Value[V]
-		ctimeExpiry    time.Duration
-		atimeExpiry    time.Duration
-		requestChannel chan *request[K, V]
+		cache               map[K]*Value[V]
+		ctimeExpiry         time.Duration
+		atimeExpiry         time.Duration
+		expiryCheckInterval time.Duration
+		requestChannel      chan *request[K, V]
 	}
 
 	request[K comparable, V any] struct {
@@ -73,11 +75,24 @@ func (c *Cache[K, V]) IsOld(v *Value[V]) bool {
 }
 
 func MakeCache[K comparable, V any](ctimeExpiry, atimeExpiry time.Duration) *Cache[K, V] {
+	interval := time.Minute
+	if ctimeExpiry > 0 && ctimeExpiry < interval {
+		interval = ctimeExpiry
+	}
+	if atimeExpiry > 0 && atimeExpiry < interval {
+		interval = atimeExpiry
+	}
+	// Don't check too often to avoid high CPU usage
+	if interval < 100*time.Millisecond {
+		interval = 100 * time.Millisecond
+	}
+
 	c := &Cache[K, V]{
-		cache:          make(map[K]*Value[V]),
-		ctimeExpiry:    ctimeExpiry,
-		atimeExpiry:    atimeExpiry,
-		requestChannel: make(chan *request[K, V]),
+		cache:               make(map[K]*Value[V]),
+		ctimeExpiry:         ctimeExpiry,
+		atimeExpiry:         atimeExpiry,
+		expiryCheckInterval: interval,
+		requestChannel:      make(chan *request[K, V]),
 	}
 	go c.service()
 	if ctimeExpiry != time.Duration(0) || atimeExpiry != time.Duration(0) {
@@ -138,6 +153,17 @@ func (c *Cache[K, V]) service() {
 				resp.mapCopy[k] = v.value
 			}
 			req.responseChannel <- resp
+		case UPSERT:
+			now := time.Now()
+			if val, ok := c.cache[req.key]; ok {
+				resp.existingValue = val.value
+			}
+			c.cache[req.key] = &Value[V]{
+				value: req.value,
+				ctime: now,
+				atime: now,
+			}
+			req.responseChannel <- resp
 		default:
 			resp.error = ferror.MakeError(ferror.ErrorInvalidArgument,
 				fmt.Sprintf("invalid request type: %v", req.requestType))
@@ -171,15 +197,25 @@ func (c *Cache[K, V]) Set(key K, value V) (V, error) {
 	return resp.existingValue, resp.error
 }
 
-func (c *Cache[K, V]) Delete(key K) error {
+func (c *Cache[K, V]) Upsert(key K, value V) {
+	respChannel := make(chan *response[K, V])
+	c.requestChannel <- &request[K, V]{
+		requestType:     UPSERT,
+		key:             key,
+		value:           value,
+		responseChannel: respChannel,
+	}
+	<-respChannel
+}
+
+func (c *Cache[K, V]) Delete(key K) {
 	respChannel := make(chan *response[K, V])
 	c.requestChannel <- &request[K, V]{
 		requestType:     DELETE,
 		key:             key,
 		responseChannel: respChannel,
 	}
-	resp := <-respChannel
-	return resp.error
+	<-respChannel
 }
 
 func (c *Cache[K, V]) Copy() map[K]V {
@@ -194,7 +230,7 @@ func (c *Cache[K, V]) Copy() map[K]V {
 
 func (c *Cache[K, V]) expiryService() {
 	for {
-		time.Sleep(time.Minute)
+		time.Sleep(c.expiryCheckInterval)
 		c.requestChannel <- &request[K, V]{
 			requestType: EXPIRE,
 		}

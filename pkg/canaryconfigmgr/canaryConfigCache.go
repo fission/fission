@@ -71,7 +71,7 @@ func (cancelFuncMap *canaryConfigCancelFuncMap) assign(f *metav1.ObjectMeta, val
 	return err
 }
 
-func (cancelFuncMap *canaryConfigCancelFuncMap) remove(f *metav1.ObjectMeta) error {
+func (cancelFuncMap *canaryConfigCancelFuncMap) remove(f *metav1.ObjectMeta) {
 	mk := keyFromMetadata(f)
-	return cancelFuncMap.cache.Delete(mk)
+	cancelFuncMap.cache.Delete(mk)
 }

@@ -67,17 +67,10 @@ func (fmap *functionServiceMap) lookup(f *metav1.ObjectMeta) (*url.URL, error) {
 
 func (fmap *functionServiceMap) assign(f *metav1.ObjectMeta, serviceURL *url.URL) {
 	mk := keyFromMetadata(f)
-	old, err := fmap.cache.Set(*mk, serviceURL)
-	if err != nil {
-		if *serviceURL == *old {
-			return
-		}
-		fmap.logger.Error("error caching service url for function with a different value", zap.Error(err))
-		// ignore error
-	}
+	fmap.cache.Upsert(*mk, serviceURL)
 }
 
-func (fmap *functionServiceMap) remove(f *metav1.ObjectMeta) error {
+func (fmap *functionServiceMap) remove(f *metav1.ObjectMeta) {
 	mk := keyFromMetadata(f)
-	return fmap.cache.Delete(*mk)
+	fmap.cache.Delete(*mk)
 }

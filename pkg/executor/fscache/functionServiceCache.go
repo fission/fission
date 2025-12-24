@@ -286,27 +286,11 @@ func (fsc *FunctionServiceCache) Add(fsvc FuncSvc) (*FuncSvc, error) {
 
 	// Add to byAddress cache. Ignore NameExists errors
 	// because of multiple-specialization. See issue #331.
-	_, err = fsc.byAddress.Set(fsvc.Address, *fsvc.Function)
-	if err != nil {
-		if IsNameExistError(err) {
-			err = nil
-		} else {
-			err = fmt.Errorf("error caching fsvc: %w", err)
-		}
-		return nil, err
-	}
+	fsc.byAddress.Upsert(fsvc.Address, *fsvc.Function)
 
 	// Add to byFunctionUID cache. Ignore NameExists errors
 	// because of multiple-specialization. See issue #331.
-	_, err = fsc.byFunctionUID.Set(fsvc.Function.UID, *fsvc.Function)
-	if err != nil {
-		if IsNameExistError(err) {
-			err = nil
-		} else {
-			err = fmt.Errorf("error caching fsvc by function uid: %w", err)
-		}
-		return nil, err
-	}
+	fsc.byFunctionUID.Upsert(fsvc.Function.UID, *fsvc.Function)
 
 	return nil, nil
 }
@@ -338,34 +322,9 @@ func (fsc *FunctionServiceCache) _touchByAddress(address string) error {
 
 // DeleteEntry deletes a function service from cache.
 func (fsc *FunctionServiceCache) DeleteEntry(fsvc *FuncSvc) {
-	msg := "error deleting function service"
-	err := fsc.byFunction.Delete(crd.CacheKeyURFromMeta(fsvc.Function))
-	if err != nil {
-		fsc.logger.Error(
-			msg,
-			zap.String("function", fsvc.Function.Name),
-			zap.Error(err),
-		)
-	}
-
-	err = fsc.byAddress.Delete(fsvc.Address)
-	if err != nil {
-		fsc.logger.Error(
-			msg,
-			zap.String("function", fsvc.Function.Name),
-			zap.Error(err),
-		)
-	}
-
-	err = fsc.byFunctionUID.Delete(fsvc.Function.UID)
-	if err != nil {
-		fsc.logger.Error(
-			msg,
-			zap.String("function", fsvc.Function.Name),
-			zap.Error(err),
-		)
-	}
-
+	fsc.byFunction.Delete(crd.CacheKeyURFromMeta(fsvc.Function))
+	fsc.byAddress.Delete(fsvc.Address)
+	fsc.byFunctionUID.Delete(fsvc.Function.UID)
 	metrics.FuncRunningSummary.WithLabelValues(fsvc.Function.Name, fsvc.Function.Namespace).Observe(fsvc.Atime.Sub(fsvc.Ctime).Seconds())
 }
 

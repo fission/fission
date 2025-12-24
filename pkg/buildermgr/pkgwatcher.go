@@ -95,10 +95,7 @@ func (pkgw *packageWatcher) build(ctx context.Context, srcpkg *fv1.Package) {
 	logger := pkgw.logger.With(zap.String("package", srcpkg.Name), zap.String("namespace", srcpkg.Namespace), zap.String("resource_version", srcpkg.ResourceVersion), zap.String("key", key.String()))
 
 	defer func() {
-		err := pkgw.buildCache.Delete(key)
-		if err != nil {
-			logger.Error("error deleting key from cache", zap.Any("key", key), zap.Error(err))
-		}
+		pkgw.buildCache.Delete(key)
 	}()
 
 	logger.Info("starting build for package")

@@ -114,7 +114,7 @@ func (frr *functionReferenceResolver) resolve(trigger fv1.HTTPTrigger) (*resolve
 	}
 
 	// cache resolve result
-	frr.refCache.Set(nfr, *rr) //nolint: errcheck
+	frr.refCache.Upsert(nfr, *rr)
 
 	return rr, nil
 }
@@ -204,13 +204,13 @@ func (frr *functionReferenceResolver) resolveByFunctionWeights(namespace string,
 	return &rr, nil
 }
 
-func (frr *functionReferenceResolver) delete(namespace string, triggerName, triggerRV string) error {
+func (frr *functionReferenceResolver) delete(namespace string, triggerName, triggerRV string) {
 	nfr := namespacedTriggerReference{
 		namespace:              namespace,
 		triggerName:            triggerName,
 		triggerResourceVersion: triggerRV,
 	}
-	return frr.refCache.Delete(nfr)
+	frr.refCache.Delete(nfr)
 }
 
 func (frr *functionReferenceResolver) copy() map[namespacedTriggerReference]resolveResult {
