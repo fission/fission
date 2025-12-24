@@ -97,7 +97,7 @@ func Test_getEnvVarlist(t *testing.T) {
 		Data: data,
 	}
 
-	kubeClient := fake.NewSimpleClientset()
+	kubeClient := fake.NewClientset()
 	_, err := kubeClient.CoreV1().Secrets(namespace).Create(ctx, secret, metav1.CreateOptions{})
 	if err != nil {
 		assert.Equal(t, nil, err)
@@ -428,7 +428,7 @@ func Test_getAuthTriggerSpec(t *testing.T) {
 		Data: data,
 	}
 
-	kubeClient := fake.NewSimpleClientset()
+	kubeClient := fake.NewClientset()
 	_, err := kubeClient.CoreV1().Secrets(namespace).Create(ctx, secret, metav1.CreateOptions{})
 	if err != nil {
 		assert.Equal(t, nil, err)

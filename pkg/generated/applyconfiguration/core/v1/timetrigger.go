@@ -26,6 +26,8 @@ import (
 
 // TimeTriggerApplyConfiguration represents a declarative configuration of the TimeTrigger type for use
 // with apply.
+//
+// TimeTrigger invokes functions based on given cron schedule.
 type TimeTriggerApplyConfiguration struct {
 	metav1.TypeMetaApplyConfiguration    `json:",inline"`
 	*metav1.ObjectMetaApplyConfiguration `json:"metadata,omitempty"`
@@ -42,6 +44,7 @@ func TimeTrigger(name, namespace string) *TimeTriggerApplyConfiguration {
 	b.WithAPIVersion("fission.io/v1")
 	return b
 }
+
 func (b TimeTriggerApplyConfiguration) IsApplyConfiguration() {}
 
 // WithKind sets the Kind field in the declarative configuration to the given value

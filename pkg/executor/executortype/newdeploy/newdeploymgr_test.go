@@ -39,8 +39,8 @@ func TestRefreshFuncPods(t *testing.T) {
 	mgr := manager.New()
 	t.Cleanup(mgr.Wait)
 	logger := loggerfactory.GetLogger()
-	kubernetesClient := fake.NewSimpleClientset()
-	fissionClient := fClient.NewSimpleClientset()
+	kubernetesClient := fake.NewClientset()
+	fissionClient := fClient.NewClientset()
 	factory := make(map[string]genInformer.SharedInformerFactory, 0)
 	factory[metav1.NamespaceAll] = genInformer.NewSharedInformerFactory(fissionClient, time.Minute*30)
 

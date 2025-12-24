@@ -26,6 +26,8 @@ import (
 
 // MessageQueueTriggerApplyConfiguration represents a declarative configuration of the MessageQueueTrigger type for use
 // with apply.
+//
+// MessageQueueTrigger invokes functions when messages arrive to certain topic that trigger subscribes to.
 type MessageQueueTriggerApplyConfiguration struct {
 	metav1.TypeMetaApplyConfiguration    `json:",inline"`
 	*metav1.ObjectMetaApplyConfiguration `json:"metadata,omitempty"`
@@ -42,6 +44,7 @@ func MessageQueueTrigger(name, namespace string) *MessageQueueTriggerApplyConfig
 	b.WithAPIVersion("fission.io/v1")
 	return b
 }
+
 func (b MessageQueueTriggerApplyConfiguration) IsApplyConfiguration() {}
 
 // WithKind sets the Kind field in the declarative configuration to the given value

@@ -69,6 +69,7 @@ func newCanaryConfigs(c *CoreV1Client, namespace string) *canaryConfigs {
 			namespace,
 			func() *corev1.CanaryConfig { return &corev1.CanaryConfig{} },
 			func() *corev1.CanaryConfigList { return &corev1.CanaryConfigList{} },
+			gentype.PrefersProtobuf[*corev1.CanaryConfig](),
 		),
 	}
 }

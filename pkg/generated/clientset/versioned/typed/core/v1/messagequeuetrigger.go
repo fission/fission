@@ -65,6 +65,7 @@ func newMessageQueueTriggers(c *CoreV1Client, namespace string) *messageQueueTri
 			namespace,
 			func() *corev1.MessageQueueTrigger { return &corev1.MessageQueueTrigger{} },
 			func() *corev1.MessageQueueTriggerList { return &corev1.MessageQueueTriggerList{} },
+			gentype.PrefersProtobuf[*corev1.MessageQueueTrigger](),
 		),
 	}
 }

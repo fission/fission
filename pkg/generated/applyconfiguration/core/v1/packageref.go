@@ -20,9 +20,13 @@ package v1
 
 // PackageRefApplyConfiguration represents a declarative configuration of the PackageRef type for use
 // with apply.
+//
+// PackageRef is a reference to the package.
 type PackageRefApplyConfiguration struct {
-	Namespace       *string `json:"namespace,omitempty"`
-	Name            *string `json:"name,omitempty"`
+	Namespace *string `json:"namespace,omitempty"`
+	Name      *string `json:"name,omitempty"`
+	// Including resource version in the reference forces the function to be updated on
+	// package update, making it possible to cache the function based on its metadata.
 	ResourceVersion *string `json:"resourceversion,omitempty"`
 }
 

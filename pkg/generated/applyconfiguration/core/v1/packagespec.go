@@ -20,11 +20,19 @@ package v1
 
 // PackageSpecApplyConfiguration represents a declarative configuration of the PackageSpec type for use
 // with apply.
+//
+// PackageSpec includes source/deploy archives and the reference of environment to build the package.
 type PackageSpecApplyConfiguration struct {
-	Environment  *EnvironmentReferenceApplyConfiguration `json:"environment,omitempty"`
-	Source       *ArchiveApplyConfiguration              `json:"source,omitempty"`
-	Deployment   *ArchiveApplyConfiguration              `json:"deployment,omitempty"`
-	BuildCommand *string                                 `json:"buildcmd,omitempty"`
+	// Environment is a reference to the environment for building source archive.
+	Environment *EnvironmentReferenceApplyConfiguration `json:"environment,omitempty"`
+	// Source is the archive contains source code and dependencies file.
+	// If the package status is in PENDING state, builder manager will then
+	// notify builder to compile source and save the result as deployable archive.
+	Source *ArchiveApplyConfiguration `json:"source,omitempty"`
+	// Deployment is the deployable archive that environment runtime used to run user function.
+	Deployment *ArchiveApplyConfiguration `json:"deployment,omitempty"`
+	// BuildCommand is a custom build command that builder used to build the source archive.
+	BuildCommand *string `json:"buildcmd,omitempty"`
 }
 
 // PackageSpecApplyConfiguration constructs a declarative configuration of the PackageSpec type for use with

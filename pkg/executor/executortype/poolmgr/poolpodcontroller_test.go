@@ -41,8 +41,8 @@ func TestPoolPodControllerPodCleanup(t *testing.T) {
 	t.Cleanup(mgr.Wait)
 	ctx := t.Context()
 	logger := loggerfactory.GetLogger()
-	kubernetesClient := fake.NewSimpleClientset()
-	fissionClient := fClient.NewSimpleClientset()
+	kubernetesClient := fake.NewClientset()
+	fissionClient := fClient.NewClientset()
 	factory := make(map[string]genInformer.SharedInformerFactory, 0)
 	factory[metav1.NamespaceDefault] = genInformer.NewFilteredSharedInformerFactory(fissionClient, time.Minute*30, metav1.NamespaceDefault, nil)
 

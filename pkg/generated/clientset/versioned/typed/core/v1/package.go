@@ -69,6 +69,7 @@ func newPackages(c *CoreV1Client, namespace string) *packages {
 			namespace,
 			func() *corev1.Package { return &corev1.Package{} },
 			func() *corev1.PackageList { return &corev1.PackageList{} },
+			gentype.PrefersProtobuf[*corev1.Package](),
 		),
 	}
 }

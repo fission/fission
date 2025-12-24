@@ -65,6 +65,7 @@ func newKubernetesWatchTriggers(c *CoreV1Client, namespace string) *kubernetesWa
 			namespace,
 			func() *corev1.KubernetesWatchTrigger { return &corev1.KubernetesWatchTrigger{} },
 			func() *corev1.KubernetesWatchTriggerList { return &corev1.KubernetesWatchTriggerList{} },
+			gentype.PrefersProtobuf[*corev1.KubernetesWatchTrigger](),
 		),
 	}
 }

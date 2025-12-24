@@ -25,17 +25,48 @@ import (
 
 // EnvironmentSpecApplyConfiguration represents a declarative configuration of the EnvironmentSpec type for use
 // with apply.
+//
+// EnvironmentSpec contains with builder, runtime and some other related environment settings.
 type EnvironmentSpecApplyConfiguration struct {
-	Version                      *int                                 `json:"version,omitempty"`
-	Runtime                      *RuntimeApplyConfiguration           `json:"runtime,omitempty"`
-	Builder                      *BuilderApplyConfiguration           `json:"builder,omitempty"`
+	// Version is the Environment API version
+	//
+	// Version "1" allows user to run code snippet in a file, and
+	// it's supported by most of the environments except tensorflow-serving.
+	//
+	// Version "2" supports downloading and compiling user function if source archive is not empty.
+	//
+	// Version "3" is almost the same with v2, but you're able to control the size of pre-warm pool of the environment.
+	Version *int `json:"version,omitempty"`
+	// Runtime is configuration for running function, like container image etc.
+	Runtime *RuntimeApplyConfiguration `json:"runtime,omitempty"`
+	// (Optional) Builder is configuration for builder manager to launch environment builder to build source code into
+	// deployable binary.
+	Builder *BuilderApplyConfiguration `json:"builder,omitempty"`
+	// (Optional) defaults to 'single'. Fission workflow uses
+	// 'infinite' to load multiple functions in one function pod.
+	// Available value:
+	// - single
+	// - infinite
 	AllowedFunctionsPerContainer *corev1.AllowedFunctionsPerContainer `json:"allowedFunctionsPerContainer,omitempty"`
-	AllowAccessToExternalNetwork *bool                                `json:"allowAccessToExternalNetwork,omitempty"`
-	Resources                    *apicorev1.ResourceRequirements      `json:"resources,omitempty"`
-	Poolsize                     *int                                 `json:"poolsize,omitempty"`
-	TerminationGracePeriod       *int64                               `json:"terminationGracePeriod,omitempty"`
-	KeepArchive                  *bool                                `json:"keeparchive,omitempty"`
-	ImagePullSecret              *string                              `json:"imagepullsecret,omitempty"`
+	// Istio default blocks all egress traffic for safety.
+	// To enable accessibility of external network for builder/function pod, set to 'true'.
+	// (Optional) defaults to 'false'
+	AllowAccessToExternalNetwork *bool `json:"allowAccessToExternalNetwork,omitempty"`
+	// The request and limit CPU/MEM resource setting for poolmanager to set up pods in the pre-warm pool.
+	// (Optional) defaults to no limitation.
+	Resources *apicorev1.ResourceRequirements `json:"resources,omitempty"`
+	// The initial pool size for environment
+	Poolsize *int `json:"poolsize,omitempty"`
+	// The grace time for pod to perform connection draining before termination. The unit is in seconds.
+	// (Optional) defaults to 360 seconds
+	TerminationGracePeriod *int64 `json:"terminationGracePeriod,omitempty"`
+	// KeepArchive is used by fetcher to determine if the extracted archive
+	// or unarchived file should be placed, which is then used by specialize handler.
+	// (This is mainly for the JVM environment because .jar is one kind of zip archive.)
+	KeepArchive *bool `json:"keeparchive,omitempty"`
+	// ImagePullSecret is the secret for Kubernetes to pull an image from a
+	// private registry.
+	ImagePullSecret *string `json:"imagepullsecret,omitempty"`
 }
 
 // EnvironmentSpecApplyConfiguration constructs a declarative configuration of the EnvironmentSpec type for use with

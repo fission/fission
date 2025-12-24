@@ -20,10 +20,16 @@ package v1
 
 // KubernetesWatchTriggerSpecApplyConfiguration represents a declarative configuration of the KubernetesWatchTriggerSpec type for use
 // with apply.
+//
+// KubernetesWatchTriggerSpec defines spec of KuberenetesWatchTrigger
 type KubernetesWatchTriggerSpecApplyConfiguration struct {
-	Namespace         *string                              `json:"namespace,omitempty"`
-	Type              *string                              `json:"type,omitempty"`
-	LabelSelector     map[string]string                    `json:"labelselector,omitempty"`
+	Namespace *string `json:"namespace,omitempty"`
+	// Type of resource to watch (Pod, Service, etc.)
+	Type *string `json:"type,omitempty"`
+	// Resource labels
+	LabelSelector map[string]string `json:"labelselector,omitempty"`
+	// The reference to a function for kubewatcher to invoke with
+	// when receiving events.
 	FunctionReference *FunctionReferenceApplyConfiguration `json:"functionref,omitempty"`
 }
 

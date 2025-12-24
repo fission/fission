@@ -20,6 +20,8 @@ package v1
 
 // SecretReferenceApplyConfiguration represents a declarative configuration of the SecretReference type for use
 // with apply.
+//
+// SecretReference is a reference to a kubernetes secret.
 type SecretReferenceApplyConfiguration struct {
 	Namespace *string `json:"namespace,omitempty"`
 	Name      *string `json:"name,omitempty"`

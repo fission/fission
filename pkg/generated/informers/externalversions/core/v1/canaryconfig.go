@@ -57,7 +57,7 @@ func NewCanaryConfigInformer(client versioned.Interface, namespace string, resyn
 // one. This reduces memory footprint and number of connections to the server.
 func NewFilteredCanaryConfigInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) cache.SharedIndexInformer {
 	return cache.NewSharedIndexInformer(
-		&cache.ListWatch{
+		cache.ToListWatcherWithWatchListSemantics(&cache.ListWatch{
 			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
@@ -82,7 +82,7 @@ func NewFilteredCanaryConfigInformer(client versioned.Interface, namespace strin
 				}
 				return client.CoreV1().CanaryConfigs(namespace).Watch(ctx, options)
 			},
-		},
+		}, client),
 		&apiscorev1.CanaryConfig{},
 		resyncPeriod,
 		indexers,

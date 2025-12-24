@@ -24,11 +24,25 @@ import (
 
 // BuilderApplyConfiguration represents a declarative configuration of the Builder type for use
 // with apply.
+//
+// Builder is the setting for environment builder.
 type BuilderApplyConfiguration struct {
-	Image     *string           `json:"image,omitempty"`
-	Command   *string           `json:"command,omitempty"`
+	// Image for containing the language compilation environment.
+	Image *string `json:"image,omitempty"`
+	// (Optional) Default build command to run for this build environment.
+	Command *string `json:"command,omitempty"`
+	// (Optional) Container allows the modification of the deployed builder
+	// container using the Kubernetes Container spec. Fission overrides
+	// the following fields:
+	// - Name
+	// - Image; set to the Builder.Image
+	// - Command; set to the Builder.Command
+	// - TerminationMessagePath
+	// - ImagePullPolicy
+	// - ReadinessProbe
 	Container *corev1.Container `json:"container,omitempty"`
-	PodSpec   *corev1.PodSpec   `json:"podspec,omitempty"`
+	// PodSpec will store the spec of the pod that will be applied to the pod created for the builder
+	PodSpec *corev1.PodSpec `json:"podspec,omitempty"`
 }
 
 // BuilderApplyConfiguration constructs a declarative configuration of the Builder type for use with

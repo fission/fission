@@ -25,10 +25,17 @@ import (
 
 // PackageStatusApplyConfiguration represents a declarative configuration of the PackageStatus type for use
 // with apply.
+//
+// PackageStatus contains the build status of a package also the build log for examination.
 type PackageStatusApplyConfiguration struct {
-	BuildStatus         *corev1.BuildStatus `json:"buildstatus,omitempty"`
-	BuildLog            *string             `json:"buildlog,omitempty"`
-	LastUpdateTimestamp *metav1.Time        `json:"lastUpdateTimestamp,omitempty"`
+	// BuildStatus is the package build status.
+	BuildStatus *corev1.BuildStatus `json:"buildstatus,omitempty"`
+	// BuildLog stores build log during the compilation.
+	BuildLog *string `json:"buildlog,omitempty"`
+	// LastUpdateTimestamp will store the timestamp the package was last updated
+	// metav1.Time is a wrapper around time.Time which supports correct marshaling to YAML and JSON.
+	// https://github.com/kubernetes/apimachinery/blob/44bd77c24ef93cd3a5eb6fef64e514025d10d44e/pkg/apis/meta/v1/time.go#L26-L35
+	LastUpdateTimestamp *metav1.Time `json:"lastUpdateTimestamp,omitempty"`
 }
 
 // PackageStatusApplyConfiguration constructs a declarative configuration of the PackageStatus type for use with

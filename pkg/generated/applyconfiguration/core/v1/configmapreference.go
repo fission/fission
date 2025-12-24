@@ -20,6 +20,8 @@ package v1
 
 // ConfigMapReferenceApplyConfiguration represents a declarative configuration of the ConfigMapReference type for use
 // with apply.
+//
+// ConfigMapReference is a reference to a kubernetes configmap.
 type ConfigMapReferenceApplyConfiguration struct {
 	Namespace *string `json:"namespace,omitempty"`
 	Name      *string `json:"name,omitempty"`

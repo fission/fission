@@ -25,22 +25,47 @@ import (
 
 // MessageQueueTriggerSpecApplyConfiguration represents a declarative configuration of the MessageQueueTriggerSpec type for use
 // with apply.
+//
+// MessageQueueTriggerSpec defines a binding from a topic in a
+// message queue to a function.
 type MessageQueueTriggerSpecApplyConfiguration struct {
+	// The reference to a function for message queue trigger to invoke with
+	// when receiving messages from subscribed topic.
 	FunctionReference *FunctionReferenceApplyConfiguration `json:"functionref,omitempty"`
-	MessageQueueType  *corev1.MessageQueueType             `json:"messageQueueType,omitempty"`
-	Topic             *string                              `json:"topic,omitempty"`
-	ResponseTopic     *string                              `json:"respTopic,omitempty"`
-	ErrorTopic        *string                              `json:"errorTopic,omitempty"`
-	MaxRetries        *int                                 `json:"maxRetries,omitempty"`
-	ContentType       *string                              `json:"contentType,omitempty"`
-	PollingInterval   *int32                               `json:"pollingInterval,omitempty"`
-	CooldownPeriod    *int32                               `json:"cooldownPeriod,omitempty"`
-	MinReplicaCount   *int32                               `json:"minReplicaCount,omitempty"`
-	MaxReplicaCount   *int32                               `json:"maxReplicaCount,omitempty"`
-	Metadata          map[string]string                    `json:"metadata,omitempty"`
-	Secret            *string                              `json:"secret,omitempty"`
-	MqtKind           *string                              `json:"mqtkind,omitempty"`
-	PodSpec           *apicorev1.PodSpec                   `json:"podspec,omitempty"`
+	// Type of message queue (NATS, Kafka, AzureQueue)
+	MessageQueueType *corev1.MessageQueueType `json:"messageQueueType,omitempty"`
+	// Subscribed topic
+	Topic *string `json:"topic,omitempty"`
+	// Topic for message queue trigger to sent response from function.
+	ResponseTopic *string `json:"respTopic,omitempty"`
+	// Topic to collect error response sent from function
+	ErrorTopic *string `json:"errorTopic,omitempty"`
+	// Maximum times for message queue trigger to retry
+	MaxRetries *int `json:"maxRetries,omitempty"`
+	// Content type of payload
+	ContentType *string `json:"contentType,omitempty"`
+	// The period to check each trigger source on every ScaledObject, and scale the deployment up or down accordingly
+	PollingInterval *int32 `json:"pollingInterval,omitempty"`
+	// The period to wait after the last trigger reported active before scaling the deployment back to 0
+	CooldownPeriod *int32 `json:"cooldownPeriod,omitempty"`
+	// Minimum number of replicas KEDA will scale the deployment down to
+	MinReplicaCount *int32 `json:"minReplicaCount,omitempty"`
+	// Maximum number of replicas KEDA will scale the deployment up to
+	MaxReplicaCount *int32 `json:"maxReplicaCount,omitempty"`
+	// ScalerTrigger fields
+	Metadata map[string]string `json:"metadata,omitempty"`
+	// Secret name
+	Secret *string `json:"secret,omitempty"`
+	// Kind of Message Queue Trigger to be created, by default its fission
+	MqtKind *string `json:"mqtkind,omitempty"`
+	// (Optional) Podspec allows modification of deployed runtime pod with Kubernetes PodSpec
+	// The merging logic is briefly described below and detailed MergePodSpec function
+	// - Volumes mounts and env variables for function and fetcher container are appended
+	// - All additional containers and init containers are appended
+	// - Volume definitions are appended
+	// - Lists such as tolerations, ImagePullSecrets, HostAliases are appended
+	// - Structs are merged and variables from pod spec take precedence
+	PodSpec *apicorev1.PodSpec `json:"podspec,omitempty"`
 }
 
 // MessageQueueTriggerSpecApplyConfiguration constructs a declarative configuration of the MessageQueueTriggerSpec type for use with

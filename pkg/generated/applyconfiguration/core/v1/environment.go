@@ -26,6 +26,8 @@ import (
 
 // EnvironmentApplyConfiguration represents a declarative configuration of the Environment type for use
 // with apply.
+//
+// Environment is environment for building and running user functions.
 type EnvironmentApplyConfiguration struct {
 	metav1.TypeMetaApplyConfiguration    `json:",inline"`
 	*metav1.ObjectMetaApplyConfiguration `json:"metadata,omitempty"`
@@ -42,6 +44,7 @@ func Environment(name, namespace string) *EnvironmentApplyConfiguration {
 	b.WithAPIVersion("fission.io/v1")
 	return b
 }
+
 func (b EnvironmentApplyConfiguration) IsApplyConfiguration() {}
 
 // WithKind sets the Kind field in the declarative configuration to the given value

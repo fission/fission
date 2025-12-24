@@ -49,7 +49,7 @@ func TestConvertTargetCPUToCustomMetric(t *testing.T) {
 
 func TestHpaOps(t *testing.T) {
 	logger := loggerfactory.GetLogger()
-	kubernetesClient := fake.NewSimpleClientset()
+	kubernetesClient := fake.NewClientset()
 	instanceID := strings.ToLower(uniuri.NewLen(8))
 	ns := "test-namespace"
 	hpaops := NewHpaOperations(logger, kubernetesClient, instanceID)

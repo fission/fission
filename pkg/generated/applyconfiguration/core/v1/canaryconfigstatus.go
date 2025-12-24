@@ -20,6 +20,8 @@ package v1
 
 // CanaryConfigStatusApplyConfiguration represents a declarative configuration of the CanaryConfigStatus type for use
 // with apply.
+//
+// CanaryConfigStatus represents canary config status
 type CanaryConfigStatusApplyConfiguration struct {
 	Status *string `json:"status,omitempty"`
 }

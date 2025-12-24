@@ -20,6 +20,8 @@ package v1
 
 // EnvironmentReferenceApplyConfiguration represents a declarative configuration of the EnvironmentReference type for use
 // with apply.
+//
+// EnvironmentReference is a reference to an environment.
 type EnvironmentReferenceApplyConfiguration struct {
 	Namespace *string `json:"namespace,omitempty"`
 	Name      *string `json:"name,omitempty"`

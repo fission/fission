@@ -24,10 +24,23 @@ import (
 
 // FunctionReferenceApplyConfiguration represents a declarative configuration of the FunctionReference type for use
 // with apply.
+//
+// FunctionReference refers to a function
 type FunctionReferenceApplyConfiguration struct {
-	Type            *corev1.FunctionReferenceType `json:"type,omitempty"`
-	Name            *string                       `json:"name,omitempty"`
-	FunctionWeights map[string]int                `json:"functionweights,omitempty"`
+	// Type indicates whether this function reference is by name or selector. For now,
+	// the only supported reference type is by "name".  Future reference types:
+	// * Function by label or annotation
+	// * Branch or tag of a versioned function
+	// * A "rolling upgrade" from one version of a function to another
+	// Available value:
+	// - name
+	// - function-weights
+	Type *corev1.FunctionReferenceType `json:"type,omitempty"`
+	// Name of the function.
+	Name *string `json:"name,omitempty"`
+	// Function Reference by weight. this map contains function name as key and its weight
+	// as the value. This is for canary upgrade purpose.
+	FunctionWeights map[string]int `json:"functionweights,omitempty"`
 }
 
 // FunctionReferenceApplyConfiguration constructs a declarative configuration of the FunctionReference type for use with

@@ -20,16 +20,36 @@ package v1
 
 // HTTPTriggerSpecApplyConfiguration represents a declarative configuration of the HTTPTriggerSpec type for use
 // with apply.
+//
+// Triggers
+// HTTPTriggerSpec is for router to expose user functions at the given URL path.
 type HTTPTriggerSpecApplyConfiguration struct {
-	Host              *string                              `json:"host,omitempty"`
-	RelativeURL       *string                              `json:"relativeurl,omitempty"`
-	Prefix            *string                              `json:"prefix,omitempty"`
-	KeepPrefix        *bool                                `json:"keepPrefix,omitempty"`
-	Method            *string                              `json:"method,omitempty"`
-	Methods           []string                             `json:"methods,omitempty"`
+	// TODO: remove this field since we have IngressConfig already
+	// Deprecated: the original idea of this field is not for setting Ingress.
+	// Since we have IngressConfig now, remove Host after couple releases.
+	Host *string `json:"host,omitempty"`
+	// RelativeURL is the exposed URL for external client to access a function with.
+	RelativeURL *string `json:"relativeurl,omitempty"`
+	// Prefix with which functions are exposed.
+	// NOTE: Prefix takes precedence over URL/RelativeURL.
+	// Note that it does not treat slashes specially ("/foobar/" will be matched by
+	// the prefix "/foobar").
+	Prefix *string `json:"prefix,omitempty"`
+	// When function is exposed with Prefix based path,
+	// keepPrefix decides whether to keep or trim prefix in URL while invoking function.
+	KeepPrefix *bool `json:"keepPrefix,omitempty"`
+	// Use Methods instead of Method. This field is going to be deprecated in a future release
+	// HTTP method to access a function.
+	Method *string `json:"method,omitempty"`
+	// HTTP methods to access a function
+	Methods []string `json:"methods,omitempty"`
+	// FunctionReference is a reference to the target function.
 	FunctionReference *FunctionReferenceApplyConfiguration `json:"functionref,omitempty"`
-	CreateIngress     *bool                                `json:"createingress,omitempty"`
-	IngressConfig     *IngressConfigApplyConfiguration     `json:"ingressconfig,omitempty"`
+	// If CreateIngress is true, router will create an ingress definition.
+	CreateIngress *bool `json:"createingress,omitempty"`
+	// TODO: make IngressConfig an independent Fission resource
+	// IngressConfig for router to set up Ingress.
+	IngressConfig *IngressConfigApplyConfiguration `json:"ingressconfig,omitempty"`
 }
 
 // HTTPTriggerSpecApplyConfiguration constructs a declarative configuration of the HTTPTriggerSpec type for use with

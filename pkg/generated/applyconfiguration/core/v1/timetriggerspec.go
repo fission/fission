@@ -24,11 +24,19 @@ import (
 
 // TimeTriggerSpecApplyConfiguration represents a declarative configuration of the TimeTriggerSpec type for use
 // with apply.
+//
+// TimeTriggerSpec invokes the specific function at a time or
+// times specified by a cron string.
 type TimeTriggerSpecApplyConfiguration struct {
-	Cron                                 *string `json:"cron,omitempty"`
+	// Cron schedule
+	Cron *string `json:"cron,omitempty"`
+	// The reference to function
 	*FunctionReferenceApplyConfiguration `json:"functionref,omitempty"`
-	Method                               *string `json:"method,omitempty"`
-	Subpath                              *string `json:"subpath,omitempty"`
+	// HTTP Method for trigger, ex : GET, POST, PUT, DELETE, HEAD (default: "POST")
+	Method *string `json:"method,omitempty"`
+	// Subpath to trigger a specific route if function
+	// internally supports routing, (default: "/")
+	Subpath *string `json:"subpath,omitempty"`
 }
 
 // TimeTriggerSpecApplyConfiguration constructs a declarative configuration of the TimeTriggerSpec type for use with

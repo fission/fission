@@ -25,14 +25,43 @@ import (
 
 // ExecutionStrategyApplyConfiguration represents a declarative configuration of the ExecutionStrategy type for use
 // with apply.
+//
+// ExecutionStrategy specifies low-level parameters for function execution,
+// such as the number of instances.
+//
+// MinScale affects the cold start behavior for a function. If MinScale is 0 then the
+// deployment is created on first invocation of function and is good for requests of
+// asynchronous nature. If MinScale is greater than 0 then MinScale number of pods are
+// created at the time of creation of function. This ensures faster response during first
+// invocation at the cost of consuming resources.
+//
+// MaxScale is the maximum number of pods that function will scale to based on TargetCPUPercent
+// and resources allocated to the function pod.
 type ExecutionStrategyApplyConfiguration struct {
-	ExecutorType          *corev1.ExecutorType                `json:"ExecutorType,omitempty"`
-	MinScale              *int                                `json:"MinScale,omitempty"`
-	MaxScale              *int                                `json:"MaxScale,omitempty"`
-	TargetCPUPercent      *int                                `json:"TargetCPUPercent,omitempty"`
-	SpecializationTimeout *int                                `json:"SpecializationTimeout,omitempty"`
-	Metrics               []v2.MetricSpec                     `json:"hpaMetrics,omitempty"`
-	Behavior              *v2.HorizontalPodAutoscalerBehavior `json:"hpaBehavior,omitempty"`
+	// ExecutorType is the executor type of function used. Defaults to "poolmgr".
+	//
+	// Available value:
+	// - poolmgr
+	// - newdeploy
+	// - container
+	ExecutorType *corev1.ExecutorType `json:"ExecutorType,omitempty"`
+	// This is only for newdeploy to set up minimum replicas of deployment.
+	MinScale *int `json:"MinScale,omitempty"`
+	// This is only for newdeploy to set up maximum replicas of deployment.
+	MaxScale *int `json:"MaxScale,omitempty"`
+	// Deprecated: use hpaMetrics instead.
+	// This is only for executor type newdeploy and container to set up target CPU utilization of HPA.
+	// Applicable for executor type newdeploy and container.
+	TargetCPUPercent *int `json:"TargetCPUPercent,omitempty"`
+	// This is the timeout setting for executor to wait for pod specialization.
+	SpecializationTimeout *int `json:"SpecializationTimeout,omitempty"`
+	// hpaMetrics is the list of metrics used to determine the desired replica count of the Deployment
+	// created for the function.
+	// Applicable for executor type newdeploy and container.
+	Metrics []v2.MetricSpec `json:"hpaMetrics,omitempty"`
+	// hpaBehavior is the behavior of HPA when scaling in up/down direction.
+	// Applicable for executor type newdeploy and container.
+	Behavior *v2.HorizontalPodAutoscalerBehavior `json:"hpaBehavior,omitempty"`
 }
 
 // ExecutionStrategyApplyConfiguration constructs a declarative configuration of the ExecutionStrategy type for use with

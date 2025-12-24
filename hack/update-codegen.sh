@@ -22,15 +22,17 @@ echo "Generating code under ${OUTDIR} using ${CODEGEN_PKG} ..."
 
 source "${CODEGEN_PKG}/kube_codegen.sh"
 
-# kube::codegen::gen_helpers \
-#     --input-pkg-root github.com/fission/fission/pkg/apis \
-#     --output-base "${OUTDIR}" \
-#     --boilerplate "${SCRIPT_ROOT}/hack/boilerplate.txt"
+THIS_PKG="github.com/fission/fission"
+
+kube::codegen::gen_helpers \
+    --boilerplate "${SCRIPT_ROOT}/hack/boilerplate.go.txt" \
+	"${SCRIPT_ROOT}/pkg/apis"
 
 kube::codegen::gen_client \
 	--with-watch \
 	--with-applyconfig \
 	--output-pkg github.com/fission/fission/pkg/generated \
 	--output-dir "${OUTDIR}" \
-	--boilerplate "${SCRIPT_ROOT}/hack/boilerplate.txt" \
-	"${SCRIPT_ROOT}/pkg/apis" \
+	--boilerplate "${SCRIPT_ROOT}/hack/boilerplate.go.txt" \
+	--prefers-protobuf \
+	"${SCRIPT_ROOT}/pkg/apis"

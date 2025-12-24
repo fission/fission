@@ -24,10 +24,33 @@ import (
 
 // RuntimeApplyConfiguration represents a declarative configuration of the Runtime type for use
 // with apply.
+//
+// Environments
+// Runtime is the setting for environment runtime.
 type RuntimeApplyConfiguration struct {
-	Image     *string           `json:"image,omitempty"`
+	// Image for containing the language runtime.
+	Image *string `json:"image,omitempty"`
+	// (Optional) Container allows the modification of the deployed runtime
+	// container using the Kubernetes Container spec. Fission overrides
+	// the following fields:
+	// - Name
+	// - Image; set to the Runtime.Image
+	// - TerminationMessagePath
+	// - ImagePullPolicy
+	//
+	// You can set either PodSpec or Container, but not both.
+	// kubebuilder:validation:XPreserveUnknownFields=true
 	Container *corev1.Container `json:"container,omitempty"`
-	PodSpec   *corev1.PodSpec   `json:"podspec,omitempty"`
+	// (Optional) Podspec allows modification of deployed runtime pod with Kubernetes PodSpec
+	// The merging logic is briefly described below and detailed MergePodSpec function
+	// - Volumes mounts and env variables for function and fetcher container are appended
+	// - All additional containers and init containers are appended
+	// - Volume definitions are appended
+	// - Lists such as tolerations, ImagePullSecrets, HostAliases are appended
+	// - Structs are merged and variables from pod spec take precedence
+	//
+	// You can set either PodSpec or Container, but not both.
+	PodSpec *corev1.PodSpec `json:"podspec,omitempty"`
 }
 
 // RuntimeApplyConfiguration constructs a declarative configuration of the Runtime type for use with

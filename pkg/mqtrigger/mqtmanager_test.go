@@ -61,7 +61,7 @@ func TestMqtManager(t *testing.T) {
 	logger := loggerfactory.GetLogger()
 	defer logger.Sync()
 	msgQueue := fakeMessageQueue{}
-	fissionClient := fClient.NewSimpleClientset()
+	fissionClient := fClient.NewClientset()
 	factory := make(map[string]genInformer.SharedInformerFactory, 0)
 	factory[metav1.NamespaceDefault] = genInformer.NewFilteredSharedInformerFactory(fissionClient, time.Minute*30, metav1.NamespaceDefault, nil)
 	mgr, err := MakeMessageQueueTriggerManager(logger, nil, fv1.MessageQueueTypeKafka, factory, msgQueue)
