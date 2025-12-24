@@ -63,7 +63,7 @@ func TestMqtManager(t *testing.T) {
 	msgQueue := fakeMessageQueue{}
 	fissionClient := fClient.NewClientset()
 	factory := make(map[string]genInformer.SharedInformerFactory, 0)
-	factory[metav1.NamespaceDefault] = genInformer.NewFilteredSharedInformerFactory(fissionClient, time.Minute*30, metav1.NamespaceDefault, nil)
+	factory[metav1.NamespaceDefault] = genInformer.NewSharedInformerFactoryWithOptions(fissionClient, time.Minute*30, genInformer.WithNamespace(metav1.NamespaceDefault))
 	mgr, err := MakeMessageQueueTriggerManager(logger, nil, fv1.MessageQueueTypeKafka, factory, msgQueue)
 	if err != nil {
 		t.Fatalf("Error creating messageQueueTriggerManagesr: %v", err)

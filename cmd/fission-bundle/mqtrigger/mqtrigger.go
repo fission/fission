@@ -78,7 +78,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *
 
 	finformerFactory := make(map[string]genInformer.SharedInformerFactory, 0)
 	for _, ns := range utils.DefaultNSResolver().FissionResourceNS {
-		finformerFactory[ns] = genInformer.NewFilteredSharedInformerFactory(fissionClient, time.Minute*30, ns, nil)
+		finformerFactory[ns] = genInformer.NewSharedInformerFactoryWithOptions(fissionClient, time.Minute*30, genInformer.WithNamespace(ns))
 	}
 
 	mqtMgr, err := mqtrigger.MakeMessageQueueTriggerManager(logger, fissionClient, mqType, finformerFactory, mq)

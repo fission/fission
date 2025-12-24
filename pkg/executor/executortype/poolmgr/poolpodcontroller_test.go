@@ -44,7 +44,7 @@ func TestPoolPodControllerPodCleanup(t *testing.T) {
 	kubernetesClient := fake.NewClientset()
 	fissionClient := fClient.NewClientset()
 	factory := make(map[string]genInformer.SharedInformerFactory, 0)
-	factory[metav1.NamespaceDefault] = genInformer.NewFilteredSharedInformerFactory(fissionClient, time.Minute*30, metav1.NamespaceDefault, nil)
+	factory[metav1.NamespaceDefault] = genInformer.NewSharedInformerFactoryWithOptions(fissionClient, time.Minute*30, genInformer.WithNamespace(metav1.NamespaceDefault))
 
 	executorLabel, err := utils.GetInformerLabelByExecutor(fv1.ExecutorTypePoolmgr)
 	if err != nil {
@@ -59,7 +59,8 @@ func TestPoolPodControllerPodCleanup(t *testing.T) {
 	}
 
 	executorInstanceID := strings.ToLower(uniuri.NewLen(8))
-	metricsClient := metricsclient.NewSimpleClientset()
+	// TODO: use NewClientset when available in upstream metrics package
+	metricsClient := metricsclient.NewSimpleClientset() //nolint:staticcheck
 	fetcherConfig, err := fetcherConfig.MakeFetcherConfig("/userfunc")
 	if err != nil {
 		t.Fatalf("Error creating fetcher config: %v", err)
