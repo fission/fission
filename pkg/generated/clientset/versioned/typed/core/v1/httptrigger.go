@@ -65,7 +65,6 @@ func newHTTPTriggers(c *CoreV1Client, namespace string) *hTTPTriggers {
 			namespace,
 			func() *corev1.HTTPTrigger { return &corev1.HTTPTrigger{} },
 			func() *corev1.HTTPTriggerList { return &corev1.HTTPTriggerList{} },
-			gentype.PrefersProtobuf[*corev1.HTTPTrigger](),
 		),
 	}
 }

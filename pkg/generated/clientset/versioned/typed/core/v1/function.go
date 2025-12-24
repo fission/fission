@@ -65,7 +65,6 @@ func newFunctions(c *CoreV1Client, namespace string) *functions {
 			namespace,
 			func() *corev1.Function { return &corev1.Function{} },
 			func() *corev1.FunctionList { return &corev1.FunctionList{} },
-			gentype.PrefersProtobuf[*corev1.Function](),
 		),
 	}
 }

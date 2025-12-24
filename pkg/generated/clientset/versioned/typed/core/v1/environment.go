@@ -65,7 +65,6 @@ func newEnvironments(c *CoreV1Client, namespace string) *environments {
 			namespace,
 			func() *corev1.Environment { return &corev1.Environment{} },
 			func() *corev1.EnvironmentList { return &corev1.EnvironmentList{} },
-			gentype.PrefersProtobuf[*corev1.Environment](),
 		),
 	}
 }

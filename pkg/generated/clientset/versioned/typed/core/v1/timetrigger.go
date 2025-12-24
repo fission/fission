@@ -65,7 +65,6 @@ func newTimeTriggers(c *CoreV1Client, namespace string) *timeTriggers {
 			namespace,
 			func() *corev1.TimeTrigger { return &corev1.TimeTrigger{} },
 			func() *corev1.TimeTriggerList { return &corev1.TimeTriggerList{} },
-			gentype.PrefersProtobuf[*corev1.TimeTrigger](),
 		),
 	}
 }
