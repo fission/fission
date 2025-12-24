@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -79,7 +78,7 @@ func TestIsZip(t *testing.T) {
 				})
 			}
 
-			got, err := IsZip(context.Background(), filename)
+			got, err := IsZip(t.Context(), filename)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("IsZip() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -92,7 +91,7 @@ func TestIsZip(t *testing.T) {
 }
 
 func TestArchiveUnarchive(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Create temp test directories
 	sourceDir, err := os.MkdirTemp("", "zip-test-source-*")
@@ -235,7 +234,7 @@ func TestArchiveUnarchive(t *testing.T) {
 }
 
 func TestArchiveOverwrite(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Create initial source directory
 	sourceDir, err := os.MkdirTemp("", "zip-test-source-*")

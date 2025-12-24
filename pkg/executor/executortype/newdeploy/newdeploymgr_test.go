@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -23,6 +22,8 @@ import (
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 	"github.com/fission/fission/pkg/utils/manager"
 	"github.com/fission/fission/pkg/utils/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -42,7 +43,7 @@ func TestRefreshFuncPods(t *testing.T) {
 	kubernetesClient := fake.NewClientset()
 	fissionClient := fClient.NewClientset()
 	factory := make(map[string]genInformer.SharedInformerFactory, 0)
-	factory[metav1.NamespaceAll] = genInformer.NewSharedInformerFactory(fissionClient, time.Minute*30)
+	factory[metav1.NamespaceDefault] = genInformer.NewSharedInformerFactoryWithOptions(fissionClient, time.Minute*30, genInformer.WithNamespace(metav1.NamespaceDefault))
 
 	executorLabel, err := utils.GetInformerLabelByExecutor(fv1.ExecutorTypeNewdeploy)
 	if err != nil {
@@ -121,7 +122,7 @@ func TestRefreshFuncPods(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error getting environment: %s", err)
 	}
-	assert.Equal(t, envRes.ObjectMeta.Name, envName)
+	require.Equal(t, envRes.ObjectMeta.Name, envName)
 
 	funcSpec := fv1.Function{
 		ObjectMeta: metav1.ObjectMeta{
@@ -152,7 +153,7 @@ func TestRefreshFuncPods(t *testing.T) {
 	}
 	assert.Equal(t, funcRes.ObjectMeta.Name, functionName)
 
-	ctx2, cancel2 := context.WithCancel(context.Background())
+	ctx2, cancel2 := context.WithCancel(t.Context())
 	wait.Until(func() {
 		t.Log("Checking for deployment")
 		ret, err := kubernetesClient.AppsV1().Deployments(functionNamespace).List(ctx2, metav1.ListOptions{})

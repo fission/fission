@@ -14,7 +14,7 @@ func TestAddAndWait(t *testing.T) {
 	value := 10
 	expectedValue := 11
 
-	mgr.Add(context.Background(), func(ctx context.Context) {
+	mgr.Add(t.Context(), func(ctx context.Context) {
 		time.Sleep(1 * time.Second)
 		value = expectedValue
 	})
@@ -29,7 +29,7 @@ func TestAddWithContextCancel(t *testing.T) {
 	value := 10
 	expectedValue := 11
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 
 	mgr.Add(ctx, func(ctx context.Context) {
 		<-ctx.Done()
@@ -46,7 +46,7 @@ func TestAddAndWaitWithTimeout(t *testing.T) {
 
 	value := 10
 
-	mgr.Add(context.Background(), func(ctx context.Context) {
+	mgr.Add(t.Context(), func(ctx context.Context) {
 		time.Sleep(2 * time.Second)
 	})
 
@@ -56,7 +56,7 @@ func TestAddAndWaitWithTimeout(t *testing.T) {
 	mgr = New()
 
 	expectedValue := 11
-	mgr.Add(context.Background(), func(ctx context.Context) {
+	mgr.Add(t.Context(), func(ctx context.Context) {
 		time.Sleep(100 * time.Millisecond)
 		value = expectedValue
 	})

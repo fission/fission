@@ -1,7 +1,6 @@
 package fscache
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -226,13 +225,13 @@ func TestPoolCacheRequests(t *testing.T) {
 				reqno := i
 				wg.Go(func() {
 					func(reqno int) {
-						svc, err := p.GetSvcValue(context.Background(), key, tt.rpp, tt.concurrency)
+						svc, err := p.GetSvcValue(t.Context(), key, tt.rpp, tt.concurrency)
 						if err != nil {
 							code, _ := ferror.GetHTTPError(err)
 							if code == http.StatusNotFound {
 								atomic.AddUint64(&svcCounter, 1)
 								address := fmt.Sprintf("svc-%d", atomic.LoadUint64(&svcCounter))
-								p.SetSvcValue(context.Background(), key, address, &FuncSvc{
+								p.SetSvcValue(t.Context(), key, address, &FuncSvc{
 									Name: address,
 								}, resource.MustParse("45m"), tt.rpp, tt.retainPods)
 							} else {
@@ -277,7 +276,7 @@ func TestPoolCacheRequests(t *testing.T) {
 					Generation: 2,
 				}
 				address := fmt.Sprintf("svc-%d", svcCounter)
-				p.SetSvcValue(context.Background(), newKey, address, &FuncSvc{
+				p.SetSvcValue(t.Context(), newKey, address, &FuncSvc{
 					Name: address,
 				}, resource.MustParse("45m"), tt.rpp, tt.retainPods)
 				funcSvc := p.ListAvailableValue()

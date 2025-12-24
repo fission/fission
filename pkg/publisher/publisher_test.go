@@ -1,7 +1,6 @@
 package publisher
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -21,7 +20,7 @@ func TestPublisher(t *testing.T) {
 		assert.Contains(t, r.Header, "Traceparent")
 	}))
 
-	ctx := context.Background()
+	ctx := t.Context()
 	logger := loggerfactory.GetLogger()
 	shutdown, err := otelUtils.InitProvider(ctx, logger, fnName)
 	assert.NoError(t, err)
@@ -43,7 +42,7 @@ func TestPublisherSubpath(t *testing.T) {
 		assert.Contains(t, r.Header, "Traceparent")
 	}))
 
-	ctx := context.Background()
+	ctx := t.Context()
 	logger := loggerfactory.GetLogger()
 	shutdown, err := otelUtils.InitProvider(ctx, logger, fnName)
 	assert.NoError(t, err)

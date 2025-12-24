@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestIsNotFound(t *testing.T) {
@@ -18,7 +18,7 @@ func TestIsNotFound(t *testing.T) {
 	}
 
 	for err, want := range errs {
-		assert.Equal(t, want, IsNotFound(err))
+		require.Equal(t, want, IsNotFound(err))
 	}
 }
 
@@ -31,6 +31,6 @@ func TestGetHTTPError(t *testing.T) {
 	}
 	for want, err := range errs {
 		code, _ := GetHTTPError(err)
-		assert.Equal(t, want, code)
+		require.Equal(t, want, code)
 	}
 }

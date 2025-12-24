@@ -21,7 +21,7 @@ import (
 func TestFissionCLI(t *testing.T) {
 	mgr := manager.New()
 	f := framework.NewFramework()
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	err := f.Start(ctx)
 	require.NoError(t, err)
 	defer func() {
