@@ -112,7 +112,7 @@ require (
 	github.com/go-openapi/swag/yamlutils v0.25.4 // indirect
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
 	github.com/gobuffalo/flect v1.0.3 // indirect
-	github.com/goccy/go-yaml v1.18.0 // indirect
+	github.com/goccy/go-yaml v1.19.1 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
@@ -220,7 +220,7 @@ require (
 	k8s.io/kube-openapi v0.0.0-20251125145642-4e65d59e963e // indirect
 	k8s.io/utils v0.0.0-20251222233032-718f0e51e6d2 // indirect
 	knative.dev/pkg v0.0.0-20250326102644-9f3e60a9244c // indirect
-	sigs.k8s.io/controller-runtime/tools/setup-envtest v0.0.0-20250211091558-894df3a7e664 // indirect
+	sigs.k8s.io/controller-runtime/tools/setup-envtest v0.0.0-20251222141034-adb64659bb1f // indirect
 	sigs.k8s.io/controller-tools v0.20.0 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
