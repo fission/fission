@@ -26,11 +26,14 @@ import (
 
 // PackageApplyConfiguration represents a declarative configuration of the Package type for use
 // with apply.
+//
+// Package Think of these as function-level images.
 type PackageApplyConfiguration struct {
 	metav1.TypeMetaApplyConfiguration    `json:",inline"`
 	*metav1.ObjectMetaApplyConfiguration `json:"metadata,omitempty"`
-	Spec                                 *PackageSpecApplyConfiguration   `json:"spec,omitempty"`
-	Status                               *PackageStatusApplyConfiguration `json:"status,omitempty"`
+	Spec                                 *PackageSpecApplyConfiguration `json:"spec,omitempty"`
+	// Status indicates the build status of package.
+	Status *PackageStatusApplyConfiguration `json:"status,omitempty"`
 }
 
 // Package constructs a declarative configuration of the Package type for use with
@@ -43,6 +46,7 @@ func Package(name, namespace string) *PackageApplyConfiguration {
 	b.WithAPIVersion("fission.io/v1")
 	return b
 }
+
 func (b PackageApplyConfiguration) IsApplyConfiguration() {}
 
 // WithKind sets the Kind field in the declarative configuration to the given value

@@ -294,7 +294,7 @@ func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, 
 
 	finformerFactory := make(map[string]genInformer.SharedInformerFactory, 0)
 	for _, ns := range utils.DefaultNSResolver().FissionResourceNS {
-		finformerFactory[ns] = genInformer.NewFilteredSharedInformerFactory(fissionClient, time.Minute*30, ns, nil)
+		finformerFactory[ns] = genInformer.NewSharedInformerFactoryWithOptions(fissionClient, time.Minute*30, genInformer.WithNamespace(ns))
 	}
 
 	executorLabel, err := utils.GetInformerLabelByExecutor(fv1.ExecutorTypePoolmgr)

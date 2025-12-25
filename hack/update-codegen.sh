@@ -16,21 +16,21 @@ CODEGEN_PKG=${CODEGEN_PKG:-$(
 	cd "${SCRIPT_ROOT}"
 	echo ${GOMODCACHEPATH}/github.com/fission/code-generator@${CODEGEN_PKG_VERSION}
 )}
-OUTDIR="${SCRIPT_ROOT}/pkg/generated"
 
-echo "Generating code under ${OUTDIR} using ${CODEGEN_PKG} ..."
+echo "Generating code under ${SCRIPT_ROOT}/pkg/generated using ${CODEGEN_PKG} ..."
 
 source "${CODEGEN_PKG}/kube_codegen.sh"
 
-# kube::codegen::gen_helpers \
-#     --input-pkg-root github.com/fission/fission/pkg/apis \
-#     --output-base "${OUTDIR}" \
-#     --boilerplate "${SCRIPT_ROOT}/hack/boilerplate.txt"
+THIS_PKG="github.com/fission/fission"
+
+kube::codegen::gen_register \
+    --boilerplate "${SCRIPT_ROOT}/hack/boilerplate.go.txt" \
+    "${SCRIPT_ROOT}"
 
 kube::codegen::gen_client \
 	--with-watch \
 	--with-applyconfig \
-	--output-pkg github.com/fission/fission/pkg/generated \
-	--output-dir "${OUTDIR}" \
-	--boilerplate "${SCRIPT_ROOT}/hack/boilerplate.txt" \
-	"${SCRIPT_ROOT}/pkg/apis" \
+	--output-pkg ${THIS_PKG}/pkg/generated \
+	--output-dir "${SCRIPT_ROOT}/pkg/generated" \
+	--boilerplate "${SCRIPT_ROOT}/hack/boilerplate.go.txt" \
+	"${SCRIPT_ROOT}/pkg/apis"

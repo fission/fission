@@ -20,9 +20,20 @@ package v1
 
 // FunctionPackageRefApplyConfiguration represents a declarative configuration of the FunctionPackageRef type for use
 // with apply.
+//
+// FunctionPackageRef includes the reference to the package also the entrypoint of package.
 type FunctionPackageRefApplyConfiguration struct {
-	PackageRef   *PackageRefApplyConfiguration `json:"packageref,omitempty"`
-	FunctionName *string                       `json:"functionName,omitempty"`
+	// Package reference
+	PackageRef *PackageRefApplyConfiguration `json:"packageref,omitempty"`
+	// FunctionName specifies a specific function within the package. This allows
+	// functions to share packages, by having different functions within the same
+	// package.
+	//
+	// Fission itself does not interpret this path. It is passed verbatim to
+	// build and runtime environments.
+	//
+	// This is optional: if unspecified, the environment has a default name.
+	FunctionName *string `json:"functionName,omitempty"`
 }
 
 // FunctionPackageRefApplyConfiguration constructs a declarative configuration of the FunctionPackageRef type for use with

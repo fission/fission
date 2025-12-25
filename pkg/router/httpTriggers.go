@@ -364,10 +364,7 @@ func (ts *HTTPTriggerSet) addFunctionHandlers() error {
 						rr.functionMap[fn.ObjectMeta.Name].ObjectMeta.ResourceVersion != fn.ObjectMeta.ResourceVersion {
 						// invalidate resolver cache
 						ts.logger.Debug("invalidating resolver cache")
-						err := ts.resolver.delete(key.namespace, key.triggerName, key.triggerResourceVersion)
-						if err != nil {
-							ts.logger.Error("error deleting functionReferenceResolver cache", zap.Error(err))
-						}
+						ts.resolver.delete(key.namespace, key.triggerName, key.triggerResourceVersion)
 						break
 					}
 				}

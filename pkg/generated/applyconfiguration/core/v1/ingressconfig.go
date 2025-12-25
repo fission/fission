@@ -20,11 +20,22 @@ package v1
 
 // IngressConfigApplyConfiguration represents a declarative configuration of the IngressConfig type for use
 // with apply.
+//
+// IngressConfig is for router to set up Ingress.
 type IngressConfigApplyConfiguration struct {
+	// Annotations will be added to metadata when creating Ingress.
 	Annotations map[string]string `json:"annotations,omitempty"`
-	Path        *string           `json:"path,omitempty"`
-	Host        *string           `json:"host,omitempty"`
-	TLS         *string           `json:"tls,omitempty"`
+	// Path is for path matching. The format of path
+	// depends on what ingress controller you used.
+	Path *string `json:"path,omitempty"`
+	// Host is for ingress controller to apply rules. If
+	// host is empty or "*", the rule applies to all
+	// inbound HTTP traffic.
+	Host *string `json:"host,omitempty"`
+	// TLS is for user to specify a Secret that contains
+	// TLS key and certificate. The domain name in the
+	// key and crt must match the value of Host field.
+	TLS *string `json:"tls,omitempty"`
 }
 
 // IngressConfigApplyConfiguration constructs a declarative configuration of the IngressConfig type for use with

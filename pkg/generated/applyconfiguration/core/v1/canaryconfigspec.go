@@ -24,14 +24,22 @@ import (
 
 // CanaryConfigSpecApplyConfiguration represents a declarative configuration of the CanaryConfigSpec type for use
 // with apply.
+//
+// CanaryConfigSpec defines the canary configuration spec
 type CanaryConfigSpecApplyConfiguration struct {
-	Trigger                 *string             `json:"trigger,omitempty"`
-	NewFunction             *string             `json:"newfunction,omitempty"`
-	OldFunction             *string             `json:"oldfunction,omitempty"`
-	WeightIncrement         *int                `json:"weightincrement,omitempty"`
-	WeightIncrementDuration *string             `json:"duration,omitempty"`
-	FailureThreshold        *int                `json:"failurethreshold,omitempty"`
-	FailureType             *corev1.FailureType `json:"failureType,omitempty"`
+	// HTTP trigger that this config references
+	Trigger *string `json:"trigger,omitempty"`
+	// New version of the function
+	NewFunction *string `json:"newfunction,omitempty"`
+	// Old stable version of the function
+	OldFunction *string `json:"oldfunction,omitempty"`
+	// Weight increment step for function
+	WeightIncrement *int `json:"weightincrement,omitempty"`
+	// Weight increment interval, string representation of time.Duration, ex : 1m, 2h, 2d (default: "2m")
+	WeightIncrementDuration *string `json:"duration,omitempty"`
+	// Threshold in percentage beyond which the new version of the function is considered unstable
+	FailureThreshold *int                `json:"failurethreshold,omitempty"`
+	FailureType      *corev1.FailureType `json:"failureType,omitempty"`
 }
 
 // CanaryConfigSpecApplyConfiguration constructs a declarative configuration of the CanaryConfigSpec type for use with

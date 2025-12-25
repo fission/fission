@@ -26,6 +26,8 @@ import (
 
 // FunctionApplyConfiguration represents a declarative configuration of the Function type for use
 // with apply.
+//
+// Function is function runs within environment runtime with given package and secrets/configmaps.
 type FunctionApplyConfiguration struct {
 	metav1.TypeMetaApplyConfiguration    `json:",inline"`
 	*metav1.ObjectMetaApplyConfiguration `json:"metadata,omitempty"`
@@ -42,6 +44,7 @@ func Function(name, namespace string) *FunctionApplyConfiguration {
 	b.WithAPIVersion("fission.io/v1")
 	return b
 }
+
 func (b FunctionApplyConfiguration) IsApplyConfiguration() {}
 
 // WithKind sets the Kind field in the declarative configuration to the given value

@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -61,13 +62,11 @@ func TestMqtManager(t *testing.T) {
 	logger := loggerfactory.GetLogger()
 	defer logger.Sync()
 	msgQueue := fakeMessageQueue{}
-	fissionClient := fClient.NewSimpleClientset()
+	fissionClient := fClient.NewClientset()
 	factory := make(map[string]genInformer.SharedInformerFactory, 0)
-	factory[metav1.NamespaceDefault] = genInformer.NewFilteredSharedInformerFactory(fissionClient, time.Minute*30, metav1.NamespaceDefault, nil)
+	factory[metav1.NamespaceDefault] = genInformer.NewSharedInformerFactoryWithOptions(fissionClient, time.Minute*30, genInformer.WithNamespace(metav1.NamespaceDefault))
 	mgr, err := MakeMessageQueueTriggerManager(logger, nil, fv1.MessageQueueTypeKafka, factory, msgQueue)
-	if err != nil {
-		t.Fatalf("Error creating messageQueueTriggerManagesr: %v", err)
-	}
+	require.NoError(t, err, "Error creating messageQueueTriggerManagesr")
 	go mgr.service()
 	trigger := fv1.MessageQueueTrigger{
 		ObjectMeta: metav1.ObjectMeta{

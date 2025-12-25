@@ -119,7 +119,7 @@ func TestExpiredWhenAllItemsExpired(t *testing.T) {
 	if q.Expired() != 0 {
 		t.Errorf("Expected Expired to return 0, got %d", q.Expired())
 	}
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	item := &svcWait{
 		svcChannel: make(chan *FuncSvc),
 		ctx:        ctx,
@@ -142,7 +142,7 @@ func TestExpiredWhenFewItemsExpired(t *testing.T) {
 	if q.Expired() != 0 {
 		t.Errorf("Expected Expired to return 0, got %d", q.Expired())
 	}
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 
 	q.Push(&svcWait{
 		svcChannel: make(chan *FuncSvc),
@@ -150,7 +150,7 @@ func TestExpiredWhenFewItemsExpired(t *testing.T) {
 	})
 	q.Push(&svcWait{
 		svcChannel: make(chan *FuncSvc),
-		ctx:        context.Background(),
+		ctx:        t.Context(),
 	})
 	if q.Len() != 2 {
 		t.Errorf("Expected queue length to be 1, got %d", q.Len())
@@ -172,11 +172,11 @@ func TestExpiredWhenNoItemsExpired(t *testing.T) {
 
 	q.Push(&svcWait{
 		svcChannel: make(chan *FuncSvc),
-		ctx:        context.Background(),
+		ctx:        t.Context(),
 	})
 	q.Push(&svcWait{
 		svcChannel: make(chan *FuncSvc),
-		ctx:        context.Background(),
+		ctx:        t.Context(),
 	})
 	if q.Len() != 2 {
 		t.Errorf("Expected queue length to be 1, got %d", q.Len())

@@ -24,7 +24,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -37,7 +37,7 @@ func TestProxyErrorHandler(t *testing.T) {
 	config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
 	logger, err := config.Build()
 
-	assert.Nil(t, err)
+	require.Nil(t, err)
 
 	fh := &functionHandler{
 		logger: logger,
@@ -52,18 +52,18 @@ func TestProxyErrorHandler(t *testing.T) {
 	errHandler := fh.getProxyErrorHandler(time.Now(), &RetryingRoundTripper{})
 
 	req, err := http.NewRequest("GET", "http://foobar.com", nil)
-	assert.Nil(t, err)
+	require.Nil(t, err)
 
 	req.Header.Set("foo", "bar")
 	respRecorder := httptest.NewRecorder()
 	errHandler(respRecorder, req, context.Canceled)
-	assert.Equal(t, 499, respRecorder.Code)
+	require.Equal(t, 499, respRecorder.Code)
 
 	respRecorder = httptest.NewRecorder()
 	errHandler(respRecorder, req, context.DeadlineExceeded)
-	assert.Equal(t, http.StatusGatewayTimeout, respRecorder.Code)
+	require.Equal(t, http.StatusGatewayTimeout, respRecorder.Code)
 
 	respRecorder = httptest.NewRecorder()
 	errHandler(respRecorder, req, errors.New("dummy"))
-	assert.Equal(t, http.StatusInternalServerError, respRecorder.Code)
+	require.Equal(t, http.StatusInternalServerError, respRecorder.Code)
 }

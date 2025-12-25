@@ -189,14 +189,7 @@ func (canaryCfgMgr *canaryConfigMgr) processCanaryConfig(ctx *context.Context, c
 				zap.String("name", canaryConfig.ObjectMeta.Name),
 				zap.String("namespace", canaryConfig.ObjectMeta.Namespace),
 				zap.String("version", canaryConfig.ObjectMeta.ResourceVersion))
-			err := canaryCfgMgr.canaryCfgCancelFuncMap.remove(&canaryConfig.ObjectMeta)
-			if err != nil {
-				canaryCfgMgr.logger.Error("error removing canary config",
-					zap.Error(err),
-					zap.String("name", canaryConfig.ObjectMeta.Name),
-					zap.String("namespace", canaryConfig.ObjectMeta.Namespace),
-					zap.String("version", canaryConfig.ObjectMeta.ResourceVersion))
-			}
+			canaryCfgMgr.canaryCfgCancelFuncMap.remove(&canaryConfig.ObjectMeta)
 			return
 
 		case <-ticker.C:
@@ -216,14 +209,7 @@ func (canaryCfgMgr *canaryConfigMgr) processCanaryConfig(ctx *context.Context, c
 				zap.String("name", canaryConfig.ObjectMeta.Name),
 				zap.String("namespace", canaryConfig.ObjectMeta.Namespace),
 				zap.String("version", canaryConfig.ObjectMeta.ResourceVersion))
-			err := canaryCfgMgr.canaryCfgCancelFuncMap.remove(&canaryConfig.ObjectMeta)
-			if err != nil {
-				canaryCfgMgr.logger.Error("error removing canary config from map",
-					zap.Error(err),
-					zap.String("name", canaryConfig.ObjectMeta.Name),
-					zap.String("namespace", canaryConfig.ObjectMeta.Namespace),
-					zap.String("version", canaryConfig.ObjectMeta.ResourceVersion))
-			}
+			canaryCfgMgr.canaryCfgCancelFuncMap.remove(&canaryConfig.ObjectMeta)
 			return
 		}
 	}
@@ -540,15 +526,7 @@ func (canaryCfgMgr *canaryConfigMgr) updateCanaryConfig(ctx context.Context, old
 	// before removing the object from cache, we need to get it's cancel func and cancel it
 	canaryCfgMgr.deleteCanaryConfig(oldCanaryConfig)
 
-	err := canaryCfgMgr.canaryCfgCancelFuncMap.remove(&oldCanaryConfig.ObjectMeta)
-	if err != nil {
-		canaryCfgMgr.logger.Error("error removing canary config from map",
-			zap.Error(err),
-			zap.String("name", oldCanaryConfig.ObjectMeta.Name),
-			zap.String("namespace", oldCanaryConfig.ObjectMeta.Namespace),
-			zap.String("version", oldCanaryConfig.ObjectMeta.ResourceVersion))
-		return
-	}
+	canaryCfgMgr.canaryCfgCancelFuncMap.remove(&oldCanaryConfig.ObjectMeta)
 	canaryCfgMgr.addCanaryConfig(ctx, newCanaryConfig)
 }
 

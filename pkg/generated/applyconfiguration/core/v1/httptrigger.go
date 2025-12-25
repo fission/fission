@@ -26,6 +26,8 @@ import (
 
 // HTTPTriggerApplyConfiguration represents a declarative configuration of the HTTPTrigger type for use
 // with apply.
+//
+// HTTPTrigger is the trigger invokes user functions when receiving HTTP requests.
 type HTTPTriggerApplyConfiguration struct {
 	metav1.TypeMetaApplyConfiguration    `json:",inline"`
 	*metav1.ObjectMetaApplyConfiguration `json:"metadata,omitempty"`
@@ -42,6 +44,7 @@ func HTTPTrigger(name, namespace string) *HTTPTriggerApplyConfiguration {
 	b.WithAPIVersion("fission.io/v1")
 	return b
 }
+
 func (b HTTPTriggerApplyConfiguration) IsApplyConfiguration() {}
 
 // WithKind sets the Kind field in the declarative configuration to the given value

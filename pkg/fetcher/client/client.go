@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,7 +13,6 @@ import (
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.uber.org/zap"
-	"golang.org/x/net/context/ctxhttp"
 
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/fetcher"
@@ -83,38 +83,84 @@ func sendRequest(logger *zap.Logger, ctx context.Context, httpClient *http.Clien
 		return nil, err
 	}
 
-	maxRetries := 20
+	const (
+		maxRetries = 20
+		minBackoff = 50 * time.Millisecond
+		maxBackoff = 2 * time.Second
+	)
+
 	var resp *http.Response
+	var lastErr error
 
 	for i := 0; i < maxRetries; i++ {
-		resp, err = ctxhttp.Post(ctx, httpClient, url, "application/json", bytes.NewReader(body))
-
-		if err == nil {
-			if resp.StatusCode == 200 {
-				body, err := io.ReadAll(resp.Body)
-				if err != nil {
-					logger.Error("error reading response body", zap.Error(err))
-				}
-				defer resp.Body.Close()
-				return body, err
-			}
-			err = ferror.MakeErrorFromHTTP(resp)
+		// Check context before request
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
 		}
 
-		// skip retry and return directly due to context deadline exceeded
-		if err == context.DeadlineExceeded {
-			msg := "error specializing function pod, either increase the specialization timeout for function or check function pod log would help."
-			err = fmt.Errorf("%s: %w", msg, err)
-			logger.Error(msg, zap.Error(err), zap.String("url", url))
+		httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+		if err != nil {
 			return nil, err
 		}
+		httpReq.Header.Set("Content-Type", "application/json")
 
-		if i < maxRetries-1 {
-			time.Sleep(50 * time.Duration(2*i) * time.Millisecond)
-			logger.Error("error specializing/fetching/uploading package, retrying", zap.Error(err), zap.String("url", url))
+		resp, err = httpClient.Do(httpReq)
+
+		if err == nil {
+			if resp.StatusCode == http.StatusOK {
+				respBody, readErr := io.ReadAll(resp.Body)
+				resp.Body.Close()
+				if readErr != nil {
+					logger.Error("error reading response body", zap.Error(readErr))
+					return nil, readErr
+				}
+				return respBody, nil
+			}
+
+			lastErr = ferror.MakeErrorFromHTTP(resp)
+			resp.Body.Close()
+
+			// Don't retry on client errors (4xx), except 429 Too Many Requests
+			if resp.StatusCode >= 400 && resp.StatusCode < 500 && resp.StatusCode != 429 {
+				return nil, lastErr
+			}
+		} else {
+			lastErr = err
+		}
+
+		// Check if we should stop retrying
+		if i == maxRetries-1 {
+			break
+		}
+
+		// Check context deadline specifically if it was the cause
+		if errors.Is(lastErr, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			msg := "error specializing function pod, either increase the specialization timeout for function or check function pod log would help."
+			wrappedErr := fmt.Errorf("%s: %w", msg, lastErr)
+			logger.Error(msg, zap.Error(lastErr), zap.String("url", url))
+			return nil, wrappedErr
+		}
+
+		// Exponential backoff with cap
+		backoff := time.Duration(50*(1<<i)) * time.Millisecond
+		if backoff > maxBackoff {
+			backoff = maxBackoff
+		}
+
+		logger.Info("retrying request",
+			zap.String("url", url),
+			zap.Int("attempt", i+1),
+			zap.Duration("backoff", backoff),
+			zap.Error(lastErr))
+
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(backoff):
 			continue
 		}
 	}
 
-	return nil, err
+	logger.Error("request failed after max retries", zap.String("url", url), zap.Int("attempts", maxRetries), zap.Error(lastErr))
+	return nil, lastErr
 }

@@ -22,6 +22,7 @@ limitations under the License.
 package v1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
 
@@ -44,6 +45,17 @@ func SetObjectDefaults_Environment(in *Environment) {
 			a := &in.Spec.Runtime.Container.Ports[i]
 			if a.Protocol == "" {
 				a.Protocol = "TCP"
+			}
+		}
+		for i := range in.Spec.Runtime.Container.Env {
+			a := &in.Spec.Runtime.Container.Env[i]
+			if a.ValueFrom != nil {
+				if a.ValueFrom.FileKeyRef != nil {
+					if a.ValueFrom.FileKeyRef.Optional == nil {
+						var ptrVar1 bool = false
+						a.ValueFrom.FileKeyRef.Optional = &ptrVar1
+					}
+				}
 			}
 		}
 		if in.Spec.Runtime.Container.LivenessProbe != nil {
@@ -72,12 +84,68 @@ func SetObjectDefaults_Environment(in *Environment) {
 		}
 	}
 	if in.Spec.Runtime.PodSpec != nil {
+		for i := range in.Spec.Runtime.PodSpec.Volumes {
+			a := &in.Spec.Runtime.PodSpec.Volumes[i]
+			if a.VolumeSource.ISCSI != nil {
+				if a.VolumeSource.ISCSI.ISCSIInterface == "" {
+					a.VolumeSource.ISCSI.ISCSIInterface = "default"
+				}
+			}
+			if a.VolumeSource.RBD != nil {
+				if a.VolumeSource.RBD.RBDPool == "" {
+					a.VolumeSource.RBD.RBDPool = "rbd"
+				}
+				if a.VolumeSource.RBD.RadosUser == "" {
+					a.VolumeSource.RBD.RadosUser = "admin"
+				}
+				if a.VolumeSource.RBD.Keyring == "" {
+					a.VolumeSource.RBD.Keyring = "/etc/ceph/keyring"
+				}
+			}
+			if a.VolumeSource.AzureDisk != nil {
+				if a.VolumeSource.AzureDisk.CachingMode == nil {
+					ptrVar1 := corev1.AzureDataDiskCachingMode(corev1.AzureDataDiskCachingReadWrite)
+					a.VolumeSource.AzureDisk.CachingMode = &ptrVar1
+				}
+				if a.VolumeSource.AzureDisk.FSType == nil {
+					var ptrVar1 string = "ext4"
+					a.VolumeSource.AzureDisk.FSType = &ptrVar1
+				}
+				if a.VolumeSource.AzureDisk.ReadOnly == nil {
+					var ptrVar1 bool = false
+					a.VolumeSource.AzureDisk.ReadOnly = &ptrVar1
+				}
+				if a.VolumeSource.AzureDisk.Kind == nil {
+					ptrVar1 := corev1.AzureDataDiskKind(corev1.AzureSharedBlobDisk)
+					a.VolumeSource.AzureDisk.Kind = &ptrVar1
+				}
+			}
+			if a.VolumeSource.ScaleIO != nil {
+				if a.VolumeSource.ScaleIO.StorageMode == "" {
+					a.VolumeSource.ScaleIO.StorageMode = "ThinProvisioned"
+				}
+				if a.VolumeSource.ScaleIO.FSType == "" {
+					a.VolumeSource.ScaleIO.FSType = "xfs"
+				}
+			}
+		}
 		for i := range in.Spec.Runtime.PodSpec.InitContainers {
 			a := &in.Spec.Runtime.PodSpec.InitContainers[i]
 			for j := range a.Ports {
 				b := &a.Ports[j]
 				if b.Protocol == "" {
 					b.Protocol = "TCP"
+				}
+			}
+			for j := range a.Env {
+				b := &a.Env[j]
+				if b.ValueFrom != nil {
+					if b.ValueFrom.FileKeyRef != nil {
+						if b.ValueFrom.FileKeyRef.Optional == nil {
+							var ptrVar1 bool = false
+							b.ValueFrom.FileKeyRef.Optional = &ptrVar1
+						}
+					}
 				}
 			}
 			if a.LivenessProbe != nil {
@@ -113,6 +181,17 @@ func SetObjectDefaults_Environment(in *Environment) {
 					b.Protocol = "TCP"
 				}
 			}
+			for j := range a.Env {
+				b := &a.Env[j]
+				if b.ValueFrom != nil {
+					if b.ValueFrom.FileKeyRef != nil {
+						if b.ValueFrom.FileKeyRef.Optional == nil {
+							var ptrVar1 bool = false
+							b.ValueFrom.FileKeyRef.Optional = &ptrVar1
+						}
+					}
+				}
+			}
 			if a.LivenessProbe != nil {
 				if a.LivenessProbe.ProbeHandler.GRPC != nil {
 					if a.LivenessProbe.ProbeHandler.GRPC.Service == nil {
@@ -144,6 +223,17 @@ func SetObjectDefaults_Environment(in *Environment) {
 				b := &a.EphemeralContainerCommon.Ports[j]
 				if b.Protocol == "" {
 					b.Protocol = "TCP"
+				}
+			}
+			for j := range a.EphemeralContainerCommon.Env {
+				b := &a.EphemeralContainerCommon.Env[j]
+				if b.ValueFrom != nil {
+					if b.ValueFrom.FileKeyRef != nil {
+						if b.ValueFrom.FileKeyRef.Optional == nil {
+							var ptrVar1 bool = false
+							b.ValueFrom.FileKeyRef.Optional = &ptrVar1
+						}
+					}
 				}
 			}
 			if a.EphemeralContainerCommon.LivenessProbe != nil {
@@ -179,6 +269,17 @@ func SetObjectDefaults_Environment(in *Environment) {
 				a.Protocol = "TCP"
 			}
 		}
+		for i := range in.Spec.Builder.Container.Env {
+			a := &in.Spec.Builder.Container.Env[i]
+			if a.ValueFrom != nil {
+				if a.ValueFrom.FileKeyRef != nil {
+					if a.ValueFrom.FileKeyRef.Optional == nil {
+						var ptrVar1 bool = false
+						a.ValueFrom.FileKeyRef.Optional = &ptrVar1
+					}
+				}
+			}
+		}
 		if in.Spec.Builder.Container.LivenessProbe != nil {
 			if in.Spec.Builder.Container.LivenessProbe.ProbeHandler.GRPC != nil {
 				if in.Spec.Builder.Container.LivenessProbe.ProbeHandler.GRPC.Service == nil {
@@ -205,12 +306,68 @@ func SetObjectDefaults_Environment(in *Environment) {
 		}
 	}
 	if in.Spec.Builder.PodSpec != nil {
+		for i := range in.Spec.Builder.PodSpec.Volumes {
+			a := &in.Spec.Builder.PodSpec.Volumes[i]
+			if a.VolumeSource.ISCSI != nil {
+				if a.VolumeSource.ISCSI.ISCSIInterface == "" {
+					a.VolumeSource.ISCSI.ISCSIInterface = "default"
+				}
+			}
+			if a.VolumeSource.RBD != nil {
+				if a.VolumeSource.RBD.RBDPool == "" {
+					a.VolumeSource.RBD.RBDPool = "rbd"
+				}
+				if a.VolumeSource.RBD.RadosUser == "" {
+					a.VolumeSource.RBD.RadosUser = "admin"
+				}
+				if a.VolumeSource.RBD.Keyring == "" {
+					a.VolumeSource.RBD.Keyring = "/etc/ceph/keyring"
+				}
+			}
+			if a.VolumeSource.AzureDisk != nil {
+				if a.VolumeSource.AzureDisk.CachingMode == nil {
+					ptrVar1 := corev1.AzureDataDiskCachingMode(corev1.AzureDataDiskCachingReadWrite)
+					a.VolumeSource.AzureDisk.CachingMode = &ptrVar1
+				}
+				if a.VolumeSource.AzureDisk.FSType == nil {
+					var ptrVar1 string = "ext4"
+					a.VolumeSource.AzureDisk.FSType = &ptrVar1
+				}
+				if a.VolumeSource.AzureDisk.ReadOnly == nil {
+					var ptrVar1 bool = false
+					a.VolumeSource.AzureDisk.ReadOnly = &ptrVar1
+				}
+				if a.VolumeSource.AzureDisk.Kind == nil {
+					ptrVar1 := corev1.AzureDataDiskKind(corev1.AzureSharedBlobDisk)
+					a.VolumeSource.AzureDisk.Kind = &ptrVar1
+				}
+			}
+			if a.VolumeSource.ScaleIO != nil {
+				if a.VolumeSource.ScaleIO.StorageMode == "" {
+					a.VolumeSource.ScaleIO.StorageMode = "ThinProvisioned"
+				}
+				if a.VolumeSource.ScaleIO.FSType == "" {
+					a.VolumeSource.ScaleIO.FSType = "xfs"
+				}
+			}
+		}
 		for i := range in.Spec.Builder.PodSpec.InitContainers {
 			a := &in.Spec.Builder.PodSpec.InitContainers[i]
 			for j := range a.Ports {
 				b := &a.Ports[j]
 				if b.Protocol == "" {
 					b.Protocol = "TCP"
+				}
+			}
+			for j := range a.Env {
+				b := &a.Env[j]
+				if b.ValueFrom != nil {
+					if b.ValueFrom.FileKeyRef != nil {
+						if b.ValueFrom.FileKeyRef.Optional == nil {
+							var ptrVar1 bool = false
+							b.ValueFrom.FileKeyRef.Optional = &ptrVar1
+						}
+					}
 				}
 			}
 			if a.LivenessProbe != nil {
@@ -246,6 +403,17 @@ func SetObjectDefaults_Environment(in *Environment) {
 					b.Protocol = "TCP"
 				}
 			}
+			for j := range a.Env {
+				b := &a.Env[j]
+				if b.ValueFrom != nil {
+					if b.ValueFrom.FileKeyRef != nil {
+						if b.ValueFrom.FileKeyRef.Optional == nil {
+							var ptrVar1 bool = false
+							b.ValueFrom.FileKeyRef.Optional = &ptrVar1
+						}
+					}
+				}
+			}
 			if a.LivenessProbe != nil {
 				if a.LivenessProbe.ProbeHandler.GRPC != nil {
 					if a.LivenessProbe.ProbeHandler.GRPC.Service == nil {
@@ -277,6 +445,17 @@ func SetObjectDefaults_Environment(in *Environment) {
 				b := &a.EphemeralContainerCommon.Ports[j]
 				if b.Protocol == "" {
 					b.Protocol = "TCP"
+				}
+			}
+			for j := range a.EphemeralContainerCommon.Env {
+				b := &a.EphemeralContainerCommon.Env[j]
+				if b.ValueFrom != nil {
+					if b.ValueFrom.FileKeyRef != nil {
+						if b.ValueFrom.FileKeyRef.Optional == nil {
+							var ptrVar1 bool = false
+							b.ValueFrom.FileKeyRef.Optional = &ptrVar1
+						}
+					}
 				}
 			}
 			if a.EphemeralContainerCommon.LivenessProbe != nil {
@@ -316,12 +495,68 @@ func SetObjectDefaults_EnvironmentList(in *EnvironmentList) {
 
 func SetObjectDefaults_Function(in *Function) {
 	if in.Spec.PodSpec != nil {
+		for i := range in.Spec.PodSpec.Volumes {
+			a := &in.Spec.PodSpec.Volumes[i]
+			if a.VolumeSource.ISCSI != nil {
+				if a.VolumeSource.ISCSI.ISCSIInterface == "" {
+					a.VolumeSource.ISCSI.ISCSIInterface = "default"
+				}
+			}
+			if a.VolumeSource.RBD != nil {
+				if a.VolumeSource.RBD.RBDPool == "" {
+					a.VolumeSource.RBD.RBDPool = "rbd"
+				}
+				if a.VolumeSource.RBD.RadosUser == "" {
+					a.VolumeSource.RBD.RadosUser = "admin"
+				}
+				if a.VolumeSource.RBD.Keyring == "" {
+					a.VolumeSource.RBD.Keyring = "/etc/ceph/keyring"
+				}
+			}
+			if a.VolumeSource.AzureDisk != nil {
+				if a.VolumeSource.AzureDisk.CachingMode == nil {
+					ptrVar1 := corev1.AzureDataDiskCachingMode(corev1.AzureDataDiskCachingReadWrite)
+					a.VolumeSource.AzureDisk.CachingMode = &ptrVar1
+				}
+				if a.VolumeSource.AzureDisk.FSType == nil {
+					var ptrVar1 string = "ext4"
+					a.VolumeSource.AzureDisk.FSType = &ptrVar1
+				}
+				if a.VolumeSource.AzureDisk.ReadOnly == nil {
+					var ptrVar1 bool = false
+					a.VolumeSource.AzureDisk.ReadOnly = &ptrVar1
+				}
+				if a.VolumeSource.AzureDisk.Kind == nil {
+					ptrVar1 := corev1.AzureDataDiskKind(corev1.AzureSharedBlobDisk)
+					a.VolumeSource.AzureDisk.Kind = &ptrVar1
+				}
+			}
+			if a.VolumeSource.ScaleIO != nil {
+				if a.VolumeSource.ScaleIO.StorageMode == "" {
+					a.VolumeSource.ScaleIO.StorageMode = "ThinProvisioned"
+				}
+				if a.VolumeSource.ScaleIO.FSType == "" {
+					a.VolumeSource.ScaleIO.FSType = "xfs"
+				}
+			}
+		}
 		for i := range in.Spec.PodSpec.InitContainers {
 			a := &in.Spec.PodSpec.InitContainers[i]
 			for j := range a.Ports {
 				b := &a.Ports[j]
 				if b.Protocol == "" {
 					b.Protocol = "TCP"
+				}
+			}
+			for j := range a.Env {
+				b := &a.Env[j]
+				if b.ValueFrom != nil {
+					if b.ValueFrom.FileKeyRef != nil {
+						if b.ValueFrom.FileKeyRef.Optional == nil {
+							var ptrVar1 bool = false
+							b.ValueFrom.FileKeyRef.Optional = &ptrVar1
+						}
+					}
 				}
 			}
 			if a.LivenessProbe != nil {
@@ -357,6 +592,17 @@ func SetObjectDefaults_Function(in *Function) {
 					b.Protocol = "TCP"
 				}
 			}
+			for j := range a.Env {
+				b := &a.Env[j]
+				if b.ValueFrom != nil {
+					if b.ValueFrom.FileKeyRef != nil {
+						if b.ValueFrom.FileKeyRef.Optional == nil {
+							var ptrVar1 bool = false
+							b.ValueFrom.FileKeyRef.Optional = &ptrVar1
+						}
+					}
+				}
+			}
 			if a.LivenessProbe != nil {
 				if a.LivenessProbe.ProbeHandler.GRPC != nil {
 					if a.LivenessProbe.ProbeHandler.GRPC.Service == nil {
@@ -388,6 +634,17 @@ func SetObjectDefaults_Function(in *Function) {
 				b := &a.EphemeralContainerCommon.Ports[j]
 				if b.Protocol == "" {
 					b.Protocol = "TCP"
+				}
+			}
+			for j := range a.EphemeralContainerCommon.Env {
+				b := &a.EphemeralContainerCommon.Env[j]
+				if b.ValueFrom != nil {
+					if b.ValueFrom.FileKeyRef != nil {
+						if b.ValueFrom.FileKeyRef.Optional == nil {
+							var ptrVar1 bool = false
+							b.ValueFrom.FileKeyRef.Optional = &ptrVar1
+						}
+					}
 				}
 			}
 			if a.EphemeralContainerCommon.LivenessProbe != nil {
@@ -427,12 +684,68 @@ func SetObjectDefaults_FunctionList(in *FunctionList) {
 
 func SetObjectDefaults_MessageQueueTrigger(in *MessageQueueTrigger) {
 	if in.Spec.PodSpec != nil {
+		for i := range in.Spec.PodSpec.Volumes {
+			a := &in.Spec.PodSpec.Volumes[i]
+			if a.VolumeSource.ISCSI != nil {
+				if a.VolumeSource.ISCSI.ISCSIInterface == "" {
+					a.VolumeSource.ISCSI.ISCSIInterface = "default"
+				}
+			}
+			if a.VolumeSource.RBD != nil {
+				if a.VolumeSource.RBD.RBDPool == "" {
+					a.VolumeSource.RBD.RBDPool = "rbd"
+				}
+				if a.VolumeSource.RBD.RadosUser == "" {
+					a.VolumeSource.RBD.RadosUser = "admin"
+				}
+				if a.VolumeSource.RBD.Keyring == "" {
+					a.VolumeSource.RBD.Keyring = "/etc/ceph/keyring"
+				}
+			}
+			if a.VolumeSource.AzureDisk != nil {
+				if a.VolumeSource.AzureDisk.CachingMode == nil {
+					ptrVar1 := corev1.AzureDataDiskCachingMode(corev1.AzureDataDiskCachingReadWrite)
+					a.VolumeSource.AzureDisk.CachingMode = &ptrVar1
+				}
+				if a.VolumeSource.AzureDisk.FSType == nil {
+					var ptrVar1 string = "ext4"
+					a.VolumeSource.AzureDisk.FSType = &ptrVar1
+				}
+				if a.VolumeSource.AzureDisk.ReadOnly == nil {
+					var ptrVar1 bool = false
+					a.VolumeSource.AzureDisk.ReadOnly = &ptrVar1
+				}
+				if a.VolumeSource.AzureDisk.Kind == nil {
+					ptrVar1 := corev1.AzureDataDiskKind(corev1.AzureSharedBlobDisk)
+					a.VolumeSource.AzureDisk.Kind = &ptrVar1
+				}
+			}
+			if a.VolumeSource.ScaleIO != nil {
+				if a.VolumeSource.ScaleIO.StorageMode == "" {
+					a.VolumeSource.ScaleIO.StorageMode = "ThinProvisioned"
+				}
+				if a.VolumeSource.ScaleIO.FSType == "" {
+					a.VolumeSource.ScaleIO.FSType = "xfs"
+				}
+			}
+		}
 		for i := range in.Spec.PodSpec.InitContainers {
 			a := &in.Spec.PodSpec.InitContainers[i]
 			for j := range a.Ports {
 				b := &a.Ports[j]
 				if b.Protocol == "" {
 					b.Protocol = "TCP"
+				}
+			}
+			for j := range a.Env {
+				b := &a.Env[j]
+				if b.ValueFrom != nil {
+					if b.ValueFrom.FileKeyRef != nil {
+						if b.ValueFrom.FileKeyRef.Optional == nil {
+							var ptrVar1 bool = false
+							b.ValueFrom.FileKeyRef.Optional = &ptrVar1
+						}
+					}
 				}
 			}
 			if a.LivenessProbe != nil {
@@ -468,6 +781,17 @@ func SetObjectDefaults_MessageQueueTrigger(in *MessageQueueTrigger) {
 					b.Protocol = "TCP"
 				}
 			}
+			for j := range a.Env {
+				b := &a.Env[j]
+				if b.ValueFrom != nil {
+					if b.ValueFrom.FileKeyRef != nil {
+						if b.ValueFrom.FileKeyRef.Optional == nil {
+							var ptrVar1 bool = false
+							b.ValueFrom.FileKeyRef.Optional = &ptrVar1
+						}
+					}
+				}
+			}
 			if a.LivenessProbe != nil {
 				if a.LivenessProbe.ProbeHandler.GRPC != nil {
 					if a.LivenessProbe.ProbeHandler.GRPC.Service == nil {
@@ -499,6 +823,17 @@ func SetObjectDefaults_MessageQueueTrigger(in *MessageQueueTrigger) {
 				b := &a.EphemeralContainerCommon.Ports[j]
 				if b.Protocol == "" {
 					b.Protocol = "TCP"
+				}
+			}
+			for j := range a.EphemeralContainerCommon.Env {
+				b := &a.EphemeralContainerCommon.Env[j]
+				if b.ValueFrom != nil {
+					if b.ValueFrom.FileKeyRef != nil {
+						if b.ValueFrom.FileKeyRef.Optional == nil {
+							var ptrVar1 bool = false
+							b.ValueFrom.FileKeyRef.Optional = &ptrVar1
+						}
+					}
 				}
 			}
 			if a.EphemeralContainerCommon.LivenessProbe != nil {

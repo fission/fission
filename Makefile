@@ -61,7 +61,7 @@ install-fission-cli:
 ### Codegen
 codegen:
 	@./hack/update-codegen.sh
-	go tool controller-gen object:headerFile="hack/boilerplate.txt" paths="./..."
+	go tool controller-gen object:headerFile="hack/boilerplate.go.txt" paths="./..."
 
 ### CRDs
 generate-crds:

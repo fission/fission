@@ -24,16 +24,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestFind(t *testing.T) {
 	os.Clearenv()
 	testDir := path.Join(os.TempDir(), fmt.Sprintf("fission-test-plugins-%v", time.Now().UnixNano()))
 	err := os.MkdirAll(testDir, os.ModePerm)
-	if err != nil {
-		t.FailNow()
-	}
+	require.NoError(t, err)
 	defer os.RemoveAll(testDir)
 	testBinary := path.Join(testDir, "foo")
 	md := &Metadata{
@@ -43,40 +41,32 @@ func TestFind(t *testing.T) {
 		Aliases: []string{"bar"},
 	}
 	jsonMd, err := json.Marshal(md)
-	if err != nil {
-		t.FailNow()
-	}
+	require.NoError(t, err)
 	err = os.WriteFile(testBinary, []byte(fmt.Sprintf("#!/bin/sh\necho '%v'", string(jsonMd))), os.ModePerm)
-	if err != nil {
-		t.FailNow()
-	}
+	require.NoError(t, err)
 
 	err = os.Setenv("PATH", testDir)
-	if err != nil {
-		t.FailNow()
-	}
+	require.NoError(t, err)
 	Prefix = ""
 
 	ctx := t.Context()
 
 	found, err := Find(ctx, md.Name)
 	os.RemoveAll(testDir)
-	assert.NoError(t, err)
-	assert.NotEmpty(t, found)
-	assert.Equal(t, md.Name, found.Name)
-	assert.Equal(t, path.Join(testDir, md.Name), found.Path)
-	assert.Equal(t, md.Aliases, found.Aliases)
-	assert.Equal(t, md.Usage, found.Usage)
-	assert.Equal(t, md.Version, found.Version)
+	require.NoError(t, err)
+	require.NotEmpty(t, found)
+	require.Equal(t, md.Name, found.Name)
+	require.Equal(t, path.Join(testDir, md.Name), found.Path)
+	require.Equal(t, md.Aliases, found.Aliases)
+	require.Equal(t, md.Usage, found.Usage)
+	require.Equal(t, md.Version, found.Version)
 }
 
 func TestExec(t *testing.T) {
 	os.Clearenv()
 	testDir := path.Join(os.TempDir(), fmt.Sprintf("fission-test-plugins-%v", time.Now().UnixNano()))
 	err := os.MkdirAll(testDir, os.ModePerm)
-	if err != nil {
-		t.FailNow()
-	}
+	require.NoError(t, err)
 	defer os.RemoveAll(testDir)
 	testBinary := path.Join(testDir, "foo")
 	md := &Metadata{
@@ -87,19 +77,13 @@ func TestExec(t *testing.T) {
 		Path:    path.Join(testBinary),
 	}
 	jsonMd, err := json.Marshal(md)
-	if err != nil {
-		t.FailNow()
-	}
+	require.NoError(t, err)
 	err = os.WriteFile(testBinary, []byte(fmt.Sprintf("#!/bin/sh\necho '%v'", string(jsonMd))), os.ModePerm)
-	if err != nil {
-		t.FailNow()
-	}
+	require.NoError(t, err)
 	err = os.Setenv("PATH", testDir)
-	if err != nil {
-		t.FailNow()
-	}
+	require.NoError(t, err)
 	Prefix = ""
 	err = Exec(md, nil)
 	os.RemoveAll(testDir)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 }

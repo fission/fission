@@ -24,9 +24,22 @@ import (
 
 // InvokeStrategyApplyConfiguration represents a declarative configuration of the InvokeStrategy type for use
 // with apply.
+//
+// InvokeStrategy is a set of controls over how the function executes.
+// It affects the performance and resource usage of the function.
+//
+// An InvokeStrategy is of one of two types: ExecutionStrategy, which controls low-level
+// parameters such as which ExecutorType to use, when to autoscale, minimum and maximum
+// number of running instances, etc. A higher-level AbstractInvokeStrategy will also be
+// supported; this strategy would specify the target request rate of the function,
+// the target latency statistics, and the target cost (in terms of compute resources).
 type InvokeStrategyApplyConfiguration struct {
+	// ExecutionStrategy specifies low-level parameters for function execution,
+	// such as the number of instances.
 	ExecutionStrategy *ExecutionStrategyApplyConfiguration `json:"ExecutionStrategy,omitempty"`
-	StrategyType      *corev1.StrategyType                 `json:"StrategyType,omitempty"`
+	// StrategyType is the strategy type of function.
+	// Now it only supports 'execution'.
+	StrategyType *corev1.StrategyType `json:"StrategyType,omitempty"`
 }
 
 // InvokeStrategyApplyConfiguration constructs a declarative configuration of the InvokeStrategy type for use with

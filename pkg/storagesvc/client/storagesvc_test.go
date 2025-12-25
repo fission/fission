@@ -30,6 +30,7 @@ import (
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/ory/dockertest/v3"
 	dc "github.com/ory/dockertest/v3/docker"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
@@ -45,9 +46,7 @@ const (
 )
 
 func failTest(t *testing.T, err error) {
-	if err != nil {
-		t.Fatalf("%v", err)
-	}
+	require.NoError(t, err)
 }
 
 func MakeTestFile(size int) (*os.File, error) {
@@ -120,7 +119,7 @@ func TestS3StorageService(t *testing.T) {
 	defer func() {
 		err := pool.Purge(resource)
 		if err != nil {
-			log.Fatal(err)
+			log.Fatalf("Could not purge resource: %s", err)
 		}
 	}()
 
@@ -241,12 +240,8 @@ func TestLocalStorageService(t *testing.T) {
 	failTest(t, err)
 
 	ids, err := client.List(ctx)
-	if err != nil {
-		t.Fatalf("Could not list files: %s", err)
-	}
-	if len(ids) != 1 {
-		t.Fatalf("Expected 1 file, got %v", len(ids))
-	}
+	require.NoError(t, err, "Could not list files")
+	require.Len(t, ids, 1)
 
 	// make a temp file for verification
 	retrievedfile, err := os.CreateTemp("", "storagesvc_verify_")

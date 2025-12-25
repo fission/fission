@@ -623,10 +623,7 @@ func (fh functionHandler) addServiceEntryToCache(serviceURL *url.URL) {
 
 // removeServiceEntryFromCache removes service url entry from cache
 func (fh functionHandler) removeServiceEntryFromCache() {
-	err := fh.fmap.remove(&fh.function.ObjectMeta)
-	if err != nil {
-		fh.logger.Error("Error removing key:", zap.Error(err))
-	}
+	fh.fmap.remove(&fh.function.ObjectMeta)
 }
 
 func (fh functionHandler) getServiceEntryFromExecutor(ctx context.Context) (serviceUrl *url.URL, err error) {

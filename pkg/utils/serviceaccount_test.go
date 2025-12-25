@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 
@@ -16,16 +17,14 @@ func TestServiceAccountCheck(t *testing.T) {
 	mgr := manager.New()
 	t.Cleanup(mgr.Wait)
 	ctx := t.Context()
-	kubernetesClient := fake.NewSimpleClientset()
+	kubernetesClient := fake.NewClientset()
 	logger := loggerfactory.GetLogger()
 	os.Setenv(ENV_CREATE_SA, "true")
 	CreateMissingPermissionForSA(ctx, kubernetesClient, logger)
 
 	// Get rolebinding for a service account
 	rolebindings, err := kubernetesClient.RbacV1().RoleBindings("default").List(ctx, metav1.ListOptions{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	if len(rolebindings.Items) != 2 {
 		t.Fatal("Rolebinding not created", len(rolebindings.Items))
 	}

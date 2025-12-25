@@ -24,20 +24,49 @@ import (
 
 // FunctionSpecApplyConfiguration represents a declarative configuration of the FunctionSpec type for use
 // with apply.
+//
+// FunctionSpec describes the contents of the function.
 type FunctionSpecApplyConfiguration struct {
-	Environment     *EnvironmentReferenceApplyConfiguration `json:"environment,omitempty"`
-	Package         *FunctionPackageRefApplyConfiguration   `json:"package,omitempty"`
-	Secrets         []SecretReferenceApplyConfiguration     `json:"secrets,omitempty"`
-	ConfigMaps      []ConfigMapReferenceApplyConfiguration  `json:"configmaps,omitempty"`
-	Resources       *corev1.ResourceRequirements            `json:"resources,omitempty"`
-	InvokeStrategy  *InvokeStrategyApplyConfiguration       `json:"InvokeStrategy,omitempty"`
-	FunctionTimeout *int                                    `json:"functionTimeout,omitempty"`
-	IdleTimeout     *int                                    `json:"idletimeout,omitempty"`
-	Concurrency     *int                                    `json:"concurrency,omitempty"`
-	RequestsPerPod  *int                                    `json:"requestsPerPod,omitempty"`
-	OnceOnly        *bool                                   `json:"onceOnly,omitempty"`
-	RetainPods      *int                                    `json:"retainPods,omitempty"`
-	PodSpec         *corev1.PodSpec                         `json:"podspec,omitempty"`
+	// Environment is the build and runtime environment that this function is
+	// associated with. An Environment with this name should exist, otherwise the
+	// function cannot be invoked.
+	Environment *EnvironmentReferenceApplyConfiguration `json:"environment,omitempty"`
+	// Reference to a package containing deployment and optionally the source.
+	Package *FunctionPackageRefApplyConfiguration `json:"package,omitempty"`
+	// Reference to a list of secrets.
+	Secrets []SecretReferenceApplyConfiguration `json:"secrets,omitempty"`
+	// Reference to a list of configmaps.
+	ConfigMaps []ConfigMapReferenceApplyConfiguration `json:"configmaps,omitempty"`
+	// cpu and memory resources as per K8S standards
+	// This is only for newdeploy to set up resource limitation
+	// when creating deployment for a function.
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+	// InvokeStrategy is a set of controls which affect how function executes
+	InvokeStrategy *InvokeStrategyApplyConfiguration `json:"InvokeStrategy,omitempty"`
+	// FunctionTimeout provides a maximum amount of duration within which a request for
+	// a particular function execution should be complete.
+	// This is optional. If not specified default value will be taken as 60s
+	FunctionTimeout *int `json:"functionTimeout,omitempty"`
+	// IdleTimeout specifies the length of time that a function is idle before the
+	// function pod(s) are eligible for deletion. If no traffic to the function
+	// is detected within the idle timeout, the executor will then recycle the
+	// function pod(s) to release resources.
+	IdleTimeout *int `json:"idletimeout,omitempty"`
+	// Maximum number of pods to be specialized which will serve requests
+	// This is optional. If not specified default value will be taken as 500
+	Concurrency *int `json:"concurrency,omitempty"`
+	// RequestsPerPod indicates the maximum number of concurrent requests that can be served by a specialized pod
+	// This is optional. If not specified default value will be taken as 1
+	RequestsPerPod *int `json:"requestsPerPod,omitempty"`
+	// OnceOnly specifies if specialized pod will serve exactly one request in its lifetime and would be garbage collected after serving that one request
+	// This is optional. If not specified default value will be taken as false
+	OnceOnly *bool `json:"onceOnly,omitempty"`
+	// RetainPods specifies the number of specialized pods that should be retained after serving requests
+	// This is optional. If not specified default value will be taken as 0
+	RetainPods *int `json:"retainPods,omitempty"`
+	// Podspec specifies podspec to use for executor type container based functions
+	// Different arguments mentioned for container based function are populated inside a pod.
+	PodSpec *corev1.PodSpec `json:"podspec,omitempty"`
 }
 
 // FunctionSpecApplyConfiguration constructs a declarative configuration of the FunctionSpec type for use with

@@ -26,6 +26,8 @@ import (
 
 // CanaryConfigApplyConfiguration represents a declarative configuration of the CanaryConfig type for use
 // with apply.
+//
+// CanaryConfig is for canary deployment of two functions.
 type CanaryConfigApplyConfiguration struct {
 	metav1.TypeMetaApplyConfiguration    `json:",inline"`
 	*metav1.ObjectMetaApplyConfiguration `json:"metadata,omitempty"`
@@ -43,6 +45,7 @@ func CanaryConfig(name, namespace string) *CanaryConfigApplyConfiguration {
 	b.WithAPIVersion("fission.io/v1")
 	return b
 }
+
 func (b CanaryConfigApplyConfiguration) IsApplyConfiguration() {}
 
 // WithKind sets the Kind field in the declarative configuration to the given value

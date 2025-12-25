@@ -24,6 +24,11 @@ import (
 
 // ChecksumApplyConfiguration represents a declarative configuration of the Checksum type for use
 // with apply.
+//
+// Checksum of package contents when the contents are stored
+// outside the Package struct. Type is the checksum algorithm;
+// "sha256" is the only currently supported one. Sum is hex
+// encoded.
 type ChecksumApplyConfiguration struct {
 	Type *corev1.ChecksumType `json:"type,omitempty"`
 	Sum  *string              `json:"sum,omitempty"`

@@ -21,15 +21,15 @@ import (
 func TestFissionCLI(t *testing.T) {
 	mgr := manager.New()
 	f := framework.NewFramework()
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	err := f.Start(ctx)
 	require.NoError(t, err)
-	defer func() {
+	t.Cleanup(func() {
 		cancel()
 		mgr.Wait()
 		err = f.Stop()
 		require.NoError(t, err)
-	}()
+	})
 
 	err = services.StartServices(ctx, f, mgr)
 	require.NoError(t, err)

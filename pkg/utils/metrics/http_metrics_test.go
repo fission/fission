@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -56,7 +55,7 @@ func TestChunked(t *testing.T) {
 
 	resp, err := http.Get(s.URL)
 	require.NoError(t, err)
-	assert.Contains(t, resp.TransferEncoding, "chunked")
+	require.Contains(t, resp.TransferEncoding, "chunked")
 	defer resp.Body.Close()
 
 	r := bufio.NewReader(resp.Body)
@@ -74,7 +73,7 @@ func TestChunked(t *testing.T) {
 		}
 
 		fmt.Println(string(line)) // we got the final response
-		assert.Equal(t, dataRow, append(line, '\n'))
+		require.Equal(t, dataRow, append(line, '\n'))
 	}
 }
 

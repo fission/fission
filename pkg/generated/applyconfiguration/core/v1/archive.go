@@ -24,10 +24,22 @@ import (
 
 // ArchiveApplyConfiguration represents a declarative configuration of the Archive type for use
 // with apply.
+//
+// Archive contains or references a collection of sources or
+// binary files.
 type ArchiveApplyConfiguration struct {
-	Type     *corev1.ArchiveType         `json:"type,omitempty"`
-	Literal  []byte                      `json:"literal,omitempty"`
-	URL      *string                     `json:"url,omitempty"`
+	// Type defines how the package is specified: literal or URL.
+	// Available value:
+	// - literal
+	// - url
+	Type *corev1.ArchiveType `json:"type,omitempty"`
+	// Literal contents of the package. Can be used for
+	// encoding packages below TODO (256 KB?) size.
+	Literal []byte `json:"literal,omitempty"`
+	// URL references a package.
+	URL *string `json:"url,omitempty"`
+	// Checksum ensures the integrity of packages
+	// referenced by URL. Ignored for literals.
 	Checksum *ChecksumApplyConfiguration `json:"checksum,omitempty"`
 }
 

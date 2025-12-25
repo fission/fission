@@ -26,6 +26,8 @@ import (
 
 // KubernetesWatchTriggerApplyConfiguration represents a declarative configuration of the KubernetesWatchTrigger type for use
 // with apply.
+//
+// KubernetesWatchTrigger watches kubernetes resource events and invokes functions.
 type KubernetesWatchTriggerApplyConfiguration struct {
 	metav1.TypeMetaApplyConfiguration    `json:",inline"`
 	*metav1.ObjectMetaApplyConfiguration `json:"metadata,omitempty"`
@@ -42,6 +44,7 @@ func KubernetesWatchTrigger(name, namespace string) *KubernetesWatchTriggerApply
 	b.WithAPIVersion("fission.io/v1")
 	return b
 }
+
 func (b KubernetesWatchTriggerApplyConfiguration) IsApplyConfiguration() {}
 
 // WithKind sets the Kind field in the declarative configuration to the given value
