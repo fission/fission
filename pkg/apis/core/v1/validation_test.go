@@ -67,8 +67,7 @@ func TestAggregateValidationErrors(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			var errs error
-			errs = errors.Join(tc.errs...)
+			errs := errors.Join(tc.errs...)
 			aggErr := AggregateValidationErrors("Environment", errs)
 			snaps.MatchSnapshot(t, fmt.Sprint(aggErr))
 		})
