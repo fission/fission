@@ -114,19 +114,6 @@ func AggregateValidationErrors(objName string, err error) error {
 
 	unmaskError(0, err)
 
-	// var errs []error
-	// // check if err has Unwrap method
-	// unwrapper, ok := err.(interface {
-	// 	Unwrap() []error
-	// })
-	// if ok {
-	// 	errs = unwrapper.Unwrap()
-	// } else {
-	// 	errs = []error{err}
-	// }
-	// for _, e := range errs {
-	// 	errMsg.WriteString(fmt.Sprintf("* %s\n", e.Error()))
-	// }
 	return errors.New(errMsg.String())
 }
 
@@ -318,7 +305,7 @@ func (is InvokeStrategy) Validate() error {
 	switch is.StrategyType {
 	case StrategyTypeExecution: // no op
 	default:
-		errs = errors.Join(errs, MakeValidationErr(ErrorUnsupportedType, "InvokeStrategy.StrategyType", is.StrategyType, "not a valid valid strategy"))
+		errs = errors.Join(errs, MakeValidationErr(ErrorUnsupportedType, "InvokeStrategy.StrategyType", is.StrategyType, "not a valid strategy"))
 	}
 
 	errs = errors.Join(errs, is.ExecutionStrategy.Validate())
