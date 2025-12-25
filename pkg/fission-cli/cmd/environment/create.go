@@ -17,9 +17,9 @@ limitations under the License.
 package environment
 
 import (
+	"errors"
 	"fmt"
 
-	"github.com/hashicorp/go-multierror"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -30,7 +30,6 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/console"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
-	"github.com/fission/fission/pkg/utils"
 )
 
 type CreateSubCommand struct {
@@ -118,7 +117,7 @@ func (opts *CreateSubCommand) run(input cli.Input) (err error) {
 
 // createEnvironmentFromCmd creates environment initialized with CLI input.
 func createEnvironmentFromCmd(input cli.Input) (*fv1.Environment, error) {
-	e := utils.MultiErrorWithFormat()
+	var errs error
 
 	envName := input.String(flagkey.EnvName)
 	envImg := input.String(flagkey.EnvImage)
@@ -159,11 +158,11 @@ func createEnvironmentFromCmd(input cli.Input) (*fv1.Environment, error) {
 
 	resourceReq, err := util.GetResourceReqs(input, nil)
 	if err != nil {
-		e = multierror.Append(e, err)
+		errs = errors.Join(errs, err)
 	}
 
-	if e.ErrorOrNil() != nil {
-		return nil, e.ErrorOrNil()
+	if errs != nil {
+		return nil, errs
 	}
 
 	env := &fv1.Environment{

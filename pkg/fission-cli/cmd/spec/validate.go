@@ -19,12 +19,12 @@ package spec
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/hashicorp/go-multierror"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
@@ -34,7 +34,6 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/console"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
-	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/gitrepo"
 )
 
@@ -105,7 +104,7 @@ func (opts *ValidateSubCommand) run(input cli.Input, fr *FissionResources) (err 
 // conflict error will be returned.
 func resourceConflictCheck(ctx context.Context, c cmd.Client, fr *FissionResources, specAllowConflicts bool, namespace string) error {
 	deployUID := fr.DeploymentConfig.UID
-	result := utils.MultiErrorWithFormat()
+	var errs error
 
 	fnList, err := getAllFunctions(ctx, c, namespace)
 	if err != nil {
@@ -114,7 +113,7 @@ func resourceConflictCheck(ctx context.Context, c cmd.Client, fr *FissionResourc
 	for _, sObj := range fr.Functions {
 		for _, cObj := range fnList {
 			if err := isResourceConflicts(deployUID, &sObj, &cObj, specAllowConflicts); err != nil {
-				result = multierror.Append(result, err)
+				errs = errors.Join(errs, err)
 				break
 			}
 		}
@@ -127,7 +126,7 @@ func resourceConflictCheck(ctx context.Context, c cmd.Client, fr *FissionResourc
 	for _, sObj := range fr.Environments {
 		for _, cObj := range envList {
 			if err := isResourceConflicts(deployUID, &sObj, &cObj, specAllowConflicts); err != nil {
-				result = multierror.Append(result, err)
+				errs = errors.Join(errs, err)
 				break
 			}
 		}
@@ -140,7 +139,7 @@ func resourceConflictCheck(ctx context.Context, c cmd.Client, fr *FissionResourc
 	for _, sObj := range fr.Packages {
 		for _, cObj := range pkgList {
 			if err := isResourceConflicts(deployUID, &sObj, &cObj, specAllowConflicts); err != nil {
-				result = multierror.Append(result, err)
+				errs = errors.Join(errs, err)
 				break
 			}
 		}
@@ -153,7 +152,7 @@ func resourceConflictCheck(ctx context.Context, c cmd.Client, fr *FissionResourc
 	for _, sObj := range fr.HttpTriggers {
 		for _, cObj := range httptriggerList {
 			if err := isResourceConflicts(deployUID, &sObj, &cObj, specAllowConflicts); err != nil {
-				result = multierror.Append(result, err)
+				errs = errors.Join(errs, err)
 				break
 			}
 		}
@@ -166,7 +165,7 @@ func resourceConflictCheck(ctx context.Context, c cmd.Client, fr *FissionResourc
 	for _, sObj := range fr.MessageQueueTriggers {
 		for _, cObj := range mqtriggerList {
 			if err := isResourceConflicts(deployUID, &sObj, &cObj, specAllowConflicts); err != nil {
-				result = multierror.Append(result, err)
+				errs = errors.Join(errs, err)
 				break
 			}
 		}
@@ -179,7 +178,7 @@ func resourceConflictCheck(ctx context.Context, c cmd.Client, fr *FissionResourc
 	for _, sObj := range fr.TimeTriggers {
 		for _, cObj := range timetriggerList {
 			if err := isResourceConflicts(deployUID, &sObj, &cObj, specAllowConflicts); err != nil {
-				result = multierror.Append(result, err)
+				errs = errors.Join(errs, err)
 				break
 			}
 		}
@@ -192,13 +191,13 @@ func resourceConflictCheck(ctx context.Context, c cmd.Client, fr *FissionResourc
 	for _, sObj := range fr.KubernetesWatchTriggers {
 		for _, cObj := range kubewatchtriggerList {
 			if err := isResourceConflicts(deployUID, &sObj, &cObj, specAllowConflicts); err != nil {
-				result = multierror.Append(result, err)
+				errs = errors.Join(errs, err)
 				break
 			}
 		}
 	}
 
-	return result.ErrorOrNil()
+	return errs
 }
 
 type objectWithKind interface {
@@ -263,7 +262,7 @@ func ReadSpecs(specDir, specIgnore string, applyCommitLabel bool) (*FissionResou
 		gr = gitrepo.NewGitRepo(specDir)
 	}
 
-	var result *multierror.Error
+	var errs error
 
 	// Users can organize the specdir into subdirs if they want to.
 	err = filepath.Walk(specDir, func(path string, info os.FileInfo, err error) error {
@@ -291,7 +290,7 @@ func ReadSpecs(specDir, specIgnore string, applyCommitLabel bool) (*FissionResou
 		// read
 		b, err := os.ReadFile(path)
 		if err != nil {
-			result = multierror.Append(result, err)
+			errs = errors.Join(errs, err)
 			return nil
 		}
 
@@ -309,7 +308,7 @@ func ReadSpecs(specDir, specIgnore string, applyCommitLabel bool) (*FissionResou
 				}, fileCommitLabelVal)
 				if err != nil {
 					// collect all errors so user can fix them all
-					result = multierror.Append(result, err)
+					errs = errors.Join(errs, err)
 				}
 			}
 			// the separator occupies one line, hence the +1
@@ -321,8 +320,8 @@ func ReadSpecs(specDir, specIgnore string, applyCommitLabel bool) (*FissionResou
 	if err != nil {
 		return nil, err
 	}
-	if err = result.ErrorOrNil(); err != nil {
-		return nil, err
+	if errs != nil {
+		return nil, errs
 	}
 
 	return &fr, nil

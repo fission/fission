@@ -2,11 +2,11 @@ package container
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 
-	"github.com/hashicorp/go-multierror"
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -38,14 +38,14 @@ func getFetcherResources() (apiv1.ResourceRequirements, error) {
 		Requests: map[apiv1.ResourceName]resource.Quantity{},
 		Limits:   map[apiv1.ResourceName]resource.Quantity{},
 	}
-	errs := utils.MultiErrorWithFormat()
-	errs = multierror.Append(errs,
+	var errs error
+	errs = errors.Join(errs,
 		parseResources("FETCHER_MINCPU", resourceReqs.Requests, apiv1.ResourceCPU),
 		parseResources("FETCHER_MINMEM", resourceReqs.Requests, apiv1.ResourceMemory),
 		parseResources("FETCHER_MAXCPU", resourceReqs.Limits, apiv1.ResourceCPU),
 		parseResources("FETCHER_MAXMEM", resourceReqs.Limits, apiv1.ResourceMemory),
 	)
-	return resourceReqs, errs.ErrorOrNil()
+	return resourceReqs, errs
 }
 
 func parseResources(env string, resourceReqs map[apiv1.ResourceName]resource.Quantity, resName apiv1.ResourceName) error {

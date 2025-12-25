@@ -21,8 +21,6 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/hashicorp/go-multierror"
-
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -34,7 +32,6 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/console"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
-	"github.com/fission/fission/pkg/utils"
 )
 
 type UpdateSubCommand struct {
@@ -105,7 +102,7 @@ func (opts *UpdateSubCommand) run(input cli.Input) error {
 
 // updateExistingEnvironmentWithCmd updates a existing environment's value based on CLI input.
 func updateExistingEnvironmentWithCmd(env *fv1.Environment, input cli.Input) (*fv1.Environment, error) {
-	e := utils.MultiErrorWithFormat()
+	var errs error
 
 	if input.IsSet(flagkey.EnvImage) {
 		env.Spec.Runtime.Image = input.String(flagkey.EnvImage)
@@ -120,7 +117,7 @@ func updateExistingEnvironmentWithCmd(env *fv1.Environment, input cli.Input) (*f
 	}
 
 	if env.Spec.Version == 1 && (len(env.Spec.Builder.Image) > 0 || len(env.Spec.Builder.Command) > 0) {
-		e = multierror.Append(e, errors.New("version 1 Environments do not support builders. Must specify --version=2"))
+		errs = errors.Join(errs, errors.New("version 1 Environments do not support builders. Must specify --version=2"))
 	}
 	if input.IsSet(flagkey.EnvExternalNetwork) {
 		env.Spec.AllowAccessToExternalNetwork = input.Bool(flagkey.EnvExternalNetwork)
@@ -152,7 +149,7 @@ func updateExistingEnvironmentWithCmd(env *fv1.Environment, input cli.Input) (*f
 		mincpu := input.Int(flagkey.RuntimeMincpu)
 		cpuRequest, err := resource.ParseQuantity(strconv.Itoa(mincpu) + "m")
 		if err != nil {
-			e = multierror.Append(e, fmt.Errorf("failed to parse mincpu: %w", err))
+			errs = errors.Join(errs, fmt.Errorf("failed to parse mincpu: %w", err))
 		}
 		env.Spec.Resources.Requests[v1.ResourceCPU] = cpuRequest
 	}
@@ -161,7 +158,7 @@ func updateExistingEnvironmentWithCmd(env *fv1.Environment, input cli.Input) (*f
 		maxcpu := input.Int(flagkey.RuntimeMaxcpu)
 		cpuLimit, err := resource.ParseQuantity(strconv.Itoa(maxcpu) + "m")
 		if err != nil {
-			e = multierror.Append(e, fmt.Errorf("failed to parse maxcpu: %w", err))
+			errs = errors.Join(errs, fmt.Errorf("failed to parse maxcpu: %w", err))
 		}
 		env.Spec.Resources.Limits[v1.ResourceCPU] = cpuLimit
 	}
@@ -170,7 +167,7 @@ func updateExistingEnvironmentWithCmd(env *fv1.Environment, input cli.Input) (*f
 		minmem := input.Int(flagkey.RuntimeMinmemory)
 		memRequest, err := resource.ParseQuantity(strconv.Itoa(minmem) + "Mi")
 		if err != nil {
-			e = multierror.Append(e, fmt.Errorf("failed to parse minmemory: %w", err))
+			errs = errors.Join(errs, fmt.Errorf("failed to parse minmemory: %w", err))
 		}
 		env.Spec.Resources.Requests[v1.ResourceMemory] = memRequest
 	}
@@ -179,7 +176,7 @@ func updateExistingEnvironmentWithCmd(env *fv1.Environment, input cli.Input) (*f
 		maxmem := input.Int(flagkey.RuntimeMaxmemory)
 		memLimit, err := resource.ParseQuantity(strconv.Itoa(maxmem) + "Mi")
 		if err != nil {
-			e = multierror.Append(e, fmt.Errorf("failed to parse maxmemory: %w", err))
+			errs = errors.Join(errs, fmt.Errorf("failed to parse maxmemory: %w", err))
 		}
 		env.Spec.Resources.Limits[v1.ResourceMemory] = memLimit
 	}
@@ -196,7 +193,7 @@ func updateExistingEnvironmentWithCmd(env *fv1.Environment, input cli.Input) (*f
 	if limitCPU.IsZero() && !requestCPU.IsZero() {
 		env.Spec.Resources.Limits[v1.ResourceCPU] = requestCPU
 	} else if limitCPU.Cmp(requestCPU) < 0 {
-		e = multierror.Append(e, fmt.Errorf("minCPU (%v) cannot be greater than MaxCPU (%v)", requestCPU.String(), limitCPU.String()))
+		errs = errors.Join(errs, fmt.Errorf("minCPU (%v) cannot be greater than MaxCPU (%v)", requestCPU.String(), limitCPU.String()))
 	}
 
 	limitMem := env.Spec.Resources.Limits[v1.ResourceMemory]
@@ -205,11 +202,11 @@ func updateExistingEnvironmentWithCmd(env *fv1.Environment, input cli.Input) (*f
 	if limitMem.IsZero() && !requestMem.IsZero() {
 		env.Spec.Resources.Limits[v1.ResourceMemory] = requestMem
 	} else if limitMem.Cmp(requestMem) < 0 {
-		e = multierror.Append(e, fmt.Errorf("minMemory (%v) cannot be greater than MaxMemory (%v)", requestMem.String(), limitMem.String()))
+		errs = errors.Join(errs, fmt.Errorf("minMemory (%v) cannot be greater than MaxMemory (%v)", requestMem.String(), limitMem.String()))
 	}
 
-	if e.ErrorOrNil() != nil {
-		return nil, e.ErrorOrNil()
+	if errs != nil {
+		return nil, errs
 	}
 
 	return env, nil
