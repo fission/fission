@@ -1,0 +1,30 @@
+
+[TestAggregateValidationErrors/no_errors - 1]
+<nil>
+---
+
+[TestAggregateValidationErrors/one_error - 1]
+Invalid fission Environment objects:
+  * E1
+
+---
+
+[TestAggregateValidationErrors/multiple_errors - 1]
+Invalid fission Environment objects:
+  * E1
+  * E2
+  * E3
+
+---
+
+[TestAggregateValidationErrors/nested_errors - 1]
+Invalid fission Environment objects:
+  * E1
+    * E2
+      * E3
+      * E4
+  * E5
+    * E6
+    * E7
+
+---

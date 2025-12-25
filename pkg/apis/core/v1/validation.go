@@ -92,22 +92,41 @@ func AggregateValidationErrors(objName string, err error) error {
 	if err == nil {
 		return nil
 	}
-	var errs []error
-	// check if err has Unwrap method
-	unwrapper, ok := err.(interface {
-		Unwrap() []error
-	})
-	if ok {
-		errs = unwrapper.Unwrap()
-	} else {
-		errs = []error{err}
-	}
 	var errMsg bytes.Buffer
 	errMsg.WriteString(fmt.Sprintf("Invalid fission %s objects:\n", objName))
 
-	for _, e := range errs {
-		errMsg.WriteString(fmt.Sprintf("* %s\n", e.Error()))
+	var unmaskError func(level int, err error)
+
+	// Do nested error unwrapping
+	unmaskError = func(level int, err error) {
+		unwrapper, ok := err.(interface {
+			Unwrap() []error
+		})
+		if ok {
+			for _, e := range unwrapper.Unwrap() {
+				unmaskError(level+1, e)
+			}
+		} else {
+			errMsg.WriteString(strings.Repeat("  ", level))
+			errMsg.WriteString(fmt.Sprintf("* %s\n", err.Error()))
+		}
 	}
+
+	unmaskError(0, err)
+
+	// var errs []error
+	// // check if err has Unwrap method
+	// unwrapper, ok := err.(interface {
+	// 	Unwrap() []error
+	// })
+	// if ok {
+	// 	errs = unwrapper.Unwrap()
+	// } else {
+	// 	errs = []error{err}
+	// }
+	// for _, e := range errs {
+	// 	errMsg.WriteString(fmt.Sprintf("* %s\n", e.Error()))
+	// }
 	return errors.New(errMsg.String())
 }
 
