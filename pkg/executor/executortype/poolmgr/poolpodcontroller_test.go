@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/dchest/uniuri"
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
@@ -47,32 +48,24 @@ func TestPoolPodControllerPodCleanup(t *testing.T) {
 	factory[metav1.NamespaceDefault] = genInformer.NewSharedInformerFactoryWithOptions(fissionClient, time.Minute*30, genInformer.WithNamespace(metav1.NamespaceDefault))
 
 	executorLabel, err := utils.GetInformerLabelByExecutor(fv1.ExecutorTypePoolmgr)
-	if err != nil {
-		t.Fatalf("Error creating labels for informer: %v", err)
-	}
+	require.NoError(t, err, "Error creating labels for informer")
 	gpmInformerFactory := utils.GetInformerFactoryByExecutor(kubernetesClient, executorLabel, time.Minute*30)
 
 	ppc, err := NewPoolPodController(ctx, logger, kubernetesClient, false,
 		factory, gpmInformerFactory)
-	if err != nil {
-		t.Fatalf("Error creating pool pod controller: %v", err)
-	}
+	require.NoError(t, err, "Error creating pool pod controller")
 
 	executorInstanceID := strings.ToLower(uniuri.NewLen(8))
 	// TODO: use NewClientset when available in upstream metrics package
 	metricsClient := metricsclient.NewSimpleClientset() //nolint:staticcheck
 	fetcherConfig, err := fetcherConfig.MakeFetcherConfig("/userfunc")
-	if err != nil {
-		t.Fatalf("Error creating fetcher config: %v", err)
-	}
+	require.NoError(t, err, "Error creating fetcher config")
 	executor, err := MakeGenericPoolManager(ctx,
 		logger,
 		fissionClient, kubernetesClient, metricsClient,
 		fetcherConfig, executorInstanceID,
 		factory, gpmInformerFactory, nil)
-	if err != nil {
-		t.Fatalf("Error creating generic pool manager: %v", err)
-	}
+	require.NoError(t, err, "Error creating generic pool manager")
 	gpm := executor.(*GenericPoolManager)
 	ppc.InjectGpm(gpm)
 
@@ -96,9 +89,7 @@ func TestPoolPodControllerPodCleanup(t *testing.T) {
 		},
 	}
 	_, err = kubernetesClient.CoreV1().Pods(pod.Namespace).Create(ctx, pod, metav1.CreateOptions{})
-	if err != nil {
-		t.Fatalf("Error creating pod: %v", err)
-	}
+	require.NoError(t, err, "Error creating pod")
 
 	// Wait for pod to be added to informer
 	start := time.Now()
@@ -116,9 +107,7 @@ func TestPoolPodControllerPodCleanup(t *testing.T) {
 
 	// Ask the controller to clean up the pod
 	key, err := k8sCache.MetaNamespaceKeyFunc(pod)
-	if err != nil {
-		t.Fatalf("Error creating key: %v", err)
-	}
+	require.NoError(t, err, "Error creating key")
 	ppc.spCleanupPodQueue.Add(key)
 	start = time.Now()
 	for ppc.spCleanupPodQueue.Len() > 0 && time.Since(start) < time.Second*5 {
@@ -129,7 +118,5 @@ func TestPoolPodControllerPodCleanup(t *testing.T) {
 
 	// Ensure pod is gone
 	getPod, err := kubernetesClient.CoreV1().Pods(pod.Namespace).Get(ctx, pod.Name, metav1.GetOptions{})
-	if err == nil {
-		t.Fatalf("Pod %v still exists", getPod.ObjectMeta)
-	}
+	require.Error(t, err, "Pod %v still exists", getPod.ObjectMeta)
 }

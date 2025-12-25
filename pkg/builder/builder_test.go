@@ -25,6 +25,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
 
@@ -32,9 +34,7 @@ func TestBuilder(t *testing.T) {
 	logger := loggerfactory.GetLogger()
 
 	dir, err := os.MkdirTemp("/tmp", "fission-builder-test")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	builder := MakeBuilder(logger, dir)
 
 	// Test VersionHandler
@@ -124,14 +124,10 @@ func TestBuilder(t *testing.T) {
 		} {
 			t.Run(test.name, func(t *testing.T) {
 				srcFile, err := os.Create(dir + "/" + test.buildRequest.SrcPkgFilename)
-				if err != nil {
-					t.Fatal(err)
-				}
+				require.NoError(t, err)
 				defer srcFile.Close()
 				body, err := json.Marshal(test.buildRequest)
-				if err != nil {
-					t.Fatal(err)
-				}
+				require.NoError(t, err)
 				w := httptest.NewRecorder()
 				r := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(body))
 				builder.Handler(w, r)
@@ -140,14 +136,10 @@ func TestBuilder(t *testing.T) {
 					t.Errorf("expected status code %d, got %d", test.status, resp.StatusCode)
 				}
 				body, err = io.ReadAll(resp.Body)
-				if err != nil {
-					t.Fatal(err)
-				}
+				require.NoError(t, err)
 				var buildResp PackageBuildResponse
 				err = json.Unmarshal(body, &buildResp)
-				if err != nil {
-					t.Fatal(err)
-				}
+				require.NoError(t, err)
 				if test.status == http.StatusOK {
 					if strings.Contains(buildResp.BuildLogs, "error") {
 						t.Errorf("expected build logs to not contain error, got %s", buildResp.BuildLogs)
@@ -196,13 +188,9 @@ func TestBuilder(t *testing.T) {
 		} {
 			t.Run(test.name, func(t *testing.T) {
 				_, err := os.MkdirTemp(dir, test.srcPkgFilename)
-				if err != nil {
-					t.Fatal(err)
-				}
+				require.NoError(t, err)
 				srcFile, err := os.Create(dir + "/" + test.srcPkgFilename)
-				if err != nil {
-					t.Fatal(err)
-				}
+				require.NoError(t, err)
 				defer srcFile.Close()
 				w := httptest.NewRecorder()
 				r := httptest.NewRequest(http.MethodDelete, "/clean/"+test.srcPkgFilename, http.NoBody)

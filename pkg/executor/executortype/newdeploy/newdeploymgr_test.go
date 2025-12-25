@@ -40,28 +40,24 @@ func TestRefreshFuncPods(t *testing.T) {
 	t.Cleanup(mgr.Wait)
 	logger := loggerfactory.GetLogger()
 	kubernetesClient := fake.NewClientset()
-	fissionClient := fClient.NewClientset()
+	// Hitting issue https://github.com/kubernetes/kubernetes/issues/126850
+	// so using NewSimpleClientset instead of NewClientset here, until that is resolved.
+	fissionClient := fClient.NewSimpleClientset() // nolint:staticcheck
 	factory := make(map[string]genInformer.SharedInformerFactory, 0)
 	factory[metav1.NamespaceDefault] = genInformer.NewSharedInformerFactoryWithOptions(fissionClient, time.Minute*30, genInformer.WithNamespace(metav1.NamespaceDefault))
 
 	executorLabel, err := utils.GetInformerLabelByExecutor(fv1.ExecutorTypeNewdeploy)
-	if err != nil {
-		t.Fatalf("Error creating labels for informer: %s", err)
-	}
+	require.NoError(t, err, "Error creating labels for informer")
 	ndmInformerFactory := utils.GetInformerFactoryByExecutor(kubernetesClient, executorLabel, time.Minute*30)
 
 	ctx := t.Context()
 
 	fetcherConfig, err := fetcherConfig.MakeFetcherConfig("/userfunc")
-	if err != nil {
-		t.Fatalf("Error creating fetcher config: %s", err)
-	}
+	require.NoError(t, err, "Error creating fetcher config")
 
 	executor, err := MakeNewDeploy(ctx, logger, fissionClient, kubernetesClient, fetcherConfig, "test",
 		factory, ndmInformerFactory, nil)
-	if err != nil {
-		t.Fatalf("new deploy manager creation failed: %s", err)
-	}
+	require.NoError(t, err, "new deploy manager creation failed")
 
 	ndm := executor.(*NewDeploy)
 
@@ -113,14 +109,10 @@ func TestRefreshFuncPods(t *testing.T) {
 	}
 
 	_, err = fissionClient.CoreV1().Environments(defaultNamespace).Create(ctx, envSpec, metav1.CreateOptions{})
-	if err != nil {
-		t.Fatalf("creating environment failed : %s", err)
-	}
+	require.NoError(t, err, "creating environment failed")
 
 	envRes, err := fissionClient.CoreV1().Environments(defaultNamespace).Get(ctx, envName, metav1.GetOptions{})
-	if err != nil {
-		t.Fatalf("Error getting environment: %s", err)
-	}
+	require.NoError(t, err, "getting environment failed")
 	require.Equal(t, envRes.ObjectMeta.Name, envName)
 
 	funcSpec := fv1.Function{
@@ -142,23 +134,17 @@ func TestRefreshFuncPods(t *testing.T) {
 		},
 	}
 	_, err = fissionClient.CoreV1().Functions(defaultNamespace).Create(ctx, &funcSpec, metav1.CreateOptions{})
-	if err != nil {
-		t.Fatalf("creating function failed : %s", err)
-	}
+	require.NoError(t, err, "creating function failed ")
 
 	funcRes, err := fissionClient.CoreV1().Functions(defaultNamespace).Get(ctx, functionName, metav1.GetOptions{})
-	if err != nil {
-		t.Fatalf("Error getting function: %s", err)
-	}
+	require.NoError(t, err, "Error getting function")
 	require.Equal(t, funcRes.ObjectMeta.Name, functionName)
 
 	ctx2, cancel2 := context.WithCancel(t.Context())
 	wait.Until(func() {
 		t.Log("Checking for deployment")
 		ret, err := kubernetesClient.AppsV1().Deployments(functionNamespace).List(ctx2, metav1.ListOptions{})
-		if err != nil {
-			t.Fatalf("Error getting deployment: %s", err)
-		}
+		require.NoError(t, err, "Error getting deployment")
 		if len(ret.Items) > 0 {
 			t.Log("Deployment created", ret.Items[0].Name)
 			cancel2()
@@ -168,9 +154,7 @@ func TestRefreshFuncPods(t *testing.T) {
 	err = BuildConfigMap(ctx, kubernetesClient, defaultNamespace, configmapName, map[string]string{
 		"test-key": "test-value",
 	})
-	if err != nil {
-		t.Fatalf("Error building configmap: %s", err)
-	}
+	require.NoError(t, err, "Error building configmap")
 
 	t.Log("Adding configmap to function")
 	funcRes.Spec.ConfigMaps = []fv1.ConfigMapReference{
@@ -180,19 +164,13 @@ func TestRefreshFuncPods(t *testing.T) {
 		},
 	}
 	_, err = fissionClient.CoreV1().Functions(defaultNamespace).Update(ctx, funcRes, metav1.UpdateOptions{})
-	if err != nil {
-		t.Fatalf("Error updating function: %s", err)
-	}
+	require.NoError(t, err, "Error updating function")
 	funcRes, err = fissionClient.CoreV1().Functions(defaultNamespace).Get(ctx, functionName, metav1.GetOptions{})
-	if err != nil {
-		t.Fatalf("Error getting function: %s", err)
-	}
+	require.NoError(t, err, "Error getting function")
 	require.Greater(t, len(funcRes.Spec.ConfigMaps), 0)
 
 	err = ndm.RefreshFuncPods(ctx, logger, *funcRes)
-	if err != nil {
-		t.Fatalf("Error refreshing function pods: %s", err)
-	}
+	require.NoError(t, err, "Error refreshing function pods")
 
 	funcLabels := ndm.getDeployLabels(funcRes.ObjectMeta, envRes.ObjectMeta)
 
@@ -200,15 +178,11 @@ func TestRefreshFuncPods(t *testing.T) {
 		LabelSelector: labels.Set(funcLabels).AsSelector().String(),
 	})
 
-	if err != nil {
-		t.Fatalf("Error getting deployment: %s", err)
-	}
+	require.NoError(t, err, "Error getting deployment")
 	require.Equal(t, len(dep.Items), 1)
 
 	cm, err := kubernetesClient.CoreV1().ConfigMaps(defaultNamespace).Get(ctx, configmapName, metav1.GetOptions{})
-	if err != nil {
-		t.Fatalf("Error getting configmap: %s", err)
-	}
+	require.NoError(t, err, "Error getting configmap")
 	require.Equal(t, cm.ObjectMeta.Name, configmapName)
 	updatedDepl := dep.Items[0]
 	resourceVersionMatch := false

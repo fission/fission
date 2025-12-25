@@ -9,7 +9,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestTracker(t *testing.T) {
@@ -35,13 +35,13 @@ func TestTracker(t *testing.T) {
 				if test.expected == nil {
 					os.Setenv(GA_TRACKING_ID, "UA-000000-2")
 					t, err := NewTracker()
-					assert.Nil(testing, err)
-					assert.NotNil(testing, t)
+					require.Nil(testing, err)
+					require.NotNil(testing, t)
 				} else {
 					t, err := NewTracker()
-					assert.Nil(testing, t)
-					assert.NotNil(testing, err)
-					assert.Equal(testing, err.Error(), test.expected.Error())
+					require.Nil(testing, t)
+					require.NotNil(testing, err)
+					require.Equal(testing, err.Error(), test.expected.Error())
 				}
 			})
 		}
@@ -51,9 +51,7 @@ func TestTracker(t *testing.T) {
 
 		os.Setenv(GA_TRACKING_ID, "UA-000000-2")
 		tr, err := NewTracker()
-		if err != nil {
-			log.Fatal(err)
-		}
+		require.NoError(t, err)
 		for _, test := range []struct {
 			name     string
 			request  *Event
@@ -103,10 +101,10 @@ func TestTracker(t *testing.T) {
 
 				t := tr.SendEvent(ctx, *test.request)
 				if test.status == http.StatusOK {
-					assert.Nil(testing, t, test.expected)
+					require.Nil(testing, t, test.expected)
 				} else {
-					assert.NotNil(testing, t)
-					assert.Equal(testing, t.Error(), test.expected.Error())
+					require.NotNil(testing, t)
+					require.Equal(testing, t.Error(), test.expected.Error())
 				}
 
 			})

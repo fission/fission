@@ -6,13 +6,13 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
 
 	kedav1alpha1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
+	"github.com/stretchr/testify/require"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 )
@@ -100,7 +100,7 @@ func Test_getEnvVarlist(t *testing.T) {
 	kubeClient := fake.NewClientset()
 	_, err := kubeClient.CoreV1().Secrets(namespace).Create(ctx, secret, metav1.CreateOptions{})
 	if err != nil {
-		assert.Equal(t, nil, err)
+		require.Equal(t, nil, err)
 	}
 
 	expectedEnvVars := []apiv1.EnvVar{
@@ -431,7 +431,7 @@ func Test_getAuthTriggerSpec(t *testing.T) {
 	kubeClient := fake.NewClientset()
 	_, err := kubeClient.CoreV1().Secrets(namespace).Create(ctx, secret, metav1.CreateOptions{})
 	if err != nil {
-		assert.Equal(t, nil, err)
+		require.Equal(t, nil, err)
 	}
 
 	authenticationRef := fmt.Sprintf("%s-auth-trigger", mqt1.ObjectMeta.Name)

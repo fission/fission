@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	asv2 "k8s.io/api/autoscaling/v2"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -358,15 +358,15 @@ func TestGetInvokeStrategy(t *testing.T) {
 
 			strategy, err := getInvokeStrategy(flags, c.existingInvokeStrategy)
 			if c.expectError {
-				assert.NotNil(t, err)
+				require.NotNil(t, err)
 				if err != nil {
 					fmt.Println(err)
 				}
 			} else {
-				assert.Nil(t, err)
+				require.Nil(t, err)
 				if err == nil {
-					assert.NoError(t, strategy.Validate())
-					assert.Equal(t, *c.expectedResult, *strategy)
+					require.NoError(t, strategy.Validate())
+					require.Equal(t, *c.expectedResult, *strategy)
 				}
 			}
 		})

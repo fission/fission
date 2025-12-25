@@ -22,18 +22,6 @@ import (
 	"github.com/fission/fission/pkg/utils/metrics"
 )
 
-func setup(tb testing.TB) func(tb testing.TB) {
-
-	os.Setenv("AUTH_USERNAME", "Foo")
-	os.Setenv("AUTH_PASSWORD", "Bar")
-	os.Setenv("JWT_SIGNING_KEY", "test")
-	return func(tb testing.TB) {
-		os.Unsetenv("AUTH_USERNAME")
-		os.Unsetenv("AUTH_PASSWORD")
-		os.Unsetenv("JWT_SIGNING_KEY")
-	}
-}
-
 func GetRouterWithAuth() *mux.Router {
 	testHandler := func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -60,13 +48,17 @@ func GetRouterWithAuth() *mux.Router {
 }
 
 func TestRouterAuth(t *testing.T) {
-
 	mgr := manager.New()
 	t.Cleanup(mgr.Wait)
-
 	ctx := t.Context()
-	teardown := setup(t)
-	defer teardown(t)
+	os.Setenv("AUTH_USERNAME", "Foo")
+	os.Setenv("AUTH_PASSWORD", "Bar")
+	os.Setenv("JWT_SIGNING_KEY", "test")
+	t.Cleanup(func() {
+		os.Unsetenv("AUTH_USERNAME")
+		os.Unsetenv("AUTH_PASSWORD")
+		os.Unsetenv("JWT_SIGNING_KEY")
+	})
 	logger := loggerfactory.GetLogger()
 	testmux := GetRouterWithAuth()
 

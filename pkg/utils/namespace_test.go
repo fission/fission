@@ -3,6 +3,8 @@ package utils
 import (
 	"os"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestNamespaceResolver(t *testing.T) {
@@ -170,9 +172,7 @@ func TestNamespaceResolver(t *testing.T) {
 		} {
 			t.Run(test.name, func(t *testing.T) {
 				ns := test.namespaceResolver.ResolveNamespace(test.namespace)
-				if ns != test.expected {
-					t.Errorf("expected function namespace %s, got %s", test.expected, ns)
-				}
+				require.Equal(t, test.expected, ns, "Resolved namespace mismatch")
 			})
 		}
 	})
@@ -211,13 +211,9 @@ func TestNamespaceResolver(t *testing.T) {
 		} {
 			t.Run(test.name, func(t *testing.T) {
 				err := setNamespace(test.defaultNamespace, test.additionalNamespace)
-				if err != nil {
-					t.Fatalf("error setting environment Variable %s", err.Error())
-				}
+				require.NoError(t, err)
 				ns := GetNamespaces()
-				if test.expected != len(ns) {
-					t.Errorf("expected length of namespace %d, got %d", test.expected, len(ns))
-				}
+				require.Len(t, ns, test.expected, "Length of namespaces mismatch")
 			})
 		}
 	})
@@ -236,9 +232,5 @@ func setNamespace(defaultNamespace string, additionalNamespace string) error {
 	if err != nil {
 		return err
 	}
-	err = os.Setenv(ENV_ADDITIONAL_NAMESPACE, additionalNamespace)
-	if err != nil {
-		return err
-	}
-	return nil
+	return os.Setenv(ENV_ADDITIONAL_NAMESPACE, additionalNamespace)
 }

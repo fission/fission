@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
@@ -15,15 +15,15 @@ import (
 func TestPublisher(t *testing.T) {
 	fnName := "test-fn"
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/"+fnName, r.URL.Path)
-		assert.Equal(t, "aaa", r.Header.Get("X-Fission-Test"))
-		assert.Contains(t, r.Header, "Traceparent")
+		require.Equal(t, "/"+fnName, r.URL.Path)
+		require.Equal(t, "aaa", r.Header.Get("X-Fission-Test"))
+		require.Contains(t, r.Header, "Traceparent")
 	}))
 
 	ctx := t.Context()
 	logger := loggerfactory.GetLogger()
 	shutdown, err := otelUtils.InitProvider(ctx, logger, fnName)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	if shutdown != nil {
 		defer shutdown(ctx)
 	}
@@ -37,15 +37,15 @@ func TestPublisherSubpath(t *testing.T) {
 	subpath := "/api/v1/read"
 	fnName := "test-fn-subpath"
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/"+fnName+subpath, r.URL.Path)
-		assert.Equal(t, "aaa", r.Header.Get("X-Fission-Test"))
-		assert.Contains(t, r.Header, "Traceparent")
+		require.Equal(t, "/"+fnName+subpath, r.URL.Path)
+		require.Equal(t, "aaa", r.Header.Get("X-Fission-Test"))
+		require.Contains(t, r.Header, "Traceparent")
 	}))
 
 	ctx := t.Context()
 	logger := loggerfactory.GetLogger()
 	shutdown, err := otelUtils.InitProvider(ctx, logger, fnName)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	if shutdown != nil {
 		defer shutdown(ctx)
 	}

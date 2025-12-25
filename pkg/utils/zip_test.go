@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestIsZip(t *testing.T) {
@@ -36,9 +38,7 @@ func TestIsZip(t *testing.T) {
 			name: "text file",
 			setupFn: func() string {
 				f, err := os.CreateTemp("", "test-*.txt")
-				if err != nil {
-					t.Fatal(err)
-				}
+				require.NoError(t, err)
 				defer f.Close()
 				if _, err := f.WriteString("hello world"); err != nil {
 					t.Fatal(err)
@@ -53,9 +53,7 @@ func TestIsZip(t *testing.T) {
 			name: "corrupt zip file",
 			setupFn: func() string {
 				f, err := os.CreateTemp("", "corrupt-*.zip")
-				if err != nil {
-					t.Fatal(err)
-				}
+				require.NoError(t, err)
 				defer f.Close()
 				if _, err := f.WriteString("corrupted content"); err != nil {
 					t.Fatal(err)
@@ -95,9 +93,7 @@ func TestArchiveUnarchive(t *testing.T) {
 
 	// Create temp test directories
 	sourceDir, err := os.MkdirTemp("", "zip-test-source-*")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer os.RemoveAll(sourceDir)
 
 	// Create test files and directories
@@ -111,13 +107,9 @@ func TestArchiveUnarchive(t *testing.T) {
 	for path, content := range files {
 		fullPath := filepath.Join(sourceDir, path)
 		err := os.MkdirAll(filepath.Dir(fullPath), 0755)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		err = os.WriteFile(fullPath, content, 0644)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 	}
 
 	// Create empty directory
@@ -147,17 +139,13 @@ func TestArchiveUnarchive(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create temp zip file
 			zipFile, err := os.CreateTemp("", "test-*.zip")
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			zipFile.Close()
 			defer os.Remove(zipFile.Name())
 
 			// Create temp extract directory
 			extractDir, err := os.MkdirTemp("", "zip-test-extract-*")
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			defer os.RemoveAll(extractDir)
 
 			// Test Archive
@@ -169,9 +157,7 @@ func TestArchiveUnarchive(t *testing.T) {
 
 			// Test is valid zip file
 			isZip, err := IsZip(ctx, zipFile.Name())
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			if !isZip {
 				t.Errorf("Archive() did not create a valid zip file")
 				return
@@ -226,9 +212,7 @@ func TestArchiveUnarchive(t *testing.T) {
 				}
 				return nil
 			})
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 		})
 	}
 }
@@ -238,9 +222,7 @@ func TestArchiveOverwrite(t *testing.T) {
 
 	// Create initial source directory
 	sourceDir, err := os.MkdirTemp("", "zip-test-source-*")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer os.RemoveAll(sourceDir)
 
 	// Create initial files
@@ -257,9 +239,7 @@ func TestArchiveOverwrite(t *testing.T) {
 
 	// Create zip file
 	zipFile, err := os.CreateTemp("", "test-*.zip")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	zipFile.Close()
 	defer os.Remove(zipFile.Name())
 
@@ -270,9 +250,7 @@ func TestArchiveOverwrite(t *testing.T) {
 
 	// Create new source directory with different content
 	newSourceDir, err := os.MkdirTemp("", "zip-test-new-source-*")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer os.RemoveAll(newSourceDir)
 
 	// Create new files
@@ -294,9 +272,7 @@ func TestArchiveOverwrite(t *testing.T) {
 
 	// Create extraction directory
 	extractDir, err := os.MkdirTemp("", "zip-test-extract-*")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer os.RemoveAll(extractDir)
 
 	// Extract overwritten zip
@@ -306,9 +282,7 @@ func TestArchiveOverwrite(t *testing.T) {
 
 	// Validate extracted content
 	files, err := os.ReadDir(extractDir)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	// Verify only new files exist
 	expectedFiles := map[string]bool{
@@ -325,9 +299,7 @@ func TestArchiveOverwrite(t *testing.T) {
 
 		// Verify content
 		content, err := os.ReadFile(filepath.Join(extractDir, f.Name()))
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		expected := newFiles[f.Name()]
 		if string(content) != string(expected) {
 			t.Errorf("File %s content mismatch: got %s, want %s",

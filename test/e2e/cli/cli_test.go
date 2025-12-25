@@ -24,12 +24,12 @@ func TestFissionCLI(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	err := f.Start(ctx)
 	require.NoError(t, err)
-	defer func() {
+	t.Cleanup(func() {
 		cancel()
 		mgr.Wait()
 		err = f.Stop()
 		require.NoError(t, err)
-	}()
+	})
 
 	err = services.StartServices(ctx, f, mgr)
 	require.NoError(t, err)
