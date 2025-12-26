@@ -72,4 +72,14 @@ func TestAggregateValidationErrors(t *testing.T) {
 			snaps.MatchSnapshot(t, fmt.Sprint(aggErr))
 		})
 	}
+
+	t.Run("nil error", func(t *testing.T) {
+		aggErr := AggregateValidationErrors("Environment", nil)
+		snaps.MatchSnapshot(t, fmt.Sprint(aggErr))
+	})
+
+	t.Run("simple error", func(t *testing.T) {
+		aggErr := AggregateValidationErrors("Environment", fmt.Errorf("simple error"))
+		snaps.MatchSnapshot(t, fmt.Sprint(aggErr))
+	})
 }

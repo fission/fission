@@ -5,26 +5,36 @@
 
 [TestAggregateValidationErrors/one_error - 1]
 Invalid fission Environment objects:
-  * E1
+* E1
 
 ---
 
 [TestAggregateValidationErrors/multiple_errors - 1]
 Invalid fission Environment objects:
-  * E1
-  * E2
-  * E3
+* E1
+* E2
+* E3
 
 ---
 
 [TestAggregateValidationErrors/nested_errors - 1]
 Invalid fission Environment objects:
-  * E1
-    * E2
-      * E3
-      * E4
-  * E5
-    * E6
-    * E7
+* E1
+  * E2
+    * E3
+    * E4
+* E5
+  * E6
+  * E7
+
+---
+
+[TestAggregateValidationErrors/nil_error - 1]
+<nil>
+---
+
+[TestAggregateValidationErrors/simple_error - 1]
+Invalid fission Environment objects:
+* simple error
 
 ---

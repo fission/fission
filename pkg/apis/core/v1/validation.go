@@ -107,7 +107,9 @@ func AggregateValidationErrors(objName string, err error) error {
 				unmaskError(level+1, e)
 			}
 		} else {
-			errMsg.WriteString(strings.Repeat("  ", level))
+			if level > 0 {
+				errMsg.WriteString(strings.Repeat("  ", level-1))
+			}
 			errMsg.WriteString(fmt.Sprintf("* %s\n", err.Error()))
 		}
 	}
