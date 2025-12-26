@@ -27,7 +27,6 @@ import (
 	"errors"
 
 	"github.com/dchest/uniuri"
-	"github.com/hashicorp/go-multierror"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -58,7 +57,7 @@ func CreateArchive(client cmd.Client, input cli.Input, includeFiles []string, no
 			return nil, fmt.Errorf("error getting root directory of spec directory: %w", err)
 		}
 	}
-	errs := utils.MultiErrorWithFormat()
+	var errs error
 	fileURL := ""
 
 	// check files existence
@@ -76,29 +75,29 @@ func CreateArchive(client cmd.Client, input cli.Input, includeFiles []string, no
 		// Get files from inputs as number of files decide next steps
 		absPath, err := filepath.Abs(path)
 		if err != nil {
-			errs = multierror.Append(errs, fmt.Errorf("error converting path to the absolute path \"%v\": %w", path, err))
+			errs = errors.Join(errs, fmt.Errorf("error converting path to the absolute path \"%v\": %w", path, err))
 			continue
 		}
 
 		if !strings.HasPrefix(absPath, rootDir) {
-			errs = multierror.Append(errs, fmt.Errorf("the files (%v) should be put under the same parent directory (%v) of spec directory; otherwise, the archive will be empty when applying spec files", path, rootDir))
+			errs = errors.Join(errs, fmt.Errorf("the files (%v) should be put under the same parent directory (%v) of spec directory; otherwise, the archive will be empty when applying spec files", path, rootDir))
 			continue
 		}
 
 		path := filepath.Join(rootDir, path)
 		files, err := utils.FindAllGlobs(path)
 		if err != nil {
-			errs = multierror.Append(errs, fmt.Errorf("error finding all globs: %w", err))
+			errs = errors.Join(errs, fmt.Errorf("error finding all globs: %w", err))
 			continue
 		}
 
 		if len(files) == 0 {
-			errs = multierror.Append(errs, fmt.Errorf("error finding any files with path \"%v\"", path))
+			errs = errors.Join(errs, fmt.Errorf("error finding any files with path \"%v\"", path))
 		}
 	}
 
-	if errs.ErrorOrNil() != nil {
-		return nil, errs.ErrorOrNil()
+	if errs != nil {
+		return nil, errs
 	}
 
 	if len(fileURL) > 0 {

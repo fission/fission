@@ -17,13 +17,13 @@ limitations under the License.
 package spec
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 
-	multierror "github.com/hashicorp/go-multierror"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sCache "k8s.io/client-go/tools/cache"
@@ -36,7 +36,6 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cmd/spec/types"
 	"github.com/fission/fission/pkg/fission-cli/console"
 	"github.com/fission/fission/pkg/fission-cli/util"
-	"github.com/fission/fission/pkg/utils"
 )
 
 const (
@@ -308,7 +307,7 @@ func (fr *FissionResources) validateFunctionReference(functions map[string]bool,
 
 // Validate validates the spec file for irregular references
 func (fr *FissionResources) Validate(input cli.Input, client cmd.Client) ([]string, error) {
-	result := utils.MultiErrorWithFormat()
+	var errs error
 	var warnings []string
 
 	// check references: both dangling refs + garbage
@@ -339,7 +338,7 @@ func (fr *FissionResources) Validate(input cli.Input, client cmd.Client) ([]stri
 				aname := strings.TrimPrefix(u, ARCHIVE_URL_PREFIX)
 				if len(aname) > 0 {
 					if _, ok := archives[aname]; !ok {
-						result = multierror.Append(result, fmt.Errorf(
+						errs = errors.Join(errs, fmt.Errorf(
 							"%v: package '%v' references unknown %v archive '%v%v'",
 							fr.SourceMap.Locations["Package"][p.ObjectMeta.Namespace][p.ObjectMeta.Name],
 							p.ObjectMeta.Name,
@@ -353,13 +352,13 @@ func (fr *FissionResources) Validate(input cli.Input, client cmd.Client) ([]stri
 			}
 		}
 
-		result = multierror.Append(result, p.Validate())
+		errs = errors.Join(errs, p.Validate())
 	}
 
 	// error on unreferenced archives
 	for name, referenced := range archives {
 		if !referenced {
-			result = multierror.Append(result, fmt.Errorf(
+			errs = errors.Join(errs, fmt.Errorf(
 				"%v: archive '%v' is not used in any package",
 				fr.SourceMap.Locations["ArchiveUploadSpec"][""][name],
 				name))
@@ -389,14 +388,14 @@ func (fr *FissionResources) Validate(input cli.Input, client cmd.Client) ([]stri
 			}
 
 			if !packageRefInFuncNs(&f) {
-				result = multierror.Append(result, fmt.Errorf(
+				errs = errors.Join(errs, fmt.Errorf(
 					"%v: function '%v' references a package outside of its namespace %v/%v",
 					fr.SourceMap.Locations["Function"][f.ObjectMeta.Namespace][f.ObjectMeta.Name],
 					f.ObjectMeta.Name,
 					f.Spec.Package.PackageRef.Namespace,
 					f.Spec.Package.PackageRef.Name))
 			} else if !packageRefExists() {
-				result = multierror.Append(result, fmt.Errorf(
+				errs = errors.Join(errs, fmt.Errorf(
 					"%v: function '%v' references unknown package %v/%v",
 					fr.SourceMap.Locations["Function"][f.ObjectMeta.Namespace][f.ObjectMeta.Name],
 					f.ObjectMeta.Name,
@@ -422,14 +421,14 @@ func (fr *FissionResources) Validate(input cli.Input, client cmd.Client) ([]stri
 				warnings = append(warnings, fmt.Sprintf("Secret %s is referred in the spec but not present in the cluster", s.Name))
 			}
 		}
-		result = multierror.Append(result, f.Validate())
+		errs = errors.Join(errs, f.Validate())
 	}
 
 	// error on unreferenced packages
 	for key, referenced := range packages {
 		namespace, name, err := k8sCache.SplitMetaNamespaceKey(key)
 		if err != nil {
-			result = multierror.Append(result, fmt.Errorf("failed to check the reference for the package '%s'", key))
+			errs = errors.Join(errs, fmt.Errorf("failed to check the reference for the package '%s'", key))
 		}
 		if !referenced {
 			warnings = append(warnings, fmt.Sprintf(
@@ -443,7 +442,7 @@ func (fr *FissionResources) Validate(input cli.Input, client cmd.Client) ([]stri
 	for _, t := range fr.HttpTriggers {
 		err := fr.validateFunctionReference(functions, t.Kind, &t.ObjectMeta, t.Spec.FunctionReference)
 		if err != nil {
-			result = multierror.Append(result, err)
+			errs = errors.Join(errs, err)
 		}
 
 		if len(t.Spec.Host) > 0 {
@@ -452,28 +451,28 @@ func (fr *FissionResources) Validate(input cli.Input, client cmd.Client) ([]stri
 		if len(t.Spec.Method) > 0 {
 			warnings = append(warnings, "Method in HTTTPTrigger spec.Method is deprecated, use spec.Methods instead")
 		}
-		result = multierror.Append(result, t.Validate())
+		errs = errors.Join(errs, t.Validate())
 	}
 	for _, t := range fr.KubernetesWatchTriggers {
 		err := fr.validateFunctionReference(functions, t.Kind, &t.ObjectMeta, t.Spec.FunctionReference)
 		if err != nil {
-			result = multierror.Append(result, err)
+			errs = errors.Join(errs, err)
 		}
-		result = multierror.Append(result, t.Validate())
+		errs = errors.Join(errs, t.Validate())
 	}
 	for _, t := range fr.TimeTriggers {
 		err := fr.validateFunctionReference(functions, t.Kind, &t.ObjectMeta, t.Spec.FunctionReference)
 		if err != nil {
-			result = multierror.Append(result, err)
+			errs = errors.Join(errs, err)
 		}
-		result = multierror.Append(result, t.Validate())
+		errs = errors.Join(errs, t.Validate())
 	}
 	for _, t := range fr.MessageQueueTriggers {
 		err := fr.validateFunctionReference(functions, t.Kind, &t.ObjectMeta, t.Spec.FunctionReference)
 		if err != nil {
-			result = multierror.Append(result, err)
+			errs = errors.Join(errs, err)
 		}
-		result = multierror.Append(result, t.Validate())
+		errs = errors.Join(errs, t.Validate())
 	}
 
 	// we do not error on unreferenced functions (you can call a function through workflows,
@@ -487,7 +486,7 @@ func (fr *FissionResources) Validate(input cli.Input, client cmd.Client) ([]stri
 			warnings = append(warnings, "You have provided both - container spec and pod spec and while merging the pod spec will take precedence.")
 			if e.Spec.Runtime.Container.Name != "" && e.Spec.Runtime.PodSpec != nil {
 				if !executorUtil.DoesContainerExistInPodSpec(e.Spec.Runtime.Container.Name, e.Spec.Runtime.PodSpec) {
-					result = multierror.Append(result, fmt.Errorf("runtime container %s does not exist in the pod spec", e.Spec.Runtime.Container.Name))
+					errs = errors.Join(errs, fmt.Errorf("runtime container %s does not exist in the pod spec", e.Spec.Runtime.Container.Name))
 				}
 			}
 		}
@@ -511,7 +510,7 @@ func (fr *FissionResources) Validate(input cli.Input, client cmd.Client) ([]stri
 		}
 	}
 	// (ErrorOrNil returns nil if there were no errors appended.)
-	return warnings, result.ErrorOrNil()
+	return warnings, errs
 }
 
 // Keep track of source location of resources, and track duplicates

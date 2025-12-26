@@ -17,16 +17,15 @@ limitations under the License.
 package httptrigger
 
 import (
+	"errors"
 	"fmt"
 
-	"github.com/hashicorp/go-multierror"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
-	"github.com/fission/fission/pkg/utils"
 )
 
 type DeleteSubCommand struct {
@@ -83,22 +82,22 @@ func (opts *DeleteSubCommand) run(input cli.Input) error {
 		triggersToDelete = []string{opts.triggerName}
 	}
 
-	errs := utils.MultiErrorWithFormat()
+	var errs error
 
 	for _, name := range triggersToDelete {
 		err := opts.Client().FissionClientSet.CoreV1().HTTPTriggers(opts.namespace).Delete(input.Context(), name, metav1.DeleteOptions{})
 		if err != nil {
-			errs = multierror.Append(errs, err)
+			errs = errors.Join(errs, err)
 		} else {
 			fmt.Printf("trigger '%v' deleted\n", name)
 		}
 	}
 
-	if errs.ErrorOrNil() != nil {
+	if errs != nil {
 		if input.Bool(flagkey.IgnoreNotFound) && util.IsNotFound(err) {
 			return nil
 		}
-		return fmt.Errorf("error deleting trigger(s): %w", errs.ErrorOrNil())
+		return fmt.Errorf("error deleting trigger(s): %w", errs)
 	}
 
 	return nil

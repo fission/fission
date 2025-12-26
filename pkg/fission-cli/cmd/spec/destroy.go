@@ -30,7 +30,6 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/console"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
-	"github.com/fission/fission/pkg/utils"
 )
 
 type DestroySubCommand struct {
@@ -129,9 +128,6 @@ func forceDeleteResources(ctx context.Context, fclient cmd.Client, fr *FissionRe
 // insertNSToResource provides a namespace to all resource which don't have a namespace specified
 // in resource
 func (opts *DestroySubCommand) insertNSToResource(input cli.Input, fr *FissionResources) error {
-
-	result := utils.MultiErrorWithFormat()
-
 	_, currentNS, err := opts.GetResourceNamespace(input, flagkey.NamespaceEnvironment)
 	if err != nil {
 		return fv1.AggregateValidationErrors("Environment", err)
@@ -173,7 +169,7 @@ func (opts *DestroySubCommand) insertNSToResource(input cli.Input, fr *FissionRe
 		}
 	}
 
-	return result.ErrorOrNil()
+	return nil
 }
 
 func deleteResources(ctx context.Context, fclient cmd.Client, fr *FissionResources, _ bool) error {
