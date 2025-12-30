@@ -205,7 +205,7 @@ func (pkgw *packageWatcher) build(ctx context.Context, srcpkg *fv1.Package) {
 					fn.Spec.Package.PackageRef.ResourceVersion != pkg.ResourceVersion {
 					fn.Spec.Package.PackageRef.ResourceVersion = pkg.ResourceVersion
 					// update CRD
-					_, err = pkgw.fissionClient.CoreV1().Functions(fn.ObjectMeta.Namespace).Update(ctx, &fn, metav1.UpdateOptions{})
+					_, err = pkgw.fissionClient.CoreV1().Functions(fn.Namespace).Update(ctx, &fn, metav1.UpdateOptions{})
 					if err != nil {
 						e := "error updating function package resource version"
 						logger.Error(e, zap.Error(err))

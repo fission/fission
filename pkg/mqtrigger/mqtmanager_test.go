@@ -60,7 +60,10 @@ func (f fakeMessageQueue) Unsubscribe(triggerSub messageQueue.Subscription) erro
 
 func TestMqtManager(t *testing.T) {
 	logger := loggerfactory.GetLogger()
-	defer logger.Sync()
+	defer func() {
+		// https://github.com/uber-go/zap/issues/328
+		_ = logger.Sync()
+	}()
 	msgQueue := fakeMessageQueue{}
 	fissionClient := fClient.NewClientset()
 	factory := make(map[string]genInformer.SharedInformerFactory, 0)

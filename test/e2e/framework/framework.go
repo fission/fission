@@ -111,6 +111,7 @@ func (f *Framework) ClientGen() *crd.ClientGenerator {
 
 func (f *Framework) Stop() error {
 	f.logger.Info("Stopping test env")
+	// https://github.com/uber-go/zap/issues/328
 	_ = f.logger.Sync()
 	err := f.env.Stop()
 	if err != nil {

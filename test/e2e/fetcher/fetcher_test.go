@@ -499,7 +499,9 @@ func (f *FetcherTestSuite) TearDownSuite() {
 	require.NoError(f.T(), err)
 
 	f.cancel()
-	f.logger.Sync()
+	// https://github.com/uber-go/zap/issues/328
+	_ = f.logger.Sync()
+
 	f.mgr.Wait()
 	err = f.framework.Stop()
 	require.NoError(f.T(), err, "error stopping framework")

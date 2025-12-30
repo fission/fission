@@ -211,7 +211,7 @@ func UpdateFunctionPackageResourceVersion(ctx context.Context, client cmd.Client
 	// update resource version of package reference of functions that shared the same package
 	for _, fn := range fnList {
 		fn.Spec.Package.PackageRef.ResourceVersion = pkgMeta.ResourceVersion
-		_, err := client.FissionClientSet.CoreV1().Functions(fn.ObjectMeta.Namespace).Update(ctx, &fn, metav1.UpdateOptions{})
+		_, err := client.FissionClientSet.CoreV1().Functions(fn.Namespace).Update(ctx, &fn, metav1.UpdateOptions{})
 		if err != nil {
 			errs = errors.Join(errs, fmt.Errorf("error updating package resource version of function '%v': %w", fn.Name, err))
 		}
