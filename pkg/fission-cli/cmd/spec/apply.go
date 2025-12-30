@@ -67,8 +67,6 @@ func (opts *ApplySubCommand) do(input cli.Input) error {
 // we make sure that all component of a resource should be present in the same Namespace. i.e.
 // Function's env and package should be present in same namespace
 func (opts *ApplySubCommand) insertNamespace(input cli.Input, fr *FissionResources) error {
-
-	result := utils.MultiErrorWithFormat()
 	_, currentNS, err := opts.GetResourceNamespace(input, flagkey.NamespaceEnvironment)
 	if err != nil {
 		return fv1.AggregateValidationErrors("Environment", err)
@@ -120,7 +118,7 @@ func (opts *ApplySubCommand) insertNamespace(input cli.Input, fr *FissionResourc
 		}
 	}
 
-	return result.ErrorOrNil()
+	return nil
 }
 
 func (opts *ApplySubCommand) run(input cli.Input) error {

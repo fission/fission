@@ -34,7 +34,6 @@ import (
 
 	"errors"
 
-	"github.com/hashicorp/go-multierror"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -49,7 +48,6 @@ import (
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/info"
 	"github.com/fission/fission/pkg/plugin"
-	"github.com/fission/fission/pkg/utils"
 )
 
 const (
@@ -249,13 +247,13 @@ func GetResourceReqs(input cli.Input, resReqs *v1.ResourceRequirements) (*v1.Res
 		r.Limits = make(map[v1.ResourceName]resource.Quantity)
 	}
 
-	e := utils.MultiErrorWithFormat()
+	var errs error
 
 	if input.IsSet(flagkey.RuntimeMincpu) {
 		mincpu := input.Int(flagkey.RuntimeMincpu)
 		cpuRequest, err := resource.ParseQuantity(strconv.Itoa(mincpu) + "m")
 		if err != nil {
-			e = multierror.Append(e, fmt.Errorf("failed to parse mincpu: %w", err))
+			errs = errors.Join(errs, fmt.Errorf("failed to parse mincpu: %w", err))
 		}
 		r.Requests[v1.ResourceCPU] = cpuRequest
 	}
@@ -264,7 +262,7 @@ func GetResourceReqs(input cli.Input, resReqs *v1.ResourceRequirements) (*v1.Res
 		minmem := input.Int(flagkey.RuntimeMinmemory)
 		memRequest, err := resource.ParseQuantity(strconv.Itoa(minmem) + "Mi")
 		if err != nil {
-			e = multierror.Append(e, fmt.Errorf("failed to parse minmemory: %w", err))
+			errs = errors.Join(errs, fmt.Errorf("failed to parse minmemory: %w", err))
 		}
 		r.Requests[v1.ResourceMemory] = memRequest
 	}
@@ -273,7 +271,7 @@ func GetResourceReqs(input cli.Input, resReqs *v1.ResourceRequirements) (*v1.Res
 		maxcpu := input.Int(flagkey.RuntimeMaxcpu)
 		cpuLimit, err := resource.ParseQuantity(strconv.Itoa(maxcpu) + "m")
 		if err != nil {
-			e = multierror.Append(e, fmt.Errorf("failed to parse maxcpu: %w", err))
+			errs = errors.Join(errs, fmt.Errorf("failed to parse maxcpu: %w", err))
 		}
 		r.Limits[v1.ResourceCPU] = cpuLimit
 	}
@@ -282,7 +280,7 @@ func GetResourceReqs(input cli.Input, resReqs *v1.ResourceRequirements) (*v1.Res
 		maxmem := input.Int(flagkey.RuntimeMaxmemory)
 		memLimit, err := resource.ParseQuantity(strconv.Itoa(maxmem) + "Mi")
 		if err != nil {
-			e = multierror.Append(e, fmt.Errorf("failed to parse maxmemory: %w", err))
+			errs = errors.Join(errs, fmt.Errorf("failed to parse maxmemory: %w", err))
 		}
 		r.Limits[v1.ResourceMemory] = memLimit
 	}
@@ -293,7 +291,7 @@ func GetResourceReqs(input cli.Input, resReqs *v1.ResourceRequirements) (*v1.Res
 	if limitCPU.IsZero() && !requestCPU.IsZero() {
 		r.Limits[v1.ResourceCPU] = requestCPU
 	} else if limitCPU.Cmp(requestCPU) < 0 {
-		e = multierror.Append(e, fmt.Errorf("minCPU (%v) cannot be greater than MaxCPU (%v)", requestCPU.String(), limitCPU.String()))
+		errs = errors.Join(errs, fmt.Errorf("minCPU (%v) cannot be greater than MaxCPU (%v)", requestCPU.String(), limitCPU.String()))
 	}
 
 	limitMem := r.Limits[v1.ResourceMemory]
@@ -302,11 +300,11 @@ func GetResourceReqs(input cli.Input, resReqs *v1.ResourceRequirements) (*v1.Res
 	if limitMem.IsZero() && !requestMem.IsZero() {
 		r.Limits[v1.ResourceMemory] = requestMem
 	} else if limitMem.Cmp(requestMem) < 0 {
-		e = multierror.Append(e, fmt.Errorf("minMemory (%v) cannot be greater than MaxMemory (%v)", requestMem.String(), limitMem.String()))
+		errs = errors.Join(errs, fmt.Errorf("minMemory (%v) cannot be greater than MaxMemory (%v)", requestMem.String(), limitMem.String()))
 	}
 
-	if e.ErrorOrNil() != nil {
-		return nil, e
+	if errs != nil {
+		return nil, errs
 	}
 
 	return &v1.ResourceRequirements{

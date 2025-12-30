@@ -17,6 +17,7 @@ limitations under the License.
 package v1
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"net/http"
@@ -24,7 +25,6 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/hashicorp/go-multierror"
 	"github.com/robfig/cron/v3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/validation"
@@ -89,19 +89,34 @@ func (e ValidationError) Error() string {
 }
 
 func AggregateValidationErrors(objName string, err error) error {
-	result := &multierror.Error{}
+	if err == nil {
+		return nil
+	}
+	var errMsg bytes.Buffer
+	errMsg.WriteString(fmt.Sprintf("Invalid fission %s objects:\n", objName))
 
-	result = multierror.Append(result, err)
+	var unmaskError func(level int, err error)
 
-	result.ErrorFormat = func(errs []error) string {
-		errMsg := fmt.Sprintf("Invalid fission %v object:\n", objName)
-		for _, err := range errs {
-			errMsg += fmt.Sprintf("* %v\n", err.Error())
+	// Do nested error unwrapping
+	unmaskError = func(level int, err error) {
+		unwrapper, ok := err.(interface {
+			Unwrap() []error
+		})
+		if ok {
+			for _, e := range unwrapper.Unwrap() {
+				unmaskError(level+1, e)
+			}
+		} else {
+			if level > 0 {
+				errMsg.WriteString(strings.Repeat("  ", level-1))
+			}
+			errMsg.WriteString(fmt.Sprintf("* %s\n", err.Error()))
 		}
-		return errMsg
 	}
 
-	return result.ErrorOrNil()
+	unmaskError(0, err)
+
+	return errors.New(errMsg.String())
 }
 
 func MakeValidationErr(errType ValidationErrorType, field string, val interface{}, detail ...string) ValidationError {
@@ -114,39 +129,39 @@ func MakeValidationErr(errType ValidationErrorType, field string, val interface{
 }
 
 func ValidateKubeLabel(field string, labels map[string]string) error {
-	result := &multierror.Error{}
+	var errs error
 
 	for k, v := range labels {
 		// Example: XXX -> YYY
 		// KubernetesWatchTriggerSpec.LabelSelector.Key: Invalid value: XXX
 		// KubernetesWatchTriggerSpec.LabelSelector.Value: Invalid value: YYY
-		result = multierror.Append(result,
+		errs = errors.Join(errs,
 			MakeValidationErr(ErrorInvalidValue, fmt.Sprintf("%v.Key", field), k, validation.IsQualifiedName(k)...),
 			MakeValidationErr(ErrorInvalidValue, fmt.Sprintf("%v.Value", field), v, validation.IsValidLabelValue(v)...))
 	}
 
-	return result.ErrorOrNil()
+	return errs
 }
 
 func ValidateKubePort(field string, port int) error {
-	var err error
+	var errs error
 
 	e := validation.IsValidPortNum(port)
 	if len(e) > 0 {
-		err = errors.Join(err, MakeValidationErr(ErrorInvalidValue, field, port, e...))
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, field, port, e...))
 	}
-	return err
+	return errs
 }
 
 func ValidateKubeName(field string, val string) error {
-	var err error
+	var errs error
 
 	e := validation.IsDNS1123Label(val)
 	if len(e) > 0 {
-		err = errors.Join(err, MakeValidationErr(ErrorInvalidValue, field, val, e...))
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, field, val, e...))
 	}
 
-	return err
+	return errs
 }
 
 // validateNS is to match the k8s behaviour. Where it is not mandatory to provide a NS. And so we validate it if user has provided one.
@@ -159,13 +174,13 @@ func validateNS(refName string, namespace string) error {
 }
 
 func ValidateKubeReference(refName string, name string, namespace string) error {
-	result := &multierror.Error{}
+	var errs error
 
-	result = multierror.Append(result,
+	errs = errors.Join(errs,
 		ValidateKubeName(fmt.Sprintf("%s.Name", refName), name),
 		validateNS(fmt.Sprintf("%s.Namespace", refName), namespace))
 
-	return result.ErrorOrNil()
+	return errs
 }
 
 func IsValidCronSpec(spec string) error {
@@ -177,203 +192,192 @@ func IsValidCronSpec(spec string) error {
 /* Resource validation function */
 
 func (checksum Checksum) Validate() error {
-	result := &multierror.Error{}
+	var errs error
 
 	switch checksum.Type {
 	case ChecksumTypeSHA256: // no op
 	default:
-		result = multierror.Append(result, MakeValidationErr(ErrorUnsupportedType, "Checksum.Type", checksum.Type, "not a valid checksum type"))
+		errs = errors.Join(errs, MakeValidationErr(ErrorUnsupportedType, "Checksum.Type", checksum.Type, "not a valid checksum type"))
 	}
 
-	return result.ErrorOrNil()
+	return errs
 }
 
 func (archive Archive) Validate() error {
-	result := &multierror.Error{}
+	var errs error
 
 	if len(archive.Type) > 0 {
 		switch archive.Type {
 		case ArchiveTypeLiteral, ArchiveTypeUrl: // no op
 		default:
-			result = multierror.Append(result, MakeValidationErr(ErrorUnsupportedType, "Archive.Type", archive.Type, "not a valid archive type"))
+			errs = errors.Join(errs, MakeValidationErr(ErrorUnsupportedType, "Archive.Type", archive.Type, "not a valid archive type"))
 		}
 	}
 
 	if archive.Checksum != (Checksum{}) {
-		result = multierror.Append(result, archive.Checksum.Validate())
+		errs = errors.Join(errs, archive.Checksum.Validate())
 	}
 
-	return result.ErrorOrNil()
+	return errs
 }
 
 func (ref EnvironmentReference) Validate() error {
-	result := &multierror.Error{}
-	result = multierror.Append(result, ValidateKubeReference("EnvironmentReference", ref.Name, ref.Namespace))
-	return result.ErrorOrNil()
+	return ValidateKubeReference("EnvironmentReference", ref.Name, ref.Namespace)
 }
 
 func (ref SecretReference) Validate() error {
-	result := &multierror.Error{}
-	result = multierror.Append(result, ValidateKubeReference("SecretReference", ref.Name, ref.Namespace))
-	return result.ErrorOrNil()
+	return ValidateKubeReference("SecretReference", ref.Name, ref.Namespace)
 }
 
 func (ref ConfigMapReference) Validate() error {
-	result := &multierror.Error{}
-	result = multierror.Append(result, ValidateKubeReference("ConfigMapReference", ref.Name, ref.Namespace))
-	return result.ErrorOrNil()
+	return ValidateKubeReference("ConfigMapReference", ref.Name, ref.Namespace)
 }
 
 func (spec PackageSpec) Validate() error {
-	result := &multierror.Error{}
+	var errs error
 
-	result = multierror.Append(result, spec.Environment.Validate())
+	errs = errors.Join(errs, spec.Environment.Validate())
 
 	for _, r := range []Archive{spec.Source, spec.Deployment} {
 		if len(r.URL) > 0 || len(r.Literal) > 0 {
-			result = multierror.Append(result, r.Validate())
+			errs = errors.Join(errs, r.Validate())
 		}
 	}
 
-	return result.ErrorOrNil()
+	return errs
 }
 
 func (sts PackageStatus) Validate() error {
-	result := &multierror.Error{}
+	var errs error
 
 	switch sts.BuildStatus {
 	case BuildStatusPending, BuildStatusRunning, BuildStatusSucceeded, BuildStatusFailed, BuildStatusNone: // no op
 	default:
-		result = multierror.Append(result, MakeValidationErr(ErrorUnsupportedType, "PackageStatus.BuildStatus", sts.BuildStatus, "not a valid build status"))
+		errs = errors.Join(errs, MakeValidationErr(ErrorUnsupportedType, "PackageStatus.BuildStatus", sts.BuildStatus, "not a valid build status"))
 	}
 
-	return result.ErrorOrNil()
+	return errs
 }
 
 func (ref PackageRef) Validate() error {
-	result := &multierror.Error{}
-	result = multierror.Append(result, ValidateKubeReference("PackageRef", ref.Name, ref.Namespace))
-	return result.ErrorOrNil()
+	return ValidateKubeReference("PackageRef", ref.Name, ref.Namespace)
 }
 
 func (ref FunctionPackageRef) Validate() error {
-	result := &multierror.Error{}
-	result = multierror.Append(result, ref.PackageRef.Validate())
-	return result.ErrorOrNil()
+	return ref.PackageRef.Validate()
 }
 
 func (spec FunctionSpec) Validate() error {
-	result := &multierror.Error{}
+	var errs error
 
 	if spec.Environment != (EnvironmentReference{}) {
-		result = multierror.Append(result, spec.Environment.Validate())
+		errs = errors.Join(errs, spec.Environment.Validate())
 	}
 
 	if spec.Package != (FunctionPackageRef{}) {
-		result = multierror.Append(result, spec.Package.Validate())
+		errs = errors.Join(errs, spec.Package.Validate())
 	}
 
 	for _, s := range spec.Secrets {
-		result = multierror.Append(result, s.Validate())
+		errs = errors.Join(errs, s.Validate())
 	}
 	for _, c := range spec.ConfigMaps {
-		result = multierror.Append(result, c.Validate())
+		errs = errors.Join(errs, c.Validate())
 	}
 
 	if !reflect.DeepEqual(spec.InvokeStrategy, InvokeStrategy{}) {
-		result = multierror.Append(result, spec.InvokeStrategy.Validate())
+		errs = errors.Join(errs, spec.InvokeStrategy.Validate())
 	}
 
 	if spec.InvokeStrategy.ExecutionStrategy.ExecutorType == ExecutorTypeContainer && spec.PodSpec == nil {
-		result = multierror.Append(result, MakeValidationErr(ErrorInvalidObject, "FunctionSpec.PodSpec", "", "executor type container requires a pod spec"))
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidObject, "FunctionSpec.PodSpec", "", "executor type container requires a pod spec"))
 	}
 
 	// TODO Add below validation warning
-	/*if spec.FunctionTimeout <= 0 {
-		result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "FunctionTimeout value", spec.FunctionTimeout, "not a valid value. Should always be more than 0"))
-	}*/
+	// if spec.FunctionTimeout <= 0 {
+	// 	errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionTimeout value", spec.FunctionTimeout, "not a valid value. Should always be more than 0"))
+	// }
 
-	return result.ErrorOrNil()
+	return errs
 }
 
 func (is InvokeStrategy) Validate() error {
-	result := &multierror.Error{}
+	var errs error
 
 	switch is.StrategyType {
 	case StrategyTypeExecution: // no op
 	default:
-		result = multierror.Append(result, MakeValidationErr(ErrorUnsupportedType, "InvokeStrategy.StrategyType", is.StrategyType, "not a valid valid strategy"))
+		errs = errors.Join(errs, MakeValidationErr(ErrorUnsupportedType, "InvokeStrategy.StrategyType", is.StrategyType, "not a valid strategy"))
 	}
 
-	result = multierror.Append(result, is.ExecutionStrategy.Validate())
+	errs = errors.Join(errs, is.ExecutionStrategy.Validate())
 
-	return result.ErrorOrNil()
+	return errs
 }
 
 func (es ExecutionStrategy) Validate() error {
-	result := &multierror.Error{}
-
+	var errs error
 	switch es.ExecutorType {
 	case ExecutorTypeNewdeploy, ExecutorTypePoolmgr, ExecutorTypeContainer: // no op
 	default:
-		result = multierror.Append(result, MakeValidationErr(ErrorUnsupportedType, "ExecutionStrategy.ExecutorType", es.ExecutorType, "not a valid executor type"))
+		errs = errors.Join(errs, MakeValidationErr(ErrorUnsupportedType, "ExecutionStrategy.ExecutorType", es.ExecutorType, "not a valid executor type"))
 	}
 
 	if es.ExecutorType == ExecutorTypeNewdeploy || es.ExecutorType == ExecutorTypeContainer {
 		if es.MinScale < 0 {
-			result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "ExecutionStrategy.MinScale", es.MinScale, "minimum scale must be greater than or equal to 0"))
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "ExecutionStrategy.MinScale", es.MinScale, "minimum scale must be greater than or equal to 0"))
 		}
 
 		if es.MaxScale <= 0 {
-			result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "ExecutionStrategy.MaxScale", es.MaxScale, "maximum scale must be greater than 0"))
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "ExecutionStrategy.MaxScale", es.MaxScale, "maximum scale must be greater than 0"))
 		}
 
 		if es.MaxScale < es.MinScale {
-			result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "ExecutionStrategy.MaxScale", es.MaxScale, "maximum scale must be greater than or equal to minimum scale"))
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "ExecutionStrategy.MaxScale", es.MaxScale, "maximum scale must be greater than or equal to minimum scale"))
 		}
 
 		if es.TargetCPUPercent < 0 || es.TargetCPUPercent > 100 {
-			result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "ExecutionStrategy.TargetCPUPercent", es.TargetCPUPercent, "TargetCPUPercent must be a value between 1 - 100"))
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "ExecutionStrategy.TargetCPUPercent", es.TargetCPUPercent, "TargetCPUPercent must be a value between 1 - 100"))
 		}
 
 		// TODO Add validation warning
 		// if es.SpecializationTimeout < 120 {
-		//	result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "ExecutionStrategy.SpecializationTimeout", es.SpecializationTimeout, "SpecializationTimeout must be a value equal to or greater than 120"))
+		//	errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "ExecutionStrategy.SpecializationTimeout", es.SpecializationTimeout, "SpecializationTimeout must be a value equal to or greater than 120"))
 		//}
 	}
 
-	return result.ErrorOrNil()
+	return errs
 }
 
 func (ref FunctionReference) Validate() error {
-	result := &multierror.Error{}
+	var errs error
 
 	switch ref.Type {
 	case FunctionReferenceTypeFunctionName: // no op
 	case FunctionReferenceTypeFunctionWeights: // no op
 	default:
-		result = multierror.Append(result, MakeValidationErr(ErrorUnsupportedType, "FunctionReference.Type", ref.Type, "not a valid function reference type"))
+		errs = errors.Join(errs, MakeValidationErr(ErrorUnsupportedType, "FunctionReference.Type", ref.Type, "not a valid function reference type"))
 	}
 
 	if ref.Type == FunctionReferenceTypeFunctionName {
-		result = multierror.Append(result, ValidateKubeName("FunctionReference.Name", ref.Name))
+		errs = errors.Join(errs, ValidateKubeName("FunctionReference.Name", ref.Name))
 	}
 
-	return result.ErrorOrNil()
+	return errs
 }
 
 func (runtime Runtime) Validate() error {
-	result := &multierror.Error{}
+	var errs error
 
 	if runtime.LoadEndpointPort > 0 {
-		result = multierror.Append(result, ValidateKubePort("Runtime.LoadEndpointPort", int(runtime.LoadEndpointPort)))
+		errs = errors.Join(errs, ValidateKubePort("Runtime.LoadEndpointPort", int(runtime.LoadEndpointPort)))
 	}
 
 	if runtime.FunctionEndpointPort > 0 {
-		result = multierror.Append(result, ValidateKubePort("Runtime.FunctionEndpointPort", int(runtime.FunctionEndpointPort)))
+		errs = errors.Join(errs, ValidateKubePort("Runtime.FunctionEndpointPort", int(runtime.FunctionEndpointPort)))
 	}
 
-	return result.ErrorOrNil()
+	return errs
 }
 
 func (builder Builder) Validate() error {
@@ -382,86 +386,86 @@ func (builder Builder) Validate() error {
 }
 
 func (spec EnvironmentSpec) Validate() error {
-	result := &multierror.Error{}
+	var errs error
 
 	if spec.Version < 1 || spec.Version > 3 {
-		result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "EnvironmentSpec.Version", spec.Version, "not a valid environment version"))
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "EnvironmentSpec.Version", spec.Version, "not a valid environment version"))
 	}
 
-	result = multierror.Append(result, spec.Runtime.Validate())
+	errs = errors.Join(errs, spec.Runtime.Validate())
 
 	if spec.Builder != (Builder{}) {
-		result = multierror.Append(result, spec.Builder.Validate())
+		errs = errors.Join(errs, spec.Builder.Validate())
 	}
 
 	if len(spec.AllowedFunctionsPerContainer) > 0 {
 		switch spec.AllowedFunctionsPerContainer {
 		case AllowedFunctionsPerContainerSingle, AllowedFunctionsPerContainerInfinite: // no op
 		default:
-			result = multierror.Append(result, MakeValidationErr(ErrorUnsupportedType, "EnvironmentSpec.AllowedFunctionsPerContainer", spec.AllowedFunctionsPerContainer, "not a valid value"))
+			errs = errors.Join(errs, MakeValidationErr(ErrorUnsupportedType, "EnvironmentSpec.AllowedFunctionsPerContainer", spec.AllowedFunctionsPerContainer, "not a valid value"))
 		}
 	}
 
 	if spec.Poolsize < 0 {
-		result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "EnvironmentSpec.Poolsize", spec.Poolsize, "must be greater than or equal to 0"))
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "EnvironmentSpec.Poolsize", spec.Poolsize, "must be greater than or equal to 0"))
 	}
 
 	if spec.TerminationGracePeriod < 0 {
-		result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "EnvironmentSpec.TerminationGracePeriod", spec.TerminationGracePeriod, "must be greater than or equal to 0"))
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "EnvironmentSpec.TerminationGracePeriod", spec.TerminationGracePeriod, "must be greater than or equal to 0"))
 	}
 
-	return result.ErrorOrNil()
+	return errs
 }
 
 func (spec HTTPTriggerSpec) Validate() error {
-	result := &multierror.Error{}
-	checkMethod := func(method string, result *multierror.Error) *multierror.Error {
+	var errs error
+
+	checkMethod := func(method string, errs error) error {
 		switch method {
 		case http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut, http.MethodPatch,
 			http.MethodDelete, http.MethodConnect, http.MethodOptions, http.MethodTrace: // no op
 		default:
-			result = multierror.Append(result, MakeValidationErr(ErrorUnsupportedType, "HTTPTriggerSpec.Method", spec.Method, "not a valid HTTP method"))
+			errs = errors.Join(errs, MakeValidationErr(ErrorUnsupportedType, "HTTPTriggerSpec.Method", spec.Method, "not a valid HTTP method"))
 		}
-		return result
+		return errs
 	}
 	if len(spec.Methods) > 0 {
 		for _, method := range spec.Methods {
-			result = checkMethod(method, result)
+			errs = checkMethod(method, errs)
 		}
 	}
 
 	if len(spec.Method) > 0 {
-		result = checkMethod(spec.Method, result)
+		errs = checkMethod(spec.Method, errs)
 	}
 
-	result = multierror.Append(result, spec.FunctionReference.Validate())
+	errs = errors.Join(errs, spec.FunctionReference.Validate())
 
 	if len(spec.Host) > 0 {
 		e := validation.IsDNS1123Subdomain(spec.Host)
 		if len(e) > 0 {
-			result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "HTTPTriggerSpec.Host", spec.Host, e...))
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "HTTPTriggerSpec.Host", spec.Host, e...))
 		}
 	}
 
-	result = multierror.Append(result, spec.IngressConfig.Validate())
-
-	return result.ErrorOrNil()
+	errs = errors.Join(errs, spec.IngressConfig.Validate())
+	return errs
 }
 
 func (config IngressConfig) Validate() error {
-	result := &multierror.Error{}
+	var errs error
 
 	// Details for how to validate Ingress host rule,
 	// see https://github.com/kubernetes/kubernetes/blob/release-1.16/pkg/apis/networking/validation/validation.go
 
 	if len(config.Path) > 0 {
 		if !strings.HasPrefix(config.Path, "/") {
-			result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "HTTPTriggerSpec.IngressConfig.IngressRule.Path", config.Path, "must be an absolute path"))
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "HTTPTriggerSpec.IngressConfig.IngressRule.Path", config.Path, "must be an absolute path"))
 		}
 
 		_, err := regexp.CompilePOSIX(config.Path)
 		if err != nil {
-			result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "HTTPTriggerSpec.IngressConfig.IngressRule.Path", config.Path, "must be a valid regex"))
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "HTTPTriggerSpec.IngressConfig.IngressRule.Path", config.Path, "must be a valid regex"))
 		}
 	}
 
@@ -472,11 +476,11 @@ func (config IngressConfig) Validate() error {
 	if len(config.Host) > 0 && config.Host != "*" {
 		if strings.Contains(config.Host, "*") {
 			for _, msg := range validation.IsWildcardDNS1123Subdomain(config.Host) {
-				result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "HTTPTriggerSpec.IngressConfig.IngressRule.Host", config.Host, msg))
+				errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "HTTPTriggerSpec.IngressConfig.IngressRule.Host", config.Host, msg))
 			}
 		}
 		for _, msg := range validation.IsDNS1123Subdomain(config.Host) {
-			result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "HTTPTriggerSpec.IngressConfig.IngressRule.Host", config.Host, msg))
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "HTTPTriggerSpec.IngressConfig.IngressRule.Host", config.Host, msg))
 		}
 	}
 
@@ -486,66 +490,66 @@ func (config IngressConfig) Validate() error {
 	var totalSize int64
 	for k, v := range config.Annotations {
 		for _, msg := range validation.IsQualifiedName(strings.ToLower(k)) {
-			result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "HTTPTriggerSpec.IngressConfig.Annotations.key", k, msg))
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "HTTPTriggerSpec.IngressConfig.Annotations.key", k, msg))
 		}
 		totalSize += (int64)(len(k)) + (int64)(len(v))
 	}
 	if totalSize > (int64)(totalAnnotationSizeLimitB) {
 		msg := fmt.Sprintf("must have at most %v characters", totalSize)
-		result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "HTTPTriggerSpec.IngressConfig.Annotations.value", totalAnnotationSizeLimitB, msg))
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "HTTPTriggerSpec.IngressConfig.Annotations.value", totalAnnotationSizeLimitB, msg))
 	}
 
-	return result.ErrorOrNil()
+	return errs
 }
 
 func (spec KubernetesWatchTriggerSpec) Validate() error {
-	result := &multierror.Error{}
+	var errs error
 
 	switch strings.ToUpper(spec.Type) {
 	case "POD", "SERVICE", "REPLICATIONCONTROLLER", "JOB":
 	default:
-		result = multierror.Append(result, MakeValidationErr(ErrorUnsupportedType, "KubernetesWatchTriggerSpec.Type", spec.Type, "not a valid supported type"))
+		errs = errors.Join(errs, MakeValidationErr(ErrorUnsupportedType, "KubernetesWatchTriggerSpec.Type", spec.Type, "not a valid supported type"))
 	}
 
-	result = multierror.Append(result,
+	errs = errors.Join(errs,
 		ValidateKubeName("KubernetesWatchTriggerSpec.Namespace", spec.Namespace),
 		ValidateKubeLabel("KubernetesWatchTriggerSpec.LabelSelector", spec.LabelSelector),
 		spec.FunctionReference.Validate())
 
-	return result.ErrorOrNil()
+	return errs
 }
 
 func (spec MessageQueueTriggerSpec) Validate() error {
-	result := &multierror.Error{}
+	var errs error
 
-	result = multierror.Append(result, spec.FunctionReference.Validate())
+	errs = errors.Join(errs, spec.FunctionReference.Validate())
 
 	if !validator.IsValidMessageQueue((string)(spec.MessageQueueType), spec.MqtKind) {
-		result = multierror.Append(result, MakeValidationErr(ErrorUnsupportedType, "MessageQueueTriggerSpec.MessageQueueType", spec.MessageQueueType, "not a supported message queue type"))
+		errs = errors.Join(errs, MakeValidationErr(ErrorUnsupportedType, "MessageQueueTriggerSpec.MessageQueueType", spec.MessageQueueType, "not a supported message queue type"))
 	} else {
 		if !validator.IsValidTopic((string)(spec.MessageQueueType), spec.Topic, spec.MqtKind) {
-			result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "MessageQueueTriggerSpec.Topic", spec.Topic, "not a valid topic"))
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "MessageQueueTriggerSpec.Topic", spec.Topic, "not a valid topic"))
 		}
 
 		if len(spec.ResponseTopic) > 0 && !validator.IsValidTopic((string)(spec.MessageQueueType), spec.ResponseTopic, spec.MqtKind) {
-			result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "MessageQueueTriggerSpec.ResponseTopic", spec.ResponseTopic, "not a valid topic"))
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "MessageQueueTriggerSpec.ResponseTopic", spec.ResponseTopic, "not a valid topic"))
 		}
 	}
 
-	return result.ErrorOrNil()
+	return errs
 }
 
 func (spec TimeTriggerSpec) Validate() error {
-	result := &multierror.Error{}
+	var errs error
 
 	err := IsValidCronSpec(spec.Cron)
 	if err != nil {
-		result = multierror.Append(result, MakeValidationErr(ErrorInvalidValue, "TimeTriggerSpec.Cron", spec.Cron, "not a valid cron spec"))
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "TimeTriggerSpec.Cron", spec.Cron, "not a valid cron spec"))
 	}
 
-	result = multierror.Append(result, spec.FunctionReference.Validate())
+	errs = errors.Join(errs, spec.FunctionReference.Validate())
 
-	return result.ErrorOrNil()
+	return errs
 }
 
 func validateMetadata(field string, m metav1.ObjectMeta) error {
@@ -553,136 +557,136 @@ func validateMetadata(field string, m metav1.ObjectMeta) error {
 }
 
 func (p *Package) Validate() error {
-	result := &multierror.Error{}
+	var errs error
 
-	result = multierror.Append(result,
+	errs = errors.Join(errs,
 		validateMetadata("Package", p.ObjectMeta),
 		p.Spec.Validate(),
 		p.Status.Validate())
 
-	return result.ErrorOrNil()
+	return errs
 }
 
 func (pl *PackageList) Validate() error {
-	result := &multierror.Error{}
+	var errs error
 	// not validate ListMeta
 	for _, p := range pl.Items {
-		result = multierror.Append(result, p.Validate())
+		errs = errors.Join(errs, p.Validate())
 	}
-	return result.ErrorOrNil()
+	return errs
 }
 
 func (f *Function) Validate() error {
-	result := &multierror.Error{}
+	var errs error
 
-	result = multierror.Append(result,
+	errs = errors.Join(errs,
 		validateMetadata("Function", f.ObjectMeta),
 		f.Spec.Validate())
 
-	return result.ErrorOrNil()
+	return errs
 }
 
 func (fl *FunctionList) Validate() error {
-	result := &multierror.Error{}
+	var errs error
 	for _, f := range fl.Items {
-		result = multierror.Append(result, f.Validate())
+		errs = errors.Join(errs, f.Validate())
 	}
-	return result.ErrorOrNil()
+	return errs
 }
 
 func (e *Environment) Validate() error {
-	result := &multierror.Error{}
+	var errs error
 
-	result = multierror.Append(result,
+	errs = errors.Join(errs,
 		validateMetadata("Environment", e.ObjectMeta),
 		e.Spec.Validate())
 
 	if e.Spec.Runtime.PodSpec != nil {
 		for _, container := range e.Spec.Runtime.PodSpec.Containers {
 			if container.Command == nil && container.Image == e.Spec.Runtime.Image && container.Name != e.Name {
-				result = multierror.Append(result, errors.New("container with image same as runtime image in podspec, must have name same as environment name"))
+				errs = errors.Join(errs, errors.New("container with image same as runtime image in podspec, must have name same as environment name"))
 			}
 		}
 	}
-	return result.ErrorOrNil()
+	return errs
 }
 
 func (el *EnvironmentList) Validate() error {
-	result := &multierror.Error{}
+	var errs error
 	for _, e := range el.Items {
-		result = multierror.Append(result, e.Validate())
+		errs = errors.Join(errs, e.Validate())
 	}
-	return result.ErrorOrNil()
+	return errs
 }
 
 func (h *HTTPTrigger) Validate() error {
-	result := &multierror.Error{}
+	var errs error
 
-	result = multierror.Append(result,
+	errs = errors.Join(errs,
 		validateMetadata("HTTPTrigger", h.ObjectMeta),
 		h.Spec.Validate())
 
-	return result.ErrorOrNil()
+	return errs
 }
 
 func (hl *HTTPTriggerList) Validate() error {
-	result := &multierror.Error{}
+	var errs error
 	for _, h := range hl.Items {
-		result = multierror.Append(result, h.Validate())
+		errs = errors.Join(errs, h.Validate())
 	}
-	return result.ErrorOrNil()
+	return errs
 }
 
 func (k *KubernetesWatchTrigger) Validate() error {
-	result := &multierror.Error{}
+	var errs error
 
-	result = multierror.Append(result,
+	errs = errors.Join(errs,
 		validateMetadata("KubernetesWatchTrigger", k.ObjectMeta),
 		k.Spec.Validate())
 
-	return result.ErrorOrNil()
+	return errs
 }
 
 func (kl *KubernetesWatchTriggerList) Validate() error {
-	result := &multierror.Error{}
+	var errs error
 	for _, k := range kl.Items {
-		result = multierror.Append(result, k.Validate())
+		errs = errors.Join(errs, k.Validate())
 	}
-	return result
+	return errs
 }
 
 func (t *TimeTrigger) Validate() error {
-	result := &multierror.Error{}
+	var errs error
 
-	result = multierror.Append(result,
+	errs = errors.Join(errs,
 		validateMetadata("TimeTrigger", t.ObjectMeta),
 		t.Spec.Validate())
 
-	return result.ErrorOrNil()
+	return errs
 }
 
 func (tl *TimeTriggerList) Validate() error {
-	result := &multierror.Error{}
+	var errs error
 	for _, t := range tl.Items {
-		result = multierror.Append(result, t.Validate())
+		errs = errors.Join(errs, t.Validate())
 	}
-	return result.ErrorOrNil()
+	return errs
 }
 
 func (m *MessageQueueTrigger) Validate() error {
-	result := &multierror.Error{}
+	var errs error
 
-	result = multierror.Append(result,
+	errs = errors.Join(errs,
 		validateMetadata("MessageQueueTrigger", m.ObjectMeta),
 		m.Spec.Validate())
 
-	return result.ErrorOrNil()
+	return errs
 }
 
 func (ml *MessageQueueTriggerList) Validate() error {
-	result := &multierror.Error{}
+	var errs error
 	for _, m := range ml.Items {
-		result = multierror.Append(result, m.Validate())
+		errs = errors.Join(errs, m.Validate())
 	}
-	return result.ErrorOrNil()
+	return errs
 }
