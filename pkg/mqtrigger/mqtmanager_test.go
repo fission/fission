@@ -97,8 +97,8 @@ func TestMqtManager(t *testing.T) {
 		t.Fatal("getTriggerSubscription should return triggerSub")
 		return
 	}
-	if getSub.trigger.ObjectMeta.Name != trigger.ObjectMeta.Name {
-		t.Errorf("getTriggerSubscription should return triggerSub with trigger name %s", trigger.ObjectMeta.Name)
+	if getSub.trigger.Name != trigger.Name {
+		t.Errorf("getTriggerSubscription should return triggerSub with trigger name %s", trigger.Name)
 	}
 	getSub.subscription.(mqtConsumer).cancel()
 	trigger.Spec.Topic = updatedTopicName

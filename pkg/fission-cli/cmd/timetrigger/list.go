@@ -56,7 +56,7 @@ func (opts *ListSubCommand) do(input cli.Input) (err error) {
 	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\n", "NAME", "CRON", "FUNCTION_NAME", "METHOD", "SUBPATH")
 	for _, tt := range tts.Items {
 		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\n",
-			tt.ObjectMeta.Name, tt.Spec.Cron, tt.Spec.Name, tt.Spec.Method, tt.Spec.Subpath)
+			tt.Name, tt.Spec.Cron, tt.Spec.Name, tt.Spec.Method, tt.Spec.Subpath)
 	}
 	w.Flush()
 

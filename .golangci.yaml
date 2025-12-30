@@ -25,16 +25,6 @@ linters:
       - third_party$
       - builtin$
       - examples$
-    rules:
-      - linters:
-        - staticcheck
-        text: "QF1008"
-      - linters:
-          - staticcheck
-        text: "QF1001"
-      - linters:
-          - staticcheck
-        text: "QF1003"
 formatters:
   enable:
     - gofmt

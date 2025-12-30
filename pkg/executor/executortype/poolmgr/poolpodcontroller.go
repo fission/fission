@@ -143,7 +143,7 @@ func IsPodActive(p *v1.Pod) bool {
 		p.DeletionTimestamp == nil
 }
 
-func (p *PoolPodController) handleFuncDelete(obj interface{}) {
+func (p *PoolPodController) handleFuncDelete(obj any) {
 	fn := obj.(*fv1.Function)
 	p.gpm.fsCache.MarkFuncDeleted(crd.CacheKeyURGFromMeta(&fn.ObjectMeta))
 }
@@ -182,7 +182,7 @@ func (p *PoolPodController) processRS(rs *apps.ReplicaSet) {
 	}
 }
 
-func (p *PoolPodController) handleRSAdd(obj interface{}) {
+func (p *PoolPodController) handleRSAdd(obj any) {
 	rs, ok := obj.(*apps.ReplicaSet)
 	if !ok {
 		p.logger.Error("unexpected type when adding rs to pool pod controller", zap.Any("obj", obj))
@@ -191,7 +191,7 @@ func (p *PoolPodController) handleRSAdd(obj interface{}) {
 	p.processRS(rs)
 }
 
-func (p *PoolPodController) handleRSUpdate(oldObj interface{}, newObj interface{}) {
+func (p *PoolPodController) handleRSUpdate(oldObj any, newObj any) {
 	rs, ok := newObj.(*apps.ReplicaSet)
 	if !ok {
 		p.logger.Error("unexpected type when updating rs to pool pod controller", zap.Any("obj", newObj))
@@ -200,7 +200,7 @@ func (p *PoolPodController) handleRSUpdate(oldObj interface{}, newObj interface{
 	p.processRS(rs)
 }
 
-func (p *PoolPodController) handleRSDelete(obj interface{}) {
+func (p *PoolPodController) handleRSDelete(obj any) {
 	rs, ok := obj.(*apps.ReplicaSet)
 	if !ok {
 		tombstone, ok := obj.(k8sCache.DeletedFinalStateUnknown)
@@ -217,7 +217,7 @@ func (p *PoolPodController) handleRSDelete(obj interface{}) {
 	p.processRS(rs)
 }
 
-func (p *PoolPodController) enqueueEnvAdd(obj interface{}) {
+func (p *PoolPodController) enqueueEnvAdd(obj any) {
 	key, err := k8sCache.MetaNamespaceKeyFunc(obj)
 	if err != nil {
 		p.logger.Error("error retrieving key from object in poolPodController", zap.Any("obj", obj))
@@ -227,7 +227,7 @@ func (p *PoolPodController) enqueueEnvAdd(obj interface{}) {
 	p.envCreateUpdateQueue.Add(key)
 }
 
-func (p *PoolPodController) enqueueEnvUpdate(oldObj, newObj interface{}) {
+func (p *PoolPodController) enqueueEnvUpdate(oldObj, newObj any) {
 	key, err := k8sCache.MetaNamespaceKeyFunc(newObj)
 	if err != nil {
 		p.logger.Error("error retrieving key from object in poolPodController", zap.Any("obj", key))
@@ -237,7 +237,7 @@ func (p *PoolPodController) enqueueEnvUpdate(oldObj, newObj interface{}) {
 	p.envCreateUpdateQueue.Add(key)
 }
 
-func (p *PoolPodController) enqueueEnvDelete(obj interface{}) {
+func (p *PoolPodController) enqueueEnvDelete(obj any) {
 	env, ok := obj.(*fv1.Environment)
 	if !ok {
 		p.logger.Error("unexpected type when deleting env to pool pod controller", zap.Any("obj", obj))
@@ -265,7 +265,7 @@ func (p *PoolPodController) Run(ctx context.Context, stopCh <-chan struct{}, mgr
 	if ok := k8sCache.WaitForCacheSync(stopCh, waitSynced...); !ok {
 		p.logger.Fatal("failed to wait for caches to sync")
 	}
-	for i := 0; i < 4; i++ {
+	for range 4 {
 		mgr.Add(ctx, func(ctx context.Context) {
 			wait.Until(p.workerRun(ctx, "envCreateUpdate", p.envCreateUpdateQueueProcessFunc), time.Second, stopCh)
 		})
@@ -310,7 +310,7 @@ func (p *PoolPodController) getEnvLister(namespace string) (flisterv1.Environmen
 func (p *PoolPodController) envCreateUpdateQueueProcessFunc(ctx context.Context) bool {
 	maxRetries := 3
 	handleEnv := func(ctx context.Context, env *fv1.Environment) error {
-		log := p.logger.With(zap.String("env", env.ObjectMeta.Name), zap.String("namespace", env.ObjectMeta.Namespace))
+		log := p.logger.With(zap.String("env", env.Name), zap.String("namespace", env.Namespace))
 		log.Debug("env reconsile request processing")
 		pool, created, err := p.gpm.getPool(ctx, env)
 		if err != nil {
@@ -414,7 +414,7 @@ func (p *PoolPodController) envDeleteQueueProcessFunc(ctx context.Context) bool 
 		p.envDeleteQueue.Forget(env)
 		return false
 	}
-	p.logger.Info("specialized pods identified for cleanup after env delete", zap.String("env", env.ObjectMeta.Name), zap.String("namespace", env.ObjectMeta.Namespace), zap.Int("count", len(specializedPods)))
+	p.logger.Info("specialized pods identified for cleanup after env delete", zap.String("env", env.Name), zap.String("namespace", env.Namespace), zap.Int("count", len(specializedPods)))
 	for _, pod := range specializedPods {
 		if !IsPodActive(pod) {
 			continue

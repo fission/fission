@@ -464,7 +464,7 @@ func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *h
 		}
 	}
 
-	fnTimeout := fh.functionTimeoutMap[fh.function.ObjectMeta.GetUID()]
+	fnTimeout := fh.functionTimeoutMap[fh.function.GetUID()]
 	if fnTimeout == 0 {
 		fnTimeout = fv1.DEFAULT_FUNCTION_TIMEOUT
 	}
@@ -609,7 +609,7 @@ func (fh functionHandler) getServiceEntryFromCache() (serviceUrl *url.URL, err e
 			if e.Code == ferror.ErrorNotFound {
 				return nil, nil
 			}
-			errMsg = fmt.Sprintf("Error getting function %v;s service entry from cache: %v", fh.function.ObjectMeta.Name, err)
+			errMsg = fmt.Sprintf("Error getting function %v;s service entry from cache: %v", fh.function.Name, err)
 		}
 		return nil, ferror.MakeError(http.StatusInternalServerError, errMsg)
 	}
@@ -679,7 +679,7 @@ func (fh functionHandler) getServiceEntry(ctx context.Context) (svcURL *url.URL,
 	fnMeta := &fh.function.ObjectMeta
 	recordObj, err := fh.svcAddrUpdateThrottler.RunOnce(
 		crd.CacheKeyURFromMeta(fnMeta).String(),
-		func(firstToTheLock bool) (interface{}, error) {
+		func(firstToTheLock bool) (any, error) {
 			if !firstToTheLock {
 				svcURL, err := fh.getServiceEntryFromCache()
 				if err != nil {
@@ -788,7 +788,7 @@ func (fh functionHandler) collectFunctionMetric(start time.Time, rrt *RetryingRo
 		fh.tapService(fh.function, rrt.serviceURL)
 	}
 
-	fh.logger.Debug("Request complete", zap.String("function", fh.function.ObjectMeta.Name),
+	fh.logger.Debug("Request complete", zap.String("function", fh.function.Name),
 		zap.Int("retry", rrt.totalRetry), zap.Duration("total-time", duration),
 		zap.Int64("content-length", resp.ContentLength))
 }

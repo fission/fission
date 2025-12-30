@@ -68,7 +68,7 @@ func (opts *CreateSubCommand) run(input cli.Input) (err error) {
 		return fv1.AggregateValidationErrors("Environment", err)
 	}
 	// we use user provided NS in spec. While creating actual record we use the current context's NS.
-	opts.env.ObjectMeta.Namespace = userDefinedNS
+	opts.env.Namespace = userDefinedNS
 
 	envList, err := opts.Client().FissionClientSet.CoreV1().Environments(opts.env.ObjectMeta.Namespace).List(input.Context(), metav1.ListOptions{})
 	if err != nil {
@@ -76,7 +76,7 @@ func (opts *CreateSubCommand) run(input cli.Input) (err error) {
 	} else if len(envList.Items) > 0 {
 		console.Verbose(2, "%d environment(s) are present in the %s namespace.  "+
 			"These environments are not isolated from each other; use separate namespaces if you need isolation.",
-			len(envList.Items), opts.env.ObjectMeta.Namespace)
+			len(envList.Items), opts.env.Namespace)
 	}
 
 	// if we're writing a spec, don't call the API
@@ -96,7 +96,7 @@ func (opts *CreateSubCommand) run(input cli.Input) (err error) {
 			return fv1.AggregateValidationErrors("Environment", err)
 		}
 
-		specFile := fmt.Sprintf("env-%v.yaml", opts.env.ObjectMeta.Name)
+		specFile := fmt.Sprintf("env-%v.yaml", opts.env.Name)
 		err = spec.SpecSave(*opts.env, specFile, false)
 		if err != nil {
 			return fmt.Errorf("error saving environment spec: %w", err)
@@ -104,14 +104,14 @@ func (opts *CreateSubCommand) run(input cli.Input) (err error) {
 		return nil
 	}
 
-	opts.env.ObjectMeta.Namespace = currentNS
+	opts.env.Namespace = currentNS
 
 	_, err = opts.Client().FissionClientSet.CoreV1().Environments(opts.env.Namespace).Create(input.Context(), opts.env, metav1.CreateOptions{})
 	if err != nil {
 		return fmt.Errorf("error creating resource: %w", err)
 	}
 
-	fmt.Printf("environment '%v' created\n", opts.env.ObjectMeta.Name)
+	fmt.Printf("environment '%v' created\n", opts.env.Name)
 	return nil
 }
 

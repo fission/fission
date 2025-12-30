@@ -112,7 +112,7 @@ func TestTracker(t *testing.T) {
 	})
 }
 
-func MockHTTPServer(status int, encodeValue interface{}) *httptest.Server {
+func MockHTTPServer(status int, encodeValue any) *httptest.Server {
 	f := func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(status)
 		w.Header().Set("Content-Type", "application/json")

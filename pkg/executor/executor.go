@@ -87,14 +87,12 @@ func MakeExecutor(ctx context.Context, logger *zap.Logger, mgr manager.Interface
 
 	// Run all informers
 	for _, informer := range informers {
-		informer := informer
 		mgr.Add(ctx, func(ctx context.Context) {
 			informer.Run(ctx.Done())
 		})
 	}
 
 	for _, et := range types {
-		et := et
 		mgr.Add(ctx, func(ctx context.Context) {
 			et.Run(ctx, mgr)
 		})
@@ -126,14 +124,11 @@ func (executor *Executor) serveCreateFuncServices(ctx context.Context) {
 		if req.function.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypePoolmgr {
 			go func() {
 				buffer := 10 // add some buffer time for specialization
-				specializationTimeout := req.function.Spec.InvokeStrategy.ExecutionStrategy.SpecializationTimeout
-
-				// set minimum specialization timeout to avoid illegal input and
-				// compatibility problem when applying old spec file that doesn't
-				// have specialization timeout field.
-				if specializationTimeout < fv1.DefaultSpecializationTimeOut {
-					specializationTimeout = fv1.DefaultSpecializationTimeOut
-				}
+				specializationTimeout := max(
+					// set minimum specialization timeout to avoid illegal input and
+					// compatibility problem when applying old spec file that doesn't
+					// have specialization timeout field.
+					req.function.Spec.InvokeStrategy.ExecutionStrategy.SpecializationTimeout, fv1.DefaultSpecializationTimeOut)
 
 				fnSpecializationTimeoutContext, cancel := context.WithTimeoutCause(req.context,
 					time.Duration(specializationTimeout+buffer)*time.Second, fmt.Errorf("function specialization timeout (%d)s exceeded", specializationTimeout+buffer))
@@ -168,14 +163,11 @@ func (executor *Executor) serveCreateFuncServices(ctx context.Context) {
 				// still can serve other subsequent requests.
 
 				buffer := 10 // add some buffer time for specialization
-				specializationTimeout := req.function.Spec.InvokeStrategy.ExecutionStrategy.SpecializationTimeout
-
-				// set minimum specialization timeout to avoid illegal input and
-				// compatibility problem when applying old spec file that doesn't
-				// have specialization timeout field.
-				if specializationTimeout < fv1.DefaultSpecializationTimeOut {
-					specializationTimeout = fv1.DefaultSpecializationTimeOut
-				}
+				specializationTimeout := max(
+					// set minimum specialization timeout to avoid illegal input and
+					// compatibility problem when applying old spec file that doesn't
+					// have specialization timeout field.
+					req.function.Spec.InvokeStrategy.ExecutionStrategy.SpecializationTimeout, fv1.DefaultSpecializationTimeOut)
 
 				fnSpecializationTimeoutContext, cancel := context.WithTimeoutCause(req.context,
 					time.Duration(specializationTimeout+buffer)*time.Second, fmt.Errorf("function specialization timeout (%d)s exceeded", specializationTimeout+buffer))
@@ -224,8 +216,8 @@ func (executor *Executor) createServiceForFunction(ctx context.Context, fn *fv1.
 	logger := otelUtils.LoggerWithTraceID(ctx, executor.logger)
 	otelUtils.SpanTrackEvent(ctx, "createServiceForFunction", otelUtils.GetAttributesForFunction(fn)...)
 	logger.Debug("no cached function service found, creating one",
-		zap.String("function_name", fn.ObjectMeta.Name),
-		zap.String("function_namespace", fn.ObjectMeta.Namespace))
+		zap.String("function_name", fn.Name),
+		zap.String("function_namespace", fn.Namespace))
 
 	t := fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType
 	e, ok := executor.executorTypes[t]
@@ -238,9 +230,9 @@ func (executor *Executor) createServiceForFunction(ctx context.Context, fn *fv1.
 		e := "error creating service for function"
 		logger.Error(e,
 			zap.Error(fsvcErr),
-			zap.String("function_name", fn.ObjectMeta.Name),
-			zap.String("function_namespace", fn.ObjectMeta.Namespace))
-		fsvcErr = fmt.Errorf("[%s] %s: %w", fn.ObjectMeta.Name, e, fsvcErr)
+			zap.String("function_name", fn.Name),
+			zap.String("function_namespace", fn.Namespace))
+		fsvcErr = fmt.Errorf("[%s] %s: %w", fn.Name, e, fsvcErr)
 	}
 
 	return fsvc, fsvcErr

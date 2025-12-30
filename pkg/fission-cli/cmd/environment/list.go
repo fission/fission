@@ -58,7 +58,7 @@ func (opts *ListSubCommand) do(input cli.Input) (err error) {
 	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "IMAGE", "BUILDER_IMAGE", "POOLSIZE", "MINCPU", "MAXCPU", "MINMEMORY", "MAXMEMORY", "EXTNET", "GRACETIME", "NAMESPACE")
 	for _, env := range envs {
 		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
-			env.ObjectMeta.Name, env.Spec.Runtime.Image, env.Spec.Builder.Image, env.Spec.Poolsize,
+			env.Name, env.Spec.Runtime.Image, env.Spec.Builder.Image, env.Spec.Poolsize,
 			env.Spec.Resources.Requests.Cpu(), env.Spec.Resources.Limits.Cpu(),
 			env.Spec.Resources.Requests.Memory(), env.Spec.Resources.Limits.Memory(),
 			env.Spec.AllowAccessToExternalNetwork, env.Spec.TerminationGracePeriod, env.Namespace,

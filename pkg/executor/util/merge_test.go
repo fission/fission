@@ -25,7 +25,7 @@ import (
 
 func Test_checkConflicts(t *testing.T) {
 	type args struct {
-		objs interface{}
+		objs any
 	}
 	tests := []struct {
 		name    string
@@ -44,17 +44,17 @@ func Test_checkConflicts(t *testing.T) {
 		},
 		{
 			name:    "conflict container name",
-			args:    args{[]interface{}{apiv1.Container{Name: "test1"}, apiv1.Container{Name: "test1"}, apiv1.Container{Name: "test3"}}},
+			args:    args{[]any{apiv1.Container{Name: "test1"}, apiv1.Container{Name: "test1"}, apiv1.Container{Name: "test3"}}},
 			wantErr: true,
 		},
 		{
 			name:    "different types",
-			args:    args{[]interface{}{apiv1.VolumeMount{Name: "test1"}, apiv1.EnvFromSource{Prefix: "", ConfigMapRef: nil, SecretRef: nil}}},
+			args:    args{[]any{apiv1.VolumeMount{Name: "test1"}, apiv1.EnvFromSource{Prefix: "", ConfigMapRef: nil, SecretRef: nil}}},
 			wantErr: true,
 		},
 		{
 			name:    "type without target field",
-			args:    args{[]interface{}{apiv1.EnvFromSource{Prefix: "", ConfigMapRef: nil, SecretRef: nil}}},
+			args:    args{[]any{apiv1.EnvFromSource{Prefix: "", ConfigMapRef: nil, SecretRef: nil}}},
 			wantErr: true,
 		},
 	}

@@ -77,7 +77,7 @@ func (c *client) Upload(ctx context.Context, fr *fetcher.ArchiveUploadRequest) (
 	return &uploadResp, nil
 }
 
-func sendRequest(logger *zap.Logger, ctx context.Context, httpClient *http.Client, req interface{}, url string) ([]byte, error) {
+func sendRequest(logger *zap.Logger, ctx context.Context, httpClient *http.Client, req any, url string) ([]byte, error) {
 	body, err := json.Marshal(req)
 	if err != nil {
 		return nil, err
@@ -92,7 +92,7 @@ func sendRequest(logger *zap.Logger, ctx context.Context, httpClient *http.Clien
 	var resp *http.Response
 	var lastErr error
 
-	for i := 0; i < maxRetries; i++ {
+	for i := range maxRetries {
 		// Check context before request
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
@@ -142,10 +142,7 @@ func sendRequest(logger *zap.Logger, ctx context.Context, httpClient *http.Clien
 		}
 
 		// Exponential backoff with cap
-		backoff := time.Duration(50*(1<<i)) * time.Millisecond
-		if backoff > maxBackoff {
-			backoff = maxBackoff
-		}
+		backoff := min(time.Duration(50*(1<<i))*time.Millisecond, maxBackoff)
 
 		logger.Info("retrying request",
 			zap.String("url", url),

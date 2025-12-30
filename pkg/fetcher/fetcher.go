@@ -288,9 +288,10 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 		}
 	} else {
 		var archive *fv1.Archive
-		if req.FetchType == fv1.FETCH_SOURCE {
+		switch req.FetchType {
+		case fv1.FETCH_SOURCE:
 			archive = &pkg.Spec.Source
-		} else if req.FetchType == fv1.FETCH_DEPLOYMENT {
+		case fv1.FETCH_DEPLOYMENT:
 			// sometimes, the user may invoke the function even before the source code is built into a deploy pkg.
 			// this results in executor sending a fetch request of type FETCH_DEPLOYMENT and since pkg.Spec.Deployment.Url will be empty,
 			// we hit this "Get : unsupported protocol scheme "" error.
@@ -304,7 +305,7 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 				return http.StatusInternalServerError, fmt.Errorf("%s: pkg %s.%s has a status of %s", e, pkg.Name, pkg.Namespace, pkg.Status.BuildStatus)
 			}
 			archive = &pkg.Spec.Deployment
-		} else {
+		default:
 			return http.StatusBadRequest, fmt.Errorf("unknown fetch type: %v", req.FetchType)
 		}
 
@@ -626,7 +627,7 @@ func (fetcher *Fetcher) rename(src string, dst string) error {
 func (fetcher *Fetcher) getPkgInformation(ctx context.Context, req FunctionFetchRequest) (pkg *fv1.Package, err error) {
 	logger := otelUtils.LoggerWithTraceID(ctx, fetcher.logger)
 	maxRetries := 5
-	for i := 0; i < maxRetries; i++ {
+	for i := range maxRetries {
 		otelUtils.SpanTrackEvent(ctx, "fetchPkgInfo", otelUtils.MapToAttributes(map[string]string{
 			"package_name":      req.Package.Name,
 			"package_namespace": req.Package.Namespace,
@@ -713,7 +714,7 @@ func (fetcher *Fetcher) SpecializePod(ctx context.Context, fetchReq FunctionFetc
 		logger.Info("calling environment v1 specialization endpoint")
 	}
 
-	for i := 0; i < maxRetries; i++ {
+	for i := range maxRetries {
 		otelUtils.SpanTrackEvent(ctx, "specializeCall", otelUtils.MapToAttributes(map[string]string{
 			"url": specializeURL,
 		})...)

@@ -263,9 +263,10 @@ func DeleteOldPackages(pkgPath, pkgType string) error {
 	}
 
 	var file string
-	if pkgType == "DEPLOY_PKG" {
+	switch pkgType {
+	case "DEPLOY_PKG":
 		file = pkgPath + ".zip"
-	} else if pkgType == "SRC_PKG" {
+	case "SRC_PKG":
 		file = pkgPath + ".tmp"
 	}
 

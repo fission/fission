@@ -3,6 +3,7 @@ package utils
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	apiv1 "k8s.io/api/core/v1"
@@ -141,10 +142,8 @@ func SupportedMetricsAPIVersionAvailable(discoveredAPIGroups *metav1.APIGroupLis
 			continue
 		}
 		for _, version := range discoveredAPIGroup.Versions {
-			for _, supportedVersion := range supportedMetricsAPIVersions {
-				if version.Version == supportedVersion {
-					return true
-				}
+			if slices.Contains(supportedMetricsAPIVersions, version.Version) {
+				return true
 			}
 		}
 	}

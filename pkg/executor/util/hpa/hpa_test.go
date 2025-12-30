@@ -113,11 +113,11 @@ func TestHpaOps(t *testing.T) {
 	if *hpa.Spec.Metrics[0].Resource.Target.AverageUtilization != 50 {
 		t.Errorf("Expected metric target average utilization to be 50, got %v", *hpa.Spec.Metrics[0].Resource.Target.AverageUtilization)
 	}
-	if hpa.ObjectMeta.Labels["test-label"] != "test-label-value" {
-		t.Errorf("Expected label to be set, got %v", hpa.ObjectMeta.Labels["test-label"])
+	if hpa.Labels["test-label"] != "test-label-value" {
+		t.Errorf("Expected label to be set, got %v", hpa.Labels["test-label"])
 	}
-	if hpa.ObjectMeta.Annotations["test-annotation"] != "test-annotation-value" {
-		t.Errorf("Expected annotation to be set, got %v", hpa.ObjectMeta.Annotations["test-annotation"])
+	if hpa.Annotations["test-annotation"] != "test-annotation-value" {
+		t.Errorf("Expected annotation to be set, got %v", hpa.Annotations["test-annotation"])
 	}
 
 	hpa, err = hpaops.GetHpa(ctx, ns, "test-hpa")

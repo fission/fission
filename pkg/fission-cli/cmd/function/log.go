@@ -87,8 +87,8 @@ func (opts *LogSubCommand) do(input cli.Input) error {
 				logFilter := logdb.LogFilter{
 					Pod:            fnPod,
 					PodNamespace:   input.String(flagkey.NamespacePod),
-					Function:       f.ObjectMeta.Name,
-					FuncUid:        string(f.ObjectMeta.UID),
+					Function:       f.Name,
+					FuncUid:        string(f.UID),
 					Since:          t,
 					Reverse:        logReverseQuery,
 					RecordLimit:    recordLimit,

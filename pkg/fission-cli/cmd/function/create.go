@@ -331,7 +331,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	}
 
 	if toSpec {
-		opts.function.ObjectMeta.Namespace = userProvidedNS
+		opts.function.Namespace = userProvidedNS
 		opts.function.Spec.Package.PackageRef.Namespace = userProvidedNS
 		opts.function.Spec.Environment.Namespace = userProvidedNS
 	}
@@ -378,7 +378,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 		return fmt.Errorf("error creating function: %w", err)
 	}
 
-	fmt.Printf("function '%s' created\n", opts.function.ObjectMeta.Name)
+	fmt.Printf("function '%s' created\n", opts.function.Name)
 
 	// Allow the user to specify an HTTP trigger while creating a function.
 	triggerUrl := input.String(flagkey.HtUrl)
@@ -406,7 +406,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 	ht := &fv1.HTTPTrigger{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      triggerName,
-			Namespace: opts.function.ObjectMeta.Namespace,
+			Namespace: opts.function.Namespace,
 		},
 		Spec: fv1.HTTPTriggerSpec{
 			RelativeURL: triggerUrl,
@@ -414,7 +414,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 			Methods:     methods,
 			FunctionReference: fv1.FunctionReference{
 				Type: fv1.FunctionReferenceTypeFunctionName,
-				Name: opts.function.ObjectMeta.Name,
+				Name: opts.function.Name,
 			},
 		},
 	}
@@ -423,7 +423,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 		return fmt.Errorf("error creating HTTP trigger: %w", err)
 	}
 
-	fmt.Printf("route created: %s %s -> %s\n", methods, triggerUrl, opts.function.ObjectMeta.Name)
+	fmt.Printf("route created: %s %s -> %s\n", methods, triggerUrl, opts.function.Name)
 	return nil
 }
 

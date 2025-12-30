@@ -31,7 +31,7 @@ func checkAuthToken(r *http.Request) error {
 	}
 
 	jwtToken := authHeader[1]
-	token, err := jwt.Parse(jwtToken, func(token *jwt.Token) (interface{}, error) {
+	token, err := jwt.Parse(jwtToken, func(token *jwt.Token) (any, error) {
 		return []byte(os.Getenv("JWT_SIGNING_KEY")), nil
 	})
 

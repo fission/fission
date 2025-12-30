@@ -28,12 +28,12 @@ import (
 var _ fCli.Input = &Cli{}
 
 type Cli struct {
-	c map[string]interface{}
+	c map[string]any
 }
 
 // TestFlagSet returns a flag set for unit test purpose.
 func TestFlagSet() Cli {
-	return Cli{c: make(map[string]interface{})}
+	return Cli{c: make(map[string]any)}
 }
 
 func (u Cli) Context() context.Context {
@@ -43,7 +43,7 @@ func (u Cli) Context() context.Context {
 // Set allows to set any kinds of value with given key.
 // The type of set value should be matched with the returned
 // type of GetXXX function.
-func (u Cli) Set(Key string, value interface{}) {
+func (u Cli) Set(Key string, value any) {
 	u.c[Key] = value
 }
 

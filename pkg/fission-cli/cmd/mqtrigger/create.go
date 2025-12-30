@@ -199,7 +199,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 	}
 
 	if input.Bool(flagkey.SpecSave) {
-		specFile := fmt.Sprintf("mqtrigger-%v.yaml", opts.trigger.ObjectMeta.Name)
+		specFile := fmt.Sprintf("mqtrigger-%v.yaml", opts.trigger.Name)
 		err := spec.SpecSave(*opts.trigger, specFile, false)
 		if err != nil {
 			return fmt.Errorf("error saving message queue trigger spec: %w", err)
@@ -212,7 +212,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 		return fmt.Errorf("create message queue trigger: %w", err)
 	}
 
-	fmt.Printf("trigger '%s' created\n", opts.trigger.ObjectMeta.Name)
+	fmt.Printf("trigger '%s' created\n", opts.trigger.Name)
 	return nil
 }
 

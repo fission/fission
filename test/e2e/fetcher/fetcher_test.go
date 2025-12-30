@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -605,13 +606,7 @@ func getArchiveIDFromURL(archiveDownloadURL string) (string, error) {
 
 func contains(list []string, item string) bool {
 
-	for _, listItem := range list {
-		if item == listItem {
-			return true
-		}
-	}
-
-	return false
+	return slices.Contains(list, item)
 }
 
 func TestFetcherTestSuite(t *testing.T) {

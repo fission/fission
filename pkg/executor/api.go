@@ -61,8 +61,8 @@ func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *htt
 
 	// Check function -> svc cache
 	logger.Debug("checking for cached function service",
-		zap.String("function_name", fn.ObjectMeta.Name),
-		zap.String("function_namespace", fn.ObjectMeta.Namespace))
+		zap.String("function_name", fn.Name),
+		zap.String("function_namespace", fn.Namespace))
 	if t == fv1.ExecutorTypePoolmgr && !fn.Spec.OnceOnly {
 		fsvc, err := et.GetFuncSvcFromCache(ctx, fn)
 		// check if its a cache hit (check if there is already specialized function pod that can serve another request)
@@ -71,22 +71,22 @@ func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *htt
 			if et.IsValid(ctx, fsvc) {
 				// Cached, return svc address
 				logger.Debug("served from cache", zap.String("name", fsvc.Name), zap.String("address", fsvc.Address))
-				executor.writeResponse(w, fsvc.Address, fn.ObjectMeta.Name)
+				executor.writeResponse(w, fsvc.Address, fn.Name)
 				return
 			}
 			logger.Debug("deleting cache entry for invalid address",
-				zap.String("function_name", fn.ObjectMeta.Name),
-				zap.String("function_namespace", fn.ObjectMeta.Namespace),
+				zap.String("function_name", fn.Name),
+				zap.String("function_namespace", fn.Namespace),
 				zap.String("address", fsvc.Address))
 			et.DeleteFuncSvcFromCache(ctx, fsvc)
 		} else {
 			code, msg := ferror.GetHTTPError(err)
 			if code == http.StatusNotFound {
-				logger.Debug("cache miss", zap.String("function_name", fn.ObjectMeta.Name))
+				logger.Debug("cache miss", zap.String("function_name", fn.Name))
 			} else {
 				logger.Error("error getting service for function",
 					zap.Error(err),
-					zap.String("function_name", fn.ObjectMeta.Name))
+					zap.String("function_name", fn.Name))
 				http.Error(w, msg, code)
 				return
 			}
@@ -97,12 +97,12 @@ func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *htt
 		if err == nil {
 			if et.IsValid(ctx, fsvc) {
 				// Cached, return svc address
-				executor.writeResponse(w, fsvc.Address, fn.ObjectMeta.Name)
+				executor.writeResponse(w, fsvc.Address, fn.Name)
 				return
 			}
 			logger.Debug("deleting cache entry for invalid address",
-				zap.String("function_name", fn.ObjectMeta.Name),
-				zap.String("function_namespace", fn.ObjectMeta.Namespace),
+				zap.String("function_name", fn.Name),
+				zap.String("function_namespace", fn.Namespace),
 				zap.String("address", fsvc.Address))
 			et.DeleteFuncSvcFromCache(ctx, fsvc)
 		}
@@ -113,12 +113,12 @@ func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *htt
 		code, msg := ferror.GetHTTPError(err)
 		logger.Error("error getting service for function",
 			zap.Error(err),
-			zap.String("function", fn.ObjectMeta.Name),
+			zap.String("function", fn.Name),
 			zap.String("fission_http_error", msg))
 		http.Error(w, msg, code)
 		return
 	}
-	executor.writeResponse(w, serviceName, fn.ObjectMeta.Name)
+	executor.writeResponse(w, serviceName, fn.Name)
 }
 
 func (executor *Executor) writeResponse(w http.ResponseWriter, serviceName string, fnName string) {

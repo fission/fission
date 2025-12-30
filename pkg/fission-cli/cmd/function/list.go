@@ -67,7 +67,7 @@ func (opts *ListSubCommand) do(input cli.Input) error {
 		}
 
 		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
-			f.ObjectMeta.Name, f.Spec.Environment.Name,
+			f.Name, f.Spec.Environment.Name,
 			f.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType,
 			f.Spec.InvokeStrategy.ExecutionStrategy.MinScale,
 			f.Spec.InvokeStrategy.ExecutionStrategy.MaxScale,
@@ -77,7 +77,7 @@ func (opts *ListSubCommand) do(input cli.Input) error {
 			f.Spec.Resources.Limits.Memory().String(),
 			strings.Join(secretsList, ","),
 			strings.Join(configMapList, ","),
-			f.ObjectMeta.Namespace)
+			f.Namespace)
 	}
 	w.Flush()
 

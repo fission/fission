@@ -272,7 +272,7 @@ func ReadSpecs(specDir, specIgnore string, applyCommitLabel bool) (*FissionResou
 
 		// For now just read YAML files. We'll add jsonnet at some point. Skip
 		// unsupported files.
-		if !(strings.HasSuffix(path, ".yaml") || strings.HasSuffix(path, ".yml")) {
+		if !strings.HasSuffix(path, ".yaml") && !strings.HasSuffix(path, ".yml") {
 			return nil
 		}
 

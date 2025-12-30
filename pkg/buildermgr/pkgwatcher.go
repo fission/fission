@@ -123,7 +123,7 @@ func (pkgw *packageWatcher) build(ctx context.Context, srcpkg *fv1.Package) {
 
 	// Create a new BackOff for health check on environment builder pod
 	healthCheckBackOff := utils.NewDefaultBackOff()
-	builderNs := pkgw.nsResolver.GetBuilderNS(env.ObjectMeta.Namespace)
+	builderNs := pkgw.nsResolver.GetBuilderNS(env.Namespace)
 
 	logger = logger.With(zap.String("environment", env.Name), zap.String("builder_namespace", builderNs), zap.String("environment_namespace", env.Namespace))
 
@@ -150,9 +150,9 @@ func (pkgw *packageWatcher) build(ctx context.Context, srcpkg *fv1.Package) {
 			pod := item.(*apiv1.Pod)
 
 			// Filter non-matching pods
-			if pod.ObjectMeta.Labels[LABEL_ENV_NAME] != env.ObjectMeta.Name ||
-				pod.ObjectMeta.Labels[LABEL_ENV_NAMESPACE] != builderNs ||
-				pod.ObjectMeta.Labels[LABEL_ENV_RESOURCEVERSION] != env.ObjectMeta.ResourceVersion {
+			if pod.Labels[LABEL_ENV_NAME] != env.Name ||
+				pod.Labels[LABEL_ENV_NAMESPACE] != builderNs ||
+				pod.Labels[LABEL_ENV_RESOURCEVERSION] != env.ResourceVersion {
 				continue
 			}
 
@@ -200,10 +200,10 @@ func (pkgw *packageWatcher) build(ctx context.Context, srcpkg *fv1.Package) {
 			// A package may be used by multiple functions. Update
 			// functions with old package resource version
 			for _, fn := range fnList.Items {
-				if fn.Spec.Package.PackageRef.Name == pkg.ObjectMeta.Name &&
-					fn.Spec.Package.PackageRef.Namespace == pkg.ObjectMeta.Namespace &&
-					fn.Spec.Package.PackageRef.ResourceVersion != pkg.ObjectMeta.ResourceVersion {
-					fn.Spec.Package.PackageRef.ResourceVersion = pkg.ObjectMeta.ResourceVersion
+				if fn.Spec.Package.PackageRef.Name == pkg.Name &&
+					fn.Spec.Package.PackageRef.Namespace == pkg.Namespace &&
+					fn.Spec.Package.PackageRef.ResourceVersion != pkg.ResourceVersion {
+					fn.Spec.Package.PackageRef.ResourceVersion = pkg.ResourceVersion
 					// update CRD
 					_, err = pkgw.fissionClient.CoreV1().Functions(fn.ObjectMeta.Namespace).Update(ctx, &fn, metav1.UpdateOptions{})
 					if err != nil {
@@ -264,11 +264,11 @@ func (pkgw *packageWatcher) packageInformerHandler(ctx context.Context) k8sCache
 		}
 	}
 	return k8sCache.ResourceEventHandlerFuncs{
-		AddFunc: func(obj interface{}) {
+		AddFunc: func(obj any) {
 			pkg := obj.(*fv1.Package)
 			processPkg(ctx, pkg)
 		},
-		UpdateFunc: func(oldObj, newObj interface{}) {
+		UpdateFunc: func(oldObj, newObj any) {
 			oldPkg := oldObj.(*fv1.Package)
 			pkg := newObj.(*fv1.Package)
 

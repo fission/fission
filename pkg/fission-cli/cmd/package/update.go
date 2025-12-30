@@ -71,7 +71,7 @@ func (opts *UpdateSubCommand) run(input cli.Input) error {
 
 	forceUpdate := input.Bool(flagkey.PkgForce)
 
-	fnList, err := GetFunctionsByPackage(input.Context(), opts.Client(), pkg.ObjectMeta.Name, pkg.ObjectMeta.Namespace)
+	fnList, err := GetFunctionsByPackage(input.Context(), opts.Client(), pkg.Name, pkg.Namespace)
 	if err != nil {
 		return fmt.Errorf("error getting function list: %w", err)
 	}
@@ -85,7 +85,7 @@ func (opts *UpdateSubCommand) run(input cli.Input) error {
 		return fmt.Errorf("error updating package: %w", err)
 	}
 
-	if pkg.ObjectMeta.ResourceVersion != newPkgMeta.ResourceVersion {
+	if pkg.ResourceVersion != newPkgMeta.ResourceVersion {
 		err = UpdateFunctionPackageResourceVersion(input.Context(), opts.Client(), newPkgMeta, fnList...)
 		if err != nil {
 			return fmt.Errorf("error updating function package reference resource version: %w", err)
@@ -184,7 +184,7 @@ func UpdatePackage(input cli.Input, client cmd.Client, specFile string, pkg *fv1
 		obj := fr.SpecExists(pkg, true, true)
 		if obj != nil {
 			pkg := obj.(*fv1.Package)
-			fmt.Printf("Re-using previously created package %s\n", pkg.ObjectMeta.Name)
+			fmt.Printf("Re-using previously created package %s\n", pkg.Name)
 			return &pkg.ObjectMeta, nil
 		}
 
@@ -213,7 +213,7 @@ func UpdateFunctionPackageResourceVersion(ctx context.Context, client cmd.Client
 		fn.Spec.Package.PackageRef.ResourceVersion = pkgMeta.ResourceVersion
 		_, err := client.FissionClientSet.CoreV1().Functions(fn.ObjectMeta.Namespace).Update(ctx, &fn, metav1.UpdateOptions{})
 		if err != nil {
-			errs = errors.Join(errs, fmt.Errorf("error updating package resource version of function '%v': %w", fn.ObjectMeta.Name, err))
+			errs = errors.Join(errs, fmt.Errorf("error updating package resource version of function '%v': %w", fn.Name, err))
 		}
 	}
 

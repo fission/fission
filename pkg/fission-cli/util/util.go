@@ -493,7 +493,7 @@ func CheckHTTPTriggerDuplicates(ctx context.Context, client cmd.Client, t *fv1.H
 		}
 		if urlMatch && methodMatch && ht.Spec.Method == t.Spec.Method && ht.Spec.Host == t.Spec.Host {
 			return fmt.Errorf("HTTPTrigger with same Host, URL & method already exists (%v)",
-				ht.ObjectMeta.Name)
+				ht.Name)
 		}
 	}
 	return nil
@@ -544,13 +544,13 @@ func FunctionPodLogs(ctx context.Context, fnName, ns string, client cmd.Client) 
 	var selector map[string]string
 	if f.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType != fv1.ExecutorTypeContainer {
 		selector = map[string]string{
-			fv1.FUNCTION_UID:          string(f.ObjectMeta.UID),
+			fv1.FUNCTION_UID:          string(f.UID),
 			fv1.ENVIRONMENT_NAME:      f.Spec.Environment.Name,
 			fv1.ENVIRONMENT_NAMESPACE: f.Spec.Environment.Namespace,
 		}
 	} else {
 		selector = map[string]string{
-			fv1.FUNCTION_UID: string(f.ObjectMeta.UID),
+			fv1.FUNCTION_UID: string(f.UID),
 		}
 	}
 	podList, err := client.KubernetesClient.CoreV1().Pods(ns).List(ctx, metav1.ListOptions{
@@ -563,8 +563,8 @@ func FunctionPodLogs(ctx context.Context, fnName, ns string, client cmd.Client) 
 	// Get the logs for last Pod executed
 	pods := podList.Items
 	sort.Slice(pods, func(i, j int) bool {
-		rv1, _ := strconv.ParseInt(pods[i].ObjectMeta.ResourceVersion, 10, 32)
-		rv2, _ := strconv.ParseInt(pods[j].ObjectMeta.ResourceVersion, 10, 32)
+		rv1, _ := strconv.ParseInt(pods[i].ResourceVersion, 10, 32)
+		rv2, _ := strconv.ParseInt(pods[j].ResourceVersion, 10, 32)
 		return rv1 > rv2
 	})
 
@@ -586,7 +586,7 @@ func getContainerLog(ctx context.Context, kubernetesClient kubernetes.Interface,
 
 	for _, container := range pod.Spec.Containers {
 		podLogOpts := v1.PodLogOptions{Container: container.Name} // Only the env container, not fetcher
-		podLogsReq := kubernetesClient.CoreV1().Pods(pod.Namespace).GetLogs(pod.ObjectMeta.Name, &podLogOpts)
+		podLogsReq := kubernetesClient.CoreV1().Pods(pod.Namespace).GetLogs(pod.Name, &podLogOpts)
 
 		podLogs, err := podLogsReq.Stream(ctx)
 		if err != nil {
@@ -594,7 +594,7 @@ func getContainerLog(ctx context.Context, kubernetesClient kubernetes.Interface,
 		}
 
 		msg := fmt.Sprintf("\n%v\nFunction: %v\nEnvironment: %v\nNamespace: %v\nPod: %v\nContainer: %v\nNode: %v\n%v\n", seq,
-			fn.ObjectMeta.Name, fn.Spec.Environment.Name, pod.Namespace, pod.Name, container.Name, pod.Spec.NodeName, seq)
+			fn.Name, fn.Spec.Environment.Name, pod.Namespace, pod.Name, container.Name, pod.Spec.NodeName, seq)
 
 		if _, err := io.WriteString(os.Stdout, msg); err != nil {
 			return fmt.Errorf("error copying pod log: %w", err)

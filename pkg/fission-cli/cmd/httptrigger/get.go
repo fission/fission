@@ -94,7 +94,7 @@ func printHtSummary(triggers []fv1.HTTPTrigger) {
 			methods = trigger.Spec.Methods
 		}
 		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
-			trigger.Name, methods, trigger.Spec.RelativeURL, function, trigger.Spec.CreateIngress, host, path, trigger.Spec.IngressConfig.TLS, ann, trigger.ObjectMeta.Namespace)
+			trigger.Name, methods, trigger.Spec.RelativeURL, function, trigger.Spec.CreateIngress, host, path, trigger.Spec.IngressConfig.TLS, ann, trigger.Namespace)
 	}
 	w.Flush()
 }

@@ -156,11 +156,11 @@ func (gp *GenericPool) setup(ctx context.Context) error {
 }
 
 func (gp *GenericPool) getEnvironmentPoolLabels(env *fv1.Environment) map[string]string {
-	envLabels := maps.CopyStringMap(env.ObjectMeta.Labels)
+	envLabels := maps.CopyStringMap(env.Labels)
 	envLabels[fv1.EXECUTOR_TYPE] = string(fv1.ExecutorTypePoolmgr)
-	envLabels[fv1.ENVIRONMENT_NAME] = env.ObjectMeta.Name
-	envLabels[fv1.ENVIRONMENT_NAMESPACE] = env.ObjectMeta.Namespace
-	envLabels[fv1.ENVIRONMENT_UID] = string(env.ObjectMeta.UID)
+	envLabels[fv1.ENVIRONMENT_NAME] = env.Name
+	envLabels[fv1.ENVIRONMENT_NAMESPACE] = env.Namespace
+	envLabels[fv1.ENVIRONMENT_UID] = string(env.UID)
 	envLabels["managed"] = "true" // this allows us to easily find pods managed by the deployment
 	return envLabels
 }
@@ -203,8 +203,8 @@ func (gp *GenericPool) updateCPUUtilizationSvc(ctx context.Context) {
 			for _, container := range val.Containers {
 				p.Add(container.Usage["cpu"])
 			}
-			if value, ok := gp.podFSVCMap.Load(val.ObjectMeta.Name); ok {
-				if valArray, ok1 := value.([]interface{}); ok1 {
+			if value, ok := gp.podFSVCMap.Load(val.Name); ok {
+				if valArray, ok1 := value.([]any); ok1 {
 					function, ok2 := valArray[0].(crd.CacheKeyURG)
 					if !ok2 {
 						gp.logger.Error("failed to convert function to type", zap.Any("function", function))
@@ -307,8 +307,8 @@ func (gp *GenericPool) choosePod(ctx context.Context, newLabels map[string]strin
 			// Append executor instance id to pod annotations to
 			// indicate this pod is managed by this executor.
 			annotations := gp.getDeployAnnotations(gp.env)
-			patch := map[string]interface{}{
-				"metadata": map[string]interface{}{
+			patch := map[string]any{
+				"metadata": map[string]any{
 					"annotations": annotations,
 					"labels":      newLabels,
 				},
@@ -415,7 +415,7 @@ func (gp *GenericPool) specializePod(ctx context.Context, pod *apiv1.Pod, fn *fv
 	// for fetcher we don't need to create a service, just talk to the pod directly
 	podIP := pod.Status.PodIP
 	if len(podIP) == 0 {
-		return fmt.Errorf("pod %s in namespace %s has no IP", pod.ObjectMeta.Name, pod.ObjectMeta.Namespace)
+		return fmt.Errorf("pod %s in namespace %s has no IP", pod.Name, pod.Namespace)
 	}
 	for _, cm := range fn.Spec.ConfigMaps {
 		_, err := gp.kubernetesClient.CoreV1().ConfigMaps(gp.fnNamespace).Get(ctx, cm.Name, metav1.GetOptions{})
@@ -424,7 +424,7 @@ func (gp *GenericPool) specializePod(ctx context.Context, pod *apiv1.Pod, fn *fv
 				logger.Error("configmap namespace mismatch", zap.String("error", "configmap must be in same namespace as function namespace"),
 					zap.String("configmap_name", cm.Name),
 					zap.String("configmap_namespace", cm.Namespace),
-					zap.String("function_name", fn.ObjectMeta.Name),
+					zap.String("function_name", fn.Name),
 					zap.String("function_namespace", gp.fnNamespace))
 				return fmt.Errorf("configmap %s must be in same namespace as function namespace", cm.Name)
 			} else {
@@ -439,7 +439,7 @@ func (gp *GenericPool) specializePod(ctx context.Context, pod *apiv1.Pod, fn *fv
 				logger.Error("secret namespace mismatch", zap.String("error", "secret must be in same namespace as function namespace"),
 					zap.String("secret_name", sec.Name),
 					zap.String("secret_namespace", sec.Namespace),
-					zap.String("function_name", fn.ObjectMeta.Name),
+					zap.String("function_name", fn.Name),
 					zap.String("function_namespace", gp.fnNamespace))
 				return fmt.Errorf("secret %s must be in same namespace as function namespace", sec.Name)
 			} else {
@@ -450,17 +450,17 @@ func (gp *GenericPool) specializePod(ctx context.Context, pod *apiv1.Pod, fn *fv
 	}
 	// specialize pod with service
 	if gp.useIstio {
-		svc := utils.GetFunctionIstioServiceName(fn.ObjectMeta.Name, fn.ObjectMeta.Namespace)
+		svc := utils.GetFunctionIstioServiceName(fn.Name, fn.Namespace)
 		podIP = fmt.Sprintf("%s.%s", svc, gp.fnNamespace)
 	}
 
 	// tell fetcher to get the function.
 	fetcherURL := gp.getFetcherURL(podIP)
-	logger.Info("calling fetcher to copy function", zap.String("function", fn.ObjectMeta.Name), zap.String("url", fetcherURL))
+	logger.Info("calling fetcher to copy function", zap.String("function", fn.Name), zap.String("url", fetcherURL))
 
 	specializeReq := gp.fetcherConfig.NewSpecializeRequest(fn, gp.env)
 
-	logger.Info("specializing pod", zap.String("function", fn.ObjectMeta.Name))
+	logger.Info("specializing pod", zap.String("function", fn.Name))
 
 	// Fetcher will download user function to share volume of pod, and
 	// invoke environment specialize api for pod specialization.
@@ -498,7 +498,7 @@ func (gp *GenericPool) createSvc(ctx context.Context, name string, labels map[st
 }
 
 func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
-	logger := otelUtils.LoggerWithTraceID(ctx, gp.logger).With(zap.String("function", fn.ObjectMeta.Name), zap.String("namespace", fn.ObjectMeta.Namespace),
+	logger := otelUtils.LoggerWithTraceID(ctx, gp.logger).With(zap.String("function", fn.Name), zap.String("namespace", fn.Namespace),
 		zap.String("env", fn.Spec.Environment.Name), zap.String("envNamespace", fn.Spec.Environment.Namespace))
 
 	logger.Info("choosing pod from pool")
@@ -528,8 +528,8 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 		// and make sure that there is only one pod behind the service
 
 		sel := map[string]string{
-			"functionName": fn.ObjectMeta.Name,
-			"functionUid":  string(fn.ObjectMeta.UID),
+			"functionName": fn.Name,
+			"functionUid":  string(fn.UID),
 		}
 		podList, err := gp.kubernetesClient.CoreV1().Pods(gp.fnNamespace).List(ctx, metav1.ListOptions{
 			LabelSelector: labels.Set(sel).AsSelector().String(),
@@ -552,33 +552,33 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 	gp.readyPodQueue.Done(key)
 	err = gp.specializePod(ctx, pod, fn)
 	if err != nil {
-		go gp.scheduleDeletePod(context.Background(), pod.ObjectMeta.Name)
+		go gp.scheduleDeletePod(context.Background(), pod.Name)
 		return nil, err
 	}
-	logger.Info("specialized pod", zap.String("pod", pod.ObjectMeta.Name), zap.String("podNamespace", pod.ObjectMeta.Namespace), zap.String("podIP", pod.Status.PodIP))
+	logger.Info("specialized pod", zap.String("pod", pod.Name), zap.String("podNamespace", pod.Namespace), zap.String("podIP", pod.Status.PodIP))
 
 	var svcHost string
 	if gp.useSvc && !gp.useIstio {
-		svcName := fmt.Sprintf("svc-%s", fn.ObjectMeta.Name)
-		if len(fn.ObjectMeta.UID) > 0 {
-			svcName = fmt.Sprintf("%s-%v", svcName, fn.ObjectMeta.UID)
+		svcName := fmt.Sprintf("svc-%s", fn.Name)
+		if len(fn.UID) > 0 {
+			svcName = fmt.Sprintf("%s-%v", svcName, fn.UID)
 		}
 
 		svc, err := gp.createSvc(ctx, svcName, funcLabels)
 		if err != nil {
-			go gp.scheduleDeletePod(context.Background(), pod.ObjectMeta.Name)
+			go gp.scheduleDeletePod(context.Background(), pod.Name)
 			return nil, err
 		}
-		if svc.ObjectMeta.Name != svcName {
-			go gp.scheduleDeletePod(context.Background(), pod.ObjectMeta.Name)
-			return nil, fmt.Errorf("sanity check failed for svc %s", svc.ObjectMeta.Name)
+		if svc.Name != svcName {
+			go gp.scheduleDeletePod(context.Background(), pod.Name)
+			return nil, fmt.Errorf("sanity check failed for svc %s", svc.Name)
 		}
 
 		// the fission router isn't in the same namespace, so return a
 		// namespace-qualified hostname
 		svcHost = fmt.Sprintf("%v.%v:8888", svcName, gp.fnNamespace)
 	} else if gp.useIstio {
-		svc := utils.GetFunctionIstioServiceName(fn.ObjectMeta.Name, fn.ObjectMeta.Namespace)
+		svc := utils.GetFunctionIstioServiceName(fn.Name, fn.Namespace)
 		svcHost = fmt.Sprintf("%v.%v:8888", svc, gp.fnNamespace)
 	} else {
 		svcHost = fmt.Sprintf("%v:8888", pod.Status.PodIP)
@@ -587,7 +587,7 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 	otelUtils.SpanTrackEvent(ctx, "addFunctionLabel", otelUtils.GetAttributesForPod(pod)...)
 	// patch svc-host and resource version to the pod annotations for new executor to adopt the pod
 	patch := fmt.Sprintf(`{"metadata":{"annotations":{"%s":"%s","%s":"%s"}}}`,
-		fv1.ANNOTATION_SVC_HOST, svcHost, fv1.FUNCTION_RESOURCE_VERSION, fn.ObjectMeta.ResourceVersion)
+		fv1.ANNOTATION_SVC_HOST, svcHost, fv1.FUNCTION_RESOURCE_VERSION, fn.ResourceVersion)
 	p, err := gp.kubernetesClient.CoreV1().Pods(pod.Namespace).Patch(ctx, pod.Name, k8sTypes.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
 	if err != nil {
 		// just log the error since it won't affect the function serving
@@ -600,11 +600,11 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 	kubeObjRefs := []apiv1.ObjectReference{
 		{
 			Kind:            "pod",
-			Name:            pod.ObjectMeta.Name,
+			Name:            pod.Name,
 			APIVersion:      pod.APIVersion,
-			Namespace:       pod.ObjectMeta.Namespace,
-			ResourceVersion: pod.ObjectMeta.ResourceVersion,
-			UID:             pod.ObjectMeta.UID,
+			Namespace:       pod.Namespace,
+			ResourceVersion: pod.ResourceVersion,
+			UID:             pod.UID,
 		},
 	}
 	cpuUsage := resource.MustParse("0m")
@@ -623,7 +623,7 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 
 	m := fn.ObjectMeta // only cache necessary part
 	fsvc := &fscache.FuncSvc{
-		Name:              pod.ObjectMeta.Name,
+		Name:              pod.Name,
 		Function:          &m,
 		Environment:       gp.env,
 		Address:           svcHost,
@@ -635,12 +635,12 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 	}
 
 	gp.fsCache.PodToFsvc.Store(pod.GetObjectMeta().GetName(), fsvc)
-	gp.podFSVCMap.Store(pod.ObjectMeta.Name, []interface{}{crd.CacheKeyURGFromMeta(fsvc.Function), fsvc.Address})
+	gp.podFSVCMap.Store(pod.Name, []any{crd.CacheKeyURGFromMeta(fsvc.Function), fsvc.Address})
 	gp.fsCache.AddFunc(ctx, *fsvc, fn.GetRequestPerPod(), fn.GetRetainPods())
 
 	logger.Info("added function service",
-		zap.String("pod", pod.ObjectMeta.Name),
-		zap.String("podNamespace", pod.ObjectMeta.Namespace),
+		zap.String("pod", pod.Name),
+		zap.String("podNamespace", pod.Namespace),
 		zap.String("serviceHost", svcHost),
 		zap.String("podIP", pod.Status.PodIP))
 
@@ -666,11 +666,11 @@ func (gp *GenericPool) destroy(ctx context.Context) error {
 	}
 
 	err := gp.kubernetesClient.AppsV1().
-		Deployments(gp.fnNamespace).Delete(ctx, gp.deployment.ObjectMeta.Name, delOpt)
+		Deployments(gp.fnNamespace).Delete(ctx, gp.deployment.Name, delOpt)
 	if err != nil {
 		gp.logger.Error("error destroying deployment",
 			zap.Error(err),
-			zap.String("deployment_name", gp.deployment.ObjectMeta.Name),
+			zap.String("deployment_name", gp.deployment.Name),
 			zap.String("deployment_namespace", gp.fnNamespace))
 		return err
 	}

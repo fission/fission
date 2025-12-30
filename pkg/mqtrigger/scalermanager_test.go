@@ -434,19 +434,19 @@ func Test_getAuthTriggerSpec(t *testing.T) {
 		require.Equal(t, nil, err)
 	}
 
-	authenticationRef := fmt.Sprintf("%s-auth-trigger", mqt1.ObjectMeta.Name)
+	authenticationRef := fmt.Sprintf("%s-auth-trigger", mqt1.Name)
 
 	blockOwnerDeletion := true
 	expectedAuthTriggerObj := &kedav1alpha1.TriggerAuthentication{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      authenticationRef,
-			Namespace: mqt1.ObjectMeta.Namespace,
+			Namespace: mqt1.Namespace,
 			OwnerReferences: []metav1.OwnerReference{
 				{
 					Kind:               "MessageQueueTrigger",
 					APIVersion:         "fission.io/v1",
-					Name:               mqt1.ObjectMeta.Name,
-					UID:                mqt1.ObjectMeta.UID,
+					Name:               mqt1.Name,
+					UID:                mqt1.UID,
 					BlockOwnerDeletion: &blockOwnerDeletion,
 				},
 			},

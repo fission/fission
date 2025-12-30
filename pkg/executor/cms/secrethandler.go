@@ -51,15 +51,15 @@ func getSecretRelatedFuncs(ctx context.Context, logger *zap.Logger, m *metav1.Ob
 func SecretEventHandlers(ctx context.Context, logger *zap.Logger, fissionClient versioned.Interface,
 	kubernetesClient kubernetes.Interface, types map[fv1.ExecutorType]executortype.ExecutorType) k8sCache.ResourceEventHandlerFuncs {
 	return k8sCache.ResourceEventHandlerFuncs{
-		AddFunc:    func(obj interface{}) {},
-		DeleteFunc: func(obj interface{}) {},
-		UpdateFunc: func(oldObj interface{}, newObj interface{}) {
+		AddFunc:    func(obj any) {},
+		DeleteFunc: func(obj any) {},
+		UpdateFunc: func(oldObj any, newObj any) {
 			oldS := oldObj.(*apiv1.Secret)
 			newS := newObj.(*apiv1.Secret)
-			if oldS.ObjectMeta.ResourceVersion != newS.ObjectMeta.ResourceVersion {
+			if oldS.ResourceVersion != newS.ResourceVersion {
 				funcs, err := getSecretRelatedFuncs(ctx, logger, &newS.ObjectMeta, fissionClient)
 				if err != nil {
-					logger.Error("Failed to get functions related to secret", zap.String("secret_name", newS.ObjectMeta.Name), zap.String("secret_namespace", newS.ObjectMeta.Namespace))
+					logger.Error("Failed to get functions related to secret", zap.String("secret_name", newS.Name), zap.String("secret_namespace", newS.Namespace))
 				}
 
 				if len(funcs) == 0 {
@@ -67,8 +67,8 @@ func SecretEventHandlers(ctx context.Context, logger *zap.Logger, fissionClient 
 				}
 
 				logger.Debug("Secret changed",
-					zap.String("secret_name", newS.ObjectMeta.Name),
-					zap.String("secret_namespace", newS.ObjectMeta.Namespace))
+					zap.String("secret_name", newS.Name),
+					zap.String("secret_namespace", newS.Namespace))
 				refreshPods(ctx, logger, funcs, types)
 			}
 		},

@@ -72,13 +72,13 @@ func (opts *ListPodsSubCommand) do(input cli.Input) (err error) {
 	for _, pod := range podsList.Items {
 
 		// A deletion timestamp indicates that a pod is terminating. Do not count this pod.
-		if pod.ObjectMeta.DeletionTimestamp != nil {
+		if pod.DeletionTimestamp != nil {
 			continue
 		}
 
 		labelList := pod.GetLabels()
 		readyContainers, noOfContainers := utils.PodContainerReadyStatus(&pod)
-		fmt.Fprintf(w, "%v\t%v\t%v/%v\t%v\t%v\t%v\t%v\t\n", pod.ObjectMeta.Name, pod.ObjectMeta.Namespace, noOfContainers, readyContainers, pod.Status.Phase, pod.Status.PodIP, labelList[v1.EXECUTOR_TYPE], labelList[v1.MANAGED])
+		fmt.Fprintf(w, "%v\t%v\t%v/%v\t%v\t%v\t%v\t%v\t\n", pod.Name, pod.Namespace, noOfContainers, readyContainers, pod.Status.Phase, pod.Status.PodIP, labelList[v1.EXECUTOR_TYPE], labelList[v1.MANAGED])
 	}
 	w.Flush()
 

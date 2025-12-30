@@ -171,7 +171,7 @@ func save(data []byte, specDir string, specFile string, truncate bool) error {
 }
 
 // called from `fission * create --spec`
-func SpecSave(resource interface{}, specFile string, update bool) error {
+func SpecSave(resource any, specFile string, update bool) error {
 	var specDir = "specs"
 
 	meta, kind, data, err := crdToYaml(resource)
@@ -205,7 +205,7 @@ func SpecSave(resource interface{}, specFile string, update bool) error {
 	return nil
 }
 
-func SpecDry(resource interface{}) error {
+func SpecDry(resource any) error {
 	_, _, data, err := crdToYaml(resource)
 	if err != nil {
 		return err
@@ -214,7 +214,7 @@ func SpecDry(resource interface{}) error {
 	return nil
 }
 
-func crdToYaml(resource interface{}) (metav1.ObjectMeta, string, []byte, error) {
+func crdToYaml(resource any) (metav1.ObjectMeta, string, []byte, error) {
 	// make sure we're writing a known type
 	var meta metav1.ObjectMeta
 	var kind string
@@ -334,14 +334,14 @@ func (fr *FissionResources) Validate(input cli.Input, client cmd.Client) ([]stri
 		}
 
 		for archiveType, u := range as {
-			if strings.HasPrefix(u, ARCHIVE_URL_PREFIX) {
-				aname := strings.TrimPrefix(u, ARCHIVE_URL_PREFIX)
+			if after, ok := strings.CutPrefix(u, ARCHIVE_URL_PREFIX); ok {
+				aname := after
 				if len(aname) > 0 {
 					if _, ok := archives[aname]; !ok {
 						errs = errors.Join(errs, fmt.Errorf(
 							"%v: package '%v' references unknown %v archive '%v%v'",
-							fr.SourceMap.Locations["Package"][p.ObjectMeta.Namespace][p.ObjectMeta.Name],
-							p.ObjectMeta.Name,
+							fr.SourceMap.Locations["Package"][p.Namespace][p.Name],
+							p.Name,
 							archiveType,
 							ARCHIVE_URL_PREFIX,
 							aname))
@@ -384,21 +384,21 @@ func (fr *FissionResources) Validate(input cli.Input, client cmd.Client) ([]stri
 
 			// check that the package referenced by each function is in the same ns as the function
 			packageRefInFuncNs := func(f *fv1.Function) bool {
-				return f.Spec.Package.PackageRef.Namespace == f.ObjectMeta.Namespace
+				return f.Spec.Package.PackageRef.Namespace == f.Namespace
 			}
 
 			if !packageRefInFuncNs(&f) {
 				errs = errors.Join(errs, fmt.Errorf(
 					"%v: function '%v' references a package outside of its namespace %v/%v",
-					fr.SourceMap.Locations["Function"][f.ObjectMeta.Namespace][f.ObjectMeta.Name],
-					f.ObjectMeta.Name,
+					fr.SourceMap.Locations["Function"][f.Namespace][f.Name],
+					f.Name,
 					f.Spec.Package.PackageRef.Namespace,
 					f.Spec.Package.PackageRef.Name))
 			} else if !packageRefExists() {
 				errs = errors.Join(errs, fmt.Errorf(
 					"%v: function '%v' references unknown package %v/%v",
-					fr.SourceMap.Locations["Function"][f.ObjectMeta.Namespace][f.ObjectMeta.Name],
-					f.ObjectMeta.Name,
+					fr.SourceMap.Locations["Function"][f.Namespace][f.Name],
+					f.Name,
 					pkgMeta.Namespace,
 					pkgMeta.Name))
 			} else {
@@ -481,7 +481,7 @@ func (fr *FissionResources) Validate(input cli.Input, client cmd.Client) ([]stri
 	// Index envs, warn on functions referencing an environment for which spes does not exist
 	environments := make(map[string]struct{})
 	for _, e := range fr.Environments {
-		environments[fmt.Sprintf("%s:%s", e.ObjectMeta.Name, e.ObjectMeta.Namespace)] = struct{}{}
+		environments[fmt.Sprintf("%s:%s", e.Name, e.Namespace)] = struct{}{}
 		if ((e.Spec.Runtime.Container != nil) && (e.Spec.Runtime.PodSpec != nil)) || ((e.Spec.Builder.Container != nil) && (e.Spec.Builder.PodSpec != nil)) {
 			warnings = append(warnings, "You have provided both - container spec and pod spec and while merging the pod spec will take precedence.")
 			if e.Spec.Runtime.Container.Name != "" && e.Spec.Runtime.PodSpec != nil {
@@ -499,7 +499,7 @@ func (fr *FissionResources) Validate(input cli.Input, client cmd.Client) ([]stri
 
 	for _, f := range fr.Functions {
 		if _, ok := environments[fmt.Sprintf("%s:%s", f.Spec.Environment.Name, f.Spec.Environment.Namespace)]; !ok {
-			warnings = append(warnings, fmt.Sprintf("Environment %s is referenced in function %s but not declared in specs", f.Spec.Environment.Name, f.ObjectMeta.Name))
+			warnings = append(warnings, fmt.Sprintf("Environment %s is referenced in function %s but not declared in specs", f.Spec.Environment.Name, f.Name))
 		}
 		strategy := f.Spec.InvokeStrategy.ExecutionStrategy
 		if strategy.ExecutorType == fv1.ExecutorTypeNewdeploy && strategy.SpecializationTimeout < fv1.DefaultSpecializationTimeOut {
@@ -666,7 +666,7 @@ func (fr *FissionResources) ParseYaml(b []byte, loc *Location, commitLabelVal st
 // otherwise.  compareMetadata and compareSpec control how the
 // equality check is performed.
 // TODO: deprecated SpecExists
-func (fr *FissionResources) SpecExists(resource interface{}, compareMetadata bool, compareSpec bool) interface{} {
+func (fr *FissionResources) SpecExists(resource any, compareMetadata bool, compareSpec bool) any {
 	switch typedres := resource.(type) {
 	case *types.ArchiveUploadSpec:
 		for _, aus := range fr.ArchiveUploadSpecs {
@@ -674,9 +674,7 @@ func (fr *FissionResources) SpecExists(resource interface{}, compareMetadata boo
 				continue
 			}
 			if compareSpec &&
-				!(reflect.DeepEqual(aus.RootDir, typedres.RootDir) &&
-					reflect.DeepEqual(aus.IncludeGlobs, typedres.IncludeGlobs) &&
-					reflect.DeepEqual(aus.ExcludeGlobs, typedres.ExcludeGlobs)) {
+				(!reflect.DeepEqual(aus.RootDir, typedres.RootDir) || !reflect.DeepEqual(aus.IncludeGlobs, typedres.IncludeGlobs) || !reflect.DeepEqual(aus.ExcludeGlobs, typedres.ExcludeGlobs)) {
 				continue
 			}
 			return &aus
@@ -700,7 +698,7 @@ func (fr *FissionResources) SpecExists(resource interface{}, compareMetadata boo
 	}
 }
 
-func (fr *FissionResources) ExistsInSpecs(resource interface{}) (bool, error) {
+func (fr *FissionResources) ExistsInSpecs(resource any) (bool, error) {
 	switch typedres := resource.(type) {
 	case types.ArchiveUploadSpec:
 		for _, obj := range fr.ArchiveUploadSpecs {
@@ -710,50 +708,50 @@ func (fr *FissionResources) ExistsInSpecs(resource interface{}) (bool, error) {
 		}
 	case fv1.Package:
 		for _, obj := range fr.Packages {
-			if obj.ObjectMeta.Name == typedres.ObjectMeta.Name &&
-				obj.ObjectMeta.Namespace == typedres.ObjectMeta.Namespace {
+			if obj.Name == typedres.Name &&
+				obj.Namespace == typedres.Namespace {
 				return true, nil
 			}
 		}
 	case fv1.Function:
 		for _, obj := range fr.Functions {
-			if obj.ObjectMeta.Name == typedres.ObjectMeta.Name &&
-				obj.ObjectMeta.Namespace == typedres.ObjectMeta.Namespace {
+			if obj.Name == typedres.Name &&
+				obj.Namespace == typedres.Namespace {
 				return true, nil
 			}
 		}
 	case fv1.Environment:
 		for _, obj := range fr.Environments {
-			if obj.ObjectMeta.Name == typedres.ObjectMeta.Name &&
-				obj.ObjectMeta.Namespace == typedres.ObjectMeta.Namespace {
+			if obj.Name == typedres.Name &&
+				obj.Namespace == typedres.Namespace {
 				return true, nil
 			}
 		}
 	case fv1.HTTPTrigger:
 		for _, obj := range fr.HttpTriggers {
-			if obj.ObjectMeta.Name == typedres.ObjectMeta.Name &&
-				obj.ObjectMeta.Namespace == typedres.ObjectMeta.Namespace {
+			if obj.Name == typedres.Name &&
+				obj.Namespace == typedres.Namespace {
 				return true, nil
 			}
 		}
 	case fv1.KubernetesWatchTrigger:
 		for _, obj := range fr.KubernetesWatchTriggers {
-			if obj.ObjectMeta.Name == typedres.ObjectMeta.Name &&
-				obj.ObjectMeta.Namespace == typedres.ObjectMeta.Namespace {
+			if obj.Name == typedres.Name &&
+				obj.Namespace == typedres.Namespace {
 				return true, nil
 			}
 		}
 	case fv1.MessageQueueTrigger:
 		for _, obj := range fr.MessageQueueTriggers {
-			if obj.ObjectMeta.Name == typedres.ObjectMeta.Name &&
-				obj.ObjectMeta.Namespace == typedres.ObjectMeta.Namespace {
+			if obj.Name == typedres.Name &&
+				obj.Namespace == typedres.Namespace {
 				return true, nil
 			}
 		}
 	case fv1.TimeTrigger:
 		for _, obj := range fr.TimeTriggers {
-			if obj.ObjectMeta.Name == typedres.ObjectMeta.Name &&
-				obj.ObjectMeta.Namespace == typedres.ObjectMeta.Namespace {
+			if obj.Name == typedres.Name &&
+				obj.Namespace == typedres.Namespace {
 				return true, nil
 			}
 		}

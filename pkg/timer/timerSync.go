@@ -94,18 +94,18 @@ func (ws *TimerSync) DeleteTimeTrigger(timeTrigger *fv1.TimeTrigger) {
 func (ws *TimerSync) TimeTriggerEventHandlers(ctx context.Context) error {
 	for _, informer := range ws.timeTriggerInformer {
 		_, err := informer.AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
-			AddFunc: func(obj interface{}) {
+			AddFunc: func(obj any) {
 				timeTrigger := obj.(*fv1.TimeTrigger)
 				ws.AddUpdateTimeTrigger(timeTrigger)
 			},
-			UpdateFunc: func(oldObj interface{}, newObj interface{}) {
+			UpdateFunc: func(oldObj any, newObj any) {
 				oldTimeTrigger := oldObj.(*fv1.TimeTrigger)
 				newTimeTrigger := newObj.(*fv1.TimeTrigger)
-				if oldTimeTrigger.ObjectMeta.ResourceVersion != newTimeTrigger.ObjectMeta.ResourceVersion {
+				if oldTimeTrigger.ResourceVersion != newTimeTrigger.ResourceVersion {
 					ws.AddUpdateTimeTrigger(newTimeTrigger)
 				}
 			},
-			DeleteFunc: func(obj interface{}) {
+			DeleteFunc: func(obj any) {
 				timeTrigger := obj.(*fv1.TimeTrigger)
 				ws.DeleteTimeTrigger(timeTrigger)
 			},

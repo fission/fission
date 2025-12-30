@@ -65,13 +65,13 @@ func GetFunctionPodLogs(ctx context.Context, client cmd.Client, logFilter LogFil
 	var selector map[string]string
 	if f.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType != fv1.ExecutorTypeContainer {
 		selector = map[string]string{
-			fv1.FUNCTION_UID:          string(f.ObjectMeta.UID),
+			fv1.FUNCTION_UID:          string(f.UID),
 			fv1.ENVIRONMENT_NAME:      f.Spec.Environment.Name,
 			fv1.ENVIRONMENT_NAMESPACE: f.Spec.Environment.Namespace,
 		}
 	} else {
 		selector = map[string]string{
-			fv1.FUNCTION_UID: string(f.ObjectMeta.UID),
+			fv1.FUNCTION_UID: string(f.UID),
 		}
 	}
 
@@ -99,8 +99,8 @@ func GetFunctionPodLogs(ctx context.Context, client cmd.Client, logFilter LogFil
 	} else {
 		// Get the logs for last Pod executed
 		sort.Slice(pods, func(i, j int) bool {
-			rv1, _ := strconv.ParseInt(pods[i].ObjectMeta.ResourceVersion, 10, 32)
-			rv2, _ := strconv.ParseInt(pods[j].ObjectMeta.ResourceVersion, 10, 32)
+			rv1, _ := strconv.ParseInt(pods[i].ResourceVersion, 10, 32)
+			rv2, _ := strconv.ParseInt(pods[j].ResourceVersion, 10, 32)
 			return rv1 > rv2
 		})
 
@@ -127,7 +127,7 @@ func streamContainerLog(ctx context.Context, kubernetesClient kubernetes.Interfa
 			TailLines: &tailLines,
 		}
 
-		podLogsReq := kubernetesClient.CoreV1().Pods(pod.Namespace).GetLogs(pod.ObjectMeta.Name, &podLogOpts)
+		podLogsReq := kubernetesClient.CoreV1().Pods(pod.Namespace).GetLogs(pod.Name, &podLogOpts)
 
 		podLogs, err := podLogsReq.Stream(ctx)
 		if err != nil {
@@ -137,7 +137,7 @@ func streamContainerLog(ctx context.Context, kubernetesClient kubernetes.Interfa
 		if logFilter.Details {
 			fn := logFilter.FunctionObject
 			msg := fmt.Sprintf("\n=== Function=%s Environment=%s Namespace=%s Pod=%s Container=%s Node=%s\n",
-				fn.ObjectMeta.Name, fn.Spec.Environment.Name, pod.Namespace, pod.Name, container.Name, pod.Spec.NodeName)
+				fn.Name, fn.Spec.Environment.Name, pod.Namespace, pod.Name, container.Name, pod.Spec.NodeName)
 			if _, err := output.WriteString(msg); err != nil {
 				return fmt.Errorf("error copying pod log: %w", err)
 			}

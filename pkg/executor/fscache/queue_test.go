@@ -48,7 +48,7 @@ func TestQueuePushWithConcurrentRequest(t *testing.T) {
 	q := NewQueue()
 	noOfRequests := 20
 	var wg sync.WaitGroup
-	for i := 0; i < noOfRequests; i++ {
+	for range noOfRequests {
 		wg.Go(func() {
 			item := &svcWait{
 				svcChannel: make(chan *FuncSvc),

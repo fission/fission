@@ -206,7 +206,7 @@ func (builder *Builder) reply(ctx context.Context, w http.ResponseWriter, pkgFil
 	rBody, err := json.Marshal(resp)
 	if err != nil {
 		e := fmt.Errorf("error encoding response body: %w", err)
-		rBody = []byte(fmt.Sprintf(`{"buildLogs": "%s"}`, e.Error()))
+		rBody = fmt.Appendf(nil, `{"buildLogs": "%s"}`, e.Error())
 		statusCode = http.StatusInternalServerError
 	}
 

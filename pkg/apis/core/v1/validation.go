@@ -119,7 +119,7 @@ func AggregateValidationErrors(objName string, err error) error {
 	return errors.New(errMsg.String())
 }
 
-func MakeValidationErr(errType ValidationErrorType, field string, val interface{}, detail ...string) ValidationError {
+func MakeValidationErr(errType ValidationErrorType, field string, val any, detail ...string) ValidationError {
 	return ValidationError{
 		Type:     errType,
 		Field:    field,

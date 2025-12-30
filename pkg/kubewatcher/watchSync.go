@@ -59,11 +59,11 @@ func (ws *WatchSync) Run(ctx context.Context, mgr manager.Interface) {
 func (ws *WatchSync) KubeWatcherEventHandlers(ctx context.Context) error {
 	for _, informer := range ws.kubeWatcherInformer {
 		_, err := informer.AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
-			AddFunc: func(obj interface{}) {
+			AddFunc: func(obj any) {
 				objKubeWatcher := obj.(*fv1.KubernetesWatchTrigger)
 				ws.kubeWatcher.addWatch(ctx, objKubeWatcher) //nolint: errCheck
 			},
-			DeleteFunc: func(obj interface{}) {
+			DeleteFunc: func(obj any) {
 				objKubeWatcher := obj.(*fv1.KubernetesWatchTrigger)
 				ws.kubeWatcher.removeWatch(objKubeWatcher) //nolint: errCheck
 			},

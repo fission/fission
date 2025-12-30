@@ -82,9 +82,9 @@ func makeFunctionReferenceResolver(logger *zap.Logger, funcInformer map[string]k
 // resolve translates a trigger's function reference to a resolveResult.
 func (frr *functionReferenceResolver) resolve(trigger fv1.HTTPTrigger) (*resolveResult, error) {
 	nfr := namespacedTriggerReference{
-		namespace:              trigger.ObjectMeta.Namespace,
+		namespace:              trigger.Namespace,
 		triggerName:            trigger.Name,
-		triggerResourceVersion: trigger.ObjectMeta.ResourceVersion,
+		triggerResourceVersion: trigger.ResourceVersion,
 	}
 
 	// check cache
@@ -149,7 +149,7 @@ func (frr *functionReferenceResolver) resolveByName(namespace, name string) (*re
 	f := obj.(*fv1.Function)
 
 	functionMap := map[string]*fv1.Function{
-		f.ObjectMeta.Name: f,
+		f.Name: f,
 	}
 
 	rr := resolveResult{
@@ -186,7 +186,7 @@ func (frr *functionReferenceResolver) resolveByFunctionWeights(namespace string,
 			return nil, fmt.Errorf("function %s/%s does not exist", namespace, functionName)
 		}
 		f := obj.(*fv1.Function)
-		functionMap[f.ObjectMeta.Name] = f
+		functionMap[f.Name] = f
 		sumPrefix = sumPrefix + functionWeight
 		fnWtDistrList = append(fnWtDistrList, functionWeightDistribution{
 			name:      functionName,

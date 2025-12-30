@@ -144,7 +144,7 @@ func (kafka Kafka) Subscribe(trigger *fv1.MessageQueueTrigger) (messageQueue.Sub
 		consumerConfig.Net.TLS.Config = tlsConfig
 	}
 
-	consumer, err := sarama.NewConsumerGroup(kafka.brokers, string(trigger.ObjectMeta.UID), consumerConfig)
+	consumer, err := sarama.NewConsumerGroup(kafka.brokers, string(trigger.UID), consumerConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -158,8 +158,8 @@ func (kafka Kafka) Subscribe(trigger *fv1.MessageQueueTrigger) (messageQueue.Sub
 		zap.String("topic", trigger.Spec.Topic),
 		zap.String("response topic", trigger.Spec.ResponseTopic),
 		zap.String("error topic", trigger.Spec.ErrorTopic),
-		zap.String("trigger", trigger.ObjectMeta.Name),
-		zap.String("function namespace", trigger.ObjectMeta.Namespace),
+		zap.String("trigger", trigger.Name),
+		zap.String("function namespace", trigger.Namespace),
 		zap.String("function name", trigger.Spec.FunctionReference.Name))
 
 	// consume errors
@@ -180,11 +180,11 @@ func (kafka Kafka) Subscribe(trigger *fv1.MessageQueueTrigger) (messageQueue.Sub
 			// Consume messages
 			err := consumer.Consume(ctx, topic, ch)
 			if err != nil {
-				kafka.logger.Error("consumer error", zap.Error(err), zap.String("trigger", trigger.ObjectMeta.Name))
+				kafka.logger.Error("consumer error", zap.Error(err), zap.String("trigger", trigger.Name))
 			}
 
 			if ctx.Err() != nil {
-				kafka.logger.Info("consumer context cancelled", zap.String("trigger", trigger.ObjectMeta.Name))
+				kafka.logger.Info("consumer context cancelled", zap.String("trigger", trigger.Name))
 				return
 			}
 			ch.ready = make(chan bool)

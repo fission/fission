@@ -25,6 +25,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"slices"
 	"strings"
 	"time"
 )
@@ -58,12 +59,7 @@ func (md *Metadata) AddAlias(alias string) {
 }
 
 func (md *Metadata) HasAlias(needle string) bool {
-	for _, alias := range md.Aliases {
-		if alias == needle {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(md.Aliases, needle)
 }
 
 // Find searches the machine for the given plugin, returning the metadata of the plugin.
@@ -105,8 +101,8 @@ func Exec(md *Metadata, args []string) error {
 func FindAll(ctx context.Context) map[string]*Metadata {
 	plugins := map[string]*Metadata{}
 
-	dirs := strings.Split(os.Getenv("PATH"), ":")
-	for _, dir := range dirs {
+	dirs := strings.SplitSeq(os.Getenv("PATH"), ":")
+	for dir := range dirs {
 		fs, err := os.ReadDir(dir)
 		if err != nil {
 			continue

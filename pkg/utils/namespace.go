@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"maps"
 	"os"
 	"strings"
 
@@ -89,9 +90,7 @@ func (nsr *NamespaceResolver) FissionNSWithOptions(option ...option) map[string]
 	}
 
 	fissionResourceNS := make(map[string]string)
-	for k, v := range nsr.FissionResourceNS {
-		fissionResourceNS[k] = v
-	}
+	maps.Copy(fissionResourceNS, nsr.FissionResourceNS)
 
 	if options.functionNS && nsr.FunctionNamespace != "" {
 		fissionResourceNS[nsr.FunctionNamespace] = nsr.FunctionNamespace
@@ -116,8 +115,8 @@ func GetNamespaces() map[string]string {
 
 	envValue = os.Getenv(ENV_ADDITIONAL_NAMESPACE)
 	if len(envValue) > 0 {
-		lstNamespaces := strings.Split(envValue, ",")
-		for _, namespace := range lstNamespaces {
+		lstNamespaces := strings.SplitSeq(envValue, ",")
+		for namespace := range lstNamespaces {
 			// check to handle string with additional comma at the end of string. eg- ns1,ns2,
 			if namespace != "" {
 				namespaces[namespace] = namespace

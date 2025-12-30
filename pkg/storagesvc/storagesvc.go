@@ -223,13 +223,14 @@ func (ss *StorageService) downloadHandler(w http.ResponseWriter, r *http.Request
 	err = ss.storageClient.copyFileToStream(fileId, w)
 	if err != nil {
 		logger.Error("error getting file from storage client", zap.Error(err), zap.String("file_id", fileId))
-		if err == ErrNotFound {
+		switch err {
+		case ErrNotFound:
 			http.Error(w, "Error retrieving item: not found", http.StatusNotFound)
-		} else if err == ErrRetrievingItem {
+		case ErrRetrievingItem:
 			http.Error(w, "Error retrieving item", http.StatusBadRequest)
-		} else if err == ErrOpeningItem {
+		case ErrOpeningItem:
 			http.Error(w, "Error opening item", http.StatusBadRequest)
-		} else if err == ErrWritingFileIntoResponse {
+		case ErrWritingFileIntoResponse:
 			http.Error(w, "Error writing response", http.StatusInternalServerError)
 		}
 		return

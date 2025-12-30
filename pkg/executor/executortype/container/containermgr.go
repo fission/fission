@@ -276,9 +276,9 @@ func (caaf *Container) RefreshFuncPods(ctx context.Context, logger *zap.Logger, 
 		}
 
 		patch := fmt.Sprintf(`{"spec" : {"template": {"spec":{"containers":[{"name": "%s", "env":[{"name": "%s", "value": "%d"}]}]}}}}`,
-			f.ObjectMeta.Name, fv1.ResourceVersionCount, rvCount)
+			f.Name, fv1.ResourceVersionCount, rvCount)
 
-		_, err = caaf.kubernetesClient.AppsV1().Deployments(deployment.ObjectMeta.Namespace).Patch(ctx, deployment.ObjectMeta.Name,
+		_, err = caaf.kubernetesClient.AppsV1().Deployments(deployment.ObjectMeta.Namespace).Patch(ctx, deployment.Name,
 			k8sTypes.StrategicMergePatchType,
 			[]byte(patch), metav1.PatchOptions{})
 		if err != nil {
@@ -308,7 +308,7 @@ func (caaf *Container) AdoptExistingResources(ctx context.Context) {
 						caaf.logger.Warn("failed to adopt resources for function", zap.Error(err))
 						return
 					}
-					caaf.logger.Info("adopt resources for function", zap.String("function", fn.ObjectMeta.Name))
+					caaf.logger.Info("adopt resources for function", zap.String("function", fn.Name))
 				})
 			}
 		}
@@ -352,19 +352,19 @@ func (caaf *Container) createFunction(ctx context.Context, fn *fv1.Function) (*f
 		return nil, nil
 	}
 
-	fsvcObj, err := caaf.throttler.RunOnce(string(fn.ObjectMeta.UID), func(ableToCreate bool) (interface{}, error) {
+	fsvcObj, err := caaf.throttler.RunOnce(string(fn.UID), func(ableToCreate bool) (any, error) {
 		if ableToCreate {
 			return caaf.fnCreate(ctx, fn)
 		}
-		return caaf.fsCache.GetByFunctionUID(fn.ObjectMeta.UID)
+		return caaf.fsCache.GetByFunctionUID(fn.UID)
 	})
 	if err != nil {
 		e := "error creating k8s resources for function"
 		caaf.logger.Error(e,
 			zap.Error(err),
-			zap.String("function_name", fn.ObjectMeta.Name),
-			zap.String("function_namespace", fn.ObjectMeta.Namespace))
-		return nil, fmt.Errorf("error creating k8s resources for function %s/%s: %w", fn.ObjectMeta.Namespace, fn.ObjectMeta.Name, err)
+			zap.String("function_name", fn.Name),
+			zap.String("function_namespace", fn.Namespace))
+		return nil, fmt.Errorf("error creating k8s resources for function %s/%s: %w", fn.Namespace, fn.Name, err)
 	}
 
 	fsvc, ok := fsvcObj.(*fscache.FuncSvc)
@@ -400,7 +400,7 @@ func (caaf *Container) fnCreate(ctx context.Context, fn *fv1.Function) (*fscache
 
 	// to support backward compatibility, if the function was created in default ns, we fall back to creating the
 	// deployment of the function in fission-function ns
-	ns := caaf.nsResolver.GetFunctionNS(fn.ObjectMeta.Namespace)
+	ns := caaf.nsResolver.GetFunctionNS(fn.Namespace)
 
 	// Envoy(istio-proxy) returns 404 directly before istio pilot
 	// propagates latest Envoy-specific configuration.
@@ -514,9 +514,9 @@ func (caaf *Container) updateFunction(ctx context.Context, oldFn *fv1.Function, 
 	if !reflect.DeepEqual(oldFn.Spec.InvokeStrategy, newFn.Spec.InvokeStrategy) {
 		// to support backward compatibility, if the function was created in default ns, we fall back to creating the
 		// deployment of the function in fission-function ns, so cleaning up resources there
-		ns := caaf.nsResolver.GetFunctionNS(newFn.ObjectMeta.Namespace)
+		ns := caaf.nsResolver.GetFunctionNS(newFn.Namespace)
 
-		fsvc, err := caaf.fsCache.GetByFunctionUID(newFn.ObjectMeta.UID)
+		fsvc, err := caaf.fsCache.GetByFunctionUID(newFn.UID)
 		if err != nil {
 			return fmt.Errorf("error updating function due to unable to find function service cache %s: %w", k8sCache.MetaObjectToName(oldFn), err)
 		}
@@ -596,7 +596,7 @@ func (caaf *Container) updateFunction(ctx context.Context, oldFn *fv1.Function, 
 
 func (caaf *Container) updateFuncDeployment(ctx context.Context, fn *fv1.Function) error {
 
-	fsvc, err := caaf.fsCache.GetByFunctionUID(fn.ObjectMeta.UID)
+	fsvc, err := caaf.fsCache.GetByFunctionUID(fn.UID)
 	if err != nil {
 		return fmt.Errorf("error updating function due to unable to find function service cache %s: %w", k8sCache.MetaObjectToName(fn), err)
 	}
@@ -604,11 +604,11 @@ func (caaf *Container) updateFuncDeployment(ctx context.Context, fn *fv1.Functio
 
 	deployLabels := caaf.getDeployLabels(fn.ObjectMeta)
 	caaf.logger.Info("updating deployment due to function update",
-		zap.String("deployment", fnObjName), zap.Any("function", fn.ObjectMeta.Name))
+		zap.String("deployment", fnObjName), zap.Any("function", fn.Name))
 
 	// to support backward compatibility, if the function was created in default ns, we fall back to creating the
 	// deployment of the function in fission-function ns
-	ns := caaf.nsResolver.GetFunctionNS(fn.ObjectMeta.Namespace)
+	ns := caaf.nsResolver.GetFunctionNS(fn.Namespace)
 
 	existingDepl, err := caaf.kubernetesClient.AppsV1().Deployments(ns).Get(ctx, fnObjName, metav1.GetOptions{})
 	if err != nil {
@@ -642,7 +642,7 @@ func (caaf *Container) fnDelete(ctx context.Context, fn *fv1.Function) error {
 	// is deleted and cause Container backend fails to delete the entry.
 	// Use GetByFunctionUID instead of GetByFunction here to find correct
 	// fsvc entry.
-	fsvc, err := caaf.fsCache.GetByFunctionUID(fn.ObjectMeta.UID)
+	fsvc, err := caaf.fsCache.GetByFunctionUID(fn.UID)
 	if err != nil {
 		return fmt.Errorf("fsvc not found in cache %s: %w", k8sCache.MetaObjectToName(fn), err)
 	}
@@ -656,7 +656,7 @@ func (caaf *Container) fnDelete(ctx context.Context, fn *fv1.Function) error {
 
 	// to support backward compatibility, if the function was created in default ns, we fall back to creating the
 	// deployment of the function in fission-function ns, so cleaning up resources there
-	ns := caaf.nsResolver.GetFunctionNS(fn.ObjectMeta.Namespace)
+	ns := caaf.nsResolver.GetFunctionNS(fn.Namespace)
 
 	err = caaf.cleanupContainer(ctx, ns, objName)
 	multierr = errors.Join(multierr, err)
@@ -666,20 +666,20 @@ func (caaf *Container) fnDelete(ctx context.Context, fn *fv1.Function) error {
 // getObjName returns a unique name for kubernetes objects of function
 func (caaf *Container) getObjName(fn *fv1.Function) string {
 	// use meta uuid of function, this ensure we always get the same name for the same function.
-	uid := fn.ObjectMeta.UID[len(fn.ObjectMeta.UID)-17:]
+	uid := fn.UID[len(fn.UID)-17:]
 	var functionMetadata string
-	if len(fn.ObjectMeta.Name)+len(fn.ObjectMeta.Namespace) < 35 {
-		functionMetadata = fn.ObjectMeta.Name + "-" + fn.ObjectMeta.Namespace
+	if len(fn.Name)+len(fn.Namespace) < 35 {
+		functionMetadata = fn.Name + "-" + fn.Namespace
 	} else {
-		if len(fn.ObjectMeta.Name) > 17 {
-			functionMetadata = fn.ObjectMeta.Name[:17]
+		if len(fn.Name) > 17 {
+			functionMetadata = fn.Name[:17]
 		} else {
-			functionMetadata = fn.ObjectMeta.Name
+			functionMetadata = fn.Name
 		}
-		if len(fn.ObjectMeta.Namespace) > 17 {
-			functionMetadata = functionMetadata + "-" + fn.ObjectMeta.Namespace[:17]
+		if len(fn.Namespace) > 17 {
+			functionMetadata = functionMetadata + "-" + fn.Namespace[:17]
 		} else {
-			functionMetadata = functionMetadata + "-" + fn.ObjectMeta.Namespace
+			functionMetadata = functionMetadata + "-" + fn.Namespace
 		}
 	}
 	// constructed name should be 63 characters long, as it is a valid k8s name
