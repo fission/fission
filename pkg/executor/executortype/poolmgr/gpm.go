@@ -208,11 +208,11 @@ func (gpm *GenericPoolManager) GetTypeName(ctx context.Context) fv1.ExecutorType
 func (gpm *GenericPoolManager) GetFuncSvc(ctx context.Context, fn *fv1.Function) (fnSvc *fscache.FuncSvc, fErr error) {
 	defer func() {
 		if fErr != nil {
-			metrics.ColdStartsError.WithLabelValues(fn.ObjectMeta.Name, fn.ObjectMeta.Namespace).Inc()
+			metrics.ColdStartsError.WithLabelValues(fn.Name, fn.Namespace).Inc()
 			return
 		}
 
-		metrics.ColdStarts.WithLabelValues(fn.ObjectMeta.Name, fn.ObjectMeta.Namespace).Inc()
+		metrics.ColdStarts.WithLabelValues(fn.Name, fn.Namespace).Inc()
 	}()
 
 	otelUtils.SpanTrackEvent(ctx, "GetFuncSvc", otelUtils.GetAttributesForFunction(fn)...)

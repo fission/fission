@@ -356,7 +356,7 @@ func (ts *HTTPTriggerSet) addFunctionHandlers() error {
 				for key, rr := range ts.resolver.copy() {
 					if key.namespace == fn.Namespace &&
 						rr.functionMap[fn.Name] != nil &&
-						rr.functionMap[fn.ObjectMeta.Name].ResourceVersion != fn.ResourceVersion {
+						rr.functionMap[fn.Name].ResourceVersion != fn.ResourceVersion {
 						// invalidate resolver cache
 						ts.logger.Debug("invalidating resolver cache")
 						ts.resolver.delete(key.namespace, key.triggerName, key.triggerResourceVersion)

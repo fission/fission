@@ -514,11 +514,11 @@ func (deploy *NewDeploy) fnCreate(ctx context.Context, fn *fv1.Function) (*fscac
 	_, err = deploy.fsCache.Add(*fsvc)
 	if err != nil {
 		deploy.logger.Error("error adding function to cache", zap.Error(err), zap.Any("function", fsvc.Function))
-		metrics.ColdStartsError.WithLabelValues(fn.ObjectMeta.Name, fn.ObjectMeta.Namespace).Inc()
+		metrics.ColdStartsError.WithLabelValues(fn.Name, fn.Namespace).Inc()
 		return fsvc, err
 	}
 
-	metrics.ColdStarts.WithLabelValues(fn.ObjectMeta.Name, fn.ObjectMeta.Namespace).Inc()
+	metrics.ColdStarts.WithLabelValues(fn.Name, fn.Namespace).Inc()
 
 	return fsvc, nil
 }
