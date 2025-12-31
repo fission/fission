@@ -240,7 +240,7 @@ func mergeVolumeLists(dst []apiv1.Volume, src []apiv1.Volume) ([]apiv1.Volume, e
 	return dst, err
 }
 
-func checkSliceConflicts(field string, objs interface{}) (err error) {
+func checkSliceConflicts(field string, objs any) (err error) {
 	defer func() {
 		// just in case to recover from unknown error
 		if e := recover(); e != nil {

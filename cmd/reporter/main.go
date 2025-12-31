@@ -25,7 +25,10 @@ import (
 
 func main() {
 	logger := loggerfactory.GetLogger()
-	defer logger.Sync()
+	defer func() {
+		// https://github.com/uber-go/zap/issues/328
+		_ = logger.Sync()
+	}()
 
 	err := app.App().Execute()
 	if err != nil {

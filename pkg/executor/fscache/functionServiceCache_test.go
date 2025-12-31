@@ -163,14 +163,13 @@ func TestFunctionServiceNewCache(t *testing.T) {
 	_, err = fsc.GetFuncSvc(ctx, fsvc.Function, 5, concurrency)
 	require.NoError(t, err)
 
-	// key := fmt.Sprintf("%v_%v", cancel.UID, fn.ObjectMeta.ResourceVersion)
 	key := crd.CacheKeyURGFromMeta(&fn.ObjectMeta)
 	fsc.MarkAvailable(key, fsvc.Address)
 
 	_, err = fsc.GetFuncSvc(ctx, fsvc.Function, 5, concurrency)
 	require.NoError(t, err)
 
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		fsc.MarkAvailable(key, fsvc.Address)
 	}
 	vals, err := fsc.ListOldForPool(30 * time.Second)

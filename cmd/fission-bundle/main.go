@@ -138,7 +138,7 @@ func main() {
 	// Initialize logger
 	logger := loggerfactory.GetLogger()
 	defer func() {
-		// Ignore error, safe to ignore as per https://github.com/uber-go/zap/issues/328
+		// https://github.com/uber-go/zap/issues/328
 		_ = logger.Sync()
 	}()
 

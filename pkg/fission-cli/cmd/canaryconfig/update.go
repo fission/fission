@@ -94,6 +94,6 @@ func (opts *UpdateSubCommand) run(input cli.Input) error {
 	if err != nil {
 		return fmt.Errorf("error updating canary config: %w", err)
 	}
-	fmt.Printf("canary config '%v' updated\n", opts.canary.ObjectMeta.Name)
+	fmt.Printf("canary config '%v' updated\n", opts.canary.Name)
 	return nil
 }

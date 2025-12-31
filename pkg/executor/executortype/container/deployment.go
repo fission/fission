@@ -19,6 +19,7 @@ package container
 import (
 	"context"
 	"fmt"
+	"maps"
 	"time"
 
 	"go.uber.org/zap"
@@ -70,7 +71,7 @@ func (cn *Container) createOrGetDeployment(ctx context.Context, fn *fv1.Function
 			if err != nil {
 				logger.Error("error while creating function deployment",
 					zap.Error(err),
-					zap.String("function", fn.ObjectMeta.Name),
+					zap.String("function", fn.Name),
 					zap.String("deployment_name", deployName),
 					zap.String("deployment_namespace", deployNamespace))
 				return nil, err
@@ -107,7 +108,7 @@ func (cn *Container) createOrGetDeployment(ctx context.Context, fn *fv1.Function
 	if *existingDepl.Spec.Replicas < minScale {
 		err = cn.scaleDeployment(ctx, existingDepl.Namespace, existingDepl.Name, minScale)
 		if err != nil {
-			logger.Error("error scaling up function deployment", zap.Error(err), zap.String("function", fn.ObjectMeta.Name))
+			logger.Error("error scaling up function deployment", zap.Error(err), zap.String("function", fn.Name))
 			return nil, err
 		}
 	}
@@ -186,9 +187,7 @@ func (cn *Container) getDeploymentSpec(ctx context.Context, fn *fv1.Function, ta
 
 	podLabels := make(map[string]string)
 
-	for k, v := range deployLabels {
-		podLabels[k] = v
-	}
+	maps.Copy(podLabels, deployLabels)
 
 	// Set maxUnavailable and maxSurge to 20% is because we want
 	// fission to rollout newer function version gradually without
@@ -215,17 +214,17 @@ func (cn *Container) getDeploymentSpec(ctx context.Context, fn *fv1.Function, ta
 		return nil, err
 	}
 
-	rvCount, err := referencedResourcesRVSum(ctx, cn.kubernetesClient, fn.ObjectMeta.Namespace, fn.Spec.Secrets, fn.Spec.ConfigMaps)
+	rvCount, err := referencedResourcesRVSum(ctx, cn.kubernetesClient, fn.Namespace, fn.Spec.Secrets, fn.Spec.ConfigMaps)
 	if err != nil {
 		return nil, err
 	}
 
 	if fn.Spec.PodSpec == nil {
-		return nil, fmt.Errorf("podSpec is not set for function %s", fn.ObjectMeta.Name)
+		return nil, fmt.Errorf("podSpec is not set for function %s", fn.Name)
 	}
 
 	container := &apiv1.Container{
-		Name:                   fn.ObjectMeta.Name,
+		Name:                   fn.Name,
 		ImagePullPolicy:        cn.runtimeImagePullPolicy,
 		TerminationMessagePath: "/dev/termination-log",
 		Lifecycle: &apiv1.Lifecycle{

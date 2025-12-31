@@ -52,7 +52,7 @@ func (opts *GetSubCommand) do(input cli.Input) (err error) {
 
 	fmt.Fprintf(w, "%v\t%v\n", "NAME", "IMAGE")
 	fmt.Fprintf(w, "%v\t%v\n",
-		env.ObjectMeta.Name, env.Spec.Runtime.Image)
+		env.Name, env.Spec.Runtime.Image)
 
 	w.Flush()
 	return nil

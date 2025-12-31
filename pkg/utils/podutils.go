@@ -30,7 +30,7 @@ func IsReadyPod(pod *v1.Pod) bool {
 
 	// pod is in "Terminating" status if deletionTimestamp is not nil
 	// https://github.com/kubernetes/kubernetes/issues/61376
-	if pod.ObjectMeta.DeletionTimestamp != nil {
+	if pod.DeletionTimestamp != nil {
 		return false
 	}
 

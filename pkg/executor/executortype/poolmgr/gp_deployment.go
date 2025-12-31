@@ -19,6 +19,7 @@ package poolmgr
 import (
 	"context"
 	"fmt"
+	"maps"
 	"strings"
 
 	"go.uber.org/zap"
@@ -45,12 +46,12 @@ func getPoolName(env *fv1.Environment) string {
 	}
 
 	// To fit the 63 character limit
-	if len(env.ObjectMeta.Name)+len(env.ObjectMeta.Namespace) < 37 {
-		envPodName = env.ObjectMeta.Name + "-" + env.ObjectMeta.Namespace
+	if len(env.Name)+len(env.Namespace) < 37 {
+		envPodName = env.Name + "-" + env.Namespace
 	} else {
-		nameLength := min(len(env.ObjectMeta.Name), 18)
-		namespaceLength := min(len(env.ObjectMeta.Namespace), 18)
-		envPodName = env.ObjectMeta.Name[:nameLength] + "-" + env.ObjectMeta.Namespace[:namespaceLength]
+		nameLength := min(len(env.Name), 18)
+		namespaceLength := min(len(env.Namespace), 18)
+		envPodName = env.Name[:nameLength] + "-" + env.Namespace[:namespaceLength]
 	}
 
 	return "poolmgr-" + strings.ToLower(fmt.Sprintf("%s-%s", envPodName, env.ResourceVersion))
@@ -87,7 +88,7 @@ func (gp *GenericPool) genDeploymentSpec(env *fv1.Environment) (*appsv1.Deployme
 		gracePeriodSeconds = env.Spec.TerminationGracePeriod
 	}
 
-	podAnnotations := env.ObjectMeta.Annotations
+	podAnnotations := env.Annotations
 	if podAnnotations == nil {
 		podAnnotations = make(map[string]string)
 	}
@@ -101,17 +102,15 @@ func (gp *GenericPool) genDeploymentSpec(env *fv1.Environment) (*appsv1.Deployme
 		podAnnotations["sidecar.istio.io/inject"] = "false"
 	}
 
-	podLabels := env.ObjectMeta.Labels
+	podLabels := env.Labels
 	if podLabels == nil {
 		podLabels = make(map[string]string)
 	}
 
-	for k, v := range deployLabels {
-		podLabels[k] = v
-	}
+	maps.Copy(podLabels, deployLabels)
 
 	container, err := util.MergeContainer(&apiv1.Container{
-		Name:                   env.ObjectMeta.Name,
+		Name:                   env.Name,
 		Image:                  env.Spec.Runtime.Image,
 		ImagePullPolicy:        gp.runtimeImagePullPolicy,
 		TerminationMessagePath: "/dev/termination-log",
@@ -190,7 +189,7 @@ func (gp *GenericPool) genDeploymentSpec(env *fv1.Environment) (*appsv1.Deployme
 	}
 
 	// If custom runtime container name - default env name
-	mainContainerName := env.ObjectMeta.Name
+	mainContainerName := env.Name
 	if env.Spec.Runtime.Container != nil && env.Spec.Runtime.Container.Name != "" && env.Spec.Runtime.PodSpec != nil {
 		if util.DoesContainerExistInPodSpec(env.Spec.Runtime.Container.Name, env.Spec.Runtime.PodSpec) {
 			mainContainerName = env.Spec.Runtime.Container.Name
@@ -263,7 +262,7 @@ func (gp *GenericPool) updatePoolDeployment(ctx context.Context, env *fv1.Enviro
 	gp.lock.Lock()
 	defer gp.lock.Unlock()
 	logger := gp.logger.With(zap.String("env", env.Name), zap.String("namespace", env.Namespace))
-	if gp.env.ObjectMeta.ResourceVersion == env.ObjectMeta.ResourceVersion {
+	if gp.env.ResourceVersion == env.ResourceVersion {
 		logger.Debug("env resource version matching with pool env")
 		return nil
 	}

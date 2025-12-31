@@ -45,17 +45,17 @@ func (opts *GetMetaSubCommand) do(input cli.Input) error {
 		return fmt.Errorf("error getting function: %w", err)
 	}
 
-	fmt.Printf("Name: %v\n", fn.ObjectMeta.Name)
+	fmt.Printf("Name: %v\n", fn.Name)
 	fmt.Printf("Environment: %v\n", fn.Spec.Environment.Name)
-	if len(fn.ObjectMeta.Labels) != 0 {
+	if len(fn.Labels) != 0 {
 		fmt.Println("Labels:")
-		for k, v := range fn.ObjectMeta.Labels {
+		for k, v := range fn.Labels {
 			fmt.Printf("  %s=%s\n", k, v)
 		}
 	}
-	if len(fn.ObjectMeta.Annotations) != 0 {
+	if len(fn.Annotations) != 0 {
 		fmt.Println("Annotations:")
-		for k, v := range fn.ObjectMeta.Annotations {
+		for k, v := range fn.Annotations {
 			fmt.Printf("  %s=%s\n", k, v)
 		}
 	}

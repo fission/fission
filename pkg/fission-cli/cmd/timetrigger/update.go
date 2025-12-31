@@ -103,7 +103,7 @@ func (opts *UpdateSubCommand) run(input cli.Input) error {
 		if err != nil {
 			return fv1.AggregateValidationErrors("TimeTrigger", err)
 		}
-		specFile := fmt.Sprintf("timetrigger-%s.yaml", opts.trigger.ObjectMeta.Name)
+		specFile := fmt.Sprintf("timetrigger-%s.yaml", opts.trigger.Name)
 		err = spec.SpecSave(*opts.trigger, specFile, true)
 		if err != nil {
 			return fmt.Errorf("error saving time trigger spec: %w", err)
@@ -115,7 +115,7 @@ func (opts *UpdateSubCommand) run(input cli.Input) error {
 		return fmt.Errorf("error updating Time trigger: %w", err)
 	}
 
-	fmt.Printf("trigger '%v' updated\n", opts.trigger.ObjectMeta.Name)
+	fmt.Printf("trigger '%v' updated\n", opts.trigger.Name)
 
 	t := util.GetServerInfo(input, opts.Client()).ServerTime.CurrentTime.UTC()
 	if err != nil {

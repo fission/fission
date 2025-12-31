@@ -41,7 +41,7 @@ type (
 		Short        string // one-letter abbreviated flag
 		Aliases      []string
 		Usage        string
-		DefaultValue interface{}
+		DefaultValue any
 
 		// If a flag is marked as deprecated, it will hidden from
 		// the help message automatically. Hence, a flag cannot be

@@ -72,7 +72,7 @@ func getScaleTargetRef(deployment *appsv1.Deployment) asv2.CrossVersionObjectRef
 	return asv2.CrossVersionObjectReference{
 		APIVersion: DeploymentVersion,
 		Kind:       DeploymentKind,
-		Name:       deployment.ObjectMeta.Name,
+		Name:       deployment.Name,
 	}
 }
 
@@ -129,7 +129,7 @@ func (hpaops *HpaOperations) CreateOrGetHpa(ctx context.Context, fn *fv1.Functio
 		},
 	}
 
-	existingHpa, err := hpaops.GetHpa(ctx, depl.ObjectMeta.Namespace, hpaName)
+	existingHpa, err := hpaops.GetHpa(ctx, depl.Namespace, hpaName)
 	if err == nil {
 		// to adopt orphan service
 		if existingHpa.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL] != hpaops.instanceID {
@@ -140,7 +140,7 @@ func (hpaops *HpaOperations) CreateOrGetHpa(ctx context.Context, fn *fv1.Functio
 			existingHpa, err = hpaops.kubernetesClient.AutoscalingV2().HorizontalPodAutoscalers(depl.ObjectMeta.Namespace).Update(ctx, existingHpa, metav1.UpdateOptions{})
 			if err != nil {
 				logger.Warn("error adopting HPA", zap.Error(err),
-					zap.String("HPA", hpaName), zap.String("ns", depl.ObjectMeta.Namespace))
+					zap.String("HPA", hpaName), zap.String("ns", depl.Namespace))
 				return nil, err
 			}
 		}

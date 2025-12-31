@@ -113,7 +113,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 	}
 
 	if input.Bool(flagkey.SpecSave) {
-		specFile := fmt.Sprintf("kubewatch-%v.yaml", opts.watcher.ObjectMeta.Name)
+		specFile := fmt.Sprintf("kubewatch-%v.yaml", opts.watcher.Name)
 		err := spec.SpecSave(*opts.watcher, specFile, false)
 		if err != nil {
 			return fmt.Errorf("error saving kubewatch spec: %w", err)
@@ -126,6 +126,6 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 		return fmt.Errorf("error creating kubewatch: %w", err)
 	}
 
-	fmt.Printf("trigger '%v' created\n", opts.watcher.ObjectMeta.Name)
+	fmt.Printf("trigger '%v' created\n", opts.watcher.Name)
 	return nil
 }

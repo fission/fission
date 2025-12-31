@@ -155,7 +155,7 @@ func (opts *UpdateSubCommand) run(input cli.Input) error {
 		if err != nil {
 			return fv1.AggregateValidationErrors("HTTPTrigger", err)
 		}
-		specFile := fmt.Sprintf("route-%s.yaml", opts.trigger.ObjectMeta.Name)
+		specFile := fmt.Sprintf("route-%s.yaml", opts.trigger.Name)
 		err = spec.SpecSave(*opts.trigger, specFile, true)
 		if err != nil {
 			return fmt.Errorf("error saving HTTP trigger spec: %w", err)
@@ -171,6 +171,6 @@ func (opts *UpdateSubCommand) run(input cli.Input) error {
 	if err != nil {
 		return fmt.Errorf("error updating the HTTP trigger: %w", err)
 	}
-	fmt.Printf("trigger '%v' updated\n", opts.trigger.ObjectMeta.Name)
+	fmt.Printf("trigger '%v' updated\n", opts.trigger.Name)
 	return nil
 }

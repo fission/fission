@@ -184,7 +184,7 @@ func (tr *Throttler) service() {
 //   }
 
 func (tr *Throttler) RunOnce(resourceKey string,
-	callbackFunc func(bool) (interface{}, error)) (interface{}, error) {
+	callbackFunc func(bool) (any, error)) (any, error) {
 
 	ch := make(chan *response)
 	tr.requestChan <- &request{

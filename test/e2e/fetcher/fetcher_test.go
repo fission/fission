@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -498,7 +499,9 @@ func (f *FetcherTestSuite) TearDownSuite() {
 	require.NoError(f.T(), err)
 
 	f.cancel()
-	f.logger.Sync()
+	// https://github.com/uber-go/zap/issues/328
+	_ = f.logger.Sync()
+
 	f.mgr.Wait()
 	err = f.framework.Stop()
 	require.NoError(f.T(), err, "error stopping framework")
@@ -605,13 +608,7 @@ func getArchiveIDFromURL(archiveDownloadURL string) (string, error) {
 
 func contains(list []string, item string) bool {
 
-	for _, listItem := range list {
-		if item == listItem {
-			return true
-		}
-	}
-
-	return false
+	return slices.Contains(list, item)
 }
 
 func TestFetcherTestSuite(t *testing.T) {

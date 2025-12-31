@@ -208,18 +208,18 @@ func (gpm *GenericPoolManager) GetTypeName(ctx context.Context) fv1.ExecutorType
 func (gpm *GenericPoolManager) GetFuncSvc(ctx context.Context, fn *fv1.Function) (fnSvc *fscache.FuncSvc, fErr error) {
 	defer func() {
 		if fErr != nil {
-			metrics.ColdStartsError.WithLabelValues(fn.ObjectMeta.Name, fn.ObjectMeta.Namespace).Inc()
+			metrics.ColdStartsError.WithLabelValues(fn.Name, fn.Namespace).Inc()
 			return
 		}
 
-		metrics.ColdStarts.WithLabelValues(fn.ObjectMeta.Name, fn.ObjectMeta.Namespace).Inc()
+		metrics.ColdStarts.WithLabelValues(fn.Name, fn.Namespace).Inc()
 	}()
 
 	otelUtils.SpanTrackEvent(ctx, "GetFuncSvc", otelUtils.GetAttributesForFunction(fn)...)
 	logger := otelUtils.LoggerWithTraceID(ctx, gpm.logger)
 
 	// from Func -> get Env
-	logger.Debug("getting environment for function", zap.String("function", fn.ObjectMeta.Name))
+	logger.Debug("getting environment for function", zap.String("function", fn.Name))
 	env, err := gpm.getFunctionEnv(ctx, fn)
 	if err != nil {
 		fErr = err
@@ -233,12 +233,12 @@ func (gpm *GenericPoolManager) GetFuncSvc(ctx context.Context, fn *fv1.Function)
 	}
 
 	if created {
-		logger.Info("created pool for the environment", zap.String("env", env.ObjectMeta.Name), zap.String("namespace", gpm.nsResolver.ResolveNamespace(gpm.nsResolver.FunctionNamespace)))
+		logger.Info("created pool for the environment", zap.String("env", env.Name), zap.String("namespace", gpm.nsResolver.ResolveNamespace(gpm.nsResolver.FunctionNamespace)))
 	}
 
 	// from GenericPool -> get one function container
 	// (this also adds to the cache)
-	logger.Debug("getting function service from pool", zap.String("function", fn.ObjectMeta.Name))
+	logger.Debug("getting function service from pool", zap.String("function", fn.Name))
 	fnSvc, fErr = pool.getFuncSvc(ctx, fn)
 	return fnSvc, fErr
 }
@@ -320,7 +320,7 @@ func (gpm *GenericPoolManager) RefreshFuncPods(ctx context.Context, logger *zap.
 	}
 
 	if created {
-		gpm.logger.Info("created pool for the environment", zap.String("env", env.ObjectMeta.Name), zap.String("namespace", gpm.nsResolver.ResolveNamespace(gpm.nsResolver.FunctionNamespace)))
+		gpm.logger.Info("created pool for the environment", zap.String("env", env.Name), zap.String("namespace", gpm.nsResolver.ResolveNamespace(gpm.nsResolver.FunctionNamespace)))
 	}
 
 	funcSvc, err := gp.fsCache.GetByFunction(&f.ObjectMeta)
@@ -341,7 +341,7 @@ func (gpm *GenericPoolManager) RefreshFuncPods(ctx context.Context, logger *zap.
 	}
 
 	for _, po := range podList.Items {
-		err := gpm.kubernetesClient.CoreV1().Pods(po.ObjectMeta.Namespace).Delete(ctx, po.ObjectMeta.Name, metav1.DeleteOptions{})
+		err := gpm.kubernetesClient.CoreV1().Pods(po.ObjectMeta.Namespace).Delete(ctx, po.Name, metav1.DeleteOptions{})
 		if k8serrors.IsNotFound(err) {
 			return nil
 		}
@@ -374,7 +374,7 @@ func (gpm *GenericPoolManager) AdoptExistingResources(ctx context.Context) {
 						gpm.logger.Error("adopt pool failed", zap.Error(err))
 					}
 					if created {
-						gpm.logger.Info("created pool for the environment", zap.String("env", env.ObjectMeta.Name), zap.String("namespace", gpm.nsResolver.ResolveNamespace(gpm.nsResolver.FunctionNamespace)))
+						gpm.logger.Info("created pool for the environment", zap.String("env", env.Name), zap.String("namespace", gpm.nsResolver.ResolveNamespace(gpm.nsResolver.FunctionNamespace)))
 					}
 				})
 			}
@@ -432,10 +432,10 @@ func (gpm *GenericPoolManager) AdoptExistingResources(ctx context.Context) {
 				svcHost, ok7 := pod.Annotations[fv1.ANNOTATION_SVC_HOST]
 				env, ok8 := envMap[fmt.Sprintf("%s/%s", envNS, envName)]
 
-				if !(ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7 && ok8) {
+				if !ok1 || !ok2 || !ok3 || !ok4 || !ok5 || !ok6 || !ok7 || !ok8 {
 					gpm.logger.Warn("failed to adopt pod for function due to lack of necessary information",
 						zap.String("pod", pod.Name), zap.Any("labels", pod.Labels), zap.Any("annotations", pod.Annotations),
-						zap.String("env", env.ObjectMeta.Name))
+						zap.String("env", env.Name))
 					return
 				}
 
@@ -454,9 +454,9 @@ func (gpm *GenericPoolManager) AdoptExistingResources(ctx context.Context) {
 							Kind:            "pod",
 							Name:            pod.Name,
 							APIVersion:      pod.APIVersion,
-							Namespace:       pod.ObjectMeta.Namespace,
-							ResourceVersion: pod.ObjectMeta.ResourceVersion,
-							UID:             pod.ObjectMeta.UID,
+							Namespace:       pod.Namespace,
+							ResourceVersion: pod.ResourceVersion,
+							UID:             pod.UID,
 						},
 					},
 					Executor: fv1.ExecutorTypePoolmgr,
@@ -520,7 +520,7 @@ func (gpm *GenericPoolManager) service() {
 			if !ok {
 				// To support backward compatibility, if envs are created in default ns, we go ahead
 				// and create pools in fission-function ns as earlier.
-				ns := gpm.nsResolver.GetFunctionNS(req.env.ObjectMeta.Namespace)
+				ns := gpm.nsResolver.GetFunctionNS(req.env.Namespace)
 				pool = MakeGenericPool(gpm.logger, gpm.fissionClient, gpm.kubernetesClient,
 					gpm.metricsClient, req.env, ns, gpm.fsCache,
 					gpm.fetcherConfig, gpm.instanceID, gpm.enableIstio, gpm.podSpecPatch)
@@ -536,13 +536,13 @@ func (gpm *GenericPoolManager) service() {
 		case CLEANUP_POOL:
 			env := *req.env
 			gpm.logger.Info("destroying pool",
-				zap.String("environment", env.ObjectMeta.Name),
-				zap.String("namespace", env.ObjectMeta.Namespace))
+				zap.String("environment", env.Name),
+				zap.String("namespace", env.Namespace))
 
 			key := crd.CacheKeyUIDFromMeta(&req.env.ObjectMeta)
 			pool, ok := gpm.pools[key]
 			if !ok {
-				gpm.logger.Error("Could not find pool", zap.String("environment", env.ObjectMeta.Name), zap.String("namespace", env.ObjectMeta.Namespace))
+				gpm.logger.Error("Could not find pool", zap.String("environment", env.Name), zap.String("namespace", env.Namespace))
 				continue
 			}
 			delete(gpm.pools, key)
@@ -550,8 +550,8 @@ func (gpm *GenericPoolManager) service() {
 				err := pool.destroy(req.ctx)
 				if err != nil {
 					gpm.logger.Error("failed to destroy pool",
-						zap.String("environment", env.ObjectMeta.Name),
-						zap.String("namespace", env.ObjectMeta.Namespace),
+						zap.String("environment", env.Name),
+						zap.String("namespace", env.Namespace),
 						zap.Error(err))
 				}
 			}
@@ -632,7 +632,7 @@ func (gpm *GenericPoolManager) doIdleObjectReaper(ctx context.Context) {
 		}
 
 		for _, env := range envs.Items {
-			envList[env.ObjectMeta.UID] = struct{}{}
+			envList[env.UID] = struct{}{}
 		}
 	}
 
@@ -644,7 +644,7 @@ func (gpm *GenericPoolManager) doIdleObjectReaper(ctx context.Context) {
 			return
 		}
 		for i, fn := range fns.Items {
-			fnList[fn.ObjectMeta.UID] = fns.Items[i]
+			fnList[fn.UID] = fns.Items[i]
 		}
 	}
 
@@ -666,9 +666,9 @@ func (gpm *GenericPoolManager) doIdleObjectReaper(ctx context.Context) {
 		}
 		// For function with the environment that no longer exists, executor
 		// cleanups the idle pod as usual and prints log to notify user.
-		if _, ok := envList[fsvc.Environment.ObjectMeta.UID]; !ok {
+		if _, ok := envList[fsvc.Environment.UID]; !ok {
 			gpm.logger.Warn("function environment no longer exists",
-				zap.String("environment", fsvc.Environment.ObjectMeta.Name),
+				zap.String("environment", fsvc.Environment.Name),
 				zap.String("function", fsvc.Name))
 		}
 
@@ -715,7 +715,7 @@ func (gpm *GenericPoolManager) WebsocketStartEventChecker(ctx context.Context, k
 	var wg wait.Group
 	for _, informer := range utils.GetInformerEventChecker(ctx, kubeClient, "WsConnectionStarted") {
 		_, err := informer.AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
-			AddFunc: func(obj interface{}) {
+			AddFunc: func(obj any) {
 				mObj := obj.(metav1.Object)
 				gpm.logger.Info("Websocket event detected for pod",
 					zap.String("Pod name", mObj.GetName()))
@@ -745,7 +745,7 @@ func (gpm *GenericPoolManager) NoActiveConnectionEventChecker(ctx context.Contex
 	var wg wait.Group
 	for _, informer := range utils.GetInformerEventChecker(ctx, kubeClient, "NoActiveConnections") {
 		_, err := informer.AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
-			AddFunc: func(obj interface{}) {
+			AddFunc: func(obj any) {
 				mObj := obj.(metav1.Object)
 				gpm.logger.Info("Inactive event detected for pod",
 					zap.String("Pod name", mObj.GetName()))

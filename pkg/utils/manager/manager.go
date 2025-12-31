@@ -43,7 +43,6 @@ func (g *GroupManager) Add(ctx context.Context, f func(context.Context)) {
 
 func (g *GroupManager) AddInformers(ctx context.Context, informers map[string]k8sCache.SharedIndexInformer) {
 	for _, informer := range informers {
-		informer := informer
 		g.Add(ctx, func(ctxArg context.Context) {
 			informer.Run(ctxArg.Done())
 		})

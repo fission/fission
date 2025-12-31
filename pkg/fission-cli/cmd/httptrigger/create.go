@@ -196,7 +196,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 	}
 
 	if input.Bool(flagkey.SpecSave) {
-		specFile := fmt.Sprintf("route-%v.yaml", opts.trigger.ObjectMeta.Name)
+		specFile := fmt.Sprintf("route-%v.yaml", opts.trigger.Name)
 		err := spec.SpecSave(*opts.trigger, specFile, false)
 		if err != nil {
 			return fmt.Errorf("error saving HTTP trigger spec: %w", err)
@@ -215,7 +215,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 		return fmt.Errorf("create HTTP trigger: %w", err)
 	}
 
-	fmt.Printf("trigger '%v' created\n", opts.trigger.ObjectMeta.Name)
+	fmt.Printf("trigger '%v' created\n", opts.trigger.Name)
 
 	return nil
 }

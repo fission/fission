@@ -32,14 +32,14 @@ import (
 func TestGetInvokeStrategy(t *testing.T) {
 	cases := []struct {
 		name                   string
-		testArgs               map[string]interface{}
+		testArgs               map[string]any
 		existingInvokeStrategy *fv1.InvokeStrategy
 		expectedResult         *fv1.InvokeStrategy
 		expectError            bool
 	}{
 		{
 			name:                   "use default executor poolmgr",
-			testArgs:               map[string]interface{}{},
+			testArgs:               map[string]any{},
 			existingInvokeStrategy: nil,
 			expectedResult: &fv1.InvokeStrategy{
 				StrategyType: fv1.StrategyTypeExecution,
@@ -52,7 +52,7 @@ func TestGetInvokeStrategy(t *testing.T) {
 		},
 		{
 			name:                   "executor type set to poolmgr",
-			testArgs:               map[string]interface{}{flagkey.FnExecutorType: string(fv1.ExecutorTypePoolmgr)},
+			testArgs:               map[string]any{flagkey.FnExecutorType: string(fv1.ExecutorTypePoolmgr)},
 			existingInvokeStrategy: nil,
 			expectedResult: &fv1.InvokeStrategy{
 				StrategyType: fv1.StrategyTypeExecution,
@@ -65,7 +65,7 @@ func TestGetInvokeStrategy(t *testing.T) {
 		},
 		{
 			name:                   "executor type set to newdeploy",
-			testArgs:               map[string]interface{}{flagkey.FnExecutorType: string(fv1.ExecutorTypeNewdeploy)},
+			testArgs:               map[string]any{flagkey.FnExecutorType: string(fv1.ExecutorTypeNewdeploy)},
 			existingInvokeStrategy: nil,
 			expectedResult: &fv1.InvokeStrategy{
 				StrategyType: fv1.StrategyTypeExecution,
@@ -80,7 +80,7 @@ func TestGetInvokeStrategy(t *testing.T) {
 		},
 		{
 			name:     "executor type change from poolmgr to newdeploy",
-			testArgs: map[string]interface{}{flagkey.FnExecutorType: string(fv1.ExecutorTypeNewdeploy)},
+			testArgs: map[string]any{flagkey.FnExecutorType: string(fv1.ExecutorTypeNewdeploy)},
 			existingInvokeStrategy: &fv1.InvokeStrategy{
 				StrategyType: fv1.StrategyTypeExecution,
 				ExecutionStrategy: fv1.ExecutionStrategy{
@@ -100,7 +100,7 @@ func TestGetInvokeStrategy(t *testing.T) {
 		},
 		{
 			name:     "executor type change from newdeploy to poolmgr",
-			testArgs: map[string]interface{}{flagkey.FnExecutorType: string(fv1.ExecutorTypePoolmgr)},
+			testArgs: map[string]any{flagkey.FnExecutorType: string(fv1.ExecutorTypePoolmgr)},
 			existingInvokeStrategy: &fv1.InvokeStrategy{
 				StrategyType: fv1.StrategyTypeExecution,
 				ExecutionStrategy: fv1.ExecutionStrategy{
@@ -121,7 +121,7 @@ func TestGetInvokeStrategy(t *testing.T) {
 		},
 		{
 			name: "minscale < maxscale",
-			testArgs: map[string]interface{}{
+			testArgs: map[string]any{
 				flagkey.FnExecutorType:   string(fv1.ExecutorTypeNewdeploy),
 				flagkey.ReplicasMinscale: 2,
 				flagkey.ReplicasMaxscale: 3,
@@ -140,7 +140,7 @@ func TestGetInvokeStrategy(t *testing.T) {
 		},
 		{
 			name: "minscale > maxscale",
-			testArgs: map[string]interface{}{
+			testArgs: map[string]any{
 				flagkey.FnExecutorType:   string(fv1.ExecutorTypeNewdeploy),
 				flagkey.ReplicasMinscale: 5,
 				flagkey.ReplicasMaxscale: 3,
@@ -151,7 +151,7 @@ func TestGetInvokeStrategy(t *testing.T) {
 		},
 		{
 			name: "maxscale not specified",
-			testArgs: map[string]interface{}{
+			testArgs: map[string]any{
 				flagkey.FnExecutorType:   string(fv1.ExecutorTypeNewdeploy),
 				flagkey.ReplicasMinscale: 5,
 			},
@@ -169,7 +169,7 @@ func TestGetInvokeStrategy(t *testing.T) {
 		},
 		{
 			name: "minscale not specified",
-			testArgs: map[string]interface{}{
+			testArgs: map[string]any{
 				flagkey.FnExecutorType:   string(fv1.ExecutorTypeNewdeploy),
 				flagkey.ReplicasMaxscale: 3,
 			},
@@ -187,7 +187,7 @@ func TestGetInvokeStrategy(t *testing.T) {
 		},
 		{
 			name: "maxscale set to 0",
-			testArgs: map[string]interface{}{
+			testArgs: map[string]any{
 				flagkey.FnExecutorType:   string(fv1.ExecutorTypeNewdeploy),
 				flagkey.ReplicasMaxscale: 0,
 			},
@@ -197,7 +197,7 @@ func TestGetInvokeStrategy(t *testing.T) {
 		},
 		{
 			name: "update minscale with value larger than existing maxScale",
-			testArgs: map[string]interface{}{
+			testArgs: map[string]any{
 				flagkey.FnExecutorType:   string(fv1.ExecutorTypeNewdeploy),
 				flagkey.ReplicasMinscale: 9,
 			},
@@ -215,7 +215,7 @@ func TestGetInvokeStrategy(t *testing.T) {
 		},
 		{
 			name: "maxscale set to 9 when existing is 5",
-			testArgs: map[string]interface{}{
+			testArgs: map[string]any{
 				flagkey.FnExecutorType:   string(fv1.ExecutorTypeNewdeploy),
 				flagkey.ReplicasMaxscale: 9,
 			},
@@ -241,7 +241,7 @@ func TestGetInvokeStrategy(t *testing.T) {
 		},
 		{
 			name: "change nothing for existing strategy",
-			testArgs: map[string]interface{}{
+			testArgs: map[string]any{
 				flagkey.FnExecutorType: string(fv1.ExecutorTypeNewdeploy),
 			},
 			existingInvokeStrategy: &fv1.InvokeStrategy{
@@ -266,7 +266,7 @@ func TestGetInvokeStrategy(t *testing.T) {
 		},
 		{
 			name: "set target cpu percentage",
-			testArgs: map[string]interface{}{
+			testArgs: map[string]any{
 				flagkey.FnExecutorType:   string(fv1.ExecutorTypeNewdeploy),
 				flagkey.RuntimeTargetcpu: 50,
 			},
@@ -285,7 +285,7 @@ func TestGetInvokeStrategy(t *testing.T) {
 		},
 		{
 			name: "change target cpu percentage",
-			testArgs: map[string]interface{}{
+			testArgs: map[string]any{
 				flagkey.FnExecutorType:   string(fv1.ExecutorTypeNewdeploy),
 				flagkey.RuntimeTargetcpu: 20,
 			},
@@ -313,7 +313,7 @@ func TestGetInvokeStrategy(t *testing.T) {
 		},
 		{
 			name: "change specializationtimeout",
-			testArgs: map[string]interface{}{
+			testArgs: map[string]any{
 				flagkey.FnExecutorType:          string(fv1.ExecutorTypeNewdeploy),
 				flagkey.FnSpecializationTimeout: 200,
 			},
@@ -338,7 +338,7 @@ func TestGetInvokeStrategy(t *testing.T) {
 		},
 		{
 			name: "specializationtimeout should not be less than 120",
-			testArgs: map[string]interface{}{
+			testArgs: map[string]any{
 				flagkey.FnExecutorType:          string(fv1.ExecutorTypeNewdeploy),
 				flagkey.FnSpecializationTimeout: 90,
 			},

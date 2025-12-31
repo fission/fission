@@ -87,16 +87,17 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 		return fmt.Errorf("error creating token: %w", err)
 	}
 
-	if resp.StatusCode == http.StatusCreated {
+	switch resp.StatusCode {
+	case http.StatusCreated:
 		var rat fv1.RouterAuthToken
 		err = json.Unmarshal(body, &rat)
 		if err != nil {
 			return err
 		}
 		fmt.Println(rat.AccessToken)
-	} else if resp.StatusCode == http.StatusNotFound {
+	case http.StatusNotFound:
 		fmt.Printf("%s. Please check if authentication is enabled and correct auth URI is mentioned via --authuri or FISSION_AUTH_URI.\n", resp.Status)
-	} else {
+	default:
 		fmt.Println(resp.Status)
 	}
 

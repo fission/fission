@@ -98,7 +98,7 @@ func (cfg *Config) NewSpecializeRequest(fn *fv1.Function, env *fv1.Environment) 
 			// workflow loads multiple functions into one function pod,
 			// we have to use a Function UID to separate the function code
 			// to avoid overwriting.
-			targetFilename = string(fn.ObjectMeta.UID)
+			targetFilename = string(fn.UID)
 		} else {
 			// set target file name to fix pattern for
 			// easy accessing.

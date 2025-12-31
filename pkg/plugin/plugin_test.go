@@ -42,7 +42,7 @@ func TestFind(t *testing.T) {
 	}
 	jsonMd, err := json.Marshal(md)
 	require.NoError(t, err)
-	err = os.WriteFile(testBinary, []byte(fmt.Sprintf("#!/bin/sh\necho '%v'", string(jsonMd))), os.ModePerm)
+	err = os.WriteFile(testBinary, fmt.Appendf(nil, "#!/bin/sh\necho '%v'", string(jsonMd)), os.ModePerm)
 	require.NoError(t, err)
 
 	err = os.Setenv("PATH", testDir)
@@ -78,7 +78,7 @@ func TestExec(t *testing.T) {
 	}
 	jsonMd, err := json.Marshal(md)
 	require.NoError(t, err)
-	err = os.WriteFile(testBinary, []byte(fmt.Sprintf("#!/bin/sh\necho '%v'", string(jsonMd))), os.ModePerm)
+	err = os.WriteFile(testBinary, fmt.Appendf(nil, "#!/bin/sh\necho '%v'", string(jsonMd)), os.ModePerm)
 	require.NoError(t, err)
 	err = os.Setenv("PATH", testDir)
 	require.NoError(t, err)

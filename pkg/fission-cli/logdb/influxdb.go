@@ -75,7 +75,7 @@ func (influx InfluxDB) GetLogs(ctx context.Context, filter LogFilter, output *by
 
 	// please check "Example 4: Bind a parameter in the WHERE clause to specific tag value"
 	// at https://docs.influxdata.com/influxdb/v1.2/tools/api/
-	parameters := make(map[string]interface{})
+	parameters := make(map[string]any)
 	parameters["funcuid"] = filter.FuncUid
 	parameters["time"] = timestamp
 	// the parameters above are only for the where clause and do not work with LIMIT
@@ -213,7 +213,7 @@ func (influx InfluxDB) query(ctx context.Context, query influxdbClient.Query) (*
 // Since we switch from fluentd to fluent-bit, there are some field names' changed which will break
 // CLI due to empty value. For backward compatibility, getEntryValue also supports to get value from
 // fallbackIndex if exists, otherwise an empty string returned instead.
-func getEntryValue(list []interface{}, index int, fallbackIndex ...int) string {
+func getEntryValue(list []any, index int, fallbackIndex ...int) string {
 	if index < len(list) && list[index] != nil {
 		return list[index].(string)
 	}

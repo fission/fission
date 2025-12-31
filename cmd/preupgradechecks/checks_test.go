@@ -10,7 +10,10 @@ import (
 
 func TestPreUpgradeTaskClient(t *testing.T) {
 	f := framework.NewFramework()
-	defer f.Logger().Sync()
+	defer func() {
+		// https://github.com/uber-go/zap/issues/328
+		_ = f.Logger().Sync()
+	}()
 	ctx := t.Context()
 	err := f.Start(ctx)
 	require.NoError(t, err)

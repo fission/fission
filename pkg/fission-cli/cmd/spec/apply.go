@@ -94,7 +94,7 @@ func (opts *ApplySubCommand) insertNamespace(input cli.Input, fr *FissionResourc
 		if fr.Packages[i].Namespace == "" || input.Bool(flagkey.ForceNamespace) {
 			fr.Packages[i].Namespace = currentNS
 			fr.Packages[i].Spec.Environment.Namespace = currentNS
-			fr.Packages[i].ObjectMeta.Namespace = currentNS
+			fr.Packages[i].Namespace = currentNS
 		}
 	}
 	for i := range fr.HttpTriggers {
@@ -458,7 +458,7 @@ func applyResources(input cli.Input, fclient cmd.Client, specDir string, fr *Fis
 			// that as an error, so that we encourage self-contained specs.
 			// Is there a good use case for non-self contained specs?
 			return nil, nil, fmt.Errorf("function %v/%v references package %v/%v, which doesn't exist in the specs",
-				f.ObjectMeta.Namespace, f.ObjectMeta.Name, f.Spec.Package.PackageRef.Namespace, f.Spec.Package.PackageRef.Name)
+				f.Namespace, f.Name, f.Spec.Package.PackageRef.Namespace, f.Spec.Package.PackageRef.Name)
 		}
 		fr.Functions[i].Spec.Package.PackageRef.ResourceVersion = m.ResourceVersion
 	}
@@ -623,14 +623,14 @@ func waitForPackageBuild(ctx context.Context, fclient cmd.Client, pkg *fv1.Packa
 			return pkg, nil
 		}
 		if time.Since(start) > 5*time.Minute {
-			return nil, fmt.Errorf("package %v has been building for a while, giving up on waiting for it", pkg.ObjectMeta.Name)
+			return nil, fmt.Errorf("package %v has been building for a while, giving up on waiting for it", pkg.Name)
 		}
 
 		// TODO watch instead
 		time.Sleep(time.Second)
 
 		var err error
-		pkg, err = fclient.FissionClientSet.CoreV1().Packages(pkg.ObjectMeta.Namespace).Get(ctx, pkg.ObjectMeta.Name, metav1.GetOptions{})
+		pkg, err = fclient.FissionClientSet.CoreV1().Packages(pkg.ObjectMeta.Namespace).Get(ctx, pkg.Name, metav1.GetOptions{})
 		if err != nil {
 			return nil, err
 		}
@@ -697,14 +697,14 @@ func applyPackages(ctx context.Context, fclient cmd.Client, fr *FissionResources
 				metadataMap[k8sCache.MetaObjectToName(&o.ObjectMeta).String()] = existingObj.ObjectMeta
 			} else {
 				// update
-				o.ObjectMeta.ResourceVersion = existingObj.ObjectMeta.ResourceVersion
+				o.ResourceVersion = existingObj.ResourceVersion
 				// We may be racing against the package builder to update the
 				// package (a previous version might have been getting built).  So,
 				// wait for the package to have a non-running build status.
 				pkg, err := waitForPackageBuild(ctx, fclient, &o)
 				if err != nil {
 					// log and ignore
-					console.Warn(fmt.Sprintf("Error waiting for package '%v' build, ignoring", o.ObjectMeta.Name))
+					console.Warn(fmt.Sprintf("Error waiting for package '%v' build, ignoring", o.Name))
 					pkg = &o
 				}
 
@@ -740,7 +740,7 @@ func applyPackages(ctx context.Context, fclient cmd.Client, fr *FissionResources
 		for _, o := range objs {
 			_, wanted := desired[k8sCache.MetaObjectToName(&o.ObjectMeta).String()]
 			if !wanted {
-				err := fclient.FissionClientSet.CoreV1().Packages(o.ObjectMeta.Namespace).Delete(ctx, o.ObjectMeta.Name, metav1.DeleteOptions{})
+				err := fclient.FissionClientSet.CoreV1().Packages(o.ObjectMeta.Namespace).Delete(ctx, o.Name, metav1.DeleteOptions{})
 				if err != nil {
 					return nil, nil, err
 				}
@@ -801,7 +801,7 @@ func applyFunctions(ctx context.Context, fclient cmd.Client, fr *FissionResource
 				metadataMap[k8sCache.MetaObjectToName(&o.ObjectMeta).String()] = existingObj.ObjectMeta
 			} else {
 				// update
-				o.ObjectMeta.ResourceVersion = existingObj.ObjectMeta.ResourceVersion
+				o.ResourceVersion = existingObj.ResourceVersion
 				newmeta, err := fclient.FissionClientSet.CoreV1().Functions(o.ObjectMeta.Namespace).Update(ctx, &o, metav1.UpdateOptions{})
 				if err != nil {
 					return nil, nil, err
@@ -827,7 +827,7 @@ func applyFunctions(ctx context.Context, fclient cmd.Client, fr *FissionResource
 		for _, o := range objs {
 			_, wanted := desired[k8sCache.MetaObjectToName(&o.ObjectMeta).String()]
 			if !wanted {
-				err := fclient.FissionClientSet.CoreV1().Functions(o.ObjectMeta.Namespace).Delete(ctx, o.ObjectMeta.Name, metav1.DeleteOptions{})
+				err := fclient.FissionClientSet.CoreV1().Functions(o.ObjectMeta.Namespace).Delete(ctx, o.Name, metav1.DeleteOptions{})
 				if err != nil {
 					return nil, nil, err
 				}
@@ -888,7 +888,7 @@ func applyEnvironments(ctx context.Context, fclient cmd.Client, fr *FissionResou
 				metadataMap[k8sCache.MetaObjectToName(&o.ObjectMeta).String()] = existingObj.ObjectMeta
 			} else {
 				// update
-				o.ObjectMeta.ResourceVersion = existingObj.ObjectMeta.ResourceVersion
+				o.ResourceVersion = existingObj.ResourceVersion
 				newmeta, err := fclient.FissionClientSet.CoreV1().Environments(o.ObjectMeta.Namespace).Update(ctx, &o, metav1.UpdateOptions{})
 				if err != nil {
 					return nil, nil, err
@@ -914,7 +914,7 @@ func applyEnvironments(ctx context.Context, fclient cmd.Client, fr *FissionResou
 		for _, o := range objs {
 			_, wanted := desired[k8sCache.MetaObjectToName(&o.ObjectMeta).String()]
 			if !wanted {
-				err := fclient.FissionClientSet.CoreV1().Environments(o.ObjectMeta.Namespace).Delete(ctx, o.ObjectMeta.Name, metav1.DeleteOptions{})
+				err := fclient.FissionClientSet.CoreV1().Environments(o.ObjectMeta.Namespace).Delete(ctx, o.Name, metav1.DeleteOptions{})
 				if err != nil {
 					return nil, nil, err
 				}
@@ -980,7 +980,7 @@ func applyHTTPTriggers(ctx context.Context, fclient cmd.Client, fr *FissionResou
 					return nil, nil, err
 				}
 				// update
-				o.ObjectMeta.ResourceVersion = existingObj.ObjectMeta.ResourceVersion
+				o.ResourceVersion = existingObj.ResourceVersion
 				newmeta, err := fclient.FissionClientSet.CoreV1().HTTPTriggers(o.ObjectMeta.Namespace).Update(ctx, &o, metav1.UpdateOptions{})
 				if err != nil {
 					return nil, nil, err
@@ -1011,7 +1011,7 @@ func applyHTTPTriggers(ctx context.Context, fclient cmd.Client, fr *FissionResou
 		for _, o := range objs {
 			_, wanted := desired[k8sCache.MetaObjectToName(&o.ObjectMeta).String()]
 			if !wanted {
-				err := fclient.FissionClientSet.CoreV1().HTTPTriggers(o.ObjectMeta.Namespace).Delete(ctx, o.ObjectMeta.Name, metav1.DeleteOptions{})
+				err := fclient.FissionClientSet.CoreV1().HTTPTriggers(o.ObjectMeta.Namespace).Delete(ctx, o.Name, metav1.DeleteOptions{})
 				if err != nil {
 					return nil, nil, err
 				}
@@ -1072,7 +1072,7 @@ func applyKubernetesWatchTriggers(ctx context.Context, fclient cmd.Client, fr *F
 				metadataMap[k8sCache.MetaObjectToName(&o.ObjectMeta).String()] = existingObj.ObjectMeta
 			} else {
 				// update
-				o.ObjectMeta.ResourceVersion = existingObj.ObjectMeta.ResourceVersion
+				o.ResourceVersion = existingObj.ResourceVersion
 				newmeta, err := fclient.FissionClientSet.CoreV1().KubernetesWatchTriggers(o.ObjectMeta.Namespace).Update(ctx, &o, metav1.UpdateOptions{})
 				if err != nil {
 					return nil, nil, err
@@ -1098,7 +1098,7 @@ func applyKubernetesWatchTriggers(ctx context.Context, fclient cmd.Client, fr *F
 		for _, o := range objs {
 			_, wanted := desired[k8sCache.MetaObjectToName(&o.ObjectMeta).String()]
 			if !wanted {
-				err := fclient.FissionClientSet.CoreV1().KubernetesWatchTriggers(o.ObjectMeta.Namespace).Delete(ctx, o.ObjectMeta.Name, metav1.DeleteOptions{})
+				err := fclient.FissionClientSet.CoreV1().KubernetesWatchTriggers(o.ObjectMeta.Namespace).Delete(ctx, o.Name, metav1.DeleteOptions{})
 				if err != nil {
 					return nil, nil, err
 				}
@@ -1159,7 +1159,7 @@ func applyTimeTriggers(ctx context.Context, fclient cmd.Client, fr *FissionResou
 				metadataMap[k8sCache.MetaObjectToName(&o.ObjectMeta).String()] = existingObj.ObjectMeta
 			} else {
 				// update
-				o.ObjectMeta.ResourceVersion = existingObj.ObjectMeta.ResourceVersion
+				o.ResourceVersion = existingObj.ResourceVersion
 				newmeta, err := fclient.FissionClientSet.CoreV1().TimeTriggers(o.ObjectMeta.Namespace).Update(ctx, &o, metav1.UpdateOptions{})
 				if err != nil {
 					return nil, nil, err
@@ -1185,7 +1185,7 @@ func applyTimeTriggers(ctx context.Context, fclient cmd.Client, fr *FissionResou
 		for _, o := range objs {
 			_, wanted := desired[k8sCache.MetaObjectToName(&o.ObjectMeta).String()]
 			if !wanted {
-				err := fclient.FissionClientSet.CoreV1().TimeTriggers(o.ObjectMeta.Namespace).Delete(ctx, o.ObjectMeta.Name, metav1.DeleteOptions{})
+				err := fclient.FissionClientSet.CoreV1().TimeTriggers(o.ObjectMeta.Namespace).Delete(ctx, o.Name, metav1.DeleteOptions{})
 				if err != nil {
 					return nil, nil, err
 				}
@@ -1246,7 +1246,7 @@ func applyMessageQueueTriggers(ctx context.Context, fclient cmd.Client, fr *Fiss
 				metadataMap[k8sCache.MetaObjectToName(&o.ObjectMeta).String()] = existingObj.ObjectMeta
 			} else {
 				// update
-				o.ObjectMeta.ResourceVersion = existingObj.ObjectMeta.ResourceVersion
+				o.ResourceVersion = existingObj.ResourceVersion
 				newmeta, err := fclient.FissionClientSet.CoreV1().MessageQueueTriggers(o.ObjectMeta.Namespace).Update(ctx, &o, metav1.UpdateOptions{})
 				if err != nil {
 					return nil, nil, err
@@ -1272,7 +1272,7 @@ func applyMessageQueueTriggers(ctx context.Context, fclient cmd.Client, fr *Fiss
 		for _, o := range objs {
 			_, wanted := desired[k8sCache.MetaObjectToName(&o.ObjectMeta).String()]
 			if !wanted {
-				err := fclient.FissionClientSet.CoreV1().MessageQueueTriggers(o.ObjectMeta.Namespace).Delete(ctx, o.ObjectMeta.Name, metav1.DeleteOptions{})
+				err := fclient.FissionClientSet.CoreV1().MessageQueueTriggers(o.ObjectMeta.Namespace).Delete(ctx, o.Name, metav1.DeleteOptions{})
 				if err != nil {
 					return nil, nil, err
 				}

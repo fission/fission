@@ -59,7 +59,7 @@ func NewMqtConsumerGroupHandler(version sarama.KafkaVersion,
 	if ch.trigger.Spec.FunctionReference.Type != fv1.FunctionReferenceTypeFunctionName {
 		ch.logger.Fatal("unsupported function reference type for trigger",
 			zap.Any("function_reference_type", ch.trigger.Spec.FunctionReference.Type),
-			zap.String("trigger", ch.trigger.ObjectMeta.Name))
+			zap.String("trigger", ch.trigger.Name))
 	}
 	// Generate the Headers
 	ch.fissionHeaders = map[string]string{
@@ -68,14 +68,14 @@ func NewMqtConsumerGroupHandler(version sarama.KafkaVersion,
 		"X-Fission-MQTrigger-ErrorTopic": ch.trigger.Spec.ErrorTopic,
 		"Content-Type":                   ch.trigger.Spec.ContentType,
 	}
-	ch.fnUrl = routerUrl + "/" + strings.TrimPrefix(utils.UrlForFunction(ch.trigger.Spec.FunctionReference.Name, ch.trigger.ObjectMeta.Namespace), "/")
+	ch.fnUrl = routerUrl + "/" + strings.TrimPrefix(utils.UrlForFunction(ch.trigger.Spec.FunctionReference.Name, ch.trigger.Namespace), "/")
 	ch.logger.Debug("function HTTP URL", zap.String("url", ch.fnUrl))
 	return ch
 }
 
 // Setup implemented to satisfy the sarama.ConsumerGroupHandler interface
 func (ch MqtConsumerGroupHandler) Setup(session sarama.ConsumerGroupSession) error {
-	mqtrigger.SetTriggerStatus(ch.trigger.Name, ch.trigger.ObjectMeta.Namespace)
+	mqtrigger.SetTriggerStatus(ch.trigger.Name, ch.trigger.Namespace)
 	mqtrigger.IncreaseInprocessCount()
 	ch.logger.With(
 		zap.String("trigger", ch.trigger.ObjectMeta.Name),
@@ -91,7 +91,7 @@ func (ch MqtConsumerGroupHandler) Setup(session sarama.ConsumerGroupSession) err
 
 // Cleanup implemented to satisfy the sarama.ConsumerGroupHandler interface
 func (ch MqtConsumerGroupHandler) Cleanup(session sarama.ConsumerGroupSession) error {
-	mqtrigger.ResetTriggerStatus(ch.trigger.Name, ch.trigger.ObjectMeta.Namespace)
+	mqtrigger.ResetTriggerStatus(ch.trigger.Name, ch.trigger.Namespace)
 	mqtrigger.DecreaseInprocessCount()
 	ch.logger.With(
 		zap.String("trigger", ch.trigger.ObjectMeta.Name),
@@ -171,7 +171,7 @@ func (ch *MqtConsumerGroupHandler) kafkaMsgHandler(msg *sarama.ConsumerMessage) 
 			ch.logger.Error("sending function invocation request failed",
 				zap.Error(err),
 				zap.String("function_url", ch.fnUrl),
-				zap.String("trigger", ch.trigger.ObjectMeta.Name))
+				zap.String("trigger", ch.trigger.Name))
 			continue
 		}
 		if resp == nil {
@@ -209,7 +209,7 @@ func (ch *MqtConsumerGroupHandler) kafkaMsgHandler(msg *sarama.ConsumerMessage) 
 
 	ch.logger.Debug("got response from function invocation",
 		zap.String("function_url", ch.fnUrl),
-		zap.String("trigger", ch.trigger.ObjectMeta.Name),
+		zap.String("trigger", ch.trigger.Name),
 		zap.String("body", string(body)))
 
 	if err != nil {
@@ -266,12 +266,12 @@ func errorHandler(logger *zap.Logger, trigger *fv1.MessageQueueTrigger, producer
 		if e != nil {
 			logger.Error("failed to publish message to error topic",
 				zap.Error(e),
-				zap.String("trigger", trigger.ObjectMeta.Name),
+				zap.String("trigger", trigger.Name),
 				zap.String("message", err.Error()),
 				zap.String("topic", trigger.Spec.Topic))
 		}
 	} else {
 		logger.Error("message received to publish to error topic, but no error topic was set",
-			zap.String("message", err.Error()), zap.String("trigger", trigger.ObjectMeta.Name), zap.String("function_url", funcUrl))
+			zap.String("message", err.Error()), zap.String("trigger", trigger.Name), zap.String("function_url", funcUrl))
 	}
 }

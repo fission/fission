@@ -36,12 +36,12 @@ type (
 
 	Time struct {
 		Timezone    string    `json:"Timezone,omitempty"`
-		CurrentTime time.Time `json:"CurrentTime,omitempty"`
+		CurrentTime time.Time `json:"CurrentTime"`
 	}
 
 	ServerInfo struct {
-		Build      BuildMeta `json:"Build,omitempty"`
-		ServerTime Time      `json:"ServerTime,omitempty"`
+		Build      BuildMeta `json:"Build"`
+		ServerTime Time      `json:"ServerTime"`
 	}
 
 	// Versions is a container of versions of the client (and its plugins) and server (and its plugins).

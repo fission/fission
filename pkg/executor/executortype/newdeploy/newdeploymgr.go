@@ -277,7 +277,7 @@ func (deploy *NewDeploy) RefreshFuncPods(ctx context.Context, logger *zap.Logger
 	funcLabels := deploy.getDeployLabels(f.ObjectMeta, metav1.ObjectMeta{
 		Name:      f.Spec.Environment.Name,
 		Namespace: f.Spec.Environment.Namespace,
-		UID:       env.ObjectMeta.UID,
+		UID:       env.UID,
 	})
 
 	dep, err := deploy.kubernetesClient.AppsV1().Deployments(deploy.nsResolver.GetFunctionNS(f.ObjectMeta.Namespace)).List(ctx, metav1.ListOptions{
@@ -290,15 +290,15 @@ func (deploy *NewDeploy) RefreshFuncPods(ctx context.Context, logger *zap.Logger
 
 	// Ideally there should be only one deployment but for now we rely on label/selector to ensure that condition
 	for _, deployment := range dep.Items {
-		rvCount, err := referencedResourcesRVSum(ctx, deploy.kubernetesClient, f.ObjectMeta.Namespace, f.Spec.Secrets, f.Spec.ConfigMaps)
+		rvCount, err := referencedResourcesRVSum(ctx, deploy.kubernetesClient, f.Namespace, f.Spec.Secrets, f.Spec.ConfigMaps)
 		if err != nil {
 			return err
 		}
 
 		patch := fmt.Sprintf(`{"spec" : {"template": {"spec":{"containers":[{"name": "%s", "image": "%s", "env":[{"name": "%s", "value": "%d"}]}]}}}}`,
-			env.ObjectMeta.Name, env.Spec.Runtime.Image, fv1.ResourceVersionCount, rvCount)
+			env.Name, env.Spec.Runtime.Image, fv1.ResourceVersionCount, rvCount)
 
-		_, err = deploy.kubernetesClient.AppsV1().Deployments(deployment.ObjectMeta.Namespace).Patch(ctx, deployment.ObjectMeta.Name,
+		_, err = deploy.kubernetesClient.AppsV1().Deployments(deployment.ObjectMeta.Namespace).Patch(ctx, deployment.Name,
 			k8sTypes.StrategicMergePatchType,
 			[]byte(patch), metav1.PatchOptions{})
 		if err != nil {
@@ -328,7 +328,7 @@ func (deploy *NewDeploy) AdoptExistingResources(ctx context.Context) {
 						deploy.logger.Warn("failed to adopt resources for function", zap.Error(err))
 						return
 					}
-					deploy.logger.Info("adopt resources for function", zap.String("function", fn.ObjectMeta.Name))
+					deploy.logger.Info("adopt resources for function", zap.String("function", fn.Name))
 				})
 			}
 		}
@@ -388,19 +388,19 @@ func (deploy *NewDeploy) createFunction(ctx context.Context, fn *fv1.Function) (
 
 	logger := otelUtils.LoggerWithTraceID(ctx, deploy.logger)
 
-	fsvcObj, err := deploy.throttler.RunOnce(string(fn.ObjectMeta.UID), func(ableToCreate bool) (interface{}, error) {
+	fsvcObj, err := deploy.throttler.RunOnce(string(fn.UID), func(ableToCreate bool) (any, error) {
 		if ableToCreate {
 			return deploy.fnCreate(ctx, fn)
 		}
-		return deploy.fsCache.GetByFunctionUID(fn.ObjectMeta.UID)
+		return deploy.fsCache.GetByFunctionUID(fn.UID)
 	})
 
 	if err != nil {
 		e := "error creating k8s resources for function"
 		logger.Error(e,
 			zap.Error(err),
-			zap.String("function_name", fn.ObjectMeta.Name),
-			zap.String("function_namespace", fn.ObjectMeta.Namespace))
+			zap.String("function_name", fn.Name),
+			zap.String("function_namespace", fn.Namespace))
 		return nil, fmt.Errorf("error creating k8s resources for function %s: %w", k8sCache.MetaObjectToName(fn), err)
 	}
 
@@ -445,7 +445,7 @@ func (deploy *NewDeploy) fnCreate(ctx context.Context, fn *fv1.Function) (*fscac
 
 	// to support backward compatibility, if the function was created in default ns, we fall back to creating the
 	// deployment of the function in fission-function ns
-	ns := deploy.nsResolver.GetFunctionNS(fn.ObjectMeta.Namespace)
+	ns := deploy.nsResolver.GetFunctionNS(fn.Namespace)
 
 	// Envoy(istio-proxy) returns 404 directly before istio pilot
 	// propagates latest Envoy-specific configuration.
@@ -478,27 +478,27 @@ func (deploy *NewDeploy) fnCreate(ctx context.Context, fn *fv1.Function) (*fscac
 		{
 			// obj.TypeMeta.Kind does not work hence this, needs investigation and a fix
 			Kind:            "deployment",
-			Name:            depl.ObjectMeta.Name,
+			Name:            depl.Name,
 			APIVersion:      depl.APIVersion,
-			Namespace:       depl.ObjectMeta.Namespace,
-			ResourceVersion: depl.ObjectMeta.ResourceVersion,
-			UID:             depl.ObjectMeta.UID,
+			Namespace:       depl.Namespace,
+			ResourceVersion: depl.ResourceVersion,
+			UID:             depl.UID,
 		},
 		{
 			Kind:            "service",
-			Name:            svc.ObjectMeta.Name,
+			Name:            svc.Name,
 			APIVersion:      svc.APIVersion,
-			Namespace:       svc.ObjectMeta.Namespace,
-			ResourceVersion: svc.ObjectMeta.ResourceVersion,
-			UID:             svc.ObjectMeta.UID,
+			Namespace:       svc.Namespace,
+			ResourceVersion: svc.ResourceVersion,
+			UID:             svc.UID,
 		},
 		{
 			Kind:            "horizontalpodautoscaler",
-			Name:            hpa.ObjectMeta.Name,
+			Name:            hpa.Name,
 			APIVersion:      hpa.APIVersion,
-			Namespace:       hpa.ObjectMeta.Namespace,
-			ResourceVersion: hpa.ObjectMeta.ResourceVersion,
-			UID:             hpa.ObjectMeta.UID,
+			Namespace:       hpa.Namespace,
+			ResourceVersion: hpa.ResourceVersion,
+			UID:             hpa.UID,
 		},
 	}
 
@@ -514,18 +514,18 @@ func (deploy *NewDeploy) fnCreate(ctx context.Context, fn *fv1.Function) (*fscac
 	_, err = deploy.fsCache.Add(*fsvc)
 	if err != nil {
 		deploy.logger.Error("error adding function to cache", zap.Error(err), zap.Any("function", fsvc.Function))
-		metrics.ColdStartsError.WithLabelValues(fn.ObjectMeta.Name, fn.ObjectMeta.Namespace).Inc()
+		metrics.ColdStartsError.WithLabelValues(fn.Name, fn.Namespace).Inc()
 		return fsvc, err
 	}
 
-	metrics.ColdStarts.WithLabelValues(fn.ObjectMeta.Name, fn.ObjectMeta.Namespace).Inc()
+	metrics.ColdStarts.WithLabelValues(fn.Name, fn.Namespace).Inc()
 
 	return fsvc, nil
 }
 
 func (deploy *NewDeploy) updateFunction(ctx context.Context, oldFn *fv1.Function, newFn *fv1.Function) error {
 
-	if oldFn.ObjectMeta.ResourceVersion == newFn.ObjectMeta.ResourceVersion {
+	if oldFn.ResourceVersion == newFn.ResourceVersion {
 		return nil
 	}
 
@@ -563,9 +563,9 @@ func (deploy *NewDeploy) updateFunction(ctx context.Context, oldFn *fv1.Function
 
 		// to support backward compatibility, if the function was created in default ns, we fall back to creating the
 		// deployment of the function in fission-function ns, so cleaning up resources there
-		ns := deploy.nsResolver.GetFunctionNS(newFn.ObjectMeta.Namespace)
+		ns := deploy.nsResolver.GetFunctionNS(newFn.Namespace)
 
-		fsvc, err := deploy.fsCache.GetByFunctionUID(newFn.ObjectMeta.UID)
+		fsvc, err := deploy.fsCache.GetByFunctionUID(newFn.UID)
 		if err != nil {
 			return fmt.Errorf("error updating function due to unable to find function service cache %s: %w", k8sCache.MetaObjectToName(oldFn), err)
 		}
@@ -651,7 +651,7 @@ func (deploy *NewDeploy) updateFunction(ctx context.Context, oldFn *fv1.Function
 }
 
 func (deploy *NewDeploy) updateFuncDeployment(ctx context.Context, fn *fv1.Function, env *fv1.Environment) error {
-	fsvc, err := deploy.fsCache.GetByFunctionUID(fn.ObjectMeta.UID)
+	fsvc, err := deploy.fsCache.GetByFunctionUID(fn.UID)
 	if err != nil {
 		return fmt.Errorf("error updating function due to unable to find function service cache: %s: %w", k8sCache.MetaObjectToName(fn), err)
 	}
@@ -659,11 +659,11 @@ func (deploy *NewDeploy) updateFuncDeployment(ctx context.Context, fn *fv1.Funct
 
 	deployLabels := deploy.getDeployLabels(fn.ObjectMeta, env.ObjectMeta)
 	deploy.logger.Info("updating deployment due to function/environment update",
-		zap.String("deployment", fnObjName), zap.Any("function", fn.ObjectMeta.Name))
+		zap.String("deployment", fnObjName), zap.Any("function", fn.Name))
 
 	// to support backward compatibility, if the function was created in default ns, we fall back to creating the
 	// deployment of the function in fission-function ns
-	ns := deploy.nsResolver.GetFunctionNS(fn.ObjectMeta.Namespace)
+	ns := deploy.nsResolver.GetFunctionNS(fn.Namespace)
 
 	existingDepl, err := deploy.kubernetesClient.AppsV1().Deployments(ns).Get(ctx, fnObjName, metav1.GetOptions{})
 	if err != nil {
@@ -698,7 +698,7 @@ func (deploy *NewDeploy) fnDelete(ctx context.Context, fn *fv1.Function) error {
 	// is deleted and cause newdeploy backend fails to delete the entry.
 	// Use GetByFunctionUID instead of GetByFunction here to find correct
 	// fsvc entry.
-	fsvc, err := deploy.fsCache.GetByFunctionUID(fn.ObjectMeta.UID)
+	fsvc, err := deploy.fsCache.GetByFunctionUID(fn.UID)
 	if err != nil {
 		return fmt.Errorf("fsvc not found in cache: %s: %w", k8sCache.MetaObjectToName(fn), err)
 	}
@@ -712,7 +712,7 @@ func (deploy *NewDeploy) fnDelete(ctx context.Context, fn *fv1.Function) error {
 
 	// to support backward compatibility, if the function was created in default ns, we fall back to creating the
 	// deployment of the function in fission-function ns, so cleaning up resources there
-	ns := deploy.nsResolver.GetFunctionNS(fn.ObjectMeta.Namespace)
+	ns := deploy.nsResolver.GetFunctionNS(fn.Namespace)
 
 	err = deploy.cleanupNewdeploy(ctx, ns, objName)
 	errs = errors.Join(errs, err)
@@ -723,20 +723,20 @@ func (deploy *NewDeploy) fnDelete(ctx context.Context, fn *fv1.Function) error {
 // getObjName returns a unique name for kubernetes objects of function
 func (deploy *NewDeploy) getObjName(fn *fv1.Function) string {
 	// use meta uuid of function, this ensure we always get the same name for the same function.
-	uid := fn.ObjectMeta.UID[len(fn.ObjectMeta.UID)-17:]
+	uid := fn.UID[len(fn.UID)-17:]
 	var functionMetadata string
-	if len(fn.ObjectMeta.Name)+len(fn.ObjectMeta.Namespace) < 35 {
-		functionMetadata = fn.ObjectMeta.Name + "-" + fn.ObjectMeta.Namespace
+	if len(fn.Name)+len(fn.Namespace) < 35 {
+		functionMetadata = fn.Name + "-" + fn.Namespace
 	} else {
-		if len(fn.ObjectMeta.Name) > 17 {
-			functionMetadata = fn.ObjectMeta.Name[:17]
+		if len(fn.Name) > 17 {
+			functionMetadata = fn.Name[:17]
 		} else {
-			functionMetadata = fn.ObjectMeta.Name
+			functionMetadata = fn.Name
 		}
-		if len(fn.ObjectMeta.Namespace) > 17 {
-			functionMetadata = functionMetadata + "-" + fn.ObjectMeta.Namespace[:17]
+		if len(fn.Namespace) > 17 {
+			functionMetadata = functionMetadata + "-" + fn.Namespace[:17]
 		} else {
-			functionMetadata = functionMetadata + "-" + fn.ObjectMeta.Namespace
+			functionMetadata = functionMetadata + "-" + fn.Namespace
 		}
 	}
 	// constructed name should be 63 characters long, as it is a valid k8s name
@@ -789,7 +789,7 @@ func (deploy *NewDeploy) doIdleObjectReaper(ctx context.Context) {
 		}
 
 		for _, env := range envs.Items {
-			envList[env.ObjectMeta.UID] = struct{}{}
+			envList[env.UID] = struct{}{}
 		}
 	}
 
@@ -807,9 +807,9 @@ func (deploy *NewDeploy) doIdleObjectReaper(ctx context.Context) {
 
 		// For function with the environment that no longer exists, executor
 		// scales down the deployment as usual and prints log to notify user.
-		if _, ok := envList[fsvc.Environment.ObjectMeta.UID]; !ok {
+		if _, ok := envList[fsvc.Environment.UID]; !ok {
 			deploy.logger.Warn("function environment no longer exists",
-				zap.String("environment", fsvc.Environment.ObjectMeta.Name),
+				zap.String("environment", fsvc.Environment.Name),
 				zap.String("function", fsvc.Name))
 		}
 

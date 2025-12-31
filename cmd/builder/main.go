@@ -35,7 +35,10 @@ func main() {
 	defer mgr.Wait()
 
 	logger := loggerfactory.GetLogger()
-	defer logger.Sync()
+	defer func() {
+		// https://github.com/uber-go/zap/issues/328
+		_ = logger.Sync()
+	}()
 	ctx := signals.SetupSignalHandler()
 	profile.ProfileIfEnabled(ctx, logger, mgr)
 

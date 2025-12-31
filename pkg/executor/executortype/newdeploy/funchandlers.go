@@ -26,7 +26,7 @@ import (
 
 func (deploy *NewDeploy) FunctionEventHandlers(ctx context.Context) k8sCache.ResourceEventHandlerFuncs {
 	return k8sCache.ResourceEventHandlerFuncs{
-		AddFunc: func(obj interface{}) {
+		AddFunc: func(obj any) {
 			// TODO: A workaround to process items in parallel. We should use workqueue ("k8s.io/client-go/util/workqueue")
 			// and worker pattern to process items instead of moving process to another goroutine.
 			// example: https://github.com/kubernetes/kubernetes/blob/master/pkg/controller/job/job_controller.go
@@ -42,7 +42,7 @@ func (deploy *NewDeploy) FunctionEventHandlers(ctx context.Context) k8sCache.Res
 				deploy.logger.Debug("end create deployment for function", zap.Any("fn", fn.ObjectMeta), zap.Any("fnspec", fn.Spec))
 			}()
 		},
-		DeleteFunc: func(obj interface{}) {
+		DeleteFunc: func(obj any) {
 			fn := obj.(*fv1.Function)
 			go func() {
 				err := deploy.deleteFunction(ctx, fn)
@@ -53,7 +53,7 @@ func (deploy *NewDeploy) FunctionEventHandlers(ctx context.Context) k8sCache.Res
 				}
 			}()
 		},
-		UpdateFunc: func(oldObj interface{}, newObj interface{}) {
+		UpdateFunc: func(oldObj any, newObj any) {
 			oldFn := oldObj.(*fv1.Function)
 			newFn := newObj.(*fv1.Function)
 			go func() {

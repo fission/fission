@@ -34,7 +34,7 @@ var (
 
 func mqTriggerEventHandlers(ctx context.Context, logger *zap.Logger, kubeClient kubernetes.Interface, kedaClient kedaClient.Interface, routerURL string) k8sCache.ResourceEventHandlerFuncs {
 	return k8sCache.ResourceEventHandlerFuncs{
-		AddFunc: func(obj interface{}) {
+		AddFunc: func(obj any) {
 			go func() {
 				mqt := obj.(*fv1.MessageQueueTrigger)
 				if mqt.Spec.MqtKind == "fission" {
@@ -44,7 +44,7 @@ func mqTriggerEventHandlers(ctx context.Context, logger *zap.Logger, kubeClient 
 				createKedaObjects(ctx, logger, kedaClient, kubeClient, mqt, routerURL)
 			}()
 		},
-		UpdateFunc: func(obj interface{}, newObj interface{}) {
+		UpdateFunc: func(obj any, newObj any) {
 			go func() {
 				mqt := obj.(*fv1.MessageQueueTrigger)
 				newMqt := newObj.(*fv1.MessageQueueTrigger)
@@ -70,13 +70,13 @@ func mqTriggerEventHandlers(ctx context.Context, logger *zap.Logger, kubeClient 
 					return
 				}
 				if !updated {
-					logger.Warn(fmt.Sprintf("%s remains unchanged. No changes found in trigger fields", mqt.ObjectMeta.Name))
+					logger.Warn(fmt.Sprintf("%s remains unchanged. No changes found in trigger fields", mqt.Name))
 					return
 				}
 
 				authenticationRef := ""
 				if len(newMqt.Spec.Secret) > 0 && newMqt.Spec.Secret != mqt.Spec.Secret {
-					authenticationRef = fmt.Sprintf("%s-auth-trigger", mqt.ObjectMeta.Name)
+					authenticationRef = fmt.Sprintf("%s-auth-trigger", mqt.Name)
 					if err := updateAuthTrigger(ctx, kedaClient, mqt, authenticationRef, kubeClient); err != nil {
 						logger.Error("Failed to update Authentication Trigger", zap.Error(err))
 						return
@@ -141,7 +141,7 @@ func toEnvVar(str string) string {
 }
 
 func getEnvVarlist(ctx context.Context, mqt *fv1.MessageQueueTrigger, routerURL string, kubeClient kubernetes.Interface) ([]apiv1.EnvVar, error) {
-	url := routerURL + "/" + strings.TrimPrefix(utils.UrlForFunction(mqt.Spec.FunctionReference.Name, mqt.ObjectMeta.Namespace), "/")
+	url := routerURL + "/" + strings.TrimPrefix(utils.UrlForFunction(mqt.Spec.FunctionReference.Name, mqt.Namespace), "/")
 	envVars := []apiv1.EnvVar{
 		{
 			Name:  "TOPIC",
@@ -161,7 +161,7 @@ func getEnvVarlist(ctx context.Context, mqt *fv1.MessageQueueTrigger, routerURL 
 		},
 		{
 			Name:  "SOURCE_NAME",
-			Value: mqt.ObjectMeta.Name,
+			Value: mqt.Name,
 		},
 		{
 			Name:  "MAX_RETRIES",
@@ -272,7 +272,7 @@ func checkAndUpdateTriggerFields(mqt, newMqt *fv1.MessageQueueTrigger) bool {
 func createKedaObjects(ctx context.Context, logger *zap.Logger, kedaClient kedaClient.Interface, kubeClient kubernetes.Interface, mqt *fv1.MessageQueueTrigger, routerURL string) {
 	authenticationRef := ""
 	if len(mqt.Spec.Secret) > 0 {
-		authenticationRef = fmt.Sprintf("%s-auth-trigger", mqt.ObjectMeta.Name)
+		authenticationRef = fmt.Sprintf("%s-auth-trigger", mqt.Name)
 		err := createAuthTrigger(ctx, kedaClient, mqt, authenticationRef, kubeClient)
 		if err != nil {
 			logger.Error("Failed to create Authentication Trigger", zap.Error(err))
@@ -283,7 +283,7 @@ func createKedaObjects(ctx context.Context, logger *zap.Logger, kedaClient kedaC
 	if err := createDeployment(ctx, mqt, routerURL, kubeClient); err != nil {
 		logger.Error("Failed to create Deployment", zap.Error(err))
 		if len(authenticationRef) > 0 {
-			err = deleteAuthTrigger(ctx, kedaClient, authenticationRef, mqt.ObjectMeta.Namespace)
+			err = deleteAuthTrigger(ctx, kedaClient, authenticationRef, mqt.Namespace)
 			if err != nil {
 				logger.Error("Failed to delete Authentication Trigger", zap.Error(err))
 			}
@@ -294,11 +294,11 @@ func createKedaObjects(ctx context.Context, logger *zap.Logger, kedaClient kedaC
 	if err := createScaledObject(ctx, kedaClient, mqt, authenticationRef); err != nil {
 		logger.Error("Failed to create ScaledObject", zap.Error(err))
 		if len(authenticationRef) > 0 {
-			if err = deleteAuthTrigger(ctx, kedaClient, authenticationRef, mqt.ObjectMeta.Namespace); err != nil {
+			if err = deleteAuthTrigger(ctx, kedaClient, authenticationRef, mqt.Namespace); err != nil {
 				logger.Error("Failed to delete Authentication Trigger", zap.Error(err))
 			}
 		}
-		if err = deleteDeployment(ctx, mqt.ObjectMeta.Name, mqt.ObjectMeta.Namespace, kubeClient); err != nil {
+		if err = deleteDeployment(ctx, mqt.Name, mqt.Namespace, kubeClient); err != nil {
 			logger.Error("Failed to delete Deployment", zap.Error(err))
 		}
 	}
@@ -307,21 +307,21 @@ func createKedaObjects(ctx context.Context, logger *zap.Logger, kedaClient kedaC
 func cleanupKedaObjects(ctx context.Context, logger *zap.Logger, kedaClient kedaClient.Interface, kubeClient kubernetes.Interface, mqt *fv1.MessageQueueTrigger) {
 	authenticationRef := ""
 	if len(mqt.Spec.Secret) > 0 {
-		authenticationRef = fmt.Sprintf("%s-auth-trigger", mqt.ObjectMeta.Name)
+		authenticationRef = fmt.Sprintf("%s-auth-trigger", mqt.Name)
 	}
 
 	if len(authenticationRef) > 0 {
-		err := deleteAuthTrigger(ctx, kedaClient, authenticationRef, mqt.ObjectMeta.Namespace)
+		err := deleteAuthTrigger(ctx, kedaClient, authenticationRef, mqt.Namespace)
 		if err != nil {
 			logger.Error("Failed to delete Authentication Trigger", zap.Error(err))
 		}
 	}
 
-	if err := deleteDeployment(ctx, mqt.ObjectMeta.Name, mqt.ObjectMeta.Namespace, kubeClient); err != nil {
+	if err := deleteDeployment(ctx, mqt.Name, mqt.Namespace, kubeClient); err != nil {
 		logger.Error("Failed to delete Deployment", zap.Error(err))
 	}
 
-	if err := deleteScaledObject(ctx, kedaClient, mqt.ObjectMeta.Name, mqt.ObjectMeta.Namespace); err != nil {
+	if err := deleteScaledObject(ctx, kedaClient, mqt.Name, mqt.Namespace); err != nil {
 		logger.Error("Failed to delete ScaledObject", zap.Error(err))
 	}
 }
@@ -344,13 +344,13 @@ func getAuthTriggerSpec(ctx context.Context, mqt *fv1.MessageQueueTrigger, authe
 	authTriggerObj := &kedav1alpha1.TriggerAuthentication{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      authenticationRef,
-			Namespace: mqt.ObjectMeta.Namespace,
+			Namespace: mqt.Namespace,
 			OwnerReferences: []metav1.OwnerReference{
 				{
 					Kind:               "MessageQueueTrigger",
 					APIVersion:         "fission.io/v1",
-					Name:               mqt.ObjectMeta.Name,
-					UID:                mqt.ObjectMeta.UID,
+					Name:               mqt.Name,
+					UID:                mqt.UID,
 					BlockOwnerDeletion: &blockOwnerDeletion,
 				},
 			},
@@ -414,7 +414,7 @@ func getDeploymentSpec(ctx context.Context, mqt *fv1.MessageQueueTrigger, router
 	podSpec := &apiv1.PodSpec{
 		Containers: []apiv1.Container{
 			{
-				Name:            mqt.ObjectMeta.Name,
+				Name:            mqt.Name,
 				Image:           image,
 				ImagePullPolicy: imagePullPolicy,
 				Env:             envVars,
@@ -429,16 +429,16 @@ func getDeploymentSpec(ctx context.Context, mqt *fv1.MessageQueueTrigger, router
 	blockOwnerDeletion := true
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: mqt.ObjectMeta.Name,
+			Name: mqt.Name,
 			Labels: map[string]string{
-				"app": mqt.ObjectMeta.Name,
+				"app": mqt.Name,
 			},
 			OwnerReferences: []metav1.OwnerReference{
 				{
 					Kind:               "MessageQueueTrigger",
 					APIVersion:         "fission.io/v1",
-					Name:               mqt.ObjectMeta.Name,
-					UID:                mqt.ObjectMeta.UID,
+					Name:               mqt.Name,
+					UID:                mqt.UID,
 					BlockOwnerDeletion: &blockOwnerDeletion,
 				},
 			},
@@ -446,13 +446,13 @@ func getDeploymentSpec(ctx context.Context, mqt *fv1.MessageQueueTrigger, router
 		Spec: appsv1.DeploymentSpec{
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					"app": mqt.ObjectMeta.Name,
+					"app": mqt.Name,
 				},
 			},
 			Template: apiv1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{
-						"app": mqt.ObjectMeta.Name,
+						"app": mqt.Name,
 					},
 				},
 				Spec: *podSpec,
@@ -500,14 +500,14 @@ func getScaledObject(mqt *fv1.MessageQueueTrigger, authenticationRef string) *ke
 
 	return &kedav1alpha1.ScaledObject{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      mqt.ObjectMeta.Name,
-			Namespace: mqt.ObjectMeta.Namespace,
+			Name:      mqt.Name,
+			Namespace: mqt.Namespace,
 			OwnerReferences: []metav1.OwnerReference{
 				{
 					Kind:               "MessageQueueTrigger",
 					APIVersion:         "fission.io/v1",
-					Name:               mqt.ObjectMeta.Name,
-					UID:                mqt.ObjectMeta.UID,
+					Name:               mqt.Name,
+					UID:                mqt.UID,
 					BlockOwnerDeletion: &blockOwnerDeletion,
 				},
 			},
@@ -519,7 +519,7 @@ func getScaledObject(mqt *fv1.MessageQueueTrigger, authenticationRef string) *ke
 			MinReplicaCount: mqt.Spec.MinReplicaCount,
 			PollingInterval: mqt.Spec.PollingInterval,
 			ScaleTargetRef: &kedav1alpha1.ScaleTarget{
-				Name: mqt.ObjectMeta.Name,
+				Name: mqt.Name,
 			},
 			Triggers: []kedav1alpha1.ScaleTriggers{
 				{
@@ -544,7 +544,7 @@ func createScaledObject(ctx context.Context, client kedaClient.Interface, mqt *f
 }
 
 func updateScaledObject(ctx context.Context, client kedaClient.Interface, mqt *fv1.MessageQueueTrigger, authenticationRef string) error {
-	oldScaledObject, err := client.KedaV1alpha1().ScaledObjects(mqt.ObjectMeta.Namespace).Get(ctx, mqt.ObjectMeta.Name, metav1.GetOptions{})
+	oldScaledObject, err := client.KedaV1alpha1().ScaledObjects(mqt.ObjectMeta.Namespace).Get(ctx, mqt.Name, metav1.GetOptions{})
 	if err != nil {
 		return err
 	}

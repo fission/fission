@@ -84,9 +84,9 @@ func (opts *ListSubCommand) run(input cli.Input) (err error) {
 		show := true
 		// TODO improve list speed when --orphan
 		if opts.listOrphans {
-			fnList, err := GetFunctionsByPackage(input.Context(), opts.Client(), pkg.ObjectMeta.Name, pkg.ObjectMeta.Namespace)
+			fnList, err := GetFunctionsByPackage(input.Context(), opts.Client(), pkg.Name, pkg.Namespace)
 			if err != nil {
-				return fmt.Errorf("get functions sharing package %v: %w", pkg.ObjectMeta.Name, err)
+				return fmt.Errorf("get functions sharing package %v: %w", pkg.Name, err)
 			}
 			if len(fnList) > 0 {
 				show = false
@@ -96,7 +96,7 @@ func (opts *ListSubCommand) run(input cli.Input) (err error) {
 			show = false
 		}
 		if show {
-			fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\n", pkg.ObjectMeta.Name, pkg.Status.BuildStatus, pkg.Spec.Environment.Name, pkg.Status.LastUpdateTimestamp.Format(time.RFC822), pkg.ObjectMeta.Namespace)
+			fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\n", pkg.Name, pkg.Status.BuildStatus, pkg.Spec.Environment.Name, pkg.Status.LastUpdateTimestamp.Format(time.RFC822), pkg.Namespace)
 		}
 	}
 

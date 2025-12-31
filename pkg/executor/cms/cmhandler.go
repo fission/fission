@@ -52,15 +52,15 @@ func ConfigMapEventHandlers(ctx context.Context, logger *zap.Logger, fissionClie
 	kubernetesClient kubernetes.Interface, types map[fv1.ExecutorType]executortype.ExecutorType) k8sCache.ResourceEventHandlerFuncs {
 
 	return k8sCache.ResourceEventHandlerFuncs{
-		AddFunc:    func(obj interface{}) {},
-		DeleteFunc: func(obj interface{}) {},
-		UpdateFunc: func(oldObj interface{}, newObj interface{}) {
+		AddFunc:    func(obj any) {},
+		DeleteFunc: func(obj any) {},
+		UpdateFunc: func(oldObj any, newObj any) {
 			oldCm := oldObj.(*apiv1.ConfigMap)
 			newCm := newObj.(*apiv1.ConfigMap)
-			if oldCm.ObjectMeta.ResourceVersion != newCm.ObjectMeta.ResourceVersion {
+			if oldCm.ResourceVersion != newCm.ResourceVersion {
 				funcs, err := getConfigmapRelatedFuncs(ctx, logger, &newCm.ObjectMeta, fissionClient)
 				if err != nil {
-					logger.Error("Failed to get functions related to configmap", zap.String("configmap_name", newCm.ObjectMeta.Name), zap.String("configmap_namespace", newCm.ObjectMeta.Namespace))
+					logger.Error("Failed to get functions related to configmap", zap.String("configmap_name", newCm.Name), zap.String("configmap_namespace", newCm.Namespace))
 				}
 
 				if len(funcs) == 0 {
@@ -68,8 +68,8 @@ func ConfigMapEventHandlers(ctx context.Context, logger *zap.Logger, fissionClie
 				}
 
 				logger.Debug("Configmap changed",
-					zap.String("configmap_name", newCm.ObjectMeta.Name),
-					zap.String("configmap_namespace", newCm.ObjectMeta.Namespace))
+					zap.String("configmap_name", newCm.Name),
+					zap.String("configmap_namespace", newCm.Namespace))
 				refreshPods(ctx, logger, funcs, types)
 			}
 		},

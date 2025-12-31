@@ -22,6 +22,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"text/template"
 	"unicode"
@@ -324,13 +325,7 @@ func filter(cmds []*cobra.Command, names ...string) []*cobra.Command {
 		if c.Hidden {
 			continue
 		}
-		skip := false
-		for _, name := range names {
-			if name == c.Name() {
-				skip = true
-				break
-			}
-		}
+		skip := slices.Contains(names, c.Name())
 		if skip {
 			continue
 		}

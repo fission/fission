@@ -43,7 +43,7 @@ func getIstioServiceLabels(fnName string) map[string]string {
 // If istio is enabled, we create a service for the function.
 func FunctionEventHandlers(ctx context.Context, logger *zap.Logger, kubernetesClient kubernetes.Interface, fissionfnNamespace string, istioEnabled bool) k8sCache.ResourceEventHandlerFuncs {
 	return k8sCache.ResourceEventHandlerFuncs{
-		AddFunc: func(obj interface{}) {
+		AddFunc: func(obj any) {
 			fn := obj.(*fv1.Function)
 
 			// Since istio only allows accessing pod through k8s service,
@@ -63,11 +63,11 @@ func FunctionEventHandlers(ctx context.Context, logger *zap.Logger, kubernetesCl
 				// create a same name service for function
 				// since istio only allows the traffic to service
 				sel := map[string]string{
-					"functionName": fn.ObjectMeta.Name,
-					"functionUid":  string(fn.ObjectMeta.UID),
+					"functionName": fn.Name,
+					"functionUid":  string(fn.UID),
 				}
 
-				svcName := utils.GetFunctionIstioServiceName(fn.ObjectMeta.Name, fn.ObjectMeta.Namespace)
+				svcName := utils.GetFunctionIstioServiceName(fn.Name, fn.Namespace)
 				envNs := utils.DefaultNSResolver().GetFunctionNS(fn.Spec.Environment.Namespace)
 
 				// service for accepting user traffic
@@ -75,7 +75,7 @@ func FunctionEventHandlers(ctx context.Context, logger *zap.Logger, kubernetesCl
 					ObjectMeta: metav1.ObjectMeta{
 						Namespace: envNs,
 						Name:      svcName,
-						Labels:    getIstioServiceLabels(fn.ObjectMeta.Name),
+						Labels:    getIstioServiceLabels(fn.Name),
 					},
 					Spec: apiv1.ServiceSpec{
 						Type: apiv1.ServiceTypeClusterIP,
@@ -105,13 +105,13 @@ func FunctionEventHandlers(ctx context.Context, logger *zap.Logger, kubernetesCl
 					logger.Error("error creating istio service for function",
 						zap.Error(err),
 						zap.String("service_name", svcName),
-						zap.String("function_name", fn.ObjectMeta.Name),
+						zap.String("function_name", fn.Name),
 						zap.Any("selectors", sel))
 				}
 			}
 		},
 
-		DeleteFunc: func(obj interface{}) {
+		DeleteFunc: func(obj any) {
 			fn := obj.(*fv1.Function)
 
 			fnExecutorType := fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType
@@ -122,14 +122,14 @@ func FunctionEventHandlers(ctx context.Context, logger *zap.Logger, kubernetesCl
 			if istioEnabled {
 				envNs := utils.DefaultNSResolver().GetFunctionNS(fn.Spec.Environment.Namespace)
 
-				svcName := utils.GetFunctionIstioServiceName(fn.ObjectMeta.Name, fn.ObjectMeta.Namespace)
+				svcName := utils.GetFunctionIstioServiceName(fn.Name, fn.Namespace)
 				// delete function istio service
 				err := kubernetesClient.CoreV1().Services(envNs).Delete(ctx, svcName, metav1.DeleteOptions{})
 				if err != nil && !kerrors.IsNotFound(err) {
 					logger.Error("error deleting istio service for function",
 						zap.Error(err),
 						zap.String("service_name", svcName),
-						zap.String("function_name", fn.ObjectMeta.Name))
+						zap.String("function_name", fn.Name))
 
 				}
 			}

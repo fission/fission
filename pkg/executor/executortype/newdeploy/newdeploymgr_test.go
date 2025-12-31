@@ -113,7 +113,7 @@ func TestRefreshFuncPods(t *testing.T) {
 
 	envRes, err := fissionClient.CoreV1().Environments(defaultNamespace).Get(ctx, envName, metav1.GetOptions{})
 	require.NoError(t, err, "getting environment failed")
-	require.Equal(t, envRes.ObjectMeta.Name, envName)
+	require.Equal(t, envRes.Name, envName)
 
 	funcSpec := fv1.Function{
 		ObjectMeta: metav1.ObjectMeta{
@@ -138,7 +138,7 @@ func TestRefreshFuncPods(t *testing.T) {
 
 	funcRes, err := fissionClient.CoreV1().Functions(defaultNamespace).Get(ctx, functionName, metav1.GetOptions{})
 	require.NoError(t, err, "Error getting function")
-	require.Equal(t, funcRes.ObjectMeta.Name, functionName)
+	require.Equal(t, funcRes.Name, functionName)
 
 	ctx2, cancel2 := context.WithCancel(t.Context())
 	wait.Until(func() {
@@ -183,7 +183,7 @@ func TestRefreshFuncPods(t *testing.T) {
 
 	cm, err := kubernetesClient.CoreV1().ConfigMaps(defaultNamespace).Get(ctx, configmapName, metav1.GetOptions{})
 	require.NoError(t, err, "Error getting configmap")
-	require.Equal(t, cm.ObjectMeta.Name, configmapName)
+	require.Equal(t, cm.Name, configmapName)
 	updatedDepl := dep.Items[0]
 	resourceVersionMatch := false
 	require.Equal(t, len(updatedDepl.Spec.Template.Spec.Containers), 2)
@@ -192,7 +192,7 @@ func TestRefreshFuncPods(t *testing.T) {
 			require.Greater(t, len(v.Env), 0)
 			for _, env := range v.Env {
 				if env.Name == fv1.ResourceVersionCount {
-					require.Equal(t, env.Value, cm.ObjectMeta.ResourceVersion)
+					require.Equal(t, env.Value, cm.ResourceVersion)
 					resourceVersionMatch = true
 				}
 			}

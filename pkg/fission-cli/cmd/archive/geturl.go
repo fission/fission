@@ -65,14 +65,15 @@ func (opts *GetURLSubCommand) do(input cli.Input) error {
 
 	storageType := resp.Header.Get("X-FISSION-STORAGETYPE")
 
-	if storageType == "local" {
+	switch storageType {
+	case "local":
 		storagesvcURL, err := util.GetStorageURL(input.Context(), opts.Client())
 		if err != nil {
 			return err
 		}
 		client := storagesvcClient.MakeClient(storagesvcURL.String())
 		fmt.Printf("URL: %s", client.GetUrl(archiveID))
-	} else if storageType == "s3" {
+	case "s3":
 		storageBucket := resp.Header.Get("X-FISSION-BUCKET")
 		s3url := fmt.Sprintf("https://%s.s3.amazonaws.com/%s", storageBucket, archiveID)
 		fmt.Printf("URL: %s", s3url)

@@ -138,7 +138,7 @@ func generateChart(title string, file string, format chart.RendererProvider, ser
 			Range: &chart.ContinuousRange{
 				Min: 0,
 			},
-			ValueFormatter: func(v interface{}) string {
+			ValueFormatter: func(v any) string {
 				return fmt.Sprintf("%.2f s", v.(float64))
 			},
 		},
@@ -149,7 +149,7 @@ func generateChart(title string, file string, format chart.RendererProvider, ser
 			Range: &chart.ContinuousRange{
 				Min: 0,
 			},
-			ValueFormatter: func(v interface{}) string {
+			ValueFormatter: func(v any) string {
 				return fmt.Sprintf("%d ms", int(v.(float64)))
 			},
 		},

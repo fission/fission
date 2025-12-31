@@ -239,6 +239,6 @@ func (opts *RunContainerSubCommand) run(input cli.Input) error {
 		return fmt.Errorf("error creating function: %w", err)
 	}
 
-	fmt.Printf("function '%v' created\n", opts.function.ObjectMeta.Name)
+	fmt.Printf("function '%v' created\n", opts.function.Name)
 	return nil
 }

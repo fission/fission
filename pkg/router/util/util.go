@@ -101,7 +101,7 @@ func GetDeployLabels(trigger *fv1.HTTPTrigger) map[string]string {
 	return map[string]string{
 		"triggerName":      trigger.Name,
 		"functionName":     trigger.Spec.FunctionReference.Name,
-		"triggerNamespace": trigger.ObjectMeta.Namespace,
+		"triggerNamespace": trigger.Namespace,
 	}
 }
 

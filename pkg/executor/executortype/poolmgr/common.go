@@ -31,9 +31,9 @@ func getEnvPoolSize(env *fv1.Environment) int32 {
 func getSpecializedPodLabels(env *fv1.Environment) map[string]string {
 	specialPodLabels := make(map[string]string)
 	specialPodLabels[fv1.EXECUTOR_TYPE] = string(fv1.ExecutorTypePoolmgr)
-	specialPodLabels[fv1.ENVIRONMENT_NAME] = env.ObjectMeta.Name
-	specialPodLabels[fv1.ENVIRONMENT_NAMESPACE] = env.ObjectMeta.Namespace
-	specialPodLabels[fv1.ENVIRONMENT_UID] = string(env.ObjectMeta.UID)
+	specialPodLabels[fv1.ENVIRONMENT_NAME] = env.Name
+	specialPodLabels[fv1.ENVIRONMENT_NAMESPACE] = env.Namespace
+	specialPodLabels[fv1.ENVIRONMENT_UID] = string(env.UID)
 	specialPodLabels["managed"] = "false"
 	return specialPodLabels
 }

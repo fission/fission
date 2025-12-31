@@ -76,7 +76,7 @@ func makePreUpgradeTaskClient(clientGen crd.ClientGeneratorInterface, logger *za
 // GetFunctionCRD checks if function CRD is present on the cluster and returns it. It returns nil if not found
 // We can use this to find out if fission had been previously installed on this cluster too.
 func (client *PreUpgradeTaskClient) GetFunctionCRD(ctx context.Context) *v1.CustomResourceDefinition {
-	for i := 0; i < maxRetries; i++ {
+	for range maxRetries {
 		crd, err := client.apiExtClient.ApiextensionsV1().CustomResourceDefinitions().Get(ctx, FunctionCRD, metav1.GetOptions{})
 		if err != nil && k8serrors.IsNotFound(err) {
 			continue
@@ -132,7 +132,7 @@ func (client *PreUpgradeTaskClient) VerifyFunctionSpecReferences(ctx context.Con
 	var errs error
 
 	for _, namespace := range utils.DefaultNSResolver().FissionResourceNS {
-		for i := 0; i < maxRetries; i++ {
+		for range maxRetries {
 			fList, err = client.fissionClient.CoreV1().Functions(namespace).List(ctx, metav1.ListOptions{})
 			if err == nil {
 				break
@@ -151,21 +151,21 @@ func (client *PreUpgradeTaskClient) VerifyFunctionSpecReferences(ctx context.Con
 		for _, fn := range fList.Items {
 			secrets := fn.Spec.Secrets
 			for _, secret := range secrets {
-				if secret.Namespace != "" && secret.Namespace != fn.ObjectMeta.Namespace {
-					errs = errors.Join(errs, fmt.Errorf("function : %s.%s cannot reference a secret : %s in namespace : %s", fn.ObjectMeta.Name, fn.ObjectMeta.Namespace, secret.Name, secret.Namespace))
+				if secret.Namespace != "" && secret.Namespace != fn.Namespace {
+					errs = errors.Join(errs, fmt.Errorf("function : %s.%s cannot reference a secret : %s in namespace : %s", fn.Name, fn.Namespace, secret.Name, secret.Namespace))
 				}
 			}
 
 			configmaps := fn.Spec.ConfigMaps
 			for _, configmap := range configmaps {
-				if configmap.Namespace != "" && configmap.Namespace != fn.ObjectMeta.Namespace {
-					errs = errors.Join(errs, fmt.Errorf("function : %s.%s cannot reference a configmap : %s in namespace : %s", fn.ObjectMeta.Name, fn.ObjectMeta.Namespace, configmap.Name, configmap.Namespace))
+				if configmap.Namespace != "" && configmap.Namespace != fn.Namespace {
+					errs = errors.Join(errs, fmt.Errorf("function : %s.%s cannot reference a configmap : %s in namespace : %s", fn.Name, fn.Namespace, configmap.Name, configmap.Namespace))
 
 				}
 			}
 
-			if fn.Spec.Package.PackageRef.Namespace != "" && fn.Spec.Package.PackageRef.Namespace != fn.ObjectMeta.Namespace {
-				errs = errors.Join(errs, fmt.Errorf("function : %s.%s cannot reference a package : %s in namespace : %s", fn.ObjectMeta.Name, fn.ObjectMeta.Namespace, fn.Spec.Package.PackageRef.Name, fn.Spec.Package.PackageRef.Namespace))
+			if fn.Spec.Package.PackageRef.Namespace != "" && fn.Spec.Package.PackageRef.Namespace != fn.Namespace {
+				errs = errors.Join(errs, fmt.Errorf("function : %s.%s cannot reference a package : %s in namespace : %s", fn.Name, fn.Namespace, fn.Spec.Package.PackageRef.Name, fn.Spec.Package.PackageRef.Namespace))
 			}
 		}
 	}

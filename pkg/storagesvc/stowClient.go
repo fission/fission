@@ -196,10 +196,10 @@ func (client *StowClient) getFileSize(itemID string) (int64, error) {
 }
 
 // filter defines an interface to filter out items from a set of items
-type filter func(stow.Item, interface{}) bool
+type filter func(stow.Item, any) bool
 
 // This method returns all items in a container, filtering out items based on the filter function passed to it
-func (client *StowClient) getItemIDsWithFilter(filterFunc filter, filterFuncParam interface{}) ([]string, error) {
+func (client *StowClient) getItemIDsWithFilter(filterFunc filter, filterFuncParam any) ([]string, error) {
 	cursor := stow.CursorStart
 	var items []stow.Item
 	var err error
@@ -230,7 +230,7 @@ func (client *StowClient) getItemIDsWithFilter(filterFunc filter, filterFuncPara
 
 // filterItemCreatedAMinuteAgo is one type of filter function that filters out items created less than a minute ago.
 // More filter functions can be written if needed, as long as they are of type filter
-func (client StowClient) filterItemCreatedAMinuteAgo(item stow.Item, currentTime interface{}) bool {
+func (client StowClient) filterItemCreatedAMinuteAgo(item stow.Item, currentTime any) bool {
 	itemLastModTime, _ := item.LastMod()
 	if currentTime.(time.Time).Sub(itemLastModTime) < 1*time.Minute {
 
@@ -242,7 +242,7 @@ func (client StowClient) filterItemCreatedAMinuteAgo(item stow.Item, currentTime
 	return false
 }
 
-func (client StowClient) filterAllItems(item stow.Item, _ interface{}) bool {
+func (client StowClient) filterAllItems(item stow.Item, _ any) bool {
 	itemLastModTime, _ := item.LastMod()
 	client.logger.Debug("item info",
 		zap.String("item", item.ID()),

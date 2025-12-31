@@ -129,7 +129,7 @@ func (mqt *MessageQueueTriggerManager) Run(ctx context.Context, stopCh <-chan st
 		mqt.logger.Fatal("failed to wait for caches to sync")
 	}
 
-	for i := 0; i < 4; i++ {
+	for range 4 {
 		mgr.Add(ctx, func(ctx context.Context) {
 			wait.Until(mqt.workerRun(ctx, "mqTriggerCreateUpdate", mqt.mqTriggerCreateUpdateQueueProcessFunc), time.Second, stopCh)
 		})
@@ -296,7 +296,7 @@ func (mqt *MessageQueueTriggerManager) RegisterTrigger(trigger *fv1.MessageQueue
 	return nil
 }
 
-func (mqt *MessageQueueTriggerManager) enqueueMqtAdd(obj interface{}) {
+func (mqt *MessageQueueTriggerManager) enqueueMqtAdd(obj any) {
 	key, err := k8sCache.MetaNamespaceKeyFunc(obj)
 	if err != nil {
 		mqt.logger.Error("error retrieving key from object in messageQueueTriggerManager", zap.Any("obj", obj))
@@ -306,7 +306,7 @@ func (mqt *MessageQueueTriggerManager) enqueueMqtAdd(obj interface{}) {
 	mqt.mqTriggerCreateUpdateQueue.Add(key)
 }
 
-func (mqt *MessageQueueTriggerManager) enqueueMqtUpdate(oldObj, newObj interface{}) {
+func (mqt *MessageQueueTriggerManager) enqueueMqtUpdate(oldObj, newObj any) {
 	key, err := k8sCache.MetaNamespaceKeyFunc(newObj)
 	if err != nil {
 		mqt.logger.Error("error retrieving key from object in messageQueueTriggerManager", zap.Any("obj", key))
@@ -316,7 +316,7 @@ func (mqt *MessageQueueTriggerManager) enqueueMqtUpdate(oldObj, newObj interface
 	mqt.mqTriggerCreateUpdateQueue.Add(key)
 }
 
-func (mqt *MessageQueueTriggerManager) enqueueMqtDelete(obj interface{}) {
+func (mqt *MessageQueueTriggerManager) enqueueMqtDelete(obj any) {
 	mqTrigger, ok := obj.(*fv1.MessageQueueTrigger)
 	if !ok {
 		mqt.logger.Error("unexpected type when deleting mqt to messageQueueTriggerManager", zap.Any("obj", obj))
@@ -417,7 +417,7 @@ func (mqt *MessageQueueTriggerManager) mqTriggerDeleteQueueProcessFunc(ctx conte
 	mqt.logger.Debug("Delete mqt", zap.Any("trigger: ", mqTrigger.ObjectMeta))
 	triggerSubscription := mqt.getTriggerSubscription(mqTrigger)
 	if triggerSubscription == nil {
-		mqt.logger.Info("Unsubscribe failed", zap.String("trigger_name", mqTrigger.ObjectMeta.Name))
+		mqt.logger.Info("Unsubscribe failed", zap.String("trigger_name", mqTrigger.Name))
 		mqt.mqTriggerDeleteQueue.Forget(mqTrigger)
 		return false
 	}
@@ -426,7 +426,7 @@ func (mqt *MessageQueueTriggerManager) mqTriggerDeleteQueueProcessFunc(ctx conte
 	if err != nil {
 		if mqt.mqTriggerDeleteQueue.NumRequeues(mqTrigger) < maxRetries {
 			mqt.mqTriggerDeleteQueue.AddRateLimited(mqTrigger)
-			mqt.logger.Error("failed to unsubscribe from message queue trigger, retrying", zap.Error(err), zap.String("trigger_name", mqTrigger.ObjectMeta.Name))
+			mqt.logger.Error("failed to unsubscribe from message queue trigger, retrying", zap.Error(err), zap.String("trigger_name", mqTrigger.Name))
 		} else {
 			mqt.mqTriggerDeleteQueue.Forget(mqTrigger)
 			mqt.logger.Error("failed to unsubscribe from message queue trigger, max retries reached", zap.Error(err))
@@ -441,12 +441,12 @@ func (mqt *MessageQueueTriggerManager) mqTriggerDeleteQueueProcessFunc(ctx conte
 			mqt.logger.Error("error deleting mqt, retrying", zap.Any("obj", mqTrigger), zap.Error(err))
 		} else {
 			mqt.mqTriggerDeleteQueue.Forget(mqTrigger)
-			mqt.logger.Error("deleting message queue trigger failed, max retries reached", zap.Error(err), zap.String("trigger_name", mqTrigger.ObjectMeta.Name))
+			mqt.logger.Error("deleting message queue trigger failed, max retries reached", zap.Error(err), zap.String("trigger_name", mqTrigger.Name))
 		}
 		return false
 	}
 
 	mqt.mqTriggerDeleteQueue.Forget(mqTrigger)
-	mqt.logger.Info("message queue trigger deleted", zap.String("trigger_name", mqTrigger.ObjectMeta.Name))
+	mqt.logger.Info("message queue trigger deleted", zap.String("trigger_name", mqTrigger.Name))
 	return false
 }

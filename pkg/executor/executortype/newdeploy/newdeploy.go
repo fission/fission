@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"strconv"
 	"time"
 
@@ -82,7 +83,7 @@ func (deploy *NewDeploy) createOrGetDeployment(ctx context.Context, fn *fv1.Func
 		if *existingDepl.Spec.Replicas < minScale {
 			err = deploy.scaleDeployment(ctx, existingDepl.Namespace, existingDepl.Name, minScale)
 			if err != nil {
-				deploy.logger.Error("error scaling up function deployment", zap.Error(err), zap.String("function", fn.ObjectMeta.Name))
+				deploy.logger.Error("error scaling up function deployment", zap.Error(err), zap.String("function", fn.Name))
 				return nil, err
 			}
 		}
@@ -101,7 +102,7 @@ func (deploy *NewDeploy) createOrGetDeployment(ctx context.Context, fn *fv1.Func
 			if err != nil {
 				deploy.logger.Error("error while creating function deployment",
 					zap.Error(err),
-					zap.String("function", fn.ObjectMeta.Name),
+					zap.String("function", fn.Name),
 					zap.String("deployment_name", deployName),
 					zap.String("deployment_namespace", deployNamespace))
 				return nil, err
@@ -142,7 +143,7 @@ func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function
 		gracePeriodSeconds = env.Spec.TerminationGracePeriod
 	}
 
-	podAnnotations := env.ObjectMeta.Annotations
+	podAnnotations := env.Annotations
 	if podAnnotations == nil {
 		podAnnotations = make(map[string]string)
 	}
@@ -154,14 +155,12 @@ func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function
 		podAnnotations["sidecar.istio.io/inject"] = "false"
 	}
 
-	podLabels := env.ObjectMeta.Labels
+	podLabels := env.Labels
 	if podLabels == nil {
 		podLabels = make(map[string]string)
 	}
 
-	for k, v := range deployLabels {
-		podLabels[k] = v
-	}
+	maps.Copy(podLabels, deployLabels)
 
 	resources := deploy.getResources(env, fn)
 
@@ -182,13 +181,13 @@ func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function
 	// rollback, set RevisionHistoryLimit to 0 to disable this feature.
 	revisionHistoryLimit := int32(0)
 
-	rvCount, err := referencedResourcesRVSum(ctx, deploy.kubernetesClient, fn.ObjectMeta.Namespace, fn.Spec.Secrets, fn.Spec.ConfigMaps)
+	rvCount, err := referencedResourcesRVSum(ctx, deploy.kubernetesClient, fn.Namespace, fn.Spec.Secrets, fn.Spec.ConfigMaps)
 	if err != nil {
 		return nil, err
 	}
 
 	container, err := util.MergeContainer(&apiv1.Container{
-		Name:                   env.ObjectMeta.Name,
+		Name:                   env.Name,
 		Image:                  env.Spec.Runtime.Image,
 		ImagePullPolicy:        deploy.runtimeImagePullPolicy,
 		TerminationMessagePath: "/dev/termination-log",
@@ -282,7 +281,7 @@ func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function
 	}
 
 	// If custom runtime container name - default env name
-	mainContainerName := env.ObjectMeta.Name
+	mainContainerName := env.Name
 	if env.Spec.Runtime.Container != nil && env.Spec.Runtime.Container.Name != "" && env.Spec.Runtime.PodSpec != nil {
 		if util.DoesContainerExistInPodSpec(env.Spec.Runtime.Container.Name, env.Spec.Runtime.PodSpec) {
 			mainContainerName = env.Spec.Runtime.Container.Name
@@ -446,7 +445,7 @@ func (deploy *NewDeploy) waitForDeploy(ctx context.Context, depl *appsv1.Deploym
 	}
 
 	logger.Error("Deployment provision failed within timeout window",
-		zap.String("name", latestDepl.ObjectMeta.Name), zap.Any("old_status", oldStatus),
+		zap.String("name", latestDepl.Name), zap.Any("old_status", oldStatus),
 		zap.Any("current_status", latestDepl.Status), zap.Int("timeout", specializationTimeout))
 
 	// this error appears in the executor pod logs

@@ -15,16 +15,14 @@ limitations under the License.
 */
 package maps
 
+import "maps"
+
 func CopyStringMap(m map[string]string) map[string]string {
 	n := make(map[string]string)
-	for k, v := range m {
-		n[k] = v
-	}
+	maps.Copy(n, m)
 	return n
 }
 
 func MergeStringMap(targetMap map[string]string, sourceMap map[string]string) {
-	for k, v := range sourceMap {
-		targetMap[k] = v
-	}
+	maps.Copy(targetMap, sourceMap)
 }

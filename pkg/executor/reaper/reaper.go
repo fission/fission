@@ -76,19 +76,19 @@ func CleanupDeployments(ctx context.Context, logger *zap.Logger, client kubernet
 			return err
 		}
 		for _, dep := range deploymentList.Items {
-			id, ok := dep.ObjectMeta.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL]
+			id, ok := dep.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL]
 			if !ok {
 				// Backward compatibility with older label name
-				id, ok = dep.ObjectMeta.Labels[fv1.EXECUTOR_INSTANCEID_LABEL]
+				id, ok = dep.Labels[fv1.EXECUTOR_INSTANCEID_LABEL]
 			}
 			if ok && id != instanceID {
-				logger.Info("cleaning up deployment", zap.String("deployment", dep.ObjectMeta.Name))
-				err := client.AppsV1().Deployments(dep.ObjectMeta.Namespace).Delete(ctx, dep.ObjectMeta.Name, delOpt)
+				logger.Info("cleaning up deployment", zap.String("deployment", dep.Name))
+				err := client.AppsV1().Deployments(dep.ObjectMeta.Namespace).Delete(ctx, dep.Name, delOpt)
 				if err != nil {
 					logger.Error("error cleaning up deployment",
 						zap.Error(err),
-						zap.String("deployment_name", dep.ObjectMeta.Name),
-						zap.String("deployment_namespace", dep.ObjectMeta.Namespace))
+						zap.String("deployment_name", dep.Name),
+						zap.String("deployment_namespace", dep.Namespace))
 				}
 				// ignore err
 			}
@@ -112,19 +112,19 @@ func CleanupPods(ctx context.Context, logger *zap.Logger, client kubernetes.Inte
 			return err
 		}
 		for _, pod := range podList.Items {
-			id, ok := pod.ObjectMeta.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL]
+			id, ok := pod.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL]
 			if !ok {
 				// Backward compatibility with older label name
-				id, ok = pod.ObjectMeta.Labels[fv1.EXECUTOR_INSTANCEID_LABEL]
+				id, ok = pod.Labels[fv1.EXECUTOR_INSTANCEID_LABEL]
 			}
 			if ok && id != instanceID {
-				logger.Info("cleaning up pod", zap.String("pod", pod.ObjectMeta.Name))
-				err := client.CoreV1().Pods(pod.ObjectMeta.Namespace).Delete(ctx, pod.ObjectMeta.Name, metav1.DeleteOptions{})
+				logger.Info("cleaning up pod", zap.String("pod", pod.Name))
+				err := client.CoreV1().Pods(pod.ObjectMeta.Namespace).Delete(ctx, pod.Name, metav1.DeleteOptions{})
 				if err != nil {
 					logger.Error("error cleaning up pod",
 						zap.Error(err),
-						zap.String("pod_name", pod.ObjectMeta.Name),
-						zap.String("pod_namespace", pod.ObjectMeta.Namespace))
+						zap.String("pod_name", pod.Name),
+						zap.String("pod_namespace", pod.Namespace))
 				}
 				// ignore err
 			}
@@ -149,19 +149,19 @@ func CleanupServices(ctx context.Context, logger *zap.Logger, client kubernetes.
 			return err
 		}
 		for _, svc := range svcList.Items {
-			id, ok := svc.ObjectMeta.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL]
+			id, ok := svc.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL]
 			if !ok {
 				// Backward compatibility with older label name
-				id, ok = svc.ObjectMeta.Labels[fv1.EXECUTOR_INSTANCEID_LABEL]
+				id, ok = svc.Labels[fv1.EXECUTOR_INSTANCEID_LABEL]
 			}
 			if ok && id != instanceID {
-				logger.Info("cleaning up service", zap.String("service", svc.ObjectMeta.Name))
-				err := client.CoreV1().Services(svc.ObjectMeta.Namespace).Delete(ctx, svc.ObjectMeta.Name, metav1.DeleteOptions{})
+				logger.Info("cleaning up service", zap.String("service", svc.Name))
+				err := client.CoreV1().Services(svc.ObjectMeta.Namespace).Delete(ctx, svc.Name, metav1.DeleteOptions{})
 				if err != nil {
 					logger.Error("error cleaning up service",
 						zap.Error(err),
-						zap.String("service_name", svc.ObjectMeta.Name),
-						zap.String("service_namespace", svc.ObjectMeta.Namespace))
+						zap.String("service_name", svc.Name),
+						zap.String("service_namespace", svc.Namespace))
 				}
 				// ignore err
 			}
@@ -187,19 +187,19 @@ func CleanupHpa(ctx context.Context, logger *zap.Logger, client kubernetes.Inter
 		}
 
 		for _, hpa := range hpaList.Items {
-			id, ok := hpa.ObjectMeta.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL]
+			id, ok := hpa.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL]
 			if !ok {
 				// Backward compatibility with older label name
-				id, ok = hpa.ObjectMeta.Labels[fv1.EXECUTOR_INSTANCEID_LABEL]
+				id, ok = hpa.Labels[fv1.EXECUTOR_INSTANCEID_LABEL]
 			}
 			if ok && id != instanceID {
-				logger.Info("cleaning up HPA", zap.String("hpa", hpa.ObjectMeta.Name))
-				err := client.AutoscalingV2().HorizontalPodAutoscalers(hpa.ObjectMeta.Namespace).Delete(ctx, hpa.ObjectMeta.Name, metav1.DeleteOptions{})
+				logger.Info("cleaning up HPA", zap.String("hpa", hpa.Name))
+				err := client.AutoscalingV2().HorizontalPodAutoscalers(hpa.ObjectMeta.Namespace).Delete(ctx, hpa.Name, metav1.DeleteOptions{})
 				if err != nil {
 					logger.Error("error cleaning up HPA",
 						zap.Error(err),
-						zap.String("hpa_name", hpa.ObjectMeta.Name),
-						zap.String("hpa_namespace", hpa.ObjectMeta.Namespace))
+						zap.String("hpa_name", hpa.Name),
+						zap.String("hpa_namespace", hpa.Namespace))
 				}
 				// ignore err
 			}

@@ -133,7 +133,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 	}
 
 	if input.Bool(flagkey.SpecSave) {
-		specFile := fmt.Sprintf("timetrigger-%v.yaml", opts.trigger.ObjectMeta.Name)
+		specFile := fmt.Sprintf("timetrigger-%v.yaml", opts.trigger.Name)
 		err := spec.SpecSave(*opts.trigger, specFile, false)
 		if err != nil {
 			return fmt.Errorf("error saving time trigger spec: %w", err)
@@ -146,7 +146,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 		return fmt.Errorf("error creating Time trigger: %w", err)
 	}
 
-	fmt.Printf("trigger '%v' created\n", opts.trigger.ObjectMeta.Name)
+	fmt.Printf("trigger '%v' created\n", opts.trigger.Name)
 
 	t := util.GetServerInfo(input, opts.Client()).ServerTime.CurrentTime.UTC()
 
@@ -167,7 +167,7 @@ func getCronNextNActivationTime(cronSpec string, serverTime time.Time, round int
 
 	fmt.Printf("Current Server Time: \t%v\n", serverTime.Format(time.RFC3339))
 
-	for i := 0; i < round; i++ {
+	for i := range round {
 		serverTime = sched.Next(serverTime)
 		fmt.Printf("Next %v invocation: \t%v\n", i+1, serverTime.Format(time.RFC3339))
 	}

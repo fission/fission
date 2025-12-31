@@ -21,7 +21,7 @@ import (
 )
 
 type (
-	Subscription interface{}
+	Subscription any
 
 	Config struct {
 		MQType  string

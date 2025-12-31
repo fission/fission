@@ -101,7 +101,8 @@ func getArchiveURL(ctx context.Context, client cmd.Client, archiveID string, ser
 
 	storageType := resp.Header.Get("X-FISSION-STORAGETYPE")
 
-	if storageType == "local" {
+	switch storageType {
+	case "local":
 		storageSvc, err := util.GetSvcName(ctx, client.KubernetesClient, "fission-storage")
 		if err != nil {
 			return "", err
@@ -109,7 +110,7 @@ func getArchiveURL(ctx context.Context, client cmd.Client, archiveID string, ser
 		storagesvcURL := "http://" + storageSvc
 		client := storageSvcClient.MakeClient(storagesvcURL)
 		return client.GetUrl(archiveID), nil
-	} else if storageType == "s3" {
+	case "s3":
 		storageBucket := resp.Header.Get("X-FISSION-BUCKET")
 		s3url := fmt.Sprintf("https://%s.s3.amazonaws.com/%s", storageBucket, archiveID)
 		return s3url, nil
@@ -228,7 +229,7 @@ func PrintPackageSummary(writer io.Writer, pkg *fv1.Package) {
 	// replace escaped line breaker character
 	buildlog := strings.ReplaceAll(pkg.Status.BuildLog, `\n`, "\n")
 	w := tabwriter.NewWriter(writer, 0, 0, 1, ' ', 0)
-	fmt.Fprintf(w, "%v\t%v\n", "Name:", pkg.ObjectMeta.Name)
+	fmt.Fprintf(w, "%v\t%v\n", "Name:", pkg.Name)
 	fmt.Fprintf(w, "%v\t%v\n", "Environment:", pkg.Spec.Environment.Name)
 	fmt.Fprintf(w, "%v\t%v\n", "Status:", pkg.Status.BuildStatus)
 	fmt.Fprintf(w, "%v\n%v", "Build Logs:", buildlog)

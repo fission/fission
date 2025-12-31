@@ -18,6 +18,7 @@ package httptrigger
 
 import (
 	"fmt"
+	"maps"
 	"strings"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -56,9 +57,7 @@ func GetIngressConfig(annotations []string, rule string, tls string,
 		if oldIngressConfig.Annotations == nil {
 			oldIngressConfig.Annotations = make(map[string]string, len(anns))
 		}
-		for k, v := range anns {
-			oldIngressConfig.Annotations[k] = v
-		}
+		maps.Copy(oldIngressConfig.Annotations, anns)
 	}
 
 	if isEmptyRule {

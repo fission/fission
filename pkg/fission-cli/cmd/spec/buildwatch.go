@@ -19,6 +19,7 @@ package spec
 import (
 	"context"
 	"fmt"
+	"maps"
 	"os"
 	"time"
 
@@ -52,9 +53,7 @@ func makePackageBuildWatcher(fclient cmd.Client) *packageBuildWatcher {
 }
 
 func (w *packageBuildWatcher) addPackages(pkgMeta map[string]metav1.ObjectMeta) {
-	for k, v := range pkgMeta {
-		w.pkgMeta[k] = v
-	}
+	maps.Copy(w.pkgMeta, pkgMeta)
 }
 
 func (w *packageBuildWatcher) watch(ctx context.Context) {
@@ -120,5 +119,5 @@ func (w *packageBuildWatcher) watch(ctx context.Context) {
 
 func pkgKey(pkg *fv1.Package) string {
 	// packages are mutable so we want to keep track of them by resource version
-	return fmt.Sprintf("%v:%v:%v", pkg.ObjectMeta.Name, pkg.ObjectMeta.Namespace, pkg.ObjectMeta.ResourceVersion)
+	return fmt.Sprintf("%v:%v:%v", pkg.Name, pkg.Namespace, pkg.ResourceVersion)
 }

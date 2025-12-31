@@ -33,13 +33,13 @@ import (
 
 func (cn *Container) getSvPort(fn *fv1.Function) (port int32, err error) {
 	if fn.Spec.PodSpec == nil {
-		return port, fmt.Errorf("podspec is empty for function %s", fn.ObjectMeta.Name)
+		return port, fmt.Errorf("podspec is empty for function %s", fn.Name)
 	}
 	if len(fn.Spec.PodSpec.Containers) != 1 {
-		return port, fmt.Errorf("podspec should have exactly one container %s", fn.ObjectMeta.Name)
+		return port, fmt.Errorf("podspec should have exactly one container %s", fn.Name)
 	}
 	if len(fn.Spec.PodSpec.Containers[0].Ports) != 1 {
-		return port, fmt.Errorf("container should have exactly one port %s", fn.ObjectMeta.Name)
+		return port, fmt.Errorf("container should have exactly one port %s", fn.Name)
 	}
 	return fn.Spec.PodSpec.Containers[0].Ports[0].ContainerPort, nil
 }

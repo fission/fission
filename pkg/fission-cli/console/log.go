@@ -29,33 +29,33 @@ var (
 	Verbosity int
 )
 
-func Error(msg interface{}) {
+func Error(msg any) {
 	fmt.Fprintf(os.Stderr, "%v: %v\n", color.RedString("Error"), trimNewline(msg))
 }
 
-func Errorf(format string, args ...interface{}) {
+func Errorf(format string, args ...any) {
 	msg := fmt.Sprintf(format, args...)
 	fmt.Fprintf(os.Stderr, "%v: %v\n", color.RedString("Error"), trimNewline(msg))
 }
 
-func Warn(msg interface{}) {
+func Warn(msg any) {
 	fmt.Fprintf(os.Stdout, "%v: %v\n", color.YellowString("Warning"), trimNewline(msg))
 }
 
-func Info(msg interface{}) {
+func Info(msg any) {
 	fmt.Fprintf(os.Stdout, "%v\n", trimNewline(msg))
 }
 
-func Infof(format string, args ...interface{}) {
+func Infof(format string, args ...any) {
 	fmt.Fprintf(os.Stdout, "%v\n", trimNewline(fmt.Sprintf(format, args...)))
 }
 
-func Verbose(verbosityLevel int, format string, args ...interface{}) {
+func Verbose(verbosityLevel int, format string, args ...any) {
 	if Verbosity >= verbosityLevel {
 		fmt.Printf(format+"\n", args...)
 	}
 }
 
-func trimNewline(m interface{}) string {
+func trimNewline(m any) string {
 	return strings.TrimSuffix(fmt.Sprintf("%v", m), "\n")
 }

@@ -197,7 +197,7 @@ func getResourceVersion(obj runtime.Object) (string, error) {
 }
 
 func (ws *watchSubscription) eventDispatchLoop(ctx context.Context) {
-	ws.logger.Info("listening to watch", zap.String("name", ws.watch.ObjectMeta.Name))
+	ws.logger.Info("listening to watch", zap.String("name", ws.watch.Name))
 	// check watchSubscription is stopped or not before waiting for event
 	// comes from the kubeWatch.ResultChan(). This fix the edge case that
 	// new kubewatch is created in the restartWatch() while the old kubewatch
@@ -207,14 +207,14 @@ func (ws *watchSubscription) eventDispatchLoop(ctx context.Context) {
 		if !more {
 			if ws.isStopped() {
 				// watch is removed by user.
-				ws.logger.Warn("watch stopped", zap.String("watch_name", ws.watch.ObjectMeta.Name))
+				ws.logger.Warn("watch stopped", zap.String("watch_name", ws.watch.Name))
 				return
 			} else {
 				// watch closed due to timeout, restart it.
-				ws.logger.Warn("watch timed out - restarting", zap.String("watch_name", ws.watch.ObjectMeta.Name))
+				ws.logger.Warn("watch timed out - restarting", zap.String("watch_name", ws.watch.Name))
 				err := ws.restartWatch(ctx)
 				if err != nil {
-					ws.logger.Panic("failed to restart watch", zap.Error(err), zap.String("watch_name", ws.watch.ObjectMeta.Name))
+					ws.logger.Panic("failed to restart watch", zap.Error(err), zap.String("watch_name", ws.watch.Name))
 				}
 				continue
 			}
@@ -222,19 +222,19 @@ func (ws *watchSubscription) eventDispatchLoop(ctx context.Context) {
 
 		if ev.Type == watch.Error {
 			e := errors.FromObject(ev.Object)
-			ws.logger.Warn("watch error - retrying after one second", zap.Error(e), zap.String("watch_name", ws.watch.ObjectMeta.Name))
+			ws.logger.Warn("watch error - retrying after one second", zap.Error(e), zap.String("watch_name", ws.watch.Name))
 			// Start from the beginning to get around "too old resource version"
 			ws.lastResourceVersion = ""
 			time.Sleep(time.Second)
 			err := ws.restartWatch(ctx)
 			if err != nil {
-				ws.logger.Panic("failed to restart watch", zap.Error(err), zap.String("watch_name", ws.watch.ObjectMeta.Name))
+				ws.logger.Panic("failed to restart watch", zap.Error(err), zap.String("watch_name", ws.watch.Name))
 			}
 			continue
 		}
 		rv, err := getResourceVersion(ev.Object)
 		if err != nil {
-			ws.logger.Error("error getting resourceVersion from object", zap.Error(err), zap.String("watch_name", ws.watch.ObjectMeta.Name))
+			ws.logger.Error("error getting resourceVersion from object", zap.Error(err), zap.String("watch_name", ws.watch.Name))
 		} else {
 			ws.lastResourceVersion = rv
 		}
@@ -243,7 +243,7 @@ func (ws *watchSubscription) eventDispatchLoop(ctx context.Context) {
 		var buf bytes.Buffer
 		err = printKubernetesObject(ev.Object, &buf)
 		if err != nil {
-			ws.logger.Error("failed to serialize object", zap.Error(err), zap.String("watch_name", ws.watch.ObjectMeta.Name))
+			ws.logger.Error("failed to serialize object", zap.Error(err), zap.String("watch_name", ws.watch.Name))
 			// TODO send a POST request indicating error
 		}
 
@@ -258,14 +258,14 @@ func (ws *watchSubscription) eventDispatchLoop(ctx context.Context) {
 		if ws.watch.Spec.FunctionReference.Type != fv1.FunctionReferenceTypeFunctionName {
 			ws.logger.Error("unsupported function ref type - cannot publish event",
 				zap.Any("type", ws.watch.Spec.FunctionReference.Type),
-				zap.String("watch_name", ws.watch.ObjectMeta.Name))
+				zap.String("watch_name", ws.watch.Name))
 			continue
 		}
 
 		// with the addition of multi-tenancy, the users can create functions in any namespace. however,
 		// the triggers can only be created in the same namespace as the function.
 		// so essentially, function namespace = trigger namespace.
-		url := utils.UrlForFunction(ws.watch.Spec.FunctionReference.Name, ws.watch.ObjectMeta.Namespace)
+		url := utils.UrlForFunction(ws.watch.Spec.FunctionReference.Name, ws.watch.Namespace)
 		ws.publisher.Publish(ctx, buf.String(), headers, http.MethodPost, url)
 	}
 }

@@ -207,7 +207,7 @@ func CreatePackage(input cli.Input, client cmd.Client, pkgName string, pkgNamesp
 		obj := fr.SpecExists(pkg, true, true)
 		if obj != nil {
 			pkg := obj.(*fv1.Package)
-			fmt.Printf("Re-using previously created package %v\n", pkg.ObjectMeta.Name)
+			fmt.Printf("Re-using previously created package %v\n", pkg.Name)
 			return &pkg.ObjectMeta, nil
 		}
 
@@ -217,7 +217,7 @@ func CreatePackage(input cli.Input, client cmd.Client, pkgName string, pkgNamesp
 		}
 		return &pkg.ObjectMeta, nil
 	} else {
-		pkg.ObjectMeta.Namespace = pkgNamespace
+		pkg.Namespace = pkgNamespace
 
 		pkgMetadata, err := client.FissionClientSet.CoreV1().Packages(pkgNamespace).Create(input.Context(), pkg, metav1.CreateOptions{})
 		if err != nil {

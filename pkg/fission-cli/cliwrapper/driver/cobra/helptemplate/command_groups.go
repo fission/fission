@@ -19,6 +19,8 @@ limitations under the License.
 package helptemplate
 
 import (
+	"slices"
+
 	"github.com/spf13/cobra"
 )
 
@@ -37,10 +39,8 @@ func (g CommandGroups) Add(c *cobra.Command) {
 
 func (g CommandGroups) Has(c *cobra.Command) bool {
 	for _, group := range g {
-		for _, command := range group.Commands {
-			if command == c {
-				return true
-			}
+		if slices.Contains(group.Commands, c) {
+			return true
 		}
 	}
 	return false
