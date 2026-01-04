@@ -182,10 +182,11 @@ func (gp *GenericPool) checkMetricsApi() bool {
 
 func (gp *GenericPool) updateCPUUtilizationSvc(ctx context.Context) {
 	var metricsApiAvailabe bool
-	checkDuration := 30
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
 
 	if !gp.checkMetricsApi() {
-		checkDuration = 180
+		ticker.Reset(180 * time.Second)
 		gp.logger.Warn("Metrics API not available")
 	}
 
@@ -222,16 +223,15 @@ func (gp *GenericPool) updateCPUUtilizationSvc(ctx context.Context) {
 		}
 	}
 
-	for {
+	for range ticker.C {
 		if metricsApiAvailabe {
 			serviceFunc(ctx)
 		} else {
 			if gp.checkMetricsApi() {
 				metricsApiAvailabe = true
-				checkDuration = 30
+				ticker.Reset(30 * time.Second)
 			}
 		}
-		time.Sleep(time.Duration(checkDuration) * time.Second)
 	}
 }
 

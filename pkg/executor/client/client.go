@@ -141,6 +141,7 @@ func (c *client) UnTapService(ctx context.Context, fnMeta metav1.ObjectMeta, exe
 
 func (c *client) service() {
 	ticker := time.NewTicker(time.Second * 5)
+	defer ticker.Stop()
 	for {
 		select {
 		case svcReq := <-c.requestChan:
