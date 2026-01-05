@@ -62,6 +62,7 @@ type (
 // MakeClient initializes and returns a Client instance.
 func MakeClient(logger *zap.Logger, executorURL string) ClientInterface {
 	hc := retryablehttp.NewClient()
+	hc.Logger = logger
 	hc.HTTPClient.Transport = otelhttp.NewTransport(hc.HTTPClient.Transport)
 	c := &client{
 		logger:      logger.Named("executor_client"),
