@@ -152,6 +152,7 @@ func (pruner *ArchivePruner) getOrphanArchives(ctx context.Context) {
 // and sends them over to the channel for deletion
 func (pruner *ArchivePruner) Start(ctx context.Context, mgr manager.Interface) {
 	ticker := time.NewTicker(pruner.pruneInterval * time.Minute)
+	defer ticker.Stop()
 	mgr.Add(ctx, func(ctx context.Context) {
 		pruner.pruneArchives(ctx)
 	})
@@ -162,7 +163,6 @@ func (pruner *ArchivePruner) Start(ctx context.Context, mgr manager.Interface) {
 			// silencing the errors, hoping they go away in next iteration.
 			pruner.getOrphanArchives(ctx)
 		case <-ctx.Done():
-			ticker.Stop()
 			return
 		}
 	}

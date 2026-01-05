@@ -229,8 +229,9 @@ func (c *Cache[K, V]) Copy() map[K]V {
 }
 
 func (c *Cache[K, V]) expiryService() {
-	for {
-		time.Sleep(c.expiryCheckInterval)
+	ticker := time.NewTicker(c.expiryCheckInterval)
+	defer ticker.Stop()
+	for range ticker.C {
 		c.requestChannel <- &request[K, V]{
 			requestType: EXPIRE,
 		}

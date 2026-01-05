@@ -17,136 +17,36 @@ limitations under the License.
 package throttler
 
 import (
+	"errors"
 	"sync"
 	"time"
-
-	"errors"
-)
-
-type throttlerOperationType int
-
-const (
-	GET throttlerOperationType = iota
-	DELETE
-	EXPIRE
 )
 
 type (
-	// actionLock is a lock that indicates whether a resource with
-	// certain key is being updated or not.
-	actionLock struct {
-		wg         *sync.WaitGroup
-		ctimestamp time.Time // creation time of lock
-		timeExpiry time.Duration
-	}
-
 	// Throttler is a simple throttling mechanism that provides the abil-
 	// ity to limit the total amount of requests to do the same thing at
 	// the same time.
-	//
-	// In router, for example, multiple goroutines may try to get the la-
-	// test service URL from executor when there is no service URL entry
-	// in the cache and caused executor overloaded because of receiving
-	// massive requests. With throttler, we can easily limit there is at
-	// most one requests being sent to executor.
 	Throttler struct {
-		requestChan    chan *request
-		locks          map[string]*actionLock
-		lockTimeExpiry time.Duration
+		mu    sync.Mutex
+		locks map[string]*entry
+		ttl   time.Duration
 	}
 
-	request struct {
-		requestType  throttlerOperationType
-		responseChan chan *response
-		resourceKey  string
-	}
-
-	response struct {
-		lock           *actionLock
-		firstGoroutine bool // denote this goroutine is the first goroutine
+	entry struct {
+		done      chan struct{}
+		createdAt time.Time
 	}
 )
-
-func (l *actionLock) isOld() bool {
-	return time.Since(l.ctimestamp) > l.timeExpiry
-}
-
-func (l *actionLock) wait() error {
-	ch := make(chan struct{})
-
-	go func(wg *sync.WaitGroup, ch chan struct{}) {
-		wg.Wait()
-		close(ch)
-	}(l.wg, ch)
-
-	select {
-	case <-ch:
-		return nil
-	case <-time.After(l.timeExpiry):
-		return errors.New("error waiting for actionLock to be released: Exceeded timeout")
-	}
-}
 
 // MakeThrottler returns a throttler that able to limit total amounts of goroutines from
 // doing the same thing at the same time.
 func MakeThrottler(timeExpiry time.Duration) *Throttler {
-	tr := &Throttler{
-		requestChan:    make(chan *request),
-		locks:          make(map[string]*actionLock),
-		lockTimeExpiry: timeExpiry,
+	t := &Throttler{
+		locks: make(map[string]*entry),
+		ttl:   timeExpiry,
 	}
-	go tr.service()
-	go tr.expiryService()
-	return tr
-}
-
-func (tr *Throttler) service() {
-	for {
-		req := <-tr.requestChan
-
-		switch req.requestType {
-		case GET:
-			lock, ok := tr.locks[req.resourceKey]
-			if ok && !lock.isOld() {
-				req.responseChan <- &response{
-					lock: lock, firstGoroutine: false,
-				}
-				continue
-			} else if ok && lock.isOld() {
-				// in case that one goroutine occupy the update lock for long time
-				lock.wg.Done()
-			}
-
-			lock = &actionLock{
-				wg:         &sync.WaitGroup{},
-				ctimestamp: time.Now(),
-				timeExpiry: tr.lockTimeExpiry,
-			}
-
-			lock.wg.Add(1)
-
-			tr.locks[req.resourceKey] = lock
-
-			req.responseChan <- &response{
-				lock: lock, firstGoroutine: true,
-			}
-
-		case DELETE:
-			lock, ok := tr.locks[req.resourceKey]
-			if ok {
-				lock.wg.Done()
-				delete(tr.locks, req.resourceKey)
-			}
-
-		case EXPIRE:
-			for k, v := range tr.locks {
-				if v.isOld() {
-					delete(tr.locks, k)
-					v.wg.Done()
-				}
-			}
-		}
-	}
+	go t.expiryService()
+	return t
 }
 
 // RunOnce accepts two arguments:
@@ -170,58 +70,71 @@ func (tr *Throttler) service() {
 //   Example callback function:
 //
 //   func(firstToTheLock bool) (interface{}, error) {
-// 	   var u *url.URL
+//    var u *url.URL
 //
-//	   if firstToTheLock { // first to the service url
-//		   // Call to backend services then do something else.
-//		   // For example, get service url from executor then update router cache.
-//	   } else {
-//		   // Do something here.
-//		   // For example, get service url from cache
-//	   }
+//   if firstToTheLock { // first to the service url
+//   // Call to backend services then do something else.
+//   // For example, get service url from executor then update router cache.
+//   } else {
+//   // Do something here.
+//   // For example, get service url from cache
+//   }
 //
-//	   return AnythingYouWant{}, error
+//   return AnythingYouWant{}, error
 //   }
 
-func (tr *Throttler) RunOnce(resourceKey string,
-	callbackFunc func(bool) (any, error)) (any, error) {
+func (t *Throttler) RunOnce(resourceKey string, callbackFunc func(bool) (any, error)) (any, error) {
+	t.mu.Lock()
+	e, ok := t.locks[resourceKey]
 
-	ch := make(chan *response)
-	tr.requestChan <- &request{
-		requestType:  GET,
-		responseChan: ch,
-		resourceKey:  resourceKey,
-	}
-	resp := <-ch
-
-	// if we are not the first one, wait for the first goroutine to finish its task
-	if !resp.firstGoroutine {
-		err := resp.lock.wait()
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	// release actionLock so that other goroutines can take over the responsibility if failed.
-	defer func() {
-		go func() {
-			tr.requestChan <- &request{
-				requestType: DELETE,
-				resourceKey: resourceKey,
+	if ok {
+		if time.Since(e.createdAt) < t.ttl {
+			t.mu.Unlock()
+			// Wait for the first goroutine to finish
+			select {
+			case <-e.done:
+				return callbackFunc(false)
+			case <-time.After(t.ttl):
+				return nil, errors.New("error waiting for throttler entry to be released: exceeded timeout")
 			}
-		}()
+		}
+		// Expired, we take over.
+		// We don't need to delete explicitly, we just overwrite.
+	}
+
+	// Create new entry
+	myEntry := &entry{
+		done:      make(chan struct{}),
+		createdAt: time.Now(),
+	}
+	t.locks[resourceKey] = myEntry
+	t.mu.Unlock()
+
+	// Ensure cleanup
+	defer func() {
+		t.mu.Lock()
+		// Only remove if it is still OUR entry
+		if t.locks[resourceKey] == myEntry {
+			delete(t.locks, resourceKey)
+		}
+		t.mu.Unlock()
+		close(myEntry.done)
 	}()
 
-	return callbackFunc(resp.firstGoroutine)
+	return callbackFunc(true)
 }
 
 // expiryService periodically expires time-out locks.
-// Normally, we don't need to do this just in case any of goroutine didn't release lock.
-func (tr *Throttler) expiryService() {
-	for {
-		time.Sleep(time.Minute)
-		tr.requestChan <- &request{
-			requestType: EXPIRE,
+func (t *Throttler) expiryService() {
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+	for range ticker.C {
+		t.mu.Lock()
+		for k, v := range t.locks {
+			if time.Since(v.createdAt) > t.ttl {
+				delete(t.locks, k)
+			}
 		}
+		t.mu.Unlock()
 	}
 }
