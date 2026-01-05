@@ -95,7 +95,7 @@ func (t *Throttler) RunOnce(resourceKey string, callbackFunc func(bool) (any, er
 			case <-e.done:
 				return callbackFunc(false)
 			case <-time.After(t.ttl):
-				return nil, errors.New("error waiting for actionLock to be released: Exceeded timeout")
+				return nil, errors.New("error waiting for throttler entry to be released: exceeded timeout")
 			}
 		}
 		// Expired, we take over.
