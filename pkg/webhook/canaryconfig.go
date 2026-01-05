@@ -21,13 +21,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	v1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
 
 type CanaryConfig struct {
 	GenericWebhook[*v1.CanaryConfig]
 }
 
-var canaryConfigLog = ctrl.Log.WithName("webhook").WithName("CanaryConfig")
+// log is for logging in this package.
+var canaryConfigLog = loggerfactory.GetLogger().Named("canaryconfig-resource")
 
 func (r *CanaryConfig) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	r.Logger = canaryConfigLog
