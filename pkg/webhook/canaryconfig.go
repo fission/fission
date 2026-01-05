@@ -27,7 +27,10 @@ type CanaryConfig struct {
 	GenericWebhook[*v1.CanaryConfig]
 }
 
+var canaryConfigLog = ctrl.Log.WithName("webhook").WithName("CanaryConfig")
+
 func (r *CanaryConfig) SetupWebhookWithManager(mgr ctrl.Manager) error {
+	r.Logger = canaryConfigLog
 	return r.GenericWebhook.SetupWebhookWithManager(mgr, &v1.CanaryConfig{})
 }
 
