@@ -142,6 +142,9 @@ func MakeGenericPool(
 }
 
 func (gp *GenericPool) setup(ctx context.Context) error {
+	// Ensure fetching service account exists in the namespace
+	utils.EnsureFetcherSA(ctx, gp.kubernetesClient, gp.logger, gp.fnNamespace)
+
 	// create the pool
 	err := gp.createPoolDeployment(ctx, gp.env)
 	if err != nil {

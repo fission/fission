@@ -286,7 +286,16 @@ func (gpm *GenericPoolManager) IsValid(ctx context.Context, fsvc *fscache.FuncSv
 	otelUtils.SpanTrackEvent(ctx, "IsValid", fscache.GetAttributesForFuncSvc(fsvc)...)
 	for _, obj := range fsvc.KubernetesObjects {
 		if strings.ToLower(obj.Kind) == "pod" {
-			pod, err := gpm.podLister[obj.Namespace].Pods(obj.Namespace).Get(obj.Name)
+			lister, ok := gpm.podLister[obj.Namespace]
+			if !ok {
+				lister = gpm.podLister[metav1.NamespaceAll]
+			}
+			if lister == nil {
+				gpm.logger.Warn("pod lister not found", zap.String("namespace", obj.Namespace))
+				return false
+			}
+
+			pod, err := lister.Pods(obj.Namespace).Get(obj.Name)
 			if err == nil && utils.IsReadyPod(pod) {
 				// Normally, the address format is http://[pod-ip]:[port], however, if the
 				// Istio is enabled the address format changes to http://[svc-name]:[port].

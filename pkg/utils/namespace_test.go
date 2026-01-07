@@ -234,3 +234,28 @@ func setNamespace(defaultNamespace string, additionalNamespace string) error {
 	}
 	return os.Setenv(ENV_ADDITIONAL_NAMESPACE, additionalNamespace)
 }
+
+func TestWatchAllNamespaces(t *testing.T) {
+	// Save current state
+	oldVal := os.Getenv(ENV_WATCH_ALL_NAMESPACES)
+	defer os.Setenv(ENV_WATCH_ALL_NAMESPACES, oldVal)
+
+	// Set env var to true
+	os.Setenv(ENV_WATCH_ALL_NAMESPACES, "true")
+
+	// Verify GetNamespaces returns meta_v1.NamespaceAll
+	ns := GetNamespaces()
+	require.Len(t, ns, 1)
+	require.Contains(t, ns, "") // NamespaceAll is empty string
+	require.Equal(t, "", ns[""])
+
+	// Set env var to false
+	os.Setenv(ENV_WATCH_ALL_NAMESPACES, "false")
+	// Should fall back to default behavior (defaults to 'default' if nothing else set)
+	os.Setenv(ENV_DEFAULT_NAMESPACE, "default")
+	os.Setenv(ENV_ADDITIONAL_NAMESPACE, "")
+	
+	ns = GetNamespaces()
+	require.Len(t, ns, 1)
+	require.Contains(t, ns, "default")
+}

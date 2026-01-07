@@ -6,7 +6,7 @@ cmd/fetcher/fetcher
 cmd/builder/builder
 cmd/preupgradechecks/pre-upgrade-checks
 cmd/reporter/reporter
-
+dist-local
 # Logs
 test/logs/
 test/e2e/cli/fission-dump/

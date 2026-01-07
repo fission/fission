@@ -134,11 +134,16 @@ func (pkgw *packageWatcher) build(ctx context.Context, srcpkg *fv1.Package) {
 	for healthCheckBackOff.NextExists() {
 		// Informer store is not able to use label to find the pod,
 		// iterate all available environment builders.
-		items := pkgw.podInformer[builderNs].GetStore().List()
-		if err != nil {
-			logger.Error("error retrieving pod information for environment", zap.Error(err))
-			return
+		var informer k8sCache.SharedIndexInformer
+		var ok bool
+		if informer, ok = pkgw.podInformer[builderNs]; !ok {
+			if informer, ok = pkgw.podInformer[metav1.NamespaceAll]; !ok {
+				logger.Error("no pod informer found for namespace", zap.String("namespace", builderNs))
+				return
+			}
 		}
+
+		items := informer.GetStore().List()
 
 		if len(items) == 0 {
 			logger.Info("builder pod does not exist for environment, will retry again later")
@@ -259,7 +264,7 @@ func (pkgw *packageWatcher) packageInformerHandler(ctx context.Context) k8sCache
 			return
 		}
 		// Only build pending state packages.
-		if pkg.Status.BuildStatus == fv1.BuildStatusPending {
+		if pkg.Status.BuildStatus == fv1.BuildStatusPending || pkg.Status.BuildStatus == fv1.BuildStatusRunning {
 			pkgw.buildWithCache(ctx, pkg)
 		}
 	}

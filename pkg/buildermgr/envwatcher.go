@@ -248,6 +248,9 @@ func (envw *environmentWatcher) DeleteBuilderDeployment(ctx context.Context, env
 }
 
 func (envw *environmentWatcher) createBuilder(ctx context.Context, env *fv1.Environment, ns string) (*builderInfo, error) {
+	// Ensure builder service account exists
+	utils.EnsureBuilderSA(ctx, envw.kubernetesClient, envw.logger, ns)
+
 	var svc *apiv1.Service
 	var deploy *appsv1.Deployment
 

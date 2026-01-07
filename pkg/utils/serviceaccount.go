@@ -106,6 +106,15 @@ func CreateMissingPermissionForSA(ctx context.Context, kubernetesClient kubernet
 	}
 }
 
+func EnsureFetcherSA(ctx context.Context, kubernetesClient kubernetes.Interface, logger *zap.Logger, namespace string) {
+	logger.Info("EnsureFetcherSA called", zap.String("namespace", namespace))
+	setupSAAndRoleBindings(ctx, kubernetesClient, logger, namespace, fetcherCheck)
+}
+
+func EnsureBuilderSA(ctx context.Context, kubernetesClient kubernetes.Interface, logger *zap.Logger, namespace string) {
+	setupSAAndRoleBindings(ctx, kubernetesClient, logger, namespace, builderCheck)
+}
+
 func getSAObj(kubernetesClient kubernetes.Interface, logger *zap.Logger) *ServiceAccount {
 	saObj := &ServiceAccount{
 		kubernetesClient: kubernetesClient,
@@ -119,11 +128,18 @@ func getSAObj(kubernetesClient kubernetes.Interface, logger *zap.Logger) *Servic
 
 func (sa *ServiceAccount) runSACheck(ctx context.Context) {
 	for _, ns := range sa.nsResolver.FissionResourceNS {
+		if ns == metav1.NamespaceAll {
+			continue
+		}
 		for _, permission := range sa.permissions {
 			if permission.saName == BuilderSAName {
 				ns = sa.nsResolver.GetBuilderNS(ns)
 			} else {
 				ns = sa.nsResolver.GetFunctionNS(ns)
+			}
+			if ns == "" {
+				sa.logger.Debug("Skipping service account check for empty namespace", zap.String("sa_name", permission.saName))
+				continue
 			}
 			setupSAAndRoleBindings(ctx, sa.kubernetesClient, sa.logger, ns, permission)
 		}
@@ -139,6 +155,7 @@ func setupSAAndRoleBindings(ctx context.Context, client kubernetes.Interface, lo
 			zap.Error(err))
 		return
 	}
+	logger.Info("service account ensured", zap.String("sa_name", SAObj.Name), zap.String("namespace", SAObj.Namespace))
 
 	var rules []rbac.PolicyRule
 

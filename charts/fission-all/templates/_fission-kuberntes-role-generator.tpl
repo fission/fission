@@ -1,7 +1,8 @@
 {{- define "kubernetes-role-generator" }}
+{{- if or (not .Values.watchAllNamespaces) (eq .namespace .Values.defaultNamespace) -}}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
+kind: {{ if .Values.watchAllNamespaces }}ClusterRole{{ else }}Role{{ end }}
 metadata:
 {{- if eq "preupgrade" .component }}
   annotations:
@@ -10,7 +11,9 @@ metadata:
     helm.sh/hook-weight: "-2"
 {{- end }}
   name: "{{ .Release.Name }}-{{ .component }}"
+  {{- if not .Values.watchAllNamespaces }}
   namespace: {{ .namespace }}
+  {{- end }}
 {{- if eq "buildermgr" .component }}
 {{- include "buildermgr-kuberules" . }}
 {{- end }}
@@ -43,7 +46,7 @@ metadata:
 {{- end }}
 
 ---
-kind: RoleBinding
+kind: {{ if .Values.watchAllNamespaces }}ClusterRoleBinding{{ else }}RoleBinding{{ end }}
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
 {{- if eq "preupgrade" .component }}
@@ -52,13 +55,16 @@ metadata:
     helm.sh/hook-delete-policy: before-hook-creation
 {{- end }}
   name: "{{ .Release.Name }}-{{ .component }}"
+  {{- if not .Values.watchAllNamespaces }}
   namespace: {{ .namespace }}
+  {{- end }}
 subjects:
   - kind: ServiceAccount
     name: "fission-{{ .component }}"
     namespace: {{ .Release.Namespace }}
 roleRef:
-  kind: Role
+  kind: {{ if .Values.watchAllNamespaces }}ClusterRole{{ else }}Role{{ end }}
   name: "{{ .Release.Name }}-{{ .component }}"
   apiGroup: rbac.authorization.k8s.io
-{{- end }}
+{{- end -}}
+{{- end -}}

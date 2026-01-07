@@ -86,6 +86,13 @@ functionNamespace: ""
 ## - namespace3
 additionalFissionNamespaces: []
 
+## watchAllNamespaces decides whether to watch all namespaces for fission custom resources.
+## If set to true, Fission will watch all namespaces.
+## This is useful when you have many namespaces and don't want to list them all in additionalFissionNamespaces.
+## limiting the number of times the helm chart needs to be upgraded.
+##
+watchAllNamespaces: true
+
 ## createNamespace decides to create namespaces by the chart.
 ## If set to true, functionNamespace and builderNamespace namespaces mentioned above will be created by the chart.
 ## Set to false if you want to create the namespaces manually.

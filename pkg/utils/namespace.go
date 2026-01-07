@@ -16,6 +16,7 @@ const (
 	ENV_BUILDER_NAMESPACE    string = "FISSION_BUILDER_NAMESPACE"
 	ENV_DEFAULT_NAMESPACE    string = "FISSION_DEFAULT_NAMESPACE"
 	ENV_ADDITIONAL_NAMESPACE string = "FISSION_RESOURCE_NAMESPACES"
+	ENV_WATCH_ALL_NAMESPACES string = "FISSION_WATCH_ALL_NAMESPACES"
 )
 
 type (
@@ -107,6 +108,11 @@ func (nsr *NamespaceResolver) FissionNSWithOptions(option ...option) map[string]
 
 func GetNamespaces() map[string]string {
 	namespaces := make(map[string]string)
+
+	if os.Getenv(ENV_WATCH_ALL_NAMESPACES) == "true" {
+		namespaces[metav1.NamespaceAll] = metav1.NamespaceAll
+		return namespaces
+	}
 
 	envValue := os.Getenv(ENV_DEFAULT_NAMESPACE)
 	if len(envValue) > 0 {
