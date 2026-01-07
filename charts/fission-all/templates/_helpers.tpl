@@ -95,10 +95,16 @@ Helper template to construct image names with repository and tag
 - name: FISSION_DEFAULT_NAMESPACE
   value: "{{ .Values.defaultNamespace }}"
 - name: FISSION_RESOURCE_NAMESPACES
+{{- if .Values.watchAllNamespaces }}
+  value: ""
+- name: FISSION_WATCH_ALL_NAMESPACES
+  value: "true"
+{{- else }}
 {{- if gt (len .Values.additionalFissionNamespaces) 0 }}
   value: "{{ .Values.defaultNamespace }},{{ join "," .Values.additionalFissionNamespaces }}"
 {{- else }}
   value: {{ .Values.defaultNamespace }}  
+{{- end }}
 {{- end }}
 {{- end }}
 

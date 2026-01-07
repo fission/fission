@@ -242,7 +242,15 @@ func (deploy *NewDeploy) IsValid(ctx context.Context, fsvc *fscache.FuncSvc) boo
 	}
 	for _, obj := range fsvc.KubernetesObjects {
 		if strings.ToLower(obj.Kind) == "service" {
-			_, err := deploy.svcLister[obj.Namespace].Services(obj.Namespace).Get(obj.Name)
+			lister, ok := deploy.svcLister[obj.Namespace]
+			if !ok {
+				lister = deploy.svcLister[metav1.NamespaceAll]
+			}
+			if lister == nil {
+				logger.Warn("service lister not found", zap.String("namespace", obj.Namespace))
+				return false
+			}
+			_, err := lister.Services(obj.Namespace).Get(obj.Name)
 			if err != nil {
 				if !k8sErrs.IsNotFound(err) {
 					logger.Error("error validating function service", zap.String("function", fsvc.Function.Name), zap.Error(err))
@@ -251,7 +259,15 @@ func (deploy *NewDeploy) IsValid(ctx context.Context, fsvc *fscache.FuncSvc) boo
 			}
 
 		} else if strings.ToLower(obj.Kind) == "deployment" {
-			currentDeploy, err := deploy.deplLister[obj.Namespace].Deployments(obj.Namespace).Get(obj.Name)
+			lister, ok := deploy.deplLister[obj.Namespace]
+			if !ok {
+				lister = deploy.deplLister[metav1.NamespaceAll]
+			}
+			if lister == nil {
+				logger.Warn("deployment lister not found", zap.String("namespace", obj.Namespace))
+				return false
+			}
+			currentDeploy, err := lister.Deployments(obj.Namespace).Get(obj.Name)
 			if err != nil {
 				if !k8sErrs.IsNotFound(err) {
 					logger.Error("error validating function deployment", zap.String("function", fsvc.Function.Name), zap.Error(err))

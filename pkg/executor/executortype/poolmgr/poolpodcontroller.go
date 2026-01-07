@@ -161,7 +161,14 @@ func (p *PoolPodController) processRS(rs *apps.ReplicaSet) {
 		return
 	}
 	rsLabelMap["managed"] = "false"
-	specializedPods, err := p.podLister[rs.Namespace].Pods(rs.Namespace).List(labels.SelectorFromSet(rsLabelMap))
+
+	podLister, err := p.getPodLister(rs.Namespace)
+	if err != nil {
+		logger.Error("Failed to get pod lister", zap.Error(err))
+		return
+	}
+
+	specializedPods, err := podLister.Pods(rs.Namespace).List(labels.SelectorFromSet(rsLabelMap))
 	if err != nil {
 		logger.Error("Failed to list specialized pods", zap.Error(err))
 	}
@@ -294,17 +301,24 @@ func (p *PoolPodController) workerRun(ctx context.Context, name string, processF
 }
 
 func (p *PoolPodController) getEnvLister(namespace string) (flisterv1.EnvironmentLister, error) {
-	lister, ok := p.envLister[namespace]
-	if ok {
+	if lister, ok := p.envLister[namespace]; ok {
 		return lister, nil
 	}
-	for ns, lister := range p.envLister {
-		if ns == namespace {
-			return lister, nil
-		}
+	if lister, ok := p.envLister[metav1.NamespaceAll]; ok {
+		return lister, nil
 	}
 	p.logger.Error("no environment lister found for namespace", zap.String("namespace", namespace))
 	return nil, fmt.Errorf("no environment lister found for namespace %s", namespace)
+}
+
+func (p *PoolPodController) getPodLister(namespace string) (corelisters.PodLister, error) {
+	if lister, ok := p.podLister[namespace]; ok {
+		return lister, nil
+	}
+	if lister, ok := p.podLister[metav1.NamespaceAll]; ok {
+		return lister, nil
+	}
+	return nil, fmt.Errorf("no pod lister found for namespace %s", namespace)
 }
 
 func (p *PoolPodController) envCreateUpdateQueueProcessFunc(ctx context.Context) bool {
@@ -398,8 +412,8 @@ func (p *PoolPodController) envDeleteQueueProcessFunc(ctx context.Context) bool 
 	p.gpm.cleanupPool(ctx, env)
 	specializePodLables := getSpecializedPodLabels(env)
 	ns := p.nsResolver.ResolveNamespace(p.nsResolver.FunctionNamespace)
-	podLister, ok := p.podLister[ns]
-	if !ok {
+	podLister, err := p.getPodLister(ns)
+	if err != nil {
 		p.logger.Error("no pod lister found for namespace", zap.String("namespace", ns))
 		p.envDeleteQueue.Forget(env)
 		return false
@@ -443,7 +457,13 @@ func (p *PoolPodController) spCleanupPodQueueProcessFunc(ctx context.Context) bo
 		p.spCleanupPodQueue.Forget(key)
 		return false
 	}
-	pod, err := p.podLister[namespace].Pods(namespace).Get(name)
+	podLister, err := p.getPodLister(namespace)
+	if err != nil {
+		p.logger.Error("error getting pod lister", zap.Error(err))
+		p.spCleanupPodQueue.Forget(key)
+		return false
+	}
+	pod, err := podLister.Pods(namespace).Get(name)
 	if apierrors.IsNotFound(err) {
 		p.logger.Info("pod not found", zap.String("key", key))
 		p.spCleanupPodQueue.Forget(key)

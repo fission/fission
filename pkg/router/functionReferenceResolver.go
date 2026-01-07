@@ -123,6 +123,9 @@ func (frr *functionReferenceResolver) getInformerByNamespace(namespace string) (
 	if informer, ok := frr.funcInformer[namespace]; ok {
 		return informer, nil
 	}
+	if informer, ok := frr.funcInformer[metav1.NamespaceAll]; ok {
+		return informer, nil
+	}
 	return nil, fmt.Errorf("informer for namespace %s not found", namespace)
 }
 

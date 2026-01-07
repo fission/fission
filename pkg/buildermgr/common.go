@@ -56,8 +56,12 @@ func buildPackage(ctx context.Context, logger *zap.Logger, fissionClient version
 
 	svcName := fmt.Sprintf("%s-%s.%s", env.Name, env.ResourceVersion, envBuilderNamespace)
 	srcPkgFilename := fmt.Sprintf("%s-%s", pkg.Name, strings.ToLower(uniuri.NewLen(6)))
-	fetcherC := fetcherClient.MakeClient(logger, fmt.Sprintf("http://%s:8000", svcName))
-	builderC := builderClient.MakeClient(logger, fmt.Sprintf("http://%s:8001", svcName))
+	fetcherUrl := fmt.Sprintf("http://%s:8000", svcName)
+	builderUrl := fmt.Sprintf("http://%s:8001", svcName)
+	logger.Info("Constructed Builder/Fetcher URLs", zap.String("fetcher_url", fetcherUrl), zap.String("builder_url", builderUrl))
+
+	fetcherC := fetcherClient.MakeClient(logger, fetcherUrl)
+	builderC := builderClient.MakeClient(logger, builderUrl)
 
 	defer func() {
 		logger.Info("cleaning src pkg from builder storage", zap.String("source_package", srcPkgFilename))
@@ -75,6 +79,7 @@ func buildPackage(ctx context.Context, logger *zap.Logger, fissionClient version
 		KeepArchive: false,
 	}
 
+	logger.Info("Calling Fetcher Fetch", zap.Any("request", fetchReq))
 	// send fetch request to fetcher
 	err = fetcherC.Fetch(ctx, fetchReq)
 	if err != nil {
@@ -83,6 +88,7 @@ func buildPackage(ctx context.Context, logger *zap.Logger, fissionClient version
 		e = fmt.Sprintf("%s: %v", e, err)
 		return nil, e, ferror.MakeError(http.StatusInternalServerError, e)
 	}
+	logger.Info("Fetcher Fetch succeeded")
 
 	buildCmd := pkg.Spec.BuildCommand
 	if len(buildCmd) == 0 {
