@@ -18,13 +18,13 @@ package otel
 import (
 	"context"
 
+	"github.com/go-logr/logr"
 	"go.opentelemetry.io/otel/trace"
-	"go.uber.org/zap"
 )
 
-func LoggerWithTraceID(ctx context.Context, logger *zap.Logger) *zap.Logger {
+func LoggerWithTraceID(ctx context.Context, logger logr.Logger) logr.Logger {
 	if span := trace.SpanContextFromContext(ctx); span.TraceID().IsValid() {
-		return logger.With(zap.String("trace_id", span.TraceID().String()))
+		return logger.WithValues("trace_id", span.TraceID().String())
 	}
 	return logger
 }

@@ -24,7 +24,6 @@ import (
 	"strconv"
 	"time"
 
-	"go.uber.org/zap"
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
 	k8s_err "k8s.io/apimachinery/pkg/api/errors"
@@ -72,8 +71,7 @@ func (deploy *NewDeploy) createOrGetDeployment(ctx context.Context, fn *fv1.Func
 			// rolling update if spec is different from the one in the cluster.
 			existingDepl, err = deploy.kubernetesClient.AppsV1().Deployments(deployNamespace).Update(ctx, existingDepl, metav1.UpdateOptions{})
 			if err != nil {
-				deploy.logger.Warn("error adopting deploy", zap.Error(err),
-					zap.String("deploy", deployName), zap.String("ns", deployNamespace))
+				deploy.logger.Error(err, "error adopting deploy", "deploy", deployName, "ns", deployNamespace)
 				return nil, err
 			}
 			// In this case, we just return without waiting for it for fast bootstraping.
@@ -83,7 +81,7 @@ func (deploy *NewDeploy) createOrGetDeployment(ctx context.Context, fn *fv1.Func
 		if *existingDepl.Spec.Replicas < minScale {
 			err = deploy.scaleDeployment(ctx, existingDepl.Namespace, existingDepl.Name, minScale)
 			if err != nil {
-				deploy.logger.Error("error scaling up function deployment", zap.Error(err), zap.String("function", fn.Name))
+				deploy.logger.Error(err, "error scaling up function deployment", "function", fn.Name)
 				return nil, err
 			}
 		}
@@ -100,11 +98,9 @@ func (deploy *NewDeploy) createOrGetDeployment(ctx context.Context, fn *fv1.Func
 				depl, err = deploy.kubernetesClient.AppsV1().Deployments(deployNamespace).Get(ctx, deployName, metav1.GetOptions{})
 			}
 			if err != nil {
-				deploy.logger.Error("error while creating function deployment",
-					zap.Error(err),
-					zap.String("function", fn.Name),
-					zap.String("deployment_name", deployName),
-					zap.String("deployment_namespace", deployNamespace))
+				deploy.logger.Error(err, "error while creating function deployment", "function", fn.Name,
+					"deployment_name", deployName,
+					"deployment_namespace", deployNamespace)
 				return nil, err
 			}
 		}
@@ -239,7 +235,7 @@ func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function
 		if err == nil {
 			pod.Spec = *updatedPodSpec
 		} else {
-			deploy.logger.Warn("Failed to merge the specs", zap.Error(err))
+			deploy.logger.Error(err, "Failed to merge the specs")
 		}
 	}
 
@@ -392,8 +388,7 @@ func (deploy *NewDeploy) createOrGetSvc(ctx context.Context, fn *fv1.Function, d
 			existingSvc.Spec.Type = service.Spec.Type
 			existingSvc, err = deploy.kubernetesClient.CoreV1().Services(svcNamespace).Update(ctx, existingSvc, metav1.UpdateOptions{})
 			if err != nil {
-				logger.Warn("error adopting service", zap.Error(err),
-					zap.String("service", svcName), zap.String("ns", svcNamespace))
+				logger.Error(err, "error adopting service", "service", svcName, "ns", svcNamespace)
 				return nil, err
 			}
 		}
@@ -444,9 +439,8 @@ func (deploy *NewDeploy) waitForDeploy(ctx context.Context, depl *appsv1.Deploym
 		time.Sleep(time.Second)
 	}
 
-	logger.Error("Deployment provision failed within timeout window",
-		zap.String("name", latestDepl.Name), zap.Any("old_status", oldStatus),
-		zap.Any("current_status", latestDepl.Status), zap.Int("timeout", specializationTimeout))
+	logger.Error(nil, "Deployment provision failed within timeout window", "name", latestDepl.Name, "old_status", oldStatus,
+		"current_status", latestDepl.Status, "timeout", specializationTimeout)
 
 	// this error appears in the executor pod logs
 	timeoutError := fmt.Errorf("failed to create deployment within the timeout window of %d seconds", specializationTimeout)
@@ -459,28 +453,22 @@ func (deploy *NewDeploy) cleanupNewdeploy(ctx context.Context, ns string, name s
 
 	err := deploy.deleteSvc(ctx, ns, name)
 	if err != nil && !k8s_err.IsNotFound(err) {
-		deploy.logger.Error("error deleting service for newdeploy function",
-			zap.Error(err),
-			zap.String("function_name", name),
-			zap.String("function_namespace", ns))
+		deploy.logger.Error(err, "error deleting service for newdeploy function", "function_name", name,
+			"function_namespace", ns)
 		result = errors.Join(result, err)
 	}
 
 	err = deploy.hpaops.DeleteHpa(ctx, ns, name)
 	if err != nil && !k8s_err.IsNotFound(err) {
-		deploy.logger.Error("error deleting HPA for newdeploy function",
-			zap.Error(err),
-			zap.String("function_name", name),
-			zap.String("function_namespace", ns))
+		deploy.logger.Error(err, "error deleting HPA for newdeploy function", "function_name", name,
+			"function_namespace", ns)
 		result = errors.Join(result, err)
 	}
 
 	err = deploy.deleteDeployment(ctx, ns, name)
 	if err != nil && !k8s_err.IsNotFound(err) {
-		deploy.logger.Error("error deleting deployment for newdeploy function",
-			zap.Error(err),
-			zap.String("function_name", name),
-			zap.String("function_namespace", ns))
+		deploy.logger.Error(err, "error deleting deployment for newdeploy function", "function_name", name,
+			"function_namespace", ns)
 		result = errors.Join(result, err)
 	}
 

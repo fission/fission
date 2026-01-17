@@ -29,9 +29,9 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/go-logr/logr"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
-	"go.uber.org/zap"
 	"golang.org/x/net/context/ctxhttp"
 	corev1 "k8s.io/api/core/v1"
 	k8serr "k8s.io/apimachinery/pkg/api/errors"
@@ -55,7 +55,7 @@ import (
 
 type (
 	Fetcher struct {
-		logger           *zap.Logger
+		logger           logr.Logger
 		sharedVolumePath string
 		sharedSecretPath string
 		sharedConfigPath string
@@ -74,20 +74,20 @@ func makeVolumeDir(dirPath string) error {
 	return os.MkdirAll(dirPath, os.ModeDir|0750)
 }
 
-func MakeFetcher(logger *zap.Logger, clientGen crd.ClientGeneratorInterface, sharedVolumePath string, sharedSecretPath string,
+func MakeFetcher(logger logr.Logger, clientGen crd.ClientGeneratorInterface, sharedVolumePath string, sharedSecretPath string,
 	sharedConfigPath string, podInfoMountDir string) (*Fetcher, error) {
-	fLogger := logger.Named("fetcher")
+	fLogger := logger.WithName("fetcher")
 	err := makeVolumeDir(sharedVolumePath)
 	if err != nil {
-		fLogger.Fatal("error creating shared volume directory", zap.Error(err), zap.String("directory", sharedVolumePath))
+		fLogger.Error(err, "error creating shared volume directory", "directory", sharedVolumePath)
 	}
 	err = makeVolumeDir(sharedSecretPath)
 	if err != nil {
-		fLogger.Fatal("error creating shared secret directory", zap.Error(err), zap.String("directory", sharedSecretPath))
+		fLogger.Error(err, "error creating shared secret directory", "directory", sharedSecretPath)
 	}
 	err = makeVolumeDir(sharedConfigPath)
 	if err != nil {
-		fLogger.Fatal("error creating shared config directory", zap.Error(err), zap.String("directory", sharedConfigPath))
+		fLogger.Error(err, "error creating shared config directory", "directory", sharedConfigPath)
 	}
 
 	fissionClient, err := clientGen.GetFissionClient()
@@ -150,7 +150,7 @@ func (fetcher *Fetcher) VersionHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	_, err := w.Write([]byte(info.BuildInfo().String()))
 	if err != nil {
-		fetcher.logger.Error("error writing response", zap.Error(err))
+		fetcher.logger.Error(err, "error writing response")
 	}
 }
 
@@ -167,34 +167,34 @@ func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	defer func() {
 		elapsed := time.Since(startTime)
-		logger.Info("fetch request done", zap.Duration("elapsed_time", elapsed))
+		logger.Info("fetch request done", "elapsed_time", elapsed)
 	}()
 
 	// parse request
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		logger.Error("error reading request body", zap.Error(err))
+		logger.Error(err, "error reading request body")
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	var req FunctionFetchRequest
 	err = json.Unmarshal(body, &req)
 	if err != nil {
-		logger.Error("error parsing request body", zap.Error(err))
+		logger.Error(err, "error parsing request body")
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	pkg, err := fetcher.getPkgInformation(ctx, req)
 	if err != nil {
-		logger.Error("error getting package information", zap.Error(err))
+		logger.Error(err, "error getting package information")
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	code, err := fetcher.Fetch(ctx, pkg, req)
 	if err != nil {
-		logger.Error("error fetching", zap.Error(err))
+		logger.Error(err, "error fetching")
 		http.Error(w, err.Error(), code)
 		return
 	}
@@ -202,7 +202,7 @@ func (fetcher *Fetcher) FetchHandler(w http.ResponseWriter, r *http.Request) {
 	logger.Info("checking secrets/cfgmaps")
 	code, err = fetcher.FetchSecretsAndCfgMaps(ctx, req.Secrets, req.ConfigMaps)
 	if err != nil {
-		logger.Error("error fetching secrets and config maps", zap.Error(err))
+		logger.Error(err, "error fetching secrets and config maps")
 		http.Error(w, err.Error(), code)
 		return
 	}
@@ -224,21 +224,21 @@ func (fetcher *Fetcher) SpecializeHandler(w http.ResponseWriter, r *http.Request
 	// parse request
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		logger.Error("error reading request body", zap.Error(err))
+		logger.Error(err, "error reading request body")
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	var req FunctionSpecializeRequest
 	err = json.Unmarshal(body, &req)
 	if err != nil {
-		logger.Error("error parsing request body", zap.Error(err))
+		logger.Error(err, "error parsing request body")
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	err = fetcher.SpecializePod(ctx, req.FetchReq, req.LoadReq)
 	if err != nil {
-		logger.Error("error specializing pod", zap.Error(err))
+		logger.Error(err, "error specializing pod")
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -254,22 +254,22 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 
 	storePath, err := utils.SanitizeFilePath(filepath.Join(fetcher.sharedVolumePath, req.Filename), fetcher.sharedVolumePath)
 	if err != nil {
-		logger.Error(err.Error(), zap.String("filename", req.Filename))
+		logger.Error(err, "filename", req.Filename)
 		return http.StatusBadRequest, fmt.Errorf("%s, request: %v", err, req)
 	}
 
 	// verify first if the file already exists.
 	if _, err := os.Stat(storePath); err == nil {
 		logger.Info("requested file already exists at shared volume - skipping fetch",
-			zap.String("requested_file", req.Filename),
-			zap.String("shared_volume_path", fetcher.sharedVolumePath))
+			"requested_file", req.Filename,
+			"shared_volume_path", fetcher.sharedVolumePath)
 		otelUtils.SpanTrackEvent(ctx, "packageAlreadyExists", otelUtils.GetAttributesForPackage(pkg)...)
 		return http.StatusOK, nil
 	}
 
 	tmpPath, err := utils.SanitizeFilePath(storePath+".tmp", fetcher.sharedVolumePath)
 	if err != nil {
-		logger.Error(err.Error(), zap.String("filename", req.Filename))
+		logger.Error(err, "filename", req.Filename)
 		return http.StatusBadRequest, fmt.Errorf("%s, request: %v", err, req)
 	}
 
@@ -283,7 +283,7 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 		err := utils.DownloadUrl(ctx, fetcher.httpClient, req.Url, tmpPath)
 		if err != nil {
 			e := "failed to download url"
-			logger.Error(e, zap.Error(err), zap.String("url", req.Url))
+			logger.Error(err, e, "url", req.Url)
 			return http.StatusBadRequest, fmt.Errorf("%s: %s: %w", e, req.Url, err)
 		}
 	} else {
@@ -297,11 +297,11 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 			// we hit this "Get : unsupported protocol scheme "" error.
 			// it may be useful to the user if we can send a more meaningful error in such a scenario.
 			if pkg.Status.BuildStatus != fv1.BuildStatusSucceeded && pkg.Status.BuildStatus != fv1.BuildStatusNone {
-				e := fmt.Sprintf("cannot fetch deployment: package build status was not %q", fv1.BuildStatusSucceeded)
+				e := fmt.Errorf("cannot fetch deployment: package build status was not %q", fv1.BuildStatusSucceeded)
 				logger.Error(e,
-					zap.String("package_name", pkg.Name),
-					zap.String("package_namespace", pkg.Namespace),
-					zap.Any("package_build_status", pkg.Status.BuildStatus))
+					"package_name", pkg.Name,
+					"package_namespace", pkg.Namespace,
+					"package_build_status", pkg.Status.BuildStatus)
 				return http.StatusInternalServerError, fmt.Errorf("%s: pkg %s.%s has a status of %s", e, pkg.Name, pkg.Namespace, pkg.Status.BuildStatus)
 			}
 			archive = &pkg.Spec.Deployment
@@ -315,7 +315,7 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 			err := os.WriteFile(tmpPath, archive.Literal, 0600)
 			if err != nil {
 				e := "failed to write file"
-				logger.Error(e, zap.Error(err), zap.String("location", tmpPath))
+				logger.Error(err, e, "location", tmpPath)
 				return http.StatusInternalServerError, fmt.Errorf("%s %s: %w", e, tmpPath, err)
 			}
 			otelUtils.SpanTrackEvent(ctx, "archiveLiteral", otelUtils.GetAttributesForPackage(pkg)...)
@@ -329,7 +329,7 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 			err := utils.DownloadUrl(ctx, fetcher.httpClient, archive.URL, tmpPath)
 			if err != nil {
 				e := "failed to download url"
-				logger.Error(e, zap.Error(err), zap.String("url", req.Url))
+				logger.Error(err, e, "url", req.Url)
 				return http.StatusBadRequest, fmt.Errorf("%s %s: %w", e, req.Url, err)
 			}
 
@@ -338,13 +338,13 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 				checksum, err := utils.GetFileChecksum(tmpPath)
 				if err != nil {
 					e := "failed to get checksum"
-					logger.Error(e, zap.Error(err))
+					logger.Error(err, e)
 					return http.StatusBadRequest, fmt.Errorf("%s: %w", e, err)
 				}
 				err = verifyChecksum(checksum, &archive.Checksum)
 				if err != nil {
 					e := "failed to verify checksum"
-					logger.Error(e, zap.Error(err))
+					logger.Error(err, e)
 					return http.StatusBadRequest, fmt.Errorf("%s: %w", e, err)
 				}
 			}
@@ -357,10 +357,8 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 		tmpUnarchivePath := filepath.Join(fetcher.sharedVolumePath, uuid.NewString())
 		err := utils.Unarchive(ctx, tmpPath, tmpUnarchivePath)
 		if err != nil {
-			logger.Error("error unarchive",
-				zap.Error(err),
-				zap.String("archive_location", tmpPath),
-				zap.String("target_location", tmpUnarchivePath))
+			logger.Error(err, "error unarchive", "archive_location", tmpPath,
+				"target_location", tmpUnarchivePath)
 			return http.StatusInternalServerError, err
 		}
 
@@ -370,15 +368,13 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 	// move tmp file to requested filename
 	err = fetcher.rename(tmpPath, storePath)
 	if err != nil {
-		logger.Error("error renaming file",
-			zap.Error(err),
-			zap.String("original_path", tmpPath),
-			zap.String("rename_path", storePath))
+		logger.Error(err, "error renaming file", "original_path", tmpPath,
+			"rename_path", storePath)
 		return http.StatusInternalServerError, fmt.Errorf("error renaming file: %w", err)
 	}
 
 	otelUtils.SpanTrackEvent(ctx, "packageFetched", otelUtils.GetAttributesForPackage(pkg)...)
-	logger.Info("successfully placed", zap.String("location", storePath))
+	logger.Info("successfully placed", "location", storePath)
 	return http.StatusOK, nil
 }
 
@@ -399,37 +395,31 @@ func (fetcher *Fetcher) FetchSecretsAndCfgMaps(ctx context.Context, secrets []fv
 					httpCode = http.StatusNotFound
 					e = "secret was not found in kubeapi"
 				}
-				logger.Error(e,
-					zap.Error(err),
-					zap.String("secret_name", secret.Name),
-					zap.String("secret_namespace", secret.Namespace))
+				logger.Error(err, e, "secret_name", secret.Name,
+					"secret_namespace", secret.Namespace)
 
 				return httpCode, errors.New(e)
 			}
 
 			secretDir, err := utils.SanitizeFilePath(filepath.Join(fetcher.sharedSecretPath, secret.Namespace, secret.Name), fetcher.sharedSecretPath)
 			if err != nil {
-				logger.Error(err.Error(), zap.String("directory", secretDir), zap.String("secret_name", secret.Name), zap.String("secret_namespace", secret.Namespace))
+				logger.Error(err, "directory", secretDir, "secret_name", secret.Name, "secret_namespace", secret.Namespace)
 				return http.StatusBadRequest, fmt.Errorf("%s, request: %v", err, secret)
 			}
 
 			err = os.MkdirAll(secretDir, os.ModeDir|0750)
 			if err != nil {
 				e := "failed to create directory for secret"
-				logger.Error(e,
-					zap.Error(err),
-					zap.String("directory", secretDir),
-					zap.String("secret_name", secret.Name),
-					zap.String("secret_namespace", secret.Namespace))
+				logger.Error(err, e, "directory", secretDir,
+					"secret_name", secret.Name,
+					"secret_namespace", secret.Namespace)
 				return http.StatusInternalServerError, fmt.Errorf("%s: %s: %w", e, secretDir, err)
 			}
 			err = writeSecretOrConfigMap(data.Data, secretDir)
 			if err != nil {
-				logger.Error("failed to write secret to file location",
-					zap.Error(err),
-					zap.String("location", secretDir),
-					zap.String("secret_name", secret.Name),
-					zap.String("secret_namespace", secret.Namespace))
+				logger.Error(err, "failed to write secret to file location", "location", secretDir,
+					"secret_name", secret.Name,
+					"secret_namespace", secret.Namespace)
 				return http.StatusInternalServerError, err
 			}
 			otelUtils.SpanTrackEvent(ctx, "storedSecret", otelUtils.MapToAttributes(map[string]string{
@@ -451,17 +441,15 @@ func (fetcher *Fetcher) FetchSecretsAndCfgMaps(ctx context.Context, secrets []fv
 					httpCode = http.StatusNotFound
 					e = "configmap was not found in kubeapi"
 				}
-				logger.Error(e,
-					zap.Error(err),
-					zap.String("config_map_name", config.Name),
-					zap.String("config_map_namespace", config.Namespace))
+				logger.Error(err, e, "config_map_name", config.Name,
+					"config_map_namespace", config.Namespace)
 
 				return httpCode, errors.New(e)
 			}
 
 			configDir, err := utils.SanitizeFilePath(filepath.Join(fetcher.sharedConfigPath, config.Namespace, config.Name), fetcher.sharedConfigPath)
 			if err != nil {
-				logger.Error(err.Error(), zap.String("directory", configDir), zap.String("config_map_name", config.Name), zap.String("config_map_namespace", config.Namespace))
+				logger.Error(err, "directory", configDir, "config_map_name", config.Name, "config_map_namespace", config.Namespace)
 				return http.StatusBadRequest, fmt.Errorf("%s, request: %v", err,
 					config)
 			}
@@ -469,11 +457,9 @@ func (fetcher *Fetcher) FetchSecretsAndCfgMaps(ctx context.Context, secrets []fv
 			err = os.MkdirAll(configDir, os.ModeDir|0750)
 			if err != nil {
 				e := "failed to create directory for configmap"
-				logger.Error(e,
-					zap.Error(err),
-					zap.String("directory", configDir),
-					zap.String("config_map_name", config.Name),
-					zap.String("config_map_namespace", config.Namespace))
+				logger.Error(err, e, "directory", configDir,
+					"config_map_name", config.Name,
+					"config_map_namespace", config.Namespace)
 				return http.StatusInternalServerError, fmt.Errorf("%s: %s: %w", e, configDir, err)
 			}
 			configMap := make(map[string][]byte)
@@ -482,11 +468,9 @@ func (fetcher *Fetcher) FetchSecretsAndCfgMaps(ctx context.Context, secrets []fv
 			}
 			err = writeSecretOrConfigMap(configMap, configDir)
 			if err != nil {
-				logger.Error("failed to write configmap to file location",
-					zap.Error(err),
-					zap.String("location", configDir),
-					zap.String("config_map_name", config.Name),
-					zap.String("config_map_namespace", config.Namespace))
+				logger.Error(err, "failed to write configmap to file location", "location", configDir,
+					"config_map_name", config.Name,
+					"config_map_namespace", config.Namespace)
 				return http.StatusInternalServerError, err
 			}
 			otelUtils.SpanTrackEvent(ctx, "storedConfigmap", otelUtils.MapToAttributes(map[string]string{
@@ -511,13 +495,13 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	defer func() {
 		elapsed := time.Since(startTime)
-		logger.Info("upload request done", zap.Duration("elapsed_time", elapsed))
+		logger.Info("upload request done", "elapsed_time", elapsed)
 	}()
 
 	// parse request
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		logger.Error("error reading request body", zap.Error(err))
+		logger.Error(err, "error reading request body")
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -525,22 +509,22 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 	var req ArchiveUploadRequest
 	err = json.Unmarshal(body, &req)
 	if err != nil {
-		logger.Error("error parsing request body", zap.Error(err))
+		logger.Error(err, "error parsing request body")
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	logger.Info("fetcher received upload request", zap.Any("request", req))
+	logger.Info("fetcher received upload request", "request", req)
 
 	srcFilepath, err := utils.SanitizeFilePath(filepath.Join(fetcher.sharedVolumePath, req.Filename), fetcher.sharedVolumePath)
 	if err != nil {
-		logger.Error("error sanitizing file path", zap.Error(err))
+		logger.Error(err, "error sanitizing file path")
 		http.Error(w, fmt.Sprintf("%s: %v", err, req.Filename), http.StatusBadRequest)
 		return
 	}
 	dstFilepath, err := utils.SanitizeFilePath(filepath.Join(fetcher.sharedVolumePath, req.Filename+".zip"), fetcher.sharedVolumePath)
 	if err != nil {
-		logger.Error("error sanitizing file path", zap.Error(err))
+		logger.Error(err, "error sanitizing file path")
 		http.Error(w, fmt.Sprintf("%s: %v", err, req.Filename), http.StatusBadRequest)
 		return
 	}
@@ -549,7 +533,7 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 		errC := utils.DeleteOldPackages(srcFilepath, "DEPLOY_PKG")
 		if errC != nil {
 			m := "error deleting deploy package after upload"
-			logger.Error(m, zap.Error(errC))
+			logger.Error(errC, m)
 		}
 	}()
 
@@ -557,7 +541,7 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 		err = utils.Archive(ctx, srcFilepath, dstFilepath)
 		if err != nil {
 			e := "error archiving zip file"
-			logger.Error(e, zap.Error(err), zap.String("source", srcFilepath), zap.String("destination", dstFilepath))
+			logger.Error(err, e, "source", srcFilepath, "destination", dstFilepath)
 			http.Error(w, fmt.Sprintf("%s: %v", e, err), http.StatusInternalServerError)
 			return
 		}
@@ -565,7 +549,7 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 		err = os.Rename(srcFilepath, dstFilepath)
 		if err != nil {
 			e := "error renaming the archive"
-			logger.Error(e, zap.Error(err), zap.String("source", srcFilepath), zap.String("destination", dstFilepath))
+			logger.Error(err, e, "source", srcFilepath, "destination", dstFilepath)
 			http.Error(w, fmt.Sprintf("%s: %v", e, err), http.StatusInternalServerError)
 			return
 		}
@@ -577,7 +561,7 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 	fileID, err := ssClient.Upload(ctx, dstFilepath, nil)
 	if err != nil {
 		e := "error uploading zip file"
-		logger.Error(e, zap.Error(err), zap.String("file", dstFilepath))
+		logger.Error(err, e, "file", dstFilepath)
 		http.Error(w, fmt.Sprintf("%s: %v", e, err), http.StatusInternalServerError)
 		return
 	}
@@ -585,7 +569,7 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 	sum, err := utils.GetFileChecksum(dstFilepath)
 	if err != nil {
 		e := "error calculating checksum of zip file"
-		logger.Error(e, zap.Error(err), zap.String("file", dstFilepath))
+		logger.Error(err, e, "file", dstFilepath)
 		http.Error(w, fmt.Sprintf("%s: %v", e, err), http.StatusInternalServerError)
 		return
 	}
@@ -598,7 +582,7 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 	rBody, err := json.Marshal(resp)
 	if err != nil {
 		e := "error encoding upload response"
-		logger.Error(e, zap.Error(err))
+		logger.Error(err, e)
 		http.Error(w, fmt.Sprintf("%s: %v", e, err), http.StatusInternalServerError)
 		return
 	}
@@ -609,7 +593,7 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 	_, err = w.Write(rBody)
 	if err != nil {
 		e := "error writing response"
-		logger.Error(e, zap.Error(err))
+		logger.Error(err, e)
 		http.Error(w, fmt.Sprintf("%s: %v", e, err), http.StatusInternalServerError)
 	}
 
@@ -637,7 +621,7 @@ func (fetcher *Fetcher) getPkgInformation(ctx context.Context, req FunctionFetch
 		pkg, err = fetcher.fissionClient.CoreV1().Packages(req.Package.Namespace).Get(ctx, req.Package.Name, metav1.GetOptions{})
 		if err == nil {
 			if req.Package.ResourceVersion != pkg.ResourceVersion {
-				logger.Warn("package resource version mismatch", zap.String("pkgName", req.Package.Name), zap.String("pkgNamespace", req.Package.Namespace), zap.String("pkgResourceVersion", req.Package.ResourceVersion), zap.String("fetchedResourceVersion", pkg.ResourceVersion))
+				logger.Info("package resource version mismatch", "pkgName", req.Package.Name, "pkgNamespace", req.Package.Namespace, "pkgResourceVersion", req.Package.ResourceVersion, "fetchedResourceVersion", pkg.ResourceVersion)
 			}
 			return pkg, nil
 		}
@@ -669,7 +653,7 @@ func (fetcher *Fetcher) SpecializePod(ctx context.Context, fetchReq FunctionFetc
 	startTime := time.Now()
 	defer func() {
 		elapsed := time.Since(startTime)
-		logger.Info("specialize request done", zap.Duration("elapsed_time", elapsed))
+		logger.Info("specialize request done", "elapsed_time", elapsed)
 	}()
 
 	pkg, err := fetcher.getPkgInformation(ctx, fetchReq)
@@ -730,7 +714,7 @@ func (fetcher *Fetcher) SpecializePod(ctx context.Context, fetchReq FunctionFetc
 		if netErr != nil && (netErr.IsConnRefusedError() || netErr.IsDialError()) {
 			if i < maxRetries-1 {
 				time.Sleep(500 * time.Duration(2*i) * time.Millisecond)
-				logger.Error("error connecting to function environment pod for specialization request, retrying", zap.Error(netErr))
+				logger.Error(netErr, "error connecting to function environment pod for specialization request, retrying")
 				continue
 			}
 		}
@@ -754,21 +738,21 @@ func (fetcher *Fetcher) WsStartHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "only GET is supported on this endpoint", http.StatusMethodNotAllowed)
 		return
 	}
-	rec, err := eventRecorder(fetcher.kubeClient)
+	rec, err := eventRecorder(fetcher.kubeClient, logger)
 	if err != nil {
-		logger.Error("Error creating recorder", zap.Error(err))
+		logger.Error(err, "Error creating recorder")
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 
 	pod, err := fetcher.kubeClient.CoreV1().Pods(fetcher.Info.Namespace).Get(ctx, fetcher.Info.Name, metav1.GetOptions{})
 	if err != nil {
-		logger.Error("Failed to get the pod", zap.Error(err))
+		logger.Error(err, "Failed to get the pod")
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 
 	ref, err := reference.GetReference(scheme.Scheme, pod)
 	if err != nil {
-		logger.Error("Could not get reference for pod", zap.Error(err))
+		logger.Error(err, "Could not get reference for pod")
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 	rec.Event(ref, corev1.EventTypeNormal, "WsConnectionStarted", "Websocket connection has been formed on this pod")
@@ -787,21 +771,21 @@ func (fetcher *Fetcher) WsEndHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "only GET is supported on this endpoint", http.StatusMethodNotAllowed)
 		return
 	}
-	rec, err := eventRecorder(fetcher.kubeClient)
+	rec, err := eventRecorder(fetcher.kubeClient, logger)
 	if err != nil {
-		logger.Error("Error creating recorder", zap.Error(err))
+		logger.Error(err, "Error creating recorder")
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 	pod, err := fetcher.kubeClient.CoreV1().Pods(fetcher.Info.Namespace).Get(ctx, fetcher.Info.Name, metav1.GetOptions{})
 	if err != nil {
-		logger.Error("Failed to get the pod", zap.Error(err))
+		logger.Error(err, "Failed to get the pod")
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 
 	// There will only be one time since we've used field selector
 	ref, err := reference.GetReference(scheme.Scheme, pod)
 	if err != nil {
-		logger.Error("Could not get reference for pod", zap.Error(err))
+		logger.Error(err, "Could not get reference for pod")
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 	// We could use Eventf and supply the amount of time the connection was inactive although, in case of multiple connections, it doesn't make sense
@@ -811,9 +795,9 @@ func (fetcher *Fetcher) WsEndHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func eventRecorder(kubeClient kubernetes.Interface) (record.EventRecorder, error) {
+func eventRecorder(kubeClient kubernetes.Interface, logger logr.Logger) (record.EventRecorder, error) {
 	eventBroadcaster := record.NewBroadcaster()
-	eventBroadcaster.StartLogging(zap.S().Infof)
+	eventBroadcaster.StartLogging(logger.Info)
 	eventBroadcaster.StartRecordingToSink(
 		&typedcorev1.EventSinkImpl{
 			Interface: kubeClient.CoreV1().Events("")})

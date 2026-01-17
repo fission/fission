@@ -22,7 +22,6 @@ import (
 	"maps"
 	"strings"
 
-	"go.uber.org/zap"
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
 	k8sErrs "k8s.io/apimachinery/pkg/api/errors"
@@ -167,7 +166,7 @@ func (gp *GenericPool) genDeploymentSpec(env *fv1.Environment) (*appsv1.Deployme
 		if err == nil {
 			pod.Spec = *updatedPodSpec
 		} else {
-			gp.logger.Warn("Failed to merge the specs", zap.Error(err))
+			gp.logger.Error(err, "Failed to merge the specs")
 		}
 	}
 
@@ -241,18 +240,18 @@ func (gp *GenericPool) createPoolDeployment(ctx context.Context, env *fv1.Enviro
 		gp.deployment = depl
 		return err
 	} else if !k8sErrs.IsNotFound(err) {
-		gp.logger.Error("error getting deployment in kubernetes", zap.Error(err), zap.String("deployment", deployment.Name))
+		gp.logger.Error(err, "error getting deployment in kubernetes", "deployment", deployment.Name)
 		return err
 	}
 
 	depl, err = gp.kubernetesClient.AppsV1().Deployments(gp.fnNamespace).Create(ctx, deployment, metav1.CreateOptions{})
 	if err != nil {
-		gp.logger.Error("error creating deployment in kubernetes", zap.Error(err), zap.String("deployment", deployment.Name))
+		gp.logger.Error(err, "error creating deployment in kubernetes", "deployment", deployment.Name)
 		return err
 	}
 
 	gp.deployment = depl
-	gp.logger.Info("deployment created", zap.String("deployment", depl.Name), zap.String("ns", depl.Namespace), zap.Any("environment", env))
+	gp.logger.Info("deployment created", "deployment", depl.Name, "ns", depl.Namespace, "environment", env)
 
 	return nil
 }
@@ -261,15 +260,15 @@ func (gp *GenericPool) updatePoolDeployment(ctx context.Context, env *fv1.Enviro
 	// avoid create/update/delete pool deployment at the same time
 	gp.lock.Lock()
 	defer gp.lock.Unlock()
-	logger := gp.logger.With(zap.String("env", env.Name), zap.String("namespace", env.Namespace))
+	logger := gp.logger.WithValues("env", env.Name, "namespace", env.Namespace)
 	if gp.env.ResourceVersion == env.ResourceVersion {
-		logger.Debug("env resource version matching with pool env")
+		logger.V(1).Info("env resource version matching with pool env")
 		return nil
 	}
 	newDeployment := gp.deployment.DeepCopy()
 	spec, err := gp.genDeploymentSpec(env)
 	if err != nil {
-		logger.Error("error generating deployment spec", zap.Error(err))
+		logger.Error(err, "error generating deployment spec")
 		return err
 	}
 	newDeployment.Spec = *spec
@@ -286,7 +285,7 @@ func (gp *GenericPool) updatePoolDeployment(ctx context.Context, env *fv1.Enviro
 
 	depl, err := gp.kubernetesClient.AppsV1().Deployments(gp.fnNamespace).Update(ctx, newDeployment, metav1.UpdateOptions{})
 	if err != nil {
-		logger.Error("error updating deployment in kubernetes", zap.Error(err), zap.String("deployment", depl.Name))
+		logger.Error(err, "error updating deployment in kubernetes", "deployment", depl.Name)
 		return err
 	}
 	// possible concurrency issue here as
@@ -294,6 +293,6 @@ func (gp *GenericPool) updatePoolDeployment(ctx context.Context, env *fv1.Enviro
 	// we can move update pool to gpm.service if required
 	gp.env = env
 	gp.deployment = depl
-	logger.Info("Updated deployment for pool", zap.String("deployment", depl.Name))
+	logger.Info("Updated deployment for pool", "deployment", depl.Name)
 	return nil
 }

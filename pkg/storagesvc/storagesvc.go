@@ -27,9 +27,9 @@ import (
 
 	"errors"
 
+	"github.com/go-logr/logr"
 	"github.com/gorilla/mux"
 	"github.com/graymeta/stow"
-	"go.uber.org/zap"
 
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/utils/httpserver"
@@ -50,7 +50,7 @@ type (
 
 	// StorageService is a struct to hold all things for storage service
 	StorageService struct {
-		logger        *zap.Logger
+		logger        logr.Logger
 		storageClient *StowClient
 		port          int
 	}
@@ -76,10 +76,10 @@ func (ss *StorageService) listItems(w http.ResponseWriter, r *http.Request) {
 	// need to filter them out.
 	archivesInStorage, err := ss.storageClient.getItemIDsWithFilter(ss.storageClient.filterAllItems, false)
 	if err != nil {
-		logger.Error("error getting items from storage", zap.Error(err))
+		logger.Error(err, "error getting items from storage")
 		return
 	}
-	logger.Debug("archives in storage", zap.Strings("archives", archivesInStorage))
+	logger.V(1).Info("archives in storage", "archives", archivesInStorage)
 
 	// respond with the list of items
 	resp, err := json.Marshal(archivesInStorage)
@@ -89,10 +89,8 @@ func (ss *StorageService) listItems(w http.ResponseWriter, r *http.Request) {
 	}
 	_, err = w.Write(resp)
 	if err != nil {
-		logger.Error(
-			"error writing HTTP response",
-			zap.Error(err),
-		)
+		logger.Error(err,
+			"error writing HTTP response")
 	}
 }
 
@@ -119,31 +117,27 @@ func (ss *StorageService) uploadHandler(w http.ResponseWriter, r *http.Request) 
 
 	fileSizeS, ok := r.Header["X-File-Size"]
 	if !ok {
-		logger.Error("upload is missing the 'X-File-Size' header",
-			zap.String("filename", handler.Filename))
+		logger.Error(nil, "upload is missing the 'X-File-Size' header",
+			"filename", handler.Filename)
 		http.Error(w, "missing X-File-Size header", http.StatusBadRequest)
 		return
 	}
 
 	fileSize, err := strconv.Atoi(fileSizeS[0])
 	if err != nil {
-		logger.Error("error parsing 'X-File-Size' header",
-			zap.Error(err),
-			zap.Strings("header", fileSizeS),
-			zap.String("filename", handler.Filename))
+		logger.Error(err, "error parsing 'X-File-Size' header", "header", fileSizeS,
+			"filename", handler.Filename)
 		http.Error(w, "missing or bad X-File-Size header", http.StatusBadRequest)
 		return
 	}
 
 	// TODO: allow headers to add more metadata (e.g. environment and function metadata)
-	logger.Debug("handling upload",
-		zap.String("filename", handler.Filename))
+	logger.V(1).Info("handling upload",
+		"filename", handler.Filename)
 
 	id, err := ss.storageClient.putFile(file, int64(fileSize))
 	if err != nil {
-		logger.Error("error saving uploaded file",
-			zap.Error(err),
-			zap.String("filename", handler.Filename))
+		logger.Error(err, "error saving uploaded file", "filename", handler.Filename)
 		http.Error(w, "Error saving uploaded file", http.StatusInternalServerError)
 		return
 	}
@@ -156,18 +150,14 @@ func (ss *StorageService) uploadHandler(w http.ResponseWriter, r *http.Request) 
 	}
 	resp, err := json.Marshal(ur)
 	if err != nil {
-		logger.Error("error marshaling uploaded file response",
-			zap.Error(err),
-			zap.String("filename", handler.Filename))
+		logger.Error(err, "error marshaling uploaded file response", "filename", handler.Filename)
 		http.Error(w, "Error marshaling response", http.StatusInternalServerError)
 		return
 	}
 	_, err = w.Write(resp)
 	if err != nil {
-		logger.Error(
-			"error writing HTTP response",
-			zap.Error(err),
-			zap.String("filename", handler.Filename),
+		logger.Error(err,
+			"error writing HTTP response", "filename", handler.Filename,
 		)
 	}
 
@@ -222,7 +212,7 @@ func (ss *StorageService) downloadHandler(w http.ResponseWriter, r *http.Request
 	// stream it to response
 	err = ss.storageClient.copyFileToStream(fileId, w)
 	if err != nil {
-		logger.Error("error getting file from storage client", zap.Error(err), zap.String("file_id", fileId))
+		logger.Error(err, "error getting file from storage client", "file_id", fileId)
 		switch err {
 		case ErrNotFound:
 			http.Error(w, "Error retrieving item: not found", http.StatusNotFound)
@@ -262,9 +252,9 @@ func (ss *StorageService) healthHandler(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(http.StatusOK)
 }
 
-func MakeStorageService(logger *zap.Logger, storageClient *StowClient, port int) *StorageService {
+func MakeStorageService(logger logr.Logger, storageClient *StowClient, port int) *StorageService {
 	return &StorageService{
-		logger:        logger.Named("storage_service"),
+		logger:        logger.WithName("storage_service"),
 		storageClient: storageClient,
 		port:          port,
 	}
@@ -285,10 +275,10 @@ func (ss *StorageService) Start(ctx context.Context, mgr manager.Interface, port
 }
 
 // Start runs storage service
-func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, storage Storage, mgr manager.Interface, port int) error {
+func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger, storage Storage, mgr manager.Interface, port int) error {
 	enablePruner, err := strconv.ParseBool(os.Getenv("PRUNE_ENABLED"))
 	if err != nil {
-		logger.Warn("PRUNE_ENABLED value not set. Enabling archive pruner by default.", zap.Error(err))
+		logger.Error(err, "PRUNE_ENABLED value not set. Enabling archive pruner by default.")
 		enablePruner = true
 	}
 	// create a storage client

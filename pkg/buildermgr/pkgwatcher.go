@@ -19,9 +19,10 @@ package buildermgr
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
-	"go.uber.org/zap"
+	"github.com/go-logr/logr"
 	apiv1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -39,7 +40,7 @@ import (
 
 type (
 	packageWatcher struct {
-		logger        *zap.Logger
+		logger        logr.Logger
 		fissionClient versioned.Interface
 		nsResolver    *utils.NamespaceResolver
 		k8sClient     kubernetes.Interface
@@ -50,11 +51,11 @@ type (
 	}
 )
 
-func makePackageWatcher(logger *zap.Logger, fissionClient versioned.Interface, k8sClientSet kubernetes.Interface,
+func makePackageWatcher(logger logr.Logger, fissionClient versioned.Interface, k8sClientSet kubernetes.Interface,
 	storageSvcUrl string, podInformer,
 	pkgInformer map[string]k8sCache.SharedIndexInformer) *packageWatcher {
 	pkgw := &packageWatcher{
-		logger:        logger.Named("package_watcher"),
+		logger:        logger.WithName("package_watcher"),
 		fissionClient: fissionClient,
 		k8sClient:     k8sClientSet,
 		nsResolver:    utils.DefaultNSResolver(),
@@ -74,7 +75,7 @@ func (pkgw *packageWatcher) buildWithCache(ctx context.Context, srcpkg *fv1.Pack
 	// Ignore duplicate build requests
 	_, err := pkgw.buildCache.Set(pkgw.buildCacheKey(srcpkg.ObjectMeta), srcpkg)
 	if err != nil {
-		pkgw.logger.Info("package build cache set error", zap.Error(err))
+		pkgw.logger.Info("package build cache set error", "error", err)
 		return
 	}
 	go pkgw.build(ctx, srcpkg)
@@ -92,7 +93,7 @@ func (pkgw *packageWatcher) buildWithCache(ctx context.Context, srcpkg *fv1.Pack
 // *. Update package status to failed state,if any one of steps above failed/time out
 func (pkgw *packageWatcher) build(ctx context.Context, srcpkg *fv1.Package) {
 	key := pkgw.buildCacheKey(srcpkg.ObjectMeta)
-	logger := pkgw.logger.With(zap.String("package", srcpkg.Name), zap.String("namespace", srcpkg.Namespace), zap.String("resource_version", srcpkg.ResourceVersion), zap.String("key", key.String()))
+	logger := pkgw.logger.WithValues("package", srcpkg.Name, "namespace", srcpkg.Namespace, "resource_version", srcpkg.ResourceVersion, "key", key.String())
 
 	defer func() {
 		pkgw.buildCache.Delete(key)
@@ -102,21 +103,19 @@ func (pkgw *packageWatcher) build(ctx context.Context, srcpkg *fv1.Package) {
 
 	pkg, err := updatePackage(ctx, logger, pkgw.fissionClient, srcpkg, fv1.BuildStatusRunning, "", nil)
 	if err != nil {
-		logger.Error("error setting package pending state", zap.Error(err))
+		logger.Error(err, "error setting package pending state")
 		return
 	}
 
 	env, err := pkgw.fissionClient.CoreV1().Environments(pkg.Spec.Environment.Namespace).Get(ctx, pkg.Spec.Environment.Name, metav1.GetOptions{})
 	if k8serrors.IsNotFound(err) {
 		e := "environment does not exist"
-		logger.Error(e, zap.String("environment", pkg.Spec.Environment.Name))
+		logger.Info(e, "environment", pkg.Spec.Environment.Name)
 		_, er := updatePackage(ctx, logger, pkgw.fissionClient, pkg,
 			fv1.BuildStatusFailed, fmt.Sprintf("%s: %q", e, pkg.Spec.Environment.Name), nil)
 		if er != nil {
-			logger.Error(
-				"error updating package",
-				zap.Error(er),
-			)
+			logger.Error(er,
+				"error updating package")
 		}
 		return
 	}
@@ -125,7 +124,7 @@ func (pkgw *packageWatcher) build(ctx context.Context, srcpkg *fv1.Package) {
 	healthCheckBackOff := utils.NewDefaultBackOff()
 	builderNs := pkgw.nsResolver.GetBuilderNS(env.Namespace)
 
-	logger = logger.With(zap.String("environment", env.Name), zap.String("builder_namespace", builderNs), zap.String("environment_namespace", env.Namespace))
+	logger = logger.WithValues("environment", env.Name, "builder_namespace", builderNs, "environment_namespace", env.Namespace)
 
 	// if err != nil {
 	//	pkgw.logger.Error("Unable to create BackOff for Health Check", zap.Error(err))
@@ -136,7 +135,7 @@ func (pkgw *packageWatcher) build(ctx context.Context, srcpkg *fv1.Package) {
 		// iterate all available environment builders.
 		items := pkgw.podInformer[builderNs].GetStore().List()
 		if err != nil {
-			logger.Error("error retrieving pod information for environment", zap.Error(err))
+			logger.Error(err, "error retrieving pod information for environment")
 			return
 		}
 
@@ -172,10 +171,10 @@ func (pkgw *packageWatcher) build(ctx context.Context, srcpkg *fv1.Package) {
 
 			uploadResp, buildLogs, err := buildPackage(ctx, pkgw.logger, pkgw.fissionClient, builderNs, pkgw.storageSvcUrl, pkg)
 			if err != nil {
-				logger.Error("error building package", zap.Error(err))
+				logger.Error(err, "error building package")
 				_, er := updatePackage(ctx, logger, pkgw.fissionClient, pkg, fv1.BuildStatusFailed, buildLogs, nil)
 				if er != nil {
-					logger.Error("error updating package", zap.Error(er))
+					logger.Error(er, "error updating package")
 				}
 				return
 			}
@@ -186,14 +185,12 @@ func (pkgw *packageWatcher) build(ctx context.Context, srcpkg *fv1.Package) {
 				Functions(pkg.Namespace).List(ctx, metav1.ListOptions{})
 			if err != nil {
 				e := "error getting function list"
-				pkgw.logger.Error(e, zap.Error(err))
+				pkgw.logger.Error(err, e)
 				buildLogs += fmt.Sprintf("%s: %v\n", e, err)
 				_, er := updatePackage(ctx, pkgw.logger, pkgw.fissionClient, pkg, fv1.BuildStatusFailed, buildLogs, nil)
 				if er != nil {
-					pkgw.logger.Error(
-						"error updating package",
-						zap.Error(er),
-					)
+					pkgw.logger.Error(er,
+						"error updating package")
 				}
 			}
 
@@ -208,11 +205,11 @@ func (pkgw *packageWatcher) build(ctx context.Context, srcpkg *fv1.Package) {
 					_, err = pkgw.fissionClient.CoreV1().Functions(fn.Namespace).Update(ctx, &fn, metav1.UpdateOptions{})
 					if err != nil {
 						e := "error updating function package resource version"
-						logger.Error(e, zap.Error(err))
+						logger.Error(err, e)
 						buildLogs += fmt.Sprintf("%s: %v\n", e, err)
 						_, er := updatePackage(ctx, logger, pkgw.fissionClient, pkg, fv1.BuildStatusFailed, buildLogs, nil)
 						if er != nil {
-							logger.Error("error updating package", zap.Error(er))
+							logger.Error(er, "error updating package")
 						}
 						return
 					}
@@ -222,10 +219,10 @@ func (pkgw *packageWatcher) build(ctx context.Context, srcpkg *fv1.Package) {
 			_, err = updatePackage(ctx, logger, pkgw.fissionClient, pkg,
 				fv1.BuildStatusSucceeded, buildLogs, uploadResp)
 			if err != nil {
-				logger.Error("error updating package info", zap.Error(err))
+				logger.Error(err, "error updating package info")
 				_, er := updatePackage(ctx, logger, pkgw.fissionClient, pkg, fv1.BuildStatusFailed, buildLogs, nil)
 				if er != nil {
-					logger.Error("error updating package", zap.Error(er))
+					logger.Error(er, "error updating package")
 				}
 				return
 			}
@@ -239,10 +236,10 @@ func (pkgw *packageWatcher) build(ctx context.Context, srcpkg *fv1.Package) {
 	_, err = updatePackage(ctx, logger, pkgw.fissionClient, pkg,
 		fv1.BuildStatusFailed, "Build timeout due to environment builder not ready", nil)
 	if err != nil {
-		logger.Error("error updating package", zap.Error(err))
+		logger.Error(err, "error updating package")
 	}
 
-	logger.Error("max retries exceeded in building source package, timeout due to environment builder not ready")
+	logger.Info("max retries exceeded in building source package, timeout due to environment builder not ready")
 }
 
 func (pkgw *packageWatcher) packageInformerHandler(ctx context.Context) k8sCache.ResourceEventHandlerFuncs {
@@ -251,7 +248,7 @@ func (pkgw *packageWatcher) packageInformerHandler(ctx context.Context) k8sCache
 		if len(pkg.Status.BuildStatus) == 0 {
 			_, err = setInitialBuildStatus(ctx, pkgw.fissionClient, pkg)
 			if err != nil {
-				pkgw.logger.Error("error filling package status", zap.Error(err))
+				pkgw.logger.Error(err, "error filling package status")
 			}
 			// once we update the package status, an update event
 			// will arrive and handle by UpdateFunc later. So we
@@ -295,7 +292,8 @@ func (pkgw *packageWatcher) Run(ctx context.Context, mgr manager.Interface) erro
 	for _, pkgInformer := range pkgw.pkgInformer {
 		_, err := pkgInformer.AddEventHandler(pkgw.packageInformerHandler(ctx))
 		if err != nil {
-			pkgw.logger.Fatal("error adding package informer handler", zap.Error(err))
+			pkgw.logger.Error(err, "error adding package informer handler")
+			os.Exit(1)
 			return err
 		}
 	}

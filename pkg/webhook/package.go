@@ -33,7 +33,7 @@ type Package struct {
 }
 
 // log is for logging in this package.
-var packagelog = loggerfactory.GetLogger().Named("package-resource")
+var packagelog = loggerfactory.GetLogger().WithName("package-resource")
 
 func (r *Package) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	r.Logger = packagelog

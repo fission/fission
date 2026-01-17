@@ -25,7 +25,7 @@ import (
 	"sync"
 	"time"
 
-	"go.uber.org/zap"
+	"github.com/go-logr/logr"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -138,7 +138,7 @@ func GetSpecFromConfigMap(filePath string) (*apiv1.PodSpec, error) {
 	return additionalSpec, err
 }
 
-func GetObjectReaperInterval(logger *zap.Logger, executorType fv1.ExecutorType, defaultReaperInterval uint) uint {
+func GetObjectReaperInterval(logger logr.Logger, executorType fv1.ExecutorType, defaultReaperInterval uint) uint {
 
 	// TODO think about migration to executor package as const.
 	globalEnvVarName := "OBJECT_REAPER_INTERVAL"
@@ -148,7 +148,7 @@ func GetObjectReaperInterval(logger *zap.Logger, executorType fv1.ExecutorType, 
 	for _, k := range keys {
 		interval, err := utils.GetUIntValueFromEnv(k)
 		if err != nil {
-			logger.Debug(fmt.Sprintf("Failed to parse %s", k))
+			logger.V(1).Info(fmt.Sprintf("Failed to parse %s", k))
 		} else {
 			return interval
 		}
@@ -162,9 +162,9 @@ func getExecutorEnvVarName(executor fv1.ExecutorType) string {
 }
 
 // CreateDumpFile => create dump file inside temp directory
-func CreateDumpFile(logger *zap.Logger) (*os.File, error) {
+func CreateDumpFile(logger logr.Logger) (*os.File, error) {
 	dumpPath := os.TempDir()
-	logger.Info("creating dump file", zap.String("dump_path", dumpPath))
+	logger.Info("creating dump file", "dump_path", dumpPath)
 
 	return os.Create(fmt.Sprintf("%s/%s-%d.txt", dumpPath, dumpFileName, time.Now().Unix()))
 }

@@ -18,10 +18,10 @@ package poolmgr
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
-	"go.uber.org/zap"
 	apps "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -35,6 +35,8 @@ import (
 	k8sCache "k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
 
+	"github.com/go-logr/logr"
+
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/executor/fscache"
@@ -46,7 +48,7 @@ import (
 
 type (
 	PoolPodController struct {
-		logger           *zap.Logger
+		logger           logr.Logger
 		kubernetesClient kubernetes.Interface
 		enableIstio      bool
 		nsResolver       *utils.NamespaceResolver
@@ -69,12 +71,12 @@ type (
 	}
 )
 
-func NewPoolPodController(ctx context.Context, logger *zap.Logger,
+func NewPoolPodController(ctx context.Context, logger logr.Logger,
 	kubernetesClient kubernetes.Interface,
 	enableIstio bool,
 	finformerFactory map[string]genInformer.SharedInformerFactory,
 	gpmInformerFactory map[string]k8sInformers.SharedInformerFactory) (*PoolPodController, error) {
-	logger = logger.Named("pool_pod_controller")
+	logger = logger.WithName("pool_pod_controller")
 	p := &PoolPodController{
 		logger:               logger,
 		nsResolver:           utils.DefaultNSResolver(),
@@ -152,30 +154,30 @@ func (p *PoolPodController) processRS(rs *apps.ReplicaSet) {
 	if *(rs.Spec.Replicas) != 0 {
 		return
 	}
-	logger := p.logger.With(zap.String("rs", rs.Name), zap.String("namespace", rs.Namespace))
-	logger.Debug("replica set has zero replica count")
+	logger := p.logger.WithValues("rs", rs.Name, "namespace", rs.Namespace)
+	logger.V(1).Info("replica set has zero replica count")
 	// List all specialized pods and schedule for cleanup
 	rsLabelMap, err := metav1.LabelSelectorAsMap(rs.Spec.Selector)
 	if err != nil {
-		p.logger.Error("Failed to parse label selector", zap.Error(err))
+		p.logger.Error(err, "Failed to parse label selector")
 		return
 	}
 	rsLabelMap["managed"] = "false"
 	specializedPods, err := p.podLister[rs.Namespace].Pods(rs.Namespace).List(labels.SelectorFromSet(rsLabelMap))
 	if err != nil {
-		logger.Error("Failed to list specialized pods", zap.Error(err))
+		logger.Error(err, "Failed to list specialized pods")
 	}
 	if len(specializedPods) == 0 {
 		return
 	}
-	logger.Info("specialized pods identified for cleanup with RS", zap.Int("numPods", len(specializedPods)))
+	logger.Info("specialized pods identified for cleanup with RS", "numPods", len(specializedPods))
 	for _, pod := range specializedPods {
 		if !IsPodActive(pod) {
 			continue
 		}
 		key, err := k8sCache.MetaNamespaceKeyFunc(pod)
 		if err != nil {
-			logger.Error("Failed to get key for pod", zap.Error(err))
+			logger.Error(err, "Failed to get key for pod")
 			continue
 		}
 		p.spCleanupPodQueue.Add(key)
@@ -185,7 +187,7 @@ func (p *PoolPodController) processRS(rs *apps.ReplicaSet) {
 func (p *PoolPodController) handleRSAdd(obj any) {
 	rs, ok := obj.(*apps.ReplicaSet)
 	if !ok {
-		p.logger.Error("unexpected type when adding rs to pool pod controller", zap.Any("obj", obj))
+		p.logger.Info("unexpected type when adding rs to pool pod controller", "obj", obj)
 		return
 	}
 	p.processRS(rs)
@@ -194,7 +196,7 @@ func (p *PoolPodController) handleRSAdd(obj any) {
 func (p *PoolPodController) handleRSUpdate(oldObj any, newObj any) {
 	rs, ok := newObj.(*apps.ReplicaSet)
 	if !ok {
-		p.logger.Error("unexpected type when updating rs to pool pod controller", zap.Any("obj", newObj))
+		p.logger.Error(nil, "unexpected type when updating rs to pool pod controller", "obj", newObj)
 		return
 	}
 	p.processRS(rs)
@@ -205,12 +207,12 @@ func (p *PoolPodController) handleRSDelete(obj any) {
 	if !ok {
 		tombstone, ok := obj.(k8sCache.DeletedFinalStateUnknown)
 		if !ok {
-			p.logger.Error("couldn't get object from tombstone", zap.Any("obj", obj))
+			p.logger.Error(nil, "couldn't get object from tombstone", "obj", obj)
 			return
 		}
 		rs, ok = tombstone.Obj.(*apps.ReplicaSet)
 		if !ok {
-			p.logger.Error("tombstone contained object that is not a replicaset", zap.Any("obj", obj))
+			p.logger.Error(nil, "tombstone contained object that is not a replicaset", "obj", obj)
 			return
 		}
 	}
@@ -220,30 +222,30 @@ func (p *PoolPodController) handleRSDelete(obj any) {
 func (p *PoolPodController) enqueueEnvAdd(obj any) {
 	key, err := k8sCache.MetaNamespaceKeyFunc(obj)
 	if err != nil {
-		p.logger.Error("error retrieving key from object in poolPodController", zap.Any("obj", obj))
+		p.logger.Error(nil, "error retrieving key from object in poolPodController", "obj", obj)
 		return
 	}
-	p.logger.Debug("enqueue env add", zap.String("key", key))
+	p.logger.V(1).Info("enqueue env add", "key", key)
 	p.envCreateUpdateQueue.Add(key)
 }
 
 func (p *PoolPodController) enqueueEnvUpdate(oldObj, newObj any) {
 	key, err := k8sCache.MetaNamespaceKeyFunc(newObj)
 	if err != nil {
-		p.logger.Error("error retrieving key from object in poolPodController", zap.Any("obj", key))
+		p.logger.Error(nil, "error retrieving key from object in poolPodController", "obj", key)
 		return
 	}
-	p.logger.Debug("enqueue env update", zap.String("key", key))
+	p.logger.V(1).Info("enqueue env update", "key", key)
 	p.envCreateUpdateQueue.Add(key)
 }
 
 func (p *PoolPodController) enqueueEnvDelete(obj any) {
 	env, ok := obj.(*fv1.Environment)
 	if !ok {
-		p.logger.Error("unexpected type when deleting env to pool pod controller", zap.Any("obj", obj))
+		p.logger.Error(nil, "unexpected type when deleting env to pool pod controller", "obj", obj)
 		return
 	}
-	p.logger.Debug("enqueue env delete", zap.Any("env", env))
+	p.logger.V(1).Info("enqueue env delete", "env", env)
 	p.envDeleteQueue.Add(env)
 }
 
@@ -263,7 +265,8 @@ func (p *PoolPodController) Run(ctx context.Context, stopCh <-chan struct{}, mgr
 		waitSynced = append(waitSynced, synced)
 	}
 	if ok := k8sCache.WaitForCacheSync(stopCh, waitSynced...); !ok {
-		p.logger.Fatal("failed to wait for caches to sync")
+		p.logger.Info("failed to wait for caches to sync")
+		os.Exit(1)
 	}
 	for range 4 {
 		mgr.Add(ctx, func(ctx context.Context) {
@@ -283,10 +286,10 @@ func (p *PoolPodController) Run(ctx context.Context, stopCh <-chan struct{}, mgr
 
 func (p *PoolPodController) workerRun(ctx context.Context, name string, processFunc func(ctx context.Context) bool) func() {
 	return func() {
-		p.logger.Debug("Starting worker with func", zap.String("name", name))
+		p.logger.V(1).Info("Starting worker with func", "name", name)
 		for {
 			if quit := processFunc(ctx); quit {
-				p.logger.Info("Shutting down worker", zap.String("name", name))
+				p.logger.Info("Shutting down worker", "name", name)
 				return
 			}
 		}
@@ -303,18 +306,18 @@ func (p *PoolPodController) getEnvLister(namespace string) (flisterv1.Environmen
 			return lister, nil
 		}
 	}
-	p.logger.Error("no environment lister found for namespace", zap.String("namespace", namespace))
+	p.logger.Error(nil, "no environment lister found for namespace", "namespace", namespace)
 	return nil, fmt.Errorf("no environment lister found for namespace %s", namespace)
 }
 
 func (p *PoolPodController) envCreateUpdateQueueProcessFunc(ctx context.Context) bool {
 	maxRetries := 3
 	handleEnv := func(ctx context.Context, env *fv1.Environment) error {
-		log := p.logger.With(zap.String("env", env.Name), zap.String("namespace", env.Namespace))
-		log.Debug("env reconsile request processing")
+		log := p.logger.WithValues("env", env.Name, "namespace", env.Namespace)
+		log.V(1).Info("env reconsile request processing")
 		pool, created, err := p.gpm.getPool(ctx, env)
 		if err != nil {
-			log.Error("error getting pool", zap.Error(err))
+			log.Error(err, "error getting pool")
 			return err
 		}
 		if created {
@@ -329,7 +332,7 @@ func (p *PoolPodController) envCreateUpdateQueueProcessFunc(ctx context.Context)
 		}
 		err = pool.updatePoolDeployment(ctx, env)
 		if err != nil {
-			log.Error("error updating pool", zap.Error(err))
+			log.Error(err, "error updating pool")
 			return err
 		}
 		// If any specialized pods are running, those would be
@@ -345,19 +348,19 @@ func (p *PoolPodController) envCreateUpdateQueueProcessFunc(ctx context.Context)
 
 	namespace, name, err := k8sCache.SplitMetaNamespaceKey(key)
 	if err != nil {
-		p.logger.Error("error splitting key", zap.Error(err))
+		p.logger.Error(err, "error splitting key")
 		p.envCreateUpdateQueue.Forget(key)
 		return false
 	}
 	envLister, err := p.getEnvLister(namespace)
 	if err != nil {
-		p.logger.Error("error getting environment lister", zap.Error(err))
+		p.logger.Error(err, "error getting environment lister")
 		p.envCreateUpdateQueue.Forget(key)
 		return false
 	}
 	env, err := envLister.Environments(namespace).Get(name)
 	if apierrors.IsNotFound(err) {
-		p.logger.Info("env not found", zap.String("key", key))
+		p.logger.Info("env not found", "key", key)
 		p.envCreateUpdateQueue.Forget(key)
 		return false
 	}
@@ -365,10 +368,10 @@ func (p *PoolPodController) envCreateUpdateQueueProcessFunc(ctx context.Context)
 	if err != nil {
 		if p.envCreateUpdateQueue.NumRequeues(key) < maxRetries {
 			p.envCreateUpdateQueue.AddRateLimited(key)
-			p.logger.Error("error getting env, retrying", zap.Error(err))
+			p.logger.Error(err, "error getting env, retrying")
 		} else {
 			p.envCreateUpdateQueue.Forget(key)
-			p.logger.Error("error getting env, retrying, max retries reached", zap.Error(err))
+			p.logger.Error(err, "error getting env, retrying, max retries reached")
 		}
 		return false
 	}
@@ -377,10 +380,10 @@ func (p *PoolPodController) envCreateUpdateQueueProcessFunc(ctx context.Context)
 	if err != nil {
 		if p.envCreateUpdateQueue.NumRequeues(key) < maxRetries {
 			p.envCreateUpdateQueue.AddRateLimited(key)
-			p.logger.Error("error handling env from envInformer, retrying", zap.String("key", key), zap.Error(err))
+			p.logger.Error(err, "error handling env from envInformer, retrying", "key", key)
 		} else {
 			p.envCreateUpdateQueue.Forget(key)
-			p.logger.Error("error handling env from envInformer, max retries reached", zap.String("key", key), zap.Error(err))
+			p.logger.Error(err, "error handling env from envInformer, max retries reached", "key", key)
 		}
 		return false
 	}
@@ -394,19 +397,19 @@ func (p *PoolPodController) envDeleteQueueProcessFunc(ctx context.Context) bool 
 		return true
 	}
 	defer p.envDeleteQueue.Done(env)
-	p.logger.Debug("env delete request processing")
+	p.logger.V(1).Info("env delete request processing")
 	p.gpm.cleanupPool(ctx, env)
 	specializePodLables := getSpecializedPodLabels(env)
 	ns := p.nsResolver.ResolveNamespace(p.nsResolver.FunctionNamespace)
 	podLister, ok := p.podLister[ns]
 	if !ok {
-		p.logger.Error("no pod lister found for namespace", zap.String("namespace", ns))
+		p.logger.Error(nil, "no pod lister found for namespace", "namespace", ns)
 		p.envDeleteQueue.Forget(env)
 		return false
 	}
 	specializedPods, err := podLister.Pods(ns).List(labels.SelectorFromSet(specializePodLables))
 	if err != nil {
-		p.logger.Error("failed to list specialized pods", zap.Error(err))
+		p.logger.Error(err, "failed to list specialized pods")
 		p.envDeleteQueue.Forget(env)
 		return false
 	}
@@ -414,14 +417,14 @@ func (p *PoolPodController) envDeleteQueueProcessFunc(ctx context.Context) bool 
 		p.envDeleteQueue.Forget(env)
 		return false
 	}
-	p.logger.Info("specialized pods identified for cleanup after env delete", zap.String("env", env.Name), zap.String("namespace", env.Namespace), zap.Int("count", len(specializedPods)))
+	p.logger.Info("specialized pods identified for cleanup after env delete", "env", env.Name, "namespace", env.Namespace, "count", len(specializedPods))
 	for _, pod := range specializedPods {
 		if !IsPodActive(pod) {
 			continue
 		}
 		key, err := k8sCache.MetaNamespaceKeyFunc(pod)
 		if err != nil {
-			p.logger.Error("Failed to get key for pod", zap.Error(err))
+			p.logger.Error(err, "Failed to get key for pod")
 			continue
 		}
 		p.spCleanupPodQueue.Add(key)
@@ -439,28 +442,28 @@ func (p *PoolPodController) spCleanupPodQueueProcessFunc(ctx context.Context) bo
 	defer p.spCleanupPodQueue.Done(key)
 	namespace, name, err := k8sCache.SplitMetaNamespaceKey(key)
 	if err != nil {
-		p.logger.Error("error splitting key", zap.Error(err))
+		p.logger.Error(err, "error splitting key")
 		p.spCleanupPodQueue.Forget(key)
 		return false
 	}
 	pod, err := p.podLister[namespace].Pods(namespace).Get(name)
 	if apierrors.IsNotFound(err) {
-		p.logger.Info("pod not found", zap.String("key", key))
+		p.logger.Info("pod not found", "key", key)
 		p.spCleanupPodQueue.Forget(key)
 		return false
 	}
 	if !IsPodActive(pod) {
-		p.logger.Info("pod not active", zap.String("key", key))
+		p.logger.Info("pod not active", "key", key)
 		p.spCleanupPodQueue.Forget(key)
 		return false
 	}
 	if err != nil {
 		if p.spCleanupPodQueue.NumRequeues(key) < maxRetries {
 			p.spCleanupPodQueue.AddRateLimited(key)
-			p.logger.Error("error getting pod, retrying", zap.Error(err))
+			p.logger.Error(err, "error getting pod, retrying")
 		} else {
 			p.spCleanupPodQueue.Forget(key)
-			p.logger.Error("error getting pod, max retries reached", zap.Error(err))
+			p.logger.Error(err, "error getting pod, max retries reached")
 		}
 		return false
 	}
@@ -471,17 +474,17 @@ func (p *PoolPodController) spCleanupPodQueueProcessFunc(ctx context.Context) bo
 			p.gpm.fsCache.DeleteFunctionSvc(ctx, fsvc)
 			p.gpm.fsCache.DeleteEntry(fsvc)
 		} else {
-			p.logger.Error("could not convert item from PodToFsvc", zap.String("key", key))
+			p.logger.Error(nil, "could not convert item from PodToFsvc", "key", key)
 		}
 	}
 	err = p.kubernetesClient.CoreV1().Pods(namespace).Delete(ctx, name, metav1.DeleteOptions{})
 	if err != nil {
-		p.logger.Error("failed to delete pod", zap.Error(err), zap.String("pod", name), zap.String("pod_namespace", namespace))
+		p.logger.Error(err, "failed to delete pod", "pod", name, "pod_namespace", namespace)
 		return false
 	}
 	p.logger.Info("cleaned specialized pod as environment update/deleted",
-		zap.String("pod", name), zap.String("pod_namespace", namespace),
-		zap.String("address", pod.Status.PodIP))
+		"pod", name, "pod_namespace", namespace,
+		"address", pod.Status.PodIP)
 	p.spCleanupPodQueue.Forget(key)
 	return false
 }

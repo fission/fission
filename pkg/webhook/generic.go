@@ -20,7 +20,7 @@ import (
 	"context"
 	"fmt"
 
-	"go.uber.org/zap"
+	"github.com/go-logr/logr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -40,7 +40,7 @@ type Defaulter[T client.Object] interface {
 
 // GenericWebhook implements the webhook interfaces for a generic type T.
 type GenericWebhook[T client.Object] struct {
-	Logger    *zap.Logger
+	Logger    logr.Logger
 	Validator Validator[T]
 	Defaulter Defaulter[T]
 }
@@ -64,9 +64,7 @@ func (w *GenericWebhook[T]) Default(_ context.Context, obj runtime.Object) error
 		var t T
 		return apierrors.NewBadRequest(fmt.Sprintf("expected %T but got %T", t, obj))
 	}
-	if w.Logger != nil {
-		w.Logger.Debug("default", zap.String("name", typedObj.GetName()))
-	}
+	w.Logger.V(1).Info("default", "name", typedObj.GetName())
 	return w.Defaulter.ApplyDefaults(typedObj)
 }
 
@@ -77,9 +75,7 @@ func (w *GenericWebhook[T]) ValidateCreate(_ context.Context, obj runtime.Object
 		var t T
 		return nil, apierrors.NewBadRequest(fmt.Sprintf("expected %T but got %T", t, obj))
 	}
-	if w.Logger != nil {
-		w.Logger.Debug("validate create", zap.String("name", typedObj.GetName()))
-	}
+	w.Logger.V(1).Info("validate create", "name", typedObj.GetName())
 	if w.Validator != nil {
 		return nil, w.Validator.Validate(typedObj)
 	}
@@ -93,9 +89,7 @@ func (w *GenericWebhook[T]) ValidateUpdate(_ context.Context, oldObj, newObj run
 		var t T
 		return nil, apierrors.NewBadRequest(fmt.Sprintf("expected %T but got %T", t, newObj))
 	}
-	if w.Logger != nil {
-		w.Logger.Debug("validate update", zap.String("name", typedObj.GetName()))
-	}
+	w.Logger.V(1).Info("validate update", "name", typedObj.GetName())
 	if w.Validator != nil {
 		return nil, w.Validator.Validate(typedObj)
 	}

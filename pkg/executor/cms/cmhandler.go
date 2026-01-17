@@ -18,7 +18,7 @@ package cms
 import (
 	"context"
 
-	"go.uber.org/zap"
+	"github.com/go-logr/logr"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -30,7 +30,7 @@ import (
 )
 
 // getConfigmapRelatedFuncs returns functions related to configmap in the same namespace
-func getConfigmapRelatedFuncs(ctx context.Context, logger *zap.Logger, m *metav1.ObjectMeta, fissionClient versioned.Interface) ([]fv1.Function, error) {
+func getConfigmapRelatedFuncs(ctx context.Context, m *metav1.ObjectMeta, fissionClient versioned.Interface) ([]fv1.Function, error) {
 	funcList, err := fissionClient.CoreV1().Functions(m.Namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return nil, err
@@ -48,7 +48,7 @@ func getConfigmapRelatedFuncs(ctx context.Context, logger *zap.Logger, m *metav1
 	return relatedFunctions, nil
 }
 
-func ConfigMapEventHandlers(ctx context.Context, logger *zap.Logger, fissionClient versioned.Interface,
+func ConfigMapEventHandlers(ctx context.Context, logger logr.Logger, fissionClient versioned.Interface,
 	kubernetesClient kubernetes.Interface, types map[fv1.ExecutorType]executortype.ExecutorType) k8sCache.ResourceEventHandlerFuncs {
 
 	return k8sCache.ResourceEventHandlerFuncs{
@@ -58,18 +58,18 @@ func ConfigMapEventHandlers(ctx context.Context, logger *zap.Logger, fissionClie
 			oldCm := oldObj.(*apiv1.ConfigMap)
 			newCm := newObj.(*apiv1.ConfigMap)
 			if oldCm.ResourceVersion != newCm.ResourceVersion {
-				funcs, err := getConfigmapRelatedFuncs(ctx, logger, &newCm.ObjectMeta, fissionClient)
+				funcs, err := getConfigmapRelatedFuncs(ctx, &newCm.ObjectMeta, fissionClient)
 				if err != nil {
-					logger.Error("Failed to get functions related to configmap", zap.String("configmap_name", newCm.Name), zap.String("configmap_namespace", newCm.Namespace))
+					logger.Error(err, "Failed to get functions related to configmap", "configmap_name", newCm.Name, "configmap_namespace", newCm.Namespace)
 				}
 
 				if len(funcs) == 0 {
 					return
 				}
 
-				logger.Debug("Configmap changed",
-					zap.String("configmap_name", newCm.Name),
-					zap.String("configmap_namespace", newCm.Namespace))
+				logger.V(1).Info("Configmap changed",
+					"configmap_name", newCm.Name,
+					"configmap_namespace", newCm.Namespace)
 				refreshPods(ctx, logger, funcs, types)
 			}
 		},

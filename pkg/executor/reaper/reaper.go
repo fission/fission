@@ -20,11 +20,12 @@ import (
 	"context"
 	"strings"
 
-	"go.uber.org/zap"
 	apiv1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+
+	"github.com/go-logr/logr"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/utils"
@@ -36,40 +37,40 @@ var (
 )
 
 // CleanupKubeObject deletes given kubernetes object
-func CleanupKubeObject(ctx context.Context, logger *zap.Logger, kubeClient kubernetes.Interface, kubeobj *apiv1.ObjectReference) {
+func CleanupKubeObject(ctx context.Context, logger logr.Logger, kubeClient kubernetes.Interface, kubeobj *apiv1.ObjectReference) {
 	switch strings.ToLower(kubeobj.Kind) {
 	case "pod":
 		err := kubeClient.CoreV1().Pods(kubeobj.Namespace).Delete(ctx, kubeobj.Name, metav1.DeleteOptions{})
 		if err != nil && !k8serrors.IsNotFound(err) {
-			logger.Error("error cleaning up pod", zap.Error(err), zap.String("pod", kubeobj.Name))
+			logger.Error(err, "error cleaning up pod", "pod", kubeobj.Name)
 		}
 
 	case "service":
 		err := kubeClient.CoreV1().Services(kubeobj.Namespace).Delete(ctx, kubeobj.Name, metav1.DeleteOptions{})
 		if err != nil && !k8serrors.IsNotFound(err) {
-			logger.Error("error cleaning up service", zap.Error(err), zap.String("service", kubeobj.Name))
+			logger.Error(err, "error cleaning up service", "service", kubeobj.Name)
 		}
 
 	case "deployment":
 		err := kubeClient.AppsV1().Deployments(kubeobj.Namespace).Delete(ctx, kubeobj.Name, delOpt)
 		if err != nil && !k8serrors.IsNotFound(err) {
-			logger.Error("error cleaning up deployment", zap.Error(err), zap.String("deployment", kubeobj.Name))
+			logger.Error(err, "error cleaning up deployment", "deployment", kubeobj.Name)
 		}
 
 	case "horizontalpodautoscaler":
 		err := kubeClient.AutoscalingV2().HorizontalPodAutoscalers(kubeobj.Namespace).Delete(ctx, kubeobj.Name, metav1.DeleteOptions{})
 		if err != nil && !k8serrors.IsNotFound(err) {
-			logger.Error("error cleaning up horizontalpodautoscaler", zap.Error(err), zap.String("horizontalpodautoscaler", kubeobj.Name))
+			logger.Error(err, "error cleaning up horizontalpodautoscaler", "horizontalpodautoscaler", kubeobj.Name)
 		}
 
 	default:
-		logger.Error("Could not identifying the object type to clean up", zap.String("type", kubeobj.Kind), zap.Any("object", kubeobj))
+		logger.Error(nil, "Could not identifying the object type to clean up", "type", kubeobj.Kind, "object", kubeobj)
 
 	}
 }
 
 // CleanupDeployments deletes deployment(s) for a given instanceID
-func CleanupDeployments(ctx context.Context, logger *zap.Logger, client kubernetes.Interface, instanceID string, listOps metav1.ListOptions) error {
+func CleanupDeployments(ctx context.Context, logger logr.Logger, client kubernetes.Interface, instanceID string, listOps metav1.ListOptions) error {
 	cleanupDeployments := func(namespace string) error {
 		deploymentList, err := client.AppsV1().Deployments(namespace).List(ctx, listOps)
 		if err != nil {
@@ -82,13 +83,11 @@ func CleanupDeployments(ctx context.Context, logger *zap.Logger, client kubernet
 				id, ok = dep.Labels[fv1.EXECUTOR_INSTANCEID_LABEL]
 			}
 			if ok && id != instanceID {
-				logger.Info("cleaning up deployment", zap.String("deployment", dep.Name))
+				logger.Info("cleaning up deployment", "deployment", dep.Name)
 				err := client.AppsV1().Deployments(dep.ObjectMeta.Namespace).Delete(ctx, dep.Name, delOpt)
 				if err != nil {
-					logger.Error("error cleaning up deployment",
-						zap.Error(err),
-						zap.String("deployment_name", dep.Name),
-						zap.String("deployment_namespace", dep.Namespace))
+					logger.Error(err, "error cleaning up deployment", "deployment_name", dep.Name,
+						"deployment_namespace", dep.Namespace)
 				}
 				// ignore err
 			}
@@ -105,7 +104,7 @@ func CleanupDeployments(ctx context.Context, logger *zap.Logger, client kubernet
 }
 
 // CleanupPods deletes pod(s) for a given instanceID
-func CleanupPods(ctx context.Context, logger *zap.Logger, client kubernetes.Interface, instanceID string, listOps metav1.ListOptions) error {
+func CleanupPods(ctx context.Context, logger logr.Logger, client kubernetes.Interface, instanceID string, listOps metav1.ListOptions) error {
 	cleanupPods := func(namespace string) error {
 		podList, err := client.CoreV1().Pods(namespace).List(ctx, listOps)
 		if err != nil {
@@ -118,13 +117,11 @@ func CleanupPods(ctx context.Context, logger *zap.Logger, client kubernetes.Inte
 				id, ok = pod.Labels[fv1.EXECUTOR_INSTANCEID_LABEL]
 			}
 			if ok && id != instanceID {
-				logger.Info("cleaning up pod", zap.String("pod", pod.Name))
+				logger.Info("cleaning up pod", "pod", pod.Name)
 				err := client.CoreV1().Pods(pod.ObjectMeta.Namespace).Delete(ctx, pod.Name, metav1.DeleteOptions{})
 				if err != nil {
-					logger.Error("error cleaning up pod",
-						zap.Error(err),
-						zap.String("pod_name", pod.Name),
-						zap.String("pod_namespace", pod.Namespace))
+					logger.Error(err, "error cleaning up pod", "pod_name", pod.Name,
+						"pod_namespace", pod.Namespace)
 				}
 				// ignore err
 			}
@@ -142,7 +139,7 @@ func CleanupPods(ctx context.Context, logger *zap.Logger, client kubernetes.Inte
 }
 
 // CleanupServices deletes service(s) for a given instanceID
-func CleanupServices(ctx context.Context, logger *zap.Logger, client kubernetes.Interface, instanceID string, listOps metav1.ListOptions) error {
+func CleanupServices(ctx context.Context, logger logr.Logger, client kubernetes.Interface, instanceID string, listOps metav1.ListOptions) error {
 	cleanupServices := func(namespace string) error {
 		svcList, err := client.CoreV1().Services(namespace).List(ctx, listOps)
 		if err != nil {
@@ -155,13 +152,11 @@ func CleanupServices(ctx context.Context, logger *zap.Logger, client kubernetes.
 				id, ok = svc.Labels[fv1.EXECUTOR_INSTANCEID_LABEL]
 			}
 			if ok && id != instanceID {
-				logger.Info("cleaning up service", zap.String("service", svc.Name))
+				logger.Info("cleaning up service", "service", svc.Name)
 				err := client.CoreV1().Services(svc.ObjectMeta.Namespace).Delete(ctx, svc.Name, metav1.DeleteOptions{})
 				if err != nil {
-					logger.Error("error cleaning up service",
-						zap.Error(err),
-						zap.String("service_name", svc.Name),
-						zap.String("service_namespace", svc.Namespace))
+					logger.Error(err, "error cleaning up service", "service_name", svc.Name,
+						"service_namespace", svc.Namespace)
 				}
 				// ignore err
 			}
@@ -179,7 +174,7 @@ func CleanupServices(ctx context.Context, logger *zap.Logger, client kubernetes.
 }
 
 // CleanupHpa deletes horizontal pod autoscaler(s) for a given instanceID
-func CleanupHpa(ctx context.Context, logger *zap.Logger, client kubernetes.Interface, instanceID string, listOps metav1.ListOptions) error {
+func CleanupHpa(ctx context.Context, logger logr.Logger, client kubernetes.Interface, instanceID string, listOps metav1.ListOptions) error {
 	cleanupHpa := func(namespace string) error {
 		hpaList, err := client.AutoscalingV2().HorizontalPodAutoscalers(namespace).List(ctx, listOps)
 		if err != nil {
@@ -193,13 +188,11 @@ func CleanupHpa(ctx context.Context, logger *zap.Logger, client kubernetes.Inter
 				id, ok = hpa.Labels[fv1.EXECUTOR_INSTANCEID_LABEL]
 			}
 			if ok && id != instanceID {
-				logger.Info("cleaning up HPA", zap.String("hpa", hpa.Name))
+				logger.Info("cleaning up HPA", "hpa", hpa.Name)
 				err := client.AutoscalingV2().HorizontalPodAutoscalers(hpa.ObjectMeta.Namespace).Delete(ctx, hpa.Name, metav1.DeleteOptions{})
 				if err != nil {
-					logger.Error("error cleaning up HPA",
-						zap.Error(err),
-						zap.String("hpa_name", hpa.Name),
-						zap.String("hpa_namespace", hpa.Namespace))
+					logger.Error(err, "error cleaning up HPA", "hpa_name", hpa.Name,
+						"hpa_namespace", hpa.Namespace)
 				}
 				// ignore err
 			}

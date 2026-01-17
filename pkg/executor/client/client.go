@@ -26,9 +26,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-logr/logr"
 	"github.com/hashicorp/go-retryablehttp"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
-	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -44,7 +44,7 @@ type (
 	}
 	// client is wrapper on a HTTP client.
 	client struct {
-		logger      *zap.Logger
+		logger      logr.Logger
 		executorURL string
 		tappedByURL map[string]TapServiceRequest
 		requestChan chan TapServiceRequest
@@ -60,11 +60,11 @@ type (
 )
 
 // MakeClient initializes and returns a Client instance.
-func MakeClient(logger *zap.Logger, executorURL string) ClientInterface {
+func MakeClient(logger logr.Logger, executorURL string) ClientInterface {
 	hc := retryablehttp.NewClient()
 	hc.HTTPClient.Transport = otelhttp.NewTransport(hc.HTTPClient.Transport)
 	c := &client{
-		logger:      logger.Named("executor_client"),
+		logger:      logger.WithName("executor_client"),
 		executorURL: strings.TrimSuffix(executorURL, "/"),
 		tappedByURL: make(map[string]TapServiceRequest),
 		requestChan: make(chan TapServiceRequest, 100),
@@ -159,10 +159,10 @@ func (c *client) service() {
 				for _, req := range urls {
 					svcReqs = append(svcReqs, req)
 				}
-				c.logger.Debug("tapped services in batch", zap.Int("service_count", len(urls)))
+				c.logger.V(1).Info("tapped services in batch", "service_count", len(urls))
 				err := c._tapService(context.Background(), svcReqs)
 				if err != nil {
-					c.logger.Error("error tapping function service address", zap.Error(err))
+					c.logger.Error(err, "error tapping function service address")
 				}
 			}()
 		}

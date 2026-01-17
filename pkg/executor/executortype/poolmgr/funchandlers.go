@@ -19,13 +19,14 @@ package poolmgr
 import (
 	"context"
 
-	"go.uber.org/zap"
 	apiv1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 	k8sCache "k8s.io/client-go/tools/cache"
+
+	"github.com/go-logr/logr"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/utils"
@@ -41,7 +42,7 @@ func getIstioServiceLabels(fnName string) map[string]string {
 // Based on function create/update/delete event, we create role binding
 // for the secret/configmap access which is used by fetcher component.
 // If istio is enabled, we create a service for the function.
-func FunctionEventHandlers(ctx context.Context, logger *zap.Logger, kubernetesClient kubernetes.Interface, fissionfnNamespace string, istioEnabled bool) k8sCache.ResourceEventHandlerFuncs {
+func FunctionEventHandlers(ctx context.Context, logger logr.Logger, kubernetesClient kubernetes.Interface, fissionfnNamespace string, istioEnabled bool) k8sCache.ResourceEventHandlerFuncs {
 	return k8sCache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj any) {
 			fn := obj.(*fv1.Function)
@@ -102,11 +103,10 @@ func FunctionEventHandlers(ctx context.Context, logger *zap.Logger, kubernetesCl
 				// create function istio service if it does not exist
 				_, err := kubernetesClient.CoreV1().Services(envNs).Create(ctx, &svc, metav1.CreateOptions{})
 				if err != nil && !kerrors.IsAlreadyExists(err) {
-					logger.Error("error creating istio service for function",
-						zap.Error(err),
-						zap.String("service_name", svcName),
-						zap.String("function_name", fn.Name),
-						zap.Any("selectors", sel))
+					logger.Error(err, "error creating istio service for function",
+						"service_name", svcName,
+						"function_name", fn.Name,
+						"selectors", sel)
 				}
 			}
 		},
@@ -126,10 +126,8 @@ func FunctionEventHandlers(ctx context.Context, logger *zap.Logger, kubernetesCl
 				// delete function istio service
 				err := kubernetesClient.CoreV1().Services(envNs).Delete(ctx, svcName, metav1.DeleteOptions{})
 				if err != nil && !kerrors.IsNotFound(err) {
-					logger.Error("error deleting istio service for function",
-						zap.Error(err),
-						zap.String("service_name", svcName),
-						zap.String("function_name", fn.Name))
+					logger.Error(err, "error deleting istio service for function", "service_name", svcName,
+						"function_name", fn.Name)
 
 				}
 			}

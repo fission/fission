@@ -17,7 +17,8 @@ limitations under the License.
 package main
 
 import (
-	"go.uber.org/zap"
+	"os"
+
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 
 	"github.com/fission/fission/pkg/crd"
@@ -26,17 +27,13 @@ import (
 
 func main() {
 	logger := loggerfactory.GetLogger()
-	defer func() {
-		// https://github.com/uber-go/zap/issues/328
-		_ = logger.Sync()
-	}()
 
 	ctx := signals.SetupSignalHandler()
 
 	preupgradeClient, err := makePreUpgradeTaskClient(crd.NewClientGenerator(), logger)
 	if err != nil {
-		logger.Fatal("error creating a crd client, please retry helm upgrade",
-			zap.Error(err))
+		logger.Error(err, "error creating a crd client, please retry helm upgrade")
+		os.Exit(1)
 	}
 
 	crd := preupgradeClient.GetFunctionCRD(ctx)
@@ -46,10 +43,12 @@ func main() {
 	}
 	err = preupgradeClient.LatestSchemaApplied(ctx)
 	if err != nil {
-		logger.Fatal("New CRDs are not applied", zap.Error(err))
+		logger.Error(err, "New CRDs are not applied")
+		os.Exit(1)
 	}
 	err = preupgradeClient.VerifyFunctionSpecReferences(ctx)
 	if err != nil {
-		logger.Fatal("Function spec references are not valid", zap.Error(err))
+		logger.Error(err, "Function spec references are not valid")
+		os.Exit(1)
 	}
 }

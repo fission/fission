@@ -21,7 +21,6 @@ import (
 	"errors"
 	"strconv"
 
-	"go.uber.org/zap"
 	apiv1 "k8s.io/api/core/v1"
 	k8s_err "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -70,28 +69,22 @@ func (cn *Container) cleanupContainer(ctx context.Context, ns string, name strin
 
 	err := cn.deleteSvc(ctx, ns, name)
 	if err != nil && !k8s_err.IsNotFound(err) {
-		cn.logger.Error("error deleting service for Container function",
-			zap.Error(err),
-			zap.String("function_name", name),
-			zap.String("function_namespace", ns))
+		cn.logger.Error(err, "error deleting service for Container function", "function_name", name,
+			"function_namespace", ns)
 		result = errors.Join(result, err)
 	}
 
 	err = cn.hpaops.DeleteHpa(ctx, ns, name)
 	if err != nil && !k8s_err.IsNotFound(err) {
-		cn.logger.Error("error deleting HPA for Container function",
-			zap.Error(err),
-			zap.String("function_name", name),
-			zap.String("function_namespace", ns))
+		cn.logger.Error(err, "error deleting HPA for Container function", "function_name", name,
+			"function_namespace", ns)
 		result = errors.Join(result, err)
 	}
 
 	err = cn.deleteDeployment(ctx, ns, name)
 	if err != nil && !k8s_err.IsNotFound(err) {
-		cn.logger.Error("error deleting deployment for Container function",
-			zap.Error(err),
-			zap.String("function_name", name),
-			zap.String("function_namespace", ns))
+		cn.logger.Error(err, "error deleting deployment for Container function", "function_name", name,
+			"function_namespace", ns)
 		result = errors.Join(result, err)
 	}
 

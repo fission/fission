@@ -31,7 +31,7 @@ type Function struct {
 }
 
 // log is for logging in this package.
-var functionlog = loggerfactory.GetLogger().Named("function-resource")
+var functionlog = loggerfactory.GetLogger().WithName("function-resource")
 
 func (r *Function) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	r.Logger = functionlog

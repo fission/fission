@@ -22,7 +22,6 @@ import (
 	"maps"
 	"time"
 
-	"go.uber.org/zap"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	apiv1 "k8s.io/api/core/v1"
@@ -69,11 +68,9 @@ func (cn *Container) createOrGetDeployment(ctx context.Context, fn *fv1.Function
 				depl, err = cn.kubernetesClient.AppsV1().Deployments(deployNamespace).Get(ctx, deployName, metav1.GetOptions{})
 			}
 			if err != nil {
-				logger.Error("error while creating function deployment",
-					zap.Error(err),
-					zap.String("function", fn.Name),
-					zap.String("deployment_name", deployName),
-					zap.String("deployment_namespace", deployNamespace))
+				logger.Error(err, "error while creating function deployment", "function", fn.Name,
+					"deployment_name", deployName,
+					"deployment_namespace", deployNamespace)
 				return nil, err
 			}
 		}
@@ -97,8 +94,7 @@ func (cn *Container) createOrGetDeployment(ctx context.Context, fn *fv1.Function
 		// rolling update if spec is different from the one in the cluster.
 		existingDepl, err = cn.kubernetesClient.AppsV1().Deployments(deployNamespace).Update(ctx, existingDepl, metav1.UpdateOptions{})
 		if err != nil {
-			logger.Warn("error adopting cn", zap.Error(err),
-				zap.String("cn", deployName), zap.String("ns", deployNamespace))
+			logger.Error(err, "error adopting cn", "cn", deployName, "ns", deployNamespace)
 			return nil, err
 		}
 		// In this case, we just return without waiting for it for fast bootstraping.
@@ -108,7 +104,7 @@ func (cn *Container) createOrGetDeployment(ctx context.Context, fn *fv1.Function
 	if *existingDepl.Spec.Replicas < minScale {
 		err = cn.scaleDeployment(ctx, existingDepl.Namespace, existingDepl.Name, minScale)
 		if err != nil {
-			logger.Error("error scaling up function deployment", zap.Error(err), zap.String("function", fn.Name))
+			logger.Error(err, "error scaling up function deployment", "function", fn.Name)
 			return nil, err
 		}
 	}
@@ -157,9 +153,8 @@ func (cn *Container) waitForDeploy(ctx context.Context, depl *appsv1.Deployment,
 	}
 
 	logger := otelUtils.LoggerWithTraceID(ctx, cn.logger)
-	logger.Error("Deployment provision failed within timeout window",
-		zap.String("name", latestDepl.Name), zap.Any("old_status", oldStatus),
-		zap.Any("current_status", latestDepl.Status), zap.Int("timeout", specializationTimeout))
+	logger.Error(nil, "Deployment provision failed within timeout window", "name", latestDepl.Name, "old_status", oldStatus,
+		"current_status", latestDepl.Status, "timeout", specializationTimeout)
 
 	// this error appears in the executor pod logs
 	timeoutError := fmt.Errorf("failed to create deployment within the timeout window of %d seconds", specializationTimeout)
@@ -303,9 +298,9 @@ func (cn *Container) getDeploymentSpec(ctx context.Context, fn *fv1.Function, ta
 
 func (caaf *Container) scaleDeployment(ctx context.Context, deplNS string, deplName string, replicas int32) error {
 	caaf.logger.Info("scaling deployment",
-		zap.String("deployment", deplName),
-		zap.String("namespace", deplNS),
-		zap.Int32("replicas", replicas))
+		"deployment", deplName,
+		"namespace", deplNS,
+		"replicas", replicas)
 	_, err := caaf.kubernetesClient.AppsV1().Deployments(deplNS).UpdateScale(ctx, deplName, &autoscalingv1.Scale{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      deplName,

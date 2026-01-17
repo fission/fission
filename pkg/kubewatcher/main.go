@@ -20,14 +20,14 @@ import (
 	"context"
 	"fmt"
 
-	"go.uber.org/zap"
+	"github.com/go-logr/logr"
 
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/publisher"
 	"github.com/fission/fission/pkg/utils/manager"
 )
 
-func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Interface, routerUrl string) error {
+func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger, mgr manager.Interface, routerUrl string) error {
 	fissionClient, err := clientGen.GetFissionClient()
 	if err != nil {
 		return fmt.Errorf("failed to get fission client: %w", err)

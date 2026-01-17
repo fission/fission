@@ -27,7 +27,6 @@ import (
 	"strings"
 
 	"github.com/gorilla/mux"
-	"go.uber.org/zap"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	ferror "github.com/fission/fission/pkg/error"
@@ -60,9 +59,9 @@ func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *htt
 	logger := otelUtils.LoggerWithTraceID(ctx, executor.logger)
 
 	// Check function -> svc cache
-	logger.Debug("checking for cached function service",
-		zap.String("function_name", fn.Name),
-		zap.String("function_namespace", fn.Namespace))
+	logger.V(1).Info("checking for cached function service",
+		"function_name", fn.Name,
+		"function_namespace", fn.Namespace)
 	if t == fv1.ExecutorTypePoolmgr && !fn.Spec.OnceOnly {
 		fsvc, err := et.GetFuncSvcFromCache(ctx, fn)
 		// check if its a cache hit (check if there is already specialized function pod that can serve another request)
@@ -70,23 +69,21 @@ func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *htt
 			// if a pod is already serving request then it already exists else validated
 			if et.IsValid(ctx, fsvc) {
 				// Cached, return svc address
-				logger.Debug("served from cache", zap.String("name", fsvc.Name), zap.String("address", fsvc.Address))
+				logger.V(1).Info("served from cache", "name", fsvc.Name, "address", fsvc.Address)
 				executor.writeResponse(w, fsvc.Address, fn.Name)
 				return
 			}
-			logger.Debug("deleting cache entry for invalid address",
-				zap.String("function_name", fn.Name),
-				zap.String("function_namespace", fn.Namespace),
-				zap.String("address", fsvc.Address))
+			logger.V(1).Info("deleting cache entry for invalid address",
+				"function_name", fn.Name,
+				"function_namespace", fn.Namespace,
+				"address", fsvc.Address)
 			et.DeleteFuncSvcFromCache(ctx, fsvc)
 		} else {
 			code, msg := ferror.GetHTTPError(err)
 			if code == http.StatusNotFound {
-				logger.Debug("cache miss", zap.String("function_name", fn.Name))
+				logger.V(1).Info("cache miss", "function_name", fn.Name)
 			} else {
-				logger.Error("error getting service for function",
-					zap.Error(err),
-					zap.String("function_name", fn.Name))
+				logger.Error(err, "error getting service for function", "function_name", fn.Name)
 				http.Error(w, msg, code)
 				return
 			}
@@ -100,10 +97,10 @@ func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *htt
 				executor.writeResponse(w, fsvc.Address, fn.Name)
 				return
 			}
-			logger.Debug("deleting cache entry for invalid address",
-				zap.String("function_name", fn.Name),
-				zap.String("function_namespace", fn.Namespace),
-				zap.String("address", fsvc.Address))
+			logger.V(1).Info("deleting cache entry for invalid address",
+				"function_name", fn.Name,
+				"function_namespace", fn.Namespace,
+				"address", fsvc.Address)
 			et.DeleteFuncSvcFromCache(ctx, fsvc)
 		}
 	}
@@ -111,10 +108,8 @@ func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *htt
 	serviceName, err := executor.getServiceForFunction(ctx, fn)
 	if err != nil {
 		code, msg := ferror.GetHTTPError(err)
-		logger.Error("error getting service for function",
-			zap.Error(err),
-			zap.String("function", fn.Name),
-			zap.String("fission_http_error", msg))
+		logger.Error(err, "error getting service for function", "function", fn.Name,
+			"fission_http_error", msg)
 		http.Error(w, msg, code)
 		return
 	}
@@ -124,10 +119,8 @@ func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *htt
 func (executor *Executor) writeResponse(w http.ResponseWriter, serviceName string, fnName string) {
 	_, err := w.Write([]byte(serviceName))
 	if err != nil {
-		executor.logger.Error(
-			"error writing HTTP response",
-			zap.String("function", fnName),
-			zap.Error(err),
+		executor.logger.Error(err,
+			"error writing HTTP response", "function", fnName,
 		)
 	}
 }
@@ -152,7 +145,7 @@ func (executor *Executor) getServiceForFunction(ctx context.Context, fn *fv1.Fun
 	cleanUp := func(funcSvc *fscache.FuncSvc) {
 		et, ok := executor.executorTypes[fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType]
 		if !ok {
-			executor.logger.Error("unknown executor type received in function service", zap.Any("executor", funcSvc.Executor))
+			executor.logger.Info("unknown executor type received in function service", "executor", funcSvc.Executor)
 			return
 		}
 		if funcSvc != nil {
@@ -186,7 +179,7 @@ func (executor *Executor) tapServices(w http.ResponseWriter, r *http.Request) {
 
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		logger.Error("failed to read tap service request", zap.Error(err))
+		logger.Error(err, "failed to read tap service request")
 		http.Error(w, "Failed to read request", http.StatusInternalServerError)
 		return
 	}
@@ -194,9 +187,7 @@ func (executor *Executor) tapServices(w http.ResponseWriter, r *http.Request) {
 	tapSvcReqs := []client.TapServiceRequest{}
 	err = json.Unmarshal(body, &tapSvcReqs)
 	if err != nil {
-		logger.Error("failed to decode tap service request",
-			zap.Error(err),
-			zap.String("request-payload", string(body)))
+		logger.Error(err, "failed to decode tap service request", "request-payload", string(body))
 		http.Error(w, "Failed to decode tap service request", http.StatusBadRequest)
 		return
 	}
@@ -221,7 +212,7 @@ func (executor *Executor) tapServices(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if errs != nil {
-		logger.Error("error tapping function service", zap.Error(errs))
+		logger.Error(errs, "error tapping function service")
 		http.Error(w, "Not found", http.StatusNotFound)
 		return
 	}

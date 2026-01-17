@@ -25,9 +25,9 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/go-logr/logr"
 	"github.com/hashicorp/go-retryablehttp"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
-	"go.uber.org/zap"
 	"golang.org/x/net/context/ctxhttp"
 
 	"github.com/fission/fission/pkg/builder"
@@ -42,18 +42,18 @@ type (
 	}
 
 	client struct {
-		logger     *zap.Logger
+		logger     logr.Logger
 		url        string
 		httpClient *retryablehttp.Client
 	}
 )
 
-func MakeClient(logger *zap.Logger, builderUrl string) ClientInterface {
+func MakeClient(logger logr.Logger, builderUrl string) ClientInterface {
 	hc := retryablehttp.NewClient()
 	hc.ErrorHandler = retryablehttp.PassthroughErrorHandler
 	hc.HTTPClient.Transport = otelhttp.NewTransport(hc.HTTPClient.Transport)
 	return &client{
-		logger:     logger.Named("builder_client"),
+		logger:     logger.WithName("builder_client"),
 		url:        strings.TrimSuffix(builderUrl, "/"),
 		httpClient: hc,
 	}
@@ -79,14 +79,14 @@ func (c *client) Build(ctx context.Context, req *builder.PackageBuildRequest) (*
 
 	rBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		logger.Error("error reading resp body", zap.Error(err))
+		logger.Error(err, "error reading resp body")
 		return nil, fmt.Errorf("error reading response body: %w", err)
 	}
 
 	pkgBuildResp := builder.PackageBuildResponse{}
 	err = json.Unmarshal(rBody, &pkgBuildResp)
 	if err != nil {
-		logger.Error("error parsing resp body", zap.Error(err))
+		logger.Error(err, "error parsing resp body")
 		return nil, fmt.Errorf("error parsing response body: %w", err)
 	}
 
@@ -103,7 +103,7 @@ func (c *client) Clean(ctx context.Context, srcPkgFilename string) error {
 
 	resp, err := ctxhttp.Do(ctx, c.httpClient.StandardClient(), req)
 	if err != nil {
-		logger.Error("error sending clean request", zap.Error(err))
+		logger.Error(err, "error sending clean request")
 		return err
 	}
 	defer resp.Body.Close()
