@@ -29,7 +29,7 @@ type MessageQueueTrigger struct {
 }
 
 // log is for logging in this package.
-var messagequeuetriggerlog = loggerfactory.GetLogger().Named("messagequeuetrigger-resource")
+var messagequeuetriggerlog = loggerfactory.GetLogger().WithName("messagequeuetrigger-resource")
 
 func (r *MessageQueueTrigger) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	r.Logger = messagequeuetriggerlog

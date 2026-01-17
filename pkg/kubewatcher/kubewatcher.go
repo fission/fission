@@ -23,12 +23,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"reflect"
 	"strings"
 	"sync/atomic"
 	"time"
 
-	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -36,6 +36,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
+
+	"github.com/go-logr/logr"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	ferror "github.com/fission/fission/pkg/error"
@@ -45,14 +47,14 @@ import (
 
 type (
 	KubeWatcher struct {
-		logger           *zap.Logger
+		logger           logr.Logger
 		watches          map[types.UID]watchSubscription
 		kubernetesClient kubernetes.Interface
 		publisher        publisher.Publisher
 	}
 
 	watchSubscription struct {
-		logger              *zap.Logger
+		logger              logr.Logger
 		watch               fv1.KubernetesWatchTrigger
 		kubeWatch           watch.Interface
 		lastResourceVersion string
@@ -62,9 +64,9 @@ type (
 	}
 )
 
-func MakeKubeWatcher(ctx context.Context, logger *zap.Logger, kubernetesClient kubernetes.Interface, publisher publisher.Publisher) *KubeWatcher {
+func MakeKubeWatcher(ctx context.Context, logger logr.Logger, kubernetesClient kubernetes.Interface, publisher publisher.Publisher) *KubeWatcher {
 	kw := &KubeWatcher{
-		logger:           logger.Named("kube_watcher"),
+		logger:           logger.WithName("kube_watcher"),
 		watches:          make(map[types.UID]watchSubscription),
 		kubernetesClient: kubernetesClient,
 		publisher:        publisher,
@@ -123,8 +125,8 @@ func createKubernetesWatch(ctx context.Context, kubeClient kubernetes.Interface,
 }
 
 func (kw *KubeWatcher) addWatch(ctx context.Context, w *fv1.KubernetesWatchTrigger) error {
-	kw.logger.Info("adding watch", zap.String("name", w.Name), zap.Any("function", w.Spec.FunctionReference))
-	ws, err := MakeWatchSubscription(ctx, kw.logger.Named("watchsubscription"), w, kw.kubernetesClient, kw.publisher)
+	kw.logger.Info("adding watch", "name", w.Name, "function", w.Spec.FunctionReference)
+	ws, err := MakeWatchSubscription(ctx, kw.logger.WithName("watchsubscription"), w, kw.kubernetesClient, kw.publisher)
 	if err != nil {
 		return err
 	}
@@ -133,7 +135,7 @@ func (kw *KubeWatcher) addWatch(ctx context.Context, w *fv1.KubernetesWatchTrigg
 }
 
 func (kw *KubeWatcher) removeWatch(w *fv1.KubernetesWatchTrigger) error {
-	kw.logger.Info("removing watch", zap.String("name", w.Name), zap.Any("function", w.Spec.FunctionReference))
+	kw.logger.Info("removing watch", "name", w.Name, "function", w.Spec.FunctionReference)
 	ws, ok := kw.watches[w.UID]
 	if !ok {
 		return ferror.MakeError(ferror.ErrorNotFound,
@@ -144,10 +146,10 @@ func (kw *KubeWatcher) removeWatch(w *fv1.KubernetesWatchTrigger) error {
 	return nil
 }
 
-func MakeWatchSubscription(ctx context.Context, logger *zap.Logger, w *fv1.KubernetesWatchTrigger, kubeClient kubernetes.Interface, publisher publisher.Publisher) (*watchSubscription, error) {
+func MakeWatchSubscription(ctx context.Context, logger logr.Logger, w *fv1.KubernetesWatchTrigger, kubeClient kubernetes.Interface, publisher publisher.Publisher) (*watchSubscription, error) {
 	var stopped int32 = 0
 	ws := &watchSubscription{
-		logger:              logger.Named("watch_subscription"),
+		logger:              logger.WithName("watch_subscription"),
 		watch:               *w,
 		kubeWatch:           nil,
 		stopped:             &stopped,
@@ -169,10 +171,10 @@ func (ws *watchSubscription) restartWatch(ctx context.Context) error {
 	retries := 60
 	for {
 		ws.logger.Info("(re)starting watch",
-			zap.Any("watch", ws.watch.ObjectMeta),
-			zap.String("namespace", ws.watch.Spec.Namespace),
-			zap.String("type", ws.watch.Spec.Type),
-			zap.String("last_resource_version", ws.lastResourceVersion))
+			"watch", ws.watch.ObjectMeta,
+			"namespace", ws.watch.Spec.Namespace,
+			"type", ws.watch.Spec.Type,
+			"last_resource_version", ws.lastResourceVersion)
 		wi, err := createKubernetesWatch(ctx, ws.kubernetesClient, &ws.watch, ws.lastResourceVersion)
 		if err != nil {
 			retries--
@@ -197,7 +199,7 @@ func getResourceVersion(obj runtime.Object) (string, error) {
 }
 
 func (ws *watchSubscription) eventDispatchLoop(ctx context.Context) {
-	ws.logger.Info("listening to watch", zap.String("name", ws.watch.Name))
+	ws.logger.Info("listening to watch", "name", ws.watch.Name)
 	// check watchSubscription is stopped or not before waiting for event
 	// comes from the kubeWatch.ResultChan(). This fix the edge case that
 	// new kubewatch is created in the restartWatch() while the old kubewatch
@@ -207,14 +209,15 @@ func (ws *watchSubscription) eventDispatchLoop(ctx context.Context) {
 		if !more {
 			if ws.isStopped() {
 				// watch is removed by user.
-				ws.logger.Warn("watch stopped", zap.String("watch_name", ws.watch.Name))
+				ws.logger.Info("watch stopped", "watch_name", ws.watch.Name)
 				return
 			} else {
 				// watch closed due to timeout, restart it.
-				ws.logger.Warn("watch timed out - restarting", zap.String("watch_name", ws.watch.Name))
+				ws.logger.Info("watch timed out - restarting", "watch_name", ws.watch.Name)
 				err := ws.restartWatch(ctx)
 				if err != nil {
-					ws.logger.Panic("failed to restart watch", zap.Error(err), zap.String("watch_name", ws.watch.Name))
+					ws.logger.Error(err, "failed to restart watch", "watch_name", ws.watch.Name)
+					os.Exit(1)
 				}
 				continue
 			}
@@ -222,19 +225,20 @@ func (ws *watchSubscription) eventDispatchLoop(ctx context.Context) {
 
 		if ev.Type == watch.Error {
 			e := errors.FromObject(ev.Object)
-			ws.logger.Warn("watch error - retrying after one second", zap.Error(e), zap.String("watch_name", ws.watch.Name))
+			ws.logger.Error(e, "watch error - retrying after one second", "watch_name", ws.watch.Name)
 			// Start from the beginning to get around "too old resource version"
 			ws.lastResourceVersion = ""
 			time.Sleep(time.Second)
 			err := ws.restartWatch(ctx)
 			if err != nil {
-				ws.logger.Panic("failed to restart watch", zap.Error(err), zap.String("watch_name", ws.watch.Name))
+				ws.logger.Error(err, "failed to restart watch", "watch_name", ws.watch.Name)
+				os.Exit(1)
 			}
 			continue
 		}
 		rv, err := getResourceVersion(ev.Object)
 		if err != nil {
-			ws.logger.Error("error getting resourceVersion from object", zap.Error(err), zap.String("watch_name", ws.watch.Name))
+			ws.logger.Error(err, "error getting resourceVersion from object", "watch_name", ws.watch.Name)
 		} else {
 			ws.lastResourceVersion = rv
 		}
@@ -243,7 +247,7 @@ func (ws *watchSubscription) eventDispatchLoop(ctx context.Context) {
 		var buf bytes.Buffer
 		err = printKubernetesObject(ev.Object, &buf)
 		if err != nil {
-			ws.logger.Error("failed to serialize object", zap.Error(err), zap.String("watch_name", ws.watch.Name))
+			ws.logger.Error(err, "failed to serialize object", "watch_name", ws.watch.Name)
 			// TODO send a POST request indicating error
 		}
 
@@ -256,9 +260,8 @@ func (ws *watchSubscription) eventDispatchLoop(ctx context.Context) {
 
 		// TODO support other function ref types. Or perhaps delegate to router?
 		if ws.watch.Spec.FunctionReference.Type != fv1.FunctionReferenceTypeFunctionName {
-			ws.logger.Error("unsupported function ref type - cannot publish event",
-				zap.Any("type", ws.watch.Spec.FunctionReference.Type),
-				zap.String("watch_name", ws.watch.Name))
+			ws.logger.Error(nil, "unsupported function ref type - cannot publish event", "type", ws.watch.Spec.FunctionReference.Type,
+				"watch_name", ws.watch.Name)
 			continue
 		}
 

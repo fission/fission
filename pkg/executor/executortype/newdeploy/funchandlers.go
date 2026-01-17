@@ -18,7 +18,6 @@ package newdeploy
 import (
 	"context"
 
-	"go.uber.org/zap"
 	k8sCache "k8s.io/client-go/tools/cache"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -32,14 +31,12 @@ func (deploy *NewDeploy) FunctionEventHandlers(ctx context.Context) k8sCache.Res
 			// example: https://github.com/kubernetes/kubernetes/blob/master/pkg/controller/job/job_controller.go
 			go func() {
 				fn := obj.(*fv1.Function)
-				deploy.logger.Debug("create deployment for function", zap.Any("fn", fn.ObjectMeta), zap.Any("fnspec", fn.Spec))
+				deploy.logger.V(1).Info("create deployment for function", "fn", fn.ObjectMeta, "fnspec", fn.Spec)
 				_, err := deploy.createFunction(ctx, fn)
 				if err != nil {
-					deploy.logger.Error("error eager creating function",
-						zap.Error(err),
-						zap.Any("function", fn))
+					deploy.logger.Error(err, "error eager creating function", "function", fn)
 				}
-				deploy.logger.Debug("end create deployment for function", zap.Any("fn", fn.ObjectMeta), zap.Any("fnspec", fn.Spec))
+				deploy.logger.V(1).Info("end create deployment for function", "fn", fn.ObjectMeta, "fnspec", fn.Spec)
 			}()
 		},
 		DeleteFunc: func(obj any) {
@@ -47,9 +44,7 @@ func (deploy *NewDeploy) FunctionEventHandlers(ctx context.Context) k8sCache.Res
 			go func() {
 				err := deploy.deleteFunction(ctx, fn)
 				if err != nil {
-					deploy.logger.Error("error deleting function",
-						zap.Error(err),
-						zap.Any("function", fn))
+					deploy.logger.Error(err, "error deleting function", "function", fn)
 				}
 			}()
 		},
@@ -59,10 +54,8 @@ func (deploy *NewDeploy) FunctionEventHandlers(ctx context.Context) k8sCache.Res
 			go func() {
 				err := deploy.updateFunction(ctx, oldFn, newFn)
 				if err != nil {
-					deploy.logger.Error("error updating function",
-						zap.Error(err),
-						zap.Any("old_function", oldFn),
-						zap.Any("new_function", newFn))
+					deploy.logger.Error(err, "error updating function", "old_function", oldFn,
+						"new_function", newFn)
 				}
 			}()
 		},

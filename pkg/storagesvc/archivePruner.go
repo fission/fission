@@ -21,8 +21,9 @@ import (
 	"fmt"
 	"time"
 
-	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/go-logr/logr"
 
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
@@ -31,7 +32,7 @@ import (
 )
 
 type ArchivePruner struct {
-	logger        *zap.Logger
+	logger        logr.Logger
 	crdClient     versioned.Interface
 	archiveChan   chan string
 	stowClient    *StowClient
@@ -40,14 +41,14 @@ type ArchivePruner struct {
 
 const defaultPruneInterval int = 60 // in minutes
 
-func MakeArchivePruner(logger *zap.Logger, clientGen crd.ClientGeneratorInterface, stowClient *StowClient, pruneInterval time.Duration) (*ArchivePruner, error) {
+func MakeArchivePruner(logger logr.Logger, clientGen crd.ClientGeneratorInterface, stowClient *StowClient, pruneInterval time.Duration) (*ArchivePruner, error) {
 	fissionClient, err := clientGen.GetFissionClient()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get fission client: %w", err)
 	}
 
 	return &ArchivePruner{
-		logger:        logger.Named("archive_pruner"),
+		logger:        logger.WithName("archive_pruner"),
 		crdClient:     fissionClient,
 		archiveChan:   make(chan string),
 		stowClient:    stowClient,
@@ -57,18 +58,16 @@ func MakeArchivePruner(logger *zap.Logger, clientGen crd.ClientGeneratorInterfac
 
 // pruneArchives listens to archiveChannel for archive ids that need to be deleted
 func (pruner *ArchivePruner) pruneArchives(ctx context.Context) {
-	pruner.logger.Debug("listening to archiveChannel to prune archives")
+	pruner.logger.V(1).Info("listening to archiveChannel to prune archives")
 	for {
 		select {
 		case archiveID := <-pruner.archiveChan:
 			pruner.logger.Info("sending delete request for archive",
-				zap.String("archive_id", archiveID))
+				"archive_id", archiveID)
 			if err := pruner.stowClient.removeFileByID(archiveID); err != nil {
 				// logging the error and continuing with other deletions.
 				// hopefully this archive will be deleted in the next iteration.
-				pruner.logger.Error("ignoring error while deleting archive",
-					zap.Error(err),
-					zap.String("archive_id", archiveID))
+				pruner.logger.Error(err, "ignoring error while deleting archive", "archive_id", archiveID)
 			}
 		case <-ctx.Done():
 			close(pruner.archiveChan)
@@ -87,7 +86,7 @@ func (pruner *ArchivePruner) insertArchive(archiveID string) {
 // and not the archives that are referenced by them, leaving the archives as orphans.
 // getOrphanArchives reaps the orphaned archives.
 func (pruner *ArchivePruner) getOrphanArchives(ctx context.Context) {
-	pruner.logger.Debug("getting orphan archives")
+	pruner.logger.V(1).Info("getting orphan archives")
 	archivesRefByPkgs := make([]string, 0)
 	var archiveID string
 
@@ -95,7 +94,7 @@ func (pruner *ArchivePruner) getOrphanArchives(ctx context.Context) {
 	for _, namespace := range utils.DefaultNSResolver().FissionResourceNS {
 		pkgList, err := pruner.crdClient.CoreV1().Packages(namespace).List(ctx, metav1.ListOptions{})
 		if err != nil {
-			pruner.logger.Error("error getting package list from kubernetes", zap.Error(err))
+			pruner.logger.Error(err, "error getting package list from kubernetes")
 			return
 		}
 
@@ -104,9 +103,7 @@ func (pruner *ArchivePruner) getOrphanArchives(ctx context.Context) {
 			if pkg.Spec.Deployment.URL != "" {
 				archiveID, err = getQueryParamValue(pkg.Spec.Deployment.URL, "id")
 				if err != nil {
-					pruner.logger.Error("error extracting value of archiveID from deployment url",
-						zap.Error(err),
-						zap.String("url", pkg.Spec.Deployment.URL))
+					pruner.logger.Error(err, "error extracting value of archiveID from deployment url", "url", pkg.Spec.Deployment.URL)
 					return
 				}
 				archivesRefByPkgs = append(archivesRefByPkgs, archiveID)
@@ -114,9 +111,7 @@ func (pruner *ArchivePruner) getOrphanArchives(ctx context.Context) {
 			if pkg.Spec.Source.URL != "" {
 				archiveID, err = getQueryParamValue(pkg.Spec.Source.URL, "id")
 				if err != nil {
-					pruner.logger.Error("error extracting value of archiveID from source url",
-						zap.Error(err),
-						zap.String("url", pkg.Spec.Source.URL))
+					pruner.logger.Error(err, "error extracting value of archiveID from source url", "url", pkg.Spec.Source.URL)
 					return
 				}
 				archivesRefByPkgs = append(archivesRefByPkgs, archiveID)
@@ -124,22 +119,22 @@ func (pruner *ArchivePruner) getOrphanArchives(ctx context.Context) {
 		}
 	}
 
-	pruner.logger.Debug("archives referenced by packagese", zap.Strings("archives", archivesRefByPkgs))
+	pruner.logger.V(1).Info("archives referenced by packagese", "archives", archivesRefByPkgs)
 
 	// get all archives on storage
 	// out of them, there may be some just created but not referenced by packages yet.
 	// need to filter them out.
 	archivesInStorage, err := pruner.stowClient.getItemIDsWithFilter(pruner.stowClient.filterItemCreatedAMinuteAgo, time.Now())
 	if err != nil {
-		pruner.logger.Error("error getting items from storage", zap.Error(err))
+		pruner.logger.Error(err, "error getting items from storage")
 		return
 	}
-	pruner.logger.Debug("archives in storage", zap.Strings("archives", archivesInStorage))
+	pruner.logger.V(1).Info("archives in storage", "archives", archivesInStorage)
 
 	// difference of the two lists gives us the list of orphan archives. This is just a brute force approach.
 	// need to do something more optimal at scale.
 	orphanedArchives := getDifferenceOfLists(archivesInStorage, archivesRefByPkgs)
-	pruner.logger.Debug("orphan archives", zap.Strings("archives", orphanedArchives))
+	pruner.logger.V(1).Info("orphan archives", "archives", orphanedArchives)
 
 	// send each orphan archive away for deletion
 	for _, archiveID = range orphanedArchives {

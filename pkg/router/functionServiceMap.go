@@ -20,15 +20,16 @@ import (
 	"net/url"
 	"time"
 
-	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/go-logr/logr"
 
 	"github.com/fission/fission/pkg/cache"
 )
 
 type (
 	functionServiceMap struct {
-		logger *zap.Logger
+		logger logr.Logger
 		cache  *cache.Cache[metadataKey, *url.URL]
 	}
 
@@ -41,9 +42,9 @@ type (
 	}
 )
 
-func makeFunctionServiceMap(logger *zap.Logger, expiry time.Duration) *functionServiceMap {
+func makeFunctionServiceMap(logger logr.Logger, expiry time.Duration) *functionServiceMap {
 	return &functionServiceMap{
-		logger: logger.Named("function_service_map"),
+		logger: logger.WithName("function_service_map"),
 		cache:  cache.MakeCache[metadataKey, *url.URL](expiry, 0),
 	}
 }

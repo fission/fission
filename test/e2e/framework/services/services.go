@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 
-	"go.uber.org/zap"
 	cnwebhook "sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	"github.com/fission/fission/pkg/buildermgr"
@@ -36,7 +35,8 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr manager.Inte
 			CertDir: env.WebhookInstallOptions.LocalServingCertDir,
 		})
 		if err != nil {
-			f.Logger().Fatal("error starting webhook", zap.Error(err))
+			f.Logger().Error(err, "error starting webhook")
+			os.Exit(1)
 		}
 	})
 	f.AddServiceInfo("webhook", framework.ServiceInfo{Port: webhookPort})

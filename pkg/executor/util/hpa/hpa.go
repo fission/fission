@@ -19,7 +19,6 @@ import (
 	"context"
 	"errors"
 
-	"go.uber.org/zap"
 	appsv1 "k8s.io/api/apps/v1"
 	asv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
@@ -27,6 +26,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes"
+
+	"github.com/go-logr/logr"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/utils"
@@ -40,13 +41,13 @@ const (
 )
 
 type HpaOperations struct {
-	logger                *zap.Logger
+	logger                logr.Logger
 	kubernetesClient      kubernetes.Interface
 	instanceID            string
 	enableOwnerReferences bool
 }
 
-func NewHpaOperations(logger *zap.Logger, kubernetesClient kubernetes.Interface, instanceID string) *HpaOperations {
+func NewHpaOperations(logger logr.Logger, kubernetesClient kubernetes.Interface, instanceID string) *HpaOperations {
 	return &HpaOperations{
 		logger:                logger,
 		kubernetesClient:      kubernetesClient,
@@ -139,8 +140,7 @@ func (hpaops *HpaOperations) CreateOrGetHpa(ctx context.Context, fn *fv1.Functio
 			existingHpa.Spec = hpa.Spec
 			existingHpa, err = hpaops.kubernetesClient.AutoscalingV2().HorizontalPodAutoscalers(depl.ObjectMeta.Namespace).Update(ctx, existingHpa, metav1.UpdateOptions{})
 			if err != nil {
-				logger.Warn("error adopting HPA", zap.Error(err),
-					zap.String("HPA", hpaName), zap.String("ns", depl.Namespace))
+				logger.Error(err, "error adopting HPA", "HPA", hpaName, "ns", depl.Namespace)
 				return nil, err
 			}
 		}

@@ -29,7 +29,7 @@ type CanaryConfig struct {
 }
 
 // log is for logging in this package.
-var canaryConfigLog = loggerfactory.GetLogger().Named("canaryconfig-resource")
+var canaryConfigLog = loggerfactory.GetLogger().WithName("canaryconfig-resource")
 
 func (r *CanaryConfig) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	r.Logger = canaryConfigLog

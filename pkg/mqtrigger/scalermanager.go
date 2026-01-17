@@ -10,13 +10,13 @@ import (
 	"strings"
 	"time"
 
-	"go.uber.org/zap"
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	k8sCache "k8s.io/client-go/tools/cache"
 
+	"github.com/go-logr/logr"
 	kedav1alpha1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
 	kedaClient "github.com/kedacore/keda/v2/pkg/generated/clientset/versioned"
 
@@ -32,7 +32,7 @@ var (
 	matchAllCap   = regexp.MustCompile("([a-z0-9])([A-Z])")
 )
 
-func mqTriggerEventHandlers(ctx context.Context, logger *zap.Logger, kubeClient kubernetes.Interface, kedaClient kedaClient.Interface, routerURL string) k8sCache.ResourceEventHandlerFuncs {
+func mqTriggerEventHandlers(ctx context.Context, logger logr.Logger, kubeClient kubernetes.Interface, kedaClient kedaClient.Interface, routerURL string) k8sCache.ResourceEventHandlerFuncs {
 	return k8sCache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj any) {
 			go func() {
@@ -40,7 +40,7 @@ func mqTriggerEventHandlers(ctx context.Context, logger *zap.Logger, kubeClient 
 				if mqt.Spec.MqtKind == "fission" {
 					return
 				}
-				logger.Debug("Create deployment for Scaler Object", zap.Any("mqt", mqt.ObjectMeta), zap.Any("mqt.Spec", mqt.Spec))
+				logger.V(1).Info("Create deployment for Scaler Object", "mqt", mqt.ObjectMeta, "mqt.Spec", mqt.Spec)
 				createKedaObjects(ctx, logger, kedaClient, kubeClient, mqt, routerURL)
 			}()
 		},
@@ -53,14 +53,14 @@ func mqTriggerEventHandlers(ctx context.Context, logger *zap.Logger, kubeClient 
 				// If mqtkind is updated to fission from keda then
 				// delete keda objects previously created for mqtkind keda.
 				if mqtkindKedaToFission {
-					logger.Debug("Mqtkind updated to fission from keda, cleanup keda objects", zap.Any("mqt", newMqt.ObjectMeta), zap.Any("mqt.Spec", newMqt.Spec))
+					logger.V(1).Info("Mqtkind updated to fission from keda, cleanup keda objects", "mqt", newMqt.ObjectMeta, "mqt.Spec", newMqt.Spec)
 					cleanupKedaObjects(ctx, logger, kedaClient, kubeClient, mqt)
 					return
 				}
 				// If mqtkind is updated to keda from fission then
 				// create keda objects
 				if mqtkindFissionToKeda {
-					logger.Debug("Mqtkind changed to keda from fission, create keda objects", zap.Any("mqt", newMqt.ObjectMeta), zap.Any("mqt.Spec", newMqt.Spec))
+					logger.V(1).Info("Mqtkind changed to keda from fission, create keda objects", "mqt", newMqt.ObjectMeta, "mqt.Spec", newMqt.Spec)
 					createKedaObjects(ctx, logger, kedaClient, kubeClient, newMqt, routerURL)
 					return
 				}
@@ -70,7 +70,7 @@ func mqTriggerEventHandlers(ctx context.Context, logger *zap.Logger, kubeClient 
 					return
 				}
 				if !updated {
-					logger.Warn(fmt.Sprintf("%s remains unchanged. No changes found in trigger fields", mqt.Name))
+					logger.Info(fmt.Sprintf("%s remains unchanged. No changes found in trigger fields", mqt.Name))
 					return
 				}
 
@@ -78,18 +78,18 @@ func mqTriggerEventHandlers(ctx context.Context, logger *zap.Logger, kubeClient 
 				if len(newMqt.Spec.Secret) > 0 && newMqt.Spec.Secret != mqt.Spec.Secret {
 					authenticationRef = fmt.Sprintf("%s-auth-trigger", mqt.Name)
 					if err := updateAuthTrigger(ctx, kedaClient, mqt, authenticationRef, kubeClient); err != nil {
-						logger.Error("Failed to update Authentication Trigger", zap.Error(err))
+						logger.Error(err, "Failed to update Authentication Trigger")
 						return
 					}
 				}
 
 				if err := updateDeployment(ctx, mqt, routerURL, kubeClient); err != nil {
-					logger.Error("Failed to Update Deployment", zap.Error(err))
+					logger.Error(err, "Failed to Update Deployment")
 					return
 				}
 
 				if err := updateScaledObject(ctx, kedaClient, mqt, authenticationRef); err != nil {
-					logger.Error("Failed to Update ScaledObject", zap.Error(err))
+					logger.Error(err, "Failed to Update ScaledObject")
 					return
 				}
 			}()
@@ -100,7 +100,7 @@ func mqTriggerEventHandlers(ctx context.Context, logger *zap.Logger, kubeClient 
 
 // StartScalerManager watches for changes in MessageQueueTrigger and,
 // Based on changes, it Creates, Updates and Deletes Objects of Kind ScaledObjects, AuthenticationTriggers and Deployments
-func StartScalerManager(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Interface, routerURL string) error {
+func StartScalerManager(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger, mgr manager.Interface, routerURL string) error {
 	fissionClient, err := clientGen.GetFissionClient()
 	if err != nil {
 		return fmt.Errorf("failed to get fission client: %w", err)
@@ -128,7 +128,8 @@ func StartScalerManager(ctx context.Context, clientGen crd.ClientGeneratorInterf
 			informer.Run(ctx.Done())
 		})
 		if ok := k8sCache.WaitForCacheSync(ctx.Done(), informer.HasSynced); !ok {
-			logger.Fatal("failed to wait for caches to sync")
+			logger.Info("failed to wait for caches to sync")
+			os.Exit(1)
 		}
 	}
 	return nil
@@ -269,42 +270,42 @@ func checkAndUpdateTriggerFields(mqt, newMqt *fv1.MessageQueueTrigger) bool {
 	return updated
 }
 
-func createKedaObjects(ctx context.Context, logger *zap.Logger, kedaClient kedaClient.Interface, kubeClient kubernetes.Interface, mqt *fv1.MessageQueueTrigger, routerURL string) {
+func createKedaObjects(ctx context.Context, logger logr.Logger, kedaClient kedaClient.Interface, kubeClient kubernetes.Interface, mqt *fv1.MessageQueueTrigger, routerURL string) {
 	authenticationRef := ""
 	if len(mqt.Spec.Secret) > 0 {
 		authenticationRef = fmt.Sprintf("%s-auth-trigger", mqt.Name)
 		err := createAuthTrigger(ctx, kedaClient, mqt, authenticationRef, kubeClient)
 		if err != nil {
-			logger.Error("Failed to create Authentication Trigger", zap.Error(err))
+			logger.Error(err, "Failed to create Authentication Trigger")
 			return
 		}
 	}
 
 	if err := createDeployment(ctx, mqt, routerURL, kubeClient); err != nil {
-		logger.Error("Failed to create Deployment", zap.Error(err))
+		logger.Error(err, "Failed to create Deployment")
 		if len(authenticationRef) > 0 {
 			err = deleteAuthTrigger(ctx, kedaClient, authenticationRef, mqt.Namespace)
 			if err != nil {
-				logger.Error("Failed to delete Authentication Trigger", zap.Error(err))
+				logger.Error(err, "Failed to delete Authentication Trigger")
 			}
 		}
 		return
 	}
 
 	if err := createScaledObject(ctx, kedaClient, mqt, authenticationRef); err != nil {
-		logger.Error("Failed to create ScaledObject", zap.Error(err))
+		logger.Error(err, "Failed to create ScaledObject")
 		if len(authenticationRef) > 0 {
 			if err = deleteAuthTrigger(ctx, kedaClient, authenticationRef, mqt.Namespace); err != nil {
-				logger.Error("Failed to delete Authentication Trigger", zap.Error(err))
+				logger.Error(err, "Failed to delete Authentication Trigger")
 			}
 		}
 		if err = deleteDeployment(ctx, mqt.Name, mqt.Namespace, kubeClient); err != nil {
-			logger.Error("Failed to delete Deployment", zap.Error(err))
+			logger.Error(err, "Failed to delete Deployment")
 		}
 	}
 }
 
-func cleanupKedaObjects(ctx context.Context, logger *zap.Logger, kedaClient kedaClient.Interface, kubeClient kubernetes.Interface, mqt *fv1.MessageQueueTrigger) {
+func cleanupKedaObjects(ctx context.Context, logger logr.Logger, kedaClient kedaClient.Interface, kubeClient kubernetes.Interface, mqt *fv1.MessageQueueTrigger) {
 	authenticationRef := ""
 	if len(mqt.Spec.Secret) > 0 {
 		authenticationRef = fmt.Sprintf("%s-auth-trigger", mqt.Name)
@@ -313,16 +314,16 @@ func cleanupKedaObjects(ctx context.Context, logger *zap.Logger, kedaClient keda
 	if len(authenticationRef) > 0 {
 		err := deleteAuthTrigger(ctx, kedaClient, authenticationRef, mqt.Namespace)
 		if err != nil {
-			logger.Error("Failed to delete Authentication Trigger", zap.Error(err))
+			logger.Error(err, "Failed to delete Authentication Trigger")
 		}
 	}
 
 	if err := deleteDeployment(ctx, mqt.Name, mqt.Namespace, kubeClient); err != nil {
-		logger.Error("Failed to delete Deployment", zap.Error(err))
+		logger.Error(err, "Failed to delete Deployment")
 	}
 
 	if err := deleteScaledObject(ctx, kedaClient, mqt.Name, mqt.Namespace); err != nil {
-		logger.Error("Failed to delete ScaledObject", zap.Error(err))
+		logger.Error(err, "Failed to delete ScaledObject")
 	}
 }
 

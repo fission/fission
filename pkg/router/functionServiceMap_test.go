@@ -20,17 +20,13 @@ import (
 	"net/url"
 	"testing"
 
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
 
 func TestFunctionServiceMap(t *testing.T) {
-	config := zap.NewDevelopmentConfig()
-	config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
-	logger, err := config.Build()
-	panicIf(err)
+	logger := loggerfactory.GetLogger()
 
 	m := makeFunctionServiceMap(logger, 0)
 	fn := &metav1.ObjectMeta{Name: "foo", Namespace: metav1.NamespaceDefault}

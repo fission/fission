@@ -9,7 +9,6 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 	"github.com/fission/fission/pkg/utils/manager"
@@ -26,7 +25,7 @@ func TestStartServer(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 		_, err := w.Write([]byte("test handler"))
 		if err != nil {
-			logger.Error("failed to write response", zap.Error(err))
+			logger.Error(err, "failed to write response")
 		}
 	}))
 

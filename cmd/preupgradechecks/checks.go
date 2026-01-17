@@ -22,7 +22,7 @@ import (
 	"fmt"
 	"strings"
 
-	"go.uber.org/zap"
+	"github.com/go-logr/logr"
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -37,7 +37,7 @@ import (
 
 type (
 	PreUpgradeTaskClient struct {
-		logger        *zap.Logger
+		logger        logr.Logger
 		fissionClient versioned.Interface
 		k8sClient     kubernetes.Interface
 		apiExtClient  apiextensionsclient.Interface
@@ -50,7 +50,7 @@ const (
 	MqtCRD      = "messagequeuetriggers.fission.io"
 )
 
-func makePreUpgradeTaskClient(clientGen crd.ClientGeneratorInterface, logger *zap.Logger) (*PreUpgradeTaskClient, error) {
+func makePreUpgradeTaskClient(clientGen crd.ClientGeneratorInterface, logger logr.Logger) (*PreUpgradeTaskClient, error) {
 	var err error
 	fissionClient, err := clientGen.GetFissionClient()
 	if err != nil {
@@ -66,7 +66,7 @@ func makePreUpgradeTaskClient(clientGen crd.ClientGeneratorInterface, logger *za
 	}
 
 	return &PreUpgradeTaskClient{
-		logger:        logger.Named("pre_upgrade_task_client"),
+		logger:        logger.WithName("pre_upgrade_task_client"),
 		fissionClient: fissionClient,
 		k8sClient:     k8sClient,
 		apiExtClient:  apiExtClient,
@@ -90,7 +90,7 @@ func (client *PreUpgradeTaskClient) GetFunctionCRD(ctx context.Context) *v1.Cust
 func (client *PreUpgradeTaskClient) GetMqtCRD(ctx context.Context) *v1.CustomResourceDefinition {
 	crd, err := client.apiExtClient.ApiextensionsV1().CustomResourceDefinitions().Get(ctx, MqtCRD, metav1.GetOptions{})
 	if err != nil {
-		client.logger.Error("Could not find MQT CRD", zap.Error(err))
+		client.logger.Error(err, "Could not find MQT CRD")
 		return nil
 	}
 	return crd
@@ -140,9 +140,7 @@ func (client *PreUpgradeTaskClient) VerifyFunctionSpecReferences(ctx context.Con
 		}
 
 		if err != nil {
-			client.logger.Error("error listing functions after max retries",
-				zap.Error(err),
-				zap.Int("max_retries", maxRetries))
+			client.logger.Error(err, "error listing functions after max retries", "max_retries", maxRetries)
 			errs = errors.Join(errs, fmt.Errorf("error listing functions in namespace : %s", namespace))
 			continue
 		}

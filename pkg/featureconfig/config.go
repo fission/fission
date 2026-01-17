@@ -21,17 +21,17 @@ import (
 	"fmt"
 	"os"
 
-	"go.uber.org/zap"
+	"github.com/go-logr/logr"
 	"sigs.k8s.io/yaml"
 )
 
 // GetFeatureConfig reads the configMap file and unmarshals the config into a feature config struct
-func GetFeatureConfig(logger *zap.Logger) (*FeatureConfig, error) {
+func GetFeatureConfig(logger logr.Logger) (*FeatureConfig, error) {
 	featureConfig := &FeatureConfig{}
 
 	// check if the file exists
 	if _, err := os.Stat(FeatureConfigFile); os.IsNotExist(err) {
-		logger.Warn("using empty feature config as file not found", zap.String("configPath", FeatureConfigFile))
+		logger.Info("using empty feature config as file not found", "configPath", FeatureConfigFile)
 		return featureConfig, nil
 	}
 

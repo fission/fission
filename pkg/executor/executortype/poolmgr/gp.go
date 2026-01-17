@@ -29,7 +29,7 @@ import (
 	"time"
 
 	"github.com/dchest/uniuri"
-	"go.uber.org/zap"
+	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
 	k8s_err "k8s.io/apimachinery/pkg/api/errors"
@@ -58,7 +58,7 @@ import (
 type (
 	// GenericPool represents a generic environment pool
 	GenericPool struct {
-		logger                   *zap.Logger
+		logger                   logr.Logger
 		lock                     sync.Mutex
 		env                      *fv1.Environment
 		deployment               *appsv1.Deployment            // kubernetes deployment
@@ -87,7 +87,7 @@ type (
 
 // MakeGenericPool returns an instance of GenericPool
 func MakeGenericPool(
-	logger *zap.Logger,
+	logger logr.Logger,
 	fissionClient versioned.Interface,
 	kubernetesClient kubernetes.Interface,
 	metricsClient metricsclient.Interface,
@@ -99,19 +99,18 @@ func MakeGenericPool(
 	enableIstio bool,
 	podSpecPatch *apiv1.PodSpec) *GenericPool {
 
-	gpLogger := logger.Named("generic_pool")
+	gpLogger := logger.WithName("generic_pool")
 
 	podReadyTimeoutStr := os.Getenv("POD_READY_TIMEOUT")
 	podReadyTimeout, err := time.ParseDuration(podReadyTimeoutStr)
 	if err != nil {
 		podReadyTimeout = 300 * time.Second
-		gpLogger.Error("failed to parse pod ready timeout duration from 'POD_READY_TIMEOUT' - set to the default value",
-			zap.Error(err),
-			zap.String("value", podReadyTimeoutStr),
-			zap.Duration("default", podReadyTimeout))
+		gpLogger.Error(err, "failed to parse pod ready timeout duration from 'POD_READY_TIMEOUT' - set to the default value",
+			"value", podReadyTimeoutStr,
+			"default", podReadyTimeout)
 	}
 
-	gpLogger.Info("creating pool", zap.Any("environment", env))
+	gpLogger.Info("creating pool", "environment", env)
 
 	// TODO: in general we need to provide the user a way to configure pools.  Initial
 	// replicas, autoscaling params, various timeouts, etc.
@@ -174,7 +173,7 @@ func (gp *GenericPool) getDeployAnnotations(env *fv1.Environment) map[string]str
 func (gp *GenericPool) checkMetricsApi() bool {
 	apiGroups, err := gp.metricsClient.Discovery().ServerGroups()
 	if err != nil {
-		gp.logger.Error("failed to discover API groups", zap.Error(err))
+		gp.logger.Error(err, "failed to discover API groups")
 		return false
 	}
 	return utils.SupportedMetricsAPIVersionAvailable(apiGroups)
@@ -187,7 +186,7 @@ func (gp *GenericPool) updateCPUUtilizationSvc(ctx context.Context) {
 
 	if !gp.checkMetricsApi() {
 		ticker.Reset(180 * time.Second)
-		gp.logger.Warn("Metrics API not available")
+		gp.logger.Info("Metrics API not available")
 	}
 
 	serviceFunc := func(ctx context.Context) {
@@ -195,10 +194,10 @@ func (gp *GenericPool) updateCPUUtilizationSvc(ctx context.Context) {
 			LabelSelector: "managed=false",
 		})
 		if err != nil {
-			gp.logger.Error("failed to fetch pod metrics list", zap.Error(err))
+			gp.logger.Error(err, "failed to fetch pod metrics list")
 			return
 		}
-		gp.logger.Debug("pods found", zap.Any("length", len(podMetricsList.Items)))
+		gp.logger.V(1).Info("pods found", "length", len(podMetricsList.Items))
 		for _, val := range podMetricsList.Items {
 			p, _ := resource.ParseQuantity("0m")
 			for _, container := range val.Containers {
@@ -208,16 +207,16 @@ func (gp *GenericPool) updateCPUUtilizationSvc(ctx context.Context) {
 				if valArray, ok1 := value.([]any); ok1 {
 					function, ok2 := valArray[0].(crd.CacheKeyURG)
 					if !ok2 {
-						gp.logger.Error("failed to convert function to type", zap.Any("function", function))
+						gp.logger.Error(nil, "failed to convert function to type", "function", function)
 						return
 					}
 					address, ok2 := valArray[1].(string)
 					if !ok2 {
-						gp.logger.Error("failed to convert address to string", zap.Any("address", address))
+						gp.logger.Error(nil, "failed to convert address to string", "address", address)
 						return
 					}
 					gp.fsCache.SetCPUUtilizaton(function, address, p)
-					gp.logger.Info("updated function cpu usage", zap.Any("function", function), zap.String("address", address), zap.Any("cpuUsage", p))
+					gp.logger.Info("updated function cpu usage", "function", function, "address", address, "cpuUsage", p)
 				}
 			}
 		}
@@ -250,17 +249,17 @@ func (gp *GenericPool) choosePod(ctx context.Context, newLabels map[string]strin
 	expoDelay := 100 * time.Millisecond
 	logger := otelUtils.LoggerWithTraceID(ctx, gp.logger)
 	if !cache.WaitForCacheSync(ctx.Done(), gp.readyPodListerSynced) {
-		logger.Error("timed out waiting for ready pod lister synced")
+		logger.Error(nil, "timed out waiting for ready pod lister synced")
 		return "", nil, errors.New("ready pod lister not synced")
 	}
 	for {
 		// Retries took too long, error out.
 		if time.Now().After(podTimeout) {
-			logger.Error("timed out waiting for pod", zap.Any("labels", newLabels), zap.Duration("timeout", podTimeout.Sub(startTime)))
+			logger.Info("timed out waiting for pod", "labels", newLabels, "timeout", podTimeout.Sub(startTime))
 			return "", nil, errors.New("timeout: waited too long to get a ready pod")
 		}
 		if ctx.Err() != nil {
-			logger.Error("context canceled while waiting for pod", zap.Any("labels", newLabels), zap.Duration("timeout", podTimeout.Sub(startTime)))
+			logger.Error(ctx.Err(), "context canceled while waiting for pod", "labels", newLabels, "timeout", podTimeout.Sub(startTime))
 			return "", nil, fmt.Errorf("context canceled while waiting for pod: %w", ctx.Err())
 		}
 
@@ -269,29 +268,29 @@ func (gp *GenericPool) choosePod(ctx context.Context, newLabels map[string]strin
 		otelUtils.SpanTrackEvent(ctx, "waitForPod", otelUtils.MapToAttributes(newLabels)...)
 		key, quit := gp.readyPodQueue.Get()
 		if quit {
-			logger.Error("readypod controller is not running")
+			logger.Error(nil, "readypod controller is not running")
 			return "", nil, errors.New("readypod controller is not running")
 		}
-		logger.Debug("got key from the queue", zap.String("key", key))
+		logger.V(1).Info("got key from the queue", "key", key)
 		namespace, name, err := cache.SplitMetaNamespaceKey(key)
 		if err != nil {
-			logger.Error("error splitting key", zap.Error(err), zap.String("key", key))
+			logger.Error(err, "error splitting key", "key", key)
 			gp.readyPodQueue.Done(key)
 			return "", nil, err
 		}
 		pod, err := gp.readyPodLister.Pods(namespace).Get(name)
 		if err != nil {
-			logger.Error("fetching object from store failed", zap.String("key", key), zap.Error(err))
+			logger.Error(err, "fetching object from store failed", "key", key)
 			gp.readyPodQueue.Done(key)
 			continue
 		}
 		if utils.IsPodTerminated(pod) {
-			logger.Error("pod is terminated", zap.String("key", key))
+			logger.Error(nil, "pod is terminated", "key", key)
 			gp.readyPodQueue.Done(key)
 			continue
 		}
 		if !utils.IsReadyPod(pod) {
-			logger.Warn("pod not ready, pod will be checked again", zap.String("key", key), zap.Duration("delay", expoDelay))
+			logger.Error(nil, "pod not ready, pod will be checked again", "key", key, "delay", expoDelay)
 			gp.readyPodQueue.Done(key)
 			gp.readyPodQueue.AddAfter(key, expoDelay)
 			expoDelay *= 2
@@ -314,7 +313,7 @@ func (gp *GenericPool) choosePod(ctx context.Context, newLabels map[string]strin
 				},
 			}
 			patchBytes, _ := json.Marshal(patch)
-			logger.Info("relabel pod", zap.String("pod", string((patchBytes))))
+			logger.Info("relabel pod", "pod", string((patchBytes)))
 			newPod, err := gp.kubernetesClient.CoreV1().Pods(chosenPod.Namespace).Patch(ctx, chosenPod.Name, k8sTypes.StrategicMergePatchType, patchBytes, metav1.PatchOptions{})
 			if err != nil && errors.Is(err, context.Canceled) {
 				// ending retry loop when the request canceled
@@ -322,7 +321,7 @@ func (gp *GenericPool) choosePod(ctx context.Context, newLabels map[string]strin
 				gp.readyPodQueue.AddAfter(key, expoDelay)
 				return "", nil, fmt.Errorf("failed to relabel pod: %s", err)
 			} else if err != nil {
-				logger.Error("failed to relabel pod", zap.Error(err), zap.String("pod", chosenPod.Name), zap.Duration("delay", expoDelay))
+				logger.Error(err, "failed to relabel pod", "pod", chosenPod.Name, "delay", expoDelay)
 				gp.readyPodQueue.Done(key)
 				gp.readyPodQueue.AddAfter(key, expoDelay)
 				expoDelay *= 2
@@ -347,8 +346,8 @@ func (gp *GenericPool) choosePod(ctx context.Context, newLabels map[string]strin
 			}
 		}
 
-		logger.Info("chose pod", zap.Any("labels", newLabels),
-			zap.String("pod", chosenPod.Name), zap.Duration("elapsed_time", time.Since(startTime)))
+		logger.Info("chose pod", "labels", newLabels,
+			"pod", chosenPod.Name, "elapsed_time", time.Since(startTime))
 
 		return key, chosenPod, nil
 	}
@@ -367,14 +366,12 @@ func (gp *GenericPool) scheduleDeletePod(ctx context.Context, name string) {
 	// The sleep allows debugging or collecting logs from the pod before it's
 	// cleaned up.  (We need a better solutions for both those things; log
 	// aggregation and storage will help.)
-	gp.logger.Error("error in pod - scheduling cleanup", zap.String("pod", name))
+	gp.logger.Info("error in pod - scheduling cleanup", "pod", name)
 	err := gp.kubernetesClient.CoreV1().Pods(gp.fnNamespace).Delete(ctx, name, metav1.DeleteOptions{})
 	if err != nil {
-		gp.logger.Error(
-			"error deleting pod",
-			zap.String("name", name),
-			zap.String("namespace", gp.fnNamespace),
-			zap.Error(err),
+		gp.logger.Error(err,
+			"error deleting pod", "name", name,
+			"namespace", gp.fnNamespace,
 		)
 	}
 }
@@ -421,11 +418,11 @@ func (gp *GenericPool) specializePod(ctx context.Context, pod *apiv1.Pod, fn *fv
 		_, err := gp.kubernetesClient.CoreV1().ConfigMaps(gp.fnNamespace).Get(ctx, cm.Name, metav1.GetOptions{})
 		if err != nil {
 			if k8s_err.IsNotFound(err) {
-				logger.Error("configmap namespace mismatch", zap.String("error", "configmap must be in same namespace as function namespace"),
-					zap.String("configmap_name", cm.Name),
-					zap.String("configmap_namespace", cm.Namespace),
-					zap.String("function_name", fn.Name),
-					zap.String("function_namespace", gp.fnNamespace))
+				logger.Error(nil, "configmap namespace mismatch", "error", "configmap must be in same namespace as function namespace",
+					"configmap_name", cm.Name,
+					"configmap_namespace", cm.Namespace,
+					"function_name", fn.Name,
+					"function_namespace", gp.fnNamespace)
 				return fmt.Errorf("configmap %s must be in same namespace as function namespace", cm.Name)
 			} else {
 				return err
@@ -436,11 +433,11 @@ func (gp *GenericPool) specializePod(ctx context.Context, pod *apiv1.Pod, fn *fv
 		_, err := gp.kubernetesClient.CoreV1().Secrets(gp.fnNamespace).Get(ctx, sec.Name, metav1.GetOptions{})
 		if err != nil {
 			if k8s_err.IsNotFound(err) {
-				logger.Error("secret namespace mismatch", zap.String("error", "secret must be in same namespace as function namespace"),
-					zap.String("secret_name", sec.Name),
-					zap.String("secret_namespace", sec.Namespace),
-					zap.String("function_name", fn.Name),
-					zap.String("function_namespace", gp.fnNamespace))
+				logger.Error(nil, "secret namespace mismatch", "error", "secret must be in same namespace as function namespace",
+					"secret_name", sec.Name,
+					"secret_namespace", sec.Namespace,
+					"function_name", fn.Name,
+					"function_namespace", gp.fnNamespace)
 				return fmt.Errorf("secret %s must be in same namespace as function namespace", sec.Name)
 			} else {
 				return err
@@ -456,11 +453,11 @@ func (gp *GenericPool) specializePod(ctx context.Context, pod *apiv1.Pod, fn *fv
 
 	// tell fetcher to get the function.
 	fetcherURL := gp.getFetcherURL(podIP)
-	logger.Info("calling fetcher to copy function", zap.String("function", fn.Name), zap.String("url", fetcherURL))
+	logger.Info("calling fetcher to copy function", "function", fn.Name, "url", fetcherURL)
 
 	specializeReq := gp.fetcherConfig.NewSpecializeRequest(fn, gp.env)
 
-	logger.Info("specializing pod", zap.String("function", fn.Name))
+	logger.Info("specializing pod", "function", fn.Name)
 
 	// Fetcher will download user function to share volume of pod, and
 	// invoke environment specialize api for pod specialization.
@@ -498,8 +495,8 @@ func (gp *GenericPool) createSvc(ctx context.Context, name string, labels map[st
 }
 
 func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
-	logger := otelUtils.LoggerWithTraceID(ctx, gp.logger).With(zap.String("function", fn.Name), zap.String("namespace", fn.Namespace),
-		zap.String("env", fn.Spec.Environment.Name), zap.String("envNamespace", fn.Spec.Environment.Namespace))
+	logger := otelUtils.LoggerWithTraceID(ctx, gp.logger).WithValues("function", fn.Name, "namespace", fn.Namespace,
+		"env", fn.Spec.Environment.Name, "envNamespace", fn.Spec.Environment.Namespace)
 
 	logger.Info("choosing pod from pool")
 	funcLabels := gp.labelsForFunction(&fn.ObjectMeta)
@@ -555,7 +552,7 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 		go gp.scheduleDeletePod(context.Background(), pod.Name)
 		return nil, err
 	}
-	logger.Info("specialized pod", zap.String("pod", pod.Name), zap.String("podNamespace", pod.Namespace), zap.String("podIP", pod.Status.PodIP))
+	logger.Info("specialized pod", "pod", pod.Name, "podNamespace", pod.Namespace, "podIP", pod.Status.PodIP)
 
 	var svcHost string
 	if gp.useSvc && !gp.useIstio {
@@ -591,8 +588,7 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 	p, err := gp.kubernetesClient.CoreV1().Pods(pod.Namespace).Patch(ctx, pod.Name, k8sTypes.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
 	if err != nil {
 		// just log the error since it won't affect the function serving
-		logger.Warn("error patching svc-host to pod", zap.Error(err),
-			zap.String("pod", pod.Name), zap.String("ns", pod.Namespace))
+		logger.Error(err, "error patching svc-host to pod", "pod", pod.Name, "ns", pod.Namespace)
 	} else {
 		pod = p
 	}
@@ -616,10 +612,10 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 	// set cpuLimit to 85th percentage of the cpuUsage
 	cpuLimit, err := gp.getPercent(cpuUsage, 0.85)
 	if err != nil {
-		logger.Error("failed to get 85 of CPU usage", zap.Error(err))
+		logger.Error(err, "failed to get 85 of CPU usage")
 		cpuLimit = cpuUsage
 	}
-	logger.Debug("cpuLimit set to", zap.Any("cpulimit", cpuLimit))
+	logger.V(1).Info("cpuLimit set to", "cpulimit", cpuLimit)
 
 	m := fn.ObjectMeta // only cache necessary part
 	fsvc := &fscache.FuncSvc{
@@ -639,10 +635,10 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 	gp.fsCache.AddFunc(ctx, *fsvc, fn.GetRequestPerPod(), fn.GetRetainPods())
 
 	logger.Info("added function service",
-		zap.String("pod", pod.Name),
-		zap.String("podNamespace", pod.Namespace),
-		zap.String("serviceHost", svcHost),
-		zap.String("podIP", pod.Status.PodIP))
+		"pod", pod.Name,
+		"podNamespace", pod.Namespace,
+		"serviceHost", svcHost,
+		"podIP", pod.Status.PodIP)
 
 	otelUtils.SpanTrackEvent(ctx, "getFuncSvcComplete", fscache.GetAttributesForFuncSvc(fsvc)...)
 	return fsvc, nil
@@ -668,10 +664,8 @@ func (gp *GenericPool) destroy(ctx context.Context) error {
 	err := gp.kubernetesClient.AppsV1().
 		Deployments(gp.fnNamespace).Delete(ctx, gp.deployment.Name, delOpt)
 	if err != nil {
-		gp.logger.Error("error destroying deployment",
-			zap.Error(err),
-			zap.String("deployment_name", gp.deployment.Name),
-			zap.String("deployment_namespace", gp.fnNamespace))
+		gp.logger.Error(err, "error destroying deployment", "deployment_name", gp.deployment.Name,
+			"deployment_namespace", gp.fnNamespace)
 		return err
 	}
 	return nil

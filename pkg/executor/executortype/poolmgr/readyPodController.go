@@ -3,7 +3,6 @@ package poolmgr
 import (
 	"time"
 
-	"go.uber.org/zap"
 	k8sCache "k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
 
@@ -16,14 +15,14 @@ func (gp *GenericPool) readyPodEventHandlers() k8sCache.ResourceEventHandlerFunc
 			key, err := k8sCache.MetaNamespaceKeyFunc(obj)
 			if err == nil {
 				gp.readyPodQueue.AddAfter(key, 100*time.Millisecond)
-				gp.logger.Debug("add func called", zap.String("key", key))
+				gp.logger.V(1).Info("add func called", "key", key)
 			}
 		},
 		DeleteFunc: func(obj any) {
 			key, err := k8sCache.DeletionHandlingMetaNamespaceKeyFunc(obj)
 			if err == nil {
 				gp.readyPodQueue.Done(key)
-				gp.logger.Debug("delete func called", zap.String("key", key))
+				gp.logger.V(1).Info("delete func called", "key", key)
 			}
 		},
 	}
@@ -48,6 +47,6 @@ func (gp *GenericPool) setupReadyPodController() error {
 		return err
 	}
 	go podInformer.Informer().Run(gp.stopReadyPodControllerCh)
-	gp.logger.Info("readyPod controller started", zap.String("env", gp.env.Name), zap.String("envID", string(gp.env.UID)))
+	gp.logger.Info("readyPod controller started", "env", gp.env.Name, "envID", string(gp.env.UID))
 	return nil
 }

@@ -24,8 +24,7 @@ import (
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 
-	"github.com/go-logr/zapr"
-	"go.uber.org/zap"
+	"github.com/go-logr/logr"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -42,10 +41,9 @@ type WebhookInjector interface {
 	SetupWebhookWithManager(mgr manager.Manager) error
 }
 
-func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, options webhook.Options) (err error) {
-	wLogger := logger.Named("webhook")
-	zaprLogger := zapr.NewLogger(logger)
-	log.SetLogger(zaprLogger)
+func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger, options webhook.Options) (err error) {
+	wLogger := logger.WithName("webhook")
+	log.SetLogger(wLogger)
 
 	metricsAddr := os.Getenv("METRICS_ADDR")
 	if metricsAddr == "" {
@@ -60,17 +58,17 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *
 			BindAddress: metricsAddr,
 		},
 		WebhookServer: webhook.NewServer(options),
-		Logger:        zaprLogger,
+		Logger:        wLogger,
 	}
 	restConfig, err := clientGen.GetRestConfig()
 	if err != nil {
-		wLogger.Error("unable to get rest config", zap.Error(err))
+		wLogger.Error(err, "unable to get rest config")
 		return err
 	}
 	// Setup a Manager
 	mgr, err := manager.New(restConfig, mgrOpt)
 	if err != nil {
-		wLogger.Error("unable to set up overall controller manager", zap.Error(err))
+		wLogger.Error(err, "unable to set up overall controller manager")
 		return err
 	}
 
@@ -89,14 +87,14 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *
 
 	for _, injector := range webhookInjectors {
 		if err := injector.SetupWebhookWithManager(mgr); err != nil {
-			wLogger.Error("unable to create webhook", zap.Error(err))
+			wLogger.Error(err, "unable to create webhook")
 			return err
 		}
 	}
 
 	wLogger.Info("starting manager")
 	if err := mgr.Start(ctx); err != nil {
-		wLogger.Error("unable to run manager", zap.Error(err))
+		wLogger.Error(err, "unable to run manager")
 		return err
 	}
 	return nil

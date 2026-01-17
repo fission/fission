@@ -29,7 +29,7 @@ type HTTPTrigger struct {
 }
 
 // log is for logging in this package.
-var httptriggerlog = loggerfactory.GetLogger().Named("httptrigger-resource")
+var httptriggerlog = loggerfactory.GetLogger().WithName("httptrigger-resource")
 
 func (r *HTTPTrigger) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	r.Logger = httptriggerlog

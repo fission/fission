@@ -24,7 +24,7 @@ import (
 	"time"
 
 	"github.com/dchest/uniuri"
-	"go.uber.org/zap"
+	"github.com/go-logr/logr"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -43,13 +43,13 @@ import (
 // 3. Send upload request to fetcher to upload deployment package.
 // 4. Return upload response and build logs.
 // *. Return build logs and error if any one of steps above failed.
-func buildPackage(ctx context.Context, logger *zap.Logger, fissionClient versioned.Interface, envBuilderNamespace string,
+func buildPackage(ctx context.Context, logger logr.Logger, fissionClient versioned.Interface, envBuilderNamespace string,
 	storageSvcUrl string, pkg *fv1.Package) (uploadResp *fetcher.ArchiveUploadResponse, buildLogs string, err error) {
 
 	env, err := fissionClient.CoreV1().Environments(pkg.Spec.Environment.Namespace).Get(ctx, pkg.Spec.Environment.Name, metav1.GetOptions{})
 	if err != nil {
 		e := "error getting environment CRD info"
-		logger.Error(e, zap.Error(err))
+		logger.Error(err, e)
 		e = fmt.Sprintf("%s: %v", e, err)
 		return nil, e, ferror.MakeError(http.StatusInternalServerError, e)
 	}
@@ -60,11 +60,11 @@ func buildPackage(ctx context.Context, logger *zap.Logger, fissionClient version
 	builderC := builderClient.MakeClient(logger, fmt.Sprintf("http://%s:8001", svcName))
 
 	defer func() {
-		logger.Info("cleaning src pkg from builder storage", zap.String("source_package", srcPkgFilename))
+		logger.Info("cleaning src pkg from builder storage", "source_package", srcPkgFilename)
 		errC := cleanPackage(ctx, builderC, srcPkgFilename)
 		if errC != nil {
 			m := "error cleaning src pkg from builder storage"
-			logger.Error(m, zap.Error(errC))
+			logger.Error(errC, m)
 		}
 	}()
 
@@ -79,7 +79,7 @@ func buildPackage(ctx context.Context, logger *zap.Logger, fissionClient version
 	err = fetcherC.Fetch(ctx, fetchReq)
 	if err != nil {
 		e := "error fetching source package"
-		logger.Error(e, zap.Error(err))
+		logger.Error(err, e)
 		e = fmt.Sprintf("%s: %v", e, err)
 		return nil, e, ferror.MakeError(http.StatusInternalServerError, e)
 	}
@@ -94,7 +94,7 @@ func buildPackage(ctx context.Context, logger *zap.Logger, fissionClient version
 		BuildCommand:   buildCmd,
 	}
 
-	logger.Info("started building with source package", zap.String("source_package", srcPkgFilename))
+	logger.Info("started building with source package", "source_package", srcPkgFilename)
 	// send build request to builder
 	buildResp, err := builderC.Build(ctx, pkgBuildReq)
 	if err != nil {
@@ -107,7 +107,7 @@ func buildPackage(ctx context.Context, logger *zap.Logger, fissionClient version
 		return nil, buildLogs, ferror.MakeError(http.StatusInternalServerError, e)
 	}
 
-	logger.Info("build succeed", zap.String("source_package", srcPkgFilename), zap.String("deployment_package", buildResp.ArtifactFilename))
+	logger.Info("build succeed", "source_package", srcPkgFilename, "deployment_package", buildResp.ArtifactFilename)
 
 	archivePackage := !env.Spec.KeepArchive
 
@@ -117,7 +117,7 @@ func buildPackage(ctx context.Context, logger *zap.Logger, fissionClient version
 		ArchivePackage: archivePackage,
 	}
 
-	logger.Info("started uploading deployment package", zap.String("deployment_package", buildResp.ArtifactFilename))
+	logger.Info("started uploading deployment package", "deployment_package", buildResp.ArtifactFilename)
 	// ask fetcher to upload the deployment package
 	uploadResp, err = fetcherC.Upload(ctx, uploadReq)
 	if err != nil {
@@ -138,7 +138,7 @@ func cleanPackage(ctx context.Context, builderClient builderClient.ClientInterfa
 	return nil
 }
 
-func updatePackage(ctx context.Context, logger *zap.Logger, fissionClient versioned.Interface,
+func updatePackage(ctx context.Context, logger logr.Logger, fissionClient versioned.Interface,
 	pkg *fv1.Package, status fv1.BuildStatus, buildLogs string,
 	uploadResp *fetcher.ArchiveUploadResponse) (*fv1.Package, error) {
 
@@ -160,7 +160,7 @@ func updatePackage(ctx context.Context, logger *zap.Logger, fissionClient versio
 	pkg, err := fissionClient.CoreV1().Packages(pkg.ObjectMeta.Namespace).Update(ctx, pkg, metav1.UpdateOptions{})
 	if err != nil {
 		e := "error updating package"
-		logger.Error(e, zap.Error(err))
+		logger.Error(err, e)
 		return nil, fmt.Errorf("%s: %w", e, err)
 	}
 

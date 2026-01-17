@@ -27,8 +27,9 @@ import (
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
-	"go.uber.org/zap"
 	"golang.org/x/net/context/ctxhttp"
+
+	"github.com/go-logr/logr"
 
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
@@ -36,7 +37,7 @@ import (
 type (
 	// WebhookPublisher for a single URL. Satisfies the Publisher interface.
 	WebhookPublisher struct {
-		logger *zap.Logger
+		logger logr.Logger
 
 		requestChannel chan *publishRequest
 
@@ -58,9 +59,9 @@ type (
 )
 
 // MakeWebhookPublisher creates a WebhookPublisher object for the given baseURL
-func MakeWebhookPublisher(logger *zap.Logger, baseURL string) *WebhookPublisher {
+func MakeWebhookPublisher(logger logr.Logger, baseURL string) *WebhookPublisher {
 	p := &WebhookPublisher{
-		logger:         logger.Named("webhook_publisher"),
+		logger:         logger.WithName("webhook_publisher"),
 		baseURL:        baseURL,
 		requestChannel: make(chan *publishRequest, 32), // buffered channel
 		// TODO make this configurable
@@ -106,13 +107,16 @@ func (p *WebhookPublisher) makeHTTPRequest(r *publishRequest) {
 	url := p.baseURL + "/" + strings.TrimPrefix(r.target, "/")
 
 	msg := fmt.Sprintf("making HTTP %s request", r.method)
-	level := zap.ErrorLevel
-	fields := []zap.Field{zap.String("url", url), zap.String("type", "publish_request")}
+	msgType := "error"
+	logger := otelUtils.LoggerWithTraceID(r.ctx, p.logger).WithValues("url", url, "type", "publish_request")
 
 	// log once for this request
 	defer func() {
-		if ce := otelUtils.LoggerWithTraceID(r.ctx, p.logger).Check(level, msg); ce != nil {
-			ce.Write(fields...)
+		switch msgType {
+		case "info":
+			logger.Info(msg)
+		case "error":
+			logger.Error(nil, msg)
 		}
 	}()
 
@@ -122,7 +126,7 @@ func (p *WebhookPublisher) makeHTTPRequest(r *publishRequest) {
 	// Create request
 	req, err := http.NewRequest(r.method, url, &buf)
 	if err != nil {
-		fields = append(fields, zap.Error(err))
+		logger = logger.WithValues("error", err)
 		return
 	}
 	for k, v := range r.headers {
@@ -133,20 +137,19 @@ func (p *WebhookPublisher) makeHTTPRequest(r *publishRequest) {
 	defer cancel()
 	resp, err := ctxhttp.Do(ctx, WebhookHttpClient, req)
 	if err != nil {
-		fields = append(fields, zap.Error(err), zap.Any("request", r))
+		logger = logger.WithValues("request", r)
 	} else {
 		var body []byte
 		body, err = io.ReadAll(resp.Body)
 		if err != nil {
-			fields = append(fields, zap.Error(err), zap.Any("request", r))
+			logger = logger.WithValues("request", r)
 			msg = "read response body error"
 		} else {
-			fields = append(fields, zap.Int("status_code", resp.StatusCode), zap.String("body", string(body)))
+			logger = logger.WithValues("status_code", resp.StatusCode, "body", string(body))
 			if resp.StatusCode >= 200 && resp.StatusCode < 400 {
-				level = zap.InfoLevel
+				msgType = "info"
 			} else if resp.StatusCode >= 400 && resp.StatusCode < 500 {
 				msg = "request returned bad request status code"
-				level = zap.WarnLevel
 			} else {
 				msg = "request returned failure status code"
 			}

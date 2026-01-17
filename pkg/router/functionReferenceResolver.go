@@ -20,9 +20,10 @@ import (
 	"fmt"
 	"time"
 
-	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sCache "k8s.io/client-go/tools/cache"
+
+	"github.com/go-logr/logr"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/cache"
@@ -35,7 +36,7 @@ type (
 		// FunctionReference -> function metadata
 		refCache     *cache.Cache[namespacedTriggerReference, resolveResult]
 		funcInformer map[string]k8sCache.SharedIndexInformer
-		logger       *zap.Logger
+		logger       logr.Logger
 		// store    k8sCache.Store
 	}
 
@@ -70,11 +71,11 @@ const (
 	resolveResultMultipleFunctions
 )
 
-func makeFunctionReferenceResolver(logger *zap.Logger, funcInformer map[string]k8sCache.SharedIndexInformer) *functionReferenceResolver {
+func makeFunctionReferenceResolver(logger logr.Logger, funcInformer map[string]k8sCache.SharedIndexInformer) *functionReferenceResolver {
 	frr := &functionReferenceResolver{
 		refCache:     cache.MakeCache[namespacedTriggerReference, resolveResult](time.Minute, 0),
 		funcInformer: funcInformer,
-		logger:       logger.Named("function_ref_resolver"),
+		logger:       logger.WithName("function_ref_resolver"),
 	}
 	return frr
 }
@@ -143,7 +144,7 @@ func (frr *functionReferenceResolver) resolveByName(namespace, name string) (*re
 		return nil, err
 	}
 	if !isExist {
-		frr.logger.Error("function does not exists", zap.String("name", name), zap.String("namespace", namespace))
+		frr.logger.Error(nil, "function does not exists", "name", name, "namespace", namespace)
 		return nil, fmt.Errorf("function %s/%s does not exist", namespace, name)
 	}
 	f := obj.(*fv1.Function)
@@ -182,7 +183,7 @@ func (frr *functionReferenceResolver) resolveByFunctionWeights(namespace string,
 			return nil, err
 		}
 		if !isExist {
-			frr.logger.Error("function does not exists", zap.String("name", functionName), zap.String("namespace", namespace))
+			frr.logger.Error(nil, "function does not exists", "name", functionName, "namespace", namespace)
 			return nil, fmt.Errorf("function %s/%s does not exist", namespace, functionName)
 		}
 		f := obj.(*fv1.Function)

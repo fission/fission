@@ -19,8 +19,8 @@ package timer
 import (
 	"context"
 
+	"github.com/go-logr/logr"
 	"github.com/robfig/cron/v3"
-	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/types"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -36,7 +36,7 @@ const (
 
 type (
 	Timer struct {
-		logger    *zap.Logger
+		logger    logr.Logger
 		triggers  map[types.UID]*timerTriggerWithCron
 		routerUrl string
 	}
@@ -47,9 +47,9 @@ type (
 	}
 )
 
-func MakeTimer(logger *zap.Logger, routerUrl string) *Timer {
+func MakeTimer(logger logr.Logger, routerUrl string) *Timer {
 	timer := &Timer{
-		logger:    logger.Named("timer"),
+		logger:    logger.WithName("timer"),
 		triggers:  make(map[types.UID]*timerTriggerWithCron),
 		routerUrl: routerUrl,
 	}
@@ -77,6 +77,6 @@ func (timer *Timer) newCron(t fv1.TimeTrigger, routerUrl string) *cron.Cron {
 		(timerPublisher).Publish(context.Background(), "", headers, t.Spec.Method, target)
 	})
 	c.Start()
-	timer.logger.Info("started cron for time trigger", zap.String("trigger_name", t.Name), zap.String("trigger_namespace", t.Namespace), zap.String("cron", t.Spec.Cron))
+	timer.logger.Info("started cron for time trigger", "trigger_name", t.Name, "trigger_namespace", t.Namespace, "cron", t.Spec.Cron)
 	return c
 }

@@ -23,11 +23,12 @@ import (
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
-	"go.uber.org/zap"
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+
+	"github.com/go-logr/logr"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/cache"
@@ -66,7 +67,7 @@ type (
 
 	// FunctionServiceCache represents the function service cache
 	FunctionServiceCache struct {
-		logger            *zap.Logger
+		logger            logr.Logger
 		byFunction        *cache.Cache[crd.CacheKeyUR, *FuncSvc]
 		byAddress         *cache.Cache[string, metav1.ObjectMeta]
 		byFunctionUID     *cache.Cache[types.UID, metav1.ObjectMeta]
@@ -106,13 +107,13 @@ func IsNameExistError(err error) bool {
 }
 
 // MakeFunctionServiceCache starts and returns an instance of FunctionServiceCache.
-func MakeFunctionServiceCache(logger *zap.Logger) *FunctionServiceCache {
+func MakeFunctionServiceCache(logger logr.Logger) *FunctionServiceCache {
 	fsc := &FunctionServiceCache{
-		logger:            logger.Named("function_service_cache"),
+		logger:            logger.WithName("function_service_cache"),
 		byFunction:        cache.MakeCache[crd.CacheKeyUR, *FuncSvc](0, 0),
 		byAddress:         cache.MakeCache[string, metav1.ObjectMeta](0, 0),
 		byFunctionUID:     cache.MakeCache[types.UID, metav1.ObjectMeta](0, 0),
-		connFunctionCache: NewPoolCache(logger.Named("conn_function_cache")),
+		connFunctionCache: NewPoolCache(logger.WithName("conn_function_cache")),
 		requestChannel:    make(chan *fscRequest),
 	}
 	go fsc.service()
@@ -134,7 +135,7 @@ func (fsc *FunctionServiceCache) service() {
 			for _, m := range fscs {
 				fsvc, err := fsc.byFunction.Get(crd.CacheKeyURFromMeta(&m))
 				if err != nil {
-					fsc.logger.Error("error while getting service", zap.String("error", err.Error()))
+					fsc.logger.Error(err, "error while getting service")
 					return
 				}
 				if time.Since(fsvc.Atime) > req.age {
@@ -151,7 +152,7 @@ func (fsc *FunctionServiceCache) service() {
 					info = append(info, fmt.Sprintf("%v\t%v\t%v", key, kubeObj.Kind, kubeObj.Name))
 				}
 			}
-			fsc.logger.Info("function service cache", zap.Int("item_count", len(funcCopy)), zap.Strings("cache", info))
+			fsc.logger.Info("function service cache", "item_count", len(funcCopy), "cache", info)
 		case LISTOLDPOOL:
 			fscs := fsc.connFunctionCache.ListAvailableValue()
 			funcObjects := make([]*FuncSvc, 0)
@@ -173,14 +174,14 @@ func (fsc *FunctionServiceCache) DumpDebugInfo(ctx context.Context) error {
 
 	file, err := util.CreateDumpFile(fsc.logger)
 	if err != nil {
-		fsc.logger.Error("error while creating file/dir", zap.String("error", err.Error()))
+		fsc.logger.Error(err, "error while creating file/dir", "error", err.Error())
 		return err
 	}
 	defer file.Close()
 
 	err = fsc.connFunctionCache.LogFnSvcGroup(ctx, file)
 	if err != nil {
-		fsc.logger.Error("error while logging function service group", zap.String("error", err.Error()))
+		fsc.logger.Error(nil, "error while logging function service group", "error", err.Error())
 		return err
 	}
 
@@ -332,11 +333,9 @@ func (fsc *FunctionServiceCache) DeleteEntry(fsvc *FuncSvc) {
 func (fsc *FunctionServiceCache) DeleteFunctionSvc(ctx context.Context, fsvc *FuncSvc) {
 	err := fsc.connFunctionCache.DeleteValue(ctx, crd.CacheKeyURGFromMeta(fsvc.Function), fsvc.Address)
 	if err != nil {
-		fsc.logger.Error(
-			"error deleting function service",
-			zap.String("function", fsvc.Function.Name),
-			zap.String("address", fsvc.Address),
-			zap.Error(err),
+		fsc.logger.Error(err,
+			"error deleting function service", "function", fsvc.Function.Name,
+			"address", fsvc.Address,
 		)
 	}
 }

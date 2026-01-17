@@ -12,7 +12,8 @@ import (
 	"time"
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
-	"go.uber.org/zap"
+
+	"github.com/go-logr/logr"
 
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/fetcher"
@@ -25,16 +26,16 @@ type (
 		Upload(context.Context, *fetcher.ArchiveUploadRequest) (*fetcher.ArchiveUploadResponse, error)
 	}
 	client struct {
-		logger     *zap.Logger
+		logger     logr.Logger
 		url        string
 		httpClient *http.Client
 	}
 )
 
-func MakeClient(logger *zap.Logger, fetcherUrl string) ClientInterface {
+func MakeClient(logger logr.Logger, fetcherUrl string) ClientInterface {
 	hc := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
 	return &client{
-		logger:     logger.Named("fetcher_client"),
+		logger:     logger.WithName("fetcher_client"),
 		url:        strings.TrimSuffix(fetcherUrl, "/"),
 		httpClient: hc,
 	}
@@ -77,7 +78,7 @@ func (c *client) Upload(ctx context.Context, fr *fetcher.ArchiveUploadRequest) (
 	return &uploadResp, nil
 }
 
-func sendRequest(logger *zap.Logger, ctx context.Context, httpClient *http.Client, req any, url string) ([]byte, error) {
+func sendRequest(logger logr.Logger, ctx context.Context, httpClient *http.Client, req any, url string) ([]byte, error) {
 	body, err := json.Marshal(req)
 	if err != nil {
 		return nil, err
@@ -111,7 +112,7 @@ func sendRequest(logger *zap.Logger, ctx context.Context, httpClient *http.Clien
 				respBody, readErr := io.ReadAll(resp.Body)
 				resp.Body.Close()
 				if readErr != nil {
-					logger.Error("error reading response body", zap.Error(readErr))
+					logger.Error(readErr, "error reading response body")
 					return nil, readErr
 				}
 				return respBody, nil
@@ -137,7 +138,7 @@ func sendRequest(logger *zap.Logger, ctx context.Context, httpClient *http.Clien
 		if errors.Is(lastErr, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			msg := "error specializing function pod, either increase the specialization timeout for function or check function pod log would help."
 			wrappedErr := fmt.Errorf("%s: %w", msg, lastErr)
-			logger.Error(msg, zap.Error(lastErr), zap.String("url", url))
+			logger.Error(lastErr, msg, "url", url)
 			return nil, wrappedErr
 		}
 
@@ -145,11 +146,10 @@ func sendRequest(logger *zap.Logger, ctx context.Context, httpClient *http.Clien
 		backoff := min(time.Duration(50*(1<<i))*time.Millisecond, maxBackoff)
 
 		logger.Info("retrying request",
-			zap.String("url", url),
-			zap.Int("attempt", i+1),
-			zap.Duration("backoff", backoff),
-			zap.Error(lastErr))
-
+			"url", url,
+			"attempt", i+1,
+			"backoff", backoff,
+			"error", lastErr.Error())
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
@@ -158,6 +158,6 @@ func sendRequest(logger *zap.Logger, ctx context.Context, httpClient *http.Clien
 		}
 	}
 
-	logger.Error("request failed after max retries", zap.String("url", url), zap.Int("attempts", maxRetries), zap.Error(lastErr))
+	logger.Error(lastErr, "request failed after max retries", "url", url, "attempts", maxRetries)
 	return nil, lastErr
 }

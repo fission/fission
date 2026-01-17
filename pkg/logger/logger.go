@@ -24,10 +24,11 @@ import (
 	"strings"
 	"time"
 
-	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 	k8sCache "k8s.io/client-go/tools/cache"
+
+	"github.com/go-logr/logr"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
@@ -41,7 +42,7 @@ const (
 	fissionSymlinkPath       = "/var/log/fission"
 )
 
-func podInformerHandlers(zapLogger *zap.Logger) k8sCache.ResourceEventHandler {
+func podInformerHandlers(zapLogger logr.Logger) k8sCache.ResourceEventHandler {
 	return k8sCache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj any) {
 			pod := obj.(*corev1.Pod)
@@ -51,8 +52,8 @@ func podInformerHandlers(zapLogger *zap.Logger) k8sCache.ResourceEventHandler {
 			err := createLogSymlinks(zapLogger, pod)
 			if err != nil {
 				funcName := pod.Labels[fv1.FUNCTION_NAME]
-				zapLogger.Error("error creating symlink",
-					zap.String("function", funcName), zap.Error(err))
+				zapLogger.Error(err, "error creating symlink",
+					"function", funcName)
 			}
 		},
 		UpdateFunc: func(_, obj any) {
@@ -63,8 +64,8 @@ func podInformerHandlers(zapLogger *zap.Logger) k8sCache.ResourceEventHandler {
 			err := createLogSymlinks(zapLogger, pod)
 			if err != nil {
 				funcName := pod.Labels[fv1.FUNCTION_NAME]
-				zapLogger.Error("error creating symlink",
-					zap.String("function", funcName), zap.Error(err))
+				zapLogger.Error(err, "error creating symlink",
+					"function", funcName)
 			}
 		},
 		DeleteFunc: func(obj any) {
@@ -73,15 +74,14 @@ func podInformerHandlers(zapLogger *zap.Logger) k8sCache.ResourceEventHandler {
 	}
 }
 
-func createLogSymlinks(zapLogger *zap.Logger, pod *corev1.Pod) error {
+func createLogSymlinks(zapLogger logr.Logger, pod *corev1.Pod) error {
 	for _, container := range pod.Status.ContainerStatuses {
 		containerUID, err := parseContainerString(container.ContainerID)
 		if err != nil {
-			zapLogger.Error("error parsing container uid",
-				zap.String("container", container.Name),
-				zap.String("pod", pod.Name),
-				zap.String("namespace", pod.Namespace),
-				zap.Error(err))
+			zapLogger.Error(err, "error parsing container uid",
+				"container", container.Name,
+				"pod", pod.Name,
+				"namespace", pod.Namespace)
 			continue
 		}
 		containerLogPath := getLogPath(originalContainerLogPath, pod.Name, pod.Namespace, container.Name, containerUID)
@@ -91,11 +91,10 @@ func createLogSymlinks(zapLogger *zap.Logger, pod *corev1.Pod) error {
 		if _, err := os.Stat(symlinkLogPath); os.IsNotExist(err) {
 			err := os.Symlink(containerLogPath, symlinkLogPath)
 			if err != nil {
-				zapLogger.Error("error creating symlink",
-					zap.String("container", container.Name),
-					zap.String("pod", pod.Name),
-					zap.String("namespace", pod.Namespace),
-					zap.Error(err))
+				zapLogger.Error(err, "error creating symlink",
+					"container", container.Name,
+					"pod", pod.Name,
+					"namespace", pod.Namespace)
 			}
 		}
 	}
@@ -138,32 +137,34 @@ func getLogPath(pathPrefix, podName, podNamespace, containerName, containerID st
 }
 
 // symlinkReaper periodically checks and removes symlink file if it's target container log file is no longer exists.
-func symlinkReaper(zapLogger *zap.Logger) {
+func symlinkReaper(zapLogger logr.Logger) {
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
 	for range ticker.C {
 		err := filepath.Walk(fissionSymlinkPath, func(path string, info os.FileInfo, err error) error {
 			if target, e := os.Readlink(path); e == nil {
 				if _, pathErr := os.Stat(target); os.IsNotExist(pathErr) {
-					zapLogger.Debug("remove symlink file", zap.String("filepath", path))
+					zapLogger.V(1).Info("remove symlink file", "filepath", path)
 					os.Remove(path)
 				}
 			}
 			return nil
 		})
 		if err != nil {
-			zapLogger.Error("error reaping symlink", zap.Error(err))
+			zapLogger.Error(err, "error reaping symlink")
 		}
 	}
 }
 
-func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger) error {
+func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger) error {
 	if _, err := os.Stat(fissionSymlinkPath); os.IsNotExist(err) {
 		logger.Info("symlink path not exist, create it",
-			zap.String("fissionSymlinkPath", fissionSymlinkPath))
+			"fissionSymlinkPath", fissionSymlinkPath)
 		err = os.Mkdir(fissionSymlinkPath, 0755)
 		if err != nil {
-			logger.Fatal("error creating fissionSymlinkPath", zap.Error(err))
+			logger.Error(err, "error creating fissionSymlinkPath")
+
+			os.Exit(1)
 		}
 	}
 	go symlinkReaper(logger)
@@ -183,6 +184,6 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *
 	}
 	wg.Wait()
 
-	logger.Error("Stop watching pod changes")
+	logger.Error(nil, "Stop watching pod changes")
 	return nil
 }

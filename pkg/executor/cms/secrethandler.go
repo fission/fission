@@ -18,11 +18,12 @@ package cms
 import (
 	"context"
 
-	"go.uber.org/zap"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	k8sCache "k8s.io/client-go/tools/cache"
+
+	"github.com/go-logr/logr"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/executor/executortype"
@@ -30,7 +31,7 @@ import (
 )
 
 // getSecretRelatedFuncs returns functions that are related to the secret in the same namespace
-func getSecretRelatedFuncs(ctx context.Context, logger *zap.Logger, m *metav1.ObjectMeta, fissionClient versioned.Interface) ([]fv1.Function, error) {
+func getSecretRelatedFuncs(ctx context.Context, logger logr.Logger, m *metav1.ObjectMeta, fissionClient versioned.Interface) ([]fv1.Function, error) {
 	funcList, err := fissionClient.CoreV1().Functions(m.Namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return nil, err
@@ -48,7 +49,7 @@ func getSecretRelatedFuncs(ctx context.Context, logger *zap.Logger, m *metav1.Ob
 	return relatedFunctions, nil
 }
 
-func SecretEventHandlers(ctx context.Context, logger *zap.Logger, fissionClient versioned.Interface,
+func SecretEventHandlers(ctx context.Context, logger logr.Logger, fissionClient versioned.Interface,
 	kubernetesClient kubernetes.Interface, types map[fv1.ExecutorType]executortype.ExecutorType) k8sCache.ResourceEventHandlerFuncs {
 	return k8sCache.ResourceEventHandlerFuncs{
 		AddFunc:    func(obj any) {},
@@ -59,16 +60,16 @@ func SecretEventHandlers(ctx context.Context, logger *zap.Logger, fissionClient 
 			if oldS.ResourceVersion != newS.ResourceVersion {
 				funcs, err := getSecretRelatedFuncs(ctx, logger, &newS.ObjectMeta, fissionClient)
 				if err != nil {
-					logger.Error("Failed to get functions related to secret", zap.String("secret_name", newS.Name), zap.String("secret_namespace", newS.Namespace))
+					logger.Error(err, "Failed to get functions related to secret", "secret_name", newS.Name, "secret_namespace", newS.Namespace)
 				}
 
 				if len(funcs) == 0 {
 					return
 				}
 
-				logger.Debug("Secret changed",
-					zap.String("secret_name", newS.Name),
-					zap.String("secret_namespace", newS.Namespace))
+				logger.V(1).Info("Secret changed",
+					"secret_name", newS.Name,
+					"secret_namespace", newS.Namespace)
 				refreshPods(ctx, logger, funcs, types)
 			}
 		},

@@ -31,11 +31,10 @@ import (
 	"github.com/ory/dockertest/v3"
 	dc "github.com/ory/dockertest/v3/docker"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/storagesvc"
+	"github.com/fission/fission/pkg/utils/loggerfactory"
 	"github.com/fission/fission/pkg/utils/manager"
 )
 
@@ -129,9 +128,7 @@ func TestS3StorageService(t *testing.T) {
 	// testID := uniuri.NewLen(8)
 	port := 8081
 
-	config := zap.NewDevelopmentConfig()
-	config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
-	logger, err := config.Build()
+	logger := loggerfactory.GetLogger()
 	failTest(t, err)
 
 	log.Println("starting storage svc")
@@ -213,10 +210,7 @@ func TestLocalStorageService(t *testing.T) {
 	mgr := manager.New()
 	t.Cleanup(mgr.Wait)
 
-	config := zap.NewDevelopmentConfig()
-	config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
-	logger, err := config.Build()
-	failTest(t, err)
+	logger := loggerfactory.GetLogger()
 
 	log.Println("starting storage svc")
 	localPath := fmt.Sprintf("/tmp/%v", testID)

@@ -19,7 +19,6 @@ package container
 import (
 	"context"
 
-	"go.uber.org/zap"
 	k8sCache "k8s.io/client-go/tools/cache"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -37,13 +36,13 @@ func (caaf *Container) FuncInformerHandler(ctx context.Context) k8sCache.Resourc
 			// and worker pattern to process items instead of moving process to another goroutine.
 			// example: https://github.com/kubernetes/kubernetes/blob/master/pkg/controller/job/job_controller.go
 			go func() {
-				log := caaf.logger.With(zap.String("function_name", fn.Name), zap.String("function_namespace", fn.Namespace))
-				log.Debug("start function create handler")
+				log := caaf.logger.WithValues("function_name", fn.Name, "function_namespace", fn.Namespace)
+				log.V(1).Info("start function create handler")
 				_, err := caaf.createFunction(ctx, fn)
 				if err != nil {
-					log.Error("error eager creating function", zap.Error(err))
+					log.Error(err, "error eager creating function")
 				}
-				log.Debug("end function create handler")
+				log.V(1).Info("end function create handler")
 			}()
 		},
 		DeleteFunc: func(obj any) {
@@ -53,13 +52,13 @@ func (caaf *Container) FuncInformerHandler(ctx context.Context) k8sCache.Resourc
 				return
 			}
 			go func() {
-				log := caaf.logger.With(zap.String("function_name", fn.Name), zap.String("function_namespace", fn.Namespace))
-				log.Debug("start function delete handler")
+				log := caaf.logger.WithValues("function_name", fn.Name, "function_namespace", fn.Namespace)
+				log.V(1).Info("start function delete handler")
 				err := caaf.deleteFunction(ctx, fn)
 				if err != nil {
-					log.Error("error deleting function", zap.Error(err))
+					log.Error(err, "error deleting function")
 				}
-				log.Debug("end function delete handler")
+				log.V(1).Info("end function delete handler")
 			}()
 		},
 		UpdateFunc: func(oldObj any, newObj any) {
@@ -70,16 +69,15 @@ func (caaf *Container) FuncInformerHandler(ctx context.Context) k8sCache.Resourc
 				return
 			}
 			go func() {
-				log := caaf.logger.With(zap.String("function_name", newFn.Name),
-					zap.String("function_namespace", newFn.Namespace),
-					zap.String("old_function_name", oldFn.Name))
-				log.Debug("start function update handler")
+				log := caaf.logger.WithValues("function_name", newFn.Name,
+					"function_namespace", newFn.Namespace,
+					"old_function_name", oldFn.Name)
+				log.V(1).Info("start function update handler")
 				err := caaf.updateFunction(ctx, oldFn, newFn)
 				if err != nil {
-					log.Error("error updating function",
-						zap.Error(err))
+					log.Error(err, "error updating function")
 				}
-				log.Debug("end function update handler")
+				log.V(1).Info("end function update handler")
 
 			}()
 		},

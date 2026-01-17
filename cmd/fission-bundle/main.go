@@ -22,7 +22,7 @@ import (
 	"fmt"
 	"os"
 
-	"go.uber.org/zap"
+	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 	cnwebhook "sigs.k8s.io/controller-runtime/pkg/webhook"
 
@@ -137,10 +137,6 @@ func main() {
 
 	// Initialize logger
 	logger := loggerfactory.GetLogger()
-	defer func() {
-		// https://github.com/uber-go/zap/issues/328
-		_ = logger.Sync()
-	}()
 
 	// Set up signal handling for graceful shutdown
 	ctx := signals.SetupSignalHandler()
@@ -152,7 +148,7 @@ func main() {
 	serviceName := getServiceNameFromArgs(args)
 	shutdown, err := otel.InitProvider(ctx, logger, serviceName)
 	if err != nil {
-		logger.Error("error initializing provider for OTLP", zap.Error(err))
+		logger.Error(err, "error initializing provider for OTLP")
 		return
 	}
 	if shutdown != nil {
@@ -166,7 +162,7 @@ func main() {
 	startRequestedService(ctx, args, clientGen, logger, mgr)
 
 	<-ctx.Done()
-	logger.Error("exiting")
+	logger.Info("exiting")
 }
 
 // setupCommandLineArgs parses command line arguments and returns them
@@ -237,7 +233,7 @@ func getServiceNameFromArgs(args *CommandLineArgs) string {
 }
 
 // startRequestedService starts the service specified by command line arguments
-func startRequestedService(ctx context.Context, args *CommandLineArgs, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Interface) {
+func startRequestedService(ctx context.Context, args *CommandLineArgs, clientGen crd.ClientGeneratorInterface, logger logr.Logger, mgr manager.Interface) {
 	var err error
 
 	// Start the requested service based on command line arguments
@@ -245,14 +241,14 @@ func startRequestedService(ctx context.Context, args *CommandLineArgs, clientGen
 		err = webhook.Start(ctx, clientGen, logger, cnwebhook.Options{
 			Port: args.webhookPort,
 		})
-		logger.Error("webhook server exited:", zap.Error(err))
+		logger.Error(err, "webhook server exited:")
 		return
 	}
 
 	if args.canaryConfig {
 		err = canaryconfigmgr.StartCanaryServer(ctx, clientGen, logger, mgr, false)
 		if err != nil {
-			logger.Error("canary config server exited with error: ", zap.Error(err))
+			logger.Error(err, "canary config server exited with error: ")
 		}
 		return
 	}
@@ -260,7 +256,7 @@ func startRequestedService(ctx context.Context, args *CommandLineArgs, clientGen
 	if args.routerPort != 0 {
 		err = router.Start(ctx, clientGen, logger, mgr, args.routerPort, eclient.MakeClient(logger, args.executorUrl))
 		if err != nil {
-			logger.Error("router exited", zap.Error(err))
+			logger.Error(err, "router exited")
 		}
 		return
 	}
@@ -268,7 +264,7 @@ func startRequestedService(ctx context.Context, args *CommandLineArgs, clientGen
 	if args.executorPort != 0 {
 		err = executor.StartExecutor(ctx, clientGen, logger, mgr, args.executorPort)
 		if err != nil {
-			logger.Error("executor exited", zap.Error(err))
+			logger.Error(err, "executor exited")
 		}
 		return
 	}
@@ -276,7 +272,7 @@ func startRequestedService(ctx context.Context, args *CommandLineArgs, clientGen
 	if args.kubewatcher {
 		err = kubewatcher.Start(ctx, clientGen, logger, mgr, args.routerUrl)
 		if err != nil {
-			logger.Error("kubewatcher exited", zap.Error(err))
+			logger.Error(err, "kubewatcher exited")
 		}
 		return
 	}
@@ -284,7 +280,7 @@ func startRequestedService(ctx context.Context, args *CommandLineArgs, clientGen
 	if args.timer {
 		err = timer.Start(ctx, clientGen, logger, mgr, args.routerUrl)
 		if err != nil {
-			logger.Error("timer exited", zap.Error(err))
+			logger.Error(err, "timer exited")
 		}
 		return
 	}
@@ -292,7 +288,7 @@ func startRequestedService(ctx context.Context, args *CommandLineArgs, clientGen
 	if args.mqt {
 		err = mqtrigger.Start(ctx, clientGen, logger, mgr, args.routerUrl)
 		if err != nil {
-			logger.Error("message queue manager exited", zap.Error(err))
+			logger.Error(err, "message queue manager exited")
 		}
 		return
 	}
@@ -300,7 +296,7 @@ func startRequestedService(ctx context.Context, args *CommandLineArgs, clientGen
 	if args.mqt_keda {
 		err = mqt.StartScalerManager(ctx, clientGen, logger, mgr, args.routerUrl)
 		if err != nil {
-			logger.Error("mqt scaler manager exited", zap.Error(err))
+			logger.Error(err, "mqt scaler manager exited")
 		}
 		return
 	}
@@ -308,7 +304,7 @@ func startRequestedService(ctx context.Context, args *CommandLineArgs, clientGen
 	if args.builderMgr {
 		err = buildermgr.Start(ctx, clientGen, logger, mgr, args.storageSvcUrl)
 		if err != nil {
-			logger.Error("builder manager exited", zap.Error(err))
+			logger.Error(err, "builder manager exited")
 		}
 		return
 	}
@@ -316,7 +312,7 @@ func startRequestedService(ctx context.Context, args *CommandLineArgs, clientGen
 	if args.logger {
 		err = functionLogger.Start(ctx, clientGen, logger)
 		if err != nil {
-			logger.Error("logger exited", zap.Error(err))
+			logger.Error(err, "logger exited")
 		}
 		return
 	}
@@ -328,7 +324,7 @@ func startRequestedService(ctx context.Context, args *CommandLineArgs, clientGen
 }
 
 // startStorageService initializes and starts the storage service
-func startStorageService(ctx context.Context, args *CommandLineArgs, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Interface) {
+func startStorageService(ctx context.Context, args *CommandLineArgs, clientGen crd.ClientGeneratorInterface, logger logr.Logger, mgr manager.Interface) {
 	var storage storagesvc.Storage
 
 	if args.storageType == string(storagesvc.StorageTypeS3) {
@@ -339,6 +335,6 @@ func startStorageService(ctx context.Context, args *CommandLineArgs, clientGen c
 
 	err := storagesvc.Start(ctx, clientGen, logger, storage, mgr, args.storageServicePort)
 	if err != nil {
-		logger.Error("storage service exited", zap.Error(err))
+		logger.Error(err, "storage service exited")
 	}
 }

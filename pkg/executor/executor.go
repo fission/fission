@@ -26,7 +26,7 @@ import (
 	"time"
 
 	"github.com/dchest/uniuri"
-	"go.uber.org/zap"
+	"github.com/go-logr/logr"
 	k8sCache "k8s.io/client-go/tools/cache"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -50,7 +50,7 @@ import (
 type (
 	// Executor defines a fission function executor.
 	Executor struct {
-		logger *zap.Logger
+		logger logr.Logger
 
 		executorTypes map[fv1.ExecutorType]executortype.ExecutorType
 		cms           *cms.ConfigSecretController
@@ -73,11 +73,11 @@ type (
 )
 
 // MakeExecutor returns an Executor for given ExecutorType(s).
-func MakeExecutor(ctx context.Context, logger *zap.Logger, mgr manager.Interface, cms *cms.ConfigSecretController,
+func MakeExecutor(ctx context.Context, logger logr.Logger, mgr manager.Interface, cms *cms.ConfigSecretController,
 	fissionClient versioned.Interface, types map[fv1.ExecutorType]executortype.ExecutorType,
 	informers ...k8sCache.SharedIndexInformer) (*Executor, error) {
 	executor := &Executor{
-		logger:        logger.Named("executor"),
+		logger:        logger.WithName("executor"),
 		cms:           cms,
 		fissionClient: fissionClient,
 		executorTypes: types,
@@ -183,8 +183,8 @@ func (executor *Executor) serveCreateFuncServices(ctx context.Context) {
 		} else {
 			// There's an existing request for this function, wait for it to finish
 			go func() {
-				executor.logger.Debug("waiting for concurrent request for the same function",
-					zap.String("function", fnName.String()))
+				executor.logger.V(1).Info("waiting for concurrent request for the same function",
+					"function", fnName.String())
 				wg, ok := wg.(*sync.WaitGroup)
 				if !ok {
 					err := fmt.Errorf("could not convert value to workgroup for function %s", fnName)
@@ -215,9 +215,9 @@ func (executor *Executor) serveCreateFuncServices(ctx context.Context) {
 func (executor *Executor) createServiceForFunction(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
 	logger := otelUtils.LoggerWithTraceID(ctx, executor.logger)
 	otelUtils.SpanTrackEvent(ctx, "createServiceForFunction", otelUtils.GetAttributesForFunction(fn)...)
-	logger.Debug("no cached function service found, creating one",
-		zap.String("function_name", fn.Name),
-		zap.String("function_namespace", fn.Namespace))
+	logger.V(1).Info("no cached function service found, creating one",
+		"function_name", fn.Name,
+		"function_namespace", fn.Namespace)
 
 	t := fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType
 	e, ok := executor.executorTypes[t]
@@ -228,10 +228,8 @@ func (executor *Executor) createServiceForFunction(ctx context.Context, fn *fv1.
 	fsvc, fsvcErr := e.GetFuncSvc(ctx, fn)
 	if fsvcErr != nil {
 		e := "error creating service for function"
-		logger.Error(e,
-			zap.Error(fsvcErr),
-			zap.String("function_name", fn.Name),
-			zap.String("function_namespace", fn.Namespace))
+		logger.Error(fsvcErr, e, "function_name", fn.Name,
+			"function_namespace", fn.Namespace)
 		fsvcErr = fmt.Errorf("[%s] %s: %w", fn.Name, e, fsvcErr)
 	}
 
@@ -250,7 +248,7 @@ func (executor *Executor) getFunctionServiceFromCache(ctx context.Context, fn *f
 
 // StartExecutor Starts executor and the executor components such as Poolmgr,
 // deploymgr and potential future executor types
-func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Interface, port int) error {
+func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger, mgr manager.Interface, port int) error {
 
 	fissionClient, err := clientGen.GetFissionClient()
 	if err != nil {
@@ -262,7 +260,7 @@ func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, 
 	}
 	metricsClient, err := clientGen.GetMetricsClient()
 	if err != nil {
-		logger.Error("error making the metrics client", zap.Error(err))
+		logger.Error(err, "error making the metrics client")
 	}
 
 	err = crd.WaitForFunctionCRDs(ctx, logger, fissionClient)
@@ -279,10 +277,10 @@ func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, 
 
 	podSpecPatch, err := util.GetSpecFromConfigMap(fv1.RuntimePodSpecPath)
 	if err != nil && !os.IsNotExist(err) {
-		logger.Warn("error reading data for pod spec patch", zap.String("path", fv1.RuntimePodSpecPath), zap.Error(err))
+		logger.Error(err, "error reading data for pod spec patch", "path", fv1.RuntimePodSpecPath)
 	}
 
-	logger.Info("Starting executor", zap.String("instanceID", executorInstanceID))
+	logger.Info("Starting executor", "instanceID", executorInstanceID)
 
 	finformerFactory := make(map[string]genInformer.SharedInformerFactory, 0)
 	for _, ns := range utils.DefaultNSResolver().FissionResourceNS {

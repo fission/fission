@@ -23,9 +23,10 @@ import (
 	"fmt"
 	"io"
 
-	"go.uber.org/zap"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/types"
+
+	"github.com/go-logr/logr"
 
 	"github.com/fission/fission/pkg/crd"
 	ferror "github.com/fission/fission/pkg/error"
@@ -67,7 +68,7 @@ type (
 	PoolCache struct {
 		cache          map[crd.CacheKeyURG]*funcSvcGroup
 		requestChannel chan *request
-		logger         *zap.Logger
+		logger         logr.Logger
 	}
 
 	request struct {
@@ -96,7 +97,7 @@ type (
 )
 
 // NewPoolCache create a Cache object
-func NewPoolCache(logger *zap.Logger) *PoolCache {
+func NewPoolCache(logger logr.Logger) *PoolCache {
 	c := &PoolCache{
 		cache:          make(map[crd.CacheKeyURG]*funcSvcGroup),
 		requestChannel: make(chan *request),
@@ -138,8 +139,8 @@ func (c *PoolCache) service() {
 					funcSvcGroup.svcs[addr].currentCPUUsage.Cmp(funcSvcGroup.svcs[addr].cpuLimit) < 1 {
 					// mark active
 					funcSvcGroup.svcs[addr].activeRequests++
-					if c.logger.Core().Enabled(zap.DebugLevel) {
-						otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Increase active requests with getValue", zap.String("function", req.function.String()), zap.String("address", addr), zap.Int("activeRequests", funcSvcGroup.svcs[addr].activeRequests))
+					if c.logger.V(1).Enabled() {
+						otelUtils.LoggerWithTraceID(req.ctx, c.logger).V(1).Info("Increase active requests with getValue", "function", req.function.String(), "address", addr, "activeRequests", funcSvcGroup.svcs[addr].activeRequests)
 					}
 					resp.value = funcSvcGroup.svcs[addr].val
 					found = true
@@ -214,8 +215,8 @@ func (c *PoolCache) service() {
 					c.cache[req.function].svcWaiting--
 				}
 			}
-			if c.logger.Core().Enabled(zap.DebugLevel) {
-				otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Increase active requests with setValue", zap.String("function", req.function.String()), zap.String("address", req.address), zap.Int("activeRequests", c.cache[req.function].svcs[req.address].activeRequests))
+			if c.logger.V(1).Enabled() {
+				otelUtils.LoggerWithTraceID(req.ctx, c.logger).V(1).Info("Increase active requests with setValue", "function", req.function.String(), "address", req.address, "activeRequests", c.cache[req.function].svcs[req.address].activeRequests)
 			}
 			c.cache[req.function].svcs[req.address].cpuLimit = req.cpuUsage
 		case markDeleted:
@@ -251,13 +252,13 @@ func (c *PoolCache) service() {
 					continue
 				}
 				for key2, value := range values.svcs {
-					debugLevel := c.logger.Core().Enabled(zap.DebugLevel)
+					debugLevel := c.logger.V(1).Enabled()
 					if debugLevel {
-						otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Reading active requests", zap.String("function", key1.String()), zap.String("address", key2), zap.Int("activeRequests", value.activeRequests))
+						otelUtils.LoggerWithTraceID(req.ctx, c.logger).V(1).Info("Reading active requests", "function", key1.String(), "address", key2, "activeRequests", value.activeRequests)
 					}
 					if value.activeRequests == 0 && svcCleanQuota > 0 {
 						if debugLevel {
-							otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Function service with no active requests", zap.String("function", key1.String()), zap.String("address", key2), zap.Int("activeRequests", value.activeRequests))
+							otelUtils.LoggerWithTraceID(req.ctx, c.logger).V(1).Info("Function service with no active requests", "function", key1.String(), "address", key2, "activeRequests", value.activeRequests)
 						}
 						vals = append(vals, value.val)
 						svcCleanQuota--
@@ -278,11 +279,11 @@ func (c *PoolCache) service() {
 				if _, ok = c.cache[req.function].svcs[req.address]; ok {
 					if c.cache[req.function].svcs[req.address].activeRequests > 0 {
 						c.cache[req.function].svcs[req.address].activeRequests--
-						if c.logger.Core().Enabled(zap.DebugLevel) {
-							otelUtils.LoggerWithTraceID(req.ctx, c.logger).Debug("Decrease active requests", zap.String("function", req.function.String()), zap.String("address", req.address), zap.Int("activeRequests", c.cache[req.function].svcs[req.address].activeRequests))
+						if c.logger.V(1).Enabled() {
+							otelUtils.LoggerWithTraceID(req.ctx, c.logger).V(1).Info("Decrease active requests", "function", req.function.String(), "address", req.address, "activeRequests", c.cache[req.function].svcs[req.address].activeRequests)
 						}
 					} else {
-						otelUtils.LoggerWithTraceID(req.ctx, c.logger).Error("Invalid request to decrease active requests", zap.String("function", req.function.String()), zap.String("address", req.address), zap.Int("activeRequests", c.cache[req.function].svcs[req.address].activeRequests))
+						otelUtils.LoggerWithTraceID(req.ctx, c.logger).Error(nil, "Invalid request to decrease active requests", "function", req.function.String(), "address", req.address, "activeRequests", c.cache[req.function].svcs[req.address].activeRequests)
 					}
 				}
 			}

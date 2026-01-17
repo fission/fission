@@ -19,7 +19,6 @@ package main
 import (
 	"os"
 
-	"go.uber.org/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 
 	"github.com/fission/fission/cmd/builder/app"
@@ -35,10 +34,7 @@ func main() {
 	defer mgr.Wait()
 
 	logger := loggerfactory.GetLogger()
-	defer func() {
-		// https://github.com/uber-go/zap/issues/328
-		_ = logger.Sync()
-	}()
+
 	ctx := signals.SetupSignalHandler()
 	profile.ProfileIfEnabled(ctx, logger, mgr)
 
@@ -47,7 +43,9 @@ func main() {
 		if os.IsNotExist(err) {
 			err = os.MkdirAll(shareVolume, os.ModeDir|0700)
 			if err != nil {
-				logger.Fatal("error creating directory: %s", zap.Error(err), zap.String("directory", shareVolume))
+				logger.Error(err, "error creating directory: %s", "directory", shareVolume)
+
+				os.Exit(1)
 			}
 		}
 	}

@@ -19,13 +19,14 @@ package router
 import (
 	"context"
 	"net/http"
+	"os"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/bep/debounce"
+	"github.com/go-logr/logr"
 	"github.com/gorilla/mux"
-	"go.uber.org/zap"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
@@ -48,7 +49,7 @@ type HTTPTriggerSet struct {
 	*functionServiceMap
 	*mutableRouter
 
-	logger                     *zap.Logger
+	logger                     logr.Logger
 	fissionClient              versioned.Interface
 	kubeClient                 kubernetes.Interface
 	executor                   eclient.ClientInterface
@@ -65,11 +66,11 @@ type HTTPTriggerSet struct {
 	syncDebouncer              func(func())
 }
 
-func makeHTTPTriggerSet(logger *zap.Logger, fmap *functionServiceMap, fissionClient versioned.Interface,
+func makeHTTPTriggerSet(logger logr.Logger, fmap *functionServiceMap, fissionClient versioned.Interface,
 	kubeClient kubernetes.Interface, executor eclient.ClientInterface, params *tsRoundTripperParams, isDebugEnv bool, unTapServiceTimeout time.Duration, actionThrottler *throttler.Throttler) (*HTTPTriggerSet, error) {
 
 	httpTriggerSet := &HTTPTriggerSet{
-		logger:                     logger.Named("http_trigger_set"),
+		logger:                     logger.WithName("http_trigger_set"),
 		functionServiceMap:         fmap,
 		triggers:                   []fv1.HTTPTrigger{},
 		fissionClient:              fissionClient,
@@ -173,11 +174,12 @@ func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) (*mux.Router
 
 		if rr.resolveResultType != resolveResultSingleFunction && rr.resolveResultType != resolveResultMultipleFunctions {
 			// not implemented yet
-			ts.logger.Panic("resolve result type not implemented", zap.Any("type", rr.resolveResultType))
+			ts.logger.Error(nil, "resolve result type not implemented", "type", rr.resolveResultType)
+			os.Exit(1)
 		}
 
 		fh := &functionHandler{
-			logger:                   ts.logger.Named(trigger.Name),
+			logger:                   ts.logger.WithName(trigger.Name),
 			fmap:                     ts.functionServiceMap,
 			executor:                 ts.executor,
 			httpTrigger:              &trigger,
@@ -221,7 +223,7 @@ func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) (*mux.Router
 				if trigger.Spec.Host != "" {
 					ht.Host(trigger.Spec.Host)
 				}
-				ts.logger.Debug("add prefix route for function", zap.String("route", prefix), zap.Any("function", fh.function), zap.Strings("methods", methods))
+				ts.logger.V(1).Info("add prefix route for function", "route", prefix, "function", fh.function, "methods", methods)
 			} else {
 				ht1 := muxRouter.Handle(prefix, handler)
 				ht1.Methods(methods...)
@@ -233,7 +235,7 @@ func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) (*mux.Router
 				if trigger.Spec.Host != "" {
 					ht2.Host(trigger.Spec.Host)
 				}
-				ts.logger.Debug("add prefix and handler route for function", zap.String("route", prefix), zap.Any("function", fh.function), zap.Strings("methods", methods))
+				ts.logger.V(1).Info("add prefix and handler route for function", "route", prefix, "function", fh.function, "methods", methods)
 			}
 		} else {
 			ht := muxRouter.Handle(trigger.Spec.RelativeURL, handler)
@@ -241,7 +243,7 @@ func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) (*mux.Router
 			if trigger.Spec.Host != "" {
 				ht.Host(trigger.Spec.Host)
 			}
-			ts.logger.Debug("add handler route for function", zap.String("router", trigger.Spec.RelativeURL), zap.Any("function", fh.function), zap.Strings("methods", methods))
+			ts.logger.V(1).Info("add handler route for function", "router", trigger.Spec.RelativeURL, "function", fh.function, "methods", methods)
 		}
 
 		if trigger.Spec.Prefix == nil && trigger.Spec.RelativeURL == "/" && len(methods) == 1 && methods[0] == http.MethodGet {
@@ -264,7 +266,7 @@ func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) (*mux.Router
 	for i := range ts.functions {
 		fn := ts.functions[i]
 		fh := &functionHandler{
-			logger:                 ts.logger.Named(fn.Name),
+			logger:                 ts.logger.WithName(fn.Name),
 			fmap:                   ts.functionServiceMap,
 			function:               &fn,
 			executor:               ts.executor,
@@ -280,7 +282,7 @@ func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) (*mux.Router
 		handler := http.HandlerFunc(fh.handler)
 		muxRouter.Handle(internalRoute, handler)
 		muxRouter.PathPrefix(internalPrefixRoute).Handler(handler)
-		ts.logger.Debug("add internal handler and prefix route for function", zap.String("router", internalRoute), zap.Any("function", fn))
+		ts.logger.V(1).Info("add internal handler and prefix route for function", "router", internalRoute, "function", fn)
 	}
 
 	if featureConfig.AuthConfig.IsEnabled {
@@ -358,7 +360,7 @@ func (ts *HTTPTriggerSet) addFunctionHandlers() error {
 						rr.functionMap[fn.Name] != nil &&
 						rr.functionMap[fn.Name].ResourceVersion != fn.ResourceVersion {
 						// invalidate resolver cache
-						ts.logger.Debug("invalidating resolver cache")
+						ts.logger.V(1).Info("invalidating resolver cache")
 						ts.resolver.delete(key.namespace, key.triggerName, key.triggerResourceVersion)
 						break
 					}
@@ -412,7 +414,7 @@ func (ts *HTTPTriggerSet) updateRouter(ctx context.Context) {
 		// make a new router and use it
 		router, err := ts.getRouter(functionTimeout)
 		if err != nil {
-			ts.logger.Error("error updating router", zap.Error(err))
+			ts.logger.Error(err, "error updating router")
 			continue
 		}
 		ts.mutableRouter.updateRouter(router)

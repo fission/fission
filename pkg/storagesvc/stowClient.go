@@ -26,8 +26,8 @@ import (
 
 	"errors"
 
+	"github.com/go-logr/logr"
 	"github.com/graymeta/stow"
-	"go.uber.org/zap"
 )
 
 type (
@@ -40,7 +40,7 @@ type (
 
 	// StowClient is the wrapper client for stow (Cloud storage abstraction package)
 	StowClient struct {
-		logger    *zap.Logger
+		logger    logr.Logger
 		config    *storageConfig
 		location  stow.Location
 		container stow.Container
@@ -102,7 +102,7 @@ func getOrCreateContainer(loc stow.Location, containerName string, cursor string
 }
 
 // MakeStowClient create a new StowClient for given storage
-func MakeStowClient(logger *zap.Logger, storage Storage) (*StowClient, error) {
+func MakeStowClient(logger logr.Logger, storage Storage) (*StowClient, error) {
 	storageType := getStorageType(storage)
 	if strings.Compare(storageType, "local") == 1 && strings.Compare(storageType, "s3") == 1 {
 		return nil, errors.New("storage types other than 'local' and 's3' are not implemented")
@@ -113,7 +113,7 @@ func MakeStowClient(logger *zap.Logger, storage Storage) (*StowClient, error) {
 	}
 
 	stowClient := &StowClient{
-		logger: logger.Named("stow_client"),
+		logger: logger.WithName("stow_client"),
 		config: config,
 	}
 
@@ -142,13 +142,11 @@ func (client *StowClient) putFile(file multipart.File, fileSize int64) (string, 
 	// save the file to the storage backend
 	item, err := client.container.Put(uploadName, file, fileSize, nil)
 	if err != nil {
-		client.logger.Error("error writing file on storage",
-			zap.Error(err),
-			zap.String("file", uploadName))
+		client.logger.Error(err, "error writing file on storage", "file", uploadName)
 		return "", ErrWritingFile
 	}
 
-	client.logger.Debug("successfully wrote file on storage", zap.String("file", uploadName))
+	client.logger.V(1).Info("successfully wrote file on storage", "file", uploadName)
 	return item.ID(), nil
 }
 
@@ -174,7 +172,7 @@ func (client *StowClient) copyFileToStream(fileId string, w io.Writer) error {
 		return ErrWritingFileIntoResponse
 	}
 
-	client.logger.Debug("successfully wrote file into httpresponse", zap.String("file", fileId))
+	client.logger.V(1).Info("successfully wrote file into httpresponse", "file", fileId)
 	return nil
 }
 
@@ -234,9 +232,9 @@ func (client StowClient) filterItemCreatedAMinuteAgo(item stow.Item, currentTime
 	itemLastModTime, _ := item.LastMod()
 	if currentTime.(time.Time).Sub(itemLastModTime) < 1*time.Minute {
 
-		client.logger.Debug("item created less than a minute ago",
-			zap.String("item", item.ID()),
-			zap.Time("last_modified_time", itemLastModTime))
+		client.logger.V(1).Info("item created less than a minute ago",
+			"item", item.ID(),
+			"last_modified_time", itemLastModTime)
 		return true
 	}
 	return false
@@ -244,9 +242,9 @@ func (client StowClient) filterItemCreatedAMinuteAgo(item stow.Item, currentTime
 
 func (client StowClient) filterAllItems(item stow.Item, _ any) bool {
 	itemLastModTime, _ := item.LastMod()
-	client.logger.Debug("item info",
-		zap.String("item", item.ID()),
-		zap.Time("last_modified_time", itemLastModTime))
+	client.logger.V(1).Info("item info",
+		"item", item.ID(),
+		"last_modified_time", itemLastModTime)
 	return false
 
 }

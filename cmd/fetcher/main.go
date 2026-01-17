@@ -17,6 +17,8 @@ limitations under the License.
 package main
 
 import (
+	"os"
+
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 
 	"github.com/fission/fission/cmd/fetcher/app"
@@ -36,13 +38,13 @@ func main() {
 	defer mgr.Wait()
 
 	logger := loggerfactory.GetLogger()
-	defer func() {
-		// https://github.com/uber-go/zap/issues/328
-		_ = logger.Sync()
-	}()
 
 	ctx := signals.SetupSignalHandler()
 	profile.ProfileIfEnabled(ctx, logger, mgr)
 
-	app.Run(ctx, crd.NewClientGenerator(), logger, mgr, fetcherPort, fv1.PodInfoMount)
+	err := app.Run(ctx, crd.NewClientGenerator(), logger, mgr, fetcherPort, fv1.PodInfoMount)
+	if err != nil {
+		logger.Error(err, "fetcher failed")
+		os.Exit(1)
+	}
 }

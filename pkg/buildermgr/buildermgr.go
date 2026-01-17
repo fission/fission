@@ -22,7 +22,7 @@ import (
 	"os"
 	"time"
 
-	"go.uber.org/zap"
+	"github.com/go-logr/logr"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
@@ -33,8 +33,8 @@ import (
 )
 
 // Start the buildermgr service.
-func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Interface, storageSvcUrl string) error {
-	bmLogger := logger.Named("builder_manager")
+func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger, mgr manager.Interface, storageSvcUrl string) error {
+	bmLogger := logger.WithName("builder_manager")
 
 	fissionClient, err := clientGen.GetFissionClient()
 	if err != nil {
@@ -57,7 +57,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *
 
 	podSpecPatch, err := util.GetSpecFromConfigMap(fv1.BuilderPodSpecPath)
 	if err != nil && !os.IsNotExist(err) {
-		logger.Warn("error reading data for pod spec patch", zap.String("path", fv1.BuilderPodSpecPath), zap.Error(err))
+		logger.Error(err, "error reading data for pod spec patch", "path", fv1.BuilderPodSpecPath)
 	}
 
 	envWatcher, err := makeEnvironmentWatcher(ctx, bmLogger, fissionClient, kubernetesClient, fetcherConfig, podSpecPatch)

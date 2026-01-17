@@ -25,19 +25,14 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
 
 func TestProxyErrorHandler(t *testing.T) {
-	config := zap.NewDevelopmentConfig()
-	config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
-	logger, err := config.Build()
-
-	require.Nil(t, err)
+	logger := loggerfactory.GetLogger()
 
 	fh := &functionHandler{
 		logger: logger,

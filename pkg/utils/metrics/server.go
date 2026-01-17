@@ -21,22 +21,22 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"go.uber.org/zap"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 
 	"github.com/fission/fission/pkg/utils/httpserver"
 	"github.com/fission/fission/pkg/utils/manager"
 )
 
-func ServeMetrics(ctx context.Context, parent string, logger *zap.Logger, mgr manager.Interface) {
+func ServeMetrics(ctx context.Context, parent string, logger logr.Logger, mgr manager.Interface) {
 	metricsAddr := os.Getenv("METRICS_ADDR")
 	if metricsAddr == "" {
 		metricsAddr = "8080"
 	}
 	err := metrics.Registry.Register(Registry)
 	if err != nil {
-		logger.Error("failed to register metrics", zap.Error(err))
+		logger.Error(err, "failed to register metrics")
 	}
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", promhttp.HandlerFor(

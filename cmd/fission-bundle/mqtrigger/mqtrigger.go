@@ -24,7 +24,7 @@ import (
 	"strings"
 	"time"
 
-	"go.uber.org/zap"
+	"github.com/go-logr/logr"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
@@ -37,7 +37,7 @@ import (
 	"github.com/fission/fission/pkg/utils/manager"
 )
 
-func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Interface, routerUrl string) error {
+func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger, mgr manager.Interface, routerUrl string) error {
 	fissionClient, err := clientGen.GetFissionClient()
 	if err != nil {
 		return fmt.Errorf("failed to get fission client: %w", err)
@@ -73,7 +73,9 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *
 		routerUrl,
 	)
 	if err != nil {
-		logger.Fatal("failed to connect to remote message queue server", zap.Error(err))
+		logger.Error(err, "failed to connect to remote message queue server")
+
+		os.Exit(1)
 	}
 
 	finformerFactory := make(map[string]genInformer.SharedInformerFactory, 0)
@@ -96,7 +98,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *
 	return nil
 }
 
-func readSecrets(logger *zap.Logger, secretsPath string) (map[string][]byte, error) {
+func readSecrets(logger logr.Logger, secretsPath string) (map[string][]byte, error) {
 	// return if no secrets exist
 	if _, err := os.Stat(secretsPath); os.IsNotExist(err) {
 		return nil, err

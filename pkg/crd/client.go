@@ -21,8 +21,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/go-logr/logr"
 	kedaClient "github.com/kedacore/keda/v2/pkg/generated/clientset/versioned"
-	"go.uber.org/zap"
 	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -135,12 +135,12 @@ func NewClientGeneratorWithRestConfig(restConfig *rest.Config) *ClientGenerator 
 }
 
 // WaitForFunctionCRDs does a timeout to check if CRDs have been installed
-func WaitForFunctionCRDs(ctx context.Context, logger *zap.Logger, fissionClient versioned.Interface) error {
+func WaitForFunctionCRDs(ctx context.Context, logger logr.Logger, fissionClient versioned.Interface) error {
 	defaultNs := utils.DefaultNSResolver().DefaultNamespace
 	if defaultNs == "" {
 		defaultNs = metav1.NamespaceDefault
 	}
-	logger.Info("Checking function CRD access", zap.String("namespace", defaultNs), zap.String("timeout", "30s"))
+	logger.Info("Checking function CRD access", "namespace", defaultNs, "timeout", "30s")
 	start := time.Now()
 	for {
 		fi := fissionClient.CoreV1().Functions(defaultNs)

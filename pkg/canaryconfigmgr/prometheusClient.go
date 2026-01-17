@@ -21,18 +21,18 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/go-logr/logr"
 	prometheus "github.com/prometheus/client_golang/api"
 	prometheusv1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/prometheus/common/model"
-	"go.uber.org/zap"
 )
 
 type PrometheusApiClient struct {
-	logger *zap.Logger
+	logger logr.Logger
 	client prometheusv1.API
 }
 
-func MakePrometheusClient(logger *zap.Logger, prometheusSvc string) (*PrometheusApiClient, error) {
+func MakePrometheusClient(logger logr.Logger, prometheusSvc string) (*PrometheusApiClient, error) {
 	promApiConfig := prometheus.Config{
 		Address: prometheusSvc,
 	}
@@ -45,7 +45,7 @@ func MakePrometheusClient(logger *zap.Logger, prometheusSvc string) (*Prometheus
 	apiQueryClient := prometheusv1.NewAPI(promApiClient)
 
 	return &PrometheusApiClient{
-		logger: logger.Named("prometheus_api_client"),
+		logger: logger.WithName("prometheus_api_client"),
 		client: apiQueryClient,
 	}, nil
 }
@@ -102,10 +102,10 @@ func (promApiClient *PrometheusApiClient) GetRequestsToFuncInWindow(ctx context.
 
 	reqsInCurrentWindow := reqs - reqsInPrevWindow
 	promApiClient.logger.Info("function requests",
-		zap.Float64("requests", reqs),
-		zap.Float64("requests_in_previous_window", reqsInPrevWindow),
-		zap.Float64("requests_in_current_window", reqsInCurrentWindow),
-		zap.String("function", funcName))
+		"requests", reqs,
+		"requests_in_previous_window", reqsInPrevWindow,
+		"requests_in_current_window", reqsInCurrentWindow,
+		"function", funcName)
 
 	return reqsInCurrentWindow, nil
 }
@@ -128,16 +128,16 @@ func (promApiClient *PrometheusApiClient) GetTotalFailedRequestsToFuncInWindow(c
 
 	failedReqsInCurrentWindow := failedRequests - failedReqsInPrevWindow
 	promApiClient.logger.Info("function requests",
-		zap.Float64("failed_requests", failedRequests),
-		zap.Float64("failed_requests_in_previous_window", failedReqsInPrevWindow),
-		zap.Float64("failed_requests_in_current_window", failedReqsInCurrentWindow),
-		zap.String("function", funcName))
+		"failed_requests", failedRequests,
+		"failed_requests_in_previous_window", failedReqsInPrevWindow,
+		"failed_requests_in_current_window", failedReqsInCurrentWindow,
+		"function", funcName)
 
 	return failedReqsInCurrentWindow, nil
 }
 
 func (promApiClient *PrometheusApiClient) executeQuery(ctx context.Context, queryString string) (float64, error) {
-	promApiClient.logger.Debug("executing prometheus query", zap.String("query", queryString))
+	promApiClient.logger.V(1).Info("executing prometheus query", "query", queryString)
 
 	val, warn, err := promApiClient.client.Query(ctx, queryString, time.Now())
 	if err != nil {
@@ -145,7 +145,7 @@ func (promApiClient *PrometheusApiClient) executeQuery(ctx context.Context, quer
 	}
 
 	if warn != nil {
-		promApiClient.logger.Warn("receive prometheus client query warning", zap.Any("msg", warn))
+		promApiClient.logger.Info("receive prometheus client query warning", "msg", warn)
 	}
 
 	switch {
@@ -171,7 +171,7 @@ func (promApiClient *PrometheusApiClient) executeQuery(ctx context.Context, quer
 
 	default:
 		promApiClient.logger.Info("return value type of prometheus query was unrecognized",
-			zap.Any("type", val.Type()))
+			"type", val.Type())
 		return 0, nil
 	}
 }
