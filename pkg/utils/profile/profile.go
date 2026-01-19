@@ -29,13 +29,13 @@ import (
 	_ "net/http/pprof"
 	"os"
 
-	"go.uber.org/zap"
+	"github.com/go-logr/logr"
 
 	"github.com/fission/fission/pkg/utils/httpserver"
 	"github.com/fission/fission/pkg/utils/manager"
 )
 
-func ProfileIfEnabled(ctx context.Context, logger *zap.Logger, mgr manager.Interface) {
+func ProfileIfEnabled(ctx context.Context, logger logr.Logger, mgr manager.Interface) {
 	enablePprof := os.Getenv("PPROF_ENABLED")
 	if enablePprof != "true" {
 		return

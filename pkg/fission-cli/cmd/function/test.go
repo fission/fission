@@ -33,6 +33,8 @@ import (
 	"go.opentelemetry.io/otel"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/go-logr/logr"
+
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/cmd/httptrigger"
@@ -168,7 +170,7 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 }
 
 func doHTTPRequest(ctx context.Context, url string, headers []string, method, body string) (*http.Response, error) {
-	shutdown, err := otelUtils.InitProvider(ctx, nil, "fission-cli")
+	shutdown, err := otelUtils.InitProvider(ctx, logr.Logger{}, "fission-cli")
 	if err != nil {
 		return nil, err
 	}

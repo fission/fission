@@ -24,10 +24,9 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 
 	"github.com/fission/fission/pkg/utils/httpserver"
+	"github.com/fission/fission/pkg/utils/loggerfactory"
 	"github.com/fission/fission/pkg/utils/manager"
 	"github.com/fission/fission/pkg/utils/metrics"
 )
@@ -76,10 +75,7 @@ func TestMutableMux(t *testing.T) {
 	muxRouter := mux.NewRouter()
 	muxRouter.Use(metrics.HTTPMetricMiddleware)
 	muxRouter.HandleFunc("/", OldHandler)
-	config := zap.NewDevelopmentConfig()
-	config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
-	logger, err := config.Build()
-	panicIf(err)
+	logger := loggerfactory.GetLogger()
 
 	mr := newMutableRouter(logger, muxRouter)
 	ctx := t.Context()

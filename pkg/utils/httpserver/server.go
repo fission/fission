@@ -6,12 +6,12 @@ import (
 	"net/http"
 	"strings"
 
-	"go.uber.org/zap"
+	"github.com/go-logr/logr"
 
 	"github.com/fission/fission/pkg/utils/manager"
 )
 
-func StartServer(ctx context.Context, log *zap.Logger, mgr manager.Interface, svc string, port string, handler http.Handler) {
+func StartServer(ctx context.Context, log logr.Logger, mgr manager.Interface, svc string, port string, handler http.Handler) {
 	if !strings.Contains(port, ":") {
 		port = fmt.Sprintf(":%s", port)
 	}
@@ -19,12 +19,12 @@ func StartServer(ctx context.Context, log *zap.Logger, mgr manager.Interface, sv
 		Addr:    port,
 		Handler: handler,
 	}
-	l := log.With(zap.String("service", svc), zap.String("addr", server.Addr))
+	l := log.WithValues("service", svc, "addr", server.Addr)
 	l.Info("starting server")
 	mgr.Add(ctx, func(ctx context.Context) {
 		if err := server.ListenAndServe(); err != nil {
 			if err != http.ErrServerClosed {
-				l.Error("server error", zap.Error(err))
+				l.Error(err, "server error")
 			}
 		}
 	})
@@ -32,7 +32,7 @@ func StartServer(ctx context.Context, log *zap.Logger, mgr manager.Interface, sv
 	l.Info("shutting down server")
 	if err := server.Shutdown(ctx); err != nil {
 		if err != context.Canceled && err != context.DeadlineExceeded {
-			l.Error("server shutdown error", zap.Error(err))
+			l.Error(err, "server shutdown error")
 		}
 	}
 }

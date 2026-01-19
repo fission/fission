@@ -18,10 +18,11 @@ package router
 
 import (
 	"net/http"
+	"os"
 	"sync/atomic"
 
+	"github.com/go-logr/logr"
 	"github.com/gorilla/mux"
-	"go.uber.org/zap"
 )
 
 //
@@ -30,13 +31,13 @@ import (
 //
 
 type mutableRouter struct {
-	logger *zap.Logger
+	logger logr.Logger
 	router atomic.Value // mux.Router
 }
 
-func newMutableRouter(logger *zap.Logger, handler *mux.Router) *mutableRouter {
+func newMutableRouter(logger logr.Logger, handler *mux.Router) *mutableRouter {
 	mr := mutableRouter{
-		logger: logger.Named("mutable_router"),
+		logger: logger.WithName("mutable_router"),
 	}
 	mr.router.Store(handler)
 	return &mr
@@ -47,7 +48,8 @@ func (mr *mutableRouter) ServeHTTP(responseWriter http.ResponseWriter, request *
 	routerValue := mr.router.Load()
 	router, ok := routerValue.(*mux.Router)
 	if !ok {
-		mr.logger.Panic("invalid router type")
+		mr.logger.Error(nil, "invalid router type")
+		os.Exit(1)
 	}
 	router.ServeHTTP(responseWriter, request)
 }

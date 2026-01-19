@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-logr/logr"
+
 	"github.com/fission/fission/cmd/fetcher/app"
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fetcher"
@@ -21,7 +23,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.uber.org/zap"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -50,7 +51,7 @@ module.exports = async function (context) {
 type FetcherTestSuite struct {
 	suite.Suite
 	mgr           manager.Interface
-	logger        *zap.Logger
+	logger        logr.Logger
 	cancel        context.CancelFunc
 	framework     *framework.Framework
 	ctx           context.Context
@@ -147,7 +148,10 @@ func (f *FetcherTestSuite) SetupSuite() {
 
 	profile.ProfileIfEnabled(ctx, f.logger, f.mgr)
 	f.mgr.Add(ctx, func(c context.Context) {
-		app.Run(ctx, f.framework.ClientGen(), f.logger, f.mgr, fetcherPort, f.podInfoDir)
+		err := app.Run(ctx, f.framework.ClientGen(), f.logger, f.mgr, fetcherPort, f.podInfoDir)
+		if err != nil {
+			f.logger.Error(err, "fetcher failed")
+		}
 	})
 
 	f.fetcherClient = client.MakeClient(f.logger, fetcherUrl)
@@ -499,8 +503,6 @@ func (f *FetcherTestSuite) TearDownSuite() {
 	require.NoError(f.T(), err)
 
 	f.cancel()
-	// https://github.com/uber-go/zap/issues/328
-	_ = f.logger.Sync()
 
 	f.mgr.Wait()
 	err = f.framework.Stop()

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-logr/logr"
 	"go.opentelemetry.io/contrib/propagators/autoprop"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
@@ -14,7 +15,6 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
-	"go.uber.org/zap"
 	"google.golang.org/grpc/credentials"
 	apiv1 "k8s.io/api/core/v1"
 )
@@ -43,12 +43,10 @@ func parseOtelConfig() OtelConfig {
 	return config
 }
 
-func getTraceExporter(ctx context.Context, logger *zap.Logger) (*otlptrace.Exporter, error) {
+func getTraceExporter(ctx context.Context, logger logr.Logger) (*otlptrace.Exporter, error) {
 	otelConfig := parseOtelConfig()
 	if otelConfig.endpoint == "" {
-		if logger != nil {
-			logger.Info("OTEL_EXPORTER_OTLP_ENDPOINT not set, skipping Opentelemtry tracing")
-		}
+		logger.Info("OTEL_EXPORTER_OTLP_ENDPOINT not set, skipping Opentelemtry tracing")
 		return nil, nil
 	}
 
@@ -69,7 +67,7 @@ func getTraceExporter(ctx context.Context, logger *zap.Logger) (*otlptrace.Expor
 }
 
 // Initializes an OTLP exporter, and configures the corresponding trace and metric providers.
-func InitProvider(ctx context.Context, logger *zap.Logger, serviceName string) (func(context.Context), error) {
+func InitProvider(ctx context.Context, logger logr.Logger, serviceName string) (func(context.Context), error) {
 	res, err := resource.New(ctx,
 		resource.WithAttributes(
 			semconv.ServiceNameKey.String(serviceName),
@@ -102,12 +100,12 @@ func InitProvider(ctx context.Context, logger *zap.Logger, serviceName string) (
 			ctx = ctxwithTimeout
 		}
 		err := tracerProvider.Shutdown(ctx)
-		if err != nil && logger != nil {
-			logger.Error("error shutting down trace provider", zap.Error(err))
+		if err != nil {
+			logger.Error(err, "error shutting down trace provider")
 		}
 		if traceExporter != nil {
-			if err = traceExporter.Shutdown(ctx); err != nil && logger != nil {
-				logger.Error("error shutting down trace exporter", zap.Error(err))
+			if err = traceExporter.Shutdown(ctx); err != nil {
+				logger.Error(err, "error shutting down trace exporter")
 			}
 		}
 	}, nil

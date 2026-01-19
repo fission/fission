@@ -1,32 +1,21 @@
 package fscache
 
 import (
-	"log"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
+	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
 
-func panicIf(err error) {
-	if err != nil {
-		log.Panicf("Error: %v", err)
-	}
-}
-
 func TestFunctionServiceCache(t *testing.T) {
-	config := zap.NewDevelopmentConfig()
-	config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
-	logger, err := config.Build()
-	panicIf(err)
+	logger := loggerfactory.GetLogger()
 
 	fsc := MakeFunctionServiceCache(logger)
 	require.NotNil(t, fsc)
@@ -72,7 +61,7 @@ func TestFunctionServiceCache(t *testing.T) {
 		Ctime:             now,
 		Atime:             now,
 	}
-	_, err = fsc.Add(*fsvc)
+	_, err := fsc.Add(*fsvc)
 	require.NoError(t, err)
 
 	_, err = fsc.GetByFunction(fsvc.Function)
@@ -101,8 +90,7 @@ func TestFunctionServiceCache(t *testing.T) {
 }
 
 func TestFunctionServiceNewCache(t *testing.T) {
-	logger, err := zap.NewDevelopment()
-	panicIf(err)
+	logger := loggerfactory.GetLogger()
 
 	fsc := MakeFunctionServiceCache(logger)
 	require.NotNil(t, fsc)
@@ -160,7 +148,7 @@ func TestFunctionServiceNewCache(t *testing.T) {
 
 	fsc.AddFunc(ctx, *fsvc, 10, fn.GetRetainPods())
 	concurrency := 10
-	_, err = fsc.GetFuncSvc(ctx, fsvc.Function, 5, concurrency)
+	_, err := fsc.GetFuncSvc(ctx, fsvc.Function, 5, concurrency)
 	require.NoError(t, err)
 
 	key := crd.CacheKeyURGFromMeta(&fn.ObjectMeta)

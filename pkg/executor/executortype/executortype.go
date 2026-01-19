@@ -19,9 +19,9 @@ package executortype
 import (
 	"context"
 
-	"go.uber.org/zap"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/go-logr/logr"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/executor/fscache"
@@ -62,7 +62,7 @@ type ExecutorType interface {
 	IsValid(context.Context, *fscache.FuncSvc) bool
 
 	// RefreshFuncPods refreshes function pods if the secrets/configmaps pods reference to get updated.
-	RefreshFuncPods(context.Context, *zap.Logger, fv1.Function) error
+	RefreshFuncPods(context.Context, logr.Logger, fv1.Function) error
 
 	// AdoptOrphanResources adopts existing resources created by the deleted executor.
 	AdoptExistingResources(context.Context)

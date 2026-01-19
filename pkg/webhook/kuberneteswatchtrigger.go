@@ -29,7 +29,7 @@ type KubernetesWatchTrigger struct {
 }
 
 // log is for logging in this package.
-var kuberneteswatchtriggerlog = loggerfactory.GetLogger().Named("kuberneteswatchtrigger-resource")
+var kuberneteswatchtriggerlog = loggerfactory.GetLogger().WithName("kuberneteswatchtrigger-resource")
 
 func (r *KubernetesWatchTrigger) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	r.Logger = kuberneteswatchtriggerlog

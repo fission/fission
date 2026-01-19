@@ -29,7 +29,7 @@ type Environment struct {
 }
 
 // log is for logging in this package.
-var environmentlog = loggerfactory.GetLogger().Named("environment-resource")
+var environmentlog = loggerfactory.GetLogger().WithName("environment-resource")
 
 func (r *Environment) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	r.Logger = environmentlog

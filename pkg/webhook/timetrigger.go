@@ -29,7 +29,7 @@ type TimeTrigger struct {
 }
 
 // log is for logging in this package.
-var timetriggerlog = loggerfactory.GetLogger().Named("timetrigger-resource")
+var timetriggerlog = loggerfactory.GetLogger().WithName("timetrigger-resource")
 
 func (r *TimeTrigger) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	r.Logger = timetriggerlog

@@ -20,7 +20,7 @@ import (
 	"context"
 	"fmt"
 
-	"go.uber.org/zap"
+	"github.com/go-logr/logr"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 
@@ -32,18 +32,18 @@ import (
 type (
 	// ConfigSecretController represents a controller for configmaps and secrets
 	ConfigSecretController struct {
-		logger *zap.Logger
+		logger logr.Logger
 
 		fissionClient versioned.Interface
 	}
 )
 
 // MakeConfigSecretController makes a controller for configmaps and secrets which changes related functions
-func MakeConfigSecretController(ctx context.Context, logger *zap.Logger, fissionClient versioned.Interface,
+func MakeConfigSecretController(ctx context.Context, logger logr.Logger, fissionClient versioned.Interface,
 	kubernetesClient kubernetes.Interface, types map[fv1.ExecutorType]executortype.ExecutorType,
 	configmapInformer,
 	secretInformer map[string]cache.SharedIndexInformer) (*ConfigSecretController, error) {
-	logger.Debug("Creating ConfigMap & Secret Controller")
+	logger.V(1).Info("Creating ConfigMap & Secret Controller")
 	cmsController := &ConfigSecretController{
 		logger:        logger,
 		fissionClient: fissionClient,
@@ -64,7 +64,7 @@ func MakeConfigSecretController(ctx context.Context, logger *zap.Logger, fission
 	return cmsController, nil
 }
 
-func refreshPods(ctx context.Context, logger *zap.Logger, funcs []fv1.Function, types map[fv1.ExecutorType]executortype.ExecutorType) {
+func refreshPods(ctx context.Context, logger logr.Logger, funcs []fv1.Function, types map[fv1.ExecutorType]executortype.ExecutorType) {
 	for _, f := range funcs {
 		var err error
 
@@ -76,9 +76,7 @@ func refreshPods(ctx context.Context, logger *zap.Logger, funcs []fv1.Function, 
 		}
 
 		if err != nil {
-			logger.Error("Failed to recycle pods for function after configmap/secret changed",
-				zap.Error(err),
-				zap.Any("function", f))
+			logger.Error(err, "Failed to recycle pods for function after configmap/secret changed", "function", f)
 		}
 	}
 }

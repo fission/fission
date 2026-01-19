@@ -23,7 +23,7 @@ import (
 	"strconv"
 	"time"
 
-	"go.uber.org/zap"
+	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -64,7 +64,7 @@ type (
 	}
 
 	environmentWatcher struct {
-		logger                 *zap.Logger
+		logger                 logr.Logger
 		cache                  map[types.UID]*builderInfo
 		fissionClient          versioned.Interface
 		kubernetesClient       kubernetes.Interface
@@ -80,7 +80,7 @@ type (
 
 func makeEnvironmentWatcher(
 	ctx context.Context,
-	logger *zap.Logger,
+	logger logr.Logger,
 	fissionClient versioned.Interface,
 	kubernetesClient kubernetes.Interface,
 	fetcherConfig *fetcherConfig.Config,
@@ -91,7 +91,7 @@ func makeEnvironmentWatcher(
 	if len(enableIstio) > 0 {
 		istio, err := strconv.ParseBool(enableIstio)
 		if err != nil {
-			logger.Error("Failed to parse ENABLE_ISTIO, defaults to false")
+			logger.Error(err, "Failed to parse ENABLE_ISTIO, defaults to false")
 		}
 		useIstio = istio
 	}
@@ -99,7 +99,7 @@ func makeEnvironmentWatcher(
 	builderImagePullPolicy := utils.GetImagePullPolicy(os.Getenv("BUILDER_IMAGE_PULL_POLICY"))
 
 	envWatcher := &environmentWatcher{
-		logger:                 logger.Named("environment_watcher"),
+		logger:                 logger.WithName("environment_watcher"),
 		cache:                  make(map[types.UID]*builderInfo),
 		fissionClient:          fissionClient,
 		kubernetesClient:       kubernetesClient,
@@ -171,7 +171,7 @@ func (envw *environmentWatcher) AddUpdateBuilder(ctx context.Context, env *fv1.E
 		if _, ok := envw.cache[crd.CacheKeyUIDFromMeta(&env.ObjectMeta)]; !ok {
 			builderInfo, err := envw.createBuilder(ctx, env, envw.nsResolver.GetBuilderNS(env.Namespace))
 			if err != nil {
-				envw.logger.Error("error creating builder service", zap.Error(err))
+				envw.logger.Error(err, "error creating builder service")
 				return
 			}
 			envw.cache[crd.CacheKeyUIDFromMeta(&env.ObjectMeta)] = builderInfo
@@ -180,7 +180,7 @@ func (envw *environmentWatcher) AddUpdateBuilder(ctx context.Context, env *fv1.E
 			// once older builder deleted then add new builder service
 			builderInfo, err := envw.createBuilder(ctx, env, envw.nsResolver.GetBuilderNS(env.Namespace))
 			if err != nil {
-				envw.logger.Error("error updating builder service", zap.Error(err))
+				envw.logger.Error(err, "error updating builder service")
 				return
 			}
 			envw.cache[crd.CacheKeyUIDFromMeta(&env.ObjectMeta)] = builderInfo
@@ -193,9 +193,9 @@ func (envw *environmentWatcher) DeleteBuilder(ctx context.Context, env *fv1.Envi
 		envw.DeleteBuilderService(ctx, env)
 		envw.DeleteBuilderDeployment(ctx, env)
 		delete(envw.cache, crd.CacheKeyUIDFromMeta(&env.ObjectMeta))
-		envw.logger.Info("builder service deleted", zap.String("env_name", env.Name), zap.String("namespace", envw.nsResolver.GetBuilderNS(env.Namespace)))
+		envw.logger.Info("builder service deleted", "env_name", env.Name, "namespace", envw.nsResolver.GetBuilderNS(env.Namespace))
 	} else {
-		envw.logger.Debug("builder service not found", zap.String("env_name", env.Name), zap.String("namespace", envw.nsResolver.GetBuilderNS(env.Namespace)))
+		envw.logger.V(1).Info("builder service not found", "env_name", env.Name, "namespace", envw.nsResolver.GetBuilderNS(env.Namespace))
 	}
 }
 
@@ -203,23 +203,22 @@ func (envw *environmentWatcher) DeleteBuilderService(ctx context.Context, env *f
 	ns := envw.nsResolver.GetBuilderNS(env.Namespace)
 	svcList, err := envw.getBuilderServiceList(ctx, envw.getDeploymentLabels(env.Name), ns)
 	if err != nil {
-		envw.logger.Error("error getting the builder service list", zap.Error(err))
+		envw.logger.Error(err, "error getting the builder service list")
 	}
 	for _, svc := range svcList {
 		envName := svc.Labels[LABEL_ENV_NAME]
 		if _, ok := envw.cache[crd.CacheKeyUIDFromMeta(&env.ObjectMeta)]; ok {
 			err := envw.deleteBuilderServiceByName(ctx, svc.Name, svc.Namespace)
 			if err != nil {
-				envw.logger.Error("error removing builder service", zap.Error(err),
-					zap.String("service_name", svc.Name),
-					zap.String("service_namespace", svc.Namespace),
-					zap.String("env_name", envName))
+				envw.logger.Error(err, "error removing builder service", "service_name", svc.Name,
+					"service_namespace", svc.Namespace,
+					"env_name", envName)
 			}
 			break
 		} else {
-			envw.logger.Error("builder service not found",
-				zap.String("service_name", svc.Name),
-				zap.String("service_namespace", svc.Namespace))
+			envw.logger.Info("builder service not found",
+				"service_name", svc.Name,
+				"service_namespace", svc.Namespace)
 		}
 	}
 }
@@ -228,21 +227,19 @@ func (envw *environmentWatcher) DeleteBuilderDeployment(ctx context.Context, env
 	ns := envw.nsResolver.GetBuilderNS(env.Namespace)
 	deployList, err := envw.getBuilderDeploymentList(ctx, envw.getDeploymentLabels(env.Name), ns)
 	if err != nil {
-		envw.logger.Error("error getting the builder deployment list", zap.Error(err))
+		envw.logger.Error(err, "error getting the builder deployment list")
 	}
 	for _, deploy := range deployList {
 		if _, ok := envw.cache[crd.CacheKeyUIDFromMeta(&env.ObjectMeta)]; ok {
 			err := envw.deleteBuilderDeploymentByName(ctx, deploy.Name, deploy.Namespace)
 			if err != nil {
-				envw.logger.Error("error removing builder deployment", zap.Error(err),
-					zap.String("deployment_name", deploy.Name),
-					zap.String("deployment_namespace", deploy.Namespace))
+				envw.logger.Error(err, "error removing builder deployment", "deployment_name", deploy.Name,
+					"deployment_namespace", deploy.Namespace)
 			}
 			break
 		} else {
-			envw.logger.Error("builder deployment not found", zap.Error(err),
-				zap.String("deployment_name", deploy.Name),
-				zap.String("deployment_namespace", deploy.Namespace))
+			envw.logger.Error(err, "builder deployment not found", "deployment_name", deploy.Name,
+				"deployment_namespace", deploy.Namespace)
 		}
 	}
 }
@@ -369,7 +366,7 @@ func (envw *environmentWatcher) createBuilderService(ctx context.Context, env *f
 			},
 		},
 	}
-	envw.logger.Info("creating builder service", zap.String("service_name", name))
+	envw.logger.Info("creating builder service", "service_name", name)
 	_, err := envw.kubernetesClient.CoreV1().Services(ns).Create(ctx, &service, metav1.CreateOptions{})
 	if err != nil {
 		return nil, err
@@ -443,7 +440,7 @@ func (envw *environmentWatcher) createBuilderDeployment(ctx context.Context, env
 		if err == nil {
 			pod.Spec = *updatedPodSpec
 		} else {
-			envw.logger.Warn("Failed to merge the specs: %v", zap.Error(err))
+			envw.logger.Error(err, "Failed to merge the specs")
 		}
 	}
 
@@ -494,7 +491,7 @@ func (envw *environmentWatcher) createBuilderDeployment(ctx context.Context, env
 		return nil, err
 	}
 
-	envw.logger.Info("creating builder deployment", zap.String("deployment", name))
+	envw.logger.Info("creating builder deployment", "deployment", name)
 
 	return deployment, nil
 }

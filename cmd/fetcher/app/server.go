@@ -19,6 +19,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"net/http"
@@ -26,7 +27,8 @@ import (
 	"sync/atomic"
 
 	"go.opentelemetry.io/otel"
-	"go.uber.org/zap"
+
+	"github.com/go-logr/logr"
 
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/fetcher"
@@ -39,7 +41,7 @@ var (
 	readyToServe uint32
 )
 
-func Run(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Interface, port string, podInfoMountDir string) {
+func Run(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger, mgr manager.Interface, port string, podInfoMountDir string) error {
 	flag.Usage = fetcherUsage
 	specializeOnStart := flag.Bool("specialize-on-startup", false, "Flag to activate specialize process at pod startup")
 	specializePayload := flag.String("specialize-request", "", "JSON payload for specialize request")
@@ -49,7 +51,7 @@ func Run(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *za
 	flag.Parse()
 	if flag.NArg() == 0 {
 		flag.Usage()
-		os.Exit(1)
+		return errors.New("missing arguments")
 	}
 
 	dir := flag.Arg(0)
@@ -57,14 +59,14 @@ func Run(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *za
 		if os.IsNotExist(err) {
 			err = os.MkdirAll(dir, os.ModeDir|0700)
 			if err != nil {
-				logger.Fatal("error creating directory", zap.Error(err), zap.String("directory", dir))
+				return fmt.Errorf("error creating directory %s: %w", dir, err)
 			}
 		}
 	}
 
 	shutdown, err := otelUtils.InitProvider(ctx, logger, "Fission-Fetcher")
 	if err != nil {
-		logger.Fatal("error initializing provider for OTLP", zap.Error(err))
+		return fmt.Errorf("error initializing OTLP provider: %w", err)
 	}
 	if shutdown != nil {
 		defer shutdown(ctx)
@@ -76,7 +78,7 @@ func Run(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *za
 
 	f, err := fetcher.MakeFetcher(logger, clientGen, dir, *secretDir, *configDir, podInfoMountDir)
 	if err != nil {
-		logger.Fatal("error making fetcher", zap.Error(err))
+		return fmt.Errorf("error making fetcher: %w", err)
 	}
 
 	// do specialization in other goroutine to prevent blocking in newdeploy
@@ -86,12 +88,14 @@ func Run(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *za
 
 			err := json.Unmarshal([]byte(*specializePayload), &specializeReq)
 			if err != nil {
-				logger.Fatal("error decoding specialize request", zap.Error(err))
+				logger.Error(err, "error decoding specialize request")
+				return
 			}
 
 			err = f.SpecializePod(ctx, specializeReq.FetchReq, specializeReq.LoadReq)
 			if err != nil {
-				logger.Fatal("error specializing function pod", zap.Error(err))
+				logger.Error(err, "error specializing function pod")
+				return
 			}
 		}
 		atomic.StoreUint32(&readyToServe, 1)
@@ -122,6 +126,7 @@ func Run(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *za
 
 	handler := otelUtils.GetHandlerWithOTEL(mux, "fission-fetcher", otelUtils.UrlsToIgnore("/healthz", "/readiness-healthz"))
 	httpserver.StartServer(ctx, logger, mgr, "fetcher", port, handler)
+	return nil
 }
 
 func fetcherUsage() {

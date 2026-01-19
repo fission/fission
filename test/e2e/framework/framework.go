@@ -11,9 +11,10 @@ import (
 	"strconv"
 	"time"
 
-	"go.uber.org/zap"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
+
+	"github.com/go-logr/logr"
 
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/utils"
@@ -27,7 +28,7 @@ type ServiceInfo struct {
 type Framework struct {
 	env         *envtest.Environment
 	config      *rest.Config
-	logger      *zap.Logger
+	logger      logr.Logger
 	serviceInfo map[string]ServiceInfo
 }
 
@@ -101,7 +102,7 @@ func (f *Framework) RestConfig() *rest.Config {
 	return f.config
 }
 
-func (f *Framework) Logger() *zap.Logger {
+func (f *Framework) Logger() logr.Logger {
 	return f.logger
 }
 
@@ -111,8 +112,6 @@ func (f *Framework) ClientGen() *crd.ClientGenerator {
 
 func (f *Framework) Stop() error {
 	f.logger.Info("Stopping test env")
-	// https://github.com/uber-go/zap/issues/328
-	_ = f.logger.Sync()
 	err := f.env.Stop()
 	if err != nil {
 		return fmt.Errorf("error stopping test env: %w", err)
@@ -122,7 +121,7 @@ func (f *Framework) Stop() error {
 
 func (f *Framework) AddServiceInfo(name string, info ServiceInfo) {
 	f.serviceInfo[name] = info
-	f.logger.Info("Added service", zap.String("name", name), zap.Any("info", info))
+	f.logger.Info("Added service", "name", name, "info", info)
 }
 
 func (f *Framework) GetServiceURL(name string) (string, error) {

@@ -20,8 +20,9 @@ import (
 	"context"
 	"fmt"
 
-	"go.uber.org/zap"
 	"k8s.io/client-go/kubernetes"
+
+	"github.com/go-logr/logr"
 
 	config "github.com/fission/fission/pkg/featureconfig"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
@@ -29,7 +30,7 @@ import (
 )
 
 // ConfigureFeatures gets the feature config and configures the features that are enabled
-func ConfigureFeatures(ctx context.Context, logger *zap.Logger, unitTestMode bool, fissionClient versioned.Interface,
+func ConfigureFeatures(ctx context.Context, logger logr.Logger, unitTestMode bool, fissionClient versioned.Interface,
 	kubeClient kubernetes.Interface, mgr manager.Interface) error {
 	// set feature enabled to false if unitTestMode
 	if unitTestMode {
@@ -39,7 +40,7 @@ func ConfigureFeatures(ctx context.Context, logger *zap.Logger, unitTestMode boo
 	// get the featureConfig from config map mounted onto the file system
 	featureConfig, err := config.GetFeatureConfig(logger)
 	if err != nil {
-		logger.Error("error getting feature config", zap.Error(err))
+		logger.Error(err, "error getting feature config")
 		return err
 	}
 

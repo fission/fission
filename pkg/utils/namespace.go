@@ -5,8 +5,9 @@ import (
 	"os"
 	"strings"
 
-	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/go-logr/logr"
 
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
@@ -24,7 +25,7 @@ type (
 		BuilderNamespace  string
 		DefaultNamespace  string
 		FissionResourceNS map[string]string
-		Logger            *zap.Logger
+		Logger            logr.Logger
 	}
 
 	options struct {
@@ -47,10 +48,10 @@ func init() {
 		Logger:            loggerfactory.GetLogger(),
 	}
 
-	nsResolver.Logger.Debug("namespaces", zap.String("function_namespace", nsResolver.FunctionNamespace),
-		zap.String("builder_namespace", nsResolver.BuilderNamespace),
-		zap.String("default_namespace", nsResolver.DefaultNamespace),
-		zap.Any("fission_resource_namespace", listNamespaces(nsResolver.FissionResourceNS)))
+	nsResolver.Logger.V(1).Info("namespaces", "function_namespace", nsResolver.FunctionNamespace,
+		"builder_namespace", nsResolver.BuilderNamespace,
+		"default_namespace", nsResolver.DefaultNamespace,
+		"fission_resource_namespace", listNamespaces(nsResolver.FissionResourceNS))
 }
 
 // listNamespaces => convert namespaces from map to slice
@@ -101,7 +102,7 @@ func (nsr *NamespaceResolver) FissionNSWithOptions(option ...option) map[string]
 	if options.defaultNs && nsr.DefaultNamespace != "" {
 		fissionResourceNS[nsr.DefaultNamespace] = nsr.DefaultNamespace
 	}
-	nsr.Logger.Debug("fission resource namespaces", zap.Any("namespaces", listNamespaces(fissionResourceNS)))
+	nsr.Logger.V(1).Info("fission resource namespaces", "namespaces", listNamespaces(fissionResourceNS))
 	return fissionResourceNS
 }
 

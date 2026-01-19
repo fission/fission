@@ -28,7 +28,7 @@ import (
 	"errors"
 
 	"github.com/IBM/sarama"
-	"go.uber.org/zap"
+	"github.com/go-logr/logr"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/mqtrigger/factory"
@@ -51,7 +51,7 @@ var (
 
 type (
 	Kafka struct {
-		logger    *zap.Logger
+		logger    logr.Logger
 		routerUrl string
 		brokers   []string
 		version   sarama.KafkaVersion
@@ -68,11 +68,11 @@ type MqtConsumer struct {
 	consumer sarama.ConsumerGroup
 }
 
-func (factory *Factory) Create(logger *zap.Logger, mqCfg messageQueue.Config, routerUrl string) (messageQueue.MessageQueue, error) {
+func (factory *Factory) Create(logger logr.Logger, mqCfg messageQueue.Config, routerUrl string) (messageQueue.MessageQueue, error) {
 	return New(logger, mqCfg, routerUrl)
 }
 
-func New(logger *zap.Logger, mqCfg messageQueue.Config, routerUrl string) (messageQueue.MessageQueue, error) {
+func New(logger logr.Logger, mqCfg messageQueue.Config, routerUrl string) (messageQueue.MessageQueue, error) {
 	if len(routerUrl) == 0 || len(mqCfg.Url) == 0 {
 		return nil, errors.New("the router URL or MQ URL is empty")
 	}
@@ -81,14 +81,12 @@ func New(logger *zap.Logger, mqCfg messageQueue.Config, routerUrl string) (messa
 	// Parse version string
 	kafkaVersion, err := sarama.ParseKafkaVersion(mqKafkaVersion)
 	if err != nil {
-		logger.Warn("error parsing kafka version string - falling back to default",
-			zap.Error(err),
-			zap.String("failed_version", mqKafkaVersion),
-			zap.Any("default_version", kafkaVersion))
+		logger.Error(err, "error parsing kafka version string - falling back to default", "failed_version", mqKafkaVersion,
+			"default_version", kafkaVersion)
 	}
 
 	kafka := Kafka{
-		logger:    logger.Named("kafka"),
+		logger:    logger.WithName("kafka"),
 		routerUrl: routerUrl,
 		brokers:   strings.Split(mqCfg.Url, ","),
 		version:   kafkaVersion,
@@ -109,14 +107,14 @@ func New(logger *zap.Logger, mqCfg messageQueue.Config, routerUrl string) (messa
 		kafka.authKeys = authKeys
 	}
 
-	logger.Info("created kafka queue", zap.Any("kafka brokers", kafka.brokers),
-		zap.Any("kafka version", kafka.version))
+	logger.Info("created kafka queue", "kafka brokers", kafka.brokers,
+		"kafka version", kafka.version)
 	return kafka, nil
 }
 
 func (kafka Kafka) Subscribe(trigger *fv1.MessageQueueTrigger) (messageQueue.Subscription, error) {
-	kafka.logger.Debug("inside kakfa subscribe", zap.Any("trigger", trigger))
-	kafka.logger.Debug("brokers set", zap.Strings("brokers", kafka.brokers))
+	kafka.logger.V(1).Info("inside kakfa subscribe", "trigger", trigger)
+	kafka.logger.V(1).Info("brokers set", "brokers", kafka.brokers)
 
 	// Create new consumer
 	consumerConfig := sarama.NewConfig()
@@ -154,18 +152,18 @@ func (kafka Kafka) Subscribe(trigger *fv1.MessageQueueTrigger) (messageQueue.Sub
 		return nil, err
 	}
 
-	kafka.logger.Info("created a new producer and a new consumer", zap.Strings("brokers", kafka.brokers),
-		zap.String("topic", trigger.Spec.Topic),
-		zap.String("response topic", trigger.Spec.ResponseTopic),
-		zap.String("error topic", trigger.Spec.ErrorTopic),
-		zap.String("trigger", trigger.Name),
-		zap.String("function namespace", trigger.Namespace),
-		zap.String("function name", trigger.Spec.FunctionReference.Name))
+	kafka.logger.Info("created a new producer and a new consumer", "brokers", kafka.brokers,
+		"topic", trigger.Spec.Topic,
+		"response topic", trigger.Spec.ResponseTopic,
+		"error topic", trigger.Spec.ErrorTopic,
+		"trigger", trigger.Name,
+		"function namespace", trigger.Namespace,
+		"function name", trigger.Spec.FunctionReference.Name)
 
 	// consume errors
 	go func() {
 		for err := range consumer.Errors() {
-			kafka.logger.With(zap.String("trigger", trigger.ObjectMeta.Name), zap.String("topic", trigger.Spec.Topic)).Error("consumer error received", zap.Error(err))
+			kafka.logger.WithValues("trigger", trigger.ObjectMeta.Name, "topic", trigger.Spec.Topic).Error(err, "consumer error received")
 		}
 	}()
 
@@ -180,11 +178,11 @@ func (kafka Kafka) Subscribe(trigger *fv1.MessageQueueTrigger) (messageQueue.Sub
 			// Consume messages
 			err := consumer.Consume(ctx, topic, ch)
 			if err != nil {
-				kafka.logger.Error("consumer error", zap.Error(err), zap.String("trigger", trigger.Name))
+				kafka.logger.Error(err, "consumer error", "trigger", trigger.Name)
 			}
 
 			if ctx.Err() != nil {
-				kafka.logger.Info("consumer context cancelled", zap.String("trigger", trigger.Name))
+				kafka.logger.Info("consumer context cancelled", "trigger", trigger.Name)
 				return
 			}
 			ch.ready = make(chan bool)
@@ -212,8 +210,7 @@ func (kafka Kafka) getTLSConfig() (*tls.Config, error) {
 
 	skipVerify, err := strconv.ParseBool(os.Getenv("INSECURE_SKIP_VERIFY"))
 	if err != nil {
-		kafka.logger.Error("failed to parse value of env variable INSECURE_SKIP_VERIFY taking default value false, expected boolean value: true/false",
-			zap.String("received", os.Getenv("INSECURE_SKIP_VERIFY")))
+		kafka.logger.Error(nil, "failed to parse value of env variable INSECURE_SKIP_VERIFY taking default value false, expected boolean value: true/false", "received", os.Getenv("INSECURE_SKIP_VERIFY"))
 	} else {
 		tlsConfig.InsecureSkipVerify = skipVerify
 	}

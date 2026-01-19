@@ -26,7 +26,7 @@ import (
 	"strings"
 	"time"
 
-	"go.uber.org/zap"
+	"github.com/go-logr/logr"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -44,7 +44,7 @@ const (
 )
 
 type canaryConfigMgr struct {
-	logger                 *zap.Logger
+	logger                 logr.Logger
 	fissionClient          versioned.Interface
 	kubeClient             kubernetes.Interface
 	canaryConfigInformer   map[string]k8sCache.SharedIndexInformer
@@ -52,7 +52,7 @@ type canaryConfigMgr struct {
 	canaryCfgCancelFuncMap *canaryConfigCancelFuncMap
 }
 
-func MakeCanaryConfigMgr(ctx context.Context, logger *zap.Logger, fissionClient versioned.Interface, kubeClient kubernetes.Interface, prometheusSvc string) (*canaryConfigMgr, error) {
+func MakeCanaryConfigMgr(ctx context.Context, logger logr.Logger, fissionClient versioned.Interface, kubeClient kubernetes.Interface, prometheusSvc string) (*canaryConfigMgr, error) {
 	if prometheusSvc == "" {
 		logger.Info("try to retrieve prometheus server information from environment variables")
 
@@ -76,7 +76,7 @@ func MakeCanaryConfigMgr(ctx context.Context, logger *zap.Logger, fissionClient 
 		prometheusSvc = fmt.Sprintf("http://%v:%v", prometheusSvcHost, prometheusSvcPort)
 	}
 
-	logger.Info("try to start canary config manager with prometheus service url", zap.String("prometheus", prometheusSvc))
+	logger.Info("try to start canary config manager with prometheus service url", "prometheus", prometheusSvc)
 
 	_, err := url.Parse(prometheusSvc)
 	if err != nil {
@@ -89,7 +89,7 @@ func MakeCanaryConfigMgr(ctx context.Context, logger *zap.Logger, fissionClient 
 	}
 
 	configMgr := &canaryConfigMgr{
-		logger:                 logger.Named("canary_config_manager"),
+		logger:                 logger.WithName("canary_config_manager"),
 		fissionClient:          fissionClient,
 		kubeClient:             kubeClient,
 		promClient:             promClient,
@@ -122,9 +122,9 @@ func (canaryCfgMgr *canaryConfigMgr) CanaryConfigEventHandlers(ctx context.Conte
 				if oldConfig.ResourceVersion != newConfig.ResourceVersion &&
 					newConfig.Status.Status == fv1.CanaryConfigStatusPending {
 					canaryCfgMgr.logger.Info("update canary config invoked",
-						zap.String("name", newConfig.Name),
-						zap.String("namespace", newConfig.Namespace),
-						zap.String("version", newConfig.ResourceVersion))
+						"name", newConfig.Name,
+						"namespace", newConfig.Namespace,
+						"version", newConfig.ResourceVersion)
 					go canaryCfgMgr.updateCanaryConfig(ctx, oldConfig, newConfig)
 				}
 				go canaryCfgMgr.reSyncCanaryConfigs(ctx)
@@ -144,17 +144,15 @@ func (canaryCfgMgr *canaryConfigMgr) Run(ctx context.Context, mgr manager.Interf
 }
 
 func (canaryCfgMgr *canaryConfigMgr) addCanaryConfig(ctx context.Context, canaryConfig *fv1.CanaryConfig) {
-	canaryCfgMgr.logger.Debug("addCanaryConfig called", zap.String("canary_config", canaryConfig.Name))
+	canaryCfgMgr.logger.V(1).Info("addCanaryConfig called", "canary_config", canaryConfig.Name)
 
 	// for each canary config, create a ticker with increment interval
 	interval, err := time.ParseDuration(canaryConfig.Spec.WeightIncrementDuration)
 	if err != nil {
-		canaryCfgMgr.logger.Error("error parsing duration - can't proceed with this canaryConfig",
-			zap.Error(err),
-			zap.String("duration", canaryConfig.Spec.WeightIncrementDuration),
-			zap.String("name", canaryConfig.Name),
-			zap.String("namespace", canaryConfig.Namespace),
-			zap.String("version", canaryConfig.ResourceVersion))
+		canaryCfgMgr.logger.Error(err, "error parsing duration - can't proceed with this canaryConfig", "duration", canaryConfig.Spec.WeightIncrementDuration,
+			"name", canaryConfig.Name,
+			"namespace", canaryConfig.Namespace,
+			"version", canaryConfig.ResourceVersion)
 		return
 	}
 	ticker := time.NewTicker(interval)
@@ -169,11 +167,9 @@ func (canaryCfgMgr *canaryConfigMgr) addCanaryConfig(ctx context.Context, canary
 	}
 	err = canaryCfgMgr.canaryCfgCancelFuncMap.assign(&canaryConfig.ObjectMeta, cacheValue)
 	if err != nil {
-		canaryCfgMgr.logger.Error("error caching canary config",
-			zap.Error(err),
-			zap.String("name", canaryConfig.Name),
-			zap.String("namespace", canaryConfig.Namespace),
-			zap.String("version", canaryConfig.ResourceVersion))
+		canaryCfgMgr.logger.Error(err, "error caching canary config", "name", canaryConfig.Name,
+			"namespace", canaryConfig.Namespace,
+			"version", canaryConfig.ResourceVersion)
 		return
 	}
 	canaryCfgMgr.processCanaryConfig(&ctx, canaryConfig, ticker)
@@ -187,9 +183,9 @@ func (canaryCfgMgr *canaryConfigMgr) processCanaryConfig(ctx *context.Context, c
 		case <-(*ctx).Done():
 			// this case when someone deleted their canary config in the middle of it being processed
 			canaryCfgMgr.logger.Info("cancel func called for canary config",
-				zap.String("name", canaryConfig.Name),
-				zap.String("namespace", canaryConfig.Namespace),
-				zap.String("version", canaryConfig.ResourceVersion))
+				"name", canaryConfig.Name,
+				"namespace", canaryConfig.Namespace,
+				"version", canaryConfig.ResourceVersion)
 			canaryCfgMgr.canaryCfgCancelFuncMap.remove(&canaryConfig.ObjectMeta)
 			return
 
@@ -198,18 +194,18 @@ func (canaryCfgMgr *canaryConfigMgr) processCanaryConfig(ctx *context.Context, c
 			// if yes, rollback.
 			// else, increment the weight of new function and decrement old function by `weightIncrement`
 			canaryCfgMgr.logger.Info("processing canary config",
-				zap.String("name", canaryConfig.Name),
-				zap.String("namespace", canaryConfig.Namespace),
-				zap.String("version", canaryConfig.ResourceVersion))
+				"name", canaryConfig.Name,
+				"namespace", canaryConfig.Namespace,
+				"version", canaryConfig.ResourceVersion)
 			canaryCfgMgr.RollForwardOrBack(*ctx, canaryConfig, quit, ticker)
 
 		case <-quit:
 			// we're done processing this canary config either because the new function receives 100% of the traffic
 			// or we rolled back to send all 100% traffic to old function
 			canaryCfgMgr.logger.Info("quit processing canaryConfig",
-				zap.String("name", canaryConfig.Name),
-				zap.String("namespace", canaryConfig.Namespace),
-				zap.String("version", canaryConfig.ResourceVersion))
+				"name", canaryConfig.Name,
+				"namespace", canaryConfig.Namespace,
+				"version", canaryConfig.ResourceVersion)
 			canaryCfgMgr.canaryCfgCancelFuncMap.remove(&canaryConfig.ObjectMeta)
 			return
 		}
@@ -221,9 +217,9 @@ func (canaryCfgMgr *canaryConfigMgr) RollForwardOrBack(ctx context.Context, cana
 	_, err := canaryCfgMgr.canaryCfgCancelFuncMap.lookup(&canaryConfig.ObjectMeta)
 	if err != nil {
 		canaryCfgMgr.logger.Info("no need of processing the config, not in cache anymore",
-			zap.String("name", canaryConfig.Name),
-			zap.String("namespace", canaryConfig.Namespace),
-			zap.String("version", canaryConfig.ResourceVersion))
+			"name", canaryConfig.Name,
+			"namespace", canaryConfig.Namespace,
+			"version", canaryConfig.ResourceVersion)
 		return
 	}
 
@@ -232,31 +228,27 @@ func (canaryCfgMgr *canaryConfigMgr) RollForwardOrBack(ctx context.Context, cana
 	if err != nil {
 		// if the http trigger is not found, then give up processing this config.
 		if k8serrors.IsNotFound(err) {
-			canaryCfgMgr.logger.Error("http trigger object for canary config missing",
-				zap.Error(err),
-				zap.String("trigger", canaryConfig.Spec.Trigger),
-				zap.String("name", canaryConfig.Name),
-				zap.String("namespace", canaryConfig.Namespace),
-				zap.String("version", canaryConfig.ResourceVersion))
+			canaryCfgMgr.logger.Error(err, "http trigger object for canary config missing", "trigger", canaryConfig.Spec.Trigger,
+				"name", canaryConfig.Name,
+				"namespace", canaryConfig.Namespace,
+				"version", canaryConfig.ResourceVersion)
 			close(quit)
 			return
 		}
 
 		// just silently ignore. wait for next window to increment weight
-		canaryCfgMgr.logger.Error("error fetching http trigger object for config",
-			zap.Error(err),
-			zap.String("name", canaryConfig.Name),
-			zap.String("namespace", canaryConfig.Namespace),
-			zap.String("version", canaryConfig.ResourceVersion))
+		canaryCfgMgr.logger.Error(err, "error fetching http trigger object for config", "name", canaryConfig.Name,
+			"namespace", canaryConfig.Namespace,
+			"version", canaryConfig.ResourceVersion)
 		return
 	}
 
 	// handle a race between ticker.Stop and receiving a notification on ticker.C
 	if canaryConfig.Status.Status != fv1.CanaryConfigStatusPending {
 		canaryCfgMgr.logger.Info("no need of processing the config, not pending anymore",
-			zap.String("name", canaryConfig.Name),
-			zap.String("namespace", canaryConfig.Namespace),
-			zap.String("version", canaryConfig.ResourceVersion))
+			"name", canaryConfig.Name,
+			"namespace", canaryConfig.Namespace,
+			"version", canaryConfig.ResourceVersion)
 		return
 	}
 
@@ -279,42 +271,38 @@ func (canaryCfgMgr *canaryConfigMgr) RollForwardOrBack(ctx context.Context, cana
 			canaryConfig.Spec.NewFunction, canaryConfig.Namespace, canaryConfig.Spec.WeightIncrementDuration)
 		if err != nil {
 			// silently ignore. wait for next window to increment weight
-			canaryCfgMgr.logger.Error("error calculating failure percentage",
-				zap.Error(err),
-				zap.String("name", canaryConfig.Name),
-				zap.String("namespace", canaryConfig.Namespace),
-				zap.String("version", canaryConfig.ResourceVersion))
+			canaryCfgMgr.logger.Error(err, "error calculating failure percentage", "name", canaryConfig.Name,
+				"namespace", canaryConfig.Namespace,
+				"version", canaryConfig.ResourceVersion)
 			return
 		}
 
 		canaryCfgMgr.logger.Info("failure percentage calculated for canaryConfig",
-			zap.Float64("failure_percent", failurePercent),
-			zap.String("name", canaryConfig.Name),
-			zap.String("namespace", canaryConfig.Namespace),
-			zap.String("version", canaryConfig.ResourceVersion))
+			"failure_percent", failurePercent,
+			"name", canaryConfig.Name,
+			"namespace", canaryConfig.Namespace,
+			"version", canaryConfig.ResourceVersion)
 
 		if failurePercent == -1 {
 			// this means there were no requests triggered to this url during this window. return here and check back
 			// during next iteration
-			canaryCfgMgr.logger.Info("total requests received for url is 0", zap.String("url", urlPath))
+			canaryCfgMgr.logger.Info("total requests received for url is 0", "url", urlPath)
 			return
 		}
 
 		if int(failurePercent) > canaryConfig.Spec.FailureThreshold {
-			canaryCfgMgr.logger.Error("failure percent crossed the threshold, so rolling back",
-				zap.Float64("failure_percent", failurePercent),
-				zap.Int("threshold", canaryConfig.Spec.FailureThreshold),
-				zap.String("name", canaryConfig.Name),
-				zap.String("namespace", canaryConfig.Namespace),
-				zap.String("version", canaryConfig.ResourceVersion))
+			canaryCfgMgr.logger.Info("failure percent crossed the threshold, so rolling back",
+				"failure_percent", failurePercent,
+				"threshold", canaryConfig.Spec.FailureThreshold,
+				"name", canaryConfig.Name,
+				"namespace", canaryConfig.Namespace,
+				"version", canaryConfig.ResourceVersion)
 			ticker.Stop()
 			err := canaryCfgMgr.rollback(ctx, canaryConfig, triggerObj)
 			if err != nil {
-				canaryCfgMgr.logger.Error("error rolling back canary config",
-					zap.Error(err),
-					zap.String("name", canaryConfig.Name),
-					zap.String("namespace", canaryConfig.Namespace),
-					zap.String("version", canaryConfig.ResourceVersion))
+				canaryCfgMgr.logger.Error(err, "error rolling back canary config", "name", canaryConfig.Name,
+					"namespace", canaryConfig.Namespace,
+					"version", canaryConfig.ResourceVersion)
 			}
 			close(quit)
 			return
@@ -324,12 +312,10 @@ func (canaryCfgMgr *canaryConfigMgr) RollForwardOrBack(ctx context.Context, cana
 	doneProcessingCanaryConfig, err := canaryCfgMgr.rollForward(ctx, canaryConfig, triggerObj)
 	if err != nil {
 		// just log the error and hope that next iteration will succeed
-		canaryCfgMgr.logger.Error("error incrementing weights for trigger",
-			zap.Error(err),
-			zap.String("trigger", triggerObj.Name),
-			zap.String("name", canaryConfig.Name),
-			zap.String("namespace", canaryConfig.Namespace),
-			zap.String("version", canaryConfig.ResourceVersion))
+		canaryCfgMgr.logger.Error(err, "error incrementing weights for trigger", "trigger", triggerObj.Name,
+			"name", canaryConfig.Name,
+			"namespace", canaryConfig.Namespace,
+			"version", canaryConfig.ResourceVersion)
 		return
 	}
 
@@ -341,17 +327,15 @@ func (canaryCfgMgr *canaryConfigMgr) RollForwardOrBack(ctx context.Context, cana
 			fv1.CanaryConfigStatusSucceeded)
 		if err != nil {
 			// can't do much after max retries other than logging it.
-			canaryCfgMgr.logger.Error("error updating canary config after max retries",
-				zap.Error(err),
-				zap.String("name", canaryConfig.Name),
-				zap.String("namespace", canaryConfig.Namespace),
-				zap.String("version", canaryConfig.ResourceVersion))
+			canaryCfgMgr.logger.Error(err, "error updating canary config after max retries", "name", canaryConfig.Name,
+				"namespace", canaryConfig.Namespace,
+				"version", canaryConfig.ResourceVersion)
 		}
 
 		canaryCfgMgr.logger.Info("done processing canary config - the new function is receiving all the traffic",
-			zap.String("name", canaryConfig.Name),
-			zap.String("namespace", canaryConfig.Namespace),
-			zap.String("version", canaryConfig.ResourceVersion))
+			"name", canaryConfig.Name,
+			"namespace", canaryConfig.Namespace,
+			"version", canaryConfig.ResourceVersion)
 		close(quit)
 		return
 	}
@@ -361,7 +345,7 @@ func (canaryCfgMgr *canaryConfigMgr) updateHttpTriggerWithRetries(ctx context.Co
 	for range maxRetries {
 		triggerObj, err := canaryCfgMgr.fissionClient.CoreV1().HTTPTriggers(triggerNamespace).Get(ctx, triggerName, metav1.GetOptions{})
 		if err != nil {
-			canaryCfgMgr.logger.Error("error getting http trigger object", zap.Error(err), zap.String("trigger_name", triggerName), zap.String("trigger_namespace", triggerNamespace))
+			canaryCfgMgr.logger.Error(err, "error getting http trigger object", "trigger_name", triggerName, "trigger_namespace", triggerNamespace)
 			return fmt.Errorf("error getting http trigger object: %w", err)
 		}
 
@@ -370,20 +354,16 @@ func (canaryCfgMgr *canaryConfigMgr) updateHttpTriggerWithRetries(ctx context.Co
 		_, err = canaryCfgMgr.fissionClient.CoreV1().HTTPTriggers(triggerNamespace).Update(ctx, triggerObj, metav1.UpdateOptions{})
 		switch {
 		case err == nil:
-			canaryCfgMgr.logger.Debug("updated http trigger", zap.String("trigger_name", triggerName), zap.String("trigger_namespace", triggerNamespace))
+			canaryCfgMgr.logger.V(1).Info("updated http trigger", "trigger_name", triggerName, "trigger_namespace", triggerNamespace)
 			return nil
 		case k8serrors.IsConflict(err):
-			canaryCfgMgr.logger.Error("conflict in updating http trigger, retrying",
-				zap.Error(err),
-				zap.String("trigger_name", triggerName),
-				zap.String("trigger_namespace", triggerNamespace))
+			canaryCfgMgr.logger.Error(err, "conflict in updating http trigger, retrying", "trigger_name", triggerName,
+				"trigger_namespace", triggerNamespace)
 			continue
 		default:
 			e := "error updating http trigger"
-			canaryCfgMgr.logger.Error("error updating http trigger",
-				zap.Error(err),
-				zap.String("trigger_name", triggerName),
-				zap.String("trigger_namespace", triggerNamespace))
+			canaryCfgMgr.logger.Error(err, "error updating http trigger", "trigger_name", triggerName,
+				"trigger_namespace", triggerNamespace)
 			return fmt.Errorf("%s: %s.%s %w", e, triggerName, triggerNamespace, err)
 		}
 	}
@@ -396,18 +376,16 @@ func (canaryCfgMgr *canaryConfigMgr) updateCanaryConfigStatusWithRetries(ctx con
 		canaryCfgObj, err := canaryCfgMgr.fissionClient.CoreV1().CanaryConfigs(cfgNamespace).Get(ctx, cfgName, metav1.GetOptions{})
 		if err != nil {
 			e := "error getting http canary config object"
-			canaryCfgMgr.logger.Error(e,
-				zap.Error(err),
-				zap.String("name", cfgName),
-				zap.String("namespace", cfgNamespace),
-				zap.String("status", status))
+			canaryCfgMgr.logger.Error(err, e, "name", cfgName,
+				"namespace", cfgNamespace,
+				"status", status)
 			return fmt.Errorf("%s: %s.%s %w", e, cfgName, cfgNamespace, err)
 		}
 
 		canaryCfgMgr.logger.Info("updating status of canary config",
-			zap.String("name", cfgName),
-			zap.String("namespace", cfgNamespace),
-			zap.String("status", status))
+			"name", cfgName,
+			"namespace", cfgNamespace,
+			"status", status)
 
 		canaryCfgObj.Status.Status = status
 
@@ -415,21 +393,19 @@ func (canaryCfgMgr *canaryConfigMgr) updateCanaryConfigStatusWithRetries(ctx con
 		switch {
 		case err == nil:
 			canaryCfgMgr.logger.Info("updated canary config",
-				zap.String("name", cfgName),
-				zap.String("namespace", cfgNamespace))
+				"name", cfgName,
+				"namespace", cfgNamespace)
 			return nil
 		case k8serrors.IsConflict(err):
 			canaryCfgMgr.logger.Info("conflict in updating canary config",
-				zap.Error(err),
-				zap.String("name", cfgName),
-				zap.String("namespace", cfgNamespace))
+				"error", err,
+				"name", cfgName,
+				"namespace", cfgNamespace)
 			continue
 		default:
 			e := "error updating canary config"
-			canaryCfgMgr.logger.Error(e,
-				zap.Error(err),
-				zap.String("name", cfgName),
-				zap.String("namespace", cfgNamespace))
+			canaryCfgMgr.logger.Error(err, e, "name", cfgName,
+				"namespace", cfgNamespace)
 			return fmt.Errorf("%s: %s.%s %w", e, cfgName, cfgNamespace, err)
 		}
 	}
@@ -471,9 +447,9 @@ func (canaryCfgMgr *canaryConfigMgr) rollForward(ctx context.Context, canaryConf
 	}
 
 	canaryCfgMgr.logger.Info("incremented functionWeights",
-		zap.String("name", canaryConfig.Name),
-		zap.String("namespace", canaryConfig.Namespace),
-		zap.Any("function_weights", functionWeights))
+		"name", canaryConfig.Name,
+		"namespace", canaryConfig.Namespace,
+		"function_weights", functionWeights)
 
 	err := canaryCfgMgr.updateHttpTriggerWithRetries(ctx, trigger.Name, trigger.Namespace, functionWeights)
 	return doneProcessingCanaryConfig, err
@@ -485,10 +461,10 @@ func (canaryCfgMgr *canaryConfigMgr) reSyncCanaryConfigs(ctx context.Context) {
 			canaryConfig := obj.(*fv1.CanaryConfig)
 			_, err := canaryCfgMgr.canaryCfgCancelFuncMap.lookup(&canaryConfig.ObjectMeta)
 			if err != nil && canaryConfig.Status.Status == fv1.CanaryConfigStatusPending {
-				canaryCfgMgr.logger.Debug("adding canary config from resync loop",
-					zap.String("name", canaryConfig.Name),
-					zap.String("namespace", canaryConfig.Namespace),
-					zap.String("version", canaryConfig.ResourceVersion))
+				canaryCfgMgr.logger.Info("adding canary config from resync loop",
+					"name", canaryConfig.Name,
+					"namespace", canaryConfig.Namespace,
+					"version", canaryConfig.ResourceVersion)
 
 				// new canaryConfig detected, add it to our cache and start processing it
 				go canaryCfgMgr.addCanaryConfig(ctx, canaryConfig)
@@ -498,17 +474,15 @@ func (canaryCfgMgr *canaryConfigMgr) reSyncCanaryConfigs(ctx context.Context) {
 }
 
 func (canaryCfgMgr *canaryConfigMgr) deleteCanaryConfig(canaryConfig *fv1.CanaryConfig) {
-	canaryCfgMgr.logger.Debug("delete event received for canary config",
-		zap.String("name", canaryConfig.Name),
-		zap.String("namespace", canaryConfig.Namespace),
-		zap.String("version", canaryConfig.ResourceVersion))
+	canaryCfgMgr.logger.V(1).Info("delete event received for canary config",
+		"name", canaryConfig.Name,
+		"namespace", canaryConfig.Namespace,
+		"version", canaryConfig.ResourceVersion)
 	canaryProcessingInfo, err := canaryCfgMgr.canaryCfgCancelFuncMap.lookup(&canaryConfig.ObjectMeta)
 	if err != nil {
-		canaryCfgMgr.logger.Error("lookup of canary config for deletion failed",
-			zap.Error(err),
-			zap.String("name", canaryConfig.Name),
-			zap.String("namespace", canaryConfig.Namespace),
-			zap.String("version", canaryConfig.ResourceVersion))
+		canaryCfgMgr.logger.Error(err, "lookup of canary config for deletion failed", "name", canaryConfig.Name,
+			"namespace", canaryConfig.Namespace,
+			"version", canaryConfig.ResourceVersion)
 		return
 	}
 	// first stop the ticker
@@ -530,8 +504,8 @@ func getEnvValue(envVar string) string {
 	return envVarSplit[1]
 }
 
-func StartCanaryServer(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Interface, unitTestFlag bool) error {
-	cLogger := logger.Named("CanaryServer")
+func StartCanaryServer(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger, mgr manager.Interface, unitTestFlag bool) error {
+	cLogger := logger.WithName("CanaryServer")
 
 	fissionClient, err := clientGen.GetFissionClient()
 	if err != nil {
@@ -544,7 +518,7 @@ func StartCanaryServer(ctx context.Context, clientGen crd.ClientGeneratorInterfa
 
 	err = ConfigureFeatures(ctx, cLogger, unitTestFlag, fissionClient, kubernetesClient, mgr)
 	if err != nil {
-		cLogger.Error("error configuring features - proceeding without optional features", zap.Error(err))
+		cLogger.Error(err, "error configuring features - proceeding without optional features")
 	}
 	return err
 }

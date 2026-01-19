@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"sync"
 
-	"go.uber.org/zap"
+	"github.com/go-logr/logr"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/mqtrigger/messageQueue"
@@ -33,7 +33,7 @@ var (
 
 type (
 	MessageQueueFactory interface {
-		Create(logger *zap.Logger, config messageQueue.Config, routerURL string) (messageQueue.MessageQueue, error)
+		Create(logger logr.Logger, config messageQueue.Config, routerURL string) (messageQueue.MessageQueue, error)
 	}
 )
 
@@ -53,7 +53,7 @@ func Register(mqType fv1.MessageQueueType, factory MessageQueueFactory) {
 	messageQueueFactories[mqType] = factory
 }
 
-func Create(logger *zap.Logger, mqType fv1.MessageQueueType, mqConfig messageQueue.Config, routerUrl string) (messageQueue.MessageQueue, error) {
+func Create(logger logr.Logger, mqType fv1.MessageQueueType, mqConfig messageQueue.Config, routerUrl string) (messageQueue.MessageQueue, error) {
 	factory, registered := messageQueueFactories[mqType]
 	if !registered {
 		return nil, fmt.Errorf("no supported message queue type found for %q", mqType)

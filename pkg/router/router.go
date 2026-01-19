@@ -46,9 +46,9 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/go-logr/logr"
 	"github.com/gorilla/mux"
 	"go.opentelemetry.io/otel"
-	"go.uber.org/zap"
 
 	"github.com/fission/fission/pkg/crd"
 	eclient "github.com/fission/fission/pkg/executor/client"
@@ -63,7 +63,7 @@ import (
 
 // request url ---[trigger]---> Function(name, deployment) ----[deployment]----> Function(name, uid) ----[pool mgr]---> k8s service url
 
-func router(ctx context.Context, logger *zap.Logger, mgr manager.Interface, httpTriggerSet *HTTPTriggerSet) (*mutableRouter, error) {
+func router(ctx context.Context, logger logr.Logger, mgr manager.Interface, httpTriggerSet *HTTPTriggerSet) (*mutableRouter, error) {
 	var mr *mutableRouter
 	mux := mux.NewRouter()
 	mux.Use(metrics.HTTPMetricMiddleware)
@@ -86,8 +86,8 @@ func router(ctx context.Context, logger *zap.Logger, mgr manager.Interface, http
 	return mr, nil
 }
 
-func serve(ctx context.Context, logger *zap.Logger, mgr manager.Interface, port int,
-	httpTriggerSet *HTTPTriggerSet, displayAccessLog bool) error {
+func serve(ctx context.Context, logger logr.Logger, mgr manager.Interface, port int,
+	httpTriggerSet *HTTPTriggerSet) error {
 	mr, err := router(ctx, logger, mgr, httpTriggerSet)
 	if err != nil {
 		return fmt.Errorf("error making router: %w", err)
@@ -100,7 +100,7 @@ func serve(ctx context.Context, logger *zap.Logger, mgr manager.Interface, port 
 }
 
 // Start starts a router
-func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *zap.Logger, mgr manager.Interface, port int, executor eclient.ClientInterface) error {
+func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger, mgr manager.Interface, port int, executor eclient.ClientInterface) error {
 	fmap := makeFunctionServiceMap(logger, time.Minute)
 
 	fissionClient, err := clientGen.GetFissionClient()
@@ -158,10 +158,8 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *
 	svcAddrRetryCount, err := strconv.Atoi(svcAddrRetryCountStr)
 	if err != nil {
 		svcAddrRetryCount = 5
-		logger.Error("failed to parse service address retry count from 'ROUTER_SVC_ADDRESS_MAX_RETRIES' - set to the default value",
-			zap.Error(err),
-			zap.String("value", svcAddrRetryCountStr),
-			zap.Int("default", svcAddrRetryCount))
+		logger.Error(err, "failed to parse service address retry count from 'ROUTER_SVC_ADDRESS_MAX_RETRIES' - set to the default value", "value", svcAddrRetryCountStr,
+			"default", svcAddrRetryCount)
 	}
 
 	// svcAddrUpdateTimeout is the timeout setting for a goroutine to wait for the update of a service entry.
@@ -170,10 +168,8 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *
 	svcAddrUpdateTimeout, err := time.ParseDuration(os.Getenv("ROUTER_SVC_ADDRESS_UPDATE_TIMEOUT"))
 	if err != nil {
 		svcAddrUpdateTimeout = 30 * time.Second
-		logger.Error("failed to parse service address update timeout duration from 'ROUTER_ROUND_TRIP_SVC_ADDRESS_UPDATE_TIMEOUT' - set to the default value",
-			zap.Error(err),
-			zap.String("value", svcAddrUpdateTimeoutStr),
-			zap.Duration("default", svcAddrUpdateTimeout))
+		logger.Error(err, "failed to parse service address update timeout duration from 'ROUTER_ROUND_TRIP_SVC_ADDRESS_UPDATE_TIMEOUT' - set to the default value", "value", svcAddrUpdateTimeoutStr,
+			"default", svcAddrUpdateTimeout)
 	}
 
 	// unTapServiceTimeout is the timeout used as timeout in the request context of unTapService
@@ -181,23 +177,11 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *
 	unTapServiceTimeout, err := time.ParseDuration(unTapServiceTimeoutstr)
 	if err != nil {
 		unTapServiceTimeout = 3600 * time.Second
-		logger.Error("failed to parse unTap service timeout duration from 'ROUTER_UNTAP_SERVICE_TIMEOUT' - set to the default value",
-			zap.Error(err),
-			zap.String("value", unTapServiceTimeoutstr),
-			zap.Duration("default", unTapServiceTimeout))
+		logger.Error(err, "failed to parse unTap service timeout duration from 'ROUTER_UNTAP_SERVICE_TIMEOUT' - set to the default value", "value", unTapServiceTimeoutstr,
+			"default", unTapServiceTimeout)
 	}
 
-	displayAccessLogStr := os.Getenv("DISPLAY_ACCESS_LOG")
-	displayAccessLog, err := strconv.ParseBool(displayAccessLogStr)
-	if err != nil {
-		displayAccessLog = false
-		logger.Error("failed to parse 'DISPLAY_ACCESS_LOG' - set to the default value",
-			zap.Error(err),
-			zap.String("value", displayAccessLogStr),
-			zap.Bool("default", displayAccessLog))
-	}
-
-	triggers, err := makeHTTPTriggerSet(logger.Named("triggerset"), fmap, fissionClient, kubeClient, executor, &tsRoundTripperParams{
+	triggers, err := makeHTTPTriggerSet(logger.WithName("triggerset"), fmap, fissionClient, kubeClient, executor, &tsRoundTripperParams{
 		timeout:           timeout,
 		timeoutExponent:   timeoutExponent,
 		disableKeepAlive:  disableKeepAlive,
@@ -213,11 +197,11 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger *
 		metrics.ServeMetrics(ctx, "router", logger, mgr)
 	})
 
-	logger.Info("starting router", zap.Int("port", port))
+	logger.Info("starting router", "port", port)
 
 	tracer := otel.Tracer("router")
 	ctx, span := tracer.Start(ctx, "router/Start")
 	defer span.End()
 
-	return serve(ctx, logger, mgr, port, triggers, displayAccessLog)
+	return serve(ctx, logger, mgr, port, triggers)
 }

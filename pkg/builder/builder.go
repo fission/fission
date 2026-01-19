@@ -31,7 +31,7 @@ import (
 	"time"
 
 	"github.com/dchest/uniuri"
-	"go.uber.org/zap"
+	"github.com/go-logr/logr"
 
 	"github.com/fission/fission/pkg/info"
 	"github.com/fission/fission/pkg/utils"
@@ -61,14 +61,14 @@ type (
 	}
 
 	Builder struct {
-		logger           *zap.Logger
+		logger           logr.Logger
 		sharedVolumePath string
 	}
 )
 
-func MakeBuilder(logger *zap.Logger, sharedVolumePath string) *Builder {
+func MakeBuilder(logger logr.Logger, sharedVolumePath string) *Builder {
 	return &Builder{
-		logger:           logger.Named("builder"),
+		logger:           logger.WithName("builder"),
 		sharedVolumePath: sharedVolumePath,
 	}
 }
@@ -79,10 +79,8 @@ func (builder *Builder) VersionHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	_, err := w.Write([]byte(info.BuildInfo().String()))
 	if err != nil {
-		logger.Error(
-			"error writing response",
-			zap.Error(err),
-		)
+		logger.Error(err,
+			"error writing response")
 	}
 }
 
@@ -91,7 +89,7 @@ func (builder *Builder) Handler(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method != "POST" {
 		e := "method not allowed"
-		logger.Error(e, zap.String("http_method", r.Method))
+		logger.Info(e, "http_method", r.Method)
 		builder.reply(r.Context(), w, "", fmt.Sprintf("%s: %s", e, r.Method), http.StatusMethodNotAllowed)
 		return
 	}
@@ -99,14 +97,14 @@ func (builder *Builder) Handler(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	defer func() {
 		elapsed := time.Since(startTime)
-		logger.Info("build request complete", zap.Duration("elapsed_time", elapsed))
+		logger.Info("build request complete", "elapsed_time", elapsed)
 	}()
 
 	// parse request
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		e := "error reading request body"
-		logger.Error(e, zap.Error(err))
+		logger.Error(err, e)
 		builder.reply(r.Context(), w, "", fmt.Sprintf("%s: %s", e, err.Error()), http.StatusInternalServerError)
 		return
 	}
@@ -114,23 +112,23 @@ func (builder *Builder) Handler(w http.ResponseWriter, r *http.Request) {
 	err = json.Unmarshal(body, &req)
 	if err != nil {
 		e := "error parsing json body"
-		logger.Error(e, zap.Error(err))
+		logger.Error(err, e)
 		builder.reply(r.Context(), w, "", fmt.Sprintf("%s: %s", e, err.Error()), http.StatusBadRequest)
 		return
 	}
-	logger.Info("builder received request", zap.Any("request", req))
+	logger.Info("builder received request", "request", req)
 
-	logger.Debug("starting build")
+	logger.V(1).Info("starting build")
 	srcPkgPath, err := utils.SanitizeFilePath(filepath.Join(builder.sharedVolumePath, req.SrcPkgFilename), builder.sharedVolumePath)
 	if err != nil {
-		logger.Error(err.Error(), zap.String("filename", req.SrcPkgFilename))
+		logger.Error(err, "filename", req.SrcPkgFilename)
 		builder.reply(r.Context(), w, "", err.Error(), http.StatusBadRequest)
 		return
 	}
 	deployPkgFilename := fmt.Sprintf("%s-%s", req.SrcPkgFilename, strings.ToLower(uniuri.NewLen(6)))
 	deployPkgPath, err := utils.SanitizeFilePath(filepath.Join(builder.sharedVolumePath, deployPkgFilename), builder.sharedVolumePath)
 	if err != nil {
-		logger.Error(err.Error(), zap.String("filename", req.SrcPkgFilename))
+		logger.Error(err, "filename", req.SrcPkgFilename)
 		builder.reply(r.Context(), w, "", err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -153,7 +151,7 @@ func (builder *Builder) Handler(w http.ResponseWriter, r *http.Request) {
 	buildLogs, err := builder.build(r.Context(), buildCmd, buildArgs, srcPkgPath, deployPkgPath)
 	if err != nil {
 		e := "error building source package"
-		logger.Error(e, zap.Error(err))
+		logger.Error(err, e)
 
 		// append error at the end of build logs
 		buildLogs += fmt.Sprintf("%s: %s\n", e, err.Error())
@@ -169,7 +167,7 @@ func (builder *Builder) Clean(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method != "DELETE" {
 		e := "method not allowed"
-		logger.Error(e, zap.String("http_method", r.Method))
+		logger.Info(e, "http_method", r.Method)
 		builder.reply(r.Context(), w, "", fmt.Sprintf("%s: %s", e, r.Method), http.StatusMethodNotAllowed)
 		return
 	}
@@ -177,18 +175,18 @@ func (builder *Builder) Clean(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	defer func() {
 		elapsed := time.Since(startTime)
-		logger.Info("clean request complete", zap.Duration("elapsed_time", elapsed))
+		logger.Info("clean request complete", "elapsed_time", elapsed)
 	}()
 
 	srcPkgFilename := r.URL.Query().Get("name")
 	srcPkgPath := filepath.Join(builder.sharedVolumePath, srcPkgFilename)
 
-	logger.Info("builder received clean request", zap.Any("source_package", srcPkgFilename))
+	logger.Info("builder received clean request", "source_package", srcPkgFilename)
 
 	err := utils.DeleteOldPackages(srcPkgPath, envSrcPkg)
 	if err != nil {
 		e := "error deleting src package after build"
-		logger.Error(e, zap.Error(err))
+		logger.Error(err, e)
 		builder.reply(r.Context(), w, srcPkgFilename, "", http.StatusInternalServerError)
 		return
 	}
@@ -216,10 +214,8 @@ func (builder *Builder) reply(ctx context.Context, w http.ResponseWriter, pkgFil
 	w.WriteHeader(statusCode)
 	_, err = w.Write(rBody)
 	if err != nil {
-		logger.Error(
-			"error writing response",
-			zap.Error(err),
-		)
+		logger.Error(err,
+			"error writing response")
 	}
 }
 
@@ -255,7 +251,7 @@ func (builder *Builder) build(ctx context.Context, command string, args []string
 	}
 
 	// Init logs
-	logger.Info("building source package", zap.String("command", command), zap.Strings("args", args), zap.Strings("env", cmd.Env))
+	logger.Info("building source package", "command", command, "args", args, "env", cmd.Env)
 
 	out := io.MultiReader(stdout, stderr)
 	scanner := bufio.NewScanner(out)

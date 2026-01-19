@@ -20,8 +20,9 @@ import (
 	"context"
 	"time"
 
-	"go.uber.org/zap"
 	k8sCache "k8s.io/client-go/tools/cache"
+
+	"github.com/go-logr/logr"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
@@ -32,16 +33,16 @@ import (
 
 type (
 	TimerSync struct {
-		logger              *zap.Logger
+		logger              logr.Logger
 		fissionClient       versioned.Interface
 		timer               *Timer
 		timeTriggerInformer map[string]k8sCache.SharedIndexInformer
 	}
 )
 
-func MakeTimerSync(ctx context.Context, logger *zap.Logger, fissionClient versioned.Interface, timer *Timer) (*TimerSync, error) {
+func MakeTimerSync(ctx context.Context, logger logr.Logger, fissionClient versioned.Interface, timer *Timer) (*TimerSync, error) {
 	ws := &TimerSync{
-		logger:        logger.Named("timer_sync"),
+		logger:        logger.WithName("timer_sync"),
 		fissionClient: fissionClient,
 		timer:         timer,
 	}
@@ -58,9 +59,9 @@ func (ws *TimerSync) Run(ctx context.Context, mgr manager.Interface) {
 }
 
 func (ws *TimerSync) AddUpdateTimeTrigger(timeTrigger *fv1.TimeTrigger) {
-	logger := ws.logger.With(zap.String("trigger_name", timeTrigger.Name), zap.String("trigger_namespace", timeTrigger.Namespace))
+	logger := ws.logger.WithValues("trigger_name", timeTrigger.Name, "trigger_namespace", timeTrigger.Namespace)
 
-	ws.logger.Debug("cron event")
+	ws.logger.V(1).Info("cron event")
 
 	if item, ok := ws.timer.triggers[crd.CacheKeyUIDFromMeta(&timeTrigger.ObjectMeta)]; ok {
 		if item.cron != nil {
@@ -68,18 +69,18 @@ func (ws *TimerSync) AddUpdateTimeTrigger(timeTrigger *fv1.TimeTrigger) {
 		}
 		item.trigger = *timeTrigger
 		item.cron = ws.timer.newCron(*timeTrigger, ws.timer.routerUrl)
-		logger.Debug("cron updated")
+		logger.V(1).Info("cron updated")
 	} else {
 		ws.timer.triggers[crd.CacheKeyUIDFromMeta(&timeTrigger.ObjectMeta)] = &timerTriggerWithCron{
 			trigger: *timeTrigger,
 			cron:    ws.timer.newCron(*timeTrigger, ws.timer.routerUrl),
 		}
-		logger.Debug("cron added")
+		logger.V(1).Info("cron added")
 	}
 }
 
 func (ws *TimerSync) DeleteTimeTrigger(timeTrigger *fv1.TimeTrigger) {
-	logger := ws.logger.With(zap.String("trigger_name", timeTrigger.Name), zap.String("trigger_namespace", timeTrigger.Namespace))
+	logger := ws.logger.WithValues("trigger_name", timeTrigger.Name, "trigger_namespace", timeTrigger.Namespace)
 
 	if item, ok := ws.timer.triggers[crd.CacheKeyUIDFromMeta(&timeTrigger.ObjectMeta)]; ok {
 		if item.cron != nil {
@@ -87,7 +88,7 @@ func (ws *TimerSync) DeleteTimeTrigger(timeTrigger *fv1.TimeTrigger) {
 			logger.Info("cron for time trigger stopped")
 		}
 		delete(ws.timer.triggers, crd.CacheKeyUIDFromMeta(&timeTrigger.ObjectMeta))
-		logger.Debug("cron deleted")
+		logger.V(1).Info("cron deleted")
 	}
 }
 

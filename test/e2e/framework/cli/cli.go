@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 
-	"go.uber.org/zap"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission/cmd/fission-cli/app"
@@ -13,7 +12,7 @@ import (
 )
 
 func ExecCommand(f *framework.Framework, ctx context.Context, args ...string) (string, error) {
-	f.Logger().Info("Executing command", zap.Strings("args", args))
+	f.Logger().Info("Executing command", "args", args)
 	cmd := app.App(cmd.ClientOptions{
 		RestConfig: f.RestConfig(),
 		Namespace:  metav1.NamespaceDefault,
