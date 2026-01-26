@@ -62,10 +62,23 @@ type (
 	Factory struct{}
 )
 
-type MqtConsumer struct {
+// KafkaSubscription implements messageQueue.Subscription for Kafka consumers.
+type KafkaSubscription struct {
 	ctx      context.Context
 	cancel   context.CancelFunc
 	consumer sarama.ConsumerGroup
+	done     chan struct{}
+}
+
+// Stop gracefully stops the Kafka subscription.
+func (s *KafkaSubscription) Stop() error {
+	s.cancel()
+	return s.consumer.Close()
+}
+
+// Done returns a channel that is closed when the subscription is stopped.
+func (s *KafkaSubscription) Done() <-chan struct{} {
+	return s.done
 }
 
 func (factory *Factory) Create(logger logr.Logger, mqCfg messageQueue.Config, routerUrl string) (messageQueue.MessageQueue, error) {
@@ -112,7 +125,7 @@ func New(logger logr.Logger, mqCfg messageQueue.Config, routerUrl string) (messa
 	return kafka, nil
 }
 
-func (kafka Kafka) Subscribe(trigger *fv1.MessageQueueTrigger) (messageQueue.Subscription, error) {
+func (kafka Kafka) Subscribe(ctx context.Context, trigger *fv1.MessageQueueTrigger) (messageQueue.Subscription, error) {
 	kafka.logger.V(1).Info("inside kakfa subscribe", "trigger", trigger)
 	kafka.logger.V(1).Info("brokers set", "brokers", kafka.brokers)
 
@@ -167,21 +180,24 @@ func (kafka Kafka) Subscribe(trigger *fv1.MessageQueueTrigger) (messageQueue.Sub
 		}
 	}()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	// Create a cancellable context that respects both parent context and our cancel function
+	subCtx, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
 	ch := NewMqtConsumerGroupHandler(kafka.version, kafka.logger, trigger, producer, kafka.routerUrl)
 
 	// consume messages
 	go func() {
+		defer close(done)
 		topic := []string{trigger.Spec.Topic}
 		// Create a new session for the consumer group until the context is cancelled
 		for {
 			// Consume messages
-			err := consumer.Consume(ctx, topic, ch)
+			err := consumer.Consume(subCtx, topic, ch)
 			if err != nil {
 				kafka.logger.Error(err, "consumer error", "trigger", trigger.Name)
 			}
 
-			if ctx.Err() != nil {
+			if subCtx.Err() != nil {
 				kafka.logger.Info("consumer context cancelled", "trigger", trigger.Name)
 				return
 			}
@@ -191,12 +207,13 @@ func (kafka Kafka) Subscribe(trigger *fv1.MessageQueueTrigger) (messageQueue.Sub
 
 	<-ch.ready // wait for consumer to be ready
 
-	mqtConsumer := MqtConsumer{
-		ctx:      ctx,
+	subscription := &KafkaSubscription{
+		ctx:      subCtx,
 		cancel:   cancel,
 		consumer: consumer,
+		done:     done,
 	}
-	return mqtConsumer, nil
+	return subscription, nil
 }
 
 func (kafka Kafka) getTLSConfig() (*tls.Config, error) {
@@ -223,9 +240,7 @@ func (kafka Kafka) getTLSConfig() (*tls.Config, error) {
 }
 
 func (kafka Kafka) Unsubscribe(subscription messageQueue.Subscription) error {
-	mqtConsumer := subscription.(MqtConsumer)
-	mqtConsumer.cancel()
-	return mqtConsumer.consumer.Close()
+	return subscription.Stop()
 }
 
 // The validation is based on Kafka's internal implementation:
