@@ -35,27 +35,44 @@ const (
 	updatedTopicName = "new-topic"
 )
 
-type mqtConsumer struct {
+// fakeSubscription implements messageQueue.Subscription for testing.
+type fakeSubscription struct {
 	ctx    context.Context
 	cancel context.CancelFunc
+	done   chan struct{}
 }
 
-type fakeMessageQueue struct {
-}
-
-func (f fakeMessageQueue) Subscribe(trigger *fv1.MessageQueueTrigger) (messageQueue.Subscription, error) {
-	ctx, cancel := context.WithCancel(context.Background())
-	mqtConsumer := mqtConsumer{
-		ctx:    ctx,
+func newFakeSubscription(ctx context.Context) *fakeSubscription {
+	subCtx, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
+	go func() {
+		<-subCtx.Done()
+		close(done)
+	}()
+	return &fakeSubscription{
+		ctx:    subCtx,
 		cancel: cancel,
+		done:   done,
 	}
-	return mqtConsumer, nil
 }
 
-func (f fakeMessageQueue) Unsubscribe(triggerSub messageQueue.Subscription) error {
-	sub := triggerSub.(mqtConsumer)
-	sub.cancel()
+func (s *fakeSubscription) Stop() error {
+	s.cancel()
 	return nil
+}
+
+func (s *fakeSubscription) Done() <-chan struct{} {
+	return s.done
+}
+
+type fakeMessageQueue struct{}
+
+func (f fakeMessageQueue) Subscribe(ctx context.Context, trigger *fv1.MessageQueueTrigger) (messageQueue.Subscription, error) {
+	return newFakeSubscription(ctx), nil
+}
+
+func (f fakeMessageQueue) Unsubscribe(sub messageQueue.Subscription) error {
+	return sub.Stop()
 }
 
 func TestMqtManager(t *testing.T) {
@@ -66,6 +83,13 @@ func TestMqtManager(t *testing.T) {
 	factory[metav1.NamespaceDefault] = genInformer.NewSharedInformerFactoryWithOptions(fissionClient, time.Minute*30, genInformer.WithNamespace(metav1.NamespaceDefault))
 	mgr, err := MakeMessageQueueTriggerManager(logger, nil, fv1.MessageQueueTypeKafka, factory, msgQueue)
 	require.NoError(t, err, "Error creating messageQueueTriggerManagesr")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Set the context for the manager (normally done in Run)
+	mgr.ctx = ctx
+
 	go mgr.service()
 	trigger := fv1.MessageQueueTrigger{
 		ObjectMeta: metav1.ObjectMeta{
@@ -76,7 +100,7 @@ func TestMqtManager(t *testing.T) {
 	if mgr.checkTriggerSubscription(&trigger) {
 		t.Errorf("checkTrigger should return false")
 	}
-	sub, err := msgQueue.Subscribe(&trigger)
+	sub, err := msgQueue.Subscribe(ctx, &trigger)
 	if err != nil {
 		t.Errorf("Subscribe should not return error")
 	}
@@ -99,9 +123,10 @@ func TestMqtManager(t *testing.T) {
 	if getSub.trigger.Name != trigger.Name {
 		t.Errorf("getTriggerSubscription should return triggerSub with trigger name %s", trigger.Name)
 	}
-	getSub.subscription.(mqtConsumer).cancel()
+	// Stop the subscription properly
+	_ = getSub.subscription.Stop()
 	trigger.Spec.Topic = updatedTopicName
-	newSub, err := msgQueue.Subscribe(&trigger)
+	newSub, err := msgQueue.Subscribe(ctx, &trigger)
 	if err != nil {
 		t.Errorf("Subscribe should not return error")
 	}
@@ -124,7 +149,8 @@ func TestMqtManager(t *testing.T) {
 	if getNewSub.trigger.Spec.Topic != updatedTopicName {
 		t.Errorf("getTriggerSubscription returns trigger with incorrect topic-name, expected %s got %s", updatedTopicName, getNewSub.trigger.Spec.Topic)
 	}
-	getNewSub.subscription.(mqtConsumer).cancel()
+	// Stop the subscription properly
+	_ = getNewSub.subscription.Stop()
 	err = mgr.delTriggerSubscription(&trigger)
 	if err != nil {
 		t.Errorf("delTriggerSubscription should not return error")

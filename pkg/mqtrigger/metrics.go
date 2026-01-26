@@ -23,7 +23,6 @@ import (
 )
 
 var (
-	labels            = []string{"trigger_name", "trigger_namespace"}
 	subscriptionCount = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "fission_mqt_subscriptions",
@@ -36,7 +35,7 @@ var (
 			Name: "fission_mqt_messages_processed_total",
 			Help: "Total number of messages processed",
 		},
-		labels,
+		[]string{"trigger_name", "trigger_namespace"},
 	)
 	messageLagCount = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
