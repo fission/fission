@@ -330,7 +330,7 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 			if err != nil {
 				e := "failed to download url from archive"
 				logger.Error(err, e, "url", req.URL)
-				return http.StatusBadRequest, fmt.Errorf("%s %s: %w", e, req.URL, err)
+				return http.StatusBadRequest, fmt.Errorf("%s %s: %w", e, archive.URL, err)
 			}
 
 			// check file integrity only if checksum is not empty.
@@ -724,7 +724,11 @@ func (fetcher *Fetcher) SpecializePod(ctx context.Context, fetchReq FunctionFetc
 			err = ferror.MakeErrorFromHTTP(resp)
 		}
 
-		return resp.StatusCode, fmt.Errorf("error specializing function pod: %w", err)
+		statusCode := http.StatusInternalServerError
+		if resp != nil {
+			statusCode = resp.StatusCode
+		}
+		return statusCode, fmt.Errorf("error specializing function pod: %w", err)
 	}
 
 	return http.StatusInternalServerError, fmt.Errorf("error specializing function pod after %v times: %w", maxRetries, err)
