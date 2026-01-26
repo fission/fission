@@ -274,7 +274,7 @@ func (f *FetcherTestSuite) TestFetcherURLType() {
 		StorageSvcUrl: f.storagesvcURL,
 		KeepArchive:   true,
 		FetchType:     fv1.FETCH_URL,
-		Url:           "http://localhost:8888/files/data/test-url-arch.zip",
+		URL:           "http://localhost:8888/files/data/test-url-arch.zip",
 		Package: metav1.ObjectMeta{
 			Name:      testDeployPkg,
 			Namespace: "default",

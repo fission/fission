@@ -36,7 +36,7 @@ type (
 	FunctionFetchRequest struct {
 		FetchType     FetchRequestType         `json:"fetchType"`
 		Package       metav1.ObjectMeta        `json:"package"`
-		Url           string                   `json:"url"`
+		URL           string                   `json:"url"`
 		StorageSvcUrl string                   `json:"storagesvcurl"`
 		Filename      string                   `json:"filename"`
 		Secrets       []fv1.SecretReference    `json:"secretList"`

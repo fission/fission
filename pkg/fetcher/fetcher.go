@@ -236,10 +236,10 @@ func (fetcher *Fetcher) SpecializeHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	err = fetcher.SpecializePod(ctx, req.FetchReq, req.LoadReq)
+	code, err := fetcher.SpecializePod(ctx, req.FetchReq, req.LoadReq)
 	if err != nil {
-		logger.Error(err, "error specializing pod")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		logger.Error(err, "error specializing pod", "statusCode", code)
+		http.Error(w, err.Error(), code)
 		return
 	}
 
@@ -277,14 +277,14 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 		otelUtils.SpanTrackEvent(ctx, "fetch_url", otelUtils.MapToAttributes(map[string]string{
 			"package-name":      pkg.Name,
 			"package-namespace": pkg.Namespace,
-			"fetch-url":         req.Url,
+			"fetch-url":         req.URL,
 		})...)
 		// fetch the file and save it to the tmp path
-		err := utils.DownloadUrl(ctx, fetcher.httpClient, req.Url, tmpPath)
+		err := utils.DownloadUrl(ctx, fetcher.httpClient, req.URL, tmpPath)
 		if err != nil {
-			e := "failed to download url"
-			logger.Error(err, e, "url", req.Url)
-			return http.StatusBadRequest, fmt.Errorf("%s: %s: %w", e, req.Url, err)
+			e := "failed to download url from fetch request"
+			logger.Error(err, e, "url", req.URL)
+			return http.StatusBadRequest, fmt.Errorf("%s: %s: %w", e, req.URL, err)
 		}
 	} else {
 		var archive *fv1.Archive
@@ -328,9 +328,9 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 			})...)
 			err := utils.DownloadUrl(ctx, fetcher.httpClient, archive.URL, tmpPath)
 			if err != nil {
-				e := "failed to download url"
-				logger.Error(err, e, "url", req.Url)
-				return http.StatusBadRequest, fmt.Errorf("%s %s: %w", e, req.Url, err)
+				e := "failed to download url from archive"
+				logger.Error(err, e, "url", req.URL)
+				return http.StatusBadRequest, fmt.Errorf("%s %s: %w", e, archive.URL, err)
 			}
 
 			// check file integrity only if checksum is not empty.
@@ -648,7 +648,7 @@ func (fetcher *Fetcher) getPkgInformation(ctx context.Context, req FunctionFetch
 	return nil, err
 }
 
-func (fetcher *Fetcher) SpecializePod(ctx context.Context, fetchReq FunctionFetchRequest, loadReq FunctionLoadRequest) error {
+func (fetcher *Fetcher) SpecializePod(ctx context.Context, fetchReq FunctionFetchRequest, loadReq FunctionLoadRequest) (int, error) {
 	logger := otelUtils.LoggerWithTraceID(ctx, fetcher.logger)
 	startTime := time.Now()
 	defer func() {
@@ -658,17 +658,17 @@ func (fetcher *Fetcher) SpecializePod(ctx context.Context, fetchReq FunctionFetc
 
 	pkg, err := fetcher.getPkgInformation(ctx, fetchReq)
 	if err != nil {
-		return fmt.Errorf("error getting package information: %w", err)
+		return http.StatusInternalServerError, fmt.Errorf("error getting package information: %w", err)
 	}
 
-	_, err = fetcher.Fetch(ctx, pkg, fetchReq)
+	code, err := fetcher.Fetch(ctx, pkg, fetchReq)
 	if err != nil {
-		return fmt.Errorf("error fetching deploy package: %w", err)
+		return code, fmt.Errorf("error fetching deploy package: %w", err)
 	}
 
-	_, err = fetcher.FetchSecretsAndCfgMaps(ctx, fetchReq.Secrets, fetchReq.ConfigMaps)
+	code, err = fetcher.FetchSecretsAndCfgMaps(ctx, fetchReq.Secrets, fetchReq.ConfigMaps)
 	if err != nil {
-		return fmt.Errorf("error fetching secrets/configs: %w", err)
+		return code, fmt.Errorf("error fetching secrets/configs: %w", err)
 	}
 
 	// Specialize the pod
@@ -680,7 +680,7 @@ func (fetcher *Fetcher) SpecializePod(ctx context.Context, fetchReq FunctionFetc
 
 	loadPayload, err := json.Marshal(loadReq)
 	if err != nil {
-		return fmt.Errorf("error encoding load request: %w", err)
+		return http.StatusInternalServerError, fmt.Errorf("error encoding load request: %w", err)
 	}
 
 	// Instead of using "localhost", here we use "127.0.0.1" for
@@ -706,7 +706,7 @@ func (fetcher *Fetcher) SpecializePod(ctx context.Context, fetchReq FunctionFetc
 		if err == nil && resp.StatusCode < 300 {
 			// Success
 			resp.Body.Close()
-			return nil
+			return resp.StatusCode, nil
 		}
 
 		netErr := network.Adapter(err)
@@ -724,10 +724,14 @@ func (fetcher *Fetcher) SpecializePod(ctx context.Context, fetchReq FunctionFetc
 			err = ferror.MakeErrorFromHTTP(resp)
 		}
 
-		return fmt.Errorf("error specializing function pod: %w", err)
+		statusCode := http.StatusInternalServerError
+		if resp != nil {
+			statusCode = resp.StatusCode
+		}
+		return statusCode, fmt.Errorf("error specializing function pod: %w", err)
 	}
 
-	return fmt.Errorf("error specializing function pod after %v times: %w", maxRetries, err)
+	return http.StatusInternalServerError, fmt.Errorf("error specializing function pod after %v times: %w", maxRetries, err)
 }
 
 // WsStartHandler is used to generate websocket events in Kubernetes
