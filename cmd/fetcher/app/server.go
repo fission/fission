@@ -92,9 +92,9 @@ func Run(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger log
 				return
 			}
 
-			err = f.SpecializePod(ctx, specializeReq.FetchReq, specializeReq.LoadReq)
+			code, err := f.SpecializePod(ctx, specializeReq.FetchReq, specializeReq.LoadReq)
 			if err != nil {
-				logger.Error(err, "error specializing function pod")
+				logger.Error(err, "error specializing function pod", "statusCode", code)
 				return
 			}
 		}

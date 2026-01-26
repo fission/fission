@@ -24,6 +24,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -164,12 +165,22 @@ func isHttp2xxSuccessful(status int) bool {
 	return status >= 200 && status < 300
 }
 
-func DownloadUrl(ctx context.Context, httpClient *http.Client, url string, localPath string) error {
+// DownloadUrl downloads a file from the specified URL and saves it to the local path.
+func DownloadUrl(ctx context.Context, httpClient *http.Client, targetURL string, localPath string) error {
+	// check valid URL
+	if targetURL == "" {
+		return errors.New("empty URL")
+	}
+	parsed, err := url.Parse(targetURL)
+	if err != nil {
+		return fmt.Errorf("invalid URL: %s: %w", targetURL, err)
+	}
+
 	// validate local path for directory traversal attacks
 	if filepath.Clean(localPath) != localPath {
 		return fmt.Errorf("invalid local path: %s", localPath)
 	}
-	resp, err := ctxhttp.Get(ctx, httpClient, url)
+	resp, err := ctxhttp.Get(ctx, httpClient, parsed.String())
 	if err != nil {
 		return err
 	}
