@@ -71,6 +71,7 @@ func mqTriggerEventHandlers(ctx context.Context, logger logr.Logger, kubeClient 
 				}
 				if !updated {
 					logger.Info("Trigger unchanged, no changes found in trigger fields", "trigger_name", mqt.Name)
+					return
 				}
 
 				authenticationRef := ""
@@ -223,24 +224,19 @@ func checkAndUpdateTriggerFields(mqt, newMqt *fv1.MessageQueueTrigger) bool {
 		mqt.Spec.ContentType = newMqt.Spec.ContentType
 		updated = true
 	}
-	// Safe nil checks for pointer fields
-	if newMqt.Spec.PollingInterval != nil && mqt.Spec.PollingInterval != nil &&
-		*newMqt.Spec.PollingInterval >= 0 && *newMqt.Spec.PollingInterval != *mqt.Spec.PollingInterval {
+	if *newMqt.Spec.PollingInterval >= 0 && *newMqt.Spec.PollingInterval != *mqt.Spec.PollingInterval {
 		mqt.Spec.PollingInterval = newMqt.Spec.PollingInterval
 		updated = true
 	}
-	if newMqt.Spec.CooldownPeriod != nil && mqt.Spec.CooldownPeriod != nil &&
-		*newMqt.Spec.CooldownPeriod >= 0 && *newMqt.Spec.CooldownPeriod != *mqt.Spec.CooldownPeriod {
+	if *newMqt.Spec.CooldownPeriod >= 0 && *newMqt.Spec.CooldownPeriod != *mqt.Spec.CooldownPeriod {
 		mqt.Spec.CooldownPeriod = newMqt.Spec.CooldownPeriod
 		updated = true
 	}
-	if newMqt.Spec.MinReplicaCount != nil && mqt.Spec.MinReplicaCount != nil &&
-		*newMqt.Spec.MinReplicaCount >= 0 && *newMqt.Spec.MinReplicaCount != *mqt.Spec.MinReplicaCount {
+	if *newMqt.Spec.MinReplicaCount >= 0 && *newMqt.Spec.MinReplicaCount != *mqt.Spec.MinReplicaCount {
 		mqt.Spec.MinReplicaCount = newMqt.Spec.MinReplicaCount
 		updated = true
 	}
-	if newMqt.Spec.MaxReplicaCount != nil && mqt.Spec.MaxReplicaCount != nil &&
-		*newMqt.Spec.MaxReplicaCount >= 0 && *newMqt.Spec.MaxReplicaCount != *mqt.Spec.MaxReplicaCount {
+	if *newMqt.Spec.MaxReplicaCount >= 0 && *newMqt.Spec.MaxReplicaCount != *mqt.Spec.MaxReplicaCount {
 		mqt.Spec.MaxReplicaCount = newMqt.Spec.MaxReplicaCount
 		updated = true
 	}
