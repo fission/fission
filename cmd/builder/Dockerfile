@@ -1,4 +1,4 @@
-FROM cgr.dev/chainguard/static:latest@sha256:a301031ffd4ed67f35ca7fa6cf3dad9937b5fa47d7493955a18d9b4ca5412d1a
+FROM cgr.dev/chainguard/static:latest@sha256:99a5f826e71115aef9f63368120a6aa518323e052297718e9bf084fb84def93c
 ARG TARGETPLATFORM
 COPY $TARGETPLATFORM/builder /builder
 ENTRYPOINT ["/builder"]
