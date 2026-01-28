@@ -838,28 +838,28 @@ mqt_keda:
   connector_images:
     kafka:
       image: ghcr.io/fission/keda-kafka-http-connector
-      tag: v0.17
+      tag: v0.20
     rabbitmq:
       image: ghcr.io/fission/keda-rabbitmq-http-connector
-      tag: v0.15
+      tag: v0.17
     awskinesis:
       image: ghcr.io/fission/keda-aws-kinesis-http-connector
-      tag: v0.15
+      tag: v0.19
     aws_sqs:
       image: ghcr.io/fission/keda-aws-sqs-http-connector
-      tag: v0.16
+      tag: v0.20
     nats_steaming:
       image: ghcr.io/fission/keda-nats-streaming-http-connector
-      tag: v0.18
+      tag: v0.20
     nats_jetstream:
       image: ghcr.io/fission/keda-nats-jetstream-http-connector
-      tag: v0.9
+      tag: v0.12
     gcp_pubsub:
       image: ghcr.io/fission/keda-gcp-pubsub-http-connector
-      tag: v0.11
+      tag: v0.14
     redis:
       image: ghcr.io/fission/keda-redis-http-connector
-      tag: v0.8
+      tag: v0.10
 
   ## Pod resources as:
   ##  resources:
