@@ -25,17 +25,17 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@20cf305ff2072d973412fa9b1e3a4f227bda3c76 # v2.14.0
+        uses: step-security/harden-runner@e3f713f2d8f53843e71c69a996d56f51aa9adfb9 # v2.14.1
         with:
           egress-policy: audit
 
       - name: Check out code
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
 
       - name: Setup go
-        uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
+        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
         with:
           go-version-file: "go.mod"
           cache: true
@@ -79,7 +79,7 @@ jobs:
       - name: Check cosign install!
         run: cosign version
 
-      - uses: anchore/sbom-action/download-syft@a930d0ac434e3182448fe678398ba5713717112a #v0.21.0
+      - uses: anchore/sbom-action/download-syft@62ad5284b8ced813296287a0b63906cb364b73ee #v0.22.0
 
       - name: Generate yaml for manifest, Minikube and Openshift installation
         run: ${GITHUB_WORKSPACE}/hack/build-yaml.sh $VERSION
@@ -101,7 +101,7 @@ jobs:
       # Attest binary artifacts
       # https://goreleaser.com/customization/attestations/
       - name: Attest binary artifacts
-        uses: actions/attest-build-provenance@00014ed6ed5efc5b1ab7f7f34a39eb55d41aa4f8 # v3.1.0
+        uses: actions/attest-build-provenance@96278af6caaf10aea03fd8d33a09a777ca52d62f # v3.2.0
         with:
           subject-checksums: ./dist/checksums.txt
 
@@ -139,7 +139,7 @@ jobs:
       attestations: write
     steps:
       - name: Checkout code
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
       - name: Login to GitHub Container Registry
@@ -162,7 +162,7 @@ jobs:
           subject-digest: ${{ fromJson(toJson(matrix)).checksum }}
           push-to-registry: true
       - name: Attest provenance for image
-        uses: actions/attest-build-provenance@00014ed6ed5efc5b1ab7f7f34a39eb55d41aa4f8 # v3.1.0
+        uses: actions/attest-build-provenance@96278af6caaf10aea03fd8d33a09a777ca52d62f # v3.2.0
         with:
           subject-name: ${{ fromJson(toJson(matrix)).image }}
           subject-digest: ${{ fromJson(toJson(matrix)).checksum }}
