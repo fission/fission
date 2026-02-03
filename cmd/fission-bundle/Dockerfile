@@ -1,4 +1,4 @@
-FROM cgr.dev/chainguard/static:latest@sha256:a301031ffd4ed67f35ca7fa6cf3dad9937b5fa47d7493955a18d9b4ca5412d1a
+FROM cgr.dev/chainguard/static:latest@sha256:9cef3c6a78264cb7e25923bf1bf7f39476dccbcc993af9f4ffeb191b77a7951e
 ARG TARGETPLATFORM
 COPY $TARGETPLATFORM/fission-bundle /
 ENTRYPOINT ["/fission-bundle"]
