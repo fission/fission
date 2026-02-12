@@ -134,7 +134,7 @@ func TestThrottler_Stress(t *testing.T) {
 
 	var firstCount int32
 
-	for i := 0; i < count; i++ {
+	for range count {
 		go func() {
 			defer wg.Done()
 			_, err := throttler.RunOnce("key", func(first bool) (any, error) {

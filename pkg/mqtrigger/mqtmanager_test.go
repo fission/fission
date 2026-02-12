@@ -84,8 +84,7 @@ func TestMqtManager(t *testing.T) {
 	mgr, err := MakeMessageQueueTriggerManager(logger, nil, fv1.MessageQueueTypeKafka, factory, msgQueue)
 	require.NoError(t, err, "Error creating messageQueueTriggerManagesr")
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	// Set the context for the manager (normally done in Run)
 	mgr.ctx = ctx
