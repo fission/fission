@@ -71,7 +71,7 @@ jobs:
           version: ${{ env.HELM_VERSION }}
 
       - name: Kind Cluster
-        uses: helm/kind-action@92086f6be054225fa813e0a4b13787fc9088faab # v1.13.0
+        uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # v1.14.0
         with:
           node_image: kindest/node:${{ matrix.kindversion }}
           version: ${{ env.KIND_VERSION }}
@@ -97,7 +97,7 @@ jobs:
           skaffold version
 
       - name: Install GoReleaser
-        uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6.4.0
+        uses: goreleaser/goreleaser-action@ec59f474b9834571250b370d4735c50f8e2d1e29 # v7.0.0
         with:
           install-only: true
           version: "~> v2"
@@ -219,7 +219,7 @@ jobs:
           version: ${{ env.HELM_VERSION }}
 
       - name: Kind Cluster
-        uses: helm/kind-action@92086f6be054225fa813e0a4b13787fc9088faab # v1.13.0
+        uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # v1.14.0
         with:
           node_image: kindest/node:${{ matrix.kindversion }}
           version: ${{ env.KIND_VERSION }}
@@ -245,7 +245,7 @@ jobs:
           skaffold version
 
       - name: Install GoReleaser
-        uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6.4.0
+        uses: goreleaser/goreleaser-action@ec59f474b9834571250b370d4735c50f8e2d1e29 # v7.0.0
         with:
           install-only: true
           version: "~> v2"
