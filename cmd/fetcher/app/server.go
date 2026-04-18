@@ -38,7 +38,7 @@ import (
 )
 
 var (
-	readyToServe uint32
+	readyToServe atomic.Uint32
 )
 
 func Run(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger, mgr manager.Interface, port string, podInfoMountDir string) error {
@@ -98,7 +98,7 @@ func Run(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger log
 				return
 			}
 		}
-		atomic.StoreUint32(&readyToServe, 1)
+		readyToServe.Store(1)
 	})
 
 	mux := http.NewServeMux()
@@ -110,7 +110,7 @@ func Run(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger log
 	mux.HandleFunc("/wsevent/end", f.WsEndHandler)
 
 	readinessHandler := func(w http.ResponseWriter, r *http.Request) {
-		if atomic.LoadUint32(&readyToServe) == 1 {
+		if readyToServe.Load() == 1 {
 			w.WriteHeader(http.StatusOK)
 		} else {
 			w.WriteHeader(http.StatusServiceUnavailable)

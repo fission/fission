@@ -93,7 +93,7 @@ func AggregateValidationErrors(objName string, err error) error {
 		return nil
 	}
 	var errMsg bytes.Buffer
-	errMsg.WriteString(fmt.Sprintf("Invalid fission %s objects:\n", objName))
+	fmt.Fprintf(&errMsg, "Invalid fission %s objects:\n", objName)
 
 	var unmaskError func(level int, err error)
 
@@ -108,9 +108,10 @@ func AggregateValidationErrors(objName string, err error) error {
 			}
 		} else {
 			if level > 0 {
+
 				errMsg.WriteString(strings.Repeat("  ", level-1))
 			}
-			errMsg.WriteString(fmt.Sprintf("* %s\n", err.Error()))
+			fmt.Fprintf(&errMsg, "* %v\n", err.Error())
 		}
 	}
 

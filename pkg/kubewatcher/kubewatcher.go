@@ -48,7 +48,7 @@ import (
 type (
 	KubeWatcher struct {
 		logger           logr.Logger
-		watches          map[types.UID]watchSubscription
+		watches          map[types.UID]*watchSubscription
 		kubernetesClient kubernetes.Interface
 		publisher        publisher.Publisher
 	}
@@ -58,7 +58,7 @@ type (
 		watch               fv1.KubernetesWatchTrigger
 		kubeWatch           watch.Interface
 		lastResourceVersion string
-		stopped             *int32
+		stopped             atomic.Int32
 		kubernetesClient    kubernetes.Interface
 		publisher           publisher.Publisher
 	}
@@ -67,7 +67,7 @@ type (
 func MakeKubeWatcher(ctx context.Context, logger logr.Logger, kubernetesClient kubernetes.Interface, publisher publisher.Publisher) *KubeWatcher {
 	kw := &KubeWatcher{
 		logger:           logger.WithName("kube_watcher"),
-		watches:          make(map[types.UID]watchSubscription),
+		watches:          make(map[types.UID]*watchSubscription),
 		kubernetesClient: kubernetesClient,
 		publisher:        publisher,
 	}
@@ -130,7 +130,7 @@ func (kw *KubeWatcher) addWatch(ctx context.Context, w *fv1.KubernetesWatchTrigg
 	if err != nil {
 		return err
 	}
-	kw.watches[w.UID] = *ws
+	kw.watches[w.UID] = ws
 	return nil
 }
 
@@ -147,12 +147,11 @@ func (kw *KubeWatcher) removeWatch(w *fv1.KubernetesWatchTrigger) error {
 }
 
 func MakeWatchSubscription(ctx context.Context, logger logr.Logger, w *fv1.KubernetesWatchTrigger, kubeClient kubernetes.Interface, publisher publisher.Publisher) (*watchSubscription, error) {
-	var stopped int32 = 0
+
 	ws := &watchSubscription{
 		logger:              logger.WithName("watch_subscription"),
 		watch:               *w,
 		kubeWatch:           nil,
-		stopped:             &stopped,
 		kubernetesClient:    kubeClient,
 		publisher:           publisher,
 		lastResourceVersion: "",
@@ -274,10 +273,10 @@ func (ws *watchSubscription) eventDispatchLoop(ctx context.Context) {
 }
 
 func (ws *watchSubscription) stop() {
-	atomic.StoreInt32(ws.stopped, 1)
+	ws.stopped.Store(1)
 	ws.kubeWatch.Stop()
 }
 
 func (ws *watchSubscription) isStopped() bool {
-	return atomic.LoadInt32(ws.stopped) == 1
+	return ws.stopped.Load() == 1
 }
