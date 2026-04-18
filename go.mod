@@ -6,7 +6,7 @@ toolchain go1.26.2
 
 require (
 	dario.cat/mergo v1.0.2
-	github.com/IBM/sarama v1.46.3
+	github.com/IBM/sarama v1.47.0
 	github.com/bep/debounce v1.2.1
 	github.com/dchest/uniuri v1.2.0
 	github.com/dustin/go-humanize v1.0.1
@@ -84,7 +84,6 @@ require (
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/dsnet/compress v0.0.2-0.20230904184137-39efe44ab707 // indirect
 	github.com/eapache/go-resiliency v1.7.0 // indirect
-	github.com/eapache/go-xerial-snappy v0.0.0-20230731223053-c322873962e3 // indirect
 	github.com/eapache/queue v1.1.0 // indirect
 	github.com/elastic/crd-ref-docs v0.2.0 // indirect
 	github.com/emicklei/go-restful/v3 v3.13.0 // indirect
@@ -119,7 +118,6 @@ require (
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
-	github.com/golang/snappy v1.0.0 // indirect
 	github.com/google/btree v1.1.3 // indirect
 	github.com/google/gnostic-models v0.7.1 // indirect
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 // indirect
@@ -140,7 +138,7 @@ require (
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/kevinburke/ssh_config v1.2.0 // indirect
-	github.com/klauspost/compress v1.18.2 // indirect
+	github.com/klauspost/compress v1.18.4 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/klauspost/crc32 v1.3.0 // indirect
 	github.com/klauspost/pgzip v1.2.6 // indirect
@@ -168,7 +166,7 @@ require (
 	github.com/opencontainers/image-spec v1.1.0 // indirect
 	github.com/opencontainers/runc v1.2.8 // indirect
 	github.com/philhofer/fwd v1.2.0 // indirect
-	github.com/pierrec/lz4/v4 v4.1.22 // indirect
+	github.com/pierrec/lz4/v4 v4.1.25 // indirect
 	github.com/pjbgf/sha1cd v0.3.2 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
