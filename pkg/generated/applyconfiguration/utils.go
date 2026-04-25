@@ -36,6 +36,8 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &corev1.ArchiveApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("Builder"):
 		return &corev1.BuilderApplyConfiguration{}
+	case v1.SchemeGroupVersion.WithKind("BuilderRegistry"):
+		return &corev1.BuilderRegistryApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("CanaryConfig"):
 		return &corev1.CanaryConfigApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("CanaryConfigSpec"):
@@ -78,6 +80,8 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &corev1.MessageQueueTriggerApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("MessageQueueTriggerSpec"):
 		return &corev1.MessageQueueTriggerSpecApplyConfiguration{}
+	case v1.SchemeGroupVersion.WithKind("OCIArchive"):
+		return &corev1.OCIArchiveApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("Package"):
 		return &corev1.PackageApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("PackageRef"):

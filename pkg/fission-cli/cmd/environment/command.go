@@ -33,6 +33,7 @@ func Commands() *cobra.Command {
 		Required: []flag.Flag{flag.EnvName, flag.EnvImage},
 		Optional: []flag.Flag{
 			flag.EnvPoolsize, flag.EnvBuilderImage, flag.EnvBuildCmd,
+			flag.EnvBuilderKind, flag.EnvBuilderRegistry, flag.EnvBuilderRegistrySec, flag.EnvBuilderRegistryBase,
 			flag.RunTimeMinCPU, flag.RunTimeMaxCPU, flag.RunTimeMinMemory, flag.RunTimeMaxMemory,
 			flag.EnvTerminationGracePeriod, flag.EnvVersion, flag.EnvImagePullSecret, flag.EnvKeepArchive,
 			flag.NamespaceEnvironment, flag.EnvExternalNetwork, flag.Labels, flag.Annotation,
@@ -58,6 +59,7 @@ func Commands() *cobra.Command {
 		Required: []flag.Flag{flag.EnvName},
 		Optional: []flag.Flag{flag.EnvImage, flag.EnvPoolsize,
 			flag.EnvBuilderImage, flag.EnvBuildCmd, flag.EnvImagePullSecret,
+			flag.EnvBuilderKind, flag.EnvBuilderRegistry, flag.EnvBuilderRegistrySec, flag.EnvBuilderRegistryBase,
 			flag.RunTimeMinCPU, flag.RunTimeMaxCPU, flag.RunTimeMinMemory, flag.RunTimeMaxMemory,
 			flag.EnvTerminationGracePeriod, flag.EnvKeepArchive, flag.EnvRuntime,
 			flag.NamespaceEnvironment, flag.EnvExternalNetwork,

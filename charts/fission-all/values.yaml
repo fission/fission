@@ -335,6 +335,39 @@ router:
     runAsUser: 10001
     runAsGroup: 10001
 
+## packageRegistry configures the OCI registry that BuildKit-flavored
+## builders push function artifacts to. Only consulted when an
+## Environment opts into Spec.Builder.Kind="buildkit"; the legacy
+## tarball builder ignores this block.
+##
+## When url is set, the buildermgr Deployment passes its value to the
+## per-Environment builder pod via PACKAGE_REGISTRY_URL. The builder
+## then uses it as the destination prefix for `buildctl ... push`.
+##
+## When imagePullSecret is set, that Secret is mounted at /kaniko/.docker
+## inside the builder pod (as docker-config) so buildctl can authenticate
+## both for pushes and for any private base-image pulls. The Secret must
+## be of type kubernetes.io/dockerconfigjson and live in the builder
+## namespace (fission-builder by default).
+##
+## Leave this block at its defaults if you do not use BuildKit-flavored
+## builders.
+packageRegistry:
+  ## Fully qualified registry/repository prefix where built images are
+  ## pushed (e.g. "ghcr.io/myorg/fission-fns").
+  url: ""
+  ## Name of a kubernetes.io/dockerconfigjson Secret in the builder
+  ## namespace that contains push + pull credentials for `url`.
+  imagePullSecret: ""
+  ## Optional override for the runtime image used as the bottom layer
+  ## of the produced OCI artifact. When empty (the default), the
+  ## builder uses Environment.Spec.Runtime.Image.
+  baseImage: ""
+  ## Image used for the BuildKit-flavored builder pod itself. Defaults
+  ## to ghcr.io/fission/buildkit-builder; users on private clusters can
+  ## point this at a mirror.
+  builderImage: "ghcr.io/fission/buildkit-builder"
+
 ## The builder manager watches the package & environments CRD changes and manages the builds of function source code.
 ##
 buildermgr:

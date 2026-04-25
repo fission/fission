@@ -649,24 +649,38 @@ func (fetcher *Fetcher) getPkgInformation(ctx context.Context, req FunctionFetch
 }
 
 func (fetcher *Fetcher) SpecializePod(ctx context.Context, fetchReq FunctionFetchRequest, loadReq FunctionLoadRequest) (int, error) {
+	return fetcher.specializePod(ctx, fetchReq, loadReq, false)
+}
+
+// SpecializePodSkipFetch is the OCI-pool variant: the deployment package is
+// already mounted at loadReq.FilePath via an image volume source, so the
+// fetcher only needs to call the runtime's specialize endpoint. Secrets and
+// configmaps are still fetched into their shared volumes if the function
+// references any.
+func (fetcher *Fetcher) SpecializePodSkipFetch(ctx context.Context, fetchReq FunctionFetchRequest, loadReq FunctionLoadRequest) (int, error) {
+	return fetcher.specializePod(ctx, fetchReq, loadReq, true)
+}
+
+func (fetcher *Fetcher) specializePod(ctx context.Context, fetchReq FunctionFetchRequest, loadReq FunctionLoadRequest, skipFetch bool) (int, error) {
 	logger := otelUtils.LoggerWithTraceID(ctx, fetcher.logger)
 	startTime := time.Now()
 	defer func() {
 		elapsed := time.Since(startTime)
-		logger.Info("specialize request done", "elapsed_time", elapsed)
+		logger.Info("specialize request done", "elapsed_time", elapsed, "skip_fetch", skipFetch)
 	}()
 
-	pkg, err := fetcher.getPkgInformation(ctx, fetchReq)
-	if err != nil {
-		return http.StatusInternalServerError, fmt.Errorf("error getting package information: %w", err)
+	if !skipFetch {
+		pkg, err := fetcher.getPkgInformation(ctx, fetchReq)
+		if err != nil {
+			return http.StatusInternalServerError, fmt.Errorf("error getting package information: %w", err)
+		}
+
+		if code, err := fetcher.Fetch(ctx, pkg, fetchReq); err != nil {
+			return code, fmt.Errorf("error fetching deploy package: %w", err)
+		}
 	}
 
-	code, err := fetcher.Fetch(ctx, pkg, fetchReq)
-	if err != nil {
-		return code, fmt.Errorf("error fetching deploy package: %w", err)
-	}
-
-	code, err = fetcher.FetchSecretsAndCfgMaps(ctx, fetchReq.Secrets, fetchReq.ConfigMaps)
+	code, err := fetcher.FetchSecretsAndCfgMaps(ctx, fetchReq.Secrets, fetchReq.ConfigMaps)
 	if err != nil {
 		return code, fmt.Errorf("error fetching secrets/configs: %w", err)
 	}

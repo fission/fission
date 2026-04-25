@@ -276,6 +276,11 @@ func (deploy *NewDeploy) RefreshFuncPods(ctx context.Context, logger logr.Logger
 		return err
 	}
 
+	ociArchive, err := executorUtils.GetFunctionOCIArchive(ctx, deploy.fissionClient, &f)
+	if err != nil {
+		return fmt.Errorf("error fetching package for function %s: %w", k8sCache.MetaObjectToName(&f), err)
+	}
+
 	funcLabels := deploy.getDeployLabels(f.ObjectMeta, metav1.ObjectMeta{
 		Name:      f.Spec.Environment.Name,
 		Namespace: f.Spec.Environment.Namespace,
@@ -297,8 +302,13 @@ func (deploy *NewDeploy) RefreshFuncPods(ctx context.Context, logger logr.Logger
 			return err
 		}
 
+		patchImage := env.Spec.Runtime.Image
+		if ociArchive != nil {
+			patchImage = ociArchive.Image
+		}
+
 		patch := fmt.Sprintf(`{"spec" : {"template": {"spec":{"containers":[{"name": "%s", "image": "%s", "env":[{"name": "%s", "value": "%d"}]}]}}}}`,
-			env.Name, env.Spec.Runtime.Image, fv1.ResourceVersionCount, rvCount)
+			env.Name, patchImage, fv1.ResourceVersionCount, rvCount)
 
 		_, err = deploy.kubernetesClient.AppsV1().Deployments(deployment.ObjectMeta.Namespace).Patch(ctx, deployment.Name,
 			k8sTypes.StrategicMergePatchType,
@@ -441,6 +451,11 @@ func (deploy *NewDeploy) fnCreate(ctx context.Context, fn *fv1.Function) (*fscac
 		return nil, err
 	}
 
+	ociArchive, err := executorUtils.GetFunctionOCIArchive(ctx, deploy.fissionClient, fn)
+	if err != nil {
+		return nil, fmt.Errorf("error fetching package for function %s: %w", k8sCache.MetaObjectToName(fn), err)
+	}
+
 	objName := deploy.getObjName(fn)
 	deployLabels := deploy.getDeployLabels(fn.ObjectMeta, env.ObjectMeta)
 	deployAnnotations := deploy.getDeployAnnotations(fn.ObjectMeta, env.ObjectMeta)
@@ -462,7 +477,7 @@ func (deploy *NewDeploy) fnCreate(ctx context.Context, fn *fv1.Function) (*fscac
 	}
 	svcAddress := fmt.Sprintf("%s.%s", svc.Name, svc.Namespace)
 
-	depl, err := deploy.createOrGetDeployment(ctx, fn, env, objName, deployLabels, deployAnnotations, ns)
+	depl, err := deploy.createOrGetDeployment(ctx, fn, env, ociArchive, objName, deployLabels, deployAnnotations, ns)
 	if err != nil {
 		deploy.logger.Error(err, "error creating deployment", "deployment", objName)
 		go cleanupFunc(context.Background(), ns, objName)
@@ -672,10 +687,15 @@ func (deploy *NewDeploy) updateFuncDeployment(ctx context.Context, fn *fv1.Funct
 		return err
 	}
 
+	ociArchive, err := executorUtils.GetFunctionOCIArchive(ctx, deploy.fissionClient, fn)
+	if err != nil {
+		return fmt.Errorf("error fetching package for function %s: %w", k8sCache.MetaObjectToName(fn), err)
+	}
+
 	// the resource version inside function packageRef is changed,
 	// so the content of fetchRequest in deployment cmd is different.
 	// Therefore, the deployment update will trigger a rolling update.
-	newDeployment, err := deploy.getDeploymentSpec(ctx, fn, env,
+	newDeployment, err := deploy.getDeploymentSpec(ctx, fn, env, ociArchive,
 		existingDepl.Spec.Replicas, // use current replicas instead of minscale in the ExecutionStrategy.
 		fnObjName, ns, deployLabels, deploy.getDeployAnnotations(fn.ObjectMeta, env.ObjectMeta))
 	if err != nil {

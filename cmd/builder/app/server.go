@@ -22,16 +22,17 @@ import (
 
 	"github.com/go-logr/logr"
 
-	builder "github.com/fission/fission/pkg/builder"
+	builderpkg "github.com/fission/fission/pkg/builder"
 	"github.com/fission/fission/pkg/utils/httpserver"
 	"github.com/fission/fission/pkg/utils/manager"
 )
 
 // Usage: builder <shared volume path>
 func Run(ctx context.Context, logger logr.Logger, mgr manager.Interface, shareVolume string) {
-	builder := builder.MakeBuilder(logger, shareVolume)
+	builder := builderpkg.MakeBuilder(logger, shareVolume)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", builder.Handler)
+	mux.HandleFunc(builderpkg.OCIBuildEndpoint, builder.OCIHandler)
 	mux.HandleFunc("/clean", builder.Clean)
 	mux.HandleFunc("/version", builder.VersionHandler)
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {

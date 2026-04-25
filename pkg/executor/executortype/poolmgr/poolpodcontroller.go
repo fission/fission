@@ -40,6 +40,7 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/executor/fscache"
+	executorUtils "github.com/fission/fission/pkg/executor/util"
 	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
 	flisterv1 "github.com/fission/fission/pkg/generated/listers/core/v1"
 	"github.com/fission/fission/pkg/utils"
@@ -148,6 +149,15 @@ func IsPodActive(p *v1.Pod) bool {
 func (p *PoolPodController) handleFuncDelete(obj any) {
 	fn := obj.(*fv1.Function)
 	p.gpm.fsCache.MarkFuncDeleted(crd.CacheKeyURGFromMeta(&fn.ObjectMeta))
+
+	// If this function used an OCI deployment package, tear down the
+	// per-Function pool's Deployment + Service. The lookup is best-effort:
+	// the Package may already be gone (cascading delete) or the function
+	// may never have been an OCI function — either way cleanupOCIFunction
+	// is idempotent so the extra call is safe.
+	if oci, err := executorUtils.GetFunctionOCIArchive(context.Background(), p.gpm.fissionClient, fn); err == nil && oci != nil {
+		p.gpm.cleanupOCIFunction(context.Background(), fn)
+	}
 }
 
 func (p *PoolPodController) processRS(rs *apps.ReplicaSet) {

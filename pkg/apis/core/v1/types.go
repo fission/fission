@@ -213,18 +213,20 @@ type (
 		Sum  string       `json:"sum,omitempty"`
 	}
 
-	// ArchiveType is either literal or URL, indicating whether
-	// the package is specified in the Archive struct or
-	// externally.
+	// ArchiveType is either literal, URL, or OCI, indicating where
+	// and how the package contents are stored.
 	ArchiveType string
 
 	// Archive contains or references a collection of sources or
 	// binary files.
+	// +kubebuilder:validation:XValidation:rule="!(has(self.oci) && has(self.url) && self.url != '')",message="archive.oci and archive.url are mutually exclusive"
+	// +kubebuilder:validation:XValidation:rule="!(has(self.oci) && has(self.literal) && size(self.literal) > 0)",message="archive.oci and archive.literal are mutually exclusive"
 	Archive struct {
-		// Type defines how the package is specified: literal or URL.
+		// Type defines how the package is specified: literal, url, or oci.
 		// Available value:
 		//  - literal
 		//  - url
+		//  - oci
 		// +optional
 		Type ArchiveType `json:"type,omitempty"`
 
@@ -241,6 +243,39 @@ type (
 		// referenced by URL. Ignored for literals.
 		// +optional
 		Checksum Checksum `json:"checksum,omitempty"`
+
+		// OCI references an OCI artifact (container image or OCI
+		// artifact) that holds the deployment contents. Mutually
+		// exclusive with Literal and URL. When set, the function pod
+		// mounts the artifact directly instead of fetching a tarball.
+		// +optional
+		OCI *OCIArchive `json:"oci,omitempty"`
+	}
+
+	// OCIArchive references a package stored as an OCI artifact in a
+	// container registry. See RFC-0001 (rfc/0001-oci-native-package-delivery.md).
+	OCIArchive struct {
+		// Image is a fully qualified OCI reference of the form
+		// registry/repository:tag or registry/repository@sha256:<digest>.
+		Image string `json:"image"`
+
+		// ImagePullSecrets are propagated to the pod spec of function
+		// pods that pull this image. Each entry references a Secret
+		// in the same namespace as the function.
+		// +optional
+		// +listType=map
+		// +listMapKey=name
+		ImagePullSecrets []apiv1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+
+		// SubPath is a path inside the mounted OCI artifact treated as
+		// the deployment root. Empty means the artifact root.
+		// +optional
+		SubPath string `json:"subPath,omitempty"`
+
+		// Digest, when set, pins the artifact content hash. Format:
+		// sha256:<64 lowercase hex chars>. Validated at admission time.
+		// +optional
+		Digest string `json:"digest,omitempty"`
 	}
 
 	// EnvironmentReference is a reference to an environment.
@@ -560,12 +595,27 @@ type (
 	}
 
 	// Builder is the setting for environment builder.
+	// +kubebuilder:validation:XValidation:rule="!(has(self.kind) && self.kind == 'buildkit') || (has(self.registry) && self.registry.url != '')",message="builder.registry.url is required when builder.kind is 'buildkit'"
 	Builder struct {
 		// Image for containing the language compilation environment.
 		Image string `json:"image,omitempty"`
 
 		// (Optional) Default build command to run for this build environment.
 		Command string `json:"command,omitempty"`
+
+		// Kind selects the builder implementation. An empty value or "tarball"
+		// (the default) runs the legacy fetcher-based pipeline that uploads a
+		// deployment archive to storagesvc. "buildkit" runs the BuildKit-based
+		// pipeline that produces an OCI artifact and pushes it to the registry
+		// declared in Registry.
+		// +optional
+		// +kubebuilder:validation:Enum="";tarball;buildkit
+		Kind string `json:"kind,omitempty"`
+
+		// (Optional) Registry is the OCI registry the buildkit builder pushes
+		// to. Only consulted when Kind is "buildkit".
+		// +optional
+		Registry *BuilderRegistry `json:"registry,omitempty"`
 
 		// (Optional) Container allows the modification of the deployed builder
 		// container using the Kubernetes Container spec. Fission overrides
@@ -580,6 +630,26 @@ type (
 
 		// PodSpec will store the spec of the pod that will be applied to the pod created for the builder
 		PodSpec *apiv1.PodSpec `json:"podspec,omitempty"`
+	}
+
+	// BuilderRegistry configures the OCI registry the BuildKit builder
+	// pushes built artifacts to. URL is the registry/repository prefix
+	// (e.g. "ghcr.io/myorg/fission-fns"). The image tag is derived from
+	// the package name and resource version.
+	BuilderRegistry struct {
+		// URL is the fully qualified registry/repository prefix where built
+		// images are pushed (e.g. "ghcr.io/myorg/fission-fns").
+		URL string `json:"url"`
+
+		// (Optional) ImagePullSecret references a Kubernetes secret in the
+		// builder's namespace whose credentials are used both for the build
+		// push and for the runtime pull when the produced image is later
+		// referenced from a Function.
+		ImagePullSecret string `json:"imagePullSecret,omitempty"`
+
+		// (Optional) BaseImage overrides the runtime image used as the base
+		// layer of the produced OCI artifact. Defaults to Environment.Spec.Runtime.Image.
+		BaseImage string `json:"baseImage,omitempty"`
 	}
 
 	// EnvironmentSpec contains with builder, runtime and some other related environment settings.

@@ -150,6 +150,24 @@ func createEnvironmentFromCmd(input cli.Input) (*fv1.Environment, error) {
 		}
 	}
 
+	envBuilderKind := input.String(flagkey.EnvBuilderKind)
+	envBuilderRegistry := input.String(flagkey.EnvBuilderRegistry)
+	envBuilderRegSecret := input.String(flagkey.EnvBuilderRegistrySec)
+	envBuilderRegBase := input.String(flagkey.EnvBuilderRegistryBase)
+	switch envBuilderKind {
+	case "", fv1.BuilderKindTarball, fv1.BuilderKindBuildKit:
+	default:
+		errs = errors.Join(errs, fmt.Errorf("--%s must be %q or %q", flagkey.EnvBuilderKind, fv1.BuilderKindTarball, fv1.BuilderKindBuildKit))
+	}
+	if envBuilderKind == fv1.BuilderKindBuildKit && envBuilderRegistry == "" {
+		errs = errors.Join(errs, fmt.Errorf("--%s is required when --%s is %q", flagkey.EnvBuilderRegistry, flagkey.EnvBuilderKind, fv1.BuilderKindBuildKit))
+	}
+	if envBuilderKind != fv1.BuilderKindBuildKit && (envBuilderRegistry != "" || envBuilderRegSecret != "" || envBuilderRegBase != "") {
+		errs = errors.Join(errs, fmt.Errorf("--%s/--%s/--%s require --%s=%s",
+			flagkey.EnvBuilderRegistry, flagkey.EnvBuilderRegistrySec, flagkey.EnvBuilderRegistryBase,
+			flagkey.EnvBuilderKind, fv1.BuilderKindBuildKit))
+	}
+
 	builderEnvParams := input.StringSlice(flagkey.EnvBuilder)
 	builderEnvList := util.GetEnvVarFromStringSlice(builderEnvParams)
 
@@ -192,6 +210,17 @@ func createEnvironmentFromCmd(input cli.Input) (*fv1.Environment, error) {
 			Builder: fv1.Builder{
 				Image:   envBuilderImg,
 				Command: envBuildCmd,
+				Kind:    envBuilderKind,
+				Registry: func() *fv1.BuilderRegistry {
+					if envBuilderRegistry == "" && envBuilderRegSecret == "" && envBuilderRegBase == "" {
+						return nil
+					}
+					return &fv1.BuilderRegistry{
+						URL:             envBuilderRegistry,
+						ImagePullSecret: envBuilderRegSecret,
+						BaseImage:       envBuilderRegBase,
+					}
+				}(),
 				Container: &apiv1.Container{
 					Name: fv1.BuilderContainerName,
 					Env:  builderEnvList,

@@ -228,6 +228,22 @@ func (gpm *GenericPoolManager) GetFuncSvc(ctx context.Context, fn *fv1.Function)
 		return nil, fErr
 	}
 
+	// If the function's package uses an OCI archive, route through the
+	// per-function OCI pool path: a Deployment whose pod template mounts
+	// the function code as an image volume and whose fetcher sidecar runs
+	// with -skip-fetch. This preserves the warm-pod latency target while
+	// dropping the tarball download and storagesvc dance.
+	oci, err := executorUtils.GetFunctionOCIArchive(ctx, gpm.fissionClient, fn)
+	if err != nil {
+		fErr = err
+		return nil, fErr
+	}
+	if oci != nil {
+		logger.V(1).Info("dispatching function to OCI pool", "function", fn.Name, "image", oci.Image)
+		fnSvc, fErr = gpm.getFuncSvcOCI(ctx, fn, env, oci)
+		return fnSvc, fErr
+	}
+
 	pool, created, err := gpm.getPool(ctx, env)
 	if err != nil {
 		fErr = err
@@ -243,6 +259,54 @@ func (gpm *GenericPoolManager) GetFuncSvc(ctx context.Context, fn *fv1.Function)
 	logger.V(1).Info("getting function service from pool", "function", fn.Name)
 	fnSvc, fErr = pool.getFuncSvc(ctx, fn)
 	return fnSvc, fErr
+}
+
+// getFuncSvcOCI ensures the per-Function OCI pool exists and is ready, and
+// returns a FuncSvc pointing at the pool's Service. The Service URL is
+// returned (instead of a pod IP) because the OCI pool runs N replicas and
+// kube-proxy load-balances across them — same model as newdeploy uses.
+func (gpm *GenericPoolManager) getFuncSvcOCI(ctx context.Context, fn *fv1.Function, env *fv1.Environment, oci *fv1.OCIArchive) (*fscache.FuncSvc, error) {
+	depl, svc, err := gpm.createOrAdoptOCIPool(ctx, fn, env, oci)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := gpm.waitForOCIPoolReady(ctx, depl.Namespace, depl.Name); err != nil {
+		return nil, fmt.Errorf("OCI pool readiness wait failed for %s: %w", fn.Name, err)
+	}
+
+	svcHost := fmt.Sprintf("%s.%s", svc.Name, svc.Namespace)
+
+	m := fn.ObjectMeta
+	fsvc := &fscache.FuncSvc{
+		Name:        depl.Name,
+		Function:    &m,
+		Environment: env,
+		Address:     svcHost,
+		KubernetesObjects: []apiv1.ObjectReference{
+			{
+				Kind:            "deployment",
+				Name:            depl.Name,
+				APIVersion:      depl.APIVersion,
+				Namespace:       depl.Namespace,
+				ResourceVersion: depl.ResourceVersion,
+				UID:             depl.UID,
+			},
+			{
+				Kind:            "service",
+				Name:            svc.Name,
+				APIVersion:      svc.APIVersion,
+				Namespace:       svc.Namespace,
+				ResourceVersion: svc.ResourceVersion,
+				UID:             svc.UID,
+			},
+		},
+		Executor: fv1.ExecutorTypePoolmgr,
+		Ctime:    time.Now(),
+		Atime:    time.Now(),
+	}
+	gpm.fsCache.AddFunc(ctx, *fsvc, fn.GetRequestPerPod(), fn.GetRetainPods())
+	return fsvc, nil
 }
 
 func (gpm *GenericPoolManager) GetFuncSvcFromCache(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
@@ -616,8 +680,12 @@ func (gpm *GenericPoolManager) getFunctionEnv(ctx context.Context, fn *fv1.Funct
 
 // idleObjectReaper reaps objects after certain idle time
 func (gpm *GenericPoolManager) idleObjectReaper(ctx context.Context) {
-	// calling function doIdleObjectReaper() repeatedly at given interval of time
-	wait.UntilWithContext(ctx, gpm.doIdleObjectReaper, gpm.objectReaperIntervalSecond)
+	// Run the generic-pool reaper and the OCI-pool reaper on the same
+	// cadence; both skip work when their respective fsvc kind is absent.
+	wait.UntilWithContext(ctx, func(ctx context.Context) {
+		gpm.doIdleObjectReaper(ctx)
+		gpm.doIdleOCIPoolReaper(ctx)
+	}, gpm.objectReaperIntervalSecond)
 }
 
 func (gpm *GenericPoolManager) doIdleObjectReaper(ctx context.Context) {
@@ -656,6 +724,12 @@ func (gpm *GenericPoolManager) doIdleObjectReaper(ctx context.Context) {
 		fsvc := funcSvcs[i]
 
 		if fsvc.Executor != fv1.ExecutorTypePoolmgr {
+			continue
+		}
+
+		// OCI pool fsvcs are reaped by doIdleOCIPoolReaper; skip them
+		// here to avoid double-handling.
+		if isOCIPoolFsvc(fsvc.KubernetesObjects) {
 			continue
 		}
 
@@ -703,6 +777,108 @@ func (gpm *GenericPoolManager) doIdleObjectReaper(ctx context.Context) {
 				}
 			}
 		}()
+	}
+}
+
+// doIdleOCIPoolReaper sweeps OCI per-Function pools for idleness. Unlike
+// the generic-pool reaper which deletes individual idle pods (the env
+// pool replaces them up to poolsize), this one tears down the entire
+// per-Function Deployment + Service when the function has been idle past
+// its IdleTimeout (or the executor default). Functions that explicitly
+// request always-warm pods via MinScale > 0 are skipped — those signal
+// "never reap, the user is paying for steady-state warm capacity."
+//
+// Cold-start back from a fully-reaped OCI pool is image-pull + pod-start,
+// dominated by the kubelet's containerd layer cache (typically ~1-3s
+// node-warm, ~50-200ms once node-cached).
+func (gpm *GenericPoolManager) doIdleOCIPoolReaper(ctx context.Context) {
+	fnList := make(map[k8sTypes.UID]fv1.Function)
+	for _, namespace := range utils.DefaultNSResolver().FissionResourceNS {
+		fns, err := gpm.fissionClient.CoreV1().Functions(namespace).List(ctx, metav1.ListOptions{})
+		if err != nil {
+			gpm.logger.Error(err, "failed to get function list for OCI reaper", "namespace", namespace)
+			return
+		}
+		for i, fn := range fns.Items {
+			fnList[fn.UID] = fns.Items[i]
+		}
+	}
+
+	funcSvcs, err := gpm.fsCache.ListOldForPool(time.Second * 5)
+	if err != nil {
+		gpm.logger.Error(err, "error listing fsvcs for OCI reaper")
+		return
+	}
+
+	for i := range funcSvcs {
+		fsvc := funcSvcs[i]
+		if fsvc.Executor != fv1.ExecutorTypePoolmgr {
+			continue
+		}
+		if !isOCIPoolFsvc(fsvc.KubernetesObjects) {
+			continue
+		}
+		if _, ok := gpm.fsCache.WebsocketFsvc.Load(fsvc.Name); ok {
+			continue
+		}
+
+		fn, fnExists := fnList[fsvc.Function.UID]
+		if fnExists && minScaleAlwaysWarm(&fn) {
+			// User contracted for always-warm capacity; never reap.
+			continue
+		}
+
+		idleTimeout := gpm.defaultIdlePodReapTime
+		if fnExists && fn.Spec.IdleTimeout != nil {
+			idleTimeout = time.Duration(*fn.Spec.IdleTimeout) * time.Second
+		}
+		if time.Since(fsvc.Atime) < idleTimeout {
+			continue
+		}
+
+		// Function is gone or genuinely idle — tear down.
+		go gpm.reapOCIPool(ctx, fsvc, idleTimeout)
+	}
+}
+
+// reapOCIPool deletes the per-Function OCI Deployment + Service and evicts
+// the FuncSvc from cache. Errors are logged and swallowed so a single
+// stuck deletion doesn't block the rest of the sweep.
+func (gpm *GenericPoolManager) reapOCIPool(ctx context.Context, fsvc *fscache.FuncSvc, idleTimeout time.Duration) {
+	deleted, err := gpm.fsCache.DeleteOldPoolCache(ctx, fsvc, idleTimeout)
+	if err != nil {
+		gpm.logger.Error(err, "error evicting OCI fsvc from cache", "function", fsvc.Function.Name)
+	}
+	if !deleted {
+		return
+	}
+	for i := range fsvc.KubernetesObjects {
+		gpm.logger.Info("releasing idle OCI pool resources",
+			"function", fsvc.Function.Name,
+			"address", fsvc.Address,
+			"object_kind", fsvc.KubernetesObjects[i].Kind,
+			"object_name", fsvc.KubernetesObjects[i].Name)
+		reaper.CleanupKubeObject(ctx, gpm.logger, gpm.kubernetesClient, &fsvc.KubernetesObjects[i])
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+// cleanupOCIFunction tears down the per-Function OCI Deployment + Service
+// when a Function CRD is deleted. Idempotent: missing objects are
+// treated as success.
+func (gpm *GenericPoolManager) cleanupOCIFunction(ctx context.Context, fn *fv1.Function) {
+	objName := ociFunctionObjName(fn)
+	ns := gpm.nsResolver.GetFunctionNS(fn.Namespace)
+	logger := otelUtils.LoggerWithTraceID(ctx, gpm.logger).WithValues("function", fn.Name, "namespace", fn.Namespace)
+
+	if err := gpm.kubernetesClient.AppsV1().Deployments(ns).Delete(ctx, objName, metav1.DeleteOptions{}); err != nil && !k8serrors.IsNotFound(err) {
+		logger.Error(err, "error cleaning up OCI pool deployment", "deployment", objName)
+	}
+	if err := gpm.kubernetesClient.CoreV1().Services(ns).Delete(ctx, objName, metav1.DeleteOptions{}); err != nil && !k8serrors.IsNotFound(err) {
+		logger.Error(err, "error cleaning up OCI pool service", "service", objName)
+	}
+	if fsvc, err := gpm.fsCache.GetByFunctionUID(fn.UID); err == nil && fsvc != nil {
+		gpm.fsCache.DeleteFunctionSvc(ctx, fsvc)
 	}
 }
 

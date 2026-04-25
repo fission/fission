@@ -31,6 +31,15 @@ type BuilderApplyConfiguration struct {
 	Image *string `json:"image,omitempty"`
 	// (Optional) Default build command to run for this build environment.
 	Command *string `json:"command,omitempty"`
+	// Kind selects the builder implementation. An empty value or "tarball"
+	// (the default) runs the legacy fetcher-based pipeline that uploads a
+	// deployment archive to storagesvc. "buildkit" runs the BuildKit-based
+	// pipeline that produces an OCI artifact and pushes it to the registry
+	// declared in Registry.
+	Kind *string `json:"kind,omitempty"`
+	// (Optional) Registry is the OCI registry the buildkit builder pushes
+	// to. Only consulted when Kind is "buildkit".
+	Registry *BuilderRegistryApplyConfiguration `json:"registry,omitempty"`
 	// (Optional) Container allows the modification of the deployed builder
 	// container using the Kubernetes Container spec. Fission overrides
 	// the following fields:
@@ -64,6 +73,22 @@ func (b *BuilderApplyConfiguration) WithImage(value string) *BuilderApplyConfigu
 // If called multiple times, the Command field is set to the value of the last call.
 func (b *BuilderApplyConfiguration) WithCommand(value string) *BuilderApplyConfiguration {
 	b.Command = &value
+	return b
+}
+
+// WithKind sets the Kind field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Kind field is set to the value of the last call.
+func (b *BuilderApplyConfiguration) WithKind(value string) *BuilderApplyConfiguration {
+	b.Kind = &value
+	return b
+}
+
+// WithRegistry sets the Registry field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Registry field is set to the value of the last call.
+func (b *BuilderApplyConfiguration) WithRegistry(value *BuilderRegistryApplyConfiguration) *BuilderApplyConfiguration {
+	b.Registry = value
 	return b
 }
 

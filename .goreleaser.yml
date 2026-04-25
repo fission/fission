@@ -70,6 +70,10 @@ builds:
     id: reporter
     binary: reporter
     dir: ./cmd/reporter
+  - <<: *build-linux
+    id: buildkit-build
+    binary: buildkit-build
+    dir: ./cmd/buildkit-build
 dockers_v2:
   - id: builder
     tags:
@@ -87,6 +91,22 @@ dockers_v2:
       org.opencontainers.image.vendor: "Fission"
       org.opencontainers.image.url: "https://fission.io/"
     dockerfile: cmd/builder/Dockerfile
+  - id: buildkit-builder
+    tags:
+      - latest
+      - "{{ .Tag }}"
+    images:
+      - "{{ .Env.GHCR_REPO }}/buildkit-builder"
+    labels:
+      org.opencontainers.image.description: "BuildKit-flavored builder for Fission environments opting into Builder.Kind=buildkit. Produces OCI artifacts and pushes to a configured registry."
+      org.opencontainers.image.source: "{{.GitURL}}"
+      org.opencontainers.image.created: "{{.Date}}"
+      org.opencontainers.image.revision: "{{.FullCommit}}"
+      org.opencontainers.image.version: "{{.Tag}}"
+      org.opencontainers.image.authors: "The Fission Authors https://fission.io/"
+      org.opencontainers.image.vendor: "Fission"
+      org.opencontainers.image.url: "https://fission.io/"
+    dockerfile: cmd/buildkit-build/Dockerfile
   - id: fetcher
     tags:
       - latest

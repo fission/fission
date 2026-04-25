@@ -169,7 +169,7 @@ func (pkgw *packageWatcher) build(ctx context.Context, srcpkg *fv1.Package) {
 				break
 			}
 
-			uploadResp, buildLogs, err := buildPackage(ctx, pkgw.logger, pkgw.fissionClient, builderNs, pkgw.storageSvcUrl, pkg)
+			outcome, buildLogs, err := buildPackage(ctx, pkgw.logger, pkgw.fissionClient, builderNs, pkgw.storageSvcUrl, pkg)
 			if err != nil {
 				logger.Error(err, "error building package")
 				_, er := updatePackage(ctx, logger, pkgw.fissionClient, pkg, fv1.BuildStatusFailed, buildLogs, nil)
@@ -217,7 +217,7 @@ func (pkgw *packageWatcher) build(ctx context.Context, srcpkg *fv1.Package) {
 			}
 
 			_, err = updatePackage(ctx, logger, pkgw.fissionClient, pkg,
-				fv1.BuildStatusSucceeded, buildLogs, uploadResp)
+				fv1.BuildStatusSucceeded, buildLogs, outcome)
 			if err != nil {
 				logger.Error(err, "error updating package info")
 				_, er := updatePackage(ctx, logger, pkgw.fissionClient, pkg, fv1.BuildStatusFailed, buildLogs, nil)

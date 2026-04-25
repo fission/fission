@@ -189,6 +189,10 @@ var (
 	EnvForce                  = Flag{Type: Bool, Name: flagkey.EnvForce, Short: "f", Usage: "Force delete env even if one or more functions exist", DefaultValue: false}
 	EnvBuilder                = Flag{Type: StringSlice, Name: flagkey.EnvBuilder, Usage: "Environment variable to be set in the builder container"}
 	EnvRuntime                = Flag{Type: StringSlice, Name: flagkey.EnvRuntime, Usage: "Environment variable to be set in the runtime container"}
+	EnvBuilderKind            = Flag{Type: String, Name: flagkey.EnvBuilderKind, Usage: "Builder kind: empty/'tarball' for legacy builds, 'buildkit' to produce OCI artifacts"}
+	EnvBuilderRegistry        = Flag{Type: String, Name: flagkey.EnvBuilderRegistry, Usage: "Registry URL the buildkit builder pushes built OCI images to (e.g. ghcr.io/myorg/fission-fns)"}
+	EnvBuilderRegistrySec     = Flag{Type: String, Name: flagkey.EnvBuilderRegistrySec, Usage: "Image pull secret name for the buildkit builder's registry"}
+	EnvBuilderRegistryBase    = Flag{Type: String, Name: flagkey.EnvBuilderRegistryBase, Usage: "Base image used as the bottom layer of the produced OCI artifact (defaults to runtime image)"}
 
 	KwName      = Flag{Type: String, Name: flagkey.KwName, Usage: "Watch name"}
 	KwFnName    = Flag{Type: String, Name: flagkey.KwFnName, Usage: "Function name"}
@@ -209,6 +213,10 @@ var (
 	PkgSrcArchive     = Flag{Type: StringSlice, Name: flagkey.PkgSrcArchive, Aliases: []string{"source", "src"}, Usage: "URL or local paths for source archive"}
 	PkgSrcChecksum    = Flag{Type: String, Name: flagkey.PkgSrcChecksum, Usage: "SHA256 checksum of source archive when providing URL"}
 	PkgInsecure       = Flag{Type: Bool, Name: flagkey.PkgInsecure, Usage: "Skip generating SHA256 checksum for file integrity validation"}
+	PkgOCI            = Flag{Type: String, Name: flagkey.PkgOCI, Usage: "OCI image reference for the deployment package (e.g. ghcr.io/org/fn:v1)"}
+	PkgOCIPullSecret  = Flag{Type: StringSlice, Name: flagkey.PkgOCIPullSecret, Usage: "Image pull secret name for the OCI deployment package (repeatable)"}
+	PkgOCISubPath     = Flag{Type: String, Name: flagkey.PkgOCISubPath, Usage: "Subpath inside the mounted OCI artifact at which the deployment root lives"}
+	PkgOCIDigest      = Flag{Type: String, Name: flagkey.PkgOCIDigest, Usage: "Optional content hash (sha256:...) to verify the OCI image"}
 
 	SpecSave             = Flag{Type: Bool, Name: flagkey.SpecSave, Usage: "Save to the spec directory instead of creating on cluster"}
 	SpecDir              = Flag{Type: String, Name: flagkey.SpecDir, Usage: "Directory to store specs, defaults to ./specs"}

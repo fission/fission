@@ -41,6 +41,10 @@ const (
 
 	// ArchiveTypeUrl means the package contents are at the specified URL.
 	ArchiveTypeUrl ArchiveType = "url"
+
+	// ArchiveTypeOCI means the package contents are delivered as an OCI
+	// artifact referenced by Archive.OCI.
+	ArchiveTypeOCI ArchiveType = "oci"
 )
 
 const (
@@ -60,6 +64,18 @@ const (
 	ExecutorTypePoolmgr   ExecutorType = "poolmgr"
 	ExecutorTypeNewdeploy ExecutorType = "newdeploy"
 	ExecutorTypeContainer ExecutorType = "container"
+)
+
+const (
+	// BuilderKindTarball runs the legacy buildermgr pipeline: fetch source,
+	// run the build command in a sidecar, upload the deployment archive to
+	// storagesvc. This is the default when Builder.Kind is empty.
+	BuilderKindTarball = "tarball"
+
+	// BuilderKindBuildKit runs the BuildKit-based pipeline: fetch source,
+	// build an OCI artifact via BuildKit, push it to a configured registry,
+	// and write the resulting image reference into Package.Spec.Deployment.OCI.
+	BuilderKindBuildKit = "buildkit"
 )
 
 const (

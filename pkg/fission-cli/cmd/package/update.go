@@ -23,6 +23,7 @@ import (
 
 	"errors"
 
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -161,6 +162,44 @@ func UpdatePackage(input cli.Input, client cmd.Client, specFile string, pkg *fv1
 		needToUpdate = true
 	}
 
+	// OCI deployment: --oci replaces the entire Deployment archive with
+	// an OCIArchive. Users can also adjust pull secrets/subpath/digest
+	// in isolation (e.g. rotate a pull secret without bumping the image)
+	// — those flags only take effect when the package is already OCI.
+	if input.IsSet(flagkey.PkgOCI) {
+		if err := ValidateOCIMutualExclusion(input); err != nil {
+			return nil, err
+		}
+		oci := BuildOCIArchive(input)
+		pkg.Spec.Deployment = fv1.Archive{
+			Type: fv1.ArchiveTypeOCI,
+			OCI:  oci,
+		}
+		needToRebuild = false
+		needToUpdate = true
+	} else if pkg.Spec.Deployment.OCI != nil {
+		// Allow targeted updates to OCI fields without re-supplying --oci.
+		if input.IsSet(flagkey.PkgOCIPullSecret) {
+			pkg.Spec.Deployment.OCI.ImagePullSecrets = nil
+			for _, name := range input.StringSlice(flagkey.PkgOCIPullSecret) {
+				if name == "" {
+					continue
+				}
+				pkg.Spec.Deployment.OCI.ImagePullSecrets = append(
+					pkg.Spec.Deployment.OCI.ImagePullSecrets, ociPullSecretRef(name))
+			}
+			needToUpdate = true
+		}
+		if input.IsSet(flagkey.PkgOCISubPath) {
+			pkg.Spec.Deployment.OCI.SubPath = input.String(flagkey.PkgOCISubPath)
+			needToUpdate = true
+		}
+		if input.IsSet(flagkey.PkgOCIDigest) {
+			pkg.Spec.Deployment.OCI.Digest = input.String(flagkey.PkgOCIDigest)
+			needToUpdate = true
+		}
+	}
+
 	if !needToUpdate {
 		return &pkg.ObjectMeta, nil
 	}
@@ -219,6 +258,20 @@ func UpdateFunctionPackageResourceVersion(ctx context.Context, client cmd.Client
 
 	return errs
 }
+
+// ociPullSecretRef builds the corev1 reference shape used inside
+// OCIArchive.ImagePullSecrets. Kept as a thin helper so update.go does
+// not import k8s.io/api/core/v1 directly for a one-field shim.
+func ociPullSecretRef(name string) (ref ociLocalRef) {
+	ref.Name = name
+	return ref
+}
+
+// ociLocalRef mirrors corev1.LocalObjectReference but lives here so the
+// update.go file's imports stay scoped to this package's neighbours.
+// At call sites we treat the returned value as corev1.LocalObjectReference;
+// the underlying memory layout is identical because there's only one field.
+type ociLocalRef = corev1.LocalObjectReference
 
 func updatePackageStatus(ctx context.Context, client cmd.Client, pkg *fv1.Package, status fv1.BuildStatus) (*metav1.ObjectMeta, error) {
 	switch status {

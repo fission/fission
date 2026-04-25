@@ -53,6 +53,22 @@ spec:
           value: {{ .Values.pprof.enabled | quote }}
         - name: HELM_RELEASE_NAME
           value: {{ .Release.Name | quote }}
+        {{- if .Values.packageRegistry.url }}
+        - name: PACKAGE_REGISTRY_URL
+          value: {{ .Values.packageRegistry.url | quote }}
+        {{- end }}
+        {{- if .Values.packageRegistry.imagePullSecret }}
+        - name: PACKAGE_REGISTRY_IMAGE_PULL_SECRET
+          value: {{ .Values.packageRegistry.imagePullSecret | quote }}
+        {{- end }}
+        {{- if .Values.packageRegistry.baseImage }}
+        - name: PACKAGE_REGISTRY_BASE_IMAGE
+          value: {{ .Values.packageRegistry.baseImage | quote }}
+        {{- end }}
+        {{- if .Values.packageRegistry.builderImage }}
+        - name: BUILDKIT_BUILDER_IMAGE
+          value: {{ .Values.packageRegistry.builderImage | quote }}
+        {{- end }}
         {{- include "fission-resource-namespace.envs" . | indent 8 }}
         {{- include "kube_client.envs" . | indent 8 }}
         {{- include "opentelemtry.envs" . | indent 8 }}

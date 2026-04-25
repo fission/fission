@@ -478,6 +478,42 @@ func (envw *environmentWatcher) createBuilderDeployment(ctx context.Context, env
 		return nil, err
 	}
 
+	// BuildKit-flavored builder: mount the registry's docker-config-json
+	// secret so buildctl can authenticate for both pushes and base-image
+	// pulls. The secret type must be kubernetes.io/dockerconfigjson; the
+	// mount path is fixed to /kaniko/.docker/ to match the convention
+	// used elsewhere in the OCI tooling ecosystem.
+	if env.Spec.Builder.Kind == fv1.BuilderKindBuildKit && env.Spec.Builder.Registry != nil && env.Spec.Builder.Registry.ImagePullSecret != "" {
+		secretName := env.Spec.Builder.Registry.ImagePullSecret
+		volName := "buildkit-registry-auth"
+		deployment.Spec.Template.Spec.Volumes = append(deployment.Spec.Template.Spec.Volumes, apiv1.Volume{
+			Name: volName,
+			VolumeSource: apiv1.VolumeSource{
+				Secret: &apiv1.SecretVolumeSource{
+					SecretName: secretName,
+					Items: []apiv1.KeyToPath{
+						{Key: ".dockerconfigjson", Path: "config.json"},
+					},
+				},
+			},
+		})
+		for i := range deployment.Spec.Template.Spec.Containers {
+			c := &deployment.Spec.Template.Spec.Containers[i]
+			if c.Name != fv1.BuilderContainerName {
+				continue
+			}
+			c.VolumeMounts = append(c.VolumeMounts, apiv1.VolumeMount{
+				Name:      volName,
+				MountPath: "/kaniko/.docker",
+				ReadOnly:  true,
+			})
+			c.Env = append(c.Env, apiv1.EnvVar{
+				Name:  "DOCKER_CONFIG",
+				Value: "/kaniko/.docker",
+			})
+		}
+	}
+
 	if env.Spec.Builder.PodSpec != nil {
 		newPodSpec, err := util.MergePodSpec(&deployment.Spec.Template.Spec, env.Spec.Builder.PodSpec)
 		if err != nil {

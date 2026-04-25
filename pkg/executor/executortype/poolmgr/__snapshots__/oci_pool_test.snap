@@ -1,0 +1,102 @@
+
+[TestBuildOCIPoolDeployment_Snapshot - 1]
+containers:
+- image: ghcr.io/fission/node-env-22
+  imagePullPolicy: IfNotPresent
+  lifecycle:
+    preStop:
+      exec:
+        command:
+        - /bin/sleep
+        - "0"
+  name: node
+  ports:
+  - containerPort: 8000
+    name: http-fetcher
+  - containerPort: 8888
+    name: http-env
+  resources: {}
+  terminationMessagePath: /dev/termination-log
+  volumeMounts:
+  - mountPath: /userfunc
+    name: userfunc
+    readOnly: true
+  - mountPath: /secrets
+    name: secrets
+  - mountPath: /configs
+    name: configmaps
+  - mountPath: /etc/podinfo
+    name: podinfo
+- command:
+  - /fetcher
+  - -secret-dir
+  - /secrets
+  - -cfgmap-dir
+  - /configs
+  - -specialize-on-startup
+  - -skip-fetch
+  - -specialize-request
+  - '{"FetchReq":{"fetchType":1,"package":{"name":"hello-pkg","namespace":"default","resourceVersion":"100"},"url":"","storagesvcurl":"","filename":"deployarchive","secretList":null,"configMapList":null,"keeparchive":false},"LoadReq":{"filepath":"/userfunc/deployarchive","functionName":"handler","url":"","FunctionMetadata":{"name":"hello","namespace":"default","uid":"22222222-2222-2222-2222-222222222222"},"envVersion":2}}'
+  - /userfunc
+  env:
+  - name: OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE
+    value: delta
+  image: ghcr.io/fission/fetcher
+  imagePullPolicy: IfNotPresent
+  lifecycle:
+    preStop:
+      exec:
+        command:
+        - /bin/sleep
+        - "0"
+  livenessProbe:
+    httpGet:
+      path: /healthz
+      port: 8000
+    initialDelaySeconds: 1
+    periodSeconds: 5
+  name: fetcher
+  readinessProbe:
+    failureThreshold: 30
+    httpGet:
+      path: /readiness-healthz
+      port: 8000
+    initialDelaySeconds: 1
+    periodSeconds: 1
+  resources: {}
+  terminationMessagePath: /dev/termination-log
+  volumeMounts:
+  - mountPath: /userfunc
+    name: userfunc
+    readOnly: true
+  - mountPath: /secrets
+    name: secrets
+  - mountPath: /configs
+    name: configmaps
+  - mountPath: /etc/podinfo
+    name: podinfo
+imagePullSecrets:
+- name: env-pull
+- name: ghcr-pull
+serviceAccountName: fission-fetcher
+terminationGracePeriodSeconds: 0
+volumes:
+- image:
+    pullPolicy: IfNotPresent
+    reference: ghcr.io/example/hello:v1
+  name: userfunc
+- emptyDir: {}
+  name: secrets
+- emptyDir: {}
+  name: configmaps
+- downwardAPI:
+    items:
+    - fieldRef:
+        fieldPath: metadata.name
+      path: name
+    - fieldRef:
+        fieldPath: metadata.namespace
+      path: namespace
+  name: podinfo
+
+---

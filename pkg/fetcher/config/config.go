@@ -149,6 +149,42 @@ func (cfg *Config) AddSpecializingFetcherToPodSpec(podSpec *apiv1.PodSpec, mainC
 	)
 }
 
+// AddOCISpecializingFetcherToPodSpec wires an OCI-pool pod: the userfunc
+// volume is sourced from an OCI image volume (KEP-4639) instead of an
+// emptyDir, and the fetcher sidecar runs with -skip-fetch so it only
+// performs the runtime specialize step. The pod is therefore "born
+// specialized" — it joins endpoints once the image is pulled and the
+// runtime acknowledges /v2/specialize, with no per-request fetcher
+// dance and no warm-up tarball download.
+//
+// The image volume is mounted read-only at cfg.sharedMountPath, the same
+// path the runtime container expects today; this keeps env runtime images
+// portable between tarball and OCI pools without code changes.
+func (cfg *Config) AddOCISpecializingFetcherToPodSpec(podSpec *apiv1.PodSpec, mainContainerName string,
+	fn *fv1.Function, env *fv1.Environment, oci *fv1.OCIArchive) error {
+
+	if oci == nil || oci.Image == "" {
+		return fmt.Errorf("OCIArchive with non-empty image is required for OCI specializing fetcher")
+	}
+
+	specializeReq := cfg.NewSpecializeRequest(fn, env)
+	specializePayload, err := json.Marshal(specializeReq)
+	if err != nil {
+		return err
+	}
+
+	return cfg.addOCIFetcherToPodSpec(
+		podSpec,
+		mainContainerName,
+		oci,
+		cfg.fetcherCommand(
+			"-specialize-on-startup",
+			"-skip-fetch",
+			"-specialize-request", string(specializePayload),
+		),
+	)
+}
+
 func (cfg *Config) fetcherCommand(extraArgs ...string) []string {
 	command := []string{"/fetcher",
 		"-secret-dir", cfg.sharedSecretPath,
@@ -228,6 +264,141 @@ func (cfg *Config) volumesWithMounts() ([]apiv1.Volume, []apiv1.VolumeMount) {
 	}
 
 	return volumes, mounts
+}
+
+// volumesWithMountsOCI returns the same volume + mount set as
+// volumesWithMounts but replaces the userfunc emptyDir with an OCI image
+// volume sourced from the supplied OCIArchive. The mount path is identical
+// so the runtime container layout stays unchanged across pool kinds.
+func (cfg *Config) volumesWithMountsOCI(oci *fv1.OCIArchive) ([]apiv1.Volume, []apiv1.VolumeMount) {
+	volumes, mounts := cfg.volumesWithMounts()
+	pullPolicy := apiv1.PullIfNotPresent
+	imgVol := apiv1.Volume{
+		Name: fv1.SharedVolumeUserfunc,
+		VolumeSource: apiv1.VolumeSource{
+			Image: &apiv1.ImageVolumeSource{
+				Reference:  oci.Image,
+				PullPolicy: pullPolicy,
+			},
+		},
+	}
+	for i := range volumes {
+		if volumes[i].Name == fv1.SharedVolumeUserfunc {
+			volumes[i] = imgVol
+			break
+		}
+	}
+	return volumes, mounts
+}
+
+// addOCIFetcherToPodSpec is the OCI-pool variant of
+// addFetcherToPodSpecWithCommand: same fetcher container shape, but the
+// userfunc volume is an image volume (read-only, immutable, kubelet-pulled)
+// instead of an emptyDir. Image pull secrets from the OCIArchive are
+// propagated onto the pod spec so private registries work out of the box.
+func (cfg *Config) addOCIFetcherToPodSpec(podSpec *apiv1.PodSpec, mainContainerName string,
+	oci *fv1.OCIArchive, command []string) error {
+
+	volumes, mounts := cfg.volumesWithMountsOCI(oci)
+
+	// userfunc image volume is read-only; the fetcher mount inherits the
+	// flag so kubelet does not attempt a write-mount and reject the pod.
+	fetcherMounts := make([]apiv1.VolumeMount, len(mounts))
+	for i, m := range mounts {
+		if m.Name == fv1.SharedVolumeUserfunc {
+			m.ReadOnly = true
+		}
+		fetcherMounts[i] = m
+	}
+
+	c := apiv1.Container{
+		Name:                   "fetcher",
+		Command:                command,
+		Image:                  cfg.fetcherImage,
+		ImagePullPolicy:        cfg.fetcherImagePullPolicy,
+		TerminationMessagePath: "/dev/termination-log",
+		VolumeMounts:           fetcherMounts,
+		Resources:              cfg.resourceRequirements,
+		ReadinessProbe: &apiv1.Probe{
+			InitialDelaySeconds: 1,
+			PeriodSeconds:       1,
+			FailureThreshold:    30,
+			ProbeHandler: apiv1.ProbeHandler{
+				HTTPGet: &apiv1.HTTPGetAction{
+					Path: "/readiness-healthz",
+					Port: intstr.IntOrString{Type: intstr.Int, IntVal: 8000},
+				},
+			},
+		},
+		LivenessProbe: &apiv1.Probe{
+			InitialDelaySeconds: 1,
+			PeriodSeconds:       5,
+			ProbeHandler: apiv1.ProbeHandler{
+				HTTPGet: &apiv1.HTTPGetAction{
+					Path: "/healthz",
+					Port: intstr.IntOrString{Type: intstr.Int, IntVal: 8000},
+				},
+			},
+		},
+		Env: otel.OtelEnvForContainer(),
+	}
+	if podSpec.TerminationGracePeriodSeconds != nil {
+		c.Lifecycle = &apiv1.Lifecycle{
+			PreStop: &apiv1.LifecycleHandler{
+				Exec: &apiv1.ExecAction{
+					Command: []string{"/bin/sleep", fmt.Sprintf("%v", *podSpec.TerminationGracePeriodSeconds)},
+				},
+			},
+		}
+	}
+
+	found := false
+	for ix, container := range podSpec.Containers {
+		if container.Name != mainContainerName {
+			continue
+		}
+		found = true
+		for j := range mounts {
+			if mounts[j].Name == fv1.SharedVolumeUserfunc {
+				mounts[j].ReadOnly = true
+			}
+		}
+		container.VolumeMounts = append(container.VolumeMounts, mounts...)
+		podSpec.Containers[ix] = container
+	}
+	if !found {
+		existing := make([]string, 0, len(podSpec.Containers))
+		for _, ec := range podSpec.Containers {
+			existing = append(existing, ec.Name)
+		}
+		return fmt.Errorf("could not find main container '%s' in given PodSpec. Found: %v",
+			mainContainerName, existing)
+	}
+
+	podSpec.Volumes = append(podSpec.Volumes, volumes...)
+	podSpec.Containers = append(podSpec.Containers, c)
+	if podSpec.ServiceAccountName == "" {
+		podSpec.ServiceAccountName = fv1.FissionFetcherSA
+	}
+
+	// Propagate OCIArchive image pull secrets onto the pod spec so
+	// kubelet can pull the image volume from a private registry.
+	seen := make(map[string]struct{}, len(podSpec.ImagePullSecrets))
+	for _, s := range podSpec.ImagePullSecrets {
+		seen[s.Name] = struct{}{}
+	}
+	for _, s := range oci.ImagePullSecrets {
+		if s.Name == "" {
+			continue
+		}
+		if _, ok := seen[s.Name]; ok {
+			continue
+		}
+		seen[s.Name] = struct{}{}
+		podSpec.ImagePullSecrets = append(podSpec.ImagePullSecrets, apiv1.LocalObjectReference{Name: s.Name})
+	}
+
+	return nil
 }
 
 func (cfg *Config) addFetcherToPodSpecWithCommand(podSpec *apiv1.PodSpec, mainContainerName string, command []string) error {

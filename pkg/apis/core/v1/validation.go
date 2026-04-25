@@ -204,19 +204,66 @@ func (checksum Checksum) Validate() error {
 	return errs
 }
 
+// ociDigestRE matches a pinned OCI content digest, e.g. sha256:<64 hex>.
+var ociDigestRE = regexp.MustCompile(`^sha256:[a-f0-9]{64}$`)
+
 func (archive Archive) Validate() error {
 	var errs error
 
 	if len(archive.Type) > 0 {
 		switch archive.Type {
-		case ArchiveTypeLiteral, ArchiveTypeUrl: // no op
+		case ArchiveTypeLiteral, ArchiveTypeUrl, ArchiveTypeOCI: // no op
 		default:
 			errs = errors.Join(errs, MakeValidationErr(ErrorUnsupportedType, "Archive.Type", archive.Type, "not a valid archive type"))
 		}
 	}
 
+	sources := 0
+	if len(archive.Literal) > 0 {
+		sources++
+	}
+	if len(archive.URL) > 0 {
+		sources++
+	}
+	if archive.OCI != nil {
+		sources++
+	}
+	if sources > 1 {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "Archive", "multiple sources", "at most one of literal, url, or oci may be set"))
+	}
+
+	if archive.OCI != nil {
+		errs = errors.Join(errs, archive.OCI.Validate())
+	}
+
 	if archive.Checksum != (Checksum{}) {
 		errs = errors.Join(errs, archive.Checksum.Validate())
+	}
+
+	return errs
+}
+
+func (oci OCIArchive) Validate() error {
+	var errs error
+
+	trimmed := strings.TrimSpace(oci.Image)
+	switch {
+	case trimmed == "":
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "OCIArchive.Image", oci.Image, "image reference must be non-empty"))
+	case strings.ContainsAny(oci.Image, " \t\n\r"):
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "OCIArchive.Image", oci.Image, "image reference must not contain whitespace"))
+	case !strings.ContainsAny(oci.Image, ":/@"):
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "OCIArchive.Image", oci.Image, "image reference must contain a repository separator"))
+	}
+
+	if oci.Digest != "" && !ociDigestRE.MatchString(oci.Digest) {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "OCIArchive.Digest", oci.Digest, "digest must be of the form sha256:<64 lowercase hex chars>"))
+	}
+
+	for i, ref := range oci.ImagePullSecrets {
+		if ref.Name == "" {
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, fmt.Sprintf("OCIArchive.ImagePullSecrets[%d].Name", i), ref.Name, "name must be non-empty"))
+		}
 	}
 
 	return errs
@@ -240,7 +287,7 @@ func (spec PackageSpec) Validate() error {
 	errs = errors.Join(errs, spec.Environment.Validate())
 
 	for _, r := range []Archive{spec.Source, spec.Deployment} {
-		if len(r.URL) > 0 || len(r.Literal) > 0 {
+		if len(r.URL) > 0 || len(r.Literal) > 0 || r.OCI != nil {
 			errs = errors.Join(errs, r.Validate())
 		}
 	}
@@ -382,8 +429,30 @@ func (runtime Runtime) Validate() error {
 }
 
 func (builder Builder) Validate() error {
-	// do nothing for now
-	return nil
+	var errs error
+
+	switch builder.Kind {
+	case "", BuilderKindTarball, BuilderKindBuildKit:
+	default:
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "Builder.Kind", builder.Kind,
+			fmt.Sprintf("must be one of %q, %q, or empty", BuilderKindTarball, BuilderKindBuildKit)))
+	}
+
+	if builder.Kind == BuilderKindBuildKit {
+		if builder.Registry == nil || builder.Registry.URL == "" {
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "Builder.Registry.URL", "",
+				"registry URL is required when builder kind is buildkit"))
+		}
+	}
+
+	if builder.Registry != nil {
+		if strings.ContainsAny(builder.Registry.URL, " \t\n") {
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "Builder.Registry.URL",
+				builder.Registry.URL, "registry URL must not contain whitespace"))
+		}
+	}
+
+	return errs
 }
 
 func (spec EnvironmentSpec) Validate() error {

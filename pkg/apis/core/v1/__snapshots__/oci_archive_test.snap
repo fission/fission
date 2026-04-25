@@ -1,0 +1,290 @@
+
+[TestOCIArchiveValidate/valid_tag_reference - 1]
+<nil>
+---
+
+[TestOCIArchiveValidate/valid_digest_reference - 1]
+<nil>
+---
+
+[TestOCIArchiveValidate/valid_with_pinned_digest_field - 1]
+<nil>
+---
+
+[TestOCIArchiveValidate/valid_with_subpath - 1]
+<nil>
+---
+
+[TestOCIArchiveValidate/valid_with_image_pull_secrets - 1]
+<nil>
+---
+
+[TestOCIArchiveValidate/empty_image - 1]
+OCIArchive.Image: Invalid value: : [image reference must be non-empty]
+---
+
+[TestOCIArchiveValidate/whitespace-only_image - 1]
+OCIArchive.Image: Invalid value:    : [image reference must be non-empty]
+---
+
+[TestOCIArchiveValidate/image_contains_whitespace - 1]
+OCIArchive.Image: Invalid value: ghcr.io/example/hello :v1: [image reference must not contain whitespace]
+---
+
+[TestOCIArchiveValidate/image_without_repository_separator - 1]
+OCIArchive.Image: Invalid value: invalidimage: [image reference must contain a repository separator]
+---
+
+[TestOCIArchiveValidate/digest_missing_algorithm_prefix - 1]
+OCIArchive.Digest: Invalid value: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855: [digest must be of the form sha256:<64 lowercase hex chars>]
+---
+
+[TestOCIArchiveValidate/digest_with_wrong_algorithm - 1]
+OCIArchive.Digest: Invalid value: md5:deadbeef: [digest must be of the form sha256:<64 lowercase hex chars>]
+---
+
+[TestOCIArchiveValidate/digest_with_uppercase_hex - 1]
+OCIArchive.Digest: Invalid value: sha256:E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855: [digest must be of the form sha256:<64 lowercase hex chars>]
+---
+
+[TestOCIArchiveValidate/digest_too_short - 1]
+OCIArchive.Digest: Invalid value: sha256:abcdef: [digest must be of the form sha256:<64 lowercase hex chars>]
+---
+
+[TestOCIArchiveValidate/image_pull_secret_with_empty_name - 1]
+OCIArchive.ImagePullSecrets[0].Name: Invalid value: : [name must be non-empty]
+---
+
+[TestArchiveValidateWithOCI/empty_archive_is_valid - 1]
+<nil>
+---
+
+[TestArchiveValidateWithOCI/literal_only - 1]
+<nil>
+---
+
+[TestArchiveValidateWithOCI/url_only - 1]
+<nil>
+---
+
+[TestArchiveValidateWithOCI/oci_only - 1]
+<nil>
+---
+
+[TestArchiveValidateWithOCI/oci_without_explicit_type_is_still_valid - 1]
+<nil>
+---
+
+[TestArchiveValidateWithOCI/oci_and_url_are_mutually_exclusive - 1]
+Archive: Invalid value: multiple sources: [at most one of literal, url, or oci may be set]
+---
+
+[TestArchiveValidateWithOCI/oci_and_literal_are_mutually_exclusive - 1]
+Archive: Invalid value: multiple sources: [at most one of literal, url, or oci may be set]
+---
+
+[TestArchiveValidateWithOCI/url_and_literal_are_mutually_exclusive - 1]
+Archive: Invalid value: multiple sources: [at most one of literal, url, or oci may be set]
+---
+
+[TestArchiveValidateWithOCI/all_three_set_is_invalid - 1]
+Archive: Invalid value: multiple sources: [at most one of literal, url, or oci may be set]
+---
+
+[TestArchiveValidateWithOCI/unknown_archive_type_is_invalid - 1]
+Archive.Type: Unsupported type: chocolate: [not a valid archive type]
+---
+
+[TestArchiveValidateWithOCI/invalid_oci_payload_surfaces_nested_error - 1]
+OCIArchive.Image: Invalid value: : [image reference must be non-empty]
+---
+
+[TestArchiveWithOCIJSONRoundTrip - 1]
+{"type":"oci","checksum":{},"oci":{"image":"ghcr.io/example/hello:v1","imagePullSecrets":[{"name":"regcred"}],"subPath":"deploy","digest":"sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"}}
+---
+
+[TestPackageCRDSchemaSnapshot - 1]
+deployment:
+  description: Deployment is the deployable archive that environment runtime used
+    to run user function.
+  properties:
+    checksum:
+      description: |-
+        Checksum ensures the integrity of packages
+        referenced by URL. Ignored for literals.
+      properties:
+        sum:
+          type: string
+        type:
+          description: |-
+            ChecksumType specifies the checksum algorithm, such as
+            sha256, used for a checksum.
+          type: string
+      type: object
+    literal:
+      description: |-
+        Literal contents of the package. Can be used for
+        encoding packages below TODO (256 KB?) size.
+      format: byte
+      type: string
+    oci:
+      description: |-
+        OCI references an OCI artifact (container image or OCI
+        artifact) that holds the deployment contents. Mutually
+        exclusive with Literal and URL. When set, the function pod
+        mounts the artifact directly instead of fetching a tarball.
+      properties:
+        digest:
+          description: |-
+            Digest, when set, pins the artifact content hash. Format:
+            sha256:<64 lowercase hex chars>. Validated at admission time.
+          type: string
+        image:
+          description: |-
+            Image is a fully qualified OCI reference of the form
+            registry/repository:tag or registry/repository@sha256:<digest>.
+          type: string
+        imagePullSecrets:
+          description: |-
+            ImagePullSecrets are propagated to the pod spec of function
+            pods that pull this image. Each entry references a Secret
+            in the same namespace as the function.
+          items:
+            description: |-
+              LocalObjectReference contains enough information to let you locate the
+              referenced object inside the same namespace.
+            properties:
+              name:
+                default: ""
+                description: |-
+                  Name of the referent.
+                  This field is effectively required, but due to backwards compatibility is
+                  allowed to be empty. Instances of this type with an empty value here are
+                  almost certainly wrong.
+                  More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                type: string
+            type: object
+            x-kubernetes-map-type: atomic
+          type: array
+          x-kubernetes-list-map-keys:
+          - name
+          x-kubernetes-list-type: map
+        subPath:
+          description: |-
+            SubPath is a path inside the mounted OCI artifact treated as
+            the deployment root. Empty means the artifact root.
+          type: string
+      required:
+      - image
+      type: object
+    type:
+      description: |-
+        Type defines how the package is specified: literal, url, or oci.
+        Available value:
+         - literal
+         - url
+         - oci
+      type: string
+    url:
+      description: URL references a package.
+      type: string
+  type: object
+  x-kubernetes-validations:
+  - message: archive.oci and archive.url are mutually exclusive
+    rule: '!(has(self.oci) && has(self.url) && self.url != '''')'
+  - message: archive.oci and archive.literal are mutually exclusive
+    rule: '!(has(self.oci) && has(self.literal) && size(self.literal) > 0)'
+source:
+  description: |-
+    Source is the archive contains source code and dependencies file.
+    If the package status is in PENDING state, builder manager will then
+    notify builder to compile source and save the result as deployable archive.
+  properties:
+    checksum:
+      description: |-
+        Checksum ensures the integrity of packages
+        referenced by URL. Ignored for literals.
+      properties:
+        sum:
+          type: string
+        type:
+          description: |-
+            ChecksumType specifies the checksum algorithm, such as
+            sha256, used for a checksum.
+          type: string
+      type: object
+    literal:
+      description: |-
+        Literal contents of the package. Can be used for
+        encoding packages below TODO (256 KB?) size.
+      format: byte
+      type: string
+    oci:
+      description: |-
+        OCI references an OCI artifact (container image or OCI
+        artifact) that holds the deployment contents. Mutually
+        exclusive with Literal and URL. When set, the function pod
+        mounts the artifact directly instead of fetching a tarball.
+      properties:
+        digest:
+          description: |-
+            Digest, when set, pins the artifact content hash. Format:
+            sha256:<64 lowercase hex chars>. Validated at admission time.
+          type: string
+        image:
+          description: |-
+            Image is a fully qualified OCI reference of the form
+            registry/repository:tag or registry/repository@sha256:<digest>.
+          type: string
+        imagePullSecrets:
+          description: |-
+            ImagePullSecrets are propagated to the pod spec of function
+            pods that pull this image. Each entry references a Secret
+            in the same namespace as the function.
+          items:
+            description: |-
+              LocalObjectReference contains enough information to let you locate the
+              referenced object inside the same namespace.
+            properties:
+              name:
+                default: ""
+                description: |-
+                  Name of the referent.
+                  This field is effectively required, but due to backwards compatibility is
+                  allowed to be empty. Instances of this type with an empty value here are
+                  almost certainly wrong.
+                  More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                type: string
+            type: object
+            x-kubernetes-map-type: atomic
+          type: array
+          x-kubernetes-list-map-keys:
+          - name
+          x-kubernetes-list-type: map
+        subPath:
+          description: |-
+            SubPath is a path inside the mounted OCI artifact treated as
+            the deployment root. Empty means the artifact root.
+          type: string
+      required:
+      - image
+      type: object
+    type:
+      description: |-
+        Type defines how the package is specified: literal, url, or oci.
+        Available value:
+         - literal
+         - url
+         - oci
+      type: string
+    url:
+      description: URL references a package.
+      type: string
+  type: object
+  x-kubernetes-validations:
+  - message: archive.oci and archive.url are mutually exclusive
+    rule: '!(has(self.oci) && has(self.url) && self.url != '''')'
+  - message: archive.oci and archive.literal are mutually exclusive
+    rule: '!(has(self.oci) && has(self.literal) && size(self.literal) > 0)'
+
+---

@@ -206,6 +206,10 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 			}
 		}
 
+		if err := _package.ValidateOCIMutualExclusion(input); err != nil {
+			return err
+		}
+
 		srcArchiveFiles := input.StringSlice(flagkey.PkgSrcArchive)
 		var deployArchiveFiles []string
 		noZip := false
@@ -216,9 +220,10 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 			deployArchiveFiles = append(deployArchiveFiles, input.String(flagkey.PkgCode))
 			noZip = true
 		}
-		// return error when both src & deploy archive are empty
-		if len(srcArchiveFiles) == 0 && len(deployArchiveFiles) == 0 {
-			return errors.New("need --code or --deploy or --src argument")
+		ociSet := input.String(flagkey.PkgOCI) != ""
+		// return error when no source is supplied via any of --code/--deploy/--src/--oci
+		if !ociSet && len(srcArchiveFiles) == 0 && len(deployArchiveFiles) == 0 {
+			return errors.New("need --code, --deploy, --src, or --oci argument")
 		}
 
 		buildcmd := input.String(flagkey.PkgBuildCmd)

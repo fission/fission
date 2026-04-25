@@ -45,6 +45,7 @@ func Run(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger log
 	flag.Usage = fetcherUsage
 	specializeOnStart := flag.Bool("specialize-on-startup", false, "Flag to activate specialize process at pod startup")
 	specializePayload := flag.String("specialize-request", "", "JSON payload for specialize request")
+	skipFetch := flag.Bool("skip-fetch", false, "Skip downloading the deployment archive during specialize-on-startup; used when the deployment is already mounted via an OCI image volume")
 	secretDir := flag.String("secret-dir", "", "Path to shared secrets directory")
 	configDir := flag.String("cfgmap-dir", "", "Path to shared configmap directory")
 
@@ -92,7 +93,12 @@ func Run(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger log
 				return
 			}
 
-			code, err := f.SpecializePod(ctx, specializeReq.FetchReq, specializeReq.LoadReq)
+			var code int
+			if *skipFetch {
+				code, err = f.SpecializePodSkipFetch(ctx, specializeReq.FetchReq, specializeReq.LoadReq)
+			} else {
+				code, err = f.SpecializePod(ctx, specializeReq.FetchReq, specializeReq.LoadReq)
+			}
 			if err != nil {
 				logger.Error(err, "error specializing function pod", "statusCode", code)
 				return

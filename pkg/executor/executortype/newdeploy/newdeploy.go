@@ -38,7 +38,7 @@ import (
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
-func (deploy *NewDeploy) createOrGetDeployment(ctx context.Context, fn *fv1.Function, env *fv1.Environment,
+func (deploy *NewDeploy) createOrGetDeployment(ctx context.Context, fn *fv1.Function, env *fv1.Environment, ociArchive *fv1.OCIArchive,
 	deployName string, deployLabels map[string]string, deployAnnotations map[string]string, deployNamespace string) (*appsv1.Deployment, error) {
 
 	specializationTimeout := fn.Spec.InvokeStrategy.ExecutionStrategy.SpecializationTimeout
@@ -51,7 +51,7 @@ func (deploy *NewDeploy) createOrGetDeployment(ctx context.Context, fn *fv1.Func
 		minScale = 1
 	}
 
-	deployment, err := deploy.getDeploymentSpec(ctx, fn, env, &minScale, deployName, deployNamespace, deployLabels, deployAnnotations)
+	deployment, err := deploy.getDeploymentSpec(ctx, fn, env, ociArchive, &minScale, deployName, deployNamespace, deployLabels, deployAnnotations)
 	if err != nil {
 		return nil, err
 	}
@@ -126,7 +126,7 @@ func (deploy *NewDeploy) deleteDeployment(ctx context.Context, ns string, name s
 	})
 }
 
-func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function, env *fv1.Environment, targetReplicas *int32,
+func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function, env *fv1.Environment, ociArchive *fv1.OCIArchive, targetReplicas *int32,
 	deployName string, deployNamespace string, deployLabels map[string]string, deployAnnotations map[string]string) (*appsv1.Deployment, error) {
 
 	replicas := int32(fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale)
@@ -182,9 +182,17 @@ func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function
 		return nil, err
 	}
 
+	// When the function's deployment Package uses an OCI archive, the user
+	// code is baked into the OCI image directly — replace the environment
+	// runtime image with the OCI reference and skip the fetcher sidecar.
+	containerImage := env.Spec.Runtime.Image
+	if ociArchive != nil {
+		containerImage = ociArchive.Image
+	}
+
 	container, err := util.MergeContainer(&apiv1.Container{
 		Name:                   env.Name,
-		Image:                  env.Spec.Runtime.Image,
+		Image:                  containerImage,
 		ImagePullPolicy:        deploy.runtimeImagePullPolicy,
 		TerminationMessagePath: "/dev/termination-log",
 		Lifecycle: &apiv1.Lifecycle{
@@ -239,7 +247,11 @@ func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function
 		}
 	}
 
-	pod.Spec = *(util.ApplyImagePullSecret(env.Spec.ImagePullSecret, pod.Spec))
+	if ociArchive != nil {
+		pod.Spec = *(util.ApplyOCIImagePullSecrets(env.Spec.ImagePullSecret, ociArchive.ImagePullSecrets, pod.Spec))
+	} else {
+		pod.Spec = *(util.ApplyImagePullSecret(env.Spec.ImagePullSecret, pod.Spec))
+	}
 
 	var ownerReferences []metav1.OwnerReference
 	if deploy.enableOwnerReferences {
@@ -286,15 +298,19 @@ func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function
 		}
 	}
 
-	// Order of merging is important here - first fetcher, then containers and lastly pod spec
-	err = deploy.fetcherConfig.AddSpecializingFetcherToPodSpec(
-		&deployment.Spec.Template.Spec,
-		mainContainerName,
-		fn,
-		env,
-	)
-	if err != nil {
-		return nil, err
+	// Order of merging is important here - first fetcher, then containers and lastly pod spec.
+	// OCI-archive packages bake the user code into the image, so the fetcher
+	// sidecar is not needed.
+	if ociArchive == nil {
+		err = deploy.fetcherConfig.AddSpecializingFetcherToPodSpec(
+			&deployment.Spec.Template.Spec,
+			mainContainerName,
+			fn,
+			env,
+		)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	if env.Spec.Runtime.PodSpec != nil {

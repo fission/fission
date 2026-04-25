@@ -1602,6 +1602,18 @@ spec:
                   image:
                     description: Image for containing the language compilation environment.
                     type: string
+                  kind:
+                    description: |-
+                      Kind selects the builder implementation. An empty value or "tarball"
+                      (the default) runs the legacy fetcher-based pipeline that uploads a
+                      deployment archive to storagesvc. "buildkit" runs the BuildKit-based
+                      pipeline that produces an OCI artifact and pushes it to the registry
+                      declared in Registry.
+                    enum:
+                    - ""
+                    - tarball
+                    - buildkit
+                    type: string
                   podspec:
                     description: PodSpec will store the spec of the pod that will
                       be applied to the pod created for the builder
@@ -10064,7 +10076,36 @@ spec:
                     required:
                     - containers
                     type: object
+                  registry:
+                    description: |-
+                      (Optional) Registry is the OCI registry the buildkit builder pushes
+                      to. Only consulted when Kind is "buildkit".
+                    properties:
+                      baseImage:
+                        description: |-
+                          (Optional) BaseImage overrides the runtime image used as the base
+                          layer of the produced OCI artifact. Defaults to Environment.Spec.Runtime.Image.
+                        type: string
+                      imagePullSecret:
+                        description: |-
+                          (Optional) ImagePullSecret references a Kubernetes secret in the
+                          builder's namespace whose credentials are used both for the build
+                          push and for the runtime pull when the produced image is later
+                          referenced from a Function.
+                        type: string
+                      url:
+                        description: |-
+                          URL is the fully qualified registry/repository prefix where built
+                          images are pushed (e.g. "ghcr.io/myorg/fission-fns").
+                        type: string
+                    required:
+                    - url
+                    type: object
                 type: object
+                x-kubernetes-validations:
+                - message: builder.registry.url is required when builder.kind is 'buildkit'
+                  rule: '!(has(self.kind) && self.kind == ''buildkit'') || (has(self.registry)
+                    && self.registry.url != '''')'
               imagepullsecret:
                 description: |-
                   ImagePullSecret is the secret for Kubernetes to pull an image from a

@@ -38,6 +38,7 @@ import (
 type (
 	ClientInterface interface {
 		Build(context.Context, *builder.PackageBuildRequest) (*builder.PackageBuildResponse, error)
+		BuildOCI(context.Context, *builder.OCIBuildRequest) (*builder.OCIBuildResponse, error)
 		Clean(context.Context, string) error
 	}
 
@@ -91,6 +92,40 @@ func (c *client) Build(ctx context.Context, req *builder.PackageBuildRequest) (*
 	}
 
 	return &pkgBuildResp, ferror.MakeErrorFromHTTP(resp)
+}
+
+// BuildOCI POSTs to the BuildKit endpoint of the builder pod and parses
+// the resulting OCI build response. Errors from the underlying transport
+// or non-2xx status codes are surfaced via ferror.MakeErrorFromHTTP so
+// callers can distinguish "buildkit binary missing" (501) from "build
+// failed" (500/400) and react accordingly.
+func (c *client) BuildOCI(ctx context.Context, req *builder.OCIBuildRequest) (*builder.OCIBuildResponse, error) {
+	logger := otelUtils.LoggerWithTraceID(ctx, c.logger)
+
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling oci build request: %w", err)
+	}
+
+	resp, err := ctxhttp.Post(ctx, c.httpClient.StandardClient(), c.url+builder.OCIBuildEndpoint, "application/json", bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("error sending oci build request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	rBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		logger.Error(err, "error reading oci build resp body")
+		return nil, fmt.Errorf("error reading oci build response body: %w", err)
+	}
+
+	ociResp := builder.OCIBuildResponse{}
+	if jerr := json.Unmarshal(rBody, &ociResp); jerr != nil {
+		logger.Error(jerr, "error parsing oci build resp body")
+		return nil, fmt.Errorf("error parsing oci build response body: %w", jerr)
+	}
+
+	return &ociResp, ferror.MakeErrorFromHTTP(resp)
 }
 
 func (c *client) Clean(ctx context.Context, srcPkgFilename string) error {

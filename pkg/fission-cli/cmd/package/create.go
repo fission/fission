@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/dchest/uniuri"
+	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -34,6 +35,54 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/util"
 	"github.com/fission/fission/pkg/utils/uuid"
 )
+
+// BuildOCIArchive returns an *fv1.OCIArchive populated from the CLI input,
+// or nil if the user did not pass --oci. It does not perform validation
+// beyond the presence check; type-level validation lives in fv1.OCIArchive.Validate.
+func BuildOCIArchive(input cli.Input) *fv1.OCIArchive {
+	image := input.String(flagkey.PkgOCI)
+	if image == "" {
+		return nil
+	}
+	oci := &fv1.OCIArchive{
+		Image:   image,
+		SubPath: input.String(flagkey.PkgOCISubPath),
+		Digest:  input.String(flagkey.PkgOCIDigest),
+	}
+	for _, name := range input.StringSlice(flagkey.PkgOCIPullSecret) {
+		if name == "" {
+			continue
+		}
+		oci.ImagePullSecrets = append(oci.ImagePullSecrets, apiv1.LocalObjectReference{Name: name})
+	}
+	return oci
+}
+
+// ValidateOCIMutualExclusion errors if --oci is combined with any of the
+// tarball/url-based source flags, and otherwise returns nil. The returned
+// error message names the conflicting flag so users see a clear remediation.
+func ValidateOCIMutualExclusion(input cli.Input) error {
+	if input.String(flagkey.PkgOCI) == "" {
+		return nil
+	}
+	type check struct {
+		name    string
+		present bool
+	}
+	for _, c := range []check{
+		{flagkey.PkgCode, input.String(flagkey.PkgCode) != ""},
+		{flagkey.PkgSrcArchive, len(input.StringSlice(flagkey.PkgSrcArchive)) > 0},
+		{flagkey.PkgDeployArchive, len(input.StringSlice(flagkey.PkgDeployArchive)) > 0},
+		{flagkey.PkgBuildCmd, input.String(flagkey.PkgBuildCmd) != ""},
+		{flagkey.PkgSrcChecksum, input.String(flagkey.PkgSrcChecksum) != ""},
+		{flagkey.PkgDeployChecksum, input.String(flagkey.PkgDeployChecksum) != ""},
+	} {
+		if c.present {
+			return fmt.Errorf("--%s cannot be combined with --%s", flagkey.PkgOCI, c.name)
+		}
+	}
+	return nil
+}
 
 type CreateSubCommand struct {
 	cmd.CommandActioner
@@ -68,9 +117,14 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 		return fv1.AggregateValidationErrors("Environment", err)
 	}
 
+	if err := ValidateOCIMutualExclusion(input); err != nil {
+		return err
+	}
+
 	srcArchiveFiles := input.StringSlice(flagkey.PkgSrcArchive)
 	deployArchiveFiles := input.StringSlice(flagkey.PkgDeployArchive)
 	buildcmd := input.String(flagkey.PkgBuildCmd)
+	ociArchive := BuildOCIArchive(input)
 
 	noZip := false
 	code := input.String(flagkey.PkgCode)
@@ -81,8 +135,8 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 		noZip = true
 	}
 
-	if len(srcArchiveFiles) == 0 && len(deployArchiveFiles) == 0 {
-		return fmt.Errorf("need --%v or --%v or --%v argument", flagkey.PkgCode, flagkey.PkgSrcArchive, flagkey.PkgDeployArchive)
+	if ociArchive == nil && len(srcArchiveFiles) == 0 && len(deployArchiveFiles) == 0 {
+		return fmt.Errorf("need --%v, --%v, --%v, or --%v argument", flagkey.PkgCode, flagkey.PkgSrcArchive, flagkey.PkgDeployArchive, flagkey.PkgOCI)
 	}
 
 	var specDir, specFile string
@@ -147,6 +201,17 @@ func CreatePackage(input cli.Input, client cmd.Client, pkgName string, pkgNamesp
 	}
 
 	var pkgStatus fv1.BuildStatus = fv1.BuildStatusSucceeded
+
+	ociArchive := BuildOCIArchive(input)
+	if ociArchive != nil {
+		pkgSpec.Deployment = fv1.Archive{
+			Type: fv1.ArchiveTypeOCI,
+			OCI:  ociArchive,
+		}
+		if len(pkgName) == 0 {
+			pkgName = util.KubifyName(fmt.Sprintf("oci-%v", uniuri.NewLen(8)))
+		}
+	}
 
 	if len(deployArchiveFiles) > 0 {
 		if len(specFile) > 0 { // we should do this in all cases, i think

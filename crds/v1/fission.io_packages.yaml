@@ -69,17 +69,74 @@ spec:
                       encoding packages below TODO (256 KB?) size.
                     format: byte
                     type: string
+                  oci:
+                    description: |-
+                      OCI references an OCI artifact (container image or OCI
+                      artifact) that holds the deployment contents. Mutually
+                      exclusive with Literal and URL. When set, the function pod
+                      mounts the artifact directly instead of fetching a tarball.
+                    properties:
+                      digest:
+                        description: |-
+                          Digest, when set, pins the artifact content hash. Format:
+                          sha256:<64 lowercase hex chars>. Validated at admission time.
+                        type: string
+                      image:
+                        description: |-
+                          Image is a fully qualified OCI reference of the form
+                          registry/repository:tag or registry/repository@sha256:<digest>.
+                        type: string
+                      imagePullSecrets:
+                        description: |-
+                          ImagePullSecrets are propagated to the pod spec of function
+                          pods that pull this image. Each entry references a Secret
+                          in the same namespace as the function.
+                        items:
+                          description: |-
+                            LocalObjectReference contains enough information to let you locate the
+                            referenced object inside the same namespace.
+                          properties:
+                            name:
+                              default: ""
+                              description: |-
+                                Name of the referent.
+                                This field is effectively required, but due to backwards compatibility is
+                                allowed to be empty. Instances of this type with an empty value here are
+                                almost certainly wrong.
+                                More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                              type: string
+                          type: object
+                          x-kubernetes-map-type: atomic
+                        type: array
+                        x-kubernetes-list-map-keys:
+                        - name
+                        x-kubernetes-list-type: map
+                      subPath:
+                        description: |-
+                          SubPath is a path inside the mounted OCI artifact treated as
+                          the deployment root. Empty means the artifact root.
+                        type: string
+                    required:
+                    - image
+                    type: object
                   type:
                     description: |-
-                      Type defines how the package is specified: literal or URL.
+                      Type defines how the package is specified: literal, url, or oci.
                       Available value:
                        - literal
                        - url
+                       - oci
                     type: string
                   url:
                     description: URL references a package.
                     type: string
                 type: object
+                x-kubernetes-validations:
+                - message: archive.oci and archive.url are mutually exclusive
+                  rule: '!(has(self.oci) && has(self.url) && self.url != '''')'
+                - message: archive.oci and archive.literal are mutually exclusive
+                  rule: '!(has(self.oci) && has(self.literal) && size(self.literal)
+                    > 0)'
               environment:
                 description: Environment is a reference to the environment for building
                   source archive.
@@ -117,17 +174,74 @@ spec:
                       encoding packages below TODO (256 KB?) size.
                     format: byte
                     type: string
+                  oci:
+                    description: |-
+                      OCI references an OCI artifact (container image or OCI
+                      artifact) that holds the deployment contents. Mutually
+                      exclusive with Literal and URL. When set, the function pod
+                      mounts the artifact directly instead of fetching a tarball.
+                    properties:
+                      digest:
+                        description: |-
+                          Digest, when set, pins the artifact content hash. Format:
+                          sha256:<64 lowercase hex chars>. Validated at admission time.
+                        type: string
+                      image:
+                        description: |-
+                          Image is a fully qualified OCI reference of the form
+                          registry/repository:tag or registry/repository@sha256:<digest>.
+                        type: string
+                      imagePullSecrets:
+                        description: |-
+                          ImagePullSecrets are propagated to the pod spec of function
+                          pods that pull this image. Each entry references a Secret
+                          in the same namespace as the function.
+                        items:
+                          description: |-
+                            LocalObjectReference contains enough information to let you locate the
+                            referenced object inside the same namespace.
+                          properties:
+                            name:
+                              default: ""
+                              description: |-
+                                Name of the referent.
+                                This field is effectively required, but due to backwards compatibility is
+                                allowed to be empty. Instances of this type with an empty value here are
+                                almost certainly wrong.
+                                More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                              type: string
+                          type: object
+                          x-kubernetes-map-type: atomic
+                        type: array
+                        x-kubernetes-list-map-keys:
+                        - name
+                        x-kubernetes-list-type: map
+                      subPath:
+                        description: |-
+                          SubPath is a path inside the mounted OCI artifact treated as
+                          the deployment root. Empty means the artifact root.
+                        type: string
+                    required:
+                    - image
+                    type: object
                   type:
                     description: |-
-                      Type defines how the package is specified: literal or URL.
+                      Type defines how the package is specified: literal, url, or oci.
                       Available value:
                        - literal
                        - url
+                       - oci
                     type: string
                   url:
                     description: URL references a package.
                     type: string
                 type: object
+                x-kubernetes-validations:
+                - message: archive.oci and archive.url are mutually exclusive
+                  rule: '!(has(self.oci) && has(self.url) && self.url != '''')'
+                - message: archive.oci and archive.literal are mutually exclusive
+                  rule: '!(has(self.oci) && has(self.literal) && size(self.literal)
+                    > 0)'
             required:
             - environment
             type: object
