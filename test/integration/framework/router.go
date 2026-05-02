@@ -3,6 +3,7 @@
 package framework
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -37,10 +38,27 @@ func (r *RouterClient) BaseURL() string { return r.baseURL }
 // Get performs a single GET against `path` (joined to BaseURL) and returns the
 // body. Non-2xx is returned as an error.
 func (r *RouterClient) Get(ctx context.Context, path string) (status int, body string, err error) {
+	return r.do(ctx, http.MethodGet, path, "", nil)
+}
+
+// Post performs a single POST against `path` with the given content type and
+// body. Returns status, response body, and any transport-level error.
+func (r *RouterClient) Post(ctx context.Context, path, contentType string, body []byte) (status int, respBody string, err error) {
+	return r.do(ctx, http.MethodPost, path, contentType, body)
+}
+
+func (r *RouterClient) do(ctx context.Context, method, path, contentType string, body []byte) (int, string, error) {
 	url := r.baseURL + ensureLeadingSlash(path)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	var reqBody io.Reader
+	if body != nil {
+		reqBody = bytes.NewReader(body)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, url, reqBody)
 	if err != nil {
 		return 0, "", err
+	}
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
 	}
 	resp, err := r.http.Do(req)
 	if err != nil {
@@ -74,6 +92,30 @@ func (r *RouterClient) GetEventually(
 		assert.Truef(c, check(status, body),
 			"router GET %q: status=%d, body=%q did not satisfy check",
 			path, status, truncate(body, 200))
+	}, 60*time.Second, 1*time.Second)
+	return lastBody
+}
+
+// PostEventually polls a POST until the response satisfies `check` or the
+// timeout elapses. The body bytes are reused on every retry.
+func (r *RouterClient) PostEventually(
+	t *testing.T,
+	ctx context.Context,
+	path, contentType string,
+	body []byte,
+	check ResponseCheck,
+) string {
+	t.Helper()
+	var lastBody string
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		status, respBody, err := r.Post(ctx, path, contentType, body)
+		if !assert.NoErrorf(c, err, "router POST %q", path) {
+			return
+		}
+		lastBody = respBody
+		assert.Truef(c, check(status, respBody),
+			"router POST %q: status=%d, body[:200]=%q did not satisfy check",
+			path, status, truncate(respBody, 200))
 	}, 60*time.Second, 1*time.Second)
 	return lastBody
 }

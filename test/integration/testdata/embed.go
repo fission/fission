@@ -11,10 +11,10 @@ import "embed"
 // use framework.WriteTestData(t, "<path>") to materialize a file under
 // t.TempDir for the CLI to consume.
 //
-// As more bash tests migrate, additional language subtrees (go, misc/...)
-// get vendored in here and added to the embed directive below. The `all:`
-// prefix ensures dotfiles and underscore-prefixed files (e.g. Python's
-// __init__.py) are included.
+// As more bash tests migrate, additional language subtrees get vendored in
+// here and added to the embed directive below. The `all:` prefix ensures
+// dotfiles and underscore-prefixed files (e.g. Python's __init__.py) are
+// included.
 //
-//go:embed all:nodejs all:python
+//go:embed all:nodejs all:python all:go all:misc
 var FS embed.FS

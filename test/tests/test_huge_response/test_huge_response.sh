@@ -1,4 +1,9 @@
 #!/bin/bash
+#test:disabled
+# Migrated to Go: test/integration/suites/common/huge_response_test.go
+# (TestHugeResponse). This script is retained for reference until the bash
+# teardown phase (Phase 6 of the migration; see
+# docs/test-migration/00-design.md).
 
 set -euo pipefail
 source $(dirname $0)/../../utils.sh

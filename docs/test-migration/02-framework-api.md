@@ -253,6 +253,14 @@ Failure messages are built lazily via `EventuallyLazy`, so `(last=N)` reports th
 
 Creates a `CanaryConfig` CR via `fission canary-config create`. Required: `Name`, `NewFunction`, `OldFunction`, `HTTPTrigger`. Optional: `IncrementStep`, `IncrementInterval` (Go duration string like `"30s"`), `FailureThreshold` (percent).
 
+### `r.Post(ctx, path, contentType, body)` / `r.PostEventually(t, ctx, path, contentType, body, check)`
+
+POST companion to `Get` / `GetEventually`. Use `PostEventually` for tests that retry until a `ResponseCheck` is satisfied — e.g. `TestHugeResponse` POSTs a 240KB body and retries until the echo length matches (a transient truncation would be a real bug worth catching).
+
+### `f.Images().RequireGo(t)` / `RequireGoBuilder(t)`
+
+Same shape as `RequireNode` / `RequirePython`. CI's "Go integration tests (common phase)" step pre-pulls and kind-loads `GO_RUNTIME_IMAGE` and `GO_BUILDER_IMAGE`.
+
 ### `r.LoadLoop(ctx, path)`
 
 Fires GETs at ~10 rps until `ctx` is cancelled. The canary controller measures failure rate per tick; without sustained traffic over multiple ticks it can't justify successive weight increments. Tests typically launch this in a goroutine with a `t.Cleanup`-bound cancel:

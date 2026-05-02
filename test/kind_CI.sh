@@ -78,18 +78,15 @@ main() {
         $ROOT/test/tests/test_function_test/test_fn_test.sh \
         $ROOT/test/tests/test_function_update.sh \
         $ROOT/test/tests/test_ingress.sh \
-        $ROOT/test/tests/test_internal_routes.sh \
         $ROOT/test/tests/test_logging/test_function_logs.sh \
         $ROOT/test/tests/test_package_command.sh \
         $ROOT/test/tests/test_package_checksum.sh \
-        $ROOT/test/tests/test_pass.sh \
         $ROOT/test/tests/test_specs/test_spec.sh \
         $ROOT/test/tests/test_specs/test_spec_multifile.sh \
         $ROOT/test/tests/test_specs/test_spec_merge/test_spec_merge.sh \
         $ROOT/test/tests/test_specs/test_spec_archive/test_spec_archive.sh \
         $ROOT/test/tests/test_environments/test_tensorflow_serving_env.sh \
         $ROOT/test/tests/test_environments/test_go_env.sh \
-        $ROOT/test/tests/test_huge_response/test_huge_response.sh \
         $ROOT/test/tests/test_kubectl/test_kubectl.sh \
         $ROOT/test/tests/websocket/test_ws.sh
 

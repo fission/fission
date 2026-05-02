@@ -19,12 +19,12 @@ See `00-design.md` for the design; `02-framework-api.md` for helper docs.
 Update these whenever the table below changes.
 
 - Total bash tests: 48
-- In `kind_CI.sh` active list: 42 (25 phase-1, 17 phase-2)
-- Not in `kind_CI.sh` active list: 6 (`test_create_fn_with_url.sh`, `test_function_timeout.sh`, `test_environments/test_jvm_jersey_env.sh`, `test_node_hello_http.sh` — migrated, `test_buildermgr.sh` — migrated, `test_canary.sh` — migrated)
-- `bash-active`: 39
+- In `kind_CI.sh` active list: 39 (22 phase-1, 17 phase-2)
+- Not in `kind_CI.sh` active list: 9 (3 never were + 6 migrated: node_hello_http, buildermgr, canary, pass, internal_routes, huge_response)
+- `bash-active`: 36
 - `bash-disabled-existing`: 6
-- `bash-disabled-migrated`: 3 (`test_node_hello_http.sh`, `test_buildermgr.sh`, `test_canary.sh`)
-- `go-live`: 3 (`TestNodeHelloHTTP`, `TestBuilderMgr`, `TestCanary`)
+- `bash-disabled-migrated`: 6 (node_hello_http, buildermgr, canary, pass, internal_routes, huge_response)
+- `go-live`: 6 (`TestNodeHelloHTTP`, `TestBuilderMgr`, `TestCanary`, `TestPass`, `TestInternalRoutes`, `TestHugeResponse`)
 - `go-skip`: 0
 - `deleted`: 0
 
@@ -46,12 +46,12 @@ Columns:
 | `test_node_hello_http.sh` | p1 | common | `TestNodeHelloHTTP` (`common/node_hello_http_test.go`) | bash-disabled-migrated / go-live | this PR |
 | `test_buildermgr.sh` | p1 | common | `TestBuilderMgr` (`common/buildermgr_test.go`) | bash-disabled-migrated / go-live | this PR |
 | `test_canary.sh` | p1 | common | `TestCanary` (`common/canary_test.go`, subtests `success`+`rollback`) | bash-disabled-migrated / go-live | this PR |
-| `test_pass.sh` | p1 | common | `TestPass` (`common/pass_test.go`) | bash-active | — |
+| `test_pass.sh` | p1 | common | `TestPass` (`common/pass_test.go`) | bash-disabled-migrated / go-live | this PR |
 | `test_annotations.sh` | p1 | common | `TestFunctionAnnotations` (`common/annotations_test.go`) | bash-active | — |
 | `test_function_update.sh` | p1 | common | `TestFunctionUpdate` (`common/function_update_test.go`) | bash-active | — |
-| `test_internal_routes.sh` | p1 | common | `TestInternalRoutes` (`common/internal_routes_test.go`) | bash-active | — |
+| `test_internal_routes.sh` | p1 | common | `TestInternalRoutes` (`common/internal_routes_test.go`) | bash-disabled-migrated / go-live | this PR |
 | `test_logging/test_function_logs.sh` | p1 | common | `TestFunctionLogs` (`common/function_logs_test.go`) | bash-active | — |
-| `test_huge_response/test_huge_response.sh` | p1 | common | `TestHugeResponse` (`common/huge_response_test.go`) | bash-active | — |
+| `test_huge_response/test_huge_response.sh` | p1 | common | `TestHugeResponse` (`common/huge_response_test.go`) | bash-disabled-migrated / go-live | this PR |
 | `test_kubectl/test_kubectl.sh` | p1 | common | `TestKubectlApply` (`common/kubectl_test.go`) | bash-active | — |
 | `websocket/test_ws.sh` | p1 | common | `TestWebsocket` (`common/websocket_test.go`) | bash-active | — |
 | `test_archive_cli.sh` | p1 | common | `TestArchiveCLI` (`common/archive_cli_test.go`) | bash-active | — |
@@ -157,8 +157,8 @@ PRs grouped by category. Each PR migrates 3–5 tests, marks the bash counterpar
 
 Suggested batches (ordered by approximate complexity):
 
-1. **HTTP basics**: `test_pass.sh`, `test_annotations.sh`, `test_huge_response.sh`, `test_internal_routes.sh`.
-2. **Function ops**: `test_function_update.sh`, `test_function_logs.sh`, `test_create_fn_with_url.sh`.
+1. **HTTP basics** ✅: `test_pass.sh`, `test_huge_response.sh`, `test_internal_routes.sh` migrated this PR. `test_annotations.sh` deferred — needs clientset Env construction (CLI doesn't expose `metadata.annotations`); migrate alongside other env-config tests in a later batch.
+2. **Function ops**: `test_function_update.sh`, `test_function_logs.sh`, `test_create_fn_with_url.sh`, `test_annotations.sh`.
 3. **Specs**: `test_spec.sh`, `test_spec_multifile.sh`, `test_spec_merge.sh`, `test_spec_archive.sh`.
 4. **Archives & packages**: `test_archive_cli.sh`, `test_archive_pruner.sh`, `test_package_command.sh`, `test_package_checksum.sh`.
 5. **Environments**: `test_python_env.sh`, `test_go_env.sh`, `test_nodejs_env.sh`, `test_tensorflow_serving_env.sh`, `test_env_podspec.sh`.

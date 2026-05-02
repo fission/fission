@@ -51,6 +51,16 @@ func (r RuntimeImages) RequirePythonBuilder(skip skipper) string {
 	return requireImage(skip, "PYTHON_BUILDER_IMAGE", r.PythonBuilder)
 }
 
+// RequireGo skips the test if GO_RUNTIME_IMAGE is unset.
+func (r RuntimeImages) RequireGo(skip skipper) string {
+	return requireImage(skip, "GO_RUNTIME_IMAGE", r.Go)
+}
+
+// RequireGoBuilder skips the test if GO_BUILDER_IMAGE is unset.
+func (r RuntimeImages) RequireGoBuilder(skip skipper) string {
+	return requireImage(skip, "GO_BUILDER_IMAGE", r.GoBuilder)
+}
+
 func requireImage(skip skipper, envVar, value string) string {
 	if value == "" {
 		skip.Skipf("%s is not set; skipping", envVar)
