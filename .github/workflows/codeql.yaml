@@ -1,15 +1,11 @@
 name: Code Scanning
 
+# TEMPORARY: triggers reduced to workflow_dispatch only on this branch to
+# keep CI iteration time short while we land the bash → Go integration test
+# migration. Restored to push/PR/weekly schedule before merge to main.
+# See docs/test-migration/00-design.md.
 on:
-  push:
-    branches:
-      - main
-      - '!dependabot/**'
-  pull_request:
-    branches:
-      - main
-  schedule:
-    - cron: "0 0 * * 0"
+  workflow_dispatch:
 
 permissions:
   contents: read
