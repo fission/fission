@@ -114,14 +114,18 @@ Tick off as PRs land. Update the table above each time.
 - [x] Create `docs/test-migration/01-migration-status.md`
 - [x] Create `docs/test-migration/02-framework-api.md`
 
-### Phase 1 — Framework + Pilot 1 (this PR)
+### Phase 1 — Framework + Pilot 1 (this PR) ✅ green on K8s 1.34
 
 - [x] `test/integration/framework/` — initial helper set
 - [x] `test/integration/testdata/nodejs/hello/` — embedded fixture
-- [x] `test/integration/suites/common/node_hello_http_test.go` — `TestNodeHelloHTTP`
-- [x] `.github/workflows/push_pr.yaml` — add two `go test` steps + log artifact upload
+- [x] `test/integration/suites/common/node_hello_http_test.go` — `TestNodeHelloHTTP` (PASS in 2.16s)
+- [x] `.github/workflows/push_pr.yaml` — add Go test step + log artifact upload, port-forward inline
 - [x] `test/tests/test_node_hello_http.sh` — `#test:disabled` + migration comment
 - [x] `test/kind_CI.sh` — remove `test_node_hello_http.sh` from active list
+
+Findings from the Phase 1 CI iteration that shaped subsequent design:
+- Tests must use `default` namespace (router only watches `FISSION_RESOURCE_NAMESPACES`, default `default`).
+- Background processes from a standalone port-forward step do not survive across GitHub Actions steps; port-forward lives inside each Go test step.
 
 ### Phase 2 — Pilot 2: builder (PR pending)
 
