@@ -157,9 +157,13 @@ jobs:
           go test -tags=integration -timeout=25m -p 1 -parallel 3 -v \
             ./test/integration/suites/newdeploy/...
 
-      - name: Integration tests
-        timeout-minutes: 90
-        run: ./test/kind_CI.sh
+      # TEMPORARY: bash integration suite disabled on this branch to keep CI
+      # iteration time short while we land the Go migration. Restored before
+      # merge to main, and removed entirely in the Phase 6 teardown.
+      # See docs/test-migration/00-design.md.
+      # - name: Integration tests
+      #   timeout-minutes: 90
+      #   run: ./test/kind_CI.sh
 
       - name: Collect Fission Dump
         timeout-minutes: 5
