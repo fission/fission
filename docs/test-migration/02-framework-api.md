@@ -37,20 +37,27 @@ f := framework.Connect(t)
 img := f.Images().RequireNode(t) // skips if NODE_RUNTIME_IMAGE unset
 ```
 
-### `TestNamespace` — per-test isolation unit
+### `TestNamespace` — per-test resource scope
 
-`f.NewTestNamespace(t)` creates `fission-it-<sanitized-test-name>-<6-hex-id>` in the cluster, labels it `fission.io/test-id=<id>`, and registers a `t.Cleanup` that:
+`f.NewTestNamespace(t)` returns a per-test scope rooted in the **`default`** Kubernetes namespace, with a fresh 6-hex-character `ID`. Tests embed `ns.ID` into resource names so concurrent tests (`t.Parallel()`) don't collide.
 
-1. Dumps diagnostics (events, pod logs, Fission CR YAML) to `$LOG_DIR/<sanitized-test-name>/` if `t.Failed()`.
-2. Deletes the namespace, **unless** `TEST_NOCLEANUP=1`.
+It does **not** create a Kubernetes namespace, because the deployed Fission router only watches namespaces listed in `FISSION_RESOURCE_NAMESPACES` (default: `default`) per `pkg/utils/namespace.go`. Resources in arbitrary namespaces would be invisible to the router.
 
-All Fission CRs are namespace-scoped, so the namespace deletion cleans up everything the test created.
+What it does:
+
+1. Generates a unique `ns.ID`.
+2. Sets `ns.Name = "default"`.
+3. Registers a `t.Cleanup` that dumps diagnostics (events, pods, Fission CRs in the namespace) to `$LOG_DIR/<sanitized-test-name>/` if `t.Failed()`.
+
+Per-resource cleanup (delete the env, function, route, package, etc.) is registered by the `Create*` helpers themselves via their own `t.Cleanup`, so failures during creation still clean up what was successfully created. All cleanup hooks honor `TEST_NOCLEANUP=1`.
 
 ```go
 ns := f.NewTestNamespace(t)
-// ns.Name is the namespace name (max 63 chars, DNS-1123 compliant).
-// ns.ID is the random 6-hex-character ID.
+envName := "nodejs-" + ns.ID    // unique per test
+fnName  := "hello-"  + ns.ID
 ```
+
+Once Fission supports a wildcard or dynamically-extended namespace list, this scope can revert to one Kubernetes namespace per test for cleaner isolation.
 
 ## Helpers (Phase 1)
 

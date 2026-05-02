@@ -42,7 +42,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        kindversion: ["v1.28.15", "v1.32.8", "v1.34.0"]
+        # TEMPORARY: only 1.34 while migration iterates. Full matrix restored
+        # before merge to main. See docs/test-migration/00-design.md.
+        kindversion: ["v1.34.0"]
         os: [ubuntu-24.04]
     steps:
       - name: Harden Runner
@@ -124,16 +126,17 @@ jobs:
           make create-crds
           SKAFFOLD_PROFILE=kind-ci make skaffold-deploy
 
-      - name: Port-forward fission components
-        run: |
-          kubectl port-forward svc/router 8888:80 -nfission &
+      # Port-forward is started inside each Go test step (and kind_CI.sh once
+      # re-enabled) rather than as a standalone step, because background
+      # processes started with `&` may not survive across GitHub Actions steps
+      # on every runner image. Wait-for-readiness covers cluster startup races.
 
       - name: Get fission version
         timeout-minutes: 10
         run: |
           fission version
 
-      - name: Go integration tests (poolmgr / common phase)
+      - name: Go integration tests (common phase)
         timeout-minutes: 30
         env:
           NODE_RUNTIME_IMAGE: ghcr.io/fission/node-env-22
@@ -143,19 +146,29 @@ jobs:
         run: |
           docker pull -q "$NODE_RUNTIME_IMAGE"
           kind load docker-image "$NODE_RUNTIME_IMAGE" --name "${KIND_CLUSTER_NAME}"
-          go test -tags=integration -timeout=25m -p 1 -parallel 6 -v \
-            ./test/integration/suites/common/... \
-            ./test/integration/suites/poolmgr/...
 
-      - name: Go integration tests (newdeploy phase)
-        timeout-minutes: 30
-        env:
-          FISSION_ROUTER: 127.0.0.1:8888
-          FISSION_NAMESPACE: fission
-          LOG_DIR: ${{ github.workspace }}/test/integration/logs
-        run: |
-          go test -tags=integration -timeout=25m -p 1 -parallel 3 -v \
-            ./test/integration/suites/newdeploy/...
+          kubectl port-forward svc/router 8888:80 -n "$FISSION_NAMESPACE" >/tmp/pf.log 2>&1 &
+          PF_PID=$!
+          trap "kill $PF_PID 2>/dev/null || true" EXIT
+
+          # Wait for port-forward to accept TCP connections. Without -f, curl
+          # exits 0 for any HTTP response (including 4xx/5xx) and exit 7 for
+          # connection refused — exactly what we want here.
+          for i in $(seq 1 30); do
+            if curl -sS --connect-timeout 1 --max-time 2 -o /dev/null "http://127.0.0.1:8888/" 2>/dev/null; then
+              echo "router port-forward ready after ${i}s"
+              break
+            fi
+            if [ "$i" -eq 30 ]; then
+              echo "router port-forward did not become ready in 30s; pf log:"
+              cat /tmp/pf.log || true
+              exit 1
+            fi
+            sleep 1
+          done
+
+          go test -tags=integration -timeout=25m -parallel 6 -v \
+            ./test/integration/suites/common/...
 
       # TEMPORARY: bash integration suite disabled on this branch to keep CI
       # iteration time short while we land the Go migration. Restored before

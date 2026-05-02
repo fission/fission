@@ -3,98 +3,68 @@
 package framework
 
 import (
-	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"os"
 	"regexp"
 	"strings"
 	"testing"
-	"time"
 
-	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// TestIDLabel matches the bash convention (clean_resource_by_id in test/utils.sh)
-// so legacy tooling can still find Go-test-created resources if needed.
+// TestIDLabel matches the bash convention (clean_resource_by_id in test/utils.sh).
+// Resources created by tests carry this label as a debugging aid; cleanup is
+// driven by per-resource t.Cleanup hooks, not label selectors.
 const TestIDLabel = "fission.io/test-id"
 
-// TestNamespace is a per-test cluster namespace plus convenience helpers
-// (CLI invocation, resource creation, diagnostic dumps). It is constructed via
-// Framework.NewTestNamespace and registers its own cleanup.
+// TestNamespace is the per-test resource scope. It does not create a
+// Kubernetes namespace — instead, all resources go into the well-known
+// `default` namespace (the same namespace the bash tests use), and isolation
+// between concurrent tests is provided by embedding TestNamespace.ID into
+// every resource name.
+//
+// Why default? The deployed Fission router only watches namespaces in
+// FISSION_RESOURCE_NAMESPACES (default: `default`), per
+// pkg/utils/namespace.go. Creating Functions/HTTPTriggers in arbitrary
+// namespaces would make them invisible to the router. Once Fission gains
+// wildcard-namespace support, this can revert to one-namespace-per-test.
+//
+// TestNamespace is constructed via Framework.NewTestNamespace and registers
+// an on-failure diagnostics dump. Per-resource cleanup (delete the env, fn,
+// route, etc.) is registered by the Create* helpers themselves.
 type TestNamespace struct {
 	f    *Framework
 	t    *testing.T
-	Name string
-	ID   string
+	Name string // "default"
+	ID   string // 6-hex character unique ID
 }
 
-// Framework returns the parent framework.
-func (ns *TestNamespace) Framework() *Framework { return ns.f }
-
-// NewTestNamespace creates `fission-it-<sanitized-test-name>-<rand>`, labels
-// it `fission.io/test-id=<id>`, and registers cleanup. If TEST_NOCLEANUP=1 is
-// set, the namespace is left in place for debugging.
+// NewTestNamespace returns a per-test scope rooted in the `default` namespace
+// with a fresh ID. Tests should embed ns.ID into all resource names so
+// concurrent tests don't collide.
+//
+// The diagnostics dump runs only on test failure. Per-resource cleanup is
+// registered by Create* helpers and skipped when TEST_NOCLEANUP=1.
 func (f *Framework) NewTestNamespace(t *testing.T) *TestNamespace {
 	t.Helper()
-	id := randomID()
-	name := nsName(t.Name(), id)
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	_, err := f.kubeClient.CoreV1().Namespaces().Create(ctx, &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: name,
-			Labels: map[string]string{
-				TestIDLabel:                        id,
-				"fission.io/integration-test":      "true",
-				"fission.io/integration-test-name": sanitize(t.Name()),
-			},
-		},
-	}, metav1.CreateOptions{})
-	if err != nil {
-		t.Fatalf("create test namespace %q: %v", name, err)
+	ns := &TestNamespace{
+		f:    f,
+		t:    t,
+		Name: metav1.NamespaceDefault,
+		ID:   randomID(),
 	}
-
-	ns := &TestNamespace{f: f, t: t, Name: name, ID: id}
-
 	t.Cleanup(func() {
 		if t.Failed() {
 			ns.dumpDiagnostics()
 		}
-		if os.Getenv("TEST_NOCLEANUP") == "1" {
-			t.Logf("TEST_NOCLEANUP=1 set; leaving namespace %s for inspection", name)
-			return
-		}
-		delCtx, delCancel := context.WithTimeout(context.Background(), 60*time.Second)
-		defer delCancel()
-		err := f.kubeClient.CoreV1().Namespaces().Delete(delCtx, name, metav1.DeleteOptions{})
-		if err != nil && !apierrors.IsNotFound(err) {
-			t.Logf("delete test namespace %q: %v", name, err)
-		}
 	})
-
 	return ns
 }
 
-// nsName builds a DNS-1123-compliant namespace name within the 63-char limit
-// (`fission-it-` prefix is 11 chars, `-<6char-id>` suffix is 7 chars,
-// leaving 45 chars for the sanitized test name).
-func nsName(testName, id string) string {
-	const prefix = "fission-it-"
-	const maxNameLen = 63 - len(prefix) - 1 - 6 // 45
-	s := sanitize(testName)
-	if len(s) > maxNameLen {
-		s = s[:maxNameLen]
-	}
-	s = strings.Trim(s, "-")
-	if s == "" {
-		s = "test"
-	}
-	return prefix + s + "-" + id
-}
+// noCleanup reports whether the test asked us to leave resources behind for
+// post-mortem debugging.
+func noCleanup() bool { return os.Getenv("TEST_NOCLEANUP") == "1" }
 
 var nonAlphaNum = regexp.MustCompile(`[^a-z0-9-]+`)
 
@@ -104,6 +74,10 @@ func sanitize(s string) string {
 	s = strings.ReplaceAll(s, "_", "-")
 	s = nonAlphaNum.ReplaceAllString(s, "-")
 	s = regexp.MustCompile(`-+`).ReplaceAllString(s, "-")
+	s = strings.Trim(s, "-")
+	if s == "" {
+		s = "test"
+	}
 	return s
 }
 

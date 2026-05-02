@@ -5,11 +5,16 @@ package framework
 import (
 	"context"
 	"testing"
+	"time"
+
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // RouteOptions are the inputs to TestNamespace.CreateRoute.
 type RouteOptions struct {
-	// Name of the HTTPTrigger. Optional; CLI auto-generates if empty.
+	// Name of the HTTPTrigger. If empty, the framework derives a stable name
+	// from Function so cleanup is deterministic.
 	Name string
 	// Function name to route to. Required.
 	Function string
@@ -19,20 +24,32 @@ type RouteOptions struct {
 	Method string
 }
 
-// CreateRoute creates an HTTPTrigger that routes Method+URL to the named
-// Function. Equivalent to `fission route create`.
+// CreateRoute creates an HTTPTrigger via the CLI. A stable trigger name is
+// derived from the Function so cleanup can find it without parsing CLI output.
 func (ns *TestNamespace) CreateRoute(t *testing.T, ctx context.Context, opts RouteOptions) {
 	t.Helper()
 	if opts.Function == "" || opts.URL == "" || opts.Method == "" {
 		t.Fatalf("CreateRoute: Function, URL, and Method are required (got %+v)", opts)
 	}
-	args := []string{"route", "create",
+	if opts.Name == "" {
+		opts.Name = "route-" + opts.Function
+	}
+	ns.CLI(t, ctx, "route", "create",
+		"--name", opts.Name,
 		"--function", opts.Function,
 		"--url", opts.URL,
 		"--method", opts.Method,
-	}
-	if opts.Name != "" {
-		args = append(args, "--name", opts.Name)
-	}
-	ns.CLI(t, ctx, args...)
+	)
+
+	t.Cleanup(func() {
+		if noCleanup() {
+			return
+		}
+		c, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		err := ns.f.fissionClient.CoreV1().HTTPTriggers(ns.Name).Delete(c, opts.Name, metav1.DeleteOptions{})
+		if err != nil && !apierrors.IsNotFound(err) {
+			t.Logf("cleanup: delete route %q: %v", opts.Name, err)
+		}
+	})
 }
