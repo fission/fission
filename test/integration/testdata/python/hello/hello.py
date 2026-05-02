@@ -1,2 +1,2 @@
 def main():
-    return "hello\n"
+    return "Hello, world!\n"

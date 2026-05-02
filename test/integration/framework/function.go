@@ -35,6 +35,9 @@ type FunctionOptions struct {
 	// Src is the local file path to a source archive (e.g. .zip). The
 	// environment must have a Builder configured.
 	Src string
+	// Deploy is the local file path to a *deploy* archive — already built,
+	// no builder invocation. Mutually exclusive with Code/Src/Pkg.
+	Deploy string
 	// Pkg is the name of an existing Package CR. The Function references
 	// the package by name; the env is inherited from the package.
 	Pkg string
@@ -80,11 +83,14 @@ func (ns *TestNamespace) CreateFunction(t *testing.T, ctx context.Context, opts 
 	if opts.Src != "" {
 		sources++
 	}
+	if opts.Deploy != "" {
+		sources++
+	}
 	if opts.Pkg != "" {
 		sources++
 	}
 	require.Equalf(t, 1, sources,
-		"FunctionOptions: exactly one of Code, Src, or Pkg must be set (got %+v)", opts)
+		"FunctionOptions: exactly one of Code, Src, Deploy, or Pkg must be set (got %+v)", opts)
 	if opts.Pkg == "" {
 		require.NotEmpty(t, opts.Env, "FunctionOptions.Env required unless Pkg is set")
 	}
@@ -98,6 +104,11 @@ func (ns *TestNamespace) CreateFunction(t *testing.T, ctx context.Context, opts 
 		}
 	case opts.Code != "":
 		args = append(args, "--env", opts.Env, "--code", opts.Code)
+	case opts.Deploy != "":
+		args = append(args, "--env", opts.Env, "--deploy", opts.Deploy)
+		if opts.Entrypoint != "" {
+			args = append(args, "--entrypoint", opts.Entrypoint)
+		}
 	default: // Src
 		args = append(args, "--env", opts.Env, "--src", opts.Src)
 		if opts.Entrypoint != "" {

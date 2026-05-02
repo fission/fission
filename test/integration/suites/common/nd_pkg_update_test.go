@@ -38,28 +38,22 @@ func TestNDPackageUpdate(t *testing.T) {
 		Poolsize: 2,
 	})
 
+	// Use --deploy (already-built archive, no build). Bash also uses
+	// --deploy here; previously we used --src which triggered a build and
+	// hit the "runtime pod not ready" race.
 	zipV1 := buildHelloZip(t, "Hello, world!")
 	ns.CreateFunction(t, ctx, framework.FunctionOptions{
-		Name: fnName, Env: envName, Src: zipV1, Entrypoint: "hello.main",
+		Name: fnName, Env: envName, Deploy: zipV1, Entrypoint: "hello.main",
 		ExecutorType: "newdeploy", MinScale: 1, MaxScale: 4, TargetCPU: 50,
 	})
-	// `fn create --src <zip>` actually feeds it as deploy archive (no
-	// builder invocation needed for an already-bundled .py file). Wait
-	// for the package status to settle.
-	pkgName := ns.FunctionPackageName(t, ctx, fnName)
-	ns.WaitForPackageBuildSucceeded(t, ctx, pkgName)
-
 	ns.CreateRoute(t, ctx, framework.RouteOptions{Function: fnName, URL: "/" + fnName, Method: "GET"})
 	f.Router(t).GetEventually(t, ctx, "/"+fnName, framework.BodyContains("world"))
 
-	// Update the archive contents and re-deploy.
+	// Update the deploy archive contents and re-apply.
 	zipV2 := buildHelloZip(t, "Hello, fission!")
-	prevTs := ns.PackageBuildTimestamp(t, ctx, pkgName)
-	ns.CLI(t, ctx, "fn", "update", "--name", fnName, "--src", zipV2,
+	ns.CLI(t, ctx, "fn", "update", "--name", fnName, "--deploy", zipV2,
 		"--entrypoint", "hello.main", "--executortype", "newdeploy",
 		"--minscale", "1", "--maxscale", "4", "--targetcpu", "50")
-	ns.WaitForPackageRebuiltSince(t, ctx, pkgName, prevTs)
-
 	f.Router(t).GetEventually(t, ctx, "/"+fnName, framework.BodyContains("fission"))
 }
 

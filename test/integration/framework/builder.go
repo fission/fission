@@ -18,9 +18,35 @@ import (
 // matches the bash `wait_for_builder` helper.
 func (ns *TestNamespace) WaitForBuilderReady(t *testing.T, ctx context.Context, envName string) {
 	t.Helper()
+	waitForReadyPod(t, ctx, ns, "envName="+envName, "builder", envName, 3*time.Minute)
+}
+
+// WaitForRuntimePodReady polls for at least one runtime (poolmgr) pod for
+// the env to be Ready. Use before triggering a source-archive build, because
+// the buildermgr POSTs to the runtime pod's fetcher on port 8000 and times
+// out if the pod is still in ContainerCreating.
+//
+// Pods carry the `environmentName=<env>` label (separate from the legacy
+// `envName=` label on builder pods).
+func (ns *TestNamespace) WaitForRuntimePodReady(t *testing.T, ctx context.Context, envName string) {
+	t.Helper()
+	waitForReadyPod(t, ctx, ns, "environmentName="+envName, "runtime", envName, 3*time.Minute)
+}
+
+// WaitForEnvReady waits for both the builder and runtime pods of envName.
+// Combines WaitForBuilderReady + WaitForRuntimePodReady. Use this in tests
+// that immediately follow with a source-archive package build.
+func (ns *TestNamespace) WaitForEnvReady(t *testing.T, ctx context.Context, envName string) {
+	t.Helper()
+	ns.WaitForBuilderReady(t, ctx, envName)
+	ns.WaitForRuntimePodReady(t, ctx, envName)
+}
+
+func waitForReadyPod(t *testing.T, ctx context.Context, ns *TestNamespace, selector, kind, envName string, timeout time.Duration) {
+	t.Helper()
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		pods, err := ns.f.kubeClient.CoreV1().Pods(ns.Name).List(ctx, metav1.ListOptions{
-			LabelSelector: "envName=" + envName,
+			LabelSelector: selector,
 		})
 		if !assert.NoError(c, err) {
 			return
@@ -30,8 +56,8 @@ func (ns *TestNamespace) WaitForBuilderReady(t *testing.T, ctx context.Context, 
 				return
 			}
 		}
-		assert.Failf(c, "no Ready builder pod yet", "env %q in namespace %q", envName, ns.Name)
-	}, 3*time.Minute, 2*time.Second)
+		assert.Failf(c, "no Ready "+kind+" pod yet", "env %q in namespace %q (selector %q)", envName, ns.Name, selector)
+	}, timeout, 2*time.Second)
 }
 
 func isPodReady(p *corev1.Pod) bool {
