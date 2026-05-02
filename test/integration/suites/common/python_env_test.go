@@ -54,41 +54,44 @@ func TestPythonEnv(t *testing.T) {
 	// v1 api: hello.py, no builder, default entrypoint resolution.
 	helloPath := framework.WriteTestData(t, "python/hello/hello.py")
 
+	// `name` is the t.Run label; `slug` goes into resource names and must
+	// be RFC 1123 (lowercase alnum + hyphens — no underscores).
 	cases := []struct {
 		name       string
+		slug       string
 		fnSetup    func(t *testing.T, fnName string)
 		expectBody string
 	}{
 		{
-			name: "v1_api",
+			name: "v1-api", slug: "v1api",
 			fnSetup: func(t *testing.T, fnName string) {
 				ns.CreateFunction(t, ctx, framework.FunctionOptions{Name: fnName, Env: envV1, Code: helloPath})
 			},
 			expectBody: "hello",
 		},
 		{
-			name: "v2_default_entrypoint",
+			name: "v2-default-entrypoint", slug: "v2default",
 			fnSetup: func(t *testing.T, fnName string) {
 				ns.CreateFunction(t, ctx, framework.FunctionOptions{Name: fnName, Pkg: pkgName})
 			},
 			expectBody: "THIS_IS_MAIN_MAIN",
 		},
 		{
-			name: "v2_entrypoint_func",
+			name: "v2-entrypoint-func", slug: "v2func",
 			fnSetup: func(t *testing.T, fnName string) {
 				ns.CreateFunction(t, ctx, framework.FunctionOptions{Name: fnName, Pkg: pkgName, Entrypoint: "func"})
 			},
 			expectBody: "THIS_IS_MAIN_FUNC",
 		},
 		{
-			name: "v2_entrypoint_foo_bar",
+			name: "v2-entrypoint-foo-bar", slug: "v2foobar",
 			fnSetup: func(t *testing.T, fnName string) {
 				ns.CreateFunction(t, ctx, framework.FunctionOptions{Name: fnName, Pkg: pkgName, Entrypoint: "foo.bar"})
 			},
 			expectBody: "THIS_IS_FOO_BAR",
 		},
 		{
-			name: "v2_entrypoint_dotted",
+			name: "v2-entrypoint-dotted", slug: "v2dotted",
 			fnSetup: func(t *testing.T, fnName string) {
 				ns.CreateFunction(t, ctx, framework.FunctionOptions{Name: fnName, Pkg: pkgName, Entrypoint: "sub_mod.altmain.entrypoint"})
 			},
@@ -99,7 +102,7 @@ func TestPythonEnv(t *testing.T) {
 	for _, tc := range cases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			fnName := "fn-py-" + tc.name + "-" + ns.ID
+			fnName := "fn-py-" + tc.slug + "-" + ns.ID
 			routePath := "/" + fnName
 			tc.fnSetup(t, fnName)
 			ns.CreateRoute(t, ctx, framework.RouteOptions{Function: fnName, URL: routePath, Method: "GET"})
