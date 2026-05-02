@@ -188,6 +188,18 @@ ns.CreateFunction(t, ctx, framework.FunctionOptions{
 
 Polls for a Pod labelled `envName=<env>` to reach `Ready=True`. Mirrors the bash `wait_for_builder` helper. Default timeout is 3 minutes (covers cold image pulls on Kind).
 
+### `ns.CreatePackage(t, ctx, PackageOptions{Name, Env, Src|Deploy, BuildCmd, DeployChecksum, Insecure})`
+
+Creates a Package via `fission package create` and registers cleanup. Use this for tests that want pkg-then-fn workflows (e.g. multiple functions sharing one package, or testing the various `package create` input modes — file/zip/glob/URL). `Src` triggers the env's builder; `Deploy` skips the build step.
+
+### `ns.PackageDeployChecksum(t, ctx, pkgName)` → `string`
+
+Returns `Package.Spec.Deployment.Checksum.Sum` — the SHA256 the CLI stored when fetching from a URL. Use to verify checksum-related package-create flags (`--deploychecksum`, `--insecure`).
+
+### `FunctionOptions.Pkg`
+
+When set, `CreateFunction` builds `fn create --name <fn> --pkg <existing> --entrypoint <ep>`. Mutually exclusive with `Code` and `Src`. `Env` is not required when `Pkg` is set (the package already references its env).
+
 ### `ns.WaitForPackageBuildSucceeded(t, ctx, pkgName)`
 
 Polls `Package.Status.BuildStatus` until it reaches `succeeded`. If the build reaches the terminal `failed` state, the helper `t.Fatal`s with the build log captured from `Status.BuildLog` — much better signal than a generic timeout.

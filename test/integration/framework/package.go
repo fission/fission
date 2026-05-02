@@ -16,6 +16,76 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 )
 
+// PackageOptions are the inputs to TestNamespace.CreatePackage. Either Src
+// (source archive — built by the env's builder) or Deploy (already-built
+// deploy archive) must be set, not both. Inputs may be zip files or
+// glob-style patterns expanded by the CLI under cwd.
+type PackageOptions struct {
+	// Name of the Package CR. Required.
+	Name string
+	// Env is the Environment name. Required.
+	Env string
+	// Src is the source archive path (or glob). When set, the env's builder
+	// runs to produce the deploy archive.
+	Src string
+	// Deploy is the deploy archive path (or glob). Bypasses the builder.
+	Deploy string
+	// BuildCmd is passed as `--buildcmd` for source-archive packages.
+	BuildCmd string
+	// DeployChecksum is the optional SHA256 the CLI compares against the
+	// downloaded deploy archive when the source is a URL.
+	DeployChecksum string
+	// Insecure disables checksum verification on URL-based archives.
+	Insecure bool
+}
+
+// CreatePackage creates a Package via `fission package create` and registers
+// its deletion on the namespace cleanup chain. Use this for tests that want
+// to exercise pkg-then-fn workflows separately from the bundled
+// `fn create --src` shortcut.
+func (ns *TestNamespace) CreatePackage(t *testing.T, ctx context.Context, opts PackageOptions) {
+	t.Helper()
+	require.NotEmpty(t, opts.Name, "PackageOptions.Name")
+	require.NotEmpty(t, opts.Env, "PackageOptions.Env")
+	require.Truef(t, (opts.Src == "") != (opts.Deploy == ""),
+		"PackageOptions: exactly one of Src or Deploy must be set (got %+v)", opts)
+
+	args := []string{"package", "create", "--name", opts.Name, "--env", opts.Env}
+	if opts.Src != "" {
+		args = append(args, "--src", opts.Src)
+		if opts.BuildCmd != "" {
+			args = append(args, "--buildcmd", opts.BuildCmd)
+		}
+	} else {
+		args = append(args, "--deploy", opts.Deploy)
+	}
+	if opts.DeployChecksum != "" {
+		args = append(args, "--deploychecksum", opts.DeployChecksum)
+	}
+	if opts.Insecure {
+		args = append(args, "--insecure")
+	}
+	ns.CLI(t, ctx, args...)
+
+	ns.addCleanup("package "+opts.Name, func(c context.Context) error {
+		err := ns.f.fissionClient.CoreV1().Packages(ns.Name).Delete(c, opts.Name, metav1.DeleteOptions{})
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+		return err
+	})
+}
+
+// PackageDeployChecksum returns Package.Spec.Deployment.Checksum.Sum.
+// Mirrors the bash one-liner:
+// `kubectl get packages <name> -o jsonpath='{.spec.deployment.checksum.sum}'`.
+func (ns *TestNamespace) PackageDeployChecksum(t *testing.T, ctx context.Context, pkgName string) string {
+	t.Helper()
+	p, err := ns.f.fissionClient.CoreV1().Packages(ns.Name).Get(ctx, pkgName, metav1.GetOptions{})
+	require.NoErrorf(t, err, "PackageDeployChecksum: get package %q", pkgName)
+	return p.Spec.Deployment.Checksum.Sum
+}
+
 // WaitForPackageBuildSucceeded polls Package.Status.BuildStatus until it
 // reaches "succeeded" (per fv1.BuildStatusSucceeded). Failure / timeout /
 // terminal "failed" status all become t.Fatal. Mirrors the bash `waitBuild`

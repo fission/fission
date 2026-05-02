@@ -18,20 +18,25 @@ import (
 
 // FunctionOptions are the inputs to TestNamespace.CreateFunction.
 //
-// Either Code (single file) or Src (zipped source package) must be provided,
-// not both. When Src is provided, Entrypoint and BuildCmd describe how the
-// builder should produce the deploy archive.
+// Exactly one of Code (single file), Src (zipped source package), or Pkg
+// (existing Package name) must be provided. When Src is set, Entrypoint and
+// BuildCmd describe how the builder produces the deploy archive. When Pkg is
+// set, Env may be omitted (the package already references its env).
 type FunctionOptions struct {
 	// Name of the Function CR. Required.
 	Name string
-	// Env is the Environment name to use. Required.
+	// Env is the Environment name to use. Required unless Pkg is set.
 	Env string
 	// Code is the local file path to a single source file (e.g. hello.js).
 	Code string
 	// Src is the local file path to a source archive (e.g. .zip). The
 	// environment must have a Builder configured.
 	Src string
-	// Entrypoint identifies the function in the source archive (e.g. "user.main").
+	// Pkg is the name of an existing Package CR. The Function references
+	// the package by name; the env is inherited from the package.
+	Pkg string
+	// Entrypoint identifies the function in the source archive or package
+	// (e.g. "user.main").
 	Entrypoint string
 	// BuildCmd is the command run by the builder (e.g. "./build.sh").
 	BuildCmd string
@@ -44,15 +49,33 @@ type FunctionOptions struct {
 func (ns *TestNamespace) CreateFunction(t *testing.T, ctx context.Context, opts FunctionOptions) {
 	t.Helper()
 	require.NotEmpty(t, opts.Name, "FunctionOptions.Name")
-	require.NotEmpty(t, opts.Env, "FunctionOptions.Env")
-	require.Truef(t, (opts.Code == "") != (opts.Src == ""),
-		"FunctionOptions: exactly one of Code or Src must be set (got %+v)", opts)
-
-	args := []string{"fn", "create", "--name", opts.Name, "--env", opts.Env}
+	sources := 0
 	if opts.Code != "" {
-		args = append(args, "--code", opts.Code)
-	} else {
-		args = append(args, "--src", opts.Src)
+		sources++
+	}
+	if opts.Src != "" {
+		sources++
+	}
+	if opts.Pkg != "" {
+		sources++
+	}
+	require.Equalf(t, 1, sources,
+		"FunctionOptions: exactly one of Code, Src, or Pkg must be set (got %+v)", opts)
+	if opts.Pkg == "" {
+		require.NotEmpty(t, opts.Env, "FunctionOptions.Env required unless Pkg is set")
+	}
+
+	args := []string{"fn", "create", "--name", opts.Name}
+	switch {
+	case opts.Pkg != "":
+		args = append(args, "--pkg", opts.Pkg)
+		if opts.Entrypoint != "" {
+			args = append(args, "--entrypoint", opts.Entrypoint)
+		}
+	case opts.Code != "":
+		args = append(args, "--env", opts.Env, "--code", opts.Code)
+	default: // Src
+		args = append(args, "--env", opts.Env, "--src", opts.Src)
 		if opts.Entrypoint != "" {
 			args = append(args, "--entrypoint", opts.Entrypoint)
 		}

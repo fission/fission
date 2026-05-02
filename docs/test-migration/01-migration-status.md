@@ -19,12 +19,12 @@ See `00-design.md` for the design; `02-framework-api.md` for helper docs.
 Update these whenever the table below changes.
 
 - Total bash tests: 48
-- In `kind_CI.sh` active list: 34 (17 phase-1, 17 phase-2)
-- Not in `kind_CI.sh` active list: 14 (3 never were + 11 migrated)
-- `bash-active`: 30
+- In `kind_CI.sh` active list: 32 (15 phase-1, 17 phase-2)
+- Not in `kind_CI.sh` active list: 16 (3 never were + 13 migrated)
+- `bash-active`: 28
 - `bash-disabled-existing`: 6
-- `bash-disabled-migrated`: 12 (node_hello_http, buildermgr, canary, pass, internal_routes, huge_response, function_update, function_logs, create_fn_with_url, annotations, spec, spec_multifile)
-- `go-live`: 12
+- `bash-disabled-migrated`: 14 (+ package_command, package_checksum)
+- `go-live`: 14
 - `go-skip`: 0
 - `deleted`: 0
 
@@ -56,8 +56,8 @@ Columns:
 | `websocket/test_ws.sh` | p1 | common | `TestWebsocket` (`common/websocket_test.go`) | bash-active | — |
 | `test_archive_cli.sh` | p1 | common | `TestArchiveCLI` (`common/archive_cli_test.go`) | bash-active | — |
 | `test_archive_pruner.sh` | p1 | common | `TestArchivePruner` (`common/archive_pruner_test.go`) | bash-active | — |
-| `test_package_command.sh` | p1 | common | `TestPackageCommand` (`common/package_command_test.go`) | bash-active | — |
-| `test_package_checksum.sh` | p1 | common | `TestPackageChecksum` (`common/package_checksum_test.go`) | bash-active | — |
+| `test_package_command.sh` | p1 | common | `TestPackageCommand` (`common/package_command_test.go`) | bash-disabled-migrated / go-live | this PR |
+| `test_package_checksum.sh` | p1 | common | `TestPackageChecksum` (`common/package_checksum_test.go`) | bash-disabled-migrated / go-live | this PR |
 | `test_specs/test_spec.sh` | p1 | common | `TestSpec` (`common/spec_test.go`) | bash-disabled-migrated / go-live | this PR |
 | `test_specs/test_spec_multifile.sh` | p1 | common | `TestSpecMultifile` (`common/spec_multifile_test.go`) | bash-disabled-migrated / go-live | this PR |
 | `test_specs/test_spec_merge/test_spec_merge.sh` | p1 | common | `TestSpecMerge` (`common/spec_merge_test.go`) | bash-active (deferred — pre-built yaml fixtures need templating) | — |
@@ -160,7 +160,7 @@ Suggested batches (ordered by approximate complexity):
 1. **HTTP basics** ✅: `test_pass.sh`, `test_huge_response.sh`, `test_internal_routes.sh` migrated this PR. `test_annotations.sh` deferred — needs clientset Env construction (CLI doesn't expose `metadata.annotations`); migrate alongside other env-config tests in a later batch.
 2. **Function ops** ✅: `test_function_update.sh`, `test_function_logs.sh`, `test_create_fn_with_url.sh`, `test_annotations.sh` migrated this PR.
 3. **Specs** (partial ✅): `test_spec.sh`, `test_spec_multifile.sh` migrated this PR. `test_spec_merge.sh` and `test_spec_archive.sh` deferred — they ship pre-built yaml fixtures with hardcoded resource names (`nodep`, `nodend`, `dummyfoobarnode`, etc.) that would collide under `t.Parallel()`; need to template the yaml at test time before they can migrate.
-4. **Archives & packages**: `test_archive_cli.sh`, `test_archive_pruner.sh`, `test_package_command.sh`, `test_package_checksum.sh`.
+4. **Archives & packages** (partial ✅): `test_package_command.sh`, `test_package_checksum.sh` migrated this PR. `test_archive_cli.sh` and `test_archive_pruner.sh` deferred — both depend on `fission archive` subcommands that stream to os.Stdout (which the in-process CLI helper can't capture under `t.Parallel()`); a clean migration likely needs direct storagesvc HTTP access from the test process.
 5. **Environments**: `test_python_env.sh`, `test_go_env.sh`, `test_nodejs_env.sh`, `test_tensorflow_serving_env.sh`, `test_env_podspec.sh`.
 6. **Function updates**: 7 tests in `test_fn_update/` (split across two PRs).
 7. **Backends**: `test_backend_poolmgr.sh`, `test_backend_newdeploy.sh`, `test_idle_objects_reaper.sh`.
