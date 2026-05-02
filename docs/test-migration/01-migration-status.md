@@ -19,12 +19,12 @@ See `00-design.md` for the design; `02-framework-api.md` for helper docs.
 Update these whenever the table below changes.
 
 - Total bash tests: 48
-- In `kind_CI.sh` active list: 36 (19 phase-1, 17 phase-2)
-- Not in `kind_CI.sh` active list: 12 (3 never were + 9 migrated)
-- `bash-active`: 32
+- In `kind_CI.sh` active list: 34 (17 phase-1, 17 phase-2)
+- Not in `kind_CI.sh` active list: 14 (3 never were + 11 migrated)
+- `bash-active`: 30
 - `bash-disabled-existing`: 6
-- `bash-disabled-migrated`: 10 (node_hello_http, buildermgr, canary, pass, internal_routes, huge_response, function_update, function_logs, create_fn_with_url, annotations)
-- `go-live`: 10
+- `bash-disabled-migrated`: 12 (node_hello_http, buildermgr, canary, pass, internal_routes, huge_response, function_update, function_logs, create_fn_with_url, annotations, spec, spec_multifile)
+- `go-live`: 12
 - `go-skip`: 0
 - `deleted`: 0
 
@@ -58,10 +58,10 @@ Columns:
 | `test_archive_pruner.sh` | p1 | common | `TestArchivePruner` (`common/archive_pruner_test.go`) | bash-active | — |
 | `test_package_command.sh` | p1 | common | `TestPackageCommand` (`common/package_command_test.go`) | bash-active | — |
 | `test_package_checksum.sh` | p1 | common | `TestPackageChecksum` (`common/package_checksum_test.go`) | bash-active | — |
-| `test_specs/test_spec.sh` | p1 | common | `TestSpec` (`common/spec_test.go`) | bash-active | — |
-| `test_specs/test_spec_multifile.sh` | p1 | common | `TestSpecMultifile` (`common/spec_multifile_test.go`) | bash-active | — |
-| `test_specs/test_spec_merge/test_spec_merge.sh` | p1 | common | `TestSpecMerge` (`common/spec_merge_test.go`) | bash-active | — |
-| `test_specs/test_spec_archive/test_spec_archive.sh` | p1 | common | `TestSpecArchive` (`common/spec_archive_test.go`) | bash-active | — |
+| `test_specs/test_spec.sh` | p1 | common | `TestSpec` (`common/spec_test.go`) | bash-disabled-migrated / go-live | this PR |
+| `test_specs/test_spec_multifile.sh` | p1 | common | `TestSpecMultifile` (`common/spec_multifile_test.go`) | bash-disabled-migrated / go-live | this PR |
+| `test_specs/test_spec_merge/test_spec_merge.sh` | p1 | common | `TestSpecMerge` (`common/spec_merge_test.go`) | bash-active (deferred — pre-built yaml fixtures need templating) | — |
+| `test_specs/test_spec_archive/test_spec_archive.sh` | p1 | common | `TestSpecArchive` (`common/spec_archive_test.go`) | bash-active (deferred — pre-built yaml fixtures need templating) | — |
 | `test_env_podspec.sh` | p1 | common | `TestEnvPodSpec` (`common/env_podspec_test.go`) | bash-active | — |
 | `test_environments/test_python_env.sh` | p1 | common | `TestPythonEnv` (`common/python_env_test.go`) | bash-active | — |
 | `test_environments/test_go_env.sh` | p1 | common | `TestGoEnv` (`common/go_env_test.go`) | bash-active | — |
@@ -159,7 +159,7 @@ Suggested batches (ordered by approximate complexity):
 
 1. **HTTP basics** ✅: `test_pass.sh`, `test_huge_response.sh`, `test_internal_routes.sh` migrated this PR. `test_annotations.sh` deferred — needs clientset Env construction (CLI doesn't expose `metadata.annotations`); migrate alongside other env-config tests in a later batch.
 2. **Function ops** ✅: `test_function_update.sh`, `test_function_logs.sh`, `test_create_fn_with_url.sh`, `test_annotations.sh` migrated this PR.
-3. **Specs**: `test_spec.sh`, `test_spec_multifile.sh`, `test_spec_merge.sh`, `test_spec_archive.sh`.
+3. **Specs** (partial ✅): `test_spec.sh`, `test_spec_multifile.sh` migrated this PR. `test_spec_merge.sh` and `test_spec_archive.sh` deferred — they ship pre-built yaml fixtures with hardcoded resource names (`nodep`, `nodend`, `dummyfoobarnode`, etc.) that would collide under `t.Parallel()`; need to template the yaml at test time before they can migrate.
 4. **Archives & packages**: `test_archive_cli.sh`, `test_archive_pruner.sh`, `test_package_command.sh`, `test_package_checksum.sh`.
 5. **Environments**: `test_python_env.sh`, `test_go_env.sh`, `test_nodejs_env.sh`, `test_tensorflow_serving_env.sh`, `test_env_podspec.sh`.
 6. **Function updates**: 7 tests in `test_fn_update/` (split across two PRs).
