@@ -68,6 +68,7 @@ func TestSpecMultifile(t *testing.T) {
 	})
 
 	ns.CreateRoute(t, ctx, framework.RouteOptions{Function: fnName, URL: routePath, Method: "GET"})
-	body := f.Router(t).GetEventually(t, ctx, routePath, framework.BodyContains("hello"))
-	require.Contains(t, body, "hello")
+	// GetEventually's BodyContains is case-insensitive; the multifile
+	// function returns "Hello, world!\n" rendered from message.txt.
+	f.Router(t).GetEventually(t, ctx, routePath, framework.BodyContains("hello"))
 }
