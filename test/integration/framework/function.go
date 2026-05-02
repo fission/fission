@@ -4,12 +4,14 @@ package framework
 
 import (
 	"context"
+	"io"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -90,6 +92,45 @@ func (ns *TestNamespace) WaitForFunction(t *testing.T, ctx context.Context, name
 		_, err := ns.f.fissionClient.CoreV1().Functions(ns.Name).Get(ctx, name, metav1.GetOptions{})
 		assert.NoErrorf(c, err, "function %q not visible in namespace %q", name, ns.Name)
 	}, 30*time.Second, 500*time.Millisecond)
+}
+
+// FunctionLogs returns the combined log output of every pod backing the
+// function's environment, read directly via the Kubernetes API. Mirrors
+// `fission function logs --name <fn> --detail` for assertion purposes.
+//
+// We don't go through the CLI here because its `function logs` subcommand
+// streams pod logs to os.Stdout, which our in-process CLI helper does not
+// capture (it only routes cobra's SetOut/SetErr writers). os.Stdout
+// redirection would be unsafe under t.Parallel — pulling logs via kubeClient
+// is race-free and matches what the CLI would print.
+func (ns *TestNamespace) FunctionLogs(t *testing.T, ctx context.Context, fnName string) string {
+	t.Helper()
+	fn, err := ns.f.fissionClient.CoreV1().Functions(ns.Name).Get(ctx, fnName, metav1.GetOptions{})
+	require.NoErrorf(t, err, "FunctionLogs: get function %q", fnName)
+
+	envName := fn.Spec.Environment.Name
+	pods, err := ns.f.kubeClient.CoreV1().Pods(ns.Name).List(ctx, metav1.ListOptions{
+		LabelSelector: "envName=" + envName,
+	})
+	require.NoErrorf(t, err, "FunctionLogs: list pods (envName=%s)", envName)
+
+	var combined strings.Builder
+	for _, p := range pods.Items {
+		// In poolmgr pods the function container name equals the env name.
+		req := ns.f.kubeClient.CoreV1().Pods(ns.Name).GetLogs(p.Name, &corev1.PodLogOptions{Container: envName})
+		stream, err := req.Stream(ctx)
+		if err != nil {
+			t.Logf("FunctionLogs: stream %s/%s: %v", p.Name, envName, err)
+			continue
+		}
+		b, readErr := io.ReadAll(stream)
+		_ = stream.Close()
+		if readErr != nil {
+			t.Logf("FunctionLogs: read %s/%s: %v", p.Name, envName, readErr)
+		}
+		combined.Write(b)
+	}
+	return combined.String()
 }
 
 // FunctionPackageName returns the auto-generated Package name backing a

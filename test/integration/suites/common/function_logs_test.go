@@ -47,13 +47,15 @@ func TestFunctionLogs(t *testing.T) {
 		require.Equalf(t, 200, status, "extra GET #%d should be 200", i)
 	}
 
-	// Poll `fission function logs` until it reports 4 "log test" lines —
-	// the log pipeline (router → log database) is asynchronous; bash sleeps
-	// 60s, we poll up to 2 minutes.
+	// Poll function pod logs until 4 "log test" lines are observed. We use
+	// the dedicated FunctionLogs helper (kubeClient-driven) rather than
+	// `fission function logs` via ns.CLI: the CLI streams pod logs to
+	// os.Stdout directly, which our in-process CLI helper does not capture
+	// (it only routes cobra's SetOut/SetErr).
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		out := ns.CLI(t, ctx, "function", "logs", "--name", fnName, "--detail")
+		out := ns.FunctionLogs(t, ctx, fnName)
 		count := strings.Count(out, "log test")
 		assert.GreaterOrEqualf(c, count, 4,
-			"function logs should report 4 'log test' lines, got %d:\n%s", count, out)
-	}, 2*time.Minute, 5*time.Second)
+			"function logs should report >= 4 'log test' lines, got %d:\n%s", count, out)
+	}, 1*time.Minute, 2*time.Second)
 }
