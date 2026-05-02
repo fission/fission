@@ -112,12 +112,16 @@ jobs:
           helm install prometheus prometheus-community/kube-prometheus-stack -n monitoring \
           --version 45.28.0 --set grafana.enabled=false --set alertmanager.enabled=false
 
-      - name: Build and Install Fission CLI
-        run: |
-          make debug-vars
-          make build-fission-cli
-          sudo make install-fission-cli
-          sudo chmod +x /usr/local/bin/fission
+      # TEMPORARY: Build/install fission CLI binary skipped on this branch.
+      # Our Go integration tests use the in-process CLI via app.App(...) and
+      # never shell out to /usr/local/bin/fission. Restored before merge to
+      # main (bash test suite still needs the binary).
+      # - name: Build and Install Fission CLI
+      #   run: |
+      #     make debug-vars
+      #     make build-fission-cli
+      #     sudo make install-fission-cli
+      #     sudo chmod +x /usr/local/bin/fission
 
       - name: Build and Install Fission
         timeout-minutes: 10
@@ -131,10 +135,12 @@ jobs:
       # processes started with `&` may not survive across GitHub Actions steps
       # on every runner image. Wait-for-readiness covers cluster startup races.
 
-      - name: Get fission version
-        timeout-minutes: 10
-        run: |
-          fission version
+      # TEMPORARY: skipped while bash CLI install is disabled. The test step
+      # below logs equivalent info on its own.
+      # - name: Get fission version
+      #   timeout-minutes: 10
+      #   run: |
+      #     fission version
 
       - name: Go integration tests (common phase)
         timeout-minutes: 30
@@ -151,11 +157,23 @@ jobs:
           # Pre-pull and kind-load every runtime/builder image referenced by
           # tests in this phase so the Kind nodes don't re-pull on first
           # function invocation. Add new images to this list as more tests
-          # land. Set FOO_IMAGE=""  in the env block above to skip an image.
+          # land. Set FOO_IMAGE="" in the env block above to skip an image.
+          # Pull/load run in parallel — sequential was ~50s, parallel ~15s.
+          load_image() {
+            local img="$1"
+            [ -z "$img" ] && return 0
+            docker pull -q "$img" \
+              && kind load docker-image "$img" --name "${KIND_CLUSTER_NAME}"
+          }
+          export -f load_image
+          export KIND_CLUSTER_NAME
+          pids=()
           for img in "$NODE_RUNTIME_IMAGE" "$PYTHON_RUNTIME_IMAGE" "$PYTHON_BUILDER_IMAGE" "$GO_RUNTIME_IMAGE" "$GO_BUILDER_IMAGE"; do
-            [ -z "$img" ] && continue
-            docker pull -q "$img"
-            kind load docker-image "$img" --name "${KIND_CLUSTER_NAME}"
+            load_image "$img" &
+            pids+=($!)
+          done
+          for pid in "${pids[@]}"; do
+            wait "$pid" || { echo "image preload failed (pid $pid)"; exit 1; }
           done
 
           kubectl port-forward svc/router 8888:80 -n "$FISSION_NAMESPACE" >/tmp/pf.log 2>&1 &
