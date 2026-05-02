@@ -4,6 +4,7 @@ package framework
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"testing"
 	"time"
@@ -97,18 +98,47 @@ func (ns *TestNamespace) FunctionWeight(t *testing.T, ctx context.Context, route
 // observe the canary controller's traffic-shift decisions.
 func (ns *TestNamespace) WaitForFunctionWeight(t *testing.T, ctx context.Context, routeName, fnName string, want int, timeout time.Duration) {
 	t.Helper()
+	ns.waitForFunctionWeightCond(t, ctx, routeName, fnName, timeout,
+		func(w int) bool { return w == want },
+		fmt.Sprintf("==%d", want))
+}
+
+// WaitForFunctionWeightAtLeast polls until the weight assigned to fnName on
+// routeName is >= want. Use this to observe the canary controller making
+// *some* progress before checking the final state — e.g. for rollback tests,
+// confirm v3 weight first rose above 0 before asserting it returned to 0.
+func (ns *TestNamespace) WaitForFunctionWeightAtLeast(t *testing.T, ctx context.Context, routeName, fnName string, want int, timeout time.Duration) {
+	t.Helper()
+	ns.waitForFunctionWeightCond(t, ctx, routeName, fnName, timeout,
+		func(w int) bool { return w >= want },
+		fmt.Sprintf(">=%d", want))
+}
+
+func (ns *TestNamespace) waitForFunctionWeightCond(
+	t *testing.T,
+	ctx context.Context,
+	routeName, fnName string,
+	timeout time.Duration,
+	match func(int) bool,
+	desc string,
+) {
+	t.Helper()
 	var last int
-	Eventually(t, ctx, timeout, 2*time.Second, func(c context.Context) (bool, error) {
-		tr, err := ns.f.fissionClient.CoreV1().HTTPTriggers(ns.Name).Get(c, routeName, metav1.GetOptions{})
-		if apierrors.IsNotFound(err) {
-			return false, nil
-		}
-		if err != nil {
-			return false, err
-		}
-		if tr.Spec.FunctionReference.FunctionWeights != nil {
-			last = tr.Spec.FunctionReference.FunctionWeights[fnName]
-		}
-		return last == want, nil
-	}, "route %q: weight for function %q never reached %d (last=%d)", routeName, fnName, want, last)
+	EventuallyLazy(t, ctx, timeout, 2*time.Second,
+		func(c context.Context) (bool, error) {
+			tr, err := ns.f.fissionClient.CoreV1().HTTPTriggers(ns.Name).Get(c, routeName, metav1.GetOptions{})
+			if apierrors.IsNotFound(err) {
+				return false, nil
+			}
+			if err != nil {
+				return false, err
+			}
+			if tr.Spec.FunctionReference.FunctionWeights != nil {
+				last = tr.Spec.FunctionReference.FunctionWeights[fnName]
+			}
+			return match(last), nil
+		},
+		func() string {
+			return fmt.Sprintf("route %q: weight for function %q never satisfied %s (last=%d)", routeName, fnName, desc, last)
+		})
 }

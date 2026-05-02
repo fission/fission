@@ -241,17 +241,32 @@ ns.CreateRoute(t, ctx, framework.RouteOptions{
 
 One-shot read of the current weight assigned to a function on the named HTTPTrigger. Returns 0 if the function isn't in `Spec.FunctionReference.FunctionWeights`.
 
-### `ns.WaitForFunctionWeight(t, ctx, routeName, fnName, want, timeout)`
+### `ns.WaitForFunctionWeight(t, ctx, routeName, fnName, want, timeout)` / `WaitForFunctionWeightAtLeast`
 
-Polls until the weight matches `want`. The canary controller settles asynchronously (every `IncrementInterval`); this is the right primitive to observe the final 100% (success) or 0% (rollback) outcome.
+Polls the HTTPTrigger spec until the weight assigned to `fnName` matches the predicate. The canary controller settles asynchronously (every `IncrementInterval`); these helpers observe the final state.
+
+`WaitForFunctionWeightAtLeast` is for negative tests where the *initial* state already matches the final target — e.g. rollback tests start at v3=0 and end at v3=0; the test must first wait for v3 to rise above 0 (canary alive) before asserting it returned to 0 (rollback fired).
+
+Failure messages are built lazily via `EventuallyLazy`, so `(last=N)` reports the actual last observed value (not the zero captured at call time).
 
 ### `ns.CreateCanaryConfig(t, ctx, CanaryConfigOptions{...})`
 
 Creates a `CanaryConfig` CR via `fission canary-config create`. Required: `Name`, `NewFunction`, `OldFunction`, `HTTPTrigger`. Optional: `IncrementStep`, `IncrementInterval` (Go duration string like `"30s"`), `FailureThreshold` (percent).
 
-### `r.FireRequests(t, ctx, path, n)` → `int`
+### `r.LoadLoop(ctx, path)`
 
-Sequential GET burst, returns count of 2xx responses. Used to feed the canary controller's failure-rate signal in tests; not a benchmark — no concurrency, no rps measurement.
+Fires GETs at ~10 rps until `ctx` is cancelled. The canary controller measures failure rate per tick; without sustained traffic over multiple ticks it can't justify successive weight increments. Tests typically launch this in a goroutine with a `t.Cleanup`-bound cancel:
+
+```go
+loadCtx, stop := context.WithCancel(ctx)
+t.Cleanup(stop)
+go f.Router(t).LoadLoop(loadCtx, "/myroute")
+ns.WaitForFunctionWeight(t, ctx, routeName, fnName, 100, 5*time.Minute)
+```
+
+### `framework.EventuallyLazy(t, ctx, timeout, interval, cond, failMsg func() string)`
+
+Companion to `Eventually` for cases where the failure message must reflect state mutated inside the polling loop. The standard `Eventually` evaluates `failArgs` at call time, so closure-captured "last observed value" variables only print zero. `EventuallyLazy` calls `failMsg()` after the timeout fires.
 
 ## Helpers (Phase 4 and beyond)
 

@@ -88,22 +88,29 @@ func BodyContains(substr string) ResponseCheck {
 	}
 }
 
-// FireRequests issues n sequential GETs to the path and returns the count of
-// successful (2xx) responses. Used as a poor-man's `ab -n N -c 1` for tests
-// that need to feed traffic to the canary controller without measuring rps.
-// All errors and non-2xx responses are simply not counted.
-func (r *RouterClient) FireRequests(t *testing.T, ctx context.Context, path string, n int) (succeeded int) {
-	t.Helper()
-	for i := 0; i < n; i++ {
-		if ctx.Err() != nil {
+// LoadLoop fires GETs to path with a small inter-request gap until ctx is
+// cancelled. Used by tests that need to feed sustained traffic to the canary
+// controller while polling for its decisions to settle. Errors and non-2xx
+// responses are silently ignored — the goal is sustained traffic, not
+// measurement.
+//
+// Typical usage: spawn a goroutine, attach a t.Cleanup that cancels.
+//
+//	loadCtx, stopLoad := context.WithCancel(ctx)
+//	t.Cleanup(stopLoad)
+//	go f.Router(t).LoadLoop(loadCtx, "/myroute")
+//	ns.WaitForFunctionWeight(...)
+func (r *RouterClient) LoadLoop(ctx context.Context, path string) {
+	tk := time.NewTicker(100 * time.Millisecond)
+	defer tk.Stop()
+	for {
+		select {
+		case <-ctx.Done():
 			return
-		}
-		status, _, err := r.Get(ctx, path)
-		if err == nil && status >= 200 && status < 300 {
-			succeeded++
+		case <-tk.C:
+			_, _, _ = r.Get(ctx, path)
 		}
 	}
-	return
 }
 
 func ensureLeadingSlash(p string) string {

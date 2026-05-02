@@ -21,8 +21,9 @@ import (
 //     controller flips traffic back to 100% old / 0% new.
 //
 // The bash test fixed-sleeps for 2 minutes per scenario and asserts at the
-// end. We use Eventually-style polling against the HTTPTrigger spec so the
-// test passes as soon as the controller settles.
+// end. We poll the HTTPTrigger spec while a goroutine fires sustained
+// background traffic — the canary controller measures failure rate per
+// tick, so the test must keep traffic flowing the whole time.
 func TestCanary(t *testing.T) {
 	t.Parallel()
 
@@ -47,6 +48,7 @@ func TestCanary(t *testing.T) {
 		fnV2 := "fn-v2-" + ns.ID
 		routeName := "route-succ-" + ns.ID
 		canaryName := "canary-succ-" + ns.ID
+		routePath := "/" + routeName
 
 		helloPath := framework.WriteTestData(t, "nodejs/hello/hello.js")
 
@@ -55,13 +57,17 @@ func TestCanary(t *testing.T) {
 
 		ns.CreateRoute(t, ctx, framework.RouteOptions{
 			Name:   routeName,
-			URL:    "/" + routeName,
+			URL:    routePath,
 			Method: "GET",
 			FunctionWeights: []framework.FunctionWeight{
 				{Name: fnV1, Weight: 100},
 				{Name: fnV2, Weight: 0},
 			},
 		})
+
+		// Make sure the route actually serves 2xx before the canary kicks
+		// in — gives a clean failure if the route or function isn't ready.
+		f.Router(t).GetEventually(t, ctx, routePath, framework.BodyContains("hello"))
 
 		ns.CreateCanaryConfig(t, ctx, framework.CanaryConfigOptions{
 			Name:              canaryName,
@@ -73,10 +79,7 @@ func TestCanary(t *testing.T) {
 			FailureThreshold:  10,
 		})
 
-		// Feed enough successful traffic for the canary controller's
-		// failure-rate signal to register as "healthy". Two waves match
-		// the bash flow (sleep / load / sleep / verify).
-		fireSuccessfulTraffic(t, ctx, f, "/"+routeName, 200)
+		startBackgroundLoad(t, ctx, f, routePath)
 		ns.WaitForFunctionWeight(t, ctx, routeName, fnV2, 100, 5*time.Minute)
 	})
 
@@ -85,6 +88,7 @@ func TestCanary(t *testing.T) {
 		fnV3 := "fn-rollback-v3-" + ns.ID
 		routeName := "route-fail-" + ns.ID
 		canaryName := "canary-fail-" + ns.ID
+		routePath := "/" + routeName
 
 		okPath := framework.WriteTestData(t, "nodejs/hello/hello.js")
 		failPath := framework.WriteTestData(t, "nodejs/hello_400/hello_400.js")
@@ -94,13 +98,15 @@ func TestCanary(t *testing.T) {
 
 		ns.CreateRoute(t, ctx, framework.RouteOptions{
 			Name:   routeName,
-			URL:    "/" + routeName,
+			URL:    routePath,
 			Method: "GET",
 			FunctionWeights: []framework.FunctionWeight{
 				{Name: fnV1, Weight: 100},
 				{Name: fnV3, Weight: 0},
 			},
 		})
+
+		f.Router(t).GetEventually(t, ctx, routePath, framework.BodyContains("hello"))
 
 		ns.CreateCanaryConfig(t, ctx, framework.CanaryConfigOptions{
 			Name:              canaryName,
@@ -112,24 +118,29 @@ func TestCanary(t *testing.T) {
 			FailureThreshold:  10,
 		})
 
-		// Fire traffic; some hits route to fnV3 (returning 400) and the
-		// failure rate climbs past the threshold, triggering rollback.
-		_ = f.Router(t).FireRequests(t, ctx, "/"+routeName, 200)
+		startBackgroundLoad(t, ctx, f, routePath)
+
+		// The failure threshold is measured *during a tick where v3 actually
+		// receives traffic*. With initial weight v3=0, the controller has to
+		// first increment to a non-zero weight (e.g. 50) before failures can
+		// register. Wait for that first increment to confirm the canary is
+		// alive — otherwise a static v3=0 (broken controller) would falsely
+		// pass the rollback check below.
+		ns.WaitForFunctionWeightAtLeast(t, ctx, routeName, fnV3, 1, 2*time.Minute)
+
+		// Now wait for the controller to observe failures and roll back.
 		ns.WaitForFunctionWeight(t, ctx, routeName, fnV3, 0, 5*time.Minute)
 	})
 }
 
-// fireSuccessfulTraffic sends requests and asserts that at least some succeed
-// — this catches gross misconfigurations (route never registered, env never
-// specialized) early, before the canary controller's polling delay would
-// otherwise mask them.
-func fireSuccessfulTraffic(t *testing.T, ctx context.Context, f *framework.Framework, path string, n int) {
+// startBackgroundLoad spawns a goroutine that fires GETs to `path` until the
+// surrounding test context cancels (or t.Cleanup fires). The canary controller
+// makes its weight-shift decisions per tick using the failure rate observed
+// *during that tick*, so the test must keep traffic flowing throughout the
+// poll, not just up front.
+func startBackgroundLoad(t *testing.T, ctx context.Context, f *framework.Framework, path string) {
 	t.Helper()
-	r := f.Router(t)
-	// First, make sure the route actually serves 2xx — gives a clean
-	// failure if the route or function isn't ready.
-	r.GetEventually(t, ctx, path, framework.BodyContains("hello"))
-	if got := r.FireRequests(t, ctx, path, n); got == 0 {
-		t.Fatalf("fireSuccessfulTraffic: 0 of %d requests to %q succeeded", n, path)
-	}
+	loadCtx, cancel := context.WithCancel(ctx)
+	t.Cleanup(cancel)
+	go f.Router(t).LoadLoop(loadCtx, path)
 }
