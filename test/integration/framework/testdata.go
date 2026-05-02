@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/fission/fission/test/integration/testdata"
@@ -39,6 +40,10 @@ func WriteTestData(t *testing.T, embedPath string) string {
 // under t.TempDir() and returns the archive path. Use this for source-package
 // fixtures the Fission builder consumes.
 //
+// File modes in the resulting archive: `*.sh` files are `0755` (so the
+// builder's `fork/exec ./build.sh` succeeds), everything else is `0644`.
+// embed.FS strips on-disk file modes, so we have to set them explicitly.
+//
 // Example:
 //
 //	srcZip := framework.ZipTestDataDir(t, "python/sourcepkg", "demo-src-pkg.zip")
@@ -64,8 +69,15 @@ func ZipTestDataDir(t *testing.T, embedDir, archiveName string) string {
 		if err != nil {
 			return err
 		}
+		base := filepath.Base(path)
 		// Flat archive (no subdirs) like `zip -j`.
-		w, err := zw.Create(filepath.Base(path))
+		fh := &zip.FileHeader{Name: base, Method: zip.Deflate}
+		mode := os.FileMode(0o644)
+		if strings.HasSuffix(base, ".sh") {
+			mode = 0o755
+		}
+		fh.SetMode(mode)
+		w, err := zw.CreateHeader(fh)
 		if err != nil {
 			return err
 		}
