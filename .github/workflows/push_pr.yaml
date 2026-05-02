@@ -211,7 +211,9 @@ jobs:
         timeout-minutes: 5
         if: ${{ always() }}
         run: |
-          command -v fission && fission support dump
+          # Tolerate missing CLI: we skip the fission CLI install on this
+          # branch (in-process CLI for Go tests). Restored before merge.
+          command -v fission && fission support dump || true
 
       - name: Kind export logs
         timeout-minutes: 10
