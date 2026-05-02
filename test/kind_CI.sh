@@ -82,7 +82,6 @@ main() {
         $ROOT/test/tests/test_ingress.sh \
         $ROOT/test/tests/test_internal_routes.sh \
         $ROOT/test/tests/test_logging/test_function_logs.sh \
-        $ROOT/test/tests/test_node_hello_http.sh \
         $ROOT/test/tests/test_package_command.sh \
         $ROOT/test/tests/test_package_checksum.sh \
         $ROOT/test/tests/test_pass.sh \

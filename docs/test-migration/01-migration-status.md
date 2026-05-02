@@ -19,12 +19,12 @@ See `00-design.md` for the design; `02-framework-api.md` for helper docs.
 Update these whenever the table below changes.
 
 - Total bash tests: 48
-- In `kind_CI.sh` active list: 45 (28 phase-1, 17 phase-2)
-- Not in `kind_CI.sh` active list: 3 (`test_create_fn_with_url.sh`, `test_function_timeout.sh`, `test_environments/test_jvm_jersey_env.sh`)
-- `bash-active` (will be migrated, including unused-by-CI): 42
-- `bash-disabled-existing` (in CI list but `#test:disabled`): 6
-- `bash-disabled-migrated`: 0
-- `go-live`: 0
+- In `kind_CI.sh` active list: 44 (27 phase-1, 17 phase-2)
+- Not in `kind_CI.sh` active list: 4 (`test_create_fn_with_url.sh`, `test_function_timeout.sh`, `test_environments/test_jvm_jersey_env.sh`, `test_node_hello_http.sh` — migrated)
+- `bash-active`: 41
+- `bash-disabled-existing`: 6
+- `bash-disabled-migrated`: 1 (`test_node_hello_http.sh`)
+- `go-live`: 1 (`TestNodeHelloHTTP`)
 - `go-skip`: 0
 - `deleted`: 0
 
@@ -43,7 +43,7 @@ Columns:
 
 | Bash file | Phase | Target suite | Go test | Status | PR |
 |-----------|-------|--------------|---------|--------|-----|
-| `test_node_hello_http.sh` | p1 | common | `TestNodeHelloHTTP` (`common/node_hello_http_test.go`) | bash-active | — |
+| `test_node_hello_http.sh` | p1 | common | `TestNodeHelloHTTP` (`common/node_hello_http_test.go`) | bash-disabled-migrated / go-live | this PR |
 | `test_buildermgr.sh` | p1 | common | `TestBuilderMgr` (`common/buildermgr_test.go`) | bash-active | — |
 | `test_canary.sh` | p1 | common | `TestCanary` (`common/canary_test.go`) | bash-active | — |
 | `test_pass.sh` | p1 | common | `TestPass` (`common/pass_test.go`) | bash-active | — |
@@ -114,14 +114,14 @@ Tick off as PRs land. Update the table above each time.
 - [x] Create `docs/test-migration/01-migration-status.md`
 - [x] Create `docs/test-migration/02-framework-api.md`
 
-### Phase 1 — Framework + Pilot 1 (PR pending)
+### Phase 1 — Framework + Pilot 1 (this PR)
 
-- [ ] `test/integration/framework/` — initial helper set
-- [ ] `test/integration/testdata/nodejs/hello/` — embedded fixture
-- [ ] `test/integration/suites/common/node_hello_http_test.go` — `TestNodeHelloHTTP`
-- [ ] `.github/workflows/push_pr.yaml` — add two `go test` steps
-- [ ] `test/tests/test_node_hello_http.sh` — `#test:disabled` + migration comment
-- [ ] `test/kind_CI.sh` — remove `test_node_hello_http.sh` from active list
+- [x] `test/integration/framework/` — initial helper set
+- [x] `test/integration/testdata/nodejs/hello/` — embedded fixture
+- [x] `test/integration/suites/common/node_hello_http_test.go` — `TestNodeHelloHTTP`
+- [x] `.github/workflows/push_pr.yaml` — add two `go test` steps + log artifact upload
+- [x] `test/tests/test_node_hello_http.sh` — `#test:disabled` + migration comment
+- [x] `test/kind_CI.sh` — remove `test_node_hello_http.sh` from active list
 
 ### Phase 2 — Pilot 2: builder (PR pending)
 

@@ -1,4 +1,8 @@
 #!/bin/bash
+#test:disabled
+# Migrated to Go: test/integration/suites/common/node_hello_http_test.go (TestNodeHelloHTTP)
+# This script is retained for reference until the bash teardown phase
+# (Phase 6 of the migration; see docs/test-migration/00-design.md).
 
 set -euo pipefail
 source $(dirname $0)/../utils.sh

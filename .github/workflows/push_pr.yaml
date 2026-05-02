@@ -133,6 +133,30 @@ jobs:
         run: |
           fission version
 
+      - name: Go integration tests (poolmgr / common phase)
+        timeout-minutes: 30
+        env:
+          NODE_RUNTIME_IMAGE: ghcr.io/fission/node-env-22
+          FISSION_ROUTER: 127.0.0.1:8888
+          FISSION_NAMESPACE: fission
+          LOG_DIR: ${{ github.workspace }}/test/integration/logs
+        run: |
+          docker pull -q "$NODE_RUNTIME_IMAGE"
+          kind load docker-image "$NODE_RUNTIME_IMAGE" --name "${KIND_CLUSTER_NAME}"
+          go test -tags=integration -timeout=25m -p 1 -parallel 6 -v \
+            ./test/integration/suites/common/... \
+            ./test/integration/suites/poolmgr/...
+
+      - name: Go integration tests (newdeploy phase)
+        timeout-minutes: 30
+        env:
+          FISSION_ROUTER: 127.0.0.1:8888
+          FISSION_NAMESPACE: fission
+          LOG_DIR: ${{ github.workspace }}/test/integration/logs
+        run: |
+          go test -tags=integration -timeout=25m -p 1 -parallel 3 -v \
+            ./test/integration/suites/newdeploy/...
+
       - name: Integration tests
         timeout-minutes: 90
         run: ./test/kind_CI.sh
@@ -181,6 +205,16 @@ jobs:
           name: kind-logs-${{ github.run_id }}-${{ matrix.kindversion }}
           path: kind-logs/*
           retention-days: 5
+
+      - name: Archive Go integration test logs
+        timeout-minutes: 10
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: go-integration-logs-${{ github.run_id }}-${{ matrix.kindversion }}
+          path: test/integration/logs/
+          retention-days: 5
+          if-no-files-found: ignore
 
   # Job to ensure backward compatibility if function and builder pods are created
   # inside functionNamespace and builderNamespace
