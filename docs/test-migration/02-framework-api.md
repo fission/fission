@@ -257,6 +257,20 @@ Creates a `CanaryConfig` CR via `fission canary-config create`. Required: `Name`
 
 POST companion to `Get` / `GetEventually`. Use `PostEventually` for tests that retry until a `ResponseCheck` is satisfied — e.g. `TestHugeResponse` POSTs a 240KB body and retries until the echo length matches (a transient truncation would be a real bug worth catching).
 
+### `ns.WithCWD(t, dir, fn)`
+
+Runs `fn` with the process working directory set to `dir`, holding a process-global mutex so concurrent tests don't race over `os.Getwd`/`os.Chdir`. Used by spec tests because `fission env create --spec` and `fn create --spec` write to `./specs` under cwd (no `--specdir` flag), and `fn create --deploy "<glob>"` expands the glob relative to cwd.
+
+Other concurrent tests are unaffected as long as they pass absolute paths to the CLI — which all framework helpers do.
+
+```go
+ns.WithCWD(t, workdir, func() {
+    ns.CLI(t, ctx, "spec", "init")
+    ns.CLI(t, ctx, "env", "create", "--spec", "--name", envName, "--image", img)
+    ns.CLI(t, ctx, "spec", "apply")
+})
+```
+
 ### `ns.FunctionLogs(t, ctx, fnName)` → `string`
 
 Returns the combined log output of every pod backing the function's environment, read directly via the Kubernetes API. Mirrors `fission function logs --name <fn> --detail` for assertion purposes — the CLI subcommand streams pod logs to `os.Stdout` directly, which the in-process `ns.CLI` helper does not capture (it only routes cobra's `SetOut`/`SetErr`). `os.Stdout` redirection would be unsafe under `t.Parallel()`.

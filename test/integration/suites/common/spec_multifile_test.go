@@ -20,6 +20,9 @@ import (
 // It exercises the spec workflow with a multi-file Python deploy archive
 // (the CLI's `--deploy "multifile/*"` glob), pulling several .py + .txt files
 // into one package, with a Python env+builder.
+//
+// As with TestSpec, the spec subcommands resolve `./specs` and the
+// `--deploy` glob relative to cwd, so the body runs inside ns.WithCWD.
 func TestSpecMultifile(t *testing.T) {
 	t.Parallel()
 
@@ -36,11 +39,10 @@ func TestSpecMultifile(t *testing.T) {
 	routePath := "/" + fnName
 
 	workdir := t.TempDir()
-	specDir := filepath.Join(workdir, "specs")
 
 	// Materialize testdata/python/multifile/* under <workdir>/multifile/
-	// so the CLI's --deploy "multifile/*" glob (resolved relative to
-	// specdir/.. = workdir) finds them.
+	// so the CLI's --deploy "multifile/*" glob (resolved relative to cwd)
+	// finds the files at apply time.
 	multiDir := filepath.Join(workdir, "multifile")
 	require.NoError(t, os.MkdirAll(multiDir, 0o755))
 	require.NoError(t, fs.WalkDir(testdata.FS, "python/multifile", func(path string, d fs.DirEntry, err error) error {
@@ -54,14 +56,16 @@ func TestSpecMultifile(t *testing.T) {
 		return os.WriteFile(filepath.Join(multiDir, filepath.Base(path)), b, 0o644)
 	}))
 
-	ns.CLI(t, ctx, "spec", "init", "--specdir", specDir)
-	ns.CLI(t, ctx, "env", "create", "--spec", "--specdir", specDir,
-		"--name", envName, "--image", runtime, "--builder", builder)
-	ns.CLI(t, ctx, "fn", "create", "--spec", "--specdir", specDir,
-		"--name", fnName, "--env", envName,
-		"--deploy", filepath.Join(multiDir, "*"),
-		"--entrypoint", "main.main")
-	ns.CLI(t, ctx, "spec", "apply", "--specdir", specDir)
+	ns.WithCWD(t, workdir, func() {
+		ns.CLI(t, ctx, "spec", "init")
+		ns.CLI(t, ctx, "env", "create", "--spec",
+			"--name", envName, "--image", runtime, "--builder", builder)
+		ns.CLI(t, ctx, "fn", "create", "--spec",
+			"--name", fnName, "--env", envName,
+			"--deploy", "multifile/*",
+			"--entrypoint", "main.main")
+		ns.CLI(t, ctx, "spec", "apply")
+	})
 
 	ns.CreateRoute(t, ctx, framework.RouteOptions{Function: fnName, URL: routePath, Method: "GET"})
 	body := f.Router(t).GetEventually(t, ctx, routePath, framework.BodyContains("hello"))
