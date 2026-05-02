@@ -32,7 +32,7 @@ import (
 
 type mutableRouter struct {
 	logger logr.Logger
-	router atomic.Value // mux.Router
+	router atomic.Pointer[mux.Router]
 }
 
 func newMutableRouter(logger logr.Logger, handler *mux.Router) *mutableRouter {
@@ -45,13 +45,13 @@ func newMutableRouter(logger logr.Logger, handler *mux.Router) *mutableRouter {
 
 func (mr *mutableRouter) ServeHTTP(responseWriter http.ResponseWriter, request *http.Request) {
 	// Atomically grab the underlying mux router and call it.
-	routerValue := mr.router.Load()
-	router, ok := routerValue.(*mux.Router)
-	if !ok {
-		mr.logger.Error(nil, "invalid router type")
-		os.Exit(1)
+	if router := mr.router.Load(); router != nil {
+		router.ServeHTTP(responseWriter, request)
+		return
 	}
-	router.ServeHTTP(responseWriter, request)
+	// This should never happen, but if it does, log an error and exit.
+	mr.logger.Error(nil, "router is nil")
+	os.Exit(1)
 }
 
 func (mr *mutableRouter) updateRouter(newHandler *mux.Router) {

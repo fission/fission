@@ -262,25 +262,25 @@ func (builder *Builder) build(ctx context.Context, command string, args []string
 	}
 	fmt.Printf("========= START =========\n")
 	defer fmt.Printf("========= END ===========\n")
-	var buildLogs string
+	var buildLogs strings.Builder
 	// Runtime logs
 	for scanner.Scan() {
 		output := scanner.Text()
 		fmt.Println(output)
-		buildLogs += fmt.Sprintf("%s\n", output)
+		fmt.Fprintf(&buildLogs, "%s\n", output)
 	}
 
 	if err := scanner.Err(); err != nil {
 		scanErr := fmt.Errorf("error reading cmd output: %w", err)
 		fmt.Println(scanErr)
-		return buildLogs, scanErr
+		return buildLogs.String(), scanErr
 	}
 
 	err = cmd.Wait()
 	if err != nil {
 		cmdErr := fmt.Errorf("error waiting for cmd %q: %w", command, err)
 		fmt.Println(cmdErr)
-		return buildLogs, cmdErr
+		return buildLogs.String(), cmdErr
 	}
-	return buildLogs, nil
+	return buildLogs.String(), nil
 }
