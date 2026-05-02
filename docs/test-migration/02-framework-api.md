@@ -257,6 +257,14 @@ Creates a `CanaryConfig` CR via `fission canary-config create`. Required: `Name`
 
 POST companion to `Get` / `GetEventually`. Use `PostEventually` for tests that retry until a `ResponseCheck` is satisfied — e.g. `TestHugeResponse` POSTs a 240KB body and retries until the echo length matches (a transient truncation would be a real bug worth catching).
 
+### `ns.CreateEnvObject(t, ctx, env *fv1.Environment)`
+
+Companion to `CreateEnv` for tests that need fields the CLI doesn't expose — most notably `metadata.annotations` (TestEnvironmentAnnotations) or `runtime.podspec` for pod-level customization. Forces `env.Namespace = ns.Name`. Registers cleanup the same way as `CreateEnv`.
+
+### `ns.Framework()` → `*Framework`
+
+Escape hatch when a test needs framework-level state (typed clientsets, router URL) that isn't surfaced via a per-namespace shortcut. Used sparingly — typical tests don't need this.
+
 ### `f.Images().RequireGo(t)` / `RequireGoBuilder(t)`
 
 Same shape as `RequireNode` / `RequirePython`. CI's "Go integration tests (common phase)" step pre-pulls and kind-loads `GO_RUNTIME_IMAGE` and `GO_BUILDER_IMAGE`.

@@ -69,16 +69,13 @@ main() {
     source $ROOT/test/run_test.sh \
         $ROOT/test/tests/test_archive_cli.sh \
         $ROOT/test/tests/test_fn_update/test_idle_objects_reaper.sh \
-        $ROOT/test/tests/test_annotations.sh \
         $ROOT/test/tests/test_archive_pruner.sh \
         $ROOT/test/tests/test_backend_poolmgr.sh \
         $ROOT/test/tests/test_env_vars.sh \
         $ROOT/test/tests/test_env_podspec.sh \
         $ROOT/test/tests/test_environments/test_python_env.sh \
         $ROOT/test/tests/test_function_test/test_fn_test.sh \
-        $ROOT/test/tests/test_function_update.sh \
         $ROOT/test/tests/test_ingress.sh \
-        $ROOT/test/tests/test_logging/test_function_logs.sh \
         $ROOT/test/tests/test_package_command.sh \
         $ROOT/test/tests/test_package_checksum.sh \
         $ROOT/test/tests/test_specs/test_spec.sh \

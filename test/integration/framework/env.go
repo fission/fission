@@ -10,6 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 )
 
 // EnvOptions are the inputs to TestNamespace.CreateEnv.
@@ -25,6 +27,27 @@ type EnvOptions struct {
 	// Lower values speed up pod recycling between function versions —
 	// useful for canary tests that need traffic to flip quickly.
 	GracePeriod int
+}
+
+// CreateEnvObject creates a Fission Environment from a fully-formed CR
+// object via the typed clientset (not the CLI), and registers its deletion on
+// the namespace cleanup chain. Use this for tests that need fields the CLI
+// doesn't expose — e.g. metadata.annotations (TestAnnotations) or
+// runtime.podspec for pod-level customization. Forces env.Namespace to ns.Name.
+func (ns *TestNamespace) CreateEnvObject(t *testing.T, ctx context.Context, env *fv1.Environment) {
+	t.Helper()
+	require.NotEmpty(t, env.Name, "env.Name")
+	env.Namespace = ns.Name
+	_, err := ns.f.fissionClient.CoreV1().Environments(ns.Name).Create(ctx, env, metav1.CreateOptions{})
+	require.NoErrorf(t, err, "create environment %q", env.Name)
+	name := env.Name
+	ns.addCleanup("env "+name, func(c context.Context) error {
+		err := ns.f.fissionClient.CoreV1().Environments(ns.Name).Delete(c, name, metav1.DeleteOptions{})
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+		return err
+	})
 }
 
 // CreateEnv creates a Fission Environment via the CLI and registers its

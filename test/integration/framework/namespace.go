@@ -52,6 +52,10 @@ type namedCleanup struct {
 	fn   func(context.Context) error
 }
 
+// Framework returns the parent framework so tests can reach the typed
+// clientsets, router URL, etc. directly when no per-namespace shortcut exists.
+func (ns *TestNamespace) Framework() *Framework { return ns.f }
+
 // addCleanup registers a per-resource cleanup. They run in reverse order of
 // registration during the namespace cleanup, after the diagnostics dump.
 func (ns *TestNamespace) addCleanup(name string, fn func(context.Context) error) {
