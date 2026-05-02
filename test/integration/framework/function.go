@@ -94,25 +94,31 @@ func (ns *TestNamespace) WaitForFunction(t *testing.T, ctx context.Context, name
 	}, 30*time.Second, 500*time.Millisecond)
 }
 
-// FunctionLogs returns the combined log output of every pod backing the
-// function's environment, read directly via the Kubernetes API. Mirrors
-// `fission function logs --name <fn> --detail` for assertion purposes.
+// FunctionLogs returns the combined log output of every specialized pod
+// backing this function (selected by `functionName=<fnName>` label), read
+// directly via the Kubernetes API. Mirrors `fission function logs --name
+// <fn> --detail` for assertion purposes.
 //
 // We don't go through the CLI here because its `function logs` subcommand
 // streams pod logs to os.Stdout, which our in-process CLI helper does not
 // capture (it only routes cobra's SetOut/SetErr writers). os.Stdout
 // redirection would be unsafe under t.Parallel — pulling logs via kubeClient
 // is race-free and matches what the CLI would print.
+//
+// Pod label notes (verified from Kind 1.34 with skaffold kind-ci):
+//   - poolmgr runtime pods: `environmentName=<env>`, `executorType=poolmgr`,
+//     and `functionName=<fn>` once specialized.
+//   - builder pods (separate deployment): `envName=<env>` (legacy label).
 func (ns *TestNamespace) FunctionLogs(t *testing.T, ctx context.Context, fnName string) string {
 	t.Helper()
+	pods, err := ns.f.kubeClient.CoreV1().Pods(ns.Name).List(ctx, metav1.ListOptions{
+		LabelSelector: "functionName=" + fnName,
+	})
+	require.NoErrorf(t, err, "FunctionLogs: list pods (functionName=%s)", fnName)
+
 	fn, err := ns.f.fissionClient.CoreV1().Functions(ns.Name).Get(ctx, fnName, metav1.GetOptions{})
 	require.NoErrorf(t, err, "FunctionLogs: get function %q", fnName)
-
 	envName := fn.Spec.Environment.Name
-	pods, err := ns.f.kubeClient.CoreV1().Pods(ns.Name).List(ctx, metav1.ListOptions{
-		LabelSelector: "envName=" + envName,
-	})
-	require.NoErrorf(t, err, "FunctionLogs: list pods (envName=%s)", envName)
 
 	var combined strings.Builder
 	for _, p := range pods.Items {
