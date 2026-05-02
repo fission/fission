@@ -27,6 +27,14 @@ type EnvOptions struct {
 	// Lower values speed up pod recycling between function versions —
 	// useful for canary tests that need traffic to flip quickly.
 	GracePeriod int
+	// Resource defaults the env applies to its spawned pods (millicores /
+	// MiB). Functions can override per-fn via FunctionOptions.{Min,Max}{CPU,Memory}.
+	MinCPU    int
+	MaxCPU    int
+	MinMemory int
+	MaxMemory int
+	// Poolsize controls the warm pool size (poolmgr only).
+	Poolsize int
 }
 
 // CreateEnvObject creates a Fission Environment from a fully-formed CR
@@ -64,6 +72,21 @@ func (ns *TestNamespace) CreateEnv(t *testing.T, ctx context.Context, opts EnvOp
 	}
 	if opts.GracePeriod > 0 {
 		args = append(args, "--graceperiod", strconv.Itoa(opts.GracePeriod))
+	}
+	if opts.MinCPU > 0 {
+		args = append(args, "--mincpu", strconv.Itoa(opts.MinCPU))
+	}
+	if opts.MaxCPU > 0 {
+		args = append(args, "--maxcpu", strconv.Itoa(opts.MaxCPU))
+	}
+	if opts.MinMemory > 0 {
+		args = append(args, "--minmemory", strconv.Itoa(opts.MinMemory))
+	}
+	if opts.MaxMemory > 0 {
+		args = append(args, "--maxmemory", strconv.Itoa(opts.MaxMemory))
+	}
+	if opts.Poolsize > 0 {
+		args = append(args, "--poolsize", strconv.Itoa(opts.Poolsize))
 	}
 	ns.CLI(t, ctx, args...)
 

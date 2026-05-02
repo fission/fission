@@ -15,6 +15,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 )
 
 // FunctionOptions are the inputs to TestNamespace.CreateFunction.
@@ -47,6 +49,21 @@ type FunctionOptions struct {
 	// ExecutorType, when set, picks the function's executor backend
 	// ("poolmgr" — default — or "newdeploy").
 	ExecutorType string
+	// MinScale / MaxScale, when > 0, control newdeploy autoscaler bounds.
+	MinScale int
+	MaxScale int
+	// TargetCPU is the CPU utilization (%) the autoscaler targets.
+	TargetCPU int
+	// MinCPU / MaxCPU are millicores (CLI: `--mincpu` / `--maxcpu`).
+	MinCPU int
+	MaxCPU int
+	// MinMemory / MaxMemory are MiB (CLI: `--minmemory` / `--maxmemory`).
+	MinMemory int
+	MaxMemory int
+	// ConfigMaps / Secrets attach a configmap or secret by name to the
+	// function pods (CLI: `--configmap` / `--secret`, both repeatable).
+	ConfigMaps []string
+	Secrets    []string
 }
 
 // CreateFunction creates a Function via the CLI from either Code or Src. The
@@ -95,6 +112,33 @@ func (ns *TestNamespace) CreateFunction(t *testing.T, ctx context.Context, opts 
 	}
 	if opts.ExecutorType != "" {
 		args = append(args, "--executortype", opts.ExecutorType)
+	}
+	if opts.MinScale > 0 {
+		args = append(args, "--minscale", strconv.Itoa(opts.MinScale))
+	}
+	if opts.MaxScale > 0 {
+		args = append(args, "--maxscale", strconv.Itoa(opts.MaxScale))
+	}
+	if opts.TargetCPU > 0 {
+		args = append(args, "--targetcpu", strconv.Itoa(opts.TargetCPU))
+	}
+	if opts.MinCPU > 0 {
+		args = append(args, "--mincpu", strconv.Itoa(opts.MinCPU))
+	}
+	if opts.MaxCPU > 0 {
+		args = append(args, "--maxcpu", strconv.Itoa(opts.MaxCPU))
+	}
+	if opts.MinMemory > 0 {
+		args = append(args, "--minmemory", strconv.Itoa(opts.MinMemory))
+	}
+	if opts.MaxMemory > 0 {
+		args = append(args, "--maxmemory", strconv.Itoa(opts.MaxMemory))
+	}
+	for _, cm := range opts.ConfigMaps {
+		args = append(args, "--configmap", cm)
+	}
+	for _, s := range opts.Secrets {
+		args = append(args, "--secret", s)
 	}
 	ns.CLI(t, ctx, args...)
 
@@ -173,6 +217,16 @@ func (ns *TestNamespace) FunctionLogs(t *testing.T, ctx context.Context, fnName 
 		combined.Write(b)
 	}
 	return combined.String()
+}
+
+// GetFunction returns the live Function CR by name. Use it to assert on
+// fields the controller has populated (e.g. Spec.InvokeStrategy.MinScale,
+// Spec.Resources).
+func (ns *TestNamespace) GetFunction(t *testing.T, ctx context.Context, fnName string) *fv1.Function {
+	t.Helper()
+	fn, err := ns.f.fissionClient.CoreV1().Functions(ns.Name).Get(ctx, fnName, metav1.GetOptions{})
+	require.NoErrorf(t, err, "GetFunction: get function %q", fnName)
+	return fn
 }
 
 // FunctionPackageName returns the auto-generated Package name backing a
