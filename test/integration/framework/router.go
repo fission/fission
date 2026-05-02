@@ -88,6 +88,24 @@ func BodyContains(substr string) ResponseCheck {
 	}
 }
 
+// FireRequests issues n sequential GETs to the path and returns the count of
+// successful (2xx) responses. Used as a poor-man's `ab -n N -c 1` for tests
+// that need to feed traffic to the canary controller without measuring rps.
+// All errors and non-2xx responses are simply not counted.
+func (r *RouterClient) FireRequests(t *testing.T, ctx context.Context, path string, n int) (succeeded int) {
+	t.Helper()
+	for i := 0; i < n; i++ {
+		if ctx.Err() != nil {
+			return
+		}
+		status, _, err := r.Get(ctx, path)
+		if err == nil && status >= 200 && status < 300 {
+			succeeded++
+		}
+	}
+	return
+}
+
 func ensureLeadingSlash(p string) string {
 	if strings.HasPrefix(p, "/") {
 		return p

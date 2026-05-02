@@ -214,6 +214,45 @@ Packs an embedded testdata directory into a flat zip (no nested entries — mirr
 
 Companion to `RequireNode`. The full set fans out as more environments come online during migration.
 
-## Helpers (Phase 3 and beyond)
+## Helpers (Phase 3)
 
-Canary helpers, timer/kubewatcher/MQ trigger helpers, and a `Specs`/yaml-apply helper will be added in subsequent phases. This file gets a new section per phase.
+### `EnvOptions.GracePeriod`
+
+Optional `--graceperiod <n>` (seconds). Lower values speed up pod recycling between function versions. Canary tests use `1` so traffic flips cleanly when weights change.
+
+### `RouteOptions.FunctionWeights` / `framework.FunctionWeight`
+
+Multi-version `HTTPTrigger`. The CLI accepts paired `--function <fn> --weight <w>` repeated; the framework emits the args in the slice order.
+
+```go
+ns.CreateRoute(t, ctx, framework.RouteOptions{
+    URL:    "/" + routeName,
+    Method: "GET",
+    FunctionWeights: []framework.FunctionWeight{
+        {Name: fnV1, Weight: 100},
+        {Name: fnV2, Weight: 0},
+    },
+})
+```
+
+`Function` and `FunctionWeights` are mutually exclusive (the helper `t.Fatal`s if both are set or neither).
+
+### `ns.FunctionWeight(t, ctx, routeName, fnName)` → `int`
+
+One-shot read of the current weight assigned to a function on the named HTTPTrigger. Returns 0 if the function isn't in `Spec.FunctionReference.FunctionWeights`.
+
+### `ns.WaitForFunctionWeight(t, ctx, routeName, fnName, want, timeout)`
+
+Polls until the weight matches `want`. The canary controller settles asynchronously (every `IncrementInterval`); this is the right primitive to observe the final 100% (success) or 0% (rollback) outcome.
+
+### `ns.CreateCanaryConfig(t, ctx, CanaryConfigOptions{...})`
+
+Creates a `CanaryConfig` CR via `fission canary-config create`. Required: `Name`, `NewFunction`, `OldFunction`, `HTTPTrigger`. Optional: `IncrementStep`, `IncrementInterval` (Go duration string like `"30s"`), `FailureThreshold` (percent).
+
+### `r.FireRequests(t, ctx, path, n)` → `int`
+
+Sequential GET burst, returns count of 2xx responses. Used to feed the canary controller's failure-rate signal in tests; not a benchmark — no concurrency, no rps measurement.
+
+## Helpers (Phase 4 and beyond)
+
+Timer/kubewatcher/MQ trigger helpers and a `Specs`/yaml-apply helper will be added as the bulk migration touches the relevant tests. This file gets a new section per phase.

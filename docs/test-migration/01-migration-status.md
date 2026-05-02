@@ -19,12 +19,12 @@ See `00-design.md` for the design; `02-framework-api.md` for helper docs.
 Update these whenever the table below changes.
 
 - Total bash tests: 48
-- In `kind_CI.sh` active list: 43 (26 phase-1, 17 phase-2)
-- Not in `kind_CI.sh` active list: 5 (`test_create_fn_with_url.sh`, `test_function_timeout.sh`, `test_environments/test_jvm_jersey_env.sh`, `test_node_hello_http.sh` — migrated, `test_buildermgr.sh` — migrated)
-- `bash-active`: 40
+- In `kind_CI.sh` active list: 42 (25 phase-1, 17 phase-2)
+- Not in `kind_CI.sh` active list: 6 (`test_create_fn_with_url.sh`, `test_function_timeout.sh`, `test_environments/test_jvm_jersey_env.sh`, `test_node_hello_http.sh` — migrated, `test_buildermgr.sh` — migrated, `test_canary.sh` — migrated)
+- `bash-active`: 39
 - `bash-disabled-existing`: 6
-- `bash-disabled-migrated`: 2 (`test_node_hello_http.sh`, `test_buildermgr.sh`)
-- `go-live`: 2 (`TestNodeHelloHTTP`, `TestBuilderMgr`)
+- `bash-disabled-migrated`: 3 (`test_node_hello_http.sh`, `test_buildermgr.sh`, `test_canary.sh`)
+- `go-live`: 3 (`TestNodeHelloHTTP`, `TestBuilderMgr`, `TestCanary`)
 - `go-skip`: 0
 - `deleted`: 0
 
@@ -45,7 +45,7 @@ Columns:
 |-----------|-------|--------------|---------|--------|-----|
 | `test_node_hello_http.sh` | p1 | common | `TestNodeHelloHTTP` (`common/node_hello_http_test.go`) | bash-disabled-migrated / go-live | this PR |
 | `test_buildermgr.sh` | p1 | common | `TestBuilderMgr` (`common/buildermgr_test.go`) | bash-disabled-migrated / go-live | this PR |
-| `test_canary.sh` | p1 | common | `TestCanary` (`common/canary_test.go`) | bash-active | — |
+| `test_canary.sh` | p1 | common | `TestCanary` (`common/canary_test.go`, subtests `success`+`rollback`) | bash-disabled-migrated / go-live | this PR |
 | `test_pass.sh` | p1 | common | `TestPass` (`common/pass_test.go`) | bash-active | — |
 | `test_annotations.sh` | p1 | common | `TestFunctionAnnotations` (`common/annotations_test.go`) | bash-active | — |
 | `test_function_update.sh` | p1 | common | `TestFunctionUpdate` (`common/function_update_test.go`) | bash-active | — |
@@ -141,11 +141,15 @@ Findings from the Phase 1 CI iteration that shaped subsequent design:
 - [x] `test/tests/test_buildermgr.sh` — `#test:disabled` + migration comment
 - [x] `test/kind_CI.sh` — remove `test_buildermgr.sh` from active list
 
-### Phase 3 — Pilot 3: canary (PR pending)
+### Phase 3 — Pilot 3: canary (this PR)
 
-- [ ] `test/integration/framework/canary.go` — canary helpers
-- [ ] `test/integration/suites/common/canary_test.go` — `TestCanary` (success + rollback subtests)
-- [ ] Disable + remove bash counterpart
+- [x] `test/integration/framework/canary.go` — `CreateCanaryConfig`
+- [x] `test/integration/framework/httptrigger.go` — `FunctionWeight`, weighted `RouteOptions.FunctionWeights`, `WaitForFunctionWeight`
+- [x] `test/integration/framework/env.go` — `EnvOptions.GracePeriod`
+- [x] `test/integration/framework/router.go` — `RouterClient.FireRequests`
+- [x] `test/integration/testdata/nodejs/hello_400/` — failing-function fixture
+- [x] `test/integration/suites/common/canary_test.go` — `TestCanary/success` (weight ramps to 100% on healthy traffic) and `TestCanary/rollback` (weight returns to 0 after failure threshold)
+- [x] Disable + remove bash counterpart
 
 ### Phase 4 — Bulk migration
 

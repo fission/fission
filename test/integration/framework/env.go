@@ -4,6 +4,7 @@ package framework
 
 import (
 	"context"
+	"strconv"
 	"testing"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -19,6 +20,10 @@ type EnvOptions struct {
 	// Builder is the optional builder image (e.g. PYTHON_BUILDER_IMAGE). When
 	// set, source-package functions can be built against this environment.
 	Builder string
+	// GracePeriod, when > 0, is passed as `--graceperiod <n>` (seconds).
+	// Lower values speed up pod recycling between function versions —
+	// useful for canary tests that need traffic to flip quickly.
+	GracePeriod int
 }
 
 // CreateEnv creates a Fission Environment via the CLI and registers its
@@ -32,6 +37,9 @@ func (ns *TestNamespace) CreateEnv(t *testing.T, ctx context.Context, opts EnvOp
 	args := []string{"env", "create", "--name", opts.Name, "--image", opts.Image}
 	if opts.Builder != "" {
 		args = append(args, "--builder", opts.Builder)
+	}
+	if opts.GracePeriod > 0 {
+		args = append(args, "--graceperiod", strconv.Itoa(opts.GracePeriod))
 	}
 	ns.CLI(t, ctx, args...)
 

@@ -1,4 +1,9 @@
 #!/bin/bash
+#test:disabled
+# Migrated to Go: test/integration/suites/common/canary_test.go (TestCanary,
+# subtests: success, rollback). This script is retained for reference until
+# the bash teardown phase (Phase 6 of the migration; see
+# docs/test-migration/00-design.md).
 
 # has 2 tests to verify the canary deployments - success scenario and a failure scenario
 
