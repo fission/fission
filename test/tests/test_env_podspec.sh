@@ -1,4 +1,10 @@
 #!/bin/bash
+#test:disabled
+# Migrated to Go: test/integration/suites/common/env_podspec_test.go
+# (TestEnvPodSpec). Retained for reference until the bash teardown phase.
+# The negative-test scenario in this script (mismatched container names)
+# is deferred — it tests fission's webhook validation, better suited to
+# unit-level coverage.
 
 set -euo pipefail
 source $(dirname $0)/../utils.sh

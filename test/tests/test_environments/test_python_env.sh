@@ -1,4 +1,9 @@
 #!/bin/bash
+#test:disabled
+# Migrated to Go: test/integration/suites/common/python_env_test.go
+# (TestPythonEnv with subtests v1_api / v2_default_entrypoint /
+# v2_entrypoint_func / v2_entrypoint_foo_bar / v2_entrypoint_dotted).
+# Retained for reference until the bash teardown phase.
 
 set -euo pipefail
 source $(dirname $0)/../../utils.sh

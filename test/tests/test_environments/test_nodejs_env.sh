@@ -1,4 +1,8 @@
 #!/bin/bash
+#test:disabled
+# Migrated to Go: test/integration/suites/common/nodejs_env_test.go
+# (TestNodejsEnv with subtests hello_world / query_string / post_body /
+# v2_builder). Retained for reference until the bash teardown phase.
 
 set -euo pipefail
 source $(dirname $0)/../../utils.sh

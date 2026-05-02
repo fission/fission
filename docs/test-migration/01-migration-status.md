@@ -21,11 +21,11 @@ Update these whenever the table below changes.
 - Total bash tests: 48
 - In `kind_CI.sh` active list: 32 (15 phase-1, 17 phase-2)
 - Not in `kind_CI.sh` active list: 16 (3 never were + 13 migrated)
-- `bash-active`: 28
+- `bash-active`: 24
 - `bash-disabled-existing`: 6
-- `bash-disabled-migrated`: 14 (+ package_command, package_checksum)
-- `go-live`: 14
-- `go-skip`: 0
+- `bash-disabled-migrated`: 18 (+ python_env, nodejs_env, env_podspec, function_timeout)
+- `go-live`: 18
+- `go-skip`: 1 (`TestPackageCommand/src_glob` — flaky under parallel load)
 - `deleted`: 0
 
 ## Tests

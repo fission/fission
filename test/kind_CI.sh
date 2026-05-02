@@ -72,8 +72,6 @@ main() {
         $ROOT/test/tests/test_archive_pruner.sh \
         $ROOT/test/tests/test_backend_poolmgr.sh \
         $ROOT/test/tests/test_env_vars.sh \
-        $ROOT/test/tests/test_env_podspec.sh \
-        $ROOT/test/tests/test_environments/test_python_env.sh \
         $ROOT/test/tests/test_function_test/test_fn_test.sh \
         $ROOT/test/tests/test_ingress.sh \
         $ROOT/test/tests/test_specs/test_spec_merge/test_spec_merge.sh \
@@ -90,7 +88,6 @@ main() {
         $ROOT/test/tests/test_secret_cfgmap/test_secret_cfgmap.sh \
         $ROOT/test/tests/test_environments/test_java_builder.sh \
         $ROOT/test/tests/test_environments/test_java_env.sh \
-        $ROOT/test/tests/test_environments/test_nodejs_env.sh \
         $ROOT/test/tests/test_fn_update/test_configmap_update.sh \
         $ROOT/test/tests/test_fn_update/test_env_update.sh \
         $ROOT/test/tests/test_obj_create_in_diff_ns.sh \

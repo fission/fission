@@ -5,6 +5,7 @@ package framework
 import (
 	"context"
 	"io"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -40,6 +41,12 @@ type FunctionOptions struct {
 	Entrypoint string
 	// BuildCmd is the command run by the builder (e.g. "./build.sh").
 	BuildCmd string
+	// FnTimeout, when > 0, is passed as `--fntimeout <n>` (seconds).
+	// Sets the function's invocation timeout; default 60s.
+	FnTimeout int
+	// ExecutorType, when set, picks the function's executor backend
+	// ("poolmgr" — default — or "newdeploy").
+	ExecutorType string
 }
 
 // CreateFunction creates a Function via the CLI from either Code or Src. The
@@ -82,6 +89,12 @@ func (ns *TestNamespace) CreateFunction(t *testing.T, ctx context.Context, opts 
 		if opts.BuildCmd != "" {
 			args = append(args, "--buildcmd", opts.BuildCmd)
 		}
+	}
+	if opts.FnTimeout > 0 {
+		args = append(args, "--fntimeout", strconv.Itoa(opts.FnTimeout))
+	}
+	if opts.ExecutorType != "" {
+		args = append(args, "--executortype", opts.ExecutorType)
 	}
 	ns.CLI(t, ctx, args...)
 
