@@ -163,7 +163,57 @@ Dumps to `$LOG_DIR/<sanitized-test-name>/`:
 
 The CI workflow uploads `test/integration/logs/` as the `go-integration-logs-<run>-<k8s-version>` artifact (5-day retention).
 
-## Helpers (Phase 2 and beyond)
+## Helpers (Phase 2)
 
-Builder/package helpers, canary helpers, timer/kubewatcher/MQ trigger helpers, and a `Specs`/yaml-apply helper will be added in subsequent phases.
-This file gets a new section per phase.
+### `EnvOptions.Builder`
+
+Optional builder image (e.g. `PYTHON_BUILDER_IMAGE`). When set, `CreateEnv` invokes `fission env create --image ... --builder ...`, which lets functions use source-package builds against this environment.
+
+### `FunctionOptions.Src` / `Entrypoint` / `BuildCmd`
+
+When `Src` is set instead of `Code`, `CreateFunction` invokes `fission fn create --src <archive> --entrypoint <module:func> --buildcmd <cmd>`. `Code` and `Src` are mutually exclusive (the helper `t.Fatal`s if both are set).
+
+```go
+srcZip := framework.ZipTestDataDir(t, "python/sourcepkg", "demo-src-pkg.zip")
+ns.CreateFunction(t, ctx, framework.FunctionOptions{
+    Name: "srcbuild-" + ns.ID,
+    Env:  envName,
+    Src:  srcZip,
+    Entrypoint: "user.main",
+    BuildCmd:   "./build.sh",
+})
+```
+
+### `ns.WaitForBuilderReady(t, ctx, envName)`
+
+Polls for a Pod labelled `envName=<env>` to reach `Ready=True`. Mirrors the bash `wait_for_builder` helper. Default timeout is 3 minutes (covers cold image pulls on Kind).
+
+### `ns.WaitForPackageBuildSucceeded(t, ctx, pkgName)`
+
+Polls `Package.Status.BuildStatus` until it reaches `succeeded`. If the build reaches the terminal `failed` state, the helper `t.Fatal`s with the build log captured from `Status.BuildLog` — much better signal than a generic timeout.
+
+### `ns.WaitForPackageBuildStatus(t, ctx, pkgName, status, timeout)`
+
+Lower-level variant for negative tests that want to assert on a specific terminal state (e.g. `fv1.BuildStatusFailed`).
+
+### `ns.FunctionPackageName(t, ctx, fnName)` → `string`
+
+Returns `Function.Spec.Package.PackageRef.Name`. Mirrors:
+
+```sh
+kubectl get functions <fn> -o jsonpath='{.spec.package.packageref.name}'
+```
+
+`fission fn update --src <new>` writes a new package and re-points the function at it; tests can poll until `FunctionPackageName` returns a fresh value to detect that the rebuild started.
+
+### `framework.ZipTestDataDir(t, embedDir, archiveName)` → `string`
+
+Packs an embedded testdata directory into a flat zip (no nested entries — mirrors the bash `zip -j` idiom used by the existing source-package tests) under `t.TempDir()`. Returns the on-disk archive path for `--src`.
+
+### `f.Images().RequirePython(t)` / `RequirePythonBuilder(t)`
+
+Companion to `RequireNode`. The full set fans out as more environments come online during migration.
+
+## Helpers (Phase 3 and beyond)
+
+Canary helpers, timer/kubewatcher/MQ trigger helpers, and a `Specs`/yaml-apply helper will be added in subsequent phases. This file gets a new section per phase.

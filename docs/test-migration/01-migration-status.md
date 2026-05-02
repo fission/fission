@@ -19,12 +19,12 @@ See `00-design.md` for the design; `02-framework-api.md` for helper docs.
 Update these whenever the table below changes.
 
 - Total bash tests: 48
-- In `kind_CI.sh` active list: 44 (27 phase-1, 17 phase-2)
-- Not in `kind_CI.sh` active list: 4 (`test_create_fn_with_url.sh`, `test_function_timeout.sh`, `test_environments/test_jvm_jersey_env.sh`, `test_node_hello_http.sh` — migrated)
-- `bash-active`: 41
+- In `kind_CI.sh` active list: 43 (26 phase-1, 17 phase-2)
+- Not in `kind_CI.sh` active list: 5 (`test_create_fn_with_url.sh`, `test_function_timeout.sh`, `test_environments/test_jvm_jersey_env.sh`, `test_node_hello_http.sh` — migrated, `test_buildermgr.sh` — migrated)
+- `bash-active`: 40
 - `bash-disabled-existing`: 6
-- `bash-disabled-migrated`: 1 (`test_node_hello_http.sh`)
-- `go-live`: 1 (`TestNodeHelloHTTP`)
+- `bash-disabled-migrated`: 2 (`test_node_hello_http.sh`, `test_buildermgr.sh`)
+- `go-live`: 2 (`TestNodeHelloHTTP`, `TestBuilderMgr`)
 - `go-skip`: 0
 - `deleted`: 0
 
@@ -44,7 +44,7 @@ Columns:
 | Bash file | Phase | Target suite | Go test | Status | PR |
 |-----------|-------|--------------|---------|--------|-----|
 | `test_node_hello_http.sh` | p1 | common | `TestNodeHelloHTTP` (`common/node_hello_http_test.go`) | bash-disabled-migrated / go-live | this PR |
-| `test_buildermgr.sh` | p1 | common | `TestBuilderMgr` (`common/buildermgr_test.go`) | bash-active | — |
+| `test_buildermgr.sh` | p1 | common | `TestBuilderMgr` (`common/buildermgr_test.go`) | bash-disabled-migrated / go-live | this PR |
 | `test_canary.sh` | p1 | common | `TestCanary` (`common/canary_test.go`) | bash-active | — |
 | `test_pass.sh` | p1 | common | `TestPass` (`common/pass_test.go`) | bash-active | — |
 | `test_annotations.sh` | p1 | common | `TestFunctionAnnotations` (`common/annotations_test.go`) | bash-active | — |
@@ -127,12 +127,19 @@ Findings from the Phase 1 CI iteration that shaped subsequent design:
 - Tests must use `default` namespace (router only watches `FISSION_RESOURCE_NAMESPACES`, default `default`).
 - Background processes from a standalone port-forward step do not survive across GitHub Actions steps; port-forward lives inside each Go test step.
 
-### Phase 2 — Pilot 2: builder (PR pending)
+### Phase 2 — Pilot 2: builder (this PR)
 
-- [ ] `test/integration/framework/` — add builder/package helpers
-- [ ] `test/integration/testdata/python/sourcepkg/` — embedded fixture
-- [ ] `test/integration/suites/common/buildermgr_test.go` — `TestBuilderMgr`
-- [ ] Disable + remove bash counterpart
+- [x] `test/integration/framework/builder.go` — `WaitForBuilderReady`
+- [x] `test/integration/framework/package.go` — `WaitForPackageBuildSucceeded`, `WaitForPackageBuildStatus`
+- [x] `test/integration/framework/function.go` — `FunctionPackageName`; FunctionOptions extended with `Src`/`Entrypoint`/`BuildCmd`
+- [x] `test/integration/framework/env.go` — EnvOptions extended with `Builder`
+- [x] `test/integration/framework/testdata.go` — `ZipTestDataDir` (flat zip, mirrors `zip -j`)
+- [x] `test/integration/framework/images.go` — `RequirePython`, `RequirePythonBuilder`
+- [x] `test/integration/testdata/python/sourcepkg/` — embedded fixture
+- [x] `test/integration/suites/common/buildermgr_test.go` — `TestBuilderMgr` with `rebuild_on_update` subtest
+- [x] `.github/workflows/push_pr.yaml` — pre-pull `PYTHON_RUNTIME_IMAGE`/`PYTHON_BUILDER_IMAGE` in the Go test step
+- [x] `test/tests/test_buildermgr.sh` — `#test:disabled` + migration comment
+- [x] `test/kind_CI.sh` — remove `test_buildermgr.sh` from active list
 
 ### Phase 3 — Pilot 3: canary (PR pending)
 

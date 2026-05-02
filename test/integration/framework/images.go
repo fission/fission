@@ -38,10 +38,24 @@ func loadRuntimeImages() RuntimeImages {
 
 // RequireNode skips the test if NODE_RUNTIME_IMAGE is unset.
 func (r RuntimeImages) RequireNode(skip skipper) string {
-	if r.Node == "" {
-		skip.Skipf("NODE_RUNTIME_IMAGE is not set; skipping")
+	return requireImage(skip, "NODE_RUNTIME_IMAGE", r.Node)
+}
+
+// RequirePython skips the test if PYTHON_RUNTIME_IMAGE is unset.
+func (r RuntimeImages) RequirePython(skip skipper) string {
+	return requireImage(skip, "PYTHON_RUNTIME_IMAGE", r.Python)
+}
+
+// RequirePythonBuilder skips the test if PYTHON_BUILDER_IMAGE is unset.
+func (r RuntimeImages) RequirePythonBuilder(skip skipper) string {
+	return requireImage(skip, "PYTHON_BUILDER_IMAGE", r.PythonBuilder)
+}
+
+func requireImage(skip skipper, envVar, value string) string {
+	if value == "" {
+		skip.Skipf("%s is not set; skipping", envVar)
 	}
-	return r.Node
+	return value
 }
 
 // skipper is the subset of *testing.T used to skip a test when an env image is

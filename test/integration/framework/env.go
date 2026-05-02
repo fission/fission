@@ -17,6 +17,9 @@ type EnvOptions struct {
 	Name string
 	// Image is the runtime image (e.g. NODE_RUNTIME_IMAGE). Required.
 	Image string
+	// Builder is the optional builder image (e.g. PYTHON_BUILDER_IMAGE). When
+	// set, source-package functions can be built against this environment.
+	Builder string
 }
 
 // CreateEnv creates a Fission Environment via the CLI and registers a
@@ -26,7 +29,11 @@ func (ns *TestNamespace) CreateEnv(t *testing.T, ctx context.Context, opts EnvOp
 	if opts.Name == "" || opts.Image == "" {
 		t.Fatalf("CreateEnv: Name and Image are required (got %+v)", opts)
 	}
-	ns.CLI(t, ctx, "env", "create", "--name", opts.Name, "--image", opts.Image)
+	args := []string{"env", "create", "--name", opts.Name, "--image", opts.Image}
+	if opts.Builder != "" {
+		args = append(args, "--builder", opts.Builder)
+	}
+	ns.CLI(t, ctx, args...)
 
 	t.Cleanup(func() {
 		if noCleanup() {

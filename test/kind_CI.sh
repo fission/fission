@@ -73,7 +73,6 @@ main() {
         $ROOT/test/tests/test_annotations.sh \
         $ROOT/test/tests/test_archive_pruner.sh \
         $ROOT/test/tests/test_backend_poolmgr.sh \
-        $ROOT/test/tests/test_buildermgr.sh \
         $ROOT/test/tests/test_env_vars.sh \
         $ROOT/test/tests/test_env_podspec.sh \
         $ROOT/test/tests/test_environments/test_python_env.sh \

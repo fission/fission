@@ -140,12 +140,21 @@ jobs:
         timeout-minutes: 30
         env:
           NODE_RUNTIME_IMAGE: ghcr.io/fission/node-env-22
+          PYTHON_RUNTIME_IMAGE: ghcr.io/fission/python-env
+          PYTHON_BUILDER_IMAGE: ghcr.io/fission/python-builder
           FISSION_ROUTER: 127.0.0.1:8888
           FISSION_NAMESPACE: fission
           LOG_DIR: ${{ github.workspace }}/test/integration/logs
         run: |
-          docker pull -q "$NODE_RUNTIME_IMAGE"
-          kind load docker-image "$NODE_RUNTIME_IMAGE" --name "${KIND_CLUSTER_NAME}"
+          # Pre-pull and kind-load every runtime/builder image referenced by
+          # tests in this phase so the Kind nodes don't re-pull on first
+          # function invocation. Add new images to this list as more tests
+          # land. Set FOO_IMAGE=""  in the env block above to skip an image.
+          for img in "$NODE_RUNTIME_IMAGE" "$PYTHON_RUNTIME_IMAGE" "$PYTHON_BUILDER_IMAGE"; do
+            [ -z "$img" ] && continue
+            docker pull -q "$img"
+            kind load docker-image "$img" --name "${KIND_CLUSTER_NAME}"
+          done
 
           kubectl port-forward svc/router 8888:80 -n "$FISSION_NAMESPACE" >/tmp/pf.log 2>&1 &
           PF_PID=$!
