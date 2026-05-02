@@ -59,31 +59,24 @@ func (ns *TestNamespace) CreateFunction(t *testing.T, ctx context.Context, opts 
 	}
 	ns.CLI(t, ctx, args...)
 
-	t.Cleanup(func() {
-		if noCleanup() {
-			return
+	ns.addCleanup("function "+opts.Name, func(c context.Context) error {
+		fc := ns.f.fissionClient.CoreV1()
+		if err := fc.Functions(ns.Name).Delete(c, opts.Name, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
+			return err
 		}
-		c, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-
-		err := ns.f.fissionClient.CoreV1().Functions(ns.Name).Delete(c, opts.Name, metav1.DeleteOptions{})
-		if err != nil && !apierrors.IsNotFound(err) {
-			t.Logf("cleanup: delete fn %q: %v", opts.Name, err)
-		}
-
-		// The CLI auto-generates a Package named `<fn>-<uuid>`. Find and delete it.
-		pkgs, err := ns.f.fissionClient.CoreV1().Packages(ns.Name).List(c, metav1.ListOptions{})
+		// The CLI auto-generates a Package named `<fn>-<uuid>`. Find and delete any.
+		pkgs, err := fc.Packages(ns.Name).List(c, metav1.ListOptions{})
 		if err != nil {
-			t.Logf("cleanup: list packages: %v", err)
-			return
+			return err
 		}
 		for _, p := range pkgs.Items {
 			if strings.HasPrefix(p.Name, opts.Name+"-") {
-				if err := ns.f.fissionClient.CoreV1().Packages(ns.Name).Delete(c, p.Name, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
-					t.Logf("cleanup: delete pkg %q: %v", p.Name, err)
+				if delErr := fc.Packages(ns.Name).Delete(c, p.Name, metav1.DeleteOptions{}); delErr != nil && !apierrors.IsNotFound(delErr) {
+					return delErr
 				}
 			}
 		}
+		return nil
 	})
 }
 
@@ -104,6 +97,10 @@ func (ns *TestNamespace) WaitForFunction(t *testing.T, ctx context.Context, name
 // FunctionPackageName returns the auto-generated Package name backing a
 // Function (Spec.Package.PackageRef.Name). Mirrors the bash one-liner:
 // `kubectl get functions <fn> -o jsonpath='{.spec.package.packageref.name}'`.
+//
+// `fission fn update --src` patches the existing Package in place, so this
+// name is *stable* across rebuilds — use Package.Status.LastUpdateTimestamp
+// (see WaitForPackageRebuiltSince) to detect a rebuild instead.
 func (ns *TestNamespace) FunctionPackageName(t *testing.T, ctx context.Context, fnName string) string {
 	t.Helper()
 	fn, err := ns.f.fissionClient.CoreV1().Functions(ns.Name).Get(ctx, fnName, metav1.GetOptions{})

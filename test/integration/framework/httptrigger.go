@@ -5,7 +5,6 @@ package framework
 import (
 	"context"
 	"testing"
-	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -14,7 +13,7 @@ import (
 // RouteOptions are the inputs to TestNamespace.CreateRoute.
 type RouteOptions struct {
 	// Name of the HTTPTrigger. If empty, the framework derives a stable name
-	// from Function so cleanup is deterministic.
+	// from Function so cleanup can find it without parsing CLI output.
 	Name string
 	// Function name to route to. Required.
 	Function string
@@ -41,15 +40,11 @@ func (ns *TestNamespace) CreateRoute(t *testing.T, ctx context.Context, opts Rou
 		"--method", opts.Method,
 	)
 
-	t.Cleanup(func() {
-		if noCleanup() {
-			return
-		}
-		c, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
+	ns.addCleanup("route "+opts.Name, func(c context.Context) error {
 		err := ns.f.fissionClient.CoreV1().HTTPTriggers(ns.Name).Delete(c, opts.Name, metav1.DeleteOptions{})
-		if err != nil && !apierrors.IsNotFound(err) {
-			t.Logf("cleanup: delete route %q: %v", opts.Name, err)
+		if apierrors.IsNotFound(err) {
+			return nil
 		}
+		return err
 	})
 }

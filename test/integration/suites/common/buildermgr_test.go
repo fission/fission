@@ -55,8 +55,8 @@ func TestBuilderMgr(t *testing.T) {
 		Method:   "GET",
 	})
 
-	pkg1 := ns.FunctionPackageName(t, ctx, fnName)
-	ns.WaitForPackageBuildSucceeded(t, ctx, pkg1)
+	pkgName := ns.FunctionPackageName(t, ctx, fnName)
+	ns.WaitForPackageBuildSucceeded(t, ctx, pkgName)
 
 	body := f.Router(t).GetEventually(t, ctx, routePath, framework.BodyContains("a: 1"))
 	require.Contains(t, body, "a: 1", "router response should contain rendered yaml document")
@@ -64,17 +64,14 @@ func TestBuilderMgr(t *testing.T) {
 	require.Contains(t, body, "d: 4", "router response should contain rendered yaml document")
 
 	t.Run("rebuild_on_update", func(t *testing.T) {
+		// fn update --src patches the same Package CR in place — the name
+		// stays stable. Capture the build timestamp before the patch so
+		// WaitForPackageRebuiltSince can ignore the stale `succeeded` state
+		// from the initial build.
+		prevBuildTs := ns.PackageBuildTimestamp(t, ctx, pkgName)
 		ns.CLI(t, ctx, "fn", "update", "--name", fnName, "--src", srcZip)
 
-		// fn update writes a new package; poll until the function points at
-		// it (different from pkg1) and that new package builds successfully.
-		framework.Eventually(t, ctx, 30*time.Second, 1*time.Second, func(c context.Context) (bool, error) {
-			cur := ns.FunctionPackageName(t, c, fnName)
-			return cur != pkg1, nil
-		}, "function %q never switched to a fresh package after update", fnName)
-
-		pkg2 := ns.FunctionPackageName(t, ctx, fnName)
-		ns.WaitForPackageBuildSucceeded(t, ctx, pkg2)
+		ns.WaitForPackageRebuiltSince(t, ctx, pkgName, prevBuildTs)
 
 		body := f.Router(t).GetEventually(t, ctx, routePath, framework.BodyContains("a: 1"))
 		require.Contains(t, body, "a: 1", "router response should still contain rendered yaml document after rebuild")

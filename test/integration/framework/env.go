@@ -5,7 +5,6 @@ package framework
 import (
 	"context"
 	"testing"
-	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -22,8 +21,9 @@ type EnvOptions struct {
 	Builder string
 }
 
-// CreateEnv creates a Fission Environment via the CLI and registers a
-// t.Cleanup that deletes it via the typed Fission clientset.
+// CreateEnv creates a Fission Environment via the CLI and registers its
+// deletion on the namespace's cleanup chain (which runs after the diagnostics
+// dump on failure).
 func (ns *TestNamespace) CreateEnv(t *testing.T, ctx context.Context, opts EnvOptions) {
 	t.Helper()
 	if opts.Name == "" || opts.Image == "" {
@@ -35,15 +35,11 @@ func (ns *TestNamespace) CreateEnv(t *testing.T, ctx context.Context, opts EnvOp
 	}
 	ns.CLI(t, ctx, args...)
 
-	t.Cleanup(func() {
-		if noCleanup() {
-			return
-		}
-		c, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
+	ns.addCleanup("env "+opts.Name, func(c context.Context) error {
 		err := ns.f.fissionClient.CoreV1().Environments(ns.Name).Delete(c, opts.Name, metav1.DeleteOptions{})
-		if err != nil && !apierrors.IsNotFound(err) {
-			t.Logf("cleanup: delete env %q: %v", opts.Name, err)
+		if apierrors.IsNotFound(err) {
+			return nil
 		}
+		return err
 	})
 }
