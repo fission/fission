@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/fission/fission/cmd/fission-cli/app"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 )
@@ -28,8 +30,7 @@ func (ns *TestNamespace) CLI(t *testing.T, ctx context.Context, args ...string) 
 	buf := new(bytes.Buffer)
 	c.SetOut(buf)
 	c.SetErr(buf)
-	if err := c.ExecuteContext(ctx); err != nil {
-		t.Fatalf("fission %s\n%s\nerror: %v", strings.Join(args, " "), buf.String(), err)
-	}
+	err := c.ExecuteContext(ctx)
+	require.NoErrorf(t, err, "fission %s\n%s", strings.Join(args, " "), buf.String())
 	return buf.String()
 }

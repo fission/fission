@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/go-logr/logr"
+	"github.com/stretchr/testify/require"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -47,9 +48,7 @@ func Connect(t *testing.T) *Framework {
 	frameworkOnce.Do(func() {
 		framework, frameworkErr = newFramework()
 	})
-	if frameworkErr != nil {
-		t.Fatalf("framework init failed: %v", frameworkErr)
-	}
+	require.NoError(t, frameworkErr, "framework init")
 	return framework
 }
 

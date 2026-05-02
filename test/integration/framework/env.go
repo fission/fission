@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -31,9 +32,9 @@ type EnvOptions struct {
 // dump on failure).
 func (ns *TestNamespace) CreateEnv(t *testing.T, ctx context.Context, opts EnvOptions) {
 	t.Helper()
-	if opts.Name == "" || opts.Image == "" {
-		t.Fatalf("CreateEnv: Name and Image are required (got %+v)", opts)
-	}
+	require.NotEmpty(t, opts.Name, "EnvOptions.Name")
+	require.NotEmpty(t, opts.Image, "EnvOptions.Image")
+
 	args := []string{"env", "create", "--name", opts.Name, "--image", opts.Image}
 	if opts.Builder != "" {
 		args = append(args, "--builder", opts.Builder)

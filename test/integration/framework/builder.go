@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -16,20 +18,20 @@ import (
 // matches the bash `wait_for_builder` helper.
 func (ns *TestNamespace) WaitForBuilderReady(t *testing.T, ctx context.Context, envName string) {
 	t.Helper()
-	Eventually(t, ctx, 3*time.Minute, 2*time.Second, func(c context.Context) (bool, error) {
-		pods, err := ns.f.kubeClient.CoreV1().Pods(ns.Name).List(c, metav1.ListOptions{
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		pods, err := ns.f.kubeClient.CoreV1().Pods(ns.Name).List(ctx, metav1.ListOptions{
 			LabelSelector: "envName=" + envName,
 		})
-		if err != nil {
-			return false, err
+		if !assert.NoError(c, err) {
+			return
 		}
 		for _, p := range pods.Items {
 			if isPodReady(&p) {
-				return true, nil
+				return
 			}
 		}
-		return false, nil
-	}, "builder pod for env %q never became Ready in namespace %q", envName, ns.Name)
+		assert.Failf(c, "no Ready builder pod yet", "env %q in namespace %q", envName, ns.Name)
+	}, 3*time.Minute, 2*time.Second)
 }
 
 func isPodReady(p *corev1.Pod) bool {

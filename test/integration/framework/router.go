@@ -10,6 +10,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // RouterClient wraps an HTTP client pointed at the Fission router (typically
@@ -51,9 +54,9 @@ func (r *RouterClient) Get(ctx context.Context, path string) (status int, body s
 	return resp.StatusCode, string(b), nil
 }
 
-// GetEventually polls a GET until the response satisfies `check` or the timeout
-// elapses. Use this in place of bash's `curl --retry` after creating a route.
-// The default timeout is 60s with a 1s interval; pass nil opts for defaults.
+// GetEventually polls a GET until the response satisfies `check` or the
+// timeout elapses. Use this in place of bash's `curl --retry` after creating
+// a route. 60s timeout, 1s tick. Returns the last response body.
 func (r *RouterClient) GetEventually(
 	t *testing.T,
 	ctx context.Context,
@@ -62,16 +65,16 @@ func (r *RouterClient) GetEventually(
 ) string {
 	t.Helper()
 	var lastBody string
-	var lastStatus int
-	Eventually(t, ctx, 60*time.Second, 1*time.Second, func(c context.Context) (bool, error) {
-		status, body, err := r.Get(c, path)
-		if err != nil {
-			return false, nil // retry transient errors
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		status, body, err := r.Get(ctx, path)
+		if !assert.NoErrorf(c, err, "router GET %q", path) {
+			return
 		}
-		lastStatus = status
 		lastBody = body
-		return check(status, body), nil
-	}, "router GET %q never satisfied check (last status=%d, body=%q)", path, lastStatus, truncate(lastBody, 200))
+		assert.Truef(c, check(status, body),
+			"router GET %q: status=%d, body=%q did not satisfy check",
+			path, status, truncate(body, 200))
+	}, 60*time.Second, 1*time.Second)
 	return lastBody
 }
 

@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -39,12 +41,11 @@ type FunctionOptions struct {
 // starts with the function name.
 func (ns *TestNamespace) CreateFunction(t *testing.T, ctx context.Context, opts FunctionOptions) {
 	t.Helper()
-	if opts.Name == "" || opts.Env == "" {
-		t.Fatalf("CreateFunction: Name and Env are required (got %+v)", opts)
-	}
-	if (opts.Code == "") == (opts.Src == "") {
-		t.Fatalf("CreateFunction: exactly one of Code or Src must be set (got %+v)", opts)
-	}
+	require.NotEmpty(t, opts.Name, "FunctionOptions.Name")
+	require.NotEmpty(t, opts.Env, "FunctionOptions.Env")
+	require.Truef(t, (opts.Code == "") != (opts.Src == ""),
+		"FunctionOptions: exactly one of Code or Src must be set (got %+v)", opts)
+
 	args := []string{"fn", "create", "--name", opts.Name, "--env", opts.Env}
 	if opts.Code != "" {
 		args = append(args, "--code", opts.Code)
@@ -81,17 +82,14 @@ func (ns *TestNamespace) CreateFunction(t *testing.T, ctx context.Context, opts 
 }
 
 // WaitForFunction polls until the Function CR exists in the test namespace, or
-// the context times out. Use this when the CLI returns before the controller
-// has processed the request.
+// the timeout elapses. Use this when the CLI returns before the controller has
+// processed the request.
 func (ns *TestNamespace) WaitForFunction(t *testing.T, ctx context.Context, name string) {
 	t.Helper()
-	Eventually(t, ctx, 30*time.Second, 500*time.Millisecond, func(c context.Context) (bool, error) {
-		_, err := ns.f.fissionClient.CoreV1().Functions(ns.Name).Get(c, name, metav1.GetOptions{})
-		if apierrors.IsNotFound(err) {
-			return false, nil
-		}
-		return err == nil, err
-	}, "function %q not visible in namespace %q", name, ns.Name)
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		_, err := ns.f.fissionClient.CoreV1().Functions(ns.Name).Get(ctx, name, metav1.GetOptions{})
+		assert.NoErrorf(c, err, "function %q not visible in namespace %q", name, ns.Name)
+	}, 30*time.Second, 500*time.Millisecond)
 }
 
 // FunctionPackageName returns the auto-generated Package name backing a
@@ -104,11 +102,8 @@ func (ns *TestNamespace) WaitForFunction(t *testing.T, ctx context.Context, name
 func (ns *TestNamespace) FunctionPackageName(t *testing.T, ctx context.Context, fnName string) string {
 	t.Helper()
 	fn, err := ns.f.fissionClient.CoreV1().Functions(ns.Name).Get(ctx, fnName, metav1.GetOptions{})
-	if err != nil {
-		t.Fatalf("FunctionPackageName: get function %q: %v", fnName, err)
-	}
-	if fn.Spec.Package.PackageRef.Name == "" {
-		t.Fatalf("FunctionPackageName: function %q has no package reference yet", fnName)
-	}
+	require.NoErrorf(t, err, "FunctionPackageName: get function %q", fnName)
+	require.NotEmptyf(t, fn.Spec.Package.PackageRef.Name,
+		"FunctionPackageName: function %q has no package reference yet", fnName)
 	return fn.Spec.Package.PackageRef.Name
 }

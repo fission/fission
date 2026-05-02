@@ -9,9 +9,11 @@ All framework code lives behind the `//go:build integration` build tag, so it is
 ## Conventions
 
 - All helpers take `t *testing.T` as the first argument and call `t.Helper()` so failures point at the test, not the helper.
-- All resource-creating helpers register `t.Cleanup` automatically. Tests do not write defers.
+- All resource-creating helpers register cleanup automatically (via `ns.addCleanup` → single namespace-level `t.Cleanup`). Tests do not write defers.
 - Mutations go through `ns.CLI(t, ctx, args...)`. Reads and waits go through the typed clientset (`f.FissionClient()`, `f.KubeClient()`).
-- Helpers do not return errors. They `t.Fatal` on unrecoverable conditions and `t.Error` on recoverable ones.
+- Helpers do not return errors. They use `testify/require` for prerequisites that must hold for the test to continue (`require.NoError`, `require.NotEmpty`), and tests use `testify/assert` for sibling checks where seeing all failures aids debugging (e.g. multiple fields of one rendered yaml document).
+- Polling loops use `require.EventuallyWithT(t, func(c *assert.CollectT){...}, waitFor, tick)`. The condition runs assertions on a `*CollectT`; failed assertions cause the iteration to retry; on final timeout testify reports the most recent assertion errors — so failure messages reflect actual final state, no manual lazy-format dance required.
+- The one exception is `package.go`'s build-status poll, which needs to *early-exit* on terminal `BuildStatusFailed` (so the test fails fast with the captured BuildLog rather than waiting the full timeout). That helper uses `wait.PollUntilContextTimeout` directly.
 - `t.Parallel()` is the default in suite tests. The framework is concurrency-safe — no global mutable state, per-test namespaces.
 
 ## Environment variables read by the framework
@@ -113,20 +115,18 @@ ns.CreateRoute(t, ctx, framework.RouteOptions{
 Polls until the Function CR is visible in the test namespace.
 Use this when the CLI returns before the controller has processed the request and the test wants to assert on cluster state.
 
-### `framework.Eventually(t, ctx, timeout, interval, cond, failMsg, ...)`
+### Polling primitive: `require.EventuallyWithT`
 
-Polling primitive over `wait.PollUntilContextTimeout`.
-The condition runs immediately and is retried until it returns `(true, nil)` or the timeout elapses.
-Timeout or condition error becomes `t.Fatal` with the formatted message.
+Use testify directly — there is no framework wrapper. Capture the parent `ctx` by closure so test cancellation propagates through clientset calls.
 
 ```go
-framework.Eventually(t, ctx, 30*time.Second, 500*time.Millisecond,
-    func(c context.Context) (bool, error) {
-        _, err := f.FissionClient().CoreV1().Functions(ns.Name).Get(c, name, metav1.GetOptions{})
-        return err == nil, nil
-    },
-    "function %q never became visible", name)
+require.EventuallyWithT(t, func(c *assert.CollectT) {
+    _, err := f.FissionClient().CoreV1().Functions(ns.Name).Get(ctx, name, metav1.GetOptions{})
+    assert.NoErrorf(c, err, "function %q not visible in namespace %q", name, ns.Name)
+}, 30*time.Second, 500*time.Millisecond)
 ```
+
+When the timeout fires, testify reports the last iteration's assertion errors — which include the actual `err` value, the last observed weight, etc. — without needing a separate "lazy fail message" mechanism.
 
 ### `f.Router(t)` → `*RouterClient`
 
@@ -264,9 +264,6 @@ go f.Router(t).LoadLoop(loadCtx, "/myroute")
 ns.WaitForFunctionWeight(t, ctx, routeName, fnName, 100, 5*time.Minute)
 ```
 
-### `framework.EventuallyLazy(t, ctx, timeout, interval, cond, failMsg func() string)`
-
-Companion to `Eventually` for cases where the failure message must reflect state mutated inside the polling loop. The standard `Eventually` evaluates `failArgs` at call time, so closure-captured "last observed value" variables only print zero. `EventuallyLazy` calls `failMsg()` after the timeout fires.
 
 ## Helpers (Phase 4 and beyond)
 

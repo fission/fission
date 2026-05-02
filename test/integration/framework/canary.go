@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -36,9 +37,11 @@ type CanaryConfigOptions struct {
 // FailureThreshold.
 func (ns *TestNamespace) CreateCanaryConfig(t *testing.T, ctx context.Context, opts CanaryConfigOptions) {
 	t.Helper()
-	if opts.Name == "" || opts.NewFunction == "" || opts.OldFunction == "" || opts.HTTPTrigger == "" {
-		t.Fatalf("CreateCanaryConfig: Name/NewFunction/OldFunction/HTTPTrigger required (got %+v)", opts)
-	}
+	require.NotEmpty(t, opts.Name, "CanaryConfigOptions.Name")
+	require.NotEmpty(t, opts.NewFunction, "CanaryConfigOptions.NewFunction")
+	require.NotEmpty(t, opts.OldFunction, "CanaryConfigOptions.OldFunction")
+	require.NotEmpty(t, opts.HTTPTrigger, "CanaryConfigOptions.HTTPTrigger")
+
 	args := []string{
 		"canary-config", "create",
 		"--name", opts.Name,

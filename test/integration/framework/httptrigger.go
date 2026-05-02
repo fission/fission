@@ -4,11 +4,12 @@ package framework
 
 import (
 	"context"
-	"fmt"
 	"strconv"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -45,12 +46,11 @@ type RouteOptions struct {
 // CLI output.
 func (ns *TestNamespace) CreateRoute(t *testing.T, ctx context.Context, opts RouteOptions) {
 	t.Helper()
-	if opts.URL == "" || opts.Method == "" {
-		t.Fatalf("CreateRoute: URL and Method are required (got %+v)", opts)
-	}
-	if (opts.Function == "") == (len(opts.FunctionWeights) == 0) {
-		t.Fatalf("CreateRoute: exactly one of Function or FunctionWeights must be set (got %+v)", opts)
-	}
+	require.NotEmpty(t, opts.URL, "RouteOptions.URL")
+	require.NotEmpty(t, opts.Method, "RouteOptions.Method")
+	require.Truef(t, (opts.Function == "") != (len(opts.FunctionWeights) == 0),
+		"RouteOptions: exactly one of Function or FunctionWeights must be set (got %+v)", opts)
+
 	if opts.Name == "" {
 		switch {
 		case opts.Function != "":
@@ -84,9 +84,7 @@ func (ns *TestNamespace) CreateRoute(t *testing.T, ctx context.Context, opts Rou
 func (ns *TestNamespace) FunctionWeight(t *testing.T, ctx context.Context, routeName, fnName string) int {
 	t.Helper()
 	tr, err := ns.f.fissionClient.CoreV1().HTTPTriggers(ns.Name).Get(ctx, routeName, metav1.GetOptions{})
-	if err != nil {
-		t.Fatalf("FunctionWeight: get httptrigger %q: %v", routeName, err)
-	}
+	require.NoErrorf(t, err, "FunctionWeight: get httptrigger %q", routeName)
 	if tr.Spec.FunctionReference.FunctionWeights == nil {
 		return 0
 	}
@@ -98,9 +96,10 @@ func (ns *TestNamespace) FunctionWeight(t *testing.T, ctx context.Context, route
 // observe the canary controller's traffic-shift decisions.
 func (ns *TestNamespace) WaitForFunctionWeight(t *testing.T, ctx context.Context, routeName, fnName string, want int, timeout time.Duration) {
 	t.Helper()
-	ns.waitForFunctionWeightCond(t, ctx, routeName, fnName, timeout,
-		func(w int) bool { return w == want },
-		fmt.Sprintf("==%d", want))
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Equalf(c, want, currentWeight(c, ns, ctx, routeName, fnName),
+			"route %q: weight for function %q", routeName, fnName)
+	}, timeout, 2*time.Second)
 }
 
 // WaitForFunctionWeightAtLeast polls until the weight assigned to fnName on
@@ -109,36 +108,23 @@ func (ns *TestNamespace) WaitForFunctionWeight(t *testing.T, ctx context.Context
 // confirm v3 weight first rose above 0 before asserting it returned to 0.
 func (ns *TestNamespace) WaitForFunctionWeightAtLeast(t *testing.T, ctx context.Context, routeName, fnName string, want int, timeout time.Duration) {
 	t.Helper()
-	ns.waitForFunctionWeightCond(t, ctx, routeName, fnName, timeout,
-		func(w int) bool { return w >= want },
-		fmt.Sprintf(">=%d", want))
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.GreaterOrEqualf(c, currentWeight(c, ns, ctx, routeName, fnName), want,
+			"route %q: weight for function %q", routeName, fnName)
+	}, timeout, 2*time.Second)
 }
 
-func (ns *TestNamespace) waitForFunctionWeightCond(
-	t *testing.T,
-	ctx context.Context,
-	routeName, fnName string,
-	timeout time.Duration,
-	match func(int) bool,
-	desc string,
-) {
-	t.Helper()
-	var last int
-	EventuallyLazy(t, ctx, timeout, 2*time.Second,
-		func(c context.Context) (bool, error) {
-			tr, err := ns.f.fissionClient.CoreV1().HTTPTriggers(ns.Name).Get(c, routeName, metav1.GetOptions{})
-			if apierrors.IsNotFound(err) {
-				return false, nil
-			}
-			if err != nil {
-				return false, err
-			}
-			if tr.Spec.FunctionReference.FunctionWeights != nil {
-				last = tr.Spec.FunctionReference.FunctionWeights[fnName]
-			}
-			return match(last), nil
-		},
-		func() string {
-			return fmt.Sprintf("route %q: weight for function %q never satisfied %s (last=%d)", routeName, fnName, desc, last)
-		})
+// currentWeight reads the HTTPTrigger and returns the weight assigned to
+// fnName, or 0 if the trigger doesn't exist or doesn't list the function.
+// Errors fetching the trigger are reported via assert.NoError on c so the
+// surrounding EventuallyWithT iteration is treated as not-yet-done.
+func currentWeight(c *assert.CollectT, ns *TestNamespace, ctx context.Context, routeName, fnName string) int {
+	tr, err := ns.f.fissionClient.CoreV1().HTTPTriggers(ns.Name).Get(ctx, routeName, metav1.GetOptions{})
+	if !assert.NoErrorf(c, err, "get httptrigger %q", routeName) {
+		return 0
+	}
+	if tr.Spec.FunctionReference.FunctionWeights == nil {
+		return 0
+	}
+	return tr.Spec.FunctionReference.FunctionWeights[fnName]
 }

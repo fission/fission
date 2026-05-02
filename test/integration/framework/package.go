@@ -4,11 +4,14 @@ package framework
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/wait"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 )
@@ -29,9 +32,7 @@ func (ns *TestNamespace) WaitForPackageBuildSucceeded(t *testing.T, ctx context.
 func (ns *TestNamespace) PackageBuildTimestamp(t *testing.T, ctx context.Context, pkgName string) metav1.Time {
 	t.Helper()
 	p, err := ns.f.fissionClient.CoreV1().Packages(ns.Name).Get(ctx, pkgName, metav1.GetOptions{})
-	if err != nil {
-		t.Fatalf("PackageBuildTimestamp: get package %q: %v", pkgName, err)
-	}
+	require.NoErrorf(t, err, "PackageBuildTimestamp: get package %q", pkgName)
 	return p.Status.LastUpdateTimestamp
 }
 
@@ -48,7 +49,7 @@ func (ns *TestNamespace) WaitForPackageRebuiltSince(t *testing.T, ctx context.Co
 	var lastStatus fv1.BuildStatus
 	var lastTs metav1.Time
 	var lastLog string
-	Eventually(t, ctx, 3*time.Minute, 1*time.Second, func(c context.Context) (bool, error) {
+	err := wait.PollUntilContextTimeout(ctx, 1*time.Second, 3*time.Minute, true, func(c context.Context) (bool, error) {
 		p, err := ns.f.fissionClient.CoreV1().Packages(ns.Name).Get(c, pkgName, metav1.GetOptions{})
 		if apierrors.IsNotFound(err) {
 			return false, nil
@@ -60,10 +61,12 @@ func (ns *TestNamespace) WaitForPackageRebuiltSince(t *testing.T, ctx context.Co
 		lastTs = p.Status.LastUpdateTimestamp
 		lastLog = p.Status.BuildLog
 		if p.Status.BuildStatus == fv1.BuildStatusFailed && p.Status.LastUpdateTimestamp.After(since.Time) {
-			t.Fatalf("package %q rebuild failed; build log:\n%s", pkgName, p.Status.BuildLog)
+			return false, fmt.Errorf("rebuild failed; build log:\n%s", p.Status.BuildLog)
 		}
 		return p.Status.BuildStatus == fv1.BuildStatusSucceeded && p.Status.LastUpdateTimestamp.After(since.Time), nil
-	}, "package %q never rebuilt after %s (last status=%q, last ts=%s, last build log: %s)", pkgName, since, lastStatus, lastTs, lastLog)
+	})
+	require.NoErrorf(t, err, "package %q never rebuilt after %s (last status=%q, last ts=%s, last build log: %s)",
+		pkgName, since, lastStatus, lastTs, lastLog)
 }
 
 // WaitForPackageBuildStatus polls until the package reaches the specified
@@ -74,11 +77,16 @@ func (ns *TestNamespace) WaitForPackageBuildStatus(t *testing.T, ctx context.Con
 	ns.waitForPackageBuildStatus(t, ctx, pkgName, status, timeout)
 }
 
+// waitForPackageBuildStatus is the shared poll body. It uses
+// wait.PollUntilContextTimeout directly (rather than require.EventuallyWithT)
+// because we need to *early-exit* with the captured BuildLog as soon as the
+// package reaches a different terminal state — testify's Eventually variants
+// can't bail before the timeout.
 func (ns *TestNamespace) waitForPackageBuildStatus(t *testing.T, ctx context.Context, pkgName string, want fv1.BuildStatus, timeout time.Duration) {
 	t.Helper()
 	var lastStatus fv1.BuildStatus
 	var lastLog string
-	Eventually(t, ctx, timeout, 2*time.Second, func(c context.Context) (bool, error) {
+	err := wait.PollUntilContextTimeout(ctx, 2*time.Second, timeout, true, func(c context.Context) (bool, error) {
 		p, err := ns.f.fissionClient.CoreV1().Packages(ns.Name).Get(c, pkgName, metav1.GetOptions{})
 		if apierrors.IsNotFound(err) {
 			return false, nil
@@ -93,9 +101,11 @@ func (ns *TestNamespace) waitForPackageBuildStatus(t *testing.T, ctx context.Con
 			return true, nil
 		case fv1.BuildStatusFailed:
 			if want != fv1.BuildStatusFailed {
-				t.Fatalf("package %q build failed; build log:\n%s", pkgName, p.Status.BuildLog)
+				return false, fmt.Errorf("build failed; build log:\n%s", p.Status.BuildLog)
 			}
 		}
 		return false, nil
-	}, "package %q never reached build status %q (last=%q, last build log: %s)", pkgName, want, lastStatus, lastLog)
+	})
+	require.NoErrorf(t, err, "package %q never reached build status %q (last=%q, last build log: %s)",
+		pkgName, want, lastStatus, lastLog)
 }

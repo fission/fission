@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/fission/fission/test/integration/framework"
@@ -59,9 +60,11 @@ func TestBuilderMgr(t *testing.T) {
 	ns.WaitForPackageBuildSucceeded(t, ctx, pkgName)
 
 	body := f.Router(t).GetEventually(t, ctx, routePath, framework.BodyContains("a: 1"))
-	require.Contains(t, body, "a: 1", "router response should contain rendered yaml document")
-	require.Contains(t, body, "c: 3", "router response should contain rendered yaml document")
-	require.Contains(t, body, "d: 4", "router response should contain rendered yaml document")
+	// The yaml document has three independent fields; use assert (not
+	// require) so a single missing field doesn't mask the others.
+	assert.Contains(t, body, "a: 1")
+	assert.Contains(t, body, "c: 3")
+	assert.Contains(t, body, "d: 4")
 
 	t.Run("rebuild_on_update", func(t *testing.T) {
 		// fn update --src patches the same Package CR in place — the name
@@ -74,6 +77,6 @@ func TestBuilderMgr(t *testing.T) {
 		ns.WaitForPackageRebuiltSince(t, ctx, pkgName, prevBuildTs)
 
 		body := f.Router(t).GetEventually(t, ctx, routePath, framework.BodyContains("a: 1"))
-		require.Contains(t, body, "a: 1", "router response should still contain rendered yaml document after rebuild")
+		require.Contains(t, body, "a: 1", "router response should still contain rendered yaml after rebuild")
 	})
 }

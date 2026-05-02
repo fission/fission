@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/fission/fission/test/integration/testdata"
 )
 
@@ -24,14 +26,10 @@ import (
 func WriteTestData(t *testing.T, embedPath string) string {
 	t.Helper()
 	b, err := testdata.FS.ReadFile(embedPath)
-	if err != nil {
-		t.Fatalf("WriteTestData: read embedded %q: %v", embedPath, err)
-	}
+	require.NoErrorf(t, err, "WriteTestData: read embedded %q", embedPath)
 	dir := t.TempDir()
 	dst := filepath.Join(dir, filepath.Base(embedPath))
-	if err := os.WriteFile(dst, b, 0o644); err != nil {
-		t.Fatalf("WriteTestData: write %q: %v", dst, err)
-	}
+	require.NoErrorf(t, os.WriteFile(dst, b, 0o644), "WriteTestData: write %q", dst)
 	return dst
 }
 
@@ -52,13 +50,11 @@ func ZipTestDataDir(t *testing.T, embedDir, archiveName string) string {
 	t.Helper()
 	dst := filepath.Join(t.TempDir(), archiveName)
 	out, err := os.Create(dst)
-	if err != nil {
-		t.Fatalf("ZipTestDataDir: create %q: %v", dst, err)
-	}
+	require.NoErrorf(t, err, "ZipTestDataDir: create %q", dst)
 	defer out.Close()
 
 	zw := zip.NewWriter(out)
-	err = fs.WalkDir(testdata.FS, embedDir, func(path string, d fs.DirEntry, err error) error {
+	walkErr := fs.WalkDir(testdata.FS, embedDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -84,11 +80,7 @@ func ZipTestDataDir(t *testing.T, embedDir, archiveName string) string {
 		_, err = w.Write(b)
 		return err
 	})
-	if err != nil {
-		t.Fatalf("ZipTestDataDir: walk %q: %v", embedDir, err)
-	}
-	if err := zw.Close(); err != nil {
-		t.Fatalf("ZipTestDataDir: finalize zip: %v", err)
-	}
+	require.NoErrorf(t, walkErr, "ZipTestDataDir: walk %q", embedDir)
+	require.NoError(t, zw.Close(), "ZipTestDataDir: finalize zip")
 	return dst
 }
