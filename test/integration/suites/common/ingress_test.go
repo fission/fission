@@ -103,9 +103,13 @@ func TestIngress(t *testing.T) {
 	requireIngress(t, relativeURL, "", "")
 
 	// Phase 2 — update with host, custom path, annotation, TLS.
+	// `route update` validates ingress flags against the *current* CLI
+	// invocation rather than the existing trigger, so we have to pass
+	// --url too even though it's unchanged (otherwise parseIngressRule
+	// rejects with "fallback url cannot be empty").
 	hostName := "test-" + ns.ID + ".com"
 	ns.CLI(t, ctx, "route", "update", "--name", routeName,
-		"--function", fnName,
+		"--function", fnName, "--url", relativeURL,
 		"--ingressannotation", "foo=bar",
 		"--ingressrule", hostName+"=/foo/bar",
 		"--ingresstls", "dummy")
@@ -113,7 +117,7 @@ func TestIngress(t *testing.T) {
 
 	// Phase 3 — clear all the optional fields with `-`.
 	ns.CLI(t, ctx, "route", "update", "--name", routeName,
-		"--function", fnName,
+		"--function", fnName, "--url", relativeURL,
 		"--ingressannotation", "-",
 		"--ingressrule", "-",
 		"--ingresstls", "-")
