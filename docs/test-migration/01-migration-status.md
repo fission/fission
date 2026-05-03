@@ -19,12 +19,12 @@ See `00-design.md` for the design; `02-framework-api.md` for helper docs.
 Update these whenever the table below changes.
 
 - Total bash tests: 48
-- In `kind_CI.sh` active list: 32 (15 phase-1, 17 phase-2)
-- Not in `kind_CI.sh` active list: 16 (3 never were + 13 migrated)
-- `bash-active`: 24
+- In `kind_CI.sh` active list: 28 (14 phase-1, 14 phase-2)
+- Not in `kind_CI.sh` active list: 20 (3 never were + 17 migrated)
+- `bash-active`: 20
 - `bash-disabled-existing`: 6
-- `bash-disabled-migrated`: 18 (+ python_env, nodejs_env, env_podspec, function_timeout)
-- `go-live`: 18
+- `bash-disabled-migrated`: 22 (+ python_env, nodejs_env, env_podspec, function_timeout)
+- `go-live`: 22
 - `go-skip`: 1 (`TestPackageCommand/src_glob` — flaky under parallel load)
 - `deleted`: 0
 
@@ -66,7 +66,7 @@ Columns:
 | `test_environments/test_python_env.sh` | p1 | common | `TestPythonEnv` (`common/python_env_test.go`) | bash-active | — |
 | `test_environments/test_go_env.sh` | p1 | common | `TestGoEnv` (`common/go_env_test.go`) | bash-active | — |
 | `test_environments/test_tensorflow_serving_env.sh` | p1 | common | `TestTensorflowServingEnv` (`common/tensorflow_serving_env_test.go`) | bash-active | — |
-| `test_backend_poolmgr.sh` | p1 | poolmgr | `TestBackendPoolmgr` (`poolmgr/backend_poolmgr_test.go`) | bash-active | — |
+| `test_backend_poolmgr.sh` | p1 | common | `TestBackendPoolmgr` (`common/backend_poolmgr_test.go`) | bash-disabled-migrated / go-live | this PR |
 | `test_fn_update/test_idle_objects_reaper.sh` | p1 | poolmgr | `TestIdleObjectsReaper` (`poolmgr/idle_objects_reaper_test.go`) | bash-active | — |
 | `test_env_vars.sh` | p1 | common | TBD (Phase 5) | bash-disabled-existing | — |
 | `test_function_test/test_fn_test.sh` | p1 | common | TBD (Phase 5) | bash-disabled-existing | — |
@@ -76,7 +76,7 @@ Columns:
 
 | Bash file | Phase | Target suite | Go test | Status | PR |
 |-----------|-------|--------------|---------|--------|-----|
-| `test_backend_newdeploy.sh` | p2 | newdeploy | `TestBackendNewdeploy` (`newdeploy/backend_newdeploy_test.go`) | bash-active | — |
+| `test_backend_newdeploy.sh` | p2 | common | `TestBackendNewdeploy` (`common/backend_newdeploy_test.go`, subtests `cold_start`+`warm_start`) | bash-disabled-migrated / go-live | this PR |
 | `test_fn_update/test_scale_change.sh` | p2 | newdeploy | `TestScaleChange` (`newdeploy/scale_change_test.go`) | bash-active | — |
 | `test_fn_update/test_configmap_update.sh` | p2 | newdeploy | `TestConfigMapUpdate` (`newdeploy/configmap_update_test.go`) | bash-active | — |
 | `test_fn_update/test_env_update.sh` | p2 | newdeploy | `TestEnvUpdate` (`newdeploy/env_update_test.go`) | bash-active | — |
@@ -86,8 +86,8 @@ Columns:
 | `test_fn_update/test_poolmgr_nd.sh` | p2 | newdeploy | `TestPoolmgrToNewdeploy` (`newdeploy/poolmgr_nd_test.go`) | bash-active | — |
 | `test_secret_cfgmap/test_secret_cfgmap.sh` | p2 | newdeploy | `TestSecretConfigMap` (`newdeploy/secret_cfgmap_test.go`) | bash-active | — |
 | `test_environments/test_nodejs_env.sh` | p2 | newdeploy | `TestNodejsEnv` (`newdeploy/nodejs_env_test.go`) | bash-active | — |
-| `test_namespace/test_ns_current_context.sh` | p2 | common | `TestNamespaceCurrentContext` (`common/ns_current_context_test.go`) | bash-active | — |
-| `test_namespace/test_ns_flag.sh` | p2 | common | `TestNamespaceFlag` (`common/ns_flag_test.go`) | bash-active | — |
+| `test_namespace/test_ns_current_context.sh` | p2 | common | `TestNamespaceCurrentContext` (`common/namespace_test.go`) | bash-disabled-migrated / go-live | this PR |
+| `test_namespace/test_ns_flag.sh` | p2 | common | `TestNamespaceFlag` (`common/namespace_test.go`) | bash-disabled-migrated / go-live | this PR |
 | `test_namespace/test_ns_env.sh` | p2 | common | `TestNamespaceEnv` (`common/ns_env_test.go`) | bash-active | — |
 | `test_namespace/test_ns_deprecated_flag.sh` | p2 | common | `TestNamespaceDeprecatedFlag` (`common/ns_deprecated_flag_test.go`) | bash-active | — |
 | `test_obj_create_in_diff_ns.sh` | p2 | common | TBD (Phase 5) | bash-disabled-existing | — |

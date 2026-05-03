@@ -70,7 +70,6 @@ main() {
         $ROOT/test/tests/test_archive_cli.sh \
         $ROOT/test/tests/test_fn_update/test_idle_objects_reaper.sh \
         $ROOT/test/tests/test_archive_pruner.sh \
-        $ROOT/test/tests/test_backend_poolmgr.sh \
         $ROOT/test/tests/test_env_vars.sh \
         $ROOT/test/tests/test_function_test/test_fn_test.sh \
         $ROOT/test/tests/test_ingress.sh \
@@ -83,7 +82,6 @@ main() {
 
     export JOBS=3
     source $ROOT/test/run_test.sh \
-        $ROOT/test/tests/test_backend_newdeploy.sh \
         $ROOT/test/tests/test_fn_update/test_scale_change.sh \
         $ROOT/test/tests/test_secret_cfgmap/test_secret_cfgmap.sh \
         $ROOT/test/tests/test_environments/test_java_builder.sh \
@@ -93,8 +91,6 @@ main() {
         $ROOT/test/tests/test_obj_create_in_diff_ns.sh \
         $ROOT/test/tests/test_fn_update/test_resource_change.sh \
         $ROOT/test/tests/test_fn_update/test_secret_update.sh
-        $ROOT/test/tests/test_namespace/test_ns_current_context.sh
-        $ROOT/test/tests/test_namespace/test_ns_flag.sh
         $ROOT/test/tests/test_namespace/test_ns_env.sh
         $ROOT/test/tests/test_namespace/test_ns_deprecated_flag.sh
 
