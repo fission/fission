@@ -167,16 +167,33 @@ Suggested batches (ordered by approximate complexity):
 8. **Namespacing** (partial ✅): 3 of 4 migrated; `test_ns_env.sh` deferred — sets FISSION_DEFAULT_NAMESPACE, which conflicts with the framework's process-global ClientOptions.Namespace under t.Parallel.
 9. **Misc** (partial ✅): `test_secret_cfgmap.sh` (7 subtests), `test_ws.sh` migrated. `test_kubectl.sh` deferred — needs `fission fn test` (not exposed via cobra writers) plus kubectl apply/replace semantics.
 
-### Phase 5 — Disabled-test triage (PR pending)
+### Phase 5 — Disabled-test triage
 
-Per-test decisions:
+First-pass migrations done (2026-05-03 PR #3356):
 
-- `test_ingress.sh` — migrate; keep `t.Skip` when ingress controller not available (Kind default).
-- `test_env_vars.sh` — investigate current state; migrate or delete based on findings.
-- `test_obj_create_in_diff_ns.sh` — investigate cross-namespace CRD support; migrate or delete.
-- `test_function_test/test_fn_test.sh` — investigate the in-development testing framework; migrate, skip, or delete.
-- `test_environments/test_java_env.sh`, `test_java_builder.sh` — migrate behind `JVM_RUNTIME_IMAGE`/`JVM_BUILDER_IMAGE` env-gate; CI keeps skipping them.
-- `test_environments/test_jvm_jersey_env.sh` — same env-gate as Java.
+- ✅ `test_ingress.sh` → `TestIngress` — verifies Ingress CR shape via the
+  Kubernetes clientset across create/update/clear cycles. Live HTTP-via-controller
+  request from the bash version is not ported (Kind has no ingress controller);
+  that one should run in GKE/EKS-flavored CI when added.
+- ✅ `test_env_vars.sh` → `TestEnvVars` — verifies env vars on
+  `Environment.Spec.Runtime.Container.Env` and `Builder.Container.Env`
+  propagate to spawned pods (read pod Spec.Containers[].Env via clientset
+  instead of bash's `kubectl exec ... env`).
+- ✅ `test_function_test/test_fn_test.sh` → `TestFunctionTest` (valid case
+  only). Bash version flagged fission#653 around invalid-function specialize
+  hangs; we hit the same hang on initial port and dropped the assertion.
+  Restore once #653 is fixed.
+
+Remaining for triage:
+
+- `test_obj_create_in_diff_ns.sh` — needs router configured to watch
+  multiple namespaces (FISSION_RESOURCE_NAMESPACES Helm value); deferred
+  until we have a way to set that per-test or per-deployment.
+- `test_environments/test_java_env.sh`, `test_java_builder.sh`,
+  `test_environments/test_jvm_jersey_env.sh` — each needs a pre-built
+  jar fixture; the bash builds via Docker+Maven at runtime, which we can't
+  reasonably do from a Go test. Land when a stable jar artifact is
+  vendorable.
 
 ### Phase 6 — Bash teardown (PR pending)
 
