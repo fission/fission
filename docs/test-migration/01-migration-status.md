@@ -19,12 +19,12 @@ See `00-design.md` for the design; `02-framework-api.md` for helper docs.
 Update these whenever the table below changes.
 
 - Total bash tests: 48
-- In `kind_CI.sh` active list: 28 (14 phase-1, 14 phase-2)
-- Not in `kind_CI.sh` active list: 20 (3 never were + 17 migrated)
-- `bash-active`: 20
+- In `kind_CI.sh` active list: 26 (14 phase-1, 12 phase-2)
+- Not in `kind_CI.sh` active list: 22 (3 never were + 19 migrated)
+- `bash-active`: 18
 - `bash-disabled-existing`: 6
-- `bash-disabled-migrated`: 22 (+ python_env, nodejs_env, env_podspec, function_timeout)
-- `go-live`: 22
+- `bash-disabled-migrated`: 24 (+ python_env, nodejs_env, env_podspec, function_timeout)
+- `go-live`: 24
 - `go-skip`: 1 (`TestPackageCommand/src_glob` — flaky under parallel load)
 - `deleted`: 0
 
@@ -78,10 +78,10 @@ Columns:
 |-----------|-------|--------------|---------|--------|-----|
 | `test_backend_newdeploy.sh` | p2 | common | `TestBackendNewdeploy` (`common/backend_newdeploy_test.go`, subtests `cold_start`+`warm_start`) | bash-disabled-migrated / go-live | this PR |
 | `test_fn_update/test_scale_change.sh` | p2 | newdeploy | `TestScaleChange` (`newdeploy/scale_change_test.go`) | bash-active | — |
-| `test_fn_update/test_configmap_update.sh` | p2 | newdeploy | `TestConfigMapUpdate` (`newdeploy/configmap_update_test.go`) | bash-active | — |
+| `test_fn_update/test_configmap_update.sh` | p2 | common | `TestConfigMapUpdate` (`common/configmap_update_test.go`) | bash-disabled-migrated / go-live | this PR |
 | `test_fn_update/test_env_update.sh` | p2 | newdeploy | `TestEnvUpdate` (`newdeploy/env_update_test.go`) | bash-active | — |
 | `test_fn_update/test_resource_change.sh` | p2 | newdeploy | `TestResourceChange` (`newdeploy/resource_change_test.go`) | bash-active | — |
-| `test_fn_update/test_secret_update.sh` | p2 | newdeploy | `TestSecretUpdate` (`newdeploy/secret_update_test.go`) | bash-active | — |
+| `test_fn_update/test_secret_update.sh` | p2 | common | `TestSecretUpdate` (`common/secret_update_test.go`) | bash-disabled-migrated / go-live | this PR |
 | `test_fn_update/test_nd_pkg_update.sh` | p2 | newdeploy | `TestNDPackageUpdate` (`newdeploy/nd_pkg_update_test.go`) | bash-active | — |
 | `test_fn_update/test_poolmgr_nd.sh` | p2 | newdeploy | `TestPoolmgrToNewdeploy` (`newdeploy/poolmgr_nd_test.go`) | bash-active | — |
 | `test_secret_cfgmap/test_secret_cfgmap.sh` | p2 | newdeploy | `TestSecretConfigMap` (`newdeploy/secret_cfgmap_test.go`) | bash-active | — |

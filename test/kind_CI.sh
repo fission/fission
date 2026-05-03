@@ -86,11 +86,9 @@ main() {
         $ROOT/test/tests/test_secret_cfgmap/test_secret_cfgmap.sh \
         $ROOT/test/tests/test_environments/test_java_builder.sh \
         $ROOT/test/tests/test_environments/test_java_env.sh \
-        $ROOT/test/tests/test_fn_update/test_configmap_update.sh \
         $ROOT/test/tests/test_fn_update/test_env_update.sh \
         $ROOT/test/tests/test_obj_create_in_diff_ns.sh \
-        $ROOT/test/tests/test_fn_update/test_resource_change.sh \
-        $ROOT/test/tests/test_fn_update/test_secret_update.sh
+        $ROOT/test/tests/test_fn_update/test_resource_change.sh
         $ROOT/test/tests/test_namespace/test_ns_env.sh
         $ROOT/test/tests/test_namespace/test_ns_deprecated_flag.sh
 
