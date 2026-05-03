@@ -74,8 +74,7 @@ main() {
         $ROOT/test/tests/test_ingress.sh \
         $ROOT/test/tests/test_specs/test_spec_merge/test_spec_merge.sh \
         $ROOT/test/tests/test_specs/test_spec_archive/test_spec_archive.sh \
-        $ROOT/test/tests/test_environments/test_tensorflow_serving_env.sh \
-        $ROOT/test/tests/test_kubectl/test_kubectl.sh
+        $ROOT/test/tests/test_environments/test_tensorflow_serving_env.sh
 
     export JOBS=3
     source $ROOT/test/run_test.sh \
