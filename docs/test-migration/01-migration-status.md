@@ -19,12 +19,12 @@ See `00-design.md` for the design; `02-framework-api.md` for helper docs.
 Update these whenever the table below changes.
 
 - Total bash tests: 48
-- In `kind_CI.sh` active list: 22 (12 phase-1, 10 phase-2)
-- Not in `kind_CI.sh` active list: 26 (3 never were + 23 migrated)
-- `bash-active`: 14
+- In `kind_CI.sh` active list: 21 (11 phase-1, 10 phase-2)
+- Not in `kind_CI.sh` active list: 27 (3 never were + 24 migrated)
+- `bash-active`: 13
 - `bash-disabled-existing`: 6
-- `bash-disabled-migrated`: 28 (+ python_env, nodejs_env, env_podspec, function_timeout)
-- `go-live`: 28
+- `bash-disabled-migrated`: 29 (+ python_env, nodejs_env, env_podspec, function_timeout)
+- `go-live`: 29
 - `go-skip`: 2 (`TestPackageCommand/src_glob`, `TestIdleObjectsReaper` — flaky under parallel load; needs fsvc TTL investigation)
 - `deleted`: 0
 
@@ -53,7 +53,7 @@ Columns:
 | `test_logging/test_function_logs.sh` | p1 | common | `TestFunctionLogs` (`common/function_logs_test.go`) | bash-disabled-migrated / go-live | this PR |
 | `test_huge_response/test_huge_response.sh` | p1 | common | `TestHugeResponse` (`common/huge_response_test.go`) | bash-disabled-migrated / go-live | this PR |
 | `test_kubectl/test_kubectl.sh` | p1 | common | `TestKubectlApply` (`common/kubectl_test.go`) | bash-active | — |
-| `websocket/test_ws.sh` | p1 | common | `TestWebsocket` (`common/websocket_test.go`) | bash-active | — |
+| `websocket/test_ws.sh` | p1 | common | `TestWebsocket` (`common/websocket_test.go`) | bash-disabled-migrated / go-live | this PR |
 | `test_archive_cli.sh` | p1 | common | `TestArchiveCLI` (`common/archive_cli_test.go`) | bash-active | — |
 | `test_archive_pruner.sh` | p1 | common | `TestArchivePruner` (`common/archive_pruner_test.go`) | bash-active | — |
 | `test_package_command.sh` | p1 | common | `TestPackageCommand` (`common/package_command_test.go`) | bash-disabled-migrated / go-live | this PR |
