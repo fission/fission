@@ -22,34 +22,14 @@ func (ns *TestNamespace) WaitForBuilderReady(t *testing.T, ctx context.Context, 
 	waitForReadyPod(t, ctx, ns, "envName="+envName, "builder", envName, 3*time.Minute)
 }
 
-// WaitForRuntimePodReady polls until *every* runtime (poolmgr) pod for the
-// env is Ready. Used by tests that don't go through CreateEnv (e.g. those
-// that bypass the framework env helper). Defaults to a single-pod wait;
-// when the env was created with a larger pool, prefer waitForRuntimePoolReady
-// (called automatically by CreateEnv) which knows the expected count.
+// WaitForRuntimePodReady polls until at least one runtime (poolmgr) pod for
+// the env is Ready. Used by tests that need to know the warm pool has
+// started — note this is NOT a prerequisite for source builds; the
+// buildermgr only talks to the builder pod, not the runtime pool.
 //
 // Pods carry the `environmentName=<env>` label (separate from the legacy
 // `envName=` label on builder pods).
 func (ns *TestNamespace) WaitForRuntimePodReady(t *testing.T, ctx context.Context, envName string) {
-	t.Helper()
-	ns.waitForRuntimePoolReady(t, ctx, envName, 1)
-}
-
-// waitForRuntimePoolReady polls until at least `minPods` runtime pods for
-// envName exist AND every one of them is Ready. The min-count guard matters
-// because the buildermgr POSTs to the env's K8s Service on port 8000, which
-// round-robins across all pool pods. If only one of poolsize pods is Ready
-// when the build starts, the round-robin can land on a still-ContainerCreating
-// pod and the fetcher call times out (`dial tcp ...:8000: i/o timeout`).
-//
-// We then also poll EndpointSlices for the env (label
-// kubernetes.io/service-name selects them) until the union of Ready
-// addresses reaches minPods. Pod readiness gates pass before kube-proxy
-// publishes endpoints, and the buildermgr POSTs to the Service — which
-// is `<envName>-<port>` not `<envName>` — so checking by Service-name is
-// awkward. EndpointSlices carry the service-name as a label and let us
-// match by label selector instead.
-func (ns *TestNamespace) waitForRuntimePoolReady(t *testing.T, ctx context.Context, envName string, minPods int) {
 	t.Helper()
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		pods, err := ns.f.kubeClient.CoreV1().Pods(ns.Name).List(ctx, metav1.ListOptions{
@@ -58,34 +38,40 @@ func (ns *TestNamespace) waitForRuntimePoolReady(t *testing.T, ctx context.Conte
 		if !assert.NoError(c, err) {
 			return
 		}
-		if !assert.GreaterOrEqualf(c, len(pods.Items), minPods,
-			"expected ≥%d runtime pods for env %q, got %d", minPods, envName, len(pods.Items)) {
-			return
-		}
 		for _, p := range pods.Items {
-			if !isPodReady(&p) {
-				assert.Failf(c, "runtime pod not ready",
-					"env %q pod %s/%s phase=%s", envName, ns.Name, p.Name, p.Status.Phase)
+			if isPodReady(&p) {
 				return
 			}
 		}
+		assert.Failf(c, "no Ready runtime pod yet",
+			"env %q in ns %q (selector environmentName=%s)", envName, ns.Name, envName)
 	}, 3*time.Minute, 2*time.Second)
+}
 
-	// EndpointSlice readiness check. EndpointSlices for the env's Service
-	// carry kubernetes.io/service-name=<svc-name> — but the svc name has a
-	// port-hash suffix (e.g. "python-v2-abcdef-3317"). Easiest: list slices
-	// in the namespace and pick those whose service-name *starts with*
-	// envName + "-".
+// waitForBuilderEndpointReady polls until the env's builder Service has at
+// least one Ready endpoint published to its EndpointSlice. The builder
+// Service is named `<env>-<env.ResourceVersion>` (see
+// pkg/buildermgr/envwatcher.go createBuilderService) and selects builder
+// pods via envName=<env>. The buildermgr POSTs to this Service on port 8000
+// (fetcher) and 8001 (builder); if the EndpointSlice hasn't been published
+// yet — kube-proxy lags pod readiness by a few hundred ms to seconds — the
+// dial fails with "dial tcp ...:8000: i/o timeout".
+//
+// We don't know the env.ResourceVersion at this layer, so we list slices
+// in the namespace and match by `kubernetes.io/service-name` starting with
+// `<envName>-`. Test ID suffixes guarantee uniqueness so this won't
+// false-match a sibling test's env.
+func (ns *TestNamespace) waitForBuilderEndpointReady(t *testing.T, ctx context.Context, envName string) {
+	t.Helper()
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		slices, err := ns.f.kubeClient.DiscoveryV1().EndpointSlices(ns.Name).List(ctx, metav1.ListOptions{})
 		if !assert.NoErrorf(c, err, "list endpointslices in ns %q", ns.Name) {
 			return
 		}
-		var ready int
-		var matched int
+		var ready, matched int
 		for _, sl := range slices.Items {
 			svc := sl.Labels["kubernetes.io/service-name"]
-			if !strings.HasPrefix(svc, envName+"-") && svc != envName {
+			if !strings.HasPrefix(svc, envName+"-") {
 				continue
 			}
 			matched++
@@ -96,12 +82,12 @@ func (ns *TestNamespace) waitForRuntimePoolReady(t *testing.T, ctx context.Conte
 			}
 		}
 		if !assert.Greaterf(c, matched, 0,
-			"no EndpointSlice yet for env %q service in ns %q", envName, ns.Name) {
+			"no EndpointSlice yet for env %q builder service in ns %q", envName, ns.Name) {
 			return
 		}
-		assert.GreaterOrEqualf(c, ready, minPods,
-			"env %q service has %d ready endpoint addresses across %d slices; need ≥%d",
-			envName, ready, matched, minPods)
+		assert.GreaterOrEqualf(c, ready, 1,
+			"env %q builder service has %d ready endpoints across %d slices; need ≥1",
+			envName, ready, matched)
 	}, 90*time.Second, 1*time.Second)
 }
 

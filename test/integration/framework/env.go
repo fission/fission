@@ -106,26 +106,19 @@ func (ns *TestNamespace) CreateEnv(t *testing.T, ctx context.Context, opts EnvOp
 	})
 
 	// For builder envs, the very next step is usually a source-archive
-	// package build. The buildermgr POSTs to the runtime pod's fetcher
-	// on port 8000; if the pod is still in ContainerCreating the call
-	// times out (`dial tcp ...:8000: i/o timeout`). Pre-wait here so
-	// individual tests don't have to remember.
+	// package build. The buildermgr POSTs to the env's *builder* Service
+	// (named `<env>-<resourceVersion>`, selecting builder pods with
+	// envName=<env>) on port 8000 (fetcher) and 8001 (builder). If the
+	// builder pod is still in ContainerCreating, or kube-proxy hasn't
+	// published its endpoint yet, the dial times out
+	// (`dial tcp ...:8000: i/o timeout`). Pre-wait for both pod readiness
+	// and EndpointSlice readiness so tests don't have to remember.
+	//
+	// Note: the runtime pool pods are *not* behind the builder Service;
+	// they live in a separate Deployment with the `environmentName` label.
+	// We don't wait on them here because the build doesn't talk to them.
 	if opts.Builder != "" {
-		// The buildermgr fetches via the env's K8s Service, which
-		// round-robins across all pool pods. If only one of poolsize
-		// pods is Ready when the build starts, the round-robin can
-		// land on a still-ContainerCreating pod. Pass the expected
-		// pool size so WaitForRuntimePodReady waits for the *whole*
-		// pool to be Ready, not just one pod.
-		expectedPool := opts.Poolsize
-		if expectedPool <= 0 {
-			expectedPool = defaultPoolsize
-		}
 		ns.WaitForBuilderReady(t, ctx, opts.Name)
-		ns.waitForRuntimePoolReady(t, ctx, opts.Name, expectedPool)
+		ns.waitForBuilderEndpointReady(t, ctx, opts.Name)
 	}
 }
-
-// defaultPoolsize matches the executor's `gp.go` default when the env's
-// Spec.Poolsize is unset (0).
-const defaultPoolsize = 3
