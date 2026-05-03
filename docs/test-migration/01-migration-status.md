@@ -19,12 +19,12 @@ See `00-design.md` for the design; `02-framework-api.md` for helper docs.
 Update these whenever the table below changes.
 
 - Total bash tests: 48
-- In `kind_CI.sh` active list: 24 (13 phase-1, 11 phase-2)
-- Not in `kind_CI.sh` active list: 24 (3 never were + 21 migrated)
-- `bash-active`: 16
+- In `kind_CI.sh` active list: 23 (12 phase-1, 11 phase-2)
+- Not in `kind_CI.sh` active list: 25 (3 never were + 22 migrated)
+- `bash-active`: 15
 - `bash-disabled-existing`: 6
-- `bash-disabled-migrated`: 26 (+ python_env, nodejs_env, env_podspec, function_timeout)
-- `go-live`: 26
+- `bash-disabled-migrated`: 27 (+ python_env, nodejs_env, env_podspec, function_timeout)
+- `go-live`: 27
 - `go-skip`: 1 (`TestPackageCommand/src_glob` — flaky under parallel load)
 - `deleted`: 0
 
@@ -64,7 +64,7 @@ Columns:
 | `test_specs/test_spec_archive/test_spec_archive.sh` | p1 | common | `TestSpecArchive` (`common/spec_archive_test.go`) | bash-active (deferred — pre-built yaml fixtures need templating) | — |
 | `test_env_podspec.sh` | p1 | common | `TestEnvPodSpec` (`common/env_podspec_test.go`) | bash-active | — |
 | `test_environments/test_python_env.sh` | p1 | common | `TestPythonEnv` (`common/python_env_test.go`) | bash-active | — |
-| `test_environments/test_go_env.sh` | p1 | common | `TestGoEnv` (`common/go_env_test.go`) | bash-active | — |
+| `test_environments/test_go_env.sh` | p1 | common | `TestGoEnv` (`common/go_env_test.go`) | bash-disabled-migrated / go-live | this PR |
 | `test_environments/test_tensorflow_serving_env.sh` | p1 | common | `TestTensorflowServingEnv` (`common/tensorflow_serving_env_test.go`) | bash-active | — |
 | `test_backend_poolmgr.sh` | p1 | common | `TestBackendPoolmgr` (`common/backend_poolmgr_test.go`) | bash-disabled-migrated / go-live | this PR |
 | `test_fn_update/test_idle_objects_reaper.sh` | p1 | common | `TestIdleObjectsReaper` (`common/idle_objects_reaper_test.go`) | bash-disabled-migrated / go-live | this PR |
