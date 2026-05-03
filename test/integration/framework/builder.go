@@ -89,6 +89,18 @@ func (ns *TestNamespace) waitForBuilderEndpointReady(t *testing.T, ctx context.C
 			"env %q builder service has %d ready endpoints across %d slices; need ≥1",
 			envName, ready, matched)
 	}, 90*time.Second, 1*time.Second)
+
+	// Even after the EndpointSlice publishes the address, the fetcher
+	// process inside the builder pod can take a beat longer to bind to
+	// port 8000 — the container's "Ready" gate doesn't include a
+	// per-port liveness check on the fetcher. A short settle sleep here
+	// is the difference between flaky and stable on parallel CI; the
+	// real fix is a fetcher-port probe but that needs apiserver-proxy
+	// gymnastics from outside the cluster.
+	select {
+	case <-time.After(5 * time.Second):
+	case <-ctx.Done():
+	}
 }
 
 // WaitForEnvReady waits for both the builder and runtime pods of envName.
