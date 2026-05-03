@@ -40,6 +40,11 @@ func (ns *TestNamespace) WaitForRuntimePodReady(t *testing.T, ctx context.Contex
 // round-robins across all pool pods. If only one of poolsize pods is Ready
 // when the build starts, the round-robin can land on a still-ContainerCreating
 // pod and the fetcher call times out (`dial tcp ...:8000: i/o timeout`).
+//
+// After all pods are Ready we also wait until the env's Service Endpoints
+// reflects them (kube-proxy can take a couple of polling intervals to
+// notice a new Ready pod), otherwise the buildermgr's POST to the Service
+// can still race a stale endpoints list.
 func (ns *TestNamespace) waitForRuntimePoolReady(t *testing.T, ctx context.Context, envName string, minPods int) {
 	t.Helper()
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
@@ -61,6 +66,24 @@ func (ns *TestNamespace) waitForRuntimePoolReady(t *testing.T, ctx context.Conte
 			}
 		}
 	}, 3*time.Minute, 2*time.Second)
+
+	// Wait for the env's Service to have ≥ minPods Ready endpoint addresses.
+	// The Service is named after the env (e.g. "python-v2-abcdef"); its
+	// Endpoints object lists the pod IPs whose readiness gates have passed
+	// from kube-proxy's perspective. Useful belt-and-suspenders against the
+	// "pod Ready but Service hasn't propagated" race.
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		ep, err := ns.f.kubeClient.CoreV1().Endpoints(ns.Name).Get(ctx, envName, metav1.GetOptions{})
+		if !assert.NoErrorf(c, err, "get endpoints %q in ns %q", envName, ns.Name) {
+			return
+		}
+		var ready int
+		for _, sub := range ep.Subsets {
+			ready += len(sub.Addresses)
+		}
+		assert.GreaterOrEqualf(c, ready, minPods,
+			"env %q service has %d ready endpoints; need ≥%d", envName, ready, minPods)
+	}, 90*time.Second, 1*time.Second)
 }
 
 // WaitForEnvReady waits for both the builder and runtime pods of envName.
