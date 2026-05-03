@@ -75,7 +75,11 @@ func TestNodejsEnv(t *testing.T) {
 		ns.CreateEnv(t, ctx, framework.EnvOptions{
 			Name: envV2, Image: runtime, Builder: nodeBuilder,
 		})
-		ns.WaitForBuilderReady(t, ctx, envV2)
+		// Wait for both runtime + builder pods. The builder fetches
+		// source through the runtime pod's fetcher; under parallel load
+		// that pod can stay in ContainerCreating long enough for the
+		// fetcher dial to time out (`dial tcp ...:8000: i/o timeout`).
+		ns.WaitForEnvReady(t, ctx, envV2)
 
 		// momentExample.js + package.json (npm-installable moment dep).
 		srcZip := framework.ZipTestDataDir(t, "nodejs/env_test/test-case-4", "moment-pkg.zip")

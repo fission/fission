@@ -67,11 +67,14 @@ func TestPythonEnv(t *testing.T) {
 		expectBody string
 	}{
 		{
+			// hello.py returns "Hello, world!\n". Asserting on "world"
+			// avoids case-sensitivity (require.Contains is case-sensitive
+			// even though BodyContains/router-side polling is not).
 			name: "v1-api", slug: "v1api",
 			fnSetup: func(t *testing.T, fnName string) {
 				ns.CreateFunction(t, ctx, framework.FunctionOptions{Name: fnName, Env: envV1, Code: helloPath})
 			},
-			expectBody: "hello",
+			expectBody: "world",
 		},
 		{
 			name: "v2-default-entrypoint", slug: "v2default",
