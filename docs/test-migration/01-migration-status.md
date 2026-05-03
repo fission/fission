@@ -21,10 +21,10 @@ Update these whenever the table below changes.
 - Total bash tests: 48
 - In `kind_CI.sh` active list: 19 (9 phase-1, 10 phase-2)
 - Not in `kind_CI.sh` active list: 29 (3 never were + 26 migrated)
-- `bash-active`: 11
-- `bash-disabled-existing`: 6
-- `bash-disabled-migrated`: 31 (+ python_env, nodejs_env, env_podspec, function_timeout)
-- `go-live`: 30
+- `bash-active`: 9
+- `bash-disabled-existing`: 4 (was 6; env_vars + fn_test ported in Phase 5 first pass)
+- `bash-disabled-migrated`: 33
+- `go-live`: 32
 - `go-skip`: 3 (`TestPackageCommand/src_glob`, `TestIdleObjectsReaper`, `TestTensorflowServingEnv` — env-gated, t.Skip in CI without TS_RUNTIME_IMAGE)
 - `deleted`: 0
 
@@ -68,8 +68,8 @@ Columns:
 | `test_environments/test_tensorflow_serving_env.sh` | p1 | common | `TestTensorflowServingEnv` (`common/tensorflow_serving_env_test.go`) | bash-disabled-migrated / go-skip (env-gated) | this PR |
 | `test_backend_poolmgr.sh` | p1 | common | `TestBackendPoolmgr` (`common/backend_poolmgr_test.go`) | bash-disabled-migrated / go-live | this PR |
 | `test_fn_update/test_idle_objects_reaper.sh` | p1 | common | `TestIdleObjectsReaper` (`common/idle_objects_reaper_test.go`) | bash-disabled-migrated / go-live | this PR |
-| `test_env_vars.sh` | p1 | common | TBD (Phase 5) | bash-disabled-existing | — |
-| `test_function_test/test_fn_test.sh` | p1 | common | TBD (Phase 5) | bash-disabled-existing | — |
+| `test_env_vars.sh` | p1 | common | `TestEnvVars` (`common/env_vars_test.go`) | bash-disabled-migrated / go-live | this PR |
+| `test_function_test/test_fn_test.sh` | p1 | common | `TestFunctionTest` (`common/function_test_test.go`) | bash-disabled-migrated / go-live | this PR |
 | `test_ingress.sh` | p1 | common | TBD (Phase 5) | bash-disabled-existing | — |
 
 ### Phase 2 (newdeploy, JOBS=3)

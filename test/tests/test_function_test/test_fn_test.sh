@@ -1,7 +1,9 @@
 #!/bin/bash
 
 #test:disabled
-# Disabled because CI Fails for invalid function https://github.com/fission/fission/issues/653
+# Migrated to Go: test/integration/suites/common/function_test_test.go (TestFunctionTest)
+# Originally disabled because CI fails for invalid function https://github.com/fission/fission/issues/653.
+# This script is retained for reference until the bash teardown phase (PR #3356).
 
 set -euo pipefail
 source $(dirname $0)/../../utils.sh
