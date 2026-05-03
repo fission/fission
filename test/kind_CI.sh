@@ -87,7 +87,6 @@ main() {
         $ROOT/test/tests/test_obj_create_in_diff_ns.sh \
         $ROOT/test/tests/test_fn_update/test_resource_change.sh
         $ROOT/test/tests/test_namespace/test_ns_env.sh
-        $ROOT/test/tests/test_namespace/test_ns_deprecated_flag.sh
 
     set -e
 

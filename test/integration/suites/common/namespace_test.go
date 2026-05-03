@@ -83,6 +83,39 @@ func TestNamespaceCurrentContext(t *testing.T) {
 	assert.Equal(t, metav1.NamespaceDefault, tr.Namespace)
 }
 
+// TestNamespaceDeprecatedFlag is the Go port of test_namespace/test_ns_deprecated_flag.sh.
+// Verifies that the deprecated `--fnNamespace` flag is still honored on
+// `fission httptrigger create` (it's marked Deprecated in the CLI flag
+// definition with `Substitute: --namespace`, so the create call should
+// succeed and the trigger should land in the named namespace).
+func TestNamespaceDeprecatedFlag(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	f := framework.Connect(t)
+	ns := f.NewTestNamespace(t)
+	customNS := "fission-it-ns-deprflag-" + ns.ID
+	createKubeNamespace(t, ctx, f, customNS)
+
+	trigger := "http-deprfl-" + ns.ID
+	url := "/url-deprfl-" + ns.ID
+	ns.CLI(t, ctx, "httptrigger", "create",
+		"--function", "nbuilderhello-"+ns.ID,
+		"--url", url, "--name", trigger,
+		"--fnNamespace", customNS)
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		_ = f.FissionClient().CoreV1().HTTPTriggers(customNS).Delete(ctx, trigger, metav1.DeleteOptions{})
+	})
+
+	tr, err := f.FissionClient().CoreV1().HTTPTriggers(customNS).Get(ctx, trigger, metav1.GetOptions{})
+	require.NoErrorf(t, err, "get httptrigger %q in ns %q", trigger, customNS)
+	assert.Equal(t, customNS, tr.Namespace)
+}
+
 // createKubeNamespace creates a Kubernetes namespace and registers a
 // t.Cleanup that deletes it. Helper local to the namespace tests.
 func createKubeNamespace(t *testing.T, ctx context.Context, f *framework.Framework, name string) {
