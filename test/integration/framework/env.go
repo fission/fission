@@ -111,6 +111,21 @@ func (ns *TestNamespace) CreateEnv(t *testing.T, ctx context.Context, opts EnvOp
 	// times out (`dial tcp ...:8000: i/o timeout`). Pre-wait here so
 	// individual tests don't have to remember.
 	if opts.Builder != "" {
-		ns.WaitForEnvReady(t, ctx, opts.Name)
+		// The buildermgr fetches via the env's K8s Service, which
+		// round-robins across all pool pods. If only one of poolsize
+		// pods is Ready when the build starts, the round-robin can
+		// land on a still-ContainerCreating pod. Pass the expected
+		// pool size so WaitForRuntimePodReady waits for the *whole*
+		// pool to be Ready, not just one pod.
+		expectedPool := opts.Poolsize
+		if expectedPool <= 0 {
+			expectedPool = defaultPoolsize
+		}
+		ns.WaitForBuilderReady(t, ctx, opts.Name)
+		ns.waitForRuntimePoolReady(t, ctx, opts.Name, expectedPool)
 	}
 }
+
+// defaultPoolsize matches the executor's `gp.go` default when the env's
+// Spec.Poolsize is unset (0).
+const defaultPoolsize = 3

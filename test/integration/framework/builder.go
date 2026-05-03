@@ -22,14 +22,25 @@ func (ns *TestNamespace) WaitForBuilderReady(t *testing.T, ctx context.Context, 
 }
 
 // WaitForRuntimePodReady polls until *every* runtime (poolmgr) pod for the
-// env is Ready. Waiting for "any one" pod isn't enough because the buildermgr
-// POSTs to the env's Kubernetes Service on port 8000, which round-robins
-// across all pool pods. If even one pod is still in ContainerCreating the
-// fetch can pick it and time out (`dial tcp ...:8000: i/o timeout`).
+// env is Ready. Used by tests that don't go through CreateEnv (e.g. those
+// that bypass the framework env helper). Defaults to a single-pod wait;
+// when the env was created with a larger pool, prefer waitForRuntimePoolReady
+// (called automatically by CreateEnv) which knows the expected count.
 //
 // Pods carry the `environmentName=<env>` label (separate from the legacy
 // `envName=` label on builder pods).
 func (ns *TestNamespace) WaitForRuntimePodReady(t *testing.T, ctx context.Context, envName string) {
+	t.Helper()
+	ns.waitForRuntimePoolReady(t, ctx, envName, 1)
+}
+
+// waitForRuntimePoolReady polls until at least `minPods` runtime pods for
+// envName exist AND every one of them is Ready. The min-count guard matters
+// because the buildermgr POSTs to the env's K8s Service on port 8000, which
+// round-robins across all pool pods. If only one of poolsize pods is Ready
+// when the build starts, the round-robin can land on a still-ContainerCreating
+// pod and the fetcher call times out (`dial tcp ...:8000: i/o timeout`).
+func (ns *TestNamespace) waitForRuntimePoolReady(t *testing.T, ctx context.Context, envName string, minPods int) {
 	t.Helper()
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		pods, err := ns.f.kubeClient.CoreV1().Pods(ns.Name).List(ctx, metav1.ListOptions{
@@ -38,7 +49,8 @@ func (ns *TestNamespace) WaitForRuntimePodReady(t *testing.T, ctx context.Contex
 		if !assert.NoError(c, err) {
 			return
 		}
-		if !assert.NotEmptyf(c, pods.Items, "no runtime pods yet for env %q", envName) {
+		if !assert.GreaterOrEqualf(c, len(pods.Items), minPods,
+			"expected ≥%d runtime pods for env %q, got %d", minPods, envName, len(pods.Items)) {
 			return
 		}
 		for _, p := range pods.Items {
