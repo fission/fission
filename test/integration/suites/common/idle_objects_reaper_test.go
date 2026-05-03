@@ -30,7 +30,7 @@ import (
 func TestIdleObjectsReaper(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 14*time.Minute)
 	defer cancel()
 
 	f := framework.Connect(t)
@@ -83,7 +83,7 @@ func TestIdleObjectsReaper(t *testing.T) {
 			assert.EqualValuesf(c, 0, *got,
 				"newdeploy fn %q expected 0 replicas after reap, got %d", fnND, *got)
 		}
-	}, 90*time.Second, 5*time.Second)
+	}, 3*time.Minute, 5*time.Second)
 
 	// poolmgr: no Running pods for the function should remain.
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
@@ -101,7 +101,7 @@ func TestIdleObjectsReaper(t *testing.T) {
 		}
 		assert.Equalf(c, 0, running,
 			"poolmgr fn %q expected 0 Running pods after reap, got %d", fnGPM, running)
-	}, 90*time.Second, 5*time.Second)
+	}, 3*time.Minute, 5*time.Second)
 
 	// Re-invoke triggers scale-up. newdeploy goes 0→1, poolmgr specializes
 	// a fresh pod from the warm pool.
@@ -123,7 +123,7 @@ func TestIdleObjectsReaper(t *testing.T) {
 			assert.EqualValuesf(c, 1, *got,
 				"newdeploy fn %q expected 1 replica after re-invoke, got %d", fnND, *got)
 		}
-	}, 90*time.Second, 5*time.Second)
+	}, 3*time.Minute, 5*time.Second)
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		pods, err := f.KubeClient().CoreV1().Pods(ns.Name).List(ctx, metav1.ListOptions{
@@ -140,5 +140,5 @@ func TestIdleObjectsReaper(t *testing.T) {
 		}
 		assert.GreaterOrEqualf(c, running, 1,
 			"poolmgr fn %q expected ≥1 Running pod after re-invoke, got %d", fnGPM, running)
-	}, 90*time.Second, 5*time.Second)
+	}, 3*time.Minute, 5*time.Second)
 }

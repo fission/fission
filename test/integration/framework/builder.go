@@ -21,16 +21,34 @@ func (ns *TestNamespace) WaitForBuilderReady(t *testing.T, ctx context.Context, 
 	waitForReadyPod(t, ctx, ns, "envName="+envName, "builder", envName, 3*time.Minute)
 }
 
-// WaitForRuntimePodReady polls for at least one runtime (poolmgr) pod for
-// the env to be Ready. Use before triggering a source-archive build, because
-// the buildermgr POSTs to the runtime pod's fetcher on port 8000 and times
-// out if the pod is still in ContainerCreating.
+// WaitForRuntimePodReady polls until *every* runtime (poolmgr) pod for the
+// env is Ready. Waiting for "any one" pod isn't enough because the buildermgr
+// POSTs to the env's Kubernetes Service on port 8000, which round-robins
+// across all pool pods. If even one pod is still in ContainerCreating the
+// fetch can pick it and time out (`dial tcp ...:8000: i/o timeout`).
 //
 // Pods carry the `environmentName=<env>` label (separate from the legacy
 // `envName=` label on builder pods).
 func (ns *TestNamespace) WaitForRuntimePodReady(t *testing.T, ctx context.Context, envName string) {
 	t.Helper()
-	waitForReadyPod(t, ctx, ns, "environmentName="+envName, "runtime", envName, 3*time.Minute)
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		pods, err := ns.f.kubeClient.CoreV1().Pods(ns.Name).List(ctx, metav1.ListOptions{
+			LabelSelector: "environmentName=" + envName,
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.NotEmptyf(c, pods.Items, "no runtime pods yet for env %q", envName) {
+			return
+		}
+		for _, p := range pods.Items {
+			if !isPodReady(&p) {
+				assert.Failf(c, "runtime pod not ready",
+					"env %q pod %s/%s phase=%s", envName, ns.Name, p.Name, p.Status.Phase)
+				return
+			}
+		}
+	}, 3*time.Minute, 2*time.Second)
 }
 
 // WaitForEnvReady waits for both the builder and runtime pods of envName.
