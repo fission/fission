@@ -22,9 +22,9 @@ Update these whenever the table below changes.
 - In `kind_CI.sh` active list: 19 (9 phase-1, 10 phase-2)
 - Not in `kind_CI.sh` active list: 29 (3 never were + 26 migrated)
 - `bash-active`: 9
-- `bash-disabled-existing`: 4 (was 6; env_vars + fn_test ported in Phase 5 first pass)
-- `bash-disabled-migrated`: 33
-- `go-live`: 32
+- `bash-disabled-existing`: 3 (was 6; env_vars, fn_test, ingress ported in Phase 5)
+- `bash-disabled-migrated`: 34
+- `go-live`: 33
 - `go-skip`: 3 (`TestPackageCommand/src_glob`, `TestIdleObjectsReaper`, `TestTensorflowServingEnv` — env-gated, t.Skip in CI without TS_RUNTIME_IMAGE)
 - `deleted`: 0
 
@@ -70,7 +70,7 @@ Columns:
 | `test_fn_update/test_idle_objects_reaper.sh` | p1 | common | `TestIdleObjectsReaper` (`common/idle_objects_reaper_test.go`) | bash-disabled-migrated / go-live | this PR |
 | `test_env_vars.sh` | p1 | common | `TestEnvVars` (`common/env_vars_test.go`) | bash-disabled-migrated / go-live | this PR |
 | `test_function_test/test_fn_test.sh` | p1 | common | `TestFunctionTest` (`common/function_test_test.go`) | bash-disabled-migrated / go-live | this PR |
-| `test_ingress.sh` | p1 | common | TBD (Phase 5) | bash-disabled-existing | — |
+| `test_ingress.sh` | p1 | common | `TestIngress` (`common/ingress_test.go`) | bash-disabled-migrated / go-live (Ingress CR only; no Kind controller) | this PR |
 
 ### Phase 2 (newdeploy, JOBS=3)
 
