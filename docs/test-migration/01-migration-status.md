@@ -19,12 +19,12 @@ See `00-design.md` for the design; `02-framework-api.md` for helper docs.
 Update these whenever the table below changes.
 
 - Total bash tests: 48
-- In `kind_CI.sh` active list: 26 (14 phase-1, 12 phase-2)
-- Not in `kind_CI.sh` active list: 22 (3 never were + 19 migrated)
-- `bash-active`: 18
+- In `kind_CI.sh` active list: 24 (13 phase-1, 11 phase-2)
+- Not in `kind_CI.sh` active list: 24 (3 never were + 21 migrated)
+- `bash-active`: 16
 - `bash-disabled-existing`: 6
-- `bash-disabled-migrated`: 24 (+ python_env, nodejs_env, env_podspec, function_timeout)
-- `go-live`: 24
+- `bash-disabled-migrated`: 26 (+ python_env, nodejs_env, env_podspec, function_timeout)
+- `go-live`: 26
 - `go-skip`: 1 (`TestPackageCommand/src_glob` — flaky under parallel load)
 - `deleted`: 0
 
@@ -67,7 +67,7 @@ Columns:
 | `test_environments/test_go_env.sh` | p1 | common | `TestGoEnv` (`common/go_env_test.go`) | bash-active | — |
 | `test_environments/test_tensorflow_serving_env.sh` | p1 | common | `TestTensorflowServingEnv` (`common/tensorflow_serving_env_test.go`) | bash-active | — |
 | `test_backend_poolmgr.sh` | p1 | common | `TestBackendPoolmgr` (`common/backend_poolmgr_test.go`) | bash-disabled-migrated / go-live | this PR |
-| `test_fn_update/test_idle_objects_reaper.sh` | p1 | poolmgr | `TestIdleObjectsReaper` (`poolmgr/idle_objects_reaper_test.go`) | bash-active | — |
+| `test_fn_update/test_idle_objects_reaper.sh` | p1 | common | `TestIdleObjectsReaper` (`common/idle_objects_reaper_test.go`) | bash-disabled-migrated / go-live | this PR |
 | `test_env_vars.sh` | p1 | common | TBD (Phase 5) | bash-disabled-existing | — |
 | `test_function_test/test_fn_test.sh` | p1 | common | TBD (Phase 5) | bash-disabled-existing | — |
 | `test_ingress.sh` | p1 | common | TBD (Phase 5) | bash-disabled-existing | — |
@@ -84,7 +84,7 @@ Columns:
 | `test_fn_update/test_secret_update.sh` | p2 | common | `TestSecretUpdate` (`common/secret_update_test.go`) | bash-disabled-migrated / go-live | this PR |
 | `test_fn_update/test_nd_pkg_update.sh` | p2 | newdeploy | `TestNDPackageUpdate` (`newdeploy/nd_pkg_update_test.go`) | bash-active | — |
 | `test_fn_update/test_poolmgr_nd.sh` | p2 | newdeploy | `TestPoolmgrToNewdeploy` (`newdeploy/poolmgr_nd_test.go`) | bash-active | — |
-| `test_secret_cfgmap/test_secret_cfgmap.sh` | p2 | newdeploy | `TestSecretConfigMap` (`newdeploy/secret_cfgmap_test.go`) | bash-active | — |
+| `test_secret_cfgmap/test_secret_cfgmap.sh` | p2 | common | `TestSecretConfigMap` (`common/secret_cfgmap_test.go`, 7 subtests) | bash-disabled-migrated / go-live | this PR |
 | `test_environments/test_nodejs_env.sh` | p2 | newdeploy | `TestNodejsEnv` (`newdeploy/nodejs_env_test.go`) | bash-active | — |
 | `test_namespace/test_ns_current_context.sh` | p2 | common | `TestNamespaceCurrentContext` (`common/namespace_test.go`) | bash-disabled-migrated / go-live | this PR |
 | `test_namespace/test_ns_flag.sh` | p2 | common | `TestNamespaceFlag` (`common/namespace_test.go`) | bash-disabled-migrated / go-live | this PR |

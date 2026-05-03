@@ -68,7 +68,6 @@ main() {
     export JOBS=6
     source $ROOT/test/run_test.sh \
         $ROOT/test/tests/test_archive_cli.sh \
-        $ROOT/test/tests/test_fn_update/test_idle_objects_reaper.sh \
         $ROOT/test/tests/test_archive_pruner.sh \
         $ROOT/test/tests/test_env_vars.sh \
         $ROOT/test/tests/test_function_test/test_fn_test.sh \
@@ -83,7 +82,6 @@ main() {
     export JOBS=3
     source $ROOT/test/run_test.sh \
         $ROOT/test/tests/test_fn_update/test_scale_change.sh \
-        $ROOT/test/tests/test_secret_cfgmap/test_secret_cfgmap.sh \
         $ROOT/test/tests/test_environments/test_java_builder.sh \
         $ROOT/test/tests/test_environments/test_java_env.sh \
         $ROOT/test/tests/test_fn_update/test_env_update.sh \

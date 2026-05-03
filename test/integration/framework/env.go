@@ -35,6 +35,10 @@ type EnvOptions struct {
 	MaxMemory int
 	// Poolsize controls the warm pool size (poolmgr only).
 	Poolsize int
+	// Period, when > 0, is passed as `--period <n>` (seconds). This is
+	// the env's polling/check interval — lower values speed up the
+	// idle-pod reaper for tests that want to observe scale-down quickly.
+	Period int
 }
 
 // CreateEnvObject creates a Fission Environment from a fully-formed CR
@@ -87,6 +91,9 @@ func (ns *TestNamespace) CreateEnv(t *testing.T, ctx context.Context, opts EnvOp
 	}
 	if opts.Poolsize > 0 {
 		args = append(args, "--poolsize", strconv.Itoa(opts.Poolsize))
+	}
+	if opts.Period > 0 {
+		args = append(args, "--period", strconv.Itoa(opts.Period))
 	}
 	ns.CLI(t, ctx, args...)
 
