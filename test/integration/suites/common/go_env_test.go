@@ -3,13 +3,19 @@
 package common_test
 
 import (
+	"archive/zip"
 	"context"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/fission/fission/test/integration/framework"
+	"github.com/fission/fission/test/integration/testdata"
 )
 
 // TestGoEnv is the Go port of test/tests/test_environments/test_go_env.sh.
@@ -70,8 +76,13 @@ func TestGoEnv(t *testing.T) {
 
 	// Phase 2 — multi-file go module. main.go + go.mod + go.sum at the
 	// archive root (no top-level dir; mirrors `cd module-example && zip -r out *`).
+	//
+	// The vendored fixtures are stored as go.mod.txt / go.sum.txt because
+	// Go's //go:embed excludes files from a nested module — a literal
+	// `go.mod` would make `module_example/` look like a separate module
+	// and the entire directory would be skipped on embed.
 	pkgV2 := "go-pkg-v2-" + ns.ID
-	modZip := framework.ZipTestDataDir(t, "go/module_example", "module.zip")
+	modZip := zipModuleExample(t)
 	ns.CreatePackage(t, ctx, framework.PackageOptions{
 		Name: pkgV2, Env: envName, Src: modZip,
 	})
@@ -84,4 +95,36 @@ func TestGoEnv(t *testing.T) {
 	require.Contains(t, bodyPM, "Vendor")
 	bodyND = f.Router(t).GetEventually(t, ctx, "/"+fnND, framework.BodyContains("Vendor"))
 	require.Contains(t, bodyND, "Vendor")
+}
+
+// zipModuleExample packs testdata/go/module_example/* into a flat zip,
+// stripping the `.txt` suffix from go.mod.txt / go.sum.txt so the builder
+// sees a real Go module on disk.
+func zipModuleExample(t *testing.T) string {
+	t.Helper()
+	dst := filepath.Join(t.TempDir(), "module.zip")
+	out, err := os.Create(dst)
+	require.NoError(t, err)
+	defer out.Close()
+	zw := zip.NewWriter(out)
+	require.NoError(t, fs.WalkDir(testdata.FS, "go/module_example", func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		b, err := testdata.FS.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		name := strings.TrimSuffix(filepath.Base(p), ".txt")
+		fh := &zip.FileHeader{Name: name, Method: zip.Deflate}
+		fh.SetMode(0o644)
+		w, err := zw.CreateHeader(fh)
+		if err != nil {
+			return err
+		}
+		_, err = w.Write(b)
+		return err
+	}))
+	require.NoError(t, zw.Close())
+	return dst
 }

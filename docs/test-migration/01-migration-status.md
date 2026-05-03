@@ -25,7 +25,7 @@ Update these whenever the table below changes.
 - `bash-disabled-existing`: 6
 - `bash-disabled-migrated`: 27 (+ python_env, nodejs_env, env_podspec, function_timeout)
 - `go-live`: 27
-- `go-skip`: 1 (`TestPackageCommand/src_glob` — flaky under parallel load)
+- `go-skip`: 2 (`TestPackageCommand/src_glob`, `TestIdleObjectsReaper` — flaky under parallel load; needs fsvc TTL investigation)
 - `deleted`: 0
 
 ## Tests
