@@ -100,7 +100,10 @@ func TestSpecArchive(t *testing.T) {
 	// Belt-and-suspenders: make sure the package status really is succeeded
 	// before hitting the function.
 	pkg := ns.GetPackage(t, ctx, pkgSource)
-	require.Equalf(t, fv1.BuildStatusSucceeded, pkg.Status.BuildStatus,
+	// fv1.BuildStatusSucceeded is an untyped string constant in const.go;
+	// cast to the typed BuildStatus for the comparison so testify's
+	// reflect.DeepEqual doesn't treat them as different types.
+	require.Equalf(t, fv1.BuildStatus(fv1.BuildStatusSucceeded), pkg.Status.BuildStatus,
 		"sourcearchive package %q final status %q (log: %s)",
 		pkgSource, pkg.Status.BuildStatus, pkg.Status.BuildLog)
 

@@ -89,6 +89,23 @@ func (ns *TestNamespace) CLIWithEnv(t *testing.T, ctx context.Context, env map[s
 // cobra-buffer string.
 func (ns *TestNamespace) CLICaptureStdout(t *testing.T, ctx context.Context, args ...string) string {
 	t.Helper()
+	out, err := ns.cliCaptureStdoutBoth(t, ctx, args...)
+	require.NoErrorf(t, err, "fission %s\n%s", strings.Join(args, " "), out)
+	return out
+}
+
+// CLICaptureStdoutBestEffort is the cleanup-friendly variant of
+// CLICaptureStdout: returns the captured output and any error from the
+// CLI rather than calling t.Fatal. Use this in t.Cleanup blocks where
+// the operation may legitimately fail (e.g. deleting a resource the
+// test body already deleted).
+func (ns *TestNamespace) CLICaptureStdoutBestEffort(t *testing.T, ctx context.Context, args ...string) (string, error) {
+	t.Helper()
+	return ns.cliCaptureStdoutBoth(t, ctx, args...)
+}
+
+func (ns *TestNamespace) cliCaptureStdoutBoth(t *testing.T, ctx context.Context, args ...string) (string, error) {
+	t.Helper()
 	ns.f.logger.Info("CLICaptureStdout", "ns", ns.Name, "args", args)
 	cliMu.Lock()
 	defer cliMu.Unlock()
@@ -120,8 +137,7 @@ func (ns *TestNamespace) CLICaptureStdout(t *testing.T, ctx context.Context, arg
 	os.Stdout = origStdout
 	captured := <-stdoutDone
 
-	require.NoErrorf(t, execErr, "fission %s\n%s\n%s", strings.Join(args, " "), buf.String(), captured)
-	return captured + buf.String()
+	return captured + buf.String(), execErr
 }
 
 // setEnvOverrides applies the given env vars and returns a restore

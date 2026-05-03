@@ -3,8 +3,12 @@
 package common_test
 
 import (
+	"archive/zip"
 	"context"
+	"crypto/rand"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -46,9 +50,12 @@ func TestArchivePruner(t *testing.T) {
 		Name: envName, Image: runtime, Builder: builder,
 	})
 
-	// Deploy archive — same shape as TestArchiveCLI: 256K random + a
-	// hello.py source file, zipped flat.
-	zipPath := framework.ZipTestDataDir(t, "python/sourcepkg", "deploy.zip")
+	// Build a deploy archive that exceeds fv1.ArchiveLiteralSizeLimit
+	// (256K) — under that threshold the CLI inlines the bytes as a
+	// literal Archive (no Spec.Deployment.URL set), and the pruner has
+	// nothing to clean. Use 512K of random bytes (incompressible) so
+	// the zipped archive is comfortably above the limit.
+	zipPath := makePrunerDeployZip(t)
 
 	// Create two packages with the same archive uploaded twice.
 	pkg1 := "pkg-pruner-1-" + ns.ID
@@ -96,6 +103,43 @@ func TestArchivePruner(t *testing.T) {
 		assert.NotContainsf(c, out, url1, "archive %q not pruned", url1)
 		assert.NotContainsf(c, out, url2, "archive %q not pruned", url2)
 	}, 90*time.Second, 5*time.Second)
+}
+
+// makePrunerDeployZip writes a zip containing a 512K random file under
+// t.TempDir and returns its on-disk path. The size guarantees the CLI
+// uploads to storagesvc (Spec.Deployment.URL set) instead of inlining
+// as Archive literal bytes.
+func makePrunerDeployZip(t *testing.T) string {
+	t.Helper()
+	workdir := t.TempDir()
+	zipPath := filepath.Join(workdir, "deploy.zip")
+	out, err := os.Create(zipPath)
+	require.NoError(t, err)
+	defer out.Close()
+	zw := zip.NewWriter(out)
+	defer zw.Close()
+
+	// 512K random bytes — incompressible, so zip stays > 256K.
+	rnd := make([]byte, 512*1024)
+	_, _ = rand.Read(rnd)
+	hdr := &zip.FileHeader{Name: "blob.bin", Method: zip.Deflate}
+	hdr.SetMode(0o644)
+	w, err := zw.CreateHeader(hdr)
+	require.NoError(t, err)
+	_, err = w.Write(rnd)
+	require.NoError(t, err)
+
+	// A tiny entrypoint so the archive is plausible as a Fission package
+	// (the test never invokes it, but pruner inspects the storagesvc
+	// archive directly so it doesn't matter).
+	helloHdr := &zip.FileHeader{Name: "hello.py", Method: zip.Deflate}
+	helloHdr.SetMode(0o644)
+	hw, err := zw.CreateHeader(helloHdr)
+	require.NoError(t, err)
+	_, err = hw.Write([]byte("def main():\n    return \"Hello, world!\""))
+	require.NoError(t, err)
+
+	return zipPath
 }
 
 // pkgArchiveID extracts the storagesvc archive ID from a Package's

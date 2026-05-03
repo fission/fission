@@ -63,11 +63,14 @@ func TestArchiveCLI(t *testing.T) {
 	archiveID := strings.TrimSpace(strings.TrimPrefix(uploadOut, "File successfully uploaded with ID:"))
 	require.NotEmptyf(t, archiveID, "could not parse archive ID from %q", uploadOut)
 
-	// Cleanup deletes the archive even if a later assertion fails.
+	// Cleanup deletes the archive on test failure. If the test body's
+	// explicit delete (Phase 5 below) ran successfully, this redundant
+	// delete returns HTTP 400 (already gone) — use the BestEffort
+	// variant so the cleanup doesn't fail the test on that 400.
 	t.Cleanup(func() {
 		dctx, dcancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer dcancel()
-		_ = ns.CLICaptureStdout(t, dctx, "ar", "delete", "--id", archiveID)
+		_, _ = ns.CLICaptureStdoutBestEffort(t, dctx, "ar", "delete", "--id", archiveID)
 	})
 
 	// 2. List — expects archiveID present.
