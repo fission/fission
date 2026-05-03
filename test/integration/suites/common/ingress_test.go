@@ -63,7 +63,10 @@ func TestIngress(t *testing.T) {
 	requireIngress := func(t *testing.T, expectPath, expectHost, expectTLS string) {
 		t.Helper()
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			list, err := f.KubeClient().NetworkingV1().Ingresses(ns.Name).List(ctx, metav1.ListOptions{
+			// pkg/router/ingress.go creates Ingresses in POD_NAMESPACE
+			// (the router pod's own ns, default `fission`), not in the
+			// trigger's namespace. Search across all namespaces.
+			list, err := f.KubeClient().NetworkingV1().Ingresses(metav1.NamespaceAll).List(ctx, metav1.ListOptions{
 				LabelSelector: listSel,
 			})
 			if !assert.NoErrorf(c, err, "list ingresses") {
