@@ -161,11 +161,11 @@ Suggested batches (ordered by approximate complexity):
 2. **Function ops** ✅: `test_function_update.sh`, `test_function_logs.sh`, `test_create_fn_with_url.sh`, `test_annotations.sh` migrated this PR.
 3. **Specs** (partial ✅): `test_spec.sh`, `test_spec_multifile.sh` migrated this PR. `test_spec_merge.sh` and `test_spec_archive.sh` deferred — they ship pre-built yaml fixtures with hardcoded resource names (`nodep`, `nodend`, `dummyfoobarnode`, etc.) that would collide under `t.Parallel()`; need to template the yaml at test time before they can migrate.
 4. **Archives & packages** (partial ✅): `test_package_command.sh`, `test_package_checksum.sh` migrated this PR. `test_archive_cli.sh` and `test_archive_pruner.sh` deferred — both depend on `fission archive` subcommands that stream to os.Stdout (which the in-process CLI helper can't capture under `t.Parallel()`); a clean migration likely needs direct storagesvc HTTP access from the test process.
-5. **Environments**: `test_python_env.sh`, `test_go_env.sh`, `test_nodejs_env.sh`, `test_tensorflow_serving_env.sh`, `test_env_podspec.sh`.
-6. **Function updates**: 7 tests in `test_fn_update/` (split across two PRs).
-7. **Backends**: `test_backend_poolmgr.sh`, `test_backend_newdeploy.sh`, `test_idle_objects_reaper.sh`.
-8. **Namespacing**: 4 tests in `test_namespace/`.
-9. **Misc**: `test_secret_cfgmap.sh`, `test_kubectl.sh`, `test_ws.sh`.
+5. **Environments** (partial ✅): `test_python_env.sh`, `test_nodejs_env.sh`, `test_env_podspec.sh`, `test_go_env.sh` migrated. `test_tensorflow_serving_env.sh` deferred — env-gated (TS_RUNTIME_IMAGE) and the bash builds the model archive at test time; needs a vendored `half_plus_two` model.
+6. **Function updates** ✅: all 7 in `test_fn_update/` migrated; `TestIdleObjectsReaper` is t.Skip'd pending fsvc TTL investigation under parallel load.
+7. **Backends** ✅: `test_backend_poolmgr.sh`, `test_backend_newdeploy.sh` migrated. `test_idle_objects_reaper.sh` migrated but t.Skip'd as above.
+8. **Namespacing** (partial ✅): 3 of 4 migrated; `test_ns_env.sh` deferred — sets FISSION_DEFAULT_NAMESPACE, which conflicts with the framework's process-global ClientOptions.Namespace under t.Parallel.
+9. **Misc** (partial ✅): `test_secret_cfgmap.sh` (7 subtests), `test_ws.sh` migrated. `test_kubectl.sh` deferred — needs `fission fn test` (not exposed via cobra writers) plus kubectl apply/replace semantics.
 
 ### Phase 5 — Disabled-test triage (PR pending)
 
