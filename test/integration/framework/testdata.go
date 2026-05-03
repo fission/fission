@@ -84,3 +84,49 @@ func ZipTestDataDir(t *testing.T, embedDir, archiveName string) string {
 	require.NoError(t, zw.Close(), "ZipTestDataDir: finalize zip")
 	return dst
 }
+
+// ZipTestDataTree packs an embedded testdata directory into a zip archive
+// preserving the relative path from `embedDir` (so subdirectories are kept).
+// Mirrors `zip -r out.zip inner/` semantics where `inner` is the direct
+// child of embedDir; entries land as `inner/<rel-path>`.
+//
+// Use this for fixtures that need their on-disk layout preserved (e.g.
+// TensorFlow SavedModel directories, multi-package source trees).
+//
+// File modes: `*.sh` → 0755, others → 0644 (embed.FS strips file modes).
+func ZipTestDataTree(t *testing.T, embedDir, archiveName string) string {
+	t.Helper()
+	dst := filepath.Join(t.TempDir(), archiveName)
+	out, err := os.Create(dst)
+	require.NoErrorf(t, err, "ZipTestDataTree: create %q", dst)
+	defer out.Close()
+
+	zw := zip.NewWriter(out)
+	require.NoError(t, fs.WalkDir(testdata.FS, embedDir, func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		b, err := testdata.FS.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(embedDir, p)
+		if err != nil {
+			return err
+		}
+		mode := os.FileMode(0o644)
+		if strings.HasSuffix(rel, ".sh") {
+			mode = 0o755
+		}
+		fh := &zip.FileHeader{Name: rel, Method: zip.Deflate}
+		fh.SetMode(mode)
+		w, err := zw.CreateHeader(fh)
+		if err != nil {
+			return err
+		}
+		_, err = w.Write(b)
+		return err
+	}))
+	require.NoError(t, zw.Close(), "ZipTestDataTree: finalize zip")
+	return dst
+}

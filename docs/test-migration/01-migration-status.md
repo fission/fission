@@ -19,13 +19,13 @@ See `00-design.md` for the design; `02-framework-api.md` for helper docs.
 Update these whenever the table below changes.
 
 - Total bash tests: 48
-- In `kind_CI.sh` active list: 20 (10 phase-1, 10 phase-2)
-- Not in `kind_CI.sh` active list: 28 (3 never were + 25 migrated)
-- `bash-active`: 12
+- In `kind_CI.sh` active list: 19 (9 phase-1, 10 phase-2)
+- Not in `kind_CI.sh` active list: 29 (3 never were + 26 migrated)
+- `bash-active`: 11
 - `bash-disabled-existing`: 6
-- `bash-disabled-migrated`: 30 (+ python_env, nodejs_env, env_podspec, function_timeout)
+- `bash-disabled-migrated`: 31 (+ python_env, nodejs_env, env_podspec, function_timeout)
 - `go-live`: 30
-- `go-skip`: 2 (`TestPackageCommand/src_glob`, `TestIdleObjectsReaper` — flaky under parallel load; needs fsvc TTL investigation)
+- `go-skip`: 3 (`TestPackageCommand/src_glob`, `TestIdleObjectsReaper`, `TestTensorflowServingEnv` — env-gated, t.Skip in CI without TS_RUNTIME_IMAGE)
 - `deleted`: 0
 
 ## Tests
@@ -65,7 +65,7 @@ Columns:
 | `test_env_podspec.sh` | p1 | common | `TestEnvPodSpec` (`common/env_podspec_test.go`) | bash-active | — |
 | `test_environments/test_python_env.sh` | p1 | common | `TestPythonEnv` (`common/python_env_test.go`) | bash-active | — |
 | `test_environments/test_go_env.sh` | p1 | common | `TestGoEnv` (`common/go_env_test.go`) | bash-disabled-migrated / go-live | this PR |
-| `test_environments/test_tensorflow_serving_env.sh` | p1 | common | `TestTensorflowServingEnv` (`common/tensorflow_serving_env_test.go`) | bash-active | — |
+| `test_environments/test_tensorflow_serving_env.sh` | p1 | common | `TestTensorflowServingEnv` (`common/tensorflow_serving_env_test.go`) | bash-disabled-migrated / go-skip (env-gated) | this PR |
 | `test_backend_poolmgr.sh` | p1 | common | `TestBackendPoolmgr` (`common/backend_poolmgr_test.go`) | bash-disabled-migrated / go-live | this PR |
 | `test_fn_update/test_idle_objects_reaper.sh` | p1 | common | `TestIdleObjectsReaper` (`common/idle_objects_reaper_test.go`) | bash-disabled-migrated / go-live | this PR |
 | `test_env_vars.sh` | p1 | common | TBD (Phase 5) | bash-disabled-existing | — |

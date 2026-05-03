@@ -61,6 +61,16 @@ func (r RuntimeImages) RequireGoBuilder(skip skipper) string {
 	return requireImage(skip, "GO_BUILDER_IMAGE", r.GoBuilder)
 }
 
+// RequireTS skips the test if TS_RUNTIME_IMAGE (TensorFlow Serving) is unset.
+func (r RuntimeImages) RequireTS(skip skipper) string {
+	return requireImage(skip, "TS_RUNTIME_IMAGE", r.TS)
+}
+
+// RequireJVMJersey skips the test if JVM_JERSEY_RUNTIME_IMAGE is unset.
+func (r RuntimeImages) RequireJVMJersey(skip skipper) string {
+	return requireImage(skip, "JVM_JERSEY_RUNTIME_IMAGE", r.JVMJersey)
+}
+
 func requireImage(skip skipper, envVar, value string) string {
 	if value == "" {
 		skip.Skipf("%s is not set; skipping", envVar)
