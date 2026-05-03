@@ -19,13 +19,13 @@ See `00-design.md` for the design; `02-framework-api.md` for helper docs.
 Update these whenever the table below changes.
 
 - Total bash tests: 48
-- In `kind_CI.sh` active list: 13
-- Not in `kind_CI.sh` active list: 35 (3 never were + 32 migrated)
-- `bash-active`: 3 (test_obj_create_in_diff_ns, test_java_env, test_java_builder; all #test:disabled, blocked on cross-ns router config or vendored jar)
-- `bash-disabled-existing`: 0 (was 6; env_vars, fn_test, ingress, ns_env, archive_*, spec_*, jvm_jersey ported)
-- `bash-disabled-migrated`: 40
+- In `kind_CI.sh` active list: 1 (only `test_obj_create_in_diff_ns.sh` — every other bash test, including the previously-disabled-existing ones, has a Go counterpart now)
+- Not in `kind_CI.sh` active list: 47
+- `bash-active`: 1 (`test_obj_create_in_diff_ns.sh`; needs cross-ns router config — out of scope for this PR)
+- `bash-disabled-existing`: 0
+- `bash-disabled-migrated`: 44
 - `go-live`: 39
-- `go-skip`: 4 (`TestPackageCommand/src_glob`, `TestIdleObjectsReaper`, `TestTensorflowServingEnv`, `TestJVMJerseyEnv` — env-gated)
+- `go-skip`: 6 (`TestPackageCommand/src_glob`, `TestIdleObjectsReaper`, `TestTensorflowServingEnv`, `TestJVMJerseyEnv`, `TestJavaEnv`, `TestJavaBuilder` — env-gated; run when image/jar env vars are set)
 - `deleted`: 0
 
 ## Tests
@@ -91,8 +91,8 @@ Columns:
 | `test_namespace/test_ns_env.sh` | p2 | common | `TestNamespaceEnv` (`common/namespace_test.go`) | bash-disabled-migrated / go-live | this PR |
 | `test_namespace/test_ns_deprecated_flag.sh` | p2 | common | `TestNamespaceDeprecatedFlag` (`common/namespace_test.go`) | bash-disabled-migrated / go-live | this PR |
 | `test_obj_create_in_diff_ns.sh` | p2 | common | TBD (Phase 5) | bash-disabled-existing | — |
-| `test_environments/test_java_builder.sh` | p2 | common | TBD (Phase 5) | bash-disabled-existing | — |
-| `test_environments/test_java_env.sh` | p2 | common | TBD (Phase 5) | bash-disabled-existing | — |
+| `test_environments/test_java_builder.sh` | p2 | common | `TestJavaBuilder` (`common/java_builder_test.go`) | bash-disabled-migrated / go-skip (needs JVM_RUNTIME_IMAGE + JVM_BUILDER_IMAGE; vendored Java source, builder pod compiles) | this PR |
+| `test_environments/test_java_env.sh` | p2 | common | `TestJavaEnv` (`common/java_env_test.go`) | bash-disabled-migrated / go-skip (needs JVM_RUNTIME_IMAGE + JAVA_HELLO_JAR_PATH) | this PR |
 
 ### Not in current CI active list (still bash-runnable; migrate during bulk phase)
 

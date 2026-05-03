@@ -64,21 +64,12 @@ export FAILURES=0
 main() {
     set +e
     export TIMEOUT=900  # 15 minutes per test
-    # run tests without newdeploy in parallel.
-    export JOBS=6
-    source $ROOT/test/run_test.sh \
-        $ROOT/test/tests/test_env_vars.sh \
-        $ROOT/test/tests/test_function_test/test_fn_test.sh \
-        $ROOT/test/tests/test_ingress.sh
-
+    # The bash test runner now only invokes tests that have not been
+    # ported to Go. Everything else lives under test/integration/ and
+    # runs via `go test -tags=integration ./test/integration/...`.
     export JOBS=3
     source $ROOT/test/run_test.sh \
-        $ROOT/test/tests/test_fn_update/test_scale_change.sh \
-        $ROOT/test/tests/test_environments/test_java_builder.sh \
-        $ROOT/test/tests/test_environments/test_java_env.sh \
-        $ROOT/test/tests/test_fn_update/test_env_update.sh \
-        $ROOT/test/tests/test_obj_create_in_diff_ns.sh \
-        $ROOT/test/tests/test_fn_update/test_resource_change.sh
+        $ROOT/test/tests/test_obj_create_in_diff_ns.sh
 
     set -e
 
