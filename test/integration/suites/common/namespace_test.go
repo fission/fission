@@ -116,6 +116,44 @@ func TestNamespaceDeprecatedFlag(t *testing.T) {
 	assert.Equal(t, customNS, tr.Namespace)
 }
 
+// TestNamespaceEnv is the Go port of test_namespace/test_ns_env.sh.
+// Verifies that FISSION_DEFAULT_NAMESPACE is honored when neither
+// `--namespace` nor the deprecated `--fnNamespace` is passed. The CLI's
+// resolution (pkg/fission-cli/cmd/cmd.go GetResourceNamespace) walks
+// flag → flag → env-var → ClientOptions.Namespace, so the env-var
+// branch wins over our default ClientOptions.Namespace="default".
+//
+// Uses the framework's CLIWithEnv helper which serializes the env-var
+// mutation against any other in-flight CLI calls via cliMu.
+func TestNamespaceEnv(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	f := framework.Connect(t)
+	ns := f.NewTestNamespace(t)
+	customNS := "fission-it-ns-env-" + ns.ID
+	createKubeNamespace(t, ctx, f, customNS)
+
+	trigger := "http-env-" + ns.ID
+	url := "/url-env-" + ns.ID
+	ns.CLIWithEnv(t, ctx,
+		map[string]string{"FISSION_DEFAULT_NAMESPACE": customNS},
+		"httptrigger", "create",
+		"--function", "nbuilderhello-"+ns.ID,
+		"--url", url, "--name", trigger)
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		_ = f.FissionClient().CoreV1().HTTPTriggers(customNS).Delete(ctx, trigger, metav1.DeleteOptions{})
+	})
+
+	tr, err := f.FissionClient().CoreV1().HTTPTriggers(customNS).Get(ctx, trigger, metav1.GetOptions{})
+	require.NoErrorf(t, err, "get httptrigger %q in ns %q", trigger, customNS)
+	assert.Equal(t, customNS, tr.Namespace)
+}
+
 // createKubeNamespace creates a Kubernetes namespace and registers a
 // t.Cleanup that deletes it. Helper local to the namespace tests.
 func createKubeNamespace(t *testing.T, ctx context.Context, f *framework.Framework, name string) {

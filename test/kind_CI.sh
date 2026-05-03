@@ -67,12 +67,10 @@ main() {
     # run tests without newdeploy in parallel.
     export JOBS=6
     source $ROOT/test/run_test.sh \
-        $ROOT/test/tests/test_archive_cli.sh \
         $ROOT/test/tests/test_archive_pruner.sh \
         $ROOT/test/tests/test_env_vars.sh \
         $ROOT/test/tests/test_function_test/test_fn_test.sh \
         $ROOT/test/tests/test_ingress.sh \
-        $ROOT/test/tests/test_specs/test_spec_merge/test_spec_merge.sh \
         $ROOT/test/tests/test_specs/test_spec_archive/test_spec_archive.sh
 
     export JOBS=3
@@ -83,7 +81,6 @@ main() {
         $ROOT/test/tests/test_fn_update/test_env_update.sh \
         $ROOT/test/tests/test_obj_create_in_diff_ns.sh \
         $ROOT/test/tests/test_fn_update/test_resource_change.sh
-        $ROOT/test/tests/test_namespace/test_ns_env.sh
 
     set -e
 
