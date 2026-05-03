@@ -97,4 +97,13 @@ func (ns *TestNamespace) CreateEnv(t *testing.T, ctx context.Context, opts EnvOp
 		}
 		return err
 	})
+
+	// For builder envs, the very next step is usually a source-archive
+	// package build. The buildermgr POSTs to the runtime pod's fetcher
+	// on port 8000; if the pod is still in ContainerCreating the call
+	// times out (`dial tcp ...:8000: i/o timeout`). Pre-wait here so
+	// individual tests don't have to remember.
+	if opts.Builder != "" {
+		ns.WaitForEnvReady(t, ctx, opts.Name)
+	}
 }

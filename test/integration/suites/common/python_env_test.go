@@ -42,12 +42,9 @@ func TestPythonEnv(t *testing.T) {
 	envV2 := "python-v2-" + ns.ID
 
 	ns.CreateEnv(t, ctx, framework.EnvOptions{Name: envV1, Image: runtime})
+	// CreateEnv waits for builder + runtime pods to be Ready when
+	// Builder is set, so we can immediately trigger the source build.
 	ns.CreateEnv(t, ctx, framework.EnvOptions{Name: envV2, Image: runtime, Builder: builder})
-	// The buildermgr fetches source through the env's runtime pod's
-	// fetcher; under parallel load that pod can stay in ContainerCreating
-	// long enough for the build to time out. Wait for both before
-	// triggering the source-archive build.
-	ns.WaitForEnvReady(t, ctx, envV2)
 
 	// Build the shared package from python/env_test/.
 	srcZip := zipTestDataTree(t, "python/env_test", "python-src-pkg.zip")

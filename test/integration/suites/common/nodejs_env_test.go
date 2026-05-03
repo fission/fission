@@ -72,14 +72,11 @@ func TestNodejsEnv(t *testing.T) {
 		if nodeBuilder == "" {
 			t.Skip("NODE_BUILDER_IMAGE not set; skipping v2 builder subtest")
 		}
+		// CreateEnv pre-waits for builder + runtime pods Ready when
+		// Builder is set.
 		ns.CreateEnv(t, ctx, framework.EnvOptions{
 			Name: envV2, Image: runtime, Builder: nodeBuilder,
 		})
-		// Wait for both runtime + builder pods. The builder fetches
-		// source through the runtime pod's fetcher; under parallel load
-		// that pod can stay in ContainerCreating long enough for the
-		// fetcher dial to time out (`dial tcp ...:8000: i/o timeout`).
-		ns.WaitForEnvReady(t, ctx, envV2)
 
 		// momentExample.js + package.json (npm-installable moment dep).
 		srcZip := framework.ZipTestDataDir(t, "nodejs/env_test/test-case-4", "moment-pkg.zip")
