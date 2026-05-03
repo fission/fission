@@ -80,12 +80,21 @@ func TestKubectlApply(t *testing.T) {
 
 	// Phase 2 — patch URL to the working file. Re-fetch first so we
 	// have the latest ResourceVersion, then update Spec.Source.URL.
+	//
+	// Critical: the buildermgr only triggers a (re)build when
+	// Status.BuildStatus == "pending" (see pkg/buildermgr/pkgwatcher.go:259-262
+	// and the long-standing TODO above it about /status subresource).
+	// A plain Spec-only Update would leave status at "failed" and the
+	// controller would skip the new build. Bash uses `kubectl replace`
+	// which round-trips the whole object including Status; we mimic
+	// that by explicitly resetting BuildStatus to pending before Update.
 	current, err := f.FissionClient().CoreV1().Packages(ns.Name).Get(ctx, pkgName, metav1.GetOptions{})
 	require.NoError(t, err)
 	since := current.Status.LastUpdateTimestamp
 	current.Spec.Source.URL = goodURL
+	current.Status.BuildStatus = fv1.BuildStatusPending
 	_, err = f.FissionClient().CoreV1().Packages(ns.Name).Update(ctx, current, metav1.UpdateOptions{})
-	require.NoError(t, err, "update package %q to good URL", pkgName)
+	require.NoError(t, err, "update package %q to good URL + pending", pkgName)
 
 	ns.WaitForPackageRebuiltSince(t, ctx, pkgName, since)
 
