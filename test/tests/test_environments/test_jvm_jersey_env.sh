@@ -1,6 +1,9 @@
 #!/bin/bash
-
-
+#test:disabled
+# Migrated to Go: test/integration/suites/common/jvm_jersey_env_test.go (TestJVMJerseyEnv)
+# Skip-by-default in CI (no JVM_JERSEY_RUNTIME_IMAGE / JVM_JERSEY_JAR_PATH); the Go
+# test runs when both env vars are set (jar built via maven once and cached).
+# This script is retained for reference until the bash teardown phase (PR #3356).
 
 set -euo pipefail
 source $(dirname $0)/../../utils.sh

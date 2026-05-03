@@ -1,0 +1,16 @@
+apiVersion: fission.io/v1
+kind: Environment
+metadata:
+  creationTimestamp: null
+  name: dummyfoobarnode
+  namespace: default
+spec:
+  builder:
+    command: build
+    image: ghcr.io/fission/node-builder
+  keeparchive: false
+  poolsize: 3
+  runtime:
+    image: ghcr.io/fission/node-env
+  terminationGracePeriod: 20
+  version: 2

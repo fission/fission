@@ -19,13 +19,13 @@ See `00-design.md` for the design; `02-framework-api.md` for helper docs.
 Update these whenever the table below changes.
 
 - Total bash tests: 48
-- In `kind_CI.sh` active list: 16
-- Not in `kind_CI.sh` active list: 32 (3 never were + 29 migrated)
-- `bash-active`: 6
-- `bash-disabled-existing`: 3 (was 6; env_vars, fn_test, ingress ported in Phase 5)
-- `bash-disabled-migrated`: 37
-- `go-live`: 36
-- `go-skip`: 3 (`TestPackageCommand/src_glob`, `TestIdleObjectsReaper`, `TestTensorflowServingEnv` — env-gated, t.Skip in CI without TS_RUNTIME_IMAGE)
+- In `kind_CI.sh` active list: 13
+- Not in `kind_CI.sh` active list: 35 (3 never were + 32 migrated)
+- `bash-active`: 3 (test_obj_create_in_diff_ns, test_java_env, test_java_builder; all #test:disabled, blocked on cross-ns router config or vendored jar)
+- `bash-disabled-existing`: 0 (was 6; env_vars, fn_test, ingress, ns_env, archive_*, spec_*, jvm_jersey ported)
+- `bash-disabled-migrated`: 40
+- `go-live`: 39
+- `go-skip`: 4 (`TestPackageCommand/src_glob`, `TestIdleObjectsReaper`, `TestTensorflowServingEnv`, `TestJVMJerseyEnv` — env-gated)
 - `deleted`: 0
 
 ## Tests
@@ -55,13 +55,13 @@ Columns:
 | `test_kubectl/test_kubectl.sh` | p1 | common | `TestKubectlApply` (`common/kubectl_test.go`) | bash-disabled-migrated / go-live | this PR |
 | `websocket/test_ws.sh` | p1 | common | `TestWebsocket` (`common/websocket_test.go`) | bash-disabled-migrated / go-live | this PR |
 | `test_archive_cli.sh` | p1 | common | `TestArchiveCLI` (`common/archive_cli_test.go`) | bash-disabled-migrated / go-live | this PR |
-| `test_archive_pruner.sh` | p1 | common | `TestArchivePruner` (`common/archive_pruner_test.go`) | bash-active | — |
+| `test_archive_pruner.sh` | p1 | common | `TestArchivePruner` (`common/archive_pruner_test.go`) | bash-disabled-migrated / go-live | this PR |
 | `test_package_command.sh` | p1 | common | `TestPackageCommand` (`common/package_command_test.go`) | bash-disabled-migrated / go-live | this PR |
 | `test_package_checksum.sh` | p1 | common | `TestPackageChecksum` (`common/package_checksum_test.go`) | bash-disabled-migrated / go-live | this PR |
 | `test_specs/test_spec.sh` | p1 | common | `TestSpec` (`common/spec_test.go`) | bash-disabled-migrated / go-live | this PR |
 | `test_specs/test_spec_multifile.sh` | p1 | common | `TestSpecMultifile` (`common/spec_multifile_test.go`) | bash-disabled-migrated / go-live | this PR |
 | `test_specs/test_spec_merge/test_spec_merge.sh` | p1 | common | `TestSpecMerge` (`common/spec_merge_test.go`) | bash-disabled-migrated / go-live | this PR |
-| `test_specs/test_spec_archive/test_spec_archive.sh` | p1 | common | `TestSpecArchive` (`common/spec_archive_test.go`) | bash-active (deferred — pre-built yaml fixtures need templating) | — |
+| `test_specs/test_spec_archive/test_spec_archive.sh` | p1 | common | `TestSpecArchive` (`common/spec_archive_test.go`) | bash-disabled-migrated / go-live | this PR |
 | `test_env_podspec.sh` | p1 | common | `TestEnvPodSpec` (`common/env_podspec_test.go`) | bash-active | — |
 | `test_environments/test_python_env.sh` | p1 | common | `TestPythonEnv` (`common/python_env_test.go`) | bash-active | — |
 | `test_environments/test_go_env.sh` | p1 | common | `TestGoEnv` (`common/go_env_test.go`) | bash-disabled-migrated / go-live | this PR |
@@ -102,7 +102,7 @@ These three are not referenced by `kind_CI.sh` today, so they don't run in PR CI
 |-----------|--------------|---------|--------|-----|
 | `test_create_fn_with_url.sh` | common | `TestCreateFunctionWithURL` (`common/create_fn_with_url_test.go`) | bash-disabled-migrated / go-live | this PR |
 | `test_function_timeout.sh` | common | `TestFunctionTimeout` (`common/function_timeout_test.go`) | bash-active | — |
-| `test_environments/test_jvm_jersey_env.sh` | common | `TestJvmJerseyEnv` (`common/jvm_jersey_env_test.go`) | bash-active (env-gated; CI skip when image unset) | — |
+| `test_environments/test_jvm_jersey_env.sh` | common | `TestJVMJerseyEnv` (`common/jvm_jersey_env_test.go`) | bash-disabled-migrated / go-skip (needs JVM_JERSEY_RUNTIME_IMAGE + JVM_JERSEY_JAR_PATH) | this PR |
 
 ## Migration sequence
 

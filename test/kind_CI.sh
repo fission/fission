@@ -67,11 +67,9 @@ main() {
     # run tests without newdeploy in parallel.
     export JOBS=6
     source $ROOT/test/run_test.sh \
-        $ROOT/test/tests/test_archive_pruner.sh \
         $ROOT/test/tests/test_env_vars.sh \
         $ROOT/test/tests/test_function_test/test_fn_test.sh \
-        $ROOT/test/tests/test_ingress.sh \
-        $ROOT/test/tests/test_specs/test_spec_archive/test_spec_archive.sh
+        $ROOT/test/tests/test_ingress.sh
 
     export JOBS=3
     source $ROOT/test/run_test.sh \

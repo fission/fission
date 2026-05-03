@@ -71,6 +71,16 @@ func (r RuntimeImages) RequireJVMJersey(skip skipper) string {
 	return requireImage(skip, "JVM_JERSEY_RUNTIME_IMAGE", r.JVMJersey)
 }
 
+// RequireJVM skips the test if JVM_RUNTIME_IMAGE is unset.
+func (r RuntimeImages) RequireJVM(skip skipper) string {
+	return requireImage(skip, "JVM_RUNTIME_IMAGE", r.JVM)
+}
+
+// RequireJVMBuilder skips the test if JVM_BUILDER_IMAGE is unset.
+func (r RuntimeImages) RequireJVMBuilder(skip skipper) string {
+	return requireImage(skip, "JVM_BUILDER_IMAGE", r.JVMBuilder)
+}
+
 func requireImage(skip skipper, envVar, value string) string {
 	if value == "" {
 		skip.Skipf("%s is not set; skipping", envVar)

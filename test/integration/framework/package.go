@@ -76,6 +76,15 @@ func (ns *TestNamespace) CreatePackage(t *testing.T, ctx context.Context, opts P
 	})
 }
 
+// GetPackage returns the live Package CR by name. Use it to assert on
+// fields the controller has populated (Status.BuildStatus, BuildLog, etc.).
+func (ns *TestNamespace) GetPackage(t *testing.T, ctx context.Context, pkgName string) *fv1.Package {
+	t.Helper()
+	p, err := ns.f.fissionClient.CoreV1().Packages(ns.Name).Get(ctx, pkgName, metav1.GetOptions{})
+	require.NoErrorf(t, err, "GetPackage: get package %q", pkgName)
+	return p
+}
+
 // PackageDeployChecksum returns Package.Spec.Deployment.Checksum.Sum.
 // Mirrors the bash one-liner:
 // `kubectl get packages <name> -o jsonpath='{.spec.deployment.checksum.sum}'`.
