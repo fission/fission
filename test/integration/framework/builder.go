@@ -4,6 +4,7 @@ package framework
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -41,10 +42,13 @@ func (ns *TestNamespace) WaitForRuntimePodReady(t *testing.T, ctx context.Contex
 // when the build starts, the round-robin can land on a still-ContainerCreating
 // pod and the fetcher call times out (`dial tcp ...:8000: i/o timeout`).
 //
-// After all pods are Ready we also wait until the env's Service Endpoints
-// reflects them (kube-proxy can take a couple of polling intervals to
-// notice a new Ready pod), otherwise the buildermgr's POST to the Service
-// can still race a stale endpoints list.
+// We then also poll EndpointSlices for the env (label
+// kubernetes.io/service-name selects them) until the union of Ready
+// addresses reaches minPods. Pod readiness gates pass before kube-proxy
+// publishes endpoints, and the buildermgr POSTs to the Service — which
+// is `<envName>-<port>` not `<envName>` — so checking by Service-name is
+// awkward. EndpointSlices carry the service-name as a label and let us
+// match by label selector instead.
 func (ns *TestNamespace) waitForRuntimePoolReady(t *testing.T, ctx context.Context, envName string, minPods int) {
 	t.Helper()
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
@@ -67,22 +71,37 @@ func (ns *TestNamespace) waitForRuntimePoolReady(t *testing.T, ctx context.Conte
 		}
 	}, 3*time.Minute, 2*time.Second)
 
-	// Wait for the env's Service to have ≥ minPods Ready endpoint addresses.
-	// The Service is named after the env (e.g. "python-v2-abcdef"); its
-	// Endpoints object lists the pod IPs whose readiness gates have passed
-	// from kube-proxy's perspective. Useful belt-and-suspenders against the
-	// "pod Ready but Service hasn't propagated" race.
+	// EndpointSlice readiness check. EndpointSlices for the env's Service
+	// carry kubernetes.io/service-name=<svc-name> — but the svc name has a
+	// port-hash suffix (e.g. "python-v2-abcdef-3317"). Easiest: list slices
+	// in the namespace and pick those whose service-name *starts with*
+	// envName + "-".
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		ep, err := ns.f.kubeClient.CoreV1().Endpoints(ns.Name).Get(ctx, envName, metav1.GetOptions{})
-		if !assert.NoErrorf(c, err, "get endpoints %q in ns %q", envName, ns.Name) {
+		slices, err := ns.f.kubeClient.DiscoveryV1().EndpointSlices(ns.Name).List(ctx, metav1.ListOptions{})
+		if !assert.NoErrorf(c, err, "list endpointslices in ns %q", ns.Name) {
 			return
 		}
 		var ready int
-		for _, sub := range ep.Subsets {
-			ready += len(sub.Addresses)
+		var matched int
+		for _, sl := range slices.Items {
+			svc := sl.Labels["kubernetes.io/service-name"]
+			if !strings.HasPrefix(svc, envName+"-") && svc != envName {
+				continue
+			}
+			matched++
+			for _, ep := range sl.Endpoints {
+				if ep.Conditions.Ready != nil && *ep.Conditions.Ready {
+					ready += len(ep.Addresses)
+				}
+			}
+		}
+		if !assert.Greaterf(c, matched, 0,
+			"no EndpointSlice yet for env %q service in ns %q", envName, ns.Name) {
+			return
 		}
 		assert.GreaterOrEqualf(c, ready, minPods,
-			"env %q service has %d ready endpoints; need ≥%d", envName, ready, minPods)
+			"env %q service has %d ready endpoint addresses across %d slices; need ≥%d",
+			envName, ready, matched, minPods)
 	}, 90*time.Second, 1*time.Second)
 }
 
