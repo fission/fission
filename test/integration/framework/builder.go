@@ -93,12 +93,15 @@ func (ns *TestNamespace) waitForBuilderEndpointReady(t *testing.T, ctx context.C
 	// Even after the EndpointSlice publishes the address, the fetcher
 	// process inside the builder pod can take a beat longer to bind to
 	// port 8000 — the container's "Ready" gate doesn't include a
-	// per-port liveness check on the fetcher. A short settle sleep here
-	// is the difference between flaky and stable on parallel CI; the
-	// real fix is a fetcher-port probe but that needs apiserver-proxy
-	// gymnastics from outside the cluster.
+	// per-port liveness check on the fetcher. Older kube-proxy versions
+	// (we observed it on K8s 1.28 vs. 1.32/1.34) also take longer to
+	// program iptables for the new Service. A 15s settle covers both.
+	// The real fix would be an apiserver-proxy GET against the fetcher's
+	// healthz, which is more plumbing than warranted while WaitForPackageBuildSucceeded
+	// already retries on the transient `dial tcp ...:8000: i/o timeout`
+	// build-log signature (see package.go).
 	select {
-	case <-time.After(5 * time.Second):
+	case <-time.After(15 * time.Second):
 	case <-ctx.Done():
 	}
 }
