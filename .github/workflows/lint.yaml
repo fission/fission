@@ -72,15 +72,12 @@ jobs:
             echo '✔ No issues detected. Have a nice day :-)'
           fi
 
-      # TEMPORARY: unit tests disabled on this branch to keep CI iteration time
-      # short while we land the bash → Go integration test migration. Restored
-      # before merge to main. See docs/test-migration/00-design.md.
-      # - name: Run unit tests
-      #   run: ./hack/runtests.sh
-      #
-      # - name: Upload Coverage report to CodeCov
-      #   uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6.0.0
-      #   with:
-      #     token: ${{ secrets.CODECOV_TOKEN }}
-      #     flags: unittests
-      #     file: ./coverage.txt
+      - name: Run unit tests
+        run: ./hack/runtests.sh
+
+      - name: Upload Coverage report to CodeCov
+        uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6.0.0
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          flags: unittests
+          file: ./coverage.txt

@@ -1,11 +1,25 @@
 name: Fission CI upgrade
 
-# TEMPORARY: triggers reduced to workflow_dispatch only on this branch to
-# keep CI iteration time short while we land the bash → Go integration test
-# migration. Restored to push/PR before merge to main.
-# See docs/test-migration/00-design.md.
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - '!dependabot/**'
+    paths:
+      - "**.go"
+      - "charts/**"
+      - "test/**"
+      - go.mod
+      - go.sum
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "**.go"
+      - "charts/**"
+      - "test/**"
+      - go.mod
+      - go.sum
 
 env:
   HELM_VERSION: v3.19.0

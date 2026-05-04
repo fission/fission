@@ -42,9 +42,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # TEMPORARY: only 1.34 while migration iterates. Full matrix restored
-        # before merge to main. See docs/test-migration/00-design.md.
-        kindversion: ["v1.34.0"]
+        kindversion: ["v1.28.15", "v1.32.8", "v1.34.0"]
         os: [ubuntu-24.04]
     steps:
       - name: Harden Runner
@@ -112,16 +110,12 @@ jobs:
           helm install prometheus prometheus-community/kube-prometheus-stack -n monitoring \
           --version 45.28.0 --set grafana.enabled=false --set alertmanager.enabled=false
 
-      # TEMPORARY: Build/install fission CLI binary skipped on this branch.
-      # Our Go integration tests use the in-process CLI via app.App(...) and
-      # never shell out to /usr/local/bin/fission. Restored before merge to
-      # main (bash test suite still needs the binary).
-      # - name: Build and Install Fission CLI
-      #   run: |
-      #     make debug-vars
-      #     make build-fission-cli
-      #     sudo make install-fission-cli
-      #     sudo chmod +x /usr/local/bin/fission
+      - name: Build and Install Fission CLI
+        run: |
+          make debug-vars
+          make build-fission-cli
+          sudo make install-fission-cli
+          sudo chmod +x /usr/local/bin/fission
 
       - name: Build and Install Fission
         timeout-minutes: 10
@@ -135,12 +129,10 @@ jobs:
       # processes started with `&` may not survive across GitHub Actions steps
       # on every runner image. Wait-for-readiness covers cluster startup races.
 
-      # TEMPORARY: skipped while bash CLI install is disabled. The test step
-      # below logs equivalent info on its own.
-      # - name: Get fission version
-      #   timeout-minutes: 10
-      #   run: |
-      #     fission version
+      - name: Get fission version
+        timeout-minutes: 10
+        run: |
+          fission version
 
       - name: Go integration tests (common phase)
         timeout-minutes: 30
@@ -200,13 +192,14 @@ jobs:
           go test -tags=integration -timeout=25m -parallel 6 -v \
             ./test/integration/suites/common/...
 
-      # TEMPORARY: bash integration suite disabled on this branch to keep CI
-      # iteration time short while we land the Go migration. Restored before
-      # merge to main, and removed entirely in the Phase 6 teardown.
-      # See docs/test-migration/00-design.md.
-      # - name: Integration tests
-      #   timeout-minutes: 90
-      #   run: ./test/kind_CI.sh
+      # Bash integration runner now invokes only the one bash test that
+      # has no Go counterpart yet (test_obj_create_in_diff_ns.sh, which is
+      # itself #test:disabled). Kept here as a no-op safety net while the
+      # follow-up cleanup PR lands; once that's merged, this step and the
+      # entire test/kind_CI.sh + test/run_test.sh harness can be removed.
+      - name: Integration tests
+        timeout-minutes: 90
+        run: ./test/kind_CI.sh
 
       - name: Collect Fission Dump
         timeout-minutes: 5

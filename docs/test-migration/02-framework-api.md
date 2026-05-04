@@ -311,6 +311,176 @@ ns.WaitForFunctionWeight(t, ctx, routeName, fnName, 100, 5*time.Minute)
 ```
 
 
-## Helpers (Phase 4 and beyond)
+## Helpers (Phase 4)
 
-Timer/kubewatcher/MQ trigger helpers and a `Specs`/yaml-apply helper will be added as the bulk migration touches the relevant tests. This file gets a new section per phase.
+Bulk-migration helpers added as new tests landed.
+
+### `ns.CreateConfigMap(t, ctx, name, data)` / `ns.CreateSecret(t, ctx, name, data)`
+
+Create a `corev1.ConfigMap` / Opaque `corev1.Secret` in the test namespace via the Kubernetes typed clientset.
+Both register cleanup automatically.
+
+```go
+ns.CreateConfigMap(t, ctx, "old-cfg-"+ns.ID, map[string]string{"TEST_KEY": "TESTVALUE"})
+ns.CreateSecret(t, ctx, "old-sec-"+ns.ID, map[string]string{"TEST_KEY": "TESTVALUE"})
+```
+
+Used by `TestConfigMapUpdate`, `TestSecretUpdate`, `TestSecretConfigMap`.
+
+### `EnvOptions.Period`
+
+`--period <n>` (seconds) — env reconciliation interval.
+Lower values speed up the idle-pod reaper and other env-side timers in tests that observe controller behavior.
+
+### `framework.ZipTestDataTree(t, embedDir, archiveName)` → `string`
+
+Sibling to `ZipTestDataDir` (flat) that **preserves** relative paths from `embedDir`.
+Use this when the language runtime needs the on-disk tree shape — e.g. TensorFlow `SavedModel/<version>/saved_model.pb`, Maven `src/main/java/io/fission/HelloWorld.java`.
+
+### `f.Images().RequireTS(t)` / `RequireJVM(t)` / `RequireJVMBuilder(t)` / `RequireJVMJersey(t)`
+
+Skipper helpers parallel to `RequireNode` etc.
+
+```go
+runtime := f.Images().RequireTS(t)        // skips if TS_RUNTIME_IMAGE unset
+runtime := f.Images().RequireJVM(t)       // skips if JVM_RUNTIME_IMAGE unset
+builder := f.Images().RequireJVMBuilder(t)
+runtime := f.Images().RequireJVMJersey(t) // skips if JVM_JERSEY_RUNTIME_IMAGE unset
+```
+
+### `ns.GetPackage(t, ctx, pkgName)` → `*fv1.Package`
+
+Read-side helper, mirroring `GetFunction`. Use for asserting on `Status.BuildStatus`, `Status.BuildLog`, `Spec.Deployment.URL`, etc.
+
+## Helpers (Phase 5)
+
+Helpers added by the disabled-existing triage and the final 6-test push.
+
+### `cliMu` (sync.RWMutex)
+
+Process-global guard for CLI invocations that mutate process state (`os.Environ()`, `os.Stdout`).
+Regular `ns.CLI` calls take the read lock so they run in parallel; the env-overriding and stdout-capturing variants take the write lock to serialize against any in-flight CLI calls while they touch the global state.
+Tests don't reference `cliMu` directly; it's purely an internal detail of the variants below.
+
+### `ns.CLIWithEnv(t, ctx, env, args...)` → `string`
+
+Same as `ns.CLI`, but sets the given env vars for the duration of the call (and restores them on return).
+Used by tests that exercise CLI flags resolved from the process environment — e.g. `FISSION_DEFAULT_NAMESPACE` resolution in `TestNamespaceEnv`.
+
+```go
+ns.CLIWithEnv(t, ctx,
+    map[string]string{"FISSION_DEFAULT_NAMESPACE": customNS},
+    "httptrigger", "create", "--function", fnName, "--url", url, "--name", trig)
+```
+
+### `ns.CLICaptureStdout(t, ctx, args...)` → `string`
+
+Same as `ns.CLI`, but additionally captures everything written to `os.Stdout` (in addition to cobra's `Out`/`Err` buffer).
+Used by CLI subcommands that print results via `fmt.Println` instead of cobra writers — `fission archive list`, `fission archive get-url`, `fission archive delete`.
+
+### `ns.CLICaptureStdoutBestEffort(t, ctx, args...)` → `(string, error)`
+
+Cleanup-friendly variant of `CLICaptureStdout` that returns the captured output and any error rather than calling `t.Fatal`.
+Use this in `t.Cleanup` blocks where the operation may legitimately fail (e.g. deleting a resource the test body already deleted).
+
+### `framework.MaterializeSpecs(t, embedDir, replacements, workdir)` → `string`
+
+Walks an embedded spec tree, applies a `strings.NewReplacer` (longest-old-string first) to every file, writes to `workdir` preserving relative paths.
+Solves the per-test-uniqueness problem for vendored YAMLs that ship with hardcoded resource names.
+
+```go
+repls := map[string]string{
+    "nodep":            envP,      // hardcoded → TEST_ID-suffixed
+    "nodend":           envND,
+    "hello-js-vm2y":    pkgName,
+    "spec-merge":       "spec-merge-" + ns.ID,
+    "b1573a35-...":     framework.NewSpecUID(t),  // fresh UUID per test
+}
+workdir := t.TempDir()
+framework.MaterializeSpecs(t, "nodejs/spec_merge", repls, workdir)
+ns.WithCWD(t, workdir, func() { ns.CLI(t, ctx, "spec", "apply") })
+```
+
+### `framework.NewSpecUID(t)` → `string`
+
+Fresh RFC-4122 v4 UUID for the spec `DeploymentConfig.uid`.
+Each test's `spec destroy` is a label-selector by `uid`, so per-test UIDs ensure cleanup only removes that test's resources.
+
+## Builder pre-wait (since Phase 4)
+
+`CreateEnv` automatically waits for the env's builder pod **and** the EndpointSlice for its Service to publish, when `EnvOptions.Builder` is set.
+This eliminates the long-recurring `dial tcp ...:8000: i/o timeout` race during source-archive builds — see commit `9ddc8dc2` for the root-cause investigation (the buildermgr POSTs to the builder Service named `<env>-<env.ResourceVersion>`, NOT the runtime pool).
+
+A 5-second settle delay after EndpointSlice readiness covers the gap between "pod Ready" and "fetcher process actually bound to port 8000".
+
+## Adding a new test
+
+Quick checklist for porting a bash test or writing a brand-new one:
+
+1. **Find the right suite directory.** All currently-migrated tests live under `test/integration/suites/common/`. Add new tests there unless you have a reason to spin up a new suite (e.g. tests that need a different `Fission` deployment configuration).
+
+2. **Build tag header.** Every test file starts with `//go:build integration` on its own line, then a blank line, then `package common_test`.
+
+3. **Vendor any fixture files** under `test/integration/testdata/<lang>/<feature>/`.
+   The `embed.FS` in `testdata/embed.go` already includes `all:nodejs all:python all:go all:misc all:java` — add to the directive if you introduce a new top-level subtree.
+   `embed.FS` skips files starting with `_` or `.` and skips files inside nested Go modules (`go.mod` makes the dir a module).
+   Workaround for nested `go.mod` / `go.sum`: store as `.txt` and rename when materializing (see `TestGoEnv`'s `zipModuleExample`).
+
+4. **Skeleton:**
+
+    ```go
+    func TestFooBar(t *testing.T) {
+        t.Parallel()
+        ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
+        defer cancel()
+
+        f := framework.Connect(t)
+        runtime := f.Images().RequirePython(t)         // env-gates the test
+        ns := f.NewTestNamespace(t)
+
+        envName := "py-foo-" + ns.ID                   // TEST_ID-suffix every name
+        fnName  := "fn-foo-" + ns.ID
+
+        ns.CreateEnv(t, ctx, framework.EnvOptions{Name: envName, Image: runtime})
+        codePath := framework.WriteTestData(t, "python/hello/hello.py")
+        ns.CreateFunction(t, ctx, framework.FunctionOptions{Name: fnName, Env: envName, Code: codePath})
+        ns.CreateRoute(t, ctx, framework.RouteOptions{Function: fnName, URL: "/"+fnName, Method: "GET"})
+
+        body := f.Router(t).GetEventually(t, ctx, "/"+fnName, framework.BodyContains("hello"))
+        require.Contains(t, body, "hello")
+    }
+    ```
+
+5. **Cleanup is automatic** — every `Create*` helper registers its own per-resource cleanup via the namespace cleanup chain, which runs after the diagnostics dump on failure.
+   You almost never need to write `defer` or `t.Cleanup` yourself.
+   Exceptions: archive-style operations that aren't CRDs (use `CLICaptureStdoutBestEffort` so a redundant cleanup-time delete doesn't fail the test), or one-off Kubernetes resources you create directly via `f.KubeClient()`.
+
+6. **Avoid `_` (underscore) in CR names** — Fission CR names are RFC-1123 subdomains. Use a separate `slug` field if your `t.Run` subtest name has underscores (see `TestPythonEnv`).
+
+7. **For builder envs**, just set `EnvOptions.Builder` — the framework pre-waits for the builder pod + EndpointSlice + 5-second fetcher settle, so your immediate-next `CreatePackage` won't race.
+
+8. **For CLI subcommands that print to raw `os.Stdout`** (`fission archive list/delete/download/get-url`), use `ns.CLICaptureStdout` instead of `ns.CLI`. For env-var-driven CLI flags (`FISSION_DEFAULT_NAMESPACE`), use `ns.CLIWithEnv`.
+
+9. **For spec-init/apply tests** with vendored YAMLs that have hardcoded resource names, use `framework.MaterializeSpecs` to rewrite names + UID at materialize time, then `ns.WithCWD(workdir, …)` for the `spec apply`.
+
+10. **Disable the bash counterpart** if you're porting one. Add at the top:
+
+    ```sh
+    #!/bin/bash
+    #test:disabled
+    # Migrated to Go: test/integration/suites/common/foo_bar_test.go (TestFooBar)
+    # This script is retained for reference until the bash teardown phase (PR #3356).
+    ```
+
+    The bash runner already only invokes Go-uncovered tests, so no `kind_CI.sh` change is needed unless your test was the *one* still-bash test.
+
+11. **Update `01-migration-status.md`** — flip the row's status to `bash-disabled-migrated / go-live` and note the PR.
+
+12. **Run locally before CI.** Bring up Kind + Fission per `00-design.md`, then:
+
+    ```sh
+    KUBECONFIG=$HOME/.kube/config FISSION_ROUTER=127.0.0.1:8888 \
+    NODE_RUNTIME_IMAGE=ghcr.io/fission/node-env-22 \
+    PYTHON_RUNTIME_IMAGE=ghcr.io/fission/python-env \
+    go test -tags=integration -v -run TestFooBar ./test/integration/suites/common/...
+    ```
