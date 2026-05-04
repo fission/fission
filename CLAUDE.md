@@ -23,12 +23,13 @@ Code generation (run after editing `pkg/apis/core/v1/types.go`):
 
 Local cluster development (skaffold + kind):
 - `kind create cluster --config kind.yaml` then `kubectl create ns fission && make create-crds`.
-- `SKAFFOLD_PROFILE=kind make skaffold-deploy` — builds linux/amd64 images via goreleaser, copies per-binary Dockerfiles into `dist/*_linux_amd64_v1/`, and Helm-installs `charts/fission-all`. Other profiles: `kind-debug` (pprof + debugEnv), `kind-ci` (full observability), `kind-ci-old` (separate `fission-builder`/`fission-function` namespaces — backwards-compat path), `kind-opentelemetry`.
+- `SKAFFOLD_PROFILE=kind make skaffold-deploy` — builds linux/amd64 images via goreleaser, copies per-binary Dockerfiles into `dist/*_linux_amd64_v1/`, and Helm-installs `charts/fission-all`. Other profiles: `kind-debug` (pprof + debugEnv), `kind-ci` (full observability), `kind-opentelemetry`.
 
-End-to-end tests (`test/`, bash-based, expect a running Fission cluster with `kubectl port-forward svc/router 8888:80 -nfission`):
-- Single test: `cd test && ./tests/test_node_hello_http.sh`. Set `TEST_NOCLEANUP=yes` to keep the resources for debugging. Override env images with e.g. `GO_RUNTIME_IMAGE=...`.
-- Parallel run: `cd test && JOBS=4 ./run_test.sh tests/foo.sh tests/bar.sh` (logs in `logs/`, summary in `logs/_recap`). Requires GNU parallel; on macOS also install `coreutils findutils gnu-sed` via Homebrew.
-- Full CI matrix: `./test/kind_CI.sh` (used by `.github/workflows/push_pr.yaml`; expects `examples/` repo cloned alongside).
+Integration tests (`test/integration/`, Go + testify, build tag `//go:build integration`, expect a running Fission cluster with `kubectl port-forward svc/router 8888:80 -nfission`):
+- Run the full suite: `go test -tags=integration -timeout=30m -parallel 6 -v ./test/integration/suites/common/...`. Set runtime/builder image env vars (`NODE_RUNTIME_IMAGE`, `PYTHON_RUNTIME_IMAGE`, etc.) — tests `t.Skip` when their required image is unset. `TEST_NOCLEANUP=1` leaves resources for debugging.
+- Run a single test: `go test -tags=integration -run TestNodeHelloHTTP -v ./test/integration/suites/common/...`.
+- Framework reference + "Adding a new test" 12-step guide: `docs/test-migration/02-framework-api.md`.
+- The previous bash test suite (`test/tests/`, `test/run_test.sh`, `test/kind_CI.sh`, `test/utils.sh`, etc.) was retired in 2026-05; the migration history lives in `docs/test-migration/`.
 
 ## Architecture
 

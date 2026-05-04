@@ -5,6 +5,7 @@ package framework
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -161,8 +162,18 @@ func (ns *TestNamespace) WaitForPackageBuildStatus(t *testing.T, ctx context.Con
 // because we need to *early-exit* with the captured BuildLog as soon as the
 // package reaches a different terminal state — testify's Eventually variants
 // can't bail before the timeout.
+//
+// When the desired terminal state is `succeeded` and the build fails with
+// a known transient signature ("dial tcp ...:8000: i/o timeout" — kube-proxy
+// hasn't propagated the env's builder Service yet, more common on older
+// Kubernetes versions), we retry up to `maxTransientRetries` times by
+// resetting Status.BuildStatus → pending. The buildermgr's UpdateFunc
+// re-triggers the build (see pkg/buildermgr/pkgwatcher.go:259-262).
 func (ns *TestNamespace) waitForPackageBuildStatus(t *testing.T, ctx context.Context, pkgName string, want fv1.BuildStatus, timeout time.Duration) {
 	t.Helper()
+	const maxTransientRetries = 3
+	transientRetries := 0
+
 	var lastStatus fv1.BuildStatus
 	var lastLog string
 	err := wait.PollUntilContextTimeout(ctx, 2*time.Second, timeout, true, func(c context.Context) (bool, error) {
@@ -179,12 +190,33 @@ func (ns *TestNamespace) waitForPackageBuildStatus(t *testing.T, ctx context.Con
 		case want:
 			return true, nil
 		case fv1.BuildStatusFailed:
-			if want != fv1.BuildStatusFailed {
-				return false, fmt.Errorf("build failed; build log:\n%s", p.Status.BuildLog)
+			if want == fv1.BuildStatusFailed {
+				return false, nil
 			}
+			if isTransientBuildError(p.Status.BuildLog) && transientRetries < maxTransientRetries {
+				transientRetries++
+				t.Logf("package %q transient build failure (retry %d/%d): %s",
+					pkgName, transientRetries, maxTransientRetries, p.Status.BuildLog)
+				p.Status.BuildStatus = fv1.BuildStatusPending
+				if _, uerr := ns.f.fissionClient.CoreV1().Packages(ns.Name).Update(c, p, metav1.UpdateOptions{}); uerr != nil {
+					return false, fmt.Errorf("transient retry: reset package status to pending: %w", uerr)
+				}
+				return false, nil
+			}
+			return false, fmt.Errorf("build failed; build log:\n%s", p.Status.BuildLog)
 		}
 		return false, nil
 	})
 	require.NoErrorf(t, err, "package %q never reached build status %q (last=%q, last build log: %s)",
 		pkgName, want, lastStatus, lastLog)
+}
+
+// isTransientBuildError reports whether the given build log matches a
+// known transient/race failure signature. The fetcher dial-timeout
+// (kube-proxy lag on the env's builder Service) is the canonical case;
+// add more patterns here as they're identified.
+func isTransientBuildError(buildLog string) bool {
+	return strings.Contains(buildLog, "dial tcp") &&
+		strings.Contains(buildLog, ":8000") &&
+		strings.Contains(buildLog, "i/o timeout")
 }

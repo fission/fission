@@ -15,7 +15,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// TestIDLabel matches the bash convention (clean_resource_by_id in test/utils.sh).
+// TestIDLabel was originally chosen to match the bash test runner's
+// `clean_resource_by_id` convention (the bash suite has since been
+// retired in Phase 6 — see docs/test-migration/01-migration-status.md).
 // Resources created by tests carry this label as a debugging aid; cleanup is
 // driven by per-resource t.Cleanup hooks, not label selectors.
 const TestIDLabel = "fission.io/test-id"
