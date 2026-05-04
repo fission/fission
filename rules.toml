@@ -1,0 +1,85 @@
+# Case 1: zap.Error is the ONLY argument after the message
+# matches: logger.Fatal("msg", zap.Error(err))
+[rule1]
+match=':[indent~\s*]:[receiver].Fatal(:[msg], zap.Error(:[err]))'
+rewrite=''':[indent]:[receiver].Error(:[err], :[msg])
+:[indent]os.Exit(1)'''
+
+# Case 2: zap.Error is the LAST argument (preceded by others)
+# matches: logger.Fatal("msg", "foo", "bar", zap.Error(err))
+# Note the comma in match pattern before zap.Error to eat the trailing comma
+[rule2]
+match=':[indent~\s*]:[receiver].Fatal(:[msg], :[pre], zap.Error(:[err]))'
+rewrite=''':[indent]:[receiver].Error(:[err], :[msg], :[pre])
+:[indent]os.Exit(1)'''
+
+# Case 3: zap.Error is in the MIDDLE or FIRST (followed by others)
+# matches: logger.Fatal("msg", zap.Error(err), "foo")
+# Note the comma after zap.Error to eat the leading comma
+[rule3]
+match=':[indent~\s*]:[receiver].Fatal(:[msg], :[pre]zap.Error(:[err]), :[post])'
+rewrite=''':[indent]:[receiver].Error(:[err], :[msg], :[pre]:[post])
+:[indent]os.Exit(1)'''
+
+[rule4]
+match='zap.String(:[k], :[v])'
+rewrite=':[k], :[v]'
+
+[rule5]
+match='zap.Int(:[k], :[v])'
+rewrite=':[k], :[v]'
+
+[rule6]
+match='zap.Bool(:[k], :[v])'
+rewrite=':[k], :[v]'
+
+[rule7]
+match='zap.Duration(:[k], :[v])'
+rewrite=':[k], :[v]'
+
+[rule8]
+# Catches zap.Any, zap.Object, zap.Reflect, etc.
+match='zap.:[type](:[k], :[v])'
+rewrite=':[k], :[v]'
+
+[rule9]
+match=':[indent~\s*]:[receiver].Error(:[msg], zap.Error(:[err]))'
+rewrite=''':[indent]:[receiver].Error(:[err], :[msg])'''
+
+[rule10]
+match=':[indent~\s*]:[receiver].Fatal(:[msg], :[pre], zap.Error(:[err]))'
+rewrite=''':[indent]:[receiver].Error(:[err], :[msg], :[pre])'''
+
+[rule11]
+match=':[indent~\s*]:[receiver].Fatal(:[msg], :[pre]zap.Error(:[err]), :[post])'
+rewrite=''':[indent]:[receiver].Error(:[err], :[msg], :[pre]:[post])'''
+
+# Replace logger.Debug with logger.V(1).Debug
+[rule12]
+match=':[indent~\s*]:[receiver].Debug(:[args])'
+rewrite=':[indent]:[receiver].V(1).Info(:[args])'
+
+
+# caaf.logger.Warn("failed to adopt resources for function", zap.Error(err))
+[rule13]
+match=':[indent~\s*]:[receiver].Warn(:[msg], zap.Error(:[err]))'
+rewrite=''':[indent]:[receiver].Error(:[err], :[msg])'''
+
+# caaf.logger.Warn("failed to adopt resources for function", zap.Error(err))
+[rule13]
+match=':[indent~\s*]:[receiver].Warn(:[msg], zap.Error(:[err]))'
+rewrite=''':[indent]:[receiver].Error(:[err], :[msg])'''
+
+[rule14]
+match=':[indent~\s*]:[receiver].Warn(:[msg], :[pre], zap.Error(:[err]))'
+rewrite=''':[indent]:[receiver].Error(:[err], :[msg], :[pre])'''
+
+[rule15]
+match=':[indent~\s*]:[receiver].Warn(:[msg], :[pre]zap.Error(:[err]), :[post])'
+rewrite=''':[indent]:[receiver].Error(:[err], :[msg], :[pre]:[post])'''
+
+# deploy.logger.Error("Error getting function", "function", function)
+# msg should be string only, so add nil as error
+[rule16]
+match=':[indent~\s*]:[receiver].Error(:[msg~"[^"]+"], :[key], :[val])'
+rewrite=''':[indent]:[receiver].Error(nil, :[msg], :[key], :[val])'''

@@ -4,8 +4,10 @@ package framework
 
 import "os"
 
-// RuntimeImages holds the runtime/builder images used by tests, sourced from
-// the same environment variables that test/kind_CI.sh sets in CI.
+// RuntimeImages holds the runtime/builder images used by tests, sourced
+// from environment variables set in the "Go integration tests" step of
+// .github/workflows/push_pr.yaml. Local runs need to export these
+// manually; tests t.Skip when their required image is unset.
 type RuntimeImages struct {
 	Node             string
 	NodeBuilder      string

@@ -59,12 +59,6 @@ jobs:
           go-version-file: "go.mod"
           cache: true
 
-      - name: Checkout sources
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          repository: fission/examples
-          path: examples
-
       - name: Helm installation
         uses: Azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0
         with:
@@ -110,13 +104,6 @@ jobs:
           helm install prometheus prometheus-community/kube-prometheus-stack -n monitoring \
           --version 45.28.0 --set grafana.enabled=false --set alertmanager.enabled=false
 
-      - name: Build and Install Fission CLI
-        run: |
-          make debug-vars
-          make build-fission-cli
-          sudo make install-fission-cli
-          sudo chmod +x /usr/local/bin/fission
-
       - name: Build and Install Fission
         timeout-minutes: 10
         run: |
@@ -124,15 +111,10 @@ jobs:
           make create-crds
           SKAFFOLD_PROFILE=kind-ci make skaffold-deploy
 
-      # Port-forward is started inside each Go test step (and kind_CI.sh once
-      # re-enabled) rather than as a standalone step, because background
-      # processes started with `&` may not survive across GitHub Actions steps
-      # on every runner image. Wait-for-readiness covers cluster startup races.
-
-      - name: Get fission version
-        timeout-minutes: 10
-        run: |
-          fission version
+      # Port-forward is started inside the Go test step rather than as a
+      # standalone step, because background processes started with `&` may
+      # not survive across GitHub Actions steps on every runner image.
+      # Wait-for-readiness covers cluster startup races.
 
       - name: Go integration tests (common phase)
         timeout-minutes: 30
@@ -192,21 +174,13 @@ jobs:
           go test -tags=integration -timeout=25m -parallel 6 -v \
             ./test/integration/suites/common/...
 
-      # Bash integration runner now invokes only the one bash test that
-      # has no Go counterpart yet (test_obj_create_in_diff_ns.sh, which is
-      # itself #test:disabled). Kept here as a no-op safety net while the
-      # follow-up cleanup PR lands; once that's merged, this step and the
-      # entire test/kind_CI.sh + test/run_test.sh harness can be removed.
-      - name: Integration tests
-        timeout-minutes: 90
-        run: ./test/kind_CI.sh
-
       - name: Collect Fission Dump
         timeout-minutes: 5
         if: ${{ always() }}
         run: |
-          # Tolerate missing CLI: we skip the fission CLI install on this
-          # branch (in-process CLI for Go tests). Restored before merge.
+          # The Go integration suite drives the CLI in-process via
+          # cmd.fission-cli/app.App, so /usr/local/bin/fission is not
+          # installed in this job. Tolerate its absence on dump.
           command -v fission && fission support dump || true
 
       - name: Kind export logs
@@ -258,153 +232,3 @@ jobs:
           retention-days: 5
           if-no-files-found: ignore
 
-  # Job to ensure backward compatibility if function and builder pods are created
-  # inside functionNamespace and builderNamespace
-  integration-test-old:
-    runs-on: ${{ matrix.os }}
-    if: ${{ contains(github.event.pull_request.labels.*.name, 'run-old-ci') }}
-    strategy:
-      fail-fast: false
-      matrix:
-        kindversion: ["v1.31.12"]
-        os: [ubuntu-24.04]
-    steps:
-      - name: Harden Runner
-        uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40 # v2.19.0
-        with:
-          egress-policy: audit
-
-      - name: Checkout sources
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - name: setup go
-        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
-        with:
-          go-version-file: "go.mod"
-          cache: true
-
-      - name: Checkout sources
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          repository: fission/examples
-          path: examples
-
-      - name: Helm installation
-        uses: Azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0
-        with:
-          version: ${{ env.HELM_VERSION }}
-
-      - name: Kind Cluster
-        uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # v1.14.0
-        with:
-          node_image: kindest/node:${{ matrix.kindversion }}
-          version: ${{ env.KIND_VERSION }}
-          cluster_name: ${{ env.KIND_CLUSTER_NAME }}
-          config: kind.yaml
-
-      - name: Configuring and testing the Installation
-        run: |
-          kubectl cluster-info --context kind-${{ env.KIND_CLUSTER_NAME }}
-          kubectl get nodes
-          sudo apt-get install -y apache2-utils
-          kubectl config use-context kind-${{ env.KIND_CLUSTER_NAME }}
-          kubectl config view
-
-      - name: Helm chart lint
-        run: |
-          helm lint charts/fission-all/
-
-      - name: Install Skaffold
-        run: |
-          curl -Lo skaffold https://storage.googleapis.com/skaffold/releases/${{ env.SKAFFOLD_VERSION }}/skaffold-linux-amd64
-          sudo install skaffold /usr/local/bin/
-          skaffold version
-
-      - name: Install GoReleaser
-        uses: goreleaser/goreleaser-action@1a80836c5c9d9e5755a25cb59ec6f45a3b5f41a8 # v7.2.1
-        with:
-          install-only: true
-          version: "~> v2"
-
-      - name: Setup Prometheus Stack
-        run: |
-          helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-          helm repo update
-          kubectl create ns monitoring
-          helm install prometheus prometheus-community/kube-prometheus-stack -n monitoring \
-          --version 45.28.0 --set grafana.enabled=false --set alertmanager.enabled=false
-
-      - name: Build and Install Fission CLI
-        run: |
-          make debug-vars
-          make build-fission-cli
-          sudo make install-fission-cli
-          sudo chmod +x /usr/local/bin/fission
-
-      - name: Build and Install Fission
-        timeout-minutes: 10
-        run: |
-          kubectl create ns fission
-          make create-crds
-          SKAFFOLD_PROFILE=kind-ci-old make skaffold-deploy
-
-      - name: Port-forward fission components
-        run: |
-          kubectl port-forward svc/router 8888:80 -nfission &
-
-      - name: Get fission version
-        timeout-minutes: 10
-        run: |
-          fission version
-
-      - name: Integration tests
-        timeout-minutes: 90
-        run: |
-          export FUNCTION_NAMESPACE=fission-function
-          export BUILDER_NAMESPACE=fission-builder
-          ./test/kind_CI.sh
-
-      - name: Collect Fission Dump
-        timeout-minutes: 5
-        if: ${{ always() }}
-        run: |
-          command -v fission && fission support dump
-
-      - name: Kind export logs
-        timeout-minutes: 10
-        if: ${{ always() }}
-        run: |
-          kind export logs --name kind kind-logs
-
-      - name: Backup prometheus data
-        timeout-minutes: 10
-        if: ${{ always() }}
-        run: |
-          TRACE=1 ./hack/backup-prometheus.sh
-
-      - name: Archive fission dump
-        timeout-minutes: 10
-        if: ${{ failure() || cancelled() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: fission-dump-${{ github.run_id }}-${{ matrix.kindversion }}
-          path: fission-dump/*.zip
-          retention-days: 5
-
-      - name: Archive prometheus dump
-        timeout-minutes: 10
-        if: ${{ always() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: prom-dump-${{ github.run_id }}-${{ matrix.kindversion }}
-          path: /tmp/prometheus/*
-          retention-days: 5
-
-      - name: Archive kind logs
-        timeout-minutes: 10
-        if: ${{ always() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: kind-logs-${{ github.run_id }}-${{ matrix.kindversion }}
-          path: kind-logs/*
-          retention-days: 5

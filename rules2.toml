@@ -1,0 +1,7 @@
+
+
+# caaf.logger.Panic("receive unknown object while creating function - expected pointer of function service object")
+[rule17]
+match=':[indent~\s*]:[receiver].Panic(:[args])'
+rewrite=''':[indent]:[receiver].Error(nil, :[args])
+:[indent]panic(:[args])'''

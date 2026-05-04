@@ -1,9 +1,0 @@
-{
-  "name": "fission-nodejs-runtime",
-  "engines": {
-    "node": ">=7.6.0"
-  },
-  "dependencies": {
-    "moment": "*"
-  }
-}
