@@ -1,4 +1,9 @@
 #!/bin/bash
+#test:disabled
+# Migrated to Go: test/integration/suites/common/internal_routes_test.go
+# (TestInternalRoutes). This script is retained for reference until the bash
+# teardown phase (Phase 6 of the migration; see
+# docs/test-migration/00-design.md).
 
 #
 # Create two functions, make sure their internal http triggers invoke

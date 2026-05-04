@@ -1,4 +1,9 @@
 #!/bin/bash
+#test:disabled
+# Migrated to Go: test/integration/suites/common/package_command_test.go
+# (TestPackageCommand, with subtests src_glob/src_zip/deploy_glob/deploy_zip).
+# Retained for reference until the bash teardown phase
+# (see docs/test-migration/00-design.md).
 
 set -euo pipefail
 source $(dirname $0)/../utils.sh

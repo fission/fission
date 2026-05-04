@@ -1,6 +1,9 @@
 #!/bin/bash
-
 #test:disabled
+# Migrated to Go: test/integration/suites/common/java_builder_test.go (TestJavaBuilder)
+# Skip-by-default in CI (no JVM_RUNTIME_IMAGE / JVM_BUILDER_IMAGE); the Go test
+# runs when both env vars are set — Java source is vendored, builder pod compiles.
+# This script is retained for reference until the bash teardown phase (PR #3356).
 
 set -euo pipefail
 source $(dirname $0)/../../utils.sh

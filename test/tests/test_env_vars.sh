@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 #test:disabled
+# Migrated to Go: test/integration/suites/common/env_vars_test.go (TestEnvVars)
+# This script is retained for reference until the bash teardown phase (PR #3356).
 
 set -euo pipefail
 source $(dirname $0)/../utils.sh

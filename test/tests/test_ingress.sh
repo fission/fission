@@ -1,6 +1,11 @@
 #!/bin/bash
-#test:disabled 
-# this test is disabled only for Kind tests and for GKE/EKS tests should be enabled
+#test:disabled
+# Migrated to Go: test/integration/suites/common/ingress_test.go (TestIngress)
+# Originally disabled because Kind has no ingress controller; the Go port verifies
+# the Ingress CR creation/update via the Kubernetes clientset, which is what the
+# bash version's kubectl assertions did anyway. The live HTTP-via-controller
+# request at the end of the bash script is not ported (Kind has no controller).
+# This script is retained for reference until the bash teardown phase (PR #3356).
 
 set -euo pipefail
 source $(dirname $0)/../utils.sh

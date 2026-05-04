@@ -1,4 +1,7 @@
 #!/bin/bash
+#test:disabled
+# Migrated to Go: test/integration/suites/common/function_timeout_test.go
+# (TestFunctionTimeout). Retained for reference until the bash teardown phase.
 
 set -euo pipefail
 source $(dirname $0)/../utils.sh

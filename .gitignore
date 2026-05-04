@@ -10,6 +10,7 @@ cmd/reporter/reporter
 # Logs
 test/logs/
 test/e2e/cli/fission-dump/
+test/integration/logs/
 
 # Pycharm IDE
 .idea

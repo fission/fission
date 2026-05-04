@@ -1,4 +1,8 @@
 #!/bin/bash
+#test:disabled
+# Migrated to Go: test/integration/suites/common/create_fn_with_url_test.go
+# (TestCreateFunctionWithURL). Retained for reference until the bash teardown
+# phase (see docs/test-migration/00-design.md).
 
 set -euo pipefail
 source $(dirname $0)/../utils.sh

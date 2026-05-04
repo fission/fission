@@ -1,4 +1,8 @@
 #!/bin/bash
+#test:disabled
+# Migrated to Go: test/integration/suites/TestScaleChange (common/scale_change_test.go).
+# Retained for reference until the bash teardown phase.
+
 
 set -euo pipefail
 source $(dirname $0)/../../utils.sh

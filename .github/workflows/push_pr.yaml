@@ -124,15 +124,79 @@ jobs:
           make create-crds
           SKAFFOLD_PROFILE=kind-ci make skaffold-deploy
 
-      - name: Port-forward fission components
-        run: |
-          kubectl port-forward svc/router 8888:80 -nfission &
+      # Port-forward is started inside each Go test step (and kind_CI.sh once
+      # re-enabled) rather than as a standalone step, because background
+      # processes started with `&` may not survive across GitHub Actions steps
+      # on every runner image. Wait-for-readiness covers cluster startup races.
 
       - name: Get fission version
         timeout-minutes: 10
         run: |
           fission version
 
+      - name: Go integration tests (common phase)
+        timeout-minutes: 30
+        env:
+          NODE_RUNTIME_IMAGE: ghcr.io/fission/node-env-22
+          NODE_BUILDER_IMAGE: ghcr.io/fission/node-builder-22
+          PYTHON_RUNTIME_IMAGE: ghcr.io/fission/python-env
+          PYTHON_BUILDER_IMAGE: ghcr.io/fission/python-builder
+          GO_RUNTIME_IMAGE: ghcr.io/fission/go-env-1.23
+          GO_BUILDER_IMAGE: ghcr.io/fission/go-builder-1.23
+          FISSION_ROUTER: 127.0.0.1:8888
+          FISSION_NAMESPACE: fission
+          LOG_DIR: ${{ github.workspace }}/test/integration/logs
+        run: |
+          # Pre-pull and kind-load every runtime/builder image referenced by
+          # tests in this phase so the Kind nodes don't re-pull on first
+          # function invocation. Add new images to this list as more tests
+          # land. Set FOO_IMAGE="" in the env block above to skip an image.
+          # Pull/load run in parallel — sequential was ~50s, parallel ~15s.
+          load_image() {
+            local img="$1"
+            [ -z "$img" ] && return 0
+            docker pull -q "$img" \
+              && kind load docker-image "$img" --name "${KIND_CLUSTER_NAME}"
+          }
+          export -f load_image
+          export KIND_CLUSTER_NAME
+          pids=()
+          for img in "$NODE_RUNTIME_IMAGE" "$NODE_BUILDER_IMAGE" "$PYTHON_RUNTIME_IMAGE" "$PYTHON_BUILDER_IMAGE" "$GO_RUNTIME_IMAGE" "$GO_BUILDER_IMAGE"; do
+            load_image "$img" &
+            pids+=($!)
+          done
+          for pid in "${pids[@]}"; do
+            wait "$pid" || { echo "image preload failed (pid $pid)"; exit 1; }
+          done
+
+          kubectl port-forward svc/router 8888:80 -n "$FISSION_NAMESPACE" >/tmp/pf.log 2>&1 &
+          PF_PID=$!
+          trap "kill $PF_PID 2>/dev/null || true" EXIT
+
+          # Wait for port-forward to accept TCP connections. Without -f, curl
+          # exits 0 for any HTTP response (including 4xx/5xx) and exit 7 for
+          # connection refused — exactly what we want here.
+          for i in $(seq 1 30); do
+            if curl -sS --connect-timeout 1 --max-time 2 -o /dev/null "http://127.0.0.1:8888/" 2>/dev/null; then
+              echo "router port-forward ready after ${i}s"
+              break
+            fi
+            if [ "$i" -eq 30 ]; then
+              echo "router port-forward did not become ready in 30s; pf log:"
+              cat /tmp/pf.log || true
+              exit 1
+            fi
+            sleep 1
+          done
+
+          go test -tags=integration -timeout=25m -parallel 6 -v \
+            ./test/integration/suites/common/...
+
+      # Bash integration runner now invokes only the one bash test that
+      # has no Go counterpart yet (test_obj_create_in_diff_ns.sh, which is
+      # itself #test:disabled). Kept here as a no-op safety net while the
+      # follow-up cleanup PR lands; once that's merged, this step and the
+      # entire test/kind_CI.sh + test/run_test.sh harness can be removed.
       - name: Integration tests
         timeout-minutes: 90
         run: ./test/kind_CI.sh
@@ -141,7 +205,9 @@ jobs:
         timeout-minutes: 5
         if: ${{ always() }}
         run: |
-          command -v fission && fission support dump
+          # Tolerate missing CLI: we skip the fission CLI install on this
+          # branch (in-process CLI for Go tests). Restored before merge.
+          command -v fission && fission support dump || true
 
       - name: Kind export logs
         timeout-minutes: 10
@@ -181,6 +247,16 @@ jobs:
           name: kind-logs-${{ github.run_id }}-${{ matrix.kindversion }}
           path: kind-logs/*
           retention-days: 5
+
+      - name: Archive Go integration test logs
+        timeout-minutes: 10
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: go-integration-logs-${{ github.run_id }}-${{ matrix.kindversion }}
+          path: test/integration/logs/
+          retention-days: 5
+          if-no-files-found: ignore
 
   # Job to ensure backward compatibility if function and builder pods are created
   # inside functionNamespace and builderNamespace

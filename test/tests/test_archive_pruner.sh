@@ -1,4 +1,8 @@
 #!/bin/bash
+#test:disabled
+# Migrated to Go: test/integration/suites/common/archive_pruner_test.go (TestArchivePruner)
+# This script is retained for reference until the bash teardown phase (PR #3356).
+
 # set -euo pipefail
 source $(dirname $0)/../utils.sh
 
