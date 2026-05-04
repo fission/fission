@@ -1,32 +1,34 @@
 # Migration Status
 
-Live tracker for the bash → Go integration test migration.
-See `00-design.md` for the design; `02-framework-api.md` for helper docs.
+Bash → Go integration test migration. Migration is complete; this file is preserved as a history of decisions and per-test mapping.
+See `00-design.md` for the design; `02-framework-api.md` for the framework reference and the "Adding a new test" guide.
 
-## Legend
+## Final state (Phase 6 — bash teardown)
+
+The bash test suite has been deleted. All bash test files under `test/tests/`, the `test/run_test.sh` runner, `test/kind_CI.sh` orchestrator, and the supporting `test/utils.sh` / `test/test_utils.sh` / `test/build.sh` / `test/test.sh` / `test/upgrade/` (Travis-era) helpers are gone. `test/init_tools.sh` is preserved because it's also sourced by `hack/build-yaml.sh` and `hack/generate-helm-manifest.sh`.
+
+Of the 48 original bash tests, 47 have a Go counterpart in `test/integration/suites/common/`. The one un-migrated test — `test_obj_create_in_diff_ns.sh` — is also deleted in this teardown; its bash logic lives in git history and the cross-namespace router config it depended on is reserved for a future targeted PR if needed.
+
+## Legend (historical)
 
 | Status | Meaning |
 |--------|---------|
 | `bash-active` | Bash test runs in CI; not yet migrated. |
-| `bash-disabled-existing` | Bash test was already `#test:disabled` before this migration began. Triage in Phase 5. |
-| `bash-disabled-migrated` | Bash test marked `#test:disabled` because the Go counterpart is live. |
+| `bash-disabled-existing` | Bash test was already `#test:disabled` before the migration began. Triaged in Phase 5. |
+| `bash-disabled-migrated` | Bash test marked `#test:disabled` because the Go counterpart was live. |
 | `go-live` | Go test is in CI and passing. |
 | `go-skip` | Go test exists but is `t.Skip`'d (env-gated or known limitation). |
-| `deleted` | Bash test was deleted as part of triage; no Go counterpart needed. |
+| `deleted` | Bash test was deleted as part of triage; no Go counterpart. |
 
-## Summary counters
+## Summary counters (final)
 
-Update these whenever the table below changes.
-
-- Total bash tests: 48
-- In `kind_CI.sh` active list: 1 (only `test_obj_create_in_diff_ns.sh` — every other bash test, including the previously-disabled-existing ones, has a Go counterpart now)
-- Not in `kind_CI.sh` active list: 47
-- `bash-active`: 1 (`test_obj_create_in_diff_ns.sh`; needs cross-ns router config — out of scope for this PR)
+- Total bash tests originally: 48
+- `go-live`: 39 (run on every PR)
+- `go-skip`: 6 (`TestPackageCommand/src_glob`, `TestIdleObjectsReaper`, `TestTensorflowServingEnv`, `TestJVMJerseyEnv`, `TestJavaEnv`, `TestJavaBuilder` — env-gated; in suite, run when image/jar env vars are set)
+- `deleted` (no Go counterpart): 1 (`test_obj_create_in_diff_ns.sh`; cross-ns router config out of scope)
+- `bash-disabled-migrated → deleted`: 47 (deleted along with the harness in Phase 6)
+- `bash-active`: 0
 - `bash-disabled-existing`: 0
-- `bash-disabled-migrated`: 44
-- `go-live`: 39
-- `go-skip`: 6 (`TestPackageCommand/src_glob`, `TestIdleObjectsReaper`, `TestTensorflowServingEnv`, `TestJVMJerseyEnv`, `TestJavaEnv`, `TestJavaBuilder` — env-gated; run when image/jar env vars are set)
-- `deleted`: 0
 
 ## Tests
 
@@ -195,11 +197,17 @@ Remaining for triage:
   reasonably do from a Go test. Land when a stable jar artifact is
   vendorable.
 
-### Phase 6 — Bash teardown (PR pending)
+### Phase 6 — Bash teardown (this PR)
 
-- [ ] Delete `test/tests/*.sh` (all bash test scripts).
-- [ ] Delete `test/run_test.sh`.
-- [ ] Delete `test/utils.sh`, `test/test_utils.sh`, `test/init_tools.sh`.
-- [ ] Delete or shrink `test/kind_CI.sh` (image preload may move into the workflow YAML).
-- [ ] Remove `examples/` clone step from `.github/workflows/push_pr.yaml`.
-- [ ] Decide: keep `docs/test-migration/02-framework-api.md` as permanent docs (move to `docs/integration-testing.md`?), delete the rest of the dir.
+- [x] Delete `test/tests/` — all 48 bash test scripts and their fixture subdirs.
+- [x] Delete `test/run_test.sh` (parallel runner, no longer needed).
+- [x] Delete `test/utils.sh` (only sourced by `test/tests/*.sh`).
+- [x] Delete `test/kind_CI.sh` (orchestrator that invoked `run_test.sh`).
+- [x] Delete `test/test_utils.sh` (only sourced by deleted bash entry points).
+- [x] Delete `test/build.sh`, `test/test.sh` (Travis-era CI runners; CI moved to GitHub Actions long ago).
+- [x] Delete `test/upgrade/` (Travis-era upgrade harness; current upgrade tests live under `test/upgrade_test/` and run via `.github/workflows/upgrade_test.yaml`).
+- [x] Keep `test/init_tools.sh` — also sourced by `hack/build-yaml.sh` and `hack/generate-helm-manifest.sh`.
+- [x] `.github/workflows/push_pr.yaml`: remove the `Build and Install Fission CLI` step (Go suite uses the in-process CLI), the `Get fission version` step, the `Integration tests` step (`./test/kind_CI.sh`), and the `examples/` checkout (Go tests vendor their fixtures under `test/integration/testdata/`).
+- [x] `.github/workflows/push_pr.yaml`: delete the `integration-test-old` job (label-gated; depended on the deleted `kind_CI.sh` + a separate `kind-ci-old` skaffold profile that's no longer exercised).
+- [x] `test/README.md`: rewritten to point at the Go integration suite, with a local-run quickstart and a pointer to `02-framework-api.md` for the framework reference.
+- [x] `docs/test-migration/`: kept as permanent reference. `02-framework-api.md` is the canonical "how to add a test" guide; this file (`01-migration-status.md`) and `00-design.md` document the migration history.
