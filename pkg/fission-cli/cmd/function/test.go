@@ -210,7 +210,7 @@ func doHTTPRequest(ctx context.Context, url string, headers []string, method, bo
 		if err != nil {
 			return nil, err
 		}
-		console.Verbose(2, string(dumpReq))
+		console.Verbose(2, "%s", string(dumpReq))
 	}
 
 	hc := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
@@ -224,7 +224,7 @@ func doHTTPRequest(ctx context.Context, url string, headers []string, method, bo
 		if err != nil {
 			return nil, err
 		}
-		console.Verbose(2, string(dumpRes))
+		console.Verbose(2, "%s", string(dumpRes))
 	}
 
 	return resp, nil

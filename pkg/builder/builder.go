@@ -144,7 +144,12 @@ func (builder *Builder) Handler(w http.ResponseWriter, r *http.Request) {
 		builder.reply(r.Context(), w, "", fmt.Sprintf("%s: %s", e, err.Error()), http.StatusBadRequest)
 		return
 	}
-	logger.Info("builder received request", "request", req)
+	// Log only the well-typed fields, not the full request struct, so an
+	// attacker-controlled BuildCommand cannot inject CR/LF into a
+	// non-structured logging backend before validation runs below.
+	logger.Info("builder received request",
+		"srcPkgFilename", req.SrcPkgFilename,
+		"buildCommandLen", len(req.BuildCommand))
 
 	logger.V(1).Info("starting build")
 	srcPkgPath, err := utils.SanitizeFilePath(filepath.Join(builder.sharedVolumePath, req.SrcPkgFilename), builder.sharedVolumePath)

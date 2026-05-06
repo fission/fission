@@ -107,7 +107,7 @@ func NewClient(opts ClientOptions) (*Client, error) {
 	} else {
 		cmdConfig, err1 = GetClientConfig(opts.KubeContext)
 		if err1 != nil {
-			console.Verbose(2, err1.Error())
+			console.Verbose(2, "%s", err1.Error())
 		}
 
 		if cmdConfig != nil {

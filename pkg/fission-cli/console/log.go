@@ -52,10 +52,25 @@ func Infof(format string, args ...any) {
 
 func Verbose(verbosityLevel int, format string, args ...any) {
 	if Verbosity >= verbosityLevel {
-		fmt.Printf(format+"\n", args...)
+		fmt.Println(sanitizeLogLine(fmt.Sprintf(format, args...)))
 	}
 }
 
+// sanitizeLogLine strips trailing newlines and replaces any embedded
+// CR/LF with a literal backslash-r/-n so external data can't inject
+// fake log lines (CWE-117).
+func sanitizeLogLine(s string) string {
+	s = strings.TrimSuffix(s, "\n")
+	if !strings.ContainsAny(s, "\n\r") {
+		return s
+	}
+	r := strings.NewReplacer("\r", "\\r", "\n", "\\n")
+	return r.Replace(s)
+}
+
+// trimNewline preserves the existing API for callers that only need
+// to drop a trailing newline; it now also neutralises embedded
+// CR/LF the same way sanitizeLogLine does.
 func trimNewline(m any) string {
-	return strings.TrimSuffix(fmt.Sprintf("%v", m), "\n")
+	return sanitizeLogLine(fmt.Sprintf("%v", m))
 }

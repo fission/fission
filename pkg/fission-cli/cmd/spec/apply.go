@@ -672,7 +672,7 @@ func applyPackages(ctx context.Context, fclient cmd.Client, fr *FissionResources
 	for _, o := range fr.Packages {
 		// apply deploymentConfig so we can find our objects on future apply invocations
 		applyDeploymentConfig(&o.ObjectMeta, fr)
-		console.Verbose(2, fmt.Sprintf("Package is here '%s','%s/%s'", k8sCache.MetaObjectToName(&o.ObjectMeta).String(), o.Spec.Environment.Namespace, o.Spec.Environment.Name))
+		console.Verbose(2, "Package is here '%s','%s/%s'", k8sCache.MetaObjectToName(&o.ObjectMeta).String(), o.Spec.Environment.Namespace, o.Spec.Environment.Name)
 
 		// index desired state
 		desired[k8sCache.MetaObjectToName(&o.ObjectMeta).String()] = true
