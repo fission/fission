@@ -86,8 +86,12 @@ func Unarchive(ctx context.Context, src string, dst string) error {
 			return os.MkdirAll(destPath, f.Mode())
 		}
 
-		// check if parent directory exists for the file
-		if err := os.MkdirAll(filepath.Dir(destPath), os.ModeDir|0o750); err != nil {
+		// check if parent directory exists for the file. Mode 0o755 is
+		// required so that other containers in the same pod (running under
+		// different UIDs / GIDs — fetcher sidecar at UID 10001 vs. builder
+		// running as root) can read this shared /packages volume. Tighter
+		// modes break cross-container access for the v2 builder flow.
+		if err := os.MkdirAll(filepath.Dir(destPath), os.ModeDir|0o755); err != nil {
 			return fmt.Errorf("failed to create parent directory: %w", err)
 		}
 
