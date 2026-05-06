@@ -39,6 +39,7 @@ manifests:
           imageTag: ""
           influxdb.enabled: "false"
           namespace: fission
+          networkPolicy.enabled: "false"
           openTelemetry.otlpCollectorEndpoint: ""
           openTelemetry.otlpInsecure: "true"
           podMonitor.additionalPodMonitorLabels.release: prometheus
@@ -114,6 +115,12 @@ profiles:
         value: true
       - op: replace
         path: /manifests/helm/releases/0/setValues/grafana.dashboards.enabled
+        value: true
+      # Exercise the storagesvc NetworkPolicy in CI so a regression in its
+      # selectors is caught before it reaches users with NetworkPolicy-aware
+      # CNIs (kindnet enforces NetworkPolicy from kind v0.27 / k8s 1.30+).
+      - op: replace
+        path: /manifests/helm/releases/0/setValues/networkPolicy.enabled
         value: true
   - name: kind-ci-old
     patches:

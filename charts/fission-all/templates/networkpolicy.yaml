@@ -56,4 +56,10 @@ spec:
       ports:
         - port: 8000
           protocol: TCP
+    # Allow the metrics endpoint from any source so Prometheus / podMonitor
+    # scraping works regardless of where the operator is deployed. Metrics
+    # contain no archive content, only counts.
+    - ports:
+        - port: 8080
+          protocol: TCP
 {{- end }}

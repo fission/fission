@@ -43,6 +43,6 @@ cosign.key
 # Dumps
 .dumps/
 
-# Security scan artefacts (Harness SARIF output, etc.)
+# SAST scan artefacts (SARIF reports)
 output.sarif
 *.sarif
