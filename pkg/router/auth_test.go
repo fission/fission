@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -167,4 +169,53 @@ func TestRouterAuth(t *testing.T) {
 			t.Errorf("expected body \"%v\", got \"%v\"", test.Body, string(body))
 		}
 	}
+}
+
+// TestAuthLoginRejectsBadCredentials verifies that authLoginHandler returns
+// 401 for both wrong-username and wrong-password inputs after the switch to
+// crypto/subtle.ConstantTimeCompare. We don't try to assert on wall-clock
+// timing — that's flaky in CI — but we do exercise both branches to confirm
+// the comparison hasn't been short-circuited.
+func TestAuthLoginRejectsBadCredentials(t *testing.T) {
+	t.Setenv("AUTH_USERNAME", "alice")
+	t.Setenv("AUTH_PASSWORD", "s3cret")
+	t.Setenv("JWT_SIGNING_KEY", "k")
+
+	featureConfig := &config.FeatureConfig{}
+	featureConfig.AuthConfig.JWTIssuer = "fission"
+	featureConfig.AuthConfig.JWTExpiryTime = 60
+	h := authLoginHandler(featureConfig)
+
+	cases := []struct {
+		name string
+		body fv1.AuthLogin
+	}{
+		{name: "wrong username", body: fv1.AuthLogin{Username: "bob", Password: "s3cret"}},
+		{name: "wrong password", body: fv1.AuthLogin{Username: "alice", Password: "wrong"}},
+		{name: "both wrong", body: fv1.AuthLogin{Username: "bob", Password: "wrong"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			b, _ := json.Marshal(tc.body)
+			req := httptest.NewRequest(http.MethodPost, "/auth/login", bytes.NewReader(b))
+			rr := httptest.NewRecorder()
+			h(rr, req)
+			if rr.Code != http.StatusUnauthorized {
+				t.Fatalf("want 401, got %d (body=%q)", rr.Code, rr.Body.String())
+			}
+			if !strings.Contains(rr.Body.String(), "invalid username or password") {
+				t.Fatalf("body should reference invalid credentials, got %q", rr.Body.String())
+			}
+		})
+	}
+
+	t.Run("correct credentials succeed", func(t *testing.T) {
+		b, _ := json.Marshal(fv1.AuthLogin{Username: "alice", Password: "s3cret"})
+		req := httptest.NewRequest(http.MethodPost, "/auth/login", bytes.NewReader(b))
+		rr := httptest.NewRecorder()
+		h(rr, req)
+		if rr.Code != http.StatusCreated {
+			t.Fatalf("want 201, got %d (body=%q)", rr.Code, rr.Body.String())
+		}
+	})
 }

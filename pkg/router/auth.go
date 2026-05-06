@@ -1,6 +1,7 @@
 package router
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -137,7 +138,11 @@ func authLoginHandler(featureConfig *config.FeatureConfig) func(w http.ResponseW
 
 		rat := &fv1.RouterAuthToken{}
 
-		if t.Username != auth.username || t.Password != auth.password {
+		// Constant-time compare on both fields ensures the response time does
+		// not depend on which field mismatched or how many bytes matched.
+		userOK := subtle.ConstantTimeCompare([]byte(t.Username), []byte(auth.username)) == 1
+		passOK := subtle.ConstantTimeCompare([]byte(t.Password), []byte(auth.password)) == 1
+		if !userOK || !passOK {
 			http.Error(w, errInvalidCreds.Error(), http.StatusUnauthorized)
 			return
 		}
