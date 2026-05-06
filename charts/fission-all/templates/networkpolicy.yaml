@@ -10,6 +10,13 @@
 # Off by default for backwards compatibility. Enable with:
 #   helm upgrade ... --set networkPolicy.enabled=true
 #
+# Each podSelector below is paired with an empty `namespaceSelector: {}` so
+# the rule matches pods in any namespace — env-builder and function pods
+# typically live in user namespaces (e.g. `default`) while storagesvc lives
+# in the Fission install namespace (e.g. `fission`). Without
+# `namespaceSelector`, NetworkPolicy podSelector only matches pods in the
+# same namespace as the policy itself.
+#
 # CNI must support NetworkPolicy ingress for this to take effect (Calico,
 # Cilium, Weave, etc.). EKS without an addon and some other defaults are no-ops.
 ---
@@ -35,7 +42,8 @@ spec:
     # and uploads the resulting deploy archive after. buildermgr stamps
     # them with `owner=buildermgr`.
     - from:
-        - podSelector:
+        - namespaceSelector: {}
+          podSelector:
             matchLabels:
               owner: buildermgr
       ports:
@@ -46,7 +54,8 @@ spec:
     # `executorType` label is set by the executor when the pod is created
     # (one of poolmgr / newdeploy / container).
     - from:
-        - podSelector:
+        - namespaceSelector: {}
+          podSelector:
             matchExpressions:
               - key: executorType
                 operator: In
