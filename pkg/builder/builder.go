@@ -42,7 +42,17 @@ const (
 	// supported environment variables
 	envSrcPkg    string = "SRC_PKG"
 	envDeployPkg string = "DEPLOY_PKG"
+
+	// defaultBuildCommand is invoked when the request omits a buildCommand.
+	defaultBuildCommand = "/build"
 )
+
+// shellMetacharacters are characters that can change the meaning of a command
+// when interpreted by a shell. The builder uses os/exec which does not invoke a
+// shell, so these characters can never serve a legitimate purpose in a build
+// command — rejecting them up front closes off the command-injection attack
+// surface even if a downstream caller ever wraps the command in `sh -c`.
+const shellMetacharacters = ";|&`$()<>\n\r"
 
 type (
 	PackageBuildRequest struct {
@@ -71,6 +81,24 @@ func MakeBuilder(logger logr.Logger, sharedVolumePath string) *Builder {
 		logger:           logger.WithName("builder"),
 		sharedVolumePath: sharedVolumePath,
 	}
+}
+
+// resolveBuildCommand parses a build-command string supplied by the caller.
+// An empty string falls back to defaultBuildCommand with no arguments.
+// A non-empty string is split on whitespace; the first token is the executable
+// and the remainder are arguments. Shell metacharacters anywhere in the input
+// are rejected — os/exec does not invoke a shell, so they can only ever be a
+// confused-deputy attempt.
+func resolveBuildCommand(cmd string) (string, []string, error) {
+	cmd = strings.TrimSpace(cmd)
+	if cmd == "" {
+		return defaultBuildCommand, nil, nil
+	}
+	if i := strings.IndexAny(cmd, shellMetacharacters); i >= 0 {
+		return "", nil, fmt.Errorf("contains shell metacharacter %q", cmd[i:i+1])
+	}
+	parts := strings.Fields(cmd)
+	return parts[0], parts[1:], nil
 }
 
 func (builder *Builder) VersionHandler(w http.ResponseWriter, r *http.Request) {
@@ -133,20 +161,11 @@ func (builder *Builder) Handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var buildArgs []string
-	buildCmd := req.BuildCommand
-	if len(buildCmd) == 0 {
-		// use default build command
-		buildCmd = "/build"
-	} else {
-		// split executable command and arguments
-		args := strings.Split(buildCmd, " ")
-		buildCmd = args[0] // get the executable command, executable command will always be on Zero index
-
-		// get all the arguments
-		for i := 1; i < len(args); i++ {
-			buildArgs = append(buildArgs, args[i])
-		}
+	buildCmd, buildArgs, err := resolveBuildCommand(req.BuildCommand)
+	if err != nil {
+		logger.Error(err, "rejecting build request")
+		builder.reply(r.Context(), w, "", fmt.Sprintf("error: invalid buildCommand: %s", err.Error()), http.StatusBadRequest)
+		return
 	}
 	buildLogs, err := builder.build(r.Context(), buildCmd, buildArgs, srcPkgPath, deployPkgPath)
 	if err != nil {
@@ -179,11 +198,16 @@ func (builder *Builder) Clean(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	srcPkgFilename := r.URL.Query().Get("name")
-	srcPkgPath := filepath.Join(builder.sharedVolumePath, srcPkgFilename)
+	srcPkgPath, err := utils.SanitizeFilePath(filepath.Join(builder.sharedVolumePath, srcPkgFilename), builder.sharedVolumePath)
+	if err != nil {
+		logger.Error(err, "rejecting clean request", "source_package", srcPkgFilename)
+		builder.reply(r.Context(), w, srcPkgFilename, fmt.Sprintf("error: invalid name: %s", err.Error()), http.StatusBadRequest)
+		return
+	}
 
 	logger.Info("builder received clean request", "source_package", srcPkgFilename)
 
-	err := utils.DeleteOldPackages(srcPkgPath, envSrcPkg)
+	err = utils.DeleteOldPackages(srcPkgPath, envSrcPkg)
 	if err != nil {
 		e := "error deleting src package after build"
 		logger.Error(err, e)

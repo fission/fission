@@ -21,6 +21,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"strings"
 	"testing"
@@ -86,7 +87,7 @@ func TestBuilder(t *testing.T) {
 				status: http.StatusOK,
 			},
 			{
-				name: "should fail with argument and pipe",
+				name: "should reject build command containing shell metacharacters",
 				buildRequest: &PackageBuildRequest{
 					SrcPkgFilename: "test2",
 					BuildCommand:   "ps -ef | grep fission",
@@ -95,7 +96,19 @@ func TestBuilder(t *testing.T) {
 					ArtifactFilename: "test2",
 					BuildLogs:        "",
 				},
-				status: http.StatusInternalServerError,
+				status: http.StatusBadRequest,
+			},
+			{
+				name: "should reject build command with command-substitution",
+				buildRequest: &PackageBuildRequest{
+					SrcPkgFilename: "test2sub",
+					BuildCommand:   "echo $(whoami)",
+				},
+				expected: &PackageBuildResponse{
+					ArtifactFilename: "test2sub",
+					BuildLogs:        "",
+				},
+				status: http.StatusBadRequest,
 			},
 			{
 				name: "should fail with invalid build command",
@@ -201,5 +214,68 @@ func TestBuilder(t *testing.T) {
 				}
 			})
 		}
+
+		// Names whose resolved absolute path escapes the shared volume root
+		// must be rejected with 400 before any filesystem operation. (Names
+		// like "foo/../bar" that filepath.Clean resolves to a legitimate
+		// in-volume path are not traversal and remain allowed.)
+		for _, name := range []string{"../etc/passwd", "../../absolute"} {
+			t.Run("should reject traversal name "+name, func(t *testing.T) {
+				w := httptest.NewRecorder()
+				r := httptest.NewRequest(http.MethodDelete, "/clean?name="+url.QueryEscape(name), http.NoBody)
+				builder.Clean(w, r)
+				resp := w.Result()
+				if resp.StatusCode != http.StatusBadRequest {
+					t.Fatalf("name %q: want 400, got %d", name, resp.StatusCode)
+				}
+			})
+		}
 	})
+}
+
+func TestResolveBuildCommand(t *testing.T) {
+	cases := []struct {
+		name    string
+		input   string
+		wantCmd string
+		wantArg []string
+		wantErr bool
+	}{
+		{name: "empty falls back to default", input: "", wantCmd: defaultBuildCommand, wantArg: nil},
+		{name: "single command", input: "ls", wantCmd: "ls"},
+		{name: "command with args", input: "ls -la /tmp", wantCmd: "ls", wantArg: []string{"-la", "/tmp"}},
+		{name: "extra whitespace is collapsed", input: "  ls   -la  ", wantCmd: "ls", wantArg: []string{"-la"}},
+		{name: "rejects pipe", input: "ls | grep .", wantErr: true},
+		{name: "rejects semicolon", input: "ls; rm -rf /", wantErr: true},
+		{name: "rejects backtick", input: "ls `whoami`", wantErr: true},
+		{name: "rejects command-substitution", input: "ls $(whoami)", wantErr: true},
+		{name: "rejects redirect", input: "ls > /etc/passwd", wantErr: true},
+		{name: "rejects newline", input: "ls\nrm /", wantErr: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cmd, args, err := resolveBuildCommand(tc.input)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("want error, got cmd=%q args=%v", cmd, args)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if cmd != tc.wantCmd {
+				t.Errorf("cmd: want %q, got %q", tc.wantCmd, cmd)
+			}
+			if len(args) != len(tc.wantArg) {
+				t.Errorf("args: want %v, got %v", tc.wantArg, args)
+				return
+			}
+			for i := range args {
+				if args[i] != tc.wantArg[i] {
+					t.Errorf("args[%d]: want %q, got %q", i, tc.wantArg[i], args[i])
+				}
+			}
+		})
+	}
 }
