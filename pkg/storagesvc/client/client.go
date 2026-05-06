@@ -64,7 +64,15 @@ func MakeClient(url string) ClientInterface {
 // service, along with the metadata.  It returns a file ID that can be
 // used to retrieve the file.
 func (c *client) Upload(ctx context.Context, filePath string, metadata *map[string]string) (string, error) {
-	fi, err := os.Stat(filePath)
+	// Open first, then stat the file descriptor — this avoids a TOCTOU
+	// between a path-based Stat and a subsequent path-based Open if the
+	// caller's filesystem is shared with another process.
+	f, err := os.Open(filePath)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	fi, err := f.Stat()
 	if err != nil {
 		return "", err
 	}
@@ -73,11 +81,6 @@ func (c *client) Upload(ctx context.Context, filePath string, metadata *map[stri
 	buf := &bytes.Buffer{}
 	bodyWriter := multipart.NewWriter(buf)
 	fileWriter, err := bodyWriter.CreateFormFile("uploadfile", filePath)
-	if err != nil {
-		return "", err
-	}
-
-	f, err := os.Open(filePath)
 	if err != nil {
 		return "", err
 	}
@@ -158,15 +161,14 @@ func (c *client) Download(ctx context.Context, id string, filePath string) error
 	// url for id
 	url := c.GetUrl(id)
 
-	// quit if file exists
-	_, err := os.Stat(filePath)
-	if err == nil || !os.IsNotExist(err) {
-		return fmt.Errorf("file already exists: %v", filePath)
-	}
-
-	// create
-	f, err := os.Create(filePath)
+	// O_EXCL atomically requires that the file does not already exist —
+	// no separate Stat-then-Create that an attacker could race against by
+	// creating filePath in between.
+	f, err := os.OpenFile(filePath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
+		if os.IsExist(err) {
+			return fmt.Errorf("file already exists: %v", filePath)
+		}
 		return err
 	}
 	defer f.Close()
@@ -174,7 +176,6 @@ func (c *client) Download(ctx context.Context, id string, filePath string) error
 	// make request
 	resp, err := ctxhttp.Get(ctx, c.httpClient, url)
 	if err != nil {
-		fmt.Println(err)
 		os.Remove(filePath)
 		return err
 	}
