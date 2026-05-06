@@ -926,3 +926,17 @@ grafana:
   dashboards:
     ## Disabled by default. switch to true to deploy them
     enable: false
+
+
+## NetworkPolicy: restrict ingress to storagesvc to other Fission components
+## (buildermgr, executor, and fetcher sidecars in function pods identified by
+## the executorType label set to one of poolmgr/newdeploy/container).
+##
+## Defense-in-depth control for the storagesvc HTTP API, which has no
+## application-layer authentication on /v1/archive endpoints. Off by default
+## for backwards compatibility — recommend enabling in production deployments
+## that don't already restrict pod-to-pod traffic.
+##
+## Requires a NetworkPolicy-aware CNI (Calico, Cilium, Weave, etc.).
+networkPolicy:
+  enabled: false

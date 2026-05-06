@@ -1,0 +1,59 @@
+{{- if .Values.networkPolicy.enabled }}
+# Restrict ingress to the storagesvc HTTP API to other Fission components only
+# (buildermgr, executor, fetcher sidecars in Fission-managed function pods).
+# Storagesvc has no application-layer authentication on /v1/archive endpoints,
+# so this NetworkPolicy is a defense-in-depth control against in-cluster
+# attackers reaching the archive store directly.
+#
+# Off by default for backwards compatibility. Enable with:
+#   helm upgrade ... --set networkPolicy.enabled=true
+#
+# CNI must support NetworkPolicy ingress for this to take effect (Calico,
+# Cilium, Weave, etc.). EKS without an addon and some other defaults are no-ops.
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: storagesvc-allow-internal
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: storagesvc
+spec:
+  podSelector:
+    matchLabels:
+      svc: storagesvc
+      application: fission-storage
+  policyTypes:
+    - Ingress
+  ingress:
+    # Buildermgr uploads built archives.
+    - from:
+        - podSelector:
+            matchLabels:
+              svc: buildermgr
+      ports:
+        - port: 8000
+          protocol: TCP
+    # Executor reads source/deploy archives when specialising new pods.
+    - from:
+        - podSelector:
+            matchLabels:
+              svc: executor
+      ports:
+        - port: 8000
+          protocol: TCP
+    # Fetcher sidecars in Fission-managed function pods download archives
+    # at specialisation time. Function pods carry the executorType label
+    # set by the executor when the pod is created (one of poolmgr / newdeploy /
+    # container).
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: executorType
+                operator: In
+                values: ["poolmgr", "newdeploy", "container"]
+      ports:
+        - port: 8000
+          protocol: TCP
+{{- end }}
