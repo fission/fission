@@ -56,7 +56,8 @@ func writeToFile(file string, obj any) {
 	// remove the empty byte from string.
 	file = string(utils.RemoveZeroBytes([]byte(file)))
 
-	err = os.WriteFile(file, bs, 0644)
+	// Diagnostic dump fragments — see dump.go for the surrounding 0o700 dir.
+	err = os.WriteFile(file, bs, 0o600)
 	if err != nil {
 		console.Error(fmt.Sprintf("Error writing file %v: %v", file, err))
 	}

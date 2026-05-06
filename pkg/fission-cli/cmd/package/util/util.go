@@ -215,8 +215,11 @@ func WriteArchiveToFile(fileName string, reader io.Reader) error {
 		return err
 	}
 
-	// Change the permissions of the target file
-	err = os.Chmod(fileName, 0644)
+	// Function archives may contain proprietary source; restrict to the
+	// owner. The CLI runs as the invoking user, so this is the right
+	// scope — collaborators get archives via re-running `fission package
+	// fetch`, not by reading each other's home directories.
+	err = os.Chmod(fileName, 0o600)
 	if err != nil {
 		return err
 	}

@@ -51,7 +51,10 @@ func (opts *DumpSubCommand) do(input cli.Input) error {
 	// check whether the dump directory exists.
 	_, err := os.Stat(outputDir)
 	if err != nil && os.IsNotExist(err) {
-		err = os.Mkdir(outputDir, 0755)
+		// Dumps include cluster pod logs and CRD specs; restrict to the
+		// invoking user. The dump tarball is intended for sharing with
+		// support, but as files on disk these should not be world-readable.
+		err = os.Mkdir(outputDir, 0o700)
 		if err != nil {
 			panic(err)
 		}
@@ -123,7 +126,7 @@ func (opts *DumpSubCommand) do(input cli.Input) error {
 	for key, res := range ress {
 		dir := fmt.Sprintf("%v/%v/", tempDir, key)
 		if _, err := os.Stat(dir); os.IsNotExist(err) {
-			err = os.MkdirAll(dir, 0755)
+			err = os.MkdirAll(dir, 0o700)
 			if err != nil {
 				panic(err)
 			}

@@ -87,7 +87,7 @@ func Unarchive(ctx context.Context, src string, dst string) error {
 		}
 
 		// check if parent directory exists for the file
-		if err := os.MkdirAll(filepath.Dir(destPath), os.ModeDir|0755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(destPath), os.ModeDir|0o750); err != nil {
 			return fmt.Errorf("failed to create parent directory: %w", err)
 		}
 
