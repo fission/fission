@@ -7,15 +7,18 @@
 # fetcherClient at http://<svc>:8000 and builderClient at
 # http://<svc>:8001 — so both ports are restricted to that source.
 #
-# This policy lives under templates/buildermgr/ because buildermgr is the
-# component that creates and labels these pods, even though the policy
-# applies to the env-builder pods themselves.
+# The policy is rendered into the namespace where buildermgr creates
+# env-builder pods (`fission-builder-ns` helper: builderNamespace if
+# set, otherwise defaultNamespace). NetworkPolicy podSelector only
+# matches pods in the policy's own namespace, so rendering this in the
+# release namespace would make it a no-op when builderNamespace differs
+# (e.g. the kind-ci profile sets builderNamespace=fission-builder).
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: builderpods-allow-buildermgr
-  namespace: {{ .Release.Namespace | quote }}
+  namespace: {{ include "fission-builder-ns" . | quote }}
   labels:
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
     svc: buildermgr
@@ -26,7 +29,10 @@ spec:
   policyTypes:
     - Ingress
   ingress:
-    # buildermgr → fetcher sidecar (POST /fetch, /upload).
+    # buildermgr → fetcher sidecar (POST /fetch, /upload). buildermgr
+    # runs in the release namespace; the namespaceSelector here matches
+    # any namespace because the policy is in builderNamespace and the
+    # source is in the release namespace.
     - from:
         - namespaceSelector: {}
           podSelector:

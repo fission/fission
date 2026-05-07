@@ -19,10 +19,13 @@ spec:
   policyTypes:
     - Ingress
   ingress:
-    # Router → executor: function-routing API.
+    # Router → executor: function-routing API. Both the executor and
+    # router Deployments live in the release namespace, so the source
+    # selector is intentionally scoped to the policy namespace — no
+    # `namespaceSelector` — to prevent any pod in any namespace from
+    # reaching this API simply by self-labelling as router.
     - from:
-        - namespaceSelector: {}
-          podSelector:
+        - podSelector:
             matchLabels:
               application: fission-router
               svc: router

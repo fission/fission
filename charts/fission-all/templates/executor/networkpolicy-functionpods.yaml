@@ -8,15 +8,18 @@
 # definitions and pkg/router/functionHandler.go:639 for the router →
 # function service URL flow.
 #
-# This policy lives under templates/executor/ because executor creates
-# and labels these pods, even though the policy applies to the function
-# pods themselves.
+# The policy is rendered into the namespace where executor creates
+# function pods (`fission-function-ns` helper: functionNamespace if
+# set, otherwise defaultNamespace). NetworkPolicy podSelector only
+# matches pods in the policy's own namespace, so rendering this in the
+# release namespace would make it a no-op when functionNamespace differs
+# (e.g. the kind-ci profile sets functionNamespace=fission-function).
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: functionpods-allow-internal
-  namespace: {{ .Release.Namespace | quote }}
+  namespace: {{ include "fission-function-ns" . | quote }}
   labels:
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
     svc: executor
@@ -29,7 +32,9 @@ spec:
   policyTypes:
     - Ingress
   ingress:
-    # executor → fetcher sidecar (POST /specialize).
+    # executor → fetcher sidecar (POST /specialize). executor runs in
+    # the release namespace; namespaceSelector: {} permits cross-ns
+    # because this policy lives in functionNamespace.
     - from:
         - namespaceSelector: {}
           podSelector:
@@ -40,7 +45,8 @@ spec:
           protocol: TCP
     # router → env runtime (user-trigger traffic). Router resolves the
     # function's service URL via executor.GetServiceForFunction and then
-    # proxies on the env's port (8888).
+    # proxies on the env's port (8888). Router is in the release
+    # namespace; same cross-ns rationale as above.
     - from:
         - namespaceSelector: {}
           podSelector:
