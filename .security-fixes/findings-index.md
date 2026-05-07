@@ -78,9 +78,9 @@ Populated as fixes land in batches B1–B4.
 
 | File:Line | Function | Rule | Batch | Status |
 |---|---|---|---|---|
-| `pkg/utils/utils.go:193` | `DownloadUrl` | file-toctou | B1 | fixed-pending-sha (atomic mode-on-create via `os.OpenFile` 0o600) |
-| `pkg/utils/zip.go:45` | `MakeZipArchiveWithGlobs` | file-toctou | B1 | fixed-pending-sha (atomic mode-on-create via `os.OpenFile` 0o600) |
-| `pkg/utils/zip.go:106` | `Unarchive` | file-toctou | B1 | fixed-pending-sha (atomic mode-on-create via `os.OpenFile` with archive entry mode) |
+| `pkg/utils/utils.go:193` | `DownloadUrl` | file-toctou | B1 | fixed-e68db701 (atomic mode-on-create via `os.OpenFile` 0o600) |
+| `pkg/utils/zip.go:45` | `MakeZipArchiveWithGlobs` | file-toctou | B1 | fixed-e68db701 (atomic mode-on-create via `os.OpenFile` 0o600) |
+| `pkg/utils/zip.go:106` | `Unarchive` | file-toctou | B1 | fixed-e68db701 (atomic mode-on-create via `os.OpenFile` with archive entry mode) |
 | `pkg/utils/utils.go:78,82` | `FindAllGlobs` | file-toctou | — | accepted-fp (filepath.Abs/Glob — no file open) |
 | `pkg/utils/utils.go:120` | `FileSize` | file-toctou | — | accepted-fp (Stat-only; no follow-up Open in same fn) |
 | `pkg/utils/utils.go:128` | `GetFileChecksum` | file-toctou | — | accepted-fp (Open-then-Read; no Stat-before-Open) |
