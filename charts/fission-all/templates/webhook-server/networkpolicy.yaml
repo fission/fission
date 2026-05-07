@@ -1,0 +1,41 @@
+{{- if .Values.networkPolicy.enabled }}
+# Document the webhook-server listener surface. The legitimate caller
+# of port 9443 is the kube-apiserver, which is not selectable by
+# podSelector on most clusters; leaving `from` unset is the documented
+# pattern for admission webhooks, and ingress on 9443 is therefore not
+# source-restricted by this policy.
+#
+# What this policy does enforce: only the listener ports declared below
+# (9443 admission, 8080 metrics) are reachable on webhook-server pods.
+# Any other port is blocked by NetworkPolicy default-deny semantics
+# once a policy selects the pod. Operators wanting real source
+# restriction on 9443 must add an `ipBlock`/namespace-based allowlist
+# matching their apiserver topology.
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: webhook-server-allow-apiserver
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: webhook-service
+    application: fission-webhook
+spec:
+  podSelector:
+    matchLabels:
+      svc: webhook-service
+      application: fission-webhook
+  policyTypes:
+    - Ingress
+  ingress:
+    # Admission webhook port. kube-apiserver source is intentionally
+    # unselected — see comment above.
+    - ports:
+        - port: 9443
+          protocol: TCP
+    # Metrics endpoint open to any scraper.
+    - ports:
+        - port: 8080
+          protocol: TCP
+{{- end }}
