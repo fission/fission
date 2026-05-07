@@ -97,7 +97,26 @@ Populated as fixes land in batches B1–B4.
 | `pkg/fetcher/fetcher.go:315` | `Fetch` literal write | file-toctou | — | accepted-fp (`os.WriteFile` is atomic with mode 0o600) |
 | `pkg/fetcher/fetcher.go:549` | `Upload` archive rename | file-toctou | — | accepted-fp (`os.Rename` is atomic) |
 | `pkg/fetcher/fetcher.go:603` | `Fetcher.rename` | file-toctou | — | accepted-fp (`os.Rename` is atomic) |
-| `cmd/*`, `pkg/executor/util/util.go`, `pkg/featureconfig/config.go`, `pkg/logger/logger.go`, `pkg/fission-cli/cmd/{spec,support,package}/*` | (per B3 Step 2 classification) | file-toctou | B3 | open |
+| `cmd/builder/main.go:44` | shareVolume MkdirAll | file-toctou | — | accepted-fp (Stat-existence-then-MkdirAll; no follow-up Open of same path) |
+| `cmd/fetcher/app/server.go:60` | dir MkdirAll | file-toctou | — | accepted-fp (Stat-existence-then-MkdirAll; no follow-up Open of same path) |
+| `cmd/fission-bundle/mqtrigger/mqtrigger.go:107` | secrets ReadDir | file-toctou | — | accepted-fp (`os.ReadDir`; not Stat-then-Open) |
+| `cmd/fission-bundle/mqtrigger/mqtrigger.go:122` | secret ReadFile | file-toctou | — | accepted-fp (`os.ReadFile`; no Stat-before-Open) |
+| `pkg/executor/util/util.go:132` | additional-spec ReadFile | file-toctou | — | accepted-fp (`os.ReadFile`; no Stat-before-Open) |
+| `pkg/featureconfig/config.go:39` | feature-config ReadFile | file-toctou | — | accepted-fp (`os.ReadFile`; no Stat-before-Open) |
+| `pkg/logger/logger.go:92` | symlink existence check | file-toctou | — | accepted-fp (best-effort symlink-exists check; race with concurrent reaper has no security impact) |
+| `pkg/logger/logger.go:163` | fissionSymlinkPath Mkdir | file-toctou | B4 | mode-tightened-in-B4 (toctou pattern is FP — Stat-existence-then-Mkdir; mode is the real fix) |
+| `pkg/fission-cli/cmd/package/package.go:55` | rootDir Abs | file-toctou | — | accepted-fp (`filepath.Abs`; no file op) |
+| `pkg/fission-cli/cmd/package/util/util.go:121` | GetContents ReadFile | file-toctou | — | accepted-fp (`os.ReadFile`; no Stat-before-Open) |
+| `pkg/fission-cli/cmd/spec/apply.go:257` | git.PlainOpen | file-toctou | — | accepted-fp (third-party go-git; not direct os syscall) |
+| `pkg/fission-cli/cmd/spec/spec.go:128` | deployment-config existence check | file-toctou | — | accepted-fp (UX guard for "run `fission spec init` first"; no follow-up Open of the same path) |
+| `pkg/fission-cli/cmd/spec/spec.go:135-143` | save: newFile flag + OpenFile | file-toctou | — | accepted-fp-low-impact (Stat-IsNotExist-then-OpenFile; the `newFile` flag controls only YAML doc separator emission, not security) |
+| `pkg/fission-cli/cmd/spec/validate.go:226` | specDir existence check | file-toctou | — | accepted-fp (UX guard; no follow-up Open of specDir directly) |
+| `pkg/fission-cli/cmd/spec/validate.go:268` | filepath.Walk | file-toctou | — | accepted-fp (Walk traversal; not Stat-then-Open of a single path) |
+| `pkg/fission-cli/cmd/support/dump.go:57` | outputDir Mkdir 0o700 | file-toctou | — | accepted-fp (Stat-IsNotExist-then-Mkdir; round-1 already tightened mode to 0o700) |
+| `pkg/fission-cli/cmd/support/dump.go:65` | outputDir Abs | file-toctou | — | accepted-fp (`filepath.Abs`; no file op) |
+| `pkg/fission-cli/cmd/support/dump.go:129` | per-key dir MkdirAll | file-toctou | — | accepted-fp (Stat-IsNotExist-then-MkdirAll; round-1 already tightened mode to 0o700) |
+| `pkg/fission-cli/cmd/support/dump.go:153` | tempDir Rename | file-toctou | — | accepted-fp (`os.Rename` is atomic) |
+| `pkg/fission-cli/util/util.go:339` | spec-ignore-path existence | file-toctou | — | accepted-fp (UX guard for custom spec-ignore file existence) |
 | `pkg/fission-cli/cmd/spec/init.go:73` | `InitSubCommand.run` (specDir mode) | loose-file-permissions | B4 | open |
 | `pkg/fission-cli/cmd/spec/init.go:107` | `InitSubCommand.run` (readme write) | loose-file-permissions | B4 | open |
 | `pkg/fission-cli/cmd/spec/init.go:135` | `writeDeploymentConfig` | loose-file-permissions | B4 | open |
