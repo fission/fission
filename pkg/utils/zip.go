@@ -42,7 +42,7 @@ func MakeZipArchiveWithGlobs(ctx context.Context, targetName string, globs ...st
 	if err != nil {
 		return "", fmt.Errorf("failed to read files from disk: %w", err)
 	}
-	out, err := os.Create(targetName)
+	out, err := os.OpenFile(targetName, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
 		return "", fmt.Errorf("failed to create archive file: %w", err)
 	}
@@ -102,16 +102,14 @@ func Unarchive(ctx context.Context, src string, dst string) error {
 		}
 		defer rc.Close()
 
-		// Create file in destination
-		destFile, err := os.Create(destPath)
+		// Create file in destination with the archive entry's mode applied
+		// at create time, so a concurrent observer never sees a wider mode.
+		// Same overwrite semantics as os.Create.
+		destFile, err := os.OpenFile(destPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, f.Mode().Perm())
 		if err != nil {
 			return fmt.Errorf("failed to create file in destination: %w", err)
 		}
 		defer destFile.Close()
-		err = destFile.Chmod(f.Mode())
-		if err != nil {
-			return fmt.Errorf("failed to set file permissions: %w", err)
-		}
 
 		// Copy file contents
 		_, err = io.Copy(destFile, rc)

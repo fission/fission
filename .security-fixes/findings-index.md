@@ -78,9 +78,18 @@ Populated as fixes land in batches B1–B4.
 
 | File:Line | Function | Rule | Batch | Status |
 |---|---|---|---|---|
-| `pkg/utils/utils.go:193` | `DownloadUrl` | file-toctou | B1 | open |
-| `pkg/utils/zip.go:45` | `MakeZipArchiveWithGlobs` | file-toctou | B1 | open |
-| `pkg/utils/zip.go:106` | `Unarchive` | file-toctou | B1 | open |
+| `pkg/utils/utils.go:193` | `DownloadUrl` | file-toctou | B1 | fixed-pending-sha (atomic mode-on-create via `os.OpenFile` 0o600) |
+| `pkg/utils/zip.go:45` | `MakeZipArchiveWithGlobs` | file-toctou | B1 | fixed-pending-sha (atomic mode-on-create via `os.OpenFile` 0o600) |
+| `pkg/utils/zip.go:106` | `Unarchive` | file-toctou | B1 | fixed-pending-sha (atomic mode-on-create via `os.OpenFile` with archive entry mode) |
+| `pkg/utils/utils.go:78,82` | `FindAllGlobs` | file-toctou | — | accepted-fp (filepath.Abs/Glob — no file open) |
+| `pkg/utils/utils.go:120` | `FileSize` | file-toctou | — | accepted-fp (Stat-only; no follow-up Open in same fn) |
+| `pkg/utils/utils.go:128` | `GetFileChecksum` | file-toctou | — | accepted-fp (Open-then-Read; no Stat-before-Open) |
+| `pkg/utils/utils.go:284,288` | `DeleteOldPackages` | file-toctou | — | accepted-fp (RemoveAll on validated /packages prefix) |
+| `pkg/utils/zip.go:14` | `IsZip` | file-toctou | — | accepted-fp (Open-then-Match; no race) |
+| `pkg/utils/zip.go:56` | `MakeZipArchiveWithGlobs` | file-toctou | — | accepted-fp (filepath.Abs return value — no file op) |
+| `pkg/utils/zip.go:62` | `Archive` | file-toctou | — | accepted-fp (Stat→IsDir branch; no follow-up Open of src) |
+| `pkg/utils/zip.go:76` | `Unarchive` | file-toctou | — | accepted-fp (Open-then-Extract; no Stat-before-Open) |
+| `pkg/utils/zip.go:86,94` | `Unarchive` extract loop | file-toctou | — | accepted-fp (MkdirAll over fresh dest path; round-1 0o755 retained for shared-volume access) |
 | `pkg/builder/builder.go:298` | `Builder.build` | log-forging-attacker | B2 | open |
 | `pkg/fetcher/fetcher.go:*` | (per Step 1 classification) | file-toctou | B2 | open |
 | `cmd/*`, `pkg/executor/util/util.go`, `pkg/featureconfig/config.go`, `pkg/logger/logger.go`, `pkg/fission-cli/cmd/{spec,support,package}/*` | (per B3 Step 2 classification) | file-toctou | B3 | open |
