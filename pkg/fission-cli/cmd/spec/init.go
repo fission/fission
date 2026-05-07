@@ -68,9 +68,11 @@ func (opts *InitSubCommand) complete(input cli.Input) error {
 		deployID = uuid.NewString()
 	}
 
-	// Create spec dir
+	// Create spec dir. 0o700: spec dir contains deployment config that
+	// may carry cluster identifiers; user-private by default. The CLI
+	// runs as the user, so no other UID needs to read this.
 	fmt.Printf("Creating fission spec directory '%v'\n", specDir)
-	err := os.MkdirAll(specDir, 0755)
+	err := os.MkdirAll(specDir, 0o700)
 	if err != nil {
 		return fmt.Errorf("create spec directory '%v': %w", specDir, err)
 	}
@@ -104,7 +106,7 @@ func (opts *InitSubCommand) run(input cli.Input) error {
 	}
 
 	// Add a bit of documentation to the spec dir here
-	err := os.WriteFile(readme, []byte(SPEC_README), 0644)
+	err := os.WriteFile(readme, []byte(SPEC_README), 0o600)
 	if err != nil {
 		return err
 	}
@@ -132,7 +134,7 @@ func writeDeploymentConfig(file string, dc *spectypes.DeploymentConfig) error {
 		"# See the README in this directory for background and usage information.\n" +
 		"# Do not edit the UID below: that will break 'fission spec apply'\n")
 
-	err = os.WriteFile(file, append(msg, y...), 0644)
+	err = os.WriteFile(file, append(msg, y...), 0o600)
 	if err != nil {
 		return err
 	}

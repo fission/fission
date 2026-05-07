@@ -160,7 +160,11 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	if _, err := os.Stat(fissionSymlinkPath); os.IsNotExist(err) {
 		logger.Info("symlink path not exist, create it",
 			"fissionSymlinkPath", fissionSymlinkPath)
-		err = os.Mkdir(fissionSymlinkPath, 0755)
+		// 0o755 is required so node-level log shippers (fluentd, fluent-bit,
+		// promtail) running as different UIDs can traverse this directory
+		// to read function pod log symlinks. Tighter modes break log
+		// aggregation; the contents themselves are non-sensitive symlinks.
+		err = os.Mkdir(fissionSymlinkPath, 0o755)
 		if err != nil {
 			logger.Error(err, "error creating fissionSymlinkPath")
 
