@@ -1,0 +1,47 @@
+{{- if .Values.networkPolicy.enabled }}
+# Restrict ingress to per-environment builder pods. These pods carry the
+# `owner: buildermgr` label (set by the buildermgr controller when it
+# creates them) and host two listeners: a fetcher sidecar on port 8000
+# and the env's builder on port 8001. Only the buildermgr controller
+# itself drives builds — see pkg/buildermgr/common.go where it constructs
+# fetcherClient at http://<svc>:8000 and builderClient at
+# http://<svc>:8001 — so both ports are restricted to that source.
+#
+# This policy lives under templates/buildermgr/ because buildermgr is the
+# component that creates and labels these pods, even though the policy
+# applies to the env-builder pods themselves.
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: builderpods-allow-buildermgr
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: buildermgr
+spec:
+  podSelector:
+    matchLabels:
+      owner: buildermgr
+  policyTypes:
+    - Ingress
+  ingress:
+    # buildermgr → fetcher sidecar (POST /fetch, /upload).
+    - from:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              svc: buildermgr
+      ports:
+        - port: 8000
+          protocol: TCP
+    # buildermgr → builder sidecar (POST /, /clean).
+    - from:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              svc: buildermgr
+      ports:
+        - port: 8001
+          protocol: TCP
+{{- end }}

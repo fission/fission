@@ -1,0 +1,53 @@
+{{- if .Values.networkPolicy.enabled }}
+# Restrict ingress to function pods managed by the executor. Each pod
+# carries an `executorType` label set to one of poolmgr / newdeploy /
+# container, and listens on two ports:
+#   - 8000: fetcher sidecar (executor calls /specialize at pod creation)
+#   - 8888: env runtime (router proxies user HTTP-trigger traffic here)
+# See pkg/executor/executortype/poolmgr/gp_deployment.go for the port
+# definitions and pkg/router/functionHandler.go:639 for the router →
+# function service URL flow.
+#
+# This policy lives under templates/executor/ because executor creates
+# and labels these pods, even though the policy applies to the function
+# pods themselves.
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: functionpods-allow-internal
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: executor
+spec:
+  podSelector:
+    matchExpressions:
+      - key: executorType
+        operator: In
+        values: ["poolmgr", "newdeploy", "container"]
+  policyTypes:
+    - Ingress
+  ingress:
+    # executor → fetcher sidecar (POST /specialize).
+    - from:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              svc: executor
+      ports:
+        - port: 8000
+          protocol: TCP
+    # router → env runtime (user-trigger traffic). Router resolves the
+    # function's service URL via executor.GetServiceForFunction and then
+    # proxies on the env's port (8888).
+    - from:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              application: fission-router
+              svc: router
+      ports:
+        - port: 8888
+          protocol: TCP
+{{- end }}

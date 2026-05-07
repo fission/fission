@@ -1,0 +1,67 @@
+{{- if .Values.networkPolicy.enabled }}
+# Restrict ingress to the router. Router is the single user-facing entry
+# point for HTTP-triggered functions, so port 8888 stays open from any
+# source (LoadBalancer / Ingress controller / NodePort traffic must
+# continue to work). The internal-caller rule below is documentation:
+# kubewatcher / timer / mqtrigger / canaryconfig publish events to router
+# via WebhookPublisher (see pkg/publisher/webhookPublisher.go).
+#
+# Operators who terminate user traffic at a known ingress namespace can
+# tighten the first ingress rule by replacing the bare port-only entry
+# with a `from` block selecting their ingress controller pods.
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: router-allow-ingress
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: router
+    application: fission-router
+spec:
+  podSelector:
+    matchLabels:
+      svc: router
+      application: fission-router
+  policyTypes:
+    - Ingress
+  ingress:
+    # User-facing HTTP triggers. No `from` selector means any source
+    # (cluster-internal pods, LoadBalancer, NodePort) — router is
+    # designed to be reachable from outside the cluster.
+    - ports:
+        - port: 8888
+          protocol: TCP
+    # Internal Fission components that publish events to the router.
+    # Listed explicitly for documentation even though the open rule
+    # above already covers them.
+    - from:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              svc: kubewatcher
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              svc: timer
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              svc: mqtrigger
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              svc: mqtrigger-keda
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              svc: canaryconfig
+      ports:
+        - port: 8888
+          protocol: TCP
+    # Metrics endpoint open to any scraper.
+    - ports:
+        - port: 8080
+          protocol: TCP
+{{- end }}

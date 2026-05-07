@@ -928,15 +928,24 @@ grafana:
     enable: false
 
 
-## NetworkPolicy: restrict ingress to storagesvc to other Fission components
-## (buildermgr, executor, and fetcher sidecars in function pods identified by
-## the executorType label set to one of poolmgr/newdeploy/container).
+## NetworkPolicy: ingress isolation for every Fission component that
+## exposes a non-metrics listener. When enabled, the chart renders one
+## ingress-only NetworkPolicy per service:
+##   - storagesvc           (port 8000)  ← buildermgr, fetcher sidecars
+##   - router               (port 8888)  ← external + internal publishers
+##   - executor             (port 8888)  ← router only
+##   - webhook-server       (port 9443)  ← kube-apiserver (admission)
+##   - env-builder pods     (8000/8001)  ← buildermgr only
+##   - function pods        (8000/8888)  ← executor + router
+## All metrics endpoints (port 8080) remain reachable from any source so
+## Prometheus / podMonitor scrapes work regardless of namespace.
 ##
-## Defense-in-depth control for the storagesvc HTTP API, which has no
-## application-layer authentication on /v1/archive endpoints. Off by default
-## for backwards compatibility — recommend enabling in production deployments
+## Defense-in-depth control for in-cluster plain-HTTP traffic, which has
+## no application-layer authentication today. Off by default for
+## backwards compatibility — recommend enabling in production deployments
 ## that don't already restrict pod-to-pod traffic.
 ##
 ## Requires a NetworkPolicy-aware CNI (Calico, Cilium, Weave, etc.).
+## Egress rules are intentionally not added in this round.
 networkPolicy:
   enabled: false

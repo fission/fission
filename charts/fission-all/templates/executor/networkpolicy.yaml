@@ -1,0 +1,36 @@
+{{- if .Values.networkPolicy.enabled }}
+# Restrict ingress to the executor HTTP API. Only the router calls into
+# the executor's /v2/getServiceForFunction, /v2/tapServices, and
+# /v2/unTapService endpoints (see pkg/executor/client/client.go); no
+# other Fission component does. External callers have no business here.
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: executor-allow-internal
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: executor
+spec:
+  podSelector:
+    matchLabels:
+      svc: executor
+  policyTypes:
+    - Ingress
+  ingress:
+    # Router → executor: function-routing API.
+    - from:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              application: fission-router
+              svc: router
+      ports:
+        - port: 8888
+          protocol: TCP
+    # Metrics endpoint open to any scraper.
+    - ports:
+        - port: 8080
+          protocol: TCP
+{{- end }}
