@@ -17,12 +17,14 @@ package builder
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -277,5 +279,69 @@ func TestResolveBuildCommand(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestSanitizeBuildLogLine(t *testing.T) {
+	tests := []struct {
+		in, want string
+	}{
+		{"plain", "plain"},
+		{"with\rcr", `with\rcr`},
+		{"with\nlf", `with\nlf`},
+		{"both\r\n", `both\r\n`},
+		{"", ""},
+	}
+	for _, tc := range tests {
+		if got := sanitizeBuildLogLine(tc.in); got != tc.want {
+			t.Errorf("sanitizeBuildLogLine(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+func TestBuilderBuild_StripsCRLFFromBuildOutput(t *testing.T) {
+	// Build script that emits a payload containing CR/LF — simulates a
+	// hostile build script trying to inject fake log lines into the
+	// builder's stdout.
+	script := "#!/bin/sh\nprintf 'real-line\\nFAKE\\rINJECTED\\n'\n"
+	dir := t.TempDir()
+	buildScript := filepath.Join(dir, "build.sh")
+	if err := os.WriteFile(buildScript, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	srcPath := filepath.Join(dir, "src")
+	if err := os.MkdirAll(srcPath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	dstPath := filepath.Join(dir, "deploy.zip")
+
+	// Capture stdout for the duration of the build call.
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := os.Stdout
+	os.Stdout = w
+	t.Cleanup(func() { os.Stdout = old })
+
+	b := MakeBuilder(loggerfactory.GetLogger(), dir)
+	logs, err := b.build(context.Background(), buildScript, nil, srcPath, dstPath)
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
+	_ = w.Close()
+	out, _ := io.ReadAll(r)
+
+	// Embedded CR must not appear as a literal control char in captured stdout —
+	// it should be escaped to "\r" (literal backslash-r).
+	if bytes.Contains(out, []byte("FAKE\rINJECTED")) {
+		t.Fatalf("stdout contains unsanitised CR: %q", out)
+	}
+	if !bytes.Contains(out, []byte(`FAKE\rINJECTED`)) {
+		t.Fatalf("stdout missing escaped form: %q", out)
+	}
+	// buildLogs (returned to caller) is also sanitised.
+	if !strings.Contains(logs, `FAKE\rINJECTED`) {
+		t.Fatalf("buildLogs missing escaped form: %q", logs)
 	}
 }

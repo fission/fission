@@ -90,8 +90,13 @@ Populated as fixes land in batches B1–B4.
 | `pkg/utils/zip.go:62` | `Archive` | file-toctou | — | accepted-fp (Stat→IsDir branch; no follow-up Open of src) |
 | `pkg/utils/zip.go:76` | `Unarchive` | file-toctou | — | accepted-fp (Open-then-Extract; no Stat-before-Open) |
 | `pkg/utils/zip.go:86,94` | `Unarchive` extract loop | file-toctou | — | accepted-fp (MkdirAll over fresh dest path; round-1 0o755 retained for shared-volume access) |
-| `pkg/builder/builder.go:298` | `Builder.build` | log-forging-attacker | B2 | open |
-| `pkg/fetcher/fetcher.go:*` | (per Step 1 classification) | file-toctou | B2 | open |
+| `pkg/builder/builder.go:298` | `Builder.build` | log-forging-attacker | B2 | fixed-pending-sha (CR/LF escape via `sanitizeBuildLogLine`) |
+| `pkg/builder/builder.go:311` | `Builder.build` cmdErr log | log-forging-attacker | — | accepted-fp (cmdErr wraps allowlisted command name from `resolveBuildCommand`) |
+| `pkg/fetcher/fetcher.go:74` | `makeVolumeDir` | file-toctou | — | accepted-fp (MkdirAll on volume root; no Stat-then-Open chain) |
+| `pkg/fetcher/fetcher.go:262` | `Fetch` storePath check | file-toctou | — | accepted-fp (Stat-existence-check; follow-up is write to different path `tmpPath`) |
+| `pkg/fetcher/fetcher.go:315` | `Fetch` literal write | file-toctou | — | accepted-fp (`os.WriteFile` is atomic with mode 0o600) |
+| `pkg/fetcher/fetcher.go:549` | `Upload` archive rename | file-toctou | — | accepted-fp (`os.Rename` is atomic) |
+| `pkg/fetcher/fetcher.go:603` | `Fetcher.rename` | file-toctou | — | accepted-fp (`os.Rename` is atomic) |
 | `cmd/*`, `pkg/executor/util/util.go`, `pkg/featureconfig/config.go`, `pkg/logger/logger.go`, `pkg/fission-cli/cmd/{spec,support,package}/*` | (per B3 Step 2 classification) | file-toctou | B3 | open |
 | `pkg/fission-cli/cmd/spec/init.go:73` | `InitSubCommand.run` (specDir mode) | loose-file-permissions | B4 | open |
 | `pkg/fission-cli/cmd/spec/init.go:107` | `InitSubCommand.run` (readme write) | loose-file-permissions | B4 | open |

@@ -83,6 +83,20 @@ func MakeBuilder(logger logr.Logger, sharedVolumePath string) *Builder {
 	}
 }
 
+// sanitizeBuildLogLine neutralises embedded CR/LF in build-script stdout
+// before echoing it to the builder pod's stdout, so a hostile build script
+// cannot inject fake log lines (CWE-117). bufio.Scanner's default split
+// function strips trailing newlines; this replacer handles embedded CR/LF
+// that survive a single Scan() call.
+var buildLogReplacer = strings.NewReplacer("\r", "\\r", "\n", "\\n")
+
+func sanitizeBuildLogLine(s string) string {
+	if !strings.ContainsAny(s, "\r\n") {
+		return s
+	}
+	return buildLogReplacer.Replace(s)
+}
+
 // resolveBuildCommand parses a build-command string supplied by the caller.
 // An empty string falls back to defaultBuildCommand with no arguments.
 // A non-empty string is split on whitespace; the first token is the executable
@@ -294,7 +308,7 @@ func (builder *Builder) build(ctx context.Context, command string, args []string
 	var buildLogs strings.Builder
 	// Runtime logs
 	for scanner.Scan() {
-		output := scanner.Text()
+		output := sanitizeBuildLogLine(scanner.Text())
 		fmt.Println(output)
 		fmt.Fprintf(&buildLogs, "%s\n", output)
 	}
