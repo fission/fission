@@ -86,6 +86,12 @@ Most failures in this repo land in one of these categories. Match the error stri
 | `package "<pkg>" never reached build status "succeeded"` | One of the buildermgr → builder → fetcher steps failed | `resources/build-pipeline-flow.md` |
 | `Error uploading deployment package: ...` | fetcher's UploadHandler failing — wrapped error is the real cause | `resources/build-pipeline-flow.md` |
 | `bufio.Scanner: token too long` in builder log | Build script line >64KB (pip progress bars do this) | `resources/build-pipeline-flow.md` |
+| `dial tcp <env-svc>:8000: i/o timeout` after `CreateEnv(Builder=...)` | Builder/runtime pod readiness race; layered settle fix in framework | `resources/integration-test-framework.md` |
+| Selector `envName=<env>` returns no pods | Wrong label key — runtime pods use `environmentName=`, builder pods use `envName=` | `resources/integration-test-framework.md` |
+| `ns.CLI` returns empty string for a subcommand that's known to print | Subcommand prints to `os.Stdout` directly (e.g. `archive list`, `function logs`) — use `ns.CLICaptureStdout` | `resources/integration-test-framework.md` |
+| Test fixture file is missing from `embed.FS` despite being on disk | The fixture's parent dir contains a `go.mod` (nested module) — `embed` skips it | `resources/integration-test-framework.md` |
+| Spec test fails with `unknown flag: --specdir` or wrong cwd | `fission env create --spec` writes `./specs` relative to cwd; needs `ns.WithCWD` | `resources/integration-test-framework.md` |
+| Package update doesn't trigger a rebuild | Package CR has no `/status` subresource; must explicitly set `Status.BuildStatus = pending` along with spec change | `resources/integration-test-framework.md` |
 
 ### Lint / Go module
 
@@ -130,6 +136,7 @@ When a Helm-chart feature should be on in CI but off by default for users (e.g. 
 - `resources/shared-volume-permissions.md` — `/packages` shared volume, builder vs. fetcher UID model, why `0o750` breaks things.
 - `resources/skaffold-kind-ci-profile.md` — adding CI-only Helm flags via the kind-ci profile.
 - `resources/builder-image-origin.md` — the gotcha that env-builder images are not rebuilt per-PR.
+- `resources/integration-test-framework.md` — Go-test-framework quirks the bash→Go migration uncovered: builder/runtime readiness race (8 layered fixes), pod-label conventions, `ns.CLI` capture limitations, `embed.FS` nested-module skip, spec-test cwd handling, Package CR `/status` subresource gap.
 - `resources/monitor-poll-loop.md` — the canonical `gh pr checks` poll loop for the push-fix-monitor cycle.
 - `resources/gh-commands-cheatsheet.md` — every `gh` invocation we use during a debug session, with notes.
 
