@@ -117,9 +117,9 @@ Populated as fixes land in batches B1–B4.
 | `pkg/fission-cli/cmd/support/dump.go:129` | per-key dir MkdirAll | file-toctou | — | accepted-fp (Stat-IsNotExist-then-MkdirAll; round-1 already tightened mode to 0o700) |
 | `pkg/fission-cli/cmd/support/dump.go:153` | tempDir Rename | file-toctou | — | accepted-fp (`os.Rename` is atomic) |
 | `pkg/fission-cli/util/util.go:339` | spec-ignore-path existence | file-toctou | — | accepted-fp (UX guard for custom spec-ignore file existence) |
-| `pkg/fission-cli/cmd/spec/init.go:73` | `InitSubCommand.run` (specDir mode) | loose-file-permissions | B4 | fixed-pending-sha (0o755 → 0o700; user-private spec dir) |
-| `pkg/fission-cli/cmd/spec/init.go:107` | `InitSubCommand.run` (readme write) | loose-file-permissions | B4 | fixed-pending-sha (0o644 → 0o600) |
-| `pkg/fission-cli/cmd/spec/init.go:135` | `writeDeploymentConfig` | loose-file-permissions | B4 | fixed-pending-sha (0o644 → 0o600) |
+| `pkg/fission-cli/cmd/spec/init.go:73` | `InitSubCommand.run` (specDir mode) | loose-file-permissions | B4 | fixed-5ce10ead (0o755 → 0o700; user-private spec dir) |
+| `pkg/fission-cli/cmd/spec/init.go:107` | `InitSubCommand.run` (readme write) | loose-file-permissions | B4 | fixed-5ce10ead (0o644 → 0o600) |
+| `pkg/fission-cli/cmd/spec/init.go:135` | `writeDeploymentConfig` | loose-file-permissions | B4 | fixed-5ce10ead (0o644 → 0o600) |
 | `pkg/logger/logger.go:163` | `Start` (fissionSymlinkPath mkdir) | loose-file-permissions | B4 | accepted-with-comment (kept 0o755 with inline comment; node-level path read by external log shippers running as different UIDs) |
 | `test/benchmark/picasso.go:65,165` | benchmark file modes | loose-file-permissions | — | accepted-out-of-scope (test/benchmark infrastructure) |
 
