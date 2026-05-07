@@ -252,4 +252,13 @@ func TestDownloadUrl_OverwriteAllowed(t *testing.T) {
 	if err != nil || string(got) != "v2" {
 		t.Fatalf("expected overwrite to v2, got %q (err=%v)", got, err)
 	}
+	// Mode must be tightened to 0o600 even when overwriting a pre-existing
+	// file with a broader mode — fchmod after OpenFile closes that window.
+	fi, err := os.Stat(dst)
+	if err != nil {
+		t.Fatalf("Stat after overwrite: %v", err)
+	}
+	if mode := fi.Mode().Perm(); mode != 0o600 {
+		t.Fatalf("mode after overwrite: got %#o, want 0600", mode)
+	}
 }
