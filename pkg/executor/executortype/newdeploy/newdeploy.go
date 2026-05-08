@@ -318,7 +318,9 @@ func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function
 	// AutomountServiceAccountToken=false flag set above suppresses the
 	// implicit mount on every container, including fetcher, so we have
 	// to add it back explicitly here. See GHSA-85g2-pmrx-r49q.
-	util.MountFetcherSATokenOnFetcher(&deployment.Spec.Template.Spec)
+	if err := util.MountFetcherSATokenOnFetcher(&deployment.Spec.Template.Spec); err != nil {
+		return nil, err
+	}
 
 	if env.Spec.Runtime.PodSpec != nil {
 		newPodSpec, err := util.MergePodSpec(&deployment.Spec.Template.Spec, env.Spec.Runtime.PodSpec)

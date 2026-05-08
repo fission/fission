@@ -224,7 +224,9 @@ func (gp *GenericPool) genDeploymentSpec(env *fv1.Environment) (*appsv1.Deployme
 	// AutomountServiceAccountToken=false flag set above suppresses the
 	// implicit mount on every container, including fetcher, so we have to
 	// add it back explicitly here. See GHSA-85g2-pmrx-r49q.
-	util.MountFetcherSATokenOnFetcher(&deploymentSpec.Template.Spec)
+	if err := util.MountFetcherSATokenOnFetcher(&deploymentSpec.Template.Spec); err != nil {
+		return nil, err
+	}
 
 	if env.Spec.Runtime.PodSpec != nil {
 		newPodSpec, err := util.MergePodSpec(&deploymentSpec.Template.Spec, env.Spec.Runtime.PodSpec)

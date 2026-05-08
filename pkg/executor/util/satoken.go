@@ -17,6 +17,8 @@ limitations under the License.
 package util
 
 import (
+	"fmt"
+
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/utils/ptr"
 )
@@ -80,8 +82,10 @@ func FetcherSATokenProjectedVolume() apiv1.Volume {
 // Kubernetes ServiceAccount path. It removes any pre-existing mount at
 // that path first so the projected volume is the sole occupant —
 // otherwise kubelet rejects the pod with a "duplicate mount path"
-// error.
-func MountFetcherSATokenOnFetcher(podSpec *apiv1.PodSpec) {
+// error. Returns an error if no fetcher container is present, since a
+// missing fetcher is almost certainly a bug in the calling code path
+// rather than something we want to silently paper over.
+func MountFetcherSATokenOnFetcher(podSpec *apiv1.PodSpec) error {
 	for i := range podSpec.Containers {
 		c := &podSpec.Containers[i]
 		if c.Name != fetcherContainerName {
@@ -99,6 +103,7 @@ func MountFetcherSATokenOnFetcher(podSpec *apiv1.PodSpec) {
 			MountPath: FetcherSATokenMountPath,
 			ReadOnly:  true,
 		})
-		return
+		return nil
 	}
+	return fmt.Errorf("fetcher container not found in pod spec; cannot mount SA token volume")
 }
