@@ -218,6 +218,14 @@ executor:
 ## router is responsible for routing function calls to the appropriate function.
 ##
 router:
+  ## internalPort is the port that backs the router's internal listener.
+  ## /fission-function/<ns>/<name> is registered ONLY on this listener
+  ## (see GHSA-3g33-6vg6-27m8). The Service exposes it as a named port
+  ## "internal" and a NetworkPolicy gates it to fission-bundle pods
+  ## (executor / kubewatcher / timer / mqtrigger / mqtrigger-keda /
+  ## canaryconfig / buildermgr) only.
+  ##
+  internalPort: 8889
   ## router priorityClassName
   ## Ref. https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/
   ## Recommended to use system-cluster-critical for router pods.

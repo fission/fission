@@ -13,10 +13,19 @@ metadata:
 spec:
   type: {{ .Values.routerServiceType }}
   ports:
-  - port: 80
+  - name: http
+    port: 80
     targetPort: 8888
 {{- if eq .Values.routerServiceType "NodePort" }}
     nodePort: {{ .Values.routerPort }}
 {{- end }}
+  # internal port serves /fission-function/<ns>/<name> for in-cluster
+  # callers (executor / kubewatcher / timer / mqtrigger / canaryconfig /
+  # buildermgr). The named port lets internal callers reach it via
+  # http://router.<ns>.svc:{{ .Values.router.internalPort | default 8889 }}; the NetworkPolicy gates
+  # access to fission-bundle pods only.
+  - name: internal
+    port: {{ .Values.router.internalPort | default 8889 }}
+    targetPort: {{ .Values.router.internalPort | default 8889 }}
   selector:
     svc: router

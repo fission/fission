@@ -112,16 +112,29 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr manager.Inte
 	}
 
 	executor := eclient.MakeClient(f.Logger(), fmt.Sprintf("http://localhost:%d", executorPort))
-	err = router.Start(ctx, f.ClientGen(), f.Logger(), mgr, routerPort, executor)
+	internalRouterPort, err := utils.FindFreePort()
+	if err != nil {
+		return fmt.Errorf("error finding unused port for router internal listener: %w", err)
+	}
+	err = router.Start(ctx, f.ClientGen(), f.Logger(), mgr, routerPort, internalRouterPort, executor)
 	if err != nil {
 		return fmt.Errorf("error starting router: %w", err)
 	}
 	f.AddServiceInfo("router", framework.ServiceInfo{Port: routerPort})
+	f.AddServiceInfo("router-internal", framework.ServiceInfo{Port: internalRouterPort})
 	routerURL, err := f.GetServiceURL("router")
 	if err != nil {
 		return fmt.Errorf("error getting router URL: %w", err)
 	}
 	os.Setenv("FISSION_ROUTER_URL", routerURL)
+	// Point internal callers (timer / kubewatcher / mqtrigger) at the
+	// router internal listener so /fission-function/<ns>/<name> reaches
+	// the right port post-GHSA-3g33-6vg6-27m8.
+	internalRouterURL, err := f.GetServiceURL("router-internal")
+	if err != nil {
+		return fmt.Errorf("error getting router internal URL: %w", err)
+	}
+	os.Setenv("ROUTER_INTERNAL_URL", internalRouterURL)
 
 	err = timer.Start(ctx, f.ClientGen(), f.Logger(), mgr, routerURL)
 	if err != nil {
