@@ -36,9 +36,9 @@ const FetcherSATokenVolumeName = "fission-fetcher-sa-token"
 // place.
 const FetcherSATokenMountPath = "/var/run/secrets/kubernetes.io/serviceaccount"
 
-// fetcherContainerName is the name AddFetcherToPodSpec uses for the
+// FetcherContainerName is the name AddFetcherToPodSpec uses for the
 // injected fetcher sidecar.
-const fetcherContainerName = "fetcher"
+const FetcherContainerName = "fetcher"
 
 // FetcherSATokenProjectedVolume returns the projected volume used to
 // expose the fission-fetcher ServiceAccount token to the fetcher
@@ -87,7 +87,7 @@ func FetcherSATokenProjectedVolume() apiv1.Volume {
 func MountFetcherSATokenOnFetcher(podSpec *apiv1.PodSpec) error {
 	for i := range podSpec.Containers {
 		c := &podSpec.Containers[i]
-		if c.Name != fetcherContainerName {
+		if c.Name != FetcherContainerName {
 			continue
 		}
 		filtered := c.VolumeMounts[:0]

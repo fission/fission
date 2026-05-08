@@ -26,16 +26,12 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/executor/util"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
 
-const (
-	saTokenMountPath = "/var/run/secrets/kubernetes.io/serviceaccount"
-	fetcherSAVolume  = "fission-fetcher-sa-token"
-	fetcherCName     = "fetcher"
-	envCName         = "newdeploy-test-env"
-)
+const envCName = "newdeploy-test-env"
 
 // newTestNewDeploy returns a minimal NewDeploy wired up for unit tests of
 // getDeploymentSpec.
@@ -121,13 +117,13 @@ func TestNewDeployPodSpecDoesNotAutomountTokenInUserContainer(t *testing.T) {
 
 	var projected *apiv1.Volume
 	for i := range pod.Spec.Volumes {
-		if pod.Spec.Volumes[i].Name == fetcherSAVolume {
+		if pod.Spec.Volumes[i].Name == util.FetcherSATokenVolumeName {
 			projected = &pod.Spec.Volumes[i]
 			break
 		}
 	}
-	require.NotNil(t, projected, "projected SA token volume %q must exist", fetcherSAVolume)
-	require.NotNil(t, projected.Projected, "%q must be a projected volume", fetcherSAVolume)
+	require.NotNil(t, projected, "projected SA token volume %q must exist", util.FetcherSATokenVolumeName)
+	require.NotNil(t, projected.Projected, "%q must be a projected volume", util.FetcherSATokenVolumeName)
 	var hasToken, hasCA, hasNS bool
 	for _, src := range projected.Projected.Sources {
 		switch {
@@ -147,7 +143,7 @@ func TestNewDeployPodSpecDoesNotAutomountTokenInUserContainer(t *testing.T) {
 	var fetcher, user *apiv1.Container
 	for i := range pod.Spec.Containers {
 		switch pod.Spec.Containers[i].Name {
-		case fetcherCName:
+		case util.FetcherContainerName:
 			fetcher = &pod.Spec.Containers[i]
 		case envCName:
 			user = &pod.Spec.Containers[i]
@@ -158,9 +154,9 @@ func TestNewDeployPodSpecDoesNotAutomountTokenInUserContainer(t *testing.T) {
 
 	hasProjectedTokenMount := false
 	for _, vm := range fetcher.VolumeMounts {
-		if vm.MountPath == saTokenMountPath {
+		if vm.MountPath == util.FetcherSATokenMountPath {
 			hasProjectedTokenMount = true
-			assert.Equal(t, fetcherSAVolume, vm.Name,
+			assert.Equal(t, util.FetcherSATokenVolumeName, vm.Name,
 				"fetcher SA token mount must be backed by the projected volume")
 			assert.True(t, vm.ReadOnly, "fetcher SA token mount must be read-only")
 		}
@@ -169,7 +165,7 @@ func TestNewDeployPodSpecDoesNotAutomountTokenInUserContainer(t *testing.T) {
 		"fetcher must mount its own SA token via projected volume")
 
 	for _, vm := range user.VolumeMounts {
-		assert.NotEqual(t, saTokenMountPath, vm.MountPath,
+		assert.NotEqual(t, util.FetcherSATokenMountPath, vm.MountPath,
 			"user container must not have any volume mount at the SA token path")
 	}
 }
@@ -202,4 +198,65 @@ func TestNewDeployPodSpecRuntimePodSpecCannotReEnableAutomount(t *testing.T) {
 		"pod-level AutomountServiceAccountToken must be explicitly set, not nil")
 	assert.False(t, *pod.Spec.AutomountServiceAccountToken,
 		"env.Spec.Runtime.PodSpec must not be able to re-enable auto-mount of the SA token")
+}
+
+// TestNewDeployPodSpecRuntimePodSpecCannotIntroduceDuplicateSATokenMount
+// pins the Copilot-flagged invariant from PR #3366: an env author who supplies
+// env.Spec.Runtime.PodSpec.Containers = [{name: "fetcher", volumeMounts:
+// [{mountPath: <SA token path>}]}] must not cause the final fetcher container
+// to end up with two mounts at the SA token path, which kubelet would reject
+// as a duplicate. The mount-enforcement helper must run AFTER the merge so
+// any user-supplied mount at that path is stripped before the projected
+// volume is added back. See GHSA-85g2-pmrx-r49q.
+func TestNewDeployPodSpecRuntimePodSpecCannotIntroduceDuplicateSATokenMount(t *testing.T) {
+	deploy := newTestNewDeploy(t)
+	env := newTestNewDeployEnv()
+	env.Spec.Runtime.PodSpec = &apiv1.PodSpec{
+		Containers: []apiv1.Container{
+			{
+				Name: util.FetcherContainerName,
+				VolumeMounts: []apiv1.VolumeMount{
+					{
+						Name:      "evil-sa-mount",
+						MountPath: util.FetcherSATokenMountPath,
+					},
+				},
+			},
+		},
+	}
+	fn := newTestNewDeployFunction()
+	ctx := t.Context()
+
+	replicas := int32(1)
+	deployment, err := deploy.getDeploymentSpec(
+		ctx, fn, env, &replicas,
+		"newdeploy-test-fn",
+		"default",
+		map[string]string{"app": "newdeploy-test"},
+		map[string]string{},
+	)
+	require.NoError(t, err)
+	pod := deployment.Spec.Template
+
+	var fetcher *apiv1.Container
+	for i := range pod.Spec.Containers {
+		if pod.Spec.Containers[i].Name == util.FetcherContainerName {
+			fetcher = &pod.Spec.Containers[i]
+			break
+		}
+	}
+	require.NotNil(t, fetcher, "fetcher container must be present")
+
+	mountsAtSAPath := 0
+	var mountVolumeName string
+	for _, vm := range fetcher.VolumeMounts {
+		if vm.MountPath == util.FetcherSATokenMountPath {
+			mountsAtSAPath++
+			mountVolumeName = vm.Name
+		}
+	}
+	assert.Equal(t, 1, mountsAtSAPath,
+		"fetcher container must have exactly one mount at the SA token path; user-supplied mount at the same path must be stripped by MountFetcherSATokenOnFetcher")
+	assert.Equal(t, util.FetcherSATokenVolumeName, mountVolumeName,
+		"the surviving mount must be backed by the projected SA token volume, not the user-supplied one")
 }

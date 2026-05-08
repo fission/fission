@@ -218,15 +218,6 @@ func (gp *GenericPool) genDeploymentSpec(env *fv1.Environment) (*appsv1.Deployme
 		return nil, err
 	}
 
-	// Re-mount the fission-fetcher SA token at the canonical Kubernetes
-	// path on the fetcher container only. The pod-level
-	// AutomountServiceAccountToken=false flag set above suppresses the
-	// implicit mount on every container, including fetcher, so we have to
-	// add it back explicitly here. See GHSA-85g2-pmrx-r49q.
-	if err := util.MountFetcherSATokenOnFetcher(&deploymentSpec.Template.Spec); err != nil {
-		return nil, err
-	}
-
 	if env.Spec.Runtime.PodSpec != nil {
 		newPodSpec, err := util.MergePodSpec(&deploymentSpec.Template.Spec, env.Spec.Runtime.PodSpec)
 		if err != nil {
@@ -238,6 +229,21 @@ func (gp *GenericPool) genDeploymentSpec(env *fv1.Environment) (*appsv1.Deployme
 		// would otherwise re-enable the kubelet auto-mount on the user
 		// container. See GHSA-85g2-pmrx-r49q.
 		deploymentSpec.Template.Spec.AutomountServiceAccountToken = new(false)
+	}
+
+	// Re-mount the fission-fetcher SA token at the canonical Kubernetes
+	// path on the fetcher container only. The pod-level
+	// AutomountServiceAccountToken=false flag set above suppresses the
+	// implicit mount on every container, including fetcher, so we have to
+	// add it back explicitly here. This must run AFTER the env.Spec.Runtime.PodSpec
+	// merge — MergePodSpec can append additional volumeMounts to the fetcher
+	// container, including one at this same path, and kubelet would reject
+	// the pod with a duplicate-mount-path error. The helper strips any
+	// pre-existing mount at the path before adding its own, so running it
+	// last guarantees a single mount on the fetcher container backed by the
+	// projected SA token volume. See GHSA-85g2-pmrx-r49q.
+	if err := util.MountFetcherSATokenOnFetcher(&deploymentSpec.Template.Spec); err != nil {
+		return nil, err
 	}
 	return &deploymentSpec, nil
 }
