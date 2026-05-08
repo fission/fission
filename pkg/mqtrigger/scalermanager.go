@@ -186,9 +186,10 @@ func getEnvVarlist(ctx context.Context, mqt *fv1.MessageQueueTrigger, routerURL 
 	// Deployment spec. The connector pod resolves the values at start
 	// time via its own ServiceAccount, restoring the Kubernetes-RBAC
 	// boundary on secret reads. The controller still calls Secrets().Get
-	// solely to enumerate the keys it must surface as env vars; the
-	// values are never copied into the controller's address space and
-	// never written into the Deployment object. See GHSA-7m8x-qg2j-4m3v.
+	// to enumerate the keys it must surface as env vars (so the response
+	// body, including secret values, briefly transits controller memory),
+	// but the values are NOT written into the Deployment object and are
+	// NOT logged. See GHSA-7m8x-qg2j-4m3v.
 	secretName := mqt.Spec.Secret
 	if len(secretName) > 0 {
 		secret, err := kubeClient.CoreV1().Secrets(mqt.Namespace).Get(ctx, secretName, metav1.GetOptions{})

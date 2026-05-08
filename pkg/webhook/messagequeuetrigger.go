@@ -82,8 +82,8 @@ func validateAllowedPodSpec(ps *apiv1.PodSpec) error {
 	}
 	prefixed := make([]string, len(bad))
 	for i, name := range bad {
-		prefixed[i] = "podSpec." + name
+		prefixed[i] = "spec.podspec." + name
 	}
-	return fmt.Errorf("MessageQueueTrigger.spec.podSpec contains disallowed fields: %v "+
+	return fmt.Errorf("MessageQueueTrigger.spec.podspec contains disallowed fields: %v "+
 		"(allowlist: nodeSelector, tolerations, affinity, runtimeClassName, containers[].resources)", prefixed)
 }
