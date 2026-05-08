@@ -63,7 +63,15 @@ type (
 		fissionClient    versioned.Interface
 		kubeClient       kubernetes.Interface
 		httpClient       *http.Client
-		Info             PodInfo
+		// storageHTTPClient is used for storagesvc archive downloads
+		// only. It carries the HMAC signer when internalAuth is enabled
+		// so requests to /v1/archive carry a valid X-Fission-Auth-Signature.
+		// httpClient stays unsigned because it also serves the user
+		// container's /v2/specialize endpoint, which is not the auth
+		// boundary and would otherwise reject the extra headers (or be
+		// confused by the body buffering that signing requires).
+		storageHTTPClient *http.Client
+		Info              PodInfo
 	}
 	PodInfo struct {
 		Name      string
@@ -110,16 +118,18 @@ func MakeFetcher(logger logr.Logger, clientGen crd.ClientGeneratorInterface, sha
 		return nil, fmt.Errorf("error reading pod namespace from downward volume: %w", err)
 	}
 
-	// Wrap the transport with the HMAC signer when the chart's
-	// internal-auth secret is mounted (FISSION_INTERNAL_AUTH_SECRET).
-	// Without this the fetcher's archive downloads via utils.DownloadUrl
-	// reach storagesvc unsigned and storagesvc rejects them with HTTP 401
-	// once internalAuth is enabled. See docs/internal-auth/00-design.md.
-	var rt http.RoundTripper = otelhttp.NewTransport(http.DefaultTransport)
+	hc := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
+	// storageHTTPClient signs requests to storagesvc with the HMAC
+	// scheme described in docs/internal-auth/00-design.md when the
+	// chart's internal-auth secret is mounted. Sharing the persistent
+	// httpClient with the signer wrapper would also sign the
+	// /v2/specialize POST sent to the user container, which doesn't
+	// expect our auth headers — keep the two clients separate.
+	var storageRT http.RoundTripper = otelhttp.NewTransport(http.DefaultTransport)
 	if secret := storageSvcClient.HMACSecretFromEnv(); len(secret) > 0 {
-		rt = hmacauth.NewSigner(secret, rt, time.Now)
+		storageRT = hmacauth.NewSigner(secret, storageRT, time.Now)
 	}
-	hc := &http.Client{Transport: rt}
+	storageHC := &http.Client{Transport: storageRT}
 	return &Fetcher{
 		logger:           fLogger,
 		sharedVolumePath: sharedVolumePath,
@@ -131,7 +141,8 @@ func MakeFetcher(logger logr.Logger, clientGen crd.ClientGeneratorInterface, sha
 			Name:      string(name),
 			Namespace: string(namespace),
 		},
-		httpClient: hc,
+		httpClient:        hc,
+		storageHTTPClient: storageHC,
 	}, nil
 }
 
@@ -290,7 +301,7 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 			"fetch-url":         req.URL,
 		})...)
 		// fetch the file and save it to the tmp path
-		err := utils.DownloadUrl(ctx, fetcher.httpClient, req.URL, tmpPath)
+		err := utils.DownloadUrl(ctx, fetcher.storageHTTPClient, req.URL, tmpPath)
 		if err != nil {
 			e := "failed to download url from fetch request"
 			logger.Error(err, e, "url", req.URL)
@@ -336,7 +347,7 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 				"package-namespace": pkg.Namespace,
 				"archive-url":       archive.URL,
 			})...)
-			err := utils.DownloadUrl(ctx, fetcher.httpClient, archive.URL, tmpPath)
+			err := utils.DownloadUrl(ctx, fetcher.storageHTTPClient, archive.URL, tmpPath)
 			if err != nil {
 				e := "failed to download url from archive"
 				logger.Error(err, e, "url", req.URL)
