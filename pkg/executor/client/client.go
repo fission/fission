@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
 	"strings"
 	"time"
@@ -32,6 +33,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 	ferror "github.com/fission/fission/pkg/error"
 )
 
@@ -60,9 +62,26 @@ type (
 )
 
 // MakeClient initializes and returns a Client instance.
-func MakeClient(logger logr.Logger, executorURL string) ClientInterface {
+//
+// masterSecret enables HMAC-SHA256 request signing per the design at
+// docs/internal-auth/00-design.md. The master is the chart-installed
+// fission-internal-auth/secret value; this client derives the
+// per-service signing key for ServiceExecutor internally so a leak of
+// one channel's runtime memory cannot forge requests on a different
+// channel. The executor only enforces signatures when its own copy of
+// the master is set on the server, so passing nil (or empty) here is
+// backwards compatible with installs that have internalAuth disabled.
+//
+// The router (the only in-cluster caller) should pass
+// storagesvcClient.HMACSecretFromEnv(); the same env var
+// (FISSION_INTERNAL_AUTH_SECRET) backs every internal channel.
+func MakeClient(logger logr.Logger, executorURL string, masterSecret []byte) ClientInterface {
 	hc := retryablehttp.NewClient()
-	hc.HTTPClient.Transport = otelhttp.NewTransport(hc.HTTPClient.Transport)
+	var rt http.RoundTripper = otelhttp.NewTransport(hc.HTTPClient.Transport)
+	if len(masterSecret) > 0 {
+		rt = hmacauth.ServiceSigner(masterSecret, hmacauth.ServiceExecutor, rt, time.Now)
+	}
+	hc.HTTPClient.Transport = rt
 	c := &client{
 		logger:      logger.WithName("executor_client"),
 		executorURL: strings.TrimSuffix(executorURL, "/"),

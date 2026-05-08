@@ -14,6 +14,7 @@ import (
 	"github.com/fission/fission/pkg/mqtrigger"
 	"github.com/fission/fission/pkg/router"
 	"github.com/fission/fission/pkg/storagesvc"
+	storagesvcClient "github.com/fission/fission/pkg/storagesvc/client"
 	"github.com/fission/fission/pkg/timer"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/manager"
@@ -111,7 +112,12 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr manager.Inte
 		return fmt.Errorf("error toggling metric address: %w", err)
 	}
 
-	executor := eclient.MakeClient(f.Logger(), fmt.Sprintf("http://localhost:%d", executorPort))
+	// E2E framework runs the executor in the same process as its caller,
+	// so any FISSION_INTERNAL_AUTH_SECRET set on the test environment
+	// flows into both ends of this client/verifier pair via
+	// HMACSecretFromEnv (returns nil when unset, leaving the channel
+	// unsigned).
+	executor := eclient.MakeClient(f.Logger(), fmt.Sprintf("http://localhost:%d", executorPort), storagesvcClient.HMACSecretFromEnv())
 	internalRouterPort, err := utils.FindFreePort()
 	if err != nil {
 		return fmt.Errorf("error finding unused port for router internal listener: %w", err)

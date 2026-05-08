@@ -38,6 +38,7 @@ import (
 	mqt "github.com/fission/fission/pkg/mqtrigger"
 	"github.com/fission/fission/pkg/router"
 	"github.com/fission/fission/pkg/storagesvc"
+	storagesvcClient "github.com/fission/fission/pkg/storagesvc/client"
 	"github.com/fission/fission/pkg/timer"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 	"github.com/fission/fission/pkg/utils/manager"
@@ -256,7 +257,7 @@ func startRequestedService(ctx context.Context, args *CommandLineArgs, clientGen
 	}
 
 	if args.routerPort != 0 {
-		err = router.Start(ctx, clientGen, logger, mgr, args.routerPort, args.routerInternalPort, eclient.MakeClient(logger, args.executorUrl))
+		err = router.Start(ctx, clientGen, logger, mgr, args.routerPort, args.routerInternalPort, eclient.MakeClient(logger, args.executorUrl, storagesvcClient.HMACSecretFromEnv()))
 		if err != nil {
 			logger.Error(err, "router exited")
 		}
