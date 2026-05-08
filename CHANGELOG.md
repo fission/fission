@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Security
+
+- **GHSA-chf8-4hv6-8pg6 / GHSA-7g8g-g937-26g8** — StorageSvc HMAC application-layer authentication.
+  Storagesvc's `/v1/archive` endpoints (GET, POST, DELETE, HEAD) now require an HMAC-SHA256 signature on every request when `internalAuth.enabled=true` (chart default).
+  See `rfc/0004-hmac-application-layer-auth.md` for the full design — signed canonical string `METHOD\nPATH\nsha256(body)\nunix_minute`, replay window ±60s, dual-secret rotation via `FISSION_INTERNAL_AUTH_SECRET_OLD`.
+  The Helm chart materialises `Secret/fission-internal-auth` (32-byte random, preserved across upgrades via `lookup`) and mounts `FISSION_INTERNAL_AUTH_SECRET` into `storagesvc`, `buildermgr`, `executor`, and `router`.
+  Backwards compatible: setting `internalAuth.enabled=false` (or leaving the env var unset on hand-rolled installs) skips enforcement entirely.
+
 ## [v1.17.0-rc1](https://github.com/fission/fission/tree/v1.17.0-rc1) (2022-07-06)
 
 [Full Changelog](https://github.com/fission/fission/compare/v1.16.0...v1.17.0-rc1)
