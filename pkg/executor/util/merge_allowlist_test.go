@@ -34,8 +34,7 @@ func TestMergeAllowedPodSpecFieldsDropsImageOverride(t *testing.T) {
 		NodeSelector: map[string]string{"role": "mqt"},
 	}
 
-	out, dropped, err := MergeAllowedPodSpecFields(src, user)
-	require.NoError(t, err)
+	out, dropped := MergeAllowedPodSpecFields(src, user)
 
 	assert.Equal(t, "fission/keda-kafka:1.0", out.Containers[0].Image,
 		"user-supplied container image must NOT override controller-set image")
@@ -51,8 +50,7 @@ func TestMergeAllowedPodSpecFieldsAcceptsTolerations(t *testing.T) {
 	user := &apiv1.PodSpec{
 		Tolerations: []apiv1.Toleration{{Key: "dedicated", Operator: apiv1.TolerationOpEqual, Value: "mqt"}},
 	}
-	out, dropped, err := MergeAllowedPodSpecFields(src, user)
-	require.NoError(t, err)
+	out, dropped := MergeAllowedPodSpecFields(src, user)
 	require.Len(t, out.Tolerations, 1)
 	assert.Empty(t, dropped, "tolerations are allowlisted and must not be reported as dropped")
 }
@@ -77,8 +75,7 @@ func TestMergeAllowedPodSpecFieldsAcceptsAffinityAndRuntimeClass(t *testing.T) {
 		Affinity:         aff,
 		RuntimeClassName: &rc,
 	}
-	out, _, err := MergeAllowedPodSpecFields(src, user)
-	require.NoError(t, err)
+	out, _ := MergeAllowedPodSpecFields(src, user)
 	require.NotNil(t, out.Affinity)
 	require.NotNil(t, out.RuntimeClassName)
 	assert.Equal(t, "kata", *out.RuntimeClassName)
@@ -97,8 +94,7 @@ func TestMergeAllowedPodSpecFieldsAppliesContainerResources(t *testing.T) {
 			},
 		}},
 	}
-	out, dropped, err := MergeAllowedPodSpecFields(src, user)
-	require.NoError(t, err)
+	out, dropped := MergeAllowedPodSpecFields(src, user)
 	assert.Equal(t, "fission/keda-kafka:1.0", out.Containers[0].Image,
 		"image must remain controller-set after Resources merge")
 	assert.Equal(t, resource.MustParse("100m"), out.Containers[0].Resources.Requests[apiv1.ResourceCPU])
@@ -129,8 +125,7 @@ func TestMergeAllowedPodSpecFieldsDropsDangerousFields(t *testing.T) {
 		HostIPC:            true,
 		SecurityContext:    &apiv1.PodSecurityContext{RunAsUser: &runAsUser},
 	}
-	out, dropped, err := MergeAllowedPodSpecFields(src, user)
-	require.NoError(t, err)
+	out, dropped := MergeAllowedPodSpecFields(src, user)
 
 	// Output must look identical to src (modulo nil vs empty).
 	assert.Equal(t, "fission/keda-kafka:1.0", out.Containers[0].Image)
@@ -166,8 +161,7 @@ func TestMergeAllowedPodSpecFieldsNilUser(t *testing.T) {
 	src := &apiv1.PodSpec{
 		Containers: []apiv1.Container{{Name: "connector", Image: "fission/keda-kafka:1.0"}},
 	}
-	out, dropped, err := MergeAllowedPodSpecFields(src, nil)
-	require.NoError(t, err)
+	out, dropped := MergeAllowedPodSpecFields(src, nil)
 	assert.Empty(t, dropped)
 	assert.Equal(t, "fission/keda-kafka:1.0", out.Containers[0].Image)
 }
@@ -180,8 +174,7 @@ func TestMergeAllowedPodSpecFieldsDoesNotMutateSrc(t *testing.T) {
 	user := &apiv1.PodSpec{
 		NodeSelector: map[string]string{"new": "label"},
 	}
-	_, _, err := MergeAllowedPodSpecFields(src, user)
-	require.NoError(t, err)
+	_, _ = MergeAllowedPodSpecFields(src, user)
 	// src must remain unchanged so the caller can re-use it across reconciles.
 	assert.Equal(t, map[string]string{"existing": "label"}, src.NodeSelector)
 }

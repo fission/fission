@@ -435,10 +435,7 @@ func getDeploymentSpec(ctx context.Context, logger logr.Logger, mqt *fv1.Message
 	// dropped here; the validating webhook rejects them at admission time
 	// so a normally-configured cluster never reaches this branch with bad
 	// input. See GHSA-7m8x-qg2j-4m3v.
-	mergedSpec, dropped, err := util.MergeAllowedPodSpecFields(podSpec, mqt.Spec.PodSpec)
-	if err != nil {
-		return nil, err
-	}
+	mergedSpec, dropped := util.MergeAllowedPodSpecFields(podSpec, mqt.Spec.PodSpec)
 	if len(dropped) > 0 {
 		logger.Info("dropped disallowed PodSpec fields from MessageQueueTrigger",
 			"trigger", mqt.Name, "namespace", mqt.Namespace, "dropped", dropped)
