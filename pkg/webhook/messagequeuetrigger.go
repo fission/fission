@@ -24,6 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	v1 "github.com/fission/fission/pkg/apis/core/v1"
+	executorutil "github.com/fission/fission/pkg/executor/util"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
 
@@ -69,49 +70,20 @@ func (r *MessageQueueTrigger) Validate(new *v1.MessageQueueTrigger) error {
 }
 
 // validateAllowedPodSpec rejects user-supplied PodSpec fields that the
-// MessageQueueTrigger connector controller refuses to honour. The set of
-// disallowed fields here MUST stay in lock-step with
-// pkg/executor/util.MergeAllowedPodSpecFields.
+// MessageQueueTrigger connector controller refuses to honour. The single
+// source of truth for the disallow list is
+// executorutil.DisallowedPodSpecFields — extending the allowlist here
+// (without touching the executor) would silently let admission accept
+// fields that the controller still drops.
 func validateAllowedPodSpec(ps *apiv1.PodSpec) error {
-	var bad []string
-	for _, c := range ps.Containers {
-		if c.Image != "" {
-			bad = append(bad, "podSpec.containers[].image")
-		}
-		if len(c.Command) > 0 {
-			bad = append(bad, "podSpec.containers[].command")
-		}
-		if len(c.Args) > 0 {
-			bad = append(bad, "podSpec.containers[].args")
-		}
-		if len(c.Env) > 0 {
-			bad = append(bad, "podSpec.containers[].env")
-		}
-		if len(c.VolumeMounts) > 0 {
-			bad = append(bad, "podSpec.containers[].volumeMounts")
-		}
+	bad := executorutil.DisallowedPodSpecFields(ps)
+	if len(bad) == 0 {
+		return nil
 	}
-	if len(ps.Volumes) > 0 {
-		bad = append(bad, "podSpec.volumes")
+	prefixed := make([]string, len(bad))
+	for i, name := range bad {
+		prefixed[i] = "podSpec." + name
 	}
-	if ps.ServiceAccountName != "" {
-		bad = append(bad, "podSpec.serviceAccountName")
-	}
-	if ps.HostNetwork {
-		bad = append(bad, "podSpec.hostNetwork")
-	}
-	if ps.HostPID {
-		bad = append(bad, "podSpec.hostPID")
-	}
-	if ps.HostIPC {
-		bad = append(bad, "podSpec.hostIPC")
-	}
-	if ps.SecurityContext != nil && ps.SecurityContext.RunAsUser != nil {
-		bad = append(bad, "podSpec.securityContext.runAsUser")
-	}
-	if len(bad) > 0 {
-		return fmt.Errorf("MessageQueueTrigger.spec.podSpec contains disallowed fields: %v "+
-			"(allowlist: nodeSelector, tolerations, affinity, runtimeClassName, containers[].resources)", bad)
-	}
-	return nil
+	return fmt.Errorf("MessageQueueTrigger.spec.podSpec contains disallowed fields: %v "+
+		"(allowlist: nodeSelector, tolerations, affinity, runtimeClassName, containers[].resources)", prefixed)
 }

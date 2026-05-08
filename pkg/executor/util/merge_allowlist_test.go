@@ -185,3 +185,83 @@ func TestMergeAllowedPodSpecFieldsDoesNotMutateSrc(t *testing.T) {
 	// src must remain unchanged so the caller can re-use it across reconciles.
 	assert.Equal(t, map[string]string{"existing": "label"}, src.NodeSelector)
 }
+
+func TestDisallowedPodSpecFieldsAllPresent(t *testing.T) {
+	runAsUser := int64(0)
+	ps := &apiv1.PodSpec{
+		Containers: []apiv1.Container{{
+			Name:         "connector",
+			Image:        "evil:latest",
+			Command:      []string{"/bin/sh"},
+			Args:         []string{"-c", "curl evil"},
+			Env:          []apiv1.EnvVar{{Name: "INJECTED", Value: "yes"}},
+			VolumeMounts: []apiv1.VolumeMount{{Name: "host", MountPath: "/host"}},
+		}},
+		Volumes: []apiv1.Volume{{Name: "host", VolumeSource: apiv1.VolumeSource{
+			HostPath: &apiv1.HostPathVolumeSource{Path: "/"},
+		}}},
+		ServiceAccountName: "cluster-admin",
+		HostNetwork:        true,
+		HostPID:            true,
+		HostIPC:            true,
+		SecurityContext:    &apiv1.PodSecurityContext{RunAsUser: &runAsUser},
+	}
+
+	bad := DisallowedPodSpecFields(ps)
+
+	for _, want := range []string{
+		"containers[].image",
+		"containers[].command",
+		"containers[].args",
+		"containers[].env",
+		"containers[].volumeMounts",
+		"volumes",
+		"serviceAccountName",
+		"hostNetwork",
+		"hostPID",
+		"hostIPC",
+		"securityContext.runAsUser",
+	} {
+		assert.Contains(t, bad, want, "expected %q to be reported as disallowed", want)
+	}
+}
+
+func TestDisallowedPodSpecFieldsOnlyAllowed(t *testing.T) {
+	rc := "kata"
+	ps := &apiv1.PodSpec{
+		Containers:       []apiv1.Container{{Name: "connector"}},
+		NodeSelector:     map[string]string{"role": "mqt"},
+		Tolerations:      []apiv1.Toleration{{Key: "dedicated"}},
+		Affinity:         &apiv1.Affinity{},
+		RuntimeClassName: &rc,
+	}
+	assert.Empty(t, DisallowedPodSpecFields(ps),
+		"PodSpec containing only allowlisted fields must report no disallowed entries")
+}
+
+func TestDisallowedPodSpecFieldsDedupAcrossContainers(t *testing.T) {
+	// Two containers each set Image — the helper must report
+	// "containers[].image" once, not twice.
+	ps := &apiv1.PodSpec{
+		Containers: []apiv1.Container{
+			{Name: "c1", Image: "a:1", Command: []string{"sh"}},
+			{Name: "c2", Image: "b:2", Command: []string{"bash"}},
+		},
+	}
+
+	bad := DisallowedPodSpecFields(ps)
+
+	// Each disallowed field name must appear exactly once.
+	counts := map[string]int{}
+	for _, name := range bad {
+		counts[name]++
+	}
+	assert.Equal(t, 1, counts["containers[].image"],
+		"image violation must be deduped across containers, got %v", bad)
+	assert.Equal(t, 1, counts["containers[].command"],
+		"command violation must be deduped across containers, got %v", bad)
+}
+
+func TestDisallowedPodSpecFieldsNil(t *testing.T) {
+	assert.Nil(t, DisallowedPodSpecFields(nil))
+}
