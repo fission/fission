@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -31,6 +32,7 @@ import (
 
 	"github.com/go-logr/logr"
 
+	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
@@ -46,6 +48,12 @@ type (
 
 		baseURL string
 		timeout time.Duration
+
+		// httpClient is the per-publisher transport. We keep it on the
+		// struct (rather than reusing the package-level WebhookHttpClient)
+		// so each publisher can carry its own HMAC signer configured at
+		// construction time.
+		httpClient *http.Client
 	}
 	publishRequest struct {
 		ctx        context.Context
@@ -58,11 +66,28 @@ type (
 	}
 )
 
-// MakeWebhookPublisher creates a WebhookPublisher object for the given baseURL
+// MakeWebhookPublisher creates a WebhookPublisher object for the given baseURL.
+//
+// If ROUTER_INTERNAL_URL is set in the environment, baseURL is overridden
+// with that value — this points kubewatcher / timer / mqtrigger at the
+// router's internal listener (port 8889) instead of the public listener
+// (port 8888). The internal listener is the only route registration for
+// /fission-function/<ns>/<name> after GHSA-3g33-6vg6-27m8.
+//
+// If FISSION_INTERNAL_AUTH_SECRET is set, the publisher's HTTP transport
+// is wrapped with hmacauth.NewSigner so each /fission-function/...
+// invocation carries the X-Fission-Auth-* headers that the router's
+// internal-listener verifier expects. An unset secret leaves the
+// transport unsigned, matching the verifier's pass-through mode for
+// first-deploy installs.
 func MakeWebhookPublisher(logger logr.Logger, baseURL string) *WebhookPublisher {
+	if internal := os.Getenv("ROUTER_INTERNAL_URL"); internal != "" {
+		baseURL = internal
+	}
 	p := &WebhookPublisher{
 		logger:         logger.WithName("webhook_publisher"),
 		baseURL:        baseURL,
+		httpClient:     newWebhookHTTPClient(),
 		requestChannel: make(chan *publishRequest, 32), // buffered channel
 		// TODO make this configurable
 		timeout: 60 * time.Minute,
@@ -72,6 +97,23 @@ func MakeWebhookPublisher(logger logr.Logger, baseURL string) *WebhookPublisher 
 	}
 	go p.svc()
 	return p
+}
+
+// newWebhookHTTPClient constructs the HTTP client used to invoke
+// /fission-function/<ns>/<name> on the router's internal listener. The
+// transport stack is otelhttp -> [hmacauth, when secret set] ->
+// http.DefaultTransport so the signature is computed AFTER OTEL has
+// added its trace headers (otherwise the signed canonical form would
+// not include those headers, but they are not part of the signed
+// canonical anyway — only path/method/body/timestamp are signed, so
+// ordering here is purely about which Transport sees the body buffer
+// in what state).
+func newWebhookHTTPClient() *http.Client {
+	var rt http.RoundTripper = otelhttp.NewTransport(http.DefaultTransport)
+	if secret := os.Getenv("FISSION_INTERNAL_AUTH_SECRET"); secret != "" {
+		rt = hmacauth.NewSigner([]byte(secret), rt, time.Now)
+	}
+	return &http.Client{Transport: rt}
 }
 
 // Publish sends a request to the target with payload having given body and headers
@@ -99,6 +141,9 @@ func (p *WebhookPublisher) svc() {
 	}
 }
 
+// WebhookHttpClient is retained for backwards compatibility with any
+// external callers that may have referenced it. New code should use a
+// *WebhookPublisher (which carries its own per-instance http.Client).
 var WebhookHttpClient = &http.Client{
 	Transport: otelhttp.NewTransport(http.DefaultTransport),
 }
@@ -135,7 +180,7 @@ func (p *WebhookPublisher) makeHTTPRequest(r *publishRequest) {
 	// Make the request
 	ctx, cancel := context.WithTimeoutCause(r.ctx, p.timeout, fmt.Errorf("webhook request timed out (%f)s exceeded ", p.timeout.Seconds()))
 	defer cancel()
-	resp, err := ctxhttp.Do(ctx, WebhookHttpClient, req)
+	resp, err := ctxhttp.Do(ctx, p.httpClient, req)
 	if err != nil {
 		logger = logger.WithValues("request", r)
 	} else {

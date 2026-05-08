@@ -23,6 +23,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"errors"
 
@@ -30,9 +31,23 @@ import (
 	"github.com/go-logr/logr"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 	"github.com/fission/fission/pkg/mqtrigger"
 	"github.com/fission/fission/pkg/utils"
 )
+
+// newKafkaHTTPClient builds the http.Client used to invoke functions
+// through the router. When FISSION_INTERNAL_AUTH_SECRET is set the
+// transport is wrapped with hmacauth.NewSigner, so every
+// /fission-function/<ns>/<name> request carries the X-Fission-Auth-*
+// headers required by the router's internal-listener verifier.
+func newKafkaHTTPClient() *http.Client {
+	rt := http.DefaultTransport
+	if secret := os.Getenv("FISSION_INTERNAL_AUTH_SECRET"); secret != "" {
+		return &http.Client{Transport: hmacauth.NewSigner([]byte(secret), rt, time.Now)}
+	}
+	return &http.Client{Transport: rt}
+}
 
 type MqtConsumerGroupHandler struct {
 	version        sarama.KafkaVersion
@@ -42,6 +57,10 @@ type MqtConsumerGroupHandler struct {
 	producer       sarama.SyncProducer
 	fnUrl          string
 	ready          chan bool
+	// httpClient invokes the function via the router. It signs each
+	// request when FISSION_INTERNAL_AUTH_SECRET is set, so the
+	// router's internal-listener HMAC verifier accepts it.
+	httpClient *http.Client
 }
 
 func NewMqtConsumerGroupHandler(version sarama.KafkaVersion,
@@ -49,12 +68,20 @@ func NewMqtConsumerGroupHandler(version sarama.KafkaVersion,
 	trigger *fv1.MessageQueueTrigger,
 	producer sarama.SyncProducer,
 	routerUrl string) MqtConsumerGroupHandler {
+	// If ROUTER_INTERNAL_URL is set in the environment, prefer it over
+	// the routerUrl flag — operators wire it to the router's internal
+	// listener (port 8889), where /fission-function/<ns>/<name> lives
+	// after GHSA-3g33-6vg6-27m8.
+	if internal := os.Getenv("ROUTER_INTERNAL_URL"); internal != "" {
+		routerUrl = internal
+	}
 	ch := MqtConsumerGroupHandler{
-		version:  version,
-		logger:   logger,
-		trigger:  trigger,
-		producer: producer,
-		ready:    make(chan bool),
+		version:    version,
+		logger:     logger,
+		trigger:    trigger,
+		producer:   producer,
+		ready:      make(chan bool),
+		httpClient: newKafkaHTTPClient(),
 	}
 	// Support other function ref types
 	if ch.trigger.Spec.FunctionReference.Type != fv1.FunctionReferenceTypeFunctionName {
@@ -165,8 +192,9 @@ func (ch *MqtConsumerGroupHandler) kafkaMsgHandler(msg *sarama.ConsumerMessage) 
 	// Make the request
 	var resp *http.Response
 	for attempt := 0; attempt <= ch.trigger.Spec.MaxRetries; attempt++ {
-		// Make the request
-		resp, err = http.DefaultClient.Do(req)
+		// Make the request via the per-handler client so HMAC
+		// signing (when configured) is applied.
+		resp, err = ch.httpClient.Do(req)
 		if err != nil {
 			ch.logger.Error(err, "sending function invocation request failed", "function_url", ch.fnUrl,
 				"trigger", ch.trigger.Name)

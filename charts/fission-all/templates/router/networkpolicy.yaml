@@ -60,6 +60,45 @@ spec:
       ports:
         - port: 8888
           protocol: TCP
+    # Internal listener (port {{ .Values.router.internalPort | default 8889 }}) — serves
+    # /fission-function/<ns>/<name>. After GHSA-3g33-6vg6-27m8 these
+    # routes are NOT registered on the public listener, so all
+    # in-cluster trigger callers must reach the router on this port.
+    # The HMAC verifier wraps the listener; this NetworkPolicy is the
+    # second layer of defence (zero-trust transport, per RFC-0004) that
+    # keeps unsigned attackers out of port {{ .Values.router.internalPort | default 8889 }} entirely.
+    - from:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              svc: kubewatcher
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              svc: timer
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              svc: mqtrigger
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              svc: mqtrigger-keda
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              svc: canaryconfig
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              svc: executor
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              svc: buildermgr
+      ports:
+        - port: {{ .Values.router.internalPort | default 8889 }}
+          protocol: TCP
     # Metrics endpoint open to any scraper.
     - ports:
         - port: 8080
