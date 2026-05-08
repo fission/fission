@@ -12,10 +12,80 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 
 	kedav1alpha1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 )
+
+// secretEnv builds an EnvVar that resolves at pod-start time from a Secret key,
+// matching the connector controller's secret-by-reference contract.
+func secretEnv(name, secretName, key string) apiv1.EnvVar {
+	return apiv1.EnvVar{
+		Name: name,
+		ValueFrom: &apiv1.EnvVarSource{
+			SecretKeyRef: &apiv1.SecretKeySelector{
+				LocalObjectReference: apiv1.LocalObjectReference{Name: secretName},
+				Key:                  key,
+			},
+		},
+	}
+}
+
+func TestGetEnvVarlistDoesNotMaterializeSecretValues(t *testing.T) {
+	const ns = "default"
+	const secretName = "kafka-creds"
+
+	pollingInterval := int32(30)
+	cooldownPeriod := int32(300)
+	minReplicaCount := int32(0)
+	maxReplicaCount := int32(100)
+
+	mqt := &fv1.MessageQueueTrigger{
+		ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: "mqt-1"},
+		Spec: fv1.MessageQueueTriggerSpec{
+			FunctionReference: fv1.FunctionReference{
+				Type: fv1.FunctionReferenceTypeFunctionName,
+				Name: "fn",
+			},
+			MessageQueueType: "kafka",
+			Topic:            "events",
+			PollingInterval:  &pollingInterval,
+			CooldownPeriod:   &cooldownPeriod,
+			MinReplicaCount:  &minReplicaCount,
+			MaxReplicaCount:  &maxReplicaCount,
+			Secret:           secretName,
+			Metadata:         map[string]string{"topic": "events"},
+			MqtKind:          "keda",
+		},
+	}
+	kubeClient := fake.NewClientset(&apiv1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: secretName},
+		Data: map[string][]byte{
+			"saslUsername": []byte("alice"),
+			"saslPassword": []byte("REDACTED"),
+		},
+	})
+
+	env, err := getEnvVarlist(t.Context(), mqt, "http://router.fission.svc/", kubeClient)
+	require.NoError(t, err)
+
+	saw := map[string]string{}
+	for _, ev := range env {
+		if ev.Name == "SASL_USERNAME" || ev.Name == "SASL_PASSWORD" {
+			saw[ev.Name] = ev.Value
+			assert.Empty(t, ev.Value, "secret-derived env vars must not embed a literal Value")
+			require.NotNil(t, ev.ValueFrom, "ValueFrom must be set for env var %s", ev.Name)
+			require.NotNil(t, ev.ValueFrom.SecretKeyRef, "SecretKeyRef must be set for env var %s", ev.Name)
+			assert.Equal(t, secretName, ev.ValueFrom.SecretKeyRef.LocalObjectReference.Name)
+			assert.NotEmpty(t, ev.ValueFrom.SecretKeyRef.Key, "SecretKeyRef.Key must be set")
+		}
+	}
+	_, sawUser := saw["SASL_USERNAME"]
+	_, sawPass := saw["SASL_PASSWORD"]
+	assert.True(t, sawUser, "expected SASL_USERNAME env var to be emitted")
+	assert.True(t, sawPass, "expected SASL_PASSWORD env var to be emitted")
+}
 
 func Test_toEnvVar(t *testing.T) {
 	type args struct {
@@ -144,30 +214,12 @@ func Test_getEnvVarlist(t *testing.T) {
 			Name:  "TOPIC",
 			Value: "topic",
 		},
-		{
-			Name:  "KEY",
-			Value: "test_key",
-		},
-		{
-			Name:  "AUTH_MODE",
-			Value: "sasl_plaintext",
-		},
-		{
-			Name:  "USERNAME",
-			Value: "admin",
-		},
-		{
-			Name:  "PASSWORD",
-			Value: "admin",
-		},
-		{
-			Name:  "CA",
-			Value: "test_ca",
-		},
-		{
-			Name:  "CERT",
-			Value: "test_cert",
-		},
+		secretEnv("KEY", "test-kafka-secrets", "key"),
+		secretEnv("AUTH_MODE", "test-kafka-secrets", "authMode"),
+		secretEnv("USERNAME", "test-kafka-secrets", "username"),
+		secretEnv("PASSWORD", "test-kafka-secrets", "password"),
+		secretEnv("CA", "test-kafka-secrets", "ca"),
+		secretEnv("CERT", "test-kafka-secrets", "cert"),
 	}
 
 	// Kafka Test with Invalid Secret Name
