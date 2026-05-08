@@ -24,6 +24,7 @@ import (
 	"github.com/stretchr/testify/require"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
@@ -196,4 +197,26 @@ func TestGenericPoolPodSpecDoesNotAutomountTokenInUserContainer(t *testing.T) {
 		assert.NotEqual(t, saTokenMountPath, vm.MountPath,
 			"user container must not have any volume mount at the SA token path")
 	}
+}
+
+// TestGenericPoolPodSpecRuntimePodSpecCannotReEnableAutomount asserts that an
+// environment whose Spec.Runtime.PodSpec sets AutomountServiceAccountToken=true
+// cannot override the security-advisory-5 invariant. The merge step must not
+// be allowed to re-introduce the implicit SA token mount on the user
+// container. See GHSA-85g2-pmrx-r49q.
+func TestGenericPoolPodSpecRuntimePodSpecCannotReEnableAutomount(t *testing.T) {
+	gp := newTestGenericPool(t)
+	env := newTestEnv()
+	env.Spec.Runtime.PodSpec = &apiv1.PodSpec{
+		AutomountServiceAccountToken: ptr.To(true),
+	}
+
+	deploymentSpec, err := gp.genDeploymentSpec(env)
+	require.NoError(t, err)
+	pod := deploymentSpec.Template
+
+	require.NotNil(t, pod.Spec.AutomountServiceAccountToken,
+		"pod-level AutomountServiceAccountToken must be explicitly set, not nil")
+	assert.False(t, *pod.Spec.AutomountServiceAccountToken,
+		"env.Spec.Runtime.PodSpec must not be able to re-enable auto-mount of the SA token")
 }

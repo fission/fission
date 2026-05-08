@@ -27,6 +27,7 @@ import (
 	k8sErrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/utils/ptr"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/executor/util"
@@ -178,6 +179,11 @@ func (gp *GenericPool) genDeploymentSpec(env *fv1.Environment) (*appsv1.Deployme
 		} else {
 			gp.logger.Error(err, "Failed to merge the specs")
 		}
+		// Re-clamp after the merge: MergePodSpec propagates a non-nil
+		// AutomountServiceAccountToken from the patch, which would otherwise
+		// re-enable the kubelet auto-mount on the user container. See
+		// GHSA-85g2-pmrx-r49q.
+		pod.Spec.AutomountServiceAccountToken = ptr.To(false)
 	}
 
 	pod.Spec = *(util.ApplyImagePullSecret(env.Spec.ImagePullSecret, pod.Spec))
@@ -226,6 +232,11 @@ func (gp *GenericPool) genDeploymentSpec(env *fv1.Environment) (*appsv1.Deployme
 			return nil, err
 		}
 		deploymentSpec.Template.Spec = *newPodSpec
+		// Re-clamp after the merge: MergePodSpec propagates a non-nil
+		// AutomountServiceAccountToken from env.Spec.Runtime.PodSpec, which
+		// would otherwise re-enable the kubelet auto-mount on the user
+		// container. See GHSA-85g2-pmrx-r49q.
+		deploymentSpec.Template.Spec.AutomountServiceAccountToken = ptr.To(false)
 	}
 	return &deploymentSpec, nil
 }
