@@ -29,10 +29,12 @@ import (
 	"strings"
 
 	"errors"
+	"time"
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"golang.org/x/net/context/ctxhttp"
 
+	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 	"github.com/fission/fission/pkg/storagesvc"
 )
 
@@ -52,8 +54,18 @@ type (
 )
 
 // Client creates a storage service client.
+//
+// When FISSION_INTERNAL_AUTH_SECRET is set, every outgoing request is
+// signed with the HMAC scheme described in RFC-0004. Storagesvc only
+// enforces signatures when its own copy of the env var is set, so leaving
+// the variable unset on either side is backwards compatible with
+// pre-1.(N+1) installs.
 func MakeClient(url string) ClientInterface {
-	hc := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
+	var rt http.RoundTripper = otelhttp.NewTransport(http.DefaultTransport)
+	if secret := os.Getenv("FISSION_INTERNAL_AUTH_SECRET"); secret != "" {
+		rt = hmacauth.NewSigner([]byte(secret), rt, time.Now)
+	}
+	hc := &http.Client{Transport: rt}
 	return &client{
 		url:        strings.TrimSuffix(url, "/") + "/v1",
 		httpClient: hc,
