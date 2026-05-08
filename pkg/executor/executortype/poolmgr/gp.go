@@ -50,6 +50,7 @@ import (
 	fetcherClient "github.com/fission/fission/pkg/fetcher/client"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
+	storagesvcClient "github.com/fission/fission/pkg/storagesvc/client"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/maps"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
@@ -460,8 +461,13 @@ func (gp *GenericPool) specializePod(ctx context.Context, pod *apiv1.Pod, fn *fv
 	logger.Info("specializing pod", "function", fn.Name)
 
 	// Fetcher will download user function to share volume of pod, and
-	// invoke environment specialize api for pod specialization.
-	err := fetcherClient.MakeClient(gp.logger, fetcherURL).Specialize(ctx, &specializeReq)
+	// invoke environment specialize api for pod specialization. The
+	// HMAC master secret (when internalAuth is enabled) is read from
+	// the executor pod's env so each /specialize call to the in-pod
+	// fetcher carries the X-Fission-Auth-* headers required by the
+	// fetcher's verifier; an empty secret is the explicit pass-through
+	// for first-deploy installs.
+	err := fetcherClient.MakeClient(gp.logger, fetcherURL, storagesvcClient.HMACSecretFromEnv()).Specialize(ctx, &specializeReq)
 	if err != nil {
 		return err
 	}

@@ -15,6 +15,7 @@ import (
 
 	"github.com/go-logr/logr"
 
+	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/fetcher"
 )
@@ -32,8 +33,27 @@ type (
 	}
 )
 
-func MakeClient(logger logr.Logger, fetcherUrl string) ClientInterface {
-	hc := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
+// MakeClient creates a fetcher client.
+//
+// masterSecret enables HMAC-SHA256 request signing per the design at
+// docs/internal-auth/00-design.md. The master is the chart-installed
+// fission-internal-auth/secret value; this client derives the
+// per-service signing key for ServiceFetcher internally so a leak of
+// one channel's runtime memory cannot forge requests on a different
+// channel. The fetcher only enforces signatures when its own copy of
+// the master is set on the server, so passing nil (or empty) here is
+// backwards compatible with installs that have internalAuth disabled.
+//
+// Controller pods (buildermgr, executor) should pass
+// storagesvcClient.HMACSecretFromEnv() — the same env var
+// (FISSION_INTERNAL_AUTH_SECRET) backs every internal channel's
+// signing/verification.
+func MakeClient(logger logr.Logger, fetcherUrl string, masterSecret []byte) ClientInterface {
+	var rt http.RoundTripper = otelhttp.NewTransport(http.DefaultTransport)
+	if len(masterSecret) > 0 {
+		rt = hmacauth.ServiceSigner(masterSecret, hmacauth.ServiceFetcher, rt, time.Now)
+	}
+	hc := &http.Client{Transport: rt}
 	return &client{
 		logger:     logger.WithName("fetcher_client"),
 		url:        strings.TrimSuffix(fetcherUrl, "/"),
