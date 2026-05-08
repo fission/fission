@@ -181,17 +181,29 @@ func getEnvVarlist(ctx context.Context, mqt *fv1.MessageQueueTrigger, routerURL 
 		})
 	}
 
-	// Add Auth Fields
+	// Add Auth Fields. SECURITY: emit secret-derived env vars as
+	// SecretKeyRef rather than materializing literal values into the
+	// Deployment spec. The connector pod resolves the values at start
+	// time via its own ServiceAccount, restoring the Kubernetes-RBAC
+	// boundary on secret reads. The controller still calls Secrets().Get
+	// solely to enumerate the keys it must surface as env vars; the
+	// values are never copied into the controller's address space and
+	// never written into the Deployment object. See GHSA-7m8x-qg2j-4m3v.
 	secretName := mqt.Spec.Secret
 	if len(secretName) > 0 {
 		secret, err := kubeClient.CoreV1().Secrets(mqt.Namespace).Get(ctx, secretName, metav1.GetOptions{})
 		if err != nil {
 			return nil, err
 		}
-		for key, value := range secret.Data {
+		for key := range secret.Data {
 			envVars = append(envVars, apiv1.EnvVar{
-				Name:  toEnvVar(key),
-				Value: string(value),
+				Name: toEnvVar(key),
+				ValueFrom: &apiv1.EnvVarSource{
+					SecretKeyRef: &apiv1.SecretKeySelector{
+						LocalObjectReference: apiv1.LocalObjectReference{Name: secretName},
+						Key:                  key,
+					},
+				},
 			})
 		}
 	}
