@@ -17,6 +17,9 @@ limitations under the License.
 package webhook
 
 import (
+	"fmt"
+
+	apiv1 "k8s.io/api/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
@@ -47,8 +50,68 @@ var _ webhook.CustomDefaulter = &MessageQueueTrigger{}
 var _ webhook.CustomValidator = &MessageQueueTrigger{}
 
 func (r *MessageQueueTrigger) Validate(new *v1.MessageQueueTrigger) error {
+	// SECURITY: reject MessageQueueTrigger.Spec.PodSpec fields that are
+	// not on the controller-side allowlist. Without this admission-time
+	// check a tenant with create/update on MessageQueueTrigger could
+	// otherwise overwrite the connector container's image, command,
+	// args, env, mounts, ServiceAccount, host namespaces, or runAsUser
+	// — see GHSA-7m8x-qg2j-4m3v. The controller still drops these
+	// fields server-side as defence in depth.
+	if new.Spec.PodSpec != nil {
+		if err := validateAllowedPodSpec(new.Spec.PodSpec); err != nil {
+			return err
+		}
+	}
 	if err := new.Validate(); err != nil {
 		return v1.AggregateValidationErrors("MessageQueueTrigger", err)
+	}
+	return nil
+}
+
+// validateAllowedPodSpec rejects user-supplied PodSpec fields that the
+// MessageQueueTrigger connector controller refuses to honour. The set of
+// disallowed fields here MUST stay in lock-step with
+// pkg/executor/util.MergeAllowedPodSpecFields.
+func validateAllowedPodSpec(ps *apiv1.PodSpec) error {
+	var bad []string
+	for _, c := range ps.Containers {
+		if c.Image != "" {
+			bad = append(bad, "podSpec.containers[].image")
+		}
+		if len(c.Command) > 0 {
+			bad = append(bad, "podSpec.containers[].command")
+		}
+		if len(c.Args) > 0 {
+			bad = append(bad, "podSpec.containers[].args")
+		}
+		if len(c.Env) > 0 {
+			bad = append(bad, "podSpec.containers[].env")
+		}
+		if len(c.VolumeMounts) > 0 {
+			bad = append(bad, "podSpec.containers[].volumeMounts")
+		}
+	}
+	if len(ps.Volumes) > 0 {
+		bad = append(bad, "podSpec.volumes")
+	}
+	if ps.ServiceAccountName != "" {
+		bad = append(bad, "podSpec.serviceAccountName")
+	}
+	if ps.HostNetwork {
+		bad = append(bad, "podSpec.hostNetwork")
+	}
+	if ps.HostPID {
+		bad = append(bad, "podSpec.hostPID")
+	}
+	if ps.HostIPC {
+		bad = append(bad, "podSpec.hostIPC")
+	}
+	if ps.SecurityContext != nil && ps.SecurityContext.RunAsUser != nil {
+		bad = append(bad, "podSpec.securityContext.runAsUser")
+	}
+	if len(bad) > 0 {
+		return fmt.Errorf("MessageQueueTrigger.spec.podSpec contains disallowed fields: %v "+
+			"(allowlist: nodeSelector, tolerations, affinity, runtimeClassName, containers[].resources)", bad)
 	}
 	return nil
 }
