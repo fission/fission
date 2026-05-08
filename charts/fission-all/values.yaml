@@ -951,20 +951,7 @@ networkPolicy:
   enabled: false
 
 
-## Function-runtime pod security posture.
-##
-## The user-code container of every Fission function pod (poolmgr +
-## newdeploy backends) is started with automountServiceAccountToken=false.
-## The fission-fetcher ServiceAccount token is re-mounted only on the
-## fetcher sidecar via a private projected volume, so user function code
-## can no longer read namespace secrets through the Kubernetes API.
-##
-## See SECURITY.md and GHSA-85g2-pmrx-r49q.
-##
-## NOTE: this value is informational. The Go code in
-## pkg/executor/executortype/{poolmgr,newdeploy} enforces
-## automountServiceAccountToken=false unconditionally — flipping the
-## value below to true does NOT re-enable the auto-mount.
-runtime:
-  userContainer:
-    automountServiceAccountToken: false
+# Function runtime user containers always run with
+# automountServiceAccountToken=false from chart 1.23 onward.
+# This is enforced unconditionally in the executor Go code to
+# close GHSA-85g2-pmrx-r49q. There is no chart-side toggle.
