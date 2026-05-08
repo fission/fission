@@ -101,7 +101,7 @@ func Verifier(opts VerifierOpts) func(http.Handler) http.Handler {
 			ts := r.Header.Get(HeaderTimestamp)
 			sig := r.Header.Get(HeaderSignature)
 			if ts == "" || sig == "" {
-				opts.Logger.V(1).Info("HMAC verification failed",
+				opts.Logger.Info("HMAC verification failed",
 					"reason", "missing headers",
 					"method", r.Method, "path", r.URL.Path,
 					"remoteAddr", r.RemoteAddr)
@@ -110,7 +110,7 @@ func Verifier(opts VerifierOpts) func(http.Handler) http.Handler {
 			}
 			tsNum, err := strconv.ParseInt(strings.TrimSpace(ts), 10, 64)
 			if err != nil {
-				opts.Logger.V(1).Info("HMAC verification failed",
+				opts.Logger.Info("HMAC verification failed",
 					"reason", "unparseable timestamp",
 					"method", r.Method, "path", r.URL.Path,
 					"remoteAddr", r.RemoteAddr)
@@ -127,7 +127,7 @@ func Verifier(opts VerifierOpts) func(http.Handler) http.Handler {
 				if err != nil {
 					var maxErr *http.MaxBytesError
 					if errors.As(err, &maxErr) {
-						opts.Logger.V(1).Info("HMAC verification failed",
+						opts.Logger.Info("HMAC verification failed",
 							"reason", "body exceeds MaxBodyBytes",
 							"method", r.Method, "path", r.URL.Path,
 							"remoteAddr", r.RemoteAddr,
@@ -135,7 +135,7 @@ func Verifier(opts VerifierOpts) func(http.Handler) http.Handler {
 						w.WriteHeader(http.StatusRequestEntityTooLarge)
 						return
 					}
-					opts.Logger.V(1).Info("HMAC verification failed",
+					opts.Logger.Info("HMAC verification failed",
 						"reason", "body read error",
 						"method", r.Method, "path", r.URL.Path,
 						"remoteAddr", r.RemoteAddr)
@@ -155,7 +155,7 @@ func Verifier(opts VerifierOpts) func(http.Handler) http.Handler {
 				next.ServeHTTP(w, r)
 				return
 			}
-			opts.Logger.V(1).Info("HMAC verification failed",
+			opts.Logger.Info("HMAC verification failed",
 				"reason", "signature mismatch or stale timestamp",
 				"method", r.Method, "path", r.URL.Path,
 				"remoteAddr", r.RemoteAddr)
