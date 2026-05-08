@@ -10,6 +10,12 @@
   The Helm chart materialises `Secret/fission-internal-auth` (32-byte random, preserved across upgrades via `lookup`) and mounts `FISSION_INTERNAL_AUTH_SECRET` into `storagesvc`, `buildermgr`, `executor`, and `router`.
   Backwards compatible: setting `internalAuth.enabled=false` (or leaving the env var unset on hand-rolled installs) skips enforcement entirely.
 
+### Notes / Operator-facing changes
+
+- `fission-cli archive` commands (`fission archive list`, `fission archive get`, etc.) require `internalAuth.enabled=false` or out-of-band secret distribution to access storagesvc directly, because the CLI does not sign storagesvc requests.
+  Standard CLI flows that go through `fission package` / `fission function` (which talk to the Kubernetes API server) are unaffected.
+  See `rfc/0004-hmac-application-layer-auth.md` § Limitations for guidance.
+
 ## [v1.17.0-rc1](https://github.com/fission/fission/tree/v1.17.0-rc1) (2022-07-06)
 
 [Full Changelog](https://github.com/fission/fission/compare/v1.16.0...v1.17.0-rc1)
