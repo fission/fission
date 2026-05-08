@@ -42,7 +42,6 @@ package router
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"os"
 	"strconv"
 	"time"
@@ -144,7 +143,7 @@ func serve(ctx context.Context, logger logr.Logger, mgr manager.Interface, port 
 		MaxBodyBytes: internalListenerMaxBodyBytes,
 		Logger:       logger.WithName("internal-hmac"),
 	})
-	var internalHandler http.Handler = verifier(internalHandlerInner)
+	internalHandler := verifier(internalHandlerInner)
 	mgr.Add(ctx, func(ctx context.Context) {
 		httpserver.StartServer(ctx, logger, mgr, "router-internal", fmt.Sprintf("%d", internalPort), internalHandler)
 	})

@@ -156,14 +156,6 @@ func versionHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// getRouter builds the public-listener mux router. It is preserved as a
-// thin wrapper over buildMuxes so any in-package caller (notably unit
-// tests) that only needs the public-side router stays unchanged.
-func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) (*mux.Router, error) {
-	public, _, err := ts.buildMuxes(fnTimeoutMap)
-	return public, err
-}
-
 // buildMuxes constructs the two mux.Router instances that back the router
 // process: one for the public listener (user HTTPTriggers + healthz +
 // version + optional auth) and one for the internal listener
