@@ -949,9 +949,3 @@ grafana:
 ## Egress rules are intentionally not added in this round.
 networkPolicy:
   enabled: false
-
-
-# Function runtime user containers always run with
-# automountServiceAccountToken=false from chart 1.23 onward.
-# This is enforced unconditionally in the executor Go code to
-# close GHSA-85g2-pmrx-r49q. There is no chart-side toggle.

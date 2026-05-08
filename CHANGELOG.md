@@ -1,14 +1,5 @@
 # Changelog
 
-## Unreleased
-
-### Security
-
-- Function runtime pods no longer auto-mount the `fission-fetcher` ServiceAccount token in the user container.
-  User function code can no longer read namespace-wide secrets via the Kubernetes API from inside a function pod.
-  Fixes GHSA-85g2-pmrx-r49q.
-  Functions that legitimately call the Kubernetes API must declare a dedicated ServiceAccount via a `PodSpec` patch.
-
 ## [v1.17.0-rc1](https://github.com/fission/fission/tree/v1.17.0-rc1) (2022-07-06)
 
 [Full Changelog](https://github.com/fission/fission/compare/v1.16.0...v1.17.0-rc1)
