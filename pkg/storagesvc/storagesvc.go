@@ -310,7 +310,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		return fmt.Errorf("error creating stowClient: %w", err)
 	}
 
-	// Read the shared HMAC secret from the env (RFC-0004). Empty means the
+	// Read the shared HMAC secret from the env (the design at docs/internal-auth/00-design.md). Empty means the
 	// verifier middleware is not registered, preserving backwards compat.
 	authSecret := []byte(os.Getenv("FISSION_INTERNAL_AUTH_SECRET"))
 	authSecretOld := []byte(os.Getenv("FISSION_INTERNAL_AUTH_SECRET_OLD"))

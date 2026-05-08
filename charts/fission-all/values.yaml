@@ -952,7 +952,7 @@ networkPolicy:
 
 
 ## InternalAuth: HMAC-SHA256 application-layer authentication for the
-## internal control-plane HTTP services. See RFC-0004 for the full design.
+## internal control-plane HTTP services. See the design at docs/internal-auth/00-design.md for the full design.
 ## When enabled, the chart materialises Secret/fission-internal-auth and
 ## mounts FISSION_INTERNAL_AUTH_SECRET into storagesvc, buildermgr,
 ## executor and router. Storagesvc rejects unsigned /v1/archive requests;

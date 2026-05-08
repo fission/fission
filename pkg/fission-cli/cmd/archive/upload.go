@@ -43,7 +43,12 @@ func (opts *UploadSubCommand) do(input cli.Input) error {
 		return err
 	}
 
-	client := storagesvcClient.MakeClient(storagesvcURL.String())
+	hmacSecret, err := storagesvcClient.HMACSecretFromCluster(input.Context(), opts.Client().KubernetesClient, util.GetFissionNamespace())
+	if err != nil {
+		return err
+	}
+
+	client := storagesvcClient.MakeClient(storagesvcURL.String(), hmacSecret)
 	archiveID, err := client.Upload(input.Context(), archiveName, nil)
 	if err != nil {
 		return err

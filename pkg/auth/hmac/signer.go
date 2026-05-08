@@ -26,7 +26,7 @@ const (
 )
 
 // Signer is an http.RoundTripper wrapper that signs every outgoing request
-// with the HMAC scheme described in RFC-0004. It buffers the request body
+// with the HMAC scheme described in the design at docs/internal-auth/00-design.md. It buffers the request body
 // to compute the body hash, then re-injects it.
 type Signer struct {
 	secret []byte

@@ -43,7 +43,12 @@ func (opts *DeleteSubCommand) do(input cli.Input) error {
 		return err
 	}
 
-	client := storagesvcClient.MakeClient(storagesvcURL.String())
+	hmacSecret, err := storagesvcClient.HMACSecretFromCluster(input.Context(), opts.Client().KubernetesClient, util.GetFissionNamespace())
+	if err != nil {
+		return err
+	}
+
+	client := storagesvcClient.MakeClient(storagesvcURL.String(), hmacSecret)
 
 	err = client.Delete(input.Context(), archiveID)
 	if err != nil {

@@ -15,7 +15,7 @@ limitations under the License.
 */
 
 // Package hmac implements Fission's internal HMAC application-layer auth
-// scheme described in RFC-0004. The canonical string used as the HMAC input
+// scheme described in the design at docs/internal-auth/00-design.md. The canonical string used as the HMAC input
 // is:
 //
 //	<METHOD>\n

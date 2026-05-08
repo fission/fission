@@ -60,7 +60,7 @@ type VerifierOpts struct {
 
 // Replay note: a signature presented twice within the SkewSec window will pass
 // twice. Nonce tracking would require a shared store across replicas and is
-// out of scope for RFC-0004; see the "Limitations" section of that RFC.
+// out of scope for the design at docs/internal-auth/00-design.md; see the "Limitations" section of that RFC.
 
 // Verifier returns a middleware constructor that enforces HMAC auth on
 // requests, with the body re-injected for downstream handlers to re-read.

@@ -19,7 +19,6 @@ package archive
 import (
 	"fmt"
 	"net/http"
-	"net/url"
 
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
@@ -45,15 +44,14 @@ func (opts *GetURLSubCommand) do(input cli.Input) error {
 		return err
 	}
 
-	relativeURL, _ := url.Parse(util.FISSION_STORAGE_URI)
+	hmacSecret, err := storagesvcClient.HMACSecretFromCluster(input.Context(), opts.Client().KubernetesClient, util.GetFissionNamespace())
+	if err != nil {
+		return err
+	}
 
-	queryString := relativeURL.Query()
-	queryString.Set("id", archiveID)
-	relativeURL.RawQuery = queryString.Encode()
+	client := storagesvcClient.MakeClient(serverURL.String(), hmacSecret)
 
-	storageAccessURL := serverURL.ResolveReference(relativeURL)
-
-	resp, err := http.Head(storageAccessURL.String())
+	resp, err := client.Info(input.Context(), archiveID)
 	if err != nil {
 		return err
 	}
@@ -67,11 +65,6 @@ func (opts *GetURLSubCommand) do(input cli.Input) error {
 
 	switch storageType {
 	case "local":
-		storagesvcURL, err := util.GetStorageURL(input.Context(), opts.Client())
-		if err != nil {
-			return err
-		}
-		client := storagesvcClient.MakeClient(storagesvcURL.String())
 		fmt.Printf("URL: %s", client.GetUrl(archiveID))
 	case "s3":
 		storageBucket := resp.Header.Get("X-FISSION-BUCKET")

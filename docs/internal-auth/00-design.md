@@ -1,14 +1,10 @@
-# RFC-0004: HMAC Application-Layer Authentication for Internal Services
+# HMAC Application-Layer Authentication for Internal Services
 
-- Status: Proposed
-- Tracking issue: GHSA-chf8-4hv6-8pg6, GHSA-7g8g-g937-26g8
-- Supersedes: —
-- Targets: Fission v1.(N+1)
-- Requires: Kubernetes 1.33+
+- Tracking issues: GHSA-chf8-4hv6-8pg6, GHSA-7g8g-g937-26g8
 
 ## Summary
 
-Add a shared-secret HMAC-SHA256 application-layer authentication scheme to Fission's internal HTTP services, starting with `storagesvc` and (in a follow-up RFC/PR) the router's internal callbacks.
+Add a shared-secret HMAC-SHA256 application-layer authentication scheme to Fission's internal HTTP services, starting with `storagesvc` and (in a follow-up PR) the router's internal callbacks.
 The scheme is transport-agnostic, replay-resistant within a one-minute window with `±60s` skew tolerance, and ships behind a Helm toggle (`internalAuth.enabled`) so existing installations continue to work during upgrade.
 
 ## Motivation
@@ -185,8 +181,8 @@ Operators that legitimately need to upload archives larger than 256 MiB should b
 **Replay within the skew window.**
 A captured signed request can be replayed any number of times within the `SkewSec` window (default 60s) and will pass verification each time.
 Adding nonce tracking would require a shared replay-cache store across all storagesvc/router replicas (Redis, a distributed cache, or a Lease-CR scheme).
-That is out of scope for this RFC; the 60-second window is short enough that the practical attack surface is limited to a recently-captured packet on the cluster network — at which point an attacker capable of sniffing in-cluster traffic has bigger problems.
-A future RFC may add a nonce store if a use case justifies the operational cost.
+That is out of scope for this PR; the 60-second window is short enough that the practical attack surface is limited to a recently-captured packet on the cluster network — at which point an attacker capable of sniffing in-cluster traffic has bigger problems.
+A future change may add a nonce store if a use case justifies the operational cost.
 
 **`fission-cli` does not sign storagesvc requests.**
 The CLI's archive subcommands (`fission archive list`, `fission archive get`, etc.) talk to storagesvc directly via a port-forward and do not currently know how to sign.
@@ -212,7 +208,7 @@ Standard CLI flows that go through `fission package` and `fission function` are 
 1. **Phase 1 — primitives, server enforcement, client signing, chart wiring** (this PR; Tasks A2.1-A2.11 of the security advisory plan).
    `internalAuth.enabled` defaults to `true`.
    Backwards compat carried by the empty-secret short-circuit.
-2. **Phase 2 — extend to router internal listener** (advisory 4, RFC will cite this one).
+2. **Phase 2 — extend to router internal listener** (advisory 4, the design will reference this doc).
 3. **Phase 3 — rotation procedure documentation** in the release-engineering runbook once Phase 1 has shipped in a release.
 
 ## Open questions

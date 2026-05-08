@@ -556,7 +556,7 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	logger.Info("starting upload...")
-	ssClient := storageSvcClient.MakeClient(req.StorageSvcUrl)
+	ssClient := storageSvcClient.MakeClient(req.StorageSvcUrl, storageSvcClient.HMACSecretFromEnv())
 
 	fileID, err := ssClient.Upload(ctx, dstFilepath, nil)
 	if err != nil {

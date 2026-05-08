@@ -144,7 +144,7 @@ func TestS3StorageService(t *testing.T) {
 	_ = storagesvc.Start(ctx, crd.NewClientGenerator(), logger, storage, mgr, port)
 
 	time.Sleep(time.Second)
-	client := MakeClient(fmt.Sprintf("http://localhost:%v/", 8081))
+	client := MakeClient(fmt.Sprintf("http://localhost:%v/", 8081), nil)
 
 	// generate a test file
 	tmpfile, err := MakeTestFile(10 * 1024)
@@ -221,7 +221,7 @@ func TestLocalStorageService(t *testing.T) {
 	_ = storagesvc.Start(ctx, crd.NewClientGenerator(), logger, storage, mgr, port)
 
 	time.Sleep(time.Second)
-	client := MakeClient(fmt.Sprintf("http://localhost:%v/", port))
+	client := MakeClient(fmt.Sprintf("http://localhost:%v/", port), nil)
 
 	// generate a test file
 	tmpfile, err := MakeTestFile(10 * 1024)

@@ -111,7 +111,7 @@ Helper template to construct image names with repository and tag
 
 {{/*
 internalAuth.envs renders the two env entries that wire the HMAC shared
-secret into a Fission control-plane container. See RFC-0004. The OLD
+secret into a Fission control-plane container. See the design at docs/internal-auth/00-design.md. The OLD
 secret is mounted with optional: true so rotation can drop it without
 forcing the chart to render an empty key.
 */}}
