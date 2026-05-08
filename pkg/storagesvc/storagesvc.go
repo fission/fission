@@ -31,6 +31,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/graymeta/stow"
 
+	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/utils/httpserver"
 	"github.com/fission/fission/pkg/utils/manager"
@@ -53,6 +54,10 @@ type (
 		logger        logr.Logger
 		storageClient *StowClient
 		port          int
+		// authSecret, if non-empty, enables HMAC enforcement on /v1/archive.
+		authSecret []byte
+		// authSecretOld is accepted alongside authSecret during rotation.
+		authSecretOld []byte
 	}
 
 	UploadResponse struct {
@@ -252,16 +257,29 @@ func (ss *StorageService) healthHandler(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(http.StatusOK)
 }
 
-func MakeStorageService(logger logr.Logger, storageClient *StowClient, port int) *StorageService {
+func MakeStorageService(logger logr.Logger, storageClient *StowClient, port int, authSecret, authSecretOld []byte) *StorageService {
 	return &StorageService{
 		logger:        logger.WithName("storage_service"),
 		storageClient: storageClient,
 		port:          port,
+		authSecret:    authSecret,
+		authSecretOld: authSecretOld,
 	}
 }
 
 func (ss *StorageService) Start(ctx context.Context, mgr manager.Interface, port int) {
 	r := mux.NewRouter()
+	if len(ss.authSecret) > 0 {
+		// HMAC enforcement is opt-in via the FISSION_INTERNAL_AUTH_SECRET env
+		// var; an empty secret means the verifier middleware is not registered
+		// at all (backwards-compatible with pre-1.(N+1) installs).
+		r.Use(hmacauth.Verifier(hmacauth.VerifierOpts{
+			Secret:    ss.authSecret,
+			OldSecret: ss.authSecretOld,
+			SkewSec:   60,
+			Bypass:    []string{"/healthz"},
+		}))
+	}
 	r.Use(metrics.HTTPMetricMiddleware)
 	r.HandleFunc("/v1/archive", ss.uploadHandler).Methods("POST")
 	r.HandleFunc("/v1/archive", ss.downloadHandler).Queries("id", "{id}").Methods("GET")
@@ -287,8 +305,13 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		return fmt.Errorf("error creating stowClient: %w", err)
 	}
 
+	// Read the shared HMAC secret from the env (RFC-0004). Empty means the
+	// verifier middleware is not registered, preserving backwards compat.
+	authSecret := []byte(os.Getenv("FISSION_INTERNAL_AUTH_SECRET"))
+	authSecretOld := []byte(os.Getenv("FISSION_INTERNAL_AUTH_SECRET_OLD"))
+
 	// create http handlers
-	storageService := MakeStorageService(logger, storageClient, port)
+	storageService := MakeStorageService(logger, storageClient, port, authSecret, authSecretOld)
 	mgr.Add(ctx, func(ctx context.Context) {
 		metrics.ServeMetrics(ctx, "storagesvc", logger, mgr)
 	})
