@@ -44,8 +44,6 @@ func MergeAllowedPodSpecFields(src, user *apiv1.PodSpec) (*apiv1.PodSpec, []stri
 		return out, nil, nil
 	}
 
-	var dropped []string
-
 	// --- Allowlisted merges ---
 
 	if len(user.NodeSelector) > 0 {
@@ -80,44 +78,69 @@ func MergeAllowedPodSpecFields(src, user *apiv1.PodSpec) (*apiv1.PodSpec, []stri
 		}
 	}
 
-	// --- Audit drops ---
+	return out, DisallowedPodSpecFields(user), nil
+}
 
-	for i := range user.Containers {
-		c := user.Containers[i]
+// DisallowedPodSpecFields returns the deduplicated list of PodSpec field
+// names that appear in `ps` but are NOT on the
+// MessageQueueTrigger.Spec.PodSpec allowlist. This is the single source of
+// truth shared by the controller-side merge in MergeAllowedPodSpecFields
+// and the admission webhook in pkg/webhook/messagequeuetrigger.go — extend
+// this function (and only this function) when changing the allowlist.
+//
+// The returned names use the executor-internal form (no "podSpec." prefix);
+// callers that surface the names in user-facing errors should prepend their
+// own prefix.
+func DisallowedPodSpecFields(ps *apiv1.PodSpec) []string {
+	if ps == nil {
+		return nil
+	}
+
+	seen := make(map[string]struct{})
+	var bad []string
+	add := func(name string) {
+		if _, ok := seen[name]; ok {
+			return
+		}
+		seen[name] = struct{}{}
+		bad = append(bad, name)
+	}
+
+	for i := range ps.Containers {
+		c := ps.Containers[i]
 		if c.Image != "" {
-			dropped = append(dropped, "containers[].image")
+			add("containers[].image")
 		}
 		if len(c.Command) > 0 {
-			dropped = append(dropped, "containers[].command")
+			add("containers[].command")
 		}
 		if len(c.Args) > 0 {
-			dropped = append(dropped, "containers[].args")
+			add("containers[].args")
 		}
 		if len(c.Env) > 0 {
-			dropped = append(dropped, "containers[].env")
+			add("containers[].env")
 		}
 		if len(c.VolumeMounts) > 0 {
-			dropped = append(dropped, "containers[].volumeMounts")
+			add("containers[].volumeMounts")
 		}
 	}
-	if len(user.Volumes) > 0 {
-		dropped = append(dropped, "volumes")
+	if len(ps.Volumes) > 0 {
+		add("volumes")
 	}
-	if user.ServiceAccountName != "" {
-		dropped = append(dropped, "serviceAccountName")
+	if ps.ServiceAccountName != "" {
+		add("serviceAccountName")
 	}
-	if user.HostNetwork {
-		dropped = append(dropped, "hostNetwork")
+	if ps.HostNetwork {
+		add("hostNetwork")
 	}
-	if user.HostPID {
-		dropped = append(dropped, "hostPID")
+	if ps.HostPID {
+		add("hostPID")
 	}
-	if user.HostIPC {
-		dropped = append(dropped, "hostIPC")
+	if ps.HostIPC {
+		add("hostIPC")
 	}
-	if user.SecurityContext != nil && user.SecurityContext.RunAsUser != nil {
-		dropped = append(dropped, "securityContext.runAsUser")
+	if ps.SecurityContext != nil && ps.SecurityContext.RunAsUser != nil {
+		add("securityContext.runAsUser")
 	}
-
-	return out, dropped, nil
+	return bad
 }
