@@ -106,6 +106,59 @@ func TestVerifierRejectsStaleTimestamp(t *testing.T) {
 	assert.Equal(t, 401, rr.Code)
 }
 
+// TestVerifierRejectsOversizeBody ensures a body that exceeds MaxBodyBytes is
+// rejected with 413 before the downstream handler runs.
+func TestVerifierRejectsOversizeBody(t *testing.T) {
+	secret := []byte("test-secret-must-be-32-bytes-min")
+	now := func() time.Time { return time.Unix(1715000000, 0) }
+	called := false
+	h := Verifier(VerifierOpts{
+		Secret:       secret,
+		SkewSec:      60,
+		Now:          now,
+		MaxBodyBytes: 16,
+	})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		w.WriteHeader(200)
+	}))
+	body := bytes.Repeat([]byte("A"), 32) // 2x the cap
+	// Sign honestly so we exercise the size cap, not the signature path.
+	sig := Sign(secret, "POST", "/v1/archive", body, 1715000000)
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/v1/archive", bytes.NewReader(body))
+	req.Header.Set(HeaderTimestamp, "1715000000")
+	req.Header.Set(HeaderSignature, sig)
+	h.ServeHTTP(rr, req)
+	assert.Equal(t, http.StatusRequestEntityTooLarge, rr.Code)
+	assert.False(t, called, "downstream handler must not be invoked when body exceeds MaxBodyBytes")
+}
+
+// TestVerifierAcceptsBodyAtBoundary documents that http.MaxBytesReader treats
+// the cap as inclusive — a body of exactly N bytes is allowed, only N+1 bytes
+// triggers the *http.MaxBytesError.
+func TestVerifierAcceptsBodyAtBoundary(t *testing.T) {
+	secret := []byte("test-secret-must-be-32-bytes-min")
+	now := func() time.Time { return time.Unix(1715000000, 0) }
+	h := Verifier(VerifierOpts{
+		Secret:       secret,
+		SkewSec:      60,
+		Now:          now,
+		MaxBodyBytes: 16,
+	})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got, _ := io.ReadAll(r.Body)
+		assert.Len(t, got, 16, "downstream must see the full boundary body")
+		w.WriteHeader(200)
+	}))
+	body := bytes.Repeat([]byte("A"), 16) // exactly the cap
+	sig := Sign(secret, "POST", "/v1/archive", body, 1715000000)
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/v1/archive", bytes.NewReader(body))
+	req.Header.Set(HeaderTimestamp, "1715000000")
+	req.Header.Set(HeaderSignature, sig)
+	h.ServeHTTP(rr, req)
+	assert.Equal(t, 200, rr.Code, "body of exactly MaxBodyBytes must be accepted")
+}
+
 func TestVerifierRejectsBadSignature(t *testing.T) {
 	secret := []byte("test-secret-must-be-32-bytes-min")
 	now := func() time.Time { return time.Unix(1715000000, 0) }
