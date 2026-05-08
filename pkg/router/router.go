@@ -130,13 +130,15 @@ func serve(ctx context.Context, logger logr.Logger, mgr manager.Interface, port 
 	// FISSION_INTERNAL_AUTH_SECRET is the explicit pass-through mode
 	// for first-deploy / migration installs and is safe by virtue of
 	// the NetworkPolicy still gating the port.
-	secret := []byte(os.Getenv("FISSION_INTERNAL_AUTH_SECRET"))
-	oldSecret := []byte(os.Getenv("FISSION_INTERNAL_AUTH_SECRET_OLD"))
+	master := []byte(os.Getenv("FISSION_INTERNAL_AUTH_SECRET"))
+	masterOld := []byte(os.Getenv("FISSION_INTERNAL_AUTH_SECRET_OLD"))
 	internalHandlerInner := otelUtils.GetHandlerWithOTEL(internalMR, "fission-router-internal")
-	verifier := hmacauth.Verifier(hmacauth.VerifierOpts{
-		Secret:    secret,
-		OldSecret: oldSecret,
-		SkewSec:   60,
+	// Use the per-service derived key for ServiceRouterInternal so a
+	// leak of the router's runtime memory cannot forge requests on
+	// other Fission internal channels (storagesvc, fetcher, builder,
+	// executor). See docs/internal-auth/00-design.md.
+	verifier := hmacauth.ServiceVerifier(master, masterOld, hmacauth.ServiceRouterInternal, hmacauth.VerifierOpts{
+		SkewSec: 60,
 		// Cap the request body the verifier will buffer before the
 		// signature check; see internalListenerMaxBodyBytes for the
 		// rationale behind 64 MiB.

@@ -38,13 +38,17 @@ import (
 
 // newKafkaHTTPClient builds the http.Client used to invoke functions
 // through the router. When FISSION_INTERNAL_AUTH_SECRET is set the
-// transport is wrapped with hmacauth.NewSigner, so every
-// /fission-function/<ns>/<name> request carries the X-Fission-Auth-*
-// headers required by the router's internal-listener verifier.
+// transport is wrapped with hmacauth.ServiceSigner for
+// ServiceRouterInternal, so every /fission-function/<ns>/<name>
+// request carries the X-Fission-Auth-* headers required by the
+// router's internal-listener verifier. Using the per-service derived
+// key keeps a leak of this consumer's runtime memory from forging
+// requests on other Fission internal channels (storagesvc, fetcher,
+// builder, executor). See docs/internal-auth/00-design.md.
 func newKafkaHTTPClient() *http.Client {
 	rt := http.DefaultTransport
-	if secret := os.Getenv("FISSION_INTERNAL_AUTH_SECRET"); secret != "" {
-		return &http.Client{Transport: hmacauth.NewSigner([]byte(secret), rt, time.Now)}
+	if master := os.Getenv("FISSION_INTERNAL_AUTH_SECRET"); master != "" {
+		return &http.Client{Transport: hmacauth.ServiceSigner([]byte(master), hmacauth.ServiceRouterInternal, rt, time.Now)}
 	}
 	return &http.Client{Transport: rt}
 }
