@@ -278,6 +278,10 @@ func (ss *StorageService) Start(ctx context.Context, mgr manager.Interface, port
 			OldSecret: ss.authSecretOld,
 			SkewSec:   60,
 			Bypass:    []string{"/healthz"},
+			// 256 MiB caps the verifier's in-memory body buffer; this is
+			// larger than any realistic Fission archive but bounds the cost
+			// of an unsigned/malicious upload to /v1/archive.
+			MaxBodyBytes: hmacauth.DefaultMaxBodyBytes,
 		}))
 	}
 	r.Use(metrics.HTTPMetricMiddleware)

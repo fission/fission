@@ -12,12 +12,19 @@ package hmac
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 )
+
+// DefaultMaxBodyBytes caps the size of a request body the verifier will buffer
+// in memory. 256 MiB comfortably exceeds any realistic Fission archive while
+// bounding the memory cost of a malicious unsigned upload (without this cap an
+// attacker can stream an arbitrary number of bytes before we reject with 401).
+const DefaultMaxBodyBytes int64 = 256 << 20
 
 // VerifierOpts configures the HMAC middleware.
 //
@@ -35,7 +42,18 @@ type VerifierOpts struct {
 	Bypass []string
 	// Now overrides the verifier's clock (defaults to time.Now). Used in tests.
 	Now func() time.Time
+	// MaxBodyBytes caps the body bytes the verifier will buffer when enforcement
+	// is active. Zero means DefaultMaxBodyBytes; a negative value disables the
+	// cap (NOT recommended outside tests). Bodies larger than the cap are
+	// rejected with 413 Request Entity Too Large before signature verification.
+	// The cap is only applied when enforcement is on (Secret non-empty); the
+	// pass-through short-circuit deliberately leaves the body untouched.
+	MaxBodyBytes int64
 }
+
+// Replay note: a signature presented twice within the SkewSec window will pass
+// twice. Nonce tracking would require a shared store across replicas and is
+// out of scope for RFC-0004; see the "Limitations" section of that RFC.
 
 // Verifier returns a middleware constructor that enforces HMAC auth on
 // requests, with the body re-injected for downstream handlers to re-read.
@@ -46,6 +64,9 @@ func Verifier(opts VerifierOpts) func(http.Handler) http.Handler {
 	if opts.Now == nil {
 		opts.Now = time.Now
 	}
+	if opts.MaxBodyBytes == 0 {
+		opts.MaxBodyBytes = DefaultMaxBodyBytes
+	}
 	bypass := map[string]struct{}{}
 	for _, p := range opts.Bypass {
 		bypass[p] = struct{}{}
@@ -54,6 +75,8 @@ func Verifier(opts VerifierOpts) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Empty Secret disables enforcement (backwards-compat short-circuit).
+			// In pass-through mode we deliberately do NOT bound the body — the
+			// downstream handler's existing limits apply unchanged.
 			if len(opts.Secret) == 0 {
 				next.ServeHTTP(w, r)
 				return
@@ -78,8 +101,16 @@ func Verifier(opts VerifierOpts) func(http.Handler) http.Handler {
 
 			var body []byte
 			if r.Body != nil {
+				if opts.MaxBodyBytes > 0 {
+					r.Body = http.MaxBytesReader(w, r.Body, opts.MaxBodyBytes)
+				}
 				body, err = io.ReadAll(r.Body)
 				if err != nil {
+					var maxErr *http.MaxBytesError
+					if errors.As(err, &maxErr) {
+						w.WriteHeader(http.StatusRequestEntityTooLarge)
+						return
+					}
 					w.WriteHeader(http.StatusUnauthorized)
 					return
 				}
