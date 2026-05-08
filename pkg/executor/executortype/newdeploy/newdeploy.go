@@ -32,7 +32,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/utils/ptr"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/executor/util"
@@ -252,7 +251,7 @@ func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function
 		// AutomountServiceAccountToken from the patch, which would otherwise
 		// re-enable the kubelet auto-mount on the user container. See
 		// GHSA-85g2-pmrx-r49q.
-		pod.Spec.AutomountServiceAccountToken = ptr.To(false)
+		pod.Spec.AutomountServiceAccountToken = new(false)
 	}
 
 	pod.Spec = *(util.ApplyImagePullSecret(env.Spec.ImagePullSecret, pod.Spec))
@@ -332,7 +331,7 @@ func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function
 		// AutomountServiceAccountToken from env.Spec.Runtime.PodSpec, which
 		// would otherwise re-enable the kubelet auto-mount on the user
 		// container. See GHSA-85g2-pmrx-r49q.
-		deployment.Spec.Template.Spec.AutomountServiceAccountToken = ptr.To(false)
+		deployment.Spec.Template.Spec.AutomountServiceAccountToken = new(false)
 	}
 
 	return deployment, nil

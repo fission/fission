@@ -20,7 +20,6 @@ import (
 	"fmt"
 
 	apiv1 "k8s.io/api/core/v1"
-	"k8s.io/utils/ptr"
 )
 
 // FetcherSATokenVolumeName is the name of the projected volume that
@@ -55,7 +54,7 @@ func FetcherSATokenProjectedVolume() apiv1.Volume {
 					{
 						ServiceAccountToken: &apiv1.ServiceAccountTokenProjection{
 							Path:              "token",
-							ExpirationSeconds: ptr.To[int64](3600),
+							ExpirationSeconds: new(int64(3600)),
 						},
 					},
 					{

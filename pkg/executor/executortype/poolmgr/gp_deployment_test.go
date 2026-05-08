@@ -24,7 +24,6 @@ import (
 	"github.com/stretchr/testify/require"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
@@ -208,7 +207,7 @@ func TestGenericPoolPodSpecRuntimePodSpecCannotReEnableAutomount(t *testing.T) {
 	gp := newTestGenericPool(t)
 	env := newTestEnv()
 	env.Spec.Runtime.PodSpec = &apiv1.PodSpec{
-		AutomountServiceAccountToken: ptr.To(true),
+		AutomountServiceAccountToken: new(true),
 	}
 
 	deploymentSpec, err := gp.genDeploymentSpec(env)
