@@ -282,6 +282,7 @@ func (ss *StorageService) Start(ctx context.Context, mgr manager.Interface, port
 			// larger than any realistic Fission archive but bounds the cost
 			// of an unsigned/malicious upload to /v1/archive.
 			MaxBodyBytes: hmacauth.DefaultMaxBodyBytes,
+			Logger:       ss.logger.WithName("hmac"),
 		}))
 	}
 	r.Use(metrics.HTTPMetricMiddleware)

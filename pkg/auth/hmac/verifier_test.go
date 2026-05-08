@@ -15,9 +15,13 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/go-logr/logr"
+	"github.com/go-logr/logr/funcr"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -157,6 +161,59 @@ func TestVerifierAcceptsBodyAtBoundary(t *testing.T) {
 	req.Header.Set(HeaderSignature, sig)
 	h.ServeHTTP(rr, req)
 	assert.Equal(t, 200, rr.Code, "body of exactly MaxBodyBytes must be accepted")
+}
+
+// captureSink is a thread-safe slice of formatted log lines, used as a
+// funcr backend so tests can assert on emitted log content.
+type captureSink struct {
+	mu    sync.Mutex
+	lines []string
+}
+
+func (c *captureSink) write(prefix, args string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.lines = append(c.lines, prefix+" "+args)
+}
+
+func (c *captureSink) Lines() []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := make([]string, len(c.lines))
+	copy(out, c.lines)
+	return out
+}
+
+func newCaptureLogger() (logr.Logger, *captureSink) {
+	sink := &captureSink{}
+	// V(1) must pass through, so set Verbosity to 1.
+	logger := funcr.New(sink.write, funcr.Options{Verbosity: 1})
+	return logger, sink
+}
+
+// TestVerifierLogsMissingHeaders asserts that an unsigned request emits exactly
+// one V(1) log line carrying reason="missing headers" without echoing the
+// (absent) signature/timestamp values.
+func TestVerifierLogsMissingHeaders(t *testing.T) {
+	secret := []byte("test-secret-must-be-32-bytes-min")
+	logger, sink := newCaptureLogger()
+	h := Verifier(VerifierOpts{Secret: secret, SkewSec: 60, Now: time.Now, Logger: logger})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+	}))
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/v1/archive", nil)
+	h.ServeHTTP(rr, req)
+	assert.Equal(t, 401, rr.Code)
+	lines := sink.Lines()
+	assert.Len(t, lines, 1, "exactly one log line per rejection")
+	assert.Contains(t, lines[0], `"reason"="missing headers"`)
+	assert.Contains(t, lines[0], `"method"="GET"`)
+	assert.Contains(t, lines[0], `"path"="/v1/archive"`)
+	// Make sure we don't accidentally echo the Authorization-style headers.
+	for _, ln := range lines {
+		assert.False(t, strings.Contains(ln, HeaderSignature), "must not echo signature header name")
+		assert.False(t, strings.Contains(ln, HeaderTimestamp), "must not echo timestamp header name")
+	}
 }
 
 func TestVerifierRejectsBadSignature(t *testing.T) {
