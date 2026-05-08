@@ -35,13 +35,13 @@ import (
 // HostNetwork, HostPID, HostIPC, and SecurityContext.RunAsUser — are
 // dropped. This is the controller-side defence for GHSA-7m8x-qg2j-4m3v;
 // the validating webhook rejects the same fields at admission time.
-func MergeAllowedPodSpecFields(src, user *apiv1.PodSpec) (*apiv1.PodSpec, []string, error) {
+func MergeAllowedPodSpecFields(src, user *apiv1.PodSpec) (*apiv1.PodSpec, []string) {
 	if src == nil {
-		return nil, nil, nil
+		return nil, nil
 	}
 	out := src.DeepCopy()
 	if user == nil {
-		return out, nil, nil
+		return out, nil
 	}
 
 	// --- Allowlisted merges ---
@@ -78,7 +78,7 @@ func MergeAllowedPodSpecFields(src, user *apiv1.PodSpec) (*apiv1.PodSpec, []stri
 		}
 	}
 
-	return out, DisallowedPodSpecFields(user), nil
+	return out, DisallowedPodSpecFields(user)
 }
 
 // DisallowedPodSpecFields returns the deduplicated list of PodSpec field
