@@ -18,6 +18,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/go-logr/logr"
 )
 
 // DefaultMaxBodyBytes caps the size of a request body the verifier will buffer
@@ -49,6 +51,11 @@ type VerifierOpts struct {
 	// The cap is only applied when enforcement is on (Secret non-empty); the
 	// pass-through short-circuit deliberately leaves the body untouched.
 	MaxBodyBytes int64
+	// Logger receives V(1) messages on each rejection. The zero value is
+	// substituted with logr.Discard() at construction so callers that don't
+	// care about audit logs don't crash. Rejection log lines deliberately
+	// omit the signature and timestamp values to avoid log poisoning.
+	Logger logr.Logger
 }
 
 // Replay note: a signature presented twice within the SkewSec window will pass
@@ -66,6 +73,10 @@ func Verifier(opts VerifierOpts) func(http.Handler) http.Handler {
 	}
 	if opts.MaxBodyBytes == 0 {
 		opts.MaxBodyBytes = DefaultMaxBodyBytes
+	}
+	// logr.Logger is a value type; the zero value's IsZero() reports unset.
+	if opts.Logger.IsZero() {
+		opts.Logger = logr.Discard()
 	}
 	bypass := map[string]struct{}{}
 	for _, p := range opts.Bypass {
@@ -90,11 +101,19 @@ func Verifier(opts VerifierOpts) func(http.Handler) http.Handler {
 			ts := r.Header.Get(HeaderTimestamp)
 			sig := r.Header.Get(HeaderSignature)
 			if ts == "" || sig == "" {
+				opts.Logger.V(1).Info("HMAC verification failed",
+					"reason", "missing headers",
+					"method", r.Method, "path", r.URL.Path,
+					"remoteAddr", r.RemoteAddr)
 				w.WriteHeader(http.StatusUnauthorized)
 				return
 			}
 			tsNum, err := strconv.ParseInt(strings.TrimSpace(ts), 10, 64)
 			if err != nil {
+				opts.Logger.V(1).Info("HMAC verification failed",
+					"reason", "unparseable timestamp",
+					"method", r.Method, "path", r.URL.Path,
+					"remoteAddr", r.RemoteAddr)
 				w.WriteHeader(http.StatusUnauthorized)
 				return
 			}
@@ -108,9 +127,18 @@ func Verifier(opts VerifierOpts) func(http.Handler) http.Handler {
 				if err != nil {
 					var maxErr *http.MaxBytesError
 					if errors.As(err, &maxErr) {
+						opts.Logger.V(1).Info("HMAC verification failed",
+							"reason", "body exceeds MaxBodyBytes",
+							"method", r.Method, "path", r.URL.Path,
+							"remoteAddr", r.RemoteAddr,
+							"limit", maxErr.Limit)
 						w.WriteHeader(http.StatusRequestEntityTooLarge)
 						return
 					}
+					opts.Logger.V(1).Info("HMAC verification failed",
+						"reason", "body read error",
+						"method", r.Method, "path", r.URL.Path,
+						"remoteAddr", r.RemoteAddr)
 					w.WriteHeader(http.StatusUnauthorized)
 					return
 				}
@@ -127,6 +155,10 @@ func Verifier(opts VerifierOpts) func(http.Handler) http.Handler {
 				next.ServeHTTP(w, r)
 				return
 			}
+			opts.Logger.V(1).Info("HMAC verification failed",
+				"reason", "signature mismatch or stale timestamp",
+				"method", r.Method, "path", r.URL.Path,
+				"remoteAddr", r.RemoteAddr)
 			w.WriteHeader(http.StatusUnauthorized)
 		})
 	}
