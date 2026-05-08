@@ -21,17 +21,17 @@ import (
 	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 )
 
-// TestVerifierMiddlewareWiring exercises just the middleware chain that
+// TestVerifierMiddlewareWiring exercises the middleware chain that
 // (ss *StorageService).Start would build, without standing up the full
-// service. It guards against regressions in the auth wiring even when no
-// kind cluster is available for the integration test in
-// test/integration/suites/common/storagesvc_auth_test.go.
+// service. It uses ServiceVerifier with ServiceStoragesvc to mirror
+// the production wiring exactly — a regression in the per-service key
+// derivation would surface here, not just in the lower-level
+// hmac/verifier_test.go suite.
 func TestVerifierMiddlewareWiring(t *testing.T) {
-	secret := []byte("test-secret-must-be-32-bytes-min")
+	master := []byte("test-master-must-be-32-bytes-min")
 
 	r := mux.NewRouter()
-	r.Use(hmacauth.Verifier(hmacauth.VerifierOpts{
-		Secret:  secret,
+	r.Use(hmacauth.ServiceVerifier(master, nil, hmacauth.ServiceStoragesvc, hmacauth.VerifierOpts{
 		SkewSec: 60,
 		Bypass:  []string{"/healthz"},
 	}))

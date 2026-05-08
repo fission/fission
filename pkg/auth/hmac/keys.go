@@ -49,8 +49,9 @@ const (
 )
 
 // derivedKeyLength is the size of every per-service signing key. 32
-// bytes (256 bits) matches the HMAC-SHA256 block size and the master
-// secret's entropy budget.
+// bytes (256 bits) matches SHA-256's digest length — HMAC-SHA256
+// keys at or below the digest length avoid the inner padding to the
+// 64-byte block size — and the master secret's entropy budget.
 const derivedKeyLength = 32
 
 // DeriveServiceKey returns the per-service signing key derived from

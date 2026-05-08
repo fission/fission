@@ -210,7 +210,8 @@ A single `$secretValue` is computed once at the top of the template via `lookup`
 
 The Secret is mounted as `FISSION_INTERNAL_AUTH_SECRET` (and the optional `FISSION_INTERNAL_AUTH_SECRET_OLD`) into:
 
-- All top-level Fission deployments (`storagesvc`, `buildermgr`, `executor`, `router`, `kubewatcher`, `timer`, `mqt-fission-kafka`, `mqt-keda`) via `_helpers.tpl::internalAuth.envs` partial.
+- The four top-level Fission deployments that talk to storagesvc — `storagesvc`, `buildermgr`, `executor`, `router` — via the `_helpers.tpl::internalAuth.envs` partial.
+  Phase 2-β / Advisory 4 extend the same partial to `kubewatcher`, `timer`, `mqt-fission-kafka`, and `mqt-keda` once those services need to sign executor / router-internal calls; that chart change ships in the follow-up PRs, not in Phase 1.
 - Every dynamically-created builder pod and function-runtime pod's fetcher container via `pkg/fetcher/config/config.go::internalAuthEnvVars`, sourced from the per-namespace Secret with `optional: true` so installs with `internalAuth.enabled=false` still admit the pod.
 
 ### Rotation

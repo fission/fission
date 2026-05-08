@@ -109,9 +109,12 @@ func HMACSecretFromEnv() []byte {
 
 // HMACSecretFromCluster reads the HMAC secret from the
 // fission-internal-auth Secret in the install namespace. Returns
-// (nil, nil) when the secret does not exist (internalAuth disabled in
+// (nil, nil) when the Secret does not exist (internalAuth disabled in
 // the chart) so callers can fall back to unsigned requests; returns
-// the error for any other failure.
+// a descriptive error when the Secret exists but has no usable
+// `secret` key (mis-configured or hand-authored Secret) so callers
+// don't silently fall back to unsigned and confuse 401 debugging
+// downstream.
 func HMACSecretFromCluster(ctx context.Context, kubeClient kubernetes.Interface, namespace string) ([]byte, error) {
 	if kubeClient == nil {
 		return nil, nil
@@ -123,7 +126,12 @@ func HMACSecretFromCluster(ctx context.Context, kubeClient kubernetes.Interface,
 		}
 		return nil, err
 	}
-	return secret.Data[internalAuthSecretKey], nil
+	value, ok := secret.Data[internalAuthSecretKey]
+	if !ok || len(value) == 0 {
+		return nil, fmt.Errorf("secret %s/%s exists but has no %q key with a non-empty value; either the chart's internalAuth materialisation has been overridden or the Secret was hand-authored",
+			namespace, internalAuthSecretName, internalAuthSecretKey)
+	}
+	return value, nil
 }
 
 // Upload sends the local file pointed to by filePath to the storage
