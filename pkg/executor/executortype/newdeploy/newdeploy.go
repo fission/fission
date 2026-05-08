@@ -217,6 +217,12 @@ func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function
 		return nil, err
 	}
 
+	// AutomountServiceAccountToken=false stops Kubernetes from injecting
+	// the fission-fetcher ServiceAccount token into every container in
+	// the pod. The fetcher container re-mounts the token via the
+	// projected volume defined below — the user-code container does not.
+	// See GHSA-85g2-pmrx-r49q.
+	automountSAToken := false
 	pod := apiv1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels:      podLabels,
@@ -225,7 +231,11 @@ func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function
 		Spec: apiv1.PodSpec{
 			Containers:                    []apiv1.Container{*container},
 			ServiceAccountName:            fv1.FissionFetcherSA,
+			AutomountServiceAccountToken:  &automountSAToken,
 			TerminationGracePeriodSeconds: &gracePeriodSeconds,
+			Volumes: []apiv1.Volume{
+				util.FetcherSATokenProjectedVolume(),
+			},
 		},
 	}
 
@@ -296,6 +306,13 @@ func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function
 	if err != nil {
 		return nil, err
 	}
+
+	// Re-mount the fission-fetcher SA token at the canonical Kubernetes
+	// path on the fetcher container only. The pod-level
+	// AutomountServiceAccountToken=false flag set above suppresses the
+	// implicit mount on every container, including fetcher, so we have
+	// to add it back explicitly here. See GHSA-85g2-pmrx-r49q.
+	util.MountFetcherSATokenOnFetcher(&deployment.Spec.Template.Spec)
 
 	if env.Spec.Runtime.PodSpec != nil {
 		newPodSpec, err := util.MergePodSpec(&deployment.Spec.Template.Spec, env.Spec.Runtime.PodSpec)
