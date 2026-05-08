@@ -61,6 +61,7 @@ type CommandLineArgs struct {
 	// Port values
 	webhookPort        int
 	routerPort         int
+	routerInternalPort int
 	executorPort       int
 	storageServicePort int
 
@@ -190,6 +191,7 @@ func setupCommandLineArgs() *CommandLineArgs {
 	// Port flags
 	flag.IntVar(&args.webhookPort, "webhookPort", 0, "Port that the webhook should listen on")
 	flag.IntVar(&args.routerPort, "routerPort", 0, "Port that the router should listen on")
+	flag.IntVar(&args.routerInternalPort, "routerInternalPort", router.DefaultInternalListenerPort, "Port for the router internal listener that serves /fission-function/<ns>/<name>")
 	flag.IntVar(&args.executorPort, "executorPort", 0, "Port that the executor should listen on")
 	flag.IntVar(&args.storageServicePort, "storageServicePort", 0, "Port that the storage service should listen on")
 
@@ -254,7 +256,7 @@ func startRequestedService(ctx context.Context, args *CommandLineArgs, clientGen
 	}
 
 	if args.routerPort != 0 {
-		err = router.Start(ctx, clientGen, logger, mgr, args.routerPort, eclient.MakeClient(logger, args.executorUrl))
+		err = router.Start(ctx, clientGen, logger, mgr, args.routerPort, args.routerInternalPort, eclient.MakeClient(logger, args.executorUrl))
 		if err != nil {
 			logger.Error(err, "router exited")
 		}
