@@ -216,6 +216,58 @@ func TestVerifierLogsMissingHeaders(t *testing.T) {
 	}
 }
 
+// TestVerifierRejectsTamperedBody — sign body A, present signature with body B.
+func TestVerifierRejectsTamperedBody(t *testing.T) {
+	secret := []byte("test-secret-must-be-32-bytes-min")
+	now := func() time.Time { return time.Unix(1715000000, 0) }
+	h := Verifier(VerifierOpts{Secret: secret, SkewSec: 60, Now: now})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+	}))
+	signedBody := []byte("original")
+	tamperedBody := []byte("tampered")
+	sig := Sign(secret, "POST", "/v1/archive", signedBody, 1715000000)
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/v1/archive", bytes.NewReader(tamperedBody))
+	req.Header.Set(HeaderTimestamp, "1715000000")
+	req.Header.Set(HeaderSignature, sig)
+	h.ServeHTTP(rr, req)
+	assert.Equal(t, 401, rr.Code)
+}
+
+// TestVerifierRejectsTamperedMethod — sign GET, replay as DELETE.
+func TestVerifierRejectsTamperedMethod(t *testing.T) {
+	secret := []byte("test-secret-must-be-32-bytes-min")
+	now := func() time.Time { return time.Unix(1715000000, 0) }
+	h := Verifier(VerifierOpts{Secret: secret, SkewSec: 60, Now: now})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+	}))
+	body := []byte{}
+	sig := Sign(secret, "GET", "/v1/archive", body, 1715000000)
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("DELETE", "/v1/archive", bytes.NewReader(body))
+	req.Header.Set(HeaderTimestamp, "1715000000")
+	req.Header.Set(HeaderSignature, sig)
+	h.ServeHTTP(rr, req)
+	assert.Equal(t, 401, rr.Code)
+}
+
+// TestVerifierRejectsTamperedPath — sign /v1/archive, replay against /v1/archive/anything.
+func TestVerifierRejectsTamperedPath(t *testing.T) {
+	secret := []byte("test-secret-must-be-32-bytes-min")
+	now := func() time.Time { return time.Unix(1715000000, 0) }
+	h := Verifier(VerifierOpts{Secret: secret, SkewSec: 60, Now: now})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+	}))
+	body := []byte("hi")
+	sig := Sign(secret, "POST", "/v1/archive", body, 1715000000)
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/v1/archive/anything", bytes.NewReader(body))
+	req.Header.Set(HeaderTimestamp, "1715000000")
+	req.Header.Set(HeaderSignature, sig)
+	h.ServeHTTP(rr, req)
+	assert.Equal(t, 401, rr.Code)
+}
+
 func TestVerifierRejectsBadSignature(t *testing.T) {
 	secret := []byte("test-secret-must-be-32-bytes-min")
 	now := func() time.Time { return time.Unix(1715000000, 0) }

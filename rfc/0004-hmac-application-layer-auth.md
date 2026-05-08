@@ -172,6 +172,32 @@ Already in place via #3365.
 We *keep* it; HMAC is layered on top.
 On its own, NetworkPolicy fails open the moment a cluster operator overrides the namespace selector or a CNI is installed in permissive mode.
 
+## Limitations
+
+The scheme has known limitations operators should plan around.
+
+**Maximum body size.**
+The verifier reads the entire request body into memory before computing the signature so the body bytes can be re-injected for downstream handlers (multipart parsers, etc.).
+That cost is bounded by `VerifierOpts.MaxBodyBytes` (default 256 MiB, set on the storagesvc registration).
+Bodies that exceed the cap are rejected with `413 Request Entity Too Large` *before* signature verification — i.e. an unauthenticated attacker cannot use a giant unsigned body to DoS storagesvc.
+Operators that legitimately need to upload archives larger than 256 MiB should bump the cap rather than disable enforcement; the cap is the largest archive size we expect to see in practice.
+
+**Replay within the skew window.**
+A captured signed request can be replayed any number of times within the `SkewSec` window (default 60s) and will pass verification each time.
+Adding nonce tracking would require a shared replay-cache store across all storagesvc/router replicas (Redis, a distributed cache, or a Lease-CR scheme).
+That is out of scope for this RFC; the 60-second window is short enough that the practical attack surface is limited to a recently-captured packet on the cluster network — at which point an attacker capable of sniffing in-cluster traffic has bigger problems.
+A future RFC may add a nonce store if a use case justifies the operational cost.
+
+**`fission-cli` does not sign storagesvc requests.**
+The CLI's archive subcommands (`fission archive list`, `fission archive get`, etc.) talk to storagesvc directly via a port-forward and do not currently know how to sign.
+Operators who use these commands must either:
+
+- Run the cluster with `internalAuth.enabled=false` (acceptable on dev clusters; reverts to NetworkPolicy-only).
+- Set `FISSION_INTERNAL_AUTH_SECRET` in the shell to match the value in `Secret/fission-internal-auth` (NOT recommended — pulls the cluster secret onto the operator's laptop).
+- Prefer `kubectl exec` into the fetcher/builder pods, which already have the secret mounted, and run archive operations from there.
+
+Standard CLI flows that go through `fission package` and `fission function` are unaffected — those commands talk to the Kubernetes API server, not storagesvc directly.
+
 ## Verification / test plan
 
 - Unit tests: `pkg/auth/hmac/*_test.go` cover canonical-string formatting, sign/verify round-trip, `OldSecret` fallback, skew tolerance, healthz bypass, and body re-readability after the verifier passes.
