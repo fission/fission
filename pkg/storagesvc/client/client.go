@@ -70,9 +70,13 @@ type (
 
 // MakeClient creates a storage service client.
 //
-// hmacSecret enables HMAC-SHA256 request signing per the design at
-// docs/internal-auth/00-design.md. Storagesvc only enforces signatures
-// when its own copy of the secret is set on the server, so passing nil
+// masterSecret enables HMAC-SHA256 request signing per the design at
+// docs/internal-auth/00-design.md. The master is the chart-installed
+// fission-internal-auth/secret value; this client derives the
+// per-service signing key for ServiceStoragesvc internally so a
+// future leak of one channel's runtime memory cannot forge requests
+// on a different channel. Storagesvc only enforces signatures when
+// its own copy of the master is set on the server, so passing nil
 // (or empty) here is backwards compatible with installs that have
 // internalAuth disabled.
 //
@@ -80,10 +84,10 @@ type (
 // should pass HMACSecretFromEnv(); CLI commands should pass
 // HMACSecretFromCluster() so they read the same Secret the cluster
 // uses.
-func MakeClient(url string, hmacSecret []byte) ClientInterface {
+func MakeClient(url string, masterSecret []byte) ClientInterface {
 	var rt http.RoundTripper = otelhttp.NewTransport(http.DefaultTransport)
-	if len(hmacSecret) > 0 {
-		rt = hmacauth.NewSigner(hmacSecret, rt, time.Now)
+	if len(masterSecret) > 0 {
+		rt = hmacauth.ServiceSigner(masterSecret, hmacauth.ServiceStoragesvc, rt, time.Now)
 	}
 	hc := &http.Client{Transport: rt}
 	return &client{

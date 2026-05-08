@@ -121,13 +121,14 @@ func MakeFetcher(logger logr.Logger, clientGen crd.ClientGeneratorInterface, sha
 	hc := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
 	// storageHTTPClient signs requests to storagesvc with the HMAC
 	// scheme described in docs/internal-auth/00-design.md when the
-	// chart's internal-auth secret is mounted. Sharing the persistent
-	// httpClient with the signer wrapper would also sign the
-	// /v2/specialize POST sent to the user container, which doesn't
-	// expect our auth headers — keep the two clients separate.
+	// chart's internal-auth master secret is mounted. The signer uses
+	// the per-service derived key for ServiceStoragesvc; sharing the
+	// persistent httpClient with the signer wrapper would also sign
+	// the /v2/specialize POST sent to the user container, which
+	// doesn't expect our auth headers — keep the two clients separate.
 	var storageRT http.RoundTripper = otelhttp.NewTransport(http.DefaultTransport)
 	if secret := storageSvcClient.HMACSecretFromEnv(); len(secret) > 0 {
-		storageRT = hmacauth.NewSigner(secret, storageRT, time.Now)
+		storageRT = hmacauth.ServiceSigner(secret, hmacauth.ServiceStoragesvc, storageRT, time.Now)
 	}
 	storageHC := &http.Client{Transport: storageRT}
 	return &Fetcher{

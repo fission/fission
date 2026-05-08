@@ -271,13 +271,17 @@ func (ss *StorageService) Start(ctx context.Context, mgr manager.Interface, port
 	r := mux.NewRouter()
 	if len(ss.authSecret) > 0 {
 		// HMAC enforcement is opt-in via the FISSION_INTERNAL_AUTH_SECRET env
-		// var; an empty secret means the verifier middleware is not registered
+		// var; an empty master means the verifier middleware is not registered
 		// at all (backwards-compatible with pre-1.(N+1) installs).
-		r.Use(hmacauth.Verifier(hmacauth.VerifierOpts{
-			Secret:    ss.authSecret,
-			OldSecret: ss.authSecretOld,
-			SkewSec:   60,
-			Bypass:    []string{"/healthz"},
+		//
+		// The verifier uses the per-service derived key for ServiceStoragesvc
+		// rather than the master directly, so a leak of this server's
+		// memory cannot forge requests on other Fission internal channels
+		// (fetcher, builder, executor, router-internal). See
+		// docs/internal-auth/00-design.md.
+		r.Use(hmacauth.ServiceVerifier(ss.authSecret, ss.authSecretOld, hmacauth.ServiceStoragesvc, hmacauth.VerifierOpts{
+			SkewSec: 60,
+			Bypass:  []string{"/healthz"},
 			// 256 MiB caps the verifier's in-memory body buffer; this is
 			// larger than any realistic Fission archive but bounds the cost
 			// of an unsigned/malicious upload to /v1/archive.
