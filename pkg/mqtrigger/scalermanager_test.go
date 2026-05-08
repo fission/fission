@@ -77,7 +77,7 @@ func TestGetEnvVarlistDoesNotMaterializeSecretValues(t *testing.T) {
 			assert.Empty(t, ev.Value, "secret-derived env vars must not embed a literal Value")
 			require.NotNil(t, ev.ValueFrom, "ValueFrom must be set for env var %s", ev.Name)
 			require.NotNil(t, ev.ValueFrom.SecretKeyRef, "SecretKeyRef must be set for env var %s", ev.Name)
-			assert.Equal(t, secretName, ev.ValueFrom.SecretKeyRef.LocalObjectReference.Name)
+			assert.Equal(t, secretName, ev.ValueFrom.SecretKeyRef.Name)
 			assert.NotEmpty(t, ev.ValueFrom.SecretKeyRef.Key, "SecretKeyRef.Key must be set")
 		}
 	}
