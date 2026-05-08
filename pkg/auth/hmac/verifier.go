@@ -118,6 +118,20 @@ func Verifier(opts VerifierOpts) func(http.Handler) http.Handler {
 				return
 			}
 
+			// Check freshness BEFORE buffering the body. A stale-timestamp
+			// request with a multi-MB body would otherwise force the
+			// verifier to allocate up to MaxBodyBytes before rejecting,
+			// turning a no-op rejection into a memory amplification.
+			now := opts.Now().Unix()
+			if abs(now-tsNum) > opts.SkewSec {
+				opts.Logger.Info("HMAC verification failed",
+					"reason", "stale timestamp",
+					"method", r.Method, "path", r.URL.Path,
+					"remoteAddr", r.RemoteAddr)
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+
 			var body []byte
 			if r.Body != nil {
 				if opts.MaxBodyBytes > 0 {
@@ -145,18 +159,20 @@ func Verifier(opts VerifierOpts) func(http.Handler) http.Handler {
 				r.Body = io.NopCloser(bytes.NewReader(body))
 			}
 
-			now := opts.Now().Unix()
-			if VerifyWithSkew(opts.Secret, r.Method, r.URL.Path, body, tsNum, sig, now, opts.SkewSec) {
+			// Sign over RequestURI (path + raw query) so query parameters
+			// like ?id= are bound to the signature.
+			ru := r.URL.RequestURI()
+			if Verify(opts.Secret, r.Method, ru, body, tsNum, sig) {
 				next.ServeHTTP(w, r)
 				return
 			}
 			if len(opts.OldSecret) > 0 &&
-				VerifyWithSkew(opts.OldSecret, r.Method, r.URL.Path, body, tsNum, sig, now, opts.SkewSec) {
+				Verify(opts.OldSecret, r.Method, ru, body, tsNum, sig) {
 				next.ServeHTTP(w, r)
 				return
 			}
 			opts.Logger.Info("HMAC verification failed",
-				"reason", "signature mismatch or stale timestamp",
+				"reason", "signature mismatch",
 				"method", r.Method, "path", r.URL.Path,
 				"remoteAddr", r.RemoteAddr)
 			w.WriteHeader(http.StatusUnauthorized)

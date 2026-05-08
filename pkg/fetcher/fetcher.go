@@ -43,6 +43,7 @@ import (
 	"k8s.io/client-go/tools/reference"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 	"github.com/fission/fission/pkg/crd"
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/error/network"
@@ -109,7 +110,16 @@ func MakeFetcher(logger logr.Logger, clientGen crd.ClientGeneratorInterface, sha
 		return nil, fmt.Errorf("error reading pod namespace from downward volume: %w", err)
 	}
 
-	hc := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
+	// Wrap the transport with the HMAC signer when the chart's
+	// internal-auth secret is mounted (FISSION_INTERNAL_AUTH_SECRET).
+	// Without this the fetcher's archive downloads via utils.DownloadUrl
+	// reach storagesvc unsigned and storagesvc rejects them with HTTP 401
+	// once internalAuth is enabled. See docs/internal-auth/00-design.md.
+	var rt http.RoundTripper = otelhttp.NewTransport(http.DefaultTransport)
+	if secret := storageSvcClient.HMACSecretFromEnv(); len(secret) > 0 {
+		rt = hmacauth.NewSigner(secret, rt, time.Now)
+	}
+	hc := &http.Client{Transport: rt}
 	return &Fetcher{
 		logger:           fLogger,
 		sharedVolumePath: sharedVolumePath,

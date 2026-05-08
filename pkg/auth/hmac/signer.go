@@ -50,15 +50,27 @@ func NewSigner(secret []byte, rt http.RoundTripper, now func() time.Time) *Signe
 func (s *Signer) RoundTrip(r *http.Request) (*http.Response, error) {
 	var body []byte
 	if r.Body != nil {
+		original := r.Body
 		var err error
-		body, err = io.ReadAll(r.Body)
+		body, err = io.ReadAll(original)
+		// Close the original body before replacing it: callers that hand
+		// in a real *os.File-backed io.ReadCloser would otherwise leak
+		// the underlying file descriptor.
+		closeErr := original.Close()
 		if err != nil {
 			return nil, err
+		}
+		if closeErr != nil {
+			return nil, closeErr
 		}
 		r.Body = io.NopCloser(bytes.NewReader(body))
 	}
 	ts := s.now().Unix()
-	sig := Sign(s.secret, r.Method, r.URL.Path, body, ts)
+	// Sign over the request-URI (path + raw query) so query parameters
+	// like ?id= are bound to the signature. Signing the path alone would
+	// let an attacker replay a captured /v1/archive?id=A signature
+	// against a different ?id=B within the skew window.
+	sig := Sign(s.secret, r.Method, r.URL.RequestURI(), body, ts)
 	r.Header.Set(HeaderTimestamp, strconv.FormatInt(ts, 10))
 	r.Header.Set(HeaderSignature, sig)
 	return s.rt.RoundTrip(r)
