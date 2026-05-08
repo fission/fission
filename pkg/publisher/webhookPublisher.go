@@ -108,10 +108,16 @@ func MakeWebhookPublisher(logger logr.Logger, baseURL string) *WebhookPublisher 
 // trace headers are intentionally NOT part of the signed canonical
 // form, which keeps the signature stable across tracing-config
 // changes and avoids re-signing per request retry.
+//
+// The signing key is derived from the master via HKDF-SHA256 for
+// ServiceRouterInternal so a leak of this caller's runtime memory
+// cannot forge requests on other Fission internal channels
+// (storagesvc, fetcher, builder, executor). See
+// docs/internal-auth/00-design.md.
 func newWebhookHTTPClient() *http.Client {
 	var rt http.RoundTripper = otelhttp.NewTransport(http.DefaultTransport)
-	if secret := os.Getenv("FISSION_INTERNAL_AUTH_SECRET"); secret != "" {
-		rt = hmacauth.NewSigner([]byte(secret), rt, time.Now)
+	if master := os.Getenv("FISSION_INTERNAL_AUTH_SECRET"); master != "" {
+		rt = hmacauth.ServiceSigner([]byte(master), hmacauth.ServiceRouterInternal, rt, time.Now)
 	}
 	return &http.Client{Transport: rt}
 }
