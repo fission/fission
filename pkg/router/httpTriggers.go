@@ -49,6 +49,12 @@ type HTTPTriggerSet struct {
 	*functionServiceMap
 	*mutableRouter
 
+	// internalMutableRouter is the mutable wrapper for the internal listener.
+	// It is updated in lockstep with mutableRouter (the public listener) on
+	// every trigger / function reconciliation. May be nil in unit-test paths
+	// that only construct the public mux directly.
+	internalMutableRouter *mutableRouter
+
 	logger                     logr.Logger
 	fissionClient              versioned.Interface
 	kubeClient                 kubernetes.Interface
@@ -96,18 +102,25 @@ func makeHTTPTriggerSet(logger logr.Logger, fmap *functionServiceMap, fissionCli
 	return httpTriggerSet, nil
 }
 
-func (ts *HTTPTriggerSet) subscribeRouter(ctx context.Context, mgr manager.Interface, mr *mutableRouter) error {
+// subscribeRouter wires the public mutable router and (optionally) the
+// internal mutable router. Passing internalMR=nil preserves the legacy
+// single-listener path used by older test scaffolding.
+func (ts *HTTPTriggerSet) subscribeRouter(ctx context.Context, mgr manager.Interface, mr *mutableRouter, internalMR *mutableRouter) error {
 	resolver := makeFunctionReferenceResolver(ts.logger, ts.funcInformer)
 	ts.resolver = resolver
 	ts.mutableRouter = mr
+	ts.internalMutableRouter = internalMR
 
 	if ts.fissionClient == nil {
 		// Used in tests only.
-		router, err := ts.getRouter(nil)
+		public, internal, err := ts.buildMuxes(nil)
 		if err != nil {
 			return err
 		}
-		mr.updateRouter(router)
+		mr.updateRouter(public)
+		if internalMR != nil {
+			internalMR.updateRouter(internal)
+		}
 		ts.logger.Info("skipping continuous trigger updates")
 		return nil
 	}
@@ -143,20 +156,44 @@ func versionHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// getRouter builds the public-listener mux router. It is preserved as a
+// thin wrapper over buildMuxes so any in-package caller (notably unit
+// tests) that only needs the public-side router stays unchanged.
 func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) (*mux.Router, error) {
+	public, _, err := ts.buildMuxes(fnTimeoutMap)
+	return public, err
+}
 
+// buildMuxes constructs the two mux.Router instances that back the router
+// process: one for the public listener (user HTTPTriggers + healthz +
+// version + optional auth) and one for the internal listener
+// (`/fission-function/<ns>/<name>` and its prefix variant). Splitting
+// the registrations is the core of GHSA-3g33-6vg6-27m8 — internal
+// invocation routes must never be reachable from the public listener,
+// because they bypass HTTPTrigger gates (auth middleware, host/method
+// matching) by design.
+//
+// The internal mux deliberately omits the metrics middleware, the auth
+// middleware, and the GKE-ingress `/` no-op handler: those concerns are
+// public-listener only. Callers wrap the internal mux with
+// hmac.Verifier in the bundle process; the verifier is intentionally
+// not added here so this function stays unit-testable without HMAC env
+// state.
+func (ts *HTTPTriggerSet) buildMuxes(fnTimeoutMap map[types.UID]int) (public, internal *mux.Router, err error) {
 	featureConfig, err := config.GetFeatureConfig(ts.logger)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	muxRouter := mux.NewRouter()
-	muxRouter.Use(metrics.HTTPMetricMiddleware)
+	public = mux.NewRouter()
+	internal = mux.NewRouter()
+
+	public.Use(metrics.HTTPMetricMiddleware)
 	if featureConfig.AuthConfig.IsEnabled {
-		muxRouter.Use(authMiddleware(featureConfig))
+		public.Use(authMiddleware(featureConfig))
 	}
 
-	// HTTP triggers setup by the user
+	// HTTP triggers setup by the user — public listener only.
 	homeHandled := false
 	for i := range ts.triggers {
 		trigger := ts.triggers[i]
@@ -218,19 +255,19 @@ func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) (*mux.Router
 		if trigger.Spec.Prefix != nil && *trigger.Spec.Prefix != "" {
 			prefix := *trigger.Spec.Prefix
 			if strings.HasSuffix(prefix, "/") {
-				ht := muxRouter.PathPrefix(prefix).Handler(handler)
+				ht := public.PathPrefix(prefix).Handler(handler)
 				ht.Methods(methods...)
 				if trigger.Spec.Host != "" {
 					ht.Host(trigger.Spec.Host)
 				}
 				ts.logger.V(1).Info("add prefix route for function", "route", prefix, "function", fh.function, "methods", methods)
 			} else {
-				ht1 := muxRouter.Handle(prefix, handler)
+				ht1 := public.Handle(prefix, handler)
 				ht1.Methods(methods...)
 				if trigger.Spec.Host != "" {
 					ht1.Host(trigger.Spec.Host)
 				}
-				ht2 := muxRouter.PathPrefix(prefix + "/").Handler(handler)
+				ht2 := public.PathPrefix(prefix + "/").Handler(handler)
 				ht2.Methods(methods...)
 				if trigger.Spec.Host != "" {
 					ht2.Host(trigger.Spec.Host)
@@ -238,7 +275,7 @@ func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) (*mux.Router
 				ts.logger.V(1).Info("add prefix and handler route for function", "route", prefix, "function", fh.function, "methods", methods)
 			}
 		} else {
-			ht := muxRouter.Handle(trigger.Spec.RelativeURL, handler)
+			ht := public.Handle(trigger.Spec.RelativeURL, handler)
 			ht.Methods(methods...)
 			if trigger.Spec.Host != "" {
 				ht.Host(trigger.Spec.Host)
@@ -258,11 +295,13 @@ func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) (*mux.Router
 		// want it to be a 404 even if the user doesn't have a function mapped to
 		// this route.
 		//
-		muxRouter.HandleFunc("/", defaultHomeHandler).Methods("GET")
+		public.HandleFunc("/", defaultHomeHandler).Methods("GET")
 	}
 
-	// Internal triggers for each function by name. Non-http
-	// triggers route into these.
+	// Internal triggers for each function by name. Non-http triggers
+	// (timer, kubewatcher, mqtrigger) and the executor's invocation
+	// path land here. These routes live ONLY on the internal mux —
+	// exposing them on the public listener is GHSA-3g33-6vg6-27m8.
 	for i := range ts.functions {
 		fn := ts.functions[i]
 		fh := &functionHandler{
@@ -280,8 +319,8 @@ func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) (*mux.Router
 		internalRoute := utils.UrlForFunction(fn.Name, fn.Namespace)
 		internalPrefixRoute := internalRoute + "/"
 		handler := http.HandlerFunc(fh.handler)
-		muxRouter.Handle(internalRoute, handler)
-		muxRouter.PathPrefix(internalPrefixRoute).Handler(handler)
+		internal.Handle(internalRoute, handler)
+		internal.PathPrefix(internalPrefixRoute).Handler(handler)
 		ts.logger.V(1).Info("add internal handler and prefix route for function", "router", internalRoute, "function", fn)
 	}
 
@@ -289,15 +328,17 @@ func (ts *HTTPTriggerSet) getRouter(fnTimeoutMap map[types.UID]int) (*mux.Router
 
 		path := featureConfig.AuthConfig.AuthUriPath
 		// Auth endpoint for the router.
-		muxRouter.HandleFunc(path, authLoginHandler(featureConfig)).Methods("POST")
+		public.HandleFunc(path, authLoginHandler(featureConfig)).Methods("POST")
 	}
 
-	// Healthz endpoint for the router.
-	muxRouter.HandleFunc("/router-healthz", routerHealthHandler).Methods("GET")
+	// Healthz endpoint for the router. Stays on the public listener so
+	// existing readiness/liveness probes and external monitors keep
+	// working without HMAC credentials.
+	public.HandleFunc("/router-healthz", routerHealthHandler).Methods("GET")
 	// version of application.
-	muxRouter.HandleFunc("/_version", versionHandler).Methods("GET")
+	public.HandleFunc("/_version", versionHandler).Methods("GET")
 
-	return muxRouter, nil
+	return public, internal, nil
 }
 
 func (ts *HTTPTriggerSet) updateTriggerStatusFailed(ht *fv1.HTTPTrigger, err error) {
@@ -411,12 +452,18 @@ func (ts *HTTPTriggerSet) updateRouter(ctx context.Context) {
 		}
 		ts.functions = allfunctions
 
-		// make a new router and use it
-		router, err := ts.getRouter(functionTimeout)
+		// make a new pair of routers and swap them in atomically. We
+		// rebuild and swap the public listener even when the internal
+		// listener is disabled (nil), so the legacy single-listener
+		// callers keep their original behaviour.
+		public, internal, err := ts.buildMuxes(functionTimeout)
 		if err != nil {
 			ts.logger.Error(err, "error updating router")
 			continue
 		}
-		ts.mutableRouter.updateRouter(router)
+		ts.mutableRouter.updateRouter(public)
+		if ts.internalMutableRouter != nil {
+			ts.internalMutableRouter.updateRouter(internal)
+		}
 	}
 }
