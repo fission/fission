@@ -28,7 +28,7 @@ import (
 )
 
 // validBaseMQT returns a MessageQueueTrigger that satisfies the existing
-// validation rules so we can isolate the new podSpec-allowlist check.
+// validation rules so we can isolate the new spec.podspec-allowlist check.
 func validBaseMQT() *fv1.MessageQueueTrigger {
 	return &fv1.MessageQueueTrigger{
 		ObjectMeta: metav1.ObjectMeta{Name: "mqt-1", Namespace: "default"},
@@ -53,7 +53,7 @@ func TestMessageQueueTriggerWebhookRejectsImageOverride(t *testing.T) {
 
 	err := v.Validate(mqt)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "podSpec.containers[].image")
+	assert.Contains(t, err.Error(), "spec.podspec.containers[].image")
 }
 
 func TestMessageQueueTriggerWebhookRejectsCommandAndArgs(t *testing.T) {
@@ -68,8 +68,8 @@ func TestMessageQueueTriggerWebhookRejectsCommandAndArgs(t *testing.T) {
 	}
 	err := v.Validate(mqt)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "podSpec.containers[].command")
-	assert.Contains(t, err.Error(), "podSpec.containers[].args")
+	assert.Contains(t, err.Error(), "spec.podspec.containers[].command")
+	assert.Contains(t, err.Error(), "spec.podspec.containers[].args")
 }
 
 func TestMessageQueueTriggerWebhookRejectsHostNamespacesAndSA(t *testing.T) {
@@ -82,8 +82,8 @@ func TestMessageQueueTriggerWebhookRejectsHostNamespacesAndSA(t *testing.T) {
 	}
 	err := v.Validate(mqt)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "podSpec.serviceAccountName")
-	assert.Contains(t, err.Error(), "podSpec.hostNetwork")
+	assert.Contains(t, err.Error(), "spec.podspec.serviceAccountName")
+	assert.Contains(t, err.Error(), "spec.podspec.hostNetwork")
 }
 
 func TestMessageQueueTriggerWebhookAcceptsAllowlistedPodSpec(t *testing.T) {

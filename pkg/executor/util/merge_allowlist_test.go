@@ -107,23 +107,41 @@ func TestMergeAllowedPodSpecFieldsDropsDangerousFields(t *testing.T) {
 		Containers: []apiv1.Container{{Name: "connector", Image: "fission/keda-kafka:1.0"}},
 	}
 	runAsUser := int64(0)
+	automount := true
+	share := true
 	user := &apiv1.PodSpec{
 		Containers: []apiv1.Container{{
-			Name:         "connector",
-			Image:        "evil:latest",
-			Command:      []string{"/bin/sh"},
-			Args:         []string{"-c", "curl evil"},
-			Env:          []apiv1.EnvVar{{Name: "INJECTED", Value: "yes"}},
-			VolumeMounts: []apiv1.VolumeMount{{Name: "host", MountPath: "/host"}},
+			Name:            "connector",
+			Image:           "evil:latest",
+			Command:         []string{"/bin/sh"},
+			Args:            []string{"-c", "curl evil"},
+			Env:             []apiv1.EnvVar{{Name: "INJECTED", Value: "yes"}},
+			EnvFrom:         []apiv1.EnvFromSource{{SecretRef: &apiv1.SecretEnvSource{LocalObjectReference: apiv1.LocalObjectReference{Name: "any-secret"}}}},
+			VolumeMounts:    []apiv1.VolumeMount{{Name: "host", MountPath: "/host"}},
+			Ports:           []apiv1.ContainerPort{{ContainerPort: 1234}},
+			WorkingDir:      "/evil",
+			Lifecycle:       &apiv1.Lifecycle{},
+			LivenessProbe:   &apiv1.Probe{},
+			ReadinessProbe:  &apiv1.Probe{},
+			StartupProbe:    &apiv1.Probe{},
+			SecurityContext: &apiv1.SecurityContext{RunAsUser: &runAsUser},
 		}},
-		Volumes: []apiv1.Volume{{Name: "host", VolumeSource: apiv1.VolumeSource{
-			HostPath: &apiv1.HostPathVolumeSource{Path: "/"},
-		}}},
-		ServiceAccountName: "cluster-admin",
-		HostNetwork:        true,
-		HostPID:            true,
-		HostIPC:            true,
-		SecurityContext:    &apiv1.PodSecurityContext{RunAsUser: &runAsUser},
+		InitContainers:               []apiv1.Container{{Name: "init", Image: "evil:latest"}},
+		Volumes:                      []apiv1.Volume{{Name: "host", VolumeSource: apiv1.VolumeSource{HostPath: &apiv1.HostPathVolumeSource{Path: "/"}}}},
+		ImagePullSecrets:             []apiv1.LocalObjectReference{{Name: "creds"}},
+		ServiceAccountName:           "cluster-admin",
+		AutomountServiceAccountToken: &automount,
+		NodeName:                     "evil-node",
+		HostNetwork:                  true,
+		HostPID:                      true,
+		HostIPC:                      true,
+		ShareProcessNamespace:        &share,
+		SecurityContext:              &apiv1.PodSecurityContext{RunAsUser: &runAsUser},
+		SchedulerName:                "evil-scheduler",
+		HostAliases:                  []apiv1.HostAlias{{IP: "1.2.3.4", Hostnames: []string{"evil"}}},
+		PriorityClassName:            "high",
+		DNSConfig:                    &apiv1.PodDNSConfig{},
+		TopologySpreadConstraints:    []apiv1.TopologySpreadConstraint{{}},
 	}
 	out, dropped := MergeAllowedPodSpecFields(src, user)
 
@@ -132,26 +150,62 @@ func TestMergeAllowedPodSpecFieldsDropsDangerousFields(t *testing.T) {
 	assert.Empty(t, out.Containers[0].Command)
 	assert.Empty(t, out.Containers[0].Args)
 	assert.Empty(t, out.Containers[0].Env)
+	assert.Empty(t, out.Containers[0].EnvFrom)
 	assert.Empty(t, out.Containers[0].VolumeMounts)
+	assert.Empty(t, out.Containers[0].Ports)
+	assert.Empty(t, out.Containers[0].WorkingDir)
+	assert.Nil(t, out.Containers[0].Lifecycle)
+	assert.Nil(t, out.Containers[0].LivenessProbe)
+	assert.Nil(t, out.Containers[0].ReadinessProbe)
+	assert.Nil(t, out.Containers[0].StartupProbe)
+	assert.Nil(t, out.Containers[0].SecurityContext)
+	assert.Empty(t, out.InitContainers)
 	assert.Empty(t, out.Volumes)
+	assert.Empty(t, out.ImagePullSecrets)
 	assert.Empty(t, out.ServiceAccountName)
+	assert.Nil(t, out.AutomountServiceAccountToken)
+	assert.Empty(t, out.NodeName)
 	assert.False(t, out.HostNetwork)
 	assert.False(t, out.HostPID)
 	assert.False(t, out.HostIPC)
+	assert.Nil(t, out.ShareProcessNamespace)
 	assert.Nil(t, out.SecurityContext)
+	assert.Empty(t, out.SchedulerName)
+	assert.Empty(t, out.HostAliases)
+	assert.Empty(t, out.PriorityClassName)
+	assert.Nil(t, out.DNSConfig)
+	assert.Empty(t, out.TopologySpreadConstraints)
 
 	for _, want := range []string{
 		"containers[].image",
 		"containers[].command",
 		"containers[].args",
 		"containers[].env",
+		"containers[].envFrom",
 		"containers[].volumeMounts",
+		"containers[].ports",
+		"containers[].workingDir",
+		"containers[].lifecycle",
+		"containers[].livenessProbe",
+		"containers[].readinessProbe",
+		"containers[].startupProbe",
+		"containers[].securityContext",
+		"initContainers",
 		"volumes",
+		"imagePullSecrets",
 		"serviceAccountName",
+		"automountServiceAccountToken",
+		"nodeName",
 		"hostNetwork",
 		"hostPID",
 		"hostIPC",
-		"securityContext.runAsUser",
+		"shareProcessNamespace",
+		"securityContext",
+		"schedulerName",
+		"hostAliases",
+		"priorityClassName",
+		"dnsConfig",
+		"topologySpreadConstraints",
 	} {
 		assert.Contains(t, dropped, want, "expected %q to be reported as dropped", want)
 	}
@@ -181,23 +235,41 @@ func TestMergeAllowedPodSpecFieldsDoesNotMutateSrc(t *testing.T) {
 
 func TestDisallowedPodSpecFieldsAllPresent(t *testing.T) {
 	runAsUser := int64(0)
+	automount := true
+	share := true
 	ps := &apiv1.PodSpec{
 		Containers: []apiv1.Container{{
-			Name:         "connector",
-			Image:        "evil:latest",
-			Command:      []string{"/bin/sh"},
-			Args:         []string{"-c", "curl evil"},
-			Env:          []apiv1.EnvVar{{Name: "INJECTED", Value: "yes"}},
-			VolumeMounts: []apiv1.VolumeMount{{Name: "host", MountPath: "/host"}},
+			Name:            "connector",
+			Image:           "evil:latest",
+			Command:         []string{"/bin/sh"},
+			Args:            []string{"-c", "curl evil"},
+			Env:             []apiv1.EnvVar{{Name: "INJECTED", Value: "yes"}},
+			EnvFrom:         []apiv1.EnvFromSource{{SecretRef: &apiv1.SecretEnvSource{LocalObjectReference: apiv1.LocalObjectReference{Name: "any-secret"}}}},
+			VolumeMounts:    []apiv1.VolumeMount{{Name: "host", MountPath: "/host"}},
+			Ports:           []apiv1.ContainerPort{{ContainerPort: 1234}},
+			WorkingDir:      "/evil",
+			Lifecycle:       &apiv1.Lifecycle{},
+			LivenessProbe:   &apiv1.Probe{},
+			ReadinessProbe:  &apiv1.Probe{},
+			StartupProbe:    &apiv1.Probe{},
+			SecurityContext: &apiv1.SecurityContext{RunAsUser: &runAsUser},
 		}},
-		Volumes: []apiv1.Volume{{Name: "host", VolumeSource: apiv1.VolumeSource{
-			HostPath: &apiv1.HostPathVolumeSource{Path: "/"},
-		}}},
-		ServiceAccountName: "cluster-admin",
-		HostNetwork:        true,
-		HostPID:            true,
-		HostIPC:            true,
-		SecurityContext:    &apiv1.PodSecurityContext{RunAsUser: &runAsUser},
+		InitContainers:               []apiv1.Container{{Name: "init", Image: "evil:latest"}},
+		Volumes:                      []apiv1.Volume{{Name: "host", VolumeSource: apiv1.VolumeSource{HostPath: &apiv1.HostPathVolumeSource{Path: "/"}}}},
+		ImagePullSecrets:             []apiv1.LocalObjectReference{{Name: "creds"}},
+		ServiceAccountName:           "cluster-admin",
+		AutomountServiceAccountToken: &automount,
+		NodeName:                     "evil-node",
+		HostNetwork:                  true,
+		HostPID:                      true,
+		HostIPC:                      true,
+		ShareProcessNamespace:        &share,
+		SecurityContext:              &apiv1.PodSecurityContext{RunAsUser: &runAsUser},
+		SchedulerName:                "evil-scheduler",
+		HostAliases:                  []apiv1.HostAlias{{IP: "1.2.3.4", Hostnames: []string{"evil"}}},
+		PriorityClassName:            "high",
+		DNSConfig:                    &apiv1.PodDNSConfig{},
+		TopologySpreadConstraints:    []apiv1.TopologySpreadConstraint{{}},
 	}
 
 	bad := DisallowedPodSpecFields(ps)
@@ -207,13 +279,31 @@ func TestDisallowedPodSpecFieldsAllPresent(t *testing.T) {
 		"containers[].command",
 		"containers[].args",
 		"containers[].env",
+		"containers[].envFrom",
 		"containers[].volumeMounts",
+		"containers[].ports",
+		"containers[].workingDir",
+		"containers[].lifecycle",
+		"containers[].livenessProbe",
+		"containers[].readinessProbe",
+		"containers[].startupProbe",
+		"containers[].securityContext",
+		"initContainers",
 		"volumes",
+		"imagePullSecrets",
 		"serviceAccountName",
+		"automountServiceAccountToken",
+		"nodeName",
 		"hostNetwork",
 		"hostPID",
 		"hostIPC",
-		"securityContext.runAsUser",
+		"shareProcessNamespace",
+		"securityContext",
+		"schedulerName",
+		"hostAliases",
+		"priorityClassName",
+		"dnsConfig",
+		"topologySpreadConstraints",
 	} {
 		assert.Contains(t, bad, want, "expected %q to be reported as disallowed", want)
 	}
