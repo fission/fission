@@ -100,14 +100,14 @@ func MakeWebhookPublisher(logger logr.Logger, baseURL string) *WebhookPublisher 
 }
 
 // newWebhookHTTPClient constructs the HTTP client used to invoke
-// /fission-function/<ns>/<name> on the router's internal listener. The
-// transport stack is otelhttp -> [hmacauth, when secret set] ->
-// http.DefaultTransport so the signature is computed AFTER OTEL has
-// added its trace headers (otherwise the signed canonical form would
-// not include those headers, but they are not part of the signed
-// canonical anyway — only path/method/body/timestamp are signed, so
-// ordering here is purely about which Transport sees the body buffer
-// in what state).
+// /fission-function/<ns>/<name> on the router's internal listener.
+// The transport stack is hmacauth (outermost, when secret set) ->
+// otelhttp -> http.DefaultTransport: the signer runs first and
+// computes the canonical form over (method, path, body, timestamp);
+// otelhttp then injects trace headers on the inner transport. OTEL
+// trace headers are intentionally NOT part of the signed canonical
+// form, which keeps the signature stable across tracing-config
+// changes and avoids re-signing per request retry.
 func newWebhookHTTPClient() *http.Client {
 	var rt http.RoundTripper = otelhttp.NewTransport(http.DefaultTransport)
 	if secret := os.Getenv("FISSION_INTERNAL_AUTH_SECRET"); secret != "" {
