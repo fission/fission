@@ -155,10 +155,11 @@ func serve(ctx context.Context, logger logr.Logger, mgr manager.Interface, port 
 
 // Start starts a router. internalPort is the listener that serves
 // /fission-function/<ns>/<name> and is wrapped with the HMAC verifier;
-// pass DefaultInternalListenerPort to use the default. A zero
-// internalPort is rejected because the listener is mandatory after
-// GHSA-3g33-6vg6-27m8 — the public listener no longer registers those
-// routes.
+// pass DefaultInternalListenerPort to use the default. Zero or
+// negative values are silently substituted with DefaultInternalListenerPort
+// so callers can omit the flag and still get the GHSA-3g33-6vg6-27m8
+// listener split — the public listener no longer registers those
+// routes, so the internal listener is mandatory.
 func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger, mgr manager.Interface, port int, internalPort int, executor eclient.ClientInterface) error {
 	if internalPort <= 0 {
 		internalPort = DefaultInternalListenerPort

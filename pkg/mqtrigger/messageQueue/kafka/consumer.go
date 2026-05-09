@@ -193,11 +193,20 @@ func (ch *MqtConsumerGroupHandler) kafkaMsgHandler(msg *sarama.ConsumerMessage) 
 		req.Header.Set(k, v)
 	}
 
-	// Make the request
+	// Make the request via the per-handler client so HMAC
+	// signing (when configured) is applied. Reset the body on every
+	// retry: net/http closes req.Body after each Do() call, AND the
+	// HMAC signing transport reads it for the canonical hash —
+	// without resetting we'd send an empty body on retry and fail
+	// signature verification on the receiving side.
 	var resp *http.Response
 	for attempt := 0; attempt <= ch.trigger.Spec.MaxRetries; attempt++ {
-		// Make the request via the per-handler client so HMAC
-		// signing (when configured) is applied.
+		req.Body = io.NopCloser(strings.NewReader(value))
+		// GetBody is also set so net/http's redirect / retryablehttp
+		// paths can re-read the body if they need to.
+		req.GetBody = func() (io.ReadCloser, error) {
+			return io.NopCloser(strings.NewReader(value)), nil
+		}
 		resp, err = ch.httpClient.Do(req)
 		if err != nil {
 			ch.logger.Error(err, "sending function invocation request failed", "function_url", ch.fnUrl,
