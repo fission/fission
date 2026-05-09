@@ -95,7 +95,7 @@ func getIngressAnnotations(annotations []string) (remove bool, anns map[string]s
 			// remove all annotations
 			return true, nil, nil
 		}
-		v := strings.Split(ann, "=")
+		v := strings.SplitN(ann, "=", 2)
 		if len(v) != 2 {
 			return false, nil, fmt.Errorf("illegal ingress annotation: %v", ann)
 		}
@@ -115,7 +115,7 @@ func getIngressHostRule(rule string, fallbackPath string) (empty bool, host stri
 	if rule == "-" {
 		return false, "*", fallbackPath, nil
 	}
-	v := strings.Split(rule, "=")
+	v := strings.SplitN(rule, "=", 2)
 	if len(v) != 2 {
 		return false, "", "", fmt.Errorf("illegal ingress rule: %v", rule)
 	}
