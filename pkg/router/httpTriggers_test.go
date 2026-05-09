@@ -142,8 +142,11 @@ func TestInternalListenerRejectsUnsignedRequests(t *testing.T) {
 	_, internalMux, err := ts.buildMuxes(nil)
 	require.NoError(t, err)
 
-	verifier := hmacauth.Verifier(hmacauth.VerifierOpts{
-		Secret:       []byte("test-secret"),
+	// Mirror the production wiring: ServiceVerifier with ServiceRouterInternal
+	// rather than the raw Verifier. A regression in service-key derivation
+	// (e.g. accidentally using a different service id on the signing side)
+	// would surface here in addition to the lower-level keys_test.go suite.
+	verifier := hmacauth.ServiceVerifier([]byte("test-master"), nil, hmacauth.ServiceRouterInternal, hmacauth.VerifierOpts{
 		SkewSec:      60,
 		MaxBodyBytes: internalListenerMaxBodyBytes,
 	})
@@ -175,8 +178,10 @@ func TestInternalListenerPassThroughWithEmptySecret(t *testing.T) {
 		w.WriteHeader(http.StatusTeapot)
 	})
 
-	verifier := hmacauth.Verifier(hmacauth.VerifierOpts{
-		Secret:       nil,
+	// Use ServiceVerifier to match the production wiring; an empty
+	// master propagates to an empty derived key, which the underlying
+	// Verifier short-circuits to pass-through.
+	verifier := hmacauth.ServiceVerifier(nil, nil, hmacauth.ServiceRouterInternal, hmacauth.VerifierOpts{
 		SkewSec:      60,
 		MaxBodyBytes: internalListenerMaxBodyBytes,
 	})
