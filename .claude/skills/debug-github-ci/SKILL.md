@@ -5,9 +5,11 @@ description: Investigate and fix GitHub Actions CI failures on the Fission repo'
 
 # Debug GitHub CI failures (Fission)
 
-Playbook for triaging and fixing CI failures on PRs in this repo. Optimised for **separating real regressions from pre-existing noise** and for **pattern-matching the same handful of recurring failure modes** before reading the full log.
+Playbook for triaging and fixing CI failures on PRs in this repo.
+Optimised for **separating real regressions from pre-existing noise** and for **pattern-matching the same handful of recurring failure modes** before reading the full log.
 
-This file is the orchestrator. Detailed playbooks for each domain live under `resources/` — read them on demand when a phase decision points there.
+This file is the orchestrator.
+Detailed playbooks for each domain live under `resources/` — read them on demand when a phase decision points there.
 
 ## When to invoke
 
@@ -17,27 +19,17 @@ Skip if the user already knows the root cause and wants you to apply a specific 
 
 ## Phase 0 — Separate noise from regression (do this first; saves hours)
 
-1. List checks for the PR:
-   ```bash
-   gh pr checks <PR> --json name,bucket,state,link \
-     --jq '.[] | select(.name != null) | "\(.bucket)\t\(.name)\t\(.link)"'
-   ```
-   Don't read logs yet. Just see who's red.
+1. List checks for the PR: ```bash gh pr checks <PR> --json name,bucket,state,link \ --jq '.[] | select(.name != null) | "\(.bucket)\t\(.name)\t\(.link)"' ``` Don't read logs yet.
+   Just see who's red.
 
-2. Compare against `main`:
-   ```bash
-   gh run list --branch main --workflow=push_pr.yaml --limit 5 \
-     --json conclusion,headSha
-   gh api repos/fission/fission/commits/<main-sha>/status \
-     --jq '.statuses[] | {context, state, description}'
-   ```
-   If the same check is also failing on `main`, it is **pre-existing noise** and the rest of this playbook does not apply to that check.
+2. Compare against `main`: ```bash gh run list --branch main --workflow=push_pr.yaml --limit 5 \ --json conclusion,headSha gh api repos/fission/fission/commits/<main-sha>/status \ --jq '.statuses[] | {context, state, description}' ``` If the same check is also failing on `main`, it is **pre-existing noise** and the rest of this playbook does not apply to that check.
 
 3. Known stickers in this repo (don't chase):
    - **`License Compliance` (FOSSA)** — fails persistently on main with "11 issues found".
    - **Tests requiring a local Docker daemon** (e.g. `TestS3StorageService` in `pkg/storagesvc/client`) — failures locally without `dockerd` are environmental.
 
-4. If main is green and PR is red → real regression. Continue.
+4. If main is green and PR is red → real regression.
+   Continue.
 
 ## Phase 1 — Get the right logs (cheapest first)
 
@@ -50,18 +42,21 @@ Order from cheapest to most expensive — escalate only if the previous step doe
 | 3 | `gh api repos/fission/fission/commits/<sha>/status` | External checks (FOSSA, codecov). Run-level not job-level. |
 | 4 | `gh run download <runId> -n go-integration-logs-<runId>-v<k8s>` | Per-test diag dirs with pod logs, yamls. The big artefact for integration-test failures. |
 
-Filter aggressively. Useful first-pass grep:
+Filter aggressively.
+Useful first-pass grep:
 ```bash
 grep -E '(FAIL|--- FAIL|fatal:|panic|error:|Error:|denied|connection refused|i/o timeout|context deadline exceeded)'
 ```
 
-Don't pull `gh run view <runId> --log` (the full archive) unless 1-3 above failed. It's tens of MB.
+Don't pull `gh run view <runId> --log` (the full archive) unless 1-3 above failed.
+It's tens of MB.
 
 Full cheatsheet: `resources/gh-commands-cheatsheet.md`.
 
 ## Phase 2 — Pattern-match the symptom
 
-Most failures in this repo land in one of these categories. Match the error string first, then load the matching resource for deeper diagnosis.
+Most failures in this repo land in one of these categories.
+Match the error string first, then load the matching resource for deeper diagnosis.
 
 ### Network / connectivity
 
@@ -92,6 +87,11 @@ Most failures in this repo land in one of these categories. Match the error stri
 | Test fixture file is missing from `embed.FS` despite being on disk | The fixture's parent dir contains a `go.mod` (nested module) — `embed` skips it | `resources/integration-test-framework.md` |
 | Spec test fails with `unknown flag: --specdir` or wrong cwd | `fission env create --spec` writes `./specs` relative to cwd; needs `ns.WithCWD` | `resources/integration-test-framework.md` |
 | Package update doesn't trigger a rebuild | Package CR has no `/status` subresource; must explicitly set `Status.BuildStatus = pending` along with spec change | `resources/integration-test-framework.md` |
+| `TestWebsocket` fails with `actual: "Error"` instead of expected echo on k8s 1.32+/1.34 (1.28 passes) | Function-pod warmup race: dial succeeds before ws-handler is attached; first frame is router's "Error" placeholder. Retry the full dial+write+read cycle. | `resources/integration-test-framework.md` |
+| `connection refused` on `127.0.0.1:8889` or `404` from `/fission-function/...` on integration tests | Missing `kubectl port-forward svc/router-internal 8889:8889 -n fission` (router listener split moved these routes off public 8888). | `resources/integration-test-framework.md` |
+| e2e test fails with router `404` for `/fission-function/...` even though integration suite is green | `test/e2e/framework/services/services.go` bypasses `cmd/fission-bundle/main.go` and missed mirroring its `ROUTER_INTERNAL_URL` resolution. | `resources/integration-test-framework.md` |
+| Same-namespace NetworkPolicy rule no-ops on some clusters | `namespaceSelector.matchLabels.kubernetes.io/metadata.name` not auto-populated; use `podSelector` alone (implicitly same-namespace). | `resources/networkpolicy-debugging.md` |
+| `USE_ENCODED_PATH=true` works at startup but stops working after a trigger reconcile | `buildMuxes` creates fresh `mux.NewRouter()` per reconciliation; `UseEncodedPath()` must be applied **inside** `buildMuxes`, not just in `router()` setup. | — |
 
 ### Lint / Go module
 
@@ -105,29 +105,30 @@ Most failures in this repo land in one of these categories. Match the error stri
 
 1. **Check the running binary's version**, not your local source.
    - `fission-bundle`, `fetcher`, `pre-upgrade-checks`, `reporter` images are built per-PR by `make skaffold-deploy`.
-   - **Env-builder images** (`python-builder`, `node-builder-22`, `go-builder-1.23`, etc.) are pre-built on GHCR. Their `/builder` binary was compiled at image-build time, NOT per-PR. Changes to `pkg/builder/builder.go` do not affect their behaviour in CI integration tests.
+   - **Env-builder images** (`python-builder`, `node-builder-22`, `go-builder-1.23`, etc.) are pre-built on GHCR.
+     Their `/builder` binary was compiled at image-build time, NOT per-PR.
+     Changes to `pkg/builder/builder.go` do not affect their behaviour in CI integration tests.
    - Confirm with the `caller":"builder/builder.go:NN"` field in pod logs vs. local file line numbers.
    - Full explanation: `resources/builder-image-origin.md`.
 
-2. **Read the source at the cited line** before iterating on a flake. Per the user's `feedback_read_source_before_iterating.md` memory, after 2 failed timing-based fixes, stop guessing — read the code path.
+2. **Read the source at the cited line** before iterating on a flake.
+   Per the user's `feedback_read_source_before_iterating.md` memory, after 2 failed timing-based fixes, stop guessing — read the code path.
 
-3. **Sanity-test locally** for the affected scope:
-   ```bash
-   make code-checks                                              # lint
-   go test -race -count=1 -timeout 5m ./pkg/<affected>/...       # focused tests
-   helm lint charts/fission-all                                  # if Helm changed
-   helm template charts/fission-all --set <vals> | sed -n '/^kind: <Kind>/,/^---/p'   # render check
-   ```
+3. **Sanity-test locally** for the affected scope: ```bash make code-checks                                              # lint go test -race -count=1 -timeout 5m ./pkg/<affected>/...       # focused tests helm lint charts/fission-all                                  # if Helm changed helm template charts/fission-all --set <vals> | sed -n '/^kind: <Kind>/,/^---/p'   # render check ```
 
 ## Phase 4 — Push and monitor
 
-After pushing the fix, arm the `Monitor` tool with the standard poll loop so terminal-state notifications arrive instead of you polling. Full recipe and rationale: `resources/monitor-poll-loop.md`.
+After pushing the fix, arm the `Monitor` tool with the standard poll loop so terminal-state notifications arrive instead of you polling.
+Full recipe and rationale: `resources/monitor-poll-loop.md`.
 
-If a check flips back to red after a fix, **don't push another fix immediately** — return to Phase 1 with the new logs. The new failure is often a different root cause exposed by the previous fix; reusing the previous hypothesis wastes a CI cycle.
+If a check flips back to red after a fix, **don't push another fix immediately** — return to Phase 1 with the new logs.
+The new failure is often a different root cause exposed by the previous fix; reusing the previous hypothesis wastes a CI cycle.
 
 ## CI-only Helm features via skaffold profile
 
-When a Helm-chart feature should be on in CI but off by default for users (e.g. `networkPolicy.enabled`), patch it via the `kind-ci` skaffold profile. Two-step: declare the chart-default in base `setValues`, then `replace`-patch it in the profile. Full instructions and rationale: `resources/skaffold-kind-ci-profile.md`.
+When a Helm-chart feature should be on in CI but off by default for users (e.g. `networkPolicy.enabled`), patch it via the `kind-ci` skaffold profile.
+Two-step: declare the chart-default in base `setValues`, then `replace`-patch it in the profile.
+Full instructions and rationale: `resources/skaffold-kind-ci-profile.md`.
 
 ## Other resources
 

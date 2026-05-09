@@ -13,7 +13,8 @@ If `networkPolicy.enabled=false` in the install (or the policy isn't there at al
 
 ## Pod labels — the source of truth
 
-A `NetworkPolicy` `from: [{ podSelector: ... }]` rule matches pod labels, **not** Service / Deployment names. The Fission control plane uses different label conventions for *controllers* vs the *worker pods* they create:
+A `NetworkPolicy` `from: [{ podSelector: ... }]` rule matches pod labels, **not** Service / Deployment names.
+The Fission control plane uses different label conventions for *controllers* vs the *worker pods* they create:
 
 | Pod kind | Labels |
 |---|---|
@@ -30,7 +31,8 @@ Constants: `pkg/apis/core/v1/const.go` (function-pod labels), `pkg/buildermgr/en
 
 ## Cross-namespace selectors are mandatory
 
-Storagesvc lives in the Fission install namespace (`fission`). Env-builder pods and function pods live in user namespaces (`default` for the test framework, plus any namespace the operator deploys functions to).
+Storagesvc lives in the Fission install namespace (`fission`).
+Env-builder pods and function pods live in user namespaces (`default` for the test framework, plus any namespace the operator deploys functions to).
 
 A `NetworkPolicy` in namespace `fission` with this rule:
 ```yaml
@@ -39,7 +41,8 @@ A `NetworkPolicy` in namespace `fission` with this rule:
         matchLabels:
           owner: buildermgr
 ```
-matches **only pods in namespace `fission`**. Pods in other namespaces are dropped.
+matches **only pods in namespace `fission`**.
+Pods in other namespaces are dropped.
 
 To match labelled pods in any namespace, pair `podSelector` with an empty `namespaceSelector`:
 ```yaml
@@ -54,7 +57,8 @@ Symptom of missing this: `dial tcp <storagesvc-ip>:80: i/o timeout` from the fet
 
 ## Reference: storagesvc NetworkPolicy template
 
-`charts/fission-all/templates/networkpolicy.yaml` is the canonical example. It demonstrates:
+`charts/fission-all/templates/networkpolicy.yaml` is the canonical example.
+It demonstrates:
 - `podSelector` on the *target* pod (storagesvc itself).
 - Three `ingress` rules: env-builder pods (port 8000), function pods (port 8000), Prometheus / metrics scraping (port 8080, no selector — allow from anywhere).
 - Each `from` peer pairs `namespaceSelector: {}` with the right `podSelector`.
@@ -64,11 +68,31 @@ Symptom of missing this: `dial tcp <storagesvc-ip>:80: i/o timeout` from the fet
 1. `helm lint charts/fission-all` — clean YAML.
 2. `helm template charts/fission-all --set networkPolicy.enabled=true` — render and inspect the resource.
 3. Check that every `from` peer has `namespaceSelector: {}` if the target pod and source pod live in different namespaces.
-4. `kubectl get pods -A -o jsonpath='{range .items[*]}{.metadata.namespace}/{.metadata.name}: {.metadata.labels}{"\n"}{end}'` on a real cluster (kind-ci) to confirm real pod labels match the selectors. The CI integration test suite is a good proxy for this — failures will show up as `i/o timeout` in fetcher logs.
+4. `kubectl get pods -A -o jsonpath='{range .items[*]}{.metadata.namespace}/{.metadata.name}: {.metadata.labels}{"\n"}{end}'` on a real cluster (kind-ci) to confirm real pod labels match the selectors.
+   The CI integration test suite is a good proxy for this — failures will show up as `i/o timeout` in fetcher logs.
+
+## Same-namespace `podSelector` doesn't need `namespaceSelector`
+
+For rules that target the *same* namespace as the NetworkPolicy itself — e.g. router internal-listener rules accepting traffic from in-namespace fission-bundle pods — use `podSelector` alone:
+```yaml
+- from:
+    - podSelector:
+        matchLabels:
+          svc: kubewatcher
+```
+This implicitly scopes to the policy's own namespace.
+Don't reach for `namespaceSelector.matchLabels.kubernetes.io/metadata.name: <ns>` to "be explicit" — that label is auto-populated by the `NamespaceDefaultLabelName` admission plugin which is **not guaranteed** across every supported k8s version/distribution.
+Adding it makes the policy silently no-op on clusters where it isn't set, while contributing nothing on clusters where it is.
+
+Rule of thumb:
+- Same namespace as the policy → `podSelector` only.
+- Different namespace → `namespaceSelector: {}` (any) or `namespaceSelector.matchLabels: {key: value}` where `key/value` is a label you **set yourself** on the source namespace.
 
 ## Verifying enforcement actually happens
 
-The default kindnet CNI enforces NetworkPolicy from kind v0.27 / k8s 1.30+. On older kind, or on EKS without an addon, `NetworkPolicy` resources are accepted by the API but never enforced. If a policy looks correct on disk but doesn't change behaviour, check the CNI:
+The default kindnet CNI enforces NetworkPolicy from kind v0.27 / k8s 1.30+.
+On older kind, or on EKS without an addon, `NetworkPolicy` resources are accepted by the API but never enforced.
+If a policy looks correct on disk but doesn't change behaviour, check the CNI:
 ```bash
 kubectl get pods -n kube-system -o name | grep -E 'kindnet|cilium|calico|weave'
 ```
