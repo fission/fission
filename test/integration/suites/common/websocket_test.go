@@ -4,6 +4,8 @@ package common_test
 
 import (
 	"context"
+	"net/http"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -12,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 	"github.com/fission/fission/test/integration/framework"
 )
 
@@ -44,20 +47,50 @@ func TestWebsocket(t *testing.T) {
 		Name: fnName, Env: envName, Code: codePath,
 	})
 
-	// http://127.0.0.1:8888 → ws://127.0.0.1:8888.
-	base := f.Router(t).BaseURL()
+	// /fission-function/<fn> moved off the public listener after
+	// GHSA-3g33-6vg6-27m8 — dial the internal listener instead, and
+	// sign the upgrade-handshake HTTP request with ServiceRouterInternal.
+	// http://127.0.0.1:8889 → ws://127.0.0.1:8889.
+	base := f.RouterInternalBaseURL()
 	require.True(t, strings.HasPrefix(base, "http://"),
-		"router base URL must be http:// for ws rewrite, got %q", base)
-	wsURL := "ws://" + strings.TrimPrefix(base, "http://") + "/fission-function/" + fnName
+		"router internal base URL must be http:// for ws rewrite, got %q", base)
+	path := "/fission-function/" + fnName
+	wsURL := "ws://" + strings.TrimPrefix(base, "http://") + path
+
+	// Build the HMAC-signed upgrade headers. Empty secret leaves the
+	// dial unsigned, which is fine when internalAuth.enabled=false on
+	// the cluster (verifier short-circuits to pass-through).
+	master := f.InternalAuthSecret()
+	dialHeader := http.Header{}
+	if len(master) > 0 {
+		key := hmacauth.DeriveServiceKey(master, hmacauth.ServiceRouterInternal)
+		ts := time.Now().Unix()
+		// gorilla/websocket dials with GET; canonical includes the
+		// request-URI (path + raw query). No body on the upgrade
+		// handshake, so body is nil.
+		sig := hmacauth.Sign(key, http.MethodGet, path, nil, ts)
+		dialHeader.Set(hmacauth.HeaderTimestamp, strconv.FormatInt(ts, 10))
+		dialHeader.Set(hmacauth.HeaderSignature, sig)
+	}
 
 	// First connect can race the executor specializing the pod; retry
-	// until dial succeeds.
+	// until dial succeeds. Re-sign on every attempt so the timestamp
+	// stays inside the verifier's skew window.
 	var conn *websocket.Conn
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		hdr := dialHeader
+		if len(master) > 0 {
+			key := hmacauth.DeriveServiceKey(master, hmacauth.ServiceRouterInternal)
+			ts := time.Now().Unix()
+			sig := hmacauth.Sign(key, http.MethodGet, path, nil, ts)
+			hdr = http.Header{}
+			hdr.Set(hmacauth.HeaderTimestamp, strconv.FormatInt(ts, 10))
+			hdr.Set(hmacauth.HeaderSignature, sig)
+		}
 		dctx, dcancel := context.WithTimeout(ctx, 10*time.Second)
 		defer dcancel()
 		var err error
-		conn, _, err = websocket.DefaultDialer.DialContext(dctx, wsURL, nil)
+		conn, _, err = websocket.DefaultDialer.DialContext(dctx, wsURL, hdr)
 		assert.NoErrorf(c, err, "websocket dial %q", wsURL)
 	}, 90*time.Second, 2*time.Second)
 	defer func() { _ = conn.Close() }()
