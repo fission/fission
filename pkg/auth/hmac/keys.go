@@ -64,9 +64,16 @@ const derivedKeyLength = 32
 // different keys, so a leak of one channel's derived key reveals
 // neither the master nor any other channel's key.
 //
-// Returns nil for an empty master so callers can use the result
-// directly with the existing emptiness checks in NewSigner /
-// VerifierOpts (empty key disables signing / enforcement).
+// Returns nil for an empty master. Callers should treat a nil/empty
+// master as "internalAuth disabled" and skip wrapping their transport
+// or registering the verifier middleware entirely (see
+// pkg/storagesvc/client.MakeClient and pkg/storagesvc/storagesvc.go::Start
+// for the canonical patterns). The Signer also short-circuits to a
+// pass-through when constructed with an empty secret as defence in
+// depth, but relying on that is discouraged because the Verifier
+// behaves the same — and the cleaner upgrade path is for both ends to
+// agree by both being unsigned, not by one side signing with an empty
+// key while the other passes through.
 func DeriveServiceKey(master []byte, service Service) []byte {
 	if len(master) == 0 {
 		return nil
@@ -85,10 +92,11 @@ func DeriveServiceKey(master []byte, service Service) []byte {
 }
 
 // ServiceSigner returns a Signer whose key is derived from `master`
-// for the given service. Pass-through when master is empty: returns
-// a Signer that wraps rt as-is via NewSigner(nil, ...) — but in
-// practice callers should check emptiness and skip wrapping the
-// transport entirely. See pkg/storagesvc/client.MakeClient for the
+// for the given service. When master is empty the returned Signer
+// short-circuits to pass-through (no headers added, no body buffering)
+// — but in practice callers should check emptiness and skip wrapping
+// the transport entirely so the http.Client falls back to its inner
+// transport directly. See pkg/storagesvc/client.MakeClient for the
 // canonical pattern.
 func ServiceSigner(master []byte, service Service, rt http.RoundTripper, now func() time.Time) *Signer {
 	return NewSigner(DeriveServiceKey(master, service), rt, now)
