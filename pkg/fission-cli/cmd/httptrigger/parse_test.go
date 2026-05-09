@@ -152,15 +152,21 @@ func Test_GetIngressConfig(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "wrong-annotations-value-2",
+			name: "annotation-value-with-equals",
 			args: args{
 				ingressConfig:       nil,
 				annotations:         []string{"a=b=c"},
 				rule:                "-",
 				fallbackRelativeURL: "/test",
 			},
-			want:    nil,
-			wantErr: true,
+			want: &fv1.IngressConfig{
+				Annotations: map[string]string{
+					"a": "b=c",
+				},
+				Host: "*",
+				Path: "/test",
+			},
+			wantErr: false,
 		},
 		{
 			name: "wrong-rule-value-1",
@@ -178,7 +184,7 @@ func Test_GetIngressConfig(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "wrong-rule-value-2",
+			name: "rule-path-with-equals",
 			args: args{
 				ingressConfig: &fv1.IngressConfig{
 					Annotations: map[string]string{
@@ -186,11 +192,18 @@ func Test_GetIngressConfig(t *testing.T) {
 					},
 				},
 				annotations:         []string{"a=b"},
-				rule:                "a=b=c",
+				rule:                "a=/b=c",
 				fallbackRelativeURL: "/test",
 			},
-			want:    nil,
-			wantErr: true,
+			want: &fv1.IngressConfig{
+				Annotations: map[string]string{
+					"hello": "world",
+					"a":     "b",
+				},
+				Host: "a",
+				Path: "/b=c",
+			},
+			wantErr: false,
 		},
 		{
 			name: "ingressconfog-with-only-fallback-rul",
@@ -384,6 +397,17 @@ func Test_getIngressAnnotations(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "annotation-value-with-equals",
+			args: args{
+				annotations: []string{"nginx.ingress.kubernetes.io/rewrite-target=/api?token=a=b"},
+			},
+			wantRemove: false,
+			wantAnns: map[string]string{
+				"nginx.ingress.kubernetes.io/rewrite-target": "/api?token=a=b",
+			},
+			wantErr: false,
+		},
+		{
 			name: "remove-all-annotations",
 			args: args{
 				annotations: []string{"-", "c=d"},
@@ -395,7 +419,7 @@ func Test_getIngressAnnotations(t *testing.T) {
 		{
 			name: "incorrect-annotation",
 			args: args{
-				annotations: []string{"a==b"},
+				annotations: []string{"a"},
 			},
 			wantRemove: false,
 			wantAnns:   nil,
@@ -459,6 +483,17 @@ func Test_getIngressHostRule(t *testing.T) {
 			wantEmpty: false,
 			wantHost:  "a",
 			wantPath:  "b",
+			wantErr:   false,
+		},
+		{
+			name: "path-with-equals",
+			args: args{
+				rule:         "example.com=/search?q=a=b",
+				fallbackPath: "/foo",
+			},
+			wantEmpty: false,
+			wantHost:  "example.com",
+			wantPath:  "/search?q=a=b",
 			wantErr:   false,
 		},
 		{
