@@ -24,11 +24,13 @@ import (
 	"html"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/gorilla/mux"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/executor/client"
 	"github.com/fission/fission/pkg/executor/fscache"
@@ -267,6 +269,27 @@ func (executor *Executor) dumpDebugInfo(w http.ResponseWriter, r *http.Request) 
 // GetHandler returns an http.Handler.
 func (executor *Executor) GetHandler() http.Handler {
 	r := mux.NewRouter()
+	// Register the HMAC verifier middleware before the metrics
+	// middleware so 401 rejections are counted at the same layer as
+	// other auth failures and the metrics middleware sees the post-
+	// verification request. The master secret (when set via
+	// FISSION_INTERNAL_AUTH_SECRET on the executor pod) is derived
+	// per-service for ServiceExecutor so a leak of this executor's
+	// runtime memory cannot forge requests on other Fission internal
+	// channels (storagesvc, fetcher, builder, router-internal). An
+	// empty master means the underlying Verifier short-circuits to
+	// pass-through, preserving backwards compatibility for installs
+	// with internalAuth disabled. /healthz is bypassed so kubelet
+	// probes continue to pass without signing. See
+	// docs/internal-auth/00-design.md.
+	master := []byte(os.Getenv("FISSION_INTERNAL_AUTH_SECRET"))
+	masterOld := []byte(os.Getenv("FISSION_INTERNAL_AUTH_SECRET_OLD"))
+	r.Use(hmacauth.ServiceVerifier(master, masterOld, hmacauth.ServiceExecutor, hmacauth.VerifierOpts{
+		SkewSec:      60,
+		Bypass:       []string{"/healthz"},
+		MaxBodyBytes: hmacauth.DefaultMaxBodyBytes,
+		Logger:       executor.logger.WithName("hmac"),
+	}))
 	r.Use(metrics.HTTPMetricMiddleware)
 	r.HandleFunc("/v2/getServiceForFunction", executor.getServiceForFunctionAPI).Methods("POST")
 	r.HandleFunc("/v2/tapService", executor.tapService).Methods("POST") // for backward compatibility

@@ -29,9 +29,16 @@ spec:
           value: {{ .Values.debugEnv | quote }}
         - name: PPROF_ENABLED
           value: {{ .Values.pprof.enabled | quote }}
+        # /fission-function/<ns>/<name> lives only on the router's
+        # internal listener (GHSA-3g33-6vg6-27m8). Publishing there
+        # requires HMAC signing; the env mounted by internalAuth.envs
+        # supplies the secret.
+        - name: ROUTER_INTERNAL_URL
+          value: "http://router-internal.{{ .Release.Namespace }}:{{ .Values.router.internalPort | default 8889 }}"
         {{- include "fission-resource-namespace.envs" . | indent 8 }}
         {{- include "kube_client.envs" . | indent 8 }}
         {{- include "opentelemtry.envs" . | indent 8 }}
+        {{- include "internalAuth.envs" . | indent 8 }}
         resources:
           {{- toYaml .Values.timer.resources | nindent 10 }}
         {{- if .Values.terminationMessagePath }}

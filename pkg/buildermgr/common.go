@@ -34,6 +34,7 @@ import (
 	"github.com/fission/fission/pkg/fetcher"
 	fetcherClient "github.com/fission/fission/pkg/fetcher/client"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
+	storagesvcClient "github.com/fission/fission/pkg/storagesvc/client"
 )
 
 // buildPackage helps to build source package into deployment package.
@@ -56,8 +57,13 @@ func buildPackage(ctx context.Context, logger logr.Logger, fissionClient version
 
 	svcName := fmt.Sprintf("%s-%s.%s", env.Name, env.ResourceVersion, envBuilderNamespace)
 	srcPkgFilename := fmt.Sprintf("%s-%s", pkg.Name, strings.ToLower(uniuri.NewLen(6)))
-	fetcherC := fetcherClient.MakeClient(logger, fmt.Sprintf("http://%s:8000", svcName))
-	builderC := builderClient.MakeClient(logger, fmt.Sprintf("http://%s:8001", svcName))
+	// HMACSecretFromEnv returns nil when internalAuth is disabled; the
+	// fetcher / builder clients pass-through unsigned in that case,
+	// which matches the corresponding verifier's empty-secret short-
+	// circuit on the server side.
+	masterSecret := storagesvcClient.HMACSecretFromEnv()
+	fetcherC := fetcherClient.MakeClient(logger, fmt.Sprintf("http://%s:8000", svcName), masterSecret)
+	builderC := builderClient.MakeClient(logger, fmt.Sprintf("http://%s:8001", svcName), masterSecret)
 
 	defer func() {
 		logger.Info("cleaning src pkg from builder storage", "source_package", srcPkgFilename)

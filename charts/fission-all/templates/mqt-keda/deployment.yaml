@@ -28,6 +28,17 @@ spec:
         env:
         - name: DEBUG_ENV
           value: {{ .Values.debugEnv | quote }}
+        # KEDA-managed connector deployments invoke functions through
+        # /fission-function/<ns>/<name>, which moved to the router's
+        # internal listener with GHSA-3g33-6vg6-27m8. The scalermanager
+        # uses ROUTER_INTERNAL_URL (when set) as HTTP_ENDPOINT for the
+        # connector deployments it creates. Note: upstream KEDA
+        # connector images do not currently sign their requests, so
+        # operators that enable the HMAC verifier on the router must
+        # build signing-aware connector images. See the comment on
+        # StartScalerManager in pkg/mqtrigger/scalermanager.go.
+        - name: ROUTER_INTERNAL_URL
+          value: "http://router-internal.{{ .Release.Namespace }}:{{ .Values.router.internalPort | default 8889 }}"
         - name: CONNECTOR_IMAGE_PULL_POLICY
           value: "{{ .Values.pullPolicy }}"
         - name: KAFKA_IMAGE

@@ -35,30 +35,62 @@ spec:
           protocol: TCP
     # Internal Fission components that publish events to the router.
     # Listed explicitly for documentation even though the open rule
-    # above already covers them.
+    # above already covers them. `podSelector` without
+    # `namespaceSelector` matches pods only in this NetworkPolicy's
+    # own namespace (the chart release namespace), which is the scope
+    # we want — and is portable across k8s versions/configs that may
+    # not auto-populate the `kubernetes.io/metadata.name` namespace
+    # label.
     - from:
-        - namespaceSelector: {}
-          podSelector:
+        - podSelector:
             matchLabels:
               svc: kubewatcher
-        - namespaceSelector: {}
-          podSelector:
+        - podSelector:
             matchLabels:
               svc: timer
-        - namespaceSelector: {}
-          podSelector:
+        - podSelector:
             matchLabels:
               svc: mqtrigger
-        - namespaceSelector: {}
-          podSelector:
+        - podSelector:
             matchLabels:
               svc: mqtrigger-keda
-        - namespaceSelector: {}
-          podSelector:
+        - podSelector:
             matchLabels:
               svc: canaryconfig
       ports:
         - port: 8888
+          protocol: TCP
+    # Internal listener (port {{ .Values.router.internalPort | default 8889 }}) — serves
+    # /fission-function/<ns>/<name>. After GHSA-3g33-6vg6-27m8 these
+    # routes are NOT registered on the public listener, so all
+    # in-cluster trigger callers must reach the router on this port.
+    # The HMAC verifier wraps the listener; this NetworkPolicy is the
+    # second layer of defence (zero-trust transport, per RFC-0004) that
+    # keeps unsigned attackers out of port {{ .Values.router.internalPort | default 8889 }} entirely.
+    - from:
+        - podSelector:
+            matchLabels:
+              svc: kubewatcher
+        - podSelector:
+            matchLabels:
+              svc: timer
+        - podSelector:
+            matchLabels:
+              svc: mqtrigger
+        - podSelector:
+            matchLabels:
+              svc: mqtrigger-keda
+        - podSelector:
+            matchLabels:
+              svc: canaryconfig
+        - podSelector:
+            matchLabels:
+              svc: executor
+        - podSelector:
+            matchLabels:
+              svc: buildermgr
+      ports:
+        - port: {{ .Values.router.internalPort | default 8889 }}
           protocol: TCP
     # Metrics endpoint open to any scraper.
     - ports:

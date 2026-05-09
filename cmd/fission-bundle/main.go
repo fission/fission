@@ -38,6 +38,7 @@ import (
 	mqt "github.com/fission/fission/pkg/mqtrigger"
 	"github.com/fission/fission/pkg/router"
 	"github.com/fission/fission/pkg/storagesvc"
+	storagesvcClient "github.com/fission/fission/pkg/storagesvc/client"
 	"github.com/fission/fission/pkg/timer"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 	"github.com/fission/fission/pkg/utils/manager"
@@ -61,6 +62,7 @@ type CommandLineArgs struct {
 	// Port values
 	webhookPort        int
 	routerPort         int
+	routerInternalPort int
 	executorPort       int
 	storageServicePort int
 
@@ -190,6 +192,7 @@ func setupCommandLineArgs() *CommandLineArgs {
 	// Port flags
 	flag.IntVar(&args.webhookPort, "webhookPort", 0, "Port that the webhook should listen on")
 	flag.IntVar(&args.routerPort, "routerPort", 0, "Port that the router should listen on")
+	flag.IntVar(&args.routerInternalPort, "routerInternalPort", router.DefaultInternalListenerPort, "Port for the router internal listener that serves /fission-function/<ns>/<name>")
 	flag.IntVar(&args.executorPort, "executorPort", 0, "Port that the executor should listen on")
 	flag.IntVar(&args.storageServicePort, "storageServicePort", 0, "Port that the storage service should listen on")
 
@@ -254,7 +257,7 @@ func startRequestedService(ctx context.Context, args *CommandLineArgs, clientGen
 	}
 
 	if args.routerPort != 0 {
-		err = router.Start(ctx, clientGen, logger, mgr, args.routerPort, eclient.MakeClient(logger, args.executorUrl))
+		err = router.Start(ctx, clientGen, logger, mgr, args.routerPort, args.routerInternalPort, eclient.MakeClient(logger, args.executorUrl, storagesvcClient.HMACSecretFromEnv()))
 		if err != nil {
 			logger.Error(err, "router exited")
 		}
@@ -269,8 +272,18 @@ func startRequestedService(ctx context.Context, args *CommandLineArgs, clientGen
 		return
 	}
 
+	// ROUTER_INTERNAL_URL (set by the chart on internal-publisher pods)
+	// overrides the legacy --routerUrl flag for kubewatcher / timer /
+	// mqtrigger / mqt_keda — they all publish to /fission-function/...,
+	// which after GHSA-3g33-6vg6-27m8 lives only on the router's
+	// internal listener (port 8889 on svc/router-internal).
+	publishURL := args.routerUrl
+	if internal := os.Getenv("ROUTER_INTERNAL_URL"); internal != "" {
+		publishURL = internal
+	}
+
 	if args.kubewatcher {
-		err = kubewatcher.Start(ctx, clientGen, logger, mgr, args.routerUrl)
+		err = kubewatcher.Start(ctx, clientGen, logger, mgr, publishURL)
 		if err != nil {
 			logger.Error(err, "kubewatcher exited")
 		}
@@ -278,7 +291,7 @@ func startRequestedService(ctx context.Context, args *CommandLineArgs, clientGen
 	}
 
 	if args.timer {
-		err = timer.Start(ctx, clientGen, logger, mgr, args.routerUrl)
+		err = timer.Start(ctx, clientGen, logger, mgr, publishURL)
 		if err != nil {
 			logger.Error(err, "timer exited")
 		}
@@ -286,7 +299,7 @@ func startRequestedService(ctx context.Context, args *CommandLineArgs, clientGen
 	}
 
 	if args.mqt {
-		err = mqtrigger.Start(ctx, clientGen, logger, mgr, args.routerUrl)
+		err = mqtrigger.Start(ctx, clientGen, logger, mgr, publishURL)
 		if err != nil {
 			logger.Error(err, "message queue manager exited")
 		}
@@ -294,7 +307,7 @@ func startRequestedService(ctx context.Context, args *CommandLineArgs, clientGen
 	}
 
 	if args.mqt_keda {
-		err = mqt.StartScalerManager(ctx, clientGen, logger, mgr, args.routerUrl)
+		err = mqt.StartScalerManager(ctx, clientGen, logger, mgr, publishURL)
 		if err != nil {
 			logger.Error(err, "mqt scaler manager exited")
 		}

@@ -14,6 +14,7 @@ import (
 	"github.com/fission/fission/pkg/mqtrigger"
 	"github.com/fission/fission/pkg/router"
 	"github.com/fission/fission/pkg/storagesvc"
+	storagesvcClient "github.com/fission/fission/pkg/storagesvc/client"
 	"github.com/fission/fission/pkg/timer"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/manager"
@@ -111,31 +112,55 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr manager.Inte
 		return fmt.Errorf("error toggling metric address: %w", err)
 	}
 
-	executor := eclient.MakeClient(f.Logger(), fmt.Sprintf("http://localhost:%d", executorPort))
-	err = router.Start(ctx, f.ClientGen(), f.Logger(), mgr, routerPort, executor)
+	// E2E framework runs the executor in the same process as its caller,
+	// so any FISSION_INTERNAL_AUTH_SECRET set on the test environment
+	// flows into both ends of this client/verifier pair via
+	// HMACSecretFromEnv (returns nil when unset, leaving the channel
+	// unsigned).
+	executor := eclient.MakeClient(f.Logger(), fmt.Sprintf("http://localhost:%d", executorPort), storagesvcClient.HMACSecretFromEnv())
+	internalRouterPort, err := utils.FindFreePort()
+	if err != nil {
+		return fmt.Errorf("error finding unused port for router internal listener: %w", err)
+	}
+	err = router.Start(ctx, f.ClientGen(), f.Logger(), mgr, routerPort, internalRouterPort, executor)
 	if err != nil {
 		return fmt.Errorf("error starting router: %w", err)
 	}
 	f.AddServiceInfo("router", framework.ServiceInfo{Port: routerPort})
+	f.AddServiceInfo("router-internal", framework.ServiceInfo{Port: internalRouterPort})
 	routerURL, err := f.GetServiceURL("router")
 	if err != nil {
 		return fmt.Errorf("error getting router URL: %w", err)
 	}
 	os.Setenv("FISSION_ROUTER_URL", routerURL)
+	// Point internal callers (timer / kubewatcher / mqtrigger) at the
+	// router internal listener so /fission-function/<ns>/<name> reaches
+	// the right port post-GHSA-3g33-6vg6-27m8.
+	internalRouterURL, err := f.GetServiceURL("router-internal")
+	if err != nil {
+		return fmt.Errorf("error getting router internal URL: %w", err)
+	}
+	os.Setenv("ROUTER_INTERNAL_URL", internalRouterURL)
 
-	err = timer.Start(ctx, f.ClientGen(), f.Logger(), mgr, routerURL)
+	// timer / kubewatcher / mqtrigger publish to /fission-function/...,
+	// which after GHSA-3g33-6vg6-27m8 lives only on the router internal
+	// listener. The fission-bundle entrypoint resolves
+	// ROUTER_INTERNAL_URL from the env before forwarding into these
+	// Start functions; this in-process harness has to do the same
+	// resolution explicitly because it bypasses the bundle.
+	err = timer.Start(ctx, f.ClientGen(), f.Logger(), mgr, internalRouterURL)
 	if err != nil {
 		return fmt.Errorf("error starting timer: %w", err)
 	}
 	f.AddServiceInfo("timer", framework.ServiceInfo{})
 
-	err = mqtrigger.StartScalerManager(ctx, f.ClientGen(), f.Logger(), mgr, routerURL)
+	err = mqtrigger.StartScalerManager(ctx, f.ClientGen(), f.Logger(), mgr, internalRouterURL)
 	if err != nil {
 		return fmt.Errorf("error starting mqt scaler manager: %w", err)
 	}
 	f.AddServiceInfo("mqtrigger-keda", framework.ServiceInfo{})
 
-	err = kubewatcher.Start(ctx, f.ClientGen(), f.Logger(), mgr, routerURL)
+	err = kubewatcher.Start(ctx, f.ClientGen(), f.Logger(), mgr, internalRouterURL)
 	if err != nil {
 		return fmt.Errorf("error starting kubewatcher: %w", err)
 	}

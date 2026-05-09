@@ -23,6 +23,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"errors"
 
@@ -30,9 +31,27 @@ import (
 	"github.com/go-logr/logr"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 	"github.com/fission/fission/pkg/mqtrigger"
 	"github.com/fission/fission/pkg/utils"
 )
+
+// newKafkaHTTPClient builds the http.Client used to invoke functions
+// through the router. When FISSION_INTERNAL_AUTH_SECRET is set the
+// transport is wrapped with hmacauth.ServiceSigner for
+// ServiceRouterInternal, so every /fission-function/<ns>/<name>
+// request carries the X-Fission-Auth-* headers required by the
+// router's internal-listener verifier. Using the per-service derived
+// key keeps a leak of this consumer's runtime memory from forging
+// requests on other Fission internal channels (storagesvc, fetcher,
+// builder, executor). See docs/internal-auth/00-design.md.
+func newKafkaHTTPClient() *http.Client {
+	rt := http.DefaultTransport
+	if master := os.Getenv("FISSION_INTERNAL_AUTH_SECRET"); master != "" {
+		return &http.Client{Transport: hmacauth.ServiceSigner([]byte(master), hmacauth.ServiceRouterInternal, rt, time.Now)}
+	}
+	return &http.Client{Transport: rt}
+}
 
 type MqtConsumerGroupHandler struct {
 	version        sarama.KafkaVersion
@@ -42,6 +61,10 @@ type MqtConsumerGroupHandler struct {
 	producer       sarama.SyncProducer
 	fnUrl          string
 	ready          chan bool
+	// httpClient invokes the function via the router. It signs each
+	// request when FISSION_INTERNAL_AUTH_SECRET is set, so the
+	// router's internal-listener HMAC verifier accepts it.
+	httpClient *http.Client
 }
 
 func NewMqtConsumerGroupHandler(version sarama.KafkaVersion,
@@ -50,11 +73,12 @@ func NewMqtConsumerGroupHandler(version sarama.KafkaVersion,
 	producer sarama.SyncProducer,
 	routerUrl string) MqtConsumerGroupHandler {
 	ch := MqtConsumerGroupHandler{
-		version:  version,
-		logger:   logger,
-		trigger:  trigger,
-		producer: producer,
-		ready:    make(chan bool),
+		version:    version,
+		logger:     logger,
+		trigger:    trigger,
+		producer:   producer,
+		ready:      make(chan bool),
+		httpClient: newKafkaHTTPClient(),
 	}
 	// Support other function ref types
 	if ch.trigger.Spec.FunctionReference.Type != fv1.FunctionReferenceTypeFunctionName {
@@ -162,11 +186,21 @@ func (ch *MqtConsumerGroupHandler) kafkaMsgHandler(msg *sarama.ConsumerMessage) 
 		req.Header.Set(k, v)
 	}
 
-	// Make the request
+	// Make the request via the per-handler client so HMAC
+	// signing (when configured) is applied. Reset the body on every
+	// retry: net/http closes req.Body after each Do() call, AND the
+	// HMAC signing transport reads it for the canonical hash —
+	// without resetting we'd send an empty body on retry and fail
+	// signature verification on the receiving side.
 	var resp *http.Response
 	for attempt := 0; attempt <= ch.trigger.Spec.MaxRetries; attempt++ {
-		// Make the request
-		resp, err = http.DefaultClient.Do(req)
+		req.Body = io.NopCloser(strings.NewReader(value))
+		// GetBody is also set so net/http's redirect / retryablehttp
+		// paths can re-read the body if they need to.
+		req.GetBody = func() (io.ReadCloser, error) {
+			return io.NopCloser(strings.NewReader(value)), nil
+		}
+		resp, err = ch.httpClient.Do(req)
 		if err != nil {
 			ch.logger.Error(err, "sending function invocation request failed", "function_url", ch.fnUrl,
 				"trigger", ch.trigger.Name)

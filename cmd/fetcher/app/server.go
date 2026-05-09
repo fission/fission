@@ -30,6 +30,7 @@ import (
 
 	"github.com/go-logr/logr"
 
+	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/fetcher"
 	"github.com/fission/fission/pkg/utils/httpserver"
@@ -124,7 +125,26 @@ func Run(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger log
 
 	logger.Info("fetcher ready to receive requests")
 
-	handler := otelUtils.GetHandlerWithOTEL(mux, "fission-fetcher", otelUtils.UrlsToIgnore("/healthz", "/readiness-healthz"))
+	// Wrap the mux with the HMAC verifier middleware. The master
+	// secret (when set via FISSION_INTERNAL_AUTH_SECRET on the function
+	// pod's fetcher container) is derived per-service for
+	// ServiceFetcher so a leak of this fetcher's runtime memory cannot
+	// forge requests on other Fission internal channels (storagesvc,
+	// builder, executor, router-internal). An empty master means the
+	// underlying Verifier short-circuits to pass-through, preserving
+	// backwards compatibility for installs with internalAuth disabled.
+	// /healthz and /readiness-healthz are bypassed so kubelet probes
+	// continue to pass without signing. See
+	// docs/internal-auth/00-design.md.
+	master := []byte(os.Getenv("FISSION_INTERNAL_AUTH_SECRET"))
+	masterOld := []byte(os.Getenv("FISSION_INTERNAL_AUTH_SECRET_OLD"))
+	verifier := hmacauth.ServiceVerifier(master, masterOld, hmacauth.ServiceFetcher, hmacauth.VerifierOpts{
+		SkewSec:      60,
+		Bypass:       []string{"/healthz", "/readiness-healthz"},
+		MaxBodyBytes: hmacauth.DefaultMaxBodyBytes,
+		Logger:       logger.WithName("hmac"),
+	})
+	handler := otelUtils.GetHandlerWithOTEL(verifier(mux), "fission-fetcher", otelUtils.UrlsToIgnore("/healthz", "/readiness-healthz"))
 	httpserver.StartServer(ctx, logger, mgr, "fetcher", port, handler)
 	return nil
 }

@@ -59,26 +59,71 @@ create_fission_objects() {
         echo "Function creation failed"
         exit 1
     fi
+
+    echo "Creating HTTPTrigger so the function can be invoked via the public router URL"
+    if fission route create --name hello --url /hello --method GET --function hello; then
+        echo "Successfully created HTTPTrigger"
+    else
+        echo "HTTPTrigger creation failed"
+        exit 1
+    fi
+
     sleep 5
 }
 
 test_fission_objects() {
     doit fission env list
     doit fission function list
+    doit fission httptrigger list
     doit fission check -v 2
     echo "-----------------###############################--------------------"
     echo "                   Running fission object tests"
     echo "-----------------###############################--------------------"
-    if fission function test -v 2 --name hello; then
-        echo "----------------------**********************-------------------------"
-        echo "                           Test success"
-        echo "----------------------**********************-------------------------"
-    else
-        echo "----------------------**********************-------------------------"
-        echo "                            Test failed"
-        echo "----------------------**********************-------------------------"
-        exit 1
-    fi
+    # Invoke via the HTTPTrigger we created in create_fission_objects rather
+    # than via `fission function test`. The CLI's `function test` subcommand
+    # used to invoke /fission-function/<name> directly on the public router,
+    # which is no longer registered there after the GHSA-3g33-6vg6-27m8
+    # listener split. HTTPTriggers are the supported public surface.
+    local pf_log="/tmp/upgrade-test-pf.log"
+    kubectl port-forward svc/router 18888:80 -n "$ns" >"$pf_log" 2>&1 &
+    local pf_pid=$!
+    trap "kill $pf_pid 2>/dev/null || true" RETURN
+
+    # Wait up to 30s for the port-forward to accept connections.
+    local i
+    for i in $(seq 1 30); do
+        if curl -sS --connect-timeout 1 --max-time 2 -o /dev/null "http://127.0.0.1:18888/" 2>/dev/null; then
+            break
+        fi
+        if [ "$i" -eq 30 ]; then
+            echo "router port-forward did not become ready in 30s; pf log:"
+            cat "$pf_log" || true
+            kill $pf_pid 2>/dev/null || true
+            exit 1
+        fi
+        sleep 1
+    done
+
+    # Poll the HTTPTrigger URL until the function is invokable. Function
+    # specialization can take a few seconds on a freshly-upgraded router.
+    for i in $(seq 1 30); do
+        if curl -fsS --max-time 5 "http://127.0.0.1:18888/hello" >/tmp/upgrade-test-resp 2>&1; then
+            echo "----------------------**********************-------------------------"
+            echo "                           Test success"
+            echo "----------------------**********************-------------------------"
+            cat /tmp/upgrade-test-resp || true
+            kill $pf_pid 2>/dev/null || true
+            return 0
+        fi
+        sleep 2
+    done
+
+    echo "----------------------**********************-------------------------"
+    echo "                            Test failed"
+    echo "----------------------**********************-------------------------"
+    cat /tmp/upgrade-test-resp || true
+    kill $pf_pid 2>/dev/null || true
+    exit 1
 }
 
 build_docker_images() {
@@ -92,12 +137,25 @@ build_docker_images() {
 }
 
 kind_image_load() {
+    # Re-tag locally-built images to match the registry prefix the chart
+    # resolves to (HELM_VARS_LATEST_RELEASE: ghcr.io/fission/<name>:latest).
+    # Without this, kubelet with pullPolicy=IfNotPresent looks for
+    # `ghcr.io/fission/fission-bundle:latest` and falls through to GHCR,
+    # pulling whatever was last published from main — which won't have
+    # any flags / templates added since that publish.
+    echo "Re-tagging local images to match HELM_VARS_LATEST_RELEASE..."
+    doit docker tag fission-bundle ghcr.io/fission/fission-bundle:latest
+    doit docker tag fetcher ghcr.io/fission/fetcher:latest
+    doit docker tag builder ghcr.io/fission/builder:latest
+    doit docker tag reporter ghcr.io/fission/reporter:latest
+    doit docker tag preupgradechecks ghcr.io/fission/pre-upgrade-checks:latest
+
     echo "Loading Docker images into Kind cluster."
-    doit kind load docker-image fission-bundle --name kind
-    doit kind load docker-image fetcher --name kind
-    doit kind load docker-image builder --name kind
-    doit kind load docker-image reporter --name kind
-    doit kind load docker-image preupgradechecks --name kind
+    doit kind load docker-image ghcr.io/fission/fission-bundle:latest --name kind
+    doit kind load docker-image ghcr.io/fission/fetcher:latest --name kind
+    doit kind load docker-image ghcr.io/fission/builder:latest --name kind
+    doit kind load docker-image ghcr.io/fission/reporter:latest --name kind
+    doit kind load docker-image ghcr.io/fission/pre-upgrade-checks:latest --name kind
 }
 
 install_fission_cli() {

@@ -50,6 +50,7 @@ import (
 	"github.com/gorilla/mux"
 	"go.opentelemetry.io/otel"
 
+	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 	"github.com/fission/fission/pkg/crd"
 	eclient "github.com/fission/fission/pkg/executor/client"
 	"github.com/fission/fission/pkg/throttler"
@@ -59,48 +60,101 @@ import (
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
+// DefaultInternalListenerPort is the default port for the internal
+// listener that serves /fission-function/<ns>/<name>. It must match the
+// targetPort used by the chart's router Service "internal" port.
+const DefaultInternalListenerPort = 8889
+
+// internalListenerMaxBodyBytes caps the request body size the HMAC
+// verifier on the internal listener will buffer. 64 MiB is large enough
+// for any realistic JSON / form / small-binary payload that flows from
+// timer / kubewatcher / mqtrigger / executor through
+// /fission-function/<ns>/<name>, while still bounding the cost of a
+// malicious oversized request before the signature check runs. This
+// trims significantly below storagesvc's 256 MiB ceiling because
+// function-invocation bodies are typically small request payloads, not
+// archive uploads.
+const internalListenerMaxBodyBytes int64 = 64 << 20
+
 // request url ---[mux]---> Function(name,uid) ----[fmap]----> k8s service url
 
 // request url ---[trigger]---> Function(name, deployment) ----[deployment]----> Function(name, uid) ----[pool mgr]---> k8s service url
 
-func router(ctx context.Context, logger logr.Logger, mgr manager.Interface, httpTriggerSet *HTTPTriggerSet) (*mutableRouter, error) {
-	var mr *mutableRouter
-	mux := mux.NewRouter()
-	mux.Use(metrics.HTTPMetricMiddleware)
+// router constructs the public and internal mutable routers and wires
+// them to httpTriggerSet's reconciliation loop. Both routers are
+// initialised with empty mux.Router instances; the trigger set fills
+// them in on first sync. The USE_ENCODED_PATH setting (see issue
+// https://github.com/fission/fission/issues/1317) is applied by
+// httpTriggerSet.buildMuxes on every reconciliation rather than here,
+// so that the feature stays on across the atomic mux swaps.
+func router(ctx context.Context, logger logr.Logger, mgr manager.Interface, httpTriggerSet *HTTPTriggerSet) (*mutableRouter, *mutableRouter, error) {
+	publicMR := newMutableRouter(logger, mux.NewRouter())
+	internalMR := newMutableRouter(logger.WithName("internal"), mux.NewRouter())
 
-	// see issue https://github.com/fission/fission/issues/1317
-	useEncodedPath, err := strconv.ParseBool(os.Getenv("USE_ENCODED_PATH"))
+	err := httpTriggerSet.subscribeRouter(ctx, mgr, publicMR, internalMR)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	if useEncodedPath {
-		mr = newMutableRouter(logger, mux.UseEncodedPath())
-	} else {
-		mr = newMutableRouter(logger, mux)
-	}
-
-	err = httpTriggerSet.subscribeRouter(ctx, mgr, mr)
-	if err != nil {
-		return nil, err
-	}
-	return mr, nil
+	return publicMR, internalMR, nil
 }
 
-func serve(ctx context.Context, logger logr.Logger, mgr manager.Interface, port int,
+func serve(ctx context.Context, logger logr.Logger, mgr manager.Interface, port int, internalPort int,
 	httpTriggerSet *HTTPTriggerSet) error {
-	mr, err := router(ctx, logger, mgr, httpTriggerSet)
+	publicMR, internalMR, err := router(ctx, logger, mgr, httpTriggerSet)
 	if err != nil {
 		return fmt.Errorf("error making router: %w", err)
 	}
-	handler := otelUtils.GetHandlerWithOTEL(mr, "fission-router", otelUtils.UrlsToIgnore("/router-healthz"))
+
+	publicHandler := otelUtils.GetHandlerWithOTEL(publicMR, "fission-router", otelUtils.UrlsToIgnore("/router-healthz"))
 	mgr.Add(ctx, func(ctx context.Context) {
-		httpserver.StartServer(ctx, logger, mgr, "router", fmt.Sprintf("%d", port), handler)
+		httpserver.StartServer(ctx, logger, mgr, "router", fmt.Sprintf("%d", port), publicHandler)
 	})
+
+	// Internal listener for /fission-function/<ns>/<name>. We wrap the
+	// mutable router with the HMAC verifier so an attacker who somehow
+	// reaches port 8889 (NetworkPolicy-locked to executor / kubewatcher
+	// / timer / mqtrigger) without a valid signature is rejected
+	// before reaching the function-handler proxy. An empty
+	// FISSION_INTERNAL_AUTH_SECRET is the explicit pass-through mode
+	// for first-deploy / migration installs and is safe by virtue of
+	// the NetworkPolicy still gating the port.
+	master := []byte(os.Getenv("FISSION_INTERNAL_AUTH_SECRET"))
+	masterOld := []byte(os.Getenv("FISSION_INTERNAL_AUTH_SECRET_OLD"))
+	internalHandlerInner := otelUtils.GetHandlerWithOTEL(internalMR, "fission-router-internal")
+	// Use the per-service derived key for ServiceRouterInternal so a
+	// leak of the router's runtime memory cannot forge requests on
+	// other Fission internal channels (storagesvc, fetcher, builder,
+	// executor). See docs/internal-auth/00-design.md.
+	verifier := hmacauth.ServiceVerifier(master, masterOld, hmacauth.ServiceRouterInternal, hmacauth.VerifierOpts{
+		SkewSec: 60,
+		// Cap the request body the verifier will buffer before the
+		// signature check; see internalListenerMaxBodyBytes for the
+		// rationale behind 64 MiB.
+		MaxBodyBytes: internalListenerMaxBodyBytes,
+		Logger:       logger.WithName("internal-hmac"),
+	})
+	internalHandler := verifier(internalHandlerInner)
+	mgr.Add(ctx, func(ctx context.Context) {
+		httpserver.StartServer(ctx, logger, mgr, "router-internal", fmt.Sprintf("%d", internalPort), internalHandler)
+	})
+
 	return nil
 }
 
-// Start starts a router
-func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger, mgr manager.Interface, port int, executor eclient.ClientInterface) error {
+// Start starts a router. internalPort is the listener that serves
+// /fission-function/<ns>/<name> and is wrapped with the HMAC verifier;
+// pass DefaultInternalListenerPort to use the default. Zero or
+// negative values are silently substituted with DefaultInternalListenerPort
+// so callers can omit the flag and still get the GHSA-3g33-6vg6-27m8
+// listener split — the public listener no longer registers those
+// routes, so the internal listener is mandatory.
+func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger, mgr manager.Interface, port int, internalPort int, executor eclient.ClientInterface) error {
+	if internalPort <= 0 {
+		internalPort = DefaultInternalListenerPort
+	}
+	if internalPort == port {
+		return fmt.Errorf("router internal port (%d) must differ from public port (%d)", internalPort, port)
+	}
 	fmap := makeFunctionServiceMap(logger, time.Minute)
 
 	fissionClient, err := clientGen.GetFissionClient()
@@ -181,6 +235,12 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 			"default", unTapServiceTimeout)
 	}
 
+	// see issue https://github.com/fission/fission/issues/1317
+	useEncodedPath, err := strconv.ParseBool(os.Getenv("USE_ENCODED_PATH"))
+	if err != nil {
+		return fmt.Errorf("failed to parse USE_ENCODED_PATH: %w", err)
+	}
+
 	triggers, err := makeHTTPTriggerSet(logger.WithName("triggerset"), fmap, fissionClient, kubeClient, executor, &tsRoundTripperParams{
 		timeout:           timeout,
 		timeoutExponent:   timeoutExponent,
@@ -188,7 +248,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		keepAliveTime:     keepAliveTime,
 		maxRetries:        maxRetries,
 		svcAddrRetryCount: svcAddrRetryCount,
-	}, isDebugEnv, unTapServiceTimeout, throttler.MakeThrottler(svcAddrUpdateTimeout))
+	}, isDebugEnv, useEncodedPath, unTapServiceTimeout, throttler.MakeThrottler(svcAddrUpdateTimeout))
 	if err != nil {
 		return fmt.Errorf("error making HTTP trigger set: %w", err)
 	}
@@ -197,11 +257,11 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		metrics.ServeMetrics(ctx, "router", logger, mgr)
 	})
 
-	logger.Info("starting router", "port", port)
+	logger.Info("starting router", "port", port, "internalPort", internalPort)
 
 	tracer := otel.Tracer("router")
 	ctx, span := tracer.Start(ctx, "router/Start")
 	defer span.End()
 
-	return serve(ctx, logger, mgr, port, triggers)
+	return serve(ctx, logger, mgr, port, internalPort, triggers)
 }

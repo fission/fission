@@ -99,7 +99,21 @@ func mqTriggerEventHandlers(ctx context.Context, logger logr.Logger, kubeClient 
 }
 
 // StartScalerManager watches for changes in MessageQueueTrigger and,
-// Based on changes, it Creates, Updates and Deletes Objects of Kind ScaledObjects, AuthenticationTriggers and Deployments
+// Based on changes, it Creates, Updates and Deletes Objects of Kind ScaledObjects, AuthenticationTriggers and Deployments.
+//
+// routerURL is propagated as the HTTP_ENDPOINT env var on KEDA-managed
+// connector deployments. The fission-bundle entrypoint resolves
+// ROUTER_INTERNAL_URL from the environment before invoking this
+// function, so KEDA connectors point at the router's internal
+// listener (where /fission-function/... lives after
+// GHSA-3g33-6vg6-27m8). KEDA connector images sourced from upstream do
+// not currently sign their requests, so deployments that enable both
+// KEDA scalers and the HMAC verifier on the router need connector
+// images that have been updated to sign — operators should either
+// keep FISSION_INTERNAL_AUTH_SECRET unset (rely on NetworkPolicy for
+// isolation, which still gates port 8889 to fission-bundle pods only)
+// or build signing-aware connector images. This is a documented
+// rollout caveat for advisory 4.
 func StartScalerManager(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger, mgr manager.Interface, routerURL string) error {
 	fissionClient, err := clientGen.GetFissionClient()
 	if err != nil {

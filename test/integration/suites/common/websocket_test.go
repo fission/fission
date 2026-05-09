@@ -4,6 +4,8 @@ package common_test
 
 import (
 	"context"
+	"net/http"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -12,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 	"github.com/fission/fission/test/integration/framework"
 )
 
@@ -44,31 +47,78 @@ func TestWebsocket(t *testing.T) {
 		Name: fnName, Env: envName, Code: codePath,
 	})
 
-	// http://127.0.0.1:8888 → ws://127.0.0.1:8888.
-	base := f.Router(t).BaseURL()
+	// /fission-function/<fn> moved off the public listener after
+	// GHSA-3g33-6vg6-27m8 — dial the internal listener instead, and
+	// sign the upgrade-handshake HTTP request with ServiceRouterInternal.
+	// http://127.0.0.1:8889 → ws://127.0.0.1:8889.
+	base := f.RouterInternalBaseURL()
 	require.True(t, strings.HasPrefix(base, "http://"),
-		"router base URL must be http:// for ws rewrite, got %q", base)
-	wsURL := "ws://" + strings.TrimPrefix(base, "http://") + "/fission-function/" + fnName
+		"router internal base URL must be http:// for ws rewrite, got %q", base)
+	path := "/fission-function/" + fnName
+	wsURL := "ws://" + strings.TrimPrefix(base, "http://") + path
+
+	// Build the HMAC-signed upgrade headers. Empty secret leaves the
+	// dial unsigned, which is fine when internalAuth.enabled=false on
+	// the cluster (verifier short-circuits to pass-through).
+	master := f.InternalAuthSecret()
+	dialHeader := http.Header{}
+	if len(master) > 0 {
+		key := hmacauth.DeriveServiceKey(master, hmacauth.ServiceRouterInternal)
+		ts := time.Now().Unix()
+		// gorilla/websocket dials with GET; canonical includes the
+		// request-URI (path + raw query). No body on the upgrade
+		// handshake, so body is nil.
+		sig := hmacauth.Sign(key, http.MethodGet, path, nil, ts)
+		dialHeader.Set(hmacauth.HeaderTimestamp, strconv.FormatInt(ts, 10))
+		dialHeader.Set(hmacauth.HeaderSignature, sig)
+	}
 
 	// First connect can race the executor specializing the pod; retry
-	// until dial succeeds.
+	// the entire dial + send + receive cycle. On slower clusters
+	// (k8s 1.32+ in CI) the websocket-upgrade handshake can succeed
+	// before the function pod's ws-handler is fully attached, in which
+	// case the first frame back is the router's "Error" placeholder
+	// rather than broadcast.js's echo. Re-establishing the connection
+	// drives the retry through pod warmup.
 	var conn *websocket.Conn
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		hdr := dialHeader
+		if len(master) > 0 {
+			key := hmacauth.DeriveServiceKey(master, hmacauth.ServiceRouterInternal)
+			ts := time.Now().Unix()
+			sig := hmacauth.Sign(key, http.MethodGet, path, nil, ts)
+			hdr = http.Header{}
+			hdr.Set(hmacauth.HeaderTimestamp, strconv.FormatInt(ts, 10))
+			hdr.Set(hmacauth.HeaderSignature, sig)
+		}
 		dctx, dcancel := context.WithTimeout(ctx, 10*time.Second)
 		defer dcancel()
-		var err error
-		conn, _, err = websocket.DefaultDialer.DialContext(dctx, wsURL, nil)
-		assert.NoErrorf(c, err, "websocket dial %q", wsURL)
+		c2, _, err := websocket.DefaultDialer.DialContext(dctx, wsURL, hdr)
+		if !assert.NoErrorf(c, err, "websocket dial %q", wsURL) {
+			return
+		}
+		if err := c2.SetReadDeadline(time.Now().Add(10 * time.Second)); !assert.NoError(c, err) {
+			_ = c2.Close()
+			return
+		}
+		if err := c2.WriteMessage(websocket.TextMessage, []byte("hello-from-test")); !assert.NoError(c, err, "websocket write") {
+			_ = c2.Close()
+			return
+		}
+		_, msg, err := c2.ReadMessage()
+		if !assert.NoError(c, err, "websocket read") {
+			_ = c2.Close()
+			return
+		}
+		if !assert.Equalf(c, "hello-from-test", string(msg),
+			"broadcast.js should echo the sent frame back to the same client (got %q)", string(msg)) {
+			_ = c2.Close()
+			return
+		}
+		conn = c2
 	}, 90*time.Second, 2*time.Second)
+	require.NotNil(t, conn, "websocket round-trip never succeeded")
 	defer func() { _ = conn.Close() }()
-
-	require.NoError(t, conn.SetReadDeadline(time.Now().Add(15*time.Second)))
-	require.NoError(t, conn.WriteMessage(websocket.TextMessage, []byte("hello-from-test")))
-
-	_, msg, err := conn.ReadMessage()
-	require.NoError(t, err, "websocket read")
-	require.Equal(t, "hello-from-test", string(msg),
-		"broadcast.js should echo the sent frame back to the same client")
 
 	// Polite close.
 	_ = conn.WriteMessage(websocket.CloseMessage,

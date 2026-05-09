@@ -14,22 +14,64 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 )
 
 // RouterClient wraps an HTTP client pointed at the Fission router (typically
 // the port-forwarded svc/router on 127.0.0.1:8888 in CI).
+//
+// Requests to /fission-function/... are unconditionally routed to the
+// framework's `routerInternal` URL (typically 127.0.0.1:8889) and
+// signed with HMAC-SHA256 because of the GHSA-3g33-6vg6-27m8 listener
+// split — the public listener no longer hosts those routes. The
+// framework reads FISSION_INTERNAL_AUTH_SECRET at startup; an empty
+// secret leaves requests unsigned, which works against clusters where
+// internalAuth.enabled=false (the verifier short-circuits to
+// pass-through).
 type RouterClient struct {
-	baseURL string
-	http    *http.Client
+	baseURL  string
+	internal string
+	http     *http.Client
 }
 
 // Router returns an HTTP client targeting FISSION_ROUTER (or 127.0.0.1:8888).
 func (f *Framework) Router(t *testing.T) *RouterClient {
 	t.Helper()
-	return &RouterClient{
-		baseURL: f.router,
-		http:    &http.Client{Timeout: 30 * time.Second},
+	// The persistent http.Client uses a transport that signs requests
+	// to /fission-function/... with the master HMAC key (when
+	// configured). Other paths (HTTPTriggers, /router-healthz) go
+	// through unsigned to match end-user behaviour against the public
+	// listener.
+	rt := http.DefaultTransport
+	if len(f.internalAuthSecret) > 0 {
+		rt = &routerSigningTransport{
+			master: f.internalAuthSecret,
+			inner:  rt,
+		}
 	}
+	return &RouterClient{
+		baseURL:  f.router,
+		internal: f.routerInternal,
+		http:     &http.Client{Timeout: 30 * time.Second, Transport: rt},
+	}
+}
+
+// routerSigningTransport wraps the framework's outbound transport so
+// that any request whose path begins with /fission-function/ is signed
+// with the ServiceRouterInternal HMAC key. Other paths pass through
+// unsigned.
+type routerSigningTransport struct {
+	master []byte
+	inner  http.RoundTripper
+}
+
+func (t *routerSigningTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	if !strings.HasPrefix(r.URL.Path, "/fission-function/") {
+		return t.inner.RoundTrip(r)
+	}
+	signer := hmacauth.ServiceSigner(t.master, hmacauth.ServiceRouterInternal, t.inner, time.Now)
+	return signer.RoundTrip(r)
 }
 
 // BaseURL returns the configured router base URL (e.g. "http://127.0.0.1:8888").
@@ -48,7 +90,17 @@ func (r *RouterClient) Post(ctx context.Context, path, contentType string, body 
 }
 
 func (r *RouterClient) do(ctx context.Context, method, path, contentType string, body []byte) (int, string, error) {
-	url := r.baseURL + ensureLeadingSlash(path)
+	// /fission-function/... lives only on the internal listener after
+	// GHSA-3g33-6vg6-27m8; route to the internal base URL.
+	// `r.internal` is always non-empty after framework setup
+	// (defaults to http://127.0.0.1:8889 from
+	// routerInternalURLFromEnv).
+	base := r.baseURL
+	p := ensureLeadingSlash(path)
+	if strings.HasPrefix(p, "/fission-function/") {
+		base = r.internal
+	}
+	url := base + p
 	var reqBody io.Reader
 	if body != nil {
 		reqBody = bytes.NewReader(body)

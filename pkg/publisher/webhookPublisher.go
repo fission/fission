@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -31,6 +32,7 @@ import (
 
 	"github.com/go-logr/logr"
 
+	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
@@ -46,6 +48,12 @@ type (
 
 		baseURL string
 		timeout time.Duration
+
+		// httpClient is the per-publisher transport. We keep it on the
+		// struct (rather than reusing the package-level WebhookHttpClient)
+		// so each publisher can carry its own HMAC signer configured at
+		// construction time.
+		httpClient *http.Client
 	}
 	publishRequest struct {
 		ctx        context.Context
@@ -58,11 +66,28 @@ type (
 	}
 )
 
-// MakeWebhookPublisher creates a WebhookPublisher object for the given baseURL
+// MakeWebhookPublisher creates a WebhookPublisher object for the given
+// baseURL. The publisher uses baseURL verbatim; callers that want to
+// override with a router-internal address must resolve it themselves
+// (typically at fission-bundle dispatch time, where the
+// ROUTER_INTERNAL_URL env var is consulted before the routerUrl flag
+// is forwarded into kubewatcher / timer / mqtrigger Start). Keeping
+// MakeWebhookPublisher deterministic lets unit tests construct a
+// publisher against an httptest.Server URL without having to scrub
+// env state.
+//
+// If FISSION_INTERNAL_AUTH_SECRET is set, the publisher's HTTP transport
+// is wrapped with hmacauth.ServiceSigner using ServiceRouterInternal,
+// so each /fission-function/... invocation carries the X-Fission-Auth-*
+// headers that the router's internal-listener verifier expects (with
+// the per-service derived key, not the master). An unset secret leaves
+// the transport unsigned, matching the verifier's pass-through mode
+// for first-deploy installs.
 func MakeWebhookPublisher(logger logr.Logger, baseURL string) *WebhookPublisher {
 	p := &WebhookPublisher{
 		logger:         logger.WithName("webhook_publisher"),
 		baseURL:        baseURL,
+		httpClient:     newWebhookHTTPClient(),
 		requestChannel: make(chan *publishRequest, 32), // buffered channel
 		// TODO make this configurable
 		timeout: 60 * time.Minute,
@@ -72,6 +97,29 @@ func MakeWebhookPublisher(logger logr.Logger, baseURL string) *WebhookPublisher 
 	}
 	go p.svc()
 	return p
+}
+
+// newWebhookHTTPClient constructs the HTTP client used to invoke
+// /fission-function/<ns>/<name> on the router's internal listener.
+// The transport stack is hmacauth (outermost, when secret set) ->
+// otelhttp -> http.DefaultTransport: the signer runs first and
+// computes the canonical form over (method, path, body, timestamp);
+// otelhttp then injects trace headers on the inner transport. OTEL
+// trace headers are intentionally NOT part of the signed canonical
+// form, which keeps the signature stable across tracing-config
+// changes and avoids re-signing per request retry.
+//
+// The signing key is derived from the master via HKDF-SHA256 for
+// ServiceRouterInternal so a leak of this caller's runtime memory
+// cannot forge requests on other Fission internal channels
+// (storagesvc, fetcher, builder, executor). See
+// docs/internal-auth/00-design.md.
+func newWebhookHTTPClient() *http.Client {
+	var rt http.RoundTripper = otelhttp.NewTransport(http.DefaultTransport)
+	if master := os.Getenv("FISSION_INTERNAL_AUTH_SECRET"); master != "" {
+		rt = hmacauth.ServiceSigner([]byte(master), hmacauth.ServiceRouterInternal, rt, time.Now)
+	}
+	return &http.Client{Transport: rt}
 }
 
 // Publish sends a request to the target with payload having given body and headers
@@ -99,6 +147,9 @@ func (p *WebhookPublisher) svc() {
 	}
 }
 
+// WebhookHttpClient is retained for backwards compatibility with any
+// external callers that may have referenced it. New code should use a
+// *WebhookPublisher (which carries its own per-instance http.Client).
 var WebhookHttpClient = &http.Client{
 	Transport: otelhttp.NewTransport(http.DefaultTransport),
 }
@@ -135,7 +186,7 @@ func (p *WebhookPublisher) makeHTTPRequest(r *publishRequest) {
 	// Make the request
 	ctx, cancel := context.WithTimeoutCause(r.ctx, p.timeout, fmt.Errorf("webhook request timed out (%f)s exceeded ", p.timeout.Seconds()))
 	defer cancel()
-	resp, err := ctxhttp.Do(ctx, WebhookHttpClient, req)
+	resp, err := ctxhttp.Do(ctx, p.httpClient, req)
 	if err != nil {
 		logger = logger.WithValues("request", r)
 	} else {

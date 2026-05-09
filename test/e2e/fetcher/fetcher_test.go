@@ -154,7 +154,10 @@ func (f *FetcherTestSuite) SetupSuite() {
 		}
 	})
 
-	f.fetcherClient = client.MakeClient(f.logger, fetcherUrl)
+	// In-process e2e: server and client are in the same process, so the
+	// HMAC master secret (when set on the env) is picked up identically
+	// at both ends via HMACSecretFromEnv.
+	f.fetcherClient = client.MakeClient(f.logger, fetcherUrl, storageClient.HMACSecretFromEnv())
 
 	_, err = cli.ExecCommand(f.framework, ctx, "env", "create", "--name", f.envName, "--image", testEnvImage,
 		"--builder", testBuilderImage)

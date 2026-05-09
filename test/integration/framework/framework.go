@@ -32,7 +32,22 @@ type Framework struct {
 	kubeClient    kubernetes.Interface
 	images        RuntimeImages
 	router        string
-	logger        logr.Logger
+	// routerInternal is the URL the test framework uses for the
+	// router's internal listener (the one hosting /fission-function/...
+	// after the GHSA-3g33-6vg6-27m8 split). Sourced from
+	// FISSION_ROUTER_INTERNAL via routerInternalURLFromEnv, which
+	// always returns a non-empty value (defaulting to
+	// http://127.0.0.1:8889 to match the suite-bootstrap port-forward
+	// of svc/router-internal). The RouterClient unconditionally
+	// routes /fission-function/<ns>/<name> here.
+	routerInternal string
+	// internalAuthSecret is the master HMAC key used to sign
+	// /fission-function/... requests on the internal listener.
+	// Sourced from FISSION_INTERNAL_AUTH_SECRET; empty disables
+	// signing (matches the chart's pass-through mode when
+	// internalAuth.enabled=false).
+	internalAuthSecret []byte
+	logger             logr.Logger
 }
 
 var (
@@ -67,13 +82,15 @@ func newFramework() (*Framework, error) {
 		return nil, err
 	}
 	return &Framework{
-		restConfig:    restConfig,
-		clientGen:     clientGen,
-		fissionClient: fissionClient,
-		kubeClient:    kubeClient,
-		images:        loadRuntimeImages(),
-		router:        routerURLFromEnv(),
-		logger:        loggerfactory.GetLogger(),
+		restConfig:         restConfig,
+		clientGen:          clientGen,
+		fissionClient:      fissionClient,
+		kubeClient:         kubeClient,
+		images:             loadRuntimeImages(),
+		router:             routerURLFromEnv(),
+		routerInternal:     routerInternalURLFromEnv(),
+		internalAuthSecret: internalAuthSecretFromEnv(),
+		logger:             loggerfactory.GetLogger(),
 	}, nil
 }
 
@@ -91,3 +108,17 @@ func (f *Framework) Images() RuntimeImages { return f.images }
 
 // Logger returns the framework logger.
 func (f *Framework) Logger() logr.Logger { return f.logger }
+
+// RouterInternalBaseURL returns the framework's URL for the router's
+// internal listener — the one hosting /fission-function/<ns>/<name>
+// after the GHSA-3g33-6vg6-27m8 split. Tests that bypass the
+// `RouterClient` HTTP helpers (e.g. websocket dials done via
+// gorilla/websocket) should compose their URL from this base.
+func (f *Framework) RouterInternalBaseURL() string { return f.routerInternal }
+
+// InternalAuthSecret returns the master HMAC key the framework uses
+// to sign /fission-function/... requests on the internal listener.
+// Empty when internalAuth is disabled in the cluster — callers should
+// emit unsigned requests in that case (the verifier short-circuits to
+// pass-through).
+func (f *Framework) InternalAuthSecret() []byte { return f.internalAuthSecret }

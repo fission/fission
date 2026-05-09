@@ -24,12 +24,14 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/hashicorp/go-retryablehttp"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"golang.org/x/net/context/ctxhttp"
 
+	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 	"github.com/fission/fission/pkg/builder"
 	ferror "github.com/fission/fission/pkg/error"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
@@ -48,10 +50,28 @@ type (
 	}
 )
 
-func MakeClient(logger logr.Logger, builderUrl string) ClientInterface {
+// MakeClient creates a builder client.
+//
+// masterSecret enables HMAC-SHA256 request signing per the design at
+// docs/internal-auth/00-design.md. The master is the chart-installed
+// fission-internal-auth/secret value; this client derives the
+// per-service signing key for ServiceBuilder internally so a leak of
+// one channel's runtime memory cannot forge requests on a different
+// channel. The builder only enforces signatures when its own copy of
+// the master is set on the server, so passing nil (or empty) here is
+// backwards compatible with installs that have internalAuth disabled.
+//
+// The buildermgr controller pod (the only caller) should pass
+// storagesvcClient.HMACSecretFromEnv(); the same env var
+// (FISSION_INTERNAL_AUTH_SECRET) backs every internal channel.
+func MakeClient(logger logr.Logger, builderUrl string, masterSecret []byte) ClientInterface {
 	hc := retryablehttp.NewClient()
 	hc.ErrorHandler = retryablehttp.PassthroughErrorHandler
-	hc.HTTPClient.Transport = otelhttp.NewTransport(hc.HTTPClient.Transport)
+	var rt http.RoundTripper = otelhttp.NewTransport(hc.HTTPClient.Transport)
+	if len(masterSecret) > 0 {
+		rt = hmacauth.ServiceSigner(masterSecret, hmacauth.ServiceBuilder, rt, time.Now)
+	}
+	hc.HTTPClient.Transport = rt
 	return &client{
 		logger:     logger.WithName("builder_client"),
 		url:        strings.TrimSuffix(builderUrl, "/"),
