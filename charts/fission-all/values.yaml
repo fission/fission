@@ -949,3 +949,24 @@ grafana:
 ## Egress rules are intentionally not added in this round.
 networkPolicy:
   enabled: false
+
+
+## InternalAuth: HMAC-SHA256 application-layer authentication for the
+## internal control-plane HTTP services. See the design at docs/internal-auth/00-design.md for the full design.
+## When enabled, the chart materialises Secret/fission-internal-auth and
+## mounts FISSION_INTERNAL_AUTH_SECRET into storagesvc, buildermgr,
+## executor and router. Storagesvc rejects unsigned /v1/archive requests;
+## the storagesvc-client transparently signs every outgoing request.
+##
+## The secret value is preserved across `helm upgrade` via Helm's
+## `lookup` — once a value is generated, subsequent upgrades reuse it.
+## Override `secret` to bring your own value; set `oldSecret` to the
+## previous value during a rotation window so the verifier accepts both.
+##
+## Disabled here means the cluster falls back to NetworkPolicy + namespace
+## isolation only, matching pre-1.(N+1) behaviour.
+internalAuth:
+  enabled: true
+  # secret: "" — auto-generated on first install; preserved on upgrade.
+  # oldSecret: "" — set during rotation; accepted by the verifier alongside `secret`.
+

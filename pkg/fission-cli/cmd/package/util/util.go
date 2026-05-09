@@ -54,7 +54,12 @@ func UploadArchiveFile(ctx context.Context, client cmd.Client, fileName string) 
 			return nil, fmt.Errorf("error getting fission storage service URL: %w", err)
 		}
 
-		storageClient := storageSvcClient.MakeClient(storagesvcURL.String())
+		hmacSecret, err := storageSvcClient.HMACSecretFromCluster(ctx, client.KubernetesClient, util.GetFissionNamespace())
+		if err != nil {
+			return nil, fmt.Errorf("error reading internal-auth secret: %w", err)
+		}
+
+		storageClient := storageSvcClient.MakeClient(storagesvcURL.String(), hmacSecret)
 		// TODO add a progress bar
 		id, err := storageClient.Upload(ctx, fileName, nil)
 		if err != nil {
@@ -81,15 +86,12 @@ func UploadArchiveFile(ctx context.Context, client cmd.Client, fileName string) 
 }
 
 func getArchiveURL(ctx context.Context, client cmd.Client, archiveID string, serverURL *url.URL) (archiveURL string, err error) {
-	relativeURL, _ := url.Parse(util.FISSION_STORAGE_URI)
-
-	queryString := relativeURL.Query()
-	queryString.Set("id", archiveID)
-	relativeURL.RawQuery = queryString.Encode()
-
-	storageAccessURL := serverURL.ResolveReference(relativeURL)
-
-	resp, err := http.Head(storageAccessURL.String())
+	hmacSecret, err := storageSvcClient.HMACSecretFromCluster(ctx, client.KubernetesClient, util.GetFissionNamespace())
+	if err != nil {
+		return "", err
+	}
+	infoClient := storageSvcClient.MakeClient(serverURL.String(), hmacSecret)
+	resp, err := infoClient.Info(ctx, archiveID)
 	if err != nil {
 		return "", err
 	}
@@ -108,8 +110,9 @@ func getArchiveURL(ctx context.Context, client cmd.Client, archiveID string, ser
 			return "", err
 		}
 		storagesvcURL := "http://" + storageSvc
-		client := storageSvcClient.MakeClient(storagesvcURL)
-		return client.GetUrl(archiveID), nil
+		// GetUrl is a string formatter; HMAC secret not needed here.
+		ssClient := storageSvcClient.MakeClient(storagesvcURL, nil)
+		return ssClient.GetUrl(archiveID), nil
 	case "s3":
 		storageBucket := resp.Header.Get("X-FISSION-BUCKET")
 		s3url := fmt.Sprintf("https://%s.s3.amazonaws.com/%s", storageBucket, archiveID)
@@ -183,8 +186,13 @@ func DownloadStrorageURL(ctx context.Context, client cmd.Client, fileUrl string)
 		}
 		id := url.Query().Get("id")
 
-		client := storageSvcClient.MakeClient(storagesvcURL.String())
-		resp, err = client.GetFile(ctx, id)
+		hmacSecret, err := storageSvcClient.HMACSecretFromCluster(ctx, client.KubernetesClient, util.GetFissionNamespace())
+		if err != nil {
+			return nil, err
+		}
+
+		ssClient := storageSvcClient.MakeClient(storagesvcURL.String(), hmacSecret)
+		resp, err = ssClient.GetFile(ctx, id)
 		if err != nil {
 			return nil, err
 		}

@@ -33,6 +33,41 @@ type Config struct {
 	serviceAccount string
 }
 
+// internalAuthEnvVars returns the env-var entries that mount the
+// HMAC-shared-secret values from the chart-installed Secret/fission-internal-auth
+// onto the fetcher sidecar container. Both keys are marked optional so a
+// pod still admits when the chart's internalAuth is disabled.
+//
+// The fetcher binary calls the storagesvc client, which reads
+// FISSION_INTERNAL_AUTH_SECRET from its environment and signs every
+// outbound request when set. Without these env vars the fetcher's
+// uploads fail with HTTP 401 once storagesvc starts enforcing
+// signatures. See docs/internal-auth/00-design.md.
+func internalAuthEnvVars() []apiv1.EnvVar {
+	return []apiv1.EnvVar{
+		{
+			Name: "FISSION_INTERNAL_AUTH_SECRET",
+			ValueFrom: &apiv1.EnvVarSource{
+				SecretKeyRef: &apiv1.SecretKeySelector{
+					LocalObjectReference: apiv1.LocalObjectReference{Name: "fission-internal-auth"},
+					Key:                  "secret",
+					Optional:             func() *bool { b := true; return &b }(),
+				},
+			},
+		},
+		{
+			Name: "FISSION_INTERNAL_AUTH_SECRET_OLD",
+			ValueFrom: &apiv1.EnvVarSource{
+				SecretKeyRef: &apiv1.SecretKeySelector{
+					LocalObjectReference: apiv1.LocalObjectReference{Name: "fission-internal-auth"},
+					Key:                  "oldSecret",
+					Optional:             func() *bool { b := true; return &b }(),
+				},
+			},
+		},
+	}
+}
+
 func getFetcherResources() (apiv1.ResourceRequirements, error) {
 	resourceReqs := apiv1.ResourceRequirements{
 		Requests: map[apiv1.ResourceName]resource.Quantity{},
@@ -267,7 +302,7 @@ func (cfg *Config) addFetcherToPodSpecWithCommand(podSpec *apiv1.PodSpec, mainCo
 				},
 			},
 		},
-		Env: otel.OtelEnvForContainer(),
+		Env: append(otel.OtelEnvForContainer(), internalAuthEnvVars()...),
 	}
 
 	// Pod is removed from endpoints list for service when it's

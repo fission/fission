@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -27,19 +28,35 @@ import (
 	"net/url"
 	"os"
 	"strings"
-
-	"errors"
+	"time"
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"golang.org/x/net/context/ctxhttp"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 
+	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 	"github.com/fission/fission/pkg/storagesvc"
 )
+
+// internalAuthSecretName is the chart-installed Secret that holds the
+// shared HMAC key used for internal control-plane authentication. The
+// chart's name is fixed; see charts/fission-all/templates/internal-auth-secret.yaml.
+const internalAuthSecretName = "fission-internal-auth"
+
+// internalAuthSecretKey is the data key inside that Secret.
+const internalAuthSecretKey = "secret"
+
+// internalAuthEnv is the env var that controller pods read to obtain
+// the HMAC secret. The chart mounts it as a secretKeyRef.
+const internalAuthEnv = "FISSION_INTERNAL_AUTH_SECRET"
 
 type (
 	ClientInterface interface {
 		Upload(ctx context.Context, filePath string, metadata *map[string]string) (string, error)
 		GetUrl(id string) string
+		Info(ctx context.Context, id string) (*http.Response, error)
 		List(ctx context.Context) ([]string, error)
 		Download(ctx context.Context, id string, filePath string) error
 		GetFile(ctx context.Context, id string) (*http.Response, error)
@@ -51,13 +68,70 @@ type (
 	}
 )
 
-// Client creates a storage service client.
-func MakeClient(url string) ClientInterface {
-	hc := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
+// MakeClient creates a storage service client.
+//
+// masterSecret enables HMAC-SHA256 request signing per the design at
+// docs/internal-auth/00-design.md. The master is the chart-installed
+// fission-internal-auth/secret value; this client derives the
+// per-service signing key for ServiceStoragesvc internally so a
+// future leak of one channel's runtime memory cannot forge requests
+// on a different channel. Storagesvc only enforces signatures when
+// its own copy of the master is set on the server, so passing nil
+// (or empty) here is backwards compatible with installs that have
+// internalAuth disabled.
+//
+// Controller pods (storagesvc, buildermgr, the in-pod fetcher binary)
+// should pass HMACSecretFromEnv(); CLI commands should pass
+// HMACSecretFromCluster() so they read the same Secret the cluster
+// uses.
+func MakeClient(url string, masterSecret []byte) ClientInterface {
+	var rt http.RoundTripper = otelhttp.NewTransport(http.DefaultTransport)
+	if len(masterSecret) > 0 {
+		rt = hmacauth.ServiceSigner(masterSecret, hmacauth.ServiceStoragesvc, rt, time.Now)
+	}
+	hc := &http.Client{Transport: rt}
 	return &client{
 		url:        strings.TrimSuffix(url, "/") + "/v1",
 		httpClient: hc,
 	}
+}
+
+// HMACSecretFromEnv returns the HMAC secret from
+// FISSION_INTERNAL_AUTH_SECRET. Returns nil when unset, which leaves
+// the storagesvc client unsigned — the correct backwards-compatible
+// default for installs that have internalAuth disabled.
+func HMACSecretFromEnv() []byte {
+	if s := os.Getenv(internalAuthEnv); s != "" {
+		return []byte(s)
+	}
+	return nil
+}
+
+// HMACSecretFromCluster reads the HMAC secret from the
+// fission-internal-auth Secret in the install namespace. Returns
+// (nil, nil) when the Secret does not exist (internalAuth disabled in
+// the chart) so callers can fall back to unsigned requests; returns
+// a descriptive error when the Secret exists but has no usable
+// `secret` key (mis-configured or hand-authored Secret) so callers
+// don't silently fall back to unsigned and confuse 401 debugging
+// downstream.
+func HMACSecretFromCluster(ctx context.Context, kubeClient kubernetes.Interface, namespace string) ([]byte, error) {
+	if kubeClient == nil {
+		return nil, nil
+	}
+	secret, err := kubeClient.CoreV1().Secrets(namespace).Get(ctx, internalAuthSecretName, metav1.GetOptions{})
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	value, ok := secret.Data[internalAuthSecretKey]
+	if !ok || len(value) == 0 {
+		return nil, fmt.Errorf("secret %s/%s exists but has no %q key with a non-empty value; either the chart's internalAuth materialisation has been overridden or the Secret was hand-authored",
+			namespace, internalAuthSecretName, internalAuthSecretKey)
+	}
+	return value, nil
 }
 
 // Upload sends the local file pointed to by filePath to the storage
@@ -193,6 +267,18 @@ func (c *client) Download(ctx context.Context, id string, filePath string) error
 	}
 
 	return nil
+}
+
+// Info issues a HEAD request for the archive identified by id. The
+// response carries the X-FISSION-STORAGETYPE / X-FISSION-BUCKET headers
+// the CLI uses to decide whether to render a local URL or an S3 URL.
+// The caller is responsible for closing the response body.
+func (c *client) Info(ctx context.Context, id string) (*http.Response, error) {
+	req, err := http.NewRequest(http.MethodHead, c.GetUrl(id), nil)
+	if err != nil {
+		return nil, err
+	}
+	return ctxhttp.Do(ctx, c.httpClient, req)
 }
 
 // Download fetches the file identified by ID to the local file path.

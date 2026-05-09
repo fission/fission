@@ -24,9 +24,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -43,6 +45,7 @@ import (
 	"k8s.io/client-go/tools/reference"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 	"github.com/fission/fission/pkg/crd"
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/error/network"
@@ -62,7 +65,15 @@ type (
 		fissionClient    versioned.Interface
 		kubeClient       kubernetes.Interface
 		httpClient       *http.Client
-		Info             PodInfo
+		// storageHTTPClient is used for storagesvc archive downloads
+		// only. It carries the HMAC signer when internalAuth is enabled
+		// so requests to /v1/archive carry a valid X-Fission-Auth-Signature.
+		// httpClient stays unsigned because it also serves the user
+		// container's /v2/specialize endpoint, which is not the auth
+		// boundary and would otherwise reject the extra headers (or be
+		// confused by the body buffering that signing requires).
+		storageHTTPClient *http.Client
+		Info              PodInfo
 	}
 	PodInfo struct {
 		Name      string
@@ -110,6 +121,18 @@ func MakeFetcher(logger logr.Logger, clientGen crd.ClientGeneratorInterface, sha
 	}
 
 	hc := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
+	// storageHTTPClient signs requests to storagesvc with the HMAC
+	// scheme described in docs/internal-auth/00-design.md when the
+	// chart's internal-auth master secret is mounted. The signer uses
+	// the per-service derived key for ServiceStoragesvc; sharing the
+	// persistent httpClient with the signer wrapper would also sign
+	// the /v2/specialize POST sent to the user container, which
+	// doesn't expect our auth headers — keep the two clients separate.
+	var storageRT http.RoundTripper = otelhttp.NewTransport(http.DefaultTransport)
+	if secret := storageSvcClient.HMACSecretFromEnv(); len(secret) > 0 {
+		storageRT = hmacauth.ServiceSigner(secret, hmacauth.ServiceStoragesvc, storageRT, time.Now)
+	}
+	storageHC := &http.Client{Transport: storageRT}
 	return &Fetcher{
 		logger:           fLogger,
 		sharedVolumePath: sharedVolumePath,
@@ -121,8 +144,38 @@ func MakeFetcher(logger logr.Logger, clientGen crd.ClientGeneratorInterface, sha
 			Name:      string(name),
 			Namespace: string(namespace),
 		},
-		httpClient: hc,
+		httpClient:        hc,
+		storageHTTPClient: storageHC,
 	}, nil
+}
+
+// httpClientForURL picks the right downloader for a URL: the signed
+// storageHTTPClient when the URL targets storagesvc (path prefix
+// /v1/archive), the unsigned httpClient otherwise. Without this guard
+// the fetcher would attach our internal HMAC headers to S3 archive
+// downloads, FETCH_URL targets the user supplied (potentially public
+// HTTP servers), and any other external endpoint — leaking auth
+// metadata to third parties for no benefit.
+//
+// Storagesvc URLs always live at /v1/archive[?id=...]; that path is
+// distinctive enough for a host-agnostic match (the host depends on
+// service name, namespace, port-forward, etc., so prefix-matching the
+// host is fragile). A URL whose path doesn't start with /v1/archive
+// is by definition not storagesvc and gets the unsigned client.
+//
+// On parse failure we default to the unsigned client — sending the
+// signed headers to an unparseable URL is the worse failure mode (data
+// exfiltration via headers); failing the download with a clearer error
+// from the inner transport is fine.
+func (fetcher *Fetcher) httpClientForURL(rawURL string) *http.Client {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return fetcher.httpClient
+	}
+	if strings.HasPrefix(parsed.Path, "/v1/archive") {
+		return fetcher.storageHTTPClient
+	}
+	return fetcher.httpClient
 }
 
 func verifyChecksum(fileChecksum, checksum *fv1.Checksum) error {
@@ -279,8 +332,10 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 			"package-namespace": pkg.Namespace,
 			"fetch-url":         req.URL,
 		})...)
-		// fetch the file and save it to the tmp path
-		err := utils.DownloadUrl(ctx, fetcher.httpClient, req.URL, tmpPath)
+		// fetch the file and save it to the tmp path. FETCH_URL targets
+		// are user-supplied — pick the unsigned client unless the URL
+		// happens to point at our own storagesvc.
+		err := utils.DownloadUrl(ctx, fetcher.httpClientForURL(req.URL), req.URL, tmpPath)
 		if err != nil {
 			e := "failed to download url from fetch request"
 			logger.Error(err, e, "url", req.URL)
@@ -326,7 +381,10 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 				"package-namespace": pkg.Namespace,
 				"archive-url":       archive.URL,
 			})...)
-			err := utils.DownloadUrl(ctx, fetcher.httpClient, archive.URL, tmpPath)
+			// archive.URL may resolve to storagesvc (/v1/archive?id=...)
+			// or an external storage backend (S3, GCS, etc.). Sign only
+			// when the URL targets storagesvc.
+			err := utils.DownloadUrl(ctx, fetcher.httpClientForURL(archive.URL), archive.URL, tmpPath)
 			if err != nil {
 				e := "failed to download url from archive"
 				logger.Error(err, e, "url", req.URL)
@@ -556,7 +614,7 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	logger.Info("starting upload...")
-	ssClient := storageSvcClient.MakeClient(req.StorageSvcUrl)
+	ssClient := storageSvcClient.MakeClient(req.StorageSvcUrl, storageSvcClient.HMACSecretFromEnv())
 
 	fileID, err := ssClient.Upload(ctx, dstFilepath, nil)
 	if err != nil {

@@ -110,6 +110,28 @@ Helper template to construct image names with repository and tag
 {{- end}}
 
 {{/*
+internalAuth.envs renders the two env entries that wire the HMAC shared
+secret into a Fission control-plane container. See the design at docs/internal-auth/00-design.md. The OLD
+secret is mounted with optional: true so rotation can drop it without
+forcing the chart to render an empty key.
+*/}}
+{{- define "internalAuth.envs" }}
+{{- if .Values.internalAuth.enabled }}
+- name: FISSION_INTERNAL_AUTH_SECRET
+  valueFrom:
+    secretKeyRef:
+      name: fission-internal-auth
+      key: secret
+- name: FISSION_INTERNAL_AUTH_SECRET_OLD
+  valueFrom:
+    secretKeyRef:
+      name: fission-internal-auth
+      key: oldSecret
+      optional: true
+{{- end }}
+{{- end }}
+
+{{/*
 Define the svc's name
 */}}
 {{- define "fission-webhook.svc" -}}

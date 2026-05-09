@@ -40,7 +40,12 @@ func (opts *ListSubCommand) do(input cli.Input) error {
 		return err
 	}
 
-	client := storagesvcClient.MakeClient(storageAccessURL.String())
+	hmacSecret, err := storagesvcClient.HMACSecretFromCluster(input.Context(), opts.Client().KubernetesClient, util.GetFissionNamespace())
+	if err != nil {
+		return err
+	}
+
+	client := storagesvcClient.MakeClient(storageAccessURL.String(), hmacSecret)
 	files, err := client.List(input.Context())
 	if err != nil {
 		return err

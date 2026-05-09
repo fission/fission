@@ -292,7 +292,7 @@ func (f *FetcherTestSuite) TestFetcherURLType() {
 
 func (f *FetcherTestSuite) TestFetcherUpload() {
 
-	storageClient := storageClient.MakeClient(f.storagesvcURL)
+	storageClient := storageClient.MakeClient(f.storagesvcURL, nil)
 
 	resp, err := f.fetcherClient.Upload(context.Background(), &fetcher.ArchiveUploadRequest{
 		Filename:       "hello.js",
