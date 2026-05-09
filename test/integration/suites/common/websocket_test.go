@@ -74,8 +74,12 @@ func TestWebsocket(t *testing.T) {
 	}
 
 	// First connect can race the executor specializing the pod; retry
-	// until dial succeeds. Re-sign on every attempt so the timestamp
-	// stays inside the verifier's skew window.
+	// the entire dial + send + receive cycle. On slower clusters
+	// (k8s 1.32+ in CI) the websocket-upgrade handshake can succeed
+	// before the function pod's ws-handler is fully attached, in which
+	// case the first frame back is the router's "Error" placeholder
+	// rather than broadcast.js's echo. Re-establishing the connection
+	// drives the retry through pod warmup.
 	var conn *websocket.Conn
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		hdr := dialHeader
@@ -89,19 +93,32 @@ func TestWebsocket(t *testing.T) {
 		}
 		dctx, dcancel := context.WithTimeout(ctx, 10*time.Second)
 		defer dcancel()
-		var err error
-		conn, _, err = websocket.DefaultDialer.DialContext(dctx, wsURL, hdr)
-		assert.NoErrorf(c, err, "websocket dial %q", wsURL)
+		c2, _, err := websocket.DefaultDialer.DialContext(dctx, wsURL, hdr)
+		if !assert.NoErrorf(c, err, "websocket dial %q", wsURL) {
+			return
+		}
+		if err := c2.SetReadDeadline(time.Now().Add(10 * time.Second)); !assert.NoError(c, err) {
+			_ = c2.Close()
+			return
+		}
+		if err := c2.WriteMessage(websocket.TextMessage, []byte("hello-from-test")); !assert.NoError(c, err, "websocket write") {
+			_ = c2.Close()
+			return
+		}
+		_, msg, err := c2.ReadMessage()
+		if !assert.NoError(c, err, "websocket read") {
+			_ = c2.Close()
+			return
+		}
+		if !assert.Equalf(c, "hello-from-test", string(msg),
+			"broadcast.js should echo the sent frame back to the same client (got %q)", string(msg)) {
+			_ = c2.Close()
+			return
+		}
+		conn = c2
 	}, 90*time.Second, 2*time.Second)
+	require.NotNil(t, conn, "websocket round-trip never succeeded")
 	defer func() { _ = conn.Close() }()
-
-	require.NoError(t, conn.SetReadDeadline(time.Now().Add(15*time.Second)))
-	require.NoError(t, conn.WriteMessage(websocket.TextMessage, []byte("hello-from-test")))
-
-	_, msg, err := conn.ReadMessage()
-	require.NoError(t, err, "websocket read")
-	require.Equal(t, "hello-from-test", string(msg),
-		"broadcast.js should echo the sent frame back to the same client")
 
 	// Polite close.
 	_ = conn.WriteMessage(websocket.CloseMessage,

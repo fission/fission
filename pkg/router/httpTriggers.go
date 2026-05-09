@@ -67,13 +67,14 @@ type HTTPTriggerSet struct {
 	updateRouterRequestChannel chan struct{}
 	tsRoundTripperParams       *tsRoundTripperParams
 	isDebugEnv                 bool
+	useEncodedPath             bool
 	svcAddrUpdateThrottler     *throttler.Throttler
 	unTapServiceTimeout        time.Duration
 	syncDebouncer              func(func())
 }
 
 func makeHTTPTriggerSet(logger logr.Logger, fmap *functionServiceMap, fissionClient versioned.Interface,
-	kubeClient kubernetes.Interface, executor eclient.ClientInterface, params *tsRoundTripperParams, isDebugEnv bool, unTapServiceTimeout time.Duration, actionThrottler *throttler.Throttler) (*HTTPTriggerSet, error) {
+	kubeClient kubernetes.Interface, executor eclient.ClientInterface, params *tsRoundTripperParams, isDebugEnv bool, useEncodedPath bool, unTapServiceTimeout time.Duration, actionThrottler *throttler.Throttler) (*HTTPTriggerSet, error) {
 
 	httpTriggerSet := &HTTPTriggerSet{
 		logger:                     logger.WithName("http_trigger_set"),
@@ -85,6 +86,7 @@ func makeHTTPTriggerSet(logger logr.Logger, fmap *functionServiceMap, fissionCli
 		updateRouterRequestChannel: make(chan struct{}, 10), // use buffer channel
 		tsRoundTripperParams:       params,
 		isDebugEnv:                 isDebugEnv,
+		useEncodedPath:             useEncodedPath,
 		svcAddrUpdateThrottler:     actionThrottler,
 		unTapServiceTimeout:        unTapServiceTimeout,
 		syncDebouncer:              debounce.New(time.Millisecond * 20),
@@ -179,6 +181,15 @@ func (ts *HTTPTriggerSet) buildMuxes(fnTimeoutMap map[types.UID]int) (public, in
 
 	public = mux.NewRouter()
 	internal = mux.NewRouter()
+	// Honour USE_ENCODED_PATH (see issue #1317) on every reconciliation:
+	// buildMuxes is called repeatedly by updateRouter and the resulting
+	// routers are atomically swapped under the listener handlers. If we
+	// don't apply UseEncodedPath here, the feature works only until the
+	// first reconciliation and then silently turns off.
+	if ts.useEncodedPath {
+		public = public.UseEncodedPath()
+		internal = internal.UseEncodedPath()
+	}
 
 	public.Use(metrics.HTTPMetricMiddleware)
 	if featureConfig.AuthConfig.IsEnabled {
