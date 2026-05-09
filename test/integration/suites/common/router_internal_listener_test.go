@@ -20,14 +20,17 @@ import (
 // unsigned requests when the HMAC secret is provisioned, while
 // remaining reachable for healthcheck-style probing.
 //
-// Prerequisites:
+// Prerequisites (matching the integration-test bootstrap in the suite
+// workflow / README — the public listener is on Service `router`, the
+// internal listener is on the separate ClusterIP-only Service
+// `router-internal` so routerServiceType=NodePort/LoadBalancer doesn't
+// expose port 8889 outside the cluster):
 //
-//	kubectl port-forward svc/router 8888:80   -n fission &
-//	kubectl port-forward svc/router 8889:8889 -n fission &
+//	kubectl port-forward svc/router          8888:80   -n fission &
+//	kubectl port-forward svc/router-internal 8889:8889 -n fission &
 //
-// (matching the integration-test bootstrap documented in the suite
-// README). The integration suite already requires the public 8888
-// forward; the 8889 forward is new for this advisory.
+// The integration suite already requires the public 8888 forward;
+// the 8889 forward is new for this advisory.
 
 const (
 	publicRouterURL   = "http://localhost:8888"

@@ -21,13 +21,14 @@ import (
 // RouterClient wraps an HTTP client pointed at the Fission router (typically
 // the port-forwarded svc/router on 127.0.0.1:8888 in CI).
 //
-// Requests to /fission-function/... are routed to the internal listener
-// (typically 127.0.0.1:8889) and signed with HMAC-SHA256 because of the
-// GHSA-3g33-6vg6-27m8 listener split — the public listener no longer
-// hosts those routes. The framework reads FISSION_INTERNAL_AUTH_SECRET
-// at startup; an empty secret leaves requests unsigned, which works
-// against clusters where internalAuth.enabled=false (the verifier
-// short-circuits to pass-through).
+// Requests to /fission-function/... are unconditionally routed to the
+// framework's `routerInternal` URL (typically 127.0.0.1:8889) and
+// signed with HMAC-SHA256 because of the GHSA-3g33-6vg6-27m8 listener
+// split — the public listener no longer hosts those routes. The
+// framework reads FISSION_INTERNAL_AUTH_SECRET at startup; an empty
+// secret leaves requests unsigned, which works against clusters where
+// internalAuth.enabled=false (the verifier short-circuits to
+// pass-through).
 type RouterClient struct {
 	baseURL  string
 	internal string
@@ -90,12 +91,13 @@ func (r *RouterClient) Post(ctx context.Context, path, contentType string, body 
 
 func (r *RouterClient) do(ctx context.Context, method, path, contentType string, body []byte) (int, string, error) {
 	// /fission-function/... lives only on the internal listener after
-	// GHSA-3g33-6vg6-27m8. Use the internal base URL when configured;
-	// fall back to the public base URL on installs that haven't
-	// adopted the listener split (older charts, dev clusters).
+	// GHSA-3g33-6vg6-27m8; route to the internal base URL.
+	// `r.internal` is always non-empty after framework setup
+	// (defaults to http://127.0.0.1:8889 from
+	// routerInternalURLFromEnv).
 	base := r.baseURL
 	p := ensureLeadingSlash(path)
-	if strings.HasPrefix(p, "/fission-function/") && r.internal != "" {
+	if strings.HasPrefix(p, "/fission-function/") {
 		base = r.internal
 	}
 	url := base + p
