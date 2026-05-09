@@ -38,10 +38,6 @@ manifests:
           grafana.dashboards.enabled: "false"
           imageTag: ""
           influxdb.enabled: "false"
-          # internalAuth.enabled mirrors the chart default (true) in base
-          # setValues so the kind-ci profile can `replace`-patch it to
-          # exercise the verifier's pass-through mode end-to-end.
-          internalAuth.enabled: "true"
           namespace: fission
           networkPolicy.enabled: "false"
           openTelemetry.otlpCollectorEndpoint: ""
@@ -126,15 +122,6 @@ profiles:
       - op: replace
         path: /manifests/helm/releases/0/setValues/networkPolicy.enabled
         value: true
-      # Disable internalAuth in CI so the test suite exercises the
-      # verifier's pass-through mode (no FISSION_INTERNAL_AUTH_SECRET on
-      # router/fetcher/builder/storagesvc/executor pods, no
-      # fission-internal-auth Secret created). Re-enable here once the
-      # tests are confirmed green to flip CI back to the signed-mode
-      # default.
-      - op: replace
-        path: /manifests/helm/releases/0/setValues/internalAuth.enabled
-        value: false
   - name: kind-ci-old
     patches:
       - op: replace
