@@ -155,12 +155,11 @@ jobs:
           PF_PID=$!
           # The router internal listener (GHSA-3g33-6vg6-27m8 fix) hosts
           # /fission-function/<ns>/<name>; the framework routes those
-          # requests to localhost:8889 with HMAC signing. Forward the
-          # internal port too so integration tests that invoke functions
-          # by name (TestSpecArchive, TestSpecMerge, TestKubectlApply,
-          # TestWebsocket, TestInternalRouterRejectsUnsigned, ...) reach
-          # the right listener.
-          kubectl port-forward svc/router 8889:8889 -n "$FISSION_NAMESPACE" >/tmp/pf-internal.log 2>&1 &
+          # requests to localhost:8889 with HMAC signing. The internal
+          # port lives on a separate ClusterIP-only Service (router-internal)
+          # so routerServiceType=NodePort/LoadBalancer doesn't expose
+          # the listener externally — port-forward that Service.
+          kubectl port-forward svc/router-internal 8889:8889 -n "$FISSION_NAMESPACE" >/tmp/pf-internal.log 2>&1 &
           PF_PID_INT=$!
           trap "kill $PF_PID $PF_PID_INT 2>/dev/null || true" EXIT
 
