@@ -142,19 +142,25 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr manager.Inte
 	}
 	os.Setenv("ROUTER_INTERNAL_URL", internalRouterURL)
 
-	err = timer.Start(ctx, f.ClientGen(), f.Logger(), mgr, routerURL)
+	// timer / kubewatcher / mqtrigger publish to /fission-function/...,
+	// which after GHSA-3g33-6vg6-27m8 lives only on the router internal
+	// listener. The fission-bundle entrypoint resolves
+	// ROUTER_INTERNAL_URL from the env before forwarding into these
+	// Start functions; this in-process harness has to do the same
+	// resolution explicitly because it bypasses the bundle.
+	err = timer.Start(ctx, f.ClientGen(), f.Logger(), mgr, internalRouterURL)
 	if err != nil {
 		return fmt.Errorf("error starting timer: %w", err)
 	}
 	f.AddServiceInfo("timer", framework.ServiceInfo{})
 
-	err = mqtrigger.StartScalerManager(ctx, f.ClientGen(), f.Logger(), mgr, routerURL)
+	err = mqtrigger.StartScalerManager(ctx, f.ClientGen(), f.Logger(), mgr, internalRouterURL)
 	if err != nil {
 		return fmt.Errorf("error starting mqt scaler manager: %w", err)
 	}
 	f.AddServiceInfo("mqtrigger-keda", framework.ServiceInfo{})
 
-	err = kubewatcher.Start(ctx, f.ClientGen(), f.Logger(), mgr, routerURL)
+	err = kubewatcher.Start(ctx, f.ClientGen(), f.Logger(), mgr, internalRouterURL)
 	if err != nil {
 		return fmt.Errorf("error starting kubewatcher: %w", err)
 	}

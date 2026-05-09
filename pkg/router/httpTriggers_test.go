@@ -117,12 +117,17 @@ func TestPublicMuxStillServesHealthAndVersion(t *testing.T) {
 	publicMux.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/_version", nil))
 	assert.Equal(t, http.StatusOK, rr.Code, "/_version must stay on the public listener")
 
-	// Symmetric guard: the internal listener must NOT serve /healthz or
-	// /_version (so cluster monitors can't probe it without HMAC creds
-	// — which would otherwise mask a misconfigured listener).
+	// Symmetric guard: the internal listener must NOT serve
+	// /router-healthz or /_version (so cluster monitors can't probe it
+	// without HMAC creds — which would otherwise mask a misconfigured
+	// listener).
 	rr = httptest.NewRecorder()
 	internalMux.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/router-healthz", nil))
 	assert.Equal(t, http.StatusNotFound, rr.Code, "internal listener must not serve /router-healthz")
+
+	rr = httptest.NewRecorder()
+	internalMux.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/_version", nil))
+	assert.Equal(t, http.StatusNotFound, rr.Code, "internal listener must not serve /_version")
 }
 
 // TestInternalListenerRejectsUnsignedRequests demonstrates that the
