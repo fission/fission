@@ -107,3 +107,17 @@ func (f *Framework) Images() RuntimeImages { return f.images }
 
 // Logger returns the framework logger.
 func (f *Framework) Logger() logr.Logger { return f.logger }
+
+// RouterInternalBaseURL returns the framework's URL for the router's
+// internal listener — the one hosting /fission-function/<ns>/<name>
+// after the GHSA-3g33-6vg6-27m8 split. Tests that bypass the
+// `RouterClient` HTTP helpers (e.g. websocket dials done via
+// gorilla/websocket) should compose their URL from this base.
+func (f *Framework) RouterInternalBaseURL() string { return f.routerInternal }
+
+// InternalAuthSecret returns the master HMAC key the framework uses
+// to sign /fission-function/... requests on the internal listener.
+// Empty when internalAuth is disabled in the cluster — callers should
+// emit unsigned requests in that case (the verifier short-circuits to
+// pass-through).
+func (f *Framework) InternalAuthSecret() []byte { return f.internalAuthSecret }
