@@ -35,10 +35,11 @@ type Framework struct {
 	// routerInternal is the URL the test framework uses for the
 	// router's internal listener (the one hosting /fission-function/...
 	// after the GHSA-3g33-6vg6-27m8 split). Sourced from
-	// FISSION_ROUTER_INTERNAL and defaults to http://127.0.0.1:8889 to
-	// match the suite-bootstrap port-forward of svc/router-internal.
-	// Always non-empty after framework setup; the RouterClient
-	// unconditionally routes /fission-function/<ns>/<name> here.
+	// FISSION_ROUTER_INTERNAL via routerInternalURLFromEnv, which
+	// always returns a non-empty value (defaulting to
+	// http://127.0.0.1:8889 to match the suite-bootstrap port-forward
+	// of svc/router-internal). The RouterClient unconditionally
+	// routes /fission-function/<ns>/<name> here.
 	routerInternal string
 	// internalAuthSecret is the master HMAC key used to sign
 	// /fission-function/... requests on the internal listener.

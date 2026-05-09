@@ -83,27 +83,15 @@ const internalListenerMaxBodyBytes int64 = 64 << 20
 // router constructs the public and internal mutable routers and wires
 // them to httpTriggerSet's reconciliation loop. Both routers are
 // initialised with empty mux.Router instances; the trigger set fills
-// them in on first sync.
+// them in on first sync. The USE_ENCODED_PATH setting (see issue
+// https://github.com/fission/fission/issues/1317) is applied by
+// httpTriggerSet.buildMuxes on every reconciliation rather than here,
+// so that the feature stays on across the atomic mux swaps.
 func router(ctx context.Context, logger logr.Logger, mgr manager.Interface, httpTriggerSet *HTTPTriggerSet) (*mutableRouter, *mutableRouter, error) {
-	publicMux := mux.NewRouter()
-	publicMux.Use(metrics.HTTPMetricMiddleware)
-	internalMux := mux.NewRouter()
+	publicMR := newMutableRouter(logger, mux.NewRouter())
+	internalMR := newMutableRouter(logger.WithName("internal"), mux.NewRouter())
 
-	// see issue https://github.com/fission/fission/issues/1317
-	useEncodedPath, err := strconv.ParseBool(os.Getenv("USE_ENCODED_PATH"))
-	if err != nil {
-		return nil, nil, err
-	}
-	var publicMR, internalMR *mutableRouter
-	if useEncodedPath {
-		publicMR = newMutableRouter(logger, publicMux.UseEncodedPath())
-		internalMR = newMutableRouter(logger.WithName("internal"), internalMux.UseEncodedPath())
-	} else {
-		publicMR = newMutableRouter(logger, publicMux)
-		internalMR = newMutableRouter(logger.WithName("internal"), internalMux)
-	}
-
-	err = httpTriggerSet.subscribeRouter(ctx, mgr, publicMR, internalMR)
+	err := httpTriggerSet.subscribeRouter(ctx, mgr, publicMR, internalMR)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -247,6 +235,12 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 			"default", unTapServiceTimeout)
 	}
 
+	// see issue https://github.com/fission/fission/issues/1317
+	useEncodedPath, err := strconv.ParseBool(os.Getenv("USE_ENCODED_PATH"))
+	if err != nil {
+		return fmt.Errorf("failed to parse USE_ENCODED_PATH: %w", err)
+	}
+
 	triggers, err := makeHTTPTriggerSet(logger.WithName("triggerset"), fmap, fissionClient, kubeClient, executor, &tsRoundTripperParams{
 		timeout:           timeout,
 		timeoutExponent:   timeoutExponent,
@@ -254,7 +248,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		keepAliveTime:     keepAliveTime,
 		maxRetries:        maxRetries,
 		svcAddrRetryCount: svcAddrRetryCount,
-	}, isDebugEnv, unTapServiceTimeout, throttler.MakeThrottler(svcAddrUpdateTimeout))
+	}, isDebugEnv, useEncodedPath, unTapServiceTimeout, throttler.MakeThrottler(svcAddrUpdateTimeout))
 	if err != nil {
 		return fmt.Errorf("error making HTTP trigger set: %w", err)
 	}

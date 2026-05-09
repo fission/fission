@@ -66,13 +66,15 @@ type (
 	}
 )
 
-// MakeWebhookPublisher creates a WebhookPublisher object for the given baseURL.
-//
-// If ROUTER_INTERNAL_URL is set in the environment, baseURL is overridden
-// with that value — this points kubewatcher / timer / mqtrigger at the
-// router's internal listener (port 8889) instead of the public listener
-// (port 8888). The internal listener is the only route registration for
-// /fission-function/<ns>/<name> after GHSA-3g33-6vg6-27m8.
+// MakeWebhookPublisher creates a WebhookPublisher object for the given
+// baseURL. The publisher uses baseURL verbatim; callers that want to
+// override with a router-internal address must resolve it themselves
+// (typically at fission-bundle dispatch time, where the
+// ROUTER_INTERNAL_URL env var is consulted before the routerUrl flag
+// is forwarded into kubewatcher / timer / mqtrigger Start). Keeping
+// MakeWebhookPublisher deterministic lets unit tests construct a
+// publisher against an httptest.Server URL without having to scrub
+// env state.
 //
 // If FISSION_INTERNAL_AUTH_SECRET is set, the publisher's HTTP transport
 // is wrapped with hmacauth.ServiceSigner using ServiceRouterInternal,
@@ -82,9 +84,6 @@ type (
 // the transport unsigned, matching the verifier's pass-through mode
 // for first-deploy installs.
 func MakeWebhookPublisher(logger logr.Logger, baseURL string) *WebhookPublisher {
-	if internal := os.Getenv("ROUTER_INTERNAL_URL"); internal != "" {
-		baseURL = internal
-	}
 	p := &WebhookPublisher{
 		logger:         logger.WithName("webhook_publisher"),
 		baseURL:        baseURL,

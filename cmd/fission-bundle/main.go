@@ -272,8 +272,18 @@ func startRequestedService(ctx context.Context, args *CommandLineArgs, clientGen
 		return
 	}
 
+	// ROUTER_INTERNAL_URL (set by the chart on internal-publisher pods)
+	// overrides the legacy --routerUrl flag for kubewatcher / timer /
+	// mqtrigger / mqt_keda — they all publish to /fission-function/...,
+	// which after GHSA-3g33-6vg6-27m8 lives only on the router's
+	// internal listener (port 8889 on svc/router-internal).
+	publishURL := args.routerUrl
+	if internal := os.Getenv("ROUTER_INTERNAL_URL"); internal != "" {
+		publishURL = internal
+	}
+
 	if args.kubewatcher {
-		err = kubewatcher.Start(ctx, clientGen, logger, mgr, args.routerUrl)
+		err = kubewatcher.Start(ctx, clientGen, logger, mgr, publishURL)
 		if err != nil {
 			logger.Error(err, "kubewatcher exited")
 		}
@@ -281,7 +291,7 @@ func startRequestedService(ctx context.Context, args *CommandLineArgs, clientGen
 	}
 
 	if args.timer {
-		err = timer.Start(ctx, clientGen, logger, mgr, args.routerUrl)
+		err = timer.Start(ctx, clientGen, logger, mgr, publishURL)
 		if err != nil {
 			logger.Error(err, "timer exited")
 		}
@@ -289,7 +299,7 @@ func startRequestedService(ctx context.Context, args *CommandLineArgs, clientGen
 	}
 
 	if args.mqt {
-		err = mqtrigger.Start(ctx, clientGen, logger, mgr, args.routerUrl)
+		err = mqtrigger.Start(ctx, clientGen, logger, mgr, publishURL)
 		if err != nil {
 			logger.Error(err, "message queue manager exited")
 		}
@@ -297,7 +307,7 @@ func startRequestedService(ctx context.Context, args *CommandLineArgs, clientGen
 	}
 
 	if args.mqt_keda {
-		err = mqt.StartScalerManager(ctx, clientGen, logger, mgr, args.routerUrl)
+		err = mqt.StartScalerManager(ctx, clientGen, logger, mgr, publishURL)
 		if err != nil {
 			logger.Error(err, "mqt scaler manager exited")
 		}

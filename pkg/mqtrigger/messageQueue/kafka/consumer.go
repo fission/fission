@@ -72,13 +72,6 @@ func NewMqtConsumerGroupHandler(version sarama.KafkaVersion,
 	trigger *fv1.MessageQueueTrigger,
 	producer sarama.SyncProducer,
 	routerUrl string) MqtConsumerGroupHandler {
-	// If ROUTER_INTERNAL_URL is set in the environment, prefer it over
-	// the routerUrl flag — operators wire it to the router's internal
-	// listener (port 8889), where /fission-function/<ns>/<name> lives
-	// after GHSA-3g33-6vg6-27m8.
-	if internal := os.Getenv("ROUTER_INTERNAL_URL"); internal != "" {
-		routerUrl = internal
-	}
 	ch := MqtConsumerGroupHandler{
 		version:    version,
 		logger:     logger,
