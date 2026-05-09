@@ -37,23 +37,33 @@ spec:
     # Listed explicitly for documentation even though the open rule
     # above already covers them.
     - from:
-        - namespaceSelector: {}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace | quote }}
           podSelector:
             matchLabels:
               svc: kubewatcher
-        - namespaceSelector: {}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace | quote }}
           podSelector:
             matchLabels:
               svc: timer
-        - namespaceSelector: {}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace | quote }}
           podSelector:
             matchLabels:
               svc: mqtrigger
-        - namespaceSelector: {}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace | quote }}
           podSelector:
             matchLabels:
               svc: mqtrigger-keda
-        - namespaceSelector: {}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace | quote }}
           podSelector:
             matchLabels:
               svc: canaryconfig
@@ -68,31 +78,45 @@ spec:
     # second layer of defence (zero-trust transport, per RFC-0004) that
     # keeps unsigned attackers out of port {{ .Values.router.internalPort | default 8889 }} entirely.
     - from:
-        - namespaceSelector: {}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace | quote }}
           podSelector:
             matchLabels:
               svc: kubewatcher
-        - namespaceSelector: {}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace | quote }}
           podSelector:
             matchLabels:
               svc: timer
-        - namespaceSelector: {}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace | quote }}
           podSelector:
             matchLabels:
               svc: mqtrigger
-        - namespaceSelector: {}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace | quote }}
           podSelector:
             matchLabels:
               svc: mqtrigger-keda
-        - namespaceSelector: {}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace | quote }}
           podSelector:
             matchLabels:
               svc: canaryconfig
-        - namespaceSelector: {}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace | quote }}
           podSelector:
             matchLabels:
               svc: executor
-        - namespaceSelector: {}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace | quote }}
           podSelector:
             matchLabels:
               svc: buildermgr

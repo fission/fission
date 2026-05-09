@@ -444,10 +444,15 @@ func (ts *HTTPTriggerSet) updateRouter(ctx context.Context) {
 		}
 		ts.functions = allfunctions
 
-		// make a new pair of routers and swap them in atomically. We
-		// rebuild and swap the public listener even when the internal
-		// listener is disabled (nil), so the legacy single-listener
-		// callers keep their original behaviour.
+		// Rebuild both muxes from the same function snapshot then swap
+		// each in turn. The two updateRouter calls are sequential, not
+		// transactional — a request that arrives between the two swaps
+		// could see an updated public mux and a stale internal mux for
+		// a few microseconds, but both muxes derive from the same
+		// `functions` snapshot so the function set served by either
+		// listener is consistent in steady state. True atomicity across
+		// listeners would require a shared atomic.Pointer holding both
+		// muxes; not worth the complexity for this case.
 		public, internal, err := ts.buildMuxes(functionTimeout)
 		if err != nil {
 			ts.logger.Error(err, "error updating router")

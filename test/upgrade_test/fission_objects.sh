@@ -92,12 +92,25 @@ build_docker_images() {
 }
 
 kind_image_load() {
+    # Re-tag locally-built images to match the registry prefix the chart
+    # resolves to (HELM_VARS_LATEST_RELEASE: ghcr.io/fission/<name>:latest).
+    # Without this, kubelet with pullPolicy=IfNotPresent looks for
+    # `ghcr.io/fission/fission-bundle:latest` and falls through to GHCR,
+    # pulling whatever was last published from main — which won't have
+    # any flags / templates added since that publish.
+    echo "Re-tagging local images to match HELM_VARS_LATEST_RELEASE..."
+    doit docker tag fission-bundle ghcr.io/fission/fission-bundle:latest
+    doit docker tag fetcher ghcr.io/fission/fetcher:latest
+    doit docker tag builder ghcr.io/fission/builder:latest
+    doit docker tag reporter ghcr.io/fission/reporter:latest
+    doit docker tag preupgradechecks ghcr.io/fission/pre-upgrade-checks:latest
+
     echo "Loading Docker images into Kind cluster."
-    doit kind load docker-image fission-bundle --name kind
-    doit kind load docker-image fetcher --name kind
-    doit kind load docker-image builder --name kind
-    doit kind load docker-image reporter --name kind
-    doit kind load docker-image preupgradechecks --name kind
+    doit kind load docker-image ghcr.io/fission/fission-bundle:latest --name kind
+    doit kind load docker-image ghcr.io/fission/fetcher:latest --name kind
+    doit kind load docker-image ghcr.io/fission/builder:latest --name kind
+    doit kind load docker-image ghcr.io/fission/reporter:latest --name kind
+    doit kind load docker-image ghcr.io/fission/pre-upgrade-checks:latest --name kind
 }
 
 install_fission_cli() {

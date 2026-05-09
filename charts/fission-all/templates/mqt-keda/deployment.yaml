@@ -38,7 +38,7 @@ spec:
         # build signing-aware connector images. See the comment on
         # StartScalerManager in pkg/mqtrigger/scalermanager.go.
         - name: ROUTER_INTERNAL_URL
-          value: "http://router.{{ .Release.Namespace }}:{{ .Values.router.internalPort | default 8889 }}"
+          value: "http://router-internal.{{ .Release.Namespace }}:{{ .Values.router.internalPort | default 8889 }}"
         - name: CONNECTOR_IMAGE_PULL_POLICY
           value: "{{ .Values.pullPolicy }}"
         - name: KAFKA_IMAGE

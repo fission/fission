@@ -153,19 +153,44 @@ jobs:
 
           kubectl port-forward svc/router 8888:80 -n "$FISSION_NAMESPACE" >/tmp/pf.log 2>&1 &
           PF_PID=$!
-          trap "kill $PF_PID 2>/dev/null || true" EXIT
+          # The router internal listener (GHSA-3g33-6vg6-27m8 fix) hosts
+          # /fission-function/<ns>/<name>; the framework routes those
+          # requests to localhost:8889 with HMAC signing. Forward the
+          # internal port too so integration tests that invoke functions
+          # by name (TestSpecArchive, TestSpecMerge, TestKubectlApply,
+          # TestWebsocket, TestInternalRouterRejectsUnsigned, ...) reach
+          # the right listener.
+          kubectl port-forward svc/router 8889:8889 -n "$FISSION_NAMESPACE" >/tmp/pf-internal.log 2>&1 &
+          PF_PID_INT=$!
+          trap "kill $PF_PID $PF_PID_INT 2>/dev/null || true" EXIT
+
+          # Export the master HMAC secret so the framework's RouterClient
+          # signs /fission-function/... requests against the internal
+          # listener. Empty when internalAuth is disabled — the framework
+          # falls back to unsigned and the verifier short-circuits.
+          if kubectl get secret fission-internal-auth -n "$FISSION_NAMESPACE" >/dev/null 2>&1; then
+            export FISSION_INTERNAL_AUTH_SECRET=$(kubectl get secret fission-internal-auth \
+              -n "$FISSION_NAMESPACE" -o jsonpath='{.data.secret}' | base64 -d)
+            echo "exported FISSION_INTERNAL_AUTH_SECRET (${#FISSION_INTERNAL_AUTH_SECRET} bytes)"
+          else
+            echo "fission-internal-auth Secret not present — running tests in unsigned mode"
+          fi
 
           # Wait for port-forward to accept TCP connections. Without -f, curl
           # exits 0 for any HTTP response (including 4xx/5xx) and exit 7 for
           # connection refused — exactly what we want here.
           for i in $(seq 1 30); do
-            if curl -sS --connect-timeout 1 --max-time 2 -o /dev/null "http://127.0.0.1:8888/" 2>/dev/null; then
-              echo "router port-forward ready after ${i}s"
+            ok_pub=0; ok_int=0
+            curl -sS --connect-timeout 1 --max-time 2 -o /dev/null "http://127.0.0.1:8888/" 2>/dev/null && ok_pub=1
+            curl -sS --connect-timeout 1 --max-time 2 -o /dev/null "http://127.0.0.1:8889/" 2>/dev/null && ok_int=1
+            if [ "$ok_pub" -eq 1 ] && [ "$ok_int" -eq 1 ]; then
+              echo "router port-forwards ready after ${i}s (8888=$ok_pub, 8889=$ok_int)"
               break
             fi
             if [ "$i" -eq 30 ]; then
-              echo "router port-forward did not become ready in 30s; pf log:"
+              echo "router port-forward did not become ready in 30s; pf logs:"
               cat /tmp/pf.log || true
+              cat /tmp/pf-internal.log || true
               exit 1
             fi
             sleep 1

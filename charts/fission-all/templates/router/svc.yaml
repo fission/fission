@@ -19,11 +19,26 @@ spec:
 {{- if eq .Values.routerServiceType "NodePort" }}
     nodePort: {{ .Values.routerPort }}
 {{- end }}
-  # internal port serves /fission-function/<ns>/<name> for in-cluster
-  # callers (executor / kubewatcher / timer / mqtrigger / canaryconfig /
-  # buildermgr). The named port lets internal callers reach it via
-  # http://router.<ns>.svc:{{ .Values.router.internalPort | default 8889 }}; the NetworkPolicy gates
-  # access to fission-bundle pods only.
+  selector:
+    svc: router
+---
+# router-internal is a separate ClusterIP-only Service so the internal
+# port stays cluster-internal regardless of routerServiceType. Keeping
+# the internal port on the same Service as the public listener would
+# expose /fission-function/<ns>/<name> via NodePort or LoadBalancer
+# whenever routerServiceType != ClusterIP — defeating the
+# GHSA-3g33-6vg6-27m8 split.
+apiVersion: v1
+kind: Service
+metadata:
+  name: router-internal
+  labels:
+    svc: router-internal
+    application: fission-router
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+spec:
+  type: ClusterIP
+  ports:
   - name: internal
     port: {{ .Values.router.internalPort | default 8889 }}
     targetPort: {{ .Values.router.internalPort | default 8889 }}

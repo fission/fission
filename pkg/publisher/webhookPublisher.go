@@ -75,11 +75,12 @@ type (
 // /fission-function/<ns>/<name> after GHSA-3g33-6vg6-27m8.
 //
 // If FISSION_INTERNAL_AUTH_SECRET is set, the publisher's HTTP transport
-// is wrapped with hmacauth.NewSigner so each /fission-function/...
-// invocation carries the X-Fission-Auth-* headers that the router's
-// internal-listener verifier expects. An unset secret leaves the
-// transport unsigned, matching the verifier's pass-through mode for
-// first-deploy installs.
+// is wrapped with hmacauth.ServiceSigner using ServiceRouterInternal,
+// so each /fission-function/... invocation carries the X-Fission-Auth-*
+// headers that the router's internal-listener verifier expects (with
+// the per-service derived key, not the master). An unset secret leaves
+// the transport unsigned, matching the verifier's pass-through mode
+// for first-deploy installs.
 func MakeWebhookPublisher(logger logr.Logger, baseURL string) *WebhookPublisher {
 	if internal := os.Getenv("ROUTER_INTERNAL_URL"); internal != "" {
 		baseURL = internal
