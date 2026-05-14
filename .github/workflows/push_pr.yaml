@@ -22,7 +22,7 @@ on:
       - go.sum
 
 env:
-  HELM_VERSION: v4.0.1
+  HELM_VERSION: v4.2.0
   KIND_VERSION: v0.30.0
   KIND_CLUSTER_NAME: kind
   SKAFFOLD_VERSION: v2.17.0
