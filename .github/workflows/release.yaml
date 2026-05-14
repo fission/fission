@@ -6,7 +6,7 @@ on:
       - v2.**
 
 env:
-  KIND_VERSION: v0.30.0
+  KIND_VERSION: v0.31.0
   KIND_NODE_IMAGE_TAG: v1.28.15
   KIND_CLUSTER_NAME: kind
   COSIGN_VERSION: v3.0.3
