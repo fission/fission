@@ -25,7 +25,7 @@ env:
   HELM_VERSION: v4.2.0
   KIND_VERSION: v0.31.0
   KIND_CLUSTER_NAME: kind
-  SKAFFOLD_VERSION: v2.17.0
+  SKAFFOLD_VERSION: v2.19.0
 
 permissions:
   contents: read
