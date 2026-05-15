@@ -106,6 +106,28 @@ jobs:
           helm install prometheus prometheus-community/kube-prometheus-stack -n monitoring \
           --version 45.28.0 --set grafana.enabled=false --set alertmanager.enabled=false
 
+      # Cache the goreleaser dist/ output keyed on the inputs that affect
+      # the linux/amd64 binaries: go.sum, production Go source (no tests),
+      # the goreleaser config, the per-binary Dockerfiles, and the Makefile
+      # (build flags / ldflags). A cache hit lets us skip ~5-8min of
+      # `goreleaser build --snapshot` work per matrix entry — skaffold
+      # still builds the small container images from the cached binaries.
+      #
+      # The key also carries a cover/plain segment: only the GOFLAGS leg
+      # (see below) builds Go binary-coverage-instrumented binaries, so
+      # instrumented and plain dist/ outputs must live in separate cache
+      # namespaces — otherwise a plain cache hit would feed uninstrumented
+      # binaries to the coverage leg and silently empty the coverage report.
+      #
+      # Exact-key match only (no restore-keys fallback) — we never want to
+      # test against binaries built from different source.
+      - name: Restore goreleaser dist/ cache
+        id: cache-dist
+        uses: actions/cache@v4
+        with:
+          path: dist
+          key: dist-linux-amd64-${{ matrix.kindversion == 'v1.32.11' && 'cover' || 'plain' }}-${{ hashFiles('go.sum', 'go.mod', '.goreleaser.yml', 'Makefile', 'cmd/**/*.go', '!cmd/**/*_test.go', 'pkg/**/*.go', '!pkg/**/*_test.go', 'cmd/**/Dockerfile') }}
+
       - name: Build and Install Fission
         timeout-minutes: 10
         env:
@@ -127,7 +149,38 @@ jobs:
           # and leave it empty.
           docker exec kind-control-plane sh -c \
             'mkdir -p /fission-coverage && chown 10001:10001 /fission-coverage && chmod 0700 /fission-coverage'
-          SKAFFOLD_PROFILE=kind-ci make skaffold-deploy
+          # On cache hit dist/ already contains the per-binary build
+          # contexts (binary + Dockerfile). Skip `make skaffold-deploy`'s
+          # prebuild step and invoke skaffold directly so goreleaser does
+          # not re-run. Skaffold itself produces the container images from
+          # these cached binaries — fast since the COPY layer is tiny.
+          #
+          # Sanity-check every context the kind-ci profile actually builds
+          # (skaffold.yaml artifacts: fission-bundle, fetcher,
+          # pre-upgrade-checks, reporter — note: NOT builder). A partially
+          # saved cache that's missing any of these would otherwise
+          # green-light `skaffold run` and fail confusingly mid-build
+          # instead of cleanly falling back to the full prebuild.
+          dist_complete=true
+          if [ "${{ steps.cache-dist.outputs.cache-hit }}" = "true" ]; then
+            for bin in fission-bundle fetcher pre-upgrade-checks reporter; do
+              if [ ! -x "dist/${bin}_linux_amd64_v1/${bin}" ] \
+                  || [ ! -f "dist/${bin}_linux_amd64_v1/Dockerfile" ]; then
+                echo "dist/ cache hit but ${bin} context incomplete"
+                dist_complete=false
+                break
+              fi
+            done
+          else
+            dist_complete=false
+          fi
+          if [ "$dist_complete" = "true" ]; then
+            echo "dist/ cache hit — skipping skaffold-prebuild (goreleaser)"
+            skaffold run -p kind-ci
+          else
+            echo "dist/ cache miss — running full skaffold-prebuild"
+            SKAFFOLD_PROFILE=kind-ci make skaffold-deploy
+          fi
 
       # Port-forward is started inside the Go test step rather than as a
       # standalone step, because background processes started with `&` may
