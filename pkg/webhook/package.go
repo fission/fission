@@ -82,5 +82,17 @@ func (r *Package) Validate(new *v1.Package) error {
 		return ferror.MakeError(ferror.ErrorInvalidArgument,
 			fmt.Sprintf("Package literal larger than %s", humanize.Bytes(uint64(v1.ArchiveLiteralSizeLimit))))
 	}
+
+	// Refuse Package objects whose spec.environment.namespace targets a
+	// different namespace than the Package itself. The buildermgr runs with
+	// a cluster-wide ServiceAccount and would otherwise dispatch a build
+	// into the referenced Environment's namespace builder, leaking that
+	// namespace's builder-SA token and Secret/ConfigMap contents back via
+	// Package.status.buildlog (GHSA-vjhc-cf4p-72q4).
+	if new.Spec.Environment.Namespace != "" && new.Spec.Environment.Namespace != new.Namespace {
+		return ferror.MakeError(ferror.ErrorInvalidArgument,
+			fmt.Sprintf("Package.spec.environment.namespace must equal Package namespace (got env.namespace=%q, pkg.namespace=%q)",
+				new.Spec.Environment.Namespace, new.Namespace))
+	}
 	return nil
 }

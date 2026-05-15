@@ -102,6 +102,24 @@ func createKubernetesWatch(ctx context.Context, kubeClient kubernetes.Interface,
 	var err error
 	var watchTimeoutSec int64 = 120
 
+	// Refuse cross-namespace targets — the webhook should already reject
+	// these at admission, but reconcile loops can see stale objects on
+	// upgraded clusters or on webhook-failurePolicy=Ignore deployments
+	// (GHSA-gc3j-79f2-7vvw).
+	if w.Spec.Namespace != "" && w.Spec.Namespace != w.Namespace {
+		return nil, fmt.Errorf("cross-namespace watch is not allowed: trigger.namespace=%s spec.namespace=%s",
+			w.Namespace, w.Spec.Namespace)
+	}
+
+	// An empty Spec.Namespace previously meant "watch all namespaces" via
+	// client-go's empty-namespace semantics — a separate cross-tenant leak.
+	// Coerce it to the trigger's own namespace so an unset field can never
+	// resolve to cluster-wide visibility.
+	target := w.Spec.Namespace
+	if target == "" {
+		target = w.Namespace
+	}
+
 	// TODO populate labelselector and fieldselector
 	listOptions := metav1.ListOptions{
 		ResourceVersion: resourceVersion,
@@ -111,13 +129,13 @@ func createKubernetesWatch(ctx context.Context, kubeClient kubernetes.Interface,
 	// TODO handle the full list of types
 	switch strings.ToUpper(w.Spec.Type) {
 	case "POD":
-		wi, err = kubeClient.CoreV1().Pods(w.Spec.Namespace).Watch(ctx, listOptions)
+		wi, err = kubeClient.CoreV1().Pods(target).Watch(ctx, listOptions)
 	case "SERVICE":
-		wi, err = kubeClient.CoreV1().Services(w.Spec.Namespace).Watch(ctx, listOptions)
+		wi, err = kubeClient.CoreV1().Services(target).Watch(ctx, listOptions)
 	case "REPLICATIONCONTROLLER":
-		wi, err = kubeClient.CoreV1().ReplicationControllers(w.Spec.Namespace).Watch(ctx, listOptions)
+		wi, err = kubeClient.CoreV1().ReplicationControllers(target).Watch(ctx, listOptions)
 	case "JOB":
-		wi, err = kubeClient.BatchV1().Jobs(w.Spec.Namespace).Watch(ctx, listOptions)
+		wi, err = kubeClient.BatchV1().Jobs(target).Watch(ctx, listOptions)
 	default:
 		err = errors.NewBadRequest(fmt.Sprintf("Error: unknown obj type '%v'", w.Spec.Type))
 	}
