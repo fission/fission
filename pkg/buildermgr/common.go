@@ -53,7 +53,7 @@ func buildPackage(ctx context.Context, logger logr.Logger, fissionClient version
 	if pkg.Spec.Environment.Namespace != "" && pkg.Spec.Environment.Namespace != pkg.Namespace {
 		e := fmt.Sprintf("cross-namespace environment reference is not allowed: pkg.namespace=%s env.namespace=%s",
 			pkg.Namespace, pkg.Spec.Environment.Namespace)
-		return nil, e, ferror.MakeError(http.StatusBadRequest, e)
+		return nil, e, ferror.MakeError(ferror.ErrorInvalidArgument, e)
 	}
 
 	env, err := fissionClient.CoreV1().Environments(pkg.Spec.Environment.Namespace).Get(ctx, pkg.Spec.Environment.Name, metav1.GetOptions{})
