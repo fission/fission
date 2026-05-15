@@ -107,6 +107,20 @@ func (pkgw *packageWatcher) build(ctx context.Context, srcpkg *fv1.Package) {
 		return
 	}
 
+	// Defence in depth — the admission webhook should already have rejected
+	// a cross-namespace environment reference at submit time, but reconcile
+	// loops can still see stale objects on upgraded clusters or on clusters
+	// running the webhook with failurePolicy=Ignore (GHSA-vjhc-cf4p-72q4).
+	if pkg.Spec.Environment.Namespace != "" && pkg.Spec.Environment.Namespace != pkg.Namespace {
+		msg := fmt.Sprintf("cross-namespace environment reference is not allowed: pkg.namespace=%s env.namespace=%s",
+			pkg.Namespace, pkg.Spec.Environment.Namespace)
+		logger.Info("rejecting cross-namespace environment reference", "env_namespace", pkg.Spec.Environment.Namespace)
+		if _, er := updatePackage(ctx, logger, pkgw.fissionClient, pkg, fv1.BuildStatusFailed, msg, nil); er != nil {
+			logger.Error(er, "error updating package")
+		}
+		return
+	}
+
 	env, err := pkgw.fissionClient.CoreV1().Environments(pkg.Spec.Environment.Namespace).Get(ctx, pkg.Spec.Environment.Name, metav1.GetOptions{})
 	if k8serrors.IsNotFound(err) {
 		e := "environment does not exist"

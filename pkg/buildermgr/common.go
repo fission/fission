@@ -47,6 +47,15 @@ import (
 func buildPackage(ctx context.Context, logger logr.Logger, fissionClient versioned.Interface, envBuilderNamespace string,
 	storageSvcUrl string, pkg *fv1.Package) (uploadResp *fetcher.ArchiveUploadResponse, buildLogs string, err error) {
 
+	// Defence in depth against cross-namespace Environment references; the
+	// admission webhook is the user-visible reject, this guard catches
+	// objects that bypassed it (GHSA-vjhc-cf4p-72q4).
+	if pkg.Spec.Environment.Namespace != "" && pkg.Spec.Environment.Namespace != pkg.Namespace {
+		e := fmt.Sprintf("cross-namespace environment reference is not allowed: pkg.namespace=%s env.namespace=%s",
+			pkg.Namespace, pkg.Spec.Environment.Namespace)
+		return nil, e, ferror.MakeError(ferror.ErrorInvalidArgument, e)
+	}
+
 	env, err := fissionClient.CoreV1().Environments(pkg.Spec.Environment.Namespace).Get(ctx, pkg.Spec.Environment.Name, metav1.GetOptions{})
 	if err != nil {
 		e := "error getting environment CRD info"
