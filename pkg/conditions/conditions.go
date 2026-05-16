@@ -19,10 +19,9 @@ limitations under the License.
 // Fission controllers that write Status.Conditions on CRDs.
 //
 // We wrap (rather than re-export) so we can: (a) give controllers a single
-// import path to grep for when Phase 2 wires writers, (b) attach Fission-
-// specific helpers in the future (e.g. NewReady, NewProgressing) without
-// breaking the call sites, and (c) keep one place where we document the
-// LastTransitionTime invariant the RFC requires.
+// import path to grep for, (b) attach Fission-specific helpers in the
+// future (e.g. NewReady, NewProgressing) without breaking call sites, and
+// (c) keep one place where we document the LastTransitionTime invariant.
 //
 // All semantics — including "LastTransitionTime updates iff Status changes" —
 // come directly from apimachinery's meta.SetStatusCondition.

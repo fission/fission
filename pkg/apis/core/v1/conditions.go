@@ -19,9 +19,6 @@ package v1
 // Standard condition Type values populated on each CRD's Status.Conditions
 // by Fission controllers. Names follow the Kubernetes convention of being
 // CamelCase and namespaced per CRD.
-//
-// Phase 1 (this file) defines only the constants — controllers begin
-// writing them in subsequent phases. See rfc/0003-crd-modernization.md.
 const (
 	// Function conditions
 	FunctionConditionReady        = "Ready"

@@ -100,10 +100,6 @@ func (ns *TestNamespace) PackageDeployChecksum(t *testing.T, ctx context.Context
 // reaches "succeeded" (per fv1.BuildStatusSucceeded). Failure / timeout /
 // terminal "failed" status all become t.Fatal. Mirrors the bash `waitBuild`
 // helper but distinguishes timeouts from explicit build failures.
-//
-// RFC-0003 Phase 2 will additionally check the PackageBuildSucceeded
-// condition once pkg/buildermgr writes it; for now this stays on the
-// legacy BuildStatus string.
 func (ns *TestNamespace) WaitForPackageBuildSucceeded(t *testing.T, ctx context.Context, pkgName string) {
 	t.Helper()
 	ns.waitForPackageBuildStatus(t, ctx, pkgName, fv1.BuildStatusSucceeded, 3*time.Minute)

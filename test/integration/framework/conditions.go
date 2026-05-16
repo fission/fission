@@ -11,9 +11,8 @@ import (
 )
 
 // GetFunctionConditions returns the Conditions slice on the named Function's
-// Status, or nil if the controller hasn't populated it yet. Safe to call in
-// any phase — returns nil for resources whose controllers don't yet write
-// conditions (which is every Phase-1 controller).
+// Status, or nil if the controller hasn't populated it yet. Returns nil for
+// resources whose controllers don't write conditions.
 func (ns *TestNamespace) GetFunctionConditions(t *testing.T, ctx context.Context, name string) []metav1.Condition {
 	t.Helper()
 	fn, err := ns.f.fissionClient.CoreV1().Functions(ns.Name).Get(ctx, name, metav1.GetOptions{})

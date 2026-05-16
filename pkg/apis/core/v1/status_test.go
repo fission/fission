@@ -182,10 +182,10 @@ func TestStatusDeepCopy(t *testing.T) {
 	}
 }
 
-// TestPackageStatusBackwardCompat ensures that PackageStatus payloads stored
-// by pre-RFC-0003 controllers (no `conditions` key) unmarshal cleanly with
-// Conditions left as nil. Catches accidental `required` constraints or
-// non-omitempty traps on the new field.
+// TestPackageStatusBackwardCompat ensures that legacy PackageStatus payloads
+// without a `conditions` key unmarshal cleanly with Conditions left as nil.
+// Catches accidental `required` constraints or non-omitempty traps on the
+// new field.
 func TestPackageStatusBackwardCompat(t *testing.T) {
 	const legacy = `{"buildstatus":"succeeded","buildlog":"ok","lastUpdateTimestamp":"2026-05-01T12:00:00Z"}`
 	var s PackageStatus

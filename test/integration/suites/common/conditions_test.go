@@ -27,8 +27,8 @@ func minimalFunction(name, namespace string) *fv1.Function {
 	return &fv1.Function{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 		Spec: fv1.FunctionSpec{
-			Environment: fv1.EnvironmentReference{Name: "phase1-fake", Namespace: namespace},
-			Package:     fv1.FunctionPackageRef{PackageRef: fv1.PackageRef{Name: "phase1-fake", Namespace: namespace}},
+			Environment: fv1.EnvironmentReference{Name: "conds-smoke-fake", Namespace: namespace},
+			Package:     fv1.FunctionPackageRef{PackageRef: fv1.PackageRef{Name: "conds-smoke-fake", Namespace: namespace}},
 			InvokeStrategy: fv1.InvokeStrategy{
 				StrategyType: fv1.StrategyTypeExecution,
 				ExecutionStrategy: fv1.ExecutionStrategy{
@@ -41,11 +41,11 @@ func minimalFunction(name, namespace string) *fv1.Function {
 	}
 }
 
-// TestPhase1Conditions_FunctionStatusSubresource creates a Function via the
-// typed client, asserts the Status field is empty (no Phase-1 writer exists),
-// then mutates Status.Conditions via UpdateStatus and re-fetches to verify
-// the apiserver persists it through the new status subresource.
-func TestPhase1Conditions_FunctionStatusSubresource(t *testing.T) {
+// TestConditions_FunctionStatusSubresource creates a Function via the
+// typed client, asserts the Status field is empty (no controller writer
+// exists yet), then mutates Status.Conditions via UpdateStatus and re-fetches
+// to verify the apiserver persists it through the new status subresource.
+func TestConditions_FunctionStatusSubresource(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -55,7 +55,7 @@ func TestPhase1Conditions_FunctionStatusSubresource(t *testing.T) {
 	ns := f.NewTestNamespace(t)
 	fc := f.FissionClient().CoreV1()
 
-	name := "phase1-fn-" + ns.ID
+	name := "conds-fn-" + ns.ID
 	_, err := fc.Functions(ns.Name).Create(ctx, minimalFunction(name, ns.Name), metav1.CreateOptions{})
 	require.NoError(t, err)
 	t.Cleanup(func() {
@@ -63,7 +63,7 @@ func TestPhase1Conditions_FunctionStatusSubresource(t *testing.T) {
 	})
 
 	conds := ns.GetFunctionConditions(t, ctx, name)
-	require.Empty(t, conds, "Phase 1 has no controller writers — expected empty Conditions")
+	require.Empty(t, conds, "no controller writes conditions yet — expected empty Conditions")
 
 	fn, err := fc.Functions(ns.Name).Get(ctx, name, metav1.GetOptions{})
 	require.NoError(t, err)
@@ -71,8 +71,8 @@ func TestPhase1Conditions_FunctionStatusSubresource(t *testing.T) {
 		{
 			Type:               fv1.FunctionConditionReady,
 			Status:             metav1.ConditionUnknown,
-			Reason:             "Phase1Smoke",
-			Message:            "set by TestPhase1Conditions_FunctionStatusSubresource",
+			Reason:             "ConditionsSmoke",
+			Message:            "set by TestConditions_FunctionStatusSubresource",
 			LastTransitionTime: metav1.Now(),
 			ObservedGeneration: fn.Generation,
 		},
@@ -84,15 +84,15 @@ func TestPhase1Conditions_FunctionStatusSubresource(t *testing.T) {
 	require.Len(t, got, 1)
 	require.Equal(t, fv1.FunctionConditionReady, got[0].Type)
 	require.EqualValues(t, "Unknown", got[0].Status)
-	require.Equal(t, "Phase1Smoke", got[0].Reason)
+	require.Equal(t, "ConditionsSmoke", got[0].Reason)
 }
 
-// TestPhase1Conditions_PackageMainResource verifies the additive change to
+// TestConditions_PackageMainResource verifies the additive change to
 // PackageStatus: Conditions can be written via the existing main-resource
 // Update path (no status subresource on Package), and round-trips cleanly.
 // This is the canary that PackageStatus changes did NOT silently flip the
 // subresource on Package, which would have broken pkg/buildermgr writes.
-func TestPhase1Conditions_PackageMainResource(t *testing.T) {
+func TestConditions_PackageMainResource(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -102,11 +102,11 @@ func TestPhase1Conditions_PackageMainResource(t *testing.T) {
 	ns := f.NewTestNamespace(t)
 	fc := f.FissionClient().CoreV1()
 
-	name := "phase1-pkg-" + ns.ID
+	name := "conds-pkg-" + ns.ID
 	pkg := &fv1.Package{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns.Name},
 		Spec: fv1.PackageSpec{
-			Environment: fv1.EnvironmentReference{Name: "phase1-fake", Namespace: ns.Name},
+			Environment: fv1.EnvironmentReference{Name: "conds-smoke-fake", Namespace: ns.Name},
 			Deployment:  fv1.Archive{Type: fv1.ArchiveTypeLiteral, Literal: []byte("// noop")},
 		},
 		Status: fv1.PackageStatus{BuildStatus: fv1.BuildStatusNone},
@@ -123,8 +123,8 @@ func TestPhase1Conditions_PackageMainResource(t *testing.T) {
 		{
 			Type:               fv1.PackageConditionBuildSucceeded,
 			Status:             metav1.ConditionTrue,
-			Reason:             "Phase1Smoke",
-			Message:            "set by TestPhase1Conditions_PackageMainResource",
+			Reason:             "ConditionsSmoke",
+			Message:            "set by TestConditions_PackageMainResource",
 			LastTransitionTime: metav1.Now(),
 			ObservedGeneration: got.Generation,
 		},
@@ -139,13 +139,13 @@ func TestPhase1Conditions_PackageMainResource(t *testing.T) {
 	require.Equal(t, fv1.PackageConditionBuildSucceeded, refetched[0].Type)
 }
 
-// TestPhase1Conditions_SSAListMapKey is the core SSA correctness test for
+// TestConditions_SSAListMapKey is the core SSA correctness test for
 // FunctionSpec.Secrets / ConfigMaps. Two distinct field managers apply
 // non-overlapping secret entries; the resulting list must contain BOTH —
-// because we marked Secrets as +listType=map / +listMapKey=name in this PR.
-// With the prior atomic listType the second apply would have clobbered the
-// first manager's entry.
-func TestPhase1Conditions_SSAListMapKey(t *testing.T) {
+// because Secrets is marked +listType=map / +listMapKey=name. With an
+// atomic listType the second apply would have clobbered the first
+// manager's entry.
+func TestConditions_SSAListMapKey(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -155,7 +155,7 @@ func TestPhase1Conditions_SSAListMapKey(t *testing.T) {
 	ns := f.NewTestNamespace(t)
 	fc := f.FissionClient().CoreV1()
 
-	name := "phase1-ssa-" + ns.ID
+	name := "conds-ssa-" + ns.ID
 
 	// minimalApply returns an apply config matching minimalFunction so the
 	// first Apply has enough required fields to pass admission.
@@ -163,10 +163,10 @@ func TestPhase1Conditions_SSAListMapKey(t *testing.T) {
 		return fapply.Function(name, ns.Name).
 			WithSpec(fapply.FunctionSpec().
 				WithEnvironment(fapply.EnvironmentReference().
-					WithName("phase1-fake").WithNamespace(ns.Name)).
+					WithName("conds-smoke-fake").WithNamespace(ns.Name)).
 				WithPackage(fapply.FunctionPackageRef().
 					WithPackageRef(fapply.PackageRef().
-						WithName("phase1-fake").WithNamespace(ns.Name))).
+						WithName("conds-smoke-fake").WithNamespace(ns.Name))).
 				WithInvokeStrategy(fapply.InvokeStrategy().
 					WithStrategyType(fv1.StrategyTypeExecution).
 					WithExecutionStrategy(fapply.ExecutionStrategy().
@@ -203,11 +203,11 @@ func TestPhase1Conditions_SSAListMapKey(t *testing.T) {
 		"both managers' Secrets entries must survive — proves +listType=map / +listMapKey=name took effect")
 }
 
-// TestPhase1Conditions_StatusSubresourceIsolated verifies that Spec edits via
+// TestConditions_StatusSubresourceIsolated verifies that Spec edits via
 // UpdateStatus are rejected (or dropped) on a CRD that has the status
 // subresource — proves the subresource boundary is actually enforced after
 // our marker change.
-func TestPhase1Conditions_StatusSubresourceIsolated(t *testing.T) {
+func TestConditions_StatusSubresourceIsolated(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -217,7 +217,7 @@ func TestPhase1Conditions_StatusSubresourceIsolated(t *testing.T) {
 	ns := f.NewTestNamespace(t)
 	fc := f.FissionClient().CoreV1()
 
-	name := "phase1-iso-" + ns.ID
+	name := "conds-iso-" + ns.ID
 	_, err := fc.Functions(ns.Name).Create(ctx, minimalFunction(name, ns.Name), metav1.CreateOptions{})
 	require.NoError(t, err)
 	t.Cleanup(func() {
@@ -230,7 +230,7 @@ func TestPhase1Conditions_StatusSubresourceIsolated(t *testing.T) {
 
 	// Mutate both spec and status; submit via UpdateStatus.
 	// The apiserver must drop the spec change (subresource semantics).
-	fn.Spec.Environment.Name = "phase1-tampered"
+	fn.Spec.Environment.Name = "conds-tampered"
 	fn.Status.Conditions = []metav1.Condition{{
 		Type: fv1.FunctionConditionProgressing, Status: metav1.ConditionTrue,
 		Reason: "Tampering", LastTransitionTime: metav1.Now(),
@@ -247,7 +247,7 @@ func TestPhase1Conditions_StatusSubresourceIsolated(t *testing.T) {
 
 	// And the inverse: a Patch on .metadata is fine and doesn't touch Status.
 	_, err = fc.Functions(ns.Name).Patch(ctx, name, types.MergePatchType,
-		[]byte(`{"metadata":{"labels":{"phase1":"smoke"}}}`), metav1.PatchOptions{})
+		[]byte(`{"metadata":{"labels":{"conds-test":"smoke"}}}`), metav1.PatchOptions{})
 	require.NoError(t, err)
 
 	final, err := fc.Functions(ns.Name).Get(ctx, name, metav1.GetOptions{})
@@ -255,6 +255,6 @@ func TestPhase1Conditions_StatusSubresourceIsolated(t *testing.T) {
 		t.Skip("Function gone — likely the cleanup raced this test")
 	}
 	require.NoError(t, err)
-	require.Equal(t, "smoke", final.Labels["phase1"])
+	require.Equal(t, "smoke", final.Labels["conds-test"])
 	require.Len(t, final.Status.Conditions, 1, "Status must survive an unrelated metadata patch")
 }
