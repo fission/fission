@@ -189,6 +189,56 @@ func updatePackage(ctx context.Context, logger logr.Logger, fissionClient versio
 	return pkg, nil
 }
 
+// syncPackageConditions reconciles Package.Status.Conditions against the
+// current Status.BuildStatus. It's safe to call on every informer event:
+// if conditions already reflect the current generation it returns without
+// any API call. Otherwise it does Get → mutate → Update so we don't write
+// against a stale ResourceVersion.
+//
+// This handles the case where a client (the fission CLI's literal/deploy
+// `package create` path) sets BuildStatus="succeeded" directly without
+// going through setInitialBuildStatus, leaving the conditions slice empty.
+// Once Phase 2 migrates that path to set conditions client-side, this
+// helper becomes a redundant safety net.
+func syncPackageConditions(ctx context.Context, logger logr.Logger, fissionClient versioned.Interface, pkg *fv1.Package) {
+	if isPackageConditionCurrent(pkg) {
+		return
+	}
+	cur, err := fissionClient.CoreV1().Packages(pkg.Namespace).Get(ctx, pkg.Name, metav1.GetOptions{})
+	if err != nil {
+		logger.V(1).Info("package conditions: get failed", "name", pkg.Name, "namespace", pkg.Namespace, "error", err)
+		return
+	}
+	if isPackageConditionCurrent(cur) {
+		return
+	}
+	before := len(cur.Status.Conditions)
+	setPackageBuildCondition(&cur.Status, cur.Status.BuildStatus, cur.Status.BuildLog, cur.Generation)
+	// If setPackageBuildCondition didn't add anything new (idempotent
+	// re-write to the same Status), the only diff is the timestamps
+	// inside metav1.Condition — which Set preserves when Status is
+	// unchanged. Skip the write in that case.
+	if len(cur.Status.Conditions) == before && isPackageConditionCurrent(cur) {
+		return
+	}
+	if _, err := fissionClient.CoreV1().Packages(cur.Namespace).Update(ctx, cur, metav1.UpdateOptions{}); err != nil {
+		logger.V(1).Info("package conditions: update failed", "name", pkg.Name, "namespace", pkg.Namespace, "error", err)
+	}
+}
+
+// isPackageConditionCurrent reports whether the PackageConditionBuildSucceeded
+// condition is present and observedGeneration matches the pkg generation —
+// i.e., conditions are up-to-date for the current spec/status.
+func isPackageConditionCurrent(pkg *fv1.Package) bool {
+	for i := range pkg.Status.Conditions {
+		c := &pkg.Status.Conditions[i]
+		if c.Type == fv1.PackageConditionBuildSucceeded && c.ObservedGeneration == pkg.Generation {
+			return true
+		}
+	}
+	return false
+}
+
 // markFunctionsForPackage writes PackageReady + Ready conditions on every
 // Function in fns that references pkg. Used by the buildermgr to propagate
 // build outcome onto the dependent Functions' status subresources so users

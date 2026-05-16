@@ -275,6 +275,14 @@ func (pkgw *packageWatcher) packageInformerHandler(ctx context.Context) k8sCache
 			// don't need to build the package at this moment.
 			return
 		}
+		// Backfill conditions on packages whose BuildStatus was written
+		// by a client that doesn't yet emit conditions (e.g., the CLI's
+		// literal/deploy-only `package create` path sets BuildStatus to
+		// "succeeded" directly without going through setInitialBuildStatus).
+		// syncPackageConditions is a no-op when conditions are already
+		// in sync with the current Generation.
+		syncPackageConditions(ctx, pkgw.logger, pkgw.fissionClient, pkg)
+
 		// Only build pending state packages.
 		if pkg.Status.BuildStatus == fv1.BuildStatusPending {
 			pkgw.buildWithCache(ctx, pkg)
