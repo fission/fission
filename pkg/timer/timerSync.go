@@ -20,11 +20,13 @@ import (
 	"context"
 	"time"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sCache "k8s.io/client-go/tools/cache"
 
 	"github.com/go-logr/logr"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/conditions"
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	"github.com/fission/fission/pkg/utils"
@@ -76,6 +78,41 @@ func (ws *TimerSync) AddUpdateTimeTrigger(timeTrigger *fv1.TimeTrigger) {
 			cron:    ws.timer.newCron(*timeTrigger, ws.timer.routerUrl),
 		}
 		logger.V(1).Info("cron added")
+	}
+	ws.markTimeTriggerScheduled(context.Background(), timeTrigger.Namespace, timeTrigger.Name)
+}
+
+// markTimeTriggerScheduled writes Scheduled + Ready conditions on a TimeTrigger
+// after its cron entry is registered. Uses the status subresource and treats
+// status writes as best-effort: timer scheduling is not gated on them.
+func (ws *TimerSync) markTimeTriggerScheduled(ctx context.Context, namespace, name string) {
+	if ws.fissionClient == nil {
+		return
+	}
+	cur, err := ws.fissionClient.CoreV1().TimeTriggers(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		ws.logger.V(1).Info("timetrigger status: get failed", "name", name, "namespace", namespace, "error", err)
+		return
+	}
+	schedChanged := conditions.Set(&cur.Status.Conditions, metav1.Condition{
+		Type:               fv1.TimeTriggerConditionScheduled,
+		Status:             metav1.ConditionTrue,
+		ObservedGeneration: cur.Generation,
+		Reason:             "CronRegistered",
+		Message:            "timer registered cron schedule " + cur.Spec.Cron,
+	})
+	readyChanged := conditions.Set(&cur.Status.Conditions, metav1.Condition{
+		Type:               fv1.TimeTriggerConditionReady,
+		Status:             metav1.ConditionTrue,
+		ObservedGeneration: cur.Generation,
+		Reason:             "CronRegistered",
+		Message:            "trigger is firing on schedule",
+	})
+	if !schedChanged && !readyChanged {
+		return
+	}
+	if _, err := ws.fissionClient.CoreV1().TimeTriggers(namespace).UpdateStatus(ctx, cur, metav1.UpdateOptions{}); err != nil {
+		ws.logger.V(1).Info("timetrigger status: update failed", "name", name, "namespace", namespace, "error", err)
 	}
 }
 

@@ -35,6 +35,7 @@ import (
 	k8sCache "k8s.io/client-go/tools/cache"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/conditions"
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/executor/util"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
@@ -172,6 +173,7 @@ func (envw *environmentWatcher) AddUpdateBuilder(ctx context.Context, env *fv1.E
 			builderInfo, err := envw.createBuilder(ctx, env, envw.nsResolver.GetBuilderNS(env.Namespace))
 			if err != nil {
 				envw.logger.Error(err, "error creating builder service")
+				envw.setEnvironmentReady(ctx, env, metav1.ConditionFalse, "BuilderCreateFailed", err.Error())
 				return
 			}
 			envw.cache[crd.CacheKeyUIDFromMeta(&env.ObjectMeta)] = builderInfo
@@ -181,10 +183,41 @@ func (envw *environmentWatcher) AddUpdateBuilder(ctx context.Context, env *fv1.E
 			builderInfo, err := envw.createBuilder(ctx, env, envw.nsResolver.GetBuilderNS(env.Namespace))
 			if err != nil {
 				envw.logger.Error(err, "error updating builder service")
+				envw.setEnvironmentReady(ctx, env, metav1.ConditionFalse, "BuilderCreateFailed", err.Error())
 				return
 			}
 			envw.cache[crd.CacheKeyUIDFromMeta(&env.ObjectMeta)] = builderInfo
 		}
+		envw.setEnvironmentReady(ctx, env, metav1.ConditionTrue, "BuilderReady", "builder deployment is ready")
+		return
+	}
+	// v1 environments and v2+ envs without a builder image are ready immediately
+	// — they don't require a builder deployment, so the env can be invoked as-is.
+	envw.setEnvironmentReady(ctx, env, metav1.ConditionTrue, "NoBuilderRequired", "environment has no builder; ready to invoke")
+}
+
+// setEnvironmentReady fetches the latest Environment, updates the Ready
+// condition idempotently (skipping the write when nothing changes), and
+// pushes it via the status subresource. The Get-Set-UpdateStatus pattern
+// avoids overwriting concurrent reconciles; conflict is logged at V(1).
+func (envw *environmentWatcher) setEnvironmentReady(ctx context.Context, env *fv1.Environment, status metav1.ConditionStatus, reason, message string) {
+	cur, err := envw.fissionClient.CoreV1().Environments(env.Namespace).Get(ctx, env.Name, metav1.GetOptions{})
+	if err != nil {
+		envw.logger.V(1).Info("environment status: get failed", "env", env.Name, "namespace", env.Namespace, "error", err)
+		return
+	}
+	changed := conditions.Set(&cur.Status.Conditions, metav1.Condition{
+		Type:               fv1.EnvironmentConditionReady,
+		Status:             status,
+		ObservedGeneration: cur.Generation,
+		Reason:             reason,
+		Message:            message,
+	})
+	if !changed {
+		return
+	}
+	if _, err := envw.fissionClient.CoreV1().Environments(env.Namespace).UpdateStatus(ctx, cur, metav1.UpdateOptions{}); err != nil {
+		envw.logger.V(1).Info("environment status: update failed", "env", env.Name, "namespace", env.Namespace, "error", err)
 	}
 }
 

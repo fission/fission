@@ -43,7 +43,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	}
 
 	poster := publisher.MakeWebhookPublisher(logger, routerUrl)
-	kubeWatch := MakeKubeWatcher(ctx, logger, kubeClient, poster)
+	kubeWatch := MakeKubeWatcher(ctx, logger, fissionClient, kubeClient, poster)
 	ws, err := MakeWatchSync(ctx, logger, fissionClient, kubeWatch)
 	if err != nil {
 		return fmt.Errorf("error making watch sync: %w", err)

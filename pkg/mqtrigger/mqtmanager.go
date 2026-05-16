@@ -22,6 +22,7 @@ import (
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	k8sCache "k8s.io/client-go/tools/cache"
@@ -30,6 +31,7 @@ import (
 	"github.com/go-logr/logr"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/conditions"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
 	flisterv1 "github.com/fission/fission/pkg/generated/listers/core/v1"
@@ -303,7 +305,42 @@ func (mqt *MessageQueueTriggerManager) RegisterTrigger(trigger *fv1.MessageQueue
 		return err
 	}
 	mqt.logger.Info("message queue trigger created", "trigger_name", trigger.Name)
+	mqt.markMessageQueueTriggerBound(mqt.ctx, trigger.Namespace, trigger.Name)
 	return nil
+}
+
+// markMessageQueueTriggerBound writes BindingReady + Ready on a
+// MessageQueueTrigger after subscribe-and-add succeeds. Best-effort; queue
+// subscription is the source of truth and is not gated on status writes.
+func (mqt *MessageQueueTriggerManager) markMessageQueueTriggerBound(ctx context.Context, namespace, name string) {
+	if mqt.fissionClient == nil {
+		return
+	}
+	cur, err := mqt.fissionClient.CoreV1().MessageQueueTriggers(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		mqt.logger.V(1).Info("mqtrigger status: get failed", "name", name, "namespace", namespace, "error", err)
+		return
+	}
+	bindChanged := conditions.Set(&cur.Status.Conditions, metav1.Condition{
+		Type:               fv1.MessageQueueTriggerConditionBindingReady,
+		Status:             metav1.ConditionTrue,
+		ObservedGeneration: cur.Generation,
+		Reason:             "Subscribed",
+		Message:            "subscribed to topic " + cur.Spec.Topic,
+	})
+	readyChanged := conditions.Set(&cur.Status.Conditions, metav1.Condition{
+		Type:               fv1.MessageQueueTriggerConditionReady,
+		Status:             metav1.ConditionTrue,
+		ObservedGeneration: cur.Generation,
+		Reason:             "Subscribed",
+		Message:            "trigger is dispatching messages",
+	})
+	if !bindChanged && !readyChanged {
+		return
+	}
+	if _, err := mqt.fissionClient.CoreV1().MessageQueueTriggers(namespace).UpdateStatus(ctx, cur, metav1.UpdateOptions{}); err != nil {
+		mqt.logger.V(1).Info("mqtrigger status: update failed", "name", name, "namespace", namespace, "error", err)
+	}
 }
 
 func (mqt *MessageQueueTriggerManager) enqueueMqtAdd(obj any) {

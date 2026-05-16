@@ -23,8 +23,6 @@ const (
 	// Function conditions
 	FunctionConditionReady        = "Ready"
 	FunctionConditionPackageReady = "PackageReady"
-	FunctionConditionEnvReady     = "EnvironmentReady"
-	FunctionConditionProgressing  = "Progressing"
 
 	// Package conditions
 	PackageConditionBuildSucceeded = "BuildSucceeded"

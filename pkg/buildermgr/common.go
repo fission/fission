@@ -30,6 +30,7 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/builder"
 	builderClient "github.com/fission/fission/pkg/builder/client"
+	"github.com/fission/fission/pkg/conditions"
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/fetcher"
 	fetcherClient "github.com/fission/fission/pkg/fetcher/client"
@@ -157,11 +158,16 @@ func updatePackage(ctx context.Context, logger logr.Logger, fissionClient versio
 	pkg *fv1.Package, status fv1.BuildStatus, buildLogs string,
 	uploadResp *fetcher.ArchiveUploadResponse) (*fv1.Package, error) {
 
+	// Preserve existing Conditions across the status replacement so
+	// transitions aren't accidentally wiped when build outcome changes.
+	existingConds := pkg.Status.Conditions
 	pkg.Status = fv1.PackageStatus{
 		BuildStatus:         status,
 		BuildLog:            buildLogs,
 		LastUpdateTimestamp: metav1.Time{Time: time.Now().UTC()},
+		Conditions:          existingConds,
 	}
+	setPackageBuildCondition(&pkg.Status, status, buildLogs, pkg.Generation)
 
 	if uploadResp != nil {
 		pkg.Spec.Deployment = fv1.Archive{
@@ -181,4 +187,102 @@ func updatePackage(ctx context.Context, logger logr.Logger, fissionClient versio
 
 	// return resource version for function to update function package ref
 	return pkg, nil
+}
+
+// markFunctionsForPackage writes PackageReady + Ready conditions on every
+// Function in fns that references pkg. Used by the buildermgr to propagate
+// build outcome onto the dependent Functions' status subresources so users
+// can `kubectl wait --for=condition=Ready function/<name>`. Best-effort —
+// individual function writes log at V(1) on failure and keep going.
+func markFunctionsForPackage(ctx context.Context, logger logr.Logger, fissionClient versioned.Interface, fns []fv1.Function, pkg *fv1.Package, succeeded bool) {
+	condStatus := metav1.ConditionFalse
+	reason, message := "PackageBuildFailed", "package build failed; see Package.Status.BuildLog"
+	if succeeded {
+		condStatus = metav1.ConditionTrue
+		reason, message = "PackageReady", "package built and ready to deploy"
+	}
+	for i := range fns {
+		fn := &fns[i]
+		if fn.Spec.Package.PackageRef.Name != pkg.Name || fn.Spec.Package.PackageRef.Namespace != pkg.Namespace {
+			continue
+		}
+		cur, err := fissionClient.CoreV1().Functions(fn.Namespace).Get(ctx, fn.Name, metav1.GetOptions{})
+		if err != nil {
+			logger.V(1).Info("function status: get failed", "name", fn.Name, "namespace", fn.Namespace, "error", err)
+			continue
+		}
+		pkgReadyChanged := conditions.Set(&cur.Status.Conditions, metav1.Condition{
+			Type:               fv1.FunctionConditionPackageReady,
+			Status:             condStatus,
+			ObservedGeneration: cur.Generation,
+			Reason:             reason,
+			Message:            message,
+		})
+		readyChanged := conditions.Set(&cur.Status.Conditions, metav1.Condition{
+			Type:               fv1.FunctionConditionReady,
+			Status:             condStatus,
+			ObservedGeneration: cur.Generation,
+			Reason:             reason,
+			Message:            message,
+		})
+		if !pkgReadyChanged && !readyChanged {
+			continue
+		}
+		if _, err := fissionClient.CoreV1().Functions(fn.Namespace).UpdateStatus(ctx, cur, metav1.UpdateOptions{}); err != nil {
+			logger.V(1).Info("function status: update failed", "name", fn.Name, "namespace", fn.Namespace, "error", err)
+		}
+	}
+}
+
+// setPackageBuildCondition mirrors the legacy BuildStatus enum onto the new
+// PackageBuildSucceeded and Ready conditions so `kubectl wait
+// --for=condition=Ready package/<name>` works alongside the existing
+// BuildStatus string. The mapping follows the same terminal-state semantics
+// the buildermgr already uses for BuildStatus.
+func setPackageBuildCondition(s *fv1.PackageStatus, status fv1.BuildStatus, buildLogs string, gen int64) {
+	var (
+		buildStatus, readyStatus metav1.ConditionStatus
+		reason, readyMessage     string
+	)
+	switch status {
+	case fv1.BuildStatusSucceeded:
+		buildStatus, readyStatus = metav1.ConditionTrue, metav1.ConditionTrue
+		reason = "BuildSucceeded"
+		readyMessage = "package built and ready to deploy"
+	case fv1.BuildStatusFailed:
+		buildStatus, readyStatus = metav1.ConditionFalse, metav1.ConditionFalse
+		reason = "BuildFailed"
+		readyMessage = "package build failed; see Package.Status.BuildLog"
+	case fv1.BuildStatusNone:
+		// Deploy-only packages have nothing to build. They're ready by
+		// virtue of the deployment archive being supplied.
+		buildStatus, readyStatus = metav1.ConditionTrue, metav1.ConditionTrue
+		reason = "NoBuildRequired"
+		readyMessage = "package has a pre-built deployment archive"
+	case fv1.BuildStatusPending:
+		buildStatus, readyStatus = metav1.ConditionUnknown, metav1.ConditionFalse
+		reason = "BuildPending"
+		readyMessage = "package build pending"
+	case fv1.BuildStatusRunning:
+		buildStatus, readyStatus = metav1.ConditionUnknown, metav1.ConditionFalse
+		reason = "BuildRunning"
+		readyMessage = "package build in progress"
+	default:
+		buildStatus, readyStatus = metav1.ConditionUnknown, metav1.ConditionUnknown
+		reason = "Unknown"
+	}
+	conditions.Set(&s.Conditions, metav1.Condition{
+		Type:               fv1.PackageConditionBuildSucceeded,
+		Status:             buildStatus,
+		ObservedGeneration: gen,
+		Reason:             reason,
+		Message:            buildLogs,
+	})
+	conditions.Set(&s.Conditions, metav1.Condition{
+		Type:               fv1.PackageConditionReady,
+		Status:             readyStatus,
+		ObservedGeneration: gen,
+		Reason:             reason,
+		Message:            readyMessage,
+	})
 }

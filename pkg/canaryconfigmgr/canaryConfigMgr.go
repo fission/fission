@@ -33,6 +33,7 @@ import (
 	k8sCache "k8s.io/client-go/tools/cache"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/conditions"
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	"github.com/fission/fission/pkg/utils"
@@ -42,6 +43,48 @@ import (
 const (
 	maxRetries = 10
 )
+
+// setCanaryConfigConditions mirrors the existing bare Status string onto the
+// standard Progressing/Ready conditions so `kubectl wait
+// --for=condition=Ready canaryconfig/<name>` works alongside the legacy
+// status. Mapping matches the enum in pkg/apis/core/v1/const.go.
+func setCanaryConfigConditions(s *fv1.CanaryConfigStatus, status string, gen int64) {
+	var (
+		progStatus, readyStatus metav1.ConditionStatus
+		reason, message         string
+	)
+	switch status {
+	case fv1.CanaryConfigStatusPending:
+		progStatus, readyStatus = metav1.ConditionTrue, metav1.ConditionFalse
+		reason, message = "InProgress", "canary rollout in progress"
+	case fv1.CanaryConfigStatusSucceeded:
+		progStatus, readyStatus = metav1.ConditionFalse, metav1.ConditionTrue
+		reason, message = "Succeeded", "canary rollout succeeded"
+	case fv1.CanaryConfigStatusFailed:
+		progStatus, readyStatus = metav1.ConditionFalse, metav1.ConditionFalse
+		reason, message = "Failed", "canary rollout failed; traffic rolled back"
+	case fv1.CanaryConfigStatusAborted:
+		progStatus, readyStatus = metav1.ConditionFalse, metav1.ConditionFalse
+		reason, message = "Aborted", "canary rollout aborted"
+	default:
+		progStatus, readyStatus = metav1.ConditionUnknown, metav1.ConditionUnknown
+		reason, message = "Unknown", "unknown canary status: "+status
+	}
+	conditions.Set(&s.Conditions, metav1.Condition{
+		Type:               fv1.CanaryConfigConditionProgressing,
+		Status:             progStatus,
+		ObservedGeneration: gen,
+		Reason:             reason,
+		Message:            message,
+	})
+	conditions.Set(&s.Conditions, metav1.Condition{
+		Type:               fv1.CanaryConfigConditionReady,
+		Status:             readyStatus,
+		ObservedGeneration: gen,
+		Reason:             reason,
+		Message:            message,
+	})
+}
 
 type canaryConfigMgr struct {
 	logger                 logr.Logger
@@ -388,6 +431,7 @@ func (canaryCfgMgr *canaryConfigMgr) updateCanaryConfigStatusWithRetries(ctx con
 			"status", status)
 
 		canaryCfgObj.Status.Status = status
+		setCanaryConfigConditions(&canaryCfgObj.Status, status, canaryCfgObj.Generation)
 
 		_, err = canaryCfgMgr.fissionClient.CoreV1().CanaryConfigs(cfgNamespace).Update(ctx, canaryCfgObj, metav1.UpdateOptions{})
 		switch {

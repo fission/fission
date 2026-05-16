@@ -28,11 +28,13 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/gorilla/mux"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	k8sCache "k8s.io/client-go/tools/cache"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/conditions"
 	ferror "github.com/fission/fission/pkg/error"
 	eclient "github.com/fission/fission/pkg/executor/client"
 	config "github.com/fission/fission/pkg/featureconfig"
@@ -348,6 +350,42 @@ func (ts *HTTPTriggerSet) updateTriggerStatusFailed(ht *fv1.HTTPTrigger, err err
 	// TODO
 }
 
+// markTriggerAdmitted writes RouteAdmitted + Ready conditions on an
+// HTTPTrigger after its routes have been installed into the router mux.
+// Uses the status subresource (HTTPTrigger is +kubebuilder:subresource:status)
+// and bails out silently on read/write errors — the router's job is to
+// serve traffic, not to block on status I/O.
+func (ts *HTTPTriggerSet) markTriggerAdmitted(ctx context.Context, namespace, name string) {
+	if ts.fissionClient == nil {
+		return // unit-test wiring without a real client
+	}
+	cur, err := ts.fissionClient.CoreV1().HTTPTriggers(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		ts.logger.V(1).Info("httptrigger status: get failed", "name", name, "namespace", namespace, "error", err)
+		return
+	}
+	admittedChanged := conditions.Set(&cur.Status.Conditions, metav1.Condition{
+		Type:               fv1.HTTPTriggerConditionRouteAdmitted,
+		Status:             metav1.ConditionTrue,
+		ObservedGeneration: cur.Generation,
+		Reason:             "RouteAdmitted",
+		Message:            "router accepted the trigger and installed its mux entry",
+	})
+	readyChanged := conditions.Set(&cur.Status.Conditions, metav1.Condition{
+		Type:               fv1.HTTPTriggerConditionReady,
+		Status:             metav1.ConditionTrue,
+		ObservedGeneration: cur.Generation,
+		Reason:             "RouteAdmitted",
+		Message:            "trigger is serving",
+	})
+	if !admittedChanged && !readyChanged {
+		return
+	}
+	if _, err := ts.fissionClient.CoreV1().HTTPTriggers(namespace).UpdateStatus(ctx, cur, metav1.UpdateOptions{}); err != nil {
+		ts.logger.V(1).Info("httptrigger status: update failed", "name", name, "namespace", namespace, "error", err)
+	}
+}
+
 func (ts *HTTPTriggerSet) addTriggerHandlers() error {
 	for _, triggerInformer := range ts.triggerInformer {
 		_, err := triggerInformer.AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
@@ -472,6 +510,14 @@ func (ts *HTTPTriggerSet) updateRouter(ctx context.Context) {
 		ts.mutableRouter.updateRouter(public)
 		if ts.internalMutableRouter != nil {
 			ts.internalMutableRouter.updateRouter(internal)
+		}
+
+		// Mark each trigger admitted now that its routes are live. We
+		// do this after the swap so the condition reflects observable
+		// state, not just intent. Each markTriggerAdmitted is best-effort
+		// and never blocks subsequent mux updates.
+		for i := range alltriggers {
+			ts.markTriggerAdmitted(ctx, alltriggers[i].Namespace, alltriggers[i].Name)
 		}
 	}
 }
