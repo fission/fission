@@ -21,6 +21,7 @@ package v1
 import (
 	corev1 "github.com/fission/fission/pkg/apis/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	applyconfigurationsmetav1 "k8s.io/client-go/applyconfigurations/meta/v1"
 )
 
 // PackageStatusApplyConfiguration represents a declarative configuration of the PackageStatus type for use
@@ -36,6 +37,8 @@ type PackageStatusApplyConfiguration struct {
 	// metav1.Time is a wrapper around time.Time which supports correct marshaling to YAML and JSON.
 	// https://github.com/kubernetes/apimachinery/blob/44bd77c24ef93cd3a5eb6fef64e514025d10d44e/pkg/apis/meta/v1/time.go#L26-L35
 	LastUpdateTimestamp *metav1.Time `json:"lastUpdateTimestamp,omitempty"`
+	// Conditions represent the latest observations of the package's state.
+	Conditions []applyconfigurationsmetav1.ConditionApplyConfiguration `json:"conditions,omitempty"`
 }
 
 // PackageStatusApplyConfiguration constructs a declarative configuration of the PackageStatus type for use with
@@ -65,5 +68,18 @@ func (b *PackageStatusApplyConfiguration) WithBuildLog(value string) *PackageSta
 // If called multiple times, the LastUpdateTimestamp field is set to the value of the last call.
 func (b *PackageStatusApplyConfiguration) WithLastUpdateTimestamp(value metav1.Time) *PackageStatusApplyConfiguration {
 	b.LastUpdateTimestamp = &value
+	return b
+}
+
+// WithConditions adds the given value to the Conditions field in the declarative configuration
+// and returns the receiver, so that objects can be build by chaining "With" function invocations.
+// If called multiple times, values provided by each call will be appended to the Conditions field.
+func (b *PackageStatusApplyConfiguration) WithConditions(values ...*applyconfigurationsmetav1.ConditionApplyConfiguration) *PackageStatusApplyConfiguration {
+	for i := range values {
+		if values[i] == nil {
+			panic("nil value passed to WithConditions")
+		}
+		b.Conditions = append(b.Conditions, *values[i])
+	}
 	return b
 }

@@ -31,7 +31,8 @@ import (
 type TimeTriggerApplyConfiguration struct {
 	metav1.TypeMetaApplyConfiguration    `json:",inline"`
 	*metav1.ObjectMetaApplyConfiguration `json:"metadata,omitempty"`
-	Spec                                 *TimeTriggerSpecApplyConfiguration `json:"spec,omitempty"`
+	Spec                                 *TimeTriggerSpecApplyConfiguration   `json:"spec,omitempty"`
+	Status                               *TimeTriggerStatusApplyConfiguration `json:"status,omitempty"`
 }
 
 // TimeTrigger constructs a declarative configuration of the TimeTrigger type for use with
@@ -210,6 +211,14 @@ func (b *TimeTriggerApplyConfiguration) ensureObjectMetaApplyConfigurationExists
 // If called multiple times, the Spec field is set to the value of the last call.
 func (b *TimeTriggerApplyConfiguration) WithSpec(value *TimeTriggerSpecApplyConfiguration) *TimeTriggerApplyConfiguration {
 	b.Spec = value
+	return b
+}
+
+// WithStatus sets the Status field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Status field is set to the value of the last call.
+func (b *TimeTriggerApplyConfiguration) WithStatus(value *TimeTriggerStatusApplyConfiguration) *TimeTriggerApplyConfiguration {
+	b.Status = value
 	return b
 }
 
