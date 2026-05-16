@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
@@ -41,10 +40,28 @@ func minimalFunction(name, namespace string) *fv1.Function {
 	}
 }
 
+// smokeConditionType is a test-only condition Type that no Fission
+// controller writes. Using it (instead of "Ready") lets the assertions
+// remain stable once controllers begin populating their own conditions.
+const smokeConditionType = "fission.io/integration-test-smoke"
+
+// findCondition returns the first condition with the given Type, or nil.
+// We deliberately don't pull this from pkg/conditions to keep the
+// integration test free of dependencies on internal helpers.
+func findCondition(conds []metav1.Condition, t string) *metav1.Condition {
+	for i := range conds {
+		if conds[i].Type == t {
+			return &conds[i]
+		}
+	}
+	return nil
+}
+
 // TestConditions_FunctionStatusSubresource creates a Function via the
-// typed client, asserts the Status field is empty (no controller writer
-// exists yet), then mutates Status.Conditions via UpdateStatus and re-fetches
-// to verify the apiserver persists it through the new status subresource.
+// typed client, writes a uniquely-typed condition via UpdateStatus, and
+// re-fetches to verify the apiserver persists it through the new status
+// subresource. The test uses a smoke-only condition Type so it stays
+// stable even after controllers start populating standard conditions.
 func TestConditions_FunctionStatusSubresource(t *testing.T) {
 	t.Parallel()
 
@@ -62,29 +79,24 @@ func TestConditions_FunctionStatusSubresource(t *testing.T) {
 		_ = fc.Functions(ns.Name).Delete(context.Background(), name, metav1.DeleteOptions{})
 	})
 
-	conds := ns.GetFunctionConditions(t, ctx, name)
-	require.Empty(t, conds, "no controller writes conditions yet — expected empty Conditions")
-
 	fn, err := fc.Functions(ns.Name).Get(ctx, name, metav1.GetOptions{})
 	require.NoError(t, err)
-	fn.Status.Conditions = []metav1.Condition{
-		{
-			Type:               fv1.FunctionConditionReady,
-			Status:             metav1.ConditionUnknown,
-			Reason:             "ConditionsSmoke",
-			Message:            "set by TestConditions_FunctionStatusSubresource",
-			LastTransitionTime: metav1.Now(),
-			ObservedGeneration: fn.Generation,
-		},
-	}
+	fn.Status.Conditions = append(fn.Status.Conditions, metav1.Condition{
+		Type:               smokeConditionType,
+		Status:             metav1.ConditionUnknown,
+		Reason:             "ConditionsSmoke",
+		Message:            "set by TestConditions_FunctionStatusSubresource",
+		LastTransitionTime: metav1.Now(),
+		ObservedGeneration: fn.Generation,
+	})
 	_, err = fc.Functions(ns.Name).UpdateStatus(ctx, fn, metav1.UpdateOptions{})
 	require.NoError(t, err, "UpdateStatus on the new /status subresource must succeed")
 
 	got := ns.GetFunctionConditions(t, ctx, name)
-	require.Len(t, got, 1)
-	require.Equal(t, fv1.FunctionConditionReady, got[0].Type)
-	require.EqualValues(t, "Unknown", got[0].Status)
-	require.Equal(t, "ConditionsSmoke", got[0].Reason)
+	c := findCondition(got, smokeConditionType)
+	require.NotNil(t, c, "smoke condition must round-trip through the status subresource (got %v)", got)
+	require.EqualValues(t, "Unknown", c.Status)
+	require.Equal(t, "ConditionsSmoke", c.Reason)
 }
 
 // TestConditions_PackageMainResource verifies the additive change to
@@ -119,24 +131,23 @@ func TestConditions_PackageMainResource(t *testing.T) {
 
 	got, err := fc.Packages(ns.Name).Get(ctx, name, metav1.GetOptions{})
 	require.NoError(t, err)
-	got.Status.Conditions = []metav1.Condition{
-		{
-			Type:               fv1.PackageConditionBuildSucceeded,
-			Status:             metav1.ConditionTrue,
-			Reason:             "ConditionsSmoke",
-			Message:            "set by TestConditions_PackageMainResource",
-			LastTransitionTime: metav1.Now(),
-			ObservedGeneration: got.Generation,
-		},
-	}
+	got.Status.Conditions = append(got.Status.Conditions, metav1.Condition{
+		Type:               smokeConditionType,
+		Status:             metav1.ConditionTrue,
+		Reason:             "ConditionsSmoke",
+		Message:            "set by TestConditions_PackageMainResource",
+		LastTransitionTime: metav1.Now(),
+		ObservedGeneration: got.Generation,
+	})
 	// Main-resource Update writes Spec AND Status together — proves we did
 	// NOT add +kubebuilder:subresource:status to Package.
 	_, err = fc.Packages(ns.Name).Update(ctx, got, metav1.UpdateOptions{})
 	require.NoError(t, err, "Update on Package main resource must persist Status.Conditions")
 
 	refetched := ns.GetPackageConditions(t, ctx, name)
-	require.Len(t, refetched, 1)
-	require.Equal(t, fv1.PackageConditionBuildSucceeded, refetched[0].Type)
+	c := findCondition(refetched, smokeConditionType)
+	require.NotNil(t, c, "smoke condition must round-trip through the main-resource Update (got %v)", refetched)
+	require.EqualValues(t, "True", c.Status)
 }
 
 // TestConditions_SSAListMapKey is the core SSA correctness test for
@@ -157,9 +168,10 @@ func TestConditions_SSAListMapKey(t *testing.T) {
 
 	name := "conds-ssa-" + ns.ID
 
-	// minimalApply returns an apply config matching minimalFunction so the
-	// first Apply has enough required fields to pass admission.
-	minimalApply := func() *fapply.FunctionApplyConfiguration {
+	// buildFn builds a complete FunctionApplyConfiguration with all the
+	// admission-required spec fields plus the caller-supplied Secrets. Each
+	// call returns a fresh, fully-formed config — no `.Spec` chaining tricks.
+	buildFn := func(secretName string) *fapply.FunctionApplyConfiguration {
 		return fapply.Function(name, ns.Name).
 			WithSpec(fapply.FunctionSpec().
 				WithEnvironment(fapply.EnvironmentReference().
@@ -172,24 +184,23 @@ func TestConditions_SSAListMapKey(t *testing.T) {
 					WithExecutionStrategy(fapply.ExecutionStrategy().
 						WithExecutorType(fv1.ExecutorTypePoolmgr).
 						WithMinScale(0).
-						WithMaxScale(1))))
+						WithMaxScale(1))).
+				WithSecrets(fapply.SecretReference().
+					WithName(secretName).WithNamespace(ns.Name)))
 	}
 
 	// Writer A owns secret "alpha".
-	a := minimalApply().WithSpec(minimalApply().Spec.
-		WithSecrets(fapply.SecretReference().WithName("alpha").WithNamespace(ns.Name)))
-	_, err := fc.Functions(ns.Name).Apply(ctx, a, metav1.ApplyOptions{FieldManager: "writer-a", Force: true})
+	_, err := fc.Functions(ns.Name).Apply(ctx, buildFn("alpha"),
+		metav1.ApplyOptions{FieldManager: "writer-a", Force: true})
 	require.NoError(t, err, "first Apply (writer-a)")
 	t.Cleanup(func() {
 		_ = fc.Functions(ns.Name).Delete(context.Background(), name, metav1.DeleteOptions{})
 	})
 
-	// Writer B owns secret "beta". Note: this Apply only sets Secrets=[beta].
-	// Because Secrets is a list-map keyed by name, "alpha" remains owned by
-	// writer-a and stays in the resulting list.
-	b := minimalApply().WithSpec(minimalApply().Spec.
-		WithSecrets(fapply.SecretReference().WithName("beta").WithNamespace(ns.Name)))
-	_, err = fc.Functions(ns.Name).Apply(ctx, b, metav1.ApplyOptions{FieldManager: "writer-b", Force: true})
+	// Writer B owns secret "beta". Because Secrets is a list-map keyed by
+	// name, "alpha" remains owned by writer-a and stays in the resulting list.
+	_, err = fc.Functions(ns.Name).Apply(ctx, buildFn("beta"),
+		metav1.ApplyOptions{FieldManager: "writer-b", Force: true})
 	require.NoError(t, err, "second Apply (writer-b)")
 
 	fn, err := fc.Functions(ns.Name).Get(ctx, name, metav1.GetOptions{})
@@ -231,10 +242,12 @@ func TestConditions_StatusSubresourceIsolated(t *testing.T) {
 	// Mutate both spec and status; submit via UpdateStatus.
 	// The apiserver must drop the spec change (subresource semantics).
 	fn.Spec.Environment.Name = "conds-tampered"
-	fn.Status.Conditions = []metav1.Condition{{
-		Type: fv1.FunctionConditionProgressing, Status: metav1.ConditionTrue,
-		Reason: "Tampering", LastTransitionTime: metav1.Now(),
-	}}
+	fn.Status.Conditions = append(fn.Status.Conditions, metav1.Condition{
+		Type:               smokeConditionType,
+		Status:             metav1.ConditionTrue,
+		Reason:             "Tampering",
+		LastTransitionTime: metav1.Now(),
+	})
 	_, err = fc.Functions(ns.Name).UpdateStatus(ctx, fn, metav1.UpdateOptions{})
 	require.NoError(t, err)
 
@@ -242,8 +255,8 @@ func TestConditions_StatusSubresourceIsolated(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, originalEnvName, after.Spec.Environment.Name,
 		"spec change submitted via UpdateStatus must be dropped — proves the subresource boundary is enforced")
-	require.Len(t, after.Status.Conditions, 1)
-	require.Equal(t, fv1.FunctionConditionProgressing, after.Status.Conditions[0].Type)
+	require.NotNil(t, findCondition(after.Status.Conditions, smokeConditionType),
+		"the smoke condition written via UpdateStatus must persist")
 
 	// And the inverse: a Patch on .metadata is fine and doesn't touch Status.
 	_, err = fc.Functions(ns.Name).Patch(ctx, name, types.MergePatchType,
@@ -251,10 +264,8 @@ func TestConditions_StatusSubresourceIsolated(t *testing.T) {
 	require.NoError(t, err)
 
 	final, err := fc.Functions(ns.Name).Get(ctx, name, metav1.GetOptions{})
-	if apierrors.IsNotFound(err) {
-		t.Skip("Function gone — likely the cleanup raced this test")
-	}
 	require.NoError(t, err)
 	require.Equal(t, "smoke", final.Labels["conds-test"])
-	require.Len(t, final.Status.Conditions, 1, "Status must survive an unrelated metadata patch")
+	require.NotNil(t, findCondition(final.Status.Conditions, smokeConditionType),
+		"the smoke condition must survive an unrelated metadata patch")
 }

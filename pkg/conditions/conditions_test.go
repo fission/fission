@@ -53,7 +53,7 @@ func TestSet_PreservesTimestampOnNoStatusChange(t *testing.T) {
 	originalTS := conds[0].LastTransitionTime
 
 	// Force the wall clock to move so a stale impl would visibly drift.
-	time.Sleep(2 * time.Millisecond)
+	time.Sleep(25 * time.Millisecond)
 
 	changed := Set(&conds, cond("Ready", "True", "StillReadyJustWithNewerReason"))
 	require.True(t, changed, "Reason/Message updates must report change even when Status is unchanged")
@@ -67,7 +67,7 @@ func TestSet_UpdatesTimestampOnStatusFlip(t *testing.T) {
 	Set(&conds, cond("Ready", "True", "AllReady"))
 	originalTS := conds[0].LastTransitionTime
 
-	time.Sleep(2 * time.Millisecond)
+	time.Sleep(25 * time.Millisecond)
 
 	Set(&conds, cond("Ready", "False", "PackageBuildFailed"))
 	require.True(t, conds[0].LastTransitionTime.After(originalTS.Time),
