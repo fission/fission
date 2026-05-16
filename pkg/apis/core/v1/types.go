@@ -196,7 +196,7 @@ type (
 	CanaryConfig struct {
 		metav1.TypeMeta   `json:",inline"`
 		metav1.ObjectMeta `json:"metadata"`
-		Spec              CanaryConfigSpec   `json:"spec"`
+		Spec              CanaryConfigSpec `json:"spec"`
 		// +optional
 		Status CanaryConfigStatus `json:"status,omitempty"`
 	}
