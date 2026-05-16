@@ -55,7 +55,7 @@ type (
 
 		// Status indicates the build status of package.
 		//+optional
-		Status PackageStatus `json:"status"`
+		Status PackageStatus `json:"status,omitempty"`
 	}
 
 	// PackageList is a list of Packages.
@@ -75,6 +75,8 @@ type (
 		metav1.TypeMeta   `json:",inline"`
 		metav1.ObjectMeta `json:"metadata"`
 		Spec              FunctionSpec `json:"spec"`
+		// +optional
+		Status FunctionStatus `json:"status,omitempty"`
 	}
 
 	// FunctionList is a list of Functions.
@@ -93,6 +95,8 @@ type (
 		metav1.TypeMeta   `json:",inline"`
 		metav1.ObjectMeta `json:"metadata"`
 		Spec              EnvironmentSpec `json:"spec"`
+		// +optional
+		Status EnvironmentStatus `json:"status,omitempty"`
 	}
 
 	// EnvironmentList is a list of Environments.
@@ -111,6 +115,8 @@ type (
 		metav1.TypeMeta   `json:",inline"`
 		metav1.ObjectMeta `json:"metadata"`
 		Spec              HTTPTriggerSpec `json:"spec"`
+		// +optional
+		Status HTTPTriggerStatus `json:"status,omitempty"`
 	}
 
 	// HTTPTriggerList is a list of HTTPTriggers
@@ -129,6 +135,8 @@ type (
 		metav1.TypeMeta   `json:",inline"`
 		metav1.ObjectMeta `json:"metadata"`
 		Spec              KubernetesWatchTriggerSpec `json:"spec"`
+		// +optional
+		Status KubernetesWatchTriggerStatus `json:"status,omitempty"`
 	}
 
 	// KubernetesWatchTriggerList is a list of KubernetesWatchTriggers
@@ -148,6 +156,8 @@ type (
 		metav1.ObjectMeta `json:"metadata"`
 
 		Spec TimeTriggerSpec `json:"spec"`
+		// +optional
+		Status TimeTriggerStatus `json:"status,omitempty"`
 	}
 
 	// TimeTriggerList is a list of TimeTriggers.
@@ -162,11 +172,14 @@ type (
 	// MessageQueueTrigger invokes functions when messages arrive to certain topic that trigger subscribes to.
 	// +genclient
 	// +kubebuilder:object:root=true
+	// +kubebuilder:subresource:status
 	MessageQueueTrigger struct {
 		metav1.TypeMeta   `json:",inline"`
 		metav1.ObjectMeta `json:"metadata"`
 
 		Spec MessageQueueTriggerSpec `json:"spec"`
+		// +optional
+		Status MessageQueueTriggerStatus `json:"status,omitempty"`
 	}
 
 	// MessageQueueTriggerList is a list of MessageQueueTriggers.
@@ -184,7 +197,8 @@ type (
 		metav1.TypeMeta   `json:",inline"`
 		metav1.ObjectMeta `json:"metadata"`
 		Spec              CanaryConfigSpec   `json:"spec"`
-		Status            CanaryConfigStatus `json:"status"`
+		// +optional
+		Status CanaryConfigStatus `json:"status,omitempty"`
 	}
 
 	// CanaryConfigList is a list of CanaryConfigs.
@@ -305,6 +319,14 @@ type (
 		// +optional
 		// +nullable
 		LastUpdateTimestamp metav1.Time `json:"lastUpdateTimestamp,omitempty"`
+
+		// Conditions represent the latest observations of the package's state.
+		// +optional
+		// +patchMergeKey=type
+		// +patchStrategy=merge
+		// +listType=map
+		// +listMapKey=type
+		Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
 	}
 
 	// PackageRef is a reference to the package.
@@ -355,11 +377,15 @@ type (
 		// Reference to a list of secrets.
 		// +optional
 		// +nullable
+		// +listType=map
+		// +listMapKey=name
 		Secrets []SecretReference `json:"secrets,omitempty"`
 
 		// Reference to a list of configmaps.
 		// +optional
 		// +nullable
+		// +listType=map
+		// +listMapKey=name
 		ConfigMaps []ConfigMapReference `json:"configmaps,omitempty"`
 
 		// cpu and memory resources as per K8S standards
@@ -684,6 +710,7 @@ type (
 
 		// HTTP methods to access a function
 		// +optional
+		// +listType=set
 		Methods []string `json:"methods,omitempty"`
 
 		// FunctionReference is a reference to the target function.
@@ -864,7 +891,97 @@ type (
 
 	// CanaryConfigStatus represents canary config status
 	CanaryConfigStatus struct {
-		Status string `json:"status"`
+		// +optional
+		Status string `json:"status,omitempty"`
+
+		// Conditions represent the latest observations of the canary's state.
+		// +optional
+		// +patchMergeKey=type
+		// +patchStrategy=merge
+		// +listType=map
+		// +listMapKey=type
+		Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
+	}
+
+	// FunctionStatus describes the observed state of a Function.
+	FunctionStatus struct {
+		// ObservedGeneration reflects the .metadata.generation that the
+		// controller observed when it last updated the status.
+		// +optional
+		ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+		// Conditions represent the latest observations of the function's state.
+		// +optional
+		// +patchMergeKey=type
+		// +patchStrategy=merge
+		// +listType=map
+		// +listMapKey=type
+		Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
+	}
+
+	// EnvironmentStatus describes the observed state of an Environment.
+	EnvironmentStatus struct {
+		// +optional
+		ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+		// +optional
+		// +patchMergeKey=type
+		// +patchStrategy=merge
+		// +listType=map
+		// +listMapKey=type
+		Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
+	}
+
+	// HTTPTriggerStatus describes the observed state of an HTTPTrigger.
+	HTTPTriggerStatus struct {
+		// +optional
+		ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+		// +optional
+		// +patchMergeKey=type
+		// +patchStrategy=merge
+		// +listType=map
+		// +listMapKey=type
+		Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
+	}
+
+	// KubernetesWatchTriggerStatus describes the observed state of a KubernetesWatchTrigger.
+	KubernetesWatchTriggerStatus struct {
+		// +optional
+		ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+		// +optional
+		// +patchMergeKey=type
+		// +patchStrategy=merge
+		// +listType=map
+		// +listMapKey=type
+		Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
+	}
+
+	// TimeTriggerStatus describes the observed state of a TimeTrigger.
+	TimeTriggerStatus struct {
+		// +optional
+		ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+		// +optional
+		// +patchMergeKey=type
+		// +patchStrategy=merge
+		// +listType=map
+		// +listMapKey=type
+		Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
+	}
+
+	// MessageQueueTriggerStatus describes the observed state of a MessageQueueTrigger.
+	MessageQueueTriggerStatus struct {
+		// +optional
+		ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+		// +optional
+		// +patchMergeKey=type
+		// +patchStrategy=merge
+		// +listType=map
+		// +listMapKey=type
+		Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
 	}
 
 	// AuthLogin defines the body for router login
