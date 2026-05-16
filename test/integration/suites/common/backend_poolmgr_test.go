@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/test/integration/framework"
 )
 
@@ -42,4 +43,17 @@ func TestBackendPoolmgr(t *testing.T) {
 
 	body := f.Router(t).GetEventually(t, ctx, "/"+fnName, framework.BodyContains("hello"))
 	require.Contains(t, body, "hello")
+
+	// Once a request has been served end-to-end the controllers should have
+	// populated every Ready condition along the dispatch chain:
+	//   - the buildermgr marked the backing Package as Ready (BuildSucceeded)
+	//   - the poolmgr executor specialized a pool pod and marked the
+	//     Function and the Environment as Ready (Specialized / PoolReady)
+	//   - the router admitted the HTTPTrigger's route (RouteAdmitted)
+	// 30s is generous — by this point every writer has had ample time.
+	pkgName := ns.FunctionPackageName(t, ctx, fnName)
+	ns.WaitForPackageConditionTrue(t, ctx, pkgName, fv1.PackageConditionBuildSucceeded, 30*time.Second)
+	ns.WaitForPackageConditionTrue(t, ctx, pkgName, fv1.PackageConditionReady, 30*time.Second)
+	ns.WaitForFunctionConditionReady(t, ctx, fnName, fv1.FunctionConditionReady, 30*time.Second)
+	ns.WaitForEnvironmentConditionReady(t, ctx, envName, fv1.EnvironmentConditionReady, 30*time.Second)
 }
