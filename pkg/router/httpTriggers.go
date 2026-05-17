@@ -411,7 +411,12 @@ func (ts *HTTPTriggerSet) addTriggerHandlers() error {
 				oldTrigger := oldObj.(*fv1.HTTPTrigger)
 				newTrigger := newObj.(*fv1.HTTPTrigger)
 
-				if oldTrigger.ResourceVersion == newTrigger.ResourceVersion {
+				// Skip status-only updates: our own markTriggerCondition
+				// writes bump RV but leave Generation untouched. If we
+				// re-synced on every status-only update we'd loop on our
+				// own writes (mux rebuild → status write → informer
+				// fires → mux rebuild).
+				if oldTrigger.Generation == newTrigger.Generation {
 					return
 				}
 
@@ -440,7 +445,13 @@ func (ts *HTTPTriggerSet) addFunctionHandlers() error {
 				oldFn := oldObj.(*fv1.Function)
 				fn := newObj.(*fv1.Function)
 
-				if oldFn.ResourceVersion == fn.ResourceVersion {
+				// Generation-based comparison filters out status-only
+				// updates (executor's FunctionConditionReady writes go
+				// through the status subresource and don't bump
+				// Generation). Without this, every cold-start specialization
+				// would invalidate the resolver cache and force a full
+				// mux rebuild on the next request.
+				if oldFn.Generation == fn.Generation {
 					return
 				}
 

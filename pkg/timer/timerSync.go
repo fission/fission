@@ -153,7 +153,12 @@ func (ws *TimerSync) TimeTriggerEventHandlers(ctx context.Context) error {
 			UpdateFunc: func(oldObj any, newObj any) {
 				oldTimeTrigger := oldObj.(*fv1.TimeTrigger)
 				newTimeTrigger := newObj.(*fv1.TimeTrigger)
-				if oldTimeTrigger.ResourceVersion != newTimeTrigger.ResourceVersion {
+				// Compare Generation, not ResourceVersion: our condition
+				// write at the end of AddUpdateTimeTrigger goes through
+				// the status subresource and bumps RV only. Re-running
+				// AddUpdateTimeTrigger on a status-only update would
+				// cycle the cron entry needlessly.
+				if oldTimeTrigger.Generation != newTimeTrigger.Generation {
 					ws.AddUpdateTimeTrigger(newTimeTrigger)
 				}
 			},

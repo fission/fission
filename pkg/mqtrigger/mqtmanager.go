@@ -364,6 +364,16 @@ func (mqt *MessageQueueTriggerManager) enqueueMqtAdd(obj any) {
 }
 
 func (mqt *MessageQueueTriggerManager) enqueueMqtUpdate(oldObj, newObj any) {
+	// Status-subresource writes (e.g., our condition write from
+	// markMessageQueueTriggerBound) bump ResourceVersion only.
+	// Re-enqueuing on those would tear down and recreate the queue
+	// subscription needlessly. Generation only changes when Spec
+	// changes, which is the actual signal we care about here.
+	oldMqt, oldOK := oldObj.(*fv1.MessageQueueTrigger)
+	newMqt, newOK := newObj.(*fv1.MessageQueueTrigger)
+	if oldOK && newOK && oldMqt.Generation == newMqt.Generation {
+		return
+	}
 	key, err := k8sCache.MetaNamespaceKeyFunc(newObj)
 	if err != nil {
 		mqt.logger.Error(err, "error retrieving key from object in messageQueueTriggerManager", "obj", newObj)

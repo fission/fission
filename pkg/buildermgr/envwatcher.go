@@ -150,7 +150,14 @@ func (envw *environmentWatcher) EnvWatchEventHandlers(ctx context.Context) error
 			UpdateFunc: func(oldObj any, newObj any) {
 				oldEnvObj := oldObj.(*fv1.Environment)
 				newEnvObj := newObj.(*fv1.Environment)
-				if oldEnvObj.ResourceVersion != newEnvObj.ResourceVersion {
+				// Use Generation, not ResourceVersion: status-subresource
+				// writes (e.g., the condition write we now do at the end
+				// of AddUpdateBuilder) bump RV but leave Generation
+				// unchanged. Triggering AddUpdateBuilder on a status-only
+				// update would unnecessarily DeleteBuilder + recreate it
+				// in a loop because the existing-cache branch always
+				// cycles the deployment.
+				if oldEnvObj.Generation != newEnvObj.Generation {
 					envw.AddUpdateBuilder(ctx, newEnvObj)
 				}
 			},
