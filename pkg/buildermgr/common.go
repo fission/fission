@@ -239,6 +239,19 @@ func isPackageConditionCurrent(pkg *fv1.Package) bool {
 	return false
 }
 
+// isTerminalBuildStatus reports whether the BuildStatus represents a state
+// in which we expect Conditions to be settled. Transient states (Pending,
+// Running) are still in motion — overwriting them via syncPackageConditions
+// would bump ResourceVersion and invalidate buildermgr's RV-keyed
+// buildCache, causing the same source archive to be built twice.
+func isTerminalBuildStatus(status fv1.BuildStatus) bool {
+	switch status {
+	case fv1.BuildStatusSucceeded, fv1.BuildStatusFailed, fv1.BuildStatusNone:
+		return true
+	}
+	return false
+}
+
 // markFunctionsForPackage writes PackageReady + Ready conditions on every
 // Function in fns that references pkg. Used by the buildermgr to propagate
 // build outcome onto the dependent Functions' status subresources so users
