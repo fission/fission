@@ -190,6 +190,7 @@ func (pkgw *packageWatcher) build(ctx context.Context, srcpkg *fv1.Package) {
 				if er != nil {
 					logger.Error(er, "error updating package")
 				}
+				pkgw.propagateFunctionFailure(ctx, logger, pkg)
 				return
 			}
 
@@ -206,6 +207,7 @@ func (pkgw *packageWatcher) build(ctx context.Context, srcpkg *fv1.Package) {
 					pkgw.logger.Error(er,
 						"error updating package")
 				}
+				pkgw.propagateFunctionFailure(ctx, logger, pkg)
 			}
 
 			// A package may be used by multiple functions. Update
@@ -225,6 +227,7 @@ func (pkgw *packageWatcher) build(ctx context.Context, srcpkg *fv1.Package) {
 						if er != nil {
 							logger.Error(er, "error updating package")
 						}
+						markFunctionsForPackage(ctx, logger, pkgw.fissionClient, fnList.Items, pkg, false)
 						return
 					}
 				}
@@ -238,6 +241,7 @@ func (pkgw *packageWatcher) build(ctx context.Context, srcpkg *fv1.Package) {
 				if er != nil {
 					logger.Error(er, "error updating package")
 				}
+				markFunctionsForPackage(ctx, logger, pkgw.fissionClient, fnList.Items, pkg, false)
 				return
 			}
 
@@ -258,8 +262,21 @@ func (pkgw *packageWatcher) build(ctx context.Context, srcpkg *fv1.Package) {
 	if err != nil {
 		logger.Error(err, "error updating package")
 	}
+	pkgw.propagateFunctionFailure(ctx, logger, pkg)
 
 	logger.Info("max retries exceeded in building source package, timeout due to environment builder not ready")
+}
+
+// propagateFunctionFailure marks every Function referencing pkg with
+// PackageReady=False / Ready=False. Used by build failure paths that
+// don't have a pre-fetched fnList in scope (the success path does).
+func (pkgw *packageWatcher) propagateFunctionFailure(ctx context.Context, logger logr.Logger, pkg *fv1.Package) {
+	fnList, err := pkgw.fissionClient.CoreV1().Functions(pkg.Namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		logger.V(1).Info("function-failure propagation: list failed", "namespace", pkg.Namespace, "error", err)
+		return
+	}
+	markFunctionsForPackage(ctx, logger, pkgw.fissionClient, fnList.Items, pkg, false)
 }
 
 func (pkgw *packageWatcher) packageInformerHandler(ctx context.Context) k8sCache.ResourceEventHandlerFuncs {

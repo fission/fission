@@ -103,3 +103,32 @@ func TestIsTrue(t *testing.T) {
 	require.False(t, IsTrue(conds, "Degraded"))
 	require.False(t, IsTrue(conds, "Missing"))
 }
+
+func TestIsAt(t *testing.T) {
+	conds := []metav1.Condition{
+		{Type: "Ready", Status: metav1.ConditionTrue, Reason: "ok", ObservedGeneration: 3},
+	}
+	// Matches on Type/Status/Reason/ObservedGeneration.
+	require.True(t, IsAt(conds, metav1.Condition{
+		Type: "Ready", Status: metav1.ConditionTrue, Reason: "ok", ObservedGeneration: 3,
+	}))
+	// Message difference doesn't break the match.
+	require.True(t, IsAt(conds, metav1.Condition{
+		Type: "Ready", Status: metav1.ConditionTrue, Reason: "ok", ObservedGeneration: 3,
+		Message: "different message ignored",
+	}))
+	// Reason differs.
+	require.False(t, IsAt(conds, metav1.Condition{
+		Type: "Ready", Status: metav1.ConditionTrue, Reason: "different", ObservedGeneration: 3,
+	}))
+	// Status differs.
+	require.False(t, IsAt(conds, metav1.Condition{
+		Type: "Ready", Status: metav1.ConditionFalse, Reason: "ok", ObservedGeneration: 3,
+	}))
+	// ObservedGeneration differs (caller observed a newer spec).
+	require.False(t, IsAt(conds, metav1.Condition{
+		Type: "Ready", Status: metav1.ConditionTrue, Reason: "ok", ObservedGeneration: 4,
+	}))
+	// Missing condition.
+	require.False(t, IsAt(conds, metav1.Condition{Type: "Missing"}))
+}

@@ -56,19 +56,19 @@ func setCanaryConfigConditions(s *fv1.CanaryConfigStatus, status string, gen int
 	switch status {
 	case fv1.CanaryConfigStatusPending:
 		progStatus, readyStatus = metav1.ConditionTrue, metav1.ConditionFalse
-		reason, message = "InProgress", "canary rollout in progress"
+		reason, message = fv1.CanaryConfigReasonInProgress, "canary rollout in progress"
 	case fv1.CanaryConfigStatusSucceeded:
 		progStatus, readyStatus = metav1.ConditionFalse, metav1.ConditionTrue
-		reason, message = "Succeeded", "canary rollout succeeded"
+		reason, message = fv1.CanaryConfigReasonSucceeded, "canary rollout succeeded"
 	case fv1.CanaryConfigStatusFailed:
 		progStatus, readyStatus = metav1.ConditionFalse, metav1.ConditionFalse
-		reason, message = "Failed", "canary rollout failed; traffic rolled back"
+		reason, message = fv1.CanaryConfigReasonFailed, "canary rollout failed; traffic rolled back"
 	case fv1.CanaryConfigStatusAborted:
 		progStatus, readyStatus = metav1.ConditionFalse, metav1.ConditionFalse
-		reason, message = "Aborted", "canary rollout aborted"
+		reason, message = fv1.CanaryConfigReasonAborted, "canary rollout aborted"
 	default:
 		progStatus, readyStatus = metav1.ConditionUnknown, metav1.ConditionUnknown
-		reason, message = "Unknown", "unknown canary status: "+status
+		reason, message = fv1.CanaryConfigReasonUnknown, "unknown canary status: "+status
 	}
 	conditions.Set(&s.Conditions, metav1.Condition{
 		Type:               fv1.CanaryConfigConditionProgressing,

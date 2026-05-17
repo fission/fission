@@ -551,7 +551,7 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 
 	key, pod, err := gp.choosePod(ctx, funcLabels)
 	if err != nil {
-		executorUtil.SetFunctionReady(ctx, gp.logger, gp.fissionClient, fn, metav1.ConditionFalse, "ChoosePodFailed", err.Error())
+		executorUtil.SetFunctionReady(ctx, gp.logger, gp.fissionClient, fn, metav1.ConditionFalse, fv1.FunctionReasonChoosePodFailed, err.Error())
 		return nil, err
 	}
 	gp.readyPodQueue.Done(key)
@@ -559,11 +559,11 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 	// invokable. Idempotent: only flips the condition the first time.
 	if gp.env != nil {
 		executorUtil.SetEnvironmentReady(ctx, gp.logger, gp.fissionClient, gp.env.Namespace, gp.env.Name,
-			metav1.ConditionTrue, "PoolReady", "runtime pool has a ready pod")
+			metav1.ConditionTrue, fv1.EnvironmentReasonPoolReady, "runtime pool has a ready pod")
 	}
 	err = gp.specializePod(ctx, pod, fn)
 	if err != nil {
-		executorUtil.SetFunctionReady(ctx, gp.logger, gp.fissionClient, fn, metav1.ConditionFalse, "SpecializationFailed", err.Error())
+		executorUtil.SetFunctionReady(ctx, gp.logger, gp.fissionClient, fn, metav1.ConditionFalse, fv1.FunctionReasonSpecializeFailed, err.Error())
 		go gp.scheduleDeletePod(context.Background(), pod.Name)
 		return nil, err
 	}
@@ -656,7 +656,7 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 		"podIP", pod.Status.PodIP)
 
 	otelUtils.SpanTrackEvent(ctx, "getFuncSvcComplete", fscache.GetAttributesForFuncSvc(fsvc)...)
-	executorUtil.SetFunctionReady(ctx, gp.logger, gp.fissionClient, fn, metav1.ConditionTrue, "Specialized", "function is serving via specialized pod "+pod.Name)
+	executorUtil.SetFunctionReady(ctx, gp.logger, gp.fissionClient, fn, metav1.ConditionTrue, fv1.FunctionReasonSpecialized, "function is serving via specialized pod "+pod.Name)
 	return fsvc, nil
 }
 

@@ -14,6 +14,16 @@ rules:
   - update
   - patch
   - delete
+- apiGroups:
+  - fission.io
+  resources:
+  - environments/status
+  - functions/status
+  - packages/status
+  verbs:
+  - get
+  - update
+  - patch
 {{- end }}
 {{- define "executor-rules" }}
 rules:
@@ -31,6 +41,15 @@ rules:
   - update
   - patch
   - delete
+- apiGroups:
+  - fission.io
+  resources:
+  - environments/status
+  - functions/status
+  verbs:
+  - get
+  - update
+  - patch
 {{- end }}
 {{- define "kubewatcher-rules" }}
 rules:
@@ -49,6 +68,14 @@ rules:
   - update
   - patch
   - delete
+- apiGroups:
+  - fission.io
+  resources:
+  - kuberneteswatchtriggers/status
+  verbs:
+  - get
+  - update
+  - patch
 {{- end }}
 {{- define "kafka-rules" }}
 rules:
@@ -67,6 +94,14 @@ rules:
   - update
   - patch
   - delete
+- apiGroups:
+  - fission.io
+  resources:
+  - messagequeuetriggers/status
+  verbs:
+  - get
+  - update
+  - patch
 {{- end }}
 {{- define "keda-rules" }}
 rules:
@@ -85,6 +120,14 @@ rules:
   - update
   - patch
   - delete
+- apiGroups:
+  - fission.io
+  resources:
+  - messagequeuetriggers/status
+  verbs:
+  - get
+  - update
+  - patch
 {{- end }}
 {{- define "preupgrade-rules" }}
 rules:
@@ -119,6 +162,14 @@ rules:
   - update
   - patch
   - delete
+- apiGroups:
+  - fission.io
+  resources:
+  - httptriggers/status
+  verbs:
+  - get
+  - update
+  - patch
 {{- end }}
 {{- define "storagesvc-rules" }}
 rules:
@@ -147,6 +198,14 @@ rules:
   - update
   - patch
   - delete
+- apiGroups:
+  - fission.io
+  resources:
+  - timetriggers/status
+  verbs:
+  - get
+  - update
+  - patch
 {{- end }}
 {{- define "canaryconfig-rules" }}
 rules:

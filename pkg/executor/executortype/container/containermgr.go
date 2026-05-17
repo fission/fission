@@ -412,7 +412,7 @@ func (caaf *Container) fnCreate(ctx context.Context, fn *fv1.Function) (*fscache
 	svc, err := caaf.createOrGetSvc(ctx, fn, deployLabels, deployAnnotations, objName, ns)
 	if err != nil {
 		caaf.logger.Error(err, "error creating service", "service", objName)
-		executorUtils.SetFunctionReady(ctx, caaf.logger, caaf.fissionClient, fn, metav1.ConditionFalse, "ServiceCreateFailed", err.Error())
+		executorUtils.SetFunctionReady(ctx, caaf.logger, caaf.fissionClient, fn, metav1.ConditionFalse, fv1.FunctionReasonServiceFailed, err.Error())
 		go cleanupFunc(ns, objName)
 		return nil, fmt.Errorf("error creating service %s: %w", objName, err)
 	}
@@ -421,7 +421,7 @@ func (caaf *Container) fnCreate(ctx context.Context, fn *fv1.Function) (*fscache
 	depl, err := caaf.createOrGetDeployment(ctx, fn, objName, deployLabels, deployAnnotations, ns)
 	if err != nil {
 		caaf.logger.Error(err, "error creating deployment", "deployment", objName)
-		executorUtils.SetFunctionReady(ctx, caaf.logger, caaf.fissionClient, fn, metav1.ConditionFalse, "DeploymentNotReady", err.Error())
+		executorUtils.SetFunctionReady(ctx, caaf.logger, caaf.fissionClient, fn, metav1.ConditionFalse, fv1.FunctionReasonDeploymentFailed, err.Error())
 		go cleanupFunc(ns, objName)
 		return nil, fmt.Errorf("error creating deployment %s: %w", objName, err)
 	}
@@ -429,7 +429,7 @@ func (caaf *Container) fnCreate(ctx context.Context, fn *fv1.Function) (*fscache
 	hpa, err := caaf.hpaops.CreateOrGetHpa(ctx, fn, objName, &fn.Spec.InvokeStrategy.ExecutionStrategy, depl, deployLabels, deployAnnotations)
 	if err != nil {
 		caaf.logger.Error(err, "error creating HPA", "hpa", objName)
-		executorUtils.SetFunctionReady(ctx, caaf.logger, caaf.fissionClient, fn, metav1.ConditionFalse, "HPACreateFailed", err.Error())
+		executorUtils.SetFunctionReady(ctx, caaf.logger, caaf.fissionClient, fn, metav1.ConditionFalse, fv1.FunctionReasonHPAFailed, err.Error())
 		go cleanupFunc(ns, objName)
 		return nil, fmt.Errorf("error creating HPA %s: %w", objName, err)
 	}
@@ -474,12 +474,12 @@ func (caaf *Container) fnCreate(ctx context.Context, fn *fv1.Function) (*fscache
 	if err != nil {
 		caaf.logger.Error(nil, "error adding function to cache", "function", fsvc.Function)
 		metrics.ColdStartsError.WithLabelValues(fn.Name, fn.Namespace).Inc()
-		executorUtils.SetFunctionReady(ctx, caaf.logger, caaf.fissionClient, fn, metav1.ConditionFalse, "FuncSvcCacheError", err.Error())
+		executorUtils.SetFunctionReady(ctx, caaf.logger, caaf.fissionClient, fn, metav1.ConditionFalse, fv1.FunctionReasonFuncSvcCacheError, err.Error())
 		return fsvc, err
 	}
 
 	metrics.ColdStarts.WithLabelValues(fn.Name, fn.Namespace).Inc()
-	executorUtils.SetFunctionReady(ctx, caaf.logger, caaf.fissionClient, fn, metav1.ConditionTrue, "DeploymentAvailable", "container deployment is ready")
+	executorUtils.SetFunctionReady(ctx, caaf.logger, caaf.fissionClient, fn, metav1.ConditionTrue, fv1.FunctionReasonDeploymentReady, "container deployment is ready")
 
 	return fsvc, nil
 }

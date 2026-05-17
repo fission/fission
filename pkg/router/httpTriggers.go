@@ -350,39 +350,47 @@ func (ts *HTTPTriggerSet) updateTriggerStatusFailed(ht *fv1.HTTPTrigger, err err
 	// TODO
 }
 
-// markTriggerAdmitted writes RouteAdmitted + Ready conditions on an
-// HTTPTrigger after its routes have been installed into the router mux.
-// Uses the status subresource (HTTPTrigger is +kubebuilder:subresource:status)
-// and bails out silently on read/write errors — the router's job is to
-// serve traffic, not to block on status I/O.
-func (ts *HTTPTriggerSet) markTriggerAdmitted(ctx context.Context, namespace, name string) {
+// markTriggerCondition writes RouteAdmitted + Ready conditions on an
+// HTTPTrigger. status=True with reason=RouteAdmitted on a successful mux
+// install; status=False with reason=MuxBuildFailed when buildMuxes errors
+// out, so users polling conditions don't see a stale True after a failure.
+//
+// Fast-path: the trigger snapshot from the informer is checked against
+// the desired condition; we only Get + UpdateStatus when this trigger
+// would actually transition (matches the user's "key transitions only"
+// expectation). updateRouter runs on every debounced trigger/function
+// event, so the fast path is what keeps API traffic bounded.
+func (ts *HTTPTriggerSet) markTriggerCondition(ctx context.Context, trigger *fv1.HTTPTrigger, status metav1.ConditionStatus, reason, admittedMessage, readyMessage string) {
 	if ts.fissionClient == nil {
 		return // unit-test wiring without a real client
 	}
-	cur, err := ts.fissionClient.CoreV1().HTTPTriggers(namespace).Get(ctx, name, metav1.GetOptions{})
+	wantAdmitted := metav1.Condition{
+		Type: fv1.HTTPTriggerConditionRouteAdmitted, Status: status,
+		ObservedGeneration: trigger.Generation, Reason: reason, Message: admittedMessage,
+	}
+	wantReady := metav1.Condition{
+		Type: fv1.HTTPTriggerConditionReady, Status: status,
+		ObservedGeneration: trigger.Generation, Reason: reason, Message: readyMessage,
+	}
+	if conditions.IsAt(trigger.Status.Conditions, wantAdmitted) &&
+		conditions.IsAt(trigger.Status.Conditions, wantReady) {
+		return
+	}
+	cur, err := ts.fissionClient.CoreV1().HTTPTriggers(trigger.Namespace).Get(ctx, trigger.Name, metav1.GetOptions{})
 	if err != nil {
-		ts.logger.V(1).Info("httptrigger status: get failed", "name", name, "namespace", namespace, "error", err)
+		ts.logger.V(1).Info("httptrigger status: get failed", "name", trigger.Name, "namespace", trigger.Namespace, "error", err)
 		return
 	}
-	admittedChanged := conditions.Set(&cur.Status.Conditions, metav1.Condition{
-		Type:               fv1.HTTPTriggerConditionRouteAdmitted,
-		Status:             metav1.ConditionTrue,
-		ObservedGeneration: cur.Generation,
-		Reason:             "RouteAdmitted",
-		Message:            "router accepted the trigger and installed its mux entry",
-	})
-	readyChanged := conditions.Set(&cur.Status.Conditions, metav1.Condition{
-		Type:               fv1.HTTPTriggerConditionReady,
-		Status:             metav1.ConditionTrue,
-		ObservedGeneration: cur.Generation,
-		Reason:             "RouteAdmitted",
-		Message:            "trigger is serving",
-	})
-	if !admittedChanged && !readyChanged {
+	wantAdmitted.ObservedGeneration = cur.Generation
+	wantReady.ObservedGeneration = cur.Generation
+	if conditions.IsAt(cur.Status.Conditions, wantAdmitted) &&
+		conditions.IsAt(cur.Status.Conditions, wantReady) {
 		return
 	}
-	if _, err := ts.fissionClient.CoreV1().HTTPTriggers(namespace).UpdateStatus(ctx, cur, metav1.UpdateOptions{}); err != nil {
-		ts.logger.V(1).Info("httptrigger status: update failed", "name", name, "namespace", namespace, "error", err)
+	conditions.Set(&cur.Status.Conditions, wantAdmitted)
+	conditions.Set(&cur.Status.Conditions, wantReady)
+	if _, err := ts.fissionClient.CoreV1().HTTPTriggers(trigger.Namespace).UpdateStatus(ctx, cur, metav1.UpdateOptions{}); err != nil {
+		ts.logger.V(1).Info("httptrigger status: update failed", "name", trigger.Name, "namespace", trigger.Namespace, "error", err)
 	}
 }
 
@@ -505,6 +513,15 @@ func (ts *HTTPTriggerSet) updateRouter(ctx context.Context) {
 		public, internal, err := ts.buildMuxes(functionTimeout)
 		if err != nil {
 			ts.logger.Error(err, "error updating router")
+			// Flip every trigger to Ready=False so consumers polling
+			// conditions don't see a stale True after a failed resync.
+			// Fast-path inside markTriggerCondition skips no-op writes.
+			for i := range alltriggers {
+				ts.markTriggerCondition(ctx, &alltriggers[i],
+					metav1.ConditionFalse, fv1.HTTPTriggerReasonMuxBuildFail,
+					"router failed to build mux: "+err.Error(),
+					"trigger is not serving due to router mux error")
+			}
 			continue
 		}
 		ts.mutableRouter.updateRouter(public)
@@ -514,10 +531,13 @@ func (ts *HTTPTriggerSet) updateRouter(ctx context.Context) {
 
 		// Mark each trigger admitted now that its routes are live. We
 		// do this after the swap so the condition reflects observable
-		// state, not just intent. Each markTriggerAdmitted is best-effort
-		// and never blocks subsequent mux updates.
+		// state, not just intent. Best-effort; never blocks subsequent
+		// mux updates.
 		for i := range alltriggers {
-			ts.markTriggerAdmitted(ctx, alltriggers[i].Namespace, alltriggers[i].Name)
+			ts.markTriggerCondition(ctx, &alltriggers[i],
+				metav1.ConditionTrue, fv1.HTTPTriggerReasonRouteAdmitted,
+				"router accepted the trigger and installed its mux entry",
+				"trigger is serving")
 		}
 	}
 }

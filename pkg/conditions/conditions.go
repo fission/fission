@@ -53,3 +53,20 @@ func Find(conds []metav1.Condition, conditionType string) *metav1.Condition {
 func IsTrue(conds []metav1.Condition, conditionType string) bool {
 	return meta.IsStatusConditionTrue(conds, conditionType)
 }
+
+// IsAt reports whether conds already contains a condition matching want's
+// Type / Status / Reason / ObservedGeneration. Controllers use this to
+// fast-path skip a Get + UpdateStatus when nothing meaningful would change
+// — important on hot informer paths (e.g., router debounced resync,
+// envwatcher AddUpdate) where the same condition is reasserted many times.
+// Message is intentionally ignored: it's free-form and shouldn't trigger
+// a write if every other field matches.
+func IsAt(conds []metav1.Condition, want metav1.Condition) bool {
+	existing := Find(conds, want.Type)
+	if existing == nil {
+		return false
+	}
+	return existing.Status == want.Status &&
+		existing.Reason == want.Reason &&
+		existing.ObservedGeneration == want.ObservedGeneration
+}

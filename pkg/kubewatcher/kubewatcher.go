@@ -150,48 +150,47 @@ func (kw *KubeWatcher) addWatch(ctx context.Context, w *fv1.KubernetesWatchTrigg
 	kw.logger.Info("adding watch", "name", w.Name, "function", w.Spec.FunctionReference)
 	ws, err := MakeWatchSubscription(ctx, kw.logger.WithName("watchsubscription"), w, kw.kubernetesClient, kw.publisher)
 	if err != nil {
-		kw.markWatchTriggerSubscribed(ctx, w.Namespace, w.Name, false, "WatchStartFailed", err.Error())
+		kw.markWatchTriggerSubscribed(ctx, w, metav1.ConditionFalse, fv1.KubernetesWatchTriggerReasonStartFailed, err.Error())
 		return err
 	}
 	kw.watches[w.UID] = ws
-	kw.markWatchTriggerSubscribed(ctx, w.Namespace, w.Name, true, "Subscribed", "watch loop is running")
+	kw.markWatchTriggerSubscribed(ctx, w, metav1.ConditionTrue, fv1.KubernetesWatchTriggerReasonSubscribed, "watch loop is running")
 	return nil
 }
 
 // markWatchTriggerSubscribed writes Subscribed + Ready conditions on a
 // KubernetesWatchTrigger. Best-effort via the status subresource.
-func (kw *KubeWatcher) markWatchTriggerSubscribed(ctx context.Context, namespace, name string, ready bool, reason, message string) {
+// Fast-path skips the apiserver call when in-memory conditions already
+// match the desired state.
+func (kw *KubeWatcher) markWatchTriggerSubscribed(ctx context.Context, w *fv1.KubernetesWatchTrigger, status metav1.ConditionStatus, reason, message string) {
 	if kw.fissionClient == nil {
 		return
 	}
-	status := metav1.ConditionTrue
-	if !ready {
-		status = metav1.ConditionFalse
+	wantSub := metav1.Condition{
+		Type: fv1.KubernetesWatchTriggerConditionSubscribed, Status: status,
+		ObservedGeneration: w.Generation, Reason: reason, Message: message,
 	}
-	cur, err := kw.fissionClient.CoreV1().KubernetesWatchTriggers(namespace).Get(ctx, name, metav1.GetOptions{})
+	wantReady := metav1.Condition{
+		Type: fv1.KubernetesWatchTriggerConditionReady, Status: status,
+		ObservedGeneration: w.Generation, Reason: reason, Message: message,
+	}
+	if conditions.IsAt(w.Status.Conditions, wantSub) && conditions.IsAt(w.Status.Conditions, wantReady) {
+		return
+	}
+	cur, err := kw.fissionClient.CoreV1().KubernetesWatchTriggers(w.Namespace).Get(ctx, w.Name, metav1.GetOptions{})
 	if err != nil {
-		kw.logger.V(1).Info("kuberneteswatchtrigger status: get failed", "name", name, "namespace", namespace, "error", err)
+		kw.logger.V(1).Info("kuberneteswatchtrigger status: get failed", "name", w.Name, "namespace", w.Namespace, "error", err)
 		return
 	}
-	subChanged := conditions.Set(&cur.Status.Conditions, metav1.Condition{
-		Type:               fv1.KubernetesWatchTriggerConditionSubscribed,
-		Status:             status,
-		ObservedGeneration: cur.Generation,
-		Reason:             reason,
-		Message:            message,
-	})
-	readyChanged := conditions.Set(&cur.Status.Conditions, metav1.Condition{
-		Type:               fv1.KubernetesWatchTriggerConditionReady,
-		Status:             status,
-		ObservedGeneration: cur.Generation,
-		Reason:             reason,
-		Message:            message,
-	})
-	if !subChanged && !readyChanged {
+	wantSub.ObservedGeneration = cur.Generation
+	wantReady.ObservedGeneration = cur.Generation
+	if conditions.IsAt(cur.Status.Conditions, wantSub) && conditions.IsAt(cur.Status.Conditions, wantReady) {
 		return
 	}
-	if _, err := kw.fissionClient.CoreV1().KubernetesWatchTriggers(namespace).UpdateStatus(ctx, cur, metav1.UpdateOptions{}); err != nil {
-		kw.logger.V(1).Info("kuberneteswatchtrigger status: update failed", "name", name, "namespace", namespace, "error", err)
+	conditions.Set(&cur.Status.Conditions, wantSub)
+	conditions.Set(&cur.Status.Conditions, wantReady)
+	if _, err := kw.fissionClient.CoreV1().KubernetesWatchTriggers(w.Namespace).UpdateStatus(ctx, cur, metav1.UpdateOptions{}); err != nil {
+		kw.logger.V(1).Info("kuberneteswatchtrigger status: update failed", "name", w.Name, "namespace", w.Namespace, "error", err)
 	}
 }
 

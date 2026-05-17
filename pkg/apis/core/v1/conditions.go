@@ -51,3 +51,56 @@ const (
 	// Environment conditions
 	EnvironmentConditionReady = "Ready"
 )
+
+// Standard Reason values written alongside each condition. PascalCase per
+// Kubernetes convention. Keeping them in the api package gives controllers
+// a single import path to grep when introducing new conditions and
+// guarantees we never drift on spelling across writers.
+const (
+	// Function condition reasons
+	FunctionReasonSpecialized       = "Specialized"
+	FunctionReasonChoosePodFailed   = "ChoosePodFailed"
+	FunctionReasonSpecializeFailed  = "SpecializationFailed"
+	FunctionReasonDeploymentReady   = "DeploymentAvailable"
+	FunctionReasonDeploymentFailed  = "DeploymentNotReady"
+	FunctionReasonServiceFailed     = "ServiceCreateFailed"
+	FunctionReasonHPAFailed         = "HPACreateFailed"
+	FunctionReasonFuncSvcCacheError = "FuncSvcCacheError"
+	FunctionReasonPackageReady      = "PackageReady"
+	FunctionReasonPackageFailed     = "PackageBuildFailed"
+
+	// Package condition reasons (mirror BuildStatus enum + composites)
+	PackageReasonBuildSucceeded  = "BuildSucceeded"
+	PackageReasonBuildFailed     = "BuildFailed"
+	PackageReasonBuildPending    = "BuildPending"
+	PackageReasonBuildRunning    = "BuildRunning"
+	PackageReasonNoBuildRequired = "NoBuildRequired"
+	PackageReasonUnknown         = "Unknown"
+
+	// Environment condition reasons
+	EnvironmentReasonBuilderReady      = "BuilderReady"
+	EnvironmentReasonBuilderCreateFail = "BuilderCreateFailed"
+	EnvironmentReasonNoBuilderRequired = "NoBuilderRequired"
+	EnvironmentReasonPoolReady         = "PoolReady"
+
+	// HTTPTrigger condition reasons
+	HTTPTriggerReasonRouteAdmitted = "RouteAdmitted"
+	HTTPTriggerReasonMuxBuildFail  = "MuxBuildFailed"
+
+	// KubernetesWatchTrigger condition reasons
+	KubernetesWatchTriggerReasonSubscribed  = "Subscribed"
+	KubernetesWatchTriggerReasonStartFailed = "WatchStartFailed"
+
+	// TimeTrigger condition reasons
+	TimeTriggerReasonCronRegistered = "CronRegistered"
+
+	// MessageQueueTrigger condition reasons
+	MessageQueueTriggerReasonSubscribed = "Subscribed"
+
+	// CanaryConfig condition reasons (mirror Status string enum)
+	CanaryConfigReasonInProgress = "InProgress"
+	CanaryConfigReasonSucceeded  = "Succeeded"
+	CanaryConfigReasonFailed     = "Failed"
+	CanaryConfigReasonAborted    = "Aborted"
+	CanaryConfigReasonUnknown    = "Unknown"
+)

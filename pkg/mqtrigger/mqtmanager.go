@@ -305,41 +305,51 @@ func (mqt *MessageQueueTriggerManager) RegisterTrigger(trigger *fv1.MessageQueue
 		return err
 	}
 	mqt.logger.Info("message queue trigger created", "trigger_name", trigger.Name)
-	mqt.markMessageQueueTriggerBound(mqt.ctx, trigger.Namespace, trigger.Name)
+	// Use the manager-wide ctx so dangling status writes cancel on
+	// manager shutdown. The RegisterTrigger call path doesn't carry
+	// a request-scoped ctx (it's driven off an internal workqueue).
+	mqt.markMessageQueueTriggerBound(mqt.ctx, trigger)
 	return nil
 }
 
 // markMessageQueueTriggerBound writes BindingReady + Ready on a
 // MessageQueueTrigger after subscribe-and-add succeeds. Best-effort; queue
 // subscription is the source of truth and is not gated on status writes.
-func (mqt *MessageQueueTriggerManager) markMessageQueueTriggerBound(ctx context.Context, namespace, name string) {
+// Fast-path skips the apiserver call when the trigger's in-memory
+// conditions already match the desired state.
+func (mqt *MessageQueueTriggerManager) markMessageQueueTriggerBound(ctx context.Context, trigger *fv1.MessageQueueTrigger) {
 	if mqt.fissionClient == nil {
 		return
 	}
-	cur, err := mqt.fissionClient.CoreV1().MessageQueueTriggers(namespace).Get(ctx, name, metav1.GetOptions{})
-	if err != nil {
-		mqt.logger.V(1).Info("mqtrigger status: get failed", "name", name, "namespace", namespace, "error", err)
-		return
+	wantBind := metav1.Condition{
+		Type: fv1.MessageQueueTriggerConditionBindingReady, Status: metav1.ConditionTrue,
+		ObservedGeneration: trigger.Generation,
+		Reason:             fv1.MessageQueueTriggerReasonSubscribed,
+		Message:            "subscribed to topic " + trigger.Spec.Topic,
 	}
-	bindChanged := conditions.Set(&cur.Status.Conditions, metav1.Condition{
-		Type:               fv1.MessageQueueTriggerConditionBindingReady,
-		Status:             metav1.ConditionTrue,
-		ObservedGeneration: cur.Generation,
-		Reason:             "Subscribed",
-		Message:            "subscribed to topic " + cur.Spec.Topic,
-	})
-	readyChanged := conditions.Set(&cur.Status.Conditions, metav1.Condition{
-		Type:               fv1.MessageQueueTriggerConditionReady,
-		Status:             metav1.ConditionTrue,
-		ObservedGeneration: cur.Generation,
-		Reason:             "Subscribed",
+	wantReady := metav1.Condition{
+		Type: fv1.MessageQueueTriggerConditionReady, Status: metav1.ConditionTrue,
+		ObservedGeneration: trigger.Generation,
+		Reason:             fv1.MessageQueueTriggerReasonSubscribed,
 		Message:            "trigger is dispatching messages",
-	})
-	if !bindChanged && !readyChanged {
+	}
+	if conditions.IsAt(trigger.Status.Conditions, wantBind) && conditions.IsAt(trigger.Status.Conditions, wantReady) {
 		return
 	}
-	if _, err := mqt.fissionClient.CoreV1().MessageQueueTriggers(namespace).UpdateStatus(ctx, cur, metav1.UpdateOptions{}); err != nil {
-		mqt.logger.V(1).Info("mqtrigger status: update failed", "name", name, "namespace", namespace, "error", err)
+	cur, err := mqt.fissionClient.CoreV1().MessageQueueTriggers(trigger.Namespace).Get(ctx, trigger.Name, metav1.GetOptions{})
+	if err != nil {
+		mqt.logger.V(1).Info("mqtrigger status: get failed", "name", trigger.Name, "namespace", trigger.Namespace, "error", err)
+		return
+	}
+	wantBind.ObservedGeneration = cur.Generation
+	wantReady.ObservedGeneration = cur.Generation
+	if conditions.IsAt(cur.Status.Conditions, wantBind) && conditions.IsAt(cur.Status.Conditions, wantReady) {
+		return
+	}
+	conditions.Set(&cur.Status.Conditions, wantBind)
+	conditions.Set(&cur.Status.Conditions, wantReady)
+	if _, err := mqt.fissionClient.CoreV1().MessageQueueTriggers(trigger.Namespace).UpdateStatus(ctx, cur, metav1.UpdateOptions{}); err != nil {
+		mqt.logger.V(1).Info("mqtrigger status: update failed", "name", trigger.Name, "namespace", trigger.Namespace, "error", err)
 	}
 }
 
