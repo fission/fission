@@ -111,10 +111,12 @@ func WaitForConditionTrue(t *testing.T, ctx context.Context, what, condType stri
 	}, timeout, 500*time.Millisecond)
 }
 
-// WaitForFunctionConditionReady polls until Function.Status.Conditions[Ready]
-// is True or timeout fires. The executor (poolmgr / newdeploy / container)
-// is the typical writer.
-func (ns *TestNamespace) WaitForFunctionConditionReady(t *testing.T, ctx context.Context, name, condType string, timeout time.Duration) {
+// WaitForFunctionConditionTrue polls until the named condition on a Function's
+// Status is True or timeout fires. The Function's executor (poolmgr /
+// newdeploy / container) is the typical writer of Ready; buildermgr writes
+// PackageReady. Pass `fv1.FunctionConditionReady` or
+// `fv1.FunctionConditionPackageReady` as condType.
+func (ns *TestNamespace) WaitForFunctionConditionTrue(t *testing.T, ctx context.Context, name, condType string, timeout time.Duration) {
 	t.Helper()
 	WaitForConditionTrue(t, ctx, "function "+name, condType, timeout, func() []metav1.Condition {
 		return ns.GetFunctionConditions(t, ctx, name)

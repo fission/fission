@@ -57,5 +57,5 @@ func TestBackendPoolmgr(t *testing.T) {
 	// controller in this PR — status writes would bump env.RV which
 	// the buildermgr embeds in the builder service hostname. See
 	// pkg/buildermgr/envwatcher.go.AddUpdateBuilder for the note.
-	ns.WaitForFunctionConditionReady(t, ctx, fnName, fv1.FunctionConditionReady, 30*time.Second)
+	ns.WaitForFunctionConditionTrue(t, ctx, fnName, fv1.FunctionConditionReady, 30*time.Second)
 }
