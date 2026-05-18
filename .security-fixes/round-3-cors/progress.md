@@ -9,7 +9,7 @@ See `plan.md` for batch detail and `findings-index.md` for triage.
 | B1    | done     | d145493a | `pkg/utils/httpsecurity` package (DenyAllCORS, SecurityHeaders, CORSAllowlist) |
 | B2    | done     | 7408ad68 | wire into router public + internal listeners |
 | B3    | done     | 2e71dcb3 | wire into executor, storagesvc, fetcher, builder |
-| B4    | done     | (pending) | HTTPTrigger CorsConfig CRD field + per-trigger allowlist + codegen |
+| B4    | done     | 819cca90+d35a4837 | HTTPTrigger CorsConfig CRD field + per-trigger allowlist + codegen |
 | B5    | pending  |        | finalise index + pre-PR scrub |
 
 Post-PR loop (after user opens the PR) lives in the plan under "Post-PR evaluation criteria" — CI green gate, Copilot review request, meaningful-comment triage, capped at ~3 review rounds.
