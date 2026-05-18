@@ -2,7 +2,6 @@ package httpsecurity
 
 import (
 	"bufio"
-	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -307,6 +306,73 @@ func TestCORSAllowlist_ExposeHeadersOnActualRequest(t *testing.T) {
 	}
 }
 
+// TestSecurityHeaders_SkipsVaryOriginOnWildcardCORS pins that
+// SecurityHeaders does NOT add Vary: Origin when an inner CORS
+// middleware has emitted Access-Control-Allow-Origin: *. With wildcard
+// the response is identical for all callers, so Vary: Origin only
+// fragments intermediate caches without any correctness benefit.
+func TestSecurityHeaders_SkipsVaryOriginOnWildcardCORS(t *testing.T) {
+	wildcardCORS := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		_, _ = w.Write([]byte("ok"))
+	})
+	rec := httptest.NewRecorder()
+	SecurityHeaders(wildcardCORS).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+
+	if varyContains(rec.Header(), "Origin") {
+		t.Errorf("Vary: Origin should be skipped when Allow-Origin is *, got Vary=%v",
+			rec.Header().Values("Vary"))
+	}
+	if rec.Header().Get("X-Content-Type-Options") != "nosniff" {
+		t.Errorf("nosniff still expected on wildcard responses")
+	}
+}
+
+// TestSecurityHeaders_KeepsVaryOriginOnSpecificCORS pins that Vary:
+// Origin IS added when CORS echoed a specific origin (not "*"). The
+// response varies by Origin so caches must key on it.
+func TestSecurityHeaders_KeepsVaryOriginOnSpecificCORS(t *testing.T) {
+	specificCORS := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "https://app.example.com")
+		_, _ = w.Write([]byte("ok"))
+	})
+	rec := httptest.NewRecorder()
+	SecurityHeaders(specificCORS).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+
+	if !varyContains(rec.Header(), "Origin") {
+		t.Errorf("Vary: Origin expected on specific-origin response, got Vary=%v",
+			rec.Header().Values("Vary"))
+	}
+}
+
+// TestDenyAllCORS_StripsHeadersBeforeFlush pins the streaming-safe
+// behaviour added in response to Copilot review: a handler that sets
+// Access-Control-* and then calls Flush() (e.g. an SSE stream) must
+// not leak those headers through the wrapper, because Flush implicitly
+// commits the response headers.
+func TestDenyAllCORS_StripsHeadersBeforeFlush(t *testing.T) {
+	fake := newFakeHijackingWriter()
+	fake.header.Set("Access-Control-Allow-Origin", "*")
+	streamingCORS := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Simulate a handler that sets stale ACL headers and then
+		// flushes without an explicit WriteHeader call. Without the
+		// Copilot fix, the stale headers would reach the wire.
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		if fl, ok := w.(http.Flusher); ok {
+			fl.Flush()
+		}
+	})
+	DenyAllCORS(streamingCORS).ServeHTTP(fake, httptest.NewRequest(http.MethodGet, "/", nil))
+
+	if fake.header.Get("Access-Control-Allow-Origin") != "" {
+		t.Errorf("Allow-Origin should have been stripped before flush; got %q",
+			fake.header.Get("Access-Control-Allow-Origin"))
+	}
+	if !fake.flushed {
+		t.Error("underlying Flush was not invoked")
+	}
+}
+
 // Compose all three middlewares as they would be wired in production
 // (SecurityHeaders outermost, DenyAllCORS inside, inner handler at the
 // bottom) and check the headers an end-to-end request sees.
@@ -411,23 +477,22 @@ func TestSecurityHeaders_ForwardsFlush(t *testing.T) {
 }
 
 func TestSecurityHeaders_HijackErrorWhenNotSupported(t *testing.T) {
-	// httptest.NewRecorder does not implement http.Hijacker.
+	// httptest.NewRecorder does not implement http.Hijacker; the
+	// wrapper still type-asserts as Hijacker (because it provides the
+	// method) but its Hijack call must surface a "not supported" error
+	// with a recognisable message rather than panic.
 	rec := httptest.NewRecorder()
 	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		hj, ok := w.(http.Hijacker)
 		if !ok {
-			// httptest.NewRecorder doesn't implement Hijacker on the
-			// inner side either, so the test assertion is that the
-			// wrapper still type-asserts as Hijacker but its Hijack
-			// surfaces a "not supported" error.
 			t.Fatal("wrapper should type-assert as Hijacker even when inner does not")
 		}
 		_, _, err := hj.Hijack()
 		if err == nil {
-			t.Error("expected error when underlying writer does not implement Hijacker")
+			t.Fatal("expected error when underlying writer does not implement Hijacker")
 		}
-		if err != nil && !errors.Is(err, err) {
-			t.Errorf("unexpected error type: %v", err)
+		if !strings.Contains(err.Error(), "Hijacker") {
+			t.Errorf("error %q should mention Hijacker", err)
 		}
 	})
 	SecurityHeaders(inner).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))

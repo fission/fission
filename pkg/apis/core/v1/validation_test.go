@@ -19,6 +19,7 @@ package v1
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/gkampitakis/go-snaps/snaps"
@@ -126,6 +127,22 @@ func TestHTTPTriggerCorsConfig_Validate(t *testing.T) {
 			errSub:  "scheme and host",
 		},
 		{
+			name: "origin with path rejected",
+			cfg: &HTTPTriggerCorsConfig{
+				AllowOrigins: []string{"https://app.example.com/api"},
+			},
+			wantErr: true,
+			errSub:  "path, query, fragment",
+		},
+		{
+			name: "origin with query rejected",
+			cfg: &HTTPTriggerCorsConfig{
+				AllowOrigins: []string{"https://app.example.com/?x=1"},
+			},
+			wantErr: true,
+			errSub:  "path, query, fragment",
+		},
+		{
 			name: "malformed MaxAge rejected",
 			cfg: &HTTPTriggerCorsConfig{
 				AllowOrigins: []string{"https://app.example.com"},
@@ -157,7 +174,7 @@ func TestHTTPTriggerCorsConfig_Validate(t *testing.T) {
 				if err == nil {
 					t.Fatalf("expected error containing %q, got nil", tc.errSub)
 				}
-				if tc.errSub != "" && !contains(err.Error(), tc.errSub) {
+				if tc.errSub != "" && !strings.Contains(err.Error(), tc.errSub) {
 					t.Fatalf("error %q does not contain %q", err, tc.errSub)
 				}
 				return
@@ -167,13 +184,4 @@ func TestHTTPTriggerCorsConfig_Validate(t *testing.T) {
 			}
 		})
 	}
-}
-
-func contains(s, sub string) bool {
-	for i := 0; i+len(sub) <= len(s); i++ {
-		if s[i:i+len(sub)] == sub {
-			return true
-		}
-	}
-	return false
 }

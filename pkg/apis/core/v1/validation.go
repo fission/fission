@@ -483,6 +483,16 @@ func (c *HTTPTriggerCorsConfig) Validate() error {
 		if err != nil || u.Scheme == "" || u.Host == "" {
 			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "HTTPTriggerSpec.CorsConfig.AllowOrigins",
 				origin, "origin must be a valid URL with scheme and host (e.g. https://app.example.com)"))
+			continue
+		}
+		// A CORS Origin header is scheme + host[:port] only — browsers
+		// will never match an Access-Control-Allow-Origin that carries
+		// a path, query, fragment, or userinfo, so accepting one here
+		// would silently fail at runtime. Reject so the trigger fails
+		// admission instead.
+		if u.Path != "" || u.RawQuery != "" || u.Fragment != "" || u.User != nil {
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "HTTPTriggerSpec.CorsConfig.AllowOrigins",
+				origin, "origin must contain only scheme + host[:port]; path, query, fragment, and userinfo are not allowed"))
 		}
 	}
 

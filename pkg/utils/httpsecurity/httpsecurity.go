@@ -94,21 +94,29 @@ func (s *securityHeadersWriter) injectHeadersOnce() {
 	if h.Get("X-Content-Type-Options") == "" {
 		h.Set("X-Content-Type-Options", "nosniff")
 	}
-	addVary(h, "Origin")
+	// Skip Vary: Origin when CORS has emitted a wildcard origin: the
+	// response is identical for every caller, so Vary: Origin would
+	// only fragment intermediate caches without any correctness benefit.
+	// For specific-origin or no-CORS responses, Vary: Origin is required
+	// so caches do not serve a response generated for origin A to origin B.
+	if h.Get("Access-Control-Allow-Origin") != "*" {
+		addVary(h, "Origin")
+	}
 }
 
 // DenyAllCORS rejects browser-driven cross-origin requests:
 //   - A preflight (OPTIONS with both Origin and Access-Control-Request-Method)
-//     from any origin returns 403 without invoking the inner handler.
+//     returns 403 without invoking the inner handler. Same-origin
+//     browsers do not send Origin on same-origin requests, so the
+//     legitimate-preflight case is naturally exempt.
 //   - A non-preflight request with an Origin header is forwarded to the
 //     inner handler, but any Access-Control-* response header the handler
 //     emits is stripped before the response is sent. The browser's
 //     Same-Origin Policy then blocks the cross-origin read because no
 //     Access-Control-Allow-Origin header is echoed.
 //
-// Same-origin OPTIONS (no Access-Control-Request-Method, or Origin matches
-// the request Host) are passed through unchanged so legitimate non-CORS
-// preflights are not broken.
+// Plain OPTIONS requests without Access-Control-Request-Method (e.g. HTTP
+// OPTIONS discovery clients) are forwarded to the inner handler.
 func DenyAllCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if isCORSPreflight(r) {
@@ -307,6 +315,15 @@ func (s *corsStripper) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 }
 
 func (s *corsStripper) Flush() {
+	// Streaming/SSE handlers may call Flush() without first calling
+	// WriteHeader, which commits the response headers. We must strip
+	// Access-Control-* here for the same reason WriteHeader does — once
+	// the flush goes through, the headers are on the wire and cannot
+	// be edited. Gated on wroteHeader so we don't double-strip.
+	if !s.wroteHeader {
+		stripAccessControl(s.Header())
+		s.wroteHeader = true
+	}
 	if fl, ok := s.ResponseWriter.(http.Flusher); ok {
 		fl.Flush()
 	}
