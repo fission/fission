@@ -42,6 +42,7 @@ import (
 	"github.com/fission/fission/pkg/info"
 	"github.com/fission/fission/pkg/throttler"
 	"github.com/fission/fission/pkg/utils"
+	"github.com/fission/fission/pkg/utils/httpsecurity"
 	"github.com/fission/fission/pkg/utils/manager"
 	"github.com/fission/fission/pkg/utils/metrics"
 )
@@ -255,7 +256,22 @@ func (ts *HTTPTriggerSet) buildMuxes(fnTimeoutMap map[types.UID]int) (public, in
 			}
 		}
 
-		handler := http.HandlerFunc(fh.handler)
+		// Per-trigger CORS: if the trigger declares a CorsConfig the
+		// router applies a CORSAllowlist middleware around its handler
+		// and appends OPTIONS to the registered methods so gorilla/mux
+		// routes the preflight to the wrapped handler instead of
+		// returning 405 before CORSAllowlist sees the request.
+		// Triggers without a CorsConfig keep the deny-by-default
+		// behaviour — no Access-Control-* headers, SOP blocks cross-
+		// origin reads.
+		var handler http.Handler = http.HandlerFunc(fh.handler)
+		if trigger.Spec.CorsConfig != nil {
+			cfg := toAllowlistConfig(trigger.Spec.CorsConfig, methods)
+			handler = httpsecurity.CORSAllowlist(cfg)(handler)
+			if !slices.Contains(methods, http.MethodOptions) {
+				methods = append(methods, http.MethodOptions)
+			}
+		}
 
 		if trigger.Spec.Prefix != nil && *trigger.Spec.Prefix != "" {
 			prefix := *trigger.Spec.Prefix
@@ -300,7 +316,12 @@ func (ts *HTTPTriggerSet) buildMuxes(fnTimeoutMap map[types.UID]int) (public, in
 		// want it to be a 404 even if the user doesn't have a function mapped to
 		// this route.
 		//
-		public.HandleFunc("/", defaultHomeHandler).Methods("GET")
+		// Router-owned probe; never a CORS surface for legitimate
+		// browser code, so reject cross-origin preflights and strip any
+		// Access-Control-* header that might be added in the future.
+		// OPTIONS is registered alongside GET so a preflight reaches
+		// DenyAllCORS instead of being 405'd by mux's method gate.
+		public.Handle("/", httpsecurity.DenyAllCORS(http.HandlerFunc(defaultHomeHandler))).Methods(http.MethodGet, http.MethodOptions)
 	}
 
 	// Internal triggers for each function by name. Non-http triggers
@@ -332,18 +353,53 @@ func (ts *HTTPTriggerSet) buildMuxes(fnTimeoutMap map[types.UID]int) (public, in
 	if featureConfig.AuthConfig.IsEnabled {
 
 		path := featureConfig.AuthConfig.AuthUriPath
-		// Auth endpoint for the router.
-		public.HandleFunc(path, authLoginHandler(featureConfig)).Methods("POST")
+		// Auth endpoint for the router. Router-owned route; cross-origin
+		// browser callers are not a legitimate use case, so reject
+		// preflights and strip any stray Access-Control-* headers.
+		// OPTIONS registered so the preflight reaches DenyAllCORS.
+		public.Handle(path, httpsecurity.DenyAllCORS(http.HandlerFunc(authLoginHandler(featureConfig)))).Methods(http.MethodPost, http.MethodOptions)
 	}
 
 	// Healthz endpoint for the router. Stays on the public listener so
 	// existing readiness/liveness probes and external monitors keep
-	// working without HMAC credentials.
-	public.HandleFunc("/router-healthz", routerHealthHandler).Methods("GET")
-	// version of application.
-	public.HandleFunc("/_version", versionHandler).Methods("GET")
+	// working without HMAC credentials. Router-owned route; deny CORS
+	// preflights (OPTIONS registered so mux routes them to DenyAllCORS).
+	public.Handle("/router-healthz", httpsecurity.DenyAllCORS(http.HandlerFunc(routerHealthHandler))).Methods(http.MethodGet, http.MethodOptions)
+	// version of application; router-owned route; deny CORS.
+	public.Handle("/_version", httpsecurity.DenyAllCORS(http.HandlerFunc(versionHandler))).Methods(http.MethodGet, http.MethodOptions)
 
 	return public, internal, nil
+}
+
+// toAllowlistConfig converts an HTTPTriggerCorsConfig (the user-facing
+// CRD field) into an httpsecurity.AllowlistConfig (the middleware-facing
+// struct). When the trigger does not set AllowMethods, the trigger's
+// HTTP methods fall in so a preflight against the trigger's allowed
+// methods succeeds without the user having to duplicate the list.
+//
+// MaxAge has already been validated at admission (see
+// HTTPTriggerCorsConfig.Validate); any parse error here would indicate
+// a regression in validation, so the helper falls back to zero rather
+// than failing the reconcile.
+func toAllowlistConfig(cfg *fv1.HTTPTriggerCorsConfig, triggerMethods []string) httpsecurity.AllowlistConfig {
+	methods := cfg.AllowMethods
+	if len(methods) == 0 {
+		methods = triggerMethods
+	}
+	var maxAge time.Duration
+	if cfg.MaxAge != "" {
+		if d, err := time.ParseDuration(cfg.MaxAge); err == nil {
+			maxAge = d
+		}
+	}
+	return httpsecurity.AllowlistConfig{
+		AllowOrigins:     cfg.AllowOrigins,
+		AllowMethods:     methods,
+		AllowHeaders:     cfg.AllowHeaders,
+		ExposeHeaders:    cfg.ExposeHeaders,
+		AllowCredentials: cfg.AllowCredentials,
+		MaxAge:           maxAge,
+	}
 }
 
 func (ts *HTTPTriggerSet) updateTriggerStatusFailed(ht *fv1.HTTPTrigger, err error) {

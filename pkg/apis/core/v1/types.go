@@ -724,6 +724,61 @@ type (
 		// IngressConfig for router to set up Ingress.
 		// +optional
 		IngressConfig IngressConfig `json:"ingressconfig"`
+
+		// CorsConfig configures CORS response headers for browser
+		// callers of this trigger. When nil, the router emits no
+		// Access-Control-* headers and the browser's Same-Origin
+		// Policy enforces cluster isolation from cross-origin pages
+		// (the deny-by-default behaviour). Set this field to
+		// allowlist specific origins for SPAs that legitimately
+		// call this trigger cross-origin.
+		// +optional
+		CorsConfig *HTTPTriggerCorsConfig `json:"corsConfig,omitempty"`
+	}
+
+	// HTTPTriggerCorsConfig is the per-HTTPTrigger CORS allowlist.
+	// It is consumed by the router public listener to attach a CORS
+	// middleware to the trigger's route. Triggers without a CorsConfig
+	// receive no Access-Control-* response headers and therefore deny
+	// cross-origin browser reads at the Same-Origin Policy layer.
+	HTTPTriggerCorsConfig struct {
+		// AllowOrigins is the list of allowed origins (scheme + host +
+		// port). Use ["*"] to allow any origin. Mixing "*" with
+		// AllowCredentials=true is a configuration error and is
+		// rejected by validation; browsers refuse the response in that
+		// combination.
+		// +optional
+		// +listType=set
+		AllowOrigins []string `json:"allowOrigins,omitempty"`
+
+		// AllowMethods is the list of HTTP methods echoed in the
+		// Access-Control-Allow-Methods preflight response. When empty
+		// the trigger's existing Methods field is used.
+		// +optional
+		// +listType=set
+		AllowMethods []string `json:"allowMethods,omitempty"`
+
+		// AllowHeaders is the list of request headers the browser is
+		// allowed to send, echoed in Access-Control-Allow-Headers.
+		// +optional
+		// +listType=set
+		AllowHeaders []string `json:"allowHeaders,omitempty"`
+
+		// ExposeHeaders is the list of response headers exposed to
+		// the browser, set in Access-Control-Expose-Headers.
+		// +optional
+		// +listType=set
+		ExposeHeaders []string `json:"exposeHeaders,omitempty"`
+
+		// AllowCredentials sets Access-Control-Allow-Credentials.
+		// When true, AllowOrigins MUST NOT contain "*".
+		// +optional
+		AllowCredentials bool `json:"allowCredentials,omitempty"`
+
+		// MaxAge is the preflight cache lifetime as parsed by
+		// time.ParseDuration. Empty means the header is omitted.
+		// +optional
+		MaxAge string `json:"maxAge,omitempty"`
 	}
 
 	// IngressConfig is for router to set up Ingress.

@@ -33,6 +33,7 @@ import (
 	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/fetcher"
+	"github.com/fission/fission/pkg/utils/httpsecurity"
 	"github.com/fission/fission/pkg/utils/httpserver"
 	"github.com/fission/fission/pkg/utils/manager"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
@@ -144,7 +145,14 @@ func Run(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger log
 		MaxBodyBytes: hmacauth.DefaultMaxBodyBytes,
 		Logger:       logger.WithName("hmac"),
 	})
-	handler := otelUtils.GetHandlerWithOTEL(verifier(mux), "fission-fetcher", otelUtils.UrlsToIgnore("/healthz", "/readiness-healthz"))
+	// Fetcher is a pod-local sidecar with no Service; no legitimate
+	// browser caller. SecurityHeaders + DenyAllCORS as defense-in-depth
+	// against a hostile package running in the same pod-network namespace.
+	handler := httpsecurity.SecurityHeaders(
+		httpsecurity.DenyAllCORS(
+			otelUtils.GetHandlerWithOTEL(verifier(mux), "fission-fetcher", otelUtils.UrlsToIgnore("/healthz", "/readiness-healthz")),
+		),
+	)
 	httpserver.StartServer(ctx, logger, mgr, "fetcher", port, handler)
 	return nil
 }

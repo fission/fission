@@ -25,6 +25,7 @@ import (
 
 	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 	builder "github.com/fission/fission/pkg/builder"
+	"github.com/fission/fission/pkg/utils/httpsecurity"
 	"github.com/fission/fission/pkg/utils/httpserver"
 	"github.com/fission/fission/pkg/utils/manager"
 )
@@ -57,5 +58,8 @@ func Run(ctx context.Context, logger logr.Logger, mgr manager.Interface, shareVo
 		MaxBodyBytes: hmacauth.DefaultMaxBodyBytes,
 		Logger:       logger.WithName("hmac"),
 	})
-	httpserver.StartServer(ctx, logger, mgr, "builder", "8001", verifier(mux))
+	// Builder is a pod-local sidecar with no Service; no legitimate
+	// browser caller. SecurityHeaders + DenyAllCORS as defense-in-depth.
+	handler := httpsecurity.SecurityHeaders(httpsecurity.DenyAllCORS(verifier(mux)))
+	httpserver.StartServer(ctx, logger, mgr, "builder", "8001", handler)
 }

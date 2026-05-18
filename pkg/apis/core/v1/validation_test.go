@@ -19,6 +19,7 @@ package v1
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/gkampitakis/go-snaps/snaps"
@@ -82,4 +83,105 @@ func TestAggregateValidationErrors(t *testing.T) {
 		aggErr := AggregateValidationErrors("Environment", fmt.Errorf("simple error"))
 		snaps.MatchSnapshot(t, fmt.Sprint(aggErr))
 	})
+}
+
+func TestHTTPTriggerCorsConfig_Validate(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		cfg     *HTTPTriggerCorsConfig
+		wantErr bool
+		errSub  string
+	}{
+		{
+			name: "nil receiver is no-op",
+			cfg:  nil,
+		},
+		{
+			name: "valid exact-origin allowlist",
+			cfg: &HTTPTriggerCorsConfig{
+				AllowOrigins: []string{"https://app.example.com"},
+				AllowMethods: []string{"GET", "POST"},
+			},
+		},
+		{
+			name: "valid wildcard without credentials",
+			cfg: &HTTPTriggerCorsConfig{
+				AllowOrigins: []string{"*"},
+			},
+		},
+		{
+			name: "wildcard with credentials rejected",
+			cfg: &HTTPTriggerCorsConfig{
+				AllowOrigins:     []string{"*"},
+				AllowCredentials: true,
+			},
+			wantErr: true,
+			errSub:  "AllowCredentials=true",
+		},
+		{
+			name: "missing scheme rejected",
+			cfg: &HTTPTriggerCorsConfig{
+				AllowOrigins: []string{"app.example.com"},
+			},
+			wantErr: true,
+			errSub:  "scheme and host",
+		},
+		{
+			name: "origin with path rejected",
+			cfg: &HTTPTriggerCorsConfig{
+				AllowOrigins: []string{"https://app.example.com/api"},
+			},
+			wantErr: true,
+			errSub:  "path, query, fragment",
+		},
+		{
+			name: "origin with query rejected",
+			cfg: &HTTPTriggerCorsConfig{
+				AllowOrigins: []string{"https://app.example.com/?x=1"},
+			},
+			wantErr: true,
+			errSub:  "path, query, fragment",
+		},
+		{
+			name: "malformed MaxAge rejected",
+			cfg: &HTTPTriggerCorsConfig{
+				AllowOrigins: []string{"https://app.example.com"},
+				MaxAge:       "garbage",
+			},
+			wantErr: true,
+			errSub:  "time.Duration",
+		},
+		{
+			name: "negative MaxAge rejected",
+			cfg: &HTTPTriggerCorsConfig{
+				AllowOrigins: []string{"https://app.example.com"},
+				MaxAge:       "-5m",
+			},
+			wantErr: true,
+			errSub:  "non-negative",
+		},
+		{
+			name: "valid MaxAge accepted",
+			cfg: &HTTPTriggerCorsConfig{
+				AllowOrigins: []string{"https://app.example.com"},
+				MaxAge:       "10m",
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.cfg.Validate()
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("expected error containing %q, got nil", tc.errSub)
+				}
+				if tc.errSub != "" && !strings.Contains(err.Error(), tc.errSub) {
+					t.Fatalf("error %q does not contain %q", err, tc.errSub)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	}
 }

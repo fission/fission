@@ -50,6 +50,14 @@ type HTTPTriggerSpecApplyConfiguration struct {
 	// TODO: make IngressConfig an independent Fission resource
 	// IngressConfig for router to set up Ingress.
 	IngressConfig *IngressConfigApplyConfiguration `json:"ingressconfig,omitempty"`
+	// CorsConfig configures CORS response headers for browser
+	// callers of this trigger. When nil, the router emits no
+	// Access-Control-* headers and the browser's Same-Origin
+	// Policy enforces cluster isolation from cross-origin pages
+	// (the deny-by-default behaviour). Set this field to
+	// allowlist specific origins for SPAs that legitimately
+	// call this trigger cross-origin.
+	CorsConfig *HTTPTriggerCorsConfigApplyConfiguration `json:"corsConfig,omitempty"`
 }
 
 // HTTPTriggerSpecApplyConfiguration constructs a declarative configuration of the HTTPTriggerSpec type for use with
@@ -129,5 +137,13 @@ func (b *HTTPTriggerSpecApplyConfiguration) WithCreateIngress(value bool) *HTTPT
 // If called multiple times, the IngressConfig field is set to the value of the last call.
 func (b *HTTPTriggerSpecApplyConfiguration) WithIngressConfig(value *IngressConfigApplyConfiguration) *HTTPTriggerSpecApplyConfiguration {
 	b.IngressConfig = value
+	return b
+}
+
+// WithCorsConfig sets the CorsConfig field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the CorsConfig field is set to the value of the last call.
+func (b *HTTPTriggerSpecApplyConfiguration) WithCorsConfig(value *HTTPTriggerCorsConfigApplyConfiguration) *HTTPTriggerSpecApplyConfiguration {
+	b.CorsConfig = value
 	return b
 }

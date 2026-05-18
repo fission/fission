@@ -21,9 +21,12 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"reflect"
 	"regexp"
+	"slices"
 	"strings"
+	"time"
 
 	"github.com/robfig/cron/v3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -450,6 +453,60 @@ func (spec HTTPTriggerSpec) Validate() error {
 	}
 
 	errs = errors.Join(errs, spec.IngressConfig.Validate())
+	if spec.CorsConfig != nil {
+		errs = errors.Join(errs, spec.CorsConfig.Validate())
+	}
+	return errs
+}
+
+// Validate enforces the CORS spec invariants that browsers will reject
+// at runtime, plus the URL-shape and duration-format invariants that
+// surface as router-side configuration errors. Validation runs at
+// admission so triggers never reconcile into a broken state.
+func (c *HTTPTriggerCorsConfig) Validate() error {
+	if c == nil {
+		return nil
+	}
+	var errs error
+
+	hasWildcard := slices.Contains(c.AllowOrigins, "*")
+	if hasWildcard && c.AllowCredentials {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "HTTPTriggerSpec.CorsConfig",
+			c.AllowOrigins, "AllowOrigins=[\"*\"] cannot be combined with AllowCredentials=true; browsers refuse the response"))
+	}
+
+	for _, origin := range c.AllowOrigins {
+		if origin == "*" {
+			continue
+		}
+		u, err := url.Parse(origin)
+		if err != nil || u.Scheme == "" || u.Host == "" {
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "HTTPTriggerSpec.CorsConfig.AllowOrigins",
+				origin, "origin must be a valid URL with scheme and host (e.g. https://app.example.com)"))
+			continue
+		}
+		// A CORS Origin header is scheme + host[:port] only — browsers
+		// will never match an Access-Control-Allow-Origin that carries
+		// a path, query, fragment, or userinfo, so accepting one here
+		// would silently fail at runtime. Reject so the trigger fails
+		// admission instead.
+		if u.Path != "" || u.RawQuery != "" || u.Fragment != "" || u.User != nil {
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "HTTPTriggerSpec.CorsConfig.AllowOrigins",
+				origin, "origin must contain only scheme + host[:port]; path, query, fragment, and userinfo are not allowed"))
+		}
+	}
+
+	if c.MaxAge != "" {
+		d, err := time.ParseDuration(c.MaxAge)
+		if err != nil {
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "HTTPTriggerSpec.CorsConfig.MaxAge",
+				c.MaxAge, fmt.Sprintf("must parse as time.Duration: %v", err)))
+		} else if d < 0 {
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "HTTPTriggerSpec.CorsConfig.MaxAge",
+				c.MaxAge, "must be non-negative"))
+		}
+	}
+
 	return errs
 }
 

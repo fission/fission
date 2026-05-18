@@ -54,6 +54,7 @@ import (
 	"github.com/fission/fission/pkg/crd"
 	eclient "github.com/fission/fission/pkg/executor/client"
 	"github.com/fission/fission/pkg/throttler"
+	"github.com/fission/fission/pkg/utils/httpsecurity"
 	"github.com/fission/fission/pkg/utils/httpserver"
 	"github.com/fission/fission/pkg/utils/manager"
 	"github.com/fission/fission/pkg/utils/metrics"
@@ -105,7 +106,16 @@ func serve(ctx context.Context, logger logr.Logger, mgr manager.Interface, port 
 		return fmt.Errorf("error making router: %w", err)
 	}
 
-	publicHandler := otelUtils.GetHandlerWithOTEL(publicMR, "fission-router", otelUtils.UrlsToIgnore("/router-healthz"))
+	// SecurityHeaders wraps the entire public listener so every
+	// response — router-owned routes (healthz / version / auth) and
+	// user-trigger proxies alike — carries X-Content-Type-Options:
+	// nosniff and Vary: Origin. Per-route DenyAllCORS for router-owned
+	// routes is wired inside buildMuxes; user-trigger routes do NOT
+	// get DenyAllCORS so user functions remain free to emit their own
+	// CORS responses (opt-in HTTPTrigger.CorsConfig lands in a follow-up).
+	publicHandler := httpsecurity.SecurityHeaders(
+		otelUtils.GetHandlerWithOTEL(publicMR, "fission-router", otelUtils.UrlsToIgnore("/router-healthz")),
+	)
 	mgr.Add(ctx, func(ctx context.Context) {
 		httpserver.StartServer(ctx, logger, mgr, "router", fmt.Sprintf("%d", port), publicHandler)
 	})
@@ -133,7 +143,16 @@ func serve(ctx context.Context, logger logr.Logger, mgr manager.Interface, port 
 		MaxBodyBytes: internalListenerMaxBodyBytes,
 		Logger:       logger.WithName("internal-hmac"),
 	})
-	internalHandler := verifier(internalHandlerInner)
+	// DenyAllCORS wraps the verifier so a browser-driven cross-origin
+	// preflight against this listener is rejected with 403 before HMAC
+	// even buffers the body. SecurityHeaders is outermost so every
+	// response (including 401s from the verifier) carries nosniff and
+	// Vary: Origin. The internal listener has no legitimate browser
+	// caller — kubewatcher, timer, mqtrigger, canaryconfigmgr, executor,
+	// and buildermgr all run pod-to-pod.
+	internalHandler := httpsecurity.SecurityHeaders(
+		httpsecurity.DenyAllCORS(verifier(internalHandlerInner)),
+	)
 	mgr.Add(ctx, func(ctx context.Context) {
 		httpserver.StartServer(ctx, logger, mgr, "router-internal", fmt.Sprintf("%d", internalPort), internalHandler)
 	})
