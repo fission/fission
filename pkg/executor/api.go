@@ -34,6 +34,7 @@ import (
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/executor/client"
 	"github.com/fission/fission/pkg/executor/fscache"
+	"github.com/fission/fission/pkg/utils/httpsecurity"
 	"github.com/fission/fission/pkg/utils/httpserver"
 	"github.com/fission/fission/pkg/utils/manager"
 	"github.com/fission/fission/pkg/utils/metrics"
@@ -301,7 +302,18 @@ func (executor *Executor) GetHandler() http.Handler {
 }
 
 // Serve starts an HTTP server.
+//
+// The handler chain is, from inside out: GetHandler (HMAC verifier +
+// metrics + business handlers) → otel → DenyAllCORS → SecurityHeaders.
+// Executor has no legitimate browser caller (router-only per
+// charts/fission-all/templates/executor/networkpolicy.yaml); the CORS
+// deny is defense-in-depth if a future regression exposes this port via
+// Ingress.
 func (executor *Executor) Serve(ctx context.Context, mgr manager.Interface, port int) {
-	handler := otelUtils.GetHandlerWithOTEL(executor.GetHandler(), "fission-executor", otelUtils.UrlsToIgnore("/healthz"))
+	handler := httpsecurity.SecurityHeaders(
+		httpsecurity.DenyAllCORS(
+			otelUtils.GetHandlerWithOTEL(executor.GetHandler(), "fission-executor", otelUtils.UrlsToIgnore("/healthz")),
+		),
+	)
 	httpserver.StartServer(ctx, executor.logger, mgr, "executor", fmt.Sprintf("%d", port), handler)
 }

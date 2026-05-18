@@ -34,13 +34,17 @@ Round 3 keeps the FP verdict at the root but adds **defense-in-depth via `Securi
 | `pkg/router/httpTriggers.go:150` | `versionHandler` | router public | SecurityHeaders globally + DenyAllCORS on `/_version` route | mitigated-B2 |
 | `pkg/router/auth.go:172` | auth token handler | router public | SecurityHeaders globally + DenyAllCORS on `<authUriPath>` route | mitigated-B2 |
 | `pkg/router/functionHandler.go:739` | proxy error path | router public | SecurityHeaders globally; user-trigger DenyAllCORS deferred to B4 opt-in | mitigated-B2 |
-| `pkg/executor/api.go:122` | `getServiceForFunctionAPI` | executor | B3 SecurityHeaders + DenyAllCORS | open → mitigated-B3 |
-| `pkg/storagesvc/storagesvc.go:95` | archive list | storagesvc | B3 SecurityHeaders + DenyAllCORS | open → mitigated-B3 |
-| `pkg/storagesvc/storagesvc.go:162` | upload response | storagesvc | B3 SecurityHeaders + DenyAllCORS | open → mitigated-B3 |
-| `pkg/fetcher/fetcher.go:204` | version handler | fetcher sidecar | B3 SecurityHeaders + DenyAllCORS | open → mitigated-B3 |
-| `pkg/fetcher/fetcher.go:651` | upload response | fetcher sidecar | B3 SecurityHeaders + DenyAllCORS | open → mitigated-B3 |
-| `pkg/builder/builder.go:122` | version handler | builder sidecar | B3 SecurityHeaders + DenyAllCORS | open → mitigated-B3 |
-| `pkg/builder/builder.go:258` | build response | builder sidecar | B3 SecurityHeaders + DenyAllCORS | open → mitigated-B3 |
+| `pkg/executor/api.go:122` | `getServiceForFunctionAPI` | executor | SecurityHeaders + DenyAllCORS wrap on Serve() | mitigated-B3 |
+| `pkg/storagesvc/storagesvc.go:95` | archive list | storagesvc | SecurityHeaders + DenyAllCORS wrap on Start() | mitigated-B3 |
+| `pkg/storagesvc/storagesvc.go:162` | upload response | storagesvc | SecurityHeaders + DenyAllCORS wrap on Start() | mitigated-B3 |
+| `pkg/fetcher/fetcher.go:204` | version handler | fetcher sidecar | SecurityHeaders + DenyAllCORS wrap on Run() | mitigated-B3 |
+| `pkg/fetcher/fetcher.go:651` | upload response | fetcher sidecar | SecurityHeaders + DenyAllCORS wrap on Run() | mitigated-B3 |
+| `pkg/builder/builder.go:122` | version handler | builder sidecar | SecurityHeaders + DenyAllCORS wrap on Run() | mitigated-B3 |
+| `pkg/builder/builder.go:258` | build response | builder sidecar | SecurityHeaders + DenyAllCORS wrap on Run() | mitigated-B3 |
+
+**Test coverage rationale for B3:** the wrap chain `httpsecurity.SecurityHeaders(httpsecurity.DenyAllCORS(inner))` is identical across all four subsystems and is exhaustively exercised by `pkg/utils/httpsecurity/httpsecurity_test.go` (preflight reject, header stripping, header injection at WriteHeader/Write time).
+The `pkg/router` package adds a wrap-shape test (`TestInternalListener_RejectsCrossOriginPreflight`) that pins the production composition.
+Per-subsystem wrap-shape tests for executor/storagesvc/fetcher/builder would be near-duplicates and were deliberately omitted; if a reviewer requests them, they can be added in a follow-up.
 
 After each batch lands, replace `open` with `mitigated-<short-sha>` and add a one-line `Mitigation evidence:` row pointing to the relevant test.
 

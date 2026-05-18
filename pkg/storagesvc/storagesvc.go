@@ -33,6 +33,7 @@ import (
 
 	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 	"github.com/fission/fission/pkg/crd"
+	"github.com/fission/fission/pkg/utils/httpsecurity"
 	"github.com/fission/fission/pkg/utils/httpserver"
 	"github.com/fission/fission/pkg/utils/manager"
 	"github.com/fission/fission/pkg/utils/metrics"
@@ -297,7 +298,16 @@ func (ss *StorageService) Start(ctx context.Context, mgr manager.Interface, port
 	r.HandleFunc("/v1/archive", ss.infoHandler).Methods("HEAD")
 	r.HandleFunc("/healthz", ss.healthHandler).Methods("GET")
 
-	handler := otelUtils.GetHandlerWithOTEL(r, "fission-storagesvc", otelUtils.UrlsToIgnore("/healthz"))
+	// Storagesvc is router/builder/function-pod internal per
+	// charts/fission-all/templates/storagesvc/networkpolicy.yaml.
+	// SecurityHeaders + DenyAllCORS as defense-in-depth: a future
+	// regression exposing this port via Ingress must not become a
+	// browser-readable archive store.
+	handler := httpsecurity.SecurityHeaders(
+		httpsecurity.DenyAllCORS(
+			otelUtils.GetHandlerWithOTEL(r, "fission-storagesvc", otelUtils.UrlsToIgnore("/healthz")),
+		),
+	)
 	httpserver.StartServer(ctx, ss.logger, mgr, "storagesvc", fmt.Sprintf("%d", port), handler)
 }
 
