@@ -104,12 +104,41 @@ jobs:
           helm install prometheus prometheus-community/kube-prometheus-stack -n monitoring \
           --version 45.28.0 --set grafana.enabled=false --set alertmanager.enabled=false
 
+      # Cache the goreleaser dist/ output keyed on the inputs that affect
+      # the linux/amd64 binaries: go.sum, production Go source (no tests),
+      # the goreleaser config, the per-binary Dockerfiles, and the Makefile
+      # (build flags / ldflags). A cache hit lets us skip ~5-8min of
+      # `goreleaser build --snapshot` work per matrix entry — skaffold
+      # still builds the small container images from the cached binaries.
+      #
+      # Exact-key match only (no restore-keys fallback) — we never want to
+      # test against binaries built from different source.
+      - name: Restore goreleaser dist/ cache
+        id: cache-dist
+        uses: actions/cache@v4
+        with:
+          path: dist
+          key: dist-linux-amd64-${{ hashFiles('go.sum', 'go.mod', '.goreleaser.yml', 'Makefile', 'cmd/**/*.go', '!cmd/**/*_test.go', 'pkg/**/*.go', '!pkg/**/*_test.go', 'cmd/**/Dockerfile') }}
+
       - name: Build and Install Fission
         timeout-minutes: 10
         run: |
           kubectl create ns fission
           make create-crds
-          SKAFFOLD_PROFILE=kind-ci make skaffold-deploy
+          # On cache hit dist/ already contains the per-binary build
+          # contexts (binary + Dockerfile). Skip `make skaffold-deploy`'s
+          # prebuild step and invoke skaffold directly so goreleaser does
+          # not re-run. Skaffold itself produces the container images from
+          # these cached binaries — fast since the COPY layer is tiny.
+          if [ "${{ steps.cache-dist.outputs.cache-hit }}" = "true" ] \
+              && [ -x dist/fission-bundle_linux_amd64_v1/fission-bundle ] \
+              && [ -f dist/builder_linux_amd64_v1/Dockerfile ]; then
+            echo "dist/ cache hit — skipping skaffold-prebuild (goreleaser)"
+            skaffold run -p kind-ci
+          else
+            echo "dist/ cache miss — running full skaffold-prebuild"
+            SKAFFOLD_PROFILE=kind-ci make skaffold-deploy
+          fi
 
       # Port-forward is started inside the Go test step rather than as a
       # standalone step, because background processes started with `&` may
