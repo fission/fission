@@ -1,7 +1,10 @@
 package httpsecurity
 
 import (
+	"bufio"
+	"errors"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -328,6 +331,106 @@ func TestComposed_SecurityHeadersOverDenyAllCORS(t *testing.T) {
 	if got := resp.Header.Get("Access-Control-Allow-Origin"); got != "" {
 		t.Errorf("stale Allow-Origin should be stripped, got %q", got)
 	}
+}
+
+// fakeHijackingWriter implements http.ResponseWriter + http.Hijacker +
+// http.Flusher to verify the middleware forwards those capabilities.
+// http.ResponseRecorder does NOT implement Hijacker, which is why we
+// need this stub.
+type fakeHijackingWriter struct {
+	header     http.Header
+	body       []byte
+	statusCode int
+	hijacked   bool
+	flushed    bool
+}
+
+func newFakeHijackingWriter() *fakeHijackingWriter {
+	return &fakeHijackingWriter{header: http.Header{}, statusCode: http.StatusOK}
+}
+
+func (f *fakeHijackingWriter) Header() http.Header { return f.header }
+func (f *fakeHijackingWriter) Write(b []byte) (int, error) {
+	f.body = append(f.body, b...)
+	return len(b), nil
+}
+func (f *fakeHijackingWriter) WriteHeader(code int) { f.statusCode = code }
+func (f *fakeHijackingWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	f.hijacked = true
+	return nil, nil, nil
+}
+func (f *fakeHijackingWriter) Flush() { f.flushed = true }
+
+// TestSecurityHeaders_ForwardsHijack pins that the wrapper delegates
+// Hijack to the underlying ResponseWriter. Without this the router's
+// proxy path breaks WebSocket upgrades (regression caught in PR #3382
+// CI). Both wrappers (SecurityHeaders, DenyAllCORS) must forward.
+func TestSecurityHeaders_ForwardsHijack(t *testing.T) {
+	fake := newFakeHijackingWriter()
+	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hj, ok := w.(http.Hijacker)
+		if !ok {
+			t.Fatal("wrapped ResponseWriter does not implement http.Hijacker")
+		}
+		_, _, _ = hj.Hijack()
+	})
+	SecurityHeaders(inner).ServeHTTP(fake, httptest.NewRequest(http.MethodGet, "/", nil))
+	if !fake.hijacked {
+		t.Error("underlying writer's Hijack was not invoked")
+	}
+}
+
+func TestDenyAllCORS_ForwardsHijack(t *testing.T) {
+	fake := newFakeHijackingWriter()
+	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hj, ok := w.(http.Hijacker)
+		if !ok {
+			t.Fatal("wrapped ResponseWriter does not implement http.Hijacker")
+		}
+		_, _, _ = hj.Hijack()
+	})
+	DenyAllCORS(inner).ServeHTTP(fake, httptest.NewRequest(http.MethodGet, "/", nil))
+	if !fake.hijacked {
+		t.Error("underlying writer's Hijack was not invoked")
+	}
+}
+
+func TestSecurityHeaders_ForwardsFlush(t *testing.T) {
+	fake := newFakeHijackingWriter()
+	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fl, ok := w.(http.Flusher)
+		if !ok {
+			t.Fatal("wrapped ResponseWriter does not implement http.Flusher")
+		}
+		fl.Flush()
+	})
+	SecurityHeaders(inner).ServeHTTP(fake, httptest.NewRequest(http.MethodGet, "/", nil))
+	if !fake.flushed {
+		t.Error("underlying writer's Flush was not invoked")
+	}
+}
+
+func TestSecurityHeaders_HijackErrorWhenNotSupported(t *testing.T) {
+	// httptest.NewRecorder does not implement http.Hijacker.
+	rec := httptest.NewRecorder()
+	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hj, ok := w.(http.Hijacker)
+		if !ok {
+			// httptest.NewRecorder doesn't implement Hijacker on the
+			// inner side either, so the test assertion is that the
+			// wrapper still type-asserts as Hijacker but its Hijack
+			// surfaces a "not supported" error.
+			t.Fatal("wrapper should type-assert as Hijacker even when inner does not")
+		}
+		_, _, err := hj.Hijack()
+		if err == nil {
+			t.Error("expected error when underlying writer does not implement Hijacker")
+		}
+		if err != nil && !errors.Is(err, err) {
+			t.Errorf("unexpected error type: %v", err)
+		}
+	})
+	SecurityHeaders(inner).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 }
 
 func varyContains(h http.Header, value string) bool {

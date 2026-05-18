@@ -18,7 +18,10 @@
 package httpsecurity
 
 import (
+	"bufio"
+	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"slices"
 	"strconv"
@@ -41,7 +44,9 @@ func SecurityHeaders(next http.Handler) http.Handler {
 }
 
 // securityHeadersWriter injects X-Content-Type-Options and appends Origin
-// to Vary at the moment the response is committed.
+// to Vary at the moment the response is committed. It forwards Hijack,
+// Flush, and Push to the underlying ResponseWriter so WebSocket upgrades
+// (router proxy path), SSE streaming, and HTTP/2 push continue to work.
 type securityHeadersWriter struct {
 	http.ResponseWriter
 	wroteHeader bool
@@ -55,6 +60,29 @@ func (s *securityHeadersWriter) WriteHeader(code int) {
 func (s *securityHeadersWriter) Write(b []byte) (int, error) {
 	s.injectHeadersOnce()
 	return s.ResponseWriter.Write(b)
+}
+
+// Hijack implements http.Hijacker so HTTP/1.1 connection upgrade
+// (WebSocket, CONNECT) still works through this wrapper. After Hijack
+// the wrapper no longer mediates the connection; security headers are
+// already flushed (or never were, for a successful 101 upgrade where
+// the client receives the response without going through Write).
+func (s *securityHeadersWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	return hijackOrErr(s.ResponseWriter)
+}
+
+func (s *securityHeadersWriter) Flush() {
+	s.injectHeadersOnce()
+	if fl, ok := s.ResponseWriter.(http.Flusher); ok {
+		fl.Flush()
+	}
+}
+
+func (s *securityHeadersWriter) Push(target string, opts *http.PushOptions) error {
+	if p, ok := s.ResponseWriter.(http.Pusher); ok {
+		return p.Push(target, opts)
+	}
+	return http.ErrNotSupported
 }
 
 func (s *securityHeadersWriter) injectHeadersOnce() {
@@ -251,7 +279,8 @@ func addVary(h http.Header, value string) {
 // Access-Control-* header the inner handler may have set just before the
 // status line is written. We intercept WriteHeader; for handlers that
 // call Write without WriteHeader, the Go http package invokes
-// WriteHeader(200) implicitly, which we also catch.
+// WriteHeader(200) implicitly, which we also catch. Hijack/Flush/Push
+// are forwarded so connection upgrades and streaming responses work.
 type corsStripper struct {
 	http.ResponseWriter
 	wroteHeader bool
@@ -271,6 +300,34 @@ func (s *corsStripper) Write(b []byte) (int, error) {
 		s.wroteHeader = true
 	}
 	return s.ResponseWriter.Write(b)
+}
+
+func (s *corsStripper) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	return hijackOrErr(s.ResponseWriter)
+}
+
+func (s *corsStripper) Flush() {
+	if fl, ok := s.ResponseWriter.(http.Flusher); ok {
+		fl.Flush()
+	}
+}
+
+func (s *corsStripper) Push(target string, opts *http.PushOptions) error {
+	if p, ok := s.ResponseWriter.(http.Pusher); ok {
+		return p.Push(target, opts)
+	}
+	return http.ErrNotSupported
+}
+
+// hijackOrErr delegates Hijack to the wrapped ResponseWriter if it
+// implements http.Hijacker, otherwise returns http.ErrNotSupported wrapped
+// for the caller to surface. Centralised so both wrappers behave
+// identically.
+func hijackOrErr(w http.ResponseWriter) (net.Conn, *bufio.ReadWriter, error) {
+	if hj, ok := w.(http.Hijacker); ok {
+		return hj.Hijack()
+	}
+	return nil, nil, errors.New("httpsecurity: underlying ResponseWriter does not implement http.Hijacker")
 }
 
 func stripAccessControl(h http.Header) {
