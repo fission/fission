@@ -259,6 +259,52 @@ func TestPublicListener_RouterOwnedRoutesRejectCrossOriginPreflight(t *testing.T
 	}
 }
 
+// TestToAllowlistConfig pins the per-trigger CORS adapter: it converts
+// the user-facing CRD spec into the httpsecurity AllowlistConfig,
+// parses MaxAge as a time.Duration, and falls back to the trigger's
+// HTTP methods when AllowMethods is unset.
+func TestToAllowlistConfig(t *testing.T) {
+	t.Run("explicit AllowMethods preferred over trigger methods", func(t *testing.T) {
+		cfg := toAllowlistConfig(&fv1.HTTPTriggerCorsConfig{
+			AllowOrigins: []string{"https://app.example.com"},
+			AllowMethods: []string{"GET", "POST"},
+			MaxAge:       "10m",
+		}, []string{"GET"})
+		assert.Equal(t, []string{"https://app.example.com"}, cfg.AllowOrigins)
+		assert.Equal(t, []string{"GET", "POST"}, cfg.AllowMethods)
+		assert.Equal(t, 10*time.Minute, cfg.MaxAge)
+	})
+	t.Run("empty AllowMethods falls back to trigger methods", func(t *testing.T) {
+		cfg := toAllowlistConfig(&fv1.HTTPTriggerCorsConfig{
+			AllowOrigins: []string{"https://app.example.com"},
+		}, []string{"GET", "POST"})
+		assert.Equal(t, []string{"GET", "POST"}, cfg.AllowMethods,
+			"AllowMethods unset must fall back to the trigger's allowed methods")
+	})
+	t.Run("malformed MaxAge defaults to zero", func(t *testing.T) {
+		// Validation rejects this at admission, but defense-in-depth at
+		// the adapter level guarantees the middleware never panics on a
+		// bad duration.
+		cfg := toAllowlistConfig(&fv1.HTTPTriggerCorsConfig{
+			AllowOrigins: []string{"https://app.example.com"},
+			MaxAge:       "garbage",
+		}, nil)
+		assert.Equal(t, time.Duration(0), cfg.MaxAge,
+			"unparseable MaxAge must fall through to zero, not panic")
+	})
+	t.Run("AllowCredentials and ExposeHeaders carried through", func(t *testing.T) {
+		cfg := toAllowlistConfig(&fv1.HTTPTriggerCorsConfig{
+			AllowOrigins:     []string{"https://app.example.com"},
+			ExposeHeaders:    []string{"X-Request-Id"},
+			AllowHeaders:     []string{"Authorization"},
+			AllowCredentials: true,
+		}, []string{"GET"})
+		assert.True(t, cfg.AllowCredentials)
+		assert.Equal(t, []string{"X-Request-Id"}, cfg.ExposeHeaders)
+		assert.Equal(t, []string{"Authorization"}, cfg.AllowHeaders)
+	})
+}
+
 // TestInternalListener_RejectsCrossOriginPreflight pins the round-3
 // DenyAllCORS wrap on the internal listener. A browser-driven preflight
 // must 403 before the HMAC verifier even reads the body.

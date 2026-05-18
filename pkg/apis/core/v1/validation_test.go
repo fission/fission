@@ -83,3 +83,97 @@ func TestAggregateValidationErrors(t *testing.T) {
 		snaps.MatchSnapshot(t, fmt.Sprint(aggErr))
 	})
 }
+
+func TestHTTPTriggerCorsConfig_Validate(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		cfg     *HTTPTriggerCorsConfig
+		wantErr bool
+		errSub  string
+	}{
+		{
+			name: "nil receiver is no-op",
+			cfg:  nil,
+		},
+		{
+			name: "valid exact-origin allowlist",
+			cfg: &HTTPTriggerCorsConfig{
+				AllowOrigins: []string{"https://app.example.com"},
+				AllowMethods: []string{"GET", "POST"},
+			},
+		},
+		{
+			name: "valid wildcard without credentials",
+			cfg: &HTTPTriggerCorsConfig{
+				AllowOrigins: []string{"*"},
+			},
+		},
+		{
+			name: "wildcard with credentials rejected",
+			cfg: &HTTPTriggerCorsConfig{
+				AllowOrigins:     []string{"*"},
+				AllowCredentials: true,
+			},
+			wantErr: true,
+			errSub:  "AllowCredentials=true",
+		},
+		{
+			name: "missing scheme rejected",
+			cfg: &HTTPTriggerCorsConfig{
+				AllowOrigins: []string{"app.example.com"},
+			},
+			wantErr: true,
+			errSub:  "scheme and host",
+		},
+		{
+			name: "malformed MaxAge rejected",
+			cfg: &HTTPTriggerCorsConfig{
+				AllowOrigins: []string{"https://app.example.com"},
+				MaxAge:       "garbage",
+			},
+			wantErr: true,
+			errSub:  "time.Duration",
+		},
+		{
+			name: "negative MaxAge rejected",
+			cfg: &HTTPTriggerCorsConfig{
+				AllowOrigins: []string{"https://app.example.com"},
+				MaxAge:       "-5m",
+			},
+			wantErr: true,
+			errSub:  "non-negative",
+		},
+		{
+			name: "valid MaxAge accepted",
+			cfg: &HTTPTriggerCorsConfig{
+				AllowOrigins: []string{"https://app.example.com"},
+				MaxAge:       "10m",
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.cfg.Validate()
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("expected error containing %q, got nil", tc.errSub)
+				}
+				if tc.errSub != "" && !contains(err.Error(), tc.errSub) {
+					t.Fatalf("error %q does not contain %q", err, tc.errSub)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+func contains(s, sub string) bool {
+	for i := 0; i+len(sub) <= len(s); i++ {
+		if s[i:i+len(sub)] == sub {
+			return true
+		}
+	}
+	return false
+}

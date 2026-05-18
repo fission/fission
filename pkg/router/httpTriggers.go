@@ -256,7 +256,16 @@ func (ts *HTTPTriggerSet) buildMuxes(fnTimeoutMap map[types.UID]int) (public, in
 			}
 		}
 
-		handler := http.HandlerFunc(fh.handler)
+		// Per-trigger CORS: if the trigger declares a CorsConfig the
+		// router applies a CORSAllowlist middleware around its handler.
+		// Triggers without a CorsConfig keep the deny-by-default
+		// behaviour — no Access-Control-* headers, SOP blocks cross-
+		// origin reads.
+		var handler http.Handler = http.HandlerFunc(fh.handler)
+		if trigger.Spec.CorsConfig != nil {
+			cfg := toAllowlistConfig(trigger.Spec.CorsConfig, methods)
+			handler = httpsecurity.CORSAllowlist(cfg)(handler)
+		}
 
 		if trigger.Spec.Prefix != nil && *trigger.Spec.Prefix != "" {
 			prefix := *trigger.Spec.Prefix
@@ -350,6 +359,37 @@ func (ts *HTTPTriggerSet) buildMuxes(fnTimeoutMap map[types.UID]int) (public, in
 	public.Handle("/_version", httpsecurity.DenyAllCORS(http.HandlerFunc(versionHandler))).Methods("GET")
 
 	return public, internal, nil
+}
+
+// toAllowlistConfig converts an HTTPTriggerCorsConfig (the user-facing
+// CRD field) into an httpsecurity.AllowlistConfig (the middleware-facing
+// struct). When the trigger does not set AllowMethods, the trigger's
+// HTTP methods fall in so a preflight against the trigger's allowed
+// methods succeeds without the user having to duplicate the list.
+//
+// MaxAge has already been validated at admission (see
+// HTTPTriggerCorsConfig.Validate); any parse error here would indicate
+// a regression in validation, so the helper falls back to zero rather
+// than failing the reconcile.
+func toAllowlistConfig(cfg *fv1.HTTPTriggerCorsConfig, triggerMethods []string) httpsecurity.AllowlistConfig {
+	methods := cfg.AllowMethods
+	if len(methods) == 0 {
+		methods = triggerMethods
+	}
+	var maxAge time.Duration
+	if cfg.MaxAge != "" {
+		if d, err := time.ParseDuration(cfg.MaxAge); err == nil {
+			maxAge = d
+		}
+	}
+	return httpsecurity.AllowlistConfig{
+		AllowOrigins:     cfg.AllowOrigins,
+		AllowMethods:     methods,
+		AllowHeaders:     cfg.AllowHeaders,
+		ExposeHeaders:    cfg.ExposeHeaders,
+		AllowCredentials: cfg.AllowCredentials,
+		MaxAge:           maxAge,
+	}
 }
 
 func (ts *HTTPTriggerSet) updateTriggerStatusFailed(ht *fv1.HTTPTrigger, err error) {
