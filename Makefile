@@ -69,11 +69,21 @@ generate-crds:
 	paths=./pkg/apis/core/v1  \
 	output:crd:artifacts:config=crds/v1
 
-### Webhook generation: it generates webhook configs with help of kubebuilder:webhook tag
+### Webhook generation: it generates webhook configs from the +kubebuilder:webhook
+### markers in pkg/webhook/.
+###
+### Output goes to bin/webhooks/ (gitignored), NOT the chart templates
+### directory. The chart's hand-maintained webhooks.yaml is the canonical
+### Helm template; the generated manifests.yaml is a reference snapshot
+### used to keep webhooks.yaml in sync with the markers. After any
+### +kubebuilder:webhook change, diff bin/webhooks/manifests.yaml against
+### the Mutating/ValidatingWebhookConfiguration sections in
+### charts/fission-all/templates/webhook-server/webhooks.yaml and port
+### any new/changed rules across.
 generate-webhooks:
 	go tool controller-gen webhook \
 	 paths=./pkg/webhook \
-	 output:dir=charts/fission-all/templates/webhook-server
+	 output:dir=bin/webhooks
 
 
 create-crds:
