@@ -70,3 +70,27 @@ func IsAt(conds []metav1.Condition, want metav1.Condition) bool {
 		existing.Reason == want.Reason &&
 		existing.ObservedGeneration == want.ObservedGeneration
 }
+
+// MessageMaxLen is the upper bound on metav1.Condition.Message enforced
+// by the apiserver via the generated CRD schema (maxLength=32768 — see
+// e.g. crds/v1/fission.io_packages.yaml). Any longer message would cause
+// the entire UpdateStatus to be rejected. Leave a small headroom for any
+// future copy/edit churn.
+const MessageMaxLen = 32 * 1024
+
+// TruncateMessage trims s to MessageMaxLen, appending an elision marker
+// when truncation occurred so the consumer knows to fetch the full text
+// elsewhere (e.g., Package.Status.BuildLog still has the untruncated
+// build output). Writers that may put user-supplied or err.Error() text
+// into Condition.Message should always wrap with this.
+func TruncateMessage(s string) string {
+	if len(s) <= MessageMaxLen {
+		return s
+	}
+	const ellipsis = "... [truncated; see full text on parent resource]"
+	keep := MessageMaxLen - len(ellipsis)
+	if keep < 0 {
+		keep = 0
+	}
+	return s[:keep] + ellipsis
+}

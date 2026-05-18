@@ -10,17 +10,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-)
 
-// findCondition returns the first condition with the given Type, or nil.
-func findCondition(conds []metav1.Condition, condType string) *metav1.Condition {
-	for i := range conds {
-		if conds[i].Type == condType {
-			return &conds[i]
-		}
-	}
-	return nil
-}
+	"github.com/fission/fission/pkg/conditions"
+)
 
 // GetFunctionConditions returns the Conditions slice on the named Function's
 // Status, or nil if the controller hasn't populated it yet. Returns nil for
@@ -109,7 +101,7 @@ func WaitForConditionTrue(t *testing.T, ctx context.Context, what, condType stri
 	t.Helper()
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		conds := fetchConds()
-		cond := findCondition(conds, condType)
+		cond := conditions.Find(conds, condType)
 		if !assert.NotNilf(c, cond, "%s: condition %q not yet present (have: %v)", what, condType, condNames(conds)) {
 			return
 		}

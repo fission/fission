@@ -239,29 +239,6 @@ func markFunctionsForPackage(ctx context.Context, logger logr.Logger, fissionCli
 	}
 }
 
-// conditionMessageMaxLen is the upper bound on metav1.Condition.Message
-// enforced by the apiserver via the generated CRD schema (maxLength=32768
-// — see crds/v1/fission.io_packages.yaml). Any longer message would cause
-// the entire UpdateStatus to be rejected. Leave a small headroom for any
-// future copy/edit churn.
-const conditionMessageMaxLen = 32 * 1024
-
-// truncateForCondition trims s to conditionMessageMaxLen, appending an
-// elision marker when truncation occurred so the consumer knows to fetch
-// the full text elsewhere (e.g., Package.Status.BuildLog still has the
-// untruncated build output).
-func truncateForCondition(s string) string {
-	if len(s) <= conditionMessageMaxLen {
-		return s
-	}
-	const ellipsis = "... [truncated; see full text on parent resource]"
-	keep := conditionMessageMaxLen - len(ellipsis)
-	if keep < 0 {
-		keep = 0
-	}
-	return s[:keep] + ellipsis
-}
-
 // setPackageBuildCondition mirrors the legacy BuildStatus enum onto the new
 // PackageBuildSucceeded and Ready conditions so `kubectl wait
 // --for=condition=Ready package/<name>` works alongside the existing
@@ -308,7 +285,7 @@ func setPackageBuildCondition(s *fv1.PackageStatus, status fv1.BuildStatus, buil
 		// Truncate so this UpdateStatus isn't rejected by the apiserver
 		// for exceeding the standard Condition.message 32KB cap. The full
 		// build output remains in Status.BuildLog.
-		Message: truncateForCondition(buildLogs),
+		Message: conditions.TruncateMessage(buildLogs),
 	})
 	conditions.Set(&s.Conditions, metav1.Condition{
 		Type:               fv1.PackageConditionReady,

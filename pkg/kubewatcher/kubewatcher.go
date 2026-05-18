@@ -166,6 +166,8 @@ func (kw *KubeWatcher) markWatchTriggerSubscribed(ctx context.Context, w *fv1.Ku
 	if kw.fissionClient == nil {
 		return
 	}
+	// The failure path embeds err.Error() which can be unbounded.
+	message = conditions.TruncateMessage(message)
 	wantSub := metav1.Condition{
 		Type: fv1.KubernetesWatchTriggerConditionSubscribed, Status: status,
 		ObservedGeneration: w.Generation, Reason: reason, Message: message,

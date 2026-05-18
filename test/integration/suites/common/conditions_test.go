@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/conditions"
 	fapply "github.com/fission/fission/pkg/generated/applyconfiguration/core/v1"
 	"github.com/fission/fission/test/integration/framework"
 )
@@ -44,18 +45,6 @@ func minimalFunction(name, namespace string) *fv1.Function {
 // controller writes. Using it (instead of "Ready") lets the assertions
 // remain stable once controllers begin populating their own conditions.
 const smokeConditionType = "fission.io/integration-test-smoke"
-
-// findCondition returns the first condition with the given Type, or nil.
-// We deliberately don't pull this from pkg/conditions to keep the
-// integration test free of dependencies on internal helpers.
-func findCondition(conds []metav1.Condition, t string) *metav1.Condition {
-	for i := range conds {
-		if conds[i].Type == t {
-			return &conds[i]
-		}
-	}
-	return nil
-}
 
 // TestConditions_FunctionStatusSubresource creates a Function via the
 // typed client, writes a uniquely-typed condition via UpdateStatus, and
@@ -93,7 +82,7 @@ func TestConditions_FunctionStatusSubresource(t *testing.T) {
 	require.NoError(t, err, "UpdateStatus on the new /status subresource must succeed")
 
 	got := ns.GetFunctionConditions(t, ctx, name)
-	c := findCondition(got, smokeConditionType)
+	c := conditions.Find(got, smokeConditionType)
 	require.NotNil(t, c, "smoke condition must round-trip through the status subresource (got %v)", got)
 	require.EqualValues(t, "Unknown", c.Status)
 	require.Equal(t, "ConditionsSmoke", c.Reason)
@@ -145,7 +134,7 @@ func TestConditions_PackageMainResource(t *testing.T) {
 	require.NoError(t, err, "Update on Package main resource must persist Status.Conditions")
 
 	refetched := ns.GetPackageConditions(t, ctx, name)
-	c := findCondition(refetched, smokeConditionType)
+	c := conditions.Find(refetched, smokeConditionType)
 	require.NotNil(t, c, "smoke condition must round-trip through the main-resource Update (got %v)", refetched)
 	require.EqualValues(t, "True", c.Status)
 }
@@ -259,7 +248,7 @@ func TestConditions_StatusSubresourceIsolated(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, originalEnvName, after.Spec.Environment.Name,
 		"spec change submitted via UpdateStatus must be dropped — proves the subresource boundary is enforced")
-	require.NotNil(t, findCondition(after.Status.Conditions, smokeConditionType),
+	require.NotNil(t, conditions.Find(after.Status.Conditions, smokeConditionType),
 		"the smoke condition written via UpdateStatus must persist")
 
 	// And the inverse: a Patch on .metadata is fine and doesn't touch Status.
@@ -270,6 +259,6 @@ func TestConditions_StatusSubresourceIsolated(t *testing.T) {
 	final, err := fc.Functions(ns.Name).Get(ctx, name, metav1.GetOptions{})
 	require.NoError(t, err)
 	require.Equal(t, "smoke", final.Labels["conds-test"])
-	require.NotNil(t, findCondition(final.Status.Conditions, smokeConditionType),
+	require.NotNil(t, conditions.Find(final.Status.Conditions, smokeConditionType),
 		"the smoke condition must survive an unrelated metadata patch")
 }

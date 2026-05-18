@@ -364,6 +364,10 @@ func (ts *HTTPTriggerSet) markTriggerCondition(ctx context.Context, trigger *fv1
 	if ts.fissionClient == nil {
 		return // unit-test wiring without a real client
 	}
+	// Truncate to the apiserver's 32KB Condition.message cap; the failure
+	// path embeds err.Error() which is otherwise unbounded.
+	admittedMessage = conditions.TruncateMessage(admittedMessage)
+	readyMessage = conditions.TruncateMessage(readyMessage)
 	wantAdmitted := metav1.Condition{
 		Type: fv1.HTTPTriggerConditionRouteAdmitted, Status: status,
 		ObservedGeneration: trigger.Generation, Reason: reason, Message: admittedMessage,
