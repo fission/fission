@@ -83,7 +83,7 @@ func mqTriggerEventHandlers(ctx context.Context, logger logr.Logger, kubeClient 
 					}
 				}
 
-				if err := updateDeployment(ctx, mqt, routerURL, kubeClient); err != nil {
+				if err := updateDeployment(ctx, logger, mqt, routerURL, kubeClient); err != nil {
 					logger.Error(err, "Failed to Update Deployment")
 					return
 				}
@@ -195,17 +195,30 @@ func getEnvVarlist(ctx context.Context, mqt *fv1.MessageQueueTrigger, routerURL 
 		})
 	}
 
-	// Add Auth Fields
+	// Add Auth Fields. SECURITY: emit secret-derived env vars as
+	// SecretKeyRef rather than materializing literal values into the
+	// Deployment spec. The connector pod resolves the values at start
+	// time via its own ServiceAccount, restoring the Kubernetes-RBAC
+	// boundary on secret reads. The controller still calls Secrets().Get
+	// to enumerate the keys it must surface as env vars (so the response
+	// body, including secret values, briefly transits controller memory),
+	// but the values are NOT written into the Deployment object and are
+	// NOT logged. See GHSA-7m8x-qg2j-4m3v.
 	secretName := mqt.Spec.Secret
 	if len(secretName) > 0 {
 		secret, err := kubeClient.CoreV1().Secrets(mqt.Namespace).Get(ctx, secretName, metav1.GetOptions{})
 		if err != nil {
 			return nil, err
 		}
-		for key, value := range secret.Data {
+		for key := range secret.Data {
 			envVars = append(envVars, apiv1.EnvVar{
-				Name:  toEnvVar(key),
-				Value: string(value),
+				Name: toEnvVar(key),
+				ValueFrom: &apiv1.EnvVarSource{
+					SecretKeyRef: &apiv1.SecretKeySelector{
+						LocalObjectReference: apiv1.LocalObjectReference{Name: secretName},
+						Key:                  key,
+					},
+				},
 			})
 		}
 	}
@@ -295,7 +308,7 @@ func createKedaObjects(ctx context.Context, logger logr.Logger, kedaClient kedaC
 		}
 	}
 
-	if err := createDeployment(ctx, mqt, routerURL, kubeClient); err != nil {
+	if err := createDeployment(ctx, logger, mqt, routerURL, kubeClient); err != nil {
 		logger.Error(err, "Failed to create Deployment")
 		if len(authenticationRef) > 0 {
 			err = deleteAuthTrigger(ctx, kedaClient, authenticationRef, mqt.Namespace)
@@ -399,7 +412,7 @@ func deleteAuthTrigger(ctx context.Context, client kedaClient.Interface, name, n
 	return err
 }
 
-func getDeploymentSpec(ctx context.Context, mqt *fv1.MessageQueueTrigger, routerURL string, kubeClient kubernetes.Interface) (*appsv1.Deployment, error) {
+func getDeploymentSpec(ctx context.Context, logger logr.Logger, mqt *fv1.MessageQueueTrigger, routerURL string, kubeClient kubernetes.Interface) (*appsv1.Deployment, error) {
 	envVars, err := getEnvVarlist(ctx, mqt, routerURL, kubeClient)
 	if err != nil {
 		return nil, err
@@ -418,10 +431,17 @@ func getDeploymentSpec(ctx context.Context, mqt *fv1.MessageQueueTrigger, router
 			},
 		},
 	}
-	podSpec, err = util.MergePodSpec(podSpec, mqt.Spec.PodSpec)
-	if err != nil {
-		return nil, err
+	// SECURITY: only an allowlist of PodSpec fields from the user-supplied
+	// mqt.Spec.PodSpec is honoured. Image/Command/Args/Env/Volumes/etc. are
+	// dropped here; the validating webhook rejects them at admission time
+	// so a normally-configured cluster never reaches this branch with bad
+	// input. See GHSA-7m8x-qg2j-4m3v.
+	mergedSpec, dropped := util.MergeAllowedPodSpecFields(podSpec, mqt.Spec.PodSpec)
+	if len(dropped) > 0 {
+		logger.Info("dropped disallowed PodSpec fields from MessageQueueTrigger",
+			"trigger", mqt.Name, "namespace", mqt.Namespace, "dropped", dropped)
 	}
+	podSpec = mergedSpec
 
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -449,8 +469,8 @@ func getDeploymentSpec(ctx context.Context, mqt *fv1.MessageQueueTrigger, router
 	}, nil
 }
 
-func createDeployment(ctx context.Context, mqt *fv1.MessageQueueTrigger, routerURL string, kubeClient kubernetes.Interface) error {
-	deployment, err := getDeploymentSpec(ctx, mqt, routerURL, kubeClient)
+func createDeployment(ctx context.Context, logger logr.Logger, mqt *fv1.MessageQueueTrigger, routerURL string, kubeClient kubernetes.Interface) error {
+	deployment, err := getDeploymentSpec(ctx, logger, mqt, routerURL, kubeClient)
 	if err != nil {
 		return err
 	}
@@ -458,8 +478,8 @@ func createDeployment(ctx context.Context, mqt *fv1.MessageQueueTrigger, routerU
 	return err
 }
 
-func updateDeployment(ctx context.Context, mqt *fv1.MessageQueueTrigger, routerURL string, kubeClient kubernetes.Interface) error {
-	deployment, err := getDeploymentSpec(ctx, mqt, routerURL, kubeClient)
+func updateDeployment(ctx context.Context, logger logr.Logger, mqt *fv1.MessageQueueTrigger, routerURL string, kubeClient kubernetes.Interface) error {
+	deployment, err := getDeploymentSpec(ctx, logger, mqt, routerURL, kubeClient)
 	if err != nil {
 		return err
 	}
