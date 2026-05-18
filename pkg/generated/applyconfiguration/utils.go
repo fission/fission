@@ -68,6 +68,8 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &corev1.FunctionStatusApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("HTTPTrigger"):
 		return &corev1.HTTPTriggerApplyConfiguration{}
+	case v1.SchemeGroupVersion.WithKind("HTTPTriggerCorsConfig"):
+		return &corev1.HTTPTriggerCorsConfigApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("HTTPTriggerSpec"):
 		return &corev1.HTTPTriggerSpecApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("HTTPTriggerStatus"):

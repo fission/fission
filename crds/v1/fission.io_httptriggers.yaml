@@ -41,6 +41,63 @@ spec:
             description: HTTPTriggerSpec is for router to expose user functions at
               the given URL path.
             properties:
+              corsConfig:
+                description: |-
+                  CorsConfig configures CORS response headers for browser
+                  callers of this trigger. When nil, the router emits no
+                  Access-Control-* headers and the browser's Same-Origin
+                  Policy enforces cluster isolation from cross-origin pages
+                  (the deny-by-default behaviour). Set this field to
+                  allowlist specific origins for SPAs that legitimately
+                  call this trigger cross-origin.
+                properties:
+                  allowCredentials:
+                    description: |-
+                      AllowCredentials sets Access-Control-Allow-Credentials.
+                      When true, AllowOrigins MUST NOT contain "*".
+                    type: boolean
+                  allowHeaders:
+                    description: |-
+                      AllowHeaders is the list of request headers the browser is
+                      allowed to send, echoed in Access-Control-Allow-Headers.
+                    items:
+                      type: string
+                    type: array
+                    x-kubernetes-list-type: set
+                  allowMethods:
+                    description: |-
+                      AllowMethods is the list of HTTP methods echoed in the
+                      Access-Control-Allow-Methods preflight response. When empty
+                      the trigger's existing Methods field is used.
+                    items:
+                      type: string
+                    type: array
+                    x-kubernetes-list-type: set
+                  allowOrigins:
+                    description: |-
+                      AllowOrigins is the list of allowed origins (scheme + host +
+                      port). Use ["*"] to allow any origin. Mixing "*" with
+                      AllowCredentials=true is a configuration error and is
+                      rejected by validation; browsers refuse the response in that
+                      combination.
+                    items:
+                      type: string
+                    type: array
+                    x-kubernetes-list-type: set
+                  exposeHeaders:
+                    description: |-
+                      ExposeHeaders is the list of response headers exposed to
+                      the browser, set in Access-Control-Expose-Headers.
+                    items:
+                      type: string
+                    type: array
+                    x-kubernetes-list-type: set
+                  maxAge:
+                    description: |-
+                      MaxAge is the preflight cache lifetime as parsed by
+                      time.ParseDuration. Empty means the header is omitted.
+                    type: string
+                type: object
               createingress:
                 description: If CreateIngress is true, router will create an ingress
                   definition.
