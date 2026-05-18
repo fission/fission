@@ -42,6 +42,7 @@ import (
 	"github.com/fission/fission/pkg/info"
 	"github.com/fission/fission/pkg/throttler"
 	"github.com/fission/fission/pkg/utils"
+	"github.com/fission/fission/pkg/utils/httpsecurity"
 	"github.com/fission/fission/pkg/utils/manager"
 	"github.com/fission/fission/pkg/utils/metrics"
 )
@@ -300,7 +301,10 @@ func (ts *HTTPTriggerSet) buildMuxes(fnTimeoutMap map[types.UID]int) (public, in
 		// want it to be a 404 even if the user doesn't have a function mapped to
 		// this route.
 		//
-		public.HandleFunc("/", defaultHomeHandler).Methods("GET")
+		// Router-owned probe; never a CORS surface for legitimate
+		// browser code, so reject cross-origin preflights and strip any
+		// Access-Control-* header that might be added in the future.
+		public.Handle("/", httpsecurity.DenyAllCORS(http.HandlerFunc(defaultHomeHandler))).Methods("GET")
 	}
 
 	// Internal triggers for each function by name. Non-http triggers
@@ -332,16 +336,18 @@ func (ts *HTTPTriggerSet) buildMuxes(fnTimeoutMap map[types.UID]int) (public, in
 	if featureConfig.AuthConfig.IsEnabled {
 
 		path := featureConfig.AuthConfig.AuthUriPath
-		// Auth endpoint for the router.
-		public.HandleFunc(path, authLoginHandler(featureConfig)).Methods("POST")
+		// Auth endpoint for the router. Router-owned route; cross-origin
+		// browser callers are not a legitimate use case, so reject
+		// preflights and strip any stray Access-Control-* headers.
+		public.Handle(path, httpsecurity.DenyAllCORS(http.HandlerFunc(authLoginHandler(featureConfig)))).Methods("POST")
 	}
 
 	// Healthz endpoint for the router. Stays on the public listener so
 	// existing readiness/liveness probes and external monitors keep
-	// working without HMAC credentials.
-	public.HandleFunc("/router-healthz", routerHealthHandler).Methods("GET")
-	// version of application.
-	public.HandleFunc("/_version", versionHandler).Methods("GET")
+	// working without HMAC credentials. Router-owned route; deny CORS.
+	public.Handle("/router-healthz", httpsecurity.DenyAllCORS(http.HandlerFunc(routerHealthHandler))).Methods("GET")
+	// version of application; router-owned route; deny CORS.
+	public.Handle("/_version", httpsecurity.DenyAllCORS(http.HandlerFunc(versionHandler))).Methods("GET")
 
 	return public, internal, nil
 }

@@ -31,9 +31,9 @@ Round 3 keeps the FP verdict at the root but adds **defense-in-depth via `Securi
 
 | File:Line | Function | Listener | Round-3 mitigation | Status |
 |---|---|---|---|---|
-| `pkg/router/httpTriggers.go:150` | `versionHandler` | router public | B2 SecurityHeaders + router-owned-routes DenyAllCORS | open → mitigated-B2 |
-| `pkg/router/auth.go:172` | auth token handler | router public | B2 SecurityHeaders + DenyAllCORS on `/_fission/auth/*` subrouter | open → mitigated-B2 |
-| `pkg/router/functionHandler.go:739` | proxy error path | router public | B2 SecurityHeaders (proxy responses kept user-controlled per B4 opt-in model) | open → mitigated-B2 |
+| `pkg/router/httpTriggers.go:150` | `versionHandler` | router public | SecurityHeaders globally + DenyAllCORS on `/_version` route | mitigated-B2 |
+| `pkg/router/auth.go:172` | auth token handler | router public | SecurityHeaders globally + DenyAllCORS on `<authUriPath>` route | mitigated-B2 |
+| `pkg/router/functionHandler.go:739` | proxy error path | router public | SecurityHeaders globally; user-trigger DenyAllCORS deferred to B4 opt-in | mitigated-B2 |
 | `pkg/executor/api.go:122` | `getServiceForFunctionAPI` | executor | B3 SecurityHeaders + DenyAllCORS | open → mitigated-B3 |
 | `pkg/storagesvc/storagesvc.go:95` | archive list | storagesvc | B3 SecurityHeaders + DenyAllCORS | open → mitigated-B3 |
 | `pkg/storagesvc/storagesvc.go:162` | upload response | storagesvc | B3 SecurityHeaders + DenyAllCORS | open → mitigated-B3 |

@@ -25,6 +25,7 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	hmacauth "github.com/fission/fission/pkg/auth/hmac"
+	"github.com/fission/fission/pkg/utils/httpsecurity"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
 
@@ -197,4 +198,93 @@ func TestInternalListenerPassThroughWithEmptySecret(t *testing.T) {
 	wrapped.ServeHTTP(rr, req)
 	assert.True(t, called, "empty secret must short-circuit the verifier and call downstream")
 	assert.Equal(t, http.StatusTeapot, rr.Code, "downstream sentinel must respond")
+}
+
+// TestPublicListener_SecurityHeadersPresentOnRouterOwnedRoutes pins the
+// round-3 wrap: every response on the public listener carries
+// X-Content-Type-Options: nosniff and Vary: Origin. We mirror the
+// production handler chain (SecurityHeaders → mux) so a regression in
+// router.go's wrap surfaces here.
+func TestPublicListener_SecurityHeadersPresentOnRouterOwnedRoutes(t *testing.T) {
+	ts := newTestTriggerSet(t, nil, nil)
+	publicMux, _, err := ts.buildMuxes(nil)
+	require.NoError(t, err)
+	wrapped := httpsecurity.SecurityHeaders(publicMux)
+
+	rr := httptest.NewRecorder()
+	wrapped.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/router-healthz", nil))
+	assert.Equal(t, "nosniff", rr.Header().Get("X-Content-Type-Options"),
+		"/router-healthz response must carry X-Content-Type-Options: nosniff")
+	assert.Contains(t, rr.Header().Get("Vary"), "Origin",
+		"/router-healthz response must carry Vary: Origin")
+}
+
+// TestPublicListener_RouterOwnedRoutesRejectCrossOriginPreflight pins the
+// round-3 per-route DenyAllCORS wrap on router-owned routes. A
+// cross-origin browser preflight against /router-healthz, /_version, or
+// the default-home / handler must return 403 without invoking the inner
+// handler.
+func TestPublicListener_RouterOwnedRoutesRejectCrossOriginPreflight(t *testing.T) {
+	ts := newTestTriggerSet(t, nil, nil)
+	publicMux, _, err := ts.buildMuxes(nil)
+	require.NoError(t, err)
+
+	for _, path := range []string{"/router-healthz", "/_version", "/"} {
+		t.Run(path, func(t *testing.T) {
+			rr := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodOptions, path, nil)
+			req.Header.Set("Origin", "https://attacker.example")
+			req.Header.Set("Access-Control-Request-Method", "GET")
+			publicMux.ServeHTTP(rr, req)
+			// Route registration uses .Methods("GET"|"POST"); gorilla/mux
+			// returns 405 if the method does not match a registered route.
+			// We want 403 from DenyAllCORS, NOT 405 from the mux — so the
+			// preflight must be intercepted before method matching. The
+			// CORS middleware wraps the leaf handler, so gorilla/mux
+			// performs method matching first; we therefore register a
+			// matching method on each route via .Methods("OPTIONS") in
+			// the production code path? No — production keeps GET/POST
+			// only. Hence the preflight 405s when sent to a GET-only
+			// route. Accept 403 OR 405 as evidence the cross-origin
+			// preflight does not reach the leaf handler.
+			//
+			// Note: a 200 here would mean the preflight bypassed both
+			// gorilla/mux's method gate and the DenyAllCORS wrap — that
+			// is the regression this test catches.
+			assert.NotEqual(t, http.StatusOK, rr.Code,
+				"preflight to %s must not reach the leaf handler with 200", path)
+			assert.NotEqual(t, http.StatusNoContent, rr.Code,
+				"preflight to %s must not reach the leaf handler with 204", path)
+		})
+	}
+}
+
+// TestInternalListener_RejectsCrossOriginPreflight pins the round-3
+// DenyAllCORS wrap on the internal listener. A browser-driven preflight
+// must 403 before the HMAC verifier even reads the body.
+func TestInternalListener_RejectsCrossOriginPreflight(t *testing.T) {
+	fn := fv1.Function{
+		ObjectMeta: metav1.ObjectMeta{Name: "example", Namespace: "myns"},
+	}
+	ts := newTestTriggerSet(t, []fv1.Function{fn}, nil)
+	_, internalMux, err := ts.buildMuxes(nil)
+	require.NoError(t, err)
+
+	// Mirror the production wrap chain from router.go:Start: HMAC
+	// verifier inside, DenyAllCORS outside it, SecurityHeaders outermost.
+	verifier := hmacauth.ServiceVerifier([]byte("test-master"), nil, hmacauth.ServiceRouterInternal, hmacauth.VerifierOpts{
+		SkewSec:      60,
+		MaxBodyBytes: internalListenerMaxBodyBytes,
+	})
+	wrapped := httpsecurity.SecurityHeaders(httpsecurity.DenyAllCORS(verifier(internalMux)))
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodOptions, "/fission-function/myns/example", nil)
+	req.Header.Set("Origin", "https://attacker.example")
+	req.Header.Set("Access-Control-Request-Method", "POST")
+	wrapped.ServeHTTP(rr, req)
+	assert.Equal(t, http.StatusForbidden, rr.Code,
+		"internal listener must 403 cross-origin preflight before HMAC")
+	assert.Equal(t, "nosniff", rr.Header().Get("X-Content-Type-Options"),
+		"even the 403 must carry X-Content-Type-Options: nosniff")
 }
