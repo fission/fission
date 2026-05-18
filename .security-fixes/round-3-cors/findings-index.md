@@ -75,6 +75,17 @@ Note its appearance here so a future worker doesn't lose it.
 
 ---
 
+## Round-3 closing summary
+
+All 10 `warning-sink-html` sites are now `mitigated-defense-in-depth` (round-2 FP verdict still holds at the root; round-3 wrap closes the only realistic exploit chain).
+No SARIF rule count changes — the scanner cannot see middleware composition, so the per-rule counts in `output.sarif` remain identical to the round-2 baseline.
+
+Round-3 introduces one new user-facing surface: `HTTPTriggerSpec.CorsConfig` (opt-in per-trigger CORS allowlist).
+Default behaviour is unchanged — triggers without `CorsConfig` continue to deny cross-origin browser reads at the Same-Origin Policy layer.
+
+Branch: `security-fixes-cors-2026-05`.
+Five batches + four "Lock SHA" follow-ups = 9 commits on the branch (before the pre-PR scrub).
+
 ## Re-scan workflow
 
 When a fresh `output.sarif` arrives:
