@@ -6,7 +6,7 @@ See `plan.md` for batch detail and `findings-index.md` for triage.
 | Batch | Status   | Commit | Notes |
 |-------|----------|--------|-------|
 | B0    | done     | 4e0750cc | branch + workspace + threat model |
-| B1    | done     | (pending push) | `pkg/utils/httpsecurity` package (DenyAllCORS, SecurityHeaders, CORSAllowlist) |
+| B1    | done     | d145493a | `pkg/utils/httpsecurity` package (DenyAllCORS, SecurityHeaders, CORSAllowlist) |
 | B2    | pending  |        | wire into router public + internal listeners |
 | B3    | pending  |        | wire into executor, storagesvc, fetcher, builder |
 | B4    | pending  |        | HTTPTrigger CorsConfig CRD field + per-trigger allowlist + codegen |
