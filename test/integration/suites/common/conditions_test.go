@@ -189,13 +189,17 @@ func TestConditions_SSAListMapKey(t *testing.T) {
 					WithName(secretName).WithNamespace(ns.Name)))
 	}
 
+	// Register the cleanup BEFORE any Apply so a failure in either
+	// Apply (or Get) still tears the Function down; Delete is a no-op
+	// when the Function never got created.
+	t.Cleanup(func() {
+		_ = fc.Functions(ns.Name).Delete(context.Background(), name, metav1.DeleteOptions{})
+	})
+
 	// Writer A owns secret "alpha".
 	_, err := fc.Functions(ns.Name).Apply(ctx, buildFn("alpha"),
 		metav1.ApplyOptions{FieldManager: "writer-a", Force: true})
 	require.NoError(t, err, "first Apply (writer-a)")
-	t.Cleanup(func() {
-		_ = fc.Functions(ns.Name).Delete(context.Background(), name, metav1.DeleteOptions{})
-	})
 
 	// Writer B owns secret "beta". Because Secrets is a list-map keyed by
 	// name, "alpha" remains owned by writer-a and stays in the resulting list.

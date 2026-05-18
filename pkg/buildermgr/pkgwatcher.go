@@ -208,6 +208,12 @@ func (pkgw *packageWatcher) build(ctx context.Context, srcpkg *fv1.Package) {
 						"error updating package")
 				}
 				pkgw.propagateFunctionFailure(ctx, logger, pkg)
+				// Without this return, the subsequent fnList.Items loop
+				// would still execute against the nil fnList — harmless
+				// today because the slice is empty, but it would also
+				// fall through to updatePackage(... Succeeded ...) below
+				// after we just marked it Failed. Bail out explicitly.
+				return
 			}
 
 			// A package may be used by multiple functions. Update
