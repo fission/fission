@@ -5,7 +5,7 @@ See `plan.md` for batch detail and `findings-index.md` for triage.
 
 | Batch | Status   | Commit | Notes |
 |-------|----------|--------|-------|
-| B0    | done     | 9836b536 | branch + workspace + threat model |
+| B0    | done     | 4e0750cc | branch + workspace + threat model |
 | B1    | pending  |        | `pkg/utils/httpsecurity` package (DenyAllCORS, SecurityHeaders, CORSAllowlist) |
 | B2    | pending  |        | wire into router public + internal listeners |
 | B3    | pending  |        | wire into executor, storagesvc, fetcher, builder |
