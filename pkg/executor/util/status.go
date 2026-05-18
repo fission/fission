@@ -78,10 +78,11 @@ func SetFunctionReady(ctx context.Context, logger logr.Logger, fissionClient ver
 	}
 }
 
-// SetEnvironmentReady is intentionally not implemented. Writing the
-// EnvironmentConditionReady condition bumps env.ResourceVersion, and the
-// buildermgr's builder service hostname is currently
-// "<env.Name>-<env.ResourceVersion>". The RV bump from a status write
-// breaks subsequent source-archive builds with DNS-lookup failures, so
-// no executor backend writes Environment status until that service-name
-// dependency is removed.
+// No SetEnvironmentReady helper is exported by this package. Writing the
+// EnvironmentConditionReady condition would bump env.ResourceVersion via
+// the status subresource, and the buildermgr's builder service hostname
+// is currently "<env.Name>-<env.ResourceVersion>" (see
+// pkg/buildermgr/common.go.buildPackage). The RV bump from a status
+// write therefore breaks in-flight source-archive builds with DNS
+// lookup failures. Until the builder service name is decoupled from
+// env.ResourceVersion, no executor backend writes Environment status.

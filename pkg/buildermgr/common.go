@@ -277,15 +277,17 @@ func setPackageBuildCondition(s *fv1.PackageStatus, status fv1.BuildStatus, buil
 		reason = fv1.PackageReasonUnknown
 		readyMessage = "unrecognised BuildStatus value: " + string(status)
 	}
+	// Both conditions get the short, fixed-per-status `readyMessage`
+	// instead of the raw build log. The full builder output already
+	// lives in Status.BuildLog (untruncated); duplicating a 32 KB blob
+	// into Condition.Message would just inflate every Package payload
+	// without giving users new information.
 	conditions.Set(&s.Conditions, metav1.Condition{
 		Type:               fv1.PackageConditionBuildSucceeded,
 		Status:             buildStatus,
 		ObservedGeneration: gen,
 		Reason:             reason,
-		// Truncate so this UpdateStatus isn't rejected by the apiserver
-		// for exceeding the standard Condition.message 32KB cap. The full
-		// build output remains in Status.BuildLog.
-		Message: conditions.TruncateMessage(buildLogs),
+		Message:            readyMessage,
 	})
 	conditions.Set(&s.Conditions, metav1.Condition{
 		Type:               fv1.PackageConditionReady,
