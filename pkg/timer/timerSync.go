@@ -39,13 +39,6 @@ type (
 		fissionClient       versioned.Interface
 		timer               *Timer
 		timeTriggerInformer map[string]k8sCache.SharedIndexInformer
-		// rootCtx is the long-running TimerSync context, captured at
-		// MakeTimerSync. The cache event-handler callbacks
-		// (AddUpdate/DeleteTimeTrigger) have no ctx parameter, so
-		// status writes from those callbacks scope their requests to
-		// this ctx — when the controller shuts down, dangling status
-		// writes are cancelled rather than left to fail on their own.
-		rootCtx context.Context
 	}
 )
 
@@ -54,7 +47,6 @@ func MakeTimerSync(ctx context.Context, logger logr.Logger, fissionClient versio
 		logger:        logger.WithName("timer_sync"),
 		fissionClient: fissionClient,
 		timer:         timer,
-		rootCtx:       ctx,
 	}
 	ws.timeTriggerInformer = utils.GetInformersForNamespaces(fissionClient, time.Minute*30, fv1.TimeTriggerResource)
 	err := ws.TimeTriggerEventHandlers(ctx)
@@ -87,7 +79,12 @@ func (ws *TimerSync) AddUpdateTimeTrigger(timeTrigger *fv1.TimeTrigger) {
 		}
 		logger.V(1).Info("cron added")
 	}
-	ws.markTimeTriggerScheduled(ws.rootCtx, timeTrigger)
+	// The cache event-handler callback signature doesn't carry a ctx, and
+	// storing one on TimerSync is the Go-style-guide anti-pattern. The
+	// status write is best-effort and only fires on the first observed
+	// generation per trigger; using context.Background() is the
+	// pragmatic choice here.
+	ws.markTimeTriggerScheduled(context.Background(), timeTrigger)
 }
 
 // markTimeTriggerScheduled writes Scheduled + Ready conditions on a TimeTrigger

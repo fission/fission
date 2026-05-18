@@ -90,7 +90,10 @@ func (ns *TestNamespace) GetCanaryConfigConditions(t *testing.T, ctx context.Con
 }
 
 // GetEnvironmentConditions returns the Conditions slice on the named
-// Environment's Status.
+// Environment's Status. No Fission controller writes these in this PR
+// (see pkg/buildermgr/envwatcher.go.AddUpdateBuilder for the rationale)
+// so this helper is retained for forward compatibility — it always
+// returns nil today.
 func (ns *TestNamespace) GetEnvironmentConditions(t *testing.T, ctx context.Context, name string) []metav1.Condition {
 	t.Helper()
 	r, err := ns.f.fissionClient.CoreV1().Environments(ns.Name).Get(ctx, name, metav1.GetOptions{})
@@ -134,17 +137,6 @@ func (ns *TestNamespace) WaitForPackageConditionTrue(t *testing.T, ctx context.C
 	t.Helper()
 	WaitForConditionTrue(t, ctx, "package "+name, condType, timeout, func() []metav1.Condition {
 		return ns.GetPackageConditions(t, ctx, name)
-	})
-}
-
-// WaitForEnvironmentConditionReady polls until Environment.Status.Conditions[Ready]
-// is True or timeout fires. The buildermgr writes True when the env's builder
-// deployment is up; the poolmgr writes True when the first runtime pod in
-// the env pool is ready.
-func (ns *TestNamespace) WaitForEnvironmentConditionReady(t *testing.T, ctx context.Context, name, condType string, timeout time.Duration) {
-	t.Helper()
-	WaitForConditionTrue(t, ctx, "environment "+name, condType, timeout, func() []metav1.Condition {
-		return ns.GetEnvironmentConditions(t, ctx, name)
 	})
 }
 

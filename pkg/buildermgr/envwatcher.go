@@ -35,7 +35,6 @@ import (
 	k8sCache "k8s.io/client-go/tools/cache"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
-	"github.com/fission/fission/pkg/conditions"
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/executor/util"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
@@ -180,7 +179,6 @@ func (envw *environmentWatcher) AddUpdateBuilder(ctx context.Context, env *fv1.E
 			builderInfo, err := envw.createBuilder(ctx, env, envw.nsResolver.GetBuilderNS(env.Namespace))
 			if err != nil {
 				envw.logger.Error(err, "error creating builder service")
-				envw.setEnvironmentReady(ctx, env, metav1.ConditionFalse, fv1.EnvironmentReasonBuilderCreateFail, err.Error())
 				return
 			}
 			envw.cache[crd.CacheKeyUIDFromMeta(&env.ObjectMeta)] = builderInfo
@@ -190,51 +188,20 @@ func (envw *environmentWatcher) AddUpdateBuilder(ctx context.Context, env *fv1.E
 			builderInfo, err := envw.createBuilder(ctx, env, envw.nsResolver.GetBuilderNS(env.Namespace))
 			if err != nil {
 				envw.logger.Error(err, "error updating builder service")
-				envw.setEnvironmentReady(ctx, env, metav1.ConditionFalse, fv1.EnvironmentReasonBuilderCreateFail, err.Error())
 				return
 			}
 			envw.cache[crd.CacheKeyUIDFromMeta(&env.ObjectMeta)] = builderInfo
 		}
-		envw.setEnvironmentReady(ctx, env, metav1.ConditionTrue, fv1.EnvironmentReasonBuilderReady, "builder deployment is ready")
-		return
 	}
-	// v1 environments and v2+ envs without a builder image are ready immediately
-	// — they don't require a builder deployment, so the env can be invoked as-is.
-	envw.setEnvironmentReady(ctx, env, metav1.ConditionTrue, fv1.EnvironmentReasonNoBuilderRequired, "environment has no builder; ready to invoke")
-}
-
-// setEnvironmentReady writes the Ready condition on the named Environment
-// via the status subresource. Fast-path: the in-memory env from the
-// informer is checked first; we only Get when conditions would actually
-// transition. AddUpdateBuilder fires on every informer event, so without
-// this fast path a busy controller would Get-then-no-op on the apiserver
-// many times per second.
-func (envw *environmentWatcher) setEnvironmentReady(ctx context.Context, env *fv1.Environment, status metav1.ConditionStatus, reason, message string) {
-	want := metav1.Condition{
-		Type:               fv1.EnvironmentConditionReady,
-		Status:             status,
-		ObservedGeneration: env.Generation,
-		Reason:             reason,
-		Message:            message,
-	}
-	if conditions.IsAt(env.Status.Conditions, want) {
-		return
-	}
-	cur, err := envw.fissionClient.CoreV1().Environments(env.Namespace).Get(ctx, env.Name, metav1.GetOptions{})
-	if err != nil {
-		envw.logger.V(1).Info("environment status: get failed", "env", env.Name, "namespace", env.Namespace, "error", err)
-		return
-	}
-	want.ObservedGeneration = cur.Generation
-	if conditions.IsAt(cur.Status.Conditions, want) {
-		return
-	}
-	if !conditions.Set(&cur.Status.Conditions, want) {
-		return
-	}
-	if _, err := envw.fissionClient.CoreV1().Environments(env.Namespace).UpdateStatus(ctx, cur, metav1.UpdateOptions{}); err != nil {
-		envw.logger.V(1).Info("environment status: update failed", "env", env.Name, "namespace", env.Namespace, "error", err)
-	}
+	// NOTE: writing EnvironmentConditionReady here would bump env.RV via
+	// the status subresource, but the builder service name (and its DNS
+	// lookup in pkg/buildermgr/common.go.buildPackage) is
+	// "<env.Name>-<env.ResourceVersion>". A status-driven RV bump
+	// therefore renames the *expected* service without renaming the
+	// *actual* one, breaking every subsequent source-archive build.
+	// Decoupling the builder service name from env.ResourceVersion is
+	// follow-up work; until then this controller does not write
+	// EnvironmentConditionReady.
 }
 
 func (envw *environmentWatcher) DeleteBuilder(ctx context.Context, env *fv1.Environment) {

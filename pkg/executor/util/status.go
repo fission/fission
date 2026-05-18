@@ -27,27 +27,33 @@ import (
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 )
 
-// SetFunctionReady writes the FunctionConditionReady condition on the named
-// Function CR using the status subresource. Shared by every executor type
-// (poolmgr, newdeploy, container) so they all surface readiness on the same
-// condition shape.
+// SetFunctionReady writes FunctionConditionReady=True with the given reason
+// on the named Function CR via the status subresource. Shared by every
+// executor type (poolmgr, newdeploy, container).
+//
+// The signature deliberately omits a ConditionStatus argument: executors
+// only write the *success* transition. getFuncSvc and friends run on the
+// cold-start hot path and may see many transient failures in quick
+// succession (image pull retries, specialize timeouts, HPA conflicts) —
+// flipping Ready=False on each would generate condition flapping that
+// is more noise than signal. Transient failure observability is covered
+// by `metrics.ColdStartsError` and structured logs.
 //
 // Fast-path: the caller passes an in-memory fn; if its Status.Conditions
-// already record the same Status/Reason/ObservedGeneration we want to
-// write, we skip the apiserver call entirely. Only key transitions
-// (cold-start success, transition False↔True, generation bump) reach the
-// network.
+// already record Ready=True with the same Reason/ObservedGeneration we
+// want, we skip the apiserver call entirely. Only the first cold-start
+// success per (function, generation) tuple reaches the network.
 //
 // Best-effort: status I/O failures are logged at V(1) and never propagated
 // back to the caller — the executor's primary job is to return a usable
 // service URL, not to gate on status writes.
-func SetFunctionReady(ctx context.Context, logger logr.Logger, fissionClient versioned.Interface, fn *fv1.Function, status metav1.ConditionStatus, reason, message string) {
+func SetFunctionReady(ctx context.Context, logger logr.Logger, fissionClient versioned.Interface, fn *fv1.Function, reason, message string) {
 	if fissionClient == nil {
 		return
 	}
 	want := metav1.Condition{
 		Type:               fv1.FunctionConditionReady,
-		Status:             status,
+		Status:             metav1.ConditionTrue,
 		ObservedGeneration: fn.Generation,
 		Reason:             reason,
 		Message:            message,
@@ -72,39 +78,10 @@ func SetFunctionReady(ctx context.Context, logger logr.Logger, fissionClient ver
 	}
 }
 
-// SetEnvironmentReady writes the EnvironmentConditionReady condition on the
-// named Environment CR using the status subresource. Used by the poolmgr to
-// signal "at least one runtime pod is ready in the pool"
-// (Reason=PoolReady), which is a stronger readiness signal than the
-// buildermgr's BuilderReady.
-//
-// Same fast-path semantics as SetFunctionReady — but we don't have an
-// in-memory Environment from the caller, so the cheap pre-check is skipped
-// and we always Get. The post-Get IsAt check still keeps the UpdateStatus
-// rate down to the actual transitions.
-func SetEnvironmentReady(ctx context.Context, logger logr.Logger, fissionClient versioned.Interface, namespace, name string, status metav1.ConditionStatus, reason, message string) {
-	if fissionClient == nil {
-		return
-	}
-	cur, err := fissionClient.CoreV1().Environments(namespace).Get(ctx, name, metav1.GetOptions{})
-	if err != nil {
-		logger.V(1).Info("environment status: get failed", "name", name, "namespace", namespace, "error", err)
-		return
-	}
-	want := metav1.Condition{
-		Type:               fv1.EnvironmentConditionReady,
-		Status:             status,
-		ObservedGeneration: cur.Generation,
-		Reason:             reason,
-		Message:            message,
-	}
-	if conditions.IsAt(cur.Status.Conditions, want) {
-		return
-	}
-	if !conditions.Set(&cur.Status.Conditions, want) {
-		return
-	}
-	if _, err := fissionClient.CoreV1().Environments(namespace).UpdateStatus(ctx, cur, metav1.UpdateOptions{}); err != nil {
-		logger.V(1).Info("environment status: update failed", "name", name, "namespace", namespace, "error", err)
-	}
-}
+// SetEnvironmentReady is intentionally not implemented. Writing the
+// EnvironmentConditionReady condition bumps env.ResourceVersion, and the
+// buildermgr's builder service hostname is currently
+// "<env.Name>-<env.ResourceVersion>". The RV bump from a status write
+// breaks subsequent source-archive builds with DNS-lookup failures, so
+// no executor backend writes Environment status until that service-name
+// dependency is removed.

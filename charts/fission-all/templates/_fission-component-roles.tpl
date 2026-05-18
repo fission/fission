@@ -16,10 +16,12 @@ rules:
   - delete
 - apiGroups:
   - fission.io
+  # Packages have no status subresource — main-resource update
+  # covers their writes. functions/status is needed because the
+  # buildermgr propagates package build outcome onto dependent
+  # functions via markFunctionsForPackage.
   resources:
-  - environments/status
   - functions/status
-  - packages/status
   verbs:
   - get
   - update
@@ -43,8 +45,9 @@ rules:
   - delete
 - apiGroups:
   - fission.io
+  # environments/status intentionally omitted — no executor writes
+  # Environment status today (see pkg/executor/util/status.go).
   resources:
-  - environments/status
   - functions/status
   verbs:
   - get

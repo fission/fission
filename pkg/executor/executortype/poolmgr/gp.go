@@ -551,19 +551,26 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 
 	key, pod, err := gp.choosePod(ctx, funcLabels)
 	if err != nil {
-		executorUtil.SetFunctionReady(ctx, gp.logger, gp.fissionClient, fn, metav1.ConditionFalse, fv1.FunctionReasonChoosePodFailed, err.Error())
+		// Transient executor errors (ChoosePodFailed, specialize timeout,
+		// etc.) are NOT written to Function.Status.Conditions: getFuncSvc
+		// runs on the cold-start hot path and may see many transient
+		// failures in quick succession. Status flapping there is noisy
+		// and not useful — those signals belong in logs / metrics
+		// (already covered by metrics.ColdStartsError). Status only
+		// transitions on durable state (specialized successfully, or
+		// the buildermgr reporting a permanent PackageBuildFailed).
 		return nil, err
 	}
 	gp.readyPodQueue.Done(key)
-	// We have a ready generic pod from the env's pool — the env is
-	// invokable. Idempotent: only flips the condition the first time.
-	if gp.env != nil {
-		executorUtil.SetEnvironmentReady(ctx, gp.logger, gp.fissionClient, gp.env.Namespace, gp.env.Name,
-			metav1.ConditionTrue, fv1.EnvironmentReasonPoolReady, "runtime pool has a ready pod")
-	}
+	// NOTE: we don't write EnvironmentConditionReady here. Status
+	// updates would bump env.ResourceVersion, which the buildermgr
+	// uses to compose the builder service hostname (see
+	// pkg/buildermgr/common.go.buildPackage) — racing the RV bump
+	// against an in-flight source-archive build manifests as
+	// "no such host" DNS errors. Decoupling that name from RV is
+	// follow-up work.
 	err = gp.specializePod(ctx, pod, fn)
 	if err != nil {
-		executorUtil.SetFunctionReady(ctx, gp.logger, gp.fissionClient, fn, metav1.ConditionFalse, fv1.FunctionReasonSpecializeFailed, err.Error())
 		go gp.scheduleDeletePod(context.Background(), pod.Name)
 		return nil, err
 	}
@@ -656,7 +663,7 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 		"podIP", pod.Status.PodIP)
 
 	otelUtils.SpanTrackEvent(ctx, "getFuncSvcComplete", fscache.GetAttributesForFuncSvc(fsvc)...)
-	executorUtil.SetFunctionReady(ctx, gp.logger, gp.fissionClient, fn, metav1.ConditionTrue, fv1.FunctionReasonSpecialized, "function is serving via specialized pod "+pod.Name)
+	executorUtil.SetFunctionReady(ctx, gp.logger, gp.fissionClient, fn, fv1.FunctionReasonReady, "function is serving via specialized pod "+pod.Name)
 	return fsvc, nil
 }
 

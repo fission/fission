@@ -454,10 +454,11 @@ func (deploy *NewDeploy) fnCreate(ctx context.Context, fn *fv1.Function) (*fscac
 	// Since newdeploy waits for pods of deployment to be ready,
 	// change the order of kubeObject creation (create service first,
 	// then deployment) to take advantage of waiting time.
+	// Transient executor errors are not written to Function.Status; see
+	// the analogous note in pkg/executor/executortype/poolmgr/gp.go.
 	svc, err := deploy.createOrGetSvc(ctx, fn, deployLabels, deployAnnotations, objName, ns)
 	if err != nil {
 		deploy.logger.Error(err, "error creating service", "service", objName)
-		executorUtils.SetFunctionReady(ctx, deploy.logger, deploy.fissionClient, fn, metav1.ConditionFalse, fv1.FunctionReasonServiceFailed, err.Error())
 		go cleanupFunc(context.Background(), ns, objName)
 		return nil, fmt.Errorf("error creating service %s: %w", objName, err)
 	}
@@ -466,7 +467,6 @@ func (deploy *NewDeploy) fnCreate(ctx context.Context, fn *fv1.Function) (*fscac
 	depl, err := deploy.createOrGetDeployment(ctx, fn, env, objName, deployLabels, deployAnnotations, ns)
 	if err != nil {
 		deploy.logger.Error(err, "error creating deployment", "deployment", objName)
-		executorUtils.SetFunctionReady(ctx, deploy.logger, deploy.fissionClient, fn, metav1.ConditionFalse, fv1.FunctionReasonDeploymentFailed, err.Error())
 		go cleanupFunc(context.Background(), ns, objName)
 		return nil, fmt.Errorf("error creating deployment %s: %w", objName, err)
 	}
@@ -474,7 +474,6 @@ func (deploy *NewDeploy) fnCreate(ctx context.Context, fn *fv1.Function) (*fscac
 	hpa, err := deploy.hpaops.CreateOrGetHpa(ctx, fn, objName, &fn.Spec.InvokeStrategy.ExecutionStrategy, depl, deployLabels, deployAnnotations)
 	if err != nil {
 		deploy.logger.Error(err, "error creating HPA", "hpa", objName)
-		executorUtils.SetFunctionReady(ctx, deploy.logger, deploy.fissionClient, fn, metav1.ConditionFalse, fv1.FunctionReasonHPAFailed, err.Error())
 		go cleanupFunc(context.Background(), ns, objName)
 		return nil, fmt.Errorf("error creating HPA %s: %w", objName, err)
 	}
@@ -520,12 +519,11 @@ func (deploy *NewDeploy) fnCreate(ctx context.Context, fn *fv1.Function) (*fscac
 	if err != nil {
 		deploy.logger.Error(err, "error adding function to cache", "function", fsvc.Function)
 		metrics.ColdStartsError.WithLabelValues(fn.Name, fn.Namespace).Inc()
-		executorUtils.SetFunctionReady(ctx, deploy.logger, deploy.fissionClient, fn, metav1.ConditionFalse, fv1.FunctionReasonFuncSvcCacheError, err.Error())
 		return fsvc, err
 	}
 
 	metrics.ColdStarts.WithLabelValues(fn.Name, fn.Namespace).Inc()
-	executorUtils.SetFunctionReady(ctx, deploy.logger, deploy.fissionClient, fn, metav1.ConditionTrue, fv1.FunctionReasonDeploymentReady, "newdeploy deployment is ready")
+	executorUtils.SetFunctionReady(ctx, deploy.logger, deploy.fissionClient, fn, fv1.FunctionReasonReady, "newdeploy deployment is ready")
 
 	return fsvc, nil
 }
