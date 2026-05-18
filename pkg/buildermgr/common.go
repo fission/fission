@@ -298,6 +298,7 @@ func setPackageBuildCondition(s *fv1.PackageStatus, status fv1.BuildStatus, buil
 	default:
 		buildStatus, readyStatus = metav1.ConditionUnknown, metav1.ConditionUnknown
 		reason = fv1.PackageReasonUnknown
+		readyMessage = "unrecognised BuildStatus value: " + string(status)
 	}
 	conditions.Set(&s.Conditions, metav1.Condition{
 		Type:               fv1.PackageConditionBuildSucceeded,
