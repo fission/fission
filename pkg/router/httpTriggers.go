@@ -257,7 +257,10 @@ func (ts *HTTPTriggerSet) buildMuxes(fnTimeoutMap map[types.UID]int) (public, in
 		}
 
 		// Per-trigger CORS: if the trigger declares a CorsConfig the
-		// router applies a CORSAllowlist middleware around its handler.
+		// router applies a CORSAllowlist middleware around its handler
+		// and appends OPTIONS to the registered methods so gorilla/mux
+		// routes the preflight to the wrapped handler instead of
+		// returning 405 before CORSAllowlist sees the request.
 		// Triggers without a CorsConfig keep the deny-by-default
 		// behaviour — no Access-Control-* headers, SOP blocks cross-
 		// origin reads.
@@ -265,6 +268,9 @@ func (ts *HTTPTriggerSet) buildMuxes(fnTimeoutMap map[types.UID]int) (public, in
 		if trigger.Spec.CorsConfig != nil {
 			cfg := toAllowlistConfig(trigger.Spec.CorsConfig, methods)
 			handler = httpsecurity.CORSAllowlist(cfg)(handler)
+			if !slices.Contains(methods, http.MethodOptions) {
+				methods = append(methods, http.MethodOptions)
+			}
 		}
 
 		if trigger.Spec.Prefix != nil && *trigger.Spec.Prefix != "" {
@@ -313,7 +319,9 @@ func (ts *HTTPTriggerSet) buildMuxes(fnTimeoutMap map[types.UID]int) (public, in
 		// Router-owned probe; never a CORS surface for legitimate
 		// browser code, so reject cross-origin preflights and strip any
 		// Access-Control-* header that might be added in the future.
-		public.Handle("/", httpsecurity.DenyAllCORS(http.HandlerFunc(defaultHomeHandler))).Methods("GET")
+		// OPTIONS is registered alongside GET so a preflight reaches
+		// DenyAllCORS instead of being 405'd by mux's method gate.
+		public.Handle("/", httpsecurity.DenyAllCORS(http.HandlerFunc(defaultHomeHandler))).Methods(http.MethodGet, http.MethodOptions)
 	}
 
 	// Internal triggers for each function by name. Non-http triggers
@@ -348,15 +356,17 @@ func (ts *HTTPTriggerSet) buildMuxes(fnTimeoutMap map[types.UID]int) (public, in
 		// Auth endpoint for the router. Router-owned route; cross-origin
 		// browser callers are not a legitimate use case, so reject
 		// preflights and strip any stray Access-Control-* headers.
-		public.Handle(path, httpsecurity.DenyAllCORS(http.HandlerFunc(authLoginHandler(featureConfig)))).Methods("POST")
+		// OPTIONS registered so the preflight reaches DenyAllCORS.
+		public.Handle(path, httpsecurity.DenyAllCORS(http.HandlerFunc(authLoginHandler(featureConfig)))).Methods(http.MethodPost, http.MethodOptions)
 	}
 
 	// Healthz endpoint for the router. Stays on the public listener so
 	// existing readiness/liveness probes and external monitors keep
-	// working without HMAC credentials. Router-owned route; deny CORS.
-	public.Handle("/router-healthz", httpsecurity.DenyAllCORS(http.HandlerFunc(routerHealthHandler))).Methods("GET")
+	// working without HMAC credentials. Router-owned route; deny CORS
+	// preflights (OPTIONS registered so mux routes them to DenyAllCORS).
+	public.Handle("/router-healthz", httpsecurity.DenyAllCORS(http.HandlerFunc(routerHealthHandler))).Methods(http.MethodGet, http.MethodOptions)
 	// version of application; router-owned route; deny CORS.
-	public.Handle("/_version", httpsecurity.DenyAllCORS(http.HandlerFunc(versionHandler))).Methods("GET")
+	public.Handle("/_version", httpsecurity.DenyAllCORS(http.HandlerFunc(versionHandler))).Methods(http.MethodGet, http.MethodOptions)
 
 	return public, internal, nil
 }

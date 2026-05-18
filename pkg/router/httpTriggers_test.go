@@ -220,10 +220,9 @@ func TestPublicListener_SecurityHeadersPresentOnRouterOwnedRoutes(t *testing.T) 
 }
 
 // TestPublicListener_RouterOwnedRoutesRejectCrossOriginPreflight pins the
-// round-3 per-route DenyAllCORS wrap on router-owned routes. A
-// cross-origin browser preflight against /router-healthz, /_version, or
-// the default-home / handler must return 403 without invoking the inner
-// handler.
+// round-3 per-route DenyAllCORS wrap on router-owned routes. Each route
+// registers OPTIONS alongside its real verb so gorilla/mux routes the
+// preflight to the wrapped DenyAllCORS handler, which returns 403.
 func TestPublicListener_RouterOwnedRoutesRejectCrossOriginPreflight(t *testing.T) {
 	ts := newTestTriggerSet(t, nil, nil)
 	publicMux, _, err := ts.buildMuxes(nil)
@@ -236,25 +235,8 @@ func TestPublicListener_RouterOwnedRoutesRejectCrossOriginPreflight(t *testing.T
 			req.Header.Set("Origin", "https://attacker.example")
 			req.Header.Set("Access-Control-Request-Method", "GET")
 			publicMux.ServeHTTP(rr, req)
-			// Route registration uses .Methods("GET"|"POST"); gorilla/mux
-			// returns 405 if the method does not match a registered route.
-			// We want 403 from DenyAllCORS, NOT 405 from the mux — so the
-			// preflight must be intercepted before method matching. The
-			// CORS middleware wraps the leaf handler, so gorilla/mux
-			// performs method matching first; we therefore register a
-			// matching method on each route via .Methods("OPTIONS") in
-			// the production code path? No — production keeps GET/POST
-			// only. Hence the preflight 405s when sent to a GET-only
-			// route. Accept 403 OR 405 as evidence the cross-origin
-			// preflight does not reach the leaf handler.
-			//
-			// Note: a 200 here would mean the preflight bypassed both
-			// gorilla/mux's method gate and the DenyAllCORS wrap — that
-			// is the regression this test catches.
-			assert.NotEqual(t, http.StatusOK, rr.Code,
-				"preflight to %s must not reach the leaf handler with 200", path)
-			assert.NotEqual(t, http.StatusNoContent, rr.Code,
-				"preflight to %s must not reach the leaf handler with 204", path)
+			assert.Equal(t, http.StatusForbidden, rr.Code,
+				"cross-origin preflight to %s must be 403 from DenyAllCORS", path)
 		})
 	}
 }
