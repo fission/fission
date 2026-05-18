@@ -20,11 +20,13 @@ import (
 	"context"
 	"time"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sCache "k8s.io/client-go/tools/cache"
 
 	"github.com/go-logr/logr"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/conditions"
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	"github.com/fission/fission/pkg/utils"
@@ -77,6 +79,52 @@ func (ws *TimerSync) AddUpdateTimeTrigger(timeTrigger *fv1.TimeTrigger) {
 		}
 		logger.V(1).Info("cron added")
 	}
+	// The cache event-handler callback signature doesn't carry a ctx, and
+	// storing one on TimerSync is the Go-style-guide anti-pattern. The
+	// status write is best-effort and only fires on the first observed
+	// generation per trigger; using context.Background() is the
+	// pragmatic choice here.
+	ws.markTimeTriggerScheduled(context.Background(), timeTrigger)
+}
+
+// markTimeTriggerScheduled writes Scheduled + Ready conditions on a TimeTrigger
+// after its cron entry is registered. Best-effort: timer scheduling is not
+// gated on status writes. Fast-path skips Get + UpdateStatus when this
+// trigger's in-memory conditions already match the desired state.
+func (ws *TimerSync) markTimeTriggerScheduled(ctx context.Context, trigger *fv1.TimeTrigger) {
+	if ws.fissionClient == nil {
+		return
+	}
+	wantSched := metav1.Condition{
+		Type: fv1.TimeTriggerConditionScheduled, Status: metav1.ConditionTrue,
+		ObservedGeneration: trigger.Generation,
+		Reason:             fv1.TimeTriggerReasonCronRegistered,
+		Message:            "timer registered cron schedule " + trigger.Spec.Cron,
+	}
+	wantReady := metav1.Condition{
+		Type: fv1.TimeTriggerConditionReady, Status: metav1.ConditionTrue,
+		ObservedGeneration: trigger.Generation,
+		Reason:             fv1.TimeTriggerReasonCronRegistered,
+		Message:            "trigger is firing on schedule",
+	}
+	if conditions.IsAt(trigger.Status.Conditions, wantSched) && conditions.IsAt(trigger.Status.Conditions, wantReady) {
+		return
+	}
+	cur, err := ws.fissionClient.CoreV1().TimeTriggers(trigger.Namespace).Get(ctx, trigger.Name, metav1.GetOptions{})
+	if err != nil {
+		ws.logger.V(1).Info("timetrigger status: get failed", "name", trigger.Name, "namespace", trigger.Namespace, "error", err)
+		return
+	}
+	wantSched.ObservedGeneration = cur.Generation
+	wantReady.ObservedGeneration = cur.Generation
+	if conditions.IsAt(cur.Status.Conditions, wantSched) && conditions.IsAt(cur.Status.Conditions, wantReady) {
+		return
+	}
+	conditions.Set(&cur.Status.Conditions, wantSched)
+	conditions.Set(&cur.Status.Conditions, wantReady)
+	if _, err := ws.fissionClient.CoreV1().TimeTriggers(trigger.Namespace).UpdateStatus(ctx, cur, metav1.UpdateOptions{}); err != nil {
+		ws.logger.V(1).Info("timetrigger status: update failed", "name", trigger.Name, "namespace", trigger.Namespace, "error", err)
+	}
 }
 
 func (ws *TimerSync) DeleteTimeTrigger(timeTrigger *fv1.TimeTrigger) {
@@ -102,7 +150,12 @@ func (ws *TimerSync) TimeTriggerEventHandlers(ctx context.Context) error {
 			UpdateFunc: func(oldObj any, newObj any) {
 				oldTimeTrigger := oldObj.(*fv1.TimeTrigger)
 				newTimeTrigger := newObj.(*fv1.TimeTrigger)
-				if oldTimeTrigger.ResourceVersion != newTimeTrigger.ResourceVersion {
+				// Compare Generation, not ResourceVersion: our condition
+				// write at the end of AddUpdateTimeTrigger goes through
+				// the status subresource and bumps RV only. Re-running
+				// AddUpdateTimeTrigger on a status-only update would
+				// cycle the cron entry needlessly.
+				if oldTimeTrigger.Generation != newTimeTrigger.Generation {
 					ws.AddUpdateTimeTrigger(newTimeTrigger)
 				}
 			},

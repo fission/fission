@@ -31,7 +31,8 @@ import (
 type MessageQueueTriggerApplyConfiguration struct {
 	metav1.TypeMetaApplyConfiguration    `json:",inline"`
 	*metav1.ObjectMetaApplyConfiguration `json:"metadata,omitempty"`
-	Spec                                 *MessageQueueTriggerSpecApplyConfiguration `json:"spec,omitempty"`
+	Spec                                 *MessageQueueTriggerSpecApplyConfiguration   `json:"spec,omitempty"`
+	Status                               *MessageQueueTriggerStatusApplyConfiguration `json:"status,omitempty"`
 }
 
 // MessageQueueTrigger constructs a declarative configuration of the MessageQueueTrigger type for use with
@@ -210,6 +211,14 @@ func (b *MessageQueueTriggerApplyConfiguration) ensureObjectMetaApplyConfigurati
 // If called multiple times, the Spec field is set to the value of the last call.
 func (b *MessageQueueTriggerApplyConfiguration) WithSpec(value *MessageQueueTriggerSpecApplyConfiguration) *MessageQueueTriggerApplyConfiguration {
 	b.Spec = value
+	return b
+}
+
+// WithStatus sets the Status field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Status field is set to the value of the last call.
+func (b *MessageQueueTriggerApplyConfiguration) WithStatus(value *MessageQueueTriggerStatusApplyConfiguration) *MessageQueueTriggerApplyConfiguration {
+	b.Status = value
 	return b
 }
 

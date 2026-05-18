@@ -52,6 +52,8 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &corev1.EnvironmentReferenceApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("EnvironmentSpec"):
 		return &corev1.EnvironmentSpecApplyConfiguration{}
+	case v1.SchemeGroupVersion.WithKind("EnvironmentStatus"):
+		return &corev1.EnvironmentStatusApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("ExecutionStrategy"):
 		return &corev1.ExecutionStrategyApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("Function"):
@@ -62,10 +64,14 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &corev1.FunctionReferenceApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("FunctionSpec"):
 		return &corev1.FunctionSpecApplyConfiguration{}
+	case v1.SchemeGroupVersion.WithKind("FunctionStatus"):
+		return &corev1.FunctionStatusApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("HTTPTrigger"):
 		return &corev1.HTTPTriggerApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("HTTPTriggerSpec"):
 		return &corev1.HTTPTriggerSpecApplyConfiguration{}
+	case v1.SchemeGroupVersion.WithKind("HTTPTriggerStatus"):
+		return &corev1.HTTPTriggerStatusApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("IngressConfig"):
 		return &corev1.IngressConfigApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("InvokeStrategy"):
@@ -74,10 +80,14 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &corev1.KubernetesWatchTriggerApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("KubernetesWatchTriggerSpec"):
 		return &corev1.KubernetesWatchTriggerSpecApplyConfiguration{}
+	case v1.SchemeGroupVersion.WithKind("KubernetesWatchTriggerStatus"):
+		return &corev1.KubernetesWatchTriggerStatusApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("MessageQueueTrigger"):
 		return &corev1.MessageQueueTriggerApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("MessageQueueTriggerSpec"):
 		return &corev1.MessageQueueTriggerSpecApplyConfiguration{}
+	case v1.SchemeGroupVersion.WithKind("MessageQueueTriggerStatus"):
+		return &corev1.MessageQueueTriggerStatusApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("Package"):
 		return &corev1.PackageApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("PackageRef"):
@@ -94,6 +104,8 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &corev1.TimeTriggerApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("TimeTriggerSpec"):
 		return &corev1.TimeTriggerSpecApplyConfiguration{}
+	case v1.SchemeGroupVersion.WithKind("TimeTriggerStatus"):
+		return &corev1.TimeTriggerStatusApplyConfiguration{}
 
 	}
 	return nil

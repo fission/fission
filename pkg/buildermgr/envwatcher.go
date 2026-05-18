@@ -149,7 +149,14 @@ func (envw *environmentWatcher) EnvWatchEventHandlers(ctx context.Context) error
 			UpdateFunc: func(oldObj any, newObj any) {
 				oldEnvObj := oldObj.(*fv1.Environment)
 				newEnvObj := newObj.(*fv1.Environment)
-				if oldEnvObj.ResourceVersion != newEnvObj.ResourceVersion {
+				// Use Generation, not ResourceVersion: status-subresource
+				// writes (e.g., the condition write we now do at the end
+				// of AddUpdateBuilder) bump RV but leave Generation
+				// unchanged. Triggering AddUpdateBuilder on a status-only
+				// update would unnecessarily DeleteBuilder + recreate it
+				// in a loop because the existing-cache branch always
+				// cycles the deployment.
+				if oldEnvObj.Generation != newEnvObj.Generation {
 					envw.AddUpdateBuilder(ctx, newEnvObj)
 				}
 			},
@@ -186,6 +193,15 @@ func (envw *environmentWatcher) AddUpdateBuilder(ctx context.Context, env *fv1.E
 			envw.cache[crd.CacheKeyUIDFromMeta(&env.ObjectMeta)] = builderInfo
 		}
 	}
+	// NOTE: writing EnvironmentConditionReady here would bump env.RV via
+	// the status subresource, but the builder service name (and its DNS
+	// lookup in pkg/buildermgr/common.go.buildPackage) is
+	// "<env.Name>-<env.ResourceVersion>". A status-driven RV bump
+	// therefore renames the *expected* service without renaming the
+	// *actual* one, breaking every subsequent source-archive build.
+	// Decoupling the builder service name from env.ResourceVersion is
+	// follow-up work; until then this controller does not write
+	// EnvironmentConditionReady.
 }
 
 func (envw *environmentWatcher) DeleteBuilder(ctx context.Context, env *fv1.Environment) {

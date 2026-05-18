@@ -14,6 +14,18 @@ rules:
   - update
   - patch
   - delete
+- apiGroups:
+  - fission.io
+  # Packages have no status subresource — main-resource update
+  # covers their writes. functions/status is needed because the
+  # buildermgr propagates package build outcome onto dependent
+  # functions via markFunctionsForPackage.
+  resources:
+  - functions/status
+  verbs:
+  - get
+  - update
+  - patch
 {{- end }}
 {{- define "executor-rules" }}
 rules:
@@ -31,6 +43,16 @@ rules:
   - update
   - patch
   - delete
+- apiGroups:
+  - fission.io
+  # environments/status intentionally omitted — no executor writes
+  # Environment status today (see pkg/executor/util/status.go).
+  resources:
+  - functions/status
+  verbs:
+  - get
+  - update
+  - patch
 {{- end }}
 {{- define "kubewatcher-rules" }}
 rules:
@@ -49,6 +71,14 @@ rules:
   - update
   - patch
   - delete
+- apiGroups:
+  - fission.io
+  resources:
+  - kuberneteswatchtriggers/status
+  verbs:
+  - get
+  - update
+  - patch
 {{- end }}
 {{- define "kafka-rules" }}
 rules:
@@ -67,6 +97,14 @@ rules:
   - update
   - patch
   - delete
+- apiGroups:
+  - fission.io
+  resources:
+  - messagequeuetriggers/status
+  verbs:
+  - get
+  - update
+  - patch
 {{- end }}
 {{- define "keda-rules" }}
 rules:
@@ -85,6 +123,14 @@ rules:
   - update
   - patch
   - delete
+- apiGroups:
+  - fission.io
+  resources:
+  - messagequeuetriggers/status
+  verbs:
+  - get
+  - update
+  - patch
 {{- end }}
 {{- define "preupgrade-rules" }}
 rules:
@@ -119,6 +165,14 @@ rules:
   - update
   - patch
   - delete
+- apiGroups:
+  - fission.io
+  resources:
+  - httptriggers/status
+  verbs:
+  - get
+  - update
+  - patch
 {{- end }}
 {{- define "storagesvc-rules" }}
 rules:
@@ -147,6 +201,14 @@ rules:
   - update
   - patch
   - delete
+- apiGroups:
+  - fission.io
+  resources:
+  - timetriggers/status
+  verbs:
+  - get
+  - update
+  - patch
 {{- end }}
 {{- define "canaryconfig-rules" }}
 rules:

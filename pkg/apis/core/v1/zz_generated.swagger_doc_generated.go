@@ -73,7 +73,8 @@ func (CanaryConfigSpec) SwaggerDoc() map[string]string {
 }
 
 var map_CanaryConfigStatus = map[string]string{
-	"": "CanaryConfigStatus represents canary config status",
+	"":           "CanaryConfigStatus represents canary config status",
+	"conditions": "Conditions represent the latest observations of the canary's state.",
 }
 
 func (CanaryConfigStatus) SwaggerDoc() map[string]string {
@@ -136,6 +137,14 @@ var map_EnvironmentSpec = map[string]string{
 
 func (EnvironmentSpec) SwaggerDoc() map[string]string {
 	return map_EnvironmentSpec
+}
+
+var map_EnvironmentStatus = map[string]string{
+	"": "EnvironmentStatus describes the observed state of an Environment.",
+}
+
+func (EnvironmentStatus) SwaggerDoc() map[string]string {
+	return map_EnvironmentStatus
 }
 
 var map_ExecutionStrategy = map[string]string{
@@ -211,6 +220,16 @@ func (FunctionSpec) SwaggerDoc() map[string]string {
 	return map_FunctionSpec
 }
 
+var map_FunctionStatus = map[string]string{
+	"":                   "FunctionStatus describes the observed state of a Function.",
+	"observedGeneration": "ObservedGeneration reflects the .metadata.generation that the controller observed when it last updated the status.",
+	"conditions":         "Conditions represent the latest observations of the function's state.",
+}
+
+func (FunctionStatus) SwaggerDoc() map[string]string {
+	return map_FunctionStatus
+}
+
 var map_HTTPTrigger = map[string]string{
 	"": "HTTPTrigger is the trigger invokes user functions when receiving HTTP requests.",
 }
@@ -242,6 +261,14 @@ var map_HTTPTriggerSpec = map[string]string{
 
 func (HTTPTriggerSpec) SwaggerDoc() map[string]string {
 	return map_HTTPTriggerSpec
+}
+
+var map_HTTPTriggerStatus = map[string]string{
+	"": "HTTPTriggerStatus describes the observed state of an HTTPTrigger.",
+}
+
+func (HTTPTriggerStatus) SwaggerDoc() map[string]string {
+	return map_HTTPTriggerStatus
 }
 
 var map_IngressConfig = map[string]string{
@@ -293,6 +320,14 @@ func (KubernetesWatchTriggerSpec) SwaggerDoc() map[string]string {
 	return map_KubernetesWatchTriggerSpec
 }
 
+var map_KubernetesWatchTriggerStatus = map[string]string{
+	"": "KubernetesWatchTriggerStatus describes the observed state of a KubernetesWatchTrigger.",
+}
+
+func (KubernetesWatchTriggerStatus) SwaggerDoc() map[string]string {
+	return map_KubernetesWatchTriggerStatus
+}
+
 var map_MessageQueueTrigger = map[string]string{
 	"": "MessageQueueTrigger invokes functions when messages arrive to certain topic that trigger subscribes to.",
 }
@@ -330,6 +365,14 @@ var map_MessageQueueTriggerSpec = map[string]string{
 
 func (MessageQueueTriggerSpec) SwaggerDoc() map[string]string {
 	return map_MessageQueueTriggerSpec
+}
+
+var map_MessageQueueTriggerStatus = map[string]string{
+	"": "MessageQueueTriggerStatus describes the observed state of a MessageQueueTrigger.",
+}
+
+func (MessageQueueTriggerStatus) SwaggerDoc() map[string]string {
+	return map_MessageQueueTriggerStatus
 }
 
 var map_Package = map[string]string{
@@ -375,6 +418,7 @@ var map_PackageStatus = map[string]string{
 	"buildstatus":         "BuildStatus is the package build status.",
 	"buildlog":            "BuildLog stores build log during the compilation.",
 	"lastUpdateTimestamp": "LastUpdateTimestamp will store the timestamp the package was last updated metav1.Time is a wrapper around time.Time which supports correct marshaling to YAML and JSON. https://github.com/kubernetes/apimachinery/blob/44bd77c24ef93cd3a5eb6fef64e514025d10d44e/pkg/apis/meta/v1/time.go#L26-L35",
+	"conditions":          "Conditions represent the latest observations of the package's state.",
 }
 
 func (PackageStatus) SwaggerDoc() map[string]string {
@@ -434,6 +478,14 @@ var map_TimeTriggerSpec = map[string]string{
 
 func (TimeTriggerSpec) SwaggerDoc() map[string]string {
 	return map_TimeTriggerSpec
+}
+
+var map_TimeTriggerStatus = map[string]string{
+	"": "TimeTriggerStatus describes the observed state of a TimeTrigger.",
+}
+
+func (TimeTriggerStatus) SwaggerDoc() map[string]string {
+	return map_TimeTriggerStatus
 }
 
 // AUTO-GENERATED FUNCTIONS END HERE

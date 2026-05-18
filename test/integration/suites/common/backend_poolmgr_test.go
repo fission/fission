@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/test/integration/framework"
 )
 
@@ -42,4 +43,19 @@ func TestBackendPoolmgr(t *testing.T) {
 
 	body := f.Router(t).GetEventually(t, ctx, "/"+fnName, framework.BodyContains("hello"))
 	require.Contains(t, body, "hello")
+
+	// Once a request has been served end-to-end the controllers that own
+	// status conditions for this PR should have populated Ready:
+	//   - the buildermgr marks the backing Package as Ready (via the
+	//     normal pending→succeeded path) — but only for source-archive
+	//     packages. Literal/deploy packages set BuildStatus client-side
+	//     and currently never get backfilled, so we don't assert on
+	//     Package conditions here.
+	//   - the poolmgr executor marks the Function as Ready after
+	//     specializing a pool pod.
+	// Environment conditions are intentionally not written by any
+	// controller in this PR — status writes would bump env.RV which
+	// the buildermgr embeds in the builder service hostname. See
+	// pkg/buildermgr/envwatcher.go.AddUpdateBuilder for the note.
+	ns.WaitForFunctionConditionTrue(t, ctx, fnName, fv1.FunctionConditionReady, 30*time.Second)
 }

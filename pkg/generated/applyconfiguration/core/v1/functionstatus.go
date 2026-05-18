@@ -22,34 +22,36 @@ import (
 	metav1 "k8s.io/client-go/applyconfigurations/meta/v1"
 )
 
-// CanaryConfigStatusApplyConfiguration represents a declarative configuration of the CanaryConfigStatus type for use
+// FunctionStatusApplyConfiguration represents a declarative configuration of the FunctionStatus type for use
 // with apply.
 //
-// CanaryConfigStatus represents canary config status
-type CanaryConfigStatusApplyConfiguration struct {
-	Status *string `json:"status,omitempty"`
-	// Conditions represent the latest observations of the canary's state.
+// FunctionStatus describes the observed state of a Function.
+type FunctionStatusApplyConfiguration struct {
+	// ObservedGeneration reflects the .metadata.generation that the
+	// controller observed when it last updated the status.
+	ObservedGeneration *int64 `json:"observedGeneration,omitempty"`
+	// Conditions represent the latest observations of the function's state.
 	Conditions []metav1.ConditionApplyConfiguration `json:"conditions,omitempty"`
 }
 
-// CanaryConfigStatusApplyConfiguration constructs a declarative configuration of the CanaryConfigStatus type for use with
+// FunctionStatusApplyConfiguration constructs a declarative configuration of the FunctionStatus type for use with
 // apply.
-func CanaryConfigStatus() *CanaryConfigStatusApplyConfiguration {
-	return &CanaryConfigStatusApplyConfiguration{}
+func FunctionStatus() *FunctionStatusApplyConfiguration {
+	return &FunctionStatusApplyConfiguration{}
 }
 
-// WithStatus sets the Status field in the declarative configuration to the given value
+// WithObservedGeneration sets the ObservedGeneration field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
-// If called multiple times, the Status field is set to the value of the last call.
-func (b *CanaryConfigStatusApplyConfiguration) WithStatus(value string) *CanaryConfigStatusApplyConfiguration {
-	b.Status = &value
+// If called multiple times, the ObservedGeneration field is set to the value of the last call.
+func (b *FunctionStatusApplyConfiguration) WithObservedGeneration(value int64) *FunctionStatusApplyConfiguration {
+	b.ObservedGeneration = &value
 	return b
 }
 
 // WithConditions adds the given value to the Conditions field in the declarative configuration
 // and returns the receiver, so that objects can be build by chaining "With" function invocations.
 // If called multiple times, values provided by each call will be appended to the Conditions field.
-func (b *CanaryConfigStatusApplyConfiguration) WithConditions(values ...*metav1.ConditionApplyConfiguration) *CanaryConfigStatusApplyConfiguration {
+func (b *FunctionStatusApplyConfiguration) WithConditions(values ...*metav1.ConditionApplyConfiguration) *FunctionStatusApplyConfiguration {
 	for i := range values {
 		if values[i] == nil {
 			panic("nil value passed to WithConditions")

@@ -40,6 +40,8 @@ type MessageQueueTriggersGetter interface {
 type MessageQueueTriggerInterface interface {
 	Create(ctx context.Context, _messageQueueTrigger *corev1.MessageQueueTrigger, opts metav1.CreateOptions) (*corev1.MessageQueueTrigger, error)
 	Update(ctx context.Context, _messageQueueTrigger *corev1.MessageQueueTrigger, opts metav1.UpdateOptions) (*corev1.MessageQueueTrigger, error)
+	// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
+	UpdateStatus(ctx context.Context, _messageQueueTrigger *corev1.MessageQueueTrigger, opts metav1.UpdateOptions) (*corev1.MessageQueueTrigger, error)
 	Delete(ctx context.Context, name string, opts metav1.DeleteOptions) error
 	DeleteCollection(ctx context.Context, opts metav1.DeleteOptions, listOpts metav1.ListOptions) error
 	Get(ctx context.Context, name string, opts metav1.GetOptions) (*corev1.MessageQueueTrigger, error)
@@ -47,6 +49,8 @@ type MessageQueueTriggerInterface interface {
 	Watch(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error)
 	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, subresources ...string) (result *corev1.MessageQueueTrigger, err error)
 	Apply(ctx context.Context, _messageQueueTrigger *applyconfigurationcorev1.MessageQueueTriggerApplyConfiguration, opts metav1.ApplyOptions) (result *corev1.MessageQueueTrigger, err error)
+	// Add a +genclient:noStatus comment above the type to avoid generating ApplyStatus().
+	ApplyStatus(ctx context.Context, _messageQueueTrigger *applyconfigurationcorev1.MessageQueueTriggerApplyConfiguration, opts metav1.ApplyOptions) (result *corev1.MessageQueueTrigger, err error)
 	MessageQueueTriggerExpansion
 }
 

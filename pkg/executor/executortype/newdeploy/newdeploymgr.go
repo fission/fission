@@ -454,6 +454,8 @@ func (deploy *NewDeploy) fnCreate(ctx context.Context, fn *fv1.Function) (*fscac
 	// Since newdeploy waits for pods of deployment to be ready,
 	// change the order of kubeObject creation (create service first,
 	// then deployment) to take advantage of waiting time.
+	// Transient executor errors are not written to Function.Status; see
+	// the analogous note in pkg/executor/executortype/poolmgr/gp.go.
 	svc, err := deploy.createOrGetSvc(ctx, fn, deployLabels, deployAnnotations, objName, ns)
 	if err != nil {
 		deploy.logger.Error(err, "error creating service", "service", objName)
@@ -521,6 +523,7 @@ func (deploy *NewDeploy) fnCreate(ctx context.Context, fn *fv1.Function) (*fscac
 	}
 
 	metrics.ColdStarts.WithLabelValues(fn.Name, fn.Namespace).Inc()
+	executorUtils.SetFunctionReady(ctx, deploy.logger, deploy.fissionClient, fn, fv1.FunctionReasonReady, "newdeploy deployment is ready")
 
 	return fsvc, nil
 }

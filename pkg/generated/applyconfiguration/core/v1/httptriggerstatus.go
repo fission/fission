@@ -22,34 +22,33 @@ import (
 	metav1 "k8s.io/client-go/applyconfigurations/meta/v1"
 )
 
-// CanaryConfigStatusApplyConfiguration represents a declarative configuration of the CanaryConfigStatus type for use
+// HTTPTriggerStatusApplyConfiguration represents a declarative configuration of the HTTPTriggerStatus type for use
 // with apply.
 //
-// CanaryConfigStatus represents canary config status
-type CanaryConfigStatusApplyConfiguration struct {
-	Status *string `json:"status,omitempty"`
-	// Conditions represent the latest observations of the canary's state.
-	Conditions []metav1.ConditionApplyConfiguration `json:"conditions,omitempty"`
+// HTTPTriggerStatus describes the observed state of an HTTPTrigger.
+type HTTPTriggerStatusApplyConfiguration struct {
+	ObservedGeneration *int64                               `json:"observedGeneration,omitempty"`
+	Conditions         []metav1.ConditionApplyConfiguration `json:"conditions,omitempty"`
 }
 
-// CanaryConfigStatusApplyConfiguration constructs a declarative configuration of the CanaryConfigStatus type for use with
+// HTTPTriggerStatusApplyConfiguration constructs a declarative configuration of the HTTPTriggerStatus type for use with
 // apply.
-func CanaryConfigStatus() *CanaryConfigStatusApplyConfiguration {
-	return &CanaryConfigStatusApplyConfiguration{}
+func HTTPTriggerStatus() *HTTPTriggerStatusApplyConfiguration {
+	return &HTTPTriggerStatusApplyConfiguration{}
 }
 
-// WithStatus sets the Status field in the declarative configuration to the given value
+// WithObservedGeneration sets the ObservedGeneration field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
-// If called multiple times, the Status field is set to the value of the last call.
-func (b *CanaryConfigStatusApplyConfiguration) WithStatus(value string) *CanaryConfigStatusApplyConfiguration {
-	b.Status = &value
+// If called multiple times, the ObservedGeneration field is set to the value of the last call.
+func (b *HTTPTriggerStatusApplyConfiguration) WithObservedGeneration(value int64) *HTTPTriggerStatusApplyConfiguration {
+	b.ObservedGeneration = &value
 	return b
 }
 
 // WithConditions adds the given value to the Conditions field in the declarative configuration
 // and returns the receiver, so that objects can be build by chaining "With" function invocations.
 // If called multiple times, values provided by each call will be appended to the Conditions field.
-func (b *CanaryConfigStatusApplyConfiguration) WithConditions(values ...*metav1.ConditionApplyConfiguration) *CanaryConfigStatusApplyConfiguration {
+func (b *HTTPTriggerStatusApplyConfiguration) WithConditions(values ...*metav1.ConditionApplyConfiguration) *HTTPTriggerStatusApplyConfiguration {
 	for i := range values {
 		if values[i] == nil {
 			panic("nil value passed to WithConditions")

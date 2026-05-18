@@ -22,6 +22,7 @@ import (
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	k8sCache "k8s.io/client-go/tools/cache"
@@ -30,6 +31,7 @@ import (
 	"github.com/go-logr/logr"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/conditions"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
 	flisterv1 "github.com/fission/fission/pkg/generated/listers/core/v1"
@@ -303,7 +305,52 @@ func (mqt *MessageQueueTriggerManager) RegisterTrigger(trigger *fv1.MessageQueue
 		return err
 	}
 	mqt.logger.Info("message queue trigger created", "trigger_name", trigger.Name)
+	// Use the manager-wide ctx so dangling status writes cancel on
+	// manager shutdown. The RegisterTrigger call path doesn't carry
+	// a request-scoped ctx (it's driven off an internal workqueue).
+	mqt.markMessageQueueTriggerBound(mqt.ctx, trigger)
 	return nil
+}
+
+// markMessageQueueTriggerBound writes BindingReady + Ready on a
+// MessageQueueTrigger after subscribe-and-add succeeds. Best-effort; queue
+// subscription is the source of truth and is not gated on status writes.
+// Fast-path skips the apiserver call when the trigger's in-memory
+// conditions already match the desired state.
+func (mqt *MessageQueueTriggerManager) markMessageQueueTriggerBound(ctx context.Context, trigger *fv1.MessageQueueTrigger) {
+	if mqt.fissionClient == nil {
+		return
+	}
+	wantBind := metav1.Condition{
+		Type: fv1.MessageQueueTriggerConditionBindingReady, Status: metav1.ConditionTrue,
+		ObservedGeneration: trigger.Generation,
+		Reason:             fv1.MessageQueueTriggerReasonSubscribed,
+		Message:            "subscribed to topic " + trigger.Spec.Topic,
+	}
+	wantReady := metav1.Condition{
+		Type: fv1.MessageQueueTriggerConditionReady, Status: metav1.ConditionTrue,
+		ObservedGeneration: trigger.Generation,
+		Reason:             fv1.MessageQueueTriggerReasonSubscribed,
+		Message:            "trigger is dispatching messages",
+	}
+	if conditions.IsAt(trigger.Status.Conditions, wantBind) && conditions.IsAt(trigger.Status.Conditions, wantReady) {
+		return
+	}
+	cur, err := mqt.fissionClient.CoreV1().MessageQueueTriggers(trigger.Namespace).Get(ctx, trigger.Name, metav1.GetOptions{})
+	if err != nil {
+		mqt.logger.V(1).Info("mqtrigger status: get failed", "name", trigger.Name, "namespace", trigger.Namespace, "error", err)
+		return
+	}
+	wantBind.ObservedGeneration = cur.Generation
+	wantReady.ObservedGeneration = cur.Generation
+	if conditions.IsAt(cur.Status.Conditions, wantBind) && conditions.IsAt(cur.Status.Conditions, wantReady) {
+		return
+	}
+	conditions.Set(&cur.Status.Conditions, wantBind)
+	conditions.Set(&cur.Status.Conditions, wantReady)
+	if _, err := mqt.fissionClient.CoreV1().MessageQueueTriggers(trigger.Namespace).UpdateStatus(ctx, cur, metav1.UpdateOptions{}); err != nil {
+		mqt.logger.V(1).Info("mqtrigger status: update failed", "name", trigger.Name, "namespace", trigger.Namespace, "error", err)
+	}
 }
 
 func (mqt *MessageQueueTriggerManager) enqueueMqtAdd(obj any) {
@@ -317,6 +364,16 @@ func (mqt *MessageQueueTriggerManager) enqueueMqtAdd(obj any) {
 }
 
 func (mqt *MessageQueueTriggerManager) enqueueMqtUpdate(oldObj, newObj any) {
+	// Status-subresource writes (e.g., our condition write from
+	// markMessageQueueTriggerBound) bump ResourceVersion only.
+	// Re-enqueuing on those would tear down and recreate the queue
+	// subscription needlessly. Generation only changes when Spec
+	// changes, which is the actual signal we care about here.
+	oldMqt, oldOK := oldObj.(*fv1.MessageQueueTrigger)
+	newMqt, newOK := newObj.(*fv1.MessageQueueTrigger)
+	if oldOK && newOK && oldMqt.Generation == newMqt.Generation {
+		return
+	}
 	key, err := k8sCache.MetaNamespaceKeyFunc(newObj)
 	if err != nil {
 		mqt.logger.Error(err, "error retrieving key from object in messageQueueTriggerManager", "obj", newObj)

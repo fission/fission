@@ -33,6 +33,8 @@ vendor/
 local/
 
 build/
+# Output of `make generate-webhooks` — see comments on the Makefile target.
+bin/
 dist/
 manifest/
 .vscode/

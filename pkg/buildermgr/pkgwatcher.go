@@ -190,6 +190,7 @@ func (pkgw *packageWatcher) build(ctx context.Context, srcpkg *fv1.Package) {
 				if er != nil {
 					logger.Error(er, "error updating package")
 				}
+				pkgw.propagateFunctionFailure(ctx, logger, pkg)
 				return
 			}
 
@@ -206,6 +207,13 @@ func (pkgw *packageWatcher) build(ctx context.Context, srcpkg *fv1.Package) {
 					pkgw.logger.Error(er,
 						"error updating package")
 				}
+				pkgw.propagateFunctionFailure(ctx, logger, pkg)
+				// Without this return, the subsequent fnList.Items loop
+				// would still execute against the nil fnList — harmless
+				// today because the slice is empty, but it would also
+				// fall through to updatePackage(... Succeeded ...) below
+				// after we just marked it Failed. Bail out explicitly.
+				return
 			}
 
 			// A package may be used by multiple functions. Update
@@ -225,6 +233,7 @@ func (pkgw *packageWatcher) build(ctx context.Context, srcpkg *fv1.Package) {
 						if er != nil {
 							logger.Error(er, "error updating package")
 						}
+						markFunctionsForPackage(ctx, logger, pkgw.fissionClient, fnList.Items, pkg, false)
 						return
 					}
 				}
@@ -238,8 +247,15 @@ func (pkgw *packageWatcher) build(ctx context.Context, srcpkg *fv1.Package) {
 				if er != nil {
 					logger.Error(er, "error updating package")
 				}
+				markFunctionsForPackage(ctx, logger, pkgw.fissionClient, fnList.Items, pkg, false)
 				return
 			}
+
+			// Surface the build outcome on every Function that references
+			// this package. The functions' Ready/PackageReady conditions
+			// then track package readiness, so `kubectl wait
+			// --for=condition=Ready function/<name>` waits for the build.
+			markFunctionsForPackage(ctx, logger, pkgw.fissionClient, fnList.Items, pkg, true)
 
 			logger.Info("completed package build request")
 			return
@@ -252,8 +268,21 @@ func (pkgw *packageWatcher) build(ctx context.Context, srcpkg *fv1.Package) {
 	if err != nil {
 		logger.Error(err, "error updating package")
 	}
+	pkgw.propagateFunctionFailure(ctx, logger, pkg)
 
 	logger.Info("max retries exceeded in building source package, timeout due to environment builder not ready")
+}
+
+// propagateFunctionFailure marks every Function referencing pkg with
+// PackageReady=False / Ready=False. Used by build failure paths that
+// don't have a pre-fetched fnList in scope (the success path does).
+func (pkgw *packageWatcher) propagateFunctionFailure(ctx context.Context, logger logr.Logger, pkg *fv1.Package) {
+	fnList, err := pkgw.fissionClient.CoreV1().Functions(pkg.Namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		logger.V(1).Info("function-failure propagation: list failed", "namespace", pkg.Namespace, "error", err)
+		return
+	}
+	markFunctionsForPackage(ctx, logger, pkgw.fissionClient, fnList.Items, pkg, false)
 }
 
 func (pkgw *packageWatcher) packageInformerHandler(ctx context.Context) k8sCache.ResourceEventHandlerFuncs {
@@ -319,8 +348,11 @@ func (pkgw *packageWatcher) Run(ctx context.Context, mgr manager.Interface) erro
 // This normally occurs when the user applies package YAML files that have no status field
 // through kubectl.
 func setInitialBuildStatus(ctx context.Context, fissionClient versioned.Interface, pkg *fv1.Package) (*fv1.Package, error) {
+	// Preserve any Conditions a previous reconcile may have written.
+	existingConds := pkg.Status.Conditions
 	pkg.Status = fv1.PackageStatus{
 		LastUpdateTimestamp: metav1.Time{Time: time.Now().UTC()},
+		Conditions:          existingConds,
 	}
 	if !pkg.Spec.Deployment.IsEmpty() {
 		// if the deployment archive is not empty,
@@ -334,6 +366,7 @@ func setInitialBuildStatus(ctx context.Context, fissionClient versioned.Interfac
 		pkg.Status.BuildStatus = fv1.BuildStatusFailed
 		pkg.Status.BuildLog = "Both deploy and source archive are empty"
 	}
+	setPackageBuildCondition(&pkg.Status, pkg.Status.BuildStatus, pkg.Status.BuildLog, pkg.Generation)
 
 	// TODO: use UpdateStatus to update status
 	return fissionClient.CoreV1().Packages(pkg.Namespace).Update(ctx, pkg, metav1.UpdateOptions{})
