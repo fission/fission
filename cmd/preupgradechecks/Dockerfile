@@ -1,4 +1,4 @@
-FROM cgr.dev/chainguard/static:latest@sha256:a301031ffd4ed67f35ca7fa6cf3dad9937b5fa47d7493955a18d9b4ca5412d1a
+FROM cgr.dev/chainguard/static:latest@sha256:77d8b8925dc27970ec2f48243f44c7a260d52c49cd778288e4ee97566e0cb75b
 ARG TARGETPLATFORM
 COPY $TARGETPLATFORM/pre-upgrade-checks /
 ENTRYPOINT ["/pre-upgrade-checks"]
