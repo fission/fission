@@ -11,7 +11,6 @@ Please refer using [latest stable release](https://github.com/fission/fission/re
 
 ## Reporting a Vulnerability
 
-Please send the details to both of us:
+Please send the details to:
 
-- Sanket Sudake sanket[at]infracloud.io
-- Vishal Biyani vishal[at]infracloud.io
+- Sanket Sudake sanketsudake[at]gmail.com
