@@ -11,6 +11,6 @@ Please refer using [latest stable release](https://github.com/fission/fission/re
 
 ## Reporting a Vulnerability
 
-Please send the details to both of us:
+Please send the details to:
 
 - Sanket Sudake sanketsudake[at]gmail.com
