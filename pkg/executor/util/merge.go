@@ -79,8 +79,29 @@ func MergePodSpec(srcPodSpec *apiv1.PodSpec, targetPodSpec *apiv1.PodSpec) (*api
 		srcPodSpec.InitContainers = cList
 	}
 
-	// For volumes - if duplicate exist, throw error
-	vols, err := mergeVolumeLists(srcPodSpec.Volumes, targetPodSpec.Volumes)
+	// Sanitize per-container SecurityContext after the merge. The admission
+	// webhook rejects privileged=true / allowPrivilegeEscalation=true and
+	// dangerous capabilities (SYS_ADMIN, NET_ADMIN, etc.) at submit time,
+	// but a webhook-bypass cluster (failurePolicy=Ignore or a stale object
+	// from a pre-webhook upgrade window) could still reach this code path.
+	// Strip the dangerous bits from the merged result so the resulting pod
+	// cannot escape its container even if admission was bypassed. Closes
+	// GHSA-gx55-f84r-v3r7 / GHSA-wmgg-3p4h-48x7 / GHSA-v455-mv2v-5g92.
+	for i := range srcPodSpec.Containers {
+		sanitizeContainerSecurityContext(&srcPodSpec.Containers[i])
+	}
+	for i := range srcPodSpec.InitContainers {
+		sanitizeContainerSecurityContext(&srcPodSpec.InitContainers[i])
+	}
+
+	// For volumes - if duplicate exist, throw error. hostPath volumes are
+	// stripped from the target before merge: a tenant-supplied hostPath
+	// mount is a node-escape primitive (read /etc, the container runtime
+	// socket, etc.). The admission webhook rejects them, and this layer
+	// makes them unreachable even on webhook-bypass clusters. Closes
+	// GHSA-gx55-f84r-v3r7 / GHSA-wmgg-3p4h-48x7 / GHSA-v455-mv2v-5g92.
+	filteredTargetVols := stripHostPathVolumes(targetPodSpec.Volumes)
+	vols, err := mergeVolumeLists(srcPodSpec.Volumes, filteredTargetVols)
 	if err != nil {
 		multierr = errors.Join(multierr, err)
 	} else {
@@ -113,6 +134,16 @@ func MergePodSpec(srcPodSpec *apiv1.PodSpec, targetPodSpec *apiv1.PodSpec) (*api
 	}
 
 	// TODO - Security context should be merged instead of overriding.
+	// Pod-level SecurityContext IS propagated: the chart's
+	// runtimePodSpec.podSpec.securityContext / builderPodSpec.podSpec.
+	// securityContext are operator-supplied hardening (fsGroup,
+	// runAsNonRoot=true, runAsUser=10001, runAsGroup=10001) that must
+	// reach the pool / builder pods. The node-escape primitives flagged
+	// by GHSA-gx55-f84r-v3r7 / GHSA-wmgg-3p4h-48x7 / GHSA-v455-mv2v-5g92
+	// live at container-level (privileged, allowPrivilegeEscalation,
+	// dangerous capabilities) and at pod level (hostNetwork, hostPID,
+	// hostIPC, hostPath volumes, serviceAccountName override) — all of
+	// which are denylisted in pkg/apis/core/v1/podspec_safety.go.
 	if targetPodSpec.SecurityContext != nil {
 		srcPodSpec.SecurityContext = targetPodSpec.SecurityContext
 	}
@@ -142,29 +173,22 @@ func MergePodSpec(srcPodSpec *apiv1.PodSpec, targetPodSpec *apiv1.PodSpec) (*api
 		srcPodSpec.DNSPolicy = targetPodSpec.DNSPolicy
 	}
 
-	if targetPodSpec.ServiceAccountName != "" {
-		srcPodSpec.ServiceAccountName = targetPodSpec.ServiceAccountName
-	}
-
-	if targetPodSpec.DeprecatedServiceAccount != "" {
-		srcPodSpec.DeprecatedServiceAccount = targetPodSpec.DeprecatedServiceAccount
-	}
+	// ServiceAccountName / DeprecatedServiceAccount intentionally not
+	// propagated: the controller chooses the SA for the pod
+	// (fission-fetcher for runtime pods, fission-builder for build pods).
+	// Letting a user-supplied podspec override it would defeat the SA-token
+	// scoping introduced by GHSA-85g2-pmrx-r49q and GHSA-8wcj-mfrc-jx5q.
+	// Closes GHSA-gx55-f84r-v3r7 / GHSA-wmgg-3p4h-48x7 / GHSA-v455-mv2v-5g92.
 
 	if targetPodSpec.AutomountServiceAccountToken != nil {
 		srcPodSpec.AutomountServiceAccountToken = targetPodSpec.AutomountServiceAccountToken
 	}
 
-	if targetPodSpec.HostNetwork {
-		srcPodSpec.HostNetwork = targetPodSpec.HostNetwork
-	}
-
-	if targetPodSpec.HostPID {
-		srcPodSpec.HostPID = targetPodSpec.HostPID
-	}
-
-	if targetPodSpec.HostIPC {
-		srcPodSpec.HostIPC = targetPodSpec.HostIPC
-	}
+	// HostNetwork / HostPID / HostIPC intentionally not propagated.
+	// A pod sharing host namespaces is a node-escape primitive — the
+	// admission webhook rejects these fields, and this layer makes them
+	// unreachable even on webhook-bypass clusters.
+	// Closes GHSA-gx55-f84r-v3r7 / GHSA-wmgg-3p4h-48x7 / GHSA-v455-mv2v-5g92.
 
 	if targetPodSpec.ShareProcessNamespace != nil {
 		srcPodSpec.ShareProcessNamespace = targetPodSpec.ShareProcessNamespace
@@ -287,4 +311,80 @@ func checkSliceConflicts(field string, objs any) (err error) {
 		}
 	}
 	return errs
+}
+
+// stripHostPathVolumes returns a copy of vols with any volume whose source
+// is a hostPath removed. Defense in depth — the admission webhook already
+// rejects hostPath in tenant-supplied podspecs (see
+// pkg/apis/core/v1/podspec_safety.go), but on webhook-bypass clusters
+// (failurePolicy=Ignore, or stale objects from a pre-webhook upgrade
+// window) this layer makes the dangerous primitive unreachable.
+// Closes GHSA-gx55-f84r-v3r7 / GHSA-wmgg-3p4h-48x7 / GHSA-v455-mv2v-5g92.
+func stripHostPathVolumes(vols []apiv1.Volume) []apiv1.Volume {
+	if len(vols) == 0 {
+		return vols
+	}
+	out := make([]apiv1.Volume, 0, len(vols))
+	for _, v := range vols {
+		if v.HostPath != nil {
+			continue
+		}
+		out = append(out, v)
+	}
+	return out
+}
+
+// dangerousMergeContainerCapabilities lists the Linux capabilities that
+// effectively bypass the container sandbox. Kept in sync with the
+// authoritative denylist in pkg/apis/core/v1/podspec_safety.go — the
+// admission webhook is the primary defence; this is the merge-layer
+// belt-and-braces for webhook-bypass clusters.
+var dangerousMergeContainerCapabilities = map[apiv1.Capability]struct{}{
+	"SYS_ADMIN":       {},
+	"NET_ADMIN":       {},
+	"SYS_PTRACE":      {},
+	"SYS_MODULE":      {},
+	"DAC_READ_SEARCH": {},
+	"DAC_OVERRIDE":    {},
+}
+
+// sanitizeContainerSecurityContext zeroes out the privilege-escalation bits
+// of a container's SecurityContext after a MergePodSpec call. The merge
+// path uses mergo.WithOverride and unconditionally copies SecurityContext
+// fields from the target container, so a tenant-supplied podspec with
+// privileged=true / allowPrivilegeEscalation=true / Capabilities.Add =
+// [SYS_ADMIN, ...] would otherwise reach the running pod on
+// webhook-bypass clusters (failurePolicy=Ignore or stale objects from a
+// pre-webhook upgrade). The webhook is the primary defence; this is
+// defence in depth. Closes GHSA-gx55-f84r-v3r7 / GHSA-wmgg-3p4h-48x7 /
+// GHSA-v455-mv2v-5g92.
+func sanitizeContainerSecurityContext(c *apiv1.Container) {
+	if c.SecurityContext == nil {
+		return
+	}
+	// Deep-copy before mutating. MergeContainer does a shallow struct copy
+	// (`dstC := *dst`) and mergo.WithOverride aliases src.SecurityContext
+	// onto dstC.SecurityContext, so mutating in place would leak into the
+	// caller's targetPodSpec — which is typically env.Spec.Runtime.PodSpec
+	// from an informer cache. Allocating a fresh SecurityContext (and a
+	// fresh Capabilities.Add slice via a new backing array) keeps the
+	// sanitization local to the merged result.
+	c.SecurityContext = c.SecurityContext.DeepCopy()
+	sc := c.SecurityContext
+	if sc.Privileged != nil && *sc.Privileged {
+		sc.Privileged = new(false)
+	}
+	if sc.AllowPrivilegeEscalation != nil && *sc.AllowPrivilegeEscalation {
+		sc.AllowPrivilegeEscalation = new(false)
+	}
+	if sc.Capabilities != nil && len(sc.Capabilities.Add) > 0 {
+		filtered := make([]apiv1.Capability, 0, len(sc.Capabilities.Add))
+		for _, cap := range sc.Capabilities.Add {
+			if _, bad := dangerousMergeContainerCapabilities[cap]; bad {
+				continue
+			}
+			filtered = append(filtered, cap)
+		}
+		sc.Capabilities.Add = filtered
+	}
 }

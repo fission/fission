@@ -42,7 +42,11 @@ func (r *Environment) SetupWebhookWithManager(mgr ctrl.Manager) error {
 var _ webhook.CustomDefaulter = &Environment{}
 
 // user: change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
-//+kubebuilder:webhook:path=/validate-fission-io-v1-environment,mutating=false,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=environments,verbs=create,versions=v1,name=venvironment.fission.io,admissionReviewVersions=v1
+// Validation must cover UPDATE as well as CREATE: GHSA-wmgg-3p4h-48x7 noted
+// that the prior CREATE-only marker let a tenant bypass admission by
+// posting a clean Environment and then PATCHing in dangerous podspec
+// fields like hostNetwork or privileged.
+//+kubebuilder:webhook:path=/validate-fission-io-v1-environment,mutating=false,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=environments,verbs=create;update,versions=v1,name=venvironment.fission.io,admissionReviewVersions=v1
 
 var _ webhook.CustomValidator = &Environment{}
 

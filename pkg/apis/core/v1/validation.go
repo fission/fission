@@ -296,6 +296,9 @@ func (spec FunctionSpec) Validate() error {
 	if spec.InvokeStrategy.ExecutionStrategy.ExecutorType == ExecutorTypeContainer && spec.PodSpec == nil {
 		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidObject, "FunctionSpec.PodSpec", "", "executor type container requires a pod spec"))
 	}
+	// Reject podspec fields that would let a tenant escalate via the
+	// executor service account. Closes GHSA-v455-mv2v-5g92.
+	errs = errors.Join(errs, ValidatePodSpecSafety("Function.spec.podspec", spec.PodSpec))
 
 	// TODO Add below validation warning
 	// if spec.FunctionTimeout <= 0 {
@@ -666,6 +669,11 @@ func (e *Environment) Validate() error {
 			}
 		}
 	}
+	// Reject podspec fields that would let a tenant escalate via the
+	// executor / buildermgr service accounts. Closes GHSA-gx55-f84r-v3r7,
+	// GHSA-wmgg-3p4h-48x7.
+	errs = errors.Join(errs, ValidatePodSpecSafety("Environment.spec.runtime.podspec", e.Spec.Runtime.PodSpec))
+	errs = errors.Join(errs, ValidatePodSpecSafety("Environment.spec.builder.podspec", e.Spec.Builder.PodSpec))
 	return errs
 }
 

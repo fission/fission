@@ -14,6 +14,7 @@ import (
 	"strings"
 	"testing"
 
+	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	v1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -113,6 +114,66 @@ func TestFunctionWebhook_Validate_CrossNamespacePackage(t *testing.T) {
 				}
 			} else if err != nil {
 				t.Fatalf("expected acceptance, got: %v", err)
+			}
+		})
+	}
+}
+
+// TestFunctionWebhook_Validate_RejectsDangerousPodSpec exercises the
+// container-executor PodSpec safety check. Closes GHSA-v455-mv2v-5g92.
+func TestFunctionWebhook_Validate_RejectsDangerousPodSpec(t *testing.T) {
+	on := true
+	cases := []struct {
+		name      string
+		ps        *apiv1.PodSpec
+		wantInErr string
+	}{
+		{
+			name:      "hostNetwork",
+			ps:        &apiv1.PodSpec{HostNetwork: true},
+			wantInErr: "hostNetwork",
+		},
+		{
+			name: "hostPath volume",
+			ps: &apiv1.PodSpec{
+				Volumes: []apiv1.Volume{{
+					Name: "host-root",
+					VolumeSource: apiv1.VolumeSource{
+						HostPath: &apiv1.HostPathVolumeSource{Path: "/"},
+					},
+				}},
+			},
+			wantInErr: "hostPath",
+		},
+		{
+			name: "privileged container",
+			ps: &apiv1.PodSpec{
+				Containers: []apiv1.Container{{
+					Name:            "user",
+					SecurityContext: &apiv1.SecurityContext{Privileged: &on},
+				}},
+			},
+			wantInErr: "privileged",
+		},
+		{
+			name:      "serviceAccountName override",
+			ps:        &apiv1.PodSpec{ServiceAccountName: "cluster-admin"},
+			wantInErr: "serviceAccountName",
+		},
+	}
+
+	r := &Function{}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fn := makeValidFunction("default", "default", "default")
+			fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType = v1.ExecutorTypeContainer
+			fn.Spec.PodSpec = tc.ps
+			err := r.Validate(fn)
+			if err == nil {
+				t.Fatalf("expected rejection for %s, got nil", tc.name)
+			}
+			if !strings.Contains(err.Error(), tc.wantInErr) {
+				t.Fatalf("error must mention %q, got: %v", tc.wantInErr, err)
 			}
 		})
 	}
