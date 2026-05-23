@@ -51,6 +51,11 @@ func TestPackageChecksum(t *testing.T) {
 		pkgName := ns.FunctionPackageName(t, ctx, fnName)
 		require.Equal(t, sum1, ns.PackageDeployChecksum(t, ctx, pkgName),
 			"package deploy checksum should match SHA256 of fetched URL content")
+		// Wait for the buildermgr to download the URL and finish building before
+		// hitting the router. The 60s GetEventually budget only covers route
+		// reconcile + executor specialization; download + build can exceed it on
+		// slow CI runners (observed flake on k8s 1.32 with TestPackageChecksum).
+		ns.WaitForPackageBuildSucceeded(t, ctx, pkgName)
 		ns.CreateRoute(t, ctx, framework.RouteOptions{Function: fnName, URL: "/" + fnName, Method: "GET"})
 		f.Router(t).GetEventually(t, ctx, "/"+fnName, framework.BodyContains("hello"))
 
@@ -59,6 +64,7 @@ func TestPackageChecksum(t *testing.T) {
 		pkgName2 := ns.FunctionPackageName(t, ctx, fnName)
 		require.Equal(t, sum2, ns.PackageDeployChecksum(t, ctx, pkgName2),
 			"package deploy checksum should reflect updated URL content")
+		ns.WaitForPackageBuildSucceeded(t, ctx, pkgName2)
 		f.Router(t).GetEventually(t, ctx, "/"+fnName, framework.BodyContains("callback"))
 	})
 
