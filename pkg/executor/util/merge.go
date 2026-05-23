@@ -362,6 +362,14 @@ func sanitizeContainerSecurityContext(c *apiv1.Container) {
 	if c.SecurityContext == nil {
 		return
 	}
+	// Deep-copy before mutating. MergeContainer does a shallow struct copy
+	// (`dstC := *dst`) and mergo.WithOverride aliases src.SecurityContext
+	// onto dstC.SecurityContext, so mutating in place would leak into the
+	// caller's targetPodSpec — which is typically env.Spec.Runtime.PodSpec
+	// from an informer cache. Allocating a fresh SecurityContext (and a
+	// fresh Capabilities.Add slice via a new backing array) keeps the
+	// sanitization local to the merged result.
+	c.SecurityContext = c.SecurityContext.DeepCopy()
 	sc := c.SecurityContext
 	if sc.Privileged != nil && *sc.Privileged {
 		sc.Privileged = new(false)
@@ -370,7 +378,7 @@ func sanitizeContainerSecurityContext(c *apiv1.Container) {
 		sc.AllowPrivilegeEscalation = new(false)
 	}
 	if sc.Capabilities != nil && len(sc.Capabilities.Add) > 0 {
-		filtered := sc.Capabilities.Add[:0]
+		filtered := make([]apiv1.Capability, 0, len(sc.Capabilities.Add))
 		for _, cap := range sc.Capabilities.Add {
 			if _, bad := dangerousMergeContainerCapabilities[cap]; bad {
 				continue
