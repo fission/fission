@@ -6,8 +6,8 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"io"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -25,20 +25,41 @@ import (
 //   - `fn create --code <url> --insecure`   → skip checksum, store empty.
 //
 // Plus the equivalent `pkg create` paths.
+//
+// The test serves the package payloads from an in-process httptest server
+// rather than reaching out to github.com/fission/examples — the CLI runs
+// in-process (see ns.CLI), so 127.0.0.1:<random> is reachable, and the
+// buildermgr never re-fetches the URL (the CLI submits the literal payload
+// to the Package CR). This keeps the test deterministic and independent of
+// external network conditions.
 func TestPackageChecksum(t *testing.T) {
 	t.Parallel()
 
-	const url1 = "https://raw.githubusercontent.com/fission/examples/main/nodejs/hello.js"
-	const url2 = "https://raw.githubusercontent.com/fission/examples/main/nodejs/hello-callback.js"
+	const (
+		helloJS    = "module.exports = function(context, callback) { callback(200, \"hello!\\n\"); };\n"
+		callbackJS = "module.exports = function(context, callback) { callback(200, \"callback!\\n\"); };\n"
+	)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/hello.js", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(helloJS))
+	})
+	mux.HandleFunc("/hello-callback.js", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(callbackJS))
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	url1 := srv.URL + "/hello.js"
+	url2 := srv.URL + "/hello-callback.js"
+	sum1 := sha256Hex(helloJS)
+	sum2 := sha256Hex(callbackJS)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
 	defer cancel()
 
 	f := framework.Connect(t)
 	image := f.Images().RequireNode(t)
-
-	sum1 := fetchSHA256(t, ctx, url1)
-	sum2 := fetchSHA256(t, ctx, url2)
 
 	ns := f.NewTestNamespace(t)
 	envName := "nodejs-pkgsum-" + ns.ID
@@ -51,10 +72,9 @@ func TestPackageChecksum(t *testing.T) {
 		pkgName := ns.FunctionPackageName(t, ctx, fnName)
 		require.Equal(t, sum1, ns.PackageDeployChecksum(t, ctx, pkgName),
 			"package deploy checksum should match SHA256 of fetched URL content")
-		// Wait for the buildermgr to download the URL and finish building before
-		// hitting the router. The 60s GetEventually budget only covers route
-		// reconcile + executor specialization; download + build can exceed it on
-		// slow CI runners (observed flake on k8s 1.32 with TestPackageChecksum).
+		// Wait for the buildermgr to finish building (download + builder run)
+		// before hitting the router. The router-poll budget only covers route
+		// reconcile + executor specialization; build can overflow it on slow CI.
 		ns.WaitForPackageBuildSucceeded(t, ctx, pkgName)
 		ns.CreateRoute(t, ctx, framework.RouteOptions{Function: fnName, URL: "/" + fnName, Method: "GET"})
 		f.Router(t).GetEventually(t, ctx, "/"+fnName, framework.BodyContains("hello"))
@@ -95,20 +115,10 @@ func TestPackageChecksum(t *testing.T) {
 	})
 }
 
-// fetchSHA256 downloads url and returns the lowercase hex SHA256 of its body.
-// Used by TestPackageChecksum to compute the expected checksum that the CLI
-// should arrive at independently.
-func fetchSHA256(t *testing.T, ctx context.Context, url string) string {
-	t.Helper()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	require.NoError(t, err)
-	c := &http.Client{Timeout: 30 * time.Second}
-	resp, err := c.Do(req)
-	require.NoErrorf(t, err, "fetchSHA256 GET %q", url)
-	defer resp.Body.Close()
-	require.Equalf(t, http.StatusOK, resp.StatusCode, "fetchSHA256 %q non-2xx", url)
-	h := sha256.New()
-	_, err = io.Copy(h, resp.Body)
-	require.NoErrorf(t, err, "fetchSHA256 read %q", url)
-	return hex.EncodeToString(h.Sum(nil))
+// sha256Hex returns the lowercase hex SHA256 of s. Used by TestPackageChecksum
+// to compute the expected checksum that the CLI should arrive at independently
+// after downloading the payload from the in-process httptest server.
+func sha256Hex(s string) string {
+	h := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(h[:])
 }
