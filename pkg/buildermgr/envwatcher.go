@@ -439,14 +439,25 @@ func (envw *environmentWatcher) createBuilderDeployment(ctx context.Context, env
 		return nil, err
 	}
 
+	// AutomountServiceAccountToken=false stops Kubernetes from injecting
+	// the fission-builder ServiceAccount token into every container in
+	// the pod. The fetcher sidecar re-mounts the token via the projected
+	// volume defined below — the user-supplied builder container does
+	// not. See GHSA-8wcj-mfrc-jx5q (the buildermgr sibling of
+	// GHSA-85g2-pmrx-r49q).
+	automountSAToken := false
 	pod := apiv1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels:      sel,
 			Annotations: podAnnotations,
 		},
 		Spec: apiv1.PodSpec{
-			Containers:         []apiv1.Container{*container},
-			ServiceAccountName: fv1.FissionBuilderSA,
+			Containers:                   []apiv1.Container{*container},
+			ServiceAccountName:           fv1.FissionBuilderSA,
+			AutomountServiceAccountToken: &automountSAToken,
+			Volumes: []apiv1.Volume{
+				util.FetcherSATokenProjectedVolume(),
+			},
 		},
 	}
 
@@ -458,6 +469,11 @@ func (envw *environmentWatcher) createBuilderDeployment(ctx context.Context, env
 		} else {
 			envw.logger.Error(err, "Failed to merge the specs")
 		}
+		// Re-clamp after the merge: MergePodSpec propagates a non-nil
+		// AutomountServiceAccountToken from the patch, which would
+		// otherwise re-enable the kubelet auto-mount on the user-supplied
+		// builder container. See GHSA-8wcj-mfrc-jx5q.
+		pod.Spec.AutomountServiceAccountToken = new(false)
 	}
 
 	pod.Spec = *(util.ApplyImagePullSecret(env.Spec.ImagePullSecret, pod.Spec))
@@ -500,6 +516,27 @@ func (envw *environmentWatcher) createBuilderDeployment(ctx context.Context, env
 			return nil, err
 		}
 		deployment.Spec.Template.Spec = *newPodSpec
+		// Re-clamp after the merge: MergePodSpec propagates a non-nil
+		// AutomountServiceAccountToken from env.Spec.Builder.PodSpec,
+		// which would otherwise re-enable the kubelet auto-mount on the
+		// user-supplied builder container. See GHSA-8wcj-mfrc-jx5q.
+		deployment.Spec.Template.Spec.AutomountServiceAccountToken = new(false)
+	}
+
+	// Re-mount the fission-builder SA token at the canonical Kubernetes
+	// path on the fetcher container only. The pod-level
+	// AutomountServiceAccountToken=false flag set above suppresses the
+	// implicit mount on every container, including fetcher, so we add it
+	// back explicitly here. This must run AFTER the
+	// env.Spec.Builder.PodSpec merge — MergePodSpec can append additional
+	// volumeMounts to the fetcher container, including one at this same
+	// path, and kubelet would reject the pod with a duplicate-mount-path
+	// error. The helper strips any pre-existing mount at the path before
+	// adding its own, so running it last guarantees a single mount on
+	// the fetcher container backed by the projected SA token volume.
+	// See GHSA-8wcj-mfrc-jx5q.
+	if err := util.MountFetcherSATokenOnFetcher(&deployment.Spec.Template.Spec); err != nil {
+		return nil, err
 	}
 
 	_, err = envw.kubernetesClient.AppsV1().Deployments(ns).Create(ctx, deployment, metav1.CreateOptions{})
