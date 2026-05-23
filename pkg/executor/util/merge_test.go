@@ -331,3 +331,56 @@ func Test_mergeContainerList(t *testing.T) {
 		})
 	}
 }
+
+// TestMergePodSpec_StripsDangerousFields pins the GHSA-gx55 / GHSA-wmgg /
+// GHSA-v455 invariant on the merge layer: dangerous PodSpec fields supplied
+// by a target (env.Spec.Runtime.PodSpec / Function.Spec.PodSpec / builder
+// podSpecPatch) must NOT propagate onto the src spec. The admission webhook
+// is the primary defence; this is belt-and-braces for clusters running with
+// failurePolicy=Ignore or stale objects from a pre-webhook upgrade window.
+func TestMergePodSpec_StripsDangerousFields(t *testing.T) {
+	on := true
+	src := &apiv1.PodSpec{
+		Containers: []apiv1.Container{{Name: "user", Image: "fission/python-env:latest"}},
+	}
+	target := &apiv1.PodSpec{
+		HostNetwork:        true,
+		HostPID:            true,
+		HostIPC:            true,
+		ServiceAccountName: "cluster-admin",
+		SecurityContext:    &apiv1.PodSecurityContext{RunAsUser: new(int64(0))},
+		Volumes: []apiv1.Volume{{
+			Name: "host-root",
+			VolumeSource: apiv1.VolumeSource{
+				HostPath: &apiv1.HostPathVolumeSource{Path: "/"},
+			},
+		}},
+		Containers: []apiv1.Container{{
+			Name:            "user",
+			SecurityContext: &apiv1.SecurityContext{Privileged: &on},
+		}},
+	}
+
+	out, _ := MergePodSpec(src, target)
+
+	if out.HostNetwork {
+		t.Errorf("HostNetwork must not propagate from target")
+	}
+	if out.HostPID {
+		t.Errorf("HostPID must not propagate from target")
+	}
+	if out.HostIPC {
+		t.Errorf("HostIPC must not propagate from target")
+	}
+	if out.ServiceAccountName != "" {
+		t.Errorf("ServiceAccountName override must not propagate, got %q", out.ServiceAccountName)
+	}
+	if out.SecurityContext != nil {
+		t.Errorf("pod-level SecurityContext must not propagate, got %+v", out.SecurityContext)
+	}
+	for _, v := range out.Volumes {
+		if v.HostPath != nil {
+			t.Errorf("hostPath volume %q must not propagate", v.Name)
+		}
+	}
+}

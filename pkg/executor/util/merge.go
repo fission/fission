@@ -79,8 +79,14 @@ func MergePodSpec(srcPodSpec *apiv1.PodSpec, targetPodSpec *apiv1.PodSpec) (*api
 		srcPodSpec.InitContainers = cList
 	}
 
-	// For volumes - if duplicate exist, throw error
-	vols, err := mergeVolumeLists(srcPodSpec.Volumes, targetPodSpec.Volumes)
+	// For volumes - if duplicate exist, throw error. hostPath volumes are
+	// stripped from the target before merge: a tenant-supplied hostPath
+	// mount is a node-escape primitive (read /etc, the container runtime
+	// socket, etc.). The admission webhook rejects them, and this layer
+	// makes them unreachable even on webhook-bypass clusters. Closes
+	// GHSA-gx55-f84r-v3r7 / GHSA-wmgg-3p4h-48x7 / GHSA-v455-mv2v-5g92.
+	filteredTargetVols := stripHostPathVolumes(targetPodSpec.Volumes)
+	vols, err := mergeVolumeLists(srcPodSpec.Volumes, filteredTargetVols)
 	if err != nil {
 		multierr = errors.Join(multierr, err)
 	} else {
@@ -112,10 +118,12 @@ func MergePodSpec(srcPodSpec *apiv1.PodSpec, targetPodSpec *apiv1.PodSpec) (*api
 		srcPodSpec.EnableServiceLinks = targetPodSpec.EnableServiceLinks
 	}
 
-	// TODO - Security context should be merged instead of overriding.
-	if targetPodSpec.SecurityContext != nil {
-		srcPodSpec.SecurityContext = targetPodSpec.SecurityContext
-	}
+	// SecurityContext is intentionally not propagated from target.
+	// The admission webhook rejects pod-level SecurityContext fields that
+	// could escalate privilege (privileged, runAsUser=0, etc.), but for
+	// defence in depth on webhook-bypass clusters (failurePolicy=Ignore
+	// or stale objects after upgrade), drop the field at the merge layer
+	// too. Closes GHSA-gx55-f84r-v3r7 / GHSA-wmgg-3p4h-48x7 / GHSA-v455-mv2v-5g92.
 
 	// TODO - Affinity should be merged instead of overriding.
 	if targetPodSpec.Affinity != nil {
@@ -142,29 +150,22 @@ func MergePodSpec(srcPodSpec *apiv1.PodSpec, targetPodSpec *apiv1.PodSpec) (*api
 		srcPodSpec.DNSPolicy = targetPodSpec.DNSPolicy
 	}
 
-	if targetPodSpec.ServiceAccountName != "" {
-		srcPodSpec.ServiceAccountName = targetPodSpec.ServiceAccountName
-	}
-
-	if targetPodSpec.DeprecatedServiceAccount != "" {
-		srcPodSpec.DeprecatedServiceAccount = targetPodSpec.DeprecatedServiceAccount
-	}
+	// ServiceAccountName / DeprecatedServiceAccount intentionally not
+	// propagated: the controller chooses the SA for the pod
+	// (fission-fetcher for runtime pods, fission-builder for build pods).
+	// Letting a user-supplied podspec override it would defeat the SA-token
+	// scoping introduced by GHSA-85g2-pmrx-r49q and GHSA-8wcj-mfrc-jx5q.
+	// Closes GHSA-gx55-f84r-v3r7 / GHSA-wmgg-3p4h-48x7 / GHSA-v455-mv2v-5g92.
 
 	if targetPodSpec.AutomountServiceAccountToken != nil {
 		srcPodSpec.AutomountServiceAccountToken = targetPodSpec.AutomountServiceAccountToken
 	}
 
-	if targetPodSpec.HostNetwork {
-		srcPodSpec.HostNetwork = targetPodSpec.HostNetwork
-	}
-
-	if targetPodSpec.HostPID {
-		srcPodSpec.HostPID = targetPodSpec.HostPID
-	}
-
-	if targetPodSpec.HostIPC {
-		srcPodSpec.HostIPC = targetPodSpec.HostIPC
-	}
+	// HostNetwork / HostPID / HostIPC intentionally not propagated.
+	// A pod sharing host namespaces is a node-escape primitive — the
+	// admission webhook rejects these fields, and this layer makes them
+	// unreachable even on webhook-bypass clusters.
+	// Closes GHSA-gx55-f84r-v3r7 / GHSA-wmgg-3p4h-48x7 / GHSA-v455-mv2v-5g92.
 
 	if targetPodSpec.ShareProcessNamespace != nil {
 		srcPodSpec.ShareProcessNamespace = targetPodSpec.ShareProcessNamespace
@@ -287,4 +288,25 @@ func checkSliceConflicts(field string, objs any) (err error) {
 		}
 	}
 	return errs
+}
+
+// stripHostPathVolumes returns a copy of vols with any volume whose source
+// is a hostPath removed. Defense in depth — the admission webhook already
+// rejects hostPath in tenant-supplied podspecs (see
+// pkg/apis/core/v1/podspec_safety.go), but on webhook-bypass clusters
+// (failurePolicy=Ignore, or stale objects from a pre-webhook upgrade
+// window) this layer makes the dangerous primitive unreachable.
+// Closes GHSA-gx55-f84r-v3r7 / GHSA-wmgg-3p4h-48x7 / GHSA-v455-mv2v-5g92.
+func stripHostPathVolumes(vols []apiv1.Volume) []apiv1.Volume {
+	if len(vols) == 0 {
+		return vols
+	}
+	out := make([]apiv1.Volume, 0, len(vols))
+	for _, v := range vols {
+		if v.HostPath != nil {
+			continue
+		}
+		out = append(out, v)
+	}
+	return out
 }
