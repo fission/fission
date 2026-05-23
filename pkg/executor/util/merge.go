@@ -79,6 +79,21 @@ func MergePodSpec(srcPodSpec *apiv1.PodSpec, targetPodSpec *apiv1.PodSpec) (*api
 		srcPodSpec.InitContainers = cList
 	}
 
+	// Sanitize per-container SecurityContext after the merge. The admission
+	// webhook rejects privileged=true / allowPrivilegeEscalation=true and
+	// dangerous capabilities (SYS_ADMIN, NET_ADMIN, etc.) at submit time,
+	// but a webhook-bypass cluster (failurePolicy=Ignore or a stale object
+	// from a pre-webhook upgrade window) could still reach this code path.
+	// Strip the dangerous bits from the merged result so the resulting pod
+	// cannot escape its container even if admission was bypassed. Closes
+	// GHSA-gx55-f84r-v3r7 / GHSA-wmgg-3p4h-48x7 / GHSA-v455-mv2v-5g92.
+	for i := range srcPodSpec.Containers {
+		sanitizeContainerSecurityContext(&srcPodSpec.Containers[i])
+	}
+	for i := range srcPodSpec.InitContainers {
+		sanitizeContainerSecurityContext(&srcPodSpec.InitContainers[i])
+	}
+
 	// For volumes - if duplicate exist, throw error. hostPath volumes are
 	// stripped from the target before merge: a tenant-supplied hostPath
 	// mount is a node-escape primitive (read /etc, the container runtime
@@ -317,4 +332,51 @@ func stripHostPathVolumes(vols []apiv1.Volume) []apiv1.Volume {
 		out = append(out, v)
 	}
 	return out
+}
+
+// dangerousMergeContainerCapabilities lists the Linux capabilities that
+// effectively bypass the container sandbox. Kept in sync with the
+// authoritative denylist in pkg/apis/core/v1/podspec_safety.go — the
+// admission webhook is the primary defence; this is the merge-layer
+// belt-and-braces for webhook-bypass clusters.
+var dangerousMergeContainerCapabilities = map[apiv1.Capability]struct{}{
+	"SYS_ADMIN":       {},
+	"NET_ADMIN":       {},
+	"SYS_PTRACE":      {},
+	"SYS_MODULE":      {},
+	"DAC_READ_SEARCH": {},
+	"DAC_OVERRIDE":    {},
+}
+
+// sanitizeContainerSecurityContext zeroes out the privilege-escalation bits
+// of a container's SecurityContext after a MergePodSpec call. The merge
+// path uses mergo.WithOverride and unconditionally copies SecurityContext
+// fields from the target container, so a tenant-supplied podspec with
+// privileged=true / allowPrivilegeEscalation=true / Capabilities.Add =
+// [SYS_ADMIN, ...] would otherwise reach the running pod on
+// webhook-bypass clusters (failurePolicy=Ignore or stale objects from a
+// pre-webhook upgrade). The webhook is the primary defence; this is
+// defence in depth. Closes GHSA-gx55-f84r-v3r7 / GHSA-wmgg-3p4h-48x7 /
+// GHSA-v455-mv2v-5g92.
+func sanitizeContainerSecurityContext(c *apiv1.Container) {
+	if c.SecurityContext == nil {
+		return
+	}
+	sc := c.SecurityContext
+	if sc.Privileged != nil && *sc.Privileged {
+		sc.Privileged = new(false)
+	}
+	if sc.AllowPrivilegeEscalation != nil && *sc.AllowPrivilegeEscalation {
+		sc.AllowPrivilegeEscalation = new(false)
+	}
+	if sc.Capabilities != nil && len(sc.Capabilities.Add) > 0 {
+		filtered := sc.Capabilities.Add[:0]
+		for _, cap := range sc.Capabilities.Add {
+			if _, bad := dangerousMergeContainerCapabilities[cap]; bad {
+				continue
+			}
+			filtered = append(filtered, cap)
+		}
+		sc.Capabilities.Add = filtered
+	}
 }

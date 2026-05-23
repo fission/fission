@@ -399,3 +399,81 @@ func TestMergePodSpec_StripsDangerousFields(t *testing.T) {
 		}
 	}
 }
+
+// TestMergePodSpec_SanitizesContainerSecurityContext pins the
+// container-level defence-in-depth: even if admission was bypassed
+// (failurePolicy=Ignore or stale objects), per-container
+// privileged=true / allowPrivilegeEscalation=true / dangerous
+// capabilities must be stripped from the merged result. The webhook
+// is the primary defence; this layer makes the bits unreachable on
+// webhook-bypass clusters. Closes GHSA-gx55 / GHSA-wmgg / GHSA-v455.
+func TestMergePodSpec_SanitizesContainerSecurityContext(t *testing.T) {
+	on := true
+	src := &apiv1.PodSpec{
+		Containers: []apiv1.Container{{Name: "user", Image: "fission/python-env:latest"}},
+	}
+	target := &apiv1.PodSpec{
+		Containers: []apiv1.Container{{
+			Name: "user",
+			SecurityContext: &apiv1.SecurityContext{
+				Privileged:               &on,
+				AllowPrivilegeEscalation: &on,
+				Capabilities: &apiv1.Capabilities{
+					Add: []apiv1.Capability{
+						"SYS_ADMIN",
+						"NET_BIND_SERVICE", // benign — must flow through
+						"NET_ADMIN",
+						"CHOWN", // benign — must flow through
+					},
+				},
+			},
+		}},
+		InitContainers: []apiv1.Container{{
+			Name: "init",
+			SecurityContext: &apiv1.SecurityContext{
+				Privileged: &on,
+			},
+		}},
+	}
+
+	out, _ := MergePodSpec(src, target)
+
+	var merged *apiv1.Container
+	for i := range out.Containers {
+		if out.Containers[i].Name == "user" {
+			merged = &out.Containers[i]
+			break
+		}
+	}
+	if merged == nil || merged.SecurityContext == nil {
+		t.Fatalf("merged user container with SecurityContext expected")
+	}
+	if merged.SecurityContext.Privileged != nil && *merged.SecurityContext.Privileged {
+		t.Errorf("Privileged=true must be sanitized to false")
+	}
+	if merged.SecurityContext.AllowPrivilegeEscalation != nil && *merged.SecurityContext.AllowPrivilegeEscalation {
+		t.Errorf("AllowPrivilegeEscalation=true must be sanitized to false")
+	}
+	for _, cap := range merged.SecurityContext.Capabilities.Add {
+		switch cap {
+		case "SYS_ADMIN", "NET_ADMIN", "SYS_PTRACE", "SYS_MODULE", "DAC_READ_SEARCH", "DAC_OVERRIDE":
+			t.Errorf("dangerous capability %q must be stripped", cap)
+		}
+	}
+	// Benign capabilities must remain.
+	gotBenign := map[apiv1.Capability]bool{}
+	for _, cap := range merged.SecurityContext.Capabilities.Add {
+		gotBenign[cap] = true
+	}
+	if !gotBenign["NET_BIND_SERVICE"] {
+		t.Errorf("benign capability NET_BIND_SERVICE must flow through")
+	}
+	if !gotBenign["CHOWN"] {
+		t.Errorf("benign capability CHOWN must flow through")
+	}
+
+	// InitContainer must also be sanitized.
+	if out.InitContainers[0].SecurityContext.Privileged != nil && *out.InitContainers[0].SecurityContext.Privileged {
+		t.Errorf("InitContainer privileged=true must be sanitized to false")
+	}
+}

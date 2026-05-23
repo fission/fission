@@ -45,7 +45,7 @@ func TestEnvironmentWebhook_Validate_Default(t *testing.T) {
 	}
 }
 
-func TestEnvironmentWebhook_Validate_RejectsDangerousRuntimePodSpec(t *testing.T) {
+func TestEnvironmentWebhook_Validate_RejectsDangerousPodSpec(t *testing.T) {
 	on := true
 	cases := []struct {
 		name      string
