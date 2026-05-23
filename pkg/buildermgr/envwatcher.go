@@ -462,8 +462,14 @@ func (envw *environmentWatcher) createBuilderDeployment(ctx context.Context, env
 	}
 
 	if envw.podSpecPatch != nil {
-
-		updatedPodSpec, err := util.MergePodSpec(&pod.Spec, envw.podSpecPatch)
+		// Merge into a deep copy: MergePodSpec mutates its first argument
+		// in place even on error (it joins partial errors and keeps the
+		// fields that did merge cleanly). Passing pod.Spec directly would
+		// leave the deployment with partial patch mutations applied on a
+		// log-and-continue error path. The copy is discarded on failure
+		// so pod.Spec retains its pre-merge state.
+		srcCopy := pod.Spec.DeepCopy()
+		updatedPodSpec, err := util.MergePodSpec(srcCopy, envw.podSpecPatch)
 		if err == nil {
 			pod.Spec = *updatedPodSpec
 		} else {
