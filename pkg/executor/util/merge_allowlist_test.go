@@ -109,6 +109,13 @@ func TestMergeAllowedPodSpecFieldsDropsDangerousFields(t *testing.T) {
 	runAsUser := int64(0)
 	automount := true
 	share := true
+	gracePeriod := int64(60)
+	deadline := int64(120)
+	priority := int32(1000)
+	enableLinks := true
+	preempt := apiv1.PreemptNever
+	fqdn := true
+	hostUsers := false
 	user := &apiv1.PodSpec{
 		Containers: []apiv1.Container{{
 			Name:            "connector",
@@ -126,22 +133,38 @@ func TestMergeAllowedPodSpecFieldsDropsDangerousFields(t *testing.T) {
 			StartupProbe:    &apiv1.Probe{},
 			SecurityContext: &apiv1.SecurityContext{RunAsUser: &runAsUser},
 		}},
-		InitContainers:               []apiv1.Container{{Name: "init", Image: "evil:latest"}},
-		Volumes:                      []apiv1.Volume{{Name: "host", VolumeSource: apiv1.VolumeSource{HostPath: &apiv1.HostPathVolumeSource{Path: "/"}}}},
-		ImagePullSecrets:             []apiv1.LocalObjectReference{{Name: "creds"}},
-		ServiceAccountName:           "cluster-admin",
-		AutomountServiceAccountToken: &automount,
-		NodeName:                     "evil-node",
-		HostNetwork:                  true,
-		HostPID:                      true,
-		HostIPC:                      true,
-		ShareProcessNamespace:        &share,
-		SecurityContext:              &apiv1.PodSecurityContext{RunAsUser: &runAsUser},
-		SchedulerName:                "evil-scheduler",
-		HostAliases:                  []apiv1.HostAlias{{IP: "1.2.3.4", Hostnames: []string{"evil"}}},
-		PriorityClassName:            "high",
-		DNSConfig:                    &apiv1.PodDNSConfig{},
-		TopologySpreadConstraints:    []apiv1.TopologySpreadConstraint{{}},
+		InitContainers:                []apiv1.Container{{Name: "init", Image: "evil:latest"}},
+		Volumes:                       []apiv1.Volume{{Name: "host", VolumeSource: apiv1.VolumeSource{HostPath: &apiv1.HostPathVolumeSource{Path: "/"}}}},
+		ImagePullSecrets:              []apiv1.LocalObjectReference{{Name: "creds"}},
+		ServiceAccountName:            "cluster-admin",
+		AutomountServiceAccountToken:  &automount,
+		NodeName:                      "evil-node",
+		HostNetwork:                   true,
+		HostPID:                       true,
+		HostIPC:                       true,
+		ShareProcessNamespace:         &share,
+		SecurityContext:               &apiv1.PodSecurityContext{RunAsUser: &runAsUser},
+		SchedulerName:                 "evil-scheduler",
+		HostAliases:                   []apiv1.HostAlias{{IP: "1.2.3.4", Hostnames: []string{"evil"}}},
+		PriorityClassName:             "high",
+		DNSConfig:                     &apiv1.PodDNSConfig{},
+		TopologySpreadConstraints:     []apiv1.TopologySpreadConstraint{{}},
+		RestartPolicy:                 apiv1.RestartPolicyNever,
+		TerminationGracePeriodSeconds: &gracePeriod,
+		ActiveDeadlineSeconds:         &deadline,
+		DNSPolicy:                     apiv1.DNSClusterFirst,
+		Hostname:                      "evil-host",
+		Subdomain:                     "evil",
+		Priority:                      &priority,
+		ReadinessGates:                []apiv1.PodReadinessGate{{ConditionType: "evil"}},
+		EnableServiceLinks:            &enableLinks,
+		PreemptionPolicy:              &preempt,
+		Overhead:                      apiv1.ResourceList{apiv1.ResourceCPU: resource.MustParse("10m")},
+		SetHostnameAsFQDN:             &fqdn,
+		OS:                            &apiv1.PodOS{Name: apiv1.Linux},
+		HostUsers:                     &hostUsers,
+		SchedulingGates:               []apiv1.PodSchedulingGate{{Name: "evil"}},
+		ResourceClaims:                []apiv1.PodResourceClaim{{Name: "evil"}},
 	}
 	out, dropped := MergeAllowedPodSpecFields(src, user)
 
@@ -175,6 +198,22 @@ func TestMergeAllowedPodSpecFieldsDropsDangerousFields(t *testing.T) {
 	assert.Empty(t, out.PriorityClassName)
 	assert.Nil(t, out.DNSConfig)
 	assert.Empty(t, out.TopologySpreadConstraints)
+	assert.Empty(t, out.RestartPolicy)
+	assert.Nil(t, out.TerminationGracePeriodSeconds)
+	assert.Nil(t, out.ActiveDeadlineSeconds)
+	assert.Empty(t, out.DNSPolicy)
+	assert.Empty(t, out.Hostname)
+	assert.Empty(t, out.Subdomain)
+	assert.Nil(t, out.Priority)
+	assert.Empty(t, out.ReadinessGates)
+	assert.Nil(t, out.EnableServiceLinks)
+	assert.Nil(t, out.PreemptionPolicy)
+	assert.Empty(t, out.Overhead)
+	assert.Nil(t, out.SetHostnameAsFQDN)
+	assert.Nil(t, out.OS)
+	assert.Nil(t, out.HostUsers)
+	assert.Empty(t, out.SchedulingGates)
+	assert.Empty(t, out.ResourceClaims)
 
 	for _, want := range []string{
 		"containers[].image",
@@ -206,6 +245,22 @@ func TestMergeAllowedPodSpecFieldsDropsDangerousFields(t *testing.T) {
 		"priorityClassName",
 		"dnsConfig",
 		"topologySpreadConstraints",
+		"restartPolicy",
+		"terminationGracePeriodSeconds",
+		"activeDeadlineSeconds",
+		"dnsPolicy",
+		"hostname",
+		"subdomain",
+		"priority",
+		"readinessGates",
+		"enableServiceLinks",
+		"preemptionPolicy",
+		"overhead",
+		"setHostnameAsFQDN",
+		"os",
+		"hostUsers",
+		"schedulingGates",
+		"resourceClaims",
 	} {
 		assert.Contains(t, dropped, want, "expected %q to be reported as dropped", want)
 	}
@@ -237,6 +292,13 @@ func TestDisallowedPodSpecFieldsAllPresent(t *testing.T) {
 	runAsUser := int64(0)
 	automount := true
 	share := true
+	gracePeriod := int64(60)
+	deadline := int64(120)
+	priority := int32(1000)
+	enableLinks := true
+	preempt := apiv1.PreemptNever
+	fqdn := true
+	hostUsers := false
 	ps := &apiv1.PodSpec{
 		Containers: []apiv1.Container{{
 			Name:            "connector",
@@ -254,22 +316,38 @@ func TestDisallowedPodSpecFieldsAllPresent(t *testing.T) {
 			StartupProbe:    &apiv1.Probe{},
 			SecurityContext: &apiv1.SecurityContext{RunAsUser: &runAsUser},
 		}},
-		InitContainers:               []apiv1.Container{{Name: "init", Image: "evil:latest"}},
-		Volumes:                      []apiv1.Volume{{Name: "host", VolumeSource: apiv1.VolumeSource{HostPath: &apiv1.HostPathVolumeSource{Path: "/"}}}},
-		ImagePullSecrets:             []apiv1.LocalObjectReference{{Name: "creds"}},
-		ServiceAccountName:           "cluster-admin",
-		AutomountServiceAccountToken: &automount,
-		NodeName:                     "evil-node",
-		HostNetwork:                  true,
-		HostPID:                      true,
-		HostIPC:                      true,
-		ShareProcessNamespace:        &share,
-		SecurityContext:              &apiv1.PodSecurityContext{RunAsUser: &runAsUser},
-		SchedulerName:                "evil-scheduler",
-		HostAliases:                  []apiv1.HostAlias{{IP: "1.2.3.4", Hostnames: []string{"evil"}}},
-		PriorityClassName:            "high",
-		DNSConfig:                    &apiv1.PodDNSConfig{},
-		TopologySpreadConstraints:    []apiv1.TopologySpreadConstraint{{}},
+		InitContainers:                []apiv1.Container{{Name: "init", Image: "evil:latest"}},
+		Volumes:                       []apiv1.Volume{{Name: "host", VolumeSource: apiv1.VolumeSource{HostPath: &apiv1.HostPathVolumeSource{Path: "/"}}}},
+		ImagePullSecrets:              []apiv1.LocalObjectReference{{Name: "creds"}},
+		ServiceAccountName:            "cluster-admin",
+		AutomountServiceAccountToken:  &automount,
+		NodeName:                      "evil-node",
+		HostNetwork:                   true,
+		HostPID:                       true,
+		HostIPC:                       true,
+		ShareProcessNamespace:         &share,
+		SecurityContext:               &apiv1.PodSecurityContext{RunAsUser: &runAsUser},
+		SchedulerName:                 "evil-scheduler",
+		HostAliases:                   []apiv1.HostAlias{{IP: "1.2.3.4", Hostnames: []string{"evil"}}},
+		PriorityClassName:             "high",
+		DNSConfig:                     &apiv1.PodDNSConfig{},
+		TopologySpreadConstraints:     []apiv1.TopologySpreadConstraint{{}},
+		RestartPolicy:                 apiv1.RestartPolicyNever,
+		TerminationGracePeriodSeconds: &gracePeriod,
+		ActiveDeadlineSeconds:         &deadline,
+		DNSPolicy:                     apiv1.DNSClusterFirst,
+		Hostname:                      "evil-host",
+		Subdomain:                     "evil",
+		Priority:                      &priority,
+		ReadinessGates:                []apiv1.PodReadinessGate{{ConditionType: "evil"}},
+		EnableServiceLinks:            &enableLinks,
+		PreemptionPolicy:              &preempt,
+		Overhead:                      apiv1.ResourceList{apiv1.ResourceCPU: resource.MustParse("10m")},
+		SetHostnameAsFQDN:             &fqdn,
+		OS:                            &apiv1.PodOS{Name: apiv1.Linux},
+		HostUsers:                     &hostUsers,
+		SchedulingGates:               []apiv1.PodSchedulingGate{{Name: "evil"}},
+		ResourceClaims:                []apiv1.PodResourceClaim{{Name: "evil"}},
 	}
 
 	bad := DisallowedPodSpecFields(ps)
@@ -304,6 +382,22 @@ func TestDisallowedPodSpecFieldsAllPresent(t *testing.T) {
 		"priorityClassName",
 		"dnsConfig",
 		"topologySpreadConstraints",
+		"restartPolicy",
+		"terminationGracePeriodSeconds",
+		"activeDeadlineSeconds",
+		"dnsPolicy",
+		"hostname",
+		"subdomain",
+		"priority",
+		"readinessGates",
+		"enableServiceLinks",
+		"preemptionPolicy",
+		"overhead",
+		"setHostnameAsFQDN",
+		"os",
+		"hostUsers",
+		"schedulingGates",
+		"resourceClaims",
 	} {
 		assert.Contains(t, bad, want, "expected %q to be reported as disallowed", want)
 	}
