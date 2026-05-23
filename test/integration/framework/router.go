@@ -124,9 +124,20 @@ func (r *RouterClient) do(ctx context.Context, method, path, contentType string,
 	return resp.StatusCode, string(b), nil
 }
 
+// routerPollTimeout is the budget GetEventually/PostEventually give for the
+// router to converge to the expected response. It must cover the slowest
+// reasonable case: function-update propagation under parallel CI load, which
+// requires the poolmgr to observe the Function CRD update, invalidate its
+// functionServiceMap entry, take a fresh pod from the pool, and re-specialize
+// it with the new package. The previous 60s was tight on k8s 1.32/1.34 with a
+// pool size of 3 and many concurrent tests competing for pool slots; 120s
+// gives ~2× headroom while remaining short enough that genuinely broken
+// tests still fail fast.
+const routerPollTimeout = 120 * time.Second
+
 // GetEventually polls a GET until the response satisfies `check` or the
 // timeout elapses. Use this in place of bash's `curl --retry` after creating
-// a route. 60s timeout, 1s tick. Returns the last response body.
+// a route. 1s tick. Returns the last response body.
 func (r *RouterClient) GetEventually(
 	t *testing.T,
 	ctx context.Context,
@@ -144,7 +155,7 @@ func (r *RouterClient) GetEventually(
 		assert.Truef(c, check(status, body),
 			"router GET %q: status=%d, body=%q did not satisfy check",
 			path, status, truncate(body, 200))
-	}, 60*time.Second, 1*time.Second)
+	}, routerPollTimeout, 1*time.Second)
 	return lastBody
 }
 
@@ -168,7 +179,7 @@ func (r *RouterClient) PostEventually(
 		assert.Truef(c, check(status, respBody),
 			"router POST %q: status=%d, body[:200]=%q did not satisfy check",
 			path, status, truncate(respBody, 200))
-	}, 60*time.Second, 1*time.Second)
+	}, routerPollTimeout, 1*time.Second)
 	return lastBody
 }
 
