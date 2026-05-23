@@ -586,6 +586,15 @@ func (gpm *GenericPoolManager) getFunctionEnv(ctx context.Context, fn *fv1.Funct
 	var env *fv1.Environment
 	otelUtils.SpanTrackEvent(ctx, "getFunctionEnv", otelUtils.GetAttributesForFunction(fn)...)
 
+	// Defence in depth for GHSA-cvw6-gfvv-953q — the admission webhook
+	// already rejects this at submit time, but a stale Function object
+	// from an upgrade-before-webhook-restart window (or a cluster running
+	// with failurePolicy=ignore) could still reach this path.
+	if envNs := fn.Spec.Environment.Namespace; envNs != "" && envNs != fn.Namespace {
+		return nil, fmt.Errorf("cross-namespace environment reference is not allowed: fn.namespace=%s env.namespace=%s",
+			fn.Namespace, envNs)
+	}
+
 	// Cached ?
 	// TODO: the cache should be able to search by <env name, fn namespace> instead of function metadata.
 	result, err := gpm.functionEnv.Get(crd.CacheKeyURFromMeta(&fn.ObjectMeta))

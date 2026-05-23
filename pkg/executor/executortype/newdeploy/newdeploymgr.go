@@ -270,6 +270,11 @@ func (deploy *NewDeploy) IsValid(ctx context.Context, fsvc *fscache.FuncSvc) boo
 
 // RefreshFuncPods deletes pods related to the function so that new pods are replenished
 func (deploy *NewDeploy) RefreshFuncPods(ctx context.Context, logger logr.Logger, f fv1.Function) error {
+	// Defence in depth for GHSA-cvw6-gfvv-953q — see fnCreate for context.
+	if envNs := f.Spec.Environment.Namespace; envNs != "" && envNs != f.Namespace {
+		return fmt.Errorf("cross-namespace environment reference is not allowed: fn.namespace=%s env.namespace=%s",
+			f.Namespace, envNs)
+	}
 
 	env, err := deploy.fissionClient.CoreV1().Environments(f.Spec.Environment.Namespace).Get(ctx, f.Spec.Environment.Name, metav1.GetOptions{})
 	if err != nil {
@@ -427,6 +432,14 @@ func (deploy *NewDeploy) deleteFunction(ctx context.Context, fn *fv1.Function) e
 }
 
 func (deploy *NewDeploy) fnCreate(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
+	// Defence in depth for GHSA-cvw6-gfvv-953q — primary defence is the
+	// admission webhook in pkg/webhook/function.go, but a stale Function
+	// from a pre-webhook upgrade window (or failurePolicy=ignore) could
+	// still reach this path.
+	if envNs := fn.Spec.Environment.Namespace; envNs != "" && envNs != fn.Namespace {
+		return nil, fmt.Errorf("cross-namespace environment reference is not allowed: fn.namespace=%s env.namespace=%s",
+			fn.Namespace, envNs)
+	}
 	cleanupFunc := func(ctx context.Context, ns string, name string) {
 		err := deploy.cleanupNewdeploy(ctx, ns, name)
 		if err != nil {
