@@ -333,13 +333,21 @@ func Test_mergeContainerList(t *testing.T) {
 }
 
 // TestMergePodSpec_StripsDangerousFields pins the GHSA-gx55 / GHSA-wmgg /
-// GHSA-v455 invariant on the merge layer: dangerous PodSpec fields supplied
+// GHSA-v455 invariant on the merge layer: node-escape PodSpec fields supplied
 // by a target (env.Spec.Runtime.PodSpec / Function.Spec.PodSpec / builder
 // podSpecPatch) must NOT propagate onto the src spec. The admission webhook
 // is the primary defence; this is belt-and-braces for clusters running with
 // failurePolicy=Ignore or stale objects from a pre-webhook upgrade window.
+//
+// Pod-level SecurityContext IS propagated (the chart's runtimePodSpec /
+// builderPodSpec features use it for operator hardening like runAsNonRoot /
+// fsGroup / runAsUser=10001). The webhook denylist handles tenant-supplied
+// per-container privileged / allowPrivilegeEscalation / dangerous-cap
+// vectors which are the actual node-escape primitives.
 func TestMergePodSpec_StripsDangerousFields(t *testing.T) {
 	on := true
+	runAsUser := int64(10001)
+	runAsNonRoot := true
 	src := &apiv1.PodSpec{
 		Containers: []apiv1.Container{{Name: "user", Image: "fission/python-env:latest"}},
 	}
@@ -348,7 +356,10 @@ func TestMergePodSpec_StripsDangerousFields(t *testing.T) {
 		HostPID:            true,
 		HostIPC:            true,
 		ServiceAccountName: "cluster-admin",
-		SecurityContext:    &apiv1.PodSecurityContext{RunAsUser: new(int64(0))},
+		SecurityContext: &apiv1.PodSecurityContext{
+			RunAsUser:    &runAsUser,
+			RunAsNonRoot: &runAsNonRoot,
+		},
 		Volumes: []apiv1.Volume{{
 			Name: "host-root",
 			VolumeSource: apiv1.VolumeSource{
@@ -375,8 +386,12 @@ func TestMergePodSpec_StripsDangerousFields(t *testing.T) {
 	if out.ServiceAccountName != "" {
 		t.Errorf("ServiceAccountName override must not propagate, got %q", out.ServiceAccountName)
 	}
-	if out.SecurityContext != nil {
-		t.Errorf("pod-level SecurityContext must not propagate, got %+v", out.SecurityContext)
+	// Pod-level SecurityContext MUST flow through to support operator
+	// hardening from the chart's runtimePodSpec / builderPodSpec features.
+	if out.SecurityContext == nil {
+		t.Errorf("pod-level SecurityContext must propagate for operator hardening")
+	} else if out.SecurityContext.RunAsUser == nil || *out.SecurityContext.RunAsUser != 10001 {
+		t.Errorf("RunAsUser=10001 must propagate, got %+v", out.SecurityContext.RunAsUser)
 	}
 	for _, v := range out.Volumes {
 		if v.HostPath != nil {

@@ -81,6 +81,11 @@ func TestValidatePodSpecSafety_DangerousFields(t *testing.T) {
 			wantInErr: "serviceAccountName",
 		},
 		{
+			name:      "deprecated serviceAccount (alias) override",
+			mutate:    func(ps *apiv1.PodSpec) { ps.DeprecatedServiceAccount = "cluster-admin" },
+			wantInErr: "serviceAccount",
+		},
+		{
 			name: "hostPath volume",
 			mutate: func(ps *apiv1.PodSpec) {
 				ps.Volumes = []apiv1.Volume{{

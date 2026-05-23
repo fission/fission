@@ -118,12 +118,20 @@ func MergePodSpec(srcPodSpec *apiv1.PodSpec, targetPodSpec *apiv1.PodSpec) (*api
 		srcPodSpec.EnableServiceLinks = targetPodSpec.EnableServiceLinks
 	}
 
-	// SecurityContext is intentionally not propagated from target.
-	// The admission webhook rejects pod-level SecurityContext fields that
-	// could escalate privilege (privileged, runAsUser=0, etc.), but for
-	// defence in depth on webhook-bypass clusters (failurePolicy=Ignore
-	// or stale objects after upgrade), drop the field at the merge layer
-	// too. Closes GHSA-gx55-f84r-v3r7 / GHSA-wmgg-3p4h-48x7 / GHSA-v455-mv2v-5g92.
+	// TODO - Security context should be merged instead of overriding.
+	// Pod-level SecurityContext IS propagated: the chart's
+	// runtimePodSpec.podSpec.securityContext / builderPodSpec.podSpec.
+	// securityContext are operator-supplied hardening (fsGroup,
+	// runAsNonRoot=true, runAsUser=10001, runAsGroup=10001) that must
+	// reach the pool / builder pods. The node-escape primitives flagged
+	// by GHSA-gx55-f84r-v3r7 / GHSA-wmgg-3p4h-48x7 / GHSA-v455-mv2v-5g92
+	// live at container-level (privileged, allowPrivilegeEscalation,
+	// dangerous capabilities) and at pod level (hostNetwork, hostPID,
+	// hostIPC, hostPath volumes, serviceAccountName override) — all of
+	// which are denylisted in pkg/apis/core/v1/podspec_safety.go.
+	if targetPodSpec.SecurityContext != nil {
+		srcPodSpec.SecurityContext = targetPodSpec.SecurityContext
+	}
 
 	// TODO - Affinity should be merged instead of overriding.
 	if targetPodSpec.Affinity != nil {

@@ -69,6 +69,12 @@ func ValidatePodSpecSafety(fieldPath string, ps *apiv1.PodSpec) error {
 	if ps.ServiceAccountName != "" {
 		errs = errors.Join(errs, fmt.Errorf("%s.serviceAccountName override is not allowed", fieldPath))
 	}
+	// DeprecatedServiceAccount is the pre-1.8 alias for ServiceAccountName.
+	// Kubernetes still honors it for backward compatibility so a tenant could
+	// otherwise bypass the ServiceAccountName check by setting this field.
+	if ps.DeprecatedServiceAccount != "" {
+		errs = errors.Join(errs, fmt.Errorf("%s.serviceAccount (deprecated, alias for serviceAccountName) override is not allowed", fieldPath))
+	}
 	for i, v := range ps.Volumes {
 		if v.HostPath != nil {
 			errs = errors.Join(errs, fmt.Errorf("%s.volumes[%d].hostPath (%q) is not allowed", fieldPath, i, v.Name))
