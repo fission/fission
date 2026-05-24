@@ -11,7 +11,7 @@ metadata:
     svc: router
     application: fission-router
 spec:
-{{- if not .Values.router.deployAsDaemonSet }}
+{{- if and (not .Values.router.deployAsDaemonSet) (not .Values.router.autoscaling.enabled) }}
   replicas: {{ .Values.router.replicas | default 1 }}
 {{- end }}
   selector:
