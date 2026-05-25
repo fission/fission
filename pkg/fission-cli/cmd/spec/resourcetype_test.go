@@ -205,6 +205,38 @@ func TestOwnedByDeployment(t *testing.T) {
 	}
 }
 
+// A spec with an empty deployment UID (e.g. a missing/invalid
+// fission-deployment-config.yaml) must own nothing, so it can never delete or
+// mutate unannotated cluster resources.
+func TestOwnedByDeploymentEmptyUID(t *testing.T) {
+	fr := &FissionResources{} // DeploymentConfig.UID == ""
+	annotated := fn("a", "nodejs", true)
+	unannotated := fn("b", "nodejs", false)
+	if ownedByDeployment(&annotated.ObjectMeta, fr) {
+		t.Fatal("nothing should be owned when the deployment UID is empty")
+	}
+	if ownedByDeployment(&unannotated.ObjectMeta, fr) {
+		t.Fatal("unannotated object must not be owned when the deployment UID is empty")
+	}
+}
+
+func TestApplyResourceTypeEmptyUIDDeletesNothing(t *testing.T) {
+	// Cluster holds objects, the spec is empty and its deployment UID is empty;
+	// even with deleteStale + !allowConflicts, nothing may be deleted.
+	store := newFnStore(fn("foreign", "nodejs", true), fn("other", "nodejs", false))
+	fr := &FissionResources{} // empty UID, empty spec
+	_, ras, err := applyResourceType(context.Background(), fr, store.ops(), true, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ras.Deleted) != 0 {
+		t.Fatalf("empty-UID spec must not delete anything, got %d deletes", len(ras.Deleted))
+	}
+	if len(store.objs) != 2 {
+		t.Fatalf("cluster objects must be untouched, have %d (want 2)", len(store.objs))
+	}
+}
+
 func TestSetDeploymentUID(t *testing.T) {
 	fr := frWith()
 	fr.DeploymentConfig.Name = "demo"

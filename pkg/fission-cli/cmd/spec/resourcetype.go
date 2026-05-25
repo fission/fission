@@ -66,9 +66,17 @@ func setDeploymentUID(o metav1.Object, fr *FissionResources) {
 	o.SetAnnotations(ann)
 }
 
-// ownedByDeployment reports whether o carries this spec's deployment UID.
+// ownedByDeployment reports whether o was created by this spec deployment, i.e.
+// it carries the deployment-UID annotation matching fr's. A spec with an empty
+// UID owns nothing, and an object without the annotation is never owned — this
+// guards `spec apply --delete` from ever touching unannotated cluster resources
+// (matching the pre-generics hasDeploymentConfig semantics).
 func ownedByDeployment(o metav1.Object, fr *FissionResources) bool {
-	return o.GetAnnotations()[FISSION_DEPLOYMENT_UID_KEY] == fr.DeploymentConfig.UID
+	if fr.DeploymentConfig.UID == "" {
+		return false
+	}
+	uid, ok := o.GetAnnotations()[FISSION_DEPLOYMENT_UID_KEY]
+	return ok && uid == fr.DeploymentConfig.UID
 }
 
 // applyResourceType reconciles one resource kind: it lists the cluster objects
