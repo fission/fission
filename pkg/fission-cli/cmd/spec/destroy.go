@@ -19,8 +19,8 @@ package spec
 import (
 	"context"
 	"fmt"
-	"strings"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sCache "k8s.io/client-go/tools/cache"
 
@@ -223,7 +223,7 @@ func destroyResources[T any, PT Object[T]](ctx context.Context, items []T, noun 
 	for i := range items {
 		o := PT(&items[i])
 		err := del(ctx, o.GetNamespace(), o.GetName())
-		if err != nil && strings.Contains(err.Error(), "not found") {
+		if apierrors.IsNotFound(err) {
 			console.Verbose(2, "could not delete %s: %s Namespace: %s", noun, o.GetName(), o.GetNamespace())
 			continue
 		} else if err != nil {

@@ -64,13 +64,16 @@ func TestPrintItems(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer r.Close()
+
 	orig := os.Stdout
+	t.Cleanup(func() { os.Stdout = orig })
 	os.Stdout = w
+
 	PrintItems([]string{"NAME", "READY"}, items, func(it row) []string {
 		return []string{it.name, it.ready}
 	})
 	w.Close()
-	os.Stdout = orig
 
 	var buf bytes.Buffer
 	if _, err := buf.ReadFrom(r); err != nil {
