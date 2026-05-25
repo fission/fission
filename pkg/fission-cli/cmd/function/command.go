@@ -65,7 +65,7 @@ func Commands() *cobra.Command {
 		Short:   "Get function metadata",
 	}, GetMeta, flag.FlagSet{
 		Required: []flag.Flag{flag.FnName},
-		Optional: []flag.Flag{flag.NamespaceFunction},
+		Optional: []flag.Flag{flag.NamespaceFunction, flag.Output},
 	})
 
 	updateCmd := wrapper.SubCommand(&cobra.Command{
@@ -108,7 +108,7 @@ func Commands() *cobra.Command {
 		Short:   "List functions",
 		Long:    "List all functions in a namespace if specified, else, list functions across all namespaces",
 	}, List, flag.FlagSet{
-		Optional: []flag.Flag{flag.NamespaceFunction, flag.AllNamespaces},
+		Optional: []flag.Flag{flag.NamespaceFunction, flag.AllNamespaces, flag.Output},
 	})
 
 	logsCmd := wrapper.SubCommand(&cobra.Command{

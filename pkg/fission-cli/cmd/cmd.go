@@ -43,6 +43,15 @@ func SetClientset(client Client) {
 	})
 }
 
+// ResetClientsetForTest clears the once-set default client so a unit test can
+// install its own (fake) client deterministically. It exists because
+// SetClientset is guarded by a sync.Once for the real CLI; tests must be able
+// to reset that. Intended for tests only.
+func ResetClientsetForTest() {
+	once = sync.Once{}
+	defaultClient = Client{}
+}
+
 func (c *CommandActioner) Client() Client {
 	return defaultClient
 }

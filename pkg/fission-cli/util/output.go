@@ -17,6 +17,7 @@ limitations under the License.
 package util
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -26,6 +27,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/duration"
+	"sigs.k8s.io/yaml"
 
 	"github.com/fission/fission/pkg/conditions"
 )
@@ -34,6 +36,47 @@ import (
 // written the condition (e.g. a freshly created resource, or a resource
 // whose controller does not emit that condition).
 const NoneValue = "<none>"
+
+// OutputFormat is the validated value of the -o/--output flag.
+type OutputFormat string
+
+const (
+	OutputTable OutputFormat = ""     // default human table
+	OutputWide  OutputFormat = "wide" // table + extra columns
+	OutputJSON  OutputFormat = "json"
+	OutputYAML  OutputFormat = "yaml"
+)
+
+// ParseOutputFormat validates the -o value (empty is allowed and means table).
+func ParseOutputFormat(s string) (OutputFormat, error) {
+	switch f := OutputFormat(strings.ToLower(s)); f {
+	case OutputTable, OutputWide, OutputJSON, OutputYAML:
+		return f, nil
+	default:
+		return "", fmt.Errorf("invalid output format %q: valid values are wide, json, yaml", s)
+	}
+}
+
+// encode marshals v as JSON or YAML. It is the structured half of the printer,
+// kept pure (no stdout) so it is straightforward to unit test.
+func encode(format OutputFormat, v any) ([]byte, error) {
+	switch format {
+	case OutputJSON:
+		return json.MarshalIndent(v, "", "  ")
+	case OutputYAML:
+		return yaml.Marshal(v)
+	default:
+		return nil, fmt.Errorf("encode called with non-structured format %q", format)
+	}
+}
+
+// AgeOf renders an object's age from its creation timestamp, kubectl-style.
+func AgeOf(t metav1.Time) string {
+	if t.IsZero() {
+		return NoneValue
+	}
+	return duration.HumanDuration(time.Since(t.Time))
+}
 
 // NewTabWriter returns a tabwriter configured with the Fission CLI's standard
 // list/get column formatting. It centralises the
@@ -65,6 +108,57 @@ func PrintItems[T any](headers []string, items []T, row func(T) []string) {
 		rows = append(rows, row(it))
 	}
 	PrintTable(headers, rows)
+}
+
+// PrintObjects renders a slice of items in the requested format. For json/yaml
+// it marshals items (a JSON array / YAML sequence). For table it uses
+// headers+row; for wide it appends wideExtra columns (e.g. AGE) after the base
+// columns. It is the single entry point for the list commands.
+func PrintObjects[T any](format OutputFormat, items []T, headers []string, row func(T) []string, wideExtra []string, wideRow func(T) []string) error {
+	switch format {
+	case OutputJSON, OutputYAML:
+		b, err := encode(format, items)
+		if err != nil {
+			return err
+		}
+		printBytes(b)
+		return nil
+	case OutputWide:
+		hdr := append(append([]string{}, headers...), wideExtra...)
+		PrintItems(hdr, items, func(t T) []string {
+			return append(row(t), wideRow(t)...)
+		})
+		return nil
+	default: // OutputTable
+		PrintItems(headers, items, row)
+		return nil
+	}
+}
+
+// PrintStructured prints v as json/yaml and returns true when the format is
+// structured; for table/wide it prints nothing and returns false so describe
+// commands fall back to their own human rendering.
+func PrintStructured(format OutputFormat, v any) (bool, error) {
+	switch format {
+	case OutputJSON, OutputYAML:
+		b, err := encode(format, v)
+		if err != nil {
+			return true, err
+		}
+		printBytes(b)
+		return true, nil
+	default:
+		return false, nil
+	}
+}
+
+// printBytes writes b to stdout ensuring exactly one trailing newline:
+// yaml.Marshal already appends one, json.MarshalIndent does not.
+func printBytes(b []byte) {
+	_, _ = os.Stdout.Write(b)
+	if n := len(b); n == 0 || b[n-1] != '\n' {
+		fmt.Fprintln(os.Stdout)
+	}
 }
 
 // ConditionStatus renders the Status of the named condition for a status

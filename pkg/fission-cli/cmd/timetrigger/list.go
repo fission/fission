@@ -47,13 +47,20 @@ func (opts *ListSubCommand) do(input cli.Input) (err error) {
 		return fmt.Errorf("list Time triggers: %w", err)
 	}
 
+	format, err := util.ParseOutputFormat(input.String(flagkey.Output))
+	if err != nil {
+		return err
+	}
+
 	headers := []string{"NAME", "CRON", "FUNCTION_NAME", "METHOD", "SUBPATH", "READY"}
-	util.PrintItems(headers, tts.Items, func(tt fv1.TimeTrigger) []string {
+	row := func(tt fv1.TimeTrigger) []string {
 		return []string{
 			tt.Name, tt.Spec.Cron, tt.Spec.Name, tt.Spec.Method, tt.Spec.Subpath,
 			util.ConditionStatus(tt.Status.Conditions, fv1.TimeTriggerConditionReady),
 		}
-	})
+	}
+	wideExtra := []string{"AGE"}
+	wideRow := func(tt fv1.TimeTrigger) []string { return []string{util.AgeOf(tt.CreationTimestamp)} }
 
-	return nil
+	return util.PrintObjects(format, tts.Items, headers, row, wideExtra, wideRow)
 }

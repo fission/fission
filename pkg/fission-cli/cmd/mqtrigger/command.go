@@ -63,7 +63,7 @@ func Commands() *cobra.Command {
 		Short:   "List message queue triggers",
 		Long:    "List all message queue triggers in a namespace if specified, else, list message queue triggers across all namespaces",
 	}, List, flag.FlagSet{
-		Optional: []flag.Flag{flag.NamespaceTrigger, flag.AllNamespaces},
+		Optional: []flag.Flag{flag.NamespaceTrigger, flag.AllNamespaces, flag.Output},
 	})
 
 	command := &cobra.Command{

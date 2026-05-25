@@ -72,7 +72,7 @@ func Commands() *cobra.Command {
 		Short: "List packages",
 		Long:  "List all packages in a namespace if specified, else, list packages across all namespaces",
 	}, List, flag.FlagSet{
-		Optional: []flag.Flag{flag.PkgOrphan, flag.PkgStatus, flag.NamespacePackage, flag.AllNamespaces},
+		Optional: []flag.Flag{flag.PkgOrphan, flag.PkgStatus, flag.NamespacePackage, flag.AllNamespaces, flag.Output},
 	})
 
 	infoCmd := wrapper.SubCommand(&cobra.Command{
@@ -80,7 +80,7 @@ func Commands() *cobra.Command {
 		Short: "Show package information",
 	}, Info, flag.FlagSet{
 		Required: []flag.Flag{flag.PkgName},
-		Optional: []flag.Flag{flag.NamespacePackage},
+		Optional: []flag.Flag{flag.NamespacePackage, flag.Output},
 	})
 
 	rebuildCmd := wrapper.SubCommand(&cobra.Command{

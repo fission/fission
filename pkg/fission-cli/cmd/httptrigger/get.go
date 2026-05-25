@@ -52,16 +52,27 @@ func (opts *GetSubCommand) run(input cli.Input) (err error) {
 		return fmt.Errorf("error getting http trigger: %w", err)
 	}
 
-	printHtSummary([]fv1.HTTPTrigger{*ht})
+	format, err := util.ParseOutputFormat(input.String(flagkey.Output))
+	if err != nil {
+		return err
+	}
+	if handled, err := util.PrintStructured(format, ht); err != nil || handled {
+		return err
+	}
+
+	// describe renders the plain table (no -o wide AGE column), consistent with
+	// the other describe commands; json/yaml are handled above.
+	if err := printHtSummary(util.OutputTable, []fv1.HTTPTrigger{*ht}); err != nil {
+		return err
+	}
 	util.PrintConditions(ht.Status.Conditions)
 
 	return nil
 }
 
-func printHtSummary(triggers []fv1.HTTPTrigger) {
+func printHtSummary(format util.OutputFormat, triggers []fv1.HTTPTrigger) error {
 	headers := []string{"NAME", "METHOD", "URL", "FUNCTION(s)", "INGRESS", "HOST", "PATH", "TLS", "ANNOTATIONS", "READY", "NAMESPACE"}
-	rows := make([][]string, 0, len(triggers))
-	for _, trigger := range triggers {
+	row := func(trigger fv1.HTTPTrigger) []string {
 		function := ""
 		if trigger.Spec.FunctionReference.Type == fv1.FunctionReferenceTypeFunctionName {
 			function = trigger.Spec.FunctionReference.Name
@@ -93,12 +104,14 @@ func printHtSummary(triggers []fv1.HTTPTrigger) {
 		if len(trigger.Spec.Methods) > 0 {
 			methods = trigger.Spec.Methods
 		}
-		rows = append(rows, []string{
+		return []string{
 			trigger.Name, fmt.Sprintf("%v", methods), trigger.Spec.RelativeURL, function,
 			fmt.Sprintf("%v", trigger.Spec.CreateIngress), host, path, fmt.Sprintf("%v", trigger.Spec.IngressConfig.TLS), ann,
 			util.ConditionStatus(trigger.Status.Conditions, fv1.HTTPTriggerConditionReady),
 			trigger.Namespace,
-		})
+		}
 	}
-	util.PrintTable(headers, rows)
+	wideExtra := []string{"AGE"}
+	wideRow := func(trigger fv1.HTTPTrigger) []string { return []string{util.AgeOf(trigger.CreationTimestamp)} }
+	return util.PrintObjects(format, triggers, headers, row, wideExtra, wideRow)
 }

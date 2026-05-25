@@ -46,6 +46,14 @@ func (opts *GetMetaSubCommand) do(input cli.Input) error {
 		return fmt.Errorf("error getting function: %w", err)
 	}
 
+	format, err := util.ParseOutputFormat(input.String(flagkey.Output))
+	if err != nil {
+		return err
+	}
+	if handled, err := util.PrintStructured(format, fn); err != nil || handled {
+		return err
+	}
+
 	fmt.Printf("Name: %v\n", fn.Name)
 	fmt.Printf("Environment: %v\n", fn.Spec.Environment.Name)
 	if len(fn.Labels) != 0 {

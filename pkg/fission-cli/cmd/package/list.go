@@ -66,13 +66,18 @@ func (opts *ListSubCommand) run(input cli.Input) (err error) {
 		return err
 	}
 
+	format, err := util.ParseOutputFormat(input.String(flagkey.Output))
+	if err != nil {
+		return err
+	}
+
 	// sort the package list by lastUpdatedTimestamp
 	sort.Slice(pkgList.Items, func(i, j int) bool {
 		return pkgList.Items[i].Status.LastUpdateTimestamp.After(pkgList.Items[j].Status.LastUpdateTimestamp.Time)
 	})
 
-	headers := []string{"NAME", "BUILD_STATUS", "ENV", "LASTUPDATEDAT", "READY", "NAMESPACE"}
-	rows := make([][]string, 0, len(pkgList.Items))
+	// apply --orphan / --status filters, then print the surviving packages.
+	filtered := make([]fv1.Package, 0, len(pkgList.Items))
 	for _, pkg := range pkgList.Items {
 		// TODO improve list speed when --orphan
 		if opts.listOrphans {
@@ -87,14 +92,20 @@ func (opts *ListSubCommand) run(input cli.Input) (err error) {
 		if len(opts.status) > 0 && opts.status != string(pkg.Status.BuildStatus) {
 			continue
 		}
-		rows = append(rows, []string{
+		filtered = append(filtered, pkg)
+	}
+
+	headers := []string{"NAME", "BUILD_STATUS", "ENV", "LASTUPDATEDAT", "READY", "NAMESPACE"}
+	row := func(pkg fv1.Package) []string {
+		return []string{
 			pkg.Name, string(pkg.Status.BuildStatus), pkg.Spec.Environment.Name,
 			pkg.Status.LastUpdateTimestamp.Format(time.RFC822),
 			util.ConditionStatus(pkg.Status.Conditions, fv1.PackageConditionReady),
 			pkg.Namespace,
-		})
+		}
 	}
-	util.PrintTable(headers, rows)
+	wideExtra := []string{"AGE"}
+	wideRow := func(pkg fv1.Package) []string { return []string{util.AgeOf(pkg.CreationTimestamp)} }
 
-	return nil
+	return util.PrintObjects(format, filtered, headers, row, wideExtra, wideRow)
 }

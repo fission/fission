@@ -59,15 +59,22 @@ func (opts *ListSubCommand) run(input cli.Input) (err error) {
 		return fmt.Errorf("error listing message queue triggers: %w", err)
 	}
 
+	format, err := util.ParseOutputFormat(input.String(flagkey.Output))
+	if err != nil {
+		return err
+	}
+
 	headers := []string{"NAME", "FUNCTION_NAME", "MESSAGE_QUEUE_TYPE", "TOPIC", "RESPONSE_TOPIC", "ERROR_TOPIC", "MAX_RETRIES", "PUB_MSG_CONTENT_TYPE", "READY", "NAMESPACE"}
-	util.PrintItems(headers, mqts.Items, func(mqt fv1.MessageQueueTrigger) []string {
+	row := func(mqt fv1.MessageQueueTrigger) []string {
 		return []string{
 			mqt.Name, mqt.Spec.FunctionReference.Name, string(mqt.Spec.MessageQueueType), mqt.Spec.Topic, mqt.Spec.ResponseTopic, mqt.Spec.ErrorTopic,
 			fmt.Sprintf("%v", mqt.Spec.MaxRetries), mqt.Spec.ContentType,
 			util.ConditionStatus(mqt.Status.Conditions, fv1.MessageQueueTriggerConditionReady),
 			mqt.Namespace,
 		}
-	})
+	}
+	wideExtra := []string{"AGE"}
+	wideRow := func(mqt fv1.MessageQueueTrigger) []string { return []string{util.AgeOf(mqt.CreationTimestamp)} }
 
-	return nil
+	return util.PrintObjects(format, mqts.Items, headers, row, wideExtra, wideRow)
 }
