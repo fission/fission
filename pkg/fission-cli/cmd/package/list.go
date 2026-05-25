@@ -18,9 +18,7 @@ package _package
 
 import (
 	"fmt"
-	"os"
 	"sort"
-	"text/tabwriter"
 	"time"
 
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -29,6 +27,7 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
+	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type ListSubCommand struct {
@@ -54,20 +53,15 @@ func (opts *ListSubCommand) complete(input cli.Input) (err error) {
 	// option for the user to list all orphan packages (not referenced by any function)
 	opts.listOrphans = input.Bool(flagkey.PkgOrphan)
 	opts.status = input.String(flagkey.PkgStatus)
-	_, opts.pkgNamespace, err = opts.GetResourceNamespace(input, flagkey.NamespacePackage)
+	opts.pkgNamespace, err = opts.ResolveNamespace(input, flagkey.NamespacePackage)
 	if err != nil {
-		return fv1.AggregateValidationErrors("Environment", err)
+		return fv1.AggregateValidationErrors("Package", err)
 	}
 	return nil
 }
 
 func (opts *ListSubCommand) run(input cli.Input) (err error) {
-
-	if input.Bool(flagkey.AllNamespaces) {
-		opts.pkgNamespace = v1.NamespaceAll
-	}
 	pkgList, err := opts.Client().FissionClientSet.CoreV1().Packages(opts.pkgNamespace).List(input.Context(), v1.ListOptions{})
-
 	if err != nil {
 		return err
 	}
@@ -77,11 +71,9 @@ func (opts *ListSubCommand) run(input cli.Input) (err error) {
 		return pkgList.Items[i].Status.LastUpdateTimestamp.After(pkgList.Items[j].Status.LastUpdateTimestamp.Time)
 	})
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
-	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\n", "NAME", "BUILD_STATUS", "ENV", "LASTUPDATEDAT", "NAMESPACE")
-
+	headers := []string{"NAME", "BUILD_STATUS", "ENV", "LASTUPDATEDAT", "READY", "NAMESPACE"}
+	rows := make([][]string, 0, len(pkgList.Items))
 	for _, pkg := range pkgList.Items {
-		show := true
 		// TODO improve list speed when --orphan
 		if opts.listOrphans {
 			fnList, err := GetFunctionsByPackage(input.Context(), opts.Client(), pkg.Name, pkg.Namespace)
@@ -89,18 +81,20 @@ func (opts *ListSubCommand) run(input cli.Input) (err error) {
 				return fmt.Errorf("get functions sharing package %v: %w", pkg.Name, err)
 			}
 			if len(fnList) > 0 {
-				show = false
+				continue
 			}
 		}
 		if len(opts.status) > 0 && opts.status != string(pkg.Status.BuildStatus) {
-			show = false
+			continue
 		}
-		if show {
-			fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\n", pkg.Name, pkg.Status.BuildStatus, pkg.Spec.Environment.Name, pkg.Status.LastUpdateTimestamp.Format(time.RFC822), pkg.Namespace)
-		}
+		rows = append(rows, []string{
+			pkg.Name, string(pkg.Status.BuildStatus), pkg.Spec.Environment.Name,
+			pkg.Status.LastUpdateTimestamp.Format(time.RFC822),
+			util.ConditionStatus(pkg.Status.Conditions, fv1.PackageConditionReady),
+			pkg.Namespace,
+		})
 	}
-
-	w.Flush()
+	util.PrintTable(headers, rows)
 
 	return nil
 }

@@ -18,14 +18,13 @@ package environment
 
 import (
 	"fmt"
-	"os"
-	"text/tabwriter"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
+	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type ListSubCommand struct {
@@ -37,14 +36,9 @@ func List(input cli.Input) error {
 }
 
 func (opts *ListSubCommand) do(input cli.Input) (err error) {
-
-	_, currentNS, err := opts.GetResourceNamespace(input, flagkey.NamespaceEnvironment)
+	currentNS, err := opts.ResolveNamespace(input, flagkey.NamespaceEnvironment)
 	if err != nil {
-		return fmt.Errorf("error creating environment: %w", err)
-	}
-
-	if input.Bool(flagkey.AllNamespaces) {
-		currentNS = metav1.NamespaceAll
+		return fmt.Errorf("error listing environments: %w", err)
 	}
 
 	response, err := opts.Client().FissionClientSet.CoreV1().Environments(currentNS).List(input.Context(), metav1.ListOptions{})
@@ -52,19 +46,21 @@ func (opts *ListSubCommand) do(input cli.Input) (err error) {
 		return fmt.Errorf("error listing environments: %w", err)
 	}
 
-	envs := response.Items
-
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
-	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "IMAGE", "BUILDER_IMAGE", "POOLSIZE", "MINCPU", "MAXCPU", "MINMEMORY", "MAXMEMORY", "EXTNET", "GRACETIME", "NAMESPACE")
-	for _, env := range envs {
-		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
-			env.Name, env.Spec.Runtime.Image, env.Spec.Builder.Image, env.Spec.Poolsize,
-			env.Spec.Resources.Requests.Cpu(), env.Spec.Resources.Limits.Cpu(),
-			env.Spec.Resources.Requests.Memory(), env.Spec.Resources.Limits.Memory(),
-			env.Spec.AllowAccessToExternalNetwork, env.Spec.TerminationGracePeriod, env.Namespace,
-		)
+	// Environment.Status.Conditions is intentionally not surfaced here: the
+	// buildermgr never writes Environment status (a write would bump
+	// ResourceVersion and break in-flight source-archive builds), so a READY
+	// column would always be empty. See pkg/apis/core/v1/conditions.go.
+	headers := []string{"NAME", "IMAGE", "BUILDER_IMAGE", "POOLSIZE", "MINCPU", "MAXCPU", "MINMEMORY", "MAXMEMORY", "EXTNET", "GRACETIME", "NAMESPACE"}
+	rows := make([][]string, 0, len(response.Items))
+	for _, env := range response.Items {
+		rows = append(rows, []string{
+			env.Name, env.Spec.Runtime.Image, env.Spec.Builder.Image, fmt.Sprintf("%v", env.Spec.Poolsize),
+			env.Spec.Resources.Requests.Cpu().String(), env.Spec.Resources.Limits.Cpu().String(),
+			env.Spec.Resources.Requests.Memory().String(), env.Spec.Resources.Limits.Memory().String(),
+			fmt.Sprintf("%v", env.Spec.AllowAccessToExternalNetwork), fmt.Sprintf("%v", env.Spec.TerminationGracePeriod), env.Namespace,
+		})
 	}
-	w.Flush()
+	util.PrintTable(headers, rows)
 
 	return nil
 }

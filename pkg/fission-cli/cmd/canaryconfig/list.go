@@ -18,14 +18,14 @@ package canaryconfig
 
 import (
 	"fmt"
-	"os"
-	"text/tabwriter"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
+	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type ListSubCommand struct {
@@ -46,7 +46,7 @@ func (opts *ListSubCommand) do(input cli.Input) error {
 }
 
 func (opts *ListSubCommand) complete(input cli.Input) (err error) {
-	_, opts.namespace, err = opts.GetResourceNamespace(input, flagkey.NamespaceCanary)
+	opts.namespace, err = opts.ResolveNamespace(input, flagkey.NamespaceCanary)
 	if err != nil {
 		return fmt.Errorf("error in listing canary config: %w", err)
 	}
@@ -54,24 +54,22 @@ func (opts *ListSubCommand) complete(input cli.Input) (err error) {
 }
 
 func (opts *ListSubCommand) run(input cli.Input) (err error) {
-
-	if input.Bool(flagkey.AllNamespaces) {
-		opts.namespace = metav1.NamespaceAll
-	}
 	canaryCfgs, err := opts.Client().FissionClientSet.CoreV1().CanaryConfigs(opts.namespace).List(input.Context(), metav1.ListOptions{})
-
 	if err != nil {
 		return fmt.Errorf("error listing canary config: %w", err)
 	}
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
-	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "TRIGGER", "FUNCTION-N", "FUNCTION-N-1", "WEIGHT-INCREMENT", "INTERVAL", "FAILURE-THRESHOLD", "FAILURE-TYPE", "STATUS")
+	headers := []string{"NAME", "TRIGGER", "FUNCTION-N", "FUNCTION-N-1", "WEIGHT-INCREMENT", "INTERVAL", "FAILURE-THRESHOLD", "FAILURE-TYPE", "STATUS", "READY"}
+	rows := make([][]string, 0, len(canaryCfgs.Items))
 	for _, canaryCfg := range canaryCfgs.Items {
-		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
-			canaryCfg.Name, canaryCfg.Spec.Trigger, canaryCfg.Spec.NewFunction, canaryCfg.Spec.OldFunction, canaryCfg.Spec.WeightIncrement, canaryCfg.Spec.WeightIncrementDuration,
-			canaryCfg.Spec.FailureThreshold, canaryCfg.Spec.FailureType, canaryCfg.Status.Status)
+		rows = append(rows, []string{
+			canaryCfg.Name, canaryCfg.Spec.Trigger, canaryCfg.Spec.NewFunction, canaryCfg.Spec.OldFunction,
+			fmt.Sprintf("%v", canaryCfg.Spec.WeightIncrement), fmt.Sprintf("%v", canaryCfg.Spec.WeightIncrementDuration),
+			fmt.Sprintf("%v", canaryCfg.Spec.FailureThreshold), string(canaryCfg.Spec.FailureType), canaryCfg.Status.Status,
+			util.ConditionStatus(canaryCfg.Status.Conditions, fv1.CanaryConfigConditionReady),
+		})
 	}
+	util.PrintTable(headers, rows)
 
-	w.Flush()
 	return nil
 }

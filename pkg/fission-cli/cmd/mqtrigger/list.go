@@ -18,14 +18,14 @@ package mqtrigger
 
 import (
 	"fmt"
-	"os"
-	"text/tabwriter"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
+	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type ListSubCommand struct {
@@ -46,33 +46,30 @@ func (opts *ListSubCommand) do(input cli.Input) error {
 }
 
 func (opts *ListSubCommand) complete(input cli.Input) (err error) {
-	_, opts.namespace, err = opts.GetResourceNamespace(input, flagkey.NamespaceTrigger)
+	opts.namespace, err = opts.ResolveNamespace(input, flagkey.NamespaceTrigger)
 	if err != nil {
-		return fmt.Errorf("error in deleting function : %w", err)
+		return fmt.Errorf("error in listing message queue triggers: %w", err)
 	}
 	return nil
 }
 
 func (opts *ListSubCommand) run(input cli.Input) (err error) {
-
-	if input.Bool(flagkey.AllNamespaces) {
-		opts.namespace = metav1.NamespaceAll
-	}
 	mqts, err := opts.Client().FissionClientSet.CoreV1().MessageQueueTriggers(opts.namespace).List(input.Context(), metav1.ListOptions{})
-
 	if err != nil {
 		return fmt.Errorf("error listing message queue triggers: %w", err)
 	}
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
-
-	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
-		"NAME", "FUNCTION_NAME", "MESSAGE_QUEUE_TYPE", "TOPIC", "RESPONSE_TOPIC", "ERROR_TOPIC", "MAX_RETRIES", "PUB_MSG_CONTENT_TYPE", "NAMESPACE")
+	headers := []string{"NAME", "FUNCTION_NAME", "MESSAGE_QUEUE_TYPE", "TOPIC", "RESPONSE_TOPIC", "ERROR_TOPIC", "MAX_RETRIES", "PUB_MSG_CONTENT_TYPE", "READY", "NAMESPACE"}
+	rows := make([][]string, 0, len(mqts.Items))
 	for _, mqt := range mqts.Items {
-		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
-			mqt.Name, mqt.Spec.FunctionReference.Name, mqt.Spec.MessageQueueType, mqt.Spec.Topic, mqt.Spec.ResponseTopic, mqt.Spec.ErrorTopic, mqt.Spec.MaxRetries, mqt.Spec.ContentType, mqt.Namespace)
+		rows = append(rows, []string{
+			mqt.Name, mqt.Spec.FunctionReference.Name, string(mqt.Spec.MessageQueueType), mqt.Spec.Topic, mqt.Spec.ResponseTopic, mqt.Spec.ErrorTopic,
+			fmt.Sprintf("%v", mqt.Spec.MaxRetries), mqt.Spec.ContentType,
+			util.ConditionStatus(mqt.Status.Conditions, fv1.MessageQueueTriggerConditionReady),
+			mqt.Namespace,
+		})
 	}
-	w.Flush()
+	util.PrintTable(headers, rows)
 
 	return nil
 }

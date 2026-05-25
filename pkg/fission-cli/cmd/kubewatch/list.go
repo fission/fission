@@ -18,8 +18,6 @@ package kubewatch
 
 import (
 	"fmt"
-	"os"
-	"text/tabwriter"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -27,6 +25,7 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
+	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type ListSubCommand struct {
@@ -47,7 +46,7 @@ func (opts *ListSubCommand) do(input cli.Input) error {
 }
 
 func (opts *ListSubCommand) complete(input cli.Input) (err error) {
-	_, opts.namespace, err = opts.GetResourceNamespace(input, flagkey.NamespaceTrigger)
+	opts.namespace, err = opts.ResolveNamespace(input, flagkey.NamespaceTrigger)
 	if err != nil {
 		return fmt.Errorf("error listing kubewatchers: %w", err)
 	}
@@ -55,25 +54,20 @@ func (opts *ListSubCommand) complete(input cli.Input) (err error) {
 }
 
 func (opts *ListSubCommand) run(input cli.Input) (err error) {
-	var ws *v1.KubernetesWatchTriggerList
-	if input.Bool(flagkey.AllNamespaces) {
-		opts.namespace = metav1.NamespaceAll
-	}
-	ws, err = opts.Client().FissionClientSet.CoreV1().KubernetesWatchTriggers(opts.namespace).List(input.Context(), metav1.ListOptions{})
-
+	ws, err := opts.Client().FissionClientSet.CoreV1().KubernetesWatchTriggers(opts.namespace).List(input.Context(), metav1.ListOptions{})
 	if err != nil {
 		return fmt.Errorf("error listing kubewatchers: %w", err)
 	}
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
-
-	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\n",
-		"NAME", "NAMESPACE", "OBJTYPE", "LABELS", "FUNCTION_NAME")
+	headers := []string{"NAME", "NAMESPACE", "OBJTYPE", "LABELS", "FUNCTION_NAME", "READY"}
+	rows := make([][]string, 0, len(ws.Items))
 	for _, wa := range ws.Items {
-		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\n",
-			wa.Name, wa.Spec.Namespace, wa.Spec.Type, wa.Spec.LabelSelector, wa.Spec.FunctionReference.Name)
+		rows = append(rows, []string{
+			wa.Name, wa.Spec.Namespace, wa.Spec.Type, fmt.Sprintf("%v", wa.Spec.LabelSelector), wa.Spec.FunctionReference.Name,
+			util.ConditionStatus(wa.Status.Conditions, v1.KubernetesWatchTriggerConditionReady),
+		})
 	}
-	w.Flush()
+	util.PrintTable(headers, rows)
 
 	return nil
 }
