@@ -73,9 +73,20 @@ func TestSpecApply_DryRun(t *testing.T) {
 		require.NotContains(t, out, "would be created",
 			"after a real apply, a dry-run should not report creates")
 		require.Contains(t, out, "(dry run - no changes made)")
+
+		// 3) Edit the function code: the package would be updated, and that change
+		// must cascade to a would-be update of the referencing function (the
+		// function embeds the package ResourceVersion). The cluster stays unchanged.
+		require.NoError(t, os.WriteFile(filepath.Join(workdir, "hello.js"),
+			[]byte("module.exports = async function(){ return {status:200, body:'changed'} }\n"), 0o644))
+		out = ns.CLICaptureStdout(t, ctx, "spec", "apply", "--dry-run")
+		require.Contains(t, out, "package would be updated")
+		require.Contains(t, out, "function would be updated",
+			"a package change must cascade to a would-be function update in dry-run")
 	})
 
-	// And the real apply did create the function.
-	_, err = fc.Functions(ns.Name).Get(ctx, fnName, metav1.GetOptions{})
+	// And the real apply did create the function; the cascade dry-run changed nothing.
+	gotFn, err := fc.Functions(ns.Name).Get(ctx, fnName, metav1.GetOptions{})
 	require.NoError(t, err, "real apply should have created the function")
+	require.NotEmpty(t, gotFn.Spec.Package.PackageRef.Name, "function should reference its package")
 }

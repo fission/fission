@@ -46,6 +46,14 @@ type resourceOps[T any, PT Object[T]] struct {
 	delete func(ctx context.Context, namespace, name string) error
 }
 
+// dryRunResourceVersion is the synthetic ResourceVersion recorded for a would-be
+// update under --dry-run. A real update bumps the object's ResourceVersion, and a
+// Function embeds the ResourceVersion of the Package it references; recording a
+// sentinel here means such dependents detect and report the would-be change too,
+// instead of appearing as no-ops because they still carry the old RV. It is never
+// written to the cluster — dry-run performs no create/update/delete calls.
+const dryRunResourceVersion = "dry-run-would-update"
+
 // setDeploymentUID stamps the deployment name/UID annotations so future applies
 // can recognise the objects this spec owns.
 func setDeploymentUID(o metav1.Object, fr *FissionResources) {
@@ -81,10 +89,11 @@ func ownedByDeployment(o metav1.Object, fr *FissionResources) bool {
 //
 // When dryRun is set, the same list/diff is performed read-only: the
 // create/update/delete client calls (and the per-deletion log line) are skipped,
-// but ras and the metadata map are still populated exactly as a real run would
-// report — using the desired object's metadata for would-be-creates and the
-// existing object's for would-be-updates — so the caller's summary and
-// cross-reference wiring stay correct without touching the cluster.
+// but ras and the metadata map are still populated as a real run would report —
+// the desired object's metadata for would-be-creates, and the existing object's
+// metadata with a sentinel ResourceVersion (dryRunResourceVersion) for would-be-
+// updates so dependents that embed it detect the change — so the caller's summary
+// and cross-reference wiring stay correct without touching the cluster.
 func applyResourceType[T any, PT Object[T]](
 	ctx context.Context,
 	fr *FissionResources,
@@ -129,16 +138,21 @@ func applyResourceType[T any, PT Object[T]](
 			// Already up to date; record existing metadata for cross-refs.
 			metadata[name] = *ops.meta(existing)
 		case found:
-			// would-be update: validate first (runs in dry-run too), record the
-			// existing metadata (carries the real ResourceVersion) for cross-refs,
-			// and only mutate when not a dry run.
+			// would-be update: validate first (runs in dry-run too), then either
+			// perform the update or, in dry-run, synthesize the metadata a real
+			// update would return (existing meta with a bumped ResourceVersion) so
+			// dependent resources still detect the would-be change.
 			if ops.validate != nil {
 				if err := ops.validate(ctx, ptr); err != nil {
 					return nil, nil, err
 				}
 			}
-			newMeta := ops.meta(existing)
-			if !dryRun {
+			var newMeta *metav1.ObjectMeta
+			if dryRun {
+				m := *ops.meta(existing)
+				m.ResourceVersion = dryRunResourceVersion
+				newMeta = &m
+			} else {
 				newMeta, err = ops.update(ctx, existing, ptr)
 				if err != nil {
 					return nil, nil, err

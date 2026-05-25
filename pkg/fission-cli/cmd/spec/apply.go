@@ -455,11 +455,10 @@ func applyResources(input cli.Input, fclient cmd.Client, specDir string, fr *Fis
 	// of the package. This ensures that various caches can invalidate themselves
 	// when the package changes.
 	//
-	// Under --dry-run the package isn't actually updated, so pkgMeta carries the
-	// package's *current* ResourceVersion. A real apply that updates a package
-	// would bump its RV and thus also update the referencing functions; a dry-run
-	// can therefore under-report those cascaded function updates. This is inherent
-	// to a no-cluster-write preview (the post-update RV can't be known in advance).
+	// Under --dry-run pkgMeta carries the package's current ResourceVersion for
+	// no-op/created packages, and the dryRunResourceVersion sentinel for packages
+	// that would be updated — so a would-be package update correctly cascades into
+	// a would-be update of the functions that reference it, matching a real apply.
 	for i, f := range fr.Functions {
 		if f.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypeContainer {
 			continue

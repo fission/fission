@@ -266,7 +266,7 @@ func TestApplyResourceTypeDryRun(t *testing.T) {
 	t.Run("update is previewed but not performed", func(t *testing.T) {
 		store := newFnStore(fn("a", "nodejs", true))
 		fr := frWith(fn("a", "python", false)) // env differs -> would update
-		_, ras, err := applyResourceType(ctx, fr, store.ops(), false, false, true)
+		meta, ras, err := applyResourceType(ctx, fr, store.ops(), false, false, true)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -275,6 +275,11 @@ func TestApplyResourceTypeDryRun(t *testing.T) {
 		}
 		if got := store.objs["default/a"].Spec.Environment.Name; got != "nodejs" {
 			t.Fatalf("dry run must not mutate the stored object, env=%q", got)
+		}
+		// The cross-ref metadata must carry the sentinel RV so dependents (a
+		// function's package reference) detect the would-be change.
+		if got := meta["default/a"].ResourceVersion; got != dryRunResourceVersion {
+			t.Fatalf("would-be update metadata must carry the dry-run RV sentinel, got %q", got)
 		}
 	})
 
