@@ -4,7 +4,7 @@ go 1.26.3
 
 require (
 	dario.cat/mergo v1.0.2
-	github.com/IBM/sarama v1.48.2
+	github.com/IBM/sarama v1.49.0
 	github.com/bep/debounce v1.2.1
 	github.com/dchest/uniuri v1.2.0
 	github.com/dustin/go-humanize v1.0.1
