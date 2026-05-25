@@ -51,11 +51,11 @@ LICENSE_FILES = $(shell find . \
 .PHONY: license license-check
 # Add SPDX license headers to any in-scope file missing one.
 license:
-	go tool addlicense -c "$(LICENSE_HOLDER)" -f $(LICENSE_TMPL) $(LICENSE_FILES)
+	@go tool addlicense -c "$(LICENSE_HOLDER)" -f $(LICENSE_TMPL) $(LICENSE_FILES)
 
 # Fail if any in-scope file is missing a license header.
 license-check:
-	go tool addlicense -check -c "$(LICENSE_HOLDER)" -f $(LICENSE_TMPL) $(LICENSE_FILES)
+	@go tool addlicense -check -c "$(LICENSE_HOLDER)" -f $(LICENSE_TMPL) $(LICENSE_FILES)
 	@grep -q "SPDX-License-Identifier: Apache-2.0" Makefile || \
 		{ echo "Makefile is missing its SPDX header"; exit 1; }
 

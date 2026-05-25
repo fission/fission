@@ -14,6 +14,8 @@ Build / lint / test (run from repo root):
 - `make build-fission-cli` — build the `fission` CLI via goreleaser (snapshot, single target).
   `make install-fission-cli` copies it to `/usr/local/bin/fission`.
 - `make code-checks` — `golangci-lint run` (config in `.golangci.yaml`; goimports local prefix `github.com/fission/fission`).
+- `make license` — add the SPDX header (`SPDX-FileCopyrightText` + `SPDX-License-Identifier: Apache-2.0`) to any in-scope source file (`.go`/`.sh`/`.py`/`Dockerfile*`) missing one.
+  `make license-check` is the CI gate (runs in `lint.yaml`); run it before pushing.
 - `make test-run` — runs `hack/runtests.sh`: pulls `setup-envtest` Kubebuilder assets for k8s 1.30.x, then `go test -race -coverprofile=coverage.txt ./...`.
   Requires `KUBEBUILDER_ASSETS` (the script sets it).
 - `make check` — full local gate: `test-run` + `build-fission-cli` + `clean`.
@@ -86,3 +88,6 @@ The CLI (`cmd/fission-cli` + `pkg/fission-cli/`) talks to Kubernetes directly th
 - `skaffold-deploy` depends on `skaffold-prebuild`, which builds linux/amd64 binaries with goreleaser into `dist/` and copies Dockerfiles in.
   If a build looks stale, `make clean` and rerun.
 - E2E tests on macOS require GNU coreutils on `PATH` — BSD versions silently behave differently.
+- New source files need an SPDX license header or the `lint` CI job fails (`make license-check`).
+  Run `make license` to add it (template in `hack/license-header.tmpl`); the legacy 15-line Apache block is gone — do not reintroduce it.
+  Generated code gets its header from `hack/boilerplate.go.txt`, so that file (not the output) is the source of truth for generated headers.
