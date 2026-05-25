@@ -42,7 +42,7 @@ func (opts *GetSubCommand) do(input cli.Input) error {
 }
 
 func (opts *GetSubCommand) run(input cli.Input) (err error) {
-	_, namespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceFunction)
+	_, namespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceTrigger)
 	if err != nil {
 		return fmt.Errorf("error in getting HTTP trigger: %w", err)
 	}
