@@ -69,7 +69,7 @@ func Commands() *cobra.Command {
 
 	waitCmd := wrapper.SubCommand(&cobra.Command{
 		Use:   "wait",
-		Short: "Wait for a HTTP trigger to reach a status condition",
+		Short: "Wait for an HTTP trigger to reach a status condition",
 	}, Wait, flag.FlagSet{
 		Required: []flag.Flag{flag.HtName, flag.WaitFor},
 		Optional: []flag.Flag{flag.NamespaceTrigger, flag.WaitTimeout},

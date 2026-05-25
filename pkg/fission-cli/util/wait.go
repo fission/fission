@@ -6,6 +6,7 @@ package util
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -46,10 +47,13 @@ func ParseForCondition(s string) (condType string, want metav1.ConditionStatus, 
 
 // WaitForCondition polls get until the named condition reaches want, or ctx is
 // done. A not-found result keeps polling (the resource may appear within the
-// deadline); any other get error is returned immediately. On timeout it reports
-// the last observed status. interval is the poll period.
+// deadline); a get error caused by ctx ending is folded into the wait result so
+// the last-seen status is still reported; any other get error is returned
+// immediately. interval is the poll period.
 func WaitForCondition(ctx context.Context, get func(context.Context) ([]metav1.Condition, error), condType string, want metav1.ConditionStatus, interval time.Duration) error {
-	lastSeen := "<none>"
+	lastSeen := NoneValue
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
 	for {
 		conds, err := get(ctx)
 		switch {
@@ -62,16 +66,30 @@ func WaitForCondition(ctx context.Context, get func(context.Context) ([]metav1.C
 			}
 		case IsNotFound(err):
 			lastSeen = "NotFound"
+		case ctx.Err() != nil:
+			// The wait deadline/cancellation interrupted the in-flight get;
+			// fall through to the ctx.Done() branch so we report the outcome
+			// (and last-seen status) consistently rather than the raw error.
 		default:
 			return err
 		}
 
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("timed out waiting for condition %q=%q (last seen %q): %w", condType, want, lastSeen, ctx.Err())
-		case <-time.After(interval):
+			return waitTimeoutError(ctx, condType, want, lastSeen)
+		case <-ticker.C:
 		}
 	}
+}
+
+// waitTimeoutError formats the terminal wait error, distinguishing a deadline
+// from an explicit cancellation so the message is accurate.
+func waitTimeoutError(ctx context.Context, condType string, want metav1.ConditionStatus, lastSeen string) error {
+	verb := "timed out"
+	if errors.Is(ctx.Err(), context.Canceled) {
+		verb = "canceled while"
+	}
+	return fmt.Errorf("%s waiting for condition %q=%q (last seen %q): %w", verb, condType, want, lastSeen, ctx.Err())
 }
 
 // RunWait is the shared glue for every resource's `wait` subcommand: it parses
