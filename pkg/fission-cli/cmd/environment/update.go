@@ -55,7 +55,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) (err error) {
 
 	_, currentContextNS, err := opts.GetResourceNamespace(input, flagkey.NamespaceEnvironment)
 	if err != nil {
-		return fmt.Errorf("error creating environment: %w", err)
+		return fmt.Errorf("error updating environment: %w", err)
 	}
 	env, err := opts.Client().FissionClientSet.CoreV1().Environments(currentContextNS).Get(input.Context(), input.String(flagkey.EnvName), metav1.GetOptions{})
 	if err != nil {

@@ -60,16 +60,14 @@ func (opts *ListSubCommand) run(input cli.Input) (err error) {
 	}
 
 	headers := []string{"NAME", "FUNCTION_NAME", "MESSAGE_QUEUE_TYPE", "TOPIC", "RESPONSE_TOPIC", "ERROR_TOPIC", "MAX_RETRIES", "PUB_MSG_CONTENT_TYPE", "READY", "NAMESPACE"}
-	rows := make([][]string, 0, len(mqts.Items))
-	for _, mqt := range mqts.Items {
-		rows = append(rows, []string{
+	util.PrintItems(headers, mqts.Items, func(mqt fv1.MessageQueueTrigger) []string {
+		return []string{
 			mqt.Name, mqt.Spec.FunctionReference.Name, string(mqt.Spec.MessageQueueType), mqt.Spec.Topic, mqt.Spec.ResponseTopic, mqt.Spec.ErrorTopic,
 			fmt.Sprintf("%v", mqt.Spec.MaxRetries), mqt.Spec.ContentType,
 			util.ConditionStatus(mqt.Status.Conditions, fv1.MessageQueueTriggerConditionReady),
 			mqt.Namespace,
-		})
-	}
-	util.PrintTable(headers, rows)
+		}
+	})
 
 	return nil
 }

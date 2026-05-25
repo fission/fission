@@ -56,6 +56,17 @@ func PrintTable(headers []string, rows [][]string) {
 	w.Flush()
 }
 
+// PrintItems renders a slice of typed items as a table: row maps each item to
+// its cells, in the same order as headers. It is sugar over PrintTable that
+// removes the build-a-[][]string loop repeated across the list commands.
+func PrintItems[T any](headers []string, items []T, row func(T) []string) {
+	rows := make([][]string, 0, len(items))
+	for _, it := range items {
+		rows = append(rows, row(it))
+	}
+	PrintTable(headers, rows)
+}
+
 // ConditionStatus renders the Status of the named condition for a status
 // column: "True", "False" or "Unknown", or NoneValue when the controller has
 // not written that condition yet.

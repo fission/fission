@@ -49,8 +49,7 @@ func (opts *ListSubCommand) do(input cli.Input) error {
 	}
 
 	headers := []string{"NAME", "ENV", "EXECUTORTYPE", "MINSCALE", "MAXSCALE", "MINCPU", "MAXCPU", "MINMEMORY", "MAXMEMORY", "SECRETS", "CONFIGMAPS", "READY", "NAMESPACE"}
-	rows := make([][]string, 0, len(fns.Items))
-	for _, f := range fns.Items {
+	util.PrintItems(headers, fns.Items, func(f fv1.Function) []string {
 		var secretsList, configMapList []string
 		for _, secret := range f.Spec.Secrets {
 			secretsList = append(secretsList, secret.Name)
@@ -58,8 +57,7 @@ func (opts *ListSubCommand) do(input cli.Input) error {
 		for _, configMap := range f.Spec.ConfigMaps {
 			configMapList = append(configMapList, configMap.Name)
 		}
-
-		rows = append(rows, []string{
+		return []string{
 			f.Name, f.Spec.Environment.Name,
 			string(f.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType),
 			fmt.Sprintf("%v", f.Spec.InvokeStrategy.ExecutionStrategy.MinScale),
@@ -72,9 +70,8 @@ func (opts *ListSubCommand) do(input cli.Input) error {
 			strings.Join(configMapList, ","),
 			util.ConditionStatus(f.Status.Conditions, fv1.FunctionConditionReady),
 			f.Namespace,
-		})
-	}
-	util.PrintTable(headers, rows)
+		}
+	})
 
 	return nil
 }

@@ -41,7 +41,7 @@ func (opts *DeleteSubCommand) do(input cli.Input) (err error) {
 
 	_, currentContextNS, err := opts.GetResourceNamespace(input, flagkey.NamespaceEnvironment)
 	if err != nil {
-		return fmt.Errorf("error creating environment: %w", err)
+		return fmt.Errorf("error deleting environment: %w", err)
 	}
 	console.Verbose(2, "Searching for resource in  %s Namespace", currentContextNS)
 	envName := input.String(flagkey.EnvName)

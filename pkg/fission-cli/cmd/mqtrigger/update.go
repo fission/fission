@@ -52,7 +52,7 @@ func (opts *UpdateSubCommand) do(input cli.Input) error {
 func (opts *UpdateSubCommand) complete(input cli.Input) (err error) {
 	_, namespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceTrigger)
 	if err != nil {
-		return fmt.Errorf("error in deleting function : %w", err)
+		return fmt.Errorf("error in updating message queue trigger : %w", err)
 	}
 
 	mqt, err := opts.Client().FissionClientSet.CoreV1().MessageQueueTriggers(namespace).Get(input.Context(), input.String(flagkey.MqtName), metav1.GetOptions{})

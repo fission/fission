@@ -37,13 +37,12 @@ Branch: `cli-refactor-dedup` (off `main` after PR #3397 merged).
 - [~] `ShowX` → PrintTable: intentionally skipped to preserve exact `spec list` output (per-kind title/spacing quirks); `ExistsInSpecs`/`SpecExists` left (low value)
 - [~] `ApplySubCommand.run()` watch loop split: deferred (low value, behavior-sensitive)
 
-### Part 2 — CRUD command dedup + bug fixes
-- [ ] Fix copy-paste wrong error strings (`"error in deleting function"` etc.) across create/update/delete
-- [ ] Bug fix: `httptrigger/delete.go` not-found check uses shadowed `err` instead of `errs`
-- [ ] `cmd.PrintItems[T]` helper; migrate list-command row loops
-- [ ] `cmd.DeleteResource` helper for simple deletes
-- [ ] Normalize `do/complete/run` outliers (light touch only)
-- [ ] Tests for new helpers (dummy driver + fake clientset)
+### Part 2 — CRUD command dedup + bug fixes — DONE
+- [x] Fix copy-paste wrong error strings: `"error in deleting function"` → operation-correct in httptrigger/timetrigger/mqtrigger create+update+delete; `"error creating environment"` → correct op in environment delete/update/get/pods; `AggregateValidationErrors("Environment")` → `"Package"` in package commands (function delete left — message was already correct)
+- [x] Bug fix: `httptrigger/delete.go` now ignores not-found *per delete* (was checking shadowed `err`, and `IsNotFound` can't unwrap an `errors.Join`)
+- [x] `util.PrintItems[T]` helper (sugar over PrintTable); migrated function/environment/timetrigger/mqtrigger/kubewatch/canaryconfig list row loops + test
+- [~] `cmd.DeleteResource`: skipped — only `function` delete is truly simple; others have dependency checks, a helper would obscure them
+- [~] `do/complete/run` normalization: skipped — low value, behavior-sensitive
 
 ### Part 3 — cobra / cliwrapper / flag cleanup
 - [ ] Remove dead code: `Global*` methods, `WrapperChain`, `Parse`

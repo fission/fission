@@ -56,7 +56,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) (err error) {
 	opts.pkgName = input.String(flagkey.PkgName)
 	_, opts.pkgNamespace, err = opts.GetResourceNamespace(input, flagkey.NamespacePackage)
 	if err != nil {
-		return fv1.AggregateValidationErrors("Environment", err)
+		return fv1.AggregateValidationErrors("Package", err)
 	}
 	opts.force = input.Bool(flagkey.PkgForce)
 	return nil

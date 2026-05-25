@@ -76,7 +76,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 
 	userProvidedNS, fnNamespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceFunction)
 	if err != nil {
-		return fmt.Errorf("error in deleting function : %w", err)
+		return fmt.Errorf("error in creating HTTP trigger : %w", err)
 	}
 
 	triggerUrl := input.String(flagkey.HtUrl)

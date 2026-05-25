@@ -48,7 +48,7 @@ func (opts *DeleteSubCommand) complete(input cli.Input) (err error) {
 
 	_, namespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceTrigger)
 	if err != nil {
-		return fmt.Errorf("error in deleting function : %w", err)
+		return fmt.Errorf("error in deleting message queue trigger : %w", err)
 	}
 
 	opts.metadata = &metav1.ObjectMeta{
