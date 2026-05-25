@@ -108,7 +108,7 @@ func Commands() *cobra.Command {
 		Short:   "List functions",
 		Long:    "List all functions in a namespace if specified, else, list functions across all namespaces",
 	}, List, flag.FlagSet{
-		Optional: []flag.Flag{flag.NamespaceFunction, flag.AllNamespaces},
+		Optional: []flag.Flag{flag.NamespaceFunction, flag.AllNamespaces, flag.Output},
 	})
 
 	logsCmd := wrapper.SubCommand(&cobra.Command{

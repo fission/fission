@@ -48,8 +48,13 @@ func (opts *ListSubCommand) do(input cli.Input) error {
 		return fmt.Errorf("error listing functions: %w", err)
 	}
 
+	format, err := util.ParseOutputFormat(input.String(flagkey.Output))
+	if err != nil {
+		return err
+	}
+
 	headers := []string{"NAME", "ENV", "EXECUTORTYPE", "MINSCALE", "MAXSCALE", "MINCPU", "MAXCPU", "MINMEMORY", "MAXMEMORY", "SECRETS", "CONFIGMAPS", "READY", "NAMESPACE"}
-	util.PrintItems(headers, fns.Items, func(f fv1.Function) []string {
+	row := func(f fv1.Function) []string {
 		var secretsList, configMapList []string
 		for _, secret := range f.Spec.Secrets {
 			secretsList = append(secretsList, secret.Name)
@@ -71,7 +76,9 @@ func (opts *ListSubCommand) do(input cli.Input) error {
 			util.ConditionStatus(f.Status.Conditions, fv1.FunctionConditionReady),
 			f.Namespace,
 		}
-	})
+	}
+	wideExtra := []string{"AGE"}
+	wideRow := func(f fv1.Function) []string { return []string{util.AgeOf(f.CreationTimestamp)} }
 
-	return nil
+	return util.PrintObjects(format, fns.Items, headers, row, wideExtra, wideRow)
 }
