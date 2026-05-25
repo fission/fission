@@ -74,12 +74,20 @@ func ownedByDeployment(o metav1.Object, fr *FissionResources) bool {
 // are removed. It returns each desired object's metadata keyed by namespace/name
 // so callers can wire up cross-references such as a function's package
 // ResourceVersion.
+//
+// When dryRun is set, the same list/diff is performed read-only: the
+// create/update/delete client calls (and the per-deletion log line) are skipped,
+// but ras and the metadata map are still populated exactly as a real run would
+// report — using the desired object's metadata for would-be-creates and the
+// existing object's for would-be-updates — so the caller's summary and
+// cross-reference wiring stay correct without touching the cluster.
 func applyResourceType[T any, PT Object[T]](
 	ctx context.Context,
 	fr *FissionResources,
 	ops resourceOps[T, PT],
 	deleteStale bool,
 	allowConflicts bool,
+	dryRun bool,
 ) (map[string]metav1.ObjectMeta, *ResourceApplyStatus, error) {
 
 	clusterObjs, err := ops.list(ctx)
@@ -117,16 +125,26 @@ func applyResourceType[T any, PT Object[T]](
 			// Already up to date; record existing metadata for cross-refs.
 			metadata[name] = *ops.meta(existing)
 		case found:
-			newMeta, err := ops.update(ctx, existing, ptr)
-			if err != nil {
-				return nil, nil, err
+			// would-be update: record the existing metadata (carries the real
+			// ResourceVersion) for cross-refs; only mutate when not a dry run.
+			newMeta := ops.meta(existing)
+			if !dryRun {
+				newMeta, err = ops.update(ctx, existing, ptr)
+				if err != nil {
+					return nil, nil, err
+				}
 			}
 			ras.Updated = append(ras.Updated, newMeta)
 			metadata[name] = *newMeta
 		default:
-			newMeta, err := ops.create(ctx, ptr)
-			if err != nil {
-				return nil, nil, err
+			// would-be create: record the desired metadata (RV empty); only
+			// mutate when not a dry run.
+			newMeta := ops.meta(ptr)
+			if !dryRun {
+				newMeta, err = ops.create(ctx, ptr)
+				if err != nil {
+					return nil, nil, err
+				}
 			}
 			ras.Created = append(ras.Created, newMeta)
 			metadata[name] = *newMeta
@@ -139,11 +157,13 @@ func applyResourceType[T any, PT Object[T]](
 			if desired[name] {
 				continue
 			}
-			if err := ops.delete(ctx, obj.GetNamespace(), obj.GetName()); err != nil {
-				return nil, nil, err
+			if !dryRun {
+				if err := ops.delete(ctx, obj.GetNamespace(), obj.GetName()); err != nil {
+					return nil, nil, err
+				}
+				fmt.Printf("Deleted %v %v\n", obj.GetObjectKind().GroupVersionKind().Kind, name)
 			}
 			ras.Deleted = append(ras.Deleted, ops.meta(obj))
-			fmt.Printf("Deleted %v %v\n", obj.GetObjectKind().GroupVersionKind().Kind, name)
 		}
 	}
 

@@ -115,8 +115,11 @@ func (opts *ApplySubCommand) run(input cli.Input) error {
 	specIgnore := util.GetSpecIgnore(input)
 	applyCommitLabel := input.Bool(flagkey.SpecApplyCommitLabel)
 	deleteResources := input.Bool(flagkey.SpecDelete)
-	watchResources := input.Bool(flagkey.SpecWatch)
-	waitForBuild := input.Bool(flagkey.SpecWait)
+	dryRun := input.Bool(flagkey.SpecApplyDryRun)
+	// --watch/--wait drive package-build polling, which is meaningless when
+	// nothing is applied, so they are inert under --dry-run.
+	watchResources := input.Bool(flagkey.SpecWatch) && !dryRun
+	waitForBuild := input.Bool(flagkey.SpecWait) && !dryRun
 	validateSpecs := util.GetValidationFlag(input)
 
 	var watcher *fsnotify.Watcher
@@ -181,11 +184,11 @@ func (opts *ApplySubCommand) run(input cli.Input) error {
 		}
 
 		// make changes to the cluster based on the specs
-		pkgMetas, as, err := applyResources(input, opts.Client(), specDir, fr, deleteResources, input.Bool(flagkey.SpecAllowConflicts))
+		pkgMetas, as, err := applyResources(input, opts.Client(), specDir, fr, deleteResources, input.Bool(flagkey.SpecAllowConflicts), dryRun)
 		if err != nil {
 			return fmt.Errorf("error applying specs: %w", err)
 		}
-		printApplyStatus(as)
+		printApplyStatus(as, dryRun)
 
 		if watchResources || waitForBuild {
 			// watch package builds
@@ -291,28 +294,36 @@ func waitForFileWatcherToSettleDown(watcher *fsnotify.Watcher) error {
 
 // printApplyStatus prints a summary of what changed on the
 // cluster as the result of a spec apply operation.
-func printApplyStatus(applyStatus map[string]ResourceApplyStatus) {
+// printApplyStatus prints the per-kind summary of an apply. When dryRun is set
+// the verbs switch to "would be …" and a "(dry run - no changes made)" footer
+// is appended, so the preview is unambiguous.
+func printApplyStatus(applyStatus map[string]ResourceApplyStatus, dryRun bool) {
+	created, updated, deleted := "created", "updated", "deleted"
+	if dryRun {
+		created, updated, deleted = "would be created", "would be updated", "would be deleted"
+	}
+
 	changed := false
 	for typ, ras := range applyStatus {
-		n := len(ras.Created)
-		if n > 0 {
+		if n := len(ras.Created); n > 0 {
 			changed = true
-			fmt.Printf("%v %v created: %v\n", n, pluralize(n, typ), strings.Join(metadataNames(ras.Created), ", "))
+			fmt.Printf("%v %v %v: %v\n", n, pluralize(n, typ), created, strings.Join(metadataNames(ras.Created), ", "))
 		}
-		n = len(ras.Updated)
-		if n > 0 {
+		if n := len(ras.Updated); n > 0 {
 			changed = true
-			fmt.Printf("%v %v updated: %v\n", n, pluralize(n, typ), strings.Join(metadataNames(ras.Updated), ", "))
+			fmt.Printf("%v %v %v: %v\n", n, pluralize(n, typ), updated, strings.Join(metadataNames(ras.Updated), ", "))
 		}
-		n = len(ras.Deleted)
-		if n > 0 {
+		if n := len(ras.Deleted); n > 0 {
 			changed = true
-			fmt.Printf("%v %v deleted: %v\n", n, pluralize(n, typ), strings.Join(metadataNames(ras.Deleted), ", "))
+			fmt.Printf("%v %v %v: %v\n", n, pluralize(n, typ), deleted, strings.Join(metadataNames(ras.Deleted), ", "))
 		}
 	}
 
 	if !changed {
 		fmt.Println("Everything up to date.")
+	}
+	if dryRun {
+		fmt.Println("(dry run - no changes made)")
 	}
 }
 
@@ -334,7 +345,13 @@ func pluralize(num int, word string) string {
 }
 
 // applyArchives figures out the set of archives that need to be uploaded, and uploads them.
-func applyArchives(input cli.Input, fclient cmd.Client, specDir string, fr *FissionResources) error {
+// Under dryRun it is a no-op: uploading is a real mutation, and the resolved
+// archive URLs are only needed for an actual create/update, so the spec keeps
+// its archive:// references untouched.
+func applyArchives(input cli.Input, fclient cmd.Client, specDir string, fr *FissionResources, dryRun bool) error {
+	if dryRun {
+		return nil
+	}
 
 	// archive:// URL -> archive map.
 	archiveFiles := make(map[string]fv1.Archive)
@@ -406,24 +423,25 @@ func applyArchives(input cli.Input, fclient cmd.Client, specDir string, fr *Fiss
 	return nil
 }
 
-// applyResources applies the given set of fission resources.
-func applyResources(input cli.Input, fclient cmd.Client, specDir string, fr *FissionResources, delete bool, specAllowConflicts bool) (map[string]metav1.ObjectMeta, map[string]ResourceApplyStatus, error) {
+// applyResources applies the given set of fission resources. When dryRun is set
+// it performs the read-only diff only, making no changes to the cluster.
+func applyResources(input cli.Input, fclient cmd.Client, specDir string, fr *FissionResources, delete bool, specAllowConflicts bool, dryRun bool) (map[string]metav1.ObjectMeta, map[string]ResourceApplyStatus, error) {
 
 	applyStatus := make(map[string]ResourceApplyStatus)
 
 	// upload archives that need to be uploaded. Changes archive references in fr.Packages.
-	err := applyArchives(input, fclient, specDir, fr)
+	err := applyArchives(input, fclient, specDir, fr, dryRun)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	_, ras, err := applyEnvironments(input.Context(), fclient, fr, delete, specAllowConflicts)
+	_, ras, err := applyEnvironments(input.Context(), fclient, fr, delete, specAllowConflicts, dryRun)
 	if err != nil {
 		return nil, nil, fmt.Errorf("environment apply failed: %w", err)
 	}
 	applyStatus["environment"] = *ras
 
-	pkgMeta, ras, err := applyPackages(input.Context(), fclient, fr, delete, specAllowConflicts)
+	pkgMeta, ras, err := applyPackages(input.Context(), fclient, fr, delete, specAllowConflicts, dryRun)
 	if err != nil {
 		return nil, nil, fmt.Errorf("package apply failed: %w", err)
 	}
@@ -452,31 +470,31 @@ func applyResources(input cli.Input, fclient cmd.Client, specDir string, fr *Fis
 		fr.Functions[i].Spec.Package.PackageRef.ResourceVersion = m.ResourceVersion
 	}
 
-	_, ras, err = applyFunctions(input.Context(), fclient, fr, delete, specAllowConflicts)
+	_, ras, err = applyFunctions(input.Context(), fclient, fr, delete, specAllowConflicts, dryRun)
 	if err != nil {
 		return nil, nil, fmt.Errorf("function apply failed: %w", err)
 	}
 	applyStatus["function"] = *ras
 
-	_, ras, err = applyHTTPTriggers(input.Context(), fclient, fr, delete, specAllowConflicts)
+	_, ras, err = applyHTTPTriggers(input.Context(), fclient, fr, delete, specAllowConflicts, dryRun)
 	if err != nil {
 		return nil, nil, fmt.Errorf("HTTPTrigger apply failed: %w", err)
 	}
 	applyStatus["HTTPTrigger"] = *ras
 
-	_, ras, err = applyKubernetesWatchTriggers(input.Context(), fclient, fr, delete, specAllowConflicts)
+	_, ras, err = applyKubernetesWatchTriggers(input.Context(), fclient, fr, delete, specAllowConflicts, dryRun)
 	if err != nil {
 		return nil, nil, fmt.Errorf("kubernetesWatchTrigger apply failed: %w", err)
 	}
 	applyStatus["KubernetesWatchTrigger"] = *ras
 
-	_, ras, err = applyTimeTriggers(input.Context(), fclient, fr, delete, specAllowConflicts)
+	_, ras, err = applyTimeTriggers(input.Context(), fclient, fr, delete, specAllowConflicts, dryRun)
 	if err != nil {
 		return nil, nil, fmt.Errorf("timeTrigger apply failed: %w", err)
 	}
 	applyStatus["TimeTrigger"] = *ras
 
-	_, ras, err = applyMessageQueueTriggers(input.Context(), fclient, fr, delete, specAllowConflicts)
+	_, ras, err = applyMessageQueueTriggers(input.Context(), fclient, fr, delete, specAllowConflicts, dryRun)
 	if err != nil {
 		return nil, nil, fmt.Errorf("messageQueueTrigger apply failed: %w", err)
 	}
@@ -607,7 +625,7 @@ func waitForPackageBuild(ctx context.Context, fclient cmd.Client, pkg *fv1.Packa
 	}
 }
 
-func applyPackages(ctx context.Context, fclient cmd.Client, fr *FissionResources, delete bool, specAllowConflicts bool) (map[string]metav1.ObjectMeta, *ResourceApplyStatus, error) {
+func applyPackages(ctx context.Context, fclient cmd.Client, fr *FissionResources, delete bool, specAllowConflicts bool, dryRun bool) (map[string]metav1.ObjectMeta, *ResourceApplyStatus, error) {
 	packages := func(ns string) typedv1.PackageInterface {
 		return fclient.FissionClientSet.CoreV1().Packages(ns)
 	}
@@ -663,10 +681,10 @@ func applyPackages(ctx context.Context, fclient cmd.Client, fr *FissionResources
 		delete: func(ctx context.Context, ns, name string) error {
 			return packages(ns).Delete(ctx, name, metav1.DeleteOptions{})
 		},
-	}, delete, specAllowConflicts)
+	}, delete, specAllowConflicts, dryRun)
 }
 
-func applyFunctions(ctx context.Context, fclient cmd.Client, fr *FissionResources, delete bool, specAllowConflicts bool) (map[string]metav1.ObjectMeta, *ResourceApplyStatus, error) {
+func applyFunctions(ctx context.Context, fclient cmd.Client, fr *FissionResources, delete bool, specAllowConflicts bool, dryRun bool) (map[string]metav1.ObjectMeta, *ResourceApplyStatus, error) {
 	functions := func(ns string) typedv1.FunctionInterface {
 		return fclient.FissionClientSet.CoreV1().Functions(ns)
 	}
@@ -701,10 +719,10 @@ func applyFunctions(ctx context.Context, fclient cmd.Client, fr *FissionResource
 		delete: func(ctx context.Context, ns, name string) error {
 			return functions(ns).Delete(ctx, name, metav1.DeleteOptions{})
 		},
-	}, delete, specAllowConflicts)
+	}, delete, specAllowConflicts, dryRun)
 }
 
-func applyEnvironments(ctx context.Context, fclient cmd.Client, fr *FissionResources, delete bool, specAllowConflicts bool) (map[string]metav1.ObjectMeta, *ResourceApplyStatus, error) {
+func applyEnvironments(ctx context.Context, fclient cmd.Client, fr *FissionResources, delete bool, specAllowConflicts bool, dryRun bool) (map[string]metav1.ObjectMeta, *ResourceApplyStatus, error) {
 	environments := func(ns string) typedv1.EnvironmentInterface {
 		return fclient.FissionClientSet.CoreV1().Environments(ns)
 	}
@@ -739,10 +757,10 @@ func applyEnvironments(ctx context.Context, fclient cmd.Client, fr *FissionResou
 		delete: func(ctx context.Context, ns, name string) error {
 			return environments(ns).Delete(ctx, name, metav1.DeleteOptions{})
 		},
-	}, delete, specAllowConflicts)
+	}, delete, specAllowConflicts, dryRun)
 }
 
-func applyHTTPTriggers(ctx context.Context, fclient cmd.Client, fr *FissionResources, delete bool, specAllowConflicts bool) (map[string]metav1.ObjectMeta, *ResourceApplyStatus, error) {
+func applyHTTPTriggers(ctx context.Context, fclient cmd.Client, fr *FissionResources, delete bool, specAllowConflicts bool, dryRun bool) (map[string]metav1.ObjectMeta, *ResourceApplyStatus, error) {
 	triggers := func(ns string) typedv1.HTTPTriggerInterface {
 		return fclient.FissionClientSet.CoreV1().HTTPTriggers(ns)
 	}
@@ -783,10 +801,10 @@ func applyHTTPTriggers(ctx context.Context, fclient cmd.Client, fr *FissionResou
 		delete: func(ctx context.Context, ns, name string) error {
 			return triggers(ns).Delete(ctx, name, metav1.DeleteOptions{})
 		},
-	}, delete, specAllowConflicts)
+	}, delete, specAllowConflicts, dryRun)
 }
 
-func applyKubernetesWatchTriggers(ctx context.Context, fclient cmd.Client, fr *FissionResources, delete bool, specAllowConflicts bool) (map[string]metav1.ObjectMeta, *ResourceApplyStatus, error) {
+func applyKubernetesWatchTriggers(ctx context.Context, fclient cmd.Client, fr *FissionResources, delete bool, specAllowConflicts bool, dryRun bool) (map[string]metav1.ObjectMeta, *ResourceApplyStatus, error) {
 	watches := func(ns string) typedv1.KubernetesWatchTriggerInterface {
 		return fclient.FissionClientSet.CoreV1().KubernetesWatchTriggers(ns)
 	}
@@ -821,10 +839,10 @@ func applyKubernetesWatchTriggers(ctx context.Context, fclient cmd.Client, fr *F
 		delete: func(ctx context.Context, ns, name string) error {
 			return watches(ns).Delete(ctx, name, metav1.DeleteOptions{})
 		},
-	}, delete, specAllowConflicts)
+	}, delete, specAllowConflicts, dryRun)
 }
 
-func applyTimeTriggers(ctx context.Context, fclient cmd.Client, fr *FissionResources, delete bool, specAllowConflicts bool) (map[string]metav1.ObjectMeta, *ResourceApplyStatus, error) {
+func applyTimeTriggers(ctx context.Context, fclient cmd.Client, fr *FissionResources, delete bool, specAllowConflicts bool, dryRun bool) (map[string]metav1.ObjectMeta, *ResourceApplyStatus, error) {
 	triggers := func(ns string) typedv1.TimeTriggerInterface {
 		return fclient.FissionClientSet.CoreV1().TimeTriggers(ns)
 	}
@@ -859,10 +877,10 @@ func applyTimeTriggers(ctx context.Context, fclient cmd.Client, fr *FissionResou
 		delete: func(ctx context.Context, ns, name string) error {
 			return triggers(ns).Delete(ctx, name, metav1.DeleteOptions{})
 		},
-	}, delete, specAllowConflicts)
+	}, delete, specAllowConflicts, dryRun)
 }
 
-func applyMessageQueueTriggers(ctx context.Context, fclient cmd.Client, fr *FissionResources, delete bool, specAllowConflicts bool) (map[string]metav1.ObjectMeta, *ResourceApplyStatus, error) {
+func applyMessageQueueTriggers(ctx context.Context, fclient cmd.Client, fr *FissionResources, delete bool, specAllowConflicts bool, dryRun bool) (map[string]metav1.ObjectMeta, *ResourceApplyStatus, error) {
 	triggers := func(ns string) typedv1.MessageQueueTriggerInterface {
 		return fclient.FissionClientSet.CoreV1().MessageQueueTriggers(ns)
 	}
@@ -897,7 +915,7 @@ func applyMessageQueueTriggers(ctx context.Context, fclient cmd.Client, fr *Fiss
 		delete: func(ctx context.Context, ns, name string) error {
 			return triggers(ns).Delete(ctx, name, metav1.DeleteOptions{})
 		},
-	}, delete, specAllowConflicts)
+	}, delete, specAllowConflicts, dryRun)
 }
 
 func isObjectMetaEqual(existingObj, newObj metav1.ObjectMeta) bool {

@@ -75,37 +75,37 @@ func forceDeleteResources(ctx context.Context, fclient cmd.Client, fr *FissionRe
 
 	var err error
 
-	_, _, err = applyHTTPTriggers(ctx, fclient, fr, true, false)
+	_, _, err = applyHTTPTriggers(ctx, fclient, fr, true, false, false)
 	if err != nil {
 		return fmt.Errorf("HTTPTrigger delete failed: %w", err)
 	}
 
-	_, _, err = applyKubernetesWatchTriggers(ctx, fclient, fr, true, false)
+	_, _, err = applyKubernetesWatchTriggers(ctx, fclient, fr, true, false, false)
 	if err != nil {
 		return fmt.Errorf("kubernetesWatchTrigger delete failed: %w", err)
 	}
 
-	_, _, err = applyTimeTriggers(ctx, fclient, fr, true, false)
+	_, _, err = applyTimeTriggers(ctx, fclient, fr, true, false, false)
 	if err != nil {
 		return fmt.Errorf("timeTrigger delete failed: %w", err)
 	}
 
-	_, _, err = applyMessageQueueTriggers(ctx, fclient, fr, true, false)
+	_, _, err = applyMessageQueueTriggers(ctx, fclient, fr, true, false, false)
 	if err != nil {
 		return fmt.Errorf("messageQueueTrigger delete failed: %w", err)
 	}
 
-	_, _, err = applyFunctions(ctx, fclient, fr, true, false)
+	_, _, err = applyFunctions(ctx, fclient, fr, true, false, false)
 	if err != nil {
 		return fmt.Errorf("function delete failed: %w", err)
 	}
 
-	_, _, err = applyPackages(ctx, fclient, fr, true, false)
+	_, _, err = applyPackages(ctx, fclient, fr, true, false, false)
 	if err != nil {
 		return fmt.Errorf("package delete failed: %w", err)
 	}
 
-	_, _, err = applyEnvironments(ctx, fclient, fr, true, false)
+	_, _, err = applyEnvironments(ctx, fclient, fr, true, false, false)
 	if err != nil {
 		return fmt.Errorf("environment delete failed: %w", err)
 	}

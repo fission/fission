@@ -159,6 +159,7 @@ const (
 	SpecWatch            = "watch"
 	SpecDelete           = "delete"
 	SpecDry              = "dry"
+	SpecApplyDryRun      = "dry-run"
 	SpecValidate         = "validation"
 	SpecIgnore           = "specignore"
 	SpecApplyCommitLabel = "commitlabel"
