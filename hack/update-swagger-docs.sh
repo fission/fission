@@ -18,7 +18,8 @@ kube::swagger::gen_types_swagger_doc() {
 
   echo "Generating swagger type docs for ${group_version} at ${gv_dir}"
 
-  # sed 's/YEAR/2017/' hack/boilerplate.txt > "$TMPFILE"
+  cat "${SCRIPT_ROOT}/hack/boilerplate.go.txt" > "$TMPFILE"
+  echo >> "$TMPFILE"
   echo "package ${group_version##*/}" >> "$TMPFILE"
   cat >> "$TMPFILE" <<EOF
 // This file contains a collection of methods that can be used from go-restful to
