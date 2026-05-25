@@ -18,6 +18,7 @@ package util
 
 import (
 	"bytes"
+	"os"
 	"strings"
 	"testing"
 
@@ -48,6 +49,41 @@ func TestConditionStatus(t *testing.T) {
 				t.Errorf("ConditionStatus() = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestPrintItems(t *testing.T) {
+	// PrintItems writes to os.Stdout; capture it to assert the row mapping is
+	// applied to every item in order.
+	type row struct {
+		name, ready string
+	}
+	items := []row{{"a", "True"}, {"b", NoneValue}}
+
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+
+	orig := os.Stdout
+	t.Cleanup(func() { os.Stdout = orig })
+	os.Stdout = w
+
+	PrintItems([]string{"NAME", "READY"}, items, func(it row) []string {
+		return []string{it.name, it.ready}
+	})
+	w.Close()
+
+	var buf bytes.Buffer
+	if _, err := buf.ReadFrom(r); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	for _, want := range []string{"NAME", "READY", "a", "True", "b", NoneValue} {
+		if !strings.Contains(out, want) {
+			t.Errorf("PrintItems output missing %q; got:\n%s", want, out)
+		}
 	}
 }
 

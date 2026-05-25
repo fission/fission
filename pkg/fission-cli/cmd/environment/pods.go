@@ -43,7 +43,7 @@ func (opts *ListPodsSubCommand) do(input cli.Input) (err error) {
 
 	_, currentNS, err := opts.GetResourceNamespace(input, flagkey.NamespaceEnvironment)
 	if err != nil {
-		return fmt.Errorf("error creating environment: %w", err)
+		return fmt.Errorf("error getting environment pods: %w", err)
 	}
 
 	_, err = opts.Client().FissionClientSet.CoreV1().Environments(currentNS).Get(input.Context(), input.String(flagkey.EnvName), metav1.GetOptions{})

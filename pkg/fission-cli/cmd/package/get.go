@@ -64,7 +64,7 @@ func (opts *GetSubCommand) complete(input cli.Input) (err error) {
 	opts.name = input.String(flagkey.PkgName)
 	_, opts.namespace, err = opts.GetResourceNamespace(input, flagkey.NamespacePackage)
 	if err != nil {
-		return fv1.AggregateValidationErrors("Environment", err)
+		return fv1.AggregateValidationErrors("Package", err)
 	}
 	opts.output = input.String(flagkey.PkgOutput)
 	return nil

@@ -49,7 +49,7 @@ func (opts *RebuildSubCommand) complete(input cli.Input) (err error) {
 	opts.name = input.String(flagkey.PkgName)
 	_, opts.namespace, err = opts.GetResourceNamespace(input, flagkey.NamespacePackage)
 	if err != nil {
-		return fv1.AggregateValidationErrors("Environment", err)
+		return fv1.AggregateValidationErrors("Package", err)
 	}
 	return nil
 }

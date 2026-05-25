@@ -60,16 +60,14 @@ func (opts *ListSubCommand) run(input cli.Input) (err error) {
 	}
 
 	headers := []string{"NAME", "TRIGGER", "FUNCTION-N", "FUNCTION-N-1", "WEIGHT-INCREMENT", "INTERVAL", "FAILURE-THRESHOLD", "FAILURE-TYPE", "STATUS", "READY"}
-	rows := make([][]string, 0, len(canaryCfgs.Items))
-	for _, canaryCfg := range canaryCfgs.Items {
-		rows = append(rows, []string{
+	util.PrintItems(headers, canaryCfgs.Items, func(canaryCfg fv1.CanaryConfig) []string {
+		return []string{
 			canaryCfg.Name, canaryCfg.Spec.Trigger, canaryCfg.Spec.NewFunction, canaryCfg.Spec.OldFunction,
 			fmt.Sprintf("%v", canaryCfg.Spec.WeightIncrement), fmt.Sprintf("%v", canaryCfg.Spec.WeightIncrementDuration),
 			fmt.Sprintf("%v", canaryCfg.Spec.FailureThreshold), string(canaryCfg.Spec.FailureType), canaryCfg.Status.Status,
 			util.ConditionStatus(canaryCfg.Status.Conditions, fv1.CanaryConfigConditionReady),
-		})
-	}
-	util.PrintTable(headers, rows)
+		}
+	})
 
 	return nil
 }

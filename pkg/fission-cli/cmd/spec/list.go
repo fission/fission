@@ -84,7 +84,7 @@ func (opts *ListSubCommand) getResource(input cli.Input, namespace string, deplo
 	if err != nil {
 		return fmt.Errorf("error getting Functions from %s namespaces: %w", printNS, err)
 	}
-	specfns := getAppliedFunctions(allfn, deployID)
+	specfns := filterByDeployID[fv1.Function](allfn, deployID)
 	ShowFunctions(specfns)
 
 	var allenvs []fv1.Environment
@@ -92,7 +92,7 @@ func (opts *ListSubCommand) getResource(input cli.Input, namespace string, deplo
 	if err != nil {
 		return fmt.Errorf("error getting Environments from  %s namespaces: %w", printNS, err)
 	}
-	specenvs := getAppliedEnvironments(allenvs, deployID)
+	specenvs := filterByDeployID[fv1.Environment](allenvs, deployID)
 	ShowEnvironments(specenvs)
 
 	var pkglists []fv1.Package
@@ -100,7 +100,7 @@ func (opts *ListSubCommand) getResource(input cli.Input, namespace string, deplo
 	if err != nil {
 		return fmt.Errorf("error getting Packages from  %s namespaces: %w", printNS, err)
 	}
-	specPkgs := getAppliedPackages(pkglists, deployID)
+	specPkgs := filterByDeployID[fv1.Package](pkglists, deployID)
 	ShowPackages(specPkgs)
 
 	var canaryCfgs []fv1.CanaryConfig
@@ -108,7 +108,7 @@ func (opts *ListSubCommand) getResource(input cli.Input, namespace string, deplo
 	if err != nil {
 		return fmt.Errorf("error getting Canary Config from  %s namespaces: %w", printNS, err)
 	}
-	specCanaryCfgs := getAppliedCanaryConfigs(canaryCfgs, deployID)
+	specCanaryCfgs := filterByDeployID[fv1.CanaryConfig](canaryCfgs, deployID)
 	ShowCanaryConfigs(specCanaryCfgs)
 
 	var hts []fv1.HTTPTrigger
@@ -116,7 +116,7 @@ func (opts *ListSubCommand) getResource(input cli.Input, namespace string, deplo
 	if err != nil {
 		return fmt.Errorf("error getting HTTP Triggers from  %s namespaces: %w", printNS, err)
 	}
-	specHTTPTriggers := getAppliedHTTPTriggers(hts, deployID)
+	specHTTPTriggers := filterByDeployID[fv1.HTTPTrigger](hts, deployID)
 	ShowHTTPTriggers(specHTTPTriggers)
 
 	var mqts []fv1.MessageQueueTrigger
@@ -124,7 +124,7 @@ func (opts *ListSubCommand) getResource(input cli.Input, namespace string, deplo
 	if err != nil {
 		return fmt.Errorf("error getting MessageQueue Triggers from  %s namespaces: %w", printNS, err)
 	}
-	specMessageQueueTriggers := getAppliedMessageQueueTriggers(mqts, deployID)
+	specMessageQueueTriggers := filterByDeployID[fv1.MessageQueueTrigger](mqts, deployID)
 	ShowMQTriggers(specMessageQueueTriggers)
 
 	var tts []fv1.TimeTrigger
@@ -132,7 +132,7 @@ func (opts *ListSubCommand) getResource(input cli.Input, namespace string, deplo
 	if err != nil {
 		return fmt.Errorf("error getting Time Triggers from  %s namespaces: %w", printNS, err)
 	}
-	specTimeTriggers := getAppliedTimeTriggers(tts, deployID)
+	specTimeTriggers := filterByDeployID[fv1.TimeTrigger](tts, deployID)
 	ShowTimeTriggers(specTimeTriggers)
 
 	var kws []fv1.KubernetesWatchTrigger
@@ -140,104 +140,22 @@ func (opts *ListSubCommand) getResource(input cli.Input, namespace string, deplo
 	if err != nil {
 		return fmt.Errorf("error getting Kube Watchers from  %s namespaces: %w", printNS, err)
 	}
-	specKubeWatchers := getSpecKubeWatchers(kws, deployID)
+	specKubeWatchers := filterByDeployID[fv1.KubernetesWatchTrigger](kws, deployID)
 	ShowAppliedKubeWatchers(specKubeWatchers)
 
 	return err
 }
 
-func getAppliedFunctions(fns []fv1.Function, deployID string) []fv1.Function {
-	var fnlist []fv1.Function
-	if len(fns) > 0 {
-		for _, f := range fns {
-			if f.Annotations["fission-uid"] == deployID {
-				fnlist = append(fnlist, f)
-			}
+// filterByDeployID returns the items annotated with the given deployment UID,
+// i.e. the resources created by this spec deployment.
+func filterByDeployID[T any, PT Object[T]](items []T, deployID string) []T {
+	var out []T
+	for i := range items {
+		if PT(&items[i]).GetAnnotations()[FISSION_DEPLOYMENT_UID_KEY] == deployID {
+			out = append(out, items[i])
 		}
 	}
-	return fnlist
-}
-
-func getAppliedEnvironments(envs []fv1.Environment, deployID string) []fv1.Environment {
-	var envlist []fv1.Environment
-	if len(envs) > 0 {
-		for _, f := range envs {
-			if f.Annotations["fission-uid"] == deployID {
-				envlist = append(envlist, f)
-			}
-		}
-	}
-	return envlist
-}
-
-func getAppliedPackages(pkgs []fv1.Package, deployID string) []fv1.Package {
-	var pkglist []fv1.Package
-	if len(pkgs) > 0 {
-		for _, f := range pkgs {
-			if f.Annotations["fission-uid"] == deployID {
-				pkglist = append(pkglist, f)
-			}
-		}
-	}
-	return pkglist
-}
-func getAppliedCanaryConfigs(canaryCfgs []fv1.CanaryConfig, deployID string) []fv1.CanaryConfig {
-	var canaryConfiglist []fv1.CanaryConfig
-	if len(canaryCfgs) > 0 {
-		for _, f := range canaryCfgs {
-			if f.Annotations["fission-uid"] == deployID {
-				canaryConfiglist = append(canaryConfiglist, f)
-			}
-		}
-	}
-	return canaryConfiglist
-}
-
-func getAppliedHTTPTriggers(hts []fv1.HTTPTrigger, deployID string) []fv1.HTTPTrigger {
-	var httpTriggerlist []fv1.HTTPTrigger
-	if len(hts) > 0 {
-		for _, f := range hts {
-			if f.Annotations["fission-uid"] == deployID {
-				httpTriggerlist = append(httpTriggerlist, f)
-			}
-		}
-	}
-	return httpTriggerlist
-
-}
-
-func getAppliedMessageQueueTriggers(mqts []fv1.MessageQueueTrigger, deployID string) []fv1.MessageQueueTrigger {
-	var mqTriggerlist []fv1.MessageQueueTrigger
-	if len(mqts) > 0 {
-		for _, f := range mqts {
-			if f.Annotations["fission-uid"] == deployID {
-				mqTriggerlist = append(mqTriggerlist, f)
-			}
-		}
-	}
-	return mqTriggerlist
-}
-func getAppliedTimeTriggers(tts []fv1.TimeTrigger, deployID string) []fv1.TimeTrigger {
-	var timeTriggerlist []fv1.TimeTrigger
-	if len(tts) > 0 {
-		for _, f := range tts {
-			if f.Annotations["fission-uid"] == deployID {
-				timeTriggerlist = append(timeTriggerlist, f)
-			}
-		}
-	}
-	return timeTriggerlist
-}
-func getSpecKubeWatchers(ws []fv1.KubernetesWatchTrigger, deployID string) []fv1.KubernetesWatchTrigger {
-	var kubeWatchTriggerlist []fv1.KubernetesWatchTrigger
-	if len(ws) > 0 {
-		for _, f := range ws {
-			if f.Annotations["fission-uid"] == deployID {
-				kubeWatchTriggerlist = append(kubeWatchTriggerlist, f)
-			}
-		}
-	}
-	return kubeWatchTriggerlist
+	return out
 }
 
 // ShowFunctions displays info of Functions

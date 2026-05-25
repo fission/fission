@@ -21,6 +21,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
@@ -51,16 +52,14 @@ func (opts *ListSubCommand) do(input cli.Input) (err error) {
 	// ResourceVersion and break in-flight source-archive builds), so a READY
 	// column would always be empty. See pkg/apis/core/v1/conditions.go.
 	headers := []string{"NAME", "IMAGE", "BUILDER_IMAGE", "POOLSIZE", "MINCPU", "MAXCPU", "MINMEMORY", "MAXMEMORY", "EXTNET", "GRACETIME", "NAMESPACE"}
-	rows := make([][]string, 0, len(response.Items))
-	for _, env := range response.Items {
-		rows = append(rows, []string{
+	util.PrintItems(headers, response.Items, func(env fv1.Environment) []string {
+		return []string{
 			env.Name, env.Spec.Runtime.Image, env.Spec.Builder.Image, fmt.Sprintf("%v", env.Spec.Poolsize),
 			env.Spec.Resources.Requests.Cpu().String(), env.Spec.Resources.Limits.Cpu().String(),
 			env.Spec.Resources.Requests.Memory().String(), env.Spec.Resources.Limits.Memory().String(),
 			fmt.Sprintf("%v", env.Spec.AllowAccessToExternalNetwork), fmt.Sprintf("%v", env.Spec.TerminationGracePeriod), env.Namespace,
-		})
-	}
-	util.PrintTable(headers, rows)
+		}
+	})
 
 	return nil
 }

@@ -65,7 +65,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 
 	userProvidedNS, pkgNamespace, err := opts.GetResourceNamespace(input, flagkey.NamespacePackage)
 	if err != nil {
-		return fv1.AggregateValidationErrors("Environment", err)
+		return fv1.AggregateValidationErrors("Package", err)
 	}
 
 	srcArchiveFiles := input.StringSlice(flagkey.PkgSrcArchive)

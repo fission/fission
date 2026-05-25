@@ -48,14 +48,12 @@ func (opts *ListSubCommand) do(input cli.Input) (err error) {
 	}
 
 	headers := []string{"NAME", "CRON", "FUNCTION_NAME", "METHOD", "SUBPATH", "READY"}
-	rows := make([][]string, 0, len(tts.Items))
-	for _, tt := range tts.Items {
-		rows = append(rows, []string{
+	util.PrintItems(headers, tts.Items, func(tt fv1.TimeTrigger) []string {
+		return []string{
 			tt.Name, tt.Spec.Cron, tt.Spec.Name, tt.Spec.Method, tt.Spec.Subpath,
 			util.ConditionStatus(tt.Status.Conditions, fv1.TimeTriggerConditionReady),
-		})
-	}
-	util.PrintTable(headers, rows)
+		}
+	})
 
 	return nil
 }

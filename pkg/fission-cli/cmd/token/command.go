@@ -24,12 +24,10 @@ import (
 )
 
 func Commands() *cobra.Command {
-	createCmd := &cobra.Command{
+	createCmd := wrapper.SubCommand(&cobra.Command{
 		Use:   "create",
 		Short: "Create a JWT token for function invocation",
-		RunE:  wrapper.Wrapper(Create),
-	}
-	wrapper.SetFlags(createCmd, flag.FlagSet{
+	}, Create, flag.FlagSet{
 		Required: []flag.Flag{flag.TokUsername, flag.TokPassword},
 		Optional: []flag.Flag{flag.TokAuthURI},
 	})

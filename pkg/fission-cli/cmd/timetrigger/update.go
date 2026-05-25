@@ -52,7 +52,7 @@ func (opts *UpdateSubCommand) do(input cli.Input) error {
 func (opts *UpdateSubCommand) complete(input cli.Input) error {
 	_, namespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceTrigger)
 	if err != nil {
-		return fmt.Errorf("error in deleting function : %w", err)
+		return fmt.Errorf("error in updating time trigger : %w", err)
 	}
 
 	tt, err := opts.Client().FissionClientSet.CoreV1().TimeTriggers(namespace).Get(input.Context(), input.String(flagkey.TtName), metav1.GetOptions{})

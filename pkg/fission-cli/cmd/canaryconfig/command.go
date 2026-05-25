@@ -25,57 +25,47 @@ import (
 
 // Commands returns canary config commands
 func Commands() *cobra.Command {
-	createCmd := &cobra.Command{
+	createCmd := wrapper.SubCommand(&cobra.Command{
 		Use:   "create",
 		Short: "Create a canary config",
-		RunE:  wrapper.Wrapper(Create),
-	}
-	wrapper.SetFlags(createCmd, flag.FlagSet{
+	}, Create, flag.FlagSet{
 		Required: []flag.Flag{flag.CanaryName, flag.CanaryTriggerName, flag.CanaryNewFunc, flag.CanaryOldFunc},
 		Optional: []flag.Flag{flag.CanaryWeightIncrement, flag.CanaryIncrementInterval, flag.CanaryFailureThreshold, flag.NamespaceFunction},
 	})
 
-	getCmd := &cobra.Command{
+	getCmd := wrapper.SubCommand(&cobra.Command{
 		Use:     "get",
 		Aliases: []string{},
 		Short:   "View parameters in a canary config",
-		RunE:    wrapper.Wrapper(Get),
-	}
-	wrapper.SetFlags(getCmd, flag.FlagSet{
+	}, Get, flag.FlagSet{
 		Required: []flag.Flag{flag.CanaryName},
 		Optional: []flag.Flag{flag.NamespaceCanary},
 	})
 
-	updateCmd := &cobra.Command{
+	updateCmd := wrapper.SubCommand(&cobra.Command{
 		Use:     "update",
 		Aliases: []string{},
 		Short:   "Update parameters of a canary config",
-		RunE:    wrapper.Wrapper(Update),
-	}
-	wrapper.SetFlags(updateCmd, flag.FlagSet{
+	}, Update, flag.FlagSet{
 		Required: []flag.Flag{flag.CanaryName},
 		Optional: []flag.Flag{flag.CanaryWeightIncrement, flag.CanaryIncrementInterval, flag.CanaryFailureThreshold, flag.NamespaceCanary},
 	})
 
-	deleteCmd := &cobra.Command{
+	deleteCmd := wrapper.SubCommand(&cobra.Command{
 		Use:     "delete",
 		Aliases: []string{},
 		Short:   "Delete a canary config",
-		RunE:    wrapper.Wrapper(Delete),
-	}
-	wrapper.SetFlags(deleteCmd, flag.FlagSet{
+	}, Delete, flag.FlagSet{
 		Required: []flag.Flag{flag.CanaryName},
 		Optional: []flag.Flag{flag.NamespaceCanary, flag.IgnoreNotFound},
 	})
 
-	listCmd := &cobra.Command{
+	listCmd := wrapper.SubCommand(&cobra.Command{
 		Use:     "list",
 		Aliases: []string{},
 		Short:   "List canary configs",
 		Long:    "List all canary configs in a namespace if specified, else, list canary configs across all namespaces",
-		RunE:    wrapper.Wrapper(List),
-	}
-	wrapper.SetFlags(listCmd, flag.FlagSet{
+	}, List, flag.FlagSet{
 		Optional: []flag.Flag{flag.NamespaceCanary, flag.AllNamespaces},
 	})
 

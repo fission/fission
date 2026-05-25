@@ -24,12 +24,10 @@ import (
 )
 
 func Commands() *cobra.Command {
-	command := &cobra.Command{
+	command := wrapper.SubCommand(&cobra.Command{
 		Use:   "version",
 		Short: "Show client/server version information",
-		RunE:  wrapper.Wrapper(Version),
-	}
-	wrapper.SetFlags(command, flag.FlagSet{
+	}, Version, flag.FlagSet{
 		Optional: []flag.Flag{flag.ClientOnly},
 	})
 

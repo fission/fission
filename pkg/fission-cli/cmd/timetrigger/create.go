@@ -66,7 +66,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) (err error) {
 
 	userProvidedNS, fnNamespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceFunction)
 	if err != nil {
-		return fmt.Errorf("error in deleting function : %w", err)
+		return fmt.Errorf("error in creating time trigger : %w", err)
 	}
 
 	cronSpec := input.String(flagkey.TtCron)

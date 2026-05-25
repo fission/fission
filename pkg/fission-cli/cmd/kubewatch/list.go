@@ -60,14 +60,12 @@ func (opts *ListSubCommand) run(input cli.Input) (err error) {
 	}
 
 	headers := []string{"NAME", "NAMESPACE", "OBJTYPE", "LABELS", "FUNCTION_NAME", "READY"}
-	rows := make([][]string, 0, len(ws.Items))
-	for _, wa := range ws.Items {
-		rows = append(rows, []string{
+	util.PrintItems(headers, ws.Items, func(wa v1.KubernetesWatchTrigger) []string {
+		return []string{
 			wa.Name, wa.Spec.Namespace, wa.Spec.Type, fmt.Sprintf("%v", wa.Spec.LabelSelector), wa.Spec.FunctionReference.Name,
 			util.ConditionStatus(wa.Status.Conditions, v1.KubernetesWatchTriggerConditionReady),
-		})
-	}
-	util.PrintTable(headers, rows)
+		}
+	})
 
 	return nil
 }

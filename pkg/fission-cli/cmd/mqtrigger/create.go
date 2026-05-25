@@ -61,7 +61,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 
 	userProvidedNS, fnNamespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceFunction)
 	if err != nil {
-		return fmt.Errorf("error in deleting function : %w", err)
+		return fmt.Errorf("error in creating message queue trigger : %w", err)
 	}
 
 	mqtKind := input.String(flagkey.MqtKind)

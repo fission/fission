@@ -39,7 +39,7 @@ func (opts *DeleteSubCommand) do(input cli.Input) (err error) {
 
 	_, namespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceTrigger)
 	if err != nil {
-		return fmt.Errorf("error in deleting function : %w", err)
+		return fmt.Errorf("error in deleting time trigger : %w", err)
 	}
 
 	err = opts.Client().FissionClientSet.CoreV1().TimeTriggers(namespace).Delete(input.Context(), input.String(flagkey.TtName), metav1.DeleteOptions{})

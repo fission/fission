@@ -56,7 +56,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) (err error) {
 
 	_, triggerNamespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceTrigger)
 	if err != nil {
-		return fmt.Errorf("error in deleting function : %w", err)
+		return fmt.Errorf("error in updating HTTP trigger : %w", err)
 	}
 
 	ht, err := opts.Client().FissionClientSet.CoreV1().HTTPTriggers(triggerNamespace).Get(input.Context(), htName, metav1.GetOptions{})
