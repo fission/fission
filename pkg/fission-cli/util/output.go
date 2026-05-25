@@ -121,7 +121,7 @@ func PrintObjects[T any](format OutputFormat, items []T, headers []string, row f
 		if err != nil {
 			return err
 		}
-		fmt.Println(string(b))
+		printBytes(b)
 		return nil
 	case OutputWide:
 		hdr := append(append([]string{}, headers...), wideExtra...)
@@ -145,10 +145,19 @@ func PrintStructured(format OutputFormat, v any) (bool, error) {
 		if err != nil {
 			return true, err
 		}
-		fmt.Println(string(b))
+		printBytes(b)
 		return true, nil
 	default:
 		return false, nil
+	}
+}
+
+// printBytes writes b to stdout ensuring exactly one trailing newline:
+// yaml.Marshal already appends one, json.MarshalIndent does not.
+func printBytes(b []byte) {
+	_, _ = os.Stdout.Write(b)
+	if n := len(b); n == 0 || b[n-1] != '\n' {
+		fmt.Fprintln(os.Stdout)
 	}
 }
 

@@ -40,14 +40,14 @@ Out of scope:
 A new shared flag `flag.Output` (`--output`, short `-o`, type String, default `""`) registered as an Optional flag on the in-scope commands.
 Empty → current table. Valid values: `json`, `yaml`, `wide`. Unknown value → error listing the valid set.
 
-Note: a `flagkey.Output = "output"` key already exists and is aliased by `PkgOutput`/`ArchiveOutput`/`SupportOutput` for the download commands.
-Introduce a distinct key (e.g. `flagkey.OutputFormat = "output"`) reused by the read commands; the download commands keep their existing flag definitions unchanged.
-(Both can share the literal name `output`/`-o` because no command registers both.)
+Note: a `flagkey.Output = "output"` key already exists (aliased by `PkgOutput`/`ArchiveOutput`/`SupportOutput` for the download commands).
+The implementation **reuses that existing `flagkey.Output` key** for the read commands' format flag (`flag.Output`); the download commands keep their own flag definitions unchanged.
+Both can share the literal name `output`/`-o` because no single command registers both.
 
 ### Semantics
 
 - `json`: marshal the (already-filtered) result. For `list` → a JSON array of the objects (`[]Function`); for describe/single → one object. Arrays chosen over a `*List` wrapper because they are simpler to consume with `jq` and the commands already work with `.Items` slices.
-- `yaml`: same objects via `sigs.k8s.io/yaml`; multiple objects separated by `\n---\n`.
+- `yaml`: the slice marshaled via `sigs.k8s.io/yaml` as a single YAML sequence (not `---`-separated documents); a single object for describe.
 - `wide`: the current table plus extra columns. Minimum new column: `AGE` (from `CreationTimestamp`, rendered with `duration.HumanDuration`). Per-resource extras may be added (e.g. function `READY`-reason). Column order: existing columns, then wide-only columns, then `NAMESPACE` stays last where present.
 - empty: byte-for-byte current output.
 
@@ -100,7 +100,7 @@ List commands call `PrintObjects(fmt, fns.Items, …)`; describe commands call a
 
 ## Testing
 
-- Unit (table-driven, in `util`): `ParseOutputFormat` valid/invalid; `PrintObjects` for table/wide/json/yaml on a sample type (assert JSON parses back, YAML has `---`, wide has the extra header).
+- Unit (table-driven, in `util`): `ParseOutputFormat` valid/invalid; `PrintObjects` for table/wide/json/yaml on a sample type (assert JSON parses back as an array, YAML contains the field, wide has the extra header).
 - Per-command: a representative `fn list -o json|yaml|wide` test via the dummy driver + fake clientset asserting shape.
 - Manual (kind): `fission fn list -o json | jq '.[].metadata.name'`, `-o yaml`, `-o wide` shows `AGE`; unknown `-o foo` errors.
 

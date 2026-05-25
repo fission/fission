@@ -60,7 +60,9 @@ func (opts *GetSubCommand) run(input cli.Input) (err error) {
 		return err
 	}
 
-	if err := printHtSummary(format, []fv1.HTTPTrigger{*ht}); err != nil {
+	// describe renders the plain table (no -o wide AGE column), consistent with
+	// the other describe commands; json/yaml are handled above.
+	if err := printHtSummary(util.OutputTable, []fv1.HTTPTrigger{*ht}); err != nil {
 		return err
 	}
 	util.PrintConditions(ht.Status.Conditions)
