@@ -109,11 +109,15 @@ func applyResourceType[T any, PT Object[T]](
 	}
 
 	// Index the cluster objects this deployment owns, by namespace/name. Keep an
-	// ordered slice too so deletions print in a stable (list) order.
+	// ordered slice too so deletions print in a stable (list) order. allByName
+	// holds every cluster object's name (owned or not) so dry-run can detect the
+	// AlreadyExists conflict a real create would hit (see the create branch).
 	ownedByName := make(map[string]PT)
+	allByName := make(map[string]bool)
 	var owned []PT
 	for i := range clusterObjs {
 		obj := PT(&clusterObjs[i])
+		allByName[k8sCache.MetaObjectToName(obj).String()] = true
 		if allowConflicts || ownedByDeployment(obj, fr) {
 			ownedByName[k8sCache.MetaObjectToName(obj).String()] = obj
 			owned = append(owned, obj)
@@ -167,6 +171,14 @@ func applyResourceType[T any, PT Object[T]](
 				if err := ops.validate(ctx, ptr); err != nil {
 					return nil, nil, err
 				}
+			}
+			// A real apply calls Create here; if an object with this name already
+			// exists but isn't owned by this spec (so it wasn't a `found` update)
+			// and we're not adopting conflicts, the server returns AlreadyExists
+			// and the apply fails. Dry-run skips the call, so surface that conflict
+			// explicitly instead of reporting a would-create that can't happen.
+			if dryRun && !allowConflicts && allByName[name] {
+				return nil, nil, fmt.Errorf("%s already exists on the cluster and is not managed by this spec deployment; a real apply would fail with AlreadyExists (use --allowconflicts to adopt it)", name)
 			}
 			newMeta := ops.meta(ptr)
 			if !dryRun {

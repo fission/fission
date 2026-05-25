@@ -352,3 +352,32 @@ func TestApplyResourceTypeDryRunValidates(t *testing.T) {
 		}
 	})
 }
+
+// TestApplyResourceTypeDryRunAlreadyExists verifies that a dry-run create whose
+// name collides with an unowned cluster object is reported as the error a real
+// apply would hit (the server's AlreadyExists), rather than a false would-create
+// — unless --allowconflicts adopts the existing object as an update.
+func TestApplyResourceTypeDryRunAlreadyExists(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("unowned collision errors without allowconflicts", func(t *testing.T) {
+		store := newFnStore(fn("a", "nodejs", false)) // exists, NOT owned by us
+		fr := frWith(fn("a", "nodejs", false))
+		_, _, err := applyResourceType(ctx, fr, store.ops(), false, false, true)
+		if err == nil {
+			t.Fatal("expected an AlreadyExists-style conflict error, got nil")
+		}
+	})
+
+	t.Run("allowconflicts adopts the object as an update", func(t *testing.T) {
+		store := newFnStore(fn("a", "nodejs", false)) // exists, unowned
+		fr := frWith(fn("a", "python", false))        // differs -> would update
+		_, ras, err := applyResourceType(ctx, fr, store.ops(), false, true, true)
+		if err != nil {
+			t.Fatalf("allowconflicts should adopt the object, got %v", err)
+		}
+		if len(ras.Updated) != 1 || len(ras.Created) != 0 {
+			t.Fatalf("expected 1 would-be update, got C=%d U=%d", len(ras.Created), len(ras.Updated))
+		}
+	})
+}
