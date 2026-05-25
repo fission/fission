@@ -43,7 +43,7 @@ SHA-pinned actions usually present:
 
 ## Phase 0 — Baseline
 
-1. Create branch: `git checkout -b ci/tool-versions-<YYYY-MM>` off `main`.
+1. Create branch off `main`. **Check for a stale collision first** — last month's branch is often still present locally and on `origin` after its PR merged, so `git checkout -b ci/tool-versions-<YYYY-MM>` fails with "branch already exists". If it exists, run `gh pr list --head <branch> --state all`; a MERGED PR means it's leftover (its bumps are already in `main`) — don't reuse it. Use a **date-stamped** name: `git checkout main && git checkout -b ci/tool-versions-<YYYY-MM-DD>`. After a recent merged sweep, expect most `*_VERSION:` vars to already be at latest — that's normal, not a discovery failure.
 2. Inventory dynamically — do not trust the snapshot above:
    ```bash
    grep -rnE "^\s*[A-Z_]+_VERSION:" .github/workflows/
@@ -84,9 +84,13 @@ For each tool to bump:
 # upgrade_test separate when it has its own intent.
 $EDITOR .github/workflows/push_pr.yaml .github/workflows/release.yaml
 
-# Sanity-check the YAML still parses (no `yq` required — Python does fine)
-python3 -c "import yaml,sys; [yaml.safe_load(open(f)) for f in sys.argv[1:]]" \
+# Sanity-check the YAML still parses. PyYAML is NOT installed on the dev macOS
+# box (python3 -c "import yaml" -> ModuleNotFoundError), so prefer ruby, which ships
+# with macOS and has YAML in stdlib. (For a pure value-only edit on a pre-valid line,
+# YAML validity is preserved by construction — but validate anyway when in doubt.)
+ruby -ryaml -e 'ARGV.each { |f| YAML.load_file(f) }; puts "YAML OK"' \
   .github/workflows/push_pr.yaml .github/workflows/release.yaml
+# Fallback if ruby is absent: python3 -c "import yaml,sys; [yaml.safe_load(open(f)) for f in sys.argv[1:]]" <files>
 
 git add .github/workflows/
 git commit -m "Bump <tool> v<old> -> v<new>"
@@ -128,6 +132,14 @@ Skaffold occasionally renames or removes profile keys. The Fission `skaffold.yam
 
 ### Dependabot's grouped github-actions PR
 Dependabot already groups *action* version bumps weekly (`.github/dependabot.yml` declares a `github-actions` group). The `*_VERSION:` env vars are NOT touched by Dependabot — those are runtime downloads, not action versions. So this skill's primary scope (env vars) does not overlap with Dependabot's; the SHA-pinned `uses:` bumps usually arrive via Dependabot, so manually doing them is catch-up if Dependabot is paused or behind.
+
+**Before deciding a SHA-pinned action is "behind," check for an open Dependabot PR:** `gh pr list --author "app/dependabot" --state open`. If there's an open `github-actions` group PR (e.g. it bumps harden-runner/codeql-action/codecov-action/goreleaser-action), that PR already owns those SHA bumps — don't duplicate it in a sweep; flag it in the summary instead.
+
+### Bumping a SHA-pinned action when the user explicitly asks
+The user may name a SHA-pinned action directly ("can we bump goreleaser too") even though it's normally Dependabot's domain. Do it, but:
+1. **Resolve the new tag to its commit SHA** (the pin is a 40-hex SHA, not the tag): `gh api repos/<owner>/<repo>/commits/<tag> --jq '.sha'`. This dereferences annotated tags to the commit. Update both the `@<sha>` and the trailing `# vX.Y.Z` comment.
+2. **One action lives in multiple files** — e.g. `goreleaser/goreleaser-action` is pinned in `push_pr.yaml`, `upgrade_test.yaml`, and `release.yaml` (×2). Replace every occurrence with the identical new `@<sha> # vX.Y.Z` and commit together. `Edit` with `replace_all: true` per file is reliable; a `perl -pi -e "s{...}{...}"` one-liner with the `#`/spaces in shell-expanded vars silently no-ops, so don't trust it without a `grep` re-check.
+3. **Flag the Dependabot overlap** in the PR/summary if an open `github-actions` group PR also bumps it (it usually does), so the user can reconcile (whichever merges first, the other rebases/drops the entry).
 
 ## Out of scope
 
