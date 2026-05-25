@@ -60,7 +60,15 @@ func Commands() *cobra.Command {
 		Short:   "Create, update and manage message queue triggers",
 	}
 
-	command.AddCommand(createCmd, updateCmd, deleteCmd, listCmd)
+	waitCmd := wrapper.SubCommand(&cobra.Command{
+		Use:   "wait",
+		Short: "Wait for a message queue trigger to reach a status condition",
+	}, Wait, flag.FlagSet{
+		Required: []flag.Flag{flag.MqtName, flag.WaitFor},
+		Optional: []flag.Flag{flag.NamespaceTrigger, flag.WaitTimeout},
+	})
+
+	command.AddCommand(createCmd, updateCmd, deleteCmd, listCmd, waitCmd)
 
 	return command
 }
