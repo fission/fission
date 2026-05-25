@@ -29,13 +29,17 @@ type Object[T any] interface {
 // client calls and equality, so each kind needs a few lines rather than its own
 // copy of the whole loop. Kind-specific quirks live inside the closures: the
 // Package update closure waits out an in-flight build, and the HTTPTrigger
-// create/update closures reject duplicate routes.
+// validate closure rejects duplicate routes.
 type resourceOps[T any, PT Object[T]] struct {
-	items  func(fr *FissionResources) []T         // desired resources from the spec
-	list   func(ctx context.Context) ([]T, error) // all such resources on the cluster
-	meta   func(PT) *metav1.ObjectMeta            // the object's ObjectMeta
-	equal  func(existing, desired PT) bool        // true => apply is a no-op
-	create func(ctx context.Context, desired PT) (*metav1.ObjectMeta, error)
+	items func(fr *FissionResources) []T         // desired resources from the spec
+	list  func(ctx context.Context) ([]T, error) // all such resources on the cluster
+	meta  func(PT) *metav1.ObjectMeta            // the object's ObjectMeta
+	equal func(existing, desired PT) bool        // true => apply is a no-op
+	// validate, if set, runs read-only admission-style checks before a
+	// create/update (e.g. HTTPTrigger duplicate-route detection). It runs in
+	// dry-run too, so a preview surfaces errors a real apply would hit.
+	validate func(ctx context.Context, desired PT) error
+	create   func(ctx context.Context, desired PT) (*metav1.ObjectMeta, error)
 	// update receives the existing object so it can carry the ResourceVersion
 	// forward (and, for packages, wait out an in-flight build).
 	update func(ctx context.Context, existing, desired PT) (*metav1.ObjectMeta, error)
@@ -125,8 +129,14 @@ func applyResourceType[T any, PT Object[T]](
 			// Already up to date; record existing metadata for cross-refs.
 			metadata[name] = *ops.meta(existing)
 		case found:
-			// would-be update: record the existing metadata (carries the real
-			// ResourceVersion) for cross-refs; only mutate when not a dry run.
+			// would-be update: validate first (runs in dry-run too), record the
+			// existing metadata (carries the real ResourceVersion) for cross-refs,
+			// and only mutate when not a dry run.
+			if ops.validate != nil {
+				if err := ops.validate(ctx, ptr); err != nil {
+					return nil, nil, err
+				}
+			}
 			newMeta := ops.meta(existing)
 			if !dryRun {
 				newMeta, err = ops.update(ctx, existing, ptr)
@@ -137,8 +147,13 @@ func applyResourceType[T any, PT Object[T]](
 			ras.Updated = append(ras.Updated, newMeta)
 			metadata[name] = *newMeta
 		default:
-			// would-be create: record the desired metadata (RV empty); only
-			// mutate when not a dry run.
+			// would-be create: validate first (runs in dry-run too), record the
+			// desired metadata (RV empty), and only mutate when not a dry run.
+			if ops.validate != nil {
+				if err := ops.validate(ctx, ptr); err != nil {
+					return nil, nil, err
+				}
+			}
 			newMeta := ops.meta(ptr)
 			if !dryRun {
 				newMeta, err = ops.create(ctx, ptr)

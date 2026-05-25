@@ -345,14 +345,12 @@ func pluralize(num int, word string) string {
 }
 
 // applyArchives figures out the set of archives that need to be uploaded, and uploads them.
-// Under dryRun it is a no-op: uploading is a real mutation, and the resolved
-// archive URLs are only needed for an actual create/update, so the spec keeps
-// its archive:// references untouched.
+// Under dryRun the read-only work still runs — local archives are built/checksummed
+// and matched against archives already on the cluster — so the resolved Package
+// specs (and therefore the diff) are accurate for unchanged archives; only the
+// actual upload of a new/changed archive is skipped (such a Package legitimately
+// shows as a would-create/update).
 func applyArchives(input cli.Input, fclient cmd.Client, specDir string, fr *FissionResources, dryRun bool) error {
-	if dryRun {
-		return nil
-	}
-
 	// archive:// URL -> archive map.
 	archiveFiles := make(map[string]fv1.Archive)
 
@@ -393,6 +391,12 @@ func applyArchives(input cli.Input, fclient cmd.Client, specDir string, fr *Fiss
 			fmt.Printf("archive %v exists, not uploading\n", name)
 			ar.URL = url
 			archiveFiles[name] = ar
+		} else if dryRun {
+			// new/changed archive: a real apply would upload it and the owning
+			// Package would be created/updated. Skip the upload (a mutation) and
+			// leave the local reference so the Package shows as a would-change.
+			fmt.Printf("would upload archive %v\n", name)
+			continue
 		} else {
 			// doesn't exist, upload
 			fmt.Printf("uploading archive %v\n", name)
@@ -450,6 +454,12 @@ func applyResources(input cli.Input, fclient cmd.Client, specDir string, fr *Fis
 	// Each reference to a package from a function must contain the resource version
 	// of the package. This ensures that various caches can invalidate themselves
 	// when the package changes.
+	//
+	// Under --dry-run the package isn't actually updated, so pkgMeta carries the
+	// package's *current* ResourceVersion. A real apply that updates a package
+	// would bump its RV and thus also update the referencing functions; a dry-run
+	// can therefore under-report those cascaded function updates. This is inherent
+	// to a no-cluster-write preview (the post-update RV can't be known in advance).
 	for i, f := range fr.Functions {
 		if f.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypeContainer {
 			continue
@@ -777,10 +787,12 @@ func applyHTTPTriggers(ctx context.Context, fclient cmd.Client, fr *FissionResou
 		equal: func(e, d *fv1.HTTPTrigger) bool {
 			return isObjectMetaEqual(e.ObjectMeta, d.ObjectMeta) && reflect.DeepEqual(e.Spec, d.Spec)
 		},
+		// read-only duplicate-route check; runs in dry-run too so a preview
+		// surfaces the conflict a real apply would reject.
+		validate: func(ctx context.Context, t *fv1.HTTPTrigger) error {
+			return util.CheckHTTPTriggerDuplicates(ctx, fclient, t)
+		},
 		create: func(ctx context.Context, t *fv1.HTTPTrigger) (*metav1.ObjectMeta, error) {
-			if err := util.CheckHTTPTriggerDuplicates(ctx, fclient, t); err != nil {
-				return nil, err
-			}
 			n, err := triggers(t.Namespace).Create(ctx, t, metav1.CreateOptions{})
 			if err != nil {
 				return nil, err
@@ -788,9 +800,6 @@ func applyHTTPTriggers(ctx context.Context, fclient cmd.Client, fr *FissionResou
 			return &n.ObjectMeta, nil
 		},
 		update: func(ctx context.Context, e, d *fv1.HTTPTrigger) (*metav1.ObjectMeta, error) {
-			if err := util.CheckHTTPTriggerDuplicates(ctx, fclient, d); err != nil {
-				return nil, err
-			}
 			d.ResourceVersion = e.ResourceVersion
 			n, err := triggers(d.Namespace).Update(ctx, d, metav1.UpdateOptions{})
 			if err != nil {

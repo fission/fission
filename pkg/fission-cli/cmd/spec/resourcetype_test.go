@@ -6,6 +6,7 @@ package spec
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"testing"
 
@@ -304,6 +305,45 @@ func TestApplyResourceTypeDryRun(t *testing.T) {
 		}
 		if len(store.objs) != 2 {
 			t.Fatalf("store must be untouched, has %d (want 2)", len(store.objs))
+		}
+	})
+}
+
+// TestApplyResourceTypeDryRunValidates verifies that the read-only validate hook
+// still runs under dryRun, so a preview surfaces a conflict (e.g. an HTTPTrigger
+// duplicate route) that a real apply would reject — for both would-be creates
+// and would-be updates — without mutating the store.
+func TestApplyResourceTypeDryRunValidates(t *testing.T) {
+	ctx := context.Background()
+	wantErr := errors.New("duplicate route")
+
+	rejectingOps := func(s *fnStore) resourceOps[fv1.Function, *fv1.Function] {
+		ops := s.ops()
+		ops.validate = func(context.Context, *fv1.Function) error { return wantErr }
+		return ops
+	}
+
+	t.Run("create preview surfaces validation error", func(t *testing.T) {
+		store := newFnStore()
+		fr := frWith(fn("a", "nodejs", false))
+		_, _, err := applyResourceType(ctx, fr, rejectingOps(store), false, false, true)
+		if !errors.Is(err, wantErr) {
+			t.Fatalf("expected validation error, got %v", err)
+		}
+		if len(store.objs) != 0 {
+			t.Fatalf("failed validation must not create anything, store has %d", len(store.objs))
+		}
+	})
+
+	t.Run("update preview surfaces validation error", func(t *testing.T) {
+		store := newFnStore(fn("a", "nodejs", true))
+		fr := frWith(fn("a", "python", false)) // env differs -> would update
+		_, _, err := applyResourceType(ctx, fr, rejectingOps(store), false, false, true)
+		if !errors.Is(err, wantErr) {
+			t.Fatalf("expected validation error, got %v", err)
+		}
+		if got := store.objs["default/a"].Spec.Environment.Name; got != "nodejs" {
+			t.Fatalf("failed validation must not mutate the stored object, env=%q", got)
 		}
 	})
 }
