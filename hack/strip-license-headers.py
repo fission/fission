@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: The Fission Authors
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Strip the legacy Apache-2.0 boilerplate block from source files.
 
 One-time migration helper for the SPDX license-header switch, kept in-tree

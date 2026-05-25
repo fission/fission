@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: The Fission Authors
+#
+# SPDX-License-Identifier: Apache-2.0
+
 FROM golang:1.10.1 AS go-builder
 WORKDIR /go
 RUN go get github.com/wcharczuk/go-chart

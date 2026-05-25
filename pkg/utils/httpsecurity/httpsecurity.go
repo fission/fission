@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: The Fission Authors
+//
+// SPDX-License-Identifier: Apache-2.0
+
 // Package httpsecurity provides composable middlewares that harden
 // Fission's HTTP listeners against browser-driven cross-origin attacks.
 //

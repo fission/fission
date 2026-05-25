@@ -1,4 +1,8 @@
 #!/bin/bash
+# SPDX-FileCopyrightText: The Fission Authors
+#
+# SPDX-License-Identifier: Apache-2.0
+
 set -exo pipefail
 
 if [ ! -z "${KUBECONFIG}" ]
