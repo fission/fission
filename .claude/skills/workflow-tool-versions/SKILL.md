@@ -88,7 +88,10 @@ $EDITOR .github/workflows/push_pr.yaml .github/workflows/release.yaml
 # box (python3 -c "import yaml" -> ModuleNotFoundError), so prefer ruby, which ships
 # with macOS and has YAML in stdlib. (For a pure value-only edit on a pre-valid line,
 # YAML validity is preserved by construction — but validate anyway when in doubt.)
-ruby -ryaml -e 'ARGV.each { |f| YAML.load_file(f) }; puts "YAML OK"' \
+# Use safe_load (not load/load_file, which can instantiate arbitrary Ruby objects);
+# aliases: true so workflow YAML anchors/aliases still parse. safe_load_file doesn't
+# exist before Psych 4 (the dev box is Ruby 2.6), so read the file and safe_load it.
+ruby -ryaml -e 'ARGV.each { |f| YAML.safe_load(File.read(f), aliases: true) }; puts "YAML OK"' \
   .github/workflows/push_pr.yaml .github/workflows/release.yaml
 # Fallback if ruby is absent: python3 -c "import yaml,sys; [yaml.safe_load(open(f)) for f in sys.argv[1:]]" <files>
 
