@@ -48,8 +48,11 @@ Branch: `cli-refactor-dedup` (off `main` after PR #3397 merged).
 - [x] Add `wrapper.SubCommand(c, action, flags)` factory (preserves all cobra.Command fields); migrated all 15 `command.go` files (71 subcommands) — removes the per-subcommand `RunE: Wrapper(...)` + separate `SetFlags(...)` pair
 - [x] Tests: `cmd/fission-cli/app/app_test.go` walks the whole command tree asserting every leaf has RunE wired + key command paths present (app coverage 0% → 68.2%)
 
-### Verification
-- [ ] `go build ./...`, `golangci-lint run ./pkg/fission-cli/...`, `go test ./pkg/fission-cli/...`
-- [ ] Coverage delta recorded above
-- [ ] kind e2e: spec init→validate→apply→idempotent re-apply→--delete→destroy
-- [ ] grep confirms no stray `"error in deleting function"`
+### Verification — DONE
+- [x] `go build ./...` clean; `golangci-lint run ./pkg/fission-cli/... ./cmd/fission-cli/...` → 0 issues; `go test ./pkg/fission-cli/... ./cmd/fission-cli/...` → all pass
+- [x] Coverage delta recorded above (spec 0→7%, util 5.3→7.5%, app 0→68.2%)
+- [x] kind e2e: spec init→validate→apply(create 4)→idempotent(env/fn/ht no-op; pkg+tt re-update is a pre-existing defaulting/build-status quirk, identical under old code)→edit→apply(1 env updated)→rm spec + apply --delete(HTTPTrigger pruned)→destroy(all removed, 0 residual)
+- [x] grep confirms no stray `"error in deleting function"` outside `function/delete.go`
+- [x] `cmd/fission-cli/app` command-tree test confirms every leaf command still has RunE wired after the SubCommand migration
+
+**Net:** 52 files, +1150 / −1381 (≈ −230 LOC including ~670 lines of *added* tests/helpers, so production code shrank ~900 LOC). No user-facing behavior change.
