@@ -41,15 +41,22 @@ type (
 	}
 )
 
-// Parse is only for converting urfave *cli.Context to Input and will be removed in future.
-func Parse(cmd *cobra.Command, args []string) wCli.Input {
-	return Cli{c: cmd, args: args}
-}
-
 func Wrapper(action cmd.CommandAction) func(*cobra.Command, []string) error {
 	return func(c *cobra.Command, args []string) error {
 		return action(Cli{c: c, args: args})
 	}
+}
+
+// SubCommand wires a Fission CommandAction and its flag set onto c, returning c
+// for convenient inline use. It collapses the "build cobra.Command with
+// RunE: Wrapper(action), then call SetFlags" pair repeated for every leaf
+// command in the per-resource command.go files, guaranteeing the two stay in
+// sync. Callers pass a cobra.Command carrying the descriptive fields (Use,
+// Short, Long, Aliases, ...) so nothing about command definition is lost.
+func SubCommand(c *cobra.Command, action cmd.CommandAction, flags flag.FlagSet) *cobra.Command {
+	c.RunE = Wrapper(action)
+	SetFlags(c, flags)
+	return c
 }
 
 func SetFlags(cmd *cobra.Command, flagSet flag.FlagSet) {
@@ -207,18 +214,6 @@ func toCobraFlag(cmd *cobra.Command, f flag.Flag, global bool) {
 	}
 }
 
-func WrapperChain(actions ...cmd.CommandAction) func(*cobra.Command, []string) error {
-	return func(c *cobra.Command, args []string) error {
-		for _, action := range actions {
-			err := action(Cli{c: c, args: args})
-			if err != nil {
-				return err
-			}
-		}
-		return nil
-	}
-}
-
 func (u Cli) Context() context.Context {
 	return u.c.Context()
 }
@@ -271,41 +266,6 @@ func (u Cli) Int64Slice(key string) []int64 {
 		vals = append(vals, int64(i))
 	}
 	return vals
-}
-
-func (u Cli) GlobalBool(key string) bool {
-	v, _ := u.c.Flags().GetBool(key)
-	return v
-}
-
-func (u Cli) GlobalString(key string) string {
-	v, _ := u.c.Flags().GetString(key)
-	return v
-}
-
-func (u Cli) GlobalStringSlice(key string) []string {
-	v, _ := u.c.Flags().GetStringArray(key)
-	return v
-}
-
-func (u Cli) GlobalInt(key string) int {
-	v, _ := u.c.Flags().GetInt(key)
-	return v
-}
-
-func (u Cli) GlobalIntSlice(key string) []int {
-	v, _ := u.c.Flags().GetIntSlice(key)
-	return v
-}
-
-func (u Cli) GlobalInt64(key string) int64 {
-	v, _ := u.c.Flags().GetInt64(key)
-	return v
-}
-
-func (u Cli) GlobalInt64Slice(key string) []int64 {
-	v, _ := u.c.Flags().GetInt64Slice(key)
-	return v
 }
 
 func (u Cli) Duration(key string) time.Duration {

@@ -26,8 +26,6 @@ type (
 	Input interface {
 		Context() context.Context
 
-		// Parse(input interface{}) error
-
 		// IsSet checks whether a flag has been set by the user
 		IsSet(key string) bool
 
@@ -52,28 +50,6 @@ type (
 
 		// Int64Slice returns int64 slice of given flag.
 		Int64Slice(key string) []int64
-
-		// GlobalBool returns true if given global flag has been set;
-		// otherwise, return false.
-		GlobalBool(key string) bool
-
-		// GlobalString returns global string value of given flag.
-		GlobalString(key string) string
-
-		// GlobalStringSlice returns global string slice of given flag.
-		GlobalStringSlice(key string) []string
-
-		// GlobalInt returns global int value of given flag.
-		GlobalInt(key string) int
-
-		// GlobalIntSlice returns global int slice of given flag.
-		GlobalIntSlice(key string) []int
-
-		// GlobalInt64 returns global int64 value of given flag.
-		GlobalInt64(key string) int64
-
-		// GlobalInt64Slice returns global int64 slice of given flag.
-		GlobalInt64Slice(key string) []int64
 
 		// Duration returns time duration of given flag.
 		Duration(key string) time.Duration

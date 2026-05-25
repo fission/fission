@@ -24,12 +24,10 @@ import (
 )
 
 func Commands() *cobra.Command {
-	createCmd := &cobra.Command{
+	createCmd := wrapper.SubCommand(&cobra.Command{
 		Use:   "create",
 		Short: "Create a function (and optionally, an HTTP route to it)",
-		RunE:  wrapper.Wrapper(Create),
-	}
-	wrapper.SetFlags(createCmd, flag.FlagSet{
+	}, Create, flag.FlagSet{
 		Required: []flag.Flag{flag.FnName},
 		Optional: []flag.Flag{
 			flag.FnEnvName, flag.FnEntryPoint, flag.FnPkgName,
@@ -52,35 +50,29 @@ func Commands() *cobra.Command {
 			flag.NamespaceFunction, flag.SpecSave, flag.SpecDry},
 	})
 
-	getCmd := &cobra.Command{
+	getCmd := wrapper.SubCommand(&cobra.Command{
 		Use:     "get",
 		Aliases: []string{},
 		Short:   "Get function source code",
-		RunE:    wrapper.Wrapper(Get),
-	}
-	wrapper.SetFlags(getCmd, flag.FlagSet{
+	}, Get, flag.FlagSet{
 		Required: []flag.Flag{flag.FnName},
 		Optional: []flag.Flag{flag.NamespaceFunction},
 	})
 
-	getmetaCmd := &cobra.Command{
+	getmetaCmd := wrapper.SubCommand(&cobra.Command{
 		Use:     "getmeta",
 		Aliases: []string{},
 		Short:   "Get function metadata",
-		RunE:    wrapper.Wrapper(GetMeta),
-	}
-	wrapper.SetFlags(getmetaCmd, flag.FlagSet{
+	}, GetMeta, flag.FlagSet{
 		Required: []flag.Flag{flag.FnName},
 		Optional: []flag.Flag{flag.NamespaceFunction},
 	})
 
-	updateCmd := &cobra.Command{
+	updateCmd := wrapper.SubCommand(&cobra.Command{
 		Use:     "update",
 		Aliases: []string{},
 		Short:   "Update a function",
-		RunE:    wrapper.Wrapper(Update),
-	}
-	wrapper.SetFlags(updateCmd, flag.FlagSet{
+	}, Update, flag.FlagSet{
 		Required: []flag.Flag{flag.FnName},
 		Optional: []flag.Flag{
 			flag.FnEnvName, flag.FnEntryPoint, flag.FnPkgName,
@@ -101,48 +93,40 @@ func Commands() *cobra.Command {
 		},
 	})
 
-	deleteCmd := &cobra.Command{
+	deleteCmd := wrapper.SubCommand(&cobra.Command{
 		Use:     "delete",
 		Aliases: []string{},
 		Short:   "Delete a function",
-		RunE:    wrapper.Wrapper(Delete),
-	}
-	wrapper.SetFlags(deleteCmd, flag.FlagSet{
+	}, Delete, flag.FlagSet{
 		Required: []flag.Flag{flag.FnName},
 		Optional: []flag.Flag{flag.NamespaceFunction, flag.IgnoreNotFound},
 	})
 
-	listCmd := &cobra.Command{
+	listCmd := wrapper.SubCommand(&cobra.Command{
 		Use:     "list",
 		Aliases: []string{},
 		Short:   "List functions",
 		Long:    "List all functions in a namespace if specified, else, list functions across all namespaces",
-		RunE:    wrapper.Wrapper(List),
-	}
-	wrapper.SetFlags(listCmd, flag.FlagSet{
+	}, List, flag.FlagSet{
 		Optional: []flag.Flag{flag.NamespaceFunction, flag.AllNamespaces},
 	})
 
-	logsCmd := &cobra.Command{
+	logsCmd := wrapper.SubCommand(&cobra.Command{
 		Use:     "log",
 		Aliases: []string{"logs"},
 		Short:   "Display function logs",
-		RunE:    wrapper.Wrapper(Log),
-	}
-	wrapper.SetFlags(logsCmd, flag.FlagSet{
+	}, Log, flag.FlagSet{
 		Required: []flag.Flag{flag.FnName},
 		Optional: []flag.Flag{
 			flag.FnLogFollow, flag.FnLogReverseQuery, flag.FnLogCount,
 			flag.FnLogDetail, flag.FnLogPod, flag.NamespaceFunction, flag.FnLogDBType, flag.NamespacePod, flag.FnLogAllPods},
 	})
 
-	testCmd := &cobra.Command{
+	testCmd := wrapper.SubCommand(&cobra.Command{
 		Use:     "test",
 		Aliases: []string{},
 		Short:   "Test a function",
-		RunE:    wrapper.Wrapper(Test),
-	}
-	wrapper.SetFlags(testCmd, flag.FlagSet{
+	}, Test, flag.FlagSet{
 		Required: []flag.Flag{flag.FnName},
 		Optional: []flag.Flag{flag.HtMethod, flag.FnTestHeader, flag.FnTestBody,
 			flag.FnTestQuery, flag.FnTestTimeout, flag.NamespaceFunction,
@@ -153,13 +137,11 @@ func Commands() *cobra.Command {
 		},
 	})
 
-	runContainerCmd := &cobra.Command{
+	runContainerCmd := wrapper.SubCommand(&cobra.Command{
 		Use:     "run-container",
 		Aliases: []string{"runc"},
 		Short:   "Alpha: Run a container image as a function",
-		RunE:    wrapper.Wrapper(RunContainer),
-	}
-	wrapper.SetFlags(runContainerCmd, flag.FlagSet{
+	}, RunContainer, flag.FlagSet{
 		Required: []flag.Flag{flag.FnName, flag.FnImageName},
 		Optional: []flag.Flag{
 			flag.FnPort, flag.FnCommand, flag.FnArgs,
@@ -179,13 +161,11 @@ func Commands() *cobra.Command {
 		},
 	})
 
-	updateContainerCmd := &cobra.Command{
+	updateContainerCmd := wrapper.SubCommand(&cobra.Command{
 		Use:     "update-container",
 		Aliases: []string{"updatec"},
 		Short:   "Alpha: Update a function running a container",
-		RunE:    wrapper.Wrapper(UpdateContainer),
-	}
-	wrapper.SetFlags(updateContainerCmd, flag.FlagSet{
+	}, UpdateContainer, flag.FlagSet{
 		Required: []flag.Flag{flag.FnName},
 		Optional: []flag.Flag{
 			flag.FnImageName, flag.FnPort,
@@ -202,14 +182,12 @@ func Commands() *cobra.Command {
 		},
 	})
 
-	listPodsCmd := &cobra.Command{
+	listPodsCmd := wrapper.SubCommand(&cobra.Command{
 		Use:     "pods",
 		Aliases: []string{"pod", "po"},
 		Short:   "List pods currently used by a function",
 		Long:    "List pods currently used by a function",
-		RunE:    wrapper.Wrapper(ListPods),
-	}
-	wrapper.SetFlags(listPodsCmd, flag.FlagSet{
+	}, ListPods, flag.FlagSet{
 		Required: []flag.Flag{flag.FnName},
 		Optional: []flag.Flag{flag.NamespaceFunction},
 	})

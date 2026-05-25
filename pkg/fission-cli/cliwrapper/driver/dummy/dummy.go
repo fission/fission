@@ -108,62 +108,6 @@ func (u Cli) Int64Slice(key string) []int64 {
 	return val.([]int64)
 }
 
-func (u Cli) GlobalBool(key string) bool {
-	val, ok := u.c[key]
-	if !ok || val == nil {
-		return false
-	}
-	return val.(bool)
-}
-
-func (u Cli) GlobalString(key string) string {
-	val, ok := u.c[key]
-	if !ok || val == nil {
-		return ""
-	}
-	return val.(string)
-}
-
-func (u Cli) GlobalStringSlice(key string) []string {
-	val, ok := u.c[key]
-	if !ok || val == nil {
-		return nil
-	}
-	return val.([]string)
-}
-
-func (u Cli) GlobalInt(key string) int {
-	val, ok := u.c[key]
-	if !ok || val == nil {
-		return 0
-	}
-	return val.(int)
-}
-
-func (u Cli) GlobalIntSlice(key string) []int {
-	val, ok := u.c[key]
-	if !ok || val == nil {
-		return nil
-	}
-	return val.([]int)
-}
-
-func (u Cli) GlobalInt64(key string) int64 {
-	val, ok := u.c[key]
-	if !ok || val == nil {
-		return 0
-	}
-	return val.(int64)
-}
-
-func (u Cli) GlobalInt64Slice(key string) []int64 {
-	val, ok := u.c[key]
-	if !ok || val == nil {
-		return nil
-	}
-	return val.([]int64)
-}
-
 func (u Cli) Duration(key string) time.Duration {
 	val, ok := u.c[key]
 	if !ok || val == nil {

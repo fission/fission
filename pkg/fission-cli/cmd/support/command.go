@@ -25,12 +25,10 @@ import (
 
 // Commands returns support commands
 func Commands() *cobra.Command {
-	dumpCmd := &cobra.Command{
+	dumpCmd := wrapper.SubCommand(&cobra.Command{
 		Use:   "dump",
 		Short: "Collect & dump all necessary information for troubleshooting",
-		RunE:  wrapper.Wrapper(Dump),
-	}
-	wrapper.SetFlags(dumpCmd, flag.FlagSet{
+	}, Dump, flag.FlagSet{
 		Optional: []flag.Flag{flag.SupportNoZip, flag.SupportOutput},
 	})
 

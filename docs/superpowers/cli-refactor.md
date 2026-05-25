@@ -16,13 +16,12 @@ Branch: `cli-refactor-dedup` (off `main` after PR #3397 merged).
 
 | Package | Before | After |
 |---------|--------|-------|
-| cmd/spec | 0.0% | — |
-| cmd | 0.0% | — |
-| cmd/function | 10.2% | — |
-| cmd/httptrigger | 16.6% | — |
-| cmd/package/util | 11.7% | — |
-| util | 5.3% | — |
-| (most others) | 0.0% | — |
+| cmd/spec | 0.0% | 7.0% |
+| cmd/function | 10.2% | 10.3% |
+| cmd/httptrigger | 16.6% | 16.9% |
+| cmd/package/util | 11.7% | 11.7% |
+| util | 5.3% | 7.5% |
+| cmd/fission-cli/app | 0.0% | 68.2% |
 
 ## Checklist
 
@@ -44,10 +43,10 @@ Branch: `cli-refactor-dedup` (off `main` after PR #3397 merged).
 - [~] `cmd.DeleteResource`: skipped — only `function` delete is truly simple; others have dependency checks, a helper would obscure them
 - [~] `do/complete/run` normalization: skipped — low value, behavior-sensitive
 
-### Part 3 — cobra / cliwrapper / flag cleanup
-- [ ] Remove dead code: `Global*` methods, `WrapperChain`, `Parse`
-- [ ] Add `SubCommand(...)` factory; migrate 15 `command.go` files
-- [ ] Tests for the factory / wrapper
+### Part 3 — cobra / cliwrapper / flag cleanup — DONE
+- [x] Remove dead code: 7 `Global*` methods (from `cli.Input` + cobra + dummy drivers), `WrapperChain`, `Parse` (all verified unused repo-wide)
+- [x] Add `wrapper.SubCommand(c, action, flags)` factory (preserves all cobra.Command fields); migrated all 15 `command.go` files (71 subcommands) — removes the per-subcommand `RunE: Wrapper(...)` + separate `SetFlags(...)` pair
+- [x] Tests: `cmd/fission-cli/app/app_test.go` walks the whole command tree asserting every leaf has RunE wired + key command paths present (app coverage 0% → 68.2%)
 
 ### Verification
 - [ ] `go build ./...`, `golangci-lint run ./pkg/fission-cli/...`, `go test ./pkg/fission-cli/...`

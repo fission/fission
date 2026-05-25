@@ -24,37 +24,31 @@ import (
 )
 
 func Commands() *cobra.Command {
-	createCmd := &cobra.Command{
+	createCmd := wrapper.SubCommand(&cobra.Command{
 		Use:   "create",
 		Short: "Create a kube watcher",
-		RunE:  wrapper.Wrapper(Create),
-	}
-	wrapper.SetFlags(createCmd, flag.FlagSet{
+	}, Create, flag.FlagSet{
 		Required: []flag.Flag{flag.KwFnName},
 		Optional: []flag.Flag{flag.KwName, flag.KwObjType, flag.NamespaceFunction, flag.SpecSave, flag.SpecDry},
 		// TODO: add label selector flag
 		// flag.KwLabelsFlag
 	})
 
-	deleteCmd := &cobra.Command{
+	deleteCmd := wrapper.SubCommand(&cobra.Command{
 		Use:     "delete",
 		Aliases: []string{},
 		Short:   "Delete a kube watcher",
-		RunE:    wrapper.Wrapper(Delete),
-	}
-	wrapper.SetFlags(deleteCmd, flag.FlagSet{
+	}, Delete, flag.FlagSet{
 		Required: []flag.Flag{flag.KwName},
 		Optional: []flag.Flag{flag.NamespaceTrigger, flag.IgnoreNotFound, flag.KwFnName},
 	})
 
-	listCmd := &cobra.Command{
+	listCmd := wrapper.SubCommand(&cobra.Command{
 		Use:     "list",
 		Aliases: []string{},
 		Short:   "List kube watchers",
 		Long:    "List all kube watchers in a namespace if specified, else, list kube watchers across all namespaces",
-		RunE:    wrapper.Wrapper(List),
-	}
-	wrapper.SetFlags(listCmd, flag.FlagSet{
+	}, List, flag.FlagSet{
 		Optional: []flag.Flag{flag.NamespaceTrigger, flag.AllNamespaces},
 	})
 

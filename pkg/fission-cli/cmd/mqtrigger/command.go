@@ -24,12 +24,10 @@ import (
 )
 
 func Commands() *cobra.Command {
-	createCmd := &cobra.Command{
+	createCmd := wrapper.SubCommand(&cobra.Command{
 		Use:   "create",
 		Short: "Create a message queue trigger",
-		RunE:  wrapper.Wrapper(Create),
-	}
-	wrapper.SetFlags(createCmd, flag.FlagSet{
+	}, Create, flag.FlagSet{
 		Required: []flag.Flag{flag.MqtFnName, flag.MqtTopic},
 		Optional: []flag.Flag{flag.MqtName, flag.MqtMQType, flag.MqtRespTopic,
 			flag.MqtErrorTopic, flag.MqtMaxRetries, flag.MqtMsgContentType,
@@ -38,13 +36,11 @@ func Commands() *cobra.Command {
 			flag.MqtMetadata, flag.MqtKind},
 	})
 
-	updateCmd := &cobra.Command{
+	updateCmd := wrapper.SubCommand(&cobra.Command{
 		Use:     "update",
 		Aliases: []string{},
 		Short:   "Update a message queue trigger",
-		RunE:    wrapper.Wrapper(Update),
-	}
-	wrapper.SetFlags(updateCmd, flag.FlagSet{
+	}, Update, flag.FlagSet{
 		Required: []flag.Flag{flag.MqtName},
 		Optional: []flag.Flag{flag.MqtFnName, flag.MqtTopic, flag.MqtRespTopic, flag.MqtErrorTopic,
 			flag.MqtMaxRetries, flag.MqtMsgContentType, flag.NamespaceTrigger, flag.MqtPollingInterval,
@@ -52,25 +48,21 @@ func Commands() *cobra.Command {
 			flag.MqtSecret, flag.MqtKind},
 	})
 
-	deleteCmd := &cobra.Command{
+	deleteCmd := wrapper.SubCommand(&cobra.Command{
 		Use:     "delete",
 		Aliases: []string{},
 		Short:   "Delete a message queue trigger",
-		RunE:    wrapper.Wrapper(Delete),
-	}
-	wrapper.SetFlags(deleteCmd, flag.FlagSet{
+	}, Delete, flag.FlagSet{
 		Required: []flag.Flag{flag.MqtName},
 		Optional: []flag.Flag{flag.NamespaceTrigger, flag.IgnoreNotFound},
 	})
 
-	listCmd := &cobra.Command{
+	listCmd := wrapper.SubCommand(&cobra.Command{
 		Use:     "list",
 		Aliases: []string{},
 		Short:   "List message queue triggers",
 		Long:    "List all message queue triggers in a namespace if specified, else, list message queue triggers across all namespaces",
-		RunE:    wrapper.Wrapper(List),
-	}
-	wrapper.SetFlags(listCmd, flag.FlagSet{
+	}, List, flag.FlagSet{
 		Optional: []flag.Flag{flag.NamespaceTrigger, flag.AllNamespaces},
 	})
 

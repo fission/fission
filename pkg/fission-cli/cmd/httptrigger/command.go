@@ -24,12 +24,10 @@ import (
 )
 
 func Commands() *cobra.Command {
-	createCmd := &cobra.Command{
+	createCmd := wrapper.SubCommand(&cobra.Command{
 		Use:   "create",
 		Short: "Create an HTTP trigger",
-		RunE:  wrapper.Wrapper(Create),
-	}
-	wrapper.SetFlags(createCmd, flag.FlagSet{
+	}, Create, flag.FlagSet{
 		Required: []flag.Flag{flag.HtFnName},
 		Optional: []flag.Flag{flag.HtUrl, flag.HtName, flag.HtMethod, flag.HtIngress,
 			flag.HtIngressRule, flag.HtIngressAnnotation, flag.HtIngressTLS,
@@ -37,23 +35,19 @@ func Commands() *cobra.Command {
 			flag.HtPrefix, flag.HtKeepPrefix},
 	})
 
-	getCmd := &cobra.Command{
+	getCmd := wrapper.SubCommand(&cobra.Command{
 		Use:     "get",
 		Aliases: []string{},
 		Short:   "Get HTTP trigger details",
-		RunE:    wrapper.Wrapper(Get),
-	}
-	wrapper.SetFlags(getCmd, flag.FlagSet{
+	}, Get, flag.FlagSet{
 		Required: []flag.Flag{flag.HtName},
 	})
 
-	updateCmd := &cobra.Command{
+	updateCmd := wrapper.SubCommand(&cobra.Command{
 		Use:     "update",
 		Aliases: []string{},
 		Short:   "Update an HTTP trigger",
-		RunE:    wrapper.Wrapper(Update),
-	}
-	wrapper.SetFlags(updateCmd, flag.FlagSet{
+	}, Update, flag.FlagSet{
 		Required: []flag.Flag{flag.HtName},
 		Optional: []flag.Flag{flag.HtUrl, flag.HtFnName,
 			flag.HtMethod, flag.HtIngress, flag.HtIngressRule, flag.HtIngressAnnotation,
@@ -61,24 +55,20 @@ func Commands() *cobra.Command {
 			flag.HtPrefix, flag.HtKeepPrefix},
 	})
 
-	deleteCmd := &cobra.Command{
+	deleteCmd := wrapper.SubCommand(&cobra.Command{
 		Use:     "delete",
 		Aliases: []string{},
 		Short:   "Delete an HTTP trigger",
-		RunE:    wrapper.Wrapper(Delete),
-	}
-	wrapper.SetFlags(deleteCmd, flag.FlagSet{
+	}, Delete, flag.FlagSet{
 		Optional: []flag.Flag{flag.HtName, flag.HtFnFilter, flag.NamespaceTrigger, flag.IgnoreNotFound},
 	})
 
-	listCmd := &cobra.Command{
+	listCmd := wrapper.SubCommand(&cobra.Command{
 		Use:     "list",
 		Aliases: []string{},
 		Short:   "List HTTP triggers",
 		Long:    "List all HTTP triggers in a namespace if specified, else, list HTTP triggers across all namespaces",
-		RunE:    wrapper.Wrapper(List),
-	}
-	wrapper.SetFlags(listCmd, flag.FlagSet{
+	}, List, flag.FlagSet{
 		Optional: []flag.Flag{flag.NamespaceTrigger, flag.HtFnFilter, flag.AllNamespaces},
 	})
 

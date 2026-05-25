@@ -24,12 +24,10 @@ import (
 )
 
 func Commands() *cobra.Command {
-	createCmd := &cobra.Command{
+	createCmd := wrapper.SubCommand(&cobra.Command{
 		Use:   "create",
 		Short: "Create a time trigger",
-		RunE:  wrapper.Wrapper(Create),
-	}
-	wrapper.SetFlags(createCmd, flag.FlagSet{
+	}, Create, flag.FlagSet{
 		Optional: []flag.Flag{flag.TtName, flag.TtFnName,
 			flag.TtCron, flag.NamespaceFunction,
 			flag.TtMethod, flag.FnSubPath,
@@ -38,13 +36,11 @@ func Commands() *cobra.Command {
 		},
 	})
 
-	updateCmd := &cobra.Command{
+	updateCmd := wrapper.SubCommand(&cobra.Command{
 		Use:     "update",
 		Aliases: []string{},
 		Short:   "Update a time trigger",
-		RunE:    wrapper.Wrapper(Update),
-	}
-	wrapper.SetFlags(updateCmd, flag.FlagSet{
+	}, Update, flag.FlagSet{
 		Required: []flag.Flag{flag.TtName},
 		Optional: []flag.Flag{flag.TtFnName, flag.TtCron, flag.NamespaceTrigger,
 
@@ -52,35 +48,29 @@ func Commands() *cobra.Command {
 		},
 	})
 
-	deleteCmd := &cobra.Command{
+	deleteCmd := wrapper.SubCommand(&cobra.Command{
 		Use:     "delete",
 		Aliases: []string{},
 		Short:   "Delete a time trigger",
-		RunE:    wrapper.Wrapper(Delete),
-	}
-	wrapper.SetFlags(deleteCmd, flag.FlagSet{
+	}, Delete, flag.FlagSet{
 		Required: []flag.Flag{flag.TtName},
 		Optional: []flag.Flag{flag.NamespaceTrigger, flag.IgnoreNotFound},
 	})
 
-	listCmd := &cobra.Command{
+	listCmd := wrapper.SubCommand(&cobra.Command{
 		Use:     "list",
 		Aliases: []string{},
 		Short:   "List time triggers",
 		Long:    "List all time triggers in a namespace if specified, else, list time triggers across all namespaces",
-		RunE:    wrapper.Wrapper(List),
-	}
-	wrapper.SetFlags(listCmd, flag.FlagSet{
+	}, List, flag.FlagSet{
 		Optional: []flag.Flag{flag.NamespaceTrigger, flag.AllNamespaces},
 	})
 
-	showCmd := &cobra.Command{
+	showCmd := wrapper.SubCommand(&cobra.Command{
 		Use:     "showschedule",
 		Aliases: []string{"show"},
 		Short:   "Show schedule for cron spec",
-		RunE:    wrapper.Wrapper(Show),
-	}
-	wrapper.SetFlags(showCmd, flag.FlagSet{
+	}, Show, flag.FlagSet{
 		Optional: []flag.Flag{flag.TtCron, flag.TtRound},
 	})
 

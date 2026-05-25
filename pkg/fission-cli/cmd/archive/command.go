@@ -25,51 +25,41 @@ import (
 
 func Commands() *cobra.Command {
 
-	uploadCmd := &cobra.Command{
+	uploadCmd := wrapper.SubCommand(&cobra.Command{
 		Use:   "upload",
 		Short: "Upload an archive",
-		RunE:  wrapper.Wrapper(Upload),
-	}
-	wrapper.SetFlags(uploadCmd, flag.FlagSet{
+	}, Upload, flag.FlagSet{
 		Required: []flag.Flag{flag.ArchiveName},
 		Optional: []flag.Flag{},
 	})
 
-	listCmd := &cobra.Command{
+	listCmd := wrapper.SubCommand(&cobra.Command{
 		Use:   "list",
 		Short: "List all uploaded archives",
-		RunE:  wrapper.Wrapper(List),
-	}
-	wrapper.SetFlags(listCmd, flag.FlagSet{
+	}, List, flag.FlagSet{
 		Optional: []flag.Flag{},
 	})
 
-	deleteCmd := &cobra.Command{
+	deleteCmd := wrapper.SubCommand(&cobra.Command{
 		Use:   "delete",
 		Short: "Delete an archive",
-		RunE:  wrapper.Wrapper(Delete),
-	}
-	wrapper.SetFlags(deleteCmd, flag.FlagSet{
+	}, Delete, flag.FlagSet{
 		Required: []flag.Flag{flag.ArchiveID},
 		Optional: []flag.Flag{flag.ArchiveOutput},
 	})
 
-	geturlCmd := &cobra.Command{
+	geturlCmd := wrapper.SubCommand(&cobra.Command{
 		Use:   "get-url",
 		Short: "Get URL of an uploaded archive",
-		RunE:  wrapper.Wrapper(GetURL),
-	}
-	wrapper.SetFlags(geturlCmd, flag.FlagSet{
+	}, GetURL, flag.FlagSet{
 		Required: []flag.Flag{flag.ArchiveID},
 		Optional: []flag.Flag{},
 	})
 
-	downloadCmd := &cobra.Command{
+	downloadCmd := wrapper.SubCommand(&cobra.Command{
 		Use:   "download",
 		Short: "Download an archive",
-		RunE:  wrapper.Wrapper(Download),
-	}
-	wrapper.SetFlags(downloadCmd, flag.FlagSet{
+	}, Download, flag.FlagSet{
 		Required: []flag.Flag{flag.ArchiveID},
 		Optional: []flag.Flag{flag.ArchiveOutput},
 	})

@@ -21,13 +21,11 @@ import (
 )
 
 func Commands() *cobra.Command {
-	command := &cobra.Command{
+	command := wrapper.SubCommand(&cobra.Command{
 		Use:   "check",
 		Short: "Check the fission installation for potential problems",
 		Long:  `Check the fission installation for potential problems.`,
-		RunE:  wrapper.Wrapper(Check),
-	}
-	wrapper.SetFlags(command, flag.FlagSet{
+	}, Check, flag.FlagSet{
 		Optional: []flag.Flag{flag.PreCheckOnly},
 	})
 
