@@ -21,7 +21,7 @@ require (
 	github.com/graymeta/stow v0.2.8
 	github.com/hashicorp/go-retryablehttp v0.7.8
 	github.com/influxdata/influxdb v1.12.4
-	github.com/kedacore/keda/v2 v2.18.3
+	github.com/kedacore/keda/v2 v2.19.0
 	github.com/mholt/archives v0.1.5
 	github.com/minio/minio-go/v7 v7.1.0
 	github.com/ory/dockertest/v3 v3.12.0
@@ -48,7 +48,7 @@ require (
 	k8s.io/apimachinery v0.35.5
 	k8s.io/client-go v0.35.5
 	k8s.io/metrics v0.35.5
-	sigs.k8s.io/controller-runtime v0.22.4
+	sigs.k8s.io/controller-runtime v0.23.1
 	sigs.k8s.io/structured-merge-diff/v6 v6.4.0
 	sigs.k8s.io/yaml v1.6.0
 )
@@ -61,7 +61,7 @@ require (
 	github.com/Masterminds/sprig v2.22.0+incompatible // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/Nvveen/Gotty v0.0.0-20120604004816-cd527374f1e5 // indirect
-	github.com/ProtonMail/go-crypto v1.1.6 // indirect
+	github.com/ProtonMail/go-crypto v1.3.0 // indirect
 	github.com/STARRY-S/zip v0.2.3 // indirect
 	github.com/andybalholm/brotli v1.2.0 // indirect
 	github.com/aws/aws-sdk-go v1.55.7 // indirect
@@ -179,12 +179,12 @@ require (
 	github.com/rs/xid v1.6.0 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/sergi/go-diff v1.4.0 // indirect
-	github.com/sirupsen/logrus v1.9.3 // indirect
+	github.com/sirupsen/logrus v1.9.4 // indirect
 	github.com/skeema/knownhosts v1.3.1 // indirect
 	github.com/sorairolake/lzip-go v0.3.8 // indirect
 	github.com/spf13/afero v1.15.0 // indirect
 	github.com/tidwall/gjson v1.19.0 // indirect
-	github.com/tidwall/match v1.1.1 // indirect
+	github.com/tidwall/match v1.2.0 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
 	github.com/tidwall/sjson v1.2.5 // indirect
 	github.com/tinylib/msgp v1.6.1 // indirect
@@ -228,10 +228,10 @@ require (
 	k8s.io/code-generator v0.35.5 // indirect
 	k8s.io/gengo/v2 v2.0.0-20250922181213-ec3ebc5fd46b // indirect
 	k8s.io/klog/v2 v2.130.1 // indirect
-	k8s.io/kube-openapi v0.0.0-20251125145642-4e65d59e963e // indirect
-	k8s.io/utils v0.0.0-20251222233032-718f0e51e6d2 // indirect
-	knative.dev/pkg v0.0.0-20250326102644-9f3e60a9244c // indirect
-	sigs.k8s.io/controller-runtime/tools/setup-envtest v0.0.0-20251222141034-adb64659bb1f // indirect
+	k8s.io/kube-openapi v0.0.0-20260127142750-a19766b6e2d4 // indirect
+	k8s.io/utils v0.0.0-20260108192941-914a6e750570 // indirect
+	knative.dev/pkg v0.0.0-20260120122510-4a022ed9999a // indirect
+	sigs.k8s.io/controller-runtime/tools/setup-envtest v0.0.0-20260126224948-cf2e741fe0fd // indirect
 	sigs.k8s.io/controller-tools v0.20.0 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
@@ -245,3 +245,18 @@ tool (
 )
 
 replace k8s.io/code-generator => github.com/fission/code-generator v0.30.0-alpha.3.0.20251224072544-63c9ff6fa3c3
+
+// KEDA v2.19.0 ships phantom high-semver requires that are not propagated through
+// its own internal `replace` directives. Drop them so MVS falls back to our real deps:
+//   - k8s.io/client-go v1.5.2: ancient v1.x tag, higher semver than the live v0.x line.
+//   - github.com/prometheus/common v1.20.99: retracted/bogus tag on the v0.x line.
+exclude (
+	github.com/prometheus/common v1.20.99
+	k8s.io/client-go v1.5.2
+)
+
+// KEDA v2.19.0 declares `require controller-runtime v0.23.1` but actually compiles
+// against v0.22.4 via its internal replace. A bare exclude would resolve UP to v0.24.1
+// (whose ResourceEventHandlerRegistration/webhook API is incompatible with KEDA's
+// generated webhook code), so pin controller-runtime to the version KEDA expects.
+replace sigs.k8s.io/controller-runtime => sigs.k8s.io/controller-runtime v0.22.4
