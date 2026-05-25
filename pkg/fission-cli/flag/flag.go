@@ -80,7 +80,7 @@ var (
 	AllNamespaces        = Flag{Type: Bool, Name: flagkey.AllNamespaces, Short: "A", Usage: "Fetch resources from all namespaces"}
 	Output               = Flag{Type: String, Name: flagkey.Output, Short: "o", Usage: "Output format: wide, json or yaml (default: table)"}
 	WaitFor              = Flag{Type: String, Name: flagkey.WaitFor, Usage: "Condition to wait for, e.g. condition=Ready or condition=Ready=False"}
-	WaitTimeout          = Flag{Type: Duration, Name: flagkey.WaitTimeout, DefaultValue: 60 * time.Second, Usage: "Maximum time to wait for the condition before giving up"}
+	WaitTimeout          = Flag{Type: Duration, Name: flagkey.WaitTimeout, DefaultValue: util.DefaultWaitTimeout, Usage: "Maximum time to wait for the condition before giving up"}
 	RunTimeMinCPU        = Flag{Type: Int, Name: flagkey.RuntimeMincpu, Usage: "Minimum CPU to be assigned to pod (In millicore, minimum 1)"}
 	RunTimeMaxCPU        = Flag{Type: Int, Name: flagkey.RuntimeMaxcpu, Usage: "Maximum CPU to be assigned to pod (In millicore, minimum 1)"}
 	RunTimeTargetCPU     = Flag{Type: Int, Name: flagkey.RuntimeTargetcpu, Usage: "Target average CPU usage percentage across pods for scaling", DefaultValue: 80}

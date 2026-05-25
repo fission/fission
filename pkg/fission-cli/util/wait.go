@@ -18,8 +18,10 @@ import (
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 )
 
-// defaultWaitTimeout is used when --timeout is unset or non-positive.
-const defaultWaitTimeout = 60 * time.Second
+// DefaultWaitTimeout is the wait timeout used when --timeout is unset or
+// non-positive. It is also the declared default of the --timeout flag, so both
+// the flag definition and the runtime fallback share this single source.
+const DefaultWaitTimeout = 60 * time.Second
 
 // ParseForCondition parses a --for value of the form "condition=<Type>" or
 // "condition=<Type>=<Status>". The status defaults to True. It mirrors
@@ -102,7 +104,7 @@ func RunWait(input cli.Input, kind, name string, get func(context.Context) ([]me
 	}
 	timeout := input.Duration(flagkey.WaitTimeout)
 	if timeout <= 0 {
-		timeout = defaultWaitTimeout
+		timeout = DefaultWaitTimeout
 	}
 
 	ctx, cancel := context.WithTimeout(input.Context(), timeout)
