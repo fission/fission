@@ -39,7 +39,7 @@ func Commands() *cobra.Command {
 		Short:   "View parameters in a canary config",
 	}, Get, flag.FlagSet{
 		Required: []flag.Flag{flag.CanaryName},
-		Optional: []flag.Flag{flag.NamespaceCanary},
+		Optional: []flag.Flag{flag.NamespaceCanary, flag.Output},
 	})
 
 	updateCmd := wrapper.SubCommand(&cobra.Command{
@@ -66,7 +66,7 @@ func Commands() *cobra.Command {
 		Short:   "List canary configs",
 		Long:    "List all canary configs in a namespace if specified, else, list canary configs across all namespaces",
 	}, List, flag.FlagSet{
-		Optional: []flag.Flag{flag.NamespaceCanary, flag.AllNamespaces},
+		Optional: []flag.Flag{flag.NamespaceCanary, flag.AllNamespaces, flag.Output},
 	})
 
 	command := &cobra.Command{

@@ -47,6 +47,14 @@ func (opts *GetSubCommand) run(input cli.Input) (err error) {
 		return fmt.Errorf("error getting canary config: %w", err)
 	}
 
+	format, err := util.ParseOutputFormat(input.String(flagkey.Output))
+	if err != nil {
+		return err
+	}
+	if handled, err := util.PrintStructured(format, canaryCfg); err != nil || handled {
+		return err
+	}
+
 	headers := []string{"NAME", "TRIGGER", "FUNCTION-N", "FUNCTION-N-1", "WEIGHT-INCREMENT", "INTERVAL", "FAILURE-THRESHOLD", "FAILURE-TYPE", "STATUS"}
 	rows := [][]string{{
 		canaryCfg.Name, canaryCfg.Spec.Trigger, canaryCfg.Spec.NewFunction, canaryCfg.Spec.OldFunction,

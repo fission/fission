@@ -59,13 +59,20 @@ func (opts *ListSubCommand) run(input cli.Input) (err error) {
 		return fmt.Errorf("error listing kubewatchers: %w", err)
 	}
 
+	format, err := util.ParseOutputFormat(input.String(flagkey.Output))
+	if err != nil {
+		return err
+	}
+
 	headers := []string{"NAME", "NAMESPACE", "OBJTYPE", "LABELS", "FUNCTION_NAME", "READY"}
-	util.PrintItems(headers, ws.Items, func(wa v1.KubernetesWatchTrigger) []string {
+	row := func(wa v1.KubernetesWatchTrigger) []string {
 		return []string{
 			wa.Name, wa.Spec.Namespace, wa.Spec.Type, fmt.Sprintf("%v", wa.Spec.LabelSelector), wa.Spec.FunctionReference.Name,
 			util.ConditionStatus(wa.Status.Conditions, v1.KubernetesWatchTriggerConditionReady),
 		}
-	})
+	}
+	wideExtra := []string{"AGE"}
+	wideRow := func(wa v1.KubernetesWatchTrigger) []string { return []string{util.AgeOf(wa.CreationTimestamp)} }
 
-	return nil
+	return util.PrintObjects(format, ws.Items, headers, row, wideExtra, wideRow)
 }

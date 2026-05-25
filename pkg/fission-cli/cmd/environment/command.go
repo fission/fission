@@ -71,7 +71,7 @@ func Commands() *cobra.Command {
 		Short: "List environments",
 		Long:  "List all environments in a namespace if specified, else, list environments across all namespaces",
 	}, List, flag.FlagSet{
-		Optional: []flag.Flag{flag.NamespaceEnvironment, flag.AllNamespaces},
+		Optional: []flag.Flag{flag.NamespaceEnvironment, flag.AllNamespaces, flag.Output},
 	})
 
 	listPodsCmd := wrapper.SubCommand(&cobra.Command{

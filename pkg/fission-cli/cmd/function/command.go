@@ -65,7 +65,7 @@ func Commands() *cobra.Command {
 		Short:   "Get function metadata",
 	}, GetMeta, flag.FlagSet{
 		Required: []flag.Flag{flag.FnName},
-		Optional: []flag.Flag{flag.NamespaceFunction},
+		Optional: []flag.Flag{flag.NamespaceFunction, flag.Output},
 	})
 
 	updateCmd := wrapper.SubCommand(&cobra.Command{

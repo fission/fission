@@ -27,6 +27,7 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	pkgutil "github.com/fission/fission/pkg/fission-cli/cmd/package/util"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
+	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type InfoSubCommand struct {
@@ -61,6 +62,14 @@ func (opts *InfoSubCommand) run(input cli.Input) error {
 	pkg, err := opts.Client().FissionClientSet.CoreV1().Packages(opts.namespace).Get(input.Context(), opts.name, metav1.GetOptions{})
 	if err != nil {
 		return fmt.Errorf("error finding package %s: %w", opts.name, err)
+	}
+
+	format, err := util.ParseOutputFormat(input.String(flagkey.Output))
+	if err != nil {
+		return err
+	}
+	if handled, err := util.PrintStructured(format, pkg); err != nil || handled {
+		return err
 	}
 
 	pkgutil.PrintPackageSummary(os.Stdout, pkg)

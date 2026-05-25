@@ -59,15 +59,22 @@ func (opts *ListSubCommand) run(input cli.Input) (err error) {
 		return fmt.Errorf("error listing canary config: %w", err)
 	}
 
+	format, err := util.ParseOutputFormat(input.String(flagkey.Output))
+	if err != nil {
+		return err
+	}
+
 	headers := []string{"NAME", "TRIGGER", "FUNCTION-N", "FUNCTION-N-1", "WEIGHT-INCREMENT", "INTERVAL", "FAILURE-THRESHOLD", "FAILURE-TYPE", "STATUS", "READY"}
-	util.PrintItems(headers, canaryCfgs.Items, func(canaryCfg fv1.CanaryConfig) []string {
+	row := func(canaryCfg fv1.CanaryConfig) []string {
 		return []string{
 			canaryCfg.Name, canaryCfg.Spec.Trigger, canaryCfg.Spec.NewFunction, canaryCfg.Spec.OldFunction,
 			fmt.Sprintf("%v", canaryCfg.Spec.WeightIncrement), fmt.Sprintf("%v", canaryCfg.Spec.WeightIncrementDuration),
 			fmt.Sprintf("%v", canaryCfg.Spec.FailureThreshold), string(canaryCfg.Spec.FailureType), canaryCfg.Status.Status,
 			util.ConditionStatus(canaryCfg.Status.Conditions, fv1.CanaryConfigConditionReady),
 		}
-	})
+	}
+	wideExtra := []string{"AGE"}
+	wideRow := func(canaryCfg fv1.CanaryConfig) []string { return []string{util.AgeOf(canaryCfg.CreationTimestamp)} }
 
-	return nil
+	return util.PrintObjects(format, canaryCfgs.Items, headers, row, wideExtra, wideRow)
 }

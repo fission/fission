@@ -41,6 +41,7 @@ func Commands() *cobra.Command {
 		Short:   "Get HTTP trigger details",
 	}, Get, flag.FlagSet{
 		Required: []flag.Flag{flag.HtName},
+		Optional: []flag.Flag{flag.NamespaceTrigger, flag.Output},
 	})
 
 	updateCmd := wrapper.SubCommand(&cobra.Command{
@@ -69,7 +70,7 @@ func Commands() *cobra.Command {
 		Short:   "List HTTP triggers",
 		Long:    "List all HTTP triggers in a namespace if specified, else, list HTTP triggers across all namespaces",
 	}, List, flag.FlagSet{
-		Optional: []flag.Flag{flag.NamespaceTrigger, flag.HtFnFilter, flag.AllNamespaces},
+		Optional: []flag.Flag{flag.NamespaceTrigger, flag.HtFnFilter, flag.AllNamespaces, flag.Output},
 	})
 
 	command := &cobra.Command{

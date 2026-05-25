@@ -49,7 +49,7 @@ func Commands() *cobra.Command {
 		Short:   "List kube watchers",
 		Long:    "List all kube watchers in a namespace if specified, else, list kube watchers across all namespaces",
 	}, List, flag.FlagSet{
-		Optional: []flag.Flag{flag.NamespaceTrigger, flag.AllNamespaces},
+		Optional: []flag.Flag{flag.NamespaceTrigger, flag.AllNamespaces, flag.Output},
 	})
 
 	command := &cobra.Command{
