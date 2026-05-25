@@ -29,16 +29,30 @@ def is_hash_file(path: str) -> bool:
 
 
 def strip_block_go(text: str) -> str:
-    """Remove a leading /* ... */ block that holds the Apache boilerplate."""
-    if not text.startswith("/*"):
+    """Remove the leading /* ... */ Apache block.
+
+    Tolerates a prefix of `//` line comments and blank lines (e.g. the
+    `//go:build` / `// +build` tags that code generators emit above the
+    license), which is preserved and kept separated from the body.
+    """
+    lines = text.splitlines(keepends=True)
+    i = 0
+    while i < len(lines) and (lines[i].lstrip().startswith("//") or lines[i].strip() == ""):
+        i += 1
+    prefix = "".join(lines[:i])
+    rest = "".join(lines[i:])
+    if not rest.startswith("/*"):
         return text
-    end = text.find("*/")
+    end = rest.find("*/")
     if end == -1:
         return text
-    block = text[: end + 2]
+    block = rest[: end + 2]
     if not any(m in block for m in MARKERS):
         return text
-    return text[end + 2 :].lstrip("\n")
+    body = rest[end + 2 :].lstrip("\n")
+    if prefix.strip():
+        return prefix.rstrip("\n") + "\n\n" + body
+    return body
 
 
 def strip_block_hash(text: str) -> str:
