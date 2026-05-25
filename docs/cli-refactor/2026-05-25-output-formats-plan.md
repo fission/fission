@@ -16,7 +16,7 @@
 
 - `pkg/fission-cli/util/output.go` — add `OutputFormat`, `ParseOutputFormat`, `encode`, `PrintObjects[T]`, `PrintStructured`. (Existing `PrintTable`/`PrintItems`/`NewTabWriter` stay.)
 - `pkg/fission-cli/util/output_test.go` — unit tests for the new helpers.
-- `pkg/fission-cli/flag/key/key.go` — `OutputFormat = "output"` key.
+- `pkg/fission-cli/flag/key/key.go` — no change; the read commands reuse the existing `Output = "output"` key.
 - `pkg/fission-cli/flag/flag.go` — `Output` flag var.
 - `pkg/fission-cli/cmd/<res>/command.go` — add `flag.Output` to the in-scope subcommands.
 - `pkg/fission-cli/cmd/<res>/list.go` — read `-o`, define wide columns, call `PrintObjects`.
@@ -318,20 +318,14 @@ git commit -m "fission-cli/util: add PrintObjects + PrintStructured format-aware
 
 - [ ] **Step 1: Add the flag key**
 
-In `key.go`, near the existing `Output = "output"` block, add:
-
-```go
-OutputFormat = "output"
-```
-
-(If a bare `Output = "output"` already exists and is only aliased by the download keys, reuse it instead of adding a duplicate literal — confirm with `grep -n 'Output\b' pkg/fission-cli/flag/key/key.go`. The flag *name* `output` is shared; only read commands get the new `flag.Output` var.)
+**As implemented:** `key.go` already has `Output = "output"` (aliased by the download keys), so **no new key is added** — the read commands' format flag reuses `flagkey.Output`. The flag *name* `output`/`-o` is shared; only read commands register the `flag.Output` var below, so there is no collision with the download commands' own flags.
 
 - [ ] **Step 2: Add the flag var**
 
-In `flag.go`, add near the other global-ish flags:
+In `flag.go`, add near the other global-ish flags (note: `flagkey.Output`, the existing key — not a new `flagkey.OutputFormat`):
 
 ```go
-Output = Flag{Type: String, Name: flagkey.OutputFormat, Short: "o", Usage: "Output format: wide, json or yaml (default: table)"}
+Output = Flag{Type: String, Name: flagkey.Output, Short: "o", Usage: "Output format: wide, json or yaml (default: table)"}
 ```
 
 - [ ] **Step 3: Verify build**

@@ -63,6 +63,9 @@ func TestFunctionListOutput(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "listfn", Namespace: "default"},
 		Spec:       fv1.FunctionSpec{Environment: fv1.EnvironmentReference{Name: "nodejs"}},
 	}
+	// Reset the sync.Once-guarded client so this test deterministically installs
+	// its own fake regardless of test order.
+	cmd.ResetClientsetForTest()
 	cmd.SetClientset(cmd.Client{
 		FissionClientSet: fissionfake.NewClientset(fn),
 		Namespace:        "default",

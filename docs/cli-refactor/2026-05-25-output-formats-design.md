@@ -48,7 +48,7 @@ Both can share the literal name `output`/`-o` because no single command register
 
 - `json`: marshal the (already-filtered) result. For `list` → a JSON array of the objects (`[]Function`); for describe/single → one object. Arrays chosen over a `*List` wrapper because they are simpler to consume with `jq` and the commands already work with `.Items` slices.
 - `yaml`: the slice marshaled via `sigs.k8s.io/yaml` as a single YAML sequence (not `---`-separated documents); a single object for describe.
-- `wide`: the current table plus extra columns. Minimum new column: `AGE` (from `CreationTimestamp`, rendered with `duration.HumanDuration`). Per-resource extras may be added (e.g. function `READY`-reason). Column order: existing columns, then wide-only columns, then `NAMESPACE` stays last where present.
+- `wide`: the current table plus extra columns. Minimum new column: `AGE` (from `CreationTimestamp`, rendered with `duration.HumanDuration`). Per-resource extras may be added (e.g. function `READY`-reason). Column order: the existing columns (including `NAMESPACE` where present) followed by the wide-only columns, so `AGE` appears last — `PrintObjects` simply appends the wide columns to keep the helper generic.
 - empty: byte-for-byte current output.
 
 ### Printer
@@ -82,7 +82,7 @@ func PrintObjects[T any](
 
 `json`/`yaml` marshal `items` directly (the CRD types already carry the right json tags).
 `table` uses `headers`+`row`; `wide` uses `headers+wideExtra` and `row`+`wideRow` concatenated.
-List commands call `PrintObjects(fmt, fns.Items, …)`; describe commands call a single-object variant (`PrintObject`) that marshals the bare object for json/yaml and prints the existing summary for table/wide.
+List commands call `PrintObjects(format, items, …)`. Describe commands call `PrintStructured(format, obj) (handled bool, err error)`: for json/yaml it marshals the bare object and returns `handled=true`; for table/wide it returns `handled=false` and the command falls back to its existing human rendering.
 
 ### Files
 
