@@ -1,16 +1,6 @@
-# Copyright 2017 The Fission Authors.
+# SPDX-FileCopyrightText: The Fission Authors
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# SPDX-License-Identifier: Apache-2.0
 
 .DEFAULT_GOAL := check
 
@@ -44,6 +34,30 @@ check: test-run build-fission-cli clean
 
 code-checks:
 	golangci-lint run
+
+### License headers
+# Files that should carry an SPDX license header. Shared by the license
+# targets and the CI check so they never drift. The single Makefile is
+# excluded (addlicense cannot process extensionless files) and is guarded
+# by the grep check in license-check instead.
+LICENSE_HOLDER := The Fission Authors
+LICENSE_TMPL := hack/license-header.tmpl
+LICENSE_FILES = $(shell find . \
+	\( -path './vendor' -o -path './dist' -o -path './node_modules' \
+	   -o -path './.git' -o -path './.claude' \
+	   -o -path './test/integration/testdata' \) -prune -o \
+	-type f \( -name '*.go' -o -name '*.sh' -o -name '*.py' -o -name 'Dockerfile*' \) -print)
+
+.PHONY: license license-check
+# Add SPDX license headers to any in-scope file missing one.
+license:
+	@go tool addlicense -c "$(LICENSE_HOLDER)" -f $(LICENSE_TMPL) $(LICENSE_FILES)
+
+# Fail if any in-scope file is missing a license header.
+license-check:
+	@go tool addlicense -check -c "$(LICENSE_HOLDER)" -f $(LICENSE_TMPL) $(LICENSE_FILES)
+	@grep -q "SPDX-License-Identifier: Apache-2.0" Makefile || \
+		{ echo "Makefile is missing its SPDX header"; exit 1; }
 
 # run basic check scripts
 test-run: code-checks

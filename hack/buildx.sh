@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: The Fission Authors
+#
+# SPDX-License-Identifier: Apache-2.0
+
 set -e
 ## This script needs to be run to start the emulator for multiarch builds
 create_docker_builder() {

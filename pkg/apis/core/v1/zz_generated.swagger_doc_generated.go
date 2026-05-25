@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: The Fission Authors
+//
+// SPDX-License-Identifier: Apache-2.0
+
 package v1
 
 // This file contains a collection of methods that can be used from go-restful to
@@ -238,6 +242,20 @@ func (HTTPTrigger) SwaggerDoc() map[string]string {
 	return map_HTTPTrigger
 }
 
+var map_HTTPTriggerCorsConfig = map[string]string{
+	"":                 "HTTPTriggerCorsConfig is the per-HTTPTrigger CORS allowlist. It is consumed by the router public listener to attach a CORS middleware to the trigger's route. Triggers without a CorsConfig receive no Access-Control-* response headers and therefore deny cross-origin browser reads at the Same-Origin Policy layer.",
+	"allowOrigins":     "AllowOrigins is the list of allowed origins (scheme + host + port). Use [\"*\"] to allow any origin. Mixing \"*\" with AllowCredentials=true is a configuration error and is rejected by validation; browsers refuse the response in that combination.",
+	"allowMethods":     "AllowMethods is the list of HTTP methods echoed in the Access-Control-Allow-Methods preflight response. When empty the trigger's existing Methods field is used.",
+	"allowHeaders":     "AllowHeaders is the list of request headers the browser is allowed to send, echoed in Access-Control-Allow-Headers.",
+	"exposeHeaders":    "ExposeHeaders is the list of response headers exposed to the browser, set in Access-Control-Expose-Headers.",
+	"allowCredentials": "AllowCredentials sets Access-Control-Allow-Credentials. When true, AllowOrigins MUST NOT contain \"*\".",
+	"maxAge":           "MaxAge is the preflight cache lifetime as parsed by time.ParseDuration. Empty means the header is omitted.",
+}
+
+func (HTTPTriggerCorsConfig) SwaggerDoc() map[string]string {
+	return map_HTTPTriggerCorsConfig
+}
+
 var map_HTTPTriggerList = map[string]string{
 	"": "HTTPTriggerList is a list of HTTPTriggers",
 }
@@ -257,6 +275,7 @@ var map_HTTPTriggerSpec = map[string]string{
 	"functionref":   "FunctionReference is a reference to the target function.",
 	"createingress": "If CreateIngress is true, router will create an ingress definition.",
 	"ingressconfig": "IngressConfig for router to set up Ingress.",
+	"corsConfig":    "CorsConfig configures CORS response headers for browser callers of this trigger. When nil, the router emits no Access-Control-* headers and the browser's Same-Origin Policy enforces cluster isolation from cross-origin pages (the deny-by-default behaviour). Set this field to allowlist specific origins for SPAs that legitimately call this trigger cross-origin.",
 }
 
 func (HTTPTriggerSpec) SwaggerDoc() map[string]string {

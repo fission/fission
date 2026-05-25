@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: The Fission Authors
+#
+# SPDX-License-Identifier: Apache-2.0
+
 if ! command -v dashboard-linter >/dev/null 2>&1; then
     echo "dashboard-linter is not installed"
     echo "Installing dashboard-linter..."
