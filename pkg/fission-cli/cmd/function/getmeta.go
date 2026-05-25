@@ -24,6 +24,7 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
+	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type GetMetaSubCommand struct {
@@ -59,6 +60,7 @@ func (opts *GetMetaSubCommand) do(input cli.Input) error {
 			fmt.Printf("  %s=%s\n", k, v)
 		}
 	}
+	util.PrintConditions(fn.Status.Conditions)
 
 	return nil
 }

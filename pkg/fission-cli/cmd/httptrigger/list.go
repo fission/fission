@@ -40,17 +40,12 @@ func (opts *ListSubCommand) do(input cli.Input) error {
 }
 
 func (opts *ListSubCommand) run(input cli.Input) (err error) {
-
-	_, namespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceTrigger)
+	namespace, err := opts.ResolveNamespace(input, flagkey.NamespaceTrigger)
 	if err != nil {
-		return fmt.Errorf("error in deleting function : %w", err)
+		return fmt.Errorf("error in listing HTTP triggers: %w", err)
 	}
 
-	if input.Bool(flagkey.AllNamespaces) {
-		namespace = v1.NamespaceAll
-	}
 	hts, err := opts.Client().FissionClientSet.CoreV1().HTTPTriggers(namespace).List(input.Context(), v1.ListOptions{})
-
 	if err != nil {
 		return fmt.Errorf("error listing HTTP triggers: %w", err)
 	}

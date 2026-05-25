@@ -18,15 +18,15 @@ package function
 
 import (
 	"fmt"
-	"os"
 	"strings"
-	"text/tabwriter"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
+	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type ListSubCommand struct {
@@ -38,48 +38,43 @@ func List(input cli.Input) error {
 }
 
 func (opts *ListSubCommand) do(input cli.Input) error {
-	_, namespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceFunction)
+	namespace, err := opts.ResolveNamespace(input, flagkey.NamespaceFunction)
 	if err != nil {
 		return fmt.Errorf("error in listing function : %w", err)
 	}
 
-	if input.Bool(flagkey.AllNamespaces) {
-		namespace = metav1.NamespaceAll
-	}
 	fns, err := opts.Client().FissionClientSet.CoreV1().Functions(namespace).List(input.Context(), metav1.ListOptions{})
-
 	if err != nil {
 		return fmt.Errorf("error listing functions: %w", err)
 	}
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
-
-	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "ENV", "EXECUTORTYPE", "MINSCALE", "MAXSCALE", "MINCPU", "MAXCPU", "MINMEMORY", "MAXMEMORY", "SECRETS", "CONFIGMAPS", "NAMESPACE")
+	headers := []string{"NAME", "ENV", "EXECUTORTYPE", "MINSCALE", "MAXSCALE", "MINCPU", "MAXCPU", "MINMEMORY", "MAXMEMORY", "SECRETS", "CONFIGMAPS", "READY", "NAMESPACE"}
+	rows := make([][]string, 0, len(fns.Items))
 	for _, f := range fns.Items {
-		secrets := f.Spec.Secrets
-		configMaps := f.Spec.ConfigMaps
 		var secretsList, configMapList []string
-		for _, secret := range secrets {
+		for _, secret := range f.Spec.Secrets {
 			secretsList = append(secretsList, secret.Name)
 		}
-		for _, configMap := range configMaps {
+		for _, configMap := range f.Spec.ConfigMaps {
 			configMapList = append(configMapList, configMap.Name)
 		}
 
-		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
+		rows = append(rows, []string{
 			f.Name, f.Spec.Environment.Name,
-			f.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType,
-			f.Spec.InvokeStrategy.ExecutionStrategy.MinScale,
-			f.Spec.InvokeStrategy.ExecutionStrategy.MaxScale,
+			string(f.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType),
+			fmt.Sprintf("%v", f.Spec.InvokeStrategy.ExecutionStrategy.MinScale),
+			fmt.Sprintf("%v", f.Spec.InvokeStrategy.ExecutionStrategy.MaxScale),
 			f.Spec.Resources.Requests.Cpu().String(),
 			f.Spec.Resources.Limits.Cpu().String(),
 			f.Spec.Resources.Requests.Memory().String(),
 			f.Spec.Resources.Limits.Memory().String(),
 			strings.Join(secretsList, ","),
 			strings.Join(configMapList, ","),
-			f.Namespace)
+			util.ConditionStatus(f.Status.Conditions, fv1.FunctionConditionReady),
+			f.Namespace,
+		})
 	}
-	w.Flush()
+	util.PrintTable(headers, rows)
 
 	return nil
 }

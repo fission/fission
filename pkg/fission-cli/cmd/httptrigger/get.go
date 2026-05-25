@@ -18,9 +18,7 @@ package httptrigger
 
 import (
 	"fmt"
-	"os"
 	"strings"
-	"text/tabwriter"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -28,6 +26,7 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
+	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type GetSubCommand struct {
@@ -45,7 +44,7 @@ func (opts *GetSubCommand) do(input cli.Input) error {
 func (opts *GetSubCommand) run(input cli.Input) (err error) {
 	_, namespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceFunction)
 	if err != nil {
-		return fmt.Errorf("error in deleting function : %w", err)
+		return fmt.Errorf("error in getting HTTP trigger: %w", err)
 	}
 
 	ht, err := opts.Client().FissionClientSet.CoreV1().HTTPTriggers(namespace).Get(input.Context(), input.String(flagkey.HtName), metav1.GetOptions{})
@@ -54,13 +53,14 @@ func (opts *GetSubCommand) run(input cli.Input) (err error) {
 	}
 
 	printHtSummary([]fv1.HTTPTrigger{*ht})
+	util.PrintConditions(ht.Status.Conditions)
 
 	return nil
 }
 
 func printHtSummary(triggers []fv1.HTTPTrigger) {
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
-	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "METHOD", "URL", "FUNCTION(s)", "INGRESS", "HOST", "PATH", "TLS", "ANNOTATIONS", "NAMESPACE")
+	headers := []string{"NAME", "METHOD", "URL", "FUNCTION(s)", "INGRESS", "HOST", "PATH", "TLS", "ANNOTATIONS", "READY", "NAMESPACE"}
+	rows := make([][]string, 0, len(triggers))
 	for _, trigger := range triggers {
 		function := ""
 		if trigger.Spec.FunctionReference.Type == fv1.FunctionReferenceTypeFunctionName {
@@ -93,8 +93,12 @@ func printHtSummary(triggers []fv1.HTTPTrigger) {
 		if len(trigger.Spec.Methods) > 0 {
 			methods = trigger.Spec.Methods
 		}
-		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
-			trigger.Name, methods, trigger.Spec.RelativeURL, function, trigger.Spec.CreateIngress, host, path, trigger.Spec.IngressConfig.TLS, ann, trigger.Namespace)
+		rows = append(rows, []string{
+			trigger.Name, fmt.Sprintf("%v", methods), trigger.Spec.RelativeURL, function,
+			fmt.Sprintf("%v", trigger.Spec.CreateIngress), host, path, fmt.Sprintf("%v", trigger.Spec.IngressConfig.TLS), ann,
+			util.ConditionStatus(trigger.Status.Conditions, fv1.HTTPTriggerConditionReady),
+			trigger.Namespace,
+		})
 	}
-	w.Flush()
+	util.PrintTable(headers, rows)
 }

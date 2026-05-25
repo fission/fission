@@ -20,6 +20,8 @@ import (
 	"os"
 	"sync"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/console"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
@@ -67,4 +69,20 @@ func (c *CommandActioner) GetResourceNamespace(input cli.Input, deprecatedFlag s
 
 	console.Verbose(2, "Namespace for resource %s ", currentNS)
 	return namespace, currentNS, nil
+}
+
+// ResolveNamespace returns the namespace a list command should operate in. It
+// applies the same precedence as GetResourceNamespace, then collapses to
+// metav1.NamespaceAll when --all-namespaces is set. This replaces the
+// GetResourceNamespace + AllNamespaces block that was duplicated across every
+// list command.
+func (c *CommandActioner) ResolveNamespace(input cli.Input, deprecatedFlag string) (string, error) {
+	_, namespace, err := c.GetResourceNamespace(input, deprecatedFlag)
+	if err != nil {
+		return "", err
+	}
+	if input.Bool(flagkey.AllNamespaces) {
+		namespace = metav1.NamespaceAll
+	}
+	return namespace, nil
 }
