@@ -180,13 +180,21 @@ func Commands() *cobra.Command {
 		Optional: []flag.Flag{flag.NamespaceFunction},
 	})
 
+	waitCmd := wrapper.SubCommand(&cobra.Command{
+		Use:   "wait",
+		Short: "Wait for a function to reach a status condition",
+	}, Wait, flag.FlagSet{
+		Required: []flag.Flag{flag.FnName, flag.WaitFor},
+		Optional: []flag.Flag{flag.NamespaceFunction, flag.WaitTimeout},
+	})
+
 	command := &cobra.Command{
 		Use:     "function",
 		Aliases: []string{"fn"},
 		Short:   "Create, update and manage functions",
 	}
 	command.AddCommand(createCmd, getCmd, getmetaCmd, updateCmd, deleteCmd, listCmd, logsCmd, testCmd,
-		runContainerCmd, updateContainerCmd, listPodsCmd)
+		runContainerCmd, updateContainerCmd, listPodsCmd, waitCmd)
 
 	return command
 }
