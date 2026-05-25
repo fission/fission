@@ -68,7 +68,15 @@ func Commands() *cobra.Command {
 		Short:   "Create, update and manage time triggers",
 	}
 
-	command.AddCommand(createCmd, updateCmd, deleteCmd, listCmd, showCmd)
+	waitCmd := wrapper.SubCommand(&cobra.Command{
+		Use:   "wait",
+		Short: "Wait for a time trigger to reach a status condition",
+	}, Wait, flag.FlagSet{
+		Required: []flag.Flag{flag.TtName, flag.WaitFor},
+		Optional: []flag.Flag{flag.NamespaceTrigger, flag.WaitTimeout},
+	})
+
+	command.AddCommand(createCmd, updateCmd, deleteCmd, listCmd, showCmd, waitCmd)
 
 	return command
 }

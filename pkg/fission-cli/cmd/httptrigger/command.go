@@ -67,7 +67,15 @@ func Commands() *cobra.Command {
 		Short:   "Create, update and manage HTTP triggers",
 	}
 
-	command.AddCommand(createCmd, getCmd, updateCmd, deleteCmd, listCmd)
+	waitCmd := wrapper.SubCommand(&cobra.Command{
+		Use:   "wait",
+		Short: "Wait for an HTTP trigger to reach a status condition",
+	}, Wait, flag.FlagSet{
+		Required: []flag.Flag{flag.HtName, flag.WaitFor},
+		Optional: []flag.Flag{flag.NamespaceTrigger, flag.WaitTimeout},
+	})
+
+	command.AddCommand(createCmd, getCmd, updateCmd, deleteCmd, listCmd, waitCmd)
 
 	return command
 }

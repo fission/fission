@@ -63,7 +63,15 @@ func Commands() *cobra.Command {
 		Short:   "Create, Update and manage canary configs",
 	}
 
-	command.AddCommand(createCmd, getCmd, updateCmd, deleteCmd, listCmd)
+	waitCmd := wrapper.SubCommand(&cobra.Command{
+		Use:   "wait",
+		Short: "Wait for a canary config to reach a status condition",
+	}, Wait, flag.FlagSet{
+		Required: []flag.Flag{flag.CanaryName, flag.WaitFor},
+		Optional: []flag.Flag{flag.NamespaceCanary, flag.WaitTimeout},
+	})
+
+	command.AddCommand(createCmd, getCmd, updateCmd, deleteCmd, listCmd, waitCmd)
 
 	return command
 }

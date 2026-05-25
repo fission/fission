@@ -46,7 +46,15 @@ func Commands() *cobra.Command {
 		Short:   "Create, update and manage kube watcher",
 	}
 
-	command.AddCommand(createCmd, deleteCmd, listCmd)
+	waitCmd := wrapper.SubCommand(&cobra.Command{
+		Use:   "wait",
+		Short: "Wait for a kube watcher to reach a status condition",
+	}, Wait, flag.FlagSet{
+		Required: []flag.Flag{flag.KwName, flag.WaitFor},
+		Optional: []flag.Flag{flag.NamespaceTrigger, flag.WaitTimeout},
+	})
+
+	command.AddCommand(createCmd, deleteCmd, listCmd, waitCmd)
 
 	return command
 }

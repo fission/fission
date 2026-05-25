@@ -179,5 +179,8 @@ const (
 	ArchiveID     = "id"
 	ArchiveOutput = Output
 
+	WaitFor     = "for"
+	WaitTimeout = "timeout"
+
 	DefaultSpecOutputDir = "fission-dump"
 )

@@ -85,7 +85,15 @@ func Commands() *cobra.Command {
 		Short:   "Create, update and manage packages",
 	}
 
-	command.AddCommand(createCmd, getSrcCmd, getDeployCmd, updateCmd, deleteCmd, listCmd, infoCmd, rebuildCmd)
+	waitCmd := wrapper.SubCommand(&cobra.Command{
+		Use:   "wait",
+		Short: "Wait for a package to reach a status condition",
+	}, Wait, flag.FlagSet{
+		Required: []flag.Flag{flag.PkgName, flag.WaitFor},
+		Optional: []flag.Flag{flag.NamespacePackage, flag.WaitTimeout},
+	})
+
+	command.AddCommand(createCmd, getSrcCmd, getDeployCmd, updateCmd, deleteCmd, listCmd, infoCmd, rebuildCmd, waitCmd)
 
 	return command
 }
