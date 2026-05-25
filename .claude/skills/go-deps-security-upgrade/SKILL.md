@@ -15,7 +15,7 @@ Skip if the user asks for a single, named dep bump — that's just `go get <pkg>
 
 ## Phase 0 — Baseline
 
-1. Create branch: `git checkout -b deps/security-sweep-<YYYY-MM>` off `main`.
+1. Create branch off `main`. **First check for a stale collision** — a prior month's sweep branch is often still present locally and on `origin` after its PR merged (`git checkout -b deps/security-sweep-<YYYY-MM>` then fails with "branch already exists", and its diff vs `main` looks like a huge *reverse* because `main` moved on). If `git rev-parse --verify deps/security-sweep-<YYYY-MM>` succeeds, run `gh pr list --head <branch> --state all` — if that branch's PR is MERGED, it's leftover; do NOT reuse it (its "upgrades" are now downgrades vs `main`). Use a **date-stamped** name instead: `git checkout main && git checkout -b deps/security-sweep-<YYYY-MM-DD>`.
 2. Install scanner (if missing): `go install golang.org/x/vuln/cmd/govulncheck@latest`.
 3. Capture baseline: `govulncheck ./... | tee /tmp/govulncheck-before.txt`. Extract the "Your code is affected by N vulnerabilities" line and the per-vuln "Fixed in:" versions — those dictate minimum target versions.
 4. List outdated direct deps: `go list -m -u -json all` filtered to entries with both `"Update"` and no `"Indirect": true`. Use this Python one-liner:
@@ -78,13 +78,22 @@ If the group fails, bisect **within** the group: drop one dep at a time from the
 ### KEDA's phantom `require` pins
 `github.com/kedacore/keda/v2` ships go.mod files that declare `require k8s.io/client-go v1.5.2` and `require sigs.k8s.io/controller-runtime v0.23.x` but internally `replace`s them to sane versions (v0.3x.x and v0.22.x). Replace directives are **not** transitive. Consumers inherit the bogus `require` and MVS picks the ancient (v1.5.2) or wrong-minor version, breaking the build.
 
-**Fix**: add `exclude` directives to the Fission `go.mod`:
+**Fix**: drop the bogus high-semver tags with `exclude`, and pin controller-runtime with `replace` (NOT `exclude`):
 ```go.mod
-// KEDA phantom requires — not propagated through their internal `replace`.
-exclude k8s.io/client-go v1.5.2
-exclude sigs.k8s.io/controller-runtime v0.23.1
+// KEDA phantom requires — bogus high-semver tags not propagated through KEDA's
+// internal `replace`. Drop them so MVS falls back to our real direct deps.
+exclude (
+	github.com/prometheus/common v1.20.99   // retracted/bogus tag on the v0.x line (KEDA also pulls this in)
+	k8s.io/client-go v1.5.2                  // ancient v1.x tag, higher semver than the live v0.x line
+)
+// KEDA declares `require controller-runtime v0.23.1` but compiles against v0.22.4
+// via its internal replace. Use `replace`, not `exclude`: a bare exclude resolves
+// UP to the next available version (v0.24.1 now exists), which breaks KEDA's webhooks.
+replace sigs.k8s.io/controller-runtime => sigs.k8s.io/controller-runtime v0.22.4
 ```
-Verify with `go mod graph | grep '<bad-version>'` to confirm which consumer declares the phantom require.
+Verify with `go mod graph | grep '<bad-version>'` to confirm which consumer declares the phantom require, and `go list -m sigs.k8s.io/controller-runtime` to confirm the replace took (`v0.23.1 => v0.22.4`).
+
+**Why `replace` and not `exclude` for controller-runtime (changed 2026-05):** the skill originally documented `exclude sigs.k8s.io/controller-runtime v0.23.1`. That worked only while v0.23.1 was the highest version — `exclude` makes MVS pick the *next higher* version to satisfy KEDA's require. Now that v0.24.0/v0.24.1 exist, excluding v0.23.1 resolves up to v0.24.1 (incompatible). `replace` pins the exact version regardless of requires. (`exclude` is still correct for `client-go v1.5.2` / `prometheus/common v1.20.99`: nothing higher than those bogus tags exists, so MVS falls back to our real direct require.)
 
 ### KEDA ↔ controller-runtime coupling
 KEDA's webhook files (`apis/keda/v1alpha1/*_webhook.go`) are compiled whenever Fission imports KEDA CRD types. If controller-runtime's `NewWebhookManagedBy` signature changed (happened at v0.23), KEDA webhook files written against the old signature won't compile. Symptoms:
@@ -94,6 +103,15 @@ not enough arguments in call to ctrl.NewWebhookManagedBy
     want (manager.Manager, T)
 ```
 **Fix**: pin controller-runtime to the KEDA-compatible version (currently v0.22.4) and defer the bump until KEDA ships a cleanly-compatible release. Document in the deferred-group commit message.
+
+### The KEDA cap also blocks the k8s core group (learned 2026-05)
+Because controller-runtime is pinned to v0.22.4 (KEDA), the **k8s core group is capped too** — they version in lockstep. controller-runtime v0.22.4 only implements the `ResourceEventHandlerRegistration` interface as of k8s v0.35; **k8s v0.36 added `HasSyncedChecker` to that interface**, which only controller-runtime v0.24 implements. So bumping `k8s.io/* → v0.36` while controller-runtime is stuck at v0.22.4 fails to compile (against controller-runtime's *own* cached source, not Fission's):
+```
+sigs.k8s.io/controller-runtime@v0.22.4/pkg/cache/multi_namespace_cache.go: cannot use handles
+    (variable of struct type handlerRegistration) as cache.ResourceEventHandlerRegistration value:
+    handlerRegistration does not implement ...ResourceEventHandlerRegistration (missing method HasSyncedChecker)
+```
+**Decision rule:** if controller-runtime is capped by KEDA at vX, cap k8s core at the highest minor controller-runtime vX supports (currently controller-runtime v0.22.4 ⇒ k8s ≤ v0.35.x). Defer both the k8s-core and controller-runtime groups together with one shared blocker note. The unblock is a single event: KEDA shipping a release built against controller-runtime v0.24, which then lets k8s core, controller-runtime, and KEDA all move together.
 
 ### Retracted module tags (e.g. `prometheus/common v1.20.99`)
 Some transitive deps push accidental high-version tags (`v1.20.99` on a project that's actually on the `v0.x` line). `go get` then picks the retracted tag as "latest". Symptom: `tidy` warns `retracted by module author`.
