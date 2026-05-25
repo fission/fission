@@ -1,6 +1,6 @@
 # Design: `-o json|yaml|wide` output formats for Fission CLI read commands
 
-Status: Draft (design only — not yet implemented).
+Status: Implemented (branch `cli-output-formats`).
 Date: 2026-05-25.
 
 ## Context
