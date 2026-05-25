@@ -82,7 +82,7 @@ func TestApplyResourceType(t *testing.T) {
 	t.Run("create when absent", func(t *testing.T) {
 		store := newFnStore()
 		fr := frWith(fn("a", "nodejs", false))
-		_, ras, err := applyResourceType(ctx, fr, store.ops(), false, false)
+		_, ras, err := applyResourceType(ctx, fr, store.ops(), false, false, false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -97,7 +97,7 @@ func TestApplyResourceType(t *testing.T) {
 	t.Run("no-op when identical", func(t *testing.T) {
 		store := newFnStore(fn("a", "nodejs", true))
 		fr := frWith(fn("a", "nodejs", false))
-		_, ras, err := applyResourceType(ctx, fr, store.ops(), false, false)
+		_, ras, err := applyResourceType(ctx, fr, store.ops(), false, false, false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -109,7 +109,7 @@ func TestApplyResourceType(t *testing.T) {
 	t.Run("update when spec differs", func(t *testing.T) {
 		store := newFnStore(fn("a", "nodejs", true))
 		fr := frWith(fn("a", "python", false)) // env changed
-		_, ras, err := applyResourceType(ctx, fr, store.ops(), false, false)
+		_, ras, err := applyResourceType(ctx, fr, store.ops(), false, false, false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -124,7 +124,7 @@ func TestApplyResourceType(t *testing.T) {
 	t.Run("prune stale owned object when deleteStale", func(t *testing.T) {
 		store := newFnStore(fn("stale", "nodejs", true), fn("keep", "nodejs", true))
 		fr := frWith(fn("keep", "nodejs", false))
-		_, ras, err := applyResourceType(ctx, fr, store.ops(), true, false)
+		_, ras, err := applyResourceType(ctx, fr, store.ops(), true, false, false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -143,7 +143,7 @@ func TestApplyResourceType(t *testing.T) {
 		// An object on the cluster without our deployment UID must not be pruned.
 		store := newFnStore(fn("foreign", "nodejs", false))
 		fr := frWith() // spec is empty
-		_, ras, err := applyResourceType(ctx, fr, store.ops(), true, false)
+		_, ras, err := applyResourceType(ctx, fr, store.ops(), true, false, false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -159,7 +159,7 @@ func TestApplyResourceType(t *testing.T) {
 func TestApplyResourceTypeStampsDeploymentUID(t *testing.T) {
 	store := newFnStore()
 	fr := frWith(fn("a", "nodejs", false))
-	if _, _, err := applyResourceType(context.Background(), fr, store.ops(), false, false); err != nil {
+	if _, _, err := applyResourceType(context.Background(), fr, store.ops(), false, false, false); err != nil {
 		t.Fatal(err)
 	}
 	got := store.objs["default/a"]
@@ -213,7 +213,7 @@ func TestApplyResourceTypeEmptyUIDDeletesNothing(t *testing.T) {
 	// even with deleteStale + !allowConflicts, nothing may be deleted.
 	store := newFnStore(fn("foreign", "nodejs", true), fn("other", "nodejs", false))
 	fr := &FissionResources{} // empty UID, empty spec
-	_, ras, err := applyResourceType(context.Background(), fr, store.ops(), true, false)
+	_, ras, err := applyResourceType(context.Background(), fr, store.ops(), true, false, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -236,4 +236,74 @@ func TestSetDeploymentUID(t *testing.T) {
 	if f.Annotations[FISSION_DEPLOYMENT_NAME_KEY] != "demo" {
 		t.Fatalf("name annotation not set: %v", f.Annotations)
 	}
+}
+
+// TestApplyResourceTypeDryRun verifies that dryRun reports the same actions a
+// real run would (create/update/delete) and populates the cross-ref metadata,
+// while making no changes to the store.
+func TestApplyResourceTypeDryRun(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("create is previewed but not performed", func(t *testing.T) {
+		store := newFnStore()
+		fr := frWith(fn("a", "nodejs", false))
+		meta, ras, err := applyResourceType(ctx, fr, store.ops(), false, false, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(ras.Created) != 1 {
+			t.Fatalf("expected 1 would-be create, got %d", len(ras.Created))
+		}
+		if len(store.objs) != 0 {
+			t.Fatalf("dry run must not create anything, store has %d", len(store.objs))
+		}
+		if _, ok := meta["default/a"]; !ok {
+			t.Fatal("cross-ref metadata must be recorded for the would-be create")
+		}
+	})
+
+	t.Run("update is previewed but not performed", func(t *testing.T) {
+		store := newFnStore(fn("a", "nodejs", true))
+		fr := frWith(fn("a", "python", false)) // env differs -> would update
+		_, ras, err := applyResourceType(ctx, fr, store.ops(), false, false, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(ras.Updated) != 1 {
+			t.Fatalf("expected 1 would-be update, got %d", len(ras.Updated))
+		}
+		if got := store.objs["default/a"].Spec.Environment.Name; got != "nodejs" {
+			t.Fatalf("dry run must not mutate the stored object, env=%q", got)
+		}
+	})
+
+	t.Run("no-op stays a no-op", func(t *testing.T) {
+		store := newFnStore(fn("a", "nodejs", true))
+		fr := frWith(fn("a", "nodejs", false)) // identical spec
+		_, ras, err := applyResourceType(ctx, fr, store.ops(), false, false, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(ras.Created)+len(ras.Updated) != 0 {
+			t.Fatalf("identical spec should be a no-op, got C=%d U=%d", len(ras.Created), len(ras.Updated))
+		}
+	})
+
+	t.Run("prune is previewed but not performed", func(t *testing.T) {
+		store := newFnStore(fn("stale", "nodejs", true), fn("keep", "nodejs", true))
+		fr := frWith(fn("keep", "nodejs", false))
+		_, ras, err := applyResourceType(ctx, fr, store.ops(), true, false, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(ras.Deleted) != 1 {
+			t.Fatalf("expected 1 would-be delete, got %d", len(ras.Deleted))
+		}
+		if _, ok := store.objs["default/stale"]; !ok {
+			t.Fatal("dry run must not delete anything")
+		}
+		if len(store.objs) != 2 {
+			t.Fatalf("store must be untouched, has %d (want 2)", len(store.objs))
+		}
+	})
 }
