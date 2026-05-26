@@ -178,6 +178,40 @@ func (ns *TestNamespace) CreateFunction(t *testing.T, ctx context.Context, opts 
 	})
 }
 
+// ContainerFunctionOptions are the inputs to CreateContainerFunction.
+type ContainerFunctionOptions struct {
+	// Name of the Function CR. Required.
+	Name string
+	// Image is the user container image to run. Required. It must serve HTTP
+	// on Port (the container executor invokes it directly, with no env pod).
+	Image string
+	// Port the image listens on (CLI `--port`); default 8888 when 0.
+	Port int
+}
+
+// CreateContainerFunction creates a container-executor function via
+// `fission function run-container`. Unlike CreateFunction this needs no
+// environment or package — the user image is the runtime. Cleanup deletes
+// the Function.
+func (ns *TestNamespace) CreateContainerFunction(t *testing.T, ctx context.Context, opts ContainerFunctionOptions) {
+	t.Helper()
+	require.NotEmpty(t, opts.Name, "ContainerFunctionOptions.Name")
+	require.NotEmpty(t, opts.Image, "ContainerFunctionOptions.Image")
+
+	args := []string{"fn", "run-container", "--name", opts.Name, "--image", opts.Image}
+	if opts.Port > 0 {
+		args = append(args, "--port", strconv.Itoa(opts.Port))
+	}
+	ns.CLI(t, ctx, args...)
+
+	ns.addCleanup("function "+opts.Name, func(c context.Context) error {
+		if err := ns.f.fissionClient.CoreV1().Functions(ns.Name).Delete(c, opts.Name, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
+			return err
+		}
+		return nil
+	})
+}
+
 // WaitForFunction polls until the Function CR exists in the test namespace, or
 // the timeout elapses. Use this when the CLI returns before the controller has
 // processed the request.
