@@ -179,6 +179,10 @@ production. See values.yaml `coverage`.
 - name: coverage-data
   hostPath:
     path: {{ .Values.coverage.hostPath | default "/fission-coverage" | quote }}
-    type: DirectoryOrCreate
+    # Directory (not DirectoryOrCreate): the dir MUST be pre-created on the
+    # node owned by the pod uid (see values.yaml + the CI workflow). This
+    # enforces the uid-owned/0700 contract and fails loudly if misconfigured
+    # rather than letting kubelet create a root-owned dir.
+    type: Directory
 {{- end }}
 {{- end }}

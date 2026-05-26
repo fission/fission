@@ -116,14 +116,15 @@ jobs:
         run: |
           kubectl create ns fission
           make create-crds
-          # Pre-create the coverage sink on the node, owned by the pod uid
-          # (10001), mode 0700 — not world-writable. Only on the instrumented
-          # leg; the kind-ci profile sets coverage.enabled=true on every leg
-          # but uninstrumented binaries simply ignore GOCOVERDIR.
-          if [ -n "$GOFLAGS" ]; then
-            docker exec kind-control-plane sh -c \
-              'mkdir -p /fission-coverage && chown 10001:10001 /fission-coverage && chmod 0700 /fission-coverage'
-          fi
+          # The kind-ci profile sets coverage.enabled=true on every leg, so
+          # every leg mounts the coverage hostPath (type: Directory, which
+          # requires the path to exist). Pre-create it on the node owned by the
+          # pod uid (10001), mode 0700 — not world-writable and never created
+          # root-owned by kubelet. Only the GOFLAGS leg builds instrumented
+          # binaries that write here; uninstrumented binaries ignore GOCOVERDIR
+          # and leave it empty.
+          docker exec kind-control-plane sh -c \
+            'mkdir -p /fission-coverage && chown 10001:10001 /fission-coverage && chmod 0700 /fission-coverage'
           SKAFFOLD_PROFILE=kind-ci make skaffold-deploy
 
       # Port-forward is started inside the Go test step rather than as a
