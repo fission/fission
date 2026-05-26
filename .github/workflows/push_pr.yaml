@@ -106,9 +106,25 @@ jobs:
 
       - name: Build and Install Fission
         timeout-minutes: 10
+        env:
+          # Build fission-bundle with Go binary-coverage instrumentation on a
+          # single matrix leg only. GOFLAGS=-cover is honoured by `go build`
+          # (via goreleaser) but ignored by go subcommands that don't know the
+          # flag (e.g. `go mod tidy`). Never set in release.yaml, so published
+          # images are never instrumented.
+          GOFLAGS: ${{ matrix.kindversion == 'v1.32.8' && '-cover -coverpkg=github.com/fission/fission/...' || '' }}
         run: |
           kubectl create ns fission
           make create-crds
+          # The kind-ci profile sets coverage.enabled=true on every leg, so
+          # every leg mounts the coverage hostPath (type: Directory, which
+          # requires the path to exist). Pre-create it on the node owned by the
+          # pod uid (10001), mode 0700 — not world-writable and never created
+          # root-owned by kubelet. Only the GOFLAGS leg builds instrumented
+          # binaries that write here; uninstrumented binaries ignore GOCOVERDIR
+          # and leave it empty.
+          docker exec kind-control-plane sh -c \
+            'mkdir -p /fission-coverage && chown 10001:10001 /fission-coverage && chmod 0700 /fission-coverage'
           SKAFFOLD_PROFILE=kind-ci make skaffold-deploy
 
       # Port-forward is started inside the Go test step rather than as a
@@ -195,8 +211,60 @@ jobs:
             sleep 1
           done
 
-          go test -tags=integration -timeout=25m -parallel 6 -v \
-            ./test/integration/suites/common/...
+          # On the coverage leg, also instrument the test binary itself so the
+          # CLI + client-library code the suite drives in-process (via
+          # cmd/fission-cli/app.App) is captured. The test process writes
+          # binary-coverage data to covdata-cli/, merged with the pod data in
+          # the collect step. Other legs run uninstrumented.
+          COVER_FLAGS=()
+          COVER_ARGS=()
+          if [ "${{ matrix.kindversion }}" = "v1.32.8" ]; then
+            mkdir -p "$PWD/covdata-cli"
+            COVER_FLAGS=(-cover -coverpkg=github.com/fission/fission/...)
+            COVER_ARGS=(-args -test.gocoverdir="$PWD/covdata-cli")
+          fi
+          go test -tags=integration "${COVER_FLAGS[@]}" -timeout=25m -parallel 6 -v \
+            ./test/integration/suites/common/... "${COVER_ARGS[@]}"
+
+      - name: Collect integration coverage
+        # Only the instrumented leg produced coverage; collect there.
+        if: ${{ matrix.kindversion == 'v1.32.8' }}
+        timeout-minutes: 5
+        run: |
+          # Graceful delete (foreground cascade) sends SIGTERM and waits for
+          # pods to terminate. fission-bundle returns from main on the first
+          # signal, which triggers the Go runtime's coverage exit hook and
+          # flushes counters to the node hostPath. Do not force-kill.
+          kubectl delete deploy --all -n fission --cascade=foreground --timeout=120s || true
+          mkdir -p covdata-raw
+          docker cp kind-control-plane:/fission-coverage/. covdata-raw/ || true
+          echo "server (pod) coverage files:"; ls -la covdata-raw || true
+          echo "cli (test-process) coverage files:"; ls -la covdata-cli 2>/dev/null || true
+          # Merge whatever we have: covdata-raw = fission-bundle pods,
+          # covdata-cli = the in-process CLI/library code. go tool covdata
+          # handles meta files from different binaries.
+          INPUTS=""
+          ls covdata-raw/covmeta.* >/dev/null 2>&1 && INPUTS="covdata-raw"
+          if ls covdata-cli/covmeta.* >/dev/null 2>&1; then
+            INPUTS="${INPUTS:+$INPUTS,}covdata-cli"
+          fi
+          if [ -n "$INPUTS" ]; then
+            go tool covdata percent -i="$INPUTS" || true
+            go tool covdata textfmt -i="$INPUTS" -o=integration-coverage.txt
+            echo "wrote integration-coverage.txt from [$INPUTS] ($(wc -l < integration-coverage.txt) lines)"
+          else
+            echo "no coverage meta files collected — skipping merge"
+          fi
+
+      - name: Upload integration coverage to CodeCov
+        if: ${{ matrix.kindversion == 'v1.32.8' && hashFiles('integration-coverage.txt') != '' }}
+        continue-on-error: true
+        uses: codecov/codecov-action@e79a6962e0d4c0c17b229090214935d2e33f8354 # v6.0.1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          flags: integration
+          file: ./integration-coverage.txt
+          fail_ci_if_error: false
 
       - name: Collect Fission Dump
         timeout-minutes: 5

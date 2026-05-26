@@ -93,6 +93,7 @@ spec:
         {{- include "kube_client.envs" . | indent 8 }}
         {{- include "opentelemtry.envs" . | indent 8 }}
         {{- include "internalAuth.envs" . | indent 8 }}
+        {{- include "coverage.envs" . | indent 8 }}
         resources:
           {{- toYaml .Values.router.resources | nindent 10 }}
         readinessProbe:
@@ -112,6 +113,7 @@ spec:
         - name: config-volume
           mountPath: /etc/config/config.yaml
           subPath: config.yaml
+        {{- include "coverage.volumemount" . | indent 8 }}
         ports:
         - containerPort: 8080
           name: metrics
@@ -138,6 +140,7 @@ spec:
       - name: config-volume
         configMap:
           name: feature-config
+      {{- include "coverage.volume" . | indent 6 }}
 {{- if .Values.router.priorityClassName }}
       priorityClassName: {{ .Values.router.priorityClassName }}
 {{- else if .Values.priorityClassName }}

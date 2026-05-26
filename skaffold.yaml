@@ -32,6 +32,7 @@ manifests:
           builderNamespace: ""
           builderPodSpec.enabled: "false"
           canaryDeployment.enabled: "false"
+          coverage.enabled: "false"
           debugEnv: "false"
           fetcher.imageTag: ""
           functionNamespace: ""
@@ -115,6 +116,12 @@ profiles:
         value: true
       - op: replace
         path: /manifests/helm/releases/0/setValues/grafana.dashboards.enabled
+        value: true
+      # Mount GOCOVERDIR into fission-bundle pods so the integration suite
+      # can collect Go binary coverage (paired with GOFLAGS=-cover at build
+      # time and a coverage collect step in the workflow). DEV/CI only.
+      - op: replace
+        path: /manifests/helm/releases/0/setValues/coverage.enabled
         value: true
       # Exercise the storagesvc NetworkPolicy in CI so a regression in its
       # selectors is caught before it reaches users with NetworkPolicy-aware
