@@ -48,5 +48,5 @@ They reflect the patterns already established across the codebase — match them
 ## Misc
 
 - New source files need the SPDX header — run `make license` (CI gate: `make license-check`).
-- Prefer the Go 1.26 builtin `new(value)` over `k8s.io/utils/ptr.To(value)`.
+- Prefer the Go 1.26 builtin `new(value)` over `k8s.io/utils/ptr.To(value)`. As of Go 1.26 `new` accepts a value expression and returns a pointer to a copy, so `new(true)` yields a `*bool` (see `pkg/executor/executortype/newdeploy/newdeploy_test.go`); it is no longer type-only.
 - Name tests `TestXxx`, and test behavior through exported APIs rather than reflecting over unexported fields.
