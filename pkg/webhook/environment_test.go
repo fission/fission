@@ -109,6 +109,40 @@ func TestEnvironmentWebhook_Validate_RejectsDangerousPodSpec(t *testing.T) {
 			},
 			wantInErr: "serviceAccountName",
 		},
+		// Runtime.Container / Builder.Container are a separate injection path
+		// from the PodSpec cases above. Closes GHSA-m63v-2g9w-2w6v.
+		{
+			name: "runtime container privileged",
+			mutate: func(e *v1.Environment) {
+				e.Spec.Runtime.Container = &apiv1.Container{
+					Name:            "py",
+					SecurityContext: &apiv1.SecurityContext{Privileged: &on},
+				}
+			},
+			wantInErr: "privileged",
+		},
+		{
+			name: "runtime container SYS_ADMIN capability",
+			mutate: func(e *v1.Environment) {
+				e.Spec.Runtime.Container = &apiv1.Container{
+					Name: "py",
+					SecurityContext: &apiv1.SecurityContext{
+						Capabilities: &apiv1.Capabilities{Add: []apiv1.Capability{"SYS_ADMIN"}},
+					},
+				}
+			},
+			wantInErr: "SYS_ADMIN",
+		},
+		{
+			name: "builder container allowPrivilegeEscalation",
+			mutate: func(e *v1.Environment) {
+				e.Spec.Builder.Container = &apiv1.Container{
+					Name:            "py-builder",
+					SecurityContext: &apiv1.SecurityContext{AllowPrivilegeEscalation: &on},
+				}
+			},
+			wantInErr: "allowPrivilegeEscalation",
+		},
 	}
 
 	r := &Environment{}

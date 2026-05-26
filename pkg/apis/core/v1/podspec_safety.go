@@ -69,37 +69,59 @@ func ValidatePodSpecSafety(fieldPath string, ps *apiv1.PodSpec) error {
 		}
 	}
 
-	checkContainer := func(group string, c apiv1.Container) error {
-		var cerrs error
-		sc := c.SecurityContext
-		if sc == nil {
-			return nil
-		}
-		if sc.Privileged != nil && *sc.Privileged {
-			cerrs = errors.Join(cerrs, fmt.Errorf(
-				"%s.%s[%s].securityContext.privileged=true is not allowed", fieldPath, group, c.Name))
-		}
-		if sc.AllowPrivilegeEscalation != nil && *sc.AllowPrivilegeEscalation {
-			cerrs = errors.Join(cerrs, fmt.Errorf(
-				"%s.%s[%s].securityContext.allowPrivilegeEscalation=true is not allowed", fieldPath, group, c.Name))
-		}
-		if sc.Capabilities != nil {
-			for _, cap := range sc.Capabilities.Add {
-				if _, bad := dangerousCapabilities[cap]; bad {
-					cerrs = errors.Join(cerrs, fmt.Errorf(
-						"%s.%s[%s].securityContext.capabilities.add[%q] is not allowed", fieldPath, group, c.Name, cap))
-				}
+	for i := range ps.Containers {
+		group := fmt.Sprintf("%s.containers[%s]", fieldPath, ps.Containers[i].Name)
+		errs = errors.Join(errs, ValidateContainerSafety(group, &ps.Containers[i]))
+	}
+	for i := range ps.InitContainers {
+		group := fmt.Sprintf("%s.initContainers[%s]", fieldPath, ps.InitContainers[i].Name)
+		errs = errors.Join(errs, ValidateContainerSafety(group, &ps.InitContainers[i]))
+	}
+
+	return errs
+}
+
+// ValidateContainerSafety rejects the SecurityContext fields of a single
+// container that would let a low-privilege tenant escape the container
+// sandbox: privileged=true, allowPrivilegeEscalation=true, and dangerous
+// Linux capabilities.
+//
+// It exists as a standalone check because the Environment CRD exposes
+// `spec.runtime.container` and `spec.builder.container` — a bare
+// *apiv1.Container that is merged into the runtime/builder pod but is
+// NOT part of any PodSpec, so ValidatePodSpecSafety never reaches it.
+// Leaving the Container SecurityContext unchecked is a bypass of the
+// PodSpec hardening (GHSA-gx55-f84r-v3r7 / GHSA-wmgg-3p4h-48x7 /
+// GHSA-v455-mv2v-5g92) — closes GHSA-m63v-2g9w-2w6v.
+//
+// ValidatePodSpecSafety calls this for each (init)container, and
+// Environment.Validate calls it directly for Runtime.Container /
+// Builder.Container. A nil container is accepted (the field is optional).
+//
+// The fieldPath argument is used as a prefix in error messages so the
+// caller can identify which container failed (e.g.
+// "Environment.spec.runtime.container").
+func ValidateContainerSafety(fieldPath string, c *apiv1.Container) error {
+	if c == nil || c.SecurityContext == nil {
+		return nil
+	}
+	var errs error
+	sc := c.SecurityContext
+	if sc.Privileged != nil && *sc.Privileged {
+		errs = errors.Join(errs, fmt.Errorf(
+			"%s.securityContext.privileged=true is not allowed", fieldPath))
+	}
+	if sc.AllowPrivilegeEscalation != nil && *sc.AllowPrivilegeEscalation {
+		errs = errors.Join(errs, fmt.Errorf(
+			"%s.securityContext.allowPrivilegeEscalation=true is not allowed", fieldPath))
+	}
+	if sc.Capabilities != nil {
+		for _, cap := range sc.Capabilities.Add {
+			if _, bad := dangerousCapabilities[cap]; bad {
+				errs = errors.Join(errs, fmt.Errorf(
+					"%s.securityContext.capabilities.add[%q] is not allowed", fieldPath, cap))
 			}
 		}
-		return cerrs
 	}
-
-	for _, c := range ps.Containers {
-		errs = errors.Join(errs, checkContainer("containers", c))
-	}
-	for _, c := range ps.InitContainers {
-		errs = errors.Join(errs, checkContainer("initContainers", c))
-	}
-
 	return errs
 }
