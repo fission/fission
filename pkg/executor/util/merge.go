@@ -39,6 +39,17 @@ func MergeContainer(dst *apiv1.Container, src *apiv1.Container) (*apiv1.Containe
 		checkSliceConflicts("Name", dstC.VolumeMounts),
 		checkSliceConflicts("Name", dstC.VolumeDevices))
 
+	// mergo.WithOverride copies src.SecurityContext onto the merged result,
+	// so a tenant-supplied Environment Runtime.Container / Builder.Container
+	// with privileged=true / allowPrivilegeEscalation=true / dangerous caps
+	// would otherwise reach the running pod. The admission webhook
+	// (ValidateContainerSafety) is the primary defence; this strips the
+	// dangerous bits at the merge layer so a webhook-bypass cluster
+	// (failurePolicy=Ignore or stale objects from a pre-webhook upgrade)
+	// is still protected. Closes GHSA-m63v-2g9w-2w6v (the Container-field
+	// sibling of GHSA-gx55 / GHSA-wmgg / GHSA-v455).
+	sanitizeContainerSecurityContext(&dstC)
+
 	return &dstC, errs
 }
 

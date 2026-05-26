@@ -662,6 +662,14 @@ func (e *Environment) Validate() error {
 	// GHSA-wmgg-3p4h-48x7.
 	errs = errors.Join(errs, ValidatePodSpecSafety("Environment.spec.runtime.podspec", e.Spec.Runtime.PodSpec))
 	errs = errors.Join(errs, ValidatePodSpecSafety("Environment.spec.builder.podspec", e.Spec.Builder.PodSpec))
+	// The standalone Runtime.Container / Builder.Container fields are merged
+	// into the runtime / builder pod without going through any PodSpec, so
+	// ValidatePodSpecSafety above does not reach them. Validate their
+	// SecurityContext directly — otherwise a tenant could set
+	// spec.runtime.container.securityContext.privileged=true and bypass the
+	// PodSpec hardening. Closes GHSA-m63v-2g9w-2w6v.
+	errs = errors.Join(errs, ValidateContainerSafety("Environment.spec.runtime.container", e.Spec.Runtime.Container))
+	errs = errors.Join(errs, ValidateContainerSafety("Environment.spec.builder.container", e.Spec.Builder.Container))
 	return errs
 }
 

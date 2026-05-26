@@ -156,6 +156,61 @@ func Test_mergeContainer(t *testing.T) {
 	}
 }
 
+// TestMergeContainer_SanitizesSecurityContext pins the GHSA-m63v-2g9w-2w6v
+// invariant: MergeContainer is the path for the Environment Runtime.Container /
+// Builder.Container fields, which do not go through any PodSpec and so are not
+// reached by MergePodSpec's sanitizer. A tenant-supplied container with
+// privileged=true / allowPrivilegeEscalation=true / dangerous caps must be
+// sanitized in the merged result, while the caller's source container must not
+// be mutated (it is typically env.Spec.Runtime.Container from an informer
+// cache).
+func TestMergeContainer_SanitizesSecurityContext(t *testing.T) {
+	on := true
+	dst := &apiv1.Container{Name: "py", Image: "fission/python-env:latest"}
+	src := &apiv1.Container{
+		Name: "py",
+		SecurityContext: &apiv1.SecurityContext{
+			Privileged:               &on,
+			AllowPrivilegeEscalation: &on,
+			Capabilities: &apiv1.Capabilities{
+				Add: []apiv1.Capability{"SYS_ADMIN", "NET_BIND_SERVICE", "NET_ADMIN"},
+			},
+		},
+	}
+
+	out, err := MergeContainer(dst, src)
+	if err != nil {
+		t.Fatalf("MergeContainer error: %v", err)
+	}
+	if out.SecurityContext == nil {
+		t.Fatalf("merged container must keep a SecurityContext")
+	}
+	if out.SecurityContext.Privileged != nil && *out.SecurityContext.Privileged {
+		t.Errorf("Privileged=true must be sanitized to false")
+	}
+	if out.SecurityContext.AllowPrivilegeEscalation != nil && *out.SecurityContext.AllowPrivilegeEscalation {
+		t.Errorf("AllowPrivilegeEscalation=true must be sanitized to false")
+	}
+	gotCaps := map[apiv1.Capability]bool{}
+	for _, c := range out.SecurityContext.Capabilities.Add {
+		gotCaps[c] = true
+	}
+	if gotCaps["SYS_ADMIN"] || gotCaps["NET_ADMIN"] {
+		t.Errorf("dangerous capabilities must be stripped, got %v", out.SecurityContext.Capabilities.Add)
+	}
+	if !gotCaps["NET_BIND_SERVICE"] {
+		t.Errorf("benign capability NET_BIND_SERVICE must flow through")
+	}
+
+	// The caller's source container must not be mutated by the merge.
+	if src.SecurityContext.Privileged == nil || !*src.SecurityContext.Privileged {
+		t.Errorf("source container Privileged must be left untouched (deep copy expected)")
+	}
+	if len(src.SecurityContext.Capabilities.Add) != 3 {
+		t.Errorf("source container capabilities must be left untouched, got %v", src.SecurityContext.Capabilities.Add)
+	}
+}
+
 func Test_mergeVolumeLists(t *testing.T) {
 	type args struct {
 		dst []apiv1.Volume

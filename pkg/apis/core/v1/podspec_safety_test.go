@@ -169,6 +169,65 @@ func TestValidatePodSpecSafety_DangerousFields(t *testing.T) {
 	}
 }
 
+// TestValidateContainerSafety covers the standalone-container check used for
+// Environment Runtime.Container / Builder.Container. Closes GHSA-m63v-2g9w-2w6v.
+func TestValidateContainerSafety(t *testing.T) {
+	on := true
+	off := false
+
+	t.Run("nil container is accepted", func(t *testing.T) {
+		if err := ValidateContainerSafety("Environment.spec.runtime.container", nil); err != nil {
+			t.Fatalf("nil container must be accepted, got: %v", err)
+		}
+	})
+
+	t.Run("nil securityContext is accepted", func(t *testing.T) {
+		c := &apiv1.Container{Name: "py", Image: "fission/python-env:latest"}
+		if err := ValidateContainerSafety("Environment.spec.runtime.container", c); err != nil {
+			t.Fatalf("container without securityContext must be accepted, got: %v", err)
+		}
+	})
+
+	t.Run("benign securityContext is accepted", func(t *testing.T) {
+		c := &apiv1.Container{
+			Name: "py",
+			SecurityContext: &apiv1.SecurityContext{
+				AllowPrivilegeEscalation: &off,
+				Capabilities:             &apiv1.Capabilities{Add: []apiv1.Capability{"NET_BIND_SERVICE"}},
+			},
+		}
+		if err := ValidateContainerSafety("Environment.spec.runtime.container", c); err != nil {
+			t.Fatalf("benign container must be accepted, got: %v", err)
+		}
+	})
+
+	cases := []struct {
+		name      string
+		sc        *apiv1.SecurityContext
+		wantInErr string
+	}{
+		{"privileged", &apiv1.SecurityContext{Privileged: &on}, "privileged"},
+		{"allowPrivilegeEscalation", &apiv1.SecurityContext{AllowPrivilegeEscalation: &on}, "allowPrivilegeEscalation"},
+		{"SYS_ADMIN", &apiv1.SecurityContext{Capabilities: &apiv1.Capabilities{Add: []apiv1.Capability{"SYS_ADMIN"}}}, "SYS_ADMIN"},
+		{"NET_ADMIN", &apiv1.SecurityContext{Capabilities: &apiv1.Capabilities{Add: []apiv1.Capability{"NET_ADMIN"}}}, "NET_ADMIN"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := &apiv1.Container{Name: "py", SecurityContext: tc.sc}
+			err := ValidateContainerSafety("Environment.spec.runtime.container", c)
+			if err == nil {
+				t.Fatalf("expected rejection for %s, got nil", tc.name)
+			}
+			if !strings.Contains(err.Error(), tc.wantInErr) {
+				t.Fatalf("error must mention %q, got: %v", tc.wantInErr, err)
+			}
+			if !strings.Contains(err.Error(), "Environment.spec.runtime.container") {
+				t.Fatalf("error must include the field prefix, got: %v", err)
+			}
+		})
+	}
+}
+
 // TestValidatePodSpecSafety_BenignCapability asserts that NET_BIND_SERVICE
 // (and other non-dangerous capabilities) flow through. The denylist is
 // intentionally narrow so legitimate function workloads can still bind to
