@@ -25,8 +25,8 @@ import (
 func TestKubernetesWatchTrigger(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	defer cancel()
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
+	t.Cleanup(cancel)
 
 	f := framework.Connect(t)
 	image := f.Images().RequireNode(t)

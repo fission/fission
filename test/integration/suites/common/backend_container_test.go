@@ -31,8 +31,8 @@ import (
 func TestBackendContainer(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
-	defer cancel()
+	ctx, cancel := context.WithTimeout(t.Context(), 6*time.Minute)
+	t.Cleanup(cancel)
 
 	f := framework.Connect(t)
 	image := f.Images().RequireContainer(t)
