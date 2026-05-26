@@ -25,7 +25,9 @@ import (
 
 var nodeName = os.Getenv("NODE_NAME")
 
-const (
+// These are vars (not consts) so tests can redirect them to a temp directory;
+// in production they are never reassigned.
+var (
 	originalContainerLogPath = "/var/log/containers"
 	fissionSymlinkPath       = "/var/log/fission"
 )
@@ -129,18 +131,25 @@ func symlinkReaper(zapLogger logr.Logger) {
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
 	for range ticker.C {
-		err := filepath.Walk(fissionSymlinkPath, func(path string, info os.FileInfo, err error) error {
-			if target, e := os.Readlink(path); e == nil {
-				if _, pathErr := os.Stat(target); os.IsNotExist(pathErr) {
-					zapLogger.V(1).Info("remove symlink file", "filepath", path)
-					os.Remove(path)
-				}
+		reapStaleSymlinks(zapLogger, fissionSymlinkPath)
+	}
+}
+
+// reapStaleSymlinks walks dir once and removes any symlink whose target no
+// longer exists. Split out from symlinkReaper's ticker loop so the reaping
+// logic can be unit-tested without waiting on the timer.
+func reapStaleSymlinks(zapLogger logr.Logger, dir string) {
+	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if target, e := os.Readlink(path); e == nil {
+			if _, pathErr := os.Stat(target); os.IsNotExist(pathErr) {
+				zapLogger.V(1).Info("remove symlink file", "filepath", path)
+				os.Remove(path)
 			}
-			return nil
-		})
-		if err != nil {
-			zapLogger.Error(err, "error reaping symlink")
 		}
+		return nil
+	})
+	if err != nil {
+		zapLogger.Error(err, "error reaping symlink")
 	}
 }
 
