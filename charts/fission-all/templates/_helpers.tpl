@@ -153,3 +153,32 @@ Define the svc's name
 {{- printf "%s" .Values.defaultNamespace -}}
 {{- end -}}
 {{- end -}}
+
+{{/*
+coverage.* helpers: emit GOCOVERDIR env, a hostPath volumeMount, and the
+hostPath volume for integration-test binary coverage. DEV/CI ONLY — gated
+by .Values.coverage.enabled (default false), so they render nothing in
+production. See values.yaml `coverage`.
+*/}}
+{{- define "coverage.envs" }}
+{{- if .Values.coverage.enabled }}
+- name: GOCOVERDIR
+  value: {{ .Values.coverage.mountPath | default "/coverage" | quote }}
+{{- end }}
+{{- end }}
+
+{{- define "coverage.volumemount" }}
+{{- if .Values.coverage.enabled }}
+- name: coverage-data
+  mountPath: {{ .Values.coverage.mountPath | default "/coverage" | quote }}
+{{- end }}
+{{- end }}
+
+{{- define "coverage.volume" }}
+{{- if .Values.coverage.enabled }}
+- name: coverage-data
+  hostPath:
+    path: {{ .Values.coverage.hostPath | default "/fission-coverage" | quote }}
+    type: DirectoryOrCreate
+{{- end }}
+{{- end }}

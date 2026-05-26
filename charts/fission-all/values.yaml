@@ -885,6 +885,19 @@ mqt_keda:
 pprof:
   enabled: false
 
+## coverage instruments fission-bundle pods to emit Go binary coverage
+## (GOCOVERDIR) for integration tests. DEV/CI ONLY — never enable in
+## production: it mounts a node hostPath. Default off; turned on by the
+## kind-ci skaffold profile. Requires images built with `GOFLAGS=-cover`.
+##
+coverage:
+  enabled: false
+  ## hostPath on the node where coverage files are written. Must be
+  ## pre-created and chown'd to the pod uid by CI before deploy.
+  hostPath: /fission-coverage
+  ## in-container path exported as GOCOVERDIR.
+  mountPath: /coverage
+
 ## Enable runtimePodSpec and add spec to your poolmgr or newdeploy pods
 ##
 runtimePodSpec:
