@@ -211,8 +211,20 @@ jobs:
             sleep 1
           done
 
-          go test -tags=integration -timeout=25m -parallel 6 -v \
-            ./test/integration/suites/common/...
+          # On the coverage leg, also instrument the test binary itself so the
+          # CLI + client-library code the suite drives in-process (via
+          # cmd/fission-cli/app.App) is captured. The test process writes
+          # binary-coverage data to covdata-cli/, merged with the pod data in
+          # the collect step. Other legs run uninstrumented.
+          COVER_FLAGS=()
+          COVER_ARGS=()
+          if [ "${{ matrix.kindversion }}" = "v1.32.8" ]; then
+            mkdir -p "$PWD/covdata-cli"
+            COVER_FLAGS=(-cover -coverpkg=github.com/fission/fission/...)
+            COVER_ARGS=(-args -test.gocoverdir="$PWD/covdata-cli")
+          fi
+          go test -tags=integration "${COVER_FLAGS[@]}" -timeout=25m -parallel 6 -v \
+            ./test/integration/suites/common/... "${COVER_ARGS[@]}"
 
       - name: Collect integration coverage
         # Only the instrumented leg produced coverage; collect there.
@@ -226,11 +238,20 @@ jobs:
           kubectl delete deploy --all -n fission --cascade=foreground --timeout=120s || true
           mkdir -p covdata-raw
           docker cp kind-control-plane:/fission-coverage/. covdata-raw/ || true
-          echo "raw coverage files:"; ls -la covdata-raw || true
-          if ls covdata-raw/covmeta.* >/dev/null 2>&1; then
-            go tool covdata percent -i=covdata-raw || true
-            go tool covdata textfmt -i=covdata-raw -o=integration-coverage.txt
-            echo "wrote integration-coverage.txt ($(wc -l < integration-coverage.txt) lines)"
+          echo "server (pod) coverage files:"; ls -la covdata-raw || true
+          echo "cli (test-process) coverage files:"; ls -la covdata-cli 2>/dev/null || true
+          # Merge whatever we have: covdata-raw = fission-bundle pods,
+          # covdata-cli = the in-process CLI/library code. go tool covdata
+          # handles meta files from different binaries.
+          INPUTS=""
+          ls covdata-raw/covmeta.* >/dev/null 2>&1 && INPUTS="covdata-raw"
+          if ls covdata-cli/covmeta.* >/dev/null 2>&1; then
+            INPUTS="${INPUTS:+$INPUTS,}covdata-cli"
+          fi
+          if [ -n "$INPUTS" ]; then
+            go tool covdata percent -i="$INPUTS" || true
+            go tool covdata textfmt -i="$INPUTS" -o=integration-coverage.txt
+            echo "wrote integration-coverage.txt from [$INPUTS] ($(wc -l < integration-coverage.txt) lines)"
           else
             echo "no coverage meta files collected — skipping merge"
           fi
