@@ -106,7 +106,7 @@ func canaryFixtures(weights map[string]int, increment int) (*fv1.HTTPTrigger, *f
 func TestRollForward(t *testing.T) {
 	t.Run("increments weights without completing", func(t *testing.T) {
 		trigger, cc := canaryFixtures(map[string]int{"new": 0, "old": 100}, 30)
-		mgr := &canaryConfigMgr{logger: logr.Discard(), fissionClient: fClient.NewSimpleClientset(trigger, cc)}
+		mgr := &canaryConfigMgr{logger: logr.Discard(), fissionClient: fClient.NewSimpleClientset(trigger, cc)} //nolint:staticcheck // NewClientset Update hits kubernetes/kubernetes#126850 for our CRDs
 
 		done, err := mgr.rollForward(t.Context(), cc, trigger)
 		require.NoError(t, err)
@@ -117,7 +117,7 @@ func TestRollForward(t *testing.T) {
 
 	t.Run("completes when the increment reaches 100", func(t *testing.T) {
 		trigger, cc := canaryFixtures(map[string]int{"new": 80, "old": 20}, 30)
-		mgr := &canaryConfigMgr{logger: logr.Discard(), fissionClient: fClient.NewSimpleClientset(trigger, cc)}
+		mgr := &canaryConfigMgr{logger: logr.Discard(), fissionClient: fClient.NewSimpleClientset(trigger, cc)} //nolint:staticcheck // NewClientset Update hits kubernetes/kubernetes#126850 for our CRDs
 
 		done, err := mgr.rollForward(t.Context(), cc, trigger)
 		require.NoError(t, err)
@@ -129,7 +129,7 @@ func TestRollForward(t *testing.T) {
 
 func TestRollback(t *testing.T) {
 	trigger, cc := canaryFixtures(map[string]int{"new": 50, "old": 50}, 30)
-	mgr := &canaryConfigMgr{logger: logr.Discard(), fissionClient: fClient.NewSimpleClientset(trigger, cc)}
+	mgr := &canaryConfigMgr{logger: logr.Discard(), fissionClient: fClient.NewSimpleClientset(trigger, cc)} //nolint:staticcheck // NewClientset Update hits kubernetes/kubernetes#126850 for our CRDs
 
 	require.NoError(t, mgr.rollback(t.Context(), cc, trigger))
 	assert.Equal(t, 0, trigger.Spec.FunctionReference.FunctionWeights["new"])
