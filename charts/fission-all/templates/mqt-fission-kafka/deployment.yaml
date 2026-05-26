@@ -52,6 +52,7 @@ spec:
         {{- include "fission-resource-namespace.envs" . | indent 8 }}
         {{- include "opentelemtry.envs" . | indent 8 }}
         {{- include "internalAuth.envs" . | indent 8 }}
+        {{- include "coverage.envs" . | indent 8 }}
         # TLS authentication is TLS with authentication (2 way)
         # More info: https://docs.confluent.io/current/kafka/authentication_ssl.html#ssl-overview
         {{- if .Values.kafka.authentication.tls.enabled }}
@@ -61,9 +62,14 @@ spec:
           value: /etc/fission/secrets
         - name: INSECURE_SKIP_VERIFY
           value: "{{ .Values.kafka.authentication.tls.insecureSkipVerify }}"
+        {{- end }}
+        {{- if or .Values.kafka.authentication.tls.enabled .Values.coverage.enabled }}
         volumeMounts:
+        {{- if .Values.kafka.authentication.tls.enabled }}
         - name: kafka-secrets
           mountPath: /etc/fission/secrets
+        {{- end }}
+        {{- include "coverage.volumemount" . | indent 8 }}
         {{- end }}
         {{- if .Values.terminationMessagePath }}
         terminationMessagePath: {{ .Values.terminationMessagePath }}
@@ -72,11 +78,14 @@ spec:
         terminationMessagePolicy: {{ .Values.terminationMessagePolicy }}
         {{- end }}
       serviceAccountName: fission-kafka
-      {{- if .Values.kafka.authentication.tls.enabled }}
+      {{- if or .Values.kafka.authentication.tls.enabled .Values.coverage.enabled }}
       volumes:
+      {{- if .Values.kafka.authentication.tls.enabled }}
       - name: kafka-secrets
         secret:
           secretName: mqtrigger-kafka-secrets
+      {{- end }}
+      {{- include "coverage.volume" . | indent 6 }}
       {{- end }}
     {{- with .Values.imagePullSecrets }}
       imagePullSecrets: 

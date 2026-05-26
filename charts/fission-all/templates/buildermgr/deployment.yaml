@@ -57,12 +57,16 @@ spec:
         {{- include "kube_client.envs" . | indent 8 }}
         {{- include "opentelemtry.envs" . | indent 8 }}
         {{- include "internalAuth.envs" . | indent 8 }}
-        {{- if .Values.builderPodSpec.enabled }}
+        {{- include "coverage.envs" . | indent 8 }}
+        {{- if or .Values.builderPodSpec.enabled .Values.coverage.enabled }}
         volumeMounts:
+        {{- if .Values.builderPodSpec.enabled }}
         - name: builder-podspec-patch-volume
           mountPath: /etc/fission/builder-podspec-patch.yaml
           subPath: builder-podspec-patch.yaml
           readOnly: true
+        {{- end }}
+        {{- include "coverage.volumemount" . | indent 8 }}
         {{- end }}
         ports:
           - containerPort: 8080
@@ -76,11 +80,14 @@ spec:
         terminationMessagePolicy: {{ .Values.terminationMessagePolicy }}
         {{- end }}
       serviceAccountName: fission-buildermgr
-      {{- if .Values.builderPodSpec.enabled }}
+      {{- if or .Values.builderPodSpec.enabled .Values.coverage.enabled }}
       volumes:
+      {{- if .Values.builderPodSpec.enabled }}
       - name: builder-podspec-patch-volume
         configMap:
           name: builder-podspec-patch
+      {{- end }}
+      {{- include "coverage.volume" . | indent 6 }}
       {{- end }}
 {{- if .Values.priorityClassName }}
       priorityClassName: {{ .Values.priorityClassName }}
