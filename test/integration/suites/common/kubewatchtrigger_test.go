@@ -18,10 +18,11 @@ import (
 )
 
 // TestKubernetesWatchTrigger exercises the kubewatcher subsystem
-// (pkg/kubewatcher): a KubernetesWatchTrigger watching ConfigMaps should invoke
-// its function when a matching object is created. We use the log.js fixture and
-// assert the function's pod logs eventually contain "log test" after a watched
-// ConfigMap is created.
+// (pkg/kubewatcher): a KubernetesWatchTrigger watching Services should invoke
+// its function when a matching object is created. (The kubewatcher only
+// supports POD/SERVICE/REPLICATIONCONTROLLER/JOB watch types.) We use the
+// log.js fixture and assert the function's pod logs eventually contain
+// "log test" after a watched Service is created.
 func TestKubernetesWatchTrigger(t *testing.T) {
 	t.Parallel()
 
@@ -45,17 +46,17 @@ func TestKubernetesWatchTrigger(t *testing.T) {
 	})
 
 	ns.CreateKubernetesWatchTrigger(t, ctx, framework.KubernetesWatchTriggerOptions{
-		Name: kwName, Function: fnName, ObjType: "configmap", WatchNamespace: ns.Name,
+		Name: kwName, Function: fnName, ObjType: "service", WatchNamespace: ns.Name,
 	})
 
 	// Give the watcher a moment to establish its informer, then create a
-	// ConfigMap in the watched namespace to fire an add event.
+	// Service in the watched namespace to fire an add event.
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.NotEmpty(c, ns.GetKubernetesWatchTriggerConditions(t, ctx, kwName),
 			"kuberneteswatchtrigger should have status conditions")
 	}, 1*time.Minute, 2*time.Second)
 
-	ns.CreateConfigMap(t, ctx, "kw-watched-"+ns.ID, map[string]string{"k": "v"})
+	ns.CreateService(t, ctx, "kw-watched-"+ns.ID)
 
 	// The add event should drive an invocation, specializing a pod that logs.
 	require.EventuallyWithT(t, func(c *assert.CollectT) {

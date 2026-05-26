@@ -187,6 +187,9 @@ type ContainerFunctionOptions struct {
 	Image string
 	// Port the image listens on (CLI `--port`); default 8888 when 0.
 	Port int
+	// ConfigMaps attaches configmaps by name (CLI `--configmap`, repeatable).
+	// Their keys are injected as env vars into the container.
+	ConfigMaps []string
 }
 
 // CreateContainerFunction creates a container-executor function via
@@ -201,6 +204,9 @@ func (ns *TestNamespace) CreateContainerFunction(t *testing.T, ctx context.Conte
 	args := []string{"fn", "run-container", "--name", opts.Name, "--image", opts.Image}
 	if opts.Port > 0 {
 		args = append(args, "--port", strconv.Itoa(opts.Port))
+	}
+	for _, cm := range opts.ConfigMaps {
+		args = append(args, "--configmap", cm)
 	}
 	ns.CLI(t, ctx, args...)
 

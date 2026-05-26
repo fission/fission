@@ -142,10 +142,11 @@ jobs:
           GO_RUNTIME_IMAGE: ghcr.io/fission/go-env-1.23
           GO_BUILDER_IMAGE: ghcr.io/fission/go-builder-1.23
           # Container-executor backend test (TestBackendContainer): a plain
-          # HTTP server image that returns 200 on GET /. hello-app listens on
-          # 8080; CONTAINER_RUNTIME_PORT tells the test which port to route to.
+          # HTTP server image that returns 200 on GET / and honours a PORT env
+          # var. hello-app defaults to 8080 but reads PORT; the test injects
+          # PORT=8888 (via configmap) so the function listens on 8888 — the
+          # port the function-pods NetworkPolicy lets the router reach.
           CONTAINER_RUNTIME_IMAGE: gcr.io/google-samples/hello-app:1.0
-          CONTAINER_RUNTIME_PORT: "8080"
           FISSION_ROUTER: 127.0.0.1:8888
           FISSION_NAMESPACE: fission
           LOG_DIR: ${{ github.workspace }}/test/integration/logs
