@@ -44,6 +44,7 @@ spec:
             fieldRef:
               fieldPath: metadata.namespace
         {{- include "opentelemtry.envs" . | indent 8 }}
+        {{- include "coverage.envs" . | indent 8 }}
         resources:
           {{- toYaml .Values.canaryDeployment.resources | nindent 10 }}
         {{- if .Values.terminationMessagePath }}
@@ -56,6 +57,7 @@ spec:
         - name: config-volume
           mountPath: /etc/config/config.yaml
           subPath: config.yaml
+        {{- include "coverage.volumemount" . | indent 8 }}
         ports:
           - containerPort: 8080
             name: metrics
@@ -69,6 +71,7 @@ spec:
       - name: config-volume
         configMap:
           name: feature-config
+      {{- include "coverage.volume" . | indent 6 }}
 {{- if .Values.priorityClassName }}
       priorityClassName: {{ .Values.priorityClassName }}
 {{- end }}
