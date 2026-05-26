@@ -19,6 +19,10 @@ func TestNewBackOff(t *testing.T) {
 	assert.Equal(t, time.Second, b.GetInitialInterval())
 	assert.Equal(t, 10*time.Second, b.GetMaxInterval())
 	assert.Equal(t, 2.0, b.GetMultiplier())
+	// the constructor must honour all four args: MaxCount and the starting
+	// backoff come from the caller, not from package defaults.
+	assert.Equal(t, float64(5), b.GetMaxCount())
+	assert.Equal(t, time.Second, b.GetCurrentBackoffDuration())
 
 	_, err = NewBackOff(-1, 10*time.Second, 2.0, 5)
 	require.Error(t, err, "negative values must be rejected")

@@ -140,10 +140,18 @@ func symlinkReaper(zapLogger logr.Logger) {
 // logic can be unit-tested without waiting on the timer.
 func reapStaleSymlinks(zapLogger logr.Logger, dir string) {
 	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			// Log and keep walking the rest of the tree rather than aborting
+			// the whole reap on one unreadable entry.
+			zapLogger.Error(err, "error walking symlink dir, skipping entry", "filepath", path)
+			return nil
+		}
 		if target, e := os.Readlink(path); e == nil {
 			if _, pathErr := os.Stat(target); os.IsNotExist(pathErr) {
 				zapLogger.V(1).Info("remove symlink file", "filepath", path)
-				os.Remove(path)
+				if rmErr := os.Remove(path); rmErr != nil {
+					zapLogger.Error(rmErr, "error removing stale symlink", "filepath", path)
+				}
 			}
 		}
 		return nil
