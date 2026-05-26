@@ -31,7 +31,7 @@ func Commands() *cobra.Command {
 		Short: "Create, update, or delete resources from application specification",
 	}, Apply, flag.FlagSet{
 		Optional: []flag.Flag{flag.SpecDir, flag.SpecIgnore, flag.SpecDelete, flag.SpecWait, flag.SpecWatch,
-			flag.SpecValidation, flag.SpecApplyCommitLabel, flag.SpecAllowConflicts, flag.ForceNamespace},
+			flag.SpecValidation, flag.SpecApplyCommitLabel, flag.SpecAllowConflicts, flag.ForceNamespace, flag.SpecApplyDryRun},
 	})
 
 	destroyCmd := wrapper.SubCommand(&cobra.Command{

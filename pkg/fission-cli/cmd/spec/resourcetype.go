@@ -29,18 +29,30 @@ type Object[T any] interface {
 // client calls and equality, so each kind needs a few lines rather than its own
 // copy of the whole loop. Kind-specific quirks live inside the closures: the
 // Package update closure waits out an in-flight build, and the HTTPTrigger
-// create/update closures reject duplicate routes.
+// validate closure rejects duplicate routes.
 type resourceOps[T any, PT Object[T]] struct {
-	items  func(fr *FissionResources) []T         // desired resources from the spec
-	list   func(ctx context.Context) ([]T, error) // all such resources on the cluster
-	meta   func(PT) *metav1.ObjectMeta            // the object's ObjectMeta
-	equal  func(existing, desired PT) bool        // true => apply is a no-op
-	create func(ctx context.Context, desired PT) (*metav1.ObjectMeta, error)
+	items func(fr *FissionResources) []T         // desired resources from the spec
+	list  func(ctx context.Context) ([]T, error) // all such resources on the cluster
+	meta  func(PT) *metav1.ObjectMeta            // the object's ObjectMeta
+	equal func(existing, desired PT) bool        // true => apply is a no-op
+	// validate, if set, runs read-only admission-style checks before a
+	// create/update (e.g. HTTPTrigger duplicate-route detection). It runs in
+	// dry-run too, so a preview surfaces errors a real apply would hit.
+	validate func(ctx context.Context, desired PT) error
+	create   func(ctx context.Context, desired PT) (*metav1.ObjectMeta, error)
 	// update receives the existing object so it can carry the ResourceVersion
 	// forward (and, for packages, wait out an in-flight build).
 	update func(ctx context.Context, existing, desired PT) (*metav1.ObjectMeta, error)
 	delete func(ctx context.Context, namespace, name string) error
 }
+
+// dryRunResourceVersion is the synthetic ResourceVersion recorded for a would-be
+// update under --dry-run. A real update bumps the object's ResourceVersion, and a
+// Function embeds the ResourceVersion of the Package it references; recording a
+// sentinel here means such dependents detect and report the would-be change too,
+// instead of appearing as no-ops because they still carry the old RV. It is never
+// written to the cluster — dry-run performs no create/update/delete calls.
+const dryRunResourceVersion = "dry-run-would-update"
 
 // setDeploymentUID stamps the deployment name/UID annotations so future applies
 // can recognise the objects this spec owns.
@@ -74,12 +86,21 @@ func ownedByDeployment(o metav1.Object, fr *FissionResources) bool {
 // are removed. It returns each desired object's metadata keyed by namespace/name
 // so callers can wire up cross-references such as a function's package
 // ResourceVersion.
+//
+// When dryRun is set, the same list/diff is performed read-only: the
+// create/update/delete client calls (and the per-deletion log line) are skipped,
+// but ras and the metadata map are still populated as a real run would report —
+// the desired object's metadata for would-be-creates, and the existing object's
+// metadata with a sentinel ResourceVersion (dryRunResourceVersion) for would-be-
+// updates so dependents that embed it detect the change — so the caller's summary
+// and cross-reference wiring stay correct without touching the cluster.
 func applyResourceType[T any, PT Object[T]](
 	ctx context.Context,
 	fr *FissionResources,
 	ops resourceOps[T, PT],
 	deleteStale bool,
 	allowConflicts bool,
+	dryRun bool,
 ) (map[string]metav1.ObjectMeta, *ResourceApplyStatus, error) {
 
 	clusterObjs, err := ops.list(ctx)
@@ -88,11 +109,15 @@ func applyResourceType[T any, PT Object[T]](
 	}
 
 	// Index the cluster objects this deployment owns, by namespace/name. Keep an
-	// ordered slice too so deletions print in a stable (list) order.
+	// ordered slice too so deletions print in a stable (list) order. allByName
+	// holds every cluster object's name (owned or not) so dry-run can detect the
+	// AlreadyExists conflict a real create would hit (see the create branch).
 	ownedByName := make(map[string]PT)
+	allByName := make(map[string]bool)
 	var owned []PT
 	for i := range clusterObjs {
 		obj := PT(&clusterObjs[i])
+		allByName[k8sCache.MetaObjectToName(obj).String()] = true
 		if allowConflicts || ownedByDeployment(obj, fr) {
 			ownedByName[k8sCache.MetaObjectToName(obj).String()] = obj
 			owned = append(owned, obj)
@@ -117,16 +142,50 @@ func applyResourceType[T any, PT Object[T]](
 			// Already up to date; record existing metadata for cross-refs.
 			metadata[name] = *ops.meta(existing)
 		case found:
-			newMeta, err := ops.update(ctx, existing, ptr)
-			if err != nil {
-				return nil, nil, err
+			// would-be update: validate first (runs in dry-run too), then either
+			// perform the update or, in dry-run, synthesize the metadata a real
+			// update would return (existing meta with a bumped ResourceVersion) so
+			// dependent resources still detect the would-be change.
+			if ops.validate != nil {
+				if err := ops.validate(ctx, ptr); err != nil {
+					return nil, nil, err
+				}
+			}
+			var newMeta *metav1.ObjectMeta
+			if dryRun {
+				m := *ops.meta(existing)
+				m.ResourceVersion = dryRunResourceVersion
+				newMeta = &m
+			} else {
+				newMeta, err = ops.update(ctx, existing, ptr)
+				if err != nil {
+					return nil, nil, err
+				}
 			}
 			ras.Updated = append(ras.Updated, newMeta)
 			metadata[name] = *newMeta
 		default:
-			newMeta, err := ops.create(ctx, ptr)
-			if err != nil {
-				return nil, nil, err
+			// would-be create: validate first (runs in dry-run too), record the
+			// desired metadata (RV empty), and only mutate when not a dry run.
+			if ops.validate != nil {
+				if err := ops.validate(ctx, ptr); err != nil {
+					return nil, nil, err
+				}
+			}
+			// A real apply calls Create here; if an object with this name already
+			// exists but isn't owned by this spec (so it wasn't a `found` update)
+			// and we're not adopting conflicts, the server returns AlreadyExists
+			// and the apply fails. Dry-run skips the call, so surface that conflict
+			// explicitly instead of reporting a would-create that can't happen.
+			if dryRun && !allowConflicts && allByName[name] {
+				return nil, nil, fmt.Errorf("%s already exists on the cluster and is not managed by this spec deployment; a real apply would fail with AlreadyExists (use --allowconflicts to adopt it)", name)
+			}
+			newMeta := ops.meta(ptr)
+			if !dryRun {
+				newMeta, err = ops.create(ctx, ptr)
+				if err != nil {
+					return nil, nil, err
+				}
 			}
 			ras.Created = append(ras.Created, newMeta)
 			metadata[name] = *newMeta
@@ -139,11 +198,13 @@ func applyResourceType[T any, PT Object[T]](
 			if desired[name] {
 				continue
 			}
-			if err := ops.delete(ctx, obj.GetNamespace(), obj.GetName()); err != nil {
-				return nil, nil, err
+			if !dryRun {
+				if err := ops.delete(ctx, obj.GetNamespace(), obj.GetName()); err != nil {
+					return nil, nil, err
+				}
+				fmt.Printf("Deleted %v %v\n", obj.GetObjectKind().GroupVersionKind().Kind, name)
 			}
 			ras.Deleted = append(ras.Deleted, ops.meta(obj))
-			fmt.Printf("Deleted %v %v\n", obj.GetObjectKind().GroupVersionKind().Kind, name)
 		}
 	}
 

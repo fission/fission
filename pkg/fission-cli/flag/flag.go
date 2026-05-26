@@ -209,6 +209,7 @@ var (
 	SpecWatch            = Flag{Type: Bool, Name: flagkey.SpecWatch, Usage: "Watch local files for change, and re-apply specs as necessary"}
 	SpecDelete           = Flag{Type: Bool, Name: flagkey.SpecDelete, Usage: "Allow apply to delete resources that no longer exist in the specification"}
 	SpecDry              = Flag{Type: Bool, Name: flagkey.SpecDry, Usage: "View the generated specs"}
+	SpecApplyDryRun      = Flag{Type: Bool, Name: flagkey.SpecApplyDryRun, Usage: "Preview what apply would create/update/delete without changing the cluster"}
 	SpecValidation       = Flag{Type: String, Name: flagkey.SpecValidate, Usage: "Turns server side validations of Fission objects on/off"}
 	SpecIgnore           = Flag{Type: String, Name: flagkey.SpecIgnore, Usage: fmt.Sprintf("File containing specs to be ignored inside --specdir, defaults to %v", util.SPEC_IGNORE_FILE)}
 	SpecApplyCommitLabel = Flag{Type: Bool, Name: flagkey.SpecApplyCommitLabel, Usage: "Apply commit label to the resources"}
