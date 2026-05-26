@@ -141,6 +141,12 @@ jobs:
           PYTHON_BUILDER_IMAGE: ghcr.io/fission/python-builder
           GO_RUNTIME_IMAGE: ghcr.io/fission/go-env-1.23
           GO_BUILDER_IMAGE: ghcr.io/fission/go-builder-1.23
+          # Container-executor backend test (TestBackendContainer): a plain
+          # HTTP server image that returns 200 on GET / and honours a PORT env
+          # var. hello-app defaults to 8080 but reads PORT; the test injects
+          # PORT=8888 (via configmap) so the function listens on 8888 — the
+          # port the function-pods NetworkPolicy lets the router reach.
+          CONTAINER_RUNTIME_IMAGE: gcr.io/google-samples/hello-app:1.0
           FISSION_ROUTER: 127.0.0.1:8888
           FISSION_NAMESPACE: fission
           LOG_DIR: ${{ github.workspace }}/test/integration/logs
@@ -159,7 +165,7 @@ jobs:
           export -f load_image
           export KIND_CLUSTER_NAME
           pids=()
-          for img in "$NODE_RUNTIME_IMAGE" "$NODE_BUILDER_IMAGE" "$PYTHON_RUNTIME_IMAGE" "$PYTHON_BUILDER_IMAGE" "$GO_RUNTIME_IMAGE" "$GO_BUILDER_IMAGE"; do
+          for img in "$NODE_RUNTIME_IMAGE" "$NODE_BUILDER_IMAGE" "$PYTHON_RUNTIME_IMAGE" "$PYTHON_BUILDER_IMAGE" "$GO_RUNTIME_IMAGE" "$GO_BUILDER_IMAGE" "$CONTAINER_RUNTIME_IMAGE"; do
             load_image "$img" &
             pids+=($!)
           done

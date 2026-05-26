@@ -24,6 +24,9 @@ type RuntimeImages struct {
 	JVMJersey        string
 	JVMJerseyBuilder string
 	TS               string
+	// Container is a plain HTTP-server image used by the container-executor
+	// backend test (it serves HTTP itself, unlike Fission runtime images).
+	Container string
 }
 
 func loadRuntimeImages() RuntimeImages {
@@ -39,6 +42,7 @@ func loadRuntimeImages() RuntimeImages {
 		JVMJersey:        os.Getenv("JVM_JERSEY_RUNTIME_IMAGE"),
 		JVMJerseyBuilder: os.Getenv("JVM_JERSEY_BUILDER_IMAGE"),
 		TS:               os.Getenv("TS_RUNTIME_IMAGE"),
+		Container:        os.Getenv("CONTAINER_RUNTIME_IMAGE"),
 	}
 }
 
@@ -85,6 +89,13 @@ func (r RuntimeImages) RequireJVM(skip skipper) string {
 // RequireJVMBuilder skips the test if JVM_BUILDER_IMAGE is unset.
 func (r RuntimeImages) RequireJVMBuilder(skip skipper) string {
 	return requireImage(skip, "JVM_BUILDER_IMAGE", r.JVMBuilder)
+}
+
+// RequireContainer skips the test if CONTAINER_RUNTIME_IMAGE is unset. It
+// should point at a small image that serves HTTP on its port (the
+// container-executor backend invokes the user image directly).
+func (r RuntimeImages) RequireContainer(skip skipper) string {
+	return requireImage(skip, "CONTAINER_RUNTIME_IMAGE", r.Container)
 }
 
 func requireImage(skip skipper, envVar, value string) string {

@@ -41,7 +41,8 @@ func NewBackOff(initialInterval time.Duration, maxInterval time.Duration, multip
 		MaxInterval:     maxInterval,
 		Multiplier:      multiplier,
 		InitialInterval: initialInterval,
-		currentbackoff:  DefaultInitialInterval,
+		MaxCount:        maxCount,
+		currentbackoff:  initialInterval,
 		currentCount:    0,
 	}, nil
 }

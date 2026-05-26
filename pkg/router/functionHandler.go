@@ -498,7 +498,7 @@ func findCeil(randomNumber int, wtDistrList []functionWeightDistribution) string
 	high := len(wtDistrList) - 1
 
 	for low < high {
-		mid := low + high/2
+		mid := (low + high) / 2
 		if randomNumber >= wtDistrList[mid].sumPrefix {
 			low = mid + 1
 		} else {

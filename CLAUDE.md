@@ -48,6 +48,11 @@ kubectl port-forward svc/router-internal 8889:8889 -n fission &
 - Framework reference + "Adding a new test" 12-step guide: `docs/test-migration/02-framework-api.md`.
 - The previous bash test suite (`test/tests/`, `test/run_test.sh`, `test/kind_CI.sh`, `test/utils.sh`, etc.) was retired in 2026-05; the migration history lives in `docs/test-migration/`.
 
+## Testing conventions
+
+When writing or modifying tests, follow `.claude/resources/test-writing-guidelines.md`.
+Key points: use `testify` (`require` for preconditions, `assert` for independent checks) over hand-written comparisons; use `t.Context()` instead of `context.Background()`; prefer fake clientsets over `envtest` for unit tests; table-driven subtests with `t.Parallel()`.
+
 ## Architecture
 
 `cmd/fission-bundle/main.go` is the dispatch point — the same binary becomes a different service depending on which `--<flag>` is passed (`--routerPort`, `--executorPort`, `--kubewatcher`, `--timer`, `--mqt`, `--mqt_keda`, `--builderMgr`, `--canaryConfig`, `--webhookPort`, `--storageServicePort`, `--logger`).

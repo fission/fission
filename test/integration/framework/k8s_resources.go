@@ -37,6 +37,31 @@ func (ns *TestNamespace) CreateConfigMap(t *testing.T, ctx context.Context, name
 	})
 }
 
+// CreateService creates a minimal ClusterIP Service in the test namespace and
+// registers its deletion on the cleanup chain. It needs no backing pods — it
+// exists purely to fire a create event for KubernetesWatchTrigger tests
+// (the kubewatcher supports watching Service objects).
+func (ns *TestNamespace) CreateService(t *testing.T, ctx context.Context, name string) {
+	t.Helper()
+	require.NotEmpty(t, name, "CreateService: name")
+	svc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns.Name},
+		Spec: corev1.ServiceSpec{
+			Selector: map[string]string{"watched-by": name},
+			Ports:    []corev1.ServicePort{{Port: 80}},
+		},
+	}
+	_, err := ns.f.kubeClient.CoreV1().Services(ns.Name).Create(ctx, svc, metav1.CreateOptions{})
+	require.NoErrorf(t, err, "create service %q", name)
+	ns.addCleanup("service "+name, func(c context.Context) error {
+		err := ns.f.kubeClient.CoreV1().Services(ns.Name).Delete(c, name, metav1.DeleteOptions{})
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+		return err
+	})
+}
+
 // CreateSecret creates an Opaque Secret in the test namespace with the given
 // string-data entries and registers its deletion on the namespace cleanup
 // chain. Mirrors `kubectl create secret generic <name> --from-literal=k=v ...`.
