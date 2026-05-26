@@ -15,14 +15,21 @@ coverage:
   status:
     project:
       default:
+        # Blocking gate on COMBINED coverage: no flag filter means codecov
+        # measures total project coverage from all uploads (unittests +
+        # integration). threshold:2 absorbs the run-to-run variability of
+        # integration coverage; carryforward (above) keeps the number stable
+        # if the integration leg ever skips its upload.
         threshold: 2
-        # Keep the blocking gate driven by unit tests only.
-        flags:
-          - unittests
-      # Integration coverage is informational while it stabilises.
+      # Per-flag breakdown kept informational so a flaky/incomplete
+      # integration upload posts a signal without separately blocking.
       integration:
         informational: true
         flags:
           - integration
+      unittests:
+        informational: true
+        flags:
+          - unittests
     # Disable patch coverage check since we focus on project coverage.
     patch: off
