@@ -1,3 +1,4 @@
+#!/bin/bash
 # SPDX-FileCopyrightText: The Fission Authors
 #
 # SPDX-License-Identifier: Apache-2.0
@@ -6,7 +7,7 @@ if ! command -v dashboard-linter >/dev/null 2>&1; then
     echo "dashboard-linter is not installed"
     echo "Installing dashboard-linter..."
     go install github.com/grafana/dashboard-linter@1be3836b83fbcf9508efcd87af87dfbfbec94279 # v0.1.1
-    exit 1;
+    export PATH="$PATH:$(go env GOPATH)/bin"
 fi
 BASE_PATH=$(pwd)
 
