@@ -11,6 +11,9 @@ env:
   KIND_CLUSTER_NAME: kind
   COSIGN_VERSION: v3.0.6
 
+permissions:
+  contents: read
+
 jobs:
   create-draft-release:
     name: Create Draft Release with Goreleaser
@@ -133,7 +136,6 @@ jobs:
       matrix:
         include: ${{ fromJson(needs.create-draft-release.outputs.ghcr_images) }}
     permissions:
-      actions: write
       id-token: write
       packages: write
       attestations: write

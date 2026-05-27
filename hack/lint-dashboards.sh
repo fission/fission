@@ -5,7 +5,7 @@
 if ! command -v dashboard-linter >/dev/null 2>&1; then
     echo "dashboard-linter is not installed"
     echo "Installing dashboard-linter..."
-    go install github.com/grafana/dashboard-linter@latest
+    go install github.com/grafana/dashboard-linter@1be3836b83fbcf9508efcd87af87dfbfbec94279 # v0.1.1
     exit 1;
 fi
 BASE_PATH=$(pwd)
