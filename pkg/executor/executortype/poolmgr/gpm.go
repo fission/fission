@@ -649,6 +649,14 @@ func (gpm *GenericPoolManager) doIdleObjectReaper(ctx context.Context) {
 		return
 	}
 
+	// Bound concurrency: a traffic drop can leave thousands of pods idle at
+	// once, and one cleanup goroutine each would spike goroutines and hammer
+	// the API server. The semaphore caps in-flight reaps; wait.UntilWithContext
+	// won't start the next reaper pass until this one returns.
+	const maxConcurrentReaps = 10
+	sem := make(chan struct{}, maxConcurrentReaps)
+	var wg sync.WaitGroup
+
 	for i := range funcSvcs {
 		fsvc := funcSvcs[i]
 
@@ -682,7 +690,11 @@ func (gpm *GenericPoolManager) doIdleObjectReaper(ctx context.Context) {
 			continue
 		}
 
+		wg.Add(1)
+		sem <- struct{}{}
 		go func() {
+			defer wg.Done()
+			defer func() { <-sem }()
 			deleted, err := gpm.fsCache.DeleteOldPoolCache(ctx, fsvc, idlePodReapTime)
 			if err != nil {
 				gpm.logger.Error(err, "error deleting Kubernetes objects for function service", "service", fsvc)
@@ -701,6 +713,7 @@ func (gpm *GenericPoolManager) doIdleObjectReaper(ctx context.Context) {
 			}
 		}()
 	}
+	wg.Wait()
 }
 
 // WebsocketStartEventChecker checks if the pod has emitted a websocket connection start event
