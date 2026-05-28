@@ -798,9 +798,9 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "fission_function_overhead_seconds",
+          "expr": "histogram_quantile(0.99, sum(rate(fission_function_overhead_seconds_bucket[5m])) by (le, function_name, method, code))",
           "interval": "",
-          "legendFormat": "Function: {{function_name}} {{method}} {{code}} Percentile:{{quantile}}",
+          "legendFormat": "Function: {{function_name}} {{method}} {{code}} p99",
           "range": true,
           "refId": "A"
         }

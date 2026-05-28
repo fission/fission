@@ -34,11 +34,15 @@ var (
 		},
 		labelsStrings,
 	)
-	functionCallOverhead = prometheus.NewSummaryVec(
-		prometheus.SummaryOpts{
-			Name:       "fission_function_overhead_seconds",
-			Help:       "The function call delay caused by fission.",
-			Objectives: map[float64]float64{0.5: 0.05, 0.9: 0.01, 0.99: 0.001},
+	functionCallOverhead = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name: "fission_function_overhead_seconds",
+			Help: "The function call delay caused by fission.",
+			// Histogram instead of Summary: a summary keeps a per-series quantile
+			// stream, and with these high-cardinality labels that was the largest
+			// router heap consumer. Buckets are fixed-size and aggregatable across
+			// replicas. Quantiles are derived with histogram_quantile().
+			Buckets: prometheus.DefBuckets,
 		},
 		labelsStrings,
 	)
