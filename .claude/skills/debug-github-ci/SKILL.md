@@ -1,6 +1,6 @@
 ---
 name: debug-github-ci
-description: Investigate and fix GitHub Actions CI failures on the Fission repo's PRs efficiently. Use when CI is red on an open PR, when an integration test needs triaging, when the user asks "why is X failing in CI", or after pushing changes to verify CI before claiming work is done. Optimised for the push-fix-monitor loop and the Fission-specific failure patterns we hit repeatedly: builder/fetcher build pipeline, storagesvc archive flow, NetworkPolicy selectors, /packages shared-volume permissions, kind-ci profile patches.
+description: Investigate and fix GitHub Actions CI failures on the Fission repo's PRs efficiently, and analyze the CI-captured pprof profiles for performance/memory work. Use when CI is red on an open PR, when an integration test needs triaging, when the user asks "why is X failing in CI", after pushing changes to verify CI before claiming work is done, or when investigating memory/compute usage in router/executor from the CI heap/goroutine profiles. Optimised for the push-fix-monitor loop and the Fission-specific failure patterns we hit repeatedly: builder/fetcher build pipeline, storagesvc archive flow, NetworkPolicy selectors, /packages shared-volume permissions, kind-ci profile patches, and pprof profile analysis (leak vs. baseline classification, before/after deltas).
 ---
 
 # Debug GitHub CI failures (Fission)
@@ -116,6 +116,8 @@ Match the error string first, then load the matching resource for deeper diagnos
 
 3. **Sanity-test locally** for the affected scope: ```bash make code-checks                                              # lint go test -race -count=1 -timeout 5m ./pkg/<affected>/...       # focused tests helm lint charts/fission-all                                  # if Helm changed helm template charts/fission-all --set <vals> | sed -n '/^kind: <Kind>/,/^---/p'   # render check ```
 
+4. **Performance / memory investigations** (not a failure, but "where is the memory/compute going", or verifying a perf fix): the integration job uploads heap + goroutine pprof artifacts per leg. Pull and read them, classify leak vs. baseline, and quantify before/after — full workflow in `resources/pprof-profile-analysis.md`.
+
 ## Phase 4 — Push and monitor
 
 After pushing the fix, arm the `Monitor` tool with the standard poll loop so terminal-state notifications arrive instead of you polling.
@@ -140,6 +142,7 @@ Full instructions and rationale: `resources/skaffold-kind-ci-profile.md`.
 - `resources/integration-test-framework.md` — Go-test-framework quirks the bash→Go migration uncovered: builder/runtime readiness race (8 layered fixes), pod-label conventions, `ns.CLI` capture limitations, `embed.FS` nested-module skip, spec-test cwd handling, Package CR `/status` subresource gap.
 - `resources/monitor-poll-loop.md` — the canonical `gh pr checks` poll loop for the push-fix-monitor cycle.
 - `resources/gh-commands-cheatsheet.md` — every `gh` invocation we use during a debug session, with notes.
+- `resources/pprof-profile-analysis.md` — pull and read the CI heap/goroutine pprof artifacts; classify leak vs. baseline; quantify a fix's before/after delta; metrics-registration gotchas (the `TestCanary`-stall trap).
 
 ## Out of scope
 
