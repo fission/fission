@@ -133,23 +133,32 @@ def build_dup_groups(threads: list[dict], jaccard_floor: float = 0.7) -> dict[in
     for t in threads:
         groups[find(t["number"])].append(t["number"])
 
+    # members each thread has a "ref" edge to (for per-member evidence)
+    ref_neighbors: dict[int, set[int]] = defaultdict(set)
+    for pair, kind_ev in evidence.items():
+        if kind_ev == "ref":
+            a, b = tuple(pair)
+            ref_neighbors[a].add(b)
+            ref_neighbors[b].add(a)
+
     result: dict[int, dict] = {}
     for members in groups.values():
         if len(members) < 2:
             continue
         members.sort()
-        open_members = [m for m in members if by_num[m]["state"] == "open"]
-        canonical = (open_members or members)[0]
-        # strongest evidence across the title-similar pairs in this group
         mset = set(members)
-        ev = "title"
-        for pair, kind_ev in evidence.items():
-            if kind_ev == "ref" and pair <= mset:
-                ev = "ref"
-                break
+        # Canonical must be a thread that is actually visible: open upstream AND
+        # not locally hidden, else we'd close items as duplicates of something
+        # intentionally removed from future runs.
+        visible = [m for m in members
+                   if by_num[m]["state"] == "open" and not by_num[m]["closed_local"]]
+        canonical = (visible or members)[0]
         for m in members:
             if m == canonical:
                 continue
+            # Per-member evidence: auto only if THIS member has a direct ref edge
+            # to another group member; title-only members stay review-tier.
+            ev = "ref" if ref_neighbors[m] & mset else "title"
             result[m] = {"canonical": canonical, "evidence": ev, "members": members}
     return result
 

@@ -113,14 +113,13 @@ def write_md(path, slug: str, triage: list[dict]):
     for tier in TIER_ORDER:
         for disp in sorted(by_tier.get(tier, {})):
             lines.append(f"| {tier} | {disp} | {len(by_tier[tier][disp])} |")
-    lines += [
-        "",
+    apply_order = (
         "**Apply order:** review `auto` items, then run "
-        "`apply.py --auto --execute`. Curate `review` items into "
-        "`approved.jsonl`, then `apply.py --from approved.jsonl --execute`. "
-        "`keep` items are label suggestions only.",
-        "",
-    ]
+        + "`apply.py --auto --execute`. Curate `review` items into "
+        + "`approved.jsonl`, then `apply.py --from approved.jsonl --execute`. "
+        + "`keep` items are label suggestions only."
+    )
+    lines += ["", apply_order, ""]
 
     titles = {
         "auto": "## Auto tier — gated, eligible for `apply.py --auto`",

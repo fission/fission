@@ -20,9 +20,8 @@ Any number listed in `<workdir>/keepers.txt` (one per line, `#` comments allowed
 If the thread carries any `[protected].labels` (`keep-open`, `help wanted`, `good first issue`, `proposal`, `hold-off-merging`, `in progress`, `work-in-progress`, `ready-to-merge`, `area-security`, `research`), it is untouchable. Rationale records which label protected it.
 
 **1. close-duplicate.**
-Non-canonical member of a locally-detected duplicate group. Group detection (in `build_dup_groups`): union-find over (a) deterministic same-repo cross-references `#123`/`pull/123`/`issues/123` of 2+ digits, and (b) same-kind title-token Jaccard ≥ 0.6 (4+ char tokens, stopwords removed). Canonical = lowest-numbered open member.
-- evidence = cross-reference → `auto`
-- evidence = title-overlap only → `review`
+Non-canonical member of a locally-detected duplicate group. Group detection (in `build_dup_groups`): union-find over (a) deterministic same-repo cross-references `#123`/`pull/123`/`issues/123` of 2+ digits, and (b) same-kind title-token Jaccard ≥ `dup_title_jaccard` (default 0.7; 4+ char tokens, stopwords removed). Canonical = lowest-numbered member that is open upstream AND not locally closed.
+- evidence is computed **per member**: a member auto-closes only if it has a direct cross-reference edge to another group member; members joined by title overlap alone stay `review`.
 
 **2. close-implemented → `review`.**
 Body matches `(fixed|resolved|closed|implemented) (in|by|via) #NNN`. Conservative: a human must confirm the referenced PR actually merged (keyword mode can't verify merge state reliably).
@@ -61,6 +60,6 @@ Everything else. Adds `needs-triage` plus inferred **type** (`[types]` keyword m
 
 - Rules are pure re-derivations: edit `config.*.toml`, re-run `scrub.sh triage` + `report` — no re-sync.
 - Too many false stale-closes? Raise `stale_days` / lower `stale_comment_max`.
-- Duplicate groups too greedy? Raise the Jaccard floor (edit `build_dup_groups`, currently 0.6) or rely only on `ref` evidence by treating `title` evidence as keep.
+- Duplicate groups too greedy? Raise `dup_title_jaccard` in `[triage]` (default 0.7), or act only on `ref`-evidence members and leave `title`-only members for manual review.
 - Area labels noisy? Tighten `[areas]` keywords or lower the cap (in `infer_areas`).
 - The engine never *removes* labels and never edits closed threads.

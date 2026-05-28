@@ -27,8 +27,8 @@ Nothing is written into the target repo, so no `.gitignore` edits are needed and
 
 Wraps gitcrawl. Reads GitHub, writes only local SQLite.
 
-- **First run / full backfill:** `--full` → `gitcrawl sync owner/repo --state all --include-comments`.
-  Pulls every issue + PR and their comments. This is the slow one (minutes for a multi-year repo); it honors GitHub rate limits and resumes cleanly.
+- **First run / full backfill:** `--full` → `gitcrawl sync owner/repo --state all` (metadata-only).
+  Pulls every issue + PR. Comment/reaction counts come from the thread object itself, so the rule engine never needs comment hydration. Add `--with-comments` only if you want comment bodies in the FTS index — that's the slow path; metadata-only is minutes for a multi-year repo, honors rate limits, and resumes cleanly.
 - **Incremental (default):** `gitcrawl sync owner/repo`.
   Fetches open items plus a recently-closed sweep, so local open-state doesn't rot between runs.
 

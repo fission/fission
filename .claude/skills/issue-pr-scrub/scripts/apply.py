@@ -23,7 +23,6 @@ so the item drops out of the next run.
 
 from __future__ import annotations
 
-import argparse
 import time
 
 import common
@@ -192,10 +191,12 @@ def build_commands(slug, kind, action, number, row, cfg) -> list[list[str]]:
     if labels:
         cmds.append(["gh", gk, "edit", str(number), "--repo", slug,
                      "--add-label", ",".join(labels)])
+    # Post the comment for ANY disposition that carries a template, not just
+    # closes — mark-stale and needs-info are label-plus-comment actions.
+    body = render(row.get("comment_template"), cfg, row.get("context", {}))
+    if body:
+        cmds.append(["gh", gk, "comment", str(number), "--repo", slug, "--body", body])
     if action == "close":
-        body = render(row.get("comment_template"), cfg, row.get("context", {}))
-        if body:
-            cmds.append(["gh", gk, "comment", str(number), "--repo", slug, "--body", body])
         close_cmd = ["gh", gk, "close", str(number), "--repo", slug]
         reason = row.get("close_reason")
         if gk == "issue" and reason:
