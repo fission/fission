@@ -326,6 +326,13 @@ func (fsc *FunctionServiceCache) DeleteFunctionSvc(ctx context.Context, fsvc *Fu
 			"address", fsvc.Address,
 		)
 	}
+	// PodToFsvc and WebsocketFsvc are keyed by pod name (== fsvc.Name) and were
+	// never cleaned up, leaking one entry per specialized pod as pods churn.
+	// Both poolmgr cleanup paths (idle reaper and specialized-pod cleanup) route
+	// through here, so removing them once covers both. Delete is a no-op for
+	// executors that never populate these maps.
+	fsc.PodToFsvc.Delete(fsvc.Name)
+	fsc.WebsocketFsvc.Delete(fsvc.Name)
 }
 
 // DeleteOld deletes aged function service entries from cache.
