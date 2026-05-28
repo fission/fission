@@ -18,12 +18,14 @@ import common
 CLOSE_DISPOSITIONS = {
     "close-duplicate", "close-implemented", "close-eol", "close-stale", "pr-archive",
 }
+# gh issue close --reason accepts {completed | not planned | duplicate}
+# (note the space — this is the CLI value, not the API's not_planned).
 CLOSE_REASON = {
-    "close-duplicate": "not_planned",
+    "close-duplicate": "duplicate",
     "close-implemented": "completed",
-    "close-eol": "not_planned",
-    "close-stale": "not_planned",
-    "pr-archive": "not_planned",
+    "close-eol": "not planned",
+    "close-stale": "not planned",
+    "pr-archive": "not planned",
     "mark-stale": None,
     "needs-info": None,
     "keep": None,

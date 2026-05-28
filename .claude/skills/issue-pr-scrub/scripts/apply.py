@@ -150,6 +150,10 @@ def main() -> None:
         pending = [(s, c) for (s, c) in steps if (number, s) not in done_steps]
         if not pending:
             continue
+        # Resuming a partial apply: earlier steps already ran OK, so our OWN
+        # label/comment bumped updated_at. Don't let the staleness guard block
+        # the leftover step on a touch we caused ourselves.
+        resuming = len(pending) < len(steps)
 
         live = current_state(slug, kind, number)
         if live is None:
@@ -160,7 +164,7 @@ def main() -> None:
         if set(live["labels"]) & protected:
             common.info(f"  #{number}: now protected ({set(live['labels']) & protected}); skip")
             continue
-        if live["updated_at"] and r.get("updated_at_at_extract") and \
+        if not resuming and live["updated_at"] and r.get("updated_at_at_extract") and \
                 live["updated_at"] != r["updated_at_at_extract"]:
             common.info(f"  #{number}: touched since extract ({live['updated_at']}); skip — re-run pipeline")
             continue
