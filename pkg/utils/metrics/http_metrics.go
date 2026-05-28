@@ -27,11 +27,14 @@ var (
 		},
 		[]string{"path", "method", "code"},
 	)
-	httpRequestDuration = prometheus.NewSummaryVec(
-		prometheus.SummaryOpts{
-			Name:       "http_requests_duration_seconds",
-			Help:       "Time taken to serve the request by path and method.",
-			Objectives: map[float64]float64{0.5: 0.05, 0.9: 0.01, 0.99: 0.001},
+	httpRequestDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name: "http_requests_duration_seconds",
+			Help: "Time taken to serve the request by path and method.",
+			// Histogram instead of Summary: a summary allocates a per-series
+			// quantile stream (the single largest router heap consumer), whereas
+			// histogram buckets are fixed-size and aggregatable across replicas.
+			Buckets: prometheus.DefBuckets,
 		},
 		[]string{"path", "method"},
 	)
