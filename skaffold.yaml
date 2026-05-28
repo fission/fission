@@ -117,6 +117,11 @@ profiles:
       - op: replace
         path: /manifests/helm/releases/0/setValues/grafana.dashboards.enabled
         value: true
+      # Expose net/http/pprof on :6060 so the workflow can capture heap and
+      # goroutine profiles as post-run artifacts for memory-leak triage.
+      - op: replace
+        path: /manifests/helm/releases/0/setValues/pprof.enabled
+        value: true
       # Mount GOCOVERDIR into fission-bundle pods so the integration suite
       # can collect Go binary coverage (paired with GOFLAGS=-cover at build
       # time and a coverage collect step in the workflow). DEV/CI only.
