@@ -131,14 +131,21 @@ def main() -> None:
     if args.execute:
         common.require_gh_auth()
 
-    done = common.ledger_done(wd)
+    # Ledger dedup is PER STEP (label/comment/close), not per row: a close that
+    # fails after the comment succeeded must not replay the (non-idempotent)
+    # comment on the next run.
+    done_steps = {(int(e["number"]), e.get("step"))
+                  for e in common.read_jsonl(common.ledger_path(wd))
+                  if e.get("status") == "ok"}
     applied = 0
     for r in rows:
         if applied >= cap:
             common.info(f"reached per-run cap ({cap}); stop. Re-run to continue.")
             break
         number, kind, action = int(r["number"]), r["kind"], r["action"]
-        if (number, action) in done:
+        steps = build_commands(slug, kind, action, number, r, cfg)
+        pending = [(s, c) for (s, c) in steps if (number, s) not in done_steps]
+        if not pending:
             continue
 
         live = current_state(slug, kind, number)
@@ -155,62 +162,67 @@ def main() -> None:
             common.info(f"  #{number}: touched since extract ({live['updated_at']}); skip — re-run pipeline")
             continue
 
-        cmds = build_commands(slug, kind, action, number, r, cfg)
-        for c in cmds:
-            common.info(("  RUN: " if args.execute else "  would: ") + " ".join(_shellish(c)))
+        for step, cmd in pending:
+            common.info(("  RUN: " if args.execute else "  would: ") + " ".join(_shellish(cmd)))
 
         if not args.execute:
             applied += 1
             continue
 
-        ok, err = run_commands(cmds)
-        common.ledger_append(wd, {
-            "number": number, "action": action, "disposition": r["disposition"],
-            "status": "ok" if ok else "error", "error": err,
-        })
-        if ok:
+        # Run pending steps in order; stop at the first failure so a later run
+        # resumes from exactly the step that failed.
+        row_ok = True
+        closed = False
+        for step, cmd in pending:
+            cp = common.run(cmd, check=False)
+            status = "ok" if cp.returncode == 0 else "error"
+            common.ledger_append(wd, {
+                "number": number, "step": step, "action": action,
+                "disposition": r["disposition"], "status": status,
+                "error": "" if status == "ok" else (cp.stderr or cp.stdout or "").strip()[:300],
+            })
+            if status == "ok":
+                done_steps.add((number, step))
+                if step == "close":
+                    closed = True
+            else:
+                common.info(f"  #{number}: step '{step}' FAILED — {(cp.stderr or '').strip()[:200]}")
+                row_ok = False
+                break
+
+        if closed and local_close and common.have("gitcrawl"):
+            common.run(
+                ["gitcrawl", "close-thread", slug, "--number", str(number),
+                 "--reason", r.get("disposition", "scrub")],
+                check=False,
+            )
+        if row_ok:
             applied += 1
-            if action == "close" and local_close and common.have("gitcrawl"):
-                common.run(
-                    ["gitcrawl", "close-thread", slug, "--number", str(number),
-                     "--reason", r.get("disposition", "scrub")],
-                    check=False,
-                )
-            time.sleep(sleep_s)
-        else:
-            common.info(f"  #{number}: FAILED — {err}")
+        time.sleep(sleep_s)
 
     common.info(f"[{mode}] done. {applied} {'applied' if args.execute else 'planned'}.")
 
 
-def build_commands(slug, kind, action, number, row, cfg) -> list[list[str]]:
-    """Return the ordered gh command argv lists for one row."""
+def build_commands(slug, kind, action, number, row, cfg) -> list[tuple[str, list[str]]]:
+    """Return ordered (step, argv) pairs for one row; step is the ledger key."""
     gk = gh_kind(kind)
-    cmds: list[list[str]] = []
+    steps: list[tuple[str, list[str]]] = []
     labels = row.get("add_labels") or []
     if labels:
-        cmds.append(["gh", gk, "edit", str(number), "--repo", slug,
-                     "--add-label", ",".join(labels)])
+        steps.append(("label", ["gh", gk, "edit", str(number), "--repo", slug,
+                                "--add-label", ",".join(labels)]))
     # Post the comment for ANY disposition that carries a template, not just
     # closes — mark-stale and needs-info are label-plus-comment actions.
     body = render(row.get("comment_template"), cfg, row.get("context", {}))
     if body:
-        cmds.append(["gh", gk, "comment", str(number), "--repo", slug, "--body", body])
+        steps.append(("comment", ["gh", gk, "comment", str(number), "--repo", slug, "--body", body]))
     if action == "close":
         close_cmd = ["gh", gk, "close", str(number), "--repo", slug]
         reason = row.get("close_reason")
         if gk == "issue" and reason:
             close_cmd += ["--reason", reason]
-        cmds.append(close_cmd)
-    return cmds
-
-
-def run_commands(cmds: list[list[str]]) -> tuple[bool, str]:
-    for c in cmds:
-        cp = common.run(c, check=False)
-        if cp.returncode != 0:
-            return False, (cp.stderr or cp.stdout or "").strip()[:300]
-    return True, ""
+        steps.append(("close", close_cmd))
+    return steps
 
 
 def _shellish(argv: list[str]) -> list[str]:

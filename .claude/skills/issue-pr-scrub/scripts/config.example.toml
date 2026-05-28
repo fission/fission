@@ -18,13 +18,12 @@ workdir = "~/.cache/issue-pr-scrub/{owner}__{repo}"
 # gitcrawl SQLite mirror. Leave as-is unless GITCRAWL_DB_PATH is customized.
 gitcrawl_db = "~/.config/gitcrawl/gitcrawl.db"
 
-[sync]
-# Metadata-only is the default and is MUCH faster: comment_count and reaction
-# totals come from the issue/PR object itself, so the rule engine never needs
-# the (slow) per-thread comment hydration. Pass `scrub.sh sync --with-comments`
-# only if you want comment bodies in the FTS index for manual search.
-include_comments = false
-include_pr_details = false       # PR files/commits/checks — heavier, off by default
+# Sync depth is controlled by CLI flags on `scrub.sh sync`, not config:
+#   (default)         metadata-only — comment_count and reaction totals come
+#                     from the issue/PR object, so the rule engine never needs
+#                     the slow per-thread comment hydration.
+#   --with-comments   also fetch comment bodies into the FTS index (slow).
+#   --full            full backfill (--state all) instead of an incremental sync.
 
 [triage]
 # --- duplicates ---

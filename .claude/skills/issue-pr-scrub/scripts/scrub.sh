@@ -11,8 +11,9 @@
 #   scrub.sh protect --repo owner/name [--from FILE] [--execute]   keep-open keepers
 #   scrub.sh apply  --repo owner/name --auto|--from FILE [--execute] [--max N]
 #
-# Everything except `apply --execute` and `labels --create-missing --execute`
-# is read-only. `run` never writes to GitHub.
+# Read-only EXCEPT the write-capable commands: `apply --execute`,
+# `protect --execute`, and `labels --create-missing --execute`.
+# `run` never writes to GitHub.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

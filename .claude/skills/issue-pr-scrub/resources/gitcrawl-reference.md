@@ -16,7 +16,8 @@ Requires Go-built binary + a GitHub token (resolved from `GITHUB_TOKEN` or `gh a
 
 | Command | Why | Writes? |
 | --- | --- | --- |
-| `gitcrawl sync R --state all --include-comments` | first-run full backfill | local SQLite only |
+| `gitcrawl sync R --state all` | first-run full backfill (metadata-only by default) | local SQLite only |
+| `gitcrawl sync R --state all --include-comments` | full backfill with comment bodies (opt-in via `scrub.sh sync --with-comments`) | local SQLite only |
 | `gitcrawl sync R` | incremental refresh (open + closed sweep) | local SQLite only |
 | `gitcrawl close-thread R --number <n> --reason ...` | hide a handled item from future runs (LOCAL) | local SQLite only |
 

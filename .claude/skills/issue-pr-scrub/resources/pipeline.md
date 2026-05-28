@@ -43,7 +43,7 @@ No network. Safe to re-run any time after a sync.
 
 ## Stage 3 — triage (`triage.py`)
 
-Deterministic rule engine over `threads.jsonl`, config-driven. Triages **open, not-locally-closed** threads only. Builds duplicate groups locally (cross-references + title-token Jaccard ≥ 0.6) — no embeddings. Emits `triage.jsonl`: `disposition, tier, add_labels[], comment_template, context, rationale, type, areas`.
+Deterministic rule engine over `threads.jsonl`, config-driven. Triages **open, not-locally-closed** threads only. Builds duplicate groups locally (same-kind title-token Jaccard ≥ `dup_title_jaccard`, default 0.7; cross-references upgrade confidence) — no embeddings. Emits `triage.jsonl`: `disposition, tier, add_labels[], comment_template, context, rationale, type, areas`.
 
 See `triage-rules.md` for the full rule list. Pure; re-run after tuning config without re-syncing.
 
