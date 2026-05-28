@@ -5,6 +5,7 @@
 package executor
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -15,6 +16,20 @@ import (
 
 	"github.com/fission/fission/pkg/utils/leaderelection"
 )
+
+func TestAwaitLeading(t *testing.T) {
+	t.Run("returns true when leadership acquired", func(t *testing.T) {
+		leading := make(chan struct{})
+		close(leading)
+		assert.True(t, awaitLeading(context.Background(), leading))
+	})
+
+	t.Run("returns false when ctx ends first", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		assert.False(t, awaitLeading(ctx, make(chan struct{})))
+	})
+}
 
 func TestReadyzHandler(t *testing.T) {
 	// An enabled-but-not-yet-leader elector (Run never called) reports
