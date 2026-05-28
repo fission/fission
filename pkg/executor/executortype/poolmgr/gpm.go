@@ -165,8 +165,10 @@ func (gpm *GenericPoolManager) Run(ctx context.Context, mgr manager.Interface) {
 		waitSynced = append(waitSynced, podListerSynced)
 	}
 	if ok := k8sCache.WaitForCacheSync(ctx.Done(), waitSynced...); !ok {
-		gpm.logger.Info("failed to wait for caches to sync")
-		os.Exit(1)
+		// Usually means the context was cancelled (shutdown or loss of
+		// leadership). Stop cleanly instead of taking the whole process down.
+		gpm.logger.Info("failed to wait for caches to sync; stopping pool manager")
+		return
 	}
 	go gpm.service()
 	gpm.poolPodC.InjectGpm(gpm)

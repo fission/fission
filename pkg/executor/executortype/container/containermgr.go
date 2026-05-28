@@ -152,8 +152,10 @@ func (caaf *Container) Run(ctx context.Context, mgr manager.Interface) {
 	}
 
 	if ok := k8sCache.WaitForCacheSync(ctx.Done(), waitSynced...); !ok {
-		caaf.logger.Error(nil, "failed to wait for caches to sync")
-		os.Exit(1)
+		// Usually means the context was cancelled (shutdown or loss of
+		// leadership). Stop cleanly instead of taking the whole process down.
+		caaf.logger.Error(nil, "failed to wait for caches to sync; stopping container manager")
+		return
 	}
 	mgr.Add(ctx, func(ctx context.Context) {
 		caaf.idleObjectReaper(ctx)
