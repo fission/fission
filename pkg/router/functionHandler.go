@@ -233,7 +233,7 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 			}
 			if roundTripper.serviceURL == nil {
 				logger.Info("serviceURL is empty for function, retrying", "executingTimeout", executingTimeout)
-				time.Sleep(executingTimeout)
+				time.Sleep(jitter(executingTimeout))
 				executingTimeout = executingTimeout * time.Duration(roundTripper.funcHandler.tsRoundTripperParams.timeoutExponent)
 				continue
 			}
@@ -366,13 +366,23 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 		}
 
 		logger.V(1).Info("Backing off before retrying", "backoff_time", executingTimeout, "error", err.Error())
-		time.Sleep(executingTimeout)
+		time.Sleep(jitter(executingTimeout))
 		executingTimeout = executingTimeout * time.Duration(roundTripper.funcHandler.tsRoundTripperParams.timeoutExponent)
 	}
 
 	e := errors.New("unable to get service url for connection")
 	logger.Error(e, "exceeded max retries for function")
 	return nil, e
+}
+
+// jitter adds up to 20% positive random jitter to a backoff duration so that
+// many concurrent retriers (and multiple router replicas) don't retry in
+// lockstep and stampede a function pod as it recovers.
+func jitter(d time.Duration) time.Duration {
+	if d <= 0 {
+		return d
+	}
+	return d + time.Duration(rand.Float64()*0.2*float64(d))
 }
 
 // getDefaultTransport returns a pointer to new copy of http.Transport object to prevent

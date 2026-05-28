@@ -6,7 +6,6 @@ package router
 
 import (
 	"net/http"
-	"os"
 	"sync/atomic"
 
 	"github.com/go-logr/logr"
@@ -37,9 +36,10 @@ func (mr *mutableRouter) ServeHTTP(responseWriter http.ResponseWriter, request *
 		router.ServeHTTP(responseWriter, request)
 		return
 	}
-	// This should never happen, but if it does, log an error and exit.
+	// This should never happen. Degrade gracefully with a 503 instead of
+	// crashing the whole router process and dropping every other request.
 	mr.logger.Error(nil, "router is nil")
-	os.Exit(1)
+	http.Error(responseWriter, "router not initialized", http.StatusServiceUnavailable)
 }
 
 func (mr *mutableRouter) updateRouter(newHandler *mux.Router) {
