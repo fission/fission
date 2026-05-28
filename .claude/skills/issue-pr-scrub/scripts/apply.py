@@ -137,10 +137,13 @@ def main() -> None:
     done_steps = {(int(e["number"]), e.get("step"))
                   for e in common.read_jsonl(common.ledger_path(wd))
                   if e.get("status") == "ok"}
+    # The cap counts individual GitHub mutations (label/comment/close each
+    # count), checked at row boundaries so a row is never left half-applied.
+    writes = 0
     applied = 0
     for r in rows:
-        if applied >= cap:
-            common.info(f"reached per-run cap ({cap}); stop. Re-run to continue.")
+        if writes >= cap:
+            common.info(f"reached per-run write cap ({cap}); stop. Re-run to continue.")
             break
         number, kind, action = int(r["number"]), r["kind"], r["action"]
         steps = build_commands(slug, kind, action, number, r, cfg)
@@ -166,11 +169,12 @@ def main() -> None:
             common.info(("  RUN: " if args.execute else "  would: ") + " ".join(_shellish(cmd)))
 
         if not args.execute:
+            writes += len(pending)
             applied += 1
             continue
 
         # Run pending steps in order; stop at the first failure so a later run
-        # resumes from exactly the step that failed.
+        # resumes from exactly the step that failed. Pace between each mutation.
         row_ok = True
         closed = False
         for step, cmd in pending:
@@ -183,8 +187,10 @@ def main() -> None:
             })
             if status == "ok":
                 done_steps.add((number, step))
+                writes += 1
                 if step == "close":
                     closed = True
+                time.sleep(sleep_s)
             else:
                 common.info(f"  #{number}: step '{step}' FAILED — {(cp.stderr or '').strip()[:200]}")
                 row_ok = False
@@ -198,7 +204,6 @@ def main() -> None:
             )
         if row_ok:
             applied += 1
-        time.sleep(sleep_s)
 
     common.info(f"[{mode}] done. {applied} {'applied' if args.execute else 'planned'}.")
 

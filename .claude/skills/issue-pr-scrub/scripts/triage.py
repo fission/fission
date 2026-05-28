@@ -361,7 +361,8 @@ class Engine:
         for a in area_labels:
             if a not in labels:
                 add.append(a)
-        add.append(priority_label)
+        if priority_label and priority_label not in labels:
+            add.append(priority_label)
         # don't relabel things already triaged with a type+area
         rationale = "active/recent — categorize for the living backlog"
         return out("keep", "keep", add, None, rationale)

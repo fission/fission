@@ -130,6 +130,6 @@ medium_label   = "priority/medium"
 low_label      = "priority/low"
 
 [apply]
-max_per_run = 25                 # hard cap on writes per apply invocation
+max_per_run = 25                 # cap on GitHub mutations/run (label/comment/close each count)
 sleep_seconds = 2.0              # gentle pacing between gh writes
 local_close = true               # gitcrawl close-thread after a successful GitHub close

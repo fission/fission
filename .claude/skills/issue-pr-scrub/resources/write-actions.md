@@ -1,6 +1,8 @@
 # Write actions — the gh playbook & safety gates
 
-`apply.py` is the **only** stage that writes to GitHub. It maps each approved `apply-plan.jsonl` row to `gh` commands. Dry-run prints them; `--execute` runs them.
+`apply.py` is the stage that applies **triage plan actions** (close/label/comment) to GitHub. It maps each approved `apply-plan.jsonl` row to `gh` commands. Dry-run prints them; `--execute` runs them.
+
+Two other commands also write to GitHub and are likewise gated behind `--execute`: `protect.py` (adds the `keep-open` label to your keepers) and `labels_sync.py --create-missing` (creates the proposed labels). Everything else in the pipeline is read-only.
 
 ## Command shapes
 
@@ -38,7 +40,7 @@ Defaults live in `apply.py` (`TEMPLATES`); override per-repo via a `[templates]`
 
 1. **Dry-run default.** Without `--execute`, `apply.py` prints `would: gh …` and makes no changes.
 2. **Selection is mutually exclusive and explicit.** Exactly one of `--auto` (tier=auto rows from `apply-plan.jsonl`) or `--from FILE.jsonl` (your curated review rows). No "apply everything".
-3. **Per-run cap.** `[apply].max_per_run` (default 25), overridable with `--max`. Stops cleanly; re-run to continue (ledger skips done rows).
+3. **Per-run write cap.** `[apply].max_per_run` (default 25), overridable with `--max`, counts individual GitHub mutations (label/comment/close each count), checked at row boundaries so a row is never left half-applied. Stops cleanly; re-run to continue (per-step ledger skips done steps).
 4. **Pacing.** `[apply].sleep_seconds` between writes — gentle on the API and on watchers' notifications.
 5. **Staleness guard.** Immediately before acting, re-fetch live `state`/`updatedAt`/`labels`. Skip if: already closed upstream, or `updatedAt` differs from extract time (someone touched it). Re-run the pipeline to refresh.
 6. **Protected re-check.** Skip if the live labels now include a protected label.

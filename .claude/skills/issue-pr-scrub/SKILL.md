@@ -85,7 +85,7 @@ The rule engine, taxonomy, and write playbook are documented in:
 
 Enforced in `apply.py`, every run:
 1. **Dry-run by default.** No `--execute` ⇒ it only prints the gh commands.
-2. **Per-run cap** (`apply.max_per_run`, default 25) + pacing between writes.
+2. **Per-run write cap** (`apply.max_per_run`, default 25 — counts each label/comment/close mutation) + pacing after every write.
 3. **Tier gate.** `--auto` touches only `tier=auto`; `review` items require `--from <curated>`.
 4. **Staleness guard.** Re-fetches each thread's live state immediately before acting; skips if it was closed or *touched since extract* — re-run the pipeline to pick up changes.
 5. **Protected re-check.** Skips anything now carrying a protected label.
