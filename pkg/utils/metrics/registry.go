@@ -5,39 +5,18 @@
 package metrics
 
 import (
-	"errors"
-
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/collectors"
-	crmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 )
 
+// Registry holds Fission's custom application metrics. ServeMetrics composes it
+// into controller-runtime's metrics.Registry, which is what is served on
+// /metrics. Go runtime and process collectors (go_memstats_*, go_goroutines,
+// process_resident_memory_bytes, ...) are already registered into that
+// controller-runtime registry by its internal controller metrics init, so they
+// are exposed on the same endpoint without anything extra here. Do not register
+// Go/process collectors into this Registry: composing it into the
+// controller-runtime registry is atomic, so a collision silently drops every
+// Fission metric.
 var (
 	Registry = prometheus.NewRegistry()
 )
-
-// RegisterRuntimeCollectors exposes Go runtime and process metrics
-// (go_memstats_*, go_goroutines, process_resident_memory_bytes, ...) on the
-// metrics endpoint so memory growth and goroutine leaks are observable per
-// subsystem.
-//
-// They are registered directly into controller-runtime's registry (the one
-// ServeMetrics actually serves) rather than into the custom Registry. The
-// custom Registry is merged into controller-runtime's as a single collector,
-// so a name collision there fails atomically and silently drops every Fission
-// metric. Some subsystems already have these collectors registered (e.g. via
-// controller-runtime's metrics server), so registration tolerates a collector
-// that is already present.
-func RegisterRuntimeCollectors() {
-	registerTolerant(collectors.NewGoCollector())
-	registerTolerant(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
-}
-
-func registerTolerant(c prometheus.Collector) {
-	if err := crmetrics.Registry.Register(c); err != nil {
-		are := prometheus.AlreadyRegisteredError{}
-		if !errors.As(err, &are) {
-			panic(err)
-		}
-	}
-}

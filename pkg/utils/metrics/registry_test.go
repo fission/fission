@@ -7,38 +7,26 @@ package metrics
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/stretchr/testify/require"
-	crmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 )
 
-// TestRegisterRuntimeCollectors verifies that runtime metrics are exposed on
-// the served (controller-runtime) registry, that calling it twice tolerates a
-// collector that is already registered, and — critically — that the custom
-// Registry still composes into the served registry afterwards. The latter is
-// the regression guard: previously the runtime collectors lived in the custom
-// Registry, so a name collision in the atomic compose call silently dropped
-// every Fission metric.
-func TestRegisterRuntimeCollectors(t *testing.T) {
-	RegisterRuntimeCollectors()
-	// Idempotent: a second call must not panic on already-registered collectors.
-	require.NotPanics(t, RegisterRuntimeCollectors)
+// TestCustomRegistryComposesOverRuntimeCollectors guards the invariant that the
+// custom Registry contains no Go/process collectors. ServeMetrics composes this
+// Registry into controller-runtime's metrics.Registry, which already exposes
+// Go/process collectors. That compose is atomic, so a single colliding
+// descriptor makes registration fail and silently drops every Fission metric
+// (this regressed once and stalled the canary controller, which reads function
+// metrics from Prometheus). Reproduce that environment and assert our Registry
+// still composes cleanly.
+func TestCustomRegistryComposesOverRuntimeCollectors(t *testing.T) {
+	base := prometheus.NewRegistry()
+	base.MustRegister(
+		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
+		collectors.NewGoCollector(collectors.WithGoCollectorRuntimeMetrics(collectors.MetricsAll)),
+	)
 
-	require.NoError(t, crmetrics.Registry.Register(Registry),
-		"custom Registry must still compose into the served registry")
-
-	families, err := crmetrics.Registry.Gather()
-	require.NoError(t, err)
-
-	names := make(map[string]bool, len(families))
-	for _, mf := range families {
-		names[mf.GetName()] = true
-	}
-	for _, want := range []string{
-		"go_goroutines",
-		"go_memstats_alloc_bytes",
-		"process_resident_memory_bytes",
-	} {
-		assert.Truef(t, names[want], "expected metric %q on the served registry", want)
-	}
+	require.NoError(t, base.Register(Registry),
+		"custom Registry must compose into a registry that already has Go/process collectors")
 }
