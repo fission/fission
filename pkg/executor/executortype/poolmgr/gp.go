@@ -63,6 +63,7 @@ type (
 		fissionClient            versioned.Interface
 		fetcherConfig            *fetcherConfig.Config
 		stopReadyPodControllerCh chan struct{}
+		cancelPoolCtx            context.CancelFunc
 		readyPodLister           corelisters.PodLister
 		readyPodListerSynced     cache.InformerSynced
 		readyPodQueue            workqueue.TypedDelayingInterface[string]
@@ -140,7 +141,12 @@ func (gp *GenericPool) setup(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	go gp.updateCPUUtilizationSvc(ctx)
+	// updateCPUUtilizationSvc runs for the lifetime of the pool, so it gets a
+	// context tied to the pool (cancelled in destroy) rather than the
+	// request-scoped ctx, which would cancel once the triggering request ends.
+	poolCtx, cancel := context.WithCancel(context.Background())
+	gp.cancelPoolCtx = cancel
+	go gp.updateCPUUtilizationSvc(poolCtx)
 	return nil
 }
 
@@ -212,13 +218,18 @@ func (gp *GenericPool) updateCPUUtilizationSvc(ctx context.Context) {
 		}
 	}
 
-	for range ticker.C {
-		if metricsApiAvailabe {
-			serviceFunc(ctx)
-		} else {
-			if gp.checkMetricsApi() {
-				metricsApiAvailabe = true
-				ticker.Reset(30 * time.Second)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if metricsApiAvailabe {
+				serviceFunc(ctx)
+			} else {
+				if gp.checkMetricsApi() {
+					metricsApiAvailabe = true
+					ticker.Reset(30 * time.Second)
+				}
 			}
 		}
 	}
@@ -666,6 +677,9 @@ func (gp *GenericPool) destroy(ctx context.Context) error {
 	gp.lock.Lock()
 	defer gp.lock.Unlock()
 	close(gp.stopReadyPodControllerCh)
+	if gp.cancelPoolCtx != nil {
+		gp.cancelPoolCtx()
+	}
 
 	deletePropagation := metav1.DeletePropagationBackground
 	delOpt := metav1.DeleteOptions{
