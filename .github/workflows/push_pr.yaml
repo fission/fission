@@ -287,6 +287,26 @@ jobs:
         run: |
           kind export logs --name ${{ env.KIND_CLUSTER_NAME }} kind-logs
 
+      - name: Collect pprof profiles
+        timeout-minutes: 5
+        if: ${{ always() }}
+        run: |
+          # Capture heap + goroutine profiles from the long-lived control-plane
+          # components for memory-leak triage. pprof is exposed on :6060 by the
+          # kind-ci profile (pprof.enabled=true). Best-effort: never fail the job.
+          mkdir -p pprof-dumps
+          for svc in router executor; do
+            pod=$(kubectl get pods -n fission -l svc=$svc -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+            [ -z "$pod" ] && { echo "no $svc pod found, skipping"; continue; }
+            kubectl port-forward -n fission "pod/$pod" 6060:6060 >/dev/null 2>&1 &
+            pf_pid=$!
+            for i in $(seq 1 10); do curl -fsS http://127.0.0.1:6060/debug/pprof/ >/dev/null 2>&1 && break; sleep 1; done
+            curl -fsS "http://127.0.0.1:6060/debug/pprof/heap" -o "pprof-dumps/${svc}-heap.pprof" || echo "heap capture failed for $svc"
+            curl -fsS "http://127.0.0.1:6060/debug/pprof/goroutine?debug=1" -o "pprof-dumps/${svc}-goroutine.txt" || echo "goroutine capture failed for $svc"
+            kill "$pf_pid" 2>/dev/null || true
+          done
+          ls -l pprof-dumps || true
+
       - name: Backup prometheus data
         timeout-minutes: 10
         if: ${{ always() }}
@@ -310,6 +330,16 @@ jobs:
           name: prom-dump-${{ github.run_id }}-${{ matrix.kindversion }}
           path: /tmp/prometheus/*
           retention-days: 5
+
+      - name: Archive pprof profiles
+        timeout-minutes: 10
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pprof-dumps-${{ github.run_id }}-${{ matrix.kindversion }}
+          path: pprof-dumps/*
+          retention-days: 5
+          if-no-files-found: ignore
 
       - name: Archive kind logs
         timeout-minutes: 10
