@@ -27,8 +27,10 @@ var (
 			Name: "fission_function_running_seconds",
 			Help: "The running time (last access - create) in seconds of the function.",
 			// Histogram instead of Summary: avoids the per-series quantile stream
-			// memory; quantiles are derived with histogram_quantile().
-			Buckets: prometheus.DefBuckets,
+			// memory; quantiles are derived with histogram_quantile(). This is a
+			// function lifetime (seconds to hours), so use exponential buckets
+			// from 1s to ~9h rather than DefBuckets (which top out at 10s).
+			Buckets: prometheus.ExponentialBuckets(1, 2, 16),
 		},
 		functionLabels,
 	)
