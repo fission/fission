@@ -160,6 +160,18 @@ rules:
   verbs:
   - get
   - list
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - create
+  - get
+  - list
+  - watch
+  - update
+  - patch
+  - delete
 {{- end }}
 {{- define "fluentbit-kuberules" }}
 rules:

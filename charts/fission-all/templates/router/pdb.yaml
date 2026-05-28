@@ -1,0 +1,21 @@
+{{- if and (not .Values.router.deployAsDaemonSet) .Values.router.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: router
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: router
+    application: fission-router
+spec:
+  {{- if .Values.router.podDisruptionBudget.minAvailable }}
+  minAvailable: {{ .Values.router.podDisruptionBudget.minAvailable }}
+  {{- end }}
+  {{- if .Values.router.podDisruptionBudget.maxUnavailable }}
+  maxUnavailable: {{ .Values.router.podDisruptionBudget.maxUnavailable }}
+  {{- end }}
+  selector:
+    matchLabels:
+      application: fission-router
+      svc: router
+{{- end }}

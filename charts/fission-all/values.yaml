@@ -145,6 +145,41 @@ fetcher:
 ## executor is responsible for providing resources to your functions.
 ##
 executor:
+  ## replicas decides how many executor pods to deploy. Defaults to 1.
+  ## To run more than one safely you MUST enable leaderElection below: the
+  ## executor is active-passive, so only the elected leader performs the
+  ## mutating controller/reaper work; the standbys keep warm caches and take
+  ## over on failure (faster failover + zero-downtime rolling upgrades).
+  ##
+  replicas: 1
+  ## leaderElection enables Lease-based leader election for the executor.
+  ## Leave disabled (default) for single-replica installs — behaviour is then
+  ## identical to before. Set enabled: true together with replicas > 1 for HA.
+  ##
+  leaderElection:
+    enabled: false
+  ## strategy is the Deployment rollout strategy for the executor. Leave unset
+  ## for the Kubernetes default. With leaderElection enabled, a surge strategy
+  ## keeps a standby warm across upgrades, e.g.:
+  ##   strategy:
+  ##     type: RollingUpdate
+  ##     rollingUpdate:
+  ##       maxSurge: 1
+  ##       maxUnavailable: 0
+  ##
+  strategy: {}
+  ## terminationGracePeriodSeconds gives in-flight work time to drain on
+  ## shutdown. Leave unset for the Kubernetes default (30s). Keep it at or
+  ## above GRACEFUL_SHUTDOWN_TIMEOUT.
+  ##
+  terminationGracePeriodSeconds: null
+  ## podDisruptionBudget (opt-in) protects executor availability during
+  ## voluntary disruptions (node drains). Only meaningful with replicas > 1.
+  ##
+  podDisruptionBudget:
+    enabled: false
+    minAvailable: 1
+    # maxUnavailable:
   ## executor priorityClassName
   ## Ref. https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/
   ## Recommended to use system-cluster-critical for executor pods.
@@ -226,6 +261,37 @@ router:
   ## canaryconfig / buildermgr) only.
   ##
   internalPort: 8889
+  ## strategy is the Deployment rollout strategy for the router (ignored when
+  ## deployAsDaemonSet is true). Leave unset for the Kubernetes default. The
+  ## router is stateless, so a surge strategy gives zero-downtime rollouts:
+  ##   strategy:
+  ##     type: RollingUpdate
+  ##     rollingUpdate:
+  ##       maxSurge: 1
+  ##       maxUnavailable: 0
+  ##
+  strategy: {}
+  ## terminationGracePeriodSeconds gives in-flight requests time to drain on
+  ## shutdown. Leave unset for the Kubernetes default (30s). Keep it at or
+  ## above GRACEFUL_SHUTDOWN_TIMEOUT.
+  ##
+  terminationGracePeriodSeconds: null
+  ## podDisruptionBudget (opt-in) protects router availability during voluntary
+  ## disruptions. Only meaningful with replicas > 1 (not a DaemonSet).
+  ##
+  podDisruptionBudget:
+    enabled: false
+    minAvailable: 1
+    # maxUnavailable:
+  ## autoscaling (opt-in) deploys a HorizontalPodAutoscaler for the router. The
+  ## router is stateless and replica-independent, so it scales out cleanly.
+  ## Ignored when deployAsDaemonSet is true.
+  ##
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 3
+    targetCPUUtilizationPercentage: 80
   ## router priorityClassName
   ## Ref. https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/
   ## Recommended to use system-cluster-critical for router pods.
