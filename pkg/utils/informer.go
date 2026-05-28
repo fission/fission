@@ -132,11 +132,15 @@ func GetInformerLabelByExecutor(executorType fv1.ExecutorType) (labels.Selector,
 	if err != nil {
 		return nil, err
 	}
-	labelSelector := labels.NewSelector()
-	labelSelector.Add(*executorLabel)
+	// labels.Selector.Add returns a new selector and does not mutate the
+	// receiver, so the result must be assigned back. Dropping it left an empty
+	// selector that matched every pod cluster-wide, so the executor informers
+	// cached all pods and OOMed at scale (issue #2775).
+	labelSelector := labels.NewSelector().Add(*executorLabel)
 
 	return labelSelector, nil
 }
+
 func SupportedMetricsAPIVersionAvailable(discoveredAPIGroups *metav1.APIGroupList) bool {
 	var supportedMetricsAPIVersions = []string{
 		"v1beta1",
