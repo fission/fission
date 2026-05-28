@@ -67,7 +67,11 @@ func checkAuthToken(r *http.Request) error {
 func authMiddleware(featureConfig *config.FeatureConfig) mux.MiddlewareFunc {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Path != featureConfig.AuthConfig.AuthUriPath && r.URL.Path != "/router-healthz" {
+			// Exempt the router-owned probe endpoints: kubelet liveness
+			// (/router-healthz) and readiness (/readyz) probes are
+			// unauthenticated, so requiring a token here would keep the pod
+			// permanently NotReady when auth is enabled.
+			if r.URL.Path != featureConfig.AuthConfig.AuthUriPath && r.URL.Path != "/router-healthz" && r.URL.Path != "/readyz" {
 				err := checkAuthToken(r)
 				if err != nil {
 					http.Error(w, err.Error(), http.StatusUnauthorized)

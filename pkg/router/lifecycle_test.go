@@ -14,6 +14,8 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/assert"
 	k8sCache "k8s.io/client-go/tools/cache"
+
+	config "github.com/fission/fission/pkg/featureconfig"
 )
 
 func TestJitter(t *testing.T) {
@@ -94,6 +96,29 @@ func TestRouterReadinessHandler(t *testing.T) {
 			assert.Equal(t, tc.want, rec.Code)
 		})
 	}
+}
+
+func TestAuthMiddlewareExemptsProbes(t *testing.T) {
+	fc := &config.FeatureConfig{}
+	fc.AuthConfig.IsEnabled = true
+	fc.AuthConfig.AuthUriPath = "/auth/login"
+
+	h := authMiddleware(fc)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	// Unauthenticated probe endpoints must pass through so the kubelet
+	// liveness/readiness probes work when auth is enabled.
+	for _, p := range []string{"/readyz", "/router-healthz"} {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, p, nil))
+		assert.Equalf(t, http.StatusOK, rec.Code, "%s must bypass auth", p)
+	}
+
+	// A normal function route with no token is still rejected.
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/some-function", nil))
+	assert.Equal(t, http.StatusUnauthorized, rec.Code)
 }
 
 func TestMutableRouterNilReturns503(t *testing.T) {
