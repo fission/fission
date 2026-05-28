@@ -22,6 +22,7 @@ func ServeMetrics(ctx context.Context, parent string, logger logr.Logger, mgr ma
 	if metricsAddr == "" {
 		metricsAddr = "8080"
 	}
+	RegisterRuntimeCollectors()
 	err := metrics.Registry.Register(Registry)
 	if err != nil {
 		logger.Error(err, "failed to register metrics")

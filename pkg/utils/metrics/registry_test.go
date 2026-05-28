@@ -12,33 +12,20 @@ import (
 	crmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 )
 
-func TestRuntimeCollectorsRegistered(t *testing.T) {
-	families, err := Registry.Gather()
-	require.NoError(t, err)
+// TestRegisterRuntimeCollectors verifies that runtime metrics are exposed on
+// the served (controller-runtime) registry, that calling it twice tolerates a
+// collector that is already registered, and — critically — that the custom
+// Registry still composes into the served registry afterwards. The latter is
+// the regression guard: previously the runtime collectors lived in the custom
+// Registry, so a name collision in the atomic compose call silently dropped
+// every Fission metric.
+func TestRegisterRuntimeCollectors(t *testing.T) {
+	RegisterRuntimeCollectors()
+	// Idempotent: a second call must not panic on already-registered collectors.
+	require.NotPanics(t, RegisterRuntimeCollectors)
 
-	names := make(map[string]bool, len(families))
-	for _, mf := range families {
-		names[mf.GetName()] = true
-	}
-
-	for _, want := range []string{
-		"go_goroutines",
-		"go_memstats_alloc_bytes",
-		"process_resident_memory_bytes",
-	} {
-		assert.True(t, names[want], "expected metric %q to be exposed by Registry", want)
-	}
-}
-
-// TestRegistryComposesIntoControllerRuntime mirrors what ServeMetrics does:
-// it registers our custom Registry into controller-runtime's metrics.Registry
-// and serves the latter. This must not fail with a duplicate-collector error,
-// and the runtime metrics must still surface through the merged registry. The
-// test guards against a future controller-runtime version that begins
-// registering Go/process collectors of its own (which would collide).
-func TestRegistryComposesIntoControllerRuntime(t *testing.T) {
 	require.NoError(t, crmetrics.Registry.Register(Registry),
-		"registering our Registry into controller-runtime's must not collide")
+		"custom Registry must still compose into the served registry")
 
 	families, err := crmetrics.Registry.Gather()
 	require.NoError(t, err)
@@ -47,6 +34,11 @@ func TestRegistryComposesIntoControllerRuntime(t *testing.T) {
 	for _, mf := range families {
 		names[mf.GetName()] = true
 	}
-	assert.True(t, names["go_goroutines"],
-		"runtime metrics must surface through the merged controller-runtime registry")
+	for _, want := range []string{
+		"go_goroutines",
+		"go_memstats_alloc_bytes",
+		"process_resident_memory_bytes",
+	} {
+		assert.Truef(t, names[want], "expected metric %q on the served registry", want)
+	}
 }
