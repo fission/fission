@@ -34,7 +34,10 @@ dup_title_jaccard = 0.7
 # --- staleness ---
 stale_days = 540                 # ~18mo no activity -> stale candidate
 stale_comment_max = 8            # skip stale-close if more engaged than this
-stale_two_step = false           # true: label `stale` + comment first, close on a later run
+stale_two_step = false           # true: ALL stale items get label `stale` + warn first, close on a later run
+# Types that always use the gentle two-step even when stale_two_step is false.
+# e.g. don't hard-close stale feature requests without a heads-up.
+stale_two_step_types = []        # e.g. ["feature-request"]
 # --- PRs ---
 pr_stale_days = 365              # PR no activity -> archive candidate
 pr_abandoned_days = 730          # >2y abandoned PR -> auto tier

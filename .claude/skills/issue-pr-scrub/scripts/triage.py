@@ -175,6 +175,10 @@ class Engine:
         self.stale_days = tri.get("stale_days", 540)
         self.stale_comment_max = tri.get("stale_comment_max", 8)
         self.stale_two_step = tri.get("stale_two_step", False)
+        # Types that always get the gentle two-step (label+warn, no close) even
+        # when stale_two_step is off — e.g. feature-requests shouldn't be hard
+        # closed as stale without a heads-up.
+        self.stale_two_step_types = set(tri.get("stale_two_step_types", []))
         self.pr_stale_days = tri.get("pr_stale_days", 365)
         self.pr_abandoned_days = tri.get("pr_abandoned_days", 730)
         self.needs_info_days = tri.get("needs_info_days", 365)
@@ -335,10 +339,11 @@ class Engine:
 
         # 5) stale issue
         if not is_pr and age >= self.stale_days and t["comment_count"] <= self.stale_comment_max:
-            if self.stale_two_step and "stale" not in labels:
+            two_step = self.stale_two_step or (type_label in self.stale_two_step_types)
+            if two_step and "stale" not in labels:
                 return out(
                     "mark-stale", "auto", self.lbl.get("stale", ["stale"]), "stale_warn",
-                    f"inactive {int(age)}d — label stale + warn; close on a later run",
+                    f"inactive {int(age)}d — {type_label or 'item'}: label stale + warn, close on a later run",
                     context={"age_days": int(age)},
                 )
             return out(
