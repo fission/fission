@@ -21,7 +21,7 @@
       }
     ]
   },
-  "editable": true,
+  "editable": false,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
   "links": [],
@@ -798,9 +798,9 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "fission_function_overhead_seconds",
+          "expr": "histogram_quantile(0.99, sum(rate(fission_function_overhead_seconds_bucket[$__rate_interval])) by (le, function_namespace, function_name, method, code))",
           "interval": "",
-          "legendFormat": "Function: {{function_name}} {{method}} {{code}} Percentile:{{quantile}}",
+          "legendFormat": "Function: {{function_namespace}}/{{function_name}} {{method}} {{code}} p99",
           "range": true,
           "refId": "A"
         }
@@ -1153,7 +1153,7 @@
         },
         "hide": 0,
         "includeAll": false,
-        "label": "Data Source",
+        "label": "Data source",
         "multi": false,
         "name": "datasource",
         "options": [],

@@ -22,11 +22,15 @@ var (
 		},
 		functionLabels,
 	)
-	FuncRunningSummary = prometheus.NewSummaryVec(
-		prometheus.SummaryOpts{
-			Name:       "fission_function_running_seconds",
-			Help:       "The running time (last access - create) in seconds of the function.",
-			Objectives: map[float64]float64{0.5: 0.05, 0.9: 0.01, 0.99: 0.001},
+	FuncRunningSeconds = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name: "fission_function_running_seconds",
+			Help: "The running time (last access - create) in seconds of the function.",
+			// Histogram instead of Summary: avoids the per-series quantile stream
+			// memory; quantiles are derived with histogram_quantile(). This is a
+			// function lifetime (seconds to hours), so use exponential buckets
+			// from 1s to ~9h rather than DefBuckets (which top out at 10s).
+			Buckets: prometheus.ExponentialBuckets(1, 2, 16),
 		},
 		functionLabels,
 	)
@@ -42,6 +46,6 @@ var (
 func init() {
 	registry := metrics.Registry
 	registry.MustRegister(ColdStarts)
-	registry.MustRegister(FuncRunningSummary)
+	registry.MustRegister(FuncRunningSeconds)
 	registry.MustRegister(ColdStartsError)
 }
