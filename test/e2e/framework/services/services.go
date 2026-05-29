@@ -29,10 +29,12 @@ import (
 func StartServices(ctx context.Context, f *framework.Framework, mgr manager.Interface) error {
 	os.Setenv("DEBUG_ENV", "true")
 	// The executor and buildermgr run under controller-runtime Managers whose
-	// metrics/health servers bind hard (unlike the fail-soft ServeMetrics the
-	// other in-process services use). In this single-process harness
-	// METRICS_ADDR is shared and racy, so tell them to bind ephemeral ports.
-	// Set once and never mutated, so their goroutines read it deterministically.
+	// metrics server binds hard (and buildermgr's health-probe server too;
+	// the executor keeps health on its API mux), unlike the fail-soft
+	// ServeMetrics the other in-process services use. In this single-process
+	// harness METRICS_ADDR is shared and racy, so tell them to bind ephemeral
+	// ports. Set once and never mutated, so their goroutines read it
+	// deterministically.
 	os.Setenv("FISSION_TEST_EPHEMERAL_SERVERS", "true")
 	env := f.GetEnv()
 	webhookPort := env.WebhookInstallOptions.LocalServingPort
