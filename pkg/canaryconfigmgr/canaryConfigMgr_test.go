@@ -108,7 +108,7 @@ func newTestEnv(prom failurePercentageGetter, objs ...client.Object) (*canaryCon
 		WithObjects(objs...).
 		WithStatusSubresource(&fv1.CanaryConfig{}).
 		Build()
-	mgr := &canaryConfigMgr{logger: logr.Discard(), client: c, promClient: prom}
+	mgr := &canaryConfigMgr{logger: logr.Discard(), client: c, apiReader: c, promClient: prom}
 	r := &CanaryConfigReconciler{logger: logr.Discard(), client: c, mgr: mgr}
 	return mgr, r, c
 }

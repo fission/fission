@@ -18,14 +18,13 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/conditions"
 	"github.com/fission/fission/pkg/crd"
 )
-
-const maxRetries = 10
 
 // failurePercentageGetter computes the error rate of the canary's new function
 // over a time window. *PrometheusApiClient satisfies it in production; unit
@@ -89,10 +88,11 @@ func setCanaryConfigConditions(s *fv1.CanaryConfigStatus, status string, gen int
 type canaryConfigMgr struct {
 	logger     logr.Logger
 	client     client.Client
+	apiReader  client.Reader
 	promClient failurePercentageGetter
 }
 
-func MakeCanaryConfigMgr(logger logr.Logger, c client.Client, prometheusSvc string) (*canaryConfigMgr, error) {
+func MakeCanaryConfigMgr(logger logr.Logger, c client.Client, apiReader client.Reader, prometheusSvc string) (*canaryConfigMgr, error) {
 	if prometheusSvc == "" {
 		logger.Info("try to retrieve prometheus server information from environment variables")
 
@@ -128,6 +128,7 @@ func MakeCanaryConfigMgr(logger logr.Logger, c client.Client, prometheusSvc stri
 	return &canaryConfigMgr{
 		logger:     logger.WithName("canary_config_manager"),
 		client:     c,
+		apiReader:  apiReader,
 		promClient: promClient,
 	}, nil
 }
@@ -258,33 +259,27 @@ func (m *canaryConfigMgr) rollbackWeights(ctx context.Context, cfg *fv1.CanaryCo
 	return m.updateHttpTriggerWithRetries(ctx, trigger.Namespace, trigger.Name, weights)
 }
 
-// updateHttpTriggerWithRetries persists fnWeights onto the HTTPTrigger. The
-// short retry loop absorbs the brief optimistic-concurrency conflicts that
-// happen when the cached trigger lags a concurrent write; a conflict that
-// outlasts the loop is returned so the reconciler can requeue and reconverge
-// once the watch refreshes the cache.
+// updateHttpTriggerWithRetries persists fnWeights onto the HTTPTrigger,
+// retrying the optimistic-concurrency conflicts that happen when a concurrent
+// write bumps the trigger's ResourceVersion. The re-read goes through the
+// uncached apiReader: the cache-backed client would re-serve the same stale
+// object on each retry, so the conflict would never clear. A conflict that
+// outlasts the backoff is returned so the reconciler can requeue.
 func (m *canaryConfigMgr) updateHttpTriggerWithRetries(ctx context.Context, namespace, name string, fnWeights map[string]int) error {
 	key := types.NamespacedName{Namespace: namespace, Name: name}
-	var lastErr error
-	for range maxRetries {
+	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		trigger := &fv1.HTTPTrigger{}
-		if err := m.client.Get(ctx, key, trigger); err != nil {
-			return fmt.Errorf("error getting http trigger %s: %w", key, err)
+		if err := m.apiReader.Get(ctx, key, trigger); err != nil {
+			return err
 		}
 		trigger.Spec.FunctionReference.FunctionWeights = fnWeights
-
-		switch err := m.client.Update(ctx, trigger); {
-		case err == nil:
-			m.logger.V(1).Info("updated http trigger weights", "trigger", key)
-			return nil
-		case apierrors.IsConflict(err):
-			lastErr = err
-			continue
-		default:
-			return fmt.Errorf("error updating http trigger %s: %w", key, err)
-		}
+		return m.client.Update(ctx, trigger)
+	})
+	if err != nil {
+		return fmt.Errorf("error updating http trigger %s: %w", key, err)
 	}
-	return fmt.Errorf("error updating http trigger %s after %d retries: %w", key, maxRetries, lastErr)
+	m.logger.V(1).Info("updated http trigger weights", "trigger", key)
+	return nil
 }
 
 func getEnvValue(envVar string) string {
@@ -295,16 +290,12 @@ func getEnvValue(envVar string) string {
 func StartCanaryServer(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger, mgr *errgroup.Group, unitTestFlag bool) error {
 	cLogger := logger.WithName("CanaryServer")
 
-	fissionClient, err := clientGen.GetFissionClient()
-	if err != nil {
-		return fmt.Errorf("failed to get fission client: %w", err)
-	}
 	restConfig, err := clientGen.GetRestConfig()
 	if err != nil {
 		return fmt.Errorf("failed to get rest config: %w", err)
 	}
 
-	err = ConfigureFeatures(ctx, restConfig, cLogger, unitTestFlag, fissionClient, mgr)
+	err = ConfigureFeatures(ctx, restConfig, cLogger, unitTestFlag, mgr)
 	if err != nil {
 		cLogger.Error(err, "error configuring features - proceeding without optional features")
 	}

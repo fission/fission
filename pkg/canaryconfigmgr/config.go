@@ -15,14 +15,12 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/controller"
-	"github.com/fission/fission/pkg/crd"
 	config "github.com/fission/fission/pkg/featureconfig"
-	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	"github.com/fission/fission/pkg/utils/crmanager"
 )
 
 // ConfigureFeatures gets the feature config and configures the features that are enabled
-func ConfigureFeatures(ctx context.Context, restConfig *rest.Config, logger logr.Logger, unitTestMode bool, fissionClient versioned.Interface, _ *errgroup.Group) error {
+func ConfigureFeatures(ctx context.Context, restConfig *rest.Config, logger logr.Logger, unitTestMode bool, _ *errgroup.Group) error {
 	// set feature enabled to false if unitTestMode
 	if unitTestMode {
 		return nil
@@ -33,10 +31,6 @@ func ConfigureFeatures(ctx context.Context, restConfig *rest.Config, logger logr
 	if err != nil {
 		logger.Error(err, "error getting feature config")
 		return err
-	}
-
-	if err := crd.WaitForFunctionCRDs(ctx, logger, fissionClient); err != nil {
-		return fmt.Errorf("error waiting for CRDs: %w", err)
 	}
 
 	// configure respective features
@@ -52,7 +46,7 @@ func ConfigureFeatures(ctx context.Context, restConfig *rest.Config, logger logr
 		return err
 	}
 
-	canaryCfgMgr, err := MakeCanaryConfigMgr(logger, crMgr.GetClient(), featureConfig.CanaryConfig.PrometheusSvc)
+	canaryCfgMgr, err := MakeCanaryConfigMgr(logger, crMgr.GetClient(), crMgr.GetAPIReader(), featureConfig.CanaryConfig.PrometheusSvc)
 	if err != nil {
 		return fmt.Errorf("failed to start canary config manager: %w", err)
 	}
