@@ -25,7 +25,8 @@ import (
 // requeued — there is no in-memory state to tear down.
 //
 // Reads go through the Manager's cache-backed client; the terminal/Progressing
-// status is written through client.Status().Update on the /status subresource.
+// status is written through a client.Status().Patch on the /status subresource
+// (see writeStatus).
 type CanaryConfigReconciler struct {
 	logger logr.Logger
 	client client.Client

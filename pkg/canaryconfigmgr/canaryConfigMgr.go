@@ -287,7 +287,11 @@ func getEnvValue(envVar string) string {
 	return value
 }
 
-func StartCanaryServer(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger, mgr *errgroup.Group, unitTestFlag bool) error {
+// StartCanaryServer keeps the *errgroup.Group parameter for signature parity
+// with the other fission-bundle subsystem entry points (the dispatcher in
+// cmd/fission-bundle threads the same group into each); the canary controller
+// runs on a controller-runtime Manager and does not use it.
+func StartCanaryServer(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger, _ *errgroup.Group, unitTestFlag bool) error {
 	cLogger := logger.WithName("CanaryServer")
 
 	restConfig, err := clientGen.GetRestConfig()
@@ -295,7 +299,7 @@ func StartCanaryServer(ctx context.Context, clientGen crd.ClientGeneratorInterfa
 		return fmt.Errorf("failed to get rest config: %w", err)
 	}
 
-	err = ConfigureFeatures(ctx, restConfig, cLogger, unitTestFlag, mgr)
+	err = ConfigureFeatures(ctx, restConfig, cLogger, unitTestFlag)
 	if err != nil {
 		cLogger.Error(err, "error configuring features - proceeding without optional features")
 	}

@@ -11,7 +11,6 @@ import (
 	"k8s.io/client-go/rest"
 
 	"github.com/go-logr/logr"
-	"golang.org/x/sync/errgroup"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/controller"
@@ -20,7 +19,7 @@ import (
 )
 
 // ConfigureFeatures gets the feature config and configures the features that are enabled
-func ConfigureFeatures(ctx context.Context, restConfig *rest.Config, logger logr.Logger, unitTestMode bool, _ *errgroup.Group) error {
+func ConfigureFeatures(ctx context.Context, restConfig *rest.Config, logger logr.Logger, unitTestMode bool) error {
 	// set feature enabled to false if unitTestMode
 	if unitTestMode {
 		return nil
