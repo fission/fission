@@ -547,8 +547,12 @@ func StartCanaryServer(ctx context.Context, clientGen crd.ClientGeneratorInterfa
 	if err != nil {
 		return fmt.Errorf("failed to get kubernetes client: %w", err)
 	}
+	restConfig, err := clientGen.GetRestConfig()
+	if err != nil {
+		return fmt.Errorf("failed to get rest config: %w", err)
+	}
 
-	err = ConfigureFeatures(ctx, cLogger, unitTestFlag, fissionClient, kubernetesClient, mgr)
+	err = ConfigureFeatures(ctx, restConfig, cLogger, unitTestFlag, fissionClient, kubernetesClient, mgr)
 	if err != nil {
 		cLogger.Error(err, "error configuring features - proceeding without optional features")
 	}

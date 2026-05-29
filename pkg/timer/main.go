@@ -11,18 +11,18 @@ import (
 	"github.com/go-logr/logr"
 
 	"github.com/fission/fission/pkg/crd"
-	"github.com/fission/fission/pkg/utils/leaderelection"
+	"github.com/fission/fission/pkg/utils/crmanager"
 	"github.com/fission/fission/pkg/utils/manager"
 )
 
-func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger, mgr manager.Interface, routerUrl string) error {
+func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger, _ manager.Interface, routerUrl string) error {
 	fissionClient, err := clientGen.GetFissionClient()
 	if err != nil {
 		return fmt.Errorf("failed to get fission client: %w", err)
 	}
-	kubeClient, err := clientGen.GetKubernetesClient()
+	restConfig, err := clientGen.GetRestConfig()
 	if err != nil {
-		return fmt.Errorf("failed to get kubernetes client: %w", err)
+		return fmt.Errorf("failed to get rest config: %w", err)
 	}
 
 	err = crd.WaitForFunctionCRDs(ctx, logger, fissionClient)
@@ -35,14 +35,22 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		return fmt.Errorf("error making timer sync: %w", err)
 	}
 
-	// Active-passive HA: only the elected leader schedules cron triggers, so
-	// two replicas don't double-fire timers. No-op when LEADER_ELECTION_ENABLED
-	// is unset (single-replica default).
-	elector, runCtx, err := leaderelection.FromEnv(ctx, kubeClient, "fission-timer", logger)
+	// Active-passive HA via native controller-runtime leader election: only the
+	// elected leader schedules cron triggers, so two replicas don't double-fire
+	// timers. No-op when LEADER_ELECTION_ENABLED is unset (single-replica
+	// default).
+	crMgr, err := crmanager.NewLeaderElected(restConfig, "fission-timer", logger)
 	if err != nil {
 		return err
 	}
-	mgr.Add(ctx, func(context.Context) { elector.Run(runCtx) })
-	mgr.Add(runCtx, elector.Gated(func(c context.Context) { timerSync.Run(c, mgr) }))
-	return nil
+	if err := crMgr.Add(crmanager.LeaderRunnable(func(c context.Context) error {
+		gm := manager.New()
+		timerSync.Run(c, gm)
+		<-c.Done()
+		gm.Wait()
+		return nil
+	})); err != nil {
+		return err
+	}
+	return crMgr.Start(ctx)
 }

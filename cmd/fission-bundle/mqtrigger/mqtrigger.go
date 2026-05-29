@@ -22,18 +22,18 @@ import (
 	"github.com/fission/fission/pkg/mqtrigger/messageQueue"
 	_ "github.com/fission/fission/pkg/mqtrigger/messageQueue/kafka"
 	"github.com/fission/fission/pkg/utils"
-	"github.com/fission/fission/pkg/utils/leaderelection"
+	"github.com/fission/fission/pkg/utils/crmanager"
 	"github.com/fission/fission/pkg/utils/manager"
 )
 
-func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger, mgr manager.Interface, routerUrl string) error {
+func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger, _ manager.Interface, routerUrl string) error {
 	fissionClient, err := clientGen.GetFissionClient()
 	if err != nil {
 		return fmt.Errorf("failed to get fission client: %w", err)
 	}
-	kubeClient, err := clientGen.GetKubernetesClient()
+	restConfig, err := clientGen.GetRestConfig()
 	if err != nil {
-		return fmt.Errorf("failed to get kubernetes client: %w", err)
+		return fmt.Errorf("failed to get rest config: %w", err)
 	}
 
 	err = crd.WaitForFunctionCRDs(ctx, logger, fissionClient)
@@ -81,24 +81,27 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		return err
 	}
 
-	// Active-passive HA: only the elected leader consumes the message queue and
-	// manages triggers, so two replicas don't double-consume. Informer
-	// factories run on every replica so a standby keeps warm caches. No-op when
-	// LEADER_ELECTION_ENABLED is unset (single-replica default).
-	elector, runCtx, err := leaderelection.FromEnv(ctx, kubeClient, "fission-mqtrigger", logger)
+	// Active-passive HA via native controller-runtime leader election: only the
+	// elected leader consumes the message queue and manages triggers, so two
+	// replicas don't double-consume. No-op when LEADER_ELECTION_ENABLED is unset
+	// (single-replica default).
+	crMgr, err := crmanager.NewLeaderElected(restConfig, "fission-mqtrigger", logger)
 	if err != nil {
 		return err
 	}
-
-	// Start informer factory (warm caches on all replicas)
-	for _, factory := range finformerFactory {
-		factory.Start(runCtx.Done())
+	if err := crMgr.Add(crmanager.LeaderRunnable(func(c context.Context) error {
+		gm := manager.New()
+		for _, factory := range finformerFactory {
+			factory.Start(c.Done())
+		}
+		mqtMgr.Run(c, c.Done(), gm)
+		<-c.Done()
+		gm.Wait()
+		return nil
+	})); err != nil {
+		return err
 	}
-
-	mgr.Add(ctx, func(context.Context) { elector.Run(runCtx) })
-	mgr.Add(runCtx, elector.Gated(func(c context.Context) { mqtMgr.Run(c, c.Done(), mgr) }))
-
-	return nil
+	return crMgr.Start(ctx)
 }
 
 func readSecrets(logger logr.Logger, secretsPath string) (map[string][]byte, error) {
