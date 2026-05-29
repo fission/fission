@@ -164,10 +164,21 @@ func (m *canaryConfigMgr) step(ctx context.Context, cfg *fv1.CanaryConfig) (step
 		return stepOutcome{}, err
 	}
 
+	// A canary rollout only makes sense against a function-weights trigger with
+	// a populated weights map; rollForward/rollbackWeights write into that map
+	// and would panic on a nil one. A mismatched trigger is a (recoverable)
+	// misconfiguration — keep requeuing so the rollout resumes if the trigger
+	// is corrected, rather than panicking or giving up.
+	if trigger.Spec.FunctionReference.Type != fv1.FunctionReferenceTypeFunctionWeights ||
+		trigger.Spec.FunctionReference.FunctionWeights == nil {
+		log.Info("http trigger is not configured for weighted canary; will retry",
+			"trigger", trigger.Name, "type", trigger.Spec.FunctionReference.Type)
+		return stepOutcome{requeue: true}, nil
+	}
+
 	// Only evaluate the failure rate once the new function is actually taking
 	// traffic; at weight 0 there is nothing to observe.
-	if trigger.Spec.FunctionReference.Type == fv1.FunctionReferenceTypeFunctionWeights &&
-		trigger.Spec.FunctionReference.FunctionWeights[cfg.Spec.NewFunction] != 0 {
+	if trigger.Spec.FunctionReference.FunctionWeights[cfg.Spec.NewFunction] != 0 {
 		urlPath := trigger.Spec.RelativeURL
 		if trigger.Spec.Prefix != nil && *trigger.Spec.Prefix != "" {
 			urlPath = *trigger.Spec.Prefix

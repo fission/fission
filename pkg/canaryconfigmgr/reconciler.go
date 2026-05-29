@@ -60,19 +60,40 @@ func (r *CanaryConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			"name", cfg.Name, "namespace", cfg.Namespace, "duration", cfg.Spec.WeightIncrementDuration)
 		return ctrl.Result{}, nil
 	}
+	if interval <= 0 {
+		// time.ParseDuration accepts "0s" and negatives; requeuing with a
+		// non-positive RequeueAfter would spin a hot reconcile loop. Treat it
+		// as an unworkable spec and stop until it is fixed.
+		r.logger.Info("non-positive WeightIncrementDuration; not scheduling canary",
+			"name", cfg.Name, "namespace", cfg.Namespace, "duration", cfg.Spec.WeightIncrementDuration)
+		return ctrl.Result{}, nil
+	}
 
 	out, err := r.mgr.step(ctx, cfg)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 	if out.terminalStatus != "" {
-		r.writeStatus(ctx, cfg, out.terminalStatus)
+		// The weights are already at their terminal split. If the status write
+		// fails the GenerationChangedPredicate would drop the resulting
+		// status-only event, leaving the config stranded in Pending with no
+		// reschedule — so surface the error and let the workqueue requeue until
+		// the terminal status sticks.
+		if err := r.writeStatus(ctx, cfg, out.terminalStatus); err != nil {
+			r.logger.Error(err, "failed to write terminal canary status; requeuing",
+				"name", cfg.Name, "namespace", cfg.Namespace, "status", out.terminalStatus)
+			return ctrl.Result{}, err
+		}
 		return ctrl.Result{}, nil
 	}
 	if out.requeue {
-		// Keep Progressing/Ready asserted (the write is skipped when unchanged)
-		// and step again after one increment window.
-		r.writeStatus(ctx, cfg, fv1.CanaryConfigStatusPending)
+		// Keep Progressing/Ready asserted (the write is skipped when unchanged).
+		// The RequeueAfter below reschedules regardless, so a failed status
+		// write here is best-effort and not fatal.
+		if err := r.writeStatus(ctx, cfg, fv1.CanaryConfigStatusPending); err != nil {
+			r.logger.V(1).Info("canary progressing status update failed",
+				"name", cfg.Name, "namespace", cfg.Namespace, "error", err)
+		}
 		return ctrl.Result{RequeueAfter: interval}, nil
 	}
 	return ctrl.Result{}, nil
@@ -80,20 +101,17 @@ func (r *CanaryConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 // writeStatus sets the bare status string and the mirrored Progressing/Ready
 // conditions, persisting through the /status subresource. The write is skipped
-// when nothing would change — important on the Pending fast path that runs
-// every WeightIncrementDuration. Best-effort: a failed status write never gates
-// the rollout; the next reconcile reconverges.
-func (r *CanaryConfigReconciler) writeStatus(ctx context.Context, cfg *fv1.CanaryConfig, status string) {
+// (and nil returned) when nothing would change — important on the Pending fast
+// path that runs every WeightIncrementDuration. The caller decides whether a
+// write failure should requeue.
+func (r *CanaryConfigReconciler) writeStatus(ctx context.Context, cfg *fv1.CanaryConfig, status string) error {
 	changed := cfg.Status.Status != status
 	cfg.Status.Status = status
 	if setCanaryConfigConditions(&cfg.Status, status, cfg.Generation) {
 		changed = true
 	}
 	if !changed {
-		return
+		return nil
 	}
-	if err := r.client.Status().Update(ctx, cfg); err != nil {
-		r.logger.V(1).Info("canary status update failed",
-			"name", cfg.Name, "namespace", cfg.Namespace, "error", err)
-	}
+	return r.client.Status().Update(ctx, cfg)
 }

@@ -211,6 +211,25 @@ func TestStep(t *testing.T) {
 		assert.Equal(t, 100, got.Spec.FunctionReference.FunctionWeights["old"])
 	})
 
+	t.Run("non-weighted trigger requeues without panicking", func(t *testing.T) {
+		trigger, cc := canaryFixtures(nil, 30) // nil FunctionWeights map
+		trigger.Spec.FunctionReference.Type = fv1.FunctionReferenceTypeFunctionName
+		mgr, _, _ := newTestEnv(fakeFailureClient{}, trigger, cc)
+
+		out, err := mgr.step(t.Context(), cc)
+		require.NoError(t, err)
+		assert.Equal(t, stepOutcome{requeue: true}, out)
+	})
+
+	t.Run("weighted trigger with nil weights map requeues without panicking", func(t *testing.T) {
+		trigger, cc := canaryFixtures(nil, 30) // type is function-weights, map nil
+		mgr, _, _ := newTestEnv(fakeFailureClient{}, trigger, cc)
+
+		out, err := mgr.step(t.Context(), cc)
+		require.NoError(t, err)
+		assert.Equal(t, stepOutcome{requeue: true}, out)
+	})
+
 	t.Run("under threshold increments and requeues", func(t *testing.T) {
 		trigger, cc := canaryFixtures(map[string]int{"new": 30, "old": 70}, 30)
 		mgr, _, c := newTestEnv(fakeFailureClient{pct: 5}, trigger, cc) // < threshold 10
@@ -263,6 +282,16 @@ func TestReconcile(t *testing.T) {
 	t.Run("invalid duration stops without requeue", func(t *testing.T) {
 		trigger, cc := canaryFixtures(map[string]int{"new": 0, "old": 100}, 30)
 		cc.Spec.WeightIncrementDuration = "not-a-duration"
+		_, r, _ := newTestEnv(fakeFailureClient{}, trigger, cc)
+
+		res, err := reconcileCC(t, r)
+		require.NoError(t, err)
+		assert.Equal(t, ctrl.Result{}, res)
+	})
+
+	t.Run("non-positive duration stops without requeue", func(t *testing.T) {
+		trigger, cc := canaryFixtures(map[string]int{"new": 0, "old": 100}, 30)
+		cc.Spec.WeightIncrementDuration = "0s"
 		_, r, _ := newTestEnv(fakeFailureClient{}, trigger, cc)
 
 		res, err := reconcileCC(t, r)
