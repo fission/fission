@@ -28,6 +28,12 @@ import (
 
 func StartServices(ctx context.Context, f *framework.Framework, mgr manager.Interface) error {
 	os.Setenv("DEBUG_ENV", "true")
+	// The executor and buildermgr run under controller-runtime Managers whose
+	// metrics/health servers bind hard (unlike the fail-soft ServeMetrics the
+	// other in-process services use). In this single-process harness
+	// METRICS_ADDR is shared and racy, so tell them to bind ephemeral ports.
+	// Set once and never mutated, so their goroutines read it deterministically.
+	os.Setenv("FISSION_TEST_EPHEMERAL_SERVERS", "true")
 	env := f.GetEnv()
 	webhookPort := env.WebhookInstallOptions.LocalServingPort
 	err := f.ToggleMetricAddr()
@@ -66,10 +72,15 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr manager.Inte
 	}
 
 	os.Setenv("POD_READY_TIMEOUT", "300s")
-	err = executor.StartExecutor(ctx, f.ClientGen(), f.Logger(), mgr, executorPort)
-	if err != nil {
-		return fmt.Errorf("error starting executor: %w", err)
-	}
+	// executor now runs under a controller-runtime Manager, so StartExecutor
+	// blocks (like webhook.Start). Run it in a goroutine so the remaining
+	// services still come up.
+	mgr.Add(ctx, func(ctx context.Context) {
+		if err := executor.StartExecutor(ctx, f.ClientGen(), f.Logger(), mgr, executorPort); err != nil {
+			f.Logger().Error(err, "error starting executor")
+			os.Exit(1)
+		}
+	})
 	f.AddServiceInfo("executor", framework.ServiceInfo{Port: executorPort})
 
 	os.Setenv("PRUNE_ENABLED", "true")
@@ -90,15 +101,9 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr manager.Inte
 		return err
 	}
 
-	// buildermgr runs under a controller-runtime Manager whose metrics/health
-	// servers bind hard (unlike the fail-soft ServeMetrics other in-process
-	// services use). In this single-process harness METRICS_ADDR is shared and
-	// racy, so tell buildermgr to bind ephemeral ports. Set once and never
-	// mutated, so its goroutine reads it deterministically.
-	os.Setenv("FISSION_TEST_EPHEMERAL_SERVERS", "true")
-
-	// buildermgr's Start blocks (like webhook.Start) until the context is
-	// cancelled, so run it in a goroutine so the remaining services come up.
+	// buildermgr's Start blocks (controller-runtime Manager), so run it in a
+	// goroutine; FISSION_TEST_EPHEMERAL_SERVERS (set at the top) makes its
+	// Manager servers bind ephemeral ports.
 	storageSvcURL := fmt.Sprintf("http://localhost:%d", storageSvcPort)
 	mgr.Add(ctx, func(ctx context.Context) {
 		if err := buildermgr.Start(ctx, f.ClientGen(), f.Logger(), mgr, storageSvcURL); err != nil {
