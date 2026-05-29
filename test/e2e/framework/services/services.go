@@ -145,10 +145,15 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr manager.Inte
 	if err != nil {
 		return fmt.Errorf("error finding unused port for router internal listener: %w", err)
 	}
-	err = router.Start(ctx, f.ClientGen(), f.Logger(), mgr, routerPort, internalRouterPort, executor)
-	if err != nil {
-		return fmt.Errorf("error starting router: %w", err)
-	}
+	// router now runs under a controller-runtime Manager, so Start blocks. Run
+	// it in a goroutine so the harness can continue; FISSION_TEST_EPHEMERAL_SERVERS
+	// (set at the top) makes its Manager metrics server bind an ephemeral port.
+	mgr.Add(ctx, func(ctx context.Context) {
+		if err := router.Start(ctx, f.ClientGen(), f.Logger(), mgr, routerPort, internalRouterPort, executor); err != nil {
+			f.Logger().Error(err, "error starting router")
+			os.Exit(1)
+		}
+	})
 	f.AddServiceInfo("router", framework.ServiceInfo{Port: routerPort})
 	f.AddServiceInfo("router-internal", framework.ServiceInfo{Port: internalRouterPort})
 	routerURL, err := f.GetServiceURL("router")

@@ -29,25 +29,50 @@ package router
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/gorilla/mux"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.opentelemetry.io/otel"
+	ctrl "sigs.k8s.io/controller-runtime"
+	ctrlmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 	"github.com/fission/fission/pkg/crd"
 	eclient "github.com/fission/fission/pkg/executor/client"
+	"github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
 	"github.com/fission/fission/pkg/throttler"
 	"github.com/fission/fission/pkg/utils/httpsecurity"
 	"github.com/fission/fission/pkg/utils/httpserver"
 	"github.com/fission/fission/pkg/utils/manager"
-	"github.com/fission/fission/pkg/utils/metrics"
+	fissionmetrics "github.com/fission/fission/pkg/utils/metrics"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
+
+// runnableFunc adapts a function to a controller-runtime manager.Runnable.
+type runnableFunc func(context.Context) error
+
+func (f runnableFunc) Start(ctx context.Context) error { return f(ctx) }
+
+// bindAddr resolves a server bind address from env, defaulting to def and
+// prefixing ":" when only a port is given.
+func bindAddr(env, def string) string {
+	addr := os.Getenv(env)
+	if addr == "" {
+		addr = def
+	}
+	if !strings.Contains(addr, ":") {
+		addr = ":" + addr
+	}
+	return addr
+}
 
 // DefaultInternalListenerPort is the default port for the internal
 // listener that serves /fission-function/<ns>/<name>. It must match the
@@ -172,6 +197,10 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	if err != nil {
 		return fmt.Errorf("error making the kube client: %w", err)
 	}
+	restConfig, err := clientGen.GetRestConfig()
+	if err != nil {
+		return fmt.Errorf("error getting rest config: %w", err)
+	}
 
 	err = crd.WaitForFunctionCRDs(ctx, logger, fissionClient)
 	if err != nil {
@@ -260,15 +289,53 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		return fmt.Errorf("error making HTTP trigger set: %w", err)
 	}
 
-	mgr.Add(ctx, func(ctx context.Context) {
-		metrics.ServeMetrics(ctx, "router", logger, mgr)
+	// The router runs under a controller-runtime Manager for lifecycle
+	// consistency with the rest of the control plane and to set up the future
+	// HTTPTrigger Reconciler. It is stateless and replica-independent, so it
+	// uses NO leader election (every replica serves). The Manager owns the
+	// metrics server and graceful shutdown; /healthz + /readyz stay on the
+	// public listener, so the Manager's own health server is disabled.
+	var alreadyRegistered prometheus.AlreadyRegisteredError
+	if err := ctrlmetrics.Registry.Register(fissionmetrics.Registry); err != nil && !errors.As(err, &alreadyRegistered) {
+		logger.Error(err, "failed to register fission metrics collectors")
+	}
+
+	metricsBind := bindAddr("METRICS_ADDR", "8080")
+	if ephemeral, _ := strconv.ParseBool(os.Getenv("FISSION_TEST_EPHEMERAL_SERVERS")); ephemeral {
+		// In-process e2e harness: bind an ephemeral metrics port to avoid clashes.
+		metricsBind = ":0"
+	}
+
+	crMgr, err := ctrl.NewManager(restConfig, ctrl.Options{
+		Scheme:                 scheme.Scheme,
+		Metrics:                metricsserver.Options{BindAddress: metricsBind},
+		HealthProbeBindAddress: "0", // /router-healthz + /readyz stay on the public listener
+		LeaderElection:         false,
+		Logger:                 logger,
 	})
+	if err != nil {
+		return fmt.Errorf("unable to set up router manager: %w", err)
+	}
 
 	logger.Info("starting router", "port", port, "internalPort", internalPort)
 
-	tracer := otel.Tracer("router")
-	ctx, span := tracer.Start(ctx, "router/Start")
-	defer span.End()
+	// The trigger watching + the public/internal listeners run on an internal
+	// GroupManager, hosted by a single Manager runnable.
+	err = crMgr.Add(runnableFunc(func(rctx context.Context) error {
+		gm := manager.New()
+		tracer := otel.Tracer("router")
+		rctx, span := tracer.Start(rctx, "router/serve")
+		defer span.End()
+		if err := serve(rctx, logger, gm, port, internalPort, triggers); err != nil {
+			return err
+		}
+		<-rctx.Done()
+		gm.Wait()
+		return nil
+	}))
+	if err != nil {
+		return fmt.Errorf("unable to add router runnable: %w", err)
+	}
 
-	return serve(ctx, logger, mgr, port, internalPort, triggers)
+	return crMgr.Start(ctx)
 }
