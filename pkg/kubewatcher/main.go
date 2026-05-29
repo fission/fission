@@ -11,6 +11,8 @@ import (
 	"github.com/go-logr/logr"
 	"golang.org/x/sync/errgroup"
 
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/controller"
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/publisher"
 	"github.com/fission/fission/pkg/utils/crmanager"
@@ -36,28 +38,24 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	}
 
 	poster := publisher.MakeWebhookPublisher(logger, routerUrl)
-	kubeWatch := MakeKubeWatcher(ctx, logger, fissionClient, kubeClient, poster)
-	ws, err := MakeWatchSync(ctx, logger, fissionClient, kubeWatch)
-	if err != nil {
-		return fmt.Errorf("error making watch sync: %w", err)
-	}
+	kubeWatch := MakeKubeWatcher(ctx, logger, kubeClient, poster)
 
 	// Active-passive HA via native controller-runtime leader election: only the
-	// elected leader runs the watch sync, so two replicas don't double-register
-	// watches / double-fire functions. No-op when LEADER_ELECTION_ENABLED is
-	// unset (single-replica default).
+	// elected leader registers watches, so two replicas don't double-register /
+	// double-fire functions. No-op when LEADER_ELECTION_ENABLED is unset
+	// (single-replica default). The reconciler watches through the Manager's
+	// namespace-scoped cache and runs only on the elected leader.
 	crMgr, err := crmanager.NewLeaderElected(restConfig, "fission-kubewatcher", logger)
 	if err != nil {
 		return err
 	}
-	if err := crMgr.Add(crmanager.LeaderRunnable(func(c context.Context) error {
-		gm := &errgroup.Group{}
-		ws.Run(c, gm)
-		<-c.Done()
-		_ = gm.Wait()
-		return nil
-	})); err != nil {
-		return err
+	r := &KubernetesWatchTriggerReconciler{
+		logger:      logger.WithName("kuberneteswatchtrigger_reconciler"),
+		client:      crMgr.GetClient(),
+		kubeWatcher: kubeWatch,
+	}
+	if err := controller.Register(crMgr, &fv1.KubernetesWatchTrigger{}, r, "kuberneteswatchtrigger"); err != nil {
+		return fmt.Errorf("error registering kuberneteswatchtrigger reconciler: %w", err)
 	}
 	return crMgr.Start(ctx)
 }
