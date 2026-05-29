@@ -15,6 +15,7 @@ import (
 	"sync/atomic"
 
 	"go.opentelemetry.io/otel"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/go-logr/logr"
 
@@ -23,7 +24,6 @@ import (
 	"github.com/fission/fission/pkg/fetcher"
 	"github.com/fission/fission/pkg/utils/httpsecurity"
 	"github.com/fission/fission/pkg/utils/httpserver"
-	"github.com/fission/fission/pkg/utils/manager"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
@@ -31,7 +31,7 @@ var (
 	readyToServe atomic.Uint32
 )
 
-func Run(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger, mgr manager.Interface, port string, podInfoMountDir string) error {
+func Run(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger, mgr *errgroup.Group, port string, podInfoMountDir string) error {
 	flag.Usage = fetcherUsage
 	specializeOnStart := flag.Bool("specialize-on-startup", false, "Flag to activate specialize process at pod startup")
 	specializePayload := flag.String("specialize-request", "", "JSON payload for specialize request")
@@ -72,23 +72,24 @@ func Run(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger log
 	}
 
 	// do specialization in other goroutine to prevent blocking in newdeploy
-	mgr.Add(ctx, func(_ context.Context) {
+	mgr.Go(func() error {
 		if *specializeOnStart {
 			var specializeReq fetcher.FunctionSpecializeRequest
 
 			err := json.Unmarshal([]byte(*specializePayload), &specializeReq)
 			if err != nil {
 				logger.Error(err, "error decoding specialize request")
-				return
+				return nil
 			}
 
 			code, err := f.SpecializePod(ctx, specializeReq.FetchReq, specializeReq.LoadReq)
 			if err != nil {
 				logger.Error(err, "error specializing function pod", "statusCode", code)
-				return
+				return nil
 			}
 		}
 		readyToServe.Store(1)
+		return nil
 	})
 
 	mux := http.NewServeMux()

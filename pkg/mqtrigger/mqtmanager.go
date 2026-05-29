@@ -17,6 +17,7 @@ import (
 	"k8s.io/client-go/util/workqueue"
 
 	"github.com/go-logr/logr"
+	"golang.org/x/sync/errgroup"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/conditions"
@@ -24,7 +25,6 @@ import (
 	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
 	flisterv1 "github.com/fission/fission/pkg/generated/listers/core/v1"
 	"github.com/fission/fission/pkg/mqtrigger/messageQueue"
-	"github.com/fission/fission/pkg/utils/manager"
 	"github.com/fission/fission/pkg/utils/metrics"
 )
 
@@ -106,7 +106,7 @@ func MakeMessageQueueTriggerManager(logger logr.Logger,
 	return &mqTriggerMgr, nil
 }
 
-func (mqt *MessageQueueTriggerManager) Run(ctx context.Context, stopCh <-chan struct{}, mgr manager.Interface) {
+func (mqt *MessageQueueTriggerManager) Run(ctx context.Context, stopCh <-chan struct{}, mgr *errgroup.Group) {
 	defer utilruntime.HandleCrash()
 	defer mqt.mqTriggerCreateUpdateQueue.ShutDown()
 	defer mqt.mqTriggerDeleteQueue.ShutDown()
@@ -128,16 +128,19 @@ func (mqt *MessageQueueTriggerManager) Run(ctx context.Context, stopCh <-chan st
 	}
 
 	for range 4 {
-		mgr.Add(ctx, func(ctx context.Context) {
+		mgr.Go(func() error {
 			wait.Until(mqt.workerRun(ctx, "mqTriggerCreateUpdate", mqt.mqTriggerCreateUpdateQueueProcessFunc), time.Second, stopCh)
+			return nil
 		})
 	}
-	mgr.Add(ctx, func(ctx context.Context) {
+	mgr.Go(func() error {
 		wait.Until(mqt.workerRun(ctx, "mqTriggerDeleteQueue", mqt.mqTriggerDeleteQueueProcessFunc), time.Second, stopCh)
+		return nil
 	})
 
-	mgr.Add(ctx, func(ctx context.Context) {
+	mgr.Go(func() error {
 		metrics.ServeMetrics(ctx, "mqtrigger", mqt.logger, mgr)
+		return nil
 	})
 
 	<-stopCh

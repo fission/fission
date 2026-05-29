@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	"golang.org/x/sync/errgroup"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
@@ -23,10 +24,9 @@ import (
 	_ "github.com/fission/fission/pkg/mqtrigger/messageQueue/kafka"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/crmanager"
-	"github.com/fission/fission/pkg/utils/manager"
 )
 
-func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger, _ manager.Interface, routerUrl string) error {
+func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger, _ *errgroup.Group, routerUrl string) error {
 	fissionClient, err := clientGen.GetFissionClient()
 	if err != nil {
 		return fmt.Errorf("failed to get fission client: %w", err)
@@ -103,10 +103,10 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		return err
 	}
 	if err := crMgr.Add(crmanager.LeaderRunnable(func(c context.Context) error {
-		gm := manager.New()
+		gm := &errgroup.Group{}
 		mqtMgr.Run(c, c.Done(), gm)
 		<-c.Done()
-		gm.Wait()
+		_ = gm.Wait()
 		return nil
 	})); err != nil {
 		return err

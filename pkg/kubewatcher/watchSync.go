@@ -11,11 +11,11 @@ import (
 	k8sCache "k8s.io/client-go/tools/cache"
 
 	"github.com/go-logr/logr"
+	"golang.org/x/sync/errgroup"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	"github.com/fission/fission/pkg/utils"
-	"github.com/fission/fission/pkg/utils/manager"
 )
 
 type (
@@ -41,8 +41,13 @@ func MakeWatchSync(ctx context.Context, logger logr.Logger, client versioned.Int
 	return ws, nil
 }
 
-func (ws *WatchSync) Run(ctx context.Context, mgr manager.Interface) {
-	mgr.AddInformers(ctx, ws.kubeWatcherInformer)
+func (ws *WatchSync) Run(ctx context.Context, mgr *errgroup.Group) {
+	for _, informer := range ws.kubeWatcherInformer {
+		mgr.Go(func() error {
+			informer.Run(ctx.Done())
+			return nil
+		})
+	}
 }
 
 func (ws *WatchSync) KubeWatcherEventHandlers(ctx context.Context) error {

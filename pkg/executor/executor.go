@@ -18,6 +18,7 @@ import (
 	"github.com/dchest/uniuri"
 	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus"
+	"golang.org/x/sync/errgroup"
 	k8sCache "k8s.io/client-go/tools/cache"
 	ctrl "sigs.k8s.io/controller-runtime"
 	ctrlmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
@@ -37,7 +38,6 @@ import (
 	"github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
 	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
 	"github.com/fission/fission/pkg/utils"
-	"github.com/fission/fission/pkg/utils/manager"
 	fissionmetrics "github.com/fission/fission/pkg/utils/metrics"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
@@ -110,7 +110,7 @@ type executorControllers struct {
 func (c *executorControllers) NeedLeaderElection() bool { return true }
 
 func (c *executorControllers) Start(ctx context.Context) error {
-	gm := manager.New()
+	gm := &errgroup.Group{}
 
 	// Read-only executortype informer factories (listers used by et.Run).
 	c.startFactories(ctx.Done())
@@ -118,12 +118,12 @@ func (c *executorControllers) Start(ctx context.Context) error {
 	// ConfigMap/Secret informers drive re-specialization (mutating), so they
 	// run on the leader only.
 	for _, informer := range c.fissionInformers {
-		gm.Add(ctx, func(ic context.Context) { informer.Run(ic.Done()) })
+		gm.Go(func() error { informer.Run(ctx.Done()); return nil })
 	}
 	for _, et := range c.executorTypes {
-		gm.Add(ctx, func(ic context.Context) { et.Run(ic, gm) })
+		gm.Go(func() error { et.Run(ctx, gm); return nil })
 	}
-	gm.Add(ctx, func(ic context.Context) { c.api.serveCreateFuncServices(ic) })
+	gm.Go(func() error { c.api.serveCreateFuncServices(ctx); return nil })
 
 	runAdoptCleanup(ctx, c.executorTypes, c.adoptResources)
 
@@ -137,7 +137,7 @@ func (c *executorControllers) Start(ctx context.Context) error {
 
 	<-ctx.Done()
 	c.api.isLeader.Store(false)
-	gm.Wait()
+	_ = gm.Wait()
 	return nil
 }
 
@@ -152,9 +152,9 @@ type executorAPIServer struct {
 func (a *executorAPIServer) NeedLeaderElection() bool { return false }
 
 func (a *executorAPIServer) Start(ctx context.Context) error {
-	gm := manager.New()
+	gm := &errgroup.Group{}
 	a.api.Serve(ctx, gm, a.port)
-	gm.Wait()
+	_ = gm.Wait()
 	return nil
 }
 
@@ -332,7 +332,7 @@ func (executor *Executor) getFunctionServiceFromCache(ctx context.Context, fn *f
 
 // StartExecutor Starts executor and the executor components such as Poolmgr,
 // deploymgr and potential future executor types
-func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger, mgr manager.Interface, port int) error {
+func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger, mgr *errgroup.Group, port int) error {
 
 	fissionClient, err := clientGen.GetFissionClient()
 	if err != nil {

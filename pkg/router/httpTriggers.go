@@ -15,6 +15,7 @@ import (
 	"github.com/bep/debounce"
 	"github.com/go-logr/logr"
 	"github.com/gorilla/mux"
+	"golang.org/x/sync/errgroup"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -31,7 +32,6 @@ import (
 	"github.com/fission/fission/pkg/throttler"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/httpsecurity"
-	"github.com/fission/fission/pkg/utils/manager"
 	"github.com/fission/fission/pkg/utils/metrics"
 )
 
@@ -98,7 +98,7 @@ func makeHTTPTriggerSet(logger logr.Logger, fmap *functionServiceMap, fissionCli
 // subscribeRouter wires the public mutable router and (optionally) the
 // internal mutable router. Passing internalMR=nil preserves the legacy
 // single-listener path used by older test scaffolding.
-func (ts *HTTPTriggerSet) subscribeRouter(ctx context.Context, mgr manager.Interface, mr *mutableRouter, internalMR *mutableRouter) error {
+func (ts *HTTPTriggerSet) subscribeRouter(ctx context.Context, mgr *errgroup.Group, mr *mutableRouter, internalMR *mutableRouter) error {
 	resolver := makeFunctionReferenceResolver(ts.logger, ts.funcInformer)
 	ts.resolver = resolver
 	ts.mutableRouter = mr
@@ -117,12 +117,23 @@ func (ts *HTTPTriggerSet) subscribeRouter(ctx context.Context, mgr manager.Inter
 		ts.logger.Info("skipping continuous trigger updates")
 		return nil
 	}
-	mgr.Add(ctx, func(ctx context.Context) {
+	mgr.Go(func() error {
 		ts.updateRouter(ctx)
+		return nil
 	})
 	ts.syncTriggers()
-	mgr.AddInformers(ctx, ts.funcInformer)
-	mgr.AddInformers(ctx, ts.triggerInformer)
+	for _, informer := range ts.funcInformer {
+		mgr.Go(func() error {
+			informer.Run(ctx.Done())
+			return nil
+		})
+	}
+	for _, informer := range ts.triggerInformer {
+		mgr.Go(func() error {
+			informer.Run(ctx.Done())
+			return nil
+		})
+	}
 	return nil
 }
 

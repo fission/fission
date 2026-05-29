@@ -13,8 +13,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-
-	"github.com/fission/fission/pkg/utils/manager"
+	"golang.org/x/sync/errgroup"
 )
 
 // defaultDrainTimeout bounds how long a server waits for in-flight requests to
@@ -32,7 +31,7 @@ func drainTimeout() time.Duration {
 	return defaultDrainTimeout
 }
 
-func StartServer(ctx context.Context, log logr.Logger, mgr manager.Interface, svc string, port string, handler http.Handler) {
+func StartServer(ctx context.Context, log logr.Logger, mgr *errgroup.Group, svc string, port string, handler http.Handler) {
 	if !strings.Contains(port, ":") {
 		port = fmt.Sprintf(":%s", port)
 	}
@@ -42,12 +41,13 @@ func StartServer(ctx context.Context, log logr.Logger, mgr manager.Interface, sv
 	}
 	l := log.WithValues("service", svc, "addr", server.Addr)
 	l.Info("starting server")
-	mgr.Add(ctx, func(ctx context.Context) {
+	mgr.Go(func() error {
 		if err := server.ListenAndServe(); err != nil {
 			if err != http.ErrServerClosed {
 				l.Error(err, "server error")
 			}
 		}
+		return nil
 	})
 	<-ctx.Done()
 	// ctx is already cancelled here (that is why we woke up), so it cannot be

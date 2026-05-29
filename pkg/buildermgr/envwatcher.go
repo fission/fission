@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	"golang.org/x/sync/errgroup"
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -28,7 +29,6 @@ import (
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	"github.com/fission/fission/pkg/utils"
-	"github.com/fission/fission/pkg/utils/manager"
 )
 
 const (
@@ -123,8 +123,13 @@ func (envw *environmentWatcher) getLabels(envName string, envNamespace string, e
 	}
 }
 
-func (envw *environmentWatcher) Run(ctx context.Context, mgr manager.Interface) {
-	mgr.AddInformers(ctx, envw.envWatchInformer)
+func (envw *environmentWatcher) Run(ctx context.Context, mgr *errgroup.Group) {
+	for _, informer := range envw.envWatchInformer {
+		mgr.Go(func() error {
+			informer.Run(ctx.Done())
+			return nil
+		})
+	}
 }
 
 func (envw *environmentWatcher) EnvWatchEventHandlers(ctx context.Context) error {

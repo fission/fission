@@ -10,16 +10,16 @@ import (
 	"os"
 
 	"github.com/go-logr/logr"
+	"golang.org/x/sync/errgroup"
 
 	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 	builder "github.com/fission/fission/pkg/builder"
 	"github.com/fission/fission/pkg/utils/httpsecurity"
 	"github.com/fission/fission/pkg/utils/httpserver"
-	"github.com/fission/fission/pkg/utils/manager"
 )
 
 // Usage: builder <shared volume path>
-func Run(ctx context.Context, logger logr.Logger, mgr manager.Interface, shareVolume string) {
+func Run(ctx context.Context, logger logr.Logger, mgr *errgroup.Group, shareVolume string) {
 	builder := builder.MakeBuilder(logger, shareVolume)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", builder.Handler)

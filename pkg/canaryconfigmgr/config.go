@@ -12,16 +12,16 @@ import (
 	"k8s.io/client-go/rest"
 
 	"github.com/go-logr/logr"
+	"golang.org/x/sync/errgroup"
 
 	config "github.com/fission/fission/pkg/featureconfig"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	"github.com/fission/fission/pkg/utils/crmanager"
-	"github.com/fission/fission/pkg/utils/manager"
 )
 
 // ConfigureFeatures gets the feature config and configures the features that are enabled
 func ConfigureFeatures(ctx context.Context, restConfig *rest.Config, logger logr.Logger, unitTestMode bool, fissionClient versioned.Interface,
-	kubeClient kubernetes.Interface, _ manager.Interface) error {
+	kubeClient kubernetes.Interface, _ *errgroup.Group) error {
 	// set feature enabled to false if unitTestMode
 	if unitTestMode {
 		return nil
@@ -50,10 +50,10 @@ func ConfigureFeatures(ctx context.Context, restConfig *rest.Config, logger logr
 		return err
 	}
 	if err := crMgr.Add(crmanager.LeaderRunnable(func(c context.Context) error {
-		gm := manager.New()
+		gm := &errgroup.Group{}
 		canaryCfgMgr.Run(c, gm)
 		<-c.Done()
-		gm.Wait()
+		_ = gm.Wait()
 		return nil
 	})); err != nil {
 		return err
