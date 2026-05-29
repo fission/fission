@@ -5,17 +5,16 @@
 package router
 
 import (
-	"context"
 	"log"
 	"net/http"
 	"testing"
 	"time"
 
 	"github.com/gorilla/mux"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/fission/fission/pkg/utils/httpserver"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
-	"github.com/fission/fission/pkg/utils/manager"
 	"github.com/fission/fission/pkg/utils/metrics"
 )
 
@@ -55,8 +54,8 @@ func spamServer(quit chan bool) {
 }
 
 func TestMutableMux(t *testing.T) {
-	mgr := manager.New()
-	t.Cleanup(mgr.Wait)
+	mgr := &errgroup.Group{}
+	t.Cleanup(func() { _ = mgr.Wait() })
 
 	// make a simple mutable router
 	log.Print("Create mutable router")
@@ -69,16 +68,18 @@ func TestMutableMux(t *testing.T) {
 	ctx := t.Context()
 
 	// start http server
-	mgr.Add(ctx, func(ctx context.Context) {
+	mgr.Go(func() error {
 		httpserver.StartServer(ctx, logger, mgr, "router", "3333", mr)
+		return nil
 	})
 
 	// continuously make requests, panic if any fails
 	time.Sleep(100 * time.Millisecond)
 	q := make(chan bool)
 
-	mgr.Add(ctx, func(ctx context.Context) {
+	mgr.Go(func() error {
 		spamServer(q)
+		return nil
 	})
 
 	time.Sleep(5 * time.Millisecond)

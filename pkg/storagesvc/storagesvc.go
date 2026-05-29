@@ -18,12 +18,12 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/gorilla/mux"
 	"github.com/graymeta/stow"
+	"golang.org/x/sync/errgroup"
 
 	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/utils/httpsecurity"
 	"github.com/fission/fission/pkg/utils/httpserver"
-	"github.com/fission/fission/pkg/utils/manager"
 	"github.com/fission/fission/pkg/utils/metrics"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
@@ -256,7 +256,7 @@ func MakeStorageService(logger logr.Logger, storageClient *StowClient, port int,
 	}
 }
 
-func (ss *StorageService) Start(ctx context.Context, mgr manager.Interface, port int) {
+func (ss *StorageService) Start(ctx context.Context, mgr *errgroup.Group, port int) {
 	r := mux.NewRouter()
 	if len(ss.authSecret) > 0 {
 		// HMAC enforcement is opt-in via the FISSION_INTERNAL_AUTH_SECRET env
@@ -300,7 +300,7 @@ func (ss *StorageService) Start(ctx context.Context, mgr manager.Interface, port
 }
 
 // Start runs storage service
-func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger, storage Storage, mgr manager.Interface, port int) error {
+func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger, storage Storage, mgr *errgroup.Group, port int) error {
 	enablePruner, err := strconv.ParseBool(os.Getenv("PRUNE_ENABLED"))
 	if err != nil {
 		logger.Error(err, "PRUNE_ENABLED value not set. Enabling archive pruner by default.")
@@ -319,12 +319,14 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 
 	// create http handlers
 	storageService := MakeStorageService(logger, storageClient, port, authSecret, authSecretOld)
-	mgr.Add(ctx, func(ctx context.Context) {
+	mgr.Go(func() error {
 		metrics.ServeMetrics(ctx, "storagesvc", logger, mgr)
+		return nil
 	})
 
-	mgr.Add(ctx, func(ctx context.Context) {
+	mgr.Go(func() error {
 		storageService.Start(ctx, mgr, port)
+		return nil
 	})
 
 	// enablePruner prevents storagesvc unit test from needing to talk to kubernetes
@@ -338,8 +340,9 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		if err != nil {
 			return fmt.Errorf("error creating archivePruner: %w", err)
 		}
-		mgr.Add(ctx, func(ctx context.Context) {
+		mgr.Go(func() error {
 			pruner.Start(ctx, mgr)
+			return nil
 		})
 	}
 

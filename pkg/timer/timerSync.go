@@ -12,13 +12,13 @@ import (
 	k8sCache "k8s.io/client-go/tools/cache"
 
 	"github.com/go-logr/logr"
+	"golang.org/x/sync/errgroup"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/conditions"
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	"github.com/fission/fission/pkg/utils"
-	"github.com/fission/fission/pkg/utils/manager"
 )
 
 type (
@@ -44,8 +44,13 @@ func MakeTimerSync(ctx context.Context, logger logr.Logger, fissionClient versio
 	return ws, nil
 }
 
-func (ws *TimerSync) Run(ctx context.Context, mgr manager.Interface) {
-	mgr.AddInformers(ctx, ws.timeTriggerInformer)
+func (ws *TimerSync) Run(ctx context.Context, mgr *errgroup.Group) {
+	for _, informer := range ws.timeTriggerInformer {
+		mgr.Go(func() error {
+			informer.Run(ctx.Done())
+			return nil
+		})
+	}
 }
 
 func (ws *TimerSync) AddUpdateTimeTrigger(timeTrigger *fv1.TimeTrigger) {

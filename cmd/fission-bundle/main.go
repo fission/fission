@@ -11,6 +11,7 @@ import (
 	"os"
 
 	"github.com/go-logr/logr"
+	"golang.org/x/sync/errgroup"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 	cnwebhook "sigs.k8s.io/controller-runtime/pkg/webhook"
 
@@ -29,7 +30,6 @@ import (
 	storagesvcClient "github.com/fission/fission/pkg/storagesvc/client"
 	"github.com/fission/fission/pkg/timer"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
-	"github.com/fission/fission/pkg/utils/manager"
 	"github.com/fission/fission/pkg/utils/otel"
 	"github.com/fission/fission/pkg/utils/profile"
 	"github.com/fission/fission/pkg/webhook"
@@ -113,8 +113,8 @@ Options:
   --version                       Print version information`
 
 func main() {
-	mgr := manager.New()
-	defer mgr.Wait()
+	mgr := &errgroup.Group{}
+	defer func() { _ = mgr.Wait() }()
 
 	// Set up command line parsing
 	args := setupCommandLineArgs()
@@ -224,7 +224,7 @@ func getServiceNameFromArgs(args *CommandLineArgs) string {
 }
 
 // startRequestedService starts the service specified by command line arguments
-func startRequestedService(ctx context.Context, args *CommandLineArgs, clientGen crd.ClientGeneratorInterface, logger logr.Logger, mgr manager.Interface) {
+func startRequestedService(ctx context.Context, args *CommandLineArgs, clientGen crd.ClientGeneratorInterface, logger logr.Logger, mgr *errgroup.Group) {
 	var err error
 
 	// Start the requested service based on command line arguments
@@ -325,7 +325,7 @@ func startRequestedService(ctx context.Context, args *CommandLineArgs, clientGen
 }
 
 // startStorageService initializes and starts the storage service
-func startStorageService(ctx context.Context, args *CommandLineArgs, clientGen crd.ClientGeneratorInterface, logger logr.Logger, mgr manager.Interface) {
+func startStorageService(ctx context.Context, args *CommandLineArgs, clientGen crd.ClientGeneratorInterface, logger logr.Logger, mgr *errgroup.Group) {
 	var storage storagesvc.Storage
 
 	if args.storageType == string(storagesvc.StorageTypeS3) {

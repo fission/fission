@@ -40,6 +40,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.opentelemetry.io/otel"
+	"golang.org/x/sync/errgroup"
 	ctrl "sigs.k8s.io/controller-runtime"
 	ctrlmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
@@ -51,7 +52,6 @@ import (
 	"github.com/fission/fission/pkg/throttler"
 	"github.com/fission/fission/pkg/utils/httpsecurity"
 	"github.com/fission/fission/pkg/utils/httpserver"
-	"github.com/fission/fission/pkg/utils/manager"
 	fissionmetrics "github.com/fission/fission/pkg/utils/metrics"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
@@ -101,7 +101,7 @@ const internalListenerMaxBodyBytes int64 = 64 << 20
 // https://github.com/fission/fission/issues/1317) is applied by
 // httpTriggerSet.buildMuxes on every reconciliation rather than here,
 // so that the feature stays on across the atomic mux swaps.
-func router(ctx context.Context, logger logr.Logger, mgr manager.Interface, httpTriggerSet *HTTPTriggerSet) (*mutableRouter, *mutableRouter, error) {
+func router(ctx context.Context, logger logr.Logger, mgr *errgroup.Group, httpTriggerSet *HTTPTriggerSet) (*mutableRouter, *mutableRouter, error) {
 	publicMR := newMutableRouter(logger, mux.NewRouter())
 	internalMR := newMutableRouter(logger.WithName("internal"), mux.NewRouter())
 
@@ -112,7 +112,7 @@ func router(ctx context.Context, logger logr.Logger, mgr manager.Interface, http
 	return publicMR, internalMR, nil
 }
 
-func serve(ctx context.Context, logger logr.Logger, mgr manager.Interface, port int, internalPort int,
+func serve(ctx context.Context, logger logr.Logger, mgr *errgroup.Group, port int, internalPort int,
 	httpTriggerSet *HTTPTriggerSet) error {
 	publicMR, internalMR, err := router(ctx, logger, mgr, httpTriggerSet)
 	if err != nil {
@@ -129,8 +129,9 @@ func serve(ctx context.Context, logger logr.Logger, mgr manager.Interface, port 
 	publicHandler := httpsecurity.SecurityHeaders(
 		otelUtils.GetHandlerWithOTEL(publicMR, "fission-router", otelUtils.UrlsToIgnore("/router-healthz")),
 	)
-	mgr.Add(ctx, func(ctx context.Context) {
+	mgr.Go(func() error {
 		httpserver.StartServer(ctx, logger, mgr, "router", fmt.Sprintf("%d", port), publicHandler)
+		return nil
 	})
 
 	// Internal listener for /fission-function/<ns>/<name>. We wrap the
@@ -166,8 +167,9 @@ func serve(ctx context.Context, logger logr.Logger, mgr manager.Interface, port 
 	internalHandler := httpsecurity.SecurityHeaders(
 		httpsecurity.DenyAllCORS(verifier(internalHandlerInner)),
 	)
-	mgr.Add(ctx, func(ctx context.Context) {
+	mgr.Go(func() error {
 		httpserver.StartServer(ctx, logger, mgr, "router-internal", fmt.Sprintf("%d", internalPort), internalHandler)
+		return nil
 	})
 
 	return nil
@@ -180,7 +182,7 @@ func serve(ctx context.Context, logger logr.Logger, mgr manager.Interface, port 
 // so callers can omit the flag and still get the GHSA-3g33-6vg6-27m8
 // listener split — the public listener no longer registers those
 // routes, so the internal listener is mandatory.
-func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger, mgr manager.Interface, port int, internalPort int, executor eclient.ClientInterface) error {
+func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger, mgr *errgroup.Group, port int, internalPort int, executor eclient.ClientInterface) error {
 	if internalPort <= 0 {
 		internalPort = DefaultInternalListenerPort
 	}
@@ -322,7 +324,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	// The trigger watching + the public/internal listeners run on an internal
 	// GroupManager, hosted by a single Manager runnable.
 	err = crMgr.Add(runnableFunc(func(rctx context.Context) error {
-		gm := manager.New()
+		gm := &errgroup.Group{}
 		tracer := otel.Tracer("router")
 		rctx, span := tracer.Start(rctx, "router/serve")
 		defer span.End()
@@ -330,7 +332,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 			return err
 		}
 		<-rctx.Done()
-		gm.Wait()
+		_ = gm.Wait()
 		return nil
 	}))
 	if err != nil {

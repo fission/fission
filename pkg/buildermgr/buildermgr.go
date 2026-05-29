@@ -17,6 +17,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus"
+	"golang.org/x/sync/errgroup"
 	k8sCache "k8s.io/client-go/tools/cache"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
@@ -29,7 +30,6 @@ import (
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	"github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
 	"github.com/fission/fission/pkg/utils"
-	"github.com/fission/fission/pkg/utils/manager"
 	fissionmetrics "github.com/fission/fission/pkg/utils/metrics"
 )
 
@@ -43,7 +43,7 @@ const leaderElectionID = "fission-buildermgr"
 // graceful shutdown. The environment/package watchers keep their existing
 // informer-driven logic; they run as a leader-only Manager runnable. The legacy
 // GroupManager argument is unused now that the Manager owns the lifecycle.
-func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger, _ manager.Interface, storageSvcUrl string) error {
+func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger, _ *errgroup.Group, storageSvcUrl string) error {
 	bmLogger := logger.WithName("builder_manager")
 
 	fissionClient, err := clientGen.GetFissionClient()
@@ -164,7 +164,7 @@ func (w *watcherRunnable) NeedLeaderElection() bool { return true }
 // Start launches the watchers and blocks until ctx is cancelled (shutdown or
 // loss of leadership), then drains the informer goroutines.
 func (w *watcherRunnable) Start(ctx context.Context) error {
-	gm := manager.New()
+	gm := &errgroup.Group{}
 	w.env.Run(ctx, gm)
 	if err := w.pkg.Run(ctx, gm); err != nil {
 		return err
@@ -177,7 +177,7 @@ func (w *watcherRunnable) Start(ctx context.Context) error {
 	}()
 	<-ctx.Done()
 	w.ready.Store(false)
-	gm.Wait()
+	_ = gm.Wait()
 	return nil
 }
 

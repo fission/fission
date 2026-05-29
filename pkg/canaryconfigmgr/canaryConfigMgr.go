@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	"golang.org/x/sync/errgroup"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -25,7 +26,6 @@ import (
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	"github.com/fission/fission/pkg/utils"
-	"github.com/fission/fission/pkg/utils/manager"
 )
 
 const (
@@ -169,8 +169,13 @@ func (canaryCfgMgr *canaryConfigMgr) CanaryConfigEventHandlers(ctx context.Conte
 	return nil
 }
 
-func (canaryCfgMgr *canaryConfigMgr) Run(ctx context.Context, mgr manager.Interface) {
-	mgr.AddInformers(ctx, canaryCfgMgr.canaryConfigInformer)
+func (canaryCfgMgr *canaryConfigMgr) Run(ctx context.Context, mgr *errgroup.Group) {
+	for _, informer := range canaryCfgMgr.canaryConfigInformer {
+		mgr.Go(func() error {
+			informer.Run(ctx.Done())
+			return nil
+		})
+	}
 	canaryCfgMgr.logger.Info("started canary configmgr controller")
 }
 
@@ -536,7 +541,7 @@ func getEnvValue(envVar string) string {
 	return envVarSplit[1]
 }
 
-func StartCanaryServer(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger, mgr manager.Interface, unitTestFlag bool) error {
+func StartCanaryServer(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger, mgr *errgroup.Group, unitTestFlag bool) error {
 	cLogger := logger.WithName("CanaryServer")
 
 	fissionClient, err := clientGen.GetFissionClient()

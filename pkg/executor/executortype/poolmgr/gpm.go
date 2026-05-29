@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
+	"golang.org/x/sync/errgroup"
 	apiv1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -42,7 +43,6 @@ import (
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
 	"github.com/fission/fission/pkg/utils"
-	"github.com/fission/fission/pkg/utils/manager"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
@@ -159,7 +159,7 @@ func MakeGenericPoolManager(ctx context.Context,
 	return gpm, nil
 }
 
-func (gpm *GenericPoolManager) Run(ctx context.Context, mgr manager.Interface) {
+func (gpm *GenericPoolManager) Run(ctx context.Context, mgr *errgroup.Group) {
 	waitSynced := make([]k8sCache.InformerSynced, 0)
 	for _, podListerSynced := range gpm.podListerSynced {
 		waitSynced = append(waitSynced, podListerSynced)
@@ -173,23 +173,27 @@ func (gpm *GenericPoolManager) Run(ctx context.Context, mgr manager.Interface) {
 	go gpm.service()
 	gpm.poolPodC.InjectGpm(gpm)
 
-	mgr.Add(ctx, func(ctx context.Context) {
+	mgr.Go(func() error {
 		err := gpm.WebsocketStartEventChecker(ctx, gpm.kubernetesClient)
 		if err != nil {
 			gpm.logger.Error(err, "error in checking websocket start event from pod: ")
 		}
+		return nil
 	})
-	mgr.Add(ctx, func(ctx context.Context) {
+	mgr.Go(func() error {
 		err := gpm.NoActiveConnectionEventChecker(ctx, gpm.kubernetesClient) //nolint:errcheck
 		if err != nil {
 			gpm.logger.Error(err, "error in checking inactive event from pod: ")
 		}
+		return nil
 	})
-	mgr.Add(ctx, func(ctx context.Context) {
+	mgr.Go(func() error {
 		gpm.idleObjectReaper(ctx)
+		return nil
 	})
-	mgr.Add(ctx, func(ctx context.Context) {
+	mgr.Go(func() error {
 		gpm.poolPodC.Run(ctx, ctx.Done(), mgr)
+		return nil
 	})
 }
 

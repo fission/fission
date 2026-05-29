@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/gorilla/mux"
+	"golang.org/x/sync/errgroup"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	hmacauth "github.com/fission/fission/pkg/auth/hmac"
@@ -24,7 +25,6 @@ import (
 	"github.com/fission/fission/pkg/executor/fscache"
 	"github.com/fission/fission/pkg/utils/httpsecurity"
 	"github.com/fission/fission/pkg/utils/httpserver"
-	"github.com/fission/fission/pkg/utils/manager"
 	"github.com/fission/fission/pkg/utils/metrics"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
@@ -316,7 +316,7 @@ func (executor *Executor) GetHandler() http.Handler {
 // charts/fission-all/templates/executor/networkpolicy.yaml); the CORS
 // deny is defense-in-depth if a future regression exposes this port via
 // Ingress.
-func (executor *Executor) Serve(ctx context.Context, mgr manager.Interface, port int) {
+func (executor *Executor) Serve(ctx context.Context, mgr *errgroup.Group, port int) {
 	handler := httpsecurity.SecurityHeaders(
 		httpsecurity.DenyAllCORS(
 			otelUtils.GetHandlerWithOTEL(executor.GetHandler(), "fission-executor", otelUtils.UrlsToIgnore("/healthz")),

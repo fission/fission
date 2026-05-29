@@ -12,11 +12,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/go-logr/logr"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	"github.com/fission/fission/pkg/utils"
-	"github.com/fission/fission/pkg/utils/manager"
 )
 
 type ArchivePruner struct {
@@ -133,11 +133,12 @@ func (pruner *ArchivePruner) getOrphanArchives(ctx context.Context) {
 // Start starts a go routine that listens to a channel for archive IDs that need to deleted.
 // Also wakes up at regular intervals to make a list of archive IDs that need to be reaped
 // and sends them over to the channel for deletion
-func (pruner *ArchivePruner) Start(ctx context.Context, mgr manager.Interface) {
+func (pruner *ArchivePruner) Start(ctx context.Context, mgr *errgroup.Group) {
 	ticker := time.NewTicker(pruner.pruneInterval * time.Minute)
 	defer ticker.Stop()
-	mgr.Add(ctx, func(ctx context.Context) {
+	mgr.Go(func() error {
 		pruner.pruneArchives(ctx)
+		return nil
 	})
 	for {
 		select {

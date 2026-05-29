@@ -7,19 +7,19 @@ package main
 import (
 	"os"
 
+	"golang.org/x/sync/errgroup"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 
 	"github.com/fission/fission/cmd/builder/app"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
-	"github.com/fission/fission/pkg/utils/manager"
 	"github.com/fission/fission/pkg/utils/profile"
 )
 
 // Usage: builder <shared volume path>
 func main() {
 
-	mgr := manager.New()
-	defer mgr.Wait()
+	mgr := &errgroup.Group{}
+	defer func() { _ = mgr.Wait() }()
 
 	logger := loggerfactory.GetLogger()
 

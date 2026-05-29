@@ -11,13 +11,13 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"golang.org/x/sync/errgroup"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 
 	"github.com/fission/fission/pkg/utils/httpserver"
-	"github.com/fission/fission/pkg/utils/manager"
 )
 
-func ServeMetrics(ctx context.Context, parent string, logger logr.Logger, mgr manager.Interface) {
+func ServeMetrics(ctx context.Context, parent string, logger logr.Logger, mgr *errgroup.Group) {
 	metricsAddr := os.Getenv("METRICS_ADDR")
 	if metricsAddr == "" {
 		metricsAddr = "8080"

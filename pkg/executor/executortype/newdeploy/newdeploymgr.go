@@ -29,6 +29,7 @@ import (
 	k8sCache "k8s.io/client-go/tools/cache"
 
 	"github.com/go-logr/logr"
+	"golang.org/x/sync/errgroup"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/executor/executortype"
@@ -42,7 +43,6 @@ import (
 	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
 	"github.com/fission/fission/pkg/throttler"
 	"github.com/fission/fission/pkg/utils"
-	"github.com/fission/fission/pkg/utils/manager"
 	"github.com/fission/fission/pkg/utils/maps"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
@@ -156,7 +156,7 @@ func MakeNewDeploy(
 }
 
 // Run start the function and environment controller along with an object reaper.
-func (deploy *NewDeploy) Run(ctx context.Context, mgr manager.Interface) {
+func (deploy *NewDeploy) Run(ctx context.Context, mgr *errgroup.Group) {
 	waitSynced := make([]k8sCache.InformerSynced, 0)
 	for _, deplListerSynced := range deploy.deplListerSynced {
 		waitSynced = append(waitSynced, deplListerSynced)
@@ -171,8 +171,9 @@ func (deploy *NewDeploy) Run(ctx context.Context, mgr manager.Interface) {
 		deploy.logger.Info("failed to wait for caches to sync; stopping newdeploy manager")
 		return
 	}
-	mgr.Add(ctx, func(ctx context.Context) {
+	mgr.Go(func() error {
 		deploy.idleObjectReaper(ctx)
+		return nil
 	})
 }
 

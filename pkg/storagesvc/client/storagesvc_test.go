@@ -19,11 +19,11 @@ import (
 	"github.com/ory/dockertest/v3"
 	dc "github.com/ory/dockertest/v3/docker"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/storagesvc"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
-	"github.com/fission/fission/pkg/utils/manager"
 )
 
 const (
@@ -73,8 +73,8 @@ func TestS3StorageService(t *testing.T) {
 	fmt.Println("Test S3 Storage service")
 	var minioClient *minio.Client
 
-	mgr := manager.New()
-	t.Cleanup(mgr.Wait)
+	mgr := &errgroup.Group{}
+	t.Cleanup(func() { _ = mgr.Wait() })
 
 	// Start minio docker container
 	pool, err := dockertest.NewPool("")
@@ -195,8 +195,8 @@ func TestLocalStorageService(t *testing.T) {
 	testID := uniuri.NewLen(8)
 	port := 8082
 
-	mgr := manager.New()
-	t.Cleanup(mgr.Wait)
+	mgr := &errgroup.Group{}
+	t.Cleanup(func() { _ = mgr.Wait() })
 
 	logger := loggerfactory.GetLogger()
 

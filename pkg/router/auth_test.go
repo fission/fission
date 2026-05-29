@@ -6,7 +6,6 @@ package router
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -18,13 +17,13 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+	"golang.org/x/sync/errgroup"
 	"k8s.io/apimachinery/pkg/util/wait"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	config "github.com/fission/fission/pkg/featureconfig"
 	"github.com/fission/fission/pkg/utils/httpserver"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
-	"github.com/fission/fission/pkg/utils/manager"
 	"github.com/fission/fission/pkg/utils/metrics"
 )
 
@@ -54,8 +53,8 @@ func GetRouterWithAuth() *mux.Router {
 }
 
 func TestRouterAuth(t *testing.T) {
-	mgr := manager.New()
-	t.Cleanup(mgr.Wait)
+	mgr := &errgroup.Group{}
+	t.Cleanup(func() { _ = mgr.Wait() })
 	ctx := t.Context()
 	os.Setenv("AUTH_USERNAME", "Foo")
 	os.Setenv("AUTH_PASSWORD", "Bar")
@@ -68,8 +67,9 @@ func TestRouterAuth(t *testing.T) {
 	logger := loggerfactory.GetLogger()
 	testmux := GetRouterWithAuth()
 
-	mgr.Add(ctx, func(ctx context.Context) {
+	mgr.Go(func() error {
 		httpserver.StartServer(ctx, logger, mgr, "test", "8990", testmux)
+		return nil
 	})
 
 	postBody, _ := json.Marshal(map[string]string{

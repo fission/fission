@@ -23,13 +23,13 @@ import (
 	"github.com/go-logr/logr"
 	kedav1alpha1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
 	kedaClient "github.com/kedacore/keda/v2/pkg/generated/clientset/versioned"
+	"golang.org/x/sync/errgroup"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/executor/util"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/crmanager"
-	"github.com/fission/fission/pkg/utils/manager"
 )
 
 var (
@@ -119,7 +119,7 @@ func mqTriggerEventHandlers(ctx context.Context, logger logr.Logger, kubeClient 
 // isolation, which still gates port 8889 to fission-bundle pods only)
 // or build signing-aware connector images. This is a documented
 // rollout caveat for advisory 4.
-func StartScalerManager(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger, _ manager.Interface, routerURL string) error {
+func StartScalerManager(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger, _ *errgroup.Group, routerURL string) error {
 	fissionClient, err := clientGen.GetFissionClient()
 	if err != nil {
 		return fmt.Errorf("failed to get fission client: %w", err)

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	"golang.org/x/sync/errgroup"
 	apiv1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -21,7 +22,6 @@ import (
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	"github.com/fission/fission/pkg/utils"
-	"github.com/fission/fission/pkg/utils/manager"
 )
 
 type (
@@ -312,17 +312,27 @@ func (pkgw *packageWatcher) packageInformerHandler(ctx context.Context) k8sCache
 	}
 }
 
-func (pkgw *packageWatcher) Run(ctx context.Context, mgr manager.Interface) error {
+func (pkgw *packageWatcher) Run(ctx context.Context, mgr *errgroup.Group) error {
 	// Metrics are served by the controller-runtime Manager (see buildermgr.go);
 	// the watcher only wires up its informers here.
-	mgr.AddInformers(ctx, pkgw.podInformer)
+	for _, informer := range pkgw.podInformer {
+		mgr.Go(func() error {
+			informer.Run(ctx.Done())
+			return nil
+		})
+	}
 	for _, pkgInformer := range pkgw.pkgInformer {
 		_, err := pkgInformer.AddEventHandler(pkgw.packageInformerHandler(ctx))
 		if err != nil {
 			return fmt.Errorf("error adding package informer handler: %w", err)
 		}
 	}
-	mgr.AddInformers(ctx, pkgw.pkgInformer)
+	for _, informer := range pkgw.pkgInformer {
+		mgr.Go(func() error {
+			informer.Run(ctx.Done())
+			return nil
+		})
+	}
 	return nil
 }
 

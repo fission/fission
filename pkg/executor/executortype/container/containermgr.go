@@ -28,6 +28,7 @@ import (
 	k8sCache "k8s.io/client-go/tools/cache"
 
 	"github.com/go-logr/logr"
+	"golang.org/x/sync/errgroup"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/executor/executortype"
@@ -40,7 +41,6 @@ import (
 	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
 	"github.com/fission/fission/pkg/throttler"
 	"github.com/fission/fission/pkg/utils"
-	"github.com/fission/fission/pkg/utils/manager"
 	"github.com/fission/fission/pkg/utils/maps"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
@@ -142,7 +142,7 @@ func MakeContainer(
 }
 
 // Run start the function along with an object reaper.
-func (caaf *Container) Run(ctx context.Context, mgr manager.Interface) {
+func (caaf *Container) Run(ctx context.Context, mgr *errgroup.Group) {
 	waitSynced := make([]k8sCache.InformerSynced, 0)
 	for _, deplListerSynced := range caaf.deplListerSynced {
 		waitSynced = append(waitSynced, deplListerSynced)
@@ -157,8 +157,9 @@ func (caaf *Container) Run(ctx context.Context, mgr manager.Interface) {
 		caaf.logger.Error(nil, "failed to wait for caches to sync; stopping container manager")
 		return
 	}
-	mgr.Add(ctx, func(ctx context.Context) {
+	mgr.Go(func() error {
 		caaf.idleObjectReaper(ctx)
+		return nil
 	})
 }
 

@@ -18,12 +18,12 @@ import (
 	"os"
 
 	"github.com/go-logr/logr"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/fission/fission/pkg/utils/httpserver"
-	"github.com/fission/fission/pkg/utils/manager"
 )
 
-func ProfileIfEnabled(ctx context.Context, logger logr.Logger, mgr manager.Interface) {
+func ProfileIfEnabled(ctx context.Context, logger logr.Logger, mgr *errgroup.Group) {
 	enablePprof := os.Getenv("PPROF_ENABLED")
 	if enablePprof != "true" {
 		return
@@ -36,7 +36,8 @@ func ProfileIfEnabled(ctx context.Context, logger logr.Logger, mgr manager.Inter
 	pprofMux := http.DefaultServeMux
 	http.DefaultServeMux = http.NewServeMux()
 
-	mgr.Add(ctx, func(ctx context.Context) {
+	mgr.Go(func() error {
 		httpserver.StartServer(ctx, logger, mgr, "pprof", pprofPort, pprofMux)
+		return nil
 	})
 }

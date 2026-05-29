@@ -24,6 +24,7 @@ import (
 	"k8s.io/client-go/util/workqueue"
 
 	"github.com/go-logr/logr"
+	"golang.org/x/sync/errgroup"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
@@ -31,7 +32,6 @@ import (
 	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
 	flisterv1 "github.com/fission/fission/pkg/generated/listers/core/v1"
 	"github.com/fission/fission/pkg/utils"
-	"github.com/fission/fission/pkg/utils/manager"
 )
 
 type (
@@ -237,7 +237,7 @@ func (p *PoolPodController) enqueueEnvDelete(obj any) {
 	p.envDeleteQueue.Add(env)
 }
 
-func (p *PoolPodController) Run(ctx context.Context, stopCh <-chan struct{}, mgr manager.Interface) {
+func (p *PoolPodController) Run(ctx context.Context, stopCh <-chan struct{}, mgr *errgroup.Group) {
 	defer utilruntime.HandleCrash()
 	defer p.envCreateUpdateQueue.ShutDown()
 	defer p.envDeleteQueue.ShutDown()
@@ -259,15 +259,18 @@ func (p *PoolPodController) Run(ctx context.Context, stopCh <-chan struct{}, mgr
 		return
 	}
 	for range 4 {
-		mgr.Add(ctx, func(ctx context.Context) {
+		mgr.Go(func() error {
 			wait.Until(p.workerRun(ctx, "envCreateUpdate", p.envCreateUpdateQueueProcessFunc), time.Second, stopCh)
+			return nil
 		})
 	}
-	mgr.Add(ctx, func(ctx context.Context) {
+	mgr.Go(func() error {
 		wait.Until(p.workerRun(ctx, "envDeleteQueue", p.envDeleteQueueProcessFunc), time.Second, stopCh)
+		return nil
 	})
-	mgr.Add(ctx, func(ctx context.Context) {
+	mgr.Go(func() error {
 		wait.Until(p.workerRun(ctx, "spCleanupPodQueue", p.spCleanupPodQueueProcessFunc), time.Second, stopCh)
+		return nil
 	})
 	p.logger.Info("Started workers for poolPodController")
 	<-stopCh

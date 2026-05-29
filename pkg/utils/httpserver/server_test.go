@@ -18,14 +18,14 @@ import (
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/fission/fission/pkg/utils/loggerfactory"
-	"github.com/fission/fission/pkg/utils/manager"
 )
 
 func TestStartServer(t *testing.T) {
-	mgr := manager.New()
-	t.Cleanup(mgr.Wait)
+	mgr := &errgroup.Group{}
+	t.Cleanup(func() { _ = mgr.Wait() })
 
 	ctx := t.Context()
 	logger := loggerfactory.GetLogger()
@@ -38,8 +38,9 @@ func TestStartServer(t *testing.T) {
 		}
 	}))
 
-	mgr.Add(ctx, func(ctx context.Context) {
+	mgr.Go(func() error {
 		StartServer(ctx, logger, mgr, "test", "8999", m)
+		return nil
 	})
 
 	tests := []struct {
@@ -101,7 +102,7 @@ func TestStartServerDrainsInFlightRequest(t *testing.T) {
 	})
 
 	ctx, cancel := context.WithCancel(context.Background())
-	mgr := manager.New()
+	mgr := &errgroup.Group{}
 	go StartServer(ctx, logr.Discard(), mgr, "test", addr, m)
 
 	require.Eventually(t, func() bool {
@@ -140,7 +141,14 @@ func TestStartServerDrainsInFlightRequest(t *testing.T) {
 		t.Fatal("in-flight request did not complete during graceful drain")
 	}
 
-	assert.NoError(t, mgr.WaitWithTimeout(5*time.Second))
+	werr := make(chan error, 1)
+	go func() { werr <- mgr.Wait() }()
+	select {
+	case err := <-werr:
+		assert.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("server goroutine did not exit after drain")
+	}
 }
 
 func TestDrainTimeout(t *testing.T) {
