@@ -73,6 +73,24 @@ func TestElectorEnabledAcquiresLeadership(t *testing.T) {
 	assert.False(t, e.IsLeader())
 }
 
+func TestAwaitAndGated(t *testing.T) {
+	e := New(false, nil, "ns", "lock", "id", logr.Discard())
+
+	// Not leading yet + cancelled ctx: Await is false and Gated does not run.
+	cctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	assert.False(t, e.Await(cctx))
+	ran := false
+	e.Gated(func(context.Context) { ran = true })(cctx)
+	assert.False(t, ran)
+
+	// Once leading: Await is true and Gated runs.
+	e.markLeading()
+	assert.True(t, e.Await(context.Background()))
+	e.Gated(func(context.Context) { ran = true })(context.Background())
+	assert.True(t, ran)
+}
+
 func TestMarkLeadingIsIdempotent(t *testing.T) {
 	e := New(false, nil, "ns", "lock", "id", logr.Discard())
 	assert.NotPanics(t, func() {

@@ -11,6 +11,7 @@ import (
 	"github.com/go-logr/logr"
 
 	"github.com/fission/fission/pkg/crd"
+	"github.com/fission/fission/pkg/utils/leaderelection"
 	"github.com/fission/fission/pkg/utils/manager"
 )
 
@@ -18,6 +19,10 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	fissionClient, err := clientGen.GetFissionClient()
 	if err != nil {
 		return fmt.Errorf("failed to get fission client: %w", err)
+	}
+	kubeClient, err := clientGen.GetKubernetesClient()
+	if err != nil {
+		return fmt.Errorf("failed to get kubernetes client: %w", err)
 	}
 
 	err = crd.WaitForFunctionCRDs(ctx, logger, fissionClient)
@@ -29,6 +34,15 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	if err != nil {
 		return fmt.Errorf("error making timer sync: %w", err)
 	}
-	timerSync.Run(ctx, mgr)
+
+	// Active-passive HA: only the elected leader schedules cron triggers, so
+	// two replicas don't double-fire timers. No-op when LEADER_ELECTION_ENABLED
+	// is unset (single-replica default).
+	elector, runCtx, err := leaderelection.FromEnv(ctx, kubeClient, "fission-timer", logger)
+	if err != nil {
+		return err
+	}
+	mgr.Add(ctx, func(context.Context) { elector.Run(runCtx) })
+	mgr.Add(runCtx, elector.Gated(func(c context.Context) { timerSync.Run(c, mgr) }))
 	return nil
 }

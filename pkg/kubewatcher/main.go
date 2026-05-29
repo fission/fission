@@ -12,6 +12,7 @@ import (
 
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/publisher"
+	"github.com/fission/fission/pkg/utils/leaderelection"
 	"github.com/fission/fission/pkg/utils/manager"
 )
 
@@ -36,7 +37,16 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	if err != nil {
 		return fmt.Errorf("error making watch sync: %w", err)
 	}
-	ws.Run(ctx, mgr)
+
+	// Active-passive HA: only the elected leader runs the watch sync, so two
+	// replicas don't double-register watches / double-fire functions. No-op
+	// when LEADER_ELECTION_ENABLED is unset (single-replica default).
+	elector, runCtx, err := leaderelection.FromEnv(ctx, kubeClient, "fission-kubewatcher", logger)
+	if err != nil {
+		return err
+	}
+	mgr.Add(ctx, func(context.Context) { elector.Run(runCtx) })
+	mgr.Add(runCtx, elector.Gated(func(c context.Context) { ws.Run(c, mgr) }))
 
 	return nil
 }

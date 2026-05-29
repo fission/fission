@@ -22,6 +22,7 @@ import (
 	"github.com/fission/fission/pkg/mqtrigger/messageQueue"
 	_ "github.com/fission/fission/pkg/mqtrigger/messageQueue/kafka"
 	"github.com/fission/fission/pkg/utils"
+	"github.com/fission/fission/pkg/utils/leaderelection"
 	"github.com/fission/fission/pkg/utils/manager"
 )
 
@@ -29,6 +30,10 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	fissionClient, err := clientGen.GetFissionClient()
 	if err != nil {
 		return fmt.Errorf("failed to get fission client: %w", err)
+	}
+	kubeClient, err := clientGen.GetKubernetesClient()
+	if err != nil {
+		return fmt.Errorf("failed to get kubernetes client: %w", err)
 	}
 
 	err = crd.WaitForFunctionCRDs(ctx, logger, fissionClient)
@@ -76,12 +81,22 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		return err
 	}
 
-	// Start informer factory
-	for _, factory := range finformerFactory {
-		factory.Start(ctx.Done())
+	// Active-passive HA: only the elected leader consumes the message queue and
+	// manages triggers, so two replicas don't double-consume. Informer
+	// factories run on every replica so a standby keeps warm caches. No-op when
+	// LEADER_ELECTION_ENABLED is unset (single-replica default).
+	elector, runCtx, err := leaderelection.FromEnv(ctx, kubeClient, "fission-mqtrigger", logger)
+	if err != nil {
+		return err
 	}
 
-	mqtMgr.Run(ctx, ctx.Done(), mgr)
+	// Start informer factory (warm caches on all replicas)
+	for _, factory := range finformerFactory {
+		factory.Start(runCtx.Done())
+	}
+
+	mgr.Add(ctx, func(context.Context) { elector.Run(runCtx) })
+	mgr.Add(runCtx, elector.Gated(func(c context.Context) { mqtMgr.Run(c, c.Done(), mgr) }))
 
 	return nil
 }

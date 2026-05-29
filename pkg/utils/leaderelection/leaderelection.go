@@ -11,7 +11,9 @@ package leaderelection
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -69,6 +71,31 @@ func WithDurations(lease, renew, retry time.Duration) Option {
 	}
 }
 
+// FromEnv builds an Elector for a control-plane subsystem from the environment.
+// Election is enabled when LEADER_ELECTION_ENABLED is truthy. It derives a run
+// context from ctx whose cancellation is wired to loss of leadership (via
+// WithOnStoppedLeading), so the caller can gate leader-only work on the
+// returned context and have it stop cleanly when the lease is lost. lockName
+// must be unique per subsystem (each gets its own Lease).
+//
+// Typical use:
+//
+//	elector, runCtx, err := leaderelection.FromEnv(ctx, kubeClient, "fission-timer", logger)
+//	if err != nil { return err }
+//	mgr.Add(ctx, func(context.Context) { elector.Run(runCtx) })
+//	mgr.Add(runCtx, elector.Gated(func(c context.Context) { ctrl.Run(c, mgr) }))
+func FromEnv(ctx context.Context, client kubernetes.Interface, lockName string, logger logr.Logger, opts ...Option) (*Elector, context.Context, error) {
+	enabled, _ := strconv.ParseBool(os.Getenv("LEADER_ELECTION_ENABLED"))
+	runCtx, cancel := context.WithCancel(ctx)
+	namespace := Namespace()
+	if enabled && namespace == "" {
+		cancel()
+		return nil, nil, fmt.Errorf("leader election enabled but pod namespace is unknown; set POD_NAMESPACE")
+	}
+	opts = append([]Option{WithOnStoppedLeading(cancel)}, opts...)
+	return New(enabled, client, namespace, lockName, Identity(), logger, opts...), runCtx, nil
+}
+
 // New builds an Elector. When enabled is false the returned Elector is a no-op
 // that reports itself as the leader as soon as Run starts. When enabled, a
 // Lease lock named lockName is contended in namespace, identified by identity.
@@ -102,6 +129,31 @@ func (e *Elector) IsLeader() bool { return e.isLeader.Load() }
 // Leading returns a channel that is closed the first time leadership is
 // acquired. Gate leader-only goroutines on it: `<-elector.Leading()`.
 func (e *Elector) Leading() <-chan struct{} { return e.leadingCh }
+
+// Await blocks until leadership is acquired or ctx is cancelled. Returns true
+// if leadership was acquired, false if ctx ended first. When election is
+// disabled it returns true as soon as Run has started.
+func (e *Elector) Await(ctx context.Context) bool {
+	select {
+	case <-e.leadingCh:
+		return true
+	case <-ctx.Done():
+		return false
+	}
+}
+
+// Gated wraps fn so it runs only once leadership is acquired (or immediately
+// when election is disabled), and not at all if ctx ends first. Use it to gate
+// a subsystem's controller loop onto leadership:
+//
+//	mgr.Add(runCtx, elector.Gated(func(ctx context.Context) { ctrl.Run(ctx, mgr) }))
+func (e *Elector) Gated(fn func(context.Context)) func(context.Context) {
+	return func(ctx context.Context) {
+		if e.Await(ctx) {
+			fn(ctx)
+		}
+	}
+}
 
 func (e *Elector) markLeading() {
 	e.isLeader.Store(true)

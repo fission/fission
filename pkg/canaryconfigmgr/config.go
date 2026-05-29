@@ -14,6 +14,7 @@ import (
 
 	config "github.com/fission/fission/pkg/featureconfig"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
+	"github.com/fission/fission/pkg/utils/leaderelection"
 	"github.com/fission/fission/pkg/utils/manager"
 )
 
@@ -38,7 +39,16 @@ func ConfigureFeatures(ctx context.Context, logger logr.Logger, unitTestMode boo
 	if err != nil {
 		return fmt.Errorf("failed to start canary config manager: %w", err)
 	}
-	canaryCfgMgr.Run(ctx, mgr)
 
-	return err
+	// Active-passive HA: only the elected leader progresses canary rollouts, so
+	// two replicas don't both shift HTTPTrigger weights. No-op when
+	// LEADER_ELECTION_ENABLED is unset (single-replica default).
+	elector, runCtx, err := leaderelection.FromEnv(ctx, kubeClient, "fission-canaryconfig", logger)
+	if err != nil {
+		return err
+	}
+	mgr.Add(ctx, func(context.Context) { elector.Run(runCtx) })
+	mgr.Add(runCtx, elector.Gated(func(c context.Context) { canaryCfgMgr.Run(c, mgr) }))
+
+	return nil
 }
