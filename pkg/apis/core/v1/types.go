@@ -181,6 +181,7 @@ type (
 	// CanaryConfig is for canary deployment of two functions.
 	// +genclient
 	// +kubebuilder:object:root=true
+	// +kubebuilder:subresource:status
 	CanaryConfig struct {
 		metav1.TypeMeta   `json:",inline"`
 		metav1.ObjectMeta `json:"metadata"`
