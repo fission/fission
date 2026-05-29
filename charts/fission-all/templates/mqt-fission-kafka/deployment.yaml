@@ -8,7 +8,7 @@ metadata:
     svc: mqtrigger
     messagequeue: kafka
 spec:
-  replicas: 1
+  replicas: {{ dig "replicas" 1 (.Values.kafka | default dict) }}
   selector:
     matchLabels:
       svc: mqtrigger
@@ -33,6 +33,7 @@ spec:
           - containerPort: 8080
             name: metrics
         env:
+        {{- include "leaderElection.envs" (dict "enabled" (dig "leaderElection" "enabled" false (.Values.kafka | default dict))) | indent 8 }}
         - name: MESSAGE_QUEUE_TYPE
           value: kafka
         - name: MESSAGE_QUEUE_URL

@@ -110,6 +110,23 @@ Helper template to construct image names with repository and tag
 {{- end}}
 
 {{/*
+leaderElection.envs renders the env entries that enable client-go leader
+election for a control-plane controller subsystem. Pass a dict with key
+"enabled" (bool). POD_NAME identifies the lease holder; the lease namespace
+falls back to the in-cluster service-account namespace when POD_NAMESPACE is
+unset, so it is intentionally not emitted here (some deployments already set
+it). Disabled by default → behaviour is unchanged for single-replica installs.
+*/}}
+{{- define "leaderElection.envs" }}
+- name: LEADER_ELECTION_ENABLED
+  value: {{ .enabled | default false | quote }}
+- name: POD_NAME
+  valueFrom:
+    fieldRef:
+      fieldPath: metadata.name
+{{- end }}
+
+{{/*
 internalAuth.envs renders the two env entries that wire the HMAC shared
 secret into a Fission control-plane container. See the design at docs/internal-auth/00-design.md. The OLD
 secret is mounted with optional: true so rotation can drop it without

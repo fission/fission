@@ -412,6 +412,15 @@ router:
 ## The builder manager watches the package & environments CRD changes and manages the builds of function source code.
 ##
 buildermgr:
+  ## replicas to deploy. To run more than one safely, enable leaderElection
+  ## below — active-passive HA: only the elected leader runs the controller.
+  ##
+  replicas: 1
+  ## leaderElection enables Lease-based leader election. Leave disabled
+  ## (default) for single-replica installs; set true with replicas > 1 for HA.
+  ##
+  leaderElection:
+    enabled: false
   ## Pod resources as:
   ##  resources:
   ##    limits:
@@ -476,6 +485,15 @@ webhook:
 ## kubewatcher watches the Kubernetes API and invokes functions associated with watches, sending the watch event to the function.
 ##
 kubewatcher:
+  ## replicas to deploy. To run more than one safely, enable leaderElection
+  ## below — active-passive HA: only the elected leader runs the controller.
+  ##
+  replicas: 1
+  ## leaderElection enables Lease-based leader election. Leave disabled
+  ## (default) for single-replica installs; set true with replicas > 1 for HA.
+  ##
+  leaderElection:
+    enabled: false
   ## Pod resources as:
   ##  resources:
   ##    limits:
@@ -545,6 +563,15 @@ storagesvc:
 ## It sends a request to router to invoke the function.
 ##
 timer:
+  ## replicas to deploy. To run more than one safely, enable leaderElection
+  ## below — active-passive HA: only the elected leader runs the controller.
+  ##
+  replicas: 1
+  ## leaderElection enables Lease-based leader election. Leave disabled
+  ## (default) for single-replica installs; set true with replicas > 1 for HA.
+  ##
+  leaderElection:
+    enabled: false
   ## Pod resources as:
   ##  resources:
   ##    limits:
@@ -572,6 +599,15 @@ timer:
 ##
 kafka:
   enabled: false
+  ## replicas to deploy. To run more than one safely, enable leaderElection
+  ## below — active-passive HA: only the elected leader consumes the queue.
+  ##
+  replicas: 1
+  ## leaderElection enables Lease-based leader election. Leave disabled
+  ## (default) for single-replica installs; set true with replicas > 1 for HA.
+  ##
+  leaderElection:
+    enabled: false
   ## note: below link is only for reference.
   ## Please use the brokers link for your kafka here.
   ##
@@ -804,6 +840,15 @@ prometheus:
 canaryDeployment:
 ## set this flag to true if you need canary deployment feature
   enabled: false
+  ## replicas to deploy. To run more than one safely, enable leaderElection
+  ## below — active-passive HA: only the elected leader progresses rollouts.
+  ##
+  replicas: 1
+  ## leaderElection enables Lease-based leader election. Leave disabled
+  ## (default) for single-replica installs; set true with replicas > 1 for HA.
+  ##
+  leaderElection:
+    enabled: false
 
   ## Pod resources as:
   ##  resources:
@@ -909,6 +954,15 @@ openTelemetry:
 ##
 mqt_keda:
   enabled: true
+  ## replicas to deploy. To run more than one safely, enable leaderElection
+  ## below — active-passive HA: only the elected leader reconciles ScaledObjects.
+  ##
+  replicas: 1
+  ## leaderElection enables Lease-based leader election. Leave disabled
+  ## (default) for single-replica installs; set true with replicas > 1 for HA.
+  ##
+  leaderElection:
+    enabled: false
   connector_images:
     kafka:
       image: ghcr.io/fission/keda-kafka-http-connector
