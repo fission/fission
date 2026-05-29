@@ -6,6 +6,7 @@ package buildermgr
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -15,6 +16,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	"github.com/prometheus/client_golang/prometheus"
 	k8sCache "k8s.io/client-go/tools/cache"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
@@ -90,15 +92,28 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 
 	// Fission's custom collectors register into controller-runtime's global
 	// metrics registry; the Manager's metrics server then serves them on
-	// METRICS_ADDR (preserving the existing :8080 scrape).
-	if err := ctrlmetrics.Registry.Register(fissionmetrics.Registry); err != nil {
+	// METRICS_ADDR (preserving the existing :8080 scrape). AlreadyRegistered is
+	// benign — it only happens when another Fission service shares the process
+	// (the e2e harness) and has already registered the same collectors.
+	var alreadyRegistered prometheus.AlreadyRegisteredError
+	if err := ctrlmetrics.Registry.Register(fissionmetrics.Registry); err != nil && !errors.As(err, &alreadyRegistered) {
 		bmLogger.Error(err, "failed to register fission metrics collectors")
+	}
+
+	metricsBind := bindAddr("METRICS_ADDR", "8080")
+	healthBind := bindAddr("HEALTH_PROBE_ADDR", "8081")
+	if ephemeral, _ := strconv.ParseBool(os.Getenv("FISSION_TEST_EPHEMERAL_SERVERS")); ephemeral {
+		// The e2e framework runs every Fission service in one process sharing
+		// METRICS_ADDR, which is fine for the fail-soft ServeMetrics servers but
+		// clashes with the Manager's hard-binding servers. Bind ephemeral ports
+		// (OS-assigned, race-free) in that mode. Never set in production.
+		metricsBind, healthBind = ":0", ":0"
 	}
 
 	mgr, err := ctrl.NewManager(restConfig, ctrl.Options{
 		Scheme:                        scheme.Scheme,
-		Metrics:                       metricsserver.Options{BindAddress: bindAddr("METRICS_ADDR", "8080")},
-		HealthProbeBindAddress:        bindAddr("HEALTH_PROBE_ADDR", "8081"),
+		Metrics:                       metricsserver.Options{BindAddress: metricsBind},
+		HealthProbeBindAddress:        healthBind,
 		LeaderElection:                leaderElectionEnabled,
 		LeaderElectionID:              leaderElectionID,
 		LeaderElectionNamespace:       leNamespace,
