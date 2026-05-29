@@ -12,7 +12,28 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"k8s.io/client-go/rest"
+
+	"github.com/fission/fission/pkg/utils"
 )
+
+func TestFissionCacheOptions(t *testing.T) {
+	// FissionCacheOptions maps the resolver's namespace set into the Manager
+	// cache's DefaultNamespaces. The env-driven resolution itself
+	// (default / FISSION_DEFAULT_NAMESPACE / FISSION_RESOURCE_NAMESPACES) is
+	// covered by GetNamespaces in pkg/utils/namespace_test.go; here we assert
+	// the mapping reproduces exactly the resolved namespaces.
+	r := utils.DefaultNSResolver()
+	orig := r.FissionResourceNS
+	t.Cleanup(func() { r.FissionResourceNS = orig })
+
+	r.FissionResourceNS = map[string]string{"ns-a": "ns-a", "ns-b": "ns-b"}
+	opts := FissionCacheOptions()
+	require.Len(t, opts.DefaultNamespaces, 2)
+	_, hasA := opts.DefaultNamespaces["ns-a"]
+	_, hasB := opts.DefaultNamespaces["ns-b"]
+	assert.True(t, hasA, "cache should be scoped to ns-a")
+	assert.True(t, hasB, "cache should be scoped to ns-b")
+}
 
 func TestLeaderRunnable(t *testing.T) {
 	ran := false

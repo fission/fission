@@ -18,9 +18,11 @@ import (
 	"github.com/go-logr/logr"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	"github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
+	"github.com/fission/fission/pkg/utils"
 )
 
 // NewLeaderElected builds a Manager whose only job is native leader election.
@@ -37,11 +39,28 @@ func NewLeaderElected(restConfig *rest.Config, lockName string, logger logr.Logg
 		Scheme:                        scheme.Scheme,
 		Metrics:                       metricsserver.Options{BindAddress: "0"},
 		HealthProbeBindAddress:        "0",
+		Cache:                         FissionCacheOptions(),
 		LeaderElection:                enabled,
 		LeaderElectionID:              lockName,
 		LeaderElectionReleaseOnCancel: true,
 		Logger:                        logger,
 	})
+}
+
+// FissionCacheOptions scopes a Manager's shared cache to exactly the namespaces
+// Fission watches (DefaultNSResolver().FissionResourceNS — driven by
+// FISSION_DEFAULT_NAMESPACE / FISSION_RESOURCE_NAMESPACES, defaulting to
+// "default"). Reconcilers registered on the Manager watch through this cache,
+// so scoping it here reproduces the per-namespace informers the subsystems used
+// before the controller-runtime migration and keeps RBAC requirements
+// unchanged. The cache is inert until a controller registers an informer, so
+// this is harmless for Managers that only run non-reconciler runnables.
+func FissionCacheOptions() cache.Options {
+	nsConfig := map[string]cache.Config{}
+	for _, ns := range utils.DefaultNSResolver().FissionResourceNS {
+		nsConfig[ns] = cache.Config{}
+	}
+	return cache.Options{DefaultNamespaces: nsConfig}
 }
 
 // LeaderRunnable adapts a leader-only function to a controller-runtime
