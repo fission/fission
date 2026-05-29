@@ -10,9 +10,6 @@ import (
 )
 
 const (
-	// MaxRetries is the default maximum number of retries for queue operations.
-	MaxRetries = 3
-
 	// AuthTriggerSuffix is the suffix appended to trigger names to create authentication trigger names.
 	AuthTriggerSuffix = "-auth-trigger"
 

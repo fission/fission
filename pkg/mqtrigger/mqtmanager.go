@@ -6,26 +6,17 @@ package mqtrigger
 
 import (
 	"context"
-	"os"
-	"time"
 
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/apimachinery/pkg/types"
 	k8sCache "k8s.io/client-go/tools/cache"
-	"k8s.io/client-go/util/workqueue"
 
 	"github.com/go-logr/logr"
-	"golang.org/x/sync/errgroup"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/conditions"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
-	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
-	flisterv1 "github.com/fission/fission/pkg/generated/listers/core/v1"
 	"github.com/fission/fission/pkg/mqtrigger/messageQueue"
-	"github.com/fission/fission/pkg/utils/metrics"
 )
 
 const (
@@ -38,6 +29,10 @@ const (
 type (
 	requestType int
 
+	// MessageQueueTriggerManager owns the live message-queue subscriptions. The
+	// subscription map is mutated only from the single service() goroutine
+	// (serialized via reqChan), so the MessageQueueTriggerReconciler can drive
+	// add/update/delete from multiple concurrent reconciles without locking.
 	MessageQueueTriggerManager struct {
 		logger           logr.Logger
 		reqChan          chan request
@@ -46,14 +41,16 @@ type (
 		messageQueueType fv1.MessageQueueType
 		messageQueue     messageQueue.MessageQueue
 
-		// ctx is the parent context for all subscriptions
+		// ctx is the leader-scoped parent context for all subscriptions, set by
+		// Start (a leader-only Runnable). It outlives any single reconcile so a
+		// subscription's consumer goroutine isn't torn down when Reconcile
+		// returns, and it is cancelled when this replica loses leadership (or
+		// the Manager stops) so a promoted standby doesn't double-consume.
 		ctx context.Context
-
-		mqtLister       map[string]flisterv1.MessageQueueTriggerLister
-		mqtListerSynced map[string]k8sCache.InformerSynced
-
-		mqTriggerCreateUpdateQueue workqueue.TypedRateLimitingInterface[string]
-		mqTriggerDeleteQueue       workqueue.TypedRateLimitingInterface[*fv1.MessageQueueTrigger]
+		// ready is closed once ctx is bound and the actor is serving, so a
+		// reconcile that races ahead of Start blocks instead of subscribing
+		// with a nil context.
+		ready chan struct{}
 	}
 
 	triggerSubscription struct {
@@ -72,79 +69,54 @@ type (
 	}
 )
 
+// MakeMessageQueueTriggerManager creates the subscription manager. The
+// leader-scoped context that bounds subscription lifetime is supplied later by
+// Start; reconciles wait (waitReady) until that context is bound.
 func MakeMessageQueueTriggerManager(logger logr.Logger,
 	fissionClient versioned.Interface,
 	mqType fv1.MessageQueueType,
-	finformerFactory map[string]genInformer.SharedInformerFactory,
-	messageQueue messageQueue.MessageQueue) (*MessageQueueTriggerManager, error) {
-	mqTriggerMgr := MessageQueueTriggerManager{
-		logger:                     logger.WithName("message_queue_trigger_manager"),
-		reqChan:                    make(chan request),
-		triggers:                   make(map[string]*triggerSubscription),
-		fissionClient:              fissionClient,
-		mqtLister:                  make(map[string]flisterv1.MessageQueueTriggerLister, 0),
-		mqtListerSynced:            make(map[string]k8sCache.InformerSynced, 0),
-		messageQueueType:           mqType,
-		messageQueue:               messageQueue,
-		mqTriggerCreateUpdateQueue: workqueue.NewTypedRateLimitingQueueWithConfig(workqueue.DefaultTypedControllerRateLimiter[string](), workqueue.TypedRateLimitingQueueConfig[string]{Name: "MqtAddUpdateQueue"}),
-		mqTriggerDeleteQueue:       workqueue.NewTypedRateLimitingQueueWithConfig(workqueue.DefaultTypedControllerRateLimiter[*fv1.MessageQueueTrigger](), workqueue.TypedRateLimitingQueueConfig[*fv1.MessageQueueTrigger]{Name: "MqtDeleteQueue"}),
+	messageQueue messageQueue.MessageQueue) *MessageQueueTriggerManager {
+	return &MessageQueueTriggerManager{
+		logger:           logger.WithName("message_queue_trigger_manager"),
+		reqChan:          make(chan request),
+		triggers:         make(map[string]*triggerSubscription),
+		fissionClient:    fissionClient,
+		messageQueueType: mqType,
+		messageQueue:     messageQueue,
+		ready:            make(chan struct{}),
 	}
-
-	for ns, informer := range finformerFactory {
-		_, err := informer.Core().V1().MessageQueueTriggers().Informer().AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
-			AddFunc:    mqTriggerMgr.enqueueMqtAdd,
-			UpdateFunc: mqTriggerMgr.enqueueMqtUpdate,
-			DeleteFunc: mqTriggerMgr.enqueueMqtDelete,
-		})
-		if err != nil {
-			return nil, err
-		}
-		mqTriggerMgr.mqtLister[ns] = informer.Core().V1().MessageQueueTriggers().Lister()
-		mqTriggerMgr.mqtListerSynced[ns] = informer.Core().V1().MessageQueueTriggers().Informer().HasSynced
-	}
-
-	return &mqTriggerMgr, nil
 }
 
-func (mqt *MessageQueueTriggerManager) Run(ctx context.Context, stopCh <-chan struct{}, mgr *errgroup.Group) {
-	defer utilruntime.HandleCrash()
-	defer mqt.mqTriggerCreateUpdateQueue.ShutDown()
-	defer mqt.mqTriggerDeleteQueue.ShutDown()
+// Start runs the subscription actor as a leader-only Runnable. It binds ctx as
+// the subscription parent (so subscriptions are cancelled on leadership loss)
+// and returns when ctx is cancelled.
+func (mqt *MessageQueueTriggerManager) Start(ctx context.Context) error {
+	mqt.logger.Info("starting message queue trigger manager")
+	mqt.bind(ctx)
+	<-ctx.Done()
+	mqt.logger.Info("shutting down message queue trigger manager")
+	return nil
+}
 
-	// Store the context for subscription lifetime management
+// bind records the leader-scoped subscription context and starts the request
+// actor, then signals readiness. Separated from Start so tests can drive it
+// without Start's blocking wait.
+func (mqt *MessageQueueTriggerManager) bind(ctx context.Context) {
 	mqt.ctx = ctx
-
 	go mqt.service()
+	close(mqt.ready)
+}
 
-	mqt.logger.Info("Waiting for informer caches to sync")
-
-	waitSynced := make([]k8sCache.InformerSynced, 0)
-	for _, synced := range mqt.mqtListerSynced {
-		waitSynced = append(waitSynced, synced)
-	}
-	if ok := k8sCache.WaitForCacheSync(stopCh, waitSynced...); !ok {
-		mqt.logger.Info("failed to wait for caches to sync")
-		os.Exit(1)
-	}
-
-	for range 4 {
-		mgr.Go(func() error {
-			wait.Until(mqt.workerRun(ctx, "mqTriggerCreateUpdate", mqt.mqTriggerCreateUpdateQueueProcessFunc), time.Second, stopCh)
-			return nil
-		})
-	}
-	mgr.Go(func() error {
-		wait.Until(mqt.workerRun(ctx, "mqTriggerDeleteQueue", mqt.mqTriggerDeleteQueueProcessFunc), time.Second, stopCh)
+// waitReady blocks until bind has run (leader-scoped ctx set, actor serving) or
+// the caller's ctx is cancelled. The reconciler calls this before driving any
+// subscribe so it never calls Subscribe with a nil context.
+func (mqt *MessageQueueTriggerManager) waitReady(ctx context.Context) error {
+	select {
+	case <-mqt.ready:
 		return nil
-	})
-
-	mgr.Go(func() error {
-		metrics.ServeMetrics(ctx, "mqtrigger", mqt.logger, mgr)
-		return nil
-	})
-
-	<-stopCh
-	mqt.logger.Info("Shutting down workers for messageQueueTriggerManager")
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func (mqt *MessageQueueTriggerManager) service() {
@@ -255,13 +227,16 @@ func (mqt *MessageQueueTriggerManager) updateTrigger(trigger *fv1.MessageQueueTr
 	err = mqt.updateTriggerSubscription(&newTriggerSubscription)
 	if err != nil {
 		mqt.logger.Error(err, "updating message queue trigger failed", "trigger_name", trigger.Name)
-		os.Exit(1)
 		return err
 	}
 	mqt.logger.Info("message queue trigger updated", "trigger_name", trigger.Name)
 	return nil
 }
 
+// RegisterTrigger subscribes to (or re-subscribes, on a spec change) the message
+// queue for trigger and records the subscription. It is the create/update path
+// the reconciler calls; the delete path is unsubscribe. Subscriptions use the
+// manager-wide ctx so they survive the reconcile that created them.
 func (mqt *MessageQueueTriggerManager) RegisterTrigger(trigger *fv1.MessageQueueTrigger) error {
 	isPresent := mqt.checkTriggerSubscription(trigger)
 	if isPresent {
@@ -292,14 +267,38 @@ func (mqt *MessageQueueTriggerManager) RegisterTrigger(trigger *fv1.MessageQueue
 	err = mqt.addTrigger(&triggerSub)
 	if err != nil {
 		mqt.logger.Error(err, "adding message queue trigger failed", "trigger_name", trigger.Name)
-		os.Exit(1)
+		// Roll back the subscription we just created so we don't leak a consumer
+		// goroutine for a trigger we failed to record; the reconciler requeues.
+		if unsubErr := mqt.messageQueue.Unsubscribe(sub); unsubErr != nil {
+			mqt.logger.Error(unsubErr, "failed to roll back subscription after add failure", "trigger_name", trigger.Name)
+		}
 		return err
 	}
 	mqt.logger.Info("message queue trigger created", "trigger_name", trigger.Name)
 	// Use the manager-wide ctx so dangling status writes cancel on
-	// manager shutdown. The RegisterTrigger call path doesn't carry
-	// a request-scoped ctx (it's driven off an internal workqueue).
+	// manager shutdown.
 	mqt.markMessageQueueTriggerBound(mqt.ctx, trigger)
+	return nil
+}
+
+// unsubscribe tears down the subscription for a deleted MessageQueueTrigger,
+// identified by name (a delete reconcile only has the NamespacedName). It is a
+// no-op if no subscription is recorded for the key.
+func (mqt *MessageQueueTriggerManager) unsubscribe(key types.NamespacedName) error {
+	stub := &fv1.MessageQueueTrigger{ObjectMeta: metav1.ObjectMeta{Namespace: key.Namespace, Name: key.Name}}
+	sub := mqt.getTriggerSubscription(stub)
+	if sub == nil {
+		return nil
+	}
+	if err := mqt.messageQueue.Unsubscribe(sub.subscription); err != nil {
+		mqt.logger.Error(err, "failed to unsubscribe from message queue trigger", "trigger_name", key.Name)
+		return err
+	}
+	if err := mqt.delTriggerSubscription(stub); err != nil {
+		mqt.logger.Error(err, "error deleting message queue trigger subscription", "trigger_name", key.Name)
+		return err
+	}
+	mqt.logger.Info("message queue trigger deleted", "trigger_name", key.Name)
 	return nil
 }
 
@@ -342,162 +341,4 @@ func (mqt *MessageQueueTriggerManager) markMessageQueueTriggerBound(ctx context.
 	if _, err := mqt.fissionClient.CoreV1().MessageQueueTriggers(trigger.Namespace).UpdateStatus(ctx, cur, metav1.UpdateOptions{}); err != nil {
 		mqt.logger.V(1).Info("mqtrigger status: update failed", "name", trigger.Name, "namespace", trigger.Namespace, "error", err)
 	}
-}
-
-func (mqt *MessageQueueTriggerManager) enqueueMqtAdd(obj any) {
-	key, err := k8sCache.MetaNamespaceKeyFunc(obj)
-	if err != nil {
-		mqt.logger.Error(nil, "error retrieving key from object in messageQueueTriggerManager", "obj", obj)
-		return
-	}
-	mqt.logger.V(1).Info("enqueue mqt add", "key", key)
-	mqt.mqTriggerCreateUpdateQueue.Add(key)
-}
-
-func (mqt *MessageQueueTriggerManager) enqueueMqtUpdate(oldObj, newObj any) {
-	// Status-subresource writes (e.g., our condition write from
-	// markMessageQueueTriggerBound) bump ResourceVersion only.
-	// Re-enqueuing on those would tear down and recreate the queue
-	// subscription needlessly. Generation only changes when Spec
-	// changes, which is the actual signal we care about here.
-	oldMqt, oldOK := oldObj.(*fv1.MessageQueueTrigger)
-	newMqt, newOK := newObj.(*fv1.MessageQueueTrigger)
-	if oldOK && newOK && oldMqt.Generation == newMqt.Generation {
-		return
-	}
-	key, err := k8sCache.MetaNamespaceKeyFunc(newObj)
-	if err != nil {
-		mqt.logger.Error(err, "error retrieving key from object in messageQueueTriggerManager", "obj", newObj)
-		return
-	}
-	mqt.logger.V(1).Info("enqueue mqt update", "key", key)
-	mqt.mqTriggerCreateUpdateQueue.Add(key)
-}
-
-func (mqt *MessageQueueTriggerManager) enqueueMqtDelete(obj any) {
-	mqTrigger, ok := obj.(*fv1.MessageQueueTrigger)
-	if !ok {
-		mqt.logger.Error(nil, "unexpected type when deleting mqt to messageQueueTriggerManager", "obj", obj)
-		return
-	}
-	mqt.logger.V(1).Info("enqueue mqt delete", "mqTrigger", mqTrigger)
-	mqt.mqTriggerDeleteQueue.Add(mqTrigger)
-}
-
-func (mqt *MessageQueueTriggerManager) workerRun(ctx context.Context, name string, processFunc func(ctx context.Context) bool) func() {
-	return func() {
-		mqt.logger.V(1).Info("Starting worker with func", "name", name)
-		for {
-			if quit := processFunc(ctx); quit {
-				mqt.logger.Info("Shutting down worker", "name", name)
-				return
-			}
-		}
-	}
-}
-
-func (mqt *MessageQueueTriggerManager) getMqtLister(namespace string) (flisterv1.MessageQueueTriggerLister, error) {
-	lister, ok := mqt.mqtLister[namespace]
-	if ok {
-		return lister, nil
-	}
-	mqt.logger.Error(nil, "no messagequeuetrigger lister found for namespace", "namespace", namespace)
-	return nil, NewListerNotFoundError(namespace)
-}
-
-func (mqt *MessageQueueTriggerManager) mqTriggerCreateUpdateQueueProcessFunc(ctx context.Context) bool {
-	key, quit := mqt.mqTriggerCreateUpdateQueue.Get()
-	if quit {
-		return false
-	}
-	defer mqt.mqTriggerCreateUpdateQueue.Done(key)
-
-	namespace, name, err := k8sCache.SplitMetaNamespaceKey(key)
-	if err != nil {
-		mqt.logger.Error(err, "error splitting key")
-		mqt.mqTriggerCreateUpdateQueue.Forget(key)
-		return false
-	}
-	mqTriggerLister, err := mqt.getMqtLister(namespace)
-	if err != nil {
-		mqt.logger.Error(err, "error getting messagequeuetrigger lister")
-		mqt.mqTriggerCreateUpdateQueue.Forget(key)
-		return false
-	}
-	mqTrigger, err := mqTriggerLister.MessageQueueTriggers(namespace).Get(name)
-	if apierrors.IsNotFound(err) {
-		mqt.logger.Info("mqt not found", "key", key)
-		mqt.mqTriggerCreateUpdateQueue.Forget(key)
-		return false
-	}
-
-	if err != nil {
-		if mqt.mqTriggerCreateUpdateQueue.NumRequeues(key) < MaxRetries {
-			mqt.mqTriggerCreateUpdateQueue.AddRateLimited(key)
-			mqt.logger.Error(err, "error getting mqt, retrying")
-		} else {
-			mqt.mqTriggerCreateUpdateQueue.Forget(key)
-			mqt.logger.Error(err, "error getting mqt, max retries reached")
-		}
-		return false
-	}
-
-	mqt.logger.V(1).Info("Added mqt", "trigger", mqTrigger.ObjectMeta)
-	err = mqt.RegisterTrigger(mqTrigger)
-	if err != nil {
-		if mqt.mqTriggerCreateUpdateQueue.NumRequeues(key) < MaxRetries {
-			mqt.mqTriggerCreateUpdateQueue.AddRateLimited(key)
-			mqt.logger.Error(err, "error handling mqt from mqtInformer, retrying", "key", key)
-		} else {
-			mqt.mqTriggerCreateUpdateQueue.Forget(key)
-			mqt.logger.Error(err, "error handling mqt from mqtInformer, max retries reached", "key", key)
-		}
-		return false
-	}
-	mqt.mqTriggerCreateUpdateQueue.Forget(key)
-	return false
-}
-
-func (mqt *MessageQueueTriggerManager) mqTriggerDeleteQueueProcessFunc(ctx context.Context) bool {
-	mqTrigger, quit := mqt.mqTriggerDeleteQueue.Get()
-	if quit {
-		return false
-	}
-	defer mqt.mqTriggerDeleteQueue.Done(mqTrigger)
-
-	mqt.logger.V(1).Info("Delete mqt", "trigger", mqTrigger.ObjectMeta)
-	triggerSubscription := mqt.getTriggerSubscription(mqTrigger)
-	if triggerSubscription == nil {
-		mqt.logger.Info("Unsubscribe failed", "trigger_name", mqTrigger.Name)
-		mqt.mqTriggerDeleteQueue.Forget(mqTrigger)
-		return false
-	}
-
-	err := mqt.messageQueue.Unsubscribe(triggerSubscription.subscription)
-	if err != nil {
-		if mqt.mqTriggerDeleteQueue.NumRequeues(mqTrigger) < MaxRetries {
-			mqt.mqTriggerDeleteQueue.AddRateLimited(mqTrigger)
-			mqt.logger.Error(err, "failed to unsubscribe from message queue trigger, retrying", "trigger_name", mqTrigger.Name)
-		} else {
-			mqt.mqTriggerDeleteQueue.Forget(mqTrigger)
-			mqt.logger.Error(err, "failed to unsubscribe from message queue trigger, max retries reached")
-		}
-		return false
-	}
-
-	err = mqt.delTriggerSubscription(mqTrigger)
-	if err != nil {
-		if mqt.mqTriggerDeleteQueue.NumRequeues(mqTrigger) < MaxRetries {
-			mqt.mqTriggerDeleteQueue.AddRateLimited(mqTrigger)
-			mqt.logger.Error(err, "error deleting mqt, retrying", "obj", mqTrigger)
-		} else {
-			mqt.mqTriggerDeleteQueue.Forget(mqTrigger)
-			mqt.logger.Error(err, "deleting message queue trigger failed, max retries reached", "trigger_name", mqTrigger.Name)
-		}
-		return false
-	}
-
-	mqt.mqTriggerDeleteQueue.Forget(mqTrigger)
-	mqt.logger.Info("message queue trigger deleted", "trigger_name", mqTrigger.Name)
-	return false
 }

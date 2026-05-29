@@ -7,14 +7,16 @@ package mqtrigger
 import (
 	"context"
 	"testing"
-	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	ctrl "sigs.k8s.io/controller-runtime"
+	crfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
-	fClient "github.com/fission/fission/pkg/generated/clientset/versioned/fake"
-	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
+	"github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
 	"github.com/fission/fission/pkg/mqtrigger/messageQueue"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
@@ -66,18 +68,10 @@ func (f fakeMessageQueue) Unsubscribe(sub messageQueue.Subscription) error {
 func TestMqtManager(t *testing.T) {
 	logger := loggerfactory.GetLogger()
 	msgQueue := fakeMessageQueue{}
-	fissionClient := fClient.NewClientset()
-	factory := make(map[string]genInformer.SharedInformerFactory, 0)
-	factory[metav1.NamespaceDefault] = genInformer.NewSharedInformerFactoryWithOptions(fissionClient, time.Minute*30, genInformer.WithNamespace(metav1.NamespaceDefault))
-	mgr, err := MakeMessageQueueTriggerManager(logger, nil, fv1.MessageQueueTypeKafka, factory, msgQueue)
-	require.NoError(t, err, "Error creating messageQueueTriggerManagesr")
-
 	ctx := t.Context()
+	mgr := MakeMessageQueueTriggerManager(logger, nil, fv1.MessageQueueTypeKafka, msgQueue)
+	mgr.bind(ctx)
 
-	// Set the context for the manager (normally done in Run)
-	mgr.ctx = ctx
-
-	go mgr.service()
 	trigger := fv1.MessageQueueTrigger{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test",
@@ -145,4 +139,46 @@ func TestMqtManager(t *testing.T) {
 	if mgr.checkTriggerSubscription(&trigger) {
 		t.Errorf("checkTrigger should return false")
 	}
+}
+
+func TestMessageQueueTriggerReconciler(t *testing.T) {
+	logger := loggerfactory.GetLogger()
+	ctx := t.Context()
+	mqt := &fv1.MessageQueueTrigger{
+		ObjectMeta: metav1.ObjectMeta{Name: "mqt1", Namespace: metav1.NamespaceDefault, Generation: 1},
+		Spec:       fv1.MessageQueueTriggerSpec{Topic: "topic-a"},
+	}
+	c := crfake.NewClientBuilder().
+		WithScheme(scheme.Scheme).
+		WithObjects(mqt).
+		WithStatusSubresource(&fv1.MessageQueueTrigger{}).
+		Build()
+
+	// nil fissionClient → markMessageQueueTriggerBound is a no-op, keeping the
+	// test focused on subscription state.
+	mgr := MakeMessageQueueTriggerManager(logger, nil, fv1.MessageQueueTypeKafka, fakeMessageQueue{})
+	mgr.bind(ctx)
+
+	r := NewMessageQueueTriggerReconciler(logger, c, mgr)
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Namespace: metav1.NamespaceDefault, Name: "mqt1"}}
+
+	// Create: subscribes and records the trigger.
+	_, err := r.Reconcile(ctx, req)
+	require.NoError(t, err)
+	assert.True(t, mgr.checkTriggerSubscription(mqt), "subscription should exist after reconcile")
+
+	// Reconcile again is idempotent (update path; still subscribed).
+	_, err = r.Reconcile(ctx, req)
+	require.NoError(t, err)
+	assert.True(t, mgr.checkTriggerSubscription(mqt))
+
+	// Delete: a NotFound get tears the subscription down.
+	require.NoError(t, c.Delete(ctx, mqt))
+	_, err = r.Reconcile(ctx, req)
+	require.NoError(t, err)
+	assert.False(t, mgr.checkTriggerSubscription(mqt), "subscription should be gone after delete")
+
+	// Unsubscribing an unknown trigger is a no-op, not an error.
+	_, err = r.Reconcile(ctx, req)
+	require.NoError(t, err)
 }
