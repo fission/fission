@@ -53,3 +53,15 @@ func (f LeaderRunnable) Start(ctx context.Context) error { return f(ctx) }
 
 // NeedLeaderElection marks the runnable as leader-only.
 func (f LeaderRunnable) NeedLeaderElection() bool { return true }
+
+// NonLeaderRunnable adapts a function to a controller-runtime Runnable that the
+// Manager runs on every replica regardless of leadership. Use it for work that
+// should also run on standbys, e.g. warming informer caches so failover is
+// fast. The Manager starts non-leader runnables before leader-only ones, so a
+// cache warmed here is ready by the time a LeaderRunnable consumes it.
+type NonLeaderRunnable func(context.Context) error
+
+func (f NonLeaderRunnable) Start(ctx context.Context) error { return f(ctx) }
+
+// NeedLeaderElection marks the runnable as running on every replica.
+func (f NonLeaderRunnable) NeedLeaderElection() bool { return false }

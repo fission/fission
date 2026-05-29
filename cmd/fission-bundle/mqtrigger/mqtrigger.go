@@ -89,11 +89,21 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	if err != nil {
 		return err
 	}
-	if err := crMgr.Add(crmanager.LeaderRunnable(func(c context.Context) error {
-		gm := manager.New()
+	// Warm the trigger informer caches on every replica (not just the leader)
+	// so a standby can take over without a cold cache. The Manager starts this
+	// non-leader runnable before the leader-only one below, so mqtMgr.Run's
+	// WaitForCacheSync sees the already-started factories.
+	if err := crMgr.Add(crmanager.NonLeaderRunnable(func(c context.Context) error {
 		for _, factory := range finformerFactory {
 			factory.Start(c.Done())
 		}
+		<-c.Done()
+		return nil
+	})); err != nil {
+		return err
+	}
+	if err := crMgr.Add(crmanager.LeaderRunnable(func(c context.Context) error {
+		gm := manager.New()
 		mqtMgr.Run(c, c.Done(), gm)
 		<-c.Done()
 		gm.Wait()
