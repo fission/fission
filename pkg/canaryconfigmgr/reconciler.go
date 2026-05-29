@@ -68,6 +68,15 @@ func (r *CanaryConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			"name", cfg.Name, "namespace", cfg.Namespace, "duration", cfg.Spec.WeightIncrementDuration)
 		return ctrl.Result{}, nil
 	}
+	if cfg.Spec.WeightIncrement <= 0 {
+		// WeightIncrement is optional and unbounded in the CRD. A zero increment
+		// would requeue forever without ever shifting traffic; a negative one
+		// would move weights the wrong way (and could exceed bounds). Treat it
+		// as an unworkable spec and stop until it is fixed.
+		r.logger.Info("non-positive WeightIncrement; not scheduling canary",
+			"name", cfg.Name, "namespace", cfg.Namespace, "weight_increment", cfg.Spec.WeightIncrement)
+		return ctrl.Result{}, nil
+	}
 
 	out, err := r.mgr.step(ctx, cfg)
 	if err != nil {

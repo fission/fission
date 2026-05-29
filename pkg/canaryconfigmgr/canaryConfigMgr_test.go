@@ -299,6 +299,17 @@ func TestReconcile(t *testing.T) {
 		assert.Equal(t, ctrl.Result{}, res)
 	})
 
+	t.Run("non-positive increment stops without requeue", func(t *testing.T) {
+		trigger, cc := canaryFixtures(map[string]int{"new": 0, "old": 100}, 0)
+		_, r, c := newTestEnv(fakeFailureClient{}, trigger, cc)
+
+		res, err := reconcileCC(t, r)
+		require.NoError(t, err)
+		assert.Equal(t, ctrl.Result{}, res)
+		// weights untouched — no forever-requeue, no traffic shift
+		assert.Equal(t, 0, getTrigger(t, c).Spec.FunctionReference.FunctionWeights["new"])
+	})
+
 	t.Run("empty status is treated as pending and progressed", func(t *testing.T) {
 		trigger, cc := canaryFixtures(map[string]int{"new": 0, "old": 100}, 30)
 		cc.Status.Status = "" // fresh create, status dropped by /status subresource
