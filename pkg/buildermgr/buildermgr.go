@@ -29,7 +29,6 @@ import (
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	"github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
 	"github.com/fission/fission/pkg/utils"
-	"github.com/fission/fission/pkg/utils/leaderelection"
 	"github.com/fission/fission/pkg/utils/manager"
 	fissionmetrics "github.com/fission/fission/pkg/utils/metrics"
 )
@@ -85,10 +84,6 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		utils.GetInformersForNamespaces(fissionClient, time.Minute*30, fv1.PackagesResource))
 
 	leaderElectionEnabled, _ := strconv.ParseBool(os.Getenv("LEADER_ELECTION_ENABLED"))
-	leNamespace := leaderelection.Namespace()
-	if leaderElectionEnabled && leNamespace == "" {
-		return fmt.Errorf("leader election enabled but pod namespace is unknown; set POD_NAMESPACE")
-	}
 
 	// Fission's custom collectors register into controller-runtime's global
 	// metrics registry; the Manager's metrics server then serves them on
@@ -116,7 +111,6 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		HealthProbeBindAddress:        healthBind,
 		LeaderElection:                leaderElectionEnabled,
 		LeaderElectionID:              leaderElectionID,
-		LeaderElectionNamespace:       leNamespace,
 		LeaderElectionReleaseOnCancel: true,
 		Logger:                        bmLogger,
 	})

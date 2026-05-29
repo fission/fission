@@ -176,22 +176,31 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr manager.Inte
 	// ROUTER_INTERNAL_URL from the env before forwarding into these
 	// Start functions; this in-process harness has to do the same
 	// resolution explicitly because it bypasses the bundle.
-	err = timer.Start(ctx, f.ClientGen(), f.Logger(), mgr, internalRouterURL)
-	if err != nil {
-		return fmt.Errorf("error starting timer: %w", err)
-	}
+	// timer, mqt_keda and kubewatcher now run under controller-runtime Managers,
+	// so their Start funcs block until ctx is cancelled. Run each in a goroutine
+	// so the harness can continue.
+	mgr.Add(ctx, func(ctx context.Context) {
+		if err := timer.Start(ctx, f.ClientGen(), f.Logger(), mgr, internalRouterURL); err != nil {
+			f.Logger().Error(err, "error starting timer")
+			os.Exit(1)
+		}
+	})
 	f.AddServiceInfo("timer", framework.ServiceInfo{})
 
-	err = mqtrigger.StartScalerManager(ctx, f.ClientGen(), f.Logger(), mgr, internalRouterURL)
-	if err != nil {
-		return fmt.Errorf("error starting mqt scaler manager: %w", err)
-	}
+	mgr.Add(ctx, func(ctx context.Context) {
+		if err := mqtrigger.StartScalerManager(ctx, f.ClientGen(), f.Logger(), mgr, internalRouterURL); err != nil {
+			f.Logger().Error(err, "error starting mqt scaler manager")
+			os.Exit(1)
+		}
+	})
 	f.AddServiceInfo("mqtrigger-keda", framework.ServiceInfo{})
 
-	err = kubewatcher.Start(ctx, f.ClientGen(), f.Logger(), mgr, internalRouterURL)
-	if err != nil {
-		return fmt.Errorf("error starting kubewatcher: %w", err)
-	}
+	mgr.Add(ctx, func(ctx context.Context) {
+		if err := kubewatcher.Start(ctx, f.ClientGen(), f.Logger(), mgr, internalRouterURL); err != nil {
+			f.Logger().Error(err, "error starting kubewatcher")
+			os.Exit(1)
+		}
+	})
 	f.AddServiceInfo("kubewatcher", framework.ServiceInfo{})
 
 	return nil

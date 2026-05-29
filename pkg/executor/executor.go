@@ -37,7 +37,6 @@ import (
 	"github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
 	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
 	"github.com/fission/fission/pkg/utils"
-	"github.com/fission/fission/pkg/utils/leaderelection"
 	"github.com/fission/fission/pkg/utils/manager"
 	fissionmetrics "github.com/fission/fission/pkg/utils/metrics"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
@@ -448,10 +447,6 @@ func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, 
 	// lease loss the Manager stops and the API server's /healthz (port 8888)
 	// goes down, so the kubelet restarts the pod and it rejoins as a standby.
 	leaderElectionEnabled, _ := strconv.ParseBool(os.Getenv("LEADER_ELECTION_ENABLED"))
-	leNamespace := leaderelection.Namespace()
-	if leaderElectionEnabled && leNamespace == "" {
-		return fmt.Errorf("leader election enabled but pod namespace is unknown; set POD_NAMESPACE")
-	}
 
 	api := MakeExecutor(logger, cmsController, fissionClient, executorTypes)
 	api.leaderElection = leaderElectionEnabled
@@ -475,7 +470,6 @@ func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, 
 		HealthProbeBindAddress:        "0", // /healthz + /readyz stay on the API mux (port)
 		LeaderElection:                leaderElectionEnabled,
 		LeaderElectionID:              "fission-executor",
-		LeaderElectionNamespace:       leNamespace,
 		LeaderElectionReleaseOnCancel: true,
 		Logger:                        logger,
 	})

@@ -1,7 +1,10 @@
 {{/*
-leases-kuberules grants the coordination.k8s.io/leases permissions a
-control-plane subsystem needs for client-go leader election (active-passive
-HA). Included by every subsystem that supports leader election.
+leases-kuberules grants the permissions a control-plane subsystem needs for
+controller-runtime native leader election (active-passive HA): the
+coordination.k8s.io/leases lock plus events create/patch for the Manager's
+leader-election event recorder. Included by every subsystem that supports
+leader election. (Some roles also grant events for other reasons; duplicate
+rules are merged by the API server.)
 */}}
 {{- define "leases-kuberules" }}
 - apiGroups:
@@ -16,6 +19,13 @@ HA). Included by every subsystem that supports leader election.
   - update
   - patch
   - delete
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
 {{- end }}
 {{- define "buildermgr-kuberules" }}
 rules:

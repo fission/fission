@@ -28,7 +28,7 @@ import (
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/executor/util"
 	"github.com/fission/fission/pkg/utils"
-	"github.com/fission/fission/pkg/utils/leaderelection"
+	"github.com/fission/fission/pkg/utils/crmanager"
 	"github.com/fission/fission/pkg/utils/manager"
 )
 
@@ -119,7 +119,7 @@ func mqTriggerEventHandlers(ctx context.Context, logger logr.Logger, kubeClient 
 // isolation, which still gates port 8889 to fission-bundle pods only)
 // or build signing-aware connector images. This is a documented
 // rollout caveat for advisory 4.
-func StartScalerManager(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger, mgr manager.Interface, routerURL string) error {
+func StartScalerManager(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger, _ manager.Interface, routerURL string) error {
 	fissionClient, err := clientGen.GetFissionClient()
 	if err != nil {
 		return fmt.Errorf("failed to get fission client: %w", err)
@@ -132,36 +132,43 @@ func StartScalerManager(ctx context.Context, clientGen crd.ClientGeneratorInterf
 	if err != nil {
 		return fmt.Errorf("failed to get keda client: %w", err)
 	}
+	restConfig, err := clientGen.GetRestConfig()
+	if err != nil {
+		return fmt.Errorf("failed to get rest config: %w", err)
+	}
 
 	err = crd.WaitForFunctionCRDs(ctx, logger, fissionClient)
 	if err != nil {
 		return fmt.Errorf("error waiting for CRDs: %w", err)
 	}
 
-	// Active-passive HA: only the elected leader reconciles KEDA ScaledObjects,
-	// so two replicas don't race on the same objects. No-op when
-	// LEADER_ELECTION_ENABLED is unset (single-replica default).
-	elector, runCtx, err := leaderelection.FromEnv(ctx, kubeClient, "fission-mqt-keda", logger)
+	// Active-passive HA via native controller-runtime leader election: only the
+	// elected leader reconciles KEDA ScaledObjects, so two replicas don't race
+	// on the same objects. No-op when LEADER_ELECTION_ENABLED is unset
+	// (single-replica default).
+	crMgr, err := crmanager.NewLeaderElected(restConfig, "fission-mqt-keda", logger)
 	if err != nil {
 		return err
 	}
-	mgr.Add(ctx, func(context.Context) { elector.Run(runCtx) })
-
-	for _, informer := range utils.GetInformersForNamespaces(fissionClient, time.Minute*30, fv1.MessageQueueResource) {
-		_, err := informer.AddEventHandler(mqTriggerEventHandlers(runCtx, logger, kubeClient, kedaClient, routerURL))
-		if err != nil {
-			return err
-		}
-		mgr.Add(runCtx, elector.Gated(func(c context.Context) {
+	informers := utils.GetInformersForNamespaces(fissionClient, time.Minute*30, fv1.MessageQueueResource)
+	if err := crMgr.Add(crmanager.LeaderRunnable(func(c context.Context) error {
+		for _, informer := range informers {
+			if _, err := informer.AddEventHandler(mqTriggerEventHandlers(c, logger, kubeClient, kedaClient, routerURL)); err != nil {
+				return err
+			}
 			go informer.Run(c.Done())
 			if ok := k8sCache.WaitForCacheSync(c.Done(), informer.HasSynced); !ok {
 				// Usually means the context was cancelled (shutdown or loss of
 				// leadership). Stop cleanly instead of crashing the process.
 				logger.Info("failed to wait for caches to sync; stopping keda scaler manager")
 			}
-		}))
+		}
+		<-c.Done()
+		return nil
+	})); err != nil {
+		return err
 	}
-	return nil
+	return crMgr.Start(ctx)
 }
 
 func toEnvVar(str string) string {

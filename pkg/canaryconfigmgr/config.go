@@ -9,18 +9,19 @@ import (
 	"fmt"
 
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 
 	"github.com/go-logr/logr"
 
 	config "github.com/fission/fission/pkg/featureconfig"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
-	"github.com/fission/fission/pkg/utils/leaderelection"
+	"github.com/fission/fission/pkg/utils/crmanager"
 	"github.com/fission/fission/pkg/utils/manager"
 )
 
 // ConfigureFeatures gets the feature config and configures the features that are enabled
-func ConfigureFeatures(ctx context.Context, logger logr.Logger, unitTestMode bool, fissionClient versioned.Interface,
-	kubeClient kubernetes.Interface, mgr manager.Interface) error {
+func ConfigureFeatures(ctx context.Context, restConfig *rest.Config, logger logr.Logger, unitTestMode bool, fissionClient versioned.Interface,
+	kubeClient kubernetes.Interface, _ manager.Interface) error {
 	// set feature enabled to false if unitTestMode
 	if unitTestMode {
 		return nil
@@ -40,15 +41,22 @@ func ConfigureFeatures(ctx context.Context, logger logr.Logger, unitTestMode boo
 		return fmt.Errorf("failed to start canary config manager: %w", err)
 	}
 
-	// Active-passive HA: only the elected leader progresses canary rollouts, so
-	// two replicas don't both shift HTTPTrigger weights. No-op when
-	// LEADER_ELECTION_ENABLED is unset (single-replica default).
-	elector, runCtx, err := leaderelection.FromEnv(ctx, kubeClient, "fission-canaryconfig", logger)
+	// Active-passive HA via native controller-runtime leader election: only the
+	// elected leader progresses canary rollouts, so two replicas don't both
+	// shift HTTPTrigger weights. No-op when LEADER_ELECTION_ENABLED is unset
+	// (single-replica default).
+	crMgr, err := crmanager.NewLeaderElected(restConfig, "fission-canaryconfig", logger)
 	if err != nil {
 		return err
 	}
-	mgr.Add(ctx, func(context.Context) { elector.Run(runCtx) })
-	mgr.Add(runCtx, elector.Gated(func(c context.Context) { canaryCfgMgr.Run(c, mgr) }))
-
-	return nil
+	if err := crMgr.Add(crmanager.LeaderRunnable(func(c context.Context) error {
+		gm := manager.New()
+		canaryCfgMgr.Run(c, gm)
+		<-c.Done()
+		gm.Wait()
+		return nil
+	})); err != nil {
+		return err
+	}
+	return crMgr.Start(ctx)
 }
