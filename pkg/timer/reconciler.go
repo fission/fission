@@ -11,10 +11,10 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/controller"
-	"github.com/fission/fission/pkg/generated/clientset/versioned"
 )
 
 // TimeTriggerReconciler keeps the in-process cron schedules in sync with the
@@ -23,27 +23,30 @@ import (
 // delete events through a rate-limited workqueue, and the GenerationChangedPredicate
 // (applied in controller.Register) drops the status-only updates the old
 // UpdateFunc filtered by hand.
+//
+// Reads go through the Manager's cache-backed client (the same informer cache
+// the watch populates), and status writes go through client.Status().Update.
 type TimeTriggerReconciler struct {
-	logger        logr.Logger
-	fissionClient versioned.Interface
-	timer         *Timer
+	logger logr.Logger
+	client client.Client
+	timer  *Timer
 }
 
 func (r *TimeTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	tt, err := r.fissionClient.CoreV1().TimeTriggers(req.Namespace).Get(ctx, req.Name, metav1.GetOptions{})
-	if apierrors.IsNotFound(err) {
-		r.timer.remove(req.NamespacedName)
-		return ctrl.Result{}, nil
-	}
-	if err != nil {
+	tt := &fv1.TimeTrigger{}
+	if err := r.client.Get(ctx, req.NamespacedName, tt); err != nil {
+		if apierrors.IsNotFound(err) {
+			r.timer.remove(req.NamespacedName)
+			return ctrl.Result{}, nil
+		}
 		return ctrl.Result{}, err
 	}
 
 	r.timer.addUpdate(tt)
 
 	// Best-effort Scheduled + Ready conditions. Status writes never gate the
-	// schedule; SetConditions fast-paths the no-op case.
-	controller.SetConditions(ctx, r.logger, r.fissionClient.CoreV1().TimeTriggers(req.Namespace), tt,
+	// schedule; SetConditions skips the write when nothing changed.
+	controller.SetConditions(ctx, r.logger, r.client, tt,
 		metav1.Condition{
 			Type: fv1.TimeTriggerConditionScheduled, Status: metav1.ConditionTrue,
 			Reason:  fv1.TimeTriggerReasonCronRegistered,

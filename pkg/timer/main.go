@@ -42,9 +42,9 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		return err
 	}
 	r := &TimeTriggerReconciler{
-		logger:        logger.WithName("timetrigger_reconciler"),
-		fissionClient: fissionClient,
-		timer:         MakeTimer(logger, routerUrl),
+		logger: logger.WithName("timetrigger_reconciler"),
+		client: crMgr.GetClient(),
+		timer:  MakeTimer(logger, routerUrl),
 	}
 	if err := controller.Register(crMgr, &fv1.TimeTrigger{}, r, "timetrigger"); err != nil {
 		return fmt.Errorf("error registering timetrigger reconciler: %w", err)

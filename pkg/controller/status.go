@@ -22,67 +22,37 @@ type ConditionedObject interface {
 	GetConditions() *[]metav1.Condition
 }
 
-// StatusClient is the subset of a generated typed client used to read and
-// persist an object's status. The namespaced Fission clients
-// (e.g. fissionClient.CoreV1().TimeTriggers(ns)) satisfy it for T being the
-// matching pointer type (*fv1.TimeTrigger, *fv1.Package, ...).
-type StatusClient[T ConditionedObject] interface {
-	Get(ctx context.Context, name string, opts metav1.GetOptions) (T, error)
-	UpdateStatus(ctx context.Context, obj T, opts metav1.UpdateOptions) (T, error)
-}
-
 // SetConditions upserts want onto obj's status conditions and persists them via
-// UpdateStatus, collapsing the IsAt fast-path / Get / re-check / Set /
-// UpdateStatus dance every Fission controller previously hand-rolled.
+// the controller-runtime status writer, collapsing the per-controller status
+// dance into one call.
 //
-// It is best-effort: status writes never gate reconcile success, so failures
-// are logged at V(1) and swallowed. ObservedGeneration on each want condition
-// is stamped from the object being written, so callers leave it zero.
+// obj is normally the object the Reconciler already fetched through the
+// Manager's cache (mgr.GetClient().Get), so no extra read is needed: the
+// conditions are mutated in place and written with client.Status().Update,
+// which targets the /status subresource directly on the API server. The write
+// is best-effort — status never gates reconcile success, so a failure (e.g. a
+// conflict from a stale cached object) is logged at V(1) and the next reconcile
+// reconverges. ObservedGeneration is stamped from obj, so callers leave it zero.
 //
-// The fast-path uses obj's in-hand conditions to skip the Get entirely when
-// nothing would change — important on hot paths where the same condition is
-// reasserted repeatedly. After a Get it re-checks against the fresh object so a
-// concurrent writer's identical state also short-circuits.
-func SetConditions[T ConditionedObject](ctx context.Context, log logr.Logger, sc StatusClient[T], obj T, want ...metav1.Condition) {
+// When nothing would change (meta.SetStatusCondition reports no diff for every
+// want), the Update is skipped — important on hot paths where the same
+// condition is reasserted repeatedly.
+func SetConditions(ctx context.Context, log logr.Logger, c client.Client, obj ConditionedObject, want ...metav1.Condition) {
 	if len(want) == 0 {
 		return
 	}
-	stamp(want, obj.GetGeneration())
-	if allAt(*obj.GetConditions(), want) {
-		return
-	}
-	fresh, err := sc.Get(ctx, obj.GetName(), metav1.GetOptions{})
-	if err != nil {
-		log.V(1).Info("status: get failed", "name", obj.GetName(), "namespace", obj.GetNamespace(), "error", err)
-		return
-	}
-	stamp(want, fresh.GetGeneration())
-	if allAt(*fresh.GetConditions(), want) {
-		return
-	}
-	for _, w := range want {
-		conditions.Set(fresh.GetConditions(), w)
-	}
-	if _, err := sc.UpdateStatus(ctx, fresh, metav1.UpdateOptions{}); err != nil {
-		log.V(1).Info("status: update failed", "name", obj.GetName(), "namespace", obj.GetNamespace(), "error", err)
-	}
-}
-
-// stamp re-writes ObservedGeneration on every want condition to gen, so the
-// IsAt comparison reflects the generation of the object actually being written.
-func stamp(want []metav1.Condition, gen int64) {
+	gen := obj.GetGeneration()
+	changed := false
 	for i := range want {
 		want[i].ObservedGeneration = gen
-	}
-}
-
-// allAt reports whether every want condition is already present in have with a
-// matching Type/Status/Reason/ObservedGeneration (Message ignored, per IsAt).
-func allAt(have []metav1.Condition, want []metav1.Condition) bool {
-	for _, w := range want {
-		if !conditions.IsAt(have, w) {
-			return false
+		if conditions.Set(obj.GetConditions(), want[i]) {
+			changed = true
 		}
 	}
-	return true
+	if !changed {
+		return
+	}
+	if err := c.Status().Update(ctx, obj); err != nil {
+		log.V(1).Info("status update failed", "name", obj.GetName(), "namespace", obj.GetNamespace(), "error", err)
+	}
 }

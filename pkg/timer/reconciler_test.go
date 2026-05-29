@@ -13,10 +13,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/conditions"
-	fakeFission "github.com/fission/fission/pkg/generated/clientset/versioned/fake"
+	"github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
 )
 
 func TestTimeTriggerReconciler(t *testing.T) {
@@ -24,11 +26,15 @@ func TestTimeTriggerReconciler(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "cron1", Namespace: "default", Generation: 1},
 		Spec:       fv1.TimeTriggerSpec{Cron: "0 0 * * *", FunctionReference: fv1.FunctionReference{Name: "fn"}},
 	}
-	fc := fakeFission.NewSimpleClientset(tt) //nolint:staticcheck // NewClientset UpdateStatus hits kubernetes/kubernetes#126850 for our CRDs
+	c := fake.NewClientBuilder().
+		WithScheme(scheme.Scheme).
+		WithObjects(tt).
+		WithStatusSubresource(&fv1.TimeTrigger{}).
+		Build()
 	r := &TimeTriggerReconciler{
-		logger:        logr.Discard(),
-		fissionClient: fc,
-		timer:         MakeTimer(logr.Discard(), "http://router.fission"),
+		logger: logr.Discard(),
+		client: c,
+		timer:  MakeTimer(logr.Discard(), "http://router.fission"),
 	}
 	key := types.NamespacedName{Namespace: "default", Name: "cron1"}
 	req := ctrl.Request{NamespacedName: key}
@@ -40,18 +46,18 @@ func TestTimeTriggerReconciler(t *testing.T) {
 	_, ok := r.timer.triggers[key]
 	assert.True(t, ok, "cron entry should be registered after reconcile")
 
-	got, err := fc.CoreV1().TimeTriggers("default").Get(ctx, "cron1", metav1.GetOptions{})
-	require.NoError(t, err)
+	got := &fv1.TimeTrigger{}
+	require.NoError(t, c.Get(ctx, client.ObjectKeyFromObject(tt), got))
 	assert.True(t, conditions.IsTrue(got.Status.Conditions, fv1.TimeTriggerConditionScheduled), "Scheduled condition should be True")
 	assert.True(t, conditions.IsTrue(got.Status.Conditions, fv1.TimeTriggerConditionReady), "Ready condition should be True")
 
-	// Reconcile again is idempotent (fast-path, no error, entry still present).
+	// Reconcile again is idempotent (no error, entry still present).
 	_, err = r.Reconcile(ctx, req)
 	require.NoError(t, err)
 	assert.Len(t, r.timer.triggers, 1)
 
 	// Delete: NotFound from the client tears the cron entry down.
-	require.NoError(t, fc.CoreV1().TimeTriggers("default").Delete(ctx, "cron1", metav1.DeleteOptions{}))
+	require.NoError(t, c.Delete(ctx, got))
 	_, err = r.Reconcile(ctx, req)
 	require.NoError(t, err)
 	_, ok = r.timer.triggers[key]
