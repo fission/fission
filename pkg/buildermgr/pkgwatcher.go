@@ -7,7 +7,6 @@ package buildermgr
 import (
 	"context"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -23,7 +22,6 @@ import (
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/manager"
-	"github.com/fission/fission/pkg/utils/metrics"
 )
 
 type (
@@ -315,17 +313,13 @@ func (pkgw *packageWatcher) packageInformerHandler(ctx context.Context) k8sCache
 }
 
 func (pkgw *packageWatcher) Run(ctx context.Context, mgr manager.Interface) error {
-
-	mgr.Add(ctx, func(ctx context.Context) {
-		metrics.ServeMetrics(ctx, "buildermgr", pkgw.logger, mgr)
-	})
+	// Metrics are served by the controller-runtime Manager (see buildermgr.go);
+	// the watcher only wires up its informers here.
 	mgr.AddInformers(ctx, pkgw.podInformer)
 	for _, pkgInformer := range pkgw.pkgInformer {
 		_, err := pkgInformer.AddEventHandler(pkgw.packageInformerHandler(ctx))
 		if err != nil {
-			pkgw.logger.Error(err, "error adding package informer handler")
-			os.Exit(1)
-			return err
+			return fmt.Errorf("error adding package informer handler: %w", err)
 		}
 	}
 	mgr.AddInformers(ctx, pkgw.pkgInformer)

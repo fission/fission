@@ -72,6 +72,21 @@ spec:
         ports:
           - containerPort: 8080
             name: metrics
+          - containerPort: 8081
+            name: health
+        livenessProbe:
+          httpGet:
+            path: "/healthz"
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: "/readyz"
+            port: 8081
+          initialDelaySeconds: 1
+          periodSeconds: 5
+          failureThreshold: 30
         resources:
           {{- toYaml .Values.buildermgr.resources | nindent 10 }}
         {{- if .Values.terminationMessagePath }}
