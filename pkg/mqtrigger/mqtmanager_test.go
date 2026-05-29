@@ -69,9 +69,9 @@ func TestMqtManager(t *testing.T) {
 	logger := loggerfactory.GetLogger()
 	msgQueue := fakeMessageQueue{}
 	ctx := t.Context()
-	mgr := MakeMessageQueueTriggerManager(ctx, logger, nil, fv1.MessageQueueTypeKafka, msgQueue)
+	mgr := MakeMessageQueueTriggerManager(logger, nil, fv1.MessageQueueTypeKafka, msgQueue)
+	mgr.bind(ctx)
 
-	go mgr.service()
 	trigger := fv1.MessageQueueTrigger{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test",
@@ -156,8 +156,8 @@ func TestMessageQueueTriggerReconciler(t *testing.T) {
 
 	// nil fissionClient → markMessageQueueTriggerBound is a no-op, keeping the
 	// test focused on subscription state.
-	mgr := MakeMessageQueueTriggerManager(ctx, logger, nil, fv1.MessageQueueTypeKafka, fakeMessageQueue{})
-	go mgr.service()
+	mgr := MakeMessageQueueTriggerManager(logger, nil, fv1.MessageQueueTypeKafka, fakeMessageQueue{})
+	mgr.bind(ctx)
 
 	r := NewMessageQueueTriggerReconciler(logger, c, mgr)
 	req := ctrl.Request{NamespacedName: types.NamespacedName{Namespace: metav1.NamespaceDefault, Name: "mqt1"}}

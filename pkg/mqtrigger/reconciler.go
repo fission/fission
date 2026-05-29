@@ -45,6 +45,13 @@ func NewMessageQueueTriggerReconciler(logger logr.Logger, client client.Client, 
 }
 
 func (r *MessageQueueTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	// The subscription manager binds its leader-scoped context and starts its
+	// actor in a sibling leader Runnable; block until that's done so we never
+	// subscribe with a nil context or send on the actor channel before it serves.
+	if err := r.mqtMgr.waitReady(ctx); err != nil {
+		return ctrl.Result{}, err
+	}
+
 	mqt := &fv1.MessageQueueTrigger{}
 	if err := r.client.Get(ctx, req.NamespacedName, mqt); err != nil {
 		if apierrors.IsNotFound(err) {

@@ -95,7 +95,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 
 	// The subscription manager (service() actor) is leader-only: only the leader
 	// holds live queue subscriptions, so a standby doesn't double-consume.
-	mqtMgr := mqtrigger.MakeMessageQueueTriggerManager(ctx, logger, fissionClient, mqType, mq)
+	mqtMgr := mqtrigger.MakeMessageQueueTriggerManager(logger, fissionClient, mqType, mq)
 	if err := crMgr.Add(crmanager.LeaderRunnable(mqtMgr.Start)); err != nil {
 		return err
 	}

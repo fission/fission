@@ -41,11 +41,16 @@ type (
 		messageQueueType fv1.MessageQueueType
 		messageQueue     messageQueue.MessageQueue
 
-		// ctx is the manager-wide parent context for all subscriptions. It
-		// outlives any single reconcile so a subscription's consumer goroutine
-		// is not torn down when Reconcile returns; it is cancelled when the
-		// controller-runtime Manager stops.
+		// ctx is the leader-scoped parent context for all subscriptions, set by
+		// Start (a leader-only Runnable). It outlives any single reconcile so a
+		// subscription's consumer goroutine isn't torn down when Reconcile
+		// returns, and it is cancelled when this replica loses leadership (or
+		// the Manager stops) so a promoted standby doesn't double-consume.
 		ctx context.Context
+		// ready is closed once ctx is bound and the actor is serving, so a
+		// reconcile that races ahead of Start blocks instead of subscribing
+		// with a nil context.
+		ready chan struct{}
 	}
 
 	triggerSubscription struct {
@@ -64,10 +69,10 @@ type (
 	}
 )
 
-// MakeMessageQueueTriggerManager creates the subscription manager. ctx is the
-// manager-wide context that bounds subscription lifetime (see the ctx field).
-// The caller must run service() (Start does) before issuing trigger requests.
-func MakeMessageQueueTriggerManager(ctx context.Context, logger logr.Logger,
+// MakeMessageQueueTriggerManager creates the subscription manager. The
+// leader-scoped context that bounds subscription lifetime is supplied later by
+// Start; reconciles wait (waitReady) until that context is bound.
+func MakeMessageQueueTriggerManager(logger logr.Logger,
 	fissionClient versioned.Interface,
 	mqType fv1.MessageQueueType,
 	messageQueue messageQueue.MessageQueue) *MessageQueueTriggerManager {
@@ -78,18 +83,40 @@ func MakeMessageQueueTriggerManager(ctx context.Context, logger logr.Logger,
 		fissionClient:    fissionClient,
 		messageQueueType: mqType,
 		messageQueue:     messageQueue,
-		ctx:              ctx,
+		ready:            make(chan struct{}),
 	}
 }
 
-// Start runs the subscription actor. It returns when ctx is cancelled (Manager
-// shutdown), at which point the actor stops serving requests.
+// Start runs the subscription actor as a leader-only Runnable. It binds ctx as
+// the subscription parent (so subscriptions are cancelled on leadership loss)
+// and returns when ctx is cancelled.
 func (mqt *MessageQueueTriggerManager) Start(ctx context.Context) error {
 	mqt.logger.Info("starting message queue trigger manager")
-	go mqt.service()
+	mqt.bind(ctx)
 	<-ctx.Done()
 	mqt.logger.Info("shutting down message queue trigger manager")
 	return nil
+}
+
+// bind records the leader-scoped subscription context and starts the request
+// actor, then signals readiness. Separated from Start so tests can drive it
+// without Start's blocking wait.
+func (mqt *MessageQueueTriggerManager) bind(ctx context.Context) {
+	mqt.ctx = ctx
+	go mqt.service()
+	close(mqt.ready)
+}
+
+// waitReady blocks until bind has run (leader-scoped ctx set, actor serving) or
+// the caller's ctx is cancelled. The reconciler calls this before driving any
+// subscribe so it never calls Subscribe with a nil context.
+func (mqt *MessageQueueTriggerManager) waitReady(ctx context.Context) error {
+	select {
+	case <-mqt.ready:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func (mqt *MessageQueueTriggerManager) service() {
