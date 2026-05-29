@@ -20,7 +20,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/wait"
 	k8sInformers "k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	appslisters "k8s.io/client-go/listers/apps/v1"
@@ -35,6 +34,7 @@ import (
 	"github.com/fission/fission/pkg/executor/fscache"
 	"github.com/fission/fission/pkg/executor/metrics"
 	"github.com/fission/fission/pkg/executor/reaper"
+	"github.com/fission/fission/pkg/executor/reaper/idle"
 	executorUtils "github.com/fission/fission/pkg/executor/util"
 	hpautils "github.com/fission/fission/pkg/executor/util/hpa"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
@@ -157,10 +157,6 @@ func (caaf *Container) Run(ctx context.Context, mgr *errgroup.Group) {
 		caaf.logger.Error(nil, "failed to wait for caches to sync; stopping container manager")
 		return
 	}
-	mgr.Go(func() error {
-		caaf.idleObjectReaper(ctx)
-		return nil
-	})
 }
 
 // GetTypeName returns the executor type name.
@@ -706,83 +702,12 @@ func (caaf *Container) updateStatus(fn *fv1.Function, err error, message string)
 	caaf.logger.Error(err, "function status update", "function", fn, "message", message)
 }
 
-// idleObjectReaper reaps objects after certain idle time
-func (caaf *Container) idleObjectReaper(ctx context.Context) {
-	// calling function doIdleObjectReaper() repeatedly at given interval of time
-	wait.UntilWithContext(ctx, caaf.doIdleObjectReaper, caaf.objectReaperIntervalSecond)
-}
-
-func (caaf *Container) doIdleObjectReaper(ctx context.Context) {
-	funcSvcs, err := caaf.fsCache.ListOld(time.Second * 5)
-	if err != nil {
-		caaf.logger.Error(err, "error reaping idle pods")
-		return
-	}
-
-	for i := range funcSvcs {
-		fsvc := funcSvcs[i]
-
-		if fsvc.Executor != fv1.ExecutorTypeContainer {
-			continue
-		}
-
-		fn, err := caaf.fissionClient.CoreV1().Functions(fsvc.Function.Namespace).Get(ctx, fsvc.Function.Name, metav1.GetOptions{})
-		if err != nil {
-			// CaaF manager handles the function delete event and clean cache/kubeobjs itself,
-			// so we ignore the not found error for functions with CaaF executor type here.
-			if k8sErrs.IsNotFound(err) && fsvc.Executor == fv1.ExecutorTypeContainer {
-				continue
-			}
-			caaf.logger.Error(err, "error getting function", "function", fsvc.Function.Name)
-			continue
-		}
-
-		idlePodReapTime := caaf.defaultIdlePodReapTime
-		if fn.Spec.IdleTimeout != nil {
-			idlePodReapTime = time.Duration(*fn.Spec.IdleTimeout) * time.Second
-		}
-
-		if time.Since(fsvc.Atime) < idlePodReapTime {
-			continue
-		}
-
-		go func() {
-			deployObj := getDeploymentObj(fsvc.KubernetesObjects)
-			if deployObj == nil {
-				caaf.logger.Error(err, "error finding function deployment", "function", fsvc.Function.Name)
-				return
-			}
-
-			currentDeploy, err := caaf.kubernetesClient.AppsV1().
-				Deployments(deployObj.Namespace).Get(ctx, deployObj.Name, metav1.GetOptions{})
-			if err != nil {
-				caaf.logger.Error(err, "error getting function deployment", "function", fsvc.Function.Name)
-				return
-			}
-
-			minScale := int32(fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale)
-
-			// do nothing if the current replicas is already lower than minScale
-			if *currentDeploy.Spec.Replicas <= minScale {
-				return
-			}
-
-			err = caaf.scaleDeployment(ctx, deployObj.Namespace, deployObj.Name, minScale)
-			if err != nil {
-				caaf.logger.Error(err, "error scaling down function deployment", "function", fsvc.Function.Name)
-			}
-		}()
-	}
-}
-
-func getDeploymentObj(kubeobjs []apiv1.ObjectReference) *apiv1.ObjectReference {
-	for _, kubeobj := range kubeobjs {
-		switch strings.ToLower(kubeobj.Kind) {
-		case "deployment":
-			return &kubeobj
-		}
-	}
-	return nil
+// IdleStrategy returns the container idle-reaping strategy (scale the function
+// deployment down to MinScale), run by the shared idle reaper. checkEnv is
+// false: the container executor never inspected the environment list.
+func (caaf *Container) IdleStrategy() idle.Strategy {
+	return idle.NewScaleDownStrategy(caaf.logger, fv1.ExecutorTypeContainer, caaf.fissionClient,
+		caaf.fsCache, caaf.kubernetesClient, caaf.defaultIdlePodReapTime, caaf.objectReaperIntervalSecond, false)
 }
 
 func (caaf *Container) DumpDebugInfo(ctx context.Context) error {

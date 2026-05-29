@@ -14,11 +14,16 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/executor/fscache"
+	"github.com/fission/fission/pkg/executor/reaper/idle"
 )
 
 type ExecutorType interface {
 	// Run runs background job.
 	Run(context.Context, *errgroup.Group)
+
+	// IdleStrategy returns this executor type's idle-reaping strategy, driven by
+	// the shared idle reaper instead of a per-type goroutine.
+	IdleStrategy() idle.Strategy
 
 	// GetTypeName returns the name of executor type
 	GetTypeName(context.Context) fv1.ExecutorType
