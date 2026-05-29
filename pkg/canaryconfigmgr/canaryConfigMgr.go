@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"net/url"
 	"os"
 	"slices"
@@ -269,16 +270,17 @@ func (m *canaryConfigMgr) updateHttpTriggerWithRetries(ctx context.Context, name
 	key := types.NamespacedName{Namespace: namespace, Name: name}
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		trigger := &fv1.HTTPTrigger{}
-		trigger := &fv1.HTTPTrigger{}
 		if err := m.apiReader.Get(ctx, key, trigger); err != nil {
 			return err
 		}
+		// Copy the computed weights into the freshly-read trigger's own map
+		// rather than assigning fnWeights wholesale: this keeps the two trigger
+		// objects from sharing one map and preserves any unrelated weight
+		// entries on the live object.
 		if trigger.Spec.FunctionReference.FunctionWeights == nil {
 			trigger.Spec.FunctionReference.FunctionWeights = map[string]int{}
 		}
-		for fn, w := range fnWeights {
-			trigger.Spec.FunctionReference.FunctionWeights[fn] = w
-		}
+		maps.Copy(trigger.Spec.FunctionReference.FunctionWeights, fnWeights)
 		return m.client.Update(ctx, trigger)
 	})
 	if err != nil {
