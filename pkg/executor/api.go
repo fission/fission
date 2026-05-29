@@ -222,7 +222,7 @@ func (executor *Executor) healthHandler(w http.ResponseWriter, r *http.Request) 
 // standby is ready to take over the moment it wins the lease. /healthz stays a
 // cheap liveness check.
 func (executor *Executor) readyzHandler(w http.ResponseWriter, r *http.Request) {
-	if executor.leaderElection && (executor.elector == nil || !executor.elector.IsLeader()) {
+	if executor.leaderElection && !executor.isLeader.Load() {
 		http.Error(w, "not leader", http.StatusServiceUnavailable)
 		return
 	}

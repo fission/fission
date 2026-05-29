@@ -6,6 +6,7 @@ package executor
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -16,7 +17,11 @@ import (
 
 	"github.com/dchest/uniuri"
 	"github.com/go-logr/logr"
+	"github.com/prometheus/client_golang/prometheus"
 	k8sCache "k8s.io/client-go/tools/cache"
+	ctrl "sigs.k8s.io/controller-runtime"
+	ctrlmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
@@ -29,11 +34,12 @@ import (
 	"github.com/fission/fission/pkg/executor/util"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
+	"github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
 	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/leaderelection"
 	"github.com/fission/fission/pkg/utils/manager"
-	"github.com/fission/fission/pkg/utils/metrics"
+	fissionmetrics "github.com/fission/fission/pkg/utils/metrics"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
@@ -54,8 +60,10 @@ type (
 		// leader (or leader election is disabled) AND informer caches have
 		// synced, so non-leaders are kept out of the Service endpoints and a
 		// just-elected leader is not advertised before its caches are warm.
+		// isLeader is set by the leader-only controllers runnable under the
+		// controller-runtime Manager.
 		leaderElection bool
-		elector        *leaderelection.Elector
+		isLeader       atomic.Bool
 		cachesSynced   atomic.Bool
 	}
 	createFuncServiceRequest struct {
@@ -70,29 +78,12 @@ type (
 	}
 )
 
-// awaitLeading blocks until leadership is acquired (leadingCh is closed) or ctx
-// is cancelled. Returns true if leadership was acquired, false if ctx ended
-// first. When leader election is disabled the caller passes a pre-closed
-// channel, so this returns true immediately.
-func awaitLeading(ctx context.Context, leadingCh <-chan struct{}) bool {
-	select {
-	case <-leadingCh:
-		return true
-	case <-ctx.Done():
-		return false
-	}
-}
-
-// MakeExecutor returns an Executor for given ExecutorType(s). All mutating
-// background work (configmap/secret informers that drive re-specialization,
-// the per-type controllers and reapers, and the function-service serializer)
-// is gated on leadership via leadingCh so it runs only on the elected leader.
-// leadingCh is pre-closed when leader election is disabled, preserving the
-// historical single-replica behaviour.
-func MakeExecutor(ctx context.Context, logger logr.Logger, mgr manager.Interface, cms *cms.ConfigSecretController,
-	fissionClient versioned.Interface, types map[fv1.ExecutorType]executortype.ExecutorType,
-	leadingCh <-chan struct{}, informers ...k8sCache.SharedIndexInformer) (*Executor, error) {
-	executor := &Executor{
+// MakeExecutor returns an Executor for the given ExecutorType(s). It only builds
+// the object; the mutating controllers are started by executorControllers (a
+// leader-only runnable) under the controller-runtime Manager.
+func MakeExecutor(logger logr.Logger, cms *cms.ConfigSecretController,
+	fissionClient versioned.Interface, types map[fv1.ExecutorType]executortype.ExecutorType) *Executor {
+	return &Executor{
 		logger:        logger.WithName("executor"),
 		cms:           cms,
 		fissionClient: fissionClient,
@@ -100,32 +91,101 @@ func MakeExecutor(ctx context.Context, logger logr.Logger, mgr manager.Interface
 
 		requestChan: make(chan *createFuncServiceRequest),
 	}
+}
 
-	// Run all informers (leader only)
-	for _, informer := range informers {
-		mgr.Add(ctx, func(ctx context.Context) {
-			if !awaitLeading(ctx, leadingCh) {
-				return
-			}
-			informer.Run(ctx.Done())
-		})
-	}
+// executorControllers runs the executor's mutating controllers on the elected
+// leader only (NeedLeaderElection). When leader election is disabled the Manager
+// runs it unconditionally, preserving single-replica behaviour. Non-leaders
+// therefore never start it, so /readyz (served by the API server on every
+// replica) reports not-ready and the Service excludes them.
+type executorControllers struct {
+	logger           logr.Logger
+	api              *Executor
+	executorTypes    map[fv1.ExecutorType]executortype.ExecutorType
+	fissionInformers []k8sCache.SharedIndexInformer
+	startFactories   func(stopCh <-chan struct{})
+	waitForSync      func(stopCh <-chan struct{}) bool
+	adoptResources   bool
+}
 
-	for _, et := range types {
-		mgr.Add(ctx, func(ctx context.Context) {
-			if !awaitLeading(ctx, leadingCh) {
-				return
-			}
-			et.Run(ctx, mgr)
-		})
+func (c *executorControllers) NeedLeaderElection() bool { return true }
+
+func (c *executorControllers) Start(ctx context.Context) error {
+	gm := manager.New()
+
+	// Read-only executortype informer factories (listers used by et.Run).
+	c.startFactories(ctx.Done())
+
+	// ConfigMap/Secret informers drive re-specialization (mutating), so they
+	// run on the leader only.
+	for _, informer := range c.fissionInformers {
+		gm.Add(ctx, func(ic context.Context) { informer.Run(ic.Done()) })
 	}
-	mgr.Add(ctx, func(ctx context.Context) {
-		if !awaitLeading(ctx, leadingCh) {
-			return
+	for _, et := range c.executorTypes {
+		gm.Add(ctx, func(ic context.Context) { et.Run(ic, gm) })
+	}
+	gm.Add(ctx, func(ic context.Context) { c.api.serveCreateFuncServices(ic) })
+
+	runAdoptCleanup(ctx, c.executorTypes, c.adoptResources)
+
+	c.api.isLeader.Store(true)
+	go func() {
+		if c.waitForSync(ctx.Done()) {
+			c.api.cachesSynced.Store(true)
+			c.logger.Info("executor caches synced; ready to serve")
 		}
-		executor.serveCreateFuncServices(ctx)
-	})
-	return executor, nil
+	}()
+
+	<-ctx.Done()
+	c.api.isLeader.Store(false)
+	gm.Wait()
+	return nil
+}
+
+// executorAPIServer serves the executor HTTP API (getServiceForFunction plus the
+// /healthz and /readyz probes) on every replica, so non-leaders report
+// not-ready and are kept out of the Service endpoints.
+type executorAPIServer struct {
+	api  *Executor
+	port int
+}
+
+func (a *executorAPIServer) NeedLeaderElection() bool { return false }
+
+func (a *executorAPIServer) Start(ctx context.Context) error {
+	gm := manager.New()
+	a.api.Serve(ctx, gm, a.port)
+	gm.Wait()
+	return nil
+}
+
+// runAdoptCleanup adopts pre-existing resources (optional) and cleans up stale
+// executor objects with a hard timeout. Runs on the leader.
+func runAdoptCleanup(ctx context.Context, executorTypes map[fv1.ExecutorType]executortype.ExecutorType, adopt bool) {
+	wg := &sync.WaitGroup{}
+	for _, et := range executorTypes {
+		wg.Go(func() {
+			if adopt {
+				et.AdoptExistingResources(ctx)
+			}
+			et.CleanupOldExecutorObjects(ctx)
+		})
+	}
+	// TODO: use context to control the waiting time once kubernetes client supports it.
+	util.WaitTimeout(wg, 30*time.Second)
+}
+
+// bindAddr resolves a server bind address from env, defaulting to def and
+// prefixing ":" when only a port is given.
+func bindAddr(env, def string) string {
+	addr := os.Getenv(env)
+	if addr == "" {
+		addr = def
+	}
+	if !strings.Contains(addr, ":") {
+		addr = ":" + addr
+	}
+	return addr
 }
 
 // All non-cached function service requests go through this goroutine
@@ -287,6 +347,10 @@ func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, 
 	if err != nil {
 		logger.Error(err, "error making the metrics client")
 	}
+	restConfig, err := clientGen.GetRestConfig()
+	if err != nil {
+		return fmt.Errorf("error getting rest config: %w", err)
+	}
 
 	err = crd.WaitForFunctionCRDs(ctx, logger, fissionClient)
 	if err != nil {
@@ -363,58 +427,10 @@ func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, 
 
 	adoptExistingResources, _ := strconv.ParseBool(os.Getenv("ADOPT_EXISTING_RESOURCES"))
 
-	// Leader election (opt-in via LEADER_ELECTION_ENABLED). Disabled by
-	// default: the elector reports itself leader immediately, so every gated
-	// path below runs exactly as it did historically. When enabled, only the
-	// elected leader runs the mutating controllers/reapers and is advertised
-	// Ready; on losing leadership we cancel runCtx so the process drains and
-	// restarts (the standby then takes over). Informer factories run on every
-	// replica so a standby keeps warm caches for fast failover.
-	leaderElectionEnabled, _ := strconv.ParseBool(os.Getenv("LEADER_ELECTION_ENABLED"))
-	runCtx, cancelRun := context.WithCancel(ctx)
-	leNamespace := leaderelection.Namespace()
-	if leaderElectionEnabled && leNamespace == "" {
-		cancelRun()
-		return fmt.Errorf("leader election enabled but pod namespace is unknown; set POD_NAMESPACE")
-	}
-	elector := leaderelection.New(leaderElectionEnabled, kubernetesClient, leNamespace,
-		"fission-executor", leaderelection.Identity(), logger,
-		leaderelection.WithOnStoppedLeading(cancelRun))
-	mgr.Add(ctx, func(context.Context) {
-		elector.Run(runCtx)
-	})
-	leadingCh := elector.Leading()
-
-	runAdoptCleanup := func(ctx context.Context) {
-		wg := &sync.WaitGroup{}
-		for _, et := range executorTypes {
-			wg.Go(func() {
-				if adoptExistingResources {
-					et.AdoptExistingResources(ctx)
-				}
-				et.CleanupOldExecutorObjects(ctx)
-			})
-		}
-		// set hard timeout for resource adoption
-		// TODO: use context to control the waiting time once kubernetes client supports it.
-		util.WaitTimeout(wg, 30*time.Second)
-	}
-	if leaderElectionEnabled {
-		// Can't block startup waiting for an election; defer to the leader.
-		mgr.Add(runCtx, func(ctx context.Context) {
-			if awaitLeading(ctx, leadingCh) {
-				runAdoptCleanup(ctx)
-			}
-		})
-	} else {
-		runAdoptCleanup(ctx)
-	}
-
 	configMapInformer := utils.GetK8sInformersForNamespaces(kubernetesClient, time.Minute*30, fv1.ConfigMaps)
 	secretInformer := utils.GetK8sInformersForNamespaces(kubernetesClient, time.Minute*30, fv1.Secrets)
-	cms, err := cms.MakeConfigSecretController(ctx, logger, fissionClient, kubernetesClient, executorTypes, configMapInformer, secretInformer)
+	cmsController, err := cms.MakeConfigSecretController(ctx, logger, fissionClient, kubernetesClient, executorTypes, configMapInformer, secretInformer)
 	if err != nil {
-		cancelRun()
 		return fmt.Errorf("error creating configmap and secret controller: %w", err)
 	}
 
@@ -425,61 +441,92 @@ func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, 
 	for _, informer := range secretInformer {
 		fissionInformers = append(fissionInformers, informer)
 	}
-	// Informer factories run on every replica (read-only watches) so a standby
-	// keeps warm caches; runCtx stops them if this leader loses its lease.
-	for _, factory := range finformerFactory {
-		factory.Start(runCtx.Done())
-	}
-	for _, informerFactory := range gpmInformerFactory {
-		informerFactory.Start(runCtx.Done())
-	}
-	for _, informerFactory := range ndmInformerFactory {
-		informerFactory.Start(runCtx.Done())
-	}
-	for _, informerFactory := range cnmInformerFactory {
-		informerFactory.Start(runCtx.Done())
+
+	// Leader election is owned by the controller-runtime Manager (native),
+	// opt-in via LEADER_ELECTION_ENABLED. When disabled the Manager runs every
+	// runnable unconditionally, so single-replica behaviour is unchanged. On
+	// lease loss the Manager stops and the API server's /healthz (port 8888)
+	// goes down, so the kubelet restarts the pod and it rejoins as a standby.
+	leaderElectionEnabled, _ := strconv.ParseBool(os.Getenv("LEADER_ELECTION_ENABLED"))
+	leNamespace := leaderelection.Namespace()
+	if leaderElectionEnabled && leNamespace == "" {
+		return fmt.Errorf("leader election enabled but pod namespace is unknown; set POD_NAMESPACE")
 	}
 
-	api, err := MakeExecutor(runCtx, logger, mgr, cms, fissionClient, executorTypes,
-		leadingCh, fissionInformers...,
-	)
-	if err != nil {
-		cancelRun()
-		return err
-	}
+	api := MakeExecutor(logger, cmsController, fissionClient, executorTypes)
 	api.leaderElection = leaderElectionEnabled
-	api.elector = elector
 
-	// Flip readiness on once we are the leader (or election is disabled) and
-	// the function informers have synced, so /readyz only reports Ready when
-	// this replica can actually serve.
-	mgr.Add(runCtx, func(ctx context.Context) {
-		if !awaitLeading(ctx, leadingCh) {
-			return
+	// Fission's collectors register into controller-runtime's global registry;
+	// the Manager's metrics server then serves them on METRICS_ADDR (:8080).
+	var alreadyRegistered prometheus.AlreadyRegisteredError
+	if err := ctrlmetrics.Registry.Register(fissionmetrics.Registry); err != nil && !errors.As(err, &alreadyRegistered) {
+		logger.Error(err, "failed to register fission metrics collectors")
+	}
+
+	metricsBind := bindAddr("METRICS_ADDR", "8080")
+	if ephemeral, _ := strconv.ParseBool(os.Getenv("FISSION_TEST_EPHEMERAL_SERVERS")); ephemeral {
+		// In-process e2e harness: bind an ephemeral metrics port to avoid clashes.
+		metricsBind = ":0"
+	}
+
+	crMgr, err := ctrl.NewManager(restConfig, ctrl.Options{
+		Scheme:                        scheme.Scheme,
+		Metrics:                       metricsserver.Options{BindAddress: metricsBind},
+		HealthProbeBindAddress:        "0", // /healthz + /readyz stay on the API mux (port)
+		LeaderElection:                leaderElectionEnabled,
+		LeaderElectionID:              "fission-executor",
+		LeaderElectionNamespace:       leNamespace,
+		LeaderElectionReleaseOnCancel: true,
+		Logger:                        logger,
+	})
+	if err != nil {
+		return fmt.Errorf("unable to set up executor manager: %w", err)
+	}
+
+	startFactories := func(stopCh <-chan struct{}) {
+		for _, factory := range finformerFactory {
+			factory.Start(stopCh)
 		}
+		for _, factory := range gpmInformerFactory {
+			factory.Start(stopCh)
+		}
+		for _, factory := range ndmInformerFactory {
+			factory.Start(stopCh)
+		}
+		for _, factory := range cnmInformerFactory {
+			factory.Start(stopCh)
+		}
+	}
+	waitForSync := func(stopCh <-chan struct{}) bool {
 		synced := true
 		for _, factory := range finformerFactory {
-			for _, ok := range factory.WaitForCacheSync(ctx.Done()) {
+			for _, ok := range factory.WaitForCacheSync(stopCh) {
 				if !ok {
 					synced = false
 				}
 			}
 		}
-		if synced {
-			api.cachesSynced.Store(true)
-			logger.Info("executor caches synced; ready to serve")
-		}
-	})
+		return synced
+	}
 
 	utils.CreateMissingPermissionForSA(ctx, kubernetesClient, logger)
 
-	mgr.Add(runCtx, func(ctx context.Context) {
-		metrics.ServeMetrics(ctx, "executor", logger, mgr)
-	})
+	controllers := &executorControllers{
+		logger:           logger,
+		api:              api,
+		executorTypes:    executorTypes,
+		fissionInformers: fissionInformers,
+		startFactories:   startFactories,
+		waitForSync:      waitForSync,
+		adoptResources:   adoptExistingResources,
+	}
+	if err := crMgr.Add(controllers); err != nil {
+		return fmt.Errorf("unable to add executor controllers: %w", err)
+	}
+	if err := crMgr.Add(&executorAPIServer{api: api, port: port}); err != nil {
+		return fmt.Errorf("unable to add executor api server: %w", err)
+	}
 
-	mgr.Add(runCtx, func(ctx context.Context) {
-		api.Serve(ctx, mgr, port)
-	})
-
-	return nil
+	logger.Info("starting executor manager", "instanceID", executorInstanceID, "leaderElection", leaderElectionEnabled)
+	return crMgr.Start(ctx)
 }
