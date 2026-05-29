@@ -222,4 +222,15 @@ rules:
   - watch
   - get
   - update
+# canaryconfigs/status is a separate RBAC resource once the CanaryConfig
+# /status subresource exists; the reconciler writes the rollout's terminal
+# status (succeeded/failed) and the Progressing/Ready conditions through it.
+- apiGroups:
+  - fission.io
+  resources:
+  - canaryconfigs/status
+  verbs:
+  - get
+  - update
+  - patch
 {{- end }}

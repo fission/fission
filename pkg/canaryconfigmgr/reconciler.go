@@ -113,7 +113,16 @@ func (r *CanaryConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request
 // (and nil returned) when nothing would change — important on the Pending fast
 // path that runs every WeightIncrementDuration. The caller decides whether a
 // write failure should requeue.
+//
+// It uses a status Patch computed from a pre-mutation DeepCopy
+// (client.MergeFrom) rather than Update: the merge patch carries no
+// ResourceVersion precondition, so a status write never fails with a
+// conflict against the cache-read object. That matters on the terminal path —
+// a conflict there would requeue with the rollout still Pending, and step()
+// would run again and could shift the HTTPTrigger weights a second time after
+// a rollback.
 func (r *CanaryConfigReconciler) writeStatus(ctx context.Context, cfg *fv1.CanaryConfig, status string) error {
+	original := cfg.DeepCopy()
 	changed := cfg.Status.Status != status
 	cfg.Status.Status = status
 	if setCanaryConfigConditions(&cfg.Status, status, cfg.Generation) {
@@ -122,5 +131,5 @@ func (r *CanaryConfigReconciler) writeStatus(ctx context.Context, cfg *fv1.Canar
 	if !changed {
 		return nil
 	}
-	return r.client.Status().Update(ctx, cfg)
+	return r.client.Status().Patch(ctx, cfg, client.MergeFrom(original))
 }
