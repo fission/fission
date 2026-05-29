@@ -28,9 +28,6 @@ import (
 	"github.com/go-logr/logr"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
-	"github.com/fission/fission/pkg/conditions"
-	ferror "github.com/fission/fission/pkg/error"
-	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	"github.com/fission/fission/pkg/publisher"
 	"github.com/fission/fission/pkg/utils"
 )
@@ -38,8 +35,7 @@ import (
 type (
 	KubeWatcher struct {
 		logger           logr.Logger
-		watches          map[types.UID]*watchSubscription
-		fissionClient    versioned.Interface
+		watches          map[types.NamespacedName]*watchSubscription
 		kubernetesClient kubernetes.Interface
 		publisher        publisher.Publisher
 	}
@@ -55,11 +51,10 @@ type (
 	}
 )
 
-func MakeKubeWatcher(ctx context.Context, logger logr.Logger, fissionClient versioned.Interface, kubernetesClient kubernetes.Interface, publisher publisher.Publisher) *KubeWatcher {
+func MakeKubeWatcher(ctx context.Context, logger logr.Logger, kubernetesClient kubernetes.Interface, publisher publisher.Publisher) *KubeWatcher {
 	kw := &KubeWatcher{
 		logger:           logger.WithName("kube_watcher"),
-		watches:          make(map[types.UID]*watchSubscription),
-		fissionClient:    fissionClient,
+		watches:          make(map[types.NamespacedName]*watchSubscription),
 		kubernetesClient: kubernetesClient,
 		publisher:        publisher,
 	}
@@ -134,66 +129,37 @@ func createKubernetesWatch(ctx context.Context, kubeClient kubernetes.Interface,
 	return wi, err
 }
 
+// addWatch (re)starts the watch subscription for a trigger. An existing
+// subscription for the same trigger is stopped before being replaced so a
+// re-reconcile (e.g. a spec change or a retried failure) can't leak the old
+// watch goroutine. Keyed by namespaced name so the reconciler can tear it down
+// on a delete, when only the name is known. Status conditions are written by
+// the reconciler via the shared helper, not here.
 func (kw *KubeWatcher) addWatch(ctx context.Context, w *fv1.KubernetesWatchTrigger) error {
 	kw.logger.Info("adding watch", "name", w.Name, "function", w.Spec.FunctionReference)
 	ws, err := MakeWatchSubscription(ctx, kw.logger.WithName("watchsubscription"), w, kw.kubernetesClient, kw.publisher)
 	if err != nil {
-		kw.markWatchTriggerSubscribed(ctx, w, metav1.ConditionFalse, fv1.KubernetesWatchTriggerReasonStartFailed, err.Error())
 		return err
 	}
-	kw.watches[w.UID] = ws
-	kw.markWatchTriggerSubscribed(ctx, w, metav1.ConditionTrue, fv1.KubernetesWatchTriggerReasonSubscribed, "watch loop is running")
+	key := types.NamespacedName{Namespace: w.Namespace, Name: w.Name}
+	if old, ok := kw.watches[key]; ok {
+		old.stop()
+	}
+	kw.watches[key] = ws
 	return nil
 }
 
-// markWatchTriggerSubscribed writes Subscribed + Ready conditions on a
-// KubernetesWatchTrigger. Best-effort via the status subresource.
-// Fast-path skips the apiserver call when in-memory conditions already
-// match the desired state.
-func (kw *KubeWatcher) markWatchTriggerSubscribed(ctx context.Context, w *fv1.KubernetesWatchTrigger, status metav1.ConditionStatus, reason, message string) {
-	if kw.fissionClient == nil {
-		return
-	}
-	// The failure path embeds err.Error() which can be unbounded.
-	message = conditions.TruncateMessage(message)
-	wantSub := metav1.Condition{
-		Type: fv1.KubernetesWatchTriggerConditionSubscribed, Status: status,
-		ObservedGeneration: w.Generation, Reason: reason, Message: message,
-	}
-	wantReady := metav1.Condition{
-		Type: fv1.KubernetesWatchTriggerConditionReady, Status: status,
-		ObservedGeneration: w.Generation, Reason: reason, Message: message,
-	}
-	if conditions.IsAt(w.Status.Conditions, wantSub) && conditions.IsAt(w.Status.Conditions, wantReady) {
-		return
-	}
-	cur, err := kw.fissionClient.CoreV1().KubernetesWatchTriggers(w.Namespace).Get(ctx, w.Name, metav1.GetOptions{})
-	if err != nil {
-		kw.logger.V(1).Info("kuberneteswatchtrigger status: get failed", "name", w.Name, "namespace", w.Namespace, "error", err)
-		return
-	}
-	wantSub.ObservedGeneration = cur.Generation
-	wantReady.ObservedGeneration = cur.Generation
-	if conditions.IsAt(cur.Status.Conditions, wantSub) && conditions.IsAt(cur.Status.Conditions, wantReady) {
-		return
-	}
-	conditions.Set(&cur.Status.Conditions, wantSub)
-	conditions.Set(&cur.Status.Conditions, wantReady)
-	if _, err := kw.fissionClient.CoreV1().KubernetesWatchTriggers(w.Namespace).UpdateStatus(ctx, cur, metav1.UpdateOptions{}); err != nil {
-		kw.logger.V(1).Info("kuberneteswatchtrigger status: update failed", "name", w.Name, "namespace", w.Namespace, "error", err)
-	}
-}
-
-func (kw *KubeWatcher) removeWatch(w *fv1.KubernetesWatchTrigger) error {
-	kw.logger.Info("removing watch", "name", w.Name, "function", w.Spec.FunctionReference)
-	ws, ok := kw.watches[w.UID]
+// removeWatch stops and drops the watch subscription for a deleted trigger.
+// No-op if the trigger was never watched (e.g. a delete observed before any
+// add).
+func (kw *KubeWatcher) removeWatch(key types.NamespacedName) {
+	ws, ok := kw.watches[key]
 	if !ok {
-		return ferror.MakeError(ferror.ErrorNotFound,
-			fmt.Sprintf("watch doesn't exist: %v", w.ObjectMeta))
+		return
 	}
-	delete(kw.watches, w.UID)
+	kw.logger.Info("removing watch", "name", key.Name, "namespace", key.Namespace)
+	delete(kw.watches, key)
 	ws.stop()
-	return nil
 }
 
 func MakeWatchSubscription(ctx context.Context, logger logr.Logger, w *fv1.KubernetesWatchTrigger, kubeClient kubernetes.Interface, publisher publisher.Publisher) (*watchSubscription, error) {
