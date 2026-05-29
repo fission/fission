@@ -25,11 +25,25 @@ func TestLeaderRunnable(t *testing.T) {
 	assert.True(t, ran, "Start must invoke the wrapped function")
 }
 
-func TestNewLeaderElected(t *testing.T) {
-	// LEADER_ELECTION_ENABLED unset -> election disabled; the Manager is built
-	// without contacting the API server (no Start), so a dummy rest.Config is
-	// sufficient to exercise construction.
+func TestNewLeaderElectedDisabled(t *testing.T) {
+	// With election disabled the Manager is built without contacting the API
+	// server (no Start), so a dummy rest.Config is sufficient. Pin
+	// LEADER_ELECTION_ENABLED so the test is deterministic regardless of the
+	// ambient environment.
+	t.Setenv("LEADER_ELECTION_ENABLED", "false")
 	mgr, err := NewLeaderElected(&rest.Config{Host: "http://127.0.0.1:1"}, "test-lock", logr.Discard())
 	require.NoError(t, err)
 	assert.NotNil(t, mgr)
+}
+
+func TestNewLeaderElectedAutoDetectsNamespace(t *testing.T) {
+	// With election enabled the Manager auto-detects the lease namespace from
+	// the in-cluster service-account mount (we deliberately don't set
+	// LeaderElectionNamespace). Running out-of-cluster, that detection fails
+	// fast at construction — confirming the auto-detect path is wired and that
+	// callers don't need to plumb a namespace in-cluster.
+	t.Setenv("LEADER_ELECTION_ENABLED", "true")
+	_, err := NewLeaderElected(&rest.Config{Host: "http://127.0.0.1:1"}, "test-lock", logr.Discard())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "leader election namespace")
 }
