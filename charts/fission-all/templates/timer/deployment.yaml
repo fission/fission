@@ -6,7 +6,7 @@ metadata:
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
     svc: timer
 spec:
-  replicas: 1
+  replicas: {{ dig "replicas" 1 (.Values.timer | default dict) }}
   selector:
     matchLabels:
       svc: timer
@@ -25,6 +25,7 @@ spec:
         command: ["/fission-bundle"]
         args: ["--timer", "--routerUrl", "http://router.{{ .Release.Namespace }}"]
         env:
+        {{- include "leaderElection.envs" (dict "enabled" (dig "leaderElection" "enabled" false (.Values.timer | default dict))) | indent 8 }}
         - name: DEBUG_ENV
           value: {{ .Values.debugEnv | quote }}
         - name: PPROF_ENABLED

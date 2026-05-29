@@ -6,7 +6,7 @@ metadata:
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
     svc: buildermgr
 spec:
-  replicas: 1
+  replicas: {{ dig "replicas" 1 (.Values.buildermgr | default dict) }}
   selector:
     matchLabels:
       svc: buildermgr
@@ -29,6 +29,7 @@ spec:
         command: ["/fission-bundle"]
         args: ["--builderMgr", "--storageSvcUrl", "http://storagesvc.{{ .Release.Namespace }}"]
         env:
+        {{- include "leaderElection.envs" (dict "enabled" (dig "leaderElection" "enabled" false (.Values.buildermgr | default dict))) | indent 8 }}
         - name: FETCHER_IMAGE
           value: {{ include "fetcherImage" . | quote }}
         - name: FETCHER_IMAGE_PULL_POLICY

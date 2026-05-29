@@ -1,5 +1,25 @@
+{{/*
+leases-kuberules grants the coordination.k8s.io/leases permissions a
+control-plane subsystem needs for client-go leader election (active-passive
+HA). Included by every subsystem that supports leader election.
+*/}}
+{{- define "leases-kuberules" }}
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - create
+  - get
+  - list
+  - watch
+  - update
+  - patch
+  - delete
+{{- end }}
 {{- define "buildermgr-kuberules" }}
 rules:
+{{- include "leases-kuberules" . }}
 - apiGroups:
   - ""
   resources:
@@ -40,6 +60,7 @@ rules:
 {{- end }}
 {{- define "canaryconfig-kuberules" }}
 rules:
+{{- include "leases-kuberules" . }}
 - apiGroups:
   - ""
   resources:
@@ -65,6 +86,7 @@ rules:
 {{- end }}
 {{- define "executor-kuberules" }}
 rules:
+{{- include "leases-kuberules" . }}
 - apiGroups:
   - ""
   resources:
@@ -174,6 +196,7 @@ rules:
 {{- end }}
 {{- define "kubewatcher-kuberules" }}
 rules:
+{{- include "leases-kuberules" . }}
 - apiGroups:
   - ""
   resources:
@@ -206,6 +229,7 @@ rules:
 {{- end }}
 {{- define "kafka-kuberules" }}
 rules:
+{{- include "leases-kuberules" . }}
 - apiGroups:
   - ""
   resources:
@@ -254,6 +278,7 @@ rules:
 {{- end }}
 {{- define "keda-kuberules" }}
 rules:
+{{- include "leases-kuberules" . }}
 - apiGroups:
   - ""
   resources:
@@ -380,5 +405,6 @@ rules:
   - watch
 {{- end }}
 {{- define "timer-kuberules" }}
-rules: []
+rules:
+{{- include "leases-kuberules" . }}
 {{- end }}

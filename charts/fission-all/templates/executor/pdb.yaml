@@ -1,0 +1,19 @@
+{{- if .Values.executor.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: executor
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: executor
+spec:
+  {{- if .Values.executor.podDisruptionBudget.minAvailable }}
+  minAvailable: {{ .Values.executor.podDisruptionBudget.minAvailable }}
+  {{- end }}
+  {{- if .Values.executor.podDisruptionBudget.maxUnavailable }}
+  maxUnavailable: {{ .Values.executor.podDisruptionBudget.maxUnavailable }}
+  {{- end }}
+  selector:
+    matchLabels:
+      svc: executor
+{{- end }}

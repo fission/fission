@@ -17,6 +17,7 @@ import (
 	"github.com/fission/fission/pkg/executor/util"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	"github.com/fission/fission/pkg/utils"
+	"github.com/fission/fission/pkg/utils/leaderelection"
 	"github.com/fission/fission/pkg/utils/manager"
 )
 
@@ -52,15 +53,25 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	if err != nil {
 		return err
 	}
-	envWatcher.Run(ctx, mgr)
 
 	pkgWatcher := makePackageWatcher(bmLogger, fissionClient,
 		kubernetesClient, storageSvcUrl,
 		utils.GetK8sInformersForNamespaces(kubernetesClient, time.Minute*30, fv1.Pods),
 		utils.GetInformersForNamespaces(fissionClient, time.Minute*30, fv1.PackagesResource))
-	err = pkgWatcher.Run(ctx, mgr)
+
+	// Active-passive HA: only the elected leader watches environments/packages
+	// and runs builds, so two replicas don't run duplicate/competing builds.
+	// No-op when LEADER_ELECTION_ENABLED is unset (single-replica default).
+	elector, runCtx, err := leaderelection.FromEnv(ctx, kubernetesClient, "fission-buildermgr", bmLogger)
 	if err != nil {
 		return err
 	}
+	mgr.Add(ctx, func(context.Context) { elector.Run(runCtx) })
+	mgr.Add(runCtx, elector.Gated(func(c context.Context) { envWatcher.Run(c, mgr) }))
+	mgr.Add(runCtx, elector.Gated(func(c context.Context) {
+		if err := pkgWatcher.Run(c, mgr); err != nil {
+			bmLogger.Error(err, "package watcher stopped")
+		}
+	}))
 	return nil
 }

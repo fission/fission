@@ -6,8 +6,8 @@ package router
 
 import (
 	"context"
+	"fmt"
 	"net/http"
-	"os"
 	"slices"
 	"strings"
 	"time"
@@ -134,6 +134,58 @@ func routerHealthHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+// routerReadinessHandler reports 200 only once the trigger and function
+// informer caches have synced. The kubelet keeps a freshly started or rolling
+// router pod out of the Service endpoints until its mux is populated, avoiding
+// 404s for valid triggers during startup and rolling updates. /router-healthz
+// stays a cheap liveness check.
+func (ts *HTTPTriggerSet) routerReadinessHandler(w http.ResponseWriter, r *http.Request) {
+	for _, inf := range ts.triggerInformer {
+		if !inf.HasSynced() {
+			http.Error(w, "trigger informer cache not synced", http.StatusServiceUnavailable)
+			return
+		}
+	}
+	for _, inf := range ts.funcInformer {
+		if !inf.HasSynced() {
+			http.Error(w, "function informer cache not synced", http.StatusServiceUnavailable)
+			return
+		}
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
+// panicRecoveryMiddleware keeps a single panicking request (e.g. a write
+// failure deep inside the reverse proxy) from crashing the whole router
+// process and dropping every other in-flight request. It is installed inside
+// buildMuxes so it survives the atomic mux swap and applies to both the public
+// and internal listeners.
+func panicRecoveryMiddleware(logger logr.Logger) mux.MiddlewareFunc {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			defer func() {
+				rec := recover()
+				if rec == nil {
+					return
+				}
+				// net/http uses ErrAbortHandler as a sentinel for an
+				// intentional abort; re-panic so its own recover handles it.
+				if rec == http.ErrAbortHandler {
+					panic(rec)
+				}
+				logger.Error(nil, "recovered from panic in handler",
+					"panic", fmt.Sprintf("%v", rec),
+					"path", r.URL.Path, "method", r.Method)
+				// Best effort: sets 502 if nothing was written yet. If the
+				// response is already underway (e.g. a hijacked/streamed
+				// connection) net/http ignores this with a logged warning.
+				w.WriteHeader(http.StatusBadGateway)
+			}()
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 func versionHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	_, err := w.Write([]byte(info.ApiInfo().String()))
@@ -182,6 +234,11 @@ func (ts *HTTPTriggerSet) buildMuxes(fnTimeoutMap map[types.UID]int) (public, in
 		internal = internal.UseEncodedPath()
 	}
 
+	// Panic recovery is the outermost middleware so it also catches panics in
+	// the metrics/auth middleware below. Applied to both listeners.
+	public.Use(panicRecoveryMiddleware(ts.logger))
+	internal.Use(panicRecoveryMiddleware(ts.logger))
+
 	public.Use(metrics.HTTPMetricMiddleware)
 	if featureConfig.AuthConfig.IsEnabled {
 		public.Use(authMiddleware(featureConfig))
@@ -204,9 +261,12 @@ func (ts *HTTPTriggerSet) buildMuxes(fnTimeoutMap map[types.UID]int) (public, in
 		}
 
 		if rr.resolveResultType != resolveResultSingleFunction && rr.resolveResultType != resolveResultMultipleFunctions {
-			// not implemented yet
+			// Unsupported resolve result type. Report it via the trigger's
+			// status and skip the route (let it 404) instead of crashing the
+			// whole router process and dropping every other trigger with it.
 			ts.logger.Error(nil, "resolve result type not implemented", "type", rr.resolveResultType)
-			os.Exit(1)
+			go ts.updateTriggerStatusFailed(&trigger, fmt.Errorf("resolve result type not implemented: %v", rr.resolveResultType))
+			continue
 		}
 
 		fh := &functionHandler{
@@ -353,6 +413,10 @@ func (ts *HTTPTriggerSet) buildMuxes(fnTimeoutMap map[types.UID]int) (public, in
 	// working without HMAC credentials. Router-owned route; deny CORS
 	// preflights (OPTIONS registered so mux routes them to DenyAllCORS).
 	public.Handle("/router-healthz", httpsecurity.DenyAllCORS(http.HandlerFunc(routerHealthHandler))).Methods(http.MethodGet, http.MethodOptions)
+	// Readiness probe: 200 only once informer caches have synced. Public
+	// listener, next to /router-healthz; no HMAC needed. Router-owned route;
+	// deny CORS (OPTIONS registered so mux routes preflights to DenyAllCORS).
+	public.Handle("/readyz", httpsecurity.DenyAllCORS(http.HandlerFunc(ts.routerReadinessHandler))).Methods(http.MethodGet, http.MethodOptions)
 	// version of application; router-owned route; deny CORS.
 	public.Handle("/_version", httpsecurity.DenyAllCORS(http.HandlerFunc(versionHandler))).Methods(http.MethodGet, http.MethodOptions)
 

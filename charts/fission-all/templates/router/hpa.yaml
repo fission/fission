@@ -1,0 +1,24 @@
+{{- if and (not .Values.router.deployAsDaemonSet) .Values.router.autoscaling.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: router
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: router
+    application: fission-router
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: router
+  minReplicas: {{ .Values.router.autoscaling.minReplicas | default 1 }}
+  maxReplicas: {{ .Values.router.autoscaling.maxReplicas | default 3 }}
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: {{ .Values.router.autoscaling.targetCPUUtilizationPercentage | default 80 }}
+{{- end }}

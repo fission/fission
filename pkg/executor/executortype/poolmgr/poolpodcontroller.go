@@ -7,7 +7,6 @@ package poolmgr
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -254,8 +253,10 @@ func (p *PoolPodController) Run(ctx context.Context, stopCh <-chan struct{}, mgr
 		waitSynced = append(waitSynced, synced)
 	}
 	if ok := k8sCache.WaitForCacheSync(stopCh, waitSynced...); !ok {
-		p.logger.Info("failed to wait for caches to sync")
-		os.Exit(1)
+		// Usually means the context was cancelled (shutdown or loss of
+		// leadership). Stop cleanly instead of taking the whole process down.
+		p.logger.Info("failed to wait for caches to sync; stopping pool pod controller")
+		return
 	}
 	for range 4 {
 		mgr.Add(ctx, func(ctx context.Context) {

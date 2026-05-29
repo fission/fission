@@ -13,6 +13,10 @@ metadata:
 spec:
 {{- if not .Values.router.deployAsDaemonSet }}
   replicas: {{ .Values.router.replicas | default 1 }}
+  {{- with .Values.router.strategy }}
+  strategy:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 {{- end }}
   selector:
     matchLabels:
@@ -98,7 +102,7 @@ spec:
           {{- toYaml .Values.router.resources | nindent 10 }}
         readinessProbe:
           httpGet:
-            path: "/router-healthz"
+            path: "/readyz"
             port: 8888
           initialDelaySeconds: 1
           periodSeconds: 1
@@ -136,6 +140,9 @@ spec:
         terminationMessagePolicy: {{ .Values.terminationMessagePolicy }}
         {{- end }}
       serviceAccountName: fission-router
+      {{- with .Values.router.terminationGracePeriodSeconds }}
+      terminationGracePeriodSeconds: {{ . }}
+      {{- end }}
       volumes:
       - name: config-volume
         configMap:

@@ -215,6 +215,24 @@ func (executor *Executor) healthHandler(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(http.StatusOK)
 }
 
+// readyzHandler reports readiness for the executor Service. It returns 200 only
+// when this replica is the leader (or leader election is disabled) AND its
+// informer caches have synced. Non-leaders report 503 so the kubelet keeps
+// them out of the Service endpoints, routing all traffic to the leader; the
+// standby is ready to take over the moment it wins the lease. /healthz stays a
+// cheap liveness check.
+func (executor *Executor) readyzHandler(w http.ResponseWriter, r *http.Request) {
+	if executor.leaderElection && (executor.elector == nil || !executor.elector.IsLeader()) {
+		http.Error(w, "not leader", http.StatusServiceUnavailable)
+		return
+	}
+	if !executor.cachesSynced.Load() {
+		http.Error(w, "caches not synced", http.StatusServiceUnavailable)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
 func (executor *Executor) unTapService(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	body, err := io.ReadAll(r.Body)
@@ -275,7 +293,7 @@ func (executor *Executor) GetHandler() http.Handler {
 	masterOld := []byte(os.Getenv("FISSION_INTERNAL_AUTH_SECRET_OLD"))
 	r.Use(hmacauth.ServiceVerifier(master, masterOld, hmacauth.ServiceExecutor, hmacauth.VerifierOpts{
 		SkewSec:      60,
-		Bypass:       []string{"/healthz"},
+		Bypass:       []string{"/healthz", "/readyz"},
 		MaxBodyBytes: hmacauth.DefaultMaxBodyBytes,
 		Logger:       executor.logger.WithName("hmac"),
 	}))
@@ -284,6 +302,7 @@ func (executor *Executor) GetHandler() http.Handler {
 	r.HandleFunc("/v2/tapService", executor.tapService).Methods("POST") // for backward compatibility
 	r.HandleFunc("/v2/tapServices", executor.tapServices).Methods("POST")
 	r.HandleFunc("/healthz", executor.healthHandler).Methods("GET")
+	r.HandleFunc("/readyz", executor.readyzHandler).Methods("GET")
 	r.HandleFunc("/v2/unTapService", executor.unTapService).Methods("POST")
 	r.HandleFunc("/v2/debugInfo", executor.dumpDebugInfo).Methods("GET")
 	return r

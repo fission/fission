@@ -8,7 +8,7 @@ metadata:
     svc: canaryconfig
     application: fission-canaryconfig
 spec:
-  replicas: 1
+  replicas: {{ dig "replicas" 1 (.Values.canaryDeployment | default dict) }}
   selector:
     matchLabels:
       svc: canaryconfig
@@ -33,6 +33,7 @@ spec:
         command: ["/fission-bundle"]
         args: ["--canaryConfig"]
         env:
+        {{- include "leaderElection.envs" (dict "enabled" (dig "leaderElection" "enabled" false (.Values.canaryDeployment | default dict))) | indent 8 }}
         - name: DEBUG_ENV
           value: {{ .Values.debugEnv | quote }}
         - name: PPROF_ENABLED

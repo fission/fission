@@ -6,7 +6,7 @@ metadata:
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
     svc: kubewatcher
 spec:
-  replicas: 1
+  replicas: {{ dig "replicas" 1 (.Values.kubewatcher | default dict) }}
   selector:
     matchLabels:
       svc: kubewatcher
@@ -25,6 +25,7 @@ spec:
         command: ["/fission-bundle"]
         args: ["--kubewatcher", "--routerUrl", "http://router.{{ .Release.Namespace }}"]
         env:
+        {{- include "leaderElection.envs" (dict "enabled" (dig "leaderElection" "enabled" false (.Values.kubewatcher | default dict))) | indent 8 }}
         - name: DEBUG_ENV
           value: {{ .Values.debugEnv | quote }}
         - name: PPROF_ENABLED

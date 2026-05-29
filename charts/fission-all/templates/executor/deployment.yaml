@@ -6,7 +6,11 @@ metadata:
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
     svc: executor
 spec:
-  replicas: 1
+  replicas: {{ .Values.executor.replicas | default 1 }}
+  {{- with .Values.executor.strategy }}
+  strategy:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   selector:
     matchLabels:
       svc: executor
@@ -29,6 +33,16 @@ spec:
         command: ["/fission-bundle"]
         args: ["--executorPort", "8888"]
         env:
+        - name: LEADER_ELECTION_ENABLED
+          value: {{ .Values.executor.leaderElection.enabled | default false | quote }}
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
         - name: FETCHER_IMAGE
           value: {{ include "fetcherImage" . | quote }}
         - name: FETCHER_IMAGE_PULL_POLICY
@@ -86,7 +100,7 @@ spec:
           {{- toYaml .Values.executor.resources | nindent 10 }}
         readinessProbe:
           httpGet:
-            path: "/healthz"
+            path: "/readyz"
             port: 8888
           initialDelaySeconds: 1
           periodSeconds: 1
@@ -127,6 +141,9 @@ spec:
         terminationMessagePolicy: {{ .Values.terminationMessagePolicy }}
         {{- end }}
       serviceAccountName: fission-executor
+      {{- with .Values.executor.terminationGracePeriodSeconds }}
+      terminationGracePeriodSeconds: {{ . }}
+      {{- end }}
       {{- if or .Values.runtimePodSpec.enabled .Values.coverage.enabled }}
       volumes:
       {{- if .Values.runtimePodSpec.enabled }}

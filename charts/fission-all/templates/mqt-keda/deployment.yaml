@@ -8,7 +8,7 @@ metadata:
     svc: mqtrigger-keda
     messagequeue: keda
 spec:
-  replicas: 1
+  replicas: {{ dig "replicas" 1 (.Values.mqt_keda | default dict) }}
   selector:
     matchLabels:
       svc: mqtrigger-keda
@@ -26,6 +26,7 @@ spec:
         command: ["/fission-bundle"]
         args: ["--mqt_keda", "--routerUrl", "http://router.{{ .Release.Namespace }}"]
         env:
+        {{- include "leaderElection.envs" (dict "enabled" (dig "leaderElection" "enabled" false (.Values.mqt_keda | default dict))) | indent 8 }}
         - name: DEBUG_ENV
           value: {{ .Values.debugEnv | quote }}
         # KEDA-managed connector deployments invoke functions through

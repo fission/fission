@@ -166,8 +166,10 @@ func (deploy *NewDeploy) Run(ctx context.Context, mgr manager.Interface) {
 	}
 
 	if ok := k8sCache.WaitForCacheSync(ctx.Done(), waitSynced...); !ok {
-		deploy.logger.Info("failed to wait for caches to sync")
-		os.Exit(1)
+		// Usually means the context was cancelled (shutdown or loss of
+		// leadership). Stop cleanly instead of taking the whole process down.
+		deploy.logger.Info("failed to wait for caches to sync; stopping newdeploy manager")
+		return
 	}
 	mgr.Add(ctx, func(ctx context.Context) {
 		deploy.idleObjectReaper(ctx)
@@ -791,8 +793,11 @@ func (deploy *NewDeploy) doIdleObjectReaper(ctx context.Context) {
 	for _, namespace := range utils.DefaultNSResolver().FissionResourceNS {
 		envs, err := deploy.fissionClient.CoreV1().Environments(namespace).List(ctx, metav1.ListOptions{})
 		if err != nil {
-			deploy.logger.Error(err, "failed to get environment list", "namespace", namespace)
-			os.Exit(1)
+			// Skip this reaper pass rather than crashing the process; an
+			// incomplete env list could otherwise reap live deployments. The
+			// reaper runs on a ticker and retries on the next interval.
+			deploy.logger.Error(err, "failed to get environment list; skipping this reaper pass", "namespace", namespace)
+			return
 		}
 
 		for _, env := range envs.Items {
