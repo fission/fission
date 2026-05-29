@@ -10,16 +10,16 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/errgroup"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 
 	"github.com/fission/fission/pkg/utils/loggerfactory"
-	"github.com/fission/fission/pkg/utils/manager"
 )
 
 func TestServiceAccountCheck(t *testing.T) {
-	mgr := manager.New()
-	t.Cleanup(mgr.Wait)
+	mgr := &errgroup.Group{}
+	t.Cleanup(func() { _ = mgr.Wait() })
 	ctx := t.Context()
 	kubernetesClient := fake.NewClientset()
 	logger := loggerfactory.GetLogger()

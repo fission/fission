@@ -12,25 +12,25 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/errgroup"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 
 	v1 "github.com/fission/fission/pkg/apis/core/v1"
-	"github.com/fission/fission/pkg/utils/manager"
 	"github.com/fission/fission/test/e2e/framework"
 	"github.com/fission/fission/test/e2e/framework/cli"
 	"github.com/fission/fission/test/e2e/framework/services"
 )
 
 func TestFissionCLI(t *testing.T) {
-	mgr := manager.New()
+	mgr := &errgroup.Group{}
 	f := framework.NewFramework()
 	ctx, cancel := context.WithCancel(t.Context())
 	err := f.Start(ctx)
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		cancel()
-		mgr.Wait()
+		_ = mgr.Wait()
 		err = f.Stop()
 		require.NoError(t, err)
 	})

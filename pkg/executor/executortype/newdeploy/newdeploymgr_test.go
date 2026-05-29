@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/errgroup"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -25,7 +26,6 @@ import (
 	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
-	"github.com/fission/fission/pkg/utils/manager"
 	"github.com/fission/fission/pkg/utils/uuid"
 )
 
@@ -40,8 +40,8 @@ const (
 
 func TestRefreshFuncPods(t *testing.T) {
 	os.Setenv("DEBUG_ENV", "true")
-	mgr := manager.New()
-	t.Cleanup(mgr.Wait)
+	mgr := &errgroup.Group{}
+	t.Cleanup(func() { _ = mgr.Wait() })
 	logger := loggerfactory.GetLogger()
 	kubernetesClient := fake.NewClientset()
 	// Hitting issue https://github.com/kubernetes/kubernetes/issues/126850
@@ -72,8 +72,9 @@ func TestRefreshFuncPods(t *testing.T) {
 	}
 	ndm.nsResolver = &nsResolver
 
-	mgr.Add(ctx, func(ctx context.Context) {
+	mgr.Go(func() error {
 		ndm.Run(ctx, mgr)
+		return nil
 	})
 	t.Log("New deploy manager started")
 

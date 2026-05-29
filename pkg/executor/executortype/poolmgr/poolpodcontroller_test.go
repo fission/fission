@@ -11,6 +11,7 @@ import (
 
 	"github.com/dchest/uniuri"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/errgroup"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
@@ -23,12 +24,11 @@ import (
 	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
-	"github.com/fission/fission/pkg/utils/manager"
 )
 
 func TestPoolPodControllerPodCleanup(t *testing.T) {
-	mgr := manager.New()
-	t.Cleanup(mgr.Wait)
+	mgr := &errgroup.Group{}
+	t.Cleanup(func() { _ = mgr.Wait() })
 	ctx := t.Context()
 	logger := loggerfactory.GetLogger()
 	kubernetesClient := fake.NewClientset()
