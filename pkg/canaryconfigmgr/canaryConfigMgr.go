@@ -269,10 +269,16 @@ func (m *canaryConfigMgr) updateHttpTriggerWithRetries(ctx context.Context, name
 	key := types.NamespacedName{Namespace: namespace, Name: name}
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		trigger := &fv1.HTTPTrigger{}
+		trigger := &fv1.HTTPTrigger{}
 		if err := m.apiReader.Get(ctx, key, trigger); err != nil {
 			return err
 		}
-		trigger.Spec.FunctionReference.FunctionWeights = fnWeights
+		if trigger.Spec.FunctionReference.FunctionWeights == nil {
+			trigger.Spec.FunctionReference.FunctionWeights = map[string]int{}
+		}
+		for fn, w := range fnWeights {
+			trigger.Spec.FunctionReference.FunctionWeights[fn] = w
+		}
 		return m.client.Update(ctx, trigger)
 	})
 	if err != nil {
