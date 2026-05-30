@@ -146,21 +146,11 @@ func updatePackage(ctx context.Context, logger logr.Logger, fissionClient versio
 	pkg *fv1.Package, status fv1.BuildStatus, buildLogs string,
 	uploadResp *fetcher.ArchiveUploadResponse) (*fv1.Package, error) {
 
-	// Preserve existing Conditions across the status replacement so
-	// transitions aren't accidentally wiped when build outcome changes.
-	existingConds := pkg.Status.Conditions
-	pkg.Status = fv1.PackageStatus{
-		BuildStatus:         status,
-		BuildLog:            buildLogs,
-		LastUpdateTimestamp: metav1.Time{Time: time.Now().UTC()},
-		Conditions:          existingConds,
-	}
-	setPackageBuildCondition(&pkg.Status, status, buildLogs, pkg.Generation)
-	desiredStatus := pkg.Status
-
 	// A successful build also writes the deployment archive onto the spec. With
 	// the /status subresource enabled, the apiserver ignores status on a
-	// main-resource Update, so the spec and status are persisted in two calls.
+	// main-resource Update, so persist the spec first (it may bump
+	// metadata.generation) and build the status afterwards, so the conditions'
+	// ObservedGeneration is stamped from the post-update generation.
 	if uploadResp != nil {
 		pkg.Spec.Deployment = fv1.Archive{
 			Type:     fv1.ArchiveTypeUrl,
@@ -173,11 +163,19 @@ func updatePackage(ctx context.Context, logger logr.Logger, fissionClient versio
 			logger.Error(err, e)
 			return nil, fmt.Errorf("%s: %w", e, err)
 		}
-		// Update returns the server object with its own (unchanged) status;
-		// re-apply the status we want before persisting it below.
 		pkg = updated
-		pkg.Status = desiredStatus
 	}
+
+	// Preserve existing Conditions across the status replacement so
+	// transitions aren't accidentally wiped when build outcome changes.
+	existingConds := pkg.Status.Conditions
+	pkg.Status = fv1.PackageStatus{
+		BuildStatus:         status,
+		BuildLog:            buildLogs,
+		LastUpdateTimestamp: metav1.Time{Time: time.Now().UTC()},
+		Conditions:          existingConds,
+	}
+	setPackageBuildCondition(&pkg.Status, status, buildLogs, pkg.Generation)
 
 	pkg, err := fissionClient.CoreV1().Packages(pkg.ObjectMeta.Namespace).UpdateStatus(ctx, pkg, metav1.UpdateOptions{})
 	if err != nil {
