@@ -10,37 +10,43 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/runtime"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/executor/util"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
+	"github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
 
 // envBuilderContainerName is the name AddFetcherToPodSpec is called with in
-// envwatcher.createBuilderDeployment for the user-supplied builder container.
+// EnvironmentReconciler.createBuilderDeployment for the user-supplied builder
+// container.
 const envBuilderContainerName = "builder"
 
-// newTestEnvironmentWatcher returns an environmentWatcher wired up just enough
-// to exercise createBuilderDeployment in unit tests. The k8s client is a
+// newTestEnvironmentWatcher returns an EnvironmentReconciler wired up just
+// enough to exercise createBuilderDeployment in unit tests. The k8s client is a
 // fake so Create() is a no-op against in-memory state; createBuilderDeployment
 // still returns the constructed *appsv1.Deployment which is what the assertions
 // inspect.
-func newTestEnvironmentWatcher(t *testing.T) *environmentWatcher {
+func newTestEnvironmentWatcher(t *testing.T) *EnvironmentReconciler {
 	t.Helper()
 	cfg, err := fetcherConfig.MakeFetcherConfig("/packages")
 	require.NoError(t, err)
-	return &environmentWatcher{
+	return &EnvironmentReconciler{
 		logger:           loggerfactory.GetLogger(),
-		kubernetesClient: k8sfake.NewSimpleClientset(),
+		kubernetesClient: k8sfake.NewClientset(),
 		nsResolver:       utils.DefaultNSResolver(),
 		fetcherConfig:    cfg,
-		cache:            map[types.UID]*builderInfo{},
 	}
 }
 
@@ -213,4 +219,110 @@ func TestBuilderEnvBuilderPodSpecCannotIntroduceDuplicateSATokenMount(t *testing
 		"fetcher must have exactly one mount at the SA-token path, not duplicates")
 	assert.Equal(t, util.FetcherSATokenVolumeName, mountVolumeName,
 		"the sole mount at the SA-token path must be the projected volume, not the user-supplied one")
+}
+
+// newTestEnvironmentReconciler wires an EnvironmentReconciler with a
+// controller-runtime fake client seeded with crObjs (for the primary
+// Environment Get) and a fake Kubernetes client seeded with k8sObjs (the
+// builder Service/Deployment store).
+func newTestEnvironmentReconciler(t *testing.T, k8sObjs []runtime.Object, crObjs ...client.Object) *EnvironmentReconciler {
+	t.Helper()
+	cfg, err := fetcherConfig.MakeFetcherConfig("/packages")
+	require.NoError(t, err)
+	return &EnvironmentReconciler{
+		logger:           loggerfactory.GetLogger(),
+		client:           fake.NewClientBuilder().WithScheme(scheme.Scheme).WithObjects(crObjs...).Build(),
+		kubernetesClient: k8sfake.NewClientset(k8sObjs...),
+		nsResolver:       utils.DefaultNSResolver(),
+		fetcherConfig:    cfg,
+	}
+}
+
+func envReq(env *fv1.Environment) ctrl.Request {
+	return ctrl.Request{NamespacedName: client.ObjectKey{Name: env.Name, Namespace: env.Namespace}}
+}
+
+// TestEnvironmentReconcileCreateIdempotentDelete walks the builder lifecycle:
+// a v2 env with a builder image creates the builder Service+Deployment, a
+// repeated reconcile is idempotent, and deleting the env tears them down.
+func TestEnvironmentReconcileCreateIdempotentDelete(t *testing.T) {
+	env := newTestBuilderEnv()
+	env.ResourceVersion = "7"
+	r := newTestEnvironmentReconciler(t, nil, env)
+	ns := r.nsResolver.GetBuilderNS(env.Namespace)
+	name := env.Name + "-" + env.ResourceVersion
+
+	_, err := r.Reconcile(t.Context(), envReq(env))
+	require.NoError(t, err)
+	_, err = r.kubernetesClient.CoreV1().Services(ns).Get(t.Context(), name, metav1.GetOptions{})
+	require.NoError(t, err, "builder service must be created")
+	_, err = r.kubernetesClient.AppsV1().Deployments(ns).Get(t.Context(), name, metav1.GetOptions{})
+	require.NoError(t, err, "builder deployment must be created")
+
+	// Idempotent: a second reconcile neither errors nor duplicates.
+	_, err = r.Reconcile(t.Context(), envReq(env))
+	require.NoError(t, err)
+	svcs, err := r.kubernetesClient.CoreV1().Services(ns).List(t.Context(), metav1.ListOptions{})
+	require.NoError(t, err)
+	assert.Len(t, svcs.Items, 1, "reconcile must not duplicate the builder service")
+
+	// Delete the env → the NotFound reconcile path tears the builder down.
+	require.NoError(t, r.client.Delete(t.Context(), env))
+	_, err = r.Reconcile(t.Context(), envReq(env))
+	require.NoError(t, err)
+	svcs, err = r.kubernetesClient.CoreV1().Services(ns).List(t.Context(), metav1.ListOptions{})
+	require.NoError(t, err)
+	assert.Empty(t, svcs.Items, "builder service must be removed on env delete")
+	deps, err := r.kubernetesClient.AppsV1().Deployments(ns).List(t.Context(), metav1.ListOptions{})
+	require.NoError(t, err)
+	assert.Empty(t, deps.Items, "builder deployment must be removed on env delete")
+}
+
+// TestEnvironmentReconcileV1IsNoop pins that a v1-interface environment (no
+// builder support) creates nothing.
+func TestEnvironmentReconcileV1IsNoop(t *testing.T) {
+	env := newTestBuilderEnv()
+	env.Spec.Version = 1
+	r := newTestEnvironmentReconciler(t, nil, env)
+	ns := r.nsResolver.GetBuilderNS(env.Namespace)
+
+	_, err := r.Reconcile(t.Context(), envReq(env))
+	require.NoError(t, err)
+	svcs, err := r.kubernetesClient.CoreV1().Services(ns).List(t.Context(), metav1.ListOptions{})
+	require.NoError(t, err)
+	assert.Empty(t, svcs.Items, "a v1 environment must not create a builder")
+}
+
+// TestEnvironmentReconcilePrunesStaleGeneration verifies that builder objects
+// left over from a previous Environment generation (a different
+// envResourceVersion label) are deleted while the current-generation pair is
+// (re)created.
+func TestEnvironmentReconcilePrunesStaleGeneration(t *testing.T) {
+	env := newTestBuilderEnv()
+	env.ResourceVersion = "2"
+	r := newTestEnvironmentReconciler(t, nil, env)
+	ns := r.nsResolver.GetBuilderNS(env.Namespace)
+
+	staleLabels := map[string]string{
+		LABEL_DEPLOYMENT_OWNER:    BUILDER_MGR,
+		LABEL_ENV_NAME:            env.Name,
+		LABEL_ENV_NAMESPACE:       ns,
+		LABEL_ENV_RESOURCEVERSION: "1",
+	}
+	_, err := r.kubernetesClient.CoreV1().Services(ns).Create(t.Context(),
+		&apiv1.Service{ObjectMeta: metav1.ObjectMeta{Name: env.Name + "-1", Namespace: ns, Labels: staleLabels}}, metav1.CreateOptions{})
+	require.NoError(t, err)
+	_, err = r.kubernetesClient.AppsV1().Deployments(ns).Create(t.Context(),
+		&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: env.Name + "-1", Namespace: ns, Labels: staleLabels}}, metav1.CreateOptions{})
+	require.NoError(t, err)
+
+	_, err = r.Reconcile(t.Context(), envReq(env))
+	require.NoError(t, err)
+
+	_, err = r.kubernetesClient.CoreV1().Services(ns).Get(t.Context(), env.Name+"-1", metav1.GetOptions{})
+	assert.True(t, apierrors.IsNotFound(err), "stale-generation builder service must be pruned")
+	_, err = r.kubernetesClient.AppsV1().Deployments(ns).Get(t.Context(), env.Name+"-1", metav1.GetOptions{})
+	assert.True(t, apierrors.IsNotFound(err), "stale-generation builder deployment must be pruned")
+	_, err = r.kubernetesClient.CoreV1().Services(ns).Get(t.Context(), env.Name+"-2", metav1.GetOptions{})
+	require.NoError(t, err, "current-generation builder service must exist")
 }

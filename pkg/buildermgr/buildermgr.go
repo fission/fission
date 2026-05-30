@@ -13,36 +13,44 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
-	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/sync/errgroup"
-	k8sCache "k8s.io/client-go/tools/cache"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	ctrlmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/controller"
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/executor/util"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	"github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
-	"github.com/fission/fission/pkg/utils"
 	fissionmetrics "github.com/fission/fission/pkg/utils/metrics"
 )
 
-// leaderElectionID is the name of the Lease the builder manager contends for.
-// Kept identical to the client-go lease name used before the controller-runtime
-// migration so there is no orphaned lease across the upgrade.
-const leaderElectionID = "fission-buildermgr"
+const (
+	// leaderElectionID is the name of the Lease the builder manager contends
+	// for. Kept identical to the client-go lease name used before the
+	// controller-runtime migration so there is no orphaned lease across the
+	// upgrade.
+	leaderElectionID = "fission-buildermgr"
+
+	// defaultPackageBuildConcurrency bounds how many package builds run at once.
+	// Each build holds a reconcile worker for the duration of the fetch + build
+	// + upload, so this replaces the old unbounded per-package build goroutines.
+	// Overridable via BUILDERMGR_PACKAGE_CONCURRENCY.
+	defaultPackageBuildConcurrency = 5
+)
 
 // Start runs the builder manager under a controller-runtime Manager. The
 // Manager owns leader election, health/readiness probes, the metrics server and
-// graceful shutdown. The environment/package watchers keep their existing
-// informer-driven logic; they run as a leader-only Manager runnable. The legacy
-// GroupManager argument is unused now that the Manager owns the lifecycle.
+// graceful shutdown, and hosts the Environment and Package reconcilers. The
+// legacy GroupManager argument is unused now that the Manager owns the
+// lifecycle.
 func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger, _ *errgroup.Group, storageSvcUrl string) error {
 	bmLogger := logger.WithName("builder_manager")
 
@@ -72,16 +80,6 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	if err != nil && !os.IsNotExist(err) {
 		bmLogger.Error(err, "error reading data for pod spec patch", "path", fv1.BuilderPodSpecPath)
 	}
-
-	envWatcher, err := makeEnvironmentWatcher(ctx, bmLogger, fissionClient, kubernetesClient, fConfig, podSpecPatch)
-	if err != nil {
-		return err
-	}
-
-	pkgWatcher := makePackageWatcher(bmLogger, fissionClient,
-		kubernetesClient, storageSvcUrl,
-		utils.GetK8sInformersForNamespaces(kubernetesClient, time.Minute*30, fv1.Pods),
-		utils.GetInformersForNamespaces(fissionClient, time.Minute*30, fv1.PackagesResource))
 
 	leaderElectionEnabled, _ := strconv.ParseBool(os.Getenv("LEADER_ELECTION_ENABLED"))
 
@@ -118,19 +116,40 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		return fmt.Errorf("unable to set up builder manager: %w", err)
 	}
 
-	runnable := &watcherRunnable{logger: bmLogger, env: envWatcher, pkg: pkgWatcher}
-	if err := mgr.Add(runnable); err != nil {
-		return fmt.Errorf("unable to add watcher runnable: %w", err)
+	envReconciler := makeEnvironmentReconciler(bmLogger, mgr.GetClient(), kubernetesClient, fConfig, podSpecPatch)
+	if err := controller.Register(mgr, &fv1.Environment{}, envReconciler, "buildermgr-environment"); err != nil {
+		return fmt.Errorf("unable to register environment reconciler: %w", err)
+	}
+
+	pkgReconciler := makePackageReconciler(bmLogger, mgr.GetClient(), fissionClient, kubernetesClient, storageSvcUrl)
+	if err := controller.RegisterWithPredicates(mgr, &fv1.Package{}, pkgReconciler, "buildermgr-package",
+		packageBuildConcurrency(), buildTriggerPredicate()); err != nil {
+		return fmt.Errorf("unable to register package reconciler: %w", err)
+	}
+
+	readiness := &readinessRunnable{logger: bmLogger, cache: mgr.GetCache()}
+	if err := mgr.Add(readiness); err != nil {
+		return fmt.Errorf("unable to add readiness runnable: %w", err)
 	}
 	if err := mgr.AddHealthzCheck("ping", healthz.Ping); err != nil {
 		return fmt.Errorf("unable to add healthz check: %w", err)
 	}
-	if err := mgr.AddReadyzCheck("informers-synced", runnable.readyCheck); err != nil {
+	if err := mgr.AddReadyzCheck("caches-synced", readiness.check); err != nil {
 		return fmt.Errorf("unable to add readyz check: %w", err)
 	}
 
 	bmLogger.Info("starting builder manager", "leaderElection", leaderElectionEnabled)
 	return mgr.Start(ctx)
+}
+
+// packageBuildConcurrency resolves the package reconciler's
+// MaxConcurrentReconciles from BUILDERMGR_PACKAGE_CONCURRENCY, falling back to
+// defaultPackageBuildConcurrency for an unset/invalid/non-positive value.
+func packageBuildConcurrency() int {
+	if v, err := strconv.Atoi(os.Getenv("BUILDERMGR_PACKAGE_CONCURRENCY")); err == nil && v > 0 {
+		return v
+	}
+	return defaultPackageBuildConcurrency
 }
 
 // bindAddr resolves a server bind address from env, defaulting to def and
@@ -146,59 +165,37 @@ func bindAddr(env, def string) string {
 	return addr
 }
 
-// watcherRunnable runs the environment and package watchers as a leader-only
-// controller-runtime runnable. The existing informer goroutines are hosted on
-// an internal GroupManager; only the elected leader runs them. When leader
-// election is disabled, the Manager runs this runnable unconditionally, so
-// single-replica behaviour is unchanged.
-type watcherRunnable struct {
+// readinessRunnable backs /readyz: it reports ready once this replica is the
+// elected leader AND the Manager's informer caches have synced — the same
+// semantics the previous informer-hosting runnable enforced (a non-leader
+// replica reports not-ready). It hosts no controllers; the Environment and
+// Package reconcilers are registered directly on the Manager.
+type readinessRunnable struct {
 	logger logr.Logger
-	env    *environmentWatcher
-	pkg    *packageWatcher
+	cache  cache.Cache
 	ready  atomic.Bool
 }
 
-// NeedLeaderElection makes the Manager run this runnable on the leader only.
-func (w *watcherRunnable) NeedLeaderElection() bool { return true }
+// NeedLeaderElection makes the Manager run this runnable on the leader only, so
+// /readyz reflects leadership.
+func (r *readinessRunnable) NeedLeaderElection() bool { return true }
 
-// Start launches the watchers and blocks until ctx is cancelled (shutdown or
-// loss of leadership), then drains the informer goroutines.
-func (w *watcherRunnable) Start(ctx context.Context) error {
-	gm := &errgroup.Group{}
-	w.env.Run(ctx, gm)
-	if err := w.pkg.Run(ctx, gm); err != nil {
-		return err
+// Start flips ready once the caches sync, then blocks until ctx is cancelled
+// (shutdown or loss of leadership).
+func (r *readinessRunnable) Start(ctx context.Context) error {
+	if r.cache.WaitForCacheSync(ctx) {
+		r.ready.Store(true)
+		r.logger.Info("builder manager informer caches synced; ready")
 	}
-	go func() {
-		if w.waitForCacheSync(ctx) {
-			w.ready.Store(true)
-			w.logger.Info("builder manager informer caches synced; ready")
-		}
-	}()
 	<-ctx.Done()
-	w.ready.Store(false)
-	_ = gm.Wait()
+	r.ready.Store(false)
 	return nil
 }
 
-func (w *watcherRunnable) waitForCacheSync(ctx context.Context) bool {
-	synced := make([]k8sCache.InformerSynced, 0)
-	for _, inf := range w.env.envWatchInformer {
-		synced = append(synced, inf.HasSynced)
-	}
-	for _, inf := range w.pkg.podInformer {
-		synced = append(synced, inf.HasSynced)
-	}
-	for _, inf := range w.pkg.pkgInformer {
-		synced = append(synced, inf.HasSynced)
-	}
-	return k8sCache.WaitForCacheSync(ctx.Done(), synced...)
-}
-
-// readyCheck backs /readyz: ready once the watcher informers have synced (and,
-// under leader election, only after this replica has won the lease).
-func (w *watcherRunnable) readyCheck(_ *http.Request) error {
-	if w.ready.Load() {
+// check backs /readyz: ready once this replica is the leader and its caches have
+// synced.
+func (r *readinessRunnable) check(_ *http.Request) error {
+	if r.ready.Load() {
 		return nil
 	}
 	return fmt.Errorf("builder manager informers not synced")
