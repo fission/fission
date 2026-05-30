@@ -512,6 +512,15 @@ func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, 
 		return err
 	}
 
+	// Each executor type registers its Function/Environment reconcilers on the
+	// Manager (replacing its informer event handlers). Types still on the
+	// informer-handler path (poolmgr) return nil.
+	for _, et := range executorTypes {
+		if err := et.RegisterReconcilers(crMgr); err != nil {
+			return fmt.Errorf("error registering reconcilers for executor type %s: %w", et.GetTypeName(ctx), err)
+		}
+	}
+
 	startFactories := func(stopCh <-chan struct{}) {
 		for _, factory := range finformerFactory {
 			factory.Start(stopCh)

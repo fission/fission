@@ -12,6 +12,8 @@ import (
 	"github.com/go-logr/logr"
 	"golang.org/x/sync/errgroup"
 
+	ctrl "sigs.k8s.io/controller-runtime"
+
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/executor/fscache"
 	"github.com/fission/fission/pkg/executor/reaper/idle"
@@ -20,6 +22,11 @@ import (
 type ExecutorType interface {
 	// Run runs background job.
 	Run(context.Context, *errgroup.Group)
+
+	// RegisterReconcilers registers this executor type's controller-runtime
+	// reconcilers (Function/Environment watchers) on the executor Manager. Types
+	// still on the informer-handler path return nil.
+	RegisterReconcilers(mgr ctrl.Manager) error
 
 	// IdleStrategy returns this executor type's idle-reaping strategy, driven by
 	// the shared idle reaper instead of a per-type goroutine.
