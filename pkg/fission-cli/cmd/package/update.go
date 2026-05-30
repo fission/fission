@@ -12,6 +12,7 @@ import (
 	"errors"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/util/retry"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
@@ -183,21 +184,41 @@ func UpdatePackage(input cli.Input, client cmd.Client, specFile string, pkg *fv1
 		return &pkg.ObjectMeta, nil
 	}
 
-	newPkg, err := client.FissionClientSet.CoreV1().Packages(pkg.ObjectMeta.Namespace).Update(input.Context(), pkg, metav1.UpdateOptions{})
-	if err != nil {
+	packages := client.FissionClientSet.CoreV1().Packages(pkg.Namespace)
+
+	// Apply the desired spec, re-getting on conflict: the buildermgr writes a
+	// package's initial build status shortly after create, which bumps the
+	// ResourceVersion between our Get and this Update.
+	desiredSpec := pkg.Spec
+	var newPkg *fv1.Package
+	if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		fresh, gerr := packages.Get(input.Context(), pkg.Name, metav1.GetOptions{})
+		if gerr != nil {
+			return gerr
+		}
+		fresh.Spec = desiredSpec
+		var uerr error
+		newPkg, uerr = packages.Update(input.Context(), fresh, metav1.UpdateOptions{})
+		return uerr
+	}); err != nil {
 		return nil, fmt.Errorf("update package: %w", err)
 	}
 
 	// The rebuild trigger (BuildStatusPending) is a status write; with the
 	// /status subresource the spec Update above ignores it, so persist it
-	// separately through UpdateStatus.
+	// separately through UpdateStatus (also conflict-retried).
 	if needToRebuild {
-		newPkg.Status = fv1.PackageStatus{
-			BuildStatus:         fv1.BuildStatusPending,
-			LastUpdateTimestamp: metav1.Time{Time: time.Now().UTC()},
-		}
-		newPkg, err = client.FissionClientSet.CoreV1().Packages(pkg.ObjectMeta.Namespace).UpdateStatus(input.Context(), newPkg, metav1.UpdateOptions{})
-		if err != nil {
+		if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			fresh, gerr := packages.Get(input.Context(), pkg.Name, metav1.GetOptions{})
+			if gerr != nil {
+				return gerr
+			}
+			fresh.Status.BuildStatus = fv1.BuildStatusPending
+			fresh.Status.LastUpdateTimestamp = metav1.Time{Time: time.Now().UTC()}
+			var uerr error
+			newPkg, uerr = packages.UpdateStatus(input.Context(), fresh, metav1.UpdateOptions{})
+			return uerr
+		}); err != nil {
 			return nil, fmt.Errorf("update package status: %w", err)
 		}
 	}
