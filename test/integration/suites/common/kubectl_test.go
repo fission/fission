@@ -14,6 +14,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/util/retry"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/test/integration/framework"
@@ -86,23 +87,32 @@ func TestKubectlApply(t *testing.T) {
 	// have the latest ResourceVersion, then update Spec.Source.URL.
 	//
 	// Critical: the buildermgr only triggers a (re)build when
-	// Status.BuildStatus == "pending" (see pkg/buildermgr/pkgwatcher.go:259-262
-	// and the long-standing TODO above it about /status subresource).
-	// A plain Spec-only Update would leave status at "failed" and the
-	// controller would skip the new build. Bash uses `kubectl replace`
-	// which round-trips the whole object including Status; we mimic
-	// that by explicitly resetting BuildStatus to pending before Update.
-	current, err := f.FissionClient().CoreV1().Packages(ns.Name).Get(ctx, pkgName, metav1.GetOptions{})
+	// Status.BuildStatus == "pending". We point Spec.Source.URL at the good URL
+	// (spec Update) and then reset BuildStatus to pending through the /status
+	// subresource (UpdateStatus). Both writes are conflict-retried because the
+	// buildermgr updates the package status concurrently.
+	pkgs := f.FissionClient().CoreV1().Packages(ns.Name)
+	current, err := pkgs.Get(ctx, pkgName, metav1.GetOptions{})
 	require.NoError(t, err)
 	since := current.Status.LastUpdateTimestamp
-	current.Spec.Source.URL = goodURL
-	updated, err := f.FissionClient().CoreV1().Packages(ns.Name).Update(ctx, current, metav1.UpdateOptions{})
-	require.NoError(t, err, "update package %q spec to good URL", pkgName)
-	// The rebuild trigger (BuildStatus=pending) is a status write; with the
-	// Package /status subresource it must go through UpdateStatus.
-	updated.Status.BuildStatus = fv1.BuildStatusPending
-	_, err = f.FissionClient().CoreV1().Packages(ns.Name).UpdateStatus(ctx, updated, metav1.UpdateOptions{})
-	require.NoError(t, err, "reset package %q build status to pending", pkgName)
+	require.NoError(t, retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		fresh, gerr := pkgs.Get(ctx, pkgName, metav1.GetOptions{})
+		if gerr != nil {
+			return gerr
+		}
+		fresh.Spec.Source.URL = goodURL
+		_, uerr := pkgs.Update(ctx, fresh, metav1.UpdateOptions{})
+		return uerr
+	}), "update package %q spec to good URL", pkgName)
+	require.NoError(t, retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		fresh, gerr := pkgs.Get(ctx, pkgName, metav1.GetOptions{})
+		if gerr != nil {
+			return gerr
+		}
+		fresh.Status.BuildStatus = fv1.BuildStatusPending
+		_, uerr := pkgs.UpdateStatus(ctx, fresh, metav1.UpdateOptions{})
+		return uerr
+	}), "reset package %q build status to pending", pkgName)
 
 	ns.WaitForPackageRebuiltSince(t, ctx, pkgName, since)
 

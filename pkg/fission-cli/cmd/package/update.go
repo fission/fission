@@ -246,12 +246,24 @@ func UpdateFunctionPackageResourceVersion(ctx context.Context, client cmd.Client
 func updatePackageStatus(ctx context.Context, client cmd.Client, pkg *fv1.Package, status fv1.BuildStatus) (*metav1.ObjectMeta, error) {
 	switch status {
 	case fv1.BuildStatusNone, fv1.BuildStatusPending, fv1.BuildStatusRunning, fv1.BuildStatusSucceeded, fv1.CanaryConfigStatusAborted:
-		pkg.Status = fv1.PackageStatus{
-			BuildStatus:         status,
-			LastUpdateTimestamp: metav1.Time{Time: time.Now().UTC()},
+		packages := client.FissionClientSet.CoreV1().Packages(pkg.Namespace)
+		var out *fv1.Package
+		// Re-get on conflict: the buildermgr can update the package status
+		// concurrently.
+		if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			fresh, gerr := packages.Get(ctx, pkg.Name, metav1.GetOptions{})
+			if gerr != nil {
+				return gerr
+			}
+			fresh.Status.BuildStatus = status
+			fresh.Status.LastUpdateTimestamp = metav1.Time{Time: time.Now().UTC()}
+			var uerr error
+			out, uerr = packages.UpdateStatus(ctx, fresh, metav1.UpdateOptions{})
+			return uerr
+		}); err != nil {
+			return nil, err
 		}
-		pkg, err := client.FissionClientSet.CoreV1().Packages(pkg.Namespace).UpdateStatus(ctx, pkg, metav1.UpdateOptions{})
-		return &pkg.ObjectMeta, err
+		return &out.ObjectMeta, nil
 	}
 	return nil, errors.New("unknown package status")
 }
