@@ -14,6 +14,7 @@ import (
 	"github.com/dchest/uniuri"
 	"github.com/go-logr/logr"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/util/retry"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/builder"
@@ -146,39 +147,57 @@ func updatePackage(ctx context.Context, logger logr.Logger, fissionClient versio
 	pkg *fv1.Package, status fv1.BuildStatus, buildLogs string,
 	uploadResp *fetcher.ArchiveUploadResponse) (*fv1.Package, error) {
 
+	packages := fissionClient.CoreV1().Packages(pkg.Namespace)
+	name := pkg.Name
+
 	// A successful build also writes the deployment archive onto the spec. With
 	// the /status subresource enabled, the apiserver ignores status on a
 	// main-resource Update, so persist the spec first (it may bump
 	// metadata.generation) and build the status afterwards, so the conditions'
-	// ObservedGeneration is stamped from the post-update generation.
+	// ObservedGeneration is stamped from the post-update generation. Both writes
+	// re-get on conflict, since other actors (a concurrent reconcile, a CLI
+	// rebuild) may update the package between our read and write.
 	if uploadResp != nil {
-		pkg.Spec.Deployment = fv1.Archive{
+		deployment := fv1.Archive{
 			Type:     fv1.ArchiveTypeUrl,
 			URL:      uploadResp.ArchiveDownloadUrl,
 			Checksum: uploadResp.Checksum,
 		}
-		updated, err := fissionClient.CoreV1().Packages(pkg.ObjectMeta.Namespace).Update(ctx, pkg, metav1.UpdateOptions{})
-		if err != nil {
+		if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			fresh, gerr := packages.Get(ctx, name, metav1.GetOptions{})
+			if gerr != nil {
+				return gerr
+			}
+			fresh.Spec.Deployment = deployment
+			var uerr error
+			pkg, uerr = packages.Update(ctx, fresh, metav1.UpdateOptions{})
+			return uerr
+		}); err != nil {
 			e := "error updating package spec"
 			logger.Error(err, e)
 			return nil, fmt.Errorf("%s: %w", e, err)
 		}
-		pkg = updated
 	}
 
-	// Preserve existing Conditions across the status replacement so
-	// transitions aren't accidentally wiped when build outcome changes.
-	existingConds := pkg.Status.Conditions
-	pkg.Status = fv1.PackageStatus{
-		BuildStatus:         status,
-		BuildLog:            buildLogs,
-		LastUpdateTimestamp: metav1.Time{Time: time.Now().UTC()},
-		Conditions:          existingConds,
-	}
-	setPackageBuildCondition(&pkg.Status, status, buildLogs, pkg.Generation)
-
-	pkg, err := fissionClient.CoreV1().Packages(pkg.ObjectMeta.Namespace).UpdateStatus(ctx, pkg, metav1.UpdateOptions{})
-	if err != nil {
+	if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		fresh, gerr := packages.Get(ctx, name, metav1.GetOptions{})
+		if gerr != nil {
+			return gerr
+		}
+		// Preserve existing Conditions across the status replacement so
+		// transitions aren't accidentally wiped when build outcome changes.
+		existingConds := fresh.Status.Conditions
+		fresh.Status = fv1.PackageStatus{
+			BuildStatus:         status,
+			BuildLog:            buildLogs,
+			LastUpdateTimestamp: metav1.Time{Time: time.Now().UTC()},
+			Conditions:          existingConds,
+		}
+		setPackageBuildCondition(&fresh.Status, status, buildLogs, fresh.Generation)
+		var uerr error
+		pkg, uerr = packages.UpdateStatus(ctx, fresh, metav1.UpdateOptions{})
+		return uerr
+	}); err != nil {
 		e := "error updating package status"
 		logger.Error(err, e)
 		return nil, fmt.Errorf("%s: %w", e, err)

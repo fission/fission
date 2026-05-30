@@ -245,7 +245,7 @@ func UpdateFunctionPackageResourceVersion(ctx context.Context, client cmd.Client
 
 func updatePackageStatus(ctx context.Context, client cmd.Client, pkg *fv1.Package, status fv1.BuildStatus) (*metav1.ObjectMeta, error) {
 	switch status {
-	case fv1.BuildStatusNone, fv1.BuildStatusPending, fv1.BuildStatusRunning, fv1.BuildStatusSucceeded, fv1.CanaryConfigStatusAborted:
+	case fv1.BuildStatusNone, fv1.BuildStatusPending, fv1.BuildStatusRunning, fv1.BuildStatusSucceeded, fv1.BuildStatusFailed:
 		packages := client.FissionClientSet.CoreV1().Packages(pkg.Namespace)
 		var out *fv1.Package
 		// Re-get on conflict: the buildermgr can update the package status
