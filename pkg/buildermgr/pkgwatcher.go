@@ -16,6 +16,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	k8sCache "k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/util/retry"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/cache"
@@ -340,25 +341,42 @@ func (pkgw *packageWatcher) Run(ctx context.Context, mgr *errgroup.Group) error 
 // This normally occurs when the user applies package YAML files that have no status field
 // through kubectl.
 func setInitialBuildStatus(ctx context.Context, fissionClient versioned.Interface, pkg *fv1.Package) (*fv1.Package, error) {
-	// Preserve any Conditions a previous reconcile may have written.
-	existingConds := pkg.Status.Conditions
-	pkg.Status = fv1.PackageStatus{
-		LastUpdateTimestamp: metav1.Time{Time: time.Now().UTC()},
-		Conditions:          existingConds,
-	}
-	if !pkg.Spec.Deployment.IsEmpty() {
-		// if the deployment archive is not empty,
-		// we assume it's a deployable package no matter
-		// the source archive is empty or not.
-		pkg.Status.BuildStatus = fv1.BuildStatusNone
-	} else if !pkg.Spec.Source.IsEmpty() {
-		pkg.Status.BuildStatus = fv1.BuildStatusPending
-	} else {
-		// mark package failed since we cannot do anything with it.
-		pkg.Status.BuildStatus = fv1.BuildStatusFailed
-		pkg.Status.BuildLog = "Both deploy and source archive are empty"
-	}
-	setPackageBuildCondition(&pkg.Status, pkg.Status.BuildStatus, pkg.Status.BuildLog, pkg.Generation)
+	packages := fissionClient.CoreV1().Packages(pkg.Namespace)
+	name := pkg.Name
 
-	return fissionClient.CoreV1().Packages(pkg.Namespace).UpdateStatus(ctx, pkg, metav1.UpdateOptions{})
+	// Re-get on conflict: a fast user/CLI update can race this initial status
+	// write. The derived status is a pure function of the spec archives, so a
+	// retry on the fresh object is idempotent.
+	var out *fv1.Package
+	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		fresh, gerr := packages.Get(ctx, name, metav1.GetOptions{})
+		if gerr != nil {
+			return gerr
+		}
+		// Preserve any Conditions a previous reconcile may have written.
+		fresh.Status = fv1.PackageStatus{
+			LastUpdateTimestamp: metav1.Time{Time: time.Now().UTC()},
+			Conditions:          fresh.Status.Conditions,
+		}
+		if !fresh.Spec.Deployment.IsEmpty() {
+			// if the deployment archive is not empty,
+			// we assume it's a deployable package no matter
+			// the source archive is empty or not.
+			fresh.Status.BuildStatus = fv1.BuildStatusNone
+		} else if !fresh.Spec.Source.IsEmpty() {
+			fresh.Status.BuildStatus = fv1.BuildStatusPending
+		} else {
+			// mark package failed since we cannot do anything with it.
+			fresh.Status.BuildStatus = fv1.BuildStatusFailed
+			fresh.Status.BuildLog = "Both deploy and source archive are empty"
+		}
+		setPackageBuildCondition(&fresh.Status, fresh.Status.BuildStatus, fresh.Status.BuildLog, fresh.Generation)
+		var uerr error
+		out, uerr = packages.UpdateStatus(ctx, fresh, metav1.UpdateOptions{})
+		return uerr
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
