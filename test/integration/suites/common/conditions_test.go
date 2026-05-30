@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/conditions"
@@ -92,12 +93,12 @@ func TestConditions_FunctionStatusSubresource(t *testing.T) {
 	require.Equal(t, "ConditionsSmoke", c.Reason)
 }
 
-// TestConditions_PackageMainResource verifies the additive change to
-// PackageStatus: Conditions can be written via the existing main-resource
-// Update path (no status subresource on Package), and round-trips cleanly.
-// This is the canary that PackageStatus changes did NOT silently flip the
-// subresource on Package, which would have broken pkg/buildermgr writes.
-func TestConditions_PackageMainResource(t *testing.T) {
+// TestConditions_PackageStatusSubresource verifies that Package now carries a
+// /status subresource: a spec change submitted through UpdateStatus must be
+// dropped by the apiserver. (Package gained +kubebuilder:subresource:status in
+// the buildermgr /status migration; this replaces the earlier test that
+// asserted the opposite.)
+func TestConditions_PackageStatusSubresource(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -108,10 +109,11 @@ func TestConditions_PackageMainResource(t *testing.T) {
 	fc := f.FissionClient().CoreV1()
 
 	name := "conds-pkg-" + ns.ID
+	const envName = "conds-smoke-fake"
 	pkg := &fv1.Package{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns.Name},
 		Spec: fv1.PackageSpec{
-			Environment: fv1.EnvironmentReference{Name: "conds-smoke-fake", Namespace: ns.Name},
+			Environment: fv1.EnvironmentReference{Name: envName, Namespace: ns.Name},
 			Deployment:  fv1.Archive{Type: fv1.ArchiveTypeLiteral, Literal: []byte("// noop")},
 		},
 		Status: fv1.PackageStatus{BuildStatus: fv1.BuildStatusNone},
@@ -122,25 +124,24 @@ func TestConditions_PackageMainResource(t *testing.T) {
 		_ = fc.Packages(ns.Name).Delete(context.Background(), name, metav1.DeleteOptions{})
 	})
 
-	got, err := fc.Packages(ns.Name).Get(ctx, name, metav1.GetOptions{})
-	require.NoError(t, err)
-	got.Status.Conditions = append(got.Status.Conditions, metav1.Condition{
-		Type:               smokeConditionType,
-		Status:             metav1.ConditionTrue,
-		Reason:             "ConditionsSmoke",
-		Message:            "set by TestConditions_PackageMainResource",
-		LastTransitionTime: metav1.Now(),
-		ObservedGeneration: got.Generation,
+	// Submit a spec change via UpdateStatus; the subresource must drop it. Retry
+	// on conflict because the buildermgr also writes this package's initial
+	// status (setInitialBuildStatus) shortly after create.
+	err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		got, gerr := fc.Packages(ns.Name).Get(ctx, name, metav1.GetOptions{})
+		if gerr != nil {
+			return gerr
+		}
+		got.Spec.Environment.Name = "conds-tampered"
+		_, uerr := fc.Packages(ns.Name).UpdateStatus(ctx, got, metav1.UpdateOptions{})
+		return uerr
 	})
-	// Main-resource Update writes Spec AND Status together — proves we did
-	// NOT add +kubebuilder:subresource:status to Package.
-	_, err = fc.Packages(ns.Name).Update(ctx, got, metav1.UpdateOptions{})
-	require.NoError(t, err, "Update on Package main resource must persist Status.Conditions")
+	require.NoError(t, err)
 
-	refetched := ns.GetPackageConditions(t, ctx, name)
-	c := conditions.Find(refetched, smokeConditionType)
-	require.NotNil(t, c, "smoke condition must round-trip through the main-resource Update (got %v)", refetched)
-	require.EqualValues(t, "True", c.Status)
+	after, err := fc.Packages(ns.Name).Get(ctx, name, metav1.GetOptions{})
+	require.NoError(t, err)
+	require.Equal(t, envName, after.Spec.Environment.Name,
+		"spec change submitted via UpdateStatus must be dropped — Package now has a /status subresource")
 }
 
 // TestConditions_SSAListMapKey is the core SSA correctness test for

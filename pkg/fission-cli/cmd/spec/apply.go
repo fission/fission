@@ -17,6 +17,7 @@ import (
 	"github.com/go-git/go-git/v5"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sCache "k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/util/retry"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
@@ -657,9 +658,14 @@ func applyPackages(ctx context.Context, fclient cmd.Client, fr *FissionResources
 					!reflect.DeepEqual(existing.Spec.Source, fv1.Archive{}) &&
 					reflect.DeepEqual(existing.Spec.Source, desired.Spec.Source) &&
 					existing.Spec.BuildCommand == desired.Spec.BuildCommand)
+			// "none" (a deploy-archive package needing no build) is as ready a
+			// terminal state as "succeeded"; treating only the latter as ready
+			// would re-apply unchanged deploy packages on every run.
+			ready := existing.Status.BuildStatus == fv1.BuildStatusSucceeded ||
+				existing.Status.BuildStatus == fv1.BuildStatusNone
 			return specMatches &&
 				isObjectMetaEqual(existing.ObjectMeta, desired.ObjectMeta) &&
-				existing.Status.BuildStatus == fv1.BuildStatusSucceeded
+				ready
 		},
 		create: func(ctx context.Context, p *fv1.Package) (*metav1.ObjectMeta, error) {
 			n, err := packages(p.Namespace).Create(ctx, p, metav1.CreateOptions{})
@@ -669,21 +675,51 @@ func applyPackages(ctx context.Context, fclient cmd.Client, fr *FissionResources
 			return &n.ObjectMeta, nil
 		},
 		update: func(ctx context.Context, existing, desired *fv1.Package) (*metav1.ObjectMeta, error) {
-			desired.ResourceVersion = existing.ResourceVersion
 			// We may be racing the package builder (a previous version might be
-			// building), so wait for a non-running build status first.
-			pkg, err := waitForPackageBuild(ctx, fclient, desired)
+			// building), so wait for a non-running build status first. Decide
+			// from the live object (existing): desired comes from the spec file
+			// and carries no status, so the wait/re-trigger must read the real
+			// BuildStatus.
+			current, err := waitForPackageBuild(ctx, fclient, existing)
 			if err != nil {
 				console.Warn(fmt.Sprintf("Error waiting for package '%v' build, ignoring", desired.Name))
-				pkg = desired
+				current = existing
 			}
-			// Re-trigger a build if the previous one failed.
-			if pkg.Status.BuildStatus == fv1.BuildStatusFailed {
-				pkg.Status.BuildStatus = fv1.BuildStatusPending
-			}
-			n, err := packages(pkg.Namespace).Update(ctx, pkg, metav1.UpdateOptions{})
-			if err != nil {
+			retrigger := current.Status.BuildStatus == fv1.BuildStatusFailed
+
+			// Apply the spec, re-getting on conflict: the buildermgr writes a
+			// package's build status concurrently, which can bump the
+			// ResourceVersion between our read and this Update.
+			var n *fv1.Package
+			if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				live, gerr := packages(desired.Namespace).Get(ctx, desired.Name, metav1.GetOptions{})
+				if gerr != nil {
+					return gerr
+				}
+				desired.ResourceVersion = live.ResourceVersion
+				var uerr error
+				n, uerr = packages(desired.Namespace).Update(ctx, desired, metav1.UpdateOptions{})
+				return uerr
+			}); err != nil {
 				return nil, err
+			}
+			// Re-trigger a build if the previous one failed. This is a status
+			// write; with the /status subresource it must go through
+			// UpdateStatus, separately from the spec Update above (also
+			// conflict-retried).
+			if retrigger {
+				if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+					live, gerr := packages(desired.Namespace).Get(ctx, desired.Name, metav1.GetOptions{})
+					if gerr != nil {
+						return gerr
+					}
+					live.Status.BuildStatus = fv1.BuildStatusPending
+					var uerr error
+					n, uerr = packages(desired.Namespace).UpdateStatus(ctx, live, metav1.UpdateOptions{})
+					return uerr
+				}); err != nil {
+					return nil, err
+				}
 			}
 			return &n.ObjectMeta, nil
 		},

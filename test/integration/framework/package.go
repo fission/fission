@@ -17,6 +17,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/util/retry"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 )
@@ -193,6 +194,13 @@ func (ns *TestNamespace) waitForPackageBuildStatus(t *testing.T, ctx context.Con
 		switch p.Status.BuildStatus {
 		case want:
 			return true, nil
+		case fv1.BuildStatusNone:
+			// A package needing no build (deploy archive / no source) reports
+			// "none" — an equally-ready terminal state as "succeeded".
+			if want == fv1.BuildStatusSucceeded {
+				return true, nil
+			}
+			return false, nil
 		case fv1.BuildStatusFailed:
 			if want == fv1.BuildStatusFailed {
 				return false, nil
@@ -201,9 +209,19 @@ func (ns *TestNamespace) waitForPackageBuildStatus(t *testing.T, ctx context.Con
 				transientRetries++
 				t.Logf("package %q transient build failure (retry %d/%d): %s",
 					pkgName, transientRetries, maxTransientRetries, p.Status.BuildLog)
-				p.Status.BuildStatus = fv1.BuildStatusPending
-				if _, uerr := ns.f.fissionClient.CoreV1().Packages(ns.Name).Update(c, p, metav1.UpdateOptions{}); uerr != nil {
-					return false, fmt.Errorf("transient retry: reset package status to pending: %w", uerr)
+				// Status write goes through the /status subresource, re-getting
+				// on conflict since the buildermgr updates package status
+				// concurrently.
+				if rerr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+					fresh, gerr := ns.f.fissionClient.CoreV1().Packages(ns.Name).Get(c, pkgName, metav1.GetOptions{})
+					if gerr != nil {
+						return gerr
+					}
+					fresh.Status.BuildStatus = fv1.BuildStatusPending
+					_, uerr := ns.f.fissionClient.CoreV1().Packages(ns.Name).UpdateStatus(c, fresh, metav1.UpdateOptions{})
+					return uerr
+				}); rerr != nil {
+					return false, fmt.Errorf("transient retry: reset package status to pending: %w", rerr)
 				}
 				return false, nil
 			}

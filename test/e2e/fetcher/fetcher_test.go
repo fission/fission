@@ -213,7 +213,10 @@ func (f *FetcherTestSuite) TestFetcherDeploymentType() {
 		}
 
 		for _, pkg := range pkgs.Items {
-			if pkg.Name == testDeployPkg && pkg.Status.BuildStatus == fv1.BuildStatusSucceeded {
+			// A deploy-archive package needs no build: the buildermgr marks it
+			// "none" (no build required), which is an equally-ready state as
+			// "succeeded" (see fetcher build-status gate). Accept either.
+			if pkg.Name == testDeployPkg && (pkg.Status.BuildStatus == fv1.BuildStatusSucceeded || pkg.Status.BuildStatus == fv1.BuildStatusNone) {
 				return true, nil
 			} else if pkg.Name == testDeployPkg && pkg.Status.BuildStatus == fv1.BuildStatusFailed {
 				return true, fmt.Errorf("build failed for package:%s", pkg.Name)
@@ -264,7 +267,10 @@ func (f *FetcherTestSuite) TestFetcherURLType() {
 		}
 
 		for _, pkg := range pkgs.Items {
-			if pkg.Name == testDeployPkg && pkg.Status.BuildStatus == fv1.BuildStatusSucceeded {
+			// A deploy-archive package needs no build: the buildermgr marks it
+			// "none" (no build required), which is an equally-ready state as
+			// "succeeded" (see fetcher build-status gate). Accept either.
+			if pkg.Name == testDeployPkg && (pkg.Status.BuildStatus == fv1.BuildStatusSucceeded || pkg.Status.BuildStatus == fv1.BuildStatusNone) {
 				return true, nil
 			} else if pkg.Name == testDeployPkg && pkg.Status.BuildStatus == fv1.BuildStatusFailed {
 				return true, fmt.Errorf("build failed for package:%s", pkg.Name)
@@ -385,7 +391,10 @@ func (f *FetcherTestSuite) TestFetcherSpecialize() {
 		}
 
 		for _, pkg := range pkgs.Items {
-			if pkg.Name == testDeployPkg && pkg.Status.BuildStatus == fv1.BuildStatusSucceeded {
+			// A deploy-archive package needs no build: the buildermgr marks it
+			// "none" (no build required), which is an equally-ready state as
+			// "succeeded" (see fetcher build-status gate). Accept either.
+			if pkg.Name == testDeployPkg && (pkg.Status.BuildStatus == fv1.BuildStatusSucceeded || pkg.Status.BuildStatus == fv1.BuildStatusNone) {
 				return true, nil
 			} else if pkg.Name == testDeployPkg && pkg.Status.BuildStatus == fv1.BuildStatusFailed {
 				return true, fmt.Errorf("build failed for package:%s", pkg.Name)

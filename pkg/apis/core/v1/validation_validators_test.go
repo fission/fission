@@ -72,6 +72,9 @@ func TestReferenceValidate(t *testing.T) {
 func TestPackageStatusValidate(t *testing.T) {
 	t.Parallel()
 	require.NoError(t, PackageStatus{BuildStatus: BuildStatusSucceeded}.Validate())
+	// Empty BuildStatus is the not-yet-processed state admitted on create once
+	// the /status subresource strips the defaulting webhook's status.
+	require.NoError(t, PackageStatus{}.Validate())
 	require.Error(t, PackageStatus{BuildStatus: "weird"}.Validate())
 }
 

@@ -16,12 +16,13 @@ rules:
   - delete
 - apiGroups:
   - fission.io
-  # Packages have no status subresource — main-resource update
-  # covers their writes. functions/status is needed because the
-  # buildermgr propagates package build outcome onto dependent
-  # functions via markFunctionsForPackage.
+  # packages/status: the buildermgr writes the package BuildStatus and
+  # build conditions through the /status subresource. functions/status is
+  # needed because the buildermgr propagates package build outcome onto
+  # dependent functions via markFunctionsForPackage.
   resources:
   - functions/status
+  - packages/status
   verbs:
   - get
   - update
