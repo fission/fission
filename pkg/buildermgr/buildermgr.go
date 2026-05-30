@@ -29,6 +29,7 @@ import (
 	"github.com/fission/fission/pkg/executor/util"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	"github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
+	"github.com/fission/fission/pkg/utils/crmanager"
 	fissionmetrics "github.com/fission/fission/pkg/utils/metrics"
 )
 
@@ -104,7 +105,14 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	}
 
 	mgr, err := ctrl.NewManager(restConfig, ctrl.Options{
-		Scheme:                        scheme.Scheme,
+		Scheme: scheme.Scheme,
+		// Scope the shared cache to the Fission-watched namespaces. The
+		// Environment/Package reconcilers read through this cache, and the
+		// buildermgr's RBAC is per-namespace Roles (not a ClusterRole) — a
+		// cluster-wide cache's list/watch is forbidden, so its sync times out and
+		// the manager exits. This reproduces the per-namespace informers the
+		// pre-reconciler watchers used. See crmanager.FissionCacheOptions.
+		Cache:                         crmanager.FissionCacheOptions(),
 		Metrics:                       metricsserver.Options{BindAddress: metricsBind},
 		HealthProbeBindAddress:        healthBind,
 		LeaderElection:                leaderElectionEnabled,
