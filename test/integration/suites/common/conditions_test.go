@@ -93,11 +93,6 @@ func TestConditions_FunctionStatusSubresource(t *testing.T) {
 	require.Equal(t, "ConditionsSmoke", c.Reason)
 }
 
-// TestConditions_PackageMainResource verifies the additive change to
-// PackageStatus: Conditions can be written via the existing main-resource
-// Update path (no status subresource on Package), and round-trips cleanly.
-// This is the canary that PackageStatus changes did NOT silently flip the
-// subresource on Package, which would have broken pkg/buildermgr writes.
 // TestConditions_PackageStatusSubresource verifies that Package now carries a
 // /status subresource: a spec change submitted through UpdateStatus must be
 // dropped by the apiserver. (Package gained +kubebuilder:subresource:status in

@@ -17,6 +17,7 @@ import (
 	"github.com/go-git/go-git/v5"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sCache "k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/util/retry"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
@@ -684,19 +685,39 @@ func applyPackages(ctx context.Context, fclient cmd.Client, fr *FissionResources
 				console.Warn(fmt.Sprintf("Error waiting for package '%v' build, ignoring", desired.Name))
 				current = existing
 			}
-			// Apply the spec from desired, on top of the post-wait version.
-			desired.ResourceVersion = current.ResourceVersion
-			n, err := packages(desired.Namespace).Update(ctx, desired, metav1.UpdateOptions{})
-			if err != nil {
+			retrigger := current.Status.BuildStatus == fv1.BuildStatusFailed
+
+			// Apply the spec, re-getting on conflict: the buildermgr writes a
+			// package's build status concurrently, which can bump the
+			// ResourceVersion between our read and this Update.
+			var n *fv1.Package
+			if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				live, gerr := packages(desired.Namespace).Get(ctx, desired.Name, metav1.GetOptions{})
+				if gerr != nil {
+					return gerr
+				}
+				desired.ResourceVersion = live.ResourceVersion
+				var uerr error
+				n, uerr = packages(desired.Namespace).Update(ctx, desired, metav1.UpdateOptions{})
+				return uerr
+			}); err != nil {
 				return nil, err
 			}
 			// Re-trigger a build if the previous one failed. This is a status
 			// write; with the /status subresource it must go through
-			// UpdateStatus, separately from the spec Update above.
-			if current.Status.BuildStatus == fv1.BuildStatusFailed {
-				n.Status.BuildStatus = fv1.BuildStatusPending
-				n, err = packages(desired.Namespace).UpdateStatus(ctx, n, metav1.UpdateOptions{})
-				if err != nil {
+			// UpdateStatus, separately from the spec Update above (also
+			// conflict-retried).
+			if retrigger {
+				if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+					live, gerr := packages(desired.Namespace).Get(ctx, desired.Name, metav1.GetOptions{})
+					if gerr != nil {
+						return gerr
+					}
+					live.Status.BuildStatus = fv1.BuildStatusPending
+					var uerr error
+					n, uerr = packages(desired.Namespace).UpdateStatus(ctx, live, metav1.UpdateOptions{})
+					return uerr
+				}); err != nil {
 					return nil, err
 				}
 			}
