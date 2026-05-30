@@ -186,8 +186,10 @@ func (r *PackageReconciler) build(ctx context.Context, pkg *fv1.Package) (ctrl.R
 		}
 	}
 
-	pkg, err = updatePackage(ctx, logger, r.fissionClient, pkg, fv1.BuildStatusSucceeded, buildLogs, uploadResp)
-	if err != nil {
+	// Discard the return: updatePackage returns a nil package on failure, and the
+	// error branch below still needs the live pkg for markBuildFailed /
+	// markFunctionsForPackage (both dereference pkg.Name/Namespace).
+	if _, err = updatePackage(ctx, logger, r.fissionClient, pkg, fv1.BuildStatusSucceeded, buildLogs, uploadResp); err != nil {
 		logger.Error(err, "error updating package info")
 		r.markBuildFailed(ctx, logger, pkg, buildLogs)
 		markFunctionsForPackage(ctx, logger, r.fissionClient, fnList.Items, pkg, false)
