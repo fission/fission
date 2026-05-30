@@ -7,15 +7,11 @@ package cms
 import (
 	"context"
 
-	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
-	k8sCache "k8s.io/client-go/tools/cache"
 
 	"github.com/go-logr/logr"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
-	"github.com/fission/fission/pkg/executor/executortype"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 )
 
@@ -36,31 +32,4 @@ func getSecretRelatedFuncs(ctx context.Context, logger logr.Logger, m *metav1.Ob
 		}
 	}
 	return relatedFunctions, nil
-}
-
-func SecretEventHandlers(ctx context.Context, logger logr.Logger, fissionClient versioned.Interface,
-	kubernetesClient kubernetes.Interface, types map[fv1.ExecutorType]executortype.ExecutorType) k8sCache.ResourceEventHandlerFuncs {
-	return k8sCache.ResourceEventHandlerFuncs{
-		AddFunc:    func(obj any) {},
-		DeleteFunc: func(obj any) {},
-		UpdateFunc: func(oldObj any, newObj any) {
-			oldS := oldObj.(*apiv1.Secret)
-			newS := newObj.(*apiv1.Secret)
-			if oldS.ResourceVersion != newS.ResourceVersion {
-				funcs, err := getSecretRelatedFuncs(ctx, logger, &newS.ObjectMeta, fissionClient)
-				if err != nil {
-					logger.Error(err, "Failed to get functions related to secret", "secret_name", newS.Name, "secret_namespace", newS.Namespace)
-				}
-
-				if len(funcs) == 0 {
-					return
-				}
-
-				logger.V(1).Info("Secret changed",
-					"secret_name", newS.Name,
-					"secret_namespace", newS.Namespace)
-				refreshPods(ctx, logger, funcs, types)
-			}
-		},
-	}
 }

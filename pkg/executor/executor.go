@@ -39,6 +39,7 @@ import (
 	"github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
 	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
 	"github.com/fission/fission/pkg/utils"
+	"github.com/fission/fission/pkg/utils/crmanager"
 	fissionmetrics "github.com/fission/fission/pkg/utils/metrics"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
@@ -49,7 +50,6 @@ type (
 		logger logr.Logger
 
 		executorTypes map[fv1.ExecutorType]executortype.ExecutorType
-		cms           *cms.ConfigSecretController
 
 		fissionClient versioned.Interface
 
@@ -81,11 +81,10 @@ type (
 // MakeExecutor returns an Executor for the given ExecutorType(s). It only builds
 // the object; the mutating controllers are started by executorControllers (a
 // leader-only runnable) under the controller-runtime Manager.
-func MakeExecutor(logger logr.Logger, cms *cms.ConfigSecretController,
+func MakeExecutor(logger logr.Logger,
 	fissionClient versioned.Interface, types map[fv1.ExecutorType]executortype.ExecutorType) *Executor {
 	return &Executor{
 		logger:        logger.WithName("executor"),
-		cms:           cms,
 		fissionClient: fissionClient,
 		executorTypes: types,
 
@@ -99,13 +98,12 @@ func MakeExecutor(logger logr.Logger, cms *cms.ConfigSecretController,
 // therefore never start it, so /readyz (served by the API server on every
 // replica) reports not-ready and the Service excludes them.
 type executorControllers struct {
-	logger           logr.Logger
-	api              *Executor
-	executorTypes    map[fv1.ExecutorType]executortype.ExecutorType
-	fissionInformers []k8sCache.SharedIndexInformer
-	startFactories   func(stopCh <-chan struct{})
-	waitForSync      func(stopCh <-chan struct{}) bool
-	adoptResources   bool
+	logger         logr.Logger
+	api            *Executor
+	executorTypes  map[fv1.ExecutorType]executortype.ExecutorType
+	startFactories func(stopCh <-chan struct{})
+	waitForSync    func(stopCh <-chan struct{}) bool
+	adoptResources bool
 }
 
 func (c *executorControllers) NeedLeaderElection() bool { return true }
@@ -116,11 +114,6 @@ func (c *executorControllers) Start(ctx context.Context) error {
 	// Read-only executortype informer factories (listers used by et.Run).
 	c.startFactories(ctx.Done())
 
-	// ConfigMap/Secret informers drive re-specialization (mutating), so they
-	// run on the leader only.
-	for _, informer := range c.fissionInformers {
-		gm.Go(func() error { informer.Run(ctx.Done()); return nil })
-	}
 	for _, et := range c.executorTypes {
 		gm.Go(func() error { et.Run(ctx, gm); return nil })
 	}
@@ -438,21 +431,6 @@ func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, 
 
 	adoptExistingResources, _ := strconv.ParseBool(os.Getenv("ADOPT_EXISTING_RESOURCES"))
 
-	configMapInformer := utils.GetK8sInformersForNamespaces(kubernetesClient, time.Minute*30, fv1.ConfigMaps)
-	secretInformer := utils.GetK8sInformersForNamespaces(kubernetesClient, time.Minute*30, fv1.Secrets)
-	cmsController, err := cms.MakeConfigSecretController(ctx, logger, fissionClient, kubernetesClient, executorTypes, configMapInformer, secretInformer)
-	if err != nil {
-		return fmt.Errorf("error creating configmap and secret controller: %w", err)
-	}
-
-	fissionInformers := make([]k8sCache.SharedIndexInformer, 0)
-	for _, informer := range configMapInformer {
-		fissionInformers = append(fissionInformers, informer)
-	}
-	for _, informer := range secretInformer {
-		fissionInformers = append(fissionInformers, informer)
-	}
-
 	// Leader election is owned by the controller-runtime Manager (native),
 	// opt-in via LEADER_ELECTION_ENABLED. When disabled the Manager runs every
 	// runnable unconditionally, so single-replica behaviour is unchanged. On
@@ -460,7 +438,7 @@ func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, 
 	// goes down, so the kubelet restarts the pod and it rejoins as a standby.
 	leaderElectionEnabled, _ := strconv.ParseBool(os.Getenv("LEADER_ELECTION_ENABLED"))
 
-	api := MakeExecutor(logger, cmsController, fissionClient, executorTypes)
+	api := MakeExecutor(logger, fissionClient, executorTypes)
 	api.leaderElection = leaderElectionEnabled
 
 	// Fission's collectors register into controller-runtime's global registry;
@@ -477,7 +455,13 @@ func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, 
 	}
 
 	crMgr, err := ctrl.NewManager(restConfig, ctrl.Options{
-		Scheme:                        scheme.Scheme,
+		Scheme: scheme.Scheme,
+		// Scope the shared cache to the Fission-watched namespaces. The ConfigMap
+		// + Secret reconcilers read through it, and the executor's RBAC is
+		// per-namespace Roles (not a ClusterRole) — a cluster-wide cache's
+		// list/watch is forbidden, so its sync would time out and the manager
+		// would exit. See crmanager.FissionCacheOptions.
+		Cache:                         crmanager.FissionCacheOptions(),
 		Metrics:                       metricsserver.Options{BindAddress: metricsBind},
 		HealthProbeBindAddress:        "0", // /healthz + /readyz stay on the API mux (port)
 		LeaderElection:                leaderElectionEnabled,
@@ -487,6 +471,13 @@ func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, 
 	})
 	if err != nil {
 		return fmt.Errorf("unable to set up executor manager: %w", err)
+	}
+
+	// ConfigMap/Secret changes recycle the pods of functions that mount them.
+	// These reconcilers replace the cms informer event handlers and, like the
+	// other mutating controllers, run on the elected leader only.
+	if err := cms.RegisterReconcilers(crMgr, logger, fissionClient, executorTypes); err != nil {
+		return err
 	}
 
 	startFactories := func(stopCh <-chan struct{}) {
@@ -518,13 +509,12 @@ func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, 
 	utils.CreateMissingPermissionForSA(ctx, kubernetesClient, logger)
 
 	controllers := &executorControllers{
-		logger:           logger,
-		api:              api,
-		executorTypes:    executorTypes,
-		fissionInformers: fissionInformers,
-		startFactories:   startFactories,
-		waitForSync:      waitForSync,
-		adoptResources:   adoptExistingResources,
+		logger:         logger,
+		api:            api,
+		executorTypes:  executorTypes,
+		startFactories: startFactories,
+		waitForSync:    waitForSync,
+		adoptResources: adoptExistingResources,
 	}
 	if err := crMgr.Add(controllers); err != nil {
 		return fmt.Errorf("unable to add executor controllers: %w", err)

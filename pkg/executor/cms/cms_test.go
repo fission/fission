@@ -14,9 +14,10 @@ import (
 	"github.com/stretchr/testify/require"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/informers"
-	k8sfake "k8s.io/client-go/kubernetes/fake"
-	"k8s.io/client-go/tools/cache"
+	"k8s.io/apimachinery/pkg/types"
+	ctrl "sigs.k8s.io/controller-runtime"
+	crfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/executor/executortype"
@@ -108,31 +109,37 @@ func configMap(name, rv string) *apiv1.ConfigMap {
 	return &apiv1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: cmsNamespace, ResourceVersion: rv}}
 }
 
-func TestConfigMapEventHandlers(t *testing.T) {
+func req(name string) ctrl.Request {
+	return ctrl.Request{NamespacedName: types.NamespacedName{Name: name, Namespace: cmsNamespace}}
+}
+
+func TestConfigMapReconciler(t *testing.T) {
 	related := functionRefingConfigMap("fn", "cfg")
-	client := fClient.NewClientset(&related)
 	exec := &fakeExecutor{}
-	types := map[fv1.ExecutorType]executortype.ExecutorType{fv1.ExecutorTypePoolmgr: exec}
-	h := ConfigMapEventHandlers(t.Context(), logr.Discard(), client, k8sfake.NewClientset(), types)
+	r := &ConfigMapReconciler{
+		logger:        logr.Discard(),
+		client:        crfake.NewClientBuilder().WithObjects(configMap("cfg", "2"), configMap("unreferenced", "1")).Build(),
+		fissionClient: fClient.NewClientset(&related),
+		types:         map[fv1.ExecutorType]executortype.ExecutorType{fv1.ExecutorTypePoolmgr: exec},
+	}
 
-	// Add/Delete are intentional no-ops.
-	h.OnAdd(configMap("cfg", "1"), false)
-	h.OnDelete(configMap("cfg", "1"))
-	assert.Equal(t, 0, exec.refreshCount)
-
-	t.Run("same resource version does not refresh", func(t *testing.T) {
-		h.OnUpdate(configMap("cfg", "1"), configMap("cfg", "1"))
-		assert.Equal(t, 0, exec.refreshCount)
-	})
-
-	t.Run("changed configmap with related funcs refreshes", func(t *testing.T) {
-		h.OnUpdate(configMap("cfg", "1"), configMap("cfg", "2"))
+	t.Run("referenced configmap recycles the function's pods", func(t *testing.T) {
+		_, err := r.Reconcile(t.Context(), req("cfg"))
+		require.NoError(t, err)
 		assert.Equal(t, 1, exec.refreshCount)
 	})
 
-	t.Run("changed configmap with no related funcs is a no-op", func(t *testing.T) {
+	t.Run("unreferenced configmap is a no-op", func(t *testing.T) {
 		before := exec.refreshCount
-		h.OnUpdate(configMap("unreferenced", "1"), configMap("unreferenced", "2"))
+		_, err := r.Reconcile(t.Context(), req("unreferenced"))
+		require.NoError(t, err)
+		assert.Equal(t, before, exec.refreshCount)
+	})
+
+	t.Run("deleted configmap is a no-op", func(t *testing.T) {
+		before := exec.refreshCount
+		_, err := r.Reconcile(t.Context(), req("gone"))
+		require.NoError(t, err)
 		assert.Equal(t, before, exec.refreshCount)
 	})
 }
@@ -141,27 +148,29 @@ func secret(name, rv string) *apiv1.Secret {
 	return &apiv1.Secret{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: cmsNamespace, ResourceVersion: rv}}
 }
 
-func TestSecretEventHandlers(t *testing.T) {
+func TestSecretReconciler(t *testing.T) {
 	related := functionRefingSecret("fn", "sec")
-	client := fClient.NewClientset(&related)
 	exec := &fakeExecutor{}
-	types := map[fv1.ExecutorType]executortype.ExecutorType{fv1.ExecutorTypePoolmgr: exec}
-	h := SecretEventHandlers(t.Context(), logr.Discard(), client, k8sfake.NewClientset(), types)
-
-	h.OnUpdate(secret("sec", "1"), secret("sec", "1"))
-	assert.Equal(t, 0, exec.refreshCount)
-
-	h.OnUpdate(secret("sec", "1"), secret("sec", "2"))
+	r := &SecretReconciler{
+		logger:        logr.Discard(),
+		client:        crfake.NewClientBuilder().WithObjects(secret("sec", "2")).Build(),
+		fissionClient: fClient.NewClientset(&related),
+		types:         map[fv1.ExecutorType]executortype.ExecutorType{fv1.ExecutorTypePoolmgr: exec},
+	}
+	_, err := r.Reconcile(t.Context(), req("sec"))
+	require.NoError(t, err)
 	assert.Equal(t, 1, exec.refreshCount)
 }
 
-func TestMakeConfigSecretController(t *testing.T) {
-	factory := informers.NewSharedInformerFactory(k8sfake.NewClientset(), 0)
-	cmInformer := map[string]cache.SharedIndexInformer{cmsNamespace: factory.Core().V1().ConfigMaps().Informer()}
-	secretInformer := map[string]cache.SharedIndexInformer{cmsNamespace: factory.Core().V1().Secrets().Informer()}
-
-	ctrl, err := MakeConfigSecretController(t.Context(), logr.Discard(), fClient.NewClientset(), k8sfake.NewClientset(),
-		map[fv1.ExecutorType]executortype.ExecutorType{}, cmInformer, secretInformer)
-	require.NoError(t, err)
-	assert.NotNil(t, ctrl)
+// TestContentChangedPredicate pins the predicate that reproduces the old
+// handlers: only a ResourceVersion-changing Update enqueues; Create/Delete are
+// dropped (so the startup list of every ConfigMap/Secret doesn't refresh pods).
+func TestContentChangedPredicate(t *testing.T) {
+	p := contentChangedPredicate()
+	assert.False(t, p.Create(event.CreateEvent{Object: configMap("cfg", "1")}), "create dropped")
+	assert.False(t, p.Delete(event.DeleteEvent{Object: configMap("cfg", "1")}), "delete dropped")
+	assert.True(t, p.Update(event.UpdateEvent{ObjectOld: configMap("cfg", "1"), ObjectNew: configMap("cfg", "2")}),
+		"content change enqueues")
+	assert.False(t, p.Update(event.UpdateEvent{ObjectOld: configMap("cfg", "1"), ObjectNew: configMap("cfg", "1")}),
+		"same resource version dropped")
 }
