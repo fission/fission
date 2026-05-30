@@ -29,91 +29,63 @@ func init() {
 	}
 }
 
-func createIngress(ctx context.Context, logger logr.Logger, trigger *fv1.HTTPTrigger, kubeClient kubernetes.Interface) {
+// reconcileIngress brings the Ingress for a trigger to its desired state
+// (level-based, called from the HTTPTrigger reconciler): create it when
+// Spec.CreateIngress is set and it is missing, update it when its spec drifts,
+// and delete it when CreateIngress is unset. The Ingress lives in podNamespace
+// and is named after the trigger.
+func reconcileIngress(ctx context.Context, logger logr.Logger, trigger *fv1.HTTPTrigger, kubeClient kubernetes.Interface) {
 	if !trigger.Spec.CreateIngress {
-		return
-	}
-	_, err := kubeClient.NetworkingV1().Ingresses(podNamespace).Create(ctx, util.GetIngressSpec(podNamespace, trigger), v1.CreateOptions{})
-	if err != nil && !k8serrors.IsAlreadyExists(err) {
-		logger.Error(err, "failed to create ingress")
-		return
-	}
-	logger.V(1).Info("created ingress successfully for trigger", "trigger", trigger.Name)
-}
-
-func deleteIngress(ctx context.Context, logger logr.Logger, trigger *fv1.HTTPTrigger, kubeClient kubernetes.Interface) {
-	if !trigger.Spec.CreateIngress {
+		// Ensure no Ingress lingers (e.g. CreateIngress was toggled off).
+		deleteIngressByName(ctx, logger, trigger.Name, kubeClient)
 		return
 	}
 
-	ingress, err := kubeClient.NetworkingV1().Ingresses(podNamespace).Get(ctx, trigger.Name, v1.GetOptions{})
-	if err != nil && !k8serrors.IsNotFound(err) {
-		logger.Error(err, "failed to get ingress when deleting trigger", "trigger", trigger.Name)
-		return
-	}
-
-	err = kubeClient.NetworkingV1().Ingresses(podNamespace).Delete(ctx, ingress.Name, v1.DeleteOptions{})
-	if err != nil && !k8serrors.IsNotFound(err) {
-		logger.Error(err, "failed to delete ingress for trigger", "ingress", ingress,
-			"trigger", trigger.Name)
-	}
-}
-
-func updateIngress(ctx context.Context, logger logr.Logger, oldT *fv1.HTTPTrigger, newT *fv1.HTTPTrigger, kubeClient kubernetes.Interface) {
-	if !oldT.Spec.CreateIngress && !newT.Spec.CreateIngress {
-		return
-	}
-
-	if !oldT.Spec.CreateIngress && newT.Spec.CreateIngress {
-		createIngress(ctx, logger, newT, kubeClient)
-		return
-	}
-
-	if !newT.Spec.CreateIngress && oldT.Spec.CreateIngress {
-		deleteIngress(ctx, logger, oldT, kubeClient)
-		return
-	}
-
-	oldIngress, err := kubeClient.NetworkingV1().Ingresses(podNamespace).Get(ctx, oldT.Name, v1.GetOptions{})
-	if err != nil {
-		if k8serrors.IsNotFound(err) {
-			createIngress(ctx, logger, newT, kubeClient)
-		}
-		logger.Error(err, "failed to get ingress when updating trigger", "trigger", oldT.Name)
-		return
-	}
-	newIngress := util.GetIngressSpec(podNamespace, newT)
-
-	changes := false
-
-	if !reflect.DeepEqual(oldIngress.Annotations, newIngress.Annotations) {
-		logger.V(1).Info("ingress annotation",
-			"old_trigger", oldIngress.Annotations, "new_trigger", newIngress.Annotations)
-
-		if oldIngress.Annotations == nil || newIngress.Annotations == nil {
-			oldIngress.Annotations = newIngress.Annotations
-		} else {
-			maps.Copy(oldIngress.Annotations, newIngress.Annotations)
-		}
-		changes = true
-	}
-
-	if !reflect.DeepEqual(oldIngress.Spec, newIngress.Spec) {
-		logger.V(1).Info("ingress spec",
-			"old_trigger", oldIngress.Spec, "new_trigger", newIngress.Spec)
-
-		oldIngress.Spec = newIngress.Spec
-		changes = true
-	}
-
-	if changes {
-		_, err = kubeClient.NetworkingV1().Ingresses(podNamespace).Update(ctx, oldIngress, v1.UpdateOptions{})
-		if err != nil {
-			logger.Error(err, "failed to update ingress for trigger", "trigger", oldT.Name)
+	desired := util.GetIngressSpec(podNamespace, trigger)
+	existing, err := kubeClient.NetworkingV1().Ingresses(podNamespace).Get(ctx, trigger.Name, v1.GetOptions{})
+	if k8serrors.IsNotFound(err) {
+		_, err := kubeClient.NetworkingV1().Ingresses(podNamespace).Create(ctx, desired, v1.CreateOptions{})
+		if err != nil && !k8serrors.IsAlreadyExists(err) {
+			logger.Error(err, "failed to create ingress", "trigger", trigger.Name)
 			return
 		}
+		logger.V(1).Info("created ingress successfully for trigger", "trigger", trigger.Name)
+		return
+	}
+	if err != nil {
+		logger.Error(err, "failed to get ingress when reconciling trigger", "trigger", trigger.Name)
+		return
+	}
 
-		logger.V(1).Info("updated ingress successfully for trigger",
-			"old_trigger", oldT.Name, "new_trigger", newT.Name)
+	changes := false
+	if !reflect.DeepEqual(existing.Annotations, desired.Annotations) {
+		if existing.Annotations == nil || desired.Annotations == nil {
+			existing.Annotations = desired.Annotations
+		} else {
+			maps.Copy(existing.Annotations, desired.Annotations)
+		}
+		changes = true
+	}
+	if !reflect.DeepEqual(existing.Spec, desired.Spec) {
+		existing.Spec = desired.Spec
+		changes = true
+	}
+	if changes {
+		if _, err := kubeClient.NetworkingV1().Ingresses(podNamespace).Update(ctx, existing, v1.UpdateOptions{}); err != nil {
+			logger.Error(err, "failed to update ingress for trigger", "trigger", trigger.Name)
+			return
+		}
+		logger.V(1).Info("updated ingress successfully for trigger", "trigger", trigger.Name)
+	}
+}
+
+// deleteIngressByName removes the Ingress with the given name from podNamespace.
+// Idempotent: a missing Ingress is not an error, so this is safe to call for a
+// trigger that never had CreateIngress set (e.g. on the reconciler's delete
+// path, where the trigger object is already gone).
+func deleteIngressByName(ctx context.Context, logger logr.Logger, name string, kubeClient kubernetes.Interface) {
+	err := kubeClient.NetworkingV1().Ingresses(podNamespace).Delete(ctx, name, v1.DeleteOptions{})
+	if err != nil && !k8serrors.IsNotFound(err) {
+		logger.Error(err, "failed to delete ingress", "ingress", name)
 	}
 }

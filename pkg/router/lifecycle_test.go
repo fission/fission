@@ -13,7 +13,6 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/assert"
-	k8sCache "k8s.io/client-go/tools/cache"
 
 	config "github.com/fission/fission/pkg/featureconfig"
 )
@@ -63,34 +62,23 @@ func TestPanicRecoveryMiddleware(t *testing.T) {
 	})
 }
 
-// fakeInformer embeds the SharedIndexInformer interface (nil) and overrides
-// only HasSynced, which is all routerReadinessHandler calls.
-type fakeInformer struct {
-	k8sCache.SharedIndexInformer
-	synced bool
-}
-
-func (f fakeInformer) HasSynced() bool { return f.synced }
-
+// TestRouterReadinessHandler pins the readiness gate: /readyz reports
+// 200 only after the first successful mux build flips ready, keeping a
+// freshly started or rolling pod out of the Service endpoints until its mux is
+// populated.
 func TestRouterReadinessHandler(t *testing.T) {
-	synced := func(b bool) map[string]k8sCache.SharedIndexInformer {
-		return map[string]k8sCache.SharedIndexInformer{"ns": fakeInformer{synced: b}}
-	}
-
 	tests := []struct {
-		name    string
-		trigger map[string]k8sCache.SharedIndexInformer
-		fn      map[string]k8sCache.SharedIndexInformer
-		want    int
+		name  string
+		ready bool
+		want  int
 	}{
-		{"all synced", synced(true), synced(true), http.StatusOK},
-		{"trigger not synced", synced(false), synced(true), http.StatusServiceUnavailable},
-		{"function not synced", synced(true), synced(false), http.StatusServiceUnavailable},
-		{"empty maps ready", map[string]k8sCache.SharedIndexInformer{}, map[string]k8sCache.SharedIndexInformer{}, http.StatusOK},
+		{"mux built -> ready", true, http.StatusOK},
+		{"mux not built -> unavailable", false, http.StatusServiceUnavailable},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			ts := &HTTPTriggerSet{triggerInformer: tc.trigger, funcInformer: tc.fn}
+			ts := &HTTPTriggerSet{}
+			ts.ready.Store(tc.ready)
 			rec := httptest.NewRecorder()
 			ts.routerReadinessHandler(rec, httptest.NewRequest(http.MethodGet, "/readyz", nil))
 			assert.Equal(t, tc.want, rec.Code)

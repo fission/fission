@@ -5,11 +5,13 @@
 package router
 
 import (
+	"context"
 	"fmt"
 	"time"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	k8sCache "k8s.io/client-go/tools/cache"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/go-logr/logr"
 
@@ -22,10 +24,13 @@ type (
 	// reference into a resolveResult
 	functionReferenceResolver struct {
 		// FunctionReference -> function metadata
-		refCache     *cache.Cache[namespacedTriggerReference, resolveResult]
-		funcInformer map[string]k8sCache.SharedIndexInformer
-		logger       logr.Logger
-		// store    k8sCache.Store
+		refCache *cache.Cache[namespacedTriggerReference, resolveResult]
+		// reader is the Manager's cache-backed client. Function lookups go
+		// through it (in-memory cache reads), replacing the per-namespace
+		// SharedIndexInformer stores the resolver used before the
+		// controller-runtime migration.
+		reader client.Reader
+		logger logr.Logger
 	}
 
 	resolveResultType int
@@ -59,17 +64,17 @@ const (
 	resolveResultMultipleFunctions
 )
 
-func makeFunctionReferenceResolver(logger logr.Logger, funcInformer map[string]k8sCache.SharedIndexInformer) *functionReferenceResolver {
+func makeFunctionReferenceResolver(logger logr.Logger, reader client.Reader) *functionReferenceResolver {
 	frr := &functionReferenceResolver{
-		refCache:     cache.MakeCache[namespacedTriggerReference, resolveResult](time.Minute, 0),
-		funcInformer: funcInformer,
-		logger:       logger.WithName("function_ref_resolver"),
+		refCache: cache.MakeCache[namespacedTriggerReference, resolveResult](time.Minute, 0),
+		reader:   reader,
+		logger:   logger.WithName("function_ref_resolver"),
 	}
 	return frr
 }
 
 // resolve translates a trigger's function reference to a resolveResult.
-func (frr *functionReferenceResolver) resolve(trigger fv1.HTTPTrigger) (*resolveResult, error) {
+func (frr *functionReferenceResolver) resolve(ctx context.Context, trigger fv1.HTTPTrigger) (*resolveResult, error) {
 	nfr := namespacedTriggerReference{
 		namespace:              trigger.Namespace,
 		triggerName:            trigger.Name,
@@ -87,13 +92,13 @@ func (frr *functionReferenceResolver) resolve(trigger fv1.HTTPTrigger) (*resolve
 
 	switch trigger.Spec.FunctionReference.Type {
 	case fv1.FunctionReferenceTypeFunctionName:
-		rr, err = frr.resolveByName(nfr.namespace, trigger.Spec.FunctionReference.Name)
+		rr, err = frr.resolveByName(ctx, nfr.namespace, trigger.Spec.FunctionReference.Name)
 		if err != nil {
 			return nil, err
 		}
 
 	case fv1.FunctionReferenceTypeFunctionWeights:
-		rr, err = frr.resolveByFunctionWeights(nfr.namespace, &trigger.Spec.FunctionReference)
+		rr, err = frr.resolveByFunctionWeights(ctx, nfr.namespace, &trigger.Spec.FunctionReference)
 		if err != nil {
 			return nil, err
 		}
@@ -108,73 +113,47 @@ func (frr *functionReferenceResolver) resolve(trigger fv1.HTTPTrigger) (*resolve
 	return rr, nil
 }
 
-func (frr *functionReferenceResolver) getInformerByNamespace(namespace string) (k8sCache.SharedIndexInformer, error) {
-	if informer, ok := frr.funcInformer[namespace]; ok {
-		return informer, nil
-	}
-	return nil, fmt.Errorf("informer for namespace %s not found", namespace)
-}
-
-// resolveByName simply looks up function by name in a namespace.
-func (frr *functionReferenceResolver) resolveByName(namespace, name string) (*resolveResult, error) {
-	// get function from cache
-	informer, err := frr.getInformerByNamespace(namespace)
-	if err != nil {
-		return nil, err
-	}
-	obj, isExist, err := informer.GetStore().Get(&fv1.Function{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: namespace,
-			Name:      name,
-		},
-	})
-	if err != nil {
-		return nil, err
-	}
-	if !isExist {
+// getFunction reads a Function from the Manager's cache.
+func (frr *functionReferenceResolver) getFunction(ctx context.Context, namespace, name string) (*fv1.Function, error) {
+	f := &fv1.Function{}
+	err := frr.reader.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, f)
+	if apierrors.IsNotFound(err) {
 		frr.logger.Error(nil, "function does not exists", "name", name, "namespace", namespace)
 		return nil, fmt.Errorf("function %s/%s does not exist", namespace, name)
 	}
-	f := obj.(*fv1.Function)
+	if err != nil {
+		return nil, err
+	}
+	return f, nil
+}
 
-	functionMap := map[string]*fv1.Function{
-		f.Name: f,
+// resolveByName simply looks up function by name in a namespace.
+func (frr *functionReferenceResolver) resolveByName(ctx context.Context, namespace, name string) (*resolveResult, error) {
+	f, err := frr.getFunction(ctx, namespace, name)
+	if err != nil {
+		return nil, err
 	}
 
 	rr := resolveResult{
 		resolveResultType: resolveResultSingleFunction,
-		functionMap:       functionMap,
+		functionMap: map[string]*fv1.Function{
+			f.Name: f,
+		},
 	}
 
 	return &rr, nil
 }
 
-func (frr *functionReferenceResolver) resolveByFunctionWeights(namespace string, fr *fv1.FunctionReference) (*resolveResult, error) {
-
+func (frr *functionReferenceResolver) resolveByFunctionWeights(ctx context.Context, namespace string, fr *fv1.FunctionReference) (*resolveResult, error) {
 	functionMap := make(map[string]*fv1.Function)
 	fnWtDistrList := make([]functionWeightDistribution, 0)
 	sumPrefix := 0
 
 	for functionName, functionWeight := range fr.FunctionWeights {
-		// get function from cache
-		informer, err := frr.getInformerByNamespace(namespace)
+		f, err := frr.getFunction(ctx, namespace, functionName)
 		if err != nil {
 			return nil, err
 		}
-		obj, isExist, err := informer.GetStore().Get(&fv1.Function{
-			ObjectMeta: metav1.ObjectMeta{
-				Namespace: namespace,
-				Name:      functionName,
-			},
-		})
-		if err != nil {
-			return nil, err
-		}
-		if !isExist {
-			frr.logger.Error(nil, "function does not exists", "name", functionName, "namespace", namespace)
-			return nil, fmt.Errorf("function %s/%s does not exist", namespace, functionName)
-		}
-		f := obj.(*fv1.Function)
 		functionMap[f.Name] = f
 		sumPrefix = sumPrefix + functionWeight
 		fnWtDistrList = append(fnWtDistrList, functionWeightDistribution{
@@ -202,6 +181,19 @@ func (frr *functionReferenceResolver) delete(namespace string, triggerName, trig
 	frr.refCache.Delete(nfr)
 }
 
-func (frr *functionReferenceResolver) copy() map[namespacedTriggerReference]resolveResult {
-	return frr.refCache.Copy()
+// invalidateForFunction drops any cached resolve result that references the
+// named function in the given namespace, so the next resolve re-reads the
+// function from the cache. Used by the function reconciler when a Function's
+// spec changes. Returns true if an entry was invalidated.
+func (frr *functionReferenceResolver) invalidateForFunction(namespace, name, resourceVersion string) bool {
+	for key, rr := range frr.refCache.Copy() {
+		if key.namespace == namespace &&
+			rr.functionMap[name] != nil &&
+			rr.functionMap[name].ResourceVersion != resourceVersion {
+			frr.logger.V(1).Info("invalidating resolver cache", "function", name, "namespace", namespace)
+			frr.delete(key.namespace, key.triggerName, key.triggerResourceVersion)
+			return true
+		}
+	}
+	return false
 }

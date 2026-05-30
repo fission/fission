@@ -45,11 +45,14 @@ import (
 	ctrlmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	hmacauth "github.com/fission/fission/pkg/auth/hmac"
+	"github.com/fission/fission/pkg/controller"
 	"github.com/fission/fission/pkg/crd"
 	eclient "github.com/fission/fission/pkg/executor/client"
 	"github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
 	"github.com/fission/fission/pkg/throttler"
+	"github.com/fission/fission/pkg/utils/crmanager"
 	"github.com/fission/fission/pkg/utils/httpsecurity"
 	"github.com/fission/fission/pkg/utils/httpserver"
 	fissionmetrics "github.com/fission/fission/pkg/utils/metrics"
@@ -279,24 +282,13 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		return fmt.Errorf("failed to parse USE_ENCODED_PATH: %w", err)
 	}
 
-	triggers, err := makeHTTPTriggerSet(logger.WithName("triggerset"), fmap, fissionClient, kubeClient, executor, &tsRoundTripperParams{
-		timeout:           timeout,
-		timeoutExponent:   timeoutExponent,
-		disableKeepAlive:  disableKeepAlive,
-		keepAliveTime:     keepAliveTime,
-		maxRetries:        maxRetries,
-		svcAddrRetryCount: svcAddrRetryCount,
-	}, isDebugEnv, useEncodedPath, unTapServiceTimeout, throttler.MakeThrottler(svcAddrUpdateTimeout))
-	if err != nil {
-		return fmt.Errorf("error making HTTP trigger set: %w", err)
-	}
-
 	// The router runs under a controller-runtime Manager for lifecycle
-	// consistency with the rest of the control plane and to set up the future
-	// HTTPTrigger Reconciler. It is stateless and replica-independent, so it
-	// uses NO leader election (every replica serves). The Manager owns the
-	// metrics server and graceful shutdown; /healthz + /readyz stay on the
-	// public listener, so the Manager's own health server is disabled.
+	// consistency with the rest of the control plane and to host the HTTPTrigger
+	// + Function reconcilers. It is stateless and replica-independent, so it
+	// uses NO leader election (every replica serves and reconciles its own mux).
+	// The Manager owns the metrics server and graceful shutdown; /router-healthz
+	// + /readyz stay on the public listener, so the Manager's own health
+	// server is disabled.
 	var alreadyRegistered prometheus.AlreadyRegisteredError
 	if err := ctrlmetrics.Registry.Register(fissionmetrics.Registry); err != nil && !errors.As(err, &alreadyRegistered) {
 		logger.Error(err, "failed to register fission metrics collectors")
@@ -309,7 +301,13 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	}
 
 	crMgr, err := ctrl.NewManager(restConfig, ctrl.Options{
-		Scheme:                 scheme.Scheme,
+		Scheme: scheme.Scheme,
+		// Scope the shared cache to the Fission-watched namespaces. The
+		// reconcilers and updateRouter read HTTPTriggers + Functions through it,
+		// and the router's RBAC is per-namespace Roles (not a ClusterRole) — a
+		// cluster-wide cache's list/watch is forbidden, so its sync would time out
+		// and the manager would exit. See crmanager.FissionCacheOptions.
+		Cache:                  crmanager.FissionCacheOptions(),
 		Metrics:                metricsserver.Options{BindAddress: metricsBind},
 		HealthProbeBindAddress: "0", // /router-healthz + /readyz stay on the public listener
 		LeaderElection:         false,
@@ -319,10 +317,36 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		return fmt.Errorf("unable to set up router manager: %w", err)
 	}
 
+	triggers, err := makeHTTPTriggerSet(logger.WithName("triggerset"), fmap, fissionClient, kubeClient, crMgr.GetClient(), executor, &tsRoundTripperParams{
+		timeout:           timeout,
+		timeoutExponent:   timeoutExponent,
+		disableKeepAlive:  disableKeepAlive,
+		keepAliveTime:     keepAliveTime,
+		maxRetries:        maxRetries,
+		svcAddrRetryCount: svcAddrRetryCount,
+	}, isDebugEnv, useEncodedPath, unTapServiceTimeout, throttler.MakeThrottler(svcAddrUpdateTimeout))
+	if err != nil {
+		return fmt.Errorf("error making HTTP trigger set: %w", err)
+	}
+
+	// Register the trigger + function reconcilers. Each signals a debounced mux
+	// rebuild; GenerationChangedPredicate drops status-only writes so the
+	// router's own HTTPTrigger condition writes don't loop.
+	if err := controller.Register(crMgr, &fv1.HTTPTrigger{},
+		&httpTriggerReconciler{logger: logger.WithName("httptrigger_reconciler"), client: crMgr.GetClient(), ts: triggers},
+		"router-httptrigger"); err != nil {
+		return fmt.Errorf("error registering httptrigger reconciler: %w", err)
+	}
+	if err := controller.Register(crMgr, &fv1.Function{},
+		&functionReconciler{logger: logger.WithName("function_reconciler"), client: crMgr.GetClient(), ts: triggers},
+		"router-function"); err != nil {
+		return fmt.Errorf("error registering function reconciler: %w", err)
+	}
+
 	logger.Info("starting router", "port", port, "internalPort", internalPort)
 
-	// The trigger watching + the public/internal listeners run on an internal
-	// GroupManager, hosted by a single Manager runnable.
+	// The public/internal listeners run on an internal GroupManager, hosted by a
+	// single Manager runnable.
 	err = crMgr.Add(runnableFunc(func(rctx context.Context) error {
 		gm := &errgroup.Group{}
 		tracer := otel.Tracer("router")
@@ -330,6 +354,13 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		defer span.End()
 		if err := serve(rctx, logger, gm, port, internalPort, triggers); err != nil {
 			return err
+		}
+		// Kick the initial mux build once the cache has synced, so router-owned
+		// routes (healthz/version/auth) are installed even with zero triggers.
+		// The reconcilers also fire for every existing object; the debouncer
+		// coalesces these into a single rebuild.
+		if crMgr.GetCache().WaitForCacheSync(rctx) {
+			triggers.syncTriggers()
 		}
 		<-rctx.Done()
 		_ = gm.Wait()
