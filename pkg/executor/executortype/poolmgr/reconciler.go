@@ -61,6 +61,13 @@ func (r *functionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		}
 		return ctrl.Result{}, err
 	}
+	// A delete followed by a quick recreate of the same name can coalesce into a
+	// single reconcile (the workqueue only carries namespace/name): if the cached
+	// function has a different UID, mark the old one deleted before caching the
+	// new one, so its fsCache entry isn't orphaned and its pods are reaped.
+	if old, ok := r.lastSeen.Load(req.NamespacedName); ok && old.(*fv1.Function).UID != fn.UID {
+		r.deleter.markFuncDeleted(crd.CacheKeyURGFromMeta(&old.(*fv1.Function).ObjectMeta))
+	}
 	r.lastSeen.Store(req.NamespacedName, fn.DeepCopy())
 	return ctrl.Result{}, nil
 }

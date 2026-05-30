@@ -63,4 +63,17 @@ func TestPoolmgrFunctionReconciler(t *testing.T) {
 		require.NoError(t, err)
 		assert.Empty(t, d.deleted)
 	})
+
+	t.Run("delete+recreate with a new UID marks the old UID deleted", func(t *testing.T) {
+		d := &fakeDeleter{}
+		recreated := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "fn", Namespace: "default", UID: "u2", ResourceVersion: "3", Generation: 1}}
+		r := &functionReconciler{logger: logr.Discard(), client: crClient(recreated), deleter: d}
+		r.lastSeen.Store(key, fn.DeepCopy()) // old UID u1
+		_, err := r.Reconcile(t.Context(), req)
+		require.NoError(t, err)
+		require.Len(t, d.deleted, 1)
+		assert.Equal(t, crd.CacheKeyURGFromMeta(&fn.ObjectMeta), d.deleted[0], "old UID must be marked deleted")
+		cached, _ := r.lastSeen.Load(key)
+		assert.Equal(t, recreated.UID, cached.(*fv1.Function).UID, "cache now holds the recreated function")
+	})
 }
