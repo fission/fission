@@ -243,7 +243,12 @@ func (sts PackageStatus) Validate() error {
 	var errs error
 
 	switch sts.BuildStatus {
-	case BuildStatusPending, BuildStatusRunning, BuildStatusSucceeded, BuildStatusFailed, BuildStatusNone: // no op
+	// "" (empty) is the not-yet-processed state: with the Package /status
+	// subresource, the apiserver strips the status set by the defaulting webhook
+	// on create, so a package is admitted with an empty BuildStatus and the
+	// buildermgr fills it in (setInitialBuildStatus). Reject only genuinely
+	// unknown values.
+	case "", BuildStatusPending, BuildStatusRunning, BuildStatusSucceeded, BuildStatusFailed, BuildStatusNone: // no op
 	default:
 		errs = errors.Join(errs, MakeValidationErr(ErrorUnsupportedType, "PackageStatus.BuildStatus", sts.BuildStatus, "not a valid build status"))
 	}

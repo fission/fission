@@ -677,13 +677,20 @@ func applyPackages(ctx context.Context, fclient cmd.Client, fr *FissionResources
 				console.Warn(fmt.Sprintf("Error waiting for package '%v' build, ignoring", desired.Name))
 				pkg = desired
 			}
-			// Re-trigger a build if the previous one failed.
-			if pkg.Status.BuildStatus == fv1.BuildStatusFailed {
-				pkg.Status.BuildStatus = fv1.BuildStatusPending
-			}
+			// Re-trigger a build if the previous one failed. This is a status
+			// write; with the /status subresource it must go through
+			// UpdateStatus, separately from the spec Update below.
+			retrigger := pkg.Status.BuildStatus == fv1.BuildStatusFailed
 			n, err := packages(pkg.Namespace).Update(ctx, pkg, metav1.UpdateOptions{})
 			if err != nil {
 				return nil, err
+			}
+			if retrigger {
+				n.Status.BuildStatus = fv1.BuildStatusPending
+				n, err = packages(pkg.Namespace).UpdateStatus(ctx, n, metav1.UpdateOptions{})
+				if err != nil {
+					return nil, err
+				}
 			}
 			return &n.ObjectMeta, nil
 		},

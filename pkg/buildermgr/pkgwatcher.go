@@ -360,6 +360,5 @@ func setInitialBuildStatus(ctx context.Context, fissionClient versioned.Interfac
 	}
 	setPackageBuildCondition(&pkg.Status, pkg.Status.BuildStatus, pkg.Status.BuildLog, pkg.Generation)
 
-	// TODO: use UpdateStatus to update status
-	return fissionClient.CoreV1().Packages(pkg.Namespace).Update(ctx, pkg, metav1.UpdateOptions{})
+	return fissionClient.CoreV1().Packages(pkg.Namespace).UpdateStatus(ctx, pkg, metav1.UpdateOptions{})
 }

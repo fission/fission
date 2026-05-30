@@ -34,6 +34,7 @@ type (
 	// Package Think of these as function-level images.
 	// +genclient
 	// +kubebuilder:object:root=true
+	// +kubebuilder:subresource:status
 	// +kubebuilder:resource:singular="package",scope="Namespaced",shortName={pkg}
 	Package struct {
 		metav1.TypeMeta   `json:",inline"`

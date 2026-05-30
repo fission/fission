@@ -156,19 +156,32 @@ func updatePackage(ctx context.Context, logger logr.Logger, fissionClient versio
 		Conditions:          existingConds,
 	}
 	setPackageBuildCondition(&pkg.Status, status, buildLogs, pkg.Generation)
+	desiredStatus := pkg.Status
 
+	// A successful build also writes the deployment archive onto the spec. With
+	// the /status subresource enabled, the apiserver ignores status on a
+	// main-resource Update, so the spec and status are persisted in two calls.
 	if uploadResp != nil {
 		pkg.Spec.Deployment = fv1.Archive{
 			Type:     fv1.ArchiveTypeUrl,
 			URL:      uploadResp.ArchiveDownloadUrl,
 			Checksum: uploadResp.Checksum,
 		}
+		updated, err := fissionClient.CoreV1().Packages(pkg.ObjectMeta.Namespace).Update(ctx, pkg, metav1.UpdateOptions{})
+		if err != nil {
+			e := "error updating package spec"
+			logger.Error(err, e)
+			return nil, fmt.Errorf("%s: %w", e, err)
+		}
+		// Update returns the server object with its own (unchanged) status;
+		// re-apply the status we want before persisting it below.
+		pkg = updated
+		pkg.Status = desiredStatus
 	}
 
-	// update package spec
-	pkg, err := fissionClient.CoreV1().Packages(pkg.ObjectMeta.Namespace).Update(ctx, pkg, metav1.UpdateOptions{})
+	pkg, err := fissionClient.CoreV1().Packages(pkg.ObjectMeta.Namespace).UpdateStatus(ctx, pkg, metav1.UpdateOptions{})
 	if err != nil {
-		e := "error updating package"
+		e := "error updating package status"
 		logger.Error(err, e)
 		return nil, fmt.Errorf("%s: %w", e, err)
 	}

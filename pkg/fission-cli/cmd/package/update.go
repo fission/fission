@@ -183,14 +183,28 @@ func UpdatePackage(input cli.Input, client cmd.Client, specFile string, pkg *fv1
 		return &pkg.ObjectMeta, nil
 	}
 
-	newPkgMeta, err := client.FissionClientSet.CoreV1().Packages(pkg.ObjectMeta.Namespace).Update(input.Context(), pkg, metav1.UpdateOptions{})
+	newPkg, err := client.FissionClientSet.CoreV1().Packages(pkg.ObjectMeta.Namespace).Update(input.Context(), pkg, metav1.UpdateOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("update package: %w", err)
 	}
 
-	fmt.Printf("Package '%v' updated\n", newPkgMeta.GetName())
+	// The rebuild trigger (BuildStatusPending) is a status write; with the
+	// /status subresource the spec Update above ignores it, so persist it
+	// separately through UpdateStatus.
+	if needToRebuild {
+		newPkg.Status = fv1.PackageStatus{
+			BuildStatus:         fv1.BuildStatusPending,
+			LastUpdateTimestamp: metav1.Time{Time: time.Now().UTC()},
+		}
+		newPkg, err = client.FissionClientSet.CoreV1().Packages(pkg.ObjectMeta.Namespace).UpdateStatus(input.Context(), newPkg, metav1.UpdateOptions{})
+		if err != nil {
+			return nil, fmt.Errorf("update package status: %w", err)
+		}
+	}
 
-	return &newPkgMeta.ObjectMeta, err
+	fmt.Printf("Package '%v' updated\n", newPkg.GetName())
+
+	return &newPkg.ObjectMeta, nil
 }
 
 func UpdateFunctionPackageResourceVersion(ctx context.Context, client cmd.Client, pkgMeta *metav1.ObjectMeta, fnList ...fv1.Function) error {
@@ -215,7 +229,7 @@ func updatePackageStatus(ctx context.Context, client cmd.Client, pkg *fv1.Packag
 			BuildStatus:         status,
 			LastUpdateTimestamp: metav1.Time{Time: time.Now().UTC()},
 		}
-		pkg, err := client.FissionClientSet.CoreV1().Packages(pkg.Namespace).Update(ctx, pkg, metav1.UpdateOptions{})
+		pkg, err := client.FissionClientSet.CoreV1().Packages(pkg.Namespace).UpdateStatus(ctx, pkg, metav1.UpdateOptions{})
 		return &pkg.ObjectMeta, err
 	}
 	return nil, errors.New("unknown package status")
