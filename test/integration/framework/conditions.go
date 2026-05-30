@@ -86,8 +86,8 @@ func (ns *TestNamespace) GetCanaryConfigConditions(t *testing.T, ctx context.Con
 }
 
 // GetEnvironmentConditions returns the Conditions slice on the named
-// Environment's Status. No Fission controller writes these in this PR
-// (see pkg/buildermgr/envwatcher.go.AddUpdateBuilder for the rationale)
+// Environment's Status. No Fission controller writes these today
+// (see the note in pkg/buildermgr/environment_reconciler.go.Reconcile)
 // so this helper is retained for forward compatibility — it always
 // returns nil today.
 func (ns *TestNamespace) GetEnvironmentConditions(t *testing.T, ctx context.Context, name string) []metav1.Condition {

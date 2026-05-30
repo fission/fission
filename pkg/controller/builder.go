@@ -34,8 +34,22 @@ func Register(mgr ctrl.Manager, obj client.Object, reconciler reconcile.Reconcil
 // reconciles for the same key, so in-memory state keyed by NamespacedName stays
 // safe.
 func RegisterWithConcurrency(mgr ctrl.Manager, obj client.Object, reconciler reconcile.Reconciler, name string, maxConcurrent int) error {
+	return RegisterWithPredicates(mgr, obj, reconciler, name, maxConcurrent, predicate.GenerationChangedPredicate{})
+}
+
+// RegisterWithPredicates is RegisterWithConcurrency with caller-supplied event
+// predicates INSTEAD of the default GenerationChangedPredicate. Use it for a
+// controller whose trigger is not a spec/generation change — e.g. the
+// buildermgr package reconciler, which must rebuild on a Status.BuildStatus →
+// pending transition: that is a /status subresource write, so it leaves
+// Generation unchanged and GenerationChangedPredicate would drop it. Passing no
+// predicates watches every event (the controller-runtime default).
+//
+// As with RegisterWithConcurrency, maxConcurrent <= 0 leaves the default (1),
+// and controllers inherit the Manager's leader-election scope.
+func RegisterWithPredicates(mgr ctrl.Manager, obj client.Object, reconciler reconcile.Reconciler, name string, maxConcurrent int, predicates ...predicate.Predicate) error {
 	b := builder.ControllerManagedBy(mgr).
-		For(obj, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		For(obj, builder.WithPredicates(predicates...)).
 		Named(name)
 	if maxConcurrent > 0 {
 		b = b.WithOptions(ctrlcontroller.Options{MaxConcurrentReconciles: maxConcurrent})
