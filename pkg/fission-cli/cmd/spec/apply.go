@@ -657,9 +657,14 @@ func applyPackages(ctx context.Context, fclient cmd.Client, fr *FissionResources
 					!reflect.DeepEqual(existing.Spec.Source, fv1.Archive{}) &&
 					reflect.DeepEqual(existing.Spec.Source, desired.Spec.Source) &&
 					existing.Spec.BuildCommand == desired.Spec.BuildCommand)
+			// "none" (a deploy-archive package needing no build) is as ready a
+			// terminal state as "succeeded"; treating only the latter as ready
+			// would re-apply unchanged deploy packages on every run.
+			ready := existing.Status.BuildStatus == fv1.BuildStatusSucceeded ||
+				existing.Status.BuildStatus == fv1.BuildStatusNone
 			return specMatches &&
 				isObjectMetaEqual(existing.ObjectMeta, desired.ObjectMeta) &&
-				existing.Status.BuildStatus == fv1.BuildStatusSucceeded
+				ready
 		},
 		create: func(ctx context.Context, p *fv1.Package) (*metav1.ObjectMeta, error) {
 			n, err := packages(p.Namespace).Create(ctx, p, metav1.CreateOptions{})
