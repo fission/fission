@@ -96,9 +96,13 @@ func TestKubectlApply(t *testing.T) {
 	require.NoError(t, err)
 	since := current.Status.LastUpdateTimestamp
 	current.Spec.Source.URL = goodURL
-	current.Status.BuildStatus = fv1.BuildStatusPending
-	_, err = f.FissionClient().CoreV1().Packages(ns.Name).Update(ctx, current, metav1.UpdateOptions{})
-	require.NoError(t, err, "update package %q to good URL + pending", pkgName)
+	updated, err := f.FissionClient().CoreV1().Packages(ns.Name).Update(ctx, current, metav1.UpdateOptions{})
+	require.NoError(t, err, "update package %q spec to good URL", pkgName)
+	// The rebuild trigger (BuildStatus=pending) is a status write; with the
+	// Package /status subresource it must go through UpdateStatus.
+	updated.Status.BuildStatus = fv1.BuildStatusPending
+	_, err = f.FissionClient().CoreV1().Packages(ns.Name).UpdateStatus(ctx, updated, metav1.UpdateOptions{})
+	require.NoError(t, err, "reset package %q build status to pending", pkgName)
 
 	ns.WaitForPackageRebuiltSince(t, ctx, pkgName, since)
 
