@@ -33,12 +33,12 @@ func (gpm *GenericPoolManager) markFuncDeleted(key crd.CacheKeyURG) {
 // the fsCache when the Function is removed, so the idle reaper recycles its
 // specialized pods. It replaces poolpodcontroller's Function delete handler.
 //
-// MarkFuncDeleted keys on the function's UID+ResourceVersion+Generation, which a
-// reconciler does not have once the live object is gone, so the reconciler keeps
-// the last-seen Function per key. It watches every event (no
-// GenerationChangedPredicate) so the cached copy carries the latest
-// ResourceVersion that MarkFuncDeleted needs — the cost is a cheap cache store
-// per function event.
+// MarkFuncDeleted matches fsCache entries by the function's UID (and records its
+// Generation), which a reconciler does not have once the live object is gone, so
+// the reconciler keeps the last-seen Function per key to supply it on delete.
+// GenerationChangedPredicate is fine: the UID is stable and the Generation is
+// captured on every spec change, and the executor's own status writes (which
+// leave Generation unchanged) don't need to churn the cache.
 //
 // Note: the environment (pool lifecycle), replicaset, and specialized-pod
 // cleanup watches remain on poolpodcontroller's informers — they are k8s-native
@@ -81,5 +81,5 @@ func (gpm *GenericPoolManager) RegisterReconcilers(mgr ctrl.Manager) error {
 		client:  mgr.GetClient(),
 		deleter: gpm,
 	}
-	return controller.RegisterWithPredicates(mgr, &fv1.Function{}, r, "poolmgr-function", 0)
+	return controller.Register(mgr, &fv1.Function{}, r, "poolmgr-function")
 }
