@@ -19,8 +19,12 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/sync/errgroup"
+	"k8s.io/apimachinery/pkg/runtime"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	k8sCache "k8s.io/client-go/tools/cache"
 	ctrl "sigs.k8s.io/controller-runtime"
+	crcache "sigs.k8s.io/controller-runtime/pkg/cache"
 	ctrlmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
@@ -39,10 +43,40 @@ import (
 	"github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
 	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
 	"github.com/fission/fission/pkg/utils"
-	"github.com/fission/fission/pkg/utils/crmanager"
 	fissionmetrics "github.com/fission/fission/pkg/utils/metrics"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
+
+// executorScheme is the controller-runtime Manager's scheme. Unlike the
+// generated fission scheme.Scheme (Fission CRD types only), it also registers
+// the Kubernetes built-in types the executor's reconcilers watch — starting with
+// ConfigMap + Secret (cms), and Pods/Deployments/ReplicaSets as later executor
+// pieces migrate.
+var executorScheme = runtime.NewScheme()
+
+func init() {
+	utilruntime.Must(clientgoscheme.AddToScheme(executorScheme))
+	utilruntime.Must(scheme.AddToScheme(executorScheme))
+}
+
+// executorCacheOptions scopes the Manager cache to exactly the namespaces the
+// executor's k8s-native informers covered before the migration: FissionResourceNS
+// plus the builder, function, and default namespaces (matching
+// GetK8sInformersForNamespaces). ConfigMaps/Secrets mounted by functions — and,
+// for later executor pieces, the function pods/deployments — live in the
+// function/builder namespaces, so scoping to FissionResourceNS alone
+// (crmanager.FissionCacheOptions) would miss them in installs that set a separate
+// FISSION_FUNCTION_NAMESPACE / FISSION_BUILDER_NAMESPACE. Executor RBAC is
+// per-namespace Roles in these same namespaces, so a cluster-wide cache would be
+// forbidden and crashloop on cache-sync timeout.
+func executorCacheOptions() crcache.Options {
+	resolver := utils.DefaultNSResolver()
+	nsConfig := map[string]crcache.Config{}
+	for _, ns := range resolver.FissionNSWithOptions(utils.WithBuilderNs(), utils.WithFunctionNs(), utils.WithDefaultNs()) {
+		nsConfig[ns] = crcache.Config{}
+	}
+	return crcache.Options{DefaultNamespaces: nsConfig}
+}
 
 type (
 	// Executor defines a fission function executor.
@@ -455,13 +489,11 @@ func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, 
 	}
 
 	crMgr, err := ctrl.NewManager(restConfig, ctrl.Options{
-		Scheme: scheme.Scheme,
-		// Scope the shared cache to the Fission-watched namespaces. The ConfigMap
-		// + Secret reconcilers read through it, and the executor's RBAC is
-		// per-namespace Roles (not a ClusterRole) — a cluster-wide cache's
-		// list/watch is forbidden, so its sync would time out and the manager
-		// would exit. See crmanager.FissionCacheOptions.
-		Cache:                         crmanager.FissionCacheOptions(),
+		Scheme: executorScheme,
+		// Scope the cache to the executor's watched namespaces (builder +
+		// function + default + resource), matching the informers it replaces.
+		// See executorCacheOptions.
+		Cache:                         executorCacheOptions(),
 		Metrics:                       metricsserver.Options{BindAddress: metricsBind},
 		HealthProbeBindAddress:        "0", // /healthz + /readyz stay on the API mux (port)
 		LeaderElection:                leaderElectionEnabled,
