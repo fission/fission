@@ -140,18 +140,9 @@ func MakeNewDeploy(
 		nd.svcLister[ns] = informerFactory.Core().V1().Services().Lister()
 		nd.svcListerSynced[ns] = informerFactory.Core().V1().Services().Informer().HasSynced
 	}
-	for _, factory := range finformerFactory {
-		_, err := factory.Core().V1().Functions().Informer().AddEventHandler(nd.FunctionEventHandlers(ctx))
-		if err != nil {
-			return nil, err
-		}
-	}
-	for _, factory := range finformerFactory {
-		_, err := factory.Core().V1().Environments().Informer().AddEventHandler(nd.EnvEventHandlers(ctx))
-		if err != nil {
-			return nil, err
-		}
-	}
+	// The Function + Environment watches are now controller-runtime reconcilers
+	// registered via RegisterReconcilers on the executor Manager (see
+	// reconciler.go); the deployment/service listers above stay as read paths.
 	return nd, nil
 }
 
@@ -373,6 +364,23 @@ func (deploy *NewDeploy) getEnvFunctions(ctx context.Context, m *metav1.ObjectMe
 		}
 	}
 	return relatedFunctions
+}
+
+// updateEnvFunctionDeployments recreates the deployments of every function that
+// uses env. Called by the environment reconciler when env's runtime image
+// changes. Best-effort: a failure on one function is logged and the rest still
+// proceed.
+func (deploy *NewDeploy) updateEnvFunctionDeployments(ctx context.Context, env *fv1.Environment) {
+	for _, f := range deploy.getEnvFunctions(ctx, &env.ObjectMeta) {
+		fn, err := deploy.fissionClient.CoreV1().Functions(f.Namespace).Get(ctx, f.Name, metav1.GetOptions{})
+		if err != nil {
+			deploy.logger.Error(err, "error getting function for environment update", "function", f.Name, "namespace", f.Namespace)
+			continue
+		}
+		if err := deploy.updateFuncDeployment(ctx, fn, env); err != nil {
+			deploy.logger.Error(err, "error updating function deployment for environment change", "function", fn.Name, "namespace", fn.Namespace)
+		}
+	}
 }
 
 func (deploy *NewDeploy) createFunction(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {

@@ -145,6 +145,14 @@ func TestRefreshFuncPods(t *testing.T) {
 	require.NoError(t, err, "Error getting function")
 	require.Equal(t, funcRes.Name, functionName)
 
+	// The Function watch is now a controller-runtime reconciler (not an informer
+	// handler registered in MakeNewDeploy), so drive deployment creation here.
+	// Run it in a goroutine exactly as the old handler did: createFunction creates
+	// the deployment and then blocks waiting for it to become available, which it
+	// never does under the fake client — the deployment is created regardless, and
+	// the poll below picks it up.
+	go func() { _, _ = ndm.createFunction(ctx, funcRes) }()
+
 	ctx2, cancel2 := context.WithCancel(t.Context())
 	wait.Until(func() {
 		t.Log("Checking for deployment")
