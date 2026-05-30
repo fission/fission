@@ -669,25 +669,28 @@ func applyPackages(ctx context.Context, fclient cmd.Client, fr *FissionResources
 			return &n.ObjectMeta, nil
 		},
 		update: func(ctx context.Context, existing, desired *fv1.Package) (*metav1.ObjectMeta, error) {
-			desired.ResourceVersion = existing.ResourceVersion
 			// We may be racing the package builder (a previous version might be
-			// building), so wait for a non-running build status first.
-			pkg, err := waitForPackageBuild(ctx, fclient, desired)
+			// building), so wait for a non-running build status first. Decide
+			// from the live object (existing): desired comes from the spec file
+			// and carries no status, so the wait/re-trigger must read the real
+			// BuildStatus.
+			current, err := waitForPackageBuild(ctx, fclient, existing)
 			if err != nil {
 				console.Warn(fmt.Sprintf("Error waiting for package '%v' build, ignoring", desired.Name))
-				pkg = desired
+				current = existing
 			}
-			// Re-trigger a build if the previous one failed. This is a status
-			// write; with the /status subresource it must go through
-			// UpdateStatus, separately from the spec Update below.
-			retrigger := pkg.Status.BuildStatus == fv1.BuildStatusFailed
-			n, err := packages(pkg.Namespace).Update(ctx, pkg, metav1.UpdateOptions{})
+			// Apply the spec from desired, on top of the post-wait version.
+			desired.ResourceVersion = current.ResourceVersion
+			n, err := packages(desired.Namespace).Update(ctx, desired, metav1.UpdateOptions{})
 			if err != nil {
 				return nil, err
 			}
-			if retrigger {
+			// Re-trigger a build if the previous one failed. This is a status
+			// write; with the /status subresource it must go through
+			// UpdateStatus, separately from the spec Update above.
+			if current.Status.BuildStatus == fv1.BuildStatusFailed {
 				n.Status.BuildStatus = fv1.BuildStatusPending
-				n, err = packages(pkg.Namespace).UpdateStatus(ctx, n, metav1.UpdateOptions{})
+				n, err = packages(desired.Namespace).UpdateStatus(ctx, n, metav1.UpdateOptions{})
 				if err != nil {
 					return nil, err
 				}
