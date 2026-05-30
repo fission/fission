@@ -27,7 +27,6 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
-	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/executor/fscache"
 	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
 	flisterv1 "github.com/fission/fission/pkg/generated/listers/core/v1"
@@ -86,14 +85,10 @@ func NewPoolPodController(ctx context.Context, logger logr.Logger,
 			}
 		}
 	}
-	for _, factory := range finformerFactory {
-		_, err := factory.Core().V1().Functions().Informer().AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
-			DeleteFunc: p.handleFuncDelete,
-		})
-		if err != nil {
-			return nil, err
-		}
-	}
+	// Function deletion (marking the fsCache entry deleted so the reaper recycles
+	// specialized pods) is now a controller-runtime reconciler on the executor
+	// Manager (see reconciler.go). The Environment + ReplicaSet watches below stay
+	// on informers for now.
 	for ns, informer := range finformerFactory {
 		_, err := informer.Core().V1().Environments().Informer().AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
 			AddFunc:    p.enqueueEnvAdd,
@@ -131,11 +126,6 @@ func IsPodActive(p *v1.Pod) bool {
 	return v1.PodSucceeded != p.Status.Phase &&
 		v1.PodFailed != p.Status.Phase &&
 		p.DeletionTimestamp == nil
-}
-
-func (p *PoolPodController) handleFuncDelete(obj any) {
-	fn := obj.(*fv1.Function)
-	p.gpm.fsCache.MarkFuncDeleted(crd.CacheKeyURGFromMeta(&fn.ObjectMeta))
 }
 
 func (p *PoolPodController) processRS(rs *apps.ReplicaSet) {
