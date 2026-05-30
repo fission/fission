@@ -32,6 +32,7 @@ import (
 	"github.com/fission/fission/pkg/executor/executortype/newdeploy"
 	"github.com/fission/fission/pkg/executor/executortype/poolmgr"
 	"github.com/fission/fission/pkg/executor/fscache"
+	"github.com/fission/fission/pkg/executor/reaper/idle"
 	"github.com/fission/fission/pkg/executor/util"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
@@ -123,6 +124,17 @@ func (c *executorControllers) Start(ctx context.Context) error {
 	for _, et := range c.executorTypes {
 		gm.Go(func() error { et.Run(ctx, gm); return nil })
 	}
+
+	// One shared idle reaper drives every executor type's idle-reaping strategy
+	// (replacing the three per-type reaper goroutines). It runs on the leader
+	// only, inheriting this leader-elected runnable's context.
+	strategies := make([]idle.Strategy, 0, len(c.executorTypes))
+	for _, et := range c.executorTypes {
+		strategies = append(strategies, et.IdleStrategy())
+	}
+	idleReaper := idle.NewReaper(c.logger, strategies...)
+	gm.Go(func() error { idleReaper.Start(ctx); return nil })
+
 	gm.Go(func() error { c.api.serveCreateFuncServices(ctx); return nil })
 
 	runAdoptCleanup(ctx, c.executorTypes, c.adoptResources)
