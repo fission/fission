@@ -67,10 +67,10 @@ func (r *functionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 
 	old, seen := r.lastReconciled.Load(req.NamespacedName)
 	if !seen {
-		// First sight. Only manage functions of our executor type — createFunction
-		// is reached only for container (and unset) types, matching the old
-		// AddFunc filter. A function that later switches *to* container generates a
-		// spec change and arrives here uncached, so it is created then too.
+		// First sight. Only manage functions whose executor type is container
+		// (createFunction is a no-op for any other type, so caching them would just
+		// grow lastReconciled). A function that later switches *to* container
+		// generates a spec change and arrives here uncached, so it is created then.
 		if !isContainerType(fn) {
 			return ctrl.Result{}, nil
 		}
