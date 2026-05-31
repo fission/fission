@@ -12,13 +12,11 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
-	k8sCache "k8s.io/client-go/tools/cache"
 
 	"github.com/go-logr/logr"
 	kedav1alpha1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
@@ -26,6 +24,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/controller"
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/executor/util"
 	"github.com/fission/fission/pkg/utils"
@@ -37,71 +36,10 @@ var (
 	matchAllCap   = regexp.MustCompile("([a-z0-9])([A-Z])")
 )
 
-func mqTriggerEventHandlers(ctx context.Context, logger logr.Logger, kubeClient kubernetes.Interface, kedaClient kedaClient.Interface, routerURL string) k8sCache.ResourceEventHandlerFuncs {
-	return k8sCache.ResourceEventHandlerFuncs{
-		AddFunc: func(obj any) {
-			go func() {
-				mqt := obj.(*fv1.MessageQueueTrigger)
-				if mqt.Spec.MqtKind == MqtKindFission {
-					return
-				}
-				logger.V(1).Info("Create deployment for Scaler Object", "mqt", mqt.ObjectMeta, "mqt.Spec", mqt.Spec)
-				createKedaObjects(ctx, logger, kedaClient, kubeClient, mqt, routerURL)
-			}()
-		},
-		UpdateFunc: func(obj any, newObj any) {
-			go func() {
-				mqt := obj.(*fv1.MessageQueueTrigger)
-				newMqt := newObj.(*fv1.MessageQueueTrigger)
-				mqtkindKedaToFission := (mqt.Spec.MqtKind == MqtKindKeda && newMqt.Spec.MqtKind == MqtKindFission)
-				mqtkindFissionToKeda := (mqt.Spec.MqtKind == MqtKindFission && newMqt.Spec.MqtKind == MqtKindKeda)
-				// If mqtkind is updated to fission from keda then
-				// delete keda objects previously created for mqtkind keda.
-				if mqtkindKedaToFission {
-					logger.V(1).Info("Mqtkind updated to fission from keda, cleanup keda objects", "mqt", newMqt.ObjectMeta, "mqt.Spec", newMqt.Spec)
-					cleanupKedaObjects(ctx, logger, kedaClient, kubeClient, mqt)
-					return
-				}
-				// If mqtkind is updated to keda from fission then
-				// create keda objects
-				if mqtkindFissionToKeda {
-					logger.V(1).Info("Mqtkind changed to keda from fission, create keda objects", "mqt", newMqt.ObjectMeta, "mqt.Spec", newMqt.Spec)
-					createKedaObjects(ctx, logger, kedaClient, kubeClient, newMqt, routerURL)
-					return
-				}
-
-				updated := checkAndUpdateTriggerFields(mqt, newMqt)
-				if mqt.Spec.MqtKind == MqtKindFission {
-					return
-				}
-				if !updated {
-					logger.Info("Trigger unchanged, no changes found in trigger fields", "trigger_name", mqt.Name)
-					return
-				}
-
-				authenticationRef := ""
-				if len(newMqt.Spec.Secret) > 0 && newMqt.Spec.Secret != mqt.Spec.Secret {
-					authenticationRef = authTriggerName(mqt.Name)
-					if err := updateAuthTrigger(ctx, kedaClient, mqt, authenticationRef, kubeClient); err != nil {
-						logger.Error(err, "Failed to update Authentication Trigger")
-						return
-					}
-				}
-
-				if err := updateDeployment(ctx, logger, mqt, routerURL, kubeClient); err != nil {
-					logger.Error(err, "Failed to Update Deployment")
-					return
-				}
-
-				if err := updateScaledObject(ctx, kedaClient, mqt, authenticationRef); err != nil {
-					logger.Error(err, "Failed to Update ScaledObject")
-					return
-				}
-			}()
-		},
-	}
-
-}
+// scalerReconcileConcurrency lets independent keda-kind MessageQueueTriggers
+// reconcile their KEDA objects in parallel, matching the per-trigger goroutine
+// fan-out the old AddFunc/UpdateFunc handler used.
+const scalerReconcileConcurrency = 4
 
 // StartScalerManager watches for changes in MessageQueueTrigger and,
 // Based on changes, it Creates, Updates and Deletes Objects of Kind ScaledObjects, AuthenticationTriggers and Deployments.
@@ -145,28 +83,19 @@ func StartScalerManager(ctx context.Context, clientGen crd.ClientGeneratorInterf
 	// Active-passive HA via native controller-runtime leader election: only the
 	// elected leader reconciles KEDA ScaledObjects, so two replicas don't race
 	// on the same objects. No-op when LEADER_ELECTION_ENABLED is unset
-	// (single-replica default).
-	crMgr, err := crmanager.NewLeaderElected(restConfig, "fission-mqt-keda", logger)
+	// (single-replica default). The reconciler watches MessageQueueTriggers
+	// through the Manager's namespace-scoped cache (FissionCacheOptions),
+	// reproducing the per-namespace informers this subsystem used before and
+	// keeping RBAC unchanged. A distinct lock name keeps this leader election
+	// independent of the --mqt subsystem's ("fission-mqtrigger").
+	crMgr, err := crmanager.NewLeaderElected(restConfig, "fission-mqt-keda-scaler", logger)
 	if err != nil {
 		return err
 	}
-	informers := utils.GetInformersForNamespaces(fissionClient, time.Minute*30, fv1.MessageQueueResource)
-	if err := crMgr.Add(crmanager.LeaderRunnable(func(c context.Context) error {
-		for _, informer := range informers {
-			if _, err := informer.AddEventHandler(mqTriggerEventHandlers(c, logger, kubeClient, kedaClient, routerURL)); err != nil {
-				return err
-			}
-			go informer.Run(c.Done())
-			if ok := k8sCache.WaitForCacheSync(c.Done(), informer.HasSynced); !ok {
-				// Usually means the context was cancelled (shutdown or loss of
-				// leadership). Stop cleanly instead of crashing the process.
-				logger.Info("failed to wait for caches to sync; stopping keda scaler manager")
-			}
-		}
-		<-c.Done()
-		return nil
-	})); err != nil {
-		return err
+
+	r := newScalerReconciler(logger, crMgr.GetClient(), kedaClient, kubeClient, routerURL)
+	if err := controller.RegisterWithConcurrency(crMgr, &fv1.MessageQueueTrigger{}, r, "mqt-keda-scaler", scalerReconcileConcurrency); err != nil {
+		return fmt.Errorf("error registering mqt keda scaler reconciler: %w", err)
 	}
 	return crMgr.Start(ctx)
 }
