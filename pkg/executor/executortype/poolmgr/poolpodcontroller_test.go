@@ -23,7 +23,6 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	fClient "github.com/fission/fission/pkg/generated/clientset/versioned/fake"
-	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
 
@@ -48,9 +47,6 @@ func TestPoolPodControllerPodCleanup(t *testing.T) {
 	kubernetesClient := fake.NewClientset(pod)
 	crClient := crfake.NewClientBuilder().WithScheme(clientgoscheme.Scheme).WithObjects(pod).Build()
 	fissionClient := fClient.NewClientset()
-	factory := map[string]genInformer.SharedInformerFactory{
-		metav1.NamespaceDefault: genInformer.NewSharedInformerFactoryWithOptions(fissionClient, time.Minute*30, genInformer.WithNamespace(metav1.NamespaceDefault)),
-	}
 
 	ppc := NewPoolPodController(logger, kubernetesClient)
 
@@ -63,7 +59,7 @@ func TestPoolPodControllerPodCleanup(t *testing.T) {
 		logger,
 		fissionClient, kubernetesClient, metricsClient,
 		fetcherConfig, executorInstanceID,
-		factory, nil)
+		nil)
 	require.NoError(t, err, "Error creating generic pool manager")
 	gpm := executor.(*GenericPoolManager)
 	gpm.crClient = crClient

@@ -43,7 +43,6 @@ import (
 	executorUtils "github.com/fission/fission/pkg/executor/util"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
-	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
 	"github.com/fission/fission/pkg/utils"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
@@ -115,7 +114,6 @@ func MakeGenericPoolManager(ctx context.Context,
 	metricsClient metricsclient.Interface,
 	fetcherConfig *fetcherConfig.Config,
 	instanceID string,
-	finformerFactory map[string]genInformer.SharedInformerFactory,
 	podSpecPatch *apiv1.PodSpec,
 ) (executortype.ExecutorType, error) {
 

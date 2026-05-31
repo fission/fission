@@ -44,7 +44,6 @@ import (
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	"github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
-	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
 	"github.com/fission/fission/pkg/utils"
 	fissionmetrics "github.com/fission/fission/pkg/utils/metrics"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
@@ -423,18 +422,13 @@ func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, 
 
 	logger.Info("Starting executor", "instanceID", executorInstanceID)
 
-	finformerFactory := make(map[string]genInformer.SharedInformerFactory, 0)
-	for _, ns := range utils.DefaultNSResolver().FissionResourceNS {
-		finformerFactory[ns] = genInformer.NewSharedInformerFactoryWithOptions(fissionClient, time.Minute*30, genInformer.WithNamespace(ns))
-	}
-
-	// poolmgr reads pods through the executor Manager cache now, so it no longer
-	// needs a dedicated pod informer factory.
+	// Function and Environment reads go through the executor Manager cache now, so
+	// no dedicated fission informer factory is needed.
 	gpm, err := poolmgr.MakeGenericPoolManager(ctx,
 		logger,
 		fissionClient, kubernetesClient, metricsClient,
 		fetcherConfig, executorInstanceID,
-		finformerFactory, podSpecPatch)
+		podSpecPatch)
 	if err != nil {
 		return fmt.Errorf("pool manager creation failed: %w", err)
 	}
@@ -448,7 +442,6 @@ func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, 
 		logger,
 		fissionClient, kubernetesClient,
 		fetcherConfig, executorInstanceID,
-		finformerFactory,
 		ndmInformerFactory, podSpecPatch)
 	if err != nil {
 		return fmt.Errorf("new deploy manager creation failed: %w", err)
@@ -462,7 +455,7 @@ func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, 
 	cnm, err := container.MakeContainer(
 		ctx, logger,
 		fissionClient, kubernetesClient,
-		executorInstanceID, finformerFactory,
+		executorInstanceID,
 		cnmInformerFactory)
 	if err != nil {
 		return fmt.Errorf("container manager creation failed: %w", err)
@@ -534,9 +527,6 @@ func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, 
 	}
 
 	startFactories := func(stopCh <-chan struct{}) {
-		for _, factory := range finformerFactory {
-			factory.Start(stopCh)
-		}
 		for _, factory := range ndmInformerFactory {
 			factory.Start(stopCh)
 		}
@@ -545,15 +535,11 @@ func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, 
 		}
 	}
 	waitForSync := func(stopCh <-chan struct{}) bool {
-		synced := true
-		for _, factory := range finformerFactory {
-			for _, ok := range factory.WaitForCacheSync(stopCh) {
-				if !ok {
-					synced = false
-				}
-			}
-		}
-		return synced
+		// The executor's Function/Environment/ConfigMap/Secret/Pod/ReplicaSet reads
+		// all go through the Manager cache now; it's ready once that has synced.
+		// controller-runtime syncs the cache before starting this (non-cache)
+		// runnable, so this returns ~immediately.
+		return crMgr.GetCache().WaitForCacheSync(ctx)
 	}
 
 	utils.CreateMissingPermissionForSA(ctx, kubernetesClient, logger)

@@ -38,7 +38,6 @@ import (
 	executorUtils "github.com/fission/fission/pkg/executor/util"
 	hpautils "github.com/fission/fission/pkg/executor/util/hpa"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
-	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
 	"github.com/fission/fission/pkg/throttler"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/maps"
@@ -89,7 +88,6 @@ func MakeContainer(
 	fissionClient versioned.Interface,
 	kubernetesClient kubernetes.Interface,
 	instanceID string,
-	finformerFactory map[string]genInformer.SharedInformerFactory,
 	cnmInformerFactory map[string]k8sInformers.SharedInformerFactory,
 ) (executortype.ExecutorType, error) {
 	enableIstio := false
