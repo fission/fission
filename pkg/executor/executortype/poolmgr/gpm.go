@@ -24,10 +24,9 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
-	k8sInformers "k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
-	corelisters "k8s.io/client-go/listers/core/v1"
 	k8sCache "k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/util/workqueue"
 	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -76,18 +75,18 @@ type (
 		requestChannel chan *request
 
 		// crClient is the executor Manager's cache-backed client, used by
-		// getFunctionEnv to resolve a function's Environment (replacing
-		// poolpodcontroller's informer lister). Set in RegisterReconcilers.
+		// getFunctionEnv to resolve a function's Environment and by the pool /
+		// reconcilers to read pods (replacing poolpodcontroller's and the per-pool
+		// informer listers). Set in RegisterReconcilers.
 		crClient client.Client
+
+		// readyPodQueues maps env UID -> a pool's readyPodQueue, published by the
+		// actor on pool create and removed on destroy. The Pod reconciler reads it
+		// lock-free (sync.Map) to feed warm pods into the right pool's queue.
+		readyPodQueues sync.Map
 
 		enableIstio   bool
 		fetcherConfig *fetcherConfig.Config
-
-		// podLister can list/get pods from the shared informer's store
-		podLister map[string]corelisters.PodLister
-
-		// podListerSynced returns true if the pod store has been synced at least once.
-		podListerSynced map[string]k8sCache.InformerSynced
 
 		defaultIdlePodReapTime time.Duration
 
@@ -117,7 +116,6 @@ func MakeGenericPoolManager(ctx context.Context,
 	fetcherConfig *fetcherConfig.Config,
 	instanceID string,
 	finformerFactory map[string]genInformer.SharedInformerFactory,
-	gpmInformerFactory map[string]k8sInformers.SharedInformerFactory,
 	podSpecPatch *apiv1.PodSpec,
 ) (executortype.ExecutorType, error) {
 
@@ -132,10 +130,7 @@ func MakeGenericPoolManager(ctx context.Context,
 		enableIstio = istio
 	}
 
-	poolPodC, err := NewPoolPodController(ctx, gpmLogger, kubernetesClient, gpmInformerFactory)
-	if err != nil {
-		return nil, err
-	}
+	poolPodC := NewPoolPodController(gpmLogger, kubernetesClient)
 	gpm := &GenericPoolManager{
 		logger:                     gpmLogger,
 		pools:                      make(map[k8sTypes.UID]*GenericPool),
@@ -153,12 +148,6 @@ func MakeGenericPoolManager(ctx context.Context,
 		poolPodC:                   poolPodC,
 		podSpecPatch:               podSpecPatch,
 		objectReaperIntervalSecond: time.Duration(executorUtils.GetObjectReaperInterval(logger, fv1.ExecutorTypePoolmgr, 5)) * time.Second,
-		podLister:                  make(map[string]corelisters.PodLister),
-		podListerSynced:            make(map[string]k8sCache.InformerSynced),
-	}
-	for ns, informerFactory := range gpmInformerFactory {
-		gpm.podLister[ns] = informerFactory.Core().V1().Pods().Lister()
-		gpm.podListerSynced[ns] = informerFactory.Core().V1().Pods().Informer().HasSynced
 	}
 
 	gpm.logger.V(1).Info("inside MakeGenericPoolManager")
@@ -167,16 +156,8 @@ func MakeGenericPoolManager(ctx context.Context,
 }
 
 func (gpm *GenericPoolManager) Run(ctx context.Context, mgr *errgroup.Group) {
-	waitSynced := make([]k8sCache.InformerSynced, 0)
-	for _, podListerSynced := range gpm.podListerSynced {
-		waitSynced = append(waitSynced, podListerSynced)
-	}
-	if ok := k8sCache.WaitForCacheSync(ctx.Done(), waitSynced...); !ok {
-		// Usually means the context was cancelled (shutdown or loss of
-		// leadership). Stop cleanly instead of taking the whole process down.
-		gpm.logger.Info("failed to wait for caches to sync; stopping pool manager")
-		return
-	}
+	// Pod reads go through the executor Manager cache (synced before this Runnable
+	// starts), so there is no informer cache to wait for here.
 	go gpm.service()
 	gpm.poolPodC.InjectGpm(gpm)
 
@@ -285,7 +266,8 @@ func (gpm *GenericPoolManager) IsValid(ctx context.Context, fsvc *fscache.FuncSv
 	otelUtils.SpanTrackEvent(ctx, "IsValid", fscache.GetAttributesForFuncSvc(fsvc)...)
 	for _, obj := range fsvc.KubernetesObjects {
 		if strings.ToLower(obj.Kind) == "pod" {
-			pod, err := gpm.podLister[obj.Namespace].Pods(obj.Namespace).Get(obj.Name)
+			pod := &apiv1.Pod{}
+			err := gpm.crClient.Get(ctx, client.ObjectKey{Namespace: obj.Namespace, Name: obj.Name}, pod)
 			if err == nil && utils.IsReadyPod(pod) {
 				// Normally, the address format is http://[pod-ip]:[port], however, if the
 				// Istio is enabled the address format changes to http://[svc-name]:[port].
@@ -521,13 +503,16 @@ func (gpm *GenericPoolManager) service() {
 				ns := gpm.nsResolver.GetFunctionNS(req.env.Namespace)
 				pool = MakeGenericPool(gpm.logger, gpm.fissionClient, gpm.kubernetesClient,
 					gpm.metricsClient, req.env, ns, gpm.fsCache,
-					gpm.fetcherConfig, gpm.instanceID, gpm.enableIstio, gpm.podSpecPatch)
+					gpm.fetcherConfig, gpm.instanceID, gpm.enableIstio, gpm.podSpecPatch, gpm.crClient)
 				err = pool.setup(req.ctx)
 				if err != nil {
 					req.responseChannel <- &response{error: err}
 					continue
 				}
 				gpm.pools[crd.CacheKeyUIDFromMeta(&req.env.ObjectMeta)] = pool
+				// Publish the pool's readyPodQueue so the Pod reconciler can feed it
+				// warm pods. Keyed by env UID, read lock-free from the reconciler.
+				gpm.readyPodQueues.Store(string(req.env.UID), pool.readyPodQueue)
 				created = true
 			}
 			req.responseChannel <- &response{pool: pool, created: created}
@@ -544,6 +529,7 @@ func (gpm *GenericPoolManager) service() {
 				continue
 			}
 			delete(gpm.pools, key)
+			gpm.readyPodQueues.Delete(string(req.env.UID))
 			if pool != nil {
 				err := pool.destroy(req.ctx)
 				if err != nil {
@@ -589,8 +575,17 @@ func (gpm *GenericPoolManager) markFuncDeleted(key crd.CacheKeyURG) {
 // processReplicaSet reaps a pool's specialized pods when its ReplicaSet has
 // scaled to zero. Driven by the ReplicaSet reconciler; delegates to the pool pod
 // controller, which owns the specialized-pod cleanup queue.
-func (gpm *GenericPoolManager) processReplicaSet(rs *appsv1.ReplicaSet) {
-	gpm.poolPodC.processRS(rs)
+func (gpm *GenericPoolManager) processReplicaSet(ctx context.Context, rs *appsv1.ReplicaSet) {
+	gpm.poolPodC.processRS(ctx, rs)
+}
+
+// enqueueReadyPod adds a warm pod's key to its pool's readyPodQueue (looked up by
+// env UID). Driven by the readyPod reconciler. A pool that no longer exists (race
+// with destroy) is simply skipped — its queue is gone and choosePod won't run.
+func (gpm *GenericPoolManager) enqueueReadyPod(envUID, key string) {
+	if q, ok := gpm.readyPodQueues.Load(envUID); ok {
+		q.(workqueue.TypedDelayingInterface[string]).AddAfter(key, 100*time.Millisecond)
+	}
 }
 
 // reconcileEnvPool brings an environment's warm pool to its desired state:

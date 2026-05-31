@@ -27,10 +27,10 @@ import (
 	k8sTypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
-	corelisters "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
 	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
@@ -48,29 +48,29 @@ import (
 type (
 	// GenericPool represents a generic environment pool
 	GenericPool struct {
-		logger                   logr.Logger
-		lock                     sync.Mutex
-		env                      *fv1.Environment
-		deployment               *appsv1.Deployment            // kubernetes deployment
-		fnNamespace              string                        // namespace to keep our resources
-		podReadyTimeout          time.Duration                 // timeout for generic pods to become ready
-		fsCache                  *fscache.FunctionServiceCache // cache funcSvc's by function, address and podname
-		useSvc                   bool                          // create k8s service for specialized pods
-		useIstio                 bool
-		runtimeImagePullPolicy   apiv1.PullPolicy // pull policy for generic pool to created env deployment
-		kubernetesClient         kubernetes.Interface
-		metricsClient            metricsclient.Interface
-		fissionClient            versioned.Interface
-		fetcherConfig            *fetcherConfig.Config
-		stopReadyPodControllerCh chan struct{}
-		cancelPoolCtx            context.CancelFunc
-		readyPodLister           corelisters.PodLister
-		readyPodListerSynced     cache.InformerSynced
-		readyPodQueue            workqueue.TypedDelayingInterface[string]
-		poolInstanceID           string // small random string to uniquify pod names
-		instanceID               string // poolmgr instance id
-		podSpecPatch             *apiv1.PodSpec
-		enableOwnerReferences    bool
+		logger                 logr.Logger
+		lock                   sync.Mutex
+		env                    *fv1.Environment
+		deployment             *appsv1.Deployment            // kubernetes deployment
+		fnNamespace            string                        // namespace to keep our resources
+		podReadyTimeout        time.Duration                 // timeout for generic pods to become ready
+		fsCache                *fscache.FunctionServiceCache // cache funcSvc's by function, address and podname
+		useSvc                 bool                          // create k8s service for specialized pods
+		useIstio               bool
+		runtimeImagePullPolicy apiv1.PullPolicy // pull policy for generic pool to created env deployment
+		kubernetesClient       kubernetes.Interface
+		metricsClient          metricsclient.Interface
+		fissionClient          versioned.Interface
+		fetcherConfig          *fetcherConfig.Config
+		cancelPoolCtx          context.CancelFunc
+		// crClient is the executor Manager's cache-backed client; choosePod reads
+		// warm pods from it (replacing the per-pool readyPod informer's lister).
+		crClient              client.Client
+		readyPodQueue         workqueue.TypedDelayingInterface[string]
+		poolInstanceID        string // small random string to uniquify pod names
+		instanceID            string // poolmgr instance id
+		podSpecPatch          *apiv1.PodSpec
+		enableOwnerReferences bool
 		// TODO: move this field into fsCache
 		podFSVCMap sync.Map
 	}
@@ -88,7 +88,8 @@ func MakeGenericPool(
 	fetcherConfig *fetcherConfig.Config,
 	instanceID string,
 	enableIstio bool,
-	podSpecPatch *apiv1.PodSpec) *GenericPool {
+	podSpecPatch *apiv1.PodSpec,
+	crClient client.Client) *GenericPool {
 
 	gpLogger := logger.WithName("generic_pool")
 
@@ -106,24 +107,25 @@ func MakeGenericPool(
 	// TODO: in general we need to provide the user a way to configure pools.  Initial
 	// replicas, autoscaling params, various timeouts, etc.
 	gp := &GenericPool{
-		logger:                   gpLogger,
-		env:                      env,
-		fissionClient:            fissionClient,
-		kubernetesClient:         kubernetesClient,
-		metricsClient:            metricsClient,
-		fnNamespace:              fnNamespace,
-		podReadyTimeout:          podReadyTimeout,
-		fsCache:                  fsCache,
-		fetcherConfig:            fetcherConfig,
-		useSvc:                   false,       // defaults off -- svc takes a second or more to become routable, slowing cold start
-		useIstio:                 enableIstio, // defaults off -- istio integration requires pod relabeling and it takes a second or more to become routable, slowing cold start
-		stopReadyPodControllerCh: make(chan struct{}),
-		poolInstanceID:           uniuri.NewLen(8),
-		instanceID:               instanceID,
-		podFSVCMap:               sync.Map{},
-		podSpecPatch:             podSpecPatch,
-		enableOwnerReferences:    utils.IsOwnerReferencesEnabled(),
-		lock:                     sync.Mutex{},
+		logger:                gpLogger,
+		env:                   env,
+		fissionClient:         fissionClient,
+		kubernetesClient:      kubernetesClient,
+		metricsClient:         metricsClient,
+		fnNamespace:           fnNamespace,
+		podReadyTimeout:       podReadyTimeout,
+		fsCache:               fsCache,
+		fetcherConfig:         fetcherConfig,
+		useSvc:                false,       // defaults off -- svc takes a second or more to become routable, slowing cold start
+		useIstio:              enableIstio, // defaults off -- istio integration requires pod relabeling and it takes a second or more to become routable, slowing cold start
+		crClient:              crClient,
+		readyPodQueue:         workqueue.NewTypedDelayingQueueWithConfig(workqueue.TypedDelayingQueueConfig[string]{Name: "readyPodQueue"}),
+		poolInstanceID:        uniuri.NewLen(8),
+		instanceID:            instanceID,
+		podFSVCMap:            sync.Map{},
+		podSpecPatch:          podSpecPatch,
+		enableOwnerReferences: utils.IsOwnerReferencesEnabled(),
+		lock:                  sync.Mutex{},
 	}
 
 	gp.runtimeImagePullPolicy = utils.GetImagePullPolicy(os.Getenv("RUNTIME_IMAGE_PULL_POLICY"))
@@ -137,10 +139,8 @@ func (gp *GenericPool) setup(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	err = gp.setupReadyPodController()
-	if err != nil {
-		return err
-	}
+	// Warm pods of this pool are fed into gp.readyPodQueue by the executor's
+	// Pod reconciler (see reconciler.go); choosePod consumes from it.
 	// updateCPUUtilizationSvc runs for the lifetime of the pool, so it gets a
 	// context tied to the pool (cancelled in destroy) rather than the
 	// request-scoped ctx, which would cancel once the triggering request ends.
@@ -249,10 +249,8 @@ func (gp *GenericPool) choosePod(ctx context.Context, newLabels map[string]strin
 	}
 	expoDelay := 100 * time.Millisecond
 	logger := otelUtils.LoggerWithTraceID(ctx, gp.logger)
-	if !cache.WaitForCacheSync(ctx.Done(), gp.readyPodListerSynced) {
-		logger.Error(nil, "timed out waiting for ready pod lister synced")
-		return "", nil, errors.New("ready pod lister not synced")
-	}
+	// The executor Manager cache is synced before the API server serves, so no
+	// per-pool cache-sync wait is needed here anymore.
 	for {
 		// Retries took too long, error out.
 		if time.Now().After(podTimeout) {
@@ -279,9 +277,20 @@ func (gp *GenericPool) choosePod(ctx context.Context, newLabels map[string]strin
 			gp.readyPodQueue.Done(key)
 			return "", nil, err
 		}
-		pod, err := gp.readyPodLister.Pods(namespace).Get(name)
-		if err != nil {
-			logger.Error(err, "fetching object from store failed", "key", key)
+		pod := &apiv1.Pod{}
+		if err := gp.crClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, pod); err != nil {
+			// Not in the cache (e.g. already specialized and relabelled out of the
+			// poolmgr-managed set, or deleted): skip this stale key.
+			logger.V(1).Info("ready pod not found in cache; skipping", "key", key, "err", err)
+			gp.readyPodQueue.Done(key)
+			continue
+		}
+		// The Manager cache holds both warm (managed=true) and specialized
+		// (managed=false) poolmgr pods; the old per-pool lister only held warm ones.
+		// Skip any pod that has already been specialized so we never re-specialize
+		// another function's pod.
+		if pod.Labels["managed"] != "true" {
+			logger.V(1).Info("pod already specialized; skipping", "key", key)
 			gp.readyPodQueue.Done(key)
 			continue
 		}
@@ -676,7 +685,7 @@ func (gp *GenericPool) getPercent(cpuUsage resource.Quantity, percentage float64
 func (gp *GenericPool) destroy(ctx context.Context) error {
 	gp.lock.Lock()
 	defer gp.lock.Unlock()
-	close(gp.stopReadyPodControllerCh)
+	gp.readyPodQueue.ShutDown()
 	if gp.cancelPoolCtx != nil {
 		gp.cancelPoolCtx()
 	}

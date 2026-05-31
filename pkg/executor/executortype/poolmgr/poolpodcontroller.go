@@ -13,14 +13,12 @@ import (
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
-	k8sInformers "k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
-	corelisters "k8s.io/client-go/listers/core/v1"
 	k8sCache "k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/go-logr/logr"
 	"golang.org/x/sync/errgroup"
@@ -42,37 +40,22 @@ type (
 		kubernetesClient kubernetes.Interface
 		nsResolver       *utils.NamespaceResolver
 
-		// podLister can list/get pods from the shared informer's store
-		podLister map[string]corelisters.PodLister
-
-		// podListerSynced returns true if the pod store has been synced at least once.
-		podListerSynced map[string]k8sCache.InformerSynced
-
 		spCleanupPodQueue workqueue.TypedRateLimitingInterface[string]
 
 		gpm *GenericPoolManager
 	}
 )
 
-func NewPoolPodController(ctx context.Context, logger logr.Logger,
-	kubernetesClient kubernetes.Interface,
-	gpmInformerFactory map[string]k8sInformers.SharedInformerFactory) (*PoolPodController, error) {
-	logger = logger.WithName("pool_pod_controller")
-	p := &PoolPodController{
-		logger:            logger,
+// NewPoolPodController returns the specialized-pod cleanup controller. Pod reads
+// now go through the executor Manager cache (p.gpm.crClient), so there is no
+// informer factory or pod lister to wire up here.
+func NewPoolPodController(logger logr.Logger, kubernetesClient kubernetes.Interface) *PoolPodController {
+	return &PoolPodController{
+		logger:            logger.WithName("pool_pod_controller"),
 		nsResolver:        utils.DefaultNSResolver(),
 		kubernetesClient:  kubernetesClient,
-		podLister:         make(map[string]corelisters.PodLister),
-		podListerSynced:   make(map[string]k8sCache.InformerSynced),
 		spCleanupPodQueue: workqueue.NewTypedRateLimitingQueueWithConfig(workqueue.DefaultTypedControllerRateLimiter[string](), workqueue.TypedRateLimitingQueueConfig[string]{Name: "SpecializedPodCleanupQueue"}),
 	}
-	for ns, informerFactory := range gpmInformerFactory {
-		p.podListerSynced[ns] = informerFactory.Core().V1().Pods().Informer().HasSynced
-		p.podLister[ns] = informerFactory.Core().V1().Pods().Lister()
-	}
-
-	p.logger.Info("pool pod controller pod lister registered")
-	return p, nil
 }
 
 func (p *PoolPodController) InjectGpm(gpm *GenericPoolManager) {
@@ -85,7 +68,7 @@ func IsPodActive(p *v1.Pod) bool {
 		p.DeletionTimestamp == nil
 }
 
-func (p *PoolPodController) processRS(rs *apps.ReplicaSet) {
+func (p *PoolPodController) processRS(ctx context.Context, rs *apps.ReplicaSet) {
 	if *(rs.Spec.Replicas) != 0 {
 		return
 	}
@@ -98,15 +81,17 @@ func (p *PoolPodController) processRS(rs *apps.ReplicaSet) {
 		return
 	}
 	rsLabelMap["managed"] = "false"
-	specializedPods, err := p.podLister[rs.Namespace].Pods(rs.Namespace).List(labels.SelectorFromSet(rsLabelMap))
-	if err != nil {
+	podList := &v1.PodList{}
+	if err := p.gpm.crClient.List(ctx, podList, client.InNamespace(rs.Namespace), client.MatchingLabels(rsLabelMap)); err != nil {
 		logger.Error(err, "Failed to list specialized pods")
-	}
-	if len(specializedPods) == 0 {
 		return
 	}
-	logger.Info("specialized pods identified for cleanup with RS", "numPods", len(specializedPods))
-	for _, pod := range specializedPods {
+	if len(podList.Items) == 0 {
+		return
+	}
+	logger.Info("specialized pods identified for cleanup with RS", "numPods", len(podList.Items))
+	for i := range podList.Items {
+		pod := &podList.Items[i]
 		if !IsPodActive(pod) {
 			continue
 		}
@@ -125,21 +110,17 @@ func (p *PoolPodController) processRS(rs *apps.ReplicaSet) {
 func (p *PoolPodController) cleanupSpecializedPodsForEnv(ctx context.Context, env *fv1.Environment) {
 	specializePodLabels := getSpecializedPodLabels(env)
 	ns := p.nsResolver.ResolveNamespace(p.nsResolver.FunctionNamespace)
-	podLister, ok := p.podLister[ns]
-	if !ok {
-		p.logger.Error(nil, "no pod lister found for namespace", "namespace", ns)
-		return
-	}
-	specializedPods, err := podLister.Pods(ns).List(labels.SelectorFromSet(specializePodLabels))
-	if err != nil {
+	podList := &v1.PodList{}
+	if err := p.gpm.crClient.List(ctx, podList, client.InNamespace(ns), client.MatchingLabels(specializePodLabels)); err != nil {
 		p.logger.Error(err, "failed to list specialized pods")
 		return
 	}
-	if len(specializedPods) == 0 {
+	if len(podList.Items) == 0 {
 		return
 	}
-	p.logger.Info("specialized pods identified for cleanup after env delete", "env", env.Name, "namespace", env.Namespace, "count", len(specializedPods))
-	for _, pod := range specializedPods {
+	p.logger.Info("specialized pods identified for cleanup after env delete", "env", env.Name, "namespace", env.Namespace, "count", len(podList.Items))
+	for i := range podList.Items {
+		pod := &podList.Items[i]
 		if !IsPodActive(pod) {
 			continue
 		}
@@ -155,19 +136,8 @@ func (p *PoolPodController) cleanupSpecializedPodsForEnv(ctx context.Context, en
 func (p *PoolPodController) Run(ctx context.Context, stopCh <-chan struct{}, mgr *errgroup.Group) {
 	defer utilruntime.HandleCrash()
 	defer p.spCleanupPodQueue.ShutDown()
-	// Wait for the caches to be synced before starting workers
-	p.logger.Info("Waiting for informer caches to sync")
-
-	waitSynced := make([]k8sCache.InformerSynced, 0)
-	for _, synced := range p.podListerSynced {
-		waitSynced = append(waitSynced, synced)
-	}
-	if ok := k8sCache.WaitForCacheSync(stopCh, waitSynced...); !ok {
-		// Usually means the context was cancelled (shutdown or loss of
-		// leadership). Stop cleanly instead of taking the whole process down.
-		p.logger.Info("failed to wait for caches to sync; stopping pool pod controller")
-		return
-	}
+	// Pod reads go through the Manager cache, which is synced before this Runnable
+	// starts, so there is no informer cache to wait for here.
 	mgr.Go(func() error {
 		wait.Until(p.workerRun(ctx, "spCleanupPodQueue", p.spCleanupPodQueueProcessFunc), time.Second, stopCh)
 		return nil
@@ -202,7 +172,8 @@ func (p *PoolPodController) spCleanupPodQueueProcessFunc(ctx context.Context) bo
 		p.spCleanupPodQueue.Forget(key)
 		return false
 	}
-	pod, err := p.podLister[namespace].Pods(namespace).Get(name)
+	pod := &v1.Pod{}
+	err = p.gpm.crClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, pod)
 	if apierrors.IsNotFound(err) {
 		p.logger.Info("pod not found", "key", key)
 		p.spCleanupPodQueue.Forget(key)

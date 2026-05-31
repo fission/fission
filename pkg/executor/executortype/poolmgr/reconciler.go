@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
+	apiv1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -44,7 +45,7 @@ type poolManager interface {
 
 // rsCleaner is the subset of *GenericPoolManager the ReplicaSet reconciler drives.
 type rsCleaner interface {
-	processReplicaSet(rs *appsv1.ReplicaSet)
+	processReplicaSet(ctx context.Context, rs *appsv1.ReplicaSet)
 }
 
 // replicaSetReconciler reaps a pool's specialized pods when its ReplicaSet scales
@@ -66,7 +67,7 @@ func (r *replicaSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 		return ctrl.Result{}, err
 	}
-	r.cleaner.processReplicaSet(rs)
+	r.cleaner.processReplicaSet(ctx, rs)
 	return ctrl.Result{}, nil
 }
 
@@ -75,6 +76,53 @@ func (r *replicaSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 // same filter the old executor-labelled informer applied.
 var poolmgrReplicaSetPredicate = predicate.NewPredicateFuncs(func(obj client.Object) bool {
 	return obj.GetLabels()[fv1.EXECUTOR_TYPE] == string(fv1.ExecutorTypePoolmgr)
+})
+
+// readyPodEnqueuer is the subset of *GenericPoolManager the readyPod reconciler
+// drives — adding a warm pod's key to its pool's readyPodQueue.
+type readyPodEnqueuer interface {
+	enqueueReadyPod(envUID, key string)
+}
+
+// readyPodReconciler feeds warm (unspecialized, Running) pool pods into their
+// pool's readyPodQueue, which choosePod consumes on cold start. It replaces the
+// per-pool readyPod informer with a single Manager-cache Pod watch, routing each
+// pod to the right pool by its environment UID label. It is purely additive: a
+// specialized or deleted pod needs no handling here because choosePod skips any
+// queue entry that is no longer a warm pod.
+type readyPodReconciler struct {
+	logger   logr.Logger
+	client   client.Client
+	enqueuer readyPodEnqueuer
+}
+
+func (r *readyPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	pod := &apiv1.Pod{}
+	if err := r.client.Get(ctx, req.NamespacedName, pod); err != nil {
+		if apierrors.IsNotFound(err) {
+			return ctrl.Result{}, nil
+		}
+		return ctrl.Result{}, err
+	}
+	// Only feed warm, Running pods. The predicate already filters managed=true, but
+	// re-check defensively and gate on Running (the old informer used a
+	// status.phase=Running field selector).
+	if pod.Labels["managed"] != "true" || pod.Status.Phase != apiv1.PodRunning {
+		return ctrl.Result{}, nil
+	}
+	envUID := pod.Labels[fv1.ENVIRONMENT_UID]
+	if envUID == "" {
+		return ctrl.Result{}, nil
+	}
+	r.enqueuer.enqueueReadyPod(envUID, req.String())
+	return ctrl.Result{}, nil
+}
+
+// poolmgrWarmPodPredicate keeps the readyPod reconciler to pool-manager warm
+// pods (managed=true), matching what the old per-pool informer watched.
+var poolmgrWarmPodPredicate = predicate.NewPredicateFuncs(func(obj client.Object) bool {
+	l := obj.GetLabels()
+	return l[fv1.EXECUTOR_TYPE] == string(fv1.ExecutorTypePoolmgr) && l["managed"] == "true"
 })
 
 // isPoolmgrType reports whether the pool manager should handle this function.
@@ -248,6 +296,19 @@ func (gpm *GenericPoolManager) RegisterReconcilers(mgr ctrl.Manager) error {
 		client:  mgr.GetClient(),
 		cleaner: gpm,
 	}
-	return controller.RegisterWithPredicates(mgr, &appsv1.ReplicaSet{}, rr, "poolmgr-replicaset", 0,
-		poolmgrReplicaSetPredicate, predicate.GenerationChangedPredicate{})
+	if err := controller.RegisterWithPredicates(mgr, &appsv1.ReplicaSet{}, rr, "poolmgr-replicaset", 0,
+		poolmgrReplicaSetPredicate, predicate.GenerationChangedPredicate{}); err != nil {
+		return err
+	}
+
+	// The readyPod reconciler reacts to pod status (phase → Running), so it must
+	// NOT use GenerationChangedPredicate (status changes leave Generation
+	// unchanged) — only the warm-pod label filter.
+	pr := &readyPodReconciler{
+		logger:   gpm.logger.WithName("readypod_reconciler"),
+		client:   mgr.GetClient(),
+		enqueuer: gpm,
+	}
+	return controller.RegisterWithPredicates(mgr, &apiv1.Pod{}, pr, "poolmgr-readypod", 0,
+		poolmgrWarmPodPredicate)
 }
