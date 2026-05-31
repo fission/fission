@@ -148,10 +148,15 @@ func TestRefreshFuncPods(t *testing.T) {
 	// The Function watch is a controller-runtime reconciler now, which needs a
 	// Manager and is not running in this unit test. Drive createFunction directly
 	// (in a goroutine, as the old informer AddFunc handler did) so the deployment
-	// gets created; createFunction then blocks in waitForDeploy on the fake client,
-	// but the deployment exists by then, which is all this test waits for.
+	// gets created. createFunction then blocks in waitForDeploy (the fake
+	// Deployment never reports AvailableReplicas), so give the goroutine its own
+	// cancelable context and cancel it once the Deployment exists — which is all
+	// this test waits for — so it exits promptly instead of sitting until
+	// SpecializationTimeout and logging after the test has moved on.
+	createCtx, cancelCreate := context.WithCancel(ctx)
+	t.Cleanup(cancelCreate)
 	go func() {
-		if _, err := ndm.createFunction(ctx, funcRes); err != nil {
+		if _, err := ndm.createFunction(createCtx, funcRes); err != nil {
 			logger.Error(err, "error creating function in test")
 		}
 	}()
@@ -166,6 +171,7 @@ func TestRefreshFuncPods(t *testing.T) {
 			cancel2()
 		}
 	}, time.Second*2, ctx2.Done())
+	cancelCreate() // deployment exists; stop the createFunction goroutine's waitForDeploy
 
 	err = BuildConfigMap(ctx, kubernetesClient, defaultNamespace, configmapName, map[string]string{
 		"test-key": "test-value",
