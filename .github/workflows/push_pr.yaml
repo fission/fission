@@ -42,7 +42,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        kindversion: ["v1.28.15", "v1.32.8", "v1.34.0"]
+        kindversion: ["v1.32.11", "v1.34.3", "v1.35.1"]
         os: [ubuntu-24.04]
     steps:
       - name: Harden Runner
@@ -112,7 +112,7 @@ jobs:
           # (via goreleaser) but ignored by go subcommands that don't know the
           # flag (e.g. `go mod tidy`). Never set in release.yaml, so published
           # images are never instrumented.
-          GOFLAGS: ${{ matrix.kindversion == 'v1.32.8' && '-cover -coverpkg=github.com/fission/fission/...' || '' }}
+          GOFLAGS: ${{ matrix.kindversion == 'v1.32.11' && '-cover -coverpkg=github.com/fission/fission/...' || '' }}
         run: |
           kubectl create ns fission
           make create-crds
@@ -224,7 +224,7 @@ jobs:
           # the collect step. Other legs run uninstrumented.
           COVER_FLAGS=()
           COVER_ARGS=()
-          if [ "${{ matrix.kindversion }}" = "v1.32.8" ]; then
+          if [ "${{ matrix.kindversion }}" = "v1.32.11" ]; then
             mkdir -p "$PWD/covdata-cli"
             COVER_FLAGS=(-cover -coverpkg=github.com/fission/fission/...)
             COVER_ARGS=(-args -test.gocoverdir="$PWD/covdata-cli")
@@ -234,7 +234,7 @@ jobs:
 
       - name: Collect integration coverage
         # Only the instrumented leg produced coverage; collect there.
-        if: ${{ matrix.kindversion == 'v1.32.8' }}
+        if: ${{ matrix.kindversion == 'v1.32.11' }}
         timeout-minutes: 5
         run: |
           # Graceful delete (foreground cascade) sends SIGTERM and waits for
@@ -263,7 +263,7 @@ jobs:
           fi
 
       - name: Upload integration coverage to CodeCov
-        if: ${{ matrix.kindversion == 'v1.32.8' && hashFiles('integration-coverage.txt') != '' }}
+        if: ${{ matrix.kindversion == 'v1.32.11' && hashFiles('integration-coverage.txt') != '' }}
         continue-on-error: true
         uses: codecov/codecov-action@e79a6962e0d4c0c17b229090214935d2e33f8354 # v6.0.1
         with:
