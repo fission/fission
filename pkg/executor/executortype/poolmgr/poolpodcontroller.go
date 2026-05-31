@@ -67,19 +67,11 @@ func NewPoolPodController(ctx context.Context, logger logr.Logger,
 		spCleanupPodQueue: workqueue.NewTypedRateLimitingQueueWithConfig(workqueue.DefaultTypedControllerRateLimiter[string](), workqueue.TypedRateLimitingQueueConfig[string]{Name: "SpecializedPodCleanupQueue"}),
 	}
 	for ns, informerFactory := range gpmInformerFactory {
-		_, err := informerFactory.Apps().V1().ReplicaSets().Informer().AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
-			AddFunc:    p.handleRSAdd,
-			UpdateFunc: p.handleRSUpdate,
-			DeleteFunc: p.handleRSDelete,
-		})
-		if err != nil {
-			return nil, err
-		}
 		p.podListerSynced[ns] = informerFactory.Core().V1().Pods().Informer().HasSynced
 		p.podLister[ns] = informerFactory.Core().V1().Pods().Lister()
 	}
 
-	p.logger.Info("pool pod controller handlers registered")
+	p.logger.Info("pool pod controller pod lister registered")
 	return p, nil
 }
 
@@ -125,41 +117,6 @@ func (p *PoolPodController) processRS(rs *apps.ReplicaSet) {
 		}
 		p.spCleanupPodQueue.Add(key)
 	}
-}
-
-func (p *PoolPodController) handleRSAdd(obj any) {
-	rs, ok := obj.(*apps.ReplicaSet)
-	if !ok {
-		p.logger.Info("unexpected type when adding rs to pool pod controller", "obj", obj)
-		return
-	}
-	p.processRS(rs)
-}
-
-func (p *PoolPodController) handleRSUpdate(oldObj any, newObj any) {
-	rs, ok := newObj.(*apps.ReplicaSet)
-	if !ok {
-		p.logger.Error(nil, "unexpected type when updating rs to pool pod controller", "obj", newObj)
-		return
-	}
-	p.processRS(rs)
-}
-
-func (p *PoolPodController) handleRSDelete(obj any) {
-	rs, ok := obj.(*apps.ReplicaSet)
-	if !ok {
-		tombstone, ok := obj.(k8sCache.DeletedFinalStateUnknown)
-		if !ok {
-			p.logger.Error(nil, "couldn't get object from tombstone", "obj", obj)
-			return
-		}
-		rs, ok = tombstone.Obj.(*apps.ReplicaSet)
-		if !ok {
-			p.logger.Error(nil, "tombstone contained object that is not a replicaset", "obj", obj)
-			return
-		}
-	}
-	p.processRS(rs)
 }
 
 // cleanupSpecializedPodsForEnv enqueues an environment's specialized pods for

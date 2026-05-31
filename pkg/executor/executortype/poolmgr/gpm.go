@@ -17,6 +17,7 @@ import (
 
 	"go.opentelemetry.io/otel/attribute"
 	"golang.org/x/sync/errgroup"
+	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -583,6 +584,13 @@ func (gpm *GenericPoolManager) cleanupPool(ctx context.Context, env *fv1.Environ
 // reconciler on delete.
 func (gpm *GenericPoolManager) markFuncDeleted(key crd.CacheKeyURG) {
 	gpm.fsCache.MarkFuncDeleted(key)
+}
+
+// processReplicaSet reaps a pool's specialized pods when its ReplicaSet has
+// scaled to zero. Driven by the ReplicaSet reconciler; delegates to the pool pod
+// controller, which owns the specialized-pod cleanup queue.
+func (gpm *GenericPoolManager) processReplicaSet(rs *appsv1.ReplicaSet) {
+	gpm.poolPodC.processRS(rs)
 }
 
 // reconcileEnvPool brings an environment's warm pool to its desired state:
