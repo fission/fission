@@ -132,12 +132,9 @@ func MakeContainer(
 		caaf.svcLister[ns] = informerFactory.Core().V1().Services().Lister()
 		caaf.svcListerSynced[ns] = informerFactory.Core().V1().Services().Informer().HasSynced
 	}
-	for _, factory := range finformerFactory {
-		_, err := factory.Core().V1().Functions().Informer().AddEventHandler(caaf.FuncInformerHandler(ctx))
-		if err != nil {
-			return nil, fmt.Errorf("failed to add event handler for function informer: %w", err)
-		}
-	}
+	// The Function watch is now a controller-runtime reconciler registered via
+	// RegisterReconcilers on the executor Manager (see reconciler.go); the
+	// deployment/service listers above stay as read paths.
 	return caaf, nil
 }
 
