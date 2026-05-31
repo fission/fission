@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -47,7 +48,7 @@ func (f *fakeFuncMgr) deleteIstioServiceForFunction(_ context.Context, fn *fv1.F
 
 type fakeRSCleaner struct{ processed []string }
 
-func (f *fakeRSCleaner) processReplicaSet(rs *appsv1.ReplicaSet) {
+func (f *fakeRSCleaner) processReplicaSet(_ context.Context, rs *appsv1.ReplicaSet) {
 	f.processed = append(f.processed, rs.Name)
 }
 
@@ -231,5 +232,62 @@ func TestPoolmgrReplicaSetReconciler(t *testing.T) {
 		_, err := r.Reconcile(t.Context(), req)
 		require.NoError(t, err)
 		assert.Empty(t, c.processed, "scale-to-zero precedes deletion, so a missing RS needs no cleanup")
+	})
+}
+
+type fakeEnqueuer struct{ enqueued map[string]string } // env UID -> key
+
+func (f *fakeEnqueuer) enqueueReadyPod(envUID, key string) {
+	if f.enqueued == nil {
+		f.enqueued = map[string]string{}
+	}
+	f.enqueued[envUID] = key
+}
+
+func warmPod(name, envUID string, phase corev1.PodPhase, managed string) *corev1.Pod {
+	return &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default", Labels: map[string]string{
+			fv1.EXECUTOR_TYPE:   string(fv1.ExecutorTypePoolmgr),
+			fv1.ENVIRONMENT_UID: envUID,
+			"managed":           managed,
+		}},
+		Status: corev1.PodStatus{Phase: phase},
+	}
+}
+
+func TestPoolmgrReadyPodReconciler(t *testing.T) {
+	key := types.NamespacedName{Name: "pod", Namespace: "default"}
+	req := ctrl.Request{NamespacedName: key}
+
+	t.Run("running warm pod is enqueued to its pool by env UID", func(t *testing.T) {
+		e := &fakeEnqueuer{}
+		r := &readyPodReconciler{logger: logr.Discard(), client: crClientK8s(warmPod("pod", "e1", corev1.PodRunning, "true")), enqueuer: e}
+		_, err := r.Reconcile(t.Context(), req)
+		require.NoError(t, err)
+		assert.Equal(t, "default/pod", e.enqueued["e1"])
+	})
+
+	t.Run("pending warm pod is not enqueued", func(t *testing.T) {
+		e := &fakeEnqueuer{}
+		r := &readyPodReconciler{logger: logr.Discard(), client: crClientK8s(warmPod("pod", "e1", corev1.PodPending, "true")), enqueuer: e}
+		_, err := r.Reconcile(t.Context(), req)
+		require.NoError(t, err)
+		assert.Empty(t, e.enqueued, "only Running pods are fed to the queue")
+	})
+
+	t.Run("specialized pod (managed=false) is not enqueued", func(t *testing.T) {
+		e := &fakeEnqueuer{}
+		r := &readyPodReconciler{logger: logr.Discard(), client: crClientK8s(warmPod("pod", "e1", corev1.PodRunning, "false")), enqueuer: e}
+		_, err := r.Reconcile(t.Context(), req)
+		require.NoError(t, err)
+		assert.Empty(t, e.enqueued, "specialized pods are not warm candidates")
+	})
+
+	t.Run("deleted pod is a no-op", func(t *testing.T) {
+		e := &fakeEnqueuer{}
+		r := &readyPodReconciler{logger: logr.Discard(), client: crClientK8s(), enqueuer: e}
+		_, err := r.Reconcile(t.Context(), req)
+		require.NoError(t, err)
+		assert.Empty(t, e.enqueued)
 	})
 }

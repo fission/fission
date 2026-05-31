@@ -19,12 +19,15 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/sync/errgroup"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	k8sCache "k8s.io/client-go/tools/cache"
 	ctrl "sigs.k8s.io/controller-runtime"
 	crcache "sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	ctrlmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
@@ -75,7 +78,18 @@ func executorCacheOptions() crcache.Options {
 	for _, ns := range resolver.FissionNSWithOptions(utils.WithBuilderNs(), utils.WithFunctionNs(), utils.WithDefaultNs()) {
 		nsConfig[ns] = crcache.Config{}
 	}
-	return crcache.Options{DefaultNamespaces: nsConfig}
+	return crcache.Options{
+		DefaultNamespaces: nsConfig,
+		// The pool manager's readyPod reconciler and pod reads watch Pods through
+		// this cache (replacing gpmInformerFactory). Scope the Pod watch to
+		// pool-manager pods so the cache doesn't mirror every function pod in the
+		// function namespace — the same executor-label filter the old informer used.
+		ByObject: map[client.Object]crcache.ByObject{
+			&corev1.Pod{}: {
+				Label: labels.SelectorFromSet(labels.Set{fv1.EXECUTOR_TYPE: string(fv1.ExecutorTypePoolmgr)}),
+			},
+		},
+	}
 }
 
 type (
@@ -414,22 +428,18 @@ func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, 
 		finformerFactory[ns] = genInformer.NewSharedInformerFactoryWithOptions(fissionClient, time.Minute*30, genInformer.WithNamespace(ns))
 	}
 
-	executorLabel, err := utils.GetInformerLabelByExecutor(fv1.ExecutorTypePoolmgr)
-	if err != nil {
-		return err
-	}
-	gpmInformerFactory := utils.GetInformerFactoryByExecutor(kubernetesClient, executorLabel, time.Minute*30)
+	// poolmgr reads pods through the executor Manager cache now, so it no longer
+	// needs a dedicated pod informer factory.
 	gpm, err := poolmgr.MakeGenericPoolManager(ctx,
 		logger,
 		fissionClient, kubernetesClient, metricsClient,
 		fetcherConfig, executorInstanceID,
-		finformerFactory,
-		gpmInformerFactory, podSpecPatch)
+		finformerFactory, podSpecPatch)
 	if err != nil {
 		return fmt.Errorf("pool manager creation failed: %w", err)
 	}
 
-	executorLabel, err = utils.GetInformerLabelByExecutor(fv1.ExecutorTypeNewdeploy)
+	executorLabel, err := utils.GetInformerLabelByExecutor(fv1.ExecutorTypeNewdeploy)
 	if err != nil {
 		return err
 	}
@@ -525,9 +535,6 @@ func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, 
 
 	startFactories := func(stopCh <-chan struct{}) {
 		for _, factory := range finformerFactory {
-			factory.Start(stopCh)
-		}
-		for _, factory := range gpmInformerFactory {
 			factory.Start(stopCh)
 		}
 		for _, factory := range ndmInformerFactory {
