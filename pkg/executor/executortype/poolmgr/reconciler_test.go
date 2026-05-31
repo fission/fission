@@ -5,6 +5,7 @@
 package poolmgr
 
 import (
+	"context"
 	"testing"
 
 	"github.com/go-logr/logr"
@@ -21,59 +22,180 @@ import (
 	"github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
 )
 
-type fakeDeleter struct{ deleted []crd.CacheKeyURG }
+type fakeFuncMgr struct {
+	deleted      []crd.CacheKeyURG
+	refreshed    []string
+	istioCreated []string
+	istioDeleted []string
+}
 
-func (f *fakeDeleter) markFuncDeleted(k crd.CacheKeyURG) { f.deleted = append(f.deleted, k) }
+func (f *fakeFuncMgr) markFuncDeleted(k crd.CacheKeyURG) { f.deleted = append(f.deleted, k) }
+func (f *fakeFuncMgr) refreshFuncPods(_ context.Context, fn *fv1.Function) error {
+	f.refreshed = append(f.refreshed, fn.Name)
+	return nil
+}
+func (f *fakeFuncMgr) createIstioServiceForFunction(_ context.Context, fn *fv1.Function) error {
+	f.istioCreated = append(f.istioCreated, fn.Name)
+	return nil
+}
+func (f *fakeFuncMgr) deleteIstioServiceForFunction(_ context.Context, fn *fv1.Function) error {
+	f.istioDeleted = append(f.istioDeleted, fn.Name)
+	return nil
+}
+
+type fakePoolMgr struct {
+	reconciled []string
+	cleaned    []string
+}
+
+func (f *fakePoolMgr) reconcileEnvPool(_ context.Context, env *fv1.Environment) error {
+	f.reconciled = append(f.reconciled, env.Name)
+	return nil
+}
+func (f *fakePoolMgr) cleanupEnvPool(_ context.Context, env *fv1.Environment) {
+	f.cleaned = append(f.cleaned, env.Name)
+}
 
 func crClient(objs ...client.Object) client.Client {
 	return fake.NewClientBuilder().WithScheme(scheme.Scheme).WithObjects(objs...).Build()
 }
 
+func poolmgrFn(name string, et fv1.ExecutorType) *fv1.Function {
+	fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default", UID: "u1", ResourceVersion: "9", Generation: 2}}
+	fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType = et
+	return fn
+}
+
 func TestPoolmgrFunctionReconciler(t *testing.T) {
 	key := types.NamespacedName{Name: "fn", Namespace: "default"}
 	req := ctrl.Request{NamespacedName: key}
-	fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "fn", Namespace: "default", UID: "u1", ResourceVersion: "9", Generation: 2}}
 
-	t.Run("existing function is cached, not marked deleted", func(t *testing.T) {
-		d := &fakeDeleter{}
-		r := &functionReconciler{logger: logr.Discard(), client: crClient(fn), deleter: d}
+	t.Run("first sight of poolmgr function creates istio service and caches", func(t *testing.T) {
+		m := &fakeFuncMgr{}
+		r := &functionReconciler{logger: logr.Discard(), client: crClient(poolmgrFn("fn", fv1.ExecutorTypePoolmgr)), mgr: m, enableIstio: true}
 		_, err := r.Reconcile(t.Context(), req)
 		require.NoError(t, err)
-		assert.Empty(t, d.deleted)
+		assert.Equal(t, []string{"fn"}, m.istioCreated)
+		assert.Empty(t, m.deleted)
 		_, cached := r.lastSeen.Load(key)
-		assert.True(t, cached, "live function must be cached so its URG is available on delete")
+		assert.True(t, cached)
 	})
 
-	t.Run("deleted function is marked deleted with its cached URG", func(t *testing.T) {
-		d := &fakeDeleter{}
-		r := &functionReconciler{logger: logr.Discard(), client: crClient(), deleter: d} // empty client -> NotFound
-		r.lastSeen.Store(key, fn.DeepCopy())
+	t.Run("istio disabled: no istio service on create", func(t *testing.T) {
+		m := &fakeFuncMgr{}
+		r := &functionReconciler{logger: logr.Discard(), client: crClient(poolmgrFn("fn", "")), mgr: m, enableIstio: false}
 		_, err := r.Reconcile(t.Context(), req)
 		require.NoError(t, err)
-		require.Len(t, d.deleted, 1)
-		assert.Equal(t, crd.CacheKeyURGFromMeta(&fn.ObjectMeta), d.deleted[0])
+		assert.Empty(t, m.istioCreated)
+		_, cached := r.lastSeen.Load(key)
+		assert.True(t, cached, "empty executor type defaults to poolmgr and is managed")
+	})
+
+	t.Run("non-poolmgr function on first sight is ignored", func(t *testing.T) {
+		m := &fakeFuncMgr{}
+		r := &functionReconciler{logger: logr.Discard(), client: crClient(poolmgrFn("fn", fv1.ExecutorTypeNewdeploy)), mgr: m, enableIstio: true}
+		_, err := r.Reconcile(t.Context(), req)
+		require.NoError(t, err)
+		assert.Empty(t, m.istioCreated)
 		_, cached := r.lastSeen.Load(key)
 		assert.False(t, cached)
 	})
 
-	t.Run("delete of an unseen function is a no-op", func(t *testing.T) {
-		d := &fakeDeleter{}
-		r := &functionReconciler{logger: logr.Discard(), client: crClient(), deleter: d}
+	t.Run("spec change of a managed function refreshes its pods", func(t *testing.T) {
+		m := &fakeFuncMgr{}
+		r := &functionReconciler{logger: logr.Discard(), client: crClient(poolmgrFn("fn", fv1.ExecutorTypePoolmgr)), mgr: m, enableIstio: true}
+		r.lastSeen.Store(key, poolmgrFn("fn", fv1.ExecutorTypePoolmgr))
 		_, err := r.Reconcile(t.Context(), req)
 		require.NoError(t, err)
-		assert.Empty(t, d.deleted)
+		assert.Equal(t, []string{"fn"}, m.refreshed, "package/config change must re-specialize pods")
+		assert.Empty(t, m.istioCreated, "istio service is stable across spec updates")
 	})
 
-	t.Run("delete+recreate with a new UID marks the old UID deleted", func(t *testing.T) {
-		d := &fakeDeleter{}
-		recreated := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "fn", Namespace: "default", UID: "u2", ResourceVersion: "3", Generation: 1}}
-		r := &functionReconciler{logger: logr.Discard(), client: crClient(recreated), deleter: d}
-		r.lastSeen.Store(key, fn.DeepCopy()) // old UID u1
+	t.Run("deleted function is marked deleted and its istio service removed", func(t *testing.T) {
+		m := &fakeFuncMgr{}
+		r := &functionReconciler{logger: logr.Discard(), client: crClient(), mgr: m, enableIstio: true} // empty client -> NotFound
+		cached := poolmgrFn("fn", fv1.ExecutorTypePoolmgr)
+		r.lastSeen.Store(key, cached)
 		_, err := r.Reconcile(t.Context(), req)
 		require.NoError(t, err)
-		require.Len(t, d.deleted, 1)
-		assert.Equal(t, crd.CacheKeyURGFromMeta(&fn.ObjectMeta), d.deleted[0], "old UID must be marked deleted")
-		cached, _ := r.lastSeen.Load(key)
-		assert.Equal(t, recreated.UID, cached.(*fv1.Function).UID, "cache now holds the recreated function")
+		require.Len(t, m.deleted, 1)
+		assert.Equal(t, crd.CacheKeyURGFromMeta(&cached.ObjectMeta), m.deleted[0])
+		assert.Equal(t, []string{"fn"}, m.istioDeleted)
+		_, ok := r.lastSeen.Load(key)
+		assert.False(t, ok)
+	})
+
+	t.Run("delete of an unseen function is a no-op", func(t *testing.T) {
+		m := &fakeFuncMgr{}
+		r := &functionReconciler{logger: logr.Discard(), client: crClient(), mgr: m, enableIstio: true}
+		_, err := r.Reconcile(t.Context(), req)
+		require.NoError(t, err)
+		assert.Empty(t, m.deleted)
+	})
+
+	t.Run("delete+recreate with a new UID cleans the old and creates the new", func(t *testing.T) {
+		m := &fakeFuncMgr{}
+		old := poolmgrFn("fn", fv1.ExecutorTypePoolmgr) // UID u1
+		recreated := poolmgrFn("fn", fv1.ExecutorTypePoolmgr)
+		recreated.UID = "u2"
+		r := &functionReconciler{logger: logr.Discard(), client: crClient(recreated), mgr: m, enableIstio: true}
+		r.lastSeen.Store(key, old)
+		_, err := r.Reconcile(t.Context(), req)
+		require.NoError(t, err)
+		require.Len(t, m.deleted, 1)
+		assert.Equal(t, crd.CacheKeyURGFromMeta(&old.ObjectMeta), m.deleted[0])
+		assert.Equal(t, []string{"fn"}, m.istioCreated, "new incarnation gets a fresh istio service")
+		newCached, _ := r.lastSeen.Load(key)
+		assert.Equal(t, types.UID("u2"), newCached.(*fv1.Function).UID)
+	})
+
+	t.Run("transition away from poolmgr cleans up and uncaches", func(t *testing.T) {
+		m := &fakeFuncMgr{}
+		now := poolmgrFn("fn", fv1.ExecutorTypeNewdeploy)
+		r := &functionReconciler{logger: logr.Discard(), client: crClient(now), mgr: m, enableIstio: true}
+		r.lastSeen.Store(key, poolmgrFn("fn", fv1.ExecutorTypePoolmgr))
+		_, err := r.Reconcile(t.Context(), req)
+		require.NoError(t, err)
+		require.Len(t, m.deleted, 1, "old poolmgr incarnation must be cleaned up")
+		assert.Equal(t, []string{"fn"}, m.istioDeleted)
+		_, ok := r.lastSeen.Load(key)
+		assert.False(t, ok)
+	})
+}
+
+func TestPoolmgrEnvironmentReconciler(t *testing.T) {
+	key := types.NamespacedName{Name: "env", Namespace: "default"}
+	req := ctrl.Request{NamespacedName: key}
+	env := &fv1.Environment{ObjectMeta: metav1.ObjectMeta{Name: "env", Namespace: "default", UID: "e1"}}
+
+	t.Run("existing environment reconciles its pool and is cached", func(t *testing.T) {
+		m := &fakePoolMgr{}
+		r := &environmentReconciler{logger: logr.Discard(), client: crClient(env), mgr: m}
+		res, err := r.Reconcile(t.Context(), req)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"env"}, m.reconciled)
+		assert.Empty(t, m.cleaned)
+		assert.Equal(t, envResyncPeriod, res.RequeueAfter, "should periodically re-reconcile")
+		_, cached := r.lastSeen.Load(key)
+		assert.True(t, cached)
+	})
+
+	t.Run("deleted environment cleans up its pool via the cached object", func(t *testing.T) {
+		m := &fakePoolMgr{}
+		r := &environmentReconciler{logger: logr.Discard(), client: crClient(), mgr: m} // empty -> NotFound
+		r.lastSeen.Store(key, env.DeepCopy())
+		_, err := r.Reconcile(t.Context(), req)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"env"}, m.cleaned)
+		_, cached := r.lastSeen.Load(key)
+		assert.False(t, cached)
+	})
+
+	t.Run("delete of an unseen environment is a no-op", func(t *testing.T) {
+		m := &fakePoolMgr{}
+		r := &environmentReconciler{logger: logr.Discard(), client: crClient(), mgr: m}
+		_, err := r.Reconcile(t.Context(), req)
+		require.NoError(t, err)
+		assert.Empty(t, m.cleaned)
 	})
 }

@@ -28,6 +28,7 @@ import (
 	corelisters "k8s.io/client-go/listers/core/v1"
 	k8sCache "k8s.io/client-go/tools/cache"
 	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/go-logr/logr"
 
@@ -72,6 +73,11 @@ type (
 		fsCache        *fscache.FunctionServiceCache
 		instanceID     string
 		requestChannel chan *request
+
+		// crClient is the executor Manager's cache-backed client, used by
+		// getFunctionEnv to resolve a function's Environment (replacing
+		// poolpodcontroller's informer lister). Set in RegisterReconcilers.
+		crClient client.Client
 
 		enableIstio   bool
 		fetcherConfig *fetcherConfig.Config
@@ -125,8 +131,7 @@ func MakeGenericPoolManager(ctx context.Context,
 		enableIstio = istio
 	}
 
-	poolPodC, err := NewPoolPodController(ctx, gpmLogger, kubernetesClient,
-		enableIstio, finformerFactory, gpmInformerFactory)
+	poolPodC, err := NewPoolPodController(ctx, gpmLogger, kubernetesClient, gpmInformerFactory)
 	if err != nil {
 		return nil, err
 	}
@@ -573,6 +578,49 @@ func (gpm *GenericPoolManager) cleanupPool(ctx context.Context, env *fv1.Environ
 	}
 }
 
+// markFuncDeleted marks a function's pool service entries deleted in the fsCache
+// so the idle reaper recycles its specialized pods. Driven by the Function
+// reconciler on delete.
+func (gpm *GenericPoolManager) markFuncDeleted(key crd.CacheKeyURG) {
+	gpm.fsCache.MarkFuncDeleted(key)
+}
+
+// reconcileEnvPool brings an environment's warm pool to its desired state:
+// ensure the pool exists, destroy it if the pool size is zero, otherwise update
+// the pool deployment. Driven by the Environment reconciler on create/update
+// (replacing poolpodcontroller's envCreateUpdateQueue handler).
+func (gpm *GenericPoolManager) reconcileEnvPool(ctx context.Context, env *fv1.Environment) error {
+	log := gpm.logger.WithValues("env", env.Name, "namespace", env.Namespace)
+	pool, created, err := gpm.getPool(ctx, env)
+	if err != nil {
+		return err
+	}
+	if created {
+		log.Info("created pool for the environment")
+		return nil
+	}
+	if getEnvPoolSize(env) == 0 {
+		log.Info("pool size is zero, cleaning up pool")
+		gpm.cleanupPool(ctx, env)
+		return nil
+	}
+	if err := pool.updatePoolDeployment(ctx, env); err != nil {
+		return err
+	}
+	// Any specialized pods are recycled by the ReplicaSet → cleanup path.
+	return nil
+}
+
+// cleanupEnvPool destroys an environment's pool and reaps its specialized pods.
+// Driven by the Environment reconciler on delete (replacing the envDeleteQueue
+// handler); it uses the last-seen Environment since the live object is gone.
+func (gpm *GenericPoolManager) cleanupEnvPool(ctx context.Context, env *fv1.Environment) {
+	gpm.logger.V(1).Info("env delete: destroying pool and reaping specialized pods",
+		"env", env.Name, "namespace", env.Namespace)
+	gpm.cleanupPool(ctx, env)
+	gpm.poolPodC.cleanupSpecializedPodsForEnv(ctx, env)
+}
+
 func (gpm *GenericPoolManager) getFunctionEnv(ctx context.Context, fn *fv1.Function) (*fv1.Environment, error) {
 	var env *fv1.Environment
 	otelUtils.SpanTrackEvent(ctx, "getFunctionEnv", otelUtils.GetAttributesForFunction(fn)...)
@@ -593,12 +641,12 @@ func (gpm *GenericPoolManager) getFunctionEnv(ctx context.Context, fn *fv1.Funct
 		return result, nil
 	}
 
-	// Get env from controller
-	envLister, err := gpm.poolPodC.getEnvLister(fn.Spec.Environment.Namespace)
-	if err != nil {
-		return nil, err
-	}
-	env, err = envLister.Environments(fn.Spec.Environment.Namespace).Get(fn.Spec.Environment.Name)
+	// Resolve the environment from the executor Manager cache.
+	env = &fv1.Environment{}
+	err = gpm.crClient.Get(ctx, client.ObjectKey{
+		Namespace: fn.Spec.Environment.Namespace,
+		Name:      fn.Spec.Environment.Name,
+	}, env)
 	if err != nil {
 		return nil, err
 	}

@@ -513,8 +513,10 @@ func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, 
 	}
 
 	// Each executor type registers its Function/Environment reconcilers on the
-	// Manager (replacing its informer event handlers). Types still on the
-	// informer-handler path (newdeploy and poolmgr) return nil.
+	// Manager (replacing its informer event handlers): container (Function),
+	// newdeploy (Function + Environment), poolmgr (Function + Environment). The
+	// remaining poolmgr watches (ReplicaSet → specialized-pod cleanup) stay on
+	// poolpodcontroller's informers.
 	for _, et := range executorTypes {
 		if err := et.RegisterReconcilers(crMgr); err != nil {
 			return fmt.Errorf("error registering reconcilers for executor type %s: %w", et.GetTypeName(ctx), err)
