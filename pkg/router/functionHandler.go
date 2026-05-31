@@ -667,9 +667,11 @@ func (fh functionHandler) getServiceEntryFromExecutor(ctx context.Context) (serv
 		return nil, err
 	}
 	// parse the address into url
-	svcURL, err := url.Parse(fmt.Sprintf("http://%v", service))
+	rawURL := fmt.Sprintf("http://%v", service)
+	svcURL, err := url.Parse(rawURL)
 	if err != nil {
-		logger.Error(err, "error parsing service url", "service_url", svcURL.String())
+		// svcURL is nil on a parse error — log the raw string, not svcURL.String().
+		logger.Error(err, "error parsing service url", "service_url", rawURL)
 		return nil, err
 	}
 	return svcURL, err
