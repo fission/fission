@@ -11,6 +11,7 @@ on:
       - "test/**"
       - go.mod
       - go.sum
+      - .github/workflows/push_pr.yaml
   pull_request:
     branches:
       - main
@@ -20,6 +21,7 @@ on:
       - "test/**"
       - go.mod
       - go.sum
+      - .github/workflows/push_pr.yaml
 
 env:
   HELM_VERSION: v4.2.0
