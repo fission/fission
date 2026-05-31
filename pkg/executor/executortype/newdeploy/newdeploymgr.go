@@ -17,6 +17,7 @@ import (
 
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	apiv1 "k8s.io/api/core/v1"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	k8sErrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -140,18 +141,9 @@ func MakeNewDeploy(
 		nd.svcLister[ns] = informerFactory.Core().V1().Services().Lister()
 		nd.svcListerSynced[ns] = informerFactory.Core().V1().Services().Informer().HasSynced
 	}
-	for _, factory := range finformerFactory {
-		_, err := factory.Core().V1().Functions().Informer().AddEventHandler(nd.FunctionEventHandlers(ctx))
-		if err != nil {
-			return nil, err
-		}
-	}
-	for _, factory := range finformerFactory {
-		_, err := factory.Core().V1().Environments().Informer().AddEventHandler(nd.EnvEventHandlers(ctx))
-		if err != nil {
-			return nil, err
-		}
-	}
+	// The Function and Environment watches are controller-runtime reconcilers now
+	// (see reconciler.go / RegisterReconcilers), wired on the executor Manager.
+	// finformerFactory stays a parameter because poolmgr still drives off it.
 	return nd, nil
 }
 
@@ -373,6 +365,28 @@ func (deploy *NewDeploy) getEnvFunctions(ctx context.Context, m *metav1.ObjectMe
 		}
 	}
 	return relatedFunctions
+}
+
+// updateEnvFunctions rebuilds the deployments of all newdeploy functions of the
+// given environment after its runtime image changed. It drives the Environment
+// reconciler (replacing the EnvEventHandlers UpdateFunc body). A per-function
+// failure is logged and skipped rather than failing the whole environment sweep:
+// requeuing the environment would re-roll every (including already-updated)
+// function, which is the amplification the informer handler avoided.
+func (deploy *NewDeploy) updateEnvFunctions(ctx context.Context, env *fv1.Environment) error {
+	deploy.logger.V(1).Info("updating functions of environment with changed image", "environment", env.ObjectMeta)
+	for _, f := range deploy.getEnvFunctions(ctx, &env.ObjectMeta) {
+		function, err := deploy.fissionClient.CoreV1().Functions(f.Namespace).Get(ctx, f.Name, metav1.GetOptions{})
+		if err != nil {
+			deploy.logger.Error(err, "error getting function while updating environment functions", "function", f.ObjectMeta)
+			continue
+		}
+		if err := deploy.updateFuncDeployment(ctx, function, env); err != nil {
+			deploy.logger.Error(err, "error updating function deployment after environment image change", "function", function.ObjectMeta)
+			continue
+		}
+	}
+	return nil
 }
 
 func (deploy *NewDeploy) createFunction(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
@@ -655,6 +669,45 @@ func (deploy *NewDeploy) updateFunction(ctx context.Context, oldFn *fv1.Function
 	return nil
 }
 
+// reconcileDeploymentSpec brings an already-existing deployment up to the
+// function's current spec when it lags. createFunction only *adopts/scales* an
+// existing deployment (it does not rewrite the pod spec), and updateFunction is
+// diff-based against the last-reconciled object. So if a function's create and a
+// later spec update coalesce into a single first reconcile — common when the
+// router specializes the function on-demand (creating the deployment) just before
+// `fission fn update` lands — the deployment can be left on the old spec with no
+// transition for updateFunction to diff. The deployment carries the function's
+// ResourceVersion as a metadata annotation (getDeployAnnotations), so compare it:
+// if stale, push the current spec. A no-op when already current.
+func (deploy *NewDeploy) reconcileDeploymentSpec(ctx context.Context, fn *fv1.Function) error {
+	fsvc, err := deploy.fsCache.GetByFunctionUID(fn.UID)
+	if err != nil {
+		// Not specialized yet — no deployment to reconcile; the on-demand path will
+		// create it from the current spec when the function is first invoked.
+		return nil
+	}
+	ns := deploy.nsResolver.GetFunctionNS(fn.Namespace)
+	existingDepl, err := deploy.kubernetesClient.AppsV1().Deployments(ns).Get(ctx, fsvc.Name, metav1.GetOptions{})
+	if err != nil {
+		if k8sErrs.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+	if existingDepl.Annotations[fv1.FUNCTION_RESOURCE_VERSION] == fn.ResourceVersion {
+		return nil // deployment already reflects the current function spec
+	}
+	env, err := deploy.fissionClient.CoreV1().Environments(fn.Spec.Environment.Namespace).
+		Get(ctx, fn.Spec.Environment.Name, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+	deploy.logger.Info("reconciling stale deployment to current function spec on first sight",
+		"function", fn.Name, "deployment", fsvc.Name,
+		"deployment_rv", existingDepl.Annotations[fv1.FUNCTION_RESOURCE_VERSION], "function_rv", fn.ResourceVersion)
+	return deploy.updateFuncDeployment(ctx, fn, env)
+}
+
 func (deploy *NewDeploy) updateFuncDeployment(ctx context.Context, fn *fv1.Function, env *fv1.Environment) error {
 	fsvc, err := deploy.fsCache.GetByFunctionUID(fn.UID)
 	if err != nil {
@@ -670,8 +723,20 @@ func (deploy *NewDeploy) updateFuncDeployment(ctx context.Context, fn *fv1.Funct
 	// deployment of the function in fission-function ns
 	ns := deploy.nsResolver.GetFunctionNS(fn.Namespace)
 
+	deployAnnotations := deploy.getDeployAnnotations(fn.ObjectMeta, env.ObjectMeta)
+
 	existingDepl, err := deploy.kubernetesClient.AppsV1().Deployments(ns).Get(ctx, fnObjName, metav1.GetOptions{})
 	if err != nil {
+		if k8sErrs.IsNotFound(err) {
+			// The deployment is gone (e.g. raced with a delete). There is nothing to
+			// update in place; the next on-demand specialization recreates it. Return
+			// nil rather than an error, which would requeue forever against a missing
+			// object. This matches the old informer handler, which logged the Get
+			// error and returned.
+			deploy.logger.Info("deployment not found while updating function; skipping in-place update",
+				"deployment", fnObjName, "function", fn.Name)
+			return nil
+		}
 		return err
 	}
 
@@ -680,10 +745,24 @@ func (deploy *NewDeploy) updateFuncDeployment(ctx context.Context, fn *fv1.Funct
 	// Therefore, the deployment update will trigger a rolling update.
 	newDeployment, err := deploy.getDeploymentSpec(ctx, fn, env,
 		existingDepl.Spec.Replicas, // use current replicas instead of minscale in the ExecutionStrategy.
-		fnObjName, ns, deployLabels, deploy.getDeployAnnotations(fn.ObjectMeta, env.ObjectMeta))
+		fnObjName, ns, deployLabels, deployAnnotations)
 	if err != nil {
 		deploy.updateStatus(fn, err, "failed to get new deployment spec while updating function")
 		return err
+	}
+
+	// A Deployment's selector is immutable. It is stable across a function's
+	// code/secret/HPA updates, but changes when the function's environment
+	// reference changes (the environment UID is part of the selector labels). An
+	// in-place Update with a different selector is rejected by the API server, so
+	// skip the rebuild and leave the existing pods serving — matching the old
+	// informer handler, which logged the rejected Update and moved on. Returning
+	// nil (not an error) avoids requeuing forever against a permanently immutable
+	// field.
+	if !apiequality.Semantic.DeepEqual(existingDepl.Spec.Selector, newDeployment.Spec.Selector) {
+		deploy.logger.Info("deployment selector changed (e.g. environment reference changed); cannot update in place, leaving existing deployment",
+			"deployment", fnObjName, "function", fn.Name)
+		return nil
 	}
 
 	err = deploy.updateDeployment(ctx, newDeployment, ns)
