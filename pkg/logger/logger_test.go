@@ -14,6 +14,10 @@ import (
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 )
@@ -191,13 +195,10 @@ func TestReapStaleSymlinks(t *testing.T) {
 	assert.True(t, os.IsNotExist(err), "symlink with a missing target should be removed")
 }
 
-func TestPodInformerHandlers(t *testing.T) {
+func TestPodReconciler(t *testing.T) {
 	origNode := nodeName
 	nodeName = "this-node"
 	t.Cleanup(func() { nodeName = origNode })
-
-	handler := podInformerHandlers(logr.Discard())
-	require.NotNil(t, handler)
 
 	readyPod := func() *corev1.Pod {
 		pod := podWithContainerStatuses(
@@ -207,43 +208,64 @@ func TestPodInformerHandlers(t *testing.T) {
 		return pod
 	}
 
-	t.Run("AddFunc creates a symlink for a valid ready pod", func(t *testing.T) {
+	// reconcileFor builds a fake-client-backed reconciler seeded with pod and
+	// reconciles it once.
+	reconcileFor := func(t *testing.T, pod *corev1.Pod) error {
+		t.Helper()
+		c := fake.NewClientBuilder().WithScheme(clientgoscheme.Scheme).WithObjects(pod).Build()
+		r := &podReconciler{logger: logr.Discard(), client: c}
+		_, err := r.Reconcile(t.Context(), ctrl.Request{
+			NamespacedName: types.NamespacedName{Namespace: pod.Namespace, Name: pod.Name},
+		})
+		return err
+	}
+
+	t.Run("creates a symlink for a valid ready pod", func(t *testing.T) {
 		symlinkDir, _ := redirectLogPaths(t)
 		pod := readyPod()
 
-		handler.OnAdd(pod, false)
+		require.NoError(t, reconcileFor(t, pod))
 
 		link := getLogPath(symlinkDir, pod.Name, pod.Namespace, "c1", "ready-uid")
 		_, err := os.Lstat(link)
-		assert.NoError(t, err, "AddFunc should create the symlink")
+		assert.NoError(t, err, "reconcile should create the symlink")
 	})
 
-	t.Run("AddFunc ignores a pod scheduled elsewhere", func(t *testing.T) {
+	t.Run("ignores a pod scheduled elsewhere", func(t *testing.T) {
 		symlinkDir, _ := redirectLogPaths(t)
 		pod := readyPod()
 		pod.Spec.NodeName = "other-node"
 
-		handler.OnAdd(pod, false)
+		require.NoError(t, reconcileFor(t, pod))
 
 		entries, err := os.ReadDir(symlinkDir)
 		require.NoError(t, err)
 		assert.Empty(t, entries)
 	})
 
-	t.Run("UpdateFunc creates a symlink for a valid ready pod", func(t *testing.T) {
+	t.Run("ignores a non-ready pod", func(t *testing.T) {
 		symlinkDir, _ := redirectLogPaths(t)
-		pod := readyPod()
+		pod := podWithContainerStatuses(
+			corev1.ContainerStatus{Name: "c1", ContainerID: "docker://not-ready", Ready: false},
+		)
 
-		handler.OnUpdate(nil, pod)
+		require.NoError(t, reconcileFor(t, pod))
 
-		link := getLogPath(symlinkDir, pod.Name, pod.Namespace, "c1", "ready-uid")
-		_, err := os.Lstat(link)
-		assert.NoError(t, err, "UpdateFunc should create the symlink")
+		entries, err := os.ReadDir(symlinkDir)
+		require.NoError(t, err)
+		assert.Empty(t, entries)
 	})
 
-	t.Run("DeleteFunc is a no-op", func(t *testing.T) {
+	t.Run("NotFound is a no-op", func(t *testing.T) {
 		symlinkDir, _ := redirectLogPaths(t)
-		handler.OnDelete(readyPod())
+		c := fake.NewClientBuilder().WithScheme(clientgoscheme.Scheme).Build()
+		r := &podReconciler{logger: logr.Discard(), client: c}
+
+		_, err := r.Reconcile(t.Context(), ctrl.Request{
+			NamespacedName: types.NamespacedName{Namespace: "fission-function", Name: "gone"},
+		})
+		require.NoError(t, err)
+
 		entries, err := os.ReadDir(symlinkDir)
 		require.NoError(t, err)
 		assert.Empty(t, entries)

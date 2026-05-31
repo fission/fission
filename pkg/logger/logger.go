@@ -12,16 +12,31 @@ import (
 	"strings"
 	"time"
 
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/util/wait"
-	k8sCache "k8s.io/client-go/tools/cache"
-
 	"github.com/go-logr/logr"
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/runtime"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	ctrl "sigs.k8s.io/controller-runtime"
+	crcache "sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/controller"
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/utils"
 )
+
+// loggerScheme registers the Kubernetes built-in types (Pods) the logger's
+// reconciler watches.
+var loggerScheme = runtime.NewScheme()
+
+func init() {
+	utilruntime.Must(clientgoscheme.AddToScheme(loggerScheme))
+}
 
 var nodeName = os.Getenv("NODE_NAME")
 
@@ -32,36 +47,39 @@ var (
 	fissionSymlinkPath       = "/var/log/fission"
 )
 
-func podInformerHandlers(zapLogger logr.Logger) k8sCache.ResourceEventHandler {
-	return k8sCache.ResourceEventHandlerFuncs{
-		AddFunc: func(obj any) {
-			pod := obj.(*corev1.Pod)
-			if !isValidFunctionPodOnNode(pod) || !utils.IsReadyPod(pod) {
-				return
-			}
-			err := createLogSymlinks(zapLogger, pod)
-			if err != nil {
-				funcName := pod.Labels[fv1.FUNCTION_NAME]
-				zapLogger.Error(err, "error creating symlink",
-					"function", funcName)
-			}
-		},
-		UpdateFunc: func(_, obj any) {
-			pod := obj.(*corev1.Pod)
-			if !isValidFunctionPodOnNode(pod) || !utils.IsReadyPod(pod) {
-				return
-			}
-			err := createLogSymlinks(zapLogger, pod)
-			if err != nil {
-				funcName := pod.Labels[fv1.FUNCTION_NAME]
-				zapLogger.Error(err, "error creating symlink",
-					"function", funcName)
-			}
-		},
-		DeleteFunc: func(obj any) {
-			// Do nothing here, let symlink reaper to recycle orphan symlink file
-		},
+// podReconciler creates log symlinks for valid, ready function pods scheduled on
+// this node, replacing the Pod informer's Add/Update handlers. It reacts to pod
+// STATUS changes (container IDs appear in Status.ContainerStatuses), so it must
+// NOT use GenerationChangedPredicate — that drops status-only updates and the
+// symlinks would never be created. A delete needs no handling here: the
+// symlinkReaper goroutine recycles orphan symlinks, so a NotFound (the pod is
+// gone) is a no-op, mirroring the old DeleteFunc.
+type podReconciler struct {
+	logger logr.Logger
+	client client.Client
+}
+
+func (r *podReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	pod := &corev1.Pod{}
+	if err := r.client.Get(ctx, req.NamespacedName, pod); err != nil {
+		if apierrors.IsNotFound(err) {
+			// Pod gone; symlinkReaper reaps any orphan symlink.
+			return ctrl.Result{}, nil
+		}
+		return ctrl.Result{}, err
 	}
+	// Mirror the old Add/Update handlers: only act on valid function pods on this
+	// node that are ready. The cache is already scoped to this node by field
+	// selector when NODE_NAME is set, but isValidFunctionPodOnNode re-checks the
+	// node defensively (and is the only filter when NODE_NAME is unset).
+	if !isValidFunctionPodOnNode(pod) || !utils.IsReadyPod(pod) {
+		return ctrl.Result{}, nil
+	}
+	if err := createLogSymlinks(r.logger, pod); err != nil {
+		r.logger.Error(err, "error creating symlink", "function", pod.Labels[fv1.FUNCTION_NAME])
+		return ctrl.Result{}, err
+	}
+	return ctrl.Result{}, nil
 }
 
 func createLogSymlinks(zapLogger logr.Logger, pod *corev1.Pod) error {
@@ -178,21 +196,64 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	}
 	go symlinkReaper(logger)
 
-	kubernetesClient, err := clientGen.GetKubernetesClient()
+	restConfig, err := clientGen.GetRestConfig()
 	if err != nil {
 		return err
 	}
 
-	var wg wait.Group
-	for _, podInformer := range utils.GetK8sInformersForNamespaces(kubernetesClient, time.Minute*30, fv1.Pods) {
-		_, err := podInformer.AddEventHandler(podInformerHandlers(logger))
-		if err != nil {
-			return err
-		}
-		wg.StartWithChannel(ctx.Done(), podInformer.Run)
+	// The logger is a DaemonSet (one pod per node). Each node's logger MUST
+	// process its OWN pods, so the Manager MUST NOT use leader election — with
+	// leader election only one node's logger would run and logging would break on
+	// every other node. Build a non-leader-elected Manager whose every runnable
+	// (here the Pod reconciler) runs on this replica unconditionally.
+	mgr, err := ctrl.NewManager(restConfig, ctrl.Options{
+		Scheme: loggerScheme,
+		Cache:  loggerCacheOptions(),
+		// No Manager-owned metrics/health servers: the logger serves none.
+		Metrics:                metricsserver.Options{BindAddress: "0"},
+		HealthProbeBindAddress: "0",
+		LeaderElection:         false,
+		Logger:                 logger,
+	})
+	if err != nil {
+		return fmt.Errorf("unable to set up logger manager: %w", err)
 	}
-	wg.Wait()
+
+	pr := &podReconciler{
+		logger: logger.WithName("pod_reconciler"),
+		client: mgr.GetClient(),
+	}
+	// React to pod STATUS changes (container IDs appear in status), so do NOT use
+	// GenerationChangedPredicate. Pass no predicates to watch every pod event.
+	if err := controller.RegisterWithPredicates(mgr, &corev1.Pod{}, pr, "logger-pod", 0); err != nil {
+		return fmt.Errorf("unable to register pod reconciler: %w", err)
+	}
+
+	if err := mgr.Start(ctx); err != nil {
+		return fmt.Errorf("error running logger manager: %w", err)
+	}
 
 	logger.Error(nil, "Stop watching pod changes")
 	return nil
+}
+
+// loggerCacheOptions scopes the Manager's Pod cache to pods on this node when
+// NODE_NAME is set (a spec.nodeName field selector), so the per-node DaemonSet
+// pod only mirrors its own node's pods rather than every pod in the cluster —
+// matching the per-node filtering isValidFunctionPodOnNode applied. When
+// NODE_NAME is unset (e.g. tests, or an install that doesn't inject it) the
+// cache watches all pods and isValidFunctionPodOnNode filters in the reconciler.
+// The cache is cluster-wide (DefaultNamespaces unset) because function pods can
+// live in any namespace; the logger's RBAC already grants pods list/watch.
+func loggerCacheOptions() crcache.Options {
+	if nodeName == "" {
+		return crcache.Options{}
+	}
+	return crcache.Options{
+		ByObject: map[client.Object]crcache.ByObject{
+			&corev1.Pod{}: {
+				Field: fields.OneTermEqualSelector("spec.nodeName", nodeName),
+			},
+		},
+	}
 }
