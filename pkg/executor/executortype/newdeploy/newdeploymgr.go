@@ -15,7 +15,6 @@ import (
 	"sync"
 	"time"
 
-	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	apiv1 "k8s.io/api/core/v1"
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
@@ -690,17 +689,14 @@ func (deploy *NewDeploy) updateFuncDeployment(ctx context.Context, fn *fv1.Funct
 	existingDepl, err := deploy.kubernetesClient.AppsV1().Deployments(ns).Get(ctx, fnObjName, metav1.GetOptions{})
 	if err != nil {
 		if k8sErrs.IsNotFound(err) {
-			// The deployment is gone — e.g. the Function and Environment reconcilers
-			// raced and a delete landed in between, or it was never (re)created.
-			// Recreate it from the desired spec rather than returning an error, which
-			// would requeue this update indefinitely against a missing object.
-			deploy.logger.Info("deployment missing while updating function; recreating",
+			// The deployment is gone (e.g. raced with a delete). There is nothing to
+			// update in place; the next on-demand specialization recreates it. Return
+			// nil rather than an error, which would requeue forever against a missing
+			// object. This matches the old informer handler, which logged the Get
+			// error and returned.
+			deploy.logger.Info("deployment not found while updating function; skipping in-place update",
 				"deployment", fnObjName, "function", fn.Name)
-			_, err = deploy.createOrGetDeployment(ctx, fn, env, fnObjName, deployLabels, deployAnnotations, ns)
-			if err != nil {
-				deploy.updateStatus(fn, err, "failed to recreate missing deployment while updating function")
-			}
-			return err
+			return nil
 		}
 		return err
 	}
@@ -717,17 +713,17 @@ func (deploy *NewDeploy) updateFuncDeployment(ctx context.Context, fn *fv1.Funct
 	}
 
 	// A Deployment's selector is immutable. It is stable across a function's
-	// code/secret/HPA updates, but if the environment is deleted and recreated its
-	// UID (which is part of the selector labels) changes — then an in-place Update
-	// fails with an "immutable field" error and would requeue forever. Detect that
-	// and replace the deployment (delete + recreate) instead.
+	// code/secret/HPA updates, but changes when the function's environment
+	// reference changes (the environment UID is part of the selector labels). An
+	// in-place Update with a different selector is rejected by the API server, so
+	// skip the rebuild and leave the existing pods serving — matching the old
+	// informer handler, which logged the rejected Update and moved on. Returning
+	// nil (not an error) avoids requeuing forever against a permanently immutable
+	// field.
 	if !apiequality.Semantic.DeepEqual(existingDepl.Spec.Selector, newDeployment.Spec.Selector) {
-		deploy.logger.Info("deployment selector changed; replacing deployment",
+		deploy.logger.Info("deployment selector changed (e.g. environment reference changed); cannot update in place, leaving existing deployment",
 			"deployment", fnObjName, "function", fn.Name)
-		if err = deploy.replaceFuncDeployment(ctx, existingDepl, fn, env, fnObjName, deployLabels, deployAnnotations, ns); err != nil {
-			deploy.updateStatus(fn, err, "failed to replace deployment while updating function")
-		}
-		return err
+		return nil
 	}
 
 	err = deploy.updateDeployment(ctx, newDeployment, ns)
@@ -737,23 +733,6 @@ func (deploy *NewDeploy) updateFuncDeployment(ctx context.Context, fn *fv1.Funct
 	}
 
 	return nil
-}
-
-// replaceFuncDeployment deletes the existing deployment and recreates it via
-// createOrGetDeployment. It is used when the desired selector differs from the
-// live one (selectors are immutable), e.g. after an environment is recreated with
-// a new UID. The delete uses foreground propagation so the new deployment's pods
-// don't collide with the old ones on the (now-changed) label selector.
-func (deploy *NewDeploy) replaceFuncDeployment(ctx context.Context, existingDepl *appsv1.Deployment, fn *fv1.Function, env *fv1.Environment, fnObjName string, deployLabels, deployAnnotations map[string]string, ns string) error {
-	fg := metav1.DeletePropagationForeground
-	err := deploy.kubernetesClient.AppsV1().Deployments(ns).Delete(ctx, existingDepl.Name, metav1.DeleteOptions{
-		PropagationPolicy: &fg,
-	})
-	if err != nil && !k8sErrs.IsNotFound(err) {
-		return fmt.Errorf("error deleting deployment %s for selector change: %w", existingDepl.Name, err)
-	}
-	_, err = deploy.createOrGetDeployment(ctx, fn, env, fnObjName, deployLabels, deployAnnotations, ns)
-	return err
 }
 
 func (deploy *NewDeploy) fnDelete(ctx context.Context, fn *fv1.Function) error {
