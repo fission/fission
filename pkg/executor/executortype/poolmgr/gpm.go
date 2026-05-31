@@ -517,7 +517,11 @@ func (gpm *GenericPoolManager) service() {
 				// sees pods that change after the queue is published, so existing pods
 				// (executor restart, or adopting an existing pool deployment) would
 				// otherwise never be enqueued — mirrors the old informer's list-on-sync.
-				gpm.seedReadyPodQueue(req.ctx, req.env, pool.readyPodQueue)
+				// This is one-shot pool initialization (a fast cache read), not request
+				// work, so it must not ride the request context: if the triggering
+				// request is cancelled here the pool would stay published-but-unseeded
+				// and later callers find the existing pool and skip the seed.
+				gpm.seedReadyPodQueue(context.Background(), req.env, pool.readyPodQueue)
 				created = true
 			}
 			req.responseChannel <- &response{pool: pool, created: created}
