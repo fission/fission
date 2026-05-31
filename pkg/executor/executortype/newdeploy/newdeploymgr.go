@@ -41,7 +41,6 @@ import (
 	hpautils "github.com/fission/fission/pkg/executor/util/hpa"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
-	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
 	"github.com/fission/fission/pkg/throttler"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/maps"
@@ -95,7 +94,6 @@ func MakeNewDeploy(
 	kubernetesClient kubernetes.Interface,
 	fetcherConfig *fetcherConfig.Config,
 	instanceID string,
-	finformerFactory map[string]genInformer.SharedInformerFactory,
 	ndmInformerFactory map[string]k8sInformers.SharedInformerFactory,
 	podSpecPatch *apiv1.PodSpec,
 ) (executortype.ExecutorType, error) {
@@ -143,7 +141,6 @@ func MakeNewDeploy(
 	}
 	// The Function and Environment watches are controller-runtime reconcilers now
 	// (see reconciler.go / RegisterReconcilers), wired on the executor Manager.
-	// finformerFactory stays a parameter because poolmgr still drives off it.
 	return nd, nil
 }
 

@@ -23,7 +23,6 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	fClient "github.com/fission/fission/pkg/generated/clientset/versioned/fake"
-	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 	"github.com/fission/fission/pkg/utils/uuid"
@@ -47,8 +46,6 @@ func TestRefreshFuncPods(t *testing.T) {
 	// Hitting issue https://github.com/kubernetes/kubernetes/issues/126850
 	// so using NewSimpleClientset instead of NewClientset here, until that is resolved.
 	fissionClient := fClient.NewSimpleClientset() // nolint:staticcheck
-	factory := make(map[string]genInformer.SharedInformerFactory, 0)
-	factory[metav1.NamespaceDefault] = genInformer.NewSharedInformerFactoryWithOptions(fissionClient, time.Minute*30, genInformer.WithNamespace(metav1.NamespaceDefault))
 
 	executorLabel, err := utils.GetInformerLabelByExecutor(fv1.ExecutorTypeNewdeploy)
 	require.NoError(t, err, "Error creating labels for informer")
@@ -60,7 +57,7 @@ func TestRefreshFuncPods(t *testing.T) {
 	require.NoError(t, err, "Error creating fetcher config")
 
 	executor, err := MakeNewDeploy(ctx, logger, fissionClient, kubernetesClient, fetcherConfig, "test",
-		factory, ndmInformerFactory, nil)
+		ndmInformerFactory, nil)
 	require.NoError(t, err, "new deploy manager creation failed")
 
 	ndm := executor.(*NewDeploy)
@@ -78,9 +75,6 @@ func TestRefreshFuncPods(t *testing.T) {
 	})
 	t.Log("New deploy manager started")
 
-	for _, f := range factory {
-		f.Start(ctx.Done())
-	}
 	for _, informerFactory := range ndmInformerFactory {
 		informerFactory.Start(ctx.Done())
 	}
