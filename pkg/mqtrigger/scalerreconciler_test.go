@@ -5,16 +5,20 @@
 package mqtrigger
 
 import (
+	"errors"
 	"testing"
 
 	kedafake "github.com/kedacore/keda/v2/pkg/generated/clientset/versioned/fake"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
+	k8stesting "k8s.io/client-go/testing"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	crfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -207,5 +211,30 @@ func TestScalerReconciler(t *testing.T) {
 		require.Len(t, so.Spec.Triggers, 1)
 		require.NotNil(t, so.Spec.Triggers[0].AuthenticationRef, "AuthenticationRef must survive a non-secret update")
 		assert.Equal(t, authTriggerName("mqt"), so.Spec.Triggers[0].AuthenticationRef.Name)
+	})
+
+	t.Run("rollback on scaledobject failure does not delete a pre-existing deployment", func(t *testing.T) {
+		t.Parallel()
+		mqt := mqtForKind("mqt", MqtKindKeda)
+		// A connector Deployment already exists (e.g. left over from a prior run, so
+		// createDeployment returns AlreadyExists rather than creating it here).
+		preExisting := &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Name: "mqt", Namespace: metav1.NamespaceDefault},
+		}
+		kube := k8sfake.NewClientset(preExisting)
+		keda := kedafake.NewSimpleClientset()
+		// Force the ScaledObject create to fail with a non-AlreadyExists error,
+		// triggering the rollback path.
+		keda.PrependReactor("create", "scaledobjects", func(k8stesting.Action) (bool, runtime.Object, error) {
+			return true, nil, errors.New("boom")
+		})
+
+		err := createKedaObjects(t.Context(), loggerfactory.GetLogger(), keda, kube, mqt, "http://router.fission")
+		require.Error(t, err, "a genuine ScaledObject create failure must surface")
+
+		// The pre-existing Deployment must NOT be rolled back: this call did not
+		// create it (AlreadyExists), so deleting it would tear down a live connector.
+		_, gerr := kube.AppsV1().Deployments(metav1.NamespaceDefault).Get(t.Context(), "mqt", metav1.GetOptions{})
+		assert.NoError(t, gerr, "rollback must not delete a Deployment it did not create")
 	})
 }

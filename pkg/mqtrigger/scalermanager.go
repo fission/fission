@@ -260,6 +260,24 @@ func createKedaObjects(ctx context.Context, logger logr.Logger, kedaClient kedaC
 	// reconciler would requeue the same Create forever.
 	created := func(err error) bool { return err == nil || apierrors.IsAlreadyExists(err) }
 
+	// Roll back only what THIS call newly created (err == nil), never resources
+	// that already existed (AlreadyExists). Deleting a pre-existing Deployment on a
+	// later transient failure would tear down a live connector and cause downtime.
+	authNewlyCreated := false
+	deployNewlyCreated := false
+	rollback := func() {
+		if deployNewlyCreated {
+			if derr := deleteDeployment(ctx, mqt.Name, mqt.Namespace, kubeClient); derr != nil {
+				logger.Error(derr, "Failed to delete Deployment")
+			}
+		}
+		if authNewlyCreated {
+			if derr := deleteAuthTrigger(ctx, kedaClient, authTriggerName(mqt.Name), mqt.Namespace); derr != nil {
+				logger.Error(derr, "Failed to delete Authentication Trigger")
+			}
+		}
+	}
+
 	authenticationRef := ""
 	if len(mqt.Spec.Secret) > 0 {
 		authenticationRef = authTriggerName(mqt.Name)
@@ -268,28 +286,20 @@ func createKedaObjects(ctx context.Context, logger logr.Logger, kedaClient kedaC
 			logger.Error(err, "Failed to create Authentication Trigger")
 			return err
 		}
+		authNewlyCreated = err == nil
 	}
 
-	if err := createDeployment(ctx, logger, mqt, routerURL, kubeClient); !created(err) {
-		logger.Error(err, "Failed to create Deployment")
-		if len(authenticationRef) > 0 {
-			if derr := deleteAuthTrigger(ctx, kedaClient, authenticationRef, mqt.Namespace); derr != nil {
-				logger.Error(derr, "Failed to delete Authentication Trigger")
-			}
-		}
-		return err
+	deployErr := createDeployment(ctx, logger, mqt, routerURL, kubeClient)
+	if !created(deployErr) {
+		logger.Error(deployErr, "Failed to create Deployment")
+		rollback()
+		return deployErr
 	}
+	deployNewlyCreated = deployErr == nil
 
 	if err := createScaledObject(ctx, kedaClient, mqt, authenticationRef); !created(err) {
 		logger.Error(err, "Failed to create ScaledObject")
-		if len(authenticationRef) > 0 {
-			if derr := deleteAuthTrigger(ctx, kedaClient, authenticationRef, mqt.Namespace); derr != nil {
-				logger.Error(derr, "Failed to delete Authentication Trigger")
-			}
-		}
-		if derr := deleteDeployment(ctx, mqt.Name, mqt.Namespace, kubeClient); derr != nil {
-			logger.Error(derr, "Failed to delete Deployment")
-		}
+		rollback()
 		return err
 	}
 	return nil
@@ -301,34 +311,22 @@ func cleanupKedaObjects(ctx context.Context, logger logr.Logger, kedaClient keda
 	// state of cleanup. Tolerating it keeps teardown idempotent: when the
 	// reconciler retries a keda->fission transition (or a deployment/scaledobject
 	// was already GC'd), a NotFound must not bubble up as an error and requeue
-	// forever.
-	join := func(err error) {
-		if err != nil && !apierrors.IsNotFound(err) {
-			errs = errors.Join(errs, err)
+	// forever. NotFound is also not logged — it is the expected outcome on a retry,
+	// so error-level logging it would be pure noise; only unexpected errors are
+	// logged and joined.
+	collect := func(msg string, err error) {
+		if err == nil || apierrors.IsNotFound(err) {
+			return
 		}
+		logger.Error(err, msg)
+		errs = errors.Join(errs, err)
 	}
 
-	authenticationRef := ""
 	if len(mqt.Spec.Secret) > 0 {
-		authenticationRef = authTriggerName(mqt.Name)
+		collect("Failed to delete Authentication Trigger", deleteAuthTrigger(ctx, kedaClient, authTriggerName(mqt.Name), mqt.Namespace))
 	}
-
-	if len(authenticationRef) > 0 {
-		if err := deleteAuthTrigger(ctx, kedaClient, authenticationRef, mqt.Namespace); err != nil {
-			logger.Error(err, "Failed to delete Authentication Trigger")
-			join(err)
-		}
-	}
-
-	if err := deleteDeployment(ctx, mqt.Name, mqt.Namespace, kubeClient); err != nil {
-		logger.Error(err, "Failed to delete Deployment")
-		join(err)
-	}
-
-	if err := deleteScaledObject(ctx, kedaClient, mqt.Name, mqt.Namespace); err != nil {
-		logger.Error(err, "Failed to delete ScaledObject")
-		join(err)
-	}
+	collect("Failed to delete Deployment", deleteDeployment(ctx, mqt.Name, mqt.Namespace, kubeClient))
+	collect("Failed to delete ScaledObject", deleteScaledObject(ctx, kedaClient, mqt.Name, mqt.Namespace))
 	return errs
 }
 
