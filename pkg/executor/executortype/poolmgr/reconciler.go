@@ -10,9 +10,11 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	appsv1 "k8s.io/api/apps/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/controller"
@@ -39,6 +41,41 @@ type poolManager interface {
 	reconcileEnvPool(ctx context.Context, env *fv1.Environment) error
 	cleanupEnvPool(ctx context.Context, env *fv1.Environment)
 }
+
+// rsCleaner is the subset of *GenericPoolManager the ReplicaSet reconciler drives.
+type rsCleaner interface {
+	processReplicaSet(rs *appsv1.ReplicaSet)
+}
+
+// replicaSetReconciler reaps a pool's specialized pods when its ReplicaSet scales
+// to zero (the pool was destroyed). It replaces poolpodcontroller's ReplicaSet
+// informer handler. processReplicaSet is a no-op unless replicas == 0, and the
+// scale-to-zero is a spec change (caught by GenerationChangedPredicate) that
+// always precedes the ReplicaSet's deletion, so a NotFound needs no handling.
+type replicaSetReconciler struct {
+	logger  logr.Logger
+	client  client.Client
+	cleaner rsCleaner
+}
+
+func (r *replicaSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	rs := &appsv1.ReplicaSet{}
+	if err := r.client.Get(ctx, req.NamespacedName, rs); err != nil {
+		if apierrors.IsNotFound(err) {
+			return ctrl.Result{}, nil
+		}
+		return ctrl.Result{}, err
+	}
+	r.cleaner.processReplicaSet(rs)
+	return ctrl.Result{}, nil
+}
+
+// poolmgrReplicaSetPredicate keeps the ReplicaSet reconciler to pool-manager
+// ReplicaSets only (the executor cache also sees newdeploy/container ones), the
+// same filter the old executor-labelled informer applied.
+var poolmgrReplicaSetPredicate = predicate.NewPredicateFuncs(func(obj client.Object) bool {
+	return obj.GetLabels()[fv1.EXECUTOR_TYPE] == string(fv1.ExecutorTypePoolmgr)
+})
 
 // isPoolmgrType reports whether the pool manager should handle this function.
 // Poolmgr is the default executor, so an empty executor type counts as poolmgr —
@@ -177,10 +214,11 @@ func (r *environmentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	return ctrl.Result{RequeueAfter: envResyncPeriod}, nil
 }
 
-// RegisterReconcilers registers the pool manager's Function and Environment
-// reconcilers on the executor Manager, replacing poolpodcontroller's Function and
-// Environment informer handlers. The ReplicaSet → specialized-pod-cleanup watch
-// stays on poolpodcontroller (k8s pod machinery).
+// RegisterReconcilers registers the pool manager's Function, Environment, and
+// ReplicaSet reconcilers on the executor Manager, replacing poolpodcontroller's
+// informer handlers. poolpodcontroller now only owns the specialized-pod cleanup
+// queue (fed by the ReplicaSet reconciler and the Environment reconciler) and the
+// pod lister.
 func (gpm *GenericPoolManager) RegisterReconcilers(mgr ctrl.Manager) error {
 	// getFunctionEnv (hot path) reads Environments from the Manager cache instead
 	// of poolpodcontroller's informer lister now.
@@ -201,5 +239,15 @@ func (gpm *GenericPoolManager) RegisterReconcilers(mgr ctrl.Manager) error {
 		client: mgr.GetClient(),
 		mgr:    gpm,
 	}
-	return controller.Register(mgr, &fv1.Environment{}, er, "poolmgr-environment")
+	if err := controller.Register(mgr, &fv1.Environment{}, er, "poolmgr-environment"); err != nil {
+		return err
+	}
+
+	rr := &replicaSetReconciler{
+		logger:  gpm.logger.WithName("replicaset_reconciler"),
+		client:  mgr.GetClient(),
+		cleaner: gpm,
+	}
+	return controller.RegisterWithPredicates(mgr, &appsv1.ReplicaSet{}, rr, "poolmgr-replicaset", 0,
+		poolmgrReplicaSetPredicate, predicate.GenerationChangedPredicate{})
 }

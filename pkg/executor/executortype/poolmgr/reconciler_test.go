@@ -17,6 +17,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
+	appsv1 "k8s.io/api/apps/v1"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
@@ -41,6 +44,12 @@ func (f *fakeFuncMgr) createIstioServiceForFunction(_ context.Context, fn *fv1.F
 func (f *fakeFuncMgr) deleteIstioServiceForFunction(_ context.Context, fn *fv1.Function) error {
 	f.istioDeleted = append(f.istioDeleted, fn.Name)
 	return nil
+}
+
+type fakeRSCleaner struct{ processed []string }
+
+func (f *fakeRSCleaner) processReplicaSet(rs *appsv1.ReplicaSet) {
+	f.processed = append(f.processed, rs.Name)
 }
 
 type fakePoolMgr struct {
@@ -197,5 +206,31 @@ func TestPoolmgrEnvironmentReconciler(t *testing.T) {
 		_, err := r.Reconcile(t.Context(), req)
 		require.NoError(t, err)
 		assert.Empty(t, m.cleaned)
+	})
+}
+
+func crClientK8s(objs ...client.Object) client.Client {
+	return fake.NewClientBuilder().WithScheme(clientgoscheme.Scheme).WithObjects(objs...).Build()
+}
+
+func TestPoolmgrReplicaSetReconciler(t *testing.T) {
+	key := types.NamespacedName{Name: "rs", Namespace: "default"}
+	req := ctrl.Request{NamespacedName: key}
+	rs := &appsv1.ReplicaSet{ObjectMeta: metav1.ObjectMeta{Name: "rs", Namespace: "default"}}
+
+	t.Run("existing replicaset is handed to the cleaner", func(t *testing.T) {
+		c := &fakeRSCleaner{}
+		r := &replicaSetReconciler{logger: logr.Discard(), client: crClientK8s(rs), cleaner: c}
+		_, err := r.Reconcile(t.Context(), req)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"rs"}, c.processed, "the zero-replica check lives in processReplicaSet")
+	})
+
+	t.Run("deleted replicaset is a no-op", func(t *testing.T) {
+		c := &fakeRSCleaner{}
+		r := &replicaSetReconciler{logger: logr.Discard(), client: crClientK8s(), cleaner: c}
+		_, err := r.Reconcile(t.Context(), req)
+		require.NoError(t, err)
+		assert.Empty(t, c.processed, "scale-to-zero precedes deletion, so a missing RS needs no cleanup")
 	})
 }
