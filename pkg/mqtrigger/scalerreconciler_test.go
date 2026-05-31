@@ -10,6 +10,7 @@ import (
 	kedafake "github.com/kedacore/keda/v2/pkg/generated/clientset/versioned/fake"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -165,5 +166,46 @@ func TestScalerReconciler(t *testing.T) {
 		last := r.getLastSeen(key)
 		require.NotNil(t, last)
 		assert.Equal(t, MqtKindKeda, last.Spec.MqtKind)
+	})
+
+	t.Run("non-secret update on a secret-bearing trigger keeps the AuthenticationRef", func(t *testing.T) {
+		t.Parallel()
+		secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: "kafka-secret", Namespace: metav1.NamespaceDefault},
+			Data:       map[string][]byte{"password": []byte("s3cr3t")},
+		}
+		mqt := mqtForKind("mqt", MqtKindKeda)
+		mqt.Spec.Secret = "kafka-secret"
+
+		kc := kedafake.NewSimpleClientset()
+		r := newScalerReconciler(
+			loggerfactory.GetLogger(),
+			crfake.NewClientBuilder().WithScheme(scheme.Scheme).WithObjects(mqt).Build(),
+			kc,
+			k8sfake.NewClientset(secret),
+			"http://router.fission",
+		)
+
+		// First reconcile creates the ScaledObject with its AuthenticationRef.
+		_, err := r.Reconcile(t.Context(), req)
+		require.NoError(t, err)
+
+		// Change a NON-secret field (max replicas) and re-reconcile. The secret is
+		// unchanged, so the update path must still carry the AuthenticationRef
+		// through to the ScaledObject instead of stripping it.
+		cur := &fv1.MessageQueueTrigger{}
+		require.NoError(t, r.client.Get(t.Context(), key, cur))
+		newMax := int32(7)
+		cur.Spec.MaxReplicaCount = &newMax
+		require.NoError(t, r.client.Update(t.Context(), cur))
+
+		_, err = r.Reconcile(t.Context(), req)
+		require.NoError(t, err)
+
+		so, err := kc.KedaV1alpha1().ScaledObjects(metav1.NamespaceDefault).Get(t.Context(), "mqt", metav1.GetOptions{})
+		require.NoError(t, err)
+		require.Len(t, so.Spec.Triggers, 1)
+		require.NotNil(t, so.Spec.Triggers[0].AuthenticationRef, "AuthenticationRef must survive a non-secret update")
+		assert.Equal(t, authTriggerName("mqt"), so.Spec.Triggers[0].AuthenticationRef.Name)
 	})
 }

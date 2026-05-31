@@ -159,12 +159,22 @@ func (r *scalerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, nil
 	}
 
+	// A secret-bearing trigger's ScaledObject must keep referencing its
+	// TriggerAuthentication on EVERY update, not only when the secret changed.
+	// authenticationRef therefore tracks "does this trigger have a secret", while
+	// the TriggerAuthentication object itself is only (re)written when the secret
+	// actually changed. Deriving the ref solely from secret-changed (as this was
+	// originally written) passed "" into updateScaledObject on any non-secret
+	// field change, stripping AuthenticationRef off the ScaledObject and breaking
+	// KEDA auth.
 	authenticationRef := ""
-	if len(mqt.Spec.Secret) > 0 && mqt.Spec.Secret != old.Spec.Secret {
+	if len(mqt.Spec.Secret) > 0 {
 		authenticationRef = authTriggerName(merged.Name)
-		if err := updateAuthTrigger(ctx, r.kedaClient, merged, authenticationRef, r.kubeClient); err != nil {
-			r.logger.Error(err, "Failed to update Authentication Trigger")
-			return ctrl.Result{}, err
+		if mqt.Spec.Secret != old.Spec.Secret {
+			if err := updateAuthTrigger(ctx, r.kedaClient, merged, authenticationRef, r.kubeClient); err != nil {
+				r.logger.Error(err, "Failed to update Authentication Trigger")
+				return ctrl.Result{}, err
+			}
 		}
 	}
 

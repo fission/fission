@@ -473,6 +473,16 @@ func deleteDeployment(ctx context.Context, name string, namespace string, kubeCl
 }
 
 func getScaledObject(mqt *fv1.MessageQueueTrigger, authenticationRef string) *kedav1alpha1.ScaledObject {
+	trigger := kedav1alpha1.ScaleTriggers{
+		Type:     string(mqt.Spec.MessageQueueType),
+		Metadata: mqt.Spec.Metadata,
+	}
+	// Only attach an AuthenticationRef for secret-bearing triggers. An
+	// empty-named ref (authenticationRef == "") is meaningless to KEDA and would
+	// dangle a reference to a nonexistent TriggerAuthentication.
+	if authenticationRef != "" {
+		trigger.AuthenticationRef = &kedav1alpha1.AuthenticationRef{Name: authenticationRef}
+	}
 	return &kedav1alpha1.ScaledObject{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            mqt.Name,
@@ -488,15 +498,7 @@ func getScaledObject(mqt *fv1.MessageQueueTrigger, authenticationRef string) *ke
 			ScaleTargetRef: &kedav1alpha1.ScaleTarget{
 				Name: mqt.Name,
 			},
-			Triggers: []kedav1alpha1.ScaleTriggers{
-				{
-					Type:     string(mqt.Spec.MessageQueueType),
-					Metadata: mqt.Spec.Metadata,
-					AuthenticationRef: &kedav1alpha1.AuthenticationRef{
-						Name: authenticationRef,
-					},
-				},
-			},
+			Triggers: []kedav1alpha1.ScaleTriggers{trigger},
 		},
 	}
 }
