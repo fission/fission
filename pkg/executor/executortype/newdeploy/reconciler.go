@@ -25,6 +25,7 @@ type funcManager interface {
 	createFunction(context.Context, *fv1.Function) (*fscache.FuncSvc, error)
 	updateFunction(context.Context, *fv1.Function, *fv1.Function) error
 	deleteFunction(context.Context, *fv1.Function) error
+	reconcileDeploymentSpec(context.Context, *fv1.Function) error
 }
 
 // envFunctionUpdater is the subset of *NewDeploy the Environment reconciler
@@ -81,6 +82,14 @@ func (r *functionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			return ctrl.Result{}, nil
 		}
 		if _, err := r.deploy.createFunction(ctx, fn); err != nil {
+			return ctrl.Result{}, err
+		}
+		// createFunction only adopts/scales an existing deployment. If this first
+		// reconcile coalesced the create with a later spec update (e.g. the router
+		// specialized the function on-demand before `fn update` landed), the adopted
+		// deployment can be stale with no transition for updateFunction to diff —
+		// bring it to the current spec. A no-op when already current.
+		if err := r.deploy.reconcileDeploymentSpec(ctx, fn); err != nil {
 			return ctrl.Result{}, err
 		}
 		r.lastReconciled.Store(req.NamespacedName, fn.DeepCopy())

@@ -669,6 +669,45 @@ func (deploy *NewDeploy) updateFunction(ctx context.Context, oldFn *fv1.Function
 	return nil
 }
 
+// reconcileDeploymentSpec brings an already-existing deployment up to the
+// function's current spec when it lags. createFunction only *adopts/scales* an
+// existing deployment (it does not rewrite the pod spec), and updateFunction is
+// diff-based against the last-reconciled object. So if a function's create and a
+// later spec update coalesce into a single first reconcile — common when the
+// router specializes the function on-demand (creating the deployment) just before
+// `fission fn update` lands — the deployment can be left on the old spec with no
+// transition for updateFunction to diff. The deployment carries the function's
+// ResourceVersion as a metadata annotation (getDeployAnnotations), so compare it:
+// if stale, push the current spec. A no-op when already current.
+func (deploy *NewDeploy) reconcileDeploymentSpec(ctx context.Context, fn *fv1.Function) error {
+	fsvc, err := deploy.fsCache.GetByFunctionUID(fn.UID)
+	if err != nil {
+		// Not specialized yet — no deployment to reconcile; the on-demand path will
+		// create it from the current spec when the function is first invoked.
+		return nil
+	}
+	ns := deploy.nsResolver.GetFunctionNS(fn.Namespace)
+	existingDepl, err := deploy.kubernetesClient.AppsV1().Deployments(ns).Get(ctx, fsvc.Name, metav1.GetOptions{})
+	if err != nil {
+		if k8sErrs.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+	if existingDepl.Annotations[fv1.FUNCTION_RESOURCE_VERSION] == fn.ResourceVersion {
+		return nil // deployment already reflects the current function spec
+	}
+	env, err := deploy.fissionClient.CoreV1().Environments(fn.Spec.Environment.Namespace).
+		Get(ctx, fn.Spec.Environment.Name, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+	deploy.logger.Info("reconciling stale deployment to current function spec on first sight",
+		"function", fn.Name, "deployment", fsvc.Name,
+		"deployment_rv", existingDepl.Annotations[fv1.FUNCTION_RESOURCE_VERSION], "function_rv", fn.ResourceVersion)
+	return deploy.updateFuncDeployment(ctx, fn, env)
+}
+
 func (deploy *NewDeploy) updateFuncDeployment(ctx context.Context, fn *fv1.Function, env *fv1.Environment) error {
 	fsvc, err := deploy.fsCache.GetByFunctionUID(fn.UID)
 	if err != nil {

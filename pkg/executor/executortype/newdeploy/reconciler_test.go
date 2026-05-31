@@ -23,7 +23,7 @@ import (
 )
 
 type fakeFuncMgr struct {
-	created, updated, deleted []string
+	created, updated, deleted, reconciled []string
 }
 
 func (f *fakeFuncMgr) createFunction(_ context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
@@ -36,6 +36,10 @@ func (f *fakeFuncMgr) updateFunction(_ context.Context, old, _ *fv1.Function) er
 }
 func (f *fakeFuncMgr) deleteFunction(_ context.Context, fn *fv1.Function) error {
 	f.deleted = append(f.deleted, fn.Name)
+	return nil
+}
+func (f *fakeFuncMgr) reconcileDeploymentSpec(_ context.Context, fn *fv1.Function) error {
+	f.reconciled = append(f.reconciled, fn.Name)
 	return nil
 }
 
@@ -74,6 +78,7 @@ func TestNewdeployFunctionReconcilerRouting(t *testing.T) {
 		_, err := r.Reconcile(t.Context(), req)
 		require.NoError(t, err)
 		assert.Equal(t, []string{"fn"}, mgr.created)
+		assert.Equal(t, []string{"fn"}, mgr.reconciled, "first sight must reconcile a possibly-stale adopted deployment to current spec")
 		assert.Empty(t, mgr.updated)
 		_, cached := r.lastReconciled.Load(key)
 		assert.True(t, cached, "managed function must be cached")
