@@ -149,7 +149,7 @@ type executorControllers struct {
 	api            *Executor
 	executorTypes  map[fv1.ExecutorType]executortype.ExecutorType
 	startFactories func(stopCh <-chan struct{})
-	waitForSync    func(stopCh <-chan struct{}) bool
+	waitForSync    func(ctx context.Context) bool
 	adoptResources bool
 }
 
@@ -181,7 +181,7 @@ func (c *executorControllers) Start(ctx context.Context) error {
 
 	c.api.isLeader.Store(true)
 	go func() {
-		if c.waitForSync(ctx.Done()) {
+		if c.waitForSync(ctx) {
 			c.api.cachesSynced.Store(true)
 			c.logger.Info("executor caches synced; ready to serve")
 		}
@@ -534,12 +534,13 @@ func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, 
 			factory.Start(stopCh)
 		}
 	}
-	waitForSync := func(stopCh <-chan struct{}) bool {
+	waitForSync := func(syncCtx context.Context) bool {
 		// The executor's Function/Environment/ConfigMap/Secret/Pod/ReplicaSet reads
 		// all go through the Manager cache now; it's ready once that has synced.
 		// controller-runtime syncs the cache before starting this (non-cache)
-		// runnable, so this returns ~immediately.
-		return crMgr.GetCache().WaitForCacheSync(ctx)
+		// runnable, so this returns ~immediately. syncCtx is the runnable's context,
+		// so the wait is cancelled on shutdown or leadership loss.
+		return crMgr.GetCache().WaitForCacheSync(syncCtx)
 	}
 
 	utils.CreateMissingPermissionForSA(ctx, kubernetesClient, logger)
