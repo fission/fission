@@ -513,6 +513,11 @@ func (gpm *GenericPoolManager) service() {
 				// Publish the pool's readyPodQueue so the Pod reconciler can feed it
 				// warm pods. Keyed by env UID, read lock-free from the reconciler.
 				gpm.readyPodQueues.Store(string(req.env.UID), pool.readyPodQueue)
+				// Seed the queue with already-Running warm pods. The reconciler only
+				// sees pods that change after the queue is published, so existing pods
+				// (executor restart, or adopting an existing pool deployment) would
+				// otherwise never be enqueued — mirrors the old informer's list-on-sync.
+				gpm.seedReadyPodQueue(req.ctx, req.env, pool.readyPodQueue)
 				created = true
 			}
 			req.responseChannel <- &response{pool: pool, created: created}
@@ -585,6 +590,35 @@ func (gpm *GenericPoolManager) processReplicaSet(ctx context.Context, rs *appsv1
 func (gpm *GenericPoolManager) enqueueReadyPod(envUID, key string) {
 	if q, ok := gpm.readyPodQueues.Load(envUID); ok {
 		q.(workqueue.TypedDelayingInterface[string]).AddAfter(key, 100*time.Millisecond)
+	}
+}
+
+// seedReadyPodQueue enqueues an environment's already-Running warm pods into a
+// freshly-published readyPodQueue, so choosePod isn't left blocked on an empty
+// queue when pods were Running before the queue existed (executor restart, or
+// adopting an existing pool deployment). The readyPodQueue dedups, so any overlap
+// with the reconciler's own events is harmless.
+func (gpm *GenericPoolManager) seedReadyPodQueue(ctx context.Context, env *fv1.Environment, queue workqueue.TypedDelayingInterface[string]) {
+	ns := gpm.nsResolver.GetFunctionNS(env.Namespace)
+	podList := &apiv1.PodList{}
+	if err := gpm.crClient.List(ctx, podList, client.InNamespace(ns), client.MatchingLabels(map[string]string{
+		fv1.EXECUTOR_TYPE:   string(fv1.ExecutorTypePoolmgr),
+		fv1.ENVIRONMENT_UID: string(env.UID),
+		"managed":           "true",
+	})); err != nil {
+		gpm.logger.Error(err, "failed to seed ready pod queue", "env", env.Name, "namespace", env.Namespace)
+		return
+	}
+	for i := range podList.Items {
+		pod := &podList.Items[i]
+		if pod.Status.Phase != apiv1.PodRunning {
+			continue
+		}
+		key, err := k8sCache.MetaNamespaceKeyFunc(pod)
+		if err != nil {
+			continue
+		}
+		queue.AddAfter(key, 100*time.Millisecond)
 	}
 }
 
