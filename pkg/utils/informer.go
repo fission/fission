@@ -117,16 +117,6 @@ func GetInformerFactoryByExecutor(client kubernetes.Interface, labels labels.Sel
 	return informerFactory
 }
 
-func GetInformerFactoryByReadyPod(client kubernetes.Interface, namespace string, labelSelector *metav1.LabelSelector) (k8sInformers.SharedInformerFactory, error) {
-	informerFactory := k8sInformers.NewSharedInformerFactoryWithOptions(client, 0,
-		k8sInformers.WithNamespace(namespace),
-		k8sInformers.WithTweakListOptions(func(options *metav1.ListOptions) {
-			options.LabelSelector = labels.Set(labelSelector.MatchLabels).AsSelector().String()
-			options.FieldSelector = "status.phase=Running"
-		}))
-	return informerFactory, nil
-}
-
 func GetInformerLabelByExecutor(executorType fv1.ExecutorType) (labels.Selector, error) {
 	executorLabel, err := labels.NewRequirement(fv1.EXECUTOR_TYPE, selection.DoubleEquals, []string{string(executorType)})
 	if err != nil {

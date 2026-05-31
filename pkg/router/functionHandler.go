@@ -21,6 +21,7 @@ import (
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	k8stypes "k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/go-logr/logr"
 
@@ -44,8 +45,12 @@ const (
 
 type (
 	functionHandler struct {
-		logger                   logr.Logger
-		fmap                     *functionServiceMap
+		logger logr.Logger
+		fmap   *functionServiceMap
+		// reader is the Manager's cache-backed client, used to re-read the current
+		// Function before asking the executor to specialize it (the resolved
+		// `function` snapshot can be stale — see getServiceEntryFromExecutor).
+		reader                   client.Reader
 		executor                 eclient.ClientInterface
 		function                 *fv1.Function
 		httpTrigger              *fv1.HTTPTrigger
@@ -621,12 +626,31 @@ func (fh functionHandler) removeServiceEntryFromCache() {
 
 func (fh functionHandler) getServiceEntryFromExecutor(ctx context.Context) (serviceUrl *url.URL, err error) {
 	logger := otelUtils.LoggerWithTraceID(ctx, fh.logger)
+
+	// The executor specializes a pod from exactly this function's package spec. The
+	// resolved `function` snapshot can be stale: the resolver caches the resolved
+	// function keyed by the *trigger's* ResourceVersion, so a `fission fn update
+	// --pkg` (which changes the function but not the trigger) doesn't invalidate
+	// it. For poolmgr — which specializes on demand from the function we pass —
+	// that means the executor would keep serving the old package. Re-read the
+	// current Function from the Manager cache so the latest spec is specialized.
+	fn := fh.function
+	if fh.reader != nil {
+		fresh := &fv1.Function{}
+		if gerr := fh.reader.Get(ctx, k8stypes.NamespacedName{Namespace: fn.Namespace, Name: fn.Name}, fresh); gerr == nil {
+			fn = fresh
+		} else {
+			logger.V(1).Info("could not re-read current function; using resolved snapshot",
+				"function", fn.Name, "namespace", fn.Namespace, "error", gerr)
+		}
+	}
+
 	// send a request to executor to specialize a new pod
-	fh.logger.V(1).Info("function timeout specified", "timeout", fh.function.Spec.FunctionTimeout)
+	fh.logger.V(1).Info("function timeout specified", "timeout", fn.Spec.FunctionTimeout)
 
 	var fContext context.Context
-	if fh.function.Spec.FunctionTimeout > 0 {
-		timeout := time.Second * time.Duration(fh.function.Spec.FunctionTimeout)
+	if fn.Spec.FunctionTimeout > 0 {
+		timeout := time.Second * time.Duration(fn.Spec.FunctionTimeout)
 		f, cancel := context.WithTimeoutCause(ctx, timeout, fmt.Errorf("function service entry timeout (%f)s exceeded", timeout.Seconds()))
 		fContext = f
 		defer cancel()
@@ -634,18 +658,20 @@ func (fh functionHandler) getServiceEntryFromExecutor(ctx context.Context) (serv
 		fContext = ctx
 	}
 
-	service, err := fh.executor.GetServiceForFunction(fContext, fh.function)
+	service, err := fh.executor.GetServiceForFunction(fContext, fn)
 	if err != nil {
 		statusCode, errMsg := ferror.GetHTTPError(err)
 		logger.Error(err, "error from GetServiceForFunction", "error_message", errMsg,
-			"function", fh.function,
+			"function", fn,
 			"status_code", statusCode)
 		return nil, err
 	}
 	// parse the address into url
-	svcURL, err := url.Parse(fmt.Sprintf("http://%v", service))
+	rawURL := fmt.Sprintf("http://%v", service)
+	svcURL, err := url.Parse(rawURL)
 	if err != nil {
-		logger.Error(err, "error parsing service url", "service_url", svcURL.String())
+		// svcURL is nil on a parse error — log the raw string, not svcURL.String().
+		logger.Error(err, "error parsing service url", "service_url", rawURL)
 		return nil, err
 	}
 	return svcURL, err

@@ -186,14 +186,17 @@ func (frr *functionReferenceResolver) delete(namespace string, triggerName, trig
 // function from the cache. Used by the function reconciler when a Function's
 // spec changes. Returns true if an entry was invalidated.
 func (frr *functionReferenceResolver) invalidateForFunction(namespace, name, resourceVersion string) bool {
+	invalidated := false
 	for key, rr := range frr.refCache.Copy() {
 		if key.namespace == namespace &&
 			rr.functionMap[name] != nil &&
 			rr.functionMap[name].ResourceVersion != resourceVersion {
-			frr.logger.V(1).Info("invalidating resolver cache", "function", name, "namespace", namespace)
+			frr.logger.V(1).Info("invalidating resolver cache", "function", name, "namespace", namespace, "trigger", key.triggerName)
 			frr.delete(key.namespace, key.triggerName, key.triggerResourceVersion)
-			return true
+			invalidated = true
+			// Don't stop at the first match: the same function can back multiple
+			// triggers (and multiple cached trigger-RV entries), all now stale.
 		}
 	}
-	return false
+	return invalidated
 }

@@ -271,6 +271,7 @@ func (ts *HTTPTriggerSet) buildMuxes(ctx context.Context, fnTimeoutMap map[types
 		fh := &functionHandler{
 			logger:                   ts.logger.WithName(trigger.Name),
 			fmap:                     ts.functionServiceMap,
+			reader:                   ts.resolver.reader,
 			executor:                 ts.executor,
 			httpTrigger:              &trigger,
 			functionMap:              rr.functionMap,
@@ -380,6 +381,7 @@ func (ts *HTTPTriggerSet) buildMuxes(ctx context.Context, fnTimeoutMap map[types
 		fh := &functionHandler{
 			logger:                 ts.logger.WithName(fn.Name),
 			fmap:                   ts.functionServiceMap,
+			reader:                 ts.resolver.reader,
 			function:               &fn,
 			executor:               ts.executor,
 			tsRoundTripperParams:   ts.tsRoundTripperParams,
