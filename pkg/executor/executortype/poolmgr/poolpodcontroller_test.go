@@ -40,8 +40,7 @@ func TestPoolPodControllerPodCleanup(t *testing.T) {
 	require.NoError(t, err, "Error creating labels for informer")
 	gpmInformerFactory := utils.GetInformerFactoryByExecutor(kubernetesClient, executorLabel, time.Minute*30)
 
-	ppc, err := NewPoolPodController(ctx, logger, kubernetesClient, false,
-		factory, gpmInformerFactory)
+	ppc, err := NewPoolPodController(ctx, logger, kubernetesClient, gpmInformerFactory)
 	require.NoError(t, err, "Error creating pool pod controller")
 
 	executorInstanceID := strings.ToLower(uniuri.NewLen(8))

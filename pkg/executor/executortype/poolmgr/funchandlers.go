@@ -11,10 +11,6 @@ import (
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/client-go/kubernetes"
-	k8sCache "k8s.io/client-go/tools/cache"
-
-	"github.com/go-logr/logr"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/utils"
@@ -26,100 +22,73 @@ func getIstioServiceLabels(fnName string) map[string]string {
 	}
 }
 
-// FunctionEventHandlers provides handlers for function resource events.
-// Based on function create/update/delete event, we create role binding
-// for the secret/configmap access which is used by fetcher component.
-// If istio is enabled, we create a service for the function.
-func FunctionEventHandlers(ctx context.Context, logger logr.Logger, kubernetesClient kubernetes.Interface, fissionfnNamespace string, istioEnabled bool) k8sCache.ResourceEventHandlerFuncs {
-	return k8sCache.ResourceEventHandlerFuncs{
-		AddFunc: func(obj any) {
-			fn := obj.(*fv1.Function)
+// createIstioServiceForFunction creates the per-function ClusterIP Service that
+// istio needs (istio only routes traffic through k8s services, so a poolmgr
+// function — whose pod lives in the warm pool — needs a stable service in front
+// of it). It is idempotent: an already-existing service is treated as success.
+// Driven by the Function reconciler on create; replaces the old istio AddFunc
+// handler.
+func (gpm *GenericPoolManager) createIstioServiceForFunction(ctx context.Context, fn *fv1.Function) error {
+	sel := map[string]string{
+		"functionName": fn.Name,
+		"functionUid":  string(fn.UID),
+	}
+	svcName := utils.GetFunctionIstioServiceName(fn.Name, fn.Namespace)
+	envNs := gpm.nsResolver.GetFunctionNS(fn.Spec.Environment.Namespace)
 
-			// Since istio only allows accessing pod through k8s service,
-			// for the functions with executor type "poolmgr" we need to
-			// create a service for sending requests to pod in pool.
-			// Functions with executor type "Newdeploy" is specialized at
-			// pod starts. In this case, just ignore such functions.
-			fnExecutorType := fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType
-
-			// In some cases, user may not enter the executorType explicitly, for example in his spec.yaml.
-			// we assume it to be of type poolmgr
-			if fnExecutorType != "" && fnExecutorType != fv1.ExecutorTypePoolmgr {
-				return
-			}
-
-			if istioEnabled {
-				// create a same name service for function
-				// since istio only allows the traffic to service
-				sel := map[string]string{
-					"functionName": fn.Name,
-					"functionUid":  string(fn.UID),
-				}
-
-				svcName := utils.GetFunctionIstioServiceName(fn.Name, fn.Namespace)
-				envNs := utils.DefaultNSResolver().GetFunctionNS(fn.Spec.Environment.Namespace)
-
-				// service for accepting user traffic
-				svc := apiv1.Service{
-					ObjectMeta: metav1.ObjectMeta{
-						Namespace: envNs,
-						Name:      svcName,
-						Labels:    getIstioServiceLabels(fn.Name),
-					},
-					Spec: apiv1.ServiceSpec{
-						Type: apiv1.ServiceTypeClusterIP,
-						Ports: []apiv1.ServicePort{
-							// Service port name should begin with a recognized prefix, or the traffic will be
-							// treated as TCP traffic. (https://istio.io/docs/setup/kubernetes/additional-setup/requirements/)
-							{
-								Name:       "http-fetcher",
-								Protocol:   apiv1.ProtocolTCP,
-								Port:       8000,
-								TargetPort: intstr.FromInt(8000),
-							},
-							{
-								Name:       "http-env",
-								Protocol:   apiv1.ProtocolTCP,
-								Port:       8888,
-								TargetPort: intstr.FromInt(8888),
-							},
-						},
-						Selector: sel,
-					},
-				}
-
-				// create function istio service if it does not exist
-				_, err := kubernetesClient.CoreV1().Services(envNs).Create(ctx, &svc, metav1.CreateOptions{})
-				if err != nil && !kerrors.IsAlreadyExists(err) {
-					logger.Error(err, "error creating istio service for function",
-						"service_name", svcName,
-						"function_name", fn.Name,
-						"selectors", sel)
-				}
-			}
+	svc := apiv1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: envNs,
+			Name:      svcName,
+			Labels:    getIstioServiceLabels(fn.Name),
 		},
-
-		DeleteFunc: func(obj any) {
-			fn := obj.(*fv1.Function)
-
-			fnExecutorType := fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType
-			if fnExecutorType != "" && fnExecutorType != fv1.ExecutorTypePoolmgr {
-				return
-			}
-
-			if istioEnabled {
-				envNs := utils.DefaultNSResolver().GetFunctionNS(fn.Spec.Environment.Namespace)
-
-				svcName := utils.GetFunctionIstioServiceName(fn.Name, fn.Namespace)
-				// delete function istio service
-				err := kubernetesClient.CoreV1().Services(envNs).Delete(ctx, svcName, metav1.DeleteOptions{})
-				if err != nil && !kerrors.IsNotFound(err) {
-					logger.Error(err, "error deleting istio service for function", "service_name", svcName,
-						"function_name", fn.Name)
-
-				}
-			}
+		Spec: apiv1.ServiceSpec{
+			Type: apiv1.ServiceTypeClusterIP,
+			Ports: []apiv1.ServicePort{
+				// Service port name should begin with a recognized prefix, or the traffic will be
+				// treated as TCP traffic. (https://istio.io/docs/setup/kubernetes/additional-setup/requirements/)
+				{
+					Name:       "http-fetcher",
+					Protocol:   apiv1.ProtocolTCP,
+					Port:       8000,
+					TargetPort: intstr.FromInt(8000),
+				},
+				{
+					Name:       "http-env",
+					Protocol:   apiv1.ProtocolTCP,
+					Port:       8888,
+					TargetPort: intstr.FromInt(8888),
+				},
+			},
+			Selector: sel,
 		},
 	}
 
+	_, err := gpm.kubernetesClient.CoreV1().Services(envNs).Create(ctx, &svc, metav1.CreateOptions{})
+	if err != nil && !kerrors.IsAlreadyExists(err) {
+		return err
+	}
+	return nil
+}
+
+// deleteIstioServiceForFunction removes the per-function istio Service. Idempotent
+// (a missing service is success). Driven by the Function reconciler on delete;
+// replaces the old istio DeleteFunc handler.
+func (gpm *GenericPoolManager) deleteIstioServiceForFunction(ctx context.Context, fn *fv1.Function) error {
+	envNs := gpm.nsResolver.GetFunctionNS(fn.Spec.Environment.Namespace)
+	svcName := utils.GetFunctionIstioServiceName(fn.Name, fn.Namespace)
+	err := gpm.kubernetesClient.CoreV1().Services(envNs).Delete(ctx, svcName, metav1.DeleteOptions{})
+	if err != nil && !kerrors.IsNotFound(err) {
+		return err
+	}
+	return nil
+}
+
+// refreshFuncPods deletes the function's specialized pods so the next request
+// re-specializes a warm pod with the function's current package/config. The
+// Function reconciler calls it on a spec change: poolmgr otherwise has no
+// function-update path, so a stale specialized pod (old package) could keep being
+// routed to until the idle reaper happens to recycle it.
+func (gpm *GenericPoolManager) refreshFuncPods(ctx context.Context, fn *fv1.Function) error {
+	return gpm.RefreshFuncPods(ctx, gpm.logger, *fn)
 }
