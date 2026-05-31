@@ -237,23 +237,26 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	return nil
 }
 
-// loggerCacheOptions scopes the Manager's Pod cache to pods on this node when
-// NODE_NAME is set (a spec.nodeName field selector), so the per-node DaemonSet
-// pod only mirrors its own node's pods rather than every pod in the cluster —
-// matching the per-node filtering isValidFunctionPodOnNode applied. When
-// NODE_NAME is unset (e.g. tests, or an install that doesn't inject it) the
-// cache watches all pods and isValidFunctionPodOnNode filters in the reconciler.
-// The cache is cluster-wide (DefaultNamespaces unset) because function pods can
-// live in any namespace; the logger's RBAC already grants pods list/watch.
+// loggerCacheOptions scopes the Manager's Pod cache to the Fission namespaces the
+// old per-namespace pod informers (GetK8sInformersForNamespaces) watched. The
+// fission-fluentbit ServiceAccount has pods list/watch only via per-namespace
+// Roles (no ClusterRole), so a cluster-wide cache would be forbidden and crashloop
+// on cache-sync. Within those namespaces, when NODE_NAME is set the Pod watch is
+// further scoped to this node (a per-node DaemonSet only needs its own node's
+// pods); isValidFunctionPodOnNode still filters in the reconciler.
 func loggerCacheOptions() crcache.Options {
-	if nodeName == "" {
-		return crcache.Options{}
+	resolver := utils.DefaultNSResolver()
+	nsConfig := map[string]crcache.Config{}
+	for _, ns := range resolver.FissionNSWithOptions(utils.WithBuilderNs(), utils.WithFunctionNs(), utils.WithDefaultNs()) {
+		nsConfig[ns] = crcache.Config{}
 	}
-	return crcache.Options{
-		ByObject: map[client.Object]crcache.ByObject{
+	opts := crcache.Options{DefaultNamespaces: nsConfig}
+	if nodeName != "" {
+		opts.ByObject = map[client.Object]crcache.ByObject{
 			&corev1.Pod{}: {
 				Field: fields.OneTermEqualSelector("spec.nodeName", nodeName),
 			},
-		},
+		}
 	}
+	return opts
 }
