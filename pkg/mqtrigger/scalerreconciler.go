@@ -23,9 +23,10 @@ import (
 // TriggerAuthentication) that back a keda-kind MessageQueueTrigger in sync with
 // the MessageQueueTrigger CRDs. It replaces the previous informer +
 // AddFunc/UpdateFunc handler: controller-runtime delivers add/update/delete
-// through its own rate-limited workqueue, and the GenerationChangedPredicate (in
-// controller.Register) drops the status-only updates the old handler never saw
-// either.
+// through its own rate-limited workqueue, and GenerationChangedPredicate (in
+// controller.RegisterWithConcurrency) drops status-only updates — which the old
+// handler did receive but effectively no-oped via checkAndUpdateTriggerFields
+// returning false.
 //
 // Reads go through the Manager's cache-backed client. A last-seen cache keyed by
 // NamespacedName supplies the "old" object the informer's UpdateFunc used to
@@ -106,18 +107,24 @@ func (r *scalerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		mqtkindKedaToFission := old.Spec.MqtKind == MqtKindKeda && mqt.Spec.MqtKind == MqtKindFission
 		mqtkindFissionToKeda := old.Spec.MqtKind == MqtKindFission && mqt.Spec.MqtKind == MqtKindKeda
 
-		// keda -> fission: tear down the KEDA objects created earlier.
+		// keda -> fission: tear down the KEDA objects created earlier. On failure
+		// requeue without advancing lastSeen, so the teardown is retried.
 		if mqtkindKedaToFission {
 			r.logger.V(1).Info("Mqtkind updated to fission from keda, cleanup keda objects", "mqt", mqt.ObjectMeta, "mqt.Spec", mqt.Spec)
-			cleanupKedaObjects(ctx, r.logger, r.kedaClient, r.kubeClient, old)
+			if err := cleanupKedaObjects(ctx, r.logger, r.kedaClient, r.kubeClient, old); err != nil {
+				return ctrl.Result{}, err
+			}
 			r.setLastSeen(req.NamespacedName, mqt.DeepCopy())
 			return ctrl.Result{}, nil
 		}
 
-		// fission -> keda: create the KEDA objects now.
+		// fission -> keda: create the KEDA objects now. On failure requeue without
+		// advancing lastSeen, so the create is retried.
 		if mqtkindFissionToKeda {
 			r.logger.V(1).Info("Mqtkind changed to keda from fission, create keda objects", "mqt", mqt.ObjectMeta, "mqt.Spec", mqt.Spec)
-			createKedaObjects(ctx, r.logger, r.kedaClient, r.kubeClient, mqt, r.routerURL)
+			if err := createKedaObjects(ctx, r.logger, r.kedaClient, r.kubeClient, mqt, r.routerURL); err != nil {
+				return ctrl.Result{}, err
+			}
 			r.setLastSeen(req.NamespacedName, mqt.DeepCopy())
 			return ctrl.Result{}, nil
 		}
@@ -129,10 +136,13 @@ func (r *scalerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, nil
 	}
 
-	// First sight of a keda-kind trigger: create the KEDA objects (AddFunc).
+	// First sight of a keda-kind trigger: create the KEDA objects (AddFunc). On
+	// failure requeue without caching, so the create is retried.
 	if old == nil {
 		r.logger.V(1).Info("Create deployment for Scaler Object", "mqt", mqt.ObjectMeta, "mqt.Spec", mqt.Spec)
-		createKedaObjects(ctx, r.logger, r.kedaClient, r.kubeClient, mqt, r.routerURL)
+		if err := createKedaObjects(ctx, r.logger, r.kedaClient, r.kubeClient, mqt, r.routerURL); err != nil {
+			return ctrl.Result{}, err
+		}
 		r.setLastSeen(req.NamespacedName, mqt.DeepCopy())
 		return ctrl.Result{}, nil
 	}

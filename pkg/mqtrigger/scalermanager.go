@@ -6,6 +6,7 @@ package mqtrigger
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"reflect"
@@ -15,6 +16,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
@@ -248,61 +250,86 @@ func checkAndUpdateTriggerFields(mqt, newMqt *fv1.MessageQueueTrigger) bool {
 	return updated
 }
 
-func createKedaObjects(ctx context.Context, logger logr.Logger, kedaClient kedaClient.Interface, kubeClient kubernetes.Interface, mqt *fv1.MessageQueueTrigger, routerURL string) {
+func createKedaObjects(ctx context.Context, logger logr.Logger, kedaClient kedaClient.Interface, kubeClient kubernetes.Interface, mqt *fv1.MessageQueueTrigger, routerURL string) error {
+	// An AlreadyExists Create means the object is already present, which is the
+	// desired end state of the create path. Tolerating it keeps the create
+	// idempotent: after a scaler-manager restart the reconciler's last-seen cache
+	// is empty, so every existing keda-kind MQT re-enters this path (old == nil) —
+	// exactly as the old informer's AddFunc re-fired on resync. The handler merely
+	// logged the AlreadyExists; here we must also avoid returning it, or the
+	// reconciler would requeue the same Create forever.
+	created := func(err error) bool { return err == nil || apierrors.IsAlreadyExists(err) }
+
 	authenticationRef := ""
 	if len(mqt.Spec.Secret) > 0 {
 		authenticationRef = authTriggerName(mqt.Name)
 		err := createAuthTrigger(ctx, kedaClient, mqt, authenticationRef, kubeClient)
-		if err != nil {
+		if !created(err) {
 			logger.Error(err, "Failed to create Authentication Trigger")
-			return
+			return err
 		}
 	}
 
-	if err := createDeployment(ctx, logger, mqt, routerURL, kubeClient); err != nil {
+	if err := createDeployment(ctx, logger, mqt, routerURL, kubeClient); !created(err) {
 		logger.Error(err, "Failed to create Deployment")
 		if len(authenticationRef) > 0 {
-			err = deleteAuthTrigger(ctx, kedaClient, authenticationRef, mqt.Namespace)
-			if err != nil {
-				logger.Error(err, "Failed to delete Authentication Trigger")
+			if derr := deleteAuthTrigger(ctx, kedaClient, authenticationRef, mqt.Namespace); derr != nil {
+				logger.Error(derr, "Failed to delete Authentication Trigger")
 			}
 		}
-		return
+		return err
 	}
 
-	if err := createScaledObject(ctx, kedaClient, mqt, authenticationRef); err != nil {
+	if err := createScaledObject(ctx, kedaClient, mqt, authenticationRef); !created(err) {
 		logger.Error(err, "Failed to create ScaledObject")
 		if len(authenticationRef) > 0 {
-			if err = deleteAuthTrigger(ctx, kedaClient, authenticationRef, mqt.Namespace); err != nil {
-				logger.Error(err, "Failed to delete Authentication Trigger")
+			if derr := deleteAuthTrigger(ctx, kedaClient, authenticationRef, mqt.Namespace); derr != nil {
+				logger.Error(derr, "Failed to delete Authentication Trigger")
 			}
 		}
-		if err = deleteDeployment(ctx, mqt.Name, mqt.Namespace, kubeClient); err != nil {
-			logger.Error(err, "Failed to delete Deployment")
+		if derr := deleteDeployment(ctx, mqt.Name, mqt.Namespace, kubeClient); derr != nil {
+			logger.Error(derr, "Failed to delete Deployment")
 		}
+		return err
 	}
+	return nil
 }
 
-func cleanupKedaObjects(ctx context.Context, logger logr.Logger, kedaClient kedaClient.Interface, kubeClient kubernetes.Interface, mqt *fv1.MessageQueueTrigger) {
+func cleanupKedaObjects(ctx context.Context, logger logr.Logger, kedaClient kedaClient.Interface, kubeClient kubernetes.Interface, mqt *fv1.MessageQueueTrigger) error {
+	var errs error
+	// A NotFound delete means the object is already gone, which is the desired end
+	// state of cleanup. Tolerating it keeps teardown idempotent: when the
+	// reconciler retries a keda->fission transition (or a deployment/scaledobject
+	// was already GC'd), a NotFound must not bubble up as an error and requeue
+	// forever.
+	join := func(err error) {
+		if err != nil && !apierrors.IsNotFound(err) {
+			errs = errors.Join(errs, err)
+		}
+	}
+
 	authenticationRef := ""
 	if len(mqt.Spec.Secret) > 0 {
 		authenticationRef = authTriggerName(mqt.Name)
 	}
 
 	if len(authenticationRef) > 0 {
-		err := deleteAuthTrigger(ctx, kedaClient, authenticationRef, mqt.Namespace)
-		if err != nil {
+		if err := deleteAuthTrigger(ctx, kedaClient, authenticationRef, mqt.Namespace); err != nil {
 			logger.Error(err, "Failed to delete Authentication Trigger")
+			join(err)
 		}
 	}
 
 	if err := deleteDeployment(ctx, mqt.Name, mqt.Namespace, kubeClient); err != nil {
 		logger.Error(err, "Failed to delete Deployment")
+		join(err)
 	}
 
 	if err := deleteScaledObject(ctx, kedaClient, mqt.Name, mqt.Namespace); err != nil {
 		logger.Error(err, "Failed to delete ScaledObject")
+		join(err)
 	}
+	return errs
 }
 
 func getAuthTriggerSpec(ctx context.Context, mqt *fv1.MessageQueueTrigger, authenticationRef string, kubeClient kubernetes.Interface) (*kedav1alpha1.TriggerAuthentication, error) {
