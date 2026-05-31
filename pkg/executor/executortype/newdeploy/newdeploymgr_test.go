@@ -145,6 +145,17 @@ func TestRefreshFuncPods(t *testing.T) {
 	require.NoError(t, err, "Error getting function")
 	require.Equal(t, funcRes.Name, functionName)
 
+	// The Function watch is a controller-runtime reconciler now, which needs a
+	// Manager and is not running in this unit test. Drive createFunction directly
+	// (in a goroutine, as the old informer AddFunc handler did) so the deployment
+	// gets created; createFunction then blocks in waitForDeploy on the fake client,
+	// but the deployment exists by then, which is all this test waits for.
+	go func() {
+		if _, err := ndm.createFunction(ctx, funcRes); err != nil {
+			logger.Error(err, "error creating function in test")
+		}
+	}()
+
 	ctx2, cancel2 := context.WithCancel(t.Context())
 	wait.Until(func() {
 		t.Log("Checking for deployment")
