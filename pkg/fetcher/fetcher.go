@@ -177,10 +177,16 @@ func verifyChecksum(fileChecksum, checksum *fv1.Checksum) error {
 }
 
 func writeSecretOrConfigMap(dataMap map[string][]byte, dirPath string) error {
+	// Open the os.Root once and write every key through it: os.Root confines
+	// each write to dirPath (the keys are Secret/ConfigMap data keys), and
+	// reusing one root avoids an openat per key.
+	root, err := os.OpenRoot(dirPath)
+	if err != nil {
+		return fmt.Errorf("failed to open directory %s: %w", dirPath, err)
+	}
+	defer root.Close()
 	for key, val := range dataMap {
-		// key is a Secret/ConfigMap data key; route through an os.Root rooted
-		// at dirPath so a key cannot write outside it.
-		if err := utils.RootWriteFile(dirPath, key, val, 0750); err != nil {
+		if err := root.WriteFile(key, val, 0750); err != nil {
 			return fmt.Errorf("failed to write file %s in %s: %w", key, dirPath, err)
 		}
 	}
