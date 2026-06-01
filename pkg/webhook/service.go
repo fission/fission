@@ -62,14 +62,23 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 
 	// Setup webhooks
 
+	// HTTPTrigger, TimeTrigger and CanaryConfig no longer need a webhook: their
+	// field rules are enforced by the API server via CEL, their parser-based
+	// rules that CEL cannot express (cron schedule; CORS origin/max-age and
+	// ingress path regex) are reported as status Conditions by the timer and
+	// router reconcilers, and CanaryConfig had no validation.
+	//
+	// The remaining CRDs keep a webhook for the checks CEL cannot express —
+	// cross-namespace references, pod-spec/container security (GHSA), the
+	// environment runtime-image/name invariant, message-queue type/topic
+	// validity, and reference-name (DNS-1123) checks — which still run via each
+	// type's Validate(). CEL covers their field rules too; the overlap is
+	// deliberate defense-in-depth.
 	webhookInjectors := []WebhookInjector{
-		&CanaryConfig{},
 		&Environment{},
 		&Package{},
 		&Function{},
-		&HTTPTrigger{},
 		&MessageQueueTrigger{},
-		&TimeTrigger{},
 		&KubernetesWatchTrigger{},
 	}
 

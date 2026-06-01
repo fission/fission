@@ -6,6 +6,7 @@ package timer
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/go-logr/logr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -40,6 +41,29 @@ func (r *TimeTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, err
+	}
+
+	// Validate the cron expression here. It needs the robfig/cron parser, which
+	// CEL on the CRD cannot express, so instead of rejecting at admission we
+	// admit the object and surface an invalid schedule as a Scheduled=False
+	// condition (the fission CLI still rejects bad crons client-side; this
+	// covers raw kubectl/GitOps writes). Without this the cron was silently
+	// dropped and the trigger never fired with no signal to the user.
+	if err := fv1.IsValidCronSpec(tt.Spec.Cron); err != nil {
+		r.timer.remove(req.NamespacedName) // drop any prior schedule for this trigger
+		controller.SetConditions(ctx, r.logger, r.client, tt,
+			metav1.Condition{
+				Type: fv1.TimeTriggerConditionScheduled, Status: metav1.ConditionFalse,
+				Reason:  fv1.TimeTriggerReasonInvalidCron,
+				Message: fmt.Sprintf("invalid cron schedule %q: %v", tt.Spec.Cron, err),
+			},
+			metav1.Condition{
+				Type: fv1.TimeTriggerConditionReady, Status: metav1.ConditionFalse,
+				Reason:  fv1.TimeTriggerReasonInvalidCron,
+				Message: "trigger is not firing: invalid cron schedule",
+			},
+		)
+		return ctrl.Result{}, nil
 	}
 
 	r.timer.addUpdate(tt)
