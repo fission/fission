@@ -18,6 +18,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
+	authorizationv1 "k8s.io/api/authorization/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 )
@@ -55,6 +56,31 @@ func (f *Framework) FissionNamespace() string {
 		return ns
 	}
 	return defaultFissionNamespace
+}
+
+// RequireExecutorCan asserts, via a SubjectAccessReview, that the executor's
+// ServiceAccount (fission-executor) is allowed verb on the given core/v1
+// resource in namespace. It's a deterministic check of the RBAC the adopt path
+// depends on — e.g. services `update`, which AdoptExistingResources needs to
+// re-stamp a Service in place.
+func (f *Framework) RequireExecutorCan(t *testing.T, ctx context.Context, verb, resource, namespace string) {
+	t.Helper()
+	sar := &authorizationv1.SubjectAccessReview{
+		Spec: authorizationv1.SubjectAccessReviewSpec{
+			User: "system:serviceaccount:" + f.FissionNamespace() + ":fission-executor",
+			ResourceAttributes: &authorizationv1.ResourceAttributes{
+				Namespace: namespace,
+				Verb:      verb,
+				Group:     "",
+				Resource:  resource,
+			},
+		},
+	}
+	res, err := f.kubeClient.AuthorizationV1().SubjectAccessReviews().Create(ctx, sar, metav1.CreateOptions{})
+	require.NoErrorf(t, err, "RequireExecutorCan: SubjectAccessReview for %s %s", verb, resource)
+	require.Truef(t, res.Status.Allowed,
+		"executor ServiceAccount must be allowed to %s %s in namespace %q (reason: %s)",
+		verb, resource, namespace, res.Status.Reason)
 }
 
 // SetExecutorEnv sets an environment variable on the executor Deployment's
