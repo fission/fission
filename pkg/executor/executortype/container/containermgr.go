@@ -12,7 +12,6 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	apiv1 "k8s.io/api/core/v1"
@@ -272,70 +271,23 @@ func (caaf *Container) RefreshFuncPods(ctx context.Context, logger logr.Logger, 
 	return nil
 }
 
-// AdoptExistingResources attempts to adopt resources for functions in all namespaces.
+// AdoptExistingResources re-claims the function objects this executor type left
+// behind on a previous run. It routes through the throttled createFunction (not
+// fnCreate directly), so the adopt pass and the Function reconciler — which also
+// re-stamps existing objects on its initial sync — single-flight per function
+// UID instead of racing on the in-place Update (which previously produced
+// resourceVersion conflicts that tripped fnCreate's destroy-on-error path).
 func (caaf *Container) AdoptExistingResources(ctx context.Context) {
-	wg := &sync.WaitGroup{}
-
-	for _, namepsace := range utils.DefaultNSResolver().FissionResourceNS {
-		fnList, err := caaf.fissionClient.CoreV1().Functions(namepsace).List(ctx, metav1.ListOptions{})
-		if err != nil {
-			caaf.logger.Error(err, "error getting function list")
-			return
-		}
-
-		for i := range fnList.Items {
-			fn := &fnList.Items[i]
-			if fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypeContainer {
-				wg.Go(func() {
-					// Route through createFunction (throttled) rather than calling
-					// fnCreate directly: the Function reconciler also re-stamps existing
-					// objects on its initial sync, so going through the per-UID throttler
-					// makes adopt and reconcile single-flight instead of racing each other
-					// on the in-place Update (which previously produced resourceVersion
-					// conflicts that tripped fnCreate's destroy-on-error path). The local
-					// err also avoids a data race on the err variable from the enclosing
-					// scope, which every adopt goroutine previously wrote.
-					if _, err := caaf.createFunction(ctx, fn); err != nil {
-						caaf.logger.Error(err, "failed to adopt resources for function", "function", fn.Name)
-						return
-					}
-					caaf.logger.Info("adopted resources for function", "function", fn.Name)
-				})
-			}
-		}
-	}
-
-	wg.Wait()
+	executorUtils.AdoptFunctions(ctx, caaf.logger, caaf.fissionClient, fv1.ExecutorTypeContainer,
+		func(ctx context.Context, fn *fv1.Function) error {
+			_, err := caaf.createFunction(ctx, fn)
+			return err
+		})
 }
 
 // CleanupOldExecutorObjects cleans orphaned resources.
 func (caaf *Container) CleanupOldExecutorObjects(ctx context.Context) {
-	caaf.logger.Info("CaaF starts to clean orphaned resources", "instanceID", caaf.instanceID)
-
-	var errs error
-	listOpts := metav1.ListOptions{
-		LabelSelector: labels.Set(map[string]string{fv1.EXECUTOR_TYPE: string(fv1.ExecutorTypeContainer)}).AsSelector().String(),
-	}
-
-	err := reaper.CleanupHpa(ctx, caaf.logger, caaf.kubernetesClient, caaf.instanceID, listOpts)
-	if err != nil {
-		errs = errors.Join(errs, err)
-	}
-
-	err = reaper.CleanupDeployments(ctx, caaf.logger, caaf.kubernetesClient, caaf.instanceID, listOpts)
-	if err != nil {
-		errs = errors.Join(errs, err)
-	}
-
-	err = reaper.CleanupServices(ctx, caaf.logger, caaf.kubernetesClient, caaf.instanceID, listOpts)
-	if err != nil {
-		errs = errors.Join(errs, err)
-	}
-
-	if errs != nil {
-		// TODO retry reaper; logged and ignored for now
-		caaf.logger.Error(errs, "Failed to cleanup old executor objects")
-	}
+	reaper.CleanupExecutorObjects(ctx, caaf.logger, caaf.kubernetesClient, caaf.instanceID, fv1.ExecutorTypeContainer)
 }
 
 func (caaf *Container) createFunction(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {

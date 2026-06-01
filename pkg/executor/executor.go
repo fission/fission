@@ -210,8 +210,15 @@ func (a *executorAPIServer) Start(ctx context.Context) error {
 	return nil
 }
 
+// adoptCleanupMaxWait caps how long startup readiness waits for the adopt +
+// cleanup pass before proceeding. It's a safety bound only: the pass itself is
+// context-bound and continues in the background if it outlasts this, and
+// CleanupOldExecutorObjects runs after AdoptExistingResources within each
+// goroutine regardless, so it never reaps objects adopt hasn't re-stamped.
+const adoptCleanupMaxWait = 30 * time.Second
+
 // runAdoptCleanup adopts pre-existing resources (optional) and cleans up stale
-// executor objects with a hard timeout. Runs on the leader.
+// executor objects. Runs on the leader.
 func runAdoptCleanup(ctx context.Context, executorTypes map[fv1.ExecutorType]executortype.ExecutorType, adopt bool) {
 	wg := &sync.WaitGroup{}
 	for _, et := range executorTypes {
@@ -222,8 +229,19 @@ func runAdoptCleanup(ctx context.Context, executorTypes map[fv1.ExecutorType]exe
 			et.CleanupOldExecutorObjects(ctx)
 		})
 	}
-	// TODO: use context to control the waiting time once kubernetes client supports it.
-	util.WaitTimeout(wg, 30*time.Second)
+	// Wait for the pass, but honour ctx (executor shutdown / leader-lease loss)
+	// rather than blocking on a fixed timer that ignores it — the adopt/cleanup
+	// calls are themselves ctx-bound and return promptly on cancellation. The
+	// cap bounds startup readiness if a call wedges.
+	done := make(chan struct{})
+	go func() { defer close(done); wg.Wait() }()
+	timer := time.NewTimer(adoptCleanupMaxWait)
+	defer timer.Stop()
+	select {
+	case <-done:
+	case <-ctx.Done():
+	case <-timer.C:
+	}
 }
 
 // bindAddr resolves a server bind address from env, defaulting to def and
