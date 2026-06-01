@@ -98,6 +98,11 @@ spec:
                       time.ParseDuration. Empty means the header is omitted.
                     type: string
                 type: object
+                x-kubernetes-validations:
+                - message: corsConfig.allowOrigins=["*"] cannot be combined with allowCredentials=true;
+                    browsers refuse the response
+                  rule: '!(has(self.allowCredentials) && self.allowCredentials &&
+                    has(self.allowOrigins) && ''*'' in self.allowOrigins)'
               createingress:
                 description: If CreateIngress is true, router will create an ingress
                   definition.
@@ -126,15 +131,24 @@ spec:
                       Available value:
                       - name
                       - function-weights
+                    enum:
+                    - name
+                    - function-weights
                     type: string
                 required:
                 - name
                 - type
                 type: object
+                x-kubernetes-validations:
+                - message: functionref.name must be a valid DNS1123 label (lowercase
+                    alphanumeric or '-', start/end alphanumeric, max 63 chars) when
+                    type is 'name'
+                  rule: self.type != 'name' || (self.name.size() <= 63 && self.name.matches('^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'))
               host:
                 description: |-
                   Deprecated: the original idea of this field is not for setting Ingress.
                   Since we have IngressConfig now, remove Host after couple releases.
+                pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*)?$
                 type: string
               ingressconfig:
                 description: IngressConfig for router to set up Ingress.
@@ -164,6 +178,14 @@ spec:
                       key and crt must match the value of Host field.
                     type: string
                 type: object
+                x-kubernetes-validations:
+                - message: ingressconfig.path must be an absolute path (start with
+                    '/')
+                  rule: '!has(self.path) || self.path == '''' || self.path.startsWith(''/'')'
+                - message: ingressconfig.host must be empty, '*', a valid DNS1123
+                    subdomain, or a wildcard DNS1123 subdomain (e.g. *.example.com)
+                  rule: '!has(self.host) || self.host == '''' || self.host == ''*''
+                    || self.host.matches(r''^(\*\.)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$'')'
               keepPrefix:
                 description: |-
                   When function is exposed with Prefix based path,
@@ -173,10 +195,30 @@ spec:
                 description: |-
                   Use Methods instead of Method. This field is going to be deprecated in a future release
                   HTTP method to access a function.
+                enum:
+                - GET
+                - HEAD
+                - POST
+                - PUT
+                - PATCH
+                - DELETE
+                - CONNECT
+                - OPTIONS
+                - TRACE
                 type: string
               methods:
                 description: HTTP methods to access a function
                 items:
+                  enum:
+                  - GET
+                  - HEAD
+                  - POST
+                  - PUT
+                  - PATCH
+                  - DELETE
+                  - CONNECT
+                  - OPTIONS
+                  - TRACE
                   type: string
                 type: array
                 x-kubernetes-list-type: set

@@ -53,6 +53,9 @@ spec:
                   Available value:
                   - single
                   - infinite
+                enum:
+                - single
+                - infinite
                 type: string
               builder:
                 description: |-
@@ -10078,6 +10081,7 @@ spec:
                 type: boolean
               poolsize:
                 description: The initial pool size for environment
+                minimum: 0
                 type: integer
               resources:
                 description: |-
@@ -20162,6 +20166,7 @@ spec:
                   The grace time for pod to perform connection draining before termination. The unit is in seconds.
                   (Optional) defaults to 360 seconds
                 format: int64
+                minimum: 0
                 type: integer
               version:
                 description: |-
@@ -20173,7 +20178,12 @@ spec:
                   Version "2" supports downloading and compiling user function if source archive is not empty.
 
                   Version "3" is almost the same with v2, but you're able to control the size of pre-warm pool of the environment.
+                maximum: 3
+                minimum: 1
                 type: integer
+                x-kubernetes-validations:
+                - message: spec.version is immutable
+                  rule: self == oldSelf
             required:
             - runtime
             - version

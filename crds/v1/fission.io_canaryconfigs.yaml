@@ -61,6 +61,8 @@ spec:
                 type: string
               weightincrement:
                 description: Weight increment step for function
+                maximum: 100
+                minimum: 1
                 type: integer
             required:
             - newfunction

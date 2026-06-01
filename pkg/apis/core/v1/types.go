@@ -230,11 +230,13 @@ type (
 		//  - literal
 		//  - url
 		// +optional
+		// +kubebuilder:validation:Enum="";literal;url
 		Type ArchiveType `json:"type,omitempty"`
 
 		// Literal contents of the package. Can be used for
 		// encoding packages below TODO (256 KB?) size.
 		// +optional
+		// +kubebuilder:validation:XValidation:rule="size(self) <= 262144",message="Package literal larger than 256 kB"
 		Literal []byte `json:"literal,omitempty"`
 
 		// URL references a package.
@@ -244,6 +246,7 @@ type (
 		// Checksum ensures the integrity of packages
 		// referenced by URL. Ignored for literals.
 		// +optional
+		// +kubebuilder:validation:XValidation:rule="(!has(self.type) || self.type == '') && (!has(self.sum) || self.sum == '') || self.type == 'sha256'",message="Checksum.type must be 'sha256'"
 		Checksum Checksum `json:"checksum,omitempty"`
 	}
 
@@ -271,6 +274,7 @@ type (
 	// PackageSpec includes source/deploy archives and the reference of environment to build the package.
 	PackageSpec struct {
 		// Environment is a reference to the environment for building source archive.
+		// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="spec.environment is immutable"
 		Environment EnvironmentReference `json:"environment"`
 
 		// Source is the archive contains source code and dependencies file.
@@ -297,6 +301,7 @@ type (
 
 		// BuildStatus is the package build status.
 		// +kubebuilder:default:="pending"
+		// +kubebuilder:validation:Enum="";pending;running;succeeded;failed;none
 		BuildStatus BuildStatus `json:"buildstatus,omitempty"`
 
 		// BuildLog stores build log during the compilation.
@@ -355,6 +360,13 @@ type (
 	StrategyType string
 
 	// FunctionSpec describes the contents of the function.
+	// +kubebuilder:validation:XValidation:rule="!(has(self.InvokeStrategy.ExecutionStrategy) && self.InvokeStrategy.ExecutionStrategy.ExecutorType == 'container') || has(self.podspec)",message="executor type container requires a pod spec (spec.podspec)"
+	// +kubebuilder:validation:XValidation:rule="!(has(self.InvokeStrategy.ExecutionStrategy) && (self.InvokeStrategy.ExecutionStrategy.ExecutorType == 'newdeploy' || self.InvokeStrategy.ExecutionStrategy.ExecutorType == 'container')) || !has(self.InvokeStrategy.ExecutionStrategy.MinScale) || self.InvokeStrategy.ExecutionStrategy.MinScale >= 0",message="minimum scale must be greater than or equal to 0 for newdeploy/container executors"
+	// +kubebuilder:validation:XValidation:rule="!(has(self.InvokeStrategy.ExecutionStrategy) && (self.InvokeStrategy.ExecutionStrategy.ExecutorType == 'newdeploy' || self.InvokeStrategy.ExecutionStrategy.ExecutorType == 'container')) || (has(self.InvokeStrategy.ExecutionStrategy.MaxScale) && self.InvokeStrategy.ExecutionStrategy.MaxScale > 0)",message="maximum scale must be greater than 0 for newdeploy/container executors"
+	// +kubebuilder:validation:XValidation:rule="!(has(self.InvokeStrategy.ExecutionStrategy) && (self.InvokeStrategy.ExecutionStrategy.ExecutorType == 'newdeploy' || self.InvokeStrategy.ExecutionStrategy.ExecutorType == 'container')) || !has(self.InvokeStrategy.ExecutionStrategy.MaxScale) || self.InvokeStrategy.ExecutionStrategy.MaxScale >= (has(self.InvokeStrategy.ExecutionStrategy.MinScale) ? self.InvokeStrategy.ExecutionStrategy.MinScale : 0)",message="maximum scale must be greater than or equal to minimum scale for newdeploy/container executors"
+	// +kubebuilder:validation:XValidation:rule="!(has(self.InvokeStrategy.ExecutionStrategy) && (self.InvokeStrategy.ExecutionStrategy.ExecutorType == 'newdeploy' || self.InvokeStrategy.ExecutionStrategy.ExecutorType == 'container')) || !has(self.InvokeStrategy.ExecutionStrategy.TargetCPUPercent) || (self.InvokeStrategy.ExecutionStrategy.TargetCPUPercent >= 0 && self.InvokeStrategy.ExecutionStrategy.TargetCPUPercent <= 100)",message="TargetCPUPercent must be a value between 0 and 100 for newdeploy/container executors"
+	// +kubebuilder:validation:XValidation:rule="!has(self.InvokeStrategy.StrategyType) || self.InvokeStrategy.StrategyType == '' || self.InvokeStrategy.StrategyType == 'execution'",message="InvokeStrategy.StrategyType must be 'execution'"
+	// +kubebuilder:validation:XValidation:rule="!has(self.InvokeStrategy.ExecutionStrategy) || !has(self.InvokeStrategy.ExecutionStrategy.ExecutorType) || self.InvokeStrategy.ExecutionStrategy.ExecutorType == '' || self.InvokeStrategy.ExecutionStrategy.ExecutorType == 'poolmgr' || self.InvokeStrategy.ExecutionStrategy.ExecutorType == 'newdeploy' || self.InvokeStrategy.ExecutionStrategy.ExecutorType == 'container'",message="ExecutionStrategy.ExecutorType must be one of poolmgr, newdeploy, container"
 	FunctionSpec struct {
 		// Environment is the build and runtime environment that this function is
 		// associated with. An Environment with this name should exist, otherwise the
@@ -503,6 +515,7 @@ type (
 	FunctionReferenceType string
 
 	// FunctionReference refers to a function
+	// +kubebuilder:validation:XValidation:rule="self.type != 'name' || (self.name.size() <= 63 && self.name.matches('^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'))",message="functionref.name must be a valid DNS1123 label (lowercase alphanumeric or '-', start/end alphanumeric, max 63 chars) when type is 'name'"
 	FunctionReference struct {
 		// Type indicates whether this function reference is by name or selector. For now,
 		// the only supported reference type is by "name".  Future reference types:
@@ -512,6 +525,7 @@ type (
 		// Available value:
 		// - name
 		// - function-weights
+		// +kubebuilder:validation:Enum=name;function-weights
 		Type FunctionReferenceType `json:"type"`
 
 		// Name of the function.
@@ -608,6 +622,9 @@ type (
 		// Version "2" supports downloading and compiling user function if source archive is not empty.
 		//
 		// Version "3" is almost the same with v2, but you're able to control the size of pre-warm pool of the environment.
+		// +kubebuilder:validation:Minimum=1
+		// +kubebuilder:validation:Maximum=3
+		// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="spec.version is immutable"
 		Version int `json:"version"`
 
 		// Runtime is configuration for running function, like container image etc.
@@ -629,6 +646,7 @@ type (
 		// - single
 		// - infinite
 		// +optional
+		// +kubebuilder:validation:Enum=single;infinite
 		AllowedFunctionsPerContainer AllowedFunctionsPerContainer `json:"allowedFunctionsPerContainer,omitempty"`
 
 		// Istio default blocks all egress traffic for safety.
@@ -644,11 +662,13 @@ type (
 
 		// The initial pool size for environment
 		// +optional
+		// +kubebuilder:validation:Minimum=0
 		Poolsize int `json:"poolsize,omitempty"`
 
 		// The grace time for pod to perform connection draining before termination. The unit is in seconds.
 		// (Optional) defaults to 360 seconds
 		// +optional
+		// +kubebuilder:validation:Minimum=0
 		TerminationGracePeriod int64 `json:"terminationGracePeriod,omitempty"`
 
 		// KeepArchive is used by fetcher to determine if the extracted archive
@@ -675,6 +695,7 @@ type (
 		// Deprecated: the original idea of this field is not for setting Ingress.
 		// Since we have IngressConfig now, remove Host after couple releases.
 		// +optional
+		// +kubebuilder:validation:Pattern=`^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*)?$`
 		Host string `json:"host"`
 
 		// RelativeURL is the exposed URL for external client to access a function with.
@@ -696,11 +717,13 @@ type (
 		// Use Methods instead of Method. This field is going to be deprecated in a future release
 		// HTTP method to access a function.
 		// +optional
+		// +kubebuilder:validation:Enum=GET;HEAD;POST;PUT;PATCH;DELETE;CONNECT;OPTIONS;TRACE
 		Method string `json:"method"`
 
 		// HTTP methods to access a function
 		// +optional
 		// +listType=set
+		// +kubebuilder:validation:items:Enum=GET;HEAD;POST;PUT;PATCH;DELETE;CONNECT;OPTIONS;TRACE
 		Methods []string `json:"methods,omitempty"`
 
 		// FunctionReference is a reference to the target function.
@@ -731,6 +754,7 @@ type (
 	// middleware to the trigger's route. Triggers without a CorsConfig
 	// receive no Access-Control-* response headers and therefore deny
 	// cross-origin browser reads at the Same-Origin Policy layer.
+	// +kubebuilder:validation:XValidation:rule="!(has(self.allowCredentials) && self.allowCredentials && has(self.allowOrigins) && '*' in self.allowOrigins)",message="corsConfig.allowOrigins=[\"*\"] cannot be combined with allowCredentials=true; browsers refuse the response"
 	HTTPTriggerCorsConfig struct {
 		// AllowOrigins is the list of allowed origins (scheme + host +
 		// port). Use ["*"] to allow any origin. Mixing "*" with
@@ -772,6 +796,8 @@ type (
 	}
 
 	// IngressConfig is for router to set up Ingress.
+	// +kubebuilder:validation:XValidation:rule="!has(self.path) || self.path == '' || self.path.startsWith('/')",message="ingressconfig.path must be an absolute path (start with '/')"
+	// +kubebuilder:validation:XValidation:rule="!has(self.host) || self.host == '' || self.host == '*' || self.host.matches(r'^(\\*\\.)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$')",message="ingressconfig.host must be empty, '*', a valid DNS1123 subdomain, or a wildcard DNS1123 subdomain (e.g. *.example.com)"
 	IngressConfig struct {
 		// Annotations will be added to metadata when creating Ingress.
 		// +optional
@@ -798,9 +824,12 @@ type (
 
 	// KubernetesWatchTriggerSpec defines spec of KuberenetesWatchTrigger
 	KubernetesWatchTriggerSpec struct {
+		// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
+		// +kubebuilder:validation:MaxLength=63
 		Namespace string `json:"namespace"`
 
 		// Type of resource to watch (Pod, Service, etc.)
+		// +kubebuilder:validation:XValidation:rule="self.upperAscii() in ['POD','SERVICE','REPLICATIONCONTROLLER','JOB']",message="spec.type must be one of POD, SERVICE, REPLICATIONCONTROLLER, JOB (case-insensitive)"
 		Type string `json:"type"`
 
 		// Resource labels
@@ -921,6 +950,8 @@ type (
 
 		// Weight increment step for function
 		// +optional
+		// +kubebuilder:validation:Minimum=1
+		// +kubebuilder:validation:Maximum=100
 		WeightIncrement int `json:"weightincrement"`
 
 		// Weight increment interval, string representation of time.Duration, ex : 1m, 2h, 2d (default: "2m")

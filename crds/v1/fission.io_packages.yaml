@@ -63,18 +63,29 @@ spec:
                           sha256, used for a checksum.
                         type: string
                     type: object
+                    x-kubernetes-validations:
+                    - message: Checksum.type must be 'sha256'
+                      rule: (!has(self.type) || self.type == '') && (!has(self.sum)
+                        || self.sum == '') || self.type == 'sha256'
                   literal:
                     description: |-
                       Literal contents of the package. Can be used for
                       encoding packages below TODO (256 KB?) size.
                     format: byte
                     type: string
+                    x-kubernetes-validations:
+                    - message: Package literal larger than 256 kB
+                      rule: size(self) <= 262144
                   type:
                     description: |-
                       Type defines how the package is specified: literal or URL.
                       Available value:
                        - literal
                        - url
+                    enum:
+                    - ""
+                    - literal
+                    - url
                     type: string
                   url:
                     description: URL references a package.
@@ -92,6 +103,9 @@ spec:
                 - name
                 - namespace
                 type: object
+                x-kubernetes-validations:
+                - message: spec.environment is immutable
+                  rule: self == oldSelf
               source:
                 description: |-
                   Source is the archive contains source code and dependencies file.
@@ -111,18 +125,29 @@ spec:
                           sha256, used for a checksum.
                         type: string
                     type: object
+                    x-kubernetes-validations:
+                    - message: Checksum.type must be 'sha256'
+                      rule: (!has(self.type) || self.type == '') && (!has(self.sum)
+                        || self.sum == '') || self.type == 'sha256'
                   literal:
                     description: |-
                       Literal contents of the package. Can be used for
                       encoding packages below TODO (256 KB?) size.
                     format: byte
                     type: string
+                    x-kubernetes-validations:
+                    - message: Package literal larger than 256 kB
+                      rule: size(self) <= 262144
                   type:
                     description: |-
                       Type defines how the package is specified: literal or URL.
                       Available value:
                        - literal
                        - url
+                    enum:
+                    - ""
+                    - literal
+                    - url
                     type: string
                   url:
                     description: URL references a package.
@@ -140,6 +165,13 @@ spec:
               buildstatus:
                 default: pending
                 description: BuildStatus is the package build status.
+                enum:
+                - ""
+                - pending
+                - running
+                - succeeded
+                - failed
+                - none
                 type: string
               conditions:
                 description: Conditions represent the latest observations of the package's
