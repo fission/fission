@@ -22,62 +22,7 @@ import (
 	metricsapi "k8s.io/metrics/pkg/apis/metrics"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
-	"github.com/fission/fission/pkg/generated/clientset/versioned"
-	genInformer "github.com/fission/fission/pkg/generated/informers/externalversions"
 )
-
-func GetInformersForNamespaces(client versioned.Interface, defaultSync time.Duration, kind string) map[string]cache.SharedIndexInformer {
-	informers := make(map[string]cache.SharedIndexInformer)
-	for _, ns := range DefaultNSResolver().FissionResourceNS {
-		factory := genInformer.NewSharedInformerFactoryWithOptions(client, defaultSync, genInformer.WithNamespace(ns)).Core().V1()
-		switch kind {
-		case fv1.CanaryConfigResource:
-			informers[ns] = factory.CanaryConfigs().Informer()
-		case fv1.EnvironmentResource:
-			informers[ns] = factory.Environments().Informer()
-		case fv1.FunctionResource:
-			informers[ns] = factory.Functions().Informer()
-		case fv1.HttpTriggerResource:
-			informers[ns] = factory.HTTPTriggers().Informer()
-		case fv1.KubernetesWatchResource:
-			informers[ns] = factory.KubernetesWatchTriggers().Informer()
-		case fv1.MessageQueueResource:
-			informers[ns] = factory.MessageQueueTriggers().Informer()
-		case fv1.PackagesResource:
-			informers[ns] = factory.Packages().Informer()
-		case fv1.TimeTriggerResource:
-			informers[ns] = factory.TimeTriggers().Informer()
-		default:
-			panic("Unknown kind: " + kind)
-		}
-	}
-	return informers
-}
-
-func GetK8sInformersForNamespaces(client kubernetes.Interface, defaultSync time.Duration, kind string) map[string]cache.SharedIndexInformer {
-	informers := make(map[string]cache.SharedIndexInformer)
-	namespaces := DefaultNSResolver()
-	for _, ns := range namespaces.FissionNSWithOptions(WithBuilderNs(), WithFunctionNs(), WithDefaultNs()) {
-		factory := k8sInformers.NewSharedInformerFactoryWithOptions(client, defaultSync, k8sInformers.WithNamespace(ns))
-		switch kind {
-		case fv1.Deployments:
-			informers[ns] = factory.Apps().V1().Deployments().Informer()
-		case fv1.ReplicaSets:
-			informers[ns] = factory.Apps().V1().ReplicaSets().Informer()
-		case fv1.Pods:
-			informers[ns] = factory.Core().V1().Pods().Informer()
-		case fv1.Services:
-			informers[ns] = factory.Core().V1().Services().Informer()
-		case fv1.ConfigMaps:
-			informers[ns] = factory.Core().V1().ConfigMaps().Informer()
-		case fv1.Secrets:
-			informers[ns] = factory.Core().V1().Secrets().Informer()
-		default:
-			panic("Unknown kind: " + kind)
-		}
-	}
-	return informers
-}
 
 func GetInformerEventChecker(ctx context.Context, client kubernetes.Interface, reason string) map[string]cache.SharedInformer {
 	informers := make(map[string]cache.SharedInformer)
