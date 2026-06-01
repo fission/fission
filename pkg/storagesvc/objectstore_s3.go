@@ -54,10 +54,12 @@ func (s *s3ObjectStore) ensureBucket(ctx context.Context, region string) error {
 	}
 	err = s.client.MakeBucket(ctx, s.bucket, minio.MakeBucketOptions{Region: region})
 	if err != nil {
-		// A concurrent creation (or a pre-existing bucket we already own) is
-		// not an error for our purposes.
-		switch minio.ToErrorResponse(err).Code {
-		case "BucketAlreadyOwnedByYou", "BucketAlreadyExists":
+		// A bucket we already own (e.g. created concurrently by another
+		// storagesvc replica between our BucketExists check and here) is not
+		// an error. "BucketAlreadyExists" is deliberately NOT treated as
+		// success: in AWS S3 semantics it means the globally-unique name is
+		// owned by a different account, which is a real misconfiguration.
+		if minio.ToErrorResponse(err).Code == "BucketAlreadyOwnedByYou" {
 			return nil
 		}
 		return err

@@ -99,7 +99,9 @@ func (client *StowClient) copyFileToStream(fileId string, w io.Writer) error {
 		if errors.Is(err, ErrNotFound) {
 			return ErrNotFound
 		}
-		return ErrOpeningItem
+		// open() locates and opens the object in one step; a non-NotFound
+		// failure is a retrieval error, matching the previous Item() probe.
+		return ErrRetrievingItem
 	}
 	defer f.Close()
 

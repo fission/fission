@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // localObjectStore is an os-based objectStore rooted at <localPath>/<container>.
@@ -35,17 +36,30 @@ func newLocalObjectStore(localPath, container string) (*localObjectStore, error)
 	return &localObjectStore{containerPath: containerPath}, nil
 }
 
-// resolve maps an id to a filesystem path. stow/local accepted both absolute
-// ids (the form it produced) and container-relative ids; we mirror that.
-func (s *localObjectStore) resolve(id string) string {
-	if filepath.IsAbs(id) {
-		return id
+// resolve maps an id (or upload name) to a filesystem path confined to the
+// container directory. stow/local accepted both absolute ids (the form it
+// produced) and container-relative ids; we mirror that, but reject any path
+// that escapes containerPath. Because the id originates from the request
+// (?id=<id>), this guards against path traversal (e.g. "/etc/passwd" or
+// "../../etc/passwd"); an escaping id is reported as ErrNotFound so handlers
+// return 404 without leaking whether the target exists.
+func (s *localObjectStore) resolve(idOrName string) (string, error) {
+	p := idOrName
+	if !filepath.IsAbs(p) {
+		p = filepath.Join(s.containerPath, filepath.FromSlash(p))
 	}
-	return filepath.Join(s.containerPath, filepath.FromSlash(id))
+	p = filepath.Clean(p)
+	if p != s.containerPath && !strings.HasPrefix(p, s.containerPath+string(os.PathSeparator)) {
+		return "", ErrNotFound
+	}
+	return p, nil
 }
 
 func (s *localObjectStore) put(name string, r io.Reader, size int64) (string, error) {
-	path := filepath.Join(s.containerPath, filepath.FromSlash(name))
+	path, err := s.resolve(name)
+	if err != nil {
+		return "", err
+	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return "", err
 	}
@@ -63,7 +77,11 @@ func (s *localObjectStore) put(name string, r io.Reader, size int64) (string, er
 }
 
 func (s *localObjectStore) open(id string) (io.ReadCloser, error) {
-	f, err := os.Open(s.resolve(id))
+	path, err := s.resolve(id)
+	if err != nil {
+		return nil, err
+	}
+	f, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, ErrNotFound
@@ -74,7 +92,11 @@ func (s *localObjectStore) open(id string) (io.ReadCloser, error) {
 }
 
 func (s *localObjectStore) size(id string) (int64, error) {
-	info, err := os.Stat(s.resolve(id))
+	path, err := s.resolve(id)
+	if err != nil {
+		return 0, err
+	}
+	info, err := os.Stat(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return 0, ErrNotFound
@@ -85,7 +107,11 @@ func (s *localObjectStore) size(id string) (int64, error) {
 }
 
 func (s *localObjectStore) remove(id string) error {
-	err := os.Remove(s.resolve(id))
+	path, err := s.resolve(id)
+	if err != nil {
+		return err
+	}
+	err = os.Remove(path)
 	if err != nil && os.IsNotExist(err) {
 		return ErrNotFound
 	}
@@ -124,7 +150,13 @@ func (s *localObjectStore) list(prefix string) ([]objectInfo, error) {
 }
 
 func (s *localObjectStore) exists(id string) (bool, error) {
-	_, err := os.Stat(s.resolve(id))
+	path, err := s.resolve(id)
+	if err != nil {
+		// An id that escapes the container (or is otherwise unresolvable) is
+		// reported as absent rather than surfaced as an error.
+		return false, nil
+	}
+	_, err = os.Stat(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return false, nil

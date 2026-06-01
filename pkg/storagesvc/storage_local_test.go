@@ -7,6 +7,7 @@ package storagesvc
 import (
 	"bytes"
 	"io"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -139,4 +140,47 @@ func TestStowClientLocalRoundTrip(t *testing.T) {
 	_, err = client.getFileSize(id)
 	assert.ErrorIs(t, err, ErrNotFound)
 	assert.ErrorIs(t, client.exists(id), ErrNotFound)
+}
+
+// TestLocalObjectStoreRejectsPathTraversal verifies that ids escaping the
+// container directory (absolute paths outside it, or "../" traversal) are
+// rejected as ErrNotFound and never touch files outside the store. The id
+// comes from the request (?id=<id>), so this guards the download/info/delete
+// handlers against path traversal.
+func TestLocalObjectStoreRejectsPathTraversal(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	// A sentinel file living OUTSIDE the container dir; it must remain
+	// untouched no matter what id an attacker supplies.
+	secret := filepath.Join(root, "secret.txt")
+	require.NoError(t, os.WriteFile(secret, []byte("top secret"), 0o600))
+
+	store, err := newLocalObjectStore(filepath.Join(root, "store"), "fission-functions")
+	require.NoError(t, err)
+
+	traversals := []string{
+		secret,        // absolute path outside the container
+		"/etc/passwd", // absolute path well outside
+		"../secret.txt",
+		"../../secret.txt", // resolves to the sentinel file
+		"subdir/../../secret.txt",
+	}
+	for _, id := range traversals {
+		t.Run(id, func(t *testing.T) {
+			_, err := store.open(id)
+			assert.ErrorIs(t, err, ErrNotFound)
+			_, err = store.size(id)
+			assert.ErrorIs(t, err, ErrNotFound)
+			assert.ErrorIs(t, store.remove(id), ErrNotFound)
+			ok, err := store.exists(id)
+			require.NoError(t, err)
+			assert.False(t, ok)
+		})
+	}
+
+	// The sentinel file outside the store must still exist and be intact.
+	got, err := os.ReadFile(secret)
+	require.NoError(t, err)
+	assert.Equal(t, []byte("top secret"), got)
 }
