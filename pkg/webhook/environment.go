@@ -16,11 +16,8 @@ type Environment struct {
 	GenericWebhook[*v1.Environment]
 }
 
-// log is for logging in this package.
-var environmentlog = loggerfactory.GetLogger().WithName("environment-resource")
-
 func (r *Environment) SetupWebhookWithManager(mgr ctrl.Manager) error {
-	r.Logger = environmentlog
+	r.Logger = loggerfactory.GetLogger().WithName("environment-resource")
 	r.Validator = r
 	return r.GenericWebhook.SetupWebhookWithManager(mgr, &v1.Environment{})
 }

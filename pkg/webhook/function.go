@@ -18,11 +18,8 @@ type Function struct {
 	GenericWebhook[*v1.Function]
 }
 
-// log is for logging in this package.
-var functionlog = loggerfactory.GetLogger().WithName("function-resource")
-
 func (r *Function) SetupWebhookWithManager(mgr ctrl.Manager) error {
-	r.Logger = functionlog
+	r.Logger = loggerfactory.GetLogger().WithName("function-resource")
 	r.Validator = r
 	return r.GenericWebhook.SetupWebhookWithManager(mgr, &v1.Function{})
 }

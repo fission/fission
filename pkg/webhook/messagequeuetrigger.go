@@ -20,11 +20,8 @@ type MessageQueueTrigger struct {
 	GenericWebhook[*v1.MessageQueueTrigger]
 }
 
-// log is for logging in this package.
-var messagequeuetriggerlog = loggerfactory.GetLogger().WithName("messagequeuetrigger-resource")
-
 func (r *MessageQueueTrigger) SetupWebhookWithManager(mgr ctrl.Manager) error {
-	r.Logger = messagequeuetriggerlog
+	r.Logger = loggerfactory.GetLogger().WithName("messagequeuetrigger-resource")
 	r.Validator = r
 	return r.GenericWebhook.SetupWebhookWithManager(mgr, &v1.MessageQueueTrigger{})
 }

@@ -16,11 +16,8 @@ type CanaryConfig struct {
 	GenericWebhook[*v1.CanaryConfig]
 }
 
-// log is for logging in this package.
-var canaryConfigLog = loggerfactory.GetLogger().WithName("canaryconfig-resource")
-
 func (r *CanaryConfig) SetupWebhookWithManager(mgr ctrl.Manager) error {
-	r.Logger = canaryConfigLog
+	r.Logger = loggerfactory.GetLogger().WithName("canaryconfig-resource")
 	return r.GenericWebhook.SetupWebhookWithManager(mgr, &v1.CanaryConfig{})
 }
 

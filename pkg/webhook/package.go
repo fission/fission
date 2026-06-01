@@ -20,11 +20,8 @@ type Package struct {
 	GenericWebhook[*v1.Package]
 }
 
-// log is for logging in this package.
-var packagelog = loggerfactory.GetLogger().WithName("package-resource")
-
 func (r *Package) SetupWebhookWithManager(mgr ctrl.Manager) error {
-	r.Logger = packagelog
+	r.Logger = loggerfactory.GetLogger().WithName("package-resource")
 	r.Validator = r
 	r.Defaulter = r
 	return r.GenericWebhook.SetupWebhookWithManager(mgr, &v1.Package{})
