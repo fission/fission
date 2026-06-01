@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	appsv1 "k8s.io/api/apps/v1"
 
 	"github.com/fission/fission/test/integration/framework"
 )
@@ -45,13 +46,21 @@ func TestPoolmgrNewdeployToggle(t *testing.T) {
 	f.Router(t).GetEventually(t, ctx, "/"+fnName, framework.BodyContains("world"))
 	require.Equal(t, "poolmgr", string(ns.GetFunction(t, ctx, fnName).Spec.InvokeStrategy.ExecutionStrategy.ExecutorType))
 
-	// → newdeploy
+	// → newdeploy: the transition (poolmgr→newdeploy) drives newdeploy's
+	// updateFunction "type changed to newdeploy" branch → createFunction, which
+	// must materialize a per-function Deployment. Assert on the live object, not
+	// just that traffic flows.
 	ns.CLI(t, ctx, "fn", "update", "--name", fnName, "--code", codePath,
 		"--minscale", "1", "--maxscale", "4", "--executortype", "newdeploy")
 	f.Router(t).GetEventually(t, ctx, "/"+fnName, framework.BodyContains("world"))
 	require.Equal(t, "newdeploy", string(ns.GetFunction(t, ctx, fnName).Spec.InvokeStrategy.ExecutionStrategy.ExecutorType))
+	ns.WaitForFunctionDeployment(t, ctx, fnName, func(*appsv1.Deployment) bool { return true },
+		"newdeploy executor created a per-function Deployment", 90*time.Second)
 
-	// → poolmgr
+	// → poolmgr: traffic must keep flowing after switching back. (The newdeploy
+	// Deployment is not torn down promptly on this transition — cleanup is
+	// deferred to the executor's periodic orphan reaper — so we don't assert on
+	// its removal here.)
 	ns.CLI(t, ctx, "fn", "update", "--name", fnName, "--code", codePath, "--executortype", "poolmgr")
 	f.Router(t).GetEventually(t, ctx, "/"+fnName, framework.BodyContains("world"))
 	require.Equal(t, "poolmgr", string(ns.GetFunction(t, ctx, fnName).Spec.InvokeStrategy.ExecutionStrategy.ExecutorType))
