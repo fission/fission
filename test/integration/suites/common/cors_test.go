@@ -275,9 +275,9 @@ func TestCORS_HTTPTrigger(t *testing.T) {
 	})
 
 	t.Run("admission rejects CorsConfig with wildcard + credentials", func(t *testing.T) {
-		// HTTPTriggerCorsConfig.Validate panics in code but the validating
-		// webhook converts that into an admission rejection. The trigger
-		// must never reconcile into a broken state.
+		// The API server's CEL validation (x-kubernetes-validations) rejects
+		// this combination at admission, so the trigger never reconciles into
+		// a broken state.
 		bad := &fv1.HTTPTrigger{
 			ObjectMeta: metav1.ObjectMeta{Name: "bad-cors-" + ns.ID, Namespace: ns.Name},
 			Spec: fv1.HTTPTriggerSpec{
@@ -300,9 +300,10 @@ func TestCORS_HTTPTrigger(t *testing.T) {
 		// a NotFound (no webhook installed) and the error message names
 		// the offending field so future regressions surface clearly.
 		assert.Falsef(t, apierrors.IsNotFound(err), "expected validation rejection, got NotFound: %v", err)
+		msg := strings.ToLower(err.Error())
 		assert.Truef(t,
-			strings.Contains(err.Error(), "AllowCredentials") || strings.Contains(err.Error(), "CorsConfig"),
-			"rejection error should mention AllowCredentials or CorsConfig (got %v)", err)
+			strings.Contains(msg, "corsconfig") || strings.Contains(msg, "allowcredentials") || strings.Contains(msg, "credentials"),
+			"rejection error should mention the CORS config / credentials (got %v)", err)
 	})
 
 	t.Run("admission rejects CorsConfig with origin containing path", func(t *testing.T) {

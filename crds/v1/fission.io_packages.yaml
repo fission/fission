@@ -63,6 +63,11 @@ spec:
                           sha256, used for a checksum.
                         type: string
                     type: object
+                    x-kubernetes-validations:
+                    - message: checksum must be empty, or its type must be 'sha256'
+                        (the only supported checksum type)
+                      rule: ((!has(self.type) || self.type == '') && (!has(self.sum)
+                        || self.sum == '')) || self.type == 'sha256'
                   literal:
                     description: |-
                       Literal contents of the package. Can be used for
@@ -75,6 +80,10 @@ spec:
                       Available value:
                        - literal
                        - url
+                    enum:
+                    - ""
+                    - literal
+                    - url
                     type: string
                   url:
                     description: URL references a package.
@@ -111,6 +120,11 @@ spec:
                           sha256, used for a checksum.
                         type: string
                     type: object
+                    x-kubernetes-validations:
+                    - message: checksum must be empty, or its type must be 'sha256'
+                        (the only supported checksum type)
+                      rule: ((!has(self.type) || self.type == '') && (!has(self.sum)
+                        || self.sum == '')) || self.type == 'sha256'
                   literal:
                     description: |-
                       Literal contents of the package. Can be used for
@@ -123,6 +137,10 @@ spec:
                       Available value:
                        - literal
                        - url
+                    enum:
+                    - ""
+                    - literal
+                    - url
                     type: string
                   url:
                     description: URL references a package.
@@ -140,6 +158,13 @@ spec:
               buildstatus:
                 default: pending
                 description: BuildStatus is the package build status.
+                enum:
+                - ""
+                - pending
+                - running
+                - succeeded
+                - failed
+                - none
                 type: string
               conditions:
                 description: Conditions represent the latest observations of the package's
