@@ -16,11 +16,8 @@ type HTTPTrigger struct {
 	GenericWebhook[*v1.HTTPTrigger]
 }
 
-// log is for logging in this package.
-var httptriggerlog = loggerfactory.GetLogger().WithName("httptrigger-resource")
-
 func (r *HTTPTrigger) SetupWebhookWithManager(mgr ctrl.Manager) error {
-	r.Logger = httptriggerlog
+	r.Logger = loggerfactory.GetLogger().WithName("httptrigger-resource")
 	r.Validator = r
 	return r.GenericWebhook.SetupWebhookWithManager(mgr, &v1.HTTPTrigger{})
 }

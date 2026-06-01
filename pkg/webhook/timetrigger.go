@@ -16,11 +16,8 @@ type TimeTrigger struct {
 	GenericWebhook[*v1.TimeTrigger]
 }
 
-// log is for logging in this package.
-var timetriggerlog = loggerfactory.GetLogger().WithName("timetrigger-resource")
-
 func (r *TimeTrigger) SetupWebhookWithManager(mgr ctrl.Manager) error {
-	r.Logger = timetriggerlog
+	r.Logger = loggerfactory.GetLogger().WithName("timetrigger-resource")
 	r.Validator = r
 	return r.GenericWebhook.SetupWebhookWithManager(mgr, &v1.TimeTrigger{})
 }

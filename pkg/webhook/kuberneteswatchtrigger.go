@@ -19,11 +19,8 @@ type KubernetesWatchTrigger struct {
 	GenericWebhook[*v1.KubernetesWatchTrigger]
 }
 
-// log is for logging in this package.
-var kuberneteswatchtriggerlog = loggerfactory.GetLogger().WithName("kuberneteswatchtrigger-resource")
-
 func (r *KubernetesWatchTrigger) SetupWebhookWithManager(mgr ctrl.Manager) error {
-	r.Logger = kuberneteswatchtriggerlog
+	r.Logger = loggerfactory.GetLogger().WithName("kuberneteswatchtrigger-resource")
 	r.Validator = r
 	return r.GenericWebhook.SetupWebhookWithManager(mgr, &v1.KubernetesWatchTrigger{})
 }
