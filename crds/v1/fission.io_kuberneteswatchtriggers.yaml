@@ -66,21 +66,35 @@ spec:
                       Available value:
                       - name
                       - function-weights
+                    enum:
+                    - name
+                    - function-weights
                     type: string
                 required:
                 - name
                 - type
                 type: object
+                x-kubernetes-validations:
+                - message: functionref.name must be a valid DNS1123 label (lowercase
+                    alphanumeric or '-', start/end alphanumeric, max 63 chars) when
+                    type is 'name'
+                  rule: self.type != 'name' || (self.name.size() <= 63 && self.name.matches('^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'))
               labelselector:
                 additionalProperties:
                   type: string
                 description: Resource labels
                 type: object
               namespace:
+                maxLength: 63
+                pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                 type: string
               type:
                 description: Type of resource to watch (Pod, Service, etc.)
                 type: string
+                x-kubernetes-validations:
+                - message: spec.type must be one of POD, SERVICE, REPLICATIONCONTROLLER,
+                    JOB (case-insensitive)
+                  rule: self.upperAscii() in ['POD','SERVICE','REPLICATIONCONTROLLER','JOB']
             required:
             - functionref
             - namespace
