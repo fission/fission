@@ -15,22 +15,24 @@ import (
 
 // localObjectStore is an os-based objectStore rooted at <localPath>/<container>.
 //
-// All file access goes through an *os.Root opened on the container directory.
-// Because the object id arrives from the request (?id=<id>), this matters for
-// security: os.Root confines every operation to the container in the kernel,
-// rejecting absolute paths and ".." traversal, so a crafted id can never read
-// or delete a file outside it (e.g. ?id=/etc/passwd or ?id=../../...).
+// Every file operation goes through an os.Root opened on the container
+// directory. Because the object id arrives from the request (?id=<id>), this
+// matters for security: os.Root confines the operation to the container in the
+// kernel, rejecting absolute paths and ".." traversal, so a crafted id can
+// never read or delete a file outside it (e.g. ?id=/etc/passwd or ?id=../..).
+// The root is opened per operation rather than held on the struct, so no
+// directory file descriptor is kept for the process lifetime; the extra openat
+// is negligible at storagesvc's request volume.
 //
 // Object ids are the absolute path of the stored file, the format the local
 // backend has always produced; they are kept for in-place-upgrade compatibility
 // and converted back to a root-relative name for each operation.
 type localObjectStore struct {
-	root          *os.Root
 	containerPath string
 }
 
 // newLocalObjectStore creates (if necessary) the container directory under
-// localPath and opens an os.Root on it.
+// localPath.
 func newLocalObjectStore(localPath, container string) (*localObjectStore, error) {
 	containerPath, err := filepath.Abs(filepath.Join(localPath, container))
 	if err != nil {
@@ -39,11 +41,7 @@ func newLocalObjectStore(localPath, container string) (*localObjectStore, error)
 	if err := os.MkdirAll(containerPath, 0o755); err != nil {
 		return nil, err
 	}
-	root, err := os.OpenRoot(containerPath)
-	if err != nil {
-		return nil, err
-	}
-	return &localObjectStore{root: root, containerPath: containerPath}, nil
+	return &localObjectStore{containerPath: containerPath}, nil
 }
 
 // relName converts an id to a name relative to the container root. ids are
@@ -68,7 +66,13 @@ func (s *localObjectStore) relName(id string) (string, error) {
 }
 
 func (s *localObjectStore) put(name string, r io.Reader, _ int64) (string, error) {
-	f, err := s.root.Create(filepath.FromSlash(name))
+	root, err := os.OpenRoot(s.containerPath)
+	if err != nil {
+		return "", err
+	}
+	defer root.Close()
+
+	f, err := root.Create(filepath.FromSlash(name))
 	if err != nil {
 		return "", err
 	}
@@ -86,7 +90,13 @@ func (s *localObjectStore) open(id string) (io.ReadCloser, error) {
 	if err != nil {
 		return nil, err
 	}
-	f, err := s.root.Open(name)
+	root, err := os.OpenRoot(s.containerPath)
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
+
+	f, err := root.Open(name)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return nil, ErrNotFound
@@ -101,7 +111,13 @@ func (s *localObjectStore) size(id string) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	info, err := s.root.Stat(name)
+	root, err := os.OpenRoot(s.containerPath)
+	if err != nil {
+		return 0, err
+	}
+	defer root.Close()
+
+	info, err := root.Stat(name)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return 0, ErrNotFound
@@ -116,7 +132,13 @@ func (s *localObjectStore) remove(id string) error {
 	if err != nil {
 		return err
 	}
-	if err := s.root.Remove(name); err != nil {
+	root, err := os.OpenRoot(s.containerPath)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+
+	if err := root.Remove(name); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return ErrNotFound
 		}
@@ -163,7 +185,13 @@ func (s *localObjectStore) exists(id string) (bool, error) {
 		// reported as absent rather than surfaced as an error.
 		return false, nil
 	}
-	if _, err := s.root.Stat(name); err != nil {
+	root, err := os.OpenRoot(s.containerPath)
+	if err != nil {
+		return false, err
+	}
+	defer root.Close()
+
+	if _, err := root.Stat(name); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return false, nil
 		}

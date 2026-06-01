@@ -43,7 +43,6 @@ const (
 var (
 	ErrNotFound                = errors.New("not found")
 	ErrRetrievingItem          = errors.New("unable to retrieve item")
-	ErrOpeningItem             = errors.New("unable to open item")
 	ErrWritingFile             = errors.New("unable to write file")
 	ErrWritingFileIntoResponse = errors.New("unable to copy item into http response")
 )

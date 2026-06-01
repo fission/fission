@@ -206,8 +206,6 @@ func (ss *StorageService) downloadHandler(w http.ResponseWriter, r *http.Request
 			http.Error(w, "Error retrieving item: not found", http.StatusNotFound)
 		case ErrRetrievingItem:
 			http.Error(w, "Error retrieving item", http.StatusBadRequest)
-		case ErrOpeningItem:
-			http.Error(w, "Error opening item", http.StatusBadRequest)
 		case ErrWritingFileIntoResponse:
 			http.Error(w, "Error writing response", http.StatusInternalServerError)
 		}
