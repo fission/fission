@@ -14,7 +14,6 @@ import (
 	"os"
 	"os/exec"
 	"path"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -154,14 +153,14 @@ func (builder *Builder) Handler(w http.ResponseWriter, r *http.Request) {
 		"buildCommandLen", len(req.BuildCommand))
 
 	logger.V(1).Info("starting build")
-	srcPkgPath, err := utils.SanitizeFilePath(filepath.Join(builder.sharedVolumePath, req.SrcPkgFilename), builder.sharedVolumePath)
+	srcPkgPath, err := utils.RootJoin(builder.sharedVolumePath, req.SrcPkgFilename)
 	if err != nil {
 		logger.Error(err, "filename", req.SrcPkgFilename)
 		builder.reply(r.Context(), w, "", err.Error(), http.StatusBadRequest)
 		return
 	}
 	deployPkgFilename := fmt.Sprintf("%s-%s", req.SrcPkgFilename, strings.ToLower(uniuri.NewLen(6)))
-	deployPkgPath, err := utils.SanitizeFilePath(filepath.Join(builder.sharedVolumePath, deployPkgFilename), builder.sharedVolumePath)
+	deployPkgPath, err := utils.RootJoin(builder.sharedVolumePath, deployPkgFilename)
 	if err != nil {
 		logger.Error(err, "filename", req.SrcPkgFilename)
 		builder.reply(r.Context(), w, "", err.Error(), http.StatusBadRequest)
@@ -205,7 +204,7 @@ func (builder *Builder) Clean(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	srcPkgFilename := r.URL.Query().Get("name")
-	srcPkgPath, err := utils.SanitizeFilePath(filepath.Join(builder.sharedVolumePath, srcPkgFilename), builder.sharedVolumePath)
+	srcPkgPath, err := utils.RootJoin(builder.sharedVolumePath, srcPkgFilename)
 	if err != nil {
 		logger.Error(err, "rejecting clean request", "source_package", srcPkgFilename)
 		builder.reply(r.Context(), w, srcPkgFilename, fmt.Sprintf("error: invalid name: %s", err.Error()), http.StatusBadRequest)
@@ -255,7 +254,7 @@ func (builder *Builder) build(ctx context.Context, command string, args []string
 
 	cmd := exec.Command(command, args...)
 
-	fi, err := os.Stat(srcPkgPath)
+	fi, err := utils.RootStat(builder.sharedVolumePath, srcPkgPath)
 	if err != nil {
 		return "", fmt.Errorf("could not find srcPkgPath: '%s'", srcPkgPath)
 	}

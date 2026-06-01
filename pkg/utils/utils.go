@@ -289,6 +289,11 @@ func IsOwnerReferencesEnabled() bool {
 }
 
 // SanitizeFilePath checks if the path is valid to prevent directory traversal attacks.
+//
+// Deprecated: prefer RootJoin (to validate a path) or the Root* helpers (to
+// perform an os.Root-confined operation). Those validate via os.Root semantics
+// and are recognized by static analysis (CodeQL go/path-injection) as a
+// traversal barrier, which this Clean+HasPrefix check is not.
 func SanitizeFilePath(path string, safedir string) (string, error) {
 	if len(path) == 0 {
 		return "", errors.New("invalid path")
