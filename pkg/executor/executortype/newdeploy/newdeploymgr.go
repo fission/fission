@@ -306,12 +306,18 @@ func (deploy *NewDeploy) AdoptExistingResources(ctx context.Context) {
 			fn := &fnList.Items[i]
 			if fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypeNewdeploy {
 				wg.Go(func() {
-					_, err = deploy.fnCreate(ctx, fn)
-					if err != nil {
-						deploy.logger.Error(err, "failed to adopt resources for function")
+					// Route through createFunction (throttled) rather than calling
+					// fnCreate directly: the Function reconciler also re-stamps existing
+					// objects on its initial sync, so going through the per-UID throttler
+					// makes adopt and reconcile single-flight instead of racing each other
+					// on the in-place Update (which previously produced resourceVersion
+					// conflicts that tripped fnCreate's destroy-on-error path). The local
+					// err also avoids a data race on the shared loop variable.
+					if _, err := deploy.createFunction(ctx, fn); err != nil {
+						deploy.logger.Error(err, "failed to adopt resources for function", "function", fn.Name)
 						return
 					}
-					deploy.logger.Info("adopt resources for function", "function", fn.Name)
+					deploy.logger.Info("adopted resources for function", "function", fn.Name)
 				})
 			}
 		}
@@ -429,6 +435,17 @@ func (deploy *NewDeploy) deleteFunction(ctx context.Context, fn *fv1.Function) e
 	return nil
 }
 
+// destroyOnCreateError reports whether a fnCreate failure warrants tearing down
+// the function's partial resources. A Conflict or AlreadyExists means the object
+// exists and was concurrently modified (e.g. the adopt pass racing a reconcile,
+// or two reconciles), so deleting it would turn a transient blip into a cold
+// recreate — leave it for the next reconcile to converge instead. Genuine
+// creation failures (quota, invalid spec, API errors) still trigger cleanup so a
+// brand-new function doesn't leak half-created objects.
+func destroyOnCreateError(err error) bool {
+	return !k8sErrs.IsConflict(err) && !k8sErrs.IsAlreadyExists(err)
+}
+
 func (deploy *NewDeploy) fnCreate(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
 	// Defence in depth for GHSA-cvw6-gfvv-953q — primary defence is the
 	// admission webhook in pkg/webhook/function.go, but a stale Function
@@ -470,7 +487,9 @@ func (deploy *NewDeploy) fnCreate(ctx context.Context, fn *fv1.Function) (*fscac
 	svc, err := deploy.createOrGetSvc(ctx, fn, deployLabels, deployAnnotations, objName, ns)
 	if err != nil {
 		deploy.logger.Error(err, "error creating service", "service", objName)
-		go cleanupFunc(context.Background(), ns, objName)
+		if destroyOnCreateError(err) {
+			go cleanupFunc(context.Background(), ns, objName)
+		}
 		return nil, fmt.Errorf("error creating service %s: %w", objName, err)
 	}
 	svcAddress := fmt.Sprintf("%s.%s", svc.Name, svc.Namespace)
@@ -478,14 +497,18 @@ func (deploy *NewDeploy) fnCreate(ctx context.Context, fn *fv1.Function) (*fscac
 	depl, err := deploy.createOrGetDeployment(ctx, fn, env, objName, deployLabels, deployAnnotations, ns)
 	if err != nil {
 		deploy.logger.Error(err, "error creating deployment", "deployment", objName)
-		go cleanupFunc(context.Background(), ns, objName)
+		if destroyOnCreateError(err) {
+			go cleanupFunc(context.Background(), ns, objName)
+		}
 		return nil, fmt.Errorf("error creating deployment %s: %w", objName, err)
 	}
 
 	hpa, err := deploy.hpaops.CreateOrGetHpa(ctx, fn, objName, &fn.Spec.InvokeStrategy.ExecutionStrategy, depl, deployLabels, deployAnnotations)
 	if err != nil {
 		deploy.logger.Error(err, "error creating HPA", "hpa", objName)
-		go cleanupFunc(context.Background(), ns, objName)
+		if destroyOnCreateError(err) {
+			go cleanupFunc(context.Background(), ns, objName)
+		}
 		return nil, fmt.Errorf("error creating HPA %s: %w", objName, err)
 	}
 

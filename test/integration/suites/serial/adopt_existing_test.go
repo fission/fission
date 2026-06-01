@@ -35,20 +35,17 @@ import (
 // reaper (which deletes objects whose annotation != the current ID) leaves it
 // alone instead of deleting it and forcing a cold recreate.
 //
-//   - poolmgr: the env-scoped warm-pool Deployment (createPoolDeployment adopt
-//     branch) is re-stamped exactly once via the serialized getPool path, so we
-//     make the strong claim there — adopted in place (same UID + creationTimestamp)
-//     with the annotation flipped — and assert the function keeps serving.
-//   - newdeploy / container: created and invoked so the restart exercises their
-//     AdoptExistingResources branches (createOrGetService/createOrGetDeployment —
-//     coverage). We do NOT assert on their per-function Deployments afterward: adopt
-//     races the Function reconciler on them, so that Deployment can be deleted and
-//     recreated (or briefly absent) around a restart independently of adopt, which
-//     would make any identity/existence assertion flaky.
+// For all three types — the per-function newdeploy/container Deployment and the
+// env-scoped poolmgr pool Deployment — we assert the strong invariant: same UID +
+// creationTimestamp (adopted, not deleted-and-recreated) with the annotation
+// flipped to the new executor, plus the function keeps serving. This is reliable
+// for the per-function Deployments because adopt now runs through the throttled
+// createFunction (single-flighting with the Function reconciler) and a transient
+// conflict no longer tears the resources down.
 //
 // The services `update` RBAC the newdeploy/container adopt path depends on — the
-// gap this suite first surfaced — is asserted directly and deterministically via
-// a SubjectAccessReview, so a regression fails cleanly instead of only flaking.
+// gap this suite first surfaced — is also asserted directly and deterministically
+// via a SubjectAccessReview, so an RBAC regression fails cleanly.
 //
 // This test lives in the serial suite because restarting the single,
 // cluster-wide executor is incompatible with the parallel common suite.
@@ -124,14 +121,18 @@ func TestAdoptExistingResources(t *testing.T) {
 	instIDOf := func(d *appsv1.Deployment) string { return d.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL] }
 	anyDeployment := func(*appsv1.Deployment) bool { return true }
 
-	// Snapshot the poolmgr warm-pool Deployment and the executor instance ID that
-	// owns it. This is the one backing object we can make a deterministic in-place
-	// adoption claim on (see below).
+	// Snapshot each backing Deployment and the executor instance ID that owns it.
+	ndBefore := ns.WaitForFunctionDeployment(t, ctx, ndFn, anyDeployment,
+		"newdeploy Deployment exists before adopt", 90*time.Second)
+	ctrBefore := ns.WaitForFunctionDeployment(t, ctx, ctrFn, anyDeployment,
+		"container Deployment exists before adopt", 90*time.Second)
 	poolBefore := ns.WaitForPoolDeployment(t, ctx, envName, anyDeployment,
 		"poolmgr pool Deployment exists before adopt", 90*time.Second)
-	require.NotEmptyf(t, instIDOf(poolBefore),
-		"pool Deployment %q should carry an executor instance ID before adopt", poolBefore.Name)
-	oldPool := instIDOf(poolBefore)
+	for _, d := range []*appsv1.Deployment{ndBefore, ctrBefore, poolBefore} {
+		require.NotEmptyf(t, instIDOf(d),
+			"deployment %q should carry an executor instance ID before adopt", d.Name)
+	}
+	oldND, oldCTR, oldPool := instIDOf(ndBefore), instIDOf(ctrBefore), instIDOf(poolBefore)
 
 	// Enable adopt and restart the executor. Once the new pod reports ready its
 	// adopt pass has run for all three executor types (newdeploy, container,
@@ -140,35 +141,47 @@ func TestAdoptExistingResources(t *testing.T) {
 	t.Cleanup(restore)
 	f.WaitForExecutorRollout(t, ctx, gen, 5*time.Minute)
 
-	// poolmgr: getPool is serialized through the pool manager's request channel, so
-	// the env-scoped pool Deployment is re-stamped exactly once, in place — adopt
-	// can't race the environment reconciler on it. Assert the strong adoption
-	// invariant here: same UID + creationTimestamp (not deleted-and-recreated) with
-	// the instance-ID annotation flipped to the new executor.
-	//
-	// We deliberately do NOT assert on the newdeploy/container *per-function*
-	// Deployments. Adopt calls fnCreate directly while the Function reconciler also
-	// (re)creates via its throttled path, and the two race: that Deployment can be
-	// deleted and recreated — or briefly absent — around a restart independently of
-	// adopt, so asserting its identity or existence is inherently flaky. Their adopt
-	// code paths are still exercised by the restart (coverage), and the services
-	// `update` RBAC they depend on is asserted deterministically by the
-	// SubjectAccessReview above.
+	// reStamped matches a Deployment whose instance-ID annotation has flipped to a
+	// new, non-empty value — i.e. the new executor adopted it.
 	reStamped := func(oldID string) func(*appsv1.Deployment) bool {
 		return func(d *appsv1.Deployment) bool {
 			id := instIDOf(d)
 			return id != "" && id != oldID
 		}
 	}
+	// Each backing object must be adopted *in place*: same UID + creationTimestamp
+	// (not deleted-and-recreated) with the instance-ID annotation flipped to the
+	// new executor. This holds for the per-function newdeploy/container Deployments
+	// too — not just the env-scoped poolmgr pool — because adopt now runs through
+	// the throttled createFunction (single-flighting with the Function reconciler
+	// instead of racing it) and a transient conflict no longer tears the resources
+	// down. (Before those fixes, the per-function Deployment could be recreated
+	// around a restart, so this assertion was scoped to poolmgr only.)
+	assertAdoptedInPlace := func(kind string, before, after *appsv1.Deployment, oldID string) {
+		t.Helper()
+		require.Equalf(t, before.UID, after.UID,
+			"%s Deployment %q must be adopted in place (same UID), not recreated", kind, before.Name)
+		require.Equalf(t, before.CreationTimestamp, after.CreationTimestamp,
+			"%s Deployment %q must keep its creationTimestamp (adopted, not recreated)", kind, before.Name)
+		require.NotEqualf(t, oldID, instIDOf(after),
+			"%s Deployment %q instance-ID annotation should be re-stamped to the new executor", kind, before.Name)
+	}
+
+	ndAfter := ns.WaitForFunctionDeployment(t, ctx, ndFn, reStamped(oldND),
+		"newdeploy Deployment re-stamped with the new executor instance ID", 5*time.Minute)
+	assertAdoptedInPlace("newdeploy", ndBefore, ndAfter, oldND)
+
+	ctrAfter := ns.WaitForFunctionDeployment(t, ctx, ctrFn, reStamped(oldCTR),
+		"container Deployment re-stamped with the new executor instance ID", 5*time.Minute)
+	assertAdoptedInPlace("container", ctrBefore, ctrAfter, oldCTR)
+
 	poolAfter := ns.WaitForPoolDeployment(t, ctx, envName, reStamped(oldPool),
 		"poolmgr pool Deployment re-stamped with the new executor instance ID", 5*time.Minute)
-	require.Equalf(t, poolBefore.UID, poolAfter.UID,
-		"poolmgr pool Deployment %q must be adopted in place (same UID), not recreated", poolBefore.Name)
-	require.Equalf(t, poolBefore.CreationTimestamp, poolAfter.CreationTimestamp,
-		"poolmgr pool Deployment %q must keep its creationTimestamp (adopted, not recreated)", poolBefore.Name)
+	assertAdoptedInPlace("poolmgr", poolBefore, poolAfter, oldPool)
 
-	// The poolmgr function keeps serving after the restart: its specialized pod was
-	// re-adopted into the function-service cache (or re-specialized from the
-	// still-warm pool) with no cold recreate of the pool.
+	// All three functions still serve after the restart: adopt re-stamped the
+	// objects so the orphan reaper kept them, with no cold recreate needed.
 	r.GetEventually(t, ctx, "/"+pmFn, framework.BodyContains("world"))
+	r.GetEventually(t, ctx, "/"+ndFn, framework.BodyContains("world"))
+	r.GetEventually(t, ctx, "/"+ctrFn, is2xx)
 }
