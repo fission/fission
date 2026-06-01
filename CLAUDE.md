@@ -45,6 +45,9 @@ kubectl port-forward svc/router-internal 8889:8889 -n fission &
   Set runtime/builder image env vars (`NODE_RUNTIME_IMAGE`, `PYTHON_RUNTIME_IMAGE`, etc.) — tests `t.Skip` when their required image is unset.
   `TEST_NOCLEANUP=1` leaves resources for debugging.
 - Run a single test: `go test -tags=integration -run TestNodeHelloHTTP -v ./test/integration/suites/common/...`.
+- `suites/serial/` holds tests that mutate cluster-wide control-plane state (e.g. restarting the executor to exercise `AdoptExistingResources`) and so cannot run alongside the parallel `common` suite.
+  CI runs them after `common/` in the same step (reusing the port-forwards), single-package: `go test -tags=integration -p 1 ./test/integration/suites/serial/...`.
+  Restart the executor via `framework.SetExecutorEnv` + `WaitForExecutorRollout` (a completed rollout means the new pod's adopt pass has run, since `/readyz` gates on `cachesSynced`, set after `runAdoptCleanup`).
 - Framework reference + "Adding a new test" 12-step guide: `docs/test-migration/02-framework-api.md`.
 - The previous bash test suite (`test/tests/`, `test/run_test.sh`, `test/kind_CI.sh`, `test/utils.sh`, etc.) was retired in 2026-05; the migration history lives in `docs/test-migration/`.
 

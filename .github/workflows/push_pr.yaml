@@ -134,8 +134,11 @@ jobs:
       # not survive across GitHub Actions steps on every runner image.
       # Wait-for-readiness covers cluster startup races.
 
-      - name: Go integration tests (common phase)
-        timeout-minutes: 30
+      - name: Go integration tests (common + serial phases)
+        # Margin over the hard go-test timeouts this step contains (common 25m +
+        # serial 18m) plus image preload / port-forward setup, so a slow-but-valid
+        # run isn't killed by the step timeout before a go-test timeout can fire.
+        timeout-minutes: 50
         env:
           NODE_RUNTIME_IMAGE: ghcr.io/fission/node-env-22
           NODE_BUILDER_IMAGE: ghcr.io/fission/node-builder-22
@@ -233,6 +236,18 @@ jobs:
           fi
           go test -tags=integration "${COVER_FLAGS[@]}" -timeout=25m -parallel 6 -v \
             ./test/integration/suites/common/... "${COVER_ARGS[@]}"
+
+          # Serial phase: tests that mutate cluster-wide control-plane state
+          # (e.g. restarting the executor to exercise AdoptExistingResources)
+          # and so cannot run alongside the parallel common suite. Runs after
+          # it, single-package (-p 1), reusing the same port-forwards and HMAC
+          # secret established above. On the coverage leg the same -cover flags
+          # apply, so the in-process CLI coverage merges into covdata-cli and
+          # the executor pod's adopt-path coverage flushes to the node hostPath.
+          # -timeout is kept above the test's own 15m context deadline so the
+          # context fires first (clear failure) rather than the hard timeout.
+          go test -tags=integration "${COVER_FLAGS[@]}" -p 1 -timeout=18m -v \
+            ./test/integration/suites/serial/... "${COVER_ARGS[@]}"
 
       - name: Collect integration coverage
         # Only the instrumented leg produced coverage; collect there.

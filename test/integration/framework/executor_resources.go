@@ -122,3 +122,57 @@ func (ns *TestNamespace) listFunctionHPAs(ctx context.Context, fnName string) ([
 	}
 	return list.Items, nil
 }
+
+// poolDeploymentSelector matches the single warm-pool Deployment the poolmgr
+// executor maintains per environment. Unlike newdeploy/container, poolmgr has
+// no per-function Deployment — its pods come from one env-scoped pool — so the
+// selector keys on environmentName + environmentNamespace + executorType
+// (gp.go getEnvironmentPoolLabels). Environments are namespaced, so the
+// namespace label is included (mirroring functionResourceSelector) to stay
+// unambiguous even if two namespaces reuse an env name.
+func (ns *TestNamespace) poolDeploymentSelector(envName string) string {
+	return fv1.ENVIRONMENT_NAME + "=" + envName +
+		"," + fv1.ENVIRONMENT_NAMESPACE + "=" + ns.Name +
+		"," + fv1.EXECUTOR_TYPE + "=" + string(fv1.ExecutorTypePoolmgr)
+}
+
+// PoolDeployment returns the poolmgr warm-pool Deployment for an environment.
+// Fails unless exactly one matches — call it only once the pool is known to
+// exist (e.g. after a poolmgr function on the env has served traffic, or after
+// WaitForPoolDeployment).
+func (ns *TestNamespace) PoolDeployment(t *testing.T, ctx context.Context, envName string) *appsv1.Deployment {
+	t.Helper()
+	items, err := ns.listPoolDeployments(ctx, envName)
+	require.NoErrorf(t, err, "PoolDeployment: list pool deployments for env %q", envName)
+	require.Lenf(t, items, 1, "PoolDeployment: expected exactly one pool deployment for env %q (got %d)", envName, len(items))
+	return &items[0]
+}
+
+// WaitForPoolDeployment polls until exactly one pool Deployment for the
+// environment exists and satisfies check, then returns the final object.
+func (ns *TestNamespace) WaitForPoolDeployment(t *testing.T, ctx context.Context, envName string, check func(*appsv1.Deployment) bool, reason string, timeout time.Duration) *appsv1.Deployment {
+	t.Helper()
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		items, err := ns.listPoolDeployments(ctx, envName)
+		if !assert.NoErrorf(c, err, "list pool deployments for env %q", envName) {
+			return
+		}
+		if !assert.Lenf(c, items, 1, "expected one pool deployment for env %q (got %d)", envName, len(items)) {
+			return
+		}
+		assert.Truef(c, check(&items[0]), "pool deployment for env %q: %s", envName, reason)
+	}, timeout, 2*time.Second)
+	return ns.PoolDeployment(t, ctx, envName)
+}
+
+// listPoolDeployments lists across all namespaces and filters by the env's
+// poolmgr labels, so it works regardless of any function-namespace override.
+func (ns *TestNamespace) listPoolDeployments(ctx context.Context, envName string) ([]appsv1.Deployment, error) {
+	list, err := ns.f.kubeClient.AppsV1().Deployments(metav1.NamespaceAll).List(ctx, metav1.ListOptions{
+		LabelSelector: ns.poolDeploymentSelector(envName),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return list.Items, nil
+}
