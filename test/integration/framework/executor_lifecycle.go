@@ -61,6 +61,15 @@ func (f *Framework) FissionNamespace() string {
 //
 // This is how a serial test exercises startup-only executor behaviour such as
 // ADOPT_EXISTING_RESOURCES: flip the env var, wait for the new pod, assert.
+//
+// The patch also forces the Deployment's strategy to Recreate. With the chart
+// default (RollingUpdate, maxSurge 25% → 1 with replicas=1) and leader election
+// disabled, a rollout briefly runs *two* executors with different instance IDs;
+// the outgoing one keeps re-stamping objects with its own ID while the incoming
+// one's adopt + cleanup pass runs, so the incoming executor's reaper deletes
+// (and the cluster then recreates) the very objects adopt is meant to keep.
+// Recreate terminates the old pod before starting the new one, giving the clean
+// single-instance restart adopt is designed for.
 func (f *Framework) SetExecutorEnv(t *testing.T, ctx context.Context, key, value string) (generation int64, restore func()) {
 	t.Helper()
 	ns := f.FissionNamespace()
@@ -90,12 +99,14 @@ func (f *Framework) SetExecutorEnv(t *testing.T, ctx context.Context, key, value
 }
 
 // patchExecutorEnv strategically merges a single env var (matched by name, the
-// env list's merge key) into the executor container and bumps the restartedAt
-// annotation to force a rollout. Other env entries and containers are left
-// untouched.
+// env list's merge key) into the executor container, forces the Recreate
+// strategy (so no two executors overlap during the rollout — see SetExecutorEnv),
+// and bumps the restartedAt annotation to force a rollout. Other env entries and
+// containers are left untouched; rollingUpdate is cleared because it is mutually
+// exclusive with Recreate.
 func (f *Framework) patchExecutorEnv(ctx context.Context, key, value string) (*appsv1.Deployment, error) {
 	patch := fmt.Sprintf(
-		`{"spec":{"template":{"metadata":{"annotations":{%q:%q}},"spec":{"containers":[{"name":%q,"env":[{"name":%q,"value":%q}]}]}}}}`,
+		`{"spec":{"strategy":{"type":"Recreate","rollingUpdate":null},"template":{"metadata":{"annotations":{%q:%q}},"spec":{"containers":[{"name":%q,"env":[{"name":%q,"value":%q}]}]}}}}`,
 		restartedAtAnnotation, strconv.FormatInt(time.Now().UnixNano(), 10),
 		executorContainerName, key, value,
 	)
