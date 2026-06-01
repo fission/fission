@@ -6,11 +6,13 @@ package reaper
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	apiv1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/go-logr/logr"
@@ -18,6 +20,28 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/utils"
 )
+
+// CleanupExecutorObjects reaps the HorizontalPodAutoscaler, Deployment and
+// Service objects of the given executor type whose executorInstanceId annotation
+// no longer matches instanceID (orphans left by a previous executor instance).
+// It's the shared body of the newdeploy and container managers'
+// CleanupOldExecutorObjects; errors are logged and swallowed, matching the
+// best-effort reaping the callers previously did inline.
+func CleanupExecutorObjects(ctx context.Context, logger logr.Logger, client kubernetes.Interface, instanceID string, executorType fv1.ExecutorType) {
+	logger.Info("starting to clean orphaned executor resources", "executorType", executorType, "instanceID", instanceID)
+	listOpts := metav1.ListOptions{
+		LabelSelector: labels.Set{fv1.EXECUTOR_TYPE: string(executorType)}.AsSelector().String(),
+	}
+	errs := errors.Join(
+		CleanupHpa(ctx, logger, client, instanceID, listOpts),
+		CleanupDeployments(ctx, logger, client, instanceID, listOpts),
+		CleanupServices(ctx, logger, client, instanceID, listOpts),
+	)
+	if errs != nil {
+		// TODO retry reaper; logged and ignored for now
+		logger.Error(errs, "failed to cleanup old executor objects", "executorType", executorType)
+	}
+}
 
 var (
 	deletePropagation = metav1.DeletePropagationBackground
