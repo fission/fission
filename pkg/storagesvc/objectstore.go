@@ -15,9 +15,8 @@ type objectInfo struct {
 	// id is the opaque identifier stored in Package URLs as ?id=<id>.
 	// For the local backend it is the absolute path of the stored file; for
 	// the s3 backend it is the object key (path.Join(subDir, uuid)). Both
-	// formats are preserved exactly as the previous graymeta/stow-backed
-	// implementation produced them, so archives created before an in-place
-	// upgrade keep resolving.
+	// formats are stable across releases so archives created before an
+	// in-place upgrade keep resolving.
 	id string
 	// lastMod is the object's last-modified time, used by the archive pruner
 	// to skip recently created (not-yet-referenced) archives.
@@ -25,10 +24,8 @@ type objectInfo struct {
 }
 
 // objectStore is an internal abstraction over the two supported storage
-// backends (local filesystem and S3). It replaces the previous
-// github.com/graymeta/stow Location/Container pair so that the S3 path can use
-// github.com/minio/minio-go/v7 directly and the binary no longer pulls in the
-// github.com/aws/aws-sdk-go v1 endpoint map.
+// backends: an os-based local filesystem store and a github.com/minio/minio-go/v7
+// S3 store.
 type objectStore interface {
 	// put stores the object under name (relative to the backend's container)
 	// and returns its opaque id.

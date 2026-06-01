@@ -40,7 +40,7 @@ type (
 	// StorageService is a struct to hold all things for storage service
 	StorageService struct {
 		logger        logr.Logger
-		storageClient *StowClient
+		storageClient *StorageClient
 		port          int
 		// authSecret, if non-empty, enables HMAC enforcement on /v1/archive.
 		authSecret []byte
@@ -99,7 +99,7 @@ func (ss *StorageService) uploadHandler(w http.ResponseWriter, r *http.Request) 
 	}
 	defer file.Close()
 
-	// stow wants the file size, but that's different from the
+	// the backend needs the file size, but that's different from the
 	// content length, the content length being the size of the
 	// encoded file in the HTTP request. So we require an
 	// "X-File-Size" header in bytes.
@@ -197,8 +197,7 @@ func (ss *StorageService) downloadHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Get the file (called "item" in stow's jargon), open it,
-	// stream it to response
+	// Get the file, open it, and stream it to the response.
 	err = ss.storageClient.copyFileToStream(fileId, w)
 	if err != nil {
 		logger.Error(err, "error getting file from storage client", "file_id", fileId)
@@ -241,7 +240,7 @@ func (ss *StorageService) healthHandler(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(http.StatusOK)
 }
 
-func MakeStorageService(logger logr.Logger, storageClient *StowClient, port int, authSecret, authSecretOld []byte) *StorageService {
+func MakeStorageService(logger logr.Logger, storageClient *StorageClient, port int, authSecret, authSecretOld []byte) *StorageService {
 	return &StorageService{
 		logger:        logger.WithName("storage_service"),
 		storageClient: storageClient,
@@ -302,9 +301,9 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		enablePruner = true
 	}
 	// create a storage client
-	storageClient, err := MakeStowClient(logger, storage)
+	storageClient, err := MakeStorageClient(logger, storage)
 	if err != nil {
-		return fmt.Errorf("error creating stowClient: %w", err)
+		return fmt.Errorf("error creating storageClient: %w", err)
 	}
 
 	// Read the shared HMAC secret from the env (the design at docs/internal-auth/00-design.md). Empty means the

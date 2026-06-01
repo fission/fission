@@ -5,6 +5,7 @@
 package storagesvc
 
 import (
+	"errors"
 	"io"
 	"io/fs"
 	"os"
@@ -14,17 +15,22 @@ import (
 
 // localObjectStore is an os-based objectStore rooted at <localPath>/<container>.
 //
-// To preserve backwards compatibility with the previous github.com/graymeta/stow
-// "local" backend, object ids are the ABSOLUTE path of the stored file
-// (filepath.Join(containerPath, name)). open/size/remove resolve an id directly
-// as a path and list returns absolute paths, exactly as stow/local did.
+// All file access goes through an *os.Root opened on the container directory.
+// Because the object id arrives from the request (?id=<id>), this matters for
+// security: os.Root confines every operation to the container in the kernel,
+// rejecting absolute paths and ".." traversal, so a crafted id can never read
+// or delete a file outside it (e.g. ?id=/etc/passwd or ?id=../../...).
+//
+// Object ids are the absolute path of the stored file, the format the local
+// backend has always produced; they are kept for in-place-upgrade compatibility
+// and converted back to a root-relative name for each operation.
 type localObjectStore struct {
-	// containerPath is the absolute path of <localPath>/<container>.
+	root          *os.Root
 	containerPath string
 }
 
 // newLocalObjectStore creates (if necessary) the container directory under
-// localPath and returns a localObjectStore rooted at it.
+// localPath and opens an os.Root on it.
 func newLocalObjectStore(localPath, container string) (*localObjectStore, error) {
 	containerPath, err := filepath.Abs(filepath.Join(localPath, container))
 	if err != nil {
@@ -33,37 +39,36 @@ func newLocalObjectStore(localPath, container string) (*localObjectStore, error)
 	if err := os.MkdirAll(containerPath, 0o755); err != nil {
 		return nil, err
 	}
-	return &localObjectStore{containerPath: containerPath}, nil
+	root, err := os.OpenRoot(containerPath)
+	if err != nil {
+		return nil, err
+	}
+	return &localObjectStore{root: root, containerPath: containerPath}, nil
 }
 
-// resolve maps an id (or upload name) to a filesystem path confined to the
-// container directory. stow/local accepted both absolute ids (the form it
-// produced) and container-relative ids; we mirror that, but reject any path
-// that escapes containerPath. Because the id originates from the request
-// (?id=<id>), this guards against path traversal (e.g. "/etc/passwd" or
-// "../../etc/passwd"); an escaping id is reported as ErrNotFound so handlers
-// return 404 without leaking whether the target exists.
-func (s *localObjectStore) resolve(idOrName string) (string, error) {
-	p := idOrName
-	if !filepath.IsAbs(p) {
-		p = filepath.Join(s.containerPath, filepath.FromSlash(p))
+// relName converts an id to a name relative to the container root. ids are
+// stored as absolute paths; os.Root operates on root-relative names. os.Root
+// itself rejects anything that escapes the root, but we additionally reject
+// absolute/".." escapes here so callers get a clean ErrNotFound rather than an
+// opaque os.Root error.
+func (s *localObjectStore) relName(id string) (string, error) {
+	name := filepath.FromSlash(id)
+	if filepath.IsAbs(name) {
+		rel, err := filepath.Rel(s.containerPath, name)
+		if err != nil {
+			return "", ErrNotFound
+		}
+		name = rel
 	}
-	p = filepath.Clean(p)
-	if p != s.containerPath && !strings.HasPrefix(p, s.containerPath+string(os.PathSeparator)) {
+	name = filepath.Clean(name)
+	if name == "." || name == ".." || strings.HasPrefix(name, ".."+string(os.PathSeparator)) {
 		return "", ErrNotFound
 	}
-	return p, nil
+	return name, nil
 }
 
-func (s *localObjectStore) put(name string, r io.Reader, size int64) (string, error) {
-	path, err := s.resolve(name)
-	if err != nil {
-		return "", err
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return "", err
-	}
-	f, err := os.Create(path)
+func (s *localObjectStore) put(name string, r io.Reader, _ int64) (string, error) {
+	f, err := s.root.Create(filepath.FromSlash(name))
 	if err != nil {
 		return "", err
 	}
@@ -72,18 +77,18 @@ func (s *localObjectStore) put(name string, r io.Reader, size int64) (string, er
 	if _, err := io.Copy(f, r); err != nil {
 		return "", err
 	}
-	// id is the absolute path, matching stow/local's item.ID().
-	return path, nil
+	// id is the absolute path of the stored file.
+	return filepath.Join(s.containerPath, filepath.FromSlash(name)), nil
 }
 
 func (s *localObjectStore) open(id string) (io.ReadCloser, error) {
-	path, err := s.resolve(id)
+	name, err := s.relName(id)
 	if err != nil {
 		return nil, err
 	}
-	f, err := os.Open(path)
+	f, err := s.root.Open(name)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, fs.ErrNotExist) {
 			return nil, ErrNotFound
 		}
 		return nil, err
@@ -92,13 +97,13 @@ func (s *localObjectStore) open(id string) (io.ReadCloser, error) {
 }
 
 func (s *localObjectStore) size(id string) (int64, error) {
-	path, err := s.resolve(id)
+	name, err := s.relName(id)
 	if err != nil {
 		return 0, err
 	}
-	info, err := os.Stat(path)
+	info, err := s.root.Stat(name)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, fs.ErrNotExist) {
 			return 0, ErrNotFound
 		}
 		return 0, err
@@ -107,15 +112,17 @@ func (s *localObjectStore) size(id string) (int64, error) {
 }
 
 func (s *localObjectStore) remove(id string) error {
-	path, err := s.resolve(id)
+	name, err := s.relName(id)
 	if err != nil {
 		return err
 	}
-	err = os.Remove(path)
-	if err != nil && os.IsNotExist(err) {
-		return ErrNotFound
+	if err := s.root.Remove(name); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return ErrNotFound
+		}
+		return err
 	}
-	return err
+	return nil
 }
 
 func (s *localObjectStore) list(prefix string) ([]objectInfo, error) {
@@ -133,7 +140,7 @@ func (s *localObjectStore) list(prefix string) ([]objectInfo, error) {
 		if relErr != nil {
 			return relErr
 		}
-		if prefix != "" && !hasPathPrefix(filepath.ToSlash(rel), prefix) {
+		if prefix != "" && !strings.HasPrefix(filepath.ToSlash(rel), prefix) {
 			return nil
 		}
 		fi, infoErr := d.Info()
@@ -150,24 +157,17 @@ func (s *localObjectStore) list(prefix string) ([]objectInfo, error) {
 }
 
 func (s *localObjectStore) exists(id string) (bool, error) {
-	path, err := s.resolve(id)
+	name, err := s.relName(id)
 	if err != nil {
 		// An id that escapes the container (or is otherwise unresolvable) is
 		// reported as absent rather than surfaced as an error.
 		return false, nil
 	}
-	_, err = os.Stat(path)
-	if err != nil {
-		if os.IsNotExist(err) {
+	if _, err := s.root.Stat(name); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
 			return false, nil
 		}
 		return false, err
 	}
 	return true, nil
-}
-
-// hasPathPrefix reports whether the slash-separated path p starts with prefix.
-// It mirrors stow's string-prefix matching on relative names.
-func hasPathPrefix(p, prefix string) bool {
-	return len(p) >= len(prefix) && p[:len(prefix)] == prefix
 }

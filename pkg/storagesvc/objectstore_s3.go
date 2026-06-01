@@ -13,12 +13,10 @@ import (
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
-// s3ObjectStore is a minio-go/v7-backed objectStore. It replaces the previous
-// github.com/graymeta/stow "s3" backend, dropping the transitive
-// github.com/aws/aws-sdk-go v1 dependency.
+// s3ObjectStore is a github.com/minio/minio-go/v7-backed objectStore.
 //
-// Object ids are the object key (path.Join(subDir, uuid)), exactly as stow/s3
-// produced them, so archives created before an in-place upgrade keep resolving.
+// Object ids are the object key (path.Join(subDir, uuid)); the format is stable
+// across releases so archives created before an in-place upgrade keep resolving.
 type s3ObjectStore struct {
 	client *minio.Client
 	bucket string
@@ -29,7 +27,8 @@ type s3ObjectStore struct {
 func newS3ObjectStore(endpoint, accessKeyID, secretAccessKey, region, bucket string) (*s3ObjectStore, error) {
 	client, err := minio.New(endpoint, &minio.Options{
 		Creds: credentials.NewStaticV4(accessKeyID, secretAccessKey, ""),
-		// The previous stow/s3 backend set ConfigDisableSSL=true.
+		// Plain HTTP to the endpoint (the storagesvc S3 backend has always
+		// connected without TLS).
 		Secure: false,
 		Region: region,
 	})
@@ -72,7 +71,7 @@ func (s *s3ObjectStore) put(name string, r io.Reader, size int64) (string, error
 	if err != nil {
 		return "", err
 	}
-	// id is the object key, matching stow/s3's item.ID().
+	// id is the object key.
 	return name, nil
 }
 

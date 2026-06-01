@@ -23,11 +23,9 @@ type (
 		storage Storage
 	}
 
-	// StowClient is the storage-service client. Historically it wrapped the
-	// github.com/graymeta/stow abstraction (hence the name); it now drives an
-	// internal objectStore backend (os-based local or minio-go/v7 S3) so the
-	// fission-bundle binary no longer pulls in github.com/aws/aws-sdk-go v1.
-	StowClient struct {
+	// StorageClient is the storage-service client. It drives an internal
+	// objectStore backend (os-based local or minio-go/v7 S3).
+	StorageClient struct {
 		logger  logr.Logger
 		config  *storageConfig
 		backend objectStore
@@ -51,8 +49,8 @@ var (
 	ErrWritingFileIntoResponse = errors.New("unable to copy item into http response")
 )
 
-// MakeStowClient create a new StowClient for given storage
-func MakeStowClient(logger logr.Logger, storage Storage) (*StowClient, error) {
+// MakeStorageClient create a new StorageClient for given storage
+func MakeStorageClient(logger logr.Logger, storage Storage) (*StorageClient, error) {
 	storageType := getStorageType(storage)
 	if strings.Compare(storageType, "local") == 1 && strings.Compare(storageType, "s3") == 1 {
 		return nil, errors.New("storage types other than 'local' and 's3' are not implemented")
@@ -67,15 +65,15 @@ func MakeStowClient(logger logr.Logger, storage Storage) (*StowClient, error) {
 		return nil, err
 	}
 
-	return &StowClient{
-		logger:  logger.WithName("stow_client"),
+	return &StorageClient{
+		logger:  logger.WithName("storage_client"),
 		config:  config,
 		backend: backend,
 	}, nil
 }
 
 // putFile writes the file on the storage
-func (client *StowClient) putFile(file multipart.File, fileSize int64) (string, error) {
+func (client *StorageClient) putFile(file multipart.File, fileSize int64) (string, error) {
 	uploadName, err := client.config.storage.getUploadFileName()
 	if err != nil {
 		return "", err
@@ -93,7 +91,7 @@ func (client *StowClient) putFile(file multipart.File, fileSize int64) (string, 
 }
 
 // copyFileToStream gets the file contents into a stream
-func (client *StowClient) copyFileToStream(fileId string, w io.Writer) error {
+func (client *StorageClient) copyFileToStream(fileId string, w io.Writer) error {
 	f, err := client.backend.open(fileId)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
@@ -115,11 +113,11 @@ func (client *StowClient) copyFileToStream(fileId string, w io.Writer) error {
 }
 
 // removeFileByID deletes the file from storage
-func (client *StowClient) removeFileByID(itemID string) error {
+func (client *StorageClient) removeFileByID(itemID string) error {
 	return client.backend.remove(itemID)
 }
 
-func (client *StowClient) getFileSize(itemID string) (int64, error) {
+func (client *StorageClient) getFileSize(itemID string) (int64, error) {
 	size, err := client.backend.size(itemID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
@@ -132,7 +130,7 @@ func (client *StowClient) getFileSize(itemID string) (int64, error) {
 
 // exists reports whether an archive with the given id is present in storage,
 // returning ErrNotFound if it is not.
-func (client *StowClient) exists(itemID string) error {
+func (client *StorageClient) exists(itemID string) error {
 	ok, err := client.backend.exists(itemID)
 	if err != nil {
 		return err
@@ -147,7 +145,7 @@ func (client *StowClient) exists(itemID string) error {
 type filter func(objectInfo, any) bool
 
 // This method returns all items in a container, filtering out items based on the filter function passed to it
-func (client *StowClient) getItemIDsWithFilter(filterFunc filter, filterFuncParam any) ([]string, error) {
+func (client *StorageClient) getItemIDsWithFilter(filterFunc filter, filterFuncParam any) ([]string, error) {
 	items, err := client.backend.list(client.config.storage.getSubDir())
 	if err != nil {
 		return nil, fmt.Errorf("error getting items from container: %w", err)
@@ -166,7 +164,7 @@ func (client *StowClient) getItemIDsWithFilter(filterFunc filter, filterFuncPara
 
 // filterItemCreatedAMinuteAgo is one type of filter function that filters out items created less than a minute ago.
 // More filter functions can be written if needed, as long as they are of type filter
-func (client StowClient) filterItemCreatedAMinuteAgo(item objectInfo, currentTime any) bool {
+func (client StorageClient) filterItemCreatedAMinuteAgo(item objectInfo, currentTime any) bool {
 	if currentTime.(time.Time).Sub(item.lastMod) < 1*time.Minute {
 
 		client.logger.V(1).Info("item created less than a minute ago",
@@ -177,7 +175,7 @@ func (client StowClient) filterItemCreatedAMinuteAgo(item objectInfo, currentTim
 	return false
 }
 
-func (client StowClient) filterAllItems(item objectInfo, _ any) bool {
+func (client StorageClient) filterAllItems(item objectInfo, _ any) bool {
 	client.logger.V(1).Info("item info",
 		"item", item.id,
 		"last_modified_time", item.lastMod)

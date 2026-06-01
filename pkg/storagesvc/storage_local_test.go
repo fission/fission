@@ -33,8 +33,8 @@ func TestLocalObjectStoreRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, id)
 
-	// stow/local backwards-compat: the id is the ABSOLUTE path of the stored
-	// file, rooted under <root>/<container>.
+	// the id is the ABSOLUTE path of the stored file, rooted under
+	// <root>/<container>.
 	assert.True(t, filepath.IsAbs(id), "expected absolute-path id, got %q", id)
 	assert.Equal(t, filepath.Join(root, "fission-functions", "archive-1"), id)
 
@@ -101,11 +101,11 @@ func TestLocalObjectStoreRemove(t *testing.T) {
 	assert.False(t, ok)
 }
 
-// TestStowClientLocalRoundTrip exercises the StowClient wrapper over the local
+// TestStorageClientLocalRoundTrip exercises the StorageClient wrapper over the local
 // backend, covering the same paths the HTTP handlers use (putFile via the
 // configured upload name, copyFileToStream, getFileSize, exists,
 // getItemIDsWithFilter, removeFileByID).
-func TestStowClientLocalRoundTrip(t *testing.T) {
+func TestStorageClientLocalRoundTrip(t *testing.T) {
 	t.Parallel()
 
 	storage := localStorage{
@@ -113,7 +113,7 @@ func TestStowClientLocalRoundTrip(t *testing.T) {
 		containerName: "fission-functions",
 		localPath:     t.TempDir(),
 	}
-	client, err := MakeStowClient(logr.Discard(), storage)
+	client, err := MakeStorageClient(logr.Discard(), storage)
 	require.NoError(t, err)
 
 	payload := []byte("hello from storagesvc")
