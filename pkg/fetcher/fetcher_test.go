@@ -53,8 +53,9 @@ func TestMakeVolumeDir(t *testing.T) {
 
 func TestRename(t *testing.T) {
 	t.Parallel()
-	f := &Fetcher{logger: loggerfactory.GetLogger()}
 	dir := t.TempDir()
+	// rename is confined to the shared volume; src and dst live under it.
+	f := &Fetcher{logger: loggerfactory.GetLogger(), sharedVolumePath: dir}
 	src := filepath.Join(dir, "src")
 	dst := filepath.Join(dir, "dst")
 	require.NoError(t, os.WriteFile(src, []byte("x"), 0600))
