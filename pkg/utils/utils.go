@@ -40,12 +40,6 @@ func UrlForFunction(name, namespace string) string {
 	return fmt.Sprintf("%s/%s", prefix, name)
 }
 
-// IsNetworkError returns true if an error is a network error, and false otherwise.
-func IsNetworkError(err error) bool {
-	_, ok := err.(net.Error)
-	return ok
-}
-
 // GetFunctionIstioServiceName return service name of function for istio feature
 func GetFunctionIstioServiceName(fnName, fnNamespace string) string {
 	return fmt.Sprintf("istio-%s-%s", fnName, fnNamespace)
@@ -286,29 +280,4 @@ func DeleteOldPackages(pkgPath, pkgType string) error {
 func IsOwnerReferencesEnabled() bool {
 	disableOwnerReference, _ := strconv.ParseBool(os.Getenv(ENV_DISABLE_OWNER_REFERENCES))
 	return !disableOwnerReference
-}
-
-// SanitizeFilePath checks if the path is valid to prevent directory traversal attacks.
-//
-// Deprecated: prefer RootJoin (to validate a path) or the Root* helpers (to
-// perform an os.Root-confined operation). Those validate via os.Root semantics
-// and are recognized by static analysis (CodeQL go/path-injection) as a
-// traversal barrier, which this Clean+HasPrefix check is not.
-func SanitizeFilePath(path string, safedir string) (string, error) {
-	if len(path) == 0 {
-		return "", errors.New("invalid path")
-	}
-	if len(safedir) == 0 {
-		return "", errors.New("invalid safe directory")
-	}
-	// get normalized path and check for directory traversal attacks
-	normalizedPath := filepath.Clean(path)
-	if normalizedPath != path {
-		return "", errors.New("invalid path")
-	}
-	// check if the path is under the safe directory
-	if !strings.HasPrefix(normalizedPath, safedir) {
-		return "", fmt.Errorf("path %s is not under the safe directory %s", normalizedPath, safedir)
-	}
-	return normalizedPath, nil
 }
