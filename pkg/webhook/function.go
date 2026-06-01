@@ -66,7 +66,14 @@ func (r *Function) Validate(new *v1.Function) error {
 		return v1.AggregateValidationErrors("Function", err)
 	}
 
-	if err := new.Validate(); err != nil {
+	// Field-level validation (executor enums, scale bounds, DNS names) is
+	// enforced by the API server via CEL (x-kubernetes-validations on the CRD).
+	// The webhook retains only what CEL cannot express: the cross-namespace
+	// reference checks above, plus the podspec security rules below — the
+	// executor ServiceAccount can create pods, so a tenant-supplied podspec
+	// must not set host namespaces, hostPath, an alternate SA, privileged
+	// containers, etc. (GHSA-v455-mv2v-5g92).
+	if err := v1.ValidatePodSpecSafety("Function.spec.podspec", new.Spec.PodSpec); err != nil {
 		return v1.AggregateValidationErrors("Function", err)
 	}
 	return nil

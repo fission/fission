@@ -75,8 +75,10 @@ const (
 	// See pkg/buildermgr/envwatcher.go.AddUpdateBuilder for why.
 
 	// HTTPTrigger condition reasons
-	HTTPTriggerReasonRouteAdmitted = "RouteAdmitted"
-	HTTPTriggerReasonMuxBuildFail  = "MuxBuildFailed"
+	HTTPTriggerReasonRouteAdmitted        = "RouteAdmitted"
+	HTTPTriggerReasonMuxBuildFail         = "MuxBuildFailed"
+	HTTPTriggerReasonInvalidCorsConfig    = "InvalidCorsConfig"    // CORS origin/max-age failed url.Parse/time.ParseDuration
+	HTTPTriggerReasonInvalidIngressConfig = "InvalidIngressConfig" // ingress path/host failed POSIX-regex/DNS validation
 
 	// KubernetesWatchTrigger condition reasons
 	KubernetesWatchTriggerReasonSubscribed  = "Subscribed"
@@ -84,9 +86,12 @@ const (
 
 	// TimeTrigger condition reasons
 	TimeTriggerReasonCronRegistered = "CronRegistered"
+	TimeTriggerReasonInvalidCron    = "InvalidCron" // cron failed the robfig/cron parser (CEL cannot express it)
 
 	// MessageQueueTrigger condition reasons
-	MessageQueueTriggerReasonSubscribed = "Subscribed"
+	MessageQueueTriggerReasonSubscribed       = "Subscribed"
+	MessageQueueTriggerReasonInvalidTopic     = "InvalidTopic"     // topic/responseTopic invalid for the queue type
+	MessageQueueTriggerReasonInvalidQueueType = "InvalidQueueType" // unsupported message-queue type/kind
 
 	// CanaryConfig condition reasons (mirror Status string enum)
 	CanaryConfigReasonInProgress = "InProgress"

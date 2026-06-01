@@ -62,14 +62,18 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 
 	// Setup webhooks
 
+	// Only CRDs whose admission checks CEL cannot express need a webhook:
+	// cross-namespace references (function/package/kuberneteswatchtrigger) and
+	// pod-spec security (function/environment/messagequeuetrigger). Field-level
+	// validation is enforced by the API server via CEL, and the Go-parser rules
+	// (cron, message-queue topic, CORS origin/max-age, ingress regex) surface as
+	// status Conditions set by their reconcilers. HTTPTrigger, TimeTrigger and
+	// CanaryConfig therefore no longer need a webhook.
 	webhookInjectors := []WebhookInjector{
-		&CanaryConfig{},
 		&Environment{},
 		&Package{},
 		&Function{},
-		&HTTPTrigger{},
 		&MessageQueueTrigger{},
-		&TimeTrigger{},
 		&KubernetesWatchTrigger{},
 	}
 
