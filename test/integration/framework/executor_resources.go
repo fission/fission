@@ -29,10 +29,14 @@ import (
 // Both executors label their Deployment, Service, HPA and pods with
 // functionName / functionNamespace (newdeploy getDeployLabels,
 // container getDeployLabels), and the HPA inherits the same deployLabels
-// (pkg/executor/util/hpa/hpa.go). In the test cluster functionNamespace is
-// empty, so GetFunctionNS("default") returns the function's own namespace —
-// the objects live in ns.Name. Poolmgr functions have no per-function
-// Deployment/HPA; do not use these helpers for poolmgr-backed functions.
+// (pkg/executor/util/hpa/hpa.go). The functionNamespace *label* is always the
+// Function CR's namespace; it is distinct from the executor's optional
+// namespace *override* (FISSION_FUNCTION_NAMESPACE / NamespaceResolver), which
+// can place the physical objects in a different namespace. So we list across
+// all namespaces and select purely by the labels — that works whether or not a
+// function namespace override is configured. Poolmgr functions have no
+// per-function Deployment/HPA; do not use these helpers for poolmgr-backed
+// functions.
 
 // functionResourceSelector matches the per-function objects created by the
 // newdeploy/container executors.
@@ -60,32 +64,6 @@ func (ns *TestNamespace) FunctionHPA(t *testing.T, ctx context.Context, fnName s
 	require.NoErrorf(t, err, "FunctionHPA: list HPAs for %q", fnName)
 	require.Lenf(t, items, 1, "FunctionHPA: expected exactly one HPA for %q (got %d)", fnName, len(items))
 	return &items[0]
-}
-
-// FunctionDeploymentExists reports whether a per-function Deployment currently
-// exists. Use it (via WaitForNoFunctionDeployment) to assert resource teardown
-// after an executor-type transition.
-func (ns *TestNamespace) FunctionDeploymentExists(t *testing.T, ctx context.Context, fnName string) bool {
-	t.Helper()
-	items, err := ns.listFunctionDeployments(ctx, fnName)
-	require.NoErrorf(t, err, "FunctionDeploymentExists: list deployments for %q", fnName)
-	return len(items) > 0
-}
-
-// CountReadyFunctionPods returns the number of Ready pods backing the function.
-func (ns *TestNamespace) CountReadyFunctionPods(t *testing.T, ctx context.Context, fnName string) int {
-	t.Helper()
-	pods, err := ns.f.kubeClient.CoreV1().Pods(ns.Name).List(ctx, metav1.ListOptions{
-		LabelSelector: ns.functionResourceSelector(fnName),
-	})
-	require.NoErrorf(t, err, "CountReadyFunctionPods: list pods for %q", fnName)
-	ready := 0
-	for i := range pods.Items {
-		if isPodReady(&pods.Items[i]) {
-			ready++
-		}
-	}
-	return ready
 }
 
 // WaitForFunctionDeployment polls until exactly one Deployment for the function
@@ -123,22 +101,10 @@ func (ns *TestNamespace) WaitForFunctionHPA(t *testing.T, ctx context.Context, f
 	return ns.FunctionHPA(t, ctx, fnName)
 }
 
-// WaitForNoFunctionDeployment polls until no Deployment matches the function —
-// i.e. the executor has torn down the per-function resources (e.g. after a
-// transition away from newdeploy/container).
-func (ns *TestNamespace) WaitForNoFunctionDeployment(t *testing.T, ctx context.Context, fnName string, timeout time.Duration) {
-	t.Helper()
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		items, err := ns.listFunctionDeployments(ctx, fnName)
-		if !assert.NoErrorf(c, err, "list deployments for %q", fnName) {
-			return
-		}
-		assert.Emptyf(c, items, "expected no deployment for %q, still %d present", fnName, len(items))
-	}, timeout, 2*time.Second)
-}
-
+// listFunctionDeployments lists across all namespaces and filters by the
+// function labels, so it works regardless of any function-namespace override.
 func (ns *TestNamespace) listFunctionDeployments(ctx context.Context, fnName string) ([]appsv1.Deployment, error) {
-	list, err := ns.f.kubeClient.AppsV1().Deployments(ns.Name).List(ctx, metav1.ListOptions{
+	list, err := ns.f.kubeClient.AppsV1().Deployments(metav1.NamespaceAll).List(ctx, metav1.ListOptions{
 		LabelSelector: ns.functionResourceSelector(fnName),
 	})
 	if err != nil {
@@ -148,7 +114,7 @@ func (ns *TestNamespace) listFunctionDeployments(ctx context.Context, fnName str
 }
 
 func (ns *TestNamespace) listFunctionHPAs(ctx context.Context, fnName string) ([]autoscalingv2.HorizontalPodAutoscaler, error) {
-	list, err := ns.f.kubeClient.AutoscalingV2().HorizontalPodAutoscalers(ns.Name).List(ctx, metav1.ListOptions{
+	list, err := ns.f.kubeClient.AutoscalingV2().HorizontalPodAutoscalers(metav1.NamespaceAll).List(ctx, metav1.ListOptions{
 		LabelSelector: ns.functionResourceSelector(fnName),
 	})
 	if err != nil {

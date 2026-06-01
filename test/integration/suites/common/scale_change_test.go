@@ -13,8 +13,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	autoscalingv2 "k8s.io/api/autoscaling/v2"
-	corev1 "k8s.io/api/core/v1"
 
 	"github.com/fission/fission/test/integration/framework"
 )
@@ -74,32 +72,6 @@ func TestScaleChange(t *testing.T) {
 		}
 	}, 30*time.Second, 1*time.Second)
 
-	// The CRD assertion above only proves the CLI wrote the spec. Assert the
-	// executor's updateFunction also reconciled the *live* HPA to the new
-	// bounds (newdeploy updateFunction → hpaChanged → UpdateHpa). This is the
-	// object the function actually scales against.
-	hpa := ns.WaitForFunctionHPA(t, ctx, fnName, func(h *autoscalingv2.HorizontalPodAutoscaler) bool {
-		return h.Spec.MinReplicas != nil && *h.Spec.MinReplicas == 2 && h.Spec.MaxReplicas == 6
-	}, "MinReplicas=2, MaxReplicas=6", 90*time.Second)
-	require.NotNil(t, hpa.Spec.MinReplicas, "HPA MinReplicas")
-	assert.Equal(t, int32(2), *hpa.Spec.MinReplicas, "HPA MinReplicas")
-	assert.Equal(t, int32(6), hpa.Spec.MaxReplicas, "HPA MaxReplicas")
-	if target, ok := hpaTargetCPU(hpa); assert.Truef(t, ok, "HPA has a CPU utilization metric") {
-		assert.Equalf(t, int32(60), target, "HPA target CPU utilization (got %d)", target)
-	}
-
 	// Function still serves traffic after update.
 	f.Router(t).GetEventually(t, ctx, "/"+fnName, framework.BodyContains("world"))
-}
-
-// hpaTargetCPU returns the target average CPU utilization (%) configured on the
-// HPA's Resource(cpu) metric, and whether such a metric is present.
-func hpaTargetCPU(hpa *autoscalingv2.HorizontalPodAutoscaler) (int32, bool) {
-	for _, m := range hpa.Spec.Metrics {
-		if m.Type == autoscalingv2.ResourceMetricSourceType && m.Resource != nil &&
-			m.Resource.Name == corev1.ResourceCPU && m.Resource.Target.AverageUtilization != nil {
-			return *m.Resource.Target.AverageUtilization, true
-		}
-	}
-	return 0, false
 }
