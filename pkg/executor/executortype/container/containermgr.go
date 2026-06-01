@@ -287,12 +287,19 @@ func (caaf *Container) AdoptExistingResources(ctx context.Context) {
 			fn := &fnList.Items[i]
 			if fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypeContainer {
 				wg.Go(func() {
-					_, err = caaf.fnCreate(ctx, fn)
-					if err != nil {
-						caaf.logger.Error(err, "failed to adopt resources for function")
+					// Route through createFunction (throttled) rather than calling
+					// fnCreate directly: the Function reconciler also re-stamps existing
+					// objects on its initial sync, so going through the per-UID throttler
+					// makes adopt and reconcile single-flight instead of racing each other
+					// on the in-place Update (which previously produced resourceVersion
+					// conflicts that tripped fnCreate's destroy-on-error path). The local
+					// err also avoids a data race on the err variable from the enclosing
+					// scope, which every adopt goroutine previously wrote.
+					if _, err := caaf.createFunction(ctx, fn); err != nil {
+						caaf.logger.Error(err, "failed to adopt resources for function", "function", fn.Name)
 						return
 					}
-					caaf.logger.Info("adopt resources for function", "function", fn.Name)
+					caaf.logger.Info("adopted resources for function", "function", fn.Name)
 				})
 			}
 		}
@@ -370,6 +377,17 @@ func (caaf *Container) deleteFunction(ctx context.Context, fn *fv1.Function) err
 	return err
 }
 
+// destroyOnCreateError reports whether a fnCreate failure warrants tearing down
+// the function's partial resources. A Conflict or AlreadyExists means the object
+// exists and was concurrently modified (e.g. the adopt pass racing a reconcile,
+// or two reconciles), so deleting it would turn a transient blip into a cold
+// recreate — leave it for the next reconcile to converge instead. Genuine
+// creation failures (quota, invalid spec, API errors) still trigger cleanup so a
+// brand-new function doesn't leak half-created objects.
+func destroyOnCreateError(err error) bool {
+	return !k8sErrs.IsConflict(err) && !k8sErrs.IsAlreadyExists(err)
+}
+
 func (caaf *Container) fnCreate(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
 	cleanupFunc := func(ns string, name string) {
 		err := caaf.cleanupContainer(ctx, ns, name)
@@ -396,7 +414,9 @@ func (caaf *Container) fnCreate(ctx context.Context, fn *fv1.Function) (*fscache
 	svc, err := caaf.createOrGetSvc(ctx, fn, deployLabels, deployAnnotations, objName, ns)
 	if err != nil {
 		caaf.logger.Error(err, "error creating service", "service", objName)
-		go cleanupFunc(ns, objName)
+		if destroyOnCreateError(err) {
+			go cleanupFunc(ns, objName)
+		}
 		return nil, fmt.Errorf("error creating service %s: %w", objName, err)
 	}
 	svcAddress := fmt.Sprintf("%s.%s", svc.Name, svc.Namespace)
@@ -404,14 +424,18 @@ func (caaf *Container) fnCreate(ctx context.Context, fn *fv1.Function) (*fscache
 	depl, err := caaf.createOrGetDeployment(ctx, fn, objName, deployLabels, deployAnnotations, ns)
 	if err != nil {
 		caaf.logger.Error(err, "error creating deployment", "deployment", objName)
-		go cleanupFunc(ns, objName)
+		if destroyOnCreateError(err) {
+			go cleanupFunc(ns, objName)
+		}
 		return nil, fmt.Errorf("error creating deployment %s: %w", objName, err)
 	}
 
 	hpa, err := caaf.hpaops.CreateOrGetHpa(ctx, fn, objName, &fn.Spec.InvokeStrategy.ExecutionStrategy, depl, deployLabels, deployAnnotations)
 	if err != nil {
 		caaf.logger.Error(err, "error creating HPA", "hpa", objName)
-		go cleanupFunc(ns, objName)
+		if destroyOnCreateError(err) {
+			go cleanupFunc(ns, objName)
+		}
 		return nil, fmt.Errorf("error creating HPA %s: %w", objName, err)
 	}
 
