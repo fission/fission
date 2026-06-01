@@ -3,7 +3,7 @@ name: fission-all
 version: 1.24.0
 appVersion: v1.24.0
 description: Fission is a fast serverless framework for Kubernetes.
-kubeVersion: ">=1.28.0-0"
+kubeVersion: ">=1.32.0-0"
 home: https://fission.io/
 icon: https://fission.io/images/fission-logo-white.svg
 sources:

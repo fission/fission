@@ -775,19 +775,6 @@ logger:
     # privileged: true
     # runAsUser: 0
 
-  ## Enable PodSecurityPolicies to allow privileged container
-  ## Only required in some clusters and when enableSecurityContext is true
-  ##
-  podSecurityPolicy:
-    enabled: false
-
-    ## Configure additional capabilities
-    ##
-    additionalCapabilities:
-    # example values for linkerd
-    #- NET_RAW
-    #- NET_ADMIN
-
 ## Enable InfluxDB
 ##
 influxdb:

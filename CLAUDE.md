@@ -16,10 +16,10 @@ Build / lint / test (run from repo root):
 - `make code-checks` — `golangci-lint run` (config in `.golangci.yaml`; goimports local prefix `github.com/fission/fission`).
 - `make license` — add the SPDX header (`SPDX-FileCopyrightText` + `SPDX-License-Identifier: Apache-2.0`) to any in-scope source file (`.go`/`.sh`/`.py`/`Dockerfile*`) missing one.
   `make license-check` is the CI gate (runs in `lint.yaml`); run it before pushing.
-- `make test-run` — runs `hack/runtests.sh`: pulls `setup-envtest` Kubebuilder assets for k8s 1.30.x, then `go test -race -coverprofile=coverage.txt ./...`.
+- `make test-run` — runs `hack/runtests.sh`: pulls `setup-envtest` Kubebuilder assets for k8s 1.32.x, then `go test -race -coverprofile=coverage.txt ./...`.
   Requires `KUBEBUILDER_ASSETS` (the script sets it).
 - `make check` — full local gate: `test-run` + `build-fission-cli` + `clean`.
-- Run a single Go test: `go test -race -run TestName ./pkg/router/...` (set `KUBEBUILDER_ASSETS=$(go tool setup-envtest -p path use 1.30.x)` first if the package needs envtest).
+- Run a single Go test: `go test -race -run TestName ./pkg/router/...` (set `KUBEBUILDER_ASSETS=$(go tool setup-envtest -p path use 1.32.x)` first if the package needs envtest).
 
 Code generation (run after editing `pkg/apis/core/v1/types.go`):
 - `make codegen` — regenerates clientset/listers/informers under `pkg/generated/` (via `hack/update-codegen.sh`) and deepcopy via controller-gen.

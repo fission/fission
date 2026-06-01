@@ -5,7 +5,7 @@
 package v1
 
 var (
-	MinimumKubernetesVersion = [3]int{1, 19, 0}
+	MinimumKubernetesVersion = [3]int{1, 32, 0}
 )
 
 const (
