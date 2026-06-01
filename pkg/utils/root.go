@@ -38,9 +38,10 @@ func relUnderRoot(base, p string) (string, error) {
 }
 
 // RootJoin validates that name resolves to a location under base (no absolute
-// escape, no ".." traversal) and returns the cleaned absolute path. It is the
-// os.Root-style replacement for SanitizeFilePath: the returned absolute path can
-// be handed to downstream consumers unchanged.
+// escape, no ".." traversal) and returns the joined, cleaned path under base —
+// absolute when base is absolute, as it always is for the callers here. It is
+// the os.Root-style replacement for SanitizeFilePath: the result can be handed
+// to downstream consumers unchanged.
 func RootJoin(base, name string) (string, error) {
 	rel, err := relUnderRoot(base, name)
 	if err != nil {
