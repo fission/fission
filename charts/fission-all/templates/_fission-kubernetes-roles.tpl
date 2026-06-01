@@ -108,7 +108,6 @@ rules:
   - ""
   resources:
   - pods
-  - services
   - replicationcontrollers
   verbs:
   - create
@@ -117,6 +116,22 @@ rules:
   - list
   - watch
   - patch
+# Services additionally need `update`: AdoptExistingResources re-stamps an
+# existing Service in place (newdeploy/container createOrGetService), which the
+# executor never does in steady state — so without `update` adopt 403s on the
+# Service and aborts before re-stamping the backing Deployment.
+- apiGroups:
+  - ""
+  resources:
+  - services
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - watch
+  - patch
+  - update
 - apiGroups:
   - ""
   resources:
