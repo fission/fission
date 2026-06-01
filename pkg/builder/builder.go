@@ -256,7 +256,7 @@ func (builder *Builder) build(ctx context.Context, command string, args []string
 
 	fi, err := utils.RootStat(builder.sharedVolumePath, srcPkgPath)
 	if err != nil {
-		return "", fmt.Errorf("could not find srcPkgPath: '%s'", srcPkgPath)
+		return "", fmt.Errorf("could not find srcPkgPath '%s': %w", srcPkgPath, err)
 	}
 	if fi.IsDir() {
 		cmd.Dir = srcPkgPath
