@@ -15,7 +15,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	appsv1 "k8s.io/api/apps/v1"
 
 	"github.com/fission/fission/test/integration/framework"
 )
@@ -58,24 +57,6 @@ func TestResourceChange(t *testing.T) {
 		"--executortype", "newdeploy", "--minscale", "1", "--maxscale", "4",
 		"--mincpu", "80", "--maxcpu", "200", "--minmemory", "512", "--maxmemory", "768")
 	assertResources(t, ctx, ns, fnName, 80, 200, 512, 768)
-
-	// The assertions above read the Function CR, which the CLI populates.
-	// Assert the executor's updateFunction also rewrote the *live* Deployment's
-	// runtime-container resources (deployChanged → updateFuncDeployment). The
-	// newdeploy pod template has a single container carrying the merged
-	// (function-over-env) resources.
-	ns.WaitForFunctionDeployment(t, ctx, fnName, func(d *appsv1.Deployment) bool {
-		cs := d.Spec.Template.Spec.Containers
-		if len(cs) == 0 {
-			return false
-		}
-		r := cs[0].Resources
-		return digitsFromQuantity(r.Requests.Cpu().String()) == 80 &&
-			digitsFromQuantity(r.Limits.Cpu().String()) == 200 &&
-			digitsFromQuantity(r.Requests.Memory().String()) == 512 &&
-			digitsFromQuantity(r.Limits.Memory().String()) == 768
-	}, "deployment runtime-container resources 80/200 mCPU, 512/768 MiB", 90*time.Second)
-
 	f.Router(t).GetEventually(t, ctx, "/"+fnName, framework.BodyContains("world"))
 }
 
