@@ -248,6 +248,15 @@ func (ts *HTTPTriggerSet) buildMuxes(ctx context.Context, fnTimeoutMap map[types
 	for i := range ts.triggers {
 		trigger := ts.triggers[i]
 
+		// Skip triggers whose CORS / ingress config is invalid. Registering a
+		// route for one would apply broken CORS or a malformed ingress path;
+		// the RouteAdmitted=False condition (set by the post-build loop in
+		// updateRouter) tells the user why the route is not served. The
+		// httptrigger admission webhook used to reject these.
+		if _, err := triggerConfigError(&trigger); err != nil {
+			continue
+		}
+
 		// resolve function reference
 		rr, err := ts.resolver.resolve(ctx, trigger)
 		if err != nil {
@@ -455,6 +464,23 @@ func toAllowlistConfig(cfg *fv1.HTTPTriggerCorsConfig, triggerMethods []string) 
 	}
 }
 
+// triggerConfigError reports whether an HTTPTrigger's CORS or ingress
+// configuration is invalid, returning the matching RouteAdmitted Reason and the
+// error, or ("", nil) when the config is valid. These checks rely on Go parsers
+// (url.Parse, time.ParseDuration, regexp.CompilePOSIX) that CRD CEL cannot
+// express; with the httptrigger admission webhook removed, the router validates
+// here and surfaces the result as the trigger's RouteAdmitted condition instead
+// of rejecting at admission. (CorsConfig.Validate is nil-safe.)
+func triggerConfigError(trigger *fv1.HTTPTrigger) (reason string, err error) {
+	if e := trigger.Spec.CorsConfig.Validate(); e != nil {
+		return fv1.HTTPTriggerReasonInvalidCorsConfig, e
+	}
+	if e := trigger.Spec.IngressConfig.Validate(); e != nil {
+		return fv1.HTTPTriggerReasonInvalidIngressConfig, e
+	}
+	return "", nil
+}
+
 func (ts *HTTPTriggerSet) updateTriggerStatusFailed(ht *fv1.HTTPTrigger, err error) {
 	// TODO
 }
@@ -577,6 +603,16 @@ func (ts *HTTPTriggerSet) updateRouter(ctx context.Context) {
 		// state, not just intent. Best-effort; never blocks subsequent
 		// mux updates.
 		for i := range alltriggers {
+			// Triggers with invalid CORS/ingress config were skipped in
+			// buildMuxes; report that as RouteAdmitted=False (the Go-parser
+			// checks CEL can't express) instead of a stale True.
+			if reason, cfgErr := triggerConfigError(&alltriggers[i]); cfgErr != nil {
+				ts.markTriggerCondition(ctx, &alltriggers[i],
+					metav1.ConditionFalse, reason,
+					"router rejected the trigger configuration: "+cfgErr.Error(),
+					"trigger is not serving due to invalid configuration")
+				continue
+			}
 			ts.markTriggerCondition(ctx, &alltriggers[i],
 				metav1.ConditionTrue, fv1.HTTPTriggerReasonRouteAdmitted,
 				"router accepted the trigger and installed its mux entry",

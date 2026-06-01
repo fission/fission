@@ -5,6 +5,9 @@
 package webhook
 
 import (
+	"errors"
+	"fmt"
+
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
@@ -36,9 +39,34 @@ var _ webhook.CustomDefaulter = &Environment{}
 var _ webhook.CustomValidator = &Environment{}
 
 func (r *Environment) Validate(new *v1.Environment) error {
-	if err := new.Validate(); err != nil {
-		err = v1.AggregateValidationErrors("Environment", err)
-		return err
+	// Field-level validation (version range, pool size, enums) is enforced by
+	// the API server via CEL (x-kubernetes-validations on the CRD). The webhook
+	// retains only the podspec/container security rules CEL cannot express:
+	// the executor and buildermgr ServiceAccounts schedule pods from these
+	// runtime/builder podspecs and bare containers, so they must not set host
+	// namespaces, hostPath, an alternate SA, privileged/allowPrivilegeEscalation,
+	// or dangerous capabilities (GHSA-gx55-f84r-v3r7, GHSA-wmgg-3p4h-48x7,
+	// GHSA-v455-mv2v-5g92, GHSA-m63v-2g9w-2w6v).
+	errs := errors.Join(
+		v1.ValidatePodSpecSafety("Environment.spec.runtime.podspec", new.Spec.Runtime.PodSpec),
+		v1.ValidatePodSpecSafety("Environment.spec.builder.podspec", new.Spec.Builder.PodSpec),
+		v1.ValidateContainerSafety("Environment.spec.runtime.container", new.Spec.Runtime.Container),
+		v1.ValidateContainerSafety("Environment.spec.builder.container", new.Spec.Builder.Container),
+	)
+	// Non-security correctness invariant that CEL cannot express (it compares a
+	// container's image to spec.runtime.image AND its name to the object's own
+	// name): a runtime-podspec container that reuses the runtime image without
+	// an explicit command must be named after the environment, or the pod will
+	// not specialize. Preserved here from the former Environment.Validate path.
+	if ps := new.Spec.Runtime.PodSpec; ps != nil {
+		for _, c := range ps.Containers {
+			if c.Command == nil && c.Image == new.Spec.Runtime.Image && c.Name != new.Name {
+				errs = errors.Join(errs, fmt.Errorf("container with image same as runtime image in podspec must have name same as environment name (container %q, environment %q)", c.Name, new.Name))
+			}
+		}
+	}
+	if errs != nil {
+		return v1.AggregateValidationErrors("Environment", errs)
 	}
 	return nil
 }

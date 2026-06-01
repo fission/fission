@@ -35,9 +35,10 @@ var _ webhook.CustomDefaulter = &KubernetesWatchTrigger{}
 var _ webhook.CustomValidator = &KubernetesWatchTrigger{}
 
 func (r *KubernetesWatchTrigger) Validate(new *v1.KubernetesWatchTrigger) error {
-	if err := new.Validate(); err != nil {
-		return v1.AggregateValidationErrors("Watch", err)
-	}
+	// Field-level validation (type enum, function-reference shape) is enforced
+	// by the API server via CEL. The webhook retains only the cross-namespace
+	// check below, which CEL cannot express (it needs the object's own
+	// namespace, not available to CRD validation rules).
 
 	// Refuse cross-namespace Watch targets — the kubewatcher controller has
 	// cluster-wide watch privileges and would otherwise stream every event

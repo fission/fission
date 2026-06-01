@@ -43,6 +43,15 @@ func (r *MessageQueueTrigger) Validate(new *v1.MessageQueueTrigger) error {
 	// args, env, mounts, ServiceAccount, host namespaces, or runAsUser
 	// — see GHSA-7m8x-qg2j-4m3v. The controller still drops these
 	// fields server-side as defence in depth.
+	// Field-level validation (function-reference shape) is enforced by the API
+	// server via CEL. The webhook retains the two checks CEL cannot express:
+	//   - the podspec allowlist (a security boundary; iterating an embedded
+	//     PodSpec exceeds the CEL cost budget — GHSA-7m8x-qg2j-4m3v), and
+	//   - message-queue type/topic validity (via the connector validator
+	//     registry in pkg/mqtrigger/validator).
+	// This webhook is retained for the podspec allowlist regardless, so unlike
+	// the deleted httptrigger/timetrigger webhooks there is no webhook to drop
+	// by moving the type/topic check to a reconciler condition.
 	if new.Spec.PodSpec != nil {
 		if err := validateAllowedPodSpec(new.Spec.PodSpec); err != nil {
 			return err

@@ -53,10 +53,11 @@ func (r *Package) ApplyDefaults(new *v1.Package) error {
 }
 
 func (r *Package) Validate(new *v1.Package) error {
-	err := new.Validate()
-	if err != nil {
-		return v1.AggregateValidationErrors("Package", err)
-	}
+	// Field-level validation (archive/checksum enums) is enforced by the API
+	// server via CEL (x-kubernetes-validations on the CRD). The webhook retains
+	// the archive literal size limit and the cross-namespace environment check
+	// below, neither of which CEL can express (the literal is a base64 byte
+	// field; the namespace check needs the object's own namespace).
 
 	// Ensure size limits
 	if len(new.Spec.Source.Literal) > int(v1.ArchiveLiteralSizeLimit) {
