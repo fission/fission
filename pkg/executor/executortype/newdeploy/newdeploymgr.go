@@ -312,7 +312,8 @@ func (deploy *NewDeploy) AdoptExistingResources(ctx context.Context) {
 					// makes adopt and reconcile single-flight instead of racing each other
 					// on the in-place Update (which previously produced resourceVersion
 					// conflicts that tripped fnCreate's destroy-on-error path). The local
-					// err also avoids a data race on the shared loop variable.
+					// err also avoids a data race on the err variable from the enclosing
+					// scope, which every adopt goroutine previously wrote.
 					if _, err := deploy.createFunction(ctx, fn); err != nil {
 						deploy.logger.Error(err, "failed to adopt resources for function", "function", fn.Name)
 						return
