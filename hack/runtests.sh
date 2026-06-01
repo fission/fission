@@ -32,7 +32,7 @@ set +x
 # for codecov
 echo "" > coverage.txt
 
-KUBEBUILDER_ASSETS=$(go tool setup-envtest -p path use 1.30.x)
+KUBEBUILDER_ASSETS=$(go tool setup-envtest -p path use 1.32.x)
 export KUBEBUILDER_ASSETS
 
 # The executor unit test only works with NodePort-type services for
