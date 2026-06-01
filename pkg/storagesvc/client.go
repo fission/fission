@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"mime/multipart"
-	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -33,7 +32,7 @@ type (
 )
 
 const (
-	// StorageTypeLocal is a constant to hold local storate type name literal
+	// StorageTypeLocal is a constant to hold local storage type name literal
 	StorageTypeLocal StorageType = "local"
 	// StorageTypeS3 is a constant to hold S3 storage type name literal
 	StorageTypeS3 StorageType = "s3"
@@ -52,7 +51,7 @@ var (
 // MakeStorageClient create a new StorageClient for given storage
 func MakeStorageClient(logger logr.Logger, storage Storage) (*StorageClient, error) {
 	storageType := getStorageType(storage)
-	if strings.Compare(storageType, "local") == 1 && strings.Compare(storageType, "s3") == 1 {
+	if storageType != string(StorageTypeLocal) && storageType != string(StorageTypeS3) {
 		return nil, errors.New("storage types other than 'local' and 's3' are not implemented")
 	}
 

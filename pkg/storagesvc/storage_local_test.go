@@ -101,10 +101,10 @@ func TestLocalObjectStoreRemove(t *testing.T) {
 	assert.False(t, ok)
 }
 
-// TestStorageClientLocalRoundTrip exercises the StorageClient wrapper over the local
-// backend, covering the same paths the HTTP handlers use (putFile via the
-// configured upload name, copyFileToStream, getFileSize, exists,
-// getItemIDsWithFilter, removeFileByID).
+// TestStorageClientLocalRoundTrip exercises the StorageClient wrapper methods
+// the HTTP handlers use (getFileSize, copyFileToStream, exists,
+// getItemIDsWithFilter, removeFileByID), seeding an object via the backend
+// directly.
 func TestStorageClientLocalRoundTrip(t *testing.T) {
 	t.Parallel()
 
