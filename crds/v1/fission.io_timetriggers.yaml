@@ -68,11 +68,19 @@ spec:
                       Available value:
                       - name
                       - function-weights
+                    enum:
+                    - name
+                    - function-weights
                     type: string
                 required:
                 - name
                 - type
                 type: object
+                x-kubernetes-validations:
+                - message: functionref.name must be a valid DNS1123 label (lowercase
+                    alphanumeric or '-', start/end alphanumeric, max 63 chars) when
+                    type is 'name'
+                  rule: self.type != 'name' || (self.name.size() <= 63 && self.name.matches('^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'))
               method:
                 default: POST
                 description: 'HTTP Method for trigger, ex : GET, POST, PUT, DELETE,

@@ -9314,6 +9314,46 @@ spec:
             - environment
             - package
             type: object
+            x-kubernetes-validations:
+            - message: executor type container requires a pod spec (spec.podspec)
+              rule: '!(has(self.InvokeStrategy.ExecutionStrategy) && self.InvokeStrategy.ExecutionStrategy.ExecutorType
+                == ''container'') || has(self.podspec)'
+            - message: minimum scale must be greater than or equal to 0 for newdeploy/container
+                executors
+              rule: '!(has(self.InvokeStrategy.ExecutionStrategy) && (self.InvokeStrategy.ExecutionStrategy.ExecutorType
+                == ''newdeploy'' || self.InvokeStrategy.ExecutionStrategy.ExecutorType
+                == ''container'')) || !has(self.InvokeStrategy.ExecutionStrategy.MinScale)
+                || self.InvokeStrategy.ExecutionStrategy.MinScale >= 0'
+            - message: maximum scale must be greater than 0 for newdeploy/container
+                executors
+              rule: '!(has(self.InvokeStrategy.ExecutionStrategy) && (self.InvokeStrategy.ExecutionStrategy.ExecutorType
+                == ''newdeploy'' || self.InvokeStrategy.ExecutionStrategy.ExecutorType
+                == ''container'')) || (has(self.InvokeStrategy.ExecutionStrategy.MaxScale)
+                && self.InvokeStrategy.ExecutionStrategy.MaxScale > 0)'
+            - message: maximum scale must be greater than or equal to minimum scale
+                for newdeploy/container executors
+              rule: '!(has(self.InvokeStrategy.ExecutionStrategy) && (self.InvokeStrategy.ExecutionStrategy.ExecutorType
+                == ''newdeploy'' || self.InvokeStrategy.ExecutionStrategy.ExecutorType
+                == ''container'')) || !has(self.InvokeStrategy.ExecutionStrategy.MaxScale)
+                || self.InvokeStrategy.ExecutionStrategy.MaxScale >= (has(self.InvokeStrategy.ExecutionStrategy.MinScale)
+                ? self.InvokeStrategy.ExecutionStrategy.MinScale : 0)'
+            - message: TargetCPUPercent must be a value between 0 and 100 for newdeploy/container
+                executors
+              rule: '!(has(self.InvokeStrategy.ExecutionStrategy) && (self.InvokeStrategy.ExecutionStrategy.ExecutorType
+                == ''newdeploy'' || self.InvokeStrategy.ExecutionStrategy.ExecutorType
+                == ''container'')) || !has(self.InvokeStrategy.ExecutionStrategy.TargetCPUPercent)
+                || (self.InvokeStrategy.ExecutionStrategy.TargetCPUPercent >= 0 &&
+                self.InvokeStrategy.ExecutionStrategy.TargetCPUPercent <= 100)'
+            - message: InvokeStrategy.StrategyType must be 'execution'
+              rule: '!has(self.InvokeStrategy.StrategyType) || self.InvokeStrategy.StrategyType
+                == '''' || self.InvokeStrategy.StrategyType == ''execution'''
+            - message: ExecutionStrategy.ExecutorType must be one of poolmgr, newdeploy,
+                container
+              rule: '!has(self.InvokeStrategy.ExecutionStrategy) || !has(self.InvokeStrategy.ExecutionStrategy.ExecutorType)
+                || self.InvokeStrategy.ExecutionStrategy.ExecutorType == '''' || self.InvokeStrategy.ExecutionStrategy.ExecutorType
+                == ''poolmgr'' || self.InvokeStrategy.ExecutionStrategy.ExecutorType
+                == ''newdeploy'' || self.InvokeStrategy.ExecutionStrategy.ExecutorType
+                == ''container'''
           status:
             description: FunctionStatus describes the observed state of a Function.
             properties:
