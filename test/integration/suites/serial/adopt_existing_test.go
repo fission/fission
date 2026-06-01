@@ -48,7 +48,10 @@ import (
 func TestAdoptExistingResources(t *testing.T) {
 	// Deliberately NOT t.Parallel(): restarts the shared executor (see package doc).
 
-	ctx, cancel := context.WithTimeout(t.Context(), 12*time.Minute)
+	// 15m budget for the whole flow (3 functions + a full executor rollout +
+	// re-stamp waits). Kept below the `go test -timeout` in CI so this context
+	// deadline — with a clear failure message — fires before the hard timeout.
+	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Minute)
 	t.Cleanup(cancel)
 
 	f := framework.Connect(t)

@@ -126,9 +126,14 @@ func (ns *TestNamespace) listFunctionHPAs(ctx context.Context, fnName string) ([
 // poolDeploymentSelector matches the single warm-pool Deployment the poolmgr
 // executor maintains per environment. Unlike newdeploy/container, poolmgr has
 // no per-function Deployment — its pods come from one env-scoped pool — so the
-// selector keys on environmentName + executorType (gp.go getEnvironmentPoolLabels).
-func poolDeploymentSelector(envName string) string {
-	return fv1.ENVIRONMENT_NAME + "=" + envName + "," + fv1.EXECUTOR_TYPE + "=" + string(fv1.ExecutorTypePoolmgr)
+// selector keys on environmentName + environmentNamespace + executorType
+// (gp.go getEnvironmentPoolLabels). Environments are namespaced, so the
+// namespace label is included (mirroring functionResourceSelector) to stay
+// unambiguous even if two namespaces reuse an env name.
+func (ns *TestNamespace) poolDeploymentSelector(envName string) string {
+	return fv1.ENVIRONMENT_NAME + "=" + envName +
+		"," + fv1.ENVIRONMENT_NAMESPACE + "=" + ns.Name +
+		"," + fv1.EXECUTOR_TYPE + "=" + string(fv1.ExecutorTypePoolmgr)
 }
 
 // PoolDeployment returns the poolmgr warm-pool Deployment for an environment.
@@ -164,7 +169,7 @@ func (ns *TestNamespace) WaitForPoolDeployment(t *testing.T, ctx context.Context
 // poolmgr labels, so it works regardless of any function-namespace override.
 func (ns *TestNamespace) listPoolDeployments(ctx context.Context, envName string) ([]appsv1.Deployment, error) {
 	list, err := ns.f.kubeClient.AppsV1().Deployments(metav1.NamespaceAll).List(ctx, metav1.ListOptions{
-		LabelSelector: poolDeploymentSelector(envName),
+		LabelSelector: ns.poolDeploymentSelector(envName),
 	})
 	if err != nil {
 		return nil, err
