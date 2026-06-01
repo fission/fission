@@ -23,13 +23,13 @@ type ArchivePruner struct {
 	logger        logr.Logger
 	crdClient     versioned.Interface
 	archiveChan   chan string
-	stowClient    *StowClient
+	storageClient *StorageClient
 	pruneInterval time.Duration
 }
 
 const defaultPruneInterval int = 60 // in minutes
 
-func MakeArchivePruner(logger logr.Logger, clientGen crd.ClientGeneratorInterface, stowClient *StowClient, pruneInterval time.Duration) (*ArchivePruner, error) {
+func MakeArchivePruner(logger logr.Logger, clientGen crd.ClientGeneratorInterface, storageClient *StorageClient, pruneInterval time.Duration) (*ArchivePruner, error) {
 	fissionClient, err := clientGen.GetFissionClient()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get fission client: %w", err)
@@ -39,7 +39,7 @@ func MakeArchivePruner(logger logr.Logger, clientGen crd.ClientGeneratorInterfac
 		logger:        logger.WithName("archive_pruner"),
 		crdClient:     fissionClient,
 		archiveChan:   make(chan string),
-		stowClient:    stowClient,
+		storageClient: storageClient,
 		pruneInterval: pruneInterval,
 	}, nil
 }
@@ -52,7 +52,7 @@ func (pruner *ArchivePruner) pruneArchives(ctx context.Context) {
 		case archiveID := <-pruner.archiveChan:
 			pruner.logger.Info("sending delete request for archive",
 				"archive_id", archiveID)
-			if err := pruner.stowClient.removeFileByID(archiveID); err != nil {
+			if err := pruner.storageClient.removeFileByID(archiveID); err != nil {
 				// logging the error and continuing with other deletions.
 				// hopefully this archive will be deleted in the next iteration.
 				pruner.logger.Error(err, "ignoring error while deleting archive", "archive_id", archiveID)
@@ -112,7 +112,7 @@ func (pruner *ArchivePruner) getOrphanArchives(ctx context.Context) {
 	// get all archives on storage
 	// out of them, there may be some just created but not referenced by packages yet.
 	// need to filter them out.
-	archivesInStorage, err := pruner.stowClient.getItemIDsWithFilter(pruner.stowClient.filterItemCreatedAMinuteAgo, time.Now())
+	archivesInStorage, err := pruner.storageClient.getItemIDsWithFilter(pruner.storageClient.filterItemCreatedAMinuteAgo, time.Now())
 	if err != nil {
 		pruner.logger.Error(err, "error getting items from storage")
 		return
