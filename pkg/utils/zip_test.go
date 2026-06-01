@@ -5,12 +5,110 @@
 package utils
 
 import (
+	"archive/zip"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+type rawZipEntry struct {
+	name string
+	mode os.FileMode
+	body string
+}
+
+// writeRawZip writes a zip whose entry names and modes are set verbatim,
+// bypassing any archive-time sanitization so that malicious names (the kind an
+// attacker-supplied package can contain) reach the extractor unchanged.
+func writeRawZip(t *testing.T, path string, entries ...rawZipEntry) {
+	t.Helper()
+	f, err := os.Create(path)
+	require.NoError(t, err)
+	defer f.Close()
+	zw := zip.NewWriter(f)
+	for _, e := range entries {
+		hdr := &zip.FileHeader{Name: e.name, Method: zip.Deflate}
+		hdr.SetMode(e.mode)
+		w, err := zw.CreateHeader(hdr)
+		require.NoError(t, err)
+		_, err = w.Write([]byte(e.body))
+		require.NoError(t, err)
+	}
+	require.NoError(t, zw.Close())
+}
+
+// TestUnarchiveZipSlip verifies that a malicious archive entry cannot write
+// outside the destination directory (zip-slip / CWE-22) and that symlink
+// entries are refused, while benign archives still extract.
+func TestUnarchiveZipSlip(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	t.Run("parent traversal is refused", func(t *testing.T) {
+		t.Parallel()
+		tmp := t.TempDir()
+		sentinel := filepath.Join(tmp, "sentinel")
+		require.NoError(t, os.WriteFile(sentinel, []byte("intact"), 0o600))
+
+		zipPath := filepath.Join(tmp, "evil.zip")
+		writeRawZip(t, zipPath, rawZipEntry{name: "../escape.txt", mode: 0o644, body: "pwned"})
+
+		err := Unarchive(ctx, zipPath, filepath.Join(tmp, "dst"))
+		assert.Error(t, err)
+		assert.NoFileExists(t, filepath.Join(tmp, "escape.txt"))
+
+		got, err := os.ReadFile(sentinel)
+		require.NoError(t, err)
+		assert.Equal(t, "intact", string(got))
+	})
+
+	t.Run("absolute path is refused", func(t *testing.T) {
+		t.Parallel()
+		tmp := t.TempDir()
+		abs := filepath.Join(tmp, "abs-escape.txt")
+		zipPath := filepath.Join(tmp, "evil.zip")
+		writeRawZip(t, zipPath, rawZipEntry{name: abs, mode: 0o644, body: "pwned"})
+
+		err := Unarchive(ctx, zipPath, filepath.Join(tmp, "dst"))
+		assert.Error(t, err)
+		assert.NoFileExists(t, abs)
+	})
+
+	t.Run("symlink entry is refused", func(t *testing.T) {
+		t.Parallel()
+		tmp := t.TempDir()
+		zipPath := filepath.Join(tmp, "evil.zip")
+		writeRawZip(t, zipPath, rawZipEntry{name: "link", mode: 0o777 | os.ModeSymlink, body: "/etc/passwd"})
+
+		dst := filepath.Join(tmp, "dst")
+		err := Unarchive(ctx, zipPath, dst)
+		assert.Error(t, err)
+		_, lerr := os.Lstat(filepath.Join(dst, "link"))
+		assert.True(t, os.IsNotExist(lerr), "no symlink should be created")
+	})
+
+	t.Run("benign archive still extracts", func(t *testing.T) {
+		t.Parallel()
+		tmp := t.TempDir()
+		zipPath := filepath.Join(tmp, "ok.zip")
+		writeRawZip(t, zipPath,
+			rawZipEntry{name: "a.txt", mode: 0o644, body: "alpha"},
+			rawZipEntry{name: "sub/b.txt", mode: 0o644, body: "beta"},
+		)
+		dst := filepath.Join(tmp, "dst")
+		require.NoError(t, Unarchive(ctx, zipPath, dst))
+
+		got, err := os.ReadFile(filepath.Join(dst, "a.txt"))
+		require.NoError(t, err)
+		assert.Equal(t, "alpha", string(got))
+		got, err = os.ReadFile(filepath.Join(dst, "sub", "b.txt"))
+		require.NoError(t, err)
+		assert.Equal(t, "beta", string(got))
+	})
+}
 
 func TestIsZip(t *testing.T) {
 	tests := []struct {
