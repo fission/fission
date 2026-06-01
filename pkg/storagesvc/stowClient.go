@@ -5,17 +5,14 @@
 package storagesvc
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
-	"os"
 	"strings"
 	"time"
 
-	"errors"
-
 	"github.com/go-logr/logr"
-	"github.com/graymeta/stow"
 )
 
 type (
@@ -26,12 +23,14 @@ type (
 		storage Storage
 	}
 
-	// StowClient is the wrapper client for stow (Cloud storage abstraction package)
+	// StowClient is the storage-service client. Historically it wrapped the
+	// github.com/graymeta/stow abstraction (hence the name); it now drives an
+	// internal objectStore backend (os-based local or minio-go/v7 S3) so the
+	// fission-bundle binary no longer pulls in github.com/aws/aws-sdk-go v1.
 	StowClient struct {
-		logger    logr.Logger
-		config    *storageConfig
-		location  stow.Location
-		container stow.Container
+		logger  logr.Logger
+		config  *storageConfig
+		backend objectStore
 	}
 )
 
@@ -52,43 +51,6 @@ var (
 	ErrWritingFileIntoResponse = errors.New("unable to copy item into http response")
 )
 
-func getContainer(loc stow.Location, containerName string, cursor string) (stow.Container, error) {
-	// use location.Containers to find containers that match the prefix (container name)
-	cons, cursorNew, err := loc.Containers(containerName, cursor, 1)
-	if err != nil {
-		return nil, err
-	}
-	var con stow.Container
-	for _, v := range cons {
-		c, err := loc.Container(v.ID())
-		if err != nil {
-			return nil, err
-		}
-		if c.Name() == containerName {
-			con = cons[0]
-			break
-		}
-	}
-	if con == nil && !stow.IsCursorEnd(cursorNew) {
-		_, err := getContainer(loc, containerName, cursorNew)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return con, nil
-}
-
-func getOrCreateContainer(loc stow.Location, containerName string, cursor string) (stow.Container, error) {
-	con, err := loc.CreateContainer(containerName)
-	if err != nil && (os.IsExist(err) || strings.Contains(err.Error(), "BucketAlreadyOwnedByYou")) {
-		con, err = getContainer(loc, containerName, stow.CursorStart)
-	}
-	if con == nil && err == nil {
-		err = fmt.Errorf("storage container %s not found", containerName)
-	}
-	return con, err
-}
-
 // MakeStowClient create a new StowClient for given storage
 func MakeStowClient(logger logr.Logger, storage Storage) (*StowClient, error) {
 	storageType := getStorageType(storage)
@@ -100,24 +62,16 @@ func MakeStowClient(logger logr.Logger, storage Storage) (*StowClient, error) {
 		storage: storage,
 	}
 
-	stowClient := &StowClient{
-		logger: logger.WithName("stow_client"),
-		config: config,
-	}
-
-	loc, err := getStorageLocation(config)
+	backend, err := config.storage.dial()
 	if err != nil {
 		return nil, err
 	}
-	stowClient.location = loc
 
-	con, err := getOrCreateContainer(loc, config.storage.getContainerName(), stow.CursorStart)
-	if err != nil {
-		return nil, err
-	}
-	stowClient.container = con
-
-	return stowClient, nil
+	return &StowClient{
+		logger:  logger.WithName("stow_client"),
+		config:  config,
+		backend: backend,
+	}, nil
 }
 
 // putFile writes the file on the storage
@@ -128,29 +82,23 @@ func (client *StowClient) putFile(file multipart.File, fileSize int64) (string, 
 	}
 
 	// save the file to the storage backend
-	item, err := client.container.Put(uploadName, file, fileSize, nil)
+	id, err := client.backend.put(uploadName, file, fileSize)
 	if err != nil {
 		client.logger.Error(err, "error writing file on storage", "file", uploadName)
 		return "", ErrWritingFile
 	}
 
 	client.logger.V(1).Info("successfully wrote file on storage", "file", uploadName)
-	return item.ID(), nil
+	return id, nil
 }
 
 // copyFileToStream gets the file contents into a stream
 func (client *StowClient) copyFileToStream(fileId string, w io.Writer) error {
-	item, err := client.container.Item(fileId)
+	f, err := client.backend.open(fileId)
 	if err != nil {
-		if err == stow.ErrNotFound {
+		if errors.Is(err, ErrNotFound) {
 			return ErrNotFound
-		} else {
-			return ErrRetrievingItem
 		}
-	}
-
-	f, err := item.Open()
-	if err != nil {
 		return ErrOpeningItem
 	}
 	defer f.Close()
@@ -166,49 +114,49 @@ func (client *StowClient) copyFileToStream(fileId string, w io.Writer) error {
 
 // removeFileByID deletes the file from storage
 func (client *StowClient) removeFileByID(itemID string) error {
-	return client.container.RemoveItem(itemID)
+	return client.backend.remove(itemID)
 }
 
 func (client *StowClient) getFileSize(itemID string) (int64, error) {
-	item, err := client.container.Item(itemID)
+	size, err := client.backend.size(itemID)
 	if err != nil {
-		if err == stow.ErrNotFound {
+		if errors.Is(err, ErrNotFound) {
 			return 0, ErrNotFound
-		} else {
-			return 0, ErrRetrievingItem
 		}
+		return 0, ErrRetrievingItem
 	}
-	return item.Size()
+	return size, nil
+}
+
+// exists reports whether an archive with the given id is present in storage,
+// returning ErrNotFound if it is not.
+func (client *StowClient) exists(itemID string) error {
+	ok, err := client.backend.exists(itemID)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return ErrNotFound
+	}
+	return nil
 }
 
 // filter defines an interface to filter out items from a set of items
-type filter func(stow.Item, any) bool
+type filter func(objectInfo, any) bool
 
 // This method returns all items in a container, filtering out items based on the filter function passed to it
 func (client *StowClient) getItemIDsWithFilter(filterFunc filter, filterFuncParam any) ([]string, error) {
-	cursor := stow.CursorStart
-	var items []stow.Item
-	var err error
+	items, err := client.backend.list(client.config.storage.getSubDir())
+	if err != nil {
+		return nil, fmt.Errorf("error getting items from container: %w", err)
+	}
 
 	archiveIDList := make([]string, 0)
-
-	for {
-		items, cursor, err = client.container.Items(client.config.storage.getSubDir(), cursor, PaginationSize)
-		if err != nil {
-			return nil, fmt.Errorf("error getting items from container: %w", err)
+	for _, item := range items {
+		if filterFunc(item, filterFuncParam) {
+			continue
 		}
-
-		for _, item := range items {
-			isItemFilterable := filterFunc(item, filterFuncParam)
-			if isItemFilterable {
-				continue
-			}
-			archiveIDList = append(archiveIDList, item.ID())
-		}
-
-		if stow.IsCursorEnd(cursor) {
-			break
-		}
+		archiveIDList = append(archiveIDList, item.id)
 	}
 
 	return archiveIDList, nil
@@ -216,23 +164,21 @@ func (client *StowClient) getItemIDsWithFilter(filterFunc filter, filterFuncPara
 
 // filterItemCreatedAMinuteAgo is one type of filter function that filters out items created less than a minute ago.
 // More filter functions can be written if needed, as long as they are of type filter
-func (client StowClient) filterItemCreatedAMinuteAgo(item stow.Item, currentTime any) bool {
-	itemLastModTime, _ := item.LastMod()
-	if currentTime.(time.Time).Sub(itemLastModTime) < 1*time.Minute {
+func (client StowClient) filterItemCreatedAMinuteAgo(item objectInfo, currentTime any) bool {
+	if currentTime.(time.Time).Sub(item.lastMod) < 1*time.Minute {
 
 		client.logger.V(1).Info("item created less than a minute ago",
-			"item", item.ID(),
-			"last_modified_time", itemLastModTime)
+			"item", item.id,
+			"last_modified_time", item.lastMod)
 		return true
 	}
 	return false
 }
 
-func (client StowClient) filterAllItems(item stow.Item, _ any) bool {
-	itemLastModTime, _ := item.LastMod()
+func (client StowClient) filterAllItems(item objectInfo, _ any) bool {
 	client.logger.V(1).Info("item info",
-		"item", item.ID(),
-		"last_modified_time", itemLastModTime)
+		"item", item.id,
+		"last_modified_time", item.lastMod)
 	return false
 
 }

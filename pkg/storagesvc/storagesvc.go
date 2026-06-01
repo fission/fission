@@ -17,7 +17,6 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/gorilla/mux"
-	"github.com/graymeta/stow"
 	"golang.org/x/sync/errgroup"
 
 	hmacauth "github.com/fission/fission/pkg/auth/hmac"
@@ -32,7 +31,7 @@ type (
 	// Storage is an interface to force storage level details implementation.
 	Storage interface {
 		getStorageType() StorageType
-		dial() (stow.Location, error)
+		dial() (objectStore, error)
 		getSubDir() string
 		getContainerName() string
 		getUploadFileName() (string, error)
@@ -57,10 +56,6 @@ type (
 // Functions handling storage interface
 func getStorageType(storage Storage) string {
 	return string(storage.getStorageType())
-}
-
-func getStorageLocation(config *storageConfig) (stow.Location, error) {
-	return config.storage.dial()
 }
 
 func (ss *StorageService) listItems(w http.ResponseWriter, r *http.Request) {
@@ -229,7 +224,7 @@ func (ss *StorageService) infoHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = ss.storageClient.container.Item(fileID)
+	err = ss.storageClient.exists(fileID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
