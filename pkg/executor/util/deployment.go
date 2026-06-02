@@ -62,6 +62,11 @@ func WaitForDeployment(ctx context.Context, kubeClient kubernetes.Interface, log
 
 	logger = otelUtils.LoggerWithTraceID(ctx, logger)
 
+	// A single Ticker keeps the 1s poll interval without allocating a timer per
+	// iteration (the loop runs up to specializationTimeout times).
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+
 	for i := 0; i < specializationTimeout; i++ {
 		latestDepl, err = kubeClient.AppsV1().Deployments(depl.ObjectMeta.Namespace).Get(ctx, depl.Name, metav1.GetOptions{})
 		if err != nil {
@@ -72,12 +77,13 @@ func WaitForDeployment(ctx context.Context, kubeClient kubernetes.Interface, log
 			otelUtils.SpanTrackEvent(ctx, "deploymentAvailable", otelUtils.GetAttributesForDeployment(latestDepl)...)
 			return latestDepl, err
 		}
-		// Sleep between polls, but stay responsive to cancellation (executor
-		// shutdown / loss of leadership) instead of blocking for a full second.
+		// Wait before the next poll, but stay responsive to cancellation
+		// (executor shutdown / loss of leadership) instead of blocking for a
+		// full second.
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
-		case <-time.After(time.Second):
+		case <-ticker.C:
 		}
 	}
 
@@ -104,8 +110,12 @@ func WaitForDeployment(ctx context.Context, kubeClient kubernetes.Interface, log
 // in the namespace) to minimise API traffic. Behaviour is preserved: only
 // references resolvable within the deployment namespace contribute, and a
 // missing referenced object contributes nothing rather than erroring.
-func ReferencedResourcesRVSum(ctx context.Context, client kubernetes.Interface, namespace string, secrets []fv1.SecretReference, cfgmaps []fv1.ConfigMapReference) (int, error) {
-	rvCount := 0
+//
+// The sum is returned as int64: resource versions are int64 etcd revisions and
+// can exceed 2^31-1 on long-running clusters, so narrowing to int would risk
+// truncation (and collisions that mask a genuine change).
+func ReferencedResourcesRVSum(ctx context.Context, client kubernetes.Interface, namespace string, secrets []fv1.SecretReference, cfgmaps []fv1.ConfigMapReference) (int64, error) {
+	var rvCount int64
 
 	for _, ref := range secrets {
 		if ref.Namespace != namespace {
@@ -119,7 +129,7 @@ func ReferencedResourcesRVSum(ctx context.Context, client kubernetes.Interface, 
 			return 0, err
 		}
 		rv, _ := strconv.ParseInt(s.ResourceVersion, 10, 64)
-		rvCount += int(rv)
+		rvCount += rv
 	}
 
 	for _, ref := range cfgmaps {
@@ -134,7 +144,7 @@ func ReferencedResourcesRVSum(ctx context.Context, client kubernetes.Interface, 
 			return 0, err
 		}
 		rv, _ := strconv.ParseInt(cfg.ResourceVersion, 10, 64)
-		rvCount += int(rv)
+		rvCount += rv
 	}
 
 	return rvCount, nil

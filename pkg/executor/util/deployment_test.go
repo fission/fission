@@ -48,7 +48,7 @@ func TestReferencedResourcesRVSum(t *testing.T) {
 		objects []runtime.Object
 		secrets []fv1.SecretReference
 		cfgmaps []fv1.ConfigMapReference
-		want    int
+		want    int64
 	}{
 		{
 			name:    "sums referenced secret and configmap resource versions",
