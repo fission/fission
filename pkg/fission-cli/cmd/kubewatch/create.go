@@ -38,7 +38,7 @@ func (opts *CreateSubCommand) do(input cli.Input) error {
 func (opts *CreateSubCommand) complete(input cli.Input) error {
 	watchName := input.String(flagkey.KwName)
 	if len(watchName) == 0 {
-		console.Warn(fmt.Sprintf("--%v will be soon marked as required flag, see 'help' for details", flagkey.MqtName))
+		console.Warn(fmt.Sprintf("--%v will be soon marked as required flag, see 'help' for details", flagkey.KwName))
 		watchName = uuid.NewString()
 	}
 	fnName := input.String(flagkey.KwFnName)
