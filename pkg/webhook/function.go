@@ -8,7 +8,7 @@ import (
 	"fmt"
 
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	v1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
@@ -26,12 +26,12 @@ func (r *Function) SetupWebhookWithManager(mgr ctrl.Manager) error {
 
 // Admission webhooks can be added by adding tag: kubebuilder:webhook:path=/mutate-fission-io-v1-function,mutating=true,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=functions,verbs=create;update,versions=v1,name=mfunction.fission.io,admissionReviewVersions=v1
 
-var _ webhook.CustomDefaulter = &Function{}
+var _ admission.Defaulter[*v1.Function] = &Function{}
 
 // user change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
 //+kubebuilder:webhook:path=/validate-fission-io-v1-function,mutating=false,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=functions,verbs=create;update,versions=v1,name=vfunction.fission.io,admissionReviewVersions=v1
 
-var _ webhook.CustomValidator = &Function{}
+var _ admission.Validator[*v1.Function] = &Function{}
 
 func (r *Function) Validate(new *v1.Function) error {
 	for _, cnfMap := range new.Spec.ConfigMaps {

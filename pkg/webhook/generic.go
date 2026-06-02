@@ -6,11 +6,8 @@ package webhook
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/go-logr/logr"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -35,56 +32,40 @@ type GenericWebhook[T client.Object] struct {
 
 // SetupWebhookWithManager sets up the webhook with the manager.
 func (w *GenericWebhook[T]) SetupWebhookWithManager(mgr ctrl.Manager, obj T) error {
-	return ctrl.NewWebhookManagedBy(mgr).
-		For(obj).
+	return ctrl.NewWebhookManagedBy(mgr, obj).
 		WithDefaulter(w).
 		WithValidator(w).
 		Complete()
 }
 
-// Default implements webhook.CustomDefaulter.
-func (w *GenericWebhook[T]) Default(_ context.Context, obj runtime.Object) error {
+// Default implements admission.Defaulter.
+func (w *GenericWebhook[T]) Default(_ context.Context, obj T) error {
 	if w.Defaulter == nil {
 		return nil
 	}
-	typedObj, ok := obj.(T)
-	if !ok {
-		var t T
-		return apierrors.NewBadRequest(fmt.Sprintf("expected %T but got %T", t, obj))
-	}
-	w.Logger.V(1).Info("default", "name", typedObj.GetName())
-	return w.Defaulter.ApplyDefaults(typedObj)
+	w.Logger.V(1).Info("default", "name", obj.GetName())
+	return w.Defaulter.ApplyDefaults(obj)
 }
 
-// ValidateCreate implements webhook.CustomValidator.
-func (w *GenericWebhook[T]) ValidateCreate(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
-	typedObj, ok := obj.(T)
-	if !ok {
-		var t T
-		return nil, apierrors.NewBadRequest(fmt.Sprintf("expected %T but got %T", t, obj))
-	}
-	w.Logger.V(1).Info("validate create", "name", typedObj.GetName())
+// ValidateCreate implements admission.Validator.
+func (w *GenericWebhook[T]) ValidateCreate(_ context.Context, obj T) (admission.Warnings, error) {
+	w.Logger.V(1).Info("validate create", "name", obj.GetName())
 	if w.Validator != nil {
-		return nil, w.Validator.Validate(typedObj)
+		return nil, w.Validator.Validate(obj)
 	}
 	return nil, nil
 }
 
-// ValidateUpdate implements webhook.CustomValidator.
-func (w *GenericWebhook[T]) ValidateUpdate(_ context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
-	typedObj, ok := newObj.(T)
-	if !ok {
-		var t T
-		return nil, apierrors.NewBadRequest(fmt.Sprintf("expected %T but got %T", t, newObj))
-	}
-	w.Logger.V(1).Info("validate update", "name", typedObj.GetName())
+// ValidateUpdate implements admission.Validator.
+func (w *GenericWebhook[T]) ValidateUpdate(_ context.Context, _, newObj T) (admission.Warnings, error) {
+	w.Logger.V(1).Info("validate update", "name", newObj.GetName())
 	if w.Validator != nil {
-		return nil, w.Validator.Validate(typedObj)
+		return nil, w.Validator.Validate(newObj)
 	}
 	return nil, nil
 }
 
-// ValidateDelete implements webhook.CustomValidator.
-func (w *GenericWebhook[T]) ValidateDelete(_ context.Context, _ runtime.Object) (admission.Warnings, error) {
+// ValidateDelete implements admission.Validator.
+func (w *GenericWebhook[T]) ValidateDelete(_ context.Context, _ T) (admission.Warnings, error) {
 	return nil, nil
 }

@@ -9,12 +9,15 @@ package v1
 // EnvironmentReferenceApplyConfiguration represents a declarative configuration of the EnvironmentReference type for use
 // with apply.
 //
-// EnvironmentReference is a reference to an environment.
+// EnvironmentReference is a reference to an environment. It is used by both
+// FunctionSpec.Environment and PackageSpec.Environment.
 type EnvironmentReferenceApplyConfiguration struct {
 	Namespace *string `json:"namespace,omitempty"`
-	// Name is omitempty + a leaf Pattern: a container function has no
-	// environment (empty name), so an empty name must be omitted and the
-	// Pattern skipped; a present name must be a DNS-1123 label.
+	// Name of the referenced environment. Optional + omitempty: an unset
+	// reference is omitted and its Pattern skipped (a container function has
+	// no environment; a Package with an unset environment is admitted and
+	// fails later with a clear builder error — the fission CLI still rejects
+	// it). When set, it must be a DNS-1123 label.
 	Name *string `json:"name,omitempty"`
 }
 
