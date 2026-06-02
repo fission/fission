@@ -8,10 +8,8 @@ import (
 	"context"
 	"fmt"
 	"maps"
-	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
-	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	apiv1 "k8s.io/api/core/v1"
 	k8s_err "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -64,7 +62,7 @@ func (cn *Container) createOrGetDeployment(ctx context.Context, fn *fv1.Function
 		}
 		otelUtils.SpanTrackEvent(ctx, "deploymentCreated", otelUtils.GetAttributesForDeployment(depl)...)
 		if minScale > 0 {
-			depl, err = cn.waitForDeploy(ctx, depl, minScale, specializationTimeout)
+			depl, err = util.WaitForDeployment(ctx, cn.kubernetesClient, cn.logger, depl, minScale, specializationTimeout)
 		}
 		return depl, err
 	}
@@ -90,14 +88,14 @@ func (cn *Container) createOrGetDeployment(ctx context.Context, fn *fv1.Function
 	}
 
 	if *existingDepl.Spec.Replicas < minScale {
-		err = cn.scaleDeployment(ctx, existingDepl.Namespace, existingDepl.Name, minScale)
+		err = util.ScaleDeployment(ctx, cn.kubernetesClient, cn.logger, existingDepl.Namespace, existingDepl.Name, minScale)
 		if err != nil {
 			logger.Error(err, "error scaling up function deployment", "function", fn.Name)
 			return nil, err
 		}
 	}
 	if existingDepl.Status.AvailableReplicas < minScale {
-		existingDepl, err = cn.waitForDeploy(ctx, existingDepl, minScale, specializationTimeout)
+		existingDepl, err = util.WaitForDeployment(ctx, cn.kubernetesClient, cn.logger, existingDepl, minScale, specializationTimeout)
 	}
 
 	return existingDepl, err
@@ -115,38 +113,6 @@ func (cn *Container) deleteDeployment(ctx context.Context, ns string, name strin
 	return cn.kubernetesClient.AppsV1().Deployments(ns).Delete(ctx, name, metav1.DeleteOptions{
 		PropagationPolicy: &deletePropagation,
 	})
-}
-
-func (cn *Container) waitForDeploy(ctx context.Context, depl *appsv1.Deployment, replicas int32, specializationTimeout int) (latestDepl *appsv1.Deployment, err error) {
-	oldStatus := depl.Status
-	otelUtils.SpanTrackEvent(ctx, "waitForDeployment", otelUtils.GetAttributesForDeployment(depl)...)
-	// if no specializationTimeout is set, use default value
-	if specializationTimeout < fv1.DefaultSpecializationTimeOut {
-		specializationTimeout = fv1.DefaultSpecializationTimeOut
-	}
-
-	for i := 0; i < specializationTimeout; i++ {
-		latestDepl, err = cn.kubernetesClient.AppsV1().Deployments(depl.ObjectMeta.Namespace).Get(ctx, depl.Name, metav1.GetOptions{})
-		if err != nil {
-			return nil, err
-		}
-		// TODO check for imagePullerror
-		// use AvailableReplicas here is better than ReadyReplicas
-		// since the pods may not be able to serve network traffic yet.
-		if latestDepl.Status.AvailableReplicas >= replicas {
-			otelUtils.SpanTrackEvent(ctx, "deploymentAvailable", otelUtils.GetAttributesForDeployment(latestDepl)...)
-			return latestDepl, err
-		}
-		time.Sleep(time.Second)
-	}
-
-	logger := otelUtils.LoggerWithTraceID(ctx, cn.logger)
-	logger.Error(nil, "Deployment provision failed within timeout window", "name", latestDepl.Name, "old_status", oldStatus,
-		"current_status", latestDepl.Status, "timeout", specializationTimeout)
-
-	// this error appears in the executor pod logs
-	timeoutError := fmt.Errorf("failed to create deployment within the timeout window of %d seconds", specializationTimeout)
-	return nil, timeoutError
 }
 
 func (cn *Container) getDeploymentSpec(ctx context.Context, fn *fv1.Function, targetReplicas *int32,
@@ -197,7 +163,7 @@ func (cn *Container) getDeploymentSpec(ctx context.Context, fn *fv1.Function, ta
 		return nil, err
 	}
 
-	rvCount, err := referencedResourcesRVSum(ctx, cn.kubernetesClient, fn.Namespace, fn.Spec.Secrets, fn.Spec.ConfigMaps)
+	rvCount, err := util.ReferencedResourcesRVSum(ctx, cn.kubernetesClient, fn.Namespace, fn.Spec.Secrets, fn.Spec.ConfigMaps)
 	if err != nil {
 		return nil, err
 	}
@@ -282,21 +248,4 @@ func (cn *Container) getDeploymentSpec(ctx context.Context, fn *fv1.Function, ta
 	}
 
 	return deployment, nil
-}
-
-func (caaf *Container) scaleDeployment(ctx context.Context, deplNS string, deplName string, replicas int32) error {
-	caaf.logger.Info("scaling deployment",
-		"deployment", deplName,
-		"namespace", deplNS,
-		"replicas", replicas)
-	_, err := caaf.kubernetesClient.AppsV1().Deployments(deplNS).UpdateScale(ctx, deplName, &autoscalingv1.Scale{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      deplName,
-			Namespace: deplNS,
-		},
-		Spec: autoscalingv1.ScaleSpec{
-			Replicas: replicas,
-		},
-	}, metav1.UpdateOptions{})
-	return err
 }
