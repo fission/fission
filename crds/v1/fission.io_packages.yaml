@@ -94,11 +94,18 @@ spec:
                   source archive.
                 properties:
                   name:
+                    description: |-
+                      Name of the referenced environment. Optional + omitempty: an unset
+                      reference is omitted and its Pattern skipped (a container function has
+                      no environment; a Package with an unset environment is admitted and
+                      fails later with a clear builder error — the fission CLI still rejects
+                      it). When set, it must be a DNS-1123 label.
+                    maxLength: 63
+                    pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                     type: string
                   namespace:
                     type: string
                 required:
-                - name
                 - namespace
                 type: object
               source:

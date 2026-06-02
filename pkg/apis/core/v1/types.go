@@ -249,22 +249,35 @@ type (
 		Checksum Checksum `json:"checksum,omitempty"`
 	}
 
-	// EnvironmentReference is a reference to an environment.
+	// EnvironmentReference is a reference to an environment. It is used by both
+	// FunctionSpec.Environment and PackageSpec.Environment.
 	EnvironmentReference struct {
 		Namespace string `json:"namespace"`
-		Name      string `json:"name"`
+		// Name of the referenced environment. Optional + omitempty: an unset
+		// reference is omitted and its Pattern skipped (a container function has
+		// no environment; a Package with an unset environment is admitted and
+		// fails later with a clear builder error — the fission CLI still rejects
+		// it). When set, it must be a DNS-1123 label.
+		// +optional
+		// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
+		// +kubebuilder:validation:MaxLength=63
+		Name string `json:"name,omitempty"`
 	}
 
 	// SecretReference is a reference to a kubernetes secret.
 	SecretReference struct {
 		Namespace string `json:"namespace"`
-		Name      string `json:"name"`
+		// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
+		// +kubebuilder:validation:MaxLength=63
+		Name string `json:"name"`
 	}
 
 	// ConfigMapReference is a reference to a kubernetes configmap.
 	ConfigMapReference struct {
 		Namespace string `json:"namespace"`
-		Name      string `json:"name"`
+		// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
+		// +kubebuilder:validation:MaxLength=63
+		Name string `json:"name"`
 	}
 
 	// BuildStatus indicates the current build status of a package.
@@ -326,8 +339,15 @@ type (
 	PackageRef struct {
 		// +optional
 		Namespace string `json:"namespace"`
+		// The package reference is optional, so Name is omitempty: when unset it
+		// is omitted from the object and the Pattern below is skipped (a function
+		// may legitimately have no package). A present name must be a DNS-1123
+		// label. A leaf Pattern (cheap structural validation) is used rather than
+		// a spec-level CEL matches() (which would exceed the cost budget).
 		// +optional
-		Name string `json:"name"`
+		// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
+		// +kubebuilder:validation:MaxLength=63
+		Name string `json:"name,omitempty"`
 
 		// Including resource version in the reference forces the function to be updated on
 		// package update, making it possible to cache the function based on its metadata.

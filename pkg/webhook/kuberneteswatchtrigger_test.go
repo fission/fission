@@ -38,11 +38,10 @@ func TestKubernetesWatchTriggerWebhook_Validate_CrossNamespace(t *testing.T) {
 		wantRejected bool
 		wantCrossErr bool // expect the new cross-namespace error specifically
 	}{
-		// Empty Spec.Namespace is already rejected by upstream KubernetesWatchTriggerSpec.Validate
-		// (ValidateKubeName requires a non-empty RFC 1123 label). Asserted here so we notice
-		// if upstream validation ever loosens — the controller-side coercion in
-		// createKubernetesWatch is the safety net for any object that slips through.
-		{name: "empty spec.namespace rejected by upstream Validate", triggerNs: "default", specNs: "", wantRejected: true, wantCrossErr: false},
+		// Namespace presence/format is enforced by the API server (the CRD marks
+		// spec.namespace required with a DNS-1123 pattern), not the webhook — see
+		// the envtest cases in test/cel. The webhook keeps only the cross-namespace
+		// rule (which needs the object's own namespace, unavailable to CRD CEL).
 		{name: "same namespace is accepted", triggerNs: "default", specNs: "default", wantRejected: false},
 		{name: "cross-namespace target is rejected by new check", triggerNs: "ns-attacker", specNs: "ns-victim", wantRejected: true, wantCrossErr: true},
 	}

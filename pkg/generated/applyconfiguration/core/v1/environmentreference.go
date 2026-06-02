@@ -12,7 +12,10 @@ package v1
 // EnvironmentReference is a reference to an environment.
 type EnvironmentReferenceApplyConfiguration struct {
 	Namespace *string `json:"namespace,omitempty"`
-	Name      *string `json:"name,omitempty"`
+	// Name is omitempty + a leaf Pattern: a container function has no
+	// environment (empty name), so an empty name must be omitted and the
+	// Pattern skipped; a present name must be a DNS-1123 label.
+	Name *string `json:"name,omitempty"`
 }
 
 // EnvironmentReferenceApplyConfiguration constructs a declarative configuration of the EnvironmentReference type for use with
