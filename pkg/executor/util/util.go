@@ -20,12 +20,47 @@ import (
 	"sigs.k8s.io/yaml"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	"github.com/fission/fission/pkg/utils"
 )
 
 const (
 	dumpFileName string = "fission-dump"
 )
+
+// AdoptFunctions lists every Function of executorType across the executor's
+// resource namespaces and (re)creates it via create, concurrently — the shared
+// body of the newdeploy and container managers' AdoptExistingResources. It runs
+// at executor startup to re-stamp pre-existing objects with the new instance ID;
+// pass the executor type's *throttled* createFunction so adopt single-flights
+// with the Function reconciler rather than racing it. A list error in one
+// namespace is logged and skipped rather than aborting the whole sweep.
+func AdoptFunctions(ctx context.Context, logger logr.Logger, fissionClient versioned.Interface,
+	executorType fv1.ExecutorType, create func(context.Context, *fv1.Function) error) {
+	wg := &sync.WaitGroup{}
+	for _, namespace := range utils.DefaultNSResolver().FissionResourceNS {
+		fnList, err := fissionClient.CoreV1().Functions(namespace).List(ctx, metav1.ListOptions{})
+		if err != nil {
+			logger.Error(err, "error listing functions to adopt", "namespace", namespace)
+			continue
+		}
+		for i := range fnList.Items {
+			fn := &fnList.Items[i]
+			if fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType != executorType {
+				continue
+			}
+			wg.Go(func() {
+				if err := create(ctx, fn); err != nil {
+					logger.Error(err, "failed to adopt resources for function",
+						"function", fn.Name, "namespace", fn.Namespace)
+					return
+				}
+				logger.Info("adopted resources for function", "function", fn.Name, "namespace", fn.Namespace)
+			})
+		}
+	}
+	wg.Wait()
+}
 
 // ApplyImagePullSecret applies image pull secret to the give pod spec.
 // It's intentional not to check the existence of secret here.

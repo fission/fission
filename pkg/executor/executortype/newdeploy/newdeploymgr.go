@@ -12,7 +12,6 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
@@ -291,70 +290,23 @@ func (deploy *NewDeploy) RefreshFuncPods(ctx context.Context, logger logr.Logger
 	return nil
 }
 
-// AdoptExistingResources attempts to adopt resources for functions in all namespaces.
+// AdoptExistingResources re-claims the function objects this executor type left
+// behind on a previous run. It routes through the throttled createFunction (not
+// fnCreate directly), so the adopt pass and the Function reconciler — which also
+// re-stamps existing objects on its initial sync — single-flight per function
+// UID instead of racing on the in-place Update (which previously produced
+// resourceVersion conflicts that tripped fnCreate's destroy-on-error path).
 func (deploy *NewDeploy) AdoptExistingResources(ctx context.Context) {
-	wg := &sync.WaitGroup{}
-
-	for _, namepsace := range utils.DefaultNSResolver().FissionResourceNS {
-		fnList, err := deploy.fissionClient.CoreV1().Functions(namepsace).List(ctx, metav1.ListOptions{})
-		if err != nil {
-			deploy.logger.Error(err, "error getting function list")
-			return
-		}
-
-		for i := range fnList.Items {
-			fn := &fnList.Items[i]
-			if fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypeNewdeploy {
-				wg.Go(func() {
-					// Route through createFunction (throttled) rather than calling
-					// fnCreate directly: the Function reconciler also re-stamps existing
-					// objects on its initial sync, so going through the per-UID throttler
-					// makes adopt and reconcile single-flight instead of racing each other
-					// on the in-place Update (which previously produced resourceVersion
-					// conflicts that tripped fnCreate's destroy-on-error path). The local
-					// err also avoids a data race on the err variable from the enclosing
-					// scope, which every adopt goroutine previously wrote.
-					if _, err := deploy.createFunction(ctx, fn); err != nil {
-						deploy.logger.Error(err, "failed to adopt resources for function", "function", fn.Name)
-						return
-					}
-					deploy.logger.Info("adopted resources for function", "function", fn.Name)
-				})
-			}
-		}
-	}
-
-	wg.Wait()
+	executorUtils.AdoptFunctions(ctx, deploy.logger, deploy.fissionClient, fv1.ExecutorTypeNewdeploy,
+		func(ctx context.Context, fn *fv1.Function) error {
+			_, err := deploy.createFunction(ctx, fn)
+			return err
+		})
 }
 
 // CleanupOldExecutorObjects cleans orphaned resources.
 func (deploy *NewDeploy) CleanupOldExecutorObjects(ctx context.Context) {
-	deploy.logger.Info("Newdeploy starts to clean orphaned resources", "instanceID", deploy.instanceID)
-
-	var errs error
-	listOpts := metav1.ListOptions{
-		LabelSelector: labels.Set(map[string]string{fv1.EXECUTOR_TYPE: string(fv1.ExecutorTypeNewdeploy)}).AsSelector().String(),
-	}
-
-	err := reaper.CleanupHpa(ctx, deploy.logger, deploy.kubernetesClient, deploy.instanceID, listOpts)
-	if err != nil {
-		errs = errors.Join(errs, err)
-	}
-
-	err = reaper.CleanupDeployments(ctx, deploy.logger, deploy.kubernetesClient, deploy.instanceID, listOpts)
-	if err != nil {
-		errs = errors.Join(errs, err)
-	}
-
-	err = reaper.CleanupServices(ctx, deploy.logger, deploy.kubernetesClient, deploy.instanceID, listOpts)
-	if err != nil {
-		errs = errors.Join(errs, err)
-	}
-
-	if errs != nil {
-		// TODO retry reaper; logged and ignored for now
-		deploy.logger.Error(err, "Failed to cleanup old executor objects")
-	}
+	reaper.CleanupExecutorObjects(ctx, deploy.logger, deploy.kubernetesClient, deploy.instanceID, fv1.ExecutorTypeNewdeploy)
 }
 
 func (deploy *NewDeploy) getEnvFunctions(ctx context.Context, m *metav1.ObjectMeta) []fv1.Function {
