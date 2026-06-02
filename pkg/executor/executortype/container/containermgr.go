@@ -330,6 +330,13 @@ func (caaf *Container) deleteFunction(ctx context.Context, fn *fv1.Function) err
 // creation failures (quota, invalid spec, API errors) still trigger cleanup so a
 // brand-new function doesn't leak half-created objects.
 func destroyOnCreateError(err error) bool {
+	// A cancelled/expired context means the executor is shutting down or lost
+	// leadership, not that creation genuinely failed — leave any
+	// partially-created resources for the next leader to adopt instead of
+	// tearing them down.
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
 	return !k8sErrs.IsConflict(err) && !k8sErrs.IsAlreadyExists(err)
 }
 

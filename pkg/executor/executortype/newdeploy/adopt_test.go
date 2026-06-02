@@ -5,6 +5,7 @@
 package newdeploy
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -28,6 +29,8 @@ func TestDestroyOnCreateError(t *testing.T) {
 	}{
 		{"conflict is transient — keep", k8sErrs.NewConflict(gr, "fn", errors.New("object has been modified")), false},
 		{"already exists is transient — keep", k8sErrs.NewAlreadyExists(gr, "fn"), false},
+		{"context canceled is shutdown — keep", context.Canceled, false},
+		{"deadline exceeded is shutdown — keep", context.DeadlineExceeded, false},
 		{"not found is genuine — clean up", k8sErrs.NewNotFound(gr, "fn"), true},
 		{"forbidden is genuine — clean up", k8sErrs.NewForbidden(gr, "fn", errors.New("rbac")), true},
 		{"opaque error is genuine — clean up", errors.New("quota exceeded"), true},
