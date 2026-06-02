@@ -36,7 +36,10 @@ var _ webhook.CustomDefaulter = &Environment{}
 var _ webhook.CustomValidator = &Environment{}
 
 func (r *Environment) Validate(new *v1.Environment) error {
-	if err := new.Validate(); err != nil {
+	// Field rules (version range, pool size, enums) are enforced by the API
+	// server via CEL; the webhook runs only the non-CEL checks (runtime
+	// image/name invariant + pod-spec/container security).
+	if err := new.ValidateForAdmission(); err != nil {
 		err = v1.AggregateValidationErrors("Environment", err)
 		return err
 	}

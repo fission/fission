@@ -35,7 +35,10 @@ var _ webhook.CustomDefaulter = &KubernetesWatchTrigger{}
 var _ webhook.CustomValidator = &KubernetesWatchTrigger{}
 
 func (r *KubernetesWatchTrigger) Validate(new *v1.KubernetesWatchTrigger) error {
-	if err := new.Validate(); err != nil {
+	// Field rules (type enum, namespace DNS, function-reference) are enforced by
+	// the API server via CEL; the webhook runs only the non-CEL checks
+	// (label-selector qualified key/value) plus the cross-namespace check below.
+	if err := new.ValidateForAdmission(); err != nil {
 		return v1.AggregateValidationErrors("Watch", err)
 	}
 

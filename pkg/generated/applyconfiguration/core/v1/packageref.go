@@ -12,7 +12,12 @@ package v1
 // PackageRef is a reference to the package.
 type PackageRefApplyConfiguration struct {
 	Namespace *string `json:"namespace,omitempty"`
-	Name      *string `json:"name,omitempty"`
+	// The package reference is optional, so Name is omitempty: when unset it
+	// is omitted from the object and the Pattern below is skipped (a function
+	// may legitimately have no package). A present name must be a DNS-1123
+	// label. A leaf Pattern (cheap structural validation) is used rather than
+	// a spec-level CEL matches() (which would exceed the cost budget).
+	Name *string `json:"name,omitempty"`
 	// Including resource version in the reference forces the function to be updated on
 	// package update, making it possible to cache the function based on its metadata.
 	ResourceVersion *string `json:"resourceversion,omitempty"`

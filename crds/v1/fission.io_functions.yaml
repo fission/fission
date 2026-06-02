@@ -719,6 +719,8 @@ spec:
                   description: ConfigMapReference is a reference to a kubernetes configmap.
                   properties:
                     name:
+                      maxLength: 63
+                      pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                       type: string
                     namespace:
                       type: string
@@ -738,11 +740,18 @@ spec:
                   function cannot be invoked.
                 properties:
                   name:
+                    description: |-
+                      Name of the referenced environment. Optional + omitempty: an unset
+                      reference is omitted and its Pattern skipped (a container function has
+                      no environment; a Package with an unset environment is admitted and
+                      fails later with a clear builder error — the fission CLI still rejects
+                      it). When set, it must be a DNS-1123 label.
+                    maxLength: 63
+                    pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                     type: string
                   namespace:
                     type: string
                 required:
-                - name
                 - namespace
                 type: object
               functionTimeout:
@@ -782,6 +791,14 @@ spec:
                     description: Package reference
                     properties:
                       name:
+                        description: |-
+                          The package reference is optional, so Name is omitempty: when unset it
+                          is omitted from the object and the Pattern below is skipped (a function
+                          may legitimately have no package). A present name must be a DNS-1123
+                          label. A leaf Pattern (cheap structural validation) is used rather than
+                          a spec-level CEL matches() (which would exceed the cost budget).
+                        maxLength: 63
+                        pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                         type: string
                       namespace:
                         type: string
@@ -9297,6 +9314,8 @@ spec:
                   description: SecretReference is a reference to a kubernetes secret.
                   properties:
                     name:
+                      maxLength: 63
+                      pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                       type: string
                     namespace:
                       type: string

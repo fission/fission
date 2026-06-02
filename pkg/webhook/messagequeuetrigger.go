@@ -48,7 +48,10 @@ func (r *MessageQueueTrigger) Validate(new *v1.MessageQueueTrigger) error {
 			return err
 		}
 	}
-	if err := new.Validate(); err != nil {
+	// Field rules (function-reference shape) are enforced by the API server via
+	// CEL; the webhook runs only the non-CEL checks: the podspec allowlist above
+	// and message-queue type/topic validity (validator registry) below.
+	if err := new.ValidateForAdmission(); err != nil {
 		return v1.AggregateValidationErrors("MessageQueueTrigger", err)
 	}
 	return nil
