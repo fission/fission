@@ -58,16 +58,21 @@ func (opts *UpdateSubCommand) complete(input cli.Input) (err error) {
 
 	if incrementStep != canaryCfg.Spec.WeightIncrement {
 		canaryCfg.Spec.WeightIncrement = incrementStep
+		updateNeeded = true
 	}
 
 	if failureThreshold != canaryCfg.Spec.FailureThreshold {
 		canaryCfg.Spec.FailureThreshold = failureThreshold
+		updateNeeded = true
 	}
 
 	if incrementInterval != canaryCfg.Spec.WeightIncrementDuration {
 		canaryCfg.Spec.WeightIncrementDuration = incrementInterval
+		updateNeeded = true
 	}
 
+	// When any spec field changed, re-arm the rollout by resetting the status to
+	// pending so the canary controller re-evaluates from the start.
 	if updateNeeded {
 		canaryCfg.Status.Status = fv1.CanaryConfigStatusPending
 	}

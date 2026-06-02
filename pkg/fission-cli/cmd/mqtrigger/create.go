@@ -115,25 +115,9 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	secret := input.String(flagkey.MqtSecret)
 
 	if input.Bool(flagkey.SpecSave) {
-		specDir := util.GetSpecDir(input)
-		specIgnore := util.GetSpecIgnore(input)
-		fr, err := spec.ReadSpecs(specDir, specIgnore, false)
-		if err != nil {
-			return fmt.Errorf("error reading spec in '%v': %w", specDir, err)
-		}
-
-		exists, err := fr.ExistsInSpecs(fv1.Function{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      fnName,
-				Namespace: userProvidedNS,
-			},
-		})
+		err = spec.CheckFunctionReferencesInSpecs(input, "MessageQueueTrigger", mqtName, []string{fnName}, userProvidedNS)
 		if err != nil {
 			return err
-		}
-		if !exists {
-			console.Warn(fmt.Sprintf("MessageQueueTrigger '%v' references unknown Function '%v', please create it before applying spec",
-				mqtName, fnName))
 		}
 	} else {
 		err = util.CheckFunctionExistence(input.Context(), opts.Client(), []string{fnName}, fnNamespace)
@@ -180,19 +164,9 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 }
 
 func (opts *CreateSubCommand) run(input cli.Input) error {
-	// if we're writing a spec, don't call the API
-	// save to spec file or display the spec to console
-	if input.Bool(flagkey.SpecDry) {
-		return spec.SpecDry(*opts.trigger)
-	}
-
-	if input.Bool(flagkey.SpecSave) {
-		specFile := fmt.Sprintf("mqtrigger-%v.yaml", opts.trigger.Name)
-		err := spec.SpecSave(*opts.trigger, specFile, false)
-		if err != nil {
-			return fmt.Errorf("error saving message queue trigger spec: %w", err)
-		}
-		return nil
+	// if we're writing a spec, don't call the API; save/print and return.
+	if handled, err := spec.SaveOrDry(input, *opts.trigger, fmt.Sprintf("mqtrigger-%v.yaml", opts.trigger.Name)); handled {
+		return err
 	}
 
 	_, err := opts.Client().FissionClientSet.CoreV1().MessageQueueTriggers(opts.trigger.ObjectMeta.Namespace).Create(input.Context(), opts.trigger, metav1.CreateOptions{})

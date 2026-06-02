@@ -67,29 +67,13 @@ func (opts *CreateSubCommand) run(input cli.Input) (err error) {
 			len(envList.Items), opts.env.Namespace)
 	}
 
-	// if we're writing a spec, don't call the API
-	// save to spec file or display the spec to console
-	if input.Bool(flagkey.SpecDry) {
-		err = opts.env.Validate()
-		if err != nil {
+	// if we're writing a spec, don't call the API; validate then save/print.
+	if input.Bool(flagkey.SpecDry) || input.Bool(flagkey.SpecSave) {
+		if err = opts.env.Validate(); err != nil {
 			return fv1.AggregateValidationErrors("Environment", err)
 		}
-
-		return spec.SpecDry(*opts.env)
-	}
-
-	if input.Bool(flagkey.SpecSave) {
-		err = opts.env.Validate()
-		if err != nil {
-			return fv1.AggregateValidationErrors("Environment", err)
-		}
-
-		specFile := fmt.Sprintf("env-%v.yaml", opts.env.Name)
-		err = spec.SpecSave(*opts.env, specFile, false)
-		if err != nil {
-			return fmt.Errorf("error saving environment spec: %w", err)
-		}
-		return nil
+		_, err = spec.SaveOrDry(input, *opts.env, fmt.Sprintf("env-%v.yaml", opts.env.Name))
+		return err
 	}
 
 	opts.env.Namespace = currentNS

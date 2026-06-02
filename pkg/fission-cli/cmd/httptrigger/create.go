@@ -110,26 +110,8 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 
 	// For Specs, the spec validate checks for function reference
 	if input.Bool(flagkey.SpecSave) {
-		specDir := util.GetSpecDir(input)
-		specIgnore := util.GetSpecIgnore(input)
-		fr, err := spec.ReadSpecs(specDir, specIgnore, false)
-		if err != nil {
-			return fmt.Errorf("error reading spec in '%v': %w", specDir, err)
-		}
-		for _, fn := range functionList {
-			exists, err := fr.ExistsInSpecs(fv1.Function{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      fn,
-					Namespace: userProvidedNS,
-				},
-			})
-			if err != nil {
-				return err
-			}
-			if !exists {
-				console.Warn(fmt.Sprintf("HTTPTrigger '%v' references unknown Function '%v', please create it before applying spec",
-					triggerName, fn))
-			}
+		if err := spec.CheckFunctionReferencesInSpecs(input, "HTTPTrigger", triggerName, functionList, userProvidedNS); err != nil {
+			return err
 		}
 	} else {
 
@@ -177,19 +159,9 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 }
 
 func (opts *CreateSubCommand) run(input cli.Input) error {
-	// if we're writing a spec, don't call the API
-	// save to spec file or display the spec to console
-	if input.Bool(flagkey.SpecDry) {
-		return spec.SpecDry(*opts.trigger)
-	}
-
-	if input.Bool(flagkey.SpecSave) {
-		specFile := fmt.Sprintf("route-%v.yaml", opts.trigger.Name)
-		err := spec.SpecSave(*opts.trigger, specFile, false)
-		if err != nil {
-			return fmt.Errorf("error saving HTTP trigger spec: %w", err)
-		}
-		return nil
+	// if we're writing a spec, don't call the API; save/print and return.
+	if handled, err := spec.SaveOrDry(input, *opts.trigger, fmt.Sprintf("route-%v.yaml", opts.trigger.Name)); handled {
+		return err
 	}
 
 	// Ensure we don't have a duplicate HTTP route defined (same URL and method)
