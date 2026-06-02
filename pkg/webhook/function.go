@@ -66,7 +66,10 @@ func (r *Function) Validate(new *v1.Function) error {
 		return v1.AggregateValidationErrors("Function", err)
 	}
 
-	if err := new.Validate(); err != nil {
+	// Field rules (executor enums, scale bounds, reference-name DNS, etc.) are
+	// enforced by the API server via CEL; the webhook runs only the non-CEL
+	// checks (pod-spec security) plus the cross-namespace checks above.
+	if err := new.ValidateForAdmission(); err != nil {
 		return v1.AggregateValidationErrors("Function", err)
 	}
 	return nil

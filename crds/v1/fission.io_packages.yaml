@@ -94,11 +94,16 @@ spec:
                   source archive.
                 properties:
                   name:
+                    description: |-
+                      Name is omitempty + a leaf Pattern: a container function has no
+                      environment (empty name), so an empty name must be omitted and the
+                      Pattern skipped; a present name must be a DNS-1123 label.
+                    maxLength: 63
+                    pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                     type: string
                   namespace:
                     type: string
                 required:
-                - name
                 - namespace
                 type: object
               source:

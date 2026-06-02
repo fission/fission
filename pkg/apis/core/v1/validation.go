@@ -289,9 +289,9 @@ func (spec FunctionSpec) Validate() error {
 	if spec.InvokeStrategy.ExecutionStrategy.ExecutorType == ExecutorTypeContainer && spec.PodSpec == nil {
 		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidObject, "FunctionSpec.PodSpec", "", "executor type container requires a pod spec"))
 	}
-	// Reject podspec fields that would let a tenant escalate via the
-	// executor service account. Closes GHSA-v455-mv2v-5g92.
-	errs = errors.Join(errs, ValidatePodSpecSafety("Function.spec.podspec", spec.PodSpec))
+	// Non-CEL admission check (pod-spec security). Kept in Validate() so the
+	// CLI checks it client-side; the webhook runs it via ValidateForAdmission().
+	errs = errors.Join(errs, spec.validateForAdmission())
 
 	// TODO Add below validation warning
 	// if spec.FunctionTimeout <= 0 {
@@ -299,6 +299,13 @@ func (spec FunctionSpec) Validate() error {
 	// }
 
 	return errs
+}
+
+// validateForAdmission returns the FunctionSpec checks the API server cannot
+// enforce via CEL and the admission webhook must still run: pod-spec security
+// (iterating an embedded PodSpec exceeds the CEL cost budget; GHSA-v455-mv2v-5g92).
+func (spec FunctionSpec) validateForAdmission() error {
+	return ValidatePodSpecSafety("Function.spec.podspec", spec.PodSpec)
 }
 
 func (is InvokeStrategy) Validate() error {
@@ -567,16 +574,33 @@ func (spec KubernetesWatchTriggerSpec) Validate() error {
 
 	errs = errors.Join(errs,
 		ValidateKubeName("KubernetesWatchTriggerSpec.Namespace", spec.Namespace),
-		ValidateKubeLabel("KubernetesWatchTriggerSpec.LabelSelector", spec.LabelSelector),
-		spec.FunctionReference.Validate())
+		spec.FunctionReference.Validate(),
+		spec.validateForAdmission())
 
 	return errs
+}
+
+// validateForAdmission returns the KubernetesWatchTriggerSpec checks CEL cannot
+// express: label-selector qualified key/value validation. (Type, namespace, and
+// function-reference are enforced by CEL on the CRD.)
+func (spec KubernetesWatchTriggerSpec) validateForAdmission() error {
+	return ValidateKubeLabel("KubernetesWatchTriggerSpec.LabelSelector", spec.LabelSelector)
 }
 
 func (spec MessageQueueTriggerSpec) Validate() error {
 	var errs error
 
 	errs = errors.Join(errs, spec.FunctionReference.Validate())
+	errs = errors.Join(errs, spec.validateForAdmission())
+
+	return errs
+}
+
+// validateForAdmission returns the MessageQueueTriggerSpec checks CEL cannot
+// express: message-queue type and topic/response-topic validity, looked up in
+// the connector validator registry (pkg/mqtrigger/validator).
+func (spec MessageQueueTriggerSpec) validateForAdmission() error {
+	var errs error
 
 	if !validator.IsValidMessageQueue((string)(spec.MessageQueueType), spec.MqtKind) {
 		errs = errors.Join(errs, MakeValidationErr(ErrorUnsupportedType, "MessageQueueTriggerSpec.MessageQueueType", spec.MessageQueueType, "not a supported message queue type"))
@@ -621,6 +645,15 @@ func (p *Package) Validate() error {
 	return errs
 }
 
+// ValidateForAdmission runs the Package checks the API server cannot enforce
+// via CEL. There are none on the spec itself (archive/checksum/build-status are
+// CEL-covered, reference names are CEL-covered); the webhook additionally
+// enforces the archive literal-size limit and the cross-namespace environment
+// check inline. Defined for a uniform webhook switch.
+func (p *Package) ValidateForAdmission() error {
+	return nil
+}
+
 func (pl *PackageList) Validate() error {
 	var errs error
 	// not validate ListMeta
@@ -640,6 +673,13 @@ func (f *Function) Validate() error {
 	return errs
 }
 
+// ValidateForAdmission runs only the checks the API server cannot enforce via
+// CEL (pod-spec security). The admission webhook calls this instead of Validate()
+// so it does not redundantly re-check the CEL-covered field rules.
+func (f *Function) ValidateForAdmission() error {
+	return f.Spec.validateForAdmission()
+}
+
 func (fl *FunctionList) Validate() error {
 	var errs error
 	for _, f := range fl.Items {
@@ -653,7 +693,20 @@ func (e *Environment) Validate() error {
 
 	errs = errors.Join(errs,
 		validateMetadata("Environment", e.ObjectMeta),
-		e.Spec.Validate())
+		e.Spec.Validate(),
+		e.validateForAdmission())
+
+	return errs
+}
+
+// validateForAdmission returns the Environment checks the API server cannot
+// enforce via CEL and the admission webhook must still run: the runtime
+// image/name invariant (a cross-field check comparing a container's image to
+// spec.runtime.image and its name to the environment name) and pod-spec /
+// container security on the runtime + builder podspecs and bare containers
+// (GHSA-gx55-f84r-v3r7, GHSA-wmgg-3p4h-48x7, GHSA-m63v-2g9w-2w6v).
+func (e *Environment) validateForAdmission() error {
+	var errs error
 
 	if e.Spec.Runtime.PodSpec != nil {
 		for _, container := range e.Spec.Runtime.PodSpec.Containers {
@@ -662,20 +715,22 @@ func (e *Environment) Validate() error {
 			}
 		}
 	}
-	// Reject podspec fields that would let a tenant escalate via the
-	// executor / buildermgr service accounts. Closes GHSA-gx55-f84r-v3r7,
-	// GHSA-wmgg-3p4h-48x7.
 	errs = errors.Join(errs, ValidatePodSpecSafety("Environment.spec.runtime.podspec", e.Spec.Runtime.PodSpec))
 	errs = errors.Join(errs, ValidatePodSpecSafety("Environment.spec.builder.podspec", e.Spec.Builder.PodSpec))
 	// The standalone Runtime.Container / Builder.Container fields are merged
 	// into the runtime / builder pod without going through any PodSpec, so
-	// ValidatePodSpecSafety above does not reach them. Validate their
-	// SecurityContext directly — otherwise a tenant could set
-	// spec.runtime.container.securityContext.privileged=true and bypass the
-	// PodSpec hardening. Closes GHSA-m63v-2g9w-2w6v.
+	// ValidatePodSpecSafety above does not reach them; validate their
+	// SecurityContext directly.
 	errs = errors.Join(errs, ValidateContainerSafety("Environment.spec.runtime.container", e.Spec.Runtime.Container))
 	errs = errors.Join(errs, ValidateContainerSafety("Environment.spec.builder.container", e.Spec.Builder.Container))
 	return errs
+}
+
+// ValidateForAdmission runs only the checks the API server cannot enforce via
+// CEL (see validateForAdmission). The admission webhook calls this instead of
+// Validate() so it does not redundantly re-check the CEL-covered field rules.
+func (e *Environment) ValidateForAdmission() error {
+	return e.validateForAdmission()
 }
 
 func (el *EnvironmentList) Validate() error {
@@ -714,6 +769,13 @@ func (k *KubernetesWatchTrigger) Validate() error {
 	return errs
 }
 
+// ValidateForAdmission runs only the checks the API server cannot enforce via
+// CEL (label-selector qualified key/value). The admission webhook calls this
+// instead of Validate(); its cross-namespace check stays inline in the webhook.
+func (k *KubernetesWatchTrigger) ValidateForAdmission() error {
+	return k.Spec.validateForAdmission()
+}
+
 func (kl *KubernetesWatchTriggerList) Validate() error {
 	var errs error
 	for _, k := range kl.Items {
@@ -748,6 +810,13 @@ func (m *MessageQueueTrigger) Validate() error {
 		m.Spec.Validate())
 
 	return errs
+}
+
+// ValidateForAdmission runs only the checks the API server cannot enforce via
+// CEL (message-queue type/topic validity). The admission webhook calls this
+// instead of Validate(); its podspec allowlist stays inline in the webhook.
+func (m *MessageQueueTrigger) ValidateForAdmission() error {
+	return m.Spec.validateForAdmission()
 }
 
 func (ml *MessageQueueTriggerList) Validate() error {
