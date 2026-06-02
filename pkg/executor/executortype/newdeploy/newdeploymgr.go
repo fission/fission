@@ -14,7 +14,6 @@ import (
 	"strings"
 	"time"
 
-	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	apiv1 "k8s.io/api/core/v1"
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	k8sErrs "k8s.io/apimachinery/pkg/api/errors"
@@ -272,7 +271,7 @@ func (deploy *NewDeploy) RefreshFuncPods(ctx context.Context, logger logr.Logger
 
 	// Ideally there should be only one deployment but for now we rely on label/selector to ensure that condition
 	for _, deployment := range dep.Items {
-		rvCount, err := referencedResourcesRVSum(ctx, deploy.kubernetesClient, f.Namespace, f.Spec.Secrets, f.Spec.ConfigMaps)
+		rvCount, err := executorUtils.ReferencedResourcesRVSum(ctx, deploy.kubernetesClient, f.Namespace, f.Spec.Secrets, f.Spec.ConfigMaps)
 		if err != nil {
 			return err
 		}
@@ -396,6 +395,16 @@ func (deploy *NewDeploy) deleteFunction(ctx context.Context, fn *fv1.Function) e
 // creation failures (quota, invalid spec, API errors) still trigger cleanup so a
 // brand-new function doesn't leak half-created objects.
 func destroyOnCreateError(err error) bool {
+	// An explicitly cancelled context means the executor is shutting down, lost
+	// leadership, or the caller gave up — not that creation genuinely failed —
+	// so leave any partially-created resources for the next leader/request to
+	// adopt instead of tearing them down. A context *deadline* is different: on
+	// the specialization path the context carries the per-function
+	// SpecializationTimeout (see pkg/executor/executor.go), so DeadlineExceeded
+	// is a genuine timeout and falls through to normal cleanup.
+	if errors.Is(err, context.Canceled) {
+		return false
+	}
 	return !k8sErrs.IsConflict(err) && !k8sErrs.IsAlreadyExists(err)
 }
 
@@ -838,29 +847,6 @@ func (deploy *NewDeploy) updateStatus(fn *fv1.Function, err error, message strin
 func (deploy *NewDeploy) IdleStrategy() idle.Strategy {
 	return idle.NewScaleDownStrategy(deploy.logger, fv1.ExecutorTypeNewdeploy, deploy.fissionClient,
 		deploy.fsCache, deploy.kubernetesClient, deploy.defaultIdlePodReapTime, deploy.objectReaperIntervalSecond, true)
-}
-
-func (deploy *NewDeploy) scaleDeployment(ctx context.Context, deplNS string, deplName string, replicas int32) error {
-	otelUtils.SpanTrackEvent(ctx, "scaleDeployment", otelUtils.MapToAttributes(map[string]string{
-		"deployment-name":      deplName,
-		"deployment-namespace": deplNS,
-		"replicas":             fmt.Sprintf("%d", replicas),
-	})...)
-	logger := otelUtils.LoggerWithTraceID(ctx, deploy.logger)
-	logger.Info("scaling deployment",
-		"deployment", deplName,
-		"namespace", deplNS,
-		"replicas", replicas)
-	_, err := deploy.kubernetesClient.AppsV1().Deployments(deplNS).UpdateScale(ctx, deplName, &autoscalingv1.Scale{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      deplName,
-			Namespace: deplNS,
-		},
-		Spec: autoscalingv1.ScaleSpec{
-			Replicas: replicas,
-		},
-	}, metav1.UpdateOptions{})
-	return err
 }
 
 func (deploy *NewDeploy) DumpDebugInfo(ctx context.Context) error {

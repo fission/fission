@@ -56,7 +56,6 @@ type (
 		fissionClient    versioned.Interface
 		instanceID       string
 		nsResolver       *utils.NamespaceResolver
-		// fetcherConfig    *fetcherConfig.Config
 
 		runtimeImagePullPolicy apiv1.PullPolicy
 		useIstio               bool
@@ -158,12 +157,6 @@ func (caaf *Container) GetTypeName(ctx context.Context) fv1.ExecutorType {
 	return fv1.ExecutorTypeContainer
 }
 
-// GetTotalAvailable has not been implemented for CaaF.
-func (caaf *Container) GetTotalAvailable(fn *fv1.Function) int {
-	// Not Implemented for CaaF.
-	return 0
-}
-
 // UnTapService has not been implemented for CaaF.
 func (caaf *Container) UnTapService(ctx context.Context, fnMeta *metav1.ObjectMeta, svcHost string) {
 	// Not Implemented for CaaF.
@@ -253,7 +246,7 @@ func (caaf *Container) RefreshFuncPods(ctx context.Context, logger logr.Logger, 
 
 	// Ideally there should be only one deployment but for now we rely on label/selector to ensure that condition
 	for _, deployment := range dep.Items {
-		rvCount, err := referencedResourcesRVSum(ctx, caaf.kubernetesClient, deployment.Namespace, f.Spec.Secrets, f.Spec.ConfigMaps)
+		rvCount, err := executorUtils.ReferencedResourcesRVSum(ctx, caaf.kubernetesClient, deployment.Namespace, f.Spec.Secrets, f.Spec.ConfigMaps)
 		if err != nil {
 			return err
 		}
@@ -337,6 +330,16 @@ func (caaf *Container) deleteFunction(ctx context.Context, fn *fv1.Function) err
 // creation failures (quota, invalid spec, API errors) still trigger cleanup so a
 // brand-new function doesn't leak half-created objects.
 func destroyOnCreateError(err error) bool {
+	// An explicitly cancelled context means the executor is shutting down, lost
+	// leadership, or the caller gave up — not that creation genuinely failed —
+	// so leave any partially-created resources for the next leader/request to
+	// adopt instead of tearing them down. A context *deadline* is different: on
+	// the specialization path the context carries the per-function
+	// SpecializationTimeout (see pkg/executor/executor.go), so DeadlineExceeded
+	// is a genuine timeout and falls through to normal cleanup.
+	if errors.Is(err, context.Canceled) {
+		return false
+	}
 	return !k8sErrs.IsConflict(err) && !k8sErrs.IsAlreadyExists(err)
 }
 
@@ -647,7 +650,7 @@ func (caaf *Container) getObjName(fn *fv1.Function) string {
 	}
 	// constructed name should be 63 characters long, as it is a valid k8s name
 	// functionMetadata should be 35 characters long, as we take 17 characters from functionUid
-	// with newdeploy 10 character prefix
+	// with the "container-" 10 character prefix
 	return strings.ToLower(fmt.Sprintf("container-%s-%s", functionMetadata, uid))
 }
 

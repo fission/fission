@@ -9,8 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"strconv"
-	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
@@ -19,7 +17,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/client-go/kubernetes"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/executor/util"
@@ -67,14 +64,14 @@ func (deploy *NewDeploy) createOrGetDeployment(ctx context.Context, fn *fv1.Func
 		}
 
 		if *existingDepl.Spec.Replicas < minScale {
-			err = deploy.scaleDeployment(ctx, existingDepl.Namespace, existingDepl.Name, minScale)
+			err = util.ScaleDeployment(ctx, deploy.kubernetesClient, deploy.logger, existingDepl.Namespace, existingDepl.Name, minScale)
 			if err != nil {
 				deploy.logger.Error(err, "error scaling up function deployment", "function", fn.Name)
 				return nil, err
 			}
 		}
 		if existingDepl.Status.AvailableReplicas < minScale {
-			existingDepl, err = deploy.waitForDeploy(ctx, existingDepl, minScale, specializationTimeout)
+			existingDepl, err = util.WaitForDeployment(ctx, deploy.kubernetesClient, deploy.logger, existingDepl, minScale, specializationTimeout)
 		}
 
 		return existingDepl, err
@@ -93,7 +90,7 @@ func (deploy *NewDeploy) createOrGetDeployment(ctx context.Context, fn *fv1.Func
 			}
 		}
 		if minScale > 0 {
-			depl, err = deploy.waitForDeploy(ctx, depl, minScale, specializationTimeout)
+			depl, err = util.WaitForDeployment(ctx, deploy.kubernetesClient, deploy.logger, depl, minScale, specializationTimeout)
 		}
 		return depl, err
 	}
@@ -165,7 +162,7 @@ func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function
 	// rollback, set RevisionHistoryLimit to 0 to disable this feature.
 	revisionHistoryLimit := int32(0)
 
-	rvCount, err := referencedResourcesRVSum(ctx, deploy.kubernetesClient, fn.Namespace, fn.Spec.Secrets, fn.Spec.ConfigMaps)
+	rvCount, err := util.ReferencedResourcesRVSum(ctx, deploy.kubernetesClient, fn.Namespace, fn.Spec.Secrets, fn.Spec.ConfigMaps)
 	if err != nil {
 		return nil, err
 	}
@@ -438,39 +435,6 @@ func (deploy *NewDeploy) deleteSvc(ctx context.Context, ns string, name string) 
 	return deploy.kubernetesClient.CoreV1().Services(ns).Delete(ctx, name, metav1.DeleteOptions{})
 }
 
-func (deploy *NewDeploy) waitForDeploy(ctx context.Context, depl *appsv1.Deployment, replicas int32, specializationTimeout int) (latestDepl *appsv1.Deployment, err error) {
-	oldStatus := depl.Status
-	otelUtils.SpanTrackEvent(ctx, "waitingForDeployment", otelUtils.GetAttributesForDeployment(depl)...)
-	// if no specializationTimeout is set, use default value
-	if specializationTimeout < fv1.DefaultSpecializationTimeOut {
-		specializationTimeout = fv1.DefaultSpecializationTimeOut
-	}
-
-	logger := otelUtils.LoggerWithTraceID(ctx, deploy.logger)
-
-	for i := 0; i < specializationTimeout; i++ {
-		latestDepl, err = deploy.kubernetesClient.AppsV1().Deployments(depl.ObjectMeta.Namespace).Get(ctx, depl.Name, metav1.GetOptions{})
-		if err != nil {
-			return nil, err
-		}
-		// TODO check for imagePullerror
-		// use AvailableReplicas here is better than ReadyReplicas
-		// since the pods may not be able to serve network traffic yet.
-		if latestDepl.Status.AvailableReplicas >= replicas {
-			otelUtils.SpanTrackEvent(ctx, "deploymentAvailable", otelUtils.GetAttributesForDeployment(latestDepl)...)
-			return latestDepl, err
-		}
-		time.Sleep(time.Second)
-	}
-
-	logger.Error(nil, "Deployment provision failed within timeout window", "name", latestDepl.Name, "old_status", oldStatus,
-		"current_status", latestDepl.Status, "timeout", specializationTimeout)
-
-	// this error appears in the executor pod logs
-	timeoutError := fmt.Errorf("failed to create deployment within the timeout window of %d seconds", specializationTimeout)
-	return nil, timeoutError
-}
-
 // cleanupNewdeploy cleans all kubernetes objects related to function
 func (deploy *NewDeploy) cleanupNewdeploy(ctx context.Context, ns string, name string) error {
 	var result error
@@ -497,58 +461,4 @@ func (deploy *NewDeploy) cleanupNewdeploy(ctx context.Context, ns string, name s
 	}
 
 	return result
-}
-
-// referencedResourcesRVSum returns the sum of resource version of all resources the function references to.
-// We used to update timestamp in the deployment environment field in order to trigger a rolling update when
-// the function referenced resources get updated. However, use timestamp means we are not able to avoid
-// triggering a rolling update when executor tries to adopt orphaned deployment due to timestamp changed which
-// is unwanted. In order to let executor adopt deployment without triggering a rolling update, we need an
-// identical way to get a value that can reflect resources changed without affecting by the time.
-// To achieve this goal, the sum of the resource version of all referenced resources is a good fit for our
-// scenario since the sum of the resource version is always the same as long as no resources changed.
-func referencedResourcesRVSum(ctx context.Context, client kubernetes.Interface, namespace string, secrets []fv1.SecretReference, cfgmaps []fv1.ConfigMapReference) (int, error) {
-	rvCount := 0
-
-	if len(secrets) > 0 {
-		list, err := client.CoreV1().Secrets(namespace).List(ctx, metav1.ListOptions{})
-		if err != nil {
-			return 0, err
-		}
-
-		objmap := make(map[string]apiv1.Secret)
-		for _, secret := range list.Items {
-			objmap[secret.Namespace+"/"+secret.Name] = secret
-		}
-
-		for _, ref := range secrets {
-			s, ok := objmap[ref.Namespace+"/"+ref.Name]
-			if ok {
-				rv, _ := strconv.ParseInt(s.ResourceVersion, 10, 32)
-				rvCount += int(rv)
-			}
-		}
-	}
-
-	if len(cfgmaps) > 0 {
-		list, err := client.CoreV1().ConfigMaps(namespace).List(ctx, metav1.ListOptions{})
-		if err != nil {
-			return 0, err
-		}
-
-		objmap := make(map[string]apiv1.ConfigMap)
-		for _, cfg := range list.Items {
-			objmap[cfg.Namespace+"/"+cfg.Name] = cfg
-		}
-
-		for _, ref := range cfgmaps {
-			s, ok := objmap[ref.Namespace+"/"+ref.Name]
-			if ok {
-				rv, _ := strconv.ParseInt(s.ResourceVersion, 10, 32)
-				rvCount += int(rv)
-			}
-		}
-	}
-
-	return rvCount, nil
 }

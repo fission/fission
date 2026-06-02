@@ -7,13 +7,10 @@ package container
 import (
 	"context"
 	"errors"
-	"strconv"
 
 	apiv1 "k8s.io/api/core/v1"
 	k8s_err "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 )
@@ -77,58 +74,4 @@ func (cn *Container) cleanupContainer(ctx context.Context, ns string, name strin
 	}
 
 	return result
-}
-
-// referencedResourcesRVSum returns the sum of resource version of all resources the function references to.
-// We used to update timestamp in the deployment environment field in order to trigger a rolling update when
-// the function referenced resources get updated. However, use timestamp means we are not able to avoid tri-
-// ggering a rolling update when executor tries to adopt orphaned deployment due to timestamp changed which
-// is unwanted. In order to let executor adopt deployment without triggering a rolling update, we need an
-// identical way to get a value that can reflect resources changed without affecting by the time.
-// To achieve this goal, the sum of the resource version of all referenced resources is a good fit for our
-// scenario since the sum of the resource version is always the same as long as no resources changed.
-func referencedResourcesRVSum(ctx context.Context, client kubernetes.Interface, namespace string, secrets []fv1.SecretReference, cfgmaps []fv1.ConfigMapReference) (int, error) {
-	rvCount := 0
-
-	if len(secrets) > 0 {
-		list, err := client.CoreV1().Secrets(namespace).List(ctx, metav1.ListOptions{})
-		if err != nil {
-			return 0, err
-		}
-
-		objmap := make(map[string]apiv1.Secret)
-		for _, secret := range list.Items {
-			objmap[secret.Namespace+"/"+secret.Name] = secret
-		}
-
-		for _, ref := range secrets {
-			s, ok := objmap[ref.Namespace+"/"+ref.Name]
-			if ok {
-				rv, _ := strconv.ParseInt(s.ResourceVersion, 10, 32)
-				rvCount += int(rv)
-			}
-		}
-	}
-
-	if len(cfgmaps) > 0 {
-		list, err := client.CoreV1().ConfigMaps(namespace).List(ctx, metav1.ListOptions{})
-		if err != nil {
-			return 0, err
-		}
-
-		objmap := make(map[string]apiv1.ConfigMap)
-		for _, cfg := range list.Items {
-			objmap[cfg.Namespace+"/"+cfg.Name] = cfg
-		}
-
-		for _, ref := range cfgmaps {
-			s, ok := objmap[ref.Namespace+"/"+ref.Name]
-			if ok {
-				rv, _ := strconv.ParseInt(s.ResourceVersion, 10, 32)
-				rvCount += int(rv)
-			}
-		}
-	}
-
-	return rvCount, nil
 }

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	"golang.org/x/sync/errgroup"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -26,6 +27,11 @@ import (
 
 const (
 	dumpFileName string = "fission-dump"
+
+	// adoptConcurrency bounds how many functions AdoptFunctions (re)creates in
+	// parallel, so the startup adopt sweep doesn't fan out one goroutine — and
+	// a burst of API calls — per function on clusters with many functions.
+	adoptConcurrency = 10
 )
 
 // AdoptFunctions lists every Function of executorType across the executor's
@@ -37,7 +43,8 @@ const (
 // namespace is logged and skipped rather than aborting the whole sweep.
 func AdoptFunctions(ctx context.Context, logger logr.Logger, fissionClient versioned.Interface,
 	executorType fv1.ExecutorType, create func(context.Context, *fv1.Function) error) {
-	wg := &sync.WaitGroup{}
+	g := new(errgroup.Group)
+	g.SetLimit(adoptConcurrency)
 	for _, namespace := range utils.DefaultNSResolver().FissionResourceNS {
 		fnList, err := fissionClient.CoreV1().Functions(namespace).List(ctx, metav1.ListOptions{})
 		if err != nil {
@@ -49,17 +56,21 @@ func AdoptFunctions(ctx context.Context, logger logr.Logger, fissionClient versi
 			if fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType != executorType {
 				continue
 			}
-			wg.Go(func() {
+			// Each adopt is independent; log and continue rather than
+			// returning an error, so one function's failure neither cancels
+			// the others nor aborts the sweep.
+			g.Go(func() error {
 				if err := create(ctx, fn); err != nil {
 					logger.Error(err, "failed to adopt resources for function",
 						"function", fn.Name, "namespace", fn.Namespace)
-					return
+					return nil
 				}
 				logger.Info("adopted resources for function", "function", fn.Name, "namespace", fn.Namespace)
+				return nil
 			})
 		}
 	}
-	wg.Wait()
+	_ = g.Wait()
 }
 
 // ApplyImagePullSecret applies image pull secret to the give pod spec.
