@@ -23,6 +23,7 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/cmd/spec/types"
 	"github.com/fission/fission/pkg/fission-cli/console"
+	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
@@ -200,6 +201,49 @@ func SpecDry(resource any) error {
 	}
 	fmt.Println(string(data))
 	return nil
+}
+
+// CheckFunctionReferencesInSpecs warns for every function name a trigger
+// references that is not present in the spec directory. It is the shared
+// --spec-save validation used by the trigger create commands (referrerKind is
+// e.g. "HTTPTrigger", referrerName the trigger name).
+func CheckFunctionReferencesInSpecs(input cli.Input, referrerKind, referrerName string, fnNames []string, namespace string) error {
+	specDir := util.GetSpecDir(input)
+	fr, err := ReadSpecs(specDir, util.GetSpecIgnore(input), false)
+	if err != nil {
+		return fmt.Errorf("error reading spec in '%v': %w", specDir, err)
+	}
+	for _, fn := range fnNames {
+		exists, err := fr.ExistsInSpecs(fv1.Function{
+			ObjectMeta: metav1.ObjectMeta{Name: fn, Namespace: namespace},
+		})
+		if err != nil {
+			return err
+		}
+		if !exists {
+			console.Warn(fmt.Sprintf("%s '%v' references unknown Function '%v', please create it before applying spec",
+				referrerKind, referrerName, fn))
+		}
+	}
+	return nil
+}
+
+// SaveOrDry handles the shared --spec-dry / --spec-save behaviour used by the
+// resource create commands. When --spec-dry is set it prints the resource YAML;
+// when --spec-save is set it writes it to specFile. It returns handled=true when
+// either flag was set, in which case the caller must return err immediately
+// instead of talking to the API server.
+func SaveOrDry(input cli.Input, resource any, specFile string) (handled bool, err error) {
+	if input.Bool(flagkey.SpecDry) {
+		return true, SpecDry(resource)
+	}
+	if input.Bool(flagkey.SpecSave) {
+		if err := SpecSave(resource, specFile, false); err != nil {
+			return true, fmt.Errorf("error saving spec to %s: %w", specFile, err)
+		}
+		return true, nil
+	}
+	return false, nil
 }
 
 func crdToYaml(resource any) (metav1.ObjectMeta, string, []byte, error) {

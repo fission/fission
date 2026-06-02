@@ -58,6 +58,16 @@ func (opts *CreateSubCommand) run(input cli.Input) (err error) {
 	// we use user provided NS in spec. While creating actual record we use the current context's NS.
 	opts.env.Namespace = userDefinedNS
 
+	// if we're writing a spec, don't call the API; validate then save/print.
+	// Handled before any API call so `--spec`/`--spec-dry` works without a cluster.
+	if input.Bool(flagkey.SpecDry) || input.Bool(flagkey.SpecSave) {
+		if err = opts.env.Validate(); err != nil {
+			return fv1.AggregateValidationErrors("Environment", err)
+		}
+		_, err = spec.SaveOrDry(input, *opts.env, fmt.Sprintf("env-%v.yaml", opts.env.Name))
+		return err
+	}
+
 	envList, err := opts.Client().FissionClientSet.CoreV1().Environments(opts.env.ObjectMeta.Namespace).List(input.Context(), metav1.ListOptions{})
 	if err != nil {
 		return err
@@ -65,31 +75,6 @@ func (opts *CreateSubCommand) run(input cli.Input) (err error) {
 		console.Verbose(2, "%d environment(s) are present in the %s namespace.  "+
 			"These environments are not isolated from each other; use separate namespaces if you need isolation.",
 			len(envList.Items), opts.env.Namespace)
-	}
-
-	// if we're writing a spec, don't call the API
-	// save to spec file or display the spec to console
-	if input.Bool(flagkey.SpecDry) {
-		err = opts.env.Validate()
-		if err != nil {
-			return fv1.AggregateValidationErrors("Environment", err)
-		}
-
-		return spec.SpecDry(*opts.env)
-	}
-
-	if input.Bool(flagkey.SpecSave) {
-		err = opts.env.Validate()
-		if err != nil {
-			return fv1.AggregateValidationErrors("Environment", err)
-		}
-
-		specFile := fmt.Sprintf("env-%v.yaml", opts.env.Name)
-		err = spec.SpecSave(*opts.env, specFile, false)
-		if err != nil {
-			return fmt.Errorf("error saving environment spec: %w", err)
-		}
-		return nil
 	}
 
 	opts.env.Namespace = currentNS

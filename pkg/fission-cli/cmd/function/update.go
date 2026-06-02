@@ -7,7 +7,6 @@ package function
 import (
 	"fmt"
 
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -67,46 +66,21 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 	secretNames := input.StringSlice(flagkey.FnSecret)
 	cfgMapNames := input.StringSlice(flagkey.FnCfgMap)
 
-	var secrets []fv1.SecretReference
-	var configMaps []fv1.ConfigMapReference
-
+	// Only overwrite secret/configmap refs when the flag was provided, so an
+	// update that doesn't mention them leaves the existing refs intact. Missing
+	// resources warn but don't abort (the update path is lenient).
 	if len(secretNames) > 0 {
-
-		// check that the referenced secret is in the same ns as the function, if not give a warning.
-		for _, secretName := range secretNames {
-			err := util.SecretExists(input.Context(), &metav1.ObjectMeta{Namespace: fnNamespace, Name: secretName}, opts.Client().KubernetesClient)
-			if k8serrors.IsNotFound(err) {
-				console.Warn(fmt.Sprintf("secret %s not found in Namespace: %s. Secret needs to be present in the same namespace as function", secretName, fnNamespace))
-			}
+		secrets, err := util.ResolveSecretReferences(input.Context(), opts.Client().KubernetesClient, secretNames, fnNamespace, true, false)
+		if err != nil {
+			return err
 		}
-
-		for _, secretName := range secretNames {
-			newSecret := fv1.SecretReference{
-				Name:      secretName,
-				Namespace: fnNamespace,
-			}
-			secrets = append(secrets, newSecret)
-		}
-
 		function.Spec.Secrets = secrets
 	}
 
 	if len(cfgMapNames) > 0 {
-
-		// check that the referenced cfgmap is in the same ns as the function, if not give a warning.
-		for _, cfgMapName := range cfgMapNames {
-			err := util.ConfigMapExists(input.Context(), &metav1.ObjectMeta{Namespace: fnNamespace, Name: cfgMapName}, opts.Client().KubernetesClient)
-			if k8serrors.IsNotFound(err) {
-				console.Warn(fmt.Sprintf("ConfigMap %s not found in Namespace: %s. ConfigMap needs to be present in the same namespace as the function", cfgMapName, fnNamespace))
-			}
-		}
-
-		for _, cfgMapName := range cfgMapNames {
-			newCfgMap := fv1.ConfigMapReference{
-				Name:      cfgMapName,
-				Namespace: fnNamespace,
-			}
-			configMaps = append(configMaps, newCfgMap)
+		configMaps, err := util.ResolveConfigMapReferences(input.Context(), opts.Client().KubernetesClient, cfgMapNames, fnNamespace, true, false)
+		if err != nil {
+			return err
 		}
 		function.Spec.ConfigMaps = configMaps
 	}

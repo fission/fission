@@ -32,7 +32,7 @@ import (
 func TestCLICommands(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute)
 	defer cancel()
 
 	f := framework.Connect(t)
@@ -86,4 +86,47 @@ func TestCLICommands(t *testing.T) {
 
 	// Client + server version.
 	ns.CLI(t, ctx, "version")
+
+	// -----------------------------------------------------------------
+	// Mutating + lifecycle CLI paths (update / delete / create) that the
+	// Create* builders don't exercise. These fill the largest remaining
+	// gaps in pkg/fission-cli/cmd/* (the trigger update/delete run paths).
+	// ns.CLI t.Fatals on a non-zero exit, so running a command already
+	// asserts its code path executes cleanly.
+	// -----------------------------------------------------------------
+
+	// fn update: change the execution timeout and confirm it persisted.
+	ns.CLI(t, ctx, "fn", "update", "--name", fnName, "--fntimeout", "90")
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		fn, err := f.FissionClient().CoreV1().Functions(ns.Name).Get(ctx, fnName, metav1.GetOptions{})
+		if assert.NoError(c, err) {
+			assert.Equal(c, 90, fn.Spec.FunctionTimeout, "fn timeout after `fn update`")
+		}
+	}, 30*time.Second, 1*time.Second)
+
+	// httptrigger get + update on the shared route.
+	ns.CLI(t, ctx, "httptrigger", "get", "--name", routeName)
+	ns.CLI(t, ctx, "httptrigger", "update", "--name", routeName, "--url", routePath+"-v2")
+
+	// timetrigger lifecycle: create (builder), update its cron, print a
+	// schedule preview, then delete.
+	ttName := "tt-cli-" + ns.ID
+	ns.CreateTimeTrigger(t, ctx, framework.TimeTriggerOptions{Name: ttName, Function: fnName, Cron: "@every 1h"})
+	ns.CLI(t, ctx, "timetrigger", "update", "--name", ttName, "--cron", "@every 2h")
+	ns.CLICaptureStdout(t, ctx, "timetrigger", "showschedule", "--cron", "@every 5m")
+	ns.CLI(t, ctx, "timetrigger", "delete", "--name", ttName)
+
+	// kubewatch lifecycle: create (builder) then delete via the CLI.
+	kwName := "kw-cli-" + ns.ID
+	ns.CreateKubernetesWatchTrigger(t, ctx, framework.KubernetesWatchTriggerOptions{
+		Name: kwName, Function: fnName, ObjType: "service", WatchNamespace: ns.Name,
+	})
+	ns.CLI(t, ctx, "watch", "delete", "--name", kwName)
+
+	// mqtrigger lifecycle: create + update + delete. The KEDA kind needs no
+	// running broker, so the CR round-trips purely through the API server.
+	mqtName := "mqt-cli-" + ns.ID
+	ns.CLI(t, ctx, "mqt", "create", "--name", mqtName, "--function", fnName, "--topic", "cli-topic", "--mqtype", "kafka")
+	ns.CLI(t, ctx, "mqt", "update", "--name", mqtName, "--maxretries", "3")
+	ns.CLI(t, ctx, "mqt", "delete", "--name", mqtName)
 }

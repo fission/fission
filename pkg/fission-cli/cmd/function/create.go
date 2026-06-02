@@ -220,66 +220,20 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		}
 	}
 
-	var secrets []fv1.SecretReference
-	var cfgmaps []fv1.ConfigMapReference
-
-	if len(secretNames) > 0 {
-		// check the referenced secret is in the same ns as the function, if not give a warning.
-		if !toSpec { // TODO: workaround in order not to block users from creating function spec, remove it.
-			for _, secretName := range secretNames {
-				err := util.SecretExists(input.Context(), &metav1.ObjectMeta{Namespace: fnNamespace, Name: secretName}, opts.Client().KubernetesClient)
-				if err != nil {
-					if k8serrors.IsNotFound(err) {
-						console.Warn(fmt.Sprintf("Secret %s not found in Namespace: %s. Secret needs to be present in the same namespace as function", secretName, fnNamespace))
-					} else {
-						return fmt.Errorf("error checking secret %s: %w", secretName, err)
-					}
-				}
-				newSecret := fv1.SecretReference{
-					Name:      secretName,
-					Namespace: fnNamespace,
-				}
-				secrets = append(secrets, newSecret)
-			}
-		} else {
-			for _, secretName := range secretNames {
-				newSecret := fv1.SecretReference{
-					Name:      secretName,
-					Namespace: userProvidedNS,
-				}
-				secrets = append(secrets, newSecret)
-			}
-		}
-
+	// Secret/configmap references point at the function namespace when creating
+	// against the cluster (and are existence-checked there), or at the
+	// user-provided namespace when writing a spec (no cluster check).
+	refNamespace := fnNamespace
+	if toSpec {
+		refNamespace = userProvidedNS
 	}
-
-	if len(cfgMapNames) > 0 {
-		// check the referenced cfgmap is in the same ns as the function, if not give a warning.
-		if !toSpec {
-			for _, cfgMapName := range cfgMapNames {
-				err := util.ConfigMapExists(input.Context(), &metav1.ObjectMeta{Namespace: fnNamespace, Name: cfgMapName}, opts.Client().KubernetesClient)
-				if err != nil {
-					if k8serrors.IsNotFound(err) {
-						console.Warn(fmt.Sprintf("ConfigMap %s not found in Namespace: %s. ConfigMap needs to be present in the same namespace as function", cfgMapName, fnNamespace))
-					} else {
-						return fmt.Errorf("error checking configmap %s: %w", cfgMapName, err)
-					}
-				}
-				newCfgMap := fv1.ConfigMapReference{
-					Name:      cfgMapName,
-					Namespace: fnNamespace,
-				}
-				cfgmaps = append(cfgmaps, newCfgMap)
-			}
-		} else {
-			for _, cfgMapName := range cfgMapNames {
-				newCfgMap := fv1.ConfigMapReference{
-					Name:      cfgMapName,
-					Namespace: userProvidedNS,
-				}
-				cfgmaps = append(cfgmaps, newCfgMap)
-			}
-		}
+	secrets, err := util.ResolveSecretReferences(input.Context(), opts.Client().KubernetesClient, secretNames, refNamespace, !toSpec, true)
+	if err != nil {
+		return err
+	}
+	cfgmaps, err := util.ResolveConfigMapReferences(input.Context(), opts.Client().KubernetesClient, cfgMapNames, refNamespace, !toSpec, true)
+	if err != nil {
+		return err
 	}
 
 	opts.function = &fv1.Function{
@@ -347,18 +301,9 @@ func generatePackageName(fnName string, id string) string {
 // run write the resource to a spec file or create a fission CRD with remote fission server.
 // It also prints warning/error if necessary.
 func (opts *CreateSubCommand) run(input cli.Input) error {
-	// if we're writing a spec, don't create the function
-	// save to spec file or display the spec to console
-	if input.Bool(flagkey.SpecDry) {
-		return spec.SpecDry(*opts.function)
-	}
-
-	if input.Bool(flagkey.SpecSave) {
-		err := spec.SpecSave(*opts.function, opts.specFile, false)
-		if err != nil {
-			return fmt.Errorf("error saving function spec: %w", err)
-		}
-		return nil
+	// if we're writing a spec, don't create the function; save/print and return.
+	if handled, err := spec.SaveOrDry(input, *opts.function, opts.specFile); handled {
+		return err
 	}
 
 	_, err := opts.Client().FissionClientSet.CoreV1().Functions(opts.function.ObjectMeta.Namespace).Create(input.Context(), opts.function, metav1.CreateOptions{})
