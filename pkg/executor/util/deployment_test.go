@@ -5,6 +5,7 @@
 package util
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -155,6 +156,24 @@ func TestWaitForDeployment(t *testing.T) {
 		missing := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: "ghost"}}
 
 		got, err := WaitForDeployment(t.Context(), client, loggerfactory.GetLogger(), missing, 1, 1)
+		require.Error(t, err)
+		assert.Nil(t, got)
+	})
+
+	t.Run("returns promptly when the context is cancelled", func(t *testing.T) {
+		t.Parallel()
+		// Deployment exists but is not yet available, so the loop would
+		// otherwise sleep; a cancelled context must short-circuit instead of
+		// blocking for the (floored) timeout window.
+		dep := &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: "pending"},
+			Status:     appsv1.DeploymentStatus{AvailableReplicas: 0},
+		}
+		client := fake.NewClientset(dep)
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+
+		got, err := WaitForDeployment(ctx, client, loggerfactory.GetLogger(), dep, 1, 1)
 		require.Error(t, err)
 		assert.Nil(t, got)
 	})

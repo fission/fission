@@ -72,7 +72,13 @@ func WaitForDeployment(ctx context.Context, kubeClient kubernetes.Interface, log
 			otelUtils.SpanTrackEvent(ctx, "deploymentAvailable", otelUtils.GetAttributesForDeployment(latestDepl)...)
 			return latestDepl, err
 		}
-		time.Sleep(time.Second)
+		// Sleep between polls, but stay responsive to cancellation (executor
+		// shutdown / loss of leadership) instead of blocking for a full second.
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(time.Second):
+		}
 	}
 
 	logger.Error(nil, "Deployment provision failed within timeout window", "name", latestDepl.Name, "old_status", oldStatus,
@@ -112,7 +118,7 @@ func ReferencedResourcesRVSum(ctx context.Context, client kubernetes.Interface, 
 			}
 			return 0, err
 		}
-		rv, _ := strconv.ParseInt(s.ResourceVersion, 10, 32)
+		rv, _ := strconv.ParseInt(s.ResourceVersion, 10, 64)
 		rvCount += int(rv)
 	}
 
@@ -127,7 +133,7 @@ func ReferencedResourcesRVSum(ctx context.Context, client kubernetes.Interface, 
 			}
 			return 0, err
 		}
-		rv, _ := strconv.ParseInt(cfg.ResourceVersion, 10, 32)
+		rv, _ := strconv.ParseInt(cfg.ResourceVersion, 10, 64)
 		rvCount += int(rv)
 	}
 
