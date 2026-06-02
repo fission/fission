@@ -4,7 +4,7 @@ go 1.26.3
 
 require (
 	dario.cat/mergo v1.0.2
-	github.com/IBM/sarama v1.49.0
+	github.com/IBM/sarama v1.50.1
 	github.com/bep/debounce v1.2.1
 	github.com/dchest/uniuri v1.2.0
 	github.com/dustin/go-humanize v1.0.1
@@ -86,7 +86,6 @@ require (
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/dsnet/compress v0.0.2-0.20230904184137-39efe44ab707 // indirect
 	github.com/eapache/go-resiliency v1.7.0 // indirect
-	github.com/eapache/queue v1.1.0 // indirect
 	github.com/elastic/crd-ref-docs v0.2.0 // indirect
 	github.com/emicklei/go-restful/v3 v3.13.0 // indirect
 	github.com/emirpasic/gods v1.18.1 // indirect
