@@ -9,7 +9,7 @@ import (
 
 	"github.com/dustin/go-humanize"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	v1 "github.com/fission/fission/pkg/apis/core/v1"
 	ferror "github.com/fission/fission/pkg/error"
@@ -29,12 +29,12 @@ func (r *Package) SetupWebhookWithManager(mgr ctrl.Manager) error {
 
 //+kubebuilder:webhook:path=/mutate-fission-io-v1-package,mutating=true,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=packages,verbs=create;update,versions=v1,name=mpackage.fission.io,admissionReviewVersions=v1
 
-var _ webhook.CustomDefaulter = &Package{}
+var _ admission.Defaulter[*v1.Package] = &Package{}
 
 // user change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
 //+kubebuilder:webhook:path=/validate-fission-io-v1-package,mutating=false,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=packages,verbs=create;update,versions=v1,name=vpackage.fission.io,admissionReviewVersions=v1
 
-var _ webhook.CustomValidator = &Package{}
+var _ admission.Validator[*v1.Package] = &Package{}
 
 func (r *Package) ApplyDefaults(new *v1.Package) error {
 	if new.Status.BuildStatus == "" {

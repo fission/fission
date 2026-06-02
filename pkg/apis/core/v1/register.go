@@ -7,11 +7,17 @@
 
 package v1
 
-func init() {
-	// We only register manually written functions here. The registration of the
-	// generated functions takes place in the generated files. The separation
-	// makes the code compile even when the generated files are missing.
-	SchemeBuilder.Register(&Function{},
+import (
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+)
+
+// addKnownTypes registers the manually written types with the scheme. The
+// registration of the generated functions takes place in the generated files.
+// The separation makes the code compile even when the generated files are missing.
+func addKnownTypes(scheme *runtime.Scheme) error {
+	scheme.AddKnownTypes(SchemeGroupVersion,
+		&Function{},
 		&FunctionList{},
 		&Environment{},
 		&EnvironmentList{},
@@ -27,4 +33,6 @@ func init() {
 		&PackageList{},
 		&CanaryConfig{},
 		&CanaryConfigList{})
+	metav1.AddToGroupVersion(scheme, SchemeGroupVersion)
+	return nil
 }
