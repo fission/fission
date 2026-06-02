@@ -85,6 +85,23 @@ func TestCanaryUpdateNoChangeKeepsStatus(t *testing.T) {
 	assert.Equal(t, "succeeded", got.Status.Status, "no spec change must leave status untouched")
 }
 
+func TestCanaryUpdateOnlySetFlagsMutate(t *testing.T) {
+	fc := setCanaryClient(newCanary()) // step=10, threshold=10, duration=2m
+
+	in := dummy.TestFlagSet()
+	in.Set(flagkey.CanaryName, "canary")
+	in.Set(flagkey.CanaryFailureThreshold, 5) // only this flag is provided
+
+	require.NoError(t, Update(in))
+
+	got, err := fc.CoreV1().CanaryConfigs("default").Get(t.Context(), "canary", metav1.GetOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, 5, got.Spec.FailureThreshold, "the set flag should change")
+	assert.Equal(t, 10, got.Spec.WeightIncrement, "an unset flag must not be clobbered with its default")
+	assert.Equal(t, "2m", got.Spec.WeightIncrementDuration, "an unset flag must not be clobbered with its default")
+	assert.Equal(t, fv1.CanaryConfigStatusPending, got.Status.Status)
+}
+
 func TestCanaryUpdateInvalidIntervalErrors(t *testing.T) {
 	setCanaryClient(newCanary())
 

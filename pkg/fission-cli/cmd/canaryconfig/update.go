@@ -39,36 +39,39 @@ func (opts *UpdateSubCommand) complete(input cli.Input) (err error) {
 	if err != nil {
 		return fmt.Errorf("error updating canary config: %w", err)
 	}
-	incrementStep := input.Int(flagkey.CanaryWeightIncrement)
-	failureThreshold := input.Int(flagkey.CanaryFailureThreshold)
-	incrementInterval := input.String(flagkey.CanaryIncrementInterval)
-
-	// check for time parsing
-	_, err = time.ParseDuration(incrementInterval)
-	if err != nil {
-		return fmt.Errorf("error parsing time duration: %w", err)
-	}
-
 	canaryCfg, err := opts.Client().FissionClientSet.CoreV1().CanaryConfigs(ns).Get(input.Context(), input.String(flagkey.CanaryName), metav1.GetOptions{})
 	if err != nil {
 		return fmt.Errorf("error getting canary config: %w", err)
 	}
 
+	// Only flags the user actually set should mutate the resource; these flags
+	// have non-zero defaults, so comparing the raw value would clobber stored
+	// fields (and reset status) on an update that never mentioned them.
 	var updateNeeded bool
 
-	if incrementStep != canaryCfg.Spec.WeightIncrement {
-		canaryCfg.Spec.WeightIncrement = incrementStep
-		updateNeeded = true
+	if input.IsSet(flagkey.CanaryWeightIncrement) {
+		if incrementStep := input.Int(flagkey.CanaryWeightIncrement); incrementStep != canaryCfg.Spec.WeightIncrement {
+			canaryCfg.Spec.WeightIncrement = incrementStep
+			updateNeeded = true
+		}
 	}
 
-	if failureThreshold != canaryCfg.Spec.FailureThreshold {
-		canaryCfg.Spec.FailureThreshold = failureThreshold
-		updateNeeded = true
+	if input.IsSet(flagkey.CanaryFailureThreshold) {
+		if failureThreshold := input.Int(flagkey.CanaryFailureThreshold); failureThreshold != canaryCfg.Spec.FailureThreshold {
+			canaryCfg.Spec.FailureThreshold = failureThreshold
+			updateNeeded = true
+		}
 	}
 
-	if incrementInterval != canaryCfg.Spec.WeightIncrementDuration {
-		canaryCfg.Spec.WeightIncrementDuration = incrementInterval
-		updateNeeded = true
+	if input.IsSet(flagkey.CanaryIncrementInterval) {
+		incrementInterval := input.String(flagkey.CanaryIncrementInterval)
+		if _, err := time.ParseDuration(incrementInterval); err != nil {
+			return fmt.Errorf("error parsing time duration: %w", err)
+		}
+		if incrementInterval != canaryCfg.Spec.WeightIncrementDuration {
+			canaryCfg.Spec.WeightIncrementDuration = incrementInterval
+			updateNeeded = true
+		}
 	}
 
 	// When any spec field changed, re-arm the rollout by resetting the status to
