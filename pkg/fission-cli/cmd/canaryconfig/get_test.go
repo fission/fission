@@ -22,6 +22,7 @@ func captureStdout(t *testing.T, fn func() error) string {
 	t.Helper()
 	r, w, err := os.Pipe()
 	require.NoError(t, err)
+	defer r.Close()
 	orig := os.Stdout
 	t.Cleanup(func() { os.Stdout = orig })
 	os.Stdout = w
