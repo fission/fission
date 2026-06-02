@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -306,10 +307,13 @@ func TestCORS_HTTPTrigger(t *testing.T) {
 			"rejection error should mention the CORS config / credentials (got %v)", err)
 	})
 
-	t.Run("admission rejects CorsConfig with origin containing path", func(t *testing.T) {
-		// Browsers match Allow-Origin against scheme + host[:port] only;
-		// an origin with a path can never match, so we reject at
-		// admission rather than silently failing at runtime.
+	t.Run("router marks RouteAdmitted=False for CorsConfig with origin containing path", func(t *testing.T) {
+		// Browsers match Allow-Origin against scheme + host[:port] only; an
+		// origin with a path can never match. Detecting that needs url.Parse —
+		// a Go parser CRD CEL cannot express — so the router admits the trigger
+		// and reports RouteAdmitted=False instead of rejecting at admission
+		// (the deleted httptrigger webhook used to reject it). The fission CLI
+		// still rejects this client-side.
 		bad := &fv1.HTTPTrigger{
 			ObjectMeta: metav1.ObjectMeta{Name: "bad-cors-path-" + ns.ID, Namespace: ns.Name},
 			Spec: fv1.HTTPTriggerSpec{
@@ -325,10 +329,15 @@ func TestCORS_HTTPTrigger(t *testing.T) {
 			},
 		}
 		_, err := f.FissionClient().CoreV1().HTTPTriggers(ns.Name).Create(ctx, bad, metav1.CreateOptions{})
-		require.Error(t, err, "admission webhook should reject origin with path")
-		assert.Falsef(t, apierrors.IsNotFound(err), "expected validation rejection, got NotFound: %v", err)
-		assert.Truef(t,
-			strings.Contains(err.Error(), "path, query, fragment") || strings.Contains(err.Error(), "CorsConfig"),
-			"rejection error should mention path/query/fragment (got %v)", err)
+		require.NoError(t, err, "invalid CORS origin is now admitted (validation moved to the RouteAdmitted condition)")
+
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			conds := ns.GetHTTPTriggerConditions(t, ctx, bad.Name)
+			cond := meta.FindStatusCondition(conds, fv1.HTTPTriggerConditionRouteAdmitted)
+			if assert.NotNil(c, cond, "RouteAdmitted condition should be set") {
+				assert.Equal(c, metav1.ConditionFalse, cond.Status)
+				assert.Equal(c, fv1.HTTPTriggerReasonInvalidCorsConfig, cond.Reason)
+			}
+		}, 60*time.Second, time.Second, "router should mark RouteAdmitted=False for an invalid CORS origin")
 	})
 }
