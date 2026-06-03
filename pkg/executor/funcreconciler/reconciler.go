@@ -19,17 +19,48 @@ import (
 	"sync"
 
 	"github.com/go-logr/logr"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
-	"github.com/fission/fission/pkg/controller"
 	"github.com/fission/fission/pkg/executor/executortype"
 )
+
+// deleteOnlyPredicate passes only Delete events. The drift watch uses it so a
+// Function is re-enqueued when one of its backing objects is removed out-of-band,
+// but NOT on Create (the executor creates them itself) or Update — crucially, the
+// newdeploy idle reaper *scales* the Deployment toward MinScale (it never deletes
+// it), so reacting to Updates would fight the reaper and churn the workqueue.
+var deleteOnlyPredicate = predicate.Funcs{
+	CreateFunc:  func(event.CreateEvent) bool { return false },
+	UpdateFunc:  func(event.UpdateEvent) bool { return false },
+	DeleteFunc:  func(event.DeleteEvent) bool { return true },
+	GenericFunc: func(event.GenericEvent) bool { return false },
+}
+
+// ownedObjectToFunction maps a managed Deployment/Service back to the Function
+// that owns it, via the function-identifying labels getDeployLabels stamps. The
+// labels carry the Function CR's own name/namespace (not the workload namespace),
+// so the request points straight at the Function. Returns nil for an object
+// without them (it is not ours).
+func ownedObjectToFunction(_ context.Context, obj client.Object) []reconcile.Request {
+	l := obj.GetLabels()
+	name, ns := l[fv1.FUNCTION_NAME], l[fv1.FUNCTION_NAMESPACE]
+	if name == "" || ns == "" {
+		return nil
+	}
+	return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: name, Namespace: ns}}}
+}
 
 // functionFinalizer gates a Function's deletion on the executor tearing its
 // backing workloads down. It is the reliable mechanism for cross-namespace
@@ -209,6 +240,21 @@ func RegisterReconciler(mgr ctrl.Manager, logger logr.Logger, executorTypes map[
 		backends:  backends,
 		finalizer: finalizerEnabled,
 	}
-	return controller.RegisterWithPredicates(mgr, &fv1.Function{}, r, "executor-function", 0,
-		predicate.Or(predicate.GenerationChangedPredicate{}, deletionTimestampPredicate))
+
+	// Built directly (not via controller.Register) because this reconciler needs
+	// .Watches() in addition to .For(): besides Function spec/delete events, it
+	// watches the Deployments and Services it manages so a backing object deleted
+	// out-of-band re-enqueues the owning Function, which recreates it (drift
+	// self-healing). The Manager cache already scopes those types to
+	// executor-managed objects (executorManagedSelector), so only newdeploy /
+	// container workloads reach the delete-only watch.
+	return builder.ControllerManagedBy(mgr).
+		Named("executor-function").
+		For(&fv1.Function{}, builder.WithPredicates(
+			predicate.Or(predicate.GenerationChangedPredicate{}, deletionTimestampPredicate))).
+		Watches(&appsv1.Deployment{}, handler.EnqueueRequestsFromMapFunc(ownedObjectToFunction),
+			builder.WithPredicates(deleteOnlyPredicate)).
+		Watches(&corev1.Service{}, handler.EnqueueRequestsFromMapFunc(ownedObjectToFunction),
+			builder.WithPredicates(deleteOnlyPredicate)).
+		Complete(r)
 }

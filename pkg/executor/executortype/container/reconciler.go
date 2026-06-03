@@ -20,6 +20,10 @@ type functionManager interface {
 	createFunction(context.Context, *fv1.Function) (*fscache.FuncSvc, error)
 	updateFunction(context.Context, *fv1.Function, *fv1.Function) error
 	deleteFunction(context.Context, *fv1.Function) error
+	// resourcesExist reports whether the function's backing Deployment and Service
+	// are present (read from the Manager cache). False means they drifted away
+	// (deleted out-of-band) and the function should be recreated.
+	resourcesExist(context.Context, *fv1.Function) (bool, error)
 }
 
 // ReconcileFunction satisfies executortype.FuncReconciler for container-backed
@@ -39,9 +43,20 @@ func (caaf *Container) DeleteFunction(ctx context.Context, fn *fv1.Function) err
 }
 
 // reconcileContainerFunc holds the create-vs-update routing, split out so it is
-// unit-testable with a fake functionManager.
+// unit-testable with a fake functionManager. It is level-triggered: a reconcile
+// of a managed function whose backing Deployment/Service drifted away (deleted
+// out-of-band, surfaced by the drift watch) recreates them via the idempotent
+// get-or-create path rather than diffing a no-longer-existent object.
 func reconcileContainerFunc(ctx context.Context, mgr functionManager, old, fn *fv1.Function) error {
 	if old == nil {
+		_, err := mgr.createFunction(ctx, fn)
+		return err
+	}
+	exist, err := mgr.resourcesExist(ctx, fn)
+	if err != nil {
+		return err
+	}
+	if !exist {
 		_, err := mgr.createFunction(ctx, fn)
 		return err
 	}

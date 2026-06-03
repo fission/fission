@@ -18,6 +18,11 @@ import (
 
 type fakeFuncMgr struct {
 	created, updated, deleted, reconciled []string
+	resourcesGone                         bool // resourcesExist returns false (drift)
+}
+
+func (f *fakeFuncMgr) resourcesExist(_ context.Context, _ *fv1.Function) (bool, error) {
+	return !f.resourcesGone, nil
 }
 
 func (f *fakeFuncMgr) createFunction(_ context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
@@ -74,6 +79,13 @@ func TestReconcileNewdeployFunc(t *testing.T) {
 		require.NoError(t, reconcileNewdeployFunc(t.Context(), mgr, fn, fn))
 		assert.Equal(t, []string{"fn"}, mgr.updated)
 		assert.Empty(t, mgr.created)
+	})
+
+	t.Run("drift: missing backing resources are recreated, not diffed", func(t *testing.T) {
+		mgr := &fakeFuncMgr{resourcesGone: true}
+		require.NoError(t, reconcileNewdeployFunc(t.Context(), mgr, fn, fn))
+		assert.Equal(t, []string{"fn"}, mgr.created, "drifted-away resources must be recreated via get-or-create")
+		assert.Empty(t, mgr.updated, "no diff against a non-existent object")
 	})
 
 	t.Run("DeleteFunction tears down the function", func(t *testing.T) {
