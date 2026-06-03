@@ -565,7 +565,14 @@ func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, 
 	// type (poolmgr/newdeploy/container) via FuncReconciler, handling executor-type
 	// transitions in one place. Replaces the three per-type Function reconcilers
 	// with a single workqueue, predicate, and last-reconciled cache.
-	if err := funcreconciler.RegisterReconciler(crMgr, logger, executorTypes); err != nil {
+	//
+	// FINALIZER_ENABLED toggles the cleanup finalizer for reliable cross-namespace
+	// teardown. The Helm chart sets it from the chart-wide finalizerEnabled value
+	// (default true); when off, any existing finalizer is drained. A bare binary
+	// with the env unset defaults to off (conservative). See
+	// funcreconciler.functionFinalizer.
+	finalizerEnabled, _ := strconv.ParseBool(os.Getenv("FINALIZER_ENABLED"))
+	if err := funcreconciler.RegisterReconciler(crMgr, logger, executorTypes, finalizerEnabled); err != nil {
 		return err
 	}
 

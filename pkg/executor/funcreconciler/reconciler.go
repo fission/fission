@@ -22,11 +22,35 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/controller"
 	"github.com/fission/fission/pkg/executor/executortype"
 )
+
+// functionFinalizer gates a Function's deletion on the executor tearing its
+// backing workloads down. It is the reliable mechanism for cross-namespace
+// cleanup: owner-reference GC cannot reach a Deployment/Service/HPA in a
+// different namespace than the Function CR (see GetFunctionNS), so the executor
+// must observe the delete and tear them down before the object is collected.
+// Toggled by the chart-wide finalizerEnabled value (default on); when off, the
+// finalizer is drained from any object that carries it so deletes never wedge.
+const functionFinalizer = "fission.io/function-cleanup"
+
+// deletionTimestampPredicate passes Update events where the object is being
+// deleted (DeletionTimestamp set). The shared GenerationChangedPredicate drops
+// these — setting DeletionTimestamp leaves Generation unchanged — which would
+// leave a finalizer-held Function unreconciled and wedge its delete. OR'd with
+// GenerationChangedPredicate so spec changes still trigger and status-only writes
+// are still filtered.
+var deletionTimestampPredicate = predicate.Funcs{
+	UpdateFunc: func(e event.UpdateEvent) bool {
+		return e.ObjectNew != nil && !e.ObjectNew.GetDeletionTimestamp().IsZero()
+	},
+}
 
 // resolveExecutorType returns the executor type that owns fn. An unset type
 // defaults to poolmgr (the default executor), matching the old per-type filters
@@ -46,6 +70,7 @@ type functionReconciler struct {
 	logger         logr.Logger
 	client         client.Client
 	backends       map[fv1.ExecutorType]executortype.FuncReconciler
+	finalizer      bool     // add+honour the cleanup finalizer (opt-in)
 	lastReconciled sync.Map // client.ObjectKey -> *fv1.Function
 }
 
@@ -53,8 +78,8 @@ func (r *functionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	fn := &fv1.Function{}
 	if err := r.client.Get(ctx, req.NamespacedName, fn); err != nil {
 		if apierrors.IsNotFound(err) {
-			// Deleted: tear down using the last-reconciled object (the live one is
-			// gone), routed to the executor type that owned it.
+			// Gone (no finalizer of ours held it): tear down using the last-reconciled
+			// object, routed to the executor type that owned it.
 			if old, ok := r.lastReconciled.LoadAndDelete(req.NamespacedName); ok {
 				oldFn := old.(*fv1.Function)
 				if b, ok := r.backends[resolveExecutorType(oldFn)]; ok {
@@ -66,6 +91,43 @@ func (r *functionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, err
+	}
+
+	// Deletion in progress. Only observable here while a finalizer holds the
+	// object; if it is ours, tear the workloads down and release it. If it is not
+	// ours, leave the cache intact so the NotFound path tears down once the object
+	// is actually removed.
+	if !fn.DeletionTimestamp.IsZero() {
+		if !controllerutil.ContainsFinalizer(fn, functionFinalizer) {
+			return ctrl.Result{}, nil
+		}
+		if b, ok := r.backends[resolveExecutorType(fn)]; ok {
+			if err := b.DeleteFunction(ctx, fn); err != nil {
+				return ctrl.Result{}, err // keep the finalizer; retry teardown
+			}
+		}
+		controllerutil.RemoveFinalizer(fn, functionFinalizer)
+		if err := r.client.Update(ctx, fn); err != nil {
+			return ctrl.Result{}, err
+		}
+		r.lastReconciled.Delete(req.NamespacedName)
+		return ctrl.Result{}, nil
+	}
+
+	// Keep the cleanup finalizer in sync with the opt-in flag. Adding/removing a
+	// finalizer is a metadata write (Generation unchanged), so it does not
+	// re-trigger this reconciler through GenerationChangedPredicate.
+	if r.finalizer && !controllerutil.ContainsFinalizer(fn, functionFinalizer) {
+		controllerutil.AddFinalizer(fn, functionFinalizer)
+		if err := r.client.Update(ctx, fn); err != nil {
+			return ctrl.Result{}, err
+		}
+	} else if !r.finalizer && controllerutil.ContainsFinalizer(fn, functionFinalizer) {
+		// Toggled off: drain the finalizer so a later delete is never wedged on it.
+		controllerutil.RemoveFinalizer(fn, functionFinalizer)
+		if err := r.client.Update(ctx, fn); err != nil {
+			return ctrl.Result{}, err
+		}
 	}
 
 	newType := resolveExecutorType(fn)
@@ -120,8 +182,15 @@ func collectBackends(executorTypes map[fv1.ExecutorType]executortype.ExecutorTyp
 // RegisterReconciler wires the single Function reconciler onto the executor
 // Manager, dispatching to the executor types that implement FuncReconciler. If no
 // executor type reconciles Functions, no reconciler is registered and nil is
-// returned.
-func RegisterReconciler(mgr ctrl.Manager, logger logr.Logger, executorTypes map[fv1.ExecutorType]executortype.ExecutorType) error {
+// returned. finalizerEnabled opts the reconciler into the cleanup finalizer
+// (reliable cross-namespace teardown); when false, any existing cleanup finalizer
+// is drained instead.
+//
+// It uses Or(GenerationChangedPredicate, deletionTimestampPredicate) rather than
+// the bare GenerationChangedPredicate Register applies: status-only writes are
+// still filtered, but a delete (DeletionTimestamp set, Generation unchanged) must
+// reach the reconciler so a finalizer-held Function is torn down and released.
+func RegisterReconciler(mgr ctrl.Manager, logger logr.Logger, executorTypes map[fv1.ExecutorType]executortype.ExecutorType, finalizerEnabled bool) error {
 	backends := collectBackends(executorTypes)
 	if len(backends) == 0 {
 		return nil
@@ -132,12 +201,14 @@ func RegisterReconciler(mgr ctrl.Manager, logger logr.Logger, executorTypes map[
 		names = append(names, string(name))
 	}
 	sort.Strings(names)
-	logger.V(1).Info("registering shared function reconciler", "executor_types", names)
+	logger.V(1).Info("registering shared function reconciler", "executor_types", names, "finalizer", finalizerEnabled)
 
 	r := &functionReconciler{
-		logger:   logger.WithName("function_reconciler"),
-		client:   mgr.GetClient(),
-		backends: backends,
+		logger:    logger.WithName("function_reconciler"),
+		client:    mgr.GetClient(),
+		backends:  backends,
+		finalizer: finalizerEnabled,
 	}
-	return controller.Register(mgr, &fv1.Function{}, r, "executor-function")
+	return controller.RegisterWithPredicates(mgr, &fv1.Function{}, r, "executor-function", 0,
+		predicate.Or(predicate.GenerationChangedPredicate{}, deletionTimestampPredicate))
 }
