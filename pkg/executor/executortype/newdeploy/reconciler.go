@@ -7,6 +7,7 @@ package newdeploy
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/go-logr/logr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -28,8 +29,9 @@ type funcManager interface {
 	reconcileDeploymentSpec(context.Context, *fv1.Function) error
 }
 
-// envFunctionUpdater is the subset of *NewDeploy the Environment reconciler
-// drives — propagating an environment image change to its functions' deployments.
+// envFunctionUpdater is the subset of *NewDeploy the Environment handler drives —
+// propagating an environment image change to its functions' deployments. An
+// interface so the routing is unit-testable with a fake.
 type envFunctionUpdater interface {
 	updateEnvFunctions(context.Context, *fv1.Environment) error
 }
@@ -110,50 +112,36 @@ func (r *functionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	return ctrl.Result{}, nil
 }
 
-// environmentReconciler propagates an environment's runtime-image change to the
-// deployments of its newdeploy functions. It replaces the Environment informer
-// handler, which acted only on an image change (Add/Delete were no-ops).
-//
-// The handler diffed old vs new image, so the reconciler keeps the last-reconciled
-// Environment per key: first sight only caches (matching the old no-op Add), and a
-// later reconcile rebuilds the function deployments only when the image actually
-// changed. GenerationChangedPredicate keeps env status writes from churning it.
-type environmentReconciler struct {
-	logger logr.Logger
-	client client.Client
-	deploy envFunctionUpdater
-	// lastReconciled maps client.ObjectKey -> *fv1.Environment.
-	lastReconciled sync.Map
+// ReconcileEnvironment satisfies executortype.EnvReconciler: it propagates an
+// environment's runtime-image change to the deployments of its newdeploy
+// functions. It acts only on an image change (the informer handler it replaced
+// treated Add/Delete as no-ops), so first sight (old == nil) caches only and a
+// later event rolls the functions only when the image actually changed. It asks
+// for no periodic requeue (0); the shared dispatcher's requeue is driven by the
+// pool manager's resync.
+func (deploy *NewDeploy) ReconcileEnvironment(ctx context.Context, old, env *fv1.Environment) (time.Duration, error) {
+	return reconcileNewdeployEnv(ctx, deploy, old, env)
 }
 
-func (r *environmentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	env := &fv1.Environment{}
-	if err := r.client.Get(ctx, req.NamespacedName, env); err != nil {
-		if apierrors.IsNotFound(err) {
-			// Environment deleted; the old handler did nothing here (function cleanup
-			// is driven by the Function watch), so just drop the cached copy.
-			r.lastReconciled.Delete(req.NamespacedName)
-			return ctrl.Result{}, nil
-		}
-		return ctrl.Result{}, err
-	}
+// CleanupEnvironment is a no-op: function cleanup is driven by the Function watch,
+// so a deleted Environment needs no newdeploy-side action (matching the old
+// handler, which did nothing on delete).
+func (deploy *NewDeploy) CleanupEnvironment(context.Context, *fv1.Environment) {}
 
-	old, seen := r.lastReconciled.Load(req.NamespacedName)
-	if !seen {
-		// First sight: cache only, matching the old AddFunc no-op. We have no prior
-		// image to diff against, and functions already track their environment.
-		r.lastReconciled.Store(req.NamespacedName, env.DeepCopy())
-		return ctrl.Result{}, nil
+// reconcileNewdeployEnv holds the image-diff routing, split out so it is
+// unit-testable with a fake envFunctionUpdater.
+func reconcileNewdeployEnv(ctx context.Context, up envFunctionUpdater, old, env *fv1.Environment) (time.Duration, error) {
+	if old == nil {
+		// First sight: nothing to diff against, and functions already track their
+		// environment. Matches the old AddFunc no-op.
+		return 0, nil
 	}
-
-	if old.(*fv1.Environment).Spec.Runtime.Image != env.Spec.Runtime.Image {
-		if err := r.deploy.updateEnvFunctions(ctx, env); err != nil {
-			// Don't advance the cache: a retry should still see the image as changed.
-			return ctrl.Result{}, err
+	if old.Spec.Runtime.Image != env.Spec.Runtime.Image {
+		if err := up.updateEnvFunctions(ctx, env); err != nil {
+			return 0, err
 		}
 	}
-	r.lastReconciled.Store(req.NamespacedName, env.DeepCopy())
-	return ctrl.Result{}, nil
+	return 0, nil
 }
 
 // isNewdeployType reports whether the executor should manage this function.
@@ -165,22 +153,15 @@ func isNewdeployType(fn *fv1.Function) bool {
 	return fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypeNewdeploy
 }
 
-// RegisterReconcilers registers the newdeploy Function and Environment reconcilers
-// on the executor Manager, replacing their informer event handlers.
+// RegisterReconcilers registers the newdeploy Function reconciler on the executor
+// Manager, replacing its informer event handler. The Environment watch is shared
+// across executor types and registered once at the executor level (see
+// envreconciler.RegisterReconciler); newdeploy plugs into it via EnvReconciler.
 func (deploy *NewDeploy) RegisterReconcilers(mgr ctrl.Manager) error {
 	fr := &functionReconciler{
 		logger: deploy.logger.WithName("function_reconciler"),
 		client: mgr.GetClient(),
 		deploy: deploy,
 	}
-	if err := controller.Register(mgr, &fv1.Function{}, fr, "newdeploy-function"); err != nil {
-		return err
-	}
-
-	er := &environmentReconciler{
-		logger: deploy.logger.WithName("environment_reconciler"),
-		client: mgr.GetClient(),
-		deploy: deploy,
-	}
-	return controller.Register(mgr, &fv1.Environment{}, er, "newdeploy-environment")
+	return controller.Register(mgr, &fv1.Function{}, fr, "newdeploy-function")
 }

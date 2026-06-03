@@ -36,8 +36,8 @@ type funcManager interface {
 	deleteIstioServiceForFunction(ctx context.Context, fn *fv1.Function) error
 }
 
-// poolManager is the subset of *GenericPoolManager the Environment reconciler
-// drives (pool lifecycle), also an interface for testing.
+// poolManager is the subset of *GenericPoolManager the Environment handlers
+// drive (pool lifecycle), an interface so the routing is unit-testable with a fake.
 type poolManager interface {
 	reconcileEnvPool(ctx context.Context, env *fv1.Environment) error
 	cleanupEnvPool(ctx context.Context, env *fv1.Environment)
@@ -229,44 +229,39 @@ func (r *functionReconciler) cleanupFunction(ctx context.Context, fn *fv1.Functi
 	return nil
 }
 
-// environmentReconciler manages the warm pool for each Environment, replacing
-// poolpodcontroller's env create/update/delete workqueues. It drives the gpm
-// actor (getPool/cleanupPool/updatePoolDeployment) — which stays as the
-// serializer shared with the hot GetFuncSvc path — and keeps the last-seen
-// Environment so a delete can still destroy the pool and reap specialized pods.
-type environmentReconciler struct {
-	logger   logr.Logger
-	client   client.Client
-	mgr      poolManager
-	lastSeen sync.Map // client.ObjectKey -> *fv1.Environment
+// ReconcileEnvironment satisfies executortype.EnvReconciler: the pool manager
+// re-reconciles the Environment's warm pool on every event, driving the gpm
+// actor (getPool/cleanupPool/updatePoolDeployment) which stays as the serializer
+// shared with the hot GetFuncSvc path. old is ignored — the pool reconcile is
+// idempotent, so there is nothing to diff. It asks for a periodic re-reconcile so
+// the pool deployment stays in sync even without a spec change (the env workqueue
+// used to get this from the 30m informer resync).
+func (gpm *GenericPoolManager) ReconcileEnvironment(ctx context.Context, _, env *fv1.Environment) (time.Duration, error) {
+	return reconcilePoolmgrEnv(ctx, gpm, env)
 }
 
-func (r *environmentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	env := &fv1.Environment{}
-	if err := r.client.Get(ctx, req.NamespacedName, env); err != nil {
-		if apierrors.IsNotFound(err) {
-			if old, ok := r.lastSeen.LoadAndDelete(req.NamespacedName); ok {
-				r.mgr.cleanupEnvPool(ctx, old.(*fv1.Environment))
-			}
-			return ctrl.Result{}, nil
-		}
-		return ctrl.Result{}, err
-	}
-
-	if err := r.mgr.reconcileEnvPool(ctx, env); err != nil {
-		return ctrl.Result{}, err
-	}
-	r.lastSeen.Store(req.NamespacedName, env.DeepCopy())
-	// Periodically re-reconcile to keep the pool deployment in sync even without a
-	// spec change (the old env workqueue got this from the 30m informer resync).
-	return ctrl.Result{RequeueAfter: envResyncPeriod}, nil
+// CleanupEnvironment destroys the warm pool when its Environment is deleted (and
+// reaps the specialized pods), using the last-seen object handed by the dispatcher.
+func (gpm *GenericPoolManager) CleanupEnvironment(ctx context.Context, env *fv1.Environment) {
+	gpm.cleanupEnvPool(ctx, env)
 }
 
-// RegisterReconcilers registers the pool manager's Function, Environment, and
-// ReplicaSet reconcilers on the executor Manager, replacing poolpodcontroller's
-// informer handlers. poolpodcontroller now only owns the specialized-pod cleanup
-// queue (fed by the ReplicaSet reconciler and the Environment reconciler) and the
-// pod lister.
+// reconcilePoolmgrEnv holds the pool-reconcile routing, split out so it is
+// unit-testable with a fake poolManager.
+func reconcilePoolmgrEnv(ctx context.Context, pm poolManager, env *fv1.Environment) (time.Duration, error) {
+	if err := pm.reconcileEnvPool(ctx, env); err != nil {
+		return 0, err
+	}
+	return envResyncPeriod, nil
+}
+
+// RegisterReconcilers registers the pool manager's Function, ReplicaSet, and
+// readyPod reconcilers on the executor Manager, replacing poolpodcontroller's
+// informer handlers. The Environment watch is shared across executor types and
+// registered once at the executor level (see envreconciler.RegisterReconciler);
+// the pool manager plugs into it via EnvReconciler. poolpodcontroller now only
+// owns the specialized-pod cleanup queue (fed by the ReplicaSet reconciler and
+// CleanupEnvironment) and the pod lister.
 func (gpm *GenericPoolManager) RegisterReconcilers(mgr ctrl.Manager) error {
 	// getFunctionEnv (hot path) reads Environments from the Manager cache instead
 	// of poolpodcontroller's informer lister now.
@@ -282,14 +277,9 @@ func (gpm *GenericPoolManager) RegisterReconcilers(mgr ctrl.Manager) error {
 		return err
 	}
 
-	er := &environmentReconciler{
-		logger: gpm.logger.WithName("environment_reconciler"),
-		client: mgr.GetClient(),
-		mgr:    gpm,
-	}
-	if err := controller.Register(mgr, &fv1.Environment{}, er, "poolmgr-environment"); err != nil {
-		return err
-	}
+	// The Environment watch is registered once at the executor level
+	// (envreconciler.RegisterReconciler), dispatching to this type via
+	// EnvReconciler, so the executor types share one Environment workqueue.
 
 	rr := &replicaSetReconciler{
 		logger:  gpm.logger.WithName("replicaset_reconciler"),
