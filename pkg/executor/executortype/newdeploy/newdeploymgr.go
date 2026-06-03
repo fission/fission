@@ -324,6 +324,24 @@ func (deploy *NewDeploy) updateEnvFunctions(ctx context.Context, env *fv1.Enviro
 	return nil
 }
 
+// resourcesExist reports whether the function's backing Deployment and Service
+// are present in the Manager cache. A missing object means it drifted away
+// (deleted out-of-band) and the function should be recreated. Reads go through
+// the cache-backed crClient (same path as IsValid).
+func (deploy *NewDeploy) resourcesExist(ctx context.Context, fn *fv1.Function) (bool, error) {
+	ns := deploy.nsResolver.GetFunctionNS(fn.Namespace)
+	key := client.ObjectKey{Namespace: ns, Name: deploy.getObjName(fn)}
+	for _, obj := range []client.Object{&appsv1.Deployment{}, &apiv1.Service{}} {
+		if err := deploy.crClient.Get(ctx, key, obj); err != nil {
+			if k8sErrs.IsNotFound(err) {
+				return false, nil
+			}
+			return false, err
+		}
+	}
+	return true, nil
+}
+
 func (deploy *NewDeploy) createFunction(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
 	if fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType != fv1.ExecutorTypeNewdeploy {
 		return nil, nil

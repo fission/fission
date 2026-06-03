@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -16,7 +17,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/executor/fscache"
+	"github.com/fission/fission/pkg/utils"
 )
 
 func svcObj(ns, name string) *apiv1.Service {
@@ -72,5 +75,42 @@ func TestNewdeployIsValid(t *testing.T) {
 	t.Run("invalid when there are no kubernetes objects", func(t *testing.T) {
 		d := newDeploy()
 		assert.False(t, d.IsValid(t.Context(), fsvcWith()))
+	})
+}
+
+// TestNewdeployResourcesExist covers the drift-detection read used by the
+// level-triggered reconcile: present when both backing objects exist, absent when
+// either has drifted away.
+func TestNewdeployResourcesExist(t *testing.T) {
+	fn := fnOfType("fn", fv1.ExecutorTypeNewdeploy)
+	fn.UID = "83c82da2-81e9-4ebd-867e-f383e65e603f"
+
+	build := func(objs ...client.Object) *NewDeploy {
+		c := fake.NewClientBuilder().WithScheme(clientgoscheme.Scheme).WithObjects(objs...).Build()
+		return &NewDeploy{logger: logr.Discard(), crClient: c, nsResolver: &utils.NamespaceResolver{}}
+	}
+	// Object name/namespace match what createOrGet* use.
+	name := build().getObjName(fn)
+	ns := (&utils.NamespaceResolver{}).GetFunctionNS(fn.Namespace)
+
+	t.Run("present when both Deployment and Service exist", func(t *testing.T) {
+		d := build(deplObj(ns, name, 1), svcObj(ns, name))
+		exist, err := d.resourcesExist(t.Context(), fn)
+		require.NoError(t, err)
+		assert.True(t, exist)
+	})
+
+	t.Run("absent when the Deployment has drifted away", func(t *testing.T) {
+		d := build(svcObj(ns, name)) // no deployment
+		exist, err := d.resourcesExist(t.Context(), fn)
+		require.NoError(t, err)
+		assert.False(t, exist)
+	})
+
+	t.Run("absent when the Service has drifted away", func(t *testing.T) {
+		d := build(deplObj(ns, name, 1)) // no service
+		exist, err := d.resourcesExist(t.Context(), fn)
+		require.NoError(t, err)
+		assert.False(t, exist)
 	})
 }

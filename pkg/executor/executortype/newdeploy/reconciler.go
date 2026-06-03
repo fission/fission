@@ -22,6 +22,10 @@ type funcManager interface {
 	updateFunction(context.Context, *fv1.Function, *fv1.Function) error
 	deleteFunction(context.Context, *fv1.Function) error
 	reconcileDeploymentSpec(context.Context, *fv1.Function) error
+	// resourcesExist reports whether the function's backing Deployment and Service
+	// are present (read from the Manager cache). False means they drifted away
+	// (deleted out-of-band) and must be recreated.
+	resourcesExist(context.Context, *fv1.Function) (bool, error)
 }
 
 // envFunctionUpdater is the subset of *NewDeploy the Environment handler drives —
@@ -53,13 +57,26 @@ func (deploy *NewDeploy) DeleteFunction(ctx context.Context, fn *fv1.Function) e
 }
 
 // reconcileNewdeployFunc holds the create-vs-update routing, split out so it is
-// unit-testable with a fake funcManager.
+// unit-testable with a fake funcManager. It is level-triggered: a reconcile of a
+// managed function whose backing Deployment/Service drifted away (deleted
+// out-of-band, surfaced by the drift watch) recreates them via the idempotent
+// get-or-create path rather than diffing a no-longer-existent object. (The
+// request path also recreates on the next invocation; this keeps MinScale>0
+// functions warm without waiting for one.)
 func reconcileNewdeployFunc(ctx context.Context, mgr funcManager, old, fn *fv1.Function) error {
 	if old == nil {
 		if _, err := mgr.createFunction(ctx, fn); err != nil {
 			return err
 		}
 		return mgr.reconcileDeploymentSpec(ctx, fn)
+	}
+	exist, err := mgr.resourcesExist(ctx, fn)
+	if err != nil {
+		return err
+	}
+	if !exist {
+		_, err := mgr.createFunction(ctx, fn)
+		return err
 	}
 	return mgr.updateFunction(ctx, old, fn)
 }

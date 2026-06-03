@@ -261,6 +261,24 @@ func (caaf *Container) CleanupOldExecutorObjects(ctx context.Context) {
 	reaper.CleanupExecutorObjects(ctx, caaf.logger, caaf.kubernetesClient, caaf.instanceID, fv1.ExecutorTypeContainer)
 }
 
+// resourcesExist reports whether the function's backing Deployment and Service
+// are present in the Manager cache. A missing object means it drifted away
+// (deleted out-of-band) and the function should be recreated. Reads go through
+// the cache-backed crClient (same path as IsValid).
+func (caaf *Container) resourcesExist(ctx context.Context, fn *fv1.Function) (bool, error) {
+	ns := caaf.nsResolver.GetFunctionNS(fn.Namespace)
+	key := client.ObjectKey{Namespace: ns, Name: caaf.getObjName(fn)}
+	for _, obj := range []client.Object{&appsv1.Deployment{}, &apiv1.Service{}} {
+		if err := caaf.crClient.Get(ctx, key, obj); err != nil {
+			if k8sErrs.IsNotFound(err) {
+				return false, nil
+			}
+			return false, err
+		}
+	}
+	return true, nil
+}
+
 func (caaf *Container) createFunction(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
 	if fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType != fv1.ExecutorTypeContainer {
 		return nil, nil
