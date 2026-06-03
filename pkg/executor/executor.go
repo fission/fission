@@ -40,6 +40,7 @@ import (
 	"github.com/fission/fission/pkg/executor/executortype/newdeploy"
 	"github.com/fission/fission/pkg/executor/executortype/poolmgr"
 	"github.com/fission/fission/pkg/executor/fscache"
+	"github.com/fission/fission/pkg/executor/funcreconciler"
 	"github.com/fission/fission/pkg/executor/reaper/idle"
 	"github.com/fission/fission/pkg/executor/util"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
@@ -543,6 +544,15 @@ func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, 
 		if err := et.RegisterReconcilers(crMgr); err != nil {
 			return fmt.Errorf("error registering reconcilers for executor type %s: %w", et.GetTypeName(ctx), err)
 		}
+	}
+
+	// One Function reconciler, shared across executor types: it resolves each
+	// Function's executor type and dispatches create/update/delete to the owning
+	// type (poolmgr/newdeploy/container) via FuncReconciler, handling executor-type
+	// transitions in one place. Replaces the three per-type Function reconcilers
+	// with a single workqueue, predicate, and last-reconciled cache.
+	if err := funcreconciler.RegisterReconciler(crMgr, logger, executorTypes); err != nil {
+		return err
 	}
 
 	// One Environment reconciler, shared across executor types: it dispatches each

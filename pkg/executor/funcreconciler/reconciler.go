@@ -1,0 +1,143 @@
+// SPDX-FileCopyrightText: The Fission Authors
+//
+// SPDX-License-Identifier: Apache-2.0
+
+// Package funcreconciler holds the executor's single Function reconciler. It
+// replaces the per-executor-type Function reconcilers (poolmgr, newdeploy,
+// container) with one reconciler that resolves each Function's executor type and
+// dispatches the create/update/delete to the owning type via
+// executortype.FuncReconciler. Sharing one reconciler means one Function
+// workqueue, one predicate evaluation per event, and one last-reconciled cache
+// instead of one set per executor type — and it makes executor-type transitions
+// atomic: the same reconcile tears the old type down and builds the new, where
+// previously two independent reconcilers had to converge.
+package funcreconciler
+
+import (
+	"context"
+	"sort"
+	"sync"
+
+	"github.com/go-logr/logr"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/controller"
+	"github.com/fission/fission/pkg/executor/executortype"
+)
+
+// resolveExecutorType returns the executor type that owns fn. An unset type
+// defaults to poolmgr (the default executor), matching the old per-type filters
+// where an empty type counted as poolmgr.
+func resolveExecutorType(fn *fv1.Function) fv1.ExecutorType {
+	if t := fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType; t != "" {
+		return t
+	}
+	return fv1.ExecutorTypePoolmgr
+}
+
+// functionReconciler dispatches Function events to the executor type that owns
+// each Function. It owns the last-reconciled Function per key, which supplies the
+// "old" object backends diff against on update, the previous executor type on a
+// transition, and the object to tear down on delete.
+type functionReconciler struct {
+	logger         logr.Logger
+	client         client.Client
+	backends       map[fv1.ExecutorType]executortype.FuncReconciler
+	lastReconciled sync.Map // client.ObjectKey -> *fv1.Function
+}
+
+func (r *functionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	fn := &fv1.Function{}
+	if err := r.client.Get(ctx, req.NamespacedName, fn); err != nil {
+		if apierrors.IsNotFound(err) {
+			// Deleted: tear down using the last-reconciled object (the live one is
+			// gone), routed to the executor type that owned it.
+			if old, ok := r.lastReconciled.LoadAndDelete(req.NamespacedName); ok {
+				oldFn := old.(*fv1.Function)
+				if b, ok := r.backends[resolveExecutorType(oldFn)]; ok {
+					if err := b.DeleteFunction(ctx, oldFn); err != nil {
+						return ctrl.Result{}, err
+					}
+				}
+			}
+			return ctrl.Result{}, nil
+		}
+		return ctrl.Result{}, err
+	}
+
+	newType := resolveExecutorType(fn)
+
+	var old *fv1.Function
+	if v, ok := r.lastReconciled.Load(req.NamespacedName); ok {
+		old = v.(*fv1.Function)
+	}
+
+	// A delete+recreate of the same name (UID change) or a switch of executor type
+	// can coalesce into one reconcile (the workqueue carries only namespace/name).
+	// Tear the old incarnation down under its old type, then treat the new one as a
+	// fresh create under its (possibly different) type.
+	if old != nil && (old.UID != fn.UID || resolveExecutorType(old) != newType) {
+		if ob, ok := r.backends[resolveExecutorType(old)]; ok {
+			if err := ob.DeleteFunction(ctx, old); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+		old = nil
+	}
+
+	backend, ok := r.backends[newType]
+	if !ok {
+		// No executor type manages this type (shouldn't happen — CEL validation
+		// restricts ExecutorType to the known set). Any old incarnation was already
+		// torn down above; drop the cache entry so we don't retain a stale object.
+		r.lastReconciled.Delete(req.NamespacedName)
+		return ctrl.Result{}, nil
+	}
+
+	if err := backend.ReconcileFunction(ctx, old, fn); err != nil {
+		return ctrl.Result{}, err
+	}
+	r.lastReconciled.Store(req.NamespacedName, fn.DeepCopy())
+	return ctrl.Result{}, nil
+}
+
+// collectBackends returns the executor types that reconcile Functions, keyed by
+// executor type. (Every current type does; the filter future-proofs against a
+// type that opts out.)
+func collectBackends(executorTypes map[fv1.ExecutorType]executortype.ExecutorType) map[fv1.ExecutorType]executortype.FuncReconciler {
+	backends := make(map[fv1.ExecutorType]executortype.FuncReconciler, len(executorTypes))
+	for name, et := range executorTypes {
+		if b, ok := et.(executortype.FuncReconciler); ok {
+			backends[name] = b
+		}
+	}
+	return backends
+}
+
+// RegisterReconciler wires the single Function reconciler onto the executor
+// Manager, dispatching to the executor types that implement FuncReconciler. If no
+// executor type reconciles Functions, no reconciler is registered and nil is
+// returned.
+func RegisterReconciler(mgr ctrl.Manager, logger logr.Logger, executorTypes map[fv1.ExecutorType]executortype.ExecutorType) error {
+	backends := collectBackends(executorTypes)
+	if len(backends) == 0 {
+		return nil
+	}
+
+	names := make([]string, 0, len(backends))
+	for name := range backends {
+		names = append(names, string(name))
+	}
+	sort.Strings(names)
+	logger.V(1).Info("registering shared function reconciler", "executor_types", names)
+
+	r := &functionReconciler{
+		logger:   logger.WithName("function_reconciler"),
+		client:   mgr.GetClient(),
+		backends: backends,
+	}
+	return controller.Register(mgr, &fv1.Function{}, r, "executor-function")
+}

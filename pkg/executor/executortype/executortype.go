@@ -72,6 +72,27 @@ type ExecutorType interface {
 	CleanupOldExecutorObjects(context.Context)
 }
 
+// FuncReconciler is implemented by executor types to reconcile the Functions
+// they own. The shared executor-level Function reconciler
+// (pkg/executor/funcreconciler) resolves each Function's executor type, owns the
+// last-reconciled cache, and handles delete/recreate and executor-type
+// transitions (tearing the old type down via DeleteFunction and building the new
+// via ReconcileFunction) — so the three executor types share one Function
+// workqueue, predicate, and cache instead of one reconciler each.
+type FuncReconciler interface {
+	// ReconcileFunction brings this executor type's backing resources for fn to
+	// the desired state. old is the previously reconciled Function for this key
+	// (guaranteed same executor type and same UID), or nil on the first reconcile
+	// of fn under this type — implementations create on nil and update (diffing
+	// against old) otherwise.
+	ReconcileFunction(ctx context.Context, old, fn *fv1.Function) error
+
+	// DeleteFunction tears down this executor type's backing resources for fn. It
+	// is called with the last-reconciled object — which carries this executor
+	// type — both when fn is deleted and when fn transitions away to another type.
+	DeleteFunction(ctx context.Context, fn *fv1.Function) error
+}
+
 // EnvReconciler is implemented by executor types that react to Environment
 // changes. The shared executor-level Environment reconciler holds the last-seen
 // Environment per key and dispatches each event to every executor type that

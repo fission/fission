@@ -6,20 +6,15 @@ package container
 
 import (
 	"context"
-	"sync"
 
-	"github.com/go-logr/logr"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
-	"github.com/fission/fission/pkg/controller"
 	"github.com/fission/fission/pkg/executor/fscache"
 )
 
-// functionManager is the subset of *Container the reconciler drives. Defined as
-// an interface so the reconcile routing (create/update/delete based on the
+// functionManager is the subset of *Container the Function handlers drive.
+// Defined as an interface so the reconcile routing (create-vs-update on the
 // last-reconciled object) is unit-testable with a fake.
 type functionManager interface {
 	createFunction(context.Context, *fv1.Function) (*fscache.FuncSvc, error)
@@ -27,90 +22,36 @@ type functionManager interface {
 	deleteFunction(context.Context, *fv1.Function) error
 }
 
-// functionReconciler manages container-backed function deployments. It replaces
-// the Function informer event handlers: controller-runtime's workqueue (with
-// bounded MaxConcurrentReconciles and per-key serialization) is the reconciler,
-// replacing the unbounded bare goroutines the old handlers spawned — addressing
-// the code's own "should use a workqueue" TODO.
-//
-// updateFunction is diff-based (it compares old vs new for HPA min/max/metrics,
-// secret/configmap changes, and executor-type transitions), but a reconciler
-// only has the current Function. So the reconciler keeps the last-reconciled
-// Function per key to supply the "old" object: Reconcile calls createFunction on
-// first sight, updateFunction(old, current) thereafter, and deleteFunction(old)
-// when the Function is gone. It is registered with GenerationChangedPredicate, so
-// the executor's own status writes (which leave Generation unchanged) don't churn
-// the loop — they were no-ops through updateFunction anyway.
-type functionReconciler struct {
-	logger logr.Logger
-	client client.Client
-	caaf   functionManager
-	// lastReconciled maps client.ObjectKey -> *fv1.Function (the object as last
-	// reconciled), supplying the "old" object updateFunction diffs against.
-	lastReconciled sync.Map
+// ReconcileFunction satisfies executortype.FuncReconciler for container-backed
+// functions (Deployment/Service/HPA). The shared Function reconciler owns the
+// last-reconciled cache and executor-type transitions, so this only sees same-type
+// create (old == nil → createFunction) and update (old != nil →
+// updateFunction(old, fn), which diffs HPA min/max/metrics and secret/configmap
+// changes).
+func (caaf *Container) ReconcileFunction(ctx context.Context, old, fn *fv1.Function) error {
+	return reconcileContainerFunc(ctx, caaf, old, fn)
 }
 
-func (r *functionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	fn := &fv1.Function{}
-	if err := r.client.Get(ctx, req.NamespacedName, fn); err != nil {
-		if apierrors.IsNotFound(err) {
-			// Deleted: clean up using the last-reconciled object (the live one is gone).
-			if old, ok := r.lastReconciled.LoadAndDelete(req.NamespacedName); ok {
-				if err := r.caaf.deleteFunction(ctx, old.(*fv1.Function)); err != nil {
-					return ctrl.Result{}, err
-				}
-			}
-			return ctrl.Result{}, nil
-		}
-		return ctrl.Result{}, err
-	}
-
-	old, seen := r.lastReconciled.Load(req.NamespacedName)
-	if !seen {
-		// First sight. Only manage functions whose executor type is container
-		// (createFunction is a no-op for any other type, so caching them would just
-		// grow lastReconciled). A function that later switches *to* container
-		// generates a spec change and arrives here uncached, so it is created then.
-		if !isContainerType(fn) {
-			return ctrl.Result{}, nil
-		}
-		if _, err := r.caaf.createFunction(ctx, fn); err != nil {
-			return ctrl.Result{}, err
-		}
-		r.lastReconciled.Store(req.NamespacedName, fn.DeepCopy())
-		return ctrl.Result{}, nil
-	}
-
-	// Already managing it: updateFunction handles spec/HPA diffs and executor-type
-	// transitions (it deletes the resources if the function is no longer container).
-	if err := r.caaf.updateFunction(ctx, old.(*fv1.Function), fn); err != nil {
-		return ctrl.Result{}, err
-	}
-	if isContainerType(fn) {
-		r.lastReconciled.Store(req.NamespacedName, fn.DeepCopy())
-	} else {
-		// Transitioned away from container; updateFunction cleaned up the resources.
-		r.lastReconciled.Delete(req.NamespacedName)
-	}
-	return ctrl.Result{}, nil
+// DeleteFunction satisfies executortype.FuncReconciler: it tears down the
+// function's Deployment/Service/HPA.
+func (caaf *Container) DeleteFunction(ctx context.Context, fn *fv1.Function) error {
+	return caaf.deleteFunction(ctx, fn)
 }
 
-// isContainerType reports whether the executor should manage this function.
-// createFunction is a no-op unless the executor type is exactly container, so we
-// only cache/manage those — caching unset-type functions (which the old handler
-// passed but createFunction ignored) would grow lastReconciled without ever
-// creating resources.
-func isContainerType(fn *fv1.Function) bool {
-	return fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypeContainer
+// reconcileContainerFunc holds the create-vs-update routing, split out so it is
+// unit-testable with a fake functionManager.
+func reconcileContainerFunc(ctx context.Context, mgr functionManager, old, fn *fv1.Function) error {
+	if old == nil {
+		_, err := mgr.createFunction(ctx, fn)
+		return err
+	}
+	return mgr.updateFunction(ctx, old, fn)
 }
 
-// RegisterReconcilers registers the container Function reconciler on the executor
-// Manager.
-func (caaf *Container) RegisterReconcilers(mgr ctrl.Manager) error {
-	r := &functionReconciler{
-		logger: caaf.logger.WithName("function_reconciler"),
-		client: mgr.GetClient(),
-		caaf:   caaf,
-	}
-	return controller.Register(mgr, &fv1.Function{}, r, "container-function")
+// RegisterReconcilers has no type-specific watches to register: the container
+// type's Function reconciles are handled by the shared executor-level Function
+// reconciler (see funcreconciler.RegisterReconciler), which it plugs into via
+// FuncReconciler.
+func (caaf *Container) RegisterReconcilers(ctrl.Manager) error {
+	return nil
 }
