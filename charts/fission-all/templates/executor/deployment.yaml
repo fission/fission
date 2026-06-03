@@ -51,6 +51,8 @@ spec:
           value: "{{ .Values.pullPolicy }}"
         - name: ADOPT_EXISTING_RESOURCES
           value: {{ .Values.executor.adoptExistingResources | default false | quote }}
+        - name: FINALIZER_ENABLED
+          value: {{ .Values.finalizerEnabled | quote }}
         - name: POD_READY_TIMEOUT
           value: {{ .Values.executor.podReadyTimeout | default false | quote }}
         - name: ENABLE_ISTIO

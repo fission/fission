@@ -102,6 +102,21 @@ createNamespace: true
 ##
 disableOwnerReference: false
 
+## finalizerEnabled is a chart-wide toggle for finalizer-based cleanup of the
+## Kubernetes resources Fission controllers create. When enabled (default), a
+## controller adds a cleanup finalizer to the CRs it owns and tears their backing
+## resources down on delete before releasing it — the reliable mechanism for
+## cross-namespace cleanup, which owner-reference GC cannot do (see
+## builderNamespace / functionNamespace). Currently honoured by the executor
+## (Function); other Fission controllers will adopt the same flag over time.
+##
+## Disable (set false) only if you need deletes to never block on a controller
+## being available; cleanup then falls back to best-effort reaping. A finalizer
+## left behind because its controller is down can be cleared manually with:
+##   kubectl patch <resource> <name> -n <ns> --type=merge -p '{"metadata":{"finalizers":[]}}'
+##
+finalizerEnabled: true
+
 ## enableIstio indicates whether to enable istio integration.
 ##
 enableIstio: false
