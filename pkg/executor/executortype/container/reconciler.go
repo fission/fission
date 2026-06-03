@@ -48,10 +48,12 @@ func reconcileContainerFunc(ctx context.Context, mgr functionManager, old, fn *f
 	return mgr.updateFunction(ctx, old, fn)
 }
 
-// RegisterReconcilers has no type-specific watches to register: the container
-// type's Function reconciles are handled by the shared executor-level Function
+// RegisterReconcilers registers no type-specific watches: the container type's
+// Function reconciles are handled by the shared executor-level Function
 // reconciler (see funcreconciler.RegisterReconciler), which it plugs into via
-// FuncReconciler.
-func (caaf *Container) RegisterReconcilers(ctrl.Manager) error {
+// FuncReconciler. It captures the Manager's cache-backed client for IsValid's
+// Deployment/Service reads (replacing the per-type informer factory).
+func (caaf *Container) RegisterReconcilers(mgr ctrl.Manager) error {
+	caaf.crClient = mgr.GetClient()
 	return nil
 }
