@@ -46,10 +46,10 @@ func TestPoolmgrNewdeployToggle(t *testing.T) {
 	f.Router(t).GetEventually(t, ctx, "/"+fnName, framework.BodyContains("world"))
 	require.Equal(t, "poolmgr", string(ns.GetFunction(t, ctx, fnName).Spec.InvokeStrategy.ExecutionStrategy.ExecutorType))
 
-	// → newdeploy: the transition (poolmgr→newdeploy) drives newdeploy's
-	// updateFunction "type changed to newdeploy" branch → createFunction, which
-	// must materialize a per-function Deployment. Assert on the live object, not
-	// just that traffic flows.
+	// → newdeploy: the shared Function reconciler (pkg/executor/funcreconciler)
+	// sees the executor type change, tears the poolmgr incarnation down, and
+	// creates the function under newdeploy — which must materialize a per-function
+	// Deployment. Assert on the live object, not just that traffic flows.
 	ns.CLI(t, ctx, "fn", "update", "--name", fnName, "--code", codePath,
 		"--minscale", "1", "--maxscale", "4", "--executortype", "newdeploy")
 	f.Router(t).GetEventually(t, ctx, "/"+fnName, framework.BodyContains("world"))

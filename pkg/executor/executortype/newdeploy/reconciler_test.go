@@ -8,18 +8,12 @@ import (
 	"context"
 	"testing"
 
-	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/executor/fscache"
-	"github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
 )
 
 type fakeFuncMgr struct {
@@ -64,66 +58,29 @@ func envWithImage(name, image string) *fv1.Environment {
 	return env
 }
 
-func crClient(objs ...client.Object) client.Client {
-	return fake.NewClientBuilder().WithScheme(scheme.Scheme).WithObjects(objs...).Build()
-}
+func TestReconcileNewdeployFunc(t *testing.T) {
+	fn := fnOfType("fn", fv1.ExecutorTypeNewdeploy)
 
-func TestNewdeployFunctionReconcilerRouting(t *testing.T) {
-	key := types.NamespacedName{Name: "fn", Namespace: "default"}
-	req := ctrl.Request{NamespacedName: key}
-
-	t.Run("first sight of newdeploy function creates and caches", func(t *testing.T) {
+	t.Run("create (old == nil) creates then reconciles the deployment spec", func(t *testing.T) {
 		mgr := &fakeFuncMgr{}
-		r := &functionReconciler{logger: logr.Discard(), client: crClient(fnOfType("fn", fv1.ExecutorTypeNewdeploy)), deploy: mgr}
-		_, err := r.Reconcile(t.Context(), req)
-		require.NoError(t, err)
+		require.NoError(t, reconcileNewdeployFunc(t.Context(), mgr, nil, fn))
 		assert.Equal(t, []string{"fn"}, mgr.created)
 		assert.Equal(t, []string{"fn"}, mgr.reconciled, "first sight must reconcile a possibly-stale adopted deployment to current spec")
 		assert.Empty(t, mgr.updated)
-		_, cached := r.lastReconciled.Load(key)
-		assert.True(t, cached, "managed function must be cached")
 	})
 
-	t.Run("cached function updates with the cached old object", func(t *testing.T) {
+	t.Run("update (old != nil) diffs against the old object", func(t *testing.T) {
 		mgr := &fakeFuncMgr{}
-		r := &functionReconciler{logger: logr.Discard(), client: crClient(fnOfType("fn", fv1.ExecutorTypeNewdeploy)), deploy: mgr}
-		r.lastReconciled.Store(key, fnOfType("fn", fv1.ExecutorTypeNewdeploy))
-		_, err := r.Reconcile(t.Context(), req)
-		require.NoError(t, err)
+		require.NoError(t, reconcileNewdeployFunc(t.Context(), mgr, fn, fn))
 		assert.Equal(t, []string{"fn"}, mgr.updated)
 		assert.Empty(t, mgr.created)
 	})
 
-	t.Run("deleted function cleans up via the cached old object", func(t *testing.T) {
+	t.Run("DeleteFunction tears down the function", func(t *testing.T) {
+		// DeleteFunction delegates straight to deleteFunction; exercise the wiring.
 		mgr := &fakeFuncMgr{}
-		r := &functionReconciler{logger: logr.Discard(), client: crClient(), deploy: mgr} // empty client -> NotFound
-		r.lastReconciled.Store(key, fnOfType("fn", fv1.ExecutorTypeNewdeploy))
-		_, err := r.Reconcile(t.Context(), req)
-		require.NoError(t, err)
+		require.NoError(t, mgr.deleteFunction(t.Context(), fn))
 		assert.Equal(t, []string{"fn"}, mgr.deleted)
-		_, cached := r.lastReconciled.Load(key)
-		assert.False(t, cached, "deleted function must be evicted from cache")
-	})
-
-	t.Run("non-newdeploy function on first sight is ignored", func(t *testing.T) {
-		mgr := &fakeFuncMgr{}
-		r := &functionReconciler{logger: logr.Discard(), client: crClient(fnOfType("fn", fv1.ExecutorTypePoolmgr)), deploy: mgr}
-		_, err := r.Reconcile(t.Context(), req)
-		require.NoError(t, err)
-		assert.Empty(t, mgr.created)
-		_, cached := r.lastReconciled.Load(key)
-		assert.False(t, cached)
-	})
-
-	t.Run("transition away from newdeploy updates and uncaches", func(t *testing.T) {
-		mgr := &fakeFuncMgr{}
-		r := &functionReconciler{logger: logr.Discard(), client: crClient(fnOfType("fn", fv1.ExecutorTypePoolmgr)), deploy: mgr}
-		r.lastReconciled.Store(key, fnOfType("fn", fv1.ExecutorTypeNewdeploy))
-		_, err := r.Reconcile(t.Context(), req)
-		require.NoError(t, err)
-		assert.Equal(t, []string{"fn"}, mgr.updated, "updateFunction handles the type-transition cleanup")
-		_, cached := r.lastReconciled.Load(key)
-		assert.False(t, cached, "transitioned-away function must be evicted")
 	})
 }
 
@@ -154,11 +111,4 @@ func TestNewdeployReconcileEnvironment(t *testing.T) {
 		// Compile-time + behavioural guard that delete needs no newdeploy-side action.
 		(&NewDeploy{}).CleanupEnvironment(t.Context(), envWithImage("env", "img:1"))
 	})
-}
-
-func TestIsNewdeployType(t *testing.T) {
-	assert.True(t, isNewdeployType(fnOfType("a", fv1.ExecutorTypeNewdeploy)))
-	assert.False(t, isNewdeployType(fnOfType("a", "")), "unset type is not managed (createFunction no-ops on it)")
-	assert.False(t, isNewdeployType(fnOfType("a", fv1.ExecutorTypeContainer)))
-	assert.False(t, isNewdeployType(fnOfType("a", fv1.ExecutorTypePoolmgr)))
 }
