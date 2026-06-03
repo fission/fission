@@ -26,6 +26,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	ctrlcontroller "sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -82,6 +83,20 @@ var deletionTimestampPredicate = predicate.Funcs{
 		return e.ObjectNew != nil && !e.ObjectNew.GetDeletionTimestamp().IsZero()
 	},
 }
+
+// funcReconcileConcurrency is the shared Function reconciler's worker count. A
+// reconcile can block for up to the specialization timeout: createFunction
+// (first sight, or recreating a drifted-away workload) waits in waitForDeploy for
+// the Deployment to become available. With a single worker that wait would
+// head-of-line-block every other function's reconcile — and merging the three
+// per-type reconcilers (each previously its own 1-worker controller, so a
+// blocking newdeploy create never stalled container/poolmgr) into one collapsed
+// that cross-type isolation. Several workers restore it; controller-runtime still
+// serializes reconciles per Function key, so per-function state stays safe.
+// Sized above the integration suite's parallelism (-parallel 6) so several
+// concurrent first-sight/drift creates can be in their waitForDeploy wait
+// without starving unrelated functions' updates.
+const funcReconcileConcurrency = 10
 
 // resolveExecutorType returns the executor type that owns fn. An unset type
 // defaults to poolmgr (the default executor), matching the old per-type filters
@@ -250,6 +265,7 @@ func RegisterReconciler(mgr ctrl.Manager, logger logr.Logger, executorTypes map[
 	// container workloads reach the delete-only watch.
 	return builder.ControllerManagedBy(mgr).
 		Named("executor-function").
+		WithOptions(ctrlcontroller.Options{MaxConcurrentReconciles: funcReconcileConcurrency}).
 		For(&fv1.Function{}, builder.WithPredicates(
 			predicate.Or(predicate.GenerationChangedPredicate{}, deletionTimestampPredicate))).
 		Watches(&appsv1.Deployment{}, handler.EnqueueRequestsFromMapFunc(ownedObjectToFunction),
