@@ -34,6 +34,7 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/executor/cms"
+	"github.com/fission/fission/pkg/executor/envreconciler"
 	"github.com/fission/fission/pkg/executor/executortype"
 	"github.com/fission/fission/pkg/executor/executortype/container"
 	"github.com/fission/fission/pkg/executor/executortype/newdeploy"
@@ -542,6 +543,14 @@ func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, 
 		if err := et.RegisterReconcilers(crMgr); err != nil {
 			return fmt.Errorf("error registering reconcilers for executor type %s: %w", et.GetTypeName(ctx), err)
 		}
+	}
+
+	// One Environment reconciler, shared across executor types: it dispatches each
+	// Environment event to every type implementing EnvReconciler (poolmgr pool sync
+	// + newdeploy image propagation), replacing the per-type Environment reconcilers
+	// with a single workqueue and last-seen cache.
+	if err := envreconciler.RegisterReconciler(crMgr, logger, executorTypes); err != nil {
+		return err
 	}
 
 	startFactories := func(stopCh <-chan struct{}) {

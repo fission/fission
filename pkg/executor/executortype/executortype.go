@@ -6,6 +6,7 @@ package executortype
 
 import (
 	"context"
+	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -69,4 +70,25 @@ type ExecutorType interface {
 
 	// CleanupOldExecutorObjects cleans up resources created by old executor instances
 	CleanupOldExecutorObjects(context.Context)
+}
+
+// EnvReconciler is implemented by executor types that react to Environment
+// changes. The shared executor-level Environment reconciler holds the last-seen
+// Environment per key and dispatches each event to every executor type that
+// implements this interface, so the executor types share one Environment
+// workqueue (and one cache) instead of each registering its own reconciler.
+// Types with no Environment-driven behaviour (e.g. container) simply do not
+// implement it and are skipped.
+type EnvReconciler interface {
+	// ReconcileEnvironment is called on every Environment create/update and on the
+	// periodic resync. old is the previously reconciled Environment for this key,
+	// or nil on first sight. It returns the interval after which this type wants
+	// the Environment re-reconciled (0 = none); the dispatcher requeues using the
+	// longest interval any type requests.
+	ReconcileEnvironment(ctx context.Context, old, env *fv1.Environment) (requeueAfter time.Duration, err error)
+
+	// CleanupEnvironment is called when the Environment is deleted, with the
+	// last-seen object (the live one is already gone). It must not return an error:
+	// the object is gone, so there is nothing to retry against.
+	CleanupEnvironment(ctx context.Context, env *fv1.Environment)
 }

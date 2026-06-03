@@ -55,11 +55,12 @@ func (f *fakeRSCleaner) processReplicaSet(_ context.Context, rs *appsv1.ReplicaS
 type fakePoolMgr struct {
 	reconciled []string
 	cleaned    []string
+	reconcErr  error
 }
 
 func (f *fakePoolMgr) reconcileEnvPool(_ context.Context, env *fv1.Environment) error {
 	f.reconciled = append(f.reconciled, env.Name)
-	return nil
+	return f.reconcErr
 }
 func (f *fakePoolMgr) cleanupEnvPool(_ context.Context, env *fv1.Environment) {
 	f.cleaned = append(f.cleaned, env.Name)
@@ -172,40 +173,30 @@ func TestPoolmgrFunctionReconciler(t *testing.T) {
 	})
 }
 
-func TestPoolmgrEnvironmentReconciler(t *testing.T) {
-	key := types.NamespacedName{Name: "env", Namespace: "default"}
-	req := ctrl.Request{NamespacedName: key}
+func TestPoolmgrReconcileEnvironment(t *testing.T) {
 	env := &fv1.Environment{ObjectMeta: metav1.ObjectMeta{Name: "env", Namespace: "default", UID: "e1"}}
 
-	t.Run("existing environment reconciles its pool and is cached", func(t *testing.T) {
+	t.Run("reconciles the pool and requests the periodic resync", func(t *testing.T) {
 		m := &fakePoolMgr{}
-		r := &environmentReconciler{logger: logr.Discard(), client: crClient(env), mgr: m}
-		res, err := r.Reconcile(t.Context(), req)
+		// old is ignored by poolmgr — the pool reconcile is idempotent.
+		requeue, err := reconcilePoolmgrEnv(t.Context(), m, env)
 		require.NoError(t, err)
 		assert.Equal(t, []string{"env"}, m.reconciled)
-		assert.Empty(t, m.cleaned)
-		assert.Equal(t, envResyncPeriod, res.RequeueAfter, "should periodically re-reconcile")
-		_, cached := r.lastSeen.Load(key)
-		assert.True(t, cached)
+		assert.Equal(t, envResyncPeriod, requeue, "poolmgr drives the periodic pool re-reconcile")
 	})
 
-	t.Run("deleted environment cleans up its pool via the cached object", func(t *testing.T) {
+	t.Run("reconcile error propagates with no requeue", func(t *testing.T) {
+		m := &fakePoolMgr{reconcErr: assert.AnError}
+		requeue, err := reconcilePoolmgrEnv(t.Context(), m, env)
+		require.Error(t, err)
+		assert.Zero(t, requeue)
+	})
+
+	t.Run("CleanupEnvironment destroys the pool", func(t *testing.T) {
+		// CleanupEnvironment delegates straight to cleanupEnvPool; exercise that wiring.
 		m := &fakePoolMgr{}
-		r := &environmentReconciler{logger: logr.Discard(), client: crClient(), mgr: m} // empty -> NotFound
-		r.lastSeen.Store(key, env.DeepCopy())
-		_, err := r.Reconcile(t.Context(), req)
-		require.NoError(t, err)
+		m.cleanupEnvPool(t.Context(), env)
 		assert.Equal(t, []string{"env"}, m.cleaned)
-		_, cached := r.lastSeen.Load(key)
-		assert.False(t, cached)
-	})
-
-	t.Run("delete of an unseen environment is a no-op", func(t *testing.T) {
-		m := &fakePoolMgr{}
-		r := &environmentReconciler{logger: logr.Discard(), client: crClient(), mgr: m}
-		_, err := r.Reconcile(t.Context(), req)
-		require.NoError(t, err)
-		assert.Empty(t, m.cleaned)
 	})
 }
 

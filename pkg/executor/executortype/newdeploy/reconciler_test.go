@@ -127,47 +127,32 @@ func TestNewdeployFunctionReconcilerRouting(t *testing.T) {
 	})
 }
 
-func TestNewdeployEnvironmentReconcilerRouting(t *testing.T) {
-	key := types.NamespacedName{Name: "env", Namespace: "default"}
-	req := ctrl.Request{NamespacedName: key}
-
-	t.Run("first sight caches without touching functions", func(t *testing.T) {
+func TestNewdeployReconcileEnvironment(t *testing.T) {
+	t.Run("first sight (old == nil) does not roll functions", func(t *testing.T) {
 		up := &fakeEnvUpdater{}
-		r := &environmentReconciler{logger: logr.Discard(), client: crClient(envWithImage("env", "img:1")), deploy: up}
-		_, err := r.Reconcile(t.Context(), req)
+		requeue, err := reconcileNewdeployEnv(t.Context(), up, nil, envWithImage("env", "img:1"))
 		require.NoError(t, err)
 		assert.Empty(t, up.updated, "first sight must not roll functions (matches old AddFunc no-op)")
-		_, cached := r.lastReconciled.Load(key)
-		assert.True(t, cached)
+		assert.Zero(t, requeue, "newdeploy requests no periodic requeue")
 	})
 
 	t.Run("image change rolls the environment's functions", func(t *testing.T) {
 		up := &fakeEnvUpdater{}
-		r := &environmentReconciler{logger: logr.Discard(), client: crClient(envWithImage("env", "img:2")), deploy: up}
-		r.lastReconciled.Store(key, envWithImage("env", "img:1"))
-		_, err := r.Reconcile(t.Context(), req)
+		_, err := reconcileNewdeployEnv(t.Context(), up, envWithImage("env", "img:1"), envWithImage("env", "img:2"))
 		require.NoError(t, err)
 		assert.Equal(t, []string{"env"}, up.updated)
 	})
 
 	t.Run("non-image spec change is a no-op", func(t *testing.T) {
 		up := &fakeEnvUpdater{}
-		r := &environmentReconciler{logger: logr.Discard(), client: crClient(envWithImage("env", "img:1")), deploy: up}
-		r.lastReconciled.Store(key, envWithImage("env", "img:1"))
-		_, err := r.Reconcile(t.Context(), req)
+		_, err := reconcileNewdeployEnv(t.Context(), up, envWithImage("env", "img:1"), envWithImage("env", "img:1"))
 		require.NoError(t, err)
 		assert.Empty(t, up.updated, "same image must not roll functions")
 	})
 
-	t.Run("deleted environment drops the cache and does nothing", func(t *testing.T) {
-		up := &fakeEnvUpdater{}
-		r := &environmentReconciler{logger: logr.Discard(), client: crClient(), deploy: up} // empty -> NotFound
-		r.lastReconciled.Store(key, envWithImage("env", "img:1"))
-		_, err := r.Reconcile(t.Context(), req)
-		require.NoError(t, err)
-		assert.Empty(t, up.updated)
-		_, cached := r.lastReconciled.Load(key)
-		assert.False(t, cached)
+	t.Run("CleanupEnvironment is a no-op (function cleanup is driven by the Function watch)", func(t *testing.T) {
+		// Compile-time + behavioural guard that delete needs no newdeploy-side action.
+		(&NewDeploy{}).CleanupEnvironment(t.Context(), envWithImage("env", "img:1"))
 	})
 }
 
