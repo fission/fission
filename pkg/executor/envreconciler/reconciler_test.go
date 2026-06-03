@@ -26,7 +26,6 @@ import (
 // fakeHandler records the (old image, new image) pairs it reconciles and the
 // names it cleans up. It satisfies executortype.EnvReconciler.
 type fakeHandler struct {
-	name      string
 	requeue   time.Duration
 	reconcErr error
 
@@ -62,8 +61,8 @@ func TestEnvironmentReconcilerDispatch(t *testing.T) {
 	req := ctrl.Request{NamespacedName: key}
 
 	t.Run("first sight dispatches to every handler with nil old and caches", func(t *testing.T) {
-		h1 := &fakeHandler{name: "poolmgr", requeue: 30 * time.Minute}
-		h2 := &fakeHandler{name: "newdeploy"}
+		h1 := &fakeHandler{requeue: 30 * time.Minute}
+		h2 := &fakeHandler{}
 		r := &environmentReconciler{logger: logr.Discard(), client: crClient(envWithImage("env", "img:1")), handlers: []executortype.EnvReconciler{h1, h2}}
 
 		res, err := r.Reconcile(t.Context(), req)
@@ -76,7 +75,7 @@ func TestEnvironmentReconcilerDispatch(t *testing.T) {
 	})
 
 	t.Run("second event hands each handler the cached old object", func(t *testing.T) {
-		h := &fakeHandler{name: "newdeploy"}
+		h := &fakeHandler{}
 		r := &environmentReconciler{logger: logr.Discard(), client: crClient(envWithImage("env", "img:2")), handlers: []executortype.EnvReconciler{h}}
 		r.lastSeen.Store(key, envWithImage("env", "img:1"))
 
@@ -88,8 +87,8 @@ func TestEnvironmentReconcilerDispatch(t *testing.T) {
 	})
 
 	t.Run("a handler error stops dispatch and does not advance the cache", func(t *testing.T) {
-		h1 := &fakeHandler{name: "poolmgr", reconcErr: assert.AnError}
-		h2 := &fakeHandler{name: "newdeploy"}
+		h1 := &fakeHandler{reconcErr: assert.AnError}
+		h2 := &fakeHandler{}
 		r := &environmentReconciler{logger: logr.Discard(), client: crClient(envWithImage("env", "img:1")), handlers: []executortype.EnvReconciler{h1, h2}}
 
 		_, err := r.Reconcile(t.Context(), req)
@@ -100,8 +99,8 @@ func TestEnvironmentReconcilerDispatch(t *testing.T) {
 	})
 
 	t.Run("delete dispatches cleanup to every handler with the cached object", func(t *testing.T) {
-		h1 := &fakeHandler{name: "poolmgr"}
-		h2 := &fakeHandler{name: "newdeploy"}
+		h1 := &fakeHandler{}
+		h2 := &fakeHandler{}
 		r := &environmentReconciler{logger: logr.Discard(), client: crClient(), handlers: []executortype.EnvReconciler{h1, h2}} // empty client -> NotFound
 		r.lastSeen.Store(key, envWithImage("env", "img:1"))
 
@@ -114,7 +113,7 @@ func TestEnvironmentReconcilerDispatch(t *testing.T) {
 	})
 
 	t.Run("delete of an unseen environment is a no-op", func(t *testing.T) {
-		h := &fakeHandler{name: "poolmgr"}
+		h := &fakeHandler{}
 		r := &environmentReconciler{logger: logr.Discard(), client: crClient(), handlers: []executortype.EnvReconciler{h}}
 
 		_, err := r.Reconcile(t.Context(), req)
@@ -123,30 +122,34 @@ func TestEnvironmentReconcilerDispatch(t *testing.T) {
 	})
 }
 
-// fakeExecutorType implements only the bits collectHandlers needs: it optionally
-// embeds an EnvReconciler. envType reports whether it reacts to Environments.
-type fakeExecutorType struct {
-	executortype.ExecutorType // nil; never called by collectHandlers
-	envType                   bool
+// fakeEnvExecutorType is an ExecutorType that also implements EnvReconciler. It
+// embeds a nil ExecutorType (collectHandlers never calls those methods); id lets
+// the ordering assertion identify which type a collected handler is.
+type fakeEnvExecutorType struct {
+	executortype.ExecutorType
+	id string
 }
 
-func (f fakeExecutorType) ReconcileEnvironment(context.Context, *fv1.Environment, *fv1.Environment) (time.Duration, error) {
+func (fakeEnvExecutorType) ReconcileEnvironment(context.Context, *fv1.Environment, *fv1.Environment) (time.Duration, error) {
 	return 0, nil
 }
-func (f fakeExecutorType) CleanupEnvironment(context.Context, *fv1.Environment) {}
+func (fakeEnvExecutorType) CleanupEnvironment(context.Context, *fv1.Environment) {}
 
 // nonEnvExecutorType implements ExecutorType but NOT EnvReconciler.
 type nonEnvExecutorType struct{ executortype.ExecutorType }
 
 func TestCollectHandlers(t *testing.T) {
-	t.Run("only types implementing EnvReconciler are collected, in name order", func(t *testing.T) {
+	t.Run("collects only EnvReconciler types, ordered by executor-type name", func(t *testing.T) {
 		types := map[fv1.ExecutorType]executortype.ExecutorType{
-			"poolmgr":   fakeExecutorType{envType: true},
-			"newdeploy": fakeExecutorType{envType: true},
-			"container": nonEnvExecutorType{},
+			"poolmgr":   fakeEnvExecutorType{id: "poolmgr"},
+			"newdeploy": fakeEnvExecutorType{id: "newdeploy"},
+			"container": nonEnvExecutorType{}, // not an EnvReconciler -> skipped
 		}
 		handlers := collectHandlers(types)
-		assert.Len(t, handlers, 2, "container does not implement EnvReconciler and is skipped")
+		require.Len(t, handlers, 2, "container does not implement EnvReconciler and is skipped")
+		// Deterministic, sorted by executor-type name: newdeploy < poolmgr.
+		assert.Equal(t, "newdeploy", handlers[0].(fakeEnvExecutorType).id)
+		assert.Equal(t, "poolmgr", handlers[1].(fakeEnvExecutorType).id)
 	})
 
 	t.Run("no env-reacting types yields no handlers", func(t *testing.T) {
