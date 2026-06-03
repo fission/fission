@@ -19,9 +19,11 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/sync/errgroup"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/selection"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	k8sCache "k8s.io/client-go/tools/cache"
@@ -85,13 +87,37 @@ func executorCacheOptions() crcache.Options {
 		// this cache (replacing gpmInformerFactory). Scope the Pod watch to
 		// pool-manager pods so the cache doesn't mirror every function pod in the
 		// function namespace — the same executor-label filter the old informer used.
+		//
+		// Deployments + Services are watched for the newdeploy/container managers'
+		// IsValid reads (replacing their standalone SharedInformerFactory). Scope
+		// them to executor-managed objects so the cache doesn't mirror every
+		// Deployment/Service in the namespace — the same label bounding the old
+		// factories applied (issue #2775).
 		ByObject: map[client.Object]crcache.ByObject{
 			&corev1.Pod{}: {
 				Label: labels.SelectorFromSet(labels.Set{fv1.EXECUTOR_TYPE: string(fv1.ExecutorTypePoolmgr)}),
 			},
+			&appsv1.Deployment{}: {Label: executorManagedSelector},
+			&corev1.Service{}:    {Label: executorManagedSelector},
 		},
 	}
 }
+
+// executorManagedSelector matches the Deployments and Services created by the
+// newdeploy and container executor types (which label them with EXECUTOR_TYPE).
+// It bounds the Manager cache's Deployment/Service watch to executor-managed
+// objects, preserving the label scoping the standalone informer factories had so
+// the cache doesn't mirror every Deployment/Service in the function namespace
+// (issue #2775).
+var executorManagedSelector = func() labels.Selector {
+	req, err := labels.NewRequirement(fv1.EXECUTOR_TYPE, selection.In,
+		[]string{string(fv1.ExecutorTypeNewdeploy), string(fv1.ExecutorTypeContainer)})
+	if err != nil {
+		// Inputs are compile-time constants, so this cannot fail in practice.
+		panic(fmt.Sprintf("building executor-managed label selector: %v", err))
+	}
+	return labels.NewSelector().Add(*req)
+}()
 
 type (
 	// Executor defines a fission function executor.
@@ -150,7 +176,6 @@ type executorControllers struct {
 	logger         logr.Logger
 	api            *Executor
 	executorTypes  map[fv1.ExecutorType]executortype.ExecutorType
-	startFactories func(stopCh <-chan struct{})
 	waitForSync    func(ctx context.Context) bool
 	adoptResources bool
 }
@@ -159,9 +184,6 @@ func (c *executorControllers) NeedLeaderElection() bool { return true }
 
 func (c *executorControllers) Start(ctx context.Context) error {
 	gm := &errgroup.Group{}
-
-	// Read-only executortype informer factories (listers used by et.Run).
-	c.startFactories(ctx.Done())
 
 	for _, et := range c.executorTypes {
 		gm.Go(func() error { et.Run(ctx, gm); return nil })
@@ -453,30 +475,22 @@ func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, 
 		return fmt.Errorf("pool manager creation failed: %w", err)
 	}
 
-	executorLabel, err := utils.GetInformerLabelByExecutor(fv1.ExecutorTypeNewdeploy)
-	if err != nil {
-		return err
-	}
-	ndmInformerFactory := utils.GetInformerFactoryByExecutor(kubernetesClient, executorLabel, time.Minute*30)
+	// newdeploy/container read Deployments/Services from the Manager cache (their
+	// IsValid path); the cache replaces the per-type SharedInformerFactory they
+	// used to run. The cache-backed client is wired in via RegisterReconcilers.
 	ndm, err := newdeploy.MakeNewDeploy(ctx,
 		logger,
 		fissionClient, kubernetesClient,
 		fetcherConfig, executorInstanceID,
-		ndmInformerFactory, podSpecPatch)
+		podSpecPatch)
 	if err != nil {
 		return fmt.Errorf("new deploy manager creation failed: %w", err)
 	}
 
-	executorLabel, err = utils.GetInformerLabelByExecutor(fv1.ExecutorTypeContainer)
-	if err != nil {
-		return err
-	}
-	cnmInformerFactory := utils.GetInformerFactoryByExecutor(kubernetesClient, executorLabel, time.Minute*30)
 	cnm, err := container.MakeContainer(
 		ctx, logger,
 		fissionClient, kubernetesClient,
-		executorInstanceID,
-		cnmInformerFactory)
+		executorInstanceID)
 	if err != nil {
 		return fmt.Errorf("container manager creation failed: %w", err)
 	}
@@ -563,14 +577,6 @@ func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, 
 		return err
 	}
 
-	startFactories := func(stopCh <-chan struct{}) {
-		for _, factory := range ndmInformerFactory {
-			factory.Start(stopCh)
-		}
-		for _, factory := range cnmInformerFactory {
-			factory.Start(stopCh)
-		}
-	}
 	waitForSync := func(syncCtx context.Context) bool {
 		// The executor's Function/Environment/ConfigMap/Secret/Pod/ReplicaSet reads
 		// all go through the Manager cache now; it's ready once that has synced.
@@ -586,7 +592,6 @@ func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, 
 		logger:         logger,
 		api:            api,
 		executorTypes:  executorTypes,
-		startFactories: startFactories,
 		waitForSync:    waitForSync,
 		adoptResources: adoptExistingResources,
 	}

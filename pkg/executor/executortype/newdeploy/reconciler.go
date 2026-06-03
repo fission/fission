@@ -96,10 +96,13 @@ func reconcileNewdeployEnv(ctx context.Context, up envFunctionUpdater, old, env 
 	return 0, nil
 }
 
-// RegisterReconcilers has no type-specific watches to register: newdeploy's
-// Function and Environment reconciles are handled by the shared executor-level
-// reconcilers (see funcreconciler/envreconciler RegisterReconciler), which
-// newdeploy plugs into via FuncReconciler and EnvReconciler.
-func (deploy *NewDeploy) RegisterReconcilers(ctrl.Manager) error {
+// RegisterReconcilers registers no type-specific watches: newdeploy's Function
+// and Environment reconciles are handled by the shared executor-level reconcilers
+// (see funcreconciler/envreconciler RegisterReconciler), which newdeploy plugs
+// into via FuncReconciler and EnvReconciler. It captures the Manager's
+// cache-backed client for IsValid's Deployment/Service reads (replacing the
+// per-type informer factory).
+func (deploy *NewDeploy) RegisterReconcilers(mgr ctrl.Manager) error {
+	deploy.crClient = mgr.GetClient()
 	return nil
 }

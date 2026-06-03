@@ -18,7 +18,6 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes/fake"
-	k8sCache "k8s.io/client-go/tools/cache"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
@@ -47,17 +46,12 @@ func TestRefreshFuncPods(t *testing.T) {
 	// so using NewSimpleClientset instead of NewClientset here, until that is resolved.
 	fissionClient := fClient.NewSimpleClientset() // nolint:staticcheck
 
-	executorLabel, err := utils.GetInformerLabelByExecutor(fv1.ExecutorTypeNewdeploy)
-	require.NoError(t, err, "Error creating labels for informer")
-	ndmInformerFactory := utils.GetInformerFactoryByExecutor(kubernetesClient, executorLabel, time.Minute*30)
-
 	ctx := t.Context()
 
 	fetcherConfig, err := fetcherConfig.MakeFetcherConfig("/userfunc")
 	require.NoError(t, err, "Error creating fetcher config")
 
-	executor, err := MakeNewDeploy(ctx, logger, fissionClient, kubernetesClient, fetcherConfig, "test",
-		ndmInformerFactory, nil)
+	executor, err := MakeNewDeploy(ctx, logger, fissionClient, kubernetesClient, fetcherConfig, "test", nil)
 	require.NoError(t, err, "new deploy manager creation failed")
 
 	ndm := executor.(*NewDeploy)
@@ -69,29 +63,9 @@ func TestRefreshFuncPods(t *testing.T) {
 	}
 	ndm.nsResolver = &nsResolver
 
-	mgr.Go(func() error {
-		ndm.Run(ctx, mgr)
-		return nil
-	})
-	t.Log("New deploy manager started")
-
-	for _, informerFactory := range ndmInformerFactory {
-		informerFactory.Start(ctx.Done())
-	}
-
-	t.Log("Informers required for new deploy manager started")
-
-	waitSynced := make([]k8sCache.InformerSynced, 0)
-	for _, deplListerSynced := range ndm.deplListerSynced {
-		waitSynced = append(waitSynced, deplListerSynced)
-	}
-	for _, svcListerSynced := range ndm.svcListerSynced {
-		waitSynced = append(waitSynced, svcListerSynced)
-	}
-
-	if ok := k8sCache.WaitForCacheSync(ctx.Done(), waitSynced...); !ok {
-		t.Fatal("Timed out waiting for caches to sync")
-	}
+	// Deployment/Service reads now go through the Manager cache (IsValid only,
+	// which this test doesn't exercise); createFunction/RefreshFuncPods below use
+	// the kubernetesClient directly, so no informer factory is needed here.
 
 	envSpec := &fv1.Environment{
 		ObjectMeta: metav1.ObjectMeta{

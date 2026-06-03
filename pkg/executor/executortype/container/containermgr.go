@@ -14,16 +14,15 @@ import (
 	"strings"
 	"time"
 
+	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
 	k8sErrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
-	k8sInformers "k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
-	appslisters "k8s.io/client-go/listers/apps/v1"
-	corelisters "k8s.io/client-go/listers/core/v1"
 	k8sCache "k8s.io/client-go/tools/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/go-logr/logr"
 	"golang.org/x/sync/errgroup"
@@ -66,11 +65,11 @@ type (
 
 		defaultIdlePodReapTime time.Duration
 
-		deplLister map[string]appslisters.DeploymentLister
-		svcLister  map[string]corelisters.ServiceLister
-
-		deplListerSynced map[string]k8sCache.InformerSynced
-		svcListerSynced  map[string]k8sCache.InformerSynced
+		// crClient is the executor Manager's cache-backed client, used by IsValid
+		// to read function Deployments/Services from the shared Manager cache
+		// (replacing this type's standalone SharedInformerFactory listers). Set in
+		// RegisterReconcilers once the Manager exists.
+		crClient client.Client
 
 		hpaops                     *hpautils.HpaOperations
 		objectReaperIntervalSecond time.Duration
@@ -86,7 +85,6 @@ func MakeContainer(
 	fissionClient versioned.Interface,
 	kubernetesClient kubernetes.Interface,
 	instanceID string,
-	cnmInformerFactory map[string]k8sInformers.SharedInformerFactory,
 ) (executortype.ExecutorType, error) {
 	enableIstio := false
 	if len(os.Getenv("ENABLE_ISTIO")) > 0 {
@@ -114,43 +112,23 @@ func MakeContainer(
 		defaultIdlePodReapTime:     1 * time.Minute,
 		objectReaperIntervalSecond: time.Duration(executorUtils.GetObjectReaperInterval(logger, fv1.ExecutorTypeContainer, 5)) * time.Second,
 		hpaops:                     hpautils.NewHpaOperations(logger, kubernetesClient, instanceID),
-		deplLister:                 make(map[string]appslisters.DeploymentLister),
-		deplListerSynced:           make(map[string]k8sCache.InformerSynced),
-		svcLister:                  make(map[string]corelisters.ServiceLister),
-		svcListerSynced:            make(map[string]k8sCache.InformerSynced),
 
 		enableOwnerReferences: utils.IsOwnerReferencesEnabled(),
 	}
 
-	for ns, informerFactory := range cnmInformerFactory {
-		caaf.deplLister[ns] = informerFactory.Apps().V1().Deployments().Lister()
-		caaf.deplListerSynced[ns] = informerFactory.Apps().V1().Deployments().Informer().HasSynced
-		caaf.svcLister[ns] = informerFactory.Core().V1().Services().Lister()
-		caaf.svcListerSynced[ns] = informerFactory.Core().V1().Services().Informer().HasSynced
-	}
-	// The Function watch is now a controller-runtime reconciler registered via
-	// RegisterReconcilers on the executor Manager (see reconciler.go); the
-	// deployment/service listers above stay as read paths.
+	// The Function watch is a controller-runtime reconciler registered via the
+	// shared funcreconciler on the executor Manager (see reconciler.go).
+	// Deployment/Service reads (IsValid) go through the Manager's cache-backed
+	// client (caaf.crClient), set in RegisterReconcilers — no per-type informer
+	// factory is needed.
 	return caaf, nil
 }
 
-// Run start the function along with an object reaper.
-func (caaf *Container) Run(ctx context.Context, mgr *errgroup.Group) {
-	waitSynced := make([]k8sCache.InformerSynced, 0)
-	for _, deplListerSynced := range caaf.deplListerSynced {
-		waitSynced = append(waitSynced, deplListerSynced)
-	}
-	for _, svcListerSynced := range caaf.svcListerSynced {
-		waitSynced = append(waitSynced, svcListerSynced)
-	}
-
-	if ok := k8sCache.WaitForCacheSync(ctx.Done(), waitSynced...); !ok {
-		// Usually means the context was cancelled (shutdown or loss of
-		// leadership). Stop cleanly instead of taking the whole process down.
-		caaf.logger.Error(nil, "failed to wait for caches to sync; stopping container manager")
-		return
-	}
-}
+// Run is a no-op: the container manager no longer runs its own informer factory.
+// Its Deployment/Service reads (IsValid) go through the executor Manager's cache,
+// which controller-runtime syncs before any runnable (including this type's
+// reapers) starts.
+func (caaf *Container) Run(context.Context, *errgroup.Group) {}
 
 // GetTypeName returns the executor type name.
 func (caaf *Container) GetTypeName(ctx context.Context) fv1.ExecutorType {
@@ -207,17 +185,17 @@ func (caaf *Container) IsValid(ctx context.Context, fsvc *fscache.FuncSvc) bool 
 		return false
 	}
 	for _, obj := range fsvc.KubernetesObjects {
+		objKey := client.ObjectKey{Namespace: obj.Namespace, Name: obj.Name}
 		if strings.ToLower(obj.Kind) == "service" {
-			_, err := caaf.svcLister[obj.Namespace].Services(obj.Namespace).Get(obj.Name)
-			if err != nil {
+			if err := caaf.crClient.Get(ctx, objKey, &apiv1.Service{}); err != nil {
 				if !k8sErrs.IsNotFound(err) {
 					logger.Error(err, "error validating function service", "function", fsvc.Function.Name)
 				}
 				return false
 			}
 		} else if strings.ToLower(obj.Kind) == "deployment" {
-			currentDeploy, err := caaf.deplLister[obj.Namespace].Deployments(obj.Namespace).Get(obj.Name)
-			if err != nil {
+			currentDeploy := &appsv1.Deployment{}
+			if err := caaf.crClient.Get(ctx, objKey, currentDeploy); err != nil {
 				if !k8sErrs.IsNotFound(err) {
 					logger.Error(err, "error validating function deployment", "function", fsvc.Function.Name)
 				}
