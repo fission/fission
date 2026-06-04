@@ -10,6 +10,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	k8sfake "k8s.io/client-go/kubernetes/fake"
 
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
@@ -93,4 +96,31 @@ func TestPodIPCache(t *testing.T) {
 	c.set("", podRef{namespace: "x", name: "y"})
 	_, ok = c.lookup("")
 	assert.False(t, ok)
+}
+
+// TestPodIPCacheAPIFallback covers the cache-miss path: a caller whose pod the
+// informer has not observed yet (a fresh pod racing the watch) must still resolve
+// via a direct API lookup, so the guard does not wrongly reject it.
+func TestPodIPCacheAPIFallback(t *testing.T) {
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "caller", Namespace: "tenant-x"},
+		Status:     corev1.PodStatus{PodIP: "10.1.2.3"},
+	}
+	c := &podIPCache{
+		ipToPod:    map[string]podRef{}, // empty warm cache forces the API fallback
+		kubeClient: k8sfake.NewClientset(pod),
+		logger:     loggerfactory.GetLogger(),
+	}
+
+	ns, ok := c.lookup("10.1.2.3")
+	assert.True(t, ok, "cache miss must resolve via the API fallback")
+	assert.Equal(t, "tenant-x", ns)
+
+	c.mu.RLock()
+	_, warm := c.ipToPod["10.1.2.3"]
+	c.mu.RUnlock()
+	assert.True(t, warm, "an API-resolved IP should be warmed into the cache")
+
+	_, ok = c.lookup("10.9.9.9")
+	assert.False(t, ok, "an IP with no pod stays unresolved")
 }
