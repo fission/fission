@@ -1,0 +1,36 @@
+{{- if .Values.router.enforceSameNamespaceInvocation }}
+{{- /*
+  The same-namespace invocation guard attributes a caller's pod IP to a namespace
+  via a cluster-wide pod cache, so the router needs pods get/list/watch across all
+  namespaces (a caller may be a function pod in any namespace). This is a separate,
+  always-cluster-scoped ClusterRole so it works regardless of watchAllNamespaces,
+  and is only created when the guard is enabled.
+*/ -}}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: "{{ .Release.Name }}-router-pod-reader"
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - get
+  - list
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: "{{ .Release.Name }}-router-pod-reader"
+subjects:
+  - kind: ServiceAccount
+    name: "fission-router"
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: ClusterRole
+  name: "{{ .Release.Name }}-router-pod-reader"
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}

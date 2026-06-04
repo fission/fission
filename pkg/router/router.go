@@ -329,6 +329,27 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		return fmt.Errorf("error making HTTP trigger set: %w", err)
 	}
 
+	// Opt-in same-namespace guard on the internal listener: when enabled, a caller
+	// may invoke a function only from its own namespace, or as an internal Fission
+	// component (a pod in the router's install namespace). Needs a cluster-wide
+	// pod-ip cache to attribute caller IPs to namespaces.
+	if enforce, _ := strconv.ParseBool(os.Getenv(EnforceSameNamespaceInvocationEnv)); enforce {
+		installNS := routerInstallNamespace()
+		if installNS == "" {
+			return fmt.Errorf("%s is enabled but the router's own namespace could not be determined; set POD_NAMESPACE via the downward API", EnforceSameNamespaceInvocationEnv)
+		}
+		ipCache, err := newPodIPCache(ctx, kubeClient, logger.WithName("same_namespace_guard"))
+		if err != nil {
+			return fmt.Errorf("error starting pod-ip cache for same-namespace guard: %w", err)
+		}
+		triggers.callerNSGuard = &sameNamespaceGuard{
+			lookup:           ipCache,
+			installNamespace: installNS,
+			logger:           logger.WithName("same_namespace_guard"),
+		}
+		logger.Info("router internal listener: same-namespace invocation guard enabled", "install_namespace", installNS)
+	}
+
 	// Register the trigger + function reconcilers. Each signals a debounced mux
 	// rebuild; GenerationChangedPredicate drops status-only writes so the
 	// router's own HTTPTrigger condition writes don't loop.
