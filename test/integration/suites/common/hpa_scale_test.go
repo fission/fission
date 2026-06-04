@@ -43,10 +43,15 @@ func TestHPAScaleUnderLoad(t *testing.T) {
 		MinCPU: 20, MaxCPU: 100, MinMemory: 128, MaxMemory: 256,
 	})
 
-	codePath := framework.WriteTestData(t, "python/hello/hello.py")
+	// cpuburn burns ~50ms of CPU per request, so cpu consumption under load is
+	// deterministic regardless of request rate or handler efficiency: even at
+	// a modest ~10 rps the single MinScale pod uses ~500m against a 50m
+	// request — far past the 20% target. A trivial hello handler proved
+	// marginal in CI (scaled on one run, not the next).
+	codePath := framework.WriteTestData(t, "python/cpuburn/cpuburn.py")
 	// MinCPU=50 sets a 50m cpu request on the function container — required so
 	// the ContainerResource cpu metric has a denominator. TargetCPU=20 is low
-	// so light sustained load trips the autoscaler.
+	// so sustained load trips the autoscaler quickly.
 	ns.CreateFunction(t, ctx, framework.FunctionOptions{
 		Name: fnName, Env: envName, Code: codePath,
 		ExecutorType: "newdeploy", MinScale: 1, MaxScale: 3,
@@ -56,7 +61,7 @@ func TestHPAScaleUnderLoad(t *testing.T) {
 	ns.CreateRoute(t, ctx, framework.RouteOptions{Function: fnName, URL: routePath, Method: "GET"})
 
 	// Function serves traffic.
-	f.Router(t).GetEventually(t, ctx, routePath, framework.BodyContains("world"))
+	f.Router(t).GetEventually(t, ctx, routePath, framework.BodyContains("burned"))
 
 	// Metric-shape assertion: the executor must emit a ContainerResource cpu
 	// metric scoped to the function container (named after the env), not a
