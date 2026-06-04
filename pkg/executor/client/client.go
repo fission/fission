@@ -169,7 +169,9 @@ func (c *client) service() {
 				c.logger.V(1).Info("tapped services in batch", "service_count", len(urls))
 				err := c._tapService(context.Background(), svcReqs)
 				if err != nil {
-					c.logger.Error(err, "error tapping function service address")
+					// Best-effort atime refresh; a 404 here just means some
+					// entries expired on the executor side.
+					c.logger.V(1).Info("error tapping function service address", "error", err.Error())
 				}
 			}()
 		}
