@@ -137,15 +137,91 @@ func TestHTTPTriggerSpecValidate(t *testing.T) {
 	t.Parallel()
 	valid := HTTPTriggerSpec{
 		Methods:           []string{"GET", "POST"},
+		RelativeURL:       "/api/hello",
 		FunctionReference: FunctionReference{Type: FunctionReferenceTypeFunctionName, Name: "hello"},
 	}
 	require.NoError(t, valid.Validate())
 
 	bad := HTTPTriggerSpec{
 		Method:            "FETCH",
+		RelativeURL:       "/api/hello",
 		FunctionReference: FunctionReference{Type: FunctionReferenceTypeFunctionName, Name: "hello"},
 	}
 	require.Error(t, bad.Validate())
+}
+
+// TestHTTPTriggerSpecValidate_Path covers the URL-path safety rules added for
+// GHSA-vchh-r53j-8mpw. Keep these cases aligned with the CEL rules on
+// HTTPTriggerSpec in types.go so the API server's admission decision and the
+// Go-side Validate() decision (used by the CLI and the router reconciler's
+// status-Condition path) stay in lockstep.
+func TestHTTPTriggerSpecValidate_Path(t *testing.T) {
+	t.Parallel()
+	str := func(s string) *string { return &s }
+	fnRef := FunctionReference{Type: FunctionReferenceTypeFunctionName, Name: "hello"}
+
+	for _, tc := range []struct {
+		name        string
+		relativeURL string
+		prefix      *string
+		wantErr     bool
+		errSub      string
+	}{
+		// happy paths
+		{name: "valid relativeurl", relativeURL: "/api/hello"},
+		{name: "valid prefix", prefix: str("/api/")},
+		{name: "valid both set", relativeURL: "/api/hello", prefix: str("/api/")},
+		{name: "literal dot-dot inside segment is allowed", relativeURL: "/api/..foo"},
+		{name: "double-dot suffix in segment is allowed", relativeURL: "/api/foo..bar"},
+
+		// at-least-one-set
+		{name: "neither set", wantErr: true, errSub: "at least one"},
+		{name: "empty relativeurl and empty prefix", prefix: str(""), wantErr: true, errSub: "at least one"},
+
+		// leading slash
+		{name: "no leading slash relativeurl", relativeURL: "hello", wantErr: true, errSub: "must start with '/'"},
+		{name: "no leading slash prefix", prefix: str("hello"), wantErr: true, errSub: "must start with '/'"},
+
+		// root-only
+		{name: "root-only relativeurl", relativeURL: "/", wantErr: true, errSub: "root-only"},
+		{name: "root-only prefix", prefix: str("/"), wantErr: true, errSub: "root-only"},
+
+		// `..` traversal
+		{name: "traversal relativeurl", relativeURL: "/api/../admin", wantErr: true, errSub: "'..'"},
+		{name: "traversal prefix", prefix: str("/api/../admin"), wantErr: true, errSub: "'..'"},
+		{name: "leading traversal", relativeURL: "/..", wantErr: true, errSub: "'..'"},
+		{name: "trailing traversal", relativeURL: "/api/..", wantErr: true, errSub: "'..'"},
+
+		// router-owned exact paths
+		{name: "reserved /router-healthz", relativeURL: "/router-healthz", wantErr: true, errSub: "router-owned"},
+		{name: "reserved /readyz", relativeURL: "/readyz", wantErr: true, errSub: "router-owned"},
+		{name: "reserved /_version", relativeURL: "/_version", wantErr: true, errSub: "router-owned"},
+		{name: "reserved /auth/login", relativeURL: "/auth/login", wantErr: true, errSub: "router-owned"},
+		{name: "reserved path as prefix", prefix: str("/readyz"), wantErr: true, errSub: "router-owned"},
+
+		// router-internal /fission-function/ prefix
+		{name: "internal-prefix relativeurl", relativeURL: "/fission-function/ns/fn", wantErr: true, errSub: "/fission-function/"},
+		{name: "internal-prefix as Prefix field", prefix: str("/fission-function/"), wantErr: true, errSub: "/fission-function/"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			spec := HTTPTriggerSpec{
+				RelativeURL:       tc.relativeURL,
+				Prefix:            tc.prefix,
+				FunctionReference: fnRef,
+				Methods:           []string{"GET"},
+			}
+			err := spec.Validate()
+			if tc.wantErr {
+				require.Error(t, err, "expected error containing %q", tc.errSub)
+				if tc.errSub != "" {
+					require.Contains(t, err.Error(), tc.errSub)
+				}
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
 }
 
 func TestIngressConfigValidate(t *testing.T) {
@@ -209,6 +285,7 @@ func TestCRDValidate(t *testing.T) {
 	t.Run("httptrigger", func(t *testing.T) {
 		h := &HTTPTrigger{ObjectMeta: meta}
 		h.Spec.FunctionReference = FunctionReference{Type: FunctionReferenceTypeFunctionName, Name: "hello"}
+		h.Spec.RelativeURL = "/api/hello"
 		require.NoError(t, h.Validate())
 	})
 }
