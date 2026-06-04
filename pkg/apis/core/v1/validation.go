@@ -459,7 +459,71 @@ func (spec HTTPTriggerSpec) Validate() error {
 	if spec.CorsConfig != nil {
 		errs = errors.Join(errs, spec.CorsConfig.Validate())
 	}
+
+	// Path validation. HTTPTrigger has no admission webhook on current main
+	// (the API server's CEL evaluation is the admission gate); these checks
+	// mirror the CEL rules on HTTPTriggerSpec so the CLI and the router
+	// reconciler's status-Condition path agree with what the API server
+	// admits. Closes GHSA-vchh-r53j-8mpw.
+	prefix := ""
+	if spec.Prefix != nil {
+		prefix = *spec.Prefix
+	}
+	if spec.RelativeURL == "" && prefix == "" {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "HTTPTriggerSpec", "",
+			"at least one of relativeurl or prefix must be set"))
+	}
+	if spec.RelativeURL != "" {
+		errs = errors.Join(errs, validateTriggerPath("HTTPTriggerSpec.RelativeURL", spec.RelativeURL))
+	}
+	if prefix != "" {
+		errs = errors.Join(errs, validateTriggerPath("HTTPTriggerSpec.Prefix", prefix))
+	}
 	return errs
+}
+
+// routerReservedExactPaths are URL paths the router serves itself: liveness
+// (/router-healthz), readiness (/readyz), version (/_version), and the
+// chart-default auth login (/auth/login). Installations that change the auth
+// path must still ensure their custom path does not collide with another
+// HTTPTrigger; this list covers the defaults the router ships with.
+var routerReservedExactPaths = map[string]struct{}{
+	"/router-healthz": {},
+	"/readyz":         {},
+	"/_version":       {},
+	"/auth/login":     {},
+}
+
+// routerInternalFunctionPrefix is the URL prefix the router serves on its
+// internal listener (post-GHSA-3g33-6vg6-27m8) for direct function invocation.
+// Triggers under this prefix would shadow internal routes if the public/
+// internal listener split is misconfigured.
+const routerInternalFunctionPrefix = "/fission-function/"
+
+// validateTriggerPath enforces the URL-path safety invariants for RelativeURL
+// and Prefix in HTTPTriggerSpec. Keep these checks aligned with the CEL rules
+// on HTTPTriggerSpec in types.go.
+func validateTriggerPath(field, path string) error {
+	if !strings.HasPrefix(path, "/") {
+		return MakeValidationErr(ErrorInvalidValue, field, path, "must start with '/'")
+	}
+	if path == "/" {
+		return MakeValidationErr(ErrorInvalidValue, field, path, "root-only path '/' is not allowed")
+	}
+	// Reject any ".." path segment. Splitting on '/' (rather than substring
+	// match) permits literal names like "..foo" or "foo..bar" while catching
+	// the traversal form ".." that the router would otherwise resolve away.
+	if slices.Contains(strings.Split(path, "/"), "..") {
+		return MakeValidationErr(ErrorInvalidValue, field, path, "must not contain '..' path segments")
+	}
+	if _, reserved := routerReservedExactPaths[path]; reserved {
+		return MakeValidationErr(ErrorInvalidValue, field, path, "collides with a router-owned path")
+	}
+	if strings.HasPrefix(path, routerInternalFunctionPrefix) {
+		return MakeValidationErr(ErrorInvalidValue, field, path,
+			"collides with the router-internal "+routerInternalFunctionPrefix+" prefix")
+	}
+	return nil
 }
 
 // Validate enforces the CORS spec invariants that browsers will reject

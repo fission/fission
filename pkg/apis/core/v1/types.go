@@ -708,6 +708,14 @@ type (
 	//
 
 	// HTTPTriggerSpec is for router to expose user functions at the given URL path.
+	//
+	// The path rules below close GHSA-vchh-r53j-8mpw: HTTPTrigger no longer has
+	// an admission webhook, so the API server's CEL evaluation is the only place
+	// these invariants can be enforced for kubectl- or REST-created triggers.
+	// Keep these CEL rules in sync with validateTriggerPath in validation.go.
+	// +kubebuilder:validation:XValidation:rule="self.relativeurl != '' || (has(self.prefix) && self.prefix != '')",message="HTTPTriggerSpec: at least one of relativeurl or prefix must be set"
+	// +kubebuilder:validation:XValidation:rule="self.relativeurl == '' || (self.relativeurl.startsWith('/') && self.relativeurl != '/' && !self.relativeurl.matches('(^|/)[.][.](/|$)') && !(self.relativeurl in ['/router-healthz','/readyz','/_version','/auth/login']) && !self.relativeurl.startsWith('/fission-function/'))",message="HTTPTriggerSpec.relativeurl must start with '/', not be '/', not contain '..' path segments, not collide with a router-owned path (/router-healthz, /readyz, /_version, /auth/login), and not start with /fission-function/"
+	// +kubebuilder:validation:XValidation:rule="!has(self.prefix) || self.prefix == '' || (self.prefix.startsWith('/') && self.prefix != '/' && !self.prefix.matches('(^|/)[.][.](/|$)') && !(self.prefix in ['/router-healthz','/readyz','/_version','/auth/login']) && !self.prefix.startsWith('/fission-function/'))",message="HTTPTriggerSpec.prefix must start with '/', not be '/', not contain '..' path segments, not collide with a router-owned path (/router-healthz, /readyz, /_version, /auth/login), and not start with /fission-function/"
 	HTTPTriggerSpec struct {
 		// TODO: remove this field since we have IngressConfig already
 		// Deprecated: the original idea of this field is not for setting Ingress.
