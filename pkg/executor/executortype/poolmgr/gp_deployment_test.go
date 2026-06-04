@@ -19,6 +19,62 @@ import (
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
 
+// TestGenDeploymentSpecPreStopLifecycle asserts that genDeploymentSpec sets a
+// kubelet-native Sleep preStop hook on the runtime container for a positive
+// TerminationGracePeriod, and sets nil Lifecycle when the grace period is 0
+// (no drain window needed, and Kubernetes rejects Sleep.Seconds < 1).
+func TestGenDeploymentSpecPreStopLifecycle(t *testing.T) {
+	t.Parallel()
+
+	t.Run("positive grace period uses native sleep", func(t *testing.T) {
+		t.Parallel()
+		gp := newTestGenericPool(t)
+		env := newTestEnv()
+		env.Spec.TerminationGracePeriod = 360
+
+		deploymentSpec, err := gp.genDeploymentSpec(env)
+		require.NoError(t, err)
+
+		// Locate the runtime (user) container — it carries the preStop hook.
+		var runtimeContainer *apiv1.Container
+		for i := range deploymentSpec.Template.Spec.Containers {
+			if deploymentSpec.Template.Spec.Containers[i].Name == envContainerName {
+				runtimeContainer = &deploymentSpec.Template.Spec.Containers[i]
+				break
+			}
+		}
+		require.NotNil(t, runtimeContainer, "runtime container must be present in the deployment spec")
+		require.NotNil(t, runtimeContainer.Lifecycle, "runtime container must have a Lifecycle set")
+		require.NotNil(t, runtimeContainer.Lifecycle.PreStop, "runtime container Lifecycle.PreStop must be set")
+
+		preStop := runtimeContainer.Lifecycle.PreStop
+		assert.Nil(t, preStop.Exec, "PreStop.Exec must be nil — no /bin/sleep exec")
+		require.NotNil(t, preStop.Sleep, "PreStop.Sleep must be set for kubelet-native drain")
+		assert.Equal(t, int64(360), preStop.Sleep.Seconds, "PreStop.Sleep.Seconds must equal the environment TerminationGracePeriod")
+	})
+
+	t.Run("zero grace period produces nil lifecycle", func(t *testing.T) {
+		t.Parallel()
+		gp := newTestGenericPool(t)
+		env := newTestEnv()
+		env.Spec.TerminationGracePeriod = 0
+
+		deploymentSpec, err := gp.genDeploymentSpec(env)
+		require.NoError(t, err)
+
+		var runtimeContainer *apiv1.Container
+		for i := range deploymentSpec.Template.Spec.Containers {
+			if deploymentSpec.Template.Spec.Containers[i].Name == envContainerName {
+				runtimeContainer = &deploymentSpec.Template.Spec.Containers[i]
+				break
+			}
+		}
+		require.NotNil(t, runtimeContainer, "runtime container must be present in the deployment spec")
+		assert.Nil(t, runtimeContainer.Lifecycle,
+			"runtime container Lifecycle must be nil when TerminationGracePeriod is 0 (no drain window, Sleep.Seconds>=1 is required by the API)")
+	})
+}
+
 const envContainerName = "test-env"
 
 func TestGetPoolName(t *testing.T) {
