@@ -137,8 +137,8 @@ func (gp *GenericPool) genDeploymentSpec(env *fv1.Environment) (*appsv1.Deployme
 			ServiceAccountName:           fv1.FissionFetcherSA,
 			AutomountServiceAccountToken: &automountSAToken,
 			// TerminationGracePeriodSeconds should be equal to the
-			// sleep time of preStop to make sure that SIGTERM is sent
-			// to pod after 6 mins.
+			// preStop sleep so SIGTERM is only sent once the drain
+			// window has elapsed.
 			TerminationGracePeriodSeconds: &gracePeriodSeconds,
 			Volumes: []apiv1.Volume{
 				util.FetcherSATokenProjectedVolume(),

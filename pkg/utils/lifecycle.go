@@ -18,9 +18,8 @@ import (
 // binary, and an exec'd sleep spanning the whole grace window is always
 // SIGKILLed at expiry, failing the hook on every termination.
 //
-// A non-positive grace returns nil: there is no drain window to hold open.
-// The API server's validation enforces Seconds >= 1 for sleep actions, so
-// zero is not a valid hook anyway.
+// A non-positive grace returns nil: there is no drain window to hold open,
+// so the hook is omitted entirely.
 func DrainLifecycle(gracePeriodSeconds int64) *apiv1.Lifecycle {
 	if gracePeriodSeconds <= 0 {
 		return nil
