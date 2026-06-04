@@ -154,6 +154,16 @@ func (r *functionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		}
 		controllerutil.RemoveFinalizer(fn, functionFinalizer)
 		if err := r.client.Update(ctx, fn); err != nil {
+			if apierrors.IsNotFound(err) {
+				// Already collected — another actor removed the last finalizer
+				// or the object was force-deleted. Teardown already ran above.
+				r.lastReconciled.Delete(req.NamespacedName)
+				return ctrl.Result{}, nil
+			}
+			if apierrors.IsConflict(err) {
+				// Stale object; requeue silently and retry on a fresh read.
+				return ctrl.Result{Requeue: true}, nil
+			}
 			return ctrl.Result{}, err
 		}
 		r.lastReconciled.Delete(req.NamespacedName)
@@ -166,12 +176,30 @@ func (r *functionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	if r.finalizer && !controllerutil.ContainsFinalizer(fn, functionFinalizer) {
 		controllerutil.AddFinalizer(fn, functionFinalizer)
 		if err := r.client.Update(ctx, fn); err != nil {
+			if apierrors.IsNotFound(err) {
+				// Deleted out from under us; the deletion path will handle
+				// teardown via the watch event.
+				return ctrl.Result{}, nil
+			}
+			if apierrors.IsConflict(err) {
+				// Stale object; requeue silently and retry on a fresh read.
+				return ctrl.Result{Requeue: true}, nil
+			}
 			return ctrl.Result{}, err
 		}
 	} else if !r.finalizer && controllerutil.ContainsFinalizer(fn, functionFinalizer) {
 		// Toggled off: drain the finalizer so a later delete is never wedged on it.
 		controllerutil.RemoveFinalizer(fn, functionFinalizer)
 		if err := r.client.Update(ctx, fn); err != nil {
+			if apierrors.IsNotFound(err) {
+				// Deleted out from under us; the deletion path will handle
+				// teardown via the watch event.
+				return ctrl.Result{}, nil
+			}
+			if apierrors.IsConflict(err) {
+				// Stale object; requeue silently and retry on a fresh read.
+				return ctrl.Result{Requeue: true}, nil
+			}
 			return ctrl.Result{}, err
 		}
 	}
