@@ -10066,6 +10066,35 @@ spec:
                     - containers
                     type: object
                 type: object
+                x-kubernetes-validations:
+                - message: spec.builder.podspec.hostNetwork is not allowed
+                  rule: '!has(self.podspec) || !has(self.podspec.hostNetwork) || !self.podspec.hostNetwork'
+                - message: spec.builder.podspec.hostPID is not allowed
+                  rule: '!has(self.podspec) || !has(self.podspec.hostPID) || !self.podspec.hostPID'
+                - message: spec.builder.podspec.hostIPC is not allowed
+                  rule: '!has(self.podspec) || !has(self.podspec.hostIPC) || !self.podspec.hostIPC'
+                - message: spec.builder.podspec.serviceAccountName override is not
+                    allowed
+                  rule: '!has(self.podspec) || !has(self.podspec.serviceAccountName)
+                    || self.podspec.serviceAccountName == '''''
+                - message: spec.builder.podspec.serviceAccount override is not allowed
+                  rule: '!has(self.podspec) || !has(self.podspec.serviceAccount) ||
+                    self.podspec.serviceAccount == '''''
+                - message: spec.builder.container.securityContext.privileged=true
+                    is not allowed
+                  rule: '!has(self.container) || !has(self.container.securityContext)
+                    || !has(self.container.securityContext.privileged) || !self.container.securityContext.privileged'
+                - message: spec.builder.container.securityContext.allowPrivilegeEscalation=true
+                    is not allowed
+                  rule: '!has(self.container) || !has(self.container.securityContext)
+                    || !has(self.container.securityContext.allowPrivilegeEscalation)
+                    || !self.container.securityContext.allowPrivilegeEscalation'
+                - message: spec.builder.container.securityContext.capabilities.add
+                    may only contain NET_BIND_SERVICE (PSA restricted)
+                  rule: '!has(self.container) || !has(self.container.securityContext)
+                    || !has(self.container.securityContext.capabilities) || !has(self.container.securityContext.capabilities.add)
+                    || self.container.securityContext.capabilities.add.all(c, c ==
+                    ''NET_BIND_SERVICE'')'
               imagepullsecret:
                 description: |-
                   ImagePullSecret is the secret for Kubernetes to pull an image from a
@@ -20157,6 +20186,35 @@ spec:
                 required:
                 - image
                 type: object
+                x-kubernetes-validations:
+                - message: spec.runtime.podspec.hostNetwork is not allowed
+                  rule: '!has(self.podspec) || !has(self.podspec.hostNetwork) || !self.podspec.hostNetwork'
+                - message: spec.runtime.podspec.hostPID is not allowed
+                  rule: '!has(self.podspec) || !has(self.podspec.hostPID) || !self.podspec.hostPID'
+                - message: spec.runtime.podspec.hostIPC is not allowed
+                  rule: '!has(self.podspec) || !has(self.podspec.hostIPC) || !self.podspec.hostIPC'
+                - message: spec.runtime.podspec.serviceAccountName override is not
+                    allowed
+                  rule: '!has(self.podspec) || !has(self.podspec.serviceAccountName)
+                    || self.podspec.serviceAccountName == '''''
+                - message: spec.runtime.podspec.serviceAccount override is not allowed
+                  rule: '!has(self.podspec) || !has(self.podspec.serviceAccount) ||
+                    self.podspec.serviceAccount == '''''
+                - message: spec.runtime.container.securityContext.privileged=true
+                    is not allowed
+                  rule: '!has(self.container) || !has(self.container.securityContext)
+                    || !has(self.container.securityContext.privileged) || !self.container.securityContext.privileged'
+                - message: spec.runtime.container.securityContext.allowPrivilegeEscalation=true
+                    is not allowed
+                  rule: '!has(self.container) || !has(self.container.securityContext)
+                    || !has(self.container.securityContext.allowPrivilegeEscalation)
+                    || !self.container.securityContext.allowPrivilegeEscalation'
+                - message: spec.runtime.container.securityContext.capabilities.add
+                    may only contain NET_BIND_SERVICE (PSA restricted)
+                  rule: '!has(self.container) || !has(self.container.securityContext)
+                    || !has(self.container.securityContext.capabilities) || !has(self.container.securityContext.capabilities.add)
+                    || self.container.securityContext.capabilities.add.all(c, c ==
+                    ''NET_BIND_SERVICE'')'
               terminationGracePeriod:
                 description: |-
                   The grace time for pod to perform connection draining before termination. The unit is in seconds.

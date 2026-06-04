@@ -385,6 +385,18 @@ type (
 	// +kubebuilder:validation:XValidation:rule="!(has(self.InvokeStrategy.ExecutionStrategy) && (self.InvokeStrategy.ExecutionStrategy.ExecutorType == 'newdeploy' || self.InvokeStrategy.ExecutionStrategy.ExecutorType == 'container')) || !has(self.InvokeStrategy.ExecutionStrategy.TargetCPUPercent) || (self.InvokeStrategy.ExecutionStrategy.TargetCPUPercent >= 0 && self.InvokeStrategy.ExecutionStrategy.TargetCPUPercent <= 100)",message="TargetCPUPercent must be a value between 0 and 100 for newdeploy/container executors"
 	// +kubebuilder:validation:XValidation:rule="!has(self.InvokeStrategy.StrategyType) || self.InvokeStrategy.StrategyType == '' || self.InvokeStrategy.StrategyType == 'execution'",message="InvokeStrategy.StrategyType must be 'execution'"
 	// +kubebuilder:validation:XValidation:rule="!has(self.InvokeStrategy.ExecutionStrategy) || !has(self.InvokeStrategy.ExecutionStrategy.ExecutorType) || self.InvokeStrategy.ExecutionStrategy.ExecutorType == '' || self.InvokeStrategy.ExecutionStrategy.ExecutorType == 'poolmgr' || self.InvokeStrategy.ExecutionStrategy.ExecutorType == 'newdeploy' || self.InvokeStrategy.ExecutionStrategy.ExecutorType == 'container'",message="ExecutionStrategy.ExecutorType must be one of poolmgr, newdeploy, container"
+	// Bounded podspec safety rules — CEL admission gate for the simple pod-level
+	// invariants. Per-container SecurityContext checks stay in the webhook
+	// (ValidatePodSpecSafety) because iterating containers exceeds the CEL cost
+	// budget; the rules here cover only the bounded, cheap cases. The has()
+	// guards on each scalar are required: PodSpec's bool/string fields are
+	// json:"...,omitempty" so a zero/empty value is OMITTED from the object,
+	// and CEL errors with "no such key" if the rule accesses an absent field.
+	// +kubebuilder:validation:XValidation:rule="!has(self.podspec) || !has(self.podspec.hostNetwork) || !self.podspec.hostNetwork",message="spec.podspec.hostNetwork is not allowed"
+	// +kubebuilder:validation:XValidation:rule="!has(self.podspec) || !has(self.podspec.hostPID) || !self.podspec.hostPID",message="spec.podspec.hostPID is not allowed"
+	// +kubebuilder:validation:XValidation:rule="!has(self.podspec) || !has(self.podspec.hostIPC) || !self.podspec.hostIPC",message="spec.podspec.hostIPC is not allowed"
+	// +kubebuilder:validation:XValidation:rule="!has(self.podspec) || !has(self.podspec.serviceAccountName) || self.podspec.serviceAccountName == ''",message="spec.podspec.serviceAccountName override is not allowed"
+	// +kubebuilder:validation:XValidation:rule="!has(self.podspec) || !has(self.podspec.serviceAccount) || self.podspec.serviceAccount == ''",message="spec.podspec.serviceAccount override is not allowed"
 	FunctionSpec struct {
 		// Environment is the build and runtime environment that this function is
 		// associated with. An Environment with this name should exist, otherwise the
@@ -561,6 +573,19 @@ type (
 	//
 
 	// Runtime is the setting for environment runtime.
+	// Bounded podspec / container safety rules — CEL admission gate for the
+	// simple, bounded fields. Per-container PodSpec.containers iteration stays
+	// in the webhook (ValidatePodSpecSafety / ValidateContainerSafety) because
+	// it exceeds the CEL cost budget. The has() guards are required because
+	// json:"...,omitempty" omits zero/empty values from the object.
+	// +kubebuilder:validation:XValidation:rule="!has(self.podspec) || !has(self.podspec.hostNetwork) || !self.podspec.hostNetwork",message="spec.runtime.podspec.hostNetwork is not allowed"
+	// +kubebuilder:validation:XValidation:rule="!has(self.podspec) || !has(self.podspec.hostPID) || !self.podspec.hostPID",message="spec.runtime.podspec.hostPID is not allowed"
+	// +kubebuilder:validation:XValidation:rule="!has(self.podspec) || !has(self.podspec.hostIPC) || !self.podspec.hostIPC",message="spec.runtime.podspec.hostIPC is not allowed"
+	// +kubebuilder:validation:XValidation:rule="!has(self.podspec) || !has(self.podspec.serviceAccountName) || self.podspec.serviceAccountName == ''",message="spec.runtime.podspec.serviceAccountName override is not allowed"
+	// +kubebuilder:validation:XValidation:rule="!has(self.podspec) || !has(self.podspec.serviceAccount) || self.podspec.serviceAccount == ''",message="spec.runtime.podspec.serviceAccount override is not allowed"
+	// +kubebuilder:validation:XValidation:rule="!has(self.container) || !has(self.container.securityContext) || !has(self.container.securityContext.privileged) || !self.container.securityContext.privileged",message="spec.runtime.container.securityContext.privileged=true is not allowed"
+	// +kubebuilder:validation:XValidation:rule="!has(self.container) || !has(self.container.securityContext) || !has(self.container.securityContext.allowPrivilegeEscalation) || !self.container.securityContext.allowPrivilegeEscalation",message="spec.runtime.container.securityContext.allowPrivilegeEscalation=true is not allowed"
+	// +kubebuilder:validation:XValidation:rule="!has(self.container) || !has(self.container.securityContext) || !has(self.container.securityContext.capabilities) || !has(self.container.securityContext.capabilities.add) || self.container.securityContext.capabilities.add.all(c, c == 'NET_BIND_SERVICE')",message="spec.runtime.container.securityContext.capabilities.add may only contain NET_BIND_SERVICE (PSA restricted)"
 	Runtime struct {
 		// Image for containing the language runtime.
 		Image string `json:"image"`
@@ -608,6 +633,15 @@ type (
 	}
 
 	// Builder is the setting for environment builder.
+	// Bounded podspec / container safety rules — see the matching Runtime block above.
+	// +kubebuilder:validation:XValidation:rule="!has(self.podspec) || !has(self.podspec.hostNetwork) || !self.podspec.hostNetwork",message="spec.builder.podspec.hostNetwork is not allowed"
+	// +kubebuilder:validation:XValidation:rule="!has(self.podspec) || !has(self.podspec.hostPID) || !self.podspec.hostPID",message="spec.builder.podspec.hostPID is not allowed"
+	// +kubebuilder:validation:XValidation:rule="!has(self.podspec) || !has(self.podspec.hostIPC) || !self.podspec.hostIPC",message="spec.builder.podspec.hostIPC is not allowed"
+	// +kubebuilder:validation:XValidation:rule="!has(self.podspec) || !has(self.podspec.serviceAccountName) || self.podspec.serviceAccountName == ''",message="spec.builder.podspec.serviceAccountName override is not allowed"
+	// +kubebuilder:validation:XValidation:rule="!has(self.podspec) || !has(self.podspec.serviceAccount) || self.podspec.serviceAccount == ''",message="spec.builder.podspec.serviceAccount override is not allowed"
+	// +kubebuilder:validation:XValidation:rule="!has(self.container) || !has(self.container.securityContext) || !has(self.container.securityContext.privileged) || !self.container.securityContext.privileged",message="spec.builder.container.securityContext.privileged=true is not allowed"
+	// +kubebuilder:validation:XValidation:rule="!has(self.container) || !has(self.container.securityContext) || !has(self.container.securityContext.allowPrivilegeEscalation) || !self.container.securityContext.allowPrivilegeEscalation",message="spec.builder.container.securityContext.allowPrivilegeEscalation=true is not allowed"
+	// +kubebuilder:validation:XValidation:rule="!has(self.container) || !has(self.container.securityContext) || !has(self.container.securityContext.capabilities) || !has(self.container.securityContext.capabilities.add) || self.container.securityContext.capabilities.add.all(c, c == 'NET_BIND_SERVICE')",message="spec.builder.container.securityContext.capabilities.add may only contain NET_BIND_SERVICE (PSA restricted)"
 	Builder struct {
 		// Image for containing the language compilation environment.
 		Image string `json:"image,omitempty"`

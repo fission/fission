@@ -11,16 +11,20 @@ import (
 	apiv1 "k8s.io/api/core/v1"
 )
 
-// dangerousCapabilities lists Linux capabilities that effectively grant root
-// or break the container sandbox. Tenants that can write to Environment or
-// Function PodSpec must not be able to add these via securityContext.
-var dangerousCapabilities = map[apiv1.Capability]struct{}{
-	"SYS_ADMIN":       {},
-	"NET_ADMIN":       {},
-	"SYS_PTRACE":      {},
-	"SYS_MODULE":      {},
-	"DAC_READ_SEARCH": {},
-	"DAC_OVERRIDE":    {},
+// allowedCapabilities is the strict allowlist of Linux capabilities a tenant
+// may request via `securityContext.capabilities.add` on Environment- or
+// Function-supplied (init)containers. It matches Kubernetes Pod Security
+// Admission's "restricted" profile (only NET_BIND_SERVICE may be added on top
+// of the forced drop: ["ALL"] applied at the executor merge layer).
+//
+// Replaces the previous fixed denylist of six capabilities (SYS_ADMIN,
+// NET_ADMIN, SYS_PTRACE, SYS_MODULE, DAC_READ_SEARCH, DAC_OVERRIDE). The
+// denylist was structurally incomplete: it omitted at least SYS_TIME (which
+// lets a tenant rewrite the shared node wall clock), and could never constrain
+// the capabilities the OCI runtime grants by default (the merge layer addresses
+// those via drop: ["ALL"]). Closes GHSA-qf5v-m7p4-95rp.
+var allowedCapabilities = map[apiv1.Capability]struct{}{
+	"NET_BIND_SERVICE": {},
 }
 
 // ValidatePodSpecSafety rejects PodSpec fields that would let a low-privilege
@@ -117,9 +121,10 @@ func ValidateContainerSafety(fieldPath string, c *apiv1.Container) error {
 	}
 	if sc.Capabilities != nil {
 		for _, cap := range sc.Capabilities.Add {
-			if _, bad := dangerousCapabilities[cap]; bad {
+			if _, ok := allowedCapabilities[cap]; !ok {
 				errs = errors.Join(errs, fmt.Errorf(
-					"%s.securityContext.capabilities.add[%q] is not allowed", fieldPath, cap))
+					"%s.securityContext.capabilities.add[%q] is not in the allowlist (only NET_BIND_SERVICE may be added)",
+					fieldPath, cap))
 			}
 		}
 	}

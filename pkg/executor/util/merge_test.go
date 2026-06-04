@@ -196,10 +196,10 @@ func TestMergeContainer_SanitizesSecurityContext(t *testing.T) {
 		gotCaps[c] = true
 	}
 	if gotCaps["SYS_ADMIN"] || gotCaps["NET_ADMIN"] {
-		t.Errorf("dangerous capabilities must be stripped, got %v", out.SecurityContext.Capabilities.Add)
+		t.Errorf("non-allowlisted capabilities must be stripped, got %v", out.SecurityContext.Capabilities.Add)
 	}
 	if !gotCaps["NET_BIND_SERVICE"] {
-		t.Errorf("benign capability NET_BIND_SERVICE must flow through")
+		t.Errorf("allowlisted capability NET_BIND_SERVICE must flow through")
 	}
 
 	// The caller's source container must not be mutated by the merge.
@@ -293,8 +293,8 @@ func Test_mergeContainerList(t *testing.T) {
 				},
 			},
 			want: []apiv1.Container{
-				{Name: "foo", Image: "my-custom-image-1", Env: []apiv1.EnvVar{{Name: "env1", Value: "foobar"}, {Name: "env2", Value: "barfoo"}, {Name: "test", Value: "foobar"}}},
-				{Name: "foo2", Image: "my-custom-image-2", Env: []apiv1.EnvVar{{Name: "env1", Value: "foobar"}, {Name: "env2", Value: "barfoo"}, {Name: "env3", Value: "foobar"}, {Name: "env4", Value: "barfoo"}}},
+				{Name: "foo", Image: "my-custom-image-1", Env: []apiv1.EnvVar{{Name: "env1", Value: "foobar"}, {Name: "env2", Value: "barfoo"}, {Name: "test", Value: "foobar"}}, SecurityContext: nil},
+				{Name: "foo2", Image: "my-custom-image-2", Env: []apiv1.EnvVar{{Name: "env1", Value: "foobar"}, {Name: "env2", Value: "barfoo"}, {Name: "env3", Value: "foobar"}, {Name: "env4", Value: "barfoo"}}, SecurityContext: nil},
 			},
 			wantErr: false,
 		},
@@ -331,7 +331,7 @@ func Test_mergeContainerList(t *testing.T) {
 				},
 			},
 			want: []apiv1.Container{
-				{Name: "foo", Image: "my-custom-image-1", Env: []apiv1.EnvVar{{Name: "env1", Value: "foobar"}, {Name: "env2", Value: "barfoo"}, {Name: "test", Value: "foobar"}}},
+				{Name: "foo", Image: "my-custom-image-1", Env: []apiv1.EnvVar{{Name: "env1", Value: "foobar"}, {Name: "env2", Value: "barfoo"}, {Name: "test", Value: "foobar"}}, SecurityContext: nil},
 				{Name: "foo2", Image: "dummy-image-2", Env: []apiv1.EnvVar{{Name: "env1", Value: "foobar"}, {Name: "env2", Value: "barfoo"}}},
 				{Name: "foo4", Image: "my-custom-image-2", Env: []apiv1.EnvVar{{Name: "env3", Value: "foobar"}, {Name: "env4", Value: "barfoo"}}},
 			},
@@ -447,10 +447,12 @@ func TestMergePodSpec_StripsDangerousFields(t *testing.T) {
 // TestMergePodSpec_SanitizesContainerSecurityContext pins the
 // container-level defence-in-depth: even if admission was bypassed
 // (failurePolicy=Ignore or stale objects), per-container
-// privileged=true / allowPrivilegeEscalation=true / dangerous
-// capabilities must be stripped from the merged result. The webhook
-// is the primary defence; this layer makes the bits unreachable on
-// webhook-bypass clusters. Closes GHSA-gx55 / GHSA-wmgg / GHSA-v455.
+// privileged=true / allowPrivilegeEscalation=true / non-allowlisted
+// capabilities.add entries must be stripped from the merged result.
+// The webhook is the primary defence; this layer makes the bits
+// unreachable on webhook-bypass clusters. Closes GHSA-gx55 / GHSA-wmgg
+// / GHSA-v455 and the GHSA-qf5v allowlist (the structural drop:["ALL"]
+// is left for a follow-up that audits Fission's own sidecar containers).
 func TestMergePodSpec_SanitizesContainerSecurityContext(t *testing.T) {
 	on := true
 	src := &apiv1.PodSpec{
@@ -464,10 +466,11 @@ func TestMergePodSpec_SanitizesContainerSecurityContext(t *testing.T) {
 				AllowPrivilegeEscalation: &on,
 				Capabilities: &apiv1.Capabilities{
 					Add: []apiv1.Capability{
-						"SYS_ADMIN",
-						"NET_BIND_SERVICE", // benign — must flow through
-						"NET_ADMIN",
-						"CHOWN", // benign — must flow through
+						"SYS_ADMIN",        // denylist holdover — stripped
+						"SYS_TIME",         // GHSA-qf5v exemplar — stripped
+						"NET_BIND_SERVICE", // allowlisted — flows through
+						"NET_ADMIN",        // stripped
+						"CHOWN",            // OCI default; not in allowlist — stripped
 					},
 				},
 			},
@@ -498,25 +501,21 @@ func TestMergePodSpec_SanitizesContainerSecurityContext(t *testing.T) {
 	if merged.SecurityContext.AllowPrivilegeEscalation != nil && *merged.SecurityContext.AllowPrivilegeEscalation {
 		t.Errorf("AllowPrivilegeEscalation=true must be sanitized to false")
 	}
+	// Only NET_BIND_SERVICE is on the allowlist; everything else must be stripped.
+	gotAdd := map[apiv1.Capability]bool{}
 	for _, cap := range merged.SecurityContext.Capabilities.Add {
-		switch cap {
-		case "SYS_ADMIN", "NET_ADMIN", "SYS_PTRACE", "SYS_MODULE", "DAC_READ_SEARCH", "DAC_OVERRIDE":
-			t.Errorf("dangerous capability %q must be stripped", cap)
+		gotAdd[cap] = true
+	}
+	for _, cap := range []apiv1.Capability{"SYS_ADMIN", "SYS_TIME", "NET_ADMIN", "CHOWN"} {
+		if gotAdd[cap] {
+			t.Errorf("non-allowlisted capability %q must be stripped, got %v", cap, merged.SecurityContext.Capabilities.Add)
 		}
 	}
-	// Benign capabilities must remain.
-	gotBenign := map[apiv1.Capability]bool{}
-	for _, cap := range merged.SecurityContext.Capabilities.Add {
-		gotBenign[cap] = true
-	}
-	if !gotBenign["NET_BIND_SERVICE"] {
-		t.Errorf("benign capability NET_BIND_SERVICE must flow through")
-	}
-	if !gotBenign["CHOWN"] {
-		t.Errorf("benign capability CHOWN must flow through")
+	if !gotAdd["NET_BIND_SERVICE"] {
+		t.Errorf("allowlisted capability NET_BIND_SERVICE must flow through")
 	}
 
-	// InitContainer must also be sanitized.
+	// InitContainer must also be sanitized for Privileged.
 	if out.InitContainers[0].SecurityContext.Privileged != nil && *out.InitContainers[0].SecurityContext.Privileged {
 		t.Errorf("InitContainer privileged=true must be sanitized to false")
 	}
