@@ -29,10 +29,19 @@ namespace A invoking a private function in namespace B is blocked.
 
 The router attributes the request's source pod IP (the TCP peer — `X-Forwarded-For`
 is ignored, since it's caller-controlled) to a namespace via a cluster-wide pod
-cache (a pod informer keeping `podIP → namespace`). The check is applied
-**per-function handler**, so the target namespace is taken from the function
-object, not parsed from the (ambiguous) path. A caller IP that cannot be resolved
-to a pod is **rejected** (fail closed).
+cache (a pod informer keeping `podIP → namespace`), falling back to a direct API
+lookup (`status.podIP`) on a cache miss so a freshly-created caller isn't rejected
+while the watch catches up. The check is applied **per-function handler**, so the
+target namespace is taken from the function object, not parsed from the (ambiguous)
+path. A caller IP that cannot be resolved to a pod is **rejected** (fail closed).
+
+> Cold-start window: a brand-new pod can issue a request in the instant before its
+> `status.podIP` is observable to the API/informer. Such a first request fails
+> closed (403) and succeeds on the caller's normal retry. Long-running callers
+> (the federation gateway, ordinary functions) are unaffected — they resolve
+> immediately after their first second. The federation→subgraph cold-start path is
+> safe regardless: the *caller* is the long-running federation, not the
+> scaled-from-zero subgraph.
 
 ## Enabling
 
