@@ -107,7 +107,7 @@ jobs:
           --version 45.28.0 --set grafana.enabled=false --set alertmanager.enabled=false
           helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/
           helm install metrics-server metrics-server/metrics-server \
-            --namespace kube-system \
+            --namespace kube-system --version 3.13.1 \
             --set 'args={--kubelet-insecure-tls}' \
             --wait --timeout 3m
 

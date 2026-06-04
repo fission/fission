@@ -111,5 +111,5 @@ func TestWebhookPublisherDoesNotRetryOtherClientErrors(t *testing.T) {
 		mu.Lock()
 		defer mu.Unlock()
 		return hits > 1
-	}, 2*time.Second, 100*time.Millisecond, "publisher should not retry non-404 client errors")
+	}, 3*time.Second, 100*time.Millisecond, "publisher should not retry non-404 client errors")
 }
