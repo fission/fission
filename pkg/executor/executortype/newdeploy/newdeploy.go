@@ -20,6 +20,7 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/executor/util"
+	"github.com/fission/fission/pkg/utils"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
@@ -172,16 +173,8 @@ func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function
 		Image:                  env.Spec.Runtime.Image,
 		ImagePullPolicy:        deploy.runtimeImagePullPolicy,
 		TerminationMessagePath: "/dev/termination-log",
-		Lifecycle: &apiv1.Lifecycle{
-			PreStop: &apiv1.LifecycleHandler{
-				Exec: &apiv1.ExecAction{
-					Command: []string{
-						"/bin/sleep",
-						fmt.Sprintf("%d", gracePeriodSeconds),
-					},
-				},
-			},
-		},
+		// Connection-draining preStop hook; see utils.DrainLifecycle.
+		Lifecycle: utils.DrainLifecycle(gracePeriodSeconds),
 		Env: []apiv1.EnvVar{
 			{
 				Name:  fv1.ResourceVersionCount,

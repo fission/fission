@@ -18,6 +18,7 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/executor/util"
+	"github.com/fission/fission/pkg/utils"
 )
 
 // getPoolName returns a unique name of an environment
@@ -102,22 +103,8 @@ func (gp *GenericPool) genDeploymentSpec(env *fv1.Environment) (*appsv1.Deployme
 		ImagePullPolicy:        gp.runtimeImagePullPolicy,
 		TerminationMessagePath: "/dev/termination-log",
 		Resources:              env.Spec.Resources,
-		// Pod is removed from endpoints list for service when it's
-		// state became "Termination". We used preStop hook as the
-		// workaround for connection draining since pod maybe shutdown
-		// before grace period expires.
-		// https://kubernetes.io/docs/concepts/workloads/pods/pod/#termination-of-pods
-		// https://github.com/kubernetes/kubernetes/issues/47576#issuecomment-308900172
-		Lifecycle: &apiv1.Lifecycle{
-			PreStop: &apiv1.LifecycleHandler{
-				Exec: &apiv1.ExecAction{
-					Command: []string{
-						"/bin/sleep",
-						fmt.Sprintf("%d", gracePeriodSeconds),
-					},
-				},
-			},
-		},
+		// Connection-draining preStop hook; see utils.DrainLifecycle.
+		Lifecycle: utils.DrainLifecycle(gracePeriodSeconds),
 		// https://istio.io/docs/setup/kubernetes/additional-setup/requirements/
 		Ports: []apiv1.ContainerPort{
 			{
@@ -150,8 +137,8 @@ func (gp *GenericPool) genDeploymentSpec(env *fv1.Environment) (*appsv1.Deployme
 			ServiceAccountName:           fv1.FissionFetcherSA,
 			AutomountServiceAccountToken: &automountSAToken,
 			// TerminationGracePeriodSeconds should be equal to the
-			// sleep time of preStop to make sure that SIGTERM is sent
-			// to pod after 6 mins.
+			// preStop sleep so SIGTERM is only sent once the drain
+			// window has elapsed.
 			TerminationGracePeriodSeconds: &gracePeriodSeconds,
 			Volumes: []apiv1.Volume{
 				util.FetcherSATokenProjectedVolume(),
