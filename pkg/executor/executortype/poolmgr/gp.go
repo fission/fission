@@ -698,6 +698,14 @@ func (gp *GenericPool) destroy(ctx context.Context) error {
 	err := gp.kubernetesClient.AppsV1().
 		Deployments(gp.fnNamespace).Delete(ctx, gp.deployment.Name, delOpt)
 	if err != nil {
+		if k8s_err.IsNotFound(err) {
+			// Already gone (e.g. namespace teardown raced us) — destroy is
+			// idempotent, nothing left to do.
+			gp.logger.V(1).Info("deployment already deleted",
+				"deployment_name", gp.deployment.Name,
+				"deployment_namespace", gp.fnNamespace)
+			return nil
+		}
 		gp.logger.Error(err, "error destroying deployment", "deployment_name", gp.deployment.Name,
 			"deployment_namespace", gp.fnNamespace)
 		return err
