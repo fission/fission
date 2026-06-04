@@ -6,6 +6,7 @@ package newdeploy
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -14,10 +15,12 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/executor/fscache"
 	"github.com/fission/fission/pkg/executor/util"
 	hpautils "github.com/fission/fission/pkg/executor/util/hpa"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
+	fissionfake "github.com/fission/fission/pkg/generated/clientset/versioned/fake"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
@@ -100,6 +103,113 @@ func TestNewDeployFnDeleteCacheMiss(t *testing.T) {
 	// fsCache is intentionally left empty so GetByFunctionUID misses.
 	require.NoError(t, deploy.fnDelete(t.Context(), fn),
 		"fnDelete must tolerate a cache miss and clean up by computed name")
+}
+
+// TestNewDeployFnCreateDeletionGuard verifies the authoritative re-read at the
+// top of fnCreate refuses to create backing objects for a Function that the
+// router presented but which is gone or being deleted in the cluster. Without
+// this guard an in-flight create can race the delete teardown and re-create the
+// Deployment/Service/HPA after teardown removed them, leaking objects whose
+// owning Function CR is already gone.
+func TestNewDeployFnCreateDeletionGuard(t *testing.T) {
+	t.Parallel()
+
+	const liveUID = "abcdef01-2345-6789-abcd-ef0123456789"
+
+	tests := []struct {
+		name string
+		// stored is the Function in the authoritative store (fake
+		// fissionClient); nil means the function is absent.
+		stored *fv1.Function
+	}{
+		{
+			name:   "function absent from fissionClient",
+			stored: nil,
+		},
+		{
+			name: "function present but being deleted",
+			stored: func() *fv1.Function {
+				fn := newTestNewDeployFunction()
+				fn.UID = liveUID
+				fn.DeletionTimestamp = &metav1.Time{Time: time.Now()}
+				fn.Finalizers = []string{"fission.io/test"}
+				return fn
+			}(),
+		},
+		{
+			name: "function present but with a different UID",
+			stored: func() *fv1.Function {
+				fn := newTestNewDeployFunction()
+				fn.UID = "00000000-0000-0000-0000-000000000000"
+				return fn
+			}(),
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			logger := loggerfactory.GetLogger()
+			kubeClient := fake.NewSimpleClientset()
+			fissionClient := fissionfake.NewSimpleClientset()
+			if tc.stored != nil {
+				fissionClient = fissionfake.NewSimpleClientset(tc.stored)
+			}
+			deploy := &NewDeploy{
+				logger:           logger,
+				kubernetesClient: kubeClient,
+				fissionClient:    fissionClient,
+				fsCache:          fscache.MakeFunctionServiceCache(logger),
+				nsResolver:       utils.DefaultNSResolver(),
+				hpaops:           hpautils.NewHpaOperations(logger, kubeClient, "test-instance"),
+			}
+
+			// The Function the router presents looks alive (no DeletionTimestamp).
+			fn := newTestNewDeployFunction()
+			fn.UID = liveUID
+
+			_, err := deploy.fnCreate(t.Context(), fn)
+			require.Error(t, err, "fnCreate must refuse a gone/deleting function")
+			assert.True(t, ferror.IsNotFound(err),
+				"guard must surface a ferror NotFound, got: %v", err)
+
+			deploys, listErr := kubeClient.AppsV1().Deployments(metav1.NamespaceAll).List(t.Context(), metav1.ListOptions{})
+			require.NoError(t, listErr)
+			assert.Empty(t, deploys.Items,
+				"no Deployment must be created when the function is gone/deleting")
+		})
+	}
+}
+
+// TestNewDeployFnCreateGuardPass verifies the guard lets a live, matching
+// Function proceed past the re-read. We do not stand up a full happy-path
+// (Environment, package, pods); proving the guard passed is enough: fnCreate
+// fails later on the missing Environment with a non-NotFound error (a k8s
+// NotFound from the apiserver lookup, which is not a ferror NotFound).
+func TestNewDeployFnCreateGuardPass(t *testing.T) {
+	t.Parallel()
+
+	live := newTestNewDeployFunction()
+	live.UID = "abcdef01-2345-6789-abcd-ef0123456789"
+
+	logger := loggerfactory.GetLogger()
+	kubeClient := fake.NewSimpleClientset()
+	deploy := &NewDeploy{
+		logger:           logger,
+		kubernetesClient: kubeClient,
+		fissionClient:    fissionfake.NewSimpleClientset(live),
+		fsCache:          fscache.MakeFunctionServiceCache(logger),
+		nsResolver:       utils.DefaultNSResolver(),
+		hpaops:           hpautils.NewHpaOperations(logger, kubeClient, "test-instance"),
+	}
+
+	fn := newTestNewDeployFunction()
+	fn.UID = live.UID
+
+	_, err := deploy.fnCreate(t.Context(), fn)
+	require.Error(t, err, "expected fnCreate to fail past the guard on the missing Environment")
+	assert.False(t, ferror.IsNotFound(err),
+		"guard must have passed; the error should come from the missing Environment lookup, not the guard. got: %v", err)
 }
 
 // TestNewDeployPodSpecDoesNotAutomountTokenInUserContainer asserts the

@@ -5,7 +5,9 @@
 package container
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -15,8 +17,10 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/executor/fscache"
 	hpautils "github.com/fission/fission/pkg/executor/util/hpa"
+	fissionfake "github.com/fission/fission/pkg/generated/clientset/versioned/fake"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
@@ -142,6 +146,132 @@ func TestContainerFnDeleteCacheMiss(t *testing.T) {
 	// fsCache is intentionally left empty so GetByFunctionUID misses.
 	require.NoError(t, cn.fnDelete(t.Context(), fn),
 		"fnDelete must tolerate a cache miss and clean up by computed name")
+}
+
+// TestContainerFnCreateDeletionGuard verifies the authoritative re-read at the
+// top of fnCreate refuses to create backing objects for a Function that the
+// router presented but which is gone or being deleted in the cluster. Without
+// this guard an in-flight create can race the delete teardown and re-create the
+// Deployment/Service/HPA after teardown removed them, leaking objects whose
+// owning Function CR is already gone.
+func TestContainerFnCreateDeletionGuard(t *testing.T) {
+	t.Parallel()
+
+	const liveUID = "abcdef01-2345-6789-abcd-ef0123456789"
+
+	tests := []struct {
+		name string
+		// stored is the Function in the authoritative store (fake
+		// fissionClient); nil means the function is absent.
+		stored *fv1.Function
+	}{
+		{
+			name:   "function absent from fissionClient",
+			stored: nil,
+		},
+		{
+			name: "function present but being deleted",
+			stored: func() *fv1.Function {
+				fn := newTestContainerFunction()
+				fn.UID = liveUID
+				fn.DeletionTimestamp = &metav1.Time{Time: time.Now()}
+				fn.Finalizers = []string{"fission.io/test"}
+				return fn
+			}(),
+		},
+		{
+			name: "function present but with a different UID",
+			stored: func() *fv1.Function {
+				fn := newTestContainerFunction()
+				fn.UID = "00000000-0000-0000-0000-000000000000"
+				return fn
+			}(),
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			logger := loggerfactory.GetLogger()
+			kubeClient := fake.NewClientset()
+			fissionClient := fissionfake.NewSimpleClientset()
+			if tc.stored != nil {
+				fissionClient = fissionfake.NewSimpleClientset(tc.stored)
+			}
+			caaf := &Container{
+				logger:           logger,
+				kubernetesClient: kubeClient,
+				fissionClient:    fissionClient,
+				fsCache:          fscache.MakeFunctionServiceCache(logger),
+				nsResolver:       utils.DefaultNSResolver(),
+				hpaops:           hpautils.NewHpaOperations(logger, kubeClient, "test-instance"),
+			}
+
+			// The Function the router presents looks alive (no DeletionTimestamp).
+			fn := newTestContainerFunction()
+			fn.UID = liveUID
+
+			_, err := caaf.fnCreate(t.Context(), fn)
+			require.Error(t, err, "fnCreate must refuse a gone/deleting function")
+			assert.True(t, ferror.IsNotFound(err),
+				"guard must surface a ferror NotFound, got: %v", err)
+
+			deploys, listErr := kubeClient.AppsV1().Deployments(metav1.NamespaceAll).List(t.Context(), metav1.ListOptions{})
+			require.NoError(t, listErr)
+			assert.Empty(t, deploys.Items,
+				"no Deployment must be created when the function is gone/deleting")
+		})
+	}
+}
+
+// TestContainerFnCreateGuardPass verifies the guard lets a live, matching
+// Function proceed past the re-read. We do not stand up a full happy-path
+// (running pods); proving the guard passed is enough: fnCreate proceeds to
+// create the backing objects and then fails waiting for the deployment to
+// become available once the bounded context expires — a DeadlineExceeded
+// error, which is not a ferror NotFound.
+func TestContainerFnCreateGuardPass(t *testing.T) {
+	t.Parallel()
+
+	// A container function needs exactly one container port for the Service to
+	// be created, so the create path can proceed past the guard to the
+	// deployment wait.
+	withPort := func(fn *fv1.Function) *fv1.Function {
+		fn.Spec.PodSpec.Containers[0].Ports = []apiv1.ContainerPort{{ContainerPort: 8080}}
+		return fn
+	}
+
+	live := withPort(newTestContainerFunction())
+	live.UID = "abcdef01-2345-6789-abcd-ef0123456789"
+
+	logger := loggerfactory.GetLogger()
+	kubeClient := fake.NewClientset()
+	caaf := &Container{
+		logger:           logger,
+		kubernetesClient: kubeClient,
+		fissionClient:    fissionfake.NewSimpleClientset(live),
+		fsCache:          fscache.MakeFunctionServiceCache(logger),
+		nsResolver:       utils.DefaultNSResolver(),
+		hpaops:           hpautils.NewHpaOperations(logger, kubeClient, "test-instance"),
+	}
+
+	fn := withPort(newTestContainerFunction())
+	fn.UID = live.UID
+
+	// Bound the context so the (never-ready, no real pods) deployment wait
+	// returns promptly instead of blocking the default specialization timeout.
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+	defer cancel()
+
+	_, err := caaf.fnCreate(ctx, fn)
+	require.Error(t, err, "expected fnCreate to fail past the guard waiting for the deployment")
+	assert.False(t, ferror.IsNotFound(err),
+		"guard must have passed; the error should come from the deployment wait, not the guard. got: %v", err)
+	// The non-NotFound error proves the guard passed: fnCreate proceeded past
+	// the re-read into createOrGetDeployment and only failed at the bounded
+	// deployment-readiness wait ("context deadline exceeded").
+	assert.ErrorIs(t, err, context.DeadlineExceeded,
+		"guard-pass should fail at the deployment wait, got: %v", err)
 }
 
 func TestContainerGetResources(t *testing.T) {
