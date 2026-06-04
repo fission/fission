@@ -458,10 +458,13 @@ func (deploy *NewDeploy) fnCreate(ctx context.Context, fn *fv1.Function) (*fscac
 	// deployment of the function in fission-function ns
 	ns := deploy.nsResolver.GetFunctionNS(fn.Namespace)
 
-	// Ensure the fission-fetcher ServiceAccount exists in the function namespace.
-	// Under watch-all-namespaces the function can be in any namespace and its
-	// fetcher sidecar needs the SA present there. Idempotent.
+	// Ensure the fission-fetcher ServiceAccount and the fission-internal-auth
+	// Secret exist in the function namespace. Under watch-all-namespaces the
+	// function can be in any namespace and its fetcher sidecar needs both present
+	// there — without the secret the fetcher's storagesvc fetch fails with HTTP
+	// 401 and the pod cannot specialize. Idempotent.
 	utils.EnsureFetcherSA(ctx, deploy.kubernetesClient, deploy.logger, ns)
+	utils.EnsureInternalAuthSecret(ctx, deploy.kubernetesClient, deploy.logger, ns)
 
 	// Envoy(istio-proxy) returns 404 directly before istio pilot
 	// propagates latest Envoy-specific configuration.

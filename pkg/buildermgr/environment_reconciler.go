@@ -160,11 +160,13 @@ func (r *EnvironmentReconciler) getLabels(envName string, envNamespace string, e
 // createBuilderDeployment are skipped when a matching (current-RV) object is
 // already present, so this is idempotent across repeated reconciles.
 func (r *EnvironmentReconciler) ensureBuilder(ctx context.Context, env *fv1.Environment, ns string) error {
-	// Ensure the fission-builder ServiceAccount exists in the builder namespace.
-	// Under watch-all-namespaces the builder can be created in any namespace and
-	// its pod needs the SA present there (the static startup pass only covers the
-	// configured namespaces). Idempotent.
+	// Ensure the fission-builder ServiceAccount and the fission-internal-auth
+	// Secret exist in the builder namespace. Under watch-all-namespaces the builder
+	// can be created in any namespace and its pod needs both present there — the
+	// builder's fetcher sidecar uploads the built archive to storagesvc, which
+	// fails with HTTP 401 without the HMAC secret. Idempotent.
 	utils.EnsureBuilderSA(ctx, r.kubernetesClient, r.logger, ns)
+	utils.EnsureInternalAuthSecret(ctx, r.kubernetesClient, r.logger, ns)
 
 	sel := r.getLabels(env.Name, ns, env.ResourceVersion)
 

@@ -59,6 +59,17 @@ rules:
   - list
   - watch
 - apiGroups:
+  - ""
+  resources:
+  # The buildermgr provisions the fission-internal-auth Secret (the shared HMAC
+  # secret) on demand in each builder namespace under watch-all-namespaces, so the
+  # builder's fetcher can sign storagesvc requests. Needs create/update in addition
+  # to the get/list/watch above.
+  - secrets
+  verbs:
+  - create
+  - update
+- apiGroups:
   - apps
   resources:
   - deployments
@@ -151,7 +162,18 @@ rules:
   - get
   - list
   - watch
-{{- if .Values.executor.serviceAccountCheck.enabled }}  
+- apiGroups:
+  - ""
+  resources:
+  # The executor provisions the fission-internal-auth Secret (the shared HMAC
+  # secret) on demand in each function namespace under watch-all-namespaces, so the
+  # fetcher sidecar can sign storagesvc requests. Needs create/update in addition
+  # to the get/list/watch above.
+  - secrets
+  verbs:
+  - create
+  - update
+{{- if .Values.executor.serviceAccountCheck.enabled }}
 - apiGroups:
   - ""
   resources:

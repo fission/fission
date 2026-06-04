@@ -134,11 +134,14 @@ func MakeGenericPool(
 }
 
 func (gp *GenericPool) setup(ctx context.Context) error {
-	// Ensure the fission-fetcher ServiceAccount exists in this pool's namespace.
-	// Under watch-all-namespaces the pool can be created in any namespace, and the
-	// fetcher sidecar needs the SA present there (the static startup pass only
-	// covers the configured namespaces). Idempotent.
+	// Ensure the fission-fetcher ServiceAccount and the fission-internal-auth
+	// Secret exist in this pool's namespace. Under watch-all-namespaces the pool
+	// can be created in any namespace, and the fetcher sidecar needs both the SA
+	// and the HMAC secret present there (the static startup pass / chart only
+	// cover the configured namespaces; without the secret the fetcher's storagesvc
+	// requests fail with HTTP 401). Idempotent.
 	utils.EnsureFetcherSA(ctx, gp.kubernetesClient, gp.logger, gp.fnNamespace)
+	utils.EnsureInternalAuthSecret(ctx, gp.kubernetesClient, gp.logger, gp.fnNamespace)
 
 	// create the pool
 	err := gp.createPoolDeployment(ctx, gp.env)
