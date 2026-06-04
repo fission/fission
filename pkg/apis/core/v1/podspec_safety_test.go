@@ -139,6 +139,82 @@ func TestValidatePodSpecSafety_DangerousFields(t *testing.T) {
 			},
 			wantInErr: "NET_ADMIN",
 		},
+		// GHSA-qf5v-m7p4-95rp regression coverage: the prior denylist omitted
+		// these escape-class capabilities. The allowlist rejects all of them.
+		{
+			name: "SYS_TIME capability (node clock corruption)",
+			mutate: func(ps *apiv1.PodSpec) {
+				ps.Containers = []apiv1.Container{{
+					Name: "user",
+					SecurityContext: &apiv1.SecurityContext{
+						Capabilities: &apiv1.Capabilities{Add: []apiv1.Capability{"SYS_TIME"}},
+					},
+				}}
+			},
+			wantInErr: "SYS_TIME",
+		},
+		{
+			name: "SYS_RAWIO capability",
+			mutate: func(ps *apiv1.PodSpec) {
+				ps.Containers = []apiv1.Container{{
+					Name: "user",
+					SecurityContext: &apiv1.SecurityContext{
+						Capabilities: &apiv1.Capabilities{Add: []apiv1.Capability{"SYS_RAWIO"}},
+					},
+				}}
+			},
+			wantInErr: "SYS_RAWIO",
+		},
+		{
+			name: "BPF capability",
+			mutate: func(ps *apiv1.PodSpec) {
+				ps.Containers = []apiv1.Container{{
+					Name: "user",
+					SecurityContext: &apiv1.SecurityContext{
+						Capabilities: &apiv1.Capabilities{Add: []apiv1.Capability{"BPF"}},
+					},
+				}}
+			},
+			wantInErr: "BPF",
+		},
+		{
+			name: "SYS_RESOURCE capability",
+			mutate: func(ps *apiv1.PodSpec) {
+				ps.Containers = []apiv1.Container{{
+					Name: "user",
+					SecurityContext: &apiv1.SecurityContext{
+						Capabilities: &apiv1.Capabilities{Add: []apiv1.Capability{"SYS_RESOURCE"}},
+					},
+				}}
+			},
+			wantInErr: "SYS_RESOURCE",
+		},
+		{
+			name: "MAC_ADMIN capability",
+			mutate: func(ps *apiv1.PodSpec) {
+				ps.Containers = []apiv1.Container{{
+					Name: "user",
+					SecurityContext: &apiv1.SecurityContext{
+						Capabilities: &apiv1.Capabilities{Add: []apiv1.Capability{"MAC_ADMIN"}},
+					},
+				}}
+			},
+			wantInErr: "MAC_ADMIN",
+		},
+		// Allowlist also rejects benign-by-old-standards but not-in-allowlist caps
+		// (the prior denylist let these through, the allowlist does not).
+		{
+			name: "CHOWN capability (rejected under allowlist)",
+			mutate: func(ps *apiv1.PodSpec) {
+				ps.Containers = []apiv1.Container{{
+					Name: "user",
+					SecurityContext: &apiv1.SecurityContext{
+						Capabilities: &apiv1.Capabilities{Add: []apiv1.Capability{"CHOWN"}},
+					},
+				}}
+			},
+			wantInErr: "CHOWN",
+		},
 		{
 			name: "privileged init container",
 			mutate: func(ps *apiv1.PodSpec) {
@@ -210,6 +286,9 @@ func TestValidateContainerSafety(t *testing.T) {
 		{"allowPrivilegeEscalation", &apiv1.SecurityContext{AllowPrivilegeEscalation: &on}, "allowPrivilegeEscalation"},
 		{"SYS_ADMIN", &apiv1.SecurityContext{Capabilities: &apiv1.Capabilities{Add: []apiv1.Capability{"SYS_ADMIN"}}}, "SYS_ADMIN"},
 		{"NET_ADMIN", &apiv1.SecurityContext{Capabilities: &apiv1.Capabilities{Add: []apiv1.Capability{"NET_ADMIN"}}}, "NET_ADMIN"},
+		// GHSA-qf5v: allowlist must reject SYS_TIME and CHOWN that the denylist let through.
+		{"SYS_TIME", &apiv1.SecurityContext{Capabilities: &apiv1.Capabilities{Add: []apiv1.Capability{"SYS_TIME"}}}, "SYS_TIME"},
+		{"CHOWN", &apiv1.SecurityContext{Capabilities: &apiv1.Capabilities{Add: []apiv1.Capability{"CHOWN"}}}, "CHOWN"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -228,22 +307,23 @@ func TestValidateContainerSafety(t *testing.T) {
 	}
 }
 
-// TestValidatePodSpecSafety_BenignCapability asserts that NET_BIND_SERVICE
-// (and other non-dangerous capabilities) flow through. The denylist is
-// intentionally narrow so legitimate function workloads can still bind to
-// privileged ports etc.
-func TestValidatePodSpecSafety_BenignCapability(t *testing.T) {
+// TestValidatePodSpecSafety_AllowedCapability asserts that NET_BIND_SERVICE
+// — the sole entry on the PSA-restricted allowlist — flows through. The
+// allowlist is intentionally narrow so legitimate function workloads can
+// still bind to privileged ports, and every other capability (including the
+// OCI defaults like CHOWN/MKNOD that the prior denylist accepted) is rejected.
+func TestValidatePodSpecSafety_AllowedCapability(t *testing.T) {
 	ps := &apiv1.PodSpec{
 		Containers: []apiv1.Container{{
 			Name: "user",
 			SecurityContext: &apiv1.SecurityContext{
 				Capabilities: &apiv1.Capabilities{
-					Add: []apiv1.Capability{"NET_BIND_SERVICE", "CHOWN"},
+					Add: []apiv1.Capability{"NET_BIND_SERVICE"},
 				},
 			},
 		}},
 	}
 	if err := ValidatePodSpecSafety("Function.spec.podspec", ps); err != nil {
-		t.Fatalf("non-dangerous capabilities must flow through, got: %v", err)
+		t.Fatalf("NET_BIND_SERVICE must flow through, got: %v", err)
 	}
 }

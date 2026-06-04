@@ -333,42 +333,42 @@ func stripHostPathVolumes(vols []apiv1.Volume) []apiv1.Volume {
 	return out
 }
 
-// dangerousMergeContainerCapabilities lists the Linux capabilities that
-// effectively bypass the container sandbox. Kept in sync with the
-// authoritative denylist in pkg/apis/core/v1/podspec_safety.go — the
-// admission webhook is the primary defence; this is the merge-layer
-// belt-and-braces for webhook-bypass clusters.
-var dangerousMergeContainerCapabilities = map[apiv1.Capability]struct{}{
-	"SYS_ADMIN":       {},
-	"NET_ADMIN":       {},
-	"SYS_PTRACE":      {},
-	"SYS_MODULE":      {},
-	"DAC_READ_SEARCH": {},
-	"DAC_OVERRIDE":    {},
+// allowedMergeContainerCapabilities is the strict allowlist of Linux
+// capabilities a tenant-supplied container may carry through the merge layer
+// via `securityContext.capabilities.add`. Kept in sync with allowedCapabilities
+// in pkg/apis/core/v1/podspec_safety.go (the admission gate). The OCI default
+// capability set is removed by the forced drop: ["ALL"] below.
+var allowedMergeContainerCapabilities = map[apiv1.Capability]struct{}{
+	"NET_BIND_SERVICE": {},
 }
 
-// sanitizeContainerSecurityContext zeroes out the privilege-escalation bits
-// of a container's SecurityContext after a MergePodSpec call. The merge
-// path uses mergo.WithOverride and unconditionally copies SecurityContext
-// fields from the target container, so a tenant-supplied podspec with
-// privileged=true / allowPrivilegeEscalation=true / Capabilities.Add =
-// [SYS_ADMIN, ...] would otherwise reach the running pod on
-// webhook-bypass clusters (failurePolicy=Ignore or stale objects from a
-// pre-webhook upgrade). The webhook is the primary defence; this is
-// defence in depth. Closes GHSA-gx55-f84r-v3r7 / GHSA-wmgg-3p4h-48x7 /
-// GHSA-v455-mv2v-5g92.
+// sanitizeContainerSecurityContext enforces the container-sandbox invariants
+// on a merged container's SecurityContext: privileged=false,
+// allowPrivilegeEscalation=false, capabilities.drop=["ALL"], and
+// capabilities.add filtered to allowedMergeContainerCapabilities. The
+// admission webhook is the primary defence; this is the merge-layer
+// belt-and-braces for webhook-bypass clusters (failurePolicy=Ignore or stale
+// objects from a pre-webhook upgrade) and is the only layer that can
+// neutralize capabilities the OCI runtime grants by default.
+//
+// Closes GHSA-gx55-f84r-v3r7 / GHSA-wmgg-3p4h-48x7 / GHSA-v455-mv2v-5g92 and
+// the follow-up GHSA-qf5v-m7p4-95rp (the prior denylist could not enumerate
+// every dangerous capability and could not constrain the OCI default set).
 func sanitizeContainerSecurityContext(c *apiv1.Container) {
+	// Deep-copy or allocate a fresh SecurityContext before mutating.
+	// MergeContainer does a shallow struct copy (`dstC := *dst`) and
+	// mergo.WithOverride aliases src.SecurityContext onto
+	// dstC.SecurityContext, so mutating in place would leak into the
+	// caller's targetPodSpec (typically env.Spec.Runtime.PodSpec from an
+	// informer cache). When the tenant supplied no SecurityContext at all
+	// we still need one to carry drop: ["ALL"] — the OCI runtime would
+	// otherwise grant its ~14 default capabilities (MKNOD, SETFCAP,
+	// DAC_OVERRIDE, NET_RAW, ...).
 	if c.SecurityContext == nil {
-		return
+		c.SecurityContext = &apiv1.SecurityContext{}
+	} else {
+		c.SecurityContext = c.SecurityContext.DeepCopy()
 	}
-	// Deep-copy before mutating. MergeContainer does a shallow struct copy
-	// (`dstC := *dst`) and mergo.WithOverride aliases src.SecurityContext
-	// onto dstC.SecurityContext, so mutating in place would leak into the
-	// caller's targetPodSpec — which is typically env.Spec.Runtime.PodSpec
-	// from an informer cache. Allocating a fresh SecurityContext (and a
-	// fresh Capabilities.Add slice via a new backing array) keeps the
-	// sanitization local to the merged result.
-	c.SecurityContext = c.SecurityContext.DeepCopy()
 	sc := c.SecurityContext
 	if sc.Privileged != nil && *sc.Privileged {
 		sc.Privileged = new(false)
@@ -376,10 +376,17 @@ func sanitizeContainerSecurityContext(c *apiv1.Container) {
 	if sc.AllowPrivilegeEscalation != nil && *sc.AllowPrivilegeEscalation {
 		sc.AllowPrivilegeEscalation = new(false)
 	}
-	if sc.Capabilities != nil && len(sc.Capabilities.Add) > 0 {
+	if sc.Capabilities == nil {
+		sc.Capabilities = &apiv1.Capabilities{}
+	}
+	// Force drop: ["ALL"]. "ALL" is a superset, so any tenant-supplied
+	// drop list is redundant and is replaced rather than appended.
+	sc.Capabilities.Drop = []apiv1.Capability{"ALL"}
+	// Filter add to the allowlist.
+	if len(sc.Capabilities.Add) > 0 {
 		filtered := make([]apiv1.Capability, 0, len(sc.Capabilities.Add))
 		for _, cap := range sc.Capabilities.Add {
-			if _, bad := dangerousMergeContainerCapabilities[cap]; bad {
+			if _, ok := allowedMergeContainerCapabilities[cap]; !ok {
 				continue
 			}
 			filtered = append(filtered, cap)
