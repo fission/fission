@@ -309,23 +309,11 @@ func (cfg *Config) addFetcherToPodSpecWithCommand(podSpec *apiv1.PodSpec, mainCo
 		Env: append(otel.OtelEnvForContainer(), internalAuthEnvVars()...),
 	}
 
-	// Pod is removed from endpoints list for service when it's
-	// state became "Termination". We used preStop hook as the
-	// workaround for connection draining since pod maybe shutdown
-	// before grace period expires.
-	// https://kubernetes.io/docs/concepts/workloads/pods/pod/#termination-of-pods
-	// https://github.com/kubernetes/kubernetes/issues/47576#issuecomment-308900172
+	// Connection-draining preStop hook; see utils.DrainLifecycle. Must be
+	// the kubelet-native sleep action — the fetcher image is distroless
+	// (chainguard/static) and has no /bin/sleep to exec.
 	if podSpec.TerminationGracePeriodSeconds != nil {
-		c.Lifecycle = &apiv1.Lifecycle{
-			PreStop: &apiv1.LifecycleHandler{
-				Exec: &apiv1.ExecAction{
-					Command: []string{
-						"/bin/sleep",
-						fmt.Sprintf("%v", *podSpec.TerminationGracePeriodSeconds),
-					},
-				},
-			},
-		}
+		c.Lifecycle = utils.DrainLifecycle(*podSpec.TerminationGracePeriodSeconds)
 	}
 
 	found := false
