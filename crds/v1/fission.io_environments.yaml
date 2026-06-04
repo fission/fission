@@ -10068,11 +10068,11 @@ spec:
                 type: object
                 x-kubernetes-validations:
                 - message: spec.builder.podspec.hostNetwork is not allowed
-                  rule: '!has(self.podspec) || !self.podspec.hostNetwork'
+                  rule: '!has(self.podspec) || !has(self.podspec.hostNetwork) || !self.podspec.hostNetwork'
                 - message: spec.builder.podspec.hostPID is not allowed
-                  rule: '!has(self.podspec) || !self.podspec.hostPID'
+                  rule: '!has(self.podspec) || !has(self.podspec.hostPID) || !self.podspec.hostPID'
                 - message: spec.builder.podspec.hostIPC is not allowed
-                  rule: '!has(self.podspec) || !self.podspec.hostIPC'
+                  rule: '!has(self.podspec) || !has(self.podspec.hostIPC) || !self.podspec.hostIPC'
                 - message: spec.builder.podspec.serviceAccountName override is not
                     allowed
                   rule: '!has(self.podspec) || !has(self.podspec.serviceAccountName)
@@ -20188,11 +20188,11 @@ spec:
                 type: object
                 x-kubernetes-validations:
                 - message: spec.runtime.podspec.hostNetwork is not allowed
-                  rule: '!has(self.podspec) || !self.podspec.hostNetwork'
+                  rule: '!has(self.podspec) || !has(self.podspec.hostNetwork) || !self.podspec.hostNetwork'
                 - message: spec.runtime.podspec.hostPID is not allowed
-                  rule: '!has(self.podspec) || !self.podspec.hostPID'
+                  rule: '!has(self.podspec) || !has(self.podspec.hostPID) || !self.podspec.hostPID'
                 - message: spec.runtime.podspec.hostIPC is not allowed
-                  rule: '!has(self.podspec) || !self.podspec.hostIPC'
+                  rule: '!has(self.podspec) || !has(self.podspec.hostIPC) || !self.podspec.hostIPC'
                 - message: spec.runtime.podspec.serviceAccountName override is not
                     allowed
                   rule: '!has(self.podspec) || !has(self.podspec.serviceAccountName)

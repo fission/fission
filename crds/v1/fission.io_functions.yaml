@@ -45,7 +45,10 @@ spec:
               Bounded podspec safety rules — CEL admission gate for the simple pod-level
               invariants. Per-container SecurityContext checks stay in the webhook
               (ValidatePodSpecSafety) because iterating containers exceeds the CEL cost
-              budget; the rules here cover only the bounded, cheap cases.
+              budget; the rules here cover only the bounded, cheap cases. The has()
+              guards on each scalar are required: PodSpec's bool/string fields are
+              json:"...,omitempty" so a zero/empty value is OMITTED from the object,
+              and CEL errors with "no such key" if the rule accesses an absent field.
             properties:
               InvokeStrategy:
                 description: InvokeStrategy is a set of controls which affect how
@@ -9378,11 +9381,11 @@ spec:
                 == ''newdeploy'' || self.InvokeStrategy.ExecutionStrategy.ExecutorType
                 == ''container'''
             - message: spec.podspec.hostNetwork is not allowed
-              rule: '!has(self.podspec) || !self.podspec.hostNetwork'
+              rule: '!has(self.podspec) || !has(self.podspec.hostNetwork) || !self.podspec.hostNetwork'
             - message: spec.podspec.hostPID is not allowed
-              rule: '!has(self.podspec) || !self.podspec.hostPID'
+              rule: '!has(self.podspec) || !has(self.podspec.hostPID) || !self.podspec.hostPID'
             - message: spec.podspec.hostIPC is not allowed
-              rule: '!has(self.podspec) || !self.podspec.hostIPC'
+              rule: '!has(self.podspec) || !has(self.podspec.hostIPC) || !self.podspec.hostIPC'
             - message: spec.podspec.serviceAccountName override is not allowed
               rule: '!has(self.podspec) || !has(self.podspec.serviceAccountName) ||
                 self.podspec.serviceAccountName == '''''
