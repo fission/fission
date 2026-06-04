@@ -154,6 +154,10 @@ func (p *WebhookPublisher) makeHTTPRequest(r *publishRequest) {
 		switch msgType {
 		case "info":
 			logger.Info(msg)
+		case "retry":
+			// A retry is scheduled; quiet per-attempt log. The final
+			// give-up (or a terminal failure) logs at error level.
+			logger.V(1).Info(msg)
 		case "error":
 			logger.Error(nil, msg)
 		}
@@ -187,12 +191,26 @@ func (p *WebhookPublisher) makeHTTPRequest(r *publishRequest) {
 			logger = logger.WithValues("status_code", resp.StatusCode, "body", string(body))
 			if resp.StatusCode >= 200 && resp.StatusCode < 400 {
 				msgType = "info"
-			} else if resp.StatusCode >= 400 && resp.StatusCode < 500 {
+				return
+			} else if resp.StatusCode == http.StatusNotFound {
+				// The router returns 404 while a freshly created trigger's
+				// route is still propagating to the mux; treat it as
+				// transient and retry (bounded by maxRetries) instead of
+				// dropping the event. A genuinely deleted function burns
+				// the bounded retries and is then dropped, logging a single
+				// error on the final attempt — per-attempt logs stay at
+				// V(1) to avoid flooding the error log (a deleted function
+				// would otherwise emit maxRetries errors per event).
+				msg = "request returned not found, will retry"
+				msgType = "retry"
+				// fall through to retry scheduling below
+			} else if resp.StatusCode < 500 {
 				msg = "request returned bad request status code"
+				return
 			} else {
 				msg = "request returned failure status code"
+				return
 			}
-			return
 		}
 	}
 
@@ -205,6 +223,7 @@ func (p *WebhookPublisher) makeHTTPRequest(r *publishRequest) {
 		})
 	} else {
 		msg = "final retry failed, giving up"
+		msgType = "error" // dropped events always surface at error level
 		// Event dropped
 	}
 }

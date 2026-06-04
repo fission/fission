@@ -105,6 +105,11 @@ jobs:
           kubectl create ns monitoring
           helm install prometheus prometheus-community/kube-prometheus-stack -n monitoring \
           --version 45.28.0 --set grafana.enabled=false --set alertmanager.enabled=false
+          helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/
+          helm install metrics-server metrics-server/metrics-server \
+            --namespace kube-system --version 3.13.0 \
+            --set 'args={--kubelet-insecure-tls}' \
+            --wait --timeout 3m
 
       - name: Build and Install Fission
         timeout-minutes: 10
