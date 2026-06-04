@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	apiv1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
@@ -41,6 +42,22 @@ func TestEnsureInternalAuthSecret(t *testing.T) {
 
 		_, err := kc.CoreV1().Secrets("tenant-ns").Get(t.Context(), InternalAuthSecretName, metav1.GetOptions{})
 		assert.True(t, apierrors.IsNotFound(err), "must not create a secret when internal auth is disabled")
+	})
+
+	t.Run("disabled DELETES a leftover secret (self-heal on toggle-off)", func(t *testing.T) {
+		// Simulate a copy left behind from when internal auth was enabled.
+		kc := k8sfake.NewClientset(&apiv1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: InternalAuthSecretName, Namespace: "tenant-ns"},
+			Data:       map[string][]byte{"secret": []byte("stale")},
+		})
+		t.Setenv("FISSION_INTERNAL_AUTH_SECRET", "")
+		t.Setenv("FISSION_INTERNAL_AUTH_SECRET_OLD", "")
+
+		EnsureInternalAuthSecret(t.Context(), kc, logger, "tenant-ns")
+
+		_, err := kc.CoreV1().Secrets("tenant-ns").Get(t.Context(), InternalAuthSecretName, metav1.GetOptions{})
+		assert.True(t, apierrors.IsNotFound(err),
+			"a leftover secret must be deleted when internal auth is off, else fetchers keep enforcing HMAC")
 	})
 
 	t.Run("updates only when the value drifts", func(t *testing.T) {
