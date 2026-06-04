@@ -270,13 +270,9 @@ func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function
 	}
 
 	// If custom runtime container name - default env name
-	mainContainerName := env.Name
-	if env.Spec.Runtime.Container != nil && env.Spec.Runtime.Container.Name != "" && env.Spec.Runtime.PodSpec != nil {
-		if util.DoesContainerExistInPodSpec(env.Spec.Runtime.Container.Name, env.Spec.Runtime.PodSpec) {
-			mainContainerName = env.Spec.Runtime.Container.Name
-		} else {
-			return nil, fmt.Errorf("runtime container %s not found in pod spec", env.Spec.Runtime.Container.Name)
-		}
+	mainContainerName, err := deploy.mainContainerName(env)
+	if err != nil {
+		return nil, err
 	}
 
 	// Order of merging is important here - first fetcher, then containers and lastly pod spec
@@ -320,6 +316,24 @@ func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function
 	}
 
 	return deployment, nil
+}
+
+// mainContainerName resolves the name of the function's main (user-code)
+// container in the deployment's pod spec. It defaults to the environment name
+// and switches to the custom runtime container name when the environment
+// declares one that is actually present in the runtime PodSpec. It is shared by
+// the deployment-spec builder and the HPA call site so the ContainerResource
+// metric can never name a container that differs from the one in the pod.
+func (deploy *NewDeploy) mainContainerName(env *fv1.Environment) (string, error) {
+	mainContainerName := env.Name
+	if env.Spec.Runtime.Container != nil && env.Spec.Runtime.Container.Name != "" && env.Spec.Runtime.PodSpec != nil {
+		if util.DoesContainerExistInPodSpec(env.Spec.Runtime.Container.Name, env.Spec.Runtime.PodSpec) {
+			mainContainerName = env.Spec.Runtime.Container.Name
+		} else {
+			return "", fmt.Errorf("runtime container %s not found in pod spec", env.Spec.Runtime.Container.Name)
+		}
+	}
+	return mainContainerName, nil
 }
 
 // getResources overrides only the resources which are overridden at function level otherwise

@@ -11,6 +11,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	asv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	k8s_err "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -58,6 +59,45 @@ func ConvertTargetCPUToCustomMetric(targetCPUVal int32) asv2.MetricSpec {
 	}
 }
 
+// RewriteResourceMetricsToContainer converts pod-wide Resource cpu/memory
+// metrics to ContainerResource metrics scoped to mainContainer. Pod-wide
+// Resource metrics require *every* container in the pod to declare the
+// resource request; sidecars (fetcher, user sidecars) and resourceless
+// function containers make KCM fail the whole metric ("missing request for
+// cpu in container ..."). Scoping to the function's main container sidesteps
+// that and stops the idle fetcher from diluting the average. The CLI keeps
+// emitting pod-wide Resource metrics (it cannot know the runtime container
+// name); the executor normalizes them here. Non-Resource metrics pass
+// through untouched.
+func RewriteResourceMetricsToContainer(metrics []asv2.MetricSpec, mainContainer string, logger logr.Logger) []asv2.MetricSpec {
+	if len(metrics) == 0 {
+		return metrics
+	}
+	if mainContainer == "" {
+		logger.Info("WARNING: cannot scope pod-wide HPA resource metrics to the function container; main container name is empty, leaving metrics pod-wide")
+		return metrics
+	}
+	out := make([]asv2.MetricSpec, len(metrics))
+	for i, m := range metrics {
+		if m.Type == asv2.ResourceMetricSourceType && m.Resource != nil &&
+			(m.Resource.Name == corev1.ResourceCPU || m.Resource.Name == corev1.ResourceMemory) {
+			logger.V(1).Info("rewrote pod-wide resource metric to container metric",
+				"resource", m.Resource.Name, "container", mainContainer)
+			out[i] = asv2.MetricSpec{
+				Type: asv2.ContainerResourceMetricSourceType,
+				ContainerResource: &asv2.ContainerResourceMetricSource{
+					Name:      m.Resource.Name,
+					Container: mainContainer,
+					Target:    m.Resource.Target,
+				},
+			}
+			continue
+		}
+		out[i] = m
+	}
+	return out
+}
+
 func getScaleTargetRef(deployment *appsv1.Deployment) asv2.CrossVersionObjectReference {
 	return asv2.CrossVersionObjectReference{
 		APIVersion: DeploymentVersion,
@@ -67,7 +107,7 @@ func getScaleTargetRef(deployment *appsv1.Deployment) asv2.CrossVersionObjectRef
 }
 
 func (hpaops *HpaOperations) CreateOrGetHpa(ctx context.Context, fn *fv1.Function, hpaName string, execStrategy *fv1.ExecutionStrategy,
-	depl *appsv1.Deployment, deployLabels map[string]string, deployAnnotations map[string]string) (*asv2.HorizontalPodAutoscaler, error) {
+	mainContainer string, depl *appsv1.Deployment, deployLabels map[string]string, deployAnnotations map[string]string) (*asv2.HorizontalPodAutoscaler, error) {
 
 	if depl == nil {
 		return nil, errors.New("failed to create HPA, found empty deployment")
@@ -91,6 +131,8 @@ func (hpaops *HpaOperations) CreateOrGetHpa(ctx context.Context, fn *fv1.Functio
 	if execStrategy.Metrics != nil {
 		hpaMetrics = append(hpaMetrics, execStrategy.Metrics...)
 	}
+
+	hpaMetrics = RewriteResourceMetricsToContainer(hpaMetrics, mainContainer, logger)
 
 	var ownerReferences []metav1.OwnerReference
 	if hpaops.enableOwnerReferences {
@@ -121,15 +163,27 @@ func (hpaops *HpaOperations) CreateOrGetHpa(ctx context.Context, fn *fv1.Functio
 
 	existingHpa, err := hpaops.GetHpa(ctx, depl.Namespace, hpaName)
 	if err == nil {
+		needsUpdate := false
 		// to adopt orphan service
 		if existingHpa.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL] != hpaops.instanceID {
 			existingHpa.Annotations = hpa.Annotations
 			existingHpa.Labels = hpa.Labels
 			existingHpa.OwnerReferences = hpa.OwnerReferences
 			existingHpa.Spec = hpa.Spec
+			needsUpdate = true
+		}
+		// Reconcile metric drift so HPAs created before this normalization
+		// (pod-wide Resource metrics) get rewritten to ContainerResource
+		// metrics in place, and so CLI-driven updates that re-emit pod-wide
+		// metrics are re-normalized.
+		if !apiequality.Semantic.DeepEqual(existingHpa.Spec.Metrics, hpa.Spec.Metrics) {
+			existingHpa.Spec.Metrics = hpa.Spec.Metrics
+			needsUpdate = true
+		}
+		if needsUpdate {
 			existingHpa, err = hpaops.kubernetesClient.AutoscalingV2().HorizontalPodAutoscalers(depl.ObjectMeta.Namespace).Update(ctx, existingHpa, metav1.UpdateOptions{})
 			if err != nil {
-				logger.Error(err, "error adopting HPA", "HPA", hpaName, "ns", depl.Namespace)
+				logger.Error(err, "error reconciling HPA", "HPA", hpaName, "ns", depl.Namespace)
 				return nil, err
 			}
 		}

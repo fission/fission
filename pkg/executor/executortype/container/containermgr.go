@@ -401,7 +401,9 @@ func (caaf *Container) fnCreate(ctx context.Context, fn *fv1.Function) (*fscache
 		return nil, fmt.Errorf("error creating deployment %s: %w", objName, err)
 	}
 
-	hpa, err := caaf.hpaops.CreateOrGetHpa(ctx, fn, objName, &fn.Spec.InvokeStrategy.ExecutionStrategy, depl, deployLabels, deployAnnotations)
+	// For container-type functions the user image runs as a single container
+	// named after the function (see deployment.go); scope HPA metrics to it.
+	hpa, err := caaf.hpaops.CreateOrGetHpa(ctx, fn, objName, &fn.Spec.InvokeStrategy.ExecutionStrategy, fn.Name, depl, deployLabels, deployAnnotations)
 	if err != nil {
 		caaf.logger.Error(err, "error creating HPA", "hpa", objName)
 		if destroyOnCreateError(err) {
@@ -523,7 +525,11 @@ func (caaf *Container) updateFunction(ctx context.Context, oldFn *fv1.Function, 
 		}
 
 		if !reflect.DeepEqual(newFn.Spec.InvokeStrategy.ExecutionStrategy.Metrics, oldFn.Spec.InvokeStrategy.ExecutionStrategy.Metrics) {
-			hpa.Spec.Metrics = newFn.Spec.InvokeStrategy.ExecutionStrategy.Metrics
+			// The CLI emits pod-wide Resource metrics; normalize them to
+			// ContainerResource metrics scoped to the function container, the
+			// same as createFunction does via CreateOrGetHpa.
+			hpa.Spec.Metrics = hpautils.RewriteResourceMetricsToContainer(
+				newFn.Spec.InvokeStrategy.ExecutionStrategy.Metrics, newFn.Name, caaf.logger)
 			hpaChanged = true
 		}
 

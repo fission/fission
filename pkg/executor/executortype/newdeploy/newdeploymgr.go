@@ -484,7 +484,17 @@ func (deploy *NewDeploy) fnCreate(ctx context.Context, fn *fv1.Function) (*fscac
 		return nil, fmt.Errorf("error creating deployment %s: %w", objName, err)
 	}
 
-	hpa, err := deploy.hpaops.CreateOrGetHpa(ctx, fn, objName, &fn.Spec.InvokeStrategy.ExecutionStrategy, depl, deployLabels, deployAnnotations)
+	// env was already validated by createOrGetDeployment above, so the
+	// container name resolves without error here.
+	mainContainerName, err := deploy.mainContainerName(env)
+	if err != nil {
+		if destroyOnCreateError(err) {
+			go cleanupFunc(context.Background(), ns, objName)
+		}
+		return nil, fmt.Errorf("error resolving main container for HPA %s: %w", objName, err)
+	}
+
+	hpa, err := deploy.hpaops.CreateOrGetHpa(ctx, fn, objName, &fn.Spec.InvokeStrategy.ExecutionStrategy, mainContainerName, depl, deployLabels, deployAnnotations)
 	if err != nil {
 		deploy.logger.Error(err, "error creating HPA", "hpa", objName)
 		if destroyOnCreateError(err) {
@@ -610,7 +620,22 @@ func (deploy *NewDeploy) updateFunction(ctx context.Context, oldFn *fv1.Function
 		}
 
 		if !reflect.DeepEqual(newFn.Spec.InvokeStrategy.ExecutionStrategy.Metrics, oldFn.Spec.InvokeStrategy.ExecutionStrategy.Metrics) {
-			hpa.Spec.Metrics = newFn.Spec.InvokeStrategy.ExecutionStrategy.Metrics
+			// The CLI emits pod-wide Resource metrics; normalize them to
+			// ContainerResource metrics scoped to the function container, the
+			// same as createFunction does via CreateOrGetHpa.
+			env, err := deploy.fissionClient.CoreV1().Environments(newFn.Spec.Environment.Namespace).
+				Get(ctx, newFn.Spec.Environment.Name, metav1.GetOptions{})
+			if err != nil {
+				deploy.updateStatus(oldFn, err, "failed to get environment while updating HPA metrics")
+				return err
+			}
+			mainContainerName, err := deploy.mainContainerName(env)
+			if err != nil {
+				deploy.updateStatus(oldFn, err, "failed to resolve main container while updating HPA metrics")
+				return err
+			}
+			hpa.Spec.Metrics = hpautils.RewriteResourceMetricsToContainer(
+				newFn.Spec.InvokeStrategy.ExecutionStrategy.Metrics, mainContainerName, deploy.logger)
 			hpaChanged = true
 		}
 
