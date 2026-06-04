@@ -49,10 +49,12 @@ type PackageReconciler struct {
 	nsResolver       *utils.NamespaceResolver
 	storageSvcUrl    string
 	podPollInterval  time.Duration
+	poolMgr          *BuilderPoolManager
+	scale            deploymentScaler
 }
 
 func makePackageReconciler(logger logr.Logger, client client.Client, fissionClient versioned.Interface,
-	kubernetesClient kubernetes.Interface, storageSvcUrl string) *PackageReconciler {
+	kubernetesClient kubernetes.Interface, storageSvcUrl string, poolMgr *BuilderPoolManager) *PackageReconciler {
 	return &PackageReconciler{
 		logger:           logger.WithName("package_reconciler"),
 		client:           client,
@@ -61,6 +63,8 @@ func makePackageReconciler(logger logr.Logger, client client.Client, fissionClie
 		nsResolver:       utils.DefaultNSResolver(),
 		storageSvcUrl:    storageSvcUrl,
 		podPollInterval:  builderPodPollInterval,
+		poolMgr:          poolMgr,
+		scale:            k8sDeploymentScaler(kubernetesClient, logger),
 	}
 }
 
@@ -68,8 +72,11 @@ func (r *PackageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	pkg := &fv1.Package{}
 	if err := r.client.Get(ctx, req.NamespacedName, pkg); err != nil {
 		if apierrors.IsNotFound(err) {
-			// Deleted: nothing to tear down (the deployment archive lives in
-			// storagesvc and is pruned independently).
+			// Deleted: drop any in-flight demand slot the package still held while
+			// requeue-waiting for a builder pod, so demand/idle accounting does not
+			// leak. (The deployment archive lives in storagesvc and is pruned
+			// independently.)
+			r.poolMgr.RemoveBuild(req.Namespace, req.Name)
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, err
@@ -135,17 +142,54 @@ func (r *PackageReconciler) build(ctx context.Context, pkg *fv1.Package) (ctrl.R
 	builderNs := r.nsResolver.GetBuilderNS(env.Namespace)
 	logger = logger.WithValues("environment", env.Name, "builder_namespace", builderNs, "environment_namespace", env.Namespace)
 
-	ready, err := r.builderPodReady(ctx, env, builderNs)
+	// Record this build as in-flight for the environment. demand is the number
+	// of distinct concurrent builds; it drives how many builder pods we provision
+	// (one per concurrent build, capped at the env's pool size) and keeps the idle
+	// reaper from scaling the builder down mid-build. StartBuild is idempotent in
+	// this package, so the requeues below never inflate demand.
+	demand := r.poolMgr.StartBuild(env, builderNs, pkg)
+
+	// Scale the builder deployment UP toward demand (capped at the pool size).
+	// Scale-down is left entirely to the idle reaper, so a pod running a build is
+	// never terminated underneath it.
+	if serr := r.scaleBuilderForDemand(ctx, env, builderNs, demand); serr != nil {
+		if apierrors.IsNotFound(serr) {
+			// The EnvironmentReconciler creates the builder Deployment and can
+			// race behind a freshly applied Package. A missing deployment is
+			// transient — wait for it rather than failing the build terminally.
+			logger.Info("builder deployment not created yet, will retry")
+			return ctrl.Result{RequeueAfter: r.podPollInterval}, nil
+		}
+		logger.Error(serr, "error scaling builder for demand")
+		r.poolMgr.FinishBuild(env.UID, pkg)
+		return r.failBuild(ctx, logger, pkg, fmt.Sprintf("error scaling builder: %v", serr))
+	}
+
+	// Claim a Ready builder pod that no other build is using, so this build gets
+	// its own dedicated pod. Pinning fetch+build+upload to one pod IP is required
+	// for correctness with more than one replica (the fetched source lives on the
+	// pod's local volume). Requeue rather than block a worker while we wait — the
+	// Package stays "pending"/"running" and visibly in-flight, so it still counts
+	// as demand. (The EnvironmentReconciler owns creating the builder Deployment;
+	// here we wait for a pod of it to become Ready and free.)
+	readyIPs, err := r.readyBuilderPodIPs(ctx, env, builderNs)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	if !ready {
-		// The EnvironmentReconciler owns creating the builder Deployment; here
-		// we just wait for its pod to report ready. Requeue rather than block a
-		// worker — the Package stays "pending" and is visibly waiting.
+	if len(readyIPs) == 0 {
 		logger.Info("environment builder pod not ready, will retry")
 		return ctrl.Result{RequeueAfter: r.podPollInterval}, nil
 	}
+	podIP, claimed := r.poolMgr.ClaimFreeBuilderPod(env.UID, readyIPs)
+	if !claimed {
+		// Every Ready pod is busy with another build: we are at the pool cap and
+		// must queue. Requeue and retry; the idle reaper leaves us alone while in-flight.
+		logger.Info("all ready builder pods are busy, will retry", "ready_pods", len(readyIPs))
+		return ctrl.Result{RequeueAfter: r.podPollInterval}, nil
+	}
+	defer r.poolMgr.ReleaseBuilderPod(env.UID, podIP)
+	defer r.poolMgr.FinishBuild(env.UID, pkg)
+	logger = logger.WithValues("builder_pod_ip", podIP)
 
 	logger.Info("starting build for package")
 	pkg, err = updatePackage(ctx, logger, r.fissionClient, pkg, fv1.BuildStatusRunning, "", nil)
@@ -153,7 +197,7 @@ func (r *PackageReconciler) build(ctx context.Context, pkg *fv1.Package) (ctrl.R
 		return ctrl.Result{}, fmt.Errorf("error setting package running state: %w", err)
 	}
 
-	uploadResp, buildLogs, err := buildPackage(ctx, logger, r.fissionClient, builderNs, r.storageSvcUrl, pkg)
+	uploadResp, buildLogs, err := buildPackage(ctx, logger, r.fissionClient, builderNs, podIP, r.storageSvcUrl, pkg)
 	if err != nil {
 		logger.Error(err, "error building package")
 		r.markBuildFailed(ctx, logger, pkg, buildLogs)
@@ -225,11 +269,46 @@ func (r *PackageReconciler) markBuildFailed(ctx context.Context, logger logr.Log
 	}
 }
 
-// builderPodReady reports whether the environment's builder pod (matched by the
-// env name/namespace/resourceVersion labels) exists and has all containers
-// ready. A pod that has not yet published any container status is treated as
-// not-ready so we keep waiting rather than build against a starting pod.
-func (r *PackageReconciler) builderPodReady(ctx context.Context, env *fv1.Environment, builderNs string) (bool, error) {
+// scaleBuilderForDemand raises the environment's builder deployment toward the
+// number of concurrent in-flight builds (demand), capped at the env's pool size
+// (spec.builder.poolsize, default 1). It only ever scales UP: scale-down is the
+// idle reaper's job, so a pod running a build is never terminated underneath it.
+// A no-op when the deployment is already at or above the desired replica count.
+func (r *PackageReconciler) scaleBuilderForDemand(ctx context.Context, env *fv1.Environment, builderNs string, demand int32) error {
+	builderName := fmt.Sprintf("%v-%v", env.Name, env.ResourceVersion)
+	desired := demand
+	if desired < 1 {
+		desired = 1
+	}
+	if maxPods := builderPoolSize(env); desired > maxPods {
+		desired = maxPods
+	}
+	// Read the current replica count via a plain Get (not the scale subresource)
+	// so the "only scale up" decision is testable against the fake clientset. A
+	// missing deployment surfaces as NotFound, which build() maps to a requeue.
+	dep, err := r.kubernetesClient.AppsV1().Deployments(builderNs).Get(ctx, builderName, metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("error getting builder deployment %q in namespace %s: %w", builderName, builderNs, err)
+	}
+	current := int32(0)
+	if dep.Spec.Replicas != nil {
+		current = *dep.Spec.Replicas
+	}
+	if current >= desired {
+		return nil
+	}
+	r.logger.Info("scaling builder deployment up for concurrent builds",
+		"builder", builderName, "namespace", builderNs,
+		"current_replicas", current, "desired_replicas", desired, "demand", demand)
+	return r.scale(ctx, builderNs, builderName, desired)
+}
+
+// readyBuilderPodIPs lists the environment's builder pods (matched by the env
+// name/namespace/resourceVersion labels) and returns the pod IPs of those that
+// are routable: all containers Ready and a non-empty PodIP. A pod that has not
+// yet published a container status or has no IP is skipped, so a build is never
+// routed at a not-yet-serving pod.
+func (r *PackageReconciler) readyBuilderPodIPs(ctx context.Context, env *fv1.Environment, builderNs string) ([]string, error) {
 	sel := map[string]string{
 		LABEL_ENV_NAME:            env.Name,
 		LABEL_ENV_NAMESPACE:       builderNs,
@@ -239,11 +318,12 @@ func (r *PackageReconciler) builderPodReady(ctx context.Context, env *fv1.Enviro
 		LabelSelector: labels.Set(sel).AsSelector().String(),
 	})
 	if err != nil {
-		return false, fmt.Errorf("error listing builder pods for environment %q in namespace %s: %w", env.Name, builderNs, err)
+		return nil, fmt.Errorf("error listing builder pods for environment %q in namespace %s: %w", env.Name, builderNs, err)
 	}
+	var ips []string
 	for i := range podList.Items {
 		pod := &podList.Items[i]
-		if len(pod.Status.ContainerStatuses) == 0 {
+		if pod.Status.PodIP == "" || len(pod.Status.ContainerStatuses) == 0 {
 			continue
 		}
 		ready := true
@@ -251,10 +331,20 @@ func (r *PackageReconciler) builderPodReady(ctx context.Context, env *fv1.Enviro
 			ready = ready && cStatus.Ready
 		}
 		if ready {
-			return true, nil
+			ips = append(ips, pod.Status.PodIP)
 		}
 	}
-	return false, nil
+	return ips, nil
+}
+
+// builderPodReady reports whether at least one builder pod for the environment is
+// routably Ready (see readyBuilderPodIPs).
+func (r *PackageReconciler) builderPodReady(ctx context.Context, env *fv1.Environment, builderNs string) (bool, error) {
+	ips, err := r.readyBuilderPodIPs(ctx, env, builderNs)
+	if err != nil {
+		return false, err
+	}
+	return len(ips) > 0, nil
 }
 
 // propagateFunctionFailure marks every Function referencing pkg with

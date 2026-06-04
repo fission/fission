@@ -34,8 +34,14 @@ import (
 // 3. Send upload request to fetcher to upload deployment package.
 // 4. Return upload response and build logs.
 // *. Return build logs and error if any one of steps above failed.
+// builderPodIP, when non-empty, pins the fetch + build + upload to one specific
+// builder pod (by IP) instead of the round-robining builder Service DNS. This is
+// required for correctness once the builder runs more than one replica: the
+// source archive is fetched onto a pod's local volume, so the build must run on
+// that same pod. An empty builderPodIP falls back to the Service DNS name,
+// preserving the single-replica behaviour.
 func buildPackage(ctx context.Context, logger logr.Logger, fissionClient versioned.Interface, envBuilderNamespace string,
-	storageSvcUrl string, pkg *fv1.Package) (uploadResp *fetcher.ArchiveUploadResponse, buildLogs string, err error) {
+	builderPodIP string, storageSvcUrl string, pkg *fv1.Package) (uploadResp *fetcher.ArchiveUploadResponse, buildLogs string, err error) {
 
 	// Defence in depth against cross-namespace Environment references; the
 	// admission webhook is the user-visible reject, this guard catches
@@ -54,15 +60,20 @@ func buildPackage(ctx context.Context, logger logr.Logger, fissionClient version
 		return nil, e, ferror.MakeError(http.StatusInternalServerError, e)
 	}
 
-	svcName := fmt.Sprintf("%s-%s.%s", env.Name, env.ResourceVersion, envBuilderNamespace)
+	// Route to a specific builder pod by IP when one was claimed (concurrent
+	// pool), else to the builder Service DNS name (single replica).
+	builderHost := fmt.Sprintf("%s-%s.%s", env.Name, env.ResourceVersion, envBuilderNamespace)
+	if builderPodIP != "" {
+		builderHost = builderPodIP
+	}
 	srcPkgFilename := fmt.Sprintf("%s-%s", pkg.Name, strings.ToLower(uniuri.NewLen(6)))
 	// HMACSecretFromEnv returns nil when internalAuth is disabled; the
 	// fetcher / builder clients pass-through unsigned in that case,
 	// which matches the corresponding verifier's empty-secret short-
 	// circuit on the server side.
 	masterSecret := storagesvcClient.HMACSecretFromEnv()
-	fetcherC := fetcherClient.MakeClient(logger, fmt.Sprintf("http://%s:8000", svcName), masterSecret)
-	builderC := builderClient.MakeClient(logger, fmt.Sprintf("http://%s:8001", svcName), masterSecret)
+	fetcherC := fetcherClient.MakeClient(logger, fmt.Sprintf("http://%s:8000", builderHost), masterSecret)
+	builderC := builderClient.MakeClient(logger, fmt.Sprintf("http://%s:8001", builderHost), masterSecret)
 
 	defer func() {
 		logger.Info("cleaning src pkg from builder storage", "source_package", srcPkgFilename)

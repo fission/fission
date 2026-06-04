@@ -235,6 +235,7 @@ func newTestEnvironmentReconciler(t *testing.T, k8sObjs []runtime.Object, crObjs
 		kubernetesClient: k8sfake.NewClientset(k8sObjs...),
 		nsResolver:       utils.DefaultNSResolver(),
 		fetcherConfig:    cfg,
+		poolMgr:          newBuilderPoolManager(loggerfactory.GetLogger()),
 	}
 }
 
