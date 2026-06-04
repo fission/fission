@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/test/integration/framework"
 )
 
@@ -43,17 +44,15 @@ func TestWait_FunctionCondition(t *testing.T) {
 	})
 
 	// Drive the smoke condition to True via the status subresource.
-	fn, err := fc.Functions(ns.Name).Get(ctx, name, metav1.GetOptions{})
-	require.NoError(t, err)
-	fn.Status.Conditions = append(fn.Status.Conditions, metav1.Condition{
-		Type:               smokeConditionType,
-		Status:             metav1.ConditionTrue,
-		Reason:             "WaitSmoke",
-		LastTransitionTime: metav1.Now(),
-		ObservedGeneration: fn.Generation,
+	updateFunctionStatusWithRetry(ctx, t, f, ns.Name, name, func(fn *fv1.Function) {
+		fn.Status.Conditions = append(fn.Status.Conditions, metav1.Condition{
+			Type:               smokeConditionType,
+			Status:             metav1.ConditionTrue,
+			Reason:             "WaitSmoke",
+			LastTransitionTime: metav1.Now(),
+			ObservedGeneration: fn.Generation,
+		})
 	})
-	_, err = fc.Functions(ns.Name).UpdateStatus(ctx, fn, metav1.UpdateOptions{})
-	require.NoError(t, err)
 
 	// Already True → wait returns success and prints the "condition met" line.
 	out := ns.CLICaptureStdout(t, ctx, "fn", "wait", "--name", name,
