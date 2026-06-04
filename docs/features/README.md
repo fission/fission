@@ -10,6 +10,7 @@ architecture (the pre-reconciler informer/watcher versions were removed upstream
 | Builder scale-to-zero | [builder-scale-to-zero.md](builder-scale-to-zero.md) | idle builders scaled to 0, warmed back on demand |
 | Newdeploy wait-for-build | [newdeploy-wait-for-build.md](newdeploy-wait-for-build.md) | newdeploy waits for the package build before provisioning |
 | Watch all namespaces | [watch-all-namespaces.md](watch-all-namespaces.md) | watch Fission CRs cluster-wide without enumerating namespaces |
+| Internal auth (HMAC) off by default | [internal-auth.md](internal-auth.md) | HMAC defaulted off so unsigned KEDA connectors + federation gateway work |
 
 Design records for the two non-trivial ports live in `docs/spike-buildermgr-port.md`
 and `docs/spike-watch-all-namespaces.md`.
@@ -25,3 +26,4 @@ and `docs/spike-watch-all-namespaces.md`.
 | `BUILDER_IDLE_REAPER_INTERVAL` | buildermgr env | 10s |
 | `NEWDEPLOY_BUILD_WAIT_TIMEOUT` | executor env | 600s |
 | `watchAllNamespaces` | Helm value | true |
+| `internalAuth.enabled` | Helm value | false (fork default; upstream is true) |

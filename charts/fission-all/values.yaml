@@ -1126,8 +1126,17 @@ networkPolicy:
 ##
 ## Disabled here means the cluster falls back to NetworkPolicy + namespace
 ## isolation only, matching pre-1.(N+1) behaviour.
+##
+## FORK DEFAULT: disabled. Upstream defaults this ON, but the HMAC verifier on
+## router-internal (and storagesvc) rejects unsigned requests from the upstream
+## KEDA HTTP connectors and the GraphQL federation gateway — neither signs — so
+## with it enabled, MessageQueueTrigger (RabbitMQ/Kafka/…) message delivery and
+## federated subgraph calls fail with 401. This fork ran for its whole v1.22.x
+## life with no HMAC at all, so off-by-default preserves that behaviour and keeps
+## those integrations working. Re-enable it (and use signing-aware connector
+## images) if you need internal-channel signing. See docs/features/internal-auth.md.
 internalAuth:
-  enabled: true
+  enabled: false
   # secret: "" — auto-generated on first install; preserved on upgrade.
   # oldSecret: "" — set during rotation; accepted by the verifier alongside `secret`.
 
