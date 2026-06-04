@@ -25,7 +25,7 @@ on:
 
 env:
   HELM_VERSION: v4.2.0
-  KIND_VERSION: v0.31.0
+  KIND_VERSION: v0.32.0
   KIND_CLUSTER_NAME: kind
   SKAFFOLD_VERSION: v2.21.0
 
@@ -44,7 +44,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        kindversion: ["v1.32.11", "v1.34.3", "v1.35.1"]
+        kindversion: ["v1.32.11", "v1.34.8", "v1.36.1"]
         os: [ubuntu-24.04]
     steps:
       - name: Harden Runner
