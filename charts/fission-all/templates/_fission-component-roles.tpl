@@ -27,6 +27,35 @@ rules:
   - get
   - update
   - patch
+# The buildermgr provisions the fission-builder ServiceAccount (and its Role +
+# RoleBinding) on demand in each builder namespace as environments are
+# discovered (EnsureBuilderSA -> setupSAAndRoleBindings). Required under
+# watch-all-namespaces, where namespaces are not known at install time and the
+# chart cannot pre-create the SA. Under watch-all these rules render as a
+# ClusterRole, granting the create power cluster-wide.
+- apiGroups:
+  - ""
+  resources:
+  - serviceaccounts
+  verbs:
+  - create
+  - get
+  - delete
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - rolebindings
+  - roles
+  verbs:
+  - create
+  - get
+  - delete
+- apiGroups:
+  - authorization.k8s.io
+  resources:
+  - localsubjectaccessreviews
+  verbs:
+  - create
 {{- end }}
 {{- define "executor-rules" }}
 rules:
@@ -54,6 +83,35 @@ rules:
   - get
   - update
   - patch
+# The executor provisions the fission-fetcher ServiceAccount (and its Role +
+# RoleBinding) on demand in each function namespace as functions are specialized
+# (EnsureFetcherSA -> setupSAAndRoleBindings). Required under watch-all-namespaces,
+# where namespaces are not known at install time and the chart cannot pre-create
+# the SA. Under watch-all these rules render as a ClusterRole, granting the create
+# power cluster-wide.
+- apiGroups:
+  - ""
+  resources:
+  - serviceaccounts
+  verbs:
+  - create
+  - get
+  - delete
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - rolebindings
+  - roles
+  verbs:
+  - create
+  - get
+  - delete
+- apiGroups:
+  - authorization.k8s.io
+  resources:
+  - localsubjectaccessreviews
+  verbs:
+  - create
 {{- end }}
 {{- define "kubewatcher-rules" }}
 rules:

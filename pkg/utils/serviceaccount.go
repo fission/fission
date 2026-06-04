@@ -111,6 +111,28 @@ func CreateMissingPermissionForSA(ctx context.Context, kubernetesClient kubernet
 	}
 }
 
+// EnsureFetcherSA ensures the fission-fetcher ServiceAccount (and its role
+// bindings) exists in namespace. It provisions the SA on demand in a
+// dynamically-discovered function namespace under watch-all-namespaces, where the
+// static startup pass (CreateMissingPermissionForSA over FissionResourceNS)
+// cannot pre-create it. Idempotent, and harmless in the static-namespace case
+// (the SA already exists), so callers can invoke it unconditionally.
+func EnsureFetcherSA(ctx context.Context, kubernetesClient kubernetes.Interface, logger logr.Logger, namespace string) {
+	if namespace == "" {
+		return
+	}
+	setupSAAndRoleBindings(ctx, kubernetesClient, logger, namespace, fetcherCheck)
+}
+
+// EnsureBuilderSA ensures the fission-builder ServiceAccount (and its role
+// bindings) exists in namespace. See EnsureFetcherSA.
+func EnsureBuilderSA(ctx context.Context, kubernetesClient kubernetes.Interface, logger logr.Logger, namespace string) {
+	if namespace == "" {
+		return
+	}
+	setupSAAndRoleBindings(ctx, kubernetesClient, logger, namespace, builderCheck)
+}
+
 func getSAObj(kubernetesClient kubernetes.Interface, logger logr.Logger) *ServiceAccount {
 	saObj := &ServiceAccount{
 		kubernetesClient: kubernetesClient,
@@ -124,11 +146,23 @@ func getSAObj(kubernetesClient kubernetes.Interface, logger logr.Logger) *Servic
 
 func (sa *ServiceAccount) runSACheck(ctx context.Context) {
 	for _, ns := range sa.nsResolver.FissionResourceNS {
+		// Under watch-all-namespaces FissionResourceNS is the single
+		// metav1.NamespaceAll ("") sentinel: there is no concrete namespace to set
+		// up here. The fetcher/builder SAs are instead ensured on demand in each
+		// function/builder namespace as it is discovered, via EnsureFetcherSA /
+		// EnsureBuilderSA.
+		if ns == metav1.NamespaceAll {
+			continue
+		}
 		for _, permission := range sa.permissions {
 			if permission.saName == BuilderSAName {
 				ns = sa.nsResolver.GetBuilderNS(ns)
 			} else {
 				ns = sa.nsResolver.GetFunctionNS(ns)
+			}
+			if ns == "" {
+				sa.logger.V(1).Info("skipping service account check for empty namespace", "sa_name", permission.saName)
+				continue
 			}
 			setupSAAndRoleBindings(ctx, sa.kubernetesClient, sa.logger, ns, permission)
 		}
