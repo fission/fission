@@ -15,6 +15,9 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/executor/fscache"
+	hpautils "github.com/fission/fission/pkg/executor/util/hpa"
+	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
 
@@ -116,6 +119,29 @@ func TestContainerGetDeploymentSpec(t *testing.T) {
 		assert.Equal(t, "Function", deployment.OwnerReferences[0].Kind)
 		assert.Equal(t, "ctr-fn", deployment.OwnerReferences[0].Name)
 	})
+}
+
+// TestContainerFnDeleteCacheMiss verifies that deleting a function whose fsvc
+// is absent from the in-memory cache (never specialized, evicted, or executor
+// restarted) does not error out — it must fall back to the deterministic
+// computed object name and clean up the backing objects instead of leaking
+// them.
+func TestContainerFnDeleteCacheMiss(t *testing.T) {
+	logger := loggerfactory.GetLogger()
+	cn := &Container{
+		logger:           logger,
+		kubernetesClient: fake.NewClientset(),
+		fsCache:          fscache.MakeFunctionServiceCache(logger),
+		nsResolver:       utils.DefaultNSResolver(),
+		hpaops:           hpautils.NewHpaOperations(logger, fake.NewClientset(), "test-instance"),
+	}
+
+	fn := newTestContainerFunction()
+	fn.UID = "abcdef01-2345-6789-abcd-ef0123456789"
+
+	// fsCache is intentionally left empty so GetByFunctionUID misses.
+	require.NoError(t, cn.fnDelete(t.Context(), fn),
+		"fnDelete must tolerate a cache miss and clean up by computed name")
 }
 
 func TestContainerGetResources(t *testing.T) {

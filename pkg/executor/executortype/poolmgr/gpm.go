@@ -532,7 +532,7 @@ func (gpm *GenericPoolManager) service() {
 			key := crd.CacheKeyUIDFromMeta(&req.env.ObjectMeta)
 			pool, ok := gpm.pools[key]
 			if !ok {
-				gpm.logger.Error(nil, "Could not find pool", "environment", env.Name, "namespace", env.Namespace)
+				gpm.logger.Info("pool already removed", "environment", env.Name, "namespace", env.Namespace)
 				continue
 			}
 			delete(gpm.pools, key)

@@ -83,6 +83,11 @@ func (r *PackageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		// buildTriggerPredicate) when a build is actually needed; deploy-only
 		// packages settle on "none" and are not built.
 		if _, err := setInitialBuildStatus(ctx, r.fissionClient, pkg); err != nil {
+			if apierrors.IsNotFound(err) {
+				// Package deleted between our Get and the status write —
+				// nothing to initialize.
+				return ctrl.Result{}, nil
+			}
 			return ctrl.Result{}, fmt.Errorf("error setting initial package build status: %w", err)
 		}
 		return ctrl.Result{}, nil

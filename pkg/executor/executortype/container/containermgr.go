@@ -604,24 +604,27 @@ func (caaf *Container) fnDelete(ctx context.Context, fn *fv1.Function) error {
 	// is deleted and cause Container backend fails to delete the entry.
 	// Use GetByFunctionUID instead of GetByFunction here to find correct
 	// fsvc entry.
+	objName := caaf.getObjName(fn)
 	fsvc, err := caaf.fsCache.GetByFunctionUID(fn.UID)
 	if err != nil {
-		return fmt.Errorf("fsvc not found in cache %s: %w", k8sCache.MetaObjectToName(fn), err)
-	}
-
-	objName := fsvc.Name
-
-	_, err = caaf.fsCache.DeleteOld(fsvc, time.Second*0)
-	if err != nil {
-		multierr = errors.Join(multierr, fmt.Errorf("error deleting function from cache: %w", err))
+		// Not in cache (never specialized, evicted, or executor restarted).
+		// The backing object names are deterministic, so proceed with
+		// cleanup using the computed name instead of failing — bailing out
+		// here would leak the Deployment/Service/HPA.
+		caaf.logger.V(1).Info("fsvc not in cache, cleaning up by computed name",
+			"function", k8sCache.MetaObjectToName(fn), "obj_name", objName)
+	} else {
+		objName = fsvc.Name
+		if _, err := caaf.fsCache.DeleteOld(fsvc, time.Second*0); err != nil {
+			multierr = errors.Join(multierr, fmt.Errorf("error deleting function from cache: %w", err))
+		}
 	}
 
 	// to support backward compatibility, if the function was created in default ns, we fall back to creating the
 	// deployment of the function in fission-function ns, so cleaning up resources there
 	ns := caaf.nsResolver.GetFunctionNS(fn.Namespace)
 
-	err = caaf.cleanupContainer(ctx, ns, objName)
-	multierr = errors.Join(multierr, err)
+	multierr = errors.Join(multierr, caaf.cleanupContainer(ctx, ns, objName))
 	return multierr
 }
 

@@ -183,7 +183,7 @@ func (executor *Executor) tapServices(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var errs error
+	var errs, notFound error
 	for _, req := range tapSvcReqs {
 		svcHost := strings.TrimPrefix(req.ServiceURL, "http://")
 
@@ -195,10 +195,13 @@ func (executor *Executor) tapServices(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		err = et.TapService(ctx, svcHost)
-		if err != nil {
-			errs = errors.Join(errs,
-				fmt.Errorf("error tapping function '%s/%s' with executor '%s' and service url '%s': %w", req.FnMetadata.Namespace, req.FnMetadata.Name, req.FnExecutorType, req.ServiceURL, err))
+		if err := et.TapService(ctx, svcHost); err != nil {
+			wrapped := fmt.Errorf("error tapping function '%s/%s' with executor '%s' and service url '%s': %w", req.FnMetadata.Namespace, req.FnMetadata.Name, req.FnExecutorType, req.ServiceURL, err)
+			if ferror.IsNotFound(err) {
+				notFound = errors.Join(notFound, wrapped)
+			} else {
+				errs = errors.Join(errs, wrapped)
+			}
 		}
 	}
 
@@ -207,7 +210,14 @@ func (executor *Executor) tapServices(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Not found", http.StatusNotFound)
 		return
 	}
-
+	if notFound != nil {
+		// Expired/deleted fsvcs are routine churn — the router's entry is
+		// stale, not broken. Still 404 so the caller knows, but not an
+		// error-level log.
+		logger.V(1).Info("tap skipped for expired function services", "detail", notFound.Error())
+		http.Error(w, "Not found", http.StatusNotFound)
+		return
+	}
 	w.WriteHeader(http.StatusOK)
 }
 

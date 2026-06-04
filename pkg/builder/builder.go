@@ -217,7 +217,7 @@ func (builder *Builder) Clean(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		e := "error deleting src package after build"
 		logger.Error(err, e)
-		builder.reply(r.Context(), w, srcPkgFilename, "", http.StatusInternalServerError)
+		builder.reply(r.Context(), w, srcPkgFilename, fmt.Sprintf("%s: %s", e, err.Error()), http.StatusInternalServerError)
 		return
 	}
 

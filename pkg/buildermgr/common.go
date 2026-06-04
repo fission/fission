@@ -66,10 +66,16 @@ func buildPackage(ctx context.Context, logger logr.Logger, fissionClient version
 
 	defer func() {
 		logger.Info("cleaning src pkg from builder storage", "source_package", srcPkgFilename)
-		errC := cleanPackage(ctx, builderC, srcPkgFilename)
-		if errC != nil {
-			m := "error cleaning src pkg from builder storage"
-			logger.Error(errC, m)
+		if errC := cleanPackage(ctx, builderC, srcPkgFilename); errC != nil {
+			if ferror.IsNotFound(errC) {
+				// Defensive: today's builder Clean never 404s (os.RemoveAll
+				// is idempotent), but a future handler that does shouldn't
+				// log "already gone" as an error.
+				return
+			}
+			logger.Error(errC, "error cleaning src pkg from builder storage",
+				"source_package", srcPkgFilename,
+				"package", pkg.Name, "package_namespace", pkg.Namespace)
 		}
 	}()
 
