@@ -14,22 +14,22 @@ routerServiceType: LoadBalancer
 ## repository represents base repository for images used in the chart.
 ## Keep it empty for using existing local image
 ##
-repository: ghcr.io
+repository: ghcr.io/stradivario
 
 ## image represents the base image fission-bundle used by multiple Fission components.
 ## We alter arguments to the image to run a particular component.
 ##
-image: fission/fission-bundle
+image: fission-bundle
 
 ## imageTag represents the tag of the base image fission-bundle used by multiple Fission components.
 ## It is also used by the chart to identify version of the few more images apart from fission-bundle.
 ## Keep it empty for using latest tag.
 ##
-imageTag: v1.25.0
+imageTag: v2.0.0-watch-all-namespaces
 
 ## pullPolicy represents the pull policy to use for images in the chart.
 ##
-pullPolicy: IfNotPresent
+pullPolicy: Always
 
 ## imagepullsecrets
 imagePullSecrets: []
@@ -145,11 +145,11 @@ fetcher:
   ## repository represents the repository of the fetcher component.
   ##
   ## By default, it is empty, which means global repository will be used.
-  repository: ""
+  repository: "ghcr.io/stradivario"
   ## image represents the image of the fetcher component.
-  image: fission/fetcher
+  image: fetcher
   ## imageTag represents the tag of the image of the fetcher component.
-  imageTag: v1.25.0
+  imageTag: v2.0.0-watch-all-namespaces
 
   ## Fetcher is only for to downloading or uploading archive.
   ## Normally, you don't need to change the value here, unless necessary.
@@ -822,17 +822,17 @@ preUpgradeChecks:
   ## Repository for pre-install/pre-upgrade checks image
   ## By default it uses the global repository
   ##
-  repository: ""
+  repository: "ghcr.io/stradivario"
   ## pre-install/pre-upgrade checks live in this image
   ##
-  image: fission/pre-upgrade-checks
+  image: pre-upgrade-checks
   ## pre-install/pre-upgrade checks image version
   ##
-  imageTag: v1.25.0
+  imageTag: v2.0.0-watch-all-namespaces
 
 ## Fission post-install/post-upgrade reporting live in this image
 ##
-postInstallReportImage: fission/reporter
+postInstallReportImage: reporter
 
 ## If there are any pod specialization errors when a function is triggered, the error
 ## summary is returned as part of http response if this is set to true.

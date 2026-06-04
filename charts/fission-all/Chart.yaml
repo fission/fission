@@ -1,7 +1,7 @@
 apiVersion: v2
 name: fission-all
-version: 1.25.0
-appVersion: v1.25.0
+version: 2.0.0-watch-all-namespaces
+appVersion: v2.0.0-watch-all-namespaces
 description: Fission is a fast serverless framework for Kubernetes.
 kubeVersion: ">=1.32.0-0"
 home: https://fission.io/
@@ -26,3 +26,14 @@ annotations:
   artifacthub.io/signKey: |
     fingerprint: 2EAE29FDF8A387050C82CD5ABBDD4FD6A1FFCBF6
     url: https://raw.githubusercontent.com/fission/fission-charts/main/public_key/pgp_keys.asc
+  artifacthub.io/changes: |
+    - kind: added
+      description: "Concurrent builder pods: demand-based builder pool (spec.builder.poolsize)"
+    - kind: added
+      description: "Builder scale-to-zero: idle builders scale to 0 and scale back up on build (spec.builder.idleTimeout)"
+    - kind: added
+      description: "Watch all namespaces: cluster-wide watching of Fission resources (watchAllNamespaces)"
+    - kind: fixed
+      description: "buildermgr RBAC for deployments/scale (required by the builder pool)"
+    - kind: fixed
+      description: "newdeploy waits for the package build before provisioning"

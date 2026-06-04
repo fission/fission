@@ -1,12 +1,12 @@
 version: 2
 
 env:
-  - GHCR_REPO=ghcr.io/fission
+  - GHCR_REPO=ghcr.io/stradivario
 
 project_name: fission
 release:
   github:
-    owner: fission
+    owner: stradivario
     name: fission
   prerelease: "true"
   draft: true
