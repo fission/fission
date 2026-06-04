@@ -762,24 +762,27 @@ func (deploy *NewDeploy) fnDelete(ctx context.Context, fn *fv1.Function) error {
 	// is deleted and cause newdeploy backend fails to delete the entry.
 	// Use GetByFunctionUID instead of GetByFunction here to find correct
 	// fsvc entry.
+	objName := deploy.getObjName(fn)
 	fsvc, err := deploy.fsCache.GetByFunctionUID(fn.UID)
 	if err != nil {
-		return fmt.Errorf("fsvc not found in cache: %s: %w", k8sCache.MetaObjectToName(fn), err)
-	}
-
-	objName := fsvc.Name
-
-	_, err = deploy.fsCache.DeleteOld(fsvc, time.Second*0)
-	if err != nil {
-		errs = errors.Join(errs, fmt.Errorf("error deleting the function from cache"))
+		// Not in cache (never specialized, evicted, or executor restarted).
+		// The backing object names are deterministic, so proceed with
+		// cleanup using the computed name instead of failing — bailing out
+		// here would leak the Deployment/Service/HPA.
+		deploy.logger.V(1).Info("fsvc not in cache, cleaning up by computed name",
+			"function", k8sCache.MetaObjectToName(fn), "obj_name", objName)
+	} else {
+		objName = fsvc.Name
+		if _, err := deploy.fsCache.DeleteOld(fsvc, time.Second*0); err != nil {
+			errs = errors.Join(errs, fmt.Errorf("error deleting the function from cache"))
+		}
 	}
 
 	// to support backward compatibility, if the function was created in default ns, we fall back to creating the
 	// deployment of the function in fission-function ns, so cleaning up resources there
 	ns := deploy.nsResolver.GetFunctionNS(fn.Namespace)
 
-	err = deploy.cleanupNewdeploy(ctx, ns, objName)
-	errs = errors.Join(errs, err)
+	errs = errors.Join(errs, deploy.cleanupNewdeploy(ctx, ns, objName))
 
 	return errs
 }
