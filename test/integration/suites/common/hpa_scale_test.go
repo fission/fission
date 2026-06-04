@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 
@@ -26,7 +27,7 @@ import (
 func TestHPAScaleUnderLoad(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute)
+	ctx, cancel := context.WithTimeout(t.Context(), 8*time.Minute)
 	defer cancel()
 
 	f := framework.Connect(t)
@@ -61,7 +62,7 @@ func TestHPAScaleUnderLoad(t *testing.T) {
 	// metric scoped to the function container (named after the env), not a
 	// pod-wide Resource metric. This fails fast on a regression of the
 	// ContainerResource rewrite, before we depend on actual scaling behavior.
-	ns.WaitForFunctionHPA(t, ctx, fnName, func(h *autoscalingv2.HorizontalPodAutoscaler) bool {
+	hpa := ns.WaitForFunctionHPA(t, ctx, fnName, func(h *autoscalingv2.HorizontalPodAutoscaler) bool {
 		for _, m := range h.Spec.Metrics {
 			if m.Type == autoscalingv2.ContainerResourceMetricSourceType &&
 				m.ContainerResource != nil && m.ContainerResource.Container == envName {
@@ -71,9 +72,19 @@ func TestHPAScaleUnderLoad(t *testing.T) {
 		return false
 	}, "hpa carries a ContainerResource cpu metric scoped to the function container", 90*time.Second)
 
-	// Sustained load: three concurrent loops (~30 rps total) until the test
-	// finishes, so the autoscaler keeps observing elevated cpu across its
-	// stabilization window.
+	// Capture the HPA Generation now (against the live apiserver, which has
+	// applied its defaulting) so we can later prove the executor does not churn
+	// the HPA spec on subsequent reconciles. Generation increments only on spec
+	// writes; the HPA controller's status updates never touch it, so comparing
+	// it at the end is race-free w.r.t. the status writes happening throughout
+	// the test.
+	gen := hpa.Generation
+
+	// Sustained load: three concurrent load loops until the test finishes, so
+	// the autoscaler keeps observing elevated cpu across its stabilization
+	// window. LoadLoop's 100ms ticker coalesces while a request is in flight,
+	// so each loop's throughput is RTT-bound (~10 rps upper bound, lower in
+	// practice).
 	loadCtx, stopLoad := context.WithCancel(ctx)
 	t.Cleanup(stopLoad)
 	for i := 0; i < 3; i++ {
@@ -92,4 +103,13 @@ func TestHPAScaleUnderLoad(t *testing.T) {
 	ns.WaitForFunctionDeployment(t, ctx, fnName, func(d *appsv1.Deployment) bool {
 		return d.Status.ReadyReplicas >= 2
 	}, "scaled above minscale under sustained load", 4*time.Minute)
+
+	// Live-path idempotency guard: the fake clientset in the unit tests cannot
+	// prove the executor performs a true no-op reconcile under apiserver
+	// defaulting, so assert it here against the live object. Generation only
+	// increments on spec changes (status writes by the HPA controller do not
+	// bump it), so an unchanged Generation proves the executor did not churn
+	// HPA spec updates on repeated reconciles (e.g. defaulting-induced drift).
+	hpa = ns.FunctionHPA(t, ctx, fnName)
+	assert.Equal(t, gen, hpa.Generation, "executor must not churn HPA spec updates (defaulting-induced drift)")
 }

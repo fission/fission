@@ -212,6 +212,29 @@ func TestRewriteResourceMetricsToContainer(t *testing.T) {
 			}},
 		},
 		{
+			// One list mixing both rewritable resources around a Pods metric:
+			// both Resource entries must be rewritten, the Pods entry left
+			// untouched, and every entry must keep its original index.
+			name:          "mixed cpu and memory resources around a pods metric",
+			input:         []asv2.MetricSpec{cpuUtil, podsMetric, memAvg},
+			mainContainer: "fn",
+			want: []asv2.MetricSpec{
+				{
+					Type: asv2.ContainerResourceMetricSourceType,
+					ContainerResource: &asv2.ContainerResourceMetricSource{
+						Name: corev1.ResourceCPU, Container: "fn", Target: cpuUtil.Resource.Target,
+					},
+				},
+				podsMetric,
+				{
+					Type: asv2.ContainerResourceMetricSourceType,
+					ContainerResource: &asv2.ContainerResourceMetricSource{
+						Name: corev1.ResourceMemory, Container: "fn", Target: memAvg.Resource.Target,
+					},
+				},
+			},
+		},
+		{
 			name:          "non-resource metrics unchanged",
 			input:         []asv2.MetricSpec{podsMetric, externalMetric, objectMetric, alreadyContainer},
 			mainContainer: "fn",

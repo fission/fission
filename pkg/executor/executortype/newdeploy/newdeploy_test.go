@@ -82,6 +82,65 @@ func newTestNewDeployFunction() *fv1.Function {
 	}
 }
 
+// TestMainContainerName covers mainContainerName, the helper shared by the
+// deployment-spec builder and the HPA call site. The updateFunction path relies
+// on its error branch to refuse rewriting the ContainerResource metric to a
+// container that does not exist in the pod spec.
+func TestMainContainerName(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		mutate  func(env *fv1.Environment)
+		want    string
+		wantErr bool
+	}{
+		{
+			name:   "defaults to env name when no custom runtime container",
+			mutate: func(*fv1.Environment) {},
+			want:   envCName,
+		},
+		{
+			name: "uses custom runtime container name present in pod spec",
+			mutate: func(env *fv1.Environment) {
+				env.Spec.Runtime.Container = &apiv1.Container{Name: "custom-runtime"}
+				env.Spec.Runtime.PodSpec = &apiv1.PodSpec{
+					Containers: []apiv1.Container{{Name: "custom-runtime"}},
+				}
+			},
+			want: "custom-runtime",
+		},
+		{
+			name: "errors when custom runtime container absent from pod spec",
+			mutate: func(env *fv1.Environment) {
+				env.Spec.Runtime.Container = &apiv1.Container{Name: "custom-runtime"}
+				env.Spec.Runtime.PodSpec = &apiv1.PodSpec{
+					Containers: []apiv1.Container{{Name: "some-other-container"}},
+				}
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			deploy := newTestNewDeploy(t)
+			env := newTestNewDeployEnv()
+			tc.mutate(env)
+
+			got, err := deploy.mainContainerName(env)
+			if tc.wantErr {
+				require.Error(t, err)
+				assert.Empty(t, got)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
 // TestNewDeployFnDeleteCacheMiss verifies that deleting a function whose fsvc
 // is absent from the in-memory cache (never specialized, evicted, or executor
 // restarted) does not error out — it must fall back to the deterministic
