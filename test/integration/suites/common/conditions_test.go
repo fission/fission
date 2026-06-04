@@ -51,6 +51,25 @@ func minimalFunction(name, namespace string) *fv1.Function {
 // remain stable once controllers begin populating their own conditions.
 const smokeConditionType = "fission.io/integration-test-smoke"
 
+// updateFunctionStatusWithRetry applies mutate to a fresh read of the
+// Function and submits it via UpdateStatus under RetryOnConflict. A bare
+// Get → mutate → UpdateStatus races the controllers that write to a
+// freshly created Function (409 "the object has been modified" flakes in
+// CI), so every status write in these tests must go through this helper.
+func updateFunctionStatusWithRetry(ctx context.Context, t *testing.T, f *framework.Framework, namespace, name string, mutate func(*fv1.Function)) {
+	t.Helper()
+	fc := f.FissionClient().CoreV1()
+	require.NoError(t, retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		fn, err := fc.Functions(namespace).Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			return err
+		}
+		mutate(fn)
+		_, err = fc.Functions(namespace).UpdateStatus(ctx, fn, metav1.UpdateOptions{})
+		return err
+	}), "status update must succeed (with conflict retries)")
+}
+
 // TestConditions_FunctionStatusSubresource creates a Function via the
 // typed client, writes a uniquely-typed condition via UpdateStatus, and
 // re-fetches to verify the apiserver persists it through the new status
@@ -73,18 +92,16 @@ func TestConditions_FunctionStatusSubresource(t *testing.T) {
 		_ = fc.Functions(ns.Name).Delete(context.Background(), name, metav1.DeleteOptions{})
 	})
 
-	fn, err := fc.Functions(ns.Name).Get(ctx, name, metav1.GetOptions{})
-	require.NoError(t, err)
-	fn.Status.Conditions = append(fn.Status.Conditions, metav1.Condition{
-		Type:               smokeConditionType,
-		Status:             metav1.ConditionUnknown,
-		Reason:             "ConditionsSmoke",
-		Message:            "set by TestConditions_FunctionStatusSubresource",
-		LastTransitionTime: metav1.Now(),
-		ObservedGeneration: fn.Generation,
+	updateFunctionStatusWithRetry(ctx, t, f, ns.Name, name, func(fn *fv1.Function) {
+		fn.Status.Conditions = append(fn.Status.Conditions, metav1.Condition{
+			Type:               smokeConditionType,
+			Status:             metav1.ConditionUnknown,
+			Reason:             "ConditionsSmoke",
+			Message:            "set by TestConditions_FunctionStatusSubresource",
+			LastTransitionTime: metav1.Now(),
+			ObservedGeneration: fn.Generation,
+		})
 	})
-	_, err = fc.Functions(ns.Name).UpdateStatus(ctx, fn, metav1.UpdateOptions{})
-	require.NoError(t, err, "UpdateStatus on the new /status subresource must succeed")
 
 	got := ns.GetFunctionConditions(t, ctx, name)
 	c := conditions.Find(got, smokeConditionType)
@@ -239,15 +256,15 @@ func TestConditions_StatusSubresourceIsolated(t *testing.T) {
 
 	// Mutate both spec and status; submit via UpdateStatus.
 	// The apiserver must drop the spec change (subresource semantics).
-	fn.Spec.Environment.Name = "conds-tampered"
-	fn.Status.Conditions = append(fn.Status.Conditions, metav1.Condition{
-		Type:               smokeConditionType,
-		Status:             metav1.ConditionTrue,
-		Reason:             "Tampering",
-		LastTransitionTime: metav1.Now(),
+	updateFunctionStatusWithRetry(ctx, t, f, ns.Name, name, func(fn *fv1.Function) {
+		fn.Spec.Environment.Name = "conds-tampered"
+		fn.Status.Conditions = append(fn.Status.Conditions, metav1.Condition{
+			Type:               smokeConditionType,
+			Status:             metav1.ConditionTrue,
+			Reason:             "Tampering",
+			LastTransitionTime: metav1.Now(),
+		})
 	})
-	_, err = fc.Functions(ns.Name).UpdateStatus(ctx, fn, metav1.UpdateOptions{})
-	require.NoError(t, err)
 
 	after, err := fc.Functions(ns.Name).Get(ctx, name, metav1.GetOptions{})
 	require.NoError(t, err)
