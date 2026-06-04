@@ -12,18 +12,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
-// dropAllSC is the SecurityContext that sanitizeContainerSecurityContext
-// produces for an input with no SecurityContext at all — Capabilities.Drop is
-// forced to ["ALL"] (GHSA-qf5v-m7p4-95rp). Test fixtures that merge two
-// matching containers must expect this in the result.
-func dropAllSC() *apiv1.SecurityContext {
-	return &apiv1.SecurityContext{
-		Capabilities: &apiv1.Capabilities{
-			Drop: []apiv1.Capability{"ALL"},
-		},
-	}
-}
-
 func Test_checkConflicts(t *testing.T) {
 	type args struct {
 		objs any
@@ -146,7 +134,7 @@ func Test_mergeContainer(t *testing.T) {
 				TerminationMessagePath:   "",
 				TerminationMessagePolicy: "",
 				ImagePullPolicy:          "Always",
-				SecurityContext:          dropAllSC(),
+				SecurityContext:          nil,
 				Stdin:                    false,
 				StdinOnce:                false,
 				TTY:                      false,
@@ -213,10 +201,6 @@ func TestMergeContainer_SanitizesSecurityContext(t *testing.T) {
 	if !gotCaps["NET_BIND_SERVICE"] {
 		t.Errorf("allowlisted capability NET_BIND_SERVICE must flow through")
 	}
-	// GHSA-qf5v: drop must be forced to ["ALL"] to neutralize OCI default caps.
-	if got := out.SecurityContext.Capabilities.Drop; len(got) != 1 || got[0] != "ALL" {
-		t.Errorf("capabilities.drop must be [ALL], got %v", got)
-	}
 
 	// The caller's source container must not be mutated by the merge.
 	if src.SecurityContext.Privileged == nil || !*src.SecurityContext.Privileged {
@@ -224,9 +208,6 @@ func TestMergeContainer_SanitizesSecurityContext(t *testing.T) {
 	}
 	if len(src.SecurityContext.Capabilities.Add) != 3 {
 		t.Errorf("source container capabilities must be left untouched, got %v", src.SecurityContext.Capabilities.Add)
-	}
-	if src.SecurityContext.Capabilities.Drop != nil {
-		t.Errorf("source container Capabilities.Drop must remain nil (deep copy expected), got %v", src.SecurityContext.Capabilities.Drop)
 	}
 }
 
@@ -312,8 +293,8 @@ func Test_mergeContainerList(t *testing.T) {
 				},
 			},
 			want: []apiv1.Container{
-				{Name: "foo", Image: "my-custom-image-1", Env: []apiv1.EnvVar{{Name: "env1", Value: "foobar"}, {Name: "env2", Value: "barfoo"}, {Name: "test", Value: "foobar"}}, SecurityContext: dropAllSC()},
-				{Name: "foo2", Image: "my-custom-image-2", Env: []apiv1.EnvVar{{Name: "env1", Value: "foobar"}, {Name: "env2", Value: "barfoo"}, {Name: "env3", Value: "foobar"}, {Name: "env4", Value: "barfoo"}}, SecurityContext: dropAllSC()},
+				{Name: "foo", Image: "my-custom-image-1", Env: []apiv1.EnvVar{{Name: "env1", Value: "foobar"}, {Name: "env2", Value: "barfoo"}, {Name: "test", Value: "foobar"}}, SecurityContext: nil},
+				{Name: "foo2", Image: "my-custom-image-2", Env: []apiv1.EnvVar{{Name: "env1", Value: "foobar"}, {Name: "env2", Value: "barfoo"}, {Name: "env3", Value: "foobar"}, {Name: "env4", Value: "barfoo"}}, SecurityContext: nil},
 			},
 			wantErr: false,
 		},
@@ -350,7 +331,7 @@ func Test_mergeContainerList(t *testing.T) {
 				},
 			},
 			want: []apiv1.Container{
-				{Name: "foo", Image: "my-custom-image-1", Env: []apiv1.EnvVar{{Name: "env1", Value: "foobar"}, {Name: "env2", Value: "barfoo"}, {Name: "test", Value: "foobar"}}, SecurityContext: dropAllSC()},
+				{Name: "foo", Image: "my-custom-image-1", Env: []apiv1.EnvVar{{Name: "env1", Value: "foobar"}, {Name: "env2", Value: "barfoo"}, {Name: "test", Value: "foobar"}}, SecurityContext: nil},
 				{Name: "foo2", Image: "dummy-image-2", Env: []apiv1.EnvVar{{Name: "env1", Value: "foobar"}, {Name: "env2", Value: "barfoo"}}},
 				{Name: "foo4", Image: "my-custom-image-2", Env: []apiv1.EnvVar{{Name: "env3", Value: "foobar"}, {Name: "env4", Value: "barfoo"}}},
 			},
@@ -467,12 +448,11 @@ func TestMergePodSpec_StripsDangerousFields(t *testing.T) {
 // container-level defence-in-depth: even if admission was bypassed
 // (failurePolicy=Ignore or stale objects), per-container
 // privileged=true / allowPrivilegeEscalation=true / non-allowlisted
-// capabilities must be stripped from the merged result, and
-// capabilities.drop must be forced to ["ALL"] so the OCI runtime's
-// ~14 default capabilities are not granted either. The webhook is
-// the primary defence; this layer makes the bits unreachable on
-// webhook-bypass clusters. Closes GHSA-gx55 / GHSA-wmgg / GHSA-v455
-// / GHSA-qf5v.
+// capabilities.add entries must be stripped from the merged result.
+// The webhook is the primary defence; this layer makes the bits
+// unreachable on webhook-bypass clusters. Closes GHSA-gx55 / GHSA-wmgg
+// / GHSA-v455 and the GHSA-qf5v allowlist (the structural drop:["ALL"]
+// is left for a follow-up that audits Fission's own sidecar containers).
 func TestMergePodSpec_SanitizesContainerSecurityContext(t *testing.T) {
 	on := true
 	src := &apiv1.PodSpec{
@@ -534,45 +514,9 @@ func TestMergePodSpec_SanitizesContainerSecurityContext(t *testing.T) {
 	if !gotAdd["NET_BIND_SERVICE"] {
 		t.Errorf("allowlisted capability NET_BIND_SERVICE must flow through")
 	}
-	// GHSA-qf5v: drop must be forced to ["ALL"].
-	if got := merged.SecurityContext.Capabilities.Drop; len(got) != 1 || got[0] != "ALL" {
-		t.Errorf("capabilities.drop must be [ALL], got %v", got)
-	}
 
-	// InitContainer must also be sanitized, including drop=["ALL"] even though
-	// the source had no Capabilities at all.
-	initSC := out.InitContainers[0].SecurityContext
-	if initSC.Privileged != nil && *initSC.Privileged {
+	// InitContainer must also be sanitized for Privileged.
+	if out.InitContainers[0].SecurityContext.Privileged != nil && *out.InitContainers[0].SecurityContext.Privileged {
 		t.Errorf("InitContainer privileged=true must be sanitized to false")
-	}
-	if initSC.Capabilities == nil {
-		t.Fatalf("InitContainer Capabilities must be allocated to carry drop=[ALL]")
-	}
-	if got := initSC.Capabilities.Drop; len(got) != 1 || got[0] != "ALL" {
-		t.Errorf("InitContainer capabilities.drop must be [ALL], got %v", got)
-	}
-}
-
-// TestMergePodSpec_AllocatesSecurityContextForDropAll asserts that even a
-// container that arrived with no SecurityContext at all (and so no requested
-// caps) still leaves the merge with drop: ["ALL"] applied. Without this, the
-// OCI runtime would grant its ~14 default capabilities — the structural gap
-// the GHSA-qf5v denylist could never close.
-func TestMergePodSpec_AllocatesSecurityContextForDropAll(t *testing.T) {
-	src := &apiv1.PodSpec{
-		Containers: []apiv1.Container{{Name: "user", Image: "fission/python-env:latest"}},
-	}
-	target := &apiv1.PodSpec{
-		Containers: []apiv1.Container{{Name: "user"}}, // no SecurityContext at all
-	}
-	out, _ := MergePodSpec(src, target)
-	if out.Containers[0].SecurityContext == nil {
-		t.Fatalf("SecurityContext must be allocated to carry drop=[ALL]")
-	}
-	if out.Containers[0].SecurityContext.Capabilities == nil {
-		t.Fatalf("Capabilities must be allocated to carry drop=[ALL]")
-	}
-	if got := out.Containers[0].SecurityContext.Capabilities.Drop; len(got) != 1 || got[0] != "ALL" {
-		t.Errorf("capabilities.drop must be [ALL] even for containers without a SecurityContext, got %v", got)
 	}
 }

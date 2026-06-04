@@ -344,31 +344,35 @@ var allowedMergeContainerCapabilities = map[apiv1.Capability]struct{}{
 
 // sanitizeContainerSecurityContext enforces the container-sandbox invariants
 // on a merged container's SecurityContext: privileged=false,
-// allowPrivilegeEscalation=false, capabilities.drop=["ALL"], and
-// capabilities.add filtered to allowedMergeContainerCapabilities. The
-// admission webhook is the primary defence; this is the merge-layer
-// belt-and-braces for webhook-bypass clusters (failurePolicy=Ignore or stale
-// objects from a pre-webhook upgrade) and is the only layer that can
-// neutralize capabilities the OCI runtime grants by default.
+// allowPrivilegeEscalation=false, and capabilities.add filtered to
+// allowedMergeContainerCapabilities. The admission webhook is the primary
+// defence; this is the merge-layer belt-and-braces for webhook-bypass
+// clusters (failurePolicy=Ignore or stale objects from a pre-webhook
+// upgrade).
 //
 // Closes GHSA-gx55-f84r-v3r7 / GHSA-wmgg-3p4h-48x7 / GHSA-v455-mv2v-5g92 and
-// the follow-up GHSA-qf5v-m7p4-95rp (the prior denylist could not enumerate
-// every dangerous capability and could not constrain the OCI default set).
+// the follow-up GHSA-qf5v-m7p4-95rp (the prior denylist on capabilities.add
+// could not enumerate every dangerous capability — the allowlist closes the
+// demonstrated CAP_SYS_TIME bypass and every other non-allowlisted add).
+//
+// Not addressed here: the OCI runtime's ~14 default capabilities (MKNOD,
+// SETFCAP, DAC_OVERRIDE, NET_RAW, ...) still reach the container. Forcing
+// capabilities.drop=["ALL"] is the structural fix the qf5v advisory
+// recommends, but Fission's own sidecar containers (fetcher, builder) were
+// authored against the OCI default cap set and need to be audited before
+// drop:["ALL"] can be applied uniformly. Tracked separately.
 func sanitizeContainerSecurityContext(c *apiv1.Container) {
-	// Deep-copy or allocate a fresh SecurityContext before mutating.
-	// MergeContainer does a shallow struct copy (`dstC := *dst`) and
-	// mergo.WithOverride aliases src.SecurityContext onto
-	// dstC.SecurityContext, so mutating in place would leak into the
-	// caller's targetPodSpec (typically env.Spec.Runtime.PodSpec from an
-	// informer cache). When the tenant supplied no SecurityContext at all
-	// we still need one to carry drop: ["ALL"] — the OCI runtime would
-	// otherwise grant its ~14 default capabilities (MKNOD, SETFCAP,
-	// DAC_OVERRIDE, NET_RAW, ...).
 	if c.SecurityContext == nil {
-		c.SecurityContext = &apiv1.SecurityContext{}
-	} else {
-		c.SecurityContext = c.SecurityContext.DeepCopy()
+		return
 	}
+	// Deep-copy before mutating. MergeContainer does a shallow struct copy
+	// (`dstC := *dst`) and mergo.WithOverride aliases src.SecurityContext
+	// onto dstC.SecurityContext, so mutating in place would leak into the
+	// caller's targetPodSpec — which is typically env.Spec.Runtime.PodSpec
+	// from an informer cache. Allocating a fresh SecurityContext (and a
+	// fresh Capabilities.Add slice via a new backing array) keeps the
+	// sanitization local to the merged result.
+	c.SecurityContext = c.SecurityContext.DeepCopy()
 	sc := c.SecurityContext
 	if sc.Privileged != nil && *sc.Privileged {
 		sc.Privileged = new(false)
@@ -376,14 +380,7 @@ func sanitizeContainerSecurityContext(c *apiv1.Container) {
 	if sc.AllowPrivilegeEscalation != nil && *sc.AllowPrivilegeEscalation {
 		sc.AllowPrivilegeEscalation = new(false)
 	}
-	if sc.Capabilities == nil {
-		sc.Capabilities = &apiv1.Capabilities{}
-	}
-	// Force drop: ["ALL"]. "ALL" is a superset, so any tenant-supplied
-	// drop list is redundant and is replaced rather than appended.
-	sc.Capabilities.Drop = []apiv1.Capability{"ALL"}
-	// Filter add to the allowlist.
-	if len(sc.Capabilities.Add) > 0 {
+	if sc.Capabilities != nil && len(sc.Capabilities.Add) > 0 {
 		filtered := make([]apiv1.Capability, 0, len(sc.Capabilities.Add))
 		for _, cap := range sc.Capabilities.Add {
 			if _, ok := allowedMergeContainerCapabilities[cap]; !ok {
