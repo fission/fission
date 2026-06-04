@@ -458,6 +458,11 @@ func (deploy *NewDeploy) fnCreate(ctx context.Context, fn *fv1.Function) (*fscac
 	// deployment of the function in fission-function ns
 	ns := deploy.nsResolver.GetFunctionNS(fn.Namespace)
 
+	// Ensure the fission-fetcher ServiceAccount exists in the function namespace.
+	// Under watch-all-namespaces the function can be in any namespace and its
+	// fetcher sidecar needs the SA present there. Idempotent.
+	utils.EnsureFetcherSA(ctx, deploy.kubernetesClient, deploy.logger, ns)
+
 	// Envoy(istio-proxy) returns 404 directly before istio pilot
 	// propagates latest Envoy-specific configuration.
 	// Since newdeploy waits for pods of deployment to be ready,

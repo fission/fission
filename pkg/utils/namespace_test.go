@@ -238,3 +238,27 @@ func setNamespace(defaultNamespace string, additionalNamespace string) error {
 	}
 	return os.Setenv(ENV_ADDITIONAL_NAMESPACE, additionalNamespace)
 }
+
+func TestGetNamespacesWatchAll(t *testing.T) {
+	t.Run("watch-all returns the NamespaceAll sentinel and ignores other ns env", func(t *testing.T) {
+		t.Setenv(ENV_WATCH_ALL_NAMESPACES, "true")
+		t.Setenv(ENV_DEFAULT_NAMESPACE, "ignored")
+		t.Setenv(ENV_ADDITIONAL_NAMESPACE, "also,ignored")
+
+		ns := GetNamespaces()
+		require.Len(t, ns, 1)
+		// "" is metav1.NamespaceAll; FissionCacheOptions maps it to a cluster-wide cache.
+		require.Contains(t, ns, "")
+		require.Equal(t, "", ns[""])
+	})
+
+	t.Run("watch-all off falls back to default/additional resolution", func(t *testing.T) {
+		t.Setenv(ENV_WATCH_ALL_NAMESPACES, "false")
+		t.Setenv(ENV_DEFAULT_NAMESPACE, "default")
+		t.Setenv(ENV_ADDITIONAL_NAMESPACE, "")
+
+		ns := GetNamespaces()
+		require.Len(t, ns, 1)
+		require.Contains(t, ns, "default")
+	})
+}
