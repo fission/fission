@@ -27,7 +27,7 @@ func TestBuilder(t *testing.T) {
 
 	dir, err := os.MkdirTemp("/tmp", "fission-builder-test")
 	require.NoError(t, err)
-	builder := MakeBuilder(logger, dir)
+	builder := MakeBuilder(logger, dir, 1)
 
 	// Test VersionHandler
 	t.Run("VersionHandler", func(t *testing.T) {
@@ -313,7 +313,7 @@ func TestBuilderBuild_StripsCRLFFromBuildOutput(t *testing.T) {
 	os.Stdout = w
 	t.Cleanup(func() { os.Stdout = old })
 
-	b := MakeBuilder(loggerfactory.GetLogger(), dir)
+	b := MakeBuilder(loggerfactory.GetLogger(), dir, 1)
 	logs, err := b.build(context.Background(), buildScript, nil, srcPath, dstPath)
 	if err != nil {
 		t.Fatalf("build: %v", err)
