@@ -38,13 +38,8 @@ spec:
           metadata:
             type: object
           spec:
-            description: |-
-              HTTPTriggerSpec is for router to expose user functions at the given URL path.
-
-              The path rules below close GHSA-vchh-r53j-8mpw: HTTPTrigger no longer has
-              an admission webhook, so the API server's CEL evaluation is the only place
-              these invariants can be enforced for kubectl- or REST-created triggers.
-              Keep these CEL rules in sync with validateTriggerPath in validation.go.
+            description: HTTPTriggerSpec is for router to expose user functions at
+              the given URL path.
             properties:
               corsConfig:
                 description: |-
