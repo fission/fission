@@ -125,7 +125,8 @@ func TestFunctionReconcilerFinalizer(t *testing.T) {
 }
 
 // clientWithUpdateErr builds a fake client seeded with objs whose Update calls
-// all fail with updateErr — exercising the finalizer Update race tolerance.
+// all fail with updateErr — exercising the finalizer Update race tolerance
+// (persistent failure: every attempt fails).
 func clientWithUpdateErr(updateErr error, objs ...client.Object) client.Client {
 	return fake.NewClientBuilder().
 		WithScheme(scheme.Scheme).
@@ -133,6 +134,26 @@ func clientWithUpdateErr(updateErr error, objs ...client.Object) client.Client {
 		WithInterceptorFuncs(interceptor.Funcs{
 			Update: func(context.Context, client.WithWatch, client.Object, ...client.UpdateOption) error {
 				return updateErr
+			},
+		}).
+		Build()
+}
+
+// clientWithTransientUpdateErr builds a fake client whose first failN Update
+// calls fail with updateErr and then succeed — exercising RetryOnConflict's
+// re-read-and-retry loop converging on a real write.
+func clientWithTransientUpdateErr(updateErr error, failN int, objs ...client.Object) client.Client {
+	calls := 0
+	return fake.NewClientBuilder().
+		WithScheme(scheme.Scheme).
+		WithObjects(objs...).
+		WithInterceptorFuncs(interceptor.Funcs{
+			Update: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.UpdateOption) error {
+				calls++
+				if calls <= failN {
+					return updateErr
+				}
+				return c.Update(ctx, obj, opts...)
 			},
 		}).
 		Build()
@@ -166,15 +187,34 @@ func TestFunctionReconcilerFinalizerUpdateRace(t *testing.T) {
 		assert.False(t, cached, "cache entry dropped on the NotFound branch")
 	})
 
-	t.Run("delete path: finalizer-remove Update returns Conflict -> requeue, no error", func(t *testing.T) {
+	t.Run("delete path: finalizer-remove Update Conflicts twice then succeeds -> absorbed, finalizer released", func(t *testing.T) {
+		nd := &fakeBackend{}
+		c := clientWithTransientUpdateErr(apierrors.NewConflict(gr, "fn", assert.AnError), 2, deletingFn())
+		require.NoError(t, c.Delete(t.Context(), deletingFn()))
+		r := newReconcilerWith(c, true, nd)
+		r.lastReconciled.Store(key, fn("fn", fv1.ExecutorTypeNewdeploy, "u1"))
+
+		res, err := r.Reconcile(t.Context(), req)
+		require.NoError(t, err)
+		assert.Equal(t, ctrl.Result{}, res, "conflicts absorbed by RetryOnConflict; no deprecated Requeue")
+		assert.Equal(t, []string{"fn"}, nd.deleted, "teardown ran before the finalizer release")
+
+		got := &fv1.Function{}
+		err = c.Get(t.Context(), key, got)
+		assert.True(t, apierrors.IsNotFound(err), "removing the last finalizer let the object be collected")
+		_, cached := r.lastReconciled.Load(key)
+		assert.False(t, cached, "cache entry dropped after teardown")
+	})
+
+	t.Run("delete path: finalizer-remove Update persistently Conflicts -> retry exhausts, error surfaced", func(t *testing.T) {
 		nd := &fakeBackend{}
 		c := clientWithUpdateErr(apierrors.NewConflict(gr, "fn", assert.AnError), deletingFn())
 		require.NoError(t, c.Delete(t.Context(), deletingFn()))
 		r := newReconcilerWith(c, true, nd)
 
-		res, err := r.Reconcile(t.Context(), req)
-		require.NoError(t, err)
-		assert.Equal(t, ctrl.Result{Requeue: true}, res)
+		_, err := r.Reconcile(t.Context(), req)
+		require.Error(t, err)
+		assert.True(t, apierrors.IsConflict(err), "bounded retry exhausts and surfaces the Conflict")
 	})
 
 	t.Run("add path: finalizer-add Update returns NotFound -> tolerated, no requeue", func(t *testing.T) {
@@ -187,14 +227,29 @@ func TestFunctionReconcilerFinalizerUpdateRace(t *testing.T) {
 		assert.Equal(t, ctrl.Result{}, res)
 	})
 
-	t.Run("add path: finalizer-add Update returns Conflict -> requeue, no error", func(t *testing.T) {
+	t.Run("add path: finalizer-add Update Conflicts twice then succeeds -> absorbed, finalizer added", func(t *testing.T) {
 		nd := &fakeBackend{}
-		c := clientWithUpdateErr(apierrors.NewConflict(gr, "fn", assert.AnError), fn("fn", fv1.ExecutorTypeNewdeploy, "u1"))
+		c := clientWithTransientUpdateErr(apierrors.NewConflict(gr, "fn", assert.AnError), 2, fn("fn", fv1.ExecutorTypeNewdeploy, "u1"))
 		r := newReconcilerWith(c, true, nd)
 
 		res, err := r.Reconcile(t.Context(), req)
 		require.NoError(t, err)
-		assert.Equal(t, ctrl.Result{Requeue: true}, res)
+		assert.Equal(t, ctrl.Result{}, res, "conflicts absorbed by RetryOnConflict; no deprecated Requeue")
+
+		got := &fv1.Function{}
+		require.NoError(t, c.Get(t.Context(), key, got))
+		assert.True(t, controllerutil.ContainsFinalizer(got, functionFinalizer), "finalizer added after the retry converged")
+		assert.Len(t, nd.reconciled, 1, "reconcile still runs after the finalizer add")
+	})
+
+	t.Run("add path: finalizer-add Update persistently Conflicts -> retry exhausts, error surfaced", func(t *testing.T) {
+		nd := &fakeBackend{}
+		c := clientWithUpdateErr(apierrors.NewConflict(gr, "fn", assert.AnError), fn("fn", fv1.ExecutorTypeNewdeploy, "u1"))
+		r := newReconcilerWith(c, true, nd)
+
+		_, err := r.Reconcile(t.Context(), req)
+		require.Error(t, err)
+		assert.True(t, apierrors.IsConflict(err), "bounded retry exhausts and surfaces the Conflict")
 	})
 }
 
