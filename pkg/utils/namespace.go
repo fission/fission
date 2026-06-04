@@ -21,6 +21,7 @@ const (
 	ENV_BUILDER_NAMESPACE    string = "FISSION_BUILDER_NAMESPACE"
 	ENV_DEFAULT_NAMESPACE    string = "FISSION_DEFAULT_NAMESPACE"
 	ENV_ADDITIONAL_NAMESPACE string = "FISSION_RESOURCE_NAMESPACES"
+	ENV_WATCH_ALL_NAMESPACES string = "FISSION_WATCH_ALL_NAMESPACES"
 )
 
 type (
@@ -112,6 +113,16 @@ func (nsr *NamespaceResolver) FissionNSWithOptions(option ...option) map[string]
 
 func GetNamespaces() map[string]string {
 	namespaces := make(map[string]string)
+
+	// Watch-all-namespaces: a single metav1.NamespaceAll ("") entry. The Manager
+	// cache reads this through FissionCacheOptions, where controller-runtime treats
+	// the "" (cache.AllNamespaces) key as "cache every namespace" — so all Fission
+	// managers go cluster-wide. Requires cluster-scoped RBAC (the chart emits
+	// ClusterRoles when watchAllNamespaces is set).
+	if os.Getenv(ENV_WATCH_ALL_NAMESPACES) == "true" {
+		namespaces[metav1.NamespaceAll] = metav1.NamespaceAll
+		return namespaces
+	}
 
 	envValue := os.Getenv(ENV_DEFAULT_NAMESPACE)
 	if len(envValue) > 0 {
