@@ -94,19 +94,55 @@ type podRef struct {
 }
 
 // podIPCache maintains an in-memory podIP -> namespace index from a cluster-wide
-// pod informer, so the guard attributes a caller IP to a namespace in O(1)
-// without a per-request API call. A transform keeps only namespace/name/podIP to
-// bound memory.
+// pod informer, so the guard attributes a caller IP to a namespace in O(1) for
+// the common (warm) case. A transform keeps only namespace/name/podIP to bound
+// memory. On a cache miss it falls back to a direct API lookup (kubeClient), so a
+// freshly created caller that races the watch is not wrongly rejected.
 type podIPCache struct {
-	mu      sync.RWMutex
-	ipToPod map[string]podRef
+	mu         sync.RWMutex
+	ipToPod    map[string]podRef
+	kubeClient kubernetes.Interface
+	logger     logr.Logger
 }
 
+// lookup resolves an IP to a namespace from the warm informer cache, falling back
+// to a direct API query on a miss. The fallback is what makes the guard correct
+// for callers whose pod the informer has not observed yet (a fresh pod races the
+// watch); without it, fail-closed would reject legitimate same-namespace traffic.
 func (c *podIPCache) lookup(ip string) (string, bool) {
 	c.mu.RLock()
-	defer c.mu.RUnlock()
 	p, ok := c.ipToPod[ip]
-	return p.namespace, ok
+	c.mu.RUnlock()
+	if ok {
+		return p.namespace, true
+	}
+	return c.resolveFromAPI(ip)
+}
+
+// resolveFromAPI looks the caller IP up directly via the API server (server-side
+// filtered by status.podIP) and warms the cache. The result is re-checked against
+// the IP so it stays correct even against a client that does not honour the field
+// selector. A truly unknown IP returns not-found (the guard then fails closed).
+func (c *podIPCache) resolveFromAPI(ip string) (string, bool) {
+	if ip == "" || c.kubeClient == nil {
+		return "", false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	pods, err := c.kubeClient.CoreV1().Pods(metav1.NamespaceAll).List(ctx, metav1.ListOptions{
+		FieldSelector: "status.podIP=" + ip,
+	})
+	if err != nil {
+		c.logger.Error(err, "error resolving caller pod IP from API", "caller_ip", ip)
+		return "", false
+	}
+	for i := range pods.Items {
+		if pods.Items[i].Status.PodIP == ip {
+			c.set(ip, podRef{namespace: pods.Items[i].Namespace, name: pods.Items[i].Name})
+			return pods.Items[i].Namespace, true
+		}
+	}
+	return "", false
 }
 
 func (c *podIPCache) set(ip string, p podRef) {
@@ -135,7 +171,7 @@ func (c *podIPCache) del(ip, name string) {
 // synced, returning a ready resolver. Cluster-wide is required: a caller may be a
 // function pod in any namespace, not just the Fission-watched ones.
 func newPodIPCache(ctx context.Context, kubeClient kubernetes.Interface, logger logr.Logger) (*podIPCache, error) {
-	c := &podIPCache{ipToPod: make(map[string]podRef)}
+	c := &podIPCache{ipToPod: make(map[string]podRef), kubeClient: kubeClient, logger: logger}
 	factory := informers.NewSharedInformerFactory(kubeClient, 30*time.Minute)
 	informer := factory.Core().V1().Pods().Informer()
 	if err := informer.SetTransform(func(obj any) (any, error) {
