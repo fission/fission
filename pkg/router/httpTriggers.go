@@ -65,7 +65,10 @@ type HTTPTriggerSet struct {
 	useEncodedPath             bool
 	svcAddrUpdateThrottler     *throttler.Throttler
 	unTapServiceTimeout        time.Duration
-	syncDebouncer              func(func())
+	// callerNSGuard, when non-nil, enforces same-namespace invocation on the
+	// internal listener (ROUTER_ENFORCE_SAME_NAMESPACE_INVOCATION). nil = disabled.
+	callerNSGuard *sameNamespaceGuard
+	syncDebouncer func(func())
 	// ready flips true after the first successful mux build; routerReadinessHandler
 	// gates /readyz on it so a starting/rolling pod stays out of the
 	// Service endpoints until its mux is populated.
@@ -402,7 +405,13 @@ func (ts *HTTPTriggerSet) buildMuxes(ctx context.Context, fnTimeoutMap map[types
 
 		internalRoute := utils.UrlForFunction(fn.Name, fn.Namespace)
 		internalPrefixRoute := internalRoute + "/"
-		handler := http.HandlerFunc(fh.handler)
+		var handler http.Handler = http.HandlerFunc(fh.handler)
+		// Same-namespace guard (opt-in): a caller may invoke this function only
+		// from its own namespace (fn.Namespace) or as an internal Fission
+		// component. Wrapped per function so the target namespace is unambiguous.
+		if ts.callerNSGuard != nil {
+			handler = ts.callerNSGuard.wrap(handler, fn.Namespace)
+		}
 		internal.Handle(internalRoute, handler)
 		internal.PathPrefix(internalPrefixRoute).Handler(handler)
 		ts.logger.V(1).Info("add internal handler and prefix route for function", "router", internalRoute, "function", fn)

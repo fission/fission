@@ -286,6 +286,18 @@ router:
   ## canaryconfig / buildermgr) only.
   ##
   internalPort: 8889
+  ## enforceSameNamespaceInvocation locks the internal listener
+  ## (/fission-function/<ns>/<name>) so a caller may only invoke a function in
+  ## its OWN namespace — unless the caller is an internal Fission component (a pod
+  ## in this release's namespace). This closes the cross-namespace invocation gap:
+  ## with it off, any pod that can reach router-internal:8889 (and, with
+  ## internalAuth disabled, without any signature) can invoke a private function
+  ## in another namespace. The router attributes the caller's pod IP to a
+  ## namespace via a cluster-wide pod cache, so enabling this grants the router
+  ## `pods` get/list/watch cluster-wide. Intended for multi-tenant clusters
+  ## (typically alongside watchAllNamespaces). Default off.
+  ##
+  enforceSameNamespaceInvocation: true
   ## strategy is the Deployment rollout strategy for the router (ignored when
   ## deployAsDaemonSet is true). Leave unset for the Kubernetes default. The
   ## router is stateless, so a surge strategy gives zero-downtime rollouts:
