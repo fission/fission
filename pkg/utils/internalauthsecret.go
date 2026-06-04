@@ -35,18 +35,33 @@ const InternalAuthSecretName = "fission-internal-auth"
 // static-namespace case (the values match), so callers invoke it unconditionally
 // alongside EnsureFetcherSA / EnsureBuilderSA.
 //
-// No-op when internal auth is disabled (both env values empty) or namespace is
-// empty: creates the Secret if missing, updates it if the HMAC values drifted,
-// and leaves it untouched otherwise.
+// Reconciles to match internal auth state, so toggling it never leaves the tenant
+// copy stale: when disabled (both env values empty) it DELETES the Secret if
+// present — a leftover copy would make the function-pod fetcher sidecar (whose
+// secretKeyRef is always mounted) keep enforcing HMAC while the control plane no
+// longer signs, producing 401s on specialization. When enabled it creates the
+// Secret if missing, updates it if the HMAC values drifted, and leaves it
+// untouched otherwise. No-op for an empty namespace.
 func EnsureInternalAuthSecret(ctx context.Context, kubernetesClient kubernetes.Interface, logger logr.Logger, namespace string) {
 	if namespace == "" {
 		return
 	}
 	secret := os.Getenv("FISSION_INTERNAL_AUTH_SECRET")
 	oldSecret := os.Getenv("FISSION_INTERNAL_AUTH_SECRET_OLD")
-	if secret == "" && oldSecret == "" {
-		// internal auth disabled — storagesvc does not enforce signatures, so
-		// there is nothing to propagate.
+	disabled := secret == "" && oldSecret == ""
+
+	secrets := kubernetesClient.CoreV1().Secrets(namespace)
+	existing, err := secrets.Get(ctx, InternalAuthSecretName, metav1.GetOptions{})
+
+	if disabled {
+		// Internal auth is off: ensure no tenant copy lingers (so fetchers don't
+		// enforce). Only delete when one actually exists, to avoid a delete call
+		// on every reconcile in the common (default-off) case.
+		if err == nil {
+			if derr := secrets.Delete(ctx, InternalAuthSecretName, metav1.DeleteOptions{}); derr != nil && !apierrors.IsNotFound(derr) {
+				logger.Error(derr, "error deleting stale internal-auth secret", "namespace", namespace)
+			}
+		}
 		return
 	}
 
@@ -58,8 +73,6 @@ func EnsureInternalAuthSecret(ctx context.Context, kubernetesClient kubernetes.I
 		data["oldSecret"] = []byte(oldSecret)
 	}
 
-	secrets := kubernetesClient.CoreV1().Secrets(namespace)
-	existing, err := secrets.Get(ctx, InternalAuthSecretName, metav1.GetOptions{})
 	if apierrors.IsNotFound(err) {
 		_, cerr := secrets.Create(ctx, &apiv1.Secret{
 			ObjectMeta: metav1.ObjectMeta{

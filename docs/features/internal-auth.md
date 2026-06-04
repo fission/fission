@@ -48,3 +48,16 @@ which surfaces as fetch failures and executor specialization timeouts:
 helm upgrade fission ... --set internalAuth.enabled=<true|false>
 kubectl rollout restart deployment -n fission   # ALL fission deployments
 ```
+
+## Tenant-namespace copies (watch-all-namespaces)
+
+Under watch-all-namespaces the executor/buildermgr copy the `fission-internal-auth`
+Secret into each function/builder namespace on demand (the fetcher sidecar reads
+it there) — see `utils.EnsureInternalAuthSecret`. This reconciles to the current
+state: when internal auth is **off** it *deletes* the tenant copy, so toggling off
+never leaves a stale Secret behind (a leftover would make the function-pod fetcher
+keep enforcing HMAC while the control plane no longer signs → 401 on
+specialization). Note the fetcher reads the Secret at pod start, so already-running
+function pods only pick up the change when they next cycle (restart the affected
+pool / newdeploy deployment to force it). A fresh install with internal auth off
+never creates the Secret at all, so this only matters when toggling a live cluster.

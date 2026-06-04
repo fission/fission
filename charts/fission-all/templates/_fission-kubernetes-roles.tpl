@@ -70,6 +70,17 @@ rules:
   - create
   - update
 - apiGroups:
+  - ""
+  resources:
+  - secrets
+  # delete is scoped by name: the buildermgr removes the tenant fission-internal-auth
+  # copy when internal auth is turned off, so leftover copies don't make fetchers
+  # enforce HMAC against an unsigned control plane.
+  resourceNames:
+  - fission-internal-auth
+  verbs:
+  - delete
+- apiGroups:
   - apps
   resources:
   - deployments
@@ -173,6 +184,17 @@ rules:
   verbs:
   - create
   - update
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  # delete is scoped by name: the executor removes the tenant fission-internal-auth
+  # copy when internal auth is turned off, so leftover copies don't make fetchers
+  # enforce HMAC against an unsigned control plane.
+  resourceNames:
+  - fission-internal-auth
+  verbs:
+  - delete
 {{- if .Values.executor.serviceAccountCheck.enabled }}
 - apiGroups:
   - ""
