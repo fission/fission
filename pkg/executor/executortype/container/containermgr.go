@@ -28,6 +28,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/executor/executortype"
 	"github.com/fission/fission/pkg/executor/fscache"
 	"github.com/fission/fission/pkg/executor/metrics"
@@ -340,6 +341,25 @@ func destroyOnCreateError(err error) bool {
 }
 
 func (caaf *Container) fnCreate(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
+	// Authoritative re-read: the Function object reaching this path originates
+	// from the router's request body and can be stale — its DeletionTimestamp
+	// may be absent even though the Function is being deleted. Without this
+	// check a create can race the delete teardown (funcreconciler) and
+	// re-create the Deployment/Service/HPA *after* teardown removed them,
+	// leaking objects whose owning Function CR is already gone.
+	live, err := caaf.fissionClient.CoreV1().Functions(fn.Namespace).Get(ctx, fn.Name, metav1.GetOptions{})
+	if err != nil {
+		if k8sErrs.IsNotFound(err) {
+			return nil, ferror.MakeError(ferror.ErrorNotFound,
+				fmt.Sprintf("function %s is gone, not creating service", k8sCache.MetaObjectToName(fn)))
+		}
+		return nil, err
+	}
+	if live.UID != fn.UID || !live.DeletionTimestamp.IsZero() {
+		return nil, ferror.MakeError(ferror.ErrorNotFound,
+			fmt.Sprintf("function %s is being deleted, not creating service", k8sCache.MetaObjectToName(fn)))
+	}
+
 	cleanupFunc := func(ns string, name string) {
 		err := caaf.cleanupContainer(ctx, ns, name)
 		if err != nil {

@@ -23,6 +23,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -120,6 +121,30 @@ type functionReconciler struct {
 	lastReconciled sync.Map // client.ObjectKey -> *fv1.Function
 }
 
+// updateFinalizerWithRetry re-reads the Function and re-applies mutate under
+// RetryOnConflict, absorbing benign write races (concurrent status writers,
+// other finalizer actors) without surfacing them as reconciler errors. It
+// reports gone=true when the Function disappeared, which callers treat as
+// already-deleted. mutate returns false when the desired state already holds
+// (no write needed). On a Conflict the fresh Get re-reads the latest object, so
+// each retry re-evaluates mutate against current state.
+func (r *functionReconciler) updateFinalizerWithRetry(ctx context.Context, key types.NamespacedName, mutate func(*fv1.Function) bool) (gone bool, err error) {
+	err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		fn := &fv1.Function{}
+		if err := r.client.Get(ctx, key, fn); err != nil {
+			return err
+		}
+		if !mutate(fn) {
+			return nil
+		}
+		return r.client.Update(ctx, fn)
+	})
+	if apierrors.IsNotFound(err) {
+		return true, nil
+	}
+	return false, err
+}
+
 func (r *functionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	fn := &fv1.Function{}
 	if err := r.client.Get(ctx, req.NamespacedName, fn); err != nil {
@@ -152,8 +177,14 @@ func (r *functionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 				return ctrl.Result{}, err // keep the finalizer; retry teardown
 			}
 		}
-		controllerutil.RemoveFinalizer(fn, functionFinalizer)
-		if err := r.client.Update(ctx, fn); err != nil {
+		// Release the finalizer under RetryOnConflict so a concurrent writer
+		// (status update, another finalizer actor) does not surface as a
+		// reconciler error. gone == true means another actor already removed the
+		// last finalizer or the object was force-deleted; teardown already ran
+		// above, so the success path applies either way.
+		if _, err := r.updateFinalizerWithRetry(ctx, req.NamespacedName, func(f *fv1.Function) bool {
+			return controllerutil.RemoveFinalizer(f, functionFinalizer)
+		}); err != nil {
 			return ctrl.Result{}, err
 		}
 		r.lastReconciled.Delete(req.NamespacedName)
@@ -164,14 +195,27 @@ func (r *functionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	// finalizer is a metadata write (Generation unchanged), so it does not
 	// re-trigger this reconciler through GenerationChangedPredicate.
 	if r.finalizer && !controllerutil.ContainsFinalizer(fn, functionFinalizer) {
-		controllerutil.AddFinalizer(fn, functionFinalizer)
-		if err := r.client.Update(ctx, fn); err != nil {
+		gone, err := r.updateFinalizerWithRetry(ctx, req.NamespacedName, func(f *fv1.Function) bool {
+			return controllerutil.AddFinalizer(f, functionFinalizer)
+		})
+		if err != nil {
 			return ctrl.Result{}, err
 		}
+		if gone {
+			// Deleted out from under us; nothing was created yet, and the deletion
+			// path handles teardown via the watch event.
+			return ctrl.Result{}, nil
+		}
+		// The helper mutated a fresh re-read, so the local fn now lacks the
+		// finalizer and carries an older resourceVersion. Nothing below writes fn
+		// back — it is only read (resolveExecutorType, ReconcileFunction) and
+		// deep-copied into lastReconciled — so proceeding with it is safe; the
+		// finalizer is metadata-only and is re-read on the next reconcile.
 	} else if !r.finalizer && controllerutil.ContainsFinalizer(fn, functionFinalizer) {
 		// Toggled off: drain the finalizer so a later delete is never wedged on it.
-		controllerutil.RemoveFinalizer(fn, functionFinalizer)
-		if err := r.client.Update(ctx, fn); err != nil {
+		if _, err := r.updateFinalizerWithRetry(ctx, req.NamespacedName, func(f *fv1.Function) bool {
+			return controllerutil.RemoveFinalizer(f, functionFinalizer)
+		}); err != nil {
 			return ctrl.Result{}, err
 		}
 	}

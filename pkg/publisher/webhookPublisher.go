@@ -182,6 +182,7 @@ func (p *WebhookPublisher) makeHTTPRequest(r *publishRequest) {
 	if err != nil {
 		logger = logger.WithValues("request", r)
 	} else {
+		defer resp.Body.Close()
 		var body []byte
 		body, err = io.ReadAll(resp.Body)
 		if err != nil {

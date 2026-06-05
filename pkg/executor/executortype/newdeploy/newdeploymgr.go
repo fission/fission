@@ -29,6 +29,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/executor/executortype"
 	"github.com/fission/fission/pkg/executor/fscache"
 	"github.com/fission/fission/pkg/executor/metrics"
@@ -415,6 +416,26 @@ func (deploy *NewDeploy) fnCreate(ctx context.Context, fn *fv1.Function) (*fscac
 		return nil, fmt.Errorf("cross-namespace environment reference is not allowed: fn.namespace=%s env.namespace=%s",
 			fn.Namespace, envNs)
 	}
+
+	// Authoritative re-read: the Function object reaching this path originates
+	// from the router's request body and can be stale — its DeletionTimestamp
+	// may be absent even though the Function is being deleted. Without this
+	// check a create can race the delete teardown (funcreconciler) and
+	// re-create the Deployment/Service/HPA *after* teardown removed them,
+	// leaking objects whose owning Function CR is already gone.
+	live, err := deploy.fissionClient.CoreV1().Functions(fn.Namespace).Get(ctx, fn.Name, metav1.GetOptions{})
+	if err != nil {
+		if k8sErrs.IsNotFound(err) {
+			return nil, ferror.MakeError(ferror.ErrorNotFound,
+				fmt.Sprintf("function %s is gone, not creating service", k8sCache.MetaObjectToName(fn)))
+		}
+		return nil, err
+	}
+	if live.UID != fn.UID || !live.DeletionTimestamp.IsZero() {
+		return nil, ferror.MakeError(ferror.ErrorNotFound,
+			fmt.Sprintf("function %s is being deleted, not creating service", k8sCache.MetaObjectToName(fn)))
+	}
+
 	cleanupFunc := func(ctx context.Context, ns string, name string) {
 		err := deploy.cleanupNewdeploy(ctx, ns, name)
 		if err != nil {
