@@ -25,7 +25,7 @@ image: fission-bundle
 ## It is also used by the chart to identify version of the few more images apart from fission-bundle.
 ## Keep it empty for using latest tag.
 ##
-imageTag: v2.0.0-watch-all-namespaces
+imageTag: v1.23.0-watch-all-namespaces
 
 ## pullPolicy represents the pull policy to use for images in the chart.
 ##
@@ -149,7 +149,7 @@ fetcher:
   ## image represents the image of the fetcher component.
   image: fetcher
   ## imageTag represents the tag of the image of the fetcher component.
-  imageTag: v2.0.0-watch-all-namespaces
+  imageTag: v1.23.0-watch-all-namespaces
 
   ## Fetcher is only for to downloading or uploading archive.
   ## Normally, you don't need to change the value here, unless necessary.
@@ -840,7 +840,7 @@ preUpgradeChecks:
   image: pre-upgrade-checks
   ## pre-install/pre-upgrade checks image version
   ##
-  imageTag: v2.0.0-watch-all-namespaces
+  imageTag: v1.23.0-watch-all-namespaces
 
 ## Fission post-install/post-upgrade reporting live in this image
 ##

@@ -26,6 +26,12 @@ CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $GO_BIN build -o $DIST_DIR/pre-upgrade-che
 echo "  - Building reporter..."
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $GO_BIN build -o $DIST_DIR/reporter ./cmd/reporter
 
+
+# Build reporter
+echo "  - Building CLI..."
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o dist/fission-cli_linux_amd64_v1/fission ./cmd/fission-cli
+
+
 echo "Preparing Helm Chart..."
 # Remove old chart copy if exists to prevent nesting
 rm -rf $DIST_DIR/fission-all
