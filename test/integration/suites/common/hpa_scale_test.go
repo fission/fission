@@ -1,0 +1,127 @@
+// SPDX-FileCopyrightText: The Fission Authors
+//
+// SPDX-License-Identifier: Apache-2.0
+
+//go:build integration
+
+package common_test
+
+import (
+	"context"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	appsv1 "k8s.io/api/apps/v1"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
+
+	"github.com/fission/fission/test/integration/framework"
+)
+
+// TestHPAScaleUnderLoad proves the full HPA pipeline end to end: the executor
+// emits a ContainerResource cpu metric scoped to the function container
+// (pod-wide Resource metrics break when any container lacks a cpu request),
+// metrics-server feeds KCM, and sustained load scales the deployment above
+// MinScale. Guards against regressions in both the metric shape and the CI
+// metrics pipeline.
+func TestHPAScaleUnderLoad(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(t.Context(), 8*time.Minute)
+	defer cancel()
+
+	f := framework.Connect(t)
+	image := f.Images().RequirePython(t)
+
+	ns := f.NewTestNamespace(t)
+	envName := "python-hpa-" + ns.ID
+	fnName := "fn-hpa-" + ns.ID
+	routePath := "/" + fnName
+
+	ns.CreateEnv(t, ctx, framework.EnvOptions{
+		Name: envName, Image: image,
+		MinCPU: 20, MaxCPU: 100, MinMemory: 128, MaxMemory: 256,
+	})
+
+	// cpuburn burns ~50ms of CPU per request, so cpu consumption under load is
+	// deterministic regardless of request rate or handler efficiency: even at
+	// a modest ~10 rps the single MinScale pod uses ~500m against a 50m
+	// request — far past the 20% target. A trivial hello handler proved
+	// marginal in CI (scaled on one run, not the next).
+	codePath := framework.WriteTestData(t, "python/cpuburn/cpuburn.py")
+	// MinCPU=50 sets a 50m cpu request on the function container — required so
+	// the ContainerResource cpu metric has a denominator. TargetCPU=20 is low
+	// so sustained load trips the autoscaler quickly.
+	ns.CreateFunction(t, ctx, framework.FunctionOptions{
+		Name: fnName, Env: envName, Code: codePath,
+		ExecutorType: "newdeploy", MinScale: 1, MaxScale: 3,
+		TargetCPU: 20,
+		MinCPU:    50, MaxCPU: 100, MinMemory: 128, MaxMemory: 256,
+	})
+	ns.CreateRoute(t, ctx, framework.RouteOptions{Function: fnName, URL: routePath, Method: "GET"})
+
+	// Function serves traffic.
+	f.Router(t).GetEventually(t, ctx, routePath, framework.BodyContains("burned"))
+
+	// Metric-shape assertion: the executor must emit a ContainerResource cpu
+	// metric scoped to the function container (named after the env), not a
+	// pod-wide Resource metric. This fails fast on a regression of the
+	// ContainerResource rewrite, before we depend on actual scaling behavior.
+	hpa := ns.WaitForFunctionHPA(t, ctx, fnName, func(h *autoscalingv2.HorizontalPodAutoscaler) bool {
+		for _, m := range h.Spec.Metrics {
+			if m.Type == autoscalingv2.ContainerResourceMetricSourceType &&
+				m.ContainerResource != nil && m.ContainerResource.Container == envName {
+				return true
+			}
+		}
+		return false
+	}, "hpa carries a ContainerResource cpu metric scoped to the function container", 90*time.Second)
+
+	// Capture the HPA Generation now (against the live apiserver, which has
+	// applied its defaulting) so we can later prove the executor does not churn
+	// the HPA spec on subsequent reconciles. Generation increments only on spec
+	// writes; the HPA controller's status updates never touch it, so comparing
+	// it at the end is race-free w.r.t. the status writes happening throughout
+	// the test.
+	gen := hpa.Generation
+
+	// Sustained load: three concurrent load loops until the test finishes, so
+	// the autoscaler keeps observing elevated cpu across its stabilization
+	// window. LoadLoop's 100ms ticker coalesces while a request is in flight,
+	// so each loop's throughput is RTT-bound (~10 rps upper bound, lower in
+	// practice).
+	loadCtx, stopLoad := context.WithCancel(ctx)
+	t.Cleanup(stopLoad)
+	for i := 0; i < 3; i++ {
+		go f.Router(t).LoadLoop(loadCtx, routePath)
+	}
+
+	// Intermediate checkpoint for failure attribution: the metrics pipeline
+	// (metrics-server -> KCM) must surface a current cpu reading on the HPA
+	// before scaling can possibly happen.
+	ns.WaitForFunctionHPA(t, ctx, fnName, func(h *autoscalingv2.HorizontalPodAutoscaler) bool {
+		return len(h.Status.CurrentMetrics) > 0
+	}, "metrics pipeline reports container cpu", 3*time.Minute)
+
+	// Scale assertion: the behavior under test is the HPA's scale *decision*,
+	// not pod readiness — a freshly scaled-up pod can sit in ContainerCreating
+	// past any reasonable window on a loaded CI node (observed in practice).
+	// Assert DesiredReplicas (KCM computed a scale-up from the container cpu
+	// metric), then that the deployment controller acted on it (pods created;
+	// readiness not required). Never assert an exact replica count.
+	ns.WaitForFunctionHPA(t, ctx, fnName, func(h *autoscalingv2.HorizontalPodAutoscaler) bool {
+		return h.Status.DesiredReplicas >= 2
+	}, "hpa decided to scale above minscale under sustained load", 4*time.Minute)
+	ns.WaitForFunctionDeployment(t, ctx, fnName, func(d *appsv1.Deployment) bool {
+		return d.Status.Replicas >= 2
+	}, "deployment acted on the hpa scale decision", 2*time.Minute)
+
+	// Live-path idempotency guard: the fake clientset in the unit tests cannot
+	// prove the executor performs a true no-op reconcile under apiserver
+	// defaulting, so assert it here against the live object. Generation only
+	// increments on spec changes (status writes by the HPA controller do not
+	// bump it), so an unchanged Generation proves the executor did not churn
+	// HPA spec updates on repeated reconciles (e.g. defaulting-induced drift).
+	hpa = ns.FunctionHPA(t, ctx, fnName)
+	assert.Equal(t, gen, hpa.Generation, "executor must not churn HPA spec updates (defaulting-induced drift)")
+}
