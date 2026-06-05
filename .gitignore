@@ -48,3 +48,4 @@ cosign.key
 # SAST scan artefacts (SARIF reports)
 output.sarif
 *.sarif
+dist-local
