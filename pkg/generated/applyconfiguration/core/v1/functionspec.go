@@ -14,6 +14,13 @@ import (
 // with apply.
 //
 // FunctionSpec describes the contents of the function.
+// Bounded podspec safety rules — CEL admission gate for the simple pod-level
+// invariants. Per-container SecurityContext checks stay in the webhook
+// (ValidatePodSpecSafety) because iterating containers exceeds the CEL cost
+// budget; the rules here cover only the bounded, cheap cases. The has()
+// guards on each scalar are required: PodSpec's bool/string fields are
+// json:"...,omitempty" so a zero/empty value is OMITTED from the object,
+// and CEL errors with "no such key" if the rule accesses an absent field.
 type FunctionSpecApplyConfiguration struct {
 	// Environment is the build and runtime environment that this function is
 	// associated with. An Environment with this name should exist, otherwise the

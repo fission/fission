@@ -15,6 +15,11 @@ import (
 //
 // Environments
 // Runtime is the setting for environment runtime.
+// Bounded podspec / container safety rules — CEL admission gate for the
+// simple, bounded fields. Per-container PodSpec.containers iteration stays
+// in the webhook (ValidatePodSpecSafety / ValidateContainerSafety) because
+// it exceeds the CEL cost budget. The has() guards are required because
+// json:"...,omitempty" omits zero/empty values from the object.
 type RuntimeApplyConfiguration struct {
 	// Image for containing the language runtime.
 	Image *string `json:"image,omitempty"`
