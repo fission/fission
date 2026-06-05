@@ -37,3 +37,5 @@ annotations:
       description: "buildermgr RBAC for deployments/scale (required by the builder pool)"
     - kind: fixed
       description: "newdeploy waits for the package build before provisioning"
+    - kind: fixed
+      description: "Router will not be accessible for pods trying to access it from outside their namespace"
