@@ -252,6 +252,26 @@ func TestRewriteResourceMetricsToContainer(t *testing.T) {
 			mainContainer: "fn",
 			want:          []asv2.MetricSpec{nilResource},
 		},
+		{
+			// An empty list must be materialized as a container cpu metric:
+			// otherwise the apiserver defaulter injects a pod-wide Resource
+			// cpu 80% metric after the rewrite ran, re-introducing the
+			// missing-request failure and destabilizing the drift reconcile.
+			name:          "empty metrics defaulted to container cpu at 80 percent",
+			input:         nil,
+			mainContainer: "fn",
+			want: []asv2.MetricSpec{{
+				Type: asv2.ContainerResourceMetricSourceType,
+				ContainerResource: &asv2.ContainerResourceMetricSource{
+					Name:      corev1.ResourceCPU,
+					Container: "fn",
+					Target: asv2.MetricTarget{
+						Type:               asv2.UtilizationMetricType,
+						AverageUtilization: new(int32(80)),
+					},
+				},
+			}},
+		},
 	}
 
 	for _, tc := range tests {

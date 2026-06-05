@@ -59,6 +59,12 @@ func ConvertTargetCPUToCustomMetric(targetCPUVal int32) asv2.MetricSpec {
 	}
 }
 
+// defaultTargetCPUUtilization mirrors the apiserver's default for HPAs
+// submitted with an empty metrics list (a pod-wide Resource cpu metric at
+// 80% utilization). We materialize the same default ourselves, scoped to
+// the function container, so the defaulter never has to.
+const defaultTargetCPUUtilization int32 = 80
+
 // RewriteResourceMetricsToContainer converts pod-wide Resource cpu/memory
 // metrics to ContainerResource metrics scoped to mainContainer. Pod-wide
 // Resource metrics require *every* container in the pod to declare the
@@ -69,13 +75,36 @@ func ConvertTargetCPUToCustomMetric(targetCPUVal int32) asv2.MetricSpec {
 // emitting pod-wide Resource metrics (it cannot know the runtime container
 // name); the executor normalizes them here. Non-Resource metrics pass
 // through untouched.
+//
+// An EMPTY metrics list is also normalized: the apiserver's defaulter
+// injects a pod-wide Resource cpu 80% metric into empty lists *after* this
+// rewrite ran, re-introducing the missing-request failure (seen in CI on
+// `fission fn run-container` functions, which set no --targetcpu) and
+// making the metric-drift reconcile fight the defaulter on every pass
+// (computed empty vs. server-defaulted). Emitting the equivalent default
+// ourselves — ContainerResource cpu 80% on the function container — keeps
+// the default semantics, works without sidecar requests, and keeps the
+// drift comparison stable.
 func RewriteResourceMetricsToContainer(metrics []asv2.MetricSpec, mainContainer string, logger logr.Logger) []asv2.MetricSpec {
-	if len(metrics) == 0 {
-		return metrics
-	}
 	if mainContainer == "" {
 		logger.Info("WARNING: cannot scope pod-wide HPA resource metrics to the function container; main container name is empty, leaving metrics pod-wide")
 		return metrics
+	}
+	if len(metrics) == 0 {
+		target := defaultTargetCPUUtilization
+		logger.V(1).Info("defaulting empty HPA metrics to a container cpu metric",
+			"container", mainContainer, "target_utilization", target)
+		return []asv2.MetricSpec{{
+			Type: asv2.ContainerResourceMetricSourceType,
+			ContainerResource: &asv2.ContainerResourceMetricSource{
+				Name:      corev1.ResourceCPU,
+				Container: mainContainer,
+				Target: asv2.MetricTarget{
+					Type:               asv2.UtilizationMetricType,
+					AverageUtilization: &target,
+				},
+			},
+		}}
 	}
 	out := make([]asv2.MetricSpec, len(metrics))
 	for i, m := range metrics {
