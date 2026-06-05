@@ -14,6 +14,7 @@ import (
 // with apply.
 //
 // Builder is the setting for environment builder.
+// Bounded podspec / container safety rules — see the matching Runtime block above.
 type BuilderApplyConfiguration struct {
 	// Image for containing the language compilation environment.
 	Image *string `json:"image,omitempty"`

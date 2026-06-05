@@ -35,7 +35,7 @@ func (AuthLogin) SwaggerDoc() map[string]string {
 }
 
 var map_Builder = map[string]string{
-	"":          "Builder is the setting for environment builder.",
+	"":          "Builder is the setting for environment builder. Bounded podspec / container safety rules — see the matching Runtime block above.",
 	"image":     "Image for containing the language compilation environment.",
 	"command":   "(Optional) Default build command to run for this build environment.",
 	"container": "(Optional) Container allows the modification of the deployed builder container using the Kubernetes Container spec. Fission overrides the following fields: - Name - Image; set to the Builder.Image - Command; set to the Builder.Command - TerminationMessagePath - ImagePullPolicy - ReadinessProbe",
@@ -118,7 +118,8 @@ func (EnvironmentList) SwaggerDoc() map[string]string {
 }
 
 var map_EnvironmentReference = map[string]string{
-	"": "EnvironmentReference is a reference to an environment.",
+	"":     "EnvironmentReference is a reference to an environment. It is used by both FunctionSpec.Environment and PackageSpec.Environment.",
+	"name": "Name of the referenced environment. Optional + omitempty: an unset reference is omitted and its Pattern skipped (a container function has no environment; a Package with an unset environment is admitted and fails later with a clear builder error — the fission CLI still rejects it). When set, it must be a DNS-1123 label.",
 }
 
 func (EnvironmentReference) SwaggerDoc() map[string]string {
@@ -204,7 +205,7 @@ func (FunctionReference) SwaggerDoc() map[string]string {
 }
 
 var map_FunctionSpec = map[string]string{
-	"":                "FunctionSpec describes the contents of the function.",
+	"":                "FunctionSpec describes the contents of the function. Bounded podspec safety rules — CEL admission gate for the simple pod-level invariants. Per-container SecurityContext checks stay in the webhook (ValidatePodSpecSafety) because iterating containers exceeds the CEL cost budget; the rules here cover only the bounded, cheap cases. The has() guards on each scalar are required: PodSpec's bool/string fields are json:\"...,omitempty\" so a zero/empty value is OMITTED from the object, and CEL errors with \"no such key\" if the rule accesses an absent field.",
 	"environment":     "Environment is the build and runtime environment that this function is associated with. An Environment with this name should exist, otherwise the function cannot be invoked.",
 	"package":         "Reference to a package containing deployment and optionally the source.",
 	"secrets":         "Reference to a list of secrets.",
@@ -413,6 +414,7 @@ func (PackageList) SwaggerDoc() map[string]string {
 
 var map_PackageRef = map[string]string{
 	"":                "PackageRef is a reference to the package.",
+	"name":            "The package reference is optional, so Name is omitempty: when unset it is omitted from the object and the Pattern below is skipped (a function may legitimately have no package). A present name must be a DNS-1123 label. A leaf Pattern (cheap structural validation) is used rather than a spec-level CEL matches() (which would exceed the cost budget).",
 	"resourceversion": "Including resource version in the reference forces the function to be updated on package update, making it possible to cache the function based on its metadata.",
 }
 
@@ -453,7 +455,7 @@ func (RouterAuthToken) SwaggerDoc() map[string]string {
 }
 
 var map_Runtime = map[string]string{
-	"":          "Runtime is the setting for environment runtime.",
+	"":          "Runtime is the setting for environment runtime. Bounded podspec / container safety rules — CEL admission gate for the simple, bounded fields. Per-container PodSpec.containers iteration stays in the webhook (ValidatePodSpecSafety / ValidateContainerSafety) because it exceeds the CEL cost budget. The has() guards are required because json:\"...,omitempty\" omits zero/empty values from the object.",
 	"image":     "Image for containing the language runtime.",
 	"container": "(Optional) Container allows the modification of the deployed runtime container using the Kubernetes Container spec. Fission overrides the following fields: - Name - Image; set to the Runtime.Image - TerminationMessagePath - ImagePullPolicy\n\nYou can set either PodSpec or Container, but not both. kubebuilder:validation:XPreserveUnknownFields=true",
 	"podspec":   "(Optional) Podspec allows modification of deployed runtime pod with Kubernetes PodSpec The merging logic is briefly described below and detailed MergePodSpec function - Volumes mounts and env variables for function and fetcher container are appended - All additional containers and init containers are appended - Volume definitions are appended - Lists such as tolerations, ImagePullSecrets, HostAliases are appended - Structs are merged and variables from pod spec take precedence\n\nYou can set either PodSpec or Container, but not both.",
