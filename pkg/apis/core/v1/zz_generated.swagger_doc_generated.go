@@ -235,6 +235,27 @@ func (FunctionStatus) SwaggerDoc() map[string]string {
 	return map_FunctionStatus
 }
 
+var map_GatewayParentRef = map[string]string{
+	"":            "GatewayParentRef references a Gateway (and optionally a specific listener) that the generated HTTPRoute attaches to. It mirrors the subset of gateway.networking.k8s.io ParentReference that Fission needs.",
+	"name":        "Name of the parent Gateway.",
+	"namespace":   "Namespace of the parent Gateway. Defaults to the router's namespace when empty. A non-empty, different namespace needs a ReferenceGrant.",
+	"sectionName": "SectionName selects a specific listener on the Gateway. Empty attaches to all compatible listeners.",
+	"port":        "Port narrows attachment to a specific Gateway listener port.",
+}
+
+func (GatewayParentRef) SwaggerDoc() map[string]string {
+	return map_GatewayParentRef
+}
+
+var map_GatewayRouteConfig = map[string]string{
+	"":           "GatewayRouteConfig is the Gateway-API-specific portion of a RouteConfig.",
+	"parentRefs": "ParentRefs are the Gateways the generated HTTPRoute attaches to. The referenced Gateways are owned by the cluster operator (Fission does not create Gateways or GatewayClasses). A cross-namespace parentRef requires a ReferenceGrant in the Gateway's namespace.",
+}
+
+func (GatewayRouteConfig) SwaggerDoc() map[string]string {
+	return map_GatewayRouteConfig
+}
+
 var map_HTTPTrigger = map[string]string{
 	"": "HTTPTrigger is the trigger invokes user functions when receiving HTTP requests.",
 }
@@ -274,8 +295,9 @@ var map_HTTPTriggerSpec = map[string]string{
 	"method":        "Use Methods instead of Method. This field is going to be deprecated in a future release HTTP method to access a function.",
 	"methods":       "HTTP methods to access a function",
 	"functionref":   "FunctionReference is a reference to the target function.",
-	"createingress": "If CreateIngress is true, router will create an ingress definition.",
-	"ingressconfig": "IngressConfig for router to set up Ingress.",
+	"createingress": "If CreateIngress is true, router will create an ingress definition. Deprecated: the Kubernetes Ingress API is frozen. Use RouteConfig (with Provider \"gateway\") to expose functions through the Gateway API instead. CreateIngress + IngressConfig keep working for the deprecation window but will be removed in a future release.",
+	"ingressconfig": "IngressConfig for router to set up Ingress. Deprecated: superseded by RouteConfig. See CreateIngress.",
+	"routeConfig":   "RouteConfig declares how the router exposes this trigger through an external route provider (Ingress or the Gateway API). It is the provider-neutral successor to CreateIngress + IngressConfig: when set it takes precedence over those fields. Leave nil to expose the function only through the router's own URL.",
 	"corsConfig":    "CorsConfig configures CORS response headers for browser callers of this trigger. When nil, the router emits no Access-Control-* headers and the browser's Same-Origin Policy enforces cluster isolation from cross-origin pages (the deny-by-default behaviour). Set this field to allowlist specific origins for SPAs that legitimately call this trigger cross-origin.",
 }
 
@@ -292,7 +314,7 @@ func (HTTPTriggerStatus) SwaggerDoc() map[string]string {
 }
 
 var map_IngressConfig = map[string]string{
-	"":            "IngressConfig is for router to set up Ingress.",
+	"":            "IngressConfig is for router to set up Ingress. Deprecated: superseded by RouteConfig. The Kubernetes Ingress API is frozen; use RouteConfig with Provider \"gateway\" for new triggers.",
 	"annotations": "Annotations will be added to metadata when creating Ingress.",
 	"path":        "Path is for path matching. The format of path depends on what ingress controller you used.",
 	"host":        "Host is for ingress controller to apply rules. If host is empty or \"*\", the rule applies to all inbound HTTP traffic.",
@@ -444,6 +466,20 @@ var map_PackageStatus = map[string]string{
 
 func (PackageStatus) SwaggerDoc() map[string]string {
 	return map_PackageStatus
+}
+
+var map_RouteConfig = map[string]string{
+	"":            "RouteConfig declares how the router exposes an HTTPTrigger through an external route provider. It is the provider-neutral successor to the deprecated CreateIngress + IngressConfig fields: the router routes it to the matching RouteProvider based on Provider.",
+	"provider":    "Provider selects the route provider that reconciles this trigger's external route. \"ingress\" creates a networking.k8s.io Ingress (the deprecated path); \"gateway\" creates a gateway.networking.k8s.io HTTPRoute attached to an operator-managed Gateway. The \"gateway\" provider must be enabled on the router (GATEWAY_API_ENABLED).",
+	"hostnames":   "Hostnames the route matches. For the gateway provider these become the HTTPRoute hostnames; for the ingress provider only the first is used as the Ingress rule host. Empty matches all hosts.",
+	"path":        "Path is the request path the route matches (must be absolute, start with '/'). Defaults to \"/\" when empty.",
+	"annotations": "Annotations are added to the generated route object (Ingress or HTTPRoute). Use these for implementation-specific configuration understood by your Ingress controller or Gateway implementation.",
+	"tls":         "TLS names a Secret holding the TLS key and certificate. It applies to the ingress provider only; with the gateway provider TLS termination is configured on the Gateway listener and this field is ignored.",
+	"gateway":     "Gateway holds Gateway-API-specific configuration. Required (at least one parentRef) when Provider is \"gateway\", unless the router is configured with a default Gateway parentRef.",
+}
+
+func (RouteConfig) SwaggerDoc() map[string]string {
+	return map_RouteConfig
 }
 
 var map_RouterAuthToken = map[string]string{

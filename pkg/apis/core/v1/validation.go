@@ -456,6 +456,9 @@ func (spec HTTPTriggerSpec) Validate() error {
 	}
 
 	errs = errors.Join(errs, spec.IngressConfig.Validate())
+	if spec.RouteConfig != nil {
+		errs = errors.Join(errs, spec.RouteConfig.Validate())
+	}
 	if spec.CorsConfig != nil {
 		errs = errors.Join(errs, spec.CorsConfig.Validate())
 	}
@@ -622,6 +625,68 @@ func (config IngressConfig) Validate() error {
 	if totalSize > (int64)(totalAnnotationSizeLimitB) {
 		msg := fmt.Sprintf("must have at most %v characters", totalSize)
 		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "HTTPTriggerSpec.IngressConfig.Annotations.value", totalAnnotationSizeLimitB, msg))
+	}
+
+	return errs
+}
+
+// Validate checks a RouteConfig. It mirrors the CEL rules on the RouteConfig
+// type so the CLI, the admission gate, and the router reconciler's
+// status-Condition path all agree. Cluster-side concerns the API server cannot
+// know (whether the gateway provider is enabled, whether a default Gateway is
+// configured) are reported by the router reconciler as status Conditions, not
+// here.
+func (config RouteConfig) Validate() error {
+	var errs error
+
+	switch config.Provider {
+	case RouteProviderIngress, RouteProviderGateway:
+	default:
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "HTTPTriggerSpec.RouteConfig.Provider", config.Provider, "must be one of: ingress, gateway"))
+	}
+
+	if len(config.Path) > 0 {
+		if !strings.HasPrefix(config.Path, "/") {
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "HTTPTriggerSpec.RouteConfig.Path", config.Path, "must be an absolute path"))
+		}
+		if _, err := regexp.CompilePOSIX(config.Path); err != nil {
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "HTTPTriggerSpec.RouteConfig.Path", config.Path, "must be a valid regex"))
+		}
+	}
+
+	for _, host := range config.Hostnames {
+		if len(host) == 0 || host == "*" {
+			continue
+		}
+		if strings.Contains(host, "*") {
+			for _, msg := range validation.IsWildcardDNS1123Subdomain(host) {
+				errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "HTTPTriggerSpec.RouteConfig.Hostnames", host, msg))
+			}
+			continue
+		}
+		for _, msg := range validation.IsDNS1123Subdomain(host) {
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "HTTPTriggerSpec.RouteConfig.Hostnames", host, msg))
+		}
+	}
+
+	var totalSize int64
+	for k, v := range config.Annotations {
+		for _, msg := range validation.IsQualifiedName(strings.ToLower(k)) {
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "HTTPTriggerSpec.RouteConfig.Annotations.key", k, msg))
+		}
+		totalSize += (int64)(len(k)) + (int64)(len(v))
+	}
+	if totalSize > (int64)(totalAnnotationSizeLimitB) {
+		msg := fmt.Sprintf("must have at most %v characters", totalSize)
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "HTTPTriggerSpec.RouteConfig.Annotations.value", totalAnnotationSizeLimitB, msg))
+	}
+
+	if config.Gateway != nil {
+		for i, ref := range config.Gateway.ParentRefs {
+			if len(ref.Name) == 0 {
+				errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, fmt.Sprintf("HTTPTriggerSpec.RouteConfig.Gateway.ParentRefs[%d].Name", i), ref.Name, "must not be empty"))
+			}
+		}
 	}
 
 	return errs

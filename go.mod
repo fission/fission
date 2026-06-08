@@ -48,6 +48,7 @@ require (
 	k8s.io/client-go v0.36.1
 	k8s.io/metrics v0.36.1
 	sigs.k8s.io/controller-runtime v0.24.1
+	sigs.k8s.io/gateway-api v1.5.1
 	sigs.k8s.io/structured-merge-diff/v6 v6.4.0
 	sigs.k8s.io/yaml v1.6.0
 )

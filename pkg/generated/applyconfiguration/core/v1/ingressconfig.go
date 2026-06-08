@@ -10,6 +10,8 @@ package v1
 // with apply.
 //
 // IngressConfig is for router to set up Ingress.
+// Deprecated: superseded by RouteConfig. The Kubernetes Ingress API is
+// frozen; use RouteConfig with Provider "gateway" for new triggers.
 type IngressConfigApplyConfiguration struct {
 	// Annotations will be added to metadata when creating Ingress.
 	Annotations map[string]string `json:"annotations,omitempty"`

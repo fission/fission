@@ -230,6 +230,60 @@ func TestIngressConfigValidate(t *testing.T) {
 	require.Error(t, IngressConfig{Path: "no-leading-slash"}.Validate())
 }
 
+func TestRouteConfigValidate(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		config  RouteConfig
+		wantErr bool
+	}{
+		{
+			name:   "ingress provider, absolute path, wildcard host",
+			config: RouteConfig{Provider: "ingress", Path: "/foo", Hostnames: []string{"*"}},
+		},
+		{
+			name:   "gateway provider with a parentRef",
+			config: RouteConfig{Provider: "gateway", Path: "/api", Hostnames: []string{"demo.example.com"}, Gateway: &GatewayRouteConfig{ParentRefs: []GatewayParentRef{{Name: "eg"}}}},
+		},
+		{
+			name:    "unknown provider",
+			config:  RouteConfig{Provider: "nginx"},
+			wantErr: true,
+		},
+		{
+			name:    "empty provider",
+			config:  RouteConfig{},
+			wantErr: true,
+		},
+		{
+			name:    "non-absolute path",
+			config:  RouteConfig{Provider: "gateway", Path: "no-leading-slash", Gateway: &GatewayRouteConfig{ParentRefs: []GatewayParentRef{{Name: "eg"}}}},
+			wantErr: true,
+		},
+		{
+			name:    "invalid hostname",
+			config:  RouteConfig{Provider: "ingress", Hostnames: []string{"Not_A_Host"}},
+			wantErr: true,
+		},
+		{
+			name:    "gateway parentRef without a name",
+			config:  RouteConfig{Provider: "gateway", Gateway: &GatewayRouteConfig{ParentRefs: []GatewayParentRef{{Name: ""}}}},
+			wantErr: true,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := tc.config.Validate()
+			if tc.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
 func TestKubernetesWatchTriggerSpecValidate(t *testing.T) {
 	t.Parallel()
 	require.NoError(t, KubernetesWatchTriggerSpec{

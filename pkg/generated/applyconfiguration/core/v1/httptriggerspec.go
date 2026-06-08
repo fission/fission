@@ -34,10 +34,21 @@ type HTTPTriggerSpecApplyConfiguration struct {
 	// FunctionReference is a reference to the target function.
 	FunctionReference *FunctionReferenceApplyConfiguration `json:"functionref,omitempty"`
 	// If CreateIngress is true, router will create an ingress definition.
+	// Deprecated: the Kubernetes Ingress API is frozen. Use RouteConfig
+	// (with Provider "gateway") to expose functions through the Gateway API
+	// instead. CreateIngress + IngressConfig keep working for the
+	// deprecation window but will be removed in a future release.
 	CreateIngress *bool `json:"createingress,omitempty"`
 	// TODO: make IngressConfig an independent Fission resource
 	// IngressConfig for router to set up Ingress.
+	// Deprecated: superseded by RouteConfig. See CreateIngress.
 	IngressConfig *IngressConfigApplyConfiguration `json:"ingressconfig,omitempty"`
+	// RouteConfig declares how the router exposes this trigger through an
+	// external route provider (Ingress or the Gateway API). It is the
+	// provider-neutral successor to CreateIngress + IngressConfig: when set
+	// it takes precedence over those fields. Leave nil to expose the
+	// function only through the router's own URL.
+	RouteConfig *RouteConfigApplyConfiguration `json:"routeConfig,omitempty"`
 	// CorsConfig configures CORS response headers for browser
 	// callers of this trigger. When nil, the router emits no
 	// Access-Control-* headers and the browser's Same-Origin
@@ -125,6 +136,14 @@ func (b *HTTPTriggerSpecApplyConfiguration) WithCreateIngress(value bool) *HTTPT
 // If called multiple times, the IngressConfig field is set to the value of the last call.
 func (b *HTTPTriggerSpecApplyConfiguration) WithIngressConfig(value *IngressConfigApplyConfiguration) *HTTPTriggerSpecApplyConfiguration {
 	b.IngressConfig = value
+	return b
+}
+
+// WithRouteConfig sets the RouteConfig field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the RouteConfig field is set to the value of the last call.
+func (b *HTTPTriggerSpecApplyConfiguration) WithRouteConfig(value *RouteConfigApplyConfiguration) *HTTPTriggerSpecApplyConfiguration {
+	b.RouteConfig = value
 	return b
 }
 
