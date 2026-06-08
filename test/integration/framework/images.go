@@ -23,6 +23,8 @@ type RuntimeImages struct {
 	JVMBuilder       string
 	JVMJersey        string
 	JVMJerseyBuilder string
+	Rust             string
+	RustBuilder      string
 	TS               string
 	// Container is a plain HTTP-server image used by the container-executor
 	// backend test (it serves HTTP itself, unlike Fission runtime images).
@@ -41,6 +43,8 @@ func loadRuntimeImages() RuntimeImages {
 		JVMBuilder:       os.Getenv("JVM_BUILDER_IMAGE"),
 		JVMJersey:        os.Getenv("JVM_JERSEY_RUNTIME_IMAGE"),
 		JVMJerseyBuilder: os.Getenv("JVM_JERSEY_BUILDER_IMAGE"),
+		Rust:             os.Getenv("RUST_RUNTIME_IMAGE"),
+		RustBuilder:      os.Getenv("RUST_BUILDER_IMAGE"),
 		TS:               os.Getenv("TS_RUNTIME_IMAGE"),
 		Container:        os.Getenv("CONTAINER_RUNTIME_IMAGE"),
 	}
@@ -79,6 +83,21 @@ func (r RuntimeImages) RequireTS(skip skipper) string {
 // RequireJVMJersey skips the test if JVM_JERSEY_RUNTIME_IMAGE is unset.
 func (r RuntimeImages) RequireJVMJersey(skip skipper) string {
 	return requireImage(skip, "JVM_JERSEY_RUNTIME_IMAGE", r.JVMJersey)
+}
+
+// RequireJVMJerseyBuilder skips the test if JVM_JERSEY_BUILDER_IMAGE is unset.
+func (r RuntimeImages) RequireJVMJerseyBuilder(skip skipper) string {
+	return requireImage(skip, "JVM_JERSEY_BUILDER_IMAGE", r.JVMJerseyBuilder)
+}
+
+// RequireRust skips the test if RUST_RUNTIME_IMAGE is unset.
+func (r RuntimeImages) RequireRust(skip skipper) string {
+	return requireImage(skip, "RUST_RUNTIME_IMAGE", r.Rust)
+}
+
+// RequireRustBuilder skips the test if RUST_BUILDER_IMAGE is unset.
+func (r RuntimeImages) RequireRustBuilder(skip skipper) string {
+	return requireImage(skip, "RUST_BUILDER_IMAGE", r.RustBuilder)
 }
 
 // RequireJVM skips the test if JVM_RUNTIME_IMAGE is unset.

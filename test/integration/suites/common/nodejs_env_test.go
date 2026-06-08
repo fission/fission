@@ -60,15 +60,16 @@ func TestNodejsEnv(t *testing.T) {
 	})
 
 	t.Run("post_body", func(t *testing.T) {
-		// The vendored wordCount.js fixture calls
-		// `context.request.split(" ")`. In current Fission node runtime,
-		// `context.request` is the express req object, which has no
-		// `.split` method — the function 500s. Skipping until either
-		// the fixture is updated (e.g. `context.request.body`) or the
-		// runtime contract documented otherwise. Bash version may have
-		// passed against an older runtime where `context.request` was
-		// the body string.
-		t.Skip("wordCount.js fixture incompatible with current node-env runtime contract")
+		// wordCount.js reads the POST body from context.request.body
+		// (node-env registers express.text({type:"text/*"}), so a
+		// text/plain body is a string there) and returns the word count.
+		fnName := "fn-node-wc-" + ns.ID
+		codePath := framework.WriteTestData(t, "nodejs/env_test/test-case-3/wordCount.js")
+		ns.CreateFunction(t, ctx, framework.FunctionOptions{Name: fnName, Env: envV1, Code: codePath})
+		ns.CreateRoute(t, ctx, framework.RouteOptions{Function: fnName, URL: "/" + fnName, Method: "POST"})
+		body := f.Router(t).PostEventually(t, ctx, "/"+fnName, "text/plain",
+			[]byte("the quick brown fox"), framework.BodyContains("4"))
+		require.Equal(t, "4", body)
 	})
 
 	t.Run("v2_builder", func(t *testing.T) {

@@ -140,17 +140,31 @@ jobs:
       # Wait-for-readiness covers cluster startup races.
 
       - name: Go integration tests (common + serial phases)
-        # Margin over the hard go-test timeouts this step contains (common 25m +
+        # Margin over the hard go-test timeouts this step contains (common 35m +
         # serial 18m) plus image preload / port-forward setup, so a slow-but-valid
         # run isn't killed by the step timeout before a go-test timeout can fire.
-        timeout-minutes: 50
+        # common bumped to 35m for the rust/jvm/jersey builder tests (cargo crate
+        # fetch + Maven dependency download on first build).
+        timeout-minutes: 60
         env:
           NODE_RUNTIME_IMAGE: ghcr.io/fission/node-env-22
           NODE_BUILDER_IMAGE: ghcr.io/fission/node-builder-22
           PYTHON_RUNTIME_IMAGE: ghcr.io/fission/python-env
           PYTHON_BUILDER_IMAGE: ghcr.io/fission/python-builder
-          GO_RUNTIME_IMAGE: ghcr.io/fission/go-env-1.23
-          GO_BUILDER_IMAGE: ghcr.io/fission/go-builder-1.23
+          GO_RUNTIME_IMAGE: ghcr.io/fission/go-env-1.26
+          GO_BUILDER_IMAGE: ghcr.io/fission/go-builder-1.26
+          # Rust env builds through its builder even for single-file functions
+          # (TestRustEnv); no code-only path.
+          RUST_RUNTIME_IMAGE: ghcr.io/fission/rust-env
+          RUST_BUILDER_IMAGE: ghcr.io/fission/rust-builder
+          # JVM (Spring Boot) via the builder path (TestJavaBuilder); the
+          # jar-deploy test (TestJavaEnv) stays skipped without JAVA_HELLO_JAR_PATH.
+          JVM_RUNTIME_IMAGE: ghcr.io/fission/jvm-env
+          JVM_BUILDER_IMAGE: ghcr.io/fission/jvm-builder
+          # JVM Jersey via the builder path (TestJVMJerseyBuilder); the
+          # jar-deploy test (TestJVMJerseyEnv) stays skipped without JVM_JERSEY_JAR_PATH.
+          JVM_JERSEY_RUNTIME_IMAGE: ghcr.io/fission/jvm-jersey-env-25
+          JVM_JERSEY_BUILDER_IMAGE: ghcr.io/fission/jvm-jersey-builder-25
           # Container-executor backend test (TestBackendContainer): a plain
           # HTTP server image that returns 200 on GET / and honours a PORT env
           # var. hello-app defaults to 8080 but reads PORT; the test injects
@@ -175,7 +189,7 @@ jobs:
           export -f load_image
           export KIND_CLUSTER_NAME
           pids=()
-          for img in "$NODE_RUNTIME_IMAGE" "$NODE_BUILDER_IMAGE" "$PYTHON_RUNTIME_IMAGE" "$PYTHON_BUILDER_IMAGE" "$GO_RUNTIME_IMAGE" "$GO_BUILDER_IMAGE" "$CONTAINER_RUNTIME_IMAGE"; do
+          for img in "$NODE_RUNTIME_IMAGE" "$NODE_BUILDER_IMAGE" "$PYTHON_RUNTIME_IMAGE" "$PYTHON_BUILDER_IMAGE" "$GO_RUNTIME_IMAGE" "$GO_BUILDER_IMAGE" "$RUST_RUNTIME_IMAGE" "$RUST_BUILDER_IMAGE" "$JVM_RUNTIME_IMAGE" "$JVM_BUILDER_IMAGE" "$JVM_JERSEY_RUNTIME_IMAGE" "$JVM_JERSEY_BUILDER_IMAGE" "$CONTAINER_RUNTIME_IMAGE"; do
             load_image "$img" &
             pids+=($!)
           done
@@ -239,7 +253,7 @@ jobs:
             COVER_FLAGS=(-cover -coverpkg=github.com/fission/fission/...)
             COVER_ARGS=(-args -test.gocoverdir="$PWD/covdata-cli")
           fi
-          go test -tags=integration "${COVER_FLAGS[@]}" -timeout=25m -parallel 6 -v \
+          go test -tags=integration "${COVER_FLAGS[@]}" -timeout=35m -parallel 6 -v \
             ./test/integration/suites/common/... "${COVER_ARGS[@]}"
 
           # Serial phase: tests that mutate cluster-wide control-plane state

@@ -16,5 +16,5 @@ import "embed"
 // dotfiles and underscore-prefixed files (e.g. Python's __init__.py) are
 // included.
 //
-//go:embed all:nodejs all:python all:go all:misc all:java
+//go:embed all:nodejs all:python all:go all:misc all:java all:rust all:jvm_jersey
 var FS embed.FS
