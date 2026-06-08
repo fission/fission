@@ -10,6 +10,7 @@ import (
 
 	v1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 )
@@ -569,5 +570,114 @@ func TestGetDeployLabels(t *testing.T) {
 				t.Errorf("GetDeployLabels() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestGetHTTPRouteSpec(t *testing.T) {
+	defaultRefs := []gwapiv1.ParentReference{{Name: "default-gw"}}
+
+	tests := []struct {
+		name           string
+		rc             *fv1.RouteConfig
+		wantParentName gwapiv1.ObjectName
+		wantHostnames  []gwapiv1.Hostname
+		wantPath       string
+	}{
+		{
+			name: "explicit parentRef, host and path",
+			rc: &fv1.RouteConfig{
+				Provider:  fv1.RouteProviderGateway,
+				Hostnames: []string{"a.example.com"},
+				Path:      "/api",
+				Gateway:   &fv1.GatewayRouteConfig{ParentRefs: []fv1.GatewayParentRef{{Name: "eg"}}},
+			},
+			wantParentName: "eg",
+			wantHostnames:  []gwapiv1.Hostname{"a.example.com"},
+			wantPath:       "/api",
+		},
+		{
+			name:           "falls back to default parentRef and path '/'",
+			rc:             &fv1.RouteConfig{Provider: fv1.RouteProviderGateway},
+			wantParentName: "default-gw",
+			wantHostnames:  nil,
+			wantPath:       "/",
+		},
+		{
+			name: "wildcard and empty hostnames are dropped",
+			rc: &fv1.RouteConfig{
+				Provider:  fv1.RouteProviderGateway,
+				Hostnames: []string{"*", "", "b.example.com"},
+				Gateway:   &fv1.GatewayRouteConfig{ParentRefs: []fv1.GatewayParentRef{{Name: "eg"}}},
+			},
+			wantParentName: "eg",
+			wantHostnames:  []gwapiv1.Hostname{"b.example.com"},
+			wantPath:       "/",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			trigger := &fv1.HTTPTrigger{
+				ObjectMeta: metav1.ObjectMeta{Name: "t1", Namespace: "default"},
+				Spec:       fv1.HTTPTriggerSpec{RouteConfig: tt.rc},
+			}
+			hr := GetHTTPRouteSpec("fission", trigger, defaultRefs)
+
+			if hr.Name != "t1" || hr.Namespace != "fission" {
+				t.Fatalf("metadata = %q/%q, want fission/t1", hr.Namespace, hr.Name)
+			}
+			if len(hr.Spec.ParentRefs) != 1 || hr.Spec.ParentRefs[0].Name != tt.wantParentName {
+				t.Fatalf("parentRefs = %#v, want name %q", hr.Spec.ParentRefs, tt.wantParentName)
+			}
+			if !reflect.DeepEqual(hr.Spec.Hostnames, tt.wantHostnames) {
+				t.Fatalf("hostnames = %#v, want %#v", hr.Spec.Hostnames, tt.wantHostnames)
+			}
+			if len(hr.Spec.Rules) != 1 || len(hr.Spec.Rules[0].Matches) != 1 {
+				t.Fatalf("rules = %#v", hr.Spec.Rules)
+			}
+			match := hr.Spec.Rules[0].Matches[0]
+			if match.Path == nil || match.Path.Value == nil || *match.Path.Value != tt.wantPath {
+				t.Fatalf("path = %#v, want %q", match.Path, tt.wantPath)
+			}
+			if match.Path.Type == nil || *match.Path.Type != gwapiv1.PathMatchPathPrefix {
+				t.Fatalf("path type = %#v, want PathPrefix", match.Path.Type)
+			}
+			if len(hr.Spec.Rules[0].BackendRefs) != 1 {
+				t.Fatalf("backendRefs = %#v", hr.Spec.Rules[0].BackendRefs)
+			}
+			be := hr.Spec.Rules[0].BackendRefs[0]
+			if be.Name != "router" || be.Port == nil || *be.Port != 80 {
+				t.Fatalf("backend = %q:%v, want router:80", be.Name, be.Port)
+			}
+		})
+	}
+}
+
+func TestGetHTTPRouteSpecParentRefFields(t *testing.T) {
+	trigger := &fv1.HTTPTrigger{
+		ObjectMeta: metav1.ObjectMeta{Name: "t", Namespace: "default"},
+		Spec: fv1.HTTPTriggerSpec{RouteConfig: &fv1.RouteConfig{
+			Provider: fv1.RouteProviderGateway,
+			Gateway: &fv1.GatewayRouteConfig{ParentRefs: []fv1.GatewayParentRef{
+				{Name: "eg", Namespace: "envoy-gateway", SectionName: "http", Port: 80},
+			}},
+		}},
+	}
+	hr := GetHTTPRouteSpec("fission", trigger, nil)
+	if len(hr.Spec.ParentRefs) != 1 {
+		t.Fatalf("parentRefs = %#v, want 1", hr.Spec.ParentRefs)
+	}
+	pr := hr.Spec.ParentRefs[0]
+	if pr.Name != "eg" {
+		t.Fatalf("name = %q, want eg", pr.Name)
+	}
+	if pr.Namespace == nil || *pr.Namespace != "envoy-gateway" {
+		t.Fatalf("namespace = %v, want envoy-gateway", pr.Namespace)
+	}
+	if pr.SectionName == nil || *pr.SectionName != "http" {
+		t.Fatalf("sectionName = %v, want http", pr.SectionName)
+	}
+	if pr.Port == nil || *pr.Port != 80 {
+		t.Fatalf("port = %v, want 80", pr.Port)
 	}
 }

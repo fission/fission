@@ -121,6 +121,19 @@ finalizerEnabled: true
 ##
 enableIstio: false
 
+## gatewayAPI configures the router's Gateway API route provider. When enabled,
+## the router creates a gateway.networking.k8s.io HTTPRoute for each HTTPTrigger
+## whose routeConfig.provider is "gateway", attaching it to an operator-managed
+## Gateway (Fission does not create Gateways or GatewayClasses). Enabling it also
+## grants the router RBAC for httproutes/referencegrants. Requires the Gateway
+## API CRDs and a Gateway controller (e.g. Envoy Gateway) installed in the cluster.
+gatewayAPI:
+  enabled: false
+  ## defaultParentRef is an optional default Gateway that HTTPRoutes attach to
+  ## when a trigger does not list its own routeConfig.gateway.parentRefs.
+  ## Format: "name" or "namespace/name".
+  defaultParentRef: ""
+
 ## Kubernetes client QPS and Burst settings
 ##
 ## kubernetesClientQPS represents the maximum queries per second to the kubernetes api server from client instances of fission components.

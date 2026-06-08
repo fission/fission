@@ -36,6 +36,8 @@ manifests:
           debugEnv: "false"
           fetcher.imageTag: ""
           functionNamespace: ""
+          gatewayAPI.enabled: "false"
+          gatewayAPI.defaultParentRef: ""
           grafana.dashboards.enabled: "false"
           imageTag: ""
           influxdb.enabled: "false"
@@ -134,6 +136,15 @@ profiles:
       - op: replace
         path: /manifests/helm/releases/0/setValues/networkPolicy.enabled
         value: true
+      # Exercise the Gateway API route provider in CI (paired with an Envoy
+      # Gateway install + a Gateway in the fission namespace in push_pr.yaml,
+      # and the TEST_GATEWAY_PARENTREF-gated TestGatewayRoute).
+      - op: replace
+        path: /manifests/helm/releases/0/setValues/gatewayAPI.enabled
+        value: true
+      - op: replace
+        path: /manifests/helm/releases/0/setValues/gatewayAPI.defaultParentRef
+        value: fission/eg-gateway
   - name: kind-ci-old
     patches:
       - op: replace

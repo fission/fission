@@ -104,8 +104,12 @@ spec:
                   rule: '!(has(self.allowCredentials) && self.allowCredentials &&
                     has(self.allowOrigins) && ''*'' in self.allowOrigins)'
               createingress:
-                description: If CreateIngress is true, router will create an ingress
-                  definition.
+                description: |-
+                  If CreateIngress is true, router will create an ingress definition.
+                  Deprecated: the Kubernetes Ingress API is frozen. Use RouteConfig
+                  (with Provider "gateway") to expose functions through the Gateway API
+                  instead. CreateIngress + IngressConfig keep working for the
+                  deprecation window but will be removed in a future release.
                 type: boolean
               functionref:
                 description: FunctionReference is a reference to the target function.
@@ -151,7 +155,9 @@ spec:
                 pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*)?$
                 type: string
               ingressconfig:
-                description: IngressConfig for router to set up Ingress.
+                description: |-
+                  IngressConfig for router to set up Ingress.
+                  Deprecated: superseded by RouteConfig. See CreateIngress.
                 properties:
                   annotations:
                     additionalProperties:
@@ -234,6 +240,113 @@ spec:
                 description: RelativeURL is the exposed URL for external client to
                   access a function with.
                 type: string
+              routeConfig:
+                description: |-
+                  RouteConfig declares how the router exposes this trigger through an
+                  external route provider (Ingress or the Gateway API). It is the
+                  provider-neutral successor to CreateIngress + IngressConfig: when set
+                  it takes precedence over those fields. Leave nil to expose the
+                  function only through the router's own URL.
+                properties:
+                  annotations:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      Annotations are added to the generated route object (Ingress or
+                      HTTPRoute). Use these for implementation-specific configuration
+                      understood by your Ingress controller or Gateway implementation.
+                    nullable: true
+                    type: object
+                  gateway:
+                    description: |-
+                      Gateway holds Gateway-API-specific configuration. Required (at least
+                      one parentRef) when Provider is "gateway", unless the router is
+                      configured with a default Gateway parentRef.
+                    properties:
+                      parentRefs:
+                        description: |-
+                          ParentRefs are the Gateways the generated HTTPRoute attaches to. The
+                          referenced Gateways are owned by the cluster operator (Fission does
+                          not create Gateways or GatewayClasses). A cross-namespace parentRef
+                          requires a ReferenceGrant in the Gateway's namespace.
+                        items:
+                          description: |-
+                            GatewayParentRef references a Gateway (and optionally a specific listener)
+                            that the generated HTTPRoute attaches to. It mirrors the subset of
+                            gateway.networking.k8s.io ParentReference that Fission needs.
+                          properties:
+                            name:
+                              description: Name of the parent Gateway.
+                              type: string
+                            namespace:
+                              description: |-
+                                Namespace of the parent Gateway. Defaults to the router's namespace
+                                when empty. A non-empty, different namespace needs a ReferenceGrant.
+                              type: string
+                            port:
+                              description: Port narrows attachment to a specific Gateway
+                                listener port.
+                              format: int32
+                              maximum: 65535
+                              minimum: 1
+                              type: integer
+                            sectionName:
+                              description: |-
+                                SectionName selects a specific listener on the Gateway. Empty attaches
+                                to all compatible listeners.
+                              type: string
+                          required:
+                          - name
+                          type: object
+                        type: array
+                        x-kubernetes-list-type: atomic
+                    type: object
+                  hostnames:
+                    description: |-
+                      Hostnames the route matches. For the gateway provider these become
+                      the HTTPRoute hostnames; for the ingress provider only the first is
+                      used as the Ingress rule host. Empty matches all hosts.
+                    items:
+                      type: string
+                    type: array
+                    x-kubernetes-list-type: set
+                  path:
+                    description: |-
+                      Path is the request path the route matches (must be absolute, start
+                      with '/'). Defaults to "/" when empty.
+                    type: string
+                  provider:
+                    description: |-
+                      Provider selects the route provider that reconciles this trigger's
+                      external route. "ingress" creates a networking.k8s.io Ingress (the
+                      deprecated path); "gateway" creates a gateway.networking.k8s.io
+                      HTTPRoute attached to an operator-managed Gateway. The "gateway"
+                      provider must be enabled on the router (GATEWAY_API_ENABLED).
+                    enum:
+                    - ingress
+                    - gateway
+                    type: string
+                  tls:
+                    description: |-
+                      TLS names a Secret holding the TLS key and certificate. It applies to
+                      the ingress provider only; with the gateway provider TLS termination
+                      is configured on the Gateway listener and this field is ignored.
+                    type: string
+                required:
+                - provider
+                type: object
+                x-kubernetes-validations:
+                - message: routeConfig.path must be an absolute path (start with '/')
+                  rule: '!has(self.path) || self.path == '''' || self.path.startsWith(''/'')'
+                - message: routeConfig.gateway.parentRefs must list at least one Gateway
+                    when provider is 'gateway' (unless the router is configured with
+                    a default Gateway)
+                  rule: self.provider != 'gateway' || (has(self.gateway) && size(self.gateway.parentRefs)
+                    > 0)
+                - message: routeConfig.tls applies to the ingress provider only; gateway
+                    TLS is configured on the Gateway listener
+                  rule: self.provider != 'gateway' || !has(self.tls) || self.tls ==
+                    ''
             required:
             - functionref
             type: object

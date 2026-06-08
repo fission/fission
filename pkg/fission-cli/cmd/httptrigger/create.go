@@ -134,11 +134,21 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		}
 	}
 
+	warnIngressDeprecated(input)
+
 	ingressConfig, err := GetIngressConfig(
 		input.StringSlice(flagkey.HtIngressAnnotation), input.String(flagkey.HtIngressRule),
 		input.String(flagkey.HtIngressTLS), fallbackURL, nil)
 	if err != nil {
 		return fmt.Errorf("error parsing ingress configuration: %w", err)
+	}
+
+	routeConfig, err := GetRouteConfig(
+		input.String(flagkey.HtRouteProvider), input.StringSlice(flagkey.HtRouteHost),
+		input.String(flagkey.HtRoutePath), input.StringSlice(flagkey.HtRouteAnnotation),
+		input.String(flagkey.HtRouteTLS), input.StringSlice(flagkey.HtGateway), fallbackURL)
+	if err != nil {
+		return fmt.Errorf("error parsing route configuration: %w", err)
 	}
 
 	opts.trigger = &fv1.HTTPTrigger{
@@ -150,6 +160,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 			FunctionReference: *functionRef,
 			CreateIngress:     input.Bool(flagkey.HtIngress),
 			IngressConfig:     *ingressConfig,
+			RouteConfig:       routeConfig,
 			Prefix:            &prefix,
 			KeepPrefix:        input.Bool(flagkey.HtKeepPrefix),
 		},
@@ -178,6 +189,17 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 	fmt.Printf("trigger '%v' created\n", opts.trigger.Name)
 
 	return nil
+}
+
+// warnIngressDeprecated emits a deprecation warning when any of the legacy
+// --createingress / --ingress* flags are used, pointing users at the Gateway
+// API. Shared by the create and update subcommands.
+func warnIngressDeprecated(input cli.Input) {
+	if input.Bool(flagkey.HtIngress) || input.IsSet(flagkey.HtIngressRule) ||
+		input.IsSet(flagkey.HtIngressAnnotation) || input.IsSet(flagkey.HtIngressTLS) {
+		console.Warn("--createingress and --ingress* are deprecated: the Kubernetes Ingress API is frozen. " +
+			"Expose functions through the Gateway API instead, e.g. --route-provider gateway --gateway <name> --route-host <host>.")
+	}
 }
 
 // GetMethod returns one of HTTP method

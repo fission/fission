@@ -15,6 +15,18 @@ const (
 	DefaultRequestsPerPod = 1
 )
 
+// RouteProviderType selects how the router exposes an HTTPTrigger externally.
+// It is the type of RouteConfig.Provider; the allowed values are the constants
+// below (also enforced by the field's kubebuilder Enum marker).
+type RouteProviderType string
+
+const (
+	// RouteProviderIngress creates a networking.k8s.io Ingress (deprecated).
+	RouteProviderIngress RouteProviderType = "ingress"
+	// RouteProviderGateway creates a gateway.networking.k8s.io HTTPRoute.
+	RouteProviderGateway RouteProviderType = "gateway"
+)
+
 //
 // To add a Fission CRD type:
 //   1. Create a "spec" type, for everything in the type except metadata
@@ -785,13 +797,26 @@ type (
 		FunctionReference FunctionReference `json:"functionref"`
 
 		// If CreateIngress is true, router will create an ingress definition.
+		// Deprecated: the Kubernetes Ingress API is frozen. Use RouteConfig
+		// (with Provider "gateway") to expose functions through the Gateway API
+		// instead. CreateIngress + IngressConfig keep working for the
+		// deprecation window but will be removed in a future release.
 		// +optional
 		CreateIngress bool `json:"createingress"`
 
 		// TODO: make IngressConfig an independent Fission resource
 		// IngressConfig for router to set up Ingress.
+		// Deprecated: superseded by RouteConfig. See CreateIngress.
 		// +optional
 		IngressConfig IngressConfig `json:"ingressconfig"`
+
+		// RouteConfig declares how the router exposes this trigger through an
+		// external route provider (Ingress or the Gateway API). It is the
+		// provider-neutral successor to CreateIngress + IngressConfig: when set
+		// it takes precedence over those fields. Leave nil to expose the
+		// function only through the router's own URL.
+		// +optional
+		RouteConfig *RouteConfig `json:"routeConfig,omitempty"`
 
 		// CorsConfig configures CORS response headers for browser
 		// callers of this trigger. When nil, the router emits no
@@ -851,6 +876,8 @@ type (
 	}
 
 	// IngressConfig is for router to set up Ingress.
+	// Deprecated: superseded by RouteConfig. The Kubernetes Ingress API is
+	// frozen; use RouteConfig with Provider "gateway" for new triggers.
 	// +kubebuilder:validation:XValidation:rule="!has(self.path) || self.path == '' || self.path.startsWith('/')",message="ingressconfig.path must be an absolute path (start with '/')"
 	// +kubebuilder:validation:XValidation:rule="!has(self.host) || self.host == '' || self.host == '*' || self.host.matches(r'^(\\*\\.)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$')",message="ingressconfig.host must be empty, '*', a valid DNS1123 subdomain, or a wildcard DNS1123 subdomain (e.g. *.example.com)"
 	IngressConfig struct {
@@ -875,6 +902,89 @@ type (
 		// key and crt must match the value of Host field.
 		// +optional
 		TLS string `json:"tls"`
+	}
+
+	// RouteConfig declares how the router exposes an HTTPTrigger through an
+	// external route provider. It is the provider-neutral successor to the
+	// deprecated CreateIngress + IngressConfig fields: the router routes it to
+	// the matching RouteProvider based on Provider.
+	// +kubebuilder:validation:XValidation:rule="!has(self.path) || self.path == '' || self.path.startsWith('/')",message="routeConfig.path must be an absolute path (start with '/')"
+	// +kubebuilder:validation:XValidation:rule="self.provider != 'gateway' || (has(self.gateway) && size(self.gateway.parentRefs) > 0)",message="routeConfig.gateway.parentRefs must list at least one Gateway when provider is 'gateway' (unless the router is configured with a default Gateway)"
+	// +kubebuilder:validation:XValidation:rule="self.provider != 'gateway' || !has(self.tls) || self.tls == ''",message="routeConfig.tls applies to the ingress provider only; gateway TLS is configured on the Gateway listener"
+	RouteConfig struct {
+		// Provider selects the route provider that reconciles this trigger's
+		// external route. "ingress" creates a networking.k8s.io Ingress (the
+		// deprecated path); "gateway" creates a gateway.networking.k8s.io
+		// HTTPRoute attached to an operator-managed Gateway. The "gateway"
+		// provider must be enabled on the router (GATEWAY_API_ENABLED).
+		// +kubebuilder:validation:Enum=ingress;gateway
+		Provider RouteProviderType `json:"provider"`
+
+		// Hostnames the route matches. For the gateway provider these become
+		// the HTTPRoute hostnames; for the ingress provider only the first is
+		// used as the Ingress rule host. Empty matches all hosts.
+		// +optional
+		// +listType=set
+		Hostnames []string `json:"hostnames,omitempty"`
+
+		// Path is the request path the route matches (must be absolute, start
+		// with '/'). Defaults to "/" when empty.
+		// +optional
+		Path string `json:"path,omitempty"`
+
+		// Annotations are added to the generated route object (Ingress or
+		// HTTPRoute). Use these for implementation-specific configuration
+		// understood by your Ingress controller or Gateway implementation.
+		// +optional
+		// +nullable
+		Annotations map[string]string `json:"annotations,omitempty"`
+
+		// TLS names a Secret holding the TLS key and certificate. It applies to
+		// the ingress provider only; with the gateway provider TLS termination
+		// is configured on the Gateway listener and this field is ignored.
+		// +optional
+		TLS string `json:"tls,omitempty"`
+
+		// Gateway holds Gateway-API-specific configuration. Required (at least
+		// one parentRef) when Provider is "gateway", unless the router is
+		// configured with a default Gateway parentRef.
+		// +optional
+		Gateway *GatewayRouteConfig `json:"gateway,omitempty"`
+	}
+
+	// GatewayRouteConfig is the Gateway-API-specific portion of a RouteConfig.
+	GatewayRouteConfig struct {
+		// ParentRefs are the Gateways the generated HTTPRoute attaches to. The
+		// referenced Gateways are owned by the cluster operator (Fission does
+		// not create Gateways or GatewayClasses). A cross-namespace parentRef
+		// requires a ReferenceGrant in the Gateway's namespace.
+		// +optional
+		// +listType=atomic
+		ParentRefs []GatewayParentRef `json:"parentRefs,omitempty"`
+	}
+
+	// GatewayParentRef references a Gateway (and optionally a specific listener)
+	// that the generated HTTPRoute attaches to. It mirrors the subset of
+	// gateway.networking.k8s.io ParentReference that Fission needs.
+	GatewayParentRef struct {
+		// Name of the parent Gateway.
+		Name string `json:"name"`
+
+		// Namespace of the parent Gateway. Defaults to the router's namespace
+		// when empty. A non-empty, different namespace needs a ReferenceGrant.
+		// +optional
+		Namespace string `json:"namespace,omitempty"`
+
+		// SectionName selects a specific listener on the Gateway. Empty attaches
+		// to all compatible listeners.
+		// +optional
+		SectionName string `json:"sectionName,omitempty"`
+
+		// Port narrows attachment to a specific Gateway listener port.
+		// +optional
+		// +kubebuilder:validation:Minimum=1
+		// +kubebuilder:validation:Maximum=65535
+		Port int32 `json:"port,omitempty"`
 	}
 
 	// KubernetesWatchTriggerSpec defines spec of KuberenetesWatchTrigger

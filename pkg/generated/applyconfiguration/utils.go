@@ -54,6 +54,10 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &corev1.FunctionSpecApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("FunctionStatus"):
 		return &corev1.FunctionStatusApplyConfiguration{}
+	case v1.SchemeGroupVersion.WithKind("GatewayParentRef"):
+		return &corev1.GatewayParentRefApplyConfiguration{}
+	case v1.SchemeGroupVersion.WithKind("GatewayRouteConfig"):
+		return &corev1.GatewayRouteConfigApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("HTTPTrigger"):
 		return &corev1.HTTPTriggerApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("HTTPTriggerCorsConfig"):
@@ -86,6 +90,8 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &corev1.PackageSpecApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("PackageStatus"):
 		return &corev1.PackageStatusApplyConfiguration{}
+	case v1.SchemeGroupVersion.WithKind("RouteConfig"):
+		return &corev1.RouteConfigApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("Runtime"):
 		return &corev1.RuntimeApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("SecretReference"):
