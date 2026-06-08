@@ -612,7 +612,7 @@ func Test_GetRouteConfig(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name      string
-		provider  string
+		provider  fv1.RouteProviderType
 		hosts     []string
 		path      string
 		anns      []string
@@ -687,7 +687,7 @@ func Test_GetRouteConfig(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			rc, err := GetRouteConfig(tt.provider, tt.hosts, tt.path, tt.anns, tt.tls, tt.gateways, tt.fallback)
+			rc, err := GetRouteConfig(string(tt.provider), tt.hosts, tt.path, tt.anns, tt.tls, tt.gateways, tt.fallback)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatal("expected error, got nil")

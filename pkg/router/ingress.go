@@ -47,7 +47,7 @@ func newIngressRouteProvider(logger logr.Logger, kubeClient kubernetes.Interface
 	}
 }
 
-func (p *ingressRouteProvider) Name() string { return fv1.RouteProviderIngress }
+func (p *ingressRouteProvider) Name() string { return string(fv1.RouteProviderIngress) }
 
 // Reconcile brings the Ingress for a trigger to its desired state (level-based):
 // create it when the trigger requests the ingress provider and it is missing,

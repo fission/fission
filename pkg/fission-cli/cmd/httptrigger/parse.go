@@ -122,7 +122,7 @@ func GetRouteConfig(provider string, hosts []string, path string, annotations []
 	if provider == "" {
 		return nil, nil
 	}
-	if provider != fv1.RouteProviderIngress && provider != fv1.RouteProviderGateway {
+	if provider != string(fv1.RouteProviderIngress) && provider != string(fv1.RouteProviderGateway) {
 		return nil, fmt.Errorf("invalid --%s %q: must be one of %q, %q", "route-provider", provider, fv1.RouteProviderIngress, fv1.RouteProviderGateway)
 	}
 
@@ -136,7 +136,7 @@ func GetRouteConfig(provider string, hosts []string, path string, annotations []
 	}
 
 	rc := &fv1.RouteConfig{
-		Provider:    provider,
+		Provider:    fv1.RouteProviderType(provider),
 		Hostnames:   hosts,
 		Path:        path,
 		Annotations: anns,

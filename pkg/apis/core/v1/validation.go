@@ -631,27 +631,25 @@ func (config IngressConfig) Validate() error {
 }
 
 // Validate checks a RouteConfig. It mirrors the CEL rules on the RouteConfig
-// type so the CLI, the admission gate, and the router reconciler's
-// status-Condition path all agree. Cluster-side concerns the API server cannot
-// know (whether the gateway provider is enabled, whether a default Gateway is
-// configured) are reported by the router reconciler as status Conditions, not
-// here.
+// type so the CLI and the admission gate agree on what is rejected. Cluster-side
+// concerns the API server cannot know — whether the gateway provider is enabled,
+// whether a default Gateway is configured — are not checked here; the router
+// reconciler logs and retries those, so a misconfiguration surfaces in the
+// router logs rather than as a CRD validation error.
 func (config RouteConfig) Validate() error {
 	var errs error
 
 	switch config.Provider {
 	case RouteProviderIngress, RouteProviderGateway:
 	default:
-		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "HTTPTriggerSpec.RouteConfig.Provider", config.Provider, "must be one of: ingress, gateway"))
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "HTTPTriggerSpec.RouteConfig.Provider", string(config.Provider), "must be one of: ingress, gateway"))
 	}
 
-	if len(config.Path) > 0 {
-		if !strings.HasPrefix(config.Path, "/") {
-			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "HTTPTriggerSpec.RouteConfig.Path", config.Path, "must be an absolute path"))
-		}
-		if _, err := regexp.CompilePOSIX(config.Path); err != nil {
-			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "HTTPTriggerSpec.RouteConfig.Path", config.Path, "must be a valid regex"))
-		}
+	// Path is matched literally by both providers (the gateway provider emits a
+	// PathPrefix match with this value), so it is validated as an absolute path,
+	// not a regex.
+	if len(config.Path) > 0 && !strings.HasPrefix(config.Path, "/") {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "HTTPTriggerSpec.RouteConfig.Path", config.Path, "must be an absolute path"))
 	}
 
 	for _, host := range config.Hostnames {

@@ -652,3 +652,32 @@ func TestGetHTTPRouteSpec(t *testing.T) {
 		})
 	}
 }
+
+func TestGetHTTPRouteSpecParentRefFields(t *testing.T) {
+	trigger := &fv1.HTTPTrigger{
+		ObjectMeta: metav1.ObjectMeta{Name: "t", Namespace: "default"},
+		Spec: fv1.HTTPTriggerSpec{RouteConfig: &fv1.RouteConfig{
+			Provider: fv1.RouteProviderGateway,
+			Gateway: &fv1.GatewayRouteConfig{ParentRefs: []fv1.GatewayParentRef{
+				{Name: "eg", Namespace: "envoy-gateway", SectionName: "http", Port: 80},
+			}},
+		}},
+	}
+	hr := GetHTTPRouteSpec("fission", trigger, nil)
+	if len(hr.Spec.ParentRefs) != 1 {
+		t.Fatalf("parentRefs = %#v, want 1", hr.Spec.ParentRefs)
+	}
+	pr := hr.Spec.ParentRefs[0]
+	if pr.Name != "eg" {
+		t.Fatalf("name = %q, want eg", pr.Name)
+	}
+	if pr.Namespace == nil || *pr.Namespace != "envoy-gateway" {
+		t.Fatalf("namespace = %v, want envoy-gateway", pr.Namespace)
+	}
+	if pr.SectionName == nil || *pr.SectionName != "http" {
+		t.Fatalf("sectionName = %v, want http", pr.SectionName)
+	}
+	if pr.Port == nil || *pr.Port != 80 {
+		t.Fatalf("port = %v, want 80", pr.Port)
+	}
+}

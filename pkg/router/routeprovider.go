@@ -30,10 +30,10 @@ type RouteProvider interface {
 	DeleteByName(ctx context.Context, name string) error
 }
 
-// desiredRouteProvider returns the name of the provider that should own this
-// trigger's external route, or "" when the trigger requests none. RouteConfig
-// (the forward API) takes precedence over the deprecated CreateIngress flag.
-func desiredRouteProvider(trigger *fv1.HTTPTrigger) string {
+// desiredRouteProvider returns the provider that should own this trigger's
+// external route, or "" when the trigger requests none. RouteConfig (the
+// forward API) takes precedence over the deprecated CreateIngress flag.
+func desiredRouteProvider(trigger *fv1.HTTPTrigger) fv1.RouteProviderType {
 	if trigger.Spec.RouteConfig != nil {
 		return trigger.Spec.RouteConfig.Provider
 	}

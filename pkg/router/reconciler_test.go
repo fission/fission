@@ -18,6 +18,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	gatewayfake "sigs.k8s.io/gateway-api/pkg/client/clientset/versioned/fake"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
@@ -77,6 +78,53 @@ func TestHTTPTriggerReconcilerIngressLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	_, err = kc.NetworkingV1().Ingresses(podNamespace).Get(t.Context(), "t1", metav1.GetOptions{})
 	assert.True(t, apierrors.IsNotFound(err), "ingress must be removed when the trigger is deleted")
+	requireRebuildSignal(t, ts)
+}
+
+// TestHTTPTriggerReconcilerGatewayAndSwitch wires BOTH providers (ingress +
+// gateway) into the reconciler — the seam this refactor introduces — and walks
+// the create→switch path: a gateway trigger creates an HTTPRoute and no Ingress,
+// then switching it to the ingress provider must delete the HTTPRoute and create
+// the Ingress in a single reconcile pass (cross-provider self-clean).
+func TestHTTPTriggerReconcilerGatewayAndSwitch(t *testing.T) {
+	trigger := &fv1.HTTPTrigger{
+		ObjectMeta: metav1.ObjectMeta{Name: "tg", Namespace: "default"},
+		Spec: fv1.HTTPTriggerSpec{
+			RelativeURL: "/tg", Methods: []string{"GET"},
+			RouteConfig: &fv1.RouteConfig{
+				Provider:  fv1.RouteProviderGateway,
+				Hostnames: []string{"tg.example.com"},
+				Gateway:   &fv1.GatewayRouteConfig{ParentRefs: []fv1.GatewayParentRef{{Name: "eg"}}},
+			},
+		},
+	}
+	ts, cl, kc := newReconcilerTS(t, trigger)
+	gw := gatewayfake.NewClientset()
+	r := &httpTriggerReconciler{logger: ts.logger, client: cl, ts: ts, providers: []RouteProvider{
+		newIngressRouteProvider(ts.logger, kc),
+		newGatewayRouteProvider(ts.logger, gw, nil),
+	}}
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "tg", Namespace: "default"}}
+
+	// Gateway provider creates the HTTPRoute; ingress provider creates nothing.
+	_, err := r.Reconcile(t.Context(), req)
+	require.NoError(t, err)
+	_, err = gw.GatewayV1().HTTPRoutes(podNamespace).Get(t.Context(), "tg", metav1.GetOptions{})
+	require.NoError(t, err, "HTTPRoute must be created for a gateway trigger")
+	_, err = kc.NetworkingV1().Ingresses(podNamespace).Get(t.Context(), "tg", metav1.GetOptions{})
+	assert.True(t, apierrors.IsNotFound(err), "no Ingress should exist for a gateway trigger")
+	requireRebuildSignal(t, ts)
+
+	// Switch to the ingress provider: the HTTPRoute is removed and the Ingress
+	// is created in the same reconcile pass.
+	trigger.Spec.RouteConfig.Provider = fv1.RouteProviderIngress
+	require.NoError(t, cl.Update(t.Context(), trigger))
+	_, err = r.Reconcile(t.Context(), req)
+	require.NoError(t, err)
+	_, err = gw.GatewayV1().HTTPRoutes(podNamespace).Get(t.Context(), "tg", metav1.GetOptions{})
+	assert.True(t, apierrors.IsNotFound(err), "HTTPRoute must be removed after switching to the ingress provider")
+	_, err = kc.NetworkingV1().Ingresses(podNamespace).Get(t.Context(), "tg", metav1.GetOptions{})
+	require.NoError(t, err, "Ingress must be created after switching to the ingress provider")
 	requireRebuildSignal(t, ts)
 }
 

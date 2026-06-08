@@ -343,6 +343,10 @@ spec:
                     a default Gateway)
                   rule: self.provider != 'gateway' || (has(self.gateway) && size(self.gateway.parentRefs)
                     > 0)
+                - message: routeConfig.tls applies to the ingress provider only; gateway
+                    TLS is configured on the Gateway listener
+                  rule: self.provider != 'gateway' || !has(self.tls) || self.tls ==
+                    ''
             required:
             - functionref
             type: object

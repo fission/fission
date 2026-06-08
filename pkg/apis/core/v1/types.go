@@ -15,13 +15,16 @@ const (
 	DefaultRequestsPerPod = 1
 )
 
-// Route providers select how the router exposes an HTTPTrigger externally.
-// These are the allowed values of RouteConfig.Provider.
+// RouteProviderType selects how the router exposes an HTTPTrigger externally.
+// It is the type of RouteConfig.Provider; the allowed values are the constants
+// below (also enforced by the field's kubebuilder Enum marker).
+type RouteProviderType string
+
 const (
 	// RouteProviderIngress creates a networking.k8s.io Ingress (deprecated).
-	RouteProviderIngress = "ingress"
+	RouteProviderIngress RouteProviderType = "ingress"
 	// RouteProviderGateway creates a gateway.networking.k8s.io HTTPRoute.
-	RouteProviderGateway = "gateway"
+	RouteProviderGateway RouteProviderType = "gateway"
 )
 
 //
@@ -907,6 +910,7 @@ type (
 	// the matching RouteProvider based on Provider.
 	// +kubebuilder:validation:XValidation:rule="!has(self.path) || self.path == '' || self.path.startsWith('/')",message="routeConfig.path must be an absolute path (start with '/')"
 	// +kubebuilder:validation:XValidation:rule="self.provider != 'gateway' || (has(self.gateway) && size(self.gateway.parentRefs) > 0)",message="routeConfig.gateway.parentRefs must list at least one Gateway when provider is 'gateway' (unless the router is configured with a default Gateway)"
+	// +kubebuilder:validation:XValidation:rule="self.provider != 'gateway' || !has(self.tls) || self.tls == ''",message="routeConfig.tls applies to the ingress provider only; gateway TLS is configured on the Gateway listener"
 	RouteConfig struct {
 		// Provider selects the route provider that reconciles this trigger's
 		// external route. "ingress" creates a networking.k8s.io Ingress (the
@@ -914,7 +918,7 @@ type (
 		// HTTPRoute attached to an operator-managed Gateway. The "gateway"
 		// provider must be enabled on the router (GATEWAY_API_ENABLED).
 		// +kubebuilder:validation:Enum=ingress;gateway
-		Provider string `json:"provider"`
+		Provider RouteProviderType `json:"provider"`
 
 		// Hostnames the route matches. For the gateway provider these become
 		// the HTTPRoute hostnames; for the ingress provider only the first is

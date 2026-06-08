@@ -24,6 +24,21 @@ func GetIngressSpec(namespace string, trigger *fv1.HTTPTrigger) *v1.Ingress {
 	if len(trigger.Spec.IngressConfig.Host) > 0 && len(trigger.Spec.IngressConfig.Path) > 0 {
 		host, path = trigger.Spec.IngressConfig.Host, trigger.Spec.IngressConfig.Path
 	}
+	annotations := trigger.Spec.IngressConfig.Annotations
+	tlsHost, tlsSecret := trigger.Spec.IngressConfig.Host, trigger.Spec.IngressConfig.TLS
+
+	// RouteConfig (the provider-neutral successor) takes precedence over the
+	// deprecated Host/IngressConfig fields when it selects the ingress provider.
+	if rc := trigger.Spec.RouteConfig; rc != nil && rc.Provider == fv1.RouteProviderIngress {
+		if len(rc.Hostnames) > 0 {
+			host, tlsHost = rc.Hostnames[0], rc.Hostnames[0]
+		}
+		if rc.Path != "" {
+			path = rc.Path
+		}
+		annotations = rc.Annotations
+		tlsSecret = rc.TLS
+	}
 
 	// In Ingress, to accept requests from all host, the host field will
 	// be an empty string instead of "*" shown in kubectl. So replace it
@@ -33,13 +48,13 @@ func GetIngressSpec(namespace string, trigger *fv1.HTTPTrigger) *v1.Ingress {
 	}
 
 	var ingTLS []v1.IngressTLS
-	if len(trigger.Spec.IngressConfig.TLS) > 0 {
+	if len(tlsSecret) > 0 {
 		ingTLS = []v1.IngressTLS{
 			{
 				Hosts: []string{
-					trigger.Spec.IngressConfig.Host,
+					tlsHost,
 				},
-				SecretName: trigger.Spec.IngressConfig.TLS,
+				SecretName: tlsSecret,
 			},
 		}
 	}
@@ -53,7 +68,7 @@ func GetIngressSpec(namespace string, trigger *fv1.HTTPTrigger) *v1.Ingress {
 			// https://github.com/kubernetes/kubernetes/issues/17088
 			// We need to revisit this in future, once Kubernetes supports cross namespace ingress
 			Namespace:   namespace,
-			Annotations: trigger.Spec.IngressConfig.Annotations,
+			Annotations: annotations,
 		},
 		Spec: v1.IngressSpec{
 			TLS: ingTLS,

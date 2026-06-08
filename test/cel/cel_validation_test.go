@@ -303,3 +303,63 @@ func TestCELKubernetesWatchTriggerNamespace(t *testing.T) {
 		})
 	}
 }
+
+func TestCELHTTPTriggerRouteConfig(t *testing.T) {
+	fc := client(t)
+
+	ht := func(name string, mut func(*fv1.HTTPTrigger)) *fv1.HTTPTrigger {
+		h := &fv1.HTTPTrigger{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
+			Spec: fv1.HTTPTriggerSpec{
+				RelativeURL:       "/" + name,
+				Methods:           []string{"GET"},
+				FunctionReference: fv1.FunctionReference{Type: fv1.FunctionReferenceTypeFunctionName, Name: "fn"},
+				RouteConfig: &fv1.RouteConfig{
+					Provider: fv1.RouteProviderGateway,
+					Gateway:  &fv1.GatewayRouteConfig{ParentRefs: []fv1.GatewayParentRef{{Name: "eg"}}},
+				},
+			},
+		}
+		if mut != nil {
+			mut(h)
+		}
+		return h
+	}
+
+	cases := []struct {
+		name    string
+		ht      *fv1.HTTPTrigger
+		wantErr string // empty => expect accept
+	}{
+		{"valid gateway with parentRef", ht("rc-valid", nil), ""},
+		{"valid ingress provider", ht("rc-ingress", func(h *fv1.HTTPTrigger) {
+			h.Spec.RouteConfig = &fv1.RouteConfig{Provider: fv1.RouteProviderIngress}
+		}), ""},
+		{"gateway without parentRefs", ht("rc-noparent", func(h *fv1.HTTPTrigger) {
+			h.Spec.RouteConfig.Gateway = nil
+		}), "parentRefs"},
+		{"unknown provider", ht("rc-badprovider", func(h *fv1.HTTPTrigger) {
+			h.Spec.RouteConfig.Provider = fv1.RouteProviderType("nginx")
+		}), "provider"},
+		{"non-absolute path", ht("rc-badpath", func(h *fv1.HTTPTrigger) {
+			h.Spec.RouteConfig.Path = "no-slash"
+		}), "path"},
+		{"tls with gateway provider", ht("rc-gwtls", func(h *fv1.HTTPTrigger) {
+			h.Spec.RouteConfig.TLS = "some-secret"
+		}), "tls"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := fc.CoreV1().HTTPTriggers(ns).Create(t.Context(), tc.ht, metav1.CreateOptions{})
+			if tc.wantErr == "" {
+				assert.NoError(t, err)
+				return
+			}
+			require.Error(t, err, "apiserver should reject")
+			if !strings.Contains(err.Error(), tc.wantErr) {
+				assert.Contains(t, strings.ToLower(err.Error()), strings.ToLower(tc.wantErr))
+			}
+		})
+	}
+}

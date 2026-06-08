@@ -136,26 +136,56 @@ func (opts *UpdateSubCommand) complete(input cli.Input) (err error) {
 	if input.IsSet(flagkey.HtRouteProvider) || input.IsSet(flagkey.HtRouteHost) ||
 		input.IsSet(flagkey.HtRoutePath) || input.IsSet(flagkey.HtRouteAnnotation) ||
 		input.IsSet(flagkey.HtRouteTLS) || input.IsSet(flagkey.HtGateway) {
-		fallbackURL := ""
-		if ht.Spec.Prefix != nil && *ht.Spec.Prefix != "" {
-			fallbackURL = *ht.Spec.Prefix
-		} else {
-			fallbackURL = ht.Spec.RelativeURL
+		// Merge into the existing RouteConfig so a partial update (e.g. only
+		// --route-host) preserves previously-set fields, mirroring how the
+		// ingress path threads the existing IngressConfig through GetIngressConfig.
+		rc := &fv1.RouteConfig{}
+		if ht.Spec.RouteConfig != nil {
+			rc = ht.Spec.RouteConfig.DeepCopy()
 		}
-		// Default the provider to the existing one so the other --route-* flags
-		// can be tweaked without re-specifying --route-provider.
-		provider := input.String(flagkey.HtRouteProvider)
-		if provider == "" && ht.Spec.RouteConfig != nil {
-			provider = ht.Spec.RouteConfig.Provider
+		if input.IsSet(flagkey.HtRouteProvider) {
+			rc.Provider = fv1.RouteProviderType(input.String(flagkey.HtRouteProvider))
 		}
-		routeConfig, err := GetRouteConfig(
-			provider, input.StringSlice(flagkey.HtRouteHost), input.String(flagkey.HtRoutePath),
-			input.StringSlice(flagkey.HtRouteAnnotation), input.String(flagkey.HtRouteTLS),
-			input.StringSlice(flagkey.HtGateway), fallbackURL)
-		if err != nil {
-			return fmt.Errorf("error parsing route configuration: %w", err)
+		if input.IsSet(flagkey.HtRouteHost) {
+			rc.Hostnames = input.StringSlice(flagkey.HtRouteHost)
 		}
-		ht.Spec.RouteConfig = routeConfig
+		if input.IsSet(flagkey.HtRoutePath) {
+			rc.Path = input.String(flagkey.HtRoutePath)
+		}
+		if input.IsSet(flagkey.HtRouteTLS) {
+			rc.TLS = input.String(flagkey.HtRouteTLS)
+		}
+		if input.IsSet(flagkey.HtRouteAnnotation) {
+			// "-" clears all annotations, matching the ingress flag semantics.
+			remove, anns, err := getIngressAnnotations(input.StringSlice(flagkey.HtRouteAnnotation))
+			if err != nil {
+				return fmt.Errorf("illegal route annotation: %w", err)
+			}
+			if remove {
+				rc.Annotations = nil
+			} else {
+				rc.Annotations = anns
+			}
+		}
+		if input.IsSet(flagkey.HtGateway) {
+			parentRefs, err := parseGatewayParentRefs(input.StringSlice(flagkey.HtGateway))
+			if err != nil {
+				return err
+			}
+			rc.Gateway = &fv1.GatewayRouteConfig{ParentRefs: parentRefs}
+		}
+		if rc.Provider == "" {
+			return fmt.Errorf("--%s is required to configure a route (one of %q, %q)",
+				flagkey.HtRouteProvider, fv1.RouteProviderIngress, fv1.RouteProviderGateway)
+		}
+		if rc.Path == "" {
+			if ht.Spec.Prefix != nil && *ht.Spec.Prefix != "" {
+				rc.Path = *ht.Spec.Prefix
+			} else {
+				rc.Path = ht.Spec.RelativeURL
+			}
+		}
+		ht.Spec.RouteConfig = rc
 	}
 
 	opts.trigger = ht

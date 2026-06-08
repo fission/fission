@@ -6,6 +6,8 @@ package router
 
 import (
 	"context"
+	"errors"
+	"fmt"
 
 	"github.com/go-logr/logr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -42,26 +44,54 @@ func (r *httpTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	if err := r.client.Get(ctx, req.NamespacedName, trigger); err != nil {
 		if apierrors.IsNotFound(err) {
 			// Deleted: drop any route object it owned (idempotent by name) and
-			// rebuild the mux without it.
+			// rebuild the mux without it. Aggregate provider errors and return
+			// them so a transient API failure on delete is retried rather than
+			// leaking an orphaned route object.
+			var errs error
 			for _, p := range r.providers {
 				if err := p.DeleteByName(ctx, req.Name); err != nil {
 					r.logger.Error(err, "failed to delete route on trigger deletion", "provider", p.Name(), "trigger", req.Name)
+					errs = errors.Join(errs, fmt.Errorf("%s: %w", p.Name(), err))
 				}
 			}
 			r.ts.syncTriggers()
-			return ctrl.Result{}, nil
+			return ctrl.Result{}, errs
 		}
 		return ctrl.Result{}, err
 	}
+	// Warn when a trigger requests a provider the router did not register (e.g.
+	// requesting the gateway provider while GATEWAY_API_ENABLED is unset): no
+	// provider will create a route, so make the misconfiguration visible in the
+	// router logs rather than failing silently.
+	if want := desiredRouteProvider(trigger); want != "" && !r.hasProvider(want) {
+		r.logger.Info("trigger requests a route provider that is not enabled on this router; no route will be created",
+			"provider", want, "trigger", trigger.Name, "namespace", trigger.Namespace)
+	}
 	// Each provider creates/updates its object when the trigger requests it and
-	// deletes its object otherwise, so switching providers self-cleans.
+	// deletes its object otherwise, so switching providers self-cleans. Errors
+	// are aggregated and returned so controller-runtime requeues with backoff —
+	// a transient API/RBAC error then retries instead of being dropped. (A
+	// permanent config error, e.g. provider=gateway with no parentRefs, also
+	// requeues; backoff caps the cost and the error is logged each pass.)
+	var errs error
 	for _, p := range r.providers {
 		if err := p.Reconcile(ctx, trigger); err != nil {
 			r.logger.Error(err, "failed to reconcile route", "provider", p.Name(), "trigger", trigger.Name)
+			errs = errors.Join(errs, fmt.Errorf("%s: %w", p.Name(), err))
 		}
 	}
 	r.ts.syncTriggers()
-	return ctrl.Result{}, nil
+	return ctrl.Result{}, errs
+}
+
+// hasProvider reports whether a provider with the given name is registered.
+func (r *httpTriggerReconciler) hasProvider(name fv1.RouteProviderType) bool {
+	for _, p := range r.providers {
+		if p.Name() == string(name) {
+			return true
+		}
+	}
+	return false
 }
 
 // functionReconciler invalidates the resolver cache for a changed Function and

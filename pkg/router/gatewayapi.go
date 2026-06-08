@@ -100,7 +100,7 @@ func newGatewayRouteProvider(logger logr.Logger, client gatewayclient.Interface,
 	}
 }
 
-func (p *gatewayRouteProvider) Name() string { return fv1.RouteProviderGateway }
+func (p *gatewayRouteProvider) Name() string { return string(fv1.RouteProviderGateway) }
 
 // Reconcile brings the HTTPRoute for a trigger to its desired state
 // (level-based): create it when the trigger requests the gateway provider and

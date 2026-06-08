@@ -6,6 +6,10 @@
 
 package v1
 
+import (
+	corev1 "github.com/fission/fission/pkg/apis/core/v1"
+)
+
 // RouteConfigApplyConfiguration represents a declarative configuration of the RouteConfig type for use
 // with apply.
 //
@@ -19,7 +23,7 @@ type RouteConfigApplyConfiguration struct {
 	// deprecated path); "gateway" creates a gateway.networking.k8s.io
 	// HTTPRoute attached to an operator-managed Gateway. The "gateway"
 	// provider must be enabled on the router (GATEWAY_API_ENABLED).
-	Provider *string `json:"provider,omitempty"`
+	Provider *corev1.RouteProviderType `json:"provider,omitempty"`
 	// Hostnames the route matches. For the gateway provider these become
 	// the HTTPRoute hostnames; for the ingress provider only the first is
 	// used as the Ingress rule host. Empty matches all hosts.
@@ -50,7 +54,7 @@ func RouteConfig() *RouteConfigApplyConfiguration {
 // WithProvider sets the Provider field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the Provider field is set to the value of the last call.
-func (b *RouteConfigApplyConfiguration) WithProvider(value string) *RouteConfigApplyConfiguration {
+func (b *RouteConfigApplyConfiguration) WithProvider(value corev1.RouteProviderType) *RouteConfigApplyConfiguration {
 	b.Provider = &value
 	return b
 }

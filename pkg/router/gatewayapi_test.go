@@ -11,6 +11,8 @@ import (
 	"github.com/stretchr/testify/require"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	k8stesting "k8s.io/client-go/testing"
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayfake "sigs.k8s.io/gateway-api/pkg/client/clientset/versioned/fake"
 
@@ -91,6 +93,50 @@ func TestGatewayProviderNoParentRefsErrors(t *testing.T) {
 	require.Error(t, err)
 	_, getErr := client.GatewayV1().HTTPRoutes(p.namespace).Get(t.Context(), "t3", metav1.GetOptions{})
 	assert.True(t, apierrors.IsNotFound(getErr))
+}
+
+func TestGatewayProviderAnnotationDriftAndNoop(t *testing.T) {
+	logger := loggerfactory.GetLogger()
+	client := gatewayfake.NewClientset()
+	var updates int
+	client.PrependReactor("update", "httproutes", func(k8stesting.Action) (bool, runtime.Object, error) {
+		updates++
+		return false, nil, nil // fall through to the default tracker
+	})
+	p := newGatewayRouteProvider(logger, client, nil)
+
+	trigger := gatewayTrigger("ta", fv1.GatewayParentRef{Name: "eg"})
+	trigger.Spec.RouteConfig.Annotations = map[string]string{"a": "1"}
+	require.NoError(t, p.Reconcile(t.Context(), trigger))
+
+	// Reconcile again with identical input -> no Update issued.
+	require.NoError(t, p.Reconcile(t.Context(), trigger))
+	assert.Equal(t, 0, updates, "identical reconcile must not issue an Update")
+
+	// Change only annotations -> exactly one Update, new annotations applied.
+	trigger.Spec.RouteConfig.Annotations = map[string]string{"a": "2", "b": "3"}
+	require.NoError(t, p.Reconcile(t.Context(), trigger))
+	assert.Equal(t, 1, updates, "annotation drift must issue exactly one Update")
+	hr, err := client.GatewayV1().HTTPRoutes(p.namespace).Get(t.Context(), "ta", metav1.GetOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, "2", hr.Annotations["a"])
+	assert.Equal(t, "3", hr.Annotations["b"])
+}
+
+func TestDesiredRouteProviderPrecedence(t *testing.T) {
+	t.Parallel()
+	// RouteConfig wins over the deprecated CreateIngress flag.
+	both := &fv1.HTTPTrigger{Spec: fv1.HTTPTriggerSpec{
+		CreateIngress: true,
+		RouteConfig:   &fv1.RouteConfig{Provider: fv1.RouteProviderGateway},
+	}}
+	assert.Equal(t, fv1.RouteProviderGateway, desiredRouteProvider(both))
+
+	legacy := &fv1.HTTPTrigger{Spec: fv1.HTTPTriggerSpec{CreateIngress: true}}
+	assert.Equal(t, fv1.RouteProviderIngress, desiredRouteProvider(legacy))
+
+	none := &fv1.HTTPTrigger{Spec: fv1.HTTPTriggerSpec{}}
+	assert.Equal(t, fv1.RouteProviderType(""), desiredRouteProvider(none))
 }
 
 func TestParseDefaultParentRefs(t *testing.T) {
