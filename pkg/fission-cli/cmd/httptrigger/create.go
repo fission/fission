@@ -141,6 +141,14 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		return fmt.Errorf("error parsing ingress configuration: %w", err)
 	}
 
+	routeConfig, err := GetRouteConfig(
+		input.String(flagkey.HtRouteProvider), input.StringSlice(flagkey.HtRouteHost),
+		input.String(flagkey.HtRoutePath), input.StringSlice(flagkey.HtRouteAnnotation),
+		input.String(flagkey.HtRouteTLS), input.StringSlice(flagkey.HtGateway), fallbackURL)
+	if err != nil {
+		return fmt.Errorf("error parsing route configuration: %w", err)
+	}
+
 	opts.trigger = &fv1.HTTPTrigger{
 		ObjectMeta: m,
 		Spec: fv1.HTTPTriggerSpec{
@@ -150,6 +158,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 			FunctionReference: *functionRef,
 			CreateIngress:     input.Bool(flagkey.HtIngress),
 			IngressConfig:     *ingressConfig,
+			RouteConfig:       routeConfig,
 			Prefix:            &prefix,
 			KeepPrefix:        input.Bool(flagkey.HtKeepPrefix),
 		},

@@ -133,6 +133,31 @@ func (opts *UpdateSubCommand) complete(input cli.Input) (err error) {
 		ht.Spec.IngressConfig = *ingress
 	}
 
+	if input.IsSet(flagkey.HtRouteProvider) || input.IsSet(flagkey.HtRouteHost) ||
+		input.IsSet(flagkey.HtRoutePath) || input.IsSet(flagkey.HtRouteAnnotation) ||
+		input.IsSet(flagkey.HtRouteTLS) || input.IsSet(flagkey.HtGateway) {
+		fallbackURL := ""
+		if ht.Spec.Prefix != nil && *ht.Spec.Prefix != "" {
+			fallbackURL = *ht.Spec.Prefix
+		} else {
+			fallbackURL = ht.Spec.RelativeURL
+		}
+		// Default the provider to the existing one so the other --route-* flags
+		// can be tweaked without re-specifying --route-provider.
+		provider := input.String(flagkey.HtRouteProvider)
+		if provider == "" && ht.Spec.RouteConfig != nil {
+			provider = ht.Spec.RouteConfig.Provider
+		}
+		routeConfig, err := GetRouteConfig(
+			provider, input.StringSlice(flagkey.HtRouteHost), input.String(flagkey.HtRoutePath),
+			input.StringSlice(flagkey.HtRouteAnnotation), input.String(flagkey.HtRouteTLS),
+			input.StringSlice(flagkey.HtGateway), fallbackURL)
+		if err != nil {
+			return fmt.Errorf("error parsing route configuration: %w", err)
+		}
+		ht.Spec.RouteConfig = routeConfig
+	}
+
 	opts.trigger = ht
 
 	return nil

@@ -130,10 +130,16 @@ var (
 	HtMethod            = Flag{Type: StringSlice, Name: flagkey.HtMethod, Usage: "HTTP Methods: GET,POST,PUT,DELETE,HEAD. To mention single method: --method GET and for multiple methods --method GET --method POST. [DEPRECATED for 'fn create', use 'route create' instead]", DefaultValue: []string{http.MethodGet}}
 	HtUrl               = Flag{Type: String, Name: flagkey.HtUrl, Usage: "URL pattern (See gorilla/mux supported patterns) [DEPRECATED for 'fn create', use 'route create' instead]"}
 	HtHost              = Flag{Type: String, Name: flagkey.HtHost, Usage: "Use --ingressrule instead", Deprecated: true, Substitute: flagkey.HtIngressRule}
-	HtIngress           = Flag{Type: Bool, Name: flagkey.HtIngress, Usage: "Creates ingress with same URL"}
-	HtIngressRule       = Flag{Type: String, Name: flagkey.HtIngressRule, Usage: "Host for Ingress rule: --ingressrule host=path (the format of host/path depends on what ingress controller you used)"}
-	HtIngressAnnotation = Flag{Type: StringSlice, Name: flagkey.HtIngressAnnotation, Usage: "Annotation for Ingress: --ingressannotation key=value (the format of annotation depends on what ingress controller you used)"}
-	HtIngressTLS        = Flag{Type: String, Name: flagkey.HtIngressTLS, Usage: "Name of the Secret contains TLS key and crt for Ingress (the usability of TLS features depends on what ingress controller you used)"}
+	HtIngress           = Flag{Type: Bool, Name: flagkey.HtIngress, Usage: "Creates ingress with same URL [DEPRECATED: the Kubernetes Ingress API is frozen, use --route-provider gateway instead]"}
+	HtIngressRule       = Flag{Type: String, Name: flagkey.HtIngressRule, Usage: "Host for Ingress rule: --ingressrule host=path (the format of host/path depends on what ingress controller you used) [DEPRECATED: use --route-host/--route-path]"}
+	HtIngressAnnotation = Flag{Type: StringSlice, Name: flagkey.HtIngressAnnotation, Usage: "Annotation for Ingress: --ingressannotation key=value (the format of annotation depends on what ingress controller you used) [DEPRECATED: use --route-annotation]"}
+	HtIngressTLS        = Flag{Type: String, Name: flagkey.HtIngressTLS, Usage: "Name of the Secret contains TLS key and crt for Ingress (the usability of TLS features depends on what ingress controller you used) [DEPRECATED: use --route-tls]"}
+	HtRouteProvider     = Flag{Type: String, Name: flagkey.HtRouteProvider, Usage: "Route provider that exposes the function externally: one of 'ingress' or 'gateway' (Gateway API HTTPRoute). When set, takes precedence over --createingress."}
+	HtRouteHost         = Flag{Type: StringSlice, Name: flagkey.HtRouteHost, Usage: "Hostname the route matches (repeatable): --route-host demo.example.com. Empty matches all hosts."}
+	HtRoutePath         = Flag{Type: String, Name: flagkey.HtRoutePath, Usage: "Request path the route matches (must start with '/'); defaults to the trigger URL/prefix"}
+	HtRouteAnnotation   = Flag{Type: StringSlice, Name: flagkey.HtRouteAnnotation, Usage: "Annotation added to the generated route object: --route-annotation key=value (repeatable)"}
+	HtRouteTLS          = Flag{Type: String, Name: flagkey.HtRouteTLS, Usage: "Name of the Secret holding TLS key and cert (ingress provider only; gateway TLS is configured on the Gateway listener)"}
+	HtGateway           = Flag{Type: StringSlice, Name: flagkey.HtGateway, Usage: "Parent Gateway the HTTPRoute attaches to (gateway provider): --gateway name or --gateway namespace/name (repeatable)"}
 	HtFnName            = Flag{Type: StringSlice, Name: flagkey.HtFnName, Usage: "Name(s) of the function for this trigger. (If 2 functions are supplied with this flag, traffic gets routed to them based on weights supplied with --weight flag.)"}
 	HtFnWeight          = Flag{Type: IntSlice, Name: flagkey.HtFnWeight, Usage: "Weight for each function supplied with --function flag, in the same order. Used for canary deployment"}
 	HtFnFilter          = Flag{Type: String, Name: flagkey.HtFilter, Usage: "Name of the function for trigger(s)"}

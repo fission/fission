@@ -84,6 +84,12 @@ const (
 	HtIngressRule       = "ingressrule"
 	HtIngressAnnotation = "ingressannotation"
 	HtIngressTLS        = "ingresstls"
+	HtRouteProvider     = "route-provider"
+	HtRouteHost         = "route-host"
+	HtRoutePath         = "route-path"
+	HtRouteAnnotation   = "route-annotation"
+	HtRouteTLS          = "route-tls"
+	HtGateway           = "gateway"
 	HtFnName            = "function"
 	HtFnWeight          = "weight"
 	HtFilter            = HtFnName

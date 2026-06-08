@@ -113,6 +113,71 @@ func getIngressHostRule(rule string, fallbackPath string) (empty bool, host stri
 	return false, v[0], v[1], nil
 }
 
+// GetRouteConfig builds a RouteConfig from the --route-* CLI flags, or returns
+// nil when no route provider was requested. fallbackPath is the trigger's
+// URL/prefix, used as the route path when --route-path is omitted. It is the
+// provider-neutral successor to GetIngressConfig.
+func GetRouteConfig(provider string, hosts []string, path string, annotations []string,
+	tls string, gateways []string, fallbackPath string) (*fv1.RouteConfig, error) {
+	if provider == "" {
+		return nil, nil
+	}
+	if provider != fv1.RouteProviderIngress && provider != fv1.RouteProviderGateway {
+		return nil, fmt.Errorf("invalid --%s %q: must be one of %q, %q", "route-provider", provider, fv1.RouteProviderIngress, fv1.RouteProviderGateway)
+	}
+
+	_, anns, err := getIngressAnnotations(annotations)
+	if err != nil {
+		return nil, fmt.Errorf("illegal route annotation: %w", err)
+	}
+
+	if path == "" {
+		path = fallbackPath
+	}
+
+	rc := &fv1.RouteConfig{
+		Provider:    provider,
+		Hostnames:   hosts,
+		Path:        path,
+		Annotations: anns,
+		TLS:         tls,
+	}
+
+	if len(gateways) > 0 {
+		parentRefs, err := parseGatewayParentRefs(gateways)
+		if err != nil {
+			return nil, err
+		}
+		rc.Gateway = &fv1.GatewayRouteConfig{ParentRefs: parentRefs}
+	}
+
+	return rc, nil
+}
+
+// parseGatewayParentRefs parses --gateway values ("name" or "namespace/name")
+// into GatewayParentRefs.
+func parseGatewayParentRefs(gateways []string) ([]fv1.GatewayParentRef, error) {
+	refs := make([]fv1.GatewayParentRef, 0, len(gateways))
+	for _, g := range gateways {
+		g = strings.TrimSpace(g)
+		if g == "" {
+			continue
+		}
+		ref := fv1.GatewayParentRef{}
+		if ns, name, ok := strings.Cut(g, "/"); ok {
+			if ns == "" || name == "" {
+				return nil, fmt.Errorf("invalid --gateway %q: expected \"name\" or \"namespace/name\"", g)
+			}
+			ref.Namespace = ns
+			ref.Name = name
+		} else {
+			ref.Name = g
+		}
+		refs = append(refs, ref)
+	}
+	return refs, nil
+}
+
 func getIngressTLS(secret string) (remove bool, tls string) {
 	switch secret {
 	case "-":
