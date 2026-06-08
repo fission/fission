@@ -165,6 +165,11 @@ jobs:
           # jar-deploy test (TestJVMJerseyEnv) stays skipped without JVM_JERSEY_JAR_PATH.
           JVM_JERSEY_RUNTIME_IMAGE: ghcr.io/fission/jvm-jersey-env-25
           JVM_JERSEY_BUILDER_IMAGE: ghcr.io/fission/jvm-jersey-builder-25
+          # TensorFlow Serving runtime (TestTensorflowServingEnv): deploys the
+          # vendored half_plus_two SavedModel (deploy archive, no builder). The
+          # image is large (~1GB) so it dominates the preload, but the test is
+          # otherwise self-contained.
+          TS_RUNTIME_IMAGE: ghcr.io/fission/tensorflow-serving-env
           # Container-executor backend test (TestBackendContainer): a plain
           # HTTP server image that returns 200 on GET / and honours a PORT env
           # var. hello-app defaults to 8080 but reads PORT; the test injects
@@ -189,13 +194,38 @@ jobs:
           export -f load_image
           export KIND_CLUSTER_NAME
           pids=()
-          for img in "$NODE_RUNTIME_IMAGE" "$NODE_BUILDER_IMAGE" "$PYTHON_RUNTIME_IMAGE" "$PYTHON_BUILDER_IMAGE" "$GO_RUNTIME_IMAGE" "$GO_BUILDER_IMAGE" "$RUST_RUNTIME_IMAGE" "$RUST_BUILDER_IMAGE" "$JVM_RUNTIME_IMAGE" "$JVM_BUILDER_IMAGE" "$JVM_JERSEY_RUNTIME_IMAGE" "$JVM_JERSEY_BUILDER_IMAGE" "$CONTAINER_RUNTIME_IMAGE"; do
+          for img in "$NODE_RUNTIME_IMAGE" "$NODE_BUILDER_IMAGE" "$PYTHON_RUNTIME_IMAGE" "$PYTHON_BUILDER_IMAGE" "$GO_RUNTIME_IMAGE" "$GO_BUILDER_IMAGE" "$RUST_RUNTIME_IMAGE" "$RUST_BUILDER_IMAGE" "$JVM_RUNTIME_IMAGE" "$JVM_BUILDER_IMAGE" "$JVM_JERSEY_RUNTIME_IMAGE" "$JVM_JERSEY_BUILDER_IMAGE" "$TS_RUNTIME_IMAGE" "$CONTAINER_RUNTIME_IMAGE"; do
             load_image "$img" &
             pids+=($!)
           done
           for pid in "${pids[@]}"; do
             wait "$pid" || { echo "image preload failed (pid $pid)"; exit 1; }
           done
+
+          # Build the Java fat jars for the jar-deploy subtests (TestJavaEnv/deploy_jar,
+          # TestJVMJerseyEnv/deploy_jar). The example poms depend on fission-java-core /
+          # fission-jvm-jersey, which are not on Maven Central — they live in the builder
+          # images' local .m2. So run `mvn package` *inside* the (already-pulled) builder
+          # image, which resolves them exactly as an in-cluster build does. Output goes to
+          # a dir outside the repo tree so it doesn't pollute the testdata embed or leave
+          # root-owned files in the checkout. Export the jar paths for the go test below.
+          build_jar() {
+            local img="$1" src="$2" out="$3"
+            # Empty image (var blanked to skip) → leave the jar absent; the
+            # jar-deploy subtest then skips itself on the missing path.
+            [ -z "$img" ] && { echo "skip jar build for $src (image unset)"; return 0; }
+            docker run --rm --entrypoint /bin/bash \
+              -v "$PWD/$src":/src:ro -v "$(dirname "$out")":/out \
+              "$img" -c "mkdir -p /build && cp -a /src/. /build/ && cd /build \
+                && mvn -q -B clean package && cp target/*with-dependencies.jar /out/$(basename "$out")"
+          }
+          JAR_DIR="${RUNNER_TEMP:-/tmp}/java-jars"
+          mkdir -p "$JAR_DIR"
+          build_jar "$JVM_BUILDER_IMAGE" test/integration/testdata/java/hello_world "$JAR_DIR/hello-world.jar"
+          build_jar "$JVM_JERSEY_BUILDER_IMAGE" test/integration/testdata/jvm_jersey/hello_world "$JAR_DIR/jersey-hello-world.jar"
+          export JAVA_HELLO_JAR_PATH="$JAR_DIR/hello-world.jar"
+          export JVM_JERSEY_JAR_PATH="$JAR_DIR/jersey-hello-world.jar"
+          echo "built jars: $(ls -l "$JAR_DIR")"
 
           kubectl port-forward svc/router 8888:80 -n "$FISSION_NAMESPACE" >/tmp/pf.log 2>&1 &
           PF_PID=$!
