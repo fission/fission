@@ -1,0 +1,61 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+	<modelVersion>4.0.0</modelVersion>
+	<groupId>io.fission</groupId>
+	<artifactId>jersey-hello-world</artifactId>
+	<version>0.0.1</version>
+	<packaging>jar</packaging>
+
+	<name>hello-world</name>
+	<url>http://maven.apache.org</url>
+
+	<properties>
+		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+		<maven.compiler.source>25</maven.compiler.source>
+		<maven.compiler.target>25</maven.compiler.target>
+	</properties>
+
+	<!-- Trimmed from environments/jvm-jersey/examples/java/pom.xml: test-scoped
+	     deps (junit, jersey test container) and the surefire plugin are dropped
+	     because this vendored copy omits src/test, so the in-cluster `mvn package`
+	     has no tests to compile or run. fission-jvm-jersey is provided by the
+	     jvm-jersey builder image. -->
+	<dependencies>
+		<dependency>
+			<groupId>io.fission</groupId>
+			<artifactId>fission-jvm-jersey</artifactId>
+			<version>0.0.1</version>
+			<scope>provided</scope>
+		</dependency>
+		<dependency>
+			<groupId>javax.ws.rs</groupId>
+			<artifactId>javax.ws.rs-api</artifactId>
+			<version>2.0</version>
+			<scope>provided</scope>
+		</dependency>
+	</dependencies>
+
+	<build>
+		<plugins>
+			<plugin>
+				<artifactId>maven-assembly-plugin</artifactId>
+				<configuration>
+					<descriptorRefs>
+						<descriptorRef>jar-with-dependencies</descriptorRef>
+					</descriptorRefs>
+				</configuration>
+				<executions>
+					<execution>
+						<id>make-assembly</id>
+						<phase>package</phase>
+						<goals>
+							<goal>single</goal>
+						</goals>
+					</execution>
+				</executions>
+			</plugin>
+		</plugins>
+	</build>
+
+</project>

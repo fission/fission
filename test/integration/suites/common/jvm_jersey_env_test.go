@@ -18,71 +18,115 @@ import (
 	"github.com/fission/fission/test/integration/framework"
 )
 
-// TestJVMJerseyEnv is the Go port of test_environments/test_jvm_jersey_env.sh.
+// TestJVMJerseyEnv covers the jvm-jersey environment via two paths, merged into
+// one test so the Jersey coverage lives in a single file:
 //
-// The bash version runs `docker run maven:... mvn package` at test time
-// to produce a fat jar; we don't replicate that from a Go test. Instead,
-// the test t.Skips unless both JVM_JERSEY_RUNTIME_IMAGE *and*
-// JVM_JERSEY_JAR_PATH are set in the environment. Local devs (or a
-// future CI step) can build the jar once and point JVM_JERSEY_JAR_PATH
-// at the artifact:
+//   - builder: zip the vendored Jersey hello-world Maven project (pom.xml +
+//     src/main/..., test sources omitted so the in-cluster `mvn package` has
+//     nothing to run) and let the Jersey builder pod produce the fat jar.
+//     Needs JVM_JERSEY_RUNTIME_IMAGE + JVM_JERSEY_BUILDER_IMAGE.
+//   - deploy_jar: deploy a pre-built fat jar directly (no build) and additionally
+//     exercise a newdeploy POST echo. Needs JVM_JERSEY_RUNTIME_IMAGE +
+//     JVM_JERSEY_JAR_PATH (CI builds the jar inside the builder image; see the
+//     "Go integration tests" step in .github/workflows/push_pr.yaml).
 //
-//	docker run --rm -v "$PWD":/usr/src/mymaven -w /usr/src/mymaven \
-//	    maven:3.5-jdk-8 mvn -q clean package
-//	export JVM_JERSEY_RUNTIME_IMAGE=ghcr.io/fission/jvm-jersey-env
-//	export JVM_JERSEY_JAR_PATH=$PWD/target/jersey-hello-world-0.0.1-jar-with-dependencies.jar
-//
-// Coverage when enabled: poolmgr GET, newdeploy GET, and newdeploy POST
-// of an XML body (echo-back) — the same three assertions the bash makes.
+// io.fission.HelloWorld returns "Hello World!" on GET and "Echo: <body>" on
+// other methods.
 func TestJVMJerseyEnv(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute)
-	defer cancel()
-
 	f := framework.Connect(t)
 	runtime := f.Images().RequireJVMJersey(t)
-
-	jarPath := os.Getenv("JVM_JERSEY_JAR_PATH")
-	if jarPath == "" {
-		t.Skip("JVM_JERSEY_JAR_PATH is not set; skipping (build the jersey jar via maven and point the env var at the .jar)")
-	}
-	if _, err := os.Stat(jarPath); err != nil {
-		t.Skipf("JVM_JERSEY_JAR_PATH=%q not accessible: %v", jarPath, err)
-	}
-
 	ns := f.NewTestNamespace(t)
-	envName := "jersey-" + ns.ID
-	fnP := "jersey-pm-" + ns.ID
-	fnND := "jersey-nd-" + ns.ID
-	fnPost := "jersey-post-" + ns.ID
 
-	ns.CreateEnv(t, ctx, framework.EnvOptions{
-		Name: envName, Image: runtime,
+	t.Run("builder", func(t *testing.T) {
+		builder := f.Images().RequireJVMJerseyBuilder(t)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		defer cancel()
+
+		envName := "jersey-bld-" + ns.ID
+		pkgName := "jerseypkg-" + ns.ID
+		fnP := "jerseybld-pm-" + ns.ID
+		fnND := "jerseybld-nd-" + ns.ID
+
+		// CreateEnv auto-waits for the builder pod + EndpointSlice to publish.
+		// KeepArchive is required for JVM: the builder ships a .jar (a zip), and
+		// without it the fetcher unzips it into a directory that the runtime
+		// can't open as a JarFile.
+		ns.CreateEnv(t, ctx, framework.EnvOptions{
+			Name: envName, Image: runtime, Builder: builder, KeepArchive: true,
+		})
+
+		// pom.xml at top level + src/main/java/io/fission/HelloWorld.java;
+		// ZipTestDataTree preserves the layout so Maven finds the source.
+		srcZip := framework.ZipTestDataTree(t, "jvm_jersey/hello_world", "jersey-src-pkg.zip")
+		ns.CreatePackage(t, ctx, framework.PackageOptions{
+			Name: pkgName, Env: envName, Src: srcZip,
+		})
+		ns.WaitForPackageBuildSucceeded(t, ctx, pkgName)
+
+		ns.CreateFunction(t, ctx, framework.FunctionOptions{
+			Name: fnP, Env: envName, Pkg: pkgName, Entrypoint: "io.fission.HelloWorld",
+		})
+		ns.CreateFunction(t, ctx, framework.FunctionOptions{
+			Name: fnND, Env: envName, Pkg: pkgName, Entrypoint: "io.fission.HelloWorld",
+			ExecutorType: "newdeploy", MinScale: 1, MaxScale: 1,
+		})
+		ns.CreateRoute(t, ctx, framework.RouteOptions{Function: fnP, URL: "/" + fnP, Method: "GET"})
+		ns.CreateRoute(t, ctx, framework.RouteOptions{Function: fnND, URL: "/" + fnND, Method: "GET"})
+
+		bodyP := f.Router(t).GetEventually(t, ctx, "/"+fnP, framework.BodyContains("Hello"))
+		require.True(t, strings.Contains(bodyP, "Hello"),
+			"poolmgr fn %q response missing 'Hello': %q", fnP, bodyP)
+		bodyND := f.Router(t).GetEventually(t, ctx, "/"+fnND, framework.BodyContains("Hello"))
+		require.True(t, strings.Contains(bodyND, "Hello"),
+			"newdeploy fn %q response missing 'Hello': %q", fnND, bodyND)
 	})
 
-	ns.CreateFunction(t, ctx, framework.FunctionOptions{
-		Name: fnP, Env: envName, Deploy: jarPath, Entrypoint: "io.fission.HelloWorld",
+	t.Run("deploy_jar", func(t *testing.T) {
+		jarPath := os.Getenv("JVM_JERSEY_JAR_PATH")
+		if jarPath == "" {
+			t.Skip("JVM_JERSEY_JAR_PATH is not set; skipping (build the jersey jar via maven and point the env var at the .jar)")
+		}
+		if _, err := os.Stat(jarPath); err != nil {
+			t.Skipf("JVM_JERSEY_JAR_PATH=%q not accessible: %v", jarPath, err)
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute)
+		defer cancel()
+
+		envName := "jersey-dep-" + ns.ID
+		fnP := "jersey-pm-" + ns.ID
+		fnND := "jersey-nd-" + ns.ID
+		fnPost := "jersey-post-" + ns.ID
+
+		// KeepArchive keeps the .jar a single file (the fetcher would otherwise
+		// unzip it into a directory the runtime can't open as a JarFile).
+		ns.CreateEnv(t, ctx, framework.EnvOptions{Name: envName, Image: runtime, KeepArchive: true})
+
+		ns.CreateFunction(t, ctx, framework.FunctionOptions{
+			Name: fnP, Env: envName, Deploy: jarPath, Entrypoint: "io.fission.HelloWorld",
+		})
+		ns.CreateFunction(t, ctx, framework.FunctionOptions{
+			Name: fnND, Env: envName, Deploy: jarPath, Entrypoint: "io.fission.HelloWorld",
+			ExecutorType: "newdeploy",
+		})
+		ns.CreateRoute(t, ctx, framework.RouteOptions{Function: fnP, URL: "/" + fnP, Method: "GET"})
+		ns.CreateRoute(t, ctx, framework.RouteOptions{Function: fnND, URL: "/" + fnND, Method: "GET"})
+		ns.CreateRoute(t, ctx, framework.RouteOptions{Function: fnND, Name: fnPost, URL: "/" + fnPost, Method: "POST"})
+
+		bodyP := f.Router(t).GetEventually(t, ctx, "/"+fnP, framework.BodyContains("Hello"))
+		require.True(t, strings.Contains(bodyP, "Hello"),
+			"poolmgr fn %q response missing 'Hello': %q", fnP, bodyP)
+		bodyND := f.Router(t).GetEventually(t, ctx, "/"+fnND, framework.BodyContains("Hello"))
+		require.True(t, strings.Contains(bodyND, "Hello"),
+			"newdeploy fn %q response missing 'Hello': %q", fnND, bodyND)
+
+		xml := []byte(`<?xml version="1.0"?><catalog><book id="bk101"><title>XML Developer's Guide</title></book></catalog>`)
+		echo := f.Router(t).PostEventually(t, ctx, "/"+fnPost, "application/xml", xml,
+			framework.BodyContains("Echo"))
+		require.True(t, strings.Contains(echo, "Echo"),
+			"jersey newdeploy POST echo missing 'Echo': %q", echo)
 	})
-	ns.CreateFunction(t, ctx, framework.FunctionOptions{
-		Name: fnND, Env: envName, Deploy: jarPath, Entrypoint: "io.fission.HelloWorld",
-		ExecutorType: "newdeploy",
-	})
-	ns.CreateRoute(t, ctx, framework.RouteOptions{Function: fnP, URL: "/" + fnP, Method: "GET"})
-	ns.CreateRoute(t, ctx, framework.RouteOptions{Function: fnND, URL: "/" + fnND, Method: "GET"})
-	ns.CreateRoute(t, ctx, framework.RouteOptions{Function: fnND, Name: fnPost, URL: "/" + fnPost, Method: "POST"})
-
-	bodyP := f.Router(t).GetEventually(t, ctx, "/"+fnP, framework.BodyContains("Hello"))
-	require.True(t, strings.Contains(bodyP, "Hello"),
-		"poolmgr fn %q response missing 'Hello': %q", fnP, bodyP)
-
-	bodyND := f.Router(t).GetEventually(t, ctx, "/"+fnND, framework.BodyContains("Hello"))
-	require.True(t, strings.Contains(bodyND, "Hello"),
-		"newdeploy fn %q response missing 'Hello': %q", fnND, bodyND)
-
-	xml := []byte(`<?xml version="1.0"?><catalog><book id="bk101"><title>XML Developer's Guide</title></book></catalog>`)
-	echo := f.Router(t).PostEventually(t, ctx, "/"+fnPost, "application/xml", xml,
-		framework.BodyContains("Echo"))
-	require.True(t, strings.Contains(echo, "Echo"),
-		"jersey newdeploy POST echo missing 'Echo': %q", echo)
 }

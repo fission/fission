@@ -43,6 +43,12 @@ type EnvOptions struct {
 	// the env's polling/check interval — lower values speed up the
 	// idle-pod reaper for tests that want to observe scale-down quickly.
 	Period int
+	// KeepArchive passes `--keeparchive` so the fetcher leaves the deploy
+	// archive as a single file instead of extracting it into a directory.
+	// Required by the JVM environments: a .jar is itself a zip, so without
+	// this the runtime sees /userfunc/deployarchive as a directory and
+	// `io.fission.Server.specialize` fails to open it as a JarFile.
+	KeepArchive bool
 }
 
 // CreateEnvObject creates a Fission Environment from a fully-formed CR
@@ -98,6 +104,9 @@ func (ns *TestNamespace) CreateEnv(t *testing.T, ctx context.Context, opts EnvOp
 	}
 	if opts.Period > 0 {
 		args = append(args, "--period", strconv.Itoa(opts.Period))
+	}
+	if opts.KeepArchive {
+		args = append(args, "--keeparchive")
 	}
 	ns.CLI(t, ctx, args...)
 
