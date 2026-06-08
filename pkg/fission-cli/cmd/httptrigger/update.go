@@ -117,6 +117,8 @@ func (opts *UpdateSubCommand) complete(input cli.Input) (err error) {
 		ht.Spec.Host = input.String(flagkey.HtHost)
 	}
 
+	warnIngressDeprecated(input)
+
 	if input.IsSet(flagkey.HtIngressRule) || input.IsSet(flagkey.HtIngressAnnotation) || input.IsSet(flagkey.HtIngressTLS) {
 		fallbackURL := ""
 		if ht.Spec.Prefix != nil && *ht.Spec.Prefix != "" {
