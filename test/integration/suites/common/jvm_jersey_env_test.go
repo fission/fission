@@ -51,8 +51,11 @@ func TestJVMJerseyEnv(t *testing.T) {
 		fnND := "jerseybld-nd-" + ns.ID
 
 		// CreateEnv auto-waits for the builder pod + EndpointSlice to publish.
+		// KeepArchive is required for JVM: the builder ships a .jar (a zip), and
+		// without it the fetcher unzips it into a directory that the runtime
+		// can't open as a JarFile.
 		ns.CreateEnv(t, ctx, framework.EnvOptions{
-			Name: envName, Image: runtime, Builder: builder,
+			Name: envName, Image: runtime, Builder: builder, KeepArchive: true,
 		})
 
 		// pom.xml at top level + src/main/java/io/fission/HelloWorld.java;
@@ -98,7 +101,9 @@ func TestJVMJerseyEnv(t *testing.T) {
 		fnND := "jersey-nd-" + ns.ID
 		fnPost := "jersey-post-" + ns.ID
 
-		ns.CreateEnv(t, ctx, framework.EnvOptions{Name: envName, Image: runtime})
+		// KeepArchive keeps the .jar a single file (the fetcher would otherwise
+		// unzip it into a directory the runtime can't open as a JarFile).
+		ns.CreateEnv(t, ctx, framework.EnvOptions{Name: envName, Image: runtime, KeepArchive: true})
 
 		ns.CreateFunction(t, ctx, framework.FunctionOptions{
 			Name: fnP, Env: envName, Deploy: jarPath, Entrypoint: "io.fission.HelloWorld",
