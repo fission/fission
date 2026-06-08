@@ -18,6 +18,7 @@ import (
 	"k8s.io/client-go/rest"
 	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
+	gatewayclient "sigs.k8s.io/gateway-api/pkg/client/clientset/versioned"
 
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	"github.com/fission/fission/pkg/utils"
@@ -36,6 +37,7 @@ type (
 		GetApiExtensionsClient() (apiextensionsclient.Interface, error)
 		GetMetricsClient() (metricsclient.Interface, error)
 		GetKedaClient() (kedaClient.Interface, error)
+		GetGatewayClient() (gatewayclient.Interface, error)
 	}
 
 	ClientGenerator struct {
@@ -112,6 +114,14 @@ func (cg *ClientGenerator) GetKedaClient() (kedaClient.Interface, error) {
 		return nil, err
 	}
 	return kedaClient.NewForConfig(config)
+}
+
+func (cg *ClientGenerator) GetGatewayClient() (gatewayclient.Interface, error) {
+	config, err := cg.getRestConfig()
+	if err != nil {
+		return nil, err
+	}
+	return gatewayclient.NewForConfig(config)
 }
 
 func NewClientGenerator() *ClientGenerator {

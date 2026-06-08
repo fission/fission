@@ -28,26 +28,38 @@ import (
 // writes and the executor's Function readiness writes do not trigger spurious
 // rebuilds, matching the old generation-based informer filters.
 
-// httpTriggerReconciler reconciles a trigger's Ingress and rebuilds the mux.
+// httpTriggerReconciler reconciles a trigger's external route (via the
+// registered RouteProviders) and rebuilds the mux.
 type httpTriggerReconciler struct {
-	logger logr.Logger
-	client client.Client
-	ts     *HTTPTriggerSet
+	logger    logr.Logger
+	client    client.Client
+	ts        *HTTPTriggerSet
+	providers []RouteProvider
 }
 
 func (r *httpTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	trigger := &fv1.HTTPTrigger{}
 	if err := r.client.Get(ctx, req.NamespacedName, trigger); err != nil {
 		if apierrors.IsNotFound(err) {
-			// Deleted: drop any Ingress it owned (idempotent by name) and
+			// Deleted: drop any route object it owned (idempotent by name) and
 			// rebuild the mux without it.
-			deleteIngressByName(ctx, r.logger, req.Name, r.ts.kubeClient)
+			for _, p := range r.providers {
+				if err := p.DeleteByName(ctx, req.Name); err != nil {
+					r.logger.Error(err, "failed to delete route on trigger deletion", "provider", p.Name(), "trigger", req.Name)
+				}
+			}
 			r.ts.syncTriggers()
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, err
 	}
-	reconcileIngress(ctx, r.logger, trigger, r.ts.kubeClient)
+	// Each provider creates/updates its object when the trigger requests it and
+	// deletes its object otherwise, so switching providers self-cleans.
+	for _, p := range r.providers {
+		if err := p.Reconcile(ctx, trigger); err != nil {
+			r.logger.Error(err, "failed to reconcile route", "provider", p.Name(), "trigger", trigger.Name)
+		}
+	}
 	r.ts.syncTriggers()
 	return ctrl.Result{}, nil
 }

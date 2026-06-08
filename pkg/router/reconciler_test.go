@@ -61,7 +61,7 @@ func TestHTTPTriggerReconcilerIngressLifecycle(t *testing.T) {
 		},
 	}
 	ts, cl, kc := newReconcilerTS(t, trigger)
-	r := &httpTriggerReconciler{logger: ts.logger, client: cl, ts: ts}
+	r := &httpTriggerReconciler{logger: ts.logger, client: cl, ts: ts, providers: []RouteProvider{newIngressRouteProvider(ts.logger, kc)}}
 	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "t1", Namespace: "default"}}
 
 	// Present + CreateIngress -> ingress created, rebuild signalled.
@@ -86,7 +86,7 @@ func TestHTTPTriggerReconcilerNoIngressStillRebuilds(t *testing.T) {
 		Spec:       fv1.HTTPTriggerSpec{RelativeURL: "/t2", Methods: []string{"GET"}},
 	}
 	ts, cl, kc := newReconcilerTS(t, trigger)
-	r := &httpTriggerReconciler{logger: ts.logger, client: cl, ts: ts}
+	r := &httpTriggerReconciler{logger: ts.logger, client: cl, ts: ts, providers: []RouteProvider{newIngressRouteProvider(ts.logger, kc)}}
 
 	_, err := r.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Name: "t2", Namespace: "default"}})
 	require.NoError(t, err)

@@ -329,11 +329,21 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		return fmt.Errorf("error making HTTP trigger set: %w", err)
 	}
 
+	// Build the route providers. The ingress provider is always registered (it
+	// serves the deprecated CreateIngress path); the gateway provider is added
+	// only when GATEWAY_API_ENABLED is set, so its RBAC is needed only when
+	// opted in. A trigger that requests a provider the router did not register
+	// gets no route object (and, in a later phase, a status Condition).
+	providers, err := buildRouteProviders(logger, kubeClient, restConfig)
+	if err != nil {
+		return fmt.Errorf("error building route providers: %w", err)
+	}
+
 	// Register the trigger + function reconcilers. Each signals a debounced mux
 	// rebuild; GenerationChangedPredicate drops status-only writes so the
 	// router's own HTTPTrigger condition writes don't loop.
 	if err := controller.Register(crMgr, &fv1.HTTPTrigger{},
-		&httpTriggerReconciler{logger: logger.WithName("httptrigger_reconciler"), client: crMgr.GetClient(), ts: triggers},
+		&httpTriggerReconciler{logger: logger.WithName("httptrigger_reconciler"), client: crMgr.GetClient(), ts: triggers, providers: providers},
 		"router-httptrigger"); err != nil {
 		return fmt.Errorf("error registering httptrigger reconciler: %w", err)
 	}
