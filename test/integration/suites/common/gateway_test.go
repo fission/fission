@@ -126,6 +126,25 @@ func TestGatewayRoute(t *testing.T) {
 	// Created with the trigger URL as the path and the configured host.
 	requireHTTPRoute(t, relativeURL, hostName, true)
 
+	// End-to-end signal beyond Fission writing the object: the Gateway
+	// implementation (Envoy Gateway in CI) must Accept the route, proving the
+	// HTTPRoute Fission generated is valid and attaches to the parent Gateway.
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		list, err := gwClient.GatewayV1().HTTPRoutes(metav1.NamespaceAll).List(ctx, metav1.ListOptions{LabelSelector: listSel})
+		if !assert.NoErrorf(c, err, "list httproutes") || !assert.NotEmpty(c, list.Items) {
+			return
+		}
+		accepted := false
+		for _, p := range list.Items[0].Status.Parents {
+			for _, cond := range p.Conditions {
+				if cond.Type == string(gwapiv1.RouteConditionAccepted) && cond.Status == metav1.ConditionTrue {
+					accepted = true
+				}
+			}
+		}
+		assert.Truef(c, accepted, "HTTPRoute %q not yet Accepted by the gateway", routeName)
+	}, 120*time.Second, 3*time.Second)
+
 	// Update path + host.
 	newHost := "gw2-" + ns.ID + ".example.com"
 	ns.CLI(t, ctx, "route", "update", "--name", routeName,

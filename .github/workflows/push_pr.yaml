@@ -28,6 +28,7 @@ env:
   KIND_VERSION: v0.32.0
   KIND_CLUSTER_NAME: kind
   SKAFFOLD_VERSION: v2.21.0
+  ENVOY_GATEWAY_VERSION: v1.8.1
 
 permissions:
   contents: read
@@ -134,6 +135,53 @@ jobs:
             'mkdir -p /fission-coverage && chown 10001:10001 /fission-coverage && chmod 0700 /fission-coverage'
           SKAFFOLD_PROFILE=kind-ci make skaffold-deploy
 
+      # Install Envoy Gateway as the sample Gateway API implementation so the
+      # router's gateway route provider (gatewayAPI.enabled=true via kind-ci)
+      # has a real Gateway to attach HTTPRoutes to. Only on the coverage leg —
+      # one well-supported k8s version is enough to exercise the provider
+      # end-to-end; other legs keep the provider enabled but idle (no Gateway,
+      # so TestGatewayRoute skips there).
+      - name: Install Envoy Gateway (sample Gateway API implementation)
+        if: ${{ matrix.kindversion == 'v1.32.11' }}
+        timeout-minutes: 6
+        run: |
+          helm install envoy-gateway oci://docker.io/envoyproxy/gateway-helm \
+            --version "${ENVOY_GATEWAY_VERSION}" \
+            -n envoy-gateway-system --create-namespace --wait --timeout 5m
+          kubectl wait --for=condition=Available -n envoy-gateway-system \
+            deploy/envoy-gateway --timeout=3m
+          # GatewayClass for Envoy Gateway's controller + a Gateway in the
+          # fission namespace. The router creates HTTPRoutes in its own
+          # namespace (fission); a same-namespace Gateway + backend Service
+          # needs no ReferenceGrant.
+          kubectl apply -f - <<'EOF'
+          apiVersion: gateway.networking.k8s.io/v1
+          kind: GatewayClass
+          metadata:
+            name: eg
+          spec:
+            controllerName: gateway.envoyproxy.io/gatewayclass-controller
+          ---
+          apiVersion: gateway.networking.k8s.io/v1
+          kind: Gateway
+          metadata:
+            name: eg-gateway
+            namespace: fission
+          spec:
+            gatewayClassName: eg
+            listeners:
+              - name: http
+                protocol: HTTP
+                port: 80
+                allowedRoutes:
+                  namespaces:
+                    from: Same
+          EOF
+          # Wait for the Gateway to be accepted/programmed so routes attach.
+          kubectl wait --for=condition=Accepted -n fission gateway/eg-gateway --timeout=3m
+          kubectl wait --for=condition=Programmed -n fission gateway/eg-gateway --timeout=3m || true
+          kubectl get gatewayclass,gateway -A
+
       # Port-forward is started inside the Go test step rather than as a
       # standalone step, because background processes started with `&` may
       # not survive across GitHub Actions steps on every runner image.
@@ -176,6 +224,10 @@ jobs:
           # PORT=8888 (via configmap) so the function listens on 8888 — the
           # port the function-pods NetworkPolicy lets the router reach.
           CONTAINER_RUNTIME_IMAGE: gcr.io/google-samples/hello-app:1.0
+          # Gates TestGatewayRoute: set only on the leg where Envoy Gateway +
+          # the eg-gateway Gateway are installed (above). Empty elsewhere, so
+          # the test skips. Value is the parentRef the test attaches to.
+          TEST_GATEWAY_PARENTREF: ${{ matrix.kindversion == 'v1.32.11' && 'fission/eg-gateway' || '' }}
           FISSION_ROUTER: 127.0.0.1:8888
           FISSION_NAMESPACE: fission
           LOG_DIR: ${{ github.workspace }}/test/integration/logs
