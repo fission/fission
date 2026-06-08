@@ -435,6 +435,32 @@ rules:
   - get
   - list
   - watch
+{{- if .Values.gatewayAPI.enabled }}
+# Gateway API route provider (gatewayAPI.enabled): the router creates HTTPRoute
+# objects per HTTPTrigger that requests the "gateway" provider. ReferenceGrants
+# are read-only — a cross-namespace HTTPRoute->Gateway parentRef requires a
+# ReferenceGrant the cluster operator owns; Fission does not create one.
+- apiGroups:
+  - gateway.networking.k8s.io
+  resources:
+  - httproutes
+  verbs:
+  - create
+  - get
+  - list
+  - watch
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - gateway.networking.k8s.io
+  resources:
+  - referencegrants
+  verbs:
+  - get
+  - list
+  - watch
+{{- end }}
 {{- end }}
 {{- define "timer-kuberules" }}
 rules:
