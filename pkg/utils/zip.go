@@ -15,28 +15,47 @@ import (
 	"github.com/mholt/archives"
 )
 
+// isZipStream sniffs whether the stream (named filename, used only for the
+// extension heuristic) is a zip archive. It performs no filesystem access.
+func isZipStream(ctx context.Context, filename string, r io.Reader) (bool, error) {
+	result, err := archives.Zip{}.Match(ctx, filename, r)
+	if err != nil {
+		return false, err
+	}
+	return result.ByName || result.ByStream, nil
+}
+
 func IsZip(ctx context.Context, filename string) (bool, error) {
 	f, err := os.Open(filename)
 	if err != nil {
 		return false, nil
 	}
-	result, err := archives.Zip{}.Match(ctx, filename, f)
-	if err != nil {
-		return false, err
-	}
-	if result.ByName || result.ByStream {
-		return true, nil
-	}
-	return false, nil
+	defer f.Close()
+	return isZipStream(ctx, filename, f)
 }
 
-func MakeZipArchiveWithGlobs(ctx context.Context, targetName string, globs ...string) (string, error) {
+// IsZipInRoot is IsZip confined to base: filename is opened through an os.Root
+// so an attacker-influenced path cannot escape base (CWE-22). Use this on the
+// server-side fetch path where the path derives from request input.
+func IsZipInRoot(ctx context.Context, base, filename string) (bool, error) {
+	f, err := RootOpen(base, filename)
+	if err != nil {
+		return false, nil
+	}
+	defer f.Close()
+	return isZipStream(ctx, filename, f)
+}
+
+// writeZipArchive compresses the files matched by globs into out. It only reads
+// the glob inputs and writes to the provided writer, so it performs no
+// destination-path filesystem access of its own.
+func writeZipArchive(ctx context.Context, out io.Writer, globs ...string) error {
 	globFiles, err := FindAllGlobs(globs...)
 	if err != nil {
-		return "", err
+		return err
 	}
 	if len(globFiles) == 0 {
-		return "", fmt.Errorf("no files found for globs: %v", globs)
+		return fmt.Errorf("no files found for globs: %v", globs)
 	}
 	files := make(map[string]string, len(globFiles))
 	for _, file := range globFiles {
@@ -45,18 +64,29 @@ func MakeZipArchiveWithGlobs(ctx context.Context, targetName string, globs ...st
 
 	archiveFiles, err := archives.FilesFromDisk(ctx, nil, files)
 	if err != nil {
-		return "", fmt.Errorf("failed to read files from disk: %w", err)
+		return fmt.Errorf("failed to read files from disk: %w", err)
 	}
+	zip := archives.CompressedArchive{
+		Archival: archives.Zip{},
+	}
+	if err := zip.Archive(ctx, out, archiveFiles); err != nil {
+		return fmt.Errorf("failed to create archive: %w", err)
+	}
+	return nil
+}
+
+func MakeZipArchiveWithGlobs(ctx context.Context, targetName string, globs ...string) (string, error) {
 	out, err := os.OpenFile(targetName, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
 		return "", fmt.Errorf("failed to create archive file: %w", err)
 	}
 	defer out.Close()
-	zip := archives.CompressedArchive{
-		Archival: archives.Zip{},
-	}
-	if err := zip.Archive(ctx, out, archiveFiles); err != nil {
-		return "", fmt.Errorf("failed to create archive: %w", err)
+	if err := writeZipArchive(ctx, out, globs...); err != nil {
+		// Don't leave a partial/empty archive behind on failure, matching the
+		// pre-refactor contract where the output was created only after the
+		// glob inputs resolved successfully.
+		os.Remove(targetName)
+		return "", err
 	}
 	return filepath.Abs(targetName)
 }
@@ -75,6 +105,33 @@ func Archive(ctx context.Context, src string, dst string) error {
 	return err
 }
 
+// ArchiveInRoot is Archive with src stat and dst creation confined to base
+// through an os.Root, so request-derived paths cannot stat or write outside
+// base (CWE-22). The glob expansion of src is unchanged from Archive.
+func ArchiveInRoot(ctx context.Context, base, src, dst string) error {
+	srcInfo, err := RootStat(base, src)
+	if err != nil {
+		return fmt.Errorf("failed to get source directory info: %w", err)
+	}
+	if srcInfo.IsDir() {
+		src = src + "/*"
+	}
+	out, err := RootOpenFile(base, dst, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o600)
+	if err != nil {
+		return fmt.Errorf("failed to create archive file: %w", err)
+	}
+	err = writeZipArchive(ctx, out, src)
+	out.Close()
+	if err != nil {
+		// Don't leave a partial/empty archive behind on failure, mirroring
+		// MakeZipArchiveWithGlobs. dst is request-derived, so remove it through
+		// the same os.Root rather than a bare os.Remove.
+		_ = RootRemove(base, dst)
+		return err
+	}
+	return nil
+}
+
 // Unarchive unzips the zip file at src into dst.
 //
 // Extraction is confined to dst through an os.Root: the archive entry name
@@ -83,12 +140,31 @@ func Archive(ctx context.Context, src string, dst string) error {
 // kernel; we also reject escaping names and symlink entries up front for a
 // clear error (zip-slip / CWE-22).
 func Unarchive(ctx context.Context, src string, dst string) error {
-	var format archives.Zip
 	file, err := os.Open(src)
 	if err != nil {
 		return fmt.Errorf("failed to open file: %w", err)
 	}
 	defer file.Close()
+	return unarchiveStream(ctx, file, dst)
+}
+
+// UnarchiveInRoot is Unarchive with the source archive opened through an
+// os.Root rooted at base, so a request-derived src path cannot read a file
+// outside base (CWE-22). Extraction into dst is confined exactly as in
+// Unarchive.
+func UnarchiveInRoot(ctx context.Context, base, src, dst string) error {
+	file, err := RootOpen(base, src)
+	if err != nil {
+		return fmt.Errorf("failed to open file: %w", err)
+	}
+	defer file.Close()
+	return unarchiveStream(ctx, file, dst)
+}
+
+// unarchiveStream extracts the zip stream file into dst. Extraction is confined
+// to dst through an os.Root (see Unarchive's doc comment for the threat model).
+func unarchiveStream(ctx context.Context, file io.Reader, dst string) error {
+	var format archives.Zip
 
 	// The destination must exist before we can open a root on it. Mode 0o755 is
 	// required so that other containers in the same pod (running under

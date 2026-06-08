@@ -95,6 +95,55 @@ func RootMkdirAll(base, path string, perm os.FileMode) error {
 	return root.MkdirAll(rel, perm.Perm())
 }
 
+// RootOpen opens path for reading within base through an os.Root, so a
+// traversing or symlinked path cannot reach a file outside base. path may be
+// base-relative or absolute-under-base. The returned file stays valid after the
+// transient root is closed.
+func RootOpen(base, path string) (*os.File, error) {
+	rel, err := relUnderRoot(base, path)
+	if err != nil {
+		return nil, err
+	}
+	root, err := os.OpenRoot(base)
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
+	return root.Open(rel)
+}
+
+// RootOpenFile opens path with the given flags and permission within base
+// through an os.Root. It is the os.Root equivalent of os.OpenFile and confines
+// the open to base even for an attacker-influenced path. The returned file
+// stays valid after the transient root is closed.
+func RootOpenFile(base, path string, flag int, perm os.FileMode) (*os.File, error) {
+	rel, err := relUnderRoot(base, path)
+	if err != nil {
+		return nil, err
+	}
+	root, err := os.OpenRoot(base)
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
+	return root.OpenFile(rel, flag, perm.Perm())
+}
+
+// RootRemove removes path within base through an os.Root, so a traversing path
+// cannot delete a file outside base.
+func RootRemove(base, path string) error {
+	rel, err := relUnderRoot(base, path)
+	if err != nil {
+		return err
+	}
+	root, err := os.OpenRoot(base)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	return root.Remove(rel)
+}
+
 // RootRename renames oldPath to newPath through an os.Root. Both ends must be
 // under the same base.
 func RootRename(base, oldPath, newPath string) error {

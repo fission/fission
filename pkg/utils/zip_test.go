@@ -425,3 +425,61 @@ func TestArchiveOverwrite(t *testing.T) {
 		}
 	}
 }
+
+// TestZipInRootConfinement exercises the os.Root-confined variants used on the
+// server-side fetch path: archive creation, zip sniffing and extraction all
+// stay within base, and request-derived paths that escape base are rejected.
+func TestZipInRootConfinement(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	base := t.TempDir()
+	srcDir := filepath.Join(base, "src")
+	require.NoError(t, os.MkdirAll(srcDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "hello.txt"), []byte("world"), 0o644))
+
+	// ArchiveInRoot writes the zip under base.
+	zipPath := filepath.Join(base, "out.zip")
+	require.NoError(t, ArchiveInRoot(ctx, base, srcDir, zipPath))
+
+	// IsZipInRoot recognises it through the root.
+	isZip, err := IsZipInRoot(ctx, base, zipPath)
+	require.NoError(t, err)
+	assert.True(t, isZip)
+
+	// UnarchiveInRoot extracts it; the source archive is opened through the root.
+	extractDir := filepath.Join(base, "extract")
+	require.NoError(t, UnarchiveInRoot(ctx, base, zipPath, extractDir))
+	got, err := os.ReadFile(filepath.Join(extractDir, "hello.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "world", string(got))
+
+	// Escaping paths are rejected before any filesystem access outside base.
+	outside := filepath.Join(filepath.Dir(base), "outside.zip")
+	require.NoError(t, os.WriteFile(outside, []byte("intact"), 0o600))
+	assert.Error(t, ArchiveInRoot(ctx, base, srcDir, "../outside.zip"))
+	assert.Error(t, UnarchiveInRoot(ctx, base, "../outside.zip", extractDir))
+	isZip, err = IsZipInRoot(ctx, base, "../outside.zip")
+	require.NoError(t, err) // open failure is swallowed, matching IsZip
+	assert.False(t, isZip)
+	data, err := os.ReadFile(outside)
+	require.NoError(t, err)
+	assert.Equal(t, "intact", string(data))
+}
+
+// TestArchiveInRootCleansUpOnFailure verifies ArchiveInRoot does not leave a
+// partial/empty archive behind when there is nothing to archive, matching the
+// MakeZipArchiveWithGlobs contract.
+func TestArchiveInRootCleansUpOnFailure(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	base := t.TempDir()
+	emptyDir := filepath.Join(base, "empty")
+	require.NoError(t, os.MkdirAll(emptyDir, 0o755))
+
+	dst := filepath.Join(base, "out.zip")
+	err := ArchiveInRoot(ctx, base, emptyDir, dst)
+	require.Error(t, err) // "no files found for globs"
+	assert.NoFileExists(t, dst)
+}
