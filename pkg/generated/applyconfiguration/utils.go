@@ -96,6 +96,8 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &corev1.RuntimeApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("SecretReference"):
 		return &corev1.SecretReferenceApplyConfiguration{}
+	case v1.SchemeGroupVersion.WithKind("StreamingConfig"):
+		return &corev1.StreamingConfigApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("TimeTrigger"):
 		return &corev1.TimeTriggerApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("TimeTriggerSpec"):

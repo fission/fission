@@ -454,6 +454,14 @@ type (
 		// +optional
 		IdleTimeout *int `json:"idletimeout,omitempty"`
 
+		// Streaming opts this function into the router's streaming invocation path:
+		// incremental flushing, an idle/max timeout split, and a router-driven pod
+		// keepalive for the connection's lifetime. When nil (the default) the function
+		// uses the classic buffered, retry-on-transient-error proxy path with a single
+		// FunctionTimeout deadline. Additive and backward compatible.
+		// +optional
+		Streaming *StreamingConfig `json:"streaming,omitempty"`
+
 		// Maximum number of pods to be specialized which will serve requests
 		// This is optional. If not specified default value will be taken as 500
 		// +optional
@@ -478,6 +486,39 @@ type (
 		// Different arguments mentioned for container based function are populated inside a pod.
 		// +optional
 		PodSpec *apiv1.PodSpec `json:"podspec,omitempty"`
+	}
+
+	// StreamingProtocol selects how the router treats the upstream response.
+	// +kubebuilder:validation:Enum=auto;sse;chunked;websocket
+	StreamingProtocol string
+
+	// StreamingConfig controls the router's streaming behavior for a function.
+	StreamingConfig struct {
+		// Enabled turns on the streaming path. A non-nil Streaming with Enabled=false
+		// is equivalent to nil (classic path), allowed so callers can keep the block
+		// while toggling.
+		// +optional
+		// +kubebuilder:default=true
+		Enabled bool `json:"enabled"`
+
+		// Protocol hints how the router proxies the response.
+		// +optional
+		// +kubebuilder:default=auto
+		Protocol StreamingProtocol `json:"protocol,omitempty"`
+
+		// IdleTimeoutSeconds is the maximum time the router waits without bytes flowing
+		// from the function before it aborts the stream; reset on every chunk. 0 means
+		// use the package default (DefaultStreamIdleSeconds).
+		// +optional
+		// +kubebuilder:validation:Minimum=0
+		IdleTimeoutSeconds int `json:"idleTimeoutSeconds,omitempty"`
+
+		// MaxDurationSeconds is a hard ceiling on total stream lifetime regardless of
+		// activity. 0 means no ceiling beyond the client connection / FunctionTimeout
+		// fallback; the router then relies on IdleTimeoutSeconds.
+		// +optional
+		// +kubebuilder:validation:Minimum=0
+		MaxDurationSeconds int `json:"maxDurationSeconds,omitempty"`
 	}
 
 	// InvokeStrategy is a set of controls over how the function executes.

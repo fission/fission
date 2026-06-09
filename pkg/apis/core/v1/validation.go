@@ -289,6 +289,11 @@ func (spec FunctionSpec) Validate() error {
 	if spec.InvokeStrategy.ExecutionStrategy.ExecutorType == ExecutorTypeContainer && spec.PodSpec == nil {
 		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidObject, "FunctionSpec.PodSpec", "", "executor type container requires a pod spec"))
 	}
+
+	if spec.Streaming != nil {
+		errs = errors.Join(errs, spec.Streaming.Validate())
+	}
+
 	// Non-CEL admission check (pod-spec security). Kept in Validate() so the
 	// CLI checks it client-side; the webhook runs it via ValidateForAdmission().
 	errs = errors.Join(errs, spec.validateForAdmission())
@@ -306,6 +311,31 @@ func (spec FunctionSpec) Validate() error {
 // (iterating an embedded PodSpec exceeds the CEL cost budget; GHSA-v455-mv2v-5g92).
 func (spec FunctionSpec) validateForAdmission() error {
 	return ValidatePodSpecSafety("Function.spec.podspec", spec.PodSpec)
+}
+
+// Validate checks the streaming config: a known protocol, non-negative timeouts,
+// and a max duration that is not below the idle timeout when both are set.
+func (sc *StreamingConfig) Validate() error {
+	var errs error
+
+	switch sc.Protocol {
+	case "", StreamingAuto, StreamingSSE, StreamingChunked, StreamingWebSocket:
+		// ok
+	default:
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.Streaming.Protocol", sc.Protocol, "not a valid streaming protocol"))
+	}
+
+	if sc.IdleTimeoutSeconds < 0 {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.Streaming.IdleTimeoutSeconds", sc.IdleTimeoutSeconds, "must be >= 0"))
+	}
+	if sc.MaxDurationSeconds < 0 {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.Streaming.MaxDurationSeconds", sc.MaxDurationSeconds, "must be >= 0"))
+	}
+	if sc.IdleTimeoutSeconds > 0 && sc.MaxDurationSeconds > 0 && sc.MaxDurationSeconds < sc.IdleTimeoutSeconds {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.Streaming.MaxDurationSeconds", sc.MaxDurationSeconds, "must be >= IdleTimeoutSeconds"))
+	}
+
+	return errs
 }
 
 func (is InvokeStrategy) Validate() error {
