@@ -25,9 +25,10 @@ type StreamingConfigApplyConfiguration struct {
 	// from the function before it aborts the stream; reset on every chunk. 0 means
 	// use the package default (DefaultStreamIdleSeconds).
 	IdleTimeoutSeconds *int `json:"idleTimeoutSeconds,omitempty"`
-	// MaxDurationSeconds is a hard ceiling on total stream lifetime regardless of
-	// activity. 0 means no ceiling beyond the client connection / FunctionTimeout
-	// fallback; the router then relies on IdleTimeoutSeconds.
+	// MaxDurationSeconds is an optional hard ceiling on total stream lifetime
+	// regardless of activity. 0 (the default) means no ceiling — the idle
+	// timeout governs. A streaming function does NOT inherit FunctionTimeout as
+	// a ceiling; that total-wall-clock cap is exactly what streaming escapes.
 	MaxDurationSeconds *int `json:"maxDurationSeconds,omitempty"`
 }
 
