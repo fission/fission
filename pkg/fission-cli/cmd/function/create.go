@@ -7,9 +7,11 @@ package function
 import (
 	"errors"
 	"fmt"
+	"os"
 
 	asv2 "k8s.io/api/autoscaling/v2"
 	apiv1 "k8s.io/api/core/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -53,6 +55,29 @@ func getStreamingConfig(input cli.Input) *fv1.StreamingConfig {
 		IdleTimeoutSeconds: input.Int(flagkey.FnStreamingIdleTimeout),
 		MaxDurationSeconds: input.Int(flagkey.FnStreamingMaxDuration),
 	}
+}
+
+// getToolConfig builds a ToolConfig from the --expose-as-mcp / --tool-* flags,
+// or nil when --expose-as-mcp is not set (the function is not advertised as an
+// MCP tool). The --tool-input-schema flag points at a JSON Schema file whose raw
+// contents are stored verbatim on the CRD.
+func getToolConfig(input cli.Input) (*fv1.ToolConfig, error) {
+	if !input.Bool(flagkey.FnExposeAsMCP) {
+		return nil, nil
+	}
+	tc := &fv1.ToolConfig{
+		ExposeAsMCP: true,
+		Description: input.String(flagkey.FnToolDescription),
+		ToolName:    input.String(flagkey.FnToolName),
+	}
+	if path := input.String(flagkey.FnToolInputSchema); path != "" {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("reading tool input schema file %q: %w", path, err)
+		}
+		tc.InputSchema = &apiextensionsv1.JSON{Raw: raw}
+	}
+	return tc, nil
 }
 
 func (opts *CreateSubCommand) do(input cli.Input) error {
@@ -249,6 +274,11 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		return err
 	}
 
+	toolConfig, err := getToolConfig(input)
+	if err != nil {
+		return err
+	}
+
 	opts.function = &fv1.Function{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fnName,
@@ -262,6 +292,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 			FunctionTimeout: fnTimeout,
 			IdleTimeout:     &fnIdleTimeout,
 			Streaming:       getStreamingConfig(input),
+			Tool:            toolConfig,
 			Concurrency:     fnConcurrency,
 			RequestsPerPod:  requestsPerPod,
 			RetainPods:      retainPods,

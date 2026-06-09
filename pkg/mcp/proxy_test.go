@@ -82,10 +82,10 @@ func TestProxyInvokeUnsignedWhenNoMaster(t *testing.T) {
 func TestProxyInvokeStatusMapping(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name        string
-		status      int
-		body        string
-		wantIsError bool
+		name         string
+		status       int
+		body         string
+		wantIsError  bool
 		wantContains string
 	}{
 		{"2xx success", http.StatusOK, "ok-body", false, "ok-body"},

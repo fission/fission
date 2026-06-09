@@ -51,9 +51,9 @@ func TestAuthorizerVerifyToken(t *testing.T) {
 	t.Run("valid token yields scope", func(t *testing.T) {
 		t.Parallel()
 		tok := mintToken(t, key, jwt.MapClaims{
-			"sub":                 "agent-1",
-			"allowed_namespaces":  []any{"ns-a", "ns-b"},
-			"exp":                 time.Now().Add(time.Hour).Unix(),
+			"sub":                "agent-1",
+			"allowed_namespaces": []any{"ns-a", "ns-b"},
+			"exp":                time.Now().Add(time.Hour).Unix(),
 		})
 		ti, err := a.verifyToken(context.Background(), tok, nil)
 		require.NoError(t, err)
