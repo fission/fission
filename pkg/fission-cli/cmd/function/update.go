@@ -106,6 +106,12 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 		function.Spec.IdleTimeout = &fnTimeout
 	}
 
+	// --streaming toggles the streaming config; when off it clears it (classic
+	// path). The other --streaming* flags only take effect alongside --streaming.
+	if input.IsSet(flagkey.FnStreaming) {
+		function.Spec.Streaming = getStreamingConfig(input)
+	}
+
 	err = checkExecutorPoolManager(input, function.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType)
 	if err != nil {
 		return err
