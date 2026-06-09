@@ -45,7 +45,7 @@ func (opts *ToolsSubCommand) do(input cli.Input) error {
 
 	exposed := make([]fv1.Function, 0, len(fns.Items))
 	for _, f := range fns.Items {
-		if f.Spec.Tool != nil && f.Spec.Tool.ExposeAsMCP {
+		if f.Spec.Tool != nil {
 			exposed = append(exposed, f)
 		}
 	}

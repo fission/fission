@@ -7,7 +7,6 @@ package mcp
 import (
 	"encoding/json"
 	"slices"
-	"sort"
 	"sync"
 
 	"k8s.io/apimachinery/pkg/types"
@@ -48,31 +47,50 @@ func NewRegistry() *Registry {
 	}
 }
 
-// Upsert inserts or updates the tool for a function. It returns whether the tool
-// was newly added, whether an existing tool changed, and the previous tool name
-// for that function (empty if none) so the caller can drop a stale registration
-// when ToolName changed.
-func (r *Registry) Upsert(e ToolEntry) (added, changed bool, oldName string) {
+// UpsertResult reports the outcome of an Upsert.
+type UpsertResult int
+
+const (
+	// UpsertNoChange: the function's tool is already registered identically.
+	UpsertNoChange UpsertResult = iota
+	// UpsertApplied: the tool was added or changed; the caller should emit an
+	// add-delta (and drop oldName first if it differs).
+	UpsertApplied
+	// UpsertConflict: the desired tool name is already owned by a *different*
+	// function; nothing was registered. The caller should not advertise this
+	// function and should surface the conflict.
+	UpsertConflict
+)
+
+// Upsert inserts or updates the tool for a function. It returns the outcome and
+// the previous tool name for that function (empty if none) so the caller can
+// drop a stale registration when ToolName changed. A tool name already owned by
+// a different function is a conflict: nothing is mutated and UpsertConflict is
+// returned (the default "<namespace>-<name>" naming never collides; only an
+// explicit ToolName override can).
+func (r *Registry) Upsert(e ToolEntry) (res UpsertResult, oldName string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	nn := types.NamespacedName{Namespace: e.Namespace, Name: e.FnName}
 	oldName = r.byFn[nn]
+
+	if existing, ok := r.byName[e.ToolName]; ok && (existing.Namespace != e.Namespace || existing.FnName != e.FnName) {
+		return UpsertConflict, oldName
+	}
+
 	if oldName != "" && oldName != e.ToolName {
 		delete(r.byName, oldName)
 	}
 
 	prev, existed := r.byName[e.ToolName]
-	switch {
-	case !existed || oldName != e.ToolName:
-		added = true
-	case !toolEntryEqual(prev, e):
-		changed = true
-	}
-
 	r.byName[e.ToolName] = e
 	r.byFn[nn] = e.ToolName
-	return added, changed, oldName
+
+	if existed && oldName == e.ToolName && toolEntryEqual(prev, e) {
+		return UpsertNoChange, oldName
+	}
+	return UpsertApplied, oldName
 }
 
 // RemoveByFunction drops the tool registered for a function, returning the tool
@@ -98,27 +116,17 @@ func (r *Registry) Lookup(toolName string) (ToolEntry, bool) {
 	return e, ok
 }
 
-// ListForNamespaces returns the tools visible to a caller authorized for the
-// given namespaces, sorted by tool name for a stable tools/list. A wildcard
-// caller sees every tool.
-func (r *Registry) ListForNamespaces(allowed []string, wildcard bool) []ToolEntry {
+// Len returns the number of registered tools.
+func (r *Registry) Len() int {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-
-	out := make([]ToolEntry, 0, len(r.byName))
-	for _, e := range r.byName {
-		if wildcard || slices.Contains(allowed, e.Namespace) {
-			out = append(out, e)
-		}
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].ToolName < out[j].ToolName })
-	return out
+	return len(r.byName)
 }
 
 // toolEntryFromFunction builds the resolved ToolEntry for an MCP-exposed
 // function: it defaults the tool name to "<namespace>-<name>" and supplies an
 // open object schema when InputSchema is unset. Callers must only pass functions
-// whose Tool.ExposeAsMCP is true.
+// whose Tool is non-nil.
 func toolEntryFromFunction(fn *fv1.Function) ToolEntry {
 	tc := fn.Spec.Tool
 	name := tc.ToolName

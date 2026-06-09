@@ -463,11 +463,11 @@ type (
 		// +optional
 		Streaming *StreamingConfig `json:"streaming,omitempty"`
 
-		// Tool, when set with ExposeAsMCP=true, advertises this function as a Model
-		// Context Protocol (MCP) tool on the fission-bundle --mcpPort server. The MCP
-		// server watches Function CRDs and hot-updates its tool list from this field.
-		// When nil (the default) the function is never advertised as a tool. Additive
-		// and backward compatible.
+		// Tool, when non-nil, advertises this function as a Model Context Protocol
+		// (MCP) tool on the fission-bundle --mcpPort server. The MCP server watches
+		// Function CRDs and hot-updates its tool list from this field. Presence is
+		// the on switch (like Streaming): nil (the default) means the function is
+		// never advertised as a tool. Additive and backward compatible.
 		// +optional
 		Tool *ToolConfig `json:"tool,omitempty"`
 
@@ -530,14 +530,12 @@ type (
 	// ToolConfig declares how a Function is exposed as an MCP (Model Context
 	// Protocol) tool. The MCP server reuses the function's existing internal
 	// invocation path; this struct only declares the agent-facing tool contract.
+	// Presence of the enclosing FunctionSpec.Tool is the on switch — there is no
+	// separate enabled flag, so the in-memory zero value and the stored object
+	// never disagree (the same rationale as StreamingConfig).
 	ToolConfig struct {
-		// ExposeAsMCP gates advertisement. False (the default) means the function
-		// is never listed as a tool even if the rest of this struct is populated.
-		// +optional
-		ExposeAsMCP bool `json:"exposeAsMCP,omitempty"`
-
 		// Description is the human/agent-facing tool description surfaced in the MCP
-		// tools/list response. Required when ExposeAsMCP is true.
+		// tools/list response. Required.
 		// +optional
 		Description string `json:"description,omitempty"`
 

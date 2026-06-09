@@ -343,22 +343,17 @@ func (sc *StreamingConfig) Validate() error {
 	return errs
 }
 
-// Validate checks the MCP tool config: a description is required when the
-// function is advertised, and a supplied InputSchema must parse as a JSON object
-// carrying a "type" key (a cheap structural check — full JSON-Schema
-// meta-validation is the agent's job, and CEL cannot parse arbitrary schemas).
-// The ToolName pattern is enforced by the CRD kubebuilder marker.
+// Validate checks the MCP tool config (only reached when FunctionSpec.Tool is
+// non-nil, i.e. the function is advertised): a description is required, and a
+// supplied InputSchema must parse as a JSON object carrying a "type" key (a
+// cheap structural check — full JSON-Schema meta-validation is the agent's job,
+// and CEL cannot parse arbitrary schemas). The ToolName pattern is enforced by
+// the CRD kubebuilder marker.
 func (tc *ToolConfig) Validate() error {
 	var errs error
 
-	if !tc.ExposeAsMCP {
-		// Nothing is advertised, so the rest of the struct is inert; don't reject
-		// a populated-but-disabled config.
-		return nil
-	}
-
 	if strings.TrimSpace(tc.Description) == "" {
-		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.Tool.Description", tc.Description, "a description is required when exposeAsMCP is true"))
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.Tool.Description", tc.Description, "a description is required when the function is exposed as an MCP tool"))
 	}
 
 	if tc.InputSchema != nil && len(tc.InputSchema.Raw) > 0 {

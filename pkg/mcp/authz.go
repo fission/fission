@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/modelcontextprotocol/go-sdk/auth"
@@ -22,7 +23,9 @@ const claimAllowedNamespaces = "allowed_namespaces"
 const wildcardNamespace = "*"
 
 // AuthScope is the namespace authorization derived from a caller's token. It is
-// the single authority for which tools a caller may list and invoke.
+// the single authority for which tools a caller may list and invoke. Wildcard
+// takes precedence: when it is true, Namespaces is ignored (the constructors in
+// this file always leave Namespaces nil for a wildcard scope).
 type AuthScope struct {
 	Namespaces []string
 	Wildcard   bool
@@ -75,6 +78,8 @@ func (a *Authorizer) HTTPMiddleware(next http.Handler) http.Handler {
 // key and projects the allowed_namespaces claim into TokenInfo. Scopes carries
 // the namespace list (or the "*" sentinel); UserID is the subject, which the
 // transport uses to bind a session to one caller and prevent session hijacking.
+// Expiration is required: the SDK's RequireBearerToken rejects a TokenInfo with
+// a zero Expiration, so a token without an exp claim is treated as invalid.
 func (a *Authorizer) verifyToken(_ context.Context, token string, _ *http.Request) (*auth.TokenInfo, error) {
 	claims := jwt.MapClaims{}
 	parsed, err := jwt.ParseWithClaims(token, claims, func(t *jwt.Token) (any, error) {
@@ -87,8 +92,17 @@ func (a *Authorizer) verifyToken(_ context.Context, token string, _ *http.Reques
 		return nil, fmt.Errorf("%w: %v", auth.ErrInvalidToken, err)
 	}
 
-	scope := scopeFromClaim(claims[claimAllowedNamespaces])
-	ti := &auth.TokenInfo{Scopes: scope.Namespaces}
+	scope, ok := parseScopeClaim(claims[claimAllowedNamespaces])
+	if !ok {
+		return nil, fmt.Errorf("%w: malformed %s claim", auth.ErrInvalidToken, claimAllowedNamespaces)
+	}
+
+	exp, ok := claims["exp"].(float64)
+	if !ok {
+		return nil, fmt.Errorf("%w: missing exp claim", auth.ErrInvalidToken)
+	}
+
+	ti := &auth.TokenInfo{Scopes: scope.Namespaces, Expiration: time.Unix(int64(exp), 0)}
 	if scope.Wildcard {
 		ti.Scopes = []string{wildcardNamespace}
 	}
@@ -122,30 +136,38 @@ func scopeFromScopes(scopes []string) AuthScope {
 	return AuthScope{Namespaces: scopes}
 }
 
-// scopeFromClaim parses the allowed_namespaces claim, which may be the string
-// "*", a single namespace string, or an array of namespace strings.
-func scopeFromClaim(v any) AuthScope {
+// parseScopeClaim parses the allowed_namespaces claim, which may be absent (a
+// valid token authorized for nothing), the string "*", a single namespace
+// string, or an array of namespace strings. It returns ok=false when the claim
+// is present but malformed (a wrong JSON type, or an array with non-string
+// elements) so the token is rejected rather than silently reduced to an empty
+// scope that is indistinguishable from "no tools exist".
+func parseScopeClaim(v any) (AuthScope, bool) {
 	switch c := v.(type) {
+	case nil:
+		return AuthScope{}, true // absent claim: authorized for nothing
 	case string:
 		if c == wildcardNamespace {
-			return AuthScope{Wildcard: true}
+			return AuthScope{Wildcard: true}, true
 		}
 		if c == "" {
-			return AuthScope{}
+			return AuthScope{}, true
 		}
-		return AuthScope{Namespaces: []string{c}}
+		return AuthScope{Namespaces: []string{c}}, true
 	case []any:
-		var ns []string
+		ns := make([]string, 0, len(c))
 		for _, e := range c {
-			if s, ok := e.(string); ok {
-				if s == wildcardNamespace {
-					return AuthScope{Wildcard: true}
-				}
-				ns = append(ns, s)
+			s, ok := e.(string)
+			if !ok {
+				return AuthScope{}, false // non-string element: malformed
 			}
+			if s == wildcardNamespace {
+				return AuthScope{Wildcard: true}, true
+			}
+			ns = append(ns, s)
 		}
-		return AuthScope{Namespaces: ns}
+		return AuthScope{Namespaces: ns}, true
 	default:
-		return AuthScope{}
+		return AuthScope{}, false // unexpected type: malformed
 	}
 }

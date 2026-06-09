@@ -97,6 +97,13 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		return nil
 	})
 
-	logger.Info("starting mcp server", "port", port, "authEnabled", authz.Enabled())
+	if authz.Enabled() {
+		logger.Info("starting mcp server", "port", port, "authEnabled", true)
+	} else {
+		// Pass-through mode grants every caller a wildcard scope. Intended for dev
+		// only; loud so an accidentally-empty JWT_SIGNING_KEY in production is
+		// visible in the logs.
+		logger.Info("WARNING: starting mcp server with authentication DISABLED — every caller can list and invoke all tools (set JWT_SIGNING_KEY to scope access)", "port", port)
+	}
 	return crMgr.Start(ctx)
 }

@@ -24,23 +24,20 @@ func TestRegistryUpsert(t *testing.T) {
 	t.Parallel()
 	r := NewRegistry()
 
-	added, changed, oldName := r.Upsert(entry("default", "fn1", "t1"))
-	assert.True(t, added)
-	assert.False(t, changed)
+	res, oldName := r.Upsert(entry("default", "fn1", "t1"))
+	assert.Equal(t, UpsertApplied, res)
 	assert.Empty(t, oldName)
 
 	// Same entry again: no-op.
-	added, changed, oldName = r.Upsert(entry("default", "fn1", "t1"))
-	assert.False(t, added)
-	assert.False(t, changed)
+	res, oldName = r.Upsert(entry("default", "fn1", "t1"))
+	assert.Equal(t, UpsertNoChange, res)
 	assert.Equal(t, "t1", oldName)
 
-	// Description change: changed.
+	// Description change: applied.
 	e := entry("default", "fn1", "t1")
 	e.Description = "new"
-	added, changed, _ = r.Upsert(e)
-	assert.False(t, added)
-	assert.True(t, changed)
+	res, _ = r.Upsert(e)
+	assert.Equal(t, UpsertApplied, res)
 
 	got, ok := r.Lookup("t1")
 	require.True(t, ok)
@@ -52,14 +49,30 @@ func TestRegistryRename(t *testing.T) {
 	r := NewRegistry()
 	r.Upsert(entry("default", "fn1", "old"))
 
-	added, _, oldName := r.Upsert(entry("default", "fn1", "new"))
-	assert.True(t, added)
+	res, oldName := r.Upsert(entry("default", "fn1", "new"))
+	assert.Equal(t, UpsertApplied, res)
 	assert.Equal(t, "old", oldName, "rename should report the prior tool name")
 
 	_, ok := r.Lookup("old")
 	assert.False(t, ok, "old tool name must be dropped on rename")
 	_, ok = r.Lookup("new")
 	assert.True(t, ok)
+}
+
+func TestRegistryNameConflict(t *testing.T) {
+	t.Parallel()
+	r := NewRegistry()
+	r.Upsert(entry("ns-a", "fn1", "shared"))
+
+	// A different function claiming the same tool name is a conflict: nothing
+	// changes and fn1's registration is untouched.
+	res, _ := r.Upsert(entry("ns-b", "fn2", "shared"))
+	assert.Equal(t, UpsertConflict, res)
+
+	got, ok := r.Lookup("shared")
+	require.True(t, ok)
+	assert.Equal(t, "fn1", got.FnName, "the original owner must keep the name")
+	assert.Equal(t, 1, r.Len())
 }
 
 func TestRegistryRemoveByFunction(t *testing.T) {
@@ -77,35 +90,15 @@ func TestRegistryRemoveByFunction(t *testing.T) {
 	assert.False(t, existed, "removing twice is a no-op")
 }
 
-func TestRegistryListForNamespaces(t *testing.T) {
+func TestRegistryLen(t *testing.T) {
 	t.Parallel()
 	r := NewRegistry()
+	assert.Equal(t, 0, r.Len())
 	r.Upsert(entry("ns-a", "fn1", "t-a1"))
 	r.Upsert(entry("ns-a", "fn2", "t-a2"))
-	r.Upsert(entry("ns-b", "fn3", "t-b1"))
-
-	t.Run("wildcard sees all, sorted", func(t *testing.T) {
-		t.Parallel()
-		got := r.ListForNamespaces(nil, true)
-		require.Len(t, got, 3)
-		assert.Equal(t, "t-a1", got[0].ToolName)
-		assert.Equal(t, "t-a2", got[1].ToolName)
-		assert.Equal(t, "t-b1", got[2].ToolName)
-	})
-
-	t.Run("scoped to ns-a", func(t *testing.T) {
-		t.Parallel()
-		got := r.ListForNamespaces([]string{"ns-a"}, false)
-		require.Len(t, got, 2)
-		for _, e := range got {
-			assert.Equal(t, "ns-a", e.Namespace)
-		}
-	})
-
-	t.Run("no namespaces sees nothing", func(t *testing.T) {
-		t.Parallel()
-		assert.Empty(t, r.ListForNamespaces(nil, false))
-	})
+	assert.Equal(t, 2, r.Len())
+	r.RemoveByFunction(types.NamespacedName{Namespace: "ns-a", Name: "fn1"})
+	assert.Equal(t, 1, r.Len())
 }
 
 func TestToolEntryFromFunction(t *testing.T) {
@@ -120,7 +113,7 @@ func TestToolEntryFromFunction(t *testing.T) {
 
 	t.Run("defaults name and schema", func(t *testing.T) {
 		t.Parallel()
-		e := toolEntryFromFunction(mkFn(&fv1.ToolConfig{ExposeAsMCP: true, Description: "d"}))
+		e := toolEntryFromFunction(mkFn(&fv1.ToolConfig{Description: "d"}))
 		assert.Equal(t, "default-myfn", e.ToolName)
 		assert.JSONEq(t, `{"type":"object"}`, string(e.InputSchema))
 	})
@@ -129,7 +122,7 @@ func TestToolEntryFromFunction(t *testing.T) {
 		t.Parallel()
 		raw := `{"type":"object","properties":{"q":{"type":"string"}}}`
 		e := toolEntryFromFunction(mkFn(&fv1.ToolConfig{
-			ExposeAsMCP: true, Description: "d", ToolName: "search",
+			Description: "d", ToolName: "search",
 			InputSchema: &apiextensionsv1.JSON{Raw: []byte(raw)},
 		}))
 		assert.Equal(t, "search", e.ToolName)

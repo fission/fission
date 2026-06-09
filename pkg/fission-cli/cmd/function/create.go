@@ -66,7 +66,6 @@ func getToolConfig(input cli.Input) (*fv1.ToolConfig, error) {
 		return nil, nil
 	}
 	tc := &fv1.ToolConfig{
-		ExposeAsMCP: true,
 		Description: input.String(flagkey.FnToolDescription),
 		ToolName:    input.String(flagkey.FnToolName),
 	}

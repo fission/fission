@@ -53,11 +53,11 @@ type FunctionSpecApplyConfiguration struct {
 	// uses the classic buffered, retry-on-transient-error proxy path with a single
 	// FunctionTimeout deadline. Additive and backward compatible.
 	Streaming *StreamingConfigApplyConfiguration `json:"streaming,omitempty"`
-	// Tool, when set with ExposeAsMCP=true, advertises this function as a Model
-	// Context Protocol (MCP) tool on the fission-bundle --mcpPort server. The MCP
-	// server watches Function CRDs and hot-updates its tool list from this field.
-	// When nil (the default) the function is never advertised as a tool. Additive
-	// and backward compatible.
+	// Tool, when non-nil, advertises this function as a Model Context Protocol
+	// (MCP) tool on the fission-bundle --mcpPort server. The MCP server watches
+	// Function CRDs and hot-updates its tool list from this field. Presence is
+	// the on switch (like Streaming): nil (the default) means the function is
+	// never advertised as a tool. Additive and backward compatible.
 	Tool *ToolConfigApplyConfiguration `json:"tool,omitempty"`
 	// Maximum number of pods to be specialized which will serve requests
 	// This is optional. If not specified default value will be taken as 500

@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/go-logr/logr"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -97,7 +98,7 @@ func (p *Proxy) Invoke(ctx context.Context, e ToolEntry, args []byte) (*mcp.Call
 
 	body, readErr := io.ReadAll(io.LimitReader(resp.Body, p.maxBody+1))
 	if readErr != nil {
-		p.logger.Error(readErr, "reading tool response", "tool", e.ToolName)
+		p.logger.Error(readErr, "reading tool response", "tool", e.ToolName, "function", e.FnName, "namespace", e.Namespace)
 		return toolError("function invocation failed"), nil
 	}
 	if int64(len(body)) > p.maxBody {
@@ -109,12 +110,12 @@ func (p *Proxy) Invoke(ctx context.Context, e ToolEntry, args []byte) (*mcp.Call
 	case resp.StatusCode >= 200 && resp.StatusCode < 300:
 		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(body)}}}, nil
 	case resp.StatusCode >= 400 && resp.StatusCode < 500:
-		// Client error from the function: surface a truncated body so the agent
-		// can adjust its arguments.
+		// Client error from the function (incl. a transient router 404 while a
+		// route propagates): surface a truncated body so the agent can adjust.
 		return toolError(fmt.Sprintf("function returned %d: %s", resp.StatusCode, truncate(string(body), 512))), nil
 	default:
-		// 5xx (incl. the router's 404 while a route propagates): generic message,
-		// detail stays in the server log. No retry — agents retry themselves.
+		// 5xx: generic message, detail stays in the server log. No retry — agents
+		// retry themselves.
 		p.logger.V(1).Info("tool call upstream error", "tool", e.ToolName, "status", resp.StatusCode)
 		return toolError("function invocation failed"), nil
 	}
@@ -128,9 +129,13 @@ func toolError(msg string) *mcp.CallToolResult {
 	}
 }
 
+// truncate clips s to at most n bytes without splitting a multi-byte rune.
 func truncate(s string, n int) string {
 	if len(s) <= n {
 		return s
+	}
+	for n > 0 && !utf8.RuneStart(s[n]) {
+		n--
 	}
 	return s[:n] + "…"
 }

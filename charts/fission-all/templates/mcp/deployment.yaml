@@ -38,10 +38,12 @@ spec:
         - name: ROUTER_INTERNAL_URL
           value: "http://router-internal.{{ .Release.Namespace }}:{{ .Values.router.internalPort | default 8889 }}"
         {{- if .Values.authentication.enabled }}
-        # Agents authenticate to /mcp with a bearer JWT signed by this key (the
-        # same key the router issues tokens with). The allowed_namespaces claim
-        # scopes which tools a caller may list and invoke. When authentication is
-        # disabled the MCP endpoint runs in dev pass-through mode (no key).
+        # Agents authenticate to /mcp with a bearer JWT signed by this key (shared
+        # with the router's signing key). Tokens must carry an exp claim and an
+        # allowed_namespaces claim ("*" or a list) that scopes which tools a
+        # caller may list and invoke — the router's own /auth/login tokens do not
+        # yet include that claim, so MCP callers use purpose-minted tokens. When
+        # authentication is disabled the MCP endpoint runs in dev pass-through mode.
         - name: JWT_SIGNING_KEY
           valueFrom:
             secretKeyRef:

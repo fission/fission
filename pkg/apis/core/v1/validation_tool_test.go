@@ -21,17 +21,15 @@ func TestToolConfigValidate(t *testing.T) {
 		cfg     ToolConfig
 		wantErr bool
 	}{
-		{"disabled is inert even if empty", ToolConfig{ExposeAsMCP: false}, false},
-		{"disabled with bad schema still inert", ToolConfig{ExposeAsMCP: false, InputSchema: rawSchema(`not json`)}, false},
-		{"exposed requires description", ToolConfig{ExposeAsMCP: true}, true},
-		{"exposed blank description", ToolConfig{ExposeAsMCP: true, Description: "   "}, true},
-		{"exposed with description ok", ToolConfig{ExposeAsMCP: true, Description: "does a thing"}, false},
-		{"exposed nil schema ok", ToolConfig{ExposeAsMCP: true, Description: "d"}, false},
-		{"exposed empty-raw schema ok", ToolConfig{ExposeAsMCP: true, Description: "d", InputSchema: rawSchema("")}, false},
-		{"exposed valid object schema", ToolConfig{ExposeAsMCP: true, Description: "d", InputSchema: rawSchema(`{"type":"object","properties":{"q":{"type":"string"}}}`)}, false},
-		{"exposed schema not an object", ToolConfig{ExposeAsMCP: true, Description: "d", InputSchema: rawSchema(`["type"]`)}, true},
-		{"exposed schema missing type", ToolConfig{ExposeAsMCP: true, Description: "d", InputSchema: rawSchema(`{"properties":{}}`)}, true},
-		{"exposed schema not json", ToolConfig{ExposeAsMCP: true, Description: "d", InputSchema: rawSchema(`{bad`)}, true},
+		{"requires description", ToolConfig{}, true},
+		{"blank description", ToolConfig{Description: "   "}, true},
+		{"with description ok", ToolConfig{Description: "does a thing"}, false},
+		{"nil schema ok", ToolConfig{Description: "d"}, false},
+		{"empty-raw schema ok", ToolConfig{Description: "d", InputSchema: rawSchema("")}, false},
+		{"valid object schema", ToolConfig{Description: "d", InputSchema: rawSchema(`{"type":"object","properties":{"q":{"type":"string"}}}`)}, false},
+		{"schema not an object", ToolConfig{Description: "d", InputSchema: rawSchema(`["type"]`)}, true},
+		{"schema missing type", ToolConfig{Description: "d", InputSchema: rawSchema(`{"properties":{}}`)}, true},
+		{"schema not json", ToolConfig{Description: "d", InputSchema: rawSchema(`{bad`)}, true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -69,7 +67,7 @@ func TestFunctionSpecValidateTool(t *testing.T) {
 	t.Run("invalid tool surfaced", func(t *testing.T) {
 		t.Parallel()
 		spec := base()
-		spec.Tool = &ToolConfig{ExposeAsMCP: true} // missing description
+		spec.Tool = &ToolConfig{} // missing description
 		if err := spec.Validate(); err == nil {
 			t.Fatalf("expected error for exposed tool without description")
 		}

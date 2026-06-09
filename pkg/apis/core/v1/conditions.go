@@ -62,10 +62,11 @@ const (
 // logs, not in condition history.
 const (
 	// Function condition reasons
-	FunctionReasonReady         = "Available"          // executor: backend is serving requests
-	FunctionReasonPackageReady  = "PackageReady"       // buildermgr: package built
-	FunctionReasonPackageFailed = "PackageBuildFailed" // buildermgr: package build failed
-	FunctionReasonToolExposed   = "ToolExposed"        // mcp: advertised as an MCP tool
+	FunctionReasonReady            = "Available"          // executor: backend is serving requests
+	FunctionReasonPackageReady     = "PackageReady"       // buildermgr: package built
+	FunctionReasonPackageFailed    = "PackageBuildFailed" // buildermgr: package build failed
+	FunctionReasonToolExposed      = "ToolExposed"        // mcp: advertised as an MCP tool
+	FunctionReasonToolNameConflict = "ToolNameConflict"   // mcp: tool name already used by another function
 
 	// Package condition reasons (mirror BuildStatus enum + composites)
 	PackageReasonBuildSucceeded  = "BuildSucceeded"

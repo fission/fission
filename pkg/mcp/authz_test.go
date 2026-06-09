@@ -31,15 +31,31 @@ func TestScopeAllows(t *testing.T) {
 	assert.False(t, AuthScope{}.Allows("a"))
 }
 
-func TestScopeFromClaim(t *testing.T) {
+func TestParseScopeClaim(t *testing.T) {
 	t.Parallel()
-	assert.True(t, scopeFromClaim("*").Wildcard)
-	assert.Equal(t, []string{"ns1"}, scopeFromClaim("ns1").Namespaces)
-	assert.Empty(t, scopeFromClaim("").Namespaces)
-	assert.Equal(t, []string{"a", "b"}, scopeFromClaim([]any{"a", "b"}).Namespaces)
-	assert.True(t, scopeFromClaim([]any{"a", "*"}).Wildcard)
-	assert.Empty(t, scopeFromClaim(42).Namespaces)
-	assert.Empty(t, scopeFromClaim(nil).Namespaces)
+
+	mustScope := func(v any) AuthScope {
+		s, ok := parseScopeClaim(v)
+		require.True(t, ok, "claim %v should be valid", v)
+		return s
+	}
+	assert.True(t, mustScope("*").Wildcard)
+	assert.Equal(t, []string{"ns1"}, mustScope("ns1").Namespaces)
+	assert.Empty(t, mustScope("").Namespaces)
+	assert.Equal(t, []string{"a", "b"}, mustScope([]any{"a", "b"}).Namespaces)
+	assert.True(t, mustScope([]any{"a", "*"}).Wildcard)
+
+	// Absent claim is valid (authorized for nothing).
+	s, ok := parseScopeClaim(nil)
+	assert.True(t, ok)
+	assert.Empty(t, s.Namespaces)
+	assert.False(t, s.Wildcard)
+
+	// Malformed claims are rejected, not silently emptied.
+	_, ok = parseScopeClaim(42)
+	assert.False(t, ok, "a numeric claim must be rejected")
+	_, ok = parseScopeClaim([]any{"a", 7})
+	assert.False(t, ok, "a non-string array element must be rejected")
 }
 
 func TestAuthorizerVerifyToken(t *testing.T) {
@@ -94,6 +110,29 @@ func TestAuthorizerVerifyToken(t *testing.T) {
 		require.NoError(t, err)
 		_, err = a.verifyToken(context.Background(), s, nil)
 		assert.Error(t, err, "alg=none must be rejected")
+	})
+
+	t.Run("missing exp rejected", func(t *testing.T) {
+		t.Parallel()
+		// No exp: the SDK rejects a zero Expiration, so verifyToken must too.
+		tok := mintToken(t, key, jwt.MapClaims{"allowed_namespaces": "*"})
+		_, err := a.verifyToken(context.Background(), tok, nil)
+		assert.Error(t, err, "a token without exp must be rejected")
+	})
+
+	t.Run("malformed claim rejected", func(t *testing.T) {
+		t.Parallel()
+		tok := mintToken(t, key, jwt.MapClaims{"allowed_namespaces": 42, "exp": time.Now().Add(time.Hour).Unix()})
+		_, err := a.verifyToken(context.Background(), tok, nil)
+		assert.Error(t, err, "a malformed allowed_namespaces claim must be rejected")
+	})
+
+	t.Run("valid token carries expiration", func(t *testing.T) {
+		t.Parallel()
+		tok := mintToken(t, key, jwt.MapClaims{"allowed_namespaces": "*", "exp": time.Now().Add(time.Hour).Unix()})
+		ti, err := a.verifyToken(context.Background(), tok, nil)
+		require.NoError(t, err)
+		assert.False(t, ti.Expiration.IsZero(), "Expiration must be set so the SDK accepts the token")
 	})
 }
 

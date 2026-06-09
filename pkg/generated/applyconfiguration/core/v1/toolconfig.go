@@ -16,12 +16,12 @@ import (
 // ToolConfig declares how a Function is exposed as an MCP (Model Context
 // Protocol) tool. The MCP server reuses the function's existing internal
 // invocation path; this struct only declares the agent-facing tool contract.
+// Presence of the enclosing FunctionSpec.Tool is the on switch — there is no
+// separate enabled flag, so the in-memory zero value and the stored object
+// never disagree (the same rationale as StreamingConfig).
 type ToolConfigApplyConfiguration struct {
-	// ExposeAsMCP gates advertisement. False (the default) means the function
-	// is never listed as a tool even if the rest of this struct is populated.
-	ExposeAsMCP *bool `json:"exposeAsMCP,omitempty"`
 	// Description is the human/agent-facing tool description surfaced in the MCP
-	// tools/list response. Required when ExposeAsMCP is true.
+	// tools/list response. Required.
 	Description *string `json:"description,omitempty"`
 	// InputSchema is the JSON Schema (draft 2020-12) for the tool's arguments,
 	// surfaced verbatim as the MCP tool inputSchema. Stored as raw JSON so the
@@ -37,14 +37,6 @@ type ToolConfigApplyConfiguration struct {
 // apply.
 func ToolConfig() *ToolConfigApplyConfiguration {
 	return &ToolConfigApplyConfiguration{}
-}
-
-// WithExposeAsMCP sets the ExposeAsMCP field in the declarative configuration to the given value
-// and returns the receiver, so that objects can be built by chaining "With" function invocations.
-// If called multiple times, the ExposeAsMCP field is set to the value of the last call.
-func (b *ToolConfigApplyConfiguration) WithExposeAsMCP(value bool) *ToolConfigApplyConfiguration {
-	b.ExposeAsMCP = &value
-	return b
 }
 
 // WithDescription sets the Description field in the declarative configuration to the given value

@@ -44,20 +44,35 @@ func (r *FunctionToolReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, err
 	}
 
-	// Not exposed (Tool nil or ExposeAsMCP false): ensure any prior tool is gone
-	// and do not assert ToolExposed.
-	if fn.Spec.Tool == nil || !fn.Spec.Tool.ExposeAsMCP {
+	// Not exposed (Tool nil): ensure any prior tool is gone and do not assert
+	// ToolExposed.
+	if fn.Spec.Tool == nil {
 		r.removeTool(req.NamespacedName)
 		return ctrl.Result{}, nil
 	}
 
 	entry := toolEntryFromFunction(fn)
-	added, changed, oldName := r.reg.Upsert(entry)
+	res, oldName := r.reg.Upsert(entry)
+
+	if res == UpsertConflict {
+		// The desired tool name is taken by another function. Don't advertise a
+		// hijacked name; drop any prior registration for this function and surface
+		// the conflict so it's visible via kubectl.
+		r.removeTool(req.NamespacedName)
+		controller.SetConditions(ctx, r.logger, r.client, fn, metav1.Condition{
+			Type:    fv1.FunctionConditionToolExposed,
+			Status:  metav1.ConditionFalse,
+			Reason:  fv1.FunctionReasonToolNameConflict,
+			Message: "MCP tool name " + entry.ToolName + " is already used by another function",
+		})
+		return ctrl.Result{}, nil
+	}
+
 	if oldName != "" && oldName != entry.ToolName {
 		// ToolName changed: drop the stale registration before adding the new one.
 		r.server.ApplyToolDelta(nil, []string{oldName})
 	}
-	if added || changed {
+	if res == UpsertApplied {
 		r.server.ApplyToolDelta([]ToolEntry{entry}, nil)
 	}
 

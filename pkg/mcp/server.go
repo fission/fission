@@ -103,10 +103,12 @@ func (s *Server) scopeMiddleware(next mcp.MethodHandler) mcp.MethodHandler {
 
 		switch method {
 		case methodToolsCall:
-			params, _ := req.GetParams().(*mcp.CallToolParamsRaw)
-			if params != nil && !s.toolVisible(params.Name, scope) {
-				// Behave as "tool not found" so a caller cannot probe which tools
-				// exist in namespaces it isn't authorized for.
+			// Behave as "tool not found" — both for out-of-scope tools (so a
+			// caller cannot probe which tools exist in namespaces it isn't
+			// authorized for) and for an unexpected params shape (don't fall
+			// through to dispatch on a failed assertion).
+			params, ok := req.GetParams().(*mcp.CallToolParamsRaw)
+			if !ok || !s.toolVisible(params.Name, scope) {
 				return nil, errToolNotFound
 			}
 		}
