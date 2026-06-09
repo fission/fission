@@ -64,6 +64,23 @@ func TestProxyInvokeSignsAndForwards(t *testing.T) {
 	assert.NotEmpty(t, gotSig, "request must be HMAC-signed (signature header)")
 }
 
+// TestProxyInvokeFoldsDefaultNamespace asserts a default-namespace function maps
+// to the folded /fission-function/<name> route (not /fission-function/default/<name>).
+func TestProxyInvokeFoldsDefaultNamespace(t *testing.T) {
+	t.Parallel()
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	p := NewProxy(srv.URL, nil, logr.Discard())
+	_, err := p.Invoke(context.Background(), ToolEntry{Namespace: "default", FnName: "fn"}, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "/fission-function/fn", gotPath, "default namespace must be folded out of the path")
+}
+
 func TestProxyInvokeUnsignedWhenNoMaster(t *testing.T) {
 	t.Parallel()
 	var gotSig string

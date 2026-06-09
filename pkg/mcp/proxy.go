@@ -20,6 +20,7 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	hmacauth "github.com/fission/fission/pkg/auth/hmac"
+	"github.com/fission/fission/pkg/utils"
 )
 
 const (
@@ -73,7 +74,11 @@ func (p *Proxy) Invoke(ctx context.Context, e ToolEntry, args []byte) (*mcp.Call
 	ctx, cancel := context.WithTimeout(ctx, p.timeout)
 	defer cancel()
 
-	url := p.baseURL + "/fission-function/" + e.Namespace + "/" + e.FnName
+	// UrlForFunction folds the default namespace (→ /fission-function/<name>),
+	// matching how the router registers the internal route; a hardcoded
+	// /fission-function/<ns>/<name> would not resolve for default-namespace
+	// functions.
+	url := p.baseURL + utils.UrlForFunction(e.FnName, e.Namespace)
 	if len(args) == 0 {
 		args = []byte("{}")
 	}

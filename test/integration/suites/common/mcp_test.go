@@ -18,6 +18,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/test/integration/framework"
 )
 
@@ -84,7 +85,9 @@ func TestMCPToolsListAndCall(t *testing.T) {
 
 	// tools/call returns the same body as a direct internal-listener invocation.
 	t.Run("tools/call invokes the function", func(t *testing.T) {
-		_, direct, err := f.Router(t).Post(ctx, "/fission-function/"+ns.Name+"/"+fnName, "application/json", []byte(`{"name":"world"}`))
+		// utils.UrlForFunction folds the default namespace, matching the route the
+		// router registers (and what the MCP proxy targets).
+		_, direct, err := f.Router(t).Post(ctx, utils.UrlForFunction(fnName, ns.Name), "application/json", []byte(`{"name":"world"}`))
 		require.NoError(t, err)
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
