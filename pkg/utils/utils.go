@@ -121,6 +121,24 @@ func GetFileChecksum(fileName string) (*fv1.Checksum, error) {
 	return sum, nil
 }
 
+// RootFileChecksum is GetFileChecksum with fileName opened through an os.Root
+// rooted at base, so a request-derived path cannot read a file outside base
+// (CWE-22). Use this on the server-side fetch path.
+func RootFileChecksum(base, fileName string) (*fv1.Checksum, error) {
+	f, err := RootOpen(base, fileName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open file %v: %w", fileName, err)
+	}
+	defer f.Close()
+
+	sum, err := GetChecksum(f)
+	if err != nil {
+		return nil, fmt.Errorf("failed to calculate checksum for %v", fileName)
+	}
+
+	return sum, nil
+}
+
 func GetChecksum(src io.Reader) (*fv1.Checksum, error) {
 	if src == nil {
 		return nil, errors.New("cannot read from nil reader")
@@ -197,6 +215,47 @@ func DownloadUrl(ctx context.Context, httpClient *http.Client, targetURL string,
 	}
 
 	return nil
+}
+
+// DownloadUrlToRoot is DownloadUrl with the destination opened through an
+// os.Root rooted at base, so a request-derived localPath cannot write outside
+// base (CWE-22). Use this on the server-side fetch path. As in DownloadUrl, the
+// destination file is created only after a 2xx response, so a failed download
+// leaves no partial file behind.
+func DownloadUrlToRoot(ctx context.Context, httpClient *http.Client, targetURL string, base string, localPath string) error {
+	if targetURL == "" {
+		return errors.New("empty URL")
+	}
+	parsed, err := url.Parse(targetURL)
+	if err != nil {
+		return fmt.Errorf("invalid URL: %s: %w", targetURL, err)
+	}
+	resp, err := ctxhttp.Get(ctx, httpClient, parsed.String())
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if !isHttp2xxSuccessful(resp.StatusCode) {
+		return errors.New(resp.Status)
+	}
+
+	w, err := RootOpenFile(base, localPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o600)
+	if err != nil {
+		return err
+	}
+	defer w.Close()
+
+	// Force 0o600 even on the overwrite path, for the same reason as DownloadUrl.
+	if err = w.Chmod(0o600); err != nil {
+		return err
+	}
+
+	if _, err = io.Copy(w, resp.Body); err != nil {
+		return err
+	}
+
+	return w.Sync()
 }
 
 func GetStringValueFromEnv(envVar string) (string, error) {

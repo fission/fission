@@ -43,6 +43,7 @@ const internalAuthEnv = "FISSION_INTERNAL_AUTH_SECRET"
 type (
 	ClientInterface interface {
 		Upload(ctx context.Context, filePath string, metadata *map[string]string) (string, error)
+		UploadReader(ctx context.Context, fileName string, r io.Reader, fileSize int64, metadata *map[string]string) (string, error)
 		GetUrl(id string) string
 		Info(ctx context.Context, id string) (*http.Response, error)
 		List(ctx context.Context) ([]string, error)
@@ -138,16 +139,23 @@ func (c *client) Upload(ctx context.Context, filePath string, metadata *map[stri
 	if err != nil {
 		return "", err
 	}
-	fileSize := fi.Size()
+	return c.UploadReader(ctx, filePath, f, fi.Size(), metadata)
+}
 
+// UploadReader sends the contents of r (of length fileSize, named fileName in
+// the multipart form) to the storage service and returns the file ID. It is the
+// reader-based form of Upload: a caller that has already opened the file — for
+// example through an os.Root on the server-side fetch path — passes the open
+// file directly so no second, path-based open is needed.
+func (c *client) UploadReader(ctx context.Context, fileName string, r io.Reader, fileSize int64, metadata *map[string]string) (string, error) {
 	buf := &bytes.Buffer{}
 	bodyWriter := multipart.NewWriter(buf)
-	fileWriter, err := bodyWriter.CreateFormFile("uploadfile", filePath)
+	fileWriter, err := bodyWriter.CreateFormFile("uploadfile", fileName)
 	if err != nil {
 		return "", err
 	}
 
-	_, err = io.Copy(fileWriter, f)
+	_, err = io.Copy(fileWriter, r)
 	if err != nil {
 		return "", err
 	}

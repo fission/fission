@@ -329,7 +329,7 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 		// fetch the file and save it to the tmp path. FETCH_URL targets
 		// are user-supplied — pick the unsigned client unless the URL
 		// happens to point at our own storagesvc.
-		err := utils.DownloadUrl(ctx, fetcher.httpClientForURL(req.URL), req.URL, tmpPath)
+		err := utils.DownloadUrlToRoot(ctx, fetcher.httpClientForURL(req.URL), req.URL, fetcher.sharedVolumePath, tmpPath)
 		if err != nil {
 			e := "failed to download url from fetch request"
 			logger.Error(err, e, "url", req.URL)
@@ -378,7 +378,7 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 			// archive.URL may resolve to storagesvc (/v1/archive?id=...)
 			// or an external storage backend (S3, GCS, etc.). Sign only
 			// when the URL targets storagesvc.
-			err := utils.DownloadUrl(ctx, fetcher.httpClientForURL(archive.URL), archive.URL, tmpPath)
+			err := utils.DownloadUrlToRoot(ctx, fetcher.httpClientForURL(archive.URL), archive.URL, fetcher.sharedVolumePath, tmpPath)
 			if err != nil {
 				e := "failed to download url from archive"
 				logger.Error(err, e, "url", req.URL)
@@ -387,7 +387,7 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 
 			// check file integrity only if checksum is not empty.
 			if len(archive.Checksum.Sum) > 0 {
-				checksum, err := utils.GetFileChecksum(tmpPath)
+				checksum, err := utils.RootFileChecksum(fetcher.sharedVolumePath, tmpPath)
 				if err != nil {
 					e := "failed to get checksum"
 					logger.Error(err, e)
@@ -404,10 +404,10 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 	}
 
 	// checking if file is a zip
-	if match, _ := utils.IsZip(ctx, tmpPath); match && !req.KeepArchive {
+	if match, _ := utils.IsZipInRoot(ctx, fetcher.sharedVolumePath, tmpPath); match && !req.KeepArchive {
 		// unarchive tmp file to a tmp unarchive path
 		tmpUnarchivePath := filepath.Join(fetcher.sharedVolumePath, uuid.NewString())
-		err := utils.Unarchive(ctx, tmpPath, tmpUnarchivePath)
+		err := utils.UnarchiveInRoot(ctx, fetcher.sharedVolumePath, tmpPath, tmpUnarchivePath)
 		if err != nil {
 			logger.Error(err, "error unarchive", "archive_location", tmpPath,
 				"target_location", tmpUnarchivePath)
@@ -590,7 +590,7 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	if req.ArchivePackage {
-		err = utils.Archive(ctx, srcFilepath, dstFilepath)
+		err = utils.ArchiveInRoot(ctx, fetcher.sharedVolumePath, srcFilepath, dstFilepath)
 		if err != nil {
 			e := "error archiving zip file"
 			logger.Error(err, e, "source", srcFilepath, "destination", dstFilepath)
@@ -610,7 +610,26 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 	logger.Info("starting upload...")
 	ssClient := storageSvcClient.MakeClient(req.StorageSvcUrl, storageSvcClient.HMACSecretFromEnv())
 
-	fileID, err := ssClient.Upload(ctx, dstFilepath, nil)
+	// Open the archive once through an os.Root rooted at the shared volume so
+	// the request-derived path cannot escape it (CWE-22), then hand the open
+	// file to the storage client.
+	uploadFile, err := utils.RootOpen(fetcher.sharedVolumePath, dstFilepath)
+	if err != nil {
+		e := "error opening zip file for upload"
+		logger.Error(err, e, "file", dstFilepath)
+		http.Error(w, fmt.Sprintf("%s: %v", e, err), http.StatusInternalServerError)
+		return
+	}
+	uploadInfo, err := uploadFile.Stat()
+	if err != nil {
+		uploadFile.Close()
+		e := "error stating zip file for upload"
+		logger.Error(err, e, "file", dstFilepath)
+		http.Error(w, fmt.Sprintf("%s: %v", e, err), http.StatusInternalServerError)
+		return
+	}
+	fileID, err := ssClient.UploadReader(ctx, dstFilepath, uploadFile, uploadInfo.Size(), nil)
+	uploadFile.Close()
 	if err != nil {
 		e := "error uploading zip file"
 		logger.Error(err, e, "file", dstFilepath)
@@ -618,7 +637,7 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sum, err := utils.GetFileChecksum(dstFilepath)
+	sum, err := utils.RootFileChecksum(fetcher.sharedVolumePath, dstFilepath)
 	if err != nil {
 		e := "error calculating checksum of zip file"
 		logger.Error(err, e, "file", dstFilepath)
