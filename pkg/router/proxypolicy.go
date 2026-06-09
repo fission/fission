@@ -26,6 +26,11 @@ type proxyPolicy struct {
 // fnTimeout is the function's resolved FunctionTimeout (0 = none). defIdle is the
 // cluster default idle timeout (DefaultStreamIdleSeconds, possibly overridden by
 // ROUTER_STREAM_IDLE_TIMEOUT).
+//
+// Classic functions keep FunctionTimeout as a single total deadline. Streaming
+// functions deliberately do NOT inherit FunctionTimeout as a ceiling — that is
+// the total-wall-clock cap streaming exists to escape. Instead the idle timeout
+// governs progress and maxDuration is an optional absolute ceiling (0 = none).
 func resolveProxyPolicy(fn *fv1.Function, fnTimeout, defIdle time.Duration) proxyPolicy {
 	p := proxyPolicy{maxDuration: fnTimeout}
 	sc := fn.Spec.Streaming
@@ -41,10 +46,7 @@ func resolveProxyPolicy(fn *fv1.Function, fnTimeout, defIdle time.Duration) prox
 	if sc.IdleTimeoutSeconds > 0 {
 		p.idleTimeout = time.Duration(sc.IdleTimeoutSeconds) * time.Second
 	}
-	if sc.MaxDurationSeconds > 0 {
-		p.maxDuration = time.Duration(sc.MaxDurationSeconds) * time.Second
-	} else if fnTimeout <= 0 {
-		p.maxDuration = 0 // no ceiling; idle timeout governs
-	}
+	// Streaming ceiling is explicit-only; no FunctionTimeout fallback.
+	p.maxDuration = time.Duration(sc.MaxDurationSeconds) * time.Second
 	return p
 }
