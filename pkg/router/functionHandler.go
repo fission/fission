@@ -31,6 +31,7 @@ import (
 	"github.com/fission/fission/pkg/error/network"
 	eclient "github.com/fission/fission/pkg/executor/client"
 	"github.com/fission/fission/pkg/router/streaming"
+	routerutil "github.com/fission/fission/pkg/router/util"
 	"github.com/fission/fission/pkg/throttler"
 	"github.com/fission/fission/pkg/utils"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
@@ -324,8 +325,19 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 			"function-namespace": fnMeta.Namespace,
 			"function-url":       newReq.URL.String(),
 			"retryCounter":       fmt.Sprintf("%d", retryCounter)})...)
-		otelRoundTripper := otelhttp.NewTransport(transport)
-		resp, err := otelRoundTripper.RoundTrip(newReq)
+		// otelhttp wraps the response body, which breaks the io.ReadWriteCloser
+		// that ReverseProxy needs to hijack a 101 Switching Protocols (WebSocket)
+		// response. Forward upgrade requests on the raw transport so the
+		// connection can be hijacked; instrument everything else.
+		// otelhttp wraps the response body, which breaks the io.ReadWriteCloser
+		// that ReverseProxy needs to hijack a 101 Switching Protocols (WebSocket)
+		// response. Forward upgrade requests on the raw transport so the
+		// connection can be hijacked; instrument everything else.
+		var rt http.RoundTripper = otelhttp.NewTransport(transport)
+		if routerutil.IsWebsocketRequest(newReq) {
+			rt = transport
+		}
+		resp, err := rt.RoundTrip(newReq)
 		if roundTripper.funcHandler.isDebugEnv {
 			dumpRespFunc(resp)
 		}
@@ -582,12 +594,10 @@ func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *h
 // the stream context (cancelled on idle/max/client-disconnect), which also stops
 // the heartbeat.
 func (fh *functionHandler) onStreamResponse(ctx context.Context, rrt *RetryingRoundTripper, w *streaming.Watchdog, resp *http.Response) {
-	if w != nil {
-		w.Start()
-	}
-
 	// Keep the poolmgr pod tapped for the connection's lifetime — the router-driven,
 	// environment-agnostic replacement for the legacy WebsocketFsvc reaper skip.
+	// Covers SSE/chunked and WebSocket alike (ServeHTTP blocks until the socket
+	// closes, so the handler defer untaps at the right time).
 	if fh.function.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypePoolmgr {
 		interval := rrt.policy.idleTimeout / 2
 		if interval <= 0 || interval > 30*time.Second {
@@ -596,6 +606,23 @@ func (fh *functionHandler) onStreamResponse(ctx context.Context, rrt *RetryingRo
 		fh.startKeepaliveHeartbeat(ctx, fh.function, rrt.serviceURL, interval)
 	}
 
+	// A hijacked WebSocket (101) keeps resp.Body as an io.ReadWriteCloser that
+	// ReverseProxy hijacks to pipe bytes both ways — we must NOT wrap it (the
+	// wrapper is read-only and would break the hijack). Idle is not observable
+	// without body reads, so rely on the heartbeat + TCP keepalive + the optional
+	// max-duration ceiling.
+	if resp.StatusCode == http.StatusSwitchingProtocols {
+		if w != nil {
+			w.Stop()
+		}
+		return
+	}
+
+	// SSE/chunked: arm the idle Watchdog and wrap resp.Body so each upstream
+	// chunk re-arms the idle window.
+	if w != nil {
+		w.Start()
+	}
 	if resp.Body == nil {
 		return
 	}

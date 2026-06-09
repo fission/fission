@@ -11,9 +11,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -134,4 +136,56 @@ func TestStreamingSurvivesPastFunctionTimeout(t *testing.T) {
 		got := countLines(t, router.URL)
 		assert.Less(t, got, chunks, "classic response should be cut by FunctionTimeout before all chunks arrive")
 	})
+}
+
+// TestWebSocketSurvivesIdlePastFunctionTimeout proves a hijacked WebSocket stays
+// open while idle past the function's FunctionTimeout — the router tap holds the
+// pod and the stream context carries no wall-clock ceiling. This is the
+// environment-agnostic replacement for the legacy /wsevent keepalive.
+func TestWebSocketSurvivesIdlePastFunctionTimeout(t *testing.T) {
+	t.Parallel()
+
+	upgrader := websocket.Upgrader{}
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		for {
+			mt, msg, err := conn.ReadMessage()
+			if err != nil {
+				return
+			}
+			if err := conn.WriteMessage(mt, msg); err != nil {
+				return
+			}
+		}
+	}))
+	defer upstream.Close()
+
+	fn := streamingFn("ws-uid", &fv1.StreamingConfig{Enabled: true, Protocol: fv1.StreamingWebSocket})
+	fh := newHandlerForUpstream(t, fn, upstream, 1 /* FunctionTimeout: 1s */)
+	router := httptest.NewServer(http.HandlerFunc(fh.handler))
+	defer router.Close()
+
+	wsURL := "ws://" + strings.TrimPrefix(router.URL, "http://") + "/"
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	require.NoError(t, err)
+	defer conn.Close()
+
+	// First echo.
+	require.NoError(t, conn.WriteMessage(websocket.TextMessage, []byte("ping-1")))
+	_, got, err := conn.ReadMessage()
+	require.NoError(t, err)
+	require.Equal(t, "ping-1", string(got))
+
+	// Stay idle well past the 1s FunctionTimeout, then echo again. A classic
+	// (non-streaming) proxy would have torn the connection down by now.
+	time.Sleep(1500 * time.Millisecond)
+
+	require.NoError(t, conn.WriteMessage(websocket.TextMessage, []byte("ping-2")))
+	_, got, err = conn.ReadMessage()
+	require.NoError(t, err)
+	require.Equal(t, "ping-2", string(got), "socket must survive idle past FunctionTimeout")
 }
