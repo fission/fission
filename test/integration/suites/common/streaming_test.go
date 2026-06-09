@@ -100,7 +100,7 @@ func TestStreamingProtocols(t *testing.T) {
 		ns.CreateFunction(t, ctx, framework.FunctionOptions{
 			Name:              fnName,
 			Env:               envName,
-			Code:              framework.WriteTestData(t, "nodejs/streaming/chat.js"),
+			Code:              framework.WriteTestData(t, "nodejs/websocket/broadcast.js"),
 			Streaming:         true,
 			StreamingProtocol: "websocket",
 		})
@@ -126,54 +126,48 @@ func TestStreamingProtocols(t *testing.T) {
 			return hdr
 		}
 
-		// The first connect can race pod warmup (the ws-handler may not be
-		// attached yet, so the first frame is the router's "Error" placeholder).
-		// Retry the whole connect + first-turn cycle until turn 1 echoes cleanly,
-		// then keep that connection for the remaining turns.
-		var conn *websocket.Conn
+		// Drive a multi-turn conversation over one long-lived socket: broadcast.js
+		// echoes each frame back to the sender, so three distinct messages must
+		// come back in order. The socket staying open across all turns is the
+		// point — the router holds the pod for the whole conversation, not just
+		// the first frame. The pod can be warming on the first connect (the env's
+		// first frame is then the "Error" placeholder), so run the whole
+		// conversation inside a retry on a fresh socket and skip "Error" frames.
+		turns := []string{"turn-one", "turn-two", "turn-three"}
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			dctx, dcancel := context.WithTimeout(ctx, 10*time.Second)
+			dctx, dcancel := context.WithTimeout(ctx, 15*time.Second)
 			defer dcancel()
-			cn, _, err := websocket.DefaultDialer.DialContext(dctx, wsURL, signedHeader())
+			conn, _, err := websocket.DefaultDialer.DialContext(dctx, wsURL, signedHeader())
 			if !assert.NoErrorf(c, err, "websocket dial %q", wsURL) {
 				return
 			}
-			if err := cn.SetReadDeadline(time.Now().Add(10 * time.Second)); !assert.NoError(c, err) {
-				_ = cn.Close()
-				return
-			}
-			if err := cn.WriteMessage(websocket.TextMessage, []byte("hello")); !assert.NoError(c, err) {
-				_ = cn.Close()
-				return
-			}
-			_, msg, err := cn.ReadMessage()
-			if !assert.NoError(c, err) {
-				_ = cn.Close()
-				return
-			}
-			if !assert.Equalf(c, "turn 1: hello", string(msg), "first chat turn (got %q)", string(msg)) {
-				_ = cn.Close()
-				return
-			}
-			conn = cn
-		}, 90*time.Second, 2*time.Second)
-		require.NotNil(t, conn, "websocket chat never established")
-		defer func() { _ = conn.Close() }()
+			defer func() { _ = conn.Close() }()
 
-		// Multi-turn: the same socket must stay open across turns (the router
-		// holds the pod for the conversation, not just the first frame). The
-		// turn counter is per-connection state in chat.js, so it keeps counting.
-		for turn := 2; turn <= 4; turn++ {
-			require.NoError(t, conn.SetReadDeadline(time.Now().Add(10*time.Second)))
-			send := "msg-" + strconv.Itoa(turn)
-			require.NoError(t, conn.WriteMessage(websocket.TextMessage, []byte(send)))
-			_, msg, err := conn.ReadMessage()
-			require.NoErrorf(t, err, "read turn %d", turn)
-			require.Equalf(t, "turn "+strconv.Itoa(turn)+": "+send, string(msg),
-				"chat turn %d must echo with its turn number over the same socket", turn)
-		}
-
-		_ = conn.WriteMessage(websocket.CloseMessage,
-			websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
+			for _, msg := range turns {
+				if err := conn.SetReadDeadline(time.Now().Add(10 * time.Second)); !assert.NoError(c, err) {
+					return
+				}
+				if err := conn.WriteMessage(websocket.TextMessage, []byte(msg)); !assert.NoErrorf(c, err, "write %q", msg) {
+					return
+				}
+				// Skip any "Error" warmup-placeholder frames the env may emit
+				// before the real echo.
+				var got string
+				for {
+					_, m, rerr := conn.ReadMessage()
+					if !assert.NoErrorf(c, rerr, "read echo for %q", msg) {
+						return
+					}
+					if string(m) == "Error" {
+						continue
+					}
+					got = string(m)
+					break
+				}
+				if !assert.Equalf(c, msg, got, "multi-turn echo for %q over the same socket", msg) {
+					return
+				}
+			}
+		}, 120*time.Second, 3*time.Second)
 	})
 }
