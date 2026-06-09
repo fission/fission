@@ -9335,6 +9335,39 @@ spec:
                 x-kubernetes-list-map-keys:
                 - name
                 x-kubernetes-list-type: map
+              streaming:
+                description: |-
+                  Streaming opts this function into the router's streaming invocation path:
+                  incremental flushing, an idle/max timeout split, and a router-driven pod
+                  keepalive for the connection's lifetime. When nil (the default) the function
+                  uses the classic buffered, retry-on-transient-error proxy path with a single
+                  FunctionTimeout deadline. Additive and backward compatible.
+                properties:
+                  idleTimeoutSeconds:
+                    description: |-
+                      IdleTimeoutSeconds is the maximum time the router waits without bytes flowing
+                      from the function before it aborts the stream; reset on every chunk. 0 means
+                      use the package default (DefaultStreamIdleSeconds).
+                    minimum: 0
+                    type: integer
+                  maxDurationSeconds:
+                    description: |-
+                      MaxDurationSeconds is an optional hard ceiling on total stream lifetime
+                      regardless of activity. 0 (the default) means no ceiling — the idle
+                      timeout governs. A streaming function does NOT inherit FunctionTimeout as
+                      a ceiling; that total-wall-clock cap is exactly what streaming escapes.
+                    minimum: 0
+                    type: integer
+                  protocol:
+                    default: auto
+                    description: Protocol hints how the router proxies the response.
+                    enum:
+                    - auto
+                    - sse
+                    - chunked
+                    - websocket
+                    type: string
+                type: object
             required:
             - InvokeStrategy
             - environment

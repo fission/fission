@@ -242,6 +242,24 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		return fmt.Errorf("failed to parse max retries value('%s') from 'ROUTER_ROUND_TRIP_MAX_RETRIES': %w", maxRetriesStr, err)
 	}
 
+	// streamIdleDefault is the idle timeout applied to streaming functions when
+	// StreamingConfig.IdleTimeoutSeconds is unset. Optional; defaults to
+	// DefaultStreamIdleSeconds.
+	streamIdleDefault := time.Duration(fv1.DefaultStreamIdleSeconds) * time.Second
+	if v := os.Getenv("ROUTER_STREAM_IDLE_TIMEOUT"); v != "" {
+		d, perr := time.ParseDuration(v)
+		if perr != nil {
+			return fmt.Errorf("failed to parse stream idle timeout value('%s') from 'ROUTER_STREAM_IDLE_TIMEOUT': %w", v, perr)
+		}
+		// A non-positive idle window would silently disable the streaming idle
+		// watchdog (streams with no max-duration ceiling could then hang forever).
+		// Reject it at startup rather than failing open.
+		if d <= 0 {
+			return fmt.Errorf("'ROUTER_STREAM_IDLE_TIMEOUT' must be a positive duration, got %q", v)
+		}
+		streamIdleDefault = d
+	}
+
 	isDebugEnvStr := os.Getenv("DEBUG_ENV")
 	isDebugEnv, err := strconv.ParseBool(isDebugEnvStr)
 	if err != nil {
@@ -324,6 +342,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		keepAliveTime:     keepAliveTime,
 		maxRetries:        maxRetries,
 		svcAddrRetryCount: svcAddrRetryCount,
+		streamIdleDefault: streamIdleDefault,
 	}, isDebugEnv, useEncodedPath, unTapServiceTimeout, throttler.MakeThrottler(svcAddrUpdateTimeout))
 	if err != nil {
 		return fmt.Errorf("error making HTTP trigger set: %w", err)

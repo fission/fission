@@ -47,6 +47,12 @@ type FunctionSpecApplyConfiguration struct {
 	// is detected within the idle timeout, the executor will then recycle the
 	// function pod(s) to release resources.
 	IdleTimeout *int `json:"idletimeout,omitempty"`
+	// Streaming opts this function into the router's streaming invocation path:
+	// incremental flushing, an idle/max timeout split, and a router-driven pod
+	// keepalive for the connection's lifetime. When nil (the default) the function
+	// uses the classic buffered, retry-on-transient-error proxy path with a single
+	// FunctionTimeout deadline. Additive and backward compatible.
+	Streaming *StreamingConfigApplyConfiguration `json:"streaming,omitempty"`
 	// Maximum number of pods to be specialized which will serve requests
 	// This is optional. If not specified default value will be taken as 500
 	Concurrency *int `json:"concurrency,omitempty"`
@@ -141,6 +147,14 @@ func (b *FunctionSpecApplyConfiguration) WithFunctionTimeout(value int) *Functio
 // If called multiple times, the IdleTimeout field is set to the value of the last call.
 func (b *FunctionSpecApplyConfiguration) WithIdleTimeout(value int) *FunctionSpecApplyConfiguration {
 	b.IdleTimeout = &value
+	return b
+}
+
+// WithStreaming sets the Streaming field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Streaming field is set to the value of the last call.
+func (b *FunctionSpecApplyConfiguration) WithStreaming(value *StreamingConfigApplyConfiguration) *FunctionSpecApplyConfiguration {
+	b.Streaming = value
 	return b
 }
 

@@ -117,6 +117,10 @@ var (
 	FnTestHeader            = Flag{Type: StringSlice, Name: flagkey.FnTestHeader, Short: "H", Usage: "Request headers"}
 	FnTestQuery             = Flag{Type: StringSlice, Name: flagkey.FnTestQuery, Short: "q", Usage: "Request query parameters: -q key1=value1 -q key2=value2"}
 	FnIdleTimeout           = Flag{Type: Int, Name: flagkey.FnIdleTimeout, Usage: "The length of time (in seconds) that a function is idle before pod(s) are eligible for recycling", DefaultValue: 120}
+	FnStreaming             = Flag{Type: Bool, Name: flagkey.FnStreaming, Usage: "Enable streaming (SSE/chunked/WebSocket) responses for this function; the response is flushed incrementally and not cut by the function timeout"}
+	FnStreamingProtocol     = Flag{Type: String, Name: flagkey.FnStreamingProtocol, Usage: "Streaming protocol when --streaming is set; one of 'auto', 'sse', 'chunked', 'websocket'", DefaultValue: "auto"}
+	FnStreamingIdleTimeout  = Flag{Type: Int, Name: flagkey.FnStreamingIdleTimeout, Usage: "Idle timeout (seconds) for a streaming response before it is aborted; reset on each chunk", DefaultValue: 60}
+	FnStreamingMaxDuration  = Flag{Type: Int, Name: flagkey.FnStreamingMaxDuration, Usage: "Hard ceiling (seconds) on total streaming response lifetime; 0 means no ceiling (the idle timeout governs)", DefaultValue: 0}
 	FnConcurrency           = Flag{Type: Int, Name: flagkey.FnConcurrency, Aliases: []string{"con"}, Usage: "Maximum number of pods specialized concurrently to serve requests (Only valid for executortype; `poolmgr`)", DefaultValue: 500}
 	FnRequestsPerPod        = Flag{Type: Int, Name: flagkey.FnRequestsPerPod, Aliases: []string{"rpp"}, Usage: "Maximum number of concurrent requests that can be served by a specialized pod (Only valid for executortype; `poolmgr`)", DefaultValue: 1}
 	FnOnceOnly              = Flag{Type: Bool, Name: flagkey.FnOnceOnly, Aliases: []string{"yolo"}, Usage: "Specifies if specialized pod will serve exactly one request in its lifetime (Only valid for executortype; `poolmgr`)"}

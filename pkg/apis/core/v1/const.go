@@ -11,6 +11,11 @@ var (
 const (
 	EXECUTOR_INSTANCEID_LABEL string = "executorInstanceId"
 	DEFAULT_FUNCTION_TIMEOUT  int    = 60
+
+	// DefaultStreamIdleSeconds is the idle timeout applied to a streaming function
+	// when StreamingConfig.IdleTimeoutSeconds is unset. Overridable cluster-wide via
+	// the router's ROUTER_STREAM_IDLE_TIMEOUT env.
+	DefaultStreamIdleSeconds int = 60
 )
 
 const (
@@ -42,6 +47,15 @@ const (
 const (
 	AllowedFunctionsPerContainerSingle   = "single"
 	AllowedFunctionsPerContainerInfinite = "infinite"
+)
+
+const (
+	// StreamingAuto flushes immediately and lets the upstream decide the framing
+	// (SSE, chunked, or a WebSocket Upgrade); the safe default.
+	StreamingAuto      StreamingProtocol = "auto"
+	StreamingSSE       StreamingProtocol = "sse"
+	StreamingChunked   StreamingProtocol = "chunked"
+	StreamingWebSocket StreamingProtocol = "websocket"
 )
 
 const (

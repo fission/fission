@@ -30,6 +30,8 @@ import (
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/error/network"
 	eclient "github.com/fission/fission/pkg/executor/client"
+	"github.com/fission/fission/pkg/router/streaming"
+	routerutil "github.com/fission/fission/pkg/router/util"
 	"github.com/fission/fission/pkg/throttler"
 	"github.com/fission/fission/pkg/utils"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
@@ -41,6 +43,14 @@ const (
 
 	// X_FORWARDED_HOST represents the 'X_FORWARDED_HOST' request header
 	X_FORWARDED_HOST = "X-Forwarded-Host"
+)
+
+// Stream-abort causes, attached to the request context via context.WithCancelCause
+// so the proxy error handler can distinguish a server-initiated stream abort from
+// a genuine client disconnect (which also surfaces as context.Canceled).
+var (
+	errStreamIdleTimeout = errors.New("stream aborted: idle timeout")
+	errStreamMaxDuration = errors.New("stream aborted: max duration")
 )
 
 type (
@@ -69,6 +79,11 @@ type (
 		disableKeepAlive bool
 		keepAliveTime    time.Duration
 
+		// streamIdleDefault is the idle timeout applied to streaming functions
+		// when StreamingConfig.IdleTimeoutSeconds is unset (from the router's
+		// ROUTER_STREAM_IDLE_TIMEOUT env, defaulting to DefaultStreamIdleSeconds).
+		streamIdleDefault time.Duration
+
 		// maxRetires is the max times for RetryingRoundTripper to retry a request.
 		// Default maxRetries is 10, which means router will retry for
 		// up to 10 times and abort it if still not succeeded.
@@ -88,6 +103,7 @@ type (
 		logger           logr.Logger
 		funcHandler      *functionHandler
 		funcTimeout      time.Duration
+		policy           proxyPolicy // resolved once in handler; drives streaming behavior
 		closeContextFunc *context.CancelFunc
 		serviceURL       *url.URL
 		urlFromCache     bool
@@ -246,7 +262,11 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 				"function-name":      fnMeta.Name,
 				"function-namespace": fnMeta.Namespace,
 				"service-entry":      roundTripper.serviceURL.String()})...)
-			if roundTripper.funcHandler.function.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypePoolmgr {
+			// Streaming functions untap in handler (after ServeHTTP fully drains the
+			// stream), not here at RoundTrip return (which fires at headers, while
+			// the body is still streaming).
+			if roundTripper.funcHandler.function.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypePoolmgr &&
+				!roundTripper.policy.streaming {
 				defer func(ctx context.Context, fn *fv1.Function, serviceURL *url.URL) {
 					go roundTripper.funcHandler.unTapService(context.Background(), fn, serviceURL) //nolint errcheck
 				}(ctx, roundTripper.funcHandler.function, roundTripper.serviceURL)
@@ -313,8 +333,19 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 			"function-namespace": fnMeta.Namespace,
 			"function-url":       newReq.URL.String(),
 			"retryCounter":       fmt.Sprintf("%d", retryCounter)})...)
-		otelRoundTripper := otelhttp.NewTransport(transport)
-		resp, err := otelRoundTripper.RoundTrip(newReq)
+		// otelhttp wraps the response body, which breaks the io.ReadWriteCloser
+		// that ReverseProxy needs to hijack a 101 Switching Protocols (WebSocket)
+		// response. Forward upgrade requests on the raw transport so the
+		// connection can be hijacked; instrument everything else. This applies to
+		// ALL WebSocket requests (streaming and classic) on purpose — otel wrapping
+		// breaks the hijack regardless of Spec.Streaming, so this also fixes classic
+		// WebSocket functions. The only cost is no otel span for the upgrade itself
+		// (a hijacked bidirectional connection isn't meaningfully traceable anyway).
+		var rt http.RoundTripper = otelhttp.NewTransport(transport)
+		if routerutil.IsWebsocketRequest(newReq) {
+			rt = transport
+		}
+		resp, err := rt.RoundTrip(newReq)
 		if roundTripper.funcHandler.isDebugEnv {
 			dumpRespFunc(resp)
 		}
@@ -418,6 +449,16 @@ func (roundTripper *RetryingRoundTripper) setContext(req *http.Request) *http.Re
 	// that user aborts connection before timeout. Otherwise,
 	// the request won't be canceled until the deadline exceeded
 	// which may be a potential security issue.
+	//
+	// Streaming: the per-attempt context inherits the request context (which the
+	// handler has already scoped to the idle Watchdog + max-duration ceiling).
+	// No wall-clock funcTimeout deadline here, or the body copy would be killed
+	// mid-stream. Classic: a fresh funcTimeout deadline per attempt (unchanged).
+	if roundTripper.policy.streaming {
+		ctx, closeCtx := context.WithCancel(req.Context())
+		roundTripper.closeContextFunc = &closeCtx
+		return req.WithContext(ctx)
+	}
 	ctx, closeCtx := context.WithTimeoutCause(req.Context(), roundTripper.funcTimeout, fmt.Errorf("roundtripper timeout (%f)s exceeded", roundTripper.funcTimeout.Seconds()))
 	roundTripper.closeContextFunc = &closeCtx
 
@@ -471,10 +512,51 @@ func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *h
 		fnTimeout = fv1.DEFAULT_FUNCTION_TIMEOUT
 	}
 
+	policy := resolveProxyPolicy(fh.function,
+		time.Duration(fnTimeout)*time.Second,
+		fh.tsRoundTripperParams.streamIdleDefault)
+
+	// Streaming: scope the request to (a) a max-duration ceiling (if any) and (b)
+	// an idle Watchdog re-armed on each upstream chunk. Both cancel the request
+	// context, which tears the upstream connection down. Classic path: the request
+	// context is used unchanged (byte-identical behavior).
+	var (
+		streamCancel context.CancelCauseFunc
+		watchdog     *streaming.Watchdog
+	)
+	if policy.streaming {
+		ctx, cancel := context.WithCancelCause(request.Context())
+		streamCancel = cancel
+		// The cancel callbacks log the abort at Info — this is the authoritative
+		// signal, and the only one for a mid-stream abort (once headers are
+		// flushed the status is already 200 and the proxy error handler never
+		// runs, so without this a cut LLM/SSE stream would be silent).
+		fnMeta := &fh.function.ObjectMeta
+		if policy.maxDuration > 0 {
+			timer := time.AfterFunc(policy.maxDuration, func() {
+				fh.logger.Info("stream aborted: max duration exceeded",
+					"function", fnMeta.Name, "namespace", fnMeta.Namespace, "maxDuration", policy.maxDuration)
+				cancel(fmt.Errorf("%w (%s)", errStreamMaxDuration, policy.maxDuration))
+			})
+			context.AfterFunc(ctx, func() { timer.Stop() })
+		}
+		watchdog = streaming.NewWatchdog(policy.idleTimeout, func() {
+			fh.logger.Info("stream aborted: idle timeout exceeded",
+				"function", fnMeta.Name, "namespace", fnMeta.Namespace, "idleTimeout", policy.idleTimeout)
+			cancel(fmt.Errorf("%w (%s)", errStreamIdleTimeout, policy.idleTimeout))
+		})
+		// Arm now (not at headers) so the idle timeout also bounds time-to-first-byte:
+		// a streaming function that accepts the connection but never responds is
+		// aborted at the idle window rather than hanging until the client disconnects.
+		watchdog.Start()
+		request = request.WithContext(ctx)
+	}
+
 	rrt := &RetryingRoundTripper{
 		logger:      fh.logger.WithName("roundtripper"),
 		funcHandler: &fh,
 		funcTimeout: time.Duration(fnTimeout) * time.Second,
+		policy:      policy,
 	}
 
 	start := time.Now()
@@ -485,8 +567,16 @@ func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *h
 		ErrorHandler: fh.getProxyErrorHandler(start, rrt),
 		ModifyResponse: func(resp *http.Response) error {
 			go fh.collectFunctionMetric(start, rrt, request, resp)
+			if policy.streaming {
+				fh.onStreamResponse(request.Context(), rrt, watchdog, resp)
+			}
 			return nil
 		},
+	}
+	if policy.streaming {
+		// Flush every write so SSE/chunked chunks reach the client as produced
+		// (Go also auto-selects this for text/event-stream).
+		proxy.FlushInterval = -1
 	}
 
 	defer func() {
@@ -499,11 +589,91 @@ func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *h
 		// will not be closed.
 		//
 		// ref: https://github.com/golang/go/issues/28239
+		if watchdog != nil {
+			watchdog.Stop()
+		}
+		if streamCancel != nil {
+			streamCancel(nil)
+		}
 		rrt.closeContext()
+		// Streaming poolmgr functions untap here — after ServeHTTP has fully
+		// drained the stream — rather than at RoundTrip return (headers).
+		if policy.streaming && rrt.serviceURL != nil &&
+			fh.function.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypePoolmgr {
+			fn, svcURL := fh.function, rrt.serviceURL
+			go fh.unTapService(context.Background(), fn, svcURL) //nolint:errcheck
+		}
 	}()
 
 	otelUtils.SpanTrackEvent(request.Context(), "functionRequestProxy", otelUtils.GetAttributesForFunction(fh.function)...)
 	proxy.ServeHTTP(responseWriter, request)
+}
+
+// onStreamResponse wires the streaming response: it arms the idle Watchdog, wraps
+// resp.Body so each upstream chunk re-arms the idle window, and (for poolmgr)
+// launches a keepalive heartbeat so the pod is not idle-reaped mid-stream. ctx is
+// the stream context (cancelled on idle/max/client-disconnect), which also stops
+// the heartbeat.
+func (fh *functionHandler) onStreamResponse(ctx context.Context, rrt *RetryingRoundTripper, w *streaming.Watchdog, resp *http.Response) {
+	// Keep the poolmgr pod tapped for the connection's lifetime — the router-driven,
+	// environment-agnostic replacement for the legacy WebsocketFsvc reaper skip.
+	// Covers SSE/chunked and WebSocket alike (ServeHTTP blocks until the socket
+	// closes, so the handler defer untaps at the right time).
+	if fh.function.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypePoolmgr {
+		interval := rrt.policy.idleTimeout / 2
+		if interval <= 0 || interval > 30*time.Second {
+			interval = 30 * time.Second
+		}
+		fh.startKeepaliveHeartbeat(ctx, fh.function, rrt.serviceURL, interval)
+	}
+
+	// A hijacked WebSocket (101) keeps resp.Body as an io.ReadWriteCloser that
+	// ReverseProxy hijacks to pipe bytes both ways — we must NOT wrap it (the
+	// wrapper is read-only and would break the hijack). Idle is not observable
+	// without body reads, so rely on the heartbeat + TCP keepalive + the optional
+	// max-duration ceiling.
+	if resp.StatusCode == http.StatusSwitchingProtocols {
+		if w != nil {
+			w.Stop()
+		}
+		return
+	}
+
+	// SSE/chunked: the idle Watchdog was already armed in handler (so it also
+	// covers time-to-first-byte); wrap resp.Body so each upstream chunk re-arms it.
+	if resp.Body == nil {
+		return
+	}
+	resp.Body = streaming.NewActivityReadCloser(
+		resp.Body,
+		func() {
+			if w != nil {
+				w.Reset()
+			}
+		},
+		func() {}, // untap is handled by the handler defer
+	)
+}
+
+// startKeepaliveHeartbeat re-taps the poolmgr service on an interval so the
+// executor's idle reaper sees a fresh Atime for the lifetime of a stream. Stops
+// when ctx is done (handler defer / client disconnect / idle/max cancel).
+func (fh *functionHandler) startKeepaliveHeartbeat(ctx context.Context, fn *fv1.Function, serviceURL *url.URL, interval time.Duration) {
+	if interval <= 0 || serviceURL == nil {
+		return
+	}
+	go func() {
+		t := time.NewTicker(interval)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				fh.tapService(fn, serviceURL)
+			}
+		}
+	}()
 }
 
 // findCeil picks a function from the functionWeightDistribution list based on the
@@ -732,8 +902,19 @@ func (fh functionHandler) getProxyErrorHandler(start time.Time, rrt *RetryingRou
 		var msg string
 		ctx := req.Context()
 		logger := otelUtils.LoggerWithTraceID(ctx, fh.logger)
-		switch err {
-		case context.Canceled:
+		// A server-initiated streaming abort (idle/max-duration) surfaces as
+		// context.Canceled too, but carries a cause we set via WithCancelCause.
+		// Surface it as a 504 with the real reason instead of masquerading as a
+		// client-close 499, and log it where an operator can see it.
+		streamCause := context.Cause(ctx)
+		switch {
+		case errors.Is(streamCause, errStreamIdleTimeout) || errors.Is(streamCause, errStreamMaxDuration):
+			status = http.StatusGatewayTimeout
+			msg = streamCause.Error()
+			// The abort was already logged at Info by the watchdog/max-duration
+			// callback; this is just the HTTP outcome for a pre-first-byte abort.
+			logger.V(1).Info(msg, "function", fh.function, "status", http.StatusText(status))
+		case errors.Is(err, context.Canceled):
 			// 499 CLIENT CLOSED REQUEST
 			// A non-standard status code introduced by nginx for the case
 			// when a client closes the connection while nginx is processing the request.
@@ -741,9 +922,9 @@ func (fh functionHandler) getProxyErrorHandler(start time.Time, rrt *RetryingRou
 			status = 499
 			msg = "client closes the connection"
 			logger.V(1).Info(msg, "function", fh.function, "status", "Client Closed Request")
-		case context.DeadlineExceeded:
+		case errors.Is(err, context.DeadlineExceeded):
 			status = http.StatusGatewayTimeout
-			msg := "no response from function before timeout"
+			msg = "no response from function before timeout"
 			logger.Info(msg, "function", fh.function, "status", http.StatusText(status))
 		default:
 			code, _ := ferror.GetHTTPError(err)

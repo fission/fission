@@ -42,6 +42,19 @@ func Create(input cli.Input) error {
 	return (&CreateSubCommand{}).do(input)
 }
 
+// getStreamingConfig builds a StreamingConfig from the --streaming* flags, or
+// nil when --streaming is not set (the classic, non-streaming proxy path).
+func getStreamingConfig(input cli.Input) *fv1.StreamingConfig {
+	if !input.Bool(flagkey.FnStreaming) {
+		return nil
+	}
+	return &fv1.StreamingConfig{
+		Protocol:           fv1.StreamingProtocol(input.String(flagkey.FnStreamingProtocol)),
+		IdleTimeoutSeconds: input.Int(flagkey.FnStreamingIdleTimeout),
+		MaxDurationSeconds: input.Int(flagkey.FnStreamingMaxDuration),
+	}
+}
+
 func (opts *CreateSubCommand) do(input cli.Input) error {
 	err := opts.complete(input)
 	if err != nil {
@@ -248,6 +261,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 			InvokeStrategy:  *invokeStrategy,
 			FunctionTimeout: fnTimeout,
 			IdleTimeout:     &fnIdleTimeout,
+			Streaming:       getStreamingConfig(input),
 			Concurrency:     fnConcurrency,
 			RequestsPerPod:  requestsPerPod,
 			RetainPods:      retainPods,
