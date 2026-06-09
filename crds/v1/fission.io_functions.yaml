@@ -9368,6 +9368,38 @@ spec:
                     - websocket
                     type: string
                 type: object
+              tool:
+                description: |-
+                  Tool, when set with ExposeAsMCP=true, advertises this function as a Model
+                  Context Protocol (MCP) tool on the fission-bundle --mcpPort server. The MCP
+                  server watches Function CRDs and hot-updates its tool list from this field.
+                  When nil (the default) the function is never advertised as a tool. Additive
+                  and backward compatible.
+                properties:
+                  description:
+                    description: |-
+                      Description is the human/agent-facing tool description surfaced in the MCP
+                      tools/list response. Required when ExposeAsMCP is true.
+                    type: string
+                  exposeAsMCP:
+                    description: |-
+                      ExposeAsMCP gates advertisement. False (the default) means the function
+                      is never listed as a tool even if the rest of this struct is populated.
+                    type: boolean
+                  inputSchema:
+                    description: |-
+                      InputSchema is the JSON Schema (draft 2020-12) for the tool's arguments,
+                      surfaced verbatim as the MCP tool inputSchema. Stored as raw JSON so the
+                      CRD does not constrain the schema shape. When empty the tool advertises an
+                      open object schema ({"type":"object"}).
+                    x-kubernetes-preserve-unknown-fields: true
+                  toolName:
+                    description: |-
+                      ToolName overrides the advertised tool name. Defaults to
+                      "<namespace>-<function name>". Must match ^[a-zA-Z0-9_-]{1,64}$.
+                    pattern: ^[a-zA-Z0-9_-]{1,64}$
+                    type: string
+                type: object
             required:
             - InvokeStrategy
             - environment

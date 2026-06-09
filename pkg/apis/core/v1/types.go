@@ -7,6 +7,7 @@ package v1
 import (
 	asv2 "k8s.io/api/autoscaling/v2"
 	apiv1 "k8s.io/api/core/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -462,6 +463,14 @@ type (
 		// +optional
 		Streaming *StreamingConfig `json:"streaming,omitempty"`
 
+		// Tool, when set with ExposeAsMCP=true, advertises this function as a Model
+		// Context Protocol (MCP) tool on the fission-bundle --mcpPort server. The MCP
+		// server watches Function CRDs and hot-updates its tool list from this field.
+		// When nil (the default) the function is never advertised as a tool. Additive
+		// and backward compatible.
+		// +optional
+		Tool *ToolConfig `json:"tool,omitempty"`
+
 		// Maximum number of pods to be specialized which will serve requests
 		// This is optional. If not specified default value will be taken as 500
 		// +optional
@@ -516,6 +525,35 @@ type (
 		// +optional
 		// +kubebuilder:validation:Minimum=0
 		MaxDurationSeconds int `json:"maxDurationSeconds,omitempty"`
+	}
+
+	// ToolConfig declares how a Function is exposed as an MCP (Model Context
+	// Protocol) tool. The MCP server reuses the function's existing internal
+	// invocation path; this struct only declares the agent-facing tool contract.
+	ToolConfig struct {
+		// ExposeAsMCP gates advertisement. False (the default) means the function
+		// is never listed as a tool even if the rest of this struct is populated.
+		// +optional
+		ExposeAsMCP bool `json:"exposeAsMCP,omitempty"`
+
+		// Description is the human/agent-facing tool description surfaced in the MCP
+		// tools/list response. Required when ExposeAsMCP is true.
+		// +optional
+		Description string `json:"description,omitempty"`
+
+		// InputSchema is the JSON Schema (draft 2020-12) for the tool's arguments,
+		// surfaced verbatim as the MCP tool inputSchema. Stored as raw JSON so the
+		// CRD does not constrain the schema shape. When empty the tool advertises an
+		// open object schema ({"type":"object"}).
+		// +optional
+		// +kubebuilder:pruning:PreserveUnknownFields
+		InputSchema *apiextensionsv1.JSON `json:"inputSchema,omitempty"`
+
+		// ToolName overrides the advertised tool name. Defaults to
+		// "<namespace>-<function name>". Must match ^[a-zA-Z0-9_-]{1,64}$.
+		// +optional
+		// +kubebuilder:validation:Pattern=`^[a-zA-Z0-9_-]{1,64}$`
+		ToolName string `json:"toolName,omitempty"`
 	}
 
 	// InvokeStrategy is a set of controls over how the function executes.

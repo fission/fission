@@ -11,6 +11,9 @@ const (
 	// Function conditions
 	FunctionConditionReady        = "Ready"
 	FunctionConditionPackageReady = "PackageReady"
+	// FunctionConditionToolExposed reports whether the MCP server is advertising
+	// this function as a tool (set by pkg/mcp's reconciler).
+	FunctionConditionToolExposed = "ToolExposed"
 
 	// Package conditions
 	PackageConditionBuildSucceeded = "BuildSucceeded"
@@ -62,6 +65,7 @@ const (
 	FunctionReasonReady         = "Available"          // executor: backend is serving requests
 	FunctionReasonPackageReady  = "PackageReady"       // buildermgr: package built
 	FunctionReasonPackageFailed = "PackageBuildFailed" // buildermgr: package build failed
+	FunctionReasonToolExposed   = "ToolExposed"        // mcp: advertised as an MCP tool
 
 	// Package condition reasons (mirror BuildStatus enum + composites)
 	PackageReasonBuildSucceeded  = "BuildSucceeded"
