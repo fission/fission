@@ -81,6 +81,29 @@ rules:
   - update
   - patch
 {{- end }}
+
+{{- define "mcp-rules" }}
+rules:
+# The MCP server is read-only against Functions (it watches them to build the
+# tool list) and writes only the ToolExposed status condition. It never mutates
+# function specs and touches no other resource.
+- apiGroups:
+  - fission.io
+  resources:
+  - functions
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - fission.io
+  resources:
+  - functions/status
+  verbs:
+  - get
+  - update
+  - patch
+{{- end }}
 {{- define "kafka-rules" }}
 rules:
 - apiGroups:

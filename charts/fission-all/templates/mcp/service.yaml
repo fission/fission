@@ -1,0 +1,21 @@
+{{- if .Values.mcp.enabled }}
+# mcp is a ClusterIP-only Service: agent access to the MCP endpoint is the
+# operator's explicit choice (front it with an Ingress / Gateway / port-forward).
+# It never joins the public router listener.
+apiVersion: v1
+kind: Service
+metadata:
+  name: mcp
+  labels:
+    svc: mcp
+    application: fission-mcp
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+spec:
+  type: ClusterIP
+  ports:
+  - name: mcp
+    port: {{ .Values.mcp.port | default 8890 }}
+    targetPort: {{ .Values.mcp.port | default 8890 }}
+  selector:
+    svc: mcp
+{{- end }}
