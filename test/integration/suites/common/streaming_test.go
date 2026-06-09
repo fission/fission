@@ -8,7 +8,6 @@ package common_test
 
 import (
 	"context"
-	"net/http"
 	"testing"
 	"time"
 
@@ -77,10 +76,11 @@ func TestStreamingSurvivesFunctionTimeout(t *testing.T) {
 		ns.CreateRoute(t, ctx, framework.RouteOptions{Function: fnName, URL: routePath, Method: "GET"})
 		ns.WaitForFunction(t, ctx, fnName)
 
-		// Steady state is a 504 (router gives up at --fntimeout before the
-		// function responds). Poll until we observe it.
+		// The router gives up at --fntimeout before the function responds.
+		// Per TestFunctionTimeout, the cut surfaces as a 5xx (not strictly 504,
+		// since the runtime may abort first). Poll until we observe a 5xx.
 		f.Router(t).GetEventually(t, ctx, routePath, func(status int, _ string) bool {
-			return status == http.StatusGatewayTimeout
+			return status >= 500 && status < 600
 		})
 	})
 }
