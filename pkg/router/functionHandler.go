@@ -527,13 +527,22 @@ func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *h
 	if policy.streaming {
 		ctx, cancel := context.WithCancelCause(request.Context())
 		streamCancel = cancel
+		// The cancel callbacks log the abort at Info — this is the authoritative
+		// signal, and the only one for a mid-stream abort (once headers are
+		// flushed the status is already 200 and the proxy error handler never
+		// runs, so without this a cut LLM/SSE stream would be silent).
+		fnMeta := &fh.function.ObjectMeta
 		if policy.maxDuration > 0 {
 			timer := time.AfterFunc(policy.maxDuration, func() {
+				fh.logger.Info("stream aborted: max duration exceeded",
+					"function", fnMeta.Name, "namespace", fnMeta.Namespace, "maxDuration", policy.maxDuration)
 				cancel(fmt.Errorf("%w (%s)", errStreamMaxDuration, policy.maxDuration))
 			})
 			context.AfterFunc(ctx, func() { timer.Stop() })
 		}
 		watchdog = streaming.NewWatchdog(policy.idleTimeout, func() {
+			fh.logger.Info("stream aborted: idle timeout exceeded",
+				"function", fnMeta.Name, "namespace", fnMeta.Namespace, "idleTimeout", policy.idleTimeout)
 			cancel(fmt.Errorf("%w (%s)", errStreamIdleTimeout, policy.idleTimeout))
 		})
 		// Arm now (not at headers) so the idle timeout also bounds time-to-first-byte:
@@ -902,7 +911,9 @@ func (fh functionHandler) getProxyErrorHandler(start time.Time, rrt *RetryingRou
 		case errors.Is(streamCause, errStreamIdleTimeout) || errors.Is(streamCause, errStreamMaxDuration):
 			status = http.StatusGatewayTimeout
 			msg = streamCause.Error()
-			logger.Info(msg, "function", fh.function, "status", http.StatusText(status))
+			// The abort was already logged at Info by the watchdog/max-duration
+			// callback; this is just the HTTP outcome for a pre-first-byte abort.
+			logger.V(1).Info(msg, "function", fh.function, "status", http.StatusText(status))
 		case errors.Is(err, context.Canceled):
 			// 499 CLIENT CLOSED REQUEST
 			// A non-standard status code introduced by nginx for the case

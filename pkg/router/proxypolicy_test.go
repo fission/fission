@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 )
 
@@ -41,18 +43,10 @@ func TestResolveProxyPolicy(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			p := resolveProxyPolicy(tc.fn, tc.fnTimeout, def)
-			if p.streaming != tc.wantStream {
-				t.Fatalf("streaming=%v want %v", p.streaming, tc.wantStream)
-			}
-			if p.protocol != tc.wantProtocol {
-				t.Fatalf("protocol=%q want %q", p.protocol, tc.wantProtocol)
-			}
-			if p.idleTimeout != tc.wantIdle {
-				t.Fatalf("idle=%v want %v", p.idleTimeout, tc.wantIdle)
-			}
-			if p.maxDuration != tc.wantMax {
-				t.Fatalf("max=%v want %v", p.maxDuration, tc.wantMax)
-			}
+			assert.Equal(t, tc.wantStream, p.streaming, "streaming")
+			assert.Equal(t, tc.wantProtocol, p.protocol, "protocol")
+			assert.Equal(t, tc.wantIdle, p.idleTimeout, "idleTimeout")
+			assert.Equal(t, tc.wantMax, p.maxDuration, "maxDuration")
 		})
 	}
 }

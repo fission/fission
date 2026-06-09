@@ -7,6 +7,7 @@ package router
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -53,6 +54,22 @@ func TestProxyErrorHandler(t *testing.T) {
 	respRecorder = httptest.NewRecorder()
 	errHandler(respRecorder, req, errors.New("dummy"))
 	require.Equal(t, http.StatusInternalServerError, respRecorder.Code)
+
+	// A server-initiated streaming abort surfaces as context.Canceled on `err`,
+	// but carries an idle/max sentinel cause on the request context. It must be
+	// reported as 504 (with the reason in the body), NOT masqueraded as a 499
+	// client-close. Regression guard for the previously-critical bug where the
+	// cause was dropped and every stream abort logged as "client closed" at V(1).
+	for _, cause := range []error{errStreamIdleTimeout, errStreamMaxDuration} {
+		ctx, cancel := context.WithCancelCause(context.Background())
+		cancel(fmt.Errorf("%w (30s)", cause))
+		respRecorder = httptest.NewRecorder()
+		errHandler(respRecorder, req.WithContext(ctx), context.Canceled)
+		require.Equalf(t, http.StatusGatewayTimeout, respRecorder.Code,
+			"stream abort (%v) must be 504, not a 499 client-close", cause)
+		require.Containsf(t, respRecorder.Body.String(), cause.Error(),
+			"504 body should carry the abort reason for %v", cause)
+	}
 }
 
 // recordingExecutor implements eclient.ClientInterface and records the Function
