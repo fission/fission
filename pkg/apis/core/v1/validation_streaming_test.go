@@ -13,14 +13,14 @@ func TestStreamingConfigValidate(t *testing.T) {
 		cfg     StreamingConfig
 		wantErr bool
 	}{
-		{"defaults", StreamingConfig{Enabled: true, Protocol: StreamingAuto}, false},
-		{"empty protocol ok", StreamingConfig{Enabled: true}, false},
-		{"negative idle", StreamingConfig{Enabled: true, IdleTimeoutSeconds: -1}, true},
-		{"negative max", StreamingConfig{Enabled: true, MaxDurationSeconds: -1}, true},
-		{"max below idle", StreamingConfig{Enabled: true, IdleTimeoutSeconds: 120, MaxDurationSeconds: 30}, true},
-		{"max equals idle ok", StreamingConfig{Enabled: true, IdleTimeoutSeconds: 30, MaxDurationSeconds: 30}, false},
-		{"max above idle ok", StreamingConfig{Enabled: true, IdleTimeoutSeconds: 30, MaxDurationSeconds: 120}, false},
-		{"bad protocol", StreamingConfig{Enabled: true, Protocol: StreamingProtocol("nope")}, true},
+		{"defaults", StreamingConfig{Protocol: StreamingAuto}, false},
+		{"empty protocol ok", StreamingConfig{}, false},
+		{"negative idle", StreamingConfig{IdleTimeoutSeconds: -1}, true},
+		{"negative max", StreamingConfig{MaxDurationSeconds: -1}, true},
+		{"max below idle", StreamingConfig{IdleTimeoutSeconds: 120, MaxDurationSeconds: 30}, true},
+		{"max equals idle ok", StreamingConfig{IdleTimeoutSeconds: 30, MaxDurationSeconds: 30}, false},
+		{"max above idle ok", StreamingConfig{IdleTimeoutSeconds: 30, MaxDurationSeconds: 120}, false},
+		{"bad protocol", StreamingConfig{Protocol: StreamingProtocol("nope")}, true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -58,7 +58,7 @@ func TestFunctionSpecValidateStreaming(t *testing.T) {
 	t.Run("invalid streaming surfaced", func(t *testing.T) {
 		t.Parallel()
 		spec := base()
-		spec.Streaming = &StreamingConfig{Enabled: true, IdleTimeoutSeconds: -5}
+		spec.Streaming = &StreamingConfig{IdleTimeoutSeconds: -5}
 		if err := spec.Validate(); err == nil {
 			t.Fatalf("expected error for negative idle timeout")
 		}

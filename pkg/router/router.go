@@ -251,6 +251,12 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		if perr != nil {
 			return fmt.Errorf("failed to parse stream idle timeout value('%s') from 'ROUTER_STREAM_IDLE_TIMEOUT': %w", v, perr)
 		}
+		// A non-positive idle window would silently disable the streaming idle
+		// watchdog (streams with no max-duration ceiling could then hang forever).
+		// Reject it at startup rather than failing open.
+		if d <= 0 {
+			return fmt.Errorf("'ROUTER_STREAM_IDLE_TIMEOUT' must be a positive duration, got %q", v)
+		}
 		streamIdleDefault = d
 	}
 

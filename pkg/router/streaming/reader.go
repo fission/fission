@@ -18,6 +18,10 @@ import (
 // that returns >0 bytes and onClose exactly once on the first Close. It is the
 // hook the streaming path uses to re-arm the idle Watchdog and to fire the pod
 // untap when an SSE/chunked stream finishes. Either callback may be nil.
+//
+// Like any io.Reader it follows the single-caller convention: Read is not safe
+// for concurrent use (unlike Watchdog, which is). onClose is guarded by sync.Once
+// so it is safe to call Close more than once.
 type ActivityReadCloser struct {
 	rc      io.ReadCloser
 	onRead  func()

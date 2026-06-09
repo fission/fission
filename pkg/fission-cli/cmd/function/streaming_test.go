@@ -46,10 +46,23 @@ func TestGetStreamingConfig(t *testing.T) {
 		}
 		sc := getStreamingConfig(in)
 		require.NotNil(t, sc)
-		assert.True(t, sc.Enabled)
 		assert.Equal(t, fv1.StreamingAuto, sc.Protocol)
 		assert.Equal(t, 60, sc.IdleTimeoutSeconds)
 		assert.Equal(t, 0, sc.MaxDurationSeconds)
+	})
+
+	t.Run("invalid protocol passes through verbatim (validation is the single gate)", func(t *testing.T) {
+		t.Parallel()
+		in := fakeStreamInput{
+			b: map[string]bool{flagkey.FnStreaming: true},
+			s: map[string]string{flagkey.FnStreamingProtocol: "grpc"},
+			i: map[string]int{flagkey.FnStreamingIdleTimeout: 60, flagkey.FnStreamingMaxDuration: 0},
+		}
+		sc := getStreamingConfig(in)
+		require.NotNil(t, sc)
+		// The CLI does not validate; it passes the value through so StreamingConfig.Validate
+		// (CRD webhook / server-side) is the single rejection point.
+		assert.Equal(t, fv1.StreamingProtocol("grpc"), sc.Protocol)
 	})
 
 	t.Run("streaming on with overrides", func(t *testing.T) {

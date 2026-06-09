@@ -49,7 +49,6 @@ func getStreamingConfig(input cli.Input) *fv1.StreamingConfig {
 		return nil
 	}
 	return &fv1.StreamingConfig{
-		Enabled:            true,
 		Protocol:           fv1.StreamingProtocol(input.String(flagkey.FnStreamingProtocol)),
 		IdleTimeoutSeconds: input.Int(flagkey.FnStreamingIdleTimeout),
 		MaxDurationSeconds: input.Int(flagkey.FnStreamingMaxDuration),

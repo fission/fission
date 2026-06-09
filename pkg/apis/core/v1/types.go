@@ -493,14 +493,10 @@ type (
 	StreamingProtocol string
 
 	// StreamingConfig controls the router's streaming behavior for a function.
+	// Presence is the on switch: a non-nil Streaming enables the streaming path,
+	// nil (the default) is the classic buffered path. There is no separate enabled
+	// flag, so the in-memory zero value and the stored object never disagree.
 	StreamingConfig struct {
-		// Enabled turns on the streaming path. A non-nil Streaming with Enabled=false
-		// is equivalent to nil (classic path), allowed so callers can keep the block
-		// while toggling.
-		// +optional
-		// +kubebuilder:default=true
-		Enabled bool `json:"enabled"`
-
 		// Protocol hints how the router proxies the response.
 		// +optional
 		// +kubebuilder:default=auto

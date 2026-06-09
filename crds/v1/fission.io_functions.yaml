@@ -9343,13 +9343,6 @@ spec:
                   uses the classic buffered, retry-on-transient-error proxy path with a single
                   FunctionTimeout deadline. Additive and backward compatible.
                 properties:
-                  enabled:
-                    default: true
-                    description: |-
-                      Enabled turns on the streaming path. A non-nil Streaming with Enabled=false
-                      is equivalent to nil (classic path), allowed so callers can keep the block
-                      while toggling.
-                    type: boolean
                   idleTimeoutSeconds:
                     description: |-
                       IdleTimeoutSeconds is the maximum time the router waits without bytes flowing

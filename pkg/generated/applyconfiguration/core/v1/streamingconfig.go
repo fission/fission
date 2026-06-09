@@ -14,11 +14,10 @@ import (
 // with apply.
 //
 // StreamingConfig controls the router's streaming behavior for a function.
+// Presence is the on switch: a non-nil Streaming enables the streaming path,
+// nil (the default) is the classic buffered path. There is no separate enabled
+// flag, so the in-memory zero value and the stored object never disagree.
 type StreamingConfigApplyConfiguration struct {
-	// Enabled turns on the streaming path. A non-nil Streaming with Enabled=false
-	// is equivalent to nil (classic path), allowed so callers can keep the block
-	// while toggling.
-	Enabled *bool `json:"enabled,omitempty"`
 	// Protocol hints how the router proxies the response.
 	Protocol *corev1.StreamingProtocol `json:"protocol,omitempty"`
 	// IdleTimeoutSeconds is the maximum time the router waits without bytes flowing
@@ -36,14 +35,6 @@ type StreamingConfigApplyConfiguration struct {
 // apply.
 func StreamingConfig() *StreamingConfigApplyConfiguration {
 	return &StreamingConfigApplyConfiguration{}
-}
-
-// WithEnabled sets the Enabled field in the declarative configuration to the given value
-// and returns the receiver, so that objects can be built by chaining "With" function invocations.
-// If called multiple times, the Enabled field is set to the value of the last call.
-func (b *StreamingConfigApplyConfiguration) WithEnabled(value bool) *StreamingConfigApplyConfiguration {
-	b.Enabled = &value
-	return b
 }
 
 // WithProtocol sets the Protocol field in the declarative configuration to the given value

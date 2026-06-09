@@ -41,7 +41,8 @@ func (w *Watchdog) Start() {
 	w.timer = time.AfterFunc(w.idle, w.fire)
 }
 
-// Reset re-arms the idle window. Call on each chunk from the upstream.
+// Reset re-arms the idle window. Call on each chunk from the upstream. It is a
+// no-op until Start has armed the watchdog, and after Stop.
 func (w *Watchdog) Reset() {
 	w.mu.Lock()
 	defer w.mu.Unlock()

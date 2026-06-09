@@ -45,6 +45,14 @@ const (
 	X_FORWARDED_HOST = "X-Forwarded-Host"
 )
 
+// Stream-abort causes, attached to the request context via context.WithCancelCause
+// so the proxy error handler can distinguish a server-initiated stream abort from
+// a genuine client disconnect (which also surfaces as context.Canceled).
+var (
+	errStreamIdleTimeout = errors.New("stream aborted: idle timeout")
+	errStreamMaxDuration = errors.New("stream aborted: max duration")
+)
+
 type (
 	functionHandler struct {
 		logger logr.Logger
@@ -328,11 +336,11 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 		// otelhttp wraps the response body, which breaks the io.ReadWriteCloser
 		// that ReverseProxy needs to hijack a 101 Switching Protocols (WebSocket)
 		// response. Forward upgrade requests on the raw transport so the
-		// connection can be hijacked; instrument everything else.
-		// otelhttp wraps the response body, which breaks the io.ReadWriteCloser
-		// that ReverseProxy needs to hijack a 101 Switching Protocols (WebSocket)
-		// response. Forward upgrade requests on the raw transport so the
-		// connection can be hijacked; instrument everything else.
+		// connection can be hijacked; instrument everything else. This applies to
+		// ALL WebSocket requests (streaming and classic) on purpose — otel wrapping
+		// breaks the hijack regardless of Spec.Streaming, so this also fixes classic
+		// WebSocket functions. The only cost is no otel span for the upgrade itself
+		// (a hijacked bidirectional connection isn't meaningfully traceable anyway).
 		var rt http.RoundTripper = otelhttp.NewTransport(transport)
 		if routerutil.IsWebsocketRequest(newReq) {
 			rt = transport
@@ -521,12 +529,12 @@ func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *h
 		streamCancel = cancel
 		if policy.maxDuration > 0 {
 			timer := time.AfterFunc(policy.maxDuration, func() {
-				cancel(fmt.Errorf("stream max duration (%s) exceeded", policy.maxDuration))
+				cancel(fmt.Errorf("%w (%s)", errStreamMaxDuration, policy.maxDuration))
 			})
 			context.AfterFunc(ctx, func() { timer.Stop() })
 		}
 		watchdog = streaming.NewWatchdog(policy.idleTimeout, func() {
-			cancel(fmt.Errorf("stream idle timeout (%s) exceeded", policy.idleTimeout))
+			cancel(fmt.Errorf("%w (%s)", errStreamIdleTimeout, policy.idleTimeout))
 		})
 		request = request.WithContext(ctx)
 	}
@@ -884,8 +892,17 @@ func (fh functionHandler) getProxyErrorHandler(start time.Time, rrt *RetryingRou
 		var msg string
 		ctx := req.Context()
 		logger := otelUtils.LoggerWithTraceID(ctx, fh.logger)
-		switch err {
-		case context.Canceled:
+		// A server-initiated streaming abort (idle/max-duration) surfaces as
+		// context.Canceled too, but carries a cause we set via WithCancelCause.
+		// Surface it as a 504 with the real reason instead of masquerading as a
+		// client-close 499, and log it where an operator can see it.
+		streamCause := context.Cause(ctx)
+		switch {
+		case errors.Is(streamCause, errStreamIdleTimeout) || errors.Is(streamCause, errStreamMaxDuration):
+			status = http.StatusGatewayTimeout
+			msg = streamCause.Error()
+			logger.Info(msg, "function", fh.function, "status", http.StatusText(status))
+		case errors.Is(err, context.Canceled):
 			// 499 CLIENT CLOSED REQUEST
 			// A non-standard status code introduced by nginx for the case
 			// when a client closes the connection while nginx is processing the request.
@@ -893,9 +910,9 @@ func (fh functionHandler) getProxyErrorHandler(start time.Time, rrt *RetryingRou
 			status = 499
 			msg = "client closes the connection"
 			logger.V(1).Info(msg, "function", fh.function, "status", "Client Closed Request")
-		case context.DeadlineExceeded:
+		case errors.Is(err, context.DeadlineExceeded):
 			status = http.StatusGatewayTimeout
-			msg := "no response from function before timeout"
+			msg = "no response from function before timeout"
 			logger.Info(msg, "function", fh.function, "status", http.StatusText(status))
 		default:
 			code, _ := ferror.GetHTTPError(err)

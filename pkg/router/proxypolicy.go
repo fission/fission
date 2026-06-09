@@ -34,7 +34,7 @@ type proxyPolicy struct {
 func resolveProxyPolicy(fn *fv1.Function, fnTimeout, defIdle time.Duration) proxyPolicy {
 	p := proxyPolicy{maxDuration: fnTimeout}
 	sc := fn.Spec.Streaming
-	if sc == nil || !sc.Enabled {
+	if sc == nil {
 		return p // classic: zero-streaming, today's behavior
 	}
 	p.streaming = true
