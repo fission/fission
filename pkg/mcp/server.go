@@ -6,7 +6,6 @@ package mcp
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 
@@ -79,7 +78,7 @@ func (s *Server) ApplyToolDelta(add []ToolEntry, removeNames []string) {
 		s.mcp.AddTool(&mcp.Tool{
 			Name:        e.ToolName,
 			Description: e.Description,
-			InputSchema: json.RawMessage(e.InputSchema),
+			InputSchema: e.InputSchema,
 		}, s.callTool)
 	}
 }

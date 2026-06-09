@@ -62,6 +62,17 @@ type FunctionOptions struct {
 	// StreamingMaxDuration, when > 0 with Streaming, passes
 	// `--streamingmaxduration <n>` (seconds) — a hard ceiling on stream lifetime.
 	StreamingMaxDuration int
+	// ExposeAsMCP, when true, passes `--expose-as-mcp` so the function is
+	// advertised as an MCP tool.
+	ExposeAsMCP bool
+	// ToolDescription, when set with ExposeAsMCP, passes `--tool-description`.
+	ToolDescription string
+	// ToolName, when set with ExposeAsMCP, passes `--tool-name` (overrides the
+	// default <namespace>-<name>).
+	ToolName string
+	// ToolInputSchema, when set with ExposeAsMCP, passes `--tool-input-schema`
+	// (a path to a JSON Schema file).
+	ToolInputSchema string
 	// ExecutorType, when set, picks the function's executor backend
 	// ("poolmgr" — default — or "newdeploy").
 	ExecutorType string
@@ -141,6 +152,18 @@ func (ns *TestNamespace) CreateFunction(t *testing.T, ctx context.Context, opts 
 		}
 		if opts.StreamingMaxDuration > 0 {
 			args = append(args, "--streamingmaxduration", strconv.Itoa(opts.StreamingMaxDuration))
+		}
+	}
+	if opts.ExposeAsMCP {
+		args = append(args, "--expose-as-mcp")
+		if opts.ToolDescription != "" {
+			args = append(args, "--tool-description", opts.ToolDescription)
+		}
+		if opts.ToolName != "" {
+			args = append(args, "--tool-name", opts.ToolName)
+		}
+		if opts.ToolInputSchema != "" {
+			args = append(args, "--tool-input-schema", opts.ToolInputSchema)
 		}
 	}
 	if opts.ExecutorType != "" {

@@ -41,6 +41,7 @@ manifests:
           grafana.dashboards.enabled: "false"
           imageTag: ""
           influxdb.enabled: "false"
+          mcp.enabled: "true"
           namespace: fission
           networkPolicy.enabled: "false"
           openTelemetry.otlpCollectorEndpoint: ""
