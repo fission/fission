@@ -536,6 +536,10 @@ func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *h
 		watchdog = streaming.NewWatchdog(policy.idleTimeout, func() {
 			cancel(fmt.Errorf("%w (%s)", errStreamIdleTimeout, policy.idleTimeout))
 		})
+		// Arm now (not at headers) so the idle timeout also bounds time-to-first-byte:
+		// a streaming function that accepts the connection but never responds is
+		// aborted at the idle window rather than hanging until the client disconnects.
+		watchdog.Start()
 		request = request.WithContext(ctx)
 	}
 
@@ -626,11 +630,8 @@ func (fh *functionHandler) onStreamResponse(ctx context.Context, rrt *RetryingRo
 		return
 	}
 
-	// SSE/chunked: arm the idle Watchdog and wrap resp.Body so each upstream
-	// chunk re-arms the idle window.
-	if w != nil {
-		w.Start()
-	}
+	// SSE/chunked: the idle Watchdog was already armed in handler (so it also
+	// covers time-to-first-byte); wrap resp.Body so each upstream chunk re-arms it.
 	if resp.Body == nil {
 		return
 	}

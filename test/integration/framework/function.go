@@ -53,6 +53,15 @@ type FunctionOptions struct {
 	// FnTimeout, when > 0, is passed as `--fntimeout <n>` (seconds).
 	// Sets the function's invocation timeout; default 60s.
 	FnTimeout int
+	// Streaming, when true, passes `--streaming` so the router streams the
+	// response (SSE/chunked/WebSocket) and does not cut it at FnTimeout.
+	Streaming bool
+	// StreamingProtocol, when set with Streaming, passes `--streamingprotocol`
+	// (auto|sse|chunked|websocket).
+	StreamingProtocol string
+	// StreamingMaxDuration, when > 0 with Streaming, passes
+	// `--streamingmaxduration <n>` (seconds) — a hard ceiling on stream lifetime.
+	StreamingMaxDuration int
 	// ExecutorType, when set, picks the function's executor backend
 	// ("poolmgr" — default — or "newdeploy").
 	ExecutorType string
@@ -124,6 +133,15 @@ func (ns *TestNamespace) CreateFunction(t *testing.T, ctx context.Context, opts 
 	}
 	if opts.FnTimeout > 0 {
 		args = append(args, "--fntimeout", strconv.Itoa(opts.FnTimeout))
+	}
+	if opts.Streaming {
+		args = append(args, "--streaming")
+		if opts.StreamingProtocol != "" {
+			args = append(args, "--streamingprotocol", opts.StreamingProtocol)
+		}
+		if opts.StreamingMaxDuration > 0 {
+			args = append(args, "--streamingmaxduration", strconv.Itoa(opts.StreamingMaxDuration))
+		}
 	}
 	if opts.ExecutorType != "" {
 		args = append(args, "--executortype", opts.ExecutorType)
