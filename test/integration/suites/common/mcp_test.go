@@ -86,9 +86,10 @@ func TestMCPToolsListAndCall(t *testing.T) {
 	// tools/call returns the same body as a direct internal-listener invocation.
 	t.Run("tools/call invokes the function", func(t *testing.T) {
 		// utils.UrlForFunction folds the default namespace, matching the route the
-		// router registers (and what the MCP proxy targets).
-		_, direct, err := f.Router(t).Post(ctx, utils.UrlForFunction(fnName, ns.Name), "application/json", []byte(`{"name":"world"}`))
-		require.NoError(t, err)
+		// router registers (and what the MCP proxy targets). Poll until the
+		// function is warm so the comparison body isn't a cold-start error.
+		direct := f.Router(t).PostEventually(t, ctx, utils.UrlForFunction(fnName, ns.Name),
+			"application/json", []byte(`{"name":"world"}`), framework.BodyContains("hello"))
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			res, err := session.CallTool(ctx, &mcp.CallToolParams{
