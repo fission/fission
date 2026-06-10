@@ -146,6 +146,9 @@ func (c *client) UnTapService(ctx context.Context, fnMeta metav1.ObjectMeta, exe
 	return nil
 }
 
+// service accumulates TapService requests and flushes them to the executor in
+// a batch every 5 seconds, so taps cost one RPC per interval regardless of
+// request rate.
 func (c *client) service() {
 	ticker := time.NewTicker(time.Second * 5)
 	defer ticker.Stop()
@@ -161,20 +164,22 @@ func (c *client) service() {
 			urls := c.tappedByURL
 			c.tappedByURL = make(map[string]TapServiceRequest)
 
-			go func() {
-				svcReqs := []TapServiceRequest{}
-				for _, req := range urls {
-					svcReqs = append(svcReqs, req)
-				}
-				c.logger.V(1).Info("tapped services in batch", "service_count", len(urls))
-				err := c._tapService(context.Background(), svcReqs)
-				if err != nil {
-					// Best-effort atime refresh; a 404 here just means some
-					// entries expired on the executor side.
-					c.logger.V(1).Info("error tapping function service address", "error", err.Error())
-				}
-			}()
+			go c.flushTaps(urls)
 		}
+	}
+}
+
+// flushTaps sends one accumulated batch of tap requests to the executor.
+// Best-effort: a 404 just means some entries expired on the executor side.
+func (c *client) flushTaps(urls map[string]TapServiceRequest) {
+	svcReqs := []TapServiceRequest{}
+	for _, req := range urls {
+		svcReqs = append(svcReqs, req)
+	}
+	c.logger.V(1).Info("tapped services in batch", "service_count", len(urls))
+	err := c._tapService(context.Background(), svcReqs)
+	if err != nil {
+		c.logger.V(1).Info("error tapping function service address", "error", err.Error())
 	}
 }
 

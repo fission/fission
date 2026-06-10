@@ -84,6 +84,21 @@ type (
 	}
 )
 
+// podReadyTimeoutFromEnv parses POD_READY_TIMEOUT, defaulting to 300s on a
+// missing or unparsable value. Called once by MakeGenericPoolManager rather
+// than on every pool creation.
+func podReadyTimeoutFromEnv(logger logr.Logger) time.Duration {
+	podReadyTimeoutStr := os.Getenv("POD_READY_TIMEOUT")
+	podReadyTimeout, err := time.ParseDuration(podReadyTimeoutStr)
+	if err != nil {
+		podReadyTimeout = 300 * time.Second
+		logger.Error(err, "failed to parse pod ready timeout duration from 'POD_READY_TIMEOUT' - set to the default value",
+			"value", podReadyTimeoutStr,
+			"default", podReadyTimeout)
+	}
+	return podReadyTimeout
+}
+
 // MakeGenericPool returns an instance of GenericPool
 func MakeGenericPool(
 	logger logr.Logger,
@@ -98,18 +113,10 @@ func MakeGenericPool(
 	enableIstio bool,
 	podSpecPatch *apiv1.PodSpec,
 	crClient client.Client,
-	oci *fv1.OCIArchive) *GenericPool {
+	oci *fv1.OCIArchive,
+	podReadyTimeout time.Duration) *GenericPool {
 
 	gpLogger := logger.WithName("generic_pool")
-
-	podReadyTimeoutStr := os.Getenv("POD_READY_TIMEOUT")
-	podReadyTimeout, err := time.ParseDuration(podReadyTimeoutStr)
-	if err != nil {
-		podReadyTimeout = 300 * time.Second
-		gpLogger.Error(err, "failed to parse pod ready timeout duration from 'POD_READY_TIMEOUT' - set to the default value",
-			"value", podReadyTimeoutStr,
-			"default", podReadyTimeout)
-	}
 
 	gpLogger.Info("creating pool", "environment", env)
 

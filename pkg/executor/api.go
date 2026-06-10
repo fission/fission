@@ -22,6 +22,7 @@ import (
 	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/executor/client"
+	"github.com/fission/fission/pkg/executor/executortype"
 	"github.com/fission/fission/pkg/executor/fscache"
 	"github.com/fission/fission/pkg/utils/httpsecurity"
 	"github.com/fission/fission/pkg/utils/httpserver"
@@ -54,45 +55,15 @@ func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *htt
 		"function_name", fn.Name,
 		"function_namespace", fn.Namespace)
 	if t == fv1.ExecutorTypePoolmgr && !fn.Spec.OnceOnly {
-		fsvc, err := et.GetFuncSvcFromCache(ctx, fn)
-		// check if its a cache hit (check if there is already specialized function pod that can serve another request)
-		if err == nil {
-			// if a pod is already serving request then it already exists else validated
-			if et.IsValid(ctx, fsvc) {
-				// Cached, return svc address
-				logger.V(1).Info("served from cache", "name", fsvc.Name, "address", fsvc.Address)
-				executor.writeResponse(w, fsvc.Address, fn.Name)
-				return
-			}
-			logger.V(1).Info("deleting cache entry for invalid address",
-				"function_name", fn.Name,
-				"function_namespace", fn.Namespace,
-				"address", fsvc.Address)
-			et.DeleteFuncSvcFromCache(ctx, fsvc)
-		} else {
-			code, msg := ferror.GetHTTPError(err)
-			if code == http.StatusNotFound {
-				logger.V(1).Info("cache miss", "function_name", fn.Name)
-			} else {
-				logger.Error(err, "error getting service for function", "function_name", fn.Name)
-				http.Error(w, msg, code)
-				return
-			}
+		// failOnCacheError: a non-NotFound cache error for poolmgr means the
+		// concurrency gate itself failed (e.g. 429 at the concurrency cap), so
+		// it must be relayed instead of falling through to specialization.
+		if executor.serveFromCache(ctx, w, et, fn, true) {
+			return
 		}
-
 	} else if t == fv1.ExecutorTypeNewdeploy || t == fv1.ExecutorTypeContainer {
-		fsvc, err := et.GetFuncSvcFromCache(ctx, fn)
-		if err == nil {
-			if et.IsValid(ctx, fsvc) {
-				// Cached, return svc address
-				executor.writeResponse(w, fsvc.Address, fn.Name)
-				return
-			}
-			logger.V(1).Info("deleting cache entry for invalid address",
-				"function_name", fn.Name,
-				"function_namespace", fn.Namespace,
-				"address", fsvc.Address)
-			et.DeleteFuncSvcFromCache(ctx, fsvc)
+		if executor.serveFromCache(ctx, w, et, fn, false) {
+			return
 		}
 	}
 
@@ -105,6 +76,43 @@ func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *htt
 		return
 	}
 	executor.writeResponse(w, serviceName, fn.Name)
+}
+
+// serveFromCache checks the function→service cache and writes the cached
+// address when a valid entry exists (a specialized pod that can serve another
+// request). It returns true when a response has been written — a cache hit, or
+// (with failOnCacheError) a fatal cache error; false means the caller should
+// proceed to create a new service. Invalid entries are evicted on the way.
+func (executor *Executor) serveFromCache(ctx context.Context, w http.ResponseWriter, et executortype.ExecutorType, fn *fv1.Function, failOnCacheError bool) bool {
+	logger := otelUtils.LoggerWithTraceID(ctx, executor.logger)
+
+	fsvc, err := et.GetFuncSvcFromCache(ctx, fn)
+	if err != nil {
+		if !failOnCacheError {
+			return false
+		}
+		code, msg := ferror.GetHTTPError(err)
+		if code == http.StatusNotFound {
+			logger.V(1).Info("cache miss", "function_name", fn.Name)
+			return false
+		}
+		logger.Error(err, "error getting service for function", "function_name", fn.Name)
+		http.Error(w, msg, code)
+		return true
+	}
+	// if a pod is already serving request then it already exists else validated
+	if et.IsValid(ctx, fsvc) {
+		// Cached, return svc address
+		logger.V(1).Info("served from cache", "name", fsvc.Name, "address", fsvc.Address)
+		executor.writeResponse(w, fsvc.Address, fn.Name)
+		return true
+	}
+	logger.V(1).Info("deleting cache entry for invalid address",
+		"function_name", fn.Name,
+		"function_namespace", fn.Namespace,
+		"address", fsvc.Address)
+	et.DeleteFuncSvcFromCache(ctx, fsvc)
+	return false
 }
 
 func (executor *Executor) writeResponse(w http.ResponseWriter, serviceName string, fnName string) {
