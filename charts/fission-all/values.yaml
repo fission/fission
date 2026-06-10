@@ -233,6 +233,19 @@ executor:
   ## packages on the fetcher pull path.
   ##
   enableOCIImageVolume: false
+  ## functionServices opts the pool manager into creating a headless selector
+  ## Service per invoked function (RFC-0002 EndpointSlice-native data plane),
+  ## so the built-in EndpointSlice controller publishes the function's
+  ## specialized pods for the router's slice-fed endpoint index. Off by
+  ## default; inert without the router-side endpointSliceCache mode.
+  ##
+  functionServices:
+    enabled: false
+  ## specializationConcurrency bounds concurrently running specializations in
+  ## the executor (EXECUTOR_SPECIALIZATION_CONCURRENCY). 0 keeps the
+  ## historical unbounded behavior.
+  ##
+  specializationConcurrency: 0
   ## podReadyTimeout represents the timeout in seconds for waiting for pod to become ready.
   ## This is applicable to Pool Manager executor type only.
   ##

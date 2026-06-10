@@ -17,6 +17,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"golang.org/x/sync/errgroup"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	hmacauth "github.com/fission/fission/pkg/auth/hmac"
@@ -124,44 +125,93 @@ func (executor *Executor) writeResponse(w http.ResponseWriter, serviceName strin
 	}
 }
 
-// getServiceForFunction first checks if this function's service is cached, if yes, it validates the address.
-// if it's a valid address, just returns it.
-// else, invalidates its cache entry and makes a new request to create a service for this function and finally responds
-// with new address or error.
-//
-// checking for the validity of the address causes a little more over-head than desired. but, it ensures that
-// stale addresses are not returned to the router.
-// To make it optimal, plan is to add an eager cache invalidator function that watches for pod deletion events and
-// invalidates the cache entry if the pod address was cached.
+// getServiceForFunction dispatches the creation of a service for the function
+// (deduplicated per function for newdeploy/container, independent runs for
+// poolmgr — see dispatchCreateFuncService) and returns its address.
 func (executor *Executor) getServiceForFunction(ctx context.Context, fn *fv1.Function) (string, error) {
-	respChan := make(chan *createFuncServiceResponse)
-	executor.requestChan <- &createFuncServiceRequest{
-		context:  ctx,
-		function: fn,
-		respChan: respChan,
-	}
-	resp := <-respChan
+	fsvc, err := executor.dispatchCreateFuncService(ctx, fn)
 	cleanUp := func(funcSvc *fscache.FuncSvc) {
 		et, ok := executor.executorTypes[fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType]
 		if !ok {
-			executor.logger.Info("unknown executor type received in function service", "executor", funcSvc.Executor)
+			executor.logger.Info("unknown executor type received in function service", "executor", fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType)
 			return
 		}
 		if funcSvc != nil {
-			et.UnTapService(ctx, funcSvc.Function, resp.funcSvc.Address)
+			// The pod was allotted but the caller is gone / errored — release it.
+			et.UnTapService(ctx, funcSvc.Function, funcSvc.Address)
 		} else {
 			et.MarkSpecializationFailure(ctx, &fn.ObjectMeta)
 		}
 	}
 	if errors.Is(ctx.Err(), context.Canceled) {
-		cleanUp(resp.funcSvc)
+		cleanUp(fsvc)
 		return "", ferror.MakeError(499, "client leave early in the process of getServiceForFunction")
 	}
-	if resp.err != nil {
-		cleanUp(resp.funcSvc)
-		return "", resp.err
+	if err != nil {
+		cleanUp(fsvc)
+		return "", err
 	}
-	return resp.funcSvc.Address, resp.err
+	return fsvc.Address, nil
+}
+
+// capacityProvider is the optional executor-type facet ensureCapacity uses to
+// enforce the function's concurrency cap before specializing an extra pod.
+// Implemented by the pool manager (PoolCache is the capacity authority).
+type capacityProvider interface {
+	ConcurrencyUsed(ctx context.Context, fnMeta *metav1.ObjectMeta) int
+}
+
+// ensureCapacityHandler serves POST /v2/ensureCapacity (RFC-0002): the router
+// calls it when every endpoint it knows for a poolmgr function is saturated by
+// its local admission accounting. The executor — still the capacity authority —
+// either synchronously specializes one more pod (responding with its address,
+// the same shape as getServiceForFunction) or answers 429 at the function's
+// concurrency cap. Unlike getServiceForFunction it never serves from the
+// PoolCache: the router only calls it because the cached pods are busy.
+func (executor *Executor) ensureCapacityHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "Failed to read request", http.StatusInternalServerError)
+		return
+	}
+
+	var req client.EnsureCapacityRequest
+	if err := json.Unmarshal(body, &req); err != nil || req.Function == nil {
+		http.Error(w, "Failed to parse request", http.StatusBadRequest)
+		return
+	}
+	fn := req.Function
+	t := fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType
+	if t != fv1.ExecutorTypePoolmgr {
+		http.Error(w, fmt.Sprintf("ensureCapacity supports poolmgr only, got '%s'", html.EscapeString(string(t))), http.StatusBadRequest)
+		return
+	}
+	et := executor.executorTypes[t]
+	logger := otelUtils.LoggerWithTraceID(ctx, executor.logger)
+
+	if cp, ok := et.(capacityProvider); ok {
+		if concurrency := fn.GetConcurrency(); concurrency > 0 {
+			if used := cp.ConcurrencyUsed(ctx, &fn.ObjectMeta); used >= concurrency {
+				logger.V(1).Info("ensureCapacity at concurrency cap",
+					"function_name", fn.Name, "function_namespace", fn.Namespace,
+					"used", used, "concurrency", concurrency,
+					"observed_ready", req.ObservedReadyEndpoints, "observed_busy", req.ObservedBusyEndpoints)
+				http.Error(w, fmt.Sprintf("function '%s' concurrency '%d' limit reached", fn.Name, concurrency), http.StatusTooManyRequests)
+				return
+			}
+		}
+	}
+
+	serviceName, err := executor.getServiceForFunction(ctx, fn)
+	if err != nil {
+		code, msg := ferror.GetHTTPError(err)
+		logger.Error(err, "error ensuring capacity for function", "function", fn.Name,
+			"fission_http_error", msg)
+		http.Error(w, msg, code)
+		return
+	}
+	executor.writeResponse(w, serviceName, fn.Name)
 }
 
 // find funcSvc and update its atime
@@ -317,6 +367,7 @@ func (executor *Executor) GetHandler() http.Handler {
 	}))
 	r.Use(metrics.HTTPMetricMiddleware)
 	r.HandleFunc("/v2/getServiceForFunction", executor.getServiceForFunctionAPI).Methods("POST")
+	r.HandleFunc("/v2/ensureCapacity", executor.ensureCapacityHandler).Methods("POST")
 	r.HandleFunc("/v2/tapService", executor.tapService).Methods("POST") // for backward compatibility
 	r.HandleFunc("/v2/tapServices", executor.tapServices).Methods("POST")
 	r.HandleFunc("/healthz", executor.healthHandler).Methods("GET")

@@ -33,6 +33,7 @@ const (
 	markSpecializationFailure
 	logFuncSvc
 	markDeleted
+	countConcurrency
 )
 
 type (
@@ -74,9 +75,10 @@ type (
 	}
 	response struct {
 		error
-		allValues    []*FuncSvc
-		value        *FuncSvc
-		svcWaitValue *svcWait
+		allValues       []*FuncSvc
+		value           *FuncSvc
+		svcWaitValue    *svcWait
+		concurrencyUsed int
 	}
 	svcWait struct {
 		svcChannel chan *FuncSvc
@@ -214,6 +216,13 @@ func (c *PoolCache) service() {
 					break
 				}
 			}
+		case countConcurrency:
+			if grp, ok := c.cache[req.function]; ok {
+				// Same quantity the getValue arm compares against the
+				// concurrency cap: specialized pods + specializations in flight.
+				resp.concurrencyUsed = len(grp.svcs) + (grp.svcWaiting - grp.queue.Len())
+			}
+			req.responseChannel <- resp
 		case listAvailableValue:
 			vals := make([]*FuncSvc, 0)
 			latestFuncGen := make(map[types.UID]int64)
@@ -366,6 +375,20 @@ func (c *PoolCache) GetSvcValue(ctx context.Context, function crd.CacheKeyURG, r
 		}
 	}
 	return resp.value, resp.error
+}
+
+// ConcurrencyUsed returns the function's specialized pod count plus in-flight
+// specializations — the quantity the concurrency cap is enforced against
+// (RFC-0002 ensureCapacity).
+func (c *PoolCache) ConcurrencyUsed(function crd.CacheKeyURG) int {
+	respChannel := make(chan *response)
+	c.requestChannel <- &request{
+		requestType:     countConcurrency,
+		function:        function,
+		responseChannel: respChannel,
+	}
+	resp := <-respChannel
+	return resp.concurrencyUsed
 }
 
 // ListAvailableValue returns a list of the available function services stored in the Cache

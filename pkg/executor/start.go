@@ -146,8 +146,6 @@ func (c *executorControllers) Start(ctx context.Context) error {
 	idleReaper := idle.NewReaper(c.logger, strategies...)
 	gm.Go(func() error { idleReaper.Start(ctx); return nil })
 
-	gm.Go(func() error { c.api.serveCreateFuncServices(ctx); return nil })
-
 	runAdoptCleanup(ctx, c.executorTypes, c.adoptResources)
 
 	c.api.isLeader.Store(true)
@@ -317,7 +315,11 @@ func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, 
 	// goes down, so the kubelet restarts the pod and it rejoins as a standby.
 	leaderElectionEnabled, _ := strconv.ParseBool(os.Getenv("LEADER_ELECTION_ENABLED"))
 
-	api := MakeExecutor(logger, fissionClient, executorTypes)
+	// Bound on concurrently running specializations (RFC-0002 phase 0b);
+	// 0 / unset keeps the historical unbounded behavior.
+	specializationConcurrency, _ := strconv.Atoi(os.Getenv("EXECUTOR_SPECIALIZATION_CONCURRENCY"))
+
+	api := MakeExecutor(logger, fissionClient, executorTypes, specializationConcurrency)
 	api.leaderElection = leaderElectionEnabled
 
 	// Fission's collectors register into controller-runtime's global registry;

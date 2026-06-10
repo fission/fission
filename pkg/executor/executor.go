@@ -7,15 +7,14 @@ package executor
 import (
 	"context"
 	"fmt"
-	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/go-logr/logr"
-	k8sCache "k8s.io/client-go/tools/cache"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
+	"github.com/fission/fission/pkg/executor/dispatch"
 	"github.com/fission/fission/pkg/executor/executortype"
 	"github.com/fission/fission/pkg/executor/fscache"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
@@ -31,8 +30,10 @@ type (
 
 		fissionClient versioned.Interface
 
-		requestChan chan *createFuncServiceRequest
-		fsCreateWg  sync.Map
+		// dispatcher runs specializations: per-function dedup with ctx-aware
+		// waiters for newdeploy/container, independent (optionally bounded)
+		// runs for poolmgr. Replaces the request-channel multiplexer.
+		dispatcher *dispatch.Dispatcher[*fscache.FuncSvc]
 
 		// Readiness state. /readyz reports ready only when this process is the
 		// leader (or leader election is disabled) AND informer caches have
@@ -44,29 +45,24 @@ type (
 		isLeader       atomic.Bool
 		cachesSynced   atomic.Bool
 	}
-	createFuncServiceRequest struct {
-		context  context.Context
-		function *fv1.Function
-		respChan chan *createFuncServiceResponse
-	}
-
-	createFuncServiceResponse struct {
-		funcSvc *fscache.FuncSvc
-		err     error
-	}
 )
 
 // MakeExecutor returns an Executor for the given ExecutorType(s). It only builds
 // the object; the mutating controllers are started by executorControllers (a
 // leader-only runnable) under the controller-runtime Manager.
+// specializationConcurrency bounds concurrently running specializations
+// (EXECUTOR_SPECIALIZATION_CONCURRENCY); 0 keeps the historical unbounded
+// behavior.
 func MakeExecutor(logger logr.Logger,
-	fissionClient versioned.Interface, types map[fv1.ExecutorType]executortype.ExecutorType) *Executor {
+	fissionClient versioned.Interface, types map[fv1.ExecutorType]executortype.ExecutorType,
+	specializationConcurrency int) *Executor {
+	l := logger.WithName("executor")
 	return &Executor{
-		logger:        logger.WithName("executor"),
+		logger:        l,
 		fissionClient: fissionClient,
 		executorTypes: types,
 
-		requestChan: make(chan *createFuncServiceRequest),
+		dispatcher: dispatch.New[*fscache.FuncSvc](l, specializationConcurrency),
 	}
 }
 
@@ -89,91 +85,22 @@ func withSpecializationTimeout(ctx context.Context, fn *fv1.Function) (context.C
 		fmt.Errorf("function specialization timeout (%d)s exceeded", specializationTimeout+buffer))
 }
 
-// All non-cached function service requests go through this goroutine
-// serially. It parallelizes requests for different functions, and
-// ensures that for a given function, only one request causes a pod to
-// get specialized. In other words, it ensures that when there's an
-// ongoing request for a certain function, all other requests wait for
-// that request to complete.
-func (executor *Executor) serveCreateFuncServices(ctx context.Context) {
-	for {
-		var req *createFuncServiceRequest
-		select {
-		case <-ctx.Done():
-			return
-		case req = <-executor.requestChan:
-		}
-		function := req.function
-		fnName := k8sCache.MetaObjectToName(function)
-		fnkeyUR := crd.CacheKeyURFromObject(function)
-
-		if req.function.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypePoolmgr {
-			go func() {
-				fnSpecializationTimeoutContext, cancel := withSpecializationTimeout(req.context, req.function)
-				defer cancel()
-
-				fsvc, err := executor.createServiceForFunction(fnSpecializationTimeoutContext, req.function)
-				req.respChan <- &createFuncServiceResponse{
-					funcSvc: fsvc,
-					err:     err,
-				}
-			}()
-			continue
-		}
-
-		// Cache miss -- is this first one to request the func?
-		wg, found := executor.fsCreateWg.Load(fnkeyUR)
-		if !found {
-			// create a waitgroup for other requests for
-			// the same function to wait on
-			wg := &sync.WaitGroup{}
-			executor.fsCreateWg.Store(fnkeyUR, wg)
-
-			// launch a goroutine for each request, to parallelize
-			// the specialization of different functions
-			wg.Go(func() {
-				// Control overall specialization time by setting function
-				// specialization time to context (see withSpecializationTimeout).
-				fnSpecializationTimeoutContext, cancel := withSpecializationTimeout(req.context, req.function)
-				defer cancel()
-
-				fsvc, err := executor.createServiceForFunction(fnSpecializationTimeoutContext, req.function)
-				req.respChan <- &createFuncServiceResponse{
-					funcSvc: fsvc,
-					err:     err,
-				}
-				executor.fsCreateWg.Delete(fnkeyUR)
-			})
-		} else {
-			// There's an existing request for this function, wait for it to finish
-			go func() {
-				executor.logger.V(1).Info("waiting for concurrent request for the same function",
-					"function", fnName.String())
-				wg, ok := wg.(*sync.WaitGroup)
-				if !ok {
-					err := fmt.Errorf("could not convert value to workgroup for function %s", fnName)
-					req.respChan <- &createFuncServiceResponse{
-						funcSvc: nil,
-						err:     err,
-					}
-				}
-				wg.Wait()
-
-				// get the function service from the cache
-				fsvc, err := executor.getFunctionServiceFromCache(req.context, req.function)
-
-				// fsCache return error when the entry does not exist/expire.
-				// It normally happened if there are multiple requests are
-				// waiting for the same function and executor failed to cre-
-				// ate service for function.
-				err = fmt.Errorf("error getting service for function %s: %w", fnName, err)
-				req.respChan <- &createFuncServiceResponse{
-					funcSvc: fsvc,
-					err:     err,
-				}
-			}()
-		}
+// dispatchCreateFuncService runs createServiceForFunction through the
+// dispatcher: poolmgr requests each specialize their own pod (concurrent
+// cache misses scale out by design), every other type deduplicates per
+// function so concurrent requests share one specialization — with waiters
+// honoring their own context (replacing the sync.WaitGroup wait that could
+// not be canceled).
+func (executor *Executor) dispatchCreateFuncService(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
+	create := func(cctx context.Context) (*fscache.FuncSvc, error) {
+		fnSpecializationTimeoutContext, cancel := withSpecializationTimeout(cctx, fn)
+		defer cancel()
+		return executor.createServiceForFunction(fnSpecializationTimeoutContext, fn)
 	}
+	if fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypePoolmgr {
+		return executor.dispatcher.DoEach(ctx, create)
+	}
+	return executor.dispatcher.Do(ctx, crd.CacheKeyURFromObject(fn).String(), create)
 }
 
 func (executor *Executor) createServiceForFunction(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
@@ -198,14 +125,4 @@ func (executor *Executor) createServiceForFunction(ctx context.Context, fn *fv1.
 	}
 
 	return fsvc, fsvcErr
-}
-
-func (executor *Executor) getFunctionServiceFromCache(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
-	otelUtils.SpanTrackEvent(ctx, "getFunctionServiceFromCache", otelUtils.GetAttributesForFunction(fn)...)
-	t := fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType
-	e, ok := executor.executorTypes[t]
-	if !ok {
-		return nil, fmt.Errorf("unknown executor type '%s'", t)
-	}
-	return e.GetFuncSvcFromCache(ctx, fn)
 }

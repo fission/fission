@@ -193,6 +193,12 @@ func (fsc *FunctionServiceCache) GetByFunction(m *metav1.ObjectMeta) (*FuncSvc, 
 	return &fsvcCopy, nil
 }
 
+// ConcurrencyUsed returns the function's specialized pod count plus in-flight
+// specializations from the pool cache (RFC-0002 ensureCapacity).
+func (fsc *FunctionServiceCache) ConcurrencyUsed(key crd.CacheKeyURG) int {
+	return fsc.connFunctionCache.ConcurrencyUsed(key)
+}
+
 // GetFuncSvc gets a function service from pool cache using function key and returns number of active instances of function pod
 func (fsc *FunctionServiceCache) GetFuncSvc(ctx context.Context, m *metav1.ObjectMeta, requestsPerPod int, concurrency int) (*FuncSvc, error) {
 	key := crd.CacheKeyURGFromMeta(m)

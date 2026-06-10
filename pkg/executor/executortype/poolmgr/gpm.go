@@ -108,6 +108,13 @@ type (
 		// podReadyTimeout bounds how long choosePod waits for a warm pod; parsed
 		// once from POD_READY_TIMEOUT and handed to every pool.
 		podReadyTimeout time.Duration
+
+		// functionServicesEnabled is the RFC-0002 gate (ENABLE_FUNCTION_SERVICES):
+		// when on, every invoked poolmgr function gets a headless selector
+		// Service so the EndpointSlice controller publishes its specialized
+		// pods to the router's slice-fed index. Disabled in Istio mode, whose
+		// functions are addressed via Istio services instead.
+		functionServicesEnabled bool
 	}
 	request struct {
 		requestType
@@ -173,6 +180,7 @@ func MakeGenericPoolManager(ctx context.Context,
 		podSpecPatch:               podSpecPatch,
 		objectReaperIntervalSecond: time.Duration(executorUtils.GetObjectReaperInterval(logger, fv1.ExecutorTypePoolmgr, 5)) * time.Second,
 		podReadyTimeout:            podReadyTimeoutFromEnv(gpmLogger),
+		functionServicesEnabled:    functionServicesEnabled() && !enableIstio,
 	}
 
 	gpm.logger.V(1).Info("inside MakeGenericPoolManager")
@@ -259,6 +267,12 @@ func (gpm *GenericPoolManager) GetFuncSvc(ctx context.Context, fn *fv1.Function)
 	// (this also adds to the cache)
 	logger.V(1).Info("getting function service from pool", "function", fn.Name)
 	fnSvc, fErr = pool.getFuncSvc(ctx, fn)
+	if fErr == nil && gpm.functionServicesEnabled {
+		// Ensure the function's headless Service (RFC-0002) strictly off the
+		// cold-start path: the pod address has already been produced; the
+		// Service only feeds the router's warm-path EndpointSlice index.
+		go gpm.ensureFunctionServiceAsync(fn)
+	}
 	return fnSvc, fErr
 }
 
@@ -270,6 +284,13 @@ func (gpm *GenericPoolManager) GetFuncSvcFromCache(ctx context.Context, fn *fv1.
 func (gpm *GenericPoolManager) DeleteFuncSvcFromCache(ctx context.Context, fsvc *fscache.FuncSvc) {
 	otelUtils.SpanTrackEvent(ctx, "DeleteFuncSvcFromCache", fscache.GetAttributesForFuncSvc(fsvc)...)
 	gpm.fsCache.DeleteFunctionSvc(ctx, fsvc)
+}
+
+// ConcurrencyUsed implements the executor's capacityProvider facet
+// (RFC-0002 ensureCapacity): specialized pods plus in-flight specializations
+// for the function, from the PoolCache — still the capacity authority.
+func (gpm *GenericPoolManager) ConcurrencyUsed(ctx context.Context, fnMeta *metav1.ObjectMeta) int {
+	return gpm.fsCache.ConcurrencyUsed(crd.CacheKeyURGFromMeta(fnMeta))
 }
 
 func (gpm *GenericPoolManager) UnTapService(ctx context.Context, fnMeta *metav1.ObjectMeta, svcHost string) {
@@ -378,9 +399,44 @@ func (gpm *GenericPoolManager) AdoptExistingResources(ctx context.Context) {
 
 	envMap := gpm.adoptPools(ctx, wg)
 	gpm.adoptPerImagePoolDeployments(ctx, wg)
+	gpm.adoptFunctionServices(ctx, wg)
 	gpm.adoptSpecializedPods(ctx, wg, envMap)
 
 	wg.Wait()
+}
+
+// adoptFunctionServices re-stamps the instanceID annotation of the per-function
+// headless Services (RFC-0002) so the post-adopt stale-instanceID reaper keeps
+// them. Like per-image pool deployments, they are created lazily on first
+// invoke, so nothing else refreshes their annotation across an executor restart.
+func (gpm *GenericPoolManager) adoptFunctionServices(ctx context.Context, wg *sync.WaitGroup) {
+	selector := labels.Set(map[string]string{
+		fv1.MANAGED_BY_LABEL: fv1.MANAGED_BY_VALUE,
+		fv1.EXECUTOR_TYPE:    string(fv1.ExecutorTypePoolmgr),
+	}).AsSelector().String()
+	svcNamespaces := make(map[string]struct{})
+	for _, ns := range utils.DefaultNSResolver().FissionResourceNS {
+		svcNamespaces[gpm.nsResolver.GetFunctionNS(ns)] = struct{}{}
+	}
+	for namespace := range svcNamespaces {
+		svcList, err := gpm.kubernetesClient.CoreV1().Services(namespace).List(ctx, metav1.ListOptions{
+			LabelSelector: selector,
+		})
+		if err != nil {
+			gpm.logger.Error(err, "error listing function services for adoption", "namespace", namespace)
+			continue
+		}
+		for i := range svcList.Items {
+			svc := &svcList.Items[i]
+			wg.Go(func() {
+				patch := fmt.Sprintf(`{"metadata":{"annotations":{"%s":"%s"}}}`, fv1.EXECUTOR_INSTANCEID_LABEL, gpm.instanceID)
+				_, err := gpm.kubernetesClient.CoreV1().Services(svc.Namespace).Patch(ctx, svc.Name, k8sTypes.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
+				if err != nil {
+					gpm.logger.Error(err, "error adopting function service", "service", svc.Name, "ns", svc.Namespace)
+				}
+			})
+		}
+	}
 }
 
 // adoptPools re-creates (and thereby re-stamps) each environment's plain warm
@@ -570,6 +626,21 @@ func (gpm *GenericPoolManager) CleanupOldExecutorObjects(ctx context.Context) {
 	}
 
 	err = reaper.CleanupPods(ctx, gpm.logger, gpm.kubernetesClient, gpm.instanceID, listOpts)
+	if err != nil {
+		errs = errors.Join(errs, err)
+	}
+
+	// Per-function headless Services (RFC-0002). The selector includes
+	// managed-by so the legacy useSvc/istio Services (which carry no
+	// instanceID annotation and are skipped by CleanupServices anyway) are
+	// never even listed.
+	fnSvcListOpts := metav1.ListOptions{
+		LabelSelector: labels.Set(map[string]string{
+			fv1.MANAGED_BY_LABEL: fv1.MANAGED_BY_VALUE,
+			fv1.EXECUTOR_TYPE:    string(fv1.ExecutorTypePoolmgr),
+		}).AsSelector().String(),
+	}
+	err = reaper.CleanupServices(ctx, gpm.logger, gpm.kubernetesClient, gpm.instanceID, fnSvcListOpts)
 	if err != nil {
 		errs = errors.Join(errs, err)
 	}

@@ -47,6 +47,16 @@ type (
 		FnExecutorType fv1.ExecutorType
 		ServiceURL     string
 	}
+
+	// EnsureCapacityRequest is the body of POST /v2/ensureCapacity (RFC-0002):
+	// the router reports its observed endpoint counts and asks the executor —
+	// still the capacity authority — to specialize one more pod (synchronous
+	// address response) or answer 429 at the function's concurrency cap.
+	EnsureCapacityRequest struct {
+		Function               *fv1.Function `json:"function"`
+		ObservedReadyEndpoints int           `json:"observedReadyEndpoints"`
+		ObservedBusyEndpoints  int           `json:"observedBusyEndpoints"`
+	}
 )
 
 // MakeClient initializes and returns a Client instance.

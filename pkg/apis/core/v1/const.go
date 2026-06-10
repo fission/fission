@@ -144,6 +144,25 @@ const (
 	// hash); the pod reconciler routes warm pods on this label. Absent on
 	// pods of plain (fetcher-based) pools.
 	POOL_OCI_IMAGE_HASH = "ociImageHash"
+
+	// RFC-0002 EndpointSlice-native data plane labels.
+	//
+	// FUNCTION_GENERATION labels a specialized pool pod with the Function
+	// generation it was specialized from. The per-function Service selector
+	// includes it so stale-generation pods drop out of the EndpointSlices on a
+	// function update (the executor-side equivalent is CacheKeyURG keying).
+	FUNCTION_GENERATION = "fission.io/function-generation"
+	// SERVED_LABEL gates a specialized pod's membership in its function
+	// Service: pool pods pass readiness probes before specialization, so the
+	// label is set only by the post-specialization patch — without it the
+	// EndpointSlice controller would publish a relabeled-but-unspecialized pod
+	// as a ready endpoint.
+	SERVED_LABEL = "fission.io/served"
+	// MANAGED_BY_LABEL marks the Services Fission's data plane owns; the
+	// EndpointSlice controller mirrors Service labels onto slices, and the
+	// router's slice informer filters on it.
+	MANAGED_BY_LABEL = "fission.io/managed-by"
+	MANAGED_BY_VALUE = "fission"
 )
 
 const (
