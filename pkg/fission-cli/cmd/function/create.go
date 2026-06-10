@@ -59,17 +59,27 @@ func getStreamingConfig(input cli.Input) *fv1.StreamingConfig {
 
 // getToolConfig builds a ToolConfig from the --expose-as-mcp / --tool-* flags,
 // or nil when --expose-as-mcp is not set (the function is not advertised as an
-// MCP tool). The --tool-input-schema flag points at a JSON Schema file whose raw
-// contents are stored verbatim on the CRD.
-func getToolConfig(input cli.Input) (*fv1.ToolConfig, error) {
+// MCP tool). It merges onto existing (the function's current Tool, or nil on
+// create), overwriting only the fields whose flag was explicitly set — so an
+// `fn update --expose-as-mcp` that omits --tool-name/--tool-input-schema keeps
+// the previously-set values instead of clearing them. The --tool-input-schema
+// flag points at a JSON Schema file whose raw contents are stored verbatim.
+func getToolConfig(input cli.Input, existing *fv1.ToolConfig) (*fv1.ToolConfig, error) {
 	if !input.Bool(flagkey.FnExposeAsMCP) {
 		return nil, nil
 	}
-	tc := &fv1.ToolConfig{
-		Description: input.String(flagkey.FnToolDescription),
-		ToolName:    input.String(flagkey.FnToolName),
+	tc := &fv1.ToolConfig{}
+	if existing != nil {
+		tc = existing.DeepCopy()
 	}
-	if path := input.String(flagkey.FnToolInputSchema); path != "" {
+	if input.IsSet(flagkey.FnToolDescription) {
+		tc.Description = input.String(flagkey.FnToolDescription)
+	}
+	if input.IsSet(flagkey.FnToolName) {
+		tc.ToolName = input.String(flagkey.FnToolName)
+	}
+	if input.IsSet(flagkey.FnToolInputSchema) {
+		path := input.String(flagkey.FnToolInputSchema)
 		raw, err := os.ReadFile(path)
 		if err != nil {
 			return nil, fmt.Errorf("reading tool input schema file %q: %w", path, err)
@@ -273,7 +283,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		return err
 	}
 
-	toolConfig, err := getToolConfig(input)
+	toolConfig, err := getToolConfig(input, nil)
 	if err != nil {
 		return err
 	}

@@ -113,9 +113,9 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 	}
 
 	// --expose-as-mcp toggles the MCP tool config; when off it clears it. The
-	// other --tool-* flags only take effect alongside --expose-as-mcp.
+	// other --tool-* flags merge onto the existing config (only set fields change).
 	if input.IsSet(flagkey.FnExposeAsMCP) {
-		toolConfig, err := getToolConfig(input)
+		toolConfig, err := getToolConfig(input, function.Spec.Tool)
 		if err != nil {
 			return err
 		}

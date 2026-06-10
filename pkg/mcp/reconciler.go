@@ -52,20 +52,22 @@ func (r *FunctionToolReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	entry := toolEntryFromFunction(fn)
-	res, oldName := r.reg.Upsert(entry)
+	res, oldName, evicted := r.reg.Upsert(entry)
 
 	if res == UpsertConflict {
-		// The desired tool name is taken by another function. Don't advertise a
-		// hijacked name; drop any prior registration for this function and surface
-		// the conflict so it's visible via kubectl.
+		// The desired tool name is owned by a lexicographically-smaller function.
+		// Don't advertise a hijacked name; drop any prior registration for this
+		// function and surface the conflict so it's visible via kubectl.
 		r.removeTool(req.NamespacedName)
-		controller.SetConditions(ctx, r.logger, r.client, fn, metav1.Condition{
-			Type:    fv1.FunctionConditionToolExposed,
-			Status:  metav1.ConditionFalse,
-			Reason:  fv1.FunctionReasonToolNameConflict,
-			Message: "MCP tool name " + entry.ToolName + " is already used by another function",
-		})
+		r.setConflict(ctx, fn, entry.ToolName)
 		return ctrl.Result{}, nil
+	}
+
+	if evicted != nil {
+		// This function won a contested name from a prior owner. Mark the loser
+		// not-exposed so its condition doesn't lag at True until it next reconciles
+		// (best-effort; its own reconcile will reach the same result).
+		r.markEvicted(ctx, *evicted, entry.ToolName)
 	}
 
 	if oldName != "" && oldName != entry.ToolName {
@@ -92,4 +94,26 @@ func (r *FunctionToolReconciler) removeTool(nn types.NamespacedName) {
 	if oldName, existed := r.reg.RemoveByFunction(nn); existed {
 		r.server.ApplyToolDelta(nil, []string{oldName})
 	}
+}
+
+// setConflict marks a function not-exposed because its tool name is taken.
+func (r *FunctionToolReconciler) setConflict(ctx context.Context, fn *fv1.Function, toolName string) {
+	controller.SetConditions(ctx, r.logger, r.client, fn, metav1.Condition{
+		Type:    fv1.FunctionConditionToolExposed,
+		Status:  metav1.ConditionFalse,
+		Reason:  fv1.FunctionReasonToolNameConflict,
+		Message: "MCP tool name " + toolName + " is already used by another function",
+	})
+}
+
+// markEvicted best-effort marks the function that just lost a contested tool
+// name not-exposed. It re-fetches the object (it may have changed or been
+// deleted); failures are non-gating since the loser's own reconcile reaches the
+// same conclusion.
+func (r *FunctionToolReconciler) markEvicted(ctx context.Context, nn types.NamespacedName, toolName string) {
+	fn := &fv1.Function{}
+	if err := r.client.Get(ctx, nn, fn); err != nil {
+		return
+	}
+	r.setConflict(ctx, fn, toolName)
 }

@@ -33,6 +33,11 @@ const (
 	// model returns a single result with no incremental streaming, so the whole
 	// upstream body is buffered; this bounds memory per call.
 	defaultMaxResponseBytes int64 = 1 << 20 // 1 MiB
+
+	// defaultMaxConcurrent bounds in-flight tool calls so the per-call buffers
+	// (defaultMaxResponseBytes each) can't exhaust memory under load. Excess
+	// calls wait for a slot until their context deadline.
+	defaultMaxConcurrent = 64
 )
 
 // Proxy invokes an MCP tool's backing function over the router internal
@@ -44,6 +49,7 @@ type Proxy struct {
 	client  *http.Client
 	maxBody int64
 	timeout time.Duration
+	sem     chan struct{} // bounds concurrent in-flight calls
 	logger  logr.Logger
 }
 
@@ -61,6 +67,7 @@ func NewProxy(routerInternalURL string, hmacMaster []byte, logger logr.Logger) *
 		client:  &http.Client{Transport: rt},
 		maxBody: defaultMaxResponseBytes,
 		timeout: defaultCallTimeout,
+		sem:     make(chan struct{}, defaultMaxConcurrent),
 		logger:  logger.WithName("proxy"),
 	}
 }
@@ -73,6 +80,16 @@ func NewProxy(routerInternalURL string, hmacMaster []byte, logger logr.Logger) *
 func (p *Proxy) Invoke(ctx context.Context, e ToolEntry, args []byte) (*mcp.CallToolResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, p.timeout)
 	defer cancel()
+
+	// Bound concurrent calls so per-call response buffers can't exhaust memory.
+	// Wait for a slot until the context deadline rather than failing immediately.
+	select {
+	case p.sem <- struct{}{}:
+		defer func() { <-p.sem }()
+	case <-ctx.Done():
+		p.logger.V(1).Info("tool call shed: concurrency limit", "tool", e.ToolName)
+		return toolError("function invocation failed: server busy"), nil
+	}
 
 	// UrlForFunction folds the default namespace (→ /fission-function/<name>),
 	// matching how the router registers the internal route; a hardcoded

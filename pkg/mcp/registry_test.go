@@ -24,19 +24,19 @@ func TestRegistryUpsert(t *testing.T) {
 	t.Parallel()
 	r := NewRegistry()
 
-	res, oldName := r.Upsert(entry("default", "fn1", "t1"))
+	res, oldName, _ := r.Upsert(entry("default", "fn1", "t1"))
 	assert.Equal(t, UpsertApplied, res)
 	assert.Empty(t, oldName)
 
 	// Same entry again: no-op.
-	res, oldName = r.Upsert(entry("default", "fn1", "t1"))
+	res, oldName, _ = r.Upsert(entry("default", "fn1", "t1"))
 	assert.Equal(t, UpsertNoChange, res)
 	assert.Equal(t, "t1", oldName)
 
 	// Description change: applied.
 	e := entry("default", "fn1", "t1")
 	e.Description = "new"
-	res, _ = r.Upsert(e)
+	res, _, _ = r.Upsert(e)
 	assert.Equal(t, UpsertApplied, res)
 
 	got, ok := r.Lookup("t1")
@@ -49,7 +49,7 @@ func TestRegistryRename(t *testing.T) {
 	r := NewRegistry()
 	r.Upsert(entry("default", "fn1", "old"))
 
-	res, oldName := r.Upsert(entry("default", "fn1", "new"))
+	res, oldName, _ := r.Upsert(entry("default", "fn1", "new"))
 	assert.Equal(t, UpsertApplied, res)
 	assert.Equal(t, "old", oldName, "rename should report the prior tool name")
 
@@ -59,20 +59,52 @@ func TestRegistryRename(t *testing.T) {
 	assert.True(t, ok)
 }
 
-func TestRegistryNameConflict(t *testing.T) {
+func TestRegistryNameConflictLoses(t *testing.T) {
 	t.Parallel()
 	r := NewRegistry()
-	r.Upsert(entry("ns-a", "fn1", "shared"))
+	r.Upsert(entry("ns-a", "fn1", "shared")) // key "ns-a/fn1"
 
-	// A different function claiming the same tool name is a conflict: nothing
-	// changes and fn1's registration is untouched.
-	res, _ := r.Upsert(entry("ns-b", "fn2", "shared"))
+	// A lexicographically-larger function claiming the same name loses: nothing
+	// changes and the smaller-key owner is untouched.
+	res, _, evicted := r.Upsert(entry("ns-b", "fn2", "shared")) // key "ns-b/fn2" > "ns-a/fn1"
 	assert.Equal(t, UpsertConflict, res)
+	assert.Nil(t, evicted)
 
 	got, ok := r.Lookup("shared")
 	require.True(t, ok)
-	assert.Equal(t, "fn1", got.FnName, "the original owner must keep the name")
+	assert.Equal(t, "fn1", got.FnName, "the smaller-key owner keeps the name")
 	assert.Equal(t, 1, r.Len())
+}
+
+func TestRegistryNameConflictWinsDeterministically(t *testing.T) {
+	t.Parallel()
+	// Whichever order the two contesting functions are processed, the
+	// lexicographically-smallest "<ns>/<name>" owns the name — so replicas with
+	// different reconcile orders converge identically.
+	for _, order := range []string{"smaller-first", "larger-first"} {
+		t.Run(order, func(t *testing.T) {
+			t.Parallel()
+			r := NewRegistry()
+			small := entry("ns-a", "fn1", "shared") // "ns-a/fn1"
+			large := entry("ns-b", "fn2", "shared") // "ns-b/fn2"
+			if order == "smaller-first" {
+				r.Upsert(small)
+				res, _, evicted := r.Upsert(large)
+				assert.Equal(t, UpsertConflict, res)
+				assert.Nil(t, evicted)
+			} else {
+				r.Upsert(large)
+				res, _, evicted := r.Upsert(small) // smaller arrives second: it takes over
+				assert.Equal(t, UpsertApplied, res)
+				require.NotNil(t, evicted)
+				assert.Equal(t, "fn2", evicted.Name, "the larger-key prior owner is evicted")
+			}
+			got, ok := r.Lookup("shared")
+			require.True(t, ok)
+			assert.Equal(t, "fn1", got.FnName, "the smaller-key function owns the name regardless of order")
+			assert.Equal(t, 1, r.Len(), "the evicted owner is no longer registered")
+		})
+	}
 }
 
 func TestRegistryRemoveByFunction(t *testing.T) {

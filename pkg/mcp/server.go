@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/modelcontextprotocol/go-sdk/auth"
@@ -19,6 +20,14 @@ import (
 const (
 	methodToolsList = "tools/list"
 	methodToolsCall = "tools/call"
+
+	// sessionTimeout closes idle MCP sessions so abandoned connections don't
+	// accumulate unbounded server-side state. Clients reconnect transparently.
+	sessionTimeout = 30 * time.Minute
+
+	// maxRequestBytes caps a single inbound /mcp request body (the JSON-RPC
+	// envelope, incl. tools/call arguments) to bound per-request memory.
+	maxRequestBytes int64 = 1 << 20 // 1 MiB
 )
 
 // errUnauthorized is returned when a request carries no valid scope (verification
@@ -84,10 +93,24 @@ func (s *Server) ApplyToolDelta(add []ToolEntry, removeNames []string) {
 }
 
 // HTTPHandler returns the http.Handler for the MCP Streamable HTTP transport,
-// wrapped with bearer-token authz (pass-through when no signing key is set).
+// wrapped with bearer-token authz (pass-through when no signing key is set) and
+// a per-request body cap. SessionTimeout bounds idle-session accumulation.
 func (s *Server) HTTPHandler() http.Handler {
-	streamable := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return s.mcp }, nil)
-	return s.authz.HTTPMiddleware(streamable)
+	streamable := mcp.NewStreamableHTTPHandler(
+		func(*http.Request) *mcp.Server { return s.mcp },
+		&mcp.StreamableHTTPOptions{SessionTimeout: sessionTimeout},
+	)
+	return s.authz.HTTPMiddleware(limitRequestBody(streamable))
+}
+
+// limitRequestBody caps each request body so a single oversized JSON-RPC
+// envelope can't exhaust memory. The SDK surfaces the read error as a protocol
+// error to the caller.
+func limitRequestBody(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.Body = http.MaxBytesReader(w, r.Body, maxRequestBytes)
+		next.ServeHTTP(w, r)
+	})
 }
 
 // scopeMiddleware enforces the caller's namespace scope: it drops out-of-scope

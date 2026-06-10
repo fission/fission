@@ -5,6 +5,7 @@
 package mcp
 
 import (
+	"context"
 	"testing"
 
 	"github.com/go-logr/logr"
@@ -127,30 +128,55 @@ func TestFunctionToolReconcilerRename(t *testing.T) {
 	assert.True(t, ok, "new tool name registered")
 }
 
-func TestFunctionToolReconcilerNameConflict(t *testing.T) {
-	owner := exposedFn("owner", &fv1.ToolConfig{Description: "d", ToolName: "shared"})
-	intruder := exposedFn("intruder", &fv1.ToolConfig{Description: "d", ToolName: "shared"})
-	r, reg, c := newReconciler(t, owner, intruder)
-	ctx := t.Context()
-
-	_, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Namespace: "default", Name: "owner"}})
-	require.NoError(t, err)
-	_, err = r.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Namespace: "default", Name: "intruder"}})
-	require.NoError(t, err)
-
-	// The owner keeps the name; the intruder is not registered and is marked
-	// ToolExposed=False with the conflict reason.
-	got, ok := reg.Lookup("shared")
-	require.True(t, ok)
-	assert.Equal(t, "owner", got.FnName)
-	assert.Equal(t, 1, reg.Len())
-
+// conflictStatus asserts a function carries ToolExposed=False/ToolNameConflict.
+func conflictStatus(t *testing.T, c client.Client, ctx context.Context, name string) {
+	t.Helper()
 	gotFn := &fv1.Function{}
-	require.NoError(t, c.Get(ctx, types.NamespacedName{Namespace: "default", Name: "intruder"}, gotFn))
+	require.NoError(t, c.Get(ctx, types.NamespacedName{Namespace: "default", Name: name}, gotFn))
 	cond := meta.FindStatusCondition(gotFn.Status.Conditions, fv1.FunctionConditionToolExposed)
 	require.NotNil(t, cond)
 	assert.Equal(t, metav1.ConditionFalse, cond.Status)
 	assert.Equal(t, fv1.FunctionReasonToolNameConflict, cond.Reason)
+}
+
+// TestFunctionToolReconcilerNameConflict verifies that a contested tool name is
+// resolved to the lexicographically-smallest function regardless of reconcile
+// order, and the loser is marked ToolExposed=False either way (conflict path
+// when it reconciles second, eviction path when the winner reconciles second).
+func TestFunctionToolReconcilerNameConflict(t *testing.T) {
+	rec := func(t *testing.T, r *FunctionToolReconciler, name string) {
+		t.Helper()
+		_, err := r.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Namespace: "default", Name: name}})
+		require.NoError(t, err)
+	}
+
+	t.Run("loser reconciles second (conflict path)", func(t *testing.T) {
+		win := exposedFn("aaa", &fv1.ToolConfig{Description: "d", ToolName: "shared"})
+		lose := exposedFn("zzz", &fv1.ToolConfig{Description: "d", ToolName: "shared"})
+		r, reg, c := newReconciler(t, win, lose)
+		rec(t, r, "aaa")
+		rec(t, r, "zzz")
+
+		got, ok := reg.Lookup("shared")
+		require.True(t, ok)
+		assert.Equal(t, "aaa", got.FnName, "smaller key wins")
+		assert.Equal(t, 1, reg.Len())
+		conflictStatus(t, c, t.Context(), "zzz")
+	})
+
+	t.Run("winner reconciles second (eviction path)", func(t *testing.T) {
+		win := exposedFn("aaa", &fv1.ToolConfig{Description: "d", ToolName: "shared"})
+		lose := exposedFn("zzz", &fv1.ToolConfig{Description: "d", ToolName: "shared"})
+		r, reg, c := newReconciler(t, win, lose)
+		rec(t, r, "zzz") // loser registers first
+		rec(t, r, "aaa") // winner takes over, evicting the loser
+
+		got, ok := reg.Lookup("shared")
+		require.True(t, ok)
+		assert.Equal(t, "aaa", got.FnName, "smaller key takes over the name")
+		assert.Equal(t, 1, reg.Len())
+		conflictStatus(t, c, t.Context(), "zzz") // evicted loser marked not-exposed
+	})
 }
 
 func TestFunctionToolReconcilerDelete(t *testing.T) {

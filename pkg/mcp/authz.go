@@ -47,8 +47,11 @@ func (s AuthScope) Allows(namespace string) bool {
 // Authorizer validates bearer tokens for the MCP endpoint and derives the
 // namespace scope. When no signing key is configured it runs in pass-through dev
 // mode (every caller gets a wildcard scope), matching the router internal
-// listener's "empty secret = pass-through" stance. The Helm default sets a key
-// and scopes callers to the install namespace, so production is scoped-by-default.
+// listener's "empty secret = pass-through" stance. Pass-through is fail-closed at
+// startup: Start refuses to run without a key unless MCP_ALLOW_INSECURE=true, and
+// the Helm chart only deploys unauthenticated when explicitly opted in. A scoped
+// deployment requires a signing key (Helm wires it from the router secret when
+// authentication.enabled) and per-caller JWTs carrying an allowed_namespaces claim.
 type Authorizer struct {
 	signingKey []byte
 }
@@ -102,12 +105,17 @@ func (a *Authorizer) verifyToken(_ context.Context, token string, _ *http.Reques
 		return nil, fmt.Errorf("%w: missing exp claim", auth.ErrInvalidToken)
 	}
 
-	ti := &auth.TokenInfo{Scopes: scope.Namespaces, Expiration: time.Unix(int64(exp), 0)}
+	// A non-empty subject is required: the SDK binds a session to TokenInfo.UserID
+	// to stop another party from attaching to a leaked session id. An empty UserID
+	// disables that check, so reject tokens without a sub.
+	sub, ok := claims["sub"].(string)
+	if !ok || sub == "" {
+		return nil, fmt.Errorf("%w: missing sub claim", auth.ErrInvalidToken)
+	}
+
+	ti := &auth.TokenInfo{Scopes: scope.Namespaces, Expiration: time.Unix(int64(exp), 0), UserID: sub}
 	if scope.Wildcard {
 		ti.Scopes = []string{wildcardNamespace}
-	}
-	if sub, ok := claims["sub"].(string); ok {
-		ti.UserID = sub
 	}
 	return ti, nil
 }

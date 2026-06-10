@@ -82,7 +82,7 @@ func TestAuthorizerVerifyToken(t *testing.T) {
 
 	t.Run("wildcard claim", func(t *testing.T) {
 		t.Parallel()
-		tok := mintToken(t, key, jwt.MapClaims{"allowed_namespaces": "*", "exp": time.Now().Add(time.Hour).Unix()})
+		tok := mintToken(t, key, jwt.MapClaims{"sub": "agent", "allowed_namespaces": "*", "exp": time.Now().Add(time.Hour).Unix()})
 		ti, err := a.verifyToken(context.Background(), tok, nil)
 		require.NoError(t, err)
 		scope, _ := a.ScopeFromTokenInfo(ti)
@@ -122,17 +122,26 @@ func TestAuthorizerVerifyToken(t *testing.T) {
 
 	t.Run("malformed claim rejected", func(t *testing.T) {
 		t.Parallel()
-		tok := mintToken(t, key, jwt.MapClaims{"allowed_namespaces": 42, "exp": time.Now().Add(time.Hour).Unix()})
+		tok := mintToken(t, key, jwt.MapClaims{"sub": "agent", "allowed_namespaces": 42, "exp": time.Now().Add(time.Hour).Unix()})
 		_, err := a.verifyToken(context.Background(), tok, nil)
 		assert.Error(t, err, "a malformed allowed_namespaces claim must be rejected")
 	})
 
-	t.Run("valid token carries expiration", func(t *testing.T) {
+	t.Run("missing sub rejected", func(t *testing.T) {
 		t.Parallel()
+		// No sub: the SDK can't bind the session to a user, so reject.
 		tok := mintToken(t, key, jwt.MapClaims{"allowed_namespaces": "*", "exp": time.Now().Add(time.Hour).Unix()})
+		_, err := a.verifyToken(context.Background(), tok, nil)
+		assert.Error(t, err, "a token without sub must be rejected")
+	})
+
+	t.Run("valid token carries expiration and user", func(t *testing.T) {
+		t.Parallel()
+		tok := mintToken(t, key, jwt.MapClaims{"sub": "agent", "allowed_namespaces": "*", "exp": time.Now().Add(time.Hour).Unix()})
 		ti, err := a.verifyToken(context.Background(), tok, nil)
 		require.NoError(t, err)
 		assert.False(t, ti.Expiration.IsZero(), "Expiration must be set so the SDK accepts the token")
+		assert.Equal(t, "agent", ti.UserID)
 	})
 }
 

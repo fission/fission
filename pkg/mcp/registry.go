@@ -62,13 +62,19 @@ const (
 	UpsertConflict
 )
 
-// Upsert inserts or updates the tool for a function. It returns the outcome and
-// the previous tool name for that function (empty if none) so the caller can
-// drop a stale registration when ToolName changed. A tool name already owned by
-// a different function is a conflict: nothing is mutated and UpsertConflict is
-// returned (the default "<namespace>-<name>" naming never collides; only an
-// explicit ToolName override can).
-func (r *Registry) Upsert(e ToolEntry) (res UpsertResult, oldName string) {
+// Upsert inserts or updates the tool for a function. It returns the outcome, the
+// previous tool name for that function (empty if none) so the caller can drop a
+// stale registration when ToolName changed, and the function evicted from a
+// contested name (nil if none).
+//
+// The default "<namespace>-<name>" naming never collides; only an explicit
+// ToolName override can. A contested name is resolved deterministically: the
+// lexicographically-smallest "<namespace>/<name>" owns it, so every replica
+// converges on the same winner regardless of reconcile order (no leader
+// election). When the incoming function wins it evicts the prior owner (returned
+// as evicted, so the caller can mark it not-exposed); when it loses it gets
+// UpsertConflict and nothing is mutated.
+func (r *Registry) Upsert(e ToolEntry) (res UpsertResult, oldName string, evicted *types.NamespacedName) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -76,7 +82,13 @@ func (r *Registry) Upsert(e ToolEntry) (res UpsertResult, oldName string) {
 	oldName = r.byFn[nn]
 
 	if existing, ok := r.byName[e.ToolName]; ok && (existing.Namespace != e.Namespace || existing.FnName != e.FnName) {
-		return UpsertConflict, oldName
+		if fnKey(e.Namespace, e.FnName) >= fnKey(existing.Namespace, existing.FnName) {
+			return UpsertConflict, oldName, nil
+		}
+		// Incoming wins: evict the prior owner before claiming the name.
+		ev := types.NamespacedName{Namespace: existing.Namespace, Name: existing.FnName}
+		delete(r.byFn, ev)
+		evicted = &ev
 	}
 
 	if oldName != "" && oldName != e.ToolName {
@@ -87,11 +99,15 @@ func (r *Registry) Upsert(e ToolEntry) (res UpsertResult, oldName string) {
 	r.byName[e.ToolName] = e
 	r.byFn[nn] = e.ToolName
 
-	if existed && oldName == e.ToolName && toolEntryEqual(prev, e) {
-		return UpsertNoChange, oldName
+	if evicted == nil && existed && oldName == e.ToolName && toolEntryEqual(prev, e) {
+		return UpsertNoChange, oldName, nil
 	}
-	return UpsertApplied, oldName
+	return UpsertApplied, oldName, evicted
 }
+
+// fnKey is the total ordering used to pick a deterministic winner for a
+// contested tool name.
+func fnKey(namespace, name string) string { return namespace + "/" + name }
 
 // RemoveByFunction drops the tool registered for a function, returning the tool
 // name that was removed (empty if none).
