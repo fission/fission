@@ -441,6 +441,14 @@ func (gp *GenericPool) specializePod(ctx context.Context, pod *apiv1.Pod, fn *fv
 	if len(podIP) == 0 {
 		return fmt.Errorf("pod %s in namespace %s has no IP", pod.Name, pod.Namespace)
 	}
+
+	// Path B (image-volume) pods have no fetcher to relay through: the code
+	// is already mounted, so go straight to the env's load endpoint. The
+	// eligibility check guarantees such functions carry no Secrets or
+	// ConfigMaps and run v2+ environments.
+	if gp.oci != nil {
+		return gp.loadOnlySpecialize(ctx, podIP, fn)
+	}
 	for _, cm := range fn.Spec.ConfigMaps {
 		_, err := gp.kubernetesClient.CoreV1().ConfigMaps(gp.fnNamespace).Get(ctx, cm.Name, metav1.GetOptions{})
 		if err != nil {
