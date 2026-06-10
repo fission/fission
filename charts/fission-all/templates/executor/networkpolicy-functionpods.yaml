@@ -32,9 +32,11 @@ spec:
   policyTypes:
     - Ingress
   ingress:
-    # executor → fetcher sidecar (POST /specialize). executor runs in
-    # the release namespace; namespaceSelector: {} permits cross-ns
-    # because this policy lives in functionNamespace.
+    # executor → fetcher sidecar (POST /specialize), and executor → env
+    # runtime (POST /v2/specialize) for image-volume pods (RFC-0001
+    # Path B), which have no fetcher to relay the load call. executor
+    # runs in the release namespace; namespaceSelector: {} permits
+    # cross-ns because this policy lives in functionNamespace.
     - from:
         - namespaceSelector: {}
           podSelector:
@@ -42,6 +44,8 @@ spec:
               svc: executor
       ports:
         - port: 8000
+          protocol: TCP
+        - port: 8888
           protocol: TCP
     # router → env runtime (user-trigger traffic). Router resolves the
     # function's service URL via executor.GetServiceForFunction and then

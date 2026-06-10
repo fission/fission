@@ -323,10 +323,9 @@ func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function
 	// every MergePodSpec (same convention as the SA-token re-clamps) so a
 	// runtime pod spec cannot strip or shadow the code mount.
 	if oci := deploy.getFunctionOCIArchive(ctx, fn); oci != nil {
-		util.AddImageVolume(&deployment.Spec.Template.Spec,
-			oci.Image, oci.SubPath,
+		util.AddImageVolume(&deployment.Spec.Template.Spec, oci,
 			filepath.Join(deploy.fetcherConfig.SharedMountPath(), deploy.fetcherConfig.TargetFilename(fn, env)),
-			oci.ImagePullSecrets, mainContainerName, util.FetcherContainerName)
+			mainContainerName, util.FetcherContainerName)
 	}
 
 	return deployment, nil

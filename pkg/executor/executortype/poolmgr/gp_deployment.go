@@ -221,8 +221,7 @@ func (gp *GenericPool) genDeploymentSpec(env *fv1.Environment) (*appsv1.Deployme
 		// (same convention as the SA-token re-clamps) so a runtime pod spec
 		// cannot strip or shadow the code mount.
 		util.AddImageVolume(&deploymentSpec.Template.Spec,
-			gp.oci.Image, gp.oci.SubPath, gp.fetcherConfig.SharedMountPath(),
-			gp.oci.ImagePullSecrets, mainContainerName)
+			gp.oci, gp.fetcherConfig.SharedMountPath(), mainContainerName)
 		return &deploymentSpec, nil
 	}
 

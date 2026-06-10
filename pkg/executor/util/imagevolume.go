@@ -12,6 +12,8 @@ import (
 
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/discovery"
+
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 )
 
 // OCIImageVolumeName is the pod volume name used for OCI package image
@@ -19,17 +21,31 @@ import (
 // so the two can coexist on newdeploy pods.
 const OCIImageVolumeName = "oci-package-image"
 
+// OCIVolumeReference is the image reference the kubelet pulls for a Path B
+// volume. When the archive pins a digest, it is appended to the reference
+// (repo:tag@sha256:...) so the kubelet enforces the pin — Path B has no
+// fetcher to verify it. A reference that already carries a digest is used
+// verbatim.
+func OCIVolumeReference(oa *fv1.OCIArchive) string {
+	if oa.Digest == "" || strings.Contains(oa.Image, "@") {
+		return oa.Image
+	}
+	return oa.Image + "@" + oa.Digest
+}
+
 // AddImageVolume appends an OCI image volume holding the package filesystem
-// and mounts it read-only at mountPath on each named container. Pull secrets
-// append to pod.Spec.ImagePullSecrets — the kubelet resolves image-volume
-// pulls from those (plus the service account's). Call this AFTER every
-// MergePodSpec so a runtime pod spec cannot strip or shadow the mount.
-func AddImageVolume(podSpec *apiv1.PodSpec, image, subPath, mountPath string, pullSecrets []apiv1.LocalObjectReference, containerNames ...string) {
+// and mounts it read-only at mountPath on each named container. The volume
+// reference embeds the archive's digest pin when set (OCIVolumeReference);
+// pull secrets append to pod.Spec.ImagePullSecrets — the kubelet resolves
+// image-volume pulls from those (plus the service account's). Call this
+// AFTER every MergePodSpec so a runtime pod spec cannot strip or shadow the
+// mount.
+func AddImageVolume(podSpec *apiv1.PodSpec, oa *fv1.OCIArchive, mountPath string, containerNames ...string) {
 	podSpec.Volumes = append(podSpec.Volumes, apiv1.Volume{
 		Name: OCIImageVolumeName,
 		VolumeSource: apiv1.VolumeSource{
 			Image: &apiv1.ImageVolumeSource{
-				Reference:  image,
+				Reference:  OCIVolumeReference(oa),
 				PullPolicy: apiv1.PullIfNotPresent,
 			},
 		},
@@ -37,7 +53,7 @@ func AddImageVolume(podSpec *apiv1.PodSpec, image, subPath, mountPath string, pu
 	mount := apiv1.VolumeMount{
 		Name:      OCIImageVolumeName,
 		MountPath: mountPath,
-		SubPath:   subPath,
+		SubPath:   oa.SubPath,
 		ReadOnly:  true,
 	}
 	for i := range podSpec.Containers {
@@ -47,7 +63,7 @@ func AddImageVolume(podSpec *apiv1.PodSpec, image, subPath, mountPath string, pu
 			}
 		}
 	}
-	podSpec.ImagePullSecrets = append(podSpec.ImagePullSecrets, pullSecrets...)
+	podSpec.ImagePullSecrets = append(podSpec.ImagePullSecrets, oa.ImagePullSecrets...)
 }
 
 // OCIImageVolumeEnabled reports whether the operator opted into delivering

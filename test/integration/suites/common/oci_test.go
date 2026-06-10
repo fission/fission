@@ -98,12 +98,25 @@ func pyHello(body string) map[string]string {
 	return map[string]string{"hello.py": "def main():\n    return \"" + body + "\""}
 }
 
+// skipOnImageVolumeLeg gates the fetcher-pull (Path A) tests OFF the
+// image-volume CI legs: there, eligible OCI functions switch to kubelet
+// pulls, and these tests' image references (the registry's ClusterIP
+// Service) only resolve via cluster DNS — which the kubelet doesn't use.
+// Path A correctness is proven on the floor (1.32) leg instead.
+func skipOnImageVolumeLeg(t *testing.T) {
+	t.Helper()
+	if os.Getenv("FISSION_TEST_IMAGE_VOLUME") != "" {
+		t.Skip("image-volume leg: eligible OCI functions use kubelet pulls, which cannot resolve the in-cluster registry Service address")
+	}
+}
+
 // TestOCIPackagePoolmgr covers RFC-0001 Path A end-to-end on the default
 // poolmgr executor: the test pushes a code image to the in-cluster registry,
 // creates an OCI package + function + route, and the fetcher pulls and
 // extracts the image at specialization time.
 func TestOCIPackagePoolmgr(t *testing.T) {
 	t.Parallel()
+	skipOnImageVolumeLeg(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
 	defer cancel()
@@ -142,6 +155,7 @@ func TestOCIPackagePoolmgr(t *testing.T) {
 // fetcher refuses the image and specialization fails.
 func TestOCIPackagePoolmgrDigestMismatch(t *testing.T) {
 	t.Parallel()
+	skipOnImageVolumeLeg(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
 	defer cancel()
@@ -187,12 +201,26 @@ func TestOCIPackagePoolmgrDigestMismatch(t *testing.T) {
 	})
 	ns.CreateRoute(t, ctx, framework.RouteOptions{Function: fnName, URL: "/" + fnName, Method: "GET"})
 
-	// The invocation must surface a 5xx (specialization failure), never the
-	// function body.
-	f.Router(t).GetEventually(t, ctx, "/"+fnName, func(status int, body string) bool {
+	// The invocation must never serve the function body. The router may
+	// surface the specialization failure as a 5xx, or hold the request
+	// while the executor retries until the client times out — both prove
+	// non-service, so a transport error counts as failure-evidence too.
+	sawFailure := false
+	deadline := time.Now().Add(2 * time.Minute)
+	for time.Now().Before(deadline) {
+		status, body, err := f.Router(t).Get(ctx, "/"+fnName)
+		if err != nil {
+			sawFailure = true
+			continue
+		}
 		require.NotContains(t, body, "never served", "wrong-digest image must not serve")
-		return status >= 500
-	})
+		if status >= 500 {
+			sawFailure = true
+			break
+		}
+		time.Sleep(time.Second)
+	}
+	require.True(t, sawFailure, "wrong-digest invocation must fail (5xx or hang), not succeed silently")
 }
 
 // TestOCIPackageNewdeploy covers RFC-0001 Path A on the newdeploy executor —
@@ -201,9 +229,10 @@ func TestOCIPackagePoolmgrDigestMismatch(t *testing.T) {
 // (minscale 1) plus a cold-start (minscale 0) subtest.
 func TestOCIPackageNewdeploy(t *testing.T) {
 	t.Parallel()
+	skipOnImageVolumeLeg(t)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute)
-	defer cancel()
+	setupCtx, setupCancel := context.WithTimeout(context.Background(), 4*time.Minute)
+	defer setupCancel()
 
 	f := framework.Connect(t)
 	hostAddr, inclusterAddr := framework.RequireRegistry(t)
@@ -211,7 +240,7 @@ func TestOCIPackageNewdeploy(t *testing.T) {
 
 	ns := f.NewTestNamespace(t)
 	envName := "python-ocind-" + ns.ID
-	ns.CreateEnv(t, ctx, framework.EnvOptions{
+	ns.CreateEnv(t, setupCtx, framework.EnvOptions{
 		Name: envName, Image: runtime,
 		MinCPU: 40, MaxCPU: 80, MinMemory: 64, MaxMemory: 128,
 	})
@@ -219,10 +248,15 @@ func TestOCIPackageNewdeploy(t *testing.T) {
 	ref, _ := framework.PushCodeImage(t, hostAddr, inclusterAddr,
 		"fission-test/hello-nd-"+ns.ID, "v1", pyHello("Hello, newdeploy OCI!"))
 	pkgName := "oci-nd-pkg-" + ns.ID
-	ns.CreatePackage(t, ctx, framework.PackageOptions{Name: pkgName, Env: envName, OCI: ref})
+	ns.CreatePackage(t, setupCtx, framework.PackageOptions{Name: pkgName, Env: envName, OCI: ref})
 
+	// Each parallel subtest needs its own context: the parent function
+	// returns (and would run a deferred cancel) before parallel subtests
+	// execute.
 	t.Run("warm", func(t *testing.T) {
 		t.Parallel()
+		ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
+		defer cancel()
 		fnName := "fn-oci-nd-warm-" + ns.ID
 		ns.CreateFunction(t, ctx, framework.FunctionOptions{
 			Name: fnName, Pkg: pkgName, Entrypoint: "hello.main",
@@ -234,6 +268,8 @@ func TestOCIPackageNewdeploy(t *testing.T) {
 
 	t.Run("cold", func(t *testing.T) {
 		t.Parallel()
+		ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
+		defer cancel()
 		fnName := "fn-oci-nd-cold-" + ns.ID
 		ns.CreateFunction(t, ctx, framework.FunctionOptions{
 			Name: fnName, Pkg: pkgName, Entrypoint: "hello.main",
@@ -251,6 +287,7 @@ func TestOCIPackageNewdeploy(t *testing.T) {
 // update is deliberately not detected — pin digests in production.
 func TestOCIPackageNewdeployUpdate(t *testing.T) {
 	t.Parallel()
+	skipOnImageVolumeLeg(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute)
 	defer cancel()
