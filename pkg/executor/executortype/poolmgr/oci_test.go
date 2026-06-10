@@ -97,6 +97,20 @@ func TestGetFunctionOCIArchiveEligibility(t *testing.T) {
 	}
 }
 
+func TestGetFunctionOCIArchiveInfiniteEnvFallsBack(t *testing.T) {
+	t.Parallel()
+	// Infinite-functions-per-container envs store code at per-function
+	// paths; a shared per-image mount cannot serve them.
+	ociArchive := fv1.Archive{Type: fv1.ArchiveTypeOCI, OCI: &fv1.OCIArchive{Image: "reg.example.com/code:v1"}}
+	fn, env, pkg := ociEligibilityFixtures(2, nil, nil, ociArchive)
+	env.Spec.AllowedFunctionsPerContainer = fv1.AllowedFunctionsPerContainerInfinite
+	gpm := &GenericPoolManager{
+		logger:        logr.Discard(),
+		fissionClient: fissionfake.NewSimpleClientset(pkg),
+	}
+	assert.Nil(t, gpm.getFunctionOCIArchive(t.Context(), fn, env))
+}
+
 func TestGetFunctionOCIArchiveMissingPackage(t *testing.T) {
 	t.Parallel()
 	fn, env, _ := ociEligibilityFixtures(2, nil, nil, fv1.Archive{})

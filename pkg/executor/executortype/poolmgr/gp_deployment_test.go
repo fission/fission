@@ -362,7 +362,9 @@ func TestGenDeploymentSpecOCIImageVolume(t *testing.T) {
 			"Path B pods must not carry the fetcher SA token volume")
 	}
 
-	// Mounted read-only at the shared mount path with the sub-path applied.
+	// Mounted read-only at the fetcher's store path — the exact path the
+	// load request names (LoadReq.FilePath = <sharedMountPath>/deployarchive)
+	// — with the sub-path applied.
 	var mount *apiv1.VolumeMount
 	for i := range user.VolumeMounts {
 		if user.VolumeMounts[i].Name == imgVol.Name {
@@ -371,7 +373,7 @@ func TestGenDeploymentSpecOCIImageVolume(t *testing.T) {
 		}
 	}
 	require.NotNil(t, mount, "user container must mount the image volume")
-	assert.Equal(t, gp.fetcherConfig.SharedMountPath(), mount.MountPath)
+	assert.Equal(t, gp.fetcherConfig.SharedMountPath()+"/"+fetcherConfig.TargetFilenameDeployArchive, mount.MountPath)
 	assert.Equal(t, "app", mount.SubPath)
 	assert.True(t, mount.ReadOnly, "image volume mount must be read-only")
 

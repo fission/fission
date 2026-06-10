@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"path/filepath"
 	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -18,6 +19,7 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/executor/util"
+	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	"github.com/fission/fission/pkg/utils"
 )
 
@@ -216,12 +218,16 @@ func (gp *GenericPool) genDeploymentSpec(env *fv1.Environment) (*appsv1.Deployme
 	}
 
 	if gp.oci != nil {
-		// Path B: mount the package image read-only at the shared mount
-		// path on the runtime container. Applied AFTER every MergePodSpec
-		// (same convention as the SA-token re-clamps) so a runtime pod spec
-		// cannot strip or shadow the code mount.
-		util.AddImageVolume(&deploymentSpec.Template.Spec,
-			gp.oci, gp.fetcherConfig.SharedMountPath(), mainContainerName)
+		// Path B: mount the package image read-only at the fetcher's store
+		// path on the runtime container — the path the load request names
+		// (LoadReq.FilePath = <sharedMountPath>/deployarchive). Eligibility
+		// guarantees a v2+, non-infinite env, so the store name is the fixed
+		// deployarchive constant. Applied AFTER every MergePodSpec (same
+		// convention as the SA-token re-clamps) so a runtime pod spec cannot
+		// strip or shadow the code mount.
+		util.AddImageVolume(&deploymentSpec.Template.Spec, gp.oci,
+			filepath.Join(gp.fetcherConfig.SharedMountPath(), fetcherConfig.TargetFilenameDeployArchive),
+			mainContainerName)
 		return &deploymentSpec, nil
 	}
 

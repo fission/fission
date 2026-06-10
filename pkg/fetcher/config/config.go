@@ -137,6 +137,12 @@ func (cfg *Config) SharedMountPath() string {
 	return cfg.sharedMountPath
 }
 
+// TargetFilenameDeployArchive is the fixed store-path name for v2+
+// environments (except AllowedFunctionsPerContainerInfinite, which keys by
+// function UID). The poolmgr image-volume path relies on it being
+// function-independent to mount one code image per pool.
+const TargetFilenameDeployArchive = "deployarchive"
+
 // TargetFilename is the name (under the shared mount path) the fetcher
 // stores a function's deployment package at, and therefore the path the
 // loader reads. Exposed so the image-volume path (RFC-0001 Path B) can mount
@@ -151,7 +157,7 @@ func (cfg *Config) TargetFilename(fn *fv1.Function, env *fv1.Environment) string
 			return string(fn.UID)
 		}
 		// set target file name to fix pattern for easy accessing.
-		return "deployarchive"
+		return TargetFilenameDeployArchive
 	}
 	return "user"
 }

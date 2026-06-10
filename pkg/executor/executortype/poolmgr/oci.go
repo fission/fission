@@ -54,6 +54,13 @@ func (gpm *GenericPoolManager) getFunctionOCIArchive(ctx context.Context, fn *fv
 	if env.Spec.Version < 2 {
 		return nil
 	}
+	// Infinite-functions-per-container envs store each function's code at a
+	// per-function path (the function UID); one shared image mount at the
+	// fixed deployarchive path cannot satisfy that — keep them on the
+	// fetcher path.
+	if env.Spec.AllowedFunctionsPerContainer == fv1.AllowedFunctionsPerContainerInfinite {
+		return nil
+	}
 	if len(fn.Spec.Secrets) > 0 || len(fn.Spec.ConfigMaps) > 0 {
 		return nil
 	}
