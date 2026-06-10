@@ -311,14 +311,29 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	// EndpointSlice-fed endpoint index (RFC-0002). Every router replica watches
 	// independently (no leader election — that is the point: warm-path state is
 	// replica-local). In shadow mode the index only powers the comparator
-	// wrapped around the live resolver; routing behavior is unchanged.
+	// wrapped around the live resolver (routing behavior unchanged); in "on"
+	// mode the fallback resolver serves the warm path from the index and uses
+	// the executor for cold starts, capacity, and strict-mode functions.
 	if cfg.endpointSliceCacheMode != endpointSliceCacheOff {
 		index := endpointcache.NewIndex()
 		if err := endpointcache.RegisterInformer(ctx, crMgr, index, logger); err != nil {
 			return fmt.Errorf("error registering endpointslice informer: %w", err)
 		}
 		endpointcache.RegisterSizeGauge(index)
-		triggers.addressResolver = endpointcache.NewShadow(logger, triggers.addressResolver, index)
+		execResolver, ok := triggers.addressResolver.(*executorResolver)
+		if !ok {
+			return fmt.Errorf("unexpected address resolver type %T", triggers.addressResolver)
+		}
+		switch cfg.endpointSliceCacheMode {
+		case endpointSliceCacheShadow:
+			triggers.addressResolver = newShadowResolver(logger, execResolver, index)
+		case endpointSliceCacheOn:
+			// The capacity facet is optional on the executor client interface;
+			// test fakes (and any custom client) without it degrade to the
+			// legacy RPC on saturation.
+			capacity, _ := executor.(CapacityClient)
+			triggers.addressResolver = newFallbackResolver(logger, index, execResolver, capacity)
+		}
 		logger.Info("endpointslice cache enabled", "mode", cfg.endpointSliceCacheMode)
 	}
 

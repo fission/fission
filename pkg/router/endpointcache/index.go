@@ -40,6 +40,10 @@ type (
 		PodUID types.UID
 		// Ready mirrors the slice endpoint's ready condition.
 		Ready bool
+		// inflight is the pod's shared in-flight counter (router-local
+		// admission accounting; see Admit). Shared with the entry's counters
+		// map so it survives rebuilds.
+		inflight *atomic.Int64
 	}
 
 	// Index is the sharded endpoint index. Writes (slice events) rebuild one
@@ -63,6 +67,15 @@ type (
 		// namespace/name, so per-slice add/update/delete events merge without
 		// a lister query.
 		slices map[string][]Endpoint
+		// counters holds the per-pod in-flight counters, keyed by pod UID so
+		// they survive slice-event rebuilds; pruned with the endpoints.
+		counters map[types.UID]*atomic.Int64
+		// quarantined holds addresses the transport reported dial failures
+		// for; skipped by Admit until the next slice event for this function
+		// clears them (the slice controller removes dead pods within ~150ms
+		// regardless of executor health). Copy-on-write (like eps) so Admit
+		// reads it lock-free; writes happen under mu.
+		quarantined atomic.Pointer[map[string]struct{}]
 		// eps is the merged endpoint list, swapped copy-on-write. Hot-path
 		// readers load it without taking mu.
 		eps atomic.Pointer[[]Endpoint]
@@ -178,7 +191,10 @@ func (ix *Index) ApplySlice(es *discoveryv1.EndpointSlice) {
 	s.mu.Lock()
 	e, exists := s.m[key]
 	if !exists {
-		e = &fnEntry{slices: make(map[string][]Endpoint)}
+		e = &fnEntry{
+			slices:   make(map[string][]Endpoint),
+			counters: make(map[types.UID]*atomic.Int64),
+		}
 		s.m[key] = e
 		ix.size.Add(1)
 	}
@@ -186,6 +202,10 @@ func (ix *Index) ApplySlice(es *discoveryv1.EndpointSlice) {
 
 	e.mu.Lock()
 	e.slices[sliceKey] = endpointsFromSlice(es)
+	// Any slice event for this function lifts quarantines: dead endpoints have
+	// been (or are being) removed by the slice controller, so survivors are
+	// trustworthy again.
+	e.quarantined.Store(nil)
 	e.rebuildLocked()
 	e.mu.Unlock()
 }
@@ -209,6 +229,7 @@ func (ix *Index) DeleteSlice(es *discoveryv1.EndpointSlice) {
 
 	e.mu.Lock()
 	delete(e.slices, sliceKey)
+	e.quarantined.Store(nil)
 	empty := len(e.slices) == 0
 	e.rebuildLocked()
 	e.mu.Unlock()
@@ -230,15 +251,122 @@ func (ix *Index) DeleteSlice(es *discoveryv1.EndpointSlice) {
 }
 
 // rebuildLocked re-merges the per-slice endpoint lists into the copy-on-write
-// snapshot. Caller holds e.mu.
+// snapshot, attaching each pod's shared in-flight counter (created on first
+// sight, pruned when the pod leaves every slice). Caller holds e.mu.
 func (e *fnEntry) rebuildLocked() {
 	n := 0
 	for _, eps := range e.slices {
 		n += len(eps)
 	}
 	merged := make([]Endpoint, 0, n)
+	live := make(map[types.UID]struct{}, n)
 	for _, eps := range e.slices {
-		merged = append(merged, eps...)
+		for _, ep := range eps {
+			if e.counters != nil && ep.PodUID != "" {
+				c, ok := e.counters[ep.PodUID]
+				if !ok {
+					c = &atomic.Int64{}
+					e.counters[ep.PodUID] = c
+				}
+				ep.inflight = c
+				live[ep.PodUID] = struct{}{}
+			}
+			merged = append(merged, ep)
+		}
+	}
+	for uid := range e.counters {
+		if _, ok := live[uid]; !ok {
+			delete(e.counters, uid)
+		}
 	}
 	e.eps.Store(&merged)
+}
+
+// Admit picks the ready, non-quarantined endpoint with the most free capacity
+// (least outstanding requests below requestsPerPod), increments its in-flight
+// counter, and returns it with a release func that the caller MUST invoke when
+// the request completes (response done / stream drained). ok=false when the
+// function has no admissible endpoint — unknown, all busy, or all quarantined.
+//
+// Enforcement is per-router-replica by design (RFC-0002): worst-case
+// over-admission is (replicas-1)×requestsPerPod per pod, degrading to brief
+// queueing at the pod. Functions needing exact global accounting use the
+// strict-mode annotation, which bypasses this path entirely.
+func (ix *Index) Admit(namespace, name string, requestsPerPod int) (Endpoint, func(), bool) {
+	if requestsPerPod <= 0 {
+		requestsPerPod = 1
+	}
+	key := FnKey{Namespace: namespace, Name: name}
+	s := ix.shard(key)
+	s.mu.RLock()
+	e, ok := s.m[key]
+	s.mu.RUnlock()
+	if !ok {
+		return Endpoint{}, nil, false
+	}
+	epsp := e.eps.Load()
+	if epsp == nil {
+		return Endpoint{}, nil, false
+	}
+
+	quarantined := e.quarantined.Load()
+
+	// Least-outstanding selection with a bounded CAS retry: the snapshot is
+	// immutable, only the counters move.
+	for range 4 {
+		var best *Endpoint
+		var bestLoad int64
+		for i := range *epsp {
+			ep := &(*epsp)[i]
+			if !ep.Ready || ep.inflight == nil {
+				continue
+			}
+			if quarantined != nil {
+				if _, bad := (*quarantined)[ep.Address]; bad {
+					continue
+				}
+			}
+			load := ep.inflight.Load()
+			if load >= int64(requestsPerPod) {
+				continue
+			}
+			if best == nil || load < bestLoad {
+				best, bestLoad = ep, load
+			}
+		}
+		if best == nil {
+			return Endpoint{}, nil, false
+		}
+		if best.inflight.CompareAndSwap(bestLoad, bestLoad+1) {
+			counter := best.inflight
+			var once sync.Once
+			release := func() { once.Do(func() { counter.Add(-1) }) }
+			return *best, release, true
+		}
+		// Lost the CAS to a concurrent admit — re-scan.
+	}
+	return Endpoint{}, nil, false
+}
+
+// Quarantine marks an address unadmissible until the next slice event for the
+// function (the transport calls it on persistent dial failures).
+func (ix *Index) Quarantine(namespace, name, address string) {
+	key := FnKey{Namespace: namespace, Name: name}
+	s := ix.shard(key)
+	s.mu.RLock()
+	e, ok := s.m[key]
+	s.mu.RUnlock()
+	if !ok {
+		return
+	}
+	e.mu.Lock()
+	next := make(map[string]struct{})
+	if cur := e.quarantined.Load(); cur != nil {
+		for a := range *cur {
+			next[a] = struct{}{}
+		}
+	}
+	next[address] = struct{}{}
+	e.quarantined.Store(&next)
+	e.mu.Unlock()
 }

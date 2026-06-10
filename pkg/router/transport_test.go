@@ -31,15 +31,15 @@ type scriptedResolver struct {
 	invalidated atomic.Int64
 }
 
-func (s *scriptedResolver) Resolve(_ context.Context, _ *fv1.Function) (*url.URL, bool, error) {
+func (s *scriptedResolver) Resolve(_ context.Context, _ *fv1.Function) (ResolvedEntry, error) {
 	n := int(s.calls.Add(1)) - 1
 	if n >= len(s.answers) {
 		n = len(s.answers) - 1
 	}
-	return s.answers[n], s.fromCache, nil
+	return ResolvedEntry{SvcURL: s.answers[n], FromCache: s.fromCache}, nil
 }
 
-func (s *scriptedResolver) Invalidate(*fv1.Function) { s.invalidated.Add(1) }
+func (s *scriptedResolver) Invalidate(*fv1.Function, *url.URL) { s.invalidated.Add(1) }
 
 // nopTapper records untaps.
 type nopTapper struct {

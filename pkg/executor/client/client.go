@@ -124,6 +124,47 @@ func (c *client) GetServiceForFunction(ctx context.Context, fn *fv1.Function) (s
 	return string(svcName), nil
 }
 
+// EnsureCapacity asks the executor to specialize one more pod for the
+// function (RFC-0002): the router calls it when every endpoint it knows is
+// saturated by its local admission accounting. Returns the new pod's address;
+// a 429 (concurrency cap) or 404 (older executor without the endpoint)
+// surfaces as a ferror with the corresponding code so the caller can degrade.
+func (c *client) EnsureCapacity(ctx context.Context, fn *fv1.Function, observedReady, observedBusy int) (string, error) {
+	executorURL := c.executorURL + "/v2/ensureCapacity"
+
+	body, err := json.Marshal(EnsureCapacityRequest{
+		Function:               fn,
+		ObservedReadyEndpoints: observedReady,
+		ObservedBusyEndpoints:  observedBusy,
+	})
+	if err != nil {
+		return "", fmt.Errorf("could not marshal request body for ensuring capacity for function: %w", err)
+	}
+
+	req, err := retryablehttp.NewRequestWithContext(ctx, "POST", executorURL, bytes.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("could not create request for ensuring capacity for function: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("error posting to ensuring capacity for function: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return "", ferror.MakeErrorFromHTTP(resp)
+	}
+
+	svcName, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("error reading response body from ensuring capacity for function: %w", err)
+	}
+
+	return string(svcName), nil
+}
+
 // UnTapService sends a request to /v2/unTapService.
 func (c *client) UnTapService(ctx context.Context, fnMeta metav1.ObjectMeta, executorType fv1.ExecutorType, serviceURL *url.URL) error {
 	url := c.executorURL + "/v2/unTapService"

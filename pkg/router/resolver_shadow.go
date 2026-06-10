@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-package endpointcache
+package router
 
 import (
 	"context"
@@ -11,43 +11,36 @@ import (
 	"github.com/go-logr/logr"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/router/endpointcache"
 )
 
-// addressResolver is structurally identical to the router's AddressResolver
-// interface (declared locally to avoid an import cycle); the Shadow wrapper
-// therefore satisfies the router interface while delegating to it.
-type addressResolver interface {
-	Resolve(ctx context.Context, fn *fv1.Function) (*url.URL, bool, error)
-	Invalidate(fn *fv1.Function)
-}
-
-// Shadow wraps the live resolver: every successful lookup is compared against
-// the slice-fed index and classified, with zero influence on routing. The
-// shadow counter is the machine-checked promotion criterion from shadow mode
-// to cutover.
-type Shadow struct {
+// shadowResolver wraps the live resolver: every successful lookup is compared
+// against the slice-fed index and classified, with zero influence on routing.
+// The shadow counter is the machine-checked promotion criterion from shadow
+// mode to cutover.
+type shadowResolver struct {
 	logger logr.Logger
-	inner  addressResolver
-	index  *Index
+	inner  AddressResolver
+	index  *endpointcache.Index
 }
 
-// NewShadow wraps inner with the shadow comparator.
-func NewShadow(logger logr.Logger, inner addressResolver, ix *Index) *Shadow {
-	return &Shadow{logger: logger.WithName("endpointcache_shadow"), inner: inner, index: ix}
+// newShadowResolver wraps inner with the shadow comparator.
+func newShadowResolver(logger logr.Logger, inner AddressResolver, ix *endpointcache.Index) *shadowResolver {
+	return &shadowResolver{logger: logger.WithName("endpointcache_shadow"), inner: inner, index: ix}
 }
 
 // Resolve delegates to the live resolver and compares its answer to the index.
-func (s *Shadow) Resolve(ctx context.Context, fn *fv1.Function) (*url.URL, bool, error) {
-	svcURL, fromCache, err := s.inner.Resolve(ctx, fn)
-	if err == nil && svcURL != nil {
-		s.compare(fn, svcURL)
+func (s *shadowResolver) Resolve(ctx context.Context, fn *fv1.Function) (ResolvedEntry, error) {
+	entry, err := s.inner.Resolve(ctx, fn)
+	if err == nil && entry.SvcURL != nil {
+		s.compare(fn, entry.SvcURL)
 	}
-	return svcURL, fromCache, err
+	return entry, err
 }
 
 // Invalidate delegates to the live resolver.
-func (s *Shadow) Invalidate(fn *fv1.Function) {
-	s.inner.Invalidate(fn)
+func (s *shadowResolver) Invalidate(fn *fv1.Function, addr *url.URL) {
+	s.inner.Invalidate(fn, addr)
 }
 
 // compare classifies one executor answer against the index:
@@ -61,7 +54,7 @@ func (s *Shadow) Invalidate(fn *fv1.Function) {
 //   - newdeploy/container: the executor returns the Service DNS name, never a
 //     pod address, so only state is compared: ≥1 ready endpoint is a "match"
 //     (the index agrees the function is scaled up), none is a "miss".
-func (s *Shadow) compare(fn *fv1.Function, svcURL *url.URL) {
+func (s *shadowResolver) compare(fn *fv1.Function, svcURL *url.URL) {
 	ready := 0
 	addrMatch := false
 	for _, ep := range s.index.Lookup(fn.Namespace, fn.Name) {
@@ -79,23 +72,23 @@ func (s *Shadow) compare(fn *fv1.Function, svcURL *url.URL) {
 	case fv1.ExecutorTypePoolmgr:
 		switch {
 		case addrMatch:
-			result = resultMatch
+			result = endpointcache.ShadowMatch
 		case ready == 0:
-			result = resultMiss
+			result = endpointcache.ShadowMiss
 		default:
-			result = resultLag
+			result = endpointcache.ShadowLag
 		}
 	case fv1.ExecutorTypeNewdeploy, fv1.ExecutorTypeContainer:
 		if ready > 0 {
-			result = resultMatch
+			result = endpointcache.ShadowMatch
 		} else {
-			result = resultMiss
+			result = endpointcache.ShadowMiss
 		}
 	default:
 		return
 	}
-	shadowResults.WithLabelValues(result).Inc()
-	if result != resultMatch {
+	endpointcache.RecordShadowResult(result)
+	if result != endpointcache.ShadowMatch {
 		s.logger.V(1).Info("shadow compare divergence",
 			"function", fn.Name, "namespace", fn.Namespace,
 			"executor_address", svcURL.Host, "ready_endpoints", ready, "result", result)

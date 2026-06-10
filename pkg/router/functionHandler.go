@@ -140,11 +140,17 @@ func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *h
 		}
 		rrt.closeContext()
 		// Streaming poolmgr functions untap here — after ServeHTTP has fully
-		// drained the stream — rather than at RoundTrip return (headers).
+		// drained the stream — rather than at RoundTrip return (headers). A
+		// router-admitted endpoint returns its local slot instead of the RPC
+		// untap.
 		if policy.streaming && rrt.serviceURL != nil &&
 			fh.function.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypePoolmgr {
-			fn, svcURL := fh.function, rrt.serviceURL
-			go fh.tapper.UnTap(context.Background(), fn, svcURL) //nolint:errcheck
+			if rrt.release != nil {
+				rrt.release()
+			} else {
+				fn, svcURL := fh.function, rrt.serviceURL
+				go fh.tapper.UnTap(context.Background(), fn, svcURL) //nolint:errcheck
+			}
 		}
 	}()
 

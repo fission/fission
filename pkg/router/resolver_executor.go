@@ -47,17 +47,17 @@ type svcEntryRecord struct {
 
 // Resolve implements AddressResolver with the historical getServiceEntry
 // semantics.
-func (r *executorResolver) Resolve(ctx context.Context, fn *fv1.Function) (svcURL *url.URL, cacheHit bool, err error) {
+func (r *executorResolver) Resolve(ctx context.Context, fn *fv1.Function) (ResolvedEntry, error) {
 	if fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypePoolmgr {
-		svcURL, err = r.fromExecutor(ctx, fn)
-		return svcURL, false, err
+		svcURL, err := r.fromExecutor(ctx, fn)
+		return ResolvedEntry{SvcURL: svcURL}, err
 	}
 	// Check if service URL present in cache
-	svcURL, err = r.fromCache(fn)
+	svcURL, err := r.fromCache(fn)
 	if err == nil && svcURL != nil {
-		return svcURL, true, nil
+		return ResolvedEntry{SvcURL: svcURL, FromCache: true}, nil
 	} else if err != nil {
-		return nil, false, err
+		return ResolvedEntry{}, err
 	}
 
 	fnMeta := &fn.ObjectMeta
@@ -84,18 +84,18 @@ func (r *executorResolver) Resolve(ctx context.Context, fn *fv1.Function) (svcUR
 	)
 
 	if recordObj == nil {
-		return nil, false, fmt.Errorf("empty service entry: %w", err)
+		return ResolvedEntry{}, fmt.Errorf("empty service entry: %w", err)
 	}
 
 	record, ok := recordObj.(svcEntryRecord)
 	if !ok {
-		return nil, false, fmt.Errorf("unexpected type of recordObj %T: %w", recordObj, err)
+		return ResolvedEntry{}, fmt.Errorf("unexpected type of recordObj %T: %w", recordObj, err)
 	}
-	return record.svcURL, record.cacheHit, err
+	return ResolvedEntry{SvcURL: record.svcURL, FromCache: record.cacheHit}, err
 }
 
 // Invalidate removes the function's service url entry from the cache.
-func (r *executorResolver) Invalidate(fn *fv1.Function) {
+func (r *executorResolver) Invalidate(fn *fv1.Function, _ *url.URL) {
 	r.fmap.remove(&fn.ObjectMeta)
 }
 

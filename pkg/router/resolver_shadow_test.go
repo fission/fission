@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-package endpointcache
+package router
 
 import (
 	"context"
@@ -10,25 +10,26 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/router/endpointcache"
+	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
 
-type fakeResolver struct {
+type staticResolver struct {
 	url         *url.URL
 	err         error
 	invalidated int
 }
 
-func (f *fakeResolver) Resolve(context.Context, *fv1.Function) (*url.URL, bool, error) {
-	return f.url, true, f.err
+func (f *staticResolver) Resolve(context.Context, *fv1.Function) (ResolvedEntry, error) {
+	return ResolvedEntry{SvcURL: f.url, FromCache: true}, f.err
 }
-func (f *fakeResolver) Invalidate(*fv1.Function) { f.invalidated++ }
+func (f *staticResolver) Invalidate(*fv1.Function, *url.URL) { f.invalidated++ }
 
 func fnOfType(name string, et fv1.ExecutorType) *fv1.Function {
 	fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"}}
@@ -36,22 +37,15 @@ func fnOfType(name string, et fv1.ExecutorType) *fv1.Function {
 	return fn
 }
 
-func mustURL(t *testing.T, raw string) *url.URL {
-	t.Helper()
-	u, err := url.Parse(raw)
-	require.NoError(t, err)
-	return u
-}
-
 func shadowCount(t *testing.T, result string) float64 {
 	t.Helper()
-	return testutil.ToFloat64(shadowResults.WithLabelValues(result))
+	return testutil.ToFloat64(endpointcache.ShadowResultCounter(result))
 }
 
 func TestShadowClassification(t *testing.T) {
 	// Not parallel: asserts deltas on the package-level counter.
-	ix := NewIndex()
-	ix.ApplySlice(slice("s1", "fn-pool", "default", 8888, "10.0.0.1"))
+	ix := endpointcache.NewIndex()
+	ix.ApplySlice(fnSlice("s1", "fn-pool", "default", "10.0.0.1"))
 
 	tests := []struct {
 		name       string
@@ -63,76 +57,75 @@ func TestShadowClassification(t *testing.T) {
 			name:       "poolmgr address among ready endpoints is a match",
 			fn:         fnOfType("fn-pool", fv1.ExecutorTypePoolmgr),
 			answer:     "http://10.0.0.1:8888",
-			wantResult: resultMatch,
+			wantResult: endpointcache.ShadowMatch,
 		},
 		{
 			name:       "poolmgr address not yet in slices is lag",
 			fn:         fnOfType("fn-pool", fv1.ExecutorTypePoolmgr),
 			answer:     "http://10.0.0.99:8888",
-			wantResult: resultLag,
+			wantResult: endpointcache.ShadowLag,
 		},
 		{
 			name:       "poolmgr with no endpoints is a miss",
 			fn:         fnOfType("fn-unknown", fv1.ExecutorTypePoolmgr),
 			answer:     "http://10.0.0.1:8888",
-			wantResult: resultMiss,
+			wantResult: endpointcache.ShadowMiss,
 		},
 		{
 			name:       "newdeploy compares state not address: endpoints present is a match",
 			fn:         fnOfType("fn-pool", fv1.ExecutorTypeNewdeploy),
 			answer:     "http://svc-x.default:80",
-			wantResult: resultMatch,
+			wantResult: endpointcache.ShadowMatch,
 		},
 		{
 			name:       "newdeploy with no endpoints is a miss",
 			fn:         fnOfType("fn-unknown", fv1.ExecutorTypeNewdeploy),
 			answer:     "http://svc-x.default:80",
-			wantResult: resultMiss,
+			wantResult: endpointcache.ShadowMiss,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			inner := &fakeResolver{url: mustURL(t, tt.answer)}
-			s := NewShadow(logr.Discard(), inner, ix)
+			inner := &staticResolver{url: mustParseURL(t, tt.answer)}
+			s := newShadowResolver(loggerfactory.GetLogger(), inner, ix)
 
 			before := shadowCount(t, tt.wantResult)
-			u, fromCache, err := s.Resolve(t.Context(), tt.fn)
+			entry, err := s.Resolve(t.Context(), tt.fn)
 			require.NoError(t, err)
-			assert.True(t, fromCache, "shadow must pass the inner answer through untouched")
-			assert.Equal(t, tt.answer, u.String())
+			assert.True(t, entry.FromCache, "shadow must pass the inner answer through untouched")
+			assert.Equal(t, tt.answer, entry.SvcURL.String())
 			assert.Equal(t, before+1, shadowCount(t, tt.wantResult))
 		})
 	}
 }
 
 func TestShadowNeverComparesOnError(t *testing.T) {
-	ix := NewIndex()
-	inner := &fakeResolver{err: errors.New("boom")}
-	s := NewShadow(logr.Discard(), inner, ix)
+	ix := endpointcache.NewIndex()
+	inner := &staticResolver{err: errors.New("boom")}
+	s := newShadowResolver(loggerfactory.GetLogger(), inner, ix)
 
-	before := shadowCount(t, resultMiss)
-	_, _, err := s.Resolve(t.Context(), fnOfType("fn-x", fv1.ExecutorTypePoolmgr))
+	before := shadowCount(t, endpointcache.ShadowMiss)
+	_, err := s.Resolve(t.Context(), fnOfType("fn-x", fv1.ExecutorTypePoolmgr))
 	require.Error(t, err)
-	assert.Equal(t, before, shadowCount(t, resultMiss), "errors are not compared")
+	assert.Equal(t, before, shadowCount(t, endpointcache.ShadowMiss), "errors are not compared")
 }
 
 func TestShadowDelegatesInvalidate(t *testing.T) {
-	inner := &fakeResolver{}
-	s := NewShadow(logr.Discard(), inner, NewIndex())
-	s.Invalidate(fnOfType("fn-x", fv1.ExecutorTypePoolmgr))
+	inner := &staticResolver{}
+	s := newShadowResolver(loggerfactory.GetLogger(), inner, endpointcache.NewIndex())
+	s.Invalidate(fnOfType("fn-x", fv1.ExecutorTypePoolmgr), nil)
 	assert.Equal(t, 1, inner.invalidated)
 }
 
 // TestShadowNeverMutatesIndex: comparisons are read-only.
 func TestShadowNeverMutatesIndex(t *testing.T) {
-	ix := NewIndex()
-	ix.ApplySlice(slice("s1", "fn-pool", "default", 8888, "10.0.0.1"))
-	s := NewShadow(logr.Discard(), &fakeResolver{url: mustURL(t, "http://10.0.0.1:8888")}, ix)
+	ix := endpointcache.NewIndex()
+	ix.ApplySlice(fnSlice("s1", "fn-pool2", "default", "10.0.0.1"))
+	s := newShadowResolver(loggerfactory.GetLogger(), &staticResolver{url: mustParseURL(t, "http://10.0.0.1:8888")}, ix)
 
 	for range 5 {
-		_, _, err := s.Resolve(t.Context(), fnOfType("fn-pool", fv1.ExecutorTypePoolmgr))
+		_, err := s.Resolve(t.Context(), fnOfType("fn-pool2", fv1.ExecutorTypePoolmgr))
 		require.NoError(t, err)
 	}
-	assert.Equal(t, 1, ix.Size())
-	assert.Len(t, ix.Lookup("default", "fn-pool"), 1)
+	assert.Len(t, ix.Lookup("default", "fn-pool2"), 1)
 }

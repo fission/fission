@@ -71,7 +71,10 @@ type (
 		closeContextFunc *context.CancelFunc
 		serviceURL       *url.URL
 		urlFromCache     bool
-		totalRetry       int
+		// release returns the router-local admission slot for the last resolved
+		// endpoint (nil when accounting is executor-side; see ResolvedEntry).
+		release    func()
+		totalRetry int
 	}
 
 	// To keep the request body open during retries, we create an interface with Close operation being a no-op.
@@ -166,7 +169,9 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 				"function-name":      fnMeta.Name,
 				"function-namespace": fnMeta.Namespace})...)
 			// get function service url from cache or executor
-			roundTripper.serviceURL, roundTripper.urlFromCache, err = roundTripper.resolver.Resolve(ctx, roundTripper.fn)
+			var entry ResolvedEntry
+			entry, err = roundTripper.resolver.Resolve(ctx, roundTripper.fn)
+			roundTripper.serviceURL, roundTripper.urlFromCache, roundTripper.release = entry.SvcURL, entry.FromCache, entry.Release
 			if err != nil {
 				// We might want a specific error code or header for fission failures as opposed to
 				// user function bugs.
@@ -200,12 +205,18 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 				"service-entry":      roundTripper.serviceURL.String()})...)
 			// Streaming functions untap in handler (after ServeHTTP fully drains the
 			// stream), not here at RoundTrip return (which fires at headers, while
-			// the body is still streaming).
+			// the body is still streaming). A router-admitted endpoint (release !=
+			// nil) returns its local slot instead of the RPC untap — the executor
+			// did no accounting for it.
 			if roundTripper.fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypePoolmgr &&
 				!roundTripper.policy.streaming {
-				defer func(fn *fv1.Function, serviceURL *url.URL) {
+				defer func(fn *fv1.Function, serviceURL *url.URL, release func()) {
+					if release != nil {
+						release()
+						return
+					}
 					go roundTripper.tapper.UnTap(context.Background(), fn, serviceURL) //nolint errcheck
-				}(roundTripper.fn, roundTripper.serviceURL)
+				}(roundTripper.fn, roundTripper.serviceURL, roundTripper.release)
 			}
 
 			// rewrite the request to reflect the service url (which comes from
@@ -297,7 +308,7 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 				"retry counter exceeded pre-defined threshold of %v",
 				roundTripper.params.svcAddrRetryCount))
 			if roundTripper.urlFromCache {
-				roundTripper.resolver.Invalidate(roundTripper.fn)
+				roundTripper.resolver.Invalidate(roundTripper.fn, roundTripper.serviceURL)
 			}
 			retryCounter = 0
 		}

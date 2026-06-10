@@ -949,7 +949,7 @@ func (gpm *GenericPoolManager) getFunctionEnv(ctx context.Context, fn *fv1.Funct
 // pods), run by the shared idle reaper.
 func (gpm *GenericPoolManager) IdleStrategy() idle.Strategy {
 	return idle.NewPoolDeleteStrategy(gpm.logger, gpm.fissionClient, gpm.fsCache, gpm.kubernetesClient,
-		gpm.defaultIdlePodReapTime, gpm.objectReaperIntervalSecond)
+		gpm.defaultIdlePodReapTime, gpm.objectReaperIntervalSecond, gpm.functionServicesEnabled)
 }
 
 // WebsocketStartEventChecker checks if the pod has emitted a websocket connection start event

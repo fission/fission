@@ -119,7 +119,7 @@ func TestPoolDeleteStrategy_Skips(t *testing.T) {
 	t.Parallel()
 	newStrategy := func() (*PoolDeleteStrategy, *fscache.FunctionServiceCache) {
 		fc := fscache.MakeFunctionServiceCache(logr.Discard())
-		s := NewPoolDeleteStrategy(logr.Discard(), nil, fc, k8sfake.NewSimpleClientset(), 2*time.Minute, 5*time.Second)
+		s := NewPoolDeleteStrategy(logr.Discard(), nil, fc, k8sfake.NewSimpleClientset(), 2*time.Minute, 5*time.Second, false)
 		s.envUIDs = map[types.UID]struct{}{}
 		s.fnByUID = map[types.UID]fv1.Function{}
 		return s, fc
@@ -225,4 +225,41 @@ func TestScaleDownStrategy_Reap(t *testing.T) {
 
 		require.NoError(t, s.Reap(t.Context(), makeFsvc()), "a deleted function is handled by the deploy manager, not the reaper")
 	})
+}
+
+// TestPoolDeleteStrategy_DrainThenDelete: with drainBeforeDelete on, reaping
+// first removes the served label (the pod leaves its function Service's
+// EndpointSlices) and defers the actual delete past a drain grace.
+func TestPoolDeleteStrategy_DrainThenDelete(t *testing.T) {
+	t.Parallel()
+	pod := &apiv1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "fn-pod",
+			Namespace: "default",
+			Labels:    map[string]string{fv1.SERVED_LABEL: "true", "managed": "false"},
+		},
+	}
+	kc := k8sfake.NewSimpleClientset(pod)
+	fc := fscache.MakeFunctionServiceCache(logr.Discard())
+	s := NewPoolDeleteStrategy(logr.Discard(), nil, fc, kc, 2*time.Minute, 5*time.Second, true)
+	s.fnByUID = map[types.UID]fv1.Function{}
+
+	f := &fscache.FuncSvc{
+		Name:        "fn-pod",
+		Executor:    fv1.ExecutorTypePoolmgr,
+		Function:    &metav1.ObjectMeta{Name: "fn", Namespace: "default", UID: "u1"},
+		Environment: &fv1.Environment{},
+		Atime:       time.Now().Add(-time.Hour),
+		KubernetesObjects: []apiv1.ObjectReference{
+			{Kind: "pod", Name: "fn-pod", Namespace: "default"},
+		},
+	}
+
+	s.drainThenDelete(t.Context(), f)
+
+	got, err := kc.CoreV1().Pods("default").Get(t.Context(), "fn-pod", metav1.GetOptions{})
+	require.NoError(t, err, "the pod must NOT be deleted during the drain grace")
+	_, served := got.Labels[fv1.SERVED_LABEL]
+	assert.False(t, served, "the served label must be removed so the pod leaves the slices")
+	assert.Equal(t, "false", got.Labels["managed"], "other labels are untouched")
 }
