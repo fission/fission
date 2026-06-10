@@ -15,11 +15,17 @@ import (
 //
 // Archive contains or references a collection of sources or
 // binary files.
+// The CEL rule below deliberately never references self.literal: any
+// access to a byte-format field (even has()) makes the apiserver convert
+// its base64 value for CEL and that conversion rejects standard-base64
+// payloads, breaking every literal archive. The literal/oci combination
+// is instead rejected by the webhook (Archive.Validate).
 type ArchiveApplyConfiguration struct {
-	// Type defines how the package is specified: literal or URL.
+	// Type defines how the package is specified: literal, URL, or OCI.
 	// Available value:
 	// - literal
 	// - url
+	// - oci
 	Type *corev1.ArchiveType `json:"type,omitempty"`
 	// Literal contents of the package. Can be used for
 	// encoding packages below TODO (256 KB?) size.
@@ -29,6 +35,10 @@ type ArchiveApplyConfiguration struct {
 	// Checksum ensures the integrity of packages
 	// referenced by URL. Ignored for literals.
 	Checksum *ChecksumApplyConfiguration `json:"checksum,omitempty"`
+	// OCI references an OCI image holding the deployment code.
+	// Mutually exclusive with Literal and URL. Consumed only on
+	// PackageSpec.Deployment; ignored on Source.
+	OCI *OCIArchiveApplyConfiguration `json:"oci,omitempty"`
 }
 
 // ArchiveApplyConfiguration constructs a declarative configuration of the Archive type for use with
@@ -68,5 +78,13 @@ func (b *ArchiveApplyConfiguration) WithURL(value string) *ArchiveApplyConfigura
 // If called multiple times, the Checksum field is set to the value of the last call.
 func (b *ArchiveApplyConfiguration) WithChecksum(value *ChecksumApplyConfiguration) *ArchiveApplyConfiguration {
 	b.Checksum = value
+	return b
+}
+
+// WithOCI sets the OCI field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the OCI field is set to the value of the last call.
+func (b *ArchiveApplyConfiguration) WithOCI(value *OCIArchiveApplyConfiguration) *ArchiveApplyConfiguration {
+	b.OCI = value
 	return b
 }

@@ -82,6 +82,8 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &corev1.MessageQueueTriggerSpecApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("MessageQueueTriggerStatus"):
 		return &corev1.MessageQueueTriggerStatusApplyConfiguration{}
+	case v1.SchemeGroupVersion.WithKind("OCIArchive"):
+		return &corev1.OCIArchiveApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("Package"):
 		return &corev1.PackageApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("PackageRef"):
