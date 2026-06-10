@@ -212,92 +212,9 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		return fmt.Errorf("error waiting for CRDs: %w", err)
 	}
 
-	timeoutStr := os.Getenv("ROUTER_ROUND_TRIP_TIMEOUT")
-	timeout, err := time.ParseDuration(timeoutStr)
+	cfg, err := loadRouterConfig(logger)
 	if err != nil {
-		return fmt.Errorf("failed to parse timeout duration value('%s') from 'ROUTER_ROUND_TRIP_TIMEOUT': %w", timeoutStr, err)
-	}
-
-	timeoutExponentStr := os.Getenv("ROUTER_ROUNDTRIP_TIMEOUT_EXPONENT")
-	timeoutExponent, err := strconv.Atoi(timeoutExponentStr)
-	if err != nil {
-		return fmt.Errorf("failed to parse timeout exponent value('%s') from 'ROUTER_ROUNDTRIP_TIMEOUT_EXPONENT': %w", timeoutExponentStr, err)
-	}
-
-	keepAliveTimeStr := os.Getenv("ROUTER_ROUND_TRIP_KEEP_ALIVE_TIME")
-	keepAliveTime, err := time.ParseDuration(keepAliveTimeStr)
-	if err != nil {
-		return fmt.Errorf("failed to parse keep alive duration value('%s') from 'ROUTER_ROUND_TRIP_KEEP_ALIVE_TIME': %w", keepAliveTimeStr, err)
-	}
-
-	disableKeepAliveStr := os.Getenv("ROUTER_ROUND_TRIP_DISABLE_KEEP_ALIVE")
-	disableKeepAlive, err := strconv.ParseBool(disableKeepAliveStr)
-	if err != nil {
-		return fmt.Errorf("failed to parse enable keep alive value('%s') from 'ROUTER_ROUND_TRIP_DISABLE_KEEP_ALIVE': %w", disableKeepAliveStr, err)
-	}
-
-	maxRetriesStr := os.Getenv("ROUTER_ROUND_TRIP_MAX_RETRIES")
-	maxRetries, err := strconv.Atoi(maxRetriesStr)
-	if err != nil {
-		return fmt.Errorf("failed to parse max retries value('%s') from 'ROUTER_ROUND_TRIP_MAX_RETRIES': %w", maxRetriesStr, err)
-	}
-
-	// streamIdleDefault is the idle timeout applied to streaming functions when
-	// StreamingConfig.IdleTimeoutSeconds is unset. Optional; defaults to
-	// DefaultStreamIdleSeconds.
-	streamIdleDefault := time.Duration(fv1.DefaultStreamIdleSeconds) * time.Second
-	if v := os.Getenv("ROUTER_STREAM_IDLE_TIMEOUT"); v != "" {
-		d, perr := time.ParseDuration(v)
-		if perr != nil {
-			return fmt.Errorf("failed to parse stream idle timeout value('%s') from 'ROUTER_STREAM_IDLE_TIMEOUT': %w", v, perr)
-		}
-		// A non-positive idle window would silently disable the streaming idle
-		// watchdog (streams with no max-duration ceiling could then hang forever).
-		// Reject it at startup rather than failing open.
-		if d <= 0 {
-			return fmt.Errorf("'ROUTER_STREAM_IDLE_TIMEOUT' must be a positive duration, got %q", v)
-		}
-		streamIdleDefault = d
-	}
-
-	isDebugEnvStr := os.Getenv("DEBUG_ENV")
-	isDebugEnv, err := strconv.ParseBool(isDebugEnvStr)
-	if err != nil {
-		return fmt.Errorf("failed to parse debug env value('%s') from 'DEBUG_ENV': %w", isDebugEnvStr, err)
-	}
-
-	// svcAddrRetryCount is the max times for RetryingRoundTripper to retry with a specific service address
-	svcAddrRetryCountStr := os.Getenv("ROUTER_SVC_ADDRESS_MAX_RETRIES")
-	svcAddrRetryCount, err := strconv.Atoi(svcAddrRetryCountStr)
-	if err != nil {
-		svcAddrRetryCount = 5
-		logger.Error(err, "failed to parse service address retry count from 'ROUTER_SVC_ADDRESS_MAX_RETRIES' - set to the default value", "value", svcAddrRetryCountStr,
-			"default", svcAddrRetryCount)
-	}
-
-	// svcAddrUpdateTimeout is the timeout setting for a goroutine to wait for the update of a service entry.
-	// If the update process cannot be done within the timeout window, consider it failed.
-	svcAddrUpdateTimeoutStr := os.Getenv("ROUTER_SVC_ADDRESS_UPDATE_TIMEOUT")
-	svcAddrUpdateTimeout, err := time.ParseDuration(os.Getenv("ROUTER_SVC_ADDRESS_UPDATE_TIMEOUT"))
-	if err != nil {
-		svcAddrUpdateTimeout = 30 * time.Second
-		logger.Error(err, "failed to parse service address update timeout duration from 'ROUTER_ROUND_TRIP_SVC_ADDRESS_UPDATE_TIMEOUT' - set to the default value", "value", svcAddrUpdateTimeoutStr,
-			"default", svcAddrUpdateTimeout)
-	}
-
-	// unTapServiceTimeout is the timeout used as timeout in the request context of unTapService
-	unTapServiceTimeoutstr := os.Getenv("ROUTER_UNTAP_SERVICE_TIMEOUT")
-	unTapServiceTimeout, err := time.ParseDuration(unTapServiceTimeoutstr)
-	if err != nil {
-		unTapServiceTimeout = 3600 * time.Second
-		logger.Error(err, "failed to parse unTap service timeout duration from 'ROUTER_UNTAP_SERVICE_TIMEOUT' - set to the default value", "value", unTapServiceTimeoutstr,
-			"default", unTapServiceTimeout)
-	}
-
-	// see issue https://github.com/fission/fission/issues/1317
-	useEncodedPath, err := strconv.ParseBool(os.Getenv("USE_ENCODED_PATH"))
-	if err != nil {
-		return fmt.Errorf("failed to parse USE_ENCODED_PATH: %w", err)
+		return err
 	}
 
 	// The router runs under a controller-runtime Manager for lifecycle
@@ -336,14 +253,14 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	}
 
 	triggers, err := makeHTTPTriggerSet(logger.WithName("triggerset"), fmap, fissionClient, kubeClient, crMgr.GetClient(), executor, &tsRoundTripperParams{
-		timeout:           timeout,
-		timeoutExponent:   timeoutExponent,
-		disableKeepAlive:  disableKeepAlive,
-		keepAliveTime:     keepAliveTime,
-		maxRetries:        maxRetries,
-		svcAddrRetryCount: svcAddrRetryCount,
-		streamIdleDefault: streamIdleDefault,
-	}, isDebugEnv, useEncodedPath, unTapServiceTimeout, throttler.MakeThrottler(svcAddrUpdateTimeout))
+		timeout:           cfg.roundTripTimeout,
+		timeoutExponent:   cfg.timeoutExponent,
+		disableKeepAlive:  cfg.disableKeepAlive,
+		keepAliveTime:     cfg.keepAliveTime,
+		maxRetries:        cfg.maxRetries,
+		svcAddrRetryCount: cfg.svcAddrRetryCount,
+		streamIdleDefault: cfg.streamIdleDefault,
+	}, cfg.isDebugEnv, cfg.useEncodedPath, cfg.unTapServiceTimeout, throttler.MakeThrottler(cfg.svcAddrUpdateTimeout))
 	if err != nil {
 		return fmt.Errorf("error making HTTP trigger set: %w", err)
 	}

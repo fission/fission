@@ -14,7 +14,6 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"strings"
 	"time"
 
 	"errors"
@@ -33,16 +32,7 @@ import (
 	"github.com/fission/fission/pkg/router/streaming"
 	routerutil "github.com/fission/fission/pkg/router/util"
 	"github.com/fission/fission/pkg/throttler"
-	"github.com/fission/fission/pkg/utils"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
-)
-
-const (
-	// FORWARDED represents the 'Forwarded' request header
-	FORWARDED = "Forwarded"
-
-	// X_FORWARDED_HOST represents the 'X_FORWARDED_HOST' request header
-	X_FORWARDED_HOST = "X-Forwarded-Host"
 )
 
 // Stream-abort causes, attached to the request context via context.WithCancelCause
@@ -163,7 +153,7 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 	ctx := req.Context()
 
 	// set the timeout for transport context
-	roundTripper.addForwardedHostHeader(req)
+	addForwardedHostHeader(roundTripper.logger, req)
 	transport := roundTripper.getDefaultTransport()
 
 	executingTimeout := roundTripper.funcHandler.tsRoundTripperParams.timeout
@@ -198,29 +188,6 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 	var fnMeta = &roundTripper.funcHandler.function.ObjectMeta
 
 	logger := otelUtils.LoggerWithTraceID(ctx, roundTripper.logger).WithValues("function", fnMeta.Name, "namespace", fnMeta.Namespace)
-
-	dumpReqFunc := func(request *http.Request) {
-		if request == nil {
-			return
-		}
-		reqMsg, err := httputil.DumpRequest(request, false)
-		if err != nil {
-			logger.Error(err, "failed to dump request")
-		} else {
-			logger.V(1).Info("round tripper request", "request", string(reqMsg))
-		}
-	}
-	dumpRespFunc := func(response *http.Response) {
-		if response == nil {
-			return
-		}
-		respMsg, err := httputil.DumpResponse(response, false)
-		if err != nil {
-			logger.Error(err, "failed to dump response")
-		} else {
-			logger.V(1).Info("round tripper response", "response", string(respMsg))
-		}
-	}
 
 	for i := 0; i < roundTripper.funcHandler.tsRoundTripperParams.maxRetries; i++ {
 		// set service url of target service of request only when
@@ -272,44 +239,9 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 				}(ctx, roundTripper.funcHandler.function, roundTripper.serviceURL)
 			}
 
-			// modify the request to reflect the service url
-			// this service url comes from executor response
-			req.URL.Scheme = roundTripper.serviceURL.Scheme
-			req.URL.Host = roundTripper.serviceURL.Host
-
-			// With addition of routing support from functions if function supports routing,
-			// 1. we trim prefix url and forward request
-			// 2. otherwise we just keep default request to root path
-			// We leave the query string intact (req.URL.RawQuery) where as we manipuate
-			// req.URL.Path according to httpTrigger specification.
-			prefixTrim := ""
-			functionURL := utils.UrlForFunction(fnMeta.Name, fnMeta.Namespace)
-			keepPrefix := false
-			if roundTripper.funcHandler.httpTrigger != nil && roundTripper.funcHandler.httpTrigger.Spec.Prefix != nil && *roundTripper.funcHandler.httpTrigger.Spec.Prefix != "" {
-				prefixTrim = *roundTripper.funcHandler.httpTrigger.Spec.Prefix
-				keepPrefix = roundTripper.funcHandler.httpTrigger.Spec.KeepPrefix
-			} else if strings.HasPrefix(req.URL.Path, functionURL) {
-				prefixTrim = functionURL
-			}
-			if prefixTrim != "" {
-				if !keepPrefix {
-					req.URL.Path = strings.TrimPrefix(req.URL.Path, prefixTrim)
-				}
-				if !strings.HasPrefix(req.URL.Path, "/") {
-					req.URL.Path = "/" + req.URL.Path
-				}
-			} else {
-				req.URL.Path = "/"
-			}
-
-			logger.V(1).Info("function invoke url",
-				"prefixTrim", prefixTrim,
-				"keepPrefix", keepPrefix,
-				"hitURL", req.URL.Path)
-			// Overwrite request host with internal host,
-			// or request will be blocked in some situations
-			// (e.g. istio-proxy)
-			req.Host = roundTripper.serviceURL.Host
+			// rewrite the request to reflect the service url (which comes from
+			// the executor response) and the trigger's prefix specification.
+			rewriteFunctionURL(logger, req, roundTripper.funcHandler.httpTrigger, fnMeta, roundTripper.serviceURL)
 		}
 
 		// over-riding default settings.
@@ -324,7 +256,7 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 		newReq := roundTripper.setContext(req)
 
 		if roundTripper.funcHandler.isDebugEnv {
-			dumpReqFunc(newReq)
+			debugDumpRequest(logger, newReq)
 		}
 
 		// forward the request to the function service
@@ -347,7 +279,7 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 		}
 		resp, err := rt.RoundTrip(newReq)
 		if roundTripper.funcHandler.isDebugEnv {
-			dumpRespFunc(resp)
+			debugDumpResponse(logger, resp)
 		}
 		if err == nil {
 			// return response back to user
@@ -676,75 +608,6 @@ func (fh *functionHandler) startKeepaliveHeartbeat(ctx context.Context, fn *fv1.
 	}()
 }
 
-// findCeil picks a function from the functionWeightDistribution list based on the
-// random number generated. It uses the prefix calculated for the function weights.
-func findCeil(randomNumber int, wtDistrList []functionWeightDistribution) string {
-	low := 0
-	high := len(wtDistrList) - 1
-
-	for low < high {
-		mid := (low + high) / 2
-		if randomNumber >= wtDistrList[mid].sumPrefix {
-			low = mid + 1
-		} else {
-			high = mid
-		}
-	}
-
-	if wtDistrList[low].sumPrefix >= randomNumber {
-		return wtDistrList[low].name
-	}
-	return ""
-}
-
-// picks a function to route to based on a random number generated
-func getCanaryBackend(fnMap map[string]*fv1.Function, fnWtDistributionList []functionWeightDistribution) *fv1.Function {
-	randomNumber := rand.Intn(fnWtDistributionList[len(fnWtDistributionList)-1].sumPrefix + 1)
-	fnName := findCeil(randomNumber, fnWtDistributionList)
-	return fnMap[fnName]
-}
-
-// addForwardedHostHeader add "forwarded host" to request header
-func (roundTripper RetryingRoundTripper) addForwardedHostHeader(req *http.Request) {
-	// for more detailed information, please visit:
-	// https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Forwarded
-
-	if len(req.Header.Get(FORWARDED)) > 0 || len(req.Header.Get(X_FORWARDED_HOST)) > 0 {
-		// forwarded headers were set by external proxy, leave them intact
-		return
-	}
-
-	// Format of req.Host is <host>:<port>
-	// We need to extract hostname from it, than
-	// check whether a host is ipv4 or ipv6 or FQDN
-	reqURL := fmt.Sprintf("%s://%s", req.Proto, req.Host)
-	u, err := url.Parse(reqURL)
-	if err != nil {
-		roundTripper.logger.Error(err, "error parsing request url while adding forwarded host headers", "url", reqURL)
-		return
-	}
-
-	var host string
-
-	// ip will be nil if the Hostname is a FQDN string
-	ip := net.ParseIP(u.Hostname())
-
-	// ip == nil -> hostname is FQDN instead of ip address
-	// The order of To4() and To16() here matters, To16() will
-	// converts an IPv4 address to IPv6 format address and may
-	// cause router append wrong host value to header. To prevent
-	// this we need to check whether To4() is nil first.
-	if ip == nil || (ip != nil && ip.To4() != nil) {
-		host = fmt.Sprintf(`host=%s;`, req.Host)
-	} else if ip != nil && ip.To16() != nil {
-		// For the "Forwarded" header, if a host is an IPv6 address it should be quoted
-		host = fmt.Sprintf(`host="%s";`, req.Host)
-	}
-
-	req.Header.Set(FORWARDED, host)
-	req.Header.Set(X_FORWARDED_HOST, req.Host)
-}
-
 // unTapservice marks the serviceURL in executor's cache as inactive, so that it can be reused
 func (fh functionHandler) unTapService(ctx context.Context, fn *fv1.Function, serviceUrl *url.URL) error {
 	fh.logger.V(1).Info("UnTapService Called")
@@ -985,4 +848,32 @@ func (fh functionHandler) collectFunctionMetric(start time.Time, rrt *RetryingRo
 	fh.logger.V(1).Info("Request complete", "function", fh.function.Name,
 		"retry", rrt.totalRetry, "total-time", duration,
 		"content-length", resp.ContentLength)
+}
+
+// debugDumpRequest logs a dump of the request (without body) at V(1); used
+// only when the router runs with DEBUG_ENV.
+func debugDumpRequest(logger logr.Logger, request *http.Request) {
+	if request == nil {
+		return
+	}
+	reqMsg, err := httputil.DumpRequest(request, false)
+	if err != nil {
+		logger.Error(err, "failed to dump request")
+	} else {
+		logger.V(1).Info("round tripper request", "request", string(reqMsg))
+	}
+}
+
+// debugDumpResponse logs a dump of the response (without body) at V(1); used
+// only when the router runs with DEBUG_ENV.
+func debugDumpResponse(logger logr.Logger, response *http.Response) {
+	if response == nil {
+		return
+	}
+	respMsg, err := httputil.DumpResponse(response, false)
+	if err != nil {
+		logger.Error(err, "failed to dump response")
+	} else {
+		logger.V(1).Info("round tripper response", "response", string(respMsg))
+	}
 }
