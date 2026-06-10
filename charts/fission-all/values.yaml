@@ -153,6 +153,10 @@ fetcher:
   image: fission/fetcher
   ## imageTag represents the tag of the image of the fetcher component.
   imageTag: v1.25.0
+  ## allowInsecureRegistries is a comma-separated list of registry hosts
+  ## (host[:port]) permitted to serve OCI package images over plain HTTP.
+  ## Default empty: every registry must serve TLS.
+  allowInsecureRegistries: ""
 
   ## Fetcher is only for to downloading or uploading archive.
   ## Normally, you don't need to change the value here, unless necessary.

@@ -34,6 +34,7 @@ manifests:
           canaryDeployment.enabled: "false"
           coverage.enabled: "false"
           debugEnv: "false"
+          fetcher.allowInsecureRegistries: ""
           fetcher.imageTag: ""
           functionNamespace: ""
           gatewayAPI.enabled: "false"
@@ -149,6 +150,12 @@ profiles:
       - op: replace
         path: /manifests/helm/releases/0/setValues/gatewayAPI.defaultParentRef
         value: fission/eg-gateway
+      # Trust the in-cluster plain-HTTP test registry for OCI package pulls
+      # (paired with the registry Deployment in push_pr.yaml and the
+      # FISSION_TEST_REGISTRY-gated TestOCIPackage* integration tests).
+      - op: replace
+        path: /manifests/helm/releases/0/setValues/fetcher.allowInsecureRegistries
+        value: test-registry.default.svc.cluster.local:5000
   - name: kind-ci-old
     patches:
       - op: replace

@@ -13,6 +13,14 @@ rules:
   - secrets
   verbs:
   - get
+# The OCI package keychain (RFC-0001) reads the fetcher SA's
+# imagePullSecrets to resolve registry credentials.
+- apiGroups:
+  - ""
+  resources:
+  - serviceaccounts
+  verbs:
+  - get
 - apiGroups:
   - fission.io
   resources:

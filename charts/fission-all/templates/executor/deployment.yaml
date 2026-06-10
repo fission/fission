@@ -65,6 +65,10 @@ spec:
           value: {{ .Values.fetcher.resource.cpu.limits | quote }}
         - name: FETCHER_MAXMEM
           value: {{ .Values.fetcher.resource.mem.limits | quote }}
+        {{- if .Values.fetcher.allowInsecureRegistries }}
+        - name: FETCHER_ALLOW_INSECURE_REGISTRIES
+          value: {{ .Values.fetcher.allowInsecureRegistries | quote }}
+        {{- end }}
         - name: DEBUG_ENV
           value: {{ .Values.debugEnv | quote }}
         - name: PPROF_ENABLED
