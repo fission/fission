@@ -9,6 +9,7 @@ package common_test
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -324,6 +325,64 @@ func TestOCIPackageNewdeployUpdate(t *testing.T) {
 	ns.CLI(t, ctx, "package", "update", "--name", pkgName, "--oci", refV2)
 	ns.CLI(t, ctx, "fn", "update", "--name", fnName, "--pkg", pkgName, "--entrypoint", "hello.main")
 	f.Router(t).GetEventually(t, ctx, "/"+fnName, framework.BodyContains("Hello, v2!"))
+}
+
+// TestOCIPackageGoCompiled covers RFC-0001 Path A for a compiled language:
+// a Go plugin (.so) — a binary artifact whose bytes must survive the OCI
+// push/pull/extract path intact, unlike the text fixtures above. The plugin
+// must be built by the env's own builder (Go plugins require an exact
+// toolchain match with the runtime), so the test builds a source package
+// on-cluster first, downloads the built artifact, and repackages it as an
+// OCI image. The Go env loads the single file inside the extracted
+// deployarchive directory.
+func TestOCIPackageGoCompiled(t *testing.T) {
+	t.Parallel()
+	skipOnImageVolumeLeg(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+
+	f := framework.Connect(t)
+	hostAddr, inclusterAddr := framework.RequireRegistry(t)
+	runtime := f.Images().RequireGo(t)
+	builder := f.Images().RequireGoBuilder(t)
+
+	ns := f.NewTestNamespace(t)
+	envName := "go-oci-" + ns.ID
+	srcPkg := "go-oci-src-" + ns.ID
+	ociPkg := "go-oci-pkg-" + ns.ID
+	fnName := "fn-go-oci-" + ns.ID
+
+	ns.CreateEnv(t, ctx, framework.EnvOptions{
+		Name: envName, Image: runtime, Builder: builder, Period: 5,
+	})
+
+	// Build the plugin on-cluster from the standard hello fixture.
+	helloPath := framework.WriteTestData(t, "go/hello_world/hello.go")
+	ns.CreatePackage(t, ctx, framework.PackageOptions{
+		Name: srcPkg, Env: envName, Src: helloPath,
+	})
+	ns.WaitForPackageBuildSucceeded(t, ctx, srcPkg)
+
+	// Download the built deploy artifact (a raw .so for the Go env) and
+	// push it as a single-layer code image.
+	artifactPath := filepath.Join(t.TempDir(), "handler.so")
+	ns.CLI(t, ctx, "package", "getdeploy", "--name", srcPkg, "--output", artifactPath)
+	artifact, err := os.ReadFile(artifactPath)
+	require.NoError(t, err)
+	require.NotEmpty(t, artifact, "built deploy artifact must not be empty")
+
+	ref, _ := framework.PushCodeImage(t, hostAddr, inclusterAddr,
+		"fission-test/go-plugin-"+ns.ID, "v1", map[string]string{"handler.so": string(artifact)})
+
+	ns.CreatePackage(t, ctx, framework.PackageOptions{Name: ociPkg, Env: envName, OCI: ref})
+	ns.CreateFunction(t, ctx, framework.FunctionOptions{
+		Name: fnName, Pkg: ociPkg, Entrypoint: "Handler",
+	})
+	ns.CreateRoute(t, ctx, framework.RouteOptions{Function: fnName, URL: "/" + fnName, Method: "GET"})
+
+	body := f.Router(t).GetEventually(t, ctx, "/"+fnName, framework.BodyContains("Hello"))
+	assert.Contains(t, body, "Hello")
 }
 
 // requireImageVolumeLeg gates the Path B tests: FISSION_TEST_IMAGE_VOLUME is
