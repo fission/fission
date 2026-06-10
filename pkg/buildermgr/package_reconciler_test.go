@@ -96,6 +96,15 @@ func TestSetInitialBuildStatus(t *testing.T) {
 		},
 	}
 	emptyPkg := &fv1.Package{ObjectMeta: metav1.ObjectMeta{Name: "empty", Namespace: "default"}}
+	// An OCI-only deployment archive must behave exactly like a tarball
+	// deployment archive: nothing to build (RFC-0001; Archive.IsEmpty is the
+	// load-bearing check).
+	ociPkg := &fv1.Package{
+		ObjectMeta: metav1.ObjectMeta{Name: "oci", Namespace: "default"},
+		Spec: fv1.PackageSpec{
+			Deployment: fv1.Archive{Type: fv1.ArchiveTypeOCI, OCI: &fv1.OCIArchive{Image: "ghcr.io/example/hello-code:v1"}},
+		},
+	}
 
 	cases := []struct {
 		name string
@@ -104,6 +113,7 @@ func TestSetInitialBuildStatus(t *testing.T) {
 	}{
 		{"source archive -> pending", sourcePkg("src", ""), fv1.BuildStatusPending},
 		{"deployment archive -> none", deployPkg, fv1.BuildStatusNone},
+		{"oci deployment archive -> none", ociPkg, fv1.BuildStatusNone},
 		{"empty spec -> failed", emptyPkg, fv1.BuildStatusFailed},
 	}
 	for _, tc := range cases {
