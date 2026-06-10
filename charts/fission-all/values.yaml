@@ -545,6 +545,58 @@ kubewatcher:
     runAsUser: 10001
     runAsGroup: 10001
 
+## The MCP (Model Context Protocol) server exposes opted-in functions as tools
+## for LLM agents. Off by default. When enabled it runs fission-bundle --mcpPort
+## as a ClusterIP-only Service and proxies tools/call to the router internal
+## listener. Agents authenticate with a bearer JWT when authentication.enabled is
+## set (the allowed_namespaces claim scopes which tools they may use). With
+## authentication disabled the endpoint can only run unauthenticated (every
+## caller gets a wildcard scope) if you explicitly set allowInsecure below;
+## otherwise enabling MCP without authentication fails the chart render.
+##
+mcp:
+  enabled: false
+  ## Port the MCP server listens on (ClusterIP Service of the same port).
+  ##
+  port: 8890
+  ## allowInsecure permits running the MCP endpoint UNAUTHENTICATED when
+  ## authentication.enabled is false (dev/test only — every caller can list and
+  ## invoke all Tool-exposed functions). Leave false in production; enable
+  ## authentication instead so agents are scoped by a signed JWT.
+  ##
+  allowInsecure: false
+  ## replicas to deploy. The server is stateless and runs without leader
+  ## election — every replica reconciles and serves the full tool list. Contested
+  ## explicit tool names (FunctionSpec.tool.toolName) are resolved deterministically
+  ## (smallest namespace/name wins) so replicas converge identically; prefer the
+  ## default "<namespace>-<name>" naming to avoid contention entirely.
+  ##
+  replicas: 1
+  ## Pod resources. Recommended to set limits in production: each in-flight
+  ## tools/call buffers up to ~1 MiB of function response (capped, bounded
+  ## concurrency), so memory scales with concurrent calls.
+  ##  resources:
+  ##    limits:
+  ##      cpu: <tbd>
+  ##      memory: <tbd>
+  ##    requests:
+  ##      cpu: <tbd>
+  ##      memory: <tbd>
+  ##
+  resources: {}
+
+  ## Security Context
+  ## It holds pod-level and container level security configuration.
+  ## This is an experimental section, please verify before enabling in production.
+  ## Ref: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#security-context-1
+  securityContext:
+    enabled: true
+    ## Mark it false, if you want to stop the non root user validation
+    runAsNonRoot: true
+    fsGroup: 10001
+    runAsUser: 10001
+    runAsGroup: 10001
+
 ## The storage service is the home for all archives of packages with sizes larger than 256KB.
 ##
 storagesvc:

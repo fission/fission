@@ -89,6 +89,11 @@ spec:
         - podSelector:
             matchLabels:
               svc: buildermgr
+        # The MCP tool server proxies tools/call to /fission-function/...
+        # on the internal listener (HMAC-signed, like the publishers above).
+        - podSelector:
+            matchLabels:
+              svc: mcp
       ports:
         - port: {{ .Values.router.internalPort | default 8889 }}
           protocol: TCP

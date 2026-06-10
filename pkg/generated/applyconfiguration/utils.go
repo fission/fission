@@ -104,6 +104,8 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &corev1.TimeTriggerSpecApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("TimeTriggerStatus"):
 		return &corev1.TimeTriggerStatusApplyConfiguration{}
+	case v1.SchemeGroupVersion.WithKind("ToolConfig"):
+		return &corev1.ToolConfigApplyConfiguration{}
 
 	}
 	return nil

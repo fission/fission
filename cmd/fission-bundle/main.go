@@ -24,6 +24,7 @@ import (
 	"github.com/fission/fission/pkg/info"
 	"github.com/fission/fission/pkg/kubewatcher"
 	functionLogger "github.com/fission/fission/pkg/logger"
+	"github.com/fission/fission/pkg/mcp"
 	mqt "github.com/fission/fission/pkg/mqtrigger"
 	"github.com/fission/fission/pkg/router"
 	"github.com/fission/fission/pkg/storagesvc"
@@ -53,6 +54,7 @@ type CommandLineArgs struct {
 	routerInternalPort int
 	executorPort       int
 	storageServicePort int
+	mcpPort            int
 
 	// URL values
 	executorUrl   string
@@ -183,6 +185,7 @@ func setupCommandLineArgs() *CommandLineArgs {
 	flag.IntVar(&args.routerInternalPort, "routerInternalPort", router.DefaultInternalListenerPort, "Port for the router internal listener that serves /fission-function/<ns>/<name>")
 	flag.IntVar(&args.executorPort, "executorPort", 0, "Port that the executor should listen on")
 	flag.IntVar(&args.storageServicePort, "storageServicePort", 0, "Port that the storage service should listen on")
+	flag.IntVar(&args.mcpPort, "mcpPort", 0, "Port that the MCP tool server should listen on")
 
 	// URL flags
 	flag.StringVar(&args.executorUrl, "executorUrl", "http://executor.fission", "Executor URL")
@@ -218,6 +221,8 @@ func getServiceNameFromArgs(args *CommandLineArgs) string {
 		serviceName = "Fission-StorageSvc"
 	} else if args.mqt_keda {
 		serviceName = "Fission-Keda-MQTrigger"
+	} else if args.mcpPort != 0 {
+		serviceName = "Fission-MCP"
 	}
 
 	return serviceName
@@ -298,6 +303,17 @@ func startRequestedService(ctx context.Context, args *CommandLineArgs, clientGen
 		err = mqt.StartScalerManager(ctx, clientGen, logger, mgr, publishURL)
 		if err != nil {
 			logger.Error(err, "mqt scaler manager exited")
+		}
+		return
+	}
+
+	if args.mcpPort != 0 {
+		// The MCP server proxies tools/call to /fission-function/... on the
+		// router internal listener, so it takes the same resolved publishURL
+		// (ROUTER_INTERNAL_URL) as kubewatcher/timer/mqt.
+		err = mcp.Start(ctx, clientGen, logger, mgr, args.mcpPort, publishURL)
+		if err != nil {
+			logger.Error(err, "mcp server exited")
 		}
 		return
 	}

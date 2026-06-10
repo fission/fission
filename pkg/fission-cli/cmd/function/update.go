@@ -112,6 +112,16 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 		function.Spec.Streaming = getStreamingConfig(input)
 	}
 
+	// --expose-as-mcp toggles the MCP tool config; when off it clears it. The
+	// other --tool-* flags merge onto the existing config (only set fields change).
+	if input.IsSet(flagkey.FnExposeAsMCP) {
+		toolConfig, err := getToolConfig(input, function.Spec.Tool)
+		if err != nil {
+			return err
+		}
+		function.Spec.Tool = toolConfig
+	}
+
 	err = checkExecutorPoolManager(input, function.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType)
 	if err != nil {
 		return err

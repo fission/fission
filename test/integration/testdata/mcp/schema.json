@@ -1,0 +1,10 @@
+{
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "who to greet"
+    }
+  },
+  "required": ["name"]
+}

@@ -6,6 +6,7 @@ package v1
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -294,6 +295,10 @@ func (spec FunctionSpec) Validate() error {
 		errs = errors.Join(errs, spec.Streaming.Validate())
 	}
 
+	if spec.Tool != nil {
+		errs = errors.Join(errs, spec.Tool.Validate())
+	}
+
 	// Non-CEL admission check (pod-spec security). Kept in Validate() so the
 	// CLI checks it client-side; the webhook runs it via ValidateForAdmission().
 	errs = errors.Join(errs, spec.validateForAdmission())
@@ -333,6 +338,31 @@ func (sc *StreamingConfig) Validate() error {
 	}
 	if sc.IdleTimeoutSeconds > 0 && sc.MaxDurationSeconds > 0 && sc.MaxDurationSeconds < sc.IdleTimeoutSeconds {
 		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.Streaming.MaxDurationSeconds", sc.MaxDurationSeconds, "must be >= IdleTimeoutSeconds"))
+	}
+
+	return errs
+}
+
+// Validate checks the MCP tool config (only reached when FunctionSpec.Tool is
+// non-nil, i.e. the function is advertised): a description is required, and a
+// supplied InputSchema must parse as a JSON object carrying a "type" key (a
+// cheap structural check — full JSON-Schema meta-validation is the agent's job,
+// and CEL cannot parse arbitrary schemas). The ToolName pattern is enforced by
+// the CRD kubebuilder marker.
+func (tc *ToolConfig) Validate() error {
+	var errs error
+
+	if strings.TrimSpace(tc.Description) == "" {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.Tool.Description", tc.Description, "a description is required when the function is exposed as an MCP tool"))
+	}
+
+	if tc.InputSchema != nil && len(tc.InputSchema.Raw) > 0 {
+		var obj map[string]json.RawMessage
+		if err := json.Unmarshal(tc.InputSchema.Raw, &obj); err != nil {
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.Tool.InputSchema", string(tc.InputSchema.Raw), "must be a JSON object"))
+		} else if _, ok := obj["type"]; !ok {
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.Tool.InputSchema", string(tc.InputSchema.Raw), `must be a JSON Schema object with a "type" key`))
+		}
 	}
 
 	return errs

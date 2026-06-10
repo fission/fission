@@ -53,6 +53,12 @@ type FunctionSpecApplyConfiguration struct {
 	// uses the classic buffered, retry-on-transient-error proxy path with a single
 	// FunctionTimeout deadline. Additive and backward compatible.
 	Streaming *StreamingConfigApplyConfiguration `json:"streaming,omitempty"`
+	// Tool, when non-nil, advertises this function as a Model Context Protocol
+	// (MCP) tool on the fission-bundle --mcpPort server. The MCP server watches
+	// Function CRDs and hot-updates its tool list from this field. Presence is
+	// the on switch (like Streaming): nil (the default) means the function is
+	// never advertised as a tool. Additive and backward compatible.
+	Tool *ToolConfigApplyConfiguration `json:"tool,omitempty"`
 	// Maximum number of pods to be specialized which will serve requests
 	// This is optional. If not specified default value will be taken as 500
 	Concurrency *int `json:"concurrency,omitempty"`
@@ -155,6 +161,14 @@ func (b *FunctionSpecApplyConfiguration) WithIdleTimeout(value int) *FunctionSpe
 // If called multiple times, the Streaming field is set to the value of the last call.
 func (b *FunctionSpecApplyConfiguration) WithStreaming(value *StreamingConfigApplyConfiguration) *FunctionSpecApplyConfiguration {
 	b.Streaming = value
+	return b
+}
+
+// WithTool sets the Tool field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Tool field is set to the value of the last call.
+func (b *FunctionSpecApplyConfiguration) WithTool(value *ToolConfigApplyConfiguration) *FunctionSpecApplyConfiguration {
+	b.Tool = value
 	return b
 }
 

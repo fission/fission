@@ -23,6 +23,7 @@ require (
 	github.com/kedacore/keda/v2 v2.20.0
 	github.com/mholt/archives v0.1.5
 	github.com/minio/minio-go/v7 v7.2.0
+	github.com/modelcontextprotocol/go-sdk v1.6.1
 	github.com/ory/dockertest/v3 v3.12.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/prometheus/common v0.68.1
@@ -54,6 +55,10 @@ require (
 )
 
 require (
+	github.com/google/jsonschema-go v0.4.3 // indirect
+	github.com/segmentio/asm v1.1.3 // indirect
+	github.com/segmentio/encoding v0.5.4 // indirect
+	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	gopkg.in/ini.v1 v1.67.2 // indirect
 	k8s.io/streaming v0.36.1 // indirect
 )

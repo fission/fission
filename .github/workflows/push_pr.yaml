@@ -289,7 +289,13 @@ jobs:
           # the listener externally — port-forward that Service.
           kubectl port-forward svc/router-internal 8889:8889 -n "$FISSION_NAMESPACE" >/tmp/pf-internal.log 2>&1 &
           PF_PID_INT=$!
-          trap "kill $PF_PID $PF_PID_INT 2>/dev/null || true" EXIT
+          # The MCP tool server (RFC-0011) is enabled in the kind-ci skaffold
+          # profile as a ClusterIP-only Service; port-forward it so the MCP
+          # integration test can reach it at FISSION_MCP_BASE_URL.
+          kubectl port-forward svc/mcp 8890:8890 -n "$FISSION_NAMESPACE" >/tmp/pf-mcp.log 2>&1 &
+          PF_PID_MCP=$!
+          export FISSION_MCP_BASE_URL="http://127.0.0.1:8890"
+          trap "kill $PF_PID $PF_PID_INT $PF_PID_MCP 2>/dev/null || true" EXIT
 
           # Export the master HMAC secret so the framework's RouterClient
           # signs /fission-function/... requests against the internal
@@ -307,17 +313,19 @@ jobs:
           # exits 0 for any HTTP response (including 4xx/5xx) and exit 7 for
           # connection refused — exactly what we want here.
           for i in $(seq 1 30); do
-            ok_pub=0; ok_int=0
+            ok_pub=0; ok_int=0; ok_mcp=0
             curl -sS --connect-timeout 1 --max-time 2 -o /dev/null "http://127.0.0.1:8888/" 2>/dev/null && ok_pub=1
             curl -sS --connect-timeout 1 --max-time 2 -o /dev/null "http://127.0.0.1:8889/" 2>/dev/null && ok_int=1
-            if [ "$ok_pub" -eq 1 ] && [ "$ok_int" -eq 1 ]; then
-              echo "router port-forwards ready after ${i}s (8888=$ok_pub, 8889=$ok_int)"
+            curl -sS --connect-timeout 1 --max-time 2 -o /dev/null "http://127.0.0.1:8890/healthz" 2>/dev/null && ok_mcp=1
+            if [ "$ok_pub" -eq 1 ] && [ "$ok_int" -eq 1 ] && [ "$ok_mcp" -eq 1 ]; then
+              echo "router + mcp port-forwards ready after ${i}s (8888=$ok_pub, 8889=$ok_int, 8890=$ok_mcp)"
               break
             fi
             if [ "$i" -eq 30 ]; then
-              echo "router port-forward did not become ready in 30s; pf logs:"
+              echo "port-forward did not become ready in 30s; pf logs:"
               cat /tmp/pf.log || true
               cat /tmp/pf-internal.log || true
+              cat /tmp/pf-mcp.log || true
               exit 1
             fi
             sleep 1

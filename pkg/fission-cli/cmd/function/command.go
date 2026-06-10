@@ -24,6 +24,8 @@ func Commands() *cobra.Command {
 			flag.FnIdleTimeout, flag.FnConcurrency, flag.FnRequestsPerPod,
 			flag.FnStreaming, flag.FnStreamingProtocol,
 			flag.FnStreamingIdleTimeout, flag.FnStreamingMaxDuration,
+			flag.FnExposeAsMCP, flag.FnToolDescription,
+			flag.FnToolInputSchema, flag.FnToolName,
 			flag.FnOnceOnly, flag.Labels, flag.Annotation, flag.FnRetainPods,
 
 			// TODO retired pkg & trigger related flags from function cmd
@@ -71,6 +73,8 @@ func Commands() *cobra.Command {
 			flag.FnIdleTimeout, flag.FnConcurrency, flag.FnRequestsPerPod,
 			flag.FnStreaming, flag.FnStreamingProtocol,
 			flag.FnStreamingIdleTimeout, flag.FnStreamingMaxDuration,
+			flag.FnExposeAsMCP, flag.FnToolDescription,
+			flag.FnToolInputSchema, flag.FnToolName,
 			flag.FnOnceOnly, flag.Labels, flag.Annotation, flag.FnRetainPods,
 
 			flag.PkgCode, flag.PkgSrcArchive, flag.PkgDeployArchive,
@@ -192,13 +196,20 @@ func Commands() *cobra.Command {
 		Optional: []flag.Flag{flag.NamespaceFunction, flag.WaitTimeout},
 	})
 
+	toolsCmd := wrapper.SubCommand(&cobra.Command{
+		Use:   "tools",
+		Short: "List functions exposed as MCP (Model Context Protocol) tools",
+	}, Tools, flag.FlagSet{
+		Optional: []flag.Flag{flag.NamespaceFunction, flag.Output},
+	})
+
 	command := &cobra.Command{
 		Use:     "function",
 		Aliases: []string{"fn"},
 		Short:   "Create, update and manage functions",
 	}
 	command.AddCommand(createCmd, getCmd, getmetaCmd, updateCmd, deleteCmd, listCmd, logsCmd, testCmd,
-		runContainerCmd, updateContainerCmd, listPodsCmd, waitCmd)
+		runContainerCmd, updateContainerCmd, listPodsCmd, waitCmd, toolsCmd)
 
 	return command
 }

@@ -41,6 +41,10 @@ manifests:
           grafana.dashboards.enabled: "false"
           imageTag: ""
           influxdb.enabled: "false"
+          mcp.enabled: "true"
+          # Dev/CI clusters run without authentication, so opt into the
+          # unauthenticated MCP endpoint explicitly (the chart fails closed otherwise).
+          mcp.allowInsecure: "true"
           namespace: fission
           networkPolicy.enabled: "false"
           openTelemetry.otlpCollectorEndpoint: ""

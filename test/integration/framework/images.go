@@ -155,6 +155,19 @@ func routerInternalURLFromEnv() string {
 	return "http://127.0.0.1:8889"
 }
 
+// mcpBaseURLFromEnv returns the URL the framework should use for the MCP server
+// (svc/mcp). Defaults to http://127.0.0.1:8890 to match the suite-bootstrap
+// port-forward; override via FISSION_MCP_BASE_URL. Empty disables the MCP tests.
+func mcpBaseURLFromEnv() string {
+	if v := os.Getenv("FISSION_MCP_BASE_URL"); v != "" {
+		if hasScheme(v) {
+			return v
+		}
+		return "http://" + v
+	}
+	return "http://127.0.0.1:8890"
+}
+
 // internalAuthSecretFromEnv returns the master HMAC key used to sign
 // requests against the router internal listener. Empty when
 // internalAuth is disabled in the cluster — the framework still issues

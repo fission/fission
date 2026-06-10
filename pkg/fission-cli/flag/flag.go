@@ -121,6 +121,10 @@ var (
 	FnStreamingProtocol     = Flag{Type: String, Name: flagkey.FnStreamingProtocol, Usage: "Streaming protocol when --streaming is set; one of 'auto', 'sse', 'chunked', 'websocket'", DefaultValue: "auto"}
 	FnStreamingIdleTimeout  = Flag{Type: Int, Name: flagkey.FnStreamingIdleTimeout, Usage: "Idle timeout (seconds) for a streaming response before it is aborted; reset on each chunk", DefaultValue: 60}
 	FnStreamingMaxDuration  = Flag{Type: Int, Name: flagkey.FnStreamingMaxDuration, Usage: "Hard ceiling (seconds) on total streaming response lifetime; 0 means no ceiling (the idle timeout governs)", DefaultValue: 0}
+	FnExposeAsMCP           = Flag{Type: Bool, Name: flagkey.FnExposeAsMCP, Usage: "Advertise this function as a Model Context Protocol (MCP) tool on the MCP server"}
+	FnToolDescription       = Flag{Type: String, Name: flagkey.FnToolDescription, Usage: "Agent-facing tool description (required with --expose-as-mcp)"}
+	FnToolInputSchema       = Flag{Type: String, Name: flagkey.FnToolInputSchema, Usage: "Path to a JSON Schema file describing the tool's arguments; advertised verbatim as the MCP tool inputSchema"}
+	FnToolName              = Flag{Type: String, Name: flagkey.FnToolName, Usage: "Override the advertised MCP tool name (defaults to <namespace>-<function name>)"}
 	FnConcurrency           = Flag{Type: Int, Name: flagkey.FnConcurrency, Aliases: []string{"con"}, Usage: "Maximum number of pods specialized concurrently to serve requests (Only valid for executortype; `poolmgr`)", DefaultValue: 500}
 	FnRequestsPerPod        = Flag{Type: Int, Name: flagkey.FnRequestsPerPod, Aliases: []string{"rpp"}, Usage: "Maximum number of concurrent requests that can be served by a specialized pod (Only valid for executortype; `poolmgr`)", DefaultValue: 1}
 	FnOnceOnly              = Flag{Type: Bool, Name: flagkey.FnOnceOnly, Aliases: []string{"yolo"}, Usage: "Specifies if specialized pod will serve exactly one request in its lifetime (Only valid for executortype; `poolmgr`)"}

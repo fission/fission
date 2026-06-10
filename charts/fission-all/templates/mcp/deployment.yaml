@@ -1,0 +1,105 @@
+{{- if .Values.mcp.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mcp
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: mcp
+    application: fission-mcp
+spec:
+  replicas: {{ dig "replicas" 1 (.Values.mcp | default dict) }}
+  selector:
+    matchLabels:
+      svc: mcp
+  template:
+    metadata:
+      labels:
+        svc: mcp
+        application: fission-mcp
+    spec:
+      {{- if .Values.mcp.securityContext.enabled }}
+      securityContext: {{- omit .Values.mcp.securityContext "enabled" | toYaml | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: mcp
+        image: {{ include "fission-bundleImage" . | quote }}
+        imagePullPolicy: {{ .Values.pullPolicy }}
+        command: ["/fission-bundle"]
+        args: ["--mcpPort", "{{ .Values.mcp.port | default 8890 }}"]
+        env:
+        - name: DEBUG_ENV
+          value: {{ .Values.debugEnv | quote }}
+        - name: PPROF_ENABLED
+          value: {{ .Values.pprof.enabled | quote }}
+        # The MCP server proxies tools/call to /fission-function/<ns>/<name>,
+        # which after GHSA-3g33-6vg6-27m8 lives only on the router's internal
+        # listener; internalAuth.envs supplies the HMAC secret used by the signer.
+        - name: ROUTER_INTERNAL_URL
+          value: "http://router-internal.{{ .Release.Namespace }}:{{ .Values.router.internalPort | default 8889 }}"
+        {{- if .Values.authentication.enabled }}
+        # Agents authenticate to /mcp with a bearer JWT signed by this key (shared
+        # with the router's signing key). Tokens must carry sub + exp claims and an
+        # allowed_namespaces claim ("*" or a list) that scopes which tools a
+        # caller may list and invoke — the router's own /auth/login tokens do not
+        # yet include that claim, so MCP callers use purpose-minted tokens.
+        - name: JWT_SIGNING_KEY
+          valueFrom:
+            secretKeyRef:
+              name: router
+              key: jwtSigningKey
+        {{- else if .Values.mcp.allowInsecure }}
+        # No signing key: the MCP endpoint runs UNAUTHENTICATED — every caller gets
+        # a wildcard scope and can invoke any Tool-exposed function. Explicitly
+        # opted in here (dev only); the server fails closed without this.
+        - name: MCP_ALLOW_INSECURE
+          value: "true"
+        {{- else }}
+        {{ required "mcp.enabled requires authentication.enabled (so agents are scoped via a signed JWT), or mcp.allowInsecure=true to explicitly run the MCP endpoint unauthenticated (dev only)." nil }}
+        {{- end }}
+        {{- include "fission-resource-namespace.envs" . | indent 8 }}
+        {{- include "kube_client.envs" . | indent 8 }}
+        {{- include "opentelemtry.envs" . | indent 8 }}
+        {{- include "internalAuth.envs" . | indent 8 }}
+        {{- include "coverage.envs" . | indent 8 }}
+        # /readyz reports ready only after the Function cache has synced, so a
+        # warming replica is kept out of the Service endpoints — agents never get
+        # an (empty) tool list from a not-yet-populated registry.
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: {{ .Values.mcp.port | default 8890 }}
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: {{ .Values.mcp.port | default 8890 }}
+          periodSeconds: 30
+        resources:
+          {{- toYaml .Values.mcp.resources | nindent 10 }}
+        {{- if .Values.terminationMessagePath }}
+        terminationMessagePath: {{ .Values.terminationMessagePath }}
+        {{- end }}
+        {{- if .Values.terminationMessagePolicy }}
+        terminationMessagePolicy: {{ .Values.terminationMessagePolicy }}
+        {{- end }}
+        {{- if .Values.coverage.enabled }}
+        volumeMounts:
+        {{- include "coverage.volumemount" . | indent 8 }}
+        {{- end }}
+      serviceAccountName: fission-mcp
+      {{- if .Values.coverage.enabled }}
+      volumes:
+      {{- include "coverage.volume" . | indent 6 }}
+      {{- end }}
+{{- if .Values.priorityClassName }}
+      priorityClassName: {{ .Values.priorityClassName }}
+{{- end }}
+    {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+{{- if .Values.extraCoreComponentPodConfig }}
+{{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
+{{- end }}
+{{- end }}
