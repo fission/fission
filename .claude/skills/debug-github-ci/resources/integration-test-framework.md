@@ -185,6 +185,13 @@ export FISSION_INTERNAL_AUTH_SECRET=$(kubectl get secret fission-internal-auth -
 ```
 Empty secret means unsigned requests, which works only when the cluster is in pass-through mode (`internalAuth.enabled=false`) — the verifier's pass-through short-circuit accepts unsigned requests in that mode, but rejects them once the secret is configured.
 
+For the MCP test (`TestMCPToolsListAndCall`) add a third forward and point the framework at it:
+```
+kubectl port-forward svc/mcp 8890:8890 -n fission &
+export FISSION_MCP_BASE_URL=http://127.0.0.1:8890   # framework default; the test t.Skips when unreachable
+```
+`svc/mcp` exists only when `mcp.enabled` (on in the kind/kind-ci skaffold profiles). The framework helper is `f.MCPBaseURL()`; the test connects a `modelcontextprotocol/go-sdk` client to `<base>/mcp`. The MCP server itself runs in the `fission` namespace, so its pod log is in the CI `kind-logs` artifact, not the test's `default`-scoped diagnostics dump.
+
 ## When the framework needs a new helper
 
 Adding a one-off API call to a test is fine.

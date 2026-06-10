@@ -11,6 +11,7 @@ Examples that already use it:
 - `prometheus.serviceEndpoint: <ci value>`
 - `storagesvc.archivePruner.interval: 1` (faster GC for tests)
 - `networkPolicy.enabled: true` (added 2026-05)
+- `mcp.enabled: true` + `mcp.allowInsecure: true` (added 2026-06) — set in the **base** `setValues` (so the MCP head is exercised in every kind profile, not just kind-ci). `allowInsecure` is required because the chart fails render when `mcp.enabled && !authentication.enabled` (dev clusters run auth off); the integration leg also port-forwards `svc/mcp 8890`.
 
 Use it when:
 - The feature has a default-off Helm value users opt into.

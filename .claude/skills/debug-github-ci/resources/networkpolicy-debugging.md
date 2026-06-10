@@ -88,6 +88,14 @@ Rule of thumb:
 - Same namespace as the policy → `podSelector` only.
 - Different namespace → `namespaceSelector: {}` (any) or `namespaceSelector.matchLabels: {key: value}` where `key/value` is a label you **set yourself** on the source namespace.
 
+## Router internal-listener allowlist — add every new internal client
+
+`charts/fission-all/templates/router/networkpolicy.yaml` gates ingress to the internal listener (port 8889, serving `/fission-function/...`) to an **explicit allowlist** of source pod labels: `svc: kubewatcher | timer | mqtrigger | mqtrigger-keda | canaryconfig | executor | buildermgr | mcp`.
+Any **new** fission-bundle head that calls the internal listener (e.g. the MCP server, `svc: mcp`) must be added to that `from` block or its signed requests are silently dropped.
+Because `networkPolicy.enabled=true` in the kind-ci skaffold profile, a missing entry passes unit tests and `helm lint` but fails the **integration** leg only, with `dial tcp <router-internal-clusterIP>:8889: i/o timeout` in the *caller's* pod log (NOT the router's).
+These are same-namespace rules (caller and router both in `fission`), so `podSelector` alone is correct — no `namespaceSelector`.
+The MCP pod runs in `fission`, which the integration-test diagnostics dump (scoped to `default`) doesn't capture — pull the CI `kind-logs-<run>-<ver>` artifact and read `.../containers/<caller>-*.log` to see the timeout.
+
 ## Verifying enforcement actually happens
 
 The default kindnet CNI enforces NetworkPolicy from kind v0.27 / k8s 1.30+.
