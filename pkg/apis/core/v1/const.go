@@ -34,6 +34,10 @@ const (
 
 	// ArchiveTypeUrl means the package contents are at the specified URL.
 	ArchiveTypeUrl ArchiveType = "url"
+
+	// ArchiveTypeOCI means the package contents are the filesystem of an
+	// OCI image referenced in the OCI field of the resource.
+	ArchiveTypeOCI ArchiveType = "oci"
 )
 
 const (
