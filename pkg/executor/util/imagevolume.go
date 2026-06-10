@@ -10,8 +10,45 @@ import (
 	"strconv"
 	"strings"
 
+	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/discovery"
 )
+
+// OCIImageVolumeName is the pod volume name used for OCI package image
+// volumes (RFC-0001 Path B). Distinct from the fetcher's "userfunc" emptyDir
+// so the two can coexist on newdeploy pods.
+const OCIImageVolumeName = "oci-package-image"
+
+// AddImageVolume appends an OCI image volume holding the package filesystem
+// and mounts it read-only at mountPath on each named container. Pull secrets
+// append to pod.Spec.ImagePullSecrets — the kubelet resolves image-volume
+// pulls from those (plus the service account's). Call this AFTER every
+// MergePodSpec so a runtime pod spec cannot strip or shadow the mount.
+func AddImageVolume(podSpec *apiv1.PodSpec, image, subPath, mountPath string, pullSecrets []apiv1.LocalObjectReference, containerNames ...string) {
+	podSpec.Volumes = append(podSpec.Volumes, apiv1.Volume{
+		Name: OCIImageVolumeName,
+		VolumeSource: apiv1.VolumeSource{
+			Image: &apiv1.ImageVolumeSource{
+				Reference:  image,
+				PullPolicy: apiv1.PullIfNotPresent,
+			},
+		},
+	})
+	mount := apiv1.VolumeMount{
+		Name:      OCIImageVolumeName,
+		MountPath: mountPath,
+		SubPath:   subPath,
+		ReadOnly:  true,
+	}
+	for i := range podSpec.Containers {
+		for _, name := range containerNames {
+			if podSpec.Containers[i].Name == name {
+				podSpec.Containers[i].VolumeMounts = append(podSpec.Containers[i].VolumeMounts, mount)
+			}
+		}
+	}
+	podSpec.ImagePullSecrets = append(podSpec.ImagePullSecrets, pullSecrets...)
+}
 
 // OCIImageVolumeEnabled reports whether the operator opted into delivering
 // OCI packages via kubelet image volumes (RFC-0001 Path B) by setting

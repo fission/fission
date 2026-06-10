@@ -21,28 +21,29 @@ import (
 	"github.com/fission/fission/pkg/utils"
 )
 
-// getPoolName returns a unique name of an environment
-func getPoolName(env *fv1.Environment) string {
+// getPoolName returns a unique name for a pool's deployment: per environment,
+// plus a short image-hash suffix for per-image pools (RFC-0001 Path B).
+func getPoolName(env *fv1.Environment, imageHash string) string {
 	// TODO: get rid of resource version here
 	var envPodName string
 
-	min := func(a, b int) int {
-		if a > b {
-			return b
-		}
-		return a
+	// To fit the 63 character limit; per-image pools spend 9 characters on
+	// the "-<hash[:8]>" suffix, so their env segments get a tighter budget.
+	segmentBudget, capPerSegment := 37, 18
+	suffix := ""
+	if imageHash != "" {
+		segmentBudget, capPerSegment = 28, 13
+		suffix = "-" + imageHash[:8]
 	}
-
-	// To fit the 63 character limit
-	if len(env.Name)+len(env.Namespace) < 37 {
+	if len(env.Name)+len(env.Namespace) < segmentBudget {
 		envPodName = env.Name + "-" + env.Namespace
 	} else {
-		nameLength := min(len(env.Name), 18)
-		namespaceLength := min(len(env.Namespace), 18)
+		nameLength := min(len(env.Name), capPerSegment)
+		namespaceLength := min(len(env.Namespace), capPerSegment)
 		envPodName = env.Name[:nameLength] + "-" + env.Namespace[:namespaceLength]
 	}
 
-	return "poolmgr-" + strings.ToLower(fmt.Sprintf("%s-%s", envPodName, env.ResourceVersion))
+	return "poolmgr-" + strings.ToLower(fmt.Sprintf("%s%s-%s", envPodName, suffix, env.ResourceVersion))
 }
 
 func (gp *GenericPool) genDeploymentMeta(env *fv1.Environment) metav1.ObjectMeta {
@@ -60,7 +61,7 @@ func (gp *GenericPool) genDeploymentMeta(env *fv1.Environment) metav1.ObjectMeta
 		}
 	}
 	return metav1.ObjectMeta{
-		Name:            getPoolName(env),
+		Name:            getPoolName(env, gp.ociImageHash),
 		Labels:          deployLabels,
 		Annotations:     deployAnnotations,
 		OwnerReferences: ownerReferences,
@@ -127,6 +128,12 @@ func (gp *GenericPool) genDeploymentSpec(env *fv1.Environment) (*appsv1.Deployme
 	// projected volume defined below — the user-code container does not.
 	// See GHSA-85g2-pmrx-r49q.
 	automountSAToken := false
+	// Path B pods (image-volume pools) have no fetcher container, so they
+	// don't carry the fetcher SA token projected volume either.
+	var baseVolumes []apiv1.Volume
+	if gp.oci == nil {
+		baseVolumes = append(baseVolumes, util.FetcherSATokenProjectedVolume())
+	}
 	pod := apiv1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels:      podLabels,
@@ -140,9 +147,7 @@ func (gp *GenericPool) genDeploymentSpec(env *fv1.Environment) (*appsv1.Deployme
 			// preStop sleep so SIGTERM is only sent once the drain
 			// window has elapsed.
 			TerminationGracePeriodSeconds: &gracePeriodSeconds,
-			Volumes: []apiv1.Volume{
-				util.FetcherSATokenProjectedVolume(),
-			},
+			Volumes:                       baseVolumes,
 		},
 	}
 
@@ -187,10 +192,14 @@ func (gp *GenericPool) genDeploymentSpec(env *fv1.Environment) (*appsv1.Deployme
 		}
 	}
 
-	// Order of merging is important here - first fetcher, then containers and lastly pod spec
-	err = gp.fetcherConfig.AddFetcherToPodSpec(&deploymentSpec.Template.Spec, mainContainerName)
-	if err != nil {
-		return nil, err
+	// Order of merging is important here - first fetcher, then containers and lastly pod spec.
+	// Path B (image-volume) pods skip the fetcher entirely: the kubelet
+	// mounts the code; specialization is load-only (see loadOnlySpecialize).
+	if gp.oci == nil {
+		err = gp.fetcherConfig.AddFetcherToPodSpec(&deploymentSpec.Template.Spec, mainContainerName)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	if env.Spec.Runtime.PodSpec != nil {
@@ -204,6 +213,17 @@ func (gp *GenericPool) genDeploymentSpec(env *fv1.Environment) (*appsv1.Deployme
 		// would otherwise re-enable the kubelet auto-mount on the user
 		// container. See GHSA-85g2-pmrx-r49q.
 		deploymentSpec.Template.Spec.AutomountServiceAccountToken = new(false)
+	}
+
+	if gp.oci != nil {
+		// Path B: mount the package image read-only at the shared mount
+		// path on the runtime container. Applied AFTER every MergePodSpec
+		// (same convention as the SA-token re-clamps) so a runtime pod spec
+		// cannot strip or shadow the code mount.
+		util.AddImageVolume(&deploymentSpec.Template.Spec,
+			gp.oci.Image, gp.oci.SubPath, gp.fetcherConfig.SharedMountPath(),
+			gp.oci.ImagePullSecrets, mainContainerName)
+		return &deploymentSpec, nil
 	}
 
 	// Re-mount the fission-fetcher SA token at the canonical Kubernetes
