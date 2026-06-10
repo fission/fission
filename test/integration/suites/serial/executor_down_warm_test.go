@@ -56,9 +56,23 @@ func TestWarmInvokeWithExecutorDown(t *testing.T) {
 
 	// Warm exactly one function and wait until its specialized pod is a ready
 	// endpoint in the slices — that is what the router's index serves from.
+	// Keep invoking while waiting: the Service ensure is async and self-heals
+	// on the warm RPC path (e.g. when the preceding serial test's executor
+	// rollout killed the first ensure mid-flight), so slices are guaranteed
+	// only under traffic.
 	body := f.Router(t).GetEventually(t, ctx, "/"+warmFn, framework.BodyContains("hello"))
 	require.Contains(t, body, "hello")
-	ns.WaitForFunctionEndpointsReady(t, ctx, warmFn, 1, time.Minute)
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		status, _, err := f.Router(t).Get(ctx, "/"+warmFn)
+		if assert.NoError(c, err) {
+			assert.Equal(c, http.StatusOK, status)
+		}
+		ready, err := ns.ReadyFunctionEndpoints(ctx, warmFn)
+		if !assert.NoError(c, err) {
+			return
+		}
+		assert.NotEmptyf(c, ready, "function %s has no ready slice endpoints yet", warmFn)
+	}, 2*time.Minute, 2*time.Second)
 
 	restore := f.ScaleExecutor(t, ctx, 0)
 	defer restore()

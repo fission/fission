@@ -177,10 +177,38 @@ func (gpm *GenericPoolManager) ensureFunctionService(ctx context.Context, fn *fv
 	return err
 }
 
+// fnSvcEnsureDebounce bounds how often maybeEnsureFunctionService re-runs the
+// (read-mostly) ensure per function.
+const fnSvcEnsureDebounce = 30 * time.Second
+
+// maybeEnsureFunctionService fires an async, debounced ensure of the
+// function's headless Service. Called from both the cold-start path (first
+// creation) and the warm RPC cache-hit path: the latter is the self-healing
+// loop — a lost ensure (executor rolled mid-flight) leaves the function
+// without slices, which routes all its traffic through the RPC path, which
+// re-triggers the ensure here. Debounced per function UID so steady-state
+// traffic adds no API reads; skipped for OnceOnly functions, whose pods serve
+// exactly one request and must never be admitted from slices.
+func (gpm *GenericPoolManager) maybeEnsureFunctionService(fn *fv1.Function) {
+	if !gpm.functionServicesEnabled || fn.Spec.OnceOnly {
+		return
+	}
+	if v, ok := gpm.fnSvcEnsured.Load(fn.UID); ok {
+		if last, ok := v.(time.Time); ok && time.Since(last) < fnSvcEnsureDebounce {
+			return
+		}
+	}
+	// Optimistic stamp dedups concurrent triggers; the failure path below
+	// removes it so the next request retries immediately.
+	gpm.fnSvcEnsured.Store(fn.UID, time.Now())
+	go gpm.ensureFunctionServiceAsync(fn)
+}
+
 // ensureFunctionServiceAsync runs ensureFunctionService off the cold-start
 // path: fire-and-forget with its own detached timeout context and one retry.
 // Errors are logged and counted, never surfaced to the invoking request — the
-// pod IP has already been returned, and the next cold start re-ensures.
+// pod IP has already been returned, and the next request re-ensures (the
+// debounce stamp is dropped on failure).
 func (gpm *GenericPoolManager) ensureFunctionServiceAsync(fn *fv1.Function) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -191,6 +219,7 @@ func (gpm *GenericPoolManager) ensureFunctionServiceAsync(fn *fv1.Function) {
 	gpm.logger.V(1).Info("retrying function service ensure", "function", fn.Name, "namespace", fn.Namespace, "error", err.Error())
 	time.Sleep(2 * time.Second)
 	if err := gpm.ensureFunctionService(ctx, fn); err != nil {
+		gpm.fnSvcEnsured.Delete(fn.UID)
 		metrics.FunctionServiceEnsures.WithLabelValues("error").Inc()
 		gpm.logger.Error(err, "failed to ensure function service; warm-path endpoint discovery degrades to executor RPC for this function",
 			"function", fn.Name, "namespace", fn.Namespace)

@@ -115,6 +115,12 @@ type (
 		// pods to the router's slice-fed index. Disabled in Istio mode, whose
 		// functions are addressed via Istio services instead.
 		functionServicesEnabled bool
+
+		// fnSvcEnsured debounces ensureFunctionService per function UID (see
+		// maybeEnsureFunctionService): map[types.UID]time.Time of the last
+		// successful-or-in-flight ensure. Entries are dropped on function
+		// delete and on ensure failure (so the next request retries).
+		fnSvcEnsured sync.Map
 	}
 	request struct {
 		requestType
@@ -267,20 +273,27 @@ func (gpm *GenericPoolManager) GetFuncSvc(ctx context.Context, fn *fv1.Function)
 	// (this also adds to the cache)
 	logger.V(1).Info("getting function service from pool", "function", fn.Name)
 	fnSvc, fErr = pool.getFuncSvc(ctx, fn)
-	if fErr == nil && gpm.functionServicesEnabled && !fn.Spec.OnceOnly {
+	if fErr == nil {
 		// Ensure the function's headless Service (RFC-0002) strictly off the
 		// cold-start path: the pod address has already been produced; the
 		// Service only feeds the router's warm-path EndpointSlice index.
-		// OnceOnly functions are excluded: their pods serve exactly one request
-		// and must never be admitted from slices.
-		go gpm.ensureFunctionServiceAsync(fn)
+		gpm.maybeEnsureFunctionService(fn)
 	}
 	return fnSvc, fErr
 }
 
 func (gpm *GenericPoolManager) GetFuncSvcFromCache(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
 	otelUtils.SpanTrackEvent(ctx, "GetFuncSvcFromCache", otelUtils.GetAttributesForFunction(fn)...)
-	return gpm.fsCache.GetFuncSvc(ctx, &fn.ObjectMeta, fn.GetRequestPerPod(), fn.GetConcurrency())
+	fnSvc, err := gpm.fsCache.GetFuncSvc(ctx, &fn.ObjectMeta, fn.GetRequestPerPod(), fn.GetConcurrency())
+	if err == nil {
+		// Self-healing for the function Service: the one-shot ensure on the
+		// cold start can be lost (executor rolled mid-ensure), and a missing
+		// Service means no slices — which routes every request through this
+		// very RPC path, making it the natural repair point. Debounced, so the
+		// steady state adds nothing.
+		gpm.maybeEnsureFunctionService(fn)
+	}
+	return fnSvc, err
 }
 
 func (gpm *GenericPoolManager) DeleteFuncSvcFromCache(ctx context.Context, fsvc *fscache.FuncSvc) {
@@ -790,6 +803,7 @@ func (gpm *GenericPoolManager) cleanupPool(ctx context.Context, env *fv1.Environ
 // reconciler on delete.
 func (gpm *GenericPoolManager) markFuncDeleted(key crd.CacheKeyURG) {
 	gpm.fsCache.MarkFuncDeleted(key)
+	gpm.fnSvcEnsured.Delete(key.UID)
 }
 
 // processReplicaSet reaps a pool's specialized pods when its ReplicaSet has
