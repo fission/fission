@@ -16,16 +16,6 @@ import (
 	"github.com/fission/fission/pkg/router/endpointcache"
 )
 
-// ConcurrencyEnforcementAnnotation opts a Function out of router-local
-// admission (RFC-0002): with the value "strict" every request goes through the
-// executor's PoolCache exactly as before the EndpointSlice data plane, giving
-// exact global per-pod concurrency accounting at the cost of the warm-path
-// RPCs.
-const (
-	ConcurrencyEnforcementAnnotation = "fission.io/concurrency-enforcement"
-	concurrencyEnforcementStrict     = "strict"
-)
-
 // CapacityClient is the optional executor-client facet the fallback resolver
 // uses when every known endpoint is saturated: the executor — still the
 // capacity authority — specializes one more pod (synchronous address answer)
@@ -68,20 +58,20 @@ func (f *fallbackResolver) Resolve(ctx context.Context, fn *fv1.Function) (Resol
 	if fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType != fv1.ExecutorTypePoolmgr {
 		return f.resolveDeployBacked(ctx, fn)
 	}
-	if fn.Annotations[ConcurrencyEnforcementAnnotation] == concurrencyEnforcementStrict {
+	// Strict-mode and OnceOnly functions take the legacy RPC path: strict for
+	// exact global concurrency accounting, OnceOnly because its pods serve
+	// exactly one request and must never be re-admitted from slices (the
+	// executor also never creates a function Service for them — this check is
+	// the router-side belt to that brace).
+	if fn.StrictConcurrencyEnforcement() || fn.Spec.OnceOnly {
 		endpointcache.RecordFallback(endpointcache.FallbackStrict)
 		return f.executor.Resolve(ctx, fn)
 	}
 
 	ep, release, ok := f.index.Admit(fn.Namespace, fn.Name, fn.GetRequestPerPod())
 	if ok {
-		svcURL, err := url.Parse("http://" + ep.Address)
-		if err != nil {
-			release()
-			return ResolvedEntry{}, fmt.Errorf("error parsing endpoint address %q: %w", ep.Address, err)
-		}
 		endpointcache.RecordHit()
-		return ResolvedEntry{SvcURL: svcURL, FromCache: true, Release: release}, nil
+		return ResolvedEntry{SvcURL: ep.URL, FromCache: true, Release: release}, nil
 	}
 
 	ready := f.index.ReadyCount(fn.Namespace, fn.Name)
@@ -94,10 +84,12 @@ func (f *fallbackResolver) Resolve(ctx context.Context, fn *fv1.Function) (Resol
 	}
 
 	// Endpoints exist but every one is at its router-local requestsPerPod cap:
-	// ask the executor (the capacity authority) for one more pod.
+	// ask the executor (the capacity authority) for one more pod. The
+	// specialization must use the CURRENT function spec (the resolved snapshot
+	// can be stale after `fn update --pkg`), same as fromExecutor.
 	endpointcache.RecordFallback(endpointcache.FallbackSaturated)
 	if f.capacity != nil {
-		addr, err := f.capacity.EnsureCapacity(ctx, fn, ready, ready)
+		addr, err := f.capacity.EnsureCapacity(ctx, f.executor.currentFunction(ctx, fn), ready, ready)
 		if err == nil {
 			svcURL, perr := url.Parse("http://" + addr)
 			if perr != nil {
@@ -125,14 +117,13 @@ func (f *fallbackResolver) resolveDeployBacked(ctx context.Context, fn *fv1.Func
 	}
 	// Zero ready endpoints: scaled to zero (or never up). Bypass the address
 	// cache — the cached Service DNS would dial into a backendless Service and
-	// climb the retry ladder — and RPC the executor, which scales the
-	// Deployment up and waits for readiness.
+	// climb the retry ladder — and RPC the executor (coalesced through the
+	// throttler), which scales the Deployment up and waits for readiness.
 	endpointcache.RecordFallback(endpointcache.FallbackNoEndpoints)
-	svcURL, err := f.executor.fromExecutor(ctx, fn)
+	svcURL, err := f.executor.resolveUncached(ctx, fn)
 	if err != nil {
 		return ResolvedEntry{}, err
 	}
-	f.executor.fmap.assign(&fn.ObjectMeta, svcURL)
 	return ResolvedEntry{SvcURL: svcURL}, nil
 }
 

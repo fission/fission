@@ -11,7 +11,7 @@ package endpointcache
 
 import (
 	"fmt"
-	"hash/fnv"
+	"net/url"
 	"sync"
 	"sync/atomic"
 
@@ -36,6 +36,9 @@ type (
 		// Address is host:port, the same form the executor returns for poolmgr
 		// (podIP:8888).
 		Address string
+		// URL is the pre-parsed http URL for Address, built once per slice
+		// event instead of per request. Callers must treat it as immutable.
+		URL *url.URL
 		// PodUID keys per-endpoint accounting across index rebuilds.
 		PodUID types.UID
 		// Ready mirrors the slice endpoint's ready condition.
@@ -92,11 +95,17 @@ func NewIndex() *Index {
 }
 
 func (ix *Index) shard(key FnKey) *indexShard {
-	h := fnv.New32a()
-	_, _ = h.Write([]byte(key.Namespace))
-	_, _ = h.Write([]byte{'/'})
-	_, _ = h.Write([]byte(key.Name))
-	return &ix.shards[h.Sum32()%shardCount]
+	// Inline FNV-1a over the key strings: hash.Hash32 via fnv.New32a would
+	// heap-allocate on every call of this per-request path.
+	h := uint32(2166136261)
+	for i := 0; i < len(key.Namespace); i++ {
+		h = (h ^ uint32(key.Namespace[i])) * 16777619
+	}
+	h = (h ^ uint32('/')) * 16777619
+	for i := 0; i < len(key.Name); i++ {
+		h = (h ^ uint32(key.Name[i])) * 16777619
+	}
+	return &ix.shards[h%shardCount]
 }
 
 // Lookup returns the function's merged endpoint list (nil when unknown). The
@@ -169,8 +178,17 @@ func endpointsFromSlice(es *discoveryv1.EndpointSlice) []Endpoint {
 		if sep.TargetRef != nil && sep.TargetRef.Kind == "Pod" {
 			podUID = sep.TargetRef.UID
 		}
+		address := fmt.Sprintf("%s:%d", sep.Addresses[0], port)
+		// Parse once per slice event so the per-request hot path stays
+		// allocation-free; address is IP:port, so this cannot fail in
+		// practice — a parse error just drops the endpoint.
+		u, err := url.Parse("http://" + address)
+		if err != nil {
+			continue
+		}
 		eps = append(eps, Endpoint{
-			Address: fmt.Sprintf("%s:%d", sep.Addresses[0], port),
+			Address: address,
+			URL:     u,
 			PodUID:  podUID,
 			Ready:   ready,
 		})
@@ -360,8 +378,17 @@ func (ix *Index) Quarantine(namespace, name, address string) {
 		return
 	}
 	e.mu.Lock()
+	cur := e.quarantined.Load()
+	if cur != nil {
+		if _, already := (*cur)[address]; already {
+			// Idempotent: a dead-pod storm quarantines the same address from
+			// many in-flight requests — only the first copy-and-store matters.
+			e.mu.Unlock()
+			return
+		}
+	}
 	next := make(map[string]struct{})
-	if cur := e.quarantined.Load(); cur != nil {
+	if cur != nil {
 		for a := range *cur {
 			next[a] = struct{}{}
 		}

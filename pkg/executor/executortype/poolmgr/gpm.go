@@ -267,10 +267,12 @@ func (gpm *GenericPoolManager) GetFuncSvc(ctx context.Context, fn *fv1.Function)
 	// (this also adds to the cache)
 	logger.V(1).Info("getting function service from pool", "function", fn.Name)
 	fnSvc, fErr = pool.getFuncSvc(ctx, fn)
-	if fErr == nil && gpm.functionServicesEnabled {
+	if fErr == nil && gpm.functionServicesEnabled && !fn.Spec.OnceOnly {
 		// Ensure the function's headless Service (RFC-0002) strictly off the
 		// cold-start path: the pod address has already been produced; the
 		// Service only feeds the router's warm-path EndpointSlice index.
+		// OnceOnly functions are excluded: their pods serve exactly one request
+		// and must never be admitted from slices.
 		go gpm.ensureFunctionServiceAsync(fn)
 	}
 	return fnSvc, fErr
@@ -286,11 +288,13 @@ func (gpm *GenericPoolManager) DeleteFuncSvcFromCache(ctx context.Context, fsvc 
 	gpm.fsCache.DeleteFunctionSvc(ctx, fsvc)
 }
 
-// ConcurrencyUsed implements the executor's capacityProvider facet
-// (RFC-0002 ensureCapacity): specialized pods plus in-flight specializations
-// for the function, from the PoolCache — still the capacity authority.
-func (gpm *GenericPoolManager) ConcurrencyUsed(ctx context.Context, fnMeta *metav1.ObjectMeta) int {
-	return gpm.fsCache.ConcurrencyUsed(crd.CacheKeyURGFromMeta(fnMeta))
+// ReserveCapacity implements the executor's capacityReserver facet (RFC-0002
+// ensureCapacity): an atomic check-and-reserve against the function's
+// concurrency cap inside the PoolCache — still the capacity authority. The
+// reservation is released by the specialization's setValue on success or
+// MarkSpecializationFailure on failure.
+func (gpm *GenericPoolManager) ReserveCapacity(ctx context.Context, fnMeta *metav1.ObjectMeta, concurrency int) error {
+	return gpm.fsCache.ReserveCapacity(crd.CacheKeyURGFromMeta(fnMeta), concurrency)
 }
 
 func (gpm *GenericPoolManager) UnTapService(ctx context.Context, fnMeta *metav1.ObjectMeta, svcHost string) {
@@ -414,11 +418,7 @@ func (gpm *GenericPoolManager) adoptFunctionServices(ctx context.Context, wg *sy
 		fv1.MANAGED_BY_LABEL: fv1.MANAGED_BY_VALUE,
 		fv1.EXECUTOR_TYPE:    string(fv1.ExecutorTypePoolmgr),
 	}).AsSelector().String()
-	svcNamespaces := make(map[string]struct{})
-	for _, ns := range utils.DefaultNSResolver().FissionResourceNS {
-		svcNamespaces[gpm.nsResolver.GetFunctionNS(ns)] = struct{}{}
-	}
-	for namespace := range svcNamespaces {
+	for _, namespace := range gpm.nsResolver.FunctionNamespaces() {
 		svcList, err := gpm.kubernetesClient.CoreV1().Services(namespace).List(ctx, metav1.ListOptions{
 			LabelSelector: selector,
 		})
@@ -487,11 +487,7 @@ func (gpm *GenericPoolManager) adoptPerImagePoolDeployments(ctx context.Context,
 	}
 
 	perImageSelector := labels.Set(l).AsSelector().String() + "," + fv1.POOL_OCI_IMAGE_HASH
-	poolNamespaces := make(map[string]struct{})
-	for _, ns := range utils.DefaultNSResolver().FissionResourceNS {
-		poolNamespaces[gpm.nsResolver.GetFunctionNS(ns)] = struct{}{}
-	}
-	for namespace := range poolNamespaces {
+	for _, namespace := range gpm.nsResolver.FunctionNamespaces() {
 		deployList, err := gpm.kubernetesClient.AppsV1().Deployments(namespace).List(ctx, metav1.ListOptions{
 			LabelSelector: perImageSelector,
 		})

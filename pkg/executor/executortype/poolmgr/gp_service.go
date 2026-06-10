@@ -132,17 +132,12 @@ func (gpm *GenericPoolManager) ensureFunctionService(ctx context.Context, fn *fv
 	// forbids cross-namespace owner refs — when the pool namespace differs from
 	// the function namespace (FISSION_FUNCTION_NAMESPACE installs), cleanup
 	// falls to deleteFunctionService + the instanceID reaper instead.
+	// NewControllerRef matches the construction every other Function-owned
+	// resource uses (incl. BlockOwnerDeletion for foreground cascades).
 	if utils.IsOwnerReferencesEnabled() && fn.Namespace == ns {
 		desired.OwnerReferences = []metav1.OwnerReference{
-			{
-				APIVersion: fv1.SchemeGroupVersion.String(),
-				Kind:       "Function",
-				Name:       fn.Name,
-				UID:        fn.UID,
-				Controller: new(bool),
-			},
+			*metav1.NewControllerRef(fn, fv1.SchemeGroupVersion.WithKind("Function")),
 		}
-		*desired.OwnerReferences[0].Controller = true
 	}
 
 	existing, err := gpm.kubernetesClient.CoreV1().Services(ns).Get(ctx, name, metav1.GetOptions{})

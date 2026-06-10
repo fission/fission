@@ -91,9 +91,16 @@ func withSpecializationTimeout(ctx context.Context, fn *fv1.Function) (context.C
 // function so concurrent requests share one specialization — with waiters
 // honoring their own context (replacing the sync.WaitGroup wait that could
 // not be canceled).
+//
+// The specialization itself runs on a context detached from the caller's
+// cancellation (values, e.g. trace IDs, are kept) and bounded only by the
+// specialization timeout: a request may be canceled for unknown reasons, and
+// aborting the in-flight specialization would waste the pod — it can serve
+// subsequent requests — and, for deduplicated types, would poison every
+// coalesced waiter with the one canceled caller's error.
 func (executor *Executor) dispatchCreateFuncService(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
 	create := func(cctx context.Context) (*fscache.FuncSvc, error) {
-		fnSpecializationTimeoutContext, cancel := withSpecializationTimeout(cctx, fn)
+		fnSpecializationTimeoutContext, cancel := withSpecializationTimeout(context.WithoutCancel(cctx), fn)
 		defer cancel()
 		return executor.createServiceForFunction(fnSpecializationTimeoutContext, fn)
 	}

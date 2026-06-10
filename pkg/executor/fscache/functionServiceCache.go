@@ -193,10 +193,11 @@ func (fsc *FunctionServiceCache) GetByFunction(m *metav1.ObjectMeta) (*FuncSvc, 
 	return &fsvcCopy, nil
 }
 
-// ConcurrencyUsed returns the function's specialized pod count plus in-flight
-// specializations from the pool cache (RFC-0002 ensureCapacity).
-func (fsc *FunctionServiceCache) ConcurrencyUsed(key crd.CacheKeyURG) int {
-	return fsc.connFunctionCache.ConcurrencyUsed(key)
+// ReserveCapacity atomically checks the function's concurrency cap and
+// reserves one in-flight specialization in the pool cache (RFC-0002
+// ensureCapacity); returns a TooManyRequests ferror at the cap.
+func (fsc *FunctionServiceCache) ReserveCapacity(key crd.CacheKeyURG, concurrency int) error {
+	return fsc.connFunctionCache.ReserveCapacity(key, concurrency)
 }
 
 // GetFuncSvc gets a function service from pool cache using function key and returns number of active instances of function pod
@@ -290,7 +291,12 @@ func (fsc *FunctionServiceCache) Add(fsvc FuncSvc) (*FuncSvc, error) {
 	return nil, nil
 }
 
-// TouchByAddress makes a TOUCH request to given address.
+// TouchByAddress makes a TOUCH request to given address. Addresses unknown to
+// the byAddress cache fall back to the pool cache: poolmgr registers its
+// specialized pods only there (AddFunc), and with the RFC-0002 warm path the
+// router's batched taps are those pods' only liveness signal — without this
+// fallback every tap 404s and the idle reaper ages serving pods on their
+// specialization time.
 func (fsc *FunctionServiceCache) TouchByAddress(address string) error {
 	responseChannel := make(chan *fscResponse)
 	fsc.requestChannel <- &fscRequest{
@@ -299,7 +305,10 @@ func (fsc *FunctionServiceCache) TouchByAddress(address string) error {
 		responseChannel: responseChannel,
 	}
 	resp := <-responseChannel
-	return resp.error
+	if resp.error != nil {
+		return fsc.connFunctionCache.TouchByAddress(address)
+	}
+	return nil
 }
 
 func (fsc *FunctionServiceCache) _touchByAddress(address string) error {

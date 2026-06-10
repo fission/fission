@@ -104,12 +104,15 @@ func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *h
 		Transport:    rrt,
 		ErrorHandler: fh.getProxyErrorHandler(start, rrt),
 		ModifyResponse: func(resp *http.Response) error {
-			go fh.collectFunctionMetric(start, rrt, request, resp)
-			// tapService for cached service urls; runs async like the metric
-			// collection it used to ride along with.
-			if rrt.urlFromCache {
-				go fh.tapper.Tap(fh.function, rrt.serviceURL)
-			}
+			// One goroutine for metric collection + the cached-URL tap (the
+			// historical pairing — the tap is a buffered channel send and does
+			// not warrant a spawn of its own).
+			go func() {
+				fh.collectFunctionMetric(start, rrt, request, resp)
+				if rrt.urlFromCache {
+					fh.tapper.Tap(fh.function, rrt.serviceURL)
+				}
+			}()
 			if policy.streaming {
 				fh.onStreamResponse(request.Context(), rrt, watchdog, resp)
 			}
@@ -197,15 +200,18 @@ func (fh functionHandler) getProxyErrorHandler(start time.Time, rrt *RetryingRou
 				"status", http.StatusText(status), "code", code)
 		}
 
-		go fh.collectFunctionMetric(start, rrt, req, &http.Response{
-			StatusCode:    status,
-			ContentLength: req.ContentLength,
-		})
-		// tapService for cached service urls, matching the historical error-path
-		// behavior (the tap used to ride inside collectFunctionMetric).
-		if rrt.urlFromCache {
-			go fh.tapper.Tap(fh.function, rrt.serviceURL)
-		}
+		go func() {
+			fh.collectFunctionMetric(start, rrt, req, &http.Response{
+				StatusCode:    status,
+				ContentLength: req.ContentLength,
+			})
+			// tapService for cached service urls, matching the historical
+			// error-path behavior (the tap used to ride inside
+			// collectFunctionMetric).
+			if rrt.urlFromCache {
+				fh.tapper.Tap(fh.function, rrt.serviceURL)
+			}
+		}()
 
 		// TODO: return error message that contains traceable UUID back to user. Issue #693
 		rw.WriteHeader(status)

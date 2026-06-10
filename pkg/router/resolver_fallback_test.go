@@ -133,7 +133,7 @@ func TestFallbackStrictAnnotationBypassesIndex(t *testing.T) {
 	f := newFallbackForTest(t, ix, exec, nil)
 
 	fn := poolFn("fn-strict")
-	fn.Annotations = map[string]string{ConcurrencyEnforcementAnnotation: "strict"}
+	fn.Annotations = map[string]string{fv1.ConcurrencyEnforcementAnnotation: fv1.ConcurrencyEnforcementStrict}
 	entry, err := f.Resolve(t.Context(), fn)
 	require.NoError(t, err)
 	assert.Equal(t, "10.9.9.9:8888", entry.SvcURL.Host, "strict mode must take the legacy RPC path")
@@ -271,4 +271,21 @@ func TestFallbackInvalidateQuarantinesEndpoint(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "10.0.0.1:8888", entry2.SvcURL.Host)
 	entry2.Release()
+}
+
+// TestFallbackOnceOnlyBypassesIndex: OnceOnly pods serve exactly one request —
+// even when (stale) slices list them, the resolver must take the executor path.
+func TestFallbackOnceOnlyBypassesIndex(t *testing.T) {
+	t.Parallel()
+	ix := endpointcache.NewIndex()
+	ix.ApplySlice(fnSlice("s1", "fn-once", "default", "10.0.0.1"))
+	exec := &stubExecutor{addr: "10.9.9.9:8888"}
+	f := newFallbackForTest(t, ix, exec, nil)
+
+	fn := poolFn("fn-once")
+	fn.Spec.OnceOnly = true
+	entry, err := f.Resolve(t.Context(), fn)
+	require.NoError(t, err)
+	assert.Equal(t, "10.9.9.9:8888", entry.SvcURL.Host, "OnceOnly must never be admitted from slices")
+	assert.Equal(t, 1, exec.calls)
 }

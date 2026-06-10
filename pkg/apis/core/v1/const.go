@@ -163,6 +163,13 @@ const (
 	// router's slice informer filters on it.
 	MANAGED_BY_LABEL = "fission.io/managed-by"
 	MANAGED_BY_VALUE = "fission"
+
+	// ConcurrencyEnforcementAnnotation opts a Function out of router-local
+	// admission (RFC-0002): with the value "strict" every request goes through
+	// the executor's PoolCache exactly as before the EndpointSlice data plane.
+	// See Function.StrictConcurrencyEnforcement.
+	ConcurrencyEnforcementAnnotation = "fission.io/concurrency-enforcement"
+	ConcurrencyEnforcementStrict     = "strict"
 )
 
 const (

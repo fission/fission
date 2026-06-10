@@ -171,6 +171,15 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 			// get function service url from cache or executor
 			var entry ResolvedEntry
 			entry, err = roundTripper.resolver.Resolve(ctx, roundTripper.fn)
+			// Return any previously-admitted slot this re-resolve abandons. The
+			// per-resolve defers below cover the classic path at exit, but a
+			// streaming request defers its release to the handler, which only
+			// sees the LAST resolution — without this, every abandoned slot
+			// would pin its pod's in-flight counter forever (sync.Once makes
+			// the duplicate call from the classic defers a no-op).
+			if roundTripper.release != nil {
+				roundTripper.release()
+			}
 			roundTripper.serviceURL, roundTripper.urlFromCache, roundTripper.release = entry.SvcURL, entry.FromCache, entry.Release
 			if err != nil {
 				// We might want a specific error code or header for fission failures as opposed to
@@ -293,6 +302,17 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 		// close response body before entering next loop
 		if resp != nil {
 			resp.Body.Close()
+		}
+
+		// An index-admitted endpoint (release != nil) that fails ANY dial is
+		// quarantined immediately: unlike the executor-RPC path — where only
+		// the timeout ladder below invalidates, because a fresh RPC re-picks a
+		// pod anyway — re-resolving the index would happily re-admit the same
+		// dead endpoint (connection refused never increments retryCounter)
+		// until maxRetries burn out. The quarantine lifts on the next slice
+		// event for the function.
+		if roundTripper.release != nil {
+			roundTripper.resolver.Invalidate(roundTripper.fn, roundTripper.serviceURL)
 		}
 
 		// Check whether an error is an timeout error ("dial tcp i/o timeout").

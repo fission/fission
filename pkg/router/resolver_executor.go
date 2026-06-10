@@ -122,27 +122,68 @@ func (r *executorResolver) fromCache(fn *fv1.Function) (serviceUrl *url.URL, err
 	return serviceUrl, nil
 }
 
+// currentFunction re-reads the Function from the Manager cache, falling back
+// to the given snapshot. The resolved snapshot can be stale: the reference
+// resolver caches the resolved function keyed by the *trigger's*
+// ResourceVersion, so a `fission fn update --pkg` (which changes the function
+// but not the trigger) doesn't invalidate it. Every path that makes the
+// executor specialize — fromExecutor AND the fallback resolver's
+// ensureCapacity — must use the current spec, or updated functions keep
+// getting pods specialized from the old package.
+func (r *executorResolver) currentFunction(ctx context.Context, fn *fv1.Function) *fv1.Function {
+	if r.reader == nil {
+		return fn
+	}
+	fresh := &fv1.Function{}
+	if gerr := r.reader.Get(ctx, k8stypes.NamespacedName{Namespace: fn.Namespace, Name: fn.Name}, fresh); gerr != nil {
+		otelUtils.LoggerWithTraceID(ctx, r.logger).V(1).Info("could not re-read current function; using resolved snapshot",
+			"function", fn.Name, "namespace", fn.Namespace, "error", gerr)
+		return fn
+	}
+	return fresh
+}
+
+// resolveUncached RPCs the executor for a fresh address — bypassing the
+// address cache but still coalescing concurrent callers through the throttler
+// (one RPC per function; followers reuse the leader's result) — and updates
+// the cache. The fallback resolver's scale-from-zero path uses it: the cached
+// Service DNS would dial into a backendless Service, but a thundering herd of
+// uncoalesced RPCs is the very thing the throttler exists to prevent.
+func (r *executorResolver) resolveUncached(ctx context.Context, fn *fv1.Function) (*url.URL, error) {
+	recordObj, err := r.throttler.RunOnce(
+		crd.CacheKeyURFromMeta(&fn.ObjectMeta).String(),
+		func(firstToTheLock bool) (any, error) {
+			if !firstToTheLock {
+				svcURL, err := r.fromCache(fn)
+				if err != nil {
+					return nil, err
+				}
+				return svcEntryRecord{svcURL: svcURL, cacheHit: true}, err
+			}
+			svcURL, err := r.fromExecutor(ctx, fn)
+			if err != nil {
+				return nil, err
+			}
+			r.fmap.assign(&fn.ObjectMeta, svcURL)
+			return svcEntryRecord{svcURL: svcURL, cacheHit: false}, nil
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	record, ok := recordObj.(svcEntryRecord)
+	if !ok {
+		return nil, fmt.Errorf("unexpected type of recordObj %T", recordObj)
+	}
+	return record.svcURL, nil
+}
+
 // fromExecutor asks the executor for the function's service address
 // (specializing a pod / scaling up as needed).
 func (r *executorResolver) fromExecutor(ctx context.Context, fn *fv1.Function) (serviceUrl *url.URL, err error) {
 	logger := otelUtils.LoggerWithTraceID(ctx, r.logger)
 
-	// The executor specializes a pod from exactly this function's package spec. The
-	// resolved `function` snapshot can be stale: the resolver caches the resolved
-	// function keyed by the *trigger's* ResourceVersion, so a `fission fn update
-	// --pkg` (which changes the function but not the trigger) doesn't invalidate
-	// it. For poolmgr — which specializes on demand from the function we pass —
-	// that means the executor would keep serving the old package. Re-read the
-	// current Function from the Manager cache so the latest spec is specialized.
-	if r.reader != nil {
-		fresh := &fv1.Function{}
-		if gerr := r.reader.Get(ctx, k8stypes.NamespacedName{Namespace: fn.Namespace, Name: fn.Name}, fresh); gerr == nil {
-			fn = fresh
-		} else {
-			logger.V(1).Info("could not re-read current function; using resolved snapshot",
-				"function", fn.Name, "namespace", fn.Namespace, "error", gerr)
-		}
-	}
+	fn = r.currentFunction(ctx, fn)
 
 	// send a request to executor to specialize a new pod
 	r.logger.V(1).Info("function timeout specified", "timeout", fn.Spec.FunctionTimeout)

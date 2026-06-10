@@ -6,19 +6,20 @@ release namespace, where the router's main Role renders). Read-only, and only
 rendered when the slice cache is enabled, so default installs carry no extra
 RBAC.
 
-Namespace set mirrors pkg/utils NamespaceResolver.GetFunctionNS: when
-functionNamespace is set every function namespace folds into it; otherwise
-defaultNamespace plus each additionalFissionNamespace.
+Namespace set mirrors pkg/utils NamespaceResolver.FunctionNamespaces (each
+resource namespace through GetFunctionNS): functionNamespace replaces only the
+DEFAULT namespace when set; additionalFissionNamespaces always map to
+themselves.
 */ -}}
 {{- if ne (.Values.router.endpointSliceCache.mode | default "off") "off" }}
 {{- $namespaces := list }}
 {{- if .Values.functionNamespace }}
-{{- $namespaces = list .Values.functionNamespace }}
+{{- $namespaces = append $namespaces .Values.functionNamespace }}
 {{- else }}
 {{- $namespaces = append $namespaces .Values.defaultNamespace }}
+{{- end }}
 {{- range $ns := .Values.additionalFissionNamespaces }}
 {{- $namespaces = append $namespaces $ns }}
-{{- end }}
 {{- end }}
 {{- range $ns := ($namespaces | uniq) }}
 ---

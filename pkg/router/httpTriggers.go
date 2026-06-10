@@ -38,7 +38,6 @@ import (
 
 // HTTPTriggerSet represents an HTTP trigger set
 type HTTPTriggerSet struct {
-	*functionServiceMap
 	*mutableRouter
 
 	// internalMutableRouter is the mutable wrapper for the internal listener.
@@ -55,11 +54,12 @@ type HTTPTriggerSet struct {
 	// replacing the per-namespace SharedIndexInformers the router used before
 	// the controller-runtime migration.
 	client   client.Client
-	executor eclient.ClientInterface
 	resolver *functionReferenceResolver
 	// addressResolver and tapper are the proxy path's injected seams
-	// (RFC-0002): function→address resolution and tap/untap accounting.
-	// addressResolver may be wrapped with the shadow comparator by Start.
+	// (RFC-0002): function→address resolution and tap/untap accounting. The
+	// executor client, address cache, and throttler live inside them —
+	// deliberately NOT also retained on this struct, so there is exactly one
+	// live copy of that state.
 	addressResolver            AddressResolver
 	tapper                     Tapper
 	triggers                   []fv1.HTTPTrigger
@@ -68,8 +68,6 @@ type HTTPTriggerSet struct {
 	tsRoundTripperParams       *tsRoundTripperParams
 	isDebugEnv                 bool
 	useEncodedPath             bool
-	svcAddrUpdateThrottler     *throttler.Throttler
-	unTapServiceTimeout        time.Duration
 	syncDebouncer              func(func())
 	// ready flips true after the first successful mux build; routerReadinessHandler
 	// gates /readyz on it so a starting/rolling pod stays out of the
@@ -86,18 +84,14 @@ func makeHTTPTriggerSet(logger logr.Logger, fmap *functionServiceMap, fissionCli
 
 	httpTriggerSet := &HTTPTriggerSet{
 		logger:                     logger.WithName("http_trigger_set"),
-		functionServiceMap:         fmap,
 		triggers:                   []fv1.HTTPTrigger{},
 		fissionClient:              fissionClient,
 		kubeClient:                 kubeClient,
 		client:                     cl,
-		executor:                   executor,
 		updateRouterRequestChannel: make(chan struct{}, 10), // use buffer channel
 		tsRoundTripperParams:       params,
 		isDebugEnv:                 isDebugEnv,
 		useEncodedPath:             useEncodedPath,
-		svcAddrUpdateThrottler:     actionThrottler,
-		unTapServiceTimeout:        unTapServiceTimeout,
 		syncDebouncer:              debounce.New(time.Millisecond * 20),
 	}
 	httpTriggerSet.resolver = makeFunctionReferenceResolver(logger, cl)

@@ -10,6 +10,7 @@ package dispatch
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/go-logr/logr"
@@ -105,11 +106,24 @@ func (d *Dispatcher[T]) Do(ctx context.Context, key string, create func(context.
 	d.inflight[key] = c
 	d.mu.Unlock()
 
-	c.val, c.err = d.DoEach(ctx, create)
+	// Completion runs in a defer so a panicking create (recovered upstream by
+	// net/http's per-connection handler) cannot wedge the key forever with the
+	// done channel never closing — waiters get an error and the next call
+	// starts fresh; the panic is then re-raised to preserve crash visibility.
+	defer func() {
+		r := recover()
+		if r != nil {
+			c.err = fmt.Errorf("panic during function service creation for %q: %v", key, r)
+		}
+		d.mu.Lock()
+		delete(d.inflight, key)
+		d.mu.Unlock()
+		close(c.done)
+		if r != nil {
+			panic(r)
+		}
+	}()
 
-	d.mu.Lock()
-	delete(d.inflight, key)
-	d.mu.Unlock()
-	close(c.done)
+	c.val, c.err = d.DoEach(ctx, create)
 	return c.val, c.err
 }

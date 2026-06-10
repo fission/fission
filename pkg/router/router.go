@@ -81,21 +81,9 @@ func init() {
 }
 
 // sliceWatchNamespaces returns the namespaces the EndpointSlice informer
-// watches: the function namespaces (where the function Services live), i.e.
-// each Fission resource namespace mapped through GetFunctionNS.
+// watches: the function namespaces (where the function Services live).
 func sliceWatchNamespaces() []string {
-	nsResolver := utils.DefaultNSResolver()
-	seen := map[string]struct{}{}
-	out := make([]string, 0, len(nsResolver.FissionResourceNS))
-	for _, ns := range nsResolver.FissionResourceNS {
-		fns := nsResolver.GetFunctionNS(ns)
-		if _, ok := seen[fns]; ok {
-			continue
-		}
-		seen[fns] = struct{}{}
-		out = append(out, fns)
-	}
-	return out
+	return utils.DefaultNSResolver().FunctionNamespaces()
 }
 
 // routerCacheOptions scopes the Manager cache. The trigger/function watches
@@ -122,33 +110,40 @@ func routerCacheOptions(mode endpointSliceCacheMode) crcache.Options {
 	return opts
 }
 
-// requireSliceWatchRBAC fails fast — with an actionable error — when the
-// router cannot list EndpointSlices in a namespace the slice informer is about
-// to watch. Without this preflight a missing Role leaves the manager cache
+// checkSliceWatchRBAC verifies — with an actionable error — that the router
+// can list and watch EndpointSlices in every namespace the slice informer
+// would watch. Without this preflight a missing Role leaves the manager cache
 // retrying a forbidden LIST forever: the router hangs not-ready and the only
-// symptom is a suppressed reflector log. The chart renders the required Role +
+// symptom is a reflector error log. The chart renders the required Role +
 // RoleBinding (router/role-dataplane.yaml) whenever
 // router.endpointSliceCache.mode != off; bespoke-RBAC installs must mirror it.
-func requireSliceWatchRBAC(ctx context.Context, kubeClient kubernetes.Interface) error {
+//
+// Callers degrade to mode=off on error rather than exiting: the slice cache is
+// a warm-path optimization with a full legacy fallback, and crash-looping the
+// data plane over a missing optimization grant (e.g. a GitOps prune dropping
+// the Role) would turn it into an outage.
+func checkSliceWatchRBAC(ctx context.Context, kubeClient kubernetes.Interface) error {
 	for _, ns := range sliceWatchNamespaces() {
-		sar := &authorizationv1.SelfSubjectAccessReview{
-			Spec: authorizationv1.SelfSubjectAccessReviewSpec{
-				ResourceAttributes: &authorizationv1.ResourceAttributes{
-					Namespace: ns,
-					Verb:      "list",
-					Group:     "discovery.k8s.io",
-					Resource:  "endpointslices",
+		for _, verb := range []string{"list", "watch"} {
+			sar := &authorizationv1.SelfSubjectAccessReview{
+				Spec: authorizationv1.SelfSubjectAccessReviewSpec{
+					ResourceAttributes: &authorizationv1.ResourceAttributes{
+						Namespace: ns,
+						Verb:      verb,
+						Group:     "discovery.k8s.io",
+						Resource:  "endpointslices",
+					},
 				},
-			},
-		}
-		res, err := kubeClient.AuthorizationV1().SelfSubjectAccessReviews().Create(ctx, sar, metav1.CreateOptions{})
-		if err != nil {
-			return fmt.Errorf("error checking endpointslice RBAC in namespace %q: %w", ns, err)
-		}
-		if !res.Status.Allowed {
-			return fmt.Errorf("router is not allowed to list endpointslices in namespace %q "+
-				"(reason: %s); ROUTER_ENDPOINTSLICE_CACHE_MODE requires the router-dataplane Role the Helm chart "+
-				"renders for router.endpointSliceCache.mode != off — set the mode to off or grant the RBAC", ns, res.Status.Reason)
+			}
+			res, err := kubeClient.AuthorizationV1().SelfSubjectAccessReviews().Create(ctx, sar, metav1.CreateOptions{})
+			if err != nil {
+				return fmt.Errorf("error checking endpointslice RBAC in namespace %q: %w", ns, err)
+			}
+			if !res.Status.Allowed {
+				return fmt.Errorf("router is not allowed to %s endpointslices in namespace %q "+
+					"(reason: %s); the Helm chart renders the required router-dataplane Role for "+
+					"router.endpointSliceCache.mode != off — grant the RBAC to enable the EndpointSlice data plane", verb, ns, res.Status.Reason)
+			}
 		}
 	}
 	return nil
@@ -318,6 +313,19 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	// the router hanging not-ready, with nothing in the logs to say why.
 	ctrl.SetLogger(logger.WithName("controller-runtime"))
 
+	// The slice informer needs read RBAC in the function namespaces (the chart
+	// renders it when the mode isn't off). A missing grant would wedge the
+	// manager cache sync and hang the router not-ready, so degrade to the
+	// legacy data plane loudly instead. Checked before manager construction
+	// because the cache options depend on the (possibly downgraded) mode.
+	if cfg.endpointSliceCacheMode != endpointSliceCacheOff {
+		if rerr := checkSliceWatchRBAC(ctx, kubeClient); rerr != nil {
+			logger.Error(rerr, "disabling the EndpointSlice cache (degrading to the executor-RPC data plane)",
+				"requested_mode", cfg.endpointSliceCacheMode)
+			cfg.endpointSliceCacheMode = endpointSliceCacheOff
+		}
+	}
+
 	// The router runs under a controller-runtime Manager for lifecycle
 	// consistency with the rest of the control plane and to host the HTTPTrigger
 	// + Function reconcilers. It is stateless and replica-independent, so it
@@ -373,11 +381,6 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	// mode the fallback resolver serves the warm path from the index and uses
 	// the executor for cold starts, capacity, and strict-mode functions.
 	if cfg.endpointSliceCacheMode != endpointSliceCacheOff {
-		// Fail fast on missing RBAC: a forbidden LIST would otherwise leave the
-		// manager cache retrying forever with the router hanging not-ready.
-		if err := requireSliceWatchRBAC(ctx, kubeClient); err != nil {
-			return err
-		}
 		index := endpointcache.NewIndex()
 		if err := endpointcache.RegisterInformer(ctx, crMgr, index, logger); err != nil {
 			return fmt.Errorf("error registering endpointslice informer: %w", err)

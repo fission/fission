@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -173,4 +174,64 @@ func mustParseURL(t *testing.T, raw string) *url.URL {
 	u, err := url.Parse(raw)
 	require.NoError(t, err)
 	return u
+}
+
+// releaseTrackingResolver scripts answers with per-resolution release tracking.
+type releaseTrackingResolver struct {
+	answers  []*url.URL
+	calls    atomic.Int64
+	released []*atomic.Int64
+	mu       sync.Mutex
+}
+
+func (s *releaseTrackingResolver) Resolve(_ context.Context, _ *fv1.Function) (ResolvedEntry, error) {
+	n := int(s.calls.Add(1)) - 1
+	if n >= len(s.answers) {
+		n = len(s.answers) - 1
+	}
+	counter := &atomic.Int64{}
+	s.mu.Lock()
+	s.released = append(s.released, counter)
+	s.mu.Unlock()
+	var once sync.Once
+	return ResolvedEntry{
+		SvcURL:    s.answers[n],
+		FromCache: true,
+		Release:   func() { once.Do(func() { counter.Add(1) }) },
+	}, nil
+}
+
+func (s *releaseTrackingResolver) Invalidate(*fv1.Function, *url.URL) {}
+
+// TestStreamingRetryReleasesAbandonedSlots guards the RFC-0002 admission-slot
+// leak: a streaming request whose first admitted endpoint fails to dial must
+// release that slot when it re-resolves — the handler defer only ever sees the
+// LAST resolution, and a leaked slot pins the pod's in-flight counter forever.
+func TestStreamingRetryReleasesAbandonedSlots(t *testing.T) {
+	t.Parallel()
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer upstream.Close()
+	live, err := url.Parse(upstream.URL)
+	require.NoError(t, err)
+	dead := mustParseURL(t, "http://127.0.0.1:1")
+
+	resolver := &releaseTrackingResolver{answers: []*url.URL{dead, live}}
+	rrt := newTestRRT(resolver, &nopTapper{}, 5, 1)
+	rrt.policy = proxyPolicy{streaming: true} // streaming: no per-resolve untap defers
+
+	req := httptest.NewRequest("GET", "http://router.example/fission-function/fn", nil)
+	resp, err := rrt.RoundTrip(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.GreaterOrEqual(t, resolver.calls.Load(), int64(2), "the dead endpoint must force a re-resolve")
+
+	resolver.mu.Lock()
+	defer resolver.mu.Unlock()
+	for i, counter := range resolver.released[:len(resolver.released)-1] {
+		assert.Equalf(t, int64(1), counter.Load(), "abandoned slot %d must be released on re-resolve", i)
+	}
+	last := resolver.released[len(resolver.released)-1]
+	assert.Zero(t, last.Load(), "the serving slot is held until the handler-level release (stream drain)")
 }

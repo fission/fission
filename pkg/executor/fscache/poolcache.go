@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"time"
 
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/types"
@@ -33,7 +34,8 @@ const (
 	markSpecializationFailure
 	logFuncSvc
 	markDeleted
-	countConcurrency
+	reserveCapacity
+	touchByAddress
 )
 
 type (
@@ -75,10 +77,9 @@ type (
 	}
 	response struct {
 		error
-		allValues       []*FuncSvc
-		value           *FuncSvc
-		svcWaitValue    *svcWait
-		concurrencyUsed int
+		allValues    []*FuncSvc
+		value        *FuncSvc
+		svcWaitValue *svcWait
 	}
 	svcWait struct {
 		svcChannel chan *FuncSvc
@@ -216,11 +217,40 @@ func (c *PoolCache) service() {
 					break
 				}
 			}
-		case countConcurrency:
-			if grp, ok := c.cache[req.function]; ok {
-				// Same quantity the getValue arm compares against the
-				// concurrency cap: specialized pods + specializations in flight.
-				resp.concurrencyUsed = len(grp.svcs) + (grp.svcWaiting - grp.queue.Len())
+		case reserveCapacity:
+			// Atomic check-and-reserve for ensureCapacity (RFC-0002): evaluated
+			// inside the actor exactly like the getValue arm, so concurrent
+			// capacity requests cannot race past the function's concurrency cap.
+			// The svcWaiting reservation is symmetric with getValue's: a
+			// successful specialization decrements it in setValue, a failed one
+			// in markSpecializationFailure.
+			grp, ok := c.cache[req.function]
+			if !ok {
+				grp = NewFuncSvcGroup()
+				c.cache[req.function] = grp
+			}
+			concurrencyUsed := len(grp.svcs) + (grp.svcWaiting - grp.queue.Len())
+			if req.concurrency > 0 && concurrencyUsed >= req.concurrency {
+				resp.error = ferror.MakeError(ferror.ErrorTooManyRequests, fmt.Sprintf("function '%s' concurrency '%d' limit reached.", req.function, req.concurrency))
+			} else {
+				grp.svcWaiting++
+			}
+			req.responseChannel <- resp
+		case touchByAddress:
+			// Refresh the Atime of every pod serving req.address (RFC-0002): the
+			// router's batched taps are poolmgr's only liveness signal once the
+			// warm path stops calling the executor per request, and the idle
+			// reaper ages on exactly this Atime (listAvailableValue).
+			found := false
+			for _, grp := range c.cache {
+				if info, ok := grp.svcs[req.address]; ok {
+					info.val.Atime = time.Now()
+					found = true
+				}
+			}
+			if !found {
+				resp.error = ferror.MakeError(ferror.ErrorNotFound,
+					fmt.Sprintf("address %s not found in pool cache", req.address))
 			}
 			req.responseChannel <- resp
 		case listAvailableValue:
@@ -285,11 +315,17 @@ func (c *PoolCache) service() {
 				}
 			}
 		case markSpecializationFailure:
-			if c.cache[req.function].svcWaiting > c.cache[req.function].queue.Len() {
-				c.cache[req.function].svcWaiting--
-				if c.cache[req.function].svcWaiting == c.cache[req.function].queue.Len() {
-					expiredRequests := c.cache[req.function].queue.Expired()
-					c.cache[req.function].svcWaiting = c.cache[req.function].svcWaiting - expiredRequests
+			// Guarded lookup: the ensureCapacity path can fail before the
+			// function ever had a getValue (which is what historically created
+			// the group) — an unguarded index here nil-panics the cache actor
+			// and takes the whole executor down.
+			if grp, ok := c.cache[req.function]; ok {
+				if grp.svcWaiting > grp.queue.Len() {
+					grp.svcWaiting--
+					if grp.svcWaiting == grp.queue.Len() {
+						expiredRequests := grp.queue.Expired()
+						grp.svcWaiting = grp.svcWaiting - expiredRequests
+					}
 				}
 			}
 		case deleteValue:
@@ -379,16 +415,32 @@ func (c *PoolCache) GetSvcValue(ctx context.Context, function crd.CacheKeyURG, r
 
 // ConcurrencyUsed returns the function's specialized pod count plus in-flight
 // specializations — the quantity the concurrency cap is enforced against
-// (RFC-0002 ensureCapacity).
-func (c *PoolCache) ConcurrencyUsed(function crd.CacheKeyURG) int {
+// (RFC-0002 ensureCapacity). The reservation must be released exactly once:
+// by setValue on a successful specialization, or MarkSpecializationFailure on
+// a failed one.
+func (c *PoolCache) ReserveCapacity(function crd.CacheKeyURG, concurrency int) error {
 	respChannel := make(chan *response)
 	c.requestChannel <- &request{
-		requestType:     countConcurrency,
+		requestType:     reserveCapacity,
 		function:        function,
+		concurrency:     concurrency,
 		responseChannel: respChannel,
 	}
 	resp := <-respChannel
-	return resp.concurrencyUsed
+	return resp.error
+}
+
+// TouchByAddress refreshes the Atime of pool-cache entries serving the given
+// address (the router's batched tap path for poolmgr; RFC-0002).
+func (c *PoolCache) TouchByAddress(address string) error {
+	respChannel := make(chan *response)
+	c.requestChannel <- &request{
+		requestType:     touchByAddress,
+		address:         address,
+		responseChannel: respChannel,
+	}
+	resp := <-respChannel
+	return resp.error
 }
 
 // ListAvailableValue returns a list of the available function services stored in the Cache

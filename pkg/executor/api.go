@@ -129,6 +129,15 @@ func (executor *Executor) writeResponse(w http.ResponseWriter, serviceName strin
 // (deduplicated per function for newdeploy/container, independent runs for
 // poolmgr — see dispatchCreateFuncService) and returns its address.
 func (executor *Executor) getServiceForFunction(ctx context.Context, fn *fv1.Function) (string, error) {
+	// Specializations are leader-only work: with the old request-channel
+	// multiplexer the consumer ran in the leader-elected runnable and a
+	// non-leader's request simply never progressed. Refuse explicitly instead —
+	// /readyz keeps non-leaders out of the Service, so this only triggers on
+	// direct hits during failover windows, where specializing would create
+	// pools/pods that fight the leader's instanceID-based reaper.
+	if executor.leaderElection && !executor.isLeader.Load() {
+		return "", ferror.MakeError(http.StatusServiceUnavailable, "not the leader; retry against the executor service")
+	}
 	fsvc, err := executor.dispatchCreateFuncService(ctx, fn)
 	cleanUp := func(funcSvc *fscache.FuncSvc) {
 		et, ok := executor.executorTypes[fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType]
@@ -154,11 +163,14 @@ func (executor *Executor) getServiceForFunction(ctx context.Context, fn *fv1.Fun
 	return fsvc.Address, nil
 }
 
-// capacityProvider is the optional executor-type facet ensureCapacity uses to
-// enforce the function's concurrency cap before specializing an extra pod.
-// Implemented by the pool manager (PoolCache is the capacity authority).
-type capacityProvider interface {
-	ConcurrencyUsed(ctx context.Context, fnMeta *metav1.ObjectMeta) int
+// capacityReserver is the optional executor-type facet ensureCapacity uses to
+// enforce the function's concurrency cap: an atomic check-and-reserve inside
+// the PoolCache (the capacity authority), so concurrent capacity requests
+// cannot race past the cap. The reservation is consumed by the
+// specialization's success (setValue) or failure (MarkSpecializationFailure)
+// accounting.
+type capacityReserver interface {
+	ReserveCapacity(ctx context.Context, fnMeta *metav1.ObjectMeta, concurrency int) error
 }
 
 // ensureCapacityHandler serves POST /v2/ensureCapacity (RFC-0002): the router
@@ -190,16 +202,15 @@ func (executor *Executor) ensureCapacityHandler(w http.ResponseWriter, r *http.R
 	et := executor.executorTypes[t]
 	logger := otelUtils.LoggerWithTraceID(ctx, executor.logger)
 
-	if cp, ok := et.(capacityProvider); ok {
-		if concurrency := fn.GetConcurrency(); concurrency > 0 {
-			if used := cp.ConcurrencyUsed(ctx, &fn.ObjectMeta); used >= concurrency {
-				logger.V(1).Info("ensureCapacity at concurrency cap",
-					"function_name", fn.Name, "function_namespace", fn.Namespace,
-					"used", used, "concurrency", concurrency,
-					"observed_ready", req.ObservedReadyEndpoints, "observed_busy", req.ObservedBusyEndpoints)
-				http.Error(w, fmt.Sprintf("function '%s' concurrency '%d' limit reached", fn.Name, concurrency), http.StatusTooManyRequests)
-				return
-			}
+	if cr, ok := et.(capacityReserver); ok {
+		if err := cr.ReserveCapacity(ctx, &fn.ObjectMeta, fn.GetConcurrency()); err != nil {
+			code, msg := ferror.GetHTTPError(err)
+			logger.V(1).Info("ensureCapacity rejected at concurrency cap",
+				"function_name", fn.Name, "function_namespace", fn.Namespace,
+				"concurrency", fn.GetConcurrency(),
+				"observed_ready", req.ObservedReadyEndpoints, "observed_busy", req.ObservedBusyEndpoints)
+			http.Error(w, msg, code)
+			return
 		}
 	}
 
