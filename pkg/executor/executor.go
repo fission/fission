@@ -92,22 +92,31 @@ func withSpecializationTimeout(ctx context.Context, fn *fv1.Function) (context.C
 // honoring their own context (replacing the sync.WaitGroup wait that could
 // not be canceled).
 //
-// The specialization itself runs on a context detached from the caller's
-// cancellation (values, e.g. trace IDs, are kept) and bounded only by the
-// specialization timeout: a request may be canceled for unknown reasons, and
-// aborting the in-flight specialization would waste the pod — it can serve
-// subsequent requests — and, for deduplicated types, would poison every
-// coalesced waiter with the one canceled caller's error.
+// Cancellation semantics differ deliberately per path:
+//   - Deduplicated types (newdeploy/container) run the creation on a context
+//     detached from the creator's cancellation (values kept, bounded by the
+//     specialization timeout): one creation serves every coalesced waiter, so
+//     the dedup bounds the detached work to one in-flight per function, and
+//     without the detach a single canceled creator poisons all waiters.
+//   - Poolmgr keeps the caller's context as the parent (main's behavior):
+//     DoEach has no dedup, so a detached creation per request would let a
+//     retry storm against a slow/cold function pile up zombie specializations
+//     that keep claiming warm pods long after their callers gave up — caller
+//     cancellation IS poolmgr's load shedding.
 func (executor *Executor) dispatchCreateFuncService(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
-	create := func(cctx context.Context) (*fscache.FuncSvc, error) {
-		fnSpecializationTimeoutContext, cancel := withSpecializationTimeout(context.WithoutCancel(cctx), fn)
+	createFrom := func(parent context.Context) (*fscache.FuncSvc, error) {
+		fnSpecializationTimeoutContext, cancel := withSpecializationTimeout(parent, fn)
 		defer cancel()
 		return executor.createServiceForFunction(fnSpecializationTimeoutContext, fn)
 	}
 	if fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypePoolmgr {
-		return executor.dispatcher.DoEach(ctx, create)
+		return executor.dispatcher.DoEach(ctx, func(cctx context.Context) (*fscache.FuncSvc, error) {
+			return createFrom(cctx)
+		})
 	}
-	return executor.dispatcher.Do(ctx, crd.CacheKeyURFromObject(fn).String(), create)
+	return executor.dispatcher.Do(ctx, crd.CacheKeyURFromObject(fn).String(), func(cctx context.Context) (*fscache.FuncSvc, error) {
+		return createFrom(context.WithoutCancel(cctx))
+	})
 }
 
 func (executor *Executor) createServiceForFunction(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
