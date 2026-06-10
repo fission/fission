@@ -182,6 +182,50 @@ jobs:
           kubectl wait --for=condition=Programmed -n fission gateway/eg-gateway --timeout=3m || true
           kubectl get gatewayclass,gateway -A
 
+      # In-cluster registry for the OCI package-delivery tests (RFC-0001):
+      # tests push code images via a port-forward and the fetcher pulls them
+      # from the Service address (allowlisted for plain HTTP via the kind-ci
+      # profile's fetcher.allowInsecureRegistries). Enabled on the 1.32 leg
+      # first — the floor version Path A must support; other legs skip the
+      # FISSION_TEST_REGISTRY-gated tests.
+      - name: Deploy test registry (OCI package delivery)
+        if: ${{ matrix.kindversion == 'v1.32.11' }}
+        timeout-minutes: 4
+        run: |
+          kubectl apply -f - <<'EOF'
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: test-registry
+            namespace: default
+            labels: {app: test-registry}
+          spec:
+            replicas: 1
+            selector:
+              matchLabels: {app: test-registry}
+            template:
+              metadata:
+                labels: {app: test-registry}
+              spec:
+                containers:
+                  - name: registry
+                    image: registry:2
+                    ports:
+                      - containerPort: 5000
+          ---
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: test-registry
+            namespace: default
+          spec:
+            selector: {app: test-registry}
+            ports:
+              - port: 5000
+                targetPort: 5000
+          EOF
+          kubectl rollout status deploy/test-registry -n default --timeout=3m
+
       # Port-forward is started inside the Go test step rather than as a
       # standalone step, because background processes started with `&` may
       # not survive across GitHub Actions steps on every runner image.
@@ -295,7 +339,17 @@ jobs:
           kubectl port-forward svc/mcp 8890:8890 -n "$FISSION_NAMESPACE" >/tmp/pf-mcp.log 2>&1 &
           PF_PID_MCP=$!
           export FISSION_MCP_BASE_URL="http://127.0.0.1:8890"
-          trap "kill $PF_PID $PF_PID_INT $PF_PID_MCP 2>/dev/null || true" EXIT
+          # OCI test registry (RFC-0001), deployed on this leg only. Tests
+          # push through the forward; cluster components pull the Service
+          # address. Both env vars unset on other legs => tests skip.
+          PF_PID_REG=""
+          if [ "${{ matrix.kindversion }}" = "v1.32.11" ]; then
+            kubectl port-forward svc/test-registry 5001:5000 -n default >/tmp/pf-registry.log 2>&1 &
+            PF_PID_REG=$!
+            export FISSION_TEST_REGISTRY=127.0.0.1:5001
+            export FISSION_TEST_REGISTRY_INCLUSTER=test-registry.default.svc.cluster.local:5000
+          fi
+          trap "kill $PF_PID $PF_PID_INT $PF_PID_MCP $PF_PID_REG 2>/dev/null || true" EXIT
 
           # Export the master HMAC secret so the framework's RouterClient
           # signs /fission-function/... requests against the internal
