@@ -358,6 +358,12 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 			return http.StatusBadRequest, fmt.Errorf("unknown fetch type: %v", req.FetchType)
 		}
 
+		// OCI archives (RFC-0001) have their own pull/extract path; the
+		// literal/url/zip handling below is tarball-specific.
+		if archive.OCI != nil {
+			return fetcher.fetchOCI(ctx, pkg, archive.OCI, storePath)
+		}
+
 		// get package data as literal or by url
 		if len(archive.Literal) > 0 {
 			// write pkg.Literal into tmpPath

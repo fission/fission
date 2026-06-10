@@ -35,6 +35,12 @@ type Config struct {
 	sharedCfgMapPath string
 
 	serviceAccount string
+
+	// insecureRegistries is the comma-separated host allowlist permitted to
+	// serve OCI package images over plain HTTP (RFC-0001). Forwarded to the
+	// fetcher container verbatim; empty (the default) means every registry
+	// must serve TLS.
+	insecureRegistries string
 }
 
 // internalAuthEnvVars returns the env-var entries that mount the
@@ -123,6 +129,7 @@ func MakeFetcherConfig(sharedMountPath string) (*Config, error) {
 		sharedSecretPath:       "/secrets",
 		sharedCfgMapPath:       "/configs",
 		serviceAccount:         fv1.FissionFetcherSA,
+		insecureRegistries:     os.Getenv("FETCHER_ALLOW_INSECURE_REGISTRIES"),
 	}, nil
 }
 
@@ -307,6 +314,12 @@ func (cfg *Config) addFetcherToPodSpecWithCommand(podSpec *apiv1.PodSpec, mainCo
 			},
 		},
 		Env: append(otel.OtelEnvForContainer(), internalAuthEnvVars()...),
+	}
+	if cfg.insecureRegistries != "" {
+		c.Env = append(c.Env, apiv1.EnvVar{
+			Name:  "FETCHER_ALLOW_INSECURE_REGISTRIES",
+			Value: cfg.insecureRegistries,
+		})
 	}
 
 	// Connection-draining preStop hook; see utils.DrainLifecycle. Must be
