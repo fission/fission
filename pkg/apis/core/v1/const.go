@@ -139,6 +139,11 @@ const (
 	FUNCTION_RESOURCE_VERSION = "functionResourceVersion"
 	EXECUTOR_TYPE             = "executorType"
 	MANAGED                   = "managed"
+	// POOL_OCI_IMAGE_HASH marks pool pods whose userfunc volume is an OCI
+	// image volume (RFC-0001 Path B). Pools are keyed per (env UID, image
+	// hash); the pod reconciler routes warm pods on this label. Absent on
+	// pods of plain (fetcher-based) pools.
+	POOL_OCI_IMAGE_HASH = "ociImageHash"
 )
 
 const (

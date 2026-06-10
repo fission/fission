@@ -71,6 +71,13 @@ type (
 		instanceID            string // poolmgr instance id
 		podSpecPatch          *apiv1.PodSpec
 		enableOwnerReferences bool
+		// oci marks this as a per-image image-volume pool (RFC-0001 Path B):
+		// its pods mount the package image read-only at the shared mount
+		// path and carry no fetcher sidecar. nil for plain pools.
+		oci *fv1.OCIArchive
+		// ociImageHash is ociImageHash(oci.Image): keys the pool, labels its
+		// pods, and suffixes the deployment name. Empty for plain pools.
+		ociImageHash string
 		// TODO: move this field into fsCache
 		podFSVCMap sync.Map
 	}
@@ -89,7 +96,8 @@ func MakeGenericPool(
 	instanceID string,
 	enableIstio bool,
 	podSpecPatch *apiv1.PodSpec,
-	crClient client.Client) *GenericPool {
+	crClient client.Client,
+	oci *fv1.OCIArchive) *GenericPool {
 
 	gpLogger := logger.WithName("generic_pool")
 
@@ -126,6 +134,10 @@ func MakeGenericPool(
 		podSpecPatch:          podSpecPatch,
 		enableOwnerReferences: utils.IsOwnerReferencesEnabled(),
 		lock:                  sync.Mutex{},
+		oci:                   oci,
+	}
+	if oci != nil {
+		gp.ociImageHash = ociImageHash(oci.Image)
 	}
 
 	gp.runtimeImagePullPolicy = utils.GetImagePullPolicy(os.Getenv("RUNTIME_IMAGE_PULL_POLICY"))
@@ -157,6 +169,11 @@ func (gp *GenericPool) getEnvironmentPoolLabels(env *fv1.Environment) map[string
 	envLabels[fv1.ENVIRONMENT_NAMESPACE] = env.Namespace
 	envLabels[fv1.ENVIRONMENT_UID] = string(env.UID)
 	envLabels["managed"] = "true" // this allows us to easily find pods managed by the deployment
+	if gp.ociImageHash != "" {
+		// Routes this pool's warm pods to its own readyPodQueue and keeps
+		// the plain pool's seed/selectors from picking them up.
+		envLabels[fv1.POOL_OCI_IMAGE_HASH] = gp.ociImageHash
+	}
 	return envLabels
 }
 
