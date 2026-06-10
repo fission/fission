@@ -81,6 +81,11 @@ type (
 		objectReaperIntervalSecond time.Duration
 
 		enableOwnerReferences bool
+
+		// imageVolumeOK is the once-evaluated RFC-0001 Path B gate:
+		// ENABLE_OCI_IMAGE_VOLUME opted in AND the cluster supports
+		// KEP-4639 image volumes (>= 1.33).
+		imageVolumeOK bool
 	}
 )
 
@@ -103,8 +108,22 @@ func MakeNewDeploy(
 		enableIstio = istio
 	}
 
+	// RFC-0001 Path B gate, evaluated once: opt-in env + cluster support.
+	imageVolumeOK := false
+	if executorUtils.OCIImageVolumeEnabled() {
+		supported, err := executorUtils.ImageVolumeSupported(kubernetesClient.Discovery())
+		if err != nil {
+			logger.Error(err, "failed to check image-volume support; OCI packages stay on the fetcher path")
+		}
+		imageVolumeOK = supported
+		logger.Info("OCI image-volume delivery (RFC-0001 Path B)",
+			"enabled", imageVolumeOK, "serverSupports", supported)
+	}
+
 	nd := &NewDeploy{
 		logger: logger.WithName("new_deploy"),
+
+		imageVolumeOK: imageVolumeOK,
 
 		fissionClient:    fissionClient,
 		kubernetesClient: kubernetesClient,

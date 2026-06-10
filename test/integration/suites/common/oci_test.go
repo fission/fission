@@ -195,6 +195,100 @@ func TestOCIPackagePoolmgrDigestMismatch(t *testing.T) {
 	})
 }
 
+// TestOCIPackageNewdeploy covers RFC-0001 Path A on the newdeploy executor —
+// which needs zero executor code: newdeploy embeds the same shared
+// specialize request, and the same in-pod fetcher pulls the image. Warm
+// (minscale 1) plus a cold-start (minscale 0) subtest.
+func TestOCIPackageNewdeploy(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute)
+	defer cancel()
+
+	f := framework.Connect(t)
+	hostAddr, inclusterAddr := framework.RequireRegistry(t)
+	runtime := f.Images().RequirePython(t)
+
+	ns := f.NewTestNamespace(t)
+	envName := "python-ocind-" + ns.ID
+	ns.CreateEnv(t, ctx, framework.EnvOptions{
+		Name: envName, Image: runtime,
+		MinCPU: 40, MaxCPU: 80, MinMemory: 64, MaxMemory: 128,
+	})
+
+	ref, _ := framework.PushCodeImage(t, hostAddr, inclusterAddr,
+		"fission-test/hello-nd-"+ns.ID, "v1", pyHello("Hello, newdeploy OCI!"))
+	pkgName := "oci-nd-pkg-" + ns.ID
+	ns.CreatePackage(t, ctx, framework.PackageOptions{Name: pkgName, Env: envName, OCI: ref})
+
+	t.Run("warm", func(t *testing.T) {
+		t.Parallel()
+		fnName := "fn-oci-nd-warm-" + ns.ID
+		ns.CreateFunction(t, ctx, framework.FunctionOptions{
+			Name: fnName, Pkg: pkgName, Entrypoint: "hello.main",
+			ExecutorType: "newdeploy", MinScale: 1, MaxScale: 1,
+		})
+		ns.CreateRoute(t, ctx, framework.RouteOptions{Function: fnName, URL: "/" + fnName, Method: "GET"})
+		f.Router(t).GetEventually(t, ctx, "/"+fnName, framework.BodyContains("Hello, newdeploy OCI!"))
+	})
+
+	t.Run("cold", func(t *testing.T) {
+		t.Parallel()
+		fnName := "fn-oci-nd-cold-" + ns.ID
+		ns.CreateFunction(t, ctx, framework.FunctionOptions{
+			Name: fnName, Pkg: pkgName, Entrypoint: "hello.main",
+			ExecutorType: "newdeploy", MinScale: 0, MaxScale: 1,
+		})
+		ns.CreateRoute(t, ctx, framework.RouteOptions{Function: fnName, URL: "/" + fnName, Method: "GET"})
+		f.Router(t).GetEventually(t, ctx, "/"+fnName, framework.BodyContains("Hello, newdeploy OCI!"))
+	})
+}
+
+// TestOCIPackageNewdeployUpdate proves the package-update rollout chain works
+// for OCI archives (mirrors TestNDPackageUpdate): updating the package to a
+// :v2 image bumps PackageRef.ResourceVersion, which rolls the deployment and
+// serves the new body. Note: mutating a tag's content WITHOUT a package
+// update is deliberately not detected — pin digests in production.
+func TestOCIPackageNewdeployUpdate(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute)
+	defer cancel()
+
+	f := framework.Connect(t)
+	hostAddr, inclusterAddr := framework.RequireRegistry(t)
+	runtime := f.Images().RequirePython(t)
+
+	ns := f.NewTestNamespace(t)
+	envName := "python-ocindu-" + ns.ID
+	pkgName := "oci-ndu-pkg-" + ns.ID
+	fnName := "fn-oci-ndu-" + ns.ID
+
+	ns.CreateEnv(t, ctx, framework.EnvOptions{
+		Name: envName, Image: runtime,
+		MinCPU: 40, MaxCPU: 80, MinMemory: 64, MaxMemory: 128,
+	})
+
+	repo := "fission-test/hello-ndu-" + ns.ID
+	refV1, _ := framework.PushCodeImage(t, hostAddr, inclusterAddr, repo, "v1", pyHello("Hello, v1!"))
+	refV2, _ := framework.PushCodeImage(t, hostAddr, inclusterAddr, repo, "v2", pyHello("Hello, v2!"))
+
+	ns.CreatePackage(t, ctx, framework.PackageOptions{Name: pkgName, Env: envName, OCI: refV1})
+	ns.CreateFunction(t, ctx, framework.FunctionOptions{
+		Name: fnName, Pkg: pkgName, Entrypoint: "hello.main",
+		ExecutorType: "newdeploy", MinScale: 1, MaxScale: 1,
+	})
+	ns.CreateRoute(t, ctx, framework.RouteOptions{Function: fnName, URL: "/" + fnName, Method: "GET"})
+	f.Router(t).GetEventually(t, ctx, "/"+fnName, framework.BodyContains("Hello, v1!"))
+
+	// Update the package to the v2 image, then touch the function so its
+	// PackageRef.ResourceVersion advances (what `fn update` does) — that is
+	// the signal newdeploy's updateFunction rollout chain keys on.
+	ns.CLI(t, ctx, "package", "update", "--name", pkgName, "--oci", refV2)
+	ns.CLI(t, ctx, "fn", "update", "--name", fnName, "--pkg", pkgName, "--entrypoint", "hello.main")
+	f.Router(t).GetEventually(t, ctx, "/"+fnName, framework.BodyContains("Hello, v2!"))
+}
+
 // requireImageVolumeLeg gates the Path B tests: FISSION_TEST_IMAGE_VOLUME is
 // set only on the CI leg whose Kubernetes supports image volumes (and where
 // executor.enableOCIImageVolume is on), and FISSION_TEST_REGISTRY_NODE is the
@@ -337,5 +431,69 @@ func TestOCIPathBFallbackWithSecrets(t *testing.T) {
 		for _, v := range pod.Spec.Volumes {
 			assert.Nilf(t, v.Image, "pod %s: fallback pods must not mount an image volume", pod.Name)
 		}
+	}
+}
+
+// TestOCIPackageNewdeployImageVolume covers newdeploy Path B: the package
+// image mounts at the fetcher's store path via a kubelet image volume — the
+// fetcher container STAYS (distinguishing this from poolmgr Path B) and its
+// exists-early-exit makes specialization load-only. Pod-shape assertions
+// (image volume + fetcher present) plus a successful serve prove the skip
+// without fragile log grepping.
+func TestOCIPackageNewdeployImageVolume(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute)
+	defer cancel()
+
+	f := framework.Connect(t)
+	hostAddr, _ := framework.RequireRegistry(t)
+	nodeAddr := requireImageVolumeLeg(t)
+	runtime := f.Images().RequirePython(t)
+
+	ns := f.NewTestNamespace(t)
+	envName := "python-ndiv-" + ns.ID
+	pkgName := "oci-ndiv-pkg-" + ns.ID
+	fnName := "fn-oci-ndiv-" + ns.ID
+
+	ns.CreateEnv(t, ctx, framework.EnvOptions{
+		Name: envName, Image: runtime,
+		MinCPU: 40, MaxCPU: 80, MinMemory: 64, MaxMemory: 128,
+	})
+
+	// The kubelet pulls this image (node-resolvable NodePort address).
+	ref, _ := framework.PushCodeImage(t, hostAddr, nodeAddr,
+		"fission-test/hello-ndiv-"+ns.ID, "v1", pyHello("Hello, newdeploy image volume!"))
+
+	ns.CreatePackage(t, ctx, framework.PackageOptions{Name: pkgName, Env: envName, OCI: ref})
+	ns.CreateFunction(t, ctx, framework.FunctionOptions{
+		Name: fnName, Pkg: pkgName, Entrypoint: "hello.main",
+		ExecutorType: "newdeploy", MinScale: 1, MaxScale: 1,
+	})
+	ns.CreateRoute(t, ctx, framework.RouteOptions{Function: fnName, URL: "/" + fnName, Method: "GET"})
+
+	f.Router(t).GetEventually(t, ctx, "/"+fnName, framework.BodyContains("Hello, newdeploy image volume!"))
+
+	pods, err := f.KubeClient().CoreV1().Pods(ns.Name).List(ctx, metav1.ListOptions{
+		LabelSelector: "functionName=" + fnName,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, pods.Items, "newdeploy function pods must exist")
+	for _, pod := range pods.Items {
+		hasFetcher := false
+		for _, c := range pod.Spec.Containers {
+			if c.Name == "fetcher" {
+				hasFetcher = true
+			}
+		}
+		assert.Truef(t, hasFetcher, "pod %s: newdeploy Path B keeps the fetcher container", pod.Name)
+		hasImageVolume := false
+		for _, v := range pod.Spec.Volumes {
+			if v.Image != nil {
+				hasImageVolume = true
+				assert.Equal(t, ref, v.Image.Reference)
+			}
+		}
+		assert.Truef(t, hasImageVolume, "pod %s: code must come from an image volume", pod.Name)
 	}
 }

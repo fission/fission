@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"path/filepath"
 
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
@@ -313,6 +314,19 @@ func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function
 	// GHSA-85g2-pmrx-r49q.
 	if err := util.MountFetcherSATokenOnFetcher(&deployment.Spec.Template.Spec); err != nil {
 		return nil, err
+	}
+
+	// RFC-0001 Path B: mount the package image read-only at the fetcher's
+	// store path on both containers. The fetcher's exists-early-exit then
+	// skips the pull and proceeds straight to secrets + load — Path B for
+	// newdeploy is delivery-only, with zero fetcher change. Applied AFTER
+	// every MergePodSpec (same convention as the SA-token re-clamps) so a
+	// runtime pod spec cannot strip or shadow the code mount.
+	if oci := deploy.getFunctionOCIArchive(ctx, fn); oci != nil {
+		util.AddImageVolume(&deployment.Spec.Template.Spec,
+			oci.Image, oci.SubPath,
+			filepath.Join(deploy.fetcherConfig.SharedMountPath(), deploy.fetcherConfig.TargetFilename(fn, env)),
+			oci.ImagePullSecrets, mainContainerName, util.FetcherContainerName)
 	}
 
 	return deployment, nil

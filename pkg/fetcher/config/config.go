@@ -137,20 +137,27 @@ func (cfg *Config) SharedMountPath() string {
 	return cfg.sharedMountPath
 }
 
-func (cfg *Config) NewSpecializeRequest(fn *fv1.Function, env *fv1.Environment) fetcher.FunctionSpecializeRequest {
-	targetFilename := "user"
+// TargetFilename is the name (under the shared mount path) the fetcher
+// stores a function's deployment package at, and therefore the path the
+// loader reads. Exposed so the image-volume path (RFC-0001 Path B) can mount
+// the package image at exactly the fetcher's store path, turning the
+// fetcher's exists-early-exit into a no-op fetch.
+func (cfg *Config) TargetFilename(fn *fv1.Function, env *fv1.Environment) string {
 	if env.Spec.Version >= 2 {
 		if env.Spec.AllowedFunctionsPerContainer == fv1.AllowedFunctionsPerContainerInfinite {
 			// workflow loads multiple functions into one function pod,
 			// we have to use a Function UID to separate the function code
 			// to avoid overwriting.
-			targetFilename = string(fn.UID)
-		} else {
-			// set target file name to fix pattern for
-			// easy accessing.
-			targetFilename = "deployarchive"
+			return string(fn.UID)
 		}
+		// set target file name to fix pattern for easy accessing.
+		return "deployarchive"
 	}
+	return "user"
+}
+
+func (cfg *Config) NewSpecializeRequest(fn *fv1.Function, env *fv1.Environment) fetcher.FunctionSpecializeRequest {
+	targetFilename := cfg.TargetFilename(fn, env)
 
 	return fetcher.FunctionSpecializeRequest{
 		FetchReq: fetcher.FunctionFetchRequest{
