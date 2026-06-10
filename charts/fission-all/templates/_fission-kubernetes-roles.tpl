@@ -435,25 +435,6 @@ rules:
   - get
   - list
   - watch
-# RFC-0002 EndpointSlice-native data plane: the router watches the
-# Fission-managed function Services' EndpointSlices (read-only) to feed its
-# warm-path endpoint index. Inert while router.endpointSliceCache.mode=off.
-- apiGroups:
-  - discovery.k8s.io
-  resources:
-  - endpointslices
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups:
-  - ""
-  resources:
-  - services
-  verbs:
-  - get
-  - list
-  - watch
 {{- if .Values.gatewayAPI.enabled }}
 # Gateway API route provider (gatewayAPI.enabled): the router creates HTTPRoute
 # objects per HTTPTrigger that requests the "gateway" provider. ReferenceGrants

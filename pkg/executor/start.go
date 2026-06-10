@@ -335,6 +335,11 @@ func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, 
 		metricsBind = ":0"
 	}
 
+	// Route controller-runtime's internal logs (reflector list/watch failures,
+	// cache sync problems) through the executor logger — otherwise they are
+	// suppressed and informer problems manifest only as a not-ready pod.
+	ctrl.SetLogger(logger.WithName("controller-runtime"))
+
 	crMgr, err := ctrl.NewManager(restConfig, ctrl.Options{
 		Scheme: executorScheme,
 		// Scope the cache to the executor's watched namespaces (builder +

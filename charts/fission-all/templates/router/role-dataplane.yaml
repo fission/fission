@@ -1,0 +1,62 @@
+{{- /*
+RFC-0002 EndpointSlice data plane: the router watches the Fission-managed
+function Services' EndpointSlices in the namespaces where function workloads
+live (the same namespace set the executor manages workloads in — NOT the
+release namespace, where the router's main Role renders). Read-only, and only
+rendered when the slice cache is enabled, so default installs carry no extra
+RBAC.
+
+Namespace set mirrors pkg/utils NamespaceResolver.GetFunctionNS: when
+functionNamespace is set every function namespace folds into it; otherwise
+defaultNamespace plus each additionalFissionNamespace.
+*/ -}}
+{{- if ne (.Values.router.endpointSliceCache.mode | default "off") "off" }}
+{{- $namespaces := list }}
+{{- if .Values.functionNamespace }}
+{{- $namespaces = list .Values.functionNamespace }}
+{{- else }}
+{{- $namespaces = append $namespaces .Values.defaultNamespace }}
+{{- range $ns := .Values.additionalFissionNamespaces }}
+{{- $namespaces = append $namespaces $ns }}
+{{- end }}
+{{- end }}
+{{- range $ns := ($namespaces | uniq) }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: "{{ $.Release.Name }}-router-dataplane"
+  namespace: {{ $ns }}
+rules:
+- apiGroups:
+  - discovery.k8s.io
+  resources:
+  - endpointslices
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - services
+  verbs:
+  - get
+  - list
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: "{{ $.Release.Name }}-router-dataplane"
+  namespace: {{ $ns }}
+subjects:
+  - kind: ServiceAccount
+    name: fission-router
+    namespace: {{ $.Release.Namespace }}
+roleRef:
+  kind: Role
+  name: "{{ $.Release.Name }}-router-dataplane"
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}
+{{- end }}

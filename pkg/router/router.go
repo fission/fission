@@ -41,10 +41,13 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"go.opentelemetry.io/otel"
 	"golang.org/x/sync/errgroup"
+	authorizationv1 "k8s.io/api/authorization/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	crcache "sigs.k8s.io/controller-runtime/pkg/cache"
@@ -77,6 +80,24 @@ func init() {
 	utilruntime.Must(scheme.AddToScheme(routerScheme))
 }
 
+// sliceWatchNamespaces returns the namespaces the EndpointSlice informer
+// watches: the function namespaces (where the function Services live), i.e.
+// each Fission resource namespace mapped through GetFunctionNS.
+func sliceWatchNamespaces() []string {
+	nsResolver := utils.DefaultNSResolver()
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(nsResolver.FissionResourceNS))
+	for _, ns := range nsResolver.FissionResourceNS {
+		fns := nsResolver.GetFunctionNS(ns)
+		if _, ok := seen[fns]; ok {
+			continue
+		}
+		seen[fns] = struct{}{}
+		out = append(out, fns)
+	}
+	return out
+}
+
 // routerCacheOptions scopes the Manager cache. The trigger/function watches
 // stay on the Fission namespaces (crmanager.FissionCacheOptions); when the
 // EndpointSlice index is enabled, the slice watch is additionally label-bound
@@ -88,10 +109,9 @@ func routerCacheOptions(mode endpointSliceCacheMode) crcache.Options {
 	if mode == endpointSliceCacheOff {
 		return opts
 	}
-	nsResolver := utils.DefaultNSResolver()
 	sliceNS := map[string]crcache.Config{}
-	for _, ns := range nsResolver.FissionResourceNS {
-		sliceNS[nsResolver.GetFunctionNS(ns)] = crcache.Config{}
+	for _, ns := range sliceWatchNamespaces() {
+		sliceNS[ns] = crcache.Config{}
 	}
 	opts.ByObject = map[client.Object]crcache.ByObject{
 		&discoveryv1.EndpointSlice{}: {
@@ -100,6 +120,38 @@ func routerCacheOptions(mode endpointSliceCacheMode) crcache.Options {
 		},
 	}
 	return opts
+}
+
+// requireSliceWatchRBAC fails fast — with an actionable error — when the
+// router cannot list EndpointSlices in a namespace the slice informer is about
+// to watch. Without this preflight a missing Role leaves the manager cache
+// retrying a forbidden LIST forever: the router hangs not-ready and the only
+// symptom is a suppressed reflector log. The chart renders the required Role +
+// RoleBinding (router/role-dataplane.yaml) whenever
+// router.endpointSliceCache.mode != off; bespoke-RBAC installs must mirror it.
+func requireSliceWatchRBAC(ctx context.Context, kubeClient kubernetes.Interface) error {
+	for _, ns := range sliceWatchNamespaces() {
+		sar := &authorizationv1.SelfSubjectAccessReview{
+			Spec: authorizationv1.SelfSubjectAccessReviewSpec{
+				ResourceAttributes: &authorizationv1.ResourceAttributes{
+					Namespace: ns,
+					Verb:      "list",
+					Group:     "discovery.k8s.io",
+					Resource:  "endpointslices",
+				},
+			},
+		}
+		res, err := kubeClient.AuthorizationV1().SelfSubjectAccessReviews().Create(ctx, sar, metav1.CreateOptions{})
+		if err != nil {
+			return fmt.Errorf("error checking endpointslice RBAC in namespace %q: %w", ns, err)
+		}
+		if !res.Status.Allowed {
+			return fmt.Errorf("router is not allowed to list endpointslices in namespace %q "+
+				"(reason: %s); ROUTER_ENDPOINTSLICE_CACHE_MODE requires the router-dataplane Role the Helm chart "+
+				"renders for router.endpointSliceCache.mode != off — set the mode to off or grant the RBAC", ns, res.Status.Reason)
+		}
+	}
+	return nil
 }
 
 // runnableFunc adapts a function to a controller-runtime manager.Runnable.
@@ -260,6 +312,12 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		return err
 	}
 
+	// Route controller-runtime's internal logs (reflector list/watch failures,
+	// cache sync problems) through the router logger. Without this they are
+	// suppressed entirely — a forbidden informer LIST then manifests only as
+	// the router hanging not-ready, with nothing in the logs to say why.
+	ctrl.SetLogger(logger.WithName("controller-runtime"))
+
 	// The router runs under a controller-runtime Manager for lifecycle
 	// consistency with the rest of the control plane and to host the HTTPTrigger
 	// + Function reconcilers. It is stateless and replica-independent, so it
@@ -315,6 +373,11 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	// mode the fallback resolver serves the warm path from the index and uses
 	// the executor for cold starts, capacity, and strict-mode functions.
 	if cfg.endpointSliceCacheMode != endpointSliceCacheOff {
+		// Fail fast on missing RBAC: a forbidden LIST would otherwise leave the
+		// manager cache retrying forever with the router hanging not-ready.
+		if err := requireSliceWatchRBAC(ctx, kubeClient); err != nil {
+			return err
+		}
 		index := endpointcache.NewIndex()
 		if err := endpointcache.RegisterInformer(ctx, crMgr, index, logger); err != nil {
 			return fmt.Errorf("error registering endpointslice informer: %w", err)
