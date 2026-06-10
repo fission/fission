@@ -226,6 +226,12 @@ executor:
   ## adoptExistingResources decides whether to adopt existing resources when executor restarts or Fission is redeployed.
   ##
   adoptExistingResources: false
+  ## enableOCIImageVolume opts into delivering OCI packages via kubelet image
+  ## volumes (RFC-0001 Path B). Requires Kubernetes >= 1.33 (KEP-4639); on
+  ## older clusters the executor logs the capability miss and keeps OCI
+  ## packages on the fetcher pull path.
+  ##
+  enableOCIImageVolume: false
   ## podReadyTimeout represents the timeout in seconds for waiting for pod to become ready.
   ## This is applicable to Pool Manager executor type only.
   ##

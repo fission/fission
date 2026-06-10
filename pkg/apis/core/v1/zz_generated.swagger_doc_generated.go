@@ -424,7 +424,7 @@ var map_OCIArchive = map[string]string{
 	"":                 "OCIArchive references an OCI image whose flattened filesystem contains the deployment code (RFC-0001). The environment runtime image stays the pod's main container; only how the code reaches the shared volume changes.",
 	"image":            "Image is a fully qualified OCI reference: registry/repo:tag[@digest].",
 	"imagePullSecrets": "ImagePullSecrets are resolved when pulling the image. The fetcher-pull path passes them to the in-fetcher keychain; the image-volume path sets them on pod.Spec.ImagePullSecrets. They must exist in the function namespace.",
-	"subPath":          "SubPath points at the deployment root inside the image filesystem. \"\" or \"/\" means the image root.",
+	"subPath":          "SubPath points at the deployment root inside the image filesystem. \"\" or \"/\" means the image root. It must be a directory: the image-volume path mounts it via the pod volumeMount subPath, and kubelets reject file subpaths on image volumes.",
 	"digest":           "Digest is an optional content hash validated on pull.",
 }
 

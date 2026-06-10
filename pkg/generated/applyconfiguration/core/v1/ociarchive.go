@@ -26,7 +26,10 @@ type OCIArchiveApplyConfiguration struct {
 	// They must exist in the function namespace.
 	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 	// SubPath points at the deployment root inside the image
-	// filesystem. "" or "/" means the image root.
+	// filesystem. "" or "/" means the image root. It must be a
+	// directory: the image-volume path mounts it via the pod
+	// volumeMount subPath, and kubelets reject file subpaths on
+	// image volumes.
 	SubPath *string `json:"subPath,omitempty"`
 	// Digest is an optional content hash validated on pull.
 	Digest *string `json:"digest,omitempty"`

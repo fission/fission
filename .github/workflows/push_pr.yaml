@@ -183,13 +183,17 @@ jobs:
           kubectl get gatewayclass,gateway -A
 
       # In-cluster registry for the OCI package-delivery tests (RFC-0001):
-      # tests push code images via a port-forward and the fetcher pulls them
-      # from the Service address (allowlisted for plain HTTP via the kind-ci
-      # profile's fetcher.allowInsecureRegistries). Enabled on the 1.32 leg
-      # first — the floor version Path A must support; other legs skip the
+      # tests push code images via a port-forward; the fetcher (Path A) pulls
+      # the ClusterIP Service address (allowlisted for plain HTTP via the
+      # kind-ci profile's fetcher.allowInsecureRegistries), and the kubelet
+      # (Path B image volumes) pulls localhost:30500 through the NodePort —
+      # containerd trusts localhost registries over plain HTTP by default, so
+      # no containerd config is needed. Enabled on the 1.32 leg (the floor
+      # version Path A must support) and the 1.36 leg (which also runs the
+      # image-volume tests); the middle leg skips the
       # FISSION_TEST_REGISTRY-gated tests.
       - name: Deploy test registry (OCI package delivery)
-        if: ${{ matrix.kindversion == 'v1.32.11' }}
+        if: ${{ matrix.kindversion == 'v1.32.11' || matrix.kindversion == 'v1.36.1' }}
         timeout-minutes: 4
         run: |
           kubectl apply -f - <<'EOF'
@@ -219,10 +223,12 @@ jobs:
             name: test-registry
             namespace: default
           spec:
+            type: NodePort
             selector: {app: test-registry}
             ports:
               - port: 5000
                 targetPort: 5000
+                nodePort: 30500
           EOF
           kubectl rollout status deploy/test-registry -n default --timeout=3m
 
@@ -339,15 +345,22 @@ jobs:
           kubectl port-forward svc/mcp 8890:8890 -n "$FISSION_NAMESPACE" >/tmp/pf-mcp.log 2>&1 &
           PF_PID_MCP=$!
           export FISSION_MCP_BASE_URL="http://127.0.0.1:8890"
-          # OCI test registry (RFC-0001), deployed on this leg only. Tests
-          # push through the forward; cluster components pull the Service
-          # address. Both env vars unset on other legs => tests skip.
+          # OCI test registry (RFC-0001), deployed on the 1.32 + 1.36 legs.
+          # Tests push through the forward; the fetcher pulls the Service
+          # address. Env vars unset on other legs => tests skip. The 1.36 leg
+          # additionally runs the image-volume (Path B) tests: the kubelet
+          # pulls localhost:30500 via the registry's NodePort (containerd's
+          # built-in localhost HTTP exception — no node config needed).
           PF_PID_REG=""
-          if [ "${{ matrix.kindversion }}" = "v1.32.11" ]; then
+          if [ "${{ matrix.kindversion }}" = "v1.32.11" ] || [ "${{ matrix.kindversion }}" = "v1.36.1" ]; then
             kubectl port-forward svc/test-registry 5001:5000 -n default >/tmp/pf-registry.log 2>&1 &
             PF_PID_REG=$!
             export FISSION_TEST_REGISTRY=127.0.0.1:5001
             export FISSION_TEST_REGISTRY_INCLUSTER=test-registry.default.svc.cluster.local:5000
+          fi
+          if [ "${{ matrix.kindversion }}" = "v1.36.1" ]; then
+            export FISSION_TEST_IMAGE_VOLUME=1
+            export FISSION_TEST_REGISTRY_NODE=localhost:30500
           fi
           trap "kill $PF_PID $PF_PID_INT $PF_PID_MCP $PF_PID_REG 2>/dev/null || true" EXIT
 

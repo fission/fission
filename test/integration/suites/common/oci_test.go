@@ -8,12 +8,14 @@ package common_test
 
 import (
 	"context"
+	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -191,4 +193,149 @@ func TestOCIPackagePoolmgrDigestMismatch(t *testing.T) {
 		require.NotContains(t, body, "never served", "wrong-digest image must not serve")
 		return status >= 500
 	})
+}
+
+// requireImageVolumeLeg gates the Path B tests: FISSION_TEST_IMAGE_VOLUME is
+// set only on the CI leg whose Kubernetes supports image volumes (and where
+// executor.enableOCIImageVolume is on), and FISSION_TEST_REGISTRY_NODE is the
+// registry address the kubelet pulls from (e.g. localhost:30500, the test
+// registry's NodePort — containerd trusts localhost registries over plain
+// HTTP by default).
+func requireImageVolumeLeg(t *testing.T) (nodeAddr string) {
+	t.Helper()
+	if os.Getenv("FISSION_TEST_IMAGE_VOLUME") == "" {
+		t.Skip("FISSION_TEST_IMAGE_VOLUME not set; skipping image-volume (Path B) test")
+	}
+	nodeAddr = os.Getenv("FISSION_TEST_REGISTRY_NODE")
+	if nodeAddr == "" {
+		t.Skip("FISSION_TEST_REGISTRY_NODE not set; skipping image-volume (Path B) test")
+	}
+	return nodeAddr
+}
+
+// TestOCIPackagePoolmgrImageVolume covers RFC-0001 Path B end-to-end: an
+// eligible function on an OCI package is served from a per-image pool whose
+// pods mount the code as a kubelet image volume — one container, no fetcher.
+// The pod-shape assertions prove Path B actually ran rather than silently
+// falling back to the fetcher path.
+func TestOCIPackagePoolmgrImageVolume(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
+	defer cancel()
+
+	f := framework.Connect(t)
+	hostAddr, _ := framework.RequireRegistry(t)
+	nodeAddr := requireImageVolumeLeg(t)
+	runtime := f.Images().RequirePython(t)
+
+	ns := f.NewTestNamespace(t)
+	envName := "python-ocib-" + ns.ID
+	pkgName := "oci-pb-pkg-" + ns.ID
+	fnName := "fn-oci-pb-" + ns.ID
+
+	ns.CreateEnv(t, ctx, framework.EnvOptions{
+		Name: envName, Image: runtime,
+		MinCPU: 40, MaxCPU: 80, MinMemory: 64, MaxMemory: 128,
+	})
+
+	// The kubelet (not the fetcher) pulls this image, so the reference must
+	// be node-resolvable: the registry's NodePort via localhost.
+	ref, _ := framework.PushCodeImage(t, hostAddr, nodeAddr,
+		"fission-test/hello-pb-"+ns.ID, "v1", pyHello("Hello, image volume!"))
+
+	ns.CreatePackage(t, ctx, framework.PackageOptions{Name: pkgName, Env: envName, OCI: ref})
+	ns.CreateFunction(t, ctx, framework.FunctionOptions{
+		Name: fnName, Pkg: pkgName, Entrypoint: "hello.main",
+	})
+	ns.CreateRoute(t, ctx, framework.RouteOptions{Function: fnName, URL: "/" + fnName, Method: "GET"})
+
+	body := f.Router(t).GetEventually(t, ctx, "/"+fnName, framework.BodyContains("Hello, image volume!"))
+	assert.Contains(t, body, "Hello, image volume!")
+
+	// Prove Path B: pods of this env's per-image pool carry the image-hash
+	// label, exactly one container (no fetcher), and an Image volume source.
+	pods, err := f.KubeClient().CoreV1().Pods(ns.Name).List(ctx, metav1.ListOptions{
+		LabelSelector: fv1.POOL_OCI_IMAGE_HASH + ",environmentName=" + envName,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, pods.Items, "per-image pool pods must exist (label %s)", fv1.POOL_OCI_IMAGE_HASH)
+	for _, pod := range pods.Items {
+		assert.Lenf(t, pod.Spec.Containers, 1, "pod %s: Path B pods carry no fetcher", pod.Name)
+		hasImageVolume := false
+		for _, v := range pod.Spec.Volumes {
+			if v.Image != nil {
+				hasImageVolume = true
+				assert.Equal(t, ref, v.Image.Reference)
+			}
+		}
+		assert.Truef(t, hasImageVolume, "pod %s: code must come from an image volume", pod.Name)
+	}
+}
+
+// TestOCIPathBFallbackWithSecrets proves the per-function eligibility check:
+// a function with a Secret needs the fetcher (it materializes secrets), so it
+// must serve from the plain fetcher pool even when image volumes are enabled.
+func TestOCIPathBFallbackWithSecrets(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
+	defer cancel()
+
+	f := framework.Connect(t)
+	hostAddr, inclusterAddr := framework.RequireRegistry(t)
+	requireImageVolumeLeg(t)
+	runtime := f.Images().RequirePython(t)
+
+	ns := f.NewTestNamespace(t)
+	envName := "python-ocifb-" + ns.ID
+	pkgName := "oci-fb-pkg-" + ns.ID
+	fnName := "fn-oci-fb-" + ns.ID
+	secretName := "oci-fb-secret-" + ns.ID
+
+	_, err := f.KubeClient().CoreV1().Secrets(ns.Name).Create(ctx, &apiv1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: secretName, Namespace: ns.Name},
+		StringData: map[string]string{"key": "value"},
+	}, metav1.CreateOptions{})
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_ = f.KubeClient().CoreV1().Secrets(ns.Name).Delete(context.Background(), secretName, metav1.DeleteOptions{})
+	})
+
+	ns.CreateEnv(t, ctx, framework.EnvOptions{
+		Name: envName, Image: runtime,
+		MinCPU: 40, MaxCPU: 80, MinMemory: 64, MaxMemory: 128,
+	})
+
+	// The fetcher pulls this one (Path A fallback), so the reference is the
+	// in-cluster Service address.
+	ref, _ := framework.PushCodeImage(t, hostAddr, inclusterAddr,
+		"fission-test/hello-fb-"+ns.ID, "v1", pyHello("Hello, fallback!"))
+
+	ns.CreatePackage(t, ctx, framework.PackageOptions{Name: pkgName, Env: envName, OCI: ref})
+	ns.CreateFunction(t, ctx, framework.FunctionOptions{
+		Name: fnName, Pkg: pkgName, Entrypoint: "hello.main",
+		Secrets: []string{secretName},
+	})
+	ns.CreateRoute(t, ctx, framework.RouteOptions{Function: fnName, URL: "/" + fnName, Method: "GET"})
+
+	body := f.Router(t).GetEventually(t, ctx, "/"+fnName, framework.BodyContains("Hello, fallback!"))
+	assert.Contains(t, body, "Hello, fallback!")
+
+	// The serving pod must be a plain-pool pod: it HAS a fetcher container
+	// and no image volume.
+	pods, err := f.KubeClient().CoreV1().Pods(ns.Name).List(ctx, metav1.ListOptions{
+		LabelSelector: "functionName=" + fnName,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, pods.Items, "the specialized pod must exist")
+	for _, pod := range pods.Items {
+		assert.GreaterOrEqualf(t, len(pod.Spec.Containers), 2,
+			"pod %s: fallback pods keep the fetcher container", pod.Name)
+		assert.NotContains(t, pod.Labels, fv1.POOL_OCI_IMAGE_HASH,
+			"pod %s: fallback pods belong to the plain pool", pod.Name)
+		for _, v := range pod.Spec.Volumes {
+			assert.Nilf(t, v.Image, "pod %s: fallback pods must not mount an image volume", pod.Name)
+		}
+	}
 }
