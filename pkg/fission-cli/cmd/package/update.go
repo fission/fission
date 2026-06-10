@@ -98,6 +98,20 @@ func UpdatePackage(input cli.Input, client cmd.Client, specFile string, pkg *fv1
 	needToRebuild := false
 	needToUpdate := false
 
+	ociImage := input.String(flagkey.PkgOCI)
+	if input.IsSet(flagkey.PkgOCI) {
+		if input.IsSet(flagkey.PkgCode) || input.IsSet(flagkey.PkgSrcArchive) || input.IsSet(flagkey.PkgDeployArchive) {
+			return nil, fmt.Errorf("--%v cannot be combined with --%v, --%v, or --%v", flagkey.PkgOCI, flagkey.PkgCode, flagkey.PkgSrcArchive, flagkey.PkgDeployArchive)
+		}
+		// Replace the deployment archive wholesale: an OCI archive carries no
+		// literal, URL, or checksum (RFC-0001).
+		pkg.Spec.Deployment = fv1.Archive{
+			Type: fv1.ArchiveTypeOCI,
+			OCI:  &fv1.OCIArchive{Image: ociImage},
+		}
+		needToUpdate = true
+	}
+
 	if input.IsSet(flagkey.PkgCode) {
 		deployArchiveFiles = append(deployArchiveFiles, code)
 		noZip = true

@@ -242,6 +242,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		}
 
 		srcArchiveFiles := input.StringSlice(flagkey.PkgSrcArchive)
+		ociImage := input.String(flagkey.PkgOCI)
 		var deployArchiveFiles []string
 		noZip := false
 		code := input.String(flagkey.PkgCode)
@@ -251,9 +252,8 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 			deployArchiveFiles = append(deployArchiveFiles, input.String(flagkey.PkgCode))
 			noZip = true
 		}
-		// return error when both src & deploy archive are empty
-		if len(srcArchiveFiles) == 0 && len(deployArchiveFiles) == 0 {
-			return errors.New("need --code or --deploy or --src argument")
+		if err := _package.ValidateArchiveSources(code, srcArchiveFiles, deployArchiveFiles, ociImage); err != nil {
+			return err
 		}
 
 		buildcmd := input.String(flagkey.PkgBuildCmd)
@@ -261,7 +261,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 
 		// create new package in the same namespace as the function.
 		pkgMetadata, err = _package.CreatePackage(input, opts.Client(), pkgName, fnNamespace, envName,
-			srcArchiveFiles, deployArchiveFiles, buildcmd, specDir, opts.specFile, noZip, userProvidedNS)
+			srcArchiveFiles, deployArchiveFiles, buildcmd, specDir, opts.specFile, noZip, userProvidedNS, ociImage)
 		if err != nil {
 			return fmt.Errorf("error creating package: %w", err)
 		}
