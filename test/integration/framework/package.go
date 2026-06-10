@@ -43,6 +43,10 @@ type PackageOptions struct {
 	DeployChecksum string
 	// Insecure disables checksum verification on URL-based archives.
 	Insecure bool
+	// OCI is a pre-built OCI image reference holding the deployment code
+	// (RFC-0001). Mutually exclusive with Src and Deploy; bypasses the
+	// builder like Deploy does.
+	OCI string
 }
 
 // CreatePackage creates a Package via `fission package create` and registers
@@ -53,16 +57,25 @@ func (ns *TestNamespace) CreatePackage(t *testing.T, ctx context.Context, opts P
 	t.Helper()
 	require.NotEmpty(t, opts.Name, "PackageOptions.Name")
 	require.NotEmpty(t, opts.Env, "PackageOptions.Env")
-	require.Truef(t, (opts.Src == "") != (opts.Deploy == ""),
-		"PackageOptions: exactly one of Src or Deploy must be set (got %+v)", opts)
+	set := 0
+	for _, s := range []string{opts.Src, opts.Deploy, opts.OCI} {
+		if s != "" {
+			set++
+		}
+	}
+	require.Equalf(t, 1, set,
+		"PackageOptions: exactly one of Src, Deploy, or OCI must be set (got %+v)", opts)
 
 	args := []string{"package", "create", "--name", opts.Name, "--env", opts.Env}
-	if opts.Src != "" {
+	switch {
+	case opts.Src != "":
 		args = append(args, "--src", opts.Src)
 		if opts.BuildCmd != "" {
 			args = append(args, "--buildcmd", opts.BuildCmd)
 		}
-	} else {
+	case opts.OCI != "":
+		args = append(args, "--oci", opts.OCI)
+	default:
 		args = append(args, "--deploy", opts.Deploy)
 	}
 	if opts.DeployChecksum != "" {

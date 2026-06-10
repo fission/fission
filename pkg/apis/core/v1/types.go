@@ -230,20 +230,27 @@ type (
 		Sum  string       `json:"sum,omitempty"`
 	}
 
-	// ArchiveType is either literal or URL, indicating whether
-	// the package is specified in the Archive struct or
-	// externally.
+	// ArchiveType is literal, url, or oci, indicating whether the
+	// package is specified in the Archive struct or externally.
 	ArchiveType string
 
 	// Archive contains or references a collection of sources or
 	// binary files.
+	// The CEL rule below deliberately never references self.literal: any
+	// access to a byte-format field (even has()) makes the apiserver convert
+	// its base64 value for CEL using URL-safe decoding, which rejects any
+	// standard-base64 payload containing '/' or '+' — in practice every
+	// zipped literal archive. The literal/oci combination is instead
+	// rejected by the webhook (Archive.Validate), with the same message.
+	// +kubebuilder:validation:XValidation:rule="!has(self.oci) || !has(self.url) || self.url == ''",message="at most one of literal, url, or oci may be set"
 	Archive struct {
-		// Type defines how the package is specified: literal or URL.
+		// Type defines how the package is specified: literal, URL, or OCI.
 		// Available value:
 		//  - literal
 		//  - url
+		//  - oci
 		// +optional
-		// +kubebuilder:validation:Enum="";literal;url
+		// +kubebuilder:validation:Enum="";literal;url;oci
 		Type ArchiveType `json:"type,omitempty"`
 
 		// Literal contents of the package. Can be used for
@@ -260,6 +267,45 @@ type (
 		// +optional
 		// +kubebuilder:validation:XValidation:rule="((!has(self.type) || self.type == '') && (!has(self.sum) || self.sum == '')) || self.type == 'sha256'",message="checksum must be empty, or its type must be 'sha256' (the only supported checksum type)"
 		Checksum Checksum `json:"checksum,omitempty"`
+
+		// OCI references an OCI image holding the deployment code.
+		// Mutually exclusive with Literal and URL. Supported only on
+		// PackageSpec.Deployment; PackageSpec.Validate rejects it on Source
+		// (source archives feed the builder, which has no OCI pull path).
+		// +optional
+		OCI *OCIArchive `json:"oci,omitempty"`
+	}
+
+	// OCIArchive references an OCI image whose flattened filesystem
+	// contains the deployment code (RFC-0001). The environment runtime
+	// image stays the pod's main container; only how the code reaches
+	// the shared volume changes.
+	OCIArchive struct {
+		// Image is a fully qualified OCI reference: registry/repo:tag[@digest].
+		// +kubebuilder:validation:MinLength=1
+		Image string `json:"image"`
+
+		// ImagePullSecrets are resolved when pulling the image. The
+		// fetcher-pull path passes them to the in-fetcher keychain; the
+		// image-volume path sets them on pod.Spec.ImagePullSecrets.
+		// They must exist in the namespace the function pods run in —
+		// the function's own namespace, or the configured function
+		// namespace for default-namespace functions.
+		// +optional
+		ImagePullSecrets []apiv1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+
+		// SubPath points at the deployment root inside the image
+		// filesystem, as a clean relative path; empty means the image
+		// root. It must be a directory: the image-volume path mounts it
+		// via the pod volumeMount subPath, and kubelets reject file
+		// subpaths on image volumes.
+		// +optional
+		SubPath string `json:"subPath,omitempty"`
+
+		// Digest is an optional content hash validated on pull.
+		// +optional
+		// +kubebuilder:validation:Pattern=`^sha256:[a-f0-9]{64}$`
+		Digest string `json:"digest,omitempty"`
 	}
 
 	// EnvironmentReference is a reference to an environment. It is used by both
@@ -1312,7 +1358,7 @@ type (
 
 // IsEmpty checks if the archive byte and litreal are of length 0
 func (a Archive) IsEmpty() bool {
-	return len(a.Literal) == 0 && len(a.URL) == 0
+	return len(a.Literal) == 0 && len(a.URL) == 0 && a.OCI == nil
 }
 
 func (fn Function) GetConcurrency() int {

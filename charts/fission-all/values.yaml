@@ -153,6 +153,11 @@ fetcher:
   image: fission/fetcher
   ## imageTag represents the tag of the image of the fetcher component.
   imageTag: v1.25.0
+  ## allowInsecureRegistries is a comma-separated list of registry hosts
+  ## (host[:port]) permitted to serve OCI package images over plain HTTP.
+  ## Default empty: registries must serve TLS (localhost and private RFC-1918
+  ## IP addresses are implicitly trusted by the underlying client).
+  allowInsecureRegistries: ""
 
   ## Fetcher is only for to downloading or uploading archive.
   ## Normally, you don't need to change the value here, unless necessary.
@@ -222,6 +227,12 @@ executor:
   ## adoptExistingResources decides whether to adopt existing resources when executor restarts or Fission is redeployed.
   ##
   adoptExistingResources: false
+  ## enableOCIImageVolume opts into delivering OCI packages via kubelet image
+  ## volumes (RFC-0001 Path B). Requires Kubernetes >= 1.33 (KEP-4639); on
+  ## older clusters the executor logs the capability miss and keeps OCI
+  ## packages on the fetcher pull path.
+  ##
+  enableOCIImageVolume: false
   ## podReadyTimeout represents the timeout in seconds for waiting for pod to become ready.
   ## This is applicable to Pool Manager executor type only.
   ##

@@ -443,3 +443,127 @@ func TestNewDeployPodSpecRuntimePodSpecCannotIntroduceDuplicateSATokenMount(t *t
 	assert.Equal(t, util.FetcherSATokenVolumeName, mountVolumeName,
 		"the surviving mount must be backed by the projected SA token volume, not the user-supplied one")
 }
+
+func ociTestPackage(deployment fv1.Archive) *fv1.Package {
+	return &fv1.Package{
+		ObjectMeta: metav1.ObjectMeta{Name: "pkg-1", Namespace: "default"},
+		Spec:       fv1.PackageSpec{Deployment: deployment},
+	}
+}
+
+// newTestOCINewDeploy wires a NewDeploy whose fissionClient holds pkg and
+// whose image-volume gate is set as given.
+func newTestOCINewDeploy(t *testing.T, pkg *fv1.Package, imageVolumeOK bool) *NewDeploy {
+	t.Helper()
+	deploy := newTestNewDeploy(t)
+	deploy.fissionClient = fissionfake.NewSimpleClientset(pkg)
+	deploy.imageVolumeOK = imageVolumeOK
+	return deploy
+}
+
+// TestGetDeploymentSpecOCIImageVolume asserts the newdeploy Path B pod shape:
+// the fetcher container STAYS (it materializes secrets and drives the load),
+// and the package image mounts read-only at the fetcher's store path on both
+// containers, so the fetcher's exists-early-exit skips the pull.
+func TestGetDeploymentSpecOCIImageVolume(t *testing.T) {
+	t.Parallel()
+	oci := &fv1.OCIArchive{
+		Image:            "registry.example.com/code/hello:v1",
+		ImagePullSecrets: []apiv1.LocalObjectReference{{Name: "regcred"}},
+	}
+	deploy := newTestOCINewDeploy(t, ociTestPackage(fv1.Archive{Type: fv1.ArchiveTypeOCI, OCI: oci}), true)
+	env := newTestNewDeployEnv()
+	env.Spec.Version = 2
+	fn := newTestNewDeployFunction()
+
+	dep, err := deploy.getDeploymentSpec(t.Context(), fn, env, nil,
+		"nd-oci", "default", map[string]string{"a": "b"}, map[string]string{})
+	require.NoError(t, err)
+	pod := dep.Spec.Template
+
+	// Both containers present: env runtime + fetcher.
+	var fetcher, user *apiv1.Container
+	for i := range pod.Spec.Containers {
+		switch pod.Spec.Containers[i].Name {
+		case util.FetcherContainerName:
+			fetcher = &pod.Spec.Containers[i]
+		case envCName:
+			user = &pod.Spec.Containers[i]
+		}
+	}
+	require.NotNil(t, fetcher, "newdeploy Path B keeps the fetcher container")
+	require.NotNil(t, user)
+
+	// Image volume present.
+	var imgVol *apiv1.Volume
+	for i := range pod.Spec.Volumes {
+		if pod.Spec.Volumes[i].Image != nil {
+			imgVol = &pod.Spec.Volumes[i]
+		}
+	}
+	require.NotNil(t, imgVol, "an image volume must be present")
+	assert.Equal(t, oci.Image, imgVol.Image.Reference)
+	assert.Equal(t, apiv1.PullIfNotPresent, imgVol.Image.PullPolicy)
+
+	// Mounted read-only at the fetcher's store path on BOTH containers.
+	wantPath := deploy.fetcherConfig.SharedMountPath() + "/" + fetcherConfig.TargetFilenameDeployArchive
+	for _, c := range []*apiv1.Container{fetcher, user} {
+		var mount *apiv1.VolumeMount
+		for i := range c.VolumeMounts {
+			if c.VolumeMounts[i].Name == imgVol.Name {
+				mount = &c.VolumeMounts[i]
+			}
+		}
+		require.NotNilf(t, mount, "container %s must mount the image volume", c.Name)
+		assert.Equal(t, wantPath, mount.MountPath)
+		assert.True(t, mount.ReadOnly)
+	}
+
+	// Pull secrets reach the pod; fetcher SA token mount intact; automount off.
+	assert.Contains(t, pod.Spec.ImagePullSecrets, apiv1.LocalObjectReference{Name: "regcred"})
+	hasSAToken := false
+	for _, vm := range fetcher.VolumeMounts {
+		if vm.MountPath == util.FetcherSATokenMountPath {
+			hasSAToken = true
+		}
+	}
+	assert.True(t, hasSAToken, "fetcher keeps its projected SA token mount")
+	require.NotNil(t, pod.Spec.AutomountServiceAccountToken)
+	assert.False(t, *pod.Spec.AutomountServiceAccountToken)
+}
+
+// TestGetDeploymentSpecOCIGateOff asserts Path A behavior when the gate is
+// off: no image volume; the fetcher pulls instead.
+func TestGetDeploymentSpecOCIGateOff(t *testing.T) {
+	t.Parallel()
+	oci := &fv1.OCIArchive{Image: "registry.example.com/code/hello:v1"}
+	deploy := newTestOCINewDeploy(t, ociTestPackage(fv1.Archive{Type: fv1.ArchiveTypeOCI, OCI: oci}), false)
+	env := newTestNewDeployEnv()
+	env.Spec.Version = 2
+	fn := newTestNewDeployFunction()
+
+	dep, err := deploy.getDeploymentSpec(t.Context(), fn, env, nil,
+		"nd-oci-off", "default", map[string]string{"a": "b"}, map[string]string{})
+	require.NoError(t, err)
+	for _, v := range dep.Spec.Template.Spec.Volumes {
+		assert.Nil(t, v.Image, "gate off must not produce an image volume")
+	}
+}
+
+// TestGetDeploymentSpecNonOCIUnchanged is the parity guard for tarball
+// packages with the gate ON: nothing about their pods changes.
+func TestGetDeploymentSpecNonOCIUnchanged(t *testing.T) {
+	t.Parallel()
+	deploy := newTestOCINewDeploy(t, ociTestPackage(fv1.Archive{Type: fv1.ArchiveTypeUrl, URL: "http://example.com/a.zip"}), true)
+	env := newTestNewDeployEnv()
+	env.Spec.Version = 2
+	fn := newTestNewDeployFunction()
+
+	dep, err := deploy.getDeploymentSpec(t.Context(), fn, env, nil,
+		"nd-tarball", "default", map[string]string{"a": "b"}, map[string]string{})
+	require.NoError(t, err)
+	for _, v := range dep.Spec.Template.Spec.Volumes {
+		assert.Nil(t, v.Image, "tarball packages must not grow an image volume")
+	}
+	assert.Empty(t, dep.Spec.Template.Spec.ImagePullSecrets)
+}

@@ -22,6 +22,7 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/selection"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
@@ -56,13 +57,17 @@ type requestType int
 const (
 	GET_POOL requestType = iota
 	CLEANUP_POOL
+	GET_ENV_POOLS
 )
 
 type (
 	GenericPoolManager struct {
 		logger logr.Logger
 
-		pools            map[k8sTypes.UID]*GenericPool
+		// pools is keyed by poolKey(env UID, image hash): the env UID alone
+		// for plain fetcher-based pools, or env UID + "/" + image hash for
+		// per-image image-volume pools (RFC-0001 Path B).
+		pools            map[string]*GenericPool
 		kubernetesClient kubernetes.Interface
 		metricsClient    metricsclient.Interface
 		nsResolver       *utils.NamespaceResolver
@@ -79,10 +84,16 @@ type (
 		// informer listers). Set in RegisterReconcilers.
 		crClient client.Client
 
-		// readyPodQueues maps env UID -> a pool's readyPodQueue, published by the
-		// actor on pool create and removed on destroy. The Pod reconciler reads it
-		// lock-free (sync.Map) to feed warm pods into the right pool's queue.
+		// readyPodQueues maps pool key (poolKey(env UID, image hash)) -> a
+		// pool's readyPodQueue, published by the actor on pool create and
+		// removed on destroy. The Pod reconciler reads it lock-free
+		// (sync.Map) to feed warm pods into the right pool's queue.
 		readyPodQueues sync.Map
+
+		// imageVolumeOK is the once-evaluated RFC-0001 Path B gate:
+		// ENABLE_OCI_IMAGE_VOLUME opted in AND the cluster supports
+		// KEP-4639 image volumes (>= 1.33).
+		imageVolumeOK bool
 
 		enableIstio   bool
 		fetcherConfig *fetcherConfig.Config
@@ -96,14 +107,20 @@ type (
 	}
 	request struct {
 		requestType
-		ctx             context.Context
-		env             *fv1.Environment
+		ctx context.Context
+		env *fv1.Environment
+		// oci selects a per-image image-volume pool (RFC-0001 Path B);
+		// nil selects the env's plain fetcher-based pool.
+		oci             *fv1.OCIArchive
 		responseChannel chan *response
 	}
 	response struct {
 		error
 		pool    *GenericPool
 		created bool
+		// pools is the GET_ENV_POOLS payload: every live pool of an env
+		// (plain + per-image).
+		pools []*GenericPool
 	}
 )
 
@@ -128,10 +145,15 @@ func MakeGenericPoolManager(ctx context.Context,
 		enableIstio = istio
 	}
 
+	// RFC-0001 Path B gate, evaluated once (shared helper, so poolmgr and
+	// newdeploy cannot drift).
+	imageVolumeOK := executorUtils.ImageVolumeGate(gpmLogger, kubernetesClient.Discovery())
+
 	poolPodC := NewPoolPodController(gpmLogger, kubernetesClient)
 	gpm := &GenericPoolManager{
 		logger:                     gpmLogger,
-		pools:                      make(map[k8sTypes.UID]*GenericPool),
+		pools:                      make(map[string]*GenericPool),
+		imageVolumeOK:              imageVolumeOK,
 		kubernetesClient:           kubernetesClient,
 		nsResolver:                 utils.DefaultNSResolver(),
 		metricsClient:              metricsClient,
@@ -204,7 +226,21 @@ func (gpm *GenericPoolManager) GetFuncSvc(ctx context.Context, fn *fv1.Function)
 		return nil, fErr
 	}
 
-	pool, created, err := gpm.getPool(ctx, env)
+	// RFC-0001 Path B: an eligible OCI-packaged function gets a per-image
+	// pool whose pods mount the code as an image volume (no fetcher). nil
+	// means the plain pool serves it (Path A or non-OCI). A failed
+	// eligibility read fails the cold start (the router retries) rather
+	// than silently pinning the function to the wrong pool type in fsCache.
+	var oci *fv1.OCIArchive
+	if gpm.imageVolumeOK {
+		oci, err = gpm.getFunctionOCIArchive(ctx, fn, env)
+		if err != nil {
+			fErr = fmt.Errorf("error reading package for OCI eligibility of function %s: %w", fn.Name, err)
+			return nil, fErr
+		}
+	}
+
+	pool, created, err := gpm.getPool(ctx, env, oci)
 	if err != nil {
 		fErr = err
 		return nil, fErr
@@ -293,7 +329,7 @@ func (gpm *GenericPoolManager) RefreshFuncPods(ctx context.Context, logger logr.
 		return err
 	}
 
-	gp, created, err := gpm.getPool(ctx, env)
+	gp, created, err := gpm.getPool(ctx, env, nil)
 	if err != nil {
 		return err
 	}
@@ -348,7 +384,7 @@ func (gpm *GenericPoolManager) AdoptExistingResources(ctx context.Context) {
 
 			if getEnvPoolSize(&env) > 0 {
 				wg.Go(func() {
-					_, created, err := gpm.getPool(ctx, &env)
+					_, created, err := gpm.getPool(ctx, &env, nil)
 					if err != nil {
 						gpm.logger.Error(err, "adopt pool failed")
 					}
@@ -366,6 +402,37 @@ func (gpm *GenericPoolManager) AdoptExistingResources(ctx context.Context) {
 
 	l := map[string]string{
 		fv1.EXECUTOR_TYPE: string(fv1.ExecutorTypePoolmgr),
+	}
+
+	// Per-image (Path B) pool deployments are created lazily on the first
+	// request, so the env loop above (which adopts each env's plain pool via
+	// getPool) never refreshes their instanceID annotation — and the
+	// post-adopt reaper deletes any poolmgr deployment with a stale
+	// instanceID. Adopt them in place here; the pool object re-attaches to
+	// the deployment on the next request for its image.
+	perImageSelector := labels.Set(l).AsSelector().String() + "," + fv1.POOL_OCI_IMAGE_HASH
+	poolNamespaces := make(map[string]struct{})
+	for _, ns := range utils.DefaultNSResolver().FissionResourceNS {
+		poolNamespaces[gpm.nsResolver.GetFunctionNS(ns)] = struct{}{}
+	}
+	for namespace := range poolNamespaces {
+		deployList, err := gpm.kubernetesClient.AppsV1().Deployments(namespace).List(ctx, metav1.ListOptions{
+			LabelSelector: perImageSelector,
+		})
+		if err != nil {
+			gpm.logger.Error(err, "error listing per-image pool deployments for adoption", "namespace", namespace)
+			continue
+		}
+		for i := range deployList.Items {
+			depl := &deployList.Items[i]
+			wg.Go(func() {
+				patch := fmt.Sprintf(`{"metadata":{"annotations":{"%s":"%s"}}}`, fv1.EXECUTOR_INSTANCEID_LABEL, gpm.instanceID)
+				_, err := gpm.kubernetesClient.AppsV1().Deployments(depl.Namespace).Patch(ctx, depl.Name, k8sTypes.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
+				if err != nil {
+					gpm.logger.Error(err, "error adopting per-image pool deployment", "deployment", depl.Name, "ns", depl.Namespace)
+				}
+			})
+		}
 	}
 
 	for _, namespace := range utils.DefaultNSResolver().FissionResourceNS {
@@ -494,23 +561,28 @@ func (gpm *GenericPoolManager) service() {
 			// just because they are missing in the cache, we end up creating another duplicate pool.
 			var err error
 			created := false
-			pool, ok := gpm.pools[crd.CacheKeyUIDFromMeta(&req.env.ObjectMeta)]
+			imageHash := ""
+			if req.oci != nil {
+				imageHash = ociPoolHash(req.oci)
+			}
+			key := poolKey(req.env.UID, imageHash)
+			pool, ok := gpm.pools[key]
 			if !ok {
 				// To support backward compatibility, if envs are created in default ns, we go ahead
 				// and create pools in fission-function ns as earlier.
 				ns := gpm.nsResolver.GetFunctionNS(req.env.Namespace)
 				pool = MakeGenericPool(gpm.logger, gpm.fissionClient, gpm.kubernetesClient,
 					gpm.metricsClient, req.env, ns, gpm.fsCache,
-					gpm.fetcherConfig, gpm.instanceID, gpm.enableIstio, gpm.podSpecPatch, gpm.crClient)
+					gpm.fetcherConfig, gpm.instanceID, gpm.enableIstio, gpm.podSpecPatch, gpm.crClient, req.oci)
 				err = pool.setup(req.ctx)
 				if err != nil {
 					req.responseChannel <- &response{error: err}
 					continue
 				}
-				gpm.pools[crd.CacheKeyUIDFromMeta(&req.env.ObjectMeta)] = pool
+				gpm.pools[key] = pool
 				// Publish the pool's readyPodQueue so the Pod reconciler can feed it
-				// warm pods. Keyed by env UID, read lock-free from the reconciler.
-				gpm.readyPodQueues.Store(string(req.env.UID), pool.readyPodQueue)
+				// warm pods. Keyed by pool key, read lock-free from the reconciler.
+				gpm.readyPodQueues.Store(key, pool.readyPodQueue)
 				// Seed the queue with already-Running warm pods. The reconciler only
 				// sees pods that change after the queue is published, so existing pods
 				// (executor restart, or adopting an existing pool deployment) would
@@ -519,48 +591,78 @@ func (gpm *GenericPoolManager) service() {
 				// work, so it must not ride the request context: if the triggering
 				// request is cancelled here the pool would stay published-but-unseeded
 				// and later callers find the existing pool and skip the seed.
-				gpm.seedReadyPodQueue(context.Background(), req.env, pool.readyPodQueue)
+				gpm.seedReadyPodQueue(context.Background(), req.env, imageHash, pool.readyPodQueue)
 				created = true
 			}
 			req.responseChannel <- &response{pool: pool, created: created}
 		case CLEANUP_POOL:
 			env := *req.env
-			gpm.logger.Info("destroying pool",
+			gpm.logger.Info("destroying pools",
 				"environment", env.Name,
 				"namespace", env.Namespace)
 
-			key := crd.CacheKeyUIDFromMeta(&req.env.ObjectMeta)
-			pool, ok := gpm.pools[key]
-			if !ok {
-				gpm.logger.Info("pool already removed", "environment", env.Name, "namespace", env.Namespace)
-				continue
-			}
-			delete(gpm.pools, key)
-			gpm.readyPodQueues.Delete(string(req.env.UID))
-			if pool != nil {
-				err := pool.destroy(req.ctx)
-				if err != nil {
-					gpm.logger.Error(err, "failed to destroy pool",
-						"environment", env.Name,
-						"namespace", env.Namespace)
+			// An env owns its plain pool plus any per-image pools
+			// (RFC-0001 Path B) — destroy them all.
+			found := false
+			for key, pool := range gpm.pools {
+				if !envPoolKeyPrefixMatch(key, req.env.UID) {
+					continue
+				}
+				found = true
+				delete(gpm.pools, key)
+				gpm.readyPodQueues.Delete(key)
+				if pool != nil {
+					err := pool.destroy(req.ctx)
+					if err != nil {
+						gpm.logger.Error(err, "failed to destroy pool",
+							"environment", env.Name,
+							"namespace", env.Namespace,
+							"poolKey", key)
+					}
 				}
 			}
+			if !found {
+				gpm.logger.Info("pool already removed", "environment", env.Name, "namespace", env.Namespace)
+			}
 			// no response, caller doesn't wait
+		case GET_ENV_POOLS:
+			pools := make([]*GenericPool, 0, 1)
+			for key, pool := range gpm.pools {
+				if envPoolKeyPrefixMatch(key, req.env.UID) {
+					pools = append(pools, pool)
+				}
+			}
+			req.responseChannel <- &response{pools: pools}
 		}
 	}
 }
 
-func (gpm *GenericPoolManager) getPool(ctx context.Context, env *fv1.Environment) (*GenericPool, bool, error) {
+func (gpm *GenericPoolManager) getPool(ctx context.Context, env *fv1.Environment, oci *fv1.OCIArchive) (*GenericPool, bool, error) {
 	otelUtils.SpanTrackEvent(ctx, "getPool", otelUtils.GetAttributesForEnv(env)...)
 	c := make(chan *response)
 	gpm.requestChannel <- &request{
 		ctx:             ctx,
 		requestType:     GET_POOL,
 		env:             env,
+		oci:             oci,
 		responseChannel: c,
 	}
 	resp := <-c
 	return resp.pool, resp.created, resp.error
+}
+
+// getEnvPools returns every live pool of an env: the plain pool plus any
+// per-image pools (RFC-0001 Path B).
+func (gpm *GenericPoolManager) getEnvPools(ctx context.Context, env *fv1.Environment) []*GenericPool {
+	c := make(chan *response)
+	gpm.requestChannel <- &request{
+		ctx:             ctx,
+		requestType:     GET_ENV_POOLS,
+		env:             env,
+		responseChannel: c,
+	}
+	resp := <-c
+	return resp.pools
 }
 
 func (gpm *GenericPoolManager) cleanupPool(ctx context.Context, env *fv1.Environment) {
@@ -586,12 +688,13 @@ func (gpm *GenericPoolManager) processReplicaSet(ctx context.Context, rs *appsv1
 	gpm.poolPodC.processRS(ctx, rs)
 }
 
-// enqueueReadyPod adds a warm pod's key to its pool's readyPodQueue (looked up by
-// env UID). Driven by the readyPod reconciler. A pool that no longer exists (race
-// with destroy) is simply skipped — its queue is gone and choosePod won't run.
-func (gpm *GenericPoolManager) enqueueReadyPod(envUID, key string) {
-	if q, ok := gpm.readyPodQueues.Load(envUID); ok {
-		q.(workqueue.TypedDelayingInterface[string]).AddAfter(key, 100*time.Millisecond)
+// enqueueReadyPod adds a warm pod's key to its pool's readyPodQueue (looked up
+// by pool key — env UID, plus image hash for per-image pools). Driven by the
+// readyPod reconciler. A pool that no longer exists (race with destroy) is
+// simply skipped — its queue is gone and choosePod won't run.
+func (gpm *GenericPoolManager) enqueueReadyPod(queueKey, podKey string) {
+	if q, ok := gpm.readyPodQueues.Load(queueKey); ok {
+		q.(workqueue.TypedDelayingInterface[string]).AddAfter(podKey, 100*time.Millisecond)
 	}
 }
 
@@ -599,15 +702,36 @@ func (gpm *GenericPoolManager) enqueueReadyPod(envUID, key string) {
 // freshly-published readyPodQueue, so choosePod isn't left blocked on an empty
 // queue when pods were Running before the queue existed (executor restart, or
 // adopting an existing pool deployment). The readyPodQueue dedups, so any overlap
-// with the reconciler's own events is harmless.
-func (gpm *GenericPoolManager) seedReadyPodQueue(ctx context.Context, env *fv1.Environment, queue workqueue.TypedDelayingInterface[string]) {
+// with the reconciler's own events is harmless. imageHash scopes the seed to
+// one pool's pods: per-image pools select on their POOL_OCI_IMAGE_HASH label;
+// the plain pool requires the label to be absent, so it never steals an
+// image-volume pod (which has no fetcher and must not serve fetcher-path
+// functions).
+func (gpm *GenericPoolManager) seedReadyPodQueue(ctx context.Context, env *fv1.Environment, imageHash string, queue workqueue.TypedDelayingInterface[string]) {
 	ns := gpm.nsResolver.GetFunctionNS(env.Namespace)
-	podList := &apiv1.PodList{}
-	if err := gpm.crClient.List(ctx, podList, client.InNamespace(ns), client.MatchingLabels(map[string]string{
+	selector := labels.SelectorFromSet(labels.Set{
 		fv1.EXECUTOR_TYPE:   string(fv1.ExecutorTypePoolmgr),
 		fv1.ENVIRONMENT_UID: string(env.UID),
 		"managed":           "true",
-	})); err != nil {
+	})
+	if imageHash != "" {
+		req, err := labels.NewRequirement(fv1.POOL_OCI_IMAGE_HASH, selection.Equals, []string{imageHash})
+		if err != nil {
+			gpm.logger.Error(err, "failed to build image-hash selector", "env", env.Name)
+			return
+		}
+		selector = selector.Add(*req)
+	} else {
+		req, err := labels.NewRequirement(fv1.POOL_OCI_IMAGE_HASH, selection.DoesNotExist, nil)
+		if err != nil {
+			gpm.logger.Error(err, "failed to build image-hash selector", "env", env.Name)
+			return
+		}
+		selector = selector.Add(*req)
+	}
+	podList := &apiv1.PodList{}
+	if err := gpm.crClient.List(ctx, podList, client.InNamespace(ns),
+		client.MatchingLabelsSelector{Selector: selector}); err != nil {
 		gpm.logger.Error(err, "failed to seed ready pod queue", "env", env.Name, "namespace", env.Namespace)
 		return
 	}
@@ -624,13 +748,14 @@ func (gpm *GenericPoolManager) seedReadyPodQueue(ctx context.Context, env *fv1.E
 	}
 }
 
-// reconcileEnvPool brings an environment's warm pool to its desired state:
-// ensure the pool exists, destroy it if the pool size is zero, otherwise update
-// the pool deployment. Driven by the Environment reconciler on create/update
+// reconcileEnvPool brings an environment's warm pools to their desired state:
+// ensure the plain pool exists, destroy every pool if the pool size is zero,
+// otherwise update each pool deployment (the plain pool plus any per-image
+// Path B pools). Driven by the Environment reconciler on create/update
 // (replacing poolpodcontroller's envCreateUpdateQueue handler).
 func (gpm *GenericPoolManager) reconcileEnvPool(ctx context.Context, env *fv1.Environment) error {
 	log := gpm.logger.WithValues("env", env.Name, "namespace", env.Namespace)
-	pool, created, err := gpm.getPool(ctx, env)
+	_, created, err := gpm.getPool(ctx, env, nil)
 	if err != nil {
 		return err
 	}
@@ -643,8 +768,12 @@ func (gpm *GenericPoolManager) reconcileEnvPool(ctx context.Context, env *fv1.En
 		gpm.cleanupPool(ctx, env)
 		return nil
 	}
-	if err := pool.updatePoolDeployment(ctx, env); err != nil {
-		return err
+	var errs error
+	for _, pool := range gpm.getEnvPools(ctx, env) {
+		errs = errors.Join(errs, pool.updatePoolDeployment(ctx, env))
+	}
+	if errs != nil {
+		return errs
 	}
 	// Any specialized pods are recycled by the ReplicaSet → cleanup path.
 	return nil

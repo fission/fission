@@ -160,6 +160,7 @@ const (
 	PkgSrcChecksum    = "srcchecksum"
 	PkgDeployChecksum = "deploychecksum"
 	PkgInsecure       = "insecure"
+	PkgOCI            = "oci"
 	PkgBuildCmd       = "buildcmd"
 	PkgOutput         = Output
 	PkgStatus         = "status"

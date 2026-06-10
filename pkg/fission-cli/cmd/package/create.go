@@ -59,6 +59,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 	srcArchiveFiles := input.StringSlice(flagkey.PkgSrcArchive)
 	deployArchiveFiles := input.StringSlice(flagkey.PkgDeployArchive)
 	buildcmd := input.String(flagkey.PkgBuildCmd)
+	ociImage := input.String(flagkey.PkgOCI)
 
 	noZip := false
 	code := input.String(flagkey.PkgCode)
@@ -69,8 +70,8 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 		noZip = true
 	}
 
-	if len(srcArchiveFiles) == 0 && len(deployArchiveFiles) == 0 {
-		return fmt.Errorf("need --%v or --%v or --%v argument", flagkey.PkgCode, flagkey.PkgSrcArchive, flagkey.PkgDeployArchive)
+	if err := ValidateArchiveSources(code, srcArchiveFiles, deployArchiveFiles, ociImage); err != nil {
+		return err
 	}
 
 	var specDir, specFile string
@@ -106,14 +107,27 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 	}
 
 	_, err = CreatePackage(input, opts.Client(), pkgName, pkgNamespace, envName,
-		srcArchiveFiles, deployArchiveFiles, buildcmd, specDir, specFile, noZip, userProvidedNS)
+		srcArchiveFiles, deployArchiveFiles, buildcmd, specDir, specFile, noZip, userProvidedNS, ociImage)
 
 	return err
 }
 
+// ValidateArchiveSources enforces that --oci is not combined with
+// --code/--src/--deploy and that at least one code source is given. It is
+// shared by `package create` and `fn create`.
+func ValidateArchiveSources(code string, srcArchiveFiles, deployArchiveFiles []string, ociImage string) error {
+	if len(ociImage) > 0 && (len(code) > 0 || len(srcArchiveFiles) > 0 || len(deployArchiveFiles) > 0) {
+		return fmt.Errorf("--%v cannot be combined with --%v, --%v, or --%v", flagkey.PkgOCI, flagkey.PkgCode, flagkey.PkgSrcArchive, flagkey.PkgDeployArchive)
+	}
+	if len(code) == 0 && len(srcArchiveFiles) == 0 && len(deployArchiveFiles) == 0 && len(ociImage) == 0 {
+		return fmt.Errorf("need --%v or --%v or --%v or --%v argument", flagkey.PkgCode, flagkey.PkgSrcArchive, flagkey.PkgDeployArchive, flagkey.PkgOCI)
+	}
+	return nil
+}
+
 // TODO: get all necessary value from CLI input directly
 func CreatePackage(input cli.Input, client cmd.Client, pkgName string, pkgNamespace string, envName string,
-	srcArchiveFiles []string, deployArchiveFiles []string, buildcmd string, specDir string, specFile string, noZip bool, userProvidedNS string) (*metav1.ObjectMeta, error) {
+	srcArchiveFiles []string, deployArchiveFiles []string, buildcmd string, specDir string, specFile string, noZip bool, userProvidedNS string, ociImage string) (*metav1.ObjectMeta, error) {
 
 	insecure := input.Bool(flagkey.PkgInsecure)
 	deployChecksum := input.String(flagkey.PkgDeployChecksum)
@@ -135,6 +149,23 @@ func CreatePackage(input cli.Input, client cmd.Client, pkgName string, pkgNamesp
 	}
 
 	var pkgStatus fv1.BuildStatus = fv1.BuildStatusSucceeded
+
+	if len(ociImage) > 0 {
+		// The OCI archive is built inline: no file globbing, zipping, or
+		// upload happens for a pre-built image reference (RFC-0001).
+		// ValidateArchiveSources guarantees no overlap with file archives.
+		pkgSpec.Deployment = fv1.Archive{
+			Type: fv1.ArchiveTypeOCI,
+			OCI:  &fv1.OCIArchive{Image: ociImage},
+		}
+		// Cosmetic: the /status subresource strips client-set status on
+		// create; Archive.IsEmpty + buildermgr setInitialBuildStatus is the
+		// load-bearing "nothing to build" mechanism.
+		pkgStatus = fv1.BuildStatusNone
+		if len(pkgName) == 0 {
+			pkgName = util.KubifyName(fmt.Sprintf("%v-%v", path.Base(ociImage), uniuri.NewLen(4)))
+		}
+	}
 
 	if len(deployArchiveFiles) > 0 {
 		if len(specFile) > 0 { // we should do this in all cases, i think

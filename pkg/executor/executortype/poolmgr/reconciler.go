@@ -12,6 +12,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	k8sTypes "k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -80,7 +81,7 @@ var poolmgrReplicaSetPredicate = predicate.NewPredicateFuncs(func(obj client.Obj
 // readyPodEnqueuer is the subset of *GenericPoolManager the readyPod reconciler
 // drives — adding a warm pod's key to its pool's readyPodQueue.
 type readyPodEnqueuer interface {
-	enqueueReadyPod(envUID, key string)
+	enqueueReadyPod(queueKey, podKey string)
 }
 
 // readyPodReconciler feeds warm (unspecialized, Running) pool pods into their
@@ -113,7 +114,10 @@ func (r *readyPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	if envUID == "" {
 		return ctrl.Result{}, nil
 	}
-	r.enqueuer.enqueueReadyPod(envUID, req.String())
+	// Per-image (Path B) pool pods carry the image-hash label; route them to
+	// their own pool's queue. Absent label -> the env's plain pool.
+	imageHash := pod.Labels[fv1.POOL_OCI_IMAGE_HASH]
+	r.enqueuer.enqueueReadyPod(poolKey(k8sTypes.UID(envUID), imageHash), req.String())
 	return ctrl.Result{}, nil
 }
 

@@ -5,7 +5,6 @@
 package poolmgr
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -78,48 +77,47 @@ func TestGenDeploymentSpecPreStopLifecycle(t *testing.T) {
 const envContainerName = "test-env"
 
 func TestGetPoolName(t *testing.T) {
+	longEnv := &fv1.Environment{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       fv1.CRD_NAME_ENVIRONMENT,
+			APIVersion: fv1.CRD_VERSION,
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "justtryingtoincreasethenumberofcharactersinthisstring",
+			Namespace:       "checkingifthegetpoolfunctionworkswithcharactersmorethan18",
+			ResourceVersion: "2518",
+		},
+	}
+	shortEnv := &fv1.Environment{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       fv1.CRD_NAME_ENVIRONMENT,
+			APIVersion: fv1.CRD_VERSION,
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "test",
+			Namespace:       "testns",
+			ResourceVersion: "2517",
+		},
+	}
 	tests := []struct {
-		name string
-		env  *fv1.Environment
-		want string
+		name      string
+		env       *fv1.Environment
+		imageHash string
+		want      string
 	}{
-		{
-			"Under character limit",
-			&fv1.Environment{
-				TypeMeta: metav1.TypeMeta{
-					Kind:       fv1.CRD_NAME_ENVIRONMENT,
-					APIVersion: fv1.CRD_VERSION,
-				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:            "test",
-					Namespace:       "testns",
-					ResourceVersion: "2517",
-				},
-			},
-			"poolmgr-test-testns-2517",
-		},
-		{
-			"Over character limit",
-			&fv1.Environment{
-				TypeMeta: metav1.TypeMeta{
-					Kind:       fv1.CRD_NAME_ENVIRONMENT,
-					APIVersion: fv1.CRD_VERSION,
-				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:            "justtryingtoincreasethenumberofcharactersinthisstring",
-					Namespace:       "checkingifthegetpoolfunctionworkswithcharactersmorethan18",
-					ResourceVersion: "2518",
-				},
-			},
-			"poolmgr-justtryingtoincrea-checkingifthegetpo-2518",
-		},
+		{"Under character limit", shortEnv, "", "poolmgr-test-testns-2517"},
+		{"Over character limit", longEnv, "", "poolmgr-justtryingtoincrea-checkingifthegetpo-2518"},
+		{"Per-image pool suffix", shortEnv, "abcdef0123456789", "poolmgr-test-testns-abcdef01-2517"},
+		{"Per-image pool over character limit", longEnv, "abcdef0123456789", "poolmgr-justtryingtoi-checkingifthe-abcdef01-2518"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := getPoolName(tt.env); got != tt.want {
+			got := getPoolName(tt.env, tt.imageHash)
+			if got != tt.want {
 				t.Errorf("getPoolName() = %s, want = %s len(getPoolName()) = %x len(want) = %x", got, tt.want, len(got), len(tt.want))
-			} else {
-				fmt.Printf("getPoolName() = %s,length of string = %x", got, len(got))
+			}
+			if len(got) > 63 {
+				t.Errorf("getPoolName() = %s is %d chars, over the 63-char DNS label limit", got, len(got))
 			}
 		})
 	}
@@ -310,4 +308,145 @@ func TestGenericPoolPodSpecRuntimePodSpecCannotIntroduceDuplicateSATokenMount(t 
 		"fetcher container must have exactly one mount at the SA token path; user-supplied mount at the same path must be stripped by MountFetcherSATokenOnFetcher")
 	assert.Equal(t, util.FetcherSATokenVolumeName, mountVolumeName,
 		"the surviving mount must be backed by the projected SA token volume, not the user-supplied one")
+}
+
+// newTestOCIPool returns a GenericPool configured as a per-image image-volume
+// pool (RFC-0001 Path B).
+func newTestOCIPool(t *testing.T, oci *fv1.OCIArchive) *GenericPool {
+	t.Helper()
+	gp := newTestGenericPool(t)
+	gp.oci = oci
+	gp.ociImageHash = ociPoolHash(oci)
+	return gp
+}
+
+// TestGenDeploymentSpecOCIImageVolume asserts the shape of a Path B pool pod:
+// no fetcher container, the code mounted read-only from an image volume at
+// the shared mount path, pull secrets propagated, and the
+// AutomountServiceAccountToken=false invariant intact.
+func TestGenDeploymentSpecOCIImageVolume(t *testing.T) {
+	t.Parallel()
+	oci := &fv1.OCIArchive{
+		Image:            "registry.example.com/code/hello:v1",
+		SubPath:          "app",
+		ImagePullSecrets: []apiv1.LocalObjectReference{{Name: "regcred"}},
+	}
+	gp := newTestOCIPool(t, oci)
+	env := newTestEnv()
+	env.Spec.Version = 2
+
+	deploymentSpec, err := gp.genDeploymentSpec(env)
+	require.NoError(t, err)
+	pod := deploymentSpec.Template
+
+	// Exactly one container: the env runtime. No fetcher.
+	require.Len(t, pod.Spec.Containers, 1, "Path B pods must not carry a fetcher container")
+	user := pod.Spec.Containers[0]
+	assert.Equal(t, envContainerName, user.Name)
+
+	// The image volume holds the code.
+	var imgVol *apiv1.Volume
+	for i := range pod.Spec.Volumes {
+		if pod.Spec.Volumes[i].Image != nil {
+			imgVol = &pod.Spec.Volumes[i]
+			break
+		}
+	}
+	require.NotNil(t, imgVol, "an image volume must be present")
+	assert.Equal(t, oci.Image, imgVol.Image.Reference)
+	assert.Equal(t, apiv1.PullIfNotPresent, imgVol.Image.PullPolicy)
+
+	// No fetcher SA token projected volume — there is no fetcher to use it.
+	for _, v := range pod.Spec.Volumes {
+		assert.NotEqual(t, util.FetcherSATokenVolumeName, v.Name,
+			"Path B pods must not carry the fetcher SA token volume")
+	}
+
+	// Mounted read-only at the fetcher's store path — the exact path the
+	// load request names (LoadReq.FilePath = <sharedMountPath>/deployarchive)
+	// — with the sub-path applied.
+	var mount *apiv1.VolumeMount
+	for i := range user.VolumeMounts {
+		if user.VolumeMounts[i].Name == imgVol.Name {
+			mount = &user.VolumeMounts[i]
+			break
+		}
+	}
+	require.NotNil(t, mount, "user container must mount the image volume")
+	assert.Equal(t, gp.fetcherConfig.SharedMountPath()+"/"+fetcherConfig.TargetFilenameDeployArchive, mount.MountPath)
+	assert.Equal(t, "app", mount.SubPath)
+	assert.True(t, mount.ReadOnly, "image volume mount must be read-only")
+
+	// Pull secrets reach the pod so the kubelet can pull the image volume.
+	assert.Contains(t, pod.Spec.ImagePullSecrets, apiv1.LocalObjectReference{Name: "regcred"})
+
+	// Security invariant unchanged.
+	require.NotNil(t, pod.Spec.AutomountServiceAccountToken)
+	assert.False(t, *pod.Spec.AutomountServiceAccountToken)
+
+	// The pod labels carry the image hash so the reconciler routes warm pods
+	// to this pool's queue.
+	assert.Equal(t, gp.ociImageHash, pod.Labels[fv1.POOL_OCI_IMAGE_HASH])
+	assert.Equal(t, gp.ociImageHash, deploymentSpec.Selector.MatchLabels[fv1.POOL_OCI_IMAGE_HASH])
+}
+
+// TestGenDeploymentSpecOCIWithPodSpecPatch asserts the pod-spec invariants are
+// re-clamped after every merge on the Path B branch too: a runtime pod spec
+// cannot re-enable SA token automount, and the image volume survives.
+func TestGenDeploymentSpecOCIWithPodSpecPatch(t *testing.T) {
+	t.Parallel()
+	gp := newTestOCIPool(t, &fv1.OCIArchive{Image: "registry.example.com/code/hello:v1"})
+	env := newTestEnv()
+	env.Spec.Version = 2
+	env.Spec.Runtime.PodSpec = &apiv1.PodSpec{
+		AutomountServiceAccountToken: new(true),
+	}
+
+	deploymentSpec, err := gp.genDeploymentSpec(env)
+	require.NoError(t, err)
+	pod := deploymentSpec.Template
+
+	require.NotNil(t, pod.Spec.AutomountServiceAccountToken)
+	assert.False(t, *pod.Spec.AutomountServiceAccountToken,
+		"runtime pod spec must not re-enable SA token automount on Path B pods")
+
+	found := false
+	for _, v := range pod.Spec.Volumes {
+		if v.Image != nil {
+			found = true
+		}
+	}
+	assert.True(t, found, "the image volume must survive the pod-spec merge")
+}
+
+// TestGenDeploymentSpecNonOCIUnchanged is the parity guard: a plain pool's
+// deployment spec keeps the pre-Path-B layout invariants — the fetcher
+// container, its SA token projected volume, and no image volume.
+func TestGenDeploymentSpecNonOCIUnchanged(t *testing.T) {
+	t.Parallel()
+	gp := newTestGenericPool(t)
+	env := newTestEnv()
+
+	deploymentSpec, err := gp.genDeploymentSpec(env)
+	require.NoError(t, err)
+	pod := deploymentSpec.Template
+
+	names := make([]string, 0, len(pod.Spec.Containers))
+	for _, c := range pod.Spec.Containers {
+		names = append(names, c.Name)
+	}
+	assert.Contains(t, names, util.FetcherContainerName, "plain pools keep the fetcher container")
+
+	hasSATokenVolume, hasImageVolume := false, false
+	for _, v := range pod.Spec.Volumes {
+		if v.Name == util.FetcherSATokenVolumeName {
+			hasSATokenVolume = true
+		}
+		if v.Image != nil {
+			hasImageVolume = true
+		}
+	}
+	assert.True(t, hasSATokenVolume, "plain pools keep the fetcher SA token volume")
+	assert.False(t, hasImageVolume, "plain pools must not grow an image volume")
+	assert.NotContains(t, pod.Labels, fv1.POOL_OCI_IMAGE_HASH)
 }

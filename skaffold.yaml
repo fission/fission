@@ -34,6 +34,8 @@ manifests:
           canaryDeployment.enabled: "false"
           coverage.enabled: "false"
           debugEnv: "false"
+          executor.enableOCIImageVolume: "false"
+          fetcher.allowInsecureRegistries: ""
           fetcher.imageTag: ""
           functionNamespace: ""
           gatewayAPI.enabled: "false"
@@ -149,6 +151,18 @@ profiles:
       - op: replace
         path: /manifests/helm/releases/0/setValues/gatewayAPI.defaultParentRef
         value: fission/eg-gateway
+      # Trust the in-cluster plain-HTTP test registry for OCI package pulls
+      # (paired with the registry Deployment in push_pr.yaml and the
+      # FISSION_TEST_REGISTRY-gated TestOCIPackage* integration tests).
+      - op: replace
+        path: /manifests/helm/releases/0/setValues/fetcher.allowInsecureRegistries
+        value: test-registry.default.svc.cluster.local:5000
+      # Opt into image-volume delivery (RFC-0001 Path B) on every leg: the
+      # executor's server-version gate keeps it inert below 1.33, and the
+      # Path B integration test additionally gates on FISSION_TEST_IMAGE_VOLUME.
+      - op: replace
+        path: /manifests/helm/releases/0/setValues/executor.enableOCIImageVolume
+        value: true
   - name: kind-ci-old
     patches:
       - op: replace

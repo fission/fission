@@ -71,6 +71,14 @@ type (
 		instanceID            string // poolmgr instance id
 		podSpecPatch          *apiv1.PodSpec
 		enableOwnerReferences bool
+		// oci marks this as a per-image image-volume pool (RFC-0001 Path B):
+		// its pods mount the package image read-only at the fetcher's store
+		// path (<sharedMountPath>/deployarchive) and carry no fetcher
+		// sidecar. nil for plain pools.
+		oci *fv1.OCIArchive
+		// ociImageHash is ociPoolHash(oci): keys the pool, labels its
+		// pods, and suffixes the deployment name. Empty for plain pools.
+		ociImageHash string
 		// TODO: move this field into fsCache
 		podFSVCMap sync.Map
 	}
@@ -89,7 +97,8 @@ func MakeGenericPool(
 	instanceID string,
 	enableIstio bool,
 	podSpecPatch *apiv1.PodSpec,
-	crClient client.Client) *GenericPool {
+	crClient client.Client,
+	oci *fv1.OCIArchive) *GenericPool {
 
 	gpLogger := logger.WithName("generic_pool")
 
@@ -126,6 +135,10 @@ func MakeGenericPool(
 		podSpecPatch:          podSpecPatch,
 		enableOwnerReferences: utils.IsOwnerReferencesEnabled(),
 		lock:                  sync.Mutex{},
+		oci:                   oci,
+	}
+	if oci != nil {
+		gp.ociImageHash = ociPoolHash(oci)
 	}
 
 	gp.runtimeImagePullPolicy = utils.GetImagePullPolicy(os.Getenv("RUNTIME_IMAGE_PULL_POLICY"))
@@ -157,6 +170,11 @@ func (gp *GenericPool) getEnvironmentPoolLabels(env *fv1.Environment) map[string
 	envLabels[fv1.ENVIRONMENT_NAMESPACE] = env.Namespace
 	envLabels[fv1.ENVIRONMENT_UID] = string(env.UID)
 	envLabels["managed"] = "true" // this allows us to easily find pods managed by the deployment
+	if gp.ociImageHash != "" {
+		// Routes this pool's warm pods to its own readyPodQueue and keeps
+		// the plain pool's seed/selectors from picking them up.
+		envLabels[fv1.POOL_OCI_IMAGE_HASH] = gp.ociImageHash
+	}
 	return envLabels
 }
 
@@ -423,6 +441,14 @@ func (gp *GenericPool) specializePod(ctx context.Context, pod *apiv1.Pod, fn *fv
 	podIP := pod.Status.PodIP
 	if len(podIP) == 0 {
 		return fmt.Errorf("pod %s in namespace %s has no IP", pod.Name, pod.Namespace)
+	}
+
+	// Path B (image-volume) pods have no fetcher to relay through: the code
+	// is already mounted, so go straight to the env's load endpoint. The
+	// eligibility check guarantees such functions carry no Secrets or
+	// ConfigMaps and run v2+ environments.
+	if gp.oci != nil {
+		return gp.loadOnlySpecialize(ctx, podIP, fn)
 	}
 	for _, cm := range fn.Spec.ConfigMaps {
 		_, err := gp.kubernetesClient.CoreV1().ConfigMaps(gp.fnNamespace).Get(ctx, cm.Name, metav1.GetOptions{})

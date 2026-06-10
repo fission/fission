@@ -35,6 +35,12 @@ type Config struct {
 	sharedCfgMapPath string
 
 	serviceAccount string
+
+	// insecureRegistries is the comma-separated host allowlist permitted to
+	// serve OCI package images over plain HTTP (RFC-0001). Forwarded to the
+	// fetcher container verbatim; empty (the default) means every registry
+	// must serve TLS.
+	insecureRegistries string
 }
 
 // internalAuthEnvVars returns the env-var entries that mount the
@@ -123,6 +129,7 @@ func MakeFetcherConfig(sharedMountPath string) (*Config, error) {
 		sharedSecretPath:       "/secrets",
 		sharedCfgMapPath:       "/configs",
 		serviceAccount:         fv1.FissionFetcherSA,
+		insecureRegistries:     os.Getenv("FETCHER_ALLOW_INSECURE_REGISTRIES"),
 	}, nil
 }
 
@@ -130,20 +137,33 @@ func (cfg *Config) SharedMountPath() string {
 	return cfg.sharedMountPath
 }
 
-func (cfg *Config) NewSpecializeRequest(fn *fv1.Function, env *fv1.Environment) fetcher.FunctionSpecializeRequest {
-	targetFilename := "user"
+// TargetFilenameDeployArchive is the fixed store-path name for v2+
+// environments (except AllowedFunctionsPerContainerInfinite, which keys by
+// function UID). The poolmgr image-volume path relies on it being
+// function-independent to mount one code image per pool.
+const TargetFilenameDeployArchive = "deployarchive"
+
+// TargetFilename is the name (under the shared mount path) the fetcher
+// stores a function's deployment package at, and therefore the path the
+// loader reads. Exposed so the image-volume path (RFC-0001 Path B) can mount
+// the package image at exactly the fetcher's store path, turning the
+// fetcher's exists-early-exit into a no-op fetch.
+func (cfg *Config) TargetFilename(fn *fv1.Function, env *fv1.Environment) string {
 	if env.Spec.Version >= 2 {
 		if env.Spec.AllowedFunctionsPerContainer == fv1.AllowedFunctionsPerContainerInfinite {
 			// workflow loads multiple functions into one function pod,
 			// we have to use a Function UID to separate the function code
 			// to avoid overwriting.
-			targetFilename = string(fn.UID)
-		} else {
-			// set target file name to fix pattern for
-			// easy accessing.
-			targetFilename = "deployarchive"
+			return string(fn.UID)
 		}
+		// set target file name to fix pattern for easy accessing.
+		return TargetFilenameDeployArchive
 	}
+	return "user"
+}
+
+func (cfg *Config) NewSpecializeRequest(fn *fv1.Function, env *fv1.Environment) fetcher.FunctionSpecializeRequest {
+	targetFilename := cfg.TargetFilename(fn, env)
 
 	return fetcher.FunctionSpecializeRequest{
 		FetchReq: fetcher.FunctionFetchRequest{
@@ -307,6 +327,12 @@ func (cfg *Config) addFetcherToPodSpecWithCommand(podSpec *apiv1.PodSpec, mainCo
 			},
 		},
 		Env: append(otel.OtelEnvForContainer(), internalAuthEnvVars()...),
+	}
+	if cfg.insecureRegistries != "" {
+		c.Env = append(c.Env, apiv1.EnvVar{
+			Name:  "FETCHER_ALLOW_INSECURE_REGISTRIES",
+			Value: cfg.insecureRegistries,
+		})
 	}
 
 	// Connection-draining preStop hook; see utils.DrainLifecycle. Must be

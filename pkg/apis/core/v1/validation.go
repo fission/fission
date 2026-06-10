@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"reflect"
 	"regexp"
 	"slices"
@@ -196,15 +197,70 @@ func (checksum Checksum) Validate() error {
 	return errs
 }
 
+// ociDigestRegexp matches the only digest form OCIArchive.Digest accepts;
+// it mirrors the field's kubebuilder Pattern marker in types.go.
+var ociDigestRegexp = regexp.MustCompile(`^sha256:[a-f0-9]{64}$`)
+
+func (o OCIArchive) Validate() error {
+	var errs error
+
+	if len(o.Image) == 0 {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "OCIArchive.Image", o.Image, "image reference is required"))
+	}
+
+	if len(o.Digest) > 0 && !ociDigestRegexp.MatchString(o.Digest) {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "OCIArchive.Digest", o.Digest, "must be 'sha256:' followed by 64 hex characters"))
+	}
+
+	// A digest embedded in the image reference and a Digest field would race
+	// for precedence (the pull paths would resolve them differently) — make
+	// the user pick one.
+	if len(o.Digest) > 0 && strings.Contains(o.Image, "@") {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "OCIArchive.Digest", o.Digest, "image reference already pins a digest; set the digest in one place only"))
+	}
+
+	// SubPath rides into pod volumeMount subPaths on the image-volume path,
+	// where Kubernetes rejects absolute paths and path traversal.
+	if cleaned := strings.Trim(o.SubPath, "/"); cleaned != "" {
+		if strings.HasPrefix(o.SubPath, "/") || cleaned != filepath.Clean(cleaned) || strings.Contains(cleaned, "..") {
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "OCIArchive.SubPath", o.SubPath, "must be a clean relative directory path inside the image (no leading '/', no '..')"))
+		}
+	}
+
+	return errs
+}
+
 func (archive Archive) Validate() error {
 	var errs error
 
 	if len(archive.Type) > 0 {
 		switch archive.Type {
-		case ArchiveTypeLiteral, ArchiveTypeUrl: // no op
+		case ArchiveTypeLiteral, ArchiveTypeUrl, ArchiveTypeOCI: // no op
 		default:
 			errs = errors.Join(errs, MakeValidationErr(ErrorUnsupportedType, "Archive.Type", archive.Type, "not a valid archive type"))
 		}
+	}
+
+	// At most one content source. The Archive CEL rule only covers url+oci
+	// (it cannot reference the byte-format literal field — see the marker
+	// comment in types.go); combinations involving literal are rejected here,
+	// via the validating webhook.
+	set := 0
+	if len(archive.Literal) > 0 {
+		set++
+	}
+	if len(archive.URL) > 0 {
+		set++
+	}
+	if archive.OCI != nil {
+		set++
+	}
+	if set > 1 {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "Archive", archive.Type, "at most one of literal, url, or oci may be set"))
+	}
+
+	if archive.OCI != nil {
+		errs = errors.Join(errs, archive.OCI.Validate())
 	}
 
 	if archive.Checksum != (Checksum{}) {
@@ -232,9 +288,15 @@ func (spec PackageSpec) Validate() error {
 	errs = errors.Join(errs, spec.Environment.Validate())
 
 	for _, r := range []Archive{spec.Source, spec.Deployment} {
-		if len(r.URL) > 0 || len(r.Literal) > 0 {
+		if !r.IsEmpty() {
 			errs = errors.Join(errs, r.Validate())
 		}
+	}
+
+	// OCI delivery applies to deployment archives only: source archives feed
+	// the builder, which has no OCI pull path.
+	if spec.Source.OCI != nil {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "PackageSpec.Source", spec.Source.Type, "oci archives are supported on the deployment archive only"))
 	}
 
 	return errs
