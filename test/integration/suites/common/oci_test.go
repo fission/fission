@@ -7,7 +7,10 @@
 package common_test
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -366,16 +369,38 @@ func TestOCIPackageGoCompiled(t *testing.T) {
 	})
 	ns.WaitForPackageBuildSucceeded(t, ctx, srcPkg)
 
-	// Download the built deploy artifact (a raw .so for the Go env) and
-	// push it as a single-layer code image.
-	artifactPath := filepath.Join(t.TempDir(), "handler.so")
+	// Download the built deploy artifact. The image must hold what an
+	// EXTRACTED deploy archive holds, so a zip artifact (the Go builder
+	// zips its plugin) is unwrapped into its member files; a raw artifact
+	// is pushed as a single file.
+	artifactPath := filepath.Join(t.TempDir(), "deploy-artifact")
 	ns.CLI(t, ctx, "package", "getdeploy", "--name", srcPkg, "--output", artifactPath)
 	artifact, err := os.ReadFile(artifactPath)
 	require.NoError(t, err)
 	require.NotEmpty(t, artifact, "built deploy artifact must not be empty")
 
+	files := map[string]string{}
+	if bytes.HasPrefix(artifact, []byte("PK\x03\x04")) {
+		zr, err := zip.NewReader(bytes.NewReader(artifact), int64(len(artifact)))
+		require.NoError(t, err)
+		for _, zf := range zr.File {
+			if zf.FileInfo().IsDir() {
+				continue
+			}
+			rc, err := zf.Open()
+			require.NoError(t, err)
+			b, err := io.ReadAll(rc)
+			rc.Close()
+			require.NoError(t, err)
+			files[zf.Name] = string(b)
+		}
+	} else {
+		files["handler.so"] = string(artifact)
+	}
+	require.NotEmpty(t, files, "deploy artifact must contain at least one file")
+
 	ref, _ := framework.PushCodeImage(t, hostAddr, inclusterAddr,
-		"fission-test/go-plugin-"+ns.ID, "v1", map[string]string{"handler.so": string(artifact)})
+		"fission-test/go-plugin-"+ns.ID, "v1", files)
 
 	ns.CreatePackage(t, ctx, framework.PackageOptions{Name: ociPkg, Env: envName, OCI: ref})
 	ns.CreateFunction(t, ctx, framework.FunctionOptions{
