@@ -371,6 +371,18 @@ router:
   ## unTapService is called to free up the resources once the function invocation is done.
   ##
   unTapServiceTimeout: 3600s
+  ## endpointSliceCache gates the router's EndpointSlice-fed endpoint index
+  ## (RFC-0002 EndpointSlice-native data plane).
+  ## mode: off    — never watch slices (historical behavior).
+  ##       shadow — watch slices and compare against executor answers
+  ##                (fission_router_endpointcache_shadow_total); routing is
+  ##                unchanged. The recommended burn-in before "on".
+  ##       on     — the index serves the warm path; the executor is called only
+  ##                for cold starts, capacity, and strict-mode functions.
+  ## The poolmgr benefit additionally requires executor.functionServices.enabled.
+  ##
+  endpointSliceCache:
+    mode: off
   ## displayAccessLog display endpoing access logs
   ## Please be aware of enabling logging endpoint access log, it increases
   ## router resource utilization when under heavy workloads.

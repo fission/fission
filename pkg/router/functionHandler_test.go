@@ -91,35 +91,35 @@ func fnWithPkg(rv, pkg string) *fv1.Function {
 	return fn
 }
 
-// TestGetServiceEntryFromExecutorReReadsCurrentFunction guards the TestGoEnv fix:
+// TestResolverFromExecutorReReadsCurrentFunction guards the TestGoEnv fix:
 // the executor must be specialized with the current Function (re-read from the
 // Manager cache), not the resolver's stale snapshot — otherwise a poolmgr function
 // keeps serving the old package after `fn update --pkg`.
-func TestGetServiceEntryFromExecutorReReadsCurrentFunction(t *testing.T) {
+func TestResolverFromExecutorReReadsCurrentFunction(t *testing.T) {
 	logger := loggerfactory.GetLogger()
 	stale := fnWithPkg("1", "pkg-v1") // the resolver snapshot the handler captured
 	fresh := fnWithPkg("2", "pkg-v2") // what the Manager cache now holds
 
 	reader := fake.NewClientBuilder().WithScheme(scheme.Scheme).WithObjects(fresh).Build()
 	exec := &recordingExecutor{}
-	fh := functionHandler{logger: logger, function: stale, reader: reader, executor: exec}
+	r := &executorResolver{logger: logger, reader: reader, executor: exec}
 
-	_, err := fh.getServiceEntryFromExecutor(t.Context())
+	_, err := r.fromExecutor(t.Context(), stale)
 	require.NoError(t, err)
 	require.NotNil(t, exec.gotFn)
 	assert.Equal(t, "pkg-v2", exec.gotFn.Spec.Package.PackageRef.Name, "executor must get the re-read function, not the stale snapshot")
 	assert.Equal(t, "2", exec.gotFn.ResourceVersion)
 }
 
-// TestGetServiceEntryFromExecutorFallsBackToSnapshot: with no reader the captured
+// TestResolverFromExecutorFallsBackToSnapshot: with no reader the captured
 // snapshot is used.
-func TestGetServiceEntryFromExecutorFallsBackToSnapshot(t *testing.T) {
+func TestResolverFromExecutorFallsBackToSnapshot(t *testing.T) {
 	logger := loggerfactory.GetLogger()
 	snap := fnWithPkg("1", "pkg-v1")
 	exec := &recordingExecutor{}
-	fh := functionHandler{logger: logger, function: snap, executor: exec} // reader nil
+	r := &executorResolver{logger: logger, executor: exec} // reader nil
 
-	_, err := fh.getServiceEntryFromExecutor(t.Context())
+	_, err := r.fromExecutor(t.Context(), snap)
 	require.NoError(t, err)
 	require.NotNil(t, exec.gotFn)
 	assert.Equal(t, "pkg-v1", exec.gotFn.Spec.Package.PackageRef.Name)

@@ -41,7 +41,14 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"go.opentelemetry.io/otel"
 	"golang.org/x/sync/errgroup"
+	discoveryv1 "k8s.io/api/discovery/v1"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
+	crcache "sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	ctrlmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
@@ -51,13 +58,49 @@ import (
 	"github.com/fission/fission/pkg/crd"
 	eclient "github.com/fission/fission/pkg/executor/client"
 	"github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
+	"github.com/fission/fission/pkg/router/endpointcache"
 	"github.com/fission/fission/pkg/throttler"
+	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/crmanager"
 	"github.com/fission/fission/pkg/utils/httpsecurity"
 	"github.com/fission/fission/pkg/utils/httpserver"
 	fissionmetrics "github.com/fission/fission/pkg/utils/metrics"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
+
+// routerScheme is the router Manager's scheme: the Fission CRD types plus the
+// Kubernetes built-ins (EndpointSlices for the RFC-0002 endpoint index).
+var routerScheme = runtime.NewScheme()
+
+func init() {
+	utilruntime.Must(clientgoscheme.AddToScheme(routerScheme))
+	utilruntime.Must(scheme.AddToScheme(routerScheme))
+}
+
+// routerCacheOptions scopes the Manager cache. The trigger/function watches
+// stay on the Fission namespaces (crmanager.FissionCacheOptions); when the
+// EndpointSlice index is enabled, the slice watch is additionally label-bound
+// to Fission-managed slices and scoped to the function namespaces (where the
+// function Services live), keeping the informer memory proportional to
+// Fission's own objects.
+func routerCacheOptions(mode endpointSliceCacheMode) crcache.Options {
+	opts := crmanager.FissionCacheOptions()
+	if mode == endpointSliceCacheOff {
+		return opts
+	}
+	nsResolver := utils.DefaultNSResolver()
+	sliceNS := map[string]crcache.Config{}
+	for _, ns := range nsResolver.FissionResourceNS {
+		sliceNS[nsResolver.GetFunctionNS(ns)] = crcache.Config{}
+	}
+	opts.ByObject = map[client.Object]crcache.ByObject{
+		&discoveryv1.EndpointSlice{}: {
+			Label:      labels.SelectorFromSet(labels.Set{fv1.MANAGED_BY_LABEL: fv1.MANAGED_BY_VALUE}),
+			Namespaces: sliceNS,
+		},
+	}
+	return opts
+}
 
 // runnableFunc adapts a function to a controller-runtime manager.Runnable.
 type runnableFunc func(context.Context) error
@@ -236,13 +279,13 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	}
 
 	crMgr, err := ctrl.NewManager(restConfig, ctrl.Options{
-		Scheme: scheme.Scheme,
+		Scheme: routerScheme,
 		// Scope the shared cache to the Fission-watched namespaces. The
 		// reconcilers and updateRouter read HTTPTriggers + Functions through it,
 		// and the router's RBAC is per-namespace Roles (not a ClusterRole) — a
 		// cluster-wide cache's list/watch is forbidden, so its sync would time out
-		// and the manager would exit. See crmanager.FissionCacheOptions.
-		Cache:                  crmanager.FissionCacheOptions(),
+		// and the manager would exit. See routerCacheOptions.
+		Cache:                  routerCacheOptions(cfg.endpointSliceCacheMode),
 		Metrics:                metricsserver.Options{BindAddress: metricsBind},
 		HealthProbeBindAddress: "0", // /router-healthz + /readyz stay on the public listener
 		LeaderElection:         false,
@@ -263,6 +306,20 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	}, cfg.isDebugEnv, cfg.useEncodedPath, cfg.unTapServiceTimeout, throttler.MakeThrottler(cfg.svcAddrUpdateTimeout))
 	if err != nil {
 		return fmt.Errorf("error making HTTP trigger set: %w", err)
+	}
+
+	// EndpointSlice-fed endpoint index (RFC-0002). Every router replica watches
+	// independently (no leader election — that is the point: warm-path state is
+	// replica-local). In shadow mode the index only powers the comparator
+	// wrapped around the live resolver; routing behavior is unchanged.
+	if cfg.endpointSliceCacheMode != endpointSliceCacheOff {
+		index := endpointcache.NewIndex()
+		if err := endpointcache.RegisterInformer(ctx, crMgr, index, logger); err != nil {
+			return fmt.Errorf("error registering endpointslice informer: %w", err)
+		}
+		endpointcache.RegisterSizeGauge(index)
+		triggers.addressResolver = endpointcache.NewShadow(logger, triggers.addressResolver, index)
+		logger.Info("endpointslice cache enabled", "mode", cfg.endpointSliceCacheMode)
 	}
 
 	// Build the route providers. The ingress provider is always registered (it

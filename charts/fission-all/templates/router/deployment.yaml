@@ -85,6 +85,8 @@ spec:
           value: {{ .Values.router.svcAddressUpdateTimeout | default "30s" | quote }}
         - name: ROUTER_UNTAP_SERVICE_TIMEOUT
           value: {{ .Values.router.unTapServiceTimeout | default "3600s" | quote }}
+        - name: ROUTER_ENDPOINTSLICE_CACHE_MODE
+          value: {{ .Values.router.endpointSliceCache.mode | default "off" | quote }}
         - name: USE_ENCODED_PATH
           value: {{ .Values.router.useEncodedPath | default false | quote }}
         - name: DEBUG_ENV

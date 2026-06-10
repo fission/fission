@@ -15,6 +15,18 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 )
 
+// endpointSliceCacheMode selects how the router uses its EndpointSlice-fed
+// endpoint index (RFC-0002): off (never watch slices — today's behavior),
+// shadow (watch and compare against executor answers, no routing change), or
+// on (the index is the warm-path address source; phase 3).
+type endpointSliceCacheMode string
+
+const (
+	endpointSliceCacheOff    endpointSliceCacheMode = "off"
+	endpointSliceCacheShadow endpointSliceCacheMode = "shadow"
+	endpointSliceCacheOn     endpointSliceCacheMode = "on"
+)
+
 // routerConfig collects every ROUTER_* (plus DEBUG_ENV / USE_ENCODED_PATH)
 // environment setting parsed at startup. Hard-fail fields abort startup when
 // missing or unparsable; soft-fail fields log and fall back to a default.
@@ -31,6 +43,11 @@ type routerConfig struct {
 	// StreamingConfig.IdleTimeoutSeconds is unset. Optional env; invalid or
 	// non-positive values abort startup.
 	streamIdleDefault time.Duration
+
+	// endpointSliceCacheMode gates the EndpointSlice-fed endpoint index
+	// (ROUTER_ENDPOINTSLICE_CACHE_MODE: off|shadow|on; unset means off; an
+	// unrecognized value aborts startup).
+	endpointSliceCacheMode endpointSliceCacheMode
 
 	// soft-fail fields (default on parse error)
 	svcAddrRetryCount    int
@@ -142,6 +159,15 @@ func loadRouterConfig(logger logr.Logger) (routerConfig, error) {
 		return cfg, fmt.Errorf("failed to parse USE_ENCODED_PATH: %w", err)
 	}
 	cfg.useEncodedPath = useEncodedPath
+
+	switch mode := endpointSliceCacheMode(os.Getenv("ROUTER_ENDPOINTSLICE_CACHE_MODE")); mode {
+	case "", endpointSliceCacheOff:
+		cfg.endpointSliceCacheMode = endpointSliceCacheOff
+	case endpointSliceCacheShadow, endpointSliceCacheOn:
+		cfg.endpointSliceCacheMode = mode
+	default:
+		return cfg, fmt.Errorf("'ROUTER_ENDPOINTSLICE_CACHE_MODE' must be one of off|shadow|on, got %q", mode)
+	}
 
 	return cfg, nil
 }
