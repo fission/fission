@@ -5,6 +5,7 @@
 package v1
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -58,6 +59,50 @@ func TestArchiveValidate(t *testing.T) {
 	require.NoError(t, Archive{Type: ArchiveTypeUrl}.Validate())
 	require.Error(t, Archive{Type: "tarball"}.Validate())
 	require.Error(t, Archive{Checksum: Checksum{Type: "md5"}}.Validate())
+}
+
+func TestArchiveValidateOCI(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		archive Archive
+		wantErr bool
+	}{
+		{"oci only is valid", Archive{Type: ArchiveTypeOCI, OCI: &OCIArchive{Image: "ghcr.io/x/y:v1"}}, false},
+		{"empty archive stays valid", Archive{}, false},
+		{"literal plus oci rejected", Archive{Literal: []byte("x"), OCI: &OCIArchive{Image: "ghcr.io/x/y:v1"}}, true},
+		{"url plus oci rejected", Archive{URL: "http://example.com/a.zip", OCI: &OCIArchive{Image: "ghcr.io/x/y:v1"}}, true},
+		{"invalid nested oci rejected", Archive{Type: ArchiveTypeOCI, OCI: &OCIArchive{}}, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			err := tt.archive.Validate()
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestOCIArchiveValidate(t *testing.T) {
+	t.Parallel()
+	validDigest := "sha256:" + strings.Repeat("ab", 32)
+	require.NoError(t, OCIArchive{Image: "ghcr.io/x/y:v1"}.Validate())
+	require.NoError(t, OCIArchive{Image: "ghcr.io/x/y:v1", Digest: validDigest}.Validate())
+	require.Error(t, OCIArchive{}.Validate(), "image is required")
+	require.Error(t, OCIArchive{Image: "ghcr.io/x/y:v1", Digest: "sha1:abcd"}.Validate())
+	require.Error(t, OCIArchive{Image: "ghcr.io/x/y:v1", Digest: "sha256:abcd"}.Validate(), "digest hex too short")
+}
+
+func TestArchiveIsEmptyOCI(t *testing.T) {
+	t.Parallel()
+	require.True(t, Archive{}.IsEmpty())
+	require.False(t, Archive{OCI: &OCIArchive{Image: "ghcr.io/x/y:v1"}}.IsEmpty())
+	require.False(t, Archive{Literal: []byte("x")}.IsEmpty())
+	require.False(t, Archive{URL: "http://example.com/a.zip"}.IsEmpty())
 }
 
 func TestReferenceValidate(t *testing.T) {

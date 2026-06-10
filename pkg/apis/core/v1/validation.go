@@ -196,15 +196,55 @@ func (checksum Checksum) Validate() error {
 	return errs
 }
 
+// ociDigestRegexp matches the only digest form OCIArchive.Digest accepts;
+// it mirrors the field's kubebuilder Pattern marker in types.go.
+var ociDigestRegexp = regexp.MustCompile(`^sha256:[a-f0-9]{64}$`)
+
+func (o OCIArchive) Validate() error {
+	var errs error
+
+	if len(o.Image) == 0 {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "OCIArchive.Image", o.Image, "image reference is required"))
+	}
+
+	if len(o.Digest) > 0 && !ociDigestRegexp.MatchString(o.Digest) {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "OCIArchive.Digest", o.Digest, "must be 'sha256:' followed by 64 hex characters"))
+	}
+
+	return errs
+}
+
 func (archive Archive) Validate() error {
 	var errs error
 
 	if len(archive.Type) > 0 {
 		switch archive.Type {
-		case ArchiveTypeLiteral, ArchiveTypeUrl: // no op
+		case ArchiveTypeLiteral, ArchiveTypeUrl, ArchiveTypeOCI: // no op
 		default:
 			errs = errors.Join(errs, MakeValidationErr(ErrorUnsupportedType, "Archive.Type", archive.Type, "not a valid archive type"))
 		}
+	}
+
+	// At most one content source. The Archive CEL rule only covers url+oci
+	// (it cannot reference the byte-format literal field — see the marker
+	// comment in types.go); combinations involving literal are rejected here,
+	// via the validating webhook.
+	set := 0
+	if len(archive.Literal) > 0 {
+		set++
+	}
+	if len(archive.URL) > 0 {
+		set++
+	}
+	if archive.OCI != nil {
+		set++
+	}
+	if set > 1 {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "Archive", archive.Type, "at most one of literal, url, or oci may be set"))
+	}
+
+	if archive.OCI != nil {
+		errs = errors.Join(errs, archive.OCI.Validate())
 	}
 
 	if archive.Checksum != (Checksum{}) {
@@ -232,7 +272,7 @@ func (spec PackageSpec) Validate() error {
 	errs = errors.Join(errs, spec.Environment.Validate())
 
 	for _, r := range []Archive{spec.Source, spec.Deployment} {
-		if len(r.URL) > 0 || len(r.Literal) > 0 {
+		if !r.IsEmpty() {
 			errs = errors.Join(errs, r.Validate())
 		}
 	}
