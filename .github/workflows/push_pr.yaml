@@ -135,6 +135,20 @@ jobs:
             'mkdir -p /fission-coverage && chown 10001:10001 /fission-coverage && chmod 0700 /fission-coverage'
           SKAFFOLD_PROFILE=kind-ci make skaffold-deploy
 
+      # Pin the v1.34 leg back to the legacy data plane (RFC-0002 gates off):
+      # kind-ci deploys with the EndpointSlice path on everywhere, so without
+      # this the executor-RPC warm path would lose all CI coverage. The
+      # gate-dependent integration tests detect the modes from the live
+      # Deployments and skip themselves on this leg.
+      - name: Pin legacy data plane (RFC-0002 gates off)
+        if: ${{ matrix.kindversion == 'v1.34.8' }}
+        timeout-minutes: 5
+        run: |
+          kubectl -n fission set env deploy/router ROUTER_ENDPOINTSLICE_CACHE_MODE=off
+          kubectl -n fission set env deploy/executor ENABLE_FUNCTION_SERVICES=false
+          kubectl -n fission rollout status deploy/router --timeout=3m
+          kubectl -n fission rollout status deploy/executor --timeout=3m
+
       # Install Envoy Gateway as the sample Gateway API implementation so the
       # router's gateway route provider (gatewayAPI.enabled=true via kind-ci)
       # has a real Gateway to attach HTTPRoutes to. Only on the coverage leg —
