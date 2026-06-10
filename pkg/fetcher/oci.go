@@ -65,7 +65,9 @@ func (fetcher *Fetcher) fetchOCI(ctx context.Context, pkg *fv1.Package, oa *fv1.
 
 // insecureRegistriesFromEnv parses the FETCHER_ALLOW_INSECURE_REGISTRIES
 // comma-separated host allowlist (set on the fetcher container by the
-// executor; see fetcher/config). Empty means every registry must serve TLS.
+// executor; see fetcher/config). Empty means registries must serve TLS (see
+// oci.ExtractOptions.InsecureRegistries for the localhost/private-IP
+// exceptions).
 func insecureRegistriesFromEnv() []string {
 	raw := os.Getenv("FETCHER_ALLOW_INSECURE_REGISTRIES")
 	if raw == "" {

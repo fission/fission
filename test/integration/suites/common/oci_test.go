@@ -212,6 +212,7 @@ func TestOCIPackagePoolmgrDigestMismatch(t *testing.T) {
 		status, body, err := f.Router(t).Get(ctx, "/"+fnName)
 		if err != nil {
 			sawFailure = true
+			time.Sleep(time.Second)
 			continue
 		}
 		require.NotContains(t, body, "never served", "wrong-digest image must not serve")
@@ -225,8 +226,9 @@ func TestOCIPackagePoolmgrDigestMismatch(t *testing.T) {
 }
 
 // TestOCIPackageNewdeploy covers RFC-0001 Path A on the newdeploy executor —
-// which needs zero executor code: newdeploy embeds the same shared
-// specialize request, and the same in-pod fetcher pulls the image. Warm
+// which needs no Path A-specific executor code: newdeploy embeds the same
+// shared specialize request, and the same in-pod fetcher pulls the image
+// (the newdeploy OCI executor code is image-volume/Path B only). Warm
 // (minscale 1) plus a cold-start (minscale 0) subtest.
 func TestOCIPackageNewdeploy(t *testing.T) {
 	t.Parallel()

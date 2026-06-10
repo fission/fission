@@ -42,12 +42,19 @@ func (gp *GenericPool) loadOnlySpecialize(ctx context.Context, podIP string, fn 
 	}
 	logger.Info("load-only specializing image-volume pod", "function", fn.Name, "url", specializeURL)
 
+	// Unlike the fetcher's loop (which talks to 127.0.0.1), this POST
+	// crosses the cluster network to a pod IP; a black-holed destination
+	// (pod deleted mid-flight, packet-dropping NetworkPolicy) must fail an
+	// attempt promptly rather than hang on the OS dial timeout.
+	client := &http.Client{Timeout: 30 * time.Second}
+
 	const maxRetries = 30
 	for i := range maxRetries {
 		otelUtils.SpanTrackEvent(ctx, "loadOnlySpecializeCall", otelUtils.MapToAttributes(map[string]string{
 			"url": specializeURL,
 		})...)
-		resp, err := ctxhttp.Post(ctx, http.DefaultClient, specializeURL, "application/json", bytes.NewReader(loadPayload))
+		var resp *http.Response
+		resp, err = ctxhttp.Post(ctx, client, specializeURL, "application/json", bytes.NewReader(loadPayload))
 		if err == nil && resp.StatusCode < 300 {
 			resp.Body.Close()
 			otelUtils.SpanTrackEvent(ctx, "specializedPod")
@@ -57,8 +64,12 @@ func (gp *GenericPool) loadOnlySpecialize(ctx context.Context, podIP string, fn 
 		netErr := network.Adapter(err)
 		if netErr != nil && (netErr.IsConnRefusedError() || netErr.IsDialError()) {
 			if i < maxRetries-1 {
-				time.Sleep(500 * time.Duration(2*i) * time.Millisecond)
 				logger.Error(netErr, "error connecting to function environment pod for specialization request, retrying")
+				select {
+				case <-ctx.Done():
+					return fmt.Errorf("error specializing function pod: %w", ctx.Err())
+				case <-time.After(500 * time.Duration(2*i+1) * time.Millisecond):
+				}
 				continue
 			}
 		}
@@ -68,5 +79,5 @@ func (gp *GenericPool) loadOnlySpecialize(ctx context.Context, podIP string, fn 
 		}
 		return fmt.Errorf("error specializing function pod: %w", err)
 	}
-	return fmt.Errorf("error specializing function pod after %v retries", maxRetries)
+	return fmt.Errorf("error specializing function pod after %v retries: %w", maxRetries, err)
 }

@@ -167,13 +167,13 @@ func TestPoolmgrReplicaSetReconciler(t *testing.T) {
 	})
 }
 
-type fakeEnqueuer struct{ enqueued map[string]string } // env UID -> key
+type fakeEnqueuer struct{ enqueued map[string]string } // pool key -> pod key
 
-func (f *fakeEnqueuer) enqueueReadyPod(envUID, key string) {
+func (f *fakeEnqueuer) enqueueReadyPod(queueKey, podKey string) {
 	if f.enqueued == nil {
 		f.enqueued = map[string]string{}
 	}
-	f.enqueued[envUID] = key
+	f.enqueued[queueKey] = podKey
 }
 
 func warmPod(name, envUID string, phase corev1.PodPhase, managed string) *corev1.Pod {
@@ -221,5 +221,20 @@ func TestPoolmgrReadyPodReconciler(t *testing.T) {
 		_, err := r.Reconcile(t.Context(), req)
 		require.NoError(t, err)
 		assert.Empty(t, e.enqueued)
+	})
+
+	t.Run("image-volume pool pod routes to its per-image queue", func(t *testing.T) {
+		// A pod carrying the image-hash label belongs to a per-image Path B
+		// pool: it has no fetcher, so handing it to the plain pool's queue
+		// would break fetcher-path functions. The reconciler must route it
+		// to poolKey(envUID, hash), never to the bare env UID.
+		pod := warmPod("pod", "e1", corev1.PodRunning, "true")
+		pod.Labels[fv1.POOL_OCI_IMAGE_HASH] = "abcdef0123456789"
+		e := &fakeEnqueuer{}
+		r := &readyPodReconciler{logger: logr.Discard(), client: crClientK8s(pod), enqueuer: e}
+		_, err := r.Reconcile(t.Context(), req)
+		require.NoError(t, err)
+		assert.Equal(t, "default/pod", e.enqueued["e1/abcdef0123456789"])
+		assert.NotContains(t, e.enqueued, "e1", "a Path B pod must not reach the plain pool's queue")
 	})
 }

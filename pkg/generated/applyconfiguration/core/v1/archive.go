@@ -17,9 +17,10 @@ import (
 // binary files.
 // The CEL rule below deliberately never references self.literal: any
 // access to a byte-format field (even has()) makes the apiserver convert
-// its base64 value for CEL and that conversion rejects standard-base64
-// payloads, breaking every literal archive. The literal/oci combination
-// is instead rejected by the webhook (Archive.Validate).
+// its base64 value for CEL using URL-safe decoding, which rejects any
+// standard-base64 payload containing '/' or '+' — in practice every
+// zipped literal archive. The literal/oci combination is instead
+// rejected by the webhook (Archive.Validate), with the same message.
 type ArchiveApplyConfiguration struct {
 	// Type defines how the package is specified: literal, URL, or OCI.
 	// Available value:
@@ -36,8 +37,9 @@ type ArchiveApplyConfiguration struct {
 	// referenced by URL. Ignored for literals.
 	Checksum *ChecksumApplyConfiguration `json:"checksum,omitempty"`
 	// OCI references an OCI image holding the deployment code.
-	// Mutually exclusive with Literal and URL. Consumed only on
-	// PackageSpec.Deployment; ignored on Source.
+	// Mutually exclusive with Literal and URL. Supported only on
+	// PackageSpec.Deployment; PackageSpec.Validate rejects it on Source
+	// (source archives feed the builder, which has no OCI pull path).
 	OCI *OCIArchiveApplyConfiguration `json:"oci,omitempty"`
 }
 

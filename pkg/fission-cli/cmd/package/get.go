@@ -80,6 +80,12 @@ func (opts *GetSubCommand) run(input cli.Input) error {
 		}
 		defer readCloser.Close()
 		reader = readCloser
+	case fv1.ArchiveTypeOCI:
+		return fmt.Errorf("package %s delivers its code as an OCI image and has no downloadable archive; pull %q with your registry tooling instead", opts.name, archive.OCI.Image)
+	}
+
+	if reader == nil {
+		return fmt.Errorf("package %s has no archive content to download", opts.name)
 	}
 
 	if len(opts.output) > 0 {

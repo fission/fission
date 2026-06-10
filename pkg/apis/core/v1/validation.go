@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"reflect"
 	"regexp"
 	"slices"
@@ -211,6 +212,21 @@ func (o OCIArchive) Validate() error {
 		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "OCIArchive.Digest", o.Digest, "must be 'sha256:' followed by 64 hex characters"))
 	}
 
+	// A digest embedded in the image reference and a Digest field would race
+	// for precedence (the pull paths would resolve them differently) — make
+	// the user pick one.
+	if len(o.Digest) > 0 && strings.Contains(o.Image, "@") {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "OCIArchive.Digest", o.Digest, "image reference already pins a digest; set the digest in one place only"))
+	}
+
+	// SubPath rides into pod volumeMount subPaths on the image-volume path,
+	// where Kubernetes rejects absolute paths and path traversal.
+	if cleaned := strings.Trim(o.SubPath, "/"); cleaned != "" {
+		if strings.HasPrefix(o.SubPath, "/") || cleaned != filepath.Clean(cleaned) || strings.Contains(cleaned, "..") {
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "OCIArchive.SubPath", o.SubPath, "must be a clean relative directory path inside the image (no leading '/', no '..')"))
+		}
+	}
+
 	return errs
 }
 
@@ -275,6 +291,12 @@ func (spec PackageSpec) Validate() error {
 		if !r.IsEmpty() {
 			errs = errors.Join(errs, r.Validate())
 		}
+	}
+
+	// OCI delivery applies to deployment archives only: source archives feed
+	// the builder, which has no OCI pull path.
+	if spec.Source.OCI != nil {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "PackageSpec.Source", spec.Source.Type, "oci archives are supported on the deployment archive only"))
 	}
 
 	return errs

@@ -44,9 +44,8 @@ func dir() tarEntry {
 	return tarEntry{typeflag: tar.TypeDir, mode: 0o755}
 }
 
-// makeLayer builds a single tar layer from the given entries, in map
-// iteration-independent order (sorted by the caller's literal order is not
-// needed; tar readers don't care).
+// makeLayer builds a single tar layer from the given entries (entry order
+// does not matter).
 func makeLayer(t *testing.T, entries map[string]tarEntry) v1.Layer {
 	t.Helper()
 	var buf bytes.Buffer
@@ -244,9 +243,9 @@ func TestExtractImageMaxBytes(t *testing.T) {
 // TestParseReferenceInsecureDefaultOff pins the allowlist contract on the
 // parsed reference's scheme: a non-allowlisted registry must be https. The
 // network-level proof is impractical in a unit test because
-// go-containerregistry (like Docker) treats localhost/127.0.0.1 registries as
-// implicitly insecure-OK — which is also why the live-pull tests above work
-// over plain HTTP without a TLS fixture.
+// go-containerregistry (like Docker) treats localhost, loopback, and private
+// RFC-1918 IP registries as implicitly insecure-OK — which is also why the
+// live-pull tests above work over plain HTTP without a TLS fixture.
 func TestParseReferenceInsecureDefaultOff(t *testing.T) {
 	t.Parallel()
 	const ref = "registry.example.com/code/hello:v1"
@@ -290,4 +289,36 @@ func assertNothingExtracted(t *testing.T, destRoot, destDir string) {
 	}
 	require.NoError(t, err)
 	assert.Empty(t, entries, "failed extraction left files behind")
+}
+
+// TestExtractImageFlattensLayers pins the layer-flattening contract the
+// package depends on (via mutate.Extract): an upper layer's file overrides a
+// lower layer's, and a whiteout entry deletes a lower-layer file. A future
+// "iterate layers directly" optimization that loses these semantics must
+// fail here.
+func TestExtractImageFlattensLayers(t *testing.T) {
+	t.Parallel()
+	lower := makeLayer(t, map[string]tarEntry{
+		"hello.js":   file("lower body"),
+		"removed.js": file("should be whited out"),
+	})
+	upper := makeLayer(t, map[string]tarEntry{
+		"hello.js":       file("upper body"),
+		".wh.removed.js": file(""),
+	})
+	img := makeImage(t, lower, upper)
+	host, ref := pushImage(t, img, "code/layers", "v1")
+
+	destRoot := t.TempDir()
+	err := ExtractImage(t.Context(), ref, destRoot, "pkg", ExtractOptions{
+		InsecureRegistries: []string{host},
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, "upper body", readExtracted(t, destRoot, "pkg", "hello.js"),
+		"the upper layer's file must win")
+	_, statErr := os.Stat(filepath.Join(destRoot, "pkg", "removed.js"))
+	assert.True(t, os.IsNotExist(statErr), "a whiteout must delete the lower-layer file")
+	_, statErr = os.Stat(filepath.Join(destRoot, "pkg", ".wh.removed.js"))
+	assert.True(t, os.IsNotExist(statErr), "the whiteout marker itself must not be extracted")
 }

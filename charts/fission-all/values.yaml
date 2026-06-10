@@ -155,7 +155,8 @@ fetcher:
   imageTag: v1.25.0
   ## allowInsecureRegistries is a comma-separated list of registry hosts
   ## (host[:port]) permitted to serve OCI package images over plain HTTP.
-  ## Default empty: every registry must serve TLS.
+  ## Default empty: registries must serve TLS (localhost and private RFC-1918
+  ## IP addresses are implicitly trusted by the underlying client).
   allowInsecureRegistries: ""
 
   ## Fetcher is only for to downloading or uploading archive.

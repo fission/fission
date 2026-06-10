@@ -238,9 +238,10 @@ type (
 	// binary files.
 	// The CEL rule below deliberately never references self.literal: any
 	// access to a byte-format field (even has()) makes the apiserver convert
-	// its base64 value for CEL and that conversion rejects standard-base64
-	// payloads, breaking every literal archive. The literal/oci combination
-	// is instead rejected by the webhook (Archive.Validate).
+	// its base64 value for CEL using URL-safe decoding, which rejects any
+	// standard-base64 payload containing '/' or '+' — in practice every
+	// zipped literal archive. The literal/oci combination is instead
+	// rejected by the webhook (Archive.Validate), with the same message.
 	// +kubebuilder:validation:XValidation:rule="!has(self.oci) || !has(self.url) || self.url == ''",message="at most one of literal, url, or oci may be set"
 	Archive struct {
 		// Type defines how the package is specified: literal, URL, or OCI.
@@ -268,8 +269,9 @@ type (
 		Checksum Checksum `json:"checksum,omitempty"`
 
 		// OCI references an OCI image holding the deployment code.
-		// Mutually exclusive with Literal and URL. Consumed only on
-		// PackageSpec.Deployment; ignored on Source.
+		// Mutually exclusive with Literal and URL. Supported only on
+		// PackageSpec.Deployment; PackageSpec.Validate rejects it on Source
+		// (source archives feed the builder, which has no OCI pull path).
 		// +optional
 		OCI *OCIArchive `json:"oci,omitempty"`
 	}
@@ -286,15 +288,17 @@ type (
 		// ImagePullSecrets are resolved when pulling the image. The
 		// fetcher-pull path passes them to the in-fetcher keychain; the
 		// image-volume path sets them on pod.Spec.ImagePullSecrets.
-		// They must exist in the function namespace.
+		// They must exist in the namespace the function pods run in —
+		// the function's own namespace, or the configured function
+		// namespace for default-namespace functions.
 		// +optional
 		ImagePullSecrets []apiv1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 
 		// SubPath points at the deployment root inside the image
-		// filesystem. "" or "/" means the image root. It must be a
-		// directory: the image-volume path mounts it via the pod
-		// volumeMount subPath, and kubelets reject file subpaths on
-		// image volumes.
+		// filesystem, as a clean relative path; empty means the image
+		// root. It must be a directory: the image-volume path mounts it
+		// via the pod volumeMount subPath, and kubelets reject file
+		// subpaths on image volumes.
 		// +optional
 		SubPath string `json:"subPath,omitempty"`
 

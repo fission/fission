@@ -153,7 +153,7 @@ func CreatePackage(input cli.Input, client cmd.Client, pkgName string, pkgNamesp
 	if len(ociImage) > 0 {
 		// The OCI archive is built inline: no file globbing, zipping, or
 		// upload happens for a pre-built image reference (RFC-0001).
-		// validateArchiveSources guarantees no overlap with file archives.
+		// ValidateArchiveSources guarantees no overlap with file archives.
 		pkgSpec.Deployment = fv1.Archive{
 			Type: fv1.ArchiveTypeOCI,
 			OCI:  &fv1.OCIArchive{Image: ociImage},

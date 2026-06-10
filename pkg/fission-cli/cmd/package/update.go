@@ -218,6 +218,30 @@ func UpdatePackage(input cli.Input, client cmd.Client, specFile string, pkg *fv1
 		return nil, fmt.Errorf("update package: %w", err)
 	}
 
+	// A package switched to an OCI deployment archive needs no build, but a
+	// stale build status from its previous life (a failed source build, say)
+	// would make the fetcher refuse to serve it. Reset it through the
+	// /status subresource — the spec Update above cannot touch status.
+	if newPkg.Spec.Deployment.OCI != nil {
+		switch newPkg.Status.BuildStatus {
+		case fv1.BuildStatusFailed, fv1.BuildStatusPending, fv1.BuildStatusRunning:
+			if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				fresh, gerr := packages.Get(input.Context(), pkg.Name, metav1.GetOptions{})
+				if gerr != nil {
+					return gerr
+				}
+				fresh.Status.BuildStatus = fv1.BuildStatusNone
+				fresh.Status.BuildLog = ""
+				fresh.Status.LastUpdateTimestamp = metav1.Time{Time: time.Now().UTC()}
+				var uerr error
+				newPkg, uerr = packages.UpdateStatus(input.Context(), fresh, metav1.UpdateOptions{})
+				return uerr
+			}); err != nil {
+				return nil, fmt.Errorf("reset package build status for oci archive: %w", err)
+			}
+		}
+	}
+
 	// The rebuild trigger (BuildStatusPending) is a status write; with the
 	// /status subresource the spec Update above ignores it, so persist it
 	// separately through UpdateStatus (also conflict-retried).

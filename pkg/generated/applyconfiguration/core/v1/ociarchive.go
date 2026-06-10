@@ -23,13 +23,15 @@ type OCIArchiveApplyConfiguration struct {
 	// ImagePullSecrets are resolved when pulling the image. The
 	// fetcher-pull path passes them to the in-fetcher keychain; the
 	// image-volume path sets them on pod.Spec.ImagePullSecrets.
-	// They must exist in the function namespace.
+	// They must exist in the namespace the function pods run in —
+	// the function's own namespace, or the configured function
+	// namespace for default-namespace functions.
 	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 	// SubPath points at the deployment root inside the image
-	// filesystem. "" or "/" means the image root. It must be a
-	// directory: the image-volume path mounts it via the pod
-	// volumeMount subPath, and kubelets reject file subpaths on
-	// image volumes.
+	// filesystem, as a clean relative path; empty means the image
+	// root. It must be a directory: the image-volume path mounts it
+	// via the pod volumeMount subPath, and kubelets reject file
+	// subpaths on image volumes.
 	SubPath *string `json:"subPath,omitempty"`
 	// Digest is an optional content hash validated on pull.
 	Digest *string `json:"digest,omitempty"`

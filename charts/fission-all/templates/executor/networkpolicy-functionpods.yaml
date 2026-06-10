@@ -33,8 +33,9 @@ spec:
     - Ingress
   ingress:
     # executor → fetcher sidecar (POST /specialize), and executor → env
-    # runtime (POST /v2/specialize) for image-volume pods (RFC-0001
-    # Path B), which have no fetcher to relay the load call. executor
+    # runtime (POST /v2/specialize) for poolmgr image-volume pods
+    # (RFC-0001 Path B), which carry no fetcher to relay the load call
+    # (newdeploy Path B pods keep theirs). executor
     # runs in the release namespace; namespaceSelector: {} permits
     # cross-ns because this policy lives in functionNamespace.
     - from:

@@ -145,17 +145,9 @@ func MakeGenericPoolManager(ctx context.Context,
 		enableIstio = istio
 	}
 
-	// RFC-0001 Path B gate, evaluated once: opt-in env + cluster support.
-	imageVolumeOK := false
-	if executorUtils.OCIImageVolumeEnabled() {
-		supported, err := executorUtils.ImageVolumeSupported(kubernetesClient.Discovery())
-		if err != nil {
-			gpmLogger.Error(err, "failed to check image-volume support; OCI packages stay on the fetcher path")
-		}
-		imageVolumeOK = supported
-		gpmLogger.Info("OCI image-volume delivery (RFC-0001 Path B)",
-			"enabled", imageVolumeOK, "serverSupports", supported)
-	}
+	// RFC-0001 Path B gate, evaluated once (shared helper, so poolmgr and
+	// newdeploy cannot drift).
+	imageVolumeOK := executorUtils.ImageVolumeGate(gpmLogger, kubernetesClient.Discovery())
 
 	poolPodC := NewPoolPodController(gpmLogger, kubernetesClient)
 	gpm := &GenericPoolManager{
@@ -236,10 +228,16 @@ func (gpm *GenericPoolManager) GetFuncSvc(ctx context.Context, fn *fv1.Function)
 
 	// RFC-0001 Path B: an eligible OCI-packaged function gets a per-image
 	// pool whose pods mount the code as an image volume (no fetcher). nil
-	// means the plain pool serves it (Path A or non-OCI).
+	// means the plain pool serves it (Path A or non-OCI). A failed
+	// eligibility read fails the cold start (the router retries) rather
+	// than silently pinning the function to the wrong pool type in fsCache.
 	var oci *fv1.OCIArchive
 	if gpm.imageVolumeOK {
-		oci = gpm.getFunctionOCIArchive(ctx, fn, env)
+		oci, err = gpm.getFunctionOCIArchive(ctx, fn, env)
+		if err != nil {
+			fErr = fmt.Errorf("error reading package for OCI eligibility of function %s: %w", fn.Name, err)
+			return nil, fErr
+		}
 	}
 
 	pool, created, err := gpm.getPool(ctx, env, oci)
@@ -406,6 +404,37 @@ func (gpm *GenericPoolManager) AdoptExistingResources(ctx context.Context) {
 		fv1.EXECUTOR_TYPE: string(fv1.ExecutorTypePoolmgr),
 	}
 
+	// Per-image (Path B) pool deployments are created lazily on the first
+	// request, so the env loop above (which adopts each env's plain pool via
+	// getPool) never refreshes their instanceID annotation — and the
+	// post-adopt reaper deletes any poolmgr deployment with a stale
+	// instanceID. Adopt them in place here; the pool object re-attaches to
+	// the deployment on the next request for its image.
+	perImageSelector := labels.Set(l).AsSelector().String() + "," + fv1.POOL_OCI_IMAGE_HASH
+	poolNamespaces := make(map[string]struct{})
+	for _, ns := range utils.DefaultNSResolver().FissionResourceNS {
+		poolNamespaces[gpm.nsResolver.GetFunctionNS(ns)] = struct{}{}
+	}
+	for namespace := range poolNamespaces {
+		deployList, err := gpm.kubernetesClient.AppsV1().Deployments(namespace).List(ctx, metav1.ListOptions{
+			LabelSelector: perImageSelector,
+		})
+		if err != nil {
+			gpm.logger.Error(err, "error listing per-image pool deployments for adoption", "namespace", namespace)
+			continue
+		}
+		for i := range deployList.Items {
+			depl := &deployList.Items[i]
+			wg.Go(func() {
+				patch := fmt.Sprintf(`{"metadata":{"annotations":{"%s":"%s"}}}`, fv1.EXECUTOR_INSTANCEID_LABEL, gpm.instanceID)
+				_, err := gpm.kubernetesClient.AppsV1().Deployments(depl.Namespace).Patch(ctx, depl.Name, k8sTypes.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
+				if err != nil {
+					gpm.logger.Error(err, "error adopting per-image pool deployment", "deployment", depl.Name, "ns", depl.Namespace)
+				}
+			})
+		}
+	}
+
 	for _, namespace := range utils.DefaultNSResolver().FissionResourceNS {
 		podList, err := gpm.kubernetesClient.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
 			LabelSelector: labels.Set(l).AsSelector().String(),
@@ -534,7 +563,7 @@ func (gpm *GenericPoolManager) service() {
 			created := false
 			imageHash := ""
 			if req.oci != nil {
-				imageHash = ociImageHash(req.oci.Image)
+				imageHash = ociPoolHash(req.oci)
 			}
 			key := poolKey(req.env.UID, imageHash)
 			pool, ok := gpm.pools[key]

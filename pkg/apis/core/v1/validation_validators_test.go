@@ -95,6 +95,36 @@ func TestOCIArchiveValidate(t *testing.T) {
 	require.Error(t, OCIArchive{}.Validate(), "image is required")
 	require.Error(t, OCIArchive{Image: "ghcr.io/x/y:v1", Digest: "sha1:abcd"}.Validate())
 	require.Error(t, OCIArchive{Image: "ghcr.io/x/y:v1", Digest: "sha256:abcd"}.Validate(), "digest hex too short")
+
+	// A digest may live in the reference or the field, not both.
+	require.NoError(t, OCIArchive{Image: "ghcr.io/x/y@" + validDigest}.Validate())
+	require.Error(t, OCIArchive{Image: "ghcr.io/x/y@" + validDigest, Digest: validDigest}.Validate(),
+		"digest in both the reference and the field must be rejected")
+
+	// SubPath must be a clean relative path.
+	require.NoError(t, OCIArchive{Image: "ghcr.io/x/y:v1", SubPath: "app"}.Validate())
+	require.NoError(t, OCIArchive{Image: "ghcr.io/x/y:v1", SubPath: "app/code"}.Validate())
+	require.NoError(t, OCIArchive{Image: "ghcr.io/x/y:v1", SubPath: ""}.Validate())
+	require.Error(t, OCIArchive{Image: "ghcr.io/x/y:v1", SubPath: "/abs"}.Validate(), "absolute sub-path")
+	require.Error(t, OCIArchive{Image: "ghcr.io/x/y:v1", SubPath: "../escape"}.Validate(), "traversing sub-path")
+	require.Error(t, OCIArchive{Image: "ghcr.io/x/y:v1", SubPath: "a/../b"}.Validate(), "unclean sub-path")
+}
+
+func TestPackageSpecValidateRejectsOCISource(t *testing.T) {
+	t.Parallel()
+	spec := PackageSpec{
+		Environment: EnvironmentReference{Name: "env", Namespace: "ns"},
+		Source:      Archive{Type: ArchiveTypeOCI, OCI: &OCIArchive{Image: "ghcr.io/x/y:v1"}},
+	}
+	err := spec.Validate()
+	require.Error(t, err, "oci on the source archive must be rejected")
+	require.Contains(t, err.Error(), "deployment archive only")
+
+	spec = PackageSpec{
+		Environment: EnvironmentReference{Name: "env", Namespace: "ns"},
+		Deployment:  Archive{Type: ArchiveTypeOCI, OCI: &OCIArchive{Image: "ghcr.io/x/y:v1"}},
+	}
+	require.NoError(t, spec.Validate())
 }
 
 func TestArchiveIsEmptyOCI(t *testing.T) {

@@ -10,20 +10,29 @@ import (
 	"encoding/hex"
 	"strings"
 
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	executorUtils "github.com/fission/fission/pkg/executor/util"
 )
 
-// ociImageHash derives the short stable hash that keys per-image pools and
-// labels their pods (RFC-0001 Path B). Empty image -> empty hash -> the
-// plain, fetcher-based pool.
-func ociImageHash(image string) string {
-	if image == "" {
+// ociPoolHash derives the short stable hash that keys per-image pools and
+// labels their pods (RFC-0001 Path B). It covers every archive field the
+// pool's pod spec depends on — reference+digest, sub-path, pull secrets —
+// so two packages that would produce different pods can never alias to the
+// same pool (e.g. one image holding several functions under different
+// sub-paths). nil -> empty hash -> the plain, fetcher-based pool.
+func ociPoolHash(oa *fv1.OCIArchive) string {
+	if oa == nil {
 		return ""
 	}
-	h := sha256.Sum256([]byte(image))
+	parts := []string{executorUtils.OCIVolumeReference(oa), oa.SubPath}
+	for _, s := range oa.ImagePullSecrets {
+		parts = append(parts, s.Name)
+	}
+	h := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
 	return hex.EncodeToString(h[:])[:16]
 }
 
@@ -44,32 +53,35 @@ func envPoolKeyPrefixMatch(key string, envUID k8sTypes.UID) bool {
 }
 
 // getFunctionOCIArchive returns the function's OCI deployment archive when the
-// function is eligible for image-volume delivery (Path B), nil otherwise —
-// nil means the plain pool serves it via the fetcher (Path A). Ineligible:
-// env v1 (its loader needs the fetcher's /specialize relay), functions with
-// Secrets/ConfigMaps (materialized by the fetcher, absent from Path B pods),
-// and non-OCI packages. Runs on the cold path only (pool lookup), so the
-// direct Package read is acceptable.
-func (gpm *GenericPoolManager) getFunctionOCIArchive(ctx context.Context, fn *fv1.Function, env *fv1.Environment) *fv1.OCIArchive {
+// function is eligible for image-volume delivery (Path B), (nil, nil) when it
+// must use the plain fetcher pool (Path A or non-OCI). Ineligible: env v1
+// (its store path is "user" and loadOnlySpecialize speaks only
+// /v2/specialize), AllowedFunctionsPerContainerInfinite envs (their store
+// path is per-function, which one shared mount cannot serve), and functions
+// with Secrets/ConfigMaps (materialized by the fetcher, absent from Path B
+// pods). A deleted package falls back to Path A — the fetcher reports the
+// missing package with a precise error — but any other read failure is
+// returned so the cold start fails visibly and the router retries, instead
+// of silently pinning the function to the wrong pool type in fsCache. Runs
+// on the cold path only (pool lookup), so the direct Package read is
+// acceptable.
+func (gpm *GenericPoolManager) getFunctionOCIArchive(ctx context.Context, fn *fv1.Function, env *fv1.Environment) (*fv1.OCIArchive, error) {
 	if env.Spec.Version < 2 {
-		return nil
+		return nil, nil
 	}
-	// Infinite-functions-per-container envs store each function's code at a
-	// per-function path (the function UID); one shared image mount at the
-	// fixed deployarchive path cannot satisfy that — keep them on the
-	// fetcher path.
 	if env.Spec.AllowedFunctionsPerContainer == fv1.AllowedFunctionsPerContainerInfinite {
-		return nil
+		return nil, nil
 	}
 	if len(fn.Spec.Secrets) > 0 || len(fn.Spec.ConfigMaps) > 0 {
-		return nil
+		return nil, nil
 	}
 	pkgRef := fn.Spec.Package.PackageRef
 	pkg, err := gpm.fissionClient.CoreV1().Packages(pkgRef.Namespace).Get(ctx, pkgRef.Name, metav1.GetOptions{})
 	if err != nil {
-		gpm.logger.Error(err, "failed to read package for OCI eligibility; falling back to fetcher path",
-			"package", pkgRef.Name, "namespace", pkgRef.Namespace, "function", fn.Name)
-		return nil
+		if k8serrors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, err
 	}
-	return pkg.Spec.Deployment.OCI
+	return pkg.Spec.Deployment.OCI, nil
 }

@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Package oci pulls function code out of OCI images (RFC-0001). It is
-// deliberately independent of the fetcher so that other consumers (newdeploy,
-// future build/push tooling) can reuse it.
+// deliberately independent of the fetcher so that future consumers (e.g.
+// build/push tooling) can reuse it.
 package oci
 
 import (
@@ -41,7 +41,9 @@ type ExtractOptions struct {
 	// process-default keychain.
 	Keychain authn.Keychain
 	// InsecureRegistries is a host (host[:port]) allowlist permitted to use
-	// plain HTTP. Default empty: every registry must serve TLS.
+	// plain HTTP. Default empty: registries must serve TLS — except
+	// localhost, loopback, and private (RFC-1918) IP addresses, which
+	// go-containerregistry defaults to plain HTTP regardless.
 	InsecureRegistries []string
 	// MaxBytes caps the total extracted bytes; <= 0 applies DefaultMaxBytes.
 	MaxBytes int64

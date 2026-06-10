@@ -225,9 +225,11 @@ func (gp *GenericPool) genDeploymentSpec(env *fv1.Environment) (*appsv1.Deployme
 		// deployarchive constant. Applied AFTER every MergePodSpec (same
 		// convention as the SA-token re-clamps) so a runtime pod spec cannot
 		// strip or shadow the code mount.
-		util.AddImageVolume(&deploymentSpec.Template.Spec, gp.oci,
+		if err := util.AddImageVolume(&deploymentSpec.Template.Spec, gp.oci,
 			filepath.Join(gp.fetcherConfig.SharedMountPath(), fetcherConfig.TargetFilenameDeployArchive),
-			mainContainerName)
+			mainContainerName); err != nil {
+			return nil, err
+		}
 		return &deploymentSpec, nil
 	}
 

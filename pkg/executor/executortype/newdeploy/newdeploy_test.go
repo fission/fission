@@ -506,7 +506,7 @@ func TestGetDeploymentSpecOCIImageVolume(t *testing.T) {
 	assert.Equal(t, apiv1.PullIfNotPresent, imgVol.Image.PullPolicy)
 
 	// Mounted read-only at the fetcher's store path on BOTH containers.
-	wantPath := "/userfunc/deployarchive"
+	wantPath := deploy.fetcherConfig.SharedMountPath() + "/" + fetcherConfig.TargetFilenameDeployArchive
 	for _, c := range []*apiv1.Container{fetcher, user} {
 		var mount *apiv1.VolumeMount
 		for i := range c.VolumeMounts {

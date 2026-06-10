@@ -316,7 +316,7 @@ func newTestOCIPool(t *testing.T, oci *fv1.OCIArchive) *GenericPool {
 	t.Helper()
 	gp := newTestGenericPool(t)
 	gp.oci = oci
-	gp.ociImageHash = ociImageHash(oci.Image)
+	gp.ociImageHash = ociPoolHash(oci)
 	return gp
 }
 
@@ -420,8 +420,8 @@ func TestGenDeploymentSpecOCIWithPodSpecPatch(t *testing.T) {
 }
 
 // TestGenDeploymentSpecNonOCIUnchanged is the parity guard: a plain pool's
-// deployment spec keeps the fetcher container, its SA token projected volume,
-// and no image volume — byte-for-byte the pre-Path-B layout.
+// deployment spec keeps the pre-Path-B layout invariants — the fetcher
+// container, its SA token projected volume, and no image volume.
 func TestGenDeploymentSpecNonOCIUnchanged(t *testing.T) {
 	t.Parallel()
 	gp := newTestGenericPool(t)

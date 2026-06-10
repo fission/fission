@@ -166,3 +166,48 @@ func TestInsecureRegistriesFromEnv(t *testing.T) {
 	t.Setenv("FETCHER_ALLOW_INSECURE_REGISTRIES", "")
 	assert.Nil(t, insecureRegistriesFromEnv())
 }
+
+// TestFetchOCIMidExtractionFailure covers the cleanup branch: an image whose
+// layer contains a link entry fails DURING extraction (after the digest
+// check), and neither the store path nor an orphaned tmp dir may remain.
+func TestFetchOCIMidExtractionFailure(t *testing.T) {
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+	body := "ok"
+	require.NoError(t, tw.WriteHeader(&tar.Header{Name: "good.py", Typeflag: tar.TypeReg, Mode: 0o644, Size: int64(len(body))}))
+	_, err := tw.Write([]byte(body))
+	require.NoError(t, err)
+	require.NoError(t, tw.WriteHeader(&tar.Header{Name: "evil-link", Typeflag: tar.TypeSymlink, Linkname: "/etc/passwd"}))
+	require.NoError(t, tw.Close())
+	raw := buf.Bytes()
+	layer, err := tarball.LayerFromOpener(func() (io.ReadCloser, error) {
+		return io.NopCloser(bytes.NewReader(raw)), nil
+	})
+	require.NoError(t, err)
+	img, err := mutate.AppendLayers(empty.Image, layer)
+	require.NoError(t, err)
+
+	srv := httptest.NewServer(registry.New(registry.Logger(log.New(io.Discard, "", 0))))
+	t.Cleanup(srv.Close)
+	u, err := url.Parse(srv.URL)
+	require.NoError(t, err)
+	ref := fmt.Sprintf("%s/code/evil:v1", u.Host)
+	parsed, err := name.ParseReference(ref, name.Insecure)
+	require.NoError(t, err)
+	require.NoError(t, remote.Write(parsed, img))
+	t.Setenv("FETCHER_ALLOW_INSECURE_REGISTRIES", u.Host)
+
+	f := newOCITestFetcher(t)
+	code, err := f.Fetch(t.Context(), ociPackage(ref, ""), FunctionFetchRequest{
+		FetchType: fv1.FETCH_DEPLOYMENT,
+		Filename:  "userfunc",
+	})
+	require.Error(t, err)
+	assert.Equal(t, http.StatusInternalServerError, code)
+
+	_, statErr := os.Stat(filepath.Join(f.sharedVolumePath, "userfunc"))
+	assert.True(t, os.IsNotExist(statErr), "failed fetch must not leave the store path behind")
+	entries, err := os.ReadDir(f.sharedVolumePath)
+	require.NoError(t, err)
+	assert.Empty(t, entries, "failed fetch must clean up its tmp extraction dir")
+}

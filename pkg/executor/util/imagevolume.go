@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/go-logr/logr"
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/discovery"
 
@@ -25,7 +26,7 @@ const OCIImageVolumeName = "oci-package-image"
 // volume. When the archive pins a digest, it is appended to the reference
 // (repo:tag@sha256:...) so the kubelet enforces the pin — Path B has no
 // fetcher to verify it. A reference that already carries a digest is used
-// verbatim.
+// verbatim (OCIArchive.Validate rejects setting both).
 func OCIVolumeReference(oa *fv1.OCIArchive) string {
 	if oa.Digest == "" || strings.Contains(oa.Image, "@") {
 		return oa.Image
@@ -39,8 +40,15 @@ func OCIVolumeReference(oa *fv1.OCIArchive) string {
 // pull secrets append to pod.Spec.ImagePullSecrets — the kubelet resolves
 // image-volume pulls from those (plus the service account's). Call this
 // AFTER every MergePodSpec so a runtime pod spec cannot strip or shadow the
-// mount.
-func AddImageVolume(podSpec *apiv1.PodSpec, oa *fv1.OCIArchive, mountPath string, containerNames ...string) {
+// mount; it errors rather than silently producing a pod without the code
+// mount (a missing mount would otherwise surface as a misleading
+// "no such file" deep in the env container).
+func AddImageVolume(podSpec *apiv1.PodSpec, oa *fv1.OCIArchive, mountPath string, containerNames ...string) error {
+	for _, v := range podSpec.Volumes {
+		if v.Name == OCIImageVolumeName {
+			return fmt.Errorf("pod spec already has a volume named %q", OCIImageVolumeName)
+		}
+	}
 	podSpec.Volumes = append(podSpec.Volumes, apiv1.Volume{
 		Name: OCIImageVolumeName,
 		VolumeSource: apiv1.VolumeSource{
@@ -53,17 +61,26 @@ func AddImageVolume(podSpec *apiv1.PodSpec, oa *fv1.OCIArchive, mountPath string
 	mount := apiv1.VolumeMount{
 		Name:      OCIImageVolumeName,
 		MountPath: mountPath,
-		SubPath:   oa.SubPath,
-		ReadOnly:  true,
+		// Normalized for the volumeMount, which rejects absolute paths
+		// ("" or "/" mean the image root); validation additionally rejects
+		// unclean or traversing sub-paths at admission.
+		SubPath:  strings.Trim(oa.SubPath, "/"),
+		ReadOnly: true,
 	}
+	matched := 0
 	for i := range podSpec.Containers {
 		for _, name := range containerNames {
 			if podSpec.Containers[i].Name == name {
 				podSpec.Containers[i].VolumeMounts = append(podSpec.Containers[i].VolumeMounts, mount)
+				matched++
 			}
 		}
 	}
+	if matched != len(containerNames) {
+		return fmt.Errorf("image volume mount matched %d of %d containers %v", matched, len(containerNames), containerNames)
+	}
 	podSpec.ImagePullSecrets = append(podSpec.ImagePullSecrets, oa.ImagePullSecrets...)
+	return nil
 }
 
 // OCIImageVolumeEnabled reports whether the operator opted into delivering
@@ -95,4 +112,32 @@ func ImageVolumeSupported(disco discovery.DiscoveryInterface) (bool, error) {
 		return false, fmt.Errorf("parsing server minor version %q: %w", v.Minor, err)
 	}
 	return major > 1 || (major == 1 && minor >= 33), nil
+}
+
+// ImageVolumeGate is the once-at-startup evaluation of the RFC-0001 Path B
+// gate, shared by poolmgr and newdeploy so the two cannot drift: the
+// operator's ENABLE_OCI_IMAGE_VOLUME opt-in combined with cluster support.
+// A malformed opt-in value and a failed discovery probe are both loud — the
+// operator asked for the feature, so silently running without it would turn
+// one boot-time blip into an unexplained delivery-mode downgrade.
+func ImageVolumeGate(logger logr.Logger, disco discovery.DiscoveryInterface) bool {
+	raw := os.Getenv("ENABLE_OCI_IMAGE_VOLUME")
+	if raw == "" {
+		return false
+	}
+	enabled, err := strconv.ParseBool(raw)
+	if err != nil {
+		logger.Error(err, "invalid ENABLE_OCI_IMAGE_VOLUME value; OCI image-volume delivery stays disabled", "value", raw)
+		return false
+	}
+	if !enabled {
+		return false
+	}
+	supported, err := ImageVolumeSupported(disco)
+	if err != nil {
+		logger.Error(err, "failed to check image-volume support; OCI packages stay on the fetcher path (support unknown, not absent)")
+		return false
+	}
+	logger.Info("OCI image-volume delivery (RFC-0001 Path B)", "enabled", supported, "serverSupports", supported)
+	return supported
 }

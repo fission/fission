@@ -5,11 +5,13 @@
 package poolmgr
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
 
@@ -26,15 +28,25 @@ func TestPoolKeyEmptyImageMatchesEnvUID(t *testing.T) {
 	assert.Equal(t, string(uid)+"/abc123", poolKey(uid, "abc123"))
 }
 
-func TestOCIImageHashStable(t *testing.T) {
+func TestOCIPoolHashStable(t *testing.T) {
 	t.Parallel()
-	h1 := ociImageHash("registry.example.com/code/hello:v1")
-	h2 := ociImageHash("registry.example.com/code/hello:v1")
-	h3 := ociImageHash("registry.example.com/code/hello:v2")
-	assert.Equal(t, h1, h2, "hash must be deterministic")
-	assert.NotEqual(t, h1, h3, "different references must hash differently")
-	assert.Len(t, h1, 16)
-	assert.Empty(t, ociImageHash(""), "empty image means no per-image pool")
+	base := &fv1.OCIArchive{Image: "registry.example.com/code/hello:v1"}
+	assert.Equal(t, ociPoolHash(base), ociPoolHash(base), "hash must be deterministic")
+	assert.Len(t, ociPoolHash(base), 16)
+	assert.Empty(t, ociPoolHash(nil), "nil archive means the plain pool")
+
+	// Every pod-spec-affecting field must contribute to the pool identity:
+	// two archives that would produce different pods must never share a pool
+	// (e.g. one image holding several functions under different sub-paths).
+	variants := []*fv1.OCIArchive{
+		{Image: "registry.example.com/code/hello:v2"},
+		{Image: "registry.example.com/code/hello:v1", SubPath: "app"},
+		{Image: "registry.example.com/code/hello:v1", Digest: "sha256:" + strings.Repeat("a", 64)},
+		{Image: "registry.example.com/code/hello:v1", ImagePullSecrets: []apiv1.LocalObjectReference{{Name: "regcred"}}},
+	}
+	for _, v := range variants {
+		assert.NotEqualf(t, ociPoolHash(base), ociPoolHash(v), "variant %+v must key its own pool", v)
+	}
 }
 
 func ociEligibilityFixtures(envVersion int, secrets []fv1.SecretReference, cfgmaps []fv1.ConfigMapReference, deployment fv1.Archive) (*fv1.Function, *fv1.Environment, *fv1.Package) {
@@ -86,7 +98,8 @@ func TestGetFunctionOCIArchiveEligibility(t *testing.T) {
 				logger:        logr.Discard(),
 				fissionClient: fissionfake.NewSimpleClientset(pkg),
 			}
-			got := gpm.getFunctionOCIArchive(t.Context(), fn, env)
+			got, err := gpm.getFunctionOCIArchive(t.Context(), fn, env)
+			require.NoError(t, err)
 			if tc.want {
 				require.NotNil(t, got)
 				assert.Equal(t, "reg.example.com/code:v1", got.Image)
@@ -108,7 +121,9 @@ func TestGetFunctionOCIArchiveInfiniteEnvFallsBack(t *testing.T) {
 		logger:        logr.Discard(),
 		fissionClient: fissionfake.NewSimpleClientset(pkg),
 	}
-	assert.Nil(t, gpm.getFunctionOCIArchive(t.Context(), fn, env))
+	got, err := gpm.getFunctionOCIArchive(t.Context(), fn, env)
+	require.NoError(t, err)
+	assert.Nil(t, got)
 }
 
 func TestGetFunctionOCIArchiveMissingPackage(t *testing.T) {
@@ -118,6 +133,7 @@ func TestGetFunctionOCIArchiveMissingPackage(t *testing.T) {
 		logger:        logr.Discard(),
 		fissionClient: fissionfake.NewSimpleClientset(),
 	}
-	assert.Nil(t, gpm.getFunctionOCIArchive(t.Context(), fn, env),
-		"a missing package must fall back to Path A, not panic")
+	got, err := gpm.getFunctionOCIArchive(t.Context(), fn, env)
+	require.NoError(t, err, "a deleted package must fall back to Path A (the fetcher reports it precisely)")
+	assert.Nil(t, got)
 }

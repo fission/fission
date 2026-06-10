@@ -72,10 +72,11 @@ type (
 		podSpecPatch          *apiv1.PodSpec
 		enableOwnerReferences bool
 		// oci marks this as a per-image image-volume pool (RFC-0001 Path B):
-		// its pods mount the package image read-only at the shared mount
-		// path and carry no fetcher sidecar. nil for plain pools.
+		// its pods mount the package image read-only at the fetcher's store
+		// path (<sharedMountPath>/deployarchive) and carry no fetcher
+		// sidecar. nil for plain pools.
 		oci *fv1.OCIArchive
-		// ociImageHash is ociImageHash(oci.Image): keys the pool, labels its
+		// ociImageHash is ociPoolHash(oci): keys the pool, labels its
 		// pods, and suffixes the deployment name. Empty for plain pools.
 		ociImageHash string
 		// TODO: move this field into fsCache
@@ -137,7 +138,7 @@ func MakeGenericPool(
 		oci:                   oci,
 	}
 	if oci != nil {
-		gp.ociImageHash = ociImageHash(oci.Image)
+		gp.ociImageHash = ociPoolHash(oci)
 	}
 
 	gp.runtimeImagePullPolicy = utils.GetImagePullPolicy(os.Getenv("RUNTIME_IMAGE_PULL_POLICY"))
