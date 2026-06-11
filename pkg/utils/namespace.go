@@ -157,6 +157,27 @@ func (nsr *NamespaceResolver) GetFunctionNS(namespace string) string {
 	return nsr.FunctionNamespace
 }
 
+// FunctionNamespaces returns the deduplicated set of namespaces function
+// workloads (pool pods, per-function Services, their EndpointSlices) live in:
+// each Fission resource namespace mapped through GetFunctionNS. Shared by the
+// router's slice watch/RBAC preflight and the executor's Service
+// adoption/cleanup so all three iterate the same set by construction
+// (RFC-0002); the Helm chart's router/role-dataplane.yaml mirrors the same
+// mapping.
+func (nsr *NamespaceResolver) FunctionNamespaces() []string {
+	seen := make(map[string]struct{}, len(nsr.FissionResourceNS))
+	out := make([]string, 0, len(nsr.FissionResourceNS))
+	for _, ns := range nsr.FissionResourceNS {
+		fns := nsr.GetFunctionNS(ns)
+		if _, ok := seen[fns]; ok {
+			continue
+		}
+		seen[fns] = struct{}{}
+		out = append(out, fns)
+	}
+	return out
+}
+
 func (nsr *NamespaceResolver) ResolveNamespace(namespace string) string {
 	if nsr.FunctionNamespace == "" || nsr.BuilderNamespace == "" {
 		return nsr.DefaultNamespace

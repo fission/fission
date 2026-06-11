@@ -13,17 +13,37 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/hashicorp/go-retryablehttp"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 	ferror "github.com/fission/fission/pkg/error"
+	"github.com/fission/fission/pkg/utils/metrics"
 )
+
+// tapFailureEscalation is the consecutive-failure count at which flushTaps
+// switches from a V(1) note to an error log (3 failures = ~15s of lost taps).
+const tapFailureEscalation = 3
+
+// tapFlushErrors counts failed tap-flush batches. Each failure drops one 5s
+// batch of liveness taps; a sustained non-zero rate means index-admitted pods
+// are invisible to the executor's idle reaper and at risk of being reaped
+// while serving.
+var tapFlushErrors = prometheus.NewCounter(prometheus.CounterOpts{
+	Name: "fission_router_tap_flush_errors_total",
+	Help: "Failed batched tap flushes from the router to the executor.",
+})
+
+func init() {
+	metrics.Registry.MustRegister(tapFlushErrors)
+}
 
 type (
 	// ClientInterface is the interface for executor client.
@@ -39,6 +59,10 @@ type (
 		tappedByURL map[string]TapServiceRequest
 		requestChan chan TapServiceRequest
 		httpClient  *retryablehttp.Client
+		// consecutive flushTaps failures; with the RFC-0002 warm path these
+		// batched taps are the only liveness signal for index-admitted pods,
+		// so persistent failure must escalate (see flushTaps).
+		tapFailures atomic.Int64
 	}
 
 	// TapServiceRequest represents
@@ -46,6 +70,16 @@ type (
 		FnMetadata     metav1.ObjectMeta
 		FnExecutorType fv1.ExecutorType
 		ServiceURL     string
+	}
+
+	// EnsureCapacityRequest is the body of POST /v2/ensureCapacity (RFC-0002):
+	// the router reports its observed endpoint counts and asks the executor —
+	// still the capacity authority — to specialize one more pod (synchronous
+	// address response) or answer 429 at the function's concurrency cap.
+	EnsureCapacityRequest struct {
+		Function               *fv1.Function `json:"function"`
+		ObservedReadyEndpoints int           `json:"observedReadyEndpoints"`
+		ObservedBusyEndpoints  int           `json:"observedBusyEndpoints"`
 	}
 )
 
@@ -114,6 +148,47 @@ func (c *client) GetServiceForFunction(ctx context.Context, fn *fv1.Function) (s
 	return string(svcName), nil
 }
 
+// EnsureCapacity asks the executor to specialize one more pod for the
+// function (RFC-0002): the router calls it when every endpoint it knows is
+// saturated by its local admission accounting. Returns the new pod's address;
+// a 429 (concurrency cap) or 404 (older executor without the endpoint)
+// surfaces as a ferror with the corresponding code so the caller can degrade.
+func (c *client) EnsureCapacity(ctx context.Context, fn *fv1.Function, observedReady, observedBusy int) (string, error) {
+	executorURL := c.executorURL + "/v2/ensureCapacity"
+
+	body, err := json.Marshal(EnsureCapacityRequest{
+		Function:               fn,
+		ObservedReadyEndpoints: observedReady,
+		ObservedBusyEndpoints:  observedBusy,
+	})
+	if err != nil {
+		return "", fmt.Errorf("could not marshal request body for ensuring capacity for function: %w", err)
+	}
+
+	req, err := retryablehttp.NewRequestWithContext(ctx, "POST", executorURL, bytes.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("could not create request for ensuring capacity for function: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("error posting to ensuring capacity for function: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return "", ferror.MakeErrorFromHTTP(resp)
+	}
+
+	svcName, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("error reading response body from ensuring capacity for function: %w", err)
+	}
+
+	return string(svcName), nil
+}
+
 // UnTapService sends a request to /v2/unTapService.
 func (c *client) UnTapService(ctx context.Context, fnMeta metav1.ObjectMeta, executorType fv1.ExecutorType, serviceURL *url.URL) error {
 	url := c.executorURL + "/v2/unTapService"
@@ -146,6 +221,9 @@ func (c *client) UnTapService(ctx context.Context, fnMeta metav1.ObjectMeta, exe
 	return nil
 }
 
+// service accumulates TapService requests and flushes them to the executor in
+// a batch every 5 seconds, so taps cost one RPC per interval regardless of
+// request rate.
 func (c *client) service() {
 	ticker := time.NewTicker(time.Second * 5)
 	defer ticker.Stop()
@@ -161,20 +239,36 @@ func (c *client) service() {
 			urls := c.tappedByURL
 			c.tappedByURL = make(map[string]TapServiceRequest)
 
-			go func() {
-				svcReqs := []TapServiceRequest{}
-				for _, req := range urls {
-					svcReqs = append(svcReqs, req)
-				}
-				c.logger.V(1).Info("tapped services in batch", "service_count", len(urls))
-				err := c._tapService(context.Background(), svcReqs)
-				if err != nil {
-					// Best-effort atime refresh; a 404 here just means some
-					// entries expired on the executor side.
-					c.logger.V(1).Info("error tapping function service address", "error", err.Error())
-				}
-			}()
+			go c.flushTaps(urls)
 		}
+	}
+}
+
+// flushTaps sends one accumulated batch of tap requests to the executor.
+// Best-effort: a 404 just means some entries expired on the executor side.
+// A failed batch is dropped, not requeued — acceptable for one interval, but
+// with the RFC-0002 warm path these taps are the ONLY liveness signal for
+// index-admitted pods (the router never RPCs the executor for them), so a
+// persistently failing flush would let the idle reaper age out pods that are
+// actively serving. Sustained failure therefore escalates to an error log and
+// is always counted in fission_router_tap_flush_errors_total.
+func (c *client) flushTaps(urls map[string]TapServiceRequest) {
+	svcReqs := []TapServiceRequest{}
+	for _, req := range urls {
+		svcReqs = append(svcReqs, req)
+	}
+	c.logger.V(1).Info("tapped services in batch", "service_count", len(urls))
+	err := c._tapService(context.Background(), svcReqs)
+	if err == nil {
+		c.tapFailures.Store(0)
+		return
+	}
+	tapFlushErrors.Inc()
+	if failures := c.tapFailures.Add(1); failures >= tapFailureEscalation {
+		c.logger.Error(err, "tap flush failing persistently; idle reaper may reap serving pods",
+			"consecutive_failures", failures, "service_count", len(urls))
+	} else {
+		c.logger.V(1).Info("error tapping function service address", "error", err.Error())
 	}
 }
 

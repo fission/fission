@@ -11,7 +11,11 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/api/resource"
 
@@ -291,4 +295,61 @@ func TestPoolCacheRequests(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestReserveCapacity locks the RFC-0002 ensureCapacity contract: the
+// check-and-reserve is atomic inside the cache actor, rejects at the
+// concurrency cap, and the reservation is symmetric with setValue /
+// markSpecializationFailure.
+func TestReserveCapacity(t *testing.T) {
+	key := crd.CacheKeyURG{UID: "reserve-fn", Generation: 1}
+	c := NewPoolCache(logr.Discard())
+
+	// concurrency=2: two reservations succeed, the third hits the cap.
+	require.NoError(t, c.ReserveCapacity(key, 2))
+	require.NoError(t, c.ReserveCapacity(key, 2))
+	err := c.ReserveCapacity(key, 2)
+	require.Error(t, err)
+	fe, ok := err.(ferror.Error)
+	require.True(t, ok)
+	require.EqualValues(t, ferror.ErrorTooManyRequests, fe.Code)
+
+	// A failed specialization releases its reservation...
+	c.MarkSpecializationFailure(key)
+	require.NoError(t, c.ReserveCapacity(key, 2))
+
+	// ...and a successful one is consumed by setValue (the pod now counts via
+	// len(svcs) instead), keeping the cap exact.
+	c.SetSvcValue(t.Context(), key, "10.0.0.1:8888", &FuncSvc{Function: &metav1.ObjectMeta{Name: "fn"}}, resource.MustParse("45m"), 10, 0)
+	err = c.ReserveCapacity(key, 2)
+	require.Error(t, err, "1 pod + 1 in-flight reservation == cap 2")
+}
+
+// TestMarkSpecializationFailureUnknownKey guards the ensureCapacity error
+// path: failing a specialization for a function the cache has never seen must
+// be a no-op, not a nil-map panic that kills the cache actor.
+func TestMarkSpecializationFailureUnknownKey(t *testing.T) {
+	c := NewPoolCache(logr.Discard())
+	c.MarkSpecializationFailure(crd.CacheKeyURG{UID: "never-seen", Generation: 1})
+	// The actor survives: a follow-up request still gets served.
+	require.NoError(t, c.ReserveCapacity(crd.CacheKeyURG{UID: "never-seen", Generation: 1}, 0))
+}
+
+// TestPoolCacheTouchByAddress locks the RFC-0002 tap-liveness fix: the
+// router's batched taps must refresh the Atime of pool-cache entries (the
+// idle reaper ages on it once the warm path stops calling the executor).
+func TestPoolCacheTouchByAddress(t *testing.T) {
+	key := crd.CacheKeyURG{UID: "touch-fn", Generation: 1}
+	c := NewPoolCache(logr.Discard())
+
+	old := time.Now().Add(-time.Hour)
+	fsvc := &FuncSvc{Function: &metav1.ObjectMeta{Name: "fn"}, Address: "10.0.0.9:8888", Atime: old}
+	c.SetSvcValue(t.Context(), key, "10.0.0.9:8888", fsvc, resource.MustParse("45m"), 10, 0)
+	c.MarkAvailable(key, "10.0.0.9:8888")
+
+	require.NoError(t, c.TouchByAddress("10.0.0.9:8888"))
+	require.True(t, fsvc.Atime.After(old), "tap must refresh the pool-cache entry's Atime")
+
+	err := c.TouchByAddress("10.9.9.9:1")
+	require.Error(t, err, "unknown address still 404s")
 }

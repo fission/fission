@@ -13,6 +13,7 @@ package idle
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -75,8 +76,7 @@ func NewReaper(logger logr.Logger, strategies ...Strategy) *Reaper {
 }
 
 // Start launches one ticker per strategy and blocks until ctx is cancelled
-// (leadership loss or shutdown). Its signature matches errgroup.Group.Go usage
-// in the executor controllers.
+// (leadership loss or shutdown); run it under an errgroup via a closure.
 func (r *Reaper) Start(ctx context.Context) {
 	var wg sync.WaitGroup
 	for _, s := range r.strategies {
@@ -188,20 +188,28 @@ type PoolDeleteStrategy struct {
 	reapTime      time.Duration
 	interval      time.Duration
 
+	// drainBeforeDelete enables the RFC-0002 two-step reap: remove the
+	// fission.io/served label first (the pod leaves its function Service's
+	// EndpointSlices, so every router stops admitting it within watch
+	// latency), then delete after a drain grace. Gated on the executor's
+	// function-Services flag — without slices there is nothing to drain from.
+	drainBeforeDelete bool
+
 	// Per-tick state populated by Prepare. Ticks for a strategy never overlap
 	// (wait.UntilWithContext), and Reap goroutines only read these maps.
 	envUIDs map[k8sTypes.UID]struct{}
 	fnByUID map[k8sTypes.UID]fv1.Function
 }
 
-func NewPoolDeleteStrategy(logger logr.Logger, fissionClient versioned.Interface, fsCache *fscache.FunctionServiceCache, kubeClient kubernetes.Interface, reapTime, interval time.Duration) *PoolDeleteStrategy {
+func NewPoolDeleteStrategy(logger logr.Logger, fissionClient versioned.Interface, fsCache *fscache.FunctionServiceCache, kubeClient kubernetes.Interface, reapTime, interval time.Duration, drainBeforeDelete bool) *PoolDeleteStrategy {
 	return &PoolDeleteStrategy{
-		logger:        logger,
-		fissionClient: fissionClient,
-		fsCache:       fsCache,
-		kubeClient:    kubeClient,
-		reapTime:      reapTime,
-		interval:      interval,
+		logger:            logger,
+		fissionClient:     fissionClient,
+		fsCache:           fsCache,
+		kubeClient:        kubeClient,
+		reapTime:          reapTime,
+		interval:          interval,
+		drainBeforeDelete: drainBeforeDelete,
 	}
 }
 
@@ -252,6 +260,10 @@ func (s *PoolDeleteStrategy) Reap(ctx context.Context, fsvc *fscache.FuncSvc) er
 		return err
 	}
 	if deleted {
+		if s.drainBeforeDelete {
+			s.drainThenDelete(ctx, fsvc)
+			return nil
+		}
 		for i := range fsvc.KubernetesObjects {
 			s.logger.Info("release idle function resources",
 				"function", fsvc.Function.Name,
@@ -264,6 +276,85 @@ func (s *PoolDeleteStrategy) Reap(ctx context.Context, fsvc *fscache.FuncSvc) er
 		}
 	}
 	return nil
+}
+
+// drainGraceCap bounds the drain grace so functions with very long timeouts
+// don't pin reaped pods for that long (RFC-0002 open question resolved: cap).
+const (
+	drainGraceMin = 30 * time.Second
+	drainGraceCap = 5 * time.Minute
+)
+
+// drainThenDelete is the RFC-0002 two-step reap: unlabel now (the pod drops
+// out of its function Service's EndpointSlices, and routers stop admitting it
+// within watch latency), delete after a grace long enough for in-flight
+// requests to finish. The delayed delete is detached (fire-and-forget): if the
+// executor restarts before it fires, the orphaned pod is re-adopted into the
+// fsCache by the adopt pass and reaped again on a later tick — self-healing,
+// no leak.
+func (s *PoolDeleteStrategy) drainThenDelete(ctx context.Context, fsvc *fscache.FuncSvc) {
+	grace := drainGraceMin
+	if fn, ok := s.fnByUID[fsvc.Function.UID]; ok {
+		if t := time.Duration(fn.Spec.FunctionTimeout) * time.Second; t > grace {
+			grace = t
+		}
+	}
+	if grace > drainGraceCap {
+		grace = drainGraceCap
+	}
+
+	// Strategic-merge null deletes the label; a no-op for pods that never
+	// carried it.
+	patch := fmt.Sprintf(`{"metadata":{"labels":{"%s":null}}}`, fv1.SERVED_LABEL)
+	for i := range fsvc.KubernetesObjects {
+		obj := fsvc.KubernetesObjects[i]
+		if !strings.EqualFold(obj.Kind, "pod") {
+			continue
+		}
+		_, err := s.kubeClient.CoreV1().Pods(obj.Namespace).Patch(ctx, obj.Name, k8sTypes.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
+		if err != nil && !k8sErrs.IsNotFound(err) {
+			s.logger.Error(err, "error unlabeling idle pod for drain", "pod", obj.Name, "ns", obj.Namespace)
+		}
+	}
+	s.logger.Info("draining idle function resources before delete",
+		"function", fsvc.Function.Name,
+		"address", fsvc.Address,
+		"pod", fsvc.Name,
+		"grace", grace,
+	)
+
+	objs := fsvc.KubernetesObjects
+	logger := s.logger
+	kubeClient := s.kubeClient
+	time.AfterFunc(grace, func() {
+		dctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+		for i := range objs {
+			logger.Info("release drained idle function resources",
+				"function", fsvc.Function.Name,
+				"address", fsvc.Address,
+				"pod", fsvc.Name,
+			)
+			// Bounded retry: the fsvc is already evicted from the cache, so
+			// nothing in the running executor would ever retry a failed delete
+			// — the unlabeled pod would leak until the next executor restart's
+			// adopt pass. Three attempts ride out an apiserver blip.
+			var derr error
+			for attempt := range 3 {
+				if attempt > 0 {
+					time.Sleep(time.Duration(attempt) * 5 * time.Second)
+				}
+				if derr = reaper.DeleteKubeObject(dctx, kubeClient, &objs[i]); derr == nil {
+					break
+				}
+			}
+			if derr != nil {
+				logger.Error(derr, "error deleting drained idle resource; pod leaks until the next executor restart",
+					"type", objs[i].Kind, "name", objs[i].Name, "ns", objs[i].Namespace)
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+	})
 }
 
 // ScaleDownStrategy reaps newdeploy/container function services by scaling

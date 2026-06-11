@@ -35,6 +35,8 @@ manifests:
           coverage.enabled: "false"
           debugEnv: "false"
           executor.enableOCIImageVolume: "false"
+          executor.functionServices.enabled: "false"
+          executor.specializationConcurrency: "0"
           fetcher.allowInsecureRegistries: ""
           fetcher.imageTag: ""
           functionNamespace: ""
@@ -59,6 +61,7 @@ manifests:
           priorityClassName: system-cluster-critical
           prometheus.serviceEndpoint: ""
           repository: ghcr.io
+          router.endpointSliceCache.mode: "off"
           routerServiceType: LoadBalancer
           runtimePodSpec.enabled: "false"
           serviceMonitor.additionalServiceMonitorLabels.release: prometheus
@@ -163,6 +166,16 @@ profiles:
       - op: replace
         path: /manifests/helm/releases/0/setValues/executor.enableOCIImageVolume
         value: true
+      # Exercise the RFC-0002 EndpointSlice data plane in CI: per-function
+      # headless Services on the executor, slice-fed warm path on the router.
+      # One workflow leg pins the router back to mode=off post-deploy so the
+      # legacy RPC path stays covered.
+      - op: replace
+        path: /manifests/helm/releases/0/setValues/executor.functionServices.enabled
+        value: true
+      - op: replace
+        path: /manifests/helm/releases/0/setValues/router.endpointSliceCache.mode
+        value: "on"
   - name: kind-ci-old
     patches:
       - op: replace

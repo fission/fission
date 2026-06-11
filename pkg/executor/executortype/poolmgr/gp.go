@@ -6,13 +6,8 @@ package poolmgr
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
-	"math"
-	"net"
 	"os"
-	"strings"
 	"sync"
 	"time"
 
@@ -25,9 +20,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
 	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -36,12 +29,9 @@ import (
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/executor/fscache"
 	executorUtil "github.com/fission/fission/pkg/executor/util"
-	fetcherClient "github.com/fission/fission/pkg/fetcher/client"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
-	storagesvcClient "github.com/fission/fission/pkg/storagesvc/client"
 	"github.com/fission/fission/pkg/utils"
-	"github.com/fission/fission/pkg/utils/maps"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
@@ -84,6 +74,21 @@ type (
 	}
 )
 
+// podReadyTimeoutFromEnv parses POD_READY_TIMEOUT, defaulting to 300s on a
+// missing or unparsable value. Called once by MakeGenericPoolManager rather
+// than on every pool creation.
+func podReadyTimeoutFromEnv(logger logr.Logger) time.Duration {
+	podReadyTimeoutStr := os.Getenv("POD_READY_TIMEOUT")
+	podReadyTimeout, err := time.ParseDuration(podReadyTimeoutStr)
+	if err != nil {
+		podReadyTimeout = 300 * time.Second
+		logger.Error(err, "failed to parse pod ready timeout duration from 'POD_READY_TIMEOUT' - set to the default value",
+			"value", podReadyTimeoutStr,
+			"default", podReadyTimeout)
+	}
+	return podReadyTimeout
+}
+
 // MakeGenericPool returns an instance of GenericPool
 func MakeGenericPool(
 	logger logr.Logger,
@@ -98,18 +103,10 @@ func MakeGenericPool(
 	enableIstio bool,
 	podSpecPatch *apiv1.PodSpec,
 	crClient client.Client,
-	oci *fv1.OCIArchive) *GenericPool {
+	oci *fv1.OCIArchive,
+	podReadyTimeout time.Duration) *GenericPool {
 
 	gpLogger := logger.WithName("generic_pool")
-
-	podReadyTimeoutStr := os.Getenv("POD_READY_TIMEOUT")
-	podReadyTimeout, err := time.ParseDuration(podReadyTimeoutStr)
-	if err != nil {
-		podReadyTimeout = 300 * time.Second
-		gpLogger.Error(err, "failed to parse pod ready timeout duration from 'POD_READY_TIMEOUT' - set to the default value",
-			"value", podReadyTimeoutStr,
-			"default", podReadyTimeout)
-	}
 
 	gpLogger.Info("creating pool", "environment", env)
 
@@ -163,378 +160,6 @@ func (gp *GenericPool) setup(ctx context.Context) error {
 	return nil
 }
 
-func (gp *GenericPool) getEnvironmentPoolLabels(env *fv1.Environment) map[string]string {
-	envLabels := maps.CopyStringMap(env.Labels)
-	envLabels[fv1.EXECUTOR_TYPE] = string(fv1.ExecutorTypePoolmgr)
-	envLabels[fv1.ENVIRONMENT_NAME] = env.Name
-	envLabels[fv1.ENVIRONMENT_NAMESPACE] = env.Namespace
-	envLabels[fv1.ENVIRONMENT_UID] = string(env.UID)
-	envLabels["managed"] = "true" // this allows us to easily find pods managed by the deployment
-	if gp.ociImageHash != "" {
-		// Routes this pool's warm pods to its own readyPodQueue and keeps
-		// the plain pool's seed/selectors from picking them up.
-		envLabels[fv1.POOL_OCI_IMAGE_HASH] = gp.ociImageHash
-	}
-	return envLabels
-}
-
-func (gp *GenericPool) getDeployAnnotations(env *fv1.Environment) map[string]string {
-	deployAnnotations := maps.CopyStringMap(env.Annotations)
-	deployAnnotations[fv1.EXECUTOR_INSTANCEID_LABEL] = gp.instanceID
-	return deployAnnotations
-}
-
-func (gp *GenericPool) checkMetricsApi() bool {
-	apiGroups, err := gp.metricsClient.Discovery().ServerGroups()
-	if err != nil {
-		gp.logger.Error(err, "failed to discover API groups")
-		return false
-	}
-	return utils.SupportedMetricsAPIVersionAvailable(apiGroups)
-}
-
-func (gp *GenericPool) updateCPUUtilizationSvc(ctx context.Context) {
-	var metricsApiAvailabe bool
-	ticker := time.NewTicker(30 * time.Second)
-	defer ticker.Stop()
-
-	if !gp.checkMetricsApi() {
-		ticker.Reset(180 * time.Second)
-		gp.logger.Info("Metrics API not available")
-	}
-
-	serviceFunc := func(ctx context.Context) {
-		podMetricsList, err := gp.metricsClient.MetricsV1beta1().PodMetricses(gp.fnNamespace).List(ctx, metav1.ListOptions{
-			LabelSelector: "managed=false",
-		})
-		if err != nil {
-			gp.logger.Error(err, "failed to fetch pod metrics list")
-			return
-		}
-		gp.logger.V(1).Info("pods found", "length", len(podMetricsList.Items))
-		for _, val := range podMetricsList.Items {
-			p, _ := resource.ParseQuantity("0m")
-			for _, container := range val.Containers {
-				p.Add(container.Usage["cpu"])
-			}
-			if value, ok := gp.podFSVCMap.Load(val.Name); ok {
-				if valArray, ok1 := value.([]any); ok1 {
-					function, ok2 := valArray[0].(crd.CacheKeyURG)
-					if !ok2 {
-						gp.logger.Error(nil, "failed to convert function to type", "function", function)
-						return
-					}
-					address, ok2 := valArray[1].(string)
-					if !ok2 {
-						gp.logger.Error(nil, "failed to convert address to string", "address", address)
-						return
-					}
-					gp.fsCache.SetCPUUtilizaton(function, address, p)
-					gp.logger.Info("updated function cpu usage", "function", function, "address", address, "cpuUsage", p)
-				}
-			}
-		}
-	}
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			if metricsApiAvailabe {
-				serviceFunc(ctx)
-			} else {
-				if gp.checkMetricsApi() {
-					metricsApiAvailabe = true
-					ticker.Reset(30 * time.Second)
-				}
-			}
-		}
-	}
-}
-
-// choosePod picks a ready pod from the pool and relabels it, waiting if necessary.
-// returns the key and pod API object.
-func (gp *GenericPool) choosePod(ctx context.Context, newLabels map[string]string) (string, *apiv1.Pod, error) {
-	startTime := time.Now()
-	podTimeout := startTime.Add(gp.podReadyTimeout)
-	deadline, ok := ctx.Deadline()
-	if ok {
-		deadline = deadline.Add(-1 * time.Second)
-		if deadline.Before(podTimeout) {
-			podTimeout = deadline
-		}
-	}
-	expoDelay := 100 * time.Millisecond
-	logger := otelUtils.LoggerWithTraceID(ctx, gp.logger)
-	// The executor Manager cache is synced before the API server serves, so no
-	// per-pool cache-sync wait is needed here anymore.
-	for {
-		// Retries took too long, error out.
-		if time.Now().After(podTimeout) {
-			logger.Info("timed out waiting for pod", "labels", newLabels, "timeout", podTimeout.Sub(startTime))
-			return "", nil, errors.New("timeout: waited too long to get a ready pod")
-		}
-		if ctx.Err() != nil {
-			logger.Error(ctx.Err(), "context canceled while waiting for pod", "labels", newLabels, "timeout", podTimeout.Sub(startTime))
-			return "", nil, fmt.Errorf("context canceled while waiting for pod: %w", ctx.Err())
-		}
-
-		var chosenPod *apiv1.Pod
-
-		otelUtils.SpanTrackEvent(ctx, "waitForPod", otelUtils.MapToAttributes(newLabels)...)
-		key, quit := gp.readyPodQueue.Get()
-		if quit {
-			logger.Error(nil, "readypod controller is not running")
-			return "", nil, errors.New("readypod controller is not running")
-		}
-		logger.V(1).Info("got key from the queue", "key", key)
-		namespace, name, err := cache.SplitMetaNamespaceKey(key)
-		if err != nil {
-			logger.Error(err, "error splitting key", "key", key)
-			gp.readyPodQueue.Done(key)
-			return "", nil, err
-		}
-		pod := &apiv1.Pod{}
-		if err := gp.crClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, pod); err != nil {
-			// Not in the cache (e.g. already specialized and relabelled out of the
-			// poolmgr-managed set, or deleted): skip this stale key.
-			logger.V(1).Info("ready pod not found in cache; skipping", "key", key, "err", err)
-			gp.readyPodQueue.Done(key)
-			continue
-		}
-		// The Manager cache holds both warm (managed=true) and specialized
-		// (managed=false) poolmgr pods; the old per-pool lister only held warm ones.
-		// Skip any pod that has already been specialized so we never re-specialize
-		// another function's pod.
-		if pod.Labels["managed"] != "true" {
-			logger.V(1).Info("pod already specialized; skipping", "key", key)
-			gp.readyPodQueue.Done(key)
-			continue
-		}
-		if utils.IsPodTerminated(pod) {
-			logger.Error(nil, "pod is terminated", "key", key)
-			gp.readyPodQueue.Done(key)
-			continue
-		}
-		if !utils.IsReadyPod(pod) {
-			logger.Error(nil, "pod not ready, pod will be checked again", "key", key, "delay", expoDelay)
-			gp.readyPodQueue.Done(key)
-			gp.readyPodQueue.AddAfter(key, expoDelay)
-			expoDelay *= 2
-			continue
-		}
-		chosenPod = pod.DeepCopy()
-		otelUtils.SpanTrackEvent(ctx, "foundPod", otelUtils.GetAttributesForPod(chosenPod)...)
-
-		if gp.env.Spec.AllowedFunctionsPerContainer != fv1.AllowedFunctionsPerContainerInfinite {
-			// Relabel.  If the pod already got picked and
-			// modified, this should fail; in that case just
-			// retry.
-			// Append executor instance id to pod annotations to
-			// indicate this pod is managed by this executor.
-			annotations := gp.getDeployAnnotations(gp.env)
-			patch := map[string]any{
-				"metadata": map[string]any{
-					"annotations": annotations,
-					"labels":      newLabels,
-				},
-			}
-			patchBytes, _ := json.Marshal(patch)
-			logger.Info("relabel pod", "pod", string((patchBytes)))
-			newPod, err := gp.kubernetesClient.CoreV1().Pods(chosenPod.Namespace).Patch(ctx, chosenPod.Name, k8sTypes.StrategicMergePatchType, patchBytes, metav1.PatchOptions{})
-			if err != nil && errors.Is(err, context.Canceled) {
-				// ending retry loop when the request canceled
-				gp.readyPodQueue.Done(key)
-				gp.readyPodQueue.AddAfter(key, expoDelay)
-				return "", nil, fmt.Errorf("failed to relabel pod: %s", err)
-			} else if err != nil {
-				logger.Error(err, "failed to relabel pod", "pod", chosenPod.Name, "delay", expoDelay)
-				gp.readyPodQueue.Done(key)
-				gp.readyPodQueue.AddAfter(key, expoDelay)
-				expoDelay *= 2
-				continue
-			}
-			otelUtils.SpanTrackEvent(ctx, "podRelabel", otelUtils.GetAttributesForPod(chosenPod)...)
-
-			// With StrategicMergePatchType, the client-go sometimes return
-			// nil error and the labels & annotations remain the same.
-			// So we have to check both of them to ensure the patch success.
-			for k, v := range newLabels {
-				if newPod.Labels[k] != v {
-					return "", nil, fmt.Errorf("value of necessary labels '%s' mismatch: want '%s', get '%v'",
-						k, v, newPod.Labels[k])
-				}
-			}
-			for k, v := range annotations {
-				if newPod.Annotations[k] != v {
-					return "", nil, fmt.Errorf("value of necessary annotations '%s' mismatch: want '%s', get '%v'",
-						k, v, newPod.Annotations[k])
-				}
-			}
-		}
-
-		logger.Info("chose pod", "labels", newLabels,
-			"pod", chosenPod.Name, "elapsed_time", time.Since(startTime))
-
-		return key, chosenPod, nil
-	}
-}
-
-func (gp *GenericPool) labelsForFunction(metadata *metav1.ObjectMeta) map[string]string {
-	label := gp.getEnvironmentPoolLabels(gp.env)
-	label[fv1.FUNCTION_NAME] = metadata.Name
-	label[fv1.FUNCTION_UID] = string(metadata.UID)
-	label[fv1.FUNCTION_NAMESPACE] = metadata.Namespace // function CRD must stay within same namespace of environment CRD
-	label["managed"] = "false"                         // this allows us to easily find pods not managed by the deployment
-	return label
-}
-
-func (gp *GenericPool) scheduleDeletePod(ctx context.Context, name string) {
-	// The sleep allows debugging or collecting logs from the pod before it's
-	// cleaned up.  (We need a better solutions for both those things; log
-	// aggregation and storage will help.)
-	gp.logger.Info("error in pod - scheduling cleanup", "pod", name)
-	err := gp.kubernetesClient.CoreV1().Pods(gp.fnNamespace).Delete(ctx, name, metav1.DeleteOptions{})
-	if err != nil {
-		gp.logger.Error(err,
-			"error deleting pod", "name", name,
-			"namespace", gp.fnNamespace,
-		)
-	}
-}
-
-// IsIPv6 validates if the podIP follows to IPv6 protocol
-func IsIPv6(podIP string) bool {
-	ip := net.ParseIP(podIP)
-	return ip != nil && strings.Contains(podIP, ":")
-}
-
-func (gp *GenericPool) getFetcherURL(podIP string) string {
-	testURL := os.Getenv("TEST_FETCHER_URL")
-	if len(testURL) != 0 {
-		// it takes a second or so for the test service to
-		// become routable once a pod is relabeled. This is
-		// super hacky, but only runs in unit tests.
-		time.Sleep(5 * time.Second)
-		return testURL
-	}
-
-	isv6 := IsIPv6(podIP)
-	var baseURL string
-
-	if isv6 { // We use bracket if the IP is in IPv6.
-		baseURL = fmt.Sprintf("http://[%s]:8000/", podIP)
-	} else {
-		baseURL = fmt.Sprintf("http://%s:8000/", podIP)
-	}
-	return baseURL
-}
-
-// specializePod chooses a pod, copies the required user-defined function to that pod
-// (via fetcher), and calls the function-run container to load it, resulting in a
-// specialized pod.
-func (gp *GenericPool) specializePod(ctx context.Context, pod *apiv1.Pod, fn *fv1.Function) error {
-	logger := otelUtils.LoggerWithTraceID(ctx, gp.logger)
-
-	// for fetcher we don't need to create a service, just talk to the pod directly
-	podIP := pod.Status.PodIP
-	if len(podIP) == 0 {
-		return fmt.Errorf("pod %s in namespace %s has no IP", pod.Name, pod.Namespace)
-	}
-
-	// Path B (image-volume) pods have no fetcher to relay through: the code
-	// is already mounted, so go straight to the env's load endpoint. The
-	// eligibility check guarantees such functions carry no Secrets or
-	// ConfigMaps and run v2+ environments.
-	if gp.oci != nil {
-		return gp.loadOnlySpecialize(ctx, podIP, fn)
-	}
-	for _, cm := range fn.Spec.ConfigMaps {
-		_, err := gp.kubernetesClient.CoreV1().ConfigMaps(gp.fnNamespace).Get(ctx, cm.Name, metav1.GetOptions{})
-		if err != nil {
-			if k8s_err.IsNotFound(err) {
-				logger.Error(nil, "configmap namespace mismatch", "error", "configmap must be in same namespace as function namespace",
-					"configmap_name", cm.Name,
-					"configmap_namespace", cm.Namespace,
-					"function_name", fn.Name,
-					"function_namespace", gp.fnNamespace)
-				return fmt.Errorf("configmap %s must be in same namespace as function namespace", cm.Name)
-			} else {
-				return err
-			}
-		}
-	}
-	for _, sec := range fn.Spec.Secrets {
-		_, err := gp.kubernetesClient.CoreV1().Secrets(gp.fnNamespace).Get(ctx, sec.Name, metav1.GetOptions{})
-		if err != nil {
-			if k8s_err.IsNotFound(err) {
-				logger.Error(nil, "secret namespace mismatch", "error", "secret must be in same namespace as function namespace",
-					"secret_name", sec.Name,
-					"secret_namespace", sec.Namespace,
-					"function_name", fn.Name,
-					"function_namespace", gp.fnNamespace)
-				return fmt.Errorf("secret %s must be in same namespace as function namespace", sec.Name)
-			} else {
-				return err
-			}
-
-		}
-	}
-	// specialize pod with service
-	if gp.useIstio {
-		svc := utils.GetFunctionIstioServiceName(fn.Name, fn.Namespace)
-		podIP = fmt.Sprintf("%s.%s", svc, gp.fnNamespace)
-	}
-
-	// tell fetcher to get the function.
-	fetcherURL := gp.getFetcherURL(podIP)
-	logger.Info("calling fetcher to copy function", "function", fn.Name, "url", fetcherURL)
-
-	specializeReq := gp.fetcherConfig.NewSpecializeRequest(fn, gp.env)
-
-	logger.Info("specializing pod", "function", fn.Name)
-
-	// Fetcher will download user function to share volume of pod, and
-	// invoke environment specialize api for pod specialization. The
-	// HMAC master secret (when internalAuth is enabled) is read from
-	// the executor pod's env so each /specialize call to the in-pod
-	// fetcher carries the X-Fission-Auth-* headers required by the
-	// fetcher's verifier; an empty secret is the explicit pass-through
-	// for first-deploy installs.
-	err := fetcherClient.MakeClient(gp.logger, fetcherURL, storagesvcClient.HMACSecretFromEnv()).Specialize(ctx, &specializeReq)
-	if err != nil {
-		return err
-	}
-	otelUtils.SpanTrackEvent(ctx, "specializedPod", otelUtils.GetAttributesForPod(pod)...)
-	return nil
-}
-
-func (gp *GenericPool) createSvc(ctx context.Context, name string, labels map[string]string) (*apiv1.Service, error) {
-	otelUtils.SpanTrackEvent(ctx, "createSvc", otelUtils.MapToAttributes(map[string]string{
-		"name": name,
-	})...)
-	service := apiv1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:   name,
-			Labels: labels,
-		},
-		Spec: apiv1.ServiceSpec{
-			Type: apiv1.ServiceTypeClusterIP,
-			Ports: []apiv1.ServicePort{
-				{
-					Protocol:   apiv1.ProtocolTCP,
-					Port:       8888,
-					TargetPort: intstr.FromInt(8888),
-				},
-			},
-			Selector: labels,
-		},
-	}
-	svc, err := gp.kubernetesClient.CoreV1().Services(gp.fnNamespace).Create(ctx, &service, metav1.CreateOptions{})
-	return svc, err
-}
-
 func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
 	logger := otelUtils.LoggerWithTraceID(ctx, gp.logger).WithValues("function", fn.Name, "namespace", fn.Namespace,
 		"env", fn.Spec.Environment.Name, "envNamespace", fn.Spec.Environment.Namespace)
@@ -583,7 +208,10 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 		}
 	}
 
-	key, pod, err := gp.choosePod(ctx, funcLabels)
+	// The relabel carries the function-generation label (RFC-0002) on top of
+	// funcLabels; list/selection paths (RefreshFuncPods, the legacy
+	// useSvc/istio selectors below) keep the generation-agnostic funcLabels.
+	key, pod, err := gp.choosePod(ctx, gp.specializedPodLabels(&fn.ObjectMeta))
 	if err != nil {
 		// Transient executor errors (ChoosePodFailed, specialize timeout,
 		// etc.) are NOT written to Function.Status.Conditions: getFuncSvc
@@ -638,9 +266,12 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 	}
 
 	otelUtils.SpanTrackEvent(ctx, "addFunctionLabel", otelUtils.GetAttributesForPod(pod)...)
-	// patch svc-host and resource version to the pod annotations for new executor to adopt the pod
-	patch := fmt.Sprintf(`{"metadata":{"annotations":{"%s":"%s","%s":"%s"}}}`,
-		fv1.ANNOTATION_SVC_HOST, svcHost, fv1.FUNCTION_RESOURCE_VERSION, fn.ResourceVersion)
+	// patch svc-host and resource version to the pod annotations for new executor
+	// to adopt the pod. The served label rides the same patch (RFC-0002): it is
+	// the post-specialization gate that admits the pod into its function
+	// Service's EndpointSlices, at zero extra API writes on the cold path.
+	patch := fmt.Sprintf(`{"metadata":{"annotations":{"%s":"%s","%s":"%s"},"labels":{"%s":"%s"}}}`,
+		fv1.ANNOTATION_SVC_HOST, svcHost, fv1.FUNCTION_RESOURCE_VERSION, fn.ResourceVersion, fv1.SERVED_LABEL, fv1.SERVED_VALUE)
 	p, err := gp.kubernetesClient.CoreV1().Pods(pod.Namespace).Patch(ctx, pod.Name, k8sTypes.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
 	if err != nil {
 		// just log the error since it won't affect the function serving
@@ -699,12 +330,6 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 	otelUtils.SpanTrackEvent(ctx, "getFuncSvcComplete", fscache.GetAttributesForFuncSvc(fsvc)...)
 	executorUtil.SetFunctionReady(ctx, gp.logger, gp.fissionClient, fn, fv1.FunctionReasonReady, "function is serving via specialized pod "+pod.Name)
 	return fsvc, nil
-}
-
-// getPercent returns  x percent of the quantity i.e multiple it x/100
-func (gp *GenericPool) getPercent(cpuUsage resource.Quantity, percentage float64) (resource.Quantity, error) {
-	val := int64(math.Ceil(float64(cpuUsage.MilliValue()) * percentage))
-	return resource.ParseQuantity(fmt.Sprintf("%dm", val))
 }
 
 // destroys the pool -- the deployment, replicaset and pods

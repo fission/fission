@@ -42,7 +42,6 @@ func newTestTriggerSet(t *testing.T, functions []fv1.Function, triggers []fv1.HT
 	logger := loggerfactory.GetLogger()
 	ts := &HTTPTriggerSet{
 		logger:                     logger.WithName("test_trigger_set"),
-		functionServiceMap:         makeFunctionServiceMap(logger, time.Minute),
 		triggers:                   triggers,
 		functions:                  functions,
 		updateRouterRequestChannel: make(chan struct{}, 1),

@@ -17,11 +17,13 @@ import (
 
 	"github.com/gorilla/mux"
 	"golang.org/x/sync/errgroup"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/executor/client"
+	"github.com/fission/fission/pkg/executor/executortype"
 	"github.com/fission/fission/pkg/executor/fscache"
 	"github.com/fission/fission/pkg/utils/httpsecurity"
 	"github.com/fission/fission/pkg/utils/httpserver"
@@ -54,45 +56,15 @@ func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *htt
 		"function_name", fn.Name,
 		"function_namespace", fn.Namespace)
 	if t == fv1.ExecutorTypePoolmgr && !fn.Spec.OnceOnly {
-		fsvc, err := et.GetFuncSvcFromCache(ctx, fn)
-		// check if its a cache hit (check if there is already specialized function pod that can serve another request)
-		if err == nil {
-			// if a pod is already serving request then it already exists else validated
-			if et.IsValid(ctx, fsvc) {
-				// Cached, return svc address
-				logger.V(1).Info("served from cache", "name", fsvc.Name, "address", fsvc.Address)
-				executor.writeResponse(w, fsvc.Address, fn.Name)
-				return
-			}
-			logger.V(1).Info("deleting cache entry for invalid address",
-				"function_name", fn.Name,
-				"function_namespace", fn.Namespace,
-				"address", fsvc.Address)
-			et.DeleteFuncSvcFromCache(ctx, fsvc)
-		} else {
-			code, msg := ferror.GetHTTPError(err)
-			if code == http.StatusNotFound {
-				logger.V(1).Info("cache miss", "function_name", fn.Name)
-			} else {
-				logger.Error(err, "error getting service for function", "function_name", fn.Name)
-				http.Error(w, msg, code)
-				return
-			}
+		// failOnCacheError: a non-NotFound cache error for poolmgr means the
+		// concurrency gate itself failed (e.g. 429 at the concurrency cap), so
+		// it must be relayed instead of falling through to specialization.
+		if executor.serveFromCache(ctx, w, et, fn, true) {
+			return
 		}
-
 	} else if t == fv1.ExecutorTypeNewdeploy || t == fv1.ExecutorTypeContainer {
-		fsvc, err := et.GetFuncSvcFromCache(ctx, fn)
-		if err == nil {
-			if et.IsValid(ctx, fsvc) {
-				// Cached, return svc address
-				executor.writeResponse(w, fsvc.Address, fn.Name)
-				return
-			}
-			logger.V(1).Info("deleting cache entry for invalid address",
-				"function_name", fn.Name,
-				"function_namespace", fn.Namespace,
-				"address", fsvc.Address)
-			et.DeleteFuncSvcFromCache(ctx, fsvc)
+		if executor.serveFromCache(ctx, w, et, fn, false) {
+			return
 		}
 	}
 
@@ -107,6 +79,43 @@ func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *htt
 	executor.writeResponse(w, serviceName, fn.Name)
 }
 
+// serveFromCache checks the function→service cache and writes the cached
+// address when a valid entry exists (a specialized pod that can serve another
+// request). It returns true when a response has been written — a cache hit, or
+// (with failOnCacheError) a fatal cache error; false means the caller should
+// proceed to create a new service. Invalid entries are evicted on the way.
+func (executor *Executor) serveFromCache(ctx context.Context, w http.ResponseWriter, et executortype.ExecutorType, fn *fv1.Function, failOnCacheError bool) bool {
+	logger := otelUtils.LoggerWithTraceID(ctx, executor.logger)
+
+	fsvc, err := et.GetFuncSvcFromCache(ctx, fn)
+	if err != nil {
+		if !failOnCacheError {
+			return false
+		}
+		code, msg := ferror.GetHTTPError(err)
+		if code == http.StatusNotFound {
+			logger.V(1).Info("cache miss", "function_name", fn.Name)
+			return false
+		}
+		logger.Error(err, "error getting service for function", "function_name", fn.Name)
+		http.Error(w, msg, code)
+		return true
+	}
+	// if a pod is already serving request then it already exists else validated
+	if et.IsValid(ctx, fsvc) {
+		// Cached, return svc address
+		logger.V(1).Info("served from cache", "name", fsvc.Name, "address", fsvc.Address)
+		executor.writeResponse(w, fsvc.Address, fn.Name)
+		return true
+	}
+	logger.V(1).Info("deleting cache entry for invalid address",
+		"function_name", fn.Name,
+		"function_namespace", fn.Namespace,
+		"address", fsvc.Address)
+	et.DeleteFuncSvcFromCache(ctx, fsvc)
+	return false
+}
+
 func (executor *Executor) writeResponse(w http.ResponseWriter, serviceName string, fnName string) {
 	_, err := w.Write([]byte(serviceName))
 	if err != nil {
@@ -116,44 +125,104 @@ func (executor *Executor) writeResponse(w http.ResponseWriter, serviceName strin
 	}
 }
 
-// getServiceForFunction first checks if this function's service is cached, if yes, it validates the address.
-// if it's a valid address, just returns it.
-// else, invalidates its cache entry and makes a new request to create a service for this function and finally responds
-// with new address or error.
-//
-// checking for the validity of the address causes a little more over-head than desired. but, it ensures that
-// stale addresses are not returned to the router.
-// To make it optimal, plan is to add an eager cache invalidator function that watches for pod deletion events and
-// invalidates the cache entry if the pod address was cached.
+// getServiceForFunction dispatches the creation of a service for the function
+// (deduplicated per function for newdeploy/container, independent runs for
+// poolmgr — see dispatchCreateFuncService) and returns its address.
 func (executor *Executor) getServiceForFunction(ctx context.Context, fn *fv1.Function) (string, error) {
-	respChan := make(chan *createFuncServiceResponse)
-	executor.requestChan <- &createFuncServiceRequest{
-		context:  ctx,
-		function: fn,
-		respChan: respChan,
+	// Specializations are leader-only work: with the old request-channel
+	// multiplexer the consumer ran in the leader-elected runnable and a
+	// non-leader's request simply never progressed. Refuse explicitly instead —
+	// /readyz keeps non-leaders out of the Service, so this only triggers on
+	// direct hits during failover windows, where specializing would create
+	// pools/pods that fight the leader's instanceID-based reaper.
+	if executor.leaderElection && !executor.isLeader.Load() {
+		return "", ferror.MakeError(http.StatusServiceUnavailable, "not the leader; retry against the executor service")
 	}
-	resp := <-respChan
+	fsvc, err := executor.dispatchCreateFuncService(ctx, fn)
 	cleanUp := func(funcSvc *fscache.FuncSvc) {
 		et, ok := executor.executorTypes[fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType]
 		if !ok {
-			executor.logger.Info("unknown executor type received in function service", "executor", funcSvc.Executor)
+			executor.logger.Info("unknown executor type received in function service", "executor", fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType)
 			return
 		}
 		if funcSvc != nil {
-			et.UnTapService(ctx, funcSvc.Function, resp.funcSvc.Address)
+			// The pod was allotted but the caller is gone / errored — release it.
+			et.UnTapService(ctx, funcSvc.Function, funcSvc.Address)
 		} else {
 			et.MarkSpecializationFailure(ctx, &fn.ObjectMeta)
 		}
 	}
 	if errors.Is(ctx.Err(), context.Canceled) {
-		cleanUp(resp.funcSvc)
+		cleanUp(fsvc)
 		return "", ferror.MakeError(499, "client leave early in the process of getServiceForFunction")
 	}
-	if resp.err != nil {
-		cleanUp(resp.funcSvc)
-		return "", resp.err
+	if err != nil {
+		cleanUp(fsvc)
+		return "", err
 	}
-	return resp.funcSvc.Address, resp.err
+	return fsvc.Address, nil
+}
+
+// capacityReserver is the optional executor-type facet ensureCapacity uses to
+// enforce the function's concurrency cap: an atomic check-and-reserve inside
+// the PoolCache (the capacity authority), so concurrent capacity requests
+// cannot race past the cap. The reservation is consumed by the
+// specialization's success (setValue) or failure (MarkSpecializationFailure)
+// accounting.
+type capacityReserver interface {
+	ReserveCapacity(ctx context.Context, fnMeta *metav1.ObjectMeta, concurrency int) error
+}
+
+// ensureCapacityHandler serves POST /v2/ensureCapacity (RFC-0002): the router
+// calls it when every endpoint it knows for a poolmgr function is saturated by
+// its local admission accounting. The executor — still the capacity authority —
+// either synchronously specializes one more pod (responding with its address,
+// the same shape as getServiceForFunction) or answers 429 at the function's
+// concurrency cap. Unlike getServiceForFunction it never serves from the
+// PoolCache: the router only calls it because the cached pods are busy.
+func (executor *Executor) ensureCapacityHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "Failed to read request", http.StatusInternalServerError)
+		return
+	}
+
+	var req client.EnsureCapacityRequest
+	if err := json.Unmarshal(body, &req); err != nil || req.Function == nil {
+		http.Error(w, "Failed to parse request", http.StatusBadRequest)
+		return
+	}
+	fn := req.Function
+	t := fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType
+	if t != fv1.ExecutorTypePoolmgr {
+		http.Error(w, fmt.Sprintf("ensureCapacity supports poolmgr only, got '%s'", html.EscapeString(string(t))), http.StatusBadRequest)
+		return
+	}
+	et := executor.executorTypes[t]
+	logger := otelUtils.LoggerWithTraceID(ctx, executor.logger)
+
+	if cr, ok := et.(capacityReserver); ok {
+		if err := cr.ReserveCapacity(ctx, &fn.ObjectMeta, fn.GetConcurrency()); err != nil {
+			code, msg := ferror.GetHTTPError(err)
+			logger.V(1).Info("ensureCapacity rejected at concurrency cap",
+				"function_name", fn.Name, "function_namespace", fn.Namespace,
+				"concurrency", fn.GetConcurrency(),
+				"observed_ready", req.ObservedReadyEndpoints, "observed_busy", req.ObservedBusyEndpoints)
+			http.Error(w, msg, code)
+			return
+		}
+	}
+
+	serviceName, err := executor.getServiceForFunction(ctx, fn)
+	if err != nil {
+		code, msg := ferror.GetHTTPError(err)
+		logger.Error(err, "error ensuring capacity for function", "function", fn.Name,
+			"fission_http_error", msg)
+		http.Error(w, msg, code)
+		return
+	}
+	executor.writeResponse(w, serviceName, fn.Name)
 }
 
 // find funcSvc and update its atime
@@ -206,8 +275,12 @@ func (executor *Executor) tapServices(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if errs != nil {
+		// Genuine tap failures (unknown executor type, internal errors) must be
+		// distinguishable on the wire from routine fsvc expiry (404 below): the
+		// router's flush treats them identically otherwise, and with the
+		// RFC-0002 warm path taps are the pods' only liveness signal.
 		logger.Error(errs, "error tapping function service")
-		http.Error(w, "Not found", http.StatusNotFound)
+		http.Error(w, "error tapping function services", http.StatusInternalServerError)
 		return
 	}
 	if notFound != nil {
@@ -309,6 +382,7 @@ func (executor *Executor) GetHandler() http.Handler {
 	}))
 	r.Use(metrics.HTTPMetricMiddleware)
 	r.HandleFunc("/v2/getServiceForFunction", executor.getServiceForFunctionAPI).Methods("POST")
+	r.HandleFunc("/v2/ensureCapacity", executor.ensureCapacityHandler).Methods("POST")
 	r.HandleFunc("/v2/tapService", executor.tapService).Methods("POST") // for backward compatibility
 	r.HandleFunc("/v2/tapServices", executor.tapServices).Methods("POST")
 	r.HandleFunc("/healthz", executor.healthHandler).Methods("GET")

@@ -104,6 +104,23 @@ type (
 
 		podSpecPatch               *apiv1.PodSpec
 		objectReaperIntervalSecond time.Duration
+
+		// podReadyTimeout bounds how long choosePod waits for a warm pod; parsed
+		// once from POD_READY_TIMEOUT and handed to every pool.
+		podReadyTimeout time.Duration
+
+		// functionServicesEnabled is the RFC-0002 gate (ENABLE_FUNCTION_SERVICES):
+		// when on, every invoked poolmgr function gets a headless selector
+		// Service so the EndpointSlice controller publishes its specialized
+		// pods to the router's slice-fed index. Disabled in Istio mode, whose
+		// functions are addressed via Istio services instead.
+		functionServicesEnabled bool
+
+		// fnSvcEnsured debounces ensureFunctionService per function UID (see
+		// maybeEnsureFunctionService): map[types.UID]time.Time of the last
+		// successful-or-in-flight ensure. Entries are dropped on function
+		// delete and on ensure failure (so the next request retries).
+		fnSvcEnsured sync.Map
 	}
 	request struct {
 		requestType
@@ -168,6 +185,8 @@ func MakeGenericPoolManager(ctx context.Context,
 		poolPodC:                   poolPodC,
 		podSpecPatch:               podSpecPatch,
 		objectReaperIntervalSecond: time.Duration(executorUtils.GetObjectReaperInterval(logger, fv1.ExecutorTypePoolmgr, 5)) * time.Second,
+		podReadyTimeout:            podReadyTimeoutFromEnv(gpmLogger),
+		functionServicesEnabled:    functionServicesEnabled() && !enableIstio,
 	}
 
 	gpm.logger.V(1).Info("inside MakeGenericPoolManager")
@@ -254,17 +273,41 @@ func (gpm *GenericPoolManager) GetFuncSvc(ctx context.Context, fn *fv1.Function)
 	// (this also adds to the cache)
 	logger.V(1).Info("getting function service from pool", "function", fn.Name)
 	fnSvc, fErr = pool.getFuncSvc(ctx, fn)
+	if fErr == nil {
+		// Ensure the function's headless Service (RFC-0002) strictly off the
+		// cold-start path: the pod address has already been produced; the
+		// Service only feeds the router's warm-path EndpointSlice index.
+		gpm.maybeEnsureFunctionService(fn)
+	}
 	return fnSvc, fErr
 }
 
 func (gpm *GenericPoolManager) GetFuncSvcFromCache(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
 	otelUtils.SpanTrackEvent(ctx, "GetFuncSvcFromCache", otelUtils.GetAttributesForFunction(fn)...)
-	return gpm.fsCache.GetFuncSvc(ctx, &fn.ObjectMeta, fn.GetRequestPerPod(), fn.GetConcurrency())
+	fnSvc, err := gpm.fsCache.GetFuncSvc(ctx, &fn.ObjectMeta, fn.GetRequestPerPod(), fn.GetConcurrency())
+	if err == nil {
+		// Self-healing for the function Service: the one-shot ensure on the
+		// cold start can be lost (executor rolled mid-ensure), and a missing
+		// Service means no slices — which routes every request through this
+		// very RPC path, making it the natural repair point. Debounced, so the
+		// steady state adds nothing.
+		gpm.maybeEnsureFunctionService(fn)
+	}
+	return fnSvc, err
 }
 
 func (gpm *GenericPoolManager) DeleteFuncSvcFromCache(ctx context.Context, fsvc *fscache.FuncSvc) {
 	otelUtils.SpanTrackEvent(ctx, "DeleteFuncSvcFromCache", fscache.GetAttributesForFuncSvc(fsvc)...)
 	gpm.fsCache.DeleteFunctionSvc(ctx, fsvc)
+}
+
+// ReserveCapacity implements the executor's capacityReserver facet (RFC-0002
+// ensureCapacity): an atomic check-and-reserve against the function's
+// concurrency cap inside the PoolCache — still the capacity authority. The
+// reservation is released by the specialization's setValue on success or
+// MarkSpecializationFailure on failure.
+func (gpm *GenericPoolManager) ReserveCapacity(ctx context.Context, fnMeta *metav1.ObjectMeta, concurrency int) error {
+	return gpm.fsCache.ReserveCapacity(crd.CacheKeyURGFromMeta(fnMeta), concurrency)
 }
 
 func (gpm *GenericPoolManager) UnTapService(ctx context.Context, fnMeta *metav1.ObjectMeta, svcHost string) {
@@ -369,14 +412,57 @@ func (gpm *GenericPoolManager) RefreshFuncPods(ctx context.Context, logger logr.
 }
 
 func (gpm *GenericPoolManager) AdoptExistingResources(ctx context.Context) {
-	envMap := make(map[string]fv1.Environment)
 	wg := &sync.WaitGroup{}
+
+	envMap := gpm.adoptPools(ctx, wg)
+	gpm.adoptPerImagePoolDeployments(ctx, wg)
+	gpm.adoptFunctionServices(ctx, wg)
+	gpm.adoptSpecializedPods(ctx, wg, envMap)
+
+	wg.Wait()
+}
+
+// adoptFunctionServices re-stamps the instanceID annotation of the per-function
+// headless Services (RFC-0002) so the post-adopt stale-instanceID reaper keeps
+// them. Like per-image pool deployments, they are created lazily on first
+// invoke, so nothing else refreshes their annotation across an executor restart.
+func (gpm *GenericPoolManager) adoptFunctionServices(ctx context.Context, wg *sync.WaitGroup) {
+	selector := labels.Set(map[string]string{
+		fv1.MANAGED_BY_LABEL: fv1.MANAGED_BY_VALUE,
+		fv1.EXECUTOR_TYPE:    string(fv1.ExecutorTypePoolmgr),
+	}).AsSelector().String()
+	for _, namespace := range gpm.nsResolver.FunctionNamespaces() {
+		svcList, err := gpm.kubernetesClient.CoreV1().Services(namespace).List(ctx, metav1.ListOptions{
+			LabelSelector: selector,
+		})
+		if err != nil {
+			gpm.logger.Error(err, "error listing function services for adoption", "namespace", namespace)
+			continue
+		}
+		for i := range svcList.Items {
+			svc := &svcList.Items[i]
+			wg.Go(func() {
+				patch := fmt.Sprintf(`{"metadata":{"annotations":{"%s":"%s"}}}`, fv1.EXECUTOR_INSTANCEID_LABEL, gpm.instanceID)
+				_, err := gpm.kubernetesClient.CoreV1().Services(svc.Namespace).Patch(ctx, svc.Name, k8sTypes.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
+				if err != nil {
+					gpm.logger.Error(err, "error adopting function service", "service", svc.Name, "ns", svc.Namespace)
+				}
+			})
+		}
+	}
+}
+
+// adoptPools re-creates (and thereby re-stamps) each environment's plain warm
+// pool, and returns the env map keyed by namespace/name for the specialized-pod
+// adoption pass.
+func (gpm *GenericPoolManager) adoptPools(ctx context.Context, wg *sync.WaitGroup) map[string]fv1.Environment {
+	envMap := make(map[string]fv1.Environment)
 
 	for _, namespace := range utils.DefaultNSResolver().FissionResourceNS {
 		envs, err := gpm.fissionClient.CoreV1().Environments(namespace).List(ctx, metav1.ListOptions{})
 		if err != nil {
 			gpm.logger.Error(err, "error getting environment list")
-			return
+			return envMap
 		}
 
 		for i := range envs.Items {
@@ -399,23 +485,22 @@ func (gpm *GenericPoolManager) AdoptExistingResources(ctx context.Context) {
 			envMap[key] = env
 		}
 	}
+	return envMap
+}
 
+// adoptPerImagePoolDeployments re-stamps the instanceID annotation of per-image
+// (RFC-0001 Path B) pool deployments. They are created lazily on the first
+// request, so adoptPools (which adopts each env's plain pool via getPool) never
+// refreshes their annotation — and the post-adopt reaper deletes any poolmgr
+// deployment with a stale instanceID. Adopt them in place here; the pool object
+// re-attaches to the deployment on the next request for its image.
+func (gpm *GenericPoolManager) adoptPerImagePoolDeployments(ctx context.Context, wg *sync.WaitGroup) {
 	l := map[string]string{
 		fv1.EXECUTOR_TYPE: string(fv1.ExecutorTypePoolmgr),
 	}
 
-	// Per-image (Path B) pool deployments are created lazily on the first
-	// request, so the env loop above (which adopts each env's plain pool via
-	// getPool) never refreshes their instanceID annotation — and the
-	// post-adopt reaper deletes any poolmgr deployment with a stale
-	// instanceID. Adopt them in place here; the pool object re-attaches to
-	// the deployment on the next request for its image.
 	perImageSelector := labels.Set(l).AsSelector().String() + "," + fv1.POOL_OCI_IMAGE_HASH
-	poolNamespaces := make(map[string]struct{})
-	for _, ns := range utils.DefaultNSResolver().FissionResourceNS {
-		poolNamespaces[gpm.nsResolver.GetFunctionNS(ns)] = struct{}{}
-	}
-	for namespace := range poolNamespaces {
+	for _, namespace := range gpm.nsResolver.FunctionNamespaces() {
 		deployList, err := gpm.kubernetesClient.AppsV1().Deployments(namespace).List(ctx, metav1.ListOptions{
 			LabelSelector: perImageSelector,
 		})
@@ -433,6 +518,15 @@ func (gpm *GenericPoolManager) AdoptExistingResources(ctx context.Context) {
 				}
 			})
 		}
+	}
+}
+
+// adoptSpecializedPods re-stamps every ready poolmgr pod's instanceID annotation
+// and re-registers specialized pods (managed=false) into the fsCache from their
+// labels/annotations, so functions keep being served across an executor restart.
+func (gpm *GenericPoolManager) adoptSpecializedPods(ctx context.Context, wg *sync.WaitGroup, envMap map[string]fv1.Environment) {
+	l := map[string]string{
+		fv1.EXECUTOR_TYPE: string(fv1.ExecutorTypePoolmgr),
 	}
 
 	for _, namespace := range utils.DefaultNSResolver().FissionResourceNS {
@@ -456,10 +550,12 @@ func (gpm *GenericPoolManager) AdoptExistingResources(ctx context.Context) {
 				time.Sleep(time.Duration(rand.Intn(30)) * time.Millisecond)
 
 				patch := fmt.Sprintf(`{"metadata":{"annotations":{"%s":"%s"}}}`, fv1.EXECUTOR_INSTANCEID_LABEL, gpm.instanceID)
-				pod, err = gpm.kubernetesClient.CoreV1().Pods(pod.Namespace).Patch(ctx, pod.Name, k8sTypes.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
-				if err != nil {
+				// Locals, not the loop-level pod/err: these goroutines run
+				// concurrently and writes to shared captures would race.
+				pod, perr := gpm.kubernetesClient.CoreV1().Pods(pod.Namespace).Patch(ctx, pod.Name, k8sTypes.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
+				if perr != nil {
 					// just log the error since it won't affect the function serving
-					gpm.logger.Error(err, "error patching executor instance ID of pod", "pod", pod.Name, "ns", pod.Namespace)
+					gpm.logger.Error(perr, "error patching executor instance ID of pod", "pod", pod.Name, "ns", pod.Namespace)
 					return
 				}
 
@@ -509,12 +605,11 @@ func (gpm *GenericPoolManager) AdoptExistingResources(ctx context.Context) {
 					Atime:    time.Now(),
 				}
 
-				_, err = gpm.fsCache.Add(fsvc)
-				if err != nil {
+				if _, aerr := gpm.fsCache.Add(fsvc); aerr != nil {
 					// If fsvc already exists we just skip the duplicate one. And let reaper to recycle the duplicate pods.
 					// This is for the case that there are multiple function pods for the same function due to unknown reason.
-					if !fscache.IsNameExistError(err) {
-						gpm.logger.Error(err, "failed to adopt pod for function", "pod", pod.Name)
+					if !fscache.IsNameExistError(aerr) {
+						gpm.logger.Error(aerr, "failed to adopt pod for function", "pod", pod.Name)
 					}
 
 					return
@@ -525,8 +620,6 @@ func (gpm *GenericPoolManager) AdoptExistingResources(ctx context.Context) {
 			})
 		}
 	}
-
-	wg.Wait()
 }
 
 func (gpm *GenericPoolManager) CleanupOldExecutorObjects(ctx context.Context) {
@@ -547,94 +640,126 @@ func (gpm *GenericPoolManager) CleanupOldExecutorObjects(ctx context.Context) {
 		errs = errors.Join(errs, err)
 	}
 
+	// Per-function headless Services (RFC-0002). The selector includes
+	// managed-by so the legacy useSvc/istio Services (which carry no
+	// instanceID annotation and are skipped by CleanupServices anyway) are
+	// never even listed.
+	fnSvcListOpts := metav1.ListOptions{
+		LabelSelector: labels.Set(map[string]string{
+			fv1.MANAGED_BY_LABEL: fv1.MANAGED_BY_VALUE,
+			fv1.EXECUTOR_TYPE:    string(fv1.ExecutorTypePoolmgr),
+		}).AsSelector().String(),
+	}
+	err = reaper.CleanupServices(ctx, gpm.logger, gpm.kubernetesClient, gpm.instanceID, fnSvcListOpts)
+	if err != nil {
+		errs = errors.Join(errs, err)
+	}
+
 	if errs != nil {
 		// TODO retry reaper; logged and ignored for now
-		gpm.logger.Error(err, "Failed to cleanup old executor objects")
+		gpm.logger.Error(errs, "Failed to cleanup old executor objects")
 	}
 }
 
+// service is the pool-manager actor: it owns gpm.pools and serializes every
+// access to it through gpm.requestChannel.
 func (gpm *GenericPoolManager) service() {
 	for {
 		req := <-gpm.requestChannel
 		switch req.requestType {
 		case GET_POOL:
-			// just because they are missing in the cache, we end up creating another duplicate pool.
-			var err error
-			created := false
-			imageHash := ""
-			if req.oci != nil {
-				imageHash = ociPoolHash(req.oci)
-			}
-			key := poolKey(req.env.UID, imageHash)
-			pool, ok := gpm.pools[key]
-			if !ok {
-				// To support backward compatibility, if envs are created in default ns, we go ahead
-				// and create pools in fission-function ns as earlier.
-				ns := gpm.nsResolver.GetFunctionNS(req.env.Namespace)
-				pool = MakeGenericPool(gpm.logger, gpm.fissionClient, gpm.kubernetesClient,
-					gpm.metricsClient, req.env, ns, gpm.fsCache,
-					gpm.fetcherConfig, gpm.instanceID, gpm.enableIstio, gpm.podSpecPatch, gpm.crClient, req.oci)
-				err = pool.setup(req.ctx)
-				if err != nil {
-					req.responseChannel <- &response{error: err}
-					continue
-				}
-				gpm.pools[key] = pool
-				// Publish the pool's readyPodQueue so the Pod reconciler can feed it
-				// warm pods. Keyed by pool key, read lock-free from the reconciler.
-				gpm.readyPodQueues.Store(key, pool.readyPodQueue)
-				// Seed the queue with already-Running warm pods. The reconciler only
-				// sees pods that change after the queue is published, so existing pods
-				// (executor restart, or adopting an existing pool deployment) would
-				// otherwise never be enqueued — mirrors the old informer's list-on-sync.
-				// This is one-shot pool initialization (a fast cache read), not request
-				// work, so it must not ride the request context: if the triggering
-				// request is cancelled here the pool would stay published-but-unseeded
-				// and later callers find the existing pool and skip the seed.
-				gpm.seedReadyPodQueue(context.Background(), req.env, imageHash, pool.readyPodQueue)
-				created = true
-			}
-			req.responseChannel <- &response{pool: pool, created: created}
+			gpm.handleGetPool(req)
 		case CLEANUP_POOL:
-			env := *req.env
-			gpm.logger.Info("destroying pools",
-				"environment", env.Name,
-				"namespace", env.Namespace)
-
-			// An env owns its plain pool plus any per-image pools
-			// (RFC-0001 Path B) — destroy them all.
-			found := false
-			for key, pool := range gpm.pools {
-				if !envPoolKeyPrefixMatch(key, req.env.UID) {
-					continue
-				}
-				found = true
-				delete(gpm.pools, key)
-				gpm.readyPodQueues.Delete(key)
-				if pool != nil {
-					err := pool.destroy(req.ctx)
-					if err != nil {
-						gpm.logger.Error(err, "failed to destroy pool",
-							"environment", env.Name,
-							"namespace", env.Namespace,
-							"poolKey", key)
-					}
-				}
-			}
-			if !found {
-				gpm.logger.Info("pool already removed", "environment", env.Name, "namespace", env.Namespace)
-			}
-			// no response, caller doesn't wait
+			gpm.handleCleanupPool(req)
 		case GET_ENV_POOLS:
-			pools := make([]*GenericPool, 0, 1)
-			for key, pool := range gpm.pools {
-				if envPoolKeyPrefixMatch(key, req.env.UID) {
-					pools = append(pools, pool)
-				}
-			}
-			req.responseChannel <- &response{pools: pools}
+			gpm.handleGetEnvPools(req)
 		}
 	}
+}
+
+// handleGetPool returns the env's pool (plain, or per-image when req.oci is
+// set), creating and seeding it on first use.
+func (gpm *GenericPoolManager) handleGetPool(req *request) {
+	// just because they are missing in the cache, we end up creating another duplicate pool.
+	var err error
+	created := false
+	imageHash := ""
+	if req.oci != nil {
+		imageHash = ociPoolHash(req.oci)
+	}
+	key := poolKey(req.env.UID, imageHash)
+	pool, ok := gpm.pools[key]
+	if !ok {
+		// To support backward compatibility, if envs are created in default ns, we go ahead
+		// and create pools in fission-function ns as earlier.
+		ns := gpm.nsResolver.GetFunctionNS(req.env.Namespace)
+		pool = MakeGenericPool(gpm.logger, gpm.fissionClient, gpm.kubernetesClient,
+			gpm.metricsClient, req.env, ns, gpm.fsCache,
+			gpm.fetcherConfig, gpm.instanceID, gpm.enableIstio, gpm.podSpecPatch, gpm.crClient, req.oci,
+			gpm.podReadyTimeout)
+		err = pool.setup(req.ctx)
+		if err != nil {
+			req.responseChannel <- &response{error: err}
+			return
+		}
+		gpm.pools[key] = pool
+		// Publish the pool's readyPodQueue so the Pod reconciler can feed it
+		// warm pods. Keyed by pool key, read lock-free from the reconciler.
+		gpm.readyPodQueues.Store(key, pool.readyPodQueue)
+		// Seed the queue with already-Running warm pods. The reconciler only
+		// sees pods that change after the queue is published, so existing pods
+		// (executor restart, or adopting an existing pool deployment) would
+		// otherwise never be enqueued — mirrors the old informer's list-on-sync.
+		// This is one-shot pool initialization (a fast cache read), not request
+		// work, so it must not ride the request context: if the triggering
+		// request is cancelled here the pool would stay published-but-unseeded
+		// and later callers find the existing pool and skip the seed.
+		gpm.seedReadyPodQueue(context.Background(), req.env, imageHash, pool.readyPodQueue)
+		created = true
+	}
+	req.responseChannel <- &response{pool: pool, created: created}
+}
+
+// handleCleanupPool destroys every pool an env owns: its plain pool plus any
+// per-image pools (RFC-0001 Path B). The caller doesn't wait for a response.
+func (gpm *GenericPoolManager) handleCleanupPool(req *request) {
+	env := *req.env
+	gpm.logger.Info("destroying pools",
+		"environment", env.Name,
+		"namespace", env.Namespace)
+
+	found := false
+	for key, pool := range gpm.pools {
+		if !envPoolKeyPrefixMatch(key, req.env.UID) {
+			continue
+		}
+		found = true
+		delete(gpm.pools, key)
+		gpm.readyPodQueues.Delete(key)
+		if pool != nil {
+			err := pool.destroy(req.ctx)
+			if err != nil {
+				gpm.logger.Error(err, "failed to destroy pool",
+					"environment", env.Name,
+					"namespace", env.Namespace,
+					"poolKey", key)
+			}
+		}
+	}
+	if !found {
+		gpm.logger.Info("pool already removed", "environment", env.Name, "namespace", env.Namespace)
+	}
+}
+
+// handleGetEnvPools answers with every live pool of an env (plain + per-image).
+func (gpm *GenericPoolManager) handleGetEnvPools(req *request) {
+	pools := make([]*GenericPool, 0, 1)
+	for key, pool := range gpm.pools {
+		if envPoolKeyPrefixMatch(key, req.env.UID) {
+			pools = append(pools, pool)
+		}
+	}
+	req.responseChannel <- &response{pools: pools}
 }
 
 func (gpm *GenericPoolManager) getPool(ctx context.Context, env *fv1.Environment, oci *fv1.OCIArchive) (*GenericPool, bool, error) {
@@ -679,6 +804,7 @@ func (gpm *GenericPoolManager) cleanupPool(ctx context.Context, env *fv1.Environ
 // reconciler on delete.
 func (gpm *GenericPoolManager) markFuncDeleted(key crd.CacheKeyURG) {
 	gpm.fsCache.MarkFuncDeleted(key)
+	gpm.fnSvcEnsured.Delete(key.UID)
 }
 
 // processReplicaSet reaps a pool's specialized pods when its ReplicaSet has
@@ -834,7 +960,7 @@ func (gpm *GenericPoolManager) getFunctionEnv(ctx context.Context, fn *fv1.Funct
 // pods), run by the shared idle reaper.
 func (gpm *GenericPoolManager) IdleStrategy() idle.Strategy {
 	return idle.NewPoolDeleteStrategy(gpm.logger, gpm.fissionClient, gpm.fsCache, gpm.kubernetesClient,
-		gpm.defaultIdlePodReapTime, gpm.objectReaperIntervalSecond)
+		gpm.defaultIdlePodReapTime, gpm.objectReaperIntervalSecond, gpm.functionServicesEnabled)
 }
 
 // WebsocketStartEventChecker checks if the pod has emitted a websocket connection start event

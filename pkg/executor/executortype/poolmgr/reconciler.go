@@ -34,6 +34,7 @@ type funcManager interface {
 	refreshFuncPods(ctx context.Context, fn *fv1.Function) error
 	createIstioServiceForFunction(ctx context.Context, fn *fv1.Function) error
 	deleteIstioServiceForFunction(ctx context.Context, fn *fv1.Function) error
+	deleteFunctionService(ctx context.Context, fn *fv1.Function) error
 }
 
 // poolManager is the subset of *GenericPoolManager the Environment handlers
@@ -146,9 +147,9 @@ func (gpm *GenericPoolManager) ReconcileFunction(ctx context.Context, old, fn *f
 
 // DeleteFunction satisfies executortype.FuncReconciler: it marks the function's
 // fsCache entries deleted (so the reaper recycles its pods) and removes its istio
-// Service (when enabled).
+// Service (when enabled) or its headless function Service (RFC-0002, when enabled).
 func (gpm *GenericPoolManager) DeleteFunction(ctx context.Context, fn *fv1.Function) error {
-	return cleanupPoolmgrFunc(ctx, gpm, gpm.enableIstio, fn)
+	return cleanupPoolmgrFunc(ctx, gpm, gpm.enableIstio, gpm.functionServicesEnabled, fn)
 }
 
 // reconcilePoolmgrFunc holds the create-vs-update routing, split out so it is
@@ -164,10 +165,15 @@ func reconcilePoolmgrFunc(ctx context.Context, mgr funcManager, enableIstio bool
 }
 
 // cleanupPoolmgrFunc holds the teardown routing, split out for unit testing.
-func cleanupPoolmgrFunc(ctx context.Context, mgr funcManager, enableIstio bool, fn *fv1.Function) error {
+func cleanupPoolmgrFunc(ctx context.Context, mgr funcManager, enableIstio, functionServices bool, fn *fv1.Function) error {
 	mgr.markFuncDeleted(crd.CacheKeyURGFromMeta(&fn.ObjectMeta))
 	if enableIstio {
 		return mgr.deleteIstioServiceForFunction(ctx, fn)
+	}
+	if functionServices {
+		// The owner reference covers same-namespace installs; this covers
+		// cross-namespace ones and is idempotent either way.
+		return mgr.deleteFunctionService(ctx, fn)
 	}
 	return nil
 }

@@ -403,10 +403,17 @@ func (deploy *NewDeploy) createOrGetSvc(ctx context.Context, fn *fv1.Function, d
 		}
 	}
 
+	// The Service carries the managed-by label (RFC-0002) so the EndpointSlice
+	// controller mirrors it onto the slices and the router's label-filtered
+	// informer sees them. Labels only — the selector stays deployLabels.
+	svcLabels := make(map[string]string, len(deployLabels)+1)
+	maps.Copy(svcLabels, deployLabels)
+	svcLabels[fv1.MANAGED_BY_LABEL] = fv1.MANAGED_BY_VALUE
+
 	service := &apiv1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            svcName,
-			Labels:          deployLabels,
+			Labels:          svcLabels,
 			Annotations:     deployAnnotations,
 			OwnerReferences: ownerReferences,
 		},
@@ -426,8 +433,10 @@ func (deploy *NewDeploy) createOrGetSvc(ctx context.Context, fn *fv1.Function, d
 
 	existingSvc, err := deploy.kubernetesClient.CoreV1().Services(svcNamespace).Get(ctx, svcName, metav1.GetOptions{})
 	if err == nil {
-		// to adopt orphan service
-		if existingSvc.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL] != deploy.instanceID {
+		// to adopt orphan service (the managed-by check upgrades Services
+		// created before RFC-0002 so their slices become router-visible)
+		if existingSvc.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL] != deploy.instanceID ||
+			existingSvc.Labels[fv1.MANAGED_BY_LABEL] != fv1.MANAGED_BY_VALUE {
 			existingSvc.Annotations = service.Annotations
 			existingSvc.Labels = service.Labels
 			existingSvc.OwnerReferences = service.OwnerReferences

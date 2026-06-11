@@ -38,7 +38,6 @@ import (
 
 // HTTPTriggerSet represents an HTTP trigger set
 type HTTPTriggerSet struct {
-	*functionServiceMap
 	*mutableRouter
 
 	// internalMutableRouter is the mutable wrapper for the internal listener.
@@ -54,17 +53,21 @@ type HTTPTriggerSet struct {
 	// reconcilers and updateRouter read HTTPTriggers + Functions through it,
 	// replacing the per-namespace SharedIndexInformers the router used before
 	// the controller-runtime migration.
-	client                     client.Client
-	executor                   eclient.ClientInterface
-	resolver                   *functionReferenceResolver
+	client   client.Client
+	resolver *functionReferenceResolver
+	// addressResolver and tapper are the proxy path's injected seams
+	// (RFC-0002): function→address resolution and tap/untap accounting. The
+	// executor client, address cache, and throttler live inside them —
+	// deliberately NOT also retained on this struct, so there is exactly one
+	// live copy of that state.
+	addressResolver            AddressResolver
+	tapper                     Tapper
 	triggers                   []fv1.HTTPTrigger
 	functions                  []fv1.Function
 	updateRouterRequestChannel chan struct{}
 	tsRoundTripperParams       *tsRoundTripperParams
 	isDebugEnv                 bool
 	useEncodedPath             bool
-	svcAddrUpdateThrottler     *throttler.Throttler
-	unTapServiceTimeout        time.Duration
 	syncDebouncer              func(func())
 	// ready flips true after the first successful mux build; routerReadinessHandler
 	// gates /readyz on it so a starting/rolling pod stays out of the
@@ -81,21 +84,32 @@ func makeHTTPTriggerSet(logger logr.Logger, fmap *functionServiceMap, fissionCli
 
 	httpTriggerSet := &HTTPTriggerSet{
 		logger:                     logger.WithName("http_trigger_set"),
-		functionServiceMap:         fmap,
 		triggers:                   []fv1.HTTPTrigger{},
 		fissionClient:              fissionClient,
 		kubeClient:                 kubeClient,
 		client:                     cl,
-		executor:                   executor,
 		updateRouterRequestChannel: make(chan struct{}, 10), // use buffer channel
 		tsRoundTripperParams:       params,
 		isDebugEnv:                 isDebugEnv,
 		useEncodedPath:             useEncodedPath,
-		svcAddrUpdateThrottler:     actionThrottler,
-		unTapServiceTimeout:        unTapServiceTimeout,
 		syncDebouncer:              debounce.New(time.Millisecond * 20),
 	}
 	httpTriggerSet.resolver = makeFunctionReferenceResolver(logger, cl)
+	// The address resolver and tapper are the proxy path's injected seams
+	// (RFC-0002). Start (router.go) may wrap addressResolver with the shadow
+	// comparator before the first mux build, depending on the cache mode.
+	httpTriggerSet.addressResolver = &executorResolver{
+		logger:    logger.WithName("executor_resolver"),
+		fmap:      fmap,
+		reader:    cl,
+		executor:  executor,
+		throttler: actionThrottler,
+	}
+	httpTriggerSet.tapper = &executorTapper{
+		logger:       logger.WithName("tapper"),
+		executor:     executor,
+		unTapTimeout: unTapServiceTimeout,
+	}
 	return httpTriggerSet, nil
 }
 
@@ -279,17 +293,14 @@ func (ts *HTTPTriggerSet) buildMuxes(ctx context.Context, fnTimeoutMap map[types
 
 		fh := &functionHandler{
 			logger:                   ts.logger.WithName(trigger.Name),
-			fmap:                     ts.functionServiceMap,
-			reader:                   ts.resolver.reader,
-			executor:                 ts.executor,
+			resolver:                 ts.addressResolver,
+			tapper:                   ts.tapper,
 			httpTrigger:              &trigger,
 			functionMap:              rr.functionMap,
 			fnWeightDistributionList: rr.functionWtDistributionList,
 			tsRoundTripperParams:     ts.tsRoundTripperParams,
 			isDebugEnv:               ts.isDebugEnv,
-			svcAddrUpdateThrottler:   ts.svcAddrUpdateThrottler,
 			functionTimeoutMap:       fnTimeoutMap,
-			unTapServiceTimeout:      ts.unTapServiceTimeout,
 		}
 
 		// The functionHandler for HTTP trigger with fn reference type "FunctionReferenceTypeFunctionName",
@@ -388,16 +399,13 @@ func (ts *HTTPTriggerSet) buildMuxes(ctx context.Context, fnTimeoutMap map[types
 	for i := range ts.functions {
 		fn := ts.functions[i]
 		fh := &functionHandler{
-			logger:                 ts.logger.WithName(fn.Name),
-			fmap:                   ts.functionServiceMap,
-			reader:                 ts.resolver.reader,
-			function:               &fn,
-			executor:               ts.executor,
-			tsRoundTripperParams:   ts.tsRoundTripperParams,
-			isDebugEnv:             ts.isDebugEnv,
-			svcAddrUpdateThrottler: ts.svcAddrUpdateThrottler,
-			functionTimeoutMap:     fnTimeoutMap,
-			unTapServiceTimeout:    ts.unTapServiceTimeout,
+			logger:               ts.logger.WithName(fn.Name),
+			resolver:             ts.addressResolver,
+			tapper:               ts.tapper,
+			function:             &fn,
+			tsRoundTripperParams: ts.tsRoundTripperParams,
+			isDebugEnv:           ts.isDebugEnv,
+			functionTimeoutMap:   fnTimeoutMap,
 		}
 
 		internalRoute := utils.UrlForFunction(fn.Name, fn.Namespace)

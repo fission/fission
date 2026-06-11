@@ -35,12 +35,6 @@ type (
 
 	resolveResultType int
 
-	functionWeightDistribution struct {
-		name      string
-		weight    int
-		sumPrefix int
-	}
-
 	// resolveResult is the result of resolving a function reference;
 	// it could be the metadata of one function or
 	// a distribution of requests across two functions.

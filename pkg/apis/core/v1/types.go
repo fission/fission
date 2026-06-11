@@ -1378,3 +1378,13 @@ func (fn Function) GetRequestPerPod() int {
 	}
 	return fn.Spec.RequestsPerPod
 }
+
+// StrictConcurrencyEnforcement reports whether the function opted out of
+// router-local admission (RFC-0002) via the
+// fission.io/concurrency-enforcement: strict annotation: every request then
+// goes through the executor's PoolCache exactly as before the EndpointSlice
+// data plane, giving exact global per-pod concurrency accounting at the cost
+// of the warm-path RPCs.
+func (fn Function) StrictConcurrencyEnforcement() bool {
+	return fn.Annotations[ConcurrencyEnforcementAnnotation] == ConcurrencyEnforcementStrict
+}

@@ -29,6 +29,7 @@ type fakeFuncMgr struct {
 	refreshed    []string
 	istioCreated []string
 	istioDeleted []string
+	fnSvcDeleted []string
 }
 
 func (f *fakeFuncMgr) markFuncDeleted(k crd.CacheKeyURG) { f.deleted = append(f.deleted, k) }
@@ -42,6 +43,10 @@ func (f *fakeFuncMgr) createIstioServiceForFunction(_ context.Context, fn *fv1.F
 }
 func (f *fakeFuncMgr) deleteIstioServiceForFunction(_ context.Context, fn *fv1.Function) error {
 	f.istioDeleted = append(f.istioDeleted, fn.Name)
+	return nil
+}
+func (f *fakeFuncMgr) deleteFunctionService(_ context.Context, fn *fv1.Function) error {
+	f.fnSvcDeleted = append(f.fnSvcDeleted, fn.Name)
 	return nil
 }
 
@@ -100,16 +105,26 @@ func TestCleanupPoolmgrFunc(t *testing.T) {
 
 	t.Run("marks fsCache deleted and removes the istio service", func(t *testing.T) {
 		m := &fakeFuncMgr{}
-		require.NoError(t, cleanupPoolmgrFunc(t.Context(), m, true, fn))
+		require.NoError(t, cleanupPoolmgrFunc(t.Context(), m, true, false, fn))
 		require.Len(t, m.deleted, 1)
 		assert.Equal(t, crd.CacheKeyURGFromMeta(&fn.ObjectMeta), m.deleted[0])
 		assert.Equal(t, []string{"fn"}, m.istioDeleted)
+		assert.Empty(t, m.fnSvcDeleted)
 	})
 
 	t.Run("istio disabled: marks fsCache deleted only", func(t *testing.T) {
 		m := &fakeFuncMgr{}
-		require.NoError(t, cleanupPoolmgrFunc(t.Context(), m, false, fn))
+		require.NoError(t, cleanupPoolmgrFunc(t.Context(), m, false, false, fn))
 		require.Len(t, m.deleted, 1)
+		assert.Empty(t, m.istioDeleted)
+		assert.Empty(t, m.fnSvcDeleted)
+	})
+
+	t.Run("function services enabled: also deletes the headless function service", func(t *testing.T) {
+		m := &fakeFuncMgr{}
+		require.NoError(t, cleanupPoolmgrFunc(t.Context(), m, false, true, fn))
+		require.Len(t, m.deleted, 1)
+		assert.Equal(t, []string{"fn"}, m.fnSvcDeleted)
 		assert.Empty(t, m.istioDeleted)
 	})
 }

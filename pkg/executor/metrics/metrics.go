@@ -41,6 +41,16 @@ var (
 		},
 		functionLabels,
 	)
+	// FunctionServiceEnsures counts per-function Service ensure outcomes
+	// (RFC-0002 EndpointSlice data plane). No function-name labels by design —
+	// same cardinality discipline as the router metrics.
+	FunctionServiceEnsures = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "fission_executor_function_service_ensures_total",
+			Help: "Count of per-function Service ensure operations by result (created|updated|exists|error).",
+		},
+		[]string{"result"},
+	)
 )
 
 func init() {
@@ -48,4 +58,5 @@ func init() {
 	registry.MustRegister(ColdStarts)
 	registry.MustRegister(FuncRunningSeconds)
 	registry.MustRegister(ColdStartsError)
+	registry.MustRegister(FunctionServiceEnsures)
 }

@@ -24,6 +24,7 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	eclient "github.com/fission/fission/pkg/executor/client"
+	"github.com/fission/fission/pkg/throttler"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
 
@@ -94,10 +95,17 @@ func newHandlerForUpstream(t *testing.T, fn *fv1.Function, upstream *httptest.Se
 // and a (possibly sub-second) default stream idle timeout, for abort/keepalive tests.
 func newStreamingHandler(t *testing.T, fn *fv1.Function, exec eclient.ClientInterface, fnTimeoutSec int, idleDefault time.Duration) functionHandler {
 	t.Helper()
+	logger := loggerfactory.GetLogger()
 	return functionHandler{
-		logger:   loggerfactory.GetLogger(),
+		logger:   logger,
 		function: fn,
-		executor: exec,
+		resolver: &executorResolver{
+			logger:    logger,
+			fmap:      makeFunctionServiceMap(logger, time.Minute),
+			executor:  exec,
+			throttler: throttler.MakeThrottler(30 * time.Second),
+		},
+		tapper: &executorTapper{logger: logger, executor: exec, unTapTimeout: time.Hour},
 		functionTimeoutMap: map[k8stypes.UID]int{
 			fn.GetUID(): fnTimeoutSec,
 		},

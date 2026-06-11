@@ -56,6 +56,18 @@ jobs:
       - name: Checkout sources
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
+      # The image preload pulls + kind-loads ~14 runtime/builder images in
+      # parallel, holding each twice on disk at peak (docker store + the kind
+      # node's containerd extract); on an unlucky runner that overflows the
+      # default free space and the load dies with "no space left" (hit twice
+      # on the v1.36 leg). Drop the large preinstalled toolchains we never
+      # use — frees ~25GB in a few seconds.
+      - name: Free runner disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force >/dev/null 2>&1 || true
+          df -h /
+
       - name: setup go
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
         with:
@@ -134,6 +146,20 @@ jobs:
           docker exec kind-control-plane sh -c \
             'mkdir -p /fission-coverage && chown 10001:10001 /fission-coverage && chmod 0700 /fission-coverage'
           SKAFFOLD_PROFILE=kind-ci make skaffold-deploy
+
+      # Pin the v1.34 leg back to the legacy data plane (RFC-0002 gates off):
+      # kind-ci deploys with the EndpointSlice path on everywhere, so without
+      # this the executor-RPC warm path would lose all CI coverage. The
+      # gate-dependent integration tests detect the modes from the live
+      # Deployments and skip themselves on this leg.
+      - name: Pin legacy data plane (RFC-0002 gates off)
+        if: ${{ matrix.kindversion == 'v1.34.8' }}
+        timeout-minutes: 5
+        run: |
+          kubectl -n fission set env deploy/router ROUTER_ENDPOINTSLICE_CACHE_MODE=off
+          kubectl -n fission set env deploy/executor ENABLE_FUNCTION_SERVICES=false
+          kubectl -n fission rollout status deploy/router --timeout=3m
+          kubectl -n fission rollout status deploy/executor --timeout=3m
 
       # Install Envoy Gateway as the sample Gateway API implementation so the
       # router's gateway route provider (gatewayAPI.enabled=true via kind-ci)
@@ -329,7 +355,14 @@ jobs:
           export JVM_JERSEY_JAR_PATH="$JAR_DIR/jersey-hello-world.jar"
           echo "built jars: $(ls -l "$JAR_DIR")"
 
-          kubectl port-forward svc/router 8888:80 -n "$FISSION_NAMESPACE" >/tmp/pf.log 2>&1 &
+          # Port-forwards are self-healing: kubectl port-forward exits when its
+          # target pod restarts (e.g. a router liveness restart under node
+          # churn), and a one-shot forward then severs the rest of the suite —
+          # one 5s blip becomes 40 connection-refused failures. The loop
+          # re-establishes the tunnel; in-flight test polls (GetEventually)
+          # absorb the gap.
+          forward() { while true; do kubectl port-forward "$1" "$2" -n "$FISSION_NAMESPACE" || true; sleep 1; done; }
+          forward svc/router 8888:80 >/tmp/pf.log 2>&1 &
           PF_PID=$!
           # The router internal listener (GHSA-3g33-6vg6-27m8 fix) hosts
           # /fission-function/<ns>/<name>; the framework routes those
@@ -337,12 +370,12 @@ jobs:
           # port lives on a separate ClusterIP-only Service (router-internal)
           # so routerServiceType=NodePort/LoadBalancer doesn't expose
           # the listener externally — port-forward that Service.
-          kubectl port-forward svc/router-internal 8889:8889 -n "$FISSION_NAMESPACE" >/tmp/pf-internal.log 2>&1 &
+          forward svc/router-internal 8889:8889 >/tmp/pf-internal.log 2>&1 &
           PF_PID_INT=$!
           # The MCP tool server (RFC-0011) is enabled in the kind-ci skaffold
           # profile as a ClusterIP-only Service; port-forward it so the MCP
           # integration test can reach it at FISSION_MCP_BASE_URL.
-          kubectl port-forward svc/mcp 8890:8890 -n "$FISSION_NAMESPACE" >/tmp/pf-mcp.log 2>&1 &
+          forward svc/mcp 8890:8890 >/tmp/pf-mcp.log 2>&1 &
           PF_PID_MCP=$!
           export FISSION_MCP_BASE_URL="http://127.0.0.1:8890"
           # OCI test registry (RFC-0001), deployed on the 1.32 + 1.36 legs.
@@ -353,7 +386,7 @@ jobs:
           # built-in localhost HTTP exception — no node config needed).
           PF_PID_REG=""
           if [ "${{ matrix.kindversion }}" = "v1.32.11" ] || [ "${{ matrix.kindversion }}" = "v1.36.1" ]; then
-            kubectl port-forward svc/test-registry 5001:5000 -n default >/tmp/pf-registry.log 2>&1 &
+            ( while true; do kubectl port-forward svc/test-registry 5001:5000 -n default || true; sleep 1; done ) >/tmp/pf-registry.log 2>&1 &
             PF_PID_REG=$!
             export FISSION_TEST_REGISTRY=127.0.0.1:5001
             export FISSION_TEST_REGISTRY_INCLUSTER=test-registry.default.svc.cluster.local:5000
@@ -505,6 +538,20 @@ jobs:
         if: ${{ always() }}
         run: |
           TRACE=1 ./hack/backup-prometheus.sh
+
+      - name: Dump port-forward logs
+        timeout-minutes: 2
+        if: ${{ failure() || cancelled() }}
+        run: |
+          # The self-healing forward loops convert a permanently-dead service
+          # (router crashloop, deleted Service) into test-timeout-shaped
+          # failures; the repeating "unable to forward" lines naming the real
+          # cause live only in these runner-local files, which no artifact
+          # captures.
+          for f in /tmp/pf.log /tmp/pf-internal.log /tmp/pf-mcp.log /tmp/pf-registry.log; do
+            echo "===== $f ====="
+            tail -n 100 "$f" 2>/dev/null || echo "(absent)"
+          done
 
       - name: Archive fission dump
         timeout-minutes: 10
