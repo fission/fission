@@ -85,12 +85,17 @@ spec:
           value: {{ .Values.router.svcAddressUpdateTimeout | default "30s" | quote }}
         - name: ROUTER_UNTAP_SERVICE_TIMEOUT
           value: {{ .Values.router.unTapServiceTimeout | default "3600s" | quote }}
-        {{- $epsMode := .Values.router.endpointSliceCache.mode | default "off" }}
-        {{- if not (has $epsMode (list "off" "shadow" "on")) }}
-        {{- fail (printf "router.endpointSliceCache.mode must be one of off|shadow|on, got %q" $epsMode) }}
+        {{- if kindIs "bool" .Values.router.endpointSliceCache.mode }}
+        {{- fail "router.endpointSliceCache.mode must be a quoted string (\"on\"/\"off\") — unquoted on/off are YAML 1.1 booleans, and an unquoted off would silently default back to \"on\"" }}
+        {{- end }}
+        {{- $epsMode := .Values.router.endpointSliceCache.mode | default "on" }}
+        {{- if not (has $epsMode (list "off" "on")) }}
+        {{- fail (printf "router.endpointSliceCache.mode must be one of off|on (shadow was removed with the RFC-0002 phase-4 defaults flip), got %q" $epsMode) }}
         {{- end }}
         - name: ROUTER_ENDPOINTSLICE_CACHE_MODE
           value: {{ $epsMode | quote }}
+        - name: ROUTER_ENDPOINTSLICE_ENDPOINT_LB
+          value: {{ .Values.router.endpointSliceCache.endpointLB | default false | quote }}
         - name: USE_ENCODED_PATH
           value: {{ .Values.router.useEncodedPath | default false | quote }}
         - name: DEBUG_ENV

@@ -18,6 +18,13 @@ type Validator[T client.Object] interface {
 	Validate(T) error
 }
 
+// Warner is an optional facet: a validator that also attaches non-fatal
+// admission warnings (surfaced by kubectl/clients) for accepted-but-suspect
+// specs, e.g. an annotation value that silently means "default".
+type Warner[T client.Object] interface {
+	Warnings(T) admission.Warnings
+}
+
 // Defaulter is an interface that can be implemented to provide custom defaulting logic.
 type Defaulter[T client.Object] interface {
 	ApplyDefaults(T) error
@@ -28,6 +35,7 @@ type GenericWebhook[T client.Object] struct {
 	Logger    logr.Logger
 	Validator Validator[T]
 	Defaulter Defaulter[T]
+	Warner    Warner[T]
 }
 
 // SetupWebhookWithManager sets up the webhook with the manager.
@@ -50,19 +58,29 @@ func (w *GenericWebhook[T]) Default(_ context.Context, obj T) error {
 // ValidateCreate implements admission.Validator.
 func (w *GenericWebhook[T]) ValidateCreate(_ context.Context, obj T) (admission.Warnings, error) {
 	w.Logger.V(1).Info("validate create", "name", obj.GetName())
+	// Warnings are independent of Validator: a webhook may warn without
+	// rejecting anything, and gating them on Validator would silently drop
+	// the warnings such a webhook was written to emit.
 	if w.Validator != nil {
-		return nil, w.Validator.Validate(obj)
+		return w.warnings(obj), w.Validator.Validate(obj)
 	}
-	return nil, nil
+	return w.warnings(obj), nil
 }
 
 // ValidateUpdate implements admission.Validator.
 func (w *GenericWebhook[T]) ValidateUpdate(_ context.Context, _, newObj T) (admission.Warnings, error) {
 	w.Logger.V(1).Info("validate update", "name", newObj.GetName())
 	if w.Validator != nil {
-		return nil, w.Validator.Validate(newObj)
+		return w.warnings(newObj), w.Validator.Validate(newObj)
 	}
-	return nil, nil
+	return w.warnings(newObj), nil
+}
+
+func (w *GenericWebhook[T]) warnings(obj T) admission.Warnings {
+	if w.Warner == nil {
+		return nil
+	}
+	return w.Warner.Warnings(obj)
 }
 
 // ValidateDelete implements admission.Validator.

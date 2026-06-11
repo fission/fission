@@ -16,15 +16,15 @@ import (
 )
 
 // endpointSliceCacheMode selects how the router uses its EndpointSlice-fed
-// endpoint index (RFC-0002): off (never watch slices — today's behavior),
-// shadow (watch and compare against executor answers, no routing change), or
-// on (the index is the warm-path address source; phase 3).
+// endpoint index (RFC-0002): off (never watch slices — the legacy
+// executor-RPC data plane) or on (the index is the warm-path address source;
+// the chart default since the phase-4 flip). The env-level default stays off:
+// unset means off, so raw-env deployments keep legacy behavior.
 type endpointSliceCacheMode string
 
 const (
-	endpointSliceCacheOff    endpointSliceCacheMode = "off"
-	endpointSliceCacheShadow endpointSliceCacheMode = "shadow"
-	endpointSliceCacheOn     endpointSliceCacheMode = "on"
+	endpointSliceCacheOff endpointSliceCacheMode = "off"
+	endpointSliceCacheOn  endpointSliceCacheMode = "on"
 )
 
 // routerConfig collects every ROUTER_* (plus DEBUG_ENV / USE_ENCODED_PATH)
@@ -45,9 +45,12 @@ type routerConfig struct {
 	streamIdleDefault time.Duration
 
 	// endpointSliceCacheMode gates the EndpointSlice-fed endpoint index
-	// (ROUTER_ENDPOINTSLICE_CACHE_MODE: off|shadow|on; unset means off; an
+	// (ROUTER_ENDPOINTSLICE_CACHE_MODE: off|on; unset means off; an
 	// unrecognized value aborts startup).
 	endpointSliceCacheMode endpointSliceCacheMode
+	// endpointSliceEndpointLB dials newdeploy/container pod IPs directly
+	// (ROUTER_ENDPOINTSLICE_ENDPOINT_LB; optional, default false, soft-fail).
+	endpointSliceEndpointLB bool
 
 	// soft-fail fields (default on parse error)
 	svcAddrRetryCount    int
@@ -160,13 +163,29 @@ func loadRouterConfig(logger logr.Logger) (routerConfig, error) {
 	}
 	cfg.useEncodedPath = useEncodedPath
 
+	// Optional; unset or unparsable means off — the flag is an optimization
+	// (per-endpoint dialing for newdeploy/container), not a correctness gate
+	// like the cache mode, so it soft-fails.
+	if raw := os.Getenv("ROUTER_ENDPOINTSLICE_ENDPOINT_LB"); raw != "" {
+		endpointLB, err := strconv.ParseBool(raw)
+		if err != nil {
+			logger.Error(err, "failed to parse 'ROUTER_ENDPOINTSLICE_ENDPOINT_LB' - endpoint LB stays off", "value", raw)
+		} else {
+			cfg.endpointSliceEndpointLB = endpointLB
+		}
+	}
+
 	switch mode := endpointSliceCacheMode(os.Getenv("ROUTER_ENDPOINTSLICE_CACHE_MODE")); mode {
 	case "", endpointSliceCacheOff:
 		cfg.endpointSliceCacheMode = endpointSliceCacheOff
-	case endpointSliceCacheShadow, endpointSliceCacheOn:
+	case endpointSliceCacheOn:
 		cfg.endpointSliceCacheMode = mode
+	case "shadow":
+		// The migration-era comparator was removed with the RFC-0002 phase-4
+		// defaults flip; failing loud beats silently picking a side.
+		return cfg, fmt.Errorf("'ROUTER_ENDPOINTSLICE_CACHE_MODE' \"shadow\" was removed with the RFC-0002 defaults flip; use \"on\" (or \"off\" for the legacy data plane)")
 	default:
-		return cfg, fmt.Errorf("'ROUTER_ENDPOINTSLICE_CACHE_MODE' must be one of off|shadow|on, got %q", mode)
+		return cfg, fmt.Errorf("'ROUTER_ENDPOINTSLICE_CACHE_MODE' must be one of off|on, got %q", mode)
 	}
 
 	return cfg, nil

@@ -1,10 +1,10 @@
 # RFC-0002: EndpointSlice-Native Data Plane
 
-- Status: Implemented, phases 0–3 ([#3485](https://github.com/fission/fission/pull/3485), merged 2026-06-11); phase 4 (defaults flip + legacy-path deletion) lands in the next minor release per the rollout plan.
+- Status: Implemented — phases 0–3 ([#3485](https://github.com/fission/fission/pull/3485), merged 2026-06-11); phase 4 (defaults on, shadow-mode removal, newdeploy endpoint-LB flag) ships in v1.26 as well — the flip was pulled forward after the perf runbook, multi-replica, and index-scale verification all passed (see 0002-perf-runbook-results.md).
 - Perf verification: the pre-phase-4 runbook passed all acceptance bars on 2026-06-11 — see [0002-perf-runbook-results.md](0002-perf-runbook-results.md).
 - Tracking issue: TBD
 - Supersedes: rev 1 of this document
-- Targets: Fission v1.(N+1) for phases 0–3, v1.(N+2) for phase 4 (defaults flip)
+- Targets: Fission v1.26 for all phases (the phase-4 defaults flip was originally planned for v1.(N+2) and pulled forward on verification evidence)
 - Requires: Kubernetes 1.32+ (current floor per `MinimumKubernetesVersion` in `pkg/apis/core/v1/const.go`; no bump). No new third-party dependencies.
 
 ## Summary
@@ -320,8 +320,8 @@ Structural extractions ride the functional phase that motivates them; phases are
    Promotion criterion to phase 3: zero shadow mismatches over a kind-ci burn-in, machine-checked against the kind-ci Prometheus.
 4. **Phase 3 — warm-path cutover** (`mode=on`, default off).
    `fallbackResolver` wired as default; index admission live; strict-mode annotation honored; second `Tapper` implementation; `ensureCapacity` consumed; drain-aware reaping; newdeploy slice-driven invalidation + scale-from-zero detection; UnTap dropped for router-admitted traffic.
-5. **Phase 4 — defaults on + deletion** (next minor release).
-   Flip `executor.functionServices.enabled=true` and `mode=on`; `endpointLB` ships default-off; one CI leg pins `mode=off` so the legacy path stays tested; delete now-dead code (shadow comparator, warm-path `functionServiceMap` usage, dead PoolCache admission arms) — earlier phases only add or move.
+5. **Phase 4 — defaults on + deletion** (pulled forward into the same release on verification evidence).
+   Flip `executor.functionServices.enabled=true` and `mode=on`; `endpointLB` ships default-off; one CI leg pins `mode=off` so the legacy path stays tested; delete now-dead code — as shipped, only the shadow comparator: the PoolCache admission arms and `functionServiceMap` survive because `mode=off`, strict-mode functions, and cold starts still drive them (see the deviation note in 0002-implementation-plan.md) — earlier phases only add or move.
 
 ## Verification
 

@@ -6,8 +6,7 @@
 // (RFC-0002): a sharded, read-mostly map from function to its ready endpoints,
 // maintained from slice informer events and read on the proxy hot path with
 // only a shard RLock plus an atomic snapshot load (no allocation, no exclusive
-// lock). In shadow mode it only powers a comparator against the executor's
-// answers; at cutover it becomes the warm-path address source.
+// lock). It is the warm-path address source when the cache mode is on.
 package endpointcache
 
 import (

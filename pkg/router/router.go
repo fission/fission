@@ -347,7 +347,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	// Registered unconditionally so the requested-vs-effective mode is
 	// alertable: an absent series cannot distinguish "mode=off install" from
 	// "RBAC degrade silently turned the data plane off after a restart".
-	endpointcache.RegisterModeInfo(string(requestedMode), string(cfg.endpointSliceCacheMode))
+	endpointcache.RegisterModeInfo(string(requestedMode), string(cfg.endpointSliceCacheMode), cfg.endpointSliceEndpointLB)
 
 	// The router runs under a controller-runtime Manager for lifecycle
 	// consistency with the rest of the control plane and to host the HTTPTrigger
@@ -399,10 +399,9 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 
 	// EndpointSlice-fed endpoint index (RFC-0002). Every router replica watches
 	// independently (no leader election — that is the point: warm-path state is
-	// replica-local). In shadow mode the index only powers the comparator
-	// wrapped around the live resolver (routing behavior unchanged); in "on"
-	// mode the fallback resolver serves the warm path from the index and uses
-	// the executor for cold starts, capacity, and strict-mode functions.
+	// replica-local). The fallback resolver serves the warm path from the
+	// index and uses the executor for cold starts, capacity, and strict-mode
+	// functions.
 	if cfg.endpointSliceCacheMode != endpointSliceCacheOff {
 		index := endpointcache.NewIndex()
 		if err := endpointcache.RegisterInformer(ctx, crMgr, index, logger); err != nil {
@@ -414,21 +413,18 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 			return fmt.Errorf("unexpected address resolver type %T", triggers.addressResolver)
 		}
 		switch cfg.endpointSliceCacheMode {
-		case endpointSliceCacheShadow:
-			triggers.addressResolver = newShadowResolver(logger, execResolver, index)
 		case endpointSliceCacheOn:
-			// The capacity facet is optional on the executor client interface;
-			// test fakes (and any custom client) without it degrade to the
-			// legacy RPC on saturation.
-			capacity, _ := executor.(CapacityClient)
-			triggers.addressResolver = newFallbackResolver(logger, index, execResolver, capacity)
+			// The client interface carries EnsureCapacity since phase 4; an
+			// OLD executor (predating /v2/ensureCapacity) still degrades at
+			// runtime via the 404 → legacy-RPC fallback in the resolver.
+			triggers.addressResolver = newFallbackResolver(logger, index, execResolver, executor, cfg.endpointSliceEndpointLB)
 		default:
-			// Unreachable: loadRouterConfig validates the tri-state. The guard
+			// Unreachable: loadRouterConfig validates the mode. The guard
 			// keeps a future refactor from silently paying for the informer
 			// while leaving the legacy resolver wired.
 			return fmt.Errorf("unhandled endpointslice cache mode %q", cfg.endpointSliceCacheMode)
 		}
-		logger.Info("endpointslice cache enabled", "mode", cfg.endpointSliceCacheMode)
+		logger.Info("endpointslice cache enabled", "mode", cfg.endpointSliceCacheMode, "endpoint_lb", cfg.endpointSliceEndpointLB)
 	}
 
 	// Build the route providers. The ingress provider is always registered (it

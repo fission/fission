@@ -20,6 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
@@ -83,6 +84,10 @@ func (r *recordingExecutor) GetServiceForFunction(_ context.Context, fn *fv1.Fun
 func (r *recordingExecutor) TapService(metav1.ObjectMeta, fv1.ExecutorType, url.URL) {}
 func (r *recordingExecutor) UnTapService(context.Context, metav1.ObjectMeta, fv1.ExecutorType, *url.URL) error {
 	return nil
+}
+
+func (r *recordingExecutor) EnsureCapacity(context.Context, *fv1.Function, int, int) (string, error) {
+	return "", ferror.MakeError(ferror.ErrorNotFound, "fake executor has no capacity endpoint")
 }
 
 func fnWithPkg(rv, pkg string) *fv1.Function {

@@ -23,6 +23,7 @@ import (
 	k8stypes "k8s.io/apimachinery/pkg/types"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	ferror "github.com/fission/fission/pkg/error"
 	eclient "github.com/fission/fission/pkg/executor/client"
 	"github.com/fission/fission/pkg/throttler"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
@@ -38,6 +39,10 @@ func (e *fixedURLExecutor) GetServiceForFunction(_ context.Context, _ *fv1.Funct
 func (e *fixedURLExecutor) TapService(metav1.ObjectMeta, fv1.ExecutorType, url.URL) {}
 func (e *fixedURLExecutor) UnTapService(context.Context, metav1.ObjectMeta, fv1.ExecutorType, *url.URL) error {
 	return nil
+}
+
+func (e *fixedURLExecutor) EnsureCapacity(context.Context, *fv1.Function, int, int) (string, error) {
+	return "", ferror.MakeError(ferror.ErrorNotFound, "fake executor has no capacity endpoint")
 }
 
 // chunkedUpstream serves `n` lines, flushing and sleeping `gap` between each.
@@ -80,6 +85,10 @@ func (e *countingExecutor) TapService(metav1.ObjectMeta, fv1.ExecutorType, url.U
 func (e *countingExecutor) UnTapService(context.Context, metav1.ObjectMeta, fv1.ExecutorType, *url.URL) error {
 	e.untaps.Add(1)
 	return nil
+}
+
+func (e *countingExecutor) EnsureCapacity(context.Context, *fv1.Function, int, int) (string, error) {
+	return "", ferror.MakeError(ferror.ErrorNotFound, "fake executor has no capacity endpoint")
 }
 
 // newHandlerForUpstream builds a minimal poolmgr functionHandler pointed at the
@@ -371,4 +380,73 @@ func TestWebSocketSurvivesIdlePastFunctionTimeout(t *testing.T) {
 	_, got, err = conn.ReadMessage()
 	require.NoError(t, err)
 	require.Equal(t, "ping-2", string(got), "socket must survive idle past FunctionTimeout")
+}
+
+// TestStreamingRouterAdmittedSlotReleasedAfterDrain pins the handler-level
+// settle of a ROUTER-ADMITTED streaming slot: the per-resolve transport defers
+// skip streaming requests, so the handler defer is the only thing returning
+// the serving slot — re-gating it on poolmgr-untap-only (the pre-phase-4
+// shape) would pin the pod's in-flight counter forever. Also asserts the
+// keepalive heartbeat taps the TAP target (Service address), not the dial
+// target (pod IP), for endpoint-LB-shaped entries.
+func TestStreamingRouterAdmittedSlotReleasedAfterDrain(t *testing.T) {
+	t.Parallel()
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		fl, _ := w.(http.Flusher)
+		for i := range 3 {
+			fmt.Fprintf(w, "chunk-%d\n", i)
+			if fl != nil {
+				fl.Flush()
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}))
+	defer upstream.Close()
+	dial, err := url.Parse(upstream.URL)
+	require.NoError(t, err)
+	tapTarget := mustParseURL(t, "http://svc-stream.default:80")
+
+	resolver := &releaseTrackingResolver{answers: []*url.URL{dial}, tapURL: tapTarget}
+	tapper := &nopTapper{}
+	fn := streamingFn("admitted-stream-uid", &fv1.StreamingConfig{})
+	logger := loggerfactory.GetLogger()
+	fh := functionHandler{
+		logger:   logger,
+		function: fn,
+		resolver: resolver,
+		tapper:   tapper,
+		functionTimeoutMap: map[k8stypes.UID]int{
+			fn.GetUID(): 0,
+		},
+		tsRoundTripperParams: &tsRoundTripperParams{
+			timeout:           5 * time.Second,
+			timeoutExponent:   2,
+			keepAliveTime:     30 * time.Second,
+			maxRetries:        2,
+			svcAddrRetryCount: 2,
+			streamIdleDefault: 200 * time.Millisecond,
+		},
+	}
+	router := httptest.NewServer(http.HandlerFunc(fh.handler))
+	defer router.Close()
+
+	got := countLines(t, router.URL)
+	require.Equal(t, 3, got, "the stream must drain fully")
+
+	// The slot is released exactly once after the drain, and the release path
+	// (router-local accounting) must NOT fire the UnTap RPC.
+	require.Eventually(t, func() bool {
+		resolver.mu.Lock()
+		defer resolver.mu.Unlock()
+		return len(resolver.released) > 0 && resolver.released[len(resolver.released)-1].Load() == 1
+	}, 2*time.Second, 20*time.Millisecond, "the handler settle must release the streaming slot after drain")
+	assert.Zero(t, tapper.untaps.Load(), "router-admitted entries never UnTap")
+
+	// Heartbeat taps (if any fired during the ~300ms stream) target the tap
+	// URL, not the dialed pod address.
+	if tapper.taps.Load() > 0 {
+		assert.Equal(t, tapTarget.Host, tapper.lastTap.Load().Host,
+			"keepalive taps must key on the Service address")
+	}
 }

@@ -65,6 +65,9 @@ func (s *stubExecutor) TapService(metav1.ObjectMeta, fv1.ExecutorType, url.URL) 
 func (s *stubExecutor) UnTapService(context.Context, metav1.ObjectMeta, fv1.ExecutorType, *url.URL) error {
 	return nil
 }
+func (s *stubExecutor) EnsureCapacity(context.Context, *fv1.Function, int, int) (string, error) {
+	return "", ferror.MakeError(ferror.ErrorNotFound, "stub executor has no capacity endpoint")
+}
 
 // stubCapacity answers EnsureCapacity.
 type stubCapacity struct {
@@ -87,7 +90,7 @@ func newFallbackForTest(t *testing.T, ix *endpointcache.Index, exec *stubExecuto
 		executor:  exec,
 		throttler: throttler.MakeThrottler(30 * time.Second),
 	}
-	return newFallbackResolver(logger, ix, er, capacity)
+	return newFallbackResolver(logger, ix, er, capacity, false)
 }
 
 func poolFn(name string) *fv1.Function {
@@ -290,4 +293,66 @@ func TestFallbackOnceOnlyBypassesIndex(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "10.9.9.9:8888", entry.SvcURL.Host, "OnceOnly must never be admitted from slices")
 	assert.Equal(t, 1, exec.calls)
+}
+
+// newEndpointLBForTest builds the fallback resolver with endpoint LB on.
+func newEndpointLBForTest(t *testing.T, ix *endpointcache.Index, exec *stubExecutor) *fallbackResolver {
+	t.Helper()
+	logger := loggerfactory.GetLogger()
+	er := &executorResolver{
+		logger:    logger,
+		fmap:      makeFunctionServiceMap(logger, time.Minute),
+		executor:  exec,
+		throttler: throttler.MakeThrottler(30 * time.Second),
+	}
+	return newFallbackResolver(logger, ix, er, nil, true)
+}
+
+func newdeployFn(name string) *fv1.Function {
+	fn := poolFn(name)
+	fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType = fv1.ExecutorTypeNewdeploy
+	return fn
+}
+
+func TestFallbackEndpointLBDialsPodsDirectly(t *testing.T) {
+	t.Parallel()
+	ix := endpointcache.NewIndex()
+	ix.ApplySlice(fnSlice("s1", "fn-lb", "default", "10.0.0.1", "10.0.0.2"))
+	exec := &stubExecutor{addr: "svc-fn-lb.default"}
+	f := newEndpointLBForTest(t, ix, exec)
+
+	fn := newdeployFn("fn-lb")
+
+	// Two held admissions spread across the two pods (least outstanding),
+	// while taps stay keyed on the Service address the executor knows.
+	first, err := f.Resolve(t.Context(), fn)
+	require.NoError(t, err)
+	require.NotNil(t, first.Release, "endpoint-LB entries carry router-local accounting")
+	require.NotNil(t, first.TapURL)
+	assert.Equal(t, "svc-fn-lb.default", first.TapURL.Host, "taps must target the Service, not the pod")
+
+	second, err := f.Resolve(t.Context(), fn)
+	require.NoError(t, err)
+	require.NotNil(t, second.Release)
+	assert.NotEqual(t, first.SvcURL.Host, second.SvcURL.Host,
+		"least-outstanding selection must spread held requests across pods")
+	for _, host := range []string{first.SvcURL.Host, second.SvcURL.Host} {
+		assert.Contains(t, []string{"10.0.0.1:8888", "10.0.0.2:8888"}, host)
+	}
+	first.Release()
+	second.Release()
+}
+
+func TestFallbackEndpointLBFallsBackToVIPWhenQuarantined(t *testing.T) {
+	t.Parallel()
+	ix := endpointcache.NewIndex()
+	ix.ApplySlice(fnSlice("s1", "fn-lbq", "default", "10.0.0.1"))
+	ix.Quarantine("default", "fn-lbq", "10.0.0.1:8888")
+	exec := &stubExecutor{addr: "svc-fn-lbq.default"}
+	f := newEndpointLBForTest(t, ix, exec)
+
+	entry, err := f.Resolve(t.Context(), newdeployFn("fn-lbq"))
+	require.NoError(t, err)
+	assert.Equal(t, "svc-fn-lbq.default", entry.SvcURL.Host, "quarantined endpoints degrade to the Service VIP")
+	assert.Nil(t, entry.Release)
 }

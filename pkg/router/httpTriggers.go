@@ -96,8 +96,8 @@ func makeHTTPTriggerSet(logger logr.Logger, fmap *functionServiceMap, fissionCli
 	}
 	httpTriggerSet.resolver = makeFunctionReferenceResolver(logger, cl)
 	// The address resolver and tapper are the proxy path's injected seams
-	// (RFC-0002). Start (router.go) may wrap addressResolver with the shadow
-	// comparator before the first mux build, depending on the cache mode.
+	// (RFC-0002). Start (router.go) swaps addressResolver for the slice-fed
+	// fallback resolver before the first mux build when the cache mode is on.
 	httpTriggerSet.addressResolver = &executorResolver{
 		logger:    logger.WithName("executor_resolver"),
 		fmap:      fmap,

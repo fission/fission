@@ -42,15 +42,21 @@ func (s *scriptedResolver) Resolve(_ context.Context, _ *fv1.Function) (Resolved
 
 func (s *scriptedResolver) Invalidate(*fv1.Function, *url.URL) { s.invalidated.Add(1) }
 
-// nopTapper records untaps.
+// nopTapper records taps/untaps and their target URLs.
 type nopTapper struct {
-	taps   atomic.Int64
-	untaps atomic.Int64
+	taps      atomic.Int64
+	untaps    atomic.Int64
+	lastTap   atomic.Pointer[url.URL]
+	lastUntap atomic.Pointer[url.URL]
 }
 
-func (n *nopTapper) Tap(*fv1.Function, *url.URL) { n.taps.Add(1) }
-func (n *nopTapper) UnTap(context.Context, *fv1.Function, *url.URL) error {
+func (n *nopTapper) Tap(_ *fv1.Function, u *url.URL) {
+	n.taps.Add(1)
+	n.lastTap.Store(u)
+}
+func (n *nopTapper) UnTap(_ context.Context, _ *fv1.Function, u *url.URL) error {
 	n.untaps.Add(1)
+	n.lastUntap.Store(u)
 	return nil
 }
 
@@ -179,6 +185,7 @@ func mustParseURL(t *testing.T, raw string) *url.URL {
 // releaseTrackingResolver scripts answers with per-resolution release tracking.
 type releaseTrackingResolver struct {
 	answers     []*url.URL
+	tapURL      *url.URL // optional: entries carry it (endpoint-LB shape)
 	calls       atomic.Int64
 	invalidated atomic.Int64
 	released    []*atomic.Int64
@@ -197,6 +204,7 @@ func (s *releaseTrackingResolver) Resolve(_ context.Context, _ *fv1.Function) (R
 	var once sync.Once
 	return ResolvedEntry{
 		SvcURL:    s.answers[n],
+		TapURL:    s.tapURL,
 		FromCache: true,
 		Release:   func() { once.Do(func() { counter.Add(1) }) },
 	}, nil
@@ -237,4 +245,87 @@ func TestStreamingRetryReleasesAbandonedSlots(t *testing.T) {
 	}
 	last := resolver.released[len(resolver.released)-1]
 	assert.Zero(t, last.Load(), "the serving slot is held until the handler-level release (stream drain)")
+}
+
+// TestSettleReleasesEndpointLBSlots: a newdeploy endpoint-LB entry carries a
+// router-local release; settle must return it at request completion and must
+// NOT fire the poolmgr UnTap RPC for it. (Before settle, both dispatch sites
+// were poolmgr-gated, so LB slots would never have been returned.)
+func TestSettleReleasesEndpointLBSlots(t *testing.T) {
+	t.Parallel()
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer upstream.Close()
+	live, err := url.Parse(upstream.URL)
+	require.NoError(t, err)
+
+	resolver := &releaseTrackingResolver{answers: []*url.URL{live}}
+	tapper := &nopTapper{}
+	rrt := newTestRRT(resolver, tapper, 3, 2)
+	rrt.fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType = fv1.ExecutorTypeNewdeploy
+
+	req := httptest.NewRequest("GET", "http://router.example/fission-function/fn", nil)
+	resp, err := rrt.RoundTrip(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	resolver.mu.Lock()
+	defer resolver.mu.Unlock()
+	require.Len(t, resolver.released, 1)
+	assert.Equal(t, int64(1), resolver.released[0].Load(), "the LB slot must be released at RoundTrip return")
+	assert.Zero(t, tapper.untaps.Load(), "no UnTap RPC for router-admitted non-poolmgr entries")
+}
+
+// TestSettleDispatchMatrix pins the full release-vs-UnTap dispatch table:
+// router-admitted entries (release != nil) return the slot and never UnTap,
+// regardless of executor type; executor-resolved poolmgr entries UnTap (on
+// the tap target, not the dial target); deploy-backed VIP entries do nothing.
+// The newdeploy/release-nil cell is the load-bearing one — the executor-type
+// check inside settle is the ONLY guard since the call sites stopped being
+// poolmgr-gated.
+func TestSettleDispatchMatrix(t *testing.T) {
+	t.Parallel()
+	dial := mustParseURL(t, "http://10.0.0.9:8888")
+	tap := mustParseURL(t, "http://svc-fn.default:80")
+
+	cases := []struct {
+		name         string
+		executorType fv1.ExecutorType
+		withRelease  bool
+		wantUntaps   int64
+		wantRelease  bool
+	}{
+		{"poolmgr executor-resolved unTaps", fv1.ExecutorTypePoolmgr, false, 1, false},
+		{"poolmgr router-admitted releases", fv1.ExecutorTypePoolmgr, true, 0, true},
+		{"newdeploy VIP is a no-op", fv1.ExecutorTypeNewdeploy, false, 0, false},
+		{"newdeploy endpoint-LB releases", fv1.ExecutorTypeNewdeploy, true, 0, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			tapper := &nopTapper{}
+			rrt := newTestRRT(&scriptedResolver{answers: []*url.URL{dial}}, tapper, 1, 1)
+			rrt.fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType = tc.executorType
+
+			var released atomic.Int64
+			var release func()
+			if tc.withRelease {
+				release = func() { released.Add(1) }
+			}
+			rrt.settle(release, tap)
+
+			if tc.wantUntaps > 0 {
+				assert.Eventually(t, func() bool { return tapper.untaps.Load() == tc.wantUntaps },
+					time.Second, 10*time.Millisecond)
+				assert.Equal(t, tap.Host, tapper.lastUntap.Load().Host,
+					"UnTap must target the tap URL (Service for LB entries), not the dial URL")
+			} else {
+				assert.Never(t, func() bool { return tapper.untaps.Load() > 0 },
+					200*time.Millisecond, 20*time.Millisecond,
+					"no UnTap RPC may fire for this cell")
+			}
+			assert.Equal(t, tc.wantRelease, released.Load() == 1)
+		})
+	}
 }

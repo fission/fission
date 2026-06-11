@@ -71,7 +71,7 @@ func (fh *functionHandler) onStreamResponse(ctx context.Context, rrt *RetryingRo
 		if interval <= 0 || interval > 30*time.Second {
 			interval = 30 * time.Second
 		}
-		fh.startKeepaliveHeartbeat(ctx, fh.function, rrt.serviceURL, interval)
+		fh.startKeepaliveHeartbeat(ctx, fh.function, rrt.tapURL, interval)
 	}
 
 	// A hijacked WebSocket (101) keeps resp.Body as an io.ReadWriteCloser that
