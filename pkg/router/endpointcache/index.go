@@ -4,8 +4,9 @@
 
 // Package endpointcache holds the router's EndpointSlice-fed endpoint index
 // (RFC-0002): a sharded, read-mostly map from function to its ready endpoints,
-// maintained from slice informer events and read lock-free on the proxy hot
-// path. In shadow mode it only powers a comparator against the executor's
+// maintained from slice informer events and read on the proxy hot path with
+// only a shard RLock plus an atomic snapshot load (no allocation, no exclusive
+// lock). In shadow mode it only powers a comparator against the executor's
 // answers; at cutover it becomes the warm-path address source.
 package endpointcache
 
@@ -75,8 +76,8 @@ type (
 		counters map[types.UID]*atomic.Int64
 		// quarantined holds addresses the transport reported dial failures
 		// for; skipped by Admit until the next slice event for this function
-		// clears them (the slice controller removes dead pods within ~150ms
-		// regardless of executor health). Copy-on-write (like eps) so Admit
+		// clears them (the slice controller removes dead pods promptly,
+		// independent of executor health). Copy-on-write (like eps) so Admit
 		// reads it lock-free; writes happen under mu.
 		quarantined atomic.Pointer[map[string]struct{}]
 		// eps is the merged endpoint list, swapped copy-on-write. Hot-path
@@ -197,7 +198,9 @@ func endpointsFromSlice(es *discoveryv1.EndpointSlice) []Endpoint {
 }
 
 // ApplySlice upserts one slice's endpoints and atomically swaps the function's
-// merged list.
+// merged list. ApplySlice and DeleteSlice assume callers are serialized per
+// slice (today: the single informer event handler) — concurrent feeders could
+// interleave the shard lookup and the entry rebuild and lose an update.
 func (ix *Index) ApplySlice(es *discoveryv1.EndpointSlice) {
 	key, ok := fnKeyForSlice(es)
 	if !ok {
@@ -394,7 +397,11 @@ func (ix *Index) Admit(namespace, name string, requestsPerPod int) (Endpoint, fu
 }
 
 // Quarantine marks an address unadmissible until the next slice event for the
-// function (the transport calls it on persistent dial failures).
+// function. The transport calls it on the FIRST dial failure of an
+// index-admitted endpoint (re-resolving would just re-admit the same dead
+// pod); only the legacy executor-resolved path climbs a retry ladder before
+// invalidating. Each new quarantine is counted in
+// fission_router_endpointcache_quarantines_total.
 func (ix *Index) Quarantine(namespace, name, address string) {
 	key := FnKey{Namespace: namespace, Name: name}
 	s := ix.shard(key)
@@ -423,4 +430,5 @@ func (ix *Index) Quarantine(namespace, name, address string) {
 	next[address] = struct{}{}
 	e.quarantined.Store(&next)
 	e.mu.Unlock()
+	RecordQuarantine()
 }

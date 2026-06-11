@@ -158,6 +158,11 @@ const (
 	// EndpointSlice controller would publish a relabeled-but-unspecialized pod
 	// as a ready endpoint.
 	SERVED_LABEL = "fission.io/served"
+	// SERVED_VALUE is SERVED_LABEL's only valid value. The Service selector
+	// (gp_service.go) and the post-specialize pod patch (gp.go) live in
+	// different files and MUST agree byte-for-byte — drift means specialized
+	// pods silently never join their Service.
+	SERVED_VALUE = "true"
 	// MANAGED_BY_LABEL marks the Services Fission's data plane owns; the
 	// EndpointSlice controller mirrors Service labels onto slices, and the
 	// router's slice informer filters on it.

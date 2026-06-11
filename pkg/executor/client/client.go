@@ -13,17 +13,37 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/hashicorp/go-retryablehttp"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 	ferror "github.com/fission/fission/pkg/error"
+	"github.com/fission/fission/pkg/utils/metrics"
 )
+
+// tapFailureEscalation is the consecutive-failure count at which flushTaps
+// switches from a V(1) note to an error log (3 failures = ~15s of lost taps).
+const tapFailureEscalation = 3
+
+// tapFlushErrors counts failed tap-flush batches. Each failure drops one 5s
+// batch of liveness taps; a sustained non-zero rate means index-admitted pods
+// are invisible to the executor's idle reaper and at risk of being reaped
+// while serving.
+var tapFlushErrors = prometheus.NewCounter(prometheus.CounterOpts{
+	Name: "fission_router_tap_flush_errors_total",
+	Help: "Failed batched tap flushes from the router to the executor.",
+})
+
+func init() {
+	metrics.Registry.MustRegister(tapFlushErrors)
+}
 
 type (
 	// ClientInterface is the interface for executor client.
@@ -39,6 +59,10 @@ type (
 		tappedByURL map[string]TapServiceRequest
 		requestChan chan TapServiceRequest
 		httpClient  *retryablehttp.Client
+		// consecutive flushTaps failures; with the RFC-0002 warm path these
+		// batched taps are the only liveness signal for index-admitted pods,
+		// so persistent failure must escalate (see flushTaps).
+		tapFailures atomic.Int64
 	}
 
 	// TapServiceRequest represents
@@ -222,6 +246,12 @@ func (c *client) service() {
 
 // flushTaps sends one accumulated batch of tap requests to the executor.
 // Best-effort: a 404 just means some entries expired on the executor side.
+// A failed batch is dropped, not requeued — acceptable for one interval, but
+// with the RFC-0002 warm path these taps are the ONLY liveness signal for
+// index-admitted pods (the router never RPCs the executor for them), so a
+// persistently failing flush would let the idle reaper age out pods that are
+// actively serving. Sustained failure therefore escalates to an error log and
+// is always counted in fission_router_tap_flush_errors_total.
 func (c *client) flushTaps(urls map[string]TapServiceRequest) {
 	svcReqs := []TapServiceRequest{}
 	for _, req := range urls {
@@ -229,7 +259,15 @@ func (c *client) flushTaps(urls map[string]TapServiceRequest) {
 	}
 	c.logger.V(1).Info("tapped services in batch", "service_count", len(urls))
 	err := c._tapService(context.Background(), svcReqs)
-	if err != nil {
+	if err == nil {
+		c.tapFailures.Store(0)
+		return
+	}
+	tapFlushErrors.Inc()
+	if failures := c.tapFailures.Add(1); failures >= tapFailureEscalation {
+		c.logger.Error(err, "tap flush failing persistently; idle reaper may reap serving pods",
+			"consecutive_failures", failures, "service_count", len(urls))
+	} else {
 		c.logger.V(1).Info("error tapping function service address", "error", err.Error())
 	}
 }

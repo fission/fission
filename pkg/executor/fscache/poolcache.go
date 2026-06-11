@@ -413,11 +413,12 @@ func (c *PoolCache) GetSvcValue(ctx context.Context, function crd.CacheKeyURG, r
 	return resp.value, resp.error
 }
 
-// ConcurrencyUsed returns the function's specialized pod count plus in-flight
-// specializations — the quantity the concurrency cap is enforced against
-// (RFC-0002 ensureCapacity). The reservation must be released exactly once:
-// by setValue on a successful specialization, or MarkSpecializationFailure on
-// a failed one.
+// ReserveCapacity atomically checks the function's concurrency cap against
+// its specialized pod count plus in-flight specializations and reserves one
+// in-flight specialization slot, or returns a TooManyRequests ferror at the
+// cap (RFC-0002 ensureCapacity). The reservation must be released exactly
+// once: by setValue on a successful specialization, or
+// MarkSpecializationFailure on a failed one.
 func (c *PoolCache) ReserveCapacity(function crd.CacheKeyURG, concurrency int) error {
 	respChannel := make(chan *response)
 	c.requestChannel <- &request{

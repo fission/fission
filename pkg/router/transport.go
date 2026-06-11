@@ -39,16 +39,17 @@ type (
 		// ROUTER_STREAM_IDLE_TIMEOUT env, defaulting to DefaultStreamIdleSeconds).
 		streamIdleDefault time.Duration
 
-		// maxRetires is the max times for RetryingRoundTripper to retry a request.
+		// maxRetries is the max times for RetryingRoundTripper to retry a request.
 		// Default maxRetries is 10, which means router will retry for
 		// up to 10 times and abort it if still not succeeded.
 		maxRetries int
 
-		// svcAddrRetryCount is the max times for RetryingRoundTripper to retry with a specific service address
-		// Router sends requests to a specific service address for each function.
-		// A service address is considered as an invalid one if amount of non-network
-		// errors router received is higher than svcAddrRetryCount.
-		// Try to get a new one from executor.
+		// svcAddrRetryCount is the max times for RetryingRoundTripper to retry
+		// with a specific cached service address: after svcAddrRetryCount
+		// network timeout errors the address is invalidated and a fresh one is
+		// resolved. (Non-timeout errors are relayed to the caller without
+		// retrying; index-admitted endpoints are quarantined on the first dial
+		// error instead of climbing this ladder.)
 		// Default svcAddrRetryCount is 5.
 		svcAddrRetryCount int
 	}
@@ -95,32 +96,19 @@ func (w *fakeCloseReadCloser) RealClose() error {
 	return w.ReadCloser.Close()
 }
 
-// RoundTrip is a custom transport with retries for http requests that forwards the request to the right serviceUrl, obtained
-// from router's cache or from executor if router entry is stale.
+// RoundTrip forwards the request to the function address obtained from the
+// injected AddressResolver, with a bounded retry loop:
 //
-// It first checks if the service address for this function came from router's cache.
-// If it didn't, it makes a request to executor to get a new service for function. If that succeeds, it adds the address
-// to it's cache and makes a request to that address with transport.RoundTrip call.
-// Initial requests to new k8s services sometimes seem to fail, but retries work. So, it retries with an exponential
-// back-off for maxRetries times.
-//
-// Else if it came from the cache, it makes a transport.RoundTrip with that cached address. If the response received is
-// a network dial error (which means that the pod doesn't exist anymore), it removes the cache entry and makes a request
-// to executor to get a new service for function. It then retries transport.RoundTrip with the new address.
-//
-// At any point in time, if the response received from transport.RoundTrip is other than dial network error, it is
-// relayed as-is to the user, without any retries.
-//
-// While this RoundTripper handles the case where a previously cached address of the function pod isn't valid anymore
-// (probably because the pod got deleted somehow), by making a request to executor to get a new service for this function,
-// it doesn't handle a case where a newly specialized pod gets deleted just after the GetServiceForFunction succeeds.
-// In such a case, the RoundTripper will retry requests against the new address and give up after maxRetries.
-// However, the subsequent http call for this function will ensure the cache is invalidated.
-//
-// If GetServiceForFunction returns an error or if RoundTripper exits with an error, it gets translated into 502
-// inside ServeHttp function of the reverseProxy.
-// Earlier, GetServiceForFunction was called inside handler function and fission explicitly set http status code to 500
-// if it returned an error.
+//   - Each iteration resolves an address (index-admitted, cached, or a fresh
+//     executor RPC — the resolver decides; see the inline comments for how a
+//     previously held admission slot is released on re-resolve) and dials it.
+//   - A network dial error invalidates the address (quarantine for
+//     index-admitted endpoints, cache eviction after svcAddrRetryCount timeouts
+//     for executor-cached ones) and retries with exponential back-off, up to
+//     maxRetries.
+//   - Any non-dial response or error is relayed to the caller as-is, without
+//     retrying; a resolver error surfaces as 502 via the reverse proxy's error
+//     handler (429 from ensureCapacity passes through unchanged).
 func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	ctx := req.Context()
 

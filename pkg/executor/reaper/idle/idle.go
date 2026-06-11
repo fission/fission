@@ -13,6 +13,7 @@ package idle
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -75,8 +76,7 @@ func NewReaper(logger logr.Logger, strategies ...Strategy) *Reaper {
 }
 
 // Start launches one ticker per strategy and blocks until ctx is cancelled
-// (leadership loss or shutdown). Its signature matches errgroup.Group.Go usage
-// in the executor controllers.
+// (leadership loss or shutdown); run it under an errgroup via a closure.
 func (r *Reaper) Start(ctx context.Context) {
 	var wg sync.WaitGroup
 	for _, s := range r.strategies {
@@ -308,7 +308,7 @@ func (s *PoolDeleteStrategy) drainThenDelete(ctx context.Context, fsvc *fscache.
 	patch := fmt.Sprintf(`{"metadata":{"labels":{"%s":null}}}`, fv1.SERVED_LABEL)
 	for i := range fsvc.KubernetesObjects {
 		obj := fsvc.KubernetesObjects[i]
-		if obj.Kind != "pod" {
+		if !strings.EqualFold(obj.Kind, "pod") {
 			continue
 		}
 		_, err := s.kubeClient.CoreV1().Pods(obj.Namespace).Patch(ctx, obj.Name, k8sTypes.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
@@ -327,7 +327,7 @@ func (s *PoolDeleteStrategy) drainThenDelete(ctx context.Context, fsvc *fscache.
 	logger := s.logger
 	kubeClient := s.kubeClient
 	time.AfterFunc(grace, func() {
-		dctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		dctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
 		for i := range objs {
 			logger.Info("release drained idle function resources",
@@ -335,7 +335,23 @@ func (s *PoolDeleteStrategy) drainThenDelete(ctx context.Context, fsvc *fscache.
 				"address", fsvc.Address,
 				"pod", fsvc.Name,
 			)
-			reaper.CleanupKubeObject(dctx, logger, kubeClient, &objs[i])
+			// Bounded retry: the fsvc is already evicted from the cache, so
+			// nothing in the running executor would ever retry a failed delete
+			// — the unlabeled pod would leak until the next executor restart's
+			// adopt pass. Three attempts ride out an apiserver blip.
+			var derr error
+			for attempt := range 3 {
+				if attempt > 0 {
+					time.Sleep(time.Duration(attempt) * 5 * time.Second)
+				}
+				if derr = reaper.DeleteKubeObject(dctx, kubeClient, &objs[i]); derr == nil {
+					break
+				}
+			}
+			if derr != nil {
+				logger.Error(derr, "error deleting drained idle resource; pod leaks until the next executor restart",
+					"type", objs[i].Kind, "name", objs[i].Name, "ns", objs[i].Namespace)
+			}
 			time.Sleep(50 * time.Millisecond)
 		}
 	})

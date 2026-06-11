@@ -92,3 +92,35 @@ func TestLoadRouterConfigHardFailures(t *testing.T) {
 		assert.Contains(t, err.Error(), "ROUTER_STREAM_IDLE_TIMEOUT")
 	})
 }
+
+// TestLoadRouterConfigEndpointSliceMode locks the tri-state gate. The
+// load-bearing case is unset → off: that is the no-behavior-change guarantee
+// for every existing install (CI pins the gate explicitly, so a default
+// flipping to shadow/on would not be caught there).
+func TestLoadRouterConfigEndpointSliceMode(t *testing.T) {
+	cases := []struct {
+		value   string
+		want    endpointSliceCacheMode
+		wantErr bool
+	}{
+		{value: "", want: endpointSliceCacheOff},
+		{value: "off", want: endpointSliceCacheOff},
+		{value: "shadow", want: endpointSliceCacheShadow},
+		{value: "on", want: endpointSliceCacheOn},
+		{value: "On", wantErr: true}, // no case folding: fail loud, not silently legacy
+		{value: "bogus", wantErr: true},
+	}
+	for _, tc := range cases {
+		t.Run("mode="+tc.value, func(t *testing.T) {
+			setRequiredRouterEnv(t)
+			t.Setenv("ROUTER_ENDPOINTSLICE_CACHE_MODE", tc.value)
+			cfg, err := loadRouterConfig(logr.Discard())
+			if tc.wantErr {
+				require.Error(t, err, "an unrecognized mode must abort startup")
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, cfg.endpointSliceCacheMode)
+		})
+	}
+}

@@ -539,6 +539,20 @@ jobs:
         run: |
           TRACE=1 ./hack/backup-prometheus.sh
 
+      - name: Dump port-forward logs
+        timeout-minutes: 2
+        if: ${{ failure() || cancelled() }}
+        run: |
+          # The self-healing forward loops convert a permanently-dead service
+          # (router crashloop, deleted Service) into test-timeout-shaped
+          # failures; the repeating "unable to forward" lines naming the real
+          # cause live only in these runner-local files, which no artifact
+          # captures.
+          for f in /tmp/pf.log /tmp/pf-internal.log /tmp/pf-mcp.log /tmp/pf-registry.log; do
+            echo "===== $f ====="
+            tail -n 100 "$f" 2>/dev/null || echo "(absent)"
+          done
+
       - name: Archive fission dump
         timeout-minutes: 10
         if: ${{ failure() || cancelled() }}

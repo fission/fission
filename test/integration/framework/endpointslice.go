@@ -24,8 +24,10 @@ import (
 
 // Helpers for the RFC-0002 EndpointSlice data plane: locating a function's
 // headless Service and its EndpointSlices (both live in the function's
-// namespace, labeled with the function coordinates), and pinning the router's
-// cache mode / the executor's replica count for the serial resilience tests.
+// namespace on default installs, which is what CI runs — strictly the executor
+// creates them in the pool namespace; see gp_service.go), and pinning the
+// router's cache mode / the executor's replica count for the serial
+// resilience tests.
 
 // functionServiceSelector matches the executor-created per-function Service
 // and (mirrored by the EndpointSlice controller) its slices.

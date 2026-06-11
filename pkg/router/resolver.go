@@ -21,7 +21,10 @@ type ResolvedEntry struct {
 	// Release, when non-nil, returns the request slot taken by router-local
 	// admission accounting; the proxy invokes it once the request completes
 	// (response done / stream drained). nil means the resolution path does its
-	// accounting executor-side (RPC untap).
+	// accounting executor-side (RPC untap). A non-nil Release is produced
+	// solely by Index.Admit (idempotent via sync.Once) — resolver authors must
+	// not fabricate one, or the two accounting modes mix and corrupt the
+	// executor's PoolCache counters.
 	Release func()
 }
 
@@ -33,8 +36,9 @@ type ResolvedEntry struct {
 type AddressResolver interface {
 	// Resolve returns the service entry for fn.
 	Resolve(ctx context.Context, fn *fv1.Function) (ResolvedEntry, error)
-	// Invalidate drops any cached state for fn's address (called by the
-	// transport when the address keeps failing dials). addr may be nil when no
-	// address had been resolved.
+	// Invalidate drops any cached state for fn's address. The transport calls
+	// it on the FIRST dial failure of an index-admitted endpoint (quarantine),
+	// and after the retry ladder for cached executor-resolved addresses. addr
+	// may be nil when no address had been resolved.
 	Invalidate(fn *fv1.Function, addr *url.URL)
 }

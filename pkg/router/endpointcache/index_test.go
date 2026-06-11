@@ -7,6 +7,7 @@ package endpointcache
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -157,4 +158,146 @@ func TestIndexConcurrentReadersDuringEventStorm(t *testing.T) {
 	close(stop)
 	readers.Wait()
 	require.True(t, true, "the race detector is the real assertion")
+}
+
+// TestAdmit covers the admission contract directly: least-outstanding
+// selection, the requestsPerPod cap, release idempotency, and every named
+// refusal reason.
+func TestAdmit(t *testing.T) {
+	t.Parallel()
+
+	t.Run("no entry", func(t *testing.T) {
+		t.Parallel()
+		ix := NewIndex()
+		_, release, result := ix.Admit("default", "ghost", 1)
+		assert.Equal(t, NoEntry, result)
+		assert.Nil(t, release)
+	})
+
+	t.Run("least-outstanding selection spreads load", func(t *testing.T) {
+		t.Parallel()
+		ix := NewIndex()
+		ix.ApplySlice(slice("s1", "fn-a", "default", 8888, "10.0.0.1", "10.0.0.2", "10.0.0.3"))
+
+		// Admit 3 slots at requestsPerPod=1 without releasing: each must land
+		// on a DIFFERENT pod, or warm traffic would pile onto one pod while
+		// others idle.
+		seen := map[string]int{}
+		for i := range 3 {
+			ep, release, result := ix.Admit("default", "fn-a", 1)
+			require.Equalf(t, Admitted, result, "admit %d", i)
+			require.NotNil(t, release)
+			seen[ep.Address]++
+		}
+		assert.Len(t, seen, 3, "3 admissions at cap 1 must use 3 distinct pods, got %v", seen)
+
+		// Saturated now.
+		_, release, result := ix.Admit("default", "fn-a", 1)
+		assert.Equal(t, AllBusy, result)
+		assert.Nil(t, release)
+	})
+
+	t.Run("requestsPerPod above one allows multiple slots per pod", func(t *testing.T) {
+		t.Parallel()
+		ix := NewIndex()
+		ix.ApplySlice(slice("s1", "fn-a", "default", 8888, "10.0.0.1"))
+
+		var releases []func()
+		for i := range 3 {
+			_, release, result := ix.Admit("default", "fn-a", 3)
+			require.Equalf(t, Admitted, result, "admit %d of 3 on one pod", i)
+			releases = append(releases, release)
+		}
+		_, _, result := ix.Admit("default", "fn-a", 3)
+		assert.Equal(t, AllBusy, result)
+
+		// Releasing one slot re-opens admission.
+		releases[0]()
+		_, release, result := ix.Admit("default", "fn-a", 3)
+		assert.Equal(t, Admitted, result)
+		release()
+	})
+
+	t.Run("release is idempotent", func(t *testing.T) {
+		t.Parallel()
+		ix := NewIndex()
+		ix.ApplySlice(slice("s1", "fn-a", "default", 8888, "10.0.0.1"))
+
+		_, release, result := ix.Admit("default", "fn-a", 1)
+		require.Equal(t, Admitted, result)
+		// The transport deliberately releases from two places (re-resolve and
+		// the per-request defer); a double release driving the counter negative
+		// would permanently over-admit a busy pod.
+		release()
+		release()
+		release()
+
+		_, r1, result := ix.Admit("default", "fn-a", 1)
+		require.Equal(t, Admitted, result)
+		_, _, result = ix.Admit("default", "fn-a", 1)
+		assert.Equal(t, AllBusy, result, "counter must not have gone negative from double release")
+		r1()
+	})
+
+	t.Run("quarantined endpoints are skipped, then all_quarantined", func(t *testing.T) {
+		t.Parallel()
+		ix := NewIndex()
+		ix.ApplySlice(slice("s1", "fn-a", "default", 8888, "10.0.0.1", "10.0.0.2"))
+
+		ix.Quarantine("default", "fn-a", "10.0.0.1:8888")
+		ep, release, result := ix.Admit("default", "fn-a", 1)
+		require.Equal(t, Admitted, result)
+		assert.Equal(t, "10.0.0.2:8888", ep.Address, "quarantined endpoint must be skipped")
+		release()
+
+		ix.Quarantine("default", "fn-a", "10.0.0.2:8888")
+		_, _, result = ix.Admit("default", "fn-a", 1)
+		assert.Equal(t, AllQuarantined, result)
+
+		// Any slice event lifts the quarantine.
+		ix.ApplySlice(slice("s1", "fn-a", "default", 8888, "10.0.0.1", "10.0.0.2"))
+		_, release, result = ix.Admit("default", "fn-a", 1)
+		assert.Equal(t, Admitted, result)
+		release()
+	})
+
+	t.Run("not-ready endpoints are never admitted", func(t *testing.T) {
+		t.Parallel()
+		ix := NewIndex()
+		es := slice("s1", "fn-a", "default", 8888, "10.0.0.1")
+		notReady := false
+		es.Endpoints[0].Conditions.Ready = &notReady
+		ix.ApplySlice(es)
+
+		_, release, result := ix.Admit("default", "fn-a", 1)
+		assert.Equal(t, NoCountedReady, result)
+		assert.Nil(t, release)
+	})
+
+	t.Run("concurrent admits never exceed the per-pod cap", func(t *testing.T) {
+		t.Parallel()
+		ix := NewIndex()
+		ix.ApplySlice(slice("s1", "fn-a", "default", 8888, "10.0.0.1", "10.0.0.2"))
+
+		const goroutines = 50
+		const perPod = 3 // 2 pods × 3 = 6 admissible slots
+		var admitted, refused atomic.Int64
+		var wg sync.WaitGroup
+		for range goroutines {
+			wg.Go(func() {
+				_, release, result := ix.Admit("default", "fn-a", perPod)
+				switch result {
+				case Admitted:
+					admitted.Add(1)
+					_ = release // hold the slot: count peak concurrency
+				default:
+					refused.Add(1)
+				}
+			})
+		}
+		wg.Wait()
+		assert.LessOrEqual(t, admitted.Load(), int64(2*perPod),
+			"admissions must never exceed pods×requestsPerPod")
+		assert.Equal(t, int64(goroutines), admitted.Load()+refused.Load())
+	})
 }

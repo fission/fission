@@ -135,7 +135,25 @@ func checkSliceWatchRBAC(ctx context.Context, kubeClient kubernetes.Interface) e
 					},
 				},
 			}
-			res, err := kubeClient.AuthorizationV1().SelfSubjectAccessReviews().Create(ctx, sar, metav1.CreateOptions{})
+			// Retry the review itself: a transient apiserver error during boot
+			// must not degrade the data plane for the router's whole lifetime.
+			// Only an explicit Allowed=false (genuinely missing RBAC) or a
+			// persistent API failure degrades.
+			var res *authorizationv1.SelfSubjectAccessReview
+			var err error
+			for attempt := range 3 {
+				if attempt > 0 {
+					select {
+					case <-ctx.Done():
+						return ctx.Err()
+					case <-time.After(2 * time.Second):
+					}
+				}
+				res, err = kubeClient.AuthorizationV1().SelfSubjectAccessReviews().Create(ctx, sar, metav1.CreateOptions{})
+				if err == nil {
+					break
+				}
+			}
 			if err != nil {
 				return fmt.Errorf("error checking endpointslice RBAC in namespace %q: %w", ns, err)
 			}
@@ -318,6 +336,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	// manager cache sync and hang the router not-ready, so degrade to the
 	// legacy data plane loudly instead. Checked before manager construction
 	// because the cache options depend on the (possibly downgraded) mode.
+	requestedMode := cfg.endpointSliceCacheMode
 	if cfg.endpointSliceCacheMode != endpointSliceCacheOff {
 		if rerr := checkSliceWatchRBAC(ctx, kubeClient); rerr != nil {
 			logger.Error(rerr, "disabling the EndpointSlice cache (degrading to the executor-RPC data plane)",
@@ -325,6 +344,10 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 			cfg.endpointSliceCacheMode = endpointSliceCacheOff
 		}
 	}
+	// Registered unconditionally so the requested-vs-effective mode is
+	// alertable: an absent series cannot distinguish "mode=off install" from
+	// "RBAC degrade silently turned the data plane off after a restart".
+	endpointcache.RegisterModeInfo(string(requestedMode), string(cfg.endpointSliceCacheMode))
 
 	// The router runs under a controller-runtime Manager for lifecycle
 	// consistency with the rest of the control plane and to host the HTTPTrigger
@@ -399,6 +422,11 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 			// legacy RPC on saturation.
 			capacity, _ := executor.(CapacityClient)
 			triggers.addressResolver = newFallbackResolver(logger, index, execResolver, capacity)
+		default:
+			// Unreachable: loadRouterConfig validates the tri-state. The guard
+			// keeps a future refactor from silently paying for the informer
+			// while leaving the legacy resolver wired.
+			return fmt.Errorf("unhandled endpointslice cache mode %q", cfg.endpointSliceCacheMode)
 		}
 		logger.Info("endpointslice cache enabled", "mode", cfg.endpointSliceCacheMode)
 	}

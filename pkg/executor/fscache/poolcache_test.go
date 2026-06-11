@@ -5,7 +5,6 @@
 package fscache
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -321,7 +320,7 @@ func TestReserveCapacity(t *testing.T) {
 
 	// ...and a successful one is consumed by setValue (the pod now counts via
 	// len(svcs) instead), keeping the cap exact.
-	c.SetSvcValue(context.Background(), key, "10.0.0.1:8888", &FuncSvc{Function: &metav1.ObjectMeta{Name: "fn"}}, resource.MustParse("45m"), 10, 0)
+	c.SetSvcValue(t.Context(), key, "10.0.0.1:8888", &FuncSvc{Function: &metav1.ObjectMeta{Name: "fn"}}, resource.MustParse("45m"), 10, 0)
 	err = c.ReserveCapacity(key, 2)
 	require.Error(t, err, "1 pod + 1 in-flight reservation == cap 2")
 }
@@ -345,7 +344,7 @@ func TestPoolCacheTouchByAddress(t *testing.T) {
 
 	old := time.Now().Add(-time.Hour)
 	fsvc := &FuncSvc{Function: &metav1.ObjectMeta{Name: "fn"}, Address: "10.0.0.9:8888", Atime: old}
-	c.SetSvcValue(context.Background(), key, "10.0.0.9:8888", fsvc, resource.MustParse("45m"), 10, 0)
+	c.SetSvcValue(t.Context(), key, "10.0.0.9:8888", fsvc, resource.MustParse("45m"), 10, 0)
 	c.MarkAvailable(key, "10.0.0.9:8888")
 
 	require.NoError(t, c.TouchByAddress("10.0.0.9:8888"))

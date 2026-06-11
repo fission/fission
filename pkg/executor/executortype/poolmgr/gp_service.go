@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"sync"
 	"time"
 
 	apiv1 "k8s.io/api/core/v1"
@@ -22,6 +23,7 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/executor/metrics"
 	"github.com/fission/fission/pkg/utils"
+	"github.com/fission/fission/pkg/utils/loggerfactory"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
@@ -53,11 +55,30 @@ func (gp *GenericPool) createSvc(ctx context.Context, name string, labels map[st
 }
 
 // functionServicesEnabled reads the RFC-0002 gate (ENABLE_FUNCTION_SERVICES,
-// Helm executor.functionServices.enabled); unset or unparsable means off.
+// Helm executor.functionServices.enabled); unset or empty means off. An
+// unparsable value also means off but is logged once: silently disabling one
+// half of the data-plane cutover over a typo would be invisible otherwise
+// (the router side hard-fails on a bad mode; the executor must keep running
+// because the legacy path still serves).
 func functionServicesEnabled() bool {
-	enabled, _ := strconv.ParseBool(os.Getenv("ENABLE_FUNCTION_SERVICES"))
+	raw := os.Getenv("ENABLE_FUNCTION_SERVICES")
+	if raw == "" {
+		return false
+	}
+	enabled, err := strconv.ParseBool(raw)
+	if err != nil {
+		warnBadGateOnce.Do(func() {
+			loggerfactory.GetLogger().WithName("poolmgr").Error(err,
+				"unparsable ENABLE_FUNCTION_SERVICES; treating as false", "value", raw)
+		})
+		return false
+	}
 	return enabled
 }
+
+// warnBadGateOnce dedups the unparsable-gate warning (the gate is read on
+// every ensure).
+var warnBadGateOnce sync.Once
 
 // functionServiceName returns the deterministic name of a function's headless
 // Service (RFC-0002): fn-<name>-<uid8>, truncated to fit the 63-char Service
@@ -83,7 +104,7 @@ func functionServiceSelector(fn *fv1.Function) map[string]string {
 	return map[string]string{
 		fv1.FUNCTION_UID:        string(fn.UID),
 		fv1.FUNCTION_GENERATION: strconv.FormatInt(fn.Generation, 10),
-		fv1.SERVED_LABEL:        "true",
+		fv1.SERVED_LABEL:        fv1.SERVED_VALUE,
 	}
 }
 

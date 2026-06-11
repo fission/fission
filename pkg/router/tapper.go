@@ -20,8 +20,10 @@ import (
 // Tapper is the liveness/accounting seam between the proxy and the executor:
 // Tap marks a service in use (batched atime keepalive, also the streaming
 // heartbeat), UnTap releases a poolmgr pod's request slot. One implementation
-// today (executor RPC); a second arrives at the RFC-0002 cutover for
-// index-admitted endpoints whose accounting is router-local.
+// (executor RPC). Index-admitted endpoints do NOT release slots through
+// Tapper: their accounting is router-local via ResolvedEntry.Release, and the
+// two must never mix (see the resolver docs) — UnTap here is only for
+// executor-resolved poolmgr entries. Tap (atime liveness) applies to both.
 type Tapper interface {
 	Tap(fn *fv1.Function, serviceURL *url.URL)
 	UnTap(ctx context.Context, fn *fv1.Function, serviceURL *url.URL) error

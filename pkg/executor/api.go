@@ -275,8 +275,12 @@ func (executor *Executor) tapServices(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if errs != nil {
+		// Genuine tap failures (unknown executor type, internal errors) must be
+		// distinguishable on the wire from routine fsvc expiry (404 below): the
+		// router's flush treats them identically otherwise, and with the
+		// RFC-0002 warm path taps are the pods' only liveness signal.
 		logger.Error(errs, "error tapping function service")
-		http.Error(w, "Not found", http.StatusNotFound)
+		http.Error(w, "error tapping function services", http.StatusInternalServerError)
 		return
 	}
 	if notFound != nil {

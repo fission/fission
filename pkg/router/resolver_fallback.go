@@ -94,6 +94,9 @@ func (f *fallbackResolver) Resolve(ctx context.Context, fn *fv1.Function) (Resol
 		"reason", string(admit), "ready_endpoints", ready)
 	endpointcache.RecordFallback(string(admit))
 	if f.capacity != nil {
+		// observedBusy == ready here: on this path every ready endpoint was
+		// inadmissible (busy or quarantined) — both counts are diagnostic-only
+		// on the executor side.
 		addr, err := f.capacity.EnsureCapacity(ctx, f.executor.currentFunction(ctx, fn), ready, ready)
 		if err == nil {
 			svcURL, perr := url.Parse("http://" + addr)
@@ -133,9 +136,14 @@ func (f *fallbackResolver) resolveDeployBacked(ctx context.Context, fn *fv1.Func
 }
 
 // Invalidate quarantines the failing endpoint (until the next slice event) and
-// drops the executor resolver's cached address.
+// drops the executor resolver's cached address. Logged at Info: dial failures
+// are rare, and a partial quarantine (one bad pod among many) is otherwise
+// invisible — the aggregate fallback metric only fires when every endpoint of
+// a function is out.
 func (f *fallbackResolver) Invalidate(fn *fv1.Function, addr *url.URL) {
 	if addr != nil {
+		f.logger.Info("quarantining endpoint after dial failure",
+			"function", fn.Name, "namespace", fn.Namespace, "address", addr.Host)
 		f.index.Quarantine(fn.Namespace, fn.Name, addr.Host)
 	}
 	f.executor.Invalidate(fn, addr)

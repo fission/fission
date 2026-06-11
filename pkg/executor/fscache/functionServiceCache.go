@@ -306,6 +306,12 @@ func (fsc *FunctionServiceCache) TouchByAddress(address string) error {
 	}
 	resp := <-responseChannel
 	if resp.error != nil {
+		// Only an unknown address falls through to the pool cache; any other
+		// error class must surface rather than be masked by the fallback's
+		// own not-found.
+		if !IsNotFoundError(resp.error) {
+			return resp.error
+		}
 		return fsc.connFunctionCache.TouchByAddress(address)
 	}
 	return nil

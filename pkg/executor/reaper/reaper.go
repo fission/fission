@@ -7,6 +7,7 @@ package reaper
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	apiv1 "k8s.io/api/core/v1"
@@ -48,37 +49,34 @@ var (
 	delOpt            = metav1.DeleteOptions{PropagationPolicy: &deletePropagation}
 )
 
-// CleanupKubeObject deletes given kubernetes object
+// CleanupKubeObject deletes given kubernetes object, logging (not returning)
+// any failure. Callers that need to retry use DeleteKubeObject directly.
 func CleanupKubeObject(ctx context.Context, logger logr.Logger, kubeClient kubernetes.Interface, kubeobj *apiv1.ObjectReference) {
+	if err := DeleteKubeObject(ctx, kubeClient, kubeobj); err != nil {
+		logger.Error(err, "error cleaning up kubernetes object", "type", kubeobj.Kind, "name", kubeobj.Name, "ns", kubeobj.Namespace)
+	}
+}
+
+// DeleteKubeObject deletes the given kubernetes object and reports the
+// outcome: nil on success or already-gone, the API error otherwise.
+func DeleteKubeObject(ctx context.Context, kubeClient kubernetes.Interface, kubeobj *apiv1.ObjectReference) error {
+	var err error
 	switch strings.ToLower(kubeobj.Kind) {
 	case "pod":
-		err := kubeClient.CoreV1().Pods(kubeobj.Namespace).Delete(ctx, kubeobj.Name, metav1.DeleteOptions{})
-		if err != nil && !k8serrors.IsNotFound(err) {
-			logger.Error(err, "error cleaning up pod", "pod", kubeobj.Name)
-		}
-
+		err = kubeClient.CoreV1().Pods(kubeobj.Namespace).Delete(ctx, kubeobj.Name, metav1.DeleteOptions{})
 	case "service":
-		err := kubeClient.CoreV1().Services(kubeobj.Namespace).Delete(ctx, kubeobj.Name, metav1.DeleteOptions{})
-		if err != nil && !k8serrors.IsNotFound(err) {
-			logger.Error(err, "error cleaning up service", "service", kubeobj.Name)
-		}
-
+		err = kubeClient.CoreV1().Services(kubeobj.Namespace).Delete(ctx, kubeobj.Name, metav1.DeleteOptions{})
 	case "deployment":
-		err := kubeClient.AppsV1().Deployments(kubeobj.Namespace).Delete(ctx, kubeobj.Name, delOpt)
-		if err != nil && !k8serrors.IsNotFound(err) {
-			logger.Error(err, "error cleaning up deployment", "deployment", kubeobj.Name)
-		}
-
+		err = kubeClient.AppsV1().Deployments(kubeobj.Namespace).Delete(ctx, kubeobj.Name, delOpt)
 	case "horizontalpodautoscaler":
-		err := kubeClient.AutoscalingV2().HorizontalPodAutoscalers(kubeobj.Namespace).Delete(ctx, kubeobj.Name, metav1.DeleteOptions{})
-		if err != nil && !k8serrors.IsNotFound(err) {
-			logger.Error(err, "error cleaning up horizontalpodautoscaler", "horizontalpodautoscaler", kubeobj.Name)
-		}
-
+		err = kubeClient.AutoscalingV2().HorizontalPodAutoscalers(kubeobj.Namespace).Delete(ctx, kubeobj.Name, metav1.DeleteOptions{})
 	default:
-		logger.Error(nil, "Could not identifying the object type to clean up", "type", kubeobj.Kind, "object", kubeobj)
-
+		return fmt.Errorf("could not identify the object type %q to clean up object %q", kubeobj.Kind, kubeobj.Name)
 	}
+	if err != nil && !k8serrors.IsNotFound(err) {
+		return err
+	}
+	return nil
 }
 
 // CleanupDeployments deletes deployment(s) for a given instanceID

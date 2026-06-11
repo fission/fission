@@ -260,7 +260,9 @@ func TestFallbackInvalidateQuarantinesEndpoint(t *testing.T) {
 	addr := mustParseURL(t, "http://10.0.0.1:8888")
 	f.Invalidate(fn, addr)
 
-	// The quarantined endpoint is unadmissible → cold-start RPC path.
+	// The quarantined endpoint is unadmissible. With one ready-but-quarantined
+	// endpoint this takes the saturated-fallback branch (ready > 0, nil
+	// capacity client → legacy RPC), not the ready==0 cold-start branch.
 	entry, err := f.Resolve(t.Context(), fn)
 	require.NoError(t, err)
 	assert.Equal(t, "10.9.9.9:8888", entry.SvcURL.Host)

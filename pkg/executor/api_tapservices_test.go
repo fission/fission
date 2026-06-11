@@ -109,17 +109,20 @@ func TestTapServices(t *testing.T) {
 			wantErrLevels: 0,
 		},
 		{
-			name:          "real error -> 404, error logged",
+			// Genuine failures answer 500, distinguishable on the wire from
+			// routine fsvc expiry (404): taps are the warm-path pods' only
+			// liveness signal, so the router must be able to tell them apart.
+			name:          "real error -> 500, error logged",
 			stub:          &tapStubExecutorType{err: errors.New("kaboom")},
 			req:           tapReq(fv1.ExecutorTypePoolmgr),
-			wantCode:      http.StatusNotFound,
+			wantCode:      http.StatusInternalServerError,
 			wantErrLevels: 1,
 		},
 		{
-			name:          "unknown executor type -> 404, error logged",
+			name:          "unknown executor type -> 500, error logged",
 			stub:          &tapStubExecutorType{err: nil},
 			req:           tapReq("does-not-exist"),
-			wantCode:      http.StatusNotFound,
+			wantCode:      http.StatusInternalServerError,
 			wantErrLevels: 1,
 		},
 	}

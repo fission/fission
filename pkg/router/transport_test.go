@@ -178,10 +178,11 @@ func mustParseURL(t *testing.T, raw string) *url.URL {
 
 // releaseTrackingResolver scripts answers with per-resolution release tracking.
 type releaseTrackingResolver struct {
-	answers  []*url.URL
-	calls    atomic.Int64
-	released []*atomic.Int64
-	mu       sync.Mutex
+	answers     []*url.URL
+	calls       atomic.Int64
+	invalidated atomic.Int64
+	released    []*atomic.Int64
+	mu          sync.Mutex
 }
 
 func (s *releaseTrackingResolver) Resolve(_ context.Context, _ *fv1.Function) (ResolvedEntry, error) {
@@ -201,7 +202,7 @@ func (s *releaseTrackingResolver) Resolve(_ context.Context, _ *fv1.Function) (R
 	}, nil
 }
 
-func (s *releaseTrackingResolver) Invalidate(*fv1.Function, *url.URL) {}
+func (s *releaseTrackingResolver) Invalidate(*fv1.Function, *url.URL) { s.invalidated.Add(1) }
 
 // TestStreamingRetryReleasesAbandonedSlots guards the RFC-0002 admission-slot
 // leak: a streaming request whose first admitted endpoint fails to dial must
@@ -226,6 +227,8 @@ func TestStreamingRetryReleasesAbandonedSlots(t *testing.T) {
 	require.NoError(t, err)
 	defer resp.Body.Close()
 	require.GreaterOrEqual(t, resolver.calls.Load(), int64(2), "the dead endpoint must force a re-resolve")
+	require.GreaterOrEqual(t, resolver.invalidated.Load(), int64(1),
+		"a dial failure on an index-admitted endpoint must invalidate (quarantine) it, not just retry")
 
 	resolver.mu.Lock()
 	defer resolver.mu.Unlock()

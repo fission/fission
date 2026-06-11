@@ -550,10 +550,12 @@ func (gpm *GenericPoolManager) adoptSpecializedPods(ctx context.Context, wg *syn
 				time.Sleep(time.Duration(rand.Intn(30)) * time.Millisecond)
 
 				patch := fmt.Sprintf(`{"metadata":{"annotations":{"%s":"%s"}}}`, fv1.EXECUTOR_INSTANCEID_LABEL, gpm.instanceID)
-				pod, err = gpm.kubernetesClient.CoreV1().Pods(pod.Namespace).Patch(ctx, pod.Name, k8sTypes.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
-				if err != nil {
+				// Locals, not the loop-level pod/err: these goroutines run
+				// concurrently and writes to shared captures would race.
+				pod, perr := gpm.kubernetesClient.CoreV1().Pods(pod.Namespace).Patch(ctx, pod.Name, k8sTypes.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
+				if perr != nil {
 					// just log the error since it won't affect the function serving
-					gpm.logger.Error(err, "error patching executor instance ID of pod", "pod", pod.Name, "ns", pod.Namespace)
+					gpm.logger.Error(perr, "error patching executor instance ID of pod", "pod", pod.Name, "ns", pod.Namespace)
 					return
 				}
 
@@ -603,12 +605,11 @@ func (gpm *GenericPoolManager) adoptSpecializedPods(ctx context.Context, wg *syn
 					Atime:    time.Now(),
 				}
 
-				_, err = gpm.fsCache.Add(fsvc)
-				if err != nil {
+				if _, aerr := gpm.fsCache.Add(fsvc); aerr != nil {
 					// If fsvc already exists we just skip the duplicate one. And let reaper to recycle the duplicate pods.
 					// This is for the case that there are multiple function pods for the same function due to unknown reason.
-					if !fscache.IsNameExistError(err) {
-						gpm.logger.Error(err, "failed to adopt pod for function", "pod", pod.Name)
+					if !fscache.IsNameExistError(aerr) {
+						gpm.logger.Error(aerr, "failed to adopt pod for function", "pod", pod.Name)
 					}
 
 					return

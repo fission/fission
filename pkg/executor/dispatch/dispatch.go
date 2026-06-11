@@ -21,7 +21,8 @@ type (
 	// Do deduplicates concurrent calls per key (one creation runs; the rest
 	// wait for its result or their own context, whichever ends first), and
 	// DoEach runs every call independently. Both honor the optional global
-	// concurrency bound.
+	// concurrency bound. Must be constructed with New — the zero value's nil
+	// inflight map panics on Do.
 	Dispatcher[T any] struct {
 		logger logr.Logger
 		// sem bounds concurrently running create funcs; nil means unbounded
