@@ -347,7 +347,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	// Registered unconditionally so the requested-vs-effective mode is
 	// alertable: an absent series cannot distinguish "mode=off install" from
 	// "RBAC degrade silently turned the data plane off after a restart".
-	endpointcache.RegisterModeInfo(string(requestedMode), string(cfg.endpointSliceCacheMode))
+	endpointcache.RegisterModeInfo(string(requestedMode), string(cfg.endpointSliceCacheMode), cfg.endpointSliceEndpointLB)
 
 	// The router runs under a controller-runtime Manager for lifecycle
 	// consistency with the rest of the control plane and to host the HTTPTrigger
@@ -424,7 +424,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 			// while leaving the legacy resolver wired.
 			return fmt.Errorf("unhandled endpointslice cache mode %q", cfg.endpointSliceCacheMode)
 		}
-		logger.Info("endpointslice cache enabled", "mode", cfg.endpointSliceCacheMode)
+		logger.Info("endpointslice cache enabled", "mode", cfg.endpointSliceCacheMode, "endpoint_lb", cfg.endpointSliceEndpointLB)
 	}
 
 	// Build the route providers. The ingress provider is always registered (it

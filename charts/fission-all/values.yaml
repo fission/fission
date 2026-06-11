@@ -384,6 +384,10 @@ router:
   ##             for cold starts, capacity, and strict-mode functions. The
   ##             default since RFC-0002 phase 4.
   ##       off — never watch slices (the legacy executor-RPC data plane).
+  ## ALWAYS QUOTE the value ("on"/"off"): unquoted on/off are YAML 1.1
+  ## booleans, and an unquoted off coerces to false, which the template
+  ## treats as unset and silently DEFAULTS BACK TO "on" — the opposite of
+  ## the intent.
   ## The migration-era "shadow" mode was removed with the defaults flip.
   ## The poolmgr benefit additionally requires executor.functionServices.enabled.
   ## endpointLB additionally dials newdeploy/container pod IPs directly

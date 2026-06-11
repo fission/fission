@@ -58,10 +58,13 @@ func (w *GenericWebhook[T]) Default(_ context.Context, obj T) error {
 // ValidateCreate implements admission.Validator.
 func (w *GenericWebhook[T]) ValidateCreate(_ context.Context, obj T) (admission.Warnings, error) {
 	w.Logger.V(1).Info("validate create", "name", obj.GetName())
+	// Warnings are independent of Validator: a webhook may warn without
+	// rejecting anything, and gating them on Validator would silently drop
+	// the warnings such a webhook was written to emit.
 	if w.Validator != nil {
 		return w.warnings(obj), w.Validator.Validate(obj)
 	}
-	return nil, nil
+	return w.warnings(obj), nil
 }
 
 // ValidateUpdate implements admission.Validator.
@@ -70,7 +73,7 @@ func (w *GenericWebhook[T]) ValidateUpdate(_ context.Context, _, newObj T) (admi
 	if w.Validator != nil {
 		return w.warnings(newObj), w.Validator.Validate(newObj)
 	}
-	return nil, nil
+	return w.warnings(newObj), nil
 }
 
 func (w *GenericWebhook[T]) warnings(obj T) admission.Warnings {

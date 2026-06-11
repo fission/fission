@@ -212,6 +212,13 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 				return nil, ferror.MakeError(http.StatusInternalServerError, err.Error())
 			}
 			if roundTripper.serviceURL == nil {
+				// No current resolver returns Release with a nil SvcURL, but if
+				// one ever did, skipping the defer registration below on the
+				// FINAL iteration would leak the slot — return it here (the
+				// sync.Once makes a later duplicate release a no-op).
+				if roundTripper.release != nil {
+					roundTripper.release()
+				}
 				logger.Info("serviceURL is empty for function, retrying", "executingTimeout", executingTimeout)
 				time.Sleep(jitter(executingTimeout))
 				executingTimeout = executingTimeout * time.Duration(roundTripper.params.timeoutExponent)

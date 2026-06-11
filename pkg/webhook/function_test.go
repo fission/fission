@@ -201,3 +201,54 @@ func TestFunctionConcurrencyEnforcementWarning(t *testing.T) {
 		t.Fatalf("warning must name the bad value and the consequence, got %q", got[0])
 	}
 }
+
+// TestWarningsSurfaceThroughValidate pins the GenericWebhook plumbing: the
+// warning must reach the admission response through BOTH ValidateCreate and
+// ValidateUpdate (the realistic flow for the concurrency-enforcement warning
+// is `kubectl annotate` on an existing Function = update), and warnings must
+// surface even for a webhook with a Warner but no Validator.
+func TestWarningsSurfaceThroughValidate(t *testing.T) {
+	t.Parallel()
+	fnWith := func(val string) *v1.Function {
+		f := &v1.Function{}
+		f.Annotations = map[string]string{v1.ConcurrencyEnforcementAnnotation: val}
+		return f
+	}
+
+	t.Run("with validator", func(t *testing.T) {
+		t.Parallel()
+		w := &Function{}
+		w.Validator = w
+		w.Warner = w
+
+		warnings, err := w.ValidateCreate(t.Context(), fnWith("Strict"))
+		if err != nil {
+			t.Fatalf("create must be admitted (warning, not rejection): %v", err)
+		}
+		if len(warnings) != 1 {
+			t.Fatalf("ValidateCreate must surface the warning, got %v", warnings)
+		}
+
+		warnings, err = w.ValidateUpdate(t.Context(), nil, fnWith("STRICT"))
+		if err != nil {
+			t.Fatalf("update must be admitted: %v", err)
+		}
+		if len(warnings) != 1 {
+			t.Fatalf("ValidateUpdate must surface the warning, got %v", warnings)
+		}
+	})
+
+	t.Run("warner without validator", func(t *testing.T) {
+		t.Parallel()
+		w := &Function{}
+		w.Warner = w // no Validator: warn-only webhooks must still surface warnings
+
+		warnings, err := w.ValidateUpdate(t.Context(), nil, fnWith("Strict"))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(warnings) != 1 {
+			t.Fatalf("warnings must not be gated on Validator, got %v", warnings)
+		}
+	})
+}

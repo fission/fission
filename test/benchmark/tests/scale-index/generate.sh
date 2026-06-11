@@ -96,10 +96,12 @@ create)
     echo "created $COUNT services + slices"
     ;;
 churn)
-    # Rewrite COUNT random slices: flip one endpoint's readiness so the router
-    # rebuilds those entries (quarantine-clear + COW swap path under storm).
+    # Rewrite COUNT random slices (within TOTAL created, default 1000): flip
+    # one endpoint's readiness so the router rebuilds those entries
+    # (quarantine-clear + COW swap path under storm).
+    TOTAL="${TOTAL:-1000}"
     for _ in $(seq 1 "$COUNT"); do
-        i=$((RANDOM % 1000))
+        i=$((RANDOM % TOTAL))
         kubectl -n "$NS" patch endpointslice "fn-scale-${i}-1" --type=json \
             -p "[{\"op\":\"replace\",\"path\":\"/endpoints/0/conditions/ready\",\"value\":$( ((RANDOM % 2)) && echo true || echo false )}]" >/dev/null 2>&1 || true
     done

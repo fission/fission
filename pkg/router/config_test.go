@@ -93,10 +93,11 @@ func TestLoadRouterConfigHardFailures(t *testing.T) {
 	})
 }
 
-// TestLoadRouterConfigEndpointSliceMode locks the tri-state gate. The
-// load-bearing case is unset → off: that is the no-behavior-change guarantee
-// for every existing install (CI pins the gate explicitly, so a default
-// flipping would not be caught there).
+// TestLoadRouterConfigEndpointSliceMode locks the mode gate (off|on; shadow
+// rejected since the phase-4 flip). The load-bearing case is unset → off: the
+// no-behavior-change guarantee for raw-env deployments — the chart sets the
+// mode explicitly (defaulting on), so its installs are governed by values.yaml
+// instead.
 func TestLoadRouterConfigEndpointSliceMode(t *testing.T) {
 	cases := []struct {
 		value   string

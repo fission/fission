@@ -130,7 +130,12 @@ func (f *fallbackResolver) Resolve(ctx context.Context, fn *fv1.Function) (Resol
 func (f *fallbackResolver) resolveDeployBacked(ctx context.Context, fn *fv1.Function) (ResolvedEntry, error) {
 	if f.index.ReadyCount(fn.Namespace, fn.Name) > 0 {
 		entry, err := f.executor.Resolve(ctx, fn)
-		if err != nil || !f.endpointLB {
+		// The nil-SvcURL guard covers the throttler-follower race (Resolve can
+		// answer nil, nil): without it the LB entry would carry TapURL=nil and
+		// taps would silently key on the pod IP — starving newdeploy atime and
+		// inviting idle scale-down under live traffic. Returning the entry
+		// keeps the loud "serviceURL is empty, retrying" transport behavior.
+		if err != nil || !f.endpointLB || entry.SvcURL == nil {
 			return entry, err
 		}
 		// Endpoint LB: dial the least-outstanding ready pod directly,
@@ -141,10 +146,23 @@ func (f *fallbackResolver) resolveDeployBacked(ctx context.Context, fn *fv1.Func
 		// address the executor knows, not the pod IP. Any inadmissible state
 		// (e.g. every endpoint quarantined) keeps the VIP entry, which still
 		// works.
-		if ep, release, admit := f.index.Admit(fn.Namespace, fn.Name, math.MaxInt32); admit == endpointcache.Admitted {
-			endpointcache.RecordHit()
+		ep, release, admit := f.index.Admit(fn.Namespace, fn.Name, math.MaxInt32)
+		if admit == endpointcache.Admitted {
+			// Counted separately from hits: the Service entry above may have
+			// cost an executor RPC, so this is NOT a "zero-RPC" hit — it is an
+			// LB pick, and the dedicated counter is also the steady-state
+			// signal that the flag is actually doing something.
+			endpointcache.RecordEndpointLBPick()
 			return ResolvedEntry{SvcURL: ep.URL, TapURL: entry.SvcURL, FromCache: true, Release: release}, nil
 		}
+		// Inadmissible (all quarantined, no counted-ready endpoint, CAS
+		// contention): the VIP still works, but the degradation must be
+		// observable — a NoCountedReady here (slice endpoints without pod
+		// targetRefs) would otherwise leave the flag permanently, invisibly
+		// inert for this function.
+		f.logger.V(1).Info("endpoint LB inadmissible; dialing the Service VIP",
+			"function", fn.Name, "namespace", fn.Namespace, "reason", string(admit))
+		endpointcache.RecordFallback(string(admit))
 		return entry, nil
 	}
 	// Zero ready endpoints: scaled to zero (or never up). Bypass the address

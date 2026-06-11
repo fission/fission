@@ -45,7 +45,8 @@ Run against the phase-4 branch (defaults on) on the same kind setup; drivers: `r
 
 - Steady state, 30 VUs × 60s against one poolmgr function with `requestsPerPod=2`: **430,231 requests, 5,547 rps, 0.007% failures, p99 12.8ms.**
 - Every replica served from its own index (119k / 145k / 166k hits); misses ≈ 0; fallback reasons in single digits per replica; `effective=on` on all three.
-- Specialized pod count held at **10** mid-load — below the single-router ideal of 15 (`ceil(VUS/requestsPerPod)`) and far inside the documented worst case of ideal + (replicas−1)×requestsPerPod = 19. Per-replica admission under-admits rather than over-admits at this scale.
+- Specialized pod count held at **10** mid-load — below the single-router ideal of 15 (`ceil(VUS/requestsPerPod)`) and far inside the documented worst case of ideal + (replicas−1)×requestsPerPod = 19.
+Per-replica admission under-admits rather than over-admits at this scale.
 - A rolling router restart mid-load (345k-request run) cost **0.02% failures** total; old pods drain keep-alive connections gracefully.
 - Measurement note: per-replica counters reset on restart and keep-alive traffic stays pinned to draining pods, so counter assertions belong on steady-state phases only.
 

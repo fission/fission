@@ -6,6 +6,7 @@ package endpointcache
 
 import (
 	"errors"
+	"strconv"
 
 	"github.com/prometheus/client_golang/prometheus"
 
@@ -32,6 +33,14 @@ var (
 		Name: "fission_router_endpointcache_misses_total",
 		Help: "Requests with no ready endpoint in the EndpointSlice endpoint index.",
 	})
+	// lbPicks counts newdeploy/container requests dialed to a pod IP by the
+	// endpoint-LB path (NOT hits: the Service entry resolution may have cost
+	// an executor RPC). Doubles as the liveness signal that the endpointLB
+	// flag is active.
+	lbPicks = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "fission_router_endpointcache_endpointlb_picks_total",
+		Help: "Requests dialed directly to a pod IP by the endpoint-LB path (newdeploy/container).",
+	})
 	// quarantines counts endpoints quarantined after a dial failure. Aggregate
 	// fallback reasons only show when EVERY endpoint of a function is out;
 	// this counter makes partial quarantine (one bad pod among many) visible.
@@ -57,6 +66,9 @@ func RecordMiss() { misses.Inc() }
 // RecordFallback counts one executor fallback by reason.
 func RecordFallback(reason string) { fallbacks.WithLabelValues(reason).Inc() }
 
+// RecordEndpointLBPick counts one endpoint-LB pod-IP pick.
+func RecordEndpointLBPick() { lbPicks.Inc() }
+
 // RecordQuarantine counts one endpoint quarantine.
 func RecordQuarantine() { quarantines.Inc() }
 
@@ -64,11 +76,11 @@ func RecordQuarantine() { quarantines.Inc() }
 // effective endpointslice cache modes. Registered for EVERY mode (including
 // off) so a fail-soft degrade (e.g. missing RBAC flipping on→off at startup)
 // is alertable as requested != effective rather than as an absent series.
-func RegisterModeInfo(requested, effective string) {
+func RegisterModeInfo(requested, effective string, endpointLB bool) {
 	g := prometheus.NewGauge(prometheus.GaugeOpts{
 		Name:        "fission_router_endpointcache_mode",
-		Help:        "Always 1; labels carry the requested and effective EndpointSlice cache modes (off|on).",
-		ConstLabels: prometheus.Labels{"requested": requested, "effective": effective},
+		Help:        "Always 1; labels carry the requested and effective EndpointSlice cache modes (off|on) and whether endpoint LB is enabled.",
+		ConstLabels: prometheus.Labels{"requested": requested, "effective": effective, "endpoint_lb": strconv.FormatBool(endpointLB)},
 	})
 	g.Set(1)
 	// Tolerate re-registration (in-process test harnesses restart the router
@@ -96,4 +108,5 @@ func init() {
 	metrics.Registry.MustRegister(misses)
 	metrics.Registry.MustRegister(fallbacks)
 	metrics.Registry.MustRegister(quarantines)
+	metrics.Registry.MustRegister(lbPicks)
 }

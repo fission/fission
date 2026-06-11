@@ -321,7 +321,7 @@ Structural extractions ride the functional phase that motivates them; phases are
 4. **Phase 3 — warm-path cutover** (`mode=on`, default off).
    `fallbackResolver` wired as default; index admission live; strict-mode annotation honored; second `Tapper` implementation; `ensureCapacity` consumed; drain-aware reaping; newdeploy slice-driven invalidation + scale-from-zero detection; UnTap dropped for router-admitted traffic.
 5. **Phase 4 — defaults on + deletion** (pulled forward into the same release on verification evidence).
-   Flip `executor.functionServices.enabled=true` and `mode=on`; `endpointLB` ships default-off; one CI leg pins `mode=off` so the legacy path stays tested; delete now-dead code (shadow comparator, warm-path `functionServiceMap` usage, dead PoolCache admission arms) — earlier phases only add or move.
+   Flip `executor.functionServices.enabled=true` and `mode=on`; `endpointLB` ships default-off; one CI leg pins `mode=off` so the legacy path stays tested; delete now-dead code — as shipped, only the shadow comparator: the PoolCache admission arms and `functionServiceMap` survive because `mode=off`, strict-mode functions, and cold starts still drive them (see the deviation note in 0002-implementation-plan.md) — earlier phases only add or move.
 
 ## Verification
 

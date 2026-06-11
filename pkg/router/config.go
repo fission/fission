@@ -16,9 +16,10 @@ import (
 )
 
 // endpointSliceCacheMode selects how the router uses its EndpointSlice-fed
-// endpoint index (RFC-0002): off (never watch slices — today's behavior),
-//
-// on (the index is the warm-path address source; phase 3).
+// endpoint index (RFC-0002): off (never watch slices — the legacy
+// executor-RPC data plane) or on (the index is the warm-path address source;
+// the chart default since the phase-4 flip). The env-level default stays off:
+// unset means off, so raw-env deployments keep legacy behavior.
 type endpointSliceCacheMode string
 
 const (
@@ -169,8 +170,9 @@ func loadRouterConfig(logger logr.Logger) (routerConfig, error) {
 		endpointLB, err := strconv.ParseBool(raw)
 		if err != nil {
 			logger.Error(err, "failed to parse 'ROUTER_ENDPOINTSLICE_ENDPOINT_LB' - endpoint LB stays off", "value", raw)
+		} else {
+			cfg.endpointSliceEndpointLB = endpointLB
 		}
-		cfg.endpointSliceEndpointLB = endpointLB
 	}
 
 	switch mode := endpointSliceCacheMode(os.Getenv("ROUTER_ENDPOINTSLICE_CACHE_MODE")); mode {
