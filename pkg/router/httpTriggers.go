@@ -299,8 +299,9 @@ func (ts *HTTPTriggerSet) buildMuxes(ctx context.Context, fnTimeoutMap map[types
 		// resolve function reference
 		rr, err := ts.resolver.resolve(ctx, trigger)
 		if err != nil {
-			// Unresolvable function reference. Report the error via
-			// the trigger's status.
+			// Unresolvable function reference. NOTE: updateTriggerStatusFailed
+			// is still a stub (TODO below), so today this surfaces only in the
+			// router log, not on the trigger's status conditions.
 			go ts.updateTriggerStatusFailed(&trigger, err)
 
 			// Ignore this route and let it 404.

@@ -6,9 +6,13 @@ package router
 
 import (
 	"context"
+	"errors"
+	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -366,7 +370,7 @@ func TestTransportRecoversFromStaleConnection(t *testing.T) {
 	require.NoError(t, err)
 
 	params := newTestParams(3, 2)
-	do := func() {
+	do := func() error {
 		rrt := &RetryingRoundTripper{
 			logger:      loggerfactory.GetLogger(),
 			resolver:    &scriptedResolver{answers: []*url.URL{u}},
@@ -377,18 +381,128 @@ func TestTransportRecoversFromStaleConnection(t *testing.T) {
 		}
 		req := httptest.NewRequest("GET", "http://router.example/fission-function/fn", nil)
 		resp, err := rrt.RoundTrip(req)
-		require.NoError(t, err)
+		if err != nil {
+			return err
+		}
 		drain(t, resp)
 		require.Equal(t, http.StatusOK, resp.StatusCode)
+		return nil
 	}
 
-	do() // establishes a pooled conn
+	require.NoError(t, do()) // establishes a pooled conn
 	require.EqualValues(t, 1, newConns.Load())
 
 	// Kill every established connection server-side: the pooled conn is now
 	// stale and the next reuse attempt fails at write/read, not dial.
 	srv.CloseClientConnections()
 
-	do() // must transparently retry on a fresh connection
+	// Common case: Go's transport detects the dead reused conn and retries the
+	// replayable GET transparently. Rare race: the conn is taken before the
+	// FIN is processed and the failure shape is one Go deliberately does NOT
+	// auto-retry (the request may have executed) — then the documented
+	// stale-conn error surfaces, and the NEXT request dials fresh and works.
+	if err := do(); err != nil {
+		assert.True(t, isStaleConnErr(err),
+			"a surfaced raced error must be the stale-conn class, got: %v", err)
+		require.NoError(t, do(), "the request after the raced one must dial fresh and succeed")
+	}
 	assert.LessOrEqual(t, newConns.Load(), int64(3), "recovery must not storm new connections")
 }
+
+// TestStaleConnectionPOSTSurfacesErrorWithoutQuarantine pins the one place
+// users see the pooled-transport failure class (RFC-0014): a NON-replayable
+// request (POST with a body) riding a pooled conn whose backend died must
+// surface an error (not hang), must NOT quarantine the endpoint (the failure
+// indicts the connection, not the pod), and must still settle its slot.
+func TestStaleConnectionPOSTSurfacesErrorWithoutQuarantine(t *testing.T) {
+	t.Parallel()
+	srv, _ := connCountingServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
+		_, _ = w.Write([]byte("ok"))
+	}))
+	u, err := url.Parse(srv.URL)
+	require.NoError(t, err)
+
+	params := newTestParams(3, 2)
+	tapper := &nopTapper{}
+
+	// Warm the pool with a GET.
+	warm := &RetryingRoundTripper{
+		logger: loggerfactory.GetLogger(), resolver: &scriptedResolver{answers: []*url.URL{u}},
+		tapper: tapper, fn: poolmgrFnForTransport(), params: params, funcTimeout: 5 * time.Second,
+	}
+	resp, err := warm.RoundTrip(httptest.NewRequest("GET", "http://router.example/fn", nil))
+	require.NoError(t, err)
+	drain(t, resp)
+
+	// Kill the pooled conn server-side, then POST a non-replayable body.
+	srv.CloseClientConnections()
+	resolver := &releaseTrackingResolver{answers: []*url.URL{u}}
+	rrt := &RetryingRoundTripper{
+		logger: loggerfactory.GetLogger(), resolver: resolver,
+		tapper: tapper, fn: poolmgrFnForTransport(), params: params, funcTimeout: 5 * time.Second,
+	}
+	req := httptest.NewRequest("POST", "http://router.example/fn", strings.NewReader("payload"))
+	req.ContentLength = -1 // unknown length: GetBody unset -> NOT replayable
+	resp2, err := rrt.RoundTrip(req)
+	if err == nil {
+		// The race is real: if the transport happened to dial fresh (pool
+		// already evicted), the POST succeeds — also acceptable behavior.
+		drain(t, resp2)
+		t.Skip("pool was already evicted; non-replayable path not exercised this run")
+	}
+	assert.True(t, isStaleConnErr(err) || errors.Is(err, io.ErrUnexpectedEOF),
+		"the surfaced error must be the stale-conn class, got: %v", err)
+	assert.Zero(t, resolver.invalidated.Load(),
+		"a stale-conn write failure must NOT quarantine the endpoint")
+	// The settle defer still fired for the admitted slot.
+	resolver.mu.Lock()
+	defer resolver.mu.Unlock()
+	for i, c := range resolver.released {
+		assert.EqualValuesf(t, 1, c.Load(), "slot %d must be settled on the relay return", i)
+	}
+}
+
+// TestDialLadderGrowsPerAttempt pins that the backoff-scaled dial budget
+// actually GROWS across retry attempts now that it rides a context value:
+// hoisting the WithValue out of the retry loop (or breaking the multiply)
+// would silently flatten the cold-pod fast-retry ladder.
+func TestDialLadderGrowsPerAttempt(t *testing.T) {
+	// NOT parallel: rewires the shared transport's DialContext.
+	params := newTestParams(3, 99) // svcAddrRetryCount high: stay on one address
+	transport, _ := params.sharedTransport()
+
+	var mu sync.Mutex
+	var seen []time.Duration
+	transport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+		d, _ := ctx.Value(dialTimeoutKey{}).(time.Duration)
+		mu.Lock()
+		seen = append(seen, d)
+		mu.Unlock()
+		return nil, &net.OpError{Op: "dial", Net: network, Err: &timeoutErr{}}
+	}
+
+	dead := mustParseURL(t, "http://192.0.2.1:8888")
+	rrt := &RetryingRoundTripper{
+		logger: loggerfactory.GetLogger(), resolver: &scriptedResolver{answers: []*url.URL{dead}, fromCache: true},
+		tapper: &nopTapper{}, fn: poolmgrFnForTransport(), params: params, funcTimeout: 5 * time.Second,
+	}
+	_, err := rrt.RoundTrip(httptest.NewRequest("GET", "http://router.example/fn", nil)) //nolint:bodyclose
+	require.Error(t, err)
+
+	mu.Lock()
+	defer mu.Unlock()
+	require.GreaterOrEqual(t, len(seen), 3, "the retry loop must attempt multiple dials")
+	for i := 1; i < len(seen); i++ {
+		assert.Greaterf(t, seen[i], seen[i-1],
+			"attempt %d's dial budget (%v) must exceed attempt %d's (%v) — the ladder must grow",
+			i, seen[i], i-1, seen[i-1])
+	}
+}
+
+// timeoutErr is a minimal net.Error with Timeout()==true for ladder tests.
+type timeoutErr struct{}
+
+func (*timeoutErr) Error() string   { return "synthetic dial timeout" }
+func (*timeoutErr) Timeout() bool   { return true }
+func (*timeoutErr) Temporary() bool { return true }

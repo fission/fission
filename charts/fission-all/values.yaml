@@ -432,8 +432,7 @@ router:
     disableKeepAlive: false
 
     ## maxIdleConnsPerHost bounds the router's pooled idle connections per
-    ## function address (each poolmgr pod is its own address). 0 uses the
-    ## built-in default (32).
+    ## function address (each poolmgr pod is its own address).
     ##
     maxIdleConnsPerHost: 32
 

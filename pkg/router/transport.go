@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -143,7 +144,7 @@ func (roundTripper *RetryingRoundTripper) settle(release func(), tapURL *url.URL
 //     for executor-cached ones) and retries with exponential back-off, up to
 //     maxRetries.
 //   - Any non-dial response or error is relayed to the caller as-is, without
-//     retrying; a resolver error surfaces as 502 via the reverse proxy's error
+//     retrying; a resolver error surfaces as 500 via the reverse proxy's error
 //     handler (429 from ensureCapacity passes through unchanged).
 func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	ctx := req.Context()
@@ -321,12 +322,23 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 
 		// if transport.RoundTrip returns a non-network dial error (e.g. "context canceled"), then relay it back to user
 		if !isNetDialErr {
-			// A canceled context is a client disconnect (the caller went away
-			// or its deadline fired), not a server-side error — log it quietly
-			// so client churn doesn't flood the router log at Error level.
-			if errors.Is(err, context.Canceled) {
+			switch {
+			case errors.Is(err, context.Canceled):
+				// A canceled context is a client disconnect (the caller went
+				// away or its deadline fired), not a server-side error — log it
+				// quietly so client churn doesn't flood the log at Error level.
 				logger.V(1).Info("request context canceled by client", "url", req.URL.Host)
-			} else {
+			case isStaleConnErr(err):
+				// A pooled connection failed mid-request (write/read on a conn
+				// whose pod was reaped between requests — possible since the
+				// shared transport reuses connections). Replayable requests
+				// were already retried inside the transport; only
+				// non-replayable ones surface here. Deliberately NOT
+				// quarantined: the failure indicts the connection, not the
+				// (possibly fine) pod, and the next attempt dials fresh.
+				logger.Info("pooled connection failed mid-request; pod may have been reaped",
+					"url", req.URL.Host, "error", err.Error())
+			default:
 				logger.Error(err, "encountered non-network dial error")
 			}
 			return resp, err
@@ -386,6 +398,27 @@ func jitter(d time.Duration) time.Duration {
 	return d + time.Duration(rand.Float64()*0.2*float64(d))
 }
 
+// isStaleConnErr reports whether err is the reused-pooled-connection failure
+// class: a write/read error on a conn whose backend died between requests, or
+// net/http's "server closed idle connection". Dial errors are excluded — they
+// have their own quarantine/ladder handling.
+func isStaleConnErr(err error) bool {
+	var opErr *net.OpError
+	if errors.As(err, &opErr) && (opErr.Op == "write" || opErr.Op == "read") {
+		return true
+	}
+	// A bare EOF on a proxied exchange means the peer closed mid-request —
+	// either a pooled conn racing a pod reap (Go's auto-retry covers the
+	// nothing-written case but deliberately not a possibly-executed request)
+	// or the pod dying mid-response. Same operator story either way.
+	if errors.Is(err, io.EOF) {
+		return true
+	}
+	// net/http's errServerClosedIdle is an unexported errors.New; the string
+	// is its only stable surface.
+	return err != nil && strings.Contains(err.Error(), "server closed idle connection")
+}
+
 // dialTimeoutKey carries the per-attempt dial timeout through the request
 // context into the shared transport's DialContext. The backoff-scaled
 // executingTimeout ladder is NOT just a timeout — it is the fast-retry
@@ -402,6 +435,12 @@ const (
 	// reap window (120s) and aligned with the RFC-0002 drain grace floor
 	// (30s), bounding how long a pooled connection can outlive its pod.
 	transportIdleConnTimeout = 30 * time.Second
+	// defaultDialTimeout caps a dial whose request context carries no
+	// dialTimeoutKey. RoundTrip always sets the key; this is the defensive
+	// bound for any future caller that forgets — without it, a streaming
+	// request (whose per-attempt context has no deadline) could hang a dial
+	// against a blackholed address indefinitely.
+	defaultDialTimeout = 30 * time.Second
 )
 
 // sharedTransport returns the process-wide pooled transport (and its
@@ -425,11 +464,13 @@ func (p *tsRoundTripperParams) sharedTransport() (*http.Transport, http.RoundTri
 		p.transport = &http.Transport{
 			Proxy: http.ProxyFromEnvironment,
 			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-				if d, ok := ctx.Value(dialTimeoutKey{}).(time.Duration); ok && d > 0 {
-					var cancel context.CancelFunc
-					ctx, cancel = context.WithTimeout(ctx, d)
-					defer cancel()
+				d, ok := ctx.Value(dialTimeoutKey{}).(time.Duration)
+				if !ok || d <= 0 {
+					d = defaultDialTimeout
 				}
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithTimeout(ctx, d)
+				defer cancel()
 				return dialer.DialContext(ctx, network, addr)
 			},
 			MaxIdleConns:          1024,

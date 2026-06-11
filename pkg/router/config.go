@@ -171,9 +171,12 @@ func loadRouterConfig(logger logr.Logger) (routerConfig, error) {
 	// the built-in default — a sizing knob, not a correctness gate.
 	if raw := os.Getenv("ROUTER_ROUND_TRIP_MAX_IDLE_CONNS_PER_HOST"); raw != "" {
 		perHost, err := strconv.Atoi(raw)
-		if err != nil || perHost < 0 {
+		switch {
+		case err != nil:
 			logger.Error(err, "failed to parse 'ROUTER_ROUND_TRIP_MAX_IDLE_CONNS_PER_HOST' - using the default", "value", raw)
-		} else {
+		case perHost < 0:
+			logger.Error(nil, "'ROUTER_ROUND_TRIP_MAX_IDLE_CONNS_PER_HOST' must not be negative - using the default", "value", raw)
+		default:
 			cfg.maxIdleConnsPerHost = perHost
 		}
 	}

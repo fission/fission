@@ -125,3 +125,28 @@ func TestLoadRouterConfigEndpointSliceMode(t *testing.T) {
 		})
 	}
 }
+
+// TestLoadRouterConfigMaxIdleConnsPerHost locks the RFC-0014 pool-sizing
+// knob's soft-fail contract: unset/garbage/negative keep the built-in default
+// (0 in cfg; resolved to defaultMaxIdleConnsPerHost at transport build).
+func TestLoadRouterConfigMaxIdleConnsPerHost(t *testing.T) {
+	cases := []struct {
+		value string
+		want  int
+	}{
+		{value: "", want: 0},
+		{value: "64", want: 64},
+		{value: "0", want: 0},
+		{value: "not-a-number", want: 0}, // soft-fail: logged, default kept
+		{value: "-5", want: 0},           // negative rejected, default kept
+	}
+	for _, tc := range cases {
+		t.Run("value="+tc.value, func(t *testing.T) {
+			setRequiredRouterEnv(t)
+			t.Setenv("ROUTER_ROUND_TRIP_MAX_IDLE_CONNS_PER_HOST", tc.value)
+			cfg, err := loadRouterConfig(logr.Discard())
+			require.NoError(t, err, "the knob must never hard-fail startup")
+			assert.Equal(t, tc.want, cfg.maxIdleConnsPerHost)
+		})
+	}
+}
