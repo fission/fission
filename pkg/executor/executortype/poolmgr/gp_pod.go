@@ -110,7 +110,11 @@ func (gp *GenericPool) choosePod(ctx context.Context, newLabels map[string]strin
 			continue
 		}
 		if !utils.IsReadyPod(pod) {
-			logger.Error(nil, "pod not ready, pod will be checked again", "key", key, "delay", expoDelay)
+			// Normal transient: the generic pod is still warming up. It is
+			// requeued with exponential backoff and re-checked, so this is an
+			// expected retry, not an error (it was logged at Error with a nil
+			// error, which flooded the executor log during pool warm-up).
+			logger.V(1).Info("pod not ready, pod will be checked again", "key", key, "delay", expoDelay)
 			gp.readyPodQueue.Done(key)
 			gp.readyPodQueue.AddAfter(key, expoDelay)
 			expoDelay *= 2

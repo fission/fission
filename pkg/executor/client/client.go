@@ -268,6 +268,18 @@ func (c *client) flushTaps(urls map[string]TapServiceRequest) {
 		c.tapFailures.Store(0)
 		return
 	}
+	// A 404 is routine churn, not a liveness failure: it means some tapped
+	// addresses already expired/were deleted on the executor side (the
+	// executor logs this at V(1) for the same reason). The executor can't be
+	// about to wrongly reap a pod it no longer tracks, so a NotFound must NOT
+	// count toward the "taps failing, serving pods at risk" escalation —
+	// otherwise normal function churn trips a misleading Error alarm. Only
+	// genuine failures (unreachable executor, timeout, 5xx) escalate.
+	if ferror.IsNotFound(err) {
+		c.tapFailures.Store(0)
+		c.logger.V(1).Info("tap flush skipped expired entries", "error", err.Error())
+		return
+	}
 	tapFlushErrors.Inc()
 	if failures := c.tapFailures.Add(1); failures >= tapFailureEscalation {
 		c.logger.Error(err, "tap flush failing persistently; idle reaper may reap serving pods",
