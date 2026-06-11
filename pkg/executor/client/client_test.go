@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/hashicorp/go-retryablehttp"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -71,11 +72,18 @@ func TestFlushTapsNotFoundDoesNotEscalate(t *testing.T) {
 	c := newTestClient(sink, srv.URL)
 	batch := map[string]TapServiceRequest{"u": {ServiceURL: "http://10.0.0.1:8888"}}
 
-	for range tapFailureEscalation + 3 {
+	before := testutil.ToFloat64(tapFlushNotFound)
+	rounds := tapFailureEscalation + 3
+	for range rounds {
 		c.flushTaps(batch)
 	}
 	assert.Zero(t, sink.errors(), "routine 404 churn must not escalate to Error")
 	assert.Zero(t, c.tapFailures.Load(), "a 404 must reset the failure counter")
+	// The 404s stay observable via a distinct counter, so a SUSTAINED rate
+	// (an index/registration drift, not churn) is still visible without
+	// tripping the failure alarm.
+	assert.Equal(t, float64(rounds), testutil.ToFloat64(tapFlushNotFound)-before,
+		"each 404 flush must increment the NotFound counter")
 }
 
 // TestFlushTapsGenuineFailureEscalates is the other half: a real failure

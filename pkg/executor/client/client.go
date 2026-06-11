@@ -41,8 +41,21 @@ var tapFlushErrors = prometheus.NewCounter(prometheus.CounterOpts{
 	Help: "Failed batched tap flushes from the router to the executor.",
 })
 
+// tapFlushNotFound counts tap flushes the executor answered 404 — every
+// tapped address had expired or was unknown. Occasional increments are
+// routine churn; a sustained rate means the router is tapping addresses the
+// executor genuinely should know (an index/registration drift), which the
+// idle reaper would otherwise silently let age out. Kept distinct from
+// tapFlushErrors so churn doesn't trip the failure alarm while a persistent
+// 404 rate stays observable.
+var tapFlushNotFound = prometheus.NewCounter(prometheus.CounterOpts{
+	Name: "fission_router_tap_flush_notfound_total",
+	Help: "Batched tap flushes the executor answered 404 (expired/unknown addresses).",
+})
+
 func init() {
 	metrics.Registry.MustRegister(tapFlushErrors)
+	metrics.Registry.MustRegister(tapFlushNotFound)
 }
 
 type (
@@ -277,6 +290,7 @@ func (c *client) flushTaps(urls map[string]TapServiceRequest) {
 	// genuine failures (unreachable executor, timeout, 5xx) escalate.
 	if ferror.IsNotFound(err) {
 		c.tapFailures.Store(0)
+		tapFlushNotFound.Inc()
 		c.logger.V(1).Info("tap flush skipped expired entries", "error", err.Error())
 		return
 	}
