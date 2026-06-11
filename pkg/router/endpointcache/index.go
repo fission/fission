@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	discoveryv1 "k8s.io/api/discovery/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -23,6 +24,16 @@ import (
 )
 
 const shardCount = 64
+
+// DefaultQuarantineTTL bounds how long a dial-failed endpoint stays
+// unadmissible when NO slice event arrives to clear it. Slice events stay the
+// primary (fast) lift; the TTL is the backstop for a steady cluster — without
+// it, one transient dial error against a function's only endpoint while the
+// executor is down (no slice events, no pod churn) pins the function to the
+// executor fallback until the executor returns, which is exactly the outage
+// mode the warm path exists to survive. After expiry the endpoint is re-tried;
+// a genuinely dead pod just gets re-quarantined by the next dial failure.
+const DefaultQuarantineTTL = 30 * time.Second
 
 type (
 	// FnKey identifies a function by its CR coordinates (the labels mirrored
@@ -57,6 +68,8 @@ type (
 		shards [shardCount]indexShard
 		// size tracks the number of functions with at least one slice.
 		size atomic.Int64
+		// quarantineTTL is DefaultQuarantineTTL unless narrowed in tests.
+		quarantineTTL time.Duration
 	}
 
 	indexShard struct {
@@ -74,12 +87,14 @@ type (
 		// counters holds the per-pod in-flight counters, keyed by pod UID so
 		// they survive slice-event rebuilds; pruned with the endpoints.
 		counters map[types.UID]*atomic.Int64
-		// quarantined holds addresses the transport reported dial failures
-		// for; skipped by Admit until the next slice event for this function
-		// clears them (the slice controller removes dead pods promptly,
-		// independent of executor health). Copy-on-write (like eps) so Admit
-		// reads it lock-free; writes happen under mu.
-		quarantined atomic.Pointer[map[string]struct{}]
+		// quarantined maps addresses the transport reported dial failures for
+		// to their quarantine expiry; skipped by Admit until the next slice
+		// event for this function clears them (the slice controller removes
+		// dead pods promptly, independent of executor health) or the TTL
+		// expires (the backstop when no slice event will come — see
+		// DefaultQuarantineTTL). Copy-on-write (like eps) so Admit reads it
+		// lock-free; writes happen under mu.
+		quarantined atomic.Pointer[map[string]time.Time]
 		// eps is the merged endpoint list, swapped copy-on-write. Hot-path
 		// readers load it without taking mu.
 		eps atomic.Pointer[[]Endpoint]
@@ -88,7 +103,7 @@ type (
 
 // NewIndex returns an empty endpoint index.
 func NewIndex() *Index {
-	ix := &Index{}
+	ix := &Index{quarantineTTL: DefaultQuarantineTTL}
 	for i := range ix.shards {
 		ix.shards[i].m = make(map[FnKey]*fnEntry)
 	}
@@ -345,6 +360,10 @@ func (ix *Index) Admit(namespace, name string, requestsPerPod int) (Endpoint, fu
 	}
 
 	quarantined := e.quarantined.Load()
+	var now time.Time
+	if quarantined != nil {
+		now = time.Now()
+	}
 
 	// Least-outstanding selection with a bounded CAS retry: the snapshot is
 	// immutable, only the counters move.
@@ -360,7 +379,7 @@ func (ix *Index) Admit(namespace, name string, requestsPerPod int) (Endpoint, fu
 			}
 			counted++
 			if quarantined != nil {
-				if _, bad := (*quarantined)[ep.Address]; bad {
+				if expiry, bad := (*quarantined)[ep.Address]; bad && now.Before(expiry) {
 					quarantinedN++
 					continue
 				}
@@ -397,10 +416,11 @@ func (ix *Index) Admit(namespace, name string, requestsPerPod int) (Endpoint, fu
 }
 
 // Quarantine marks an address unadmissible until the next slice event for the
-// function. The transport calls it on the FIRST dial failure of an
-// index-admitted endpoint (re-resolving would just re-admit the same dead
-// pod); only the legacy executor-resolved path climbs a retry ladder before
-// invalidating. Each new quarantine is counted in
+// function or the quarantine TTL expires, whichever comes first. The transport
+// calls it on the FIRST dial failure of an index-admitted endpoint
+// (re-resolving would just re-admit the same dead pod); only the legacy
+// executor-resolved path climbs a retry ladder before invalidating. Each new
+// (or expired-and-renewed) quarantine is counted in
 // fission_router_endpointcache_quarantines_total.
 func (ix *Index) Quarantine(namespace, name, address string) {
 	key := FnKey{Namespace: namespace, Name: name}
@@ -411,23 +431,28 @@ func (ix *Index) Quarantine(namespace, name, address string) {
 	if !ok {
 		return
 	}
+	now := time.Now()
 	e.mu.Lock()
 	cur := e.quarantined.Load()
 	if cur != nil {
-		if _, already := (*cur)[address]; already {
+		if expiry, already := (*cur)[address]; already && now.Before(expiry) {
 			// Idempotent: a dead-pod storm quarantines the same address from
 			// many in-flight requests — only the first copy-and-store matters.
 			e.mu.Unlock()
 			return
 		}
 	}
-	next := make(map[string]struct{})
+	next := make(map[string]time.Time)
 	if cur != nil {
-		for a := range *cur {
-			next[a] = struct{}{}
+		// Copy only live entries: expired quarantines fall away here instead
+		// of accumulating across the entry's lifetime.
+		for a, expiry := range *cur {
+			if now.Before(expiry) {
+				next[a] = expiry
+			}
 		}
 	}
-	next[address] = struct{}{}
+	next[address] = now.Add(ix.quarantineTTL)
 	e.quarantined.Store(&next)
 	e.mu.Unlock()
 	RecordQuarantine()

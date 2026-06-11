@@ -9,6 +9,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -259,6 +260,32 @@ func TestAdmit(t *testing.T) {
 		_, release, result = ix.Admit("default", "fn-a", 1)
 		assert.Equal(t, Admitted, result)
 		release()
+	})
+
+	t.Run("quarantine expires after the TTL without a slice event", func(t *testing.T) {
+		t.Parallel()
+		ix := NewIndex()
+		ix.quarantineTTL = 50 * time.Millisecond
+		ix.ApplySlice(slice("s1", "fn-a", "default", 8888, "10.0.0.1"))
+
+		// The CI-observed outage mode: the function's ONLY endpoint gets
+		// quarantined while the executor is down, so no slice event will ever
+		// arrive to lift it. The TTL is the self-heal.
+		ix.Quarantine("default", "fn-a", "10.0.0.1:8888")
+		_, _, result := ix.Admit("default", "fn-a", 1)
+		require.Equal(t, AllQuarantined, result)
+
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			_, release, result := ix.Admit("default", "fn-a", 1)
+			if assert.Equal(c, Admitted, result, "quarantine must expire after the TTL") {
+				release()
+			}
+		}, 2*time.Second, 10*time.Millisecond)
+
+		// A dead pod is simply re-quarantined by the next dial failure.
+		ix.Quarantine("default", "fn-a", "10.0.0.1:8888")
+		_, _, result = ix.Admit("default", "fn-a", 1)
+		assert.Equal(t, AllQuarantined, result)
 	})
 
 	t.Run("not-ready endpoints are never admitted", func(t *testing.T) {
