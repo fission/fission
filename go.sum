@@ -321,8 +321,8 @@ github.com/json-iterator/go v1.1.12 h1:PV8peI4a0ysnczrg+LtxykD8LfKY9ML6u2jnxaEnr
 github.com/json-iterator/go v1.1.12/go.mod h1:e30LSqwooZae/UwlEbR2852Gd8hjQvJoHmT4TnhNGBo=
 github.com/jstemmer/go-junit-report v0.0.0-20190106144839-af01ea7f8024/go.mod h1:6v2b51hI/fHJwM22ozAgKL4VKDeJcHhJFhtBdhmNjmU=
 github.com/jstemmer/go-junit-report v0.9.1/go.mod h1:Brl9GWCQeLvo8nXZwPNNblvFj/XSXhF0NWZEnDohbsk=
-github.com/kedacore/keda/v2 v2.20.0 h1:nPKQL9iKsPpoyq7BftlBzJiQzb2LdKHiqBIEG6ju3bk=
-github.com/kedacore/keda/v2 v2.20.0/go.mod h1:wrV1MP6buZQ1S5/J/R7UyBeJr857x92E43LADVoSajs=
+github.com/kedacore/keda/v2 v2.20.1 h1:0Bb2zX/s+RSPtU2W+/Jk24A/aFl8MO79UuU0C4lA8ts=
+github.com/kedacore/keda/v2 v2.20.1/go.mod h1:wrV1MP6buZQ1S5/J/R7UyBeJr857x92E43LADVoSajs=
 github.com/kevinburke/ssh_config v1.2.0 h1:x584FjTGwHzMwvHx18PXxbBVzfnxogHaAReU4gf13a4=
 github.com/kevinburke/ssh_config v1.2.0/go.mod h1:CT57kijsi8u/K/BOFA39wgDQJ9CxiF4nAY/ojJ6r6mM=
 github.com/kisielk/gotool v1.0.0/go.mod h1:XhKaO+MFFWcvkIS/tQcRk01m1F5IRFswLeQ+oQHNcck=

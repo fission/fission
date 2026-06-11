@@ -22,7 +22,7 @@ require (
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674
 	github.com/hashicorp/go-retryablehttp v0.7.8
 	github.com/influxdata/influxdb v1.12.4
-	github.com/kedacore/keda/v2 v2.20.0
+	github.com/kedacore/keda/v2 v2.20.1
 	github.com/mholt/archives v0.1.5
 	github.com/minio/minio-go/v7 v7.2.0
 	github.com/modelcontextprotocol/go-sdk v1.6.1
