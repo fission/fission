@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -128,4 +129,47 @@ func TestResolverFromExecutorFallsBackToSnapshot(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, exec.gotFn)
 	assert.Equal(t, "pkg-v1", exec.gotFn.Spec.Package.PackageRef.Name)
+}
+
+// TestPrecomputedPolicyParity pins the RFC-0014 hoist: the policy looked up
+// from the build-time map must equal what resolveProxyPolicy computes per
+// request — including the canary case where the backend (and so the policy)
+// is selected per request by UID.
+func TestPrecomputedPolicyParity(t *testing.T) {
+	t.Parallel()
+	classic := fnWithPkg("rv1", "pkg1")
+	classic.ObjectMeta.UID = "uid-classic"
+	stream := fnWithPkg("rv2", "pkg2")
+	stream.ObjectMeta.UID = "uid-stream"
+	stream.ObjectMeta.Name = "fn-stream"
+	stream.Spec.Streaming = &fv1.StreamingConfig{IdleTimeoutSeconds: 7}
+
+	fns := map[string]*fv1.Function{classic.Name: classic, stream.Name: stream}
+	timeouts := map[k8stypes.UID]int{classic.GetUID(): 42} // stream falls to default
+	const idleDefault = 33 * time.Second
+
+	policies := precomputePolicies(fns, timeouts, idleDefault)
+	require.Len(t, policies, 2)
+
+	for _, fn := range fns {
+		fnTimeout := timeouts[fn.GetUID()]
+		if fnTimeout == 0 {
+			fnTimeout = fv1.DEFAULT_FUNCTION_TIMEOUT
+		}
+		want := resolveProxyPolicy(fn, time.Duration(fnTimeout)*time.Second, idleDefault)
+		assert.Equal(t, want, policies[fn.GetUID()], "hoisted policy must match per-request computation for %s", fn.Name)
+	}
+
+	// The handler-side lookup helper returns the hoisted entry, and falls back
+	// to direct computation for handlers built without the map (test harnesses).
+	fh := &functionHandler{
+		tsRoundTripperParams: &tsRoundTripperParams{streamIdleDefault: idleDefault},
+		policyByUID:          policies,
+	}
+	assert.Equal(t, policies[stream.GetUID()], fh.proxyPolicyFor(stream, time.Duration(fv1.DEFAULT_FUNCTION_TIMEOUT)*time.Second))
+	bare := &functionHandler{tsRoundTripperParams: &tsRoundTripperParams{streamIdleDefault: idleDefault}}
+	assert.Equal(t,
+		resolveProxyPolicy(classic, 42*time.Second, idleDefault),
+		bare.proxyPolicyFor(classic, 42*time.Second),
+		"missing map must fall back to direct computation")
 }

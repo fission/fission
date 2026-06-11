@@ -17,6 +17,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	k8stypes "k8s.io/apimachinery/pkg/types"
+
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
 
@@ -132,3 +135,53 @@ func BenchmarkRoundTripWarm(b *testing.B) {
 		resp.Body.Close()
 	}
 }
+
+// benchHandler builds a functionHandler against upstream; hoisted toggles the
+// RFC-0014 phase-2 precomputation (the fallback path is the pre-hoist
+// behavior, so the two benchmarks compare old vs new in one binary).
+func benchHandler(b *testing.B, upstream *url.URL, hoisted bool) functionHandler {
+	logger := loggerfactory.GetLogger()
+	fn := poolmgrFnForTransport()
+	params := newTestParams(3, 2)
+	fh := functionHandler{
+		logger:               logger,
+		resolver:             &scriptedResolver{answers: []*url.URL{upstream}, fromCache: false},
+		tapper:               &nopTapper{},
+		function:             fn,
+		tsRoundTripperParams: params,
+		functionTimeoutMap:   map[k8stypes.UID]int{},
+	}
+	if hoisted {
+		fh.rtLogger = logger.WithName("roundtripper")
+		fh.policyByUID = precomputePolicies(map[string]*fv1.Function{fn.Name: fn}, fh.functionTimeoutMap, params.streamIdleDefault)
+	}
+	return fh
+}
+
+func benchProxyHandler(b *testing.B, hoisted bool) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer srv.Close()
+	u, err := url.Parse(srv.URL)
+	if err != nil {
+		b.Fatal(err)
+	}
+	fh := benchHandler(b, u, hoisted)
+
+	b.ReportAllocs()
+	for b.Loop() {
+		req := httptest.NewRequest("GET", "http://router.example/fn", nil)
+		rec := httptest.NewRecorder()
+		fh.handler(rec, req)
+		if rec.Code != http.StatusOK {
+			b.Fatalf("unexpected status %d", rec.Code)
+		}
+	}
+}
+
+// BenchmarkProxyHandlerHoisted measures the full handler path with the
+// phase-2 precomputed logger/policy; BenchmarkProxyHandlerPreHoist exercises
+// the fallback (per-request computation) path for comparison.
+func BenchmarkProxyHandlerHoisted(b *testing.B)  { benchProxyHandler(b, true) }
+func BenchmarkProxyHandlerPreHoist(b *testing.B) { benchProxyHandler(b, false) }

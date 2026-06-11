@@ -35,6 +35,30 @@ type functionHandler struct {
 	tsRoundTripperParams     *tsRoundTripperParams
 	isDebugEnv               bool
 	functionTimeoutMap       map[k8stypes.UID]int
+	// Hoisted per-route state (RFC-0014): computed once at mux build instead
+	// of per request. rtLogger is the round tripper's named logger;
+	// policyByUID holds the resolved proxy policy per backend function (the
+	// canary path selects the backend per request, hence per-UID).
+	rtLogger    logr.Logger
+	policyByUID map[k8stypes.UID]proxyPolicy
+}
+
+// proxyPolicyFor returns the hoisted policy for fn, computing it on the spot
+// only when the route was built without a precomputed map (test harnesses).
+func (fh *functionHandler) proxyPolicyFor(fn *fv1.Function, fnTimeout time.Duration) proxyPolicy {
+	if p, ok := fh.policyByUID[fn.GetUID()]; ok {
+		return p
+	}
+	return resolveProxyPolicy(fn, fnTimeout, fh.tsRoundTripperParams.streamIdleDefault)
+}
+
+// roundTripperLogger returns the hoisted per-route logger, falling back to
+// deriving it for handlers constructed without one (test harnesses).
+func (fh *functionHandler) roundTripperLogger() logr.Logger {
+	if fh.rtLogger.GetSink() != nil {
+		return fh.rtLogger
+	}
+	return fh.logger.WithName("roundtripper")
 }
 
 func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *http.Request) {
@@ -70,9 +94,7 @@ func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *h
 		fnTimeout = fv1.DEFAULT_FUNCTION_TIMEOUT
 	}
 
-	policy := resolveProxyPolicy(fh.function,
-		time.Duration(fnTimeout)*time.Second,
-		fh.tsRoundTripperParams.streamIdleDefault)
+	policy := fh.proxyPolicyFor(fh.function, time.Duration(fnTimeout)*time.Second)
 
 	// Streaming: scope the request to a max-duration ceiling and an idle
 	// Watchdog (see setupStreamContext). Classic path: the request context is
@@ -86,7 +108,7 @@ func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *h
 	}
 
 	rrt := &RetryingRoundTripper{
-		logger:      fh.logger.WithName("roundtripper"),
+		logger:      fh.roundTripperLogger(),
 		resolver:    fh.resolver,
 		tapper:      fh.tapper,
 		fn:          fh.function,
