@@ -236,11 +236,13 @@ executor:
   ## functionServices opts the pool manager into creating a headless selector
   ## Service per invoked function (RFC-0002 EndpointSlice-native data plane),
   ## so the built-in EndpointSlice controller publishes the function's
-  ## specialized pods for the router's slice-fed endpoint index. Off by
-  ## default; inert without the router-side endpointSliceCache mode.
+  ## specialized pods for the router's slice-fed endpoint index.
+  ## On by default since RFC-0002 phase 4; set false to fall back to the
+  ## legacy executor-RPC-only data plane. Inert without the router-side
+  ## endpointSliceCache mode.
   ##
   functionServices:
-    enabled: false
+    enabled: true
   ## specializationConcurrency bounds concurrently running specializations in
   ## the executor (EXECUTOR_SPECIALIZATION_CONCURRENCY). 0 keeps the
   ## historical unbounded behavior — and is the recommended setting: the bound
@@ -378,16 +380,19 @@ router:
   unTapServiceTimeout: 3600s
   ## endpointSliceCache gates the router's EndpointSlice-fed endpoint index
   ## (RFC-0002 EndpointSlice-native data plane).
-  ## mode: off    — never watch slices (historical behavior).
-  ##       shadow — watch slices and compare against executor answers
-  ##                (fission_router_endpointcache_shadow_total); routing is
-  ##                unchanged. The recommended burn-in before "on".
-  ##       on     — the index serves the warm path; the executor is called only
-  ##                for cold starts, capacity, and strict-mode functions.
+  ## mode: on  — the index serves the warm path; the executor is called only
+  ##             for cold starts, capacity, and strict-mode functions. The
+  ##             default since RFC-0002 phase 4.
+  ##       off — never watch slices (the legacy executor-RPC data plane).
+  ## The migration-era "shadow" mode was removed with the defaults flip.
   ## The poolmgr benefit additionally requires executor.functionServices.enabled.
+  ## endpointLB additionally dials newdeploy/container pod IPs directly
+  ## (least-outstanding across ready endpoints) instead of the Service VIP;
+  ## off by default.
   ##
   endpointSliceCache:
-    mode: off
+    mode: "on"
+    endpointLB: false
   ## displayAccessLog display endpoing access logs
   ## Please be aware of enabling logging endpoint access log, it increases
   ## router resource utilization when under heavy workloads.

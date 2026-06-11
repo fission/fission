@@ -110,7 +110,7 @@ func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *h
 			go func() {
 				fh.collectFunctionMetric(start, rrt, request, resp)
 				if rrt.urlFromCache {
-					fh.tapper.Tap(fh.function, rrt.serviceURL)
+					fh.tapper.Tap(fh.function, rrt.tapURL)
 				}
 			}()
 			if policy.streaming {
@@ -142,18 +142,12 @@ func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *h
 			streamCancel(nil)
 		}
 		rrt.closeContext()
-		// Streaming poolmgr functions untap here — after ServeHTTP has fully
-		// drained the stream — rather than at RoundTrip return (headers). A
-		// router-admitted endpoint returns its local slot instead of the RPC
-		// untap.
-		if policy.streaming && rrt.serviceURL != nil &&
-			fh.function.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypePoolmgr {
-			if rrt.release != nil {
-				rrt.release()
-			} else {
-				fn, svcURL := fh.function, rrt.serviceURL
-				go fh.tapper.UnTap(context.Background(), fn, svcURL) //nolint:errcheck
-			}
+		// Streaming functions settle here — after ServeHTTP has fully drained
+		// the stream — rather than at RoundTrip return (headers). settle
+		// dispatches between the two accounting modes (local release vs RPC
+		// untap).
+		if policy.streaming && rrt.serviceURL != nil {
+			rrt.settle(rrt.release, rrt.tapURL)
 		}
 	}()
 
@@ -209,7 +203,7 @@ func (fh functionHandler) getProxyErrorHandler(start time.Time, rrt *RetryingRou
 			// error-path behavior (the tap used to ride inside
 			// collectFunctionMetric).
 			if rrt.urlFromCache {
-				fh.tapper.Tap(fh.function, rrt.serviceURL)
+				fh.tapper.Tap(fh.function, rrt.tapURL)
 			}
 		}()
 

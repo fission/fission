@@ -12,13 +12,6 @@ import (
 	"github.com/fission/fission/pkg/utils/metrics"
 )
 
-// Shadow-comparison results (see RecordShadowResult).
-const (
-	ShadowMatch = "match"
-	ShadowMiss  = "miss"
-	ShadowLag   = "lag"
-)
-
 // Warm-path fallback reasons (see RecordFallback). Admission refusals are
 // labeled with the AdmitResult strings (all_busy, all_quarantined, ...).
 const (
@@ -28,21 +21,6 @@ const (
 )
 
 var (
-	// shadowResults counts shadow-mode comparisons of executor answers against
-	// the slice-fed index. "match" = agreement; "miss" = the index knows no
-	// ready endpoint for the function; "lag" = endpoints exist but the
-	// executor's (poolmgr) address is not yet among them — expected briefly
-	// after a fresh specialization. A steady-state non-match rate of zero is
-	// the promotion criterion from shadow mode to cutover. No function-name
-	// labels by design (cardinality).
-	shadowResults = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "fission_router_endpointcache_shadow_total",
-			Help: "Shadow-mode comparisons of executor answers vs the EndpointSlice index, by result (match|miss|lag).",
-		},
-		[]string{"result"},
-	)
-
 	// hits counts warm-path requests admitted from the index (zero executor
 	// RPCs); misses counts requests for which the index knew no READY endpoint
 	// (no entry at all, or an entry whose endpoints are all unready).
@@ -70,15 +48,6 @@ var (
 	}, []string{"reason"})
 )
 
-// RecordShadowResult counts one shadow comparison (router package hook —
-// the comparator lives there to use the AddressResolver types).
-func RecordShadowResult(result string) { shadowResults.WithLabelValues(result).Inc() }
-
-// ShadowResultCounter returns one shadow result counter (test hook).
-func ShadowResultCounter(result string) prometheus.Counter {
-	return shadowResults.WithLabelValues(result)
-}
-
 // RecordHit counts one index-admitted request.
 func RecordHit() { hits.Inc() }
 
@@ -98,7 +67,7 @@ func RecordQuarantine() { quarantines.Inc() }
 func RegisterModeInfo(requested, effective string) {
 	g := prometheus.NewGauge(prometheus.GaugeOpts{
 		Name:        "fission_router_endpointcache_mode",
-		Help:        "Always 1; labels carry the requested and effective EndpointSlice cache modes (off|shadow|on).",
+		Help:        "Always 1; labels carry the requested and effective EndpointSlice cache modes (off|on).",
 		ConstLabels: prometheus.Labels{"requested": requested, "effective": effective},
 	})
 	g.Set(1)
@@ -123,7 +92,6 @@ func RegisterSizeGauge(ix *Index) {
 }
 
 func init() {
-	metrics.Registry.MustRegister(shadowResults)
 	metrics.Registry.MustRegister(hits)
 	metrics.Registry.MustRegister(misses)
 	metrics.Registry.MustRegister(fallbacks)

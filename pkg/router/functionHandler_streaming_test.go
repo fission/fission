@@ -23,6 +23,7 @@ import (
 	k8stypes "k8s.io/apimachinery/pkg/types"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	ferror "github.com/fission/fission/pkg/error"
 	eclient "github.com/fission/fission/pkg/executor/client"
 	"github.com/fission/fission/pkg/throttler"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
@@ -38,6 +39,10 @@ func (e *fixedURLExecutor) GetServiceForFunction(_ context.Context, _ *fv1.Funct
 func (e *fixedURLExecutor) TapService(metav1.ObjectMeta, fv1.ExecutorType, url.URL) {}
 func (e *fixedURLExecutor) UnTapService(context.Context, metav1.ObjectMeta, fv1.ExecutorType, *url.URL) error {
 	return nil
+}
+
+func (e *fixedURLExecutor) EnsureCapacity(context.Context, *fv1.Function, int, int) (string, error) {
+	return "", ferror.MakeError(ferror.ErrorNotFound, "fake executor has no capacity endpoint")
 }
 
 // chunkedUpstream serves `n` lines, flushing and sleeping `gap` between each.
@@ -80,6 +85,10 @@ func (e *countingExecutor) TapService(metav1.ObjectMeta, fv1.ExecutorType, url.U
 func (e *countingExecutor) UnTapService(context.Context, metav1.ObjectMeta, fv1.ExecutorType, *url.URL) error {
 	e.untaps.Add(1)
 	return nil
+}
+
+func (e *countingExecutor) EnsureCapacity(context.Context, *fv1.Function, int, int) (string, error) {
+	return "", ferror.MakeError(ferror.ErrorNotFound, "fake executor has no capacity endpoint")
 }
 
 // newHandlerForUpstream builds a minimal poolmgr functionHandler pointed at the

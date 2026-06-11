@@ -1,6 +1,6 @@
 # RFC-0002: EndpointSlice-Native Data Plane
 
-- Status: Implemented, phases 0–3 ([#3485](https://github.com/fission/fission/pull/3485), merged 2026-06-11); phase 4 (defaults flip + legacy-path deletion) lands in the next minor release per the rollout plan.
+- Status: Implemented — phases 0–3 ([#3485](https://github.com/fission/fission/pull/3485), merged 2026-06-11); phase 4 (defaults on, shadow-mode removal, newdeploy endpoint-LB flag) implemented and held for the post-v1.26 merge window per the rollout plan.
 - Perf verification: the pre-phase-4 runbook passed all acceptance bars on 2026-06-11 — see [0002-perf-runbook-results.md](0002-perf-runbook-results.md).
 - Tracking issue: TBD
 - Supersedes: rev 1 of this document

@@ -172,3 +172,32 @@ func TestFunctionWebhook_Validate_RejectsDangerousPodSpec(t *testing.T) {
 		})
 	}
 }
+
+// TestFunctionConcurrencyEnforcementWarning: the annotation fails open (any
+// non-"strict" value means router-local accounting), so a typo must earn an
+// admission warning while the user is still looking.
+func TestFunctionConcurrencyEnforcementWarning(t *testing.T) {
+	t.Parallel()
+	w := &Function{}
+	w.Warner = w
+
+	fn := func(annotations map[string]string) *v1.Function {
+		f := &v1.Function{}
+		f.Annotations = annotations
+		return f
+	}
+
+	if got := w.Warnings(fn(nil)); len(got) != 0 {
+		t.Fatalf("no annotation must warn nothing, got %v", got)
+	}
+	if got := w.Warnings(fn(map[string]string{v1.ConcurrencyEnforcementAnnotation: v1.ConcurrencyEnforcementStrict})); len(got) != 0 {
+		t.Fatalf("the recognized value must warn nothing, got %v", got)
+	}
+	got := w.Warnings(fn(map[string]string{v1.ConcurrencyEnforcementAnnotation: "Strict"}))
+	if len(got) != 1 {
+		t.Fatalf("a typo'd value must warn exactly once, got %v", got)
+	}
+	if !strings.Contains(got[0], `"Strict"`) || !strings.Contains(got[0], "router-local") {
+		t.Fatalf("warning must name the bad value and the consequence, got %q", got[0])
+	}
+}

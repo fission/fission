@@ -95,6 +95,8 @@ Rollback: `mode=shadow` or `off` at runtime via Helm upgrade; no data migration.
 
 ## Phase 4 — defaults on + endpoint LB flag + deletion (next minor release)
 
+As shipped, two deviations from the plan below: the PoolCache admission arms and the `functionServiceMap` are NOT deleted — `mode=off` (a supported configuration with its own CI leg), strict-mode functions, and cold starts all still drive them, so they stay until a future RFC removes the legacy plane entirely; and the quarantine TTL (a review follow-up) shipped separately as [#3487](https://github.com/fission/fission/pull/3487) after CI demonstrated quarantine permanence during executor downtime.
+
 - Flip `executor.functionServices.enabled=true` and `router.endpointSliceCache.mode=on` in `values.yaml`.
 - `router.endpointSliceCache.endpointLB` ships default-off (newdeploy per-endpoint dialing, `ready`-condition filter).
 - One CI matrix leg pins `mode=off` (post-deploy `kubectl -n fission set env deploy/router ROUTER_ENDPOINTSLICE_CACHE_MODE=off` on a single kind version, mirroring the `TEST_GATEWAY_PARENTREF` conditional pattern in `.github/workflows/push_pr.yaml`) so the legacy path stays tested until a future RFC removes it.

@@ -7,6 +7,7 @@ package router
 import (
 	"context"
 	"fmt"
+	"math"
 	"net/url"
 
 	"github.com/go-logr/logr"
@@ -43,14 +44,19 @@ type fallbackResolver struct {
 	index    *endpointcache.Index
 	executor *executorResolver
 	capacity CapacityClient // nil when the executor client doesn't support it
+	// endpointLB dials newdeploy/container pod IPs directly (least
+	// outstanding across ready endpoints) instead of the Service VIP.
+	// Default off (ROUTER_ENDPOINTSLICE_ENDPOINT_LB).
+	endpointLB bool
 }
 
-func newFallbackResolver(logger logr.Logger, ix *endpointcache.Index, executor *executorResolver, capacity CapacityClient) *fallbackResolver {
+func newFallbackResolver(logger logr.Logger, ix *endpointcache.Index, executor *executorResolver, capacity CapacityClient, endpointLB bool) *fallbackResolver {
 	return &fallbackResolver{
-		logger:   logger.WithName("endpointcache_resolver"),
-		index:    ix,
-		executor: executor,
-		capacity: capacity,
+		logger:     logger.WithName("endpointcache_resolver"),
+		index:      ix,
+		executor:   executor,
+		capacity:   capacity,
+		endpointLB: endpointLB,
 	}
 }
 
@@ -118,10 +124,28 @@ func (f *fallbackResolver) Resolve(ctx context.Context, fn *fv1.Function) (Resol
 }
 
 // resolveDeployBacked handles newdeploy/container: the Service DNS address
-// stays the dial target; the index contributes scale-state awareness.
+// stays the dial target (the index contributes scale-state awareness) unless
+// endpointLB is on, in which case ready pod IPs are dialed directly with
+// least-outstanding selection.
 func (f *fallbackResolver) resolveDeployBacked(ctx context.Context, fn *fv1.Function) (ResolvedEntry, error) {
 	if f.index.ReadyCount(fn.Namespace, fn.Name) > 0 {
-		return f.executor.Resolve(ctx, fn)
+		entry, err := f.executor.Resolve(ctx, fn)
+		if err != nil || !f.endpointLB {
+			return entry, err
+		}
+		// Endpoint LB: dial the least-outstanding ready pod directly,
+		// bypassing the Service VIP. No per-pod admission cap — newdeploy
+		// concurrency is the Deployment's business (HPA), the index only
+		// spreads — so the cap is effectively unbounded. Taps stay keyed on
+		// the Service address (TapURL): newdeploy idle scale-down ages on the
+		// address the executor knows, not the pod IP. Any inadmissible state
+		// (e.g. every endpoint quarantined) keeps the VIP entry, which still
+		// works.
+		if ep, release, admit := f.index.Admit(fn.Namespace, fn.Name, math.MaxInt32); admit == endpointcache.Admitted {
+			endpointcache.RecordHit()
+			return ResolvedEntry{SvcURL: ep.URL, TapURL: entry.SvcURL, FromCache: true, Release: release}, nil
+		}
+		return entry, nil
 	}
 	// Zero ready endpoints: scaled to zero (or never up). Bypass the address
 	// cache — the cached Service DNS would dial into a backendless Service and

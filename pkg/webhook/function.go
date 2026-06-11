@@ -21,6 +21,7 @@ type Function struct {
 func (r *Function) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	r.Logger = loggerfactory.GetLogger().WithName("function-resource")
 	r.Validator = r
+	r.Warner = r
 	return r.GenericWebhook.SetupWebhookWithManager(mgr, &v1.Function{})
 }
 
@@ -32,6 +33,20 @@ var _ admission.Defaulter[*v1.Function] = &Function{}
 //+kubebuilder:webhook:path=/validate-fission-io-v1-function,mutating=false,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=functions,verbs=create;update,versions=v1,name=vfunction.fission.io,admissionReviewVersions=v1
 
 var _ admission.Validator[*v1.Function] = &Function{}
+
+// Warnings flags accepted-but-suspect specs. The concurrency-enforcement
+// annotation FAILS OPEN — any value other than "strict" silently means
+// router-local (approximate) accounting, the opposite of what a user typing
+// "Strict" or "STRICT" asked for — so a typo earns a warning at admission,
+// where the user is still looking.
+func (r *Function) Warnings(new *v1.Function) admission.Warnings {
+	if v, ok := new.Annotations[v1.ConcurrencyEnforcementAnnotation]; ok && v != v1.ConcurrencyEnforcementStrict {
+		return admission.Warnings{fmt.Sprintf(
+			"annotation %s has unrecognized value %q; only %q is recognized — the function will use router-local (approximate) concurrency accounting",
+			v1.ConcurrencyEnforcementAnnotation, v, v1.ConcurrencyEnforcementStrict)}
+	}
+	return nil
+}
 
 func (r *Function) Validate(new *v1.Function) error {
 	for _, cnfMap := range new.Spec.ConfigMaps {

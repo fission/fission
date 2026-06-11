@@ -35,4 +35,4 @@ Secondary observations:
 ## What this clears / what remains for phase 4
 
 - Cleared: the perf gate (this runbook) for flipping `executor.functionServices.enabled=true` + `router.endpointSliceCache.mode=on` defaults in the next minor after v1.26.
-- Remaining for the phase-4 PR (see [0002-implementation-plan.md](0002-implementation-plan.md)): defaults flip, optional newdeploy `endpointLB` flag, dead-code deletion (PoolCache admission arms, warm-path functionServiceMap usage, shadow comparator decision), quarantine TTL-or-success-clears, fold `EnsureCapacity` into the executor client interface, collapse the `Release`-nil bimodality, webhook warning for unrecognized `concurrency-enforcement` values.
+- All of it has since shipped: quarantine TTL in [#3487](https://github.com/fission/fission/pull/3487); the defaults flip, newdeploy `endpointLB` flag, shadow-comparator removal, `EnsureCapacity` interface fold, `settle()` accounting collapse, and the `concurrency-enforcement` webhook warning in the phase-4 change (see [0002-implementation-plan.md](0002-implementation-plan.md) for the two as-shipped deviations).

@@ -71,7 +71,10 @@ type (
 
 		closeContextFunc *context.CancelFunc
 		serviceURL       *url.URL
-		urlFromCache     bool
+		// tapURL is the liveness-tap target for serviceURL (differs from it
+		// only for endpoint-LB entries; see ResolvedEntry.TapURL).
+		tapURL       *url.URL
+		urlFromCache bool
 		// release returns the router-local admission slot for the last resolved
 		// endpoint (nil when accounting is executor-side; see ResolvedEntry).
 		release    func()
@@ -94,6 +97,23 @@ func (w *fakeCloseReadCloser) RealClose() error {
 		return nil
 	}
 	return w.ReadCloser.Close()
+}
+
+// settle returns the request slot held by one resolution once its request
+// completes: router-admitted entries (poolmgr index admission or newdeploy/
+// container endpoint-LB) return their local slot via release; executor-
+// resolved poolmgr entries release via the async UnTap RPC (the executor did
+// the accounting); deploy-backed VIP entries hold no slot. This is the single
+// dispatch point for the two accounting modes — they must never mix (see
+// ResolvedEntry.Release).
+func (roundTripper *RetryingRoundTripper) settle(release func(), tapURL *url.URL) {
+	if release != nil {
+		release()
+		return
+	}
+	if roundTripper.fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypePoolmgr {
+		go roundTripper.tapper.UnTap(context.Background(), roundTripper.fn, tapURL) //nolint:errcheck
+	}
 }
 
 // RoundTrip forwards the request to the function address obtained from the
@@ -169,6 +189,7 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 				roundTripper.release()
 			}
 			roundTripper.serviceURL, roundTripper.urlFromCache, roundTripper.release = entry.SvcURL, entry.FromCache, entry.Release
+			roundTripper.tapURL = entry.tapTarget()
 			if err != nil {
 				// We might want a specific error code or header for fission failures as opposed to
 				// user function bugs.
@@ -200,20 +221,15 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 				"function-name":      fnMeta.Name,
 				"function-namespace": fnMeta.Namespace,
 				"service-entry":      roundTripper.serviceURL.String()})...)
-			// Streaming functions untap in handler (after ServeHTTP fully drains the
-			// stream), not here at RoundTrip return (which fires at headers, while
-			// the body is still streaming). A router-admitted endpoint (release !=
-			// nil) returns its local slot instead of the RPC untap — the executor
-			// did no accounting for it.
-			if roundTripper.fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypePoolmgr &&
-				!roundTripper.policy.streaming {
-				defer func(fn *fv1.Function, serviceURL *url.URL, release func()) {
-					if release != nil {
-						release()
-						return
-					}
-					go roundTripper.tapper.UnTap(context.Background(), fn, serviceURL) //nolint errcheck
-				}(roundTripper.fn, roundTripper.serviceURL, roundTripper.release)
+			// Streaming functions settle in the handler (after ServeHTTP fully
+			// drains the stream), not here at RoundTrip return (which fires at
+			// headers, while the body is still streaming). One defer per
+			// resolution: an executor-resolved retry chain unTaps each pod the
+			// executor allotted; router-admitted releases are sync.Once-idempotent.
+			if !roundTripper.policy.streaming {
+				defer func(release func(), tapURL *url.URL) {
+					roundTripper.settle(release, tapURL)
+				}(roundTripper.release, roundTripper.tapURL)
 			}
 
 			// rewrite the request to reflect the service url (which comes from

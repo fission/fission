@@ -238,3 +238,33 @@ func TestStreamingRetryReleasesAbandonedSlots(t *testing.T) {
 	last := resolver.released[len(resolver.released)-1]
 	assert.Zero(t, last.Load(), "the serving slot is held until the handler-level release (stream drain)")
 }
+
+// TestSettleReleasesEndpointLBSlots: a newdeploy endpoint-LB entry carries a
+// router-local release; settle must return it at request completion and must
+// NOT fire the poolmgr UnTap RPC for it. (Before settle, both dispatch sites
+// were poolmgr-gated, so LB slots would never have been returned.)
+func TestSettleReleasesEndpointLBSlots(t *testing.T) {
+	t.Parallel()
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer upstream.Close()
+	live, err := url.Parse(upstream.URL)
+	require.NoError(t, err)
+
+	resolver := &releaseTrackingResolver{answers: []*url.URL{live}}
+	tapper := &nopTapper{}
+	rrt := newTestRRT(resolver, tapper, 3, 2)
+	rrt.fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType = fv1.ExecutorTypeNewdeploy
+
+	req := httptest.NewRequest("GET", "http://router.example/fission-function/fn", nil)
+	resp, err := rrt.RoundTrip(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	resolver.mu.Lock()
+	defer resolver.mu.Unlock()
+	require.Len(t, resolver.released, 1)
+	assert.Equal(t, int64(1), resolver.released[0].Load(), "the LB slot must be released at RoundTrip return")
+	assert.Zero(t, tapper.untaps.Load(), "no UnTap RPC for router-admitted non-poolmgr entries")
+}

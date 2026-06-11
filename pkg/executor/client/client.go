@@ -51,6 +51,11 @@ type (
 		GetServiceForFunction(ctx context.Context, fn *fv1.Function) (string, error)
 		TapService(fnMeta metav1.ObjectMeta, executorType fv1.ExecutorType, serviceURL url.URL)
 		UnTapService(ctx context.Context, fnMeta metav1.ObjectMeta, executorType fv1.ExecutorType, serviceURL *url.URL) error
+		// EnsureCapacity is the RFC-0002 saturation path (POST
+		// /v2/ensureCapacity). A 404 from an executor predating it surfaces
+		// as an ErrorNotFound ferror; the router degrades to
+		// GetServiceForFunction (upgrade-order safety).
+		EnsureCapacity(ctx context.Context, fn *fv1.Function, observedReady, observedBusy int) (string, error)
 	}
 	// client is wrapper on a HTTP client.
 	client struct {
