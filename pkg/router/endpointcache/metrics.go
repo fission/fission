@@ -59,7 +59,7 @@ var (
 	// this counter makes partial quarantine (one bad pod among many) visible.
 	quarantines = prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "fission_router_endpointcache_quarantines_total",
-		Help: "Endpoints quarantined from the index after a dial failure (lifted on the next slice event).",
+		Help: "Endpoints quarantined from the index after a dial failure (lifted by the next slice event or the quarantine TTL).",
 	})
 	// fallbacks counts warm-path requests routed to the executor for a
 	// specific reason (strict-mode annotation, no endpoints, all endpoints

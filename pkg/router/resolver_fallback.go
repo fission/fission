@@ -135,7 +135,8 @@ func (f *fallbackResolver) resolveDeployBacked(ctx context.Context, fn *fv1.Func
 	return ResolvedEntry{SvcURL: svcURL}, nil
 }
 
-// Invalidate quarantines the failing endpoint (until the next slice event) and
+// Invalidate quarantines the failing endpoint (until the next slice event or
+// the quarantine TTL, whichever comes first) and
 // drops the executor resolver's cached address. Logged at Info: dial failures
 // are rare, and a partial quarantine (one bad pod among many) is otherwise
 // invisible — the aggregate fallback metric only fires when every endpoint of
