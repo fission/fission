@@ -34,7 +34,7 @@ Secondary observations:
 
 ## What this clears / what remains for phase 4
 
-- Cleared: the perf gate (this runbook) for flipping `executor.functionServices.enabled=true` + `router.endpointSliceCache.mode=on` defaults in the next minor after v1.26.
+- Cleared: the perf gate (this runbook) for flipping `executor.functionServices.enabled=true` + `router.endpointSliceCache.mode=on` defaults; together with the multi-replica and index-scale addendum below, this evidence backed pulling the flip forward into v1.26 itself.
 - All of it has since shipped: quarantine TTL in [#3487](https://github.com/fission/fission/pull/3487); the defaults flip, newdeploy `endpointLB` flag, shadow-comparator removal, `EnsureCapacity` interface fold, `settle()` accounting collapse, and the `concurrency-enforcement` webhook warning in the phase-4 change (see [0002-implementation-plan.md](0002-implementation-plan.md) for the two as-shipped deviations).
 
 ## Addendum (2026-06-11): multi-replica and scale verification
