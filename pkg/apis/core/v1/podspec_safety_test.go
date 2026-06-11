@@ -397,8 +397,8 @@ func walkTenantPodSpecFields(prefix string, rt reflect.Type, targets map[reflect
 		return
 	}
 	seen[rt] = true
-	for i := range rt.NumField() {
-		f := rt.Field(i)
+	for f := range rt.Fields() {
+		f := f
 		if !f.IsExported() {
 			continue
 		}

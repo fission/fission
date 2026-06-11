@@ -76,9 +76,6 @@ func TruncateMessage(s string) string {
 		return s
 	}
 	const ellipsis = "... [truncated; see full text on parent resource]"
-	keep := MessageMaxLen - len(ellipsis)
-	if keep < 0 {
-		keep = 0
-	}
+	keep := max(MessageMaxLen-len(ellipsis), 0)
 	return s[:keep] + ellipsis
 }
