@@ -117,6 +117,7 @@ Match the error string first, then load the matching resource for deeper diagnos
 3. **Sanity-test locally** for the affected scope: ```bash make code-checks                                              # lint go test -race -count=1 -timeout 5m ./pkg/<affected>/...       # focused tests helm lint charts/fission-all                                  # if Helm changed helm template charts/fission-all --set <vals> | sed -n '/^kind: <Kind>/,/^---/p'   # render check ```
 
 4. **Performance / memory investigations** (not a failure, but "where is the memory/compute going", or verifying a perf fix): the integration job uploads heap + goroutine pprof artifacts per leg. Pull and read them, classify leak vs. baseline, and quantify before/after — full workflow in `resources/pprof-profile-analysis.md`.
+   For time-series questions (latency comparisons, leak-vs-constant-offset, cross-leg before/after), each leg also uploads its whole Prometheus TSDB as `prom-dump-<runId>-<ver>` — spin it up in a local container and query it: `resources/prometheus-dump-analysis.md`.
 
 ## Phase 4 — Push and monitor
 
@@ -142,7 +143,8 @@ Full instructions and rationale: `resources/skaffold-kind-ci-profile.md`.
 - `resources/integration-test-framework.md` — Go-test-framework quirks the bash→Go migration uncovered: builder/runtime readiness race (8 layered fixes), pod-label conventions, `ns.CLI` capture limitations, `embed.FS` nested-module skip, spec-test cwd handling, Package CR `/status` subresource gap.
 - `resources/monitor-poll-loop.md` — the canonical `gh pr checks` poll loop for the push-fix-monitor cycle.
 - `resources/gh-commands-cheatsheet.md` — every `gh` invocation we use during a debug session, with notes.
-- `resources/pprof-profile-analysis.md` — pull and read the CI heap/goroutine pprof artifacts; classify leak vs. baseline; quantify a fix's before/after delta; metrics-registration gotchas (the `TestCanary`-stall trap).
+- `resources/pprof-profile-analysis.md` — pull and read the CI heap/goroutine pprof artifacts; classify leak vs. baseline; quantify a fix's before/after delta; metrics-registration gotchas (the `TestCanary`-stall trap); artifact-coverage gotchas (partial/missing legs).
+- `resources/prometheus-dump-analysis.md` — run the `prom-dump-<runId>-<ver>` TSDB artifact in a local Prometheus container and query it: URL-encoding/window-bounding traps, per-pod vs `sum()` rollout-overlap artifact, the thirds-trend leak check, cross-leg comparison queries.
 
 ## Out of scope
 
