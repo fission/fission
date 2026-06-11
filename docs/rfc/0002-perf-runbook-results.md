@@ -36,3 +36,32 @@ Secondary observations:
 
 - Cleared: the perf gate (this runbook) for flipping `executor.functionServices.enabled=true` + `router.endpointSliceCache.mode=on` defaults in the next minor after v1.26.
 - All of it has since shipped: quarantine TTL in [#3487](https://github.com/fission/fission/pull/3487); the defaults flip, newdeploy `endpointLB` flag, shadow-comparator removal, `EnsureCapacity` interface fold, `settle()` accounting collapse, and the `concurrency-enforcement` webhook warning in the phase-4 change (see [0002-implementation-plan.md](0002-implementation-plan.md) for the two as-shipped deviations).
+
+## Addendum (2026-06-11): multi-replica and scale verification
+
+Run against the phase-4 branch (defaults on) on the same kind setup; drivers: `rfc/0002-multireplica-check.sh`, `rfc/0002-scale-check.sh` (local), `test/benchmark/tests/scale-index/generate.sh` (committed).
+
+### Multi-replica admission (router × 3, in-cluster k6 — the laptop port-forward cannot spread connections)
+
+- Steady state, 30 VUs × 60s against one poolmgr function with `requestsPerPod=2`: **430,231 requests, 5,547 rps, 0.007% failures, p99 12.8ms.**
+- Every replica served from its own index (119k / 145k / 166k hits); misses ≈ 0; fallback reasons in single digits per replica; `effective=on` on all three.
+- Specialized pod count held at **10** mid-load — below the single-router ideal of 15 (`ceil(VUS/requestsPerPod)`) and far inside the documented worst case of ideal + (replicas−1)×requestsPerPod = 19. Per-replica admission under-admits rather than over-admits at this scale.
+- A rolling router restart mid-load (345k-request run) cost **0.02% failures** total; old pods drain keep-alive connections gracefully.
+- Measurement note: per-replica counters reset on restart and keep-alive traffic stays pinned to draining pods, so counter assertions belong on steady-state phases only.
+
+### Router index scale (synthetic 1,000 functions, 2,000 endpoints, no pods)
+
+| | baseline | 1,000 fns | after 300-slice churn storm |
+|---|---|---|---|
+| `endpointcache_size` | 0 | 1,000 (exact) | 1,000 |
+| heap inuse | 14.2MB | 18.3MB (**+4.2MB ≈ 4KB/fn**) | 20.3MB |
+| RSS | 96.1MB | 98.7MB | 99.3MB |
+| goroutines | 84 | **84 (flat)** | **84 (flat)** |
+
+Linear, small, and goroutine-flat through creation and churn; extrapolates to ~42MB at 10k functions, inside the RFC's <50MB projection.
+
+### Real-fleet lifecycle (80 invoked functions)
+
+- 80/80 invocations succeeded; Services and slices appear per invoked function and are **reaped on idle by design** (single-invoke functions held only the trailing ~2–3 minutes of Services — the accumulation-bounding property from the risk register, observed working).
+- A reaped function re-ensures its Service on the next cold start (verified: re-invoke → 200 → Service back).
+- Executor restart with the fleet present: rollout including the adopt pass completed in 4s.
