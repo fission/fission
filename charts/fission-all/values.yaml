@@ -243,7 +243,12 @@ executor:
     enabled: false
   ## specializationConcurrency bounds concurrently running specializations in
   ## the executor (EXECUTOR_SPECIALIZATION_CONCURRENCY). 0 keeps the
-  ## historical unbounded behavior.
+  ## historical unbounded behavior — and is the recommended setting: the bound
+  ## is shared by fast poolmgr specializations (~100ms) and newdeploy/container
+  ## creations that hold a slot while waiting minutes for Deployment readiness,
+  ## so a small bound under mixed load head-of-line blocks poolmgr cold starts.
+  ## Only set this if poolmgr-heavy specialization bursts are overwhelming your
+  ## nodes, and size it generously.
   ##
   specializationConcurrency: 0
   ## podReadyTimeout represents the timeout in seconds for waiting for pod to become ready.

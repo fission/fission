@@ -17,11 +17,11 @@ const (
 	ShadowLag   = "lag"
 )
 
-// Warm-path fallback reasons (see RecordFallback).
+// Warm-path fallback reasons (see RecordFallback). Admission refusals are
+// labeled with the AdmitResult strings (all_busy, all_quarantined, ...).
 const (
 	FallbackStrict              = "strict"
 	FallbackNoEndpoints         = "no_endpoints"
-	FallbackSaturated           = "saturated"
 	FallbackCapacityUnsupported = "capacity_unsupported"
 )
 

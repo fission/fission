@@ -300,17 +300,31 @@ func (e *fnEntry) rebuildLocked() {
 	e.eps.Store(&merged)
 }
 
+// AdmitResult explains an Admit outcome, so the resolver can label its
+// fallback metric and logs with the real refusal reason instead of a generic
+// "saturated".
+type AdmitResult string
+
+const (
+	Admitted        AdmitResult = "admitted"
+	NoEntry         AdmitResult = "no_entry"
+	AllBusy         AdmitResult = "all_busy"
+	AllQuarantined  AdmitResult = "all_quarantined"
+	NoCountedReady  AdmitResult = "no_counted_ready"
+	AdmitContention AdmitResult = "cas_contention"
+)
+
 // Admit picks the ready, non-quarantined endpoint with the most free capacity
 // (least outstanding requests below requestsPerPod), increments its in-flight
 // counter, and returns it with a release func that the caller MUST invoke when
-// the request completes (response done / stream drained). ok=false when the
-// function has no admissible endpoint — unknown, all busy, or all quarantined.
+// the request completes (response done / stream drained). A non-Admitted
+// result names why no endpoint was admissible.
 //
 // Enforcement is per-router-replica by design (RFC-0002): worst-case
 // over-admission is (replicas-1)×requestsPerPod per pod, degrading to brief
 // queueing at the pod. Functions needing exact global accounting use the
 // strict-mode annotation, which bypasses this path entirely.
-func (ix *Index) Admit(namespace, name string, requestsPerPod int) (Endpoint, func(), bool) {
+func (ix *Index) Admit(namespace, name string, requestsPerPod int) (Endpoint, func(), AdmitResult) {
 	if requestsPerPod <= 0 {
 		requestsPerPod = 1
 	}
@@ -320,32 +334,37 @@ func (ix *Index) Admit(namespace, name string, requestsPerPod int) (Endpoint, fu
 	e, ok := s.m[key]
 	s.mu.RUnlock()
 	if !ok {
-		return Endpoint{}, nil, false
+		return Endpoint{}, nil, NoEntry
 	}
 	epsp := e.eps.Load()
 	if epsp == nil {
-		return Endpoint{}, nil, false
+		return Endpoint{}, nil, NoEntry
 	}
 
 	quarantined := e.quarantined.Load()
 
 	// Least-outstanding selection with a bounded CAS retry: the snapshot is
 	// immutable, only the counters move.
+	result := NoEntry
 	for range 4 {
 		var best *Endpoint
 		var bestLoad int64
+		counted, quarantinedN, busy := 0, 0, 0
 		for i := range *epsp {
 			ep := &(*epsp)[i]
 			if !ep.Ready || ep.inflight == nil {
 				continue
 			}
+			counted++
 			if quarantined != nil {
 				if _, bad := (*quarantined)[ep.Address]; bad {
+					quarantinedN++
 					continue
 				}
 			}
 			load := ep.inflight.Load()
 			if load >= int64(requestsPerPod) {
+				busy++
 				continue
 			}
 			if best == nil || load < bestLoad {
@@ -353,17 +372,25 @@ func (ix *Index) Admit(namespace, name string, requestsPerPod int) (Endpoint, fu
 			}
 		}
 		if best == nil {
-			return Endpoint{}, nil, false
+			switch {
+			case counted == 0:
+				return Endpoint{}, nil, NoCountedReady
+			case quarantinedN == counted:
+				return Endpoint{}, nil, AllQuarantined
+			default:
+				return Endpoint{}, nil, AllBusy
+			}
 		}
 		if best.inflight.CompareAndSwap(bestLoad, bestLoad+1) {
 			counter := best.inflight
 			var once sync.Once
 			release := func() { once.Do(func() { counter.Add(-1) }) }
-			return *best, release, true
+			return *best, release, Admitted
 		}
 		// Lost the CAS to a concurrent admit — re-scan.
+		result = AdmitContention
 	}
-	return Endpoint{}, nil, false
+	return Endpoint{}, nil, result
 }
 
 // Quarantine marks an address unadmissible until the next slice event for the

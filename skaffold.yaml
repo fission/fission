@@ -176,15 +176,6 @@ profiles:
       - op: replace
         path: /manifests/helm/releases/0/setValues/router.endpointSliceCache.mode
         value: "on"
-      # Bound concurrent specializations: the parallel suite cold-starts ~25
-      # environments at once on a single kind node, and an unbounded burst can
-      # saturate the node into cascade timeouts (the long-tail tests fail with
-      # 120s GetEventually exhaustion). 8 concurrent specializations keep the
-      # suite fast while pacing the burst — and give the dispatcher bound real
-      # CI coverage.
-      - op: replace
-        path: /manifests/helm/releases/0/setValues/executor.specializationConcurrency
-        value: 8
   - name: kind-ci-old
     patches:
       - op: replace

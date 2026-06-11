@@ -68,8 +68,8 @@ func (f *fallbackResolver) Resolve(ctx context.Context, fn *fv1.Function) (Resol
 		return f.executor.Resolve(ctx, fn)
 	}
 
-	ep, release, ok := f.index.Admit(fn.Namespace, fn.Name, fn.GetRequestPerPod())
-	if ok {
+	ep, release, admit := f.index.Admit(fn.Namespace, fn.Name, fn.GetRequestPerPod())
+	if admit == endpointcache.Admitted {
 		endpointcache.RecordHit()
 		return ResolvedEntry{SvcURL: ep.URL, FromCache: true, Release: release}, nil
 	}
@@ -83,11 +83,16 @@ func (f *fallbackResolver) Resolve(ctx context.Context, fn *fv1.Function) (Resol
 		return f.executor.Resolve(ctx, fn)
 	}
 
-	// Endpoints exist but every one is at its router-local requestsPerPod cap:
-	// ask the executor (the capacity authority) for one more pod. The
-	// specialization must use the CURRENT function spec (the resolved snapshot
-	// can be stale after `fn update --pkg`), same as fromExecutor.
-	endpointcache.RecordFallback(endpointcache.FallbackSaturated)
+	// Endpoints exist but none was admissible (busy / quarantined): ask the
+	// executor (the capacity authority) for one more pod. The reason is logged
+	// and labeled so a divergence between the kube slices and the index view
+	// is diagnosable from the router log alone. The specialization must use
+	// the CURRENT function spec (the resolved snapshot can be stale after
+	// `fn update --pkg`), same as fromExecutor.
+	f.logger.V(1).Info("no admissible endpoint; falling back to executor",
+		"function", fn.Name, "namespace", fn.Namespace,
+		"reason", string(admit), "ready_endpoints", ready)
+	endpointcache.RecordFallback(string(admit))
 	if f.capacity != nil {
 		addr, err := f.capacity.EnsureCapacity(ctx, f.executor.currentFunction(ctx, fn), ready, ready)
 		if err == nil {
