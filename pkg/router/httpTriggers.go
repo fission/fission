@@ -249,6 +249,12 @@ func precomputePolicies(fns map[string]*fv1.Function, fnTimeoutMap map[types.UID
 }
 
 func (ts *HTTPTriggerSet) buildMuxes(ctx context.Context, fnTimeoutMap map[types.UID]int) (public, internal *mux.Router, err error) {
+	// Hoisted-policy input (RFC-0014). Guarded: test trigger sets construct
+	// without round-trip params; production always wires them.
+	var streamIdleDefault time.Duration
+	if ts.tsRoundTripperParams != nil {
+		streamIdleDefault = ts.tsRoundTripperParams.streamIdleDefault
+	}
 	featureConfig, err := config.GetFeatureConfig(ts.logger)
 	if err != nil {
 		return nil, nil, err
@@ -325,7 +331,7 @@ func (ts *HTTPTriggerSet) buildMuxes(ctx context.Context, fnTimeoutMap map[types
 			// the per-backend proxy policies are pure functions of build-time
 			// inputs — computing them per request was pure allocator pressure.
 			rtLogger:    routeLogger.WithName("roundtripper"),
-			policyByUID: precomputePolicies(rr.functionMap, fnTimeoutMap, ts.tsRoundTripperParams.streamIdleDefault),
+			policyByUID: precomputePolicies(rr.functionMap, fnTimeoutMap, streamIdleDefault),
 		}
 
 		// The functionHandler for HTTP trigger with fn reference type "FunctionReferenceTypeFunctionName",
@@ -434,7 +440,7 @@ func (ts *HTTPTriggerSet) buildMuxes(ctx context.Context, fnTimeoutMap map[types
 			functionTimeoutMap:   fnTimeoutMap,
 			rtLogger:             routeLogger.WithName("roundtripper"),
 			policyByUID: precomputePolicies(map[string]*fv1.Function{fn.Name: &fn},
-				fnTimeoutMap, ts.tsRoundTripperParams.streamIdleDefault),
+				fnTimeoutMap, streamIdleDefault),
 		}
 
 		internalRoute := utils.UrlForFunction(fn.Name, fn.Namespace)

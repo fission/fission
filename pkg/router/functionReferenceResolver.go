@@ -7,7 +7,6 @@ package router
 import (
 	"context"
 	"fmt"
-	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
@@ -16,15 +15,17 @@ import (
 	"github.com/go-logr/logr"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
-	"github.com/fission/fission/pkg/cache"
 )
 
 type (
-	// functionReferenceResolver provides a resolver to turn a function
-	// reference into a resolveResult
+	// functionReferenceResolver turns a trigger's function reference into a
+	// resolveResult. Resolution reads straight from the Manager's informer
+	// cache (in-memory map reads): the trigger-RV-keyed result cache that used
+	// to sit in front of it was a cache of a cache — it cost two goroutines
+	// (pkg/cache actor + expiry), a full Copy() walk on every Function
+	// reconcile, and a stale-snapshot class (trigger-RV keying misses function
+	// updates) — and was removed in RFC-0014 phase 3.
 	functionReferenceResolver struct {
-		// FunctionReference -> function metadata
-		refCache *cache.Cache[namespacedTriggerReference, resolveResult]
 		// reader is the Manager's cache-backed client. Function lookups go
 		// through it (in-memory cache reads), replacing the per-namespace
 		// SharedIndexInformer stores the resolver used before the
@@ -43,14 +44,6 @@ type (
 		functionMap                map[string]*fv1.Function
 		functionWtDistributionList []functionWeightDistribution
 	}
-
-	// namespacedTriggerReference is just a trigger reference plus a
-	// namespace.
-	namespacedTriggerReference struct {
-		namespace              string
-		triggerName            string
-		triggerResourceVersion string
-	}
 )
 
 const (
@@ -59,52 +52,26 @@ const (
 )
 
 func makeFunctionReferenceResolver(logger logr.Logger, reader client.Reader) *functionReferenceResolver {
-	frr := &functionReferenceResolver{
-		refCache: cache.MakeCache[namespacedTriggerReference, resolveResult](time.Minute, 0),
-		reader:   reader,
-		logger:   logger.WithName("function_ref_resolver"),
+	return &functionReferenceResolver{
+		reader: reader,
+		logger: logger.WithName("function_ref_resolver"),
 	}
-	return frr
 }
 
-// resolve translates a trigger's function reference to a resolveResult.
+// resolve translates a trigger's function reference to a resolveResult,
+// reading current Function objects from the Manager cache. Uncached on
+// purpose: it runs only during mux rebuilds (never on the request path — the
+// result is closed into the route's handler at build time), and the informer
+// reads it fans out to are in-memory.
 func (frr *functionReferenceResolver) resolve(ctx context.Context, trigger fv1.HTTPTrigger) (*resolveResult, error) {
-	nfr := namespacedTriggerReference{
-		namespace:              trigger.Namespace,
-		triggerName:            trigger.Name,
-		triggerResourceVersion: trigger.ResourceVersion,
-	}
-
-	// check cache
-	result, err := frr.refCache.Get(nfr)
-	if err == nil {
-		return &result, nil
-	}
-
-	// resolve on cache miss
-	var rr *resolveResult
-
 	switch trigger.Spec.FunctionReference.Type {
 	case fv1.FunctionReferenceTypeFunctionName:
-		rr, err = frr.resolveByName(ctx, nfr.namespace, trigger.Spec.FunctionReference.Name)
-		if err != nil {
-			return nil, err
-		}
-
+		return frr.resolveByName(ctx, trigger.Namespace, trigger.Spec.FunctionReference.Name)
 	case fv1.FunctionReferenceTypeFunctionWeights:
-		rr, err = frr.resolveByFunctionWeights(ctx, nfr.namespace, &trigger.Spec.FunctionReference)
-		if err != nil {
-			return nil, err
-		}
-
+		return frr.resolveByFunctionWeights(ctx, trigger.Namespace, &trigger.Spec.FunctionReference)
 	default:
 		return nil, fmt.Errorf("unrecognized function reference type %v", trigger.Spec.FunctionReference.Type)
 	}
-
-	// cache resolve result
-	frr.refCache.Upsert(nfr, *rr)
-
-	return rr, nil
 }
 
 // getFunction reads a Function from the Manager's cache.
@@ -164,33 +131,4 @@ func (frr *functionReferenceResolver) resolveByFunctionWeights(ctx context.Conte
 	}
 
 	return &rr, nil
-}
-
-func (frr *functionReferenceResolver) delete(namespace string, triggerName, triggerRV string) {
-	nfr := namespacedTriggerReference{
-		namespace:              namespace,
-		triggerName:            triggerName,
-		triggerResourceVersion: triggerRV,
-	}
-	frr.refCache.Delete(nfr)
-}
-
-// invalidateForFunction drops any cached resolve result that references the
-// named function in the given namespace, so the next resolve re-reads the
-// function from the cache. Used by the function reconciler when a Function's
-// spec changes. Returns true if an entry was invalidated.
-func (frr *functionReferenceResolver) invalidateForFunction(namespace, name, resourceVersion string) bool {
-	invalidated := false
-	for key, rr := range frr.refCache.Copy() {
-		if key.namespace == namespace &&
-			rr.functionMap[name] != nil &&
-			rr.functionMap[name].ResourceVersion != resourceVersion {
-			frr.logger.V(1).Info("invalidating resolver cache", "function", name, "namespace", namespace, "trigger", key.triggerName)
-			frr.delete(key.namespace, key.triggerName, key.triggerResourceVersion)
-			invalidated = true
-			// Don't stop at the first match: the same function can back multiple
-			// triggers (and multiple cached trigger-RV entries), all now stale.
-		}
-	}
-	return invalidated
 }

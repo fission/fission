@@ -288,7 +288,7 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 		// breaks the hijack regardless of Spec.Streaming, so this also fixes classic
 		// WebSocket functions. The only cost is no otel span for the upgrade itself
 		// (a hijacked bidirectional connection isn't meaningfully traceable anyway).
-		var rt http.RoundTripper = otelTransport
+		rt := otelTransport
 		if routerutil.IsWebsocketRequest(newReq) {
 			rt = transport
 		}

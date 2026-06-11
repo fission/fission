@@ -138,10 +138,10 @@ func TestResolverFromExecutorFallsBackToSnapshot(t *testing.T) {
 func TestPrecomputedPolicyParity(t *testing.T) {
 	t.Parallel()
 	classic := fnWithPkg("rv1", "pkg1")
-	classic.ObjectMeta.UID = "uid-classic"
+	classic.UID = "uid-classic"
 	stream := fnWithPkg("rv2", "pkg2")
-	stream.ObjectMeta.UID = "uid-stream"
-	stream.ObjectMeta.Name = "fn-stream"
+	stream.UID = "uid-stream"
+	stream.Name = "fn-stream"
 	stream.Spec.Streaming = &fv1.StreamingConfig{IdleTimeoutSeconds: 7}
 
 	fns := map[string]*fv1.Function{classic.Name: classic, stream.Name: stream}
