@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"sync"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -33,6 +34,21 @@ type (
 		timeoutExponent  int
 		disableKeepAlive bool
 		keepAliveTime    time.Duration
+
+		// maxIdleConnsPerHost bounds the shared transport's idle pool per
+		// function address (each poolmgr pod is its own host). Go's default
+		// of 2 would throttle per-pod reuse below requestsPerPod ceilings.
+		// From ROUTER_ROUND_TRIP_MAX_IDLE_CONNS_PER_HOST; 0 means the
+		// defaultMaxIdleConnsPerHost.
+		maxIdleConnsPerHost int
+
+		// The shared transport (RFC-0014): ONE pool for the router process,
+		// built lazily on first use. Before this, a fresh http.Transport was
+		// constructed per request, which silently defeated keep-alive
+		// entirely — every proxied request dialed TCP fresh.
+		transportOnce sync.Once
+		transport     *http.Transport
+		otelTransport http.RoundTripper
 
 		// streamIdleDefault is the idle timeout applied to streaming functions
 		// when StreamingConfig.IdleTimeoutSeconds is unset (from the router's
@@ -134,7 +150,7 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 
 	// set the timeout for transport context
 	addForwardedHostHeader(roundTripper.logger, req)
-	transport := roundTripper.getDefaultTransport()
+	transport, otelTransport := roundTripper.params.sharedTransport()
 
 	executingTimeout := roundTripper.params.timeout
 
@@ -244,16 +260,15 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 			rewriteFunctionURL(logger, req, roundTripper.trigger, fnMeta, roundTripper.serviceURL)
 		}
 
-		// over-riding default settings.
-		transport.DialContext = (&net.Dialer{
-			Timeout:   executingTimeout,
-			KeepAlive: roundTripper.params.keepAliveTime,
-		}).DialContext
-
 		// Do NOT assign returned request to "req"
 		// because the request used in the last round
 		// will be canceled when calling setContext.
 		newReq := roundTripper.setContext(req)
+		// Per-attempt dial deadline (the cold-pod fast-retry ladder) rides the
+		// context into the SHARED transport's DialContext; a pooled-conn hit
+		// skips the dial entirely, which is correct — there is nothing to
+		// time out.
+		newReq = newReq.WithContext(context.WithValue(newReq.Context(), dialTimeoutKey{}, executingTimeout))
 
 		if roundTripper.isDebugEnv {
 			debugDumpRequest(logger, newReq)
@@ -273,7 +288,7 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 		// breaks the hijack regardless of Spec.Streaming, so this also fixes classic
 		// WebSocket functions. The only cost is no otel span for the upgrade itself
 		// (a hijacked bidirectional connection isn't meaningfully traceable anyway).
-		var rt http.RoundTripper = otelhttp.NewTransport(transport)
+		var rt http.RoundTripper = otelTransport
 		if routerutil.IsWebsocketRequest(newReq) {
 			rt = transport
 		}
@@ -371,23 +386,69 @@ func jitter(d time.Duration) time.Duration {
 	return d + time.Duration(rand.Float64()*0.2*float64(d))
 }
 
-// getDefaultTransport returns a pointer to new copy of http.Transport object to prevent
-// the value of http.DefaultTransport from being changed by goroutines.
-func (roundTripper RetryingRoundTripper) getDefaultTransport() *http.Transport {
-	// The transport setup here follows the configurations of http.DefaultTransport
-	// but without Dialer since we will change it later.
-	return &http.Transport{
-		Proxy:                 http.ProxyFromEnvironment,
-		MaxIdleConns:          100,
-		IdleConnTimeout:       90 * time.Second,
-		TLSHandshakeTimeout:   10 * time.Second,
-		ExpectContinueTimeout: 1 * time.Second,
-		// Default disables caching, Please refer to issue and specifically comment:
-		// https://github.com/fission/fission/issues/723#issuecomment-398781995
-		// You can change it by setting environment variable "ROUTER_ROUND_TRIP_DISABLE_KEEP_ALIVE"
-		// of router or helm variable "disableKeepAlive" before installation to false.
-		DisableKeepAlives: roundTripper.params.disableKeepAlive,
-	}
+// dialTimeoutKey carries the per-attempt dial timeout through the request
+// context into the shared transport's DialContext. The backoff-scaled
+// executingTimeout ladder is NOT just a timeout — it is the fast-retry
+// mechanism for cold pods (a not-yet-listening pod must fail the dial
+// quickly so the loop re-resolves), so it must survive the move to a shared
+// transport whose Dialer cannot carry per-request state.
+type dialTimeoutKey struct{}
+
+const (
+	// defaultMaxIdleConnsPerHost: each poolmgr pod is its own host (ip:8888),
+	// so this is effectively the per-pod pooled-connection ceiling.
+	defaultMaxIdleConnsPerHost = 32
+	// transportIdleConnTimeout is deliberately shorter than the poolmgr idle
+	// reap window (120s) and aligned with the RFC-0002 drain grace floor
+	// (30s), bounding how long a pooled connection can outlive its pod.
+	transportIdleConnTimeout = 30 * time.Second
+)
+
+// sharedTransport returns the process-wide pooled transport (and its
+// otel-instrumented wrapper), building both once. Connection reuse across
+// requests is the point (RFC-0014); per-attempt dial deadlines arrive via
+// dialTimeoutKey on the request context — net.Dialer.DialContext honors ctx
+// deadlines, and a deadline-exceeded dial classifies exactly like the old
+// Dialer.Timeout (*net.OpError{Op: "dial"} with Timeout() == true), keeping
+// the retry-ladder semantics byte-identical (pinned by
+// TestDialLadderTimeoutClassification).
+func (p *tsRoundTripperParams) sharedTransport() (*http.Transport, http.RoundTripper) {
+	p.transportOnce.Do(func() {
+		perHost := p.maxIdleConnsPerHost
+		if perHost <= 0 {
+			perHost = defaultMaxIdleConnsPerHost
+		}
+		// No Dialer.Timeout: the per-attempt deadline comes from the context
+		// (cancelling the derived ctx after a successful dial does not affect
+		// the established connection, per net.Dialer docs).
+		dialer := &net.Dialer{KeepAlive: p.keepAliveTime}
+		p.transport = &http.Transport{
+			Proxy: http.ProxyFromEnvironment,
+			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				if d, ok := ctx.Value(dialTimeoutKey{}).(time.Duration); ok && d > 0 {
+					var cancel context.CancelFunc
+					ctx, cancel = context.WithTimeout(ctx, d)
+					defer cancel()
+				}
+				return dialer.DialContext(ctx, network, addr)
+			},
+			MaxIdleConns:          1024,
+			MaxIdleConnsPerHost:   perHost,
+			IdleConnTimeout:       transportIdleConnTimeout,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
+			// The escape hatch back to per-request connections
+			// (ROUTER_ROUND_TRIP_DISABLE_KEEP_ALIVE / helm
+			// router.roundTrip.disableKeepAlive); see
+			// https://github.com/fission/fission/issues/723 for the original
+			// stale-connection concern, now mitigated by FIN-driven pool
+			// eviction, the short idle timeout, and the transport's automatic
+			// retry of replayable requests on a reused-conn failure.
+			DisableKeepAlives: p.disableKeepAlive,
+		}
+		p.otelTransport = otelhttp.NewTransport(p.transport)
+	})
+	return p.transport, p.otelTransport
 }
 
 // setContext returns a shallow copy of request with a new timeout context.

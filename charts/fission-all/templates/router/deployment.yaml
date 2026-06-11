@@ -75,8 +75,14 @@ spec:
           value: {{ .Values.router.roundTrip.timeoutExponent | default 2 | quote }}
         - name: ROUTER_ROUND_TRIP_KEEP_ALIVE_TIME
           value: {{ .Values.router.roundTrip.keepAliveTime | default "30s" | quote }}
+        # NOTE: not `| default true`: sprig's default treats false as empty, so
+        # an explicit `disableKeepAlive: false` would silently coerce back to
+        # "true" and make keep-alive impossible to enable (the values.yaml
+        # default is false; nil also renders "false").
         - name: ROUTER_ROUND_TRIP_DISABLE_KEEP_ALIVE
-          value: {{ .Values.router.roundTrip.disableKeepAlive | default true | quote }}
+          value: {{ if .Values.router.roundTrip.disableKeepAlive }}"true"{{ else }}"false"{{ end }}
+        - name: ROUTER_ROUND_TRIP_MAX_IDLE_CONNS_PER_HOST
+          value: {{ .Values.router.roundTrip.maxIdleConnsPerHost | default 32 | quote }}
         - name: ROUTER_ROUND_TRIP_MAX_RETRIES
           value: {{ .Values.router.roundTrip.maxRetries | default 10 | quote }}
         - name: ROUTER_SVC_ADDRESS_MAX_RETRIES

@@ -19,6 +19,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/error/network"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
 
@@ -328,4 +329,66 @@ func TestSettleDispatchMatrix(t *testing.T) {
 			assert.Equal(t, tc.wantRelease, released.Load() == 1)
 		})
 	}
+}
+
+// TestDialLadderTimeoutClassification pins the RFC-0014 invariant that moving
+// the per-attempt dial timeout from Dialer.Timeout to a context deadline does
+// NOT change error classification: a timed-out dial must still be a dial
+// error AND a timeout error, or the retry ladder (which counts timeouts
+// toward address invalidation) silently changes behavior.
+func TestDialLadderTimeoutClassification(t *testing.T) {
+	t.Parallel()
+	params := newTestParams(1, 1)
+	transport, _ := params.sharedTransport()
+
+	// TEST-NET-1 (RFC 5737): guaranteed unroutable; the 50ms ladder deadline
+	// fires first. (Same address the pre-existing timeout-ladder test uses.)
+	ctx := context.WithValue(t.Context(), dialTimeoutKey{}, 50*time.Millisecond)
+	_, err := transport.DialContext(ctx, "tcp", "192.0.2.1:8888")
+	require.Error(t, err)
+
+	netErr := network.Adapter(err)
+	require.NotNil(t, netErr, "a ladder-deadline dial failure must classify as a network error")
+	assert.True(t, netErr.IsDialError(), "must classify as a dial error (Op == dial)")
+	assert.True(t, netErr.IsTimeoutError(), "must classify as a timeout (counts toward the invalidation ladder)")
+}
+
+// TestTransportRecoversFromStaleConnection pins the pooled-connection failure
+// mode RFC-0014 introduces: a pooled conn whose backend died is detected on
+// reuse, and the transport transparently retries replayable requests (GET, no
+// body) on a fresh connection — the caller sees a 200, not an error.
+func TestTransportRecoversFromStaleConnection(t *testing.T) {
+	t.Parallel()
+	srv, newConns := connCountingServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("ok"))
+	}))
+	u, err := url.Parse(srv.URL)
+	require.NoError(t, err)
+
+	params := newTestParams(3, 2)
+	do := func() {
+		rrt := &RetryingRoundTripper{
+			logger:      loggerfactory.GetLogger(),
+			resolver:    &scriptedResolver{answers: []*url.URL{u}},
+			tapper:      &nopTapper{},
+			fn:          poolmgrFnForTransport(),
+			params:      params,
+			funcTimeout: 5 * time.Second,
+		}
+		req := httptest.NewRequest("GET", "http://router.example/fission-function/fn", nil)
+		resp, err := rrt.RoundTrip(req)
+		require.NoError(t, err)
+		drain(t, resp)
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+	}
+
+	do() // establishes a pooled conn
+	require.EqualValues(t, 1, newConns.Load())
+
+	// Kill every established connection server-side: the pooled conn is now
+	// stale and the next reuse attempt fails at write/read, not dial.
+	srv.CloseClientConnections()
+
+	do() // must transparently retry on a fresh connection
+	assert.LessOrEqual(t, newConns.Load(), int64(3), "recovery must not storm new connections")
 }

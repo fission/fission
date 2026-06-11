@@ -385,13 +385,14 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	}
 
 	triggers, err := makeHTTPTriggerSet(logger.WithName("triggerset"), fmap, fissionClient, kubeClient, crMgr.GetClient(), executor, &tsRoundTripperParams{
-		timeout:           cfg.roundTripTimeout,
-		timeoutExponent:   cfg.timeoutExponent,
-		disableKeepAlive:  cfg.disableKeepAlive,
-		keepAliveTime:     cfg.keepAliveTime,
-		maxRetries:        cfg.maxRetries,
-		svcAddrRetryCount: cfg.svcAddrRetryCount,
-		streamIdleDefault: cfg.streamIdleDefault,
+		timeout:             cfg.roundTripTimeout,
+		timeoutExponent:     cfg.timeoutExponent,
+		disableKeepAlive:    cfg.disableKeepAlive,
+		keepAliveTime:       cfg.keepAliveTime,
+		maxRetries:          cfg.maxRetries,
+		svcAddrRetryCount:   cfg.svcAddrRetryCount,
+		streamIdleDefault:   cfg.streamIdleDefault,
+		maxIdleConnsPerHost: cfg.maxIdleConnsPerHost,
 	}, cfg.isDebugEnv, cfg.useEncodedPath, cfg.unTapServiceTimeout, throttler.MakeThrottler(cfg.svcAddrUpdateTimeout))
 	if err != nil {
 		return fmt.Errorf("error making HTTP trigger set: %w", err)
