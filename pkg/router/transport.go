@@ -306,7 +306,14 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 
 		// if transport.RoundTrip returns a non-network dial error (e.g. "context canceled"), then relay it back to user
 		if !isNetDialErr {
-			logger.Error(err, "encountered non-network dial error")
+			// A canceled context is a client disconnect (the caller went away
+			// or its deadline fired), not a server-side error — log it quietly
+			// so client churn doesn't flood the router log at Error level.
+			if errors.Is(err, context.Canceled) {
+				logger.V(1).Info("request context canceled by client", "url", req.URL.Host)
+			} else {
+				logger.Error(err, "encountered non-network dial error")
+			}
 			return resp, err
 		}
 

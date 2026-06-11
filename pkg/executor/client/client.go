@@ -41,8 +41,21 @@ var tapFlushErrors = prometheus.NewCounter(prometheus.CounterOpts{
 	Help: "Failed batched tap flushes from the router to the executor.",
 })
 
+// tapFlushNotFound counts tap flushes the executor answered 404 — every
+// tapped address had expired or was unknown. Occasional increments are
+// routine churn; a sustained rate means the router is tapping addresses the
+// executor genuinely should know (an index/registration drift), which the
+// idle reaper would otherwise silently let age out. Kept distinct from
+// tapFlushErrors so churn doesn't trip the failure alarm while a persistent
+// 404 rate stays observable.
+var tapFlushNotFound = prometheus.NewCounter(prometheus.CounterOpts{
+	Name: "fission_router_tap_flush_notfound_total",
+	Help: "Batched tap flushes the executor answered 404 (expired/unknown addresses).",
+})
+
 func init() {
 	metrics.Registry.MustRegister(tapFlushErrors)
+	metrics.Registry.MustRegister(tapFlushNotFound)
 }
 
 type (
@@ -266,6 +279,19 @@ func (c *client) flushTaps(urls map[string]TapServiceRequest) {
 	err := c._tapService(context.Background(), svcReqs)
 	if err == nil {
 		c.tapFailures.Store(0)
+		return
+	}
+	// A 404 is routine churn, not a liveness failure: it means some tapped
+	// addresses already expired/were deleted on the executor side (the
+	// executor logs this at V(1) for the same reason). The executor can't be
+	// about to wrongly reap a pod it no longer tracks, so a NotFound must NOT
+	// count toward the "taps failing, serving pods at risk" escalation —
+	// otherwise normal function churn trips a misleading Error alarm. Only
+	// genuine failures (unreachable executor, timeout, 5xx) escalate.
+	if ferror.IsNotFound(err) {
+		c.tapFailures.Store(0)
+		tapFlushNotFound.Inc()
+		c.logger.V(1).Info("tap flush skipped expired entries", "error", err.Error())
 		return
 	}
 	tapFlushErrors.Inc()

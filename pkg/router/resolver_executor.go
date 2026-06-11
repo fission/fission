@@ -6,6 +6,7 @@ package router
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -200,6 +201,15 @@ func (r *executorResolver) fromExecutor(ctx context.Context, fn *fv1.Function) (
 
 	service, err := r.executor.GetServiceForFunction(fContext, fn)
 	if err != nil {
+		// A canceled context is the caller giving up mid-cold-start (client
+		// disconnect / its deadline elsewhere), not an executor failure — log
+		// it quietly so client churn during specialization doesn't read as a
+		// server error. Genuine failures (executor down, 5xx, the cold-start
+		// deadline itself) still surface at Error.
+		if errors.Is(err, context.Canceled) {
+			logger.V(1).Info("GetServiceForFunction canceled by caller", "function", fn.Name, "namespace", fn.Namespace)
+			return nil, err
+		}
 		statusCode, errMsg := ferror.GetHTTPError(err)
 		logger.Error(err, "error from GetServiceForFunction", "error_message", errMsg,
 			"function", fn,
