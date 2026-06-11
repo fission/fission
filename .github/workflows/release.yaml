@@ -9,7 +9,7 @@ env:
   KIND_VERSION: v0.32.0
   KIND_NODE_IMAGE_TAG: v1.32.11
   KIND_CLUSTER_NAME: kind
-  COSIGN_VERSION: v3.0.6
+  COSIGN_VERSION: v3.1.1
 
 permissions:
   contents: read
