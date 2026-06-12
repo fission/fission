@@ -1,7 +1,7 @@
 # RFC-0013: Incremental Router Route Updates
 
-- Status: Proposed (published ahead of implementation — queued as the next router work after RFC-0014)
-- Tracking issue: TBD
+- Status: Implemented (phases 0–2; phase 3 not built — its benchmark gate was not crossed, see "As shipped")
+- Tracking issue: —
 - Supersedes: —
 - Targets: Fission v1.27+ (phases 0–2); phase 3 conditional on benchmark evidence
 - Requires: no new dependencies (gorilla/mux is retained through phase 2); no Kubernetes floor change
@@ -179,6 +179,29 @@ Differential fuzz; shadow burn-in; promotion per the gate.
 - Bounded-staleness window for keep-last-good on transient resolve errors?
 - Should `RouteConflict` eventually become an admission-webhook rejection?
 - Does phase 3 subsume the internal mux or only the public one (the internal mux is namespace-structured and cheap)?
+
+## As shipped
+
+Phases 0–2 landed together (the PR carries per-phase commits); phase 3 (the native matcher) was **not** built, per its own gate:
+the phase-0 benchmark put gorilla's worst-case match at 10k routes at ~0.7ms on Apple M2 (last-registered route; ~70µs at 1k routes), under the >1ms build trigger.
+The evidence is recorded in the PR; the gate stays armed — a user report or a slower-hardware measurement above 1ms reopens it.
+
+Measured on the shipped implementation (Apple M2, fake-cache resolver):
+
+- One canary weight tick with 10k routes in the table: **~15µs / 9.6KB / 97 allocs** through the incremental path, vs **~208ms / 303MB / 3.54M allocs** for the same event through the legacy full rebuild (BenchmarkIncrementalWeightTick vs BenchmarkBuildMuxes/triggers=10000) — the steady-churn class is O(1), roughly four orders of magnitude off the rebuild cost.
+- The no-route-flap test drives sustained requests through a stable route while handler swaps and unrelated materializations churn concurrently under `-race`: zero non-200s.
+
+Differences from the proposal, decided during implementation and review:
+
+- **Generation, not ResourceVersion, keys change detection** (`TriggerGen`/`FnGens` rather than the proposed `TriggerRV`/`FnRVs`): the reconcilers run behind `GenerationChangedPredicate`, so the resync must use the same notion of "changed" — RV keying would have counted every status-only write (the router's own conditions, the executor's function readiness) as drift and rebuilt a handler per pass.
+- **A failed materialize is sticky**: the drained condition batch is re-queued, a dirty flag stays set, and the resync loop re-signals until a build succeeds; `fission_router_mux_materialize_failures_total` and `fission_router_route_resync_failures_total` make the materializer's and the drift guard's own failure modes alertable (review finding — a consumed signal must not strand table state out of the served mux).
+- **An unresolved-trigger index** keeps the trigger→function edge alive when the function does not exist yet, so the function's create event re-admits the route immediately via the cascade (the trigger-before-function apply ordering would otherwise wait for the next resync).
+- **Conflict losers are guarded on the apply path too**: the `NoChange`/`HandlerSwapped` condition write consults the shadow set, so a weight tick or resync pass cannot flip a shadowed trigger back to `RouteAdmitted=True` (review finding).
+- The routes gauge shipped as `fission_router_routes` (promlinter: `_total` implies a counter).
+- A second registration-level fix fell out of the no-flap race test: gorilla's `Route.Methods()` uppercases the slice it is handed **in place**, so the legacy path had been silently mutating informer-owned trigger objects; both paths now clone per registration.
+- `FunctionNotFound` became an explicit `RouteAdmitted=False` reason — previously an unresolvable trigger 404'd while its condition claimed the route was admitted.
+
+The escape hatch (`ROUTER_INCREMENTAL_ROUTES=false`, chart `router.incrementalRoutes`) ships active for this release with the v1.34 CI leg pinned to it (the same leg that pins the RFC-0002 legacy data plane), and is scheduled for removal one release later.
 
 ## Risks (top 3, with mitigations)
 
