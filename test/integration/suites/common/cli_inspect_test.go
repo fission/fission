@@ -67,7 +67,14 @@ func TestCLICommands(t *testing.T) {
 	assert.Contains(t, ns.CLICaptureStdout(t, ctx, "fn", "list"), fnName, "fn list should name the function")
 	assert.Contains(t, ns.CLICaptureStdout(t, ctx, "env", "list"), envName, "env list should name the env")
 	assert.Contains(t, ns.CLICaptureStdout(t, ctx, "pkg", "list"), pkgName, "pkg list should name the package")
-	assert.Contains(t, ns.CLICaptureStdout(t, ctx, "pkg", "info", "--name", pkgName), pkgName, "pkg info should name the package")
+	pkgInfo := ns.CLICaptureStdout(t, ctx, "pkg", "info", "--name", pkgName)
+	assert.Contains(t, pkgInfo, pkgName, "pkg info should name the package")
+	assert.Contains(t, pkgInfo, "Deployment:", "pkg info should describe how the code is delivered")
+
+	// fission check: the health checker (including the oci-delivery
+	// category) must run clean against a live cluster.
+	checkOut := ns.CLICaptureStdout(t, ctx, "check")
+	assert.Contains(t, checkOut, "oci-delivery", "fission check should run the oci-delivery category")
 	assert.Contains(t, ns.CLICaptureStdout(t, ctx, "httptrigger", "list"), routeName, "httptrigger list should name the route")
 
 	// --- read-only inspections we run for code-path coverage (exit-code only) ---

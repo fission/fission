@@ -7,6 +7,7 @@ package healthcheck
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -82,9 +83,12 @@ func (hc *HealthChecker) CheckOCIImageVolume(ctx context.Context) error {
 		return fmt.Errorf("could not read the cluster version: %w", err)
 	}
 	major := strings.TrimSuffix(ver.Major, "+")
-	minor := strings.TrimSuffix(ver.Minor, "+")
-	if major == "1" && len(minor) > 0 && minor < "33" && len(minor) == 2 {
-		return fmt.Errorf("image volumes are enabled but the cluster is v%s.%s (< 1.33): OCI packages will use fetcher pulls instead — works, but without the image-volume cold-start benefit", major, minor)
+	minor, err := strconv.Atoi(strings.TrimSuffix(ver.Minor, "+"))
+	if err != nil {
+		return nil // unparsable vendor minor: don't guess
+	}
+	if major == "1" && minor < 33 {
+		return fmt.Errorf("image volumes are enabled but the cluster is v%s.%d (< 1.33): OCI packages will use fetcher pulls instead — works, but without the image-volume cold-start benefit", major, minor)
 	}
 	return nil
 }
