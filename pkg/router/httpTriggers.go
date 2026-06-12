@@ -8,8 +8,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"slices"
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -31,9 +29,7 @@ import (
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	"github.com/fission/fission/pkg/info"
 	"github.com/fission/fission/pkg/throttler"
-	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/httpsecurity"
-	"github.com/fission/fission/pkg/utils/metrics"
 )
 
 // HTTPTriggerSet represents an HTTP trigger set
@@ -249,38 +245,12 @@ func precomputePolicies(fns map[string]*fv1.Function, fnTimeoutMap map[types.UID
 }
 
 func (ts *HTTPTriggerSet) buildMuxes(ctx context.Context, fnTimeoutMap map[types.UID]int) (public, internal *mux.Router, err error) {
-	// Hoisted-policy input (RFC-0014). Guarded: test trigger sets construct
-	// without round-trip params; production always wires them.
-	var streamIdleDefault time.Duration
-	if ts.tsRoundTripperParams != nil {
-		streamIdleDefault = ts.tsRoundTripperParams.streamIdleDefault
-	}
 	featureConfig, err := config.GetFeatureConfig(ts.logger)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	public = mux.NewRouter()
-	internal = mux.NewRouter()
-	// Honour USE_ENCODED_PATH (see issue #1317) on every reconciliation:
-	// buildMuxes is called repeatedly by updateRouter and the resulting
-	// routers are atomically swapped under the listener handlers. If we
-	// don't apply UseEncodedPath here, the feature works only until the
-	// first reconciliation and then silently turns off.
-	if ts.useEncodedPath {
-		public = public.UseEncodedPath()
-		internal = internal.UseEncodedPath()
-	}
-
-	// Panic recovery is the outermost middleware so it also catches panics in
-	// the metrics/auth middleware below. Applied to both listeners.
-	public.Use(panicRecoveryMiddleware(ts.logger))
-	internal.Use(panicRecoveryMiddleware(ts.logger))
-
-	public.Use(metrics.HTTPMetricMiddleware)
-	if featureConfig.AuthConfig.IsEnabled {
-		public.Use(authMiddleware(featureConfig))
-	}
+	public, internal = ts.newListenerMuxes(featureConfig)
 
 	// HTTP triggers setup by the user — public listener only.
 	homeHandled := false
@@ -299,180 +269,47 @@ func (ts *HTTPTriggerSet) buildMuxes(ctx context.Context, fnTimeoutMap map[types
 		// resolve function reference
 		rr, err := ts.resolver.resolve(ctx, trigger)
 		if err != nil {
-			// Unresolvable function reference. NOTE: updateTriggerStatusFailed
-			// is still a stub (TODO below), so today this surfaces only in the
-			// router log, not on the trigger's status conditions.
-			go ts.updateTriggerStatusFailed(&trigger, err)
-
-			// Ignore this route and let it 404.
+			// Unresolvable function reference: skip the route and let it 404.
+			// The post-build loop in updateRouter reports it on the trigger's
+			// conditions.
+			ts.logger.Error(err, "skipping trigger with unresolvable function reference",
+				"trigger", trigger.Name, "namespace", trigger.Namespace)
 			continue
 		}
 
 		if rr.resolveResultType != resolveResultSingleFunction && rr.resolveResultType != resolveResultMultipleFunctions {
-			// Unsupported resolve result type. Report it via the trigger's
-			// status and skip the route (let it 404) instead of crashing the
-			// whole router process and dropping every other trigger with it.
+			// Unsupported resolve result type. Skip the route (let it 404)
+			// instead of crashing the whole router process and dropping every
+			// other trigger with it.
 			ts.logger.Error(nil, "resolve result type not implemented", "type", rr.resolveResultType)
-			go ts.updateTriggerStatusFailed(&trigger, fmt.Errorf("resolve result type not implemented: %v", rr.resolveResultType))
 			continue
 		}
 
-		routeLogger := ts.logger.WithName(trigger.Name)
-		fh := &functionHandler{
-			logger:                   routeLogger,
-			resolver:                 ts.addressResolver,
-			tapper:                   ts.tapper,
-			httpTrigger:              &trigger,
-			functionMap:              rr.functionMap,
-			fnWeightDistributionList: rr.functionWtDistributionList,
-			tsRoundTripperParams:     ts.tsRoundTripperParams,
-			isDebugEnv:               ts.isDebugEnv,
-			functionTimeoutMap:       fnTimeoutMap,
-			// Hoisted per-route state (RFC-0014): the round tripper logger and
-			// the per-backend proxy policies are pure functions of build-time
-			// inputs — computing them per request was pure allocator pressure.
-			rtLogger:    routeLogger.WithName("roundtripper"),
-			policyByUID: precomputePolicies(rr.functionMap, fnTimeoutMap, streamIdleDefault),
-		}
+		shape := deriveRouteShape(&trigger)
+		handler := ts.buildTriggerHandler(&trigger, rr, fnTimeoutMap)
+		registerRouteShape(public, shape, handler)
+		ts.logger.V(1).Info("registered trigger route",
+			"trigger", trigger.Name, "exact", shape.exactPath, "prefix", shape.prefixPath, "methods", shape.methods)
 
-		// The functionHandler for HTTP trigger with fn reference type "FunctionReferenceTypeFunctionName",
-		// it's function metadata is set here.
-
-		// The functionHandler For HTTP trigger with fn reference type "FunctionReferenceTypeFunctionWeights",
-		// it's function metadata is decided dynamically before proxying the request in order to support canary
-		// deployment. For more details, please check "handler" function of functionHandler.
-
-		if rr.resolveResultType == resolveResultSingleFunction {
-			for _, fn := range fh.functionMap {
-				fh.function = fn
-			}
-		}
-
-		methods := trigger.Spec.Methods
-		if len(trigger.Spec.Method) > 0 {
-			present := slices.Contains(trigger.Spec.Methods, trigger.Spec.Method)
-			if !present {
-				methods = append(methods, trigger.Spec.Method)
-			}
-		}
-
-		// Per-trigger CORS: if the trigger declares a CorsConfig the
-		// router applies a CORSAllowlist middleware around its handler
-		// and appends OPTIONS to the registered methods so gorilla/mux
-		// routes the preflight to the wrapped handler instead of
-		// returning 405 before CORSAllowlist sees the request.
-		// Triggers without a CorsConfig keep the deny-by-default
-		// behaviour — no Access-Control-* headers, SOP blocks cross-
-		// origin reads.
-		var handler http.Handler = http.HandlerFunc(fh.handler)
-		if trigger.Spec.CorsConfig != nil {
-			cfg := toAllowlistConfig(trigger.Spec.CorsConfig, methods)
-			handler = httpsecurity.CORSAllowlist(cfg)(handler)
-			if !slices.Contains(methods, http.MethodOptions) {
-				methods = append(methods, http.MethodOptions)
-			}
-		}
-
-		if trigger.Spec.Prefix != nil && *trigger.Spec.Prefix != "" {
-			prefix := *trigger.Spec.Prefix
-			if strings.HasSuffix(prefix, "/") {
-				ht := public.PathPrefix(prefix).Handler(handler)
-				ht.Methods(methods...)
-				if trigger.Spec.Host != "" {
-					ht.Host(trigger.Spec.Host)
-				}
-				ts.logger.V(1).Info("add prefix route for function", "route", prefix, "function", fh.function, "methods", methods)
-			} else {
-				ht1 := public.Handle(prefix, handler)
-				ht1.Methods(methods...)
-				if trigger.Spec.Host != "" {
-					ht1.Host(trigger.Spec.Host)
-				}
-				ht2 := public.PathPrefix(prefix + "/").Handler(handler)
-				ht2.Methods(methods...)
-				if trigger.Spec.Host != "" {
-					ht2.Host(trigger.Spec.Host)
-				}
-				ts.logger.V(1).Info("add prefix and handler route for function", "route", prefix, "function", fh.function, "methods", methods)
-			}
-		} else {
-			ht := public.Handle(trigger.Spec.RelativeURL, handler)
-			ht.Methods(methods...)
-			if trigger.Spec.Host != "" {
-				ht.Host(trigger.Spec.Host)
-			}
-			ts.logger.V(1).Info("add handler route for function", "router", trigger.Spec.RelativeURL, "function", fh.function, "methods", methods)
-		}
-
-		if trigger.Spec.Prefix == nil && trigger.Spec.RelativeURL == "/" && len(methods) == 1 && methods[0] == http.MethodGet {
+		if shape.claimsHome() {
 			homeHandled = true
 		}
 	}
-	if !homeHandled {
-		//
-		// This adds a no-op handler that returns 200-OK to make sure that the
-		// "GET /" request succeeds.  This route is used by GKE Ingress (and
-		// perhaps other ingress implementations) as a health check, so we don't
-		// want it to be a 404 even if the user doesn't have a function mapped to
-		// this route.
-		//
-		// Router-owned probe; never a CORS surface for legitimate
-		// browser code, so reject cross-origin preflights and strip any
-		// Access-Control-* header that might be added in the future.
-		// OPTIONS is registered alongside GET so a preflight reaches
-		// DenyAllCORS instead of being 405'd by mux's method gate.
-		public.Handle("/", httpsecurity.DenyAllCORS(http.HandlerFunc(defaultHomeHandler))).Methods(http.MethodGet, http.MethodOptions)
-	}
 
-	// Internal triggers for each function by name. Non-http triggers
+	// Internal routes for each function by name. Non-http triggers
 	// (timer, kubewatcher, mqtrigger) and the executor's invocation
 	// path land here. These routes live ONLY on the internal mux —
 	// exposing them on the public listener is GHSA-3g33-6vg6-27m8.
 	for i := range ts.functions {
 		fn := ts.functions[i]
-		routeLogger := ts.logger.WithName(fn.Name)
-		fh := &functionHandler{
-			logger:               routeLogger,
-			resolver:             ts.addressResolver,
-			tapper:               ts.tapper,
-			function:             &fn,
-			tsRoundTripperParams: ts.tsRoundTripperParams,
-			isDebugEnv:           ts.isDebugEnv,
-			functionTimeoutMap:   fnTimeoutMap,
-			rtLogger:             routeLogger.WithName("roundtripper"),
-			policyByUID: precomputePolicies(map[string]*fv1.Function{fn.Name: &fn},
-				fnTimeoutMap, streamIdleDefault),
-		}
-
-		internalRoute := utils.UrlForFunction(fn.Name, fn.Namespace)
-		internalPrefixRoute := internalRoute + "/"
-		handler := http.HandlerFunc(fh.handler)
-		internal.Handle(internalRoute, handler)
-		internal.PathPrefix(internalPrefixRoute).Handler(handler)
-		ts.logger.V(1).Info("add internal handler and prefix route for function", "router", internalRoute, "function", fn)
+		handler := ts.buildInternalFunctionHandler(&fn, fnTimeoutMap)
+		exact, prefix := internalRoutePair(types.NamespacedName{Namespace: fn.Namespace, Name: fn.Name})
+		internal.Handle(exact, handler)
+		internal.PathPrefix(prefix).Handler(handler)
+		ts.logger.V(1).Info("add internal handler and prefix route for function", "router", exact, "function", fn.Name)
 	}
 
-	if featureConfig.AuthConfig.IsEnabled {
-
-		path := featureConfig.AuthConfig.AuthUriPath
-		// Auth endpoint for the router. Router-owned route; cross-origin
-		// browser callers are not a legitimate use case, so reject
-		// preflights and strip any stray Access-Control-* headers.
-		// OPTIONS registered so the preflight reaches DenyAllCORS.
-		public.Handle(path, httpsecurity.DenyAllCORS(http.HandlerFunc(authLoginHandler(featureConfig)))).Methods(http.MethodPost, http.MethodOptions)
-	}
-
-	// Healthz endpoint for the router. Stays on the public listener so
-	// existing readiness/liveness probes and external monitors keep
-	// working without HMAC credentials. Router-owned route; deny CORS
-	// preflights (OPTIONS registered so mux routes them to DenyAllCORS).
-	public.Handle("/router-healthz", httpsecurity.DenyAllCORS(http.HandlerFunc(routerHealthHandler))).Methods(http.MethodGet, http.MethodOptions)
-	// Readiness probe: 200 only once informer caches have synced. Public
-	// listener, next to /router-healthz; no HMAC needed. Router-owned route;
-	// deny CORS (OPTIONS registered so mux routes preflights to DenyAllCORS).
-	public.Handle("/readyz", httpsecurity.DenyAllCORS(http.HandlerFunc(ts.routerReadinessHandler))).Methods(http.MethodGet, http.MethodOptions)
-	// version of application; router-owned route; deny CORS.
-	public.Handle("/_version", httpsecurity.DenyAllCORS(http.HandlerFunc(versionHandler))).Methods(http.MethodGet, http.MethodOptions)
+	ts.registerRouterOwnedRoutes(public, featureConfig, homeHandled)
 
 	return public, internal, nil
 }
@@ -523,10 +360,6 @@ func triggerConfigError(trigger *fv1.HTTPTrigger) (reason string, err error) {
 		return fv1.HTTPTriggerReasonInvalidIngressConfig, e
 	}
 	return "", nil
-}
-
-func (ts *HTTPTriggerSet) updateTriggerStatusFailed(ht *fv1.HTTPTrigger, err error) {
-	// TODO
 }
 
 // markTriggerCondition writes RouteAdmitted + Ready conditions on an
