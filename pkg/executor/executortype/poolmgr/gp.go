@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/dchest/uniuri"
@@ -69,6 +70,10 @@ type (
 		// ociImageHash is ociPoolHash(oci): keys the pool, labels its
 		// pods, and suffixes the deployment name. Empty for plain pools.
 		ociImageHash string
+		// lastActive (unix nanos) is the pool's activity clock for the
+		// per-image idle reaper (RFC-0012): stored at creation and on every
+		// GET_POOL. Atomic so the reap pass can read it lock-free.
+		lastActive atomic.Int64
 		// TODO: move this field into fsCache
 		podFSVCMap sync.Map
 	}
@@ -137,6 +142,7 @@ func MakeGenericPool(
 	if oci != nil {
 		gp.ociImageHash = ociPoolHash(oci)
 	}
+	gp.lastActive.Store(time.Now().UnixNano())
 
 	gp.runtimeImagePullPolicy = utils.GetImagePullPolicy(os.Getenv("RUNTIME_IMAGE_PULL_POLICY"))
 

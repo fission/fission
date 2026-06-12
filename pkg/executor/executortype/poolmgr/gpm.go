@@ -58,6 +58,7 @@ const (
 	GET_POOL requestType = iota
 	CLEANUP_POOL
 	GET_ENV_POOLS
+	REAP_IDLE_POOLS
 )
 
 type (
@@ -99,6 +100,9 @@ type (
 		fetcherConfig *fetcherConfig.Config
 
 		defaultIdlePodReapTime time.Duration
+		// ociPoolIdleReapTime is the idle window after which an empty
+		// per-image pool deployment is reaped (RFC-0012; OCI_POOL_IDLE_REAP_TIME).
+		ociPoolIdleReapTime time.Duration
 
 		poolPodC *PoolPodController
 
@@ -180,6 +184,7 @@ func MakeGenericPoolManager(ctx context.Context,
 		instanceID:                 instanceID,
 		requestChannel:             make(chan *request),
 		defaultIdlePodReapTime:     2 * time.Minute,
+		ociPoolIdleReapTime:        ociPoolIdleReapTimeFromEnv(logger),
 		fetcherConfig:              fetcherConfig,
 		enableIstio:                enableIstio,
 		poolPodC:                   poolPodC,
@@ -216,6 +221,12 @@ func (gpm *GenericPoolManager) Run(ctx context.Context, mgr *errgroup.Group) {
 	})
 	mgr.Go(func() error {
 		gpm.poolPodC.Run(ctx, ctx.Done(), mgr)
+		return nil
+	})
+	// Per-image idle pool reaper (RFC-0012): bounds warm-pool economics once
+	// every built package is its own image. Generic pools are never touched.
+	mgr.Go(func() error {
+		gpm.reapIdlePoolsLoop(ctx)
 		return nil
 	})
 }
@@ -673,6 +684,8 @@ func (gpm *GenericPoolManager) service() {
 			gpm.handleCleanupPool(req)
 		case GET_ENV_POOLS:
 			gpm.handleGetEnvPools(req)
+		case REAP_IDLE_POOLS:
+			gpm.handleReapIdlePools(req)
 		}
 	}
 }
@@ -717,6 +730,10 @@ func (gpm *GenericPoolManager) handleGetPool(req *request) {
 		gpm.seedReadyPodQueue(context.Background(), req.env, imageHash, pool.readyPodQueue)
 		created = true
 	}
+	// Touch the pool's activity clock (every specialization starts with a
+	// GET_POOL, and this handler is serialized with the reap pass, so a
+	// just-touched pool can never be reaped out from under the request).
+	pool.lastActive.Store(time.Now().UnixNano())
 	req.responseChannel <- &response{pool: pool, created: created}
 }
 

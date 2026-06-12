@@ -233,6 +233,12 @@ executor:
   ## packages on the fetcher pull path.
   ##
   enableOCIImageVolume: false
+  ## ociPoolIdleReapTime is the idle window after which an empty per-image
+  ## (OCI) warm pool deployment is reaped (RFC-0012). A reaped pool is
+  ## recreated on the next cold start, paying a kubelet-cached image pull.
+  ## Generic environment pools are never reaped.
+  ##
+  ociPoolIdleReapTime: 5m
   ## functionServices opts the pool manager into creating a headless selector
   ## Service per invoked function (RFC-0002 EndpointSlice-native data plane),
   ## so the built-in EndpointSlice controller publishes the function's

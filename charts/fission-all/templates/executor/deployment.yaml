@@ -73,6 +73,8 @@ spec:
         - name: ENABLE_OCI_IMAGE_VOLUME
           value: {{ .Values.executor.enableOCIImageVolume | quote }}
         {{- end }}
+        - name: OCI_POOL_IDLE_REAP_TIME
+          value: {{ .Values.executor.ociPoolIdleReapTime | default "5m" | quote }}
         {{- if .Values.executor.functionServices.enabled }}
         - name: ENABLE_FUNCTION_SERVICES
           value: {{ .Values.executor.functionServices.enabled | quote }}
