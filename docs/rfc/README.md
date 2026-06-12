@@ -18,6 +18,7 @@ Each document carries a `Status` header naming the implementing PRs and, where a
 | [0007](0007-gateway-api-route-provider.md) | Gateway API Route Provider | Implemented ([#3478](https://github.com/fission/fission/pull/3478)) |
 | [0008](0008-streaming-invocation-path.md) | Streaming Invocation Path (SSE / chunked / WebSocket) | Implemented ([#3482](https://github.com/fission/fission/pull/3482)) |
 | [0011](0011-functions-as-mcp-tools.md) | Functions as MCP Tools & AI Gateway | Part A implemented ([#3483](https://github.com/fission/fission/pull/3483)); Part B deferred |
+| [0012](0012-oci-default-package-delivery.md) | OCI-Native Package Delivery as the Default Cold-Start Path | Implemented (phases 1–4) |
 | [0013](0013-incremental-router-routes.md) | Incremental Router Route Updates | Implemented (phases 0–2; phase 3 gated, not built) |
 | [0014](0014-router-hot-path-efficiency.md) | Router Hot-Path Efficiency | Implemented ([#3491](https://github.com/fission/fission/pull/3491)) |
 
