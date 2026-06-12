@@ -63,7 +63,7 @@ func TestLoadPackageRegistryConfig(t *testing.T) {
 		assert.False(t, cfg.fallbackToStorage, "strict mode must survive parsing")
 	})
 
-	t.Run("garbage booleans soft-fail to defaults", func(t *testing.T) {
+	t.Run("garbage FALLBACK soft-fails to the safe default", func(t *testing.T) {
 		setAll(t, map[string]string{
 			"PACKAGE_REGISTRY_ENABLED":             "true",
 			"PACKAGE_REGISTRY_REPOSITORY_PREFIX":   "reg.example.com/p",
@@ -72,6 +72,13 @@ func TestLoadPackageRegistryConfig(t *testing.T) {
 		cfg, err := loadPackageRegistryConfig(logger)
 		require.NoError(t, err)
 		assert.True(t, cfg.fallbackToStorage)
+	})
+
+	t.Run("garbage ENABLED hard-fails", func(t *testing.T) {
+		setAll(t, map[string]string{"PACKAGE_REGISTRY_ENABLED": "ture"})
+		_, err := loadPackageRegistryConfig(logger)
+		require.Error(t, err,
+			"a typo'd enable flag must not silently ship tarballs forever")
 	})
 }
 

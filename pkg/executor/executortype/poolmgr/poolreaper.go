@@ -83,13 +83,23 @@ func (gpm *GenericPoolManager) reapIdlePoolsLoop(ctx context.Context) {
 
 // handleReapIdlePools runs one reap pass. Runs on the actor goroutine.
 func (gpm *GenericPoolManager) handleReapIdlePools(req *request) {
-	cutoff := time.Now().Add(-gpm.ociPoolIdleReapTime)
 	for key, pool := range gpm.pools {
 		if pool == nil || pool.ociImageHash == "" {
 			// Generic env pools are never reaped.
 			continue
 		}
-		if time.Unix(0, pool.lastActive.Load()).After(cutoff) {
+		// The effective idle window is never shorter than the pool's
+		// pod-ready timeout plus slack: a cold start can legitimately block
+		// in choosePod for the full pod-ready window (image pull on a cold
+		// node — the OCI case exactly), and lastActive is touched at
+		// GET_POOL time. With window == timeout the reaper could destroy a
+		// pool at the finish line of its first cold start. choosePod also
+		// re-touches the clock when it claims a pod (belt and braces).
+		window := gpm.ociPoolIdleReapTime
+		if minWindow := pool.podReadyTimeout + time.Minute; window < minWindow {
+			window = minWindow
+		}
+		if time.Unix(0, pool.lastActive.Load()).After(time.Now().Add(-window)) {
 			continue
 		}
 		busy, err := gpm.poolHasSpecializedPods(req.ctx, pool)
@@ -107,16 +117,24 @@ func (gpm *GenericPoolManager) handleReapIdlePools(req *request) {
 			"environment", pool.env.Name,
 			"namespace", pool.env.Namespace,
 			"idle_since", time.Unix(0, pool.lastActive.Load()).Format(time.RFC3339))
-		// Drop the map entry first so a racing GetFuncSvc (serialized behind
-		// this handler) recreates a fresh pool instead of finding a
-		// half-destroyed one — on-demand pool creation IS the cold-start path.
+		// The map entry drops regardless of destroy's outcome so the next
+		// GET_POOL (serialized behind this handler) recreates cleanly —
+		// on-demand pool creation IS the cold-start path, and destroy has
+		// already shut the ready-pod queue down. The destroy itself is
+		// bounded so an API-server outage cannot stall the pool actor (and
+		// with it every cold start) for longer than one pass.
 		delete(gpm.pools, key)
 		gpm.readyPodQueues.Delete(key)
-		if err := pool.destroy(req.ctx); err != nil {
-			// The deployment may briefly leak; a recreate reuses the
-			// deterministic name (setup adopts it) and CleanupOldExecutorObjects
-			// catches true orphans on restart.
-			gpm.logger.Error(err, "error destroying reaped pool", "poolKey", key)
+		destroyCtx, cancel := context.WithTimeout(req.ctx, 30*time.Second)
+		err = pool.destroy(destroyCtx)
+		cancel()
+		if err != nil {
+			// The deployment leaks until a recreate adopts it by name or
+			// CleanupOldExecutorObjects sweeps it on restart; count it
+			// separately so the Gate C reap counter never lies.
+			gpm.logger.Error(err, "error destroying reaped pool; the deployment is orphaned until adoption or restart cleanup", "poolKey", key)
+			metrics.OCIPoolReapFailures.Inc()
+			continue
 		}
 		metrics.OCIPoolsReaped.Inc()
 	}

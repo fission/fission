@@ -56,8 +56,10 @@ func loadPackageRegistryConfig(logger logr.Logger) (*packageRegistryConfig, erro
 	}
 	enabled, err := strconv.ParseBool(raw)
 	if err != nil {
-		logger.Error(err, "failed to parse 'PACKAGE_REGISTRY_ENABLED' - the OCI producer stays off", "value", raw)
-		return cfg, nil
+		// Hard-fail, same policy as the missing prefix: an unparseable
+		// enable flag silently shipping tarballs forever is exactly the
+		// half-configured-producer failure mode startup must reject.
+		return nil, fmt.Errorf("failed to parse 'PACKAGE_REGISTRY_ENABLED' value %q: %w", raw, err)
 	}
 	cfg.enabled = enabled
 	if !enabled {

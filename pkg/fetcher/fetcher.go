@@ -587,7 +587,15 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The artifact is deleted only after a SUCCESSFUL upload: the buildermgr
+	// client retries /upload on 5xx, and deleting on failure would turn every
+	// retry into "no such file" — masking the real error (registry auth, TLS,
+	// storage outage) from the user's build log.
+	uploadSucceeded := false
 	defer func() {
+		if !uploadSucceeded {
+			return
+		}
 		errC := utils.DeleteOldPackages(srcFilepath, "DEPLOY_PKG")
 		if errC != nil {
 			m := "error deleting deploy package after upload"
@@ -606,6 +614,7 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 		if pushErr == nil {
 			logger.Info("published deployment package as OCI image",
 				"image", ociArchive.Image, "digest", ociArchive.Digest)
+			uploadSucceeded = true
 			writeUploadResponse(logger, w, &ArchiveUploadResponse{OCI: ociArchive})
 			return
 		}
@@ -683,6 +692,7 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 	if ociPushErr != nil {
 		resp.OCIPushError = ociPushErr.Error()
 	}
+	uploadSucceeded = true
 	logger.Info("completed upload request")
 	writeUploadResponse(logger, w, resp)
 }

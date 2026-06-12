@@ -6,6 +6,7 @@ package buildermgr
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -146,7 +147,16 @@ func buildPackage(ctx context.Context, logger logr.Logger, fissionClient version
 		// distinct).
 		uploadResp.OCI.ImagePullSecrets = []apiv1.LocalObjectReference{{Name: registryCfg.pullSecret}}
 	}
-	if uploadResp.OCIPushError != "" {
+	switch {
+	case uploadResp.OCI != nil:
+		ociPublishes.WithLabelValues("published").Inc()
+	case uploadResp.OCIPushError != "":
+		// The control-plane signal for a degraded producer: the per-package
+		// condition and builder-pod logs alone would leave a fleet-wide
+		// registry outage invisible on dashboards.
+		logger.Error(errors.New(uploadResp.OCIPushError), "OCI publish degraded to the storage tarball",
+			"package", pkg.Name, "namespace", pkg.Namespace)
+		ociPublishes.WithLabelValues("degraded").Inc()
 		buildResp.BuildLogs += fmt.Sprintf("OCI publish failed (fell back to the storage tarball): %v\n", uploadResp.OCIPushError)
 	}
 
