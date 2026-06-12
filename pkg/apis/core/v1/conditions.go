@@ -84,6 +84,7 @@ const (
 	HTTPTriggerReasonMuxBuildFail         = "MuxBuildFailed"
 	HTTPTriggerReasonInvalidCorsConfig    = "InvalidCorsConfig"    // CORS origin/max-age failed url.Parse/time.ParseDuration
 	HTTPTriggerReasonInvalidIngressConfig = "InvalidIngressConfig" // ingress path/host failed POSIX-regex/DNS validation
+	HTTPTriggerReasonFunctionNotFound     = "FunctionNotFound"     // the referenced function does not exist; the route is not served
 
 	// KubernetesWatchTrigger condition reasons
 	KubernetesWatchTriggerReasonSubscribed  = "Subscribed"

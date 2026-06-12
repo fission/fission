@@ -50,6 +50,38 @@ var (
 		},
 		labelsStrings,
 	)
+
+	// Route-update observability (RFC-0013). muxRebuilds is the headline:
+	// in incremental mode it must NOT move under canary-weight / function
+	// churn — only shape changes (trigger create/delete/path edits) and the
+	// legacy mode's full rebuilds increment it.
+	routeTableApplies = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "fission_router_route_table_applies_total",
+			Help: "Route table applications by result (no_change, handler_swapped, shape_changed, rejected).",
+		},
+		[]string{"result"},
+	)
+	muxRebuilds = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "fission_router_mux_rebuilds_total",
+			Help: "Full mux rebuilds by listener and reason (shape_change for the incremental materializer, legacy for the full-rebuild mode).",
+		},
+		[]string{"listener", "reason"},
+	)
+	routesTotal = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "fission_router_routes",
+			Help: "Routes currently in the route table (public = HTTP triggers, internal = functions).",
+		},
+		[]string{"listener"},
+	)
+	resyncDrift = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name: "fission_router_route_resync_drift_total",
+			Help: "Routes the periodic resync had to correct — a nonzero value means a watch event was missed (the table self-healed).",
+		},
+	)
 )
 
 func init() {
@@ -57,6 +89,10 @@ func init() {
 	registry.MustRegister(functionCalls)
 	registry.MustRegister(functionCallErrors)
 	registry.MustRegister(functionCallOverhead)
+	registry.MustRegister(routeTableApplies)
+	registry.MustRegister(muxRebuilds)
+	registry.MustRegister(routesTotal)
+	registry.MustRegister(resyncDrift)
 }
 
 // collectFunctionMetric records the per-call counters and the

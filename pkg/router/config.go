@@ -60,6 +60,10 @@ type routerConfig struct {
 	// pool per function address (ROUTER_ROUND_TRIP_MAX_IDLE_CONNS_PER_HOST;
 	// optional, 0 = the built-in default, soft-fail).
 	maxIdleConnsPerHost int
+	// incrementalRoutes selects the per-event route-table update path
+	// (RFC-0013). Default true; ROUTER_INCREMENTAL_ROUTES=false is the
+	// escape hatch reinstating the legacy full-rebuild loop for one release.
+	incrementalRoutes bool
 }
 
 // loadRouterConfig parses the router's environment configuration. Behavior is
@@ -178,6 +182,19 @@ func loadRouterConfig(logger logr.Logger) (routerConfig, error) {
 			logger.Error(nil, "'ROUTER_ROUND_TRIP_MAX_IDLE_CONNS_PER_HOST' must not be negative - using the default", "value", raw)
 		default:
 			cfg.maxIdleConnsPerHost = perHost
+		}
+	}
+
+	// Incremental route updates (RFC-0013). Default ON; unparsable values
+	// keep the default and log (an escape hatch must not be able to brick
+	// startup).
+	cfg.incrementalRoutes = true
+	if raw := os.Getenv("ROUTER_INCREMENTAL_ROUTES"); raw != "" {
+		incremental, err := strconv.ParseBool(raw)
+		if err != nil {
+			logger.Error(err, "failed to parse 'ROUTER_INCREMENTAL_ROUTES' - incremental route updates stay enabled", "value", raw)
+		} else {
+			cfg.incrementalRoutes = incremental
 		}
 	}
 

@@ -213,6 +213,25 @@ func (t *Table) DeleteTrigger(uid types.UID) ApplyResult {
 	return ShapeChanged
 }
 
+// DeleteTriggerByName removes the route of the trigger with the given
+// namespace/name — the form a delete event arrives in (the object, and with
+// it the UID, is already gone). Linear over the table; deletes are rare,
+// human-driven events. Removes every matching UID (a missed delete event
+// followed by a recreate can briefly leave two UIDs for one name).
+func (t *Table) DeleteTriggerByName(key types.NamespacedName) ApplyResult {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	res := NoChange
+	for uid, spec := range t.public {
+		if spec.Namespace == key.Namespace && spec.Name == key.Name {
+			delete(t.public, uid)
+			t.dropFnIndexLocked(uid)
+			res = ShapeChanged
+		}
+	}
+	return res
+}
+
 // ApplyFunction reconciles one function's internal-listener route. Insert is
 // a ShapeChanged (the internal mux gains the route pair); an RV change is a
 // pure handler swap; same RV is NoChange.

@@ -88,15 +88,22 @@ func (s routeShape) claimsHome() bool {
 // registerRouteShape registers a shape onto a mux with the given handler:
 // up to two gorilla routes (exact and/or prefix), each gated by the shape's
 // methods and optional host.
+//
+// gorilla's Route.Methods MUTATES the slice it is handed (it uppercases the
+// entries in place) and then keeps it as the route's matcher. Passing the
+// shape's slice directly would (a) corrupt the caller's canonical copy (the
+// route table's spec, or the informer-owned trigger object) and (b) race
+// with the still-serving previous mux whose matcher shares the same backing
+// array — so each registration gets its own clone.
 func registerRouteShape(r *mux.Router, shape routeShape, handler http.Handler) {
 	if shape.exactPath != "" {
-		route := r.Handle(shape.exactPath, handler).Methods(shape.methods...)
+		route := r.Handle(shape.exactPath, handler).Methods(slices.Clone(shape.methods)...)
 		if shape.host != "" {
 			route.Host(shape.host)
 		}
 	}
 	if shape.prefixPath != "" {
-		route := r.PathPrefix(shape.prefixPath).Handler(handler).Methods(shape.methods...)
+		route := r.PathPrefix(shape.prefixPath).Handler(handler).Methods(slices.Clone(shape.methods)...)
 		if shape.host != "" {
 			route.Host(shape.host)
 		}

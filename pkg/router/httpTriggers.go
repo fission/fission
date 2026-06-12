@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -28,6 +29,7 @@ import (
 	config "github.com/fission/fission/pkg/featureconfig"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	"github.com/fission/fission/pkg/info"
+	"github.com/fission/fission/pkg/router/routetable"
 	"github.com/fission/fission/pkg/throttler"
 	"github.com/fission/fission/pkg/utils/httpsecurity"
 )
@@ -69,6 +71,27 @@ type HTTPTriggerSet struct {
 	// gates /readyz on it so a starting/rolling pod stays out of the
 	// Service endpoints until its mux is populated.
 	ready atomic.Bool
+
+	// Incremental route updates (RFC-0013). When incremental is true the
+	// reconcilers feed per-event diffs into routeTable and the materializer
+	// rebuilds muxes only on shape changes; when false the legacy
+	// full-rebuild loop (updateRouter) runs — the ROUTER_INCREMENTAL_ROUTES
+	// escape hatch. enableIncrementalRoutes flips the mode before the
+	// Manager starts.
+	incremental bool
+	routeTable  *routetable.Table
+	// pendingConditions holds triggers whose shape change is waiting on the
+	// debounced materialize; their RouteAdmitted conditions are marked after
+	// the swap so conditions reflect observable state.
+	pendingMu         sync.Mutex
+	pendingConditions map[types.UID]*fv1.HTTPTrigger
+}
+
+// enableIncrementalRoutes switches the trigger set to the incremental route
+// path. Must be called before subscribeRouter / the Manager starts.
+func (ts *HTTPTriggerSet) enableIncrementalRoutes() {
+	ts.incremental = true
+	ts.routeTable = routetable.New()
 }
 
 // makeHTTPTriggerSet builds the trigger set. cl is the Manager's cache-backed
@@ -133,6 +156,15 @@ func (ts *HTTPTriggerSet) subscribeRouter(ctx context.Context, mgr *errgroup.Gro
 	// rebuilds through updateRouterRequestChannel; this goroutine consumes them.
 	// The Manager owns the informer caches, so there are no informers to Run
 	// here. The initial mux build is kicked off by Start once the cache syncs.
+	// Incremental mode (RFC-0013) consumes the same channel with the
+	// materializer (rebuild-from-table) instead of the legacy full rebuild.
+	if ts.incremental {
+		mgr.Go(func() error {
+			ts.materializeLoop(ctx)
+			return nil
+		})
+		return nil
+	}
 	mgr.Go(func() error {
 		ts.updateRouter(ctx)
 		return nil
@@ -472,6 +504,8 @@ func (ts *HTTPTriggerSet) updateRouter(ctx context.Context) {
 		if ts.internalMutableRouter != nil {
 			ts.internalMutableRouter.updateRouter(internal)
 		}
+		muxRebuilds.WithLabelValues("public", "legacy").Inc()
+		muxRebuilds.WithLabelValues("internal", "legacy").Inc()
 		// The mux now serves user routes — report ready (gates /readyz).
 		ts.ready.Store(true)
 

@@ -1,0 +1,464 @@
+// SPDX-FileCopyrightText: The Fission Authors
+//
+// SPDX-License-Identifier: Apache-2.0
+
+package router
+
+import (
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	"time"
+
+	"github.com/bep/debounce"
+	"github.com/gorilla/mux"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	fissionfake "github.com/fission/fission/pkg/generated/clientset/versioned/fake"
+	"github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
+	"github.com/fission/fission/pkg/router/routetable"
+	"github.com/fission/fission/pkg/utils/loggerfactory"
+)
+
+// newIncrementalTS builds an HTTPTriggerSet in incremental mode, backed by a
+// fake cache client holding objs, with both mutable routers wired so
+// materialize() has swap targets.
+func newIncrementalTS(t testing.TB, objs ...client.Object) (*HTTPTriggerSet, client.Client) {
+	t.Helper()
+	logger := loggerfactory.GetLogger()
+	cl := fake.NewClientBuilder().WithScheme(scheme.Scheme).WithObjects(objs...).Build()
+	ts := &HTTPTriggerSet{
+		logger:                     logger.WithName("incremental_test"),
+		client:                     cl,
+		updateRouterRequestChannel: make(chan struct{}, 10),
+		syncDebouncer:              debounce.New(time.Millisecond),
+		resolver:                   makeFunctionReferenceResolver(logger, cl),
+	}
+	ts.enableIncrementalRoutes()
+	ts.mutableRouter = newMutableRouter(logger, mux.NewRouter())
+	ts.internalMutableRouter = newMutableRouter(logger, mux.NewRouter())
+	return ts, cl
+}
+
+// muxes returns the currently-swapped-in routers.
+func muxes(ts *HTTPTriggerSet) (public, internal *mux.Router) {
+	return ts.router.Load(), ts.internalMutableRouter.router.Load()
+}
+
+// requireSignal / requireNoSignal assert on the debounced materializer
+// channel. The debouncer fires after 1ms in tests; 250ms is comfortably past
+// it without slowing the suite on the negative path more than necessary.
+func requireSignal(t *testing.T, ts *HTTPTriggerSet) {
+	t.Helper()
+	select {
+	case <-ts.updateRouterRequestChannel:
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("expected a materialize signal, got none")
+	}
+}
+
+func requireNoSignal(t *testing.T, ts *HTTPTriggerSet) {
+	t.Helper()
+	select {
+	case <-ts.updateRouterRequestChannel:
+		t.Fatal("got a materialize signal for a handler-only change")
+	case <-time.After(250 * time.Millisecond):
+	}
+}
+
+func incrFn(name, ns, rv string) *fv1.Function {
+	return &fv1.Function{ObjectMeta: metav1.ObjectMeta{
+		Name: name, Namespace: ns, ResourceVersion: rv, UID: types.UID("fn-" + name),
+	}}
+}
+
+func incrTrigger(name, ns, rv, url, fnName string) *fv1.HTTPTrigger {
+	return &fv1.HTTPTrigger{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns, ResourceVersion: rv, UID: types.UID("trig-" + name)},
+		Spec: fv1.HTTPTriggerSpec{
+			RelativeURL: url,
+			Methods:     []string{http.MethodGet},
+			FunctionReference: fv1.FunctionReference{
+				Type: fv1.FunctionReferenceTypeFunctionName, Name: fnName,
+			},
+		},
+	}
+}
+
+// TestIncrementalTriggerLifecycle drives insert → materialize → delete →
+// materialize through the real apply path and asserts what the listeners
+// serve at each step.
+func TestIncrementalTriggerLifecycle(t *testing.T) {
+	fn := incrFn("fn", "default", "1")
+	trigger := incrTrigger("t1", "default", "1", "/hello", "fn")
+	ts, _ := newIncrementalTS(t, fn, trigger)
+
+	res, err := ts.applyTriggerIncremental(t.Context(), trigger)
+	require.NoError(t, err)
+	assert.Equal(t, routetable.ShapeChanged, res)
+	requireSignal(t, ts)
+	ts.materialize(t.Context())
+
+	public, _ := muxes(ts)
+	assert.True(t, muxMatches(public, http.MethodGet, "/hello"), "route must serve after materialize")
+	assert.True(t, ts.ready.Load(), "first materialize must flip readiness")
+
+	// Identical re-apply: no change, no signal.
+	res, err = ts.applyTriggerIncremental(t.Context(), trigger)
+	require.NoError(t, err)
+	assert.Equal(t, routetable.NoChange, res)
+	requireNoSignal(t, ts)
+
+	// Delete: the route must drop out after the next materialize.
+	res2 := ts.deleteTriggerIncremental(types.NamespacedName{Namespace: "default", Name: "t1"})
+	assert.Equal(t, routetable.ShapeChanged, res2)
+	requireSignal(t, ts)
+	ts.materialize(t.Context())
+	public, _ = muxes(ts)
+	assert.False(t, muxMatches(public, http.MethodGet, "/hello"), "deleted trigger must not serve")
+}
+
+// TestIncrementalCanaryTickIsHandlerSwapOnly is the RFC's headline
+// acceptance: a canary FunctionWeights rewrite (or any same-shape trigger
+// update) must be a handler swap with ZERO materializer signals — at any
+// trigger count, a weight tick no longer rebuilds anything.
+func TestIncrementalCanaryTickIsHandlerSwapOnly(t *testing.T) {
+	fnA := incrFn("fn-a", "default", "1")
+	fnB := incrFn("fn-b", "default", "1")
+	canary := &fv1.HTTPTrigger{
+		ObjectMeta: metav1.ObjectMeta{Name: "canary", Namespace: "default", ResourceVersion: "1", UID: "trig-canary"},
+		Spec: fv1.HTTPTriggerSpec{
+			RelativeURL: "/canary",
+			Methods:     []string{http.MethodGet},
+			FunctionReference: fv1.FunctionReference{
+				Type:            fv1.FunctionReferenceTypeFunctionWeights,
+				FunctionWeights: map[string]int{"fn-a": 90, "fn-b": 10},
+			},
+		},
+	}
+	ts, _ := newIncrementalTS(t, fnA, fnB, canary)
+
+	res, err := ts.applyTriggerIncremental(t.Context(), canary)
+	require.NoError(t, err)
+	require.Equal(t, routetable.ShapeChanged, res, "first apply inserts")
+	requireSignal(t, ts)
+	ts.materialize(t.Context())
+
+	// 50 weight ticks: every one must be a pure handler swap.
+	for i := range 50 {
+		tick := canary.DeepCopy()
+		tick.ResourceVersion = fmt.Sprintf("%d", i+2)
+		tick.Spec.FunctionReference.FunctionWeights = map[string]int{"fn-a": 90 - i, "fn-b": 10 + i}
+		res, err := ts.applyTriggerIncremental(t.Context(), tick)
+		require.NoError(t, err)
+		require.Equal(t, routetable.HandlerSwapped, res, "weight tick %d must be a handler swap", i)
+	}
+	requireNoSignal(t, ts)
+
+	public, _ := muxes(ts)
+	assert.True(t, muxMatches(public, http.MethodGet, "/canary"), "the route keeps serving through the ticks")
+}
+
+// TestIncrementalFunctionEventCascade pins the fn-index path: a function
+// update swaps the internal route's handler AND re-applies the referencing
+// trigger as a handler swap; a function create/delete is an internal shape
+// change.
+func TestIncrementalFunctionEventCascade(t *testing.T) {
+	fn := incrFn("fn", "myns", "1")
+	trigger := incrTrigger("t1", "myns", "1", "/hello", "fn")
+	ts, cl := newIncrementalTS(t, fn, trigger)
+
+	// Seed: function insert (internal shape change) + trigger insert.
+	res, err := ts.applyFunctionIncremental(t.Context(), fn)
+	require.NoError(t, err)
+	assert.Equal(t, routetable.ShapeChanged, res, "first sighting adds the internal route")
+	_, err = ts.applyTriggerIncremental(t.Context(), trigger)
+	require.NoError(t, err)
+	requireSignal(t, ts)
+	ts.materialize(t.Context())
+	_, internal := muxes(ts)
+	require.True(t, muxMatches(internal, http.MethodPost, "/fission-function/myns/fn"))
+
+	// Function update: internal handler swap + trigger handler swap, no signal.
+	fn2 := &fv1.Function{}
+	require.NoError(t, cl.Get(t.Context(), types.NamespacedName{Namespace: "myns", Name: "fn"}, fn2))
+	fn2.Labels = map[string]string{"rev": "2"} // any spec-level change; the client bumps the RV
+	require.NoError(t, cl.Update(t.Context(), fn2))
+	res, err = ts.applyFunctionIncremental(t.Context(), fn2)
+	require.NoError(t, err)
+	assert.Equal(t, routetable.HandlerSwapped, res)
+	requireNoSignal(t, ts)
+
+	// Function delete: internal route drops; the trigger's resolve now fails
+	// NotFound so its route drops too.
+	require.NoError(t, cl.Delete(t.Context(), fn2))
+	require.NoError(t, ts.deleteFunctionIncremental(t.Context(), types.NamespacedName{Namespace: "myns", Name: "fn"}))
+	requireSignal(t, ts)
+	ts.materialize(t.Context())
+	public, internal := muxes(ts)
+	assert.False(t, muxMatches(internal, http.MethodPost, "/fission-function/myns/fn"),
+		"deleted function's internal route must drop")
+	assert.False(t, muxMatches(public, http.MethodGet, "/hello"),
+		"trigger resolving through the deleted function must stop serving")
+}
+
+// TestIncrementalConditionsViaReconciler drives the REAL reconcilers (the
+// production entry points) against an incremental trigger set and asserts
+// the conditions: admitted triggers get RouteAdmitted=True after
+// materialize; a trigger whose function is missing gets
+// RouteAdmitted=False/FunctionNotFound.
+func TestIncrementalConditionsViaReconciler(t *testing.T) {
+	fn := incrFn("fn", "default", "1")
+	good := incrTrigger("good", "default", "1", "/good", "fn")
+	orphan := incrTrigger("orphan", "default", "1", "/orphan", "ghost")
+	ts, cl := newIncrementalTS(t, fn, good, orphan)
+	fc := fissionfake.NewSimpleClientset(good, orphan)
+	ts.fissionClient = fc
+
+	r := &httpTriggerReconciler{logger: ts.logger, client: cl, ts: ts}
+	for _, name := range []string{"good", "orphan"} {
+		_, err := r.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Namespace: "default", Name: name}})
+		require.NoError(t, err)
+	}
+	requireSignal(t, ts)
+	ts.materialize(t.Context())
+
+	public, _ := muxes(ts)
+	assert.True(t, muxMatches(public, http.MethodGet, "/good"))
+	assert.False(t, muxMatches(public, http.MethodGet, "/orphan"), "unresolvable trigger must not serve")
+
+	gotGood, err := fc.CoreV1().HTTPTriggers("default").Get(t.Context(), "good", metav1.GetOptions{})
+	require.NoError(t, err)
+	requireCondition(t, gotGood, fv1.HTTPTriggerConditionRouteAdmitted, metav1.ConditionTrue, fv1.HTTPTriggerReasonRouteAdmitted)
+
+	gotOrphan, err := fc.CoreV1().HTTPTriggers("default").Get(t.Context(), "orphan", metav1.GetOptions{})
+	require.NoError(t, err)
+	requireCondition(t, gotOrphan, fv1.HTTPTriggerConditionRouteAdmitted, metav1.ConditionFalse, fv1.HTTPTriggerReasonFunctionNotFound)
+}
+
+func requireCondition(t *testing.T, trigger *fv1.HTTPTrigger, condType string, status metav1.ConditionStatus, reason string) {
+	t.Helper()
+	for _, c := range trigger.Status.Conditions {
+		if c.Type == condType {
+			assert.Equal(t, status, c.Status, "condition %s status", condType)
+			assert.Equal(t, reason, c.Reason, "condition %s reason", condType)
+			return
+		}
+	}
+	t.Fatalf("condition %s not found on trigger %s (have %+v)", condType, trigger.Name, trigger.Status.Conditions)
+}
+
+// TestIncrementalResyncHealsDrift simulates missed watch events: objects
+// created and deleted behind the reconcilers' back are corrected by the
+// periodic resync.
+func TestIncrementalResyncHealsDrift(t *testing.T) {
+	fn := incrFn("fn", "default", "1")
+	t1 := incrTrigger("t1", "default", "1", "/one", "fn")
+	ts, cl := newIncrementalTS(t, fn, t1)
+
+	// Initial resync populates (not drift).
+	require.NoError(t, ts.resync(t.Context(), true))
+	pub, internal := ts.routeTable.Sizes()
+	assert.Equal(t, 1, pub)
+	assert.Equal(t, 1, internal)
+
+	// A second pass is fully converged: every apply must be NoChange (this
+	// is exactly what the drift counter counts after startup).
+	require.NoError(t, ts.resync(t.Context(), false))
+	pub, internal = ts.routeTable.Sizes()
+	assert.Equal(t, 1, pub)
+	assert.Equal(t, 1, internal)
+
+	// Missed events: t1 deleted, t2 created, with no reconciler in sight.
+	require.NoError(t, cl.Delete(t.Context(), t1))
+	t2 := incrTrigger("t2", "default", "", "/two", "fn") // no RV: the fake client assigns one on Create
+	require.NoError(t, cl.Create(t.Context(), t2))
+
+	require.NoError(t, ts.resync(t.Context(), false))
+	ts.materialize(t.Context())
+	public, _ := muxes(ts)
+	assert.False(t, muxMatches(public, http.MethodGet, "/one"), "resync must drop the missed delete")
+	assert.True(t, muxMatches(public, http.MethodGet, "/two"), "resync must add the missed create")
+}
+
+// TestIncrementalLegacyParity builds the same world through BOTH paths —
+// the legacy buildMuxes and the incremental table + materialize — and
+// asserts a corpus of requests is dispatched identically on both listeners.
+// This is the contract that lets the escape hatch be safe in either
+// direction.
+func TestIncrementalLegacyParity(t *testing.T) {
+	prefix := "/api"
+	slashPrefix := "/files/"
+	functions := []fv1.Function{
+		*incrFn("fn", "default", "1"),
+		*incrFn("other", "myns", "1"),
+	}
+	triggers := []fv1.HTTPTrigger{
+		*incrTrigger("exact", "default", "1", "/hello", "fn"),
+		*incrTrigger("home", "default", "1", "/", "fn"),
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "dual", Namespace: "default", ResourceVersion: "1", UID: "trig-dual"},
+			Spec: fv1.HTTPTriggerSpec{
+				Prefix:            &prefix,
+				Methods:           []string{http.MethodGet, http.MethodPost},
+				FunctionReference: fv1.FunctionReference{Type: fv1.FunctionReferenceTypeFunctionName, Name: "fn"},
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "slashpfx", Namespace: "default", ResourceVersion: "1", UID: "trig-slashpfx"},
+			Spec: fv1.HTTPTriggerSpec{
+				Prefix:            &slashPrefix,
+				Methods:           []string{http.MethodGet},
+				FunctionReference: fv1.FunctionReference{Type: fv1.FunctionReferenceTypeFunctionName, Name: "fn"},
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "hosted", Namespace: "default", ResourceVersion: "1", UID: "trig-hosted"},
+			Spec: fv1.HTTPTriggerSpec{
+				RelativeURL:       "/hosted",
+				Host:              "api.example.com",
+				Methods:           []string{http.MethodGet},
+				FunctionReference: fv1.FunctionReference{Type: fv1.FunctionReferenceTypeFunctionName, Name: "fn"},
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "cors", Namespace: "default", ResourceVersion: "1", UID: "trig-cors"},
+			Spec: fv1.HTTPTriggerSpec{
+				RelativeURL: "/cors",
+				Methods:     []string{http.MethodGet},
+				CorsConfig:  &fv1.HTTPTriggerCorsConfig{AllowOrigins: []string{"https://app.example.com"}},
+				FunctionReference: fv1.FunctionReference{
+					Type: fv1.FunctionReferenceTypeFunctionName, Name: "fn",
+				},
+			},
+		},
+		*incrTrigger("orphan", "default", "1", "/orphan", "ghost"), // skipped by both paths
+	}
+
+	// Legacy path.
+	legacyTS := newShapeTS(t, functions, triggers)
+	legacyPublic, legacyInternal, err := legacyTS.buildMuxes(t.Context(), nil)
+	require.NoError(t, err)
+
+	// Incremental path: applies + materialize.
+	objs := make([]client.Object, 0, len(functions)+len(triggers))
+	for i := range functions {
+		objs = append(objs, &functions[i])
+	}
+	for i := range triggers {
+		objs = append(objs, &triggers[i])
+	}
+	incrTS, _ := newIncrementalTS(t, objs...)
+	require.NoError(t, incrTS.resync(t.Context(), true))
+	incrTS.materialize(t.Context())
+	incrPublic, incrInternal := muxes(incrTS)
+
+	type probe struct {
+		method, path, host string
+	}
+	corpus := []probe{
+		{http.MethodGet, "/hello", ""}, {http.MethodPost, "/hello", ""}, {http.MethodGet, "/hello/x", ""},
+		{http.MethodGet, "/", ""}, {http.MethodOptions, "/", ""},
+		{http.MethodGet, "/api", ""}, {http.MethodPost, "/api", ""}, {http.MethodGet, "/api/", ""},
+		{http.MethodGet, "/api/v1", ""}, {http.MethodGet, "/apifoo", ""}, {http.MethodDelete, "/api", ""},
+		{http.MethodGet, "/files/", ""}, {http.MethodGet, "/files/a/b", ""}, {http.MethodGet, "/files", ""},
+		{http.MethodGet, "/hosted", "api.example.com"}, {http.MethodGet, "/hosted", "other.example.com"}, {http.MethodGet, "/hosted", ""},
+		{http.MethodGet, "/cors", ""}, {http.MethodOptions, "/cors", ""},
+		{http.MethodGet, "/orphan", ""},
+		{http.MethodGet, "/router-healthz", ""}, {http.MethodGet, "/readyz", ""}, {http.MethodGet, "/_version", ""},
+		{http.MethodGet, "/no-such-route", ""},
+	}
+	matchOn := func(r *mux.Router, p probe) bool {
+		req := httptest.NewRequest(p.method, p.path, nil)
+		if p.host != "" {
+			req.Host = p.host
+		}
+		var match mux.RouteMatch
+		return r.Match(req, &match) && match.Handler != nil
+	}
+	for _, p := range corpus {
+		assert.Equal(t, matchOn(legacyPublic, p), matchOn(incrPublic, p),
+			"public dispatch parity for %s %s host=%q", p.method, p.path, p.host)
+	}
+
+	internalCorpus := []probe{
+		{http.MethodPost, "/fission-function/fn", ""},
+		{http.MethodPost, "/fission-function/fn/sub", ""},
+		{http.MethodPost, "/fission-function/default/fn", ""},
+		{http.MethodPost, "/fission-function/myns/other", ""},
+		{http.MethodPost, "/fission-function/myns/other/sub", ""},
+		{http.MethodPost, "/fission-function/myns/otherX", ""},
+		{http.MethodGet, "/router-healthz", ""},
+	}
+	for _, p := range internalCorpus {
+		assert.Equal(t, matchOn(legacyInternal, p), matchOn(incrInternal, p),
+			"internal dispatch parity for %s %s", p.method, p.path)
+	}
+}
+
+// TestIncrementalNoRouteFlap extends the mutablemux swap guarantee to the
+// full incremental machinery: sustained requests against one stable route
+// while canary handler swaps and unrelated shape changes (trigger adds) +
+// materializes churn concurrently. Zero non-200s allowed. Run with -race.
+func TestIncrementalNoRouteFlap(t *testing.T) {
+	ts, _ := newIncrementalTS(t)
+
+	ok := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	stable := &routetable.RouteSpec{
+		TriggerUID: "stable", Namespace: "default", Name: "stable",
+		TriggerRV: "1", ExactPath: "/stable", Methods: []string{http.MethodGet},
+	}
+	ts.routeTable.ApplyTrigger(stable, func() http.Handler { return ok })
+	ts.materialize(t.Context())
+
+	stop := make(chan struct{})
+	churnDone := make(chan struct{})
+	go func() {
+		defer close(churnDone)
+		i := 0
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+			}
+			i++
+			// Handler swap on the stable route (same shape, new RV).
+			swap := *stable
+			swap.TriggerRV = fmt.Sprintf("%d", i+1)
+			ts.routeTable.ApplyTrigger(&swap, func() http.Handler { return ok })
+			// Unrelated shape change + immediate materialize (worst case:
+			// no debounce coalescing at all).
+			noise := &routetable.RouteSpec{
+				TriggerUID: types.UID(fmt.Sprintf("noise-%d", i%17)),
+				Namespace:  "default", Name: fmt.Sprintf("noise-%d", i%17),
+				TriggerRV: fmt.Sprintf("%d", i),
+				ExactPath: fmt.Sprintf("/noise-%d", i%17), Methods: []string{http.MethodGet},
+			}
+			ts.routeTable.ApplyTrigger(noise, func() http.Handler { return ok })
+			ts.materialize(t.Context())
+		}
+	}()
+
+	for range 3000 {
+		rr := httptest.NewRecorder()
+		ts.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/stable", nil))
+		if rr.Code != http.StatusOK {
+			close(stop)
+			<-churnDone
+			t.Fatalf("stable route flapped: got %d", rr.Code)
+		}
+	}
+	close(stop)
+	<-churnDone
+}

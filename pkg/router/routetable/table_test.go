@@ -137,6 +137,22 @@ func TestApplyTriggerDecisionTable(t *testing.T) {
 		assert.Equal(t, NoChange, tbl.DeleteTrigger("u1"))
 		assert.Empty(t, tbl.Snapshot())
 	})
+
+	t.Run("delete by name removes every matching UID and cleans the index", func(t *testing.T) {
+		tbl := New()
+		// Two UIDs for one name: the recreate-with-missed-delete case.
+		tbl.ApplyTrigger(spec("u1", "1", map[string]string{"fn": "1"}, nil),
+			func() http.Handler { return tagHandler("v1") })
+		stale := spec("u2", "1", map[string]string{"fn": "1"}, nil)
+		stale.Name = "trig-u1"
+		tbl.ApplyTrigger(stale, func() http.Handler { return tagHandler("v2") })
+
+		key := types.NamespacedName{Namespace: "default", Name: "trig-u1"}
+		assert.Equal(t, ShapeChanged, tbl.DeleteTriggerByName(key))
+		assert.Empty(t, tbl.Snapshot())
+		assert.Empty(t, tbl.TriggersForFunction(types.NamespacedName{Namespace: "default", Name: "fn"}))
+		assert.Equal(t, NoChange, tbl.DeleteTriggerByName(key))
+	})
 }
 
 // TestApplyFunctionDecisionTable pins the internal-route contract: insert /
