@@ -6,6 +6,7 @@ package router
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -16,6 +17,13 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 )
+
+// errFunctionNotFound marks a resolve failure caused by the referenced
+// function not existing (as opposed to a transient cache/reader error).
+// The incremental route path uses it to distinguish "remove the route and
+// mark the trigger FunctionNotFound" from "requeue and keep the
+// last-known-good route".
+var errFunctionNotFound = errors.New("function not found")
 
 type (
 	// functionReferenceResolver turns a trigger's function reference into a
@@ -80,7 +88,7 @@ func (frr *functionReferenceResolver) getFunction(ctx context.Context, namespace
 	err := frr.reader.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, f)
 	if apierrors.IsNotFound(err) {
 		frr.logger.Error(nil, "function does not exists", "name", name, "namespace", namespace)
-		return nil, fmt.Errorf("function %s/%s does not exist", namespace, name)
+		return nil, fmt.Errorf("function %s/%s does not exist: %w", namespace, name, errFunctionNotFound)
 	}
 	if err != nil {
 		return nil, err

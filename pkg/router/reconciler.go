@@ -44,7 +44,7 @@ func (r *httpTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	if err := r.client.Get(ctx, req.NamespacedName, trigger); err != nil {
 		if apierrors.IsNotFound(err) {
 			// Deleted: drop any route object it owned (idempotent by name) and
-			// rebuild the mux without it. Aggregate provider errors and return
+			// remove its route. Aggregate provider errors and return
 			// them so a transient API failure on delete is retried rather than
 			// leaking an orphaned route object.
 			var errs error
@@ -54,7 +54,11 @@ func (r *httpTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 					errs = errors.Join(errs, fmt.Errorf("%s: %w", p.Name(), err))
 				}
 			}
-			r.ts.syncTriggers()
+			if r.ts.incremental {
+				r.ts.deleteTriggerIncremental(req.NamespacedName)
+			} else {
+				r.ts.syncTriggers()
+			}
 			return ctrl.Result{}, errs
 		}
 		return ctrl.Result{}, err
@@ -80,7 +84,18 @@ func (r *httpTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			errs = errors.Join(errs, fmt.Errorf("%s: %w", p.Name(), err))
 		}
 	}
-	r.ts.syncTriggers()
+	if r.ts.incremental {
+		// Per-event diff (RFC-0013): validate → resolve → route-table apply.
+		// A handler-only change swaps an atomic pointer; only shape changes
+		// signal the materializer. A transient resolve error is returned so
+		// controller-runtime requeues (the last-known-good route keeps
+		// serving).
+		if _, err := r.ts.applyTriggerIncremental(ctx, trigger); err != nil {
+			errs = errors.Join(errs, err)
+		}
+	} else {
+		r.ts.syncTriggers()
+	}
 	return ctrl.Result{}, errs
 }
 
@@ -106,16 +121,28 @@ func (r *functionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	fn := &fv1.Function{}
 	if err := r.client.Get(ctx, req.NamespacedName, fn); err != nil {
 		if apierrors.IsNotFound(err) {
-			// Deleted: nothing to invalidate by ResourceVersion; rebuild so the
-			// function's routes drop out.
+			// Deleted: drop the internal route and cascade to the triggers
+			// resolving through it (incremental), or rebuild so the
+			// function's routes drop out (legacy).
+			if r.ts.incremental {
+				return ctrl.Result{}, r.ts.deleteFunctionIncremental(ctx, req.NamespacedName)
+			}
 			r.ts.syncTriggers()
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, err
 	}
-	// The rebuild triggered below re-resolves every trigger straight from the
-	// Manager cache (the resolver is uncached since RFC-0014 phase 3), so no
-	// explicit invalidation is needed — the rebuild IS the invalidation.
+	if r.ts.incremental {
+		// Per-event diff (RFC-0013): upsert the internal route (insert =
+		// shape change, update = handler swap) and re-apply the referencing
+		// triggers via the fn index — function churn never rebuilds a mux.
+		_, err := r.ts.applyFunctionIncremental(ctx, fn)
+		return ctrl.Result{}, err
+	}
+	// Legacy: the rebuild triggered below re-resolves every trigger straight
+	// from the Manager cache (the resolver is uncached since RFC-0014 phase
+	// 3), so no explicit invalidation is needed — the rebuild IS the
+	// invalidation.
 	r.ts.syncTriggers()
 	return ctrl.Result{}, nil
 }

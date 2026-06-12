@@ -102,6 +102,11 @@ spec:
           value: {{ $epsMode | quote }}
         - name: ROUTER_ENDPOINTSLICE_ENDPOINT_LB
           value: {{ .Values.router.endpointSliceCache.endpointLB | default false | quote }}
+        {{- /* NOTE: `| default true` would coerce an explicit `false` back to
+             true (sprig default treats false as unset), so the escape hatch
+             is rendered with if/else — same pattern as disableKeepAlive. */}}
+        - name: ROUTER_INCREMENTAL_ROUTES
+          value: {{ if hasKey .Values.router "incrementalRoutes" }}{{ if .Values.router.incrementalRoutes }}"true"{{ else }}"false"{{ end }}{{ else }}"true"{{ end }}
         - name: USE_ENCODED_PATH
           value: {{ .Values.router.useEncodedPath | default false | quote }}
         - name: DEBUG_ENV

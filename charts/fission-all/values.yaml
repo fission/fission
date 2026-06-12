@@ -407,6 +407,16 @@ router:
   # svcAnnotations:
   #   cloud.google.com/load-balancer-type: Internal
 
+  ## incrementalRoutes selects the router's incremental route-update path
+  ## (RFC-0013): trigger/function events apply per-event diffs to a route
+  ## table, canary weight ticks and function updates swap an atomic handler
+  ## pointer, and the muxes are rebuilt only on route-shape changes (trigger
+  ## create/delete or path/method/host edits).
+  ## false reinstates the legacy full-rebuild-on-every-event loop; the
+  ## escape hatch is scheduled for removal one release after it ships.
+  ##
+  incrementalRoutes: true
+
   ## useEncodedPath decideds to match encoded path.
   ## If true, "/foo%2Fbar" will match the path "/{var}";
   ## Otherwise, it will match the path "/foo/bar".

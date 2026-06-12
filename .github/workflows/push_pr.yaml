@@ -152,11 +152,11 @@ jobs:
       # this the executor-RPC warm path would lose all CI coverage. The
       # gate-dependent integration tests detect the modes from the live
       # Deployments and skip themselves on this leg.
-      - name: Pin legacy data plane (RFC-0002 gates off)
+      - name: Pin legacy data plane (RFC-0002 gates off, RFC-0013 legacy rebuild)
         if: ${{ matrix.kindversion == 'v1.34.8' }}
         timeout-minutes: 5
         run: |
-          kubectl -n fission set env deploy/router ROUTER_ENDPOINTSLICE_CACHE_MODE=off
+          kubectl -n fission set env deploy/router ROUTER_ENDPOINTSLICE_CACHE_MODE=off ROUTER_INCREMENTAL_ROUTES=false
           kubectl -n fission set env deploy/executor ENABLE_FUNCTION_SERVICES=false
           kubectl -n fission rollout status deploy/router --timeout=3m
           kubectl -n fission rollout status deploy/executor --timeout=3m

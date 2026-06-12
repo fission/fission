@@ -409,6 +409,14 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	if err != nil {
 		return fmt.Errorf("error making HTTP trigger set: %w", err)
 	}
+	// Incremental route updates (RFC-0013): per-event route-table diffs +
+	// handler indirection; muxes rebuild only on shape changes. The escape
+	// hatch (ROUTER_INCREMENTAL_ROUTES=false) reinstates the legacy
+	// full-rebuild loop.
+	if cfg.incrementalRoutes {
+		triggers.enableIncrementalRoutes()
+	}
+	logger.Info("router route-update mode configured", "incrementalRoutes", cfg.incrementalRoutes)
 
 	// EndpointSlice-fed endpoint index (RFC-0002). Every router replica watches
 	// independently (no leader election — that is the point: warm-path state is
@@ -481,7 +489,22 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		// The reconcilers also fire for every existing object; the debouncer
 		// coalesces these into a single rebuild.
 		if crMgr.GetCache().WaitForCacheSync(rctx) {
-			triggers.syncTriggers()
+			if triggers.incremental {
+				// Initial table population; idempotent against the reconciler
+				// replay that is happening concurrently. The explicit signal
+				// covers the zero-object install (router-owned routes must
+				// still materialize) and the resync loop is the drift guard.
+				if err := triggers.resync(rctx, true); err != nil {
+					logger.Error(err, "initial route table resync failed; reconciler replay will converge the table")
+				}
+				triggers.signalMaterialize()
+				gm.Go(func() error {
+					triggers.resyncLoop(rctx)
+					return nil
+				})
+			} else {
+				triggers.syncTriggers()
+			}
 		}
 		<-rctx.Done()
 		_ = gm.Wait()
