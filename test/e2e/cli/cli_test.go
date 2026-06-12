@@ -7,8 +7,8 @@ package cli_test
 import (
 	"context"
 	"os"
-	"strings"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
