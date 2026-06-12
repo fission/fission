@@ -17,6 +17,7 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/oci"
+	"github.com/fission/fission/pkg/utils"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
@@ -88,7 +89,9 @@ func insecureRegistriesFromEnv() []string {
 // same kauth keychain as pulls, with the spec's push secret as the
 // imagePullSecret-style reference.
 func (fetcher *Fetcher) pushOCI(ctx context.Context, srcPath string, spec *OCIPushSpec) (*fv1.OCIArchive, error) {
-	st, err := os.Stat(srcPath)
+	// RootStat confines the request-derived path to the shared volume
+	// (os.Root; CWE-22 — same contract as the tarball upload path).
+	st, err := utils.RootStat(fetcher.sharedVolumePath, srcPath)
 	if err != nil {
 		return nil, fmt.Errorf("stating build artifact: %w", err)
 	}

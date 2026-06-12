@@ -101,12 +101,19 @@ func PushDirectory(ctx context.Context, dir, repo string, opts PushOptions) (ima
 
 // tarGzDirectory writes dir's contents (relative to dir) as a deterministic
 // tar.gz stream: sorted order (fs.WalkDir guarantees lexical order), zeroed
-// times, no user/group. Directories and regular files only.
+// times, no user/group. Directories and regular files only. All reads are
+// confined to dir via os.Root (the path may be request-derived — CWE-22).
 func tarGzDirectory(dir string, w io.Writer) error {
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return fmt.Errorf("opening source root: %w", err)
+	}
+	defer root.Close()
+
 	gz := gzip.NewWriter(w)
 	tw := tar.NewWriter(gz)
 
-	err := fs.WalkDir(os.DirFS(dir), ".", func(path string, d fs.DirEntry, err error) error {
+	err = fs.WalkDir(root.FS(), ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -135,7 +142,7 @@ func tarGzDirectory(dir string, w io.Writer) error {
 			}); err != nil {
 				return err
 			}
-			f, err := os.Open(filepath.Join(dir, path))
+			f, err := root.Open(path)
 			if err != nil {
 				return err
 			}
