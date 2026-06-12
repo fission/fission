@@ -14,6 +14,12 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
+// NoServiceAccount skips the ServiceAccount imagePullSecrets lookup in
+// Keychain — for callers whose pod identity has no RBAC on (or no use for)
+// a ServiceAccount's pull secrets, e.g. the PUSH path in the builder pod
+// (RFC-0012), which authenticates solely via the explicit push secret.
+const NoServiceAccount = kauth.NoServiceAccount
+
 // Keychain builds the registry-credential chain for pulling a package image:
 // the service account's imagePullSecrets plus the explicit pullSecrets (both
 // in namespace ns), falling back to the process-default keychain (and thus

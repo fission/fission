@@ -399,6 +399,11 @@ func TestGenDeploymentSpecOCIImageVolume(t *testing.T) {
 	// to this pool's queue.
 	assert.Equal(t, gp.ociImageHash, pod.Labels[fv1.POOL_OCI_IMAGE_HASH])
 	assert.Equal(t, gp.ociImageHash, deploymentSpec.Selector.MatchLabels[fv1.POOL_OCI_IMAGE_HASH])
+
+	// Per-image pools keep one warm pod regardless of the env poolsize
+	// (RFC-0012 economics: poolsize would multiply per PACKAGE).
+	require.NotNil(t, deploymentSpec.Replicas)
+	assert.Equal(t, int32(1), *deploymentSpec.Replicas)
 }
 
 // TestGenDeploymentSpecOCIWithPodSpecPatch asserts the pod-spec invariants are

@@ -175,6 +175,15 @@ func (gp *GenericPool) genDeploymentSpec(env *fv1.Environment) (*appsv1.Deployme
 	case fv1.AllowedFunctionsPerContainerInfinite:
 		poolsize = 1
 	}
+	if gp.oci != nil {
+		// Per-image pools keep ONE warm pod (RFC-0012): the env's poolsize
+		// multiplies per PACKAGE here (N built packages x poolsize pods,
+		// for both variants), and the kubelet's image cache makes recreation
+		// cheap — warm depth is the generic pool's job, bounded-economics is
+		// this pool's. This is the RFC's Gate C poolsize lever, applied by
+		// default.
+		poolsize = 1
+	}
 
 	deploymentSpec := appsv1.DeploymentSpec{
 		// TODO: fix this hardcoded value
@@ -328,6 +337,15 @@ func (gp *GenericPool) updatePoolDeployment(ctx context.Context, env *fv1.Enviro
 	poolsize := getEnvPoolSize(env)
 	switch env.Spec.AllowedFunctionsPerContainer {
 	case fv1.AllowedFunctionsPerContainerInfinite:
+		poolsize = 1
+	}
+	if gp.oci != nil {
+		// Per-image pools keep ONE warm pod (RFC-0012): the env's poolsize
+		// multiplies per PACKAGE here (N built packages x poolsize pods,
+		// for both variants), and the kubelet's image cache makes recreation
+		// cheap — warm depth is the generic pool's job, bounded-economics is
+		// this pool's. This is the RFC's Gate C poolsize lever, applied by
+		// default.
 		poolsize = 1
 	}
 	newDeployment.Spec.Replicas = &poolsize

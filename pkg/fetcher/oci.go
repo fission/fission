@@ -105,7 +105,12 @@ func (fetcher *Fetcher) pushOCI(ctx context.Context, srcPath string, spec *OCIPu
 	if spec.PushSecretName != "" {
 		pushSecrets = append(pushSecrets, apiv1.LocalObjectReference{Name: spec.PushSecretName})
 	}
-	keychain, err := oci.Keychain(ctx, fetcher.kubeClient, fetcher.Info.Namespace, fv1.FissionFetcherSA, pushSecrets)
+	// No ServiceAccount lookup: pushes authenticate via the explicit push
+	// secret only. The builder pod runs as fission-builder, which has no
+	// RBAC to read the fission-fetcher SA (and SA imagePullSecrets are a
+	// pull concept anyway) — resolving it here broke every push with a
+	// Forbidden error in-cluster.
+	keychain, err := oci.Keychain(ctx, fetcher.kubeClient, fetcher.Info.Namespace, oci.NoServiceAccount, pushSecrets)
 	if err != nil {
 		return nil, fmt.Errorf("building registry keychain: %w", err)
 	}
