@@ -46,6 +46,14 @@ spec:
   environment:
     name: churn-env
     namespace: ${NS}
+  package:
+    packageref:
+      name: churn-pkg
+      namespace: ${NS}
+  InvokeStrategy:
+    StrategyType: execution
+    ExecutionStrategy:
+      ExecutorType: poolmgr
 EOF
 }
 
@@ -69,6 +77,7 @@ spec:
   - GET
   functionref:
     type: function-weights
+    name: churn-fn-${i}
     functionweights:
       churn-fn-${i}: ${weight}
       churn-fn-${other}: $(( 100 - weight ))
