@@ -141,43 +141,35 @@ kubernetesClientQPS: 200
 ## kubernetesClientBurst represents the maximum burst queries to the kubernetes api server from client instances of fission components.
 kubernetesClientBurst: 500
 
-## packageRegistry configures the OCI package producer (RFC-0012): when
-## enabled, every successful package build is published to the registry as a
-## digest-pinned single-layer OCI image and the Package's deployment archive
-## references it — fission fn create --code users get OCI (image-volume)
-## delivery with zero per-package action. Disabled by default because Fission
-## cannot conjure a registry; without one, builds keep producing storagesvc
-## tarballs exactly as before.
-## NOTE the registry URL must be reachable by the builder pod (push), the
-## fetcher (Path A pulls), AND the kubelet on every node (Path B image
-## volumes) — a cluster-DNS-only registry breaks Path B.
+## packageRegistry publishes built function packages to a container registry
+## as OCI images instead of storing tarballs. Functions then cold-start
+## faster on Kubernetes 1.33+ (code is mounted directly by the kubelet).
+## Without a registry, builds keep using internal storage — no change.
+## NOTE: the registry must be reachable from inside the cluster AND from
+## every node.
 ##
 packageRegistry:
   enabled: false
-  ## repositoryPrefix is the repository root; packages publish to
-  ## <repositoryPrefix>/<namespace>/<package>:<short-digest>.
-  ## e.g. ghcr.io/myorg/fission-packages
+  ## Repository root. Packages are pushed to
+  ## <repositoryPrefix>/<namespace>/<package>, e.g. ghcr.io/myorg/fission-packages.
   repositoryPrefix: ""
-  ## publishedPrefix optionally overrides the prefix RECORDED in published
-  ## archives (pushes still go to repositoryPrefix). For registries whose
-  ## push URL differs from the consumption URL — e.g. pushed via cluster
-  ## DNS but pulled by the kubelet via a node-resolvable NodePort name.
-  publishedPrefix: ""
-  ## pushSecret names a dockerconfigjson secret (in the builder namespace)
-  ## holding WRITE credentials, resolved by the builder pod's fetcher at
-  ## push time. Keep it distinct from pullSecret (least privilege).
+  ## Secret names (kubernetes.io/dockerconfigjson, in the builder namespace):
+  ## pushSecret needs write access (used at build time); pullSecret needs
+  ## read access (attached to packages for pulling). Keep them separate.
   pushSecret: ""
-  ## pullSecret names a READ-ONLY dockerconfigjson secret stamped into the
-  ## published archive's imagePullSecrets (used by function pods / kubelet).
   pullSecret: ""
-  ## insecureHosts is a comma-separated host[:port] allowlist permitted to
-  ## serve plain HTTP (same semantics as fetcher.allowInsecureRegistries).
-  insecureHosts: ""
-  ## fallbackToStorage selects the degraded mode: when a push fails the
-  ## build falls back to the storagesvc tarball and the Package gets an
-  ## OCIPublished=False/OCIPublishDegraded condition. false = strict: the
-  ## build fails (for shops requiring OCI provenance).
+  ## On a failed push: true keeps the build and stores a tarball instead
+  ## (the package gets condition OCIPublished=False); false fails the build.
   fallbackToStorage: true
+  ## --- Advanced (mainly for self-hosted / in-cluster registries) ---
+  ## publishedPrefix: if nodes reach the registry by a DIFFERENT address
+  ## than pods do (e.g. an in-cluster registry exposed via NodePort), set
+  ## the node-visible prefix here; it is recorded in packages while pushes
+  ## go to repositoryPrefix.
+  publishedPrefix: ""
+  ## insecureHosts: comma-separated host[:port] list allowed to use plain
+  ## HTTP instead of TLS.
+  insecureHosts: ""
 
 ## fetcher is a light weight component that helps in running functions.
 ## fetcher helps in fetching function source code/build and uploading it when function is invoked.
@@ -265,18 +257,14 @@ executor:
   ## adoptExistingResources decides whether to adopt existing resources when executor restarts or Fission is redeployed.
   ##
   adoptExistingResources: false
-  ## enableOCIImageVolume delivers OCI packages via kubelet image volumes
-  ## (RFC-0001 Path B; the default since RFC-0012). Requires Kubernetes >=
-  ## 1.33 (KEP-4639); on older clusters the executor logs the capability miss
-  ## and keeps OCI packages on the fetcher pull path — the flag is safe to
-  ## leave on everywhere. false is the escape hatch back to fetcher-pull
-  ## delivery for OCI packages (tarball packages are unaffected either way).
+  ## Mount OCI packages directly into function pods (needs Kubernetes 1.33+;
+  ## older clusters automatically fall back to downloading the package).
+  ## Gives noticeably faster cold starts. Set false to always download.
   ##
   enableOCIImageVolume: true
-  ## ociPoolIdleReapTime is the idle window after which an empty per-image
-  ## (OCI) warm pool deployment is reaped (RFC-0012). A reaped pool is
-  ## recreated on the next cold start, paying a kubelet-cached image pull.
-  ## Generic environment pools are never reaped.
+  ## How long an unused per-package warm pool is kept before removal; it is
+  ## recreated automatically on the next request. Shared environment pools
+  ## are never removed.
   ##
   ociPoolIdleReapTime: 5m
   ## functionServices opts the pool manager into creating a headless selector

@@ -157,3 +157,17 @@ func TestSetPackageOCIPublishCondition(t *testing.T) {
 	setPackageOCIPublishCondition(status, nil, 4)
 	assert.Nil(t, conditions.Find(status.Conditions, fv1.PackageConditionOCIPublished))
 }
+
+// TestDescribeOCIDeliveryWarning is covered in the CLI; here we pin that a
+// cluster-DNS recorded prefix still PARSES (the warning is advisory).
+func TestClusterDNSPrefixStillParses(t *testing.T) {
+	logger := loggerfactory.GetLogger()
+	t.Setenv("PACKAGE_REGISTRY_ENABLED", "true")
+	t.Setenv("PACKAGE_REGISTRY_REPOSITORY_PREFIX", "test-registry.default.svc.cluster.local:5000/builds")
+	for _, k := range []string{"PACKAGE_REGISTRY_PUBLISHED_PREFIX", "PACKAGE_REGISTRY_PUSH_SECRET", "PACKAGE_REGISTRY_PULL_SECRET", "PACKAGE_REGISTRY_INSECURE_HOSTS", "PACKAGE_REGISTRY_FALLBACK_TO_STORAGE"} {
+		t.Setenv(k, "")
+	}
+	cfg, err := loadPackageRegistryConfig(logger)
+	require.NoError(t, err)
+	assert.True(t, cfg.enabled)
+}

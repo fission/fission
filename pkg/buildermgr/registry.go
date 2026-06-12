@@ -78,6 +78,14 @@ func loadPackageRegistryConfig(logger logr.Logger) (*packageRegistryConfig, erro
 			cfg.insecureHosts = append(cfg.insecureHosts, h)
 		}
 	}
+	effective := cfg.publishedPrefix
+	if effective == "" {
+		effective = cfg.repositoryPrefix
+	}
+	if host, _, _ := strings.Cut(effective, "/"); strings.HasSuffix(strings.Split(host, ":")[0], ".svc") || strings.Contains(host, ".svc.") {
+		logger.Info("WARNING: packages will reference a cluster-DNS registry name that nodes cannot resolve; image-volume mounts will fail — set PACKAGE_REGISTRY_PUBLISHED_PREFIX to a node-resolvable name",
+			"recordedPrefix", effective)
+	}
 	if raw := os.Getenv("PACKAGE_REGISTRY_FALLBACK_TO_STORAGE"); raw != "" {
 		fallback, err := strconv.ParseBool(raw)
 		if err != nil {

@@ -70,6 +70,9 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 		noZip = true
 	}
 
+	if ociImage != "" && isClusterLocalRef(ociImage) {
+		console.Warn(fmt.Sprintf("%q is a cluster-DNS registry name: nodes cannot resolve it, so image-volume mounts will fail and only fetcher-pull delivery will work. Use a node-resolvable registry address if you want image volumes.", ociImage))
+	}
 	if err := ValidateArchiveSources(code, srcArchiveFiles, deployArchiveFiles, ociImage); err != nil {
 		return err
 	}
@@ -115,6 +118,19 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 // ValidateArchiveSources enforces that --oci is not combined with
 // --code/--src/--deploy and that at least one code source is given. It is
 // shared by `package create` and `fn create`.
+// isClusterLocalRef reports whether an image reference's registry host is a
+// cluster-DNS name (resolvable by pods, NOT by the kubelet on nodes).
+func isClusterLocalRef(ref string) bool {
+	host := ref
+	if i := strings.IndexByte(host, '/'); i >= 0 {
+		host = host[:i]
+	}
+	if i := strings.IndexByte(host, ':'); i >= 0 {
+		host = host[:i]
+	}
+	return strings.HasSuffix(host, ".svc") || strings.Contains(host, ".svc.")
+}
+
 func ValidateArchiveSources(code string, srcArchiveFiles, deployArchiveFiles []string, ociImage string) error {
 	if len(ociImage) > 0 && (len(code) > 0 || len(srcArchiveFiles) > 0 || len(deployArchiveFiles) > 0) {
 		return fmt.Errorf("--%v cannot be combined with --%v, --%v, or --%v", flagkey.PkgOCI, flagkey.PkgCode, flagkey.PkgSrcArchive, flagkey.PkgDeployArchive)
