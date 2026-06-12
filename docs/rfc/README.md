@@ -2,7 +2,7 @@
 
 This directory holds the architecture RFCs behind shipped (or partially shipped) Fission features.
 RFCs describe non-trivial, cross-cutting changes — new CRDs, data-plane refactors, backward-compat strategies, release-skewing decisions — and are published here once their implementation lands on `main`, so the design rationale travels with the code.
-Proposals that have not been implemented yet are not published here.
+Proposals are normally published here once their implementation lands; a proposal slated for near-term implementation may be published early, marked Proposed.
 
 Each document carries a `Status` header naming the implementing PRs and, where applicable, the parts that remain.
 
@@ -18,6 +18,8 @@ Each document carries a `Status` header naming the implementing PRs and, where a
 | [0007](0007-gateway-api-route-provider.md) | Gateway API Route Provider | Implemented ([#3478](https://github.com/fission/fission/pull/3478)) |
 | [0008](0008-streaming-invocation-path.md) | Streaming Invocation Path (SSE / chunked / WebSocket) | Implemented ([#3482](https://github.com/fission/fission/pull/3482)) |
 | [0011](0011-functions-as-mcp-tools.md) | Functions as MCP Tools & AI Gateway | Part A implemented ([#3483](https://github.com/fission/fission/pull/3483)); Part B deferred |
+| [0013](0013-incremental-router-routes.md) | Incremental Router Route Updates | Proposed (queued for implementation) |
+| [0014](0014-router-hot-path-efficiency.md) | Router Hot-Path Efficiency | Implemented ([#3491](https://github.com/fission/fission/pull/3491)) |
 
 ## Companion material
 

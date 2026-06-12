@@ -336,6 +336,18 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	// manager cache sync and hang the router not-ready, so degrade to the
 	// legacy data plane loudly instead. Checked before manager construction
 	// because the cache options depend on the (possibly downgraded) mode.
+	// The pooled proxy transport's effective settings (RFC-0014): the one log
+	// line an operator can check to confirm keep-alive / pool sizing took
+	// effect (e.g. after using the disableKeepAlive escape hatch).
+	effPerHost := cfg.maxIdleConnsPerHost
+	if effPerHost <= 0 {
+		effPerHost = defaultMaxIdleConnsPerHost
+	}
+	logger.Info("router proxy transport configured",
+		"disableKeepAlive", cfg.disableKeepAlive,
+		"maxIdleConnsPerHost", effPerHost,
+		"idleConnTimeout", transportIdleConnTimeout)
+
 	requestedMode := cfg.endpointSliceCacheMode
 	if cfg.endpointSliceCacheMode != endpointSliceCacheOff {
 		if rerr := checkSliceWatchRBAC(ctx, kubeClient); rerr != nil {
@@ -385,13 +397,14 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	}
 
 	triggers, err := makeHTTPTriggerSet(logger.WithName("triggerset"), fmap, fissionClient, kubeClient, crMgr.GetClient(), executor, &tsRoundTripperParams{
-		timeout:           cfg.roundTripTimeout,
-		timeoutExponent:   cfg.timeoutExponent,
-		disableKeepAlive:  cfg.disableKeepAlive,
-		keepAliveTime:     cfg.keepAliveTime,
-		maxRetries:        cfg.maxRetries,
-		svcAddrRetryCount: cfg.svcAddrRetryCount,
-		streamIdleDefault: cfg.streamIdleDefault,
+		timeout:             cfg.roundTripTimeout,
+		timeoutExponent:     cfg.timeoutExponent,
+		disableKeepAlive:    cfg.disableKeepAlive,
+		keepAliveTime:       cfg.keepAliveTime,
+		maxRetries:          cfg.maxRetries,
+		svcAddrRetryCount:   cfg.svcAddrRetryCount,
+		streamIdleDefault:   cfg.streamIdleDefault,
+		maxIdleConnsPerHost: cfg.maxIdleConnsPerHost,
 	}, cfg.isDebugEnv, cfg.useEncodedPath, cfg.unTapServiceTimeout, throttler.MakeThrottler(cfg.svcAddrUpdateTimeout))
 	if err != nil {
 		return fmt.Errorf("error making HTTP trigger set: %w", err)

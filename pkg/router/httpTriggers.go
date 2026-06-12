@@ -229,7 +229,32 @@ func versionHandler(w http.ResponseWriter, r *http.Request) {
 // hmac.Verifier in the bundle process; the verifier is intentionally
 // not added here so this function stays unit-testable without HMAC env
 // state.
+// precomputePolicies resolves the proxy policy for every backend function of
+// a route at mux-build time (RFC-0014): resolveProxyPolicy is a pure function
+// of (fn, timeout, idle-default), and the canary path selects the backend per
+// request, so the map is keyed by function UID.
+func precomputePolicies(fns map[string]*fv1.Function, fnTimeoutMap map[types.UID]int, streamIdleDefault time.Duration) map[types.UID]proxyPolicy {
+	policies := make(map[types.UID]proxyPolicy, len(fns))
+	for _, fn := range fns {
+		if fn == nil {
+			continue
+		}
+		fnTimeout := fnTimeoutMap[fn.GetUID()]
+		if fnTimeout == 0 {
+			fnTimeout = fv1.DEFAULT_FUNCTION_TIMEOUT
+		}
+		policies[fn.GetUID()] = resolveProxyPolicy(fn, time.Duration(fnTimeout)*time.Second, streamIdleDefault)
+	}
+	return policies
+}
+
 func (ts *HTTPTriggerSet) buildMuxes(ctx context.Context, fnTimeoutMap map[types.UID]int) (public, internal *mux.Router, err error) {
+	// Hoisted-policy input (RFC-0014). Guarded: test trigger sets construct
+	// without round-trip params; production always wires them.
+	var streamIdleDefault time.Duration
+	if ts.tsRoundTripperParams != nil {
+		streamIdleDefault = ts.tsRoundTripperParams.streamIdleDefault
+	}
 	featureConfig, err := config.GetFeatureConfig(ts.logger)
 	if err != nil {
 		return nil, nil, err
@@ -274,8 +299,9 @@ func (ts *HTTPTriggerSet) buildMuxes(ctx context.Context, fnTimeoutMap map[types
 		// resolve function reference
 		rr, err := ts.resolver.resolve(ctx, trigger)
 		if err != nil {
-			// Unresolvable function reference. Report the error via
-			// the trigger's status.
+			// Unresolvable function reference. NOTE: updateTriggerStatusFailed
+			// is still a stub (TODO below), so today this surfaces only in the
+			// router log, not on the trigger's status conditions.
 			go ts.updateTriggerStatusFailed(&trigger, err)
 
 			// Ignore this route and let it 404.
@@ -291,8 +317,9 @@ func (ts *HTTPTriggerSet) buildMuxes(ctx context.Context, fnTimeoutMap map[types
 			continue
 		}
 
+		routeLogger := ts.logger.WithName(trigger.Name)
 		fh := &functionHandler{
-			logger:                   ts.logger.WithName(trigger.Name),
+			logger:                   routeLogger,
 			resolver:                 ts.addressResolver,
 			tapper:                   ts.tapper,
 			httpTrigger:              &trigger,
@@ -301,6 +328,11 @@ func (ts *HTTPTriggerSet) buildMuxes(ctx context.Context, fnTimeoutMap map[types
 			tsRoundTripperParams:     ts.tsRoundTripperParams,
 			isDebugEnv:               ts.isDebugEnv,
 			functionTimeoutMap:       fnTimeoutMap,
+			// Hoisted per-route state (RFC-0014): the round tripper logger and
+			// the per-backend proxy policies are pure functions of build-time
+			// inputs — computing them per request was pure allocator pressure.
+			rtLogger:    routeLogger.WithName("roundtripper"),
+			policyByUID: precomputePolicies(rr.functionMap, fnTimeoutMap, streamIdleDefault),
 		}
 
 		// The functionHandler for HTTP trigger with fn reference type "FunctionReferenceTypeFunctionName",
@@ -398,14 +430,18 @@ func (ts *HTTPTriggerSet) buildMuxes(ctx context.Context, fnTimeoutMap map[types
 	// exposing them on the public listener is GHSA-3g33-6vg6-27m8.
 	for i := range ts.functions {
 		fn := ts.functions[i]
+		routeLogger := ts.logger.WithName(fn.Name)
 		fh := &functionHandler{
-			logger:               ts.logger.WithName(fn.Name),
+			logger:               routeLogger,
 			resolver:             ts.addressResolver,
 			tapper:               ts.tapper,
 			function:             &fn,
 			tsRoundTripperParams: ts.tsRoundTripperParams,
 			isDebugEnv:           ts.isDebugEnv,
 			functionTimeoutMap:   fnTimeoutMap,
+			rtLogger:             routeLogger.WithName("roundtripper"),
+			policyByUID: precomputePolicies(map[string]*fv1.Function{fn.Name: &fn},
+				fnTimeoutMap, streamIdleDefault),
 		}
 
 		internalRoute := utils.UrlForFunction(fn.Name, fn.Namespace)

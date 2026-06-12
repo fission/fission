@@ -56,6 +56,10 @@ type routerConfig struct {
 	svcAddrRetryCount    int
 	svcAddrUpdateTimeout time.Duration
 	unTapServiceTimeout  time.Duration
+	// maxIdleConnsPerHost bounds the shared proxy transport's idle-connection
+	// pool per function address (ROUTER_ROUND_TRIP_MAX_IDLE_CONNS_PER_HOST;
+	// optional, 0 = the built-in default, soft-fail).
+	maxIdleConnsPerHost int
 }
 
 // loadRouterConfig parses the router's environment configuration. Behavior is
@@ -162,6 +166,20 @@ func loadRouterConfig(logger logr.Logger) (routerConfig, error) {
 		return cfg, fmt.Errorf("failed to parse USE_ENCODED_PATH: %w", err)
 	}
 	cfg.useEncodedPath = useEncodedPath
+
+	// Optional pooled-transport tuning (RFC-0014); unset or unparsable keeps
+	// the built-in default — a sizing knob, not a correctness gate.
+	if raw := os.Getenv("ROUTER_ROUND_TRIP_MAX_IDLE_CONNS_PER_HOST"); raw != "" {
+		perHost, err := strconv.Atoi(raw)
+		switch {
+		case err != nil:
+			logger.Error(err, "failed to parse 'ROUTER_ROUND_TRIP_MAX_IDLE_CONNS_PER_HOST' - using the default", "value", raw)
+		case perHost < 0:
+			logger.Error(nil, "'ROUTER_ROUND_TRIP_MAX_IDLE_CONNS_PER_HOST' must not be negative - using the default", "value", raw)
+		default:
+			cfg.maxIdleConnsPerHost = perHost
+		}
+	}
 
 	// Optional; unset or unparsable means off — the flag is an optimization
 	// (per-endpoint dialing for newdeploy/container), not a correctness gate

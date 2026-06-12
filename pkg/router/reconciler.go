@@ -113,9 +113,9 @@ func (r *functionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		}
 		return ctrl.Result{}, err
 	}
-	if r.ts.resolver != nil {
-		r.ts.resolver.invalidateForFunction(fn.Namespace, fn.Name, fn.ResourceVersion)
-	}
+	// The rebuild triggered below re-resolves every trigger straight from the
+	// Manager cache (the resolver is uncached since RFC-0014 phase 3), so no
+	// explicit invalidation is needed — the rebuild IS the invalidation.
 	r.ts.syncTriggers()
 	return ctrl.Result{}, nil
 }

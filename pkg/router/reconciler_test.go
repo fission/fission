@@ -143,26 +143,29 @@ func TestHTTPTriggerReconcilerNoIngressStillRebuilds(t *testing.T) {
 	requireRebuildSignal(t, ts)
 }
 
-func TestFunctionReconcilerInvalidatesAndRebuilds(t *testing.T) {
+func TestFunctionReconcilerRebuildsAndResolvesFresh(t *testing.T) {
 	fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "fn1", Namespace: "default", ResourceVersion: "5"}}
 	ts, cl, _ := newReconcilerTS(t, fn)
 	r := &functionReconciler{logger: ts.logger, client: cl, ts: ts}
 
-	// Seed a resolver entry that references fn1 at an older ResourceVersion.
-	ts.resolver.refCache.Upsert(
-		namespacedTriggerReference{namespace: "default", triggerName: "trig", triggerResourceVersion: "1"},
-		resolveResult{
-			resolveResultType: resolveResultSingleFunction,
-			functionMap:       map[string]*fv1.Function{"fn1": {ObjectMeta: metav1.ObjectMeta{Name: "fn1", Namespace: "default", ResourceVersion: "4"}}},
-		},
-	)
-
 	_, err := r.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Name: "fn1", Namespace: "default"}})
 	require.NoError(t, err)
-
-	_, gerr := ts.resolver.refCache.Get(namespacedTriggerReference{namespace: "default", triggerName: "trig", triggerResourceVersion: "1"})
-	assert.Error(t, gerr, "stale resolver entry must be invalidated when the function changes")
 	requireRebuildSignal(t, ts)
+
+	// The resolver is uncached (RFC-0014 phase 3): the rebuild the reconciler
+	// signalled re-resolves from the live Manager cache, so a resolve after a
+	// function update ALWAYS sees the current ResourceVersion — the staleness
+	// class the old trigger-RV-keyed cache could serve is structurally gone.
+	trigger := fv1.HTTPTrigger{
+		ObjectMeta: metav1.ObjectMeta{Name: "trig", Namespace: "default", ResourceVersion: "1"},
+		Spec: fv1.HTTPTriggerSpec{
+			FunctionReference: fv1.FunctionReference{Type: fv1.FunctionReferenceTypeFunctionName, Name: "fn1"},
+		},
+	}
+	rr, err := ts.resolver.resolve(t.Context(), trigger)
+	require.NoError(t, err)
+	assert.Equal(t, "5", rr.functionMap["fn1"].ResourceVersion,
+		"resolution must read the function's current state from the Manager cache")
 }
 
 func TestFunctionReconcilerDeletedRebuilds(t *testing.T) {
