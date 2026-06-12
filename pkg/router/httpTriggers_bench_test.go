@@ -22,8 +22,10 @@ import (
 	"github.com/gorilla/mux"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/router/routetable"
 )
 
 // benchRouteSet builds N functions and N triggers (trigger bench-i routes
@@ -101,5 +103,57 @@ func BenchmarkMuxMatch(b *testing.B) {
 				public.Match(req, &match)
 			}
 		})
+	}
+}
+
+// BenchmarkIncrementalWeightTick measures the RFC-0013 steady-churn unit: one
+// canary weight tick applied through the incremental path while the table
+// holds 10k other routes. Compare with BenchmarkBuildMuxes/triggers=10000 —
+// the legacy cost of the same event — to see the O(full rebuild) → O(1) move.
+func BenchmarkIncrementalWeightTick(b *testing.B) {
+	const n = 10000
+	fns, triggers, _ := benchRouteSet(n)
+	canary := fv1.HTTPTrigger{
+		ObjectMeta: metav1.ObjectMeta{Name: "bench-canary", Namespace: "default", ResourceVersion: "1", UID: "uid-canary"},
+		Spec: fv1.HTTPTriggerSpec{
+			RelativeURL: "/bench-canary",
+			Methods:     []string{http.MethodGet},
+			FunctionReference: fv1.FunctionReference{
+				Type:            fv1.FunctionReferenceTypeFunctionWeights,
+				FunctionWeights: map[string]int{"bench-fn-0": 90, "bench-fn-1": 10},
+			},
+		},
+	}
+	triggers = append(triggers, canary)
+
+	objs := make([]client.Object, 0, len(fns)+len(triggers))
+	for i := range fns {
+		objs = append(objs, &fns[i])
+	}
+	for i := range triggers {
+		objs = append(objs, &triggers[i])
+	}
+	ts, _ := newIncrementalTS(b, objs...)
+	if err := ts.resync(b.Context(), true); err != nil {
+		b.Fatal(err)
+	}
+	ts.materialize(b.Context())
+
+	b.ReportAllocs()
+	i := 0
+	for b.Loop() {
+		i++
+		tick := canary.DeepCopy()
+		tick.ResourceVersion = fmt.Sprintf("rv-%d", i)
+		tick.Spec.FunctionReference.FunctionWeights = map[string]int{
+			"bench-fn-0": 90 - (i % 80), "bench-fn-1": 10 + (i % 80),
+		}
+		res, err := ts.applyTriggerIncremental(b.Context(), tick)
+		if err != nil {
+			b.Fatal(err)
+		}
+		if res != routetable.HandlerSwapped {
+			b.Fatalf("expected a handler swap, got %v", res)
+		}
 	}
 }
