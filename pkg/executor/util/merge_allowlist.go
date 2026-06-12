@@ -5,6 +5,8 @@
 package util
 
 import (
+	"maps"
+
 	apiv1 "k8s.io/api/core/v1"
 )
 
@@ -47,9 +49,7 @@ func MergeAllowedPodSpecFields(src, user *apiv1.PodSpec) (*apiv1.PodSpec, []stri
 		if out.NodeSelector == nil {
 			out.NodeSelector = make(map[string]string, len(user.NodeSelector))
 		}
-		for k, v := range user.NodeSelector {
-			out.NodeSelector[k] = v
-		}
+		maps.Copy(out.NodeSelector, user.NodeSelector)
 	}
 	if len(user.Tolerations) > 0 {
 		out.Tolerations = append(out.Tolerations, user.Tolerations...)

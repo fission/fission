@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/golang-jwt/jwt/v4"
@@ -36,12 +37,7 @@ func (s AuthScope) Allows(namespace string) bool {
 	if s.Wildcard {
 		return true
 	}
-	for _, ns := range s.Namespaces {
-		if ns == namespace {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(s.Namespaces, namespace)
 }
 
 // Authorizer validates bearer tokens for the MCP endpoint and derives the
@@ -136,10 +132,8 @@ func (a *Authorizer) ScopeFromTokenInfo(ti *auth.TokenInfo) (AuthScope, bool) {
 // scopeFromScopes rebuilds an AuthScope from TokenInfo.Scopes (the "*" sentinel
 // means wildcard).
 func scopeFromScopes(scopes []string) AuthScope {
-	for _, s := range scopes {
-		if s == wildcardNamespace {
-			return AuthScope{Wildcard: true}
-		}
+	if slices.Contains(scopes, wildcardNamespace) {
+		return AuthScope{Wildcard: true}
 	}
 	return AuthScope{Namespaces: scopes}
 }
