@@ -130,10 +130,11 @@ func (gp *GenericPool) genDeploymentSpec(env *fv1.Environment) (*appsv1.Deployme
 	// projected volume defined below — the user-code container does not.
 	// See GHSA-85g2-pmrx-r49q.
 	automountSAToken := false
-	// Path B pods (image-volume pools) have no fetcher container, so they
-	// don't carry the fetcher SA token projected volume either.
+	// Fetcherless Path B pods (B-direct) have no fetcher container, so they
+	// don't carry the fetcher SA token projected volume either; plain pools
+	// and the fetcher-retained variant (B-fetcher, RFC-0012) do.
 	var baseVolumes []apiv1.Volume
-	if gp.oci == nil {
+	if gp.hasFetcher() {
 		baseVolumes = append(baseVolumes, util.FetcherSATokenProjectedVolume())
 	}
 	pod := apiv1.PodTemplateSpec{
@@ -195,9 +196,10 @@ func (gp *GenericPool) genDeploymentSpec(env *fv1.Environment) (*appsv1.Deployme
 	}
 
 	// Order of merging is important here - first fetcher, then containers and lastly pod spec.
-	// Path B (image-volume) pods skip the fetcher entirely: the kubelet
-	// mounts the code; specialization is load-only (see loadOnlySpecialize).
-	if gp.oci == nil {
+	// Fetcherless Path B pods (B-direct) skip the fetcher entirely: the
+	// kubelet mounts the code; specialization is load-only (see
+	// loadOnlySpecialize). B-fetcher pods keep it for Secrets/ConfigMaps.
+	if gp.hasFetcher() {
 		err = gp.fetcherConfig.AddFetcherToPodSpec(&deploymentSpec.Template.Spec, mainContainerName)
 		if err != nil {
 			return nil, err
@@ -219,18 +221,28 @@ func (gp *GenericPool) genDeploymentSpec(env *fv1.Environment) (*appsv1.Deployme
 
 	if gp.oci != nil {
 		// Path B: mount the package image read-only at the fetcher's store
-		// path on the runtime container — the path the load request names
-		// (LoadReq.FilePath = <sharedMountPath>/deployarchive). Eligibility
-		// guarantees a v2+, non-infinite env, so the store name is the fixed
-		// deployarchive constant. Applied AFTER every MergePodSpec (same
-		// convention as the SA-token re-clamps) so a runtime pod spec cannot
-		// strip or shadow the code mount.
+		// path — the path the load request names (LoadReq.FilePath =
+		// <sharedMountPath>/deployarchive). Eligibility guarantees a v2+,
+		// non-infinite, non-KeepArchive env, so the store name is the fixed
+		// deployarchive constant. B-direct mounts on the runtime container
+		// only; B-fetcher also mounts on the fetcher container, whose
+		// exists-early-exit then skips the pull (newdeploy's shipped
+		// pattern). Applied AFTER every MergePodSpec (same convention as the
+		// SA-token re-clamps) so a runtime pod spec cannot strip or shadow
+		// the code mount.
+		containers := []string{mainContainerName}
+		if gp.ociFetcherVariant {
+			containers = append(containers, util.FetcherContainerName)
+		}
 		if err := util.AddImageVolume(&deploymentSpec.Template.Spec, gp.oci,
 			filepath.Join(gp.fetcherConfig.SharedMountPath(), fetcherConfig.TargetFilenameDeployArchive),
-			mainContainerName); err != nil {
+			containers...); err != nil {
 			return nil, err
 		}
-		return &deploymentSpec, nil
+		if !gp.ociFetcherVariant {
+			// B-direct: no fetcher container, so no SA token to re-mount.
+			return &deploymentSpec, nil
+		}
 	}
 
 	// Re-mount the fission-fetcher SA token at the canonical Kubernetes

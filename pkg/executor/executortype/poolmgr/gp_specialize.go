@@ -63,11 +63,13 @@ func (gp *GenericPool) specializePod(ctx context.Context, pod *apiv1.Pod, fn *fv
 		return fmt.Errorf("pod %s in namespace %s has no IP", pod.Name, pod.Namespace)
 	}
 
-	// Path B (image-volume) pods have no fetcher to relay through: the code
-	// is already mounted, so go straight to the env's load endpoint. The
-	// eligibility check guarantees such functions carry no Secrets or
-	// ConfigMaps and run v2+ environments.
-	if gp.oci != nil {
+	// Fetcherless Path B pods (B-direct) have no fetcher to relay through:
+	// the code is already mounted, so go straight to the env's load
+	// endpoint. B-fetcher pods (RFC-0012) fall through to the normal
+	// fetcher path below — the fetcher's exists-early-exit makes the fetch
+	// a no-op against the image mount, and it still materializes
+	// Secrets/ConfigMaps and drives the load.
+	if gp.oci != nil && !gp.ociFetcherVariant {
 		return gp.loadOnlySpecialize(ctx, podIP, fn)
 	}
 	for _, cm := range fn.Spec.ConfigMaps {

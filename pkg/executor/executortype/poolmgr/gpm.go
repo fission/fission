@@ -130,9 +130,10 @@ type (
 		requestType
 		ctx context.Context
 		env *fv1.Environment
-		// oci selects a per-image image-volume pool (RFC-0001 Path B);
+		// oci selects a per-image image-volume pool (RFC-0001 Path B),
+		// including its pod-spec variant (RFC-0012 B-fetcher);
 		// nil selects the env's plain fetcher-based pool.
-		oci             *fv1.OCIArchive
+		oci             *ociPoolSpec
 		responseChannel chan *response
 	}
 	response struct {
@@ -257,13 +258,15 @@ func (gpm *GenericPoolManager) GetFuncSvc(ctx context.Context, fn *fv1.Function)
 	}
 
 	// RFC-0001 Path B: an eligible OCI-packaged function gets a per-image
-	// pool whose pods mount the code as an image volume (no fetcher). nil
-	// means the plain pool serves it (Path A or non-OCI). A failed
-	// eligibility read fails the cold start (the router retries) rather
-	// than silently pinning the function to the wrong pool type in fsCache.
-	var oci *fv1.OCIArchive
+	// pool whose pods mount the code as an image volume — fetcherless
+	// (B-direct), or with the fetcher retained for Secrets/ConfigMaps
+	// materialization (B-fetcher, RFC-0012). nil means the plain pool
+	// serves it (Path A or non-OCI). A failed eligibility read fails the
+	// cold start (the router retries) rather than silently pinning the
+	// function to the wrong pool type in fsCache.
+	var oci *ociPoolSpec
 	if gpm.imageVolumeOK {
-		oci, err = gpm.getFunctionOCIArchive(ctx, fn, env)
+		oci, err = gpm.getFunctionOCIPool(ctx, fn, env)
 		if err != nil {
 			fErr = fmt.Errorf("error reading package for OCI eligibility of function %s: %w", fn.Name, err)
 			return nil, fErr
@@ -779,7 +782,7 @@ func (gpm *GenericPoolManager) handleGetEnvPools(req *request) {
 	req.responseChannel <- &response{pools: pools}
 }
 
-func (gpm *GenericPoolManager) getPool(ctx context.Context, env *fv1.Environment, oci *fv1.OCIArchive) (*GenericPool, bool, error) {
+func (gpm *GenericPoolManager) getPool(ctx context.Context, env *fv1.Environment, oci *ociPoolSpec) (*GenericPool, bool, error) {
 	otelUtils.SpanTrackEvent(ctx, "getPool", otelUtils.GetAttributesForEnv(env)...)
 	c := make(chan *response)
 	gpm.requestChannel <- &request{

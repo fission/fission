@@ -193,7 +193,7 @@ func TestGetPoolTouchesActivityClock(t *testing.T) {
 	gpm := newReaperGpm(t)
 	// Register the pool under the exact key handleGetPool derives for this
 	// archive, so the GET takes the found path (no pool creation involved).
-	oci := &fv1.OCIArchive{Image: "reg.example/pkg:v1"}
+	oci := &ociPoolSpec{archive: &fv1.OCIArchive{Image: "reg.example/pkg:v1"}}
 	key := addTestPool(t, gpm, "env", ociPoolHash(oci), time.Hour)
 	pool := gpm.pools[key]
 	stale := pool.lastActive.Load()
