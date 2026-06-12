@@ -32,6 +32,23 @@ spec:
         {{- include "leaderElection.envs" (dict "enabled" (dig "leaderElection" "enabled" false (.Values.buildermgr | default dict))) | indent 8 }}
         - name: FETCHER_IMAGE
           value: {{ include "fetcherImage" . | quote }}
+        {{- if .Values.packageRegistry.enabled }}
+        - name: PACKAGE_REGISTRY_ENABLED
+          value: "true"
+        - name: PACKAGE_REGISTRY_REPOSITORY_PREFIX
+          value: {{ required "packageRegistry.repositoryPrefix is required when packageRegistry.enabled" .Values.packageRegistry.repositoryPrefix | quote }}
+        - name: PACKAGE_REGISTRY_PUBLISHED_PREFIX
+          value: {{ .Values.packageRegistry.publishedPrefix | default "" | quote }}
+        - name: PACKAGE_REGISTRY_PUSH_SECRET
+          value: {{ .Values.packageRegistry.pushSecret | quote }}
+        - name: PACKAGE_REGISTRY_PULL_SECRET
+          value: {{ .Values.packageRegistry.pullSecret | quote }}
+        - name: PACKAGE_REGISTRY_INSECURE_HOSTS
+          value: {{ .Values.packageRegistry.insecureHosts | quote }}
+        {{- /* sprig default would eat an explicit false; render if/else. */}}
+        - name: PACKAGE_REGISTRY_FALLBACK_TO_STORAGE
+          value: {{ if hasKey .Values.packageRegistry "fallbackToStorage" }}{{ if .Values.packageRegistry.fallbackToStorage }}"true"{{ else }}"false"{{ end }}{{ else }}"true"{{ end }}
+        {{- end }}
         - name: FETCHER_IMAGE_PULL_POLICY
           value: "{{ .Values.pullPolicy }}"
         - name: BUILDER_IMAGE_PULL_POLICY

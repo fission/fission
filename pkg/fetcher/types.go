@@ -60,12 +60,52 @@ type (
 		Filename       string `json:"filename"`
 		StorageSvcUrl  string `json:"storagesvcurl"`
 		ArchivePackage bool   `json:"archivepackage"`
+		// OCIPush (RFC-0012 producer) asks the fetcher to publish the built
+		// deployment directory as a single-layer OCI image instead of the
+		// storagesvc tarball. On push failure with FallbackToStorage the
+		// fetcher falls back to the tarball upload and reports the push
+		// error alongside; without it the upload fails.
+		OCIPush *OCIPushSpec `json:"ociPush,omitempty"`
 	}
 
-	// ArchiveUploadResponse defines the download url of an archive and
-	// its checksum.
+	// OCIPushSpec carries the registry destination and credentials selector
+	// for an OCI publish (RFC-0012).
+	OCIPushSpec struct {
+		// Repository is the full repository (no tag), e.g.
+		// ghcr.io/org/fission-packages/default/pkg; the fetcher tags the
+		// image with its own short digest.
+		Repository string `json:"repository"`
+		// PublishedRepository, when set, is the repository recorded in the
+		// published archive INSTEAD of Repository (the push endpoint). For
+		// registries whose push URL differs from the consumption URL — the
+		// RFC-0012 split-brain: the kubelet (image volumes) resolves via the
+		// NODE resolver, the builder pod via cluster DNS. Same registry,
+		// two names; the digest pins identity across both.
+		PublishedRepository string `json:"publishedRepository,omitempty"`
+		// PushSecretName names a dockerconfigjson secret in the fetcher's
+		// namespace holding write credentials; empty = anonymous/ambient.
+		PushSecretName string `json:"pushSecretName,omitempty"`
+		// InsecureHosts is a host (host[:port]) allowlist permitted plain
+		// HTTP, merged with FETCHER_ALLOW_INSECURE_REGISTRIES.
+		InsecureHosts []string `json:"insecureHosts,omitempty"`
+		// FallbackToStorage selects the degraded mode: push failure falls
+		// back to the storagesvc tarball (response carries OCIPushError)
+		// instead of failing the upload.
+		FallbackToStorage bool `json:"fallbackToStorage"`
+	}
+
+	// ArchiveUploadResponse defines the built artifact's location: an OCI
+	// image reference (RFC-0012 producer) or a storagesvc download url and
+	// checksum.
 	ArchiveUploadResponse struct {
-		ArchiveDownloadUrl string       `json:"archiveDownloadUrl"`
-		Checksum           fv1.Checksum `json:"checksum"`
+		ArchiveDownloadUrl string       `json:"archiveDownloadUrl,omitempty"`
+		Checksum           fv1.Checksum `json:"checksum,omitempty"`
+		// OCI is set when the artifact was published as an OCI image
+		// (digest-pinned; ImagePullSecrets are stamped by the caller).
+		OCI *fv1.OCIArchive `json:"oci,omitempty"`
+		// OCIPushError carries the publish failure when the response fell
+		// back to the storagesvc tarball, so the caller can surface the
+		// degradation on the Package.
+		OCIPushError string `json:"ociPushError,omitempty"`
 	}
 )

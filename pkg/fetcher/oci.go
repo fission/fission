@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	apiv1 "k8s.io/api/core/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/oci"
@@ -80,4 +81,46 @@ func insecureRegistriesFromEnv() []string {
 		}
 	}
 	return hosts
+}
+
+// pushOCI publishes the built deployment directory as a single-layer OCI
+// image (RFC-0012 producer). The push credential is resolved through the
+// same kauth keychain as pulls, with the spec's push secret as the
+// imagePullSecret-style reference.
+func (fetcher *Fetcher) pushOCI(ctx context.Context, srcPath string, spec *OCIPushSpec) (*fv1.OCIArchive, error) {
+	st, err := os.Stat(srcPath)
+	if err != nil {
+		return nil, fmt.Errorf("stating build artifact: %w", err)
+	}
+	if !st.IsDir() {
+		// OCI artifacts are directory-shaped (image volumes mount
+		// directories); a single-file artifact stays on the tarball path.
+		return nil, fmt.Errorf("build artifact %q is not a directory; OCI publishing requires a directory artifact", filepath.Base(srcPath))
+	}
+
+	var pushSecrets []apiv1.LocalObjectReference
+	if spec.PushSecretName != "" {
+		pushSecrets = append(pushSecrets, apiv1.LocalObjectReference{Name: spec.PushSecretName})
+	}
+	keychain, err := oci.Keychain(ctx, fetcher.kubeClient, fetcher.Info.Namespace, fv1.FissionFetcherSA, pushSecrets)
+	if err != nil {
+		return nil, fmt.Errorf("building registry keychain: %w", err)
+	}
+
+	insecure := insecureRegistriesFromEnv()
+	insecure = append(insecure, spec.InsecureHosts...)
+
+	imageRef, digest, err := oci.PushDirectory(ctx, srcPath, spec.Repository, oci.PushOptions{
+		Keychain:           keychain,
+		InsecureRegistries: insecure,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if spec.PublishedRepository != "" {
+		// Record the consumption-side name (e.g. the node-resolvable form
+		// the kubelet pulls); the digest pins identity across both names.
+		imageRef = strings.Replace(imageRef, spec.Repository, spec.PublishedRepository, 1)
+	}
+	return &fv1.OCIArchive{Image: imageRef, Digest: digest}, nil
 }

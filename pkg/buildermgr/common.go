@@ -13,6 +13,7 @@ import (
 
 	"github.com/dchest/uniuri"
 	"github.com/go-logr/logr"
+	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/util/retry"
 
@@ -35,7 +36,7 @@ import (
 // 4. Return upload response and build logs.
 // *. Return build logs and error if any one of steps above failed.
 func buildPackage(ctx context.Context, logger logr.Logger, fissionClient versioned.Interface, envBuilderNamespace string,
-	storageSvcUrl string, pkg *fv1.Package) (uploadResp *fetcher.ArchiveUploadResponse, buildLogs string, err error) {
+	storageSvcUrl string, registryCfg *packageRegistryConfig, pkg *fv1.Package) (uploadResp *fetcher.ArchiveUploadResponse, buildLogs string, err error) {
 
 	// Defence in depth against cross-namespace Environment references; the
 	// admission webhook is the user-visible reject, this guard catches
@@ -126,6 +127,9 @@ func buildPackage(ctx context.Context, logger logr.Logger, fissionClient version
 		Filename:       buildResp.ArtifactFilename,
 		StorageSvcUrl:  storageSvcUrl,
 		ArchivePackage: archivePackage,
+		// RFC-0012 producer: publish the deployment directory as an OCI
+		// image when a registry is configured (nil keeps today's tarball).
+		OCIPush: registryCfg.ociPushSpecFor(pkg, env),
 	}
 
 	logger.Info("started uploading deployment package", "deployment_package", buildResp.ArtifactFilename)
@@ -135,6 +139,15 @@ func buildPackage(ctx context.Context, logger logr.Logger, fissionClient version
 		e := fmt.Sprintf("Error uploading deployment package: %v", err)
 		buildResp.BuildLogs += fmt.Sprintf("%v\n", e)
 		return nil, buildResp.BuildLogs, ferror.MakeError(http.StatusInternalServerError, e)
+	}
+	if uploadResp.OCI != nil && registryCfg != nil && registryCfg.pullSecret != "" {
+		// The read credential is stamped control-plane-side: the fetcher
+		// only knows the push secret (least privilege, deliberately
+		// distinct).
+		uploadResp.OCI.ImagePullSecrets = []apiv1.LocalObjectReference{{Name: registryCfg.pullSecret}}
+	}
+	if uploadResp.OCIPushError != "" {
+		buildResp.BuildLogs += fmt.Sprintf("OCI publish failed (fell back to the storage tarball): %v\n", uploadResp.OCIPushError)
 	}
 
 	return uploadResp, buildResp.BuildLogs, nil
@@ -169,6 +182,15 @@ func updatePackage(ctx context.Context, logger logr.Logger, fissionClient versio
 			URL:      uploadResp.ArchiveDownloadUrl,
 			Checksum: uploadResp.Checksum,
 		}
+		if uploadResp.OCI != nil {
+			// RFC-0012 producer: the build was published as a digest-pinned
+			// OCI image; the Package's deployment archive references it
+			// instead of a storagesvc URL.
+			deployment = fv1.Archive{
+				Type: fv1.ArchiveTypeOCI,
+				OCI:  uploadResp.OCI,
+			}
+		}
 		if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 			fresh, gerr := packages.Get(ctx, name, metav1.GetOptions{})
 			if gerr != nil {
@@ -200,6 +222,7 @@ func updatePackage(ctx context.Context, logger logr.Logger, fissionClient versio
 			Conditions:          existingConds,
 		}
 		setPackageBuildCondition(&fresh.Status, status, buildLogs, fresh.Generation)
+		setPackageOCIPublishCondition(&fresh.Status, uploadResp, fresh.Generation)
 		var uerr error
 		pkg, uerr = packages.UpdateStatus(ctx, fresh, metav1.UpdateOptions{})
 		return uerr
@@ -320,4 +343,33 @@ func setPackageBuildCondition(s *fv1.PackageStatus, status fv1.BuildStatus, buil
 		Reason:             reason,
 		Message:            readyMessage,
 	})
+}
+
+// setPackageOCIPublishCondition records the RFC-0012 producer outcome on the
+// Package: published (True), degraded to the tarball fallback (False), or —
+// when the build did not involve the producer — no change (a stale condition
+// from an earlier producer build is cleared so it cannot misrepresent the
+// current archive).
+func setPackageOCIPublishCondition(s *fv1.PackageStatus, uploadResp *fetcher.ArchiveUploadResponse, gen int64) {
+	if uploadResp == nil {
+		return
+	}
+	switch {
+	case uploadResp.OCI != nil:
+		conditions.Set(&s.Conditions, metav1.Condition{
+			Type: fv1.PackageConditionOCIPublished, Status: metav1.ConditionTrue,
+			ObservedGeneration: gen, Reason: fv1.PackageReasonOCIPublished,
+			Message: fmt.Sprintf("published as %s (%s)", uploadResp.OCI.Image, uploadResp.OCI.Digest),
+		})
+	case uploadResp.OCIPushError != "":
+		conditions.Set(&s.Conditions, metav1.Condition{
+			Type: fv1.PackageConditionOCIPublished, Status: metav1.ConditionFalse,
+			ObservedGeneration: gen, Reason: fv1.PackageReasonOCIPublishDegraded,
+			Message: conditions.TruncateMessage("push failed; the build fell back to the storage tarball: " + uploadResp.OCIPushError),
+		})
+	default:
+		// Tarball build without producer involvement: drop any stale
+		// publish condition from a previous registry-enabled build.
+		conditions.Delete(&s.Conditions, fv1.PackageConditionOCIPublished)
+	}
 }

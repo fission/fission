@@ -18,6 +18,11 @@ const (
 	// Package conditions
 	PackageConditionBuildSucceeded = "BuildSucceeded"
 	PackageConditionReady          = "Ready"
+	// PackageConditionOCIPublished reports the RFC-0012 producer outcome:
+	// True = the build was published as a digest-pinned OCI image; False
+	// with reason OCIPublishDegraded = the push failed and the build fell
+	// back to the storagesvc tarball.
+	PackageConditionOCIPublished = "OCIPublished"
 
 	// HTTPTrigger conditions
 	HTTPTriggerConditionRouteAdmitted = "RouteAdmitted"
@@ -75,6 +80,9 @@ const (
 	PackageReasonBuildRunning    = "BuildRunning"
 	PackageReasonNoBuildRequired = "NoBuildRequired"
 	PackageReasonUnknown         = "Unknown"
+	// OCI producer (RFC-0012) publish outcome reasons.
+	PackageReasonOCIPublished       = "OCIPublished"
+	PackageReasonOCIPublishDegraded = "OCIPublishDegraded" // push failed; the build fell back to the storagesvc tarball
 
 	// Environment condition reasons — no writer in this PR.
 	// See pkg/buildermgr/envwatcher.go.AddUpdateBuilder for why.

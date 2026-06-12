@@ -595,6 +595,31 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
+	// OCI publish mode (RFC-0012 producer): push the deployment DIRECTORY
+	// (pre-zip) as a single-layer image. Success short-circuits the
+	// storagesvc upload entirely; failure either fails the request (strict)
+	// or falls through to the tarball path with the push error reported
+	// alongside, so the caller can mark the Package's publish as degraded.
+	var ociPushErr error
+	if req.OCIPush != nil {
+		ociArchive, pushErr := fetcher.pushOCI(ctx, srcFilepath, req.OCIPush)
+		if pushErr == nil {
+			logger.Info("published deployment package as OCI image",
+				"image", ociArchive.Image, "digest", ociArchive.Digest)
+			writeUploadResponse(logger, w, &ArchiveUploadResponse{OCI: ociArchive})
+			return
+		}
+		if !req.OCIPush.FallbackToStorage {
+			e := "error publishing deployment package as OCI image"
+			logger.Error(pushErr, e, "repository", req.OCIPush.Repository)
+			http.Error(w, fmt.Sprintf("%s: %v", e, pushErr), http.StatusInternalServerError)
+			return
+		}
+		logger.Error(pushErr, "OCI publish failed; falling back to the storagesvc tarball upload",
+			"repository", req.OCIPush.Repository)
+		ociPushErr = pushErr
+	}
+
 	if req.ArchivePackage {
 		err = utils.ArchiveInRoot(ctx, fetcher.sharedVolumePath, srcFilepath, dstFilepath)
 		if err != nil {
@@ -651,11 +676,19 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := ArchiveUploadResponse{
+	resp := &ArchiveUploadResponse{
 		ArchiveDownloadUrl: ssClient.GetUrl(fileID),
 		Checksum:           *sum,
 	}
+	if ociPushErr != nil {
+		resp.OCIPushError = ociPushErr.Error()
+	}
+	logger.Info("completed upload request")
+	writeUploadResponse(logger, w, resp)
+}
 
+// writeUploadResponse marshals and writes an upload response.
+func writeUploadResponse(logger logr.Logger, w http.ResponseWriter, resp *ArchiveUploadResponse) {
 	rBody, err := json.Marshal(resp)
 	if err != nil {
 		e := "error encoding upload response"
@@ -663,17 +696,11 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("%s: %v", e, err), http.StatusInternalServerError)
 		return
 	}
-
-	logger.Info("completed upload request")
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	_, err = w.Write(rBody)
-	if err != nil {
-		e := "error writing response"
-		logger.Error(err, e)
-		http.Error(w, fmt.Sprintf("%s: %v", e, err), http.StatusInternalServerError)
+	if _, err := w.Write(rBody); err != nil {
+		logger.Error(err, "error writing response")
 	}
-
 }
 
 func (fetcher *Fetcher) rename(src string, dst string) error {
