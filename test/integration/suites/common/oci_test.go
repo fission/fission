@@ -491,18 +491,21 @@ func TestOCIPackagePoolmgrImageVolume(t *testing.T) {
 	}
 }
 
-// TestOCIPathBFallbackWithSecrets proves the per-function eligibility check:
-// a function with a Secret needs the fetcher (it materializes secrets), so it
-// must serve from the plain fetcher pool even when image volumes are enabled.
-func TestOCIPathBFallbackWithSecrets(t *testing.T) {
+// TestOCIPathBSecrets covers the RFC-0012 B-fetcher variant: a function
+// with a Secret rides image-volume delivery WITH the fetcher sidecar
+// retained (it materializes the secret; its exists-early-exit makes the
+// fetch a no-op against the mount). Before RFC-0012 such functions fell
+// back to the plain fetcher pool; the pod-shape assertions prove the new
+// variant actually served it.
+func TestOCIPathBSecrets(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
 	defer cancel()
 
 	f := framework.Connect(t)
-	hostAddr, inclusterAddr := framework.RequireRegistry(t)
-	requireImageVolumeLeg(t)
+	hostAddr, _ := framework.RequireRegistry(t)
+	nodeAddr := requireImageVolumeLeg(t)
 	runtime := f.Images().RequirePython(t)
 
 	ns := f.NewTestNamespace(t)
@@ -525,9 +528,9 @@ func TestOCIPathBFallbackWithSecrets(t *testing.T) {
 		MinCPU: 40, MaxCPU: 80, MinMemory: 64, MaxMemory: 128,
 	})
 
-	// The fetcher pulls this one (Path A fallback), so the reference is the
-	// in-cluster Service address.
-	ref, _ := framework.PushCodeImage(t, hostAddr, inclusterAddr,
+	// B-fetcher pods mount the image volume too, so the kubelet pulls the
+	// reference: it must be node-resolvable, same as B-direct.
+	ref, _ := framework.PushCodeImage(t, hostAddr, nodeAddr,
 		"fission-test/hello-fb-"+ns.ID, "v1", pyHello("Hello, fallback!"))
 
 	ns.CreatePackage(t, ctx, framework.PackageOptions{Name: pkgName, Env: envName, OCI: ref})
@@ -540,21 +543,25 @@ func TestOCIPathBFallbackWithSecrets(t *testing.T) {
 	body := f.Router(t).GetEventually(t, ctx, "/"+fnName, framework.BodyContains("Hello, fallback!"))
 	assert.Contains(t, body, "Hello, fallback!")
 
-	// The serving pod must be a plain-pool pod: it HAS a fetcher container
-	// and no image volume.
+	// The serving pod must be a B-fetcher per-image pool pod: image volume
+	// mounted AND the fetcher container retained for the secret.
 	pods, err := f.KubeClient().CoreV1().Pods(ns.Name).List(ctx, metav1.ListOptions{
 		LabelSelector: "functionName=" + fnName,
 	})
 	require.NoError(t, err)
 	require.NotEmpty(t, pods.Items, "the specialized pod must exist")
 	for _, pod := range pods.Items {
+		assert.Containsf(t, pod.Labels, fv1.POOL_OCI_IMAGE_HASH,
+			"pod %s: secrets functions ride a per-image pool since RFC-0012", pod.Name)
 		assert.GreaterOrEqualf(t, len(pod.Spec.Containers), 2,
-			"pod %s: fallback pods keep the fetcher container", pod.Name)
-		assert.NotContains(t, pod.Labels, fv1.POOL_OCI_IMAGE_HASH,
-			"pod %s: fallback pods belong to the plain pool", pod.Name)
+			"pod %s: B-fetcher pods keep the fetcher container", pod.Name)
+		foundImageVol := false
 		for _, v := range pod.Spec.Volumes {
-			assert.Nilf(t, v.Image, "pod %s: fallback pods must not mount an image volume", pod.Name)
+			if v.Image != nil {
+				foundImageVol = true
+			}
 		}
+		assert.Truef(t, foundImageVol, "pod %s: B-fetcher pods mount the package image volume", pod.Name)
 	}
 }
 
