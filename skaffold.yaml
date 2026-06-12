@@ -34,7 +34,7 @@ manifests:
           canaryDeployment.enabled: "false"
           coverage.enabled: "false"
           debugEnv: "false"
-          executor.enableOCIImageVolume: "false"
+          executor.enableOCIImageVolume: "true"
           executor.functionServices.enabled: "true"
           executor.specializationConcurrency: "0"
           fetcher.allowInsecureRegistries: ""

@@ -227,12 +227,14 @@ executor:
   ## adoptExistingResources decides whether to adopt existing resources when executor restarts or Fission is redeployed.
   ##
   adoptExistingResources: false
-  ## enableOCIImageVolume opts into delivering OCI packages via kubelet image
-  ## volumes (RFC-0001 Path B). Requires Kubernetes >= 1.33 (KEP-4639); on
-  ## older clusters the executor logs the capability miss and keeps OCI
-  ## packages on the fetcher pull path.
+  ## enableOCIImageVolume delivers OCI packages via kubelet image volumes
+  ## (RFC-0001 Path B; the default since RFC-0012). Requires Kubernetes >=
+  ## 1.33 (KEP-4639); on older clusters the executor logs the capability miss
+  ## and keeps OCI packages on the fetcher pull path — the flag is safe to
+  ## leave on everywhere. false is the escape hatch back to fetcher-pull
+  ## delivery for OCI packages (tarball packages are unaffected either way).
   ##
-  enableOCIImageVolume: false
+  enableOCIImageVolume: true
   ## ociPoolIdleReapTime is the idle window after which an empty per-image
   ## (OCI) warm pool deployment is reaped (RFC-0012). A reaped pool is
   ## recreated on the next cold start, paying a kubelet-cached image pull.
