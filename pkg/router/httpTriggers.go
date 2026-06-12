@@ -85,6 +85,10 @@ type HTTPTriggerSet struct {
 	// the swap so conditions reflect observable state.
 	pendingMu         sync.Mutex
 	pendingConditions map[types.UID]*fv1.HTTPTrigger
+	// conflictLosers tracks the triggers currently shadowed by a route
+	// conflict (phase 2), so a cleared conflict flips the loser back to
+	// RouteAdmitted=True. Touched only by materialize (single goroutine).
+	conflictLosers map[types.NamespacedName]routetable.Conflict
 }
 
 // enableIncrementalRoutes switches the trigger set to the incremental route

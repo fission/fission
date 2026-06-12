@@ -268,18 +268,19 @@ func (ts *HTTPTriggerSet) materialize(ctx context.Context) {
 
 	public, internal := ts.newListenerMuxes(featureConfig)
 
-	homeHandled := false
-	for _, spec := range ts.routeTable.Snapshot() {
-		shape := routeShape{
-			exactPath:  spec.ExactPath,
-			prefixPath: spec.PrefixPath,
-			host:       spec.Host,
-			methods:    spec.Methods,
+	// Precedence-ordered registration (phase 2): hosted before host-less,
+	// exact before prefix, longest prefix first, creation-time tiebreak.
+	// gorilla dispatches to the first matching registration, so the order IS
+	// the precedence.
+	m := ts.routeTable.Materialization()
+	for _, r := range m.Routes {
+		shape := routeShape{host: r.Host, methods: r.Methods}
+		if r.Exact {
+			shape.exactPath = r.Path
+		} else {
+			shape.prefixPath = r.Path
 		}
-		registerRouteShape(public, shape, spec.Handler)
-		if shape.claimsHome() {
-			homeHandled = true
-		}
+		registerRouteShape(public, shape, r.Handler)
 	}
 
 	// Internal listener: the function invocation routes (GHSA split — these
@@ -290,7 +291,7 @@ func (ts *HTTPTriggerSet) materialize(ctx context.Context) {
 		internal.PathPrefix(prefix).Handler(ispec.Handler)
 	}
 
-	ts.registerRouterOwnedRoutes(public, featureConfig, homeHandled)
+	ts.registerRouterOwnedRoutes(public, featureConfig, m.HomeClaimed)
 
 	ts.mutableRouter.updateRouter(public)
 	if ts.internalMutableRouter != nil {
@@ -301,14 +302,59 @@ func (ts *HTTPTriggerSet) materialize(ctx context.Context) {
 	// The mux now serves user routes — report ready (gates /readyz).
 	ts.ready.Store(true)
 
+	ts.reportConflicts(ctx, m.Conflicts)
+
 	// Mark the batch's triggers admitted now that their routes are
-	// observable (parity with the legacy post-swap loop).
+	// observable (parity with the legacy post-swap loop). A trigger that is
+	// shadowed by a conflict keeps the False condition reportConflicts set.
 	for _, trigger := range ts.drainPendingConditions() {
+		if _, shadowed := ts.conflictLosers[types.NamespacedName{Namespace: trigger.Namespace, Name: trigger.Name}]; shadowed {
+			continue
+		}
 		ts.markTriggerCondition(ctx, trigger,
 			metav1.ConditionTrue, fv1.HTTPTriggerReasonRouteAdmitted,
 			"router accepted the trigger and installed its mux entry",
 			"trigger is serving")
 	}
+}
+
+// reportConflicts maintains the RouteAdmitted=False/RouteConflict conditions
+// across materializations: current losers are marked False naming their
+// winner; triggers that stopped losing (their winner was deleted or
+// reshaped) flip back to True. Only called from materialize, so
+// conflictLosers needs no locking beyond the materialize serialization.
+func (ts *HTTPTriggerSet) reportConflicts(ctx context.Context, conflicts []routetable.Conflict) {
+	current := make(map[types.NamespacedName]routetable.Conflict, len(conflicts))
+	for _, c := range conflicts {
+		current[c.Loser] = c
+		if _, known := ts.conflictLosers[c.Loser]; !known {
+			ts.logger.Info("route conflict: trigger is shadowed by an identical route shape",
+				"trigger", c.Loser.String(), "winner", c.Winner.String())
+		}
+		trigger := &fv1.HTTPTrigger{}
+		if err := ts.client.Get(ctx, c.Loser, trigger); err != nil {
+			continue // deleted in the meantime; its delete event cleans up
+		}
+		ts.markTriggerCondition(ctx, trigger,
+			metav1.ConditionFalse, fv1.HTTPTriggerReasonRouteConflict,
+			fmt.Sprintf("route is shadowed: trigger %s registered the same route shape and wins by precedence (oldest first)", c.Winner.String()),
+			"trigger is not serving; its route shape is owned by "+c.Winner.String())
+	}
+	for loser := range ts.conflictLosers {
+		if _, still := current[loser]; still {
+			continue
+		}
+		ts.logger.Info("route conflict cleared: trigger is serving again", "trigger", loser.String())
+		trigger := &fv1.HTTPTrigger{}
+		if err := ts.client.Get(ctx, loser, trigger); err != nil {
+			continue
+		}
+		ts.markTriggerCondition(ctx, trigger,
+			metav1.ConditionTrue, fv1.HTTPTriggerReasonRouteAdmitted,
+			"router accepted the trigger and installed its mux entry",
+			"trigger is serving")
+	}
+	ts.conflictLosers = current
 }
 
 // resyncLoop is the drift guard: it periodically re-lists triggers +

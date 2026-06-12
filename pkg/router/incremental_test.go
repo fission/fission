@@ -462,3 +462,86 @@ func TestIncrementalNoRouteFlap(t *testing.T) {
 	close(stop)
 	<-churnDone
 }
+
+// TestIncrementalPrecedenceDispatch pins the phase-2 dispatch rules through
+// the real materializer: exact beats prefix, longest prefix wins, host-
+// qualified beats host-less. Handlers are distinguishable stubs applied
+// straight to the table (the resolution machinery is exercised elsewhere).
+func TestIncrementalPrecedenceDispatch(t *testing.T) {
+	ts, _ := newIncrementalTS(t)
+	tag := func(name string) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write([]byte(name))
+		})
+	}
+	add := func(name, exact, prefix, host string, created time.Time) {
+		spec := &routetable.RouteSpec{
+			TriggerUID: types.UID(name), Namespace: "default", Name: name,
+			TriggerRV: "1", ExactPath: exact, PrefixPath: prefix, Host: host,
+			Methods: []string{http.MethodGet},
+			Created: metav1.NewTime(created),
+		}
+		ts.routeTable.ApplyTrigger(spec, func() http.Handler { return tag(name) })
+	}
+	t0 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	add("wide", "", "/api/", "", t0)
+	add("narrow", "", "/api/v1/", "", t0)
+	add("exact", "/api/v1/users", "", "", t0)
+	add("hosted", "", "/api/", "api.example.com", t0)
+	ts.materialize(t.Context())
+
+	dispatch := func(path, host string) string {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		if host != "" {
+			req.Host = host
+		}
+		rr := httptest.NewRecorder()
+		ts.ServeHTTP(rr, req)
+		return rr.Body.String()
+	}
+	assert.Equal(t, "exact", dispatch("/api/v1/users", ""), "exact beats every prefix")
+	assert.Equal(t, "narrow", dispatch("/api/v1/other", ""), "longest prefix wins")
+	assert.Equal(t, "wide", dispatch("/api/v2/x", ""), "shorter prefix serves the rest of the subtree")
+	assert.Equal(t, "hosted", dispatch("/api/v1/users", "api.example.com"),
+		"host-qualified routes outrank host-less ones, even exact ones")
+}
+
+// TestIncrementalConflictConditions drives the full conflict lifecycle
+// through the real apply path: the younger duplicate is shadowed and marked
+// RouteAdmitted=False/RouteConflict naming the winner; deleting the winner
+// flips the loser back to True and its route starts serving.
+func TestIncrementalConflictConditions(t *testing.T) {
+	fn := incrFn("fn", "default", "1")
+	older := incrTrigger("older", "default", "1", "/dup", "fn")
+	older.CreationTimestamp = metav1.NewTime(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+	younger := incrTrigger("younger", "default", "1", "/dup", "fn")
+	younger.CreationTimestamp = metav1.NewTime(time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC))
+
+	ts, cl := newIncrementalTS(t, fn, older, younger)
+	fc := fissionfake.NewSimpleClientset(older, younger)
+	ts.fissionClient = fc
+
+	for _, trigger := range []*fv1.HTTPTrigger{older, younger} {
+		_, err := ts.applyTriggerIncremental(t.Context(), trigger)
+		require.NoError(t, err)
+	}
+	ts.materialize(t.Context())
+
+	gotYounger, err := fc.CoreV1().HTTPTriggers("default").Get(t.Context(), "younger", metav1.GetOptions{})
+	require.NoError(t, err)
+	requireCondition(t, gotYounger, fv1.HTTPTriggerConditionRouteAdmitted, metav1.ConditionFalse, fv1.HTTPTriggerReasonRouteConflict)
+	gotOlder, err := fc.CoreV1().HTTPTriggers("default").Get(t.Context(), "older", metav1.GetOptions{})
+	require.NoError(t, err)
+	requireCondition(t, gotOlder, fv1.HTTPTriggerConditionRouteAdmitted, metav1.ConditionTrue, fv1.HTTPTriggerReasonRouteAdmitted)
+
+	// Delete the winner: the loser must start serving and flip to True.
+	require.NoError(t, cl.Delete(t.Context(), older))
+	ts.deleteTriggerIncremental(types.NamespacedName{Namespace: "default", Name: "older"})
+	ts.materialize(t.Context())
+
+	public, _ := muxes(ts)
+	assert.True(t, muxMatches(public, http.MethodGet, "/dup"), "the shadowed route serves once the winner is gone")
+	gotYounger, err = fc.CoreV1().HTTPTriggers("default").Get(t.Context(), "younger", metav1.GetOptions{})
+	require.NoError(t, err)
+	requireCondition(t, gotYounger, fv1.HTTPTriggerConditionRouteAdmitted, metav1.ConditionTrue, fv1.HTTPTriggerReasonRouteAdmitted)
+}
