@@ -185,6 +185,8 @@ var (
 	EnvImage                  = Flag{Type: String, Name: flagkey.EnvImage, Usage: "Environment image URL"}
 	EnvBuilderImage           = Flag{Type: String, Name: flagkey.EnvBuilderImage, Usage: "Environment builder image URL"}
 	EnvBuildCmd               = Flag{Type: String, Name: flagkey.EnvBuildcommand, Usage: "Build command for environment builder to build source package"}
+	EnvBuilderIdleTimeout     = Flag{Type: Int64, Name: flagkey.EnvBuilderIdleTimeout, Usage: "The length of time (in seconds) that a builder is idle before it is scaled to zero; 0 disables scale-to-zero (defaults to 600 if unset)"}
+	EnvBuilderPoolsize        = Flag{Type: Int, Name: flagkey.EnvBuilderPoolsize, Usage: "Number of builder pod replicas for concurrent package builds (defaults to 1 if unset)"}
 	EnvKeepArchive            = Flag{Type: Bool, Name: flagkey.EnvKeeparchive, Usage: "Keep the archive instead of extracting it into a directory (mainly for the JVM environment because .jar is one kind of zip archive)"}
 	EnvExternalNetwork        = Flag{Type: Bool, Name: flagkey.EnvExternalNetwork, Usage: "Allow pod to access external network (only works when istio feature is enabled)"}
 	EnvTerminationGracePeriod = Flag{Type: Int64, Name: flagkey.EnvGracePeriod, Aliases: []string{"period"}, Usage: "Grace time (in seconds) for pod to perform connection draining before termination (only non-negative values considered)", DefaultValue: 360}

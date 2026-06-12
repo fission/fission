@@ -62,9 +62,19 @@ rules:
   - apps
   resources:
   - deployments
+  # deployments/scale is required by the builder pool: the package reconciler
+  # scales builder deployments UP on demand (reads replicas via deployments/get,
+  # writes via deployments/scale UpdateScale) and the idle reaper scales them
+  # back to zero. Without get on deployments and update on the scale subresource
+  # the buildermgr SA is RBAC-forbidden and builds fail to dispatch.
+  - deployments/scale
   verbs:
+  - get
   - list
+  - watch
   - create
+  - update
+  - patch
   - delete
 - apiGroups:
   - apiextensions.k8s.io

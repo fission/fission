@@ -60,13 +60,23 @@ type (
 	Builder struct {
 		logger           logr.Logger
 		sharedVolumePath string
+		// sem bounds the number of builds that may run concurrently inside this
+		// pod. cap(sem) == maxParallelBuilds; an empty token is pushed on build
+		// start and popped on completion.
+		sem chan struct{}
 	}
 )
 
-func MakeBuilder(logger logr.Logger, sharedVolumePath string) *Builder {
+func MakeBuilder(logger logr.Logger, sharedVolumePath string, maxParallelBuilds int) *Builder {
+	// Guard against a non-positive value: an unbuffered semaphore channel would
+	// block every build forever. At least one build must always be allowed.
+	if maxParallelBuilds < 1 {
+		maxParallelBuilds = 1
+	}
 	return &Builder{
 		logger:           logger.WithName("builder"),
 		sharedVolumePath: sharedVolumePath,
+		sem:              make(chan struct{}, maxParallelBuilds),
 	}
 }
 
@@ -127,6 +137,21 @@ func (builder *Builder) Handler(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		elapsed := time.Since(startTime)
 		logger.Info("build request complete", "elapsed_time", elapsed)
+	}()
+
+	// Bound the number of builds running concurrently inside this pod. When the
+	// pod is already at capacity the request blocks here until a slot frees up.
+	if queued := len(builder.sem); queued > 0 {
+		logger.Info("build queued - waiting for semaphore",
+			"queued_builds", queued, "max_parallel_builds", cap(builder.sem))
+	}
+	builder.sem <- struct{}{}
+	logger.Info("build started - semaphore acquired",
+		"active_builds", len(builder.sem), "max_parallel_builds", cap(builder.sem))
+	defer func() {
+		<-builder.sem
+		logger.Info("build finished - semaphore released",
+			"remaining_builds", len(builder.sem), "max_parallel_builds", cap(builder.sem))
 	}()
 
 	// parse request

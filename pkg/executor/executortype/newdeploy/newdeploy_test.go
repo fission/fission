@@ -5,6 +5,7 @@
 package newdeploy
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -26,6 +28,68 @@ import (
 )
 
 const envCName = "newdeploy-test-env"
+
+func TestWaitForBuild(t *testing.T) {
+	fnFor := func(pkgName, pkgNs string) *fv1.Function {
+		return &fv1.Function{
+			ObjectMeta: metav1.ObjectMeta{Name: "fn", Namespace: "default"},
+			Spec: fv1.FunctionSpec{
+				Package: fv1.FunctionPackageRef{
+					PackageRef: fv1.PackageRef{Name: pkgName, Namespace: pkgNs},
+				},
+			},
+		}
+	}
+	pkgWith := func(status fv1.BuildStatus) *fv1.Package {
+		p := &fv1.Package{ObjectMeta: metav1.ObjectMeta{Name: "pkg", Namespace: "default"}}
+		p.Status.BuildStatus = status
+		return p
+	}
+	newDeploy := func(objs ...runtime.Object) *NewDeploy {
+		return &NewDeploy{
+			logger:        loggerfactory.GetLogger(),
+			fissionClient: fissionfake.NewSimpleClientset(objs...),
+		}
+	}
+
+	t.Run("no package reference returns immediately", func(t *testing.T) {
+		require.NoError(t, newDeploy().waitForBuild(t.Context(), fnFor("", "")))
+	})
+
+	t.Run("succeeded build proceeds", func(t *testing.T) {
+		d := newDeploy(pkgWith(fv1.BuildStatusSucceeded))
+		require.NoError(t, d.waitForBuild(t.Context(), fnFor("pkg", "default")))
+	})
+
+	t.Run("none (deploy-only) build proceeds", func(t *testing.T) {
+		d := newDeploy(pkgWith(fv1.BuildStatusNone))
+		require.NoError(t, d.waitForBuild(t.Context(), fnFor("pkg", "default")))
+	})
+
+	t.Run("failed build is a terminal error", func(t *testing.T) {
+		d := newDeploy(pkgWith(fv1.BuildStatusFailed))
+		err := d.waitForBuild(t.Context(), fnFor("pkg", "default"))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "build failed")
+	})
+
+	t.Run("slow build provisions anyway after the wait window", func(t *testing.T) {
+		t.Setenv("NEWDEPLOY_BUILD_WAIT_TIMEOUT", "1")
+		d := newDeploy(pkgWith(fv1.BuildStatusPending))
+		start := time.Now()
+		require.NoError(t, d.waitForBuild(t.Context(), fnFor("pkg", "default")))
+		assert.GreaterOrEqual(t, time.Since(start), 500*time.Millisecond,
+			"must poll at least one interval before falling back, not return immediately")
+	})
+
+	t.Run("cancelled context aborts the wait", func(t *testing.T) {
+		t.Setenv("NEWDEPLOY_BUILD_WAIT_TIMEOUT", "600")
+		d := newDeploy(pkgWith(fv1.BuildStatusPending))
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+		require.ErrorIs(t, d.waitForBuild(ctx, fnFor("pkg", "default")), context.Canceled)
+	})
+}
 
 // newTestNewDeploy returns a minimal NewDeploy wired up for unit tests of
 // getDeploymentSpec.

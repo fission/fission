@@ -5,6 +5,7 @@
 package buildermgr
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -134,11 +135,14 @@ func newTestPackageReconciler(t *testing.T, fc versioned.Interface, crObjs ...cl
 		WithStatusSubresource(&fv1.Package{}).
 		Build()
 	return &PackageReconciler{
-		logger:          loggerfactory.GetLogger(),
-		client:          c,
-		fissionClient:   fc,
-		nsResolver:      utils.DefaultNSResolver(),
-		podPollInterval: builderPodPollInterval,
+		logger:           loggerfactory.GetLogger(),
+		client:           c,
+		fissionClient:    fc,
+		kubernetesClient: k8sfake.NewClientset(),
+		nsResolver:       utils.DefaultNSResolver(),
+		podPollInterval:  builderPodPollInterval,
+		poolMgr:          newBuilderPoolManager(loggerfactory.GetLogger()),
+		scale:            func(context.Context, string, string, int32) error { return nil },
 	}
 }
 
@@ -202,6 +206,31 @@ func TestPackageReconcileGate(t *testing.T) {
 	})
 }
 
+// TestBuildRequeuesWhenBuilderDeploymentMissing pins the regression: a pending
+// package whose environment exists but whose builder Deployment has not been
+// created yet (the EnvironmentReconciler racing behind) must REQUEUE and stay
+// pending, never fail terminally or spin. This is the controller-runtime
+// equivalent of the old "infinite build" guard: the package waits cleanly until
+// the builder comes up, and the buildTriggerPredicate stops the reconciler from
+// re-triggering itself in the meantime (see TestBuildTriggerPredicate).
+func TestBuildRequeuesWhenBuilderDeploymentMissing(t *testing.T) {
+	env := &fv1.Environment{
+		ObjectMeta: metav1.ObjectMeta{Name: "go", Namespace: "default"},
+		Spec:       fv1.EnvironmentSpec{Version: 2, Builder: fv1.Builder{Image: "builder:latest"}},
+	}
+	fc := newFissionFake(env, sourcePkg("needsbuild", fv1.BuildStatusPending))
+	r := newTestPackageReconciler(t, fc, sourcePkg("needsbuild", fv1.BuildStatusPending))
+	// No builder deployment exists in the (empty) fake Kubernetes client.
+
+	res, err := r.Reconcile(t.Context(), ctrl.Request{NamespacedName: client.ObjectKey{Name: "needsbuild", Namespace: "default"}})
+	require.NoError(t, err)
+	assert.Equal(t, builderPodPollInterval, res.RequeueAfter, "a missing builder deployment must requeue, not fail")
+
+	got, err := fc.CoreV1().Packages("default").Get(t.Context(), "needsbuild", metav1.GetOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, fv1.BuildStatusPending, string(got.Status.BuildStatus), "package must stay pending while waiting for the builder")
+}
+
 // TestBuilderPodReady checks the readiness gate that the package build waits on.
 func TestBuilderPodReady(t *testing.T) {
 	env := &fv1.Environment{
@@ -219,7 +248,9 @@ func TestBuilderPodReady(t *testing.T) {
 					LABEL_ENV_RESOURCEVERSION: env.ResourceVersion,
 				},
 			},
-			Status: apiv1.PodStatus{ContainerStatuses: statuses},
+			// A routably-ready builder pod always has a PodIP; readiness without
+			// an IP is unreachable, so the helper requires both.
+			Status: apiv1.PodStatus{PodIP: "10.0.0.1", ContainerStatuses: statuses},
 		}
 	}
 
