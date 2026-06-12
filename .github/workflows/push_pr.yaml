@@ -161,6 +161,20 @@ jobs:
           kubectl -n fission rollout status deploy/router --timeout=3m
           kubectl -n fission rollout status deploy/executor --timeout=3m
 
+      # Enable the OCI package producer (RFC-0012) on the image-volume leg:
+      # builds push to the in-cluster test registry via cluster DNS and the
+      # recorded reference uses the node-resolvable NodePort name (the
+      # publishedPrefix split-brain knob), so the kubelet's image-volume
+      # mounts pull straight from the node. The whole builder test corpus on
+      # this leg then rides producer-published OCI packages end-to-end; the
+      # other legs keep the tarball pipeline covered.
+      - name: Enable OCI package producer (RFC-0012)
+        if: ${{ matrix.kindversion == 'v1.36.1' }}
+        timeout-minutes: 5
+        run: |
+          kubectl -n fission set env deploy/buildermgr             PACKAGE_REGISTRY_ENABLED=true             PACKAGE_REGISTRY_REPOSITORY_PREFIX=test-registry.default.svc.cluster.local:5000/fission-builds             PACKAGE_REGISTRY_PUBLISHED_PREFIX=localhost:30500/fission-builds             PACKAGE_REGISTRY_INSECURE_HOSTS=test-registry.default.svc.cluster.local:5000
+          kubectl -n fission rollout status deploy/buildermgr --timeout=3m
+
       # Install Envoy Gateway as the sample Gateway API implementation so the
       # router's gateway route provider (gatewayAPI.enabled=true via kind-ci)
       # has a real Gateway to attach HTTPRoutes to. Only on the coverage leg —
@@ -394,6 +408,7 @@ jobs:
           if [ "${{ matrix.kindversion }}" = "v1.36.1" ]; then
             export FISSION_TEST_IMAGE_VOLUME=1
             export FISSION_TEST_REGISTRY_NODE=localhost:30500
+            export FISSION_TEST_OCI_PRODUCER=1
           fi
           trap "kill $PF_PID $PF_PID_INT $PF_PID_MCP $PF_PID_REG 2>/dev/null || true" EXIT
 

@@ -20,6 +20,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	apiv1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -619,4 +620,74 @@ func TestOCIPackageNewdeployImageVolume(t *testing.T) {
 		}
 		assert.Truef(t, hasImageVolume, "pod %s: code must come from an image volume", pod.Name)
 	}
+}
+
+// TestOCIProducerBuild covers RFC-0012 phase 4 end-to-end on a live cluster:
+// with the buildermgr's packageRegistry configured (the FISSION_TEST_OCI_PRODUCER
+// leg), a plain `fission fn create --src` source build publishes the
+// deployment archive as a digest-pinned OCI image, the Package is rewritten
+// to Archive{Type: oci} with the OCIPublished condition, and the function
+// serves through the image-volume path — zero per-package opt-in.
+func TestOCIProducerBuild(t *testing.T) {
+	t.Parallel()
+	if os.Getenv("FISSION_TEST_OCI_PRODUCER") == "" {
+		t.Skip("FISSION_TEST_OCI_PRODUCER not set; skipping OCI producer test")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+
+	f := framework.Connect(t)
+	pyImage := f.Images().RequirePython(t)
+	builderImage := f.Images().RequirePythonBuilder(t)
+
+	ns := f.NewTestNamespace(t)
+
+	envName := "py-ociprod-" + ns.ID
+	fnName := "fn-ociprod-" + ns.ID
+	routePath := "/" + fnName
+
+	ns.CreateEnv(t, ctx, framework.EnvOptions{
+		Name:    envName,
+		Image:   pyImage,
+		Builder: builderImage,
+	})
+	ns.WaitForBuilderReady(t, ctx, envName)
+
+	srcZip := framework.ZipTestDataDir(t, "python/sourcepkg", "demo-src-pkg-ociprod.zip")
+	ns.CreateFunction(t, ctx, framework.FunctionOptions{
+		Name:       fnName,
+		Env:        envName,
+		Src:        srcZip,
+		Entrypoint: "user.main",
+		BuildCmd:   "./build.sh",
+	})
+	ns.CreateRoute(t, ctx, framework.RouteOptions{
+		Function: fnName,
+		URL:      routePath,
+		Method:   "GET",
+	})
+
+	pkgName := ns.FunctionPackageName(t, ctx, fnName)
+	ns.WaitForPackageBuildSucceeded(t, ctx, pkgName)
+
+	// The producer rewrote the package to a digest-pinned OCI archive.
+	pkg, err := f.FissionClient().CoreV1().Packages(ns.Name).Get(ctx, pkgName, metav1.GetOptions{})
+	require.NoError(t, err)
+	require.Equal(t, fv1.ArchiveTypeOCI, pkg.Spec.Deployment.Type,
+		"a registry-enabled build must publish an OCI archive; build log:\n%s", pkg.Status.BuildLog)
+	require.NotNil(t, pkg.Spec.Deployment.OCI)
+	assert.Contains(t, pkg.Spec.Deployment.OCI.Digest, "sha256:", "digest-pinned by default")
+	if nodeReg := os.Getenv("FISSION_TEST_REGISTRY_NODE"); nodeReg != "" {
+		assert.Contains(t, pkg.Spec.Deployment.OCI.Image, nodeReg,
+			"the recorded reference must carry the published (node-resolvable) prefix")
+	}
+	cond := meta.FindStatusCondition(pkg.Status.Conditions, fv1.PackageConditionOCIPublished)
+	require.NotNil(t, cond, "the publish outcome must be observable")
+	assert.Equal(t, metav1.ConditionTrue, cond.Status)
+
+	// And the built function actually serves (image-volume delivery on this
+	// leg; the executor's gate handles the rest).
+	body := f.Router(t).GetEventually(t, ctx, routePath, framework.BodyContains("a: 1"))
+	assert.Contains(t, body, "a: 1")
 }
