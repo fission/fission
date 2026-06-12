@@ -403,6 +403,13 @@ func triggerConfigError(trigger *fv1.HTTPTrigger) (reason string, err error) {
 	if e := trigger.Spec.IngressConfig.Validate(); e != nil {
 		return fv1.HTTPTriggerReasonInvalidIngressConfig, e
 	}
+	// Gorilla template compile check: a capturing group would PANIC at mux
+	// registration (crashing the rebuild goroutine), a malformed template
+	// would register a silently-dead route. CEL cannot express this, so the
+	// router is the gate.
+	if e := validateRouteTemplate(deriveRouteShape(trigger)); e != nil {
+		return fv1.HTTPTriggerReasonInvalidRouteTemplate, e
+	}
 	return "", nil
 }
 

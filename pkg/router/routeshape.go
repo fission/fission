@@ -5,6 +5,7 @@
 package router
 
 import (
+	"fmt"
 	"net/http"
 	"slices"
 	"time"
@@ -117,6 +118,36 @@ func registerRouteShape(r *mux.Router, shape routeShape, handler http.Handler) {
 func internalRoutePair(key types.NamespacedName) (exact, prefix string) {
 	exact = utils.UrlForFunction(key.Name, key.Namespace)
 	return exact, exact + "/"
+}
+
+// validateRouteTemplate reports whether a shape's gorilla path templates
+// compile. Two failure classes, both reachable through admitted triggers
+// (there is no HTTPTrigger admission webhook and CEL cannot run gorilla's
+// parser): a capturing group ({sort:(asc|desc)}) makes gorilla PANIC at
+// registration — which, unguarded, crashes the router's rebuild goroutine
+// and CrashLoops the process for as long as the trigger exists — and a
+// malformed template (unbalanced braces, empty var) records a route error
+// that silently never matches. Both paths (legacy buildMuxes and the
+// incremental apply) reject the trigger through triggerConfigError instead,
+// surfacing RouteAdmitted=False/InvalidRouteTemplate.
+func validateRouteTemplate(shape routeShape) (err error) {
+	defer func() {
+		if rec := recover(); rec != nil {
+			err = fmt.Errorf("invalid route template: %v", rec)
+		}
+	}()
+	scratch := mux.NewRouter()
+	if shape.exactPath != "" {
+		if e := scratch.Handle(shape.exactPath, http.NotFoundHandler()).GetError(); e != nil {
+			return e
+		}
+	}
+	if shape.prefixPath != "" {
+		if e := scratch.PathPrefix(shape.prefixPath).Handler(http.NotFoundHandler()).GetError(); e != nil {
+			return e
+		}
+	}
+	return nil
 }
 
 // buildTriggerHandler constructs the proxy handler for one trigger from its

@@ -343,3 +343,47 @@ func TestRouteShapeGorillaTemplates(t *testing.T) {
 	assert.True(t, muxMatches(public, http.MethodGet, "/accounts/123"), "plain {var} must match one segment")
 	assert.False(t, muxMatches(public, http.MethodGet, "/accounts/123/txns"), "plain {var} must not span segments")
 }
+
+// TestRouteShapeInvalidTemplatesRejected pins the template-compile gate:
+// a capturing-group template (which would PANIC gorilla at registration and
+// crash the router's rebuild goroutine) and a malformed template (which
+// would register a silently-dead route) are both rejected by
+// triggerConfigError, the build does not panic, the bad routes 404, and a
+// healthy sibling keeps serving.
+func TestRouteShapeInvalidTemplatesRejected(t *testing.T) {
+	ts := newShapeTS(t, []fv1.Function{shapeFn("fn")}, []fv1.HTTPTrigger{
+		shapeTrigger("capture", func(tr *fv1.HTTPTrigger) {
+			tr.Spec.RelativeURL = `/bad/{sort:(asc|desc)}` // capturing group
+		}),
+		shapeTrigger("unbalanced", func(tr *fv1.HTTPTrigger) {
+			tr.Spec.RelativeURL = `/bad/{id`
+		}),
+		shapeTrigger("healthy", func(tr *fv1.HTTPTrigger) {
+			tr.Spec.RelativeURL = `/good/{sort:(?:asc|desc)}` // non-capturing is fine
+		}),
+	})
+
+	var public *mux.Router
+	require.NotPanics(t, func() {
+		var err error
+		public, _, err = ts.buildMuxes(t.Context(), nil)
+		require.NoError(t, err)
+	}, "a capturing-group template must never panic the mux build")
+
+	assert.False(t, muxMatches(public, http.MethodGet, "/bad/asc"), "capturing-group route must be skipped")
+	assert.True(t, muxMatches(public, http.MethodGet, "/good/asc"), "non-capturing sibling must serve")
+	assert.False(t, muxMatches(public, http.MethodGet, "/good/other"), "the alternation still constrains matching")
+
+	for _, name := range []string{"capture", "unbalanced"} {
+		tr := shapeTrigger(name, nil)
+		switch name {
+		case "capture":
+			tr.Spec.RelativeURL = `/bad/{sort:(asc|desc)}`
+		case "unbalanced":
+			tr.Spec.RelativeURL = `/bad/{id`
+		}
+		reason, err := triggerConfigError(&tr)
+		require.Error(t, err, "%s must be rejected by config validation", name)
+		assert.Equal(t, fv1.HTTPTriggerReasonInvalidRouteTemplate, reason)
+	}
+}

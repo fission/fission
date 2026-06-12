@@ -86,6 +86,7 @@ const (
 	HTTPTriggerReasonInvalidIngressConfig = "InvalidIngressConfig" // ingress path/host failed POSIX-regex/DNS validation
 	HTTPTriggerReasonFunctionNotFound     = "FunctionNotFound"     // the referenced function does not exist; the route is not served
 	HTTPTriggerReasonRouteConflict        = "RouteConflict"        // another trigger registered the same route shape and wins by precedence; this one is shadowed
+	HTTPTriggerReasonInvalidRouteTemplate = "InvalidRouteTemplate" // the path's gorilla template does not compile (capturing groups, unbalanced braces, ...)
 
 	// KubernetesWatchTrigger condition reasons
 	KubernetesWatchTriggerReasonSubscribed  = "Subscribed"
