@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/bep/debounce"
+	"github.com/go-logr/logr"
 	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -22,6 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	config "github.com/fission/fission/pkg/featureconfig"
 	fissionfake "github.com/fission/fission/pkg/generated/clientset/versioned/fake"
 	"github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
 	"github.com/fission/fission/pkg/router/routetable"
@@ -74,15 +76,15 @@ func requireNoSignal(t *testing.T, ts *HTTPTriggerSet) {
 	}
 }
 
-func incrFn(name, ns, rv string) *fv1.Function {
+func incrFn(name, ns string, gen int64) *fv1.Function {
 	return &fv1.Function{ObjectMeta: metav1.ObjectMeta{
-		Name: name, Namespace: ns, ResourceVersion: rv, UID: types.UID("fn-" + name),
+		Name: name, Namespace: ns, Generation: gen, UID: types.UID("fn-" + name),
 	}}
 }
 
-func incrTrigger(name, ns, rv, url, fnName string) *fv1.HTTPTrigger {
+func incrTrigger(name, ns string, gen int64, url, fnName string) *fv1.HTTPTrigger {
 	return &fv1.HTTPTrigger{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns, ResourceVersion: rv, UID: types.UID("trig-" + name)},
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns, Generation: gen, UID: types.UID("trig-" + name)},
 		Spec: fv1.HTTPTriggerSpec{
 			RelativeURL: url,
 			Methods:     []string{http.MethodGet},
@@ -97,8 +99,8 @@ func incrTrigger(name, ns, rv, url, fnName string) *fv1.HTTPTrigger {
 // materialize through the real apply path and asserts what the listeners
 // serve at each step.
 func TestIncrementalTriggerLifecycle(t *testing.T) {
-	fn := incrFn("fn", "default", "1")
-	trigger := incrTrigger("t1", "default", "1", "/hello", "fn")
+	fn := incrFn("fn", "default", 1)
+	trigger := incrTrigger("t1", "default", 1, "/hello", "fn")
 	ts, _ := newIncrementalTS(t, fn, trigger)
 
 	res, err := ts.applyTriggerIncremental(t.Context(), trigger)
@@ -131,10 +133,10 @@ func TestIncrementalTriggerLifecycle(t *testing.T) {
 // update) must be a handler swap with ZERO materializer signals — at any
 // trigger count, a weight tick no longer rebuilds anything.
 func TestIncrementalCanaryTickIsHandlerSwapOnly(t *testing.T) {
-	fnA := incrFn("fn-a", "default", "1")
-	fnB := incrFn("fn-b", "default", "1")
+	fnA := incrFn("fn-a", "default", 1)
+	fnB := incrFn("fn-b", "default", 1)
 	canary := &fv1.HTTPTrigger{
-		ObjectMeta: metav1.ObjectMeta{Name: "canary", Namespace: "default", ResourceVersion: "1", UID: "trig-canary"},
+		ObjectMeta: metav1.ObjectMeta{Name: "canary", Namespace: "default", Generation: 1, UID: "trig-canary"},
 		Spec: fv1.HTTPTriggerSpec{
 			RelativeURL: "/canary",
 			Methods:     []string{http.MethodGet},
@@ -155,7 +157,7 @@ func TestIncrementalCanaryTickIsHandlerSwapOnly(t *testing.T) {
 	// 50 weight ticks: every one must be a pure handler swap.
 	for i := range 50 {
 		tick := canary.DeepCopy()
-		tick.ResourceVersion = fmt.Sprintf("%d", i+2)
+		tick.Generation = int64(i + 2)
 		tick.Spec.FunctionReference.FunctionWeights = map[string]int{"fn-a": 90 - i, "fn-b": 10 + i}
 		res, err := ts.applyTriggerIncremental(t.Context(), tick)
 		require.NoError(t, err)
@@ -172,8 +174,8 @@ func TestIncrementalCanaryTickIsHandlerSwapOnly(t *testing.T) {
 // trigger as a handler swap; a function create/delete is an internal shape
 // change.
 func TestIncrementalFunctionEventCascade(t *testing.T) {
-	fn := incrFn("fn", "myns", "1")
-	trigger := incrTrigger("t1", "myns", "1", "/hello", "fn")
+	fn := incrFn("fn", "myns", 1)
+	trigger := incrTrigger("t1", "myns", 1, "/hello", "fn")
 	ts, cl := newIncrementalTS(t, fn, trigger)
 
 	// Seed: function insert (internal shape change) + trigger insert.
@@ -190,7 +192,7 @@ func TestIncrementalFunctionEventCascade(t *testing.T) {
 	// Function update: internal handler swap + trigger handler swap, no signal.
 	fn2 := &fv1.Function{}
 	require.NoError(t, cl.Get(t.Context(), types.NamespacedName{Namespace: "myns", Name: "fn"}, fn2))
-	fn2.Labels = map[string]string{"rev": "2"} // any spec-level change; the client bumps the RV
+	fn2.Generation = 2 // a spec change bumps the generation — the handler-swap key
 	require.NoError(t, cl.Update(t.Context(), fn2))
 	res, err = ts.applyFunctionIncremental(t.Context(), fn2)
 	require.NoError(t, err)
@@ -216,9 +218,9 @@ func TestIncrementalFunctionEventCascade(t *testing.T) {
 // materialize; a trigger whose function is missing gets
 // RouteAdmitted=False/FunctionNotFound.
 func TestIncrementalConditionsViaReconciler(t *testing.T) {
-	fn := incrFn("fn", "default", "1")
-	good := incrTrigger("good", "default", "1", "/good", "fn")
-	orphan := incrTrigger("orphan", "default", "1", "/orphan", "ghost")
+	fn := incrFn("fn", "default", 1)
+	good := incrTrigger("good", "default", 1, "/good", "fn")
+	orphan := incrTrigger("orphan", "default", 1, "/orphan", "ghost")
 	ts, cl := newIncrementalTS(t, fn, good, orphan)
 	fc := fissionfake.NewSimpleClientset(good, orphan)
 	ts.fissionClient = fc
@@ -260,8 +262,8 @@ func requireCondition(t *testing.T, trigger *fv1.HTTPTrigger, condType string, s
 // created and deleted behind the reconcilers' back are corrected by the
 // periodic resync.
 func TestIncrementalResyncHealsDrift(t *testing.T) {
-	fn := incrFn("fn", "default", "1")
-	t1 := incrTrigger("t1", "default", "1", "/one", "fn")
+	fn := incrFn("fn", "default", 1)
+	t1 := incrTrigger("t1", "default", 1, "/one", "fn")
 	ts, cl := newIncrementalTS(t, fn, t1)
 
 	// Initial resync populates (not drift).
@@ -279,7 +281,8 @@ func TestIncrementalResyncHealsDrift(t *testing.T) {
 
 	// Missed events: t1 deleted, t2 created, with no reconciler in sight.
 	require.NoError(t, cl.Delete(t.Context(), t1))
-	t2 := incrTrigger("t2", "default", "", "/two", "fn") // no RV: the fake client assigns one on Create
+	t2 := incrTrigger("t2", "default", 1, "/two", "fn")
+	t2.ResourceVersion = "" // the fake client rejects RVs on Create and assigns its own
 	require.NoError(t, cl.Create(t.Context(), t2))
 
 	require.NoError(t, ts.resync(t.Context(), false))
@@ -298,14 +301,14 @@ func TestIncrementalLegacyParity(t *testing.T) {
 	prefix := "/api"
 	slashPrefix := "/files/"
 	functions := []fv1.Function{
-		*incrFn("fn", "default", "1"),
-		*incrFn("other", "myns", "1"),
+		*incrFn("fn", "default", 1),
+		*incrFn("other", "myns", 1),
 	}
 	triggers := []fv1.HTTPTrigger{
-		*incrTrigger("exact", "default", "1", "/hello", "fn"),
-		*incrTrigger("home", "default", "1", "/", "fn"),
+		*incrTrigger("exact", "default", 1, "/hello", "fn"),
+		*incrTrigger("home", "default", 1, "/", "fn"),
 		{
-			ObjectMeta: metav1.ObjectMeta{Name: "dual", Namespace: "default", ResourceVersion: "1", UID: "trig-dual"},
+			ObjectMeta: metav1.ObjectMeta{Name: "dual", Namespace: "default", Generation: 1, UID: "trig-dual"},
 			Spec: fv1.HTTPTriggerSpec{
 				Prefix:            &prefix,
 				Methods:           []string{http.MethodGet, http.MethodPost},
@@ -313,7 +316,7 @@ func TestIncrementalLegacyParity(t *testing.T) {
 			},
 		},
 		{
-			ObjectMeta: metav1.ObjectMeta{Name: "slashpfx", Namespace: "default", ResourceVersion: "1", UID: "trig-slashpfx"},
+			ObjectMeta: metav1.ObjectMeta{Name: "slashpfx", Namespace: "default", Generation: 1, UID: "trig-slashpfx"},
 			Spec: fv1.HTTPTriggerSpec{
 				Prefix:            &slashPrefix,
 				Methods:           []string{http.MethodGet},
@@ -321,7 +324,7 @@ func TestIncrementalLegacyParity(t *testing.T) {
 			},
 		},
 		{
-			ObjectMeta: metav1.ObjectMeta{Name: "hosted", Namespace: "default", ResourceVersion: "1", UID: "trig-hosted"},
+			ObjectMeta: metav1.ObjectMeta{Name: "hosted", Namespace: "default", Generation: 1, UID: "trig-hosted"},
 			Spec: fv1.HTTPTriggerSpec{
 				RelativeURL:       "/hosted",
 				Host:              "api.example.com",
@@ -330,7 +333,7 @@ func TestIncrementalLegacyParity(t *testing.T) {
 			},
 		},
 		{
-			ObjectMeta: metav1.ObjectMeta{Name: "cors", Namespace: "default", ResourceVersion: "1", UID: "trig-cors"},
+			ObjectMeta: metav1.ObjectMeta{Name: "cors", Namespace: "default", Generation: 1, UID: "trig-cors"},
 			Spec: fv1.HTTPTriggerSpec{
 				RelativeURL: "/cors",
 				Methods:     []string{http.MethodGet},
@@ -340,7 +343,7 @@ func TestIncrementalLegacyParity(t *testing.T) {
 				},
 			},
 		},
-		*incrTrigger("orphan", "default", "1", "/orphan", "ghost"), // skipped by both paths
+		*incrTrigger("orphan", "default", 1, "/orphan", "ghost"), // skipped by both paths
 	}
 
 	// Legacy path.
@@ -416,7 +419,7 @@ func TestIncrementalNoRouteFlap(t *testing.T) {
 	})
 	stable := &routetable.RouteSpec{
 		TriggerUID: "stable", Namespace: "default", Name: "stable",
-		TriggerRV: "1", ExactPath: "/stable", Methods: []string{http.MethodGet},
+		TriggerGen: 1, ExactPath: "/stable", Methods: []string{http.MethodGet},
 	}
 	ts.routeTable.ApplyTrigger(stable, func() http.Handler { return ok })
 	ts.materialize(t.Context())
@@ -435,15 +438,15 @@ func TestIncrementalNoRouteFlap(t *testing.T) {
 			i++
 			// Handler swap on the stable route (same shape, new RV).
 			swap := *stable
-			swap.TriggerRV = fmt.Sprintf("%d", i+1)
+			swap.TriggerGen = int64(i + 1)
 			ts.routeTable.ApplyTrigger(&swap, func() http.Handler { return ok })
 			// Unrelated shape change + immediate materialize (worst case:
 			// no debounce coalescing at all).
 			noise := &routetable.RouteSpec{
 				TriggerUID: types.UID(fmt.Sprintf("noise-%d", i%17)),
 				Namespace:  "default", Name: fmt.Sprintf("noise-%d", i%17),
-				TriggerRV: fmt.Sprintf("%d", i),
-				ExactPath: fmt.Sprintf("/noise-%d", i%17), Methods: []string{http.MethodGet},
+				TriggerGen: int64(i),
+				ExactPath:  fmt.Sprintf("/noise-%d", i%17), Methods: []string{http.MethodGet},
 			}
 			ts.routeTable.ApplyTrigger(noise, func() http.Handler { return ok })
 			ts.materialize(t.Context())
@@ -477,7 +480,7 @@ func TestIncrementalPrecedenceDispatch(t *testing.T) {
 	add := func(name, exact, prefix, host string, created time.Time) {
 		spec := &routetable.RouteSpec{
 			TriggerUID: types.UID(name), Namespace: "default", Name: name,
-			TriggerRV: "1", ExactPath: exact, PrefixPath: prefix, Host: host,
+			TriggerGen: 1, ExactPath: exact, PrefixPath: prefix, Host: host,
 			Methods: []string{http.MethodGet},
 			Created: metav1.NewTime(created),
 		}
@@ -511,10 +514,10 @@ func TestIncrementalPrecedenceDispatch(t *testing.T) {
 // RouteAdmitted=False/RouteConflict naming the winner; deleting the winner
 // flips the loser back to True and its route starts serving.
 func TestIncrementalConflictConditions(t *testing.T) {
-	fn := incrFn("fn", "default", "1")
-	older := incrTrigger("older", "default", "1", "/dup", "fn")
+	fn := incrFn("fn", "default", 1)
+	older := incrTrigger("older", "default", 1, "/dup", "fn")
 	older.CreationTimestamp = metav1.NewTime(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
-	younger := incrTrigger("younger", "default", "1", "/dup", "fn")
+	younger := incrTrigger("younger", "default", 1, "/dup", "fn")
 	younger.CreationTimestamp = metav1.NewTime(time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC))
 
 	ts, cl := newIncrementalTS(t, fn, older, younger)
@@ -544,4 +547,124 @@ func TestIncrementalConflictConditions(t *testing.T) {
 	gotYounger, err = fc.CoreV1().HTTPTriggers("default").Get(t.Context(), "younger", metav1.GetOptions{})
 	require.NoError(t, err)
 	requireCondition(t, gotYounger, fv1.HTTPTriggerConditionRouteAdmitted, metav1.ConditionTrue, fv1.HTTPTriggerReasonRouteAdmitted)
+}
+
+// TestIncrementalConflictLoserSurvivesHandlerSwap is the review-finding
+// regression test: a shadowed trigger must KEEP its RouteAdmitted=False/
+// RouteConflict condition through handler swaps and resync passes — the
+// NoChange/HandlerSwapped condition path must not flip a loser to True while
+// gorilla still dispatches its shape to the winner.
+func TestIncrementalConflictLoserSurvivesHandlerSwap(t *testing.T) {
+	fn := incrFn("fn", "default", 1)
+	older := incrTrigger("older", "default", 1, "/dup", "fn")
+	older.CreationTimestamp = metav1.NewTime(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+	younger := incrTrigger("younger", "default", 1, "/dup", "fn")
+	younger.CreationTimestamp = metav1.NewTime(time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC))
+
+	ts, _ := newIncrementalTS(t, fn, older, younger)
+	fc := fissionfake.NewSimpleClientset(older, younger)
+	ts.fissionClient = fc
+
+	for _, trigger := range []*fv1.HTTPTrigger{older, younger} {
+		_, err := ts.applyTriggerIncremental(t.Context(), trigger)
+		require.NoError(t, err)
+	}
+	ts.materialize(t.Context())
+
+	assertLoserFalse := func(when string) {
+		t.Helper()
+		got, err := fc.CoreV1().HTTPTriggers("default").Get(t.Context(), "younger", metav1.GetOptions{})
+		require.NoError(t, err, "reading loser condition %s", when)
+		requireCondition(t, got, fv1.HTTPTriggerConditionRouteAdmitted, metav1.ConditionFalse, fv1.HTTPTriggerReasonRouteConflict)
+	}
+	assertLoserFalse("after materialize")
+
+	// A handler swap on the loser (spec generation bump, same shape) must
+	// not flip the condition.
+	swap := younger.DeepCopy()
+	swap.Generation = 2
+	res, err := ts.applyTriggerIncremental(t.Context(), swap)
+	require.NoError(t, err)
+	require.Equal(t, routetable.HandlerSwapped, res)
+	assertLoserFalse("after handler swap")
+
+	// A resync pass (which re-applies every trigger as NoChange) must not
+	// flip it either — this is the path that runs every 60s in production.
+	require.NoError(t, ts.resync(t.Context(), false))
+	assertLoserFalse("after resync")
+}
+
+// TestIncrementalFunctionCreatedAfterTrigger pins the unresolved-index
+// cascade: a trigger applied before its function exists is re-admitted by
+// the function's create event itself — NOT left waiting for the next resync.
+func TestIncrementalFunctionCreatedAfterTrigger(t *testing.T) {
+	trigger := incrTrigger("early", "default", 1, "/early", "late-fn")
+	ts, cl := newIncrementalTS(t, trigger)
+	fc := fissionfake.NewSimpleClientset(trigger)
+	ts.fissionClient = fc
+
+	res, err := ts.applyTriggerIncremental(t.Context(), trigger)
+	require.NoError(t, err)
+	assert.Equal(t, routetable.NoChange, res, "nothing to remove; the route never existed")
+	got, err := fc.CoreV1().HTTPTriggers("default").Get(t.Context(), "early", metav1.GetOptions{})
+	require.NoError(t, err)
+	requireCondition(t, got, fv1.HTTPTriggerConditionRouteAdmitted, metav1.ConditionFalse, fv1.HTTPTriggerReasonFunctionNotFound)
+
+	// The function arrives. Its create event must re-admit the trigger via
+	// the unresolved index — no resync involved.
+	fn := incrFn("late-fn", "default", 1)
+	require.NoError(t, cl.Create(t.Context(), fn))
+	_, err = ts.applyFunctionIncremental(t.Context(), fn)
+	require.NoError(t, err)
+	ts.materialize(t.Context())
+
+	public, _ := muxes(ts)
+	assert.True(t, muxMatches(public, http.MethodGet, "/early"),
+		"the trigger must serve as soon as its function exists")
+	got, err = fc.CoreV1().HTTPTriggers("default").Get(t.Context(), "early", metav1.GetOptions{})
+	require.NoError(t, err)
+	requireCondition(t, got, fv1.HTTPTriggerConditionRouteAdmitted, metav1.ConditionTrue, fv1.HTTPTriggerReasonRouteAdmitted)
+}
+
+// TestIncrementalMaterializeFailureRetries pins the sticky-failure contract:
+// a failed materialize re-queues the batch's conditions and sets the dirty
+// flag (the resync loop's re-arm signal); the retry then completes the
+// deferred work — routes serve and conditions flip True.
+func TestIncrementalMaterializeFailureRetries(t *testing.T) {
+	fn := incrFn("fn", "default", 1)
+	trigger := incrTrigger("t1", "default", 1, "/hello", "fn")
+	ts, _ := newIncrementalTS(t, fn, trigger)
+	fc := fissionfake.NewSimpleClientset(trigger)
+	ts.fissionClient = fc
+
+	failing := true
+	realFn := ts.featureConfigFn
+	ts.featureConfigFn = func(logger logr.Logger) (*config.FeatureConfig, error) {
+		if failing {
+			return nil, fmt.Errorf("injected feature config failure")
+		}
+		return realFn(logger)
+	}
+
+	_, err := ts.applyTriggerIncremental(t.Context(), trigger)
+	require.NoError(t, err)
+	ts.materialize(t.Context())
+
+	assert.True(t, ts.materializeDirty.Load(), "a failed materialize must leave the dirty flag set")
+	assert.False(t, ts.ready.Load(), "readiness must not report before a successful build")
+	got, err := fc.CoreV1().HTTPTriggers("default").Get(t.Context(), "t1", metav1.GetOptions{})
+	require.NoError(t, err)
+	requireCondition(t, got, fv1.HTTPTriggerConditionRouteAdmitted, metav1.ConditionFalse, fv1.HTTPTriggerReasonMuxBuildFail)
+
+	// Retry (in production the resync loop re-signals on the dirty flag).
+	failing = false
+	ts.materialize(t.Context())
+
+	assert.False(t, ts.materializeDirty.Load(), "a successful build must clear the dirty flag")
+	assert.True(t, ts.ready.Load())
+	public, _ := muxes(ts)
+	assert.True(t, muxMatches(public, http.MethodGet, "/hello"), "the deferred batch must now serve")
+	got, err = fc.CoreV1().HTTPTriggers("default").Get(t.Context(), "t1", metav1.GetOptions{})
+	require.NoError(t, err)
+	requireCondition(t, got, fv1.HTTPTriggerConditionRouteAdmitted, metav1.ConditionTrue, fv1.HTTPTriggerReasonRouteAdmitted)
 }

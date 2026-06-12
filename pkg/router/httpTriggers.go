@@ -82,13 +82,20 @@ type HTTPTriggerSet struct {
 	routeTable  *routetable.Table
 	// pendingConditions holds triggers whose shape change is waiting on the
 	// debounced materialize; their RouteAdmitted conditions are marked after
-	// the swap so conditions reflect observable state.
+	// the swap so conditions reflect observable state. conflictLosers tracks
+	// the triggers currently shadowed by a route conflict (phase 2): written
+	// by materialize, read by the apply path (reconcilers + resync) through
+	// isConflictLoser, so both maps share pendingMu.
 	pendingMu         sync.Mutex
 	pendingConditions map[types.UID]*fv1.HTTPTrigger
-	// conflictLosers tracks the triggers currently shadowed by a route
-	// conflict (phase 2), so a cleared conflict flips the loser back to
-	// RouteAdmitted=True. Touched only by materialize (single goroutine).
-	conflictLosers map[types.NamespacedName]routetable.Conflict
+	conflictLosers    map[types.NamespacedName]routetable.Conflict
+	// materializeDirty is set when a materialize attempt fails, so the
+	// resync loop re-signals until a build succeeds — a consumed signal must
+	// not strand table state out of the served mux.
+	materializeDirty atomic.Bool
+	// featureConfigFn is the materializer's feature-config source —
+	// injectable so tests can exercise the materialize failure path.
+	featureConfigFn func(logr.Logger) (*config.FeatureConfig, error)
 }
 
 // enableIncrementalRoutes switches the trigger set to the incremental route
@@ -96,6 +103,7 @@ type HTTPTriggerSet struct {
 func (ts *HTTPTriggerSet) enableIncrementalRoutes() {
 	ts.incremental = true
 	ts.routeTable = routetable.New()
+	ts.featureConfigFn = config.GetFeatureConfig
 }
 
 // makeHTTPTriggerSet builds the trigger set. cl is the Manager's cache-backed

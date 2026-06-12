@@ -82,6 +82,22 @@ var (
 			Help: "Routes the periodic resync had to correct — a nonzero value means a watch event was missed (the table self-healed).",
 		},
 	)
+	// The drift guard's own failure modes must be observable: the safety
+	// story of the incremental path rests on the resync, so a resync that
+	// cannot run (or a materialize that cannot build) needs an alertable
+	// signal beyond a log line.
+	resyncFailures = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name: "fission_router_route_resync_failures_total",
+			Help: "Resync passes that failed (list error or per-trigger apply errors); the drift guard was unable to verify the table this tick.",
+		},
+	)
+	materializeFailures = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name: "fission_router_mux_materialize_failures_total",
+			Help: "Mux materializations that failed before the swap; the served mux is stale until a retry succeeds (the resync loop re-arms it).",
+		},
+	)
 )
 
 func init() {
@@ -93,6 +109,8 @@ func init() {
 	registry.MustRegister(muxRebuilds)
 	registry.MustRegister(routesTotal)
 	registry.MustRegister(resyncDrift)
+	registry.MustRegister(resyncFailures)
+	registry.MustRegister(materializeFailures)
 }
 
 // collectFunctionMetric records the per-call counters and the

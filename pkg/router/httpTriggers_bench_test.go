@@ -114,7 +114,7 @@ func BenchmarkIncrementalWeightTick(b *testing.B) {
 	const n = 10000
 	fns, triggers, _ := benchRouteSet(n)
 	canary := fv1.HTTPTrigger{
-		ObjectMeta: metav1.ObjectMeta{Name: "bench-canary", Namespace: "default", ResourceVersion: "1", UID: "uid-canary"},
+		ObjectMeta: metav1.ObjectMeta{Name: "bench-canary", Namespace: "default", Generation: 1, UID: "uid-canary"},
 		Spec: fv1.HTTPTriggerSpec{
 			RelativeURL: "/bench-canary",
 			Methods:     []string{http.MethodGet},
@@ -144,7 +144,7 @@ func BenchmarkIncrementalWeightTick(b *testing.B) {
 	for b.Loop() {
 		i++
 		tick := canary.DeepCopy()
-		tick.ResourceVersion = fmt.Sprintf("rv-%d", i)
+		tick.Generation = int64(i + 1)
 		tick.Spec.FunctionReference.FunctionWeights = map[string]int{
 			"bench-fn-0": 90 - (i % 80), "bench-fn-1": 10 + (i % 80),
 		}

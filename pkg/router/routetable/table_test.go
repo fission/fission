@@ -31,13 +31,13 @@ func serve(t *testing.T, h http.Handler) string {
 	return rr.Body.String()
 }
 
-func spec(uid, rv string, fnRVs map[string]string, mutate func(*RouteSpec)) *RouteSpec {
+func spec(uid string, gen int64, fnGens map[string]int64, mutate func(*RouteSpec)) *RouteSpec {
 	s := &RouteSpec{
 		TriggerUID: types.UID(uid),
 		Namespace:  "default",
 		Name:       "trig-" + uid,
-		TriggerRV:  rv,
-		FnRVs:      fnRVs,
+		TriggerGen: gen,
+		FnGens:     fnGens,
 		ExactPath:  "/path",
 		Methods:    []string{http.MethodGet},
 	}
@@ -62,7 +62,7 @@ func mustNotBuild(t *testing.T) func() http.Handler {
 func TestApplyTriggerDecisionTable(t *testing.T) {
 	t.Run("insert is ShapeChanged and builds", func(t *testing.T) {
 		tbl := New()
-		res := tbl.ApplyTrigger(spec("u1", "1", map[string]string{"fn": "10"}, nil),
+		res := tbl.ApplyTrigger(spec("u1", 1, map[string]int64{"fn": 10}, nil),
 			func() http.Handler { return tagHandler("v1") })
 		assert.Equal(t, ShapeChanged, res)
 		snap := tbl.Snapshot()
@@ -72,29 +72,29 @@ func TestApplyTriggerDecisionTable(t *testing.T) {
 
 	t.Run("identical re-apply is NoChange and never builds", func(t *testing.T) {
 		tbl := New()
-		tbl.ApplyTrigger(spec("u1", "1", map[string]string{"fn": "10"}, nil),
+		tbl.ApplyTrigger(spec("u1", 1, map[string]int64{"fn": 10}, nil),
 			func() http.Handler { return tagHandler("v1") })
-		res := tbl.ApplyTrigger(spec("u1", "1", map[string]string{"fn": "10"}, nil), mustNotBuild(t))
+		res := tbl.ApplyTrigger(spec("u1", 1, map[string]int64{"fn": 10}, nil), mustNotBuild(t))
 		assert.Equal(t, NoChange, res)
 	})
 
-	t.Run("trigger RV bump with same shape is HandlerSwapped", func(t *testing.T) {
+	t.Run("trigger generation bump with same shape is HandlerSwapped", func(t *testing.T) {
 		tbl := New()
-		tbl.ApplyTrigger(spec("u1", "1", map[string]string{"fn": "10"}, nil),
+		tbl.ApplyTrigger(spec("u1", 1, map[string]int64{"fn": 10}, nil),
 			func() http.Handler { return tagHandler("v1") })
 		ref := tbl.Snapshot()[0].Handler
-		res := tbl.ApplyTrigger(spec("u1", "2", map[string]string{"fn": "10"}, nil),
+		res := tbl.ApplyTrigger(spec("u1", 2, map[string]int64{"fn": 10}, nil),
 			func() http.Handler { return tagHandler("v2") })
 		assert.Equal(t, HandlerSwapped, res)
 		assert.Equal(t, "v2", serve(t, ref), "the EXISTING ref must now serve the new handler")
 		assert.Same(t, ref, tbl.Snapshot()[0].Handler, "ref identity must be stable across swaps")
 	})
 
-	t.Run("function RV bump with same shape is HandlerSwapped (the canary tick)", func(t *testing.T) {
+	t.Run("function generation bump with same shape is HandlerSwapped (the canary tick)", func(t *testing.T) {
 		tbl := New()
-		tbl.ApplyTrigger(spec("u1", "1", map[string]string{"fn-a": "10", "fn-b": "20"}, nil),
+		tbl.ApplyTrigger(spec("u1", 1, map[string]int64{"fn-a": 10, "fn-b": 20}, nil),
 			func() http.Handler { return tagHandler("v1") })
-		res := tbl.ApplyTrigger(spec("u1", "1", map[string]string{"fn-a": "11", "fn-b": "20"}, nil),
+		res := tbl.ApplyTrigger(spec("u1", 1, map[string]int64{"fn-a": 11, "fn-b": 20}, nil),
 			func() http.Handler { return tagHandler("v2") })
 		assert.Equal(t, HandlerSwapped, res)
 		assert.Equal(t, "v2", serve(t, tbl.Snapshot()[0].Handler))
@@ -102,10 +102,10 @@ func TestApplyTriggerDecisionTable(t *testing.T) {
 
 	t.Run("path change is ShapeChanged and preserves ref identity", func(t *testing.T) {
 		tbl := New()
-		tbl.ApplyTrigger(spec("u1", "1", map[string]string{"fn": "10"}, nil),
+		tbl.ApplyTrigger(spec("u1", 1, map[string]int64{"fn": 10}, nil),
 			func() http.Handler { return tagHandler("v1") })
 		ref := tbl.Snapshot()[0].Handler
-		res := tbl.ApplyTrigger(spec("u1", "2", map[string]string{"fn": "10"}, func(s *RouteSpec) {
+		res := tbl.ApplyTrigger(spec("u1", 2, map[string]int64{"fn": 10}, func(s *RouteSpec) {
 			s.ExactPath = "/moved"
 		}), func() http.Handler { return tagHandler("v2") })
 		assert.Equal(t, ShapeChanged, res)
@@ -118,12 +118,12 @@ func TestApplyTriggerDecisionTable(t *testing.T) {
 
 	t.Run("methods and host changes are shape changes", func(t *testing.T) {
 		tbl := New()
-		tbl.ApplyTrigger(spec("u1", "1", nil, nil), func() http.Handler { return tagHandler("v1") })
-		res := tbl.ApplyTrigger(spec("u1", "2", nil, func(s *RouteSpec) {
+		tbl.ApplyTrigger(spec("u1", 1, nil, nil), func() http.Handler { return tagHandler("v1") })
+		res := tbl.ApplyTrigger(spec("u1", 2, nil, func(s *RouteSpec) {
 			s.Methods = []string{http.MethodGet, http.MethodPost}
 		}), func() http.Handler { return tagHandler("v2") })
 		assert.Equal(t, ShapeChanged, res)
-		res = tbl.ApplyTrigger(spec("u1", "3", nil, func(s *RouteSpec) {
+		res = tbl.ApplyTrigger(spec("u1", 3, nil, func(s *RouteSpec) {
 			s.Methods = []string{http.MethodGet, http.MethodPost}
 			s.Host = "api.example.com"
 		}), func() http.Handler { return tagHandler("v3") })
@@ -132,7 +132,7 @@ func TestApplyTriggerDecisionTable(t *testing.T) {
 
 	t.Run("delete is ShapeChanged once, NoChange after", func(t *testing.T) {
 		tbl := New()
-		tbl.ApplyTrigger(spec("u1", "1", nil, nil), func() http.Handler { return tagHandler("v1") })
+		tbl.ApplyTrigger(spec("u1", 1, nil, nil), func() http.Handler { return tagHandler("v1") })
 		assert.Equal(t, ShapeChanged, tbl.DeleteTrigger("u1"))
 		assert.Equal(t, NoChange, tbl.DeleteTrigger("u1"))
 		assert.Empty(t, tbl.Snapshot())
@@ -141,9 +141,9 @@ func TestApplyTriggerDecisionTable(t *testing.T) {
 	t.Run("delete by name removes every matching UID and cleans the index", func(t *testing.T) {
 		tbl := New()
 		// Two UIDs for one name: the recreate-with-missed-delete case.
-		tbl.ApplyTrigger(spec("u1", "1", map[string]string{"fn": "1"}, nil),
+		tbl.ApplyTrigger(spec("u1", 1, map[string]int64{"fn": 1}, nil),
 			func() http.Handler { return tagHandler("v1") })
-		stale := spec("u2", "1", map[string]string{"fn": "1"}, nil)
+		stale := spec("u2", 1, map[string]int64{"fn": 1}, nil)
 		stale.Name = "trig-u1"
 		tbl.ApplyTrigger(stale, func() http.Handler { return tagHandler("v2") })
 
@@ -156,20 +156,20 @@ func TestApplyTriggerDecisionTable(t *testing.T) {
 }
 
 // TestApplyFunctionDecisionTable pins the internal-route contract: insert /
-// delete touch the internal mux, RV bumps are pure swaps.
+// delete touch the internal mux, generation bumps are pure swaps.
 func TestApplyFunctionDecisionTable(t *testing.T) {
 	key := types.NamespacedName{Namespace: "default", Name: "fn"}
 	tbl := New()
 
-	assert.Equal(t, ShapeChanged, tbl.ApplyFunction(key, "1", func() http.Handler { return tagHandler("v1") }),
+	assert.Equal(t, ShapeChanged, tbl.ApplyFunction(key, 1, func() http.Handler { return tagHandler("v1") }),
 		"first sighting of a function must add its internal route")
-	assert.Equal(t, NoChange, tbl.ApplyFunction(key, "1", func() http.Handler {
-		t.Fatal("same-RV apply must not build")
+	assert.Equal(t, NoChange, tbl.ApplyFunction(key, 1, func() http.Handler {
+		t.Fatal("same-generation apply must not build")
 		return nil
 	}))
 
 	ref := tbl.InternalSnapshot()[0].Handler
-	assert.Equal(t, HandlerSwapped, tbl.ApplyFunction(key, "2", func() http.Handler { return tagHandler("v2") }))
+	assert.Equal(t, HandlerSwapped, tbl.ApplyFunction(key, 2, func() http.Handler { return tagHandler("v2") }))
 	assert.Equal(t, "v2", serve(t, ref), "function update must swap in place")
 
 	assert.Equal(t, ShapeChanged, tbl.DeleteFunction(key))
@@ -185,9 +185,9 @@ func TestFnIndexMaintenance(t *testing.T) {
 	fnA := types.NamespacedName{Namespace: "default", Name: "fn-a"}
 	fnB := types.NamespacedName{Namespace: "default", Name: "fn-b"}
 
-	tbl.ApplyTrigger(spec("u1", "1", map[string]string{"fn-a": "1"}, nil),
+	tbl.ApplyTrigger(spec("u1", 1, map[string]int64{"fn-a": 1}, nil),
 		func() http.Handler { return tagHandler("t1") })
-	tbl.ApplyTrigger(spec("u2", "1", map[string]string{"fn-a": "1", "fn-b": "1"}, func(s *RouteSpec) {
+	tbl.ApplyTrigger(spec("u2", 1, map[string]int64{"fn-a": 1, "fn-b": 1}, func(s *RouteSpec) {
 		s.ExactPath = "/two"
 	}), func() http.Handler { return tagHandler("t2") })
 
@@ -195,7 +195,7 @@ func TestFnIndexMaintenance(t *testing.T) {
 	assert.Len(t, tbl.TriggersForFunction(fnB), 1)
 
 	// Re-target u1 from fn-a to fn-b: the index must follow.
-	tbl.ApplyTrigger(spec("u1", "2", map[string]string{"fn-b": "1"}, nil),
+	tbl.ApplyTrigger(spec("u1", 2, map[string]int64{"fn-b": 1}, nil),
 		func() http.Handler { return tagHandler("t1b") })
 	assert.Len(t, tbl.TriggersForFunction(fnA), 1, "u1 no longer resolves through fn-a")
 	assert.Len(t, tbl.TriggersForFunction(fnB), 2)
@@ -251,7 +251,7 @@ func TestHandlerRefSwapUnderConcurrentServe(t *testing.T) {
 func TestSnapshotDeterminismAndIsolation(t *testing.T) {
 	tbl := New()
 	for _, uid := range []string{"u3", "u1", "u2"} {
-		tbl.ApplyTrigger(spec(uid, "1", nil, func(s *RouteSpec) {
+		tbl.ApplyTrigger(spec(uid, 1, nil, func(s *RouteSpec) {
 			s.ExactPath = "/" + uid
 		}), func() http.Handler { return tagHandler(uid) })
 	}
@@ -261,7 +261,7 @@ func TestSnapshotDeterminismAndIsolation(t *testing.T) {
 		[]string{snap[0].Name, snap[1].Name, snap[2].Name}, "snapshot must be name-sorted")
 
 	// Mutate after snapshot: the held snapshot must be unaffected.
-	tbl.ApplyTrigger(spec("u1", "2", nil, func(s *RouteSpec) {
+	tbl.ApplyTrigger(spec("u1", 2, nil, func(s *RouteSpec) {
 		s.ExactPath = "/moved"
 	}), func() http.Handler { return tagHandler("u1b") })
 	assert.Equal(t, "/u1", snap[0].ExactPath, "snapshot specs are copies, not live pointers")

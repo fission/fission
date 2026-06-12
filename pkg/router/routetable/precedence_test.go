@@ -27,7 +27,7 @@ func pSpec(name string, created time.Time, mutate func(*RouteSpec)) *RouteSpec {
 		TriggerUID: types.UID("uid-" + name),
 		Namespace:  "default",
 		Name:       name,
-		TriggerRV:  "1",
+		TriggerGen: 1,
 		Methods:    []string{http.MethodGet},
 		Created:    metav1.NewTime(created),
 	}

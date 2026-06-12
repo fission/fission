@@ -63,16 +63,21 @@ func (r *HandlerRef) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 // fields, the match shape, and the swappable handler. Shape equality drives
 // the materializer; (TriggerRV, FnRVs) equality drives handler swaps.
 type RouteSpec struct {
-	// Identity / change detection.
+	// Identity / change detection. Generations (not ResourceVersions) on
+	// purpose: the reconcilers are registered with
+	// GenerationChangedPredicate, so status-only writes (the router's own
+	// condition updates, the executor's function readiness) never reach the
+	// event path — and the resync must use the SAME notion of "changed", or
+	// every status write would count as drift and rebuild a handler.
 	TriggerUID types.UID
 	Namespace  string
 	Name       string
-	TriggerRV  string
-	// FnRVs maps each resolved backend function's name to its
-	// ResourceVersion. It supersedes TTL-based invalidation with precise
-	// per-trigger change detection: a function update changes its RV, which
-	// makes the apply a HandlerSwapped instead of a NoChange.
-	FnRVs map[string]string
+	TriggerGen int64
+	// FnGens maps each resolved backend function's name to its Generation.
+	// It supersedes TTL-based invalidation with precise per-trigger change
+	// detection: a function spec change bumps its generation, which makes
+	// the apply a HandlerSwapped instead of a NoChange.
+	FnGens map[string]int64
 
 	// Match shape. Exactly one of ExactPath / PrefixPath may be empty; a
 	// non-slash trigger Prefix sets BOTH (the dual-registration pair —
@@ -106,9 +111,9 @@ func (s *RouteSpec) shapeEqual(o *RouteSpec) bool {
 // namespace/name, so it never shape-changes in place — only insert and
 // delete touch the internal mux.
 type InternalSpec struct {
-	Key        types.NamespacedName
-	FunctionRV string
-	Handler    *HandlerRef
+	Key         types.NamespacedName
+	FunctionGen int64
+	Handler     *HandlerRef
 }
 
 // ApplyResult tells the caller what an apply did — and therefore what it
@@ -149,14 +154,24 @@ type Table struct {
 	// triggerFns is the reverse of fnIndex, kept so a trigger re-apply that
 	// changes its function set (or a delete) can clean its old index entries.
 	triggerFns map[types.UID][]types.NamespacedName
+	// unresolved maps a function to the triggers that REFERENCE it but could
+	// not resolve (the function does not exist yet). It keeps the
+	// function-create cascade working for the trigger-before-function apply
+	// ordering: without it, the route's removal would drop the index edge
+	// and the trigger would only re-admit at the next resync.
+	unresolved map[types.NamespacedName]map[types.NamespacedName]struct{}
+	// unresolvedFns is the reverse of unresolved, for cleanup.
+	unresolvedFns map[types.NamespacedName][]types.NamespacedName
 }
 
 func New() *Table {
 	return &Table{
-		public:     make(map[types.UID]*RouteSpec),
-		internal:   make(map[types.NamespacedName]*InternalSpec),
-		fnIndex:    make(map[types.NamespacedName]map[types.UID]struct{}),
-		triggerFns: make(map[types.UID][]types.NamespacedName),
+		public:        make(map[types.UID]*RouteSpec),
+		internal:      make(map[types.NamespacedName]*InternalSpec),
+		fnIndex:       make(map[types.NamespacedName]map[types.UID]struct{}),
+		triggerFns:    make(map[types.UID][]types.NamespacedName),
+		unresolved:    make(map[types.NamespacedName]map[types.NamespacedName]struct{}),
+		unresolvedFns: make(map[types.NamespacedName][]types.NamespacedName),
 	}
 }
 
@@ -171,6 +186,8 @@ func (t *Table) ApplyTrigger(spec *RouteSpec, build func() http.Handler) ApplyRe
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
+	t.clearUnresolvedLocked(types.NamespacedName{Namespace: spec.Namespace, Name: spec.Name})
+
 	old, ok := t.public[spec.TriggerUID]
 	if !ok {
 		spec.Handler = NewHandlerRef(build())
@@ -179,12 +196,12 @@ func (t *Table) ApplyTrigger(spec *RouteSpec, build func() http.Handler) ApplyRe
 		return ShapeChanged
 	}
 	if old.shapeEqual(spec) {
-		if old.TriggerRV == spec.TriggerRV && maps.Equal(old.FnRVs, spec.FnRVs) {
+		if old.TriggerGen == spec.TriggerGen && maps.Equal(old.FnGens, spec.FnGens) {
 			return NoChange
 		}
 		old.Handler.Swap(build())
-		old.TriggerRV = spec.TriggerRV
-		old.FnRVs = spec.FnRVs
+		old.TriggerGen = spec.TriggerGen
+		old.FnGens = spec.FnGens
 		old.Created = spec.Created
 		old.Namespace, old.Name = spec.Namespace, spec.Name
 		t.reindexLocked(old)
@@ -205,9 +222,11 @@ func (t *Table) ApplyTrigger(spec *RouteSpec, build func() http.Handler) ApplyRe
 func (t *Table) DeleteTrigger(uid types.UID) ApplyResult {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if _, ok := t.public[uid]; !ok {
+	spec, ok := t.public[uid]
+	if !ok {
 		return NoChange
 	}
+	t.clearUnresolvedLocked(types.NamespacedName{Namespace: spec.Namespace, Name: spec.Name})
 	delete(t.public, uid)
 	t.dropFnIndexLocked(uid)
 	return ShapeChanged
@@ -221,6 +240,7 @@ func (t *Table) DeleteTrigger(uid types.UID) ApplyResult {
 func (t *Table) DeleteTriggerByName(key types.NamespacedName) ApplyResult {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	t.clearUnresolvedLocked(key)
 	res := NoChange
 	for uid, spec := range t.public {
 		if spec.Namespace == key.Namespace && spec.Name == key.Name {
@@ -233,21 +253,21 @@ func (t *Table) DeleteTriggerByName(key types.NamespacedName) ApplyResult {
 }
 
 // ApplyFunction reconciles one function's internal-listener route. Insert is
-// a ShapeChanged (the internal mux gains the route pair); an RV change is a
-// pure handler swap; same RV is NoChange.
-func (t *Table) ApplyFunction(key types.NamespacedName, rv string, build func() http.Handler) ApplyResult {
+// a ShapeChanged (the internal mux gains the route pair); a generation
+// change is a pure handler swap; same generation is NoChange.
+func (t *Table) ApplyFunction(key types.NamespacedName, gen int64, build func() http.Handler) ApplyResult {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	old, ok := t.internal[key]
 	if !ok {
-		t.internal[key] = &InternalSpec{Key: key, FunctionRV: rv, Handler: NewHandlerRef(build())}
+		t.internal[key] = &InternalSpec{Key: key, FunctionGen: gen, Handler: NewHandlerRef(build())}
 		return ShapeChanged
 	}
-	if old.FunctionRV == rv {
+	if old.FunctionGen == gen {
 		return NoChange
 	}
 	old.Handler.Swap(build())
-	old.FunctionRV = rv
+	old.FunctionGen = gen
 	return HandlerSwapped
 }
 
@@ -262,17 +282,62 @@ func (t *Table) DeleteFunction(key types.NamespacedName) ApplyResult {
 	return ShapeChanged
 }
 
+// MarkUnresolved records that a trigger references the given functions but
+// could not resolve (function missing). The next ApplyTrigger or delete for
+// the trigger clears the entry; a function event for any referenced function
+// includes the trigger in TriggersForFunction so the cascade re-applies it
+// immediately instead of waiting for the resync.
+func (t *Table) MarkUnresolved(trigger types.NamespacedName, fns []types.NamespacedName) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.clearUnresolvedLocked(trigger)
+	for _, fn := range fns {
+		set, ok := t.unresolved[fn]
+		if !ok {
+			set = make(map[types.NamespacedName]struct{})
+			t.unresolved[fn] = set
+		}
+		set[trigger] = struct{}{}
+	}
+	t.unresolvedFns[trigger] = fns
+}
+
+// clearUnresolvedLocked drops a trigger's unresolved edges. Caller holds t.mu.
+func (t *Table) clearUnresolvedLocked(trigger types.NamespacedName) {
+	for _, fn := range t.unresolvedFns[trigger] {
+		if set, ok := t.unresolved[fn]; ok {
+			delete(set, trigger)
+			if len(set) == 0 {
+				delete(t.unresolved, fn)
+			}
+		}
+	}
+	delete(t.unresolvedFns, trigger)
+}
+
 // TriggersForFunction returns the namespaced names of the triggers whose
-// routes resolve through the given function, so a function event can
-// re-apply exactly those triggers (re-resolve + handler swap).
+// routes resolve through the given function — plus the triggers that
+// reference it but could not resolve yet — so a function event can re-apply
+// exactly the affected triggers (re-resolve + handler swap / re-admit).
 func (t *Table) TriggersForFunction(key types.NamespacedName) []types.NamespacedName {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	uids := t.fnIndex[key]
+	seen := make(map[types.NamespacedName]struct{}, len(uids))
 	out := make([]types.NamespacedName, 0, len(uids))
 	for uid := range uids {
 		if spec, ok := t.public[uid]; ok {
-			out = append(out, types.NamespacedName{Namespace: spec.Namespace, Name: spec.Name})
+			k := types.NamespacedName{Namespace: spec.Namespace, Name: spec.Name}
+			if _, dup := seen[k]; !dup {
+				seen[k] = struct{}{}
+				out = append(out, k)
+			}
+		}
+	}
+	for trigger := range t.unresolved[key] {
+		if _, dup := seen[trigger]; !dup {
+			seen[trigger] = struct{}{}
+			out = append(out, trigger)
 		}
 	}
 	// Deterministic order for tests and log readability.
@@ -280,15 +345,16 @@ func (t *Table) TriggersForFunction(key types.NamespacedName) []types.Namespaced
 	return out
 }
 
-// PublicUIDs returns the UIDs currently in the public table — the resync
-// loop diffs this against the live trigger list to drop deleted routes whose
-// delete events were missed.
-func (t *Table) PublicUIDs() []types.UID {
+// PublicTriggers returns the UID → namespace/name of every trigger in the
+// public table — the resync loop diffs this against the live trigger list to
+// drop deleted routes whose delete events were missed (re-checking by name
+// first, so a trigger created mid-pass is not torn down by its own race).
+func (t *Table) PublicTriggers() map[types.UID]types.NamespacedName {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	out := make([]types.UID, 0, len(t.public))
-	for uid := range t.public {
-		out = append(out, uid)
+	out := make(map[types.UID]types.NamespacedName, len(t.public))
+	for uid, spec := range t.public {
+		out[uid] = types.NamespacedName{Namespace: spec.Namespace, Name: spec.Name}
 	}
 	return out
 }
@@ -352,8 +418,8 @@ func (t *Table) Sizes() (public, internal int) {
 // current FnRVs. Caller holds t.mu.
 func (t *Table) reindexLocked(spec *RouteSpec) {
 	t.dropFnIndexLocked(spec.TriggerUID)
-	keys := make([]types.NamespacedName, 0, len(spec.FnRVs))
-	for fnName := range spec.FnRVs {
+	keys := make([]types.NamespacedName, 0, len(spec.FnGens))
+	for fnName := range spec.FnGens {
 		key := types.NamespacedName{Namespace: spec.Namespace, Name: fnName}
 		keys = append(keys, key)
 		set, ok := t.fnIndex[key]

@@ -16,7 +16,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
-	config "github.com/fission/fission/pkg/featureconfig"
 	"github.com/fission/fission/pkg/router/routetable"
 )
 
@@ -37,20 +36,41 @@ import (
 // a missed watch event and increments fission_router_route_resync_drift_total.
 const resyncInterval = 60 * time.Second
 
+// referencedFunctions lists the function keys a trigger's reference resolves
+// through (the canary form references several).
+func referencedFunctions(trigger *fv1.HTTPTrigger) []types.NamespacedName {
+	ref := trigger.Spec.FunctionReference
+	switch ref.Type {
+	case fv1.FunctionReferenceTypeFunctionWeights:
+		out := make([]types.NamespacedName, 0, len(ref.FunctionWeights))
+		for name := range ref.FunctionWeights {
+			out = append(out, types.NamespacedName{Namespace: trigger.Namespace, Name: name})
+		}
+		return out
+	default:
+		return []types.NamespacedName{{Namespace: trigger.Namespace, Name: ref.Name}}
+	}
+}
+
 // applyTriggerIncremental reconciles one trigger into the route table:
 // validate → resolve → apply. Returns the apply result so the resync loop
 // can count drift, and an error only for transient resolve failures (the
 // reconciler requeues; the last-known-good route keeps serving — parity with
 // the legacy path, where a LIST error kept the old mux).
 func (ts *HTTPTriggerSet) applyTriggerIncremental(ctx context.Context, trigger *fv1.HTTPTrigger) (routetable.ApplyResult, error) {
+	key := types.NamespacedName{Namespace: trigger.Namespace, Name: trigger.Name}
+
 	// Invalid CORS/ingress config: the route must not serve (parity with the
 	// legacy skip), and the user sees why on the trigger's conditions.
+	// Delete-by-name so a previously-unresolved trigger's index entry is
+	// cleared too.
 	if reason, cfgErr := triggerConfigError(trigger); cfgErr != nil {
-		res := ts.routeTable.DeleteTrigger(trigger.UID)
+		res := ts.routeTable.DeleteTriggerByName(key)
 		routeTableApplies.WithLabelValues("rejected").Inc()
 		if res == routetable.ShapeChanged {
 			ts.signalMaterialize()
 		}
+		ts.updateRoutesGauge()
 		ts.markTriggerCondition(ctx, trigger, metav1.ConditionFalse, reason,
 			"router rejected the trigger configuration: "+cfgErr.Error(),
 			"trigger is not serving due to invalid configuration")
@@ -61,13 +81,16 @@ func (ts *HTTPTriggerSet) applyTriggerIncremental(ctx context.Context, trigger *
 	if err != nil {
 		if errors.Is(err, errFunctionNotFound) {
 			// The referenced function does not exist: drop the route (it
-			// would 404 anyway) and say so on the trigger. A later function
-			// create re-admits it via the function reconciler's cascade.
-			res := ts.routeTable.DeleteTrigger(trigger.UID)
+			// would 404 anyway) and say so on the trigger. The unresolved
+			// index keeps the trigger→function edge alive, so the function's
+			// create event re-admits the route immediately via the cascade.
+			res := ts.routeTable.DeleteTriggerByName(key)
+			ts.routeTable.MarkUnresolved(key, referencedFunctions(trigger))
 			routeTableApplies.WithLabelValues("rejected").Inc()
 			if res == routetable.ShapeChanged {
 				ts.signalMaterialize()
 			}
+			ts.updateRoutesGauge()
 			ts.markTriggerCondition(ctx, trigger, metav1.ConditionFalse, fv1.HTTPTriggerReasonFunctionNotFound,
 				"router cannot resolve the trigger's function reference: "+err.Error(),
 				"trigger is not serving because its function does not exist")
@@ -79,11 +102,12 @@ func (ts *HTTPTriggerSet) applyTriggerIncremental(ctx context.Context, trigger *
 	}
 	if rr.resolveResultType != resolveResultSingleFunction && rr.resolveResultType != resolveResultMultipleFunctions {
 		ts.logger.Error(nil, "resolve result type not implemented", "type", rr.resolveResultType)
-		res := ts.routeTable.DeleteTrigger(trigger.UID)
+		res := ts.routeTable.DeleteTriggerByName(key)
 		routeTableApplies.WithLabelValues("rejected").Inc()
 		if res == routetable.ShapeChanged {
 			ts.signalMaterialize()
 		}
+		ts.updateRoutesGauge()
 		ts.markTriggerCondition(ctx, trigger, metav1.ConditionFalse, fv1.HTTPTriggerReasonMuxBuildFail,
 			fmt.Sprintf("resolve result type not implemented: %v", rr.resolveResultType),
 			"trigger is not serving due to an unsupported function reference")
@@ -91,18 +115,18 @@ func (ts *HTTPTriggerSet) applyTriggerIncremental(ctx context.Context, trigger *
 	}
 
 	shape := deriveRouteShape(trigger)
-	fnRVs := make(map[string]string, len(rr.functionMap))
+	fnGens := make(map[string]int64, len(rr.functionMap))
 	fnTimeout := make(map[types.UID]int, len(rr.functionMap))
 	for name, fn := range rr.functionMap {
-		fnRVs[name] = fn.ResourceVersion
+		fnGens[name] = fn.Generation
 		fnTimeout[fn.UID] = fn.Spec.FunctionTimeout
 	}
 	spec := &routetable.RouteSpec{
 		TriggerUID: trigger.UID,
 		Namespace:  trigger.Namespace,
 		Name:       trigger.Name,
-		TriggerRV:  trigger.ResourceVersion,
-		FnRVs:      fnRVs,
+		TriggerGen: trigger.Generation,
+		FnGens:     fnGens,
 		ExactPath:  shape.exactPath,
 		PrefixPath: shape.prefixPath,
 		Host:       shape.host,
@@ -123,8 +147,15 @@ func (ts *HTTPTriggerSet) applyTriggerIncremental(ctx context.Context, trigger *
 		ts.signalMaterialize()
 	default:
 		// NoChange / HandlerSwapped: the route is already live (the swap is
-		// immediate); mark right away. markTriggerCondition's fast path makes
-		// the NoChange case a no-op write.
+		// immediate). Mark right away — UNLESS the trigger is currently
+		// shadowed by a route conflict: its RouteConflict condition is owned
+		// by reportConflicts, and flipping it to True here would assert the
+		// opposite of observable routing (the resync re-applies every
+		// trigger, so without this guard a shadowed loser would self-mark
+		// serving within a minute of being reported).
+		if ts.isConflictLoser(key) {
+			break
+		}
 		ts.markTriggerCondition(ctx, trigger, metav1.ConditionTrue, fv1.HTTPTriggerReasonRouteAdmitted,
 			"router accepted the trigger and installed its mux entry",
 			"trigger is serving")
@@ -147,11 +178,12 @@ func (ts *HTTPTriggerSet) deleteTriggerIncremental(key types.NamespacedName) rou
 // applyFunctionIncremental reconciles a function event: upsert its internal
 // route (insert = shape change, update = handler swap), then cascade to the
 // triggers resolving through it (their handlers close over the function
-// snapshot, so each gets a fresh resolve + swap).
+// snapshot, so each gets a fresh resolve + swap; a trigger that could not
+// resolve before re-admits here).
 func (ts *HTTPTriggerSet) applyFunctionIncremental(ctx context.Context, fn *fv1.Function) (routetable.ApplyResult, error) {
 	key := types.NamespacedName{Namespace: fn.Namespace, Name: fn.Name}
 	fnTimeout := map[types.UID]int{fn.UID: fn.Spec.FunctionTimeout}
-	res := ts.routeTable.ApplyFunction(key, fn.ResourceVersion, func() http.Handler {
+	res := ts.routeTable.ApplyFunction(key, fn.Generation, func() http.Handler {
 		return ts.buildInternalFunctionHandler(fn, fnTimeout)
 	})
 	routeTableApplies.WithLabelValues(res.String()).Inc()
@@ -173,8 +205,9 @@ func (ts *HTTPTriggerSet) deleteFunctionIncremental(ctx context.Context, key typ
 	return ts.reapplyTriggersForFunction(ctx, key)
 }
 
-// reapplyTriggersForFunction re-applies every trigger resolving through the
-// given function. Aggregates transient errors so the reconciler requeues.
+// reapplyTriggersForFunction re-applies every trigger resolving through (or
+// unresolvably referencing) the given function. Aggregates transient errors
+// so the reconciler requeues.
 func (ts *HTTPTriggerSet) reapplyTriggersForFunction(ctx context.Context, key types.NamespacedName) error {
 	var errs error
 	for _, tkey := range ts.routeTable.TriggersForFunction(key) {
@@ -228,6 +261,26 @@ func (ts *HTTPTriggerSet) drainPendingConditions() []*fv1.HTTPTrigger {
 	return out
 }
 
+// isConflictLoser reports whether a trigger is currently shadowed by a route
+// conflict (phase 2). Reads happen on the reconciler/resync goroutines while
+// materialize writes, hence the lock.
+func (ts *HTTPTriggerSet) isConflictLoser(key types.NamespacedName) bool {
+	ts.pendingMu.Lock()
+	defer ts.pendingMu.Unlock()
+	_, shadowed := ts.conflictLosers[key]
+	return shadowed
+}
+
+// setConflictLosers swaps in the current shadow set and returns the previous
+// one (for cleared-conflict detection).
+func (ts *HTTPTriggerSet) setConflictLosers(current map[types.NamespacedName]routetable.Conflict) map[types.NamespacedName]routetable.Conflict {
+	ts.pendingMu.Lock()
+	defer ts.pendingMu.Unlock()
+	prev := ts.conflictLosers
+	ts.conflictLosers = current
+	return prev
+}
+
 // updateRoutesGauge publishes the table sizes.
 func (ts *HTTPTriggerSet) updateRoutesGauge() {
 	pub, internal := ts.routeTable.Sizes()
@@ -253,15 +306,27 @@ func (ts *HTTPTriggerSet) materializeLoop(ctx context.Context) {
 // swaps them in, then marks the conditions of the triggers whose shape
 // changes were in this batch. Registration goes through the same helpers as
 // the legacy buildMuxes (routeshape.go), so the two paths cannot drift.
+//
+// A failed materialize is STICKY: the drained conditions are re-queued, the
+// dirty flag stays set, and the resync loop re-signals every tick until a
+// build succeeds — the consumed signal must not strand the table's state out
+// of the mux (a stale mux self-reports routes it does not serve).
 func (ts *HTTPTriggerSet) materialize(ctx context.Context) {
-	featureConfig, err := config.GetFeatureConfig(ts.logger)
+	featureConfig, err := ts.featureConfigFn(ts.logger)
 	if err != nil {
-		ts.logger.Error(err, "error reading feature config; skipping mux materialization")
+		ts.logger.Error(err, "error reading feature config; mux materialization failed (will retry)")
+		materializeFailures.Inc()
+		ts.materializeDirty.Store(true)
 		for _, trigger := range ts.drainPendingConditions() {
 			ts.markTriggerCondition(ctx, trigger,
 				metav1.ConditionFalse, fv1.HTTPTriggerReasonMuxBuildFail,
 				"router failed to build mux: "+err.Error(),
 				"trigger is not serving due to router mux error")
+			// Re-queue so the retry's success flips the condition to True;
+			// consuming the batch here would leave a serving route marked
+			// failed (or, worse, a non-serving route later marked True by
+			// the resync's NoChange path).
+			ts.queuePendingCondition(trigger)
 		}
 		return
 	}
@@ -297,6 +362,7 @@ func (ts *HTTPTriggerSet) materialize(ctx context.Context) {
 	if ts.internalMutableRouter != nil {
 		ts.internalMutableRouter.updateRouter(internal)
 	}
+	ts.materializeDirty.Store(false)
 	muxRebuilds.WithLabelValues("public", "shape_change").Inc()
 	muxRebuilds.WithLabelValues("internal", "shape_change").Inc()
 	// The mux now serves user routes — report ready (gates /readyz).
@@ -308,7 +374,7 @@ func (ts *HTTPTriggerSet) materialize(ctx context.Context) {
 	// observable (parity with the legacy post-swap loop). A trigger that is
 	// shadowed by a conflict keeps the False condition reportConflicts set.
 	for _, trigger := range ts.drainPendingConditions() {
-		if _, shadowed := ts.conflictLosers[types.NamespacedName{Namespace: trigger.Namespace, Name: trigger.Name}]; shadowed {
+		if ts.isConflictLoser(types.NamespacedName{Namespace: trigger.Namespace, Name: trigger.Name}) {
 			continue
 		}
 		ts.markTriggerCondition(ctx, trigger,
@@ -321,32 +387,44 @@ func (ts *HTTPTriggerSet) materialize(ctx context.Context) {
 // reportConflicts maintains the RouteAdmitted=False/RouteConflict conditions
 // across materializations: current losers are marked False naming their
 // winner; triggers that stopped losing (their winner was deleted or
-// reshaped) flip back to True. Only called from materialize, so
-// conflictLosers needs no locking beyond the materialize serialization.
+// reshaped) flip back to True.
 func (ts *HTTPTriggerSet) reportConflicts(ctx context.Context, conflicts []routetable.Conflict) {
 	current := make(map[types.NamespacedName]routetable.Conflict, len(conflicts))
 	for _, c := range conflicts {
 		current[c.Loser] = c
-		if _, known := ts.conflictLosers[c.Loser]; !known {
+	}
+	prev := ts.setConflictLosers(current)
+
+	for _, c := range conflicts {
+		if _, known := prev[c.Loser]; !known {
 			ts.logger.Info("route conflict: trigger is shadowed by an identical route shape",
 				"trigger", c.Loser.String(), "winner", c.Winner.String())
 		}
 		trigger := &fv1.HTTPTrigger{}
 		if err := ts.client.Get(ctx, c.Loser, trigger); err != nil {
-			continue // deleted in the meantime; its delete event cleans up
+			if !apierrors.IsNotFound(err) {
+				// Transient: the condition stays stale until the next
+				// materialize re-runs this loop. NotFound needs no action
+				// (the delete event cleans the table and the conflict).
+				ts.logger.Error(err, "failed to read conflicting trigger for condition update", "trigger", c.Loser.String())
+			}
+			continue
 		}
 		ts.markTriggerCondition(ctx, trigger,
 			metav1.ConditionFalse, fv1.HTTPTriggerReasonRouteConflict,
 			fmt.Sprintf("route is shadowed: trigger %s registered the same route shape and wins by precedence (oldest first)", c.Winner.String()),
 			"trigger is not serving; its route shape is owned by "+c.Winner.String())
 	}
-	for loser := range ts.conflictLosers {
+	for loser := range prev {
 		if _, still := current[loser]; still {
 			continue
 		}
 		ts.logger.Info("route conflict cleared: trigger is serving again", "trigger", loser.String())
 		trigger := &fv1.HTTPTrigger{}
 		if err := ts.client.Get(ctx, loser, trigger); err != nil {
+			if !apierrors.IsNotFound(err) {
+				ts.logger.Error(err, "failed to read formerly-conflicting trigger for condition update", "trigger", loser.String())
+			}
 			continue
 		}
 		ts.markTriggerCondition(ctx, trigger,
@@ -354,13 +432,13 @@ func (ts *HTTPTriggerSet) reportConflicts(ctx context.Context, conflicts []route
 			"router accepted the trigger and installed its mux entry",
 			"trigger is serving")
 	}
-	ts.conflictLosers = current
 }
 
 // resyncLoop is the drift guard: it periodically re-lists triggers +
 // functions from the Manager cache and re-applies them. Anything it corrects
 // is a missed watch event; today's full-rebuild path self-heals every event,
-// so the incremental path must demonstrably do the same.
+// so the incremental path must demonstrably do the same. It also re-arms the
+// materializer after a failed build (the sticky dirty flag).
 func (ts *HTTPTriggerSet) resyncLoop(ctx context.Context) {
 	ticker := time.NewTicker(resyncInterval)
 	defer ticker.Stop()
@@ -370,7 +448,11 @@ func (ts *HTTPTriggerSet) resyncLoop(ctx context.Context) {
 			return
 		case <-ticker.C:
 		}
+		if ts.materializeDirty.Load() {
+			ts.signalMaterialize()
+		}
 		if err := ts.resync(ctx, false); err != nil {
+			resyncFailures.Inc()
 			ts.logger.Error(err, "route table resync failed; routes keep serving from the last good state")
 		}
 	}
@@ -401,7 +483,7 @@ func (ts *HTTPTriggerSet) resync(ctx context.Context, initial bool) error {
 		fnTimeout := map[types.UID]int{fn.UID: fn.Spec.FunctionTimeout}
 		// Apply the internal route directly (no trigger cascade — the
 		// triggers are re-applied below in this same pass).
-		res := ts.routeTable.ApplyFunction(key, fn.ResourceVersion, func() http.Handler {
+		res := ts.routeTable.ApplyFunction(key, fn.Generation, func() http.Handler {
 			return ts.buildInternalFunctionHandler(fn, fnTimeout)
 		})
 		if res != routetable.NoChange {
@@ -412,11 +494,18 @@ func (ts *HTTPTriggerSet) resync(ctx context.Context, initial bool) error {
 		}
 	}
 	for _, key := range ts.routeTable.InternalKeys() {
-		if _, ok := liveFns[key]; !ok {
-			if ts.routeTable.DeleteFunction(key) == routetable.ShapeChanged {
-				drift++
-				ts.signalMaterialize()
-			}
+		if _, ok := liveFns[key]; ok {
+			continue
+		}
+		// Re-check before deleting: the function may have been created
+		// while this pass was walking (its reconciler already applied it) —
+		// the LIST snapshot must not tear down a fresher table entry.
+		if err := ts.client.Get(ctx, key, &fv1.Function{}); err == nil || !apierrors.IsNotFound(err) {
+			continue
+		}
+		if ts.routeTable.DeleteFunction(key) == routetable.ShapeChanged {
+			drift++
+			ts.signalMaterialize()
 		}
 	}
 
@@ -433,12 +522,27 @@ func (ts *HTTPTriggerSet) resync(ctx context.Context, initial bool) error {
 			drift++
 		}
 	}
-	for _, uid := range ts.routeTable.PublicUIDs() {
-		if _, ok := liveTriggers[uid]; !ok {
-			if ts.routeTable.DeleteTrigger(uid) == routetable.ShapeChanged {
-				drift++
-				ts.signalMaterialize()
-			}
+	for uid, key := range ts.routeTable.PublicTriggers() {
+		if _, ok := liveTriggers[uid]; ok {
+			continue
+		}
+		// Mid-pass-create guard (same idea as the function side): re-read
+		// before deleting, but compare UIDs — a live object with the SAME
+		// UID means the trigger was created while this pass walked (its
+		// reconciler already applied it; the LIST snapshot is just stale).
+		// A live object with a DIFFERENT UID is a delete+recreate whose old
+		// entry must still be dropped, and a transient read error skips the
+		// delete (the next pass retries).
+		cur := &fv1.HTTPTrigger{}
+		switch err := ts.client.Get(ctx, key, cur); {
+		case err == nil && cur.UID == uid:
+			continue
+		case err != nil && !apierrors.IsNotFound(err):
+			continue
+		}
+		if ts.routeTable.DeleteTrigger(uid) == routetable.ShapeChanged {
+			drift++
+			ts.signalMaterialize()
 		}
 	}
 
