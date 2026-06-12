@@ -317,3 +317,29 @@ func TestRouteShapeInternalNamespaceFolding(t *testing.T) {
 	assert.False(t, muxMatches(internal, http.MethodPost, "/fission-function/myns/foX"),
 		"internal prefix must not glob past the path-segment boundary")
 }
+
+// TestRouteShapeGorillaTemplates pins gorilla path-template support
+// ({var}, {var:regex}) through the shared registration helpers: the route
+// table treats the template as an opaque shape string and gorilla compiles
+// it at registration, so patterned RelativeURLs must keep matching exactly
+// as they always have (real-world example: /bank/{html:[a-zA-Z0-9\.\/]+}).
+func TestRouteShapeGorillaTemplates(t *testing.T) {
+	ts := newShapeTS(t, []fv1.Function{shapeFn("fn")}, []fv1.HTTPTrigger{
+		shapeTrigger("regex", func(tr *fv1.HTTPTrigger) {
+			tr.Spec.RelativeURL = `/bank/{html:[a-zA-Z0-9\.\/]+}`
+		}),
+		shapeTrigger("var", func(tr *fv1.HTTPTrigger) {
+			tr.Spec.RelativeURL = "/accounts/{id}"
+		}),
+	})
+	public, _, err := ts.buildMuxes(t.Context(), nil)
+	require.NoError(t, err)
+
+	assert.True(t, muxMatches(public, http.MethodGet, "/bank/index.html"), "regex template must match a file path")
+	assert.True(t, muxMatches(public, http.MethodGet, "/bank/css/style.css"), "the regex includes / so it spans segments")
+	assert.False(t, muxMatches(public, http.MethodGet, "/bank/oops!"), "characters outside the regex class must not match")
+	assert.False(t, muxMatches(public, http.MethodPost, "/bank/index.html"), "methods still gate template routes")
+
+	assert.True(t, muxMatches(public, http.MethodGet, "/accounts/123"), "plain {var} must match one segment")
+	assert.False(t, muxMatches(public, http.MethodGet, "/accounts/123/txns"), "plain {var} must not span segments")
+}

@@ -344,6 +344,8 @@ func TestIncrementalLegacyParity(t *testing.T) {
 			},
 		},
 		*incrTrigger("orphan", "default", 1, "/orphan", "ghost"), // skipped by both paths
+		*incrTrigger("regex", "default", 1, `/bank/{html:[a-zA-Z0-9\.\/]+}`, "fn"),
+		*incrTrigger("var", "default", 1, "/sessions/{id}", "fn"),
 	}
 
 	// Legacy path.
@@ -376,6 +378,9 @@ func TestIncrementalLegacyParity(t *testing.T) {
 		{http.MethodGet, "/hosted", "api.example.com"}, {http.MethodGet, "/hosted", "other.example.com"}, {http.MethodGet, "/hosted", ""},
 		{http.MethodGet, "/cors", ""}, {http.MethodOptions, "/cors", ""},
 		{http.MethodGet, "/orphan", ""},
+		{http.MethodGet, "/bank/index.html", ""}, {http.MethodGet, "/bank/css/app.css", ""},
+		{http.MethodGet, "/bank/oops!", ""}, {http.MethodPost, "/bank/index.html", ""},
+		{http.MethodGet, "/sessions/abc", ""}, {http.MethodGet, "/sessions/abc/x", ""},
 		{http.MethodGet, "/router-healthz", ""}, {http.MethodGet, "/readyz", ""}, {http.MethodGet, "/_version", ""},
 		{http.MethodGet, "/no-such-route", ""},
 	}
