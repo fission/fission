@@ -185,3 +185,18 @@ func TestIsClusterLocalRef(t *testing.T) {
 		}
 	}
 }
+
+func TestSplitImageDigest(t *testing.T) {
+	cases := []struct{ in, image, digest string }{
+		{"ghcr.io/org/pkg:v1", "ghcr.io/org/pkg:v1", ""},
+		{"ghcr.io/org/pkg:v1@sha256:abc123", "ghcr.io/org/pkg:v1", "sha256:abc123"},
+		{"ghcr.io/org/pkg@sha256:abc123", "ghcr.io/org/pkg", "sha256:abc123"},
+		{"localhost:30500/p:tag", "localhost:30500/p:tag", ""},
+	}
+	for _, tc := range cases {
+		image, digest := splitImageDigest(tc.in)
+		if image != tc.image || digest != tc.digest {
+			t.Errorf("splitImageDigest(%q) = (%q,%q), want (%q,%q)", tc.in, image, digest, tc.image, tc.digest)
+		}
+	}
+}

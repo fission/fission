@@ -70,9 +70,6 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 		noZip = true
 	}
 
-	if ociImage != "" && isClusterLocalRef(ociImage) {
-		console.Warn(fmt.Sprintf("%q is a cluster-DNS registry name: nodes cannot resolve it, so image-volume mounts will fail and only fetcher-pull delivery will work. Use a node-resolvable registry address if you want image volumes.", ociImage))
-	}
 	if err := ValidateArchiveSources(code, srcArchiveFiles, deployArchiveFiles, ociImage); err != nil {
 		return err
 	}
@@ -131,6 +128,16 @@ func isClusterLocalRef(ref string) bool {
 	return strings.HasSuffix(host, ".svc") || strings.Contains(host, ".svc.")
 }
 
+// splitImageDigest separates a trailing @sha256:... pin from an image
+// reference, so users can pass the fully pinned form a registry or CI system
+// hands them and the Package records the digest in its own field.
+func splitImageDigest(ref string) (image, digest string) {
+	if i := strings.LastIndex(ref, "@sha256:"); i >= 0 {
+		return ref[:i], ref[i+1:]
+	}
+	return ref, ""
+}
+
 func ValidateArchiveSources(code string, srcArchiveFiles, deployArchiveFiles []string, ociImage string) error {
 	if len(ociImage) > 0 && (len(code) > 0 || len(srcArchiveFiles) > 0 || len(deployArchiveFiles) > 0) {
 		return fmt.Errorf("--%v cannot be combined with --%v, --%v, or --%v", flagkey.PkgOCI, flagkey.PkgCode, flagkey.PkgSrcArchive, flagkey.PkgDeployArchive)
@@ -170,9 +177,16 @@ func CreatePackage(input cli.Input, client cmd.Client, pkgName string, pkgNamesp
 		// The OCI archive is built inline: no file globbing, zipping, or
 		// upload happens for a pre-built image reference (RFC-0001).
 		// ValidateArchiveSources guarantees no overlap with file archives.
+		if isClusterLocalRef(ociImage) {
+			console.Warn(fmt.Sprintf("%q is a cluster-DNS registry name: nodes cannot resolve it, so image-volume mounts will fail and only fetcher-pull delivery will work. Use a node-resolvable registry address if you want image volumes.", ociImage))
+		}
+		// Accept a fully pinned reference (repo:tag@sha256:...) and split
+		// the digest into its own field — the form CI/CD pipelines paste
+		// when promoting one immutable artifact across environments.
+		image, digest := splitImageDigest(ociImage)
 		pkgSpec.Deployment = fv1.Archive{
 			Type: fv1.ArchiveTypeOCI,
-			OCI:  &fv1.OCIArchive{Image: ociImage},
+			OCI:  &fv1.OCIArchive{Image: image, Digest: digest},
 		}
 		// Cosmetic: the /status subresource strips client-set status on
 		// create; Archive.IsEmpty + buildermgr setInitialBuildStatus is the

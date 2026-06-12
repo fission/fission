@@ -57,6 +57,17 @@ this directory to figure out which files to archive.
 You can use 'fission spec apply --watch' to watch for file changes and continuously keep
 the cluster updated.
 
+Pre-built OCI packages (GitOps / CI/CD)
+---------------------------------------
+
+If your code is already published to a container registry, reference it instead of
+uploading archives: 'fission function create --spec --name hello --env go
+--oci ghcr.io/org/pkgs/hello:1.2.0@sha256:<digest> --entrypoint Handler'.
+The generated Package spec carries only the image reference — nothing is uploaded at
+apply time, the digest pins exactly what runs, and the same spec promotes unchanged
+across dev/qa/prod (only the reference differs per overlay). These specs are also plain
+Kubernetes resources, so tools like Argo CD can apply them directly.
+
 You can add YAMLs to this directory by writing them manually, but it's easier to generate
 them.  Use 'fission function create --spec' to generate a function spec,
 'fission environment create --spec' to generate an environment spec, and so on.
