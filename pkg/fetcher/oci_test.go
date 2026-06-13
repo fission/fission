@@ -297,6 +297,43 @@ func TestUploadHandlerOCIModes(t *testing.T) {
 		require.NotNil(t, resp.OCI)
 		assert.Contains(t, resp.OCI.Image, "localhost:30500/builds/pkg:",
 			"the recorded reference must carry the consumption-side name")
+		assert.True(t, strings.HasPrefix(resp.OCI.Digest, "sha256:"),
+			"the digest pin must survive the prefix rewrite")
+
+		// The prefix swap must NOT touch the digest: push the same artifact
+		// without a published prefix and confirm the digest is byte-identical
+		// (the load-bearing property — consumers pin on the digest).
+		f2 := newOCITestFetcher(t)
+		writeArtifactDir(t, f2, "artifact")
+		rr2 := uploadViaHandler(t, f2, &ArchiveUploadRequest{
+			Filename: "artifact",
+			OCIPush:  &OCIPushSpec{Repository: host + "/builds/pkg", InsecureHosts: []string{host}},
+		})
+		require.Equal(t, http.StatusOK, rr2.Code, rr2.Body.String())
+		var resp2 ArchiveUploadResponse
+		require.NoError(t, json.Unmarshal(rr2.Body.Bytes(), &resp2))
+		assert.Equal(t, resp2.OCI.Digest, resp.OCI.Digest,
+			"identical content must yield an identical digest regardless of publishedPrefix")
+	})
+
+	t.Run("published prefix that is a superstring of the push repo replaces only the prefix", func(t *testing.T) {
+		f := newOCITestFetcher(t)
+		writeArtifactDir(t, f, "artifact")
+		host := newRegistryHost(t)
+		rr := uploadViaHandler(t, f, &ArchiveUploadRequest{
+			Filename: "artifact",
+			OCIPush: &OCIPushSpec{
+				Repository:          host + "/builds/pkg",
+				PublishedRepository: "localhost:30500/builds/pkg-mirror",
+				InsecureHosts:       []string{host},
+			},
+		})
+		require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+		var resp ArchiveUploadResponse
+		require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
+		require.NotNil(t, resp.OCI)
+		assert.True(t, strings.HasPrefix(resp.OCI.Image, "localhost:30500/builds/pkg-mirror:"),
+			"only the leading push prefix should be rewritten, got %q", resp.OCI.Image)
 	})
 
 	t.Run("strict push failure fails the upload", func(t *testing.T) {

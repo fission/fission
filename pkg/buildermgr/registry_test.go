@@ -146,15 +146,25 @@ func TestSetPackageOCIPublishCondition(t *testing.T) {
 	assert.Equal(t, fv1.PackageReasonOCIPublishDegraded, cond.Reason)
 	assert.Contains(t, cond.Message, "registry down")
 
+	// Recovery: a later successful push flips the degraded condition back to
+	// True (the transition operators watch with kubectl wait).
+	setPackageOCIPublishCondition(status, &fetcher.ArchiveUploadResponse{
+		OCI: &fv1.OCIArchive{Image: "r/p:def", Digest: "sha256:def"},
+	}, 3)
+	cond = conditions.Find(status.Conditions, fv1.PackageConditionOCIPublished)
+	require.NotNil(t, cond)
+	assert.Equal(t, metav1.ConditionTrue, cond.Status, "a recovered push must flip the condition back to True")
+	assert.Equal(t, fv1.PackageReasonOCIPublished, cond.Reason)
+
 	// A later non-producer build clears the stale publish condition.
 	setPackageOCIPublishCondition(status, &fetcher.ArchiveUploadResponse{
 		ArchiveDownloadUrl: "http://storage/y",
-	}, 3)
+	}, 4)
 	assert.Nil(t, conditions.Find(status.Conditions, fv1.PackageConditionOCIPublished),
 		"a tarball-only build must not carry a stale publish condition")
 
 	// nil response (status-only updates) never touches the condition.
-	setPackageOCIPublishCondition(status, nil, 4)
+	setPackageOCIPublishCondition(status, nil, 5)
 	assert.Nil(t, conditions.Find(status.Conditions, fv1.PackageConditionOCIPublished))
 }
 

@@ -7,11 +7,12 @@ package healthcheck
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+
+	executorUtils "github.com/fission/fission/pkg/executor/util"
 )
 
 // OCI package-delivery checks: catch the registry misconfigurations that
@@ -78,17 +79,16 @@ func (hc *HealthChecker) CheckOCIImageVolume(ctx context.Context) error {
 	if deployEnv(ctx, kube, hc.fissionNamespace, "executor", "ENABLE_OCI_IMAGE_VOLUME") != "true" {
 		return nil // explicitly off: fetcher-pull delivery, valid configuration
 	}
-	ver, err := kube.Discovery().ServerVersion()
+	// Defer to the SAME authority the executor's runtime gate uses, so the
+	// healthcheck can never report "OK" while the runtime has silently
+	// degraded to fetcher pulls (e.g. on an unparsable vendor version).
+	supported, err := executorUtils.ImageVolumeSupported(kube.Discovery())
 	if err != nil {
-		return fmt.Errorf("could not read the cluster version: %w", err)
+		return fmt.Errorf("image volumes are enabled but the cluster version could not be confirmed (%w): OCI packages may be using fetcher pulls instead of image volumes", err)
 	}
-	major := strings.TrimSuffix(ver.Major, "+")
-	minor, err := strconv.Atoi(strings.TrimSuffix(ver.Minor, "+"))
-	if err != nil {
-		return nil // unparsable vendor minor: don't guess
-	}
-	if major == "1" && minor < 33 {
-		return fmt.Errorf("image volumes are enabled but the cluster is v%s.%d (< 1.33): OCI packages will use fetcher pulls instead — works, but without the image-volume cold-start benefit", major, minor)
+	if !supported {
+		ver, _ := kube.Discovery().ServerVersion()
+		return fmt.Errorf("image volumes are enabled but the cluster is v%s.%s (< 1.33): OCI packages will use fetcher pulls instead — works, but without the image-volume cold-start benefit", ver.Major, ver.Minor)
 	}
 	return nil
 }

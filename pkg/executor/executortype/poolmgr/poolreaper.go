@@ -25,7 +25,8 @@ import (
 // idle SPECIALIZED pods; an empty per-image pool deployment (its warm pods
 // re-created by the deployment controller) lives forever. This reaper closes
 // the economics: a per-image pool whose last activity is older than the reap
-// window AND which currently serves no specialized pods is destroyed — the
+// window (floored to the pod-ready timeout + slack; see handleReapIdlePools)
+// AND which currently serves no specialized pods is destroyed — the
 // next cold start recreates it on demand (the normal pool-creation path),
 // paying a kubelet-cached image pull on warm nodes.
 //

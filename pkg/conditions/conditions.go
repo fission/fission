@@ -29,9 +29,6 @@ func Set(conds *[]metav1.Condition, c metav1.Condition) bool {
 	return meta.SetStatusCondition(conds, c)
 }
 
-// Find returns a pointer to the condition with the given Type, or nil.
-// The returned pointer references storage inside conds; callers that
-// intend to mutate should copy first.
 // Delete removes the condition of the given type, reporting whether it was
 // present. Use when a condition's subject no longer applies (e.g. a stale
 // producer-outcome condition after a build that did not involve the producer).
@@ -39,6 +36,9 @@ func Delete(conds *[]metav1.Condition, conditionType string) bool {
 	return meta.RemoveStatusCondition(conds, conditionType)
 }
 
+// Find returns a pointer to the condition with the given Type, or nil.
+// The returned pointer references storage inside conds; callers that
+// intend to mutate should copy first.
 func Find(conds []metav1.Condition, conditionType string) *metav1.Condition {
 	return meta.FindStatusCondition(conds, conditionType)
 }

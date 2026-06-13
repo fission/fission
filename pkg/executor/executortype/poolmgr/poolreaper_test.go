@@ -71,6 +71,7 @@ func addTestPool(t *testing.T, gpm *GenericPoolManager, envName, imageHash strin
 		kubernetesClient: gpm.kubernetesClient,
 		readyPodQueue:    workqueue.NewTypedDelayingQueueWithConfig(workqueue.TypedDelayingQueueConfig[string]{Name: "test"}),
 		ociImageHash:     imageHash,
+		podReadyTimeout:  time.Minute,
 	}
 	pool.lastActive.Store(time.Now().Add(-idleFor).UnixNano())
 	key := poolKey(env.UID, imageHash)
@@ -165,6 +166,48 @@ func TestReapIdlePoolsDecisionTable(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestReapWindowFlooredToPodReadyTimeout pins that the effective idle window
+// is never shorter than podReadyTimeout + 1m: a pool idle past the (small)
+// configured window but inside the floor must NOT be reaped — that window is
+// where a first cold start legitimately blocks waiting for an image pull.
+func TestReapWindowFlooredToPodReadyTimeout(t *testing.T) {
+	gpm := newReaperGpm(t)
+	gpm.ociPoolIdleReapTime = time.Second // tiny configured window
+	// Idle for 30s: past the 1s configured window, but well inside the
+	// podReadyTimeout(1m)+1m floor.
+	key := addTestPool(t, gpm, "env", "abcd1234efgh5678", 30*time.Second)
+
+	gpm.handleReapIdlePools(&request{ctx: t.Context()})
+
+	_, stillThere := gpm.pools[key]
+	assert.True(t, stillThere, "a pool idle inside the pod-ready-timeout floor must not be reaped")
+}
+
+// TestReapThenRecreate pins the reap→recreate seam: after a reap drops the
+// pool and its ready-pod queue, a GET for the same OCI spec must rebuild
+// cleanly (fresh queue published), not find a half-torn pool.
+func TestReapThenRecreate(t *testing.T) {
+	gpm := newReaperGpm(t)
+	oci := &ociPoolSpec{archive: &fv1.OCIArchive{Image: "reg.example/pkg:v1"}}
+	key := addTestPool(t, gpm, "env", ociPoolHash(oci), time.Hour)
+	env := gpm.pools[key].env
+
+	gpm.handleReapIdlePools(&request{ctx: t.Context()})
+	_, gone := gpm.pools[key]
+	require.False(t, gone, "the pool must be reaped")
+	_, qGone := gpm.readyPodQueues.Load(key)
+	require.False(t, qGone, "the ready-pod queue must be dropped with the pool")
+
+	// A GET for the same spec recreates from scratch.
+	respC := make(chan *response, 1)
+	gpm.handleGetPool(&request{ctx: t.Context(), env: env, oci: oci, responseChannel: respC})
+	resp := <-respC
+	require.NoError(t, resp.error)
+	assert.True(t, resp.created, "the reaped pool must be recreated, not found")
+	_, qBack := gpm.readyPodQueues.Load(key)
+	assert.True(t, qBack, "the recreated pool must publish a fresh ready-pod queue")
 }
 
 // TestReapIdlePoolsFailSafeOnListError pins the uncertainty rule: if the pod
