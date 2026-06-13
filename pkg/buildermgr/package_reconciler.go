@@ -48,11 +48,12 @@ type PackageReconciler struct {
 	kubernetesClient kubernetes.Interface
 	nsResolver       *utils.NamespaceResolver
 	storageSvcUrl    string
+	registryCfg      *packageRegistryConfig
 	podPollInterval  time.Duration
 }
 
 func makePackageReconciler(logger logr.Logger, client client.Client, fissionClient versioned.Interface,
-	kubernetesClient kubernetes.Interface, storageSvcUrl string) *PackageReconciler {
+	kubernetesClient kubernetes.Interface, storageSvcUrl string, registryCfg *packageRegistryConfig) *PackageReconciler {
 	return &PackageReconciler{
 		logger:           logger.WithName("package_reconciler"),
 		client:           client,
@@ -60,6 +61,7 @@ func makePackageReconciler(logger logr.Logger, client client.Client, fissionClie
 		kubernetesClient: kubernetesClient,
 		nsResolver:       utils.DefaultNSResolver(),
 		storageSvcUrl:    storageSvcUrl,
+		registryCfg:      registryCfg,
 		podPollInterval:  builderPodPollInterval,
 	}
 }
@@ -153,7 +155,7 @@ func (r *PackageReconciler) build(ctx context.Context, pkg *fv1.Package) (ctrl.R
 		return ctrl.Result{}, fmt.Errorf("error setting package running state: %w", err)
 	}
 
-	uploadResp, buildLogs, err := buildPackage(ctx, logger, r.fissionClient, builderNs, r.storageSvcUrl, pkg)
+	uploadResp, buildLogs, err := buildPackage(ctx, logger, r.fissionClient, builderNs, r.storageSvcUrl, r.registryCfg, pkg)
 	if err != nil {
 		logger.Error(err, "error building package")
 		r.markBuildFailed(ctx, logger, pkg, buildLogs)

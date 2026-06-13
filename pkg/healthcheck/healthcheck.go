@@ -27,6 +27,7 @@ const (
 	Kubernetes      CategoryID = "kubernetes"
 	FissionServices CategoryID = "fission-services"
 	FissionVersion  CategoryID = "fission-version"
+	OCIDelivery     CategoryID = "oci-delivery"
 )
 
 var (
@@ -186,6 +187,24 @@ func (hc *HealthChecker) allCategories() []*Category {
 					successMsg: "fission is up-to-date",
 					check: func(ctx context.Context, input cli.Input, client cmd.Client) error {
 						return hc.CheckFissionVersion(ctx, input, client)
+					},
+				},
+			},
+			false,
+		),
+		NewCategory(
+			OCIDelivery,
+			[]Checker{
+				{
+					successMsg: "package registry configuration is consistent",
+					check: func(ctx context.Context, input cli.Input, client cmd.Client) error {
+						return hc.CheckOCIProducer(ctx)
+					},
+				},
+				{
+					successMsg: "image-volume delivery is supported by this cluster",
+					check: func(ctx context.Context, input cli.Input, client cmd.Client) error {
+						return hc.CheckOCIImageVolume(ctx)
 					},
 				},
 			},

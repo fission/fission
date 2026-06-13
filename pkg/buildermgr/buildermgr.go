@@ -129,7 +129,18 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		return fmt.Errorf("unable to register environment reconciler: %w", err)
 	}
 
-	pkgReconciler := makePackageReconciler(bmLogger, mgr.GetClient(), fissionClient, kubernetesClient, storageSvcUrl)
+	registryCfg, err := loadPackageRegistryConfig(bmLogger)
+	if err != nil {
+		return fmt.Errorf("error loading package registry config: %w", err)
+	}
+	if registryCfg.enabled {
+		bmLogger.Info("OCI package producer enabled (RFC-0012)",
+			"repositoryPrefix", registryCfg.repositoryPrefix,
+			"fallbackToStorage", registryCfg.fallbackToStorage,
+			"pushSecret", registryCfg.pushSecret != "",
+			"pullSecret", registryCfg.pullSecret != "")
+	}
+	pkgReconciler := makePackageReconciler(bmLogger, mgr.GetClient(), fissionClient, kubernetesClient, storageSvcUrl, registryCfg)
 	if err := controller.RegisterWithPredicates(mgr, &fv1.Package{}, pkgReconciler, "buildermgr-package",
 		packageBuildConcurrency(), buildTriggerPredicate()); err != nil {
 		return fmt.Errorf("unable to register package reconciler: %w", err)

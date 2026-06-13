@@ -7,6 +7,7 @@ package cli_test
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -482,7 +483,10 @@ func TestFissionCLI(t *testing.T) {
 		_, err = cli.ExecCommand(f, ctx, "archive", "get-url", "--id", id)
 		require.NoError(t, err)
 
-		_, err = cli.ExecCommand(f, ctx, "archive", "download", "--id", id)
+		// Without --output the CLI names the file after the storage ID (a
+		// UUID) in the CURRENT DIRECTORY — which littered the repo with
+		// stray files from test runs. Always download into the test tempdir.
+		_, err = cli.ExecCommand(f, ctx, "archive", "download", "--id", id, "--output", filepath.Join(t.TempDir(), "downloaded.zip"))
 		require.NoError(t, err)
 
 		_, err = cli.ExecCommand(f, ctx, "archive", "delete", "--id", id)

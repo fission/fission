@@ -30,19 +30,23 @@ func TestPoolKeyEmptyImageMatchesEnvUID(t *testing.T) {
 
 func TestOCIPoolHashStable(t *testing.T) {
 	t.Parallel()
-	base := &fv1.OCIArchive{Image: "registry.example.com/code/hello:v1"}
+	base := &ociPoolSpec{archive: &fv1.OCIArchive{Image: "registry.example.com/code/hello:v1"}}
 	assert.Equal(t, ociPoolHash(base), ociPoolHash(base), "hash must be deterministic")
 	assert.Len(t, ociPoolHash(base), 16)
-	assert.Empty(t, ociPoolHash(nil), "nil archive means the plain pool")
+	assert.Empty(t, ociPoolHash(nil), "nil spec means the plain pool")
+	assert.Empty(t, ociPoolHash(&ociPoolSpec{}), "nil archive means the plain pool")
 
 	// Every pod-spec-affecting field must contribute to the pool identity:
-	// two archives that would produce different pods must never share a pool
-	// (e.g. one image holding several functions under different sub-paths).
-	variants := []*fv1.OCIArchive{
-		{Image: "registry.example.com/code/hello:v2"},
-		{Image: "registry.example.com/code/hello:v1", SubPath: "app"},
-		{Image: "registry.example.com/code/hello:v1", Digest: "sha256:" + strings.Repeat("a", 64)},
-		{Image: "registry.example.com/code/hello:v1", ImagePullSecrets: []apiv1.LocalObjectReference{{Name: "regcred"}}},
+	// two specs that would produce different pods must never share a pool
+	// (e.g. one image holding several functions under different sub-paths,
+	// or — RFC-0012 — a secrets-using function needing the fetcher-retained
+	// variant of the same image).
+	variants := []*ociPoolSpec{
+		{archive: &fv1.OCIArchive{Image: "registry.example.com/code/hello:v2"}},
+		{archive: &fv1.OCIArchive{Image: "registry.example.com/code/hello:v1", SubPath: "app"}},
+		{archive: &fv1.OCIArchive{Image: "registry.example.com/code/hello:v1", Digest: "sha256:" + strings.Repeat("a", 64)}},
+		{archive: &fv1.OCIArchive{Image: "registry.example.com/code/hello:v1", ImagePullSecrets: []apiv1.LocalObjectReference{{Name: "regcred"}}}},
+		{archive: &fv1.OCIArchive{Image: "registry.example.com/code/hello:v1"}, fetcherVariant: true},
 	}
 	for _, v := range variants {
 		assert.NotEqualf(t, ociPoolHash(base), ociPoolHash(v), "variant %+v must key its own pool", v)
@@ -71,38 +75,43 @@ func ociEligibilityFixtures(envVersion int, secrets []fv1.SecretReference, cfgma
 	return fn, env, pkg
 }
 
-func TestGetFunctionOCIArchiveEligibility(t *testing.T) {
+func TestGetFunctionOCIPoolEligibility(t *testing.T) {
 	t.Parallel()
 	ociArchive := fv1.Archive{Type: fv1.ArchiveTypeOCI, OCI: &fv1.OCIArchive{Image: "reg.example.com/code:v1"}}
 	urlArchive := fv1.Archive{Type: fv1.ArchiveTypeUrl, URL: "http://example.com/a.zip"}
 
 	cases := []struct {
-		name       string
-		envVersion int
-		secrets    []fv1.SecretReference
-		cfgmaps    []fv1.ConfigMapReference
-		deployment fv1.Archive
-		want       bool
+		name        string
+		envVersion  int
+		keepArchive bool
+		secrets     []fv1.SecretReference
+		cfgmaps     []fv1.ConfigMapReference
+		deployment  fv1.Archive
+		want        bool
+		wantFetcher bool
 	}{
-		{"oci package on v2 env", 2, nil, nil, ociArchive, true},
-		{"non-oci package", 2, nil, nil, urlArchive, false},
-		{"env v1 needs the fetcher", 1, nil, nil, ociArchive, false},
-		{"secrets need the fetcher", 2, []fv1.SecretReference{{Name: "s"}}, nil, ociArchive, false},
-		{"configmaps need the fetcher", 2, nil, []fv1.ConfigMapReference{{Name: "c"}}, ociArchive, false},
+		{name: "oci package on v2 env rides B-direct", envVersion: 2, deployment: ociArchive, want: true},
+		{name: "non-oci package", envVersion: 2, deployment: urlArchive, want: false},
+		{name: "env v1 needs Path A", envVersion: 1, deployment: ociArchive, want: false},
+		{name: "KeepArchive env needs Path A (archive FILE expected; OCI is a directory)", envVersion: 2, keepArchive: true, deployment: ociArchive, want: false},
+		{name: "secrets ride B-fetcher", envVersion: 2, secrets: []fv1.SecretReference{{Name: "s"}}, deployment: ociArchive, want: true, wantFetcher: true},
+		{name: "configmaps ride B-fetcher", envVersion: 2, cfgmaps: []fv1.ConfigMapReference{{Name: "c"}}, deployment: ociArchive, want: true, wantFetcher: true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			fn, env, pkg := ociEligibilityFixtures(tc.envVersion, tc.secrets, tc.cfgmaps, tc.deployment)
+			env.Spec.KeepArchive = tc.keepArchive
 			gpm := &GenericPoolManager{
 				logger:        logr.Discard(),
 				fissionClient: fissionfake.NewSimpleClientset(pkg),
 			}
-			got, err := gpm.getFunctionOCIArchive(t.Context(), fn, env)
+			got, err := gpm.getFunctionOCIPool(t.Context(), fn, env)
 			require.NoError(t, err)
 			if tc.want {
 				require.NotNil(t, got)
-				assert.Equal(t, "reg.example.com/code:v1", got.Image)
+				assert.Equal(t, "reg.example.com/code:v1", got.archive.Image)
+				assert.Equal(t, tc.wantFetcher, got.fetcherVariant)
 			} else {
 				assert.Nil(t, got)
 			}
@@ -121,7 +130,7 @@ func TestGetFunctionOCIArchiveInfiniteEnvFallsBack(t *testing.T) {
 		logger:        logr.Discard(),
 		fissionClient: fissionfake.NewSimpleClientset(pkg),
 	}
-	got, err := gpm.getFunctionOCIArchive(t.Context(), fn, env)
+	got, err := gpm.getFunctionOCIPool(t.Context(), fn, env)
 	require.NoError(t, err)
 	assert.Nil(t, got)
 }
@@ -133,7 +142,7 @@ func TestGetFunctionOCIArchiveMissingPackage(t *testing.T) {
 		logger:        logr.Discard(),
 		fissionClient: fissionfake.NewSimpleClientset(),
 	}
-	got, err := gpm.getFunctionOCIArchive(t.Context(), fn, env)
+	got, err := gpm.getFunctionOCIPool(t.Context(), fn, env)
 	require.NoError(t, err, "a deleted package must fall back to Path A (the fetcher reports it precisely)")
 	assert.Nil(t, got)
 }

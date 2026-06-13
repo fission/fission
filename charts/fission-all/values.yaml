@@ -141,6 +141,36 @@ kubernetesClientQPS: 200
 ## kubernetesClientBurst represents the maximum burst queries to the kubernetes api server from client instances of fission components.
 kubernetesClientBurst: 500
 
+## packageRegistry publishes built function packages to a container registry
+## as OCI images instead of storing tarballs. Functions then cold-start
+## faster on Kubernetes 1.33+ (code is mounted directly by the kubelet).
+## Without a registry, builds keep using internal storage — no change.
+## NOTE: the registry must be reachable from inside the cluster AND from
+## every node.
+##
+packageRegistry:
+  enabled: false
+  ## Repository root. Packages are pushed to
+  ## <repositoryPrefix>/<namespace>/<package>, e.g. ghcr.io/myorg/fission-packages.
+  repositoryPrefix: ""
+  ## Secret names (kubernetes.io/dockerconfigjson, in the builder namespace):
+  ## pushSecret needs write access (used at build time); pullSecret needs
+  ## read access (attached to packages for pulling). Keep them separate.
+  pushSecret: ""
+  pullSecret: ""
+  ## On a failed push: true keeps the build and stores a tarball instead
+  ## (the package gets condition OCIPublished=False); false fails the build.
+  fallbackToStorage: true
+  ## --- Advanced (mainly for self-hosted / in-cluster registries) ---
+  ## publishedPrefix: if nodes reach the registry by a DIFFERENT address
+  ## than pods do (e.g. an in-cluster registry exposed via NodePort), set
+  ## the node-visible prefix here; it is recorded in packages while pushes
+  ## go to repositoryPrefix.
+  publishedPrefix: ""
+  ## insecureHosts: comma-separated host[:port] list allowed to use plain
+  ## HTTP instead of TLS.
+  insecureHosts: ""
+
 ## fetcher is a light weight component that helps in running functions.
 ## fetcher helps in fetching function source code/build and uploading it when function is invoked.
 ##
@@ -227,12 +257,16 @@ executor:
   ## adoptExistingResources decides whether to adopt existing resources when executor restarts or Fission is redeployed.
   ##
   adoptExistingResources: false
-  ## enableOCIImageVolume opts into delivering OCI packages via kubelet image
-  ## volumes (RFC-0001 Path B). Requires Kubernetes >= 1.33 (KEP-4639); on
-  ## older clusters the executor logs the capability miss and keeps OCI
-  ## packages on the fetcher pull path.
+  ## Mount OCI packages directly into function pods (needs Kubernetes 1.33+;
+  ## older clusters automatically fall back to downloading the package).
+  ## Gives noticeably faster cold starts. Set false to always download.
   ##
-  enableOCIImageVolume: false
+  enableOCIImageVolume: true
+  ## How long an unused per-package warm pool is kept before removal; it is
+  ## recreated automatically on the next request. Shared environment pools
+  ## are never removed.
+  ##
+  ociPoolIdleReapTime: 5m
   ## functionServices opts the pool manager into creating a headless selector
   ## Service per invoked function (RFC-0002 EndpointSlice-native data plane),
   ## so the built-in EndpointSlice controller publishes the function's

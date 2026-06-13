@@ -311,12 +311,23 @@ func TestGenericPoolPodSpecRuntimePodSpecCannotIntroduceDuplicateSATokenMount(t 
 }
 
 // newTestOCIPool returns a GenericPool configured as a per-image image-volume
-// pool (RFC-0001 Path B).
+// pool (RFC-0001 Path B, fetcherless B-direct variant).
 func newTestOCIPool(t *testing.T, oci *fv1.OCIArchive) *GenericPool {
 	t.Helper()
 	gp := newTestGenericPool(t)
 	gp.oci = oci
-	gp.ociImageHash = ociPoolHash(oci)
+	gp.ociImageHash = ociPoolHash(&ociPoolSpec{archive: oci})
+	return gp
+}
+
+// newTestOCIFetcherPool returns a GenericPool configured as the
+// fetcher-retained Path B variant (RFC-0012 B-fetcher).
+func newTestOCIFetcherPool(t *testing.T, oci *fv1.OCIArchive) *GenericPool {
+	t.Helper()
+	gp := newTestGenericPool(t)
+	gp.oci = oci
+	gp.ociFetcherVariant = true
+	gp.ociImageHash = ociPoolHash(&ociPoolSpec{archive: oci, fetcherVariant: true})
 	return gp
 }
 
@@ -388,6 +399,11 @@ func TestGenDeploymentSpecOCIImageVolume(t *testing.T) {
 	// to this pool's queue.
 	assert.Equal(t, gp.ociImageHash, pod.Labels[fv1.POOL_OCI_IMAGE_HASH])
 	assert.Equal(t, gp.ociImageHash, deploymentSpec.Selector.MatchLabels[fv1.POOL_OCI_IMAGE_HASH])
+
+	// Per-image pools keep one warm pod regardless of the env poolsize
+	// (RFC-0012 economics: poolsize would multiply per PACKAGE).
+	require.NotNil(t, deploymentSpec.Replicas)
+	assert.Equal(t, int32(1), *deploymentSpec.Replicas)
 }
 
 // TestGenDeploymentSpecOCIWithPodSpecPatch asserts the pod-spec invariants are
@@ -449,4 +465,75 @@ func TestGenDeploymentSpecNonOCIUnchanged(t *testing.T) {
 	assert.True(t, hasSATokenVolume, "plain pools keep the fetcher SA token volume")
 	assert.False(t, hasImageVolume, "plain pools must not grow an image volume")
 	assert.NotContains(t, pod.Labels, fv1.POOL_OCI_IMAGE_HASH)
+}
+
+// TestGenDeploymentSpecOCIFetcherVariant asserts the shape of a B-fetcher
+// pool pod (RFC-0012): the fetcher sidecar is retained (with its SA token
+// projected volume and re-mount), and the image volume is mounted read-only
+// at the fetcher's store path on BOTH containers so the fetcher's
+// exists-early-exit skips the pull — newdeploy's shipped Path B pattern.
+func TestGenDeploymentSpecOCIFetcherVariant(t *testing.T) {
+	t.Parallel()
+	oci := &fv1.OCIArchive{
+		Image:            "registry.example.com/code/hello:v1",
+		ImagePullSecrets: []apiv1.LocalObjectReference{{Name: "regcred"}},
+	}
+	gp := newTestOCIFetcherPool(t, oci)
+	env := newTestEnv()
+	env.Spec.Version = 2
+
+	deploymentSpec, err := gp.genDeploymentSpec(env)
+	require.NoError(t, err)
+	pod := deploymentSpec.Template
+
+	// Two containers: env runtime + fetcher.
+	require.Len(t, pod.Spec.Containers, 2, "B-fetcher pods must keep the fetcher sidecar")
+	names := []string{pod.Spec.Containers[0].Name, pod.Spec.Containers[1].Name}
+	assert.Contains(t, names, envContainerName)
+	assert.Contains(t, names, util.FetcherContainerName)
+
+	// The image volume is mounted at the fetcher store path on BOTH
+	// containers (the fetcher needs it for the exists-early-exit; the
+	// runtime needs it for the load).
+	var imgVol *apiv1.Volume
+	for i := range pod.Spec.Volumes {
+		if pod.Spec.Volumes[i].Image != nil {
+			imgVol = &pod.Spec.Volumes[i]
+			break
+		}
+	}
+	require.NotNil(t, imgVol, "an image volume must be present")
+	wantPath := gp.fetcherConfig.SharedMountPath() + "/" + fetcherConfig.TargetFilenameDeployArchive
+	for _, c := range pod.Spec.Containers {
+		var mount *apiv1.VolumeMount
+		for i := range c.VolumeMounts {
+			if c.VolumeMounts[i].Name == imgVol.Name {
+				mount = &c.VolumeMounts[i]
+				break
+			}
+		}
+		require.NotNilf(t, mount, "container %s must mount the image volume", c.Name)
+		assert.Equal(t, wantPath, mount.MountPath)
+		assert.True(t, mount.ReadOnly)
+	}
+
+	// The fetcher SA token projected volume IS present (unlike B-direct) and
+	// the fetcher container re-mounts it (GHSA-85g2-pmrx-r49q invariant).
+	foundSAVol := false
+	for _, v := range pod.Spec.Volumes {
+		if v.Name == util.FetcherSATokenVolumeName {
+			foundSAVol = true
+		}
+	}
+	assert.True(t, foundSAVol, "B-fetcher pods must carry the fetcher SA token volume")
+
+	// SA automount stays off pod-wide.
+	require.NotNil(t, pod.Spec.AutomountServiceAccountToken)
+	assert.False(t, *pod.Spec.AutomountServiceAccountToken)
+
+	// Pull secrets reach the pod for the kubelet image-volume pull.
+	assert.Contains(t, pod.Spec.ImagePullSecrets, apiv1.LocalObjectReference{Name: "regcred"})
+
+	// Pod labels carry the (variant-specific) image hash.
+	assert.Equal(t, gp.ociImageHash, pod.Labels[fv1.POOL_OCI_IMAGE_HASH])
 }

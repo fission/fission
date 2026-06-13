@@ -231,9 +231,33 @@ func PrintPackageSummary(writer io.Writer, pkg *fv1.Package) {
 	fmt.Fprintf(w, "%v\t%v\n", "Name:", pkg.Name)
 	fmt.Fprintf(w, "%v\t%v\n", "Environment:", pkg.Spec.Environment.Name)
 	fmt.Fprintf(w, "%v\t%v\n", "Status:", pkg.Status.BuildStatus)
+	fmt.Fprintf(w, "%v\t%v\n", "Deployment:", DescribeDeploymentArchive(&pkg.Spec.Deployment))
 	w.Flush()
 	util.PrintConditionsTo(writer, pkg.Status.Conditions)
 	fmt.Fprintf(writer, "%v\n%v", "Build Logs:", buildlog)
+}
+
+// DescribeDeploymentArchive renders a one-line, user-facing description of
+// how a package's code is stored and therefore delivered to function pods.
+func DescribeDeploymentArchive(a *fv1.Archive) string {
+	switch {
+	case a.OCI != nil:
+		ref := a.OCI.Image
+		if a.OCI.Digest != "" {
+			short := strings.TrimPrefix(a.OCI.Digest, "sha256:")
+			if len(short) > 12 {
+				short = short[:12]
+			}
+			ref += " (digest " + short + ")"
+		}
+		return "OCI image " + ref + " — mounted directly on clusters with image volumes, pulled by the fetcher otherwise"
+	case len(a.Literal) > 0:
+		return fmt.Sprintf("embedded in the package (%d bytes)", len(a.Literal))
+	case a.URL != "":
+		return "archive in storage (" + a.URL + ")"
+	default:
+		return "none"
+	}
 }
 
 // validArchiveURL checks if the given URL is a valid archive URL

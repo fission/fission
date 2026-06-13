@@ -170,6 +170,11 @@ func (gp *GenericPool) choosePod(ctx context.Context, newLabels map[string]strin
 			}
 		}
 
+		// Re-touch the pool's activity clock at claim time: the wait above
+		// can consume most of the pod-ready window, and the idle reaper
+		// must never see a pool that just claimed a pod as idle.
+		gp.lastActive.Store(time.Now().UnixNano())
+
 		logger.Info("chose pod", "labels", newLabels,
 			"pod", chosenPod.Name, "elapsed_time", time.Since(startTime))
 

@@ -51,6 +51,24 @@ var (
 		},
 		[]string{"result"},
 	)
+	// OCIPoolsReaped counts per-image pool deployments destroyed by the idle
+	// pool reaper (RFC-0012). The Gate C signal: at many-package scale this
+	// moving (and warm-pod count staying bounded) is the design working.
+	OCIPoolsReaped = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name: "fission_executor_oci_pools_reaped_total",
+			Help: "Per-image (OCI) warm pools destroyed by the idle pool reaper.",
+		},
+	)
+	// OCIPoolReapFailures counts reap passes whose deployment delete failed
+	// (the pool entry is dropped and the deployment orphaned until adoption
+	// or restart cleanup) — kept separate so OCIPoolsReaped never lies.
+	OCIPoolReapFailures = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name: "fission_executor_oci_pool_reap_failures_total",
+			Help: "Idle-pool reap attempts whose deployment delete failed (deployment orphaned until adoption or restart cleanup).",
+		},
+	)
 )
 
 func init() {
@@ -59,4 +77,6 @@ func init() {
 	registry.MustRegister(FuncRunningSeconds)
 	registry.MustRegister(ColdStartsError)
 	registry.MustRegister(FunctionServiceEnsures)
+	registry.MustRegister(OCIPoolsReaped)
+	registry.MustRegister(OCIPoolReapFailures)
 }

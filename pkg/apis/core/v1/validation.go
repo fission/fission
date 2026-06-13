@@ -259,6 +259,14 @@ func (archive Archive) Validate() error {
 		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "Archive", archive.Type, "at most one of literal, url, or oci may be set"))
 	}
 
+	// Type==oci must carry an OCI payload: otherwise consumers that switch on
+	// the type (e.g. `fission package getdeploy`, the executor's eligibility
+	// read) would dereference a nil OCIArchive on a hand-authored or
+	// corrupt Package.
+	if archive.Type == ArchiveTypeOCI && archive.OCI == nil {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "Archive.Type", archive.Type, "type is 'oci' but no oci payload is set"))
+	}
+
 	if archive.OCI != nil {
 		errs = errors.Join(errs, archive.OCI.Validate())
 	}

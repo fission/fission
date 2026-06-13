@@ -170,3 +170,33 @@ func TestUpdatePackageOCIMutualExclusion(t *testing.T) {
 	_, err := UpdatePackage(in, client, "", pkg.DeepCopy())
 	require.Error(t, err, "--oci combined with --code must be rejected")
 }
+
+func TestIsClusterLocalRef(t *testing.T) {
+	cases := map[string]bool{
+		"test-registry.default.svc.cluster.local:5000/x/y:v1": true,
+		"registry.fission.svc:5000/x":                         true,
+		"ghcr.io/org/pkg:v1":                                  false,
+		"localhost:30500/x:v1":                                false,
+		"10.0.0.5:5000/x":                                     false,
+	}
+	for ref, want := range cases {
+		if got := isClusterLocalRef(ref); got != want {
+			t.Errorf("isClusterLocalRef(%q) = %v, want %v", ref, got, want)
+		}
+	}
+}
+
+func TestSplitImageDigest(t *testing.T) {
+	cases := []struct{ in, image, digest string }{
+		{"ghcr.io/org/pkg:v1", "ghcr.io/org/pkg:v1", ""},
+		{"ghcr.io/org/pkg:v1@sha256:abc123", "ghcr.io/org/pkg:v1", "sha256:abc123"},
+		{"ghcr.io/org/pkg@sha256:abc123", "ghcr.io/org/pkg", "sha256:abc123"},
+		{"localhost:30500/p:tag", "localhost:30500/p:tag", ""},
+	}
+	for _, tc := range cases {
+		image, digest := splitImageDigest(tc.in)
+		if image != tc.image || digest != tc.digest {
+			t.Errorf("splitImageDigest(%q) = (%q,%q), want (%q,%q)", tc.in, image, digest, tc.image, tc.digest)
+		}
+	}
+}

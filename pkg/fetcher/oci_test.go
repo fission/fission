@@ -7,6 +7,7 @@ package fetcher
 import (
 	"archive/tar"
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -210,4 +211,164 @@ func TestFetchOCIMidExtractionFailure(t *testing.T) {
 	entries, err := os.ReadDir(f.sharedVolumePath)
 	require.NoError(t, err)
 	assert.Empty(t, entries, "failed fetch must clean up its tmp extraction dir")
+}
+
+// newRegistryHost starts an in-memory plain-HTTP OCI registry and returns
+// its host (for push-mode tests that need only the registry, no image).
+func newRegistryHost(t *testing.T) string {
+	t.Helper()
+	srv := httptest.NewServer(registry.New(registry.Logger(log.New(io.Discard, "", 0))))
+	t.Cleanup(srv.Close)
+	u, err := url.Parse(srv.URL)
+	require.NoError(t, err)
+	return u.Host
+}
+
+// stubStorageSvc serves the minimal storagesvc surface UploadReader needs.
+func stubStorageSvc(t *testing.T) string {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"stub-file-id"}`))
+	}))
+	t.Cleanup(srv.Close)
+	return srv.URL
+}
+
+func uploadViaHandler(t *testing.T, f *Fetcher, req *ArchiveUploadRequest) *httptest.ResponseRecorder {
+	t.Helper()
+	body, err := json.Marshal(req)
+	require.NoError(t, err)
+	rr := httptest.NewRecorder()
+	f.UploadHandler(rr, httptest.NewRequest(http.MethodPost, "/upload", bytes.NewReader(body)))
+	return rr
+}
+
+// writeArtifactDir places a built deployment directory on the shared volume.
+func writeArtifactDir(t *testing.T, f *Fetcher, name string) {
+	t.Helper()
+	dir := filepath.Join(f.sharedVolumePath, name)
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "main.py"), []byte("def main(): pass\n"), 0o644))
+}
+
+// TestUploadHandlerOCIModes pins the producer's upload-handler mode table
+// (RFC-0012): push success short-circuits the storagesvc upload entirely;
+// strict push failure fails the request; fallback push failure rides the
+// tarball path and reports the push error alongside.
+func TestUploadHandlerOCIModes(t *testing.T) {
+	t.Run("push success returns OCI and skips storage", func(t *testing.T) {
+		f := newOCITestFetcher(t)
+		writeArtifactDir(t, f, "artifact")
+		host := newRegistryHost(t)
+		rr := uploadViaHandler(t, f, &ArchiveUploadRequest{
+			Filename: "artifact",
+			OCIPush: &OCIPushSpec{
+				Repository:    host + "/builds/pkg",
+				InsecureHosts: []string{host},
+			},
+			// No StorageSvcUrl on purpose: a storage call would fail loudly.
+		})
+		require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+		var resp ArchiveUploadResponse
+		require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
+		require.NotNil(t, resp.OCI)
+		assert.Contains(t, resp.OCI.Image, host+"/builds/pkg:")
+		assert.Contains(t, resp.OCI.Digest, "sha256:")
+		assert.Empty(t, resp.ArchiveDownloadUrl, "OCI success must not upload a tarball")
+		assert.Empty(t, resp.OCIPushError)
+	})
+
+	t.Run("published repository overrides the recorded name", func(t *testing.T) {
+		f := newOCITestFetcher(t)
+		writeArtifactDir(t, f, "artifact")
+		host := newRegistryHost(t)
+		rr := uploadViaHandler(t, f, &ArchiveUploadRequest{
+			Filename: "artifact",
+			OCIPush: &OCIPushSpec{
+				Repository:          host + "/builds/pkg",
+				PublishedRepository: "localhost:30500/builds/pkg",
+				InsecureHosts:       []string{host},
+			},
+		})
+		require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+		var resp ArchiveUploadResponse
+		require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
+		require.NotNil(t, resp.OCI)
+		assert.Contains(t, resp.OCI.Image, "localhost:30500/builds/pkg:",
+			"the recorded reference must carry the consumption-side name")
+		assert.True(t, strings.HasPrefix(resp.OCI.Digest, "sha256:"),
+			"the digest pin must survive the prefix rewrite")
+
+		// The prefix swap must NOT touch the digest: push the same artifact
+		// without a published prefix and confirm the digest is byte-identical
+		// (the load-bearing property — consumers pin on the digest).
+		f2 := newOCITestFetcher(t)
+		writeArtifactDir(t, f2, "artifact")
+		rr2 := uploadViaHandler(t, f2, &ArchiveUploadRequest{
+			Filename: "artifact",
+			OCIPush:  &OCIPushSpec{Repository: host + "/builds/pkg", InsecureHosts: []string{host}},
+		})
+		require.Equal(t, http.StatusOK, rr2.Code, rr2.Body.String())
+		var resp2 ArchiveUploadResponse
+		require.NoError(t, json.Unmarshal(rr2.Body.Bytes(), &resp2))
+		assert.Equal(t, resp2.OCI.Digest, resp.OCI.Digest,
+			"identical content must yield an identical digest regardless of publishedPrefix")
+	})
+
+	t.Run("published prefix that is a superstring of the push repo replaces only the prefix", func(t *testing.T) {
+		f := newOCITestFetcher(t)
+		writeArtifactDir(t, f, "artifact")
+		host := newRegistryHost(t)
+		rr := uploadViaHandler(t, f, &ArchiveUploadRequest{
+			Filename: "artifact",
+			OCIPush: &OCIPushSpec{
+				Repository:          host + "/builds/pkg",
+				PublishedRepository: "localhost:30500/builds/pkg-mirror",
+				InsecureHosts:       []string{host},
+			},
+		})
+		require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+		var resp ArchiveUploadResponse
+		require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
+		require.NotNil(t, resp.OCI)
+		assert.True(t, strings.HasPrefix(resp.OCI.Image, "localhost:30500/builds/pkg-mirror:"),
+			"only the leading push prefix should be rewritten, got %q", resp.OCI.Image)
+	})
+
+	t.Run("strict push failure fails the upload", func(t *testing.T) {
+		f := newOCITestFetcher(t)
+		writeArtifactDir(t, f, "artifact")
+		rr := uploadViaHandler(t, f, &ArchiveUploadRequest{
+			Filename: "artifact",
+			OCIPush: &OCIPushSpec{
+				Repository:        "127.0.0.1:1/builds/pkg",
+				InsecureHosts:     []string{"127.0.0.1:1"},
+				FallbackToStorage: false,
+			},
+		})
+		assert.Equal(t, http.StatusInternalServerError, rr.Code)
+		assert.Contains(t, rr.Body.String(), "error publishing")
+	})
+
+	t.Run("fallback push failure rides the tarball and reports the error", func(t *testing.T) {
+		f := newOCITestFetcher(t)
+		writeArtifactDir(t, f, "artifact")
+		rr := uploadViaHandler(t, f, &ArchiveUploadRequest{
+			Filename:       "artifact",
+			StorageSvcUrl:  stubStorageSvc(t),
+			ArchivePackage: true,
+			OCIPush: &OCIPushSpec{
+				Repository:        "127.0.0.1:1/builds/pkg",
+				InsecureHosts:     []string{"127.0.0.1:1"},
+				FallbackToStorage: true,
+			},
+		})
+		require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+		var resp ArchiveUploadResponse
+		require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
+		assert.Nil(t, resp.OCI)
+		assert.NotEmpty(t, resp.OCIPushError, "the degradation must be reported")
+		assert.Contains(t, resp.ArchiveDownloadUrl, "stub-file-id", "the tarball fallback must have uploaded")
+	})
 }

@@ -65,14 +65,21 @@ spec:
           value: {{ .Values.fetcher.resource.cpu.limits | quote }}
         - name: FETCHER_MAXMEM
           value: {{ .Values.fetcher.resource.mem.limits | quote }}
-        {{- if .Values.fetcher.allowInsecureRegistries }}
+        {{- /* Function-pod fetchers must trust the producer's registry too:
+             a Path A pull of a producer-published package (k8s < 1.33, or
+             image volumes off) otherwise fails TLS against an insecure
+             registry — two knobs away from the error. Union the lists. */}}
+        {{- $insecure := compact (list .Values.fetcher.allowInsecureRegistries .Values.packageRegistry.insecureHosts) }}
+        {{- if $insecure }}
         - name: FETCHER_ALLOW_INSECURE_REGISTRIES
-          value: {{ .Values.fetcher.allowInsecureRegistries | quote }}
+          value: {{ join "," $insecure | quote }}
         {{- end }}
         {{- if .Values.executor.enableOCIImageVolume }}
         - name: ENABLE_OCI_IMAGE_VOLUME
           value: {{ .Values.executor.enableOCIImageVolume | quote }}
         {{- end }}
+        - name: OCI_POOL_IDLE_REAP_TIME
+          value: {{ .Values.executor.ociPoolIdleReapTime | default "5m" | quote }}
         {{- if .Values.executor.functionServices.enabled }}
         - name: ENABLE_FUNCTION_SERVICES
           value: {{ .Values.executor.functionServices.enabled | quote }}

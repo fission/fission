@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/dchest/uniuri"
@@ -63,12 +64,21 @@ type (
 		enableOwnerReferences bool
 		// oci marks this as a per-image image-volume pool (RFC-0001 Path B):
 		// its pods mount the package image read-only at the fetcher's store
-		// path (<sharedMountPath>/deployarchive) and carry no fetcher
-		// sidecar. nil for plain pools.
+		// path (<sharedMountPath>/deployarchive). nil for plain pools.
 		oci *fv1.OCIArchive
+		// ociFetcherVariant selects the fetcher-retained Path B variant
+		// (RFC-0012 "B-fetcher"): the fetcher sidecar stays in the pod to
+		// materialize Secrets/ConfigMaps and drive the load; its
+		// exists-early-exit makes the fetch a no-op against the image mount.
+		// false = "B-direct" (no fetcher; load-only specialize).
+		ociFetcherVariant bool
 		// ociImageHash is ociPoolHash(oci): keys the pool, labels its
 		// pods, and suffixes the deployment name. Empty for plain pools.
 		ociImageHash string
+		// lastActive (unix nanos) is the pool's activity clock for the
+		// per-image idle reaper (RFC-0012): stored at creation and on every
+		// GET_POOL. Atomic so the reap pass can read it lock-free.
+		lastActive atomic.Int64
 		// TODO: move this field into fsCache
 		podFSVCMap sync.Map
 	}
@@ -103,7 +113,7 @@ func MakeGenericPool(
 	enableIstio bool,
 	podSpecPatch *apiv1.PodSpec,
 	crClient client.Client,
-	oci *fv1.OCIArchive,
+	oci *ociPoolSpec,
 	podReadyTimeout time.Duration) *GenericPool {
 
 	gpLogger := logger.WithName("generic_pool")
@@ -132,11 +142,13 @@ func MakeGenericPool(
 		podSpecPatch:          podSpecPatch,
 		enableOwnerReferences: utils.IsOwnerReferencesEnabled(),
 		lock:                  sync.Mutex{},
-		oci:                   oci,
 	}
 	if oci != nil {
+		gp.oci = oci.archive
+		gp.ociFetcherVariant = oci.fetcherVariant
 		gp.ociImageHash = ociPoolHash(oci)
 	}
+	gp.lastActive.Store(time.Now().UnixNano())
 
 	gp.runtimeImagePullPolicy = utils.GetImagePullPolicy(os.Getenv("RUNTIME_IMAGE_PULL_POLICY"))
 

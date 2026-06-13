@@ -27,7 +27,7 @@ func TestPrintPackageSummary(t *testing.T) {
 		},
 	}
 
-	expected := `Name:        foobar\nEnvironment: \nStatus:      failed\nBuild Logs:\ndummy-build-log`
+	expected := `Name:        foobar\nEnvironment: \nStatus:      failed\nDeployment:  none\nBuild Logs:\ndummy-build-log`
 	writer := &bytes.Buffer{}
 	PrintPackageSummary(writer, pkg)
 

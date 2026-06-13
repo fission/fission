@@ -58,6 +58,7 @@ const (
 	GET_POOL requestType = iota
 	CLEANUP_POOL
 	GET_ENV_POOLS
+	REAP_IDLE_POOLS
 )
 
 type (
@@ -99,6 +100,9 @@ type (
 		fetcherConfig *fetcherConfig.Config
 
 		defaultIdlePodReapTime time.Duration
+		// ociPoolIdleReapTime is the idle window after which an empty
+		// per-image pool deployment is reaped (RFC-0012; OCI_POOL_IDLE_REAP_TIME).
+		ociPoolIdleReapTime time.Duration
 
 		poolPodC *PoolPodController
 
@@ -126,9 +130,10 @@ type (
 		requestType
 		ctx context.Context
 		env *fv1.Environment
-		// oci selects a per-image image-volume pool (RFC-0001 Path B);
+		// oci selects a per-image image-volume pool (RFC-0001 Path B),
+		// including its pod-spec variant (RFC-0012 B-fetcher);
 		// nil selects the env's plain fetcher-based pool.
-		oci             *fv1.OCIArchive
+		oci             *ociPoolSpec
 		responseChannel chan *response
 	}
 	response struct {
@@ -180,6 +185,7 @@ func MakeGenericPoolManager(ctx context.Context,
 		instanceID:                 instanceID,
 		requestChannel:             make(chan *request),
 		defaultIdlePodReapTime:     2 * time.Minute,
+		ociPoolIdleReapTime:        ociPoolIdleReapTimeFromEnv(logger),
 		fetcherConfig:              fetcherConfig,
 		enableIstio:                enableIstio,
 		poolPodC:                   poolPodC,
@@ -218,6 +224,12 @@ func (gpm *GenericPoolManager) Run(ctx context.Context, mgr *errgroup.Group) {
 		gpm.poolPodC.Run(ctx, ctx.Done(), mgr)
 		return nil
 	})
+	// Per-image idle pool reaper (RFC-0012): bounds warm-pool economics once
+	// every built package is its own image. Generic pools are never touched.
+	mgr.Go(func() error {
+		gpm.reapIdlePoolsLoop(ctx)
+		return nil
+	})
 }
 
 func (gpm *GenericPoolManager) GetTypeName(ctx context.Context) fv1.ExecutorType {
@@ -246,13 +258,15 @@ func (gpm *GenericPoolManager) GetFuncSvc(ctx context.Context, fn *fv1.Function)
 	}
 
 	// RFC-0001 Path B: an eligible OCI-packaged function gets a per-image
-	// pool whose pods mount the code as an image volume (no fetcher). nil
-	// means the plain pool serves it (Path A or non-OCI). A failed
-	// eligibility read fails the cold start (the router retries) rather
-	// than silently pinning the function to the wrong pool type in fsCache.
-	var oci *fv1.OCIArchive
+	// pool whose pods mount the code as an image volume — fetcherless
+	// (B-direct), or with the fetcher retained for Secrets/ConfigMaps
+	// materialization (B-fetcher, RFC-0012). nil means the plain pool
+	// serves it (Path A or non-OCI). A failed eligibility read fails the
+	// cold start (the router retries) rather than silently pinning the
+	// function to the wrong pool type in fsCache.
+	var oci *ociPoolSpec
 	if gpm.imageVolumeOK {
-		oci, err = gpm.getFunctionOCIArchive(ctx, fn, env)
+		oci, err = gpm.getFunctionOCIPool(ctx, fn, env)
 		if err != nil {
 			fErr = fmt.Errorf("error reading package for OCI eligibility of function %s: %w", fn.Name, err)
 			return nil, fErr
@@ -673,6 +687,8 @@ func (gpm *GenericPoolManager) service() {
 			gpm.handleCleanupPool(req)
 		case GET_ENV_POOLS:
 			gpm.handleGetEnvPools(req)
+		case REAP_IDLE_POOLS:
+			gpm.handleReapIdlePools(req)
 		}
 	}
 }
@@ -717,6 +733,10 @@ func (gpm *GenericPoolManager) handleGetPool(req *request) {
 		gpm.seedReadyPodQueue(context.Background(), req.env, imageHash, pool.readyPodQueue)
 		created = true
 	}
+	// Touch the pool's activity clock (every specialization starts with a
+	// GET_POOL, and this handler is serialized with the reap pass, so a
+	// just-touched pool can never be reaped out from under the request).
+	pool.lastActive.Store(time.Now().UnixNano())
 	req.responseChannel <- &response{pool: pool, created: created}
 }
 
@@ -762,7 +782,7 @@ func (gpm *GenericPoolManager) handleGetEnvPools(req *request) {
 	req.responseChannel <- &response{pools: pools}
 }
 
-func (gpm *GenericPoolManager) getPool(ctx context.Context, env *fv1.Environment, oci *fv1.OCIArchive) (*GenericPool, bool, error) {
+func (gpm *GenericPoolManager) getPool(ctx context.Context, env *fv1.Environment, oci *ociPoolSpec) (*GenericPool, bool, error) {
 	otelUtils.SpanTrackEvent(ctx, "getPool", otelUtils.GetAttributesForEnv(env)...)
 	c := make(chan *response)
 	gpm.requestChannel <- &request{

@@ -20,6 +20,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	apiv1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -490,18 +491,21 @@ func TestOCIPackagePoolmgrImageVolume(t *testing.T) {
 	}
 }
 
-// TestOCIPathBFallbackWithSecrets proves the per-function eligibility check:
-// a function with a Secret needs the fetcher (it materializes secrets), so it
-// must serve from the plain fetcher pool even when image volumes are enabled.
-func TestOCIPathBFallbackWithSecrets(t *testing.T) {
+// TestOCIPathBSecrets covers the RFC-0012 B-fetcher variant: a function
+// with a Secret rides image-volume delivery WITH the fetcher sidecar
+// retained (it materializes the secret; its exists-early-exit makes the
+// fetch a no-op against the mount). Before RFC-0012 such functions fell
+// back to the plain fetcher pool; the pod-shape assertions prove the new
+// variant actually served it.
+func TestOCIPathBSecrets(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
 	defer cancel()
 
 	f := framework.Connect(t)
-	hostAddr, inclusterAddr := framework.RequireRegistry(t)
-	requireImageVolumeLeg(t)
+	hostAddr, _ := framework.RequireRegistry(t)
+	nodeAddr := requireImageVolumeLeg(t)
 	runtime := f.Images().RequirePython(t)
 
 	ns := f.NewTestNamespace(t)
@@ -524,9 +528,9 @@ func TestOCIPathBFallbackWithSecrets(t *testing.T) {
 		MinCPU: 40, MaxCPU: 80, MinMemory: 64, MaxMemory: 128,
 	})
 
-	// The fetcher pulls this one (Path A fallback), so the reference is the
-	// in-cluster Service address.
-	ref, _ := framework.PushCodeImage(t, hostAddr, inclusterAddr,
+	// B-fetcher pods mount the image volume too, so the kubelet pulls the
+	// reference: it must be node-resolvable, same as B-direct.
+	ref, _ := framework.PushCodeImage(t, hostAddr, nodeAddr,
 		"fission-test/hello-fb-"+ns.ID, "v1", pyHello("Hello, fallback!"))
 
 	ns.CreatePackage(t, ctx, framework.PackageOptions{Name: pkgName, Env: envName, OCI: ref})
@@ -539,21 +543,25 @@ func TestOCIPathBFallbackWithSecrets(t *testing.T) {
 	body := f.Router(t).GetEventually(t, ctx, "/"+fnName, framework.BodyContains("Hello, fallback!"))
 	assert.Contains(t, body, "Hello, fallback!")
 
-	// The serving pod must be a plain-pool pod: it HAS a fetcher container
-	// and no image volume.
+	// The serving pod must be a B-fetcher per-image pool pod: image volume
+	// mounted AND the fetcher container retained for the secret.
 	pods, err := f.KubeClient().CoreV1().Pods(ns.Name).List(ctx, metav1.ListOptions{
 		LabelSelector: "functionName=" + fnName,
 	})
 	require.NoError(t, err)
 	require.NotEmpty(t, pods.Items, "the specialized pod must exist")
 	for _, pod := range pods.Items {
+		assert.Containsf(t, pod.Labels, fv1.POOL_OCI_IMAGE_HASH,
+			"pod %s: secrets functions ride a per-image pool since RFC-0012", pod.Name)
 		assert.GreaterOrEqualf(t, len(pod.Spec.Containers), 2,
-			"pod %s: fallback pods keep the fetcher container", pod.Name)
-		assert.NotContains(t, pod.Labels, fv1.POOL_OCI_IMAGE_HASH,
-			"pod %s: fallback pods belong to the plain pool", pod.Name)
+			"pod %s: B-fetcher pods keep the fetcher container", pod.Name)
+		foundImageVol := false
 		for _, v := range pod.Spec.Volumes {
-			assert.Nilf(t, v.Image, "pod %s: fallback pods must not mount an image volume", pod.Name)
+			if v.Image != nil {
+				foundImageVol = true
+			}
 		}
+		assert.Truef(t, foundImageVol, "pod %s: B-fetcher pods mount the package image volume", pod.Name)
 	}
 }
 
@@ -619,4 +627,74 @@ func TestOCIPackageNewdeployImageVolume(t *testing.T) {
 		}
 		assert.Truef(t, hasImageVolume, "pod %s: code must come from an image volume", pod.Name)
 	}
+}
+
+// TestOCIProducerBuild covers RFC-0012 phase 4 end-to-end on a live cluster:
+// with the buildermgr's packageRegistry configured (the FISSION_TEST_OCI_PRODUCER
+// leg), a plain `fission fn create --src` source build publishes the
+// deployment archive as a digest-pinned OCI image, the Package is rewritten
+// to Archive{Type: oci} with the OCIPublished condition, and the function
+// serves through the image-volume path — zero per-package opt-in.
+func TestOCIProducerBuild(t *testing.T) {
+	t.Parallel()
+	if os.Getenv("FISSION_TEST_OCI_PRODUCER") == "" {
+		t.Skip("FISSION_TEST_OCI_PRODUCER not set; skipping OCI producer test")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+
+	f := framework.Connect(t)
+	pyImage := f.Images().RequirePython(t)
+	builderImage := f.Images().RequirePythonBuilder(t)
+
+	ns := f.NewTestNamespace(t)
+
+	envName := "py-ociprod-" + ns.ID
+	fnName := "fn-ociprod-" + ns.ID
+	routePath := "/" + fnName
+
+	ns.CreateEnv(t, ctx, framework.EnvOptions{
+		Name:    envName,
+		Image:   pyImage,
+		Builder: builderImage,
+	})
+	ns.WaitForBuilderReady(t, ctx, envName)
+
+	srcZip := framework.ZipTestDataDir(t, "python/sourcepkg", "demo-src-pkg-ociprod.zip")
+	ns.CreateFunction(t, ctx, framework.FunctionOptions{
+		Name:       fnName,
+		Env:        envName,
+		Src:        srcZip,
+		Entrypoint: "user.main",
+		BuildCmd:   "./build.sh",
+	})
+	ns.CreateRoute(t, ctx, framework.RouteOptions{
+		Function: fnName,
+		URL:      routePath,
+		Method:   "GET",
+	})
+
+	pkgName := ns.FunctionPackageName(t, ctx, fnName)
+	ns.WaitForPackageBuildSucceeded(t, ctx, pkgName)
+
+	// The producer rewrote the package to a digest-pinned OCI archive.
+	pkg, err := f.FissionClient().CoreV1().Packages(ns.Name).Get(ctx, pkgName, metav1.GetOptions{})
+	require.NoError(t, err)
+	require.Equal(t, fv1.ArchiveTypeOCI, pkg.Spec.Deployment.Type,
+		"a registry-enabled build must publish an OCI archive; build log:\n%s", pkg.Status.BuildLog)
+	require.NotNil(t, pkg.Spec.Deployment.OCI)
+	assert.Contains(t, pkg.Spec.Deployment.OCI.Digest, "sha256:", "digest-pinned by default")
+	if nodeReg := os.Getenv("FISSION_TEST_REGISTRY_NODE"); nodeReg != "" {
+		assert.Contains(t, pkg.Spec.Deployment.OCI.Image, nodeReg,
+			"the recorded reference must carry the published (node-resolvable) prefix")
+	}
+	cond := meta.FindStatusCondition(pkg.Status.Conditions, fv1.PackageConditionOCIPublished)
+	require.NotNil(t, cond, "the publish outcome must be observable")
+	assert.Equal(t, metav1.ConditionTrue, cond.Status)
+
+	// And the built function actually serves (image-volume delivery on this
+	// leg; the executor's gate handles the rest).
+	body := f.Router(t).GetEventually(t, ctx, routePath, framework.BodyContains("a: 1"))
+	assert.Contains(t, body, "a: 1")
 }
