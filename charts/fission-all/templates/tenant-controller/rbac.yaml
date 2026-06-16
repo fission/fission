@@ -39,6 +39,36 @@ rules:
   - get
   - list
   - watch
+# Provision per-namespace fetcher/builder RBAC for runtime-onboarded tenants.
+# The bind+escalate verbs let the controller MINT Roles that grant read on a
+# tenant's own secrets/configmaps WITHOUT the controller itself being able to
+# read them — strictly tighter than holding cluster-wide secret read, and
+# confined to this single controller's ServiceAccount.
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - roles
+  - rolebindings
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+  - bind
+  - escalate
+- apiGroups:
+  - ""
+  resources:
+  - serviceaccounts
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - delete
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

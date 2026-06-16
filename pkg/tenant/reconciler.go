@@ -5,9 +5,10 @@
 // Package tenant implements the fission-bundle --tenantController subsystem: the
 // lifecycle controller for multi-namespace tenancy (docs/multiple-namespace).
 // It reconciles FissionTenant CRs (and Namespaces labelled fission.io/enabled)
-// into the live resource-namespace set and reports readiness. Per-namespace RBAC
-// / ServiceAccount / auth-key provisioning is layered on in later phases; this
-// phase wires the API, the controller, and the resolver drive.
+// into the live resource-namespace set, provisions per-namespace RBAC and
+// service accounts for the fetcher/builder (tearing them down on offboard via a
+// finalizer), and reports readiness. Per-namespace HMAC auth-key provisioning is
+// layered on in a later phase.
 package tenant
 
 import (
@@ -20,6 +21,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	corev1 "k8s.io/api/core/v1"
 
@@ -40,9 +42,16 @@ const (
 	managedByAnnotation = "fission.io/managed-by"
 	managedByLabel      = "label"
 
+	// tenantFinalizer guards teardown of the per-namespace RBAC the controller
+	// provisions, so it is removed before the FissionTenant object disappears.
+	tenantFinalizer = "fission.io/tenant-cleanup"
+
 	// Condition reasons.
-	ReasonOnboarded         = "Onboarded"
-	ReasonNamespaceNotFound = "NamespaceNotFound"
+	ReasonOnboarded            = "Onboarded"
+	ReasonNamespaceNotFound    = "NamespaceNotFound"
+	ReasonRolesApplied         = "RolesApplied"
+	ReasonServiceAccountsReady = "ServiceAccountsReady"
+	ReasonProvisioningFailed   = "ProvisioningFailed"
 )
 
 // TenantReconciler reconciles FissionTenant CRs into the live resolver set and
@@ -65,6 +74,28 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		}
 		return ctrl.Result{}, err
 	}
+
+	// Offboard: tear down the per-namespace RBAC the controller provisioned, then
+	// release the finalizer so the object can be removed. User Functions are left
+	// in place (disabling onboarding is not deleting content).
+	if !ft.DeletionTimestamp.IsZero() {
+		if controllerutil.ContainsFinalizer(ft, tenantFinalizer) {
+			if err := DeleteNamespaceRBAC(ctx, r.client, ft.Spec.Namespace); err != nil {
+				return ctrl.Result{}, err
+			}
+			controllerutil.RemoveFinalizer(ft, tenantFinalizer)
+			if err := r.client.Update(ctx, ft); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+		return ctrl.Result{}, r.syncResolver(ctx)
+	}
+	// Add the cleanup finalizer before provisioning, so teardown always runs.
+	if controllerutil.AddFinalizer(ft, tenantFinalizer) {
+		if err := r.client.Update(ctx, ft); err != nil {
+			return ctrl.Result{}, err
+		}
+	}
 	ft.Status.ObservedGeneration = ft.Generation
 
 	target := &corev1.Namespace{}
@@ -84,12 +115,38 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, err
 	}
 
-	controller.SetConditions(ctx, r.logger, r.client, ft, metav1.Condition{
-		Type:    fv1.FissionTenantConditionReady,
-		Status:  metav1.ConditionTrue,
-		Reason:  ReasonOnboarded,
-		Message: fmt.Sprintf("namespace %q is onboarded", ft.Spec.Namespace),
-	})
+	// Namespace exists: provision the per-namespace RBAC + service accounts the
+	// fetcher/builder need (idempotent; the runtime equivalent of the chart's
+	// _function-access-role.tpl). Ready gates on it.
+	if err := EnsureNamespaceRBAC(ctx, r.client, ft.Spec.Namespace); err != nil {
+		controller.SetConditions(ctx, r.logger, r.client, ft, metav1.Condition{
+			Type:    fv1.FissionTenantConditionRBACProvisioned,
+			Status:  metav1.ConditionFalse,
+			Reason:  ReasonProvisioningFailed,
+			Message: err.Error(),
+		})
+		return ctrl.Result{}, fmt.Errorf("provisioning RBAC for tenant %q: %w", ft.Spec.Namespace, err)
+	}
+	controller.SetConditions(ctx, r.logger, r.client, ft,
+		metav1.Condition{
+			Type:    fv1.FissionTenantConditionRBACProvisioned,
+			Status:  metav1.ConditionTrue,
+			Reason:  ReasonRolesApplied,
+			Message: "per-namespace RBAC provisioned",
+		},
+		metav1.Condition{
+			Type:    fv1.FissionTenantConditionServiceAccountsReady,
+			Status:  metav1.ConditionTrue,
+			Reason:  ReasonServiceAccountsReady,
+			Message: "fetcher and builder service accounts present",
+		},
+		metav1.Condition{
+			Type:    fv1.FissionTenantConditionReady,
+			Status:  metav1.ConditionTrue,
+			Reason:  ReasonOnboarded,
+			Message: fmt.Sprintf("namespace %q is onboarded", ft.Spec.Namespace),
+		},
+	)
 	return ctrl.Result{}, r.syncResolver(ctx)
 }
 
