@@ -16,6 +16,7 @@ These are living planning + implementation-tracking docs; they stay here until t
 | [prd.md](./prd.md) | The PRD: context, goals, three-pillar design, phased delivery, critical files, and concrete recommendations for PR [#3476](https://github.com/fission/fission/pull/3476). |
 | [testing-plan.md](./testing-plan.md) | Per-phase unit + integration test matrix, framework changes, CI wiring, coverage targets. |
 | [performance-benchmarking.md](./performance-benchmarking.md) | Metrics, scaling sweeps, baselines (today vs PR #3476), and the hard/soft regression gates. |
+| [backward-compatibility.md](./backward-compatibility.md) | Upgrade/rolling-restart compatibility review, issues by severity with mitigations, and the safe-upgrade runbook. |
 
 Add implementation notes, decision logs, and sub-task trackers to this folder as work proceeds.
 
@@ -29,6 +30,8 @@ Add implementation notes, decision logs, and sub-task trackers to this folder as
 | Onboarding API | FissionTenant CRD **and** `fission.io/enabled=true` label, both |
 | HMAC secret isolation | Per-namespace derived keys — master never in a tenant namespace |
 | Cross-namespace invocation | Admission + NetworkPolicy — no runtime podIP guard |
+| Dynamic-watch RBAC (review) | Only Fission CRDs go cluster-wide; all core/workload resources per-namespace dynamic |
+| HMAC migration (review) | Version-aware signing — control plane signs each pod with the key it expects; no upgrade 401s |
 
 ---
 

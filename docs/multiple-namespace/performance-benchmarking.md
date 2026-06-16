@@ -37,19 +37,21 @@ Measured in the `serial/tenant_no_restart_test.go` integration test and reproduc
 
 ## 3. Scaling sweep — cost vs namespace count
 
-The architectural claim is "Tier-A is one informer (flat in N); only Tier-B scales linearly."
+The architectural claim is "Tier-A (Fission CRDs) is one cluster-wide informer, flat in N; Tier-B (workloads + Secrets/ConfigMaps) scales linearly."
+Per the backward-compatibility decision, workloads (pods/services/deployments/endpointslices) are in Tier-B too — so the linear term is **larger** than a secrets-only split, a deliberate trade for zero cluster-wide read of any core resource.
 Prove it with a sweep at **N = {1, 10, 50, 100, 250}** tenant namespaces, each holding a small fixed function set.
 
 | Dimension | Expectation | Method |
 |---|---|---|
-| Executor RSS / Go heap | Sub-linear; Tier-A flat, Tier-B (Secret/ConfigMap informers) the only linear term | CI pprof heap capture (kind-ci observability) at each N; plot heap vs N. |
-| Router RSS / heap | Roughly flat (EndpointSlice + CRD watches are cluster-wide, single informer) | pprof heap; compare to Baseline-Today (which is also per-namespace today). |
-| Goroutine count | Flat for Tier-A; bounded per-tenant increment for Tier-B caches | pprof goroutine profile; assert no unbounded growth. |
-| API server LIST/WATCH connections | Tier-A: O(1) cluster-wide watches; Tier-B: O(N) Secret/ConfigMap watches | apiserver `apiserver_longrunning_requests` / watch count; compare to Baseline-Today O(N-per-type) and Baseline-PR3476 O(1)-but-cluster-wide-secrets. |
+| Executor RSS / Go heap | Sub-linear; Tier-A (CRDs) flat, Tier-B (workload + Secret/ConfigMap informers) the linear term | CI pprof heap capture (kind-ci observability) at each N; plot heap vs N. |
+| Router RSS / heap | CRD/HTTPTrigger watch flat (Tier-A); the RFC-0002 EndpointSlice watch is now per-namespace Tier-B, so a bounded per-tenant increment | pprof heap; compare to Baseline-Today (also per-namespace). |
+| Goroutine count | Flat for Tier-A; bounded per-tenant increment for each Tier-B informer (more informers/tenant than a secrets-only split) | pprof goroutine profile; assert no unbounded growth. |
+| API server LIST/WATCH connections | Tier-A: O(1) cluster-wide CRD watches; Tier-B: O(N × workload+secret+cm types) | apiserver `apiserver_longrunning_requests` / watch count; compare to Baseline-Today O(N-per-type) and Baseline-PR3476 O(1)-but-cluster-wide-secrets. |
 | Informer initial-sync time on N tenants | Bounded; Tier-A one sync, Tier-B parallel per-tenant | Manager `WaitForCacheSync` duration. |
 
-Explicit honesty in the report: Tier-B Secret/ConfigMap watches are O(N) — that is the deliberate price of *not* caching all secrets cluster-wide.
-We quantify the per-tenant memory cost (MiB/tenant) so operators can size, and compare it to Baseline-PR3476's "O(1) informer but every secret in the cluster resident" — which is cheaper in connections but unbounded and insecure in data resident.
+Explicit honesty in the report: Tier-B is O(N) across more types than a secrets-only split — that is the deliberate price of *not* granting any cluster-wide core-resource read.
+We quantify the per-tenant cost (MiB/tenant and watch-connections/tenant) so operators can size, and compare it to Baseline-PR3476's "O(1) informers but every secret + workload in the cluster resident" — cheaper in connections but unbounded and insecure in data resident.
+This is the one axis where the design *consciously* pays more than the watch-all alternative, in exchange for the isolation guarantee; the sweep makes that cost explicit rather than hidden.
 
 ---
 
@@ -134,7 +136,7 @@ Run on kind-ci (or a perf cluster) with the observability profile so pprof + Pro
 | Secrets resident in control-plane memory | per-watched-ns | **every secret in cluster** | only onboarded-tenant secrets (Tier-B) |
 | Internal auth default | on | **off** | **on** |
 | Cross-tenant impersonation | master copied everywhere → trivial | master copied everywhere → trivial | **cryptographically prevented** (per-ns keys) |
-| API server watch connections | O(N per type) | O(1) but cluster-wide | O(1) Tier-A + O(N) Tier-B (secrets/cms only) |
+| API server watch connections | O(N per type) | O(1) but cluster-wide | O(1) Tier-A (CRDs) + O(N) Tier-B (workloads + secrets/cms) — the deliberate cost of zero cluster-wide core read |
 | Cold-start p99 | baseline | baseline | **== baseline** (RFC-0002 invariant) |
 
 The intent is visible at a glance: equal-or-better on every performance axis, strictly better on every security axis.

@@ -3,7 +3,7 @@
 **Status:** Draft for review
 **Date:** 2026-06-16
 **Tracking:** GitHub issue [#3298](https://github.com/fission/fission/issues/3298); compares against PR [#3476](https://github.com/fission/fission/pull/3476)
-**Companion docs:** [testing-plan.md](./testing-plan.md) · [performance-benchmarking.md](./performance-benchmarking.md)
+**Companion docs:** [testing-plan.md](./testing-plan.md) · [performance-benchmarking.md](./performance-benchmarking.md) · [backward-compatibility.md](./backward-compatibility.md)
 
 ---
 
@@ -38,6 +38,13 @@ Each of those is a regression on the axis the user ranked #1: security.
 | Onboarding API | **FissionTenant CRD *and* namespace label**, both. Label is sugar reconciled into the canonical CR. |
 | HMAC secret isolation | **Per-namespace derived keys** — the master never lands in a tenant namespace. |
 | Cross-namespace invocation | **Admission + NetworkPolicy** — no runtime podIP guard. |
+
+Two further decisions came out of the backward-compatibility review ([backward-compatibility.md](./backward-compatibility.md)):
+
+| Fork | Decision |
+|---|---|
+| Dynamic-watch RBAC strictness | **Only Fission CRDs go cluster-wide**; all core/workload resources stay per-namespace dynamic (revises the Tier split in §4.1). |
+| HMAC migration mechanism | **Version-aware signing** — the control plane signs each pod with the key that pod expects, so rolling upgrades never 401 (see §5.5). |
 
 ---
 
@@ -94,15 +101,19 @@ This makes runtime per-namespace watching feasible without a process restart.
 
 Resources are split into two tiers per manager:
 
+Per the backward-compatibility review, the split is drawn at the strictest defensible line — **only Fission's own CRD types go cluster-wide**:
+
 | Tier | Resource types | Watch model | Cluster-wide? | RBAC justification |
 |---|---|---|---|---|
-| **A** | Fission CRDs (Function, Environment, Package, all Triggers, CanaryConfig); Fission-labeled workloads (Pod `fission.io/executor-type`, Deployment/Service `fission.io/managed-by`, EndpointSlice `fission.io/managed-by=fission`) | One cluster-wide cache, label/predicate-filtered, + tenant-membership predicate | **Yes** | Fission is the sole owner of its CRD GVKs — a cluster-wide watch on a type only Fission defines leaks nothing a tenant didn't put in a Fission object. Workload watches are already label-bounded today. Endpoint IPs and pool pods are not tenant secrets. |
-| **B** | Secret, ConfigMap | Per-namespace dynamic `cluster.Cluster`, added/removed at runtime by the tenant controller | **No — never** | Tenant data. A cluster-wide Secret watch would cache every secret in the cluster in the executor's memory. RFC-0004's CM/Secret pod-recycle uses `.For(&Secret{})` (list+watch, not get), so the watch is unavoidable — security forces it per-namespace. |
+| **A** | Fission CRDs only (Function, Environment, Package, all Triggers, CanaryConfig) | One cluster-wide cache + tenant-membership predicate | **Yes** | Fission is the sole owner of these GVKs — a cluster-wide watch on a type only Fission defines leaks nothing a tenant didn't put in a Fission object. This is the single new ClusterRole, and it touches no core/workload type. It buys free dynamic discovery (a Function in a freshly-onboarded namespace appears with no watch reconfiguration). |
+| **B** | Pods, Services, Deployments, EndpointSlices (Fission-labeled), Secrets, ConfigMaps, Events | Per-namespace dynamic `cluster.Cluster`, added/removed at runtime by the tenant controller | **No — never** | RBAC cannot filter by label, so a cluster-wide watch grant on pods/services/secrets means the SA *can* read all of them — a privilege expansion vs today's namespaced-only Roles. Keeping every core/workload type per-namespace preserves least privilege. RFC-0004's CM/Secret pod-recycle uses `.For(&Secret{})` (list+watch, not get), so the watch is unavoidable — security forces it per-namespace anyway. |
 
 Tier A is built once at startup and never touched again on tenant change — new tenants' Functions simply start passing the membership predicate.
-Tier B is the only thing manipulated at runtime, and it is exactly the sensitive-data path we keep least-privilege.
+Tier B is provisioned and torn down per tenant at runtime, and it is exactly the sensitive-data + workload path we keep least-privilege.
+This costs more per-namespace informers than putting workloads in Tier A (see [performance-benchmarking.md](./performance-benchmarking.md) §3) — a deliberate trade for zero cluster-wide read of any core resource.
+The RFC-0002 router EndpointSlice watch moves from cluster-wide to per-namespace dynamic to match.
 
-This is strictly better than PR #3476's "watch all + cluster-wide RBAC": tenant Secrets/ConfigMaps are **never** in a cluster-wide cache and the control plane never gets cluster-wide secret read.
+This is strictly better than PR #3476's "watch all + cluster-wide RBAC": tenant Secrets/ConfigMaps/workloads are **never** in a cluster-wide cache, and the only cluster-wide grant is read of Fission's own CRDs.
 
 ### 4.2 Making the namespace set dynamic
 
@@ -208,6 +219,15 @@ This reuses the existing `OldSecret` rotation-overlap idea, generalized to "old 
 No `KeyVersion` bump is needed (info strings don't collide).
 After all pods roll, a second upgrade drops the master-derived candidate.
 This dual-accept is **mandatory**, not optional — without it the upgrade is a 401 storm.
+
+Dual-accept handles *new verifier / old signer*.
+The **reverse straddle** — new control plane signing while an **old fetcher pod** (adopted in place across the executor upgrade, old sidecar intact) verifies only the master key — is handled by **version-aware signing**: the executor/buildermgr sign `/specialize` and `/build` with the key the *target pod* expects (master-derived for pre-upgrade pods, ns-derived for post-upgrade pods), branching on a pod version annotation.
+Old pods age out; no operator flag day; no 401s.
+
+Crucially, the **master stays in tenant namespaces during the window**: the tenant Secret carries *both* `data.secret` (master, for old pods — whose env mount is `Optional:true` and fails *open*) and the derived keys (for new pods).
+The master is removed from tenant namespaces only **after every function/builder pod has cycled**, so the full isolation benefit lands incrementally as pods turn over, never by forcing a restart.
+See [backward-compatibility.md](./backward-compatibility.md) for the safe-upgrade runbook.
+
 Master rotation still works: every ns-key is `HKDF(master, …)`, so rotating the master rotates all ns-keys atomically.
 
 ### 5.6 What this buys (attack-walk)
