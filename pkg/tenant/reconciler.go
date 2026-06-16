@@ -1,0 +1,163 @@
+// SPDX-FileCopyrightText: The Fission Authors
+//
+// SPDX-License-Identifier: Apache-2.0
+
+// Package tenant implements the fission-bundle --tenantController subsystem: the
+// lifecycle controller for multi-namespace tenancy (docs/multiple-namespace).
+// It reconciles FissionTenant CRs (and Namespaces labelled fission.io/enabled)
+// into the live resource-namespace set and reports readiness. Per-namespace RBAC
+// / ServiceAccount / auth-key provisioning is layered on in later phases; this
+// phase wires the API, the controller, and the resolver drive.
+package tenant
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/go-logr/logr"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	corev1 "k8s.io/api/core/v1"
+
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/controller"
+	"github.com/fission/fission/pkg/utils"
+)
+
+const (
+	// EnabledLabel on a Namespace opts it in as a Fission tenant; the controller
+	// materializes a labelled Namespace into a FissionTenant CR (one-way
+	// ignition — removing the label never deletes the CR; see prd.md §6.2).
+	EnabledLabel = "fission.io/enabled"
+
+	// managedByAnnotation records how a FissionTenant came to exist: "label"
+	// (materialized from EnabledLabel) vs a user/helm-authored CR. Only
+	// label-managed CRs carry it.
+	managedByAnnotation = "fission.io/managed-by"
+	managedByLabel      = "label"
+
+	// Condition reasons.
+	ReasonOnboarded         = "Onboarded"
+	ReasonNamespaceNotFound = "NamespaceNotFound"
+)
+
+// TenantReconciler reconciles FissionTenant CRs into the live resolver set and
+// reports a Ready condition. It runs on the leader-elected --tenantController
+// Manager (it writes status). The resolver drive is additive over the
+// env-seeded set (utils.GetNamespaces) so an empty tenant list never wipes the
+// env default; the env→CR source flip is a later phase.
+type TenantReconciler struct {
+	logger   logr.Logger
+	client   client.Client
+	resolver *utils.NamespaceResolver
+}
+
+func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	ft := &fv1.FissionTenant{}
+	if err := r.client.Get(ctx, req.NamespacedName, ft); err != nil {
+		if apierrors.IsNotFound(err) {
+			// Deleted: re-derive the live set without it.
+			return ctrl.Result{}, r.syncResolver(ctx)
+		}
+		return ctrl.Result{}, err
+	}
+
+	target := &corev1.Namespace{}
+	err := r.client.Get(ctx, types.NamespacedName{Name: ft.Spec.Namespace}, target)
+	switch {
+	case apierrors.IsNotFound(err):
+		controller.SetConditions(ctx, r.logger, r.client, ft, metav1.Condition{
+			Type:    fv1.FissionTenantConditionReady,
+			Status:  metav1.ConditionFalse,
+			Reason:  ReasonNamespaceNotFound,
+			Message: fmt.Sprintf("namespace %q does not exist", ft.Spec.Namespace),
+		})
+		// Still sync: the tenant is declared even if its namespace is absent, but
+		// a missing namespace contributes nothing to watch.
+		return ctrl.Result{}, r.syncResolver(ctx)
+	case err != nil:
+		return ctrl.Result{}, err
+	}
+
+	controller.SetConditions(ctx, r.logger, r.client, ft, metav1.Condition{
+		Type:    fv1.FissionTenantConditionReady,
+		Status:  metav1.ConditionTrue,
+		Reason:  ReasonOnboarded,
+		Message: fmt.Sprintf("namespace %q is onboarded", ft.Spec.Namespace),
+	})
+	return ctrl.Result{}, r.syncResolver(ctx)
+}
+
+// syncResolver sets the live resource-namespace set to the union of the
+// env-seeded namespaces and every FissionTenant's spec.namespace whose namespace
+// exists. Listing on each reconcile is cheap (tenants number in the tens) and
+// makes deletes self-correcting.
+func (r *TenantReconciler) syncResolver(ctx context.Context) error {
+	list := &fv1.FissionTenantList{}
+	if err := r.client.List(ctx, list); err != nil {
+		return err
+	}
+	set := utils.GetNamespaces() // env-seeded base; additive until the source flip
+	for i := range list.Items {
+		ns := list.Items[i].Spec.Namespace
+		if ns != "" {
+			set[ns] = ns
+		}
+	}
+	r.resolver.SetTenants(set)
+	return nil
+}
+
+// NamespaceReconciler materializes a Namespace labelled fission.io/enabled=true
+// into a FissionTenant CR. It is the "label is sugar" ignition path: it only ever
+// creates, never deletes — removing the label leaves the CR in place (operators
+// disable a tenant explicitly via `fission tenant disable`).
+type NamespaceReconciler struct {
+	logger logr.Logger
+	client client.Client
+}
+
+func (r *NamespaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	target := &corev1.Namespace{}
+	if err := r.client.Get(ctx, req.NamespacedName, target); err != nil {
+		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+	if target.Labels[EnabledLabel] != "true" {
+		return ctrl.Result{}, nil
+	}
+
+	// Already onboarded by some FissionTenant (label-born or user-authored under
+	// any name)? Then there is nothing to materialize.
+	list := &fv1.FissionTenantList{}
+	if err := r.client.List(ctx, list); err != nil {
+		return ctrl.Result{}, err
+	}
+	for i := range list.Items {
+		if list.Items[i].Spec.Namespace == target.Name {
+			return ctrl.Result{}, nil
+		}
+	}
+
+	ft := &fv1.FissionTenant{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        target.Name,
+			Annotations: map[string]string{managedByAnnotation: managedByLabel},
+			OwnerReferences: []metav1.OwnerReference{{
+				APIVersion: "v1",
+				Kind:       "Namespace",
+				Name:       target.Name,
+				UID:        target.UID,
+			}},
+		},
+		Spec: fv1.FissionTenantSpec{Namespace: target.Name},
+	}
+	if err := r.client.Create(ctx, ft); err != nil && !apierrors.IsAlreadyExists(err) {
+		return ctrl.Result{}, err
+	}
+	r.logger.Info("materialized FissionTenant from namespace label", "namespace", target.Name)
+	return ctrl.Result{}, nil
+}

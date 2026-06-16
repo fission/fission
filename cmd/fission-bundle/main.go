@@ -29,6 +29,7 @@ import (
 	"github.com/fission/fission/pkg/router"
 	"github.com/fission/fission/pkg/storagesvc"
 	storagesvcClient "github.com/fission/fission/pkg/storagesvc/client"
+	"github.com/fission/fission/pkg/tenant"
 	"github.com/fission/fission/pkg/timer"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 	"github.com/fission/fission/pkg/utils/otel"
@@ -39,14 +40,15 @@ import (
 // Command line arguments
 type CommandLineArgs struct {
 	// Flags
-	canaryConfig bool
-	kubewatcher  bool
-	timer        bool
-	mqt          bool
-	mqt_keda     bool
-	builderMgr   bool
-	showVersion  bool
-	logger       bool
+	canaryConfig     bool
+	kubewatcher      bool
+	timer            bool
+	mqt              bool
+	mqt_keda         bool
+	builderMgr       bool
+	showVersion      bool
+	logger           bool
+	tenantController bool
 
 	// Port values
 	webhookPort        int
@@ -112,6 +114,7 @@ Options:
   --mqt                           Start message queue trigger.
   --mqt_keda					  Start message queue trigger of kind KEDA
   --builderMgr                    Start builder manager.
+  --tenantController              Start the multi-namespace tenant lifecycle controller.
   --version                       Print version information`
 
 func main() {
@@ -176,6 +179,7 @@ func setupCommandLineArgs() *CommandLineArgs {
 	flag.BoolVar(&args.mqt, "mqt", false, "Start message queue trigger")
 	flag.BoolVar(&args.mqt_keda, "mqt_keda", false, "Start message queue trigger of kind KEDA")
 	flag.BoolVar(&args.builderMgr, "builderMgr", false, "Start builder manager")
+	flag.BoolVar(&args.tenantController, "tenantController", false, "Start the multi-namespace tenant lifecycle controller")
 	flag.BoolVar(&args.showVersion, "version", false, "Print version information")
 	flag.BoolVar(&args.logger, "logger", false, "Start logger")
 
@@ -223,6 +227,8 @@ func getServiceNameFromArgs(args *CommandLineArgs) string {
 		serviceName = "Fission-Keda-MQTrigger"
 	} else if args.mcpPort != 0 {
 		serviceName = "Fission-MCP"
+	} else if args.tenantController {
+		serviceName = "Fission-TenantController"
 	}
 
 	return serviceName
@@ -314,6 +320,14 @@ func startRequestedService(ctx context.Context, args *CommandLineArgs, clientGen
 		err = mcp.Start(ctx, clientGen, logger, mgr, args.mcpPort, publishURL)
 		if err != nil {
 			logger.Error(err, "mcp server exited")
+		}
+		return
+	}
+
+	if args.tenantController {
+		err = tenant.Start(ctx, clientGen, logger, mgr)
+		if err != nil {
+			logger.Error(err, "tenant controller exited")
 		}
 		return
 	}
