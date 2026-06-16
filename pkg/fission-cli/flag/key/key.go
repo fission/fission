@@ -198,5 +198,10 @@ const (
 	WaitFor     = "for"
 	WaitTimeout = "timeout"
 
+	// FissionTenant (multi-namespace tenancy)
+	TenantFunctionNamespace = "function-namespace"
+	TenantBuilderNamespace  = "builder-namespace"
+	TenantForce             = "force"
+
 	DefaultSpecOutputDir = "fission-dump"
 )
