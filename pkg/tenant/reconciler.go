@@ -176,23 +176,13 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 }
 
 // syncResolver sets the live resource-namespace set to the union of the
-// env-seeded namespaces and every FissionTenant's spec.namespace whose namespace
-// exists. Listing on each reconcile is cheap (tenants number in the tens) and
-// makes deletes self-correcting.
+// env-seeded namespaces and every FissionTenant's spec.namespace. Listing on each
+// reconcile is cheap (tenants number in the tens) and makes deletes
+// self-correcting. It shares SyncResolverFromTenants with the data-plane
+// resolver-sync so the controller and every other process compute the set
+// identically.
 func (r *TenantReconciler) syncResolver(ctx context.Context) error {
-	list := &fv1.FissionTenantList{}
-	if err := r.client.List(ctx, list); err != nil {
-		return err
-	}
-	set := utils.GetNamespaces() // env-seeded base; additive until the source flip
-	for i := range list.Items {
-		ns := list.Items[i].Spec.Namespace
-		if ns != "" {
-			set[ns] = ns
-		}
-	}
-	r.resolver.SetTenants(set)
-	return nil
+	return SyncResolverFromTenants(ctx, r.client, r.resolver)
 }
 
 // namespaceToRequests maps a Namespace event to reconcile requests for every

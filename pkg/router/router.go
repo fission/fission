@@ -62,6 +62,7 @@ import (
 	eclient "github.com/fission/fission/pkg/executor/client"
 	"github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
 	"github.com/fission/fission/pkg/router/endpointcache"
+	"github.com/fission/fission/pkg/tenant"
 	"github.com/fission/fission/pkg/throttler"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/crmanager"
@@ -470,6 +471,17 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		&functionReconciler{logger: logger.WithName("function_reconciler"), client: crMgr.GetClient(), ts: triggers},
 		"router-function"); err != nil {
 		return fmt.Errorf("error registering function reconciler: %w", err)
+	}
+
+	// Cross-process propagation: under dynamic tenancy, keep the router's resolver
+	// in step with the FissionTenant set so a namespace onboarded at runtime is
+	// admitted by the tenant-scoped reconcilers above (their MembershipPredicate
+	// reads this resolver) and its HTTPTriggers start routing without a restart.
+	// The router's cache is already cluster-wide in this mode (FissionCacheOptions).
+	if utils.DynamicNamespacesEnabled() {
+		if err := tenant.AddResolverSync(crMgr, utils.DefaultNSResolver(), logger); err != nil {
+			return fmt.Errorf("error registering tenant resolver-sync: %w", err)
+		}
 	}
 
 	logger.Info("starting router", "port", port, "internalPort", internalPort)

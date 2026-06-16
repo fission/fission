@@ -106,6 +106,17 @@ metadata:
 {{- if eq "canaryconfig" .component }}
 {{- include "canaryconfig-rules" . }}
 {{- end }}
+# Read FissionTenant (cluster-scoped) so the component's resolver-sync keeps its
+# live tenant set current and a runtime-onboarded namespace reaches its
+# membership predicate without a restart. Appended to the same rules list above.
+- apiGroups:
+  - fission.io
+  resources:
+  - fissiontenants
+  verbs:
+  - get
+  - list
+  - watch
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
