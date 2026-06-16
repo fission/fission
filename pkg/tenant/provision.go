@@ -52,11 +52,22 @@ func DeleteNamespaceRBAC(ctx context.Context, c client.Client, namespace string)
 		client.InNamespace(namespace),
 		client.MatchingLabels{managedByLabelKey: managedByValue},
 	}
-	// RoleBindings before Roles before ServiceAccounts (reverse of creation).
+	// RoleBindings before Roles before ServiceAccounts (reverse of creation). The
+	// label selector means only controller-managed objects are removed — never
+	// chart- or user-managed RBAC.
 	for _, proto := range []client.Object{&rbacv1.RoleBinding{}, &rbacv1.Role{}, &corev1.ServiceAccount{}} {
 		if err := c.DeleteAllOf(ctx, proto, opts...); err != nil && !apierrors.IsNotFound(err) {
 			return fmt.Errorf("deleting %T in %s: %w", proto, namespace, err)
 		}
+	}
+	// The derived-key Secret is deleted by NAME, not by label: DeleteAllOf would
+	// require secrets list/get cluster-wide (i.e. read of every secret) — exactly
+	// the privilege the design withholds from the controller. A name-scoped delete
+	// needs only the `delete` verb, so the controller can write/remove the auth
+	// secret without ever being able to read tenant secrets.
+	authSecret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: internalAuthSecretName, Namespace: namespace}}
+	if err := c.Delete(ctx, authSecret); err != nil && !apierrors.IsNotFound(err) {
+		return fmt.Errorf("deleting auth secret in %s: %w", namespace, err)
 	}
 	return nil
 }

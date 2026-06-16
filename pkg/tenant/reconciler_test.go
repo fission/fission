@@ -95,6 +95,27 @@ func TestTenantReconcilerNamespaceToRequests(t *testing.T) {
 	assert.Empty(t, r.namespaceToRequests(t.Context(), ns("unmanaged", nil)), "an unmanaged namespace enqueues nothing")
 }
 
+func TestTenantReconcilerProvisionsAuthSecret(t *testing.T) {
+	ft := tenant("team-a", "team-a")
+	c := newFakeClient(t, ft, ns("team-a", nil))
+	r := &TenantReconciler{logger: logr.Discard(), client: c, resolver: &utils.NamespaceResolver{}, master: []byte("master-bytes-for-test")}
+
+	_, err := r.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Name: "team-a"}})
+	require.NoError(t, err)
+
+	// The derived-key secret is provisioned in the tenant namespace.
+	s := &corev1.Secret{}
+	require.NoError(t, c.Get(t.Context(), types.NamespacedName{Namespace: "team-a", Name: "fission-internal-auth"}, s))
+	assert.NotEmpty(t, s.Data["fetcherKey"], "derived fetcher key must be written")
+
+	// And AuthKeyProvisioned is reported True.
+	got := &fv1.FissionTenant{}
+	require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: "team-a"}, got))
+	cond := apimeta.FindStatusCondition(got.Status.Conditions, fv1.FissionTenantConditionAuthKeyProvisioned)
+	require.NotNil(t, cond, "AuthKeyProvisioned must be set when a master is present")
+	assert.Equal(t, metav1.ConditionTrue, cond.Status)
+}
+
 func TestTenantReconcilerNamespaceMissingSetsNotReady(t *testing.T) {
 	ft := tenant("ghost", "ghost") // no Namespace object created
 	c := newFakeClient(t, ft)

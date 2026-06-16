@@ -76,7 +76,11 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	}
 
 	resolver := utils.DefaultNSResolver()
-	tenantR := &TenantReconciler{logger: logger.WithName("tenant"), client: crMgr.GetClient(), resolver: resolver}
+	// The internal-auth master (empty when internalAuth is disabled) lets the
+	// controller derive and provision per-namespace auth keys. Read here, not in
+	// a library constructor, per the deterministic-constructor convention.
+	master := []byte(os.Getenv("FISSION_INTERNAL_AUTH_SECRET"))
+	tenantR := &TenantReconciler{logger: logger.WithName("tenant"), client: crMgr.GetClient(), resolver: resolver, master: master}
 	// Watch FissionTenant spec changes AND Namespace create/delete: the Ready
 	// condition and the resolver entry depend on whether the target namespace
 	// exists, which the FissionTenant watch alone cannot observe.

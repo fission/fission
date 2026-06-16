@@ -69,6 +69,17 @@ rules:
   - watch
   - create
   - delete
+# Write-only access to the per-namespace derived-key Secret: create + delete by
+# NAME only — deliberately NO get/list/watch, so the controller can provision and
+# remove the auth secret without being able to read any tenant secret. This keeps
+# the controller's blast radius minimal even though it writes secret material.
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - create
+  - delete
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

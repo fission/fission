@@ -52,6 +52,7 @@ const (
 	ReasonRolesApplied         = "RolesApplied"
 	ReasonServiceAccountsReady = "ServiceAccountsReady"
 	ReasonProvisioningFailed   = "ProvisioningFailed"
+	ReasonKeysDerived          = "KeysDerived"
 )
 
 // TenantReconciler reconciles FissionTenant CRs into the live resolver set and
@@ -63,6 +64,9 @@ type TenantReconciler struct {
 	logger   logr.Logger
 	client   client.Client
 	resolver *utils.NamespaceResolver
+	// master is the internal-auth master secret used to derive per-namespace
+	// keys. Empty (internalAuth disabled) skips auth-key provisioning.
+	master []byte
 }
 
 func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -127,26 +131,47 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		})
 		return ctrl.Result{}, fmt.Errorf("provisioning RBAC for tenant %q: %w", ft.Spec.Namespace, err)
 	}
-	controller.SetConditions(ctx, r.logger, r.client, ft,
-		metav1.Condition{
+	// Provision the per-namespace derived-key auth Secret (no-op when internalAuth
+	// is disabled / master is empty).
+	if err := EnsureNamespaceAuthSecret(ctx, r.client, r.master, ft.Spec.Namespace); err != nil {
+		controller.SetConditions(ctx, r.logger, r.client, ft, metav1.Condition{
+			Type:    fv1.FissionTenantConditionAuthKeyProvisioned,
+			Status:  metav1.ConditionFalse,
+			Reason:  ReasonProvisioningFailed,
+			Message: err.Error(),
+		})
+		return ctrl.Result{}, fmt.Errorf("provisioning auth secret for tenant %q: %w", ft.Spec.Namespace, err)
+	}
+
+	conds := []metav1.Condition{
+		{
 			Type:    fv1.FissionTenantConditionRBACProvisioned,
 			Status:  metav1.ConditionTrue,
 			Reason:  ReasonRolesApplied,
 			Message: "per-namespace RBAC provisioned",
 		},
-		metav1.Condition{
+		{
 			Type:    fv1.FissionTenantConditionServiceAccountsReady,
 			Status:  metav1.ConditionTrue,
 			Reason:  ReasonServiceAccountsReady,
 			Message: "fetcher and builder service accounts present",
 		},
-		metav1.Condition{
-			Type:    fv1.FissionTenantConditionReady,
+	}
+	if len(r.master) > 0 {
+		conds = append(conds, metav1.Condition{
+			Type:    fv1.FissionTenantConditionAuthKeyProvisioned,
 			Status:  metav1.ConditionTrue,
-			Reason:  ReasonOnboarded,
-			Message: fmt.Sprintf("namespace %q is onboarded", ft.Spec.Namespace),
-		},
-	)
+			Reason:  ReasonKeysDerived,
+			Message: "per-namespace internal-auth keys provisioned",
+		})
+	}
+	conds = append(conds, metav1.Condition{
+		Type:    fv1.FissionTenantConditionReady,
+		Status:  metav1.ConditionTrue,
+		Reason:  ReasonOnboarded,
+		Message: fmt.Sprintf("namespace %q is onboarded", ft.Spec.Namespace),
+	})
+	controller.SetConditions(ctx, r.logger, r.client, ft, conds...)
 	return ctrl.Result{}, r.syncResolver(ctx)
 }
 
