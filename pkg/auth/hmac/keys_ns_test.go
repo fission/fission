@@ -87,6 +87,44 @@ func TestServiceVerifierNSNamespaceMismatch(t *testing.T) {
 	assert.Equal(t, 401, rr2.Code, "a team-a signature must be rejected by a team-b verifier")
 }
 
+func TestServiceVerifierNamespaceFromHeader(t *testing.T) {
+	master := []byte(testMaster)
+	now := func() time.Time { return time.Unix(1715000123, 0) }
+
+	handler := ServiceVerifierNamespaceFromHeader(master, nil, ServiceStoragesvc, VerifierOpts{SkewSec: 60, Now: now})(
+		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(200) }))
+
+	signed := func(key []byte, nsHeader string) *http.Request {
+		rr := httptest.NewRecorder()
+		req := httptest.NewRequest("GET", "/v1/archive?id=x", nil)
+		_, err := NewSigner(key, &recordingTransport{rr: rr}, now).RoundTrip(req)
+		require.NoError(t, err)
+		req2 := signedRequestFromRecorder(t, rr)
+		// The namespace header rides the request but is NOT part of the signature
+		// (canonical = method/uri/body/ts), so set it on the verified request.
+		if nsHeader != "" {
+			req2.Header.Set(HeaderNamespace, nsHeader)
+		}
+		return req2
+	}
+	serve := func(req *http.Request) int {
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+		return rr.Code
+	}
+
+	// Truthful claim: header team-a + signed with K(storagesvc, team-a) → accepted.
+	assert.Equal(t, 200, serve(signed(DeriveServiceKeyNS(master, ServiceStoragesvc, "team-a"), "team-a")))
+
+	// Spoof attempt: claim team-b but sign with team-a's key → verifier derives the
+	// team-b key, which the caller cannot sign with → rejected.
+	assert.Equal(t, 401, serve(signed(DeriveServiceKeyNS(master, ServiceStoragesvc, "team-a"), "team-b")))
+
+	// Dual-accept: no header + master-derived signature (an old, pre-migration
+	// client) → accepted, so the upgrade isn't a flag day.
+	assert.Equal(t, 200, serve(signed(DeriveServiceKey(master, ServiceStoragesvc), "")))
+}
+
 func TestVerifierFromKeyRoundTrip(t *testing.T) {
 	// A pod that holds ONLY a derived ns key (never the master) verifies with it.
 	now := func() time.Time { return time.Unix(1715000123, 0) }

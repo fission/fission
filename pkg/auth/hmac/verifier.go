@@ -50,6 +50,22 @@ type VerifierOpts struct {
 	// care about audit logs don't crash. Rejection log lines deliberately
 	// omit the signature and timestamp values to avoid log poisoning.
 	Logger logr.Logger
+	// KeysFromRequest, when set, supplies the ordered candidate keys to try for
+	// each request — used by namespace-scoped verifiers that derive the key from
+	// a request header (e.g. ServiceVerifierNamespaceFromHeader). It REPLACES
+	// Secret/OldSecret for the verification step; Secret is then ignored for
+	// key selection but a non-nil KeysFromRequest still enables enforcement.
+	// Empty/nil candidate keys are skipped. Keep it cheap — it runs per request.
+	KeysFromRequest func(*http.Request) [][]byte
+}
+
+// candidateKeys returns the ordered keys to try for a request: the per-request
+// hook when set, else the static active+rotation pair.
+func (o VerifierOpts) candidateKeys(r *http.Request) [][]byte {
+	if o.KeysFromRequest != nil {
+		return o.KeysFromRequest(r)
+	}
+	return [][]byte{o.Secret, o.OldSecret}
 }
 
 // Replay note: a signature presented twice within the SkewSec window will pass
@@ -79,10 +95,11 @@ func Verifier(opts VerifierOpts) func(http.Handler) http.Handler {
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Empty Secret disables enforcement (backwards-compat short-circuit).
-			// In pass-through mode we deliberately do NOT bound the body — the
-			// downstream handler's existing limits apply unchanged.
-			if len(opts.Secret) == 0 {
+			// Empty Secret AND no per-request key hook disables enforcement
+			// (backwards-compat short-circuit). In pass-through mode we
+			// deliberately do NOT bound the body — the downstream handler's
+			// existing limits apply unchanged.
+			if len(opts.Secret) == 0 && opts.KeysFromRequest == nil {
 				next.ServeHTTP(w, r)
 				return
 			}
@@ -154,16 +171,15 @@ func Verifier(opts VerifierOpts) func(http.Handler) http.Handler {
 			}
 
 			// Sign over RequestURI (path + raw query) so query parameters
-			// like ?id= are bound to the signature.
+			// like ?id= are bound to the signature. Try each candidate key in
+			// order (active, then rotation, or the per-request namespace keys);
+			// constant-time compare happens inside Verify per candidate.
 			ru := r.URL.RequestURI()
-			if Verify(opts.Secret, r.Method, ru, body, tsNum, sig) {
-				next.ServeHTTP(w, r)
-				return
-			}
-			if len(opts.OldSecret) > 0 &&
-				Verify(opts.OldSecret, r.Method, ru, body, tsNum, sig) {
-				next.ServeHTTP(w, r)
-				return
+			for _, key := range opts.candidateKeys(r) {
+				if len(key) > 0 && Verify(key, r.Method, ru, body, tsNum, sig) {
+					next.ServeHTTP(w, r)
+					return
+				}
 			}
 			opts.Logger.V(1).Info("HMAC verification failed",
 				"reason", "signature mismatch",

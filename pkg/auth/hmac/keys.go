@@ -163,3 +163,34 @@ func VerifierFromKey(key, oldKey []byte, opts VerifierOpts) func(http.Handler) h
 	opts.OldSecret = oldKey
 	return Verifier(opts)
 }
+
+// ServiceVerifierNamespaceFromHeader is a verifier for a namespace-scoped channel
+// served by a control-plane component that handles many tenants (storagesvc): for
+// each request it derives the per-namespace key from the caller's HeaderNamespace,
+// and also accepts the master-derived (non-namespace) key so an old, pre-migration
+// client that signs master-derived is still accepted during the upgrade window
+// (dual-accept). It holds the master (it is control-plane) and derives per request.
+//
+// The header is unsigned and does not need to be bound into the canonical: a
+// caller can only produce a valid signature with the namespace key it actually
+// holds, so claiming a different namespace just makes the verifier derive a key
+// the caller cannot sign with → rejection.
+func ServiceVerifierNamespaceFromHeader(masterSecret, masterOldSecret []byte, service Service, opts VerifierOpts) func(http.Handler) http.Handler {
+	opts.KeysFromRequest = func(r *http.Request) [][]byte {
+		keys := make([][]byte, 0, 4)
+		if ns := r.Header.Get(HeaderNamespace); ns != "" {
+			keys = append(keys,
+				DeriveServiceKeyNS(masterSecret, service, ns),
+				DeriveServiceKeyNS(masterOldSecret, service, ns),
+			)
+		}
+		// Dual-accept the master-derived key for pre-migration clients that sign
+		// master-derived and send no namespace header.
+		keys = append(keys,
+			DeriveServiceKey(masterSecret, service),
+			DeriveServiceKey(masterOldSecret, service),
+		)
+		return keys
+	}
+	return Verifier(opts)
+}
