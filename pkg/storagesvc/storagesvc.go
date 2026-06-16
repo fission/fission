@@ -255,12 +255,19 @@ func (ss *StorageService) Start(ctx context.Context, mgr *errgroup.Group, port i
 		// var; an empty master means the verifier middleware is not registered
 		// at all (backwards-compatible with pre-1.(N+1) installs).
 		//
-		// The verifier uses the per-service derived key for ServiceStoragesvc
-		// rather than the master directly, so a leak of this server's
-		// memory cannot forge requests on other Fission internal channels
-		// (fetcher, builder, executor, router-internal). See
-		// docs/internal-auth/00-design.md.
-		r.Use(hmacauth.ServiceVerifier(ss.authSecret, ss.authSecretOld, hmacauth.ServiceStoragesvc, hmacauth.VerifierOpts{
+		// The verifier derives the per-service key for ServiceStoragesvc rather
+		// than using the master directly, so a leak of this server's memory
+		// cannot forge requests on other Fission internal channels (fetcher,
+		// builder, executor, router-internal). See docs/internal-auth/00-design.md.
+		//
+		// NamespaceFromHeader additionally scopes the key per tenant: a caller
+		// that sends X-Fission-Auth-Namespace is verified with that namespace's
+		// derived key, so a leaked tenant fetcher key can talk to storagesvc only
+		// as its own namespace. It stays backward-compatible by also accepting the
+		// master-derived key for callers that send no namespace header (existing
+		// fetchers, the CLI, the pruner), so this is safe to adopt unconditionally
+		// — multi-namespace tenancy doesn't have to be enabled for it to be inert.
+		r.Use(hmacauth.ServiceVerifierNamespaceFromHeader(ss.authSecret, ss.authSecretOld, hmacauth.ServiceStoragesvc, hmacauth.VerifierOpts{
 			SkewSec: 60,
 			Bypass:  []string{"/healthz"},
 			// 256 MiB caps the verifier's in-memory body buffer; this is
