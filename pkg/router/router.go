@@ -461,12 +461,12 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	// Register the trigger + function reconcilers. Each signals a debounced mux
 	// rebuild; GenerationChangedPredicate drops status-only writes so the
 	// router's own HTTPTrigger condition writes don't loop.
-	if err := controller.Register(crMgr, &fv1.HTTPTrigger{},
+	if err := controller.RegisterTenantScoped(crMgr, &fv1.HTTPTrigger{},
 		&httpTriggerReconciler{logger: logger.WithName("httptrigger_reconciler"), client: crMgr.GetClient(), ts: triggers, providers: providers},
 		"router-httptrigger"); err != nil {
 		return fmt.Errorf("error registering httptrigger reconciler: %w", err)
 	}
-	if err := controller.Register(crMgr, &fv1.Function{},
+	if err := controller.RegisterTenantScoped(crMgr, &fv1.Function{},
 		&functionReconciler{logger: logger.WithName("function_reconciler"), client: crMgr.GetClient(), ts: triggers},
 		"router-function"); err != nil {
 		return fmt.Errorf("error registering function reconciler: %w", err)

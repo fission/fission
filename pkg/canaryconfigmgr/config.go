@@ -55,7 +55,7 @@ func ConfigureFeatures(ctx context.Context, restConfig *rest.Config, logger logr
 		client: crMgr.GetClient(),
 		mgr:    canaryCfgMgr,
 	}
-	if err := controller.Register(crMgr, &fv1.CanaryConfig{}, r, "canaryconfig"); err != nil {
+	if err := controller.RegisterTenantScoped(crMgr, &fv1.CanaryConfig{}, r, "canaryconfig"); err != nil {
 		return fmt.Errorf("error registering canaryconfig reconciler: %w", err)
 	}
 	return crMgr.Start(ctx)

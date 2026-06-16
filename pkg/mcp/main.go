@@ -103,7 +103,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		reg:    registry,
 		server: server,
 	}
-	if err := controller.Register(crMgr, &fv1.Function{}, r, "mcp-function"); err != nil {
+	if err := controller.RegisterTenantScoped(crMgr, &fv1.Function{}, r, "mcp-function"); err != nil {
 		return fmt.Errorf("error registering mcp function reconciler: %w", err)
 	}
 

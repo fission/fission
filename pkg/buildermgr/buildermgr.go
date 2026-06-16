@@ -125,7 +125,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	}
 
 	envReconciler := makeEnvironmentReconciler(bmLogger, mgr.GetClient(), kubernetesClient, fConfig, podSpecPatch)
-	if err := controller.Register(mgr, &fv1.Environment{}, envReconciler, "buildermgr-environment"); err != nil {
+	if err := controller.RegisterTenantScoped(mgr, &fv1.Environment{}, envReconciler, "buildermgr-environment"); err != nil {
 		return fmt.Errorf("unable to register environment reconciler: %w", err)
 	}
 
@@ -141,7 +141,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 			"pullSecret", registryCfg.pullSecret != "")
 	}
 	pkgReconciler := makePackageReconciler(bmLogger, mgr.GetClient(), fissionClient, kubernetesClient, storageSvcUrl, registryCfg)
-	if err := controller.RegisterWithPredicates(mgr, &fv1.Package{}, pkgReconciler, "buildermgr-package",
+	if err := controller.RegisterTenantScopedWithPredicates(mgr, &fv1.Package{}, pkgReconciler, "buildermgr-package",
 		packageBuildConcurrency(), buildTriggerPredicate()); err != nil {
 		return fmt.Errorf("unable to register package reconciler: %w", err)
 	}

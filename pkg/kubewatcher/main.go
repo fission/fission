@@ -54,7 +54,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		client:      crMgr.GetClient(),
 		kubeWatcher: kubeWatch,
 	}
-	if err := controller.Register(crMgr, &fv1.KubernetesWatchTrigger{}, r, "kuberneteswatchtrigger"); err != nil {
+	if err := controller.RegisterTenantScoped(crMgr, &fv1.KubernetesWatchTrigger{}, r, "kuberneteswatchtrigger"); err != nil {
 		return fmt.Errorf("error registering kuberneteswatchtrigger reconciler: %w", err)
 	}
 	return crMgr.Start(ctx)

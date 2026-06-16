@@ -40,6 +40,13 @@ func RegisterTenantScoped(mgr ctrl.Manager, obj client.Object, reconciler reconc
 	return RegisterTenantScopedWithPredicates(mgr, obj, reconciler, name, 0, predicate.GenerationChangedPredicate{})
 }
 
+// RegisterTenantScopedWithConcurrency is RegisterWithConcurrency under the
+// multi-namespace model: the default GenerationChangedPredicate plus
+// MembershipPredicate when dynamic namespaces are on.
+func RegisterTenantScopedWithConcurrency(mgr ctrl.Manager, obj client.Object, reconciler reconcile.Reconciler, name string, maxConcurrent int) error {
+	return RegisterTenantScopedWithPredicates(mgr, obj, reconciler, name, maxConcurrent, predicate.GenerationChangedPredicate{})
+}
+
 // RegisterTenantScopedWithPredicates is RegisterWithPredicates plus, when dynamic
 // namespaces are on, MembershipPredicate ANDed onto the supplied predicates. The
 // supplied predicates REPLACE the default GenerationChangedPredicate (pass it
