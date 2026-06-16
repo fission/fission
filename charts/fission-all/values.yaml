@@ -698,6 +698,29 @@ mcp:
     runAsUser: 10001
     runAsGroup: 10001
 
+## The tenant controller is the multi-namespace tenancy lifecycle controller
+## (docs/multiple-namespace). It reconciles FissionTenant CRs and namespaces
+## labelled fission.io/enabled=true into the live resource-namespace set and
+## reports readiness. Off by default; enabling it is additive (the existing
+## env-driven namespace set keeps working).
+##
+tenantController:
+  enabled: false
+  replicas: 1
+  ## Run active-passive with leader election when replicas > 1.
+  leaderElection:
+    enabled: false
+  ## Pod resources.
+  resources: {}
+  ## Security Context (pod + container level). Experimental; verify before
+  ## enabling in production.
+  securityContext:
+    enabled: true
+    runAsNonRoot: true
+    fsGroup: 10001
+    runAsUser: 10001
+    runAsGroup: 10001
+
 ## The storage service is the home for all archives of packages with sizes larger than 256KB.
 ##
 storagesvc:

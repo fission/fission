@@ -1,0 +1,69 @@
+{{- if .Values.tenantController.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tenantcontroller
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: tenantcontroller
+    application: fission-tenant-controller
+spec:
+  replicas: {{ dig "replicas" 1 (.Values.tenantController | default dict) }}
+  selector:
+    matchLabels:
+      svc: tenantcontroller
+  template:
+    metadata:
+      labels:
+        svc: tenantcontroller
+        application: fission-tenant-controller
+    spec:
+      {{- if .Values.tenantController.securityContext.enabled }}
+      securityContext: {{- omit .Values.tenantController.securityContext "enabled" | toYaml | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: tenantcontroller
+        image: {{ include "fission-bundleImage" . | quote }}
+        imagePullPolicy: {{ .Values.pullPolicy }}
+        command: ["/fission-bundle"]
+        args: ["--tenantController"]
+        env:
+        {{- include "leaderElection.envs" (dict "enabled" (dig "leaderElection" "enabled" false (.Values.tenantController | default dict))) | indent 8 }}
+        - name: DEBUG_ENV
+          value: {{ .Values.debugEnv | quote }}
+        - name: PPROF_ENABLED
+          value: {{ .Values.pprof.enabled | quote }}
+        # The env-seeded namespace set (defaultNamespace + additionalFissionNamespaces)
+        # is the additive base the controller unions with the FissionTenant CRs.
+        {{- include "fission-resource-namespace.envs" . | indent 8 }}
+        {{- include "kube_client.envs" . | indent 8 }}
+        {{- include "opentelemtry.envs" . | indent 8 }}
+        {{- include "coverage.envs" . | indent 8 }}
+        resources:
+          {{- toYaml .Values.tenantController.resources | nindent 10 }}
+        {{- if .Values.terminationMessagePath }}
+        terminationMessagePath: {{ .Values.terminationMessagePath }}
+        {{- end }}
+        {{- if .Values.terminationMessagePolicy }}
+        terminationMessagePolicy: {{ .Values.terminationMessagePolicy }}
+        {{- end }}
+        {{- if .Values.coverage.enabled }}
+        volumeMounts:
+        {{- include "coverage.volumemount" . | indent 8 }}
+        {{- end }}
+      serviceAccountName: fission-tenant-controller
+      {{- if .Values.coverage.enabled }}
+      volumes:
+      {{- include "coverage.volume" . | indent 6 }}
+      {{- end }}
+      {{- if .Values.priorityClassName }}
+      priorityClassName: {{ .Values.priorityClassName }}
+      {{- end }}
+    {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+{{- if .Values.extraCoreComponentPodConfig }}
+{{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
+{{- end }}
+{{- end }}
