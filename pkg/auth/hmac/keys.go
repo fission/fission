@@ -112,3 +112,54 @@ func ServiceVerifier(masterSecret, masterOldSecret []byte, service Service, opts
 	opts.OldSecret = DeriveServiceKey(masterOldSecret, service)
 	return Verifier(opts)
 }
+
+// DeriveServiceKeyNS is DeriveServiceKey scoped additionally to a namespace, for
+// the multi-namespace channels (fetcher, builder, storagesvc) whose signing key
+// is mounted into a tenant pod: a leak of one tenant's key cannot forge requests
+// for another tenant or for the master-derived control-plane channels.
+//
+// The namespace is appended to the HKDF info as "<KeyVersion>:<service>:<ns>".
+// Because the plain service derivation stops at "<KeyVersion>:<service>", the two
+// never collide — so introducing namespace scoping leaves every existing
+// master-scoped key byte-for-byte unchanged (no KeyVersion bump, no in-flight
+// signature breakage). Returns nil for an empty master, like DeriveServiceKey.
+func DeriveServiceKeyNS(master []byte, service Service, namespace string) []byte {
+	if len(master) == 0 {
+		return nil
+	}
+	info := KeyVersion + ":" + string(service) + ":" + namespace
+	key, err := hkdf.Key(sha256.New, master, nil, info, derivedKeyLength)
+	if err != nil {
+		panic("hmac.DeriveServiceKeyNS: hkdf.Key failed: " + err.Error())
+	}
+	return key
+}
+
+// ServiceSignerNS is ServiceSigner for a namespace-scoped channel. The signer
+// holds the master and derives the namespace key on the fly, so a control-plane
+// component (which holds the master) can sign for whichever tenant namespace it
+// is acting on.
+func ServiceSignerNS(master []byte, service Service, namespace string, rt http.RoundTripper, now func() time.Time) *Signer {
+	return NewSigner(DeriveServiceKeyNS(master, service, namespace), rt, now)
+}
+
+// ServiceVerifierNS is ServiceVerifier for a namespace-scoped channel: the
+// active and rotation keys are derived for (service, namespace). A verifier
+// running in tenant namespace N is constructed with namespace=N, so it accepts
+// only signatures produced with that tenant's key.
+func ServiceVerifierNS(masterSecret, masterOldSecret []byte, service Service, namespace string, opts VerifierOpts) func(http.Handler) http.Handler {
+	opts.Secret = DeriveServiceKeyNS(masterSecret, service, namespace)
+	opts.OldSecret = DeriveServiceKeyNS(masterOldSecret, service, namespace)
+	return Verifier(opts)
+}
+
+// VerifierFromKey builds a verifier from already-derived key bytes rather than a
+// master — for a tenant pod (fetcher/builder) that is provisioned with only its
+// own namespace-scoped derived key and never sees the master. key/oldKey are the
+// active and rotation derived keys (oldKey may be nil). The signing counterpart
+// is NewSigner, which already takes a raw key.
+func VerifierFromKey(key, oldKey []byte, opts VerifierOpts) func(http.Handler) http.Handler {
+	opts.Secret = key
+	opts.OldSecret = oldKey
+	return Verifier(opts)
+}
