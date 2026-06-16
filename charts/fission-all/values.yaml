@@ -710,6 +710,11 @@ tenantController:
   ## Run active-passive with leader election when replicas > 1.
   leaderElection:
     enabled: false
+  ## On install/upgrade, seed a FissionTenant for each namespace already in
+  ## defaultNamespace + additionalFissionNamespaces (idempotent post-upgrade
+  ## hook). Restarts nothing. Set false to manage tenants exclusively via
+  ## `fission tenant` / the fission.io/enabled label.
+  seedExistingNamespaces: true
   ## Pod resources.
   resources: {}
   ## Security Context (pod + container level). Experimental; verify before
