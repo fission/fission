@@ -698,6 +698,18 @@ mcp:
     runAsUser: 10001
     runAsGroup: 10001
 
+## Multi-namespace tenancy (docs/multiple-namespace).
+##
+tenancy:
+  ## dynamicNamespaces turns on the cluster-wide Fission-CRD watch + live
+  ## tenant-membership filtering, so namespaces can be onboarded/offboarded at
+  ## runtime without restarting the control plane. Requires tenantController.enabled.
+  ## It adds exactly one cluster-wide grant per data-plane component, on
+  ## fission.io CRD types ONLY (no core/workload type), and sets
+  ## FISSION_DYNAMIC_NAMESPACES on those components. Off by default — the
+  ## per-namespace caches and RBAC behave exactly as before.
+  dynamicNamespaces: false
+
 ## The tenant controller is the multi-namespace tenancy lifecycle controller
 ## (docs/multiple-namespace). It reconciles FissionTenant CRs and namespaces
 ## labelled fission.io/enabled=true into the live resource-namespace set and

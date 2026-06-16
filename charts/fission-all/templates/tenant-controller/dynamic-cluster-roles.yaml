@@ -1,0 +1,12 @@
+{{- if dig "dynamicNamespaces" false (.Values.tenancy | default dict) }}
+# Dynamic multi-namespace mode (FISSION_DYNAMIC_NAMESPACES): the data-plane
+# components that watch Fission CRDs do so cluster-wide and filter to the live
+# tenant set (controller.MembershipPredicate), so they need cluster-wide read of
+# Fission's own CRD types. This is the ONLY cluster-wide grant the model adds —
+# fission.io types only, no core/workload type — and the per-namespace Roles
+# remain for the default (off) path. The executor is intentionally absent: it
+# keeps its per-namespace cache (Tier-B) until the provisioning phase.
+{{- range $component := list "buildermgr" "kubewatcher" "mcp" "kafka" "keda" "router" "timer" "canaryconfig" }}
+{{- include "fission-cluster-role-generator" (merge (dict "component" $component) $) }}
+{{- end }}
+{{- end }}

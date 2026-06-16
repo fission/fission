@@ -98,8 +98,10 @@ Helper template to construct image names with repository and tag
 {{- if gt (len .Values.additionalFissionNamespaces) 0 }}
   value: "{{ .Values.defaultNamespace }},{{ join "," .Values.additionalFissionNamespaces }}"
 {{- else }}
-  value: {{ .Values.defaultNamespace }}  
+  value: {{ .Values.defaultNamespace }}
 {{- end }}
+- name: FISSION_DYNAMIC_NAMESPACES
+  value: "{{ dig "dynamicNamespaces" false (.Values.tenancy | default dict) }}"
 {{- end }}
 
 {{- define "kube_client.envs" }}
