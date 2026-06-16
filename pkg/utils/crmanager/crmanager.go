@@ -56,6 +56,15 @@ func NewLeaderElected(restConfig *rest.Config, lockName string, logger logr.Logg
 // unchanged. The cache is inert until a controller registers an informer, so
 // this is harmless for Managers that only run non-reconciler runnables.
 func FissionCacheOptions() cache.Options {
+	if utils.DynamicNamespacesEnabled() {
+		// Cluster-wide cache: Fission-CRD informers see every namespace's CRs so
+		// a namespace can be onboarded/offboarded at runtime without rebuilding
+		// the Manager. Reconcilers drop non-tenant objects via
+		// controller.MembershipPredicate. This is the one cluster-wide read the
+		// dynamic-watch design adds, and only over Fission's own CRD types —
+		// these CRD-only Managers cache no core/workload type.
+		return cache.Options{}
+	}
 	nsConfig := map[string]cache.Config{}
 	for _, ns := range utils.DefaultNSResolver().FissionResourceNamespaces() {
 		nsConfig[ns] = cache.Config{}

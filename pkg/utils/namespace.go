@@ -7,6 +7,7 @@ package utils
 import (
 	"maps"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -282,4 +283,14 @@ func (nsr *NamespaceResolver) ResolveNamespace(namespace string) string {
 // GetFissionNamespaces => return all fission core component namespaces
 func DefaultNSResolver() *NamespaceResolver {
 	return nsResolver
+}
+
+// DynamicNamespacesEnabled reports whether the dynamic multi-namespace watch
+// model is on (FISSION_DYNAMIC_NAMESPACES=true). When on, Fission-CRD caches are
+// cluster-wide and reconcilers filter to the live tenant set, so namespaces can
+// be onboarded/offboarded without a control-plane restart. Default off: the
+// per-namespace caches and behaviour are unchanged.
+func DynamicNamespacesEnabled() bool {
+	v, _ := strconv.ParseBool(os.Getenv("FISSION_DYNAMIC_NAMESPACES"))
+	return v
 }

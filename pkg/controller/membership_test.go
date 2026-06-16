@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/utils"
@@ -32,4 +33,16 @@ func TestMembershipPredicate(t *testing.T) {
 	// starts admitting without rebuilding the controller.
 	r.AddTenant("team-b")
 	assert.True(t, p.Create(event.CreateEvent{Object: notTenant}), "predicate must observe a later AddTenant")
+}
+
+func TestTenantScopedPredicates(t *testing.T) {
+	base := []predicate.Predicate{predicate.GenerationChangedPredicate{}}
+
+	t.Setenv("FISSION_DYNAMIC_NAMESPACES", "false")
+	assert.Len(t, tenantScopedPredicates(base), 1, "off: no membership predicate added")
+
+	t.Setenv("FISSION_DYNAMIC_NAMESPACES", "true")
+	got := tenantScopedPredicates(base)
+	assert.Len(t, got, 2, "on: membership predicate appended")
+	assert.Len(t, base, 1, "the caller's slice must not be mutated")
 }
