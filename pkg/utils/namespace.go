@@ -132,6 +132,16 @@ func (nsr *NamespaceResolver) FissionResourceNamespaces() map[string]string {
 	return out
 }
 
+// IsTenant reports whether ns is in the live resource-namespace set. It is the
+// cheap membership check (no map copy) used on the per-event hot path by the
+// reconcilers' tenant-membership predicate.
+func (nsr *NamespaceResolver) IsTenant(ns string) bool {
+	nsr.mu.RLock()
+	defer nsr.mu.RUnlock()
+	_, ok := nsr.fissionResourceNS[ns]
+	return ok
+}
+
 // SetTenants replaces the live resource-namespace set and notifies subscribers.
 // The tenant-lifecycle controller calls this when the FissionTenant set changes,
 // so the watched namespaces can be updated without a process restart.

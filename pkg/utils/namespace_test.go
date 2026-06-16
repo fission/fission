@@ -10,6 +10,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -280,6 +281,20 @@ func TestNamespaceResolverDynamicSet(t *testing.T) {
 		got = r.FissionResourceNamespaces()
 		require.Len(t, got, 1)
 		require.Contains(t, got, "ns-b")
+	})
+
+	t.Run("IsTenant reflects the live set", func(t *testing.T) {
+		r := &NamespaceResolver{}
+		r.SetTenants(map[string]string{"team-a": "team-a"})
+
+		assert.True(t, r.IsTenant("team-a"))
+		assert.False(t, r.IsTenant("team-b"))
+
+		r.AddTenant("team-b")
+		assert.True(t, r.IsTenant("team-b"), "IsTenant must observe a later AddTenant")
+
+		r.RemoveTenant("team-a")
+		assert.False(t, r.IsTenant("team-a"), "IsTenant must observe a RemoveTenant")
 	})
 
 	t.Run("change feed signals on a real mutation", func(t *testing.T) {
