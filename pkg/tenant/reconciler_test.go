@@ -70,6 +70,31 @@ func TestTenantReconcilerNamespaceExistsSetsReady(t *testing.T) {
 	assert.Contains(t, r.resolver.FissionResourceNamespaces(), "team-a", "resolver must include the onboarded namespace")
 }
 
+func TestTenantReconcilerSetsObservedGeneration(t *testing.T) {
+	ft := tenant("team-a", "team-a") // Generation: 1
+	c := newFakeClient(t, ft, ns("team-a", nil))
+	r := &TenantReconciler{logger: logr.Discard(), client: c, resolver: &utils.NamespaceResolver{}}
+
+	_, err := r.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Name: "team-a"}})
+	require.NoError(t, err)
+
+	got := &fv1.FissionTenant{}
+	require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: "team-a"}, got))
+	assert.Equal(t, int64(1), got.Status.ObservedGeneration, "status.observedGeneration must track spec generation")
+}
+
+func TestTenantReconcilerNamespaceToRequests(t *testing.T) {
+	// "custom" CR manages namespace team-b; a team-b namespace event must enqueue it.
+	c := newFakeClient(t, tenant("team-a", "team-a"), tenant("custom", "team-b"))
+	r := &TenantReconciler{logger: logr.Discard(), client: c, resolver: &utils.NamespaceResolver{}}
+
+	reqs := r.namespaceToRequests(t.Context(), ns("team-b", nil))
+	require.Len(t, reqs, 1)
+	assert.Equal(t, "custom", reqs[0].Name, "the tenant whose spec.namespace matches must be enqueued by its CR name")
+
+	assert.Empty(t, r.namespaceToRequests(t.Context(), ns("unmanaged", nil)), "an unmanaged namespace enqueues nothing")
+}
+
 func TestTenantReconcilerNamespaceMissingSetsNotReady(t *testing.T) {
 	ft := tenant("ghost", "ghost") // no Namespace object created
 	c := newFakeClient(t, ft)

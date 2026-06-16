@@ -7,7 +7,6 @@ package tenant
 import (
 	"fmt"
 
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	v1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -35,19 +34,26 @@ func (opts *EnableSubCommand) do(input cli.Input) error {
 	fnNS := input.String(flagkey.TenantFunctionNamespace)
 	builderNS := input.String(flagkey.TenantBuilderNamespace)
 
-	// Idempotent: update mutable fields if the tenant already exists.
-	existing, err := tenants.Get(ctx, namespace, metav1.GetOptions{})
-	switch {
-	case err == nil:
+	// Idempotent, and consistent with the controller's own dedup: match on
+	// spec.namespace (a tenant may be named differently from the namespace it
+	// manages) rather than the CR name, so we never create a second tenant for
+	// an already-onboarded namespace.
+	list, err := tenants.List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return fmt.Errorf("error listing tenants: %w", err)
+	}
+	for i := range list.Items {
+		if list.Items[i].Spec.Namespace != namespace {
+			continue
+		}
+		existing := &list.Items[i]
 		existing.Spec.FunctionNamespace = fnNS
 		existing.Spec.BuilderNamespace = builderNS
 		if _, err := tenants.Update(ctx, existing, metav1.UpdateOptions{}); err != nil {
-			return fmt.Errorf("error updating tenant %q: %w", namespace, err)
+			return fmt.Errorf("error updating tenant %q: %w", existing.Name, err)
 		}
-		fmt.Printf("tenant %q updated\n", namespace)
+		fmt.Printf("tenant for namespace %q updated\n", namespace)
 		return nil
-	case !apierrors.IsNotFound(err):
-		return fmt.Errorf("error checking tenant %q: %w", namespace, err)
 	}
 
 	ft := &v1.FissionTenant{

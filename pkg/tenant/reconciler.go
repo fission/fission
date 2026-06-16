@@ -65,6 +65,7 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		}
 		return ctrl.Result{}, err
 	}
+	ft.Status.ObservedGeneration = ft.Generation
 
 	target := &corev1.Namespace{}
 	err := r.client.Get(ctx, types.NamespacedName{Name: ft.Spec.Namespace}, target)
@@ -110,6 +111,26 @@ func (r *TenantReconciler) syncResolver(ctx context.Context) error {
 	}
 	r.resolver.SetTenants(set)
 	return nil
+}
+
+// namespaceToRequests maps a Namespace event to reconcile requests for every
+// FissionTenant whose spec.namespace matches, so a tenant's Ready condition and
+// the resolver set re-converge when its namespace is created or deleted out of
+// band (the Ready condition is a function of namespace existence, external state
+// the FissionTenant watch alone cannot observe).
+func (r *TenantReconciler) namespaceToRequests(ctx context.Context, obj client.Object) []ctrl.Request {
+	list := &fv1.FissionTenantList{}
+	if err := r.client.List(ctx, list); err != nil {
+		r.logger.V(1).Info("namespace-to-tenant mapping: list failed", "namespace", obj.GetName(), "error", err)
+		return nil
+	}
+	var reqs []ctrl.Request
+	for i := range list.Items {
+		if list.Items[i].Spec.Namespace == obj.GetName() {
+			reqs = append(reqs, ctrl.Request{NamespacedName: types.NamespacedName{Name: list.Items[i].Name}})
+		}
+	}
+	return reqs
 }
 
 // NamespaceReconciler materializes a Namespace labelled fission.io/enabled=true

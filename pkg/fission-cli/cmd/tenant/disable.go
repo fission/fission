@@ -30,9 +30,10 @@ func (opts *DisableSubCommand) do(input cli.Input) error {
 	ctx := input.Context()
 	force := input.Bool(flagkey.TenantForce)
 
-	// Safe by default: refuse to strip RBAC out from under running functions.
-	// The controller drains provisioned resources via finalizer; user Functions
-	// are left in place (they simply stop being served).
+	// Safe by default: refuse to stop managing a namespace that still has
+	// functions. User Functions are left in place (they simply stop being
+	// served). Finalizer-based draining of provisioned per-namespace resources
+	// arrives with the provisioning phase.
 	if !force {
 		fns, err := opts.Client().FissionClientSet.CoreV1().Functions(namespace).List(ctx, metav1.ListOptions{})
 		if err == nil && len(fns.Items) > 0 {
