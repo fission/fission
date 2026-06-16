@@ -130,7 +130,7 @@ func idleThreshold(fn *fv1.Function, def time.Duration) time.Duration {
 // namespaces, used to detect function services whose environment was deleted.
 func listEnvUIDs(ctx context.Context, fissionClient versioned.Interface) (map[k8sTypes.UID]struct{}, error) {
 	envUIDs := make(map[k8sTypes.UID]struct{})
-	for _, namespace := range utils.DefaultNSResolver().FissionResourceNS {
+	for _, namespace := range utils.DefaultNSResolver().FissionResourceNamespaces() {
 		envs, err := fissionClient.CoreV1().Environments(namespace).List(ctx, metav1.ListOptions{})
 		if err != nil {
 			return nil, err
@@ -146,7 +146,7 @@ func listEnvUIDs(ctx context.Context, fissionClient versioned.Interface) (map[k8
 // namespaces keyed by UID.
 func listFunctionsByUID(ctx context.Context, fissionClient versioned.Interface) (map[k8sTypes.UID]fv1.Function, error) {
 	fnByUID := make(map[k8sTypes.UID]fv1.Function)
-	for _, namespace := range utils.DefaultNSResolver().FissionResourceNS {
+	for _, namespace := range utils.DefaultNSResolver().FissionResourceNamespaces() {
 		fns, err := fissionClient.CoreV1().Functions(namespace).List(ctx, metav1.ListOptions{})
 		if err != nil {
 			return nil, err

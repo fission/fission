@@ -23,10 +23,10 @@ func TestFissionCacheOptions(t *testing.T) {
 	// covered by GetNamespaces in pkg/utils/namespace_test.go; here we assert
 	// the mapping reproduces exactly the resolved namespaces.
 	r := utils.DefaultNSResolver()
-	orig := r.FissionResourceNS
-	t.Cleanup(func() { r.FissionResourceNS = orig })
+	orig := r.FissionResourceNamespaces()
+	t.Cleanup(func() { r.SetTenants(orig) })
 
-	r.FissionResourceNS = map[string]string{"ns-a": "ns-a", "ns-b": "ns-b"}
+	r.SetTenants(map[string]string{"ns-a": "ns-a", "ns-b": "ns-b"})
 	opts := FissionCacheOptions()
 	require.Len(t, opts.DefaultNamespaces, 2)
 	_, hasA := opts.DefaultNamespaces["ns-a"]

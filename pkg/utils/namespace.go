@@ -8,6 +8,7 @@ import (
 	"maps"
 	"os"
 	"strings"
+	"sync"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -28,8 +29,17 @@ type (
 		FunctionNamespace string
 		BuilderNamespace  string
 		DefaultNamespace  string
-		FissionResourceNS map[string]string
-		Logger            logr.Logger
+
+		// mu guards fissionResourceNS and subscribers, making the resource
+		// namespace set safe to mutate at runtime for multi-namespace tenancy
+		// (Phase 0; see docs/multiple-namespace/prd.md §4.2). The three scalar
+		// namespaces above stay env-driven and immutable — only the tenant set
+		// is dynamic.
+		mu                sync.RWMutex
+		fissionResourceNS map[string]string
+		subscribers       []chan struct{}
+
+		Logger logr.Logger
 	}
 
 	options struct {
@@ -48,14 +58,14 @@ func init() {
 		FunctionNamespace: os.Getenv(ENV_FUNCTION_NAMESPACE),
 		BuilderNamespace:  os.Getenv(ENV_BUILDER_NAMESPACE),
 		DefaultNamespace:  os.Getenv(ENV_DEFAULT_NAMESPACE),
-		FissionResourceNS: GetNamespaces(),
+		fissionResourceNS: GetNamespaces(),
 		Logger:            loggerfactory.GetLogger(),
 	}
 
 	nsResolver.Logger.V(1).Info("namespaces", "function_namespace", nsResolver.FunctionNamespace,
 		"builder_namespace", nsResolver.BuilderNamespace,
 		"default_namespace", nsResolver.DefaultNamespace,
-		"fission_resource_namespace", listNamespaces(nsResolver.FissionResourceNS))
+		"fission_resource_namespace", listNamespaces(nsResolver.FissionResourceNamespaces()))
 }
 
 // listNamespaces => convert namespaces from map to slice
@@ -94,8 +104,7 @@ func (nsr *NamespaceResolver) FissionNSWithOptions(option ...option) map[string]
 		options = *opt(&options)
 	}
 
-	fissionResourceNS := make(map[string]string)
-	maps.Copy(fissionResourceNS, nsr.FissionResourceNS)
+	fissionResourceNS := nsr.FissionResourceNamespaces()
 
 	if options.functionNS && nsr.FunctionNamespace != "" {
 		fissionResourceNS[nsr.FunctionNamespace] = nsr.FunctionNamespace
@@ -108,6 +117,80 @@ func (nsr *NamespaceResolver) FissionNSWithOptions(option ...option) map[string]
 	}
 	nsr.Logger.V(1).Info("fission resource namespaces", "namespaces", listNamespaces(fissionResourceNS))
 	return fissionResourceNS
+}
+
+// FissionResourceNamespaces returns a copy of the live set of namespaces whose
+// Fission resources (Functions, Packages, Environments, Triggers) this process
+// watches. The returned map is a defensive copy — callers may iterate or mutate
+// it without affecting the resolver, and reads are safe against concurrent
+// SetTenants/AddTenant/RemoveTenant.
+func (nsr *NamespaceResolver) FissionResourceNamespaces() map[string]string {
+	nsr.mu.RLock()
+	defer nsr.mu.RUnlock()
+	out := make(map[string]string, len(nsr.fissionResourceNS))
+	maps.Copy(out, nsr.fissionResourceNS)
+	return out
+}
+
+// SetTenants replaces the live resource-namespace set and notifies subscribers.
+// The tenant-lifecycle controller calls this when the FissionTenant set changes,
+// so the watched namespaces can be updated without a process restart.
+func (nsr *NamespaceResolver) SetTenants(namespaces map[string]string) {
+	nsr.mu.Lock()
+	defer nsr.mu.Unlock()
+	nsr.fissionResourceNS = make(map[string]string, len(namespaces))
+	maps.Copy(nsr.fissionResourceNS, namespaces)
+	nsr.notifyLocked()
+}
+
+// AddTenant adds ns to the live set, notifying subscribers only when ns was not
+// already present. A no-op add is silent so subscribers aren't woken needlessly.
+func (nsr *NamespaceResolver) AddTenant(ns string) {
+	nsr.mu.Lock()
+	defer nsr.mu.Unlock()
+	if _, ok := nsr.fissionResourceNS[ns]; ok {
+		return
+	}
+	if nsr.fissionResourceNS == nil {
+		nsr.fissionResourceNS = make(map[string]string)
+	}
+	nsr.fissionResourceNS[ns] = ns
+	nsr.notifyLocked()
+}
+
+// RemoveTenant removes ns from the live set, notifying subscribers only when ns
+// was present.
+func (nsr *NamespaceResolver) RemoveTenant(ns string) {
+	nsr.mu.Lock()
+	defer nsr.mu.Unlock()
+	if _, ok := nsr.fissionResourceNS[ns]; !ok {
+		return
+	}
+	delete(nsr.fissionResourceNS, ns)
+	nsr.notifyLocked()
+}
+
+// Subscribe returns a channel that receives a coalesced signal whenever the
+// resource-namespace set changes. The channel is buffered (depth 1) and sends
+// are non-blocking, so a slow or absent reader never stalls a mutation and only
+// ever observes "something changed", not how many times.
+func (nsr *NamespaceResolver) Subscribe() <-chan struct{} {
+	nsr.mu.Lock()
+	defer nsr.mu.Unlock()
+	ch := make(chan struct{}, 1)
+	nsr.subscribers = append(nsr.subscribers, ch)
+	return ch
+}
+
+// notifyLocked sends a non-blocking signal to every subscriber. Callers must
+// hold nsr.mu.
+func (nsr *NamespaceResolver) notifyLocked() {
+	for _, ch := range nsr.subscribers {
+		select {
+		case ch <- struct{}{}:
+		default:
+		}
+	}
 }
 
 func GetNamespaces() map[string]string {
@@ -165,9 +248,10 @@ func (nsr *NamespaceResolver) GetFunctionNS(namespace string) string {
 // (RFC-0002); the Helm chart's router/role-dataplane.yaml mirrors the same
 // mapping.
 func (nsr *NamespaceResolver) FunctionNamespaces() []string {
-	seen := make(map[string]struct{}, len(nsr.FissionResourceNS))
-	out := make([]string, 0, len(nsr.FissionResourceNS))
-	for _, ns := range nsr.FissionResourceNS {
+	set := nsr.FissionResourceNamespaces()
+	seen := make(map[string]struct{}, len(set))
+	out := make([]string, 0, len(set))
+	for _, ns := range set {
 		fns := nsr.GetFunctionNS(ns)
 		if _, ok := seen[fns]; ok {
 			continue

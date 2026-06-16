@@ -57,7 +57,7 @@ func NewLeaderElected(restConfig *rest.Config, lockName string, logger logr.Logg
 // this is harmless for Managers that only run non-reconciler runnables.
 func FissionCacheOptions() cache.Options {
 	nsConfig := map[string]cache.Config{}
-	for _, ns := range utils.DefaultNSResolver().FissionResourceNS {
+	for _, ns := range utils.DefaultNSResolver().FissionResourceNamespaces() {
 		nsConfig[ns] = cache.Config{}
 	}
 	return cache.Options{DefaultNamespaces: nsConfig}

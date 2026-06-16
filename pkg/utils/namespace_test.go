@@ -5,7 +5,9 @@
 package utils
 
 import (
+	"fmt"
 	"os"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -237,4 +239,102 @@ func setNamespace(defaultNamespace string, additionalNamespace string) error {
 		return err
 	}
 	return os.Setenv(ENV_ADDITIONAL_NAMESPACE, additionalNamespace)
+}
+
+// TestNamespaceResolverDynamicSet covers the runtime-mutable resource-namespace
+// set introduced for multi-namespace tenancy (Phase 0): the set is read through
+// a copy-returning accessor and mutated through Set/Add/Remove, which publish a
+// coalesced change signal to subscribers. See docs/multiple-namespace/prd.md §4.2.
+func TestNamespaceResolverDynamicSet(t *testing.T) {
+	t.Run("FissionResourceNamespaces returns a copy", func(t *testing.T) {
+		r := &NamespaceResolver{}
+		r.SetTenants(map[string]string{"ns-a": "ns-a"})
+
+		got := r.FissionResourceNamespaces()
+		got["ns-b"] = "ns-b" // mutating the returned map must not leak back
+
+		again := r.FissionResourceNamespaces()
+		require.NotContains(t, again, "ns-b", "accessor must return a defensive copy")
+		require.Contains(t, again, "ns-a")
+	})
+
+	t.Run("SetTenants replaces the whole set", func(t *testing.T) {
+		r := &NamespaceResolver{}
+		r.SetTenants(map[string]string{"ns-a": "ns-a", "ns-b": "ns-b"})
+		r.SetTenants(map[string]string{"ns-c": "ns-c"})
+
+		require.Equal(t, map[string]string{"ns-c": "ns-c"}, r.FissionResourceNamespaces())
+	})
+
+	t.Run("AddTenant and RemoveTenant mutate the set", func(t *testing.T) {
+		r := &NamespaceResolver{}
+		r.AddTenant("ns-a")
+		r.AddTenant("ns-b")
+
+		got := r.FissionResourceNamespaces()
+		require.Len(t, got, 2)
+		require.Contains(t, got, "ns-a")
+		require.Contains(t, got, "ns-b")
+
+		r.RemoveTenant("ns-a")
+		got = r.FissionResourceNamespaces()
+		require.Len(t, got, 1)
+		require.Contains(t, got, "ns-b")
+	})
+
+	t.Run("change feed signals on a real mutation", func(t *testing.T) {
+		r := &NamespaceResolver{}
+		ch := r.Subscribe()
+
+		r.AddTenant("ns-a")
+
+		select {
+		case <-ch:
+		default:
+			t.Fatal("expected a change signal after AddTenant")
+		}
+	})
+
+	t.Run("change feed is silent on a no-op mutation", func(t *testing.T) {
+		r := &NamespaceResolver{}
+		r.AddTenant("ns-a")
+		ch := r.Subscribe()
+
+		r.AddTenant("ns-a")    // already present
+		r.RemoveTenant("ns-z") // never present
+
+		select {
+		case <-ch:
+			t.Fatal("no-op mutation must not signal")
+		default:
+		}
+	})
+}
+
+// TestNamespaceResolverConcurrentAccess is the thread-safety guard: concurrent
+// readers and writers must be race-free under `go test -race`.
+func TestNamespaceResolverConcurrentAccess(t *testing.T) {
+	r := &NamespaceResolver{}
+	r.SetTenants(map[string]string{"seed": "seed"})
+
+	var wg sync.WaitGroup
+	for i := range 8 {
+		wg.Go(func() {
+			ns := fmt.Sprintf("ns-%d", i)
+			r.AddTenant(ns)
+			_ = r.FissionResourceNamespaces()
+			_ = r.FunctionNamespaces()
+			r.RemoveTenant(ns)
+		})
+	}
+	for range 8 {
+		wg.Go(func() {
+			for range 50 {
+				_ = r.FissionResourceNamespaces()
+			}
+		})
+	}
+	wg.Wait()
+
+	require.Contains(t, r.FissionResourceNamespaces(), "seed", "seed namespace must survive the churn")
 }
