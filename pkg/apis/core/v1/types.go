@@ -213,6 +213,81 @@ type (
 		Items []CanaryConfig `json:"items"`
 	}
 
+	// FissionTenant onboards a Kubernetes namespace for Fission. It is the
+	// cluster-scoped source of truth the tenant-lifecycle controller reconciles
+	// into the live resource-namespace set (and, in later phases, per-namespace
+	// RBAC, service accounts, and auth keys). Setting the label
+	// fission.io/enabled=true on a Namespace is sugar the controller
+	// materializes into one of these. See docs/multiple-namespace/prd.md.
+	// +genclient
+	// +genclient:nonNamespaced
+	// +kubebuilder:object:root=true
+	// +kubebuilder:subresource:status
+	// +kubebuilder:resource:scope="Cluster",shortName={ftenant}
+	// +kubebuilder:printcolumn:name="Namespace",type=string,JSONPath=`.spec.namespace`
+	// +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].status`
+	// +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
+	FissionTenant struct {
+		metav1.TypeMeta   `json:",inline"`
+		metav1.ObjectMeta `json:"metadata"`
+		Spec              FissionTenantSpec `json:"spec"`
+		// +optional
+		Status FissionTenantStatus `json:"status,omitempty"`
+	}
+
+	// FissionTenantList is a list of FissionTenants.
+	// +kubebuilder:object:root=true
+	FissionTenantList struct {
+		metav1.TypeMeta `json:",inline"`
+		metav1.ListMeta `json:"metadata"`
+		Items           []FissionTenant `json:"items"`
+	}
+
+	// FissionTenantSpec declares which namespace Fission manages and, optionally,
+	// where that tenant's function and builder workloads run.
+	FissionTenantSpec struct {
+		// Namespace is the Kubernetes namespace this tenant onboards. It is the
+		// immutable join key to the live Namespace.
+		// +kubebuilder:validation:MinLength=1
+		// +kubebuilder:validation:MaxLength=63
+		// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
+		// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="spec.namespace is immutable"
+		Namespace string `json:"namespace"`
+
+		// FunctionNamespace, if set, is where this tenant's function pods and
+		// Services run; empty means they run in spec.namespace. Generalizes the
+		// deprecated cluster-global FISSION_FUNCTION_NAMESPACE to a per-tenant
+		// mapping.
+		// +optional
+		// +kubebuilder:validation:MaxLength=63
+		// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
+		FunctionNamespace string `json:"functionNamespace,omitempty"`
+
+		// BuilderNamespace, if set, is where this tenant's builder pods run;
+		// empty means they run in spec.namespace.
+		// +optional
+		// +kubebuilder:validation:MaxLength=63
+		// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
+		BuilderNamespace string `json:"builderNamespace,omitempty"`
+	}
+
+	// FissionTenantStatus reports the controller's progress onboarding the tenant.
+	FissionTenantStatus struct {
+		// ObservedGeneration is the spec generation the controller last reconciled.
+		// +optional
+		ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+		// Conditions are the latest observations of the tenant's state:
+		// RBACProvisioned, ServiceAccountsReady, AuthKeyProvisioned, WatchActive,
+		// and the Ready rollup.
+		// +optional
+		// +patchMergeKey=type
+		// +patchStrategy=merge
+		// +listType=map
+		// +listMapKey=type
+		Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
+	}
+
 	//
 	// Functions and packages
 	//

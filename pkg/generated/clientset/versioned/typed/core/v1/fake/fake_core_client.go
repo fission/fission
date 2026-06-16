@@ -24,6 +24,10 @@ func (c *FakeCoreV1) Environments(namespace string) v1.EnvironmentInterface {
 	return newFakeEnvironments(c, namespace)
 }
 
+func (c *FakeCoreV1) FissionTenants() v1.FissionTenantInterface {
+	return newFakeFissionTenants(c)
+}
+
 func (c *FakeCoreV1) Functions(namespace string) v1.FunctionInterface {
 	return newFakeFunctions(c, namespace)
 }

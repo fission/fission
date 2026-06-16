@@ -22,6 +22,10 @@ type EnvironmentListerExpansion interface{}
 // EnvironmentNamespaceLister.
 type EnvironmentNamespaceListerExpansion interface{}
 
+// FissionTenantListerExpansion allows custom methods to be added to
+// FissionTenantLister.
+type FissionTenantListerExpansion interface{}
+
 // FunctionListerExpansion allows custom methods to be added to
 // FunctionLister.
 type FunctionListerExpansion interface{}

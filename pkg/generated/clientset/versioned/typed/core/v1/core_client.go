@@ -18,6 +18,7 @@ type CoreV1Interface interface {
 	RESTClient() rest.Interface
 	CanaryConfigsGetter
 	EnvironmentsGetter
+	FissionTenantsGetter
 	FunctionsGetter
 	HTTPTriggersGetter
 	KubernetesWatchTriggersGetter
@@ -37,6 +38,10 @@ func (c *CoreV1Client) CanaryConfigs(namespace string) CanaryConfigInterface {
 
 func (c *CoreV1Client) Environments(namespace string) EnvironmentInterface {
 	return newEnvironments(c, namespace)
+}
+
+func (c *CoreV1Client) FissionTenants() FissionTenantInterface {
+	return newFissionTenants(c)
 }
 
 func (c *CoreV1Client) Functions(namespace string) FunctionInterface {
