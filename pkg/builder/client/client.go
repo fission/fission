@@ -53,13 +53,35 @@ type (
 // storagesvcClient.HMACSecretFromEnv(); the same env var
 // (FISSION_INTERNAL_AUTH_SECRET) backs every internal channel.
 func MakeClient(logger logr.Logger, builderUrl string, masterSecret []byte) ClientInterface {
+	return makeBuilderClient(logger, builderUrl, func(base http.RoundTripper) http.RoundTripper {
+		if len(masterSecret) > 0 {
+			return hmacauth.ServiceSigner(masterSecret, hmacauth.ServiceBuilder, base, time.Now)
+		}
+		return base
+	})
+}
+
+// MakeClientNS is MakeClient for a target builder that verifies /build with its
+// per-namespace derived key rather than the master-derived ServiceBuilder key
+// (multi-namespace tenancy). The caller still holds the master and derives
+// K(builder, namespace) on the fly, so a leak of one tenant pod's key cannot
+// forge a build against another tenant's builder. An empty master yields an
+// unsigned client (pass-through), matching MakeClient.
+func MakeClientNS(logger logr.Logger, builderUrl string, masterSecret []byte, namespace string) ClientInterface {
+	return makeBuilderClient(logger, builderUrl, func(base http.RoundTripper) http.RoundTripper {
+		if len(masterSecret) > 0 {
+			return hmacauth.ServiceSignerNS(masterSecret, hmacauth.ServiceBuilder, namespace, base, time.Now)
+		}
+		return base
+	})
+}
+
+// makeBuilderClient builds the retryable HTTP builder client, layering the
+// caller's signer (via sign) over the otel-instrumented default transport.
+func makeBuilderClient(logger logr.Logger, builderUrl string, sign func(base http.RoundTripper) http.RoundTripper) ClientInterface {
 	hc := retryablehttp.NewClient()
 	hc.ErrorHandler = retryablehttp.PassthroughErrorHandler
-	var rt http.RoundTripper = otelhttp.NewTransport(hc.HTTPClient.Transport)
-	if len(masterSecret) > 0 {
-		rt = hmacauth.ServiceSigner(masterSecret, hmacauth.ServiceBuilder, rt, time.Now)
-	}
-	hc.HTTPClient.Transport = rt
+	hc.HTTPClient.Transport = sign(otelhttp.NewTransport(hc.HTTPClient.Transport))
 	return &client{
 		logger:     logger.WithName("builder_client"),
 		url:        strings.TrimSuffix(builderUrl, "/"),

@@ -27,7 +27,23 @@ import (
 	fetcherClient "github.com/fission/fission/pkg/fetcher/client"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	storagesvcClient "github.com/fission/fission/pkg/storagesvc/client"
+	"github.com/fission/fission/pkg/utils"
 )
+
+// builderSigningNamespace decides whether buildermgr signs a builder pod's
+// fetcher/builder sidecar calls with that namespace's per-namespace derived key.
+// Version-aware, the sibling of the executor's poolmgr.fetcherSigningNamespace:
+// only a builder pod stamped with the namespace key-scheme annotation (created by
+// createBuilderDeployment while dynamic tenancy was on for its namespace) holds
+// the per-namespace keys and verifies with them, so we sign with the builder
+// namespace key. Pre-upgrade pods carrying no annotation, and every pod when
+// tenancy is off, verify with the master-derived key and stay master-signed.
+func builderSigningNamespace(pod *apiv1.Pod, builderNs string) (string, bool) {
+	if pod != nil && utils.DynamicNamespacesEnabled() && pod.Annotations[fv1.AuthKeySchemeAnnotation] == fv1.AuthKeySchemeNamespace {
+		return builderNs, true
+	}
+	return "", false
+}
 
 // buildPackage helps to build source package into deployment package.
 // Following is the steps buildPackage function takes to complete the whole process.
@@ -36,8 +52,13 @@ import (
 // 3. Send upload request to fetcher to upload deployment package.
 // 4. Return upload response and build logs.
 // *. Return build logs and error if any one of steps above failed.
+// signNamespace selects version-aware signing for the builder pod's sidecars:
+// non-empty means sign with that namespace's per-namespace keys (the pod holds
+// only those), empty means the master-derived keys. The package reconciler
+// computes it from the ready builder pod's key-scheme annotation
+// (builderSigningNamespace).
 func buildPackage(ctx context.Context, logger logr.Logger, fissionClient versioned.Interface, envBuilderNamespace string,
-	storageSvcUrl string, registryCfg *packageRegistryConfig, pkg *fv1.Package) (uploadResp *fetcher.ArchiveUploadResponse, buildLogs string, err error) {
+	signNamespace string, storageSvcUrl string, registryCfg *packageRegistryConfig, pkg *fv1.Package) (uploadResp *fetcher.ArchiveUploadResponse, buildLogs string, err error) {
 
 	// Defence in depth against cross-namespace Environment references; the
 	// admission webhook is the user-visible reject, this guard catches
@@ -63,8 +84,17 @@ func buildPackage(ctx context.Context, logger logr.Logger, fissionClient version
 	// which matches the corresponding verifier's empty-secret short-
 	// circuit on the server side.
 	masterSecret := storagesvcClient.HMACSecretFromEnv()
-	fetcherC := fetcherClient.MakeClient(logger, fmt.Sprintf("http://%s:8000", svcName), masterSecret)
-	builderC := builderClient.MakeClient(logger, fmt.Sprintf("http://%s:8001", svcName), masterSecret)
+	fetcherURL := fmt.Sprintf("http://%s:8000", svcName)
+	builderURL := fmt.Sprintf("http://%s:8001", svcName)
+	var fetcherC fetcherClient.ClientInterface
+	var builderC builderClient.ClientInterface
+	if signNamespace != "" {
+		fetcherC = fetcherClient.MakeClientNS(logger, fetcherURL, masterSecret, signNamespace)
+		builderC = builderClient.MakeClientNS(logger, builderURL, masterSecret, signNamespace)
+	} else {
+		fetcherC = fetcherClient.MakeClient(logger, fetcherURL, masterSecret)
+		builderC = builderClient.MakeClient(logger, builderURL, masterSecret)
+	}
 
 	defer func() {
 		logger.Info("cleaning src pkg from builder storage", "source_package", srcPkgFilename)

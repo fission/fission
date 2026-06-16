@@ -244,9 +244,9 @@ func TestBuilderPodReady(t *testing.T) {
 				logger:           loggerfactory.GetLogger(),
 				kubernetesClient: k8sfake.NewClientset(objs...),
 			}
-			ready, err := r.builderPodReady(t.Context(), env, builderNs)
+			pod, err := r.readyBuilderPod(t.Context(), env, builderNs)
 			require.NoError(t, err)
-			assert.Equal(t, tc.want, ready)
+			assert.Equal(t, tc.want, pod != nil)
 		})
 	}
 }

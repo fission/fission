@@ -375,6 +375,15 @@ func (r *EnvironmentReconciler) createBuilderDeployment(ctx context.Context, env
 		podAnnotations["sidecar.istio.io/inject"] = "false"
 	}
 
+	// Stamp the HMAC key-scheme so buildermgr signs this builder pod's sidecar
+	// calls with the key its fetcher will verify with (version-aware signing,
+	// builderSigningNamespace). Present for tenant namespaces under dynamic
+	// tenancy, absent otherwise — stable, so at most one rollout when tenancy is
+	// first enabled, never ongoing churn.
+	if utils.DynamicNamespacesEnabled() && r.nsResolver.IsTenant(ns) {
+		podAnnotations[fv1.AuthKeySchemeAnnotation] = fv1.AuthKeySchemeNamespace
+	}
+
 	container, err := util.MergeContainer(&apiv1.Container{
 		Name:                   fv1.BuilderContainerName,
 		Image:                  env.Spec.Builder.Image,
