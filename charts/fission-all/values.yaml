@@ -1286,4 +1286,3 @@ internalAuth:
   enabled: true
   # secret: "" — auto-generated on first install; preserved on upgrade.
   # oldSecret: "" — set during rotation; accepted by the verifier alongside `secret`.
-
