@@ -45,7 +45,7 @@ type Config struct {
 
 // internalAuthEnvVars returns the env-var entries that mount the
 // HMAC-shared-secret values from the chart-installed Secret/fission-internal-auth
-// onto the fetcher sidecar container. Both keys are marked optional so a
+// onto the fetcher sidecar container. Every key is marked optional so a
 // pod still admits when the chart's internalAuth is disabled.
 //
 // The fetcher binary calls the storagesvc client, which reads
@@ -53,26 +53,37 @@ type Config struct {
 // outbound request when set. Without these env vars the fetcher's
 // uploads fail with HTTP 401 once storagesvc starts enforcing
 // signatures. See docs/internal-auth/00-design.md.
+//
+// FISSION_FETCHER_KEY / FISSION_STORAGE_KEY are the per-namespace derived keys
+// the tenant controller writes into a tenant namespace's Secret under multi-
+// namespace tenancy (the master never lands there). They are self-selecting:
+// in a single-namespace install the Secret has no fetcherKey/storageKey data, so
+// these resolve empty (Optional) and the fetcher falls back to the master-derived
+// scheme — byte-identical to before. When present, the fetcher holds only its
+// own namespace's keys and never the master.
 func internalAuthEnvVars() []apiv1.EnvVar {
 	return []apiv1.EnvVar{
-		{
-			Name: "FISSION_INTERNAL_AUTH_SECRET",
-			ValueFrom: &apiv1.EnvVarSource{
-				SecretKeyRef: &apiv1.SecretKeySelector{
-					LocalObjectReference: apiv1.LocalObjectReference{Name: "fission-internal-auth"},
-					Key:                  "secret",
-					Optional:             func() *bool { b := true; return &b }(),
-				},
-			},
-		},
-		{
-			Name: "FISSION_INTERNAL_AUTH_SECRET_OLD",
-			ValueFrom: &apiv1.EnvVarSource{
-				SecretKeyRef: &apiv1.SecretKeySelector{
-					LocalObjectReference: apiv1.LocalObjectReference{Name: "fission-internal-auth"},
-					Key:                  "oldSecret",
-					Optional:             func() *bool { b := true; return &b }(),
-				},
+		secretKeyEnv("FISSION_INTERNAL_AUTH_SECRET", "secret"),
+		secretKeyEnv("FISSION_INTERNAL_AUTH_SECRET_OLD", "oldSecret"),
+		secretKeyEnv("FISSION_FETCHER_KEY", "fetcherKey"),
+		secretKeyEnv("FISSION_FETCHER_KEY_OLD", "fetcherKeyOld"),
+		secretKeyEnv("FISSION_STORAGE_KEY", "storageKey"),
+		secretKeyEnv("FISSION_STORAGE_KEY_OLD", "storageKeyOld"),
+	}
+}
+
+// secretKeyEnv builds an optional secretKeyRef env var sourced from the
+// chart-installed fission-internal-auth Secret. Optional so the pod admits when
+// the key (or the whole Secret) is absent — the backwards-compatible default.
+func secretKeyEnv(name, secretKey string) apiv1.EnvVar {
+	optional := true
+	return apiv1.EnvVar{
+		Name: name,
+		ValueFrom: &apiv1.EnvVarSource{
+			SecretKeyRef: &apiv1.SecretKeySelector{
+				LocalObjectReference: apiv1.LocalObjectReference{Name: "fission-internal-auth"},
+				Key:                  secretKey,
+				Optional:             &optional,
 			},
 		},
 	}

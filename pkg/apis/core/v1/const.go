@@ -24,6 +24,23 @@ const (
 )
 
 const (
+	// AuthKeySchemeAnnotation records which HMAC key scheme a fetcher-bearing
+	// pod was created with, so the executor signs each /specialize call with the
+	// key that pod's verifier actually expects (version-aware signing across a
+	// rolling upgrade). It is stamped on the pod template only when dynamic
+	// multi-namespace tenancy is on for the pod's namespace; its absence means
+	// the master-derived key scheme, which is the only scheme pre-tenancy pods
+	// and all single-namespace installs ever use.
+	AuthKeySchemeAnnotation string = "fission.io/auth-key-scheme"
+
+	// AuthKeySchemeNamespace is the AuthKeySchemeAnnotation value meaning the
+	// pod's fetcher verifies with a per-namespace derived key (it holds only its
+	// own namespace's key, never the master), so the executor must sign with
+	// ServiceSignerNS for the pod's namespace.
+	AuthKeySchemeNamespace string = "namespace"
+)
+
+const (
 	ChecksumTypeSHA256 ChecksumType = "sha256"
 )
 

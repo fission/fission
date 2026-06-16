@@ -57,11 +57,28 @@ func MakeClient(logger logr.Logger, fetcherUrl string, masterSecret []byte) Clie
 	if len(masterSecret) > 0 {
 		rt = hmacauth.ServiceSigner(masterSecret, hmacauth.ServiceFetcher, rt, time.Now)
 	}
-	hc := &http.Client{Transport: rt}
+	return makeClientWithTransport(logger, fetcherUrl, rt)
+}
+
+// MakeClientNS is MakeClient for a target fetcher that verifies /specialize with
+// its per-namespace derived key rather than the master-derived ServiceFetcher
+// key (multi-namespace tenancy). The caller still holds the master and derives
+// K(fetcher, namespace) on the fly, so a leak of one tenant pod's key cannot be
+// used to specialize another tenant's pod. An empty master yields an unsigned
+// client (pass-through), matching MakeClient.
+func MakeClientNS(logger logr.Logger, fetcherUrl string, masterSecret []byte, namespace string) ClientInterface {
+	var rt http.RoundTripper = otelhttp.NewTransport(http.DefaultTransport)
+	if len(masterSecret) > 0 {
+		rt = hmacauth.ServiceSignerNS(masterSecret, hmacauth.ServiceFetcher, namespace, rt, time.Now)
+	}
+	return makeClientWithTransport(logger, fetcherUrl, rt)
+}
+
+func makeClientWithTransport(logger logr.Logger, fetcherUrl string, rt http.RoundTripper) ClientInterface {
 	return &client{
 		logger:     logger.WithName("fetcher_client"),
 		url:        strings.TrimSuffix(fetcherUrl, "/"),
-		httpClient: hc,
+		httpClient: &http.Client{Transport: rt},
 	}
 }
 
