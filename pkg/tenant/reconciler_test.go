@@ -105,7 +105,7 @@ func TestTenantReconcilerProvisionsAuthSecret(t *testing.T) {
 
 	// The derived-key secret is provisioned in the tenant namespace.
 	s := &corev1.Secret{}
-	require.NoError(t, c.Get(t.Context(), types.NamespacedName{Namespace: "team-a", Name: "fission-internal-auth"}, s))
+	require.NoError(t, c.Get(t.Context(), types.NamespacedName{Namespace: "team-a", Name: fv1.TenantAuthKeysSecret}, s))
 	assert.NotEmpty(t, s.Data["fetcherKey"], "derived fetcher key must be written")
 
 	// And AuthKeyProvisioned is reported True.

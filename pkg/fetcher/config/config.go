@@ -55,35 +55,52 @@ type Config struct {
 // signatures. See docs/internal-auth/00-design.md.
 //
 // FISSION_FETCHER_KEY / FISSION_STORAGE_KEY are the per-namespace derived keys
-// the tenant controller writes into a tenant namespace's Secret under multi-
-// namespace tenancy (the master never lands there). They are self-selecting:
-// in a single-namespace install the Secret has no fetcherKey/storageKey data, so
-// these resolve empty (Optional) and the fetcher falls back to the master-derived
-// scheme — byte-identical to before. When present, the fetcher holds only its
-// own namespace's keys and never the master.
+// the tenant controller writes into a tenant namespace's TenantAuthKeysSecret
+// under multi-namespace tenancy (the master never lands there). The Secret is a
+// DIFFERENT name from the chart's master copy so an existing install's
+// already-replicated master Secret cannot shadow it.
+//
+// In the default single-namespace mode all six are optional, so a pod admits
+// whether or not internalAuth is configured — byte-identical to before. Under
+// dynamic tenancy with auth enabled the fetcher key is REQUIRED: the kubelet then
+// blocks pod start until the controller has provisioned the namespace's derived
+// key, so a running pod is guaranteed to hold the key the executor will
+// version-aware-sign it with — closing the stamp-before-key race without 401s.
+// The storage key stays optional even then: storagesvc dual-accepts a
+// master-derived signature, so an unprovisioned fetcher degrades gracefully.
 func internalAuthEnvVars() []apiv1.EnvVar {
+	const chartSecret = "fission-internal-auth"
+	keysSecret := fv1.TenantAuthKeysSecret
+
+	// Require the fetcher key only when it is guaranteed to be provisioned:
+	// dynamic tenancy on (so a tenant controller is running, enforced by the
+	// chart) AND internal auth enabled (a master exists to derive from). With
+	// auth disabled there is no key to wait for, so requiring it would wedge the
+	// pod in CreateContainerConfigError forever.
+	fetcherKeyRequired := utils.DynamicNamespacesEnabled() && os.Getenv("FISSION_INTERNAL_AUTH_SECRET") != ""
+
 	return []apiv1.EnvVar{
-		secretKeyEnv("FISSION_INTERNAL_AUTH_SECRET", "secret"),
-		secretKeyEnv("FISSION_INTERNAL_AUTH_SECRET_OLD", "oldSecret"),
-		secretKeyEnv("FISSION_FETCHER_KEY", "fetcherKey"),
-		secretKeyEnv("FISSION_FETCHER_KEY_OLD", "fetcherKeyOld"),
-		secretKeyEnv("FISSION_STORAGE_KEY", "storageKey"),
-		secretKeyEnv("FISSION_STORAGE_KEY_OLD", "storageKeyOld"),
+		secretKeyEnv("FISSION_INTERNAL_AUTH_SECRET", chartSecret, "secret", true),
+		secretKeyEnv("FISSION_INTERNAL_AUTH_SECRET_OLD", chartSecret, "oldSecret", true),
+		secretKeyEnv("FISSION_FETCHER_KEY", keysSecret, fv1.TenantAuthFetcherKey, !fetcherKeyRequired),
+		secretKeyEnv("FISSION_FETCHER_KEY_OLD", keysSecret, "fetcherKeyOld", true),
+		secretKeyEnv("FISSION_STORAGE_KEY", keysSecret, fv1.TenantAuthStorageKey, true),
+		secretKeyEnv("FISSION_STORAGE_KEY_OLD", keysSecret, "storageKeyOld", true),
 	}
 }
 
-// secretKeyEnv builds an optional secretKeyRef env var sourced from the
-// chart-installed fission-internal-auth Secret. Optional so the pod admits when
-// the key (or the whole Secret) is absent — the backwards-compatible default.
-func secretKeyEnv(name, secretKey string) apiv1.EnvVar {
-	optional := true
+// secretKeyEnv builds a secretKeyRef env var. optional=true lets the pod admit
+// when the key (or the whole Secret) is absent — the backwards-compatible
+// default; optional=false makes the kubelet gate pod start on the key's presence.
+func secretKeyEnv(name, secretName, secretKey string, optional bool) apiv1.EnvVar {
+	opt := optional
 	return apiv1.EnvVar{
 		Name: name,
 		ValueFrom: &apiv1.EnvVarSource{
 			SecretKeyRef: &apiv1.SecretKeySelector{
-				LocalObjectReference: apiv1.LocalObjectReference{Name: "fission-internal-auth"},
+				LocalObjectReference: apiv1.LocalObjectReference{Name: secretName},
 				Key:                  secretKey,
-				Optional:             &optional,
+				Optional:             &opt,
 			},
 		},
 	}

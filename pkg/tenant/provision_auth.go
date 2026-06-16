@@ -13,22 +13,22 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/auth/hmac"
 )
 
+// keysSecretName is the controller-owned per-namespace derived-key Secret. It is
+// a DIFFERENT name from the chart's master-bearing "fission-internal-auth" so the
+// controller can create it cleanly in a namespace that already holds the chart's
+// master copy (an existing install replicated one into every function namespace);
+// a same-named Secret would collide on create and silently never write the keys.
+// Sharing the name+field constants with the fetcher pod-spec keeps writer and
+// reader in lockstep.
 const (
-	// internalAuthSecretName is the Secret the fetcher/builder containers mount
-	// for internal-auth signing. The chart materializes a master-bearing copy
-	// today; the tenant controller writes a derived-key-only copy for namespaces
-	// it manages (see NamespaceAuthSecret).
-	internalAuthSecretName = "fission-internal-auth"
-
-	// Per-namespace derived-key fields. Distinct from the chart's "secret"
-	// (master) field so the two can coexist during the migration window before
-	// the master is dropped from tenant namespaces.
-	fetcherKeyField = "fetcherKey"
-	builderKeyField = "builderKey"
-	storageKeyField = "storageKey"
+	keysSecretName  = fv1.TenantAuthKeysSecret
+	fetcherKeyField = fv1.TenantAuthFetcherKey
+	builderKeyField = fv1.TenantAuthBuilderKey
+	storageKeyField = fv1.TenantAuthStorageKey
 )
 
 // NamespaceAuthSecret builds the internal-auth Secret for a tenant namespace
@@ -46,7 +46,7 @@ func NamespaceAuthSecret(master []byte, namespace string) *corev1.Secret {
 	}
 	return &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      internalAuthSecretName,
+			Name:      keysSecretName,
 			Namespace: namespace,
 			Labels:    map[string]string{managedByLabelKey: managedByValue},
 		},

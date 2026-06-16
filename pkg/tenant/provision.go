@@ -64,8 +64,10 @@ func DeleteNamespaceRBAC(ctx context.Context, c client.Client, namespace string)
 	// require secrets list/get cluster-wide (i.e. read of every secret) — exactly
 	// the privilege the design withholds from the controller. A name-scoped delete
 	// needs only the `delete` verb, so the controller can write/remove the auth
-	// secret without ever being able to read tenant secrets.
-	authSecret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: internalAuthSecretName, Namespace: namespace}}
+	// secret without ever being able to read tenant secrets. The name is the
+	// controller-owned keysSecretName, never the chart's master copy, so teardown
+	// cannot disturb a Helm-managed Secret.
+	authSecret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: keysSecretName, Namespace: namespace}}
 	if err := c.Delete(ctx, authSecret); err != nil && !apierrors.IsNotFound(err) {
 		return fmt.Errorf("deleting auth secret in %s: %w", namespace, err)
 	}

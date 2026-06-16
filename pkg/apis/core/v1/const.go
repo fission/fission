@@ -24,6 +24,27 @@ const (
 )
 
 const (
+	// TenantAuthKeysSecret is the controller-owned Secret (one per tenant
+	// namespace) holding that namespace's derived HMAC keys. It is deliberately
+	// a DIFFERENT name from the chart's master-bearing "fission-internal-auth":
+	// an existing install already replicated the master copy into every function
+	// namespace, so a same-named controller Secret would collide (AlreadyExists)
+	// and silently never write the derived keys, leaving the data plane to 401.
+	// A distinct name lets the controller create it cleanly, own it fully for
+	// teardown (without touching the Helm-managed master Secret), and reach the
+	// "master never in a tenant namespace" end state by simply having the chart
+	// stop replicating the master copy — no in-place merge/removal needed.
+	TenantAuthKeysSecret = "fission-internal-auth-keys"
+
+	// Data-key fields inside TenantAuthKeysSecret. Shared by the tenant
+	// controller (writer) and the fetcher pod-spec (reader) so the two cannot
+	// drift.
+	TenantAuthFetcherKey = "fetcherKey"
+	TenantAuthBuilderKey = "builderKey"
+	TenantAuthStorageKey = "storageKey"
+)
+
+const (
 	// AuthKeySchemeAnnotation records which HMAC key scheme a fetcher-bearing
 	// pod was created with, so the executor signs each /specialize call with the
 	// key that pod's verifier actually expects (version-aware signing across a
