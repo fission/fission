@@ -8,7 +8,6 @@ package serial_test
 
 import (
 	"context"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -73,21 +72,15 @@ func TestDynamicTenantLifecycle(t *testing.T) {
 	routeURL := "/" + fnName
 	ns.CreateRoute(t, ctx, framework.RouteOptions{Function: fnName, URL: routeURL, Method: "GET"})
 
-	// DIAGNOSTIC: locate where the staged CRs actually landed. envtest (CLI +
-	// apiserver, no control plane) puts them in tenantNS, but a CI run showed
-	// tenantNS empty at failure — so log the ground truth across all namespaces.
-	allFns, ferr := f.FissionClient().CoreV1().Functions(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
-	t.Logf("DIAG: list-all functions err=%v", ferr)
-	for i := range allFns.Items {
-		t.Logf("DIAG: function %s/%s", allFns.Items[i].Namespace, allFns.Items[i].Name)
-	}
-	allEnvs, _ := f.FissionClient().CoreV1().Environments(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
-	for i := range allEnvs.Items {
-		t.Logf("DIAG: environment %s/%s", allEnvs.Items[i].Namespace, allEnvs.Items[i].Name)
-	}
-	_, nsGetErr := f.KubeClient().CoreV1().Namespaces().Get(ctx, tenantNS, metav1.GetOptions{})
-	t.Logf("DIAG: namespace %q exists: %v (err=%v)", tenantNS, nsGetErr == nil, nsGetErr)
-	t.Logf("DIAG: FISSION_DEFAULT_NAMESPACE=%q FISSION_RESOURCE_NAMESPACES=%q", os.Getenv("FISSION_DEFAULT_NAMESPACE"), os.Getenv("FISSION_RESOURCE_NAMESPACES"))
+	// Make sure the staged CRs are durably persisted before onboarding, so the
+	// stage-then-onboard ordering the test depends on is real and not racing the
+	// CLI's create round-trip. The onboard re-enqueue LISTs the namespace's CRs to
+	// converge them, so a function that isn't list-visible yet would be missed.
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		fns, lerr := f.FissionClient().CoreV1().Functions(tenantNS).List(ctx, metav1.ListOptions{})
+		assert.NoError(c, lerr, "list functions in tenant namespace")
+		assert.NotEmpty(c, fns.Items, "staged function must be list-visible before onboarding")
+	}, time.Minute, time.Second)
 
 	// 2. Onboard. The controller provisions per-namespace RBAC, ServiceAccounts and
 	//    the derived-key Secret; the data-plane managers add the namespace to their
