@@ -17,6 +17,7 @@ import (
 	ctrlcontroller "sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -70,7 +71,7 @@ func RegisterTenantScopedWithPredicates(mgr ctrl.Manager, obj client.Object, rec
 	b := builder.ControllerManagedBy(mgr).
 		For(obj, builder.WithPredicates(tenantScopedPredicates(predicates)...)).
 		Watches(&fv1.FissionTenant{},
-			TenantReenqueueHandler(mgr.GetClient(), mgr.GetScheme(), obj),
+			TenantReenqueueHandler(mgr.GetAPIReader(), mgr.GetScheme(), obj),
 			builder.WithPredicates(TenantOnboardPredicate())).
 		Named(name)
 	if maxConcurrent > 0 {
@@ -122,13 +123,18 @@ func TenantOnboardPredicate() predicate.Predicate {
 //  2. Re-enqueues the namespace's existing CRs, so any created before onboarding
 //     converge in one pass. The enqueued requests bypass the predicates, so a CR
 //     dropped earlier is reconciled now.
-func TenantReenqueueHandler(c client.Client, scheme *runtime.Scheme, proto client.Object) handler.EventHandler {
-	return handler.EnqueueRequestsFromMapFunc(tenantReenqueueMapFunc(c, scheme, proto))
+//
+// reader MUST be uncached (mgr.GetAPIReader()): a CR staged moments before the
+// onboard may not be in the informer cache yet, and the cached client would then
+// return an empty list and silently re-enqueue nothing — the informer-lag race
+// that the apiserver read closes.
+func TenantReenqueueHandler(reader client.Reader, scheme *runtime.Scheme, proto client.Object) handler.EventHandler {
+	return handler.EnqueueRequestsFromMapFunc(tenantReenqueueMapFunc(reader, scheme, proto))
 }
 
 // tenantReenqueueMapFunc is the map function behind TenantReenqueueHandler,
 // extracted so it can be unit-tested without a workqueue.
-func tenantReenqueueMapFunc(c client.Client, scheme *runtime.Scheme, proto client.Object) handler.MapFunc {
+func tenantReenqueueMapFunc(reader client.Reader, scheme *runtime.Scheme, proto client.Object) handler.MapFunc {
 	return func(ctx context.Context, tenantObj client.Object) []reconcile.Request {
 		ft, ok := tenantObj.(*fv1.FissionTenant)
 		if !ok || ft.Spec.Namespace == "" {
@@ -154,7 +160,7 @@ func tenantReenqueueMapFunc(c client.Client, scheme *runtime.Scheme, proto clien
 		if !ok {
 			return nil
 		}
-		if err := c.List(ctx, list, client.InNamespace(ns)); err != nil {
+		if err := reader.List(ctx, list, client.InNamespace(ns)); err != nil {
 			return nil
 		}
 		var reqs []reconcile.Request
@@ -164,6 +170,8 @@ func tenantReenqueueMapFunc(c client.Client, scheme *runtime.Scheme, proto clien
 			}
 			return nil
 		})
+		log.FromContext(ctx).Info("tenant onboarded: re-enqueueing namespace CRs",
+			"namespace", ns, "kind", gvk.Kind, "count", len(reqs))
 		return reqs
 	}
 }

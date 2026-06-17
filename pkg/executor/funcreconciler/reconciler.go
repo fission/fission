@@ -337,7 +337,7 @@ func RegisterReconciler(mgr ctrl.Manager, logger logr.Logger, executorTypes map[
 		// event predated the tenant. Mirrors controller.RegisterTenantScoped (this
 		// reconciler builds its own controller, so it wires the watch directly).
 		b = b.Watches(&fv1.FissionTenant{},
-			controller.TenantReenqueueHandler(mgr.GetClient(), mgr.GetScheme(), &fv1.Function{}),
+			controller.TenantReenqueueHandler(mgr.GetAPIReader(), mgr.GetScheme(), &fv1.Function{}),
 			builder.WithPredicates(controller.TenantOnboardPredicate()))
 	}
 	return b.Complete(r)
