@@ -8,6 +8,7 @@ package framework
 
 import (
 	"context"
+	"strconv"
 	"testing"
 	"time"
 
@@ -36,7 +37,10 @@ func (f *Framework) DynamicNamespacesEnabled(t *testing.T, ctx context.Context) 
 	dep, err := f.kubeClient.AppsV1().Deployments(f.FissionNamespace()).Get(ctx, executorDeploymentName, metav1.GetOptions{})
 	require.NoErrorf(t, err, "DynamicNamespacesEnabled: get executor Deployment")
 	v, _ := executorEnvValue(dep, "FISSION_DYNAMIC_NAMESPACES")
-	return v == "true"
+	// Parse like production (utils.DynamicNamespacesEnabled) so "1"/"True"/etc.
+	// agree with the cluster's own interpretation, not just the chart's "true".
+	on, _ := strconv.ParseBool(v)
+	return on
 }
 
 // NewTestNamespaceIn creates a real Kubernetes namespace and returns a
@@ -161,6 +165,15 @@ func (f *Framework) WaitForControlPlaneStable(t *testing.T, ctx context.Context,
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		deps, err := f.kubeClient.AppsV1().Deployments(ns).List(ctx, metav1.ListOptions{})
 		if !assert.NoError(c, err, "list control-plane deployments") {
+			return
+		}
+		// Guard against a vacuous pass: an empty list would skip the loop and
+		// satisfy EventuallyWithT on the first tick, certifying "stable" without
+		// checking anything (e.g. a wrong FISSION_NAMESPACE). The replicas check
+		// below assumes no HPA-driven scaling in the release namespace (replicas
+		// are Deployment-owned in kind-ci); a future control-plane HPA would make
+		// .Spec.Replicas HPA-owned and need rethinking here.
+		if !assert.NotEmptyf(c, deps.Items, "no Deployments found in Fission namespace %q", ns) {
 			return
 		}
 		for i := range deps.Items {

@@ -31,8 +31,11 @@ import (
 // static-namespace CI leg (FISSION_DYNAMIC_NAMESPACES off), matching how the
 // RFC-0002/0013 gate-dependent tests detect their mode.
 func TestDynamicTenantLifecycle(t *testing.T) {
-	// Deliberately NOT t.Parallel(): see the doc comment.
-	ctx, cancel := context.WithTimeout(t.Context(), 12*time.Minute)
+	// Deliberately NOT t.Parallel(): see the doc comment. 15m (matching the adopt
+	// test) covers the stack-up — control-plane-stable wait, onboard, a cold-start
+	// function invoke (poolmgr spin-up + first specialization in a brand-new
+	// namespace), and offboard — when this runs after the other serial tests.
+	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Minute)
 	t.Cleanup(cancel)
 
 	f := framework.Connect(t)
@@ -58,6 +61,24 @@ func TestDynamicTenantLifecycle(t *testing.T) {
 	ns.EnableTenant(t, ctx)
 	f.WaitForTenantReady(t, ctx, tenantNS)
 
+	// Re-enabling is idempotent: `tenant enable` matches on spec.namespace and
+	// updates the existing tenant instead of creating a duplicate. The enable does
+	// a full-object update, which can briefly 409 against the controller's status
+	// writer, so retry; then prove exactly one FissionTenant exists for the namespace.
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		_, eerr := ns.CLICaptureStdoutBestEffort(t, ctx, "tenant", "enable", "--namespace", tenantNS)
+		assert.NoError(c, eerr, "re-enable tenant (idempotent)")
+	}, 30*time.Second, 2*time.Second)
+	tenants, err := f.FissionClient().CoreV1().FissionTenants().List(ctx, metav1.ListOptions{})
+	require.NoError(t, err, "list FissionTenants")
+	count := 0
+	for i := range tenants.Items {
+		if tenants.Items[i].Spec.Namespace == tenantNS {
+			count++
+		}
+	}
+	require.Equalf(t, 1, count, "re-enabling must not create a duplicate tenant for %q", tenantNS)
+
 	// 2. Create a sample environment + function + route in the new namespace.
 	envName := "python-" + ns.ID
 	ns.CreateEnv(t, ctx, framework.EnvOptions{Name: envName, Image: pyImage, Poolsize: 1})
@@ -70,8 +91,11 @@ func TestDynamicTenantLifecycle(t *testing.T) {
 	ns.CreateRoute(t, ctx, framework.RouteOptions{Function: fnName, URL: routeURL, Method: "GET"})
 
 	// 3. Invoke it. The namespace-explicit internal route proves the executor
-	//    specialized a pod in the tenant namespace — exercising the per-namespace
-	//    fetcher HMAC key end-to-end — and the router serves it.
+	//    specialized a pod in the tenant namespace — whose fetcher used the
+	//    namespace's own derived HMAC key to fetch its package — and that the
+	//    router resolved the tenant trigger. (Cross-namespace key *isolation* —
+	//    that namespace A's key cannot auth as B — is a separate negative test,
+	//    tracked as a follow-up; this asserts the positive path only.)
 	r := f.Router(t)
 	body := r.GetEventually(t, ctx, "/fission-function/"+tenantNS+"/"+fnName, framework.BodyContains("hello"))
 	require.Contains(t, strings.ToLower(body), "hello")
@@ -84,10 +108,17 @@ func TestDynamicTenantLifecycle(t *testing.T) {
 	//    control-plane pod (#3298: the whole point of the dynamic model).
 	f.AssertNoControlPlaneRestart(t, ctx, before)
 
-	// 5. Offboard, the safe-by-default way: drain the namespace, then disable.
-	//    `tenant disable` refuses while functions remain (the controller never
-	//    silently strips a busy namespace), so delete the resources and wait for
-	//    the function to clear first. The controller then tears the namespace's
+	// 5. Offboard, the safe-by-default way. First prove `tenant disable` REFUSES
+	//    while the namespace still has a function — the controller never silently
+	//    strips a busy namespace. (Best-effort CLI variant so the expected
+	//    non-zero exit is an asserted error, not a t.Fatal.)
+	out, derr := ns.CLICaptureStdoutBestEffort(t, ctx, "tenant", "disable", "--namespace", tenantNS)
+	require.Errorf(t, derr, "tenant disable must refuse while %q still has a function (got: %s)", tenantNS, out)
+	require.Containsf(t, derr.Error(), "function",
+		"the refusal should explain the namespace still has functions: %v", derr)
+
+	//    Now drain the namespace and disable for real. `tenant disable` succeeds
+	//    once no functions remain; the controller then tears the namespace's
 	//    RBAC/Secret down via its finalizer.
 	fc := f.FissionClient().CoreV1()
 	require.NoError(t, fc.HTTPTriggers(tenantNS).Delete(ctx, "route-"+fnName, metav1.DeleteOptions{}))
