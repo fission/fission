@@ -154,17 +154,31 @@ func (f *Framework) WaitForTenantOffboarded(t *testing.T, ctx context.Context, n
 
 // WaitForControlPlaneStable blocks until every Deployment in the Fission release
 // namespace has fully rolled out (observedGeneration current, all replicas
-// updated and available, none unavailable). The serial suite's other tests (e.g.
-// AdoptExistingResources) restart the executor and restore it WITHOUT waiting on
-// the restore rollout, so a rollout can still be in flight when this test starts;
-// snapshotting the control plane mid-rollout would make AssertNoControlPlane
-// Restart flake. Call this before ControlPlanePodUIDs.
+// updated and available, none unavailable) AND has stayed that way for a
+// sustained run of consecutive checks. Call this before ControlPlanePodUIDs.
+//
+// The sustained requirement is essential, not belt-and-suspenders. The serial
+// suite's adopt test restarts the executor with the Recreate strategy and then
+// triggers a restore rollout on cleanup WITHOUT waiting for it, so when this runs
+// the executor can be churning through several overlapping rollouts within a
+// couple of seconds. A single "looks stable" instant is not enough: the
+// Deployment status passes transiently between two of those rollouts, and
+// snapshotting then captures a pod the next rollout immediately replaces —
+// falsely tripping AssertNoControlPlaneRestart (observed: executor pod gone
+// ~10s after a stable-looking snapshot on the slower kind leg). Requiring
+// stability to hold continuously lets all prior-test churn drain first.
 func (f *Framework) WaitForControlPlaneStable(t *testing.T, ctx context.Context, timeout time.Duration) {
 	t.Helper()
 	ns := f.FissionNamespace()
+	// ~20s of continuous stability at the 2s tick: comfortably longer than the
+	// prior test's executor rollouts take to drain, so a transient gap between
+	// them cannot satisfy it.
+	const requiredConsecutive = 10
+	consecutive := 0
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		deps, err := f.kubeClient.AppsV1().Deployments(ns).List(ctx, metav1.ListOptions{})
 		if !assert.NoError(c, err, "list control-plane deployments") {
+			consecutive = 0
 			return
 		}
 		// Guard against a vacuous pass: an empty list would skip the loop and
@@ -174,8 +188,10 @@ func (f *Framework) WaitForControlPlaneStable(t *testing.T, ctx context.Context,
 		// are Deployment-owned in kind-ci); a future control-plane HPA would make
 		// .Spec.Replicas HPA-owned and need rethinking here.
 		if !assert.NotEmptyf(c, deps.Items, "no Deployments found in Fission namespace %q", ns) {
+			consecutive = 0
 			return
 		}
+		stable := true
 		for i := range deps.Items {
 			d := &deps.Items[i]
 			want := int32(1)
@@ -183,12 +199,23 @@ func (f *Framework) WaitForControlPlaneStable(t *testing.T, ctx context.Context,
 				want = *d.Spec.Replicas
 			}
 			st := d.Status
-			assert.GreaterOrEqualf(c, st.ObservedGeneration, d.Generation, "%s: rollout not observed", d.Name)
-			assert.Equalf(c, want, st.UpdatedReplicas, "%s: rollout in progress (updated replicas)", d.Name)
-			assert.Equalf(c, want, st.AvailableReplicas, "%s: available replicas", d.Name)
-			assert.Equalf(c, want, st.Replicas, "%s: old pod still terminating (total replicas)", d.Name)
-			assert.Zerof(c, st.UnavailableReplicas, "%s: unavailable replicas", d.Name)
+			ok := assert.GreaterOrEqualf(c, st.ObservedGeneration, d.Generation, "%s: rollout not observed", d.Name)
+			ok = assert.Equalf(c, want, st.UpdatedReplicas, "%s: rollout in progress (updated replicas)", d.Name) && ok
+			ok = assert.Equalf(c, want, st.AvailableReplicas, "%s: available replicas", d.Name) && ok
+			ok = assert.Equalf(c, want, st.Replicas, "%s: old pod still terminating (total replicas)", d.Name) && ok
+			ok = assert.Zerof(c, st.UnavailableReplicas, "%s: unavailable replicas", d.Name) && ok
+			stable = stable && ok
 		}
+		// Not settled this tick: reset the run and let EventuallyWithT retry. The
+		// per-Deployment assertions above already recorded what was unstable, so a
+		// genuine timeout still reports the offending Deployment.
+		if !stable {
+			consecutive = 0
+			return
+		}
+		consecutive++
+		assert.GreaterOrEqualf(c, consecutive, requiredConsecutive,
+			"control plane settling: %d/%d consecutive stable checks", consecutive, requiredConsecutive)
 	}, timeout, 2*time.Second)
 }
 
