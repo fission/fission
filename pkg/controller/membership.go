@@ -5,11 +5,22 @@
 package controller
 
 import (
+	"context"
+
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
+	ctrlcontroller "sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/utils"
 )
 
@@ -48,11 +59,24 @@ func RegisterTenantScopedWithConcurrency(mgr ctrl.Manager, obj client.Object, re
 }
 
 // RegisterTenantScopedWithPredicates is RegisterWithPredicates plus, when dynamic
-// namespaces are on, MembershipPredicate ANDed onto the supplied predicates. The
-// supplied predicates REPLACE the default GenerationChangedPredicate (pass it
-// explicitly if wanted).
+// namespaces are on, MembershipPredicate ANDed onto the supplied predicates AND a
+// FissionTenant watch that re-converges a namespace on onboarding (see
+// TenantReenqueueHandler). The supplied predicates REPLACE the default
+// GenerationChangedPredicate (pass it explicitly if wanted).
 func RegisterTenantScopedWithPredicates(mgr ctrl.Manager, obj client.Object, reconciler reconcile.Reconciler, name string, maxConcurrent int, predicates ...predicate.Predicate) error {
-	return RegisterWithPredicates(mgr, obj, reconciler, name, maxConcurrent, tenantScopedPredicates(predicates)...)
+	if !utils.DynamicNamespacesEnabled() {
+		return RegisterWithPredicates(mgr, obj, reconciler, name, maxConcurrent, predicates...)
+	}
+	b := builder.ControllerManagedBy(mgr).
+		For(obj, builder.WithPredicates(tenantScopedPredicates(predicates)...)).
+		Watches(&fv1.FissionTenant{},
+			TenantReenqueueHandler(mgr.GetClient(), mgr.GetScheme(), obj),
+			builder.WithPredicates(TenantOnboardPredicate())).
+		Named(name)
+	if maxConcurrent > 0 {
+		b = b.WithOptions(ctrlcontroller.Options{MaxConcurrentReconciles: maxConcurrent})
+	}
+	return b.Complete(reconciler)
 }
 
 // tenantScopedPredicates appends MembershipPredicate when dynamic namespaces are
@@ -66,4 +90,80 @@ func tenantScopedPredicates(predicates []predicate.Predicate) []predicate.Predic
 	out = append(out, predicates...)
 	out = append(out, MembershipPredicate(utils.DefaultNSResolver()))
 	return out
+}
+
+// TenantOnboardPredicate fires the FissionTenant re-enqueue watch on a tenant's
+// create and update (onboarding / re-onboarding), but not delete: offboarding
+// just stops admitting new events (the resolver-sync controller drops the
+// namespace from the live set), and there is nothing to re-converge. Exported so
+// reconcilers that build their own controller (e.g. the executor funcreconciler)
+// can wire the same FissionTenant watch as RegisterTenantScoped.
+func TenantOnboardPredicate() predicate.Predicate {
+	return predicate.Funcs{
+		CreateFunc:  func(event.CreateEvent) bool { return true },
+		UpdateFunc:  func(event.UpdateEvent) bool { return true },
+		DeleteFunc:  func(event.DeleteEvent) bool { return false },
+		GenericFunc: func(event.GenericEvent) bool { return false },
+	}
+}
+
+// TenantReenqueueHandler maps a FissionTenant onboarding event to reconcile
+// requests for every `proto`-typed CR already in that tenant's namespace. It
+// closes the dynamic-onboarding gap the MembershipPredicate alone leaves: that
+// predicate drops a CR whose event arrives while the namespace is not yet a
+// tenant, and — because GenerationChangedPredicate also suppresses the informer's
+// periodic resync — the CR would never be reconciled again. On a FissionTenant
+// add it:
+//
+//  1. Adds the namespace to the live resolver set IMMEDIATELY (utils.AddTenant),
+//     so a CR created right after onboarding is admitted by its own event without
+//     waiting on the separate resolver-sync controller — eliminating the
+//     cross-controller race that otherwise drops it permanently.
+//  2. Re-enqueues the namespace's existing CRs, so any created before onboarding
+//     converge in one pass. The enqueued requests bypass the predicates, so a CR
+//     dropped earlier is reconciled now.
+func TenantReenqueueHandler(c client.Client, scheme *runtime.Scheme, proto client.Object) handler.EventHandler {
+	return handler.EnqueueRequestsFromMapFunc(tenantReenqueueMapFunc(c, scheme, proto))
+}
+
+// tenantReenqueueMapFunc is the map function behind TenantReenqueueHandler,
+// extracted so it can be unit-tested without a workqueue.
+func tenantReenqueueMapFunc(c client.Client, scheme *runtime.Scheme, proto client.Object) handler.MapFunc {
+	return func(ctx context.Context, tenantObj client.Object) []reconcile.Request {
+		ft, ok := tenantObj.(*fv1.FissionTenant)
+		if !ok || ft.Spec.Namespace == "" {
+			return nil
+		}
+		ns := ft.Spec.Namespace
+		// (1) Make membership live now (idempotent), independent of the dedicated
+		// resolver-sync controller's timing.
+		utils.DefaultNSResolver().AddTenant(ns)
+
+		// (2) List the proto's CRs in ns and enqueue them. Build the List type for
+		// proto from the scheme (e.g. Function → FunctionList).
+		gvk, err := apiutil.GVKForObject(proto, scheme)
+		if err != nil {
+			return nil
+		}
+		gvk.Kind += "List"
+		listObj, err := scheme.New(gvk)
+		if err != nil {
+			return nil
+		}
+		list, ok := listObj.(client.ObjectList)
+		if !ok {
+			return nil
+		}
+		if err := c.List(ctx, list, client.InNamespace(ns)); err != nil {
+			return nil
+		}
+		var reqs []reconcile.Request
+		_ = apimeta.EachListItem(list, func(o runtime.Object) error {
+			if m, err := apimeta.Accessor(o); err == nil {
+				reqs = append(reqs, reconcile.Request{NamespacedName: types.NamespacedName{Namespace: m.GetNamespace(), Name: m.GetName()}})
+			}
+			return nil
+		})
+		return reqs
+	}
 }

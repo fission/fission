@@ -323,13 +323,22 @@ func RegisterReconciler(mgr ctrl.Manager, logger logr.Logger, executorTypes map[
 	if utils.DynamicNamespacesEnabled() {
 		funcPredicate = predicate.And(funcPredicate, controller.MembershipPredicate(utils.DefaultNSResolver()))
 	}
-	return builder.ControllerManagedBy(mgr).
+	b := builder.ControllerManagedBy(mgr).
 		Named("executor-function").
 		WithOptions(ctrlcontroller.Options{MaxConcurrentReconciles: funcReconcileConcurrency}).
 		For(&fv1.Function{}, builder.WithPredicates(funcPredicate)).
 		Watches(&appsv1.Deployment{}, handler.EnqueueRequestsFromMapFunc(ownedObjectToFunction),
 			builder.WithPredicates(deleteOnlyPredicate)).
 		Watches(&corev1.Service{}, handler.EnqueueRequestsFromMapFunc(ownedObjectToFunction),
-			builder.WithPredicates(deleteOnlyPredicate)).
-		Complete(r)
+			builder.WithPredicates(deleteOnlyPredicate))
+	if utils.DynamicNamespacesEnabled() {
+		// Re-converge a namespace's Functions when it is onboarded at runtime: the
+		// membership predicate above otherwise permanently drops a Function whose
+		// event predated the tenant. Mirrors controller.RegisterTenantScoped (this
+		// reconciler builds its own controller, so it wires the watch directly).
+		b = b.Watches(&fv1.FissionTenant{},
+			controller.TenantReenqueueHandler(mgr.GetClient(), mgr.GetScheme(), &fv1.Function{}),
+			builder.WithPredicates(controller.TenantOnboardPredicate()))
+	}
+	return b.Complete(r)
 }
