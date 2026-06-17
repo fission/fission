@@ -59,6 +59,19 @@ rules:
   - delete
   - bind
   - escalate
+# Bind ONLY the two fixed workload ClusterRoles into tenant namespaces (via the
+# RoleBindings the controller provisions) so the executor/buildermgr can manage
+# workloads there. resourceNames-scoped: the controller cannot bind any other
+# ClusterRole, so it cannot escalate itself to arbitrary cluster permissions.
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - clusterroles
+  verbs:
+  - bind
+  resourceNames:
+  - fission-executor-tenant-workload
+  - fission-buildermgr-tenant-workload
 - apiGroups:
   - ""
   resources:

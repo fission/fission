@@ -34,8 +34,8 @@ const (
 // namespace's OWN ConfigMaps/Secrets/Packages (no cross-namespace, no
 // escalation): a tenant controller holding rbac `escalate`/`bind` can mint these
 // without itself being able to read those Secrets.
-func EnsureNamespaceRBAC(ctx context.Context, c client.Client, namespace string) error {
-	for _, obj := range namespaceRBACObjects(namespace) {
+func EnsureNamespaceRBAC(ctx context.Context, c client.Client, namespace, releaseNamespace string) error {
+	for _, obj := range namespaceRBACObjects(namespace, releaseNamespace) {
 		if err := c.Create(ctx, obj); err != nil && !apierrors.IsAlreadyExists(err) {
 			return fmt.Errorf("provisioning %T %s/%s: %w", obj, namespace, obj.GetName(), err)
 		}
@@ -74,7 +74,7 @@ func DeleteNamespaceRBAC(ctx context.Context, c client.Client, namespace string)
 	return nil
 }
 
-func namespaceRBACObjects(ns string) []client.Object {
+func namespaceRBACObjects(ns, releaseNamespace string) []client.Object {
 	labels := map[string]string{managedByLabelKey: managedByValue}
 	meta := func(name string) metav1.ObjectMeta {
 		return metav1.ObjectMeta{Name: name, Namespace: ns, Labels: labels}
@@ -86,8 +86,18 @@ func namespaceRBACObjects(ns string) []client.Object {
 			Subjects:   []rbacv1.Subject{{Kind: "ServiceAccount", Name: sa, Namespace: ns}},
 		}
 	}
+	// clusterRoleBinding binds a release-namespace control-plane SA to a fixed
+	// workload ClusterRole, scoped to THIS namespace by the RoleBinding — so the
+	// executor / buildermgr can manage their workloads here, never cluster-wide.
+	clusterRoleBinding := func(name, sa, clusterRole string) *rbacv1.RoleBinding {
+		return &rbacv1.RoleBinding{
+			ObjectMeta: meta(name),
+			RoleRef:    rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "ClusterRole", Name: clusterRole},
+			Subjects:   []rbacv1.Subject{{Kind: "ServiceAccount", Name: sa, Namespace: releaseNamespace}},
+		}
+	}
 	get := []string{"get"}
-	return []client.Object{
+	objs := []client.Object{
 		&corev1.ServiceAccount{ObjectMeta: meta(fv1.FissionFetcherSA)},
 		&corev1.ServiceAccount{ObjectMeta: meta(fv1.FissionBuilderSA)},
 
@@ -109,4 +119,18 @@ func namespaceRBACObjects(ns string) []client.Object {
 		roleBinding(builderRoleName, fv1.FissionBuilderSA),
 		roleBinding(fetcherWebsocketRoleName, fv1.FissionFetcherSA),
 	}
+
+	// Bind the executor and buildermgr (release-namespace SAs) to their workload
+	// ClusterRoles so they can create/manage workloads in this tenant namespace —
+	// the dynamic equivalent of the chart's per-namespace executor/buildermgr
+	// kubernetes Roles. Skipped when the release namespace is unknown (the subject
+	// would be unresolvable), in which case the executor/buildermgr fall back to
+	// any statically-rendered Role for this namespace.
+	if releaseNamespace != "" {
+		objs = append(objs,
+			clusterRoleBinding("fission-executor-workload", fv1.FissionExecutorSA, fv1.ExecutorTenantWorkloadClusterRole),
+			clusterRoleBinding("fission-buildermgr-workload", fv1.FissionBuildermgrSA, fv1.BuildermgrTenantWorkloadClusterRole),
+		)
+	}
+	return objs
 }

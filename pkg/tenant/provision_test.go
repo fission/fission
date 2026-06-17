@@ -21,7 +21,7 @@ func TestEnsureNamespaceRBACCreatesObjects(t *testing.T) {
 	c := newFakeClient(t)
 	ctx := t.Context()
 
-	require.NoError(t, EnsureNamespaceRBAC(ctx, c, "team-a"))
+	require.NoError(t, EnsureNamespaceRBAC(ctx, c, "team-a", "fission"))
 
 	// ServiceAccounts.
 	for _, sa := range []string{fv1.FissionFetcherSA, fv1.FissionBuilderSA} {
@@ -45,17 +45,63 @@ func TestEnsureNamespaceRBACCreatesObjects(t *testing.T) {
 	assert.True(t, grantsGet(fetcher, "fission.io", "packages"), "fetcher Role must grant packages get")
 }
 
+// TestEnsureNamespaceRBACBindsWorkloadClusterRoles pins that the executor and
+// buildermgr (release-namespace SAs) get a RoleBinding to their workload
+// ClusterRole in each tenant namespace, so they can manage workloads there under
+// dynamic tenancy. The binding is scoped to the namespace (RoleBinding, not
+// ClusterRoleBinding) and the subject points at the release namespace.
+func TestEnsureNamespaceRBACBindsWorkloadClusterRoles(t *testing.T) {
+	c := newFakeClient(t)
+	ctx := t.Context()
+	require.NoError(t, EnsureNamespaceRBAC(ctx, c, "team-a", "fission"))
+
+	cases := []struct {
+		binding     string
+		sa          string
+		clusterRole string
+	}{
+		{"fission-executor-workload", fv1.FissionExecutorSA, fv1.ExecutorTenantWorkloadClusterRole},
+		{"fission-buildermgr-workload", fv1.FissionBuildermgrSA, fv1.BuildermgrTenantWorkloadClusterRole},
+	}
+	for _, tc := range cases {
+		t.Run(tc.binding, func(t *testing.T) {
+			rb := &rbacv1.RoleBinding{}
+			require.NoError(t, c.Get(ctx, types.NamespacedName{Namespace: "team-a", Name: tc.binding}, rb))
+			assert.Equal(t, "ClusterRole", rb.RoleRef.Kind, "must bind a ClusterRole")
+			assert.Equal(t, tc.clusterRole, rb.RoleRef.Name)
+			require.Len(t, rb.Subjects, 1)
+			assert.Equal(t, tc.sa, rb.Subjects[0].Name)
+			assert.Equal(t, "fission", rb.Subjects[0].Namespace, "subject SA lives in the release namespace")
+			assert.Equal(t, managedByValue, rb.Labels[managedByLabelKey], "must be labelled for cleanup")
+		})
+	}
+}
+
+// TestEnsureNamespaceRBACSkipsWorkloadBindingsWithoutReleaseNS guards the
+// fallback: with no release namespace known, the workload bindings are skipped
+// (an unresolvable subject would be useless), leaving the fetcher/builder RBAC.
+func TestEnsureNamespaceRBACSkipsWorkloadBindingsWithoutReleaseNS(t *testing.T) {
+	c := newFakeClient(t)
+	ctx := t.Context()
+	require.NoError(t, EnsureNamespaceRBAC(ctx, c, "team-a", ""))
+
+	rb := &rbacv1.RoleBinding{}
+	assert.True(t, apierrors.IsNotFound(c.Get(ctx, types.NamespacedName{Namespace: "team-a", Name: "fission-executor-workload"}, rb)),
+		"workload binding must be skipped when the release namespace is unknown")
+	require.NoError(t, c.Get(ctx, types.NamespacedName{Namespace: "team-a", Name: fetcherRoleName}, &rbacv1.Role{}))
+}
+
 func TestEnsureNamespaceRBACIsIdempotent(t *testing.T) {
 	c := newFakeClient(t)
 	ctx := t.Context()
-	require.NoError(t, EnsureNamespaceRBAC(ctx, c, "team-a"))
-	require.NoError(t, EnsureNamespaceRBAC(ctx, c, "team-a"), "re-running must not error (create-if-absent)")
+	require.NoError(t, EnsureNamespaceRBAC(ctx, c, "team-a", "fission"))
+	require.NoError(t, EnsureNamespaceRBAC(ctx, c, "team-a", "fission"), "re-running must not error (create-if-absent)")
 }
 
 func TestDeleteNamespaceRBACRemovesManaged(t *testing.T) {
 	c := newFakeClient(t)
 	ctx := t.Context()
-	require.NoError(t, EnsureNamespaceRBAC(ctx, c, "team-a"))
+	require.NoError(t, EnsureNamespaceRBAC(ctx, c, "team-a", "fission"))
 	require.NoError(t, DeleteNamespaceRBAC(ctx, c, "team-a"))
 
 	sa := &corev1.ServiceAccount{}

@@ -67,6 +67,10 @@ type TenantReconciler struct {
 	// master is the internal-auth master secret used to derive per-namespace
 	// keys. Empty (internalAuth disabled) skips auth-key provisioning.
 	master []byte
+	// releaseNamespace is the install namespace where the executor/buildermgr SAs
+	// live; it is the subject namespace for the workload RoleBindings provisioned
+	// into each tenant namespace. Empty skips that binding (static Roles apply).
+	releaseNamespace string
 }
 
 func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -122,7 +126,7 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	// Namespace exists: provision the per-namespace RBAC + service accounts the
 	// fetcher/builder need (idempotent; the runtime equivalent of the chart's
 	// _function-access-role.tpl). Ready gates on it.
-	if err := EnsureNamespaceRBAC(ctx, r.client, ft.Spec.Namespace); err != nil {
+	if err := EnsureNamespaceRBAC(ctx, r.client, ft.Spec.Namespace, r.releaseNamespace); err != nil {
 		controller.SetConditions(ctx, r.logger, r.client, ft, metav1.Condition{
 			Type:    fv1.FissionTenantConditionRBACProvisioned,
 			Status:  metav1.ConditionFalse,

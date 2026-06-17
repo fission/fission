@@ -226,6 +226,21 @@ const (
 const (
 	FissionBuilderSA = "fission-builder"
 	FissionFetcherSA = "fission-fetcher"
+
+	// Control-plane ServiceAccounts (in the install/release namespace) that need
+	// workload RBAC in each tenant namespace under dynamic tenancy. The tenant
+	// controller binds them to the *TenantWorkloadClusterRole below per namespace.
+	FissionExecutorSA   = "fission-executor"
+	FissionBuildermgrSA = "fission-buildermgr"
+
+	// ExecutorTenantWorkloadClusterRole / BuildermgrTenantWorkloadClusterRole are
+	// the fixed-name ClusterRoles (chart-rendered only in dynamic mode) holding
+	// the executor's / buildermgr's per-namespace workload rules. The controller
+	// references them by name in the RoleBindings it provisions, so the names must
+	// match the chart and be install-independent (dynamic tenancy is one Fission
+	// install per cluster, since it watches cluster-wide).
+	ExecutorTenantWorkloadClusterRole   = "fission-executor-tenant-workload"
+	BuildermgrTenantWorkloadClusterRole = "fission-buildermgr-tenant-workload"
 )
 
 const (

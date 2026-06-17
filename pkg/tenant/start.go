@@ -80,7 +80,11 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	// controller derive and provision per-namespace auth keys. Read here, not in
 	// a library constructor, per the deterministic-constructor convention.
 	master := []byte(os.Getenv("FISSION_INTERNAL_AUTH_SECRET"))
-	tenantR := &TenantReconciler{logger: logger.WithName("tenant"), client: crMgr.GetClient(), resolver: resolver, master: master}
+	// The install namespace (downward-API POD_NAMESPACE) is where the
+	// executor/buildermgr SAs live — the subject namespace for the per-tenant
+	// workload RoleBindings the controller provisions.
+	releaseNamespace := os.Getenv("POD_NAMESPACE")
+	tenantR := &TenantReconciler{logger: logger.WithName("tenant"), client: crMgr.GetClient(), resolver: resolver, master: master, releaseNamespace: releaseNamespace}
 	// Watch FissionTenant spec changes AND Namespace create/delete: the Ready
 	// condition and the resolver entry depend on whether the target namespace
 	// exists, which the FissionTenant watch alone cannot observe.

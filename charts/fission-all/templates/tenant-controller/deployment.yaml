@@ -33,6 +33,13 @@ spec:
           value: {{ .Values.debugEnv | quote }}
         - name: PPROF_ENABLED
           value: {{ .Values.pprof.enabled | quote }}
+        # The install namespace (where the executor/buildermgr SAs live) is the
+        # subject namespace for the per-tenant workload RoleBindings the controller
+        # provisions under dynamic tenancy.
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
         # The env-seeded namespace set (defaultNamespace + additionalFissionNamespaces)
         # is the additive base the controller unions with the FissionTenant CRs.
         {{- include "fission-resource-namespace.envs" . | indent 8 }}
