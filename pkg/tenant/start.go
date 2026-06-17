@@ -48,9 +48,12 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	if err != nil {
 		return fmt.Errorf("failed to get fission client: %w", err)
 	}
-	// Gate on the Fission CRDs being served (FissionTenant ships alongside them),
-	// so the Manager's informers don't error on a not-yet-registered type.
-	if err := crd.WaitForFunctionCRDs(ctx, logger, fissionClient); err != nil {
+	// Gate on the FissionTenant CRD being served — the type this controller
+	// watches — so the Manager's informers don't error on a not-yet-registered
+	// type. We must NOT use WaitForFunctionCRDs here: the tenant controller's
+	// least-privilege RBAC has no function access, so listing Functions would
+	// Forbidden-timeout and crash the controller before it provisions any tenant.
+	if err := crd.WaitForTenantCRDs(ctx, logger, fissionClient); err != nil {
 		return fmt.Errorf("error waiting for CRDs: %w", err)
 	}
 
