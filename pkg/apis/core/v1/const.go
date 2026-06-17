@@ -61,6 +61,15 @@ const (
 	AuthKeySchemeNamespace string = "namespace"
 )
 
+// HasNamespaceKeyScheme reports whether a fetcher/builder pod's annotations mark
+// it as verifying with a per-namespace derived key (the AuthKeySchemeNamespace
+// scheme). The executor and buildermgr read it to choose version-aware signing;
+// keeping the annotation key/value pairing in one place means a change to the
+// scheme is a single edit.
+func HasNamespaceKeyScheme(annotations map[string]string) bool {
+	return annotations[AuthKeySchemeAnnotation] == AuthKeySchemeNamespace
+}
+
 const (
 	ChecksumTypeSHA256 ChecksumType = "sha256"
 )

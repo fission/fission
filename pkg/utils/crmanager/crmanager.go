@@ -54,11 +54,10 @@ func NewLeaderElected(restConfig *rest.Config, lockName string, logger logr.Logg
 	// watches Fission CRDs cluster-wide and filters to the live tenant set via
 	// MembershipPredicate. Registering the resolver-sync here keeps that set
 	// current from the FissionTenant CRs, so a namespace onboarded at runtime
-	// reaches each trigger manager without a restart. Read-only — no provisioning.
-	if utils.DynamicNamespacesEnabled() {
-		if err := tenant.AddResolverSync(mgr, utils.DefaultNSResolver(), logger); err != nil {
-			return nil, err
-		}
+	// reaches each trigger manager without a restart. Read-only — no provisioning;
+	// a no-op when dynamic tenancy is off.
+	if err := tenant.AddResolverSync(mgr); err != nil {
+		return nil, err
 	}
 	return mgr, nil
 }

@@ -478,10 +478,9 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	// admitted by the tenant-scoped reconcilers above (their MembershipPredicate
 	// reads this resolver) and its HTTPTriggers start routing without a restart.
 	// The router's cache is already cluster-wide in this mode (FissionCacheOptions).
-	if utils.DynamicNamespacesEnabled() {
-		if err := tenant.AddResolverSync(crMgr, utils.DefaultNSResolver(), logger); err != nil {
-			return fmt.Errorf("error registering tenant resolver-sync: %w", err)
-		}
+	// AddResolverSync is a no-op when dynamic tenancy is off.
+	if err := tenant.AddResolverSync(crMgr); err != nil {
+		return fmt.Errorf("error registering tenant resolver-sync: %w", err)
 	}
 
 	logger.Info("starting router", "port", port, "internalPort", internalPort)

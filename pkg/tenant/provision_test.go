@@ -5,6 +5,7 @@
 package tenant
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -114,19 +115,10 @@ func TestDeleteNamespaceRBACRemovesManaged(t *testing.T) {
 
 func grantsGet(r *rbacv1.Role, apiGroup, resource string) bool {
 	for _, rule := range r.Rules {
-		if !contains(rule.APIGroups, apiGroup) || !contains(rule.Resources, resource) {
+		if !slices.Contains(rule.APIGroups, apiGroup) || !slices.Contains(rule.Resources, resource) {
 			continue
 		}
-		if contains(rule.Verbs, "get") {
-			return true
-		}
-	}
-	return false
-}
-
-func contains(s []string, v string) bool {
-	for _, x := range s {
-		if x == v {
+		if slices.Contains(rule.Verbs, "get") {
 			return true
 		}
 	}

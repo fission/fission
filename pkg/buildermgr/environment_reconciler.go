@@ -370,9 +370,7 @@ func (r *EnvironmentReconciler) getBuilderDeploymentList(ctx context.Context, se
 // optional otherwise, so default-mode and non-tenant pods still start and the
 // builder falls back to the master-derived scheme (empty key = pass-through).
 func builderAuthEnvVars(namespace string) []apiv1.EnvVar {
-	required := utils.DynamicNamespacesEnabled() &&
-		os.Getenv("FISSION_INTERNAL_AUTH_SECRET") != "" &&
-		utils.DefaultNSResolver().IsTenant(namespace)
+	required := utils.PerNamespaceKeyRequired(namespace)
 	keyRef := func(name, key string, optional bool) apiv1.EnvVar {
 		opt := optional
 		return apiv1.EnvVar{Name: name, ValueFrom: &apiv1.EnvVarSource{SecretKeyRef: &apiv1.SecretKeySelector{

@@ -31,14 +31,12 @@ type (
 		BuilderNamespace  string
 		DefaultNamespace  string
 
-		// mu guards fissionResourceNS and subscribers, making the resource
-		// namespace set safe to mutate at runtime for multi-namespace tenancy
-		// (Phase 0; see docs/multiple-namespace/prd.md §4.2). The three scalar
-		// namespaces above stay env-driven and immutable — only the tenant set
-		// is dynamic.
+		// mu guards fissionResourceNS, making the resource-namespace set safe to
+		// mutate at runtime for multi-namespace tenancy (Phase 0; see
+		// docs/multiple-namespace/prd.md §4.2). The three scalar namespaces above
+		// stay env-driven and immutable — only the tenant set is dynamic.
 		mu                sync.RWMutex
 		fissionResourceNS map[string]string
-		subscribers       []chan struct{}
 
 		Logger logr.Logger
 	}
@@ -143,65 +141,32 @@ func (nsr *NamespaceResolver) IsTenant(ns string) bool {
 	return ok
 }
 
-// SetTenants replaces the live resource-namespace set and notifies subscribers.
-// The tenant-lifecycle controller calls this when the FissionTenant set changes,
-// so the watched namespaces can be updated without a process restart.
+// SetTenants replaces the live resource-namespace set. The tenant-lifecycle
+// controller (and each data-plane manager's resolver-sync) calls this when the
+// FissionTenant set changes, so the watched namespaces can be updated without a
+// process restart.
 func (nsr *NamespaceResolver) SetTenants(namespaces map[string]string) {
 	nsr.mu.Lock()
 	defer nsr.mu.Unlock()
 	nsr.fissionResourceNS = make(map[string]string, len(namespaces))
 	maps.Copy(nsr.fissionResourceNS, namespaces)
-	nsr.notifyLocked()
 }
 
-// AddTenant adds ns to the live set, notifying subscribers only when ns was not
-// already present. A no-op add is silent so subscribers aren't woken needlessly.
+// AddTenant adds ns to the live set (idempotent).
 func (nsr *NamespaceResolver) AddTenant(ns string) {
 	nsr.mu.Lock()
 	defer nsr.mu.Unlock()
-	if _, ok := nsr.fissionResourceNS[ns]; ok {
-		return
-	}
 	if nsr.fissionResourceNS == nil {
 		nsr.fissionResourceNS = make(map[string]string)
 	}
 	nsr.fissionResourceNS[ns] = ns
-	nsr.notifyLocked()
 }
 
-// RemoveTenant removes ns from the live set, notifying subscribers only when ns
-// was present.
+// RemoveTenant removes ns from the live set (idempotent).
 func (nsr *NamespaceResolver) RemoveTenant(ns string) {
 	nsr.mu.Lock()
 	defer nsr.mu.Unlock()
-	if _, ok := nsr.fissionResourceNS[ns]; !ok {
-		return
-	}
 	delete(nsr.fissionResourceNS, ns)
-	nsr.notifyLocked()
-}
-
-// Subscribe returns a channel that receives a coalesced signal whenever the
-// resource-namespace set changes. The channel is buffered (depth 1) and sends
-// are non-blocking, so a slow or absent reader never stalls a mutation and only
-// ever observes "something changed", not how many times.
-func (nsr *NamespaceResolver) Subscribe() <-chan struct{} {
-	nsr.mu.Lock()
-	defer nsr.mu.Unlock()
-	ch := make(chan struct{}, 1)
-	nsr.subscribers = append(nsr.subscribers, ch)
-	return ch
-}
-
-// notifyLocked sends a non-blocking signal to every subscriber. Callers must
-// hold nsr.mu.
-func (nsr *NamespaceResolver) notifyLocked() {
-	for _, ch := range nsr.subscribers {
-		select {
-		case ch <- struct{}{}:
-		default:
-		}
-	}
 }
 
 func GetNamespaces() map[string]string {
@@ -293,4 +258,17 @@ func DefaultNSResolver() *NamespaceResolver {
 func DynamicNamespacesEnabled() bool {
 	v, _ := strconv.ParseBool(os.Getenv("FISSION_DYNAMIC_NAMESPACES"))
 	return v
+}
+
+// PerNamespaceKeyRequired reports whether a fetcher/builder pod scheduled into
+// `namespace` must mount its per-namespace derived HMAC key as a REQUIRED secret
+// ref — so the kubelet blocks pod start until the tenant controller has
+// provisioned it, making the executor/buildermgr's version-aware signing
+// race-free. True only under dynamic tenancy, with internal auth enabled, for a
+// live tenant namespace: a non-tenant namespace never gets keys, so requiring one
+// there would wedge the pod in CreateContainerConfigError forever.
+func PerNamespaceKeyRequired(namespace string) bool {
+	return DynamicNamespacesEnabled() &&
+		os.Getenv("FISSION_INTERNAL_AUTH_SECRET") != "" &&
+		DefaultNSResolver().IsTenant(namespace)
 }

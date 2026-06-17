@@ -39,7 +39,7 @@ import (
 // namespace key. Pre-upgrade pods carrying no annotation, and every pod when
 // tenancy is off, verify with the master-derived key and stay master-signed.
 func builderSigningNamespace(pod *apiv1.Pod, builderNs string) (string, bool) {
-	if pod != nil && utils.DynamicNamespacesEnabled() && pod.Annotations[fv1.AuthKeySchemeAnnotation] == fv1.AuthKeySchemeNamespace {
+	if pod != nil && utils.DynamicNamespacesEnabled() && fv1.HasNamespaceKeyScheme(pod.Annotations) {
 		return builderNs, true
 	}
 	return "", false

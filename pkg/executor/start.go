@@ -430,10 +430,9 @@ func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, 
 	// admitted by the func/env membership predicates (and gets pooled/specialized)
 	// without a restart. The cache is cluster-wide for Tier-A types in this mode
 	// (executorCacheOptions); the tenant controller still owns provisioning.
-	if utils.DynamicNamespacesEnabled() {
-		if err := tenant.AddResolverSync(crMgr, utils.DefaultNSResolver(), logger); err != nil {
-			return fmt.Errorf("unable to add tenant resolver-sync: %w", err)
-		}
+	// AddResolverSync is a no-op when dynamic tenancy is off.
+	if err := tenant.AddResolverSync(crMgr); err != nil {
+		return fmt.Errorf("unable to add tenant resolver-sync: %w", err)
 	}
 
 	waitForSync := func(syncCtx context.Context) bool {

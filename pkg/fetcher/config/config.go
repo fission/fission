@@ -72,17 +72,11 @@ func internalAuthEnvVars(namespace string) []apiv1.EnvVar {
 	const chartSecret = "fission-internal-auth"
 	keysSecret := fv1.TenantAuthKeysSecret
 
-	// Require the fetcher key only when it is guaranteed to be provisioned:
-	// dynamic tenancy on (so a tenant controller is running, enforced by the
-	// chart) AND internal auth enabled (a master exists to derive from) AND the
-	// pod's namespace is a live tenant (so the controller actually writes a
-	// derived-key Secret there). A non-tenant namespace — e.g. a standalone
-	// builder namespace — never gets keys, so requiring one would wedge the pod
-	// in CreateContainerConfigError forever; there the key stays optional and the
-	// fetcher falls back to the master-derived scheme.
-	fetcherKeyRequired := utils.DynamicNamespacesEnabled() &&
-		os.Getenv("FISSION_INTERNAL_AUTH_SECRET") != "" &&
-		utils.DefaultNSResolver().IsTenant(namespace)
+	// Require the fetcher key only where it is guaranteed to be provisioned (a
+	// live tenant namespace under dynamic tenancy with auth enabled); elsewhere it
+	// stays optional and the fetcher falls back to the master-derived scheme. See
+	// utils.PerNamespaceKeyRequired.
+	fetcherKeyRequired := utils.PerNamespaceKeyRequired(namespace)
 
 	return []apiv1.EnvVar{
 		secretKeyEnv("FISSION_INTERNAL_AUTH_SECRET", chartSecret, "secret", true),

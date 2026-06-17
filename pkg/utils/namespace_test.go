@@ -296,34 +296,6 @@ func TestNamespaceResolverDynamicSet(t *testing.T) {
 		r.RemoveTenant("team-a")
 		assert.False(t, r.IsTenant("team-a"), "IsTenant must observe a RemoveTenant")
 	})
-
-	t.Run("change feed signals on a real mutation", func(t *testing.T) {
-		r := &NamespaceResolver{}
-		ch := r.Subscribe()
-
-		r.AddTenant("ns-a")
-
-		select {
-		case <-ch:
-		default:
-			t.Fatal("expected a change signal after AddTenant")
-		}
-	})
-
-	t.Run("change feed is silent on a no-op mutation", func(t *testing.T) {
-		r := &NamespaceResolver{}
-		r.AddTenant("ns-a")
-		ch := r.Subscribe()
-
-		r.AddTenant("ns-a")    // already present
-		r.RemoveTenant("ns-z") // never present
-
-		select {
-		case <-ch:
-			t.Fatal("no-op mutation must not signal")
-		default:
-		}
-	})
 }
 
 // TestNamespaceResolverConcurrentAccess is the thread-safety guard: concurrent

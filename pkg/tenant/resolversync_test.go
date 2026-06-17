@@ -7,7 +7,6 @@ package tenant
 import (
 	"testing"
 
-	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -35,7 +34,7 @@ func TestSyncResolverFromTenants(t *testing.T) {
 func TestResolverSyncReconciler(t *testing.T) {
 	c := newFakeClient(t, tenant("team-a", "team-a"))
 	resolver := &utils.NamespaceResolver{}
-	r := &ResolverSyncReconciler{client: c, resolver: resolver, logger: logr.Discard()}
+	r := &ResolverSyncReconciler{client: c, resolver: resolver}
 
 	_, err := r.Reconcile(t.Context(), ctrl.Request{})
 	require.NoError(t, err)

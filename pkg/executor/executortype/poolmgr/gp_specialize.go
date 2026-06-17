@@ -74,7 +74,7 @@ func shouldStampNamespaceKeyScheme(fnNamespace string, resolver *utils.Namespace
 // dynamic-tenancy gate makes a stale annotation harmless if the feature is
 // turned back off.
 func fetcherSigningNamespace(pod *apiv1.Pod) (namespace string, nsScoped bool) {
-	if utils.DynamicNamespacesEnabled() && pod.Annotations[fv1.AuthKeySchemeAnnotation] == fv1.AuthKeySchemeNamespace {
+	if utils.DynamicNamespacesEnabled() && fv1.HasNamespaceKeyScheme(pod.Annotations) {
 		return pod.Namespace, true
 	}
 	return "", false

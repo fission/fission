@@ -48,11 +48,19 @@ func TestDeriveServiceKeyNSEmptyMaster(t *testing.T) {
 	assert.Nil(t, DeriveServiceKeyNS([]byte{}, ServiceFetcher, "team-a"))
 }
 
+// nsVerifier builds the verifier a tenant pod in `namespace` actually runs: it
+// holds only its own derived key (VerifierFromKey), never the master.
+func nsVerifier(master []byte, service Service, namespace string, now func() time.Time) func(http.Handler) http.Handler {
+	return VerifierFromKey(DeriveServiceKeyNS(master, service, namespace), nil, VerifierOpts{SkewSec: 60, Now: now})
+}
+
 func TestServiceSignerVerifierNSRoundTrip(t *testing.T) {
 	master := []byte(testMaster)
 	now := func() time.Time { return time.Unix(1715000123, 0) }
 
-	handler := ServiceVerifierNS(master, nil, ServiceFetcher, "team-a", VerifierOpts{SkewSec: 60, Now: now})(
+	// The control plane signs with ServiceSignerNS (it holds the master); the
+	// team-a pod verifies with its own derived key.
+	handler := nsVerifier(master, ServiceFetcher, "team-a", now)(
 		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(200) }))
 
 	rr := httptest.NewRecorder()
@@ -71,8 +79,8 @@ func TestServiceVerifierNSNamespaceMismatch(t *testing.T) {
 	master := []byte(testMaster)
 	now := func() time.Time { return time.Unix(1715000123, 0) }
 
-	// Verifier expects team-b; signer signs as team-a.
-	handler := ServiceVerifierNS(master, nil, ServiceFetcher, "team-b", VerifierOpts{SkewSec: 60, Now: now})(
+	// team-b's pod verifies with its own key; a team-a signature must not forge in.
+	handler := nsVerifier(master, ServiceFetcher, "team-b", now)(
 		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(200) }))
 
 	rr := httptest.NewRecorder()
