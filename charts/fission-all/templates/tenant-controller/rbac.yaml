@@ -57,6 +57,10 @@ rules:
   - update
   - patch
   - delete
+  # deletecollection backs the offboard teardown (DeleteNamespaceRBAC's
+  # label-selected DeleteAllOf); it is a distinct RBAC verb that `delete` does
+  # not imply, but adds no real capability here since `delete`+`list` already do.
+  - deletecollection
   - bind
   - escalate
 # Bind ONLY the two fixed workload ClusterRoles into tenant namespaces (via the
@@ -82,6 +86,8 @@ rules:
   - watch
   - create
   - delete
+  # deletecollection backs the offboard teardown (see roles/rolebindings above).
+  - deletecollection
 # Write-only access to the per-namespace derived-key Secret: create + delete by
 # NAME only — deliberately NO get/list/watch, so the controller can provision and
 # remove the auth secret without being able to read any tenant secret. This keeps

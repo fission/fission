@@ -54,7 +54,10 @@ func DeleteNamespaceRBAC(ctx context.Context, c client.Client, namespace string)
 	}
 	// RoleBindings before Roles before ServiceAccounts (reverse of creation). The
 	// label selector means only controller-managed objects are removed — never
-	// chart- or user-managed RBAC.
+	// chart- or user-managed RBAC. DeleteAllOf issues a deletecollection request,
+	// so the tenant-controller ClusterRole MUST grant `deletecollection` on these
+	// three resources (charts/.../tenant-controller/rbac.yaml) — `delete` alone is
+	// insufficient and the finalizer would wedge on a forbidden error.
 	for _, proto := range []client.Object{&rbacv1.RoleBinding{}, &rbacv1.Role{}, &corev1.ServiceAccount{}} {
 		if err := c.DeleteAllOf(ctx, proto, opts...); err != nil && !apierrors.IsNotFound(err) {
 			return fmt.Errorf("deleting %T in %s: %w", proto, namespace, err)
