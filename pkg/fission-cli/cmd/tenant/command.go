@@ -7,6 +7,7 @@ package tenant
 import (
 	"github.com/spf13/cobra"
 
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	wrapper "github.com/fission/fission/pkg/fission-cli/cliwrapper/driver/cobra"
 	"github.com/fission/fission/pkg/fission-cli/flag"
 )
@@ -59,7 +60,7 @@ func Commands() *cobra.Command {
 // managedBySource reports how a FissionTenant came to exist, for display:
 // "label" (materialized from fission.io/enabled), "helm"/"user" (authored).
 func managedBySource(annotations map[string]string) string {
-	if s := annotations["fission.io/managed-by"]; s != "" {
+	if s := annotations[fv1.MANAGED_BY_LABEL]; s != "" {
 		return s
 	}
 	return "user"

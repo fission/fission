@@ -138,14 +138,12 @@ func Run(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger log
 	// requests as another tenant's fetcher. Otherwise fall back to deriving the
 	// ServiceFetcher key from the master (existing behaviour; empty master =
 	// pass-through).
-	var verifier func(http.Handler) http.Handler
-	if fetcherKey := hmacauth.DecodeKeyFromEnv(os.Getenv("FISSION_FETCHER_KEY")); len(fetcherKey) > 0 {
-		verifier = hmacauth.VerifierFromKey(fetcherKey, hmacauth.DecodeKeyFromEnv(os.Getenv("FISSION_FETCHER_KEY_OLD")), vopts)
-	} else {
-		master := []byte(os.Getenv("FISSION_INTERNAL_AUTH_SECRET"))
-		masterOld := []byte(os.Getenv("FISSION_INTERNAL_AUTH_SECRET_OLD"))
-		verifier = hmacauth.ServiceVerifier(master, masterOld, hmacauth.ServiceFetcher, vopts)
-	}
+	verifier := hmacauth.VerifierFromKeyOrMaster(
+		hmacauth.DecodeKeyFromEnv(os.Getenv("FISSION_FETCHER_KEY")),
+		hmacauth.DecodeKeyFromEnv(os.Getenv("FISSION_FETCHER_KEY_OLD")),
+		[]byte(os.Getenv("FISSION_INTERNAL_AUTH_SECRET")),
+		[]byte(os.Getenv("FISSION_INTERNAL_AUTH_SECRET_OLD")),
+		hmacauth.ServiceFetcher, vopts)
 	// Fetcher is a pod-local sidecar with no Service; no legitimate
 	// browser caller. SecurityHeaders + DenyAllCORS as defense-in-depth
 	// against a hostile package running in the same pod-network namespace.

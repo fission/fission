@@ -109,6 +109,14 @@ func namespaceRBACObjects(ns, releaseNamespace string, owner metav1.OwnerReferen
 		}
 	}
 	get := []string{"get"}
+	// LOCKSTEP: these fetcher/builder/websocket Role rules are the dynamic-path
+	// twin of charts/fission-all/templates/_function-access-role.tpl (the static
+	// per-namespace install path). There is no shared source of truth across Go
+	// and Helm, so any change here — especially to the secrets/configmaps `get`
+	// grants — MUST be mirrored in that template, or the static and runtime-
+	// onboarded namespaces drift in what a tenant pod may read. (Deeper fix tracked
+	// as a follow-up: bind shared-partial ClusterRoles by name, as the workload
+	// roles in dynamic-workload-roles.yaml already do.)
 	objs := []client.Object{
 		&corev1.ServiceAccount{ObjectMeta: meta(fv1.FissionFetcherSA)},
 		&corev1.ServiceAccount{ObjectMeta: meta(fv1.FissionBuilderSA)},

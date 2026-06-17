@@ -38,8 +38,9 @@ const (
 
 	// managedByAnnotation records how a FissionTenant came to exist: "label"
 	// (materialized from EnabledLabel) vs a user/helm-authored CR. Only
-	// label-managed CRs carry it.
-	managedByAnnotation = "fission.io/managed-by"
+	// label-managed CRs carry it. The key is the shared fission.io/managed-by
+	// constant; the values here are provenance-specific (label/helm/user).
+	managedByAnnotation = fv1.MANAGED_BY_LABEL
 	managedByLabel      = "label"
 
 	// tenantFinalizer guards teardown of the per-namespace RBAC the controller

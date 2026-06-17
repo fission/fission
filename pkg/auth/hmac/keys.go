@@ -49,6 +49,26 @@ const (
 // 64-byte block size — and the master secret's entropy budget.
 const derivedKeyLength = 32
 
+// deriveKey is the shared HKDF-SHA256 derivation behind DeriveServiceKey and
+// DeriveServiceKeyNS. Keeping it single-sourced guarantees the two derivations
+// stay byte-compatible in everything but the info string — same hash, nil salt,
+// derivedKeyLength — which is exactly the property the "the two never collide"
+// guarantee (and the unchanged master-scoped keys) relies on. Returns nil for an
+// empty master, so callers treat a nil/empty master as "internalAuth disabled".
+func deriveKey(master []byte, info string) []byte {
+	if len(master) == 0 {
+		return nil
+	}
+	// hkdf.Key only fails when keyLength exceeds the underlying hash's output
+	// bound (255 * HashSize). 32 bytes for SHA-256 is well inside that limit, so
+	// the error is unreachable; surface it as a programmer error if it ever fires.
+	key, err := hkdf.Key(sha256.New, master, nil, info, derivedKeyLength)
+	if err != nil {
+		panic("hmac.deriveKey: hkdf.Key failed: " + err.Error())
+	}
+	return key
+}
+
 // DeriveServiceKey returns the per-service signing key derived from
 // the master secret via HKDF-SHA256. Both signer and verifier call
 // this with the same service identifier, so the derived key matches
@@ -70,20 +90,7 @@ const derivedKeyLength = 32
 // agree by both being unsigned, not by one side signing with an empty
 // key while the other passes through.
 func DeriveServiceKey(master []byte, service Service) []byte {
-	if len(master) == 0 {
-		return nil
-	}
-	info := KeyVersion + ":" + string(service)
-	// hkdf.Key only fails when keyLength exceeds the underlying
-	// hash's output bound (255 * HashSize). 32 bytes for SHA-256 is
-	// well inside that limit, so the error is unreachable.
-	key, err := hkdf.Key(sha256.New, master, nil, info, derivedKeyLength)
-	if err != nil {
-		// Should never happen with sha256 + 32 bytes; surface as a
-		// programmer error if it ever does.
-		panic("hmac.DeriveServiceKey: hkdf.Key failed: " + err.Error())
-	}
-	return key
+	return deriveKey(master, KeyVersion+":"+string(service))
 }
 
 // ServiceSigner returns a Signer whose key is derived from `master`
@@ -125,15 +132,7 @@ func ServiceVerifier(masterSecret, masterOldSecret []byte, service Service, opts
 // master-scoped key byte-for-byte unchanged (no KeyVersion bump, no in-flight
 // signature breakage). Returns nil for an empty master, like DeriveServiceKey.
 func DeriveServiceKeyNS(master []byte, service Service, namespace string) []byte {
-	if len(master) == 0 {
-		return nil
-	}
-	info := KeyVersion + ":" + string(service) + ":" + namespace
-	key, err := hkdf.Key(sha256.New, master, nil, info, derivedKeyLength)
-	if err != nil {
-		panic("hmac.DeriveServiceKeyNS: hkdf.Key failed: " + err.Error())
-	}
-	return key
+	return deriveKey(master, KeyVersion+":"+string(service)+":"+namespace)
 }
 
 // ServiceSignerNS is ServiceSigner for a namespace-scoped channel. The signer
@@ -153,6 +152,22 @@ func VerifierFromKey(key, oldKey []byte, opts VerifierOpts) func(http.Handler) h
 	opts.Secret = key
 	opts.OldSecret = oldKey
 	return Verifier(opts)
+}
+
+// VerifierFromKeyOrMaster builds the verifier middleware for a tenant sidecar
+// (fetcher/builder) that may hold EITHER its own per-namespace derived key OR
+// nothing but the master. It centralizes the one security decision both sidecars
+// make so they can't drift: when a non-empty derived `key` is provided (a
+// dynamic-tenancy pod, provisioned with only its namespace key and never the
+// master), verify with that key and its rotation `keyOld`; otherwise derive
+// `service`'s key from `master`/`masterOld` (the static-namespace install, where
+// an empty master is pass-through). The package stays env-free — callers read
+// their own env vars and pass the decoded bytes.
+func VerifierFromKeyOrMaster(key, keyOld, master, masterOld []byte, service Service, opts VerifierOpts) func(http.Handler) http.Handler {
+	if len(key) > 0 {
+		return VerifierFromKey(key, keyOld, opts)
+	}
+	return ServiceVerifier(master, masterOld, service, opts)
 }
 
 // EncodeKeyForEnv encodes a derived key for transport through a Kubernetes Secret

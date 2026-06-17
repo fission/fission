@@ -1,3 +1,10 @@
+{{- /*
+LOCKSTEP: these fetcher/builder/websocket Role rules are mirrored in Go at
+pkg/tenant/provision.go (namespaceRBACObjects), which provisions the same grants
+for namespaces onboarded at runtime by the tenant controller. Any change to the
+rules below MUST be mirrored there, or static-install and dynamically-onboarded
+namespaces drift in what a tenant pod may read.
+*/ -}}
 {{- define "fissionFunction.roles" }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
