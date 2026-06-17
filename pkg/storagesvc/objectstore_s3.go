@@ -8,6 +8,8 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"net/url"
+	"strings"
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
@@ -22,14 +24,35 @@ type s3ObjectStore struct {
 	bucket string
 }
 
+// parseS3Endpoint splits a configured endpoint into the bare host[:port] minio
+// expects and whether to use TLS. minio.New rejects endpoints carrying a scheme
+// or path, so an "https://host:port" value (which Helm users have always been
+// able to set) has to be normalized here. A scheme-less endpoint keeps the
+// historical plain-HTTP behaviour.
+func parseS3Endpoint(endpoint string) (host string, secure bool, err error) {
+	if !strings.Contains(endpoint, "://") {
+		return endpoint, false, nil
+	}
+	u, err := url.Parse(endpoint)
+	if err != nil {
+		return "", false, err
+	}
+	return u.Host, u.Scheme == "https", nil
+}
+
 // newS3ObjectStore connects to the S3-compatible endpoint and ensures the
 // bucket exists.
 func newS3ObjectStore(endpoint, accessKeyID, secretAccessKey, region, bucket string) (*s3ObjectStore, error) {
-	client, err := minio.New(endpoint, &minio.Options{
+	host, secure, err := parseS3Endpoint(endpoint)
+	if err != nil {
+		return nil, err
+	}
+
+	client, err := minio.New(host, &minio.Options{
 		Creds: credentials.NewStaticV4(accessKeyID, secretAccessKey, ""),
-		// Plain HTTP to the endpoint (the storagesvc S3 backend has always
-		// connected without TLS).
-		Secure: false,
+		// TLS is used when the endpoint is given as an https:// URL; a
+		// scheme-less endpoint keeps connecting over plain HTTP as before.
+		Secure: secure,
 		Region: region,
 	})
 	if err != nil {
