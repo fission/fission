@@ -35,7 +35,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/controller"
 	"github.com/fission/fission/pkg/executor/executortype"
+	"github.com/fission/fission/pkg/utils"
 )
 
 // deleteOnlyPredicate passes only Delete events. The drift watch uses it so a
@@ -307,11 +309,17 @@ func RegisterReconciler(mgr ctrl.Manager, logger logr.Logger, executorTypes map[
 	// self-healing). The Manager cache already scopes those types to
 	// executor-managed objects (executorManagedSelector), so only newdeploy /
 	// container workloads reach the delete-only watch.
+	// Spec/delete events drive the reconciler; under dynamic tenancy AND the
+	// membership predicate so the cluster-wide cache only reconciles Functions in
+	// live tenant namespaces (no-op when dynamic tenancy is off).
+	funcPredicate := predicate.Or(predicate.GenerationChangedPredicate{}, deletionTimestampPredicate)
+	if utils.DynamicNamespacesEnabled() {
+		funcPredicate = predicate.And(funcPredicate, controller.MembershipPredicate(utils.DefaultNSResolver()))
+	}
 	return builder.ControllerManagedBy(mgr).
 		Named("executor-function").
 		WithOptions(ctrlcontroller.Options{MaxConcurrentReconciles: funcReconcileConcurrency}).
-		For(&fv1.Function{}, builder.WithPredicates(
-			predicate.Or(predicate.GenerationChangedPredicate{}, deletionTimestampPredicate))).
+		For(&fv1.Function{}, builder.WithPredicates(funcPredicate)).
 		Watches(&appsv1.Deployment{}, handler.EnqueueRequestsFromMapFunc(ownedObjectToFunction),
 			builder.WithPredicates(deleteOnlyPredicate)).
 		Watches(&corev1.Service{}, handler.EnqueueRequestsFromMapFunc(ownedObjectToFunction),

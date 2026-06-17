@@ -106,6 +106,9 @@ metadata:
 {{- if eq "canaryconfig" .component }}
 {{- include "canaryconfig-rules" . }}
 {{- end }}
+{{- if eq "executor" .component }}
+{{- include "executor-rules" . }}
+{{- end }}
 # Read FissionTenant (cluster-scoped) so the component's resolver-sync keeps its
 # live tenant set current and a runtime-onboarded namespace reaches its
 # membership predicate without a restart. Appended to the same rules list above.
@@ -117,6 +120,30 @@ metadata:
   - get
   - list
   - watch
+{{- if eq "executor" .component }}
+# The executor's cache goes cluster-wide for its labelled workloads (pool pods,
+# managed Deployments/Services) in dynamic mode — Tier A per PRD §4.1 (these are
+# not tenant secrets). Read-only, and ONLY these label-bounded workload types:
+# Secrets, ConfigMaps and ReplicaSets stay namespace-scoped (per-namespace Roles +
+# the scoped cache), so they are deliberately NOT granted cluster-wide here.
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  - services
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  verbs:
+  - get
+  - list
+  - watch
+{{- end }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
