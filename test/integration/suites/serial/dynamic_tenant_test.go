@@ -72,6 +72,18 @@ func TestDynamicTenantLifecycle(t *testing.T) {
 	routeURL := "/" + fnName
 	ns.CreateRoute(t, ctx, framework.RouteOptions{Function: fnName, URL: routeURL, Method: "GET"})
 
+	// The onboard re-enqueue LISTs the namespace's CRs, and a List can be served
+	// from the apiserver watch cache, which briefly lags the create (a Get is
+	// consistent, a List is not). The in-process CLI stages all three CRs in well
+	// under that lag window, so wait until the function is list-visible before
+	// onboarding — otherwise the re-enqueue finds nothing, the membership predicate
+	// has already dropped the function's create event, and it 404s forever.
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		fns, lerr := f.FissionClient().CoreV1().Functions(tenantNS).List(ctx, metav1.ListOptions{})
+		assert.NoError(c, lerr, "list functions in tenant namespace")
+		assert.NotEmpty(c, fns.Items, "staged function must be list-visible before onboarding")
+	}, time.Minute, time.Second)
+
 	// 2. Onboard. The controller provisions per-namespace RBAC, ServiceAccounts and
 	//    the derived-key Secret; the data-plane managers add the namespace to their
 	//    watched set AND re-enqueue the staged CRs — all without a restart.
