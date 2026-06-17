@@ -69,6 +69,13 @@ manifests:
           serviceMonitor.namespace: monitoring
           storagesvc.archivePruner.enabled: "true"
           storagesvc.archivePruner.interval: "60"
+          # Multi-namespace tenancy is off by default; the dynamic-tenancy
+          # profile flips both flags on for the CI legs that exercise it. They
+          # must move together (the chart's validate.yaml fails the render
+          # otherwise): the dynamic data plane requires the controller to
+          # provision per-namespace auth keys.
+          tenancy.dynamicNamespaces: "false"
+          tenantController.enabled: "false"
           terminationMessagePath: /var/log/termination-log
           terminationMessagePolicy: FallbackToLogsOnError
         setValueTemplates:
@@ -169,6 +176,20 @@ profiles:
       # The RFC-0002 EndpointSlice data plane is on by chart default (phase 4);
       # one workflow leg pins the router back to mode=off post-deploy so the
       # legacy RPC path stays covered.
+  # dynamic-tenancy turns on multi-namespace tenancy (the dynamic, restart-free
+  # onboarding model). Composed onto kind-ci as `-p kind-ci,dynamic-tenancy` on
+  # the non-legacy CI legs, so the whole suite runs against a dynamic-mode
+  # control plane (default is auto-seeded as a tenant by the migration job) and
+  # TestDynamicTenantLifecycle exercises runtime namespace onboarding. Both flags
+  # flip together — the chart's validate.yaml fails the render if they diverge.
+  - name: dynamic-tenancy
+    patches:
+      - op: replace
+        path: /manifests/helm/releases/0/setValues/tenancy.dynamicNamespaces
+        value: true
+      - op: replace
+        path: /manifests/helm/releases/0/setValues/tenantController.enabled
+        value: true
   - name: kind-ci-old
     patches:
       - op: replace
