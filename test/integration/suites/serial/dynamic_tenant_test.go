@@ -55,9 +55,26 @@ func TestDynamicTenantLifecycle(t *testing.T) {
 	tenantNS := "fission-tenant-e2e-" + framework.RandomID()
 	ns := f.NewTestNamespaceIn(t, ctx, tenantNS)
 
-	// 1. Onboard. The controller provisions per-namespace RBAC, ServiceAccounts
-	//    and the derived-key Secret; the data-plane managers add the namespace to
-	//    their watched set via resolver-sync — no restart.
+	// 1. Stage a sample environment + function + route in the namespace BEFORE
+	//    onboarding. The data plane drops them (not a tenant yet); onboarding then
+	//    re-converges them in one pass. This is the deterministic exercise of the
+	//    runtime-onboarding path: the FissionTenant re-enqueue re-lists the CRs that
+	//    already exist, with no dependency on a CR's own create event racing the
+	//    membership flip (which an "onboard, then create" ordering would, and which
+	//    flaked the heavily-loaded coverage leg).
+	envName := "python-" + ns.ID
+	ns.CreateEnv(t, ctx, framework.EnvOptions{Name: envName, Image: pyImage, Poolsize: 1})
+
+	fnName := "hello-" + ns.ID
+	codePath := framework.WriteTestData(t, "python/hello/hello.py")
+	ns.CreateFunction(t, ctx, framework.FunctionOptions{Name: fnName, Env: envName, Code: codePath})
+
+	routeURL := "/" + fnName
+	ns.CreateRoute(t, ctx, framework.RouteOptions{Function: fnName, URL: routeURL, Method: "GET"})
+
+	// 2. Onboard. The controller provisions per-namespace RBAC, ServiceAccounts and
+	//    the derived-key Secret; the data-plane managers add the namespace to their
+	//    watched set AND re-enqueue the staged CRs — all without a restart.
 	ns.EnableTenant(t, ctx)
 	f.WaitForTenantReady(t, ctx, tenantNS)
 
@@ -79,17 +96,6 @@ func TestDynamicTenantLifecycle(t *testing.T) {
 	}
 	require.Equalf(t, 1, count, "re-enabling must not create a duplicate tenant for %q", tenantNS)
 
-	// 2. Create a sample environment + function + route in the new namespace.
-	envName := "python-" + ns.ID
-	ns.CreateEnv(t, ctx, framework.EnvOptions{Name: envName, Image: pyImage, Poolsize: 1})
-
-	fnName := "hello-" + ns.ID
-	codePath := framework.WriteTestData(t, "python/hello/hello.py")
-	ns.CreateFunction(t, ctx, framework.FunctionOptions{Name: fnName, Env: envName, Code: codePath})
-
-	routeURL := "/" + fnName
-	ns.CreateRoute(t, ctx, framework.RouteOptions{Function: fnName, URL: routeURL, Method: "GET"})
-
 	// 3. Invoke it. The namespace-explicit internal route proves the executor
 	//    specialized a pod in the tenant namespace — whose fetcher used the
 	//    namespace's own derived HMAC key to fetch its package — and that the
@@ -100,8 +106,8 @@ func TestDynamicTenantLifecycle(t *testing.T) {
 	body := r.GetEventually(t, ctx, "/fission-function/"+tenantNS+"/"+fnName, framework.BodyContains("hello"))
 	require.Contains(t, strings.ToLower(body), "hello")
 
-	// The public HTTPTrigger path must work too: the router picked up the new
-	// tenant's trigger via resolver-sync, with no restart.
+	// The public HTTPTrigger path must work too: the router re-enqueued the new
+	// tenant's trigger on onboarding, with no restart.
 	r.GetEventually(t, ctx, routeURL, framework.BodyContains("hello"))
 
 	// 4. Onboarding + serving a fresh tenant must not have rolled any
