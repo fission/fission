@@ -13,6 +13,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -22,7 +23,7 @@ func TestEnsureNamespaceRBACCreatesObjects(t *testing.T) {
 	c := newFakeClient(t)
 	ctx := t.Context()
 
-	require.NoError(t, EnsureNamespaceRBAC(ctx, c, "team-a", "fission"))
+	require.NoError(t, EnsureNamespaceRBAC(ctx, c, "team-a", "fission", metav1.OwnerReference{}))
 
 	// ServiceAccounts.
 	for _, sa := range []string{fv1.FissionFetcherSA, fv1.FissionBuilderSA} {
@@ -54,7 +55,7 @@ func TestEnsureNamespaceRBACCreatesObjects(t *testing.T) {
 func TestEnsureNamespaceRBACBindsWorkloadClusterRoles(t *testing.T) {
 	c := newFakeClient(t)
 	ctx := t.Context()
-	require.NoError(t, EnsureNamespaceRBAC(ctx, c, "team-a", "fission"))
+	require.NoError(t, EnsureNamespaceRBAC(ctx, c, "team-a", "fission", metav1.OwnerReference{}))
 
 	cases := []struct {
 		binding     string
@@ -84,7 +85,7 @@ func TestEnsureNamespaceRBACBindsWorkloadClusterRoles(t *testing.T) {
 func TestEnsureNamespaceRBACSkipsWorkloadBindingsWithoutReleaseNS(t *testing.T) {
 	c := newFakeClient(t)
 	ctx := t.Context()
-	require.NoError(t, EnsureNamespaceRBAC(ctx, c, "team-a", ""))
+	require.NoError(t, EnsureNamespaceRBAC(ctx, c, "team-a", "", metav1.OwnerReference{}))
 
 	rb := &rbacv1.RoleBinding{}
 	assert.True(t, apierrors.IsNotFound(c.Get(ctx, types.NamespacedName{Namespace: "team-a", Name: "fission-executor-workload"}, rb)),
@@ -95,14 +96,19 @@ func TestEnsureNamespaceRBACSkipsWorkloadBindingsWithoutReleaseNS(t *testing.T) 
 func TestEnsureNamespaceRBACIsIdempotent(t *testing.T) {
 	c := newFakeClient(t)
 	ctx := t.Context()
-	require.NoError(t, EnsureNamespaceRBAC(ctx, c, "team-a", "fission"))
-	require.NoError(t, EnsureNamespaceRBAC(ctx, c, "team-a", "fission"), "re-running must not error (create-if-absent)")
+	require.NoError(t, EnsureNamespaceRBAC(ctx, c, "team-a", "fission", metav1.OwnerReference{}))
+	require.NoError(t, EnsureNamespaceRBAC(ctx, c, "team-a", "fission", metav1.OwnerReference{}), "re-running must not error (create-if-absent)")
 }
 
 func TestDeleteNamespaceRBACRemovesManaged(t *testing.T) {
 	c := newFakeClient(t)
 	ctx := t.Context()
-	require.NoError(t, EnsureNamespaceRBAC(ctx, c, "team-a", "fission"))
+	require.NoError(t, EnsureNamespaceRBAC(ctx, c, "team-a", "fission", metav1.OwnerReference{}))
+	// Provision the derived-key Secret too, so teardown's name-scoped delete of it
+	// is exercised (it is the security-load-bearing branch: a leaked-then-offboarded
+	// tenant's signing key must not linger).
+	require.NoError(t, EnsureNamespaceAuthSecret(ctx, c, []byte("master-bytes"), "team-a"))
+
 	require.NoError(t, DeleteNamespaceRBAC(ctx, c, "team-a"))
 
 	sa := &corev1.ServiceAccount{}
@@ -111,6 +117,9 @@ func TestDeleteNamespaceRBACRemovesManaged(t *testing.T) {
 	assert.True(t, apierrors.IsNotFound(c.Get(ctx, types.NamespacedName{Namespace: "team-a", Name: fetcherRoleName}, role)), "fetcher Role must be deleted")
 	rb := &rbacv1.RoleBinding{}
 	assert.True(t, apierrors.IsNotFound(c.Get(ctx, types.NamespacedName{Namespace: "team-a", Name: builderRoleName}, rb)), "builder RoleBinding must be deleted")
+	keys := &corev1.Secret{}
+	assert.True(t, apierrors.IsNotFound(c.Get(ctx, types.NamespacedName{Namespace: "team-a", Name: fv1.TenantAuthKeysSecret}, keys)),
+		"derived-key Secret must be deleted by name on teardown")
 }
 
 func grantsGet(r *rbacv1.Role, apiGroup, resource string) bool {

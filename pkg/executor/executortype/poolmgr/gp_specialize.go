@@ -158,14 +158,21 @@ func (gp *GenericPool) specializePod(ctx context.Context, pod *apiv1.Pod, fn *fv
 	// fetcherSigningNamespace).
 	master := storagesvcClient.HMACSecretFromEnv()
 	var client fetcherClient.ClientInterface
-	if ns, nsScoped := fetcherSigningNamespace(pod); nsScoped {
-		client = fetcherClient.MakeClientNS(gp.logger, fetcherURL, master, ns)
+	signNS, nsScoped := fetcherSigningNamespace(pod)
+	if nsScoped {
+		client = fetcherClient.MakeClientNS(gp.logger, fetcherURL, master, signNS)
 	} else {
 		client = fetcherClient.MakeClient(gp.logger, fetcherURL, master)
 	}
-	err := client.Specialize(ctx, &specializeReq)
-	if err != nil {
-		return err
+	if err := client.Specialize(ctx, &specializeReq); err != nil {
+		// Name the chosen signing scheme: a 401 here usually means the executor's
+		// pick disagrees with the pod's mounted key (e.g. ns-signed but
+		// FISSION_FETCHER_KEY not mounted), and the two halves live in different
+		// processes — surfacing the scheme turns a log-correlation hunt into a read.
+		if nsScoped {
+			return fmt.Errorf("specialize signed namespace-scoped for %q (verify FISSION_FETCHER_KEY is mounted on the pod): %w", signNS, err)
+		}
+		return fmt.Errorf("specialize signed master-scoped: %w", err)
 	}
 	otelUtils.SpanTrackEvent(ctx, "specializedPod", otelUtils.GetAttributesForPod(pod)...)
 	return nil

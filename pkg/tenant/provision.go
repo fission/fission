@@ -34,8 +34,8 @@ const (
 // namespace's OWN ConfigMaps/Secrets/Packages (no cross-namespace, no
 // escalation): a tenant controller holding rbac `escalate`/`bind` can mint these
 // without itself being able to read those Secrets.
-func EnsureNamespaceRBAC(ctx context.Context, c client.Client, namespace, releaseNamespace string) error {
-	for _, obj := range namespaceRBACObjects(namespace, releaseNamespace) {
+func EnsureNamespaceRBAC(ctx context.Context, c client.Client, namespace, releaseNamespace string, owner metav1.OwnerReference) error {
+	for _, obj := range namespaceRBACObjects(namespace, releaseNamespace, owner) {
 		if err := c.Create(ctx, obj); err != nil && !apierrors.IsAlreadyExists(err) {
 			return fmt.Errorf("provisioning %T %s/%s: %w", obj, namespace, obj.GetName(), err)
 		}
@@ -74,10 +74,18 @@ func DeleteNamespaceRBAC(ctx context.Context, c client.Client, namespace string)
 	return nil
 }
 
-func namespaceRBACObjects(ns, releaseNamespace string) []client.Object {
+func namespaceRBACObjects(ns, releaseNamespace string, owner metav1.OwnerReference) []client.Object {
 	labels := map[string]string{managedByLabelKey: managedByValue}
 	meta := func(name string) metav1.ObjectMeta {
-		return metav1.ObjectMeta{Name: name, Namespace: ns, Labels: labels}
+		m := metav1.ObjectMeta{Name: name, Namespace: ns, Labels: labels}
+		// Own the provisioned object by the FissionTenant (cluster-scoped, so it may
+		// own these namespaced objects) as a GC backstop: even a force-delete that
+		// strips the finalizer reaps the grant, so a workload binding can't outlive
+		// its tenant. The finalizer (DeleteNamespaceRBAC) stays the primary path.
+		if owner.UID != "" {
+			m.OwnerReferences = []metav1.OwnerReference{owner}
+		}
+		return m
 	}
 	roleBinding := func(name, sa string) *rbacv1.RoleBinding {
 		return &rbacv1.RoleBinding{
@@ -86,10 +94,11 @@ func namespaceRBACObjects(ns, releaseNamespace string) []client.Object {
 			Subjects:   []rbacv1.Subject{{Kind: "ServiceAccount", Name: sa, Namespace: ns}},
 		}
 	}
-	// clusterRoleBinding binds a release-namespace control-plane SA to a fixed
-	// workload ClusterRole, scoped to THIS namespace by the RoleBinding — so the
-	// executor / buildermgr can manage their workloads here, never cluster-wide.
-	clusterRoleBinding := func(name, sa, clusterRole string) *rbacv1.RoleBinding {
+	// workloadRoleBinding binds a release-namespace control-plane SA to a fixed
+	// workload ClusterRole, scoped to THIS namespace by the RoleBinding (it is a
+	// RoleBinding, NOT a ClusterRoleBinding) — so the executor / buildermgr can
+	// manage their workloads here, never cluster-wide.
+	workloadRoleBinding := func(name, sa, clusterRole string) *rbacv1.RoleBinding {
 		return &rbacv1.RoleBinding{
 			ObjectMeta: meta(name),
 			RoleRef:    rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "ClusterRole", Name: clusterRole},
@@ -128,8 +137,8 @@ func namespaceRBACObjects(ns, releaseNamespace string) []client.Object {
 	// any statically-rendered Role for this namespace.
 	if releaseNamespace != "" {
 		objs = append(objs,
-			clusterRoleBinding("fission-executor-workload", fv1.FissionExecutorSA, fv1.ExecutorTenantWorkloadClusterRole),
-			clusterRoleBinding("fission-buildermgr-workload", fv1.FissionBuildermgrSA, fv1.BuildermgrTenantWorkloadClusterRole),
+			workloadRoleBinding("fission-executor-workload", fv1.FissionExecutorSA, fv1.ExecutorTenantWorkloadClusterRole),
+			workloadRoleBinding("fission-buildermgr-workload", fv1.FissionBuildermgrSA, fv1.BuildermgrTenantWorkloadClusterRole),
 		)
 	}
 	return objs

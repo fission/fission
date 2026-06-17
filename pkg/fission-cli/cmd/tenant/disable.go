@@ -36,7 +36,12 @@ func (opts *DisableSubCommand) do(input cli.Input) error {
 	// arrives with the provisioning phase.
 	if !force {
 		fns, err := opts.Client().FissionClientSet.CoreV1().Functions(namespace).List(ctx, metav1.ListOptions{})
-		if err == nil && len(fns.Items) > 0 {
+		if err != nil {
+			// Fail closed: if we cannot confirm the namespace is empty, do not
+			// disable it on a guess. The operator can --force to skip the check.
+			return fmt.Errorf("checking namespace %q for functions before disabling (re-run with --force to skip): %w", namespace, err)
+		}
+		if len(fns.Items) > 0 {
 			return fmt.Errorf("namespace %q still has %d function(s); delete them first, or re-run with --force to disable anyway (functions will stop being served)", namespace, len(fns.Items))
 		}
 	}

@@ -63,6 +63,13 @@ func ownedObjectToFunction(_ context.Context, obj client.Object) []reconcile.Req
 	if name == "" || ns == "" {
 		return nil
 	}
+	// Under dynamic tenancy the drift watch sees workloads cluster-wide; a leftover
+	// managed object in a namespace that has since left the tenant set must not
+	// re-enqueue its Function (the membership predicate gates .For but not this
+	// mapper). Drop it so an offboarded namespace stops reconciling immediately.
+	if utils.DynamicNamespacesEnabled() && !utils.DefaultNSResolver().IsTenant(ns) {
+		return nil
+	}
 	return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: name, Namespace: ns}}}
 }
 

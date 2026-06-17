@@ -59,10 +59,16 @@ func NamespaceAuthSecret(master []byte, namespace string) *corev1.Secret {
 }
 
 // EnsureNamespaceAuthSecret writes the per-namespace derived-key Secret into a
-// tenant namespace (create-if-absent). An empty master (internalAuth disabled)
-// is a no-op. AlreadyExists is ignored so a chart-managed master secret in a
-// Helm-configured namespace is left untouched — the controller only mints the
-// derived-key secret where one does not yet exist (runtime-onboarded namespaces).
+// tenant namespace. An empty master (internalAuth disabled) is a no-op.
+//
+// This is CREATE-ONCE: AlreadyExists is ignored, so the keys are written on first
+// onboard and never rewritten. The Secret name (keysSecretName) is distinct from
+// the chart's master copy, so it always creates cleanly — the ignore is NOT about
+// avoiding a collision. The consequence: rotating the internal-auth master does
+// NOT propagate to already-provisioned tenants (their Secret keeps the old derived
+// keys). In-place key rotation is a tracked follow-up (the *KeyOld fields are
+// plumbed for it); until then, rotate a tenant's keys by offboarding +
+// re-onboarding it (DeleteNamespaceRBAC removes the Secret by name).
 func EnsureNamespaceAuthSecret(ctx context.Context, c client.Client, master []byte, namespace string) error {
 	secret := NamespaceAuthSecret(master, namespace)
 	if secret == nil {

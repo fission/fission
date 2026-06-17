@@ -244,8 +244,8 @@ func setNamespace(defaultNamespace string, additionalNamespace string) error {
 
 // TestNamespaceResolverDynamicSet covers the runtime-mutable resource-namespace
 // set introduced for multi-namespace tenancy (Phase 0): the set is read through
-// a copy-returning accessor and mutated through Set/Add/Remove, which publish a
-// coalesced change signal to subscribers. See docs/multiple-namespace/prd.md §4.2.
+// a copy-returning accessor and mutated through Set/Add/Remove (the resolver-sync
+// reconciler drives it). See docs/multiple-namespace/prd.md §4.2.
 func TestNamespaceResolverDynamicSet(t *testing.T) {
 	t.Run("FissionResourceNamespaces returns a copy", func(t *testing.T) {
 		r := &NamespaceResolver{}

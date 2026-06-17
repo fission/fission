@@ -125,8 +125,16 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	// Namespace exists: provision the per-namespace RBAC + service accounts the
 	// fetcher/builder need (idempotent; the runtime equivalent of the chart's
-	// _function-access-role.tpl). Ready gates on it.
-	if err := EnsureNamespaceRBAC(ctx, r.client, ft.Spec.Namespace, r.releaseNamespace); err != nil {
+	// _function-access-role.tpl). Ready gates on it. The provisioned objects are
+	// owned by this FissionTenant (a GC backstop in case the finalizer is bypassed
+	// by a force-delete).
+	owner := metav1.OwnerReference{
+		APIVersion: "fission.io/v1",
+		Kind:       "FissionTenant",
+		Name:       ft.Name,
+		UID:        ft.UID,
+	}
+	if err := EnsureNamespaceRBAC(ctx, r.client, ft.Spec.Namespace, r.releaseNamespace, owner); err != nil {
 		controller.SetConditions(ctx, r.logger, r.client, ft, metav1.Condition{
 			Type:    fv1.FissionTenantConditionRBACProvisioned,
 			Status:  metav1.ConditionFalse,
@@ -197,7 +205,10 @@ func (r *TenantReconciler) syncResolver(ctx context.Context) error {
 func (r *TenantReconciler) namespaceToRequests(ctx context.Context, obj client.Object) []ctrl.Request {
 	list := &fv1.FissionTenantList{}
 	if err := r.client.List(ctx, list); err != nil {
-		r.logger.V(1).Info("namespace-to-tenant mapping: list failed", "namespace", obj.GetName(), "error", err)
+		// This mapper is the only path that re-converges a tenant's Ready condition
+		// on namespace create/delete; a persistent List failure silently strands
+		// tenants at NamespaceNotFound, so surface it at Error (not V(1)).
+		r.logger.Error(err, "namespace-to-tenant mapping: list failed", "namespace", obj.GetName())
 		return nil
 	}
 	var reqs []ctrl.Request

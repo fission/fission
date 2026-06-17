@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -93,6 +94,41 @@ func TestTenantReconcilerNamespaceToRequests(t *testing.T) {
 	assert.Equal(t, "custom", reqs[0].Name, "the tenant whose spec.namespace matches must be enqueued by its CR name")
 
 	assert.Empty(t, r.namespaceToRequests(t.Context(), ns("unmanaged", nil)), "an unmanaged namespace enqueues nothing")
+}
+
+// TestTenantReconcilerOffboardTearsDownRBAC drives the security-critical
+// offboarding path through Reconcile: a deleted FissionTenant (held by its
+// finalizer) must tear down the provisioned RBAC AND the derived-key Secret
+// before releasing the finalizer, so no privilege/key residue outlives the tenant.
+func TestTenantReconcilerOffboardTearsDownRBAC(t *testing.T) {
+	ft := tenant("team-a", "team-a")
+	ft.Finalizers = []string{tenantFinalizer}
+	c := newFakeClient(t, ft, ns("team-a", nil))
+	ctx := t.Context()
+
+	// Provision as a prior reconcile would have.
+	require.NoError(t, EnsureNamespaceRBAC(ctx, c, "team-a", "fission", metav1.OwnerReference{}))
+	require.NoError(t, EnsureNamespaceAuthSecret(ctx, c, []byte("master-bytes"), "team-a"))
+
+	resolver := &utils.NamespaceResolver{}
+	resolver.AddTenant("team-a")
+	r := &TenantReconciler{logger: logr.Discard(), client: c, resolver: resolver, master: []byte("master-bytes"), releaseNamespace: "fission"}
+
+	// Offboard: deleting the CR leaves it with a DeletionTimestamp (finalizer held).
+	cur := &fv1.FissionTenant{}
+	require.NoError(t, c.Get(ctx, types.NamespacedName{Name: "team-a"}, cur))
+	require.NoError(t, c.Delete(ctx, cur))
+
+	_, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: "team-a"}})
+	require.NoError(t, err)
+
+	notFound := func(obj client.Object, name string, ns string) bool {
+		return apierrors.IsNotFound(c.Get(ctx, types.NamespacedName{Namespace: ns, Name: name}, obj))
+	}
+	assert.True(t, notFound(&corev1.ServiceAccount{}, fv1.FissionFetcherSA, "team-a"), "fetcher SA must be torn down")
+	assert.True(t, notFound(&corev1.Secret{}, fv1.TenantAuthKeysSecret, "team-a"), "derived-key Secret must be torn down")
+	assert.True(t, notFound(&fv1.FissionTenant{}, "team-a", ""), "finalizer released → the FissionTenant is removed")
+	assert.NotContains(t, r.resolver.FissionResourceNamespaces(), "team-a", "resolver must drop the offboarded namespace")
 }
 
 func TestTenantReconcilerProvisionsAuthSecret(t *testing.T) {
