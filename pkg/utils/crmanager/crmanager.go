@@ -22,6 +22,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	"github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
+	"github.com/fission/fission/pkg/tenant"
 	"github.com/fission/fission/pkg/utils"
 )
 
@@ -35,7 +36,7 @@ import (
 // rejoins as a standby.
 func NewLeaderElected(restConfig *rest.Config, lockName string, logger logr.Logger) (ctrl.Manager, error) {
 	enabled, _ := strconv.ParseBool(os.Getenv("LEADER_ELECTION_ENABLED"))
-	return ctrl.NewManager(restConfig, ctrl.Options{
+	mgr, err := ctrl.NewManager(restConfig, ctrl.Options{
 		Scheme:                        scheme.Scheme,
 		Metrics:                       metricsserver.Options{BindAddress: "0"},
 		HealthProbeBindAddress:        "0",
@@ -45,6 +46,21 @@ func NewLeaderElected(restConfig *rest.Config, lockName string, logger logr.Logg
 		LeaderElectionReleaseOnCancel: true,
 		Logger:                        logger,
 	})
+	if err != nil {
+		return nil, err
+	}
+	// Cross-process propagation: under dynamic tenancy every crmanager-based
+	// subsystem (the trigger managers — timer/kubewatcher/mqtrigger/canaryconfig)
+	// watches Fission CRDs cluster-wide and filters to the live tenant set via
+	// MembershipPredicate. Registering the resolver-sync here keeps that set
+	// current from the FissionTenant CRs, so a namespace onboarded at runtime
+	// reaches each trigger manager without a restart. Read-only — no provisioning.
+	if utils.DynamicNamespacesEnabled() {
+		if err := tenant.AddResolverSync(mgr, utils.DefaultNSResolver(), logger); err != nil {
+			return nil, err
+		}
+	}
+	return mgr, nil
 }
 
 // FissionCacheOptions scopes a Manager's shared cache to exactly the namespaces

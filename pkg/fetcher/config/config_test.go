@@ -34,7 +34,7 @@ func TestAddFetcherToPodSpecPreStopLifecycle(t *testing.T) {
 			TerminationGracePeriodSeconds: &grace,
 		}
 
-		err = cfg.AddFetcherToPodSpec(podSpec, "user")
+		err = cfg.AddFetcherToPodSpec(podSpec, "user", "test-ns")
 		require.NoError(t, err)
 
 		// Locate the fetcher sidecar that was injected.
@@ -69,7 +69,7 @@ func TestAddFetcherToPodSpecPreStopLifecycle(t *testing.T) {
 			TerminationGracePeriodSeconds: &grace,
 		}
 
-		err = cfg.AddFetcherToPodSpec(podSpec, "user")
+		err = cfg.AddFetcherToPodSpec(podSpec, "user", "test-ns")
 		require.NoError(t, err)
 
 		var fetcherContainer *apiv1.Container
@@ -96,7 +96,7 @@ func TestAddFetcherToPodSpecPreStopLifecycle(t *testing.T) {
 			TerminationGracePeriodSeconds: nil,
 		}
 
-		err = cfg.AddFetcherToPodSpec(podSpec, "user")
+		err = cfg.AddFetcherToPodSpec(podSpec, "user", "test-ns")
 		require.NoError(t, err)
 
 		var fetcherContainer *apiv1.Container

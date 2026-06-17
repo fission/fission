@@ -218,7 +218,7 @@ func (gp *GenericPool) genDeploymentSpec(env *fv1.Environment) (*appsv1.Deployme
 	// kubelet mounts the code; specialization is load-only (see
 	// loadOnlySpecialize). B-fetcher pods keep it for Secrets/ConfigMaps.
 	if gp.hasFetcher() {
-		err = gp.fetcherConfig.AddFetcherToPodSpec(&deploymentSpec.Template.Spec, mainContainerName)
+		err = gp.fetcherConfig.AddFetcherToPodSpec(&deploymentSpec.Template.Spec, mainContainerName, gp.fnNamespace)
 		if err != nil {
 			return nil, err
 		}

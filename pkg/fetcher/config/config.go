@@ -68,16 +68,21 @@ type Config struct {
 // version-aware-sign it with — closing the stamp-before-key race without 401s.
 // The storage key stays optional even then: storagesvc dual-accepts a
 // master-derived signature, so an unprovisioned fetcher degrades gracefully.
-func internalAuthEnvVars() []apiv1.EnvVar {
+func internalAuthEnvVars(namespace string) []apiv1.EnvVar {
 	const chartSecret = "fission-internal-auth"
 	keysSecret := fv1.TenantAuthKeysSecret
 
 	// Require the fetcher key only when it is guaranteed to be provisioned:
 	// dynamic tenancy on (so a tenant controller is running, enforced by the
-	// chart) AND internal auth enabled (a master exists to derive from). With
-	// auth disabled there is no key to wait for, so requiring it would wedge the
-	// pod in CreateContainerConfigError forever.
-	fetcherKeyRequired := utils.DynamicNamespacesEnabled() && os.Getenv("FISSION_INTERNAL_AUTH_SECRET") != ""
+	// chart) AND internal auth enabled (a master exists to derive from) AND the
+	// pod's namespace is a live tenant (so the controller actually writes a
+	// derived-key Secret there). A non-tenant namespace — e.g. a standalone
+	// builder namespace — never gets keys, so requiring one would wedge the pod
+	// in CreateContainerConfigError forever; there the key stays optional and the
+	// fetcher falls back to the master-derived scheme.
+	fetcherKeyRequired := utils.DynamicNamespacesEnabled() &&
+		os.Getenv("FISSION_INTERNAL_AUTH_SECRET") != "" &&
+		utils.DefaultNSResolver().IsTenant(namespace)
 
 	return []apiv1.EnvVar{
 		secretKeyEnv("FISSION_INTERNAL_AUTH_SECRET", chartSecret, "secret", true),
@@ -215,11 +220,14 @@ func (cfg *Config) NewSpecializeRequest(fn *fv1.Function, env *fv1.Environment) 
 	}
 }
 
-func (cfg *Config) AddFetcherToPodSpec(podSpec *apiv1.PodSpec, mainContainerName string) error {
-	return cfg.addFetcherToPodSpecWithCommand(podSpec, mainContainerName, cfg.fetcherCommand())
+// AddFetcherToPodSpec adds the fetcher sidecar to podSpec. namespace is where the
+// pod will run; it scopes whether the per-namespace derived key is required (see
+// internalAuthEnvVars).
+func (cfg *Config) AddFetcherToPodSpec(podSpec *apiv1.PodSpec, mainContainerName, namespace string) error {
+	return cfg.addFetcherToPodSpecWithCommand(podSpec, mainContainerName, namespace, cfg.fetcherCommand())
 }
 
-func (cfg *Config) AddSpecializingFetcherToPodSpec(podSpec *apiv1.PodSpec, mainContainerName string, fn *fv1.Function, env *fv1.Environment) error {
+func (cfg *Config) AddSpecializingFetcherToPodSpec(podSpec *apiv1.PodSpec, mainContainerName, namespace string, fn *fv1.Function, env *fv1.Environment) error {
 	specializeReq := cfg.NewSpecializeRequest(fn, env)
 	specializePayload, err := json.Marshal(specializeReq)
 	if err != nil {
@@ -229,6 +237,7 @@ func (cfg *Config) AddSpecializingFetcherToPodSpec(podSpec *apiv1.PodSpec, mainC
 	return cfg.addFetcherToPodSpecWithCommand(
 		podSpec,
 		mainContainerName,
+		namespace,
 		cfg.fetcherCommand(
 			"-specialize-on-startup",
 			"-specialize-request", string(specializePayload),
@@ -317,7 +326,7 @@ func (cfg *Config) volumesWithMounts() ([]apiv1.Volume, []apiv1.VolumeMount) {
 	return volumes, mounts
 }
 
-func (cfg *Config) addFetcherToPodSpecWithCommand(podSpec *apiv1.PodSpec, mainContainerName string, command []string) error {
+func (cfg *Config) addFetcherToPodSpecWithCommand(podSpec *apiv1.PodSpec, mainContainerName, namespace string, command []string) error {
 	volumes, mounts := cfg.volumesWithMounts()
 	c := apiv1.Container{
 		Name:                   "fetcher",
@@ -354,7 +363,7 @@ func (cfg *Config) addFetcherToPodSpecWithCommand(podSpec *apiv1.PodSpec, mainCo
 				},
 			},
 		},
-		Env: append(otel.OtelEnvForContainer(), internalAuthEnvVars()...),
+		Env: append(otel.OtelEnvForContainer(), internalAuthEnvVars(namespace)...),
 	}
 	if cfg.insecureRegistries != "" {
 		c.Env = append(c.Env, apiv1.EnvVar{

@@ -12,6 +12,7 @@ import (
 	apiv1 "k8s.io/api/core/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/utils"
 )
 
 // envByName indexes an env-var slice by name for assertion.
@@ -31,7 +32,7 @@ func envByName(t *testing.T, vars []apiv1.EnvVar) map[string]apiv1.EnvVar {
 // with the chart copy). All are optional in the default single-namespace mode.
 func TestInternalAuthEnvVarsSources(t *testing.T) {
 	t.Setenv("FISSION_DYNAMIC_NAMESPACES", "false")
-	vars := envByName(t, internalAuthEnvVars())
+	vars := envByName(t, internalAuthEnvVars("team-a"))
 
 	cases := []struct {
 		env        string
@@ -61,28 +62,38 @@ func TestInternalAuthEnvVarsSources(t *testing.T) {
 
 // TestInternalAuthEnvVarsFetcherKeyRequiredInDynamicMode pins the race-free
 // contract: in dynamic tenancy with internal auth enabled, the fetcher key is
-// REQUIRED, so the kubelet blocks pod start until the tenant controller has
-// provisioned the namespace's derived-key Secret. This makes the executor's
-// version-aware ns-signing safe — a running pod is guaranteed to hold the key it
-// will be signed with, never a stale master-only env that would 401. With auth
-// disabled (no master) it stays optional so pass-through installs still start.
+// REQUIRED for a TENANT namespace, so the kubelet blocks pod start until the
+// tenant controller has provisioned that namespace's derived-key Secret. This
+// makes the executor's version-aware ns-signing safe — a running pod is
+// guaranteed to hold the key it will be signed with, never a stale master-only
+// env that would 401. A NON-tenant namespace (e.g. a standalone builder
+// namespace that never gets keys) keeps it optional so the pod still starts and
+// falls back to master-derived signing — otherwise it would wedge forever. With
+// auth disabled (no master) it stays optional so pass-through installs start.
 func TestInternalAuthEnvVarsFetcherKeyRequiredInDynamicMode(t *testing.T) {
+	const tenantNS = "tenant-ns-for-test"
+	resolver := utils.DefaultNSResolver()
+	resolver.AddTenant(tenantNS)
+	t.Cleanup(func() { resolver.RemoveTenant(tenantNS) })
+
 	tests := []struct {
 		name         string
 		dynamic      bool
 		master       string
+		namespace    string
 		wantOptional bool
 	}{
-		{"dynamic + master present requires the fetcher key", true, "master-secret", false},
-		{"dynamic + auth disabled keeps it optional", true, "", true},
-		{"non-dynamic keeps it optional", false, "master-secret", true},
+		{"dynamic + master + tenant namespace requires the fetcher key", true, "master-secret", tenantNS, false},
+		{"dynamic + master + NON-tenant namespace stays optional (no wedge)", true, "master-secret", "not-a-tenant", true},
+		{"dynamic + auth disabled keeps it optional", true, "", tenantNS, true},
+		{"non-dynamic keeps it optional", false, "master-secret", tenantNS, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Setenv("FISSION_DYNAMIC_NAMESPACES", boolStr(tt.dynamic))
 			t.Setenv("FISSION_INTERNAL_AUTH_SECRET", tt.master)
 
-			vars := envByName(t, internalAuthEnvVars())
+			vars := envByName(t, internalAuthEnvVars(tt.namespace))
 			fk := vars["FISSION_FETCHER_KEY"]
 			require.NotNil(t, fk.ValueFrom.SecretKeyRef.Optional)
 			assert.Equal(t, tt.wantOptional, *fk.ValueFrom.SecretKeyRef.Optional)

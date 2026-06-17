@@ -29,6 +29,8 @@ import (
 	"github.com/fission/fission/pkg/executor/util"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	"github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
+	"github.com/fission/fission/pkg/tenant"
+	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/crmanager"
 	fissionmetrics "github.com/fission/fission/pkg/utils/metrics"
 )
@@ -144,6 +146,16 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	if err := controller.RegisterTenantScopedWithPredicates(mgr, &fv1.Package{}, pkgReconciler, "buildermgr-package",
 		packageBuildConcurrency(), buildTriggerPredicate()); err != nil {
 		return fmt.Errorf("unable to register package reconciler: %w", err)
+	}
+
+	// Cross-process propagation: under dynamic tenancy keep buildermgr's resolver
+	// in step with the FissionTenant set so a runtime-onboarded namespace's
+	// Packages reach the membership predicate (and build) without a restart. The
+	// cluster-wide cache + RBAC are already in place in this mode.
+	if utils.DynamicNamespacesEnabled() {
+		if err := tenant.AddResolverSync(mgr, utils.DefaultNSResolver(), bmLogger); err != nil {
+			return fmt.Errorf("unable to add tenant resolver-sync: %w", err)
+		}
 	}
 
 	readiness := &readinessRunnable{logger: bmLogger, cache: mgr.GetCache()}

@@ -480,7 +480,7 @@ func (r *EnvironmentReconciler) createBuilderDeployment(ctx context.Context, env
 		},
 	}
 
-	err = r.fetcherConfig.AddFetcherToPodSpec(&deployment.Spec.Template.Spec, "builder")
+	err = r.fetcherConfig.AddFetcherToPodSpec(&deployment.Spec.Template.Spec, "builder", ns)
 	if err != nil {
 		return nil, err
 	}

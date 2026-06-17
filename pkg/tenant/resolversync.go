@@ -42,10 +42,13 @@ func SyncResolverFromTenants(ctx context.Context, c client.Client, resolver *uti
 // ResolverSyncReconciler keeps a data-plane manager's in-process resolver in step
 // with the FissionTenant set WITHOUT doing any provisioning (that is the tenant
 // controller's job, and the privilege the data plane must not hold). Every
-// data-plane subsystem (executor, router, buildermgr, the trigger managers) runs
-// one under dynamic tenancy: it is the cross-process half of dynamic onboarding —
-// a namespace onboarded at runtime reaches each manager's membership predicate
-// (controller.MembershipPredicate reads the same resolver) without a restart.
+// cluster-wide data-plane subsystem (router, buildermgr, and the trigger managers
+// via crmanager.NewLeaderElected) runs one under dynamic tenancy: it is the
+// cross-process half of dynamic onboarding — a namespace onboarded at runtime
+// reaches each manager's membership predicate (controller.MembershipPredicate
+// reads the same resolver) without a restart. The executor is the deliberate
+// exception: it keeps a per-namespace cache until its cluster-wide-cache
+// provisioning phase lands, so it has nothing cluster-wide to admit yet.
 type ResolverSyncReconciler struct {
 	client   client.Client
 	resolver *utils.NamespaceResolver
