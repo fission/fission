@@ -50,8 +50,8 @@ func Run(ctx context.Context, logger logr.Logger, mgr *errgroup.Group, shareVolu
 	// as another tenant's builder. Otherwise fall back to deriving ServiceBuilder
 	// from the master (existing behaviour; empty master = pass-through).
 	var verifier func(http.Handler) http.Handler
-	if builderKey := []byte(os.Getenv("FISSION_BUILDER_KEY")); len(builderKey) > 0 {
-		verifier = hmacauth.VerifierFromKey(builderKey, []byte(os.Getenv("FISSION_BUILDER_KEY_OLD")), vopts)
+	if builderKey := hmacauth.DecodeKeyFromEnv(os.Getenv("FISSION_BUILDER_KEY")); len(builderKey) > 0 {
+		verifier = hmacauth.VerifierFromKey(builderKey, hmacauth.DecodeKeyFromEnv(os.Getenv("FISSION_BUILDER_KEY_OLD")), vopts)
 	} else {
 		master := []byte(os.Getenv("FISSION_INTERNAL_AUTH_SECRET"))
 		masterOld := []byte(os.Getenv("FISSION_INTERNAL_AUTH_SECRET_OLD"))

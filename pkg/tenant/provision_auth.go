@@ -50,10 +50,14 @@ func NamespaceAuthSecret(master []byte, namespace string) *corev1.Secret {
 			Namespace: namespace,
 			Labels:    map[string]string{managedByLabelKey: managedByValue},
 		},
+		// Hex-encode each derived key: these land in a Secret the fetcher/builder
+		// consume as ENV VARS, and raw HKDF bytes are not valid UTF-8, which breaks
+		// container creation ("string field contains invalid UTF-8"). The consumers
+		// hex-decode via hmac.DecodeKeyFromEnv.
 		Data: map[string][]byte{
-			fetcherKeyField: hmac.DeriveServiceKeyNS(master, hmac.ServiceFetcher, namespace),
-			builderKeyField: hmac.DeriveServiceKeyNS(master, hmac.ServiceBuilder, namespace),
-			storageKeyField: hmac.DeriveServiceKeyNS(master, hmac.ServiceStoragesvc, namespace),
+			fetcherKeyField: []byte(hmac.EncodeKeyForEnv(hmac.DeriveServiceKeyNS(master, hmac.ServiceFetcher, namespace))),
+			builderKeyField: []byte(hmac.EncodeKeyForEnv(hmac.DeriveServiceKeyNS(master, hmac.ServiceBuilder, namespace))),
+			storageKeyField: []byte(hmac.EncodeKeyForEnv(hmac.DeriveServiceKeyNS(master, hmac.ServiceStoragesvc, namespace))),
 		},
 	}
 }

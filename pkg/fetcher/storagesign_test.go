@@ -37,7 +37,9 @@ func TestStorageSigningTransport(t *testing.T) {
 	}
 
 	t.Run("namespace key signs with the ns key and sets the header → verifies", func(t *testing.T) {
-		t.Setenv("FISSION_STORAGE_KEY", string(hmacauth.DeriveServiceKeyNS(master, hmacauth.ServiceStoragesvc, "team-a")))
+		// Hex-encoded exactly as the tenant controller provisions it into the keys
+		// Secret (env-var transport must be UTF-8); storageSigningTransport hex-decodes.
+		t.Setenv("FISSION_STORAGE_KEY", hmacauth.EncodeKeyForEnv(hmacauth.DeriveServiceKeyNS(master, hmacauth.ServiceStoragesvc, "team-a")))
 		t.Setenv("FISSION_INTERNAL_AUTH_SECRET", "") // never the master in a tenant pod
 
 		cap := &captureRT{}

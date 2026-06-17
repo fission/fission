@@ -7,6 +7,7 @@ package hmac
 import (
 	"crypto/hkdf"
 	"crypto/sha256"
+	"encoding/hex"
 	"net/http"
 	"time"
 )
@@ -152,6 +153,34 @@ func VerifierFromKey(key, oldKey []byte, opts VerifierOpts) func(http.Handler) h
 	opts.Secret = key
 	opts.OldSecret = oldKey
 	return Verifier(opts)
+}
+
+// EncodeKeyForEnv encodes a derived key for transport through a Kubernetes Secret
+// that a pod consumes as an ENVIRONMENT VARIABLE. Raw HKDF output is binary and is
+// not valid UTF-8, and env-var values must be — the kubelet/containerd reject the
+// pod at container creation with "grpc: error unmarshalling request: string field
+// contains invalid UTF-8". Hex keeps the value printable, exact, and round-trips
+// via DecodeKeyFromEnv. (The master key needs no encoding: it is randAlphaNum and
+// is only ever derived-from in-process, never surfaced raw to a pod.)
+func EncodeKeyForEnv(key []byte) string {
+	if len(key) == 0 {
+		return ""
+	}
+	return hex.EncodeToString(key)
+}
+
+// DecodeKeyFromEnv reverses EncodeKeyForEnv for a derived key read from an
+// environment variable. Empty yields nil. A value that is not valid hex is
+// returned as its raw bytes, so a key set by hand (or any pre-encoding caller)
+// still works — the provisioner always hex-encodes, so this path is defensive.
+func DecodeKeyFromEnv(s string) []byte {
+	if s == "" {
+		return nil
+	}
+	if b, err := hex.DecodeString(s); err == nil {
+		return b
+	}
+	return []byte(s)
 }
 
 // ServiceVerifierNamespaceFromHeader is a verifier for a namespace-scoped channel

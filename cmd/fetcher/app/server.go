@@ -139,8 +139,8 @@ func Run(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger log
 	// ServiceFetcher key from the master (existing behaviour; empty master =
 	// pass-through).
 	var verifier func(http.Handler) http.Handler
-	if fetcherKey := []byte(os.Getenv("FISSION_FETCHER_KEY")); len(fetcherKey) > 0 {
-		verifier = hmacauth.VerifierFromKey(fetcherKey, []byte(os.Getenv("FISSION_FETCHER_KEY_OLD")), vopts)
+	if fetcherKey := hmacauth.DecodeKeyFromEnv(os.Getenv("FISSION_FETCHER_KEY")); len(fetcherKey) > 0 {
+		verifier = hmacauth.VerifierFromKey(fetcherKey, hmacauth.DecodeKeyFromEnv(os.Getenv("FISSION_FETCHER_KEY_OLD")), vopts)
 	} else {
 		master := []byte(os.Getenv("FISSION_INTERNAL_AUTH_SECRET"))
 		masterOld := []byte(os.Getenv("FISSION_INTERNAL_AUTH_SECRET_OLD"))

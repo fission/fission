@@ -6,6 +6,7 @@ package tenant
 
 import (
 	"testing"
+	"unicode/utf8"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -30,10 +31,20 @@ func TestNamespaceAuthSecretDerivesNamespaceKeys(t *testing.T) {
 	assert.Equal(t, "team-a", s.Namespace)
 	assert.Equal(t, managedByValue, s.Labels[managedByLabelKey])
 
-	// Keys are the namespace-derived values…
-	assert.Equal(t, hmac.DeriveServiceKeyNS(master, hmac.ServiceFetcher, "team-a"), s.Data["fetcherKey"])
-	assert.Equal(t, hmac.DeriveServiceKeyNS(master, hmac.ServiceBuilder, "team-a"), s.Data["builderKey"])
-	assert.Equal(t, hmac.DeriveServiceKeyNS(master, hmac.ServiceStoragesvc, "team-a"), s.Data["storageKey"])
+	// Keys are the hex-encoded namespace-derived values. Hex matters: the Secret is
+	// consumed as ENV VARS, and raw HKDF bytes are not valid UTF-8, which breaks
+	// container creation ("string field contains invalid UTF-8").
+	assert.Equal(t, []byte(hmac.EncodeKeyForEnv(hmac.DeriveServiceKeyNS(master, hmac.ServiceFetcher, "team-a"))), s.Data["fetcherKey"])
+	assert.Equal(t, []byte(hmac.EncodeKeyForEnv(hmac.DeriveServiceKeyNS(master, hmac.ServiceBuilder, "team-a"))), s.Data["builderKey"])
+	assert.Equal(t, []byte(hmac.EncodeKeyForEnv(hmac.DeriveServiceKeyNS(master, hmac.ServiceStoragesvc, "team-a"))), s.Data["storageKey"])
+
+	// Regression guard for the invalid-UTF-8 container-creation failure: every
+	// value must be valid UTF-8 (so it survives env-var transport) and must
+	// round-trip back to the raw derived key.
+	for field, val := range s.Data {
+		assert.Truef(t, utf8.Valid(val), "field %q must be valid UTF-8 for env-var transport", field)
+	}
+	assert.Equal(t, hmac.DeriveServiceKeyNS(master, hmac.ServiceFetcher, "team-a"), hmac.DecodeKeyFromEnv(string(s.Data["fetcherKey"])))
 
 	// …and the master itself is NEVER written into a tenant namespace.
 	assert.NotContains(t, s.Data, "secret", "the master must never land in a tenant secret")
@@ -57,7 +68,7 @@ func TestEnsureNamespaceAuthSecretCreates(t *testing.T) {
 
 	s := &corev1.Secret{}
 	require.NoError(t, c.Get(ctx, types.NamespacedName{Namespace: "team-a", Name: fv1.TenantAuthKeysSecret}, s))
-	assert.Equal(t, hmac.DeriveServiceKeyNS(master, hmac.ServiceFetcher, "team-a"), s.Data["fetcherKey"])
+	assert.Equal(t, []byte(hmac.EncodeKeyForEnv(hmac.DeriveServiceKeyNS(master, hmac.ServiceFetcher, "team-a"))), s.Data["fetcherKey"])
 	assert.Equal(t, managedByValue, s.Labels[managedByLabelKey])
 }
 
@@ -95,7 +106,7 @@ func TestEnsureNamespaceAuthSecretWritesAlongsideChartMaster(t *testing.T) {
 	keys := &corev1.Secret{}
 	require.NoError(t, c.Get(ctx, types.NamespacedName{Namespace: "team-a", Name: fv1.TenantAuthKeysSecret}, keys),
 		"derived-key Secret must be written even when the chart master copy already exists")
-	assert.Equal(t, hmac.DeriveServiceKeyNS(master, hmac.ServiceFetcher, "team-a"), keys.Data["fetcherKey"])
+	assert.Equal(t, []byte(hmac.EncodeKeyForEnv(hmac.DeriveServiceKeyNS(master, hmac.ServiceFetcher, "team-a"))), keys.Data["fetcherKey"])
 }
 
 func TestEnsureNamespaceAuthSecretIdempotent(t *testing.T) {

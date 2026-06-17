@@ -94,7 +94,7 @@ func (n *namespaceHeaderRoundTripper) RoundTrip(r *http.Request) (*http.Response
 // else the master-derived ServiceStoragesvc signer, else (no auth) base unchanged.
 // Centralised so every storagesvc client the fetcher builds signs identically.
 func storageSigningTransport(base http.RoundTripper, namespace string) http.RoundTripper {
-	if storageKey := []byte(os.Getenv("FISSION_STORAGE_KEY")); len(storageKey) > 0 {
+	if storageKey := hmacauth.DecodeKeyFromEnv(os.Getenv("FISSION_STORAGE_KEY")); len(storageKey) > 0 {
 		return &namespaceHeaderRoundTripper{namespace: namespace, next: hmacauth.NewSigner(storageKey, base, time.Now)}
 	}
 	if secret := storageSvcClient.HMACSecretFromEnv(); len(secret) > 0 {

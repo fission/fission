@@ -11,10 +11,31 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// TestEncodeDecodeKeyForEnv is the regression guard for the dynamic-tenancy
+// container-creation failure: a raw derived key surfaced as an env var is not
+// valid UTF-8 ("string field contains invalid UTF-8" at container create). The
+// encode/decode pair must make it UTF-8-safe and round-trip exactly.
+func TestEncodeDecodeKeyForEnv(t *testing.T) {
+	// A real derived key is 32 random bytes — almost always NOT valid UTF-8.
+	raw := DeriveServiceKeyNS([]byte(testMaster), ServiceFetcher, "team-a")
+	require.NotEmpty(t, raw)
+	require.False(t, utf8.Valid(raw), "precondition: a raw derived key is usually not valid UTF-8")
+
+	enc := EncodeKeyForEnv(raw)
+	assert.True(t, utf8.ValidString(enc), "encoded key must be valid UTF-8 for env-var transport")
+	assert.Equal(t, raw, DecodeKeyFromEnv(enc), "encode→decode must round-trip to the raw key")
+
+	// Boundary + back-compat behaviour.
+	assert.Empty(t, EncodeKeyForEnv(nil))
+	assert.Nil(t, DecodeKeyFromEnv(""))
+	assert.Equal(t, []byte("not-hex-key!"), DecodeKeyFromEnv("not-hex-key!"), "a non-hex value passes through as raw bytes")
+}
 
 func TestDeriveServiceKeyNSRoundTrip(t *testing.T) {
 	key := DeriveServiceKeyNS([]byte(testMaster), ServiceFetcher, "team-a")
