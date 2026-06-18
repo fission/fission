@@ -222,3 +222,34 @@ func TestNamespaceReconcilerUnlabeledNoCR(t *testing.T) {
 	require.NoError(t, c.List(t.Context(), list))
 	assert.Empty(t, list.Items, "an unlabeled namespace must not be materialized")
 }
+
+// TestNamespaceReconcilerAutoOnboardAll covers cluster mode: every non-system
+// namespace is materialized into a FissionTenant regardless of the label, while
+// the Kubernetes system namespaces and the control-plane namespace are excluded.
+func TestNamespaceReconcilerAutoOnboardAll(t *testing.T) {
+	reconcile := func(t *testing.T, c client.Client, name string) {
+		t.Helper()
+		r := &NamespaceReconciler{logger: logr.Discard(), client: c, autoOnboardAll: true, releaseNamespace: "fission"}
+		_, err := r.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Name: name}})
+		require.NoError(t, err)
+	}
+
+	t.Run("unlabeled namespace is auto-onboarded", func(t *testing.T) {
+		c := newFakeClient(t, ns("team-x", nil))
+		reconcile(t, c, "team-x")
+		got := &fv1.FissionTenant{}
+		require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: "team-x"}, got),
+			"cluster mode must materialize a FissionTenant for an unlabeled namespace")
+		assert.Equal(t, "team-x", got.Spec.Namespace)
+	})
+
+	for _, sys := range []string{"kube-system", "kube-public", "kube-node-lease", "fission"} {
+		t.Run("excludes "+sys, func(t *testing.T) {
+			c := newFakeClient(t, ns(sys, nil))
+			reconcile(t, c, sys)
+			list := &fv1.FissionTenantList{}
+			require.NoError(t, c.List(t.Context(), list))
+			assert.Empty(t, list.Items, "system / control-plane namespace %q must not be auto-onboarded", sys)
+		})
+	}
+}

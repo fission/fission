@@ -221,13 +221,21 @@ func (r *TenantReconciler) namespaceToRequests(ctx context.Context, obj client.O
 	return reqs
 }
 
-// NamespaceReconciler materializes a Namespace labelled fission.io/enabled=true
-// into a FissionTenant CR. It is the "label is sugar" ignition path: it only ever
-// creates, never deletes — removing the label leaves the CR in place (operators
-// disable a tenant explicitly via `fission tenant disable`).
+// NamespaceReconciler materializes a Namespace into a FissionTenant CR. In the
+// default (dynamic) mode it is the "label is sugar" ignition path: it materializes
+// only Namespaces labelled fission.io/enabled=true. In cluster (trusted-cluster)
+// mode autoOnboardAll is set and it materializes EVERY non-system namespace — the
+// auto-onboarding that lets functions run in any namespace with no FissionTenant
+// CR ceremony. Either way it only ever creates, never deletes.
 type NamespaceReconciler struct {
 	logger logr.Logger
 	client client.Client
+	// autoOnboardAll (cluster mode) materializes every non-system namespace,
+	// ignoring the fission.io/enabled label.
+	autoOnboardAll bool
+	// releaseNamespace is the control-plane install namespace, excluded from
+	// auto-onboarding (it runs no functions). Empty when not in cluster mode.
+	releaseNamespace string
 }
 
 func (r *NamespaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -235,7 +243,13 @@ func (r *NamespaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	if err := r.client.Get(ctx, req.NamespacedName, target); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
-	if target.Labels[EnabledLabel] != "true" {
+	if r.autoOnboardAll {
+		// Cluster mode: onboard every namespace except Kubernetes system namespaces
+		// and the control-plane namespace, which never run function/builder pods.
+		if isExcludedFromAutoOnboard(target.Name, r.releaseNamespace) {
+			return ctrl.Result{}, nil
+		}
+	} else if target.Labels[EnabledLabel] != "true" {
 		return ctrl.Result{}, nil
 	}
 
@@ -267,6 +281,19 @@ func (r *NamespaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	if err := r.client.Create(ctx, ft); err != nil && !apierrors.IsAlreadyExists(err) {
 		return ctrl.Result{}, err
 	}
-	r.logger.Info("materialized FissionTenant from namespace label", "namespace", target.Name)
+	r.logger.Info("materialized FissionTenant for namespace", "namespace", target.Name, "autoOnboard", r.autoOnboardAll)
 	return ctrl.Result{}, nil
+}
+
+// isExcludedFromAutoOnboard reports whether a namespace must NOT be auto-onboarded
+// in cluster mode: the Kubernetes system namespaces (which never run Fission
+// workloads) and the control-plane install namespace. Everything else is fair game
+// — cluster mode's premise is that every other namespace may run functions.
+func isExcludedFromAutoOnboard(namespace, releaseNamespace string) bool {
+	// kube-system, kube-public, and kube-node-lease run no Fission workloads.
+	switch namespace {
+	case metav1.NamespaceSystem, metav1.NamespacePublic, "kube-node-lease":
+		return true
+	}
+	return releaseNamespace != "" && namespace == releaseNamespace
 }
