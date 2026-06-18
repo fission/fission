@@ -54,6 +54,17 @@ const (
 	// builds. The constant is kept so a follow-up that decouples the
 	// service name from RV can wire writers without an api churn.
 	EnvironmentConditionReady = "Ready"
+
+	// FissionTenant conditions (multi-namespace tenancy). The tenant-lifecycle
+	// controller writes RBACProvisioned/ServiceAccountsReady/Ready; the auth-key
+	// and dynamic-watch workstreams (Phases 4-5) write AuthKeyProvisioned and
+	// WatchActive into the same slice. Ready is the rollup over its declared
+	// prerequisites.
+	FissionTenantConditionRBACProvisioned      = "RBACProvisioned"
+	FissionTenantConditionServiceAccountsReady = "ServiceAccountsReady"
+	FissionTenantConditionAuthKeyProvisioned   = "AuthKeyProvisioned"
+	FissionTenantConditionWatchActive          = "WatchActive"
+	FissionTenantConditionReady                = "Ready"
 )
 
 // Standard Reason values written alongside each condition. PascalCase per

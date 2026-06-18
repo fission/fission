@@ -24,6 +24,53 @@ const (
 )
 
 const (
+	// TenantAuthKeysSecret is the controller-owned Secret (one per tenant
+	// namespace) holding that namespace's derived HMAC keys. It is deliberately
+	// a DIFFERENT name from the chart's master-bearing "fission-internal-auth":
+	// an existing install already replicated the master copy into every function
+	// namespace, so a same-named controller Secret would collide (AlreadyExists)
+	// and silently never write the derived keys, leaving the data plane to 401.
+	// A distinct name lets the controller create it cleanly, own it fully for
+	// teardown (without touching the Helm-managed master Secret), and reach the
+	// "master never in a tenant namespace" end state by simply having the chart
+	// stop replicating the master copy — no in-place merge/removal needed.
+	TenantAuthKeysSecret = "fission-internal-auth-keys"
+
+	// Data-key fields inside TenantAuthKeysSecret. Shared by the tenant
+	// controller (writer) and the fetcher pod-spec (reader) so the two cannot
+	// drift.
+	TenantAuthFetcherKey = "fetcherKey"
+	TenantAuthBuilderKey = "builderKey"
+	TenantAuthStorageKey = "storageKey"
+)
+
+const (
+	// AuthKeySchemeAnnotation records which HMAC key scheme a fetcher-bearing
+	// pod was created with, so the executor signs each /specialize call with the
+	// key that pod's verifier actually expects (version-aware signing across a
+	// rolling upgrade). It is stamped on the pod template only when dynamic
+	// multi-namespace tenancy is on for the pod's namespace; its absence means
+	// the master-derived key scheme, which is the only scheme pre-tenancy pods
+	// and all single-namespace installs ever use.
+	AuthKeySchemeAnnotation string = "fission.io/auth-key-scheme"
+
+	// AuthKeySchemeNamespace is the AuthKeySchemeAnnotation value meaning the
+	// pod's fetcher verifies with a per-namespace derived key (it holds only its
+	// own namespace's key, never the master), so the executor must sign with
+	// ServiceSignerNS for the pod's namespace.
+	AuthKeySchemeNamespace string = "namespace"
+)
+
+// HasNamespaceKeyScheme reports whether a fetcher/builder pod's annotations mark
+// it as verifying with a per-namespace derived key (the AuthKeySchemeNamespace
+// scheme). The executor and buildermgr read it to choose version-aware signing;
+// keeping the annotation key/value pairing in one place means a change to the
+// scheme is a single edit.
+func HasNamespaceKeyScheme(annotations map[string]string) bool {
+	return annotations[AuthKeySchemeAnnotation] == AuthKeySchemeNamespace
+}
+
+const (
 	ChecksumTypeSHA256 ChecksumType = "sha256"
 )
 
@@ -188,6 +235,21 @@ const (
 const (
 	FissionBuilderSA = "fission-builder"
 	FissionFetcherSA = "fission-fetcher"
+
+	// Control-plane ServiceAccounts (in the install/release namespace) that need
+	// workload RBAC in each tenant namespace under dynamic tenancy. The tenant
+	// controller binds them to the *TenantWorkloadClusterRole below per namespace.
+	FissionExecutorSA   = "fission-executor"
+	FissionBuildermgrSA = "fission-buildermgr"
+
+	// ExecutorTenantWorkloadClusterRole / BuildermgrTenantWorkloadClusterRole are
+	// the fixed-name ClusterRoles (chart-rendered only in dynamic mode) holding
+	// the executor's / buildermgr's per-namespace workload rules. The controller
+	// references them by name in the RoleBindings it provisions, so the names must
+	// match the chart and be install-independent (dynamic tenancy is one Fission
+	// install per cluster, since it watches cluster-wide).
+	ExecutorTenantWorkloadClusterRole   = "fission-executor-tenant-workload"
+	BuildermgrTenantWorkloadClusterRole = "fission-buildermgr-tenant-workload"
 )
 
 const (

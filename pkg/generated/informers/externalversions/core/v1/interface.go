@@ -16,6 +16,8 @@ type Interface interface {
 	CanaryConfigs() CanaryConfigInformer
 	// Environments returns a EnvironmentInformer.
 	Environments() EnvironmentInformer
+	// FissionTenants returns a FissionTenantInformer.
+	FissionTenants() FissionTenantInformer
 	// Functions returns a FunctionInformer.
 	Functions() FunctionInformer
 	// HTTPTriggers returns a HTTPTriggerInformer.
@@ -49,6 +51,11 @@ func (v *version) CanaryConfigs() CanaryConfigInformer {
 // Environments returns a EnvironmentInformer.
 func (v *version) Environments() EnvironmentInformer {
 	return &environmentInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
+}
+
+// FissionTenants returns a FissionTenantInformer.
+func (v *version) FissionTenants() FissionTenantInformer {
+	return &fissionTenantInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
 }
 
 // Functions returns a FunctionInformer.

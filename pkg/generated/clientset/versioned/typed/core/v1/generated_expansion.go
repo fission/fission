@@ -10,6 +10,8 @@ type CanaryConfigExpansion interface{}
 
 type EnvironmentExpansion interface{}
 
+type FissionTenantExpansion interface{}
+
 type FunctionExpansion interface{}
 
 type HTTPTriggerExpansion interface{}

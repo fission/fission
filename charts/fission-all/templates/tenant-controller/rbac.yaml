@@ -1,0 +1,144 @@
+{{- if .Values.tenantController.enabled }}
+# The tenant controller's only cluster-wide grant: read/write Fission's own
+# FissionTenant CRD and read Namespaces. Both are cluster-scoped types; this
+# touches no core/workload type (no pods/secrets/configmaps), so it is the
+# least-privilege cluster grant the dynamic-watch design needs. Per-namespace
+# RBAC provisioning (and the escalate/bind it requires) is a later phase.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ .Release.Name }}-fission-tenant-controller
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+rules:
+- apiGroups:
+  - fission.io
+  resources:
+  - fissiontenants
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - fission.io
+  resources:
+  - fissiontenants/status
+  verbs:
+  - get
+  - update
+  - patch
+- apiGroups:
+  - ""
+  resources:
+  - namespaces
+  verbs:
+  - get
+  - list
+  - watch
+# Provision per-namespace fetcher/builder RBAC for runtime-onboarded tenants.
+# The bind+escalate verbs let the controller MINT Roles that grant read on a
+# tenant's own secrets/configmaps WITHOUT the controller itself being able to
+# read them — strictly tighter than holding cluster-wide secret read, and
+# confined to this single controller's ServiceAccount.
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - roles
+  - rolebindings
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+  # deletecollection backs the offboard teardown (DeleteNamespaceRBAC's
+  # label-selected DeleteAllOf); it is a distinct RBAC verb that `delete` does
+  # not imply, but adds no real capability here since `delete`+`list` already do.
+  - deletecollection
+  - bind
+  - escalate
+# Bind ONLY the two fixed workload ClusterRoles into tenant namespaces (via the
+# RoleBindings the controller provisions) so the executor/buildermgr can manage
+# workloads there. resourceNames-scoped: the controller cannot bind any other
+# ClusterRole, so it cannot escalate itself to arbitrary cluster permissions.
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - clusterroles
+  verbs:
+  - bind
+  resourceNames:
+  - fission-executor-tenant-workload
+  - fission-buildermgr-tenant-workload
+- apiGroups:
+  - ""
+  resources:
+  - serviceaccounts
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - delete
+  # deletecollection backs the offboard teardown (see roles/rolebindings above).
+  - deletecollection
+# Write-only access to the per-namespace derived-key Secret: create + delete by
+# NAME only — deliberately NO get/list/watch, so the controller can provision and
+# remove the auth secret without being able to read any tenant secret. This keeps
+# the controller's blast radius minimal even though it writes secret material.
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - create
+  - delete
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ .Release.Name }}-fission-tenant-controller
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ .Release.Name }}-fission-tenant-controller
+subjects:
+- kind: ServiceAccount
+  name: fission-tenant-controller
+  namespace: {{ .Release.Namespace }}
+---
+# Leader-election lease + event recorder, namespaced to the release namespace.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ .Release.Name }}-fission-tenant-controller
+  namespace: {{ .Release.Namespace }}
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+rules:
+{{- include "leases-kuberules" . }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ .Release.Name }}-fission-tenant-controller
+  namespace: {{ .Release.Namespace }}
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ .Release.Name }}-fission-tenant-controller
+subjects:
+- kind: ServiceAccount
+  name: fission-tenant-controller
+  namespace: {{ .Release.Namespace }}
+{{- end }}

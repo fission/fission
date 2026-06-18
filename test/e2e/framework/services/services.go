@@ -70,9 +70,9 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr *errgroup.Gr
 	os.Setenv("FISSION_DEFAULT_NAMESPACE", "default")
 	os.Setenv("FISSION_RESOURCE_NAMESPACES", "default")
 	utils.DefaultNSResolver().DefaultNamespace = "default"
-	utils.DefaultNSResolver().FissionResourceNS = map[string]string{
+	utils.DefaultNSResolver().SetTenants(map[string]string{
 		"default": "default",
-	}
+	})
 
 	os.Setenv("POD_READY_TIMEOUT", "300s")
 	// executor now runs under a controller-runtime Manager, so StartExecutor

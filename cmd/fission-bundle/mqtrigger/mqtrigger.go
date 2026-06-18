@@ -101,7 +101,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	}
 
 	r := mqtrigger.NewMessageQueueTriggerReconciler(logger, crMgr.GetClient(), mqtMgr)
-	if err := controller.RegisterWithConcurrency(crMgr, &fv1.MessageQueueTrigger{}, r, "messagequeuetrigger", mqtReconcileConcurrency); err != nil {
+	if err := controller.RegisterTenantScopedWithConcurrency(crMgr, &fv1.MessageQueueTrigger{}, r, "messagequeuetrigger", mqtReconcileConcurrency); err != nil {
 		return fmt.Errorf("error registering messagequeuetrigger reconciler: %w", err)
 	}
 	return crMgr.Start(ctx)

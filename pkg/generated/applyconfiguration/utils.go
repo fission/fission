@@ -44,6 +44,12 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &corev1.EnvironmentStatusApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("ExecutionStrategy"):
 		return &corev1.ExecutionStrategyApplyConfiguration{}
+	case v1.SchemeGroupVersion.WithKind("FissionTenant"):
+		return &corev1.FissionTenantApplyConfiguration{}
+	case v1.SchemeGroupVersion.WithKind("FissionTenantSpec"):
+		return &corev1.FissionTenantSpecApplyConfiguration{}
+	case v1.SchemeGroupVersion.WithKind("FissionTenantStatus"):
+		return &corev1.FissionTenantStatusApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("Function"):
 		return &corev1.FunctionApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("FunctionPackageRef"):

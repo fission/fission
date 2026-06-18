@@ -1,0 +1,24 @@
+{{- if dig "dynamicNamespaces" false (.Values.tenancy | default dict) }}
+# Dynamic multi-namespace mode: the executor and buildermgr (which run as
+# release-namespace ServiceAccounts) must create/manage their workloads
+# (Deployments, Services, pods, HPAs, …) in namespaces onboarded at RUNTIME,
+# where the chart's static per-namespace Roles do not exist. These fixed-name
+# ClusterRoles carry exactly the same per-namespace kuberules the static Roles
+# use; the tenant controller binds them into each tenant namespace with a
+# namespaced RoleBinding (see pkg/tenant/provision.go), so the grant is scoped to
+# tenant namespaces only — never cluster-wide. The names are install-independent
+# because dynamic tenancy is one Fission install per cluster (it watches
+# cluster-wide). Rendered only in dynamic mode; the static path is unchanged.
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: fission-executor-tenant-workload
+{{- include "executor-kuberules" . }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: fission-buildermgr-tenant-workload
+{{- include "buildermgr-kuberules" . }}
+{{- end }}

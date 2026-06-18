@@ -1,0 +1,46 @@
+{{- if and .Values.tenantController.enabled (dig "seedExistingNamespaces" true (.Values.tenantController | default dict)) }}
+# Post-install/post-upgrade migration: seed a FissionTenant for each namespace
+# in the env-driven config (defaultNamespace + additionalFissionNamespaces) so
+# existing installs adopt the CR model. Idempotent (create-if-absent), never
+# touches user/label/CLI-created tenants, and mutates no Deployment — so running
+# it on upgrade restarts nothing (the fix for #3298's mass-restart). Reuses the
+# tenant-controller ServiceAccount, which already has create permission on
+# fissiontenants.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: fission-tenant-seed
+  namespace: {{ .Release.Namespace }}
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: tenantcontroller
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        svc: tenantcontroller
+    spec:
+      restartPolicy: Never
+      serviceAccountName: fission-tenant-controller
+      {{- if .Values.tenantController.securityContext.enabled }}
+      securityContext: {{- omit .Values.tenantController.securityContext "enabled" | toYaml | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: seed
+        image: {{ include "fission-bundleImage" . | quote }}
+        imagePullPolicy: {{ .Values.pullPolicy }}
+        command: ["/fission-bundle"]
+        args: ["--seedTenants"]
+        env:
+        {{- include "fission-resource-namespace.envs" . | indent 8 }}
+        {{- include "kube_client.envs" . | indent 8 }}
+    {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+{{- end }}

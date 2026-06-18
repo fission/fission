@@ -89,6 +89,15 @@ func (gp *GenericPool) genDeploymentSpec(env *fv1.Environment) (*appsv1.Deployme
 	// append executor instance-id to pod annotations when a pod is chosen
 	// for function specialization.
 
+	// Stamp the HMAC key-scheme so the executor signs this pod's /specialize
+	// calls with the key its fetcher will actually verify with (version-aware
+	// signing). Stable per-namespace under dynamic tenancy — present for tenant
+	// namespaces, absent otherwise — so it adds at most one rollout when tenancy
+	// is first enabled, never ongoing churn. See fetcherSigningNamespace.
+	if shouldStampNamespaceKeyScheme(gp.fnNamespace, utils.DefaultNSResolver()) {
+		podAnnotations[fv1.AuthKeySchemeAnnotation] = fv1.AuthKeySchemeNamespace
+	}
+
 	if gp.useIstio && env.Spec.AllowAccessToExternalNetwork {
 		podAnnotations["sidecar.istio.io/inject"] = "false"
 	}
@@ -209,7 +218,7 @@ func (gp *GenericPool) genDeploymentSpec(env *fv1.Environment) (*appsv1.Deployme
 	// kubelet mounts the code; specialization is load-only (see
 	// loadOnlySpecialize). B-fetcher pods keep it for Secrets/ConfigMaps.
 	if gp.hasFetcher() {
-		err = gp.fetcherConfig.AddFetcherToPodSpec(&deploymentSpec.Template.Spec, mainContainerName)
+		err = gp.fetcherConfig.AddFetcherToPodSpec(&deploymentSpec.Template.Spec, mainContainerName, gp.fnNamespace)
 		if err != nil {
 			return nil, err
 		}

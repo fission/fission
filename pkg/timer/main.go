@@ -46,7 +46,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		client: crMgr.GetClient(),
 		timer:  MakeTimer(logger, routerUrl),
 	}
-	if err := controller.Register(crMgr, &fv1.TimeTrigger{}, r, "timetrigger"); err != nil {
+	if err := controller.RegisterTenantScoped(crMgr, &fv1.TimeTrigger{}, r, "timetrigger"); err != nil {
 		return fmt.Errorf("error registering timetrigger reconciler: %w", err)
 	}
 	return crMgr.Start(ctx)

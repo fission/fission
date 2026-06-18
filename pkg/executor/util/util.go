@@ -45,7 +45,7 @@ func AdoptFunctions(ctx context.Context, logger logr.Logger, fissionClient versi
 	executorType fv1.ExecutorType, create func(context.Context, *fv1.Function) error) {
 	g := new(errgroup.Group)
 	g.SetLimit(adoptConcurrency)
-	for _, namespace := range utils.DefaultNSResolver().FissionResourceNS {
+	for _, namespace := range utils.DefaultNSResolver().FissionResourceNamespaces() {
 		fnList, err := fissionClient.CoreV1().Functions(namespace).List(ctx, metav1.ListOptions{})
 		if err != nil {
 			logger.Error(err, "error listing functions to adopt", "namespace", namespace)

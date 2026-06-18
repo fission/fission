@@ -362,6 +362,29 @@ func (r *EnvironmentReconciler) getBuilderDeploymentList(ctx context.Context, se
 	return deployList.Items, nil
 }
 
+// builderAuthEnvVars mounts the per-namespace derived builder key onto the
+// builder container under dynamic tenancy, so /build verifies with this
+// namespace's key and the pod never holds the master. Required for a live tenant
+// namespace with auth enabled — the kubelet then gates pod start on the
+// controller having provisioned the key (race-free, mirroring the fetcher key);
+// optional otherwise, so default-mode and non-tenant pods still start and the
+// builder falls back to the master-derived scheme (empty key = pass-through).
+func builderAuthEnvVars(namespace string) []apiv1.EnvVar {
+	required := utils.PerNamespaceKeyRequired(namespace)
+	keyRef := func(name, key string, optional bool) apiv1.EnvVar {
+		opt := optional
+		return apiv1.EnvVar{Name: name, ValueFrom: &apiv1.EnvVarSource{SecretKeyRef: &apiv1.SecretKeySelector{
+			LocalObjectReference: apiv1.LocalObjectReference{Name: fv1.TenantAuthKeysSecret},
+			Key:                  key,
+			Optional:             &opt,
+		}}}
+	}
+	return []apiv1.EnvVar{
+		keyRef("FISSION_BUILDER_KEY", fv1.TenantAuthBuilderKey, !required),
+		keyRef("FISSION_BUILDER_KEY_OLD", "builderKeyOld", true),
+	}
+}
+
 func (r *EnvironmentReconciler) createBuilderDeployment(ctx context.Context, env *fv1.Environment, ns string) (*appsv1.Deployment, error) {
 	name := fmt.Sprintf("%v-%v", env.Name, env.ResourceVersion)
 	sel := r.getLabels(env.Name, ns, env.ResourceVersion)
@@ -375,12 +398,24 @@ func (r *EnvironmentReconciler) createBuilderDeployment(ctx context.Context, env
 		podAnnotations["sidecar.istio.io/inject"] = "false"
 	}
 
+	// Stamp the HMAC key-scheme so buildermgr signs this builder pod's sidecar
+	// calls with the key its fetcher will verify with (version-aware signing,
+	// builderSigningNamespace). Present for tenant namespaces under dynamic
+	// tenancy, absent otherwise — stable, so at most one rollout when tenancy is
+	// first enabled, never ongoing churn.
+	if utils.DynamicNamespacesEnabled() && r.nsResolver.IsTenant(ns) {
+		podAnnotations[fv1.AuthKeySchemeAnnotation] = fv1.AuthKeySchemeNamespace
+	}
+
 	container, err := util.MergeContainer(&apiv1.Container{
 		Name:                   fv1.BuilderContainerName,
 		Image:                  env.Spec.Builder.Image,
 		ImagePullPolicy:        r.builderImagePullPolicy,
 		TerminationMessagePath: "/dev/termination-log",
 		Command:                []string{"/builder", r.fetcherConfig.SharedMountPath()},
+		// Per-namespace builder key for /build verification under dynamic tenancy
+		// (absent/empty otherwise = master-derived or pass-through, unchanged).
+		Env: builderAuthEnvVars(ns),
 		ReadinessProbe: &apiv1.Probe{
 			InitialDelaySeconds: 5,
 			PeriodSeconds:       2,
@@ -471,7 +506,7 @@ func (r *EnvironmentReconciler) createBuilderDeployment(ctx context.Context, env
 		},
 	}
 
-	err = r.fetcherConfig.AddFetcherToPodSpec(&deployment.Spec.Template.Spec, "builder")
+	err = r.fetcherConfig.AddFetcherToPodSpec(&deployment.Spec.Template.Spec, "builder", ns)
 	if err != nil {
 		return nil, err
 	}

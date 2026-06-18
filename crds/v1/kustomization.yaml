@@ -3,6 +3,7 @@ kind: Kustomization
 resources:
 - fission.io_canaryconfigs.yaml
 - fission.io_environments.yaml
+- fission.io_fissiontenants.yaml
 - fission.io_functions.yaml
 - fission.io_httptriggers.yaml
 - fission.io_kuberneteswatchtriggers.yaml

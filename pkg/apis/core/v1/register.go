@@ -32,7 +32,9 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 		&Package{},
 		&PackageList{},
 		&CanaryConfig{},
-		&CanaryConfigList{})
+		&CanaryConfigList{},
+		&FissionTenant{},
+		&FissionTenantList{})
 	metav1.AddToGroupVersion(scheme, SchemeGroupVersion)
 	return nil
 }

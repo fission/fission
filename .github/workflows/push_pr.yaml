@@ -145,7 +145,19 @@ jobs:
           # and leave it empty.
           docker exec kind-control-plane sh -c \
             'mkdir -p /fission-coverage && chown 10001:10001 /fission-coverage && chmod 0700 /fission-coverage'
-          SKAFFOLD_PROFILE=kind-ci make skaffold-deploy
+          # Multi-namespace tenancy (dynamic, restart-free onboarding) is
+          # exercised on the two non-legacy legs by composing the dynamic-tenancy
+          # skaffold profile onto kind-ci. The whole suite then runs against a
+          # dynamic-mode control plane (default is auto-seeded as a tenant), and
+          # the serial TestDynamicTenantLifecycle onboards a fresh namespace at
+          # runtime. v1.34.8 stays on the static model — it is the all-legacy leg
+          # (RFC-0002/0013/0012 pinned off below), so static namespacing keeps
+          # that path covered too.
+          PROFILE=kind-ci
+          case "${{ matrix.kindversion }}" in
+            v1.32.11|v1.36.1) PROFILE=kind-ci,dynamic-tenancy ;;
+          esac
+          SKAFFOLD_PROFILE="$PROFILE" make skaffold-deploy
 
       # Pin the v1.34 leg back to the legacy data plane (RFC-0002 gates off):
       # kind-ci deploys with the EndpointSlice path on everywhere, so without
@@ -279,11 +291,13 @@ jobs:
 
       - name: Go integration tests (common + serial phases)
         # Margin over the hard go-test timeouts this step contains (common 35m +
-        # serial 18m) plus image preload / port-forward setup, so a slow-but-valid
+        # serial 25m) plus image preload / port-forward setup, so a slow-but-valid
         # run isn't killed by the step timeout before a go-test timeout can fire.
         # common bumped to 35m for the rust/jvm/jersey builder tests (cargo crate
-        # fetch + Maven dependency download on first build).
-        timeout-minutes: 60
+        # fetch + Maven dependency download on first build); serial bumped to 25m
+        # for TestDynamicTenantLifecycle on the dynamic legs (onboard → cold-start
+        # function → offboard, on top of the adopt/executor-down tests).
+        timeout-minutes: 70
         env:
           NODE_RUNTIME_IMAGE: ghcr.io/fission/node-env-22
           NODE_BUILDER_IMAGE: ghcr.io/fission/node-builder-22
@@ -470,7 +484,7 @@ jobs:
           # the executor pod's adopt-path coverage flushes to the node hostPath.
           # -timeout is kept above the test's own 15m context deadline so the
           # context fires first (clear failure) rather than the hard timeout.
-          go test -tags=integration "${COVER_FLAGS[@]}" -p 1 -timeout=18m -v \
+          go test -tags=integration "${COVER_FLAGS[@]}" -p 1 -timeout=25m -v \
             ./test/integration/suites/serial/... "${COVER_ARGS[@]}"
 
       - name: Collect integration coverage

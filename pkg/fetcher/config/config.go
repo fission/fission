@@ -45,7 +45,7 @@ type Config struct {
 
 // internalAuthEnvVars returns the env-var entries that mount the
 // HMAC-shared-secret values from the chart-installed Secret/fission-internal-auth
-// onto the fetcher sidecar container. Both keys are marked optional so a
+// onto the fetcher sidecar container. Every key is marked optional so a
 // pod still admits when the chart's internalAuth is disabled.
 //
 // The fetcher binary calls the storagesvc client, which reads
@@ -53,26 +53,53 @@ type Config struct {
 // outbound request when set. Without these env vars the fetcher's
 // uploads fail with HTTP 401 once storagesvc starts enforcing
 // signatures. See docs/internal-auth/00-design.md.
-func internalAuthEnvVars() []apiv1.EnvVar {
+//
+// FISSION_FETCHER_KEY / FISSION_STORAGE_KEY are the per-namespace derived keys
+// the tenant controller writes into a tenant namespace's TenantAuthKeysSecret
+// under multi-namespace tenancy (the master never lands there). The Secret is a
+// DIFFERENT name from the chart's master copy so an existing install's
+// already-replicated master Secret cannot shadow it.
+//
+// In the default single-namespace mode all six are optional, so a pod admits
+// whether or not internalAuth is configured — byte-identical to before. Under
+// dynamic tenancy with auth enabled the fetcher key is REQUIRED: the kubelet then
+// blocks pod start until the controller has provisioned the namespace's derived
+// key, so a running pod is guaranteed to hold the key the executor will
+// version-aware-sign it with — closing the stamp-before-key race without 401s.
+// The storage key stays optional even then: storagesvc dual-accepts a
+// master-derived signature, so an unprovisioned fetcher degrades gracefully.
+func internalAuthEnvVars(namespace string) []apiv1.EnvVar {
+	const chartSecret = "fission-internal-auth"
+	keysSecret := fv1.TenantAuthKeysSecret
+
+	// Require the fetcher key only where it is guaranteed to be provisioned (a
+	// live tenant namespace under dynamic tenancy with auth enabled); elsewhere it
+	// stays optional and the fetcher falls back to the master-derived scheme. See
+	// utils.PerNamespaceKeyRequired.
+	fetcherKeyRequired := utils.PerNamespaceKeyRequired(namespace)
+
 	return []apiv1.EnvVar{
-		{
-			Name: "FISSION_INTERNAL_AUTH_SECRET",
-			ValueFrom: &apiv1.EnvVarSource{
-				SecretKeyRef: &apiv1.SecretKeySelector{
-					LocalObjectReference: apiv1.LocalObjectReference{Name: "fission-internal-auth"},
-					Key:                  "secret",
-					Optional:             func() *bool { b := true; return &b }(),
-				},
-			},
-		},
-		{
-			Name: "FISSION_INTERNAL_AUTH_SECRET_OLD",
-			ValueFrom: &apiv1.EnvVarSource{
-				SecretKeyRef: &apiv1.SecretKeySelector{
-					LocalObjectReference: apiv1.LocalObjectReference{Name: "fission-internal-auth"},
-					Key:                  "oldSecret",
-					Optional:             func() *bool { b := true; return &b }(),
-				},
+		secretKeyEnv("FISSION_INTERNAL_AUTH_SECRET", chartSecret, "secret", true),
+		secretKeyEnv("FISSION_INTERNAL_AUTH_SECRET_OLD", chartSecret, "oldSecret", true),
+		secretKeyEnv("FISSION_FETCHER_KEY", keysSecret, fv1.TenantAuthFetcherKey, !fetcherKeyRequired),
+		secretKeyEnv("FISSION_FETCHER_KEY_OLD", keysSecret, "fetcherKeyOld", true),
+		secretKeyEnv("FISSION_STORAGE_KEY", keysSecret, fv1.TenantAuthStorageKey, true),
+		secretKeyEnv("FISSION_STORAGE_KEY_OLD", keysSecret, "storageKeyOld", true),
+	}
+}
+
+// secretKeyEnv builds a secretKeyRef env var. optional=true lets the pod admit
+// when the key (or the whole Secret) is absent — the backwards-compatible
+// default; optional=false makes the kubelet gate pod start on the key's presence.
+func secretKeyEnv(name, secretName, secretKey string, optional bool) apiv1.EnvVar {
+	opt := optional
+	return apiv1.EnvVar{
+		Name: name,
+		ValueFrom: &apiv1.EnvVarSource{
+			SecretKeyRef: &apiv1.SecretKeySelector{
+				LocalObjectReference: apiv1.LocalObjectReference{Name: secretName},
+				Key:                  secretKey,
+				Optional:             &opt,
 			},
 		},
 	}
@@ -187,11 +214,14 @@ func (cfg *Config) NewSpecializeRequest(fn *fv1.Function, env *fv1.Environment) 
 	}
 }
 
-func (cfg *Config) AddFetcherToPodSpec(podSpec *apiv1.PodSpec, mainContainerName string) error {
-	return cfg.addFetcherToPodSpecWithCommand(podSpec, mainContainerName, cfg.fetcherCommand())
+// AddFetcherToPodSpec adds the fetcher sidecar to podSpec. namespace is where the
+// pod will run; it scopes whether the per-namespace derived key is required (see
+// internalAuthEnvVars).
+func (cfg *Config) AddFetcherToPodSpec(podSpec *apiv1.PodSpec, mainContainerName, namespace string) error {
+	return cfg.addFetcherToPodSpecWithCommand(podSpec, mainContainerName, namespace, cfg.fetcherCommand())
 }
 
-func (cfg *Config) AddSpecializingFetcherToPodSpec(podSpec *apiv1.PodSpec, mainContainerName string, fn *fv1.Function, env *fv1.Environment) error {
+func (cfg *Config) AddSpecializingFetcherToPodSpec(podSpec *apiv1.PodSpec, mainContainerName, namespace string, fn *fv1.Function, env *fv1.Environment) error {
 	specializeReq := cfg.NewSpecializeRequest(fn, env)
 	specializePayload, err := json.Marshal(specializeReq)
 	if err != nil {
@@ -201,6 +231,7 @@ func (cfg *Config) AddSpecializingFetcherToPodSpec(podSpec *apiv1.PodSpec, mainC
 	return cfg.addFetcherToPodSpecWithCommand(
 		podSpec,
 		mainContainerName,
+		namespace,
 		cfg.fetcherCommand(
 			"-specialize-on-startup",
 			"-specialize-request", string(specializePayload),
@@ -289,7 +320,7 @@ func (cfg *Config) volumesWithMounts() ([]apiv1.Volume, []apiv1.VolumeMount) {
 	return volumes, mounts
 }
 
-func (cfg *Config) addFetcherToPodSpecWithCommand(podSpec *apiv1.PodSpec, mainContainerName string, command []string) error {
+func (cfg *Config) addFetcherToPodSpecWithCommand(podSpec *apiv1.PodSpec, mainContainerName, namespace string, command []string) error {
 	volumes, mounts := cfg.volumesWithMounts()
 	c := apiv1.Container{
 		Name:                   "fetcher",
@@ -326,7 +357,7 @@ func (cfg *Config) addFetcherToPodSpecWithCommand(podSpec *apiv1.PodSpec, mainCo
 				},
 			},
 		},
-		Env: append(otel.OtelEnvForContainer(), internalAuthEnvVars()...),
+		Env: append(otel.OtelEnvForContainer(), internalAuthEnvVars(namespace)...),
 	}
 	if cfg.insecureRegistries != "" {
 		c.Env = append(c.Env, apiv1.EnvVar{

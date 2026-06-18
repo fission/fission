@@ -22,6 +22,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	"github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
+	"github.com/fission/fission/pkg/tenant"
 	"github.com/fission/fission/pkg/utils"
 )
 
@@ -35,7 +36,7 @@ import (
 // rejoins as a standby.
 func NewLeaderElected(restConfig *rest.Config, lockName string, logger logr.Logger) (ctrl.Manager, error) {
 	enabled, _ := strconv.ParseBool(os.Getenv("LEADER_ELECTION_ENABLED"))
-	return ctrl.NewManager(restConfig, ctrl.Options{
+	mgr, err := ctrl.NewManager(restConfig, ctrl.Options{
 		Scheme:                        scheme.Scheme,
 		Metrics:                       metricsserver.Options{BindAddress: "0"},
 		HealthProbeBindAddress:        "0",
@@ -45,6 +46,20 @@ func NewLeaderElected(restConfig *rest.Config, lockName string, logger logr.Logg
 		LeaderElectionReleaseOnCancel: true,
 		Logger:                        logger,
 	})
+	if err != nil {
+		return nil, err
+	}
+	// Cross-process propagation: under dynamic tenancy every crmanager-based
+	// subsystem (the trigger managers — timer/kubewatcher/mqtrigger/canaryconfig)
+	// watches Fission CRDs cluster-wide and filters to the live tenant set via
+	// MembershipPredicate. Registering the resolver-sync here keeps that set
+	// current from the FissionTenant CRs, so a namespace onboarded at runtime
+	// reaches each trigger manager without a restart. Read-only — no provisioning;
+	// a no-op when dynamic tenancy is off.
+	if err := tenant.AddResolverSync(mgr); err != nil {
+		return nil, err
+	}
+	return mgr, nil
 }
 
 // FissionCacheOptions scopes a Manager's shared cache to exactly the namespaces
@@ -56,8 +71,17 @@ func NewLeaderElected(restConfig *rest.Config, lockName string, logger logr.Logg
 // unchanged. The cache is inert until a controller registers an informer, so
 // this is harmless for Managers that only run non-reconciler runnables.
 func FissionCacheOptions() cache.Options {
+	if utils.DynamicNamespacesEnabled() {
+		// Cluster-wide cache: Fission-CRD informers see every namespace's CRs so
+		// a namespace can be onboarded/offboarded at runtime without rebuilding
+		// the Manager. Reconcilers drop non-tenant objects via
+		// controller.MembershipPredicate. This is the one cluster-wide read the
+		// dynamic-watch design adds, and only over Fission's own CRD types —
+		// these CRD-only Managers cache no core/workload type.
+		return cache.Options{}
+	}
 	nsConfig := map[string]cache.Config{}
-	for _, ns := range utils.DefaultNSResolver().FissionResourceNS {
+	for _, ns := range utils.DefaultNSResolver().FissionResourceNamespaces() {
 		nsConfig[ns] = cache.Config{}
 	}
 	return cache.Options{DefaultNamespaces: nsConfig}

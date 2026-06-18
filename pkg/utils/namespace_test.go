@@ -5,9 +5,12 @@
 package utils
 
 import (
+	"fmt"
 	"os"
+	"sync"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -237,4 +240,88 @@ func setNamespace(defaultNamespace string, additionalNamespace string) error {
 		return err
 	}
 	return os.Setenv(ENV_ADDITIONAL_NAMESPACE, additionalNamespace)
+}
+
+// TestNamespaceResolverDynamicSet covers the runtime-mutable resource-namespace
+// set introduced for multi-namespace tenancy (Phase 0): the set is read through
+// a copy-returning accessor and mutated through Set/Add/Remove (the resolver-sync
+// reconciler drives it). See docs/multiple-namespace/prd.md §4.2.
+func TestNamespaceResolverDynamicSet(t *testing.T) {
+	t.Run("FissionResourceNamespaces returns a copy", func(t *testing.T) {
+		r := &NamespaceResolver{}
+		r.SetTenants(map[string]string{"ns-a": "ns-a"})
+
+		got := r.FissionResourceNamespaces()
+		got["ns-b"] = "ns-b" // mutating the returned map must not leak back
+
+		again := r.FissionResourceNamespaces()
+		require.NotContains(t, again, "ns-b", "accessor must return a defensive copy")
+		require.Contains(t, again, "ns-a")
+	})
+
+	t.Run("SetTenants replaces the whole set", func(t *testing.T) {
+		r := &NamespaceResolver{}
+		r.SetTenants(map[string]string{"ns-a": "ns-a", "ns-b": "ns-b"})
+		r.SetTenants(map[string]string{"ns-c": "ns-c"})
+
+		require.Equal(t, map[string]string{"ns-c": "ns-c"}, r.FissionResourceNamespaces())
+	})
+
+	t.Run("AddTenant and RemoveTenant mutate the set", func(t *testing.T) {
+		r := &NamespaceResolver{}
+		r.AddTenant("ns-a")
+		r.AddTenant("ns-b")
+
+		got := r.FissionResourceNamespaces()
+		require.Len(t, got, 2)
+		require.Contains(t, got, "ns-a")
+		require.Contains(t, got, "ns-b")
+
+		r.RemoveTenant("ns-a")
+		got = r.FissionResourceNamespaces()
+		require.Len(t, got, 1)
+		require.Contains(t, got, "ns-b")
+	})
+
+	t.Run("IsTenant reflects the live set", func(t *testing.T) {
+		r := &NamespaceResolver{}
+		r.SetTenants(map[string]string{"team-a": "team-a"})
+
+		assert.True(t, r.IsTenant("team-a"))
+		assert.False(t, r.IsTenant("team-b"))
+
+		r.AddTenant("team-b")
+		assert.True(t, r.IsTenant("team-b"), "IsTenant must observe a later AddTenant")
+
+		r.RemoveTenant("team-a")
+		assert.False(t, r.IsTenant("team-a"), "IsTenant must observe a RemoveTenant")
+	})
+}
+
+// TestNamespaceResolverConcurrentAccess is the thread-safety guard: concurrent
+// readers and writers must be race-free under `go test -race`.
+func TestNamespaceResolverConcurrentAccess(t *testing.T) {
+	r := &NamespaceResolver{}
+	r.SetTenants(map[string]string{"seed": "seed"})
+
+	var wg sync.WaitGroup
+	for i := range 8 {
+		wg.Go(func() {
+			ns := fmt.Sprintf("ns-%d", i)
+			r.AddTenant(ns)
+			_ = r.FissionResourceNamespaces()
+			_ = r.FunctionNamespaces()
+			r.RemoveTenant(ns)
+		})
+	}
+	for range 8 {
+		wg.Go(func() {
+			for range 50 {
+				_ = r.FissionResourceNamespaces()
+			}
+		})
+	}
+	wg.Wait()
+
+	require.Contains(t, r.FissionResourceNamespaces(), "seed", "seed namespace must survive the churn")
 }

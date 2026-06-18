@@ -126,14 +126,24 @@ func Run(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger log
 	// /healthz and /readiness-healthz are bypassed so kubelet probes
 	// continue to pass without signing. See
 	// docs/internal-auth/00-design.md.
-	master := []byte(os.Getenv("FISSION_INTERNAL_AUTH_SECRET"))
-	masterOld := []byte(os.Getenv("FISSION_INTERNAL_AUTH_SECRET_OLD"))
-	verifier := hmacauth.ServiceVerifier(master, masterOld, hmacauth.ServiceFetcher, hmacauth.VerifierOpts{
+	vopts := hmacauth.VerifierOpts{
 		SkewSec:      60,
 		Bypass:       []string{"/healthz", "/readiness-healthz"},
 		MaxBodyBytes: hmacauth.DefaultMaxBodyBytes,
 		Logger:       logger.WithName("hmac"),
-	})
+	}
+	// Per-namespace tenancy: when the tenant controller has mounted a derived
+	// fetcher key (FISSION_FETCHER_KEY), verify /specialize with it directly —
+	// this pod then never holds the master, so a leak of its memory cannot forge
+	// requests as another tenant's fetcher. Otherwise fall back to deriving the
+	// ServiceFetcher key from the master (existing behaviour; empty master =
+	// pass-through).
+	verifier := hmacauth.VerifierFromKeyOrMaster(
+		hmacauth.DecodeKeyFromEnv(os.Getenv("FISSION_FETCHER_KEY")),
+		hmacauth.DecodeKeyFromEnv(os.Getenv("FISSION_FETCHER_KEY_OLD")),
+		[]byte(os.Getenv("FISSION_INTERNAL_AUTH_SECRET")),
+		[]byte(os.Getenv("FISSION_INTERNAL_AUTH_SECRET_OLD")),
+		hmacauth.ServiceFetcher, vopts)
 	// Fetcher is a pod-local sidecar with no Service; no legitimate
 	// browser caller. SecurityHeaders + DenyAllCORS as defense-in-depth
 	// against a hostile package running in the same pod-network namespace.

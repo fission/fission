@@ -73,6 +73,36 @@ func makeVolumeDir(dirPath string) error {
 	return os.MkdirAll(dirPath, os.ModeDir|0750)
 }
 
+// namespaceHeaderRoundTripper sets the X-Fission-Auth-Namespace header on every
+// outgoing request, so a namespace-scoped storagesvc verifier derives this pod's
+// per-namespace key. The header is not signed (it does not need to be — the key
+// is self-protecting), so it can be set outside the signer wrapper.
+type namespaceHeaderRoundTripper struct {
+	namespace string
+	next      http.RoundTripper
+}
+
+func (n *namespaceHeaderRoundTripper) RoundTrip(r *http.Request) (*http.Response, error) {
+	r = r.Clone(r.Context())
+	r.Header.Set(hmacauth.HeaderNamespace, n.namespace)
+	return n.next.RoundTrip(r)
+}
+
+// storageSigningTransport wraps base with the right storagesvc request signer for
+// this fetcher pod: a derived per-namespace key + namespace header when the tenant
+// controller mounted one (FISSION_STORAGE_KEY — the pod never holds the master),
+// else the master-derived ServiceStoragesvc signer, else (no auth) base unchanged.
+// Centralised so every storagesvc client the fetcher builds signs identically.
+func storageSigningTransport(base http.RoundTripper, namespace string) http.RoundTripper {
+	if storageKey := hmacauth.DecodeKeyFromEnv(os.Getenv("FISSION_STORAGE_KEY")); len(storageKey) > 0 {
+		return &namespaceHeaderRoundTripper{namespace: namespace, next: hmacauth.NewSigner(storageKey, base, time.Now)}
+	}
+	if secret := storageSvcClient.HMACSecretFromEnv(); len(secret) > 0 {
+		return hmacauth.ServiceSigner(secret, hmacauth.ServiceStoragesvc, base, time.Now)
+	}
+	return base
+}
+
 func MakeFetcher(logger logr.Logger, clientGen crd.ClientGeneratorInterface, sharedVolumePath string, sharedSecretPath string,
 	sharedConfigPath string, podInfoMountDir string) (*Fetcher, error) {
 	fLogger := logger.WithName("fetcher")
@@ -116,11 +146,7 @@ func MakeFetcher(logger logr.Logger, clientGen crd.ClientGeneratorInterface, sha
 	// persistent httpClient with the signer wrapper would also sign
 	// the /v2/specialize POST sent to the user container, which
 	// doesn't expect our auth headers — keep the two clients separate.
-	var storageRT http.RoundTripper = otelhttp.NewTransport(http.DefaultTransport)
-	if secret := storageSvcClient.HMACSecretFromEnv(); len(secret) > 0 {
-		storageRT = hmacauth.ServiceSigner(secret, hmacauth.ServiceStoragesvc, storageRT, time.Now)
-	}
-	storageHC := &http.Client{Transport: storageRT}
+	storageHC := &http.Client{Transport: storageSigningTransport(otelhttp.NewTransport(http.DefaultTransport), string(namespace))}
 	return &Fetcher{
 		logger:           fLogger,
 		sharedVolumePath: sharedVolumePath,
@@ -648,7 +674,8 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	logger.Info("starting upload...")
-	ssClient := storageSvcClient.MakeClient(req.StorageSvcUrl, storageSvcClient.HMACSecretFromEnv())
+	ssClient := storageSvcClient.MakeClientWithTransport(req.StorageSvcUrl,
+		storageSigningTransport(otelhttp.NewTransport(http.DefaultTransport), fetcher.Info.Namespace))
 
 	// Open the archive once through an os.Root rooted at the shared volume so
 	// the request-derived path cannot escape it (CWE-22), then hand the open

@@ -35,7 +35,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/controller"
 	"github.com/fission/fission/pkg/executor/executortype"
+	"github.com/fission/fission/pkg/utils"
 )
 
 // deleteOnlyPredicate passes only Delete events. The drift watch uses it so a
@@ -59,6 +61,13 @@ func ownedObjectToFunction(_ context.Context, obj client.Object) []reconcile.Req
 	l := obj.GetLabels()
 	name, ns := l[fv1.FUNCTION_NAME], l[fv1.FUNCTION_NAMESPACE]
 	if name == "" || ns == "" {
+		return nil
+	}
+	// Under dynamic tenancy the drift watch sees workloads cluster-wide; a leftover
+	// managed object in a namespace that has since left the tenant set must not
+	// re-enqueue its Function (the membership predicate gates .For but not this
+	// mapper). Drop it so an offboarded namespace stops reconciling immediately.
+	if utils.DynamicNamespacesEnabled() && !utils.DefaultNSResolver().IsTenant(ns) {
 		return nil
 	}
 	return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: name, Namespace: ns}}}
@@ -307,14 +316,29 @@ func RegisterReconciler(mgr ctrl.Manager, logger logr.Logger, executorTypes map[
 	// self-healing). The Manager cache already scopes those types to
 	// executor-managed objects (executorManagedSelector), so only newdeploy /
 	// container workloads reach the delete-only watch.
-	return builder.ControllerManagedBy(mgr).
+	// Spec/delete events drive the reconciler; under dynamic tenancy AND the
+	// membership predicate so the cluster-wide cache only reconciles Functions in
+	// live tenant namespaces (no-op when dynamic tenancy is off).
+	funcPredicate := predicate.Or(predicate.GenerationChangedPredicate{}, deletionTimestampPredicate)
+	if utils.DynamicNamespacesEnabled() {
+		funcPredicate = predicate.And(funcPredicate, controller.MembershipPredicate(utils.DefaultNSResolver()))
+	}
+	b := builder.ControllerManagedBy(mgr).
 		Named("executor-function").
 		WithOptions(ctrlcontroller.Options{MaxConcurrentReconciles: funcReconcileConcurrency}).
-		For(&fv1.Function{}, builder.WithPredicates(
-			predicate.Or(predicate.GenerationChangedPredicate{}, deletionTimestampPredicate))).
+		For(&fv1.Function{}, builder.WithPredicates(funcPredicate)).
 		Watches(&appsv1.Deployment{}, handler.EnqueueRequestsFromMapFunc(ownedObjectToFunction),
 			builder.WithPredicates(deleteOnlyPredicate)).
 		Watches(&corev1.Service{}, handler.EnqueueRequestsFromMapFunc(ownedObjectToFunction),
-			builder.WithPredicates(deleteOnlyPredicate)).
-		Complete(r)
+			builder.WithPredicates(deleteOnlyPredicate))
+	if utils.DynamicNamespacesEnabled() {
+		// Re-converge a namespace's Functions when it is onboarded at runtime: the
+		// membership predicate above otherwise permanently drops a Function whose
+		// event predated the tenant. Mirrors controller.RegisterTenantScoped (this
+		// reconciler builds its own controller, so it wires the watch directly).
+		b = b.Watches(&fv1.FissionTenant{},
+			controller.TenantReenqueueHandler(mgr.GetAPIReader(), mgr.GetScheme(), &fv1.Function{}),
+			builder.WithPredicates(controller.TenantOnboardPredicate()))
+	}
+	return b.Complete(r)
 }

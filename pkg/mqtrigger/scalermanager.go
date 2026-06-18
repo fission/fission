@@ -96,7 +96,7 @@ func StartScalerManager(ctx context.Context, clientGen crd.ClientGeneratorInterf
 	}
 
 	r := newScalerReconciler(logger, crMgr.GetClient(), kedaClient, kubeClient, routerURL)
-	if err := controller.RegisterWithConcurrency(crMgr, &fv1.MessageQueueTrigger{}, r, "mqt-keda-scaler", scalerReconcileConcurrency); err != nil {
+	if err := controller.RegisterTenantScopedWithConcurrency(crMgr, &fv1.MessageQueueTrigger{}, r, "mqt-keda-scaler", scalerReconcileConcurrency); err != nil {
 		return fmt.Errorf("error registering mqt keda scaler reconciler: %w", err)
 	}
 	return crMgr.Start(ctx)

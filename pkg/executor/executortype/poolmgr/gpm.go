@@ -472,7 +472,7 @@ func (gpm *GenericPoolManager) adoptFunctionServices(ctx context.Context, wg *sy
 func (gpm *GenericPoolManager) adoptPools(ctx context.Context, wg *sync.WaitGroup) map[string]fv1.Environment {
 	envMap := make(map[string]fv1.Environment)
 
-	for _, namespace := range utils.DefaultNSResolver().FissionResourceNS {
+	for _, namespace := range utils.DefaultNSResolver().FissionResourceNamespaces() {
 		envs, err := gpm.fissionClient.CoreV1().Environments(namespace).List(ctx, metav1.ListOptions{})
 		if err != nil {
 			gpm.logger.Error(err, "error getting environment list")
@@ -543,7 +543,7 @@ func (gpm *GenericPoolManager) adoptSpecializedPods(ctx context.Context, wg *syn
 		fv1.EXECUTOR_TYPE: string(fv1.ExecutorTypePoolmgr),
 	}
 
-	for _, namespace := range utils.DefaultNSResolver().FissionResourceNS {
+	for _, namespace := range utils.DefaultNSResolver().FissionResourceNamespaces() {
 		podList, err := gpm.kubernetesClient.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
 			LabelSelector: labels.Set(l).AsSelector().String(),
 		})

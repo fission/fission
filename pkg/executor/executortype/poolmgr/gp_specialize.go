@@ -51,6 +51,35 @@ func (gp *GenericPool) getFetcherURL(podIP string) string {
 	return baseURL
 }
 
+// shouldStampNamespaceKeyScheme reports whether a pool pod created in fnNamespace
+// should carry the namespace key-scheme annotation. Only when dynamic tenancy is
+// on and the namespace is a live tenant: the tenant controller provisions a
+// namespace's derived-key Secret before admitting it to the live set, so a live
+// tenant is guaranteed to have one — the pod will mount its per-namespace key and
+// the executor (fetcherSigningNamespace) will ns-sign it. Stamping a namespace
+// without that Secret would promise a key the pod never receives and 401 every
+// specialization, so the IsTenant gate is load-bearing, not cosmetic.
+func shouldStampNamespaceKeyScheme(fnNamespace string, resolver *utils.NamespaceResolver) bool {
+	return utils.DynamicNamespacesEnabled() && resolver != nil && resolver.IsTenant(fnNamespace)
+}
+
+// fetcherSigningNamespace decides how the executor signs the /specialize call to
+// a pod's fetcher. A pod the executor stamped with the namespace key-scheme
+// annotation (genDeploymentSpec, only while dynamic tenancy is on for the pod's
+// namespace) holds only its per-namespace derived key and verifies with it, so
+// we sign with ServiceSignerNS for the pod's namespace and nsScoped is true.
+// Every other pod — pre-upgrade pods carrying no annotation across a rolling
+// upgrade, or any pod when dynamic tenancy is off — verifies with the
+// master-derived key, so nsScoped is false and the caller master-signs. The
+// dynamic-tenancy gate makes a stale annotation harmless if the feature is
+// turned back off.
+func fetcherSigningNamespace(pod *apiv1.Pod) (namespace string, nsScoped bool) {
+	if utils.DynamicNamespacesEnabled() && fv1.HasNamespaceKeyScheme(pod.Annotations) {
+		return pod.Namespace, true
+	}
+	return "", false
+}
+
 // specializePod chooses a pod, copies the required user-defined function to that pod
 // (via fetcher), and calls the function-run container to load it, resulting in a
 // specialized pod.
@@ -123,10 +152,27 @@ func (gp *GenericPool) specializePod(ctx context.Context, pod *apiv1.Pod, fn *fv
 	// the executor pod's env so each /specialize call to the in-pod
 	// fetcher carries the X-Fission-Auth-* headers required by the
 	// fetcher's verifier; an empty secret is the explicit pass-through
-	// for first-deploy installs.
-	err := fetcherClient.MakeClient(gp.logger, fetcherURL, storagesvcClient.HMACSecretFromEnv()).Specialize(ctx, &specializeReq)
-	if err != nil {
-		return err
+	// for first-deploy installs. Version-aware: a pod created under
+	// dynamic tenancy verifies with its per-namespace key, so sign with
+	// that key; every other pod stays master-signed (see
+	// fetcherSigningNamespace).
+	master := storagesvcClient.HMACSecretFromEnv()
+	var client fetcherClient.ClientInterface
+	signNS, nsScoped := fetcherSigningNamespace(pod)
+	if nsScoped {
+		client = fetcherClient.MakeClientNS(gp.logger, fetcherURL, master, signNS)
+	} else {
+		client = fetcherClient.MakeClient(gp.logger, fetcherURL, master)
+	}
+	if err := client.Specialize(ctx, &specializeReq); err != nil {
+		// Name the chosen signing scheme: a 401 here usually means the executor's
+		// pick disagrees with the pod's mounted key (e.g. ns-signed but
+		// FISSION_FETCHER_KEY not mounted), and the two halves live in different
+		// processes — surfacing the scheme turns a log-correlation hunt into a read.
+		if nsScoped {
+			return fmt.Errorf("specialize signed namespace-scoped for %q (verify FISSION_FETCHER_KEY is mounted on the pod): %w", signNS, err)
+		}
+		return fmt.Errorf("specialize signed master-scoped: %w", err)
 	}
 	otelUtils.SpanTrackEvent(ctx, "specializedPod", otelUtils.GetAttributesForPod(pod)...)
 	return nil

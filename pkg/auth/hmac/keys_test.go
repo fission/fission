@@ -145,7 +145,7 @@ func readAllAndRestore(r *http.Request) ([]byte, error) {
 	return buf.Bytes(), err
 }
 
-func signedRequestFromRecorder(t *testing.T, rr *httptest.ResponseRecorder) *http.Request {
+func signedRequestFromRecorder(t testing.TB, rr *httptest.ResponseRecorder) *http.Request {
 	t.Helper()
 	method := rr.Header().Get("X-Test-Method")
 	uri := rr.Header().Get("X-Test-RequestURI")

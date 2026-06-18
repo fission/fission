@@ -23,16 +23,35 @@ func TestFissionCacheOptions(t *testing.T) {
 	// covered by GetNamespaces in pkg/utils/namespace_test.go; here we assert
 	// the mapping reproduces exactly the resolved namespaces.
 	r := utils.DefaultNSResolver()
-	orig := r.FissionResourceNS
-	t.Cleanup(func() { r.FissionResourceNS = orig })
+	orig := r.FissionResourceNamespaces()
+	t.Cleanup(func() { r.SetTenants(orig) })
 
-	r.FissionResourceNS = map[string]string{"ns-a": "ns-a", "ns-b": "ns-b"}
+	r.SetTenants(map[string]string{"ns-a": "ns-a", "ns-b": "ns-b"})
 	opts := FissionCacheOptions()
 	require.Len(t, opts.DefaultNamespaces, 2)
 	_, hasA := opts.DefaultNamespaces["ns-a"]
 	_, hasB := opts.DefaultNamespaces["ns-b"]
 	assert.True(t, hasA, "cache should be scoped to ns-a")
 	assert.True(t, hasB, "cache should be scoped to ns-b")
+}
+
+func TestFissionCacheOptionsDynamic(t *testing.T) {
+	// With dynamic namespaces on, the Fission-CRD cache is cluster-wide
+	// (no DefaultNamespaces) so it sees every tenant's CRs; reconcilers drop
+	// non-tenant objects via the membership predicate. Off (default), it stays
+	// scoped to the resolved namespace set.
+	r := utils.DefaultNSResolver()
+	orig := r.FissionResourceNamespaces()
+	t.Cleanup(func() { r.SetTenants(orig) })
+	r.SetTenants(map[string]string{"ns-a": "ns-a"})
+
+	t.Setenv("FISSION_DYNAMIC_NAMESPACES", "true")
+	assert.True(t, utils.DynamicNamespacesEnabled())
+	assert.Empty(t, FissionCacheOptions().DefaultNamespaces, "dynamic mode must use a cluster-wide cache")
+
+	t.Setenv("FISSION_DYNAMIC_NAMESPACES", "false")
+	assert.False(t, utils.DynamicNamespacesEnabled())
+	assert.Len(t, FissionCacheOptions().DefaultNamespaces, 1, "default mode stays per-namespace")
 }
 
 func TestLeaderRunnable(t *testing.T) {

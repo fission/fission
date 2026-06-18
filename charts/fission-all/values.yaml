@@ -698,6 +698,46 @@ mcp:
     runAsUser: 10001
     runAsGroup: 10001
 
+## Multi-namespace tenancy (docs/multiple-namespace).
+##
+tenancy:
+  ## dynamicNamespaces turns on the cluster-wide Fission-CRD watch + live
+  ## tenant-membership filtering, so namespaces can be onboarded/offboarded at
+  ## runtime without restarting the control plane. Requires tenantController.enabled.
+  ## It adds exactly one cluster-wide grant per data-plane component, on
+  ## fission.io CRD types ONLY (no core/workload type), and sets
+  ## FISSION_DYNAMIC_NAMESPACES on those components. Off by default — the
+  ## per-namespace caches and RBAC behave exactly as before.
+  dynamicNamespaces: false
+
+## The tenant controller is the multi-namespace tenancy lifecycle controller
+## (docs/multiple-namespace). It reconciles FissionTenant CRs and namespaces
+## labelled fission.io/enabled=true into the live resource-namespace set and
+## reports readiness. Off by default; enabling it is additive (the existing
+## env-driven namespace set keeps working).
+##
+tenantController:
+  enabled: false
+  replicas: 1
+  ## Run active-passive with leader election when replicas > 1.
+  leaderElection:
+    enabled: false
+  ## On install/upgrade, seed a FissionTenant for each namespace already in
+  ## defaultNamespace + additionalFissionNamespaces (idempotent post-upgrade
+  ## hook). Restarts nothing. Set false to manage tenants exclusively via
+  ## `fission tenant` / the fission.io/enabled label.
+  seedExistingNamespaces: true
+  ## Pod resources.
+  resources: {}
+  ## Security Context (pod + container level). Experimental; verify before
+  ## enabling in production.
+  securityContext:
+    enabled: true
+    runAsNonRoot: true
+    fsGroup: 10001
+    runAsUser: 10001
+    runAsGroup: 10001
+
 ## The storage service is the home for all archives of packages with sizes larger than 256KB.
 ##
 storagesvc:

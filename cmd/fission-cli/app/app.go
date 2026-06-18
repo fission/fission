@@ -24,6 +24,7 @@ import (
 	_package "github.com/fission/fission/pkg/fission-cli/cmd/package"
 	"github.com/fission/fission/pkg/fission-cli/cmd/spec"
 	"github.com/fission/fission/pkg/fission-cli/cmd/support"
+	"github.com/fission/fission/pkg/fission-cli/cmd/tenant"
 	"github.com/fission/fission/pkg/fission-cli/cmd/timetrigger"
 	"github.com/fission/fission/pkg/fission-cli/cmd/token"
 	"github.com/fission/fission/pkg/fission-cli/cmd/version"
@@ -82,6 +83,7 @@ func App(clientOptions cmd.ClientOptions) *cobra.Command {
 	groups = append(groups, helptemplate.CreateCmdGroup("Trigger Commands", httptrigger.Commands(), mqtrigger.Commands(), timetrigger.Commands(), kubewatch.Commands()))
 	groups = append(groups, helptemplate.CreateCmdGroup("Deploy Strategies Commands", canaryconfig.Commands()))
 	groups = append(groups, helptemplate.CreateCmdGroup("Declarative Application Commands", spec.Commands()))
+	groups = append(groups, helptemplate.CreateCmdGroup("Administration Commands", tenant.Commands()))
 	groups = append(groups, helptemplate.CreateCmdGroup("Other Commands", support.Commands(), version.Commands(), check.Commands()))
 	groups.Add(rootCmd)
 

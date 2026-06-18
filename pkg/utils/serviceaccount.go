@@ -123,7 +123,7 @@ func getSAObj(kubernetesClient kubernetes.Interface, logger logr.Logger) *Servic
 }
 
 func (sa *ServiceAccount) runSACheck(ctx context.Context) {
-	for _, ns := range sa.nsResolver.FissionResourceNS {
+	for _, ns := range sa.nsResolver.FissionResourceNamespaces() {
 		for _, permission := range sa.permissions {
 			if permission.saName == BuilderSAName {
 				ns = sa.nsResolver.GetBuilderNS(ns)

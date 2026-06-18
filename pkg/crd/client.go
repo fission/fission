@@ -132,6 +132,23 @@ func NewClientGeneratorWithRestConfig(restConfig *rest.Config) *ClientGenerator 
 	return &ClientGenerator{restConfig: restConfig}
 }
 
+// waitForCRD polls listFn until it succeeds or 30s elapses — the shared "is this
+// CRD served and accessible yet?" gate. Each caller passes the List for the type
+// it actually has RBAC for; logging stays with the caller so it can include
+// type-specific fields (e.g. the namespace).
+func waitForCRD(ctx context.Context, label string, listFn func(context.Context) error) error {
+	start := time.Now()
+	for {
+		if err := listFn(ctx); err == nil {
+			return nil
+		}
+		time.Sleep(100 * time.Millisecond)
+		if time.Since(start) > 30*time.Second {
+			return fmt.Errorf("timeout waiting for %s CRD access", label)
+		}
+	}
+}
+
 // WaitForFunctionCRDs does a timeout to check if CRDs have been installed
 func WaitForFunctionCRDs(ctx context.Context, logger logr.Logger, fissionClient versioned.Interface) error {
 	defaultNs := utils.DefaultNSResolver().DefaultNamespace
@@ -139,17 +156,22 @@ func WaitForFunctionCRDs(ctx context.Context, logger logr.Logger, fissionClient 
 		defaultNs = metav1.NamespaceDefault
 	}
 	logger.Info("Checking function CRD access", "namespace", defaultNs, "timeout", "30s")
-	start := time.Now()
-	for {
-		fi := fissionClient.CoreV1().Functions(defaultNs)
-		_, err := fi.List(ctx, metav1.ListOptions{})
-		if err == nil {
-			return nil
-		}
-		time.Sleep(100 * time.Millisecond)
+	return waitForCRD(ctx, "function", func(ctx context.Context) error {
+		_, err := fissionClient.CoreV1().Functions(defaultNs).List(ctx, metav1.ListOptions{})
+		return err
+	})
+}
 
-		if time.Since(start) > 30*time.Second {
-			return fmt.Errorf("timeout waiting for function CRD access")
-		}
-	}
+// WaitForTenantCRDs gates on the cluster-scoped FissionTenant CRD being served
+// and accessible. The tenant controller watches FissionTenants — not Functions —
+// and its least-privilege RBAC deliberately grants no function access, so it must
+// gate on the type it actually reconciles. Using WaitForFunctionCRDs here would
+// 30s-timeout on a Forbidden list and crash the controller, so it would never
+// provision tenant auth keys — wedging every fetcher pod in CreateContainerConfigError.
+func WaitForTenantCRDs(ctx context.Context, logger logr.Logger, fissionClient versioned.Interface) error {
+	logger.Info("Checking FissionTenant CRD access", "timeout", "30s")
+	return waitForCRD(ctx, "FissionTenant", func(ctx context.Context) error {
+		_, err := fissionClient.CoreV1().FissionTenants().List(ctx, metav1.ListOptions{})
+		return err
+	})
 }

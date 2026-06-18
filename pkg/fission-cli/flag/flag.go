@@ -244,4 +244,8 @@ var (
 	ArchiveName   = Flag{Type: String, Name: flagkey.ArchiveName, Usage: "Name of the archive file"}
 	ArchiveID     = Flag{Type: String, Name: flagkey.ArchiveID, Usage: "Id for the archive file"}
 	ArchiveOutput = Flag{Type: String, Name: flagkey.ArchiveOutput, Usage: "Download file with this name", Aliases: []string{"o"}, DefaultValue: ""}
+
+	TenantFunctionNamespace = Flag{Type: String, Name: flagkey.TenantFunctionNamespace, Usage: "Namespace where this tenant's function pods run (defaults to the tenant namespace)"}
+	TenantBuilderNamespace  = Flag{Type: String, Name: flagkey.TenantBuilderNamespace, Usage: "Namespace where this tenant's builder pods run (defaults to the tenant namespace)"}
+	TenantForce             = Flag{Type: Bool, Name: flagkey.TenantForce, Usage: "Disable the tenant even if it still has functions/triggers (they will stop being served)", DefaultValue: false}
 )

@@ -126,3 +126,8 @@ func randomID() string {
 	_, _ = rand.Read(b[:])
 	return hex.EncodeToString(b[:])
 }
+
+// RandomID returns a fresh 6-hex-character identifier, the same kind embedded in
+// TestNamespace.ID. Exported for tests that must name a resource (e.g. a tenant
+// namespace) before constructing the TestNamespace bound to it.
+func RandomID() string { return randomID() }

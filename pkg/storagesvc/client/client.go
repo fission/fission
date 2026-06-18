@@ -78,10 +78,17 @@ func MakeClient(url string, masterSecret []byte) ClientInterface {
 	if len(masterSecret) > 0 {
 		rt = hmacauth.ServiceSigner(masterSecret, hmacauth.ServiceStoragesvc, rt, time.Now)
 	}
-	hc := &http.Client{Transport: rt}
+	return MakeClientWithTransport(url, rt)
+}
+
+// MakeClientWithTransport is MakeClient with a caller-supplied signing transport.
+// Namespace-scoped callers (the per-namespace fetcher) build a transport that
+// signs with a derived key and sets the namespace header rather than deriving
+// from the master, and pass it here.
+func MakeClientWithTransport(url string, rt http.RoundTripper) ClientInterface {
 	return &client{
 		url:        strings.TrimSuffix(url, "/") + "/v1",
-		httpClient: hc,
+		httpClient: &http.Client{Transport: rt},
 	}
 }
 

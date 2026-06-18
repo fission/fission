@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission/cmd/fission-cli/app"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
@@ -29,6 +30,33 @@ import (
 // outstanding parallel CLI calls finish.
 var cliMu sync.RWMutex
 
+// withNamespaceFlag makes a non-default test namespace (NewTestNamespaceIn)
+// take effect for the in-process CLI by passing --namespace explicitly.
+//
+// The CLI resolves a create/get/delete's target namespace from a *process-
+// global* client (cmd.SetClientset is sync.Once-guarded), so the first CLI call
+// in the test binary freezes it — and since every NewTestNamespace test uses
+// `default`, it freezes to `default`. A later app.App(ClientOptions{Namespace:
+// <other>}) then rebuilds a correct per-call client but its SetClientset is a
+// no-op, so GetResourceNamespace's c.Client().Namespace fallback still returns
+// `default`. Passing --namespace takes GetResourceNamespace's flag-first branch,
+// which reads the actual flag and is immune to the frozen global.
+//
+// Default-namespace callers are returned unchanged (the frozen global is already
+// correct for them), and an explicit --namespace/-n already in args wins.
+func withNamespaceFlag(args []string, namespace string) []string {
+	if namespace == metav1.NamespaceDefault {
+		return args
+	}
+	for _, a := range args {
+		if a == "--namespace" || a == "-n" ||
+			strings.HasPrefix(a, "--namespace=") || strings.HasPrefix(a, "-n=") {
+			return args
+		}
+	}
+	return append(append([]string(nil), args...), "--namespace", namespace)
+}
+
 // CLI runs a Fission CLI command in-process (no fork/exec) with this
 // namespace as the default. Returns combined stdout+stderr and t.Fatals on
 // non-zero exit. The same in-process pattern is used by test/e2e/framework/cli.
@@ -37,6 +65,7 @@ func (ns *TestNamespace) CLI(t *testing.T, ctx context.Context, args ...string) 
 	ns.f.logger.Info("CLI", "ns", ns.Name, "args", args)
 	cliMu.RLock()
 	defer cliMu.RUnlock()
+	args = withNamespaceFlag(args, ns.Name)
 	c := app.App(cmd.ClientOptions{
 		RestConfig: ns.f.restConfig,
 		Namespace:  ns.Name,
@@ -125,6 +154,7 @@ func (ns *TestNamespace) cliCaptureStdoutBoth(t *testing.T, ctx context.Context,
 		stdoutDone <- string(b)
 	}()
 
+	args = withNamespaceFlag(args, ns.Name)
 	c := app.App(cmd.ClientOptions{
 		RestConfig: ns.f.restConfig,
 		Namespace:  ns.Name,

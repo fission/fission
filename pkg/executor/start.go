@@ -44,6 +44,7 @@ import (
 	"github.com/fission/fission/pkg/executor/util"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	"github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
+	"github.com/fission/fission/pkg/tenant"
 	"github.com/fission/fission/pkg/utils"
 	fissionmetrics "github.com/fission/fission/pkg/utils/metrics"
 )
@@ -76,25 +77,50 @@ func executorCacheOptions() crcache.Options {
 	for _, ns := range resolver.FissionNSWithOptions(utils.WithBuilderNs(), utils.WithFunctionNs(), utils.WithDefaultNs()) {
 		nsConfig[ns] = crcache.Config{}
 	}
+	// The pool manager's readyPod reconciler and pod reads watch Pods through this
+	// cache (replacing gpmInformerFactory). Scope the Pod watch to pool-manager
+	// pods so the cache doesn't mirror every function pod in the function
+	// namespace — the same executor-label filter the old informer used.
+	//
+	// Deployments + Services are watched for the newdeploy/container managers'
+	// IsValid reads (replacing their standalone SharedInformerFactory). Scope them
+	// to executor-managed objects so the cache doesn't mirror every
+	// Deployment/Service in the namespace — the same label bounding the old
+	// factories applied (issue #2775).
+	byObject := map[client.Object]crcache.ByObject{
+		&corev1.Pod{}: {
+			Label: labels.SelectorFromSet(labels.Set{fv1.EXECUTOR_TYPE: string(fv1.ExecutorTypePoolmgr)}),
+		},
+		&appsv1.Deployment{}: {Label: executorManagedSelector},
+		&corev1.Service{}:    {Label: executorManagedSelector},
+	}
+
+	if utils.DynamicNamespacesEnabled() {
+		// Tier A (Function/Environment) goes cluster-wide so a namespace onboarded
+		// at runtime is visible without a restart; the func/env reconcilers filter
+		// to the live tenant set via controller.MembershipPredicate. The labeled
+		// workload watches above are already label-bounded, so cluster-wide +
+		// label-filtered is safe (pool pods / managed Deployments/Services are not
+		// tenant secrets — PRD §4.1).
+		//
+		// Tier B (Secret/ConfigMap) MUST stay namespace-scoped: a cluster-wide
+		// Secret cache would mirror every Secret in the cluster into the executor's
+		// memory, the one read the design forbids. Override the per-type namespaces
+		// to the env-seeded set (the dynamic per-namespace cache is a later phase),
+		// leaving the cluster-wide default to the Tier-A CRDs only.
+		byObject[&corev1.Secret{}] = crcache.ByObject{Namespaces: nsConfig}
+		byObject[&corev1.ConfigMap{}] = crcache.ByObject{Namespaces: nsConfig}
+		// ReplicaSets (poolmgr's specialized-pod cleanup watch) are not label-bounded
+		// here, so a cluster-wide cache would mirror every ReplicaSet in the cluster.
+		// Keep them namespace-scoped too — and out of the cluster-wide RBAC; runtime
+		// onboarding's specialized-pod cleanup follows with the provisioning phase.
+		byObject[&appsv1.ReplicaSet{}] = crcache.ByObject{Namespaces: nsConfig}
+		return crcache.Options{ByObject: byObject}
+	}
+
 	return crcache.Options{
 		DefaultNamespaces: nsConfig,
-		// The pool manager's readyPod reconciler and pod reads watch Pods through
-		// this cache (replacing gpmInformerFactory). Scope the Pod watch to
-		// pool-manager pods so the cache doesn't mirror every function pod in the
-		// function namespace — the same executor-label filter the old informer used.
-		//
-		// Deployments + Services are watched for the newdeploy/container managers'
-		// IsValid reads (replacing their standalone SharedInformerFactory). Scope
-		// them to executor-managed objects so the cache doesn't mirror every
-		// Deployment/Service in the namespace — the same label bounding the old
-		// factories applied (issue #2775).
-		ByObject: map[client.Object]crcache.ByObject{
-			&corev1.Pod{}: {
-				Label: labels.SelectorFromSet(labels.Set{fv1.EXECUTOR_TYPE: string(fv1.ExecutorTypePoolmgr)}),
-			},
-			&appsv1.Deployment{}: {Label: executorManagedSelector},
-			&corev1.Service{}:    {Label: executorManagedSelector},
-		},
+		ByObject:          byObject,
 	}
 }
 
@@ -397,6 +423,16 @@ func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, 
 	// with a single workqueue and last-seen cache.
 	if err := envreconciler.RegisterReconciler(crMgr, logger, executorTypes); err != nil {
 		return err
+	}
+
+	// Cross-process propagation: under dynamic tenancy keep the executor's resolver
+	// in step with the FissionTenant set so a namespace onboarded at runtime is
+	// admitted by the func/env membership predicates (and gets pooled/specialized)
+	// without a restart. The cache is cluster-wide for Tier-A types in this mode
+	// (executorCacheOptions); the tenant controller still owns provisioning.
+	// AddResolverSync is a no-op when dynamic tenancy is off.
+	if err := tenant.AddResolverSync(crMgr); err != nil {
+		return fmt.Errorf("unable to add tenant resolver-sync: %w", err)
 	}
 
 	waitForSync := func(syncCtx context.Context) bool {

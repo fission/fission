@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	apiv1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -137,11 +138,11 @@ func (r *PackageReconciler) build(ctx context.Context, pkg *fv1.Package) (ctrl.R
 	builderNs := r.nsResolver.GetBuilderNS(env.Namespace)
 	logger = logger.WithValues("environment", env.Name, "builder_namespace", builderNs, "environment_namespace", env.Namespace)
 
-	ready, err := r.builderPodReady(ctx, env, builderNs)
+	builderPod, err := r.readyBuilderPod(ctx, env, builderNs)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	if !ready {
+	if builderPod == nil {
 		// The EnvironmentReconciler owns creating the builder Deployment; here
 		// we just wait for its pod to report ready. Requeue rather than block a
 		// worker — the Package stays "pending" and is visibly waiting.
@@ -155,7 +156,11 @@ func (r *PackageReconciler) build(ctx context.Context, pkg *fv1.Package) (ctrl.R
 		return ctrl.Result{}, fmt.Errorf("error setting package running state: %w", err)
 	}
 
-	uploadResp, buildLogs, err := buildPackage(ctx, logger, r.fissionClient, builderNs, r.storageSvcUrl, r.registryCfg, pkg)
+	// Version-aware signing: sign this builder pod's sidecar calls with the key
+	// it actually verifies with (its per-namespace key if it was stamped under
+	// dynamic tenancy, else master-derived).
+	signNamespace, _ := builderSigningNamespace(builderPod, builderNs)
+	uploadResp, buildLogs, err := buildPackage(ctx, logger, r.fissionClient, builderNs, signNamespace, r.storageSvcUrl, r.registryCfg, pkg)
 	if err != nil {
 		logger.Error(err, "error building package")
 		r.markBuildFailed(ctx, logger, pkg, buildLogs)
@@ -227,11 +232,13 @@ func (r *PackageReconciler) markBuildFailed(ctx context.Context, logger logr.Log
 	}
 }
 
-// builderPodReady reports whether the environment's builder pod (matched by the
-// env name/namespace/resourceVersion labels) exists and has all containers
-// ready. A pod that has not yet published any container status is treated as
-// not-ready so we keep waiting rather than build against a starting pod.
-func (r *PackageReconciler) builderPodReady(ctx context.Context, env *fv1.Environment, builderNs string) (bool, error) {
+// readyBuilderPod returns the environment's ready builder pod (matched by the env
+// name/namespace/resourceVersion labels), or nil when none is ready yet. A pod
+// that has not yet published any container status is treated as not-ready so we
+// keep waiting rather than build against a starting pod. The pod itself is
+// returned (not just a bool) so the caller can read its key-scheme annotation to
+// pick version-aware signing (builderSigningNamespace).
+func (r *PackageReconciler) readyBuilderPod(ctx context.Context, env *fv1.Environment, builderNs string) (*apiv1.Pod, error) {
 	sel := map[string]string{
 		LABEL_ENV_NAME:            env.Name,
 		LABEL_ENV_NAMESPACE:       builderNs,
@@ -241,7 +248,7 @@ func (r *PackageReconciler) builderPodReady(ctx context.Context, env *fv1.Enviro
 		LabelSelector: labels.Set(sel).AsSelector().String(),
 	})
 	if err != nil {
-		return false, fmt.Errorf("error listing builder pods for environment %q in namespace %s: %w", env.Name, builderNs, err)
+		return nil, fmt.Errorf("error listing builder pods for environment %q in namespace %s: %w", env.Name, builderNs, err)
 	}
 	for i := range podList.Items {
 		pod := &podList.Items[i]
@@ -253,10 +260,10 @@ func (r *PackageReconciler) builderPodReady(ctx context.Context, env *fv1.Enviro
 			ready = ready && cStatus.Ready
 		}
 		if ready {
-			return true, nil
+			return pod, nil
 		}
 	}
-	return false, nil
+	return nil, nil
 }
 
 // propagateFunctionFailure marks every Function referencing pkg with

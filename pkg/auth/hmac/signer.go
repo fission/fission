@@ -17,6 +17,14 @@ const (
 	HeaderTimestamp = "X-Fission-Auth-Timestamp"
 	// HeaderSignature carries hex(HMAC-SHA256(secret, canonical)).
 	HeaderSignature = "X-Fission-Auth-Signature"
+	// HeaderNamespace carries the caller's namespace for namespace-scoped
+	// channels (storagesvc): the verifier derives the per-namespace key from it.
+	// It is NOT part of the signed canonical string — it does not need to be,
+	// because the key is bound to the claimed namespace: a caller can only
+	// produce a valid signature for the namespace whose key it actually holds, so
+	// claiming a different namespace just makes the verifier derive a key the
+	// caller cannot sign with. See ServiceVerifierNamespaceFromHeader.
+	HeaderNamespace = "X-Fission-Auth-Namespace"
 )
 
 // Signer is an http.RoundTripper wrapper that signs every outgoing request

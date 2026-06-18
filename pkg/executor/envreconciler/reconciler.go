@@ -111,5 +111,8 @@ func RegisterReconciler(mgr ctrl.Manager, logger logr.Logger, executorTypes map[
 		client:   mgr.GetClient(),
 		handlers: handlers,
 	}
-	return controller.Register(mgr, &fv1.Environment{}, r, "executor-environment")
+	// RegisterTenantScoped adds controller.MembershipPredicate when dynamic
+	// tenancy is on (no-op otherwise), so the cluster-wide cache only reconciles
+	// Environments in live tenant namespaces.
+	return controller.RegisterTenantScoped(mgr, &fv1.Environment{}, r, "executor-environment")
 }

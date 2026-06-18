@@ -280,6 +280,7 @@ func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function
 	err = deploy.fetcherConfig.AddSpecializingFetcherToPodSpec(
 		&deployment.Spec.Template.Spec,
 		mainContainerName,
+		deployNamespace,
 		fn,
 		env,
 	)
