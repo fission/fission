@@ -466,3 +466,30 @@ rules:
 rules:
 {{- include "leases-kuberules" . }}
 {{- end }}
+
+{{/*
+router-dataplane-kuberules: the RFC-0002 EndpointSlice data-plane read grant
+(Fission-managed function Services' EndpointSlices + the Services themselves).
+Single-sourced so the per-namespace Role (router/role-dataplane.yaml) and the
+cluster-wide ClusterRole (tenant-controller/cluster-mode-bindings.yaml) cannot
+drift.
+*/}}
+{{- define "router-dataplane-kuberules" }}
+rules:
+- apiGroups:
+  - discovery.k8s.io
+  resources:
+  - endpointslices
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - services
+  verbs:
+  - get
+  - list
+  - watch
+{{- end }}

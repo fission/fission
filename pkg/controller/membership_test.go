@@ -86,6 +86,12 @@ func TestTenantScopedPredicates(t *testing.T) {
 
 	t.Setenv("FISSION_TENANCY_MODE", "dynamic")
 	got := tenantScopedPredicates(base)
-	assert.Len(t, got, 2, "on: membership predicate appended")
+	assert.Len(t, got, 2, "dynamic: membership predicate appended")
 	assert.Len(t, base, 1, "the caller's slice must not be mutated")
+
+	// Cluster mode also runs a cluster-wide cache, so it MUST get the membership
+	// predicate too — otherwise the cluster-wide cache reconciles every namespace
+	// before the resolver knows it is a tenant, breaking ordering + key stamping.
+	t.Setenv("FISSION_TENANCY_MODE", "cluster")
+	assert.Len(t, tenantScopedPredicates(base), 2, "cluster: membership predicate appended")
 }

@@ -324,13 +324,11 @@ func PerNamespaceKeysEnabled() bool {
 // `namespace` must mount its per-namespace derived HMAC key as a REQUIRED secret
 // ref — so the kubelet blocks pod start until the tenant controller has
 // provisioned it, making the executor/buildermgr's version-aware signing
-// race-free. True only under dynamic tenancy, with internal auth enabled, for a
-// live tenant namespace: a non-tenant namespace never gets keys, so requiring one
-// there would wedge the pod in CreateContainerConfigError forever.
-//
-// True under dynamic OR cluster mode (both provision per-namespace derived keys —
-// cluster mode keeps fetcher/builder least-privilege on the HMAC axis too), with
-// internal auth enabled, for a live tenant namespace.
+// race-free. True under dynamic OR cluster mode (both provision per-namespace
+// derived keys — cluster mode keeps fetcher/builder least-privilege on the HMAC
+// axis too), with internal auth enabled, for a live tenant namespace: a non-tenant
+// namespace never gets keys, so requiring one there would wedge the pod in
+// CreateContainerConfigError forever.
 func PerNamespaceKeyRequired(namespace string) bool {
 	return PerNamespaceKeysEnabled() &&
 		os.Getenv("FISSION_INTERNAL_AUTH_SECRET") != "" &&

@@ -43,23 +43,7 @@ metadata:
   name: "{{ .Release.Name }}-router-dataplane-cluster"
   labels:
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
-rules:
-- apiGroups:
-  - discovery.k8s.io
-  resources:
-  - endpointslices
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups:
-  - ""
-  resources:
-  - services
-  verbs:
-  - get
-  - list
-  - watch
+{{- include "router-dataplane-kuberules" . }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

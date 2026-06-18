@@ -43,11 +43,11 @@ func MembershipPredicate(nsr *utils.NamespaceResolver) predicate.Predicate {
 }
 
 // RegisterTenantScoped is Register for a namespaced Fission CRD reconciler under
-// the multi-namespace model. When dynamic namespaces are enabled (the Fission-CRD
-// cache is then cluster-wide), it composes MembershipPredicate so CRs in
-// non-tenant namespaces are dropped before the workqueue; otherwise it is exactly
-// Register. Use it ONLY for namespaced Fission CRDs — never cluster-scoped types,
-// whose empty namespace would always be dropped.
+// the multi-namespace model. When the Fission-CRD cache is cluster-wide (dynamic
+// OR cluster mode), it composes MembershipPredicate so CRs in non-tenant
+// namespaces are dropped before the workqueue; otherwise it is exactly Register.
+// Use it ONLY for namespaced Fission CRDs — never cluster-scoped types, whose
+// empty namespace would always be dropped.
 func RegisterTenantScoped(mgr ctrl.Manager, obj client.Object, reconciler reconcile.Reconciler, name string) error {
 	return RegisterTenantScopedWithPredicates(mgr, obj, reconciler, name, 0, predicate.GenerationChangedPredicate{})
 }
@@ -65,7 +65,7 @@ func RegisterTenantScopedWithConcurrency(mgr ctrl.Manager, obj client.Object, re
 // TenantReenqueueHandler). The supplied predicates REPLACE the default
 // GenerationChangedPredicate (pass it explicitly if wanted).
 func RegisterTenantScopedWithPredicates(mgr ctrl.Manager, obj client.Object, reconciler reconcile.Reconciler, name string, maxConcurrent int, predicates ...predicate.Predicate) error {
-	if !utils.DynamicNamespacesEnabled() {
+	if !utils.CrdWatchClusterWide() {
 		return RegisterWithPredicates(mgr, obj, reconciler, name, maxConcurrent, predicates...)
 	}
 	b := builder.ControllerManagedBy(mgr).
@@ -80,11 +80,11 @@ func RegisterTenantScopedWithPredicates(mgr ctrl.Manager, obj client.Object, rec
 	return b.Complete(reconciler)
 }
 
-// tenantScopedPredicates appends MembershipPredicate when dynamic namespaces are
-// enabled, copying rather than mutating the caller's slice. Extracted so the
-// composition is unit-testable without a Manager.
+// tenantScopedPredicates appends MembershipPredicate when the Fission-CRD cache is
+// cluster-wide (dynamic OR cluster mode), copying rather than mutating the caller's
+// slice. Extracted so the composition is unit-testable without a Manager.
 func tenantScopedPredicates(predicates []predicate.Predicate) []predicate.Predicate {
-	if !utils.DynamicNamespacesEnabled() {
+	if !utils.CrdWatchClusterWide() {
 		return predicates
 	}
 	out := make([]predicate.Predicate, 0, len(predicates)+1)
