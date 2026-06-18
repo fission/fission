@@ -252,4 +252,40 @@ func TestNamespaceReconcilerAutoOnboardAll(t *testing.T) {
 			assert.Empty(t, list.Items, "system / control-plane namespace %q must not be auto-onboarded", sys)
 		})
 	}
+
+	// Delete-recreate race: a managed FissionTenant left by a deleted same-named
+	// namespace (stale owner UID) must not be treated as "already onboarded" — the
+	// reconciler requeues so it re-materializes for the current namespace once GC
+	// reaps the stale CR.
+	t.Run("requeues on a stale managed tenant from a recreated namespace", func(t *testing.T) {
+		staleFT := &fv1.FissionTenant{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            "team-x",
+				Annotations:     map[string]string{managedByAnnotation: managedByLabel},
+				OwnerReferences: []metav1.OwnerReference{{Kind: "Namespace", Name: "team-x", UID: "team-x-OLD-uid"}},
+			},
+			Spec: fv1.FissionTenantSpec{Namespace: "team-x"},
+		}
+		c := newFakeClient(t, ns("team-x", nil), staleFT) // ns("team-x") has UID "team-x-uid" != stale
+		r := &NamespaceReconciler{logger: logr.Discard(), client: c, autoOnboardAll: true, releaseNamespace: "fission"}
+		res, err := r.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Name: "team-x"}})
+		require.NoError(t, err)
+		assert.Positive(t, res.RequeueAfter, "stale managed tenant must trigger a requeue, not an early return")
+		list := &fv1.FissionTenantList{}
+		require.NoError(t, c.List(t.Context(), list))
+		assert.Len(t, list.Items, 1, "must not create a duplicate while the stale CR is still being GC'd")
+	})
+
+	// A user-authored CR (no managed annotation) for the namespace is respected:
+	// no requeue, no duplicate.
+	t.Run("respects a user-authored tenant under a different name", func(t *testing.T) {
+		c := newFakeClient(t, ns("team-y", nil), tenant("custom", "team-y"))
+		r := &NamespaceReconciler{logger: logr.Discard(), client: c, autoOnboardAll: true, releaseNamespace: "fission"}
+		res, err := r.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Name: "team-y"}})
+		require.NoError(t, err)
+		assert.Zero(t, res.RequeueAfter, "a user-authored tenant is not stale; no requeue")
+		list := &fv1.FissionTenantList{}
+		require.NoError(t, c.List(t.Context(), list))
+		assert.Len(t, list.Items, 1, "must not duplicate a user-authored tenant")
+	})
 }

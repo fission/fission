@@ -14,6 +14,7 @@ package tenant
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/go-logr/logr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -254,15 +255,24 @@ func (r *NamespaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	// Already onboarded by some FissionTenant (label-born or user-authored under
-	// any name)? Then there is nothing to materialize.
+	// any name)? Then there is nothing to materialize — UNLESS the matching CR is a
+	// controller-managed one owned by a DIFFERENT (deleted) instance of this
+	// namespace: the delete-recreate race, where a same-named namespace is recreated
+	// before owner-reference GC has reaped the old CR. That stale CR is about to be
+	// GC'd, leaving the new namespace stranded with no FissionTenant and no event to
+	// retry, so requeue to re-materialize once it clears.
 	list := &fv1.FissionTenantList{}
 	if err := r.client.List(ctx, list); err != nil {
 		return ctrl.Result{}, err
 	}
 	for i := range list.Items {
-		if list.Items[i].Spec.Namespace == target.Name {
-			return ctrl.Result{}, nil
+		if list.Items[i].Spec.Namespace != target.Name {
+			continue
 		}
+		if isStaleManagedTenant(&list.Items[i], target.UID) {
+			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+		}
+		return ctrl.Result{}, nil
 	}
 
 	ft := &fv1.FissionTenant{
@@ -278,11 +288,34 @@ func (r *NamespaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		},
 		Spec: fv1.FissionTenantSpec{Namespace: target.Name},
 	}
-	if err := r.client.Create(ctx, ft); err != nil && !apierrors.IsAlreadyExists(err) {
+	if err := r.client.Create(ctx, ft); err != nil {
+		if apierrors.IsAlreadyExists(err) {
+			// A same-named CR exists but didn't match the list above (informer lag);
+			// requeue so the stale-vs-live check runs against the fresh object.
+			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+		}
+		r.logger.Error(err, "failed to materialize FissionTenant", "namespace", target.Name)
 		return ctrl.Result{}, err
 	}
 	r.logger.Info("materialized FissionTenant for namespace", "namespace", target.Name, "autoOnboard", r.autoOnboardAll)
 	return ctrl.Result{}, nil
+}
+
+// isStaleManagedTenant reports whether ft is a controller-managed FissionTenant
+// left behind by a deleted instance of namespace nsUID — i.e. it is managed by us
+// and carries a Namespace owner reference whose UID differs from the current
+// namespace's. A user-authored CR (no managed annotation) or one owned by the
+// current namespace is NOT stale.
+func isStaleManagedTenant(ft *fv1.FissionTenant, nsUID types.UID) bool {
+	if ft.Annotations[managedByAnnotation] != managedByLabel {
+		return false
+	}
+	for _, o := range ft.OwnerReferences {
+		if o.Kind == "Namespace" {
+			return o.UID != nsUID
+		}
+	}
+	return false
 }
 
 // isExcludedFromAutoOnboard reports whether a namespace must NOT be auto-onboarded
