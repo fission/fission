@@ -6,7 +6,9 @@
 // hashicorp/go-retryablehttp. Its defaults mirror retryablehttp's so swapping
 // it in is behavior-preserving: up to 4 retries with exponential backoff
 // between RetryWaitMin and RetryWaitMax, retrying network errors, 429, and 5xx
-// (except 501).
+// (except 501). The one intentional divergence is that a server-supplied
+// Retry-After is capped at RetryWaitMax (retryablehttp honors it uncapped) so a
+// misbehaving internal peer cannot stall a caller for an unbounded delay.
 //
 // It is the OUTERMOST transport in Fission's internal clients so that the HMAC
 // signer (pkg/auth/hmac) below it re-signs each attempt with a fresh
