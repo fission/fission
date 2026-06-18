@@ -246,11 +246,18 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 // pods); isValidFunctionPodOnNode still filters in the reconciler.
 func loggerCacheOptions() crcache.Options {
 	resolver := utils.DefaultNSResolver()
-	nsConfig := map[string]crcache.Config{}
-	for _, ns := range resolver.FissionNSWithOptions(utils.WithBuilderNs(), utils.WithFunctionNs(), utils.WithDefaultNs()) {
-		nsConfig[ns] = crcache.Config{}
+	opts := crcache.Options{}
+	// Cluster mode: function pods run in any namespace, so the log collector
+	// watches Pods cluster-wide (it holds the matching cluster-wide read via the
+	// fluentbit ClusterRole rendered only in cluster mode). Other modes scope the
+	// Pod cache to the Fission namespaces, matching fluentbit's per-namespace Roles.
+	if !utils.ClusterTenancyEnabled() {
+		nsConfig := map[string]crcache.Config{}
+		for _, ns := range resolver.FissionNSWithOptions(utils.WithBuilderNs(), utils.WithFunctionNs(), utils.WithDefaultNs()) {
+			nsConfig[ns] = crcache.Config{}
+		}
+		opts.DefaultNamespaces = nsConfig
 	}
-	opts := crcache.Options{DefaultNamespaces: nsConfig}
 	if nodeName != "" {
 		opts.ByObject = map[client.Object]crcache.ByObject{
 			&corev1.Pod{}: {

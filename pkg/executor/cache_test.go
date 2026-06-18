@@ -62,6 +62,25 @@ func TestExecutorCacheOptionsTierSplit(t *testing.T) {
 		assert.NotEmpty(t, cm.Namespaces, "ConfigMap cache must be namespace-scoped, NEVER cluster-wide")
 		assert.NotEmpty(t, rs.Namespaces, "ReplicaSet cache must be namespace-scoped to avoid mirroring the whole cluster")
 	})
+
+	t.Run("cluster mode caches Secrets/ConfigMaps/ReplicaSets cluster-wide", func(t *testing.T) {
+		t.Setenv("FISSION_TENANCY_MODE", "cluster")
+		opts := executorCacheOptions()
+		assert.Empty(t, opts.DefaultNamespaces, "everything cluster-wide in cluster mode")
+		secret, cm, rs := perTypeOverrides(opts)
+		// No per-type Namespaces override → these default to the cluster-wide cache.
+		// The Pod/Deployment/Service label bounds remain (memory bounds), but the
+		// Tier-B types are deliberately cluster-wide — the trusted-cluster trade.
+		if secret != nil {
+			assert.Empty(t, secret.Namespaces, "Secret cache is cluster-wide in cluster mode")
+		}
+		if cm != nil {
+			assert.Empty(t, cm.Namespaces, "ConfigMap cache is cluster-wide in cluster mode")
+		}
+		if rs != nil {
+			assert.Empty(t, rs.Namespaces, "ReplicaSet cache is cluster-wide in cluster mode")
+		}
+	})
 }
 
 // TestExecutorManagedSelector guards the Manager cache's Deployment/Service

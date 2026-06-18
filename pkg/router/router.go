@@ -98,15 +98,21 @@ func routerCacheOptions(mode endpointSliceCacheMode) crcache.Options {
 	if mode == endpointSliceCacheOff {
 		return opts
 	}
-	sliceNS := map[string]crcache.Config{}
-	for _, ns := range sliceWatchNamespaces() {
-		sliceNS[ns] = crcache.Config{}
+	sliceByObject := crcache.ByObject{
+		Label: labels.SelectorFromSet(labels.Set{fv1.MANAGED_BY_LABEL: fv1.MANAGED_BY_VALUE}),
+	}
+	// Cluster mode: functions (and their Services) live in any namespace, so the
+	// label-bounded slice watch goes cluster-wide (no per-namespace scoping). Other
+	// modes scope it to the function namespaces where the Services live.
+	if !utils.ClusterTenancyEnabled() {
+		sliceNS := map[string]crcache.Config{}
+		for _, ns := range sliceWatchNamespaces() {
+			sliceNS[ns] = crcache.Config{}
+		}
+		sliceByObject.Namespaces = sliceNS
 	}
 	opts.ByObject = map[client.Object]crcache.ByObject{
-		&discoveryv1.EndpointSlice{}: {
-			Label:      labels.SelectorFromSet(labels.Set{fv1.MANAGED_BY_LABEL: fv1.MANAGED_BY_VALUE}),
-			Namespaces: sliceNS,
-		},
+		&discoveryv1.EndpointSlice{}: sliceByObject,
 	}
 	return opts
 }
@@ -124,7 +130,14 @@ func routerCacheOptions(mode endpointSliceCacheMode) crcache.Options {
 // data plane over a missing optimization grant (e.g. a GitOps prune dropping
 // the Role) would turn it into an outage.
 func checkSliceWatchRBAC(ctx context.Context, kubeClient kubernetes.Interface) error {
-	for _, ns := range sliceWatchNamespaces() {
+	// Cluster mode watches EndpointSlices cluster-wide, so a single cluster-scoped
+	// review (empty Namespace) is the right preflight; other modes check each
+	// function namespace the informer scopes to.
+	watchNamespaces := sliceWatchNamespaces()
+	if utils.ClusterTenancyEnabled() {
+		watchNamespaces = []string{""}
+	}
+	for _, ns := range watchNamespaces {
 		for _, verb := range []string{"list", "watch"} {
 			sar := &authorizationv1.SelfSubjectAccessReview{
 				Spec: authorizationv1.SelfSubjectAccessReviewSpec{

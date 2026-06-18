@@ -95,6 +95,19 @@ func executorCacheOptions() crcache.Options {
 		&corev1.Service{}:    {Label: executorManagedSelector},
 	}
 
+	if utils.ClusterTenancyEnabled() {
+		// Cluster (trusted-cluster) mode: Tier A AND Tier B go cluster-wide. The
+		// executor reads Secrets/ConfigMaps/ReplicaSets across all namespaces — the
+		// operational simplification this opt-in mode trades isolation for (PRD
+		// §4.5; the executor holds the matching cluster-wide read via
+		// cluster-mode-bindings.yaml). The label-bounded Pod/Deployment/Service
+		// watches above are kept (memory bounds, valid in any mode); Secret/
+		// ConfigMap/ReplicaSet get NO per-namespace override, so they default to the
+		// cluster-wide cache. Function pods still hold only narrow per-namespace
+		// fetcher RBAC — this widening is the control plane's, not the workload's.
+		return crcache.Options{ByObject: byObject}
+	}
+
 	if utils.DynamicNamespacesEnabled() {
 		// Tier A (Function/Environment) goes cluster-wide so a namespace onboarded
 		// at runtime is visible without a restart; the func/env reconcilers filter
