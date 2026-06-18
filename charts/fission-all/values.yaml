@@ -715,12 +715,14 @@ tenancy:
   ##           Secrets/ConfigMaps/workloads are NEVER in a cluster-wide cache. The
   ##           recommended posture for untrusted multi-tenant clusters.
   ##   cluster — opt-in trusted-cluster mode. The controller auto-onboards every
-  ##           function-bearing namespace (no FissionTenant CR needed), so
-  ##           fetcher/builder pods keep their narrow per-namespace RBAC + keys,
-  ##           but the control plane (executor/buildermgr) reads Secrets/ConfigMaps
-  ##           and manages workloads CLUSTER-WIDE for operational simplicity.
-  ##           SECURITY TRADE-OFF: a compromised executor/buildermgr can read any
-  ##           namespace's Secrets. Use ONLY on single-tenant/trusted clusters.
+  ##           namespace (no FissionTenant CR needed), so fetcher/builder pods keep
+  ##           their narrow per-namespace RBAC + keys, but the control plane
+  ##           (executor/buildermgr) reads Secrets/ConfigMaps and manages workloads
+  ##           CLUSTER-WIDE for operational simplicity. Label a namespace
+  ##           `fission.io/enabled=false` to opt it OUT of auto-onboarding (and to
+  ##           offboard one already onboarded). SECURITY TRADE-OFF: a compromised
+  ##           executor/buildermgr can read any namespace's Secrets. Use ONLY on
+  ##           single-tenant/trusted clusters.
   ## dynamic and cluster set FISSION_TENANCY_MODE on the data-plane components and
   ## render the tenant controller; static renders neither.
   mode: static

@@ -32,10 +32,16 @@ import (
 )
 
 const (
-	// EnabledLabel on a Namespace opts it in as a Fission tenant; the controller
-	// materializes a labelled Namespace into a FissionTenant CR (one-way
-	// ignition — removing the label never deletes the CR; see prd.md §6.2).
+	// EnabledLabel on a Namespace is an explicit Fission-tenancy membership
+	// override. In dynamic mode "true" opts a namespace IN (the controller
+	// materializes it into a FissionTenant; one-way ignition — removing the label
+	// never deletes the CR, see prd.md §6.2). In cluster mode, where every
+	// namespace is auto-onboarded by default, "false" opts a namespace OUT: the
+	// controller skips it and, if it was already auto-onboarded, offboards it.
 	EnabledLabel = "fission.io/enabled"
+	// EnabledLabelOptOut is the EnabledLabel value that excludes a namespace from
+	// cluster-mode auto-onboarding.
+	EnabledLabelOptOut = "false"
 
 	// managedByAnnotation records how a FissionTenant came to exist: "label"
 	// (materialized from EnabledLabel) vs a user/helm-authored CR. Only
@@ -250,6 +256,12 @@ func (r *NamespaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		if isExcludedFromAutoOnboard(target.Name, r.releaseNamespace) {
 			return ctrl.Result{}, nil
 		}
+		// Explicit operator opt-out: skip onboarding, and offboard the namespace if
+		// the controller had already auto-onboarded it (so labelling a live
+		// namespace fission.io/enabled=false tears its Fission RBAC/keys down).
+		if target.Labels[EnabledLabel] == EnabledLabelOptOut {
+			return r.offboardManaged(ctx, target.Name)
+		}
 	} else if target.Labels[EnabledLabel] != "true" {
 		return ctrl.Result{}, nil
 	}
@@ -266,10 +278,15 @@ func (r *NamespaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, err
 	}
 	for i := range list.Items {
-		if list.Items[i].Spec.Namespace != target.Name {
+		ft := &list.Items[i]
+		if ft.Spec.Namespace != target.Name {
 			continue
 		}
-		if isStaleManagedTenant(&list.Items[i], target.UID) {
+		// A managed CR from a deleted namespace instance (stale owner UID), or one
+		// currently being deleted (e.g. just offboarded via the opt-out label and
+		// now re-enabled), is transient — requeue so we re-materialize for the
+		// current, enabled namespace once it clears.
+		if isStaleManagedTenant(ft, target.UID) || !ft.DeletionTimestamp.IsZero() {
 			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 		}
 		return ctrl.Result{}, nil
@@ -299,6 +316,39 @@ func (r *NamespaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 	r.logger.Info("materialized FissionTenant for namespace", "namespace", target.Name, "autoOnboard", r.autoOnboardAll)
 	return ctrl.Result{}, nil
+}
+
+// offboardManaged deletes the controller-managed FissionTenant for namespace (if
+// any), used when a cluster-mode namespace is explicitly opted out with
+// fission.io/enabled=false. Deleting the CR runs the TenantReconciler's offboard
+// finalizer (tears down the per-namespace RBAC + key Secret and drops the
+// namespace from the resolver). A user/helm-authored FissionTenant is left
+// untouched — the opt-out label only governs auto-onboarded namespaces; an
+// operator who authored a CR manages it explicitly via `fission tenant disable`.
+func (r *NamespaceReconciler) offboardManaged(ctx context.Context, namespace string) (ctrl.Result, error) {
+	list := &fv1.FissionTenantList{}
+	if err := r.client.List(ctx, list); err != nil {
+		return ctrl.Result{}, err
+	}
+	for i := range list.Items {
+		ft := &list.Items[i]
+		if ft.Spec.Namespace != namespace {
+			continue
+		}
+		if ft.Annotations[managedByAnnotation] != managedByLabel {
+			return ctrl.Result{}, nil // user-authored: respect it, don't auto-offboard
+		}
+		if !ft.DeletionTimestamp.IsZero() {
+			return ctrl.Result{}, nil // already offboarding
+		}
+		if err := r.client.Delete(ctx, ft); err != nil && !apierrors.IsNotFound(err) {
+			r.logger.Error(err, "failed to offboard opted-out namespace", "namespace", namespace)
+			return ctrl.Result{}, err
+		}
+		r.logger.Info("offboarded namespace via fission.io/enabled=false opt-out", "namespace", namespace)
+		return ctrl.Result{}, nil
+	}
+	return ctrl.Result{}, nil // not onboarded; nothing to offboard
 }
 
 // isStaleManagedTenant reports whether ft is a controller-managed FissionTenant

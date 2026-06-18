@@ -137,16 +137,21 @@ func enabledLabelPredicate() predicate.Predicate {
 	})
 }
 
-// autoOnboardPredicate (cluster mode) admits Namespace create events only: every
-// existing namespace surfaces as an add on the informer's initial sync, and any
-// later namespace as a create, so the reconciler materializes a FissionTenant for
-// each exactly once. Label/spec updates change nothing (materialize is idempotent
-// and keyed on existence), and namespace deletes are handled by owner-reference GC
-// of the materialized FissionTenant — so neither needs to wake the reconciler.
+// autoOnboardPredicate (cluster mode) admits Namespace create events (every
+// existing namespace surfaces as an add on the informer's initial sync, any later
+// namespace as a create, so the reconciler materializes a FissionTenant for each
+// exactly once) AND updates that flip the fission.io/enabled opt-out label, so an
+// operator labelling a live namespace fission.io/enabled=false (or removing the
+// label to re-enable) wakes the reconciler to offboard / re-onboard it. Other
+// label/spec updates change nothing (materialize is idempotent, keyed on
+// existence), and namespace deletes are handled by owner-reference GC of the
+// materialized FissionTenant.
 func autoOnboardPredicate() predicate.Predicate {
 	return predicate.Funcs{
-		CreateFunc:  func(event.CreateEvent) bool { return true },
-		UpdateFunc:  func(event.UpdateEvent) bool { return false },
+		CreateFunc: func(event.CreateEvent) bool { return true },
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			return e.ObjectOld.GetLabels()[EnabledLabel] != e.ObjectNew.GetLabels()[EnabledLabel]
+		},
 		DeleteFunc:  func(event.DeleteEvent) bool { return false },
 		GenericFunc: func(event.GenericEvent) bool { return false },
 	}

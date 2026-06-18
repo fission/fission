@@ -289,3 +289,47 @@ func TestNamespaceReconcilerAutoOnboardAll(t *testing.T) {
 		assert.Len(t, list.Items, 1, "must not duplicate a user-authored tenant")
 	})
 }
+
+// TestNamespaceReconcilerClusterOptOut covers the cluster-mode opt-out label
+// (fission.io/enabled=false): a labelled namespace is not onboarded, and labelling
+// an already-onboarded namespace offboards its controller-managed FissionTenant
+// while leaving a user-authored CR alone.
+func TestNamespaceReconcilerClusterOptOut(t *testing.T) {
+	reconcile := func(t *testing.T, c client.Client, name string) {
+		t.Helper()
+		r := &NamespaceReconciler{logger: logr.Discard(), client: c, autoOnboardAll: true, releaseNamespace: "fission"}
+		_, err := r.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Name: name}})
+		require.NoError(t, err)
+	}
+	optedOut := map[string]string{EnabledLabel: EnabledLabelOptOut}
+
+	t.Run("opted-out namespace is not onboarded", func(t *testing.T) {
+		c := newFakeClient(t, ns("team-z", optedOut))
+		reconcile(t, c, "team-z")
+		list := &fv1.FissionTenantList{}
+		require.NoError(t, c.List(t.Context(), list))
+		assert.Empty(t, list.Items, "fission.io/enabled=false must keep a namespace un-onboarded")
+	})
+
+	t.Run("opting out a live namespace offboards its managed tenant", func(t *testing.T) {
+		managedFT := &fv1.FissionTenant{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            "team-w",
+				Annotations:     map[string]string{managedByAnnotation: managedByLabel},
+				OwnerReferences: []metav1.OwnerReference{{Kind: "Namespace", Name: "team-w", UID: "team-w-uid"}},
+			},
+			Spec: fv1.FissionTenantSpec{Namespace: "team-w"},
+		}
+		c := newFakeClient(t, ns("team-w", optedOut), managedFT)
+		reconcile(t, c, "team-w")
+		err := c.Get(t.Context(), types.NamespacedName{Name: "team-w"}, &fv1.FissionTenant{})
+		assert.True(t, apierrors.IsNotFound(err), "opting out must delete the controller-managed FissionTenant")
+	})
+
+	t.Run("opt-out leaves a user-authored tenant alone", func(t *testing.T) {
+		c := newFakeClient(t, ns("team-u", optedOut), tenant("user-owned", "team-u"))
+		reconcile(t, c, "team-u")
+		require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: "user-owned"}, &fv1.FissionTenant{}),
+			"a user-authored FissionTenant must survive the opt-out label")
+	})
+}
