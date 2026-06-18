@@ -242,14 +242,20 @@ const (
 	FissionExecutorSA   = "fission-executor"
 	FissionBuildermgrSA = "fission-buildermgr"
 
-	// ExecutorTenantWorkloadClusterRole / BuildermgrTenantWorkloadClusterRole are
-	// the fixed-name ClusterRoles (chart-rendered only in dynamic mode) holding
-	// the executor's / buildermgr's per-namespace workload rules. The controller
-	// references them by name in the RoleBindings it provisions, so the names must
-	// match the chart and be install-independent (dynamic tenancy is one Fission
-	// install per cluster, since it watches cluster-wide).
-	ExecutorTenantWorkloadClusterRole   = "fission-executor-tenant-workload"
-	BuildermgrTenantWorkloadClusterRole = "fission-buildermgr-tenant-workload"
+	// The *TenantWorkloadClusterRole names are the fixed-name ClusterRoles
+	// (chart-rendered only in dynamic mode) holding the per-namespace rules a
+	// runtime-onboarded tenant needs. The controller references them by name in
+	// the RoleBindings it provisions, so the names must match the chart and be
+	// install-independent (dynamic tenancy is one Fission install per cluster,
+	// since it watches cluster-wide). Executor/buildermgr carry workload-management
+	// rules; fetcher/builder/fetcher-websocket carry the function-pod sidecar read
+	// rules — all single-sourced from the chart's shared partials so the static
+	// and dynamic paths cannot drift.
+	ExecutorTenantWorkloadClusterRole         = "fission-executor-tenant-workload"
+	BuildermgrTenantWorkloadClusterRole       = "fission-buildermgr-tenant-workload"
+	FetcherTenantWorkloadClusterRole          = "fission-fetcher-tenant-workload"
+	BuilderTenantWorkloadClusterRole          = "fission-builder-tenant-workload"
+	FetcherWebsocketTenantWorkloadClusterRole = "fission-fetcher-websocket-tenant-workload"
 )
 
 const (

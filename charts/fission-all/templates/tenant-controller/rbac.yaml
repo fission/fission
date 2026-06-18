@@ -39,11 +39,15 @@ rules:
   - get
   - list
   - watch
-# Provision per-namespace fetcher/builder RBAC for runtime-onboarded tenants.
-# The bind+escalate verbs let the controller MINT Roles that grant read on a
-# tenant's own secrets/configmaps WITHOUT the controller itself being able to
-# read them — strictly tighter than holding cluster-wide secret read, and
-# confined to this single controller's ServiceAccount.
+# Provision per-namespace fetcher/builder RBAC for runtime-onboarded tenants. The
+# controller binds the fixed-name *-tenant-workload ClusterRoles into each tenant
+# namespace (the rules live in the chart, not the controller), so it needs `bind`
+# on those ClusterRoles but authors no Role of its own.
+# NOTE: `escalate` (and roles create/update/patch) are now UNUSED — the controller
+# stopped minting Roles when it switched to binding chart ClusterRoles. They are
+# retained here pending the dedicated escalate/bind hardening item, which removes
+# them (and the roles-author verbs) and adds a ValidatingAdmissionPolicy. The roles
+# delete/deletecollection verbs stay to reap any legacy Roles on upgrade.
 - apiGroups:
   - rbac.authorization.k8s.io
   resources:
@@ -63,10 +67,11 @@ rules:
   - deletecollection
   - bind
   - escalate
-# Bind ONLY the two fixed workload ClusterRoles into tenant namespaces (via the
-# RoleBindings the controller provisions) so the executor/buildermgr can manage
-# workloads there. resourceNames-scoped: the controller cannot bind any other
-# ClusterRole, so it cannot escalate itself to arbitrary cluster permissions.
+# Bind ONLY the fixed-name tenant-workload ClusterRoles into tenant namespaces (via
+# the RoleBindings the controller provisions): the executor/buildermgr workload
+# roles AND the fetcher/builder/fetcher-websocket function-pod read roles.
+# resourceNames-scoped: the controller cannot bind any other ClusterRole, so it
+# cannot escalate itself to arbitrary cluster permissions.
 - apiGroups:
   - rbac.authorization.k8s.io
   resources:
@@ -76,6 +81,9 @@ rules:
   resourceNames:
   - fission-executor-tenant-workload
   - fission-buildermgr-tenant-workload
+  - fission-fetcher-tenant-workload
+  - fission-builder-tenant-workload
+  - fission-fetcher-websocket-tenant-workload
 - apiGroups:
   - ""
   resources:

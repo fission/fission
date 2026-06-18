@@ -5,7 +5,6 @@
 package tenant
 
 import (
-	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -15,6 +14,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 )
@@ -31,20 +31,35 @@ func TestEnsureNamespaceRBACCreatesObjects(t *testing.T) {
 		require.NoError(t, c.Get(ctx, types.NamespacedName{Namespace: "team-a", Name: sa}, got), "SA %q must exist", sa)
 	}
 
-	// Roles + RoleBindings (fetcher, builder, fetcher-websocket).
-	for _, role := range []string{fetcherRoleName, builderRoleName, fetcherWebsocketRoleName} {
-		r := &rbacv1.Role{}
-		require.NoError(t, c.Get(ctx, types.NamespacedName{Namespace: "team-a", Name: role}, r), "Role %q must exist", role)
-		assert.Equal(t, managedByValue, r.Labels[managedByLabelKey], "Role must be labelled for cleanup")
-		rb := &rbacv1.RoleBinding{}
-		require.NoError(t, c.Get(ctx, types.NamespacedName{Namespace: "team-a", Name: role}, rb), "RoleBinding %q must exist", role)
+	// The fetcher/builder/websocket pod SAs are bound to their fixed-name
+	// function-access ClusterRoles in the tenant namespace — the rules live in the
+	// chart (rendered as the ClusterRoles), so the controller authors no Role.
+	cases := []struct {
+		binding     string
+		sa          string
+		clusterRole string
+	}{
+		{fetcherRoleName, fv1.FissionFetcherSA, fv1.FetcherTenantWorkloadClusterRole},
+		{builderRoleName, fv1.FissionBuilderSA, fv1.BuilderTenantWorkloadClusterRole},
+		{fetcherWebsocketRoleName, fv1.FissionFetcherSA, fv1.FetcherWebsocketTenantWorkloadClusterRole},
+	}
+	for _, tc := range cases {
+		t.Run(tc.binding, func(t *testing.T) {
+			rb := &rbacv1.RoleBinding{}
+			require.NoError(t, c.Get(ctx, types.NamespacedName{Namespace: "team-a", Name: tc.binding}, rb), "RoleBinding %q must exist", tc.binding)
+			assert.Equal(t, "ClusterRole", rb.RoleRef.Kind, "must bind a ClusterRole")
+			assert.Equal(t, tc.clusterRole, rb.RoleRef.Name)
+			require.Len(t, rb.Subjects, 1)
+			assert.Equal(t, tc.sa, rb.Subjects[0].Name)
+			assert.Equal(t, "team-a", rb.Subjects[0].Namespace, "subject SA lives in the tenant namespace")
+			assert.Equal(t, managedByValue, rb.Labels[managedByLabelKey], "must be labelled for cleanup")
+		})
 	}
 
-	// The fetcher Role grants secret/configmap read (the function-access grant).
-	fetcher := &rbacv1.Role{}
-	require.NoError(t, c.Get(ctx, types.NamespacedName{Namespace: "team-a", Name: fetcherRoleName}, fetcher))
-	assert.True(t, grantsGet(fetcher, "", "secrets"), "fetcher Role must grant secrets get")
-	assert.True(t, grantsGet(fetcher, "fission.io", "packages"), "fetcher Role must grant packages get")
+	// The controller authors no Role of its own — it binds chart ClusterRoles.
+	roles := &rbacv1.RoleList{}
+	require.NoError(t, c.List(ctx, roles, client.InNamespace("team-a")))
+	assert.Empty(t, roles.Items, "controller must not author any Role")
 }
 
 // TestEnsureNamespaceRBACBindsWorkloadClusterRoles pins that the executor and
@@ -90,7 +105,8 @@ func TestEnsureNamespaceRBACSkipsWorkloadBindingsWithoutReleaseNS(t *testing.T) 
 	rb := &rbacv1.RoleBinding{}
 	assert.True(t, apierrors.IsNotFound(c.Get(ctx, types.NamespacedName{Namespace: "team-a", Name: "fission-executor-workload"}, rb)),
 		"workload binding must be skipped when the release namespace is unknown")
-	require.NoError(t, c.Get(ctx, types.NamespacedName{Namespace: "team-a", Name: fetcherRoleName}, &rbacv1.Role{}))
+	require.NoError(t, c.Get(ctx, types.NamespacedName{Namespace: "team-a", Name: fetcherRoleName}, &rbacv1.RoleBinding{}),
+		"the fetcher function-access binding is still provisioned without a release namespace")
 }
 
 func TestEnsureNamespaceRBACIsIdempotent(t *testing.T) {
@@ -113,23 +129,10 @@ func TestDeleteNamespaceRBACRemovesManaged(t *testing.T) {
 
 	sa := &corev1.ServiceAccount{}
 	assert.True(t, apierrors.IsNotFound(c.Get(ctx, types.NamespacedName{Namespace: "team-a", Name: fv1.FissionFetcherSA}, sa)), "fetcher SA must be deleted")
-	role := &rbacv1.Role{}
-	assert.True(t, apierrors.IsNotFound(c.Get(ctx, types.NamespacedName{Namespace: "team-a", Name: fetcherRoleName}, role)), "fetcher Role must be deleted")
 	rb := &rbacv1.RoleBinding{}
+	assert.True(t, apierrors.IsNotFound(c.Get(ctx, types.NamespacedName{Namespace: "team-a", Name: fetcherRoleName}, rb)), "fetcher RoleBinding must be deleted")
 	assert.True(t, apierrors.IsNotFound(c.Get(ctx, types.NamespacedName{Namespace: "team-a", Name: builderRoleName}, rb)), "builder RoleBinding must be deleted")
 	keys := &corev1.Secret{}
 	assert.True(t, apierrors.IsNotFound(c.Get(ctx, types.NamespacedName{Namespace: "team-a", Name: fv1.TenantAuthKeysSecret}, keys)),
 		"derived-key Secret must be deleted by name on teardown")
-}
-
-func grantsGet(r *rbacv1.Role, apiGroup, resource string) bool {
-	for _, rule := range r.Rules {
-		if !slices.Contains(rule.APIGroups, apiGroup) || !slices.Contains(rule.Resources, resource) {
-			continue
-		}
-		if slices.Contains(rule.Verbs, "get") {
-			return true
-		}
-	}
-	return false
 }

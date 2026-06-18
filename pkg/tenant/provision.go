@@ -21,19 +21,23 @@ const (
 	managedByLabelKey = "app.kubernetes.io/managed-by"
 	managedByValue    = "fission-tenant-controller"
 
+	// These name the per-namespace RoleBindings the controller provisions (and
+	// match the static chart's binding names). Each binds a fetcher/builder pod SA
+	// to the fixed-name *TenantWorkloadClusterRole ClusterRole that carries its
+	// rules — the controller no longer authors Roles of its own.
 	fetcherRoleName          = "fission-fetcher"
 	builderRoleName          = "fission-builder"
 	fetcherWebsocketRoleName = "fission-fetcher-websocket"
 )
 
-// EnsureNamespaceRBAC creates (idempotently) the ServiceAccounts, Roles, and
-// RoleBindings a tenant namespace needs for the fetcher and builder to run — the
-// dynamic, runtime equivalent of the chart's _function-access-role.tpl, for
-// namespaces onboarded after install. Every object carries the managed-by label
-// so offboarding can clean them up. The Roles grant read-only access to the
-// namespace's OWN ConfigMaps/Secrets/Packages (no cross-namespace, no
-// escalation): a tenant controller holding rbac `escalate`/`bind` can mint these
-// without itself being able to read those Secrets.
+// EnsureNamespaceRBAC creates (idempotently) the ServiceAccounts and RoleBindings
+// a tenant namespace needs for the fetcher and builder to run — the dynamic,
+// runtime equivalent of the chart's _function-access-role.tpl, for namespaces
+// onboarded after install. Every object carries the managed-by label so
+// offboarding can clean them up. The grants live in the chart's fixed-name
+// ClusterRoles (rendered in dynamic mode); the controller only BINDS them by name
+// into each tenant namespace — it needs rbac `bind` on those ClusterRoles, but no
+// longer `escalate` (it authors no Role), and never read of the tenant's secrets.
 func EnsureNamespaceRBAC(ctx context.Context, c client.Client, namespace, releaseNamespace string, owner metav1.OwnerReference) error {
 	for _, obj := range namespaceRBACObjects(namespace, releaseNamespace, owner) {
 		if err := c.Create(ctx, obj); err != nil && !apierrors.IsAlreadyExists(err) {
@@ -57,7 +61,9 @@ func DeleteNamespaceRBAC(ctx context.Context, c client.Client, namespace string)
 	// chart- or user-managed RBAC. DeleteAllOf issues a deletecollection request,
 	// so the tenant-controller ClusterRole MUST grant `deletecollection` on these
 	// three resources (charts/.../tenant-controller/rbac.yaml) — `delete` alone is
-	// insufficient and the finalizer would wedge on a forbidden error.
+	// insufficient and the finalizer would wedge on a forbidden error. Role stays
+	// in the sweep only to reap any legacy per-namespace Roles a pre-unification
+	// controller authored before this revision started binding ClusterRoles.
 	for _, proto := range []client.Object{&rbacv1.RoleBinding{}, &rbacv1.Role{}, &corev1.ServiceAccount{}} {
 		if err := c.DeleteAllOf(ctx, proto, opts...); err != nil && !apierrors.IsNotFound(err) {
 			return fmt.Errorf("deleting %T in %s: %w", proto, namespace, err)
@@ -90,54 +96,32 @@ func namespaceRBACObjects(ns, releaseNamespace string, owner metav1.OwnerReferen
 		}
 		return m
 	}
-	roleBinding := func(name, sa string) *rbacv1.RoleBinding {
-		return &rbacv1.RoleBinding{
-			ObjectMeta: meta(name),
-			RoleRef:    rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "Role", Name: name},
-			Subjects:   []rbacv1.Subject{{Kind: "ServiceAccount", Name: sa, Namespace: ns}},
-		}
-	}
-	// workloadRoleBinding binds a release-namespace control-plane SA to a fixed
-	// workload ClusterRole, scoped to THIS namespace by the RoleBinding (it is a
-	// RoleBinding, NOT a ClusterRoleBinding) — so the executor / buildermgr can
-	// manage their workloads here, never cluster-wide.
-	workloadRoleBinding := func(name, sa, clusterRole string) *rbacv1.RoleBinding {
+	// clusterRoleBinding binds a fixed-name ClusterRole into THIS tenant namespace
+	// with a namespaced RoleBinding (NOT a ClusterRoleBinding), so the grant is
+	// scoped to the namespace. saNamespace is where the bound ServiceAccount lives:
+	// the tenant namespace for the fetcher/builder pod SAs, the release namespace
+	// for the executor/buildermgr control-plane SAs. The rules live ONLY in the
+	// chart's shared partials (rendered as these ClusterRoles), so the static and
+	// dynamic paths share one source of truth and the controller carries no copy.
+	clusterRoleBinding := func(name, sa, saNamespace, clusterRole string) *rbacv1.RoleBinding {
 		return &rbacv1.RoleBinding{
 			ObjectMeta: meta(name),
 			RoleRef:    rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "ClusterRole", Name: clusterRole},
-			Subjects:   []rbacv1.Subject{{Kind: "ServiceAccount", Name: sa, Namespace: releaseNamespace}},
+			Subjects:   []rbacv1.Subject{{Kind: "ServiceAccount", Name: sa, Namespace: saNamespace}},
 		}
 	}
-	get := []string{"get"}
-	// LOCKSTEP: these fetcher/builder/websocket Role rules are the dynamic-path
-	// twin of charts/fission-all/templates/_function-access-role.tpl (the static
-	// per-namespace install path). There is no shared source of truth across Go
-	// and Helm, so any change here — especially to the secrets/configmaps `get`
-	// grants — MUST be mirrored in that template, or the static and runtime-
-	// onboarded namespaces drift in what a tenant pod may read. (Deeper fix tracked
-	// as a follow-up: bind shared-partial ClusterRoles by name, as the workload
-	// roles in dynamic-workload-roles.yaml already do.)
 	objs := []client.Object{
 		&corev1.ServiceAccount{ObjectMeta: meta(fv1.FissionFetcherSA)},
 		&corev1.ServiceAccount{ObjectMeta: meta(fv1.FissionBuilderSA)},
 
-		&rbacv1.Role{ObjectMeta: meta(fetcherRoleName), Rules: []rbacv1.PolicyRule{
-			{APIGroups: []string{""}, Resources: []string{"configmaps", "secrets"}, Verbs: get},
-			{APIGroups: []string{""}, Resources: []string{"serviceaccounts"}, Verbs: get},
-			{APIGroups: []string{"fission.io"}, Resources: []string{"packages"}, Verbs: get},
-		}},
-		&rbacv1.Role{ObjectMeta: meta(builderRoleName), Rules: []rbacv1.PolicyRule{
-			{APIGroups: []string{"fission.io"}, Resources: []string{"packages"}, Verbs: get},
-			{APIGroups: []string{""}, Resources: []string{"configmaps", "secrets"}, Verbs: get},
-		}},
-		&rbacv1.Role{ObjectMeta: meta(fetcherWebsocketRoleName), Rules: []rbacv1.PolicyRule{
-			{APIGroups: []string{""}, Resources: []string{"events"}, Verbs: []string{"get", "list", "watch", "create", "update", "patch"}},
-			{APIGroups: []string{""}, Resources: []string{"pods"}, Verbs: get},
-		}},
-
-		roleBinding(fetcherRoleName, fv1.FissionFetcherSA),
-		roleBinding(builderRoleName, fv1.FissionBuilderSA),
-		roleBinding(fetcherWebsocketRoleName, fv1.FissionFetcherSA),
+		// The fetcher/builder pod SAs (in THIS tenant namespace) bound to the
+		// fixed-name ClusterRoles carrying their read rules (configmaps/secrets/
+		// packages/serviceaccounts; events+pods for the websocket fetcher). The
+		// chart's _function-access-role.tpl renders the SAME rules into the static
+		// per-namespace Roles from the same partials, so the two paths cannot drift.
+		clusterRoleBinding(fetcherRoleName, fv1.FissionFetcherSA, ns, fv1.FetcherTenantWorkloadClusterRole),
+		clusterRoleBinding(builderRoleName, fv1.FissionBuilderSA, ns, fv1.BuilderTenantWorkloadClusterRole),
+		clusterRoleBinding(fetcherWebsocketRoleName, fv1.FissionFetcherSA, ns, fv1.FetcherWebsocketTenantWorkloadClusterRole),
 	}
 
 	// Bind the executor and buildermgr (release-namespace SAs) to their workload
@@ -148,8 +132,8 @@ func namespaceRBACObjects(ns, releaseNamespace string, owner metav1.OwnerReferen
 	// any statically-rendered Role for this namespace.
 	if releaseNamespace != "" {
 		objs = append(objs,
-			workloadRoleBinding("fission-executor-workload", fv1.FissionExecutorSA, fv1.ExecutorTenantWorkloadClusterRole),
-			workloadRoleBinding("fission-buildermgr-workload", fv1.FissionBuildermgrSA, fv1.BuildermgrTenantWorkloadClusterRole),
+			clusterRoleBinding("fission-executor-workload", fv1.FissionExecutorSA, releaseNamespace, fv1.ExecutorTenantWorkloadClusterRole),
+			clusterRoleBinding("fission-buildermgr-workload", fv1.FissionBuildermgrSA, releaseNamespace, fv1.BuildermgrTenantWorkloadClusterRole),
 		)
 	}
 	return objs

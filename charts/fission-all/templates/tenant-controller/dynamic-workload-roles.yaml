@@ -1,14 +1,16 @@
 {{- if dig "dynamicNamespaces" false (.Values.tenancy | default dict) }}
-# Dynamic multi-namespace mode: the executor and buildermgr (which run as
-# release-namespace ServiceAccounts) must create/manage their workloads
-# (Deployments, Services, pods, HPAs, …) in namespaces onboarded at RUNTIME,
-# where the chart's static per-namespace Roles do not exist. These fixed-name
-# ClusterRoles carry exactly the same per-namespace kuberules the static Roles
-# use; the tenant controller binds them into each tenant namespace with a
-# namespaced RoleBinding (see pkg/tenant/provision.go), so the grant is scoped to
-# tenant namespaces only — never cluster-wide. The names are install-independent
-# because dynamic tenancy is one Fission install per cluster (it watches
-# cluster-wide). Rendered only in dynamic mode; the static path is unchanged.
+# Dynamic multi-namespace mode: components and function-pod sidecars that run in
+# namespaces onboarded at RUNTIME (where the chart's static per-namespace Roles do
+# not exist) get their grants from these fixed-name ClusterRoles, which carry
+# exactly the same rules the static Roles use — single-sourced from the shared
+# {executor,buildermgr}-kuberules and fissionFunction.*Rules partials, so the
+# static and dynamic paths cannot drift. The tenant controller binds each into a
+# tenant namespace with a namespaced RoleBinding (see pkg/tenant/provision.go), so
+# every grant is scoped to tenant namespaces only — never cluster-wide. The names
+# are install-independent because dynamic tenancy is one Fission install per
+# cluster. Rendered only in dynamic mode; the static path is unchanged.
+#
+# executor/buildermgr: manage their workloads (Deployments, Services, pods, HPAs).
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -21,4 +23,26 @@ kind: ClusterRole
 metadata:
   name: fission-buildermgr-tenant-workload
 {{- include "buildermgr-kuberules" . }}
+# fetcher/builder/fetcher-websocket: what a function pod's sidecars may read in
+# their own tenant namespace (configmaps/secrets/packages/serviceaccounts; events
+# + pods for the websocket fetcher). The dynamic twin of the static Roles in
+# _function-access-role.tpl; pkg/tenant/provision.go binds these by name.
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: fission-fetcher-tenant-workload
+{{- include "fissionFunction.fetcherRules" . }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: fission-builder-tenant-workload
+{{- include "fissionFunction.builderRules" . }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: fission-fetcher-websocket-tenant-workload
+{{- include "fissionFunction.fetcherWebsocketRules" . }}
 {{- end }}
