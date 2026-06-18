@@ -1,0 +1,65 @@
+{{- if dig "dynamicNamespaces" false (.Values.tenancy | default dict) }}
+# Defense-in-depth for the tenant controller's `bind` privilege. The controller
+# can only bind the fixed-name *-tenant-workload ClusterRoles (rbac.yaml
+# resourceNames-scopes that), but a COMPROMISED controller could still bind one of
+# them to an attacker-controlled ServiceAccount, granting that SA the namespace's
+# secret/configmap read. This policy rejects ANY RoleBinding that references a
+# tenant-workload ClusterRole unless every subject is one of the fixed Fission
+# fetcher/builder/executor/buildermgr ServiceAccounts — so the grant can only ever
+# reach Fission's own pods, never an arbitrary SA.
+#
+# It is a cluster-wide ValidatingAdmissionPolicy (GA in k8s 1.30; the chart's floor
+# is 1.32) keyed on the binding's roleRef, so it applies to the binding SHAPE, not
+# a particular caller — the controller is the only principal that can create these
+# bindings anyway, but the invariant holds even if another principal ever gains
+# `bind`. It is inert for every other RoleBinding (the matchCondition filters them
+# out), so it adds no admission cost to unrelated RBAC. Rendered only in dynamic
+# mode, where those ClusterRoles exist.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: {{ .Release.Name }}-fission-tenant-workload-binding
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+spec:
+  # Fail closed: a request the policy cannot evaluate is denied rather than admitted.
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ["rbac.authorization.k8s.io"]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["rolebindings"]
+  # Only evaluate bindings that reference one of the tenant-workload ClusterRoles;
+  # every other RoleBinding skips the policy entirely.
+  matchConditions:
+    - name: targets-tenant-workload-clusterrole
+      expression: >
+        object.roleRef.kind == 'ClusterRole' && object.roleRef.name in [
+          'fission-executor-tenant-workload',
+          'fission-buildermgr-tenant-workload',
+          'fission-fetcher-tenant-workload',
+          'fission-builder-tenant-workload',
+          'fission-fetcher-websocket-tenant-workload'
+        ]
+  validations:
+    - expression: >
+        !has(object.subjects) || object.subjects.all(s,
+          s.kind == 'ServiceAccount' && s.name in [
+            'fission-fetcher', 'fission-builder', 'fission-executor', 'fission-buildermgr'
+          ])
+      reason: Forbidden
+      message: >
+        a RoleBinding to a Fission tenant-workload ClusterRole may only bind the
+        fixed fission fetcher/builder/executor/buildermgr ServiceAccounts
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: {{ .Release.Name }}-fission-tenant-workload-binding
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+spec:
+  policyName: {{ .Release.Name }}-fission-tenant-workload-binding
+  validationActions: ["Deny"]
+{{- end }}
