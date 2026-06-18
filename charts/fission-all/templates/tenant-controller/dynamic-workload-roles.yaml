@@ -1,24 +1,23 @@
 {{- if dig "dynamicNamespaces" false (.Values.tenancy | default dict) }}
-# Dynamic multi-namespace mode: the executor and buildermgr (which run as
-# release-namespace ServiceAccounts) must create/manage their workloads
-# (Deployments, Services, pods, HPAs, …) in namespaces onboarded at RUNTIME,
-# where the chart's static per-namespace Roles do not exist. These fixed-name
-# ClusterRoles carry exactly the same per-namespace kuberules the static Roles
-# use; the tenant controller binds them into each tenant namespace with a
-# namespaced RoleBinding (see pkg/tenant/provision.go), so the grant is scoped to
-# tenant namespaces only — never cluster-wide. The names are install-independent
-# because dynamic tenancy is one Fission install per cluster (it watches
-# cluster-wide). Rendered only in dynamic mode; the static path is unchanged.
+# Dynamic multi-namespace mode: components and function-pod sidecars that run in
+# namespaces onboarded at RUNTIME (where the chart's static per-namespace Roles do
+# not exist) get their grants from these fixed-name ClusterRoles, which carry
+# exactly the same rules the static Roles use — single-sourced from the shared
+# {executor,buildermgr}-kuberules and fissionFunction.*Rules partials, so the
+# static and dynamic paths cannot drift. The tenant controller binds each into a
+# tenant namespace with a namespaced RoleBinding (see pkg/tenant/provision.go), so
+# every grant is scoped to tenant namespaces only — never cluster-wide. The names
+# are install-independent because dynamic tenancy is one Fission install per
+# cluster. Rendered only in dynamic mode; the static path is unchanged.
+#
+# The role set (name + rules partial) is single-sourced in _tenant-workload-roles.tpl;
+# rbac.yaml and admission-policy.yaml derive their resourceNames/CEL from the same list.
+{{- range $r := (include "fission.tenantWorkloadRoles" . | fromYamlArray) }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: fission-executor-tenant-workload
-{{- include "executor-kuberules" . }}
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: fission-buildermgr-tenant-workload
-{{- include "buildermgr-kuberules" . }}
+  name: {{ $r.name }}
+{{- include $r.rules $ }}
+{{- end }}
 {{- end }}

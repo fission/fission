@@ -1,17 +1,15 @@
 {{- /*
-LOCKSTEP: these fetcher/builder/websocket Role rules are mirrored in Go at
-pkg/tenant/provision.go (namespaceRBACObjects), which provisions the same grants
-for namespaces onboarded at runtime by the tenant controller. Any change to the
-rules below MUST be mirrored there, or static-install and dynamically-onboarded
-namespaces drift in what a tenant pod may read.
+fetcher/builder/websocket access rules — the SINGLE SOURCE for what a function
+pod's sidecars may read. Used in two places:
+  - the static per-namespace Roles below (fissionFunction.roles), and
+  - the fixed-name ClusterRoles for dynamic multi-namespace mode
+    (templates/tenant-controller/dynamic-workload-roles.yaml), which the tenant
+    controller binds into each runtime-onboarded namespace by name.
+Because both render from these partials, the static and dynamic paths can no
+longer drift — pkg/tenant/provision.go binds the ClusterRoles by name and no
+longer carries its own copy of the rules.
 */ -}}
-{{- define "fissionFunction.roles" }}
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: {{ .Release.Name }}-fission-fetcher
-  namespace: {{ .namespace }}
+{{- define "fissionFunction.fetcherRules" }}
 rules:
 - apiGroups:
   - ""
@@ -34,12 +32,9 @@ rules:
   - packages
   verbs:
   - get
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: {{ .Release.Name }}-fission-builder
-  namespace: {{ .namespace }}
+{{- end -}}
+
+{{- define "fissionFunction.builderRules" }}
 rules:
 - apiGroups:
   - fission.io
@@ -54,12 +49,9 @@ rules:
   - secrets
   verbs:
   - get
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  namespace: {{ .namespace }}
-  name: {{ .Release.Name }}-fission-fetcher-websocket
+{{- end -}}
+
+{{- define "fissionFunction.fetcherWebsocketRules" }}
 rules:
 - apiGroups:
   - ""
@@ -77,7 +69,31 @@ rules:
   resources:
   - pods
   verbs:
-  - get  
+  - get
+{{- end -}}
+
+{{- define "fissionFunction.roles" }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ .Release.Name }}-fission-fetcher
+  namespace: {{ .namespace }}
+{{- include "fissionFunction.fetcherRules" . }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ .Release.Name }}-fission-builder
+  namespace: {{ .namespace }}
+{{- include "fissionFunction.builderRules" . }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: {{ .namespace }}
+  name: {{ .Release.Name }}-fission-fetcher-websocket
+{{- include "fissionFunction.fetcherWebsocketRules" . }}
 {{- end -}}
 
 {{- define "fissionFunction.rolebindings" }}

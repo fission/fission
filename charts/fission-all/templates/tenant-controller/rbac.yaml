@@ -39,43 +39,52 @@ rules:
   - get
   - list
   - watch
-# Provision per-namespace fetcher/builder RBAC for runtime-onboarded tenants.
-# The bind+escalate verbs let the controller MINT Roles that grant read on a
-# tenant's own secrets/configmaps WITHOUT the controller itself being able to
-# read them — strictly tighter than holding cluster-wide secret read, and
-# confined to this single controller's ServiceAccount.
+# Provision per-namespace RoleBindings for runtime-onboarded tenants and reap them
+# on offboard. The controller BINDS the fixed-name *-tenant-workload ClusterRoles
+# (the rules live in the chart, not the controller) — it authors NO Role of its
+# own, so it deliberately holds NEITHER `create` on roles NOR `escalate`. It can
+# therefore grant the fixed fetcher/builder rule shapes but can never mint a Role
+# with arbitrary rules — the least-privilege posture the dynamic-watch design
+# targets. The ValidatingAdmissionPolicy in admission-policy.yaml further pins
+# which ServiceAccounts those bindings may name.
+#
+# rolebindings: create (provision) + deletecollection (the label-selected
+# DeleteAllOf teardown); deletecollection is a distinct verb `delete` does not imply.
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - rolebindings
+  verbs:
+  - create
+  - delete
+  - deletecollection
+# roles: delete-only, solely to reap any legacy per-namespace Roles a
+# pre-unification controller authored before this revision started binding
+# ClusterRoles. The controller never creates a Role.
 - apiGroups:
   - rbac.authorization.k8s.io
   resources:
   - roles
-  - rolebindings
   verbs:
-  - get
-  - list
-  - watch
-  - create
-  - update
-  - patch
   - delete
-  # deletecollection backs the offboard teardown (DeleteNamespaceRBAC's
-  # label-selected DeleteAllOf); it is a distinct RBAC verb that `delete` does
-  # not imply, but adds no real capability here since `delete`+`list` already do.
   - deletecollection
-  - bind
-  - escalate
-# Bind ONLY the two fixed workload ClusterRoles into tenant namespaces (via the
-# RoleBindings the controller provisions) so the executor/buildermgr can manage
-# workloads there. resourceNames-scoped: the controller cannot bind any other
-# ClusterRole, so it cannot escalate itself to arbitrary cluster permissions.
+# Bind ONLY the fixed-name tenant-workload ClusterRoles into tenant namespaces (via
+# the RoleBindings the controller provisions): the executor/buildermgr workload
+# roles AND the fetcher/builder/fetcher-websocket function-pod read roles.
+# resourceNames-scoped: the controller cannot bind any other ClusterRole, so it
+# cannot escalate itself to arbitrary cluster permissions.
 - apiGroups:
   - rbac.authorization.k8s.io
   resources:
   - clusterroles
   verbs:
   - bind
+  # Single-sourced from _tenant-workload-roles.tpl (same list the ClusterRoles and
+  # the admission policy derive from), so the bind-scope cannot drift from them.
   resourceNames:
-  - fission-executor-tenant-workload
-  - fission-buildermgr-tenant-workload
+{{- range $r := (include "fission.tenantWorkloadRoles" . | fromYamlArray) }}
+  - {{ $r.name }}
+{{- end }}
 - apiGroups:
   - ""
   resources:
