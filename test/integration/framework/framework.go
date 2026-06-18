@@ -122,7 +122,7 @@ func (f *Framework) Logger() logr.Logger { return f.logger }
 // internal listener — the one hosting /fission-function/<ns>/<name>
 // after the GHSA-3g33-6vg6-27m8 split. Tests that bypass the
 // `RouterClient` HTTP helpers (e.g. websocket dials done via
-// gorilla/websocket) should compose their URL from this base.
+// coder/websocket) should compose their URL from this base.
 func (f *Framework) RouterInternalBaseURL() string { return f.routerInternal }
 
 // InternalAuthSecret returns the master HMAC key the framework uses

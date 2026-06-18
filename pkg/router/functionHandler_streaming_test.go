@@ -16,7 +16,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gorilla/websocket"
+	"github.com/coder/websocket"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -244,15 +244,14 @@ func TestStreamingKeepaliveRetapsPod(t *testing.T) {
 // applies to a socket without observable body reads).
 func TestWebSocketRespectsMaxDuration(t *testing.T) {
 	t.Parallel()
-	upgrader := websocket.Upgrader{}
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		conn, err := upgrader.Upgrade(w, r, nil)
+		conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
 		if err != nil {
 			return
 		}
-		defer conn.Close()
+		defer func() { _ = conn.CloseNow() }()
 		for {
-			if _, _, err := conn.ReadMessage(); err != nil {
+			if _, _, err := conn.Read(r.Context()); err != nil {
 				return
 			}
 		}
@@ -266,15 +265,18 @@ func TestWebSocketRespectsMaxDuration(t *testing.T) {
 	router := httptest.NewServer(http.HandlerFunc(fh.handler))
 	defer router.Close()
 
+	dialCtx, dialCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer dialCancel()
 	wsURL := "ws://" + strings.TrimPrefix(router.URL, "http://") + "/"
-	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	conn, _, err := websocket.Dial(dialCtx, wsURL, nil)
 	require.NoError(t, err)
-	defer conn.Close()
+	defer func() { _ = conn.CloseNow() }()
 
 	// Idle socket: no messages. The 1s ceiling must close it. Bound the read so a
 	// failure to enforce the ceiling fails the test instead of hanging.
-	require.NoError(t, conn.SetReadDeadline(time.Now().Add(3*time.Second)))
-	_, _, err = conn.ReadMessage()
+	readCtx, readCancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer readCancel()
+	_, _, err = conn.Read(readCtx)
 	require.Error(t, err, "socket must be closed at the max-duration ceiling")
 }
 
@@ -337,19 +339,18 @@ func TestStreamingSurvivesPastFunctionTimeout(t *testing.T) {
 func TestWebSocketSurvivesIdlePastFunctionTimeout(t *testing.T) {
 	t.Parallel()
 
-	upgrader := websocket.Upgrader{}
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		conn, err := upgrader.Upgrade(w, r, nil)
+		conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
 		if err != nil {
 			return
 		}
-		defer conn.Close()
+		defer func() { _ = conn.CloseNow() }()
 		for {
-			mt, msg, err := conn.ReadMessage()
+			mt, msg, err := conn.Read(r.Context())
 			if err != nil {
 				return
 			}
-			if err := conn.WriteMessage(mt, msg); err != nil {
+			if err := conn.Write(r.Context(), mt, msg); err != nil {
 				return
 			}
 		}
@@ -361,14 +362,21 @@ func TestWebSocketSurvivesIdlePastFunctionTimeout(t *testing.T) {
 	router := httptest.NewServer(http.HandlerFunc(fh.handler))
 	defer router.Close()
 
+	dialCtx, dialCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer dialCancel()
 	wsURL := "ws://" + strings.TrimPrefix(router.URL, "http://") + "/"
-	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	conn, _, err := websocket.Dial(dialCtx, wsURL, nil)
 	require.NoError(t, err)
-	defer conn.Close()
+	defer func() { _ = conn.CloseNow() }()
+
+	// One context for all read/writes; it outlives the idle sleep below but
+	// bounds any single op so a regression fails instead of hanging.
+	wsCtx, wsCancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer wsCancel()
 
 	// First echo.
-	require.NoError(t, conn.WriteMessage(websocket.TextMessage, []byte("ping-1")))
-	_, got, err := conn.ReadMessage()
+	require.NoError(t, conn.Write(wsCtx, websocket.MessageText, []byte("ping-1")))
+	_, got, err := conn.Read(wsCtx)
 	require.NoError(t, err)
 	require.Equal(t, "ping-1", string(got))
 
@@ -376,8 +384,8 @@ func TestWebSocketSurvivesIdlePastFunctionTimeout(t *testing.T) {
 	// (non-streaming) proxy would have torn the connection down by now.
 	time.Sleep(1500 * time.Millisecond)
 
-	require.NoError(t, conn.WriteMessage(websocket.TextMessage, []byte("ping-2")))
-	_, got, err = conn.ReadMessage()
+	require.NoError(t, conn.Write(wsCtx, websocket.MessageText, []byte("ping-2")))
+	_, got, err = conn.Read(wsCtx)
 	require.NoError(t, err)
 	require.Equal(t, "ping-2", string(got), "socket must survive idle past FunctionTimeout")
 }

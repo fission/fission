@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gorilla/websocket"
+	"github.com/coder/websocket"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -137,25 +137,26 @@ func TestStreamingProtocols(t *testing.T) {
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			dctx, dcancel := context.WithTimeout(ctx, 15*time.Second)
 			defer dcancel()
-			conn, _, err := websocket.DefaultDialer.DialContext(dctx, wsURL, signedHeader())
+			conn, _, err := websocket.Dial(dctx, wsURL, &websocket.DialOptions{HTTPHeader: signedHeader()})
 			if !assert.NoErrorf(c, err, "websocket dial %q", wsURL) {
 				return
 			}
-			defer func() { _ = conn.Close() }()
+			defer func() { _ = conn.CloseNow() }()
 
 			for _, msg := range turns {
-				if err := conn.SetReadDeadline(time.Now().Add(10 * time.Second)); !assert.NoError(c, err) {
-					return
-				}
-				if err := conn.WriteMessage(websocket.TextMessage, []byte(msg)); !assert.NoErrorf(c, err, "write %q", msg) {
+				// coder/websocket carries the per-turn read deadline on the context.
+				ioCtx, iocancel := context.WithTimeout(ctx, 10*time.Second)
+				if err := conn.Write(ioCtx, websocket.MessageText, []byte(msg)); !assert.NoErrorf(c, err, "write %q", msg) {
+					iocancel()
 					return
 				}
 				// Skip any "Error" warmup-placeholder frames the env may emit
 				// before the real echo.
 				var got string
 				for {
-					_, m, rerr := conn.ReadMessage()
+					_, m, rerr := conn.Read(ioCtx)
 					if !assert.NoErrorf(c, rerr, "read echo for %q", msg) {
+						iocancel()
 						return
 					}
 					if string(m) == "Error" {
@@ -164,6 +165,7 @@ func TestStreamingProtocols(t *testing.T) {
 					got = string(m)
 					break
 				}
+				iocancel()
 				if !assert.Equalf(c, msg, got, "multi-turn echo for %q over the same socket", msg) {
 					return
 				}
