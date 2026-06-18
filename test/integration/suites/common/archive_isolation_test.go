@@ -108,6 +108,12 @@ func TestArchiveNamespaceIsolation(t *testing.T) {
 	require.Error(t, clientA.Delete(ctx, idB), "tenant A must not delete tenant B's archive")
 	assert.Equal(t, http.StatusOK, info(masterClient, idB), "B's archive must survive A's denied delete")
 
+	// Path traversal cannot reach another tenant's archive: the crafted id cleans
+	// to B's path but is prefixed with A's namespace (and A signs it with its own key).
+	crafted := strings.Replace(idB, "_tenant_/"+nsB+"/", "_tenant_/"+nsA+"/../"+nsB+"/", 1)
+	require.NotEqual(t, idB, crafted, "craft must differ from the real id")
+	assert.Equal(t, http.StatusNotFound, info(clientA, crafted), "traversal must not reach B's archive")
+
 	// A tenant can download its own archive end-to-end.
 	dst := filepath.Join(t.TempDir(), "dl.bin")
 	require.NoError(t, clientA.Download(ctx, idA, dst))
