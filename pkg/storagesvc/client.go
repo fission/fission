@@ -70,9 +70,11 @@ func MakeStorageClient(logger logr.Logger, storage Storage) (*StorageClient, err
 	}, nil
 }
 
-// putFile writes the file on the storage
-func (client *StorageClient) putFile(file multipart.File, fileSize int64) (string, error) {
-	uploadName, err := client.config.storage.getUploadFileName()
+// putFile writes the file on the storage. namespace, when non-empty, scopes the
+// generated id to that tenant (see getUploadFileName / authz.go); empty yields a
+// legacy unscoped id.
+func (client *StorageClient) putFile(file multipart.File, fileSize int64, namespace string) (string, error) {
+	uploadName, err := client.config.storage.getUploadFileName(namespace)
 	if err != nil {
 		return "", err
 	}

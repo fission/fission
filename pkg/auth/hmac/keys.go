@@ -209,20 +209,27 @@ func DecodeKeyFromEnv(s string) []byte {
 // caller can only produce a valid signature with the namespace key it actually
 // holds, so claiming a different namespace just makes the verifier derive a key
 // the caller cannot sign with → rejection.
+//
+// Candidates are labeled with the principal they authenticate so a handler can
+// authorize on the namespace whose key actually matched (AuthenticatedNamespace),
+// not the raw header: an ns-key match reports the header namespace, a master-key
+// match reports "" (unrestricted) regardless of any header the caller set — so a
+// master holder is never mis-scoped to a namespace it merely claimed.
 func ServiceVerifierNamespaceFromHeader(masterSecret, masterOldSecret []byte, service Service, opts VerifierOpts) func(http.Handler) http.Handler {
-	opts.KeysFromRequest = func(r *http.Request) [][]byte {
-		keys := make([][]byte, 0, 4)
+	opts.KeysFromRequestLabeled = func(r *http.Request) []LabeledKey {
+		keys := make([]LabeledKey, 0, 4)
 		if ns := r.Header.Get(HeaderNamespace); ns != "" {
 			keys = append(keys,
-				DeriveServiceKeyNS(masterSecret, service, ns),
-				DeriveServiceKeyNS(masterOldSecret, service, ns),
+				LabeledKey{Namespace: ns, Key: DeriveServiceKeyNS(masterSecret, service, ns)},
+				LabeledKey{Namespace: ns, Key: DeriveServiceKeyNS(masterOldSecret, service, ns)},
 			)
 		}
 		// Dual-accept the master-derived key for pre-migration clients that sign
-		// master-derived and send no namespace header.
+		// master-derived and send no namespace header. Labeled "" (unrestricted):
+		// only the control plane holds the master.
 		keys = append(keys,
-			DeriveServiceKey(masterSecret, service),
-			DeriveServiceKey(masterOldSecret, service),
+			LabeledKey{Namespace: "", Key: DeriveServiceKey(masterSecret, service)},
+			LabeledKey{Namespace: "", Key: DeriveServiceKey(masterOldSecret, service)},
 		)
 		return keys
 	}

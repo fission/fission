@@ -34,7 +34,10 @@ type (
 		dial() (objectStore, error)
 		getSubDir() string
 		getContainerName() string
-		getUploadFileName() (string, error)
+		// getUploadFileName returns the storage name for a new upload. When
+		// namespace is non-empty the id is namespace-scoped (carries the tenant
+		// marker + namespace); an empty namespace yields the legacy unscoped id.
+		getUploadFileName(namespace string) (string, error)
 	}
 
 	// StorageService is a struct to hold all things for storage service
@@ -68,6 +71,21 @@ func (ss *StorageService) listItems(w http.ResponseWriter, r *http.Request) {
 		logger.Error(err, "error getting items from storage")
 		return
 	}
+	// A namespace-scoped caller sees only its own archives; an unrestricted
+	// (master) caller — the pruner, the CLI — sees everything, unchanged.
+	// Deliberately stricter than authorizedFor: list does NOT surface legacy/
+	// unscoped archives to a tenant (it shows only what the tenant owns), whereas
+	// get/delete/info grandfather legacy ids. The asymmetry leaks nothing — list
+	// is the more restrictive direction.
+	if authNS, _ := hmacauth.AuthenticatedNamespace(r.Context()); authNS != "" {
+		scoped := make([]string, 0, len(archivesInStorage))
+		for _, id := range archivesInStorage {
+			if archiveNamespace(id) == authNS {
+				scoped = append(scoped, id)
+			}
+		}
+		archivesInStorage = scoped
+	}
 	logger.V(1).Info("archives in storage", "archives", archivesInStorage)
 
 	// respond with the list of items
@@ -91,6 +109,7 @@ func (ss *StorageService) uploadHandler(w http.ResponseWriter, r *http.Request) 
 	err := r.ParseMultipartForm(0)
 	if err != nil {
 		http.Error(w, "failed to parse request", http.StatusBadRequest)
+		return
 	}
 	file, handler, err := r.FormFile("uploadfile")
 	if err != nil {
@@ -124,7 +143,17 @@ func (ss *StorageService) uploadHandler(w http.ResponseWriter, r *http.Request) 
 	logger.V(1).Info("handling upload",
 		"filename", handler.Filename)
 
-	id, err := ss.storageClient.putFile(file, int64(fileSize))
+	// authNS is the namespace whose key verified the request (empty = master /
+	// unrestricted), set by the verifier — never a raw header. A non-empty value
+	// scopes the new archive's id to that tenant. Validate it before it is joined
+	// into a storage path (load-bearing for S3, which has no os.Root confinement).
+	authNS, _ := hmacauth.AuthenticatedNamespace(r.Context())
+	if authNS != "" && !validNamespaceLabel(authNS) {
+		http.Error(w, "invalid namespace", http.StatusBadRequest)
+		return
+	}
+
+	id, err := ss.storageClient.putFile(file, int64(fileSize), authNS)
 	if err != nil {
 		logger.Error(err, "error saving uploaded file", "filename", handler.Filename)
 		http.Error(w, "Error saving uploaded file", http.StatusInternalServerError)
@@ -170,9 +199,17 @@ func (ss *StorageService) deleteHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// A namespace-scoped caller may only delete its own (or legacy) archives.
+	// 404, not 403, so it cannot probe whether another tenant's archive exists.
+	if !ss.authorizedFor(r, fileId) {
+		http.Error(w, "Error deleting item: not found", http.StatusNotFound)
+		return
+	}
+
 	filesize, err := ss.storageClient.getFileSize(fileId)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
 	}
 
 	err = ss.storageClient.removeFileByID(fileId)
@@ -197,6 +234,13 @@ func (ss *StorageService) downloadHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	// A namespace-scoped caller may only download its own (or legacy) archives.
+	// 404, not 403, so it cannot probe whether another tenant's archive exists.
+	if !ss.authorizedFor(r, fileId) {
+		http.Error(w, "Error retrieving item: not found", http.StatusNotFound)
+		return
+	}
+
 	// Get the file, open it, and stream it to the response.
 	err = ss.storageClient.copyFileToStream(fileId, w)
 	if err != nil {
@@ -218,6 +262,13 @@ func (ss *StorageService) infoHandler(w http.ResponseWriter, r *http.Request) {
 	fileID, err := ss.getIdFromRequest(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// A namespace-scoped caller may only probe its own (or legacy) archives;
+	// deny as 404 (identical to a real miss) so it is not an existence oracle.
+	if !ss.authorizedFor(r, fileID) {
+		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
 

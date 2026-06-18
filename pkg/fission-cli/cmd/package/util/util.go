@@ -22,7 +22,12 @@ import (
 	"github.com/fission/fission/pkg/utils/uuid"
 )
 
-func UploadArchiveFile(ctx context.Context, client cmd.Client, fileName string) (*fv1.Archive, error) {
+// UploadArchiveFile uploads fileName to storagesvc and returns the resulting
+// Archive. When namespace is non-empty the upload is scoped to that tenant, so
+// the archive id carries the namespace and storagesvc isolates it from other
+// tenants; an empty namespace uploads master-derived/unscoped (the legacy form,
+// for callers without an unambiguous owning namespace such as spec apply).
+func UploadArchiveFile(ctx context.Context, client cmd.Client, fileName, namespace string) (*fv1.Archive, error) {
 	var archive fv1.Archive
 
 	size, err := utils.FileSize(fileName)
@@ -47,7 +52,10 @@ func UploadArchiveFile(ctx context.Context, client cmd.Client, fileName string) 
 			return nil, fmt.Errorf("error reading internal-auth secret: %w", err)
 		}
 
-		storageClient := storageSvcClient.MakeClient(storagesvcURL.String(), hmacSecret)
+		// Scope the upload to the owning namespace when known, so the archive id
+		// is namespace-tagged and storagesvc isolates it; falls back to
+		// master-derived/unscoped for an empty namespace.
+		storageClient := storageSvcClient.MakeClientNS(storagesvcURL.String(), hmacSecret, namespace)
 		// TODO add a progress bar
 		id, err := storageClient.Upload(ctx, fileName, nil)
 		if err != nil {

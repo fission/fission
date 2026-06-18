@@ -6,6 +6,7 @@ package hmac
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	"net/http"
@@ -15,6 +16,34 @@ import (
 
 	"github.com/go-logr/logr"
 )
+
+// LabeledKey is a candidate verification key tagged with the principal it
+// authenticates. When a request verifies against a LabeledKey, that Namespace is
+// the request's authenticated principal — recoverable downstream via
+// AuthenticatedNamespace. An empty Namespace means an unrestricted principal
+// (e.g. a master-derived key held only by the control plane), so a holder of it
+// is never scoped to a namespace it merely claimed in a header.
+type LabeledKey struct {
+	Namespace string
+	Key       []byte
+}
+
+// authNamespaceCtxKey is the context key under which the verifier stores the
+// authenticated principal namespace on a successful match. Unexported so only
+// this package can set it; readers use AuthenticatedNamespace.
+type authNamespaceCtxKeyType struct{}
+
+var authNamespaceCtxKey authNamespaceCtxKeyType
+
+// AuthenticatedNamespace returns the namespace whose key verified the request,
+// as recorded by the verifier middleware on success. ok is false when no
+// verifier ran or enforcement was off; ns == "" with ok == true is an
+// unrestricted (master) principal. Handlers treat both the unset case and ""
+// as unrestricted.
+func AuthenticatedNamespace(ctx context.Context) (ns string, ok bool) {
+	ns, ok = ctx.Value(authNamespaceCtxKey).(string)
+	return ns, ok
+}
 
 // DefaultMaxBodyBytes caps the size of a request body the verifier will buffer
 // in memory. 256 MiB comfortably exceeds any realistic Fission archive while
@@ -50,22 +79,26 @@ type VerifierOpts struct {
 	// care about audit logs don't crash. Rejection log lines deliberately
 	// omit the signature and timestamp values to avoid log poisoning.
 	Logger logr.Logger
-	// KeysFromRequest, when set, supplies the ordered candidate keys to try for
-	// each request — used by namespace-scoped verifiers that derive the key from
-	// a request header (e.g. ServiceVerifierNamespaceFromHeader). It REPLACES
-	// Secret/OldSecret for the verification step; Secret is then ignored for
-	// key selection but a non-nil KeysFromRequest still enables enforcement.
-	// Empty/nil candidate keys are skipped. Keep it cheap — it runs per request.
-	KeysFromRequest func(*http.Request) [][]byte
+	// KeysFromRequestLabeled, when set, supplies the ordered candidate keys to try
+	// for each request, each tagged with the principal namespace recorded (via
+	// AuthenticatedNamespace) when that candidate verifies — used by namespace-
+	// scoped verifiers that derive the key from a request header (e.g.
+	// ServiceVerifierNamespaceFromHeader). It REPLACES Secret/OldSecret for key
+	// selection, and a non-nil hook enables enforcement. Empty/nil candidate keys
+	// are skipped; an empty namespace label is an unrestricted principal. Lets a
+	// multi-tenant verifier authorize on the namespace whose key actually matched,
+	// not a caller-controlled header. Keep it cheap — it runs per request.
+	KeysFromRequestLabeled func(*http.Request) []LabeledKey
 }
 
-// candidateKeys returns the ordered keys to try for a request: the per-request
-// hook when set, else the static active+rotation pair.
-func (o VerifierOpts) candidateKeys(r *http.Request) [][]byte {
-	if o.KeysFromRequest != nil {
-		return o.KeysFromRequest(r)
+// labeledCandidates returns the ordered candidate keys to try for a request,
+// each tagged with the principal namespace to record on a match: the per-request
+// labeled hook when set, else the static active+rotation pair (unrestricted).
+func (o VerifierOpts) labeledCandidates(r *http.Request) []LabeledKey {
+	if o.KeysFromRequestLabeled != nil {
+		return o.KeysFromRequestLabeled(r)
 	}
-	return [][]byte{o.Secret, o.OldSecret}
+	return []LabeledKey{{Key: o.Secret}, {Key: o.OldSecret}}
 }
 
 // Replay note: a signature presented twice within the SkewSec window will pass
@@ -99,7 +132,7 @@ func Verifier(opts VerifierOpts) func(http.Handler) http.Handler {
 			// (backwards-compat short-circuit). In pass-through mode we
 			// deliberately do NOT bound the body — the downstream handler's
 			// existing limits apply unchanged.
-			if len(opts.Secret) == 0 && opts.KeysFromRequest == nil {
+			if len(opts.Secret) == 0 && opts.KeysFromRequestLabeled == nil {
 				next.ServeHTTP(w, r)
 				return
 			}
@@ -175,9 +208,13 @@ func Verifier(opts VerifierOpts) func(http.Handler) http.Handler {
 			// order (active, then rotation, or the per-request namespace keys);
 			// constant-time compare happens inside Verify per candidate.
 			ru := r.URL.RequestURI()
-			for _, key := range opts.candidateKeys(r) {
-				if len(key) > 0 && Verify(key, r.Method, ru, body, tsNum, sig) {
-					next.ServeHTTP(w, r)
+			for _, c := range opts.labeledCandidates(r) {
+				if len(c.Key) > 0 && Verify(c.Key, r.Method, ru, body, tsNum, sig) {
+					// Record the principal whose key matched so downstream
+					// handlers authorize on the authenticated namespace rather
+					// than a caller-controlled header.
+					ctx := context.WithValue(r.Context(), authNamespaceCtxKey, c.Namespace)
+					next.ServeHTTP(w, r.WithContext(ctx))
 					return
 				}
 			}
