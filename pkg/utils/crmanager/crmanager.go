@@ -12,6 +12,7 @@ package crmanager
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strconv"
 
@@ -21,10 +22,32 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
+	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
 	"github.com/fission/fission/pkg/tenant"
 	"github.com/fission/fission/pkg/utils"
 )
+
+// NewTriggerManager is the shared bring-up for the trigger subsystems
+// (timer/kubewatcher/mqtrigger): resolve the Fission + REST clients, wait for the
+// Function CRDs to be served, and build the leader-elected Manager. lockName is the
+// per-subsystem Lease name passed to NewLeaderElected. Subsystems do their own
+// extra setup (e.g. kubewatcher's Kubernetes client, mqtrigger's queue) and then
+// register their reconciler on the returned Manager.
+func NewTriggerManager(ctx context.Context, clientGen crd.ClientGeneratorInterface, lockName string, logger logr.Logger) (ctrl.Manager, error) {
+	fissionClient, err := clientGen.GetFissionClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get fission client: %w", err)
+	}
+	restConfig, err := clientGen.GetRestConfig()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get rest config: %w", err)
+	}
+	if err := crd.WaitForFunctionCRDs(ctx, logger, fissionClient); err != nil {
+		return nil, fmt.Errorf("error waiting for CRDs: %w", err)
+	}
+	return NewLeaderElected(restConfig, lockName, logger)
+}
 
 // NewLeaderElected builds a Manager whose only job is native leader election.
 // Its metrics and health-probe servers are disabled (the subsystem serves its

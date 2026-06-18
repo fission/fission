@@ -56,15 +56,15 @@ func DeleteNamespaceRBAC(ctx context.Context, c client.Client, namespace string)
 		client.InNamespace(namespace),
 		client.MatchingLabels{managedByLabelKey: managedByValue},
 	}
-	// RoleBindings before Roles before ServiceAccounts (reverse of creation). The
-	// label selector means only controller-managed objects are removed — never
-	// chart- or user-managed RBAC. DeleteAllOf issues a deletecollection request,
-	// so the tenant-controller ClusterRole MUST grant `deletecollection` on these
-	// three resources (charts/.../tenant-controller/rbac.yaml) — `delete` alone is
-	// insufficient and the finalizer would wedge on a forbidden error. Role stays
-	// in the sweep only to reap any legacy per-namespace Roles a pre-unification
-	// controller authored before this revision started binding ClusterRoles.
-	for _, proto := range []client.Object{&rbacv1.RoleBinding{}, &rbacv1.Role{}, &corev1.ServiceAccount{}} {
+	// RoleBindings before ServiceAccounts (reverse of creation). The label selector
+	// means only controller-managed objects are removed — never chart- or
+	// user-managed RBAC. DeleteAllOf issues a deletecollection request, so the
+	// tenant-controller ClusterRole MUST grant `deletecollection` on these resources
+	// (charts/.../tenant-controller/rbac.yaml) — `delete` alone is insufficient and
+	// the finalizer would wedge on a forbidden error. The controller authors no
+	// Role of its own (it binds the fixed-name *-tenant-workload ClusterRoles), so
+	// Roles are not in the sweep.
+	for _, proto := range []client.Object{&rbacv1.RoleBinding{}, &corev1.ServiceAccount{}} {
 		if err := c.DeleteAllOf(ctx, proto, opts...); err != nil && !apierrors.IsNotFound(err) {
 			return fmt.Errorf("deleting %T in %s: %w", proto, namespace, err)
 		}

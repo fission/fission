@@ -77,6 +77,11 @@ type (
 var nsResolver *NamespaceResolver
 
 func init() {
+	// Build the global resolver from the env at package load. Deliberately does NO
+	// logging here: init() runs before main() configures the logger (zap setup), so
+	// an init-time log would land on the default logger and couples state setup to
+	// logging. Subsystems that want the namespace set at startup log it themselves
+	// from their own (configured) logger via DefaultNSResolver().
 	nsResolver = &NamespaceResolver{
 		FunctionNamespace: os.Getenv(ENV_FUNCTION_NAMESPACE),
 		BuilderNamespace:  os.Getenv(ENV_BUILDER_NAMESPACE),
@@ -84,11 +89,6 @@ func init() {
 		fissionResourceNS: GetNamespaces(),
 		Logger:            loggerfactory.GetLogger(),
 	}
-
-	nsResolver.Logger.V(1).Info("namespaces", "function_namespace", nsResolver.FunctionNamespace,
-		"builder_namespace", nsResolver.BuilderNamespace,
-		"default_namespace", nsResolver.DefaultNamespace,
-		"fission_resource_namespace", listNamespaces(nsResolver.FissionResourceNamespaces()))
 }
 
 // listNamespaces => convert namespaces from map to slice

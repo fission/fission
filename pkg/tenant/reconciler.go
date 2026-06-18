@@ -5,10 +5,10 @@
 // Package tenant implements the fission-bundle --tenantController subsystem: the
 // lifecycle controller for multi-namespace tenancy (docs/multiple-namespace).
 // It reconciles FissionTenant CRs (and Namespaces labelled fission.io/enabled)
-// into the live resource-namespace set, provisions per-namespace RBAC and
-// service accounts for the fetcher/builder (tearing them down on offboard via a
-// finalizer), and reports readiness. Per-namespace HMAC auth-key provisioning is
-// layered on in a later phase.
+// into the live resource-namespace set, provisions per-namespace RBAC, service
+// accounts, and the derived HMAC auth-key Secret for the fetcher/builder (tearing
+// them down on offboard via a finalizer), and reports readiness. In cluster mode
+// it auto-onboards every namespace instead of requiring an explicit FissionTenant.
 package tenant
 
 import (
@@ -60,7 +60,7 @@ const (
 // reports a Ready condition. It runs on the leader-elected --tenantController
 // Manager (it writes status). The resolver drive is additive over the
 // env-seeded set (utils.GetNamespaces) so an empty tenant list never wipes the
-// env default; the env→CR source flip is a later phase.
+// env default.
 type TenantReconciler struct {
 	logger   logr.Logger
 	client   client.Client
