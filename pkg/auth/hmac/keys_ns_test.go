@@ -154,6 +154,69 @@ func TestServiceVerifierNamespaceFromHeader(t *testing.T) {
 	assert.Equal(t, 200, serve(signed(DeriveServiceKey(master, ServiceStoragesvc), "")))
 }
 
+// TestVerifierReportsPrincipal locks the property storagesvc authorization
+// relies on: the namespace exposed via AuthenticatedNamespace is the one whose
+// key actually verified, NOT a caller-controlled header. This is the case a
+// "trust the post-verifier header" approach gets wrong — a master holder can set
+// any header — and is exactly why the verifier labels candidates.
+func TestVerifierReportsPrincipal(t *testing.T) {
+	master := []byte(testMaster)
+	now := func() time.Time { return time.Unix(1715000123, 0) }
+
+	var gotNS string
+	var gotOK bool
+	handler := ServiceVerifierNamespaceFromHeader(master, nil, ServiceStoragesvc, VerifierOpts{SkewSec: 60, Now: now})(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			gotNS, gotOK = AuthenticatedNamespace(r.Context())
+			w.WriteHeader(200)
+		}))
+
+	signed := func(key []byte, nsHeader string) *http.Request {
+		rr := httptest.NewRecorder()
+		req := httptest.NewRequest("GET", "/v1/archive?id=x", nil)
+		_, err := NewSigner(key, &recordingTransport{rr: rr}, now).RoundTrip(req)
+		require.NoError(t, err)
+		req2 := signedRequestFromRecorder(t, rr)
+		if nsHeader != "" {
+			req2.Header.Set(HeaderNamespace, nsHeader)
+		}
+		return req2
+	}
+	serve := func(req *http.Request) int {
+		gotNS, gotOK = "", false
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+		return rr.Code
+	}
+
+	t.Run("ns-key holder → principal is its own namespace", func(t *testing.T) {
+		require.Equal(t, 200, serve(signed(DeriveServiceKeyNS(master, ServiceStoragesvc, "team-a"), "team-a")))
+		assert.True(t, gotOK)
+		assert.Equal(t, "team-a", gotNS)
+	})
+
+	t.Run("master holder, no header → unrestricted principal", func(t *testing.T) {
+		require.Equal(t, 200, serve(signed(DeriveServiceKey(master, ServiceStoragesvc), "")))
+		assert.True(t, gotOK)
+		assert.Empty(t, gotNS, "master principal is unrestricted")
+	})
+
+	t.Run("master holder spoofing a header is NOT mis-scoped to it", func(t *testing.T) {
+		// Master signs master-derived but sets header=team-b. The verifier accepts
+		// (the master key matches) but must report "" — the matched key's label —
+		// never the spoofed header.
+		require.Equal(t, 200, serve(signed(DeriveServiceKey(master, ServiceStoragesvc), "team-b")))
+		assert.True(t, gotOK)
+		assert.Empty(t, gotNS, "must reflect the matched master key, not the spoofed header")
+	})
+
+	t.Run("rejected request never reaches the handler", func(t *testing.T) {
+		// Tenant team-a spoofing header=team-b → 401; the principal is never set.
+		require.Equal(t, 401, serve(signed(DeriveServiceKeyNS(master, ServiceStoragesvc, "team-a"), "team-b")))
+		assert.False(t, gotOK, "handler must not run on rejection")
+	})
+}
+
 func TestVerifierFromKeyRoundTrip(t *testing.T) {
 	// A pod that holds ONLY a derived ns key (never the master) verifies with it.
 	now := func() time.Time { return time.Unix(1715000123, 0) }
