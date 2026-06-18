@@ -7,7 +7,6 @@ package utils
 import (
 	"maps"
 	"os"
-	"strconv"
 	"strings"
 	"sync"
 
@@ -23,6 +22,31 @@ const (
 	ENV_BUILDER_NAMESPACE    string = "FISSION_BUILDER_NAMESPACE"
 	ENV_DEFAULT_NAMESPACE    string = "FISSION_DEFAULT_NAMESPACE"
 	ENV_ADDITIONAL_NAMESPACE string = "FISSION_RESOURCE_NAMESPACES"
+	// ENV_TENANCY_MODE selects the multi-namespace tenancy posture (see
+	// TenancyMode). The chart sets it from tenancy.mode.
+	ENV_TENANCY_MODE string = "FISSION_TENANCY_MODE"
+)
+
+// TenancyModeValue is the multi-namespace tenancy posture (chart value
+// tenancy.mode → env FISSION_TENANCY_MODE). See docs/multiple-namespace/prd.md §4.
+type TenancyModeValue string
+
+const (
+	// TenancyStatic (default): Fission resources only in the env-seeded namespace
+	// set; per-namespace Roles rendered by Helm; no tenant controller.
+	TenancyStatic TenancyModeValue = "static"
+	// TenancyDynamic: namespaces onboarded at runtime via FissionTenant CRs; the
+	// tenant controller provisions per-namespace fetcher/builder RBAC + derived
+	// HMAC keys; Fission-CRD caches go cluster-wide and reconcilers filter to the
+	// live tenant set; Tier-B (Secrets/ConfigMaps/workloads) stays per-namespace.
+	TenancyDynamic TenancyModeValue = "dynamic"
+	// TenancyCluster: opt-in trusted-cluster mode. The tenant controller
+	// auto-onboards every function-bearing namespace (no FissionTenant CR), so
+	// fetcher/builder pods keep their narrow per-namespace RBAC + per-namespace
+	// keys; the control plane (executor/buildermgr) reads Secrets/ConfigMaps and
+	// manages workloads cluster-wide for operational simplicity. Trades
+	// control-plane isolation for zero-ceremony coverage.
+	TenancyCluster TenancyModeValue = "cluster"
 )
 
 type (
@@ -53,6 +77,11 @@ type (
 var nsResolver *NamespaceResolver
 
 func init() {
+	// Build the global resolver from the env at package load. Deliberately does NO
+	// logging here: init() runs before main() configures the logger (zap setup), so
+	// an init-time log would land on the default logger and couples state setup to
+	// logging. Subsystems that want the namespace set at startup log it themselves
+	// from their own (configured) logger via DefaultNSResolver().
 	nsResolver = &NamespaceResolver{
 		FunctionNamespace: os.Getenv(ENV_FUNCTION_NAMESPACE),
 		BuilderNamespace:  os.Getenv(ENV_BUILDER_NAMESPACE),
@@ -60,11 +89,6 @@ func init() {
 		fissionResourceNS: GetNamespaces(),
 		Logger:            loggerfactory.GetLogger(),
 	}
-
-	nsResolver.Logger.V(1).Info("namespaces", "function_namespace", nsResolver.FunctionNamespace,
-		"builder_namespace", nsResolver.BuilderNamespace,
-		"default_namespace", nsResolver.DefaultNamespace,
-		"fission_resource_namespace", listNamespaces(nsResolver.FissionResourceNamespaces()))
 }
 
 // listNamespaces => convert namespaces from map to slice
@@ -250,25 +274,63 @@ func DefaultNSResolver() *NamespaceResolver {
 	return nsResolver
 }
 
-// DynamicNamespacesEnabled reports whether the dynamic multi-namespace watch
-// model is on (FISSION_DYNAMIC_NAMESPACES=true). When on, Fission-CRD caches are
-// cluster-wide and reconcilers filter to the live tenant set, so namespaces can
-// be onboarded/offboarded without a control-plane restart. Default off: the
-// per-namespace caches and behaviour are unchanged.
+// TenancyMode reports the configured multi-namespace tenancy posture from
+// FISSION_TENANCY_MODE. Unset or unrecognised → TenancyStatic (the safe default).
+func TenancyMode() TenancyModeValue {
+	switch TenancyModeValue(strings.ToLower(os.Getenv(ENV_TENANCY_MODE))) {
+	case TenancyDynamic:
+		return TenancyDynamic
+	case TenancyCluster:
+		return TenancyCluster
+	default:
+		return TenancyStatic
+	}
+}
+
+// DynamicNamespacesEnabled reports whether the dynamic per-namespace onboarding
+// model is on (tenancy.mode=dynamic). When on, Fission-CRD caches are cluster-wide
+// and reconcilers filter to the live tenant set, so namespaces can be
+// onboarded/offboarded without a control-plane restart. The shared cluster-wide
+// Fission-CRD watch is used by both dynamic and cluster mode (see
+// CrdWatchClusterWide); only the per-namespace Tier-B + tenant-membership
+// filtering is dynamic-specific.
 func DynamicNamespacesEnabled() bool {
-	v, _ := strconv.ParseBool(os.Getenv("FISSION_DYNAMIC_NAMESPACES"))
-	return v
+	return TenancyMode() == TenancyDynamic
+}
+
+// ClusterTenancyEnabled reports whether the opt-in trusted-cluster mode is on
+// (tenancy.mode=cluster). See TenancyCluster.
+func ClusterTenancyEnabled() bool {
+	return TenancyMode() == TenancyCluster
+}
+
+// CrdWatchClusterWide reports whether Fission-CRD informer caches should watch
+// all namespaces (Tier A). True in both dynamic and cluster mode; in dynamic mode
+// a tenant-membership predicate still filters reconciles to the onboarded set.
+func CrdWatchClusterWide() bool {
+	return TenancyMode() != TenancyStatic
+}
+
+// PerNamespaceKeysEnabled reports whether fetcher/builder pods use per-namespace
+// derived HMAC keys (rather than the master-derived service key). True in both
+// dynamic and cluster mode: the tenant controller provisions a per-namespace
+// derived-key Secret for every onboarded namespace in both, so fetcher/builder
+// stay least-privilege on the HMAC axis regardless of the control-plane posture.
+func PerNamespaceKeysEnabled() bool {
+	return TenancyMode() != TenancyStatic
 }
 
 // PerNamespaceKeyRequired reports whether a fetcher/builder pod scheduled into
 // `namespace` must mount its per-namespace derived HMAC key as a REQUIRED secret
 // ref — so the kubelet blocks pod start until the tenant controller has
 // provisioned it, making the executor/buildermgr's version-aware signing
-// race-free. True only under dynamic tenancy, with internal auth enabled, for a
-// live tenant namespace: a non-tenant namespace never gets keys, so requiring one
-// there would wedge the pod in CreateContainerConfigError forever.
+// race-free. True under dynamic OR cluster mode (both provision per-namespace
+// derived keys — cluster mode keeps fetcher/builder least-privilege on the HMAC
+// axis too), with internal auth enabled, for a live tenant namespace: a non-tenant
+// namespace never gets keys, so requiring one there would wedge the pod in
+// CreateContainerConfigError forever.
 func PerNamespaceKeyRequired(namespace string) bool {
-	return DynamicNamespacesEnabled() &&
+	return PerNamespaceKeysEnabled() &&
 		os.Getenv("FISSION_INTERNAL_AUTH_SECRET") != "" &&
 		DefaultNSResolver().IsTenant(namespace)
 }

@@ -45,11 +45,11 @@ func TestFissionCacheOptionsDynamic(t *testing.T) {
 	t.Cleanup(func() { r.SetTenants(orig) })
 	r.SetTenants(map[string]string{"ns-a": "ns-a"})
 
-	t.Setenv("FISSION_DYNAMIC_NAMESPACES", "true")
+	t.Setenv("FISSION_TENANCY_MODE", "dynamic")
 	assert.True(t, utils.DynamicNamespacesEnabled())
 	assert.Empty(t, FissionCacheOptions().DefaultNamespaces, "dynamic mode must use a cluster-wide cache")
 
-	t.Setenv("FISSION_DYNAMIC_NAMESPACES", "false")
+	t.Setenv("FISSION_TENANCY_MODE", "static")
 	assert.False(t, utils.DynamicNamespacesEnabled())
 	assert.Len(t, FissionCacheOptions().DefaultNamespaces, 1, "default mode stays per-namespace")
 }

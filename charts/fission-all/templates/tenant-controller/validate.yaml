@@ -1,19 +1,11 @@
 {{- /*
-Multi-namespace tenancy render-time invariant: the dynamic data plane and the
-tenant controller must be enabled together.
-
-- tenancy.dynamicNamespaces (data plane) makes the fetcher key REQUIRED and the
-  executor version-aware ns-sign each /specialize, expecting the controller to
-  have provisioned every tenant namespace's derived-key Secret. Without the
-  controller, fetcher pods wedge waiting for a key nobody writes.
-- tenantController.enabled without dynamicNamespaces provisions per-namespace
-  keys the data plane never consumes (it still master-signs), which would 401
-  every specialization in those namespaces.
-
-Either way a half-wired install is broken, so fail the render rather than ship
-one. This mirrors the chart's other fail-closed guards (e.g. the MQT cert
-checks).
+Multi-namespace tenancy render-time invariant: tenancy.mode must be one of the
+three known postures. An unknown value would silently fall back to static in the
+data plane (utils.TenancyMode) while the chart might still render controller RBAC
+from a mistyped gate, i.e. a half-wired install. Fail the render instead. This
+mirrors the chart's other fail-closed guards (e.g. the MQT cert checks).
 */ -}}
-{{- if ne (.Values.tenancy.dynamicNamespaces | toString) (.Values.tenantController.enabled | toString) }}
-{{- fail "multi-namespace tenancy misconfigured: tenancy.dynamicNamespaces and tenantController.enabled must be set together (both true or both false). The dynamic data plane requires the tenant controller to provision per-namespace auth keys, and the controller is pointless (and 401s the data plane) without it." }}
+{{- $mode := include "fission.tenancyMode" . }}
+{{- if not (has $mode (list "static" "dynamic" "cluster")) }}
+{{- fail (printf "multi-namespace tenancy misconfigured: tenancy.mode must be one of static|dynamic|cluster, got %q. static = env-seeded namespaces only; dynamic = runtime per-namespace onboarding (least-privilege, recommended for untrusted multi-tenant); cluster = opt-in trusted-cluster watch-all (control plane reads Secrets cluster-wide)." $mode) }}
 {{- end }}

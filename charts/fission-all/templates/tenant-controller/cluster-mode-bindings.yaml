@@ -1,0 +1,92 @@
+{{- if eq (include "fission.tenancyMode" .) "cluster" }}
+# Cluster (trusted-cluster) tenancy mode only. The control plane manages workloads
+# and reads Secrets/ConfigMaps CLUSTER-WIDE so functions run in any namespace with
+# no per-namespace provisioning — the operational simplification this opt-in mode
+# trades isolation for (PRD §4.5).
+#
+# SECURITY TRADE-OFF: the executor/buildermgr ServiceAccounts hold cluster-wide
+# read of Secrets/ConfigMaps here. A compromise of either reaches every namespace's
+# Secrets. This is the documented cost of cluster mode; use ONLY on single-tenant /
+# trusted clusters. Function pods (fetcher/builder) are NOT bound here — they keep
+# their narrow per-namespace RBAC, provisioned by the tenant controller.
+#
+# These bind the SAME fixed-name *-tenant-workload ClusterRoles the controller
+# binds per-namespace in dynamic mode (single-sourced in _tenant-workload-roles.tpl);
+# the only difference is the binding scope — a ClusterRoleBinding instead of a
+# per-namespace RoleBinding.
+{{- range $b := list (dict "sa" "fission-executor" "role" "fission-executor-tenant-workload") (dict "sa" "fission-buildermgr" "role" "fission-buildermgr-tenant-workload") }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: "{{ $.Release.Name }}-{{ $b.sa }}-cluster-workload"
+  labels:
+    chart: "{{ $.Chart.Name }}-{{ $.Chart.Version }}"
+subjects:
+  - kind: ServiceAccount
+    name: {{ $b.sa }}
+    namespace: {{ $.Release.Namespace }}
+roleRef:
+  kind: ClusterRole
+  name: {{ $b.role }}
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}
+{{- if ne (.Values.router.endpointSliceCache.mode | default "off") "off" }}
+---
+# Router EndpointSlice data plane (RFC-0002), cluster-wide: in cluster mode the
+# function Services live in any namespace, so the router reads their EndpointSlices
+# + Services cluster-wide (the per-namespace router-dataplane Role covers the
+# static/dynamic paths). Read-only.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: "{{ .Release.Name }}-router-dataplane-cluster"
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+{{- include "router-dataplane-kuberules" . }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: "{{ .Release.Name }}-router-dataplane-cluster"
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+subjects:
+  - kind: ServiceAccount
+    name: fission-router
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: ClusterRole
+  name: "{{ .Release.Name }}-router-dataplane-cluster"
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}
+{{- if .Values.influxdb.enabled }}
+---
+# Fluentbit log collector (DaemonSet, deployed when influxdb.enabled), cluster-wide:
+# in cluster mode function pods
+# run in any namespace, so the collector reads Pods cluster-wide (the per-namespace
+# fluentbit Role covers static/dynamic). Read-only.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: "{{ .Release.Name }}-fluentbit-cluster"
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+{{- include "fluentbit-kuberules" . }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: "{{ .Release.Name }}-fluentbit-cluster"
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+subjects:
+  - kind: ServiceAccount
+    name: fission-fluentbit
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: ClusterRole
+  name: "{{ .Release.Name }}-fluentbit-cluster"
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}
+{{- end }}

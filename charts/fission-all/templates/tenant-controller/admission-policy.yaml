@@ -1,4 +1,4 @@
-{{- if dig "dynamicNamespaces" false (.Values.tenancy | default dict) }}
+{{- if include "fission.tenancyControllerEnabled" . }}
 {{- /* CEL list of the tenant-workload ClusterRole names, single-sourced from
        _tenant-workload-roles.tpl so the policy's roleRef allow-list cannot drift
        from the ClusterRoles it guards or the controller's bind resourceNames. */ -}}
@@ -20,8 +20,9 @@
 # a particular caller — the controller is the only principal that can create these
 # bindings anyway, but the invariant holds even if another principal ever gains
 # `bind`. It is inert for every other RoleBinding (the matchCondition filters them
-# out), so it adds no admission cost to unrelated RBAC. Rendered only in dynamic
-# mode, where those ClusterRoles exist.
+# out), so it adds no admission cost to unrelated RBAC. Rendered in dynamic AND
+# cluster mode (whenever the controller provisions per-namespace RoleBindings to
+# those ClusterRoles); never in static.
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicy
 metadata:

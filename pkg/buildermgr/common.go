@@ -34,12 +34,12 @@ import (
 // fetcher/builder sidecar calls with that namespace's per-namespace derived key.
 // Version-aware, the sibling of the executor's poolmgr.fetcherSigningNamespace:
 // only a builder pod stamped with the namespace key-scheme annotation (created by
-// createBuilderDeployment while dynamic tenancy was on for its namespace) holds
-// the per-namespace keys and verifies with them, so we sign with the builder
-// namespace key. Pre-upgrade pods carrying no annotation, and every pod when
-// tenancy is off, verify with the master-derived key and stay master-signed.
+// createBuilderDeployment while per-namespace keys were in use for its namespace)
+// holds the per-namespace keys and verifies with them, so we sign with the builder
+// namespace key. Pre-upgrade pods carrying no annotation, and every pod under
+// static tenancy, verify with the master-derived key and stay master-signed.
 func builderSigningNamespace(pod *apiv1.Pod, builderNs string) (string, bool) {
-	if pod != nil && utils.DynamicNamespacesEnabled() && fv1.HasNamespaceKeyScheme(pod.Annotations) {
+	if pod != nil && utils.PerNamespaceKeysEnabled() && fv1.HasNamespaceKeyScheme(pod.Annotations) {
 		return builderNs, true
 	}
 	return "", false

@@ -63,11 +63,12 @@ func ownedObjectToFunction(_ context.Context, obj client.Object) []reconcile.Req
 	if name == "" || ns == "" {
 		return nil
 	}
-	// Under dynamic tenancy the drift watch sees workloads cluster-wide; a leftover
-	// managed object in a namespace that has since left the tenant set must not
-	// re-enqueue its Function (the membership predicate gates .For but not this
-	// mapper). Drop it so an offboarded namespace stops reconciling immediately.
-	if utils.DynamicNamespacesEnabled() && !utils.DefaultNSResolver().IsTenant(ns) {
+	// With a cluster-wide cache (dynamic OR cluster mode) the drift watch sees
+	// workloads cluster-wide; a leftover managed object in a namespace not in the
+	// tenant set must not re-enqueue its Function (the membership predicate gates
+	// .For but not this mapper). Drop it so a non-tenant namespace stops
+	// reconciling immediately.
+	if utils.CrdWatchClusterWide() && !utils.DefaultNSResolver().IsTenant(ns) {
 		return nil
 	}
 	return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: name, Namespace: ns}}}
@@ -316,11 +317,12 @@ func RegisterReconciler(mgr ctrl.Manager, logger logr.Logger, executorTypes map[
 	// self-healing). The Manager cache already scopes those types to
 	// executor-managed objects (executorManagedSelector), so only newdeploy /
 	// container workloads reach the delete-only watch.
-	// Spec/delete events drive the reconciler; under dynamic tenancy AND the
-	// membership predicate so the cluster-wide cache only reconciles Functions in
-	// live tenant namespaces (no-op when dynamic tenancy is off).
+	// Spec/delete events drive the reconciler; when the cache is cluster-wide
+	// (dynamic OR cluster mode) the membership predicate is ANDed on so the
+	// cluster-wide cache only reconciles Functions in live tenant namespaces (no-op
+	// in static mode, where the cache is already namespace-scoped).
 	funcPredicate := predicate.Or(predicate.GenerationChangedPredicate{}, deletionTimestampPredicate)
-	if utils.DynamicNamespacesEnabled() {
+	if utils.CrdWatchClusterWide() {
 		funcPredicate = predicate.And(funcPredicate, controller.MembershipPredicate(utils.DefaultNSResolver()))
 	}
 	b := builder.ControllerManagedBy(mgr).
@@ -331,7 +333,7 @@ func RegisterReconciler(mgr ctrl.Manager, logger logr.Logger, executorTypes map[
 			builder.WithPredicates(deleteOnlyPredicate)).
 		Watches(&corev1.Service{}, handler.EnqueueRequestsFromMapFunc(ownedObjectToFunction),
 			builder.WithPredicates(deleteOnlyPredicate))
-	if utils.DynamicNamespacesEnabled() {
+	if utils.CrdWatchClusterWide() {
 		// Re-converge a namespace's Functions when it is onboarded at runtime: the
 		// membership predicate above otherwise permanently drops a Function whose
 		// event predated the tenant. Mirrors controller.RegisterTenantScoped (this

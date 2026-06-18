@@ -41,7 +41,7 @@ func TestExecutorCacheOptionsTierSplit(t *testing.T) {
 	}
 
 	t.Run("non-dynamic scopes every type to the env namespaces", func(t *testing.T) {
-		t.Setenv("FISSION_DYNAMIC_NAMESPACES", "false")
+		t.Setenv("FISSION_TENANCY_MODE", "static")
 		opts := executorCacheOptions()
 		assert.NotEmpty(t, opts.DefaultNamespaces, "per-namespace cache by default")
 		secret, cm, rs := perTypeOverrides(opts)
@@ -51,7 +51,7 @@ func TestExecutorCacheOptionsTierSplit(t *testing.T) {
 	})
 
 	t.Run("dynamic keeps Secrets and ConfigMaps namespace-scoped", func(t *testing.T) {
-		t.Setenv("FISSION_DYNAMIC_NAMESPACES", "true")
+		t.Setenv("FISSION_TENANCY_MODE", "dynamic")
 		opts := executorCacheOptions()
 		assert.Empty(t, opts.DefaultNamespaces, "Function/Environment cluster-wide in dynamic mode")
 		secret, cm, rs := perTypeOverrides(opts)
@@ -61,6 +61,25 @@ func TestExecutorCacheOptionsTierSplit(t *testing.T) {
 		assert.NotEmpty(t, secret.Namespaces, "Secret cache must be namespace-scoped, NEVER cluster-wide")
 		assert.NotEmpty(t, cm.Namespaces, "ConfigMap cache must be namespace-scoped, NEVER cluster-wide")
 		assert.NotEmpty(t, rs.Namespaces, "ReplicaSet cache must be namespace-scoped to avoid mirroring the whole cluster")
+	})
+
+	t.Run("cluster mode caches Secrets/ConfigMaps/ReplicaSets cluster-wide", func(t *testing.T) {
+		t.Setenv("FISSION_TENANCY_MODE", "cluster")
+		opts := executorCacheOptions()
+		assert.Empty(t, opts.DefaultNamespaces, "everything cluster-wide in cluster mode")
+		secret, cm, rs := perTypeOverrides(opts)
+		// No per-type Namespaces override → these default to the cluster-wide cache.
+		// The Pod/Deployment/Service label bounds remain (memory bounds), but the
+		// Tier-B types are deliberately cluster-wide — the trusted-cluster trade.
+		if secret != nil {
+			assert.Empty(t, secret.Namespaces, "Secret cache is cluster-wide in cluster mode")
+		}
+		if cm != nil {
+			assert.Empty(t, cm.Namespaces, "ConfigMap cache is cluster-wide in cluster mode")
+		}
+		if rs != nil {
+			assert.Empty(t, rs.Namespaces, "ReplicaSet cache is cluster-wide in cluster mode")
+		}
 	})
 }
 

@@ -1,11 +1,12 @@
-{{- if and .Values.tenantController.enabled (dig "seedExistingNamespaces" true (.Values.tenantController | default dict)) }}
+{{- if and (eq (include "fission.tenancyMode" .) "dynamic") (dig "seedExistingNamespaces" true (.Values.tenantController | default dict)) }}
 # Post-install/post-upgrade migration: seed a FissionTenant for each namespace
 # in the env-driven config (defaultNamespace + additionalFissionNamespaces) so
 # existing installs adopt the CR model. Idempotent (create-if-absent), never
 # touches user/label/CLI-created tenants, and mutates no Deployment — so running
 # it on upgrade restarts nothing (the fix for #3298's mass-restart). Reuses the
 # tenant-controller ServiceAccount, which already has create permission on
-# fissiontenants.
+# fissiontenants. Dynamic mode only: cluster mode auto-onboards every namespace,
+# so there is nothing to seed.
 apiVersion: batch/v1
 kind: Job
 metadata:

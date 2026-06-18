@@ -12,6 +12,7 @@ package crmanager
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strconv"
 
@@ -21,10 +22,32 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
+	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
 	"github.com/fission/fission/pkg/tenant"
 	"github.com/fission/fission/pkg/utils"
 )
+
+// NewTriggerManager is the shared bring-up for the trigger subsystems
+// (timer/kubewatcher/mqtrigger): resolve the Fission + REST clients, wait for the
+// Function CRDs to be served, and build the leader-elected Manager. lockName is the
+// per-subsystem Lease name passed to NewLeaderElected. Subsystems do their own
+// extra setup (e.g. kubewatcher's Kubernetes client, mqtrigger's queue) and then
+// register their reconciler on the returned Manager.
+func NewTriggerManager(ctx context.Context, clientGen crd.ClientGeneratorInterface, lockName string, logger logr.Logger) (ctrl.Manager, error) {
+	fissionClient, err := clientGen.GetFissionClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get fission client: %w", err)
+	}
+	restConfig, err := clientGen.GetRestConfig()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get rest config: %w", err)
+	}
+	if err := crd.WaitForFunctionCRDs(ctx, logger, fissionClient); err != nil {
+		return nil, fmt.Errorf("error waiting for CRDs: %w", err)
+	}
+	return NewLeaderElected(restConfig, lockName, logger)
+}
 
 // NewLeaderElected builds a Manager whose only job is native leader election.
 // Its metrics and health-probe servers are disabled (the subsystem serves its
@@ -71,13 +94,14 @@ func NewLeaderElected(restConfig *rest.Config, lockName string, logger logr.Logg
 // unchanged. The cache is inert until a controller registers an informer, so
 // this is harmless for Managers that only run non-reconciler runnables.
 func FissionCacheOptions() cache.Options {
-	if utils.DynamicNamespacesEnabled() {
-		// Cluster-wide cache: Fission-CRD informers see every namespace's CRs so
-		// a namespace can be onboarded/offboarded at runtime without rebuilding
-		// the Manager. Reconcilers drop non-tenant objects via
-		// controller.MembershipPredicate. This is the one cluster-wide read the
-		// dynamic-watch design adds, and only over Fission's own CRD types —
-		// these CRD-only Managers cache no core/workload type.
+	if utils.CrdWatchClusterWide() {
+		// Cluster-wide cache (dynamic OR cluster mode): Fission-CRD informers see
+		// every namespace's CRs so a namespace can be onboarded at runtime without
+		// rebuilding the Manager. In dynamic mode reconcilers drop non-tenant
+		// objects via controller.MembershipPredicate; in cluster mode every
+		// namespace is a tenant. This is the one cluster-wide read the watch design
+		// adds, and only over Fission's own CRD types — these CRD-only Managers
+		// cache no core/workload type.
 		return cache.Options{}
 	}
 	nsConfig := map[string]cache.Config{}

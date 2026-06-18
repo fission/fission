@@ -145,17 +145,22 @@ jobs:
           # and leave it empty.
           docker exec kind-control-plane sh -c \
             'mkdir -p /fission-coverage && chown 10001:10001 /fission-coverage && chmod 0700 /fission-coverage'
-          # Multi-namespace tenancy (dynamic, restart-free onboarding) is
-          # exercised on the two non-legacy legs by composing the dynamic-tenancy
-          # skaffold profile onto kind-ci. The whole suite then runs against a
-          # dynamic-mode control plane (default is auto-seeded as a tenant), and
-          # the serial TestDynamicTenantLifecycle onboards a fresh namespace at
-          # runtime. v1.34.8 stays on the static model — it is the all-legacy leg
-          # (RFC-0002/0013/0012 pinned off below), so static namespacing keeps
-          # that path covered too.
+          # Multi-namespace tenancy: each leg exercises one of the three postures
+          # by composing a skaffold profile onto kind-ci, so every mode stays
+          # covered.
+          #   v1.32.11 → dynamic  (restart-free FissionTenant onboarding; the
+          #              serial TestDynamicTenantLifecycle onboards a fresh ns).
+          #   v1.36.1  → cluster  (trusted-cluster watch-all; the controller
+          #              auto-onboards every namespace; the serial
+          #              TestClusterTenantAutoOnboard runs a function in a fresh,
+          #              never-declared namespace and asserts fetcher RBAC stays
+          #              per-namespace).
+          #   v1.34.8  → static   (the all-legacy leg; RFC-0002/0013/0012 pinned
+          #              off below, so the static namespacing path is covered too).
           PROFILE=kind-ci
           case "${{ matrix.kindversion }}" in
-            v1.32.11|v1.36.1) PROFILE=kind-ci,dynamic-tenancy ;;
+            v1.32.11) PROFILE=kind-ci,dynamic-tenancy ;;
+            v1.36.1)  PROFILE=kind-ci,cluster-tenancy ;;
           esac
           SKAFFOLD_PROFILE="$PROFILE" make skaffold-deploy
 

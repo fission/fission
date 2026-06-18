@@ -8,7 +8,7 @@ package framework
 
 import (
 	"context"
-	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -27,20 +27,35 @@ import (
 // DynamicNamespacesEnabled lets a test skip itself otherwise, mirroring the
 // RFC-0002/0013 gate-detection helpers (RouterEndpointSliceMode etc.).
 
-// DynamicNamespacesEnabled reports whether the cluster runs the dynamic
-// multi-namespace tenancy model, read from FISSION_DYNAMIC_NAMESPACES on the
-// executor Deployment (the chart sets it on every control-plane Deployment via
-// the fission-resource-namespace.envs helper). The tenancy lifecycle test skips
-// itself when it is off, so the static-namespace CI leg stays a no-op for it.
-func (f *Framework) DynamicNamespacesEnabled(t *testing.T, ctx context.Context) bool {
+// TenancyMode reports the cluster's configured tenancy posture
+// (static|dynamic|cluster), read from FISSION_TENANCY_MODE on the executor
+// Deployment (the chart sets it on every control-plane Deployment via the
+// fission-resource-namespace.envs helper). Unset → "static" (production default).
+func (f *Framework) TenancyMode(t *testing.T, ctx context.Context) string {
 	t.Helper()
 	dep, err := f.kubeClient.AppsV1().Deployments(f.FissionNamespace()).Get(ctx, executorDeploymentName, metav1.GetOptions{})
-	require.NoErrorf(t, err, "DynamicNamespacesEnabled: get executor Deployment")
-	v, _ := executorEnvValue(dep, "FISSION_DYNAMIC_NAMESPACES")
-	// Parse like production (utils.DynamicNamespacesEnabled) so "1"/"True"/etc.
-	// agree with the cluster's own interpretation, not just the chart's "true".
-	on, _ := strconv.ParseBool(v)
-	return on
+	require.NoErrorf(t, err, "TenancyMode: get executor Deployment")
+	v, _ := executorEnvValue(dep, "FISSION_TENANCY_MODE")
+	if v == "" {
+		return "static"
+	}
+	return strings.ToLower(v)
+}
+
+// DynamicNamespacesEnabled reports whether the cluster runs the dynamic
+// multi-namespace tenancy model (tenancy.mode=dynamic). The tenancy lifecycle
+// test skips itself when it is off, so the static/cluster CI legs stay a no-op
+// for it.
+func (f *Framework) DynamicNamespacesEnabled(t *testing.T, ctx context.Context) bool {
+	t.Helper()
+	return f.TenancyMode(t, ctx) == "dynamic"
+}
+
+// ClusterTenancyEnabled reports whether the cluster runs the opt-in
+// trusted-cluster mode (tenancy.mode=cluster).
+func (f *Framework) ClusterTenancyEnabled(t *testing.T, ctx context.Context) bool {
+	t.Helper()
+	return f.TenancyMode(t, ctx) == "cluster"
 }
 
 // NewTestNamespaceIn creates a real Kubernetes namespace and returns a

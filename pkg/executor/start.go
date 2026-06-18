@@ -95,6 +95,19 @@ func executorCacheOptions() crcache.Options {
 		&corev1.Service{}:    {Label: executorManagedSelector},
 	}
 
+	if utils.ClusterTenancyEnabled() {
+		// Cluster (trusted-cluster) mode: Tier A AND Tier B go cluster-wide. The
+		// executor reads Secrets/ConfigMaps/ReplicaSets across all namespaces — the
+		// operational simplification this opt-in mode trades isolation for (PRD
+		// §4.5; the executor holds the matching cluster-wide read via
+		// cluster-mode-bindings.yaml). The label-bounded Pod/Deployment/Service
+		// watches above are kept (memory bounds, valid in any mode); Secret/
+		// ConfigMap/ReplicaSet get NO per-namespace override, so they default to the
+		// cluster-wide cache. Function pods still hold only narrow per-namespace
+		// fetcher RBAC — this widening is the control plane's, not the workload's.
+		return crcache.Options{ByObject: byObject}
+	}
+
 	if utils.DynamicNamespacesEnabled() {
 		// Tier A (Function/Environment) goes cluster-wide so a namespace onboarded
 		// at runtime is visible without a restart; the func/env reconcilers filter
@@ -106,14 +119,14 @@ func executorCacheOptions() crcache.Options {
 		// Tier B (Secret/ConfigMap) MUST stay namespace-scoped: a cluster-wide
 		// Secret cache would mirror every Secret in the cluster into the executor's
 		// memory, the one read the design forbids. Override the per-type namespaces
-		// to the env-seeded set (the dynamic per-namespace cache is a later phase),
-		// leaving the cluster-wide default to the Tier-A CRDs only.
+		// to the env-seeded set, leaving the cluster-wide default to the Tier-A CRDs
+		// only. (Operators needing Tier-B reads in arbitrary runtime-onboarded
+		// namespaces use cluster mode, which goes cluster-wide above.)
 		byObject[&corev1.Secret{}] = crcache.ByObject{Namespaces: nsConfig}
 		byObject[&corev1.ConfigMap{}] = crcache.ByObject{Namespaces: nsConfig}
 		// ReplicaSets (poolmgr's specialized-pod cleanup watch) are not label-bounded
 		// here, so a cluster-wide cache would mirror every ReplicaSet in the cluster.
-		// Keep them namespace-scoped too — and out of the cluster-wide RBAC; runtime
-		// onboarding's specialized-pod cleanup follows with the provisioning phase.
+		// Keep them namespace-scoped too — and out of the cluster-wide RBAC.
 		byObject[&appsv1.ReplicaSet{}] = crcache.ByObject{Namespaces: nsConfig}
 		return crcache.Options{ByObject: byObject}
 	}

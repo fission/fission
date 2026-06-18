@@ -1,12 +1,13 @@
-{{- if dig "dynamicNamespaces" false (.Values.tenancy | default dict) }}
-# Dynamic multi-namespace mode (FISSION_DYNAMIC_NAMESPACES): the data-plane
-# components that watch Fission CRDs do so cluster-wide and filter to the live
-# tenant set (controller.MembershipPredicate), so they need cluster-wide read of
-# Fission's own CRD types. For most components that is fission.io types only.
-# The executor additionally reads its label-bounded workloads (pods, services,
-# deployments) cluster-wide — Tier A per PRD §4.1, read-only; its Secrets,
-# ConfigMaps and ReplicaSets stay namespace-scoped (per-namespace Roles + the
-# scoped cache). The per-namespace Roles remain for the default (off) path.
+{{- if include "fission.tenancyControllerEnabled" . }}
+# Dynamic + cluster tenancy (tenancy.mode != static, FISSION_TENANCY_MODE): the
+# data-plane components that watch Fission CRDs do so cluster-wide, so they need
+# cluster-wide read of Fission's own CRD types. For most components that is
+# fission.io types only. The executor additionally reads its label-bounded
+# workloads (pods, services, deployments) cluster-wide — Tier A per PRD §4.1,
+# read-only. In dynamic mode its Secrets/ConfigMaps/ReplicaSets stay
+# namespace-scoped (per-namespace Roles + scoped cache); cluster mode grants those
+# cluster-wide via the separate cluster-mode-bindings.yaml. The per-namespace Roles
+# remain for the static path.
 {{- range $component := list "buildermgr" "kubewatcher" "mcp" "kafka" "keda" "router" "timer" "canaryconfig" "executor" }}
 {{- include "fission-cluster-role-generator" (merge (dict "component" $component) $) }}
 {{- end }}

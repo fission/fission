@@ -30,18 +30,11 @@ import (
 const mqtReconcileConcurrency = 4
 
 func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger, _ *errgroup.Group, routerUrl string) error {
+	// fissionClient is needed below for the subscription manager; NewTriggerManager
+	// resolves its own to wait for the Function CRDs (a cheap cached call).
 	fissionClient, err := clientGen.GetFissionClient()
 	if err != nil {
 		return fmt.Errorf("failed to get fission client: %w", err)
-	}
-	restConfig, err := clientGen.GetRestConfig()
-	if err != nil {
-		return fmt.Errorf("failed to get rest config: %w", err)
-	}
-
-	err = crd.WaitForFunctionCRDs(ctx, logger, fissionClient)
-	if err != nil {
-		return fmt.Errorf("error waiting for CRDs: %w", err)
 	}
 
 	mqType := (fv1.MessageQueueType)(os.Getenv("MESSAGE_QUEUE_TYPE"))
@@ -76,8 +69,8 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	// elected leader consumes the message queue and manages triggers, so two
 	// replicas don't double-consume. No-op when LEADER_ELECTION_ENABLED is unset
 	// (single-replica default). The reconciler watches MessageQueueTriggers
-	// through the Manager's namespace-scoped cache and runs only on the leader.
-	crMgr, err := crmanager.NewLeaderElected(restConfig, "fission-mqtrigger", logger)
+	// through the Manager's cache and runs only on the leader.
+	crMgr, err := crmanager.NewTriggerManager(ctx, clientGen, "fission-mqtrigger", logger)
 	if err != nil {
 		return err
 	}

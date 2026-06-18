@@ -59,13 +59,16 @@ func (r *ResolverSyncReconciler) Reconcile(ctx context.Context, _ ctrl.Request) 
 }
 
 // AddResolverSync registers the resolver-sync reconciler on mgr, watching
-// FissionTenant. It is a no-op unless dynamic tenancy is on, so every data-plane
-// Start can call it unconditionally. The manager's cache is cluster-wide in that
-// mode, so the cluster-scoped FissionTenant watch needs no extra cache wiring;
-// the component's ClusterRole must grant fissiontenants get/list/watch
-// (charts/.../tenant-controller/dynamic-cluster-roles.yaml).
+// FissionTenant. It is a no-op unless the Fission-CRD cache is cluster-wide
+// (dynamic OR cluster mode), so every data-plane Start can call it
+// unconditionally. Both modes need it: it is what keeps each process's resolver —
+// and therefore IsTenant, which gates the membership predicate AND per-namespace
+// HMAC key stamping — in step with the live FissionTenant set. The manager's cache
+// is cluster-wide in these modes, so the cluster-scoped FissionTenant watch needs
+// no extra cache wiring; the component's ClusterRole must grant fissiontenants
+// get/list/watch (charts/.../tenant-controller/dynamic-cluster-roles.yaml).
 func AddResolverSync(mgr ctrl.Manager) error {
-	if !utils.DynamicNamespacesEnabled() {
+	if !utils.CrdWatchClusterWide() {
 		return nil
 	}
 	r := &ResolverSyncReconciler{client: mgr.GetClient(), resolver: utils.DefaultNSResolver()}

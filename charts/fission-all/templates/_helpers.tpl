@@ -100,9 +100,26 @@ Helper template to construct image names with repository and tag
 {{- else }}
   value: {{ .Values.defaultNamespace }}
 {{- end }}
-- name: FISSION_DYNAMIC_NAMESPACES
-  value: "{{ dig "dynamicNamespaces" false (.Values.tenancy | default dict) }}"
+- name: FISSION_TENANCY_MODE
+  value: "{{ include "fission.tenancyMode" . }}"
 {{- end }}
+
+{{/*
+fission.tenancyMode — the configured multi-namespace tenancy posture, normalised
+to one of static|dynamic|cluster. Single source of truth for every gate.
+*/}}
+{{- define "fission.tenancyMode" -}}
+{{- dig "mode" "static" (.Values.tenancy | default dict) -}}
+{{- end -}}
+
+{{/*
+fission.tenancyControllerEnabled — true (non-empty) when the tenant controller and
+the dynamic-cluster machinery should be rendered, i.e. tenancy.mode is dynamic OR
+cluster. Empty string (falsey) for static. Use: {{- if include "fission.tenancyControllerEnabled" . }}
+*/}}
+{{- define "fission.tenancyControllerEnabled" -}}
+{{- if ne (include "fission.tenancyMode" .) "static" -}}true{{- end -}}
+{{- end -}}
 
 {{- define "kube_client.envs" }}
 - name: KUBE_CLIENT_QPS

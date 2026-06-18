@@ -5,15 +5,16 @@
 // Package tenant implements the fission-bundle --tenantController subsystem: the
 // lifecycle controller for multi-namespace tenancy (docs/multiple-namespace).
 // It reconciles FissionTenant CRs (and Namespaces labelled fission.io/enabled)
-// into the live resource-namespace set, provisions per-namespace RBAC and
-// service accounts for the fetcher/builder (tearing them down on offboard via a
-// finalizer), and reports readiness. Per-namespace HMAC auth-key provisioning is
-// layered on in a later phase.
+// into the live resource-namespace set, provisions per-namespace RBAC, service
+// accounts, and the derived HMAC auth-key Secret for the fetcher/builder (tearing
+// them down on offboard via a finalizer), and reports readiness. In cluster mode
+// it auto-onboards every namespace instead of requiring an explicit FissionTenant.
 package tenant
 
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/go-logr/logr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -31,10 +32,16 @@ import (
 )
 
 const (
-	// EnabledLabel on a Namespace opts it in as a Fission tenant; the controller
-	// materializes a labelled Namespace into a FissionTenant CR (one-way
-	// ignition — removing the label never deletes the CR; see prd.md §6.2).
+	// EnabledLabel on a Namespace is an explicit Fission-tenancy membership
+	// override. In dynamic mode "true" opts a namespace IN (the controller
+	// materializes it into a FissionTenant; one-way ignition — removing the label
+	// never deletes the CR, see prd.md §6.2). In cluster mode, where every
+	// namespace is auto-onboarded by default, "false" opts a namespace OUT: the
+	// controller skips it and, if it was already auto-onboarded, offboards it.
 	EnabledLabel = "fission.io/enabled"
+	// EnabledLabelOptOut is the EnabledLabel value that excludes a namespace from
+	// cluster-mode auto-onboarding.
+	EnabledLabelOptOut = "false"
 
 	// managedByAnnotation records how a FissionTenant came to exist: "label"
 	// (materialized from EnabledLabel) vs a user/helm-authored CR. Only
@@ -60,7 +67,7 @@ const (
 // reports a Ready condition. It runs on the leader-elected --tenantController
 // Manager (it writes status). The resolver drive is additive over the
 // env-seeded set (utils.GetNamespaces) so an empty tenant list never wipes the
-// env default; the env→CR source flip is a later phase.
+// env default.
 type TenantReconciler struct {
 	logger   logr.Logger
 	client   client.Client
@@ -221,13 +228,21 @@ func (r *TenantReconciler) namespaceToRequests(ctx context.Context, obj client.O
 	return reqs
 }
 
-// NamespaceReconciler materializes a Namespace labelled fission.io/enabled=true
-// into a FissionTenant CR. It is the "label is sugar" ignition path: it only ever
-// creates, never deletes — removing the label leaves the CR in place (operators
-// disable a tenant explicitly via `fission tenant disable`).
+// NamespaceReconciler materializes a Namespace into a FissionTenant CR. In the
+// default (dynamic) mode it is the "label is sugar" ignition path: it materializes
+// only Namespaces labelled fission.io/enabled=true. In cluster (trusted-cluster)
+// mode autoOnboardAll is set and it materializes EVERY non-system namespace — the
+// auto-onboarding that lets functions run in any namespace with no FissionTenant
+// CR ceremony. Either way it only ever creates, never deletes.
 type NamespaceReconciler struct {
 	logger logr.Logger
 	client client.Client
+	// autoOnboardAll (cluster mode) materializes every non-system namespace,
+	// ignoring the fission.io/enabled label.
+	autoOnboardAll bool
+	// releaseNamespace is the control-plane install namespace, excluded from
+	// auto-onboarding (it runs no functions). Empty when not in cluster mode.
+	releaseNamespace string
 }
 
 func (r *NamespaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -235,20 +250,46 @@ func (r *NamespaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	if err := r.client.Get(ctx, req.NamespacedName, target); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
-	if target.Labels[EnabledLabel] != "true" {
+	if r.autoOnboardAll {
+		// Cluster mode: onboard every namespace except Kubernetes system namespaces
+		// and the control-plane namespace, which never run function/builder pods.
+		if isExcludedFromAutoOnboard(target.Name, r.releaseNamespace) {
+			return ctrl.Result{}, nil
+		}
+		// Explicit operator opt-out: skip onboarding, and offboard the namespace if
+		// the controller had already auto-onboarded it (so labelling a live
+		// namespace fission.io/enabled=false tears its Fission RBAC/keys down).
+		if target.Labels[EnabledLabel] == EnabledLabelOptOut {
+			return r.offboardManaged(ctx, target.Name)
+		}
+	} else if target.Labels[EnabledLabel] != "true" {
 		return ctrl.Result{}, nil
 	}
 
 	// Already onboarded by some FissionTenant (label-born or user-authored under
-	// any name)? Then there is nothing to materialize.
+	// any name)? Then there is nothing to materialize — UNLESS the matching CR is a
+	// controller-managed one owned by a DIFFERENT (deleted) instance of this
+	// namespace: the delete-recreate race, where a same-named namespace is recreated
+	// before owner-reference GC has reaped the old CR. That stale CR is about to be
+	// GC'd, leaving the new namespace stranded with no FissionTenant and no event to
+	// retry, so requeue to re-materialize once it clears.
 	list := &fv1.FissionTenantList{}
 	if err := r.client.List(ctx, list); err != nil {
 		return ctrl.Result{}, err
 	}
 	for i := range list.Items {
-		if list.Items[i].Spec.Namespace == target.Name {
-			return ctrl.Result{}, nil
+		ft := &list.Items[i]
+		if ft.Spec.Namespace != target.Name {
+			continue
 		}
+		// A managed CR from a deleted namespace instance (stale owner UID), or one
+		// currently being deleted (e.g. just offboarded via the opt-out label and
+		// now re-enabled), is transient — requeue so we re-materialize for the
+		// current, enabled namespace once it clears.
+		if isStaleManagedTenant(ft, target.UID) || !ft.DeletionTimestamp.IsZero() {
+			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+		}
+		return ctrl.Result{}, nil
 	}
 
 	ft := &fv1.FissionTenant{
@@ -264,9 +305,78 @@ func (r *NamespaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		},
 		Spec: fv1.FissionTenantSpec{Namespace: target.Name},
 	}
-	if err := r.client.Create(ctx, ft); err != nil && !apierrors.IsAlreadyExists(err) {
+	if err := r.client.Create(ctx, ft); err != nil {
+		if apierrors.IsAlreadyExists(err) {
+			// A same-named CR exists but didn't match the list above (informer lag);
+			// requeue so the stale-vs-live check runs against the fresh object.
+			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+		}
+		r.logger.Error(err, "failed to materialize FissionTenant", "namespace", target.Name)
 		return ctrl.Result{}, err
 	}
-	r.logger.Info("materialized FissionTenant from namespace label", "namespace", target.Name)
+	r.logger.Info("materialized FissionTenant for namespace", "namespace", target.Name, "autoOnboard", r.autoOnboardAll)
 	return ctrl.Result{}, nil
+}
+
+// offboardManaged deletes the controller-managed FissionTenant for namespace (if
+// any), used when a cluster-mode namespace is explicitly opted out with
+// fission.io/enabled=false. Deleting the CR runs the TenantReconciler's offboard
+// finalizer (tears down the per-namespace RBAC + key Secret and drops the
+// namespace from the resolver). A user/helm-authored FissionTenant is left
+// untouched — the opt-out label only governs auto-onboarded namespaces; an
+// operator who authored a CR manages it explicitly via `fission tenant disable`.
+func (r *NamespaceReconciler) offboardManaged(ctx context.Context, namespace string) (ctrl.Result, error) {
+	list := &fv1.FissionTenantList{}
+	if err := r.client.List(ctx, list); err != nil {
+		return ctrl.Result{}, err
+	}
+	for i := range list.Items {
+		ft := &list.Items[i]
+		if ft.Spec.Namespace != namespace {
+			continue
+		}
+		if ft.Annotations[managedByAnnotation] != managedByLabel {
+			return ctrl.Result{}, nil // user-authored: respect it, don't auto-offboard
+		}
+		if !ft.DeletionTimestamp.IsZero() {
+			return ctrl.Result{}, nil // already offboarding
+		}
+		if err := r.client.Delete(ctx, ft); err != nil && !apierrors.IsNotFound(err) {
+			r.logger.Error(err, "failed to offboard opted-out namespace", "namespace", namespace)
+			return ctrl.Result{}, err
+		}
+		r.logger.Info("offboarded namespace via fission.io/enabled=false opt-out", "namespace", namespace)
+		return ctrl.Result{}, nil
+	}
+	return ctrl.Result{}, nil // not onboarded; nothing to offboard
+}
+
+// isStaleManagedTenant reports whether ft is a controller-managed FissionTenant
+// left behind by a deleted instance of namespace nsUID — i.e. it is managed by us
+// and carries a Namespace owner reference whose UID differs from the current
+// namespace's. A user-authored CR (no managed annotation) or one owned by the
+// current namespace is NOT stale.
+func isStaleManagedTenant(ft *fv1.FissionTenant, nsUID types.UID) bool {
+	if ft.Annotations[managedByAnnotation] != managedByLabel {
+		return false
+	}
+	for _, o := range ft.OwnerReferences {
+		if o.Kind == "Namespace" {
+			return o.UID != nsUID
+		}
+	}
+	return false
+}
+
+// isExcludedFromAutoOnboard reports whether a namespace must NOT be auto-onboarded
+// in cluster mode: the Kubernetes system namespaces (which never run Fission
+// workloads) and the control-plane install namespace. Everything else is fair game
+// — cluster mode's premise is that every other namespace may run functions.
+func isExcludedFromAutoOnboard(namespace, releaseNamespace string) bool {
+	// kube-system, kube-public, and kube-node-lease run no Fission workloads.
+	switch namespace {
+	case metav1.NamespaceSystem, metav1.NamespacePublic, "kube-node-lease":
+		return true
+	}
+	return releaseNamespace != "" && namespace == releaseNamespace
 }

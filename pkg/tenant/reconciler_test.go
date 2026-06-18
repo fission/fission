@@ -222,3 +222,114 @@ func TestNamespaceReconcilerUnlabeledNoCR(t *testing.T) {
 	require.NoError(t, c.List(t.Context(), list))
 	assert.Empty(t, list.Items, "an unlabeled namespace must not be materialized")
 }
+
+// TestNamespaceReconcilerAutoOnboardAll covers cluster mode: every non-system
+// namespace is materialized into a FissionTenant regardless of the label, while
+// the Kubernetes system namespaces and the control-plane namespace are excluded.
+func TestNamespaceReconcilerAutoOnboardAll(t *testing.T) {
+	reconcile := func(t *testing.T, c client.Client, name string) {
+		t.Helper()
+		r := &NamespaceReconciler{logger: logr.Discard(), client: c, autoOnboardAll: true, releaseNamespace: "fission"}
+		_, err := r.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Name: name}})
+		require.NoError(t, err)
+	}
+
+	t.Run("unlabeled namespace is auto-onboarded", func(t *testing.T) {
+		c := newFakeClient(t, ns("team-x", nil))
+		reconcile(t, c, "team-x")
+		got := &fv1.FissionTenant{}
+		require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: "team-x"}, got),
+			"cluster mode must materialize a FissionTenant for an unlabeled namespace")
+		assert.Equal(t, "team-x", got.Spec.Namespace)
+	})
+
+	for _, sys := range []string{"kube-system", "kube-public", "kube-node-lease", "fission"} {
+		t.Run("excludes "+sys, func(t *testing.T) {
+			c := newFakeClient(t, ns(sys, nil))
+			reconcile(t, c, sys)
+			list := &fv1.FissionTenantList{}
+			require.NoError(t, c.List(t.Context(), list))
+			assert.Empty(t, list.Items, "system / control-plane namespace %q must not be auto-onboarded", sys)
+		})
+	}
+
+	// Delete-recreate race: a managed FissionTenant left by a deleted same-named
+	// namespace (stale owner UID) must not be treated as "already onboarded" — the
+	// reconciler requeues so it re-materializes for the current namespace once GC
+	// reaps the stale CR.
+	t.Run("requeues on a stale managed tenant from a recreated namespace", func(t *testing.T) {
+		staleFT := &fv1.FissionTenant{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            "team-x",
+				Annotations:     map[string]string{managedByAnnotation: managedByLabel},
+				OwnerReferences: []metav1.OwnerReference{{Kind: "Namespace", Name: "team-x", UID: "team-x-OLD-uid"}},
+			},
+			Spec: fv1.FissionTenantSpec{Namespace: "team-x"},
+		}
+		c := newFakeClient(t, ns("team-x", nil), staleFT) // ns("team-x") has UID "team-x-uid" != stale
+		r := &NamespaceReconciler{logger: logr.Discard(), client: c, autoOnboardAll: true, releaseNamespace: "fission"}
+		res, err := r.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Name: "team-x"}})
+		require.NoError(t, err)
+		assert.Positive(t, res.RequeueAfter, "stale managed tenant must trigger a requeue, not an early return")
+		list := &fv1.FissionTenantList{}
+		require.NoError(t, c.List(t.Context(), list))
+		assert.Len(t, list.Items, 1, "must not create a duplicate while the stale CR is still being GC'd")
+	})
+
+	// A user-authored CR (no managed annotation) for the namespace is respected:
+	// no requeue, no duplicate.
+	t.Run("respects a user-authored tenant under a different name", func(t *testing.T) {
+		c := newFakeClient(t, ns("team-y", nil), tenant("custom", "team-y"))
+		r := &NamespaceReconciler{logger: logr.Discard(), client: c, autoOnboardAll: true, releaseNamespace: "fission"}
+		res, err := r.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Name: "team-y"}})
+		require.NoError(t, err)
+		assert.Zero(t, res.RequeueAfter, "a user-authored tenant is not stale; no requeue")
+		list := &fv1.FissionTenantList{}
+		require.NoError(t, c.List(t.Context(), list))
+		assert.Len(t, list.Items, 1, "must not duplicate a user-authored tenant")
+	})
+}
+
+// TestNamespaceReconcilerClusterOptOut covers the cluster-mode opt-out label
+// (fission.io/enabled=false): a labelled namespace is not onboarded, and labelling
+// an already-onboarded namespace offboards its controller-managed FissionTenant
+// while leaving a user-authored CR alone.
+func TestNamespaceReconcilerClusterOptOut(t *testing.T) {
+	reconcile := func(t *testing.T, c client.Client, name string) {
+		t.Helper()
+		r := &NamespaceReconciler{logger: logr.Discard(), client: c, autoOnboardAll: true, releaseNamespace: "fission"}
+		_, err := r.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Name: name}})
+		require.NoError(t, err)
+	}
+	optedOut := map[string]string{EnabledLabel: EnabledLabelOptOut}
+
+	t.Run("opted-out namespace is not onboarded", func(t *testing.T) {
+		c := newFakeClient(t, ns("team-z", optedOut))
+		reconcile(t, c, "team-z")
+		list := &fv1.FissionTenantList{}
+		require.NoError(t, c.List(t.Context(), list))
+		assert.Empty(t, list.Items, "fission.io/enabled=false must keep a namespace un-onboarded")
+	})
+
+	t.Run("opting out a live namespace offboards its managed tenant", func(t *testing.T) {
+		managedFT := &fv1.FissionTenant{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            "team-w",
+				Annotations:     map[string]string{managedByAnnotation: managedByLabel},
+				OwnerReferences: []metav1.OwnerReference{{Kind: "Namespace", Name: "team-w", UID: "team-w-uid"}},
+			},
+			Spec: fv1.FissionTenantSpec{Namespace: "team-w"},
+		}
+		c := newFakeClient(t, ns("team-w", optedOut), managedFT)
+		reconcile(t, c, "team-w")
+		err := c.Get(t.Context(), types.NamespacedName{Name: "team-w"}, &fv1.FissionTenant{})
+		assert.True(t, apierrors.IsNotFound(err), "opting out must delete the controller-managed FissionTenant")
+	})
+
+	t.Run("opt-out leaves a user-authored tenant alone", func(t *testing.T) {
+		c := newFakeClient(t, ns("team-u", optedOut), tenant("user-owned", "team-u"))
+		reconcile(t, c, "team-u")
+		require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: "user-owned"}, &fv1.FissionTenant{}),
+			"a user-authored FissionTenant must survive the opt-out label")
+	})
+}

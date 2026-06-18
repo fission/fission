@@ -701,23 +701,37 @@ mcp:
 ## Multi-namespace tenancy (docs/multiple-namespace).
 ##
 tenancy:
-  ## dynamicNamespaces turns on the cluster-wide Fission-CRD watch + live
-  ## tenant-membership filtering, so namespaces can be onboarded/offboarded at
-  ## runtime without restarting the control plane. Requires tenantController.enabled.
-  ## It adds exactly one cluster-wide grant per data-plane component, on
-  ## fission.io CRD types ONLY (no core/workload type), and sets
-  ## FISSION_DYNAMIC_NAMESPACES on those components. Off by default — the
-  ## per-namespace caches and RBAC behave exactly as before.
-  dynamicNamespaces: false
+  ## mode selects the multi-namespace tenancy posture (docs/multiple-namespace).
+  ## One of:
+  ##   static  (default) — Fission resources only in the env-seeded namespace set
+  ##           (defaultNamespace + additionalFissionNamespaces); per-namespace
+  ##           Roles rendered by Helm; no tenant controller. Behaves exactly as
+  ##           pre-tenancy Fission.
+  ##   dynamic — namespaces onboarded/offboarded at runtime via FissionTenant CRs
+  ##           or the fission.io/enabled label, with NO control-plane restart. The
+  ##           tenant controller provisions narrow per-namespace fetcher/builder
+  ##           RBAC + per-namespace derived HMAC keys; data-plane managers watch
+  ##           Fission CRDs cluster-wide and filter to the onboarded set; tenant
+  ##           Secrets/ConfigMaps/workloads are NEVER in a cluster-wide cache. The
+  ##           recommended posture for untrusted multi-tenant clusters.
+  ##   cluster — opt-in trusted-cluster mode. The controller auto-onboards every
+  ##           namespace (no FissionTenant CR needed), so fetcher/builder pods keep
+  ##           their narrow per-namespace RBAC + keys, but the control plane
+  ##           (executor/buildermgr) reads Secrets/ConfigMaps and manages workloads
+  ##           CLUSTER-WIDE for operational simplicity. Label a namespace
+  ##           `fission.io/enabled=false` to opt it OUT of auto-onboarding (and to
+  ##           offboard one already onboarded). SECURITY TRADE-OFF: a compromised
+  ##           executor/buildermgr can read any namespace's Secrets. Use ONLY on
+  ##           single-tenant/trusted clusters.
+  ## dynamic and cluster set FISSION_TENANCY_MODE on the data-plane components and
+  ## render the tenant controller; static renders neither.
+  mode: static
 
 ## The tenant controller is the multi-namespace tenancy lifecycle controller
-## (docs/multiple-namespace). It reconciles FissionTenant CRs and namespaces
-## labelled fission.io/enabled=true into the live resource-namespace set and
-## reports readiness. Off by default; enabling it is additive (the existing
-## env-driven namespace set keeps working).
+## (docs/multiple-namespace). It is rendered automatically when tenancy.mode is
+## dynamic or cluster (and never when static); the settings below tune it.
 ##
 tenantController:
-  enabled: false
   replicas: 1
   ## Run active-passive with leader election when replicas > 1.
   leaderElection:

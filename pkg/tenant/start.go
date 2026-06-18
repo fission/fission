@@ -87,7 +87,16 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	// executor/buildermgr SAs live — the subject namespace for the per-tenant
 	// workload RoleBindings the controller provisions.
 	releaseNamespace := os.Getenv("POD_NAMESPACE")
-	tenantR := &TenantReconciler{logger: logger.WithName("tenant"), client: crMgr.GetClient(), resolver: resolver, master: master, releaseNamespace: releaseNamespace}
+	// In cluster mode the executor/buildermgr are bound cluster-wide via static
+	// ClusterRoleBindings (cluster-mode-bindings.yaml), so the controller must NOT
+	// also mint per-namespace workload RoleBindings for them — only the narrow
+	// fetcher/builder per-namespace RBAC. Passing an empty releaseNamespace to the
+	// reconciler makes namespaceRBACObjects skip the executor/buildermgr bindings.
+	tenantReleaseNamespace := releaseNamespace
+	if utils.ClusterTenancyEnabled() {
+		tenantReleaseNamespace = ""
+	}
+	tenantR := &TenantReconciler{logger: logger.WithName("tenant"), client: crMgr.GetClient(), resolver: resolver, master: master, releaseNamespace: tenantReleaseNamespace}
 	// Watch FissionTenant spec changes AND Namespace create/delete: the Ready
 	// condition and the resolver entry depend on whether the target namespace
 	// exists, which the FissionTenant watch alone cannot observe.
@@ -99,11 +108,19 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		Complete(tenantR); err != nil {
 		return fmt.Errorf("error registering fission-tenant reconciler: %w", err)
 	}
-	// The namespace reconciler triggers on the fission.io/enabled label rather
-	// than a generation change, so it overrides the default predicate.
+	// The namespace reconciler materializes Namespaces into FissionTenant CRs. In
+	// dynamic mode it triggers on the fission.io/enabled label; in cluster mode it
+	// auto-onboards every namespace (admit all; the reconciler excludes system /
+	// control-plane namespaces). Either way it overrides the default predicate.
+	nsReconciler := &NamespaceReconciler{logger: logger.WithName("namespace"), client: crMgr.GetClient()}
+	nsPredicate := enabledLabelPredicate()
+	if utils.ClusterTenancyEnabled() {
+		nsReconciler.autoOnboardAll = true
+		nsReconciler.releaseNamespace = releaseNamespace
+		nsPredicate = autoOnboardPredicate()
+	}
 	if err := controller.RegisterWithPredicates(crMgr, &corev1.Namespace{},
-		&NamespaceReconciler{logger: logger.WithName("namespace"), client: crMgr.GetClient()},
-		"fission-tenant-namespace", 0, enabledLabelPredicate()); err != nil {
+		nsReconciler, "fission-tenant-namespace", 0, nsPredicate); err != nil {
 		return fmt.Errorf("error registering tenant namespace reconciler: %w", err)
 	}
 
@@ -118,6 +135,26 @@ func enabledLabelPredicate() predicate.Predicate {
 	return predicate.NewPredicateFuncs(func(o client.Object) bool {
 		return o.GetLabels()[EnabledLabel] == "true"
 	})
+}
+
+// autoOnboardPredicate (cluster mode) admits Namespace create events (every
+// existing namespace surfaces as an add on the informer's initial sync, any later
+// namespace as a create, so the reconciler materializes a FissionTenant for each
+// exactly once) AND updates that flip the fission.io/enabled opt-out label, so an
+// operator labelling a live namespace fission.io/enabled=false (or removing the
+// label to re-enable) wakes the reconciler to offboard / re-onboard it. Other
+// label/spec updates change nothing (materialize is idempotent, keyed on
+// existence), and namespace deletes are handled by owner-reference GC of the
+// materialized FissionTenant.
+func autoOnboardPredicate() predicate.Predicate {
+	return predicate.Funcs{
+		CreateFunc: func(event.CreateEvent) bool { return true },
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			return e.ObjectOld.GetLabels()[EnabledLabel] != e.ObjectNew.GetLabels()[EnabledLabel]
+		},
+		DeleteFunc:  func(event.DeleteEvent) bool { return false },
+		GenericFunc: func(event.GenericEvent) bool { return false },
+	}
 }
 
 // namespaceExistencePredicate admits only Namespace create and delete events —

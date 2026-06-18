@@ -20,8 +20,15 @@ import (
 
 func GetInformerEventChecker(ctx context.Context, client kubernetes.Interface, reason string) map[string]cache.SharedInformer {
 	informers := make(map[string]cache.SharedInformer)
-	namespaces := DefaultNSResolver()
-	for _, ns := range namespaces.FissionNSWithOptions(WithBuilderNs(), WithFunctionNs(), WithDefaultNs()) {
+	// Cluster mode: function pods (and their websocket-connection events) live in
+	// any namespace, so watch Events cluster-wide via a single informer keyed ""
+	// (the executor holds the matching cluster-wide events read in cluster mode).
+	// Other modes build one per-namespace informer over the Fission namespaces.
+	watchNamespaces := listNamespaces(DefaultNSResolver().FissionNSWithOptions(WithBuilderNs(), WithFunctionNs(), WithDefaultNs()))
+	if ClusterTenancyEnabled() {
+		watchNamespaces = []string{metav1.NamespaceAll}
+	}
+	for _, ns := range watchNamespaces {
 		informers[ns] = cache.NewSharedInformer(
 			&cache.ListWatch{
 				ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
