@@ -79,12 +79,12 @@ rules:
   - clusterroles
   verbs:
   - bind
+  # Single-sourced from _tenant-workload-roles.tpl (same list the ClusterRoles and
+  # the admission policy derive from), so the bind-scope cannot drift from them.
   resourceNames:
-  - fission-executor-tenant-workload
-  - fission-buildermgr-tenant-workload
-  - fission-fetcher-tenant-workload
-  - fission-builder-tenant-workload
-  - fission-fetcher-websocket-tenant-workload
+{{- range $r := (include "fission.tenantWorkloadRoles" . | fromYamlArray) }}
+  - {{ $r.name }}
+{{- end }}
 - apiGroups:
   - ""
   resources:

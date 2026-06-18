@@ -10,39 +10,14 @@
 # are install-independent because dynamic tenancy is one Fission install per
 # cluster. Rendered only in dynamic mode; the static path is unchanged.
 #
-# executor/buildermgr: manage their workloads (Deployments, Services, pods, HPAs).
+# The role set (name + rules partial) is single-sourced in _tenant-workload-roles.tpl;
+# rbac.yaml and admission-policy.yaml derive their resourceNames/CEL from the same list.
+{{- range $r := (include "fission.tenantWorkloadRoles" . | fromYamlArray) }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: fission-executor-tenant-workload
-{{- include "executor-kuberules" . }}
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: fission-buildermgr-tenant-workload
-{{- include "buildermgr-kuberules" . }}
-# fetcher/builder/fetcher-websocket: what a function pod's sidecars may read in
-# their own tenant namespace (configmaps/secrets/packages/serviceaccounts; events
-# + pods for the websocket fetcher). The dynamic twin of the static Roles in
-# _function-access-role.tpl; pkg/tenant/provision.go binds these by name.
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: fission-fetcher-tenant-workload
-{{- include "fissionFunction.fetcherRules" . }}
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: fission-builder-tenant-workload
-{{- include "fissionFunction.builderRules" . }}
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: fission-fetcher-websocket-tenant-workload
-{{- include "fissionFunction.fetcherWebsocketRules" . }}
+  name: {{ $r.name }}
+{{- include $r.rules $ }}
+{{- end }}
 {{- end }}

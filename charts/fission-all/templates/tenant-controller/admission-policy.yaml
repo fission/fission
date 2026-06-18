@@ -1,4 +1,11 @@
 {{- if dig "dynamicNamespaces" false (.Values.tenancy | default dict) }}
+{{- /* CEL list of the tenant-workload ClusterRole names, single-sourced from
+       _tenant-workload-roles.tpl so the policy's roleRef allow-list cannot drift
+       from the ClusterRoles it guards or the controller's bind resourceNames. */ -}}
+{{- $roleNames := list }}
+{{- range $r := (include "fission.tenantWorkloadRoles" . | fromYamlArray) }}
+{{- $roleNames = append $roleNames (printf "'%s'" $r.name) }}
+{{- end }}
 # Defense-in-depth for the tenant controller's `bind` privilege. The controller
 # can only bind the fixed-name *-tenant-workload ClusterRoles (rbac.yaml
 # resourceNames-scopes that), but a COMPROMISED controller could still bind one of
@@ -35,13 +42,8 @@ spec:
   matchConditions:
     - name: targets-tenant-workload-clusterrole
       expression: >
-        object.roleRef.kind == 'ClusterRole' && object.roleRef.name in [
-          'fission-executor-tenant-workload',
-          'fission-buildermgr-tenant-workload',
-          'fission-fetcher-tenant-workload',
-          'fission-builder-tenant-workload',
-          'fission-fetcher-websocket-tenant-workload'
-        ]
+        object.roleRef.kind == 'ClusterRole' &&
+        object.roleRef.name in [{{ join ", " $roleNames }}]
   validations:
     - expression: >
         !has(object.subjects) || object.subjects.all(s,
