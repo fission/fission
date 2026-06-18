@@ -201,7 +201,7 @@ func CreatePackage(input cli.Input, client cmd.Client, pkgName string, pkgNamesp
 		if len(specFile) > 0 { // we should do this in all cases, i think
 			pkgStatus = fv1.BuildStatusNone
 		}
-		deployment, err := CreateArchive(client, input, deployArchiveFiles, noZip, insecure, deployChecksum, specDir, specFile)
+		deployment, err := CreateArchive(client, input, deployArchiveFiles, noZip, insecure, deployChecksum, specDir, specFile, pkgNamespace)
 		if err != nil {
 			return nil, fmt.Errorf("error creating deploy archive: %w", err)
 		}
@@ -211,7 +211,7 @@ func CreatePackage(input cli.Input, client cmd.Client, pkgName string, pkgNamesp
 		}
 	}
 	if len(srcArchiveFiles) > 0 {
-		source, err := CreateArchive(client, input, srcArchiveFiles, false, insecure, srcChecksum, specDir, specFile)
+		source, err := CreateArchive(client, input, srcArchiveFiles, false, insecure, srcChecksum, specDir, specFile, pkgNamespace)
 		if err != nil {
 			return nil, fmt.Errorf("error creating source archive: %w", err)
 		}

@@ -92,6 +92,37 @@ func MakeClientWithTransport(url string, rt http.RoundTripper) ClientInterface {
 	}
 }
 
+// namespaceHeaderRoundTripper sets the X-Fission-Auth-Namespace header (the
+// tenant the request is scoped to) before delegating to the signing transport.
+// The header is not part of the HMAC canonical, so setting it here does not
+// affect the signature; it tells storagesvc which namespace's key to verify with.
+type namespaceHeaderRoundTripper struct {
+	namespace string
+	next      http.RoundTripper
+}
+
+func (n *namespaceHeaderRoundTripper) RoundTrip(r *http.Request) (*http.Response, error) {
+	r = r.Clone(r.Context())
+	r.Header.Set(hmacauth.HeaderNamespace, n.namespace)
+	return n.next.RoundTrip(r)
+}
+
+// MakeClientNS is MakeClient for a namespace-scoped caller: it signs with the
+// per-namespace derived ServiceStoragesvc key (so an archive it uploads is scoped
+// to `namespace`, and storagesvc reports `namespace` as the authenticated
+// principal) and sets the namespace header. masterSecret is the chart-installed
+// master, from which the namespace key is derived in-process. With an empty
+// masterSecret (internalAuth disabled) or an empty namespace it is exactly
+// MakeClient — unsigned or master-derived/unscoped — so it is always a safe drop-in.
+func MakeClientNS(url string, masterSecret []byte, namespace string) ClientInterface {
+	if len(masterSecret) == 0 || namespace == "" {
+		return MakeClient(url, masterSecret)
+	}
+	rt := hmacauth.ServiceSignerNS(masterSecret, hmacauth.ServiceStoragesvc, namespace,
+		otelhttp.NewTransport(http.DefaultTransport), time.Now)
+	return MakeClientWithTransport(url, &namespaceHeaderRoundTripper{namespace: namespace, next: rt})
+}
+
 // HMACSecretFromEnv returns the HMAC secret from
 // FISSION_INTERNAL_AUTH_SECRET. Returns nil when unset, which leaves
 // the storagesvc client unsigned — the correct backwards-compatible

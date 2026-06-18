@@ -401,8 +401,13 @@ func applyArchives(input cli.Input, fclient cmd.Client, specDir string, fr *Fiss
 		} else {
 			// doesn't exist, upload
 			fmt.Printf("uploading archive %v\n", name)
-			// ar.URL is actually a local filename at this stage
-			uploadedAr, err := pkgutil.UploadArchiveFile(input.Context(), fclient, ar.URL)
+			// ar.URL is actually a local filename at this stage.
+			// Unscoped ("" namespace): spec archives are de-duplicated by checksum
+			// and may be shared by packages across namespaces, so they cannot be
+			// pinned to a single tenant. They upload as legacy (unscoped) ids,
+			// readable by any tenant (grandfathered) — scoping the spec path is a
+			// tracked follow-up that needs per-package-namespace upload handling.
+			uploadedAr, err := pkgutil.UploadArchiveFile(input.Context(), fclient, ar.URL, "")
 			if err != nil {
 				return err
 			}
