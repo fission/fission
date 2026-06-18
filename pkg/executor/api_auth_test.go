@@ -9,7 +9,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/assert"
 
 	hmacauth "github.com/fission/fission/pkg/auth/hmac"
@@ -25,18 +24,18 @@ import (
 func TestExecutorVerifierMiddlewareWiring(t *testing.T) {
 	master := []byte("test-master-must-be-32-bytes-min!!")
 
-	r := mux.NewRouter()
-	r.Use(hmacauth.ServiceVerifier(master, nil, hmacauth.ServiceExecutor, hmacauth.VerifierOpts{
+	m := http.NewServeMux()
+	m.HandleFunc("POST /v2/getServiceForFunction", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	m.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	r := hmacauth.ServiceVerifier(master, nil, hmacauth.ServiceExecutor, hmacauth.VerifierOpts{
 		SkewSec:      60,
 		Bypass:       []string{"/healthz"},
 		MaxBodyBytes: hmacauth.DefaultMaxBodyBytes,
-	}))
-	r.HandleFunc("/v2/getServiceForFunction", func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}).Methods(http.MethodPost)
-	r.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}).Methods(http.MethodGet)
+	})(m)
 
 	t.Run("rejects unsigned /v2/getServiceForFunction", func(t *testing.T) {
 		rr := httptest.NewRecorder()
@@ -55,15 +54,15 @@ func TestExecutorVerifierMiddlewareWiring(t *testing.T) {
 	})
 
 	t.Run("empty master short-circuits to pass-through", func(t *testing.T) {
-		r2 := mux.NewRouter()
-		r2.Use(hmacauth.ServiceVerifier(nil, nil, hmacauth.ServiceExecutor, hmacauth.VerifierOpts{
+		m2 := http.NewServeMux()
+		m2.HandleFunc("POST /v2/getServiceForFunction", func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+		r2 := hmacauth.ServiceVerifier(nil, nil, hmacauth.ServiceExecutor, hmacauth.VerifierOpts{
 			SkewSec:      60,
 			Bypass:       []string{"/healthz"},
 			MaxBodyBytes: hmacauth.DefaultMaxBodyBytes,
-		}))
-		r2.HandleFunc("/v2/getServiceForFunction", func(w http.ResponseWriter, _ *http.Request) {
-			w.WriteHeader(http.StatusOK)
-		}).Methods(http.MethodPost)
+		})(m2)
 
 		rr := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodPost, "/v2/getServiceForFunction", nil)

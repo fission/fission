@@ -16,7 +16,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/require"
 )
 
@@ -51,10 +50,7 @@ func chunkedHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func TestChunked(t *testing.T) {
-	mr := mux.NewRouter()
-	mr.Use(HTTPMetricMiddleware)
-	mr.Handle("/", http.HandlerFunc(chunkedHandler))
-	s := httptest.NewServer(mr)
+	s := httptest.NewServer(InstrumentHandler("/", http.HandlerFunc(chunkedHandler)))
 	defer s.Close()
 
 	resp, err := http.Get(s.URL)

@@ -5,10 +5,9 @@
 package metrics
 
 import (
-	"fmt"
 	"net/http"
+	"strconv"
 
-	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/fission/fission/pkg/router/util"
@@ -64,27 +63,43 @@ func (rw *ResponseWriterWrapper) Flush() {
 	}
 }
 
-func HTTPMetricMiddleware(next http.Handler) http.Handler {
+// InstrumentHandler wraps next, recording request metrics under a fixed,
+// low-cardinality path label. Use it for static routes (e.g. stdlib ServeMux
+// handlers) where the registered pattern is known at wiring time.
+func InstrumentHandler(path string, next http.Handler) http.Handler {
+	return instrument(func(*http.Request) string { return path }, next)
+}
+
+// InstrumentHandlerFunc wraps next, deriving the path label per request via
+// pathFn. Use it where the matched route template is only known at request
+// time — e.g. the router's gorilla mux, which supplies the template from
+// mux.CurrentRoute. Keeping the mux-specific lookup in the caller is what lets
+// this package stay router-agnostic.
+func InstrumentHandlerFunc(pathFn func(*http.Request) string, next http.Handler) http.Handler {
+	return instrument(pathFn, next)
+}
+
+// instrument is the shared metrics core. pathFn is evaluated BEFORE serving so
+// the in-flight gauge inc/dec and the duration timer all key on the same path
+// series; websocket upgrades bypass instrumentation (they never return until
+// the socket closes).
+func instrument(pathFn func(*http.Request) string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if util.IsWebsocketRequest(r) {
 			next.ServeHTTP(w, r)
 			return
 		}
-		labels := make(prometheus.Labels, 0)
-		labels["path"] = r.URL.Path
-		if route := mux.CurrentRoute(r); route != nil {
-			if routePath, err := route.GetPathTemplate(); err == nil {
-				labels["path"] = routePath
-			}
+		labels := prometheus.Labels{
+			"path":   pathFn(r),
+			"method": r.Method,
 		}
-		labels["method"] = r.Method
 		rw := ResponseWriterWrapper{w, http.StatusOK}
 		httpRequestInFlight.With(labels).Inc()
-		httpRequestDuration := prometheus.NewTimer(httpRequestDuration.With(labels))
+		timer := prometheus.NewTimer(httpRequestDuration.With(labels))
 		defer func() {
-			httpRequestDuration.ObserveDuration()
+			timer.ObserveDuration()
 			httpRequestInFlight.With(labels).Dec()
-			labels["code"] = fmt.Sprintf("%d", rw.statusCode)
+			labels["code"] = strconv.Itoa(rw.statusCode)
 			httpRequestsTotal.With(labels).Inc()
 		}()
 		next.ServeHTTP(&rw, r)

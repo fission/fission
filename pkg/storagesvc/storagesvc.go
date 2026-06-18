@@ -16,7 +16,6 @@ import (
 	"errors"
 
 	"github.com/go-logr/logr"
-	"github.com/gorilla/mux"
 	"golang.org/x/sync/errgroup"
 
 	hmacauth "github.com/fission/fission/pkg/auth/hmac"
@@ -182,6 +181,18 @@ func (ss *StorageService) uploadHandler(w http.ResponseWriter, r *http.Request) 
 	totalArchives.WithLabelValues().Inc()
 }
 
+// getOrListHandler dispatches GET /v1/archive: a request carrying an `id` query
+// param downloads that archive, otherwise it lists archives. stdlib ServeMux
+// cannot match on query params (gorilla used .Queries("id", "{id}") to split
+// these), so the two GET routes merge here.
+func (ss *StorageService) getOrListHandler(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Query().Has("id") {
+		ss.downloadHandler(w, r)
+		return
+	}
+	ss.listItems(w, r)
+}
+
 func (ss *StorageService) getIdFromRequest(r *http.Request) (string, error) {
 	values := r.URL.Query()
 	ids, ok := values["id"]
@@ -300,11 +311,24 @@ func MakeStorageService(logger logr.Logger, storageClient *StorageClient, port i
 }
 
 func (ss *StorageService) Start(ctx context.Context, mgr *errgroup.Group, port int) {
-	r := mux.NewRouter()
+	m := http.NewServeMux()
+	// Each route carries its own metrics instrumentation keyed on the static
+	// path (replacing the gorilla Use(metrics) middleware); the HMAC verifier
+	// wraps the whole mux below.
+	handle := func(pattern, label string, h http.HandlerFunc) {
+		m.Handle(pattern, metrics.InstrumentHandler(label, h))
+	}
+	handle("POST /v1/archive", "/v1/archive", ss.uploadHandler)
+	handle("GET /v1/archive", "/v1/archive", ss.getOrListHandler)
+	handle("DELETE /v1/archive", "/v1/archive", ss.deleteHandler)
+	handle("HEAD /v1/archive", "/v1/archive", ss.infoHandler)
+	handle("GET /healthz", "/healthz", ss.healthHandler)
+
+	var handler http.Handler = m
 	if len(ss.authSecret) > 0 {
 		// HMAC enforcement is opt-in via the FISSION_INTERNAL_AUTH_SECRET env
-		// var; an empty master means the verifier middleware is not registered
-		// at all (backwards-compatible with pre-1.(N+1) installs).
+		// var; an empty master means the verifier is not registered at all
+		// (backwards-compatible with pre-1.(N+1) installs).
 		//
 		// The verifier derives the per-service key for ServiceStoragesvc rather
 		// than using the master directly, so a leak of this server's memory
@@ -318,7 +342,11 @@ func (ss *StorageService) Start(ctx context.Context, mgr *errgroup.Group, port i
 		// master-derived key for callers that send no namespace header (existing
 		// fetchers, the CLI, the pruner), so this is safe to adopt unconditionally
 		// — multi-namespace tenancy doesn't have to be enabled for it to be inert.
-		r.Use(hmacauth.ServiceVerifierNamespaceFromHeader(ss.authSecret, ss.authSecretOld, hmacauth.ServiceStoragesvc, hmacauth.VerifierOpts{
+		//
+		// The verifier wraps the whole mux as the OUTERMOST layer so 401
+		// rejections are handled at the auth layer and the per-route metrics
+		// instrumentation sees only post-verification requests.
+		handler = hmacauth.ServiceVerifierNamespaceFromHeader(ss.authSecret, ss.authSecretOld, hmacauth.ServiceStoragesvc, hmacauth.VerifierOpts{
 			SkewSec: 60,
 			Bypass:  []string{"/healthz"},
 			// 256 MiB caps the verifier's in-memory body buffer; this is
@@ -326,24 +354,17 @@ func (ss *StorageService) Start(ctx context.Context, mgr *errgroup.Group, port i
 			// of an unsigned/malicious upload to /v1/archive.
 			MaxBodyBytes: hmacauth.DefaultMaxBodyBytes,
 			Logger:       ss.logger.WithName("hmac"),
-		}))
+		})(handler)
 	}
-	r.Use(metrics.HTTPMetricMiddleware)
-	r.HandleFunc("/v1/archive", ss.uploadHandler).Methods("POST")
-	r.HandleFunc("/v1/archive", ss.downloadHandler).Queries("id", "{id}").Methods("GET")
-	r.HandleFunc("/v1/archive", ss.listItems).Methods("GET")
-	r.HandleFunc("/v1/archive", ss.deleteHandler).Methods("DELETE")
-	r.HandleFunc("/v1/archive", ss.infoHandler).Methods("HEAD")
-	r.HandleFunc("/healthz", ss.healthHandler).Methods("GET")
 
 	// Storagesvc is router/builder/function-pod internal per
 	// charts/fission-all/templates/storagesvc/networkpolicy.yaml.
 	// SecurityHeaders + DenyAllCORS as defense-in-depth: a future
 	// regression exposing this port via Ingress must not become a
 	// browser-readable archive store.
-	handler := httpsecurity.SecurityHeaders(
+	handler = httpsecurity.SecurityHeaders(
 		httpsecurity.DenyAllCORS(
-			otelUtils.GetHandlerWithOTEL(r, "fission-storagesvc", otelUtils.UrlsToIgnore("/healthz")),
+			otelUtils.GetHandlerWithOTEL(handler, "fission-storagesvc", otelUtils.UrlsToIgnore("/healthz")),
 		),
 	)
 	httpserver.StartServer(ctx, ss.logger, mgr, "storagesvc", fmt.Sprintf("%d", port), handler)

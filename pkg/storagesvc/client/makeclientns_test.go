@@ -9,7 +9,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -26,14 +25,14 @@ func TestMakeClientNS(t *testing.T) {
 
 	var principal string
 	var sawRequest bool
-	r := mux.NewRouter()
-	r.Use(hmacauth.ServiceVerifierNamespaceFromHeader(master, nil, hmacauth.ServiceStoragesvc,
-		hmacauth.VerifierOpts{SkewSec: 60}))
-	r.HandleFunc("/v1/archive", func(w http.ResponseWriter, req *http.Request) {
+	m := http.NewServeMux()
+	m.HandleFunc("HEAD /v1/archive", func(w http.ResponseWriter, req *http.Request) {
 		principal, _ = hmacauth.AuthenticatedNamespace(req.Context())
 		sawRequest = true
 		w.WriteHeader(http.StatusOK)
-	}).Methods(http.MethodHead)
+	})
+	r := hmacauth.ServiceVerifierNamespaceFromHeader(master, nil, hmacauth.ServiceStoragesvc,
+		hmacauth.VerifierOpts{SkewSec: 60})(m)
 
 	srv := httptest.NewServer(r)
 	defer srv.Close()

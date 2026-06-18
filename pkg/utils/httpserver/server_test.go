@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/gorilla/mux"
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -29,8 +28,10 @@ func TestStartServer(t *testing.T) {
 
 	ctx := t.Context()
 	logger := loggerfactory.GetLogger()
-	m := mux.NewRouter()
-	m.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	m := http.NewServeMux()
+	// "/{$}" matches only the exact root path (stdlib ServeMux's bare "/" is a
+	// catch-all subtree, unlike gorilla's exact "/"), so /notfound still 404s.
+	m.Handle("/{$}", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, err := w.Write([]byte("test handler"))
 		if err != nil {

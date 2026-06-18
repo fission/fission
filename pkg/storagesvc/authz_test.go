@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -116,12 +115,12 @@ func TestArchiveAuthzHandlers(t *testing.T) {
 	require.NoError(t, err)
 	ss := MakeStorageService(logr.Discard(), sc, 0, master, nil)
 
-	r := mux.NewRouter()
-	r.Use(hmacauth.ServiceVerifierNamespaceFromHeader(master, nil, hmacauth.ServiceStoragesvc,
-		hmacauth.VerifierOpts{SkewSec: 60, Now: func() time.Time { return now }}))
-	r.HandleFunc("/v1/archive", ss.downloadHandler).Queries("id", "{id}").Methods(http.MethodGet)
-	r.HandleFunc("/v1/archive", ss.deleteHandler).Methods(http.MethodDelete)
-	r.HandleFunc("/v1/archive", ss.infoHandler).Methods(http.MethodHead)
+	m := http.NewServeMux()
+	m.HandleFunc("GET /v1/archive", ss.getOrListHandler)
+	m.HandleFunc("DELETE /v1/archive", ss.deleteHandler)
+	m.HandleFunc("HEAD /v1/archive", ss.infoHandler)
+	r := hmacauth.ServiceVerifierNamespaceFromHeader(master, nil, hmacauth.ServiceStoragesvc,
+		hmacauth.VerifierOpts{SkewSec: 60, Now: func() time.Time { return now }})(m)
 
 	// Seed archives directly through the backend (the upload path is covered by
 	// TestGetUploadFileNameScoping); returns the stored id.
