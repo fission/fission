@@ -72,7 +72,18 @@ func (s *localObjectStore) put(name string, r io.Reader, _ int64) (string, error
 	}
 	defer root.Close()
 
-	f, err := root.Create(filepath.FromSlash(name))
+	rel := filepath.FromSlash(name)
+	// A namespace-scoped name (e.g. _tenant_/<ns>/<uuid>) nests under directories
+	// that must exist before Create. MkdirAll runs through the os.Root, so it is
+	// confined to the container — even a crafted name cannot create directories
+	// outside it.
+	if dir := filepath.Dir(rel); dir != "." {
+		if err := root.MkdirAll(dir, 0o755); err != nil {
+			return "", err
+		}
+	}
+
+	f, err := root.Create(rel)
 	if err != nil {
 		return "", err
 	}
@@ -82,7 +93,7 @@ func (s *localObjectStore) put(name string, r io.Reader, _ int64) (string, error
 		return "", err
 	}
 	// id is the absolute path of the stored file.
-	return filepath.Join(s.containerPath, filepath.FromSlash(name)), nil
+	return filepath.Join(s.containerPath, rel), nil
 }
 
 func (s *localObjectStore) open(id string) (io.ReadCloser, error) {

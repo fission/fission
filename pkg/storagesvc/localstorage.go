@@ -6,6 +6,7 @@ package storagesvc
 
 import (
 	"os"
+	"path"
 
 	"github.com/fission/fission/pkg/utils/uuid"
 )
@@ -34,10 +35,16 @@ func (ls localStorage) getStorageType() StorageType {
 	return ls.storageType
 }
 
-func (ls localStorage) getUploadFileName() (string, error) {
+func (ls localStorage) getUploadFileName(namespace string) (string, error) {
 	// This is not the item ID (that's returned by Put)
 	// should we just use handler.Filename? what are the constraints here?
-	return uuid.NewString(), nil
+	id := uuid.NewString()
+	if namespace != "" {
+		// Namespace-scoped: _tenant_/<ns>/<uuid> under the container, so storagesvc
+		// can authorize a caller against the owning namespace (see authz.go).
+		return path.Join(archiveTenantMarker, namespace, id), nil
+	}
+	return id, nil
 }
 
 func (ls localStorage) getSubDir() string {

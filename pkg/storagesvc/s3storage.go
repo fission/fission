@@ -55,8 +55,13 @@ func (ss s3Storage) getSubDir() string {
 	return ss.subDir
 }
 
-func (ss s3Storage) getUploadFileName() (string, error) {
+func (ss s3Storage) getUploadFileName(namespace string) (string, error) {
 	id := uuid.NewString()
+	if namespace != "" {
+		// Namespace-scoped: <subDir>/_tenant_/<ns>/<uuid>, so storagesvc can
+		// authorize a caller against the owning namespace (see authz.go).
+		return path.Join(ss.subDir, archiveTenantMarker, namespace, id), nil
+	}
 	return path.Join(ss.subDir, id), nil
 }
 
