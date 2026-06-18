@@ -79,38 +79,24 @@ type VerifierOpts struct {
 	// care about audit logs don't crash. Rejection log lines deliberately
 	// omit the signature and timestamp values to avoid log poisoning.
 	Logger logr.Logger
-	// KeysFromRequest, when set, supplies the ordered candidate keys to try for
-	// each request — used by namespace-scoped verifiers that derive the key from
-	// a request header (e.g. ServiceVerifierNamespaceFromHeader). It REPLACES
-	// Secret/OldSecret for the verification step; Secret is then ignored for
-	// key selection but a non-nil KeysFromRequest still enables enforcement.
-	// Empty/nil candidate keys are skipped. Keep it cheap — it runs per request.
-	// Candidates from this hook are unlabeled (unrestricted principal); use
-	// KeysFromRequestLabeled to also report the authenticated namespace.
-	KeysFromRequest func(*http.Request) [][]byte
-	// KeysFromRequestLabeled is KeysFromRequest plus a principal label per
-	// candidate: the namespace recorded (via AuthenticatedNamespace) when that
-	// candidate verifies. Takes precedence over KeysFromRequest and
-	// Secret/OldSecret. Lets a multi-tenant verifier authorize on the namespace
-	// whose key actually matched, not a caller-controlled header.
+	// KeysFromRequestLabeled, when set, supplies the ordered candidate keys to try
+	// for each request, each tagged with the principal namespace recorded (via
+	// AuthenticatedNamespace) when that candidate verifies — used by namespace-
+	// scoped verifiers that derive the key from a request header (e.g.
+	// ServiceVerifierNamespaceFromHeader). It REPLACES Secret/OldSecret for key
+	// selection, and a non-nil hook enables enforcement. Empty/nil candidate keys
+	// are skipped; an empty namespace label is an unrestricted principal. Lets a
+	// multi-tenant verifier authorize on the namespace whose key actually matched,
+	// not a caller-controlled header. Keep it cheap — it runs per request.
 	KeysFromRequestLabeled func(*http.Request) []LabeledKey
 }
 
 // labeledCandidates returns the ordered candidate keys to try for a request,
-// each tagged with the principal namespace to record on a match. Precedence:
-// the labeled hook, then the unlabeled hook (all unrestricted), then the static
-// active+rotation pair (unrestricted).
+// each tagged with the principal namespace to record on a match: the per-request
+// labeled hook when set, else the static active+rotation pair (unrestricted).
 func (o VerifierOpts) labeledCandidates(r *http.Request) []LabeledKey {
 	if o.KeysFromRequestLabeled != nil {
 		return o.KeysFromRequestLabeled(r)
-	}
-	if o.KeysFromRequest != nil {
-		raw := o.KeysFromRequest(r)
-		out := make([]LabeledKey, len(raw))
-		for i, k := range raw {
-			out[i] = LabeledKey{Key: k}
-		}
-		return out
 	}
 	return []LabeledKey{{Key: o.Secret}, {Key: o.OldSecret}}
 }
@@ -146,7 +132,7 @@ func Verifier(opts VerifierOpts) func(http.Handler) http.Handler {
 			// (backwards-compat short-circuit). In pass-through mode we
 			// deliberately do NOT bound the body — the downstream handler's
 			// existing limits apply unchanged.
-			if len(opts.Secret) == 0 && opts.KeysFromRequest == nil && opts.KeysFromRequestLabeled == nil {
+			if len(opts.Secret) == 0 && opts.KeysFromRequestLabeled == nil {
 				next.ServeHTTP(w, r)
 				return
 			}
