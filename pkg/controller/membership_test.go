@@ -81,10 +81,10 @@ func TestTenantReenqueueMapFunc(t *testing.T) {
 func TestTenantScopedPredicates(t *testing.T) {
 	base := []predicate.Predicate{predicate.GenerationChangedPredicate{}}
 
-	t.Setenv("FISSION_DYNAMIC_NAMESPACES", "false")
+	t.Setenv("FISSION_TENANCY_MODE", "static")
 	assert.Len(t, tenantScopedPredicates(base), 1, "off: no membership predicate added")
 
-	t.Setenv("FISSION_DYNAMIC_NAMESPACES", "true")
+	t.Setenv("FISSION_TENANCY_MODE", "dynamic")
 	got := tenantScopedPredicates(base)
 	assert.Len(t, got, 2, "on: membership predicate appended")
 	assert.Len(t, base, 1, "the caller's slice must not be mutated")

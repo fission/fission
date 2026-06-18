@@ -41,7 +41,7 @@ func TestExecutorCacheOptionsTierSplit(t *testing.T) {
 	}
 
 	t.Run("non-dynamic scopes every type to the env namespaces", func(t *testing.T) {
-		t.Setenv("FISSION_DYNAMIC_NAMESPACES", "false")
+		t.Setenv("FISSION_TENANCY_MODE", "static")
 		opts := executorCacheOptions()
 		assert.NotEmpty(t, opts.DefaultNamespaces, "per-namespace cache by default")
 		secret, cm, rs := perTypeOverrides(opts)
@@ -51,7 +51,7 @@ func TestExecutorCacheOptionsTierSplit(t *testing.T) {
 	})
 
 	t.Run("dynamic keeps Secrets and ConfigMaps namespace-scoped", func(t *testing.T) {
-		t.Setenv("FISSION_DYNAMIC_NAMESPACES", "true")
+		t.Setenv("FISSION_TENANCY_MODE", "dynamic")
 		opts := executorCacheOptions()
 		assert.Empty(t, opts.DefaultNamespaces, "Function/Environment cluster-wide in dynamic mode")
 		secret, cm, rs := perTypeOverrides(opts)

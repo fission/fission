@@ -52,29 +52,29 @@ func (gp *GenericPool) getFetcherURL(podIP string) string {
 }
 
 // shouldStampNamespaceKeyScheme reports whether a pool pod created in fnNamespace
-// should carry the namespace key-scheme annotation. Only when dynamic tenancy is
-// on and the namespace is a live tenant: the tenant controller provisions a
-// namespace's derived-key Secret before admitting it to the live set, so a live
-// tenant is guaranteed to have one — the pod will mount its per-namespace key and
-// the executor (fetcherSigningNamespace) will ns-sign it. Stamping a namespace
-// without that Secret would promise a key the pod never receives and 401 every
-// specialization, so the IsTenant gate is load-bearing, not cosmetic.
+// should carry the namespace key-scheme annotation. Only when per-namespace keys
+// are in use (dynamic or cluster mode) and the namespace is a live tenant: the
+// tenant controller provisions a namespace's derived-key Secret before admitting
+// it to the live set, so a live tenant is guaranteed to have one — the pod will
+// mount its per-namespace key and the executor (fetcherSigningNamespace) will
+// ns-sign it. Stamping a namespace without that Secret would promise a key the pod
+// never receives and 401 every specialization, so the IsTenant gate is
+// load-bearing, not cosmetic.
 func shouldStampNamespaceKeyScheme(fnNamespace string, resolver *utils.NamespaceResolver) bool {
-	return utils.DynamicNamespacesEnabled() && resolver != nil && resolver.IsTenant(fnNamespace)
+	return utils.PerNamespaceKeysEnabled() && resolver != nil && resolver.IsTenant(fnNamespace)
 }
 
 // fetcherSigningNamespace decides how the executor signs the /specialize call to
 // a pod's fetcher. A pod the executor stamped with the namespace key-scheme
-// annotation (genDeploymentSpec, only while dynamic tenancy is on for the pod's
-// namespace) holds only its per-namespace derived key and verifies with it, so
-// we sign with ServiceSignerNS for the pod's namespace and nsScoped is true.
+// annotation (genDeploymentSpec, only while per-namespace keys are in use for the
+// pod's namespace) holds only its per-namespace derived key and verifies with it,
+// so we sign with ServiceSignerNS for the pod's namespace and nsScoped is true.
 // Every other pod — pre-upgrade pods carrying no annotation across a rolling
-// upgrade, or any pod when dynamic tenancy is off — verifies with the
-// master-derived key, so nsScoped is false and the caller master-signs. The
-// dynamic-tenancy gate makes a stale annotation harmless if the feature is
-// turned back off.
+// upgrade, or any pod under static tenancy — verifies with the master-derived
+// key, so nsScoped is false and the caller master-signs. The per-namespace-keys
+// gate makes a stale annotation harmless if the feature is turned back off.
 func fetcherSigningNamespace(pod *apiv1.Pod) (namespace string, nsScoped bool) {
-	if utils.DynamicNamespacesEnabled() && fv1.HasNamespaceKeyScheme(pod.Annotations) {
+	if utils.PerNamespaceKeysEnabled() && fv1.HasNamespaceKeyScheme(pod.Annotations) {
 		return pod.Namespace, true
 	}
 	return "", false

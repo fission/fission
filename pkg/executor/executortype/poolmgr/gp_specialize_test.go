@@ -45,7 +45,7 @@ func TestFetcherSigningNamespace(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Setenv("FISSION_DYNAMIC_NAMESPACES", boolEnv(tt.dynamic))
+			t.Setenv("FISSION_TENANCY_MODE", tenancyModeEnv(tt.dynamic))
 			ns, scoped := fetcherSigningNamespace(tt.pod)
 			assert.Equal(t, tt.wantScoped, scoped, "nsScoped decision")
 			assert.Equal(t, tt.wantNS, ns, "signing namespace")
@@ -77,15 +77,16 @@ func TestShouldStampNamespaceKeyScheme(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Setenv("FISSION_DYNAMIC_NAMESPACES", boolEnv(tt.dynamic))
+			t.Setenv("FISSION_TENANCY_MODE", tenancyModeEnv(tt.dynamic))
 			assert.Equal(t, tt.want, shouldStampNamespaceKeyScheme(tt.namespace, tt.resolver))
 		})
 	}
 }
 
-func boolEnv(b bool) string {
-	if b {
-		return "true"
+// tenancyModeEnv maps the test's "dynamic?" flag to a FISSION_TENANCY_MODE value.
+func tenancyModeEnv(dynamic bool) string {
+	if dynamic {
+		return "dynamic"
 	}
-	return "false"
+	return "static"
 }

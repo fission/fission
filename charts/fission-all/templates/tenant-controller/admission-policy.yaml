@@ -1,4 +1,4 @@
-{{- if dig "dynamicNamespaces" false (.Values.tenancy | default dict) }}
+{{- if include "fission.tenancyControllerEnabled" . }}
 {{- /* CEL list of the tenant-workload ClusterRole names, single-sourced from
        _tenant-workload-roles.tpl so the policy's roleRef allow-list cannot drift
        from the ClusterRoles it guards or the controller's bind resourceNames. */ -}}

@@ -325,3 +325,40 @@ func TestNamespaceResolverConcurrentAccess(t *testing.T) {
 
 	require.Contains(t, r.FissionResourceNamespaces(), "seed", "seed namespace must survive the churn")
 }
+
+func TestTenancyMode(t *testing.T) {
+	tests := []struct {
+		env          string // FISSION_TENANCY_MODE value; "" = unset
+		wantMode     TenancyModeValue
+		wantDynamic  bool
+		wantCluster  bool
+		wantCrdWide  bool
+		wantPerNSKey bool
+	}{
+		{"", TenancyStatic, false, false, false, false},
+		{"static", TenancyStatic, false, false, false, false},
+		{"dynamic", TenancyDynamic, true, false, true, true},
+		{"cluster", TenancyCluster, false, true, true, true},
+		// Case-insensitive + unknown falls back to static (the safe default).
+		{"Dynamic", TenancyDynamic, true, false, true, true},
+		{"CLUSTER", TenancyCluster, false, true, true, true},
+		{"bogus", TenancyStatic, false, false, false, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.env, func(t *testing.T) {
+			if tt.env == "" {
+				t.Setenv(ENV_TENANCY_MODE, "")
+				_ = os.Unsetenv(ENV_TENANCY_MODE)
+			} else {
+				t.Setenv(ENV_TENANCY_MODE, tt.env)
+			}
+			assert.Equal(t, tt.wantMode, TenancyMode(), "TenancyMode")
+			assert.Equal(t, tt.wantDynamic, DynamicNamespacesEnabled(), "DynamicNamespacesEnabled")
+			assert.Equal(t, tt.wantCluster, ClusterTenancyEnabled(), "ClusterTenancyEnabled")
+			assert.Equal(t, tt.wantCrdWide, CrdWatchClusterWide(), "CrdWatchClusterWide")
+			assert.Equal(t, tt.wantPerNSKey, PerNamespaceKeysEnabled(), "PerNamespaceKeysEnabled")
+			// dynamic and cluster are mutually exclusive — never both true.
+			assert.False(t, DynamicNamespacesEnabled() && ClusterTenancyEnabled(), "modes must be mutually exclusive")
+		})
+	}
+}

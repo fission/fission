@@ -5,7 +5,6 @@
 package buildermgr
 
 import (
-	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -38,7 +37,7 @@ func TestBuilderAuthEnvVars(t *testing.T) {
 
 	// Sourcing: the active builder key comes from the tenant keys Secret.
 	t.Run("builder key sourced from the tenant keys Secret", func(t *testing.T) {
-		t.Setenv("FISSION_DYNAMIC_NAMESPACES", "false")
+		t.Setenv("FISSION_TENANCY_MODE", "static")
 		bk := byName(builderAuthEnvVars(tenantNS))["FISSION_BUILDER_KEY"]
 		require.NotNil(t, bk.ValueFrom.SecretKeyRef)
 		assert.Equal(t, fv1.TenantAuthKeysSecret, bk.ValueFrom.SecretKeyRef.Name)
@@ -59,7 +58,7 @@ func TestBuilderAuthEnvVars(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Setenv("FISSION_DYNAMIC_NAMESPACES", strconv.FormatBool(tt.dynamic))
+			t.Setenv("FISSION_TENANCY_MODE", tenancyModeEnv(tt.dynamic))
 			t.Setenv("FISSION_INTERNAL_AUTH_SECRET", tt.master)
 			bk := byName(builderAuthEnvVars(tt.namespace))["FISSION_BUILDER_KEY"]
 			require.NotNil(t, bk.ValueFrom.SecretKeyRef.Optional)

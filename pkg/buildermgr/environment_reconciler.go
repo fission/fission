@@ -400,10 +400,10 @@ func (r *EnvironmentReconciler) createBuilderDeployment(ctx context.Context, env
 
 	// Stamp the HMAC key-scheme so buildermgr signs this builder pod's sidecar
 	// calls with the key its fetcher will verify with (version-aware signing,
-	// builderSigningNamespace). Present for tenant namespaces under dynamic
-	// tenancy, absent otherwise — stable, so at most one rollout when tenancy is
-	// first enabled, never ongoing churn.
-	if utils.DynamicNamespacesEnabled() && r.nsResolver.IsTenant(ns) {
+	// builderSigningNamespace). Present for tenant namespaces when per-namespace
+	// keys are in use (dynamic or cluster mode), absent otherwise — stable, so at
+	// most one rollout when tenancy is first enabled, never ongoing churn.
+	if utils.PerNamespaceKeysEnabled() && r.nsResolver.IsTenant(ns) {
 		podAnnotations[fv1.AuthKeySchemeAnnotation] = fv1.AuthKeySchemeNamespace
 	}
 

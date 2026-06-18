@@ -31,7 +31,7 @@ func envByName(t *testing.T, vars []apiv1.EnvVar) map[string]apiv1.EnvVar {
 // controller-owned TenantAuthKeysSecret (a distinct name so it never collides
 // with the chart copy). All are optional in the default single-namespace mode.
 func TestInternalAuthEnvVarsSources(t *testing.T) {
-	t.Setenv("FISSION_DYNAMIC_NAMESPACES", "false")
+	t.Setenv("FISSION_TENANCY_MODE", "static")
 	vars := envByName(t, internalAuthEnvVars("team-a"))
 
 	cases := []struct {
@@ -90,7 +90,7 @@ func TestInternalAuthEnvVarsFetcherKeyRequiredInDynamicMode(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Setenv("FISSION_DYNAMIC_NAMESPACES", boolStr(tt.dynamic))
+			t.Setenv("FISSION_TENANCY_MODE", tenancyModeEnv(tt.dynamic))
 			t.Setenv("FISSION_INTERNAL_AUTH_SECRET", tt.master)
 
 			vars := envByName(t, internalAuthEnvVars(tt.namespace))
@@ -108,9 +108,10 @@ func TestInternalAuthEnvVarsFetcherKeyRequiredInDynamicMode(t *testing.T) {
 	}
 }
 
-func boolStr(b bool) string {
-	if b {
-		return "true"
+// tenancyModeEnv maps the test's "dynamic?" flag to a FISSION_TENANCY_MODE value.
+func tenancyModeEnv(dynamic bool) string {
+	if dynamic {
+		return "dynamic"
 	}
-	return "false"
+	return "static"
 }

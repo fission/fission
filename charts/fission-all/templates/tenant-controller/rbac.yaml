@@ -1,4 +1,4 @@
-{{- if .Values.tenantController.enabled }}
+{{- if include "fission.tenancyControllerEnabled" . }}
 # The tenant controller's only cluster-wide grant: read/write Fission's own
 # FissionTenant CRD and read Namespaces. Both are cluster-scoped types; this
 # touches no core/workload type (no pods/secrets/configmaps), so it is the

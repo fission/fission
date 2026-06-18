@@ -5,7 +5,6 @@
 package buildermgr
 
 import (
-	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -14,6 +13,14 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 )
+
+// tenancyModeEnv maps a test's "dynamic?" flag to a FISSION_TENANCY_MODE value.
+func tenancyModeEnv(dynamic bool) string {
+	if dynamic {
+		return "dynamic"
+	}
+	return "static"
+}
 
 // TestBuilderSigningNamespace pins buildermgr's version-aware signing decision —
 // the sibling of the executor's. buildermgr must sign each builder pod's
@@ -42,7 +49,7 @@ func TestBuilderSigningNamespace(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Setenv("FISSION_DYNAMIC_NAMESPACES", strconv.FormatBool(tt.dynamic))
+			t.Setenv("FISSION_TENANCY_MODE", tenancyModeEnv(tt.dynamic))
 			ns, scoped := builderSigningNamespace(tt.pod, builderNs)
 			assert.Equal(t, tt.wantScoped, scoped, "nsScoped decision")
 			assert.Equal(t, tt.wantNS, ns, "signing namespace")

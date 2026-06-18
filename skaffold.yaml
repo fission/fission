@@ -69,13 +69,10 @@ manifests:
           serviceMonitor.namespace: monitoring
           storagesvc.archivePruner.enabled: "true"
           storagesvc.archivePruner.interval: "60"
-          # Multi-namespace tenancy is off by default; the dynamic-tenancy
-          # profile flips both flags on for the CI legs that exercise it. They
-          # must move together (the chart's validate.yaml fails the render
-          # otherwise): the dynamic data plane requires the controller to
-          # provision per-namespace auth keys.
-          tenancy.dynamicNamespaces: "false"
-          tenantController.enabled: "false"
+          # Multi-namespace tenancy is static by default; the dynamic-tenancy and
+          # cluster-tenancy profiles flip tenancy.mode for the CI legs that
+          # exercise each posture.
+          tenancy.mode: "static"
           terminationMessagePath: /var/log/termination-log
           terminationMessagePolicy: FallbackToLogsOnError
         setValueTemplates:
@@ -180,16 +177,21 @@ profiles:
   # onboarding model). Composed onto kind-ci as `-p kind-ci,dynamic-tenancy` on
   # the non-legacy CI legs, so the whole suite runs against a dynamic-mode
   # control plane (default is auto-seeded as a tenant by the migration job) and
-  # TestDynamicTenantLifecycle exercises runtime namespace onboarding. Both flags
-  # flip together — the chart's validate.yaml fails the render if they diverge.
+  # TestDynamicTenantLifecycle exercises runtime namespace onboarding.
   - name: dynamic-tenancy
     patches:
       - op: replace
-        path: /manifests/helm/releases/0/setValues/tenancy.dynamicNamespaces
-        value: true
+        path: /manifests/helm/releases/0/setValues/tenancy.mode
+        value: dynamic
+  # cluster-tenancy turns on the opt-in trusted-cluster watch-all model. Composed
+  # onto kind-ci as `-p kind-ci,cluster-tenancy` on one CI leg, so the suite runs
+  # against a cluster-mode control plane (every namespace auto-onboarded, control
+  # plane reads cluster-wide). Mirrors dynamic-tenancy / the RFC-0002 legacy-pin.
+  - name: cluster-tenancy
+    patches:
       - op: replace
-        path: /manifests/helm/releases/0/setValues/tenantController.enabled
-        value: true
+        path: /manifests/helm/releases/0/setValues/tenancy.mode
+        value: cluster
   - name: kind-ci-old
     patches:
       - op: replace

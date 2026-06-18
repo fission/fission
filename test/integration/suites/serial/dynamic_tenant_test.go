@@ -28,7 +28,7 @@ import (
 // It lives in the serial suite because it onboards a tenant (mutating the
 // cluster-wide watched set) and asserts that no control-plane pod restarted,
 // which the parallel suite's churn would invalidate. It skips itself on the
-// static-namespace CI leg (FISSION_DYNAMIC_NAMESPACES off), matching how the
+// static/cluster CI legs (tenancy.mode != dynamic), matching how the
 // RFC-0002/0013 gate-dependent tests detect their mode.
 func TestDynamicTenantLifecycle(t *testing.T) {
 	// Deliberately NOT t.Parallel(): see the doc comment. 15m (matching the adopt
@@ -40,7 +40,7 @@ func TestDynamicTenantLifecycle(t *testing.T) {
 
 	f := framework.Connect(t)
 	if !f.DynamicNamespacesEnabled(t, ctx) {
-		t.Skip("FISSION_DYNAMIC_NAMESPACES is off; this leg runs the static namespace model")
+		t.Skip("tenancy.mode is not dynamic; this leg runs a different tenancy model")
 	}
 	pyImage := f.Images().RequirePython(t)
 

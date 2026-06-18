@@ -1,4 +1,4 @@
-{{- if dig "dynamicNamespaces" false (.Values.tenancy | default dict) }}
+{{- if include "fission.tenancyControllerEnabled" . }}
 # Dynamic multi-namespace mode: components and function-pod sidecars that run in
 # namespaces onboarded at RUNTIME (where the chart's static per-namespace Roles do
 # not exist) get their grants from these fixed-name ClusterRoles, which carry
