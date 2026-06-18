@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"errors"
@@ -312,17 +313,22 @@ func MakeStorageService(logger logr.Logger, storageClient *StorageClient, port i
 
 func (ss *StorageService) Start(ctx context.Context, mgr *errgroup.Group, port int) {
 	m := http.NewServeMux()
-	// Each route carries its own metrics instrumentation keyed on the static
-	// path (replacing the gorilla Use(metrics) middleware); the HMAC verifier
-	// wraps the whole mux below.
-	handle := func(pattern, label string, h http.HandlerFunc) {
+	// Each route carries its own metrics instrumentation keyed on the route's
+	// path (the pattern minus its leading "METHOD " token, kept as the single
+	// source of truth), replacing the gorilla Use(metrics) middleware; the HMAC
+	// verifier wraps the whole mux below.
+	handle := func(pattern string, h http.HandlerFunc) {
+		label := pattern
+		if _, path, ok := strings.Cut(pattern, " "); ok {
+			label = path
+		}
 		m.Handle(pattern, metrics.InstrumentHandler(label, h))
 	}
-	handle("POST /v1/archive", "/v1/archive", ss.uploadHandler)
-	handle("GET /v1/archive", "/v1/archive", ss.getOrListHandler)
-	handle("DELETE /v1/archive", "/v1/archive", ss.deleteHandler)
-	handle("HEAD /v1/archive", "/v1/archive", ss.infoHandler)
-	handle("GET /healthz", "/healthz", ss.healthHandler)
+	handle("POST /v1/archive", ss.uploadHandler)
+	handle("GET /v1/archive", ss.getOrListHandler)
+	handle("DELETE /v1/archive", ss.deleteHandler)
+	handle("HEAD /v1/archive", ss.infoHandler)
+	handle("GET /healthz", ss.healthHandler)
 
 	var handler http.Handler = m
 	if len(ss.authSecret) > 0 {

@@ -358,21 +358,26 @@ func (executor *Executor) dumpDebugInfo(w http.ResponseWriter, r *http.Request) 
 // GetHandler returns an http.Handler.
 func (executor *Executor) GetHandler() http.Handler {
 	m := http.NewServeMux()
-	// Each route carries its own metrics instrumentation keyed on the static
-	// pattern; the HMAC verifier wraps the whole mux below (replacing the
-	// gorilla Use(verifier)/Use(metrics) chain — verifier outermost, metrics
-	// inner, so behavior is unchanged).
-	handle := func(pattern, label string, h http.HandlerFunc) {
+	// Each route carries its own metrics instrumentation keyed on the route's
+	// path (the pattern minus its leading "METHOD " token, kept as the single
+	// source of truth); the HMAC verifier wraps the whole mux below (replacing
+	// the gorilla Use(verifier)/Use(metrics) chain — verifier outermost,
+	// metrics inner, so behavior is unchanged).
+	handle := func(pattern string, h http.HandlerFunc) {
+		label := pattern
+		if _, path, ok := strings.Cut(pattern, " "); ok {
+			label = path
+		}
 		m.Handle(pattern, metrics.InstrumentHandler(label, h))
 	}
-	handle("POST /v2/getServiceForFunction", "/v2/getServiceForFunction", executor.getServiceForFunctionAPI)
-	handle("POST /v2/ensureCapacity", "/v2/ensureCapacity", executor.ensureCapacityHandler)
-	handle("POST /v2/tapService", "/v2/tapService", executor.tapService) // for backward compatibility
-	handle("POST /v2/tapServices", "/v2/tapServices", executor.tapServices)
-	handle("POST /v2/unTapService", "/v2/unTapService", executor.unTapService)
-	handle("GET /v2/debugInfo", "/v2/debugInfo", executor.dumpDebugInfo)
-	handle("GET /healthz", "/healthz", executor.healthHandler)
-	handle("GET /readyz", "/readyz", executor.readyzHandler)
+	handle("POST /v2/getServiceForFunction", executor.getServiceForFunctionAPI)
+	handle("POST /v2/ensureCapacity", executor.ensureCapacityHandler)
+	handle("POST /v2/tapService", executor.tapService) // for backward compatibility
+	handle("POST /v2/tapServices", executor.tapServices)
+	handle("POST /v2/unTapService", executor.unTapService)
+	handle("GET /v2/debugInfo", executor.dumpDebugInfo)
+	handle("GET /healthz", executor.healthHandler)
+	handle("GET /readyz", executor.readyzHandler)
 
 	// The HMAC verifier wraps the whole mux as the OUTERMOST layer so 401
 	// rejections are handled at the auth layer and the metrics instrumentation
