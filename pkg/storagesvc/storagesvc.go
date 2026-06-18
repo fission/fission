@@ -73,6 +73,10 @@ func (ss *StorageService) listItems(w http.ResponseWriter, r *http.Request) {
 	}
 	// A namespace-scoped caller sees only its own archives; an unrestricted
 	// (master) caller — the pruner, the CLI — sees everything, unchanged.
+	// Deliberately stricter than authorizedFor: list does NOT surface legacy/
+	// unscoped archives to a tenant (it shows only what the tenant owns), whereas
+	// get/delete/info grandfather legacy ids. The asymmetry leaks nothing — list
+	// is the more restrictive direction.
 	if authNS, _ := hmacauth.AuthenticatedNamespace(r.Context()); authNS != "" {
 		scoped := make([]string, 0, len(archivesInStorage))
 		for _, id := range archivesInStorage {
@@ -105,6 +109,7 @@ func (ss *StorageService) uploadHandler(w http.ResponseWriter, r *http.Request) 
 	err := r.ParseMultipartForm(0)
 	if err != nil {
 		http.Error(w, "failed to parse request", http.StatusBadRequest)
+		return
 	}
 	file, handler, err := r.FormFile("uploadfile")
 	if err != nil {
@@ -204,6 +209,7 @@ func (ss *StorageService) deleteHandler(w http.ResponseWriter, r *http.Request) 
 	filesize, err := ss.storageClient.getFileSize(fileId)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
 	}
 
 	err = ss.storageClient.removeFileByID(fileId)

@@ -6,7 +6,9 @@ package storagesvc
 
 import (
 	"net/http"
+	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"k8s.io/apimachinery/pkg/util/validation"
@@ -28,8 +30,16 @@ const archiveTenantMarker = "_tenant_"
 // (container path for local, subDir for S3), so it needs no backend state and is
 // robust to a subDir change between releases. "" maps a legacy id to the
 // grandfathered path in authorizedFor.
+//
+// The id is path.Clean'd first so the namespace we authorize against is the one
+// the storage backend will actually resolve to. Without this, a crafted id like
+// "_tenant_/<ownNS>/../<victimNS>/<uuid>" would parse as ownNS (authorized) yet
+// the local backend (relName → filepath.Clean) collapses the ".." and resolves
+// the victim's file — a cross-tenant read/delete. idHasParentTraversal is the
+// belt-and-suspenders reject; cleaning here keeps parse and resolve in agreement
+// regardless.
 func archiveNamespace(id string) string {
-	segs := strings.Split(filepath.ToSlash(id), "/")
+	segs := strings.Split(path.Clean(filepath.ToSlash(id)), "/")
 	for i, s := range segs {
 		if s != archiveTenantMarker {
 			continue
@@ -43,6 +53,14 @@ func archiveNamespace(id string) string {
 		return ""
 	}
 	return ""
+}
+
+// idHasParentTraversal reports whether the id contains a ".." path segment. Such
+// an id is never legitimate (real ids are clean uuids / _tenant_/ns/uuid /
+// absolute container paths) and is rejected outright before authorization, so a
+// parse-vs-resolve disagreement can never be reached.
+func idHasParentTraversal(id string) bool {
+	return slices.Contains(strings.Split(filepath.ToSlash(id), "/"), "..")
 }
 
 // validNamespaceLabel reports whether ns is a syntactically valid RFC-1123
@@ -64,6 +82,11 @@ func (ss *StorageService) authorizedFor(r *http.Request, id string) bool {
 	authNS, _ := hmacauth.AuthenticatedNamespace(r.Context())
 	if authNS == "" {
 		return true
+	}
+	// Reject traversal before authorizing: a ".." could otherwise steer a request
+	// authorized as the caller's namespace to another tenant's archive.
+	if idHasParentTraversal(id) {
+		return false
 	}
 	arcNS := archiveNamespace(id)
 	if arcNS == "" {

@@ -38,12 +38,26 @@ func TestArchiveNamespace(t *testing.T) {
 		{"marker without trailing uuid is not a namespace", archiveTenantMarker + "/team-a", ""},
 		{"segment after marker is not a valid label", archiveTenantMarker + "/Not_A_Label/" + uuid, ""},
 		{"marker as a coincidental subdir with single trailing segment", archiveTenantMarker + "/" + uuid, ""},
+		// Traversal: the parsed namespace must reflect what the backend resolves
+		// (the cleaned path), not the literal prefix — else a sibling-escape id
+		// would authorize as one tenant but read another's file.
+		{"traversal resolves to the real owner, not the literal prefix", archiveTenantMarker + "/team-a/../team-b/" + uuid, "team-b"},
+		{"traversal escaping the marker is unowned", archiveTenantMarker + "/team-a/../../etc/passwd", ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			assert.Equal(t, tc.want, archiveNamespace(tc.id))
 		})
 	}
+}
+
+func TestIdHasParentTraversal(t *testing.T) {
+	assert.True(t, idHasParentTraversal("_tenant_/a/../b/uuid"))
+	assert.True(t, idHasParentTraversal("/container/_tenant_/a/../b/uuid"))
+	assert.True(t, idHasParentTraversal("../../etc/passwd"))
+	assert.False(t, idHasParentTraversal("_tenant_/team-a/uuid"))
+	assert.False(t, idHasParentTraversal("550e8400-e29b-41d4-a716-446655440000"))
+	assert.False(t, idHasParentTraversal("/container/_tenant_/team-a/uuid"))
 }
 
 func TestValidNamespaceLabel(t *testing.T) {
@@ -157,6 +171,21 @@ func TestArchiveAuthzHandlers(t *testing.T) {
 		assert.Equal(t, http.StatusOK, do(http.MethodGet, idB, keyMaster, ""))
 		assert.Equal(t, http.StatusOK, do(http.MethodGet, idLegacy, keyMaster, ""))
 	})
+	// Regression: a path-traversal id that CLEANS to tenant B's archive but is
+	// prefixed with the attacker's own namespace must NOT grant access. Without the
+	// fix archiveNamespace parsed the literal prefix ("team-a") and authorized,
+	// while the local backend collapsed the ".." and resolved team-b's file.
+	t.Run("path traversal cannot reach another tenant's archive", func(t *testing.T) {
+		crafted := strings.Replace(idB, "/"+archiveTenantMarker+"/team-b/", "/"+archiveTenantMarker+"/team-a/../team-b/", 1)
+		require.NotEqual(t, idB, crafted, "craft must differ from the real id")
+		require.Equal(t, "team-b", archiveNamespace(crafted), "cleaned id resolves to the real owner")
+		assert.Equal(t, http.StatusNotFound, do(http.MethodGet, crafted, keyA, "team-a"))
+		assert.Equal(t, http.StatusNotFound, do(http.MethodDelete, crafted, keyA, "team-a"))
+		assert.Equal(t, http.StatusNotFound, do(http.MethodHead, crafted, keyA, "team-a"))
+		// And team-b's archive is intact (master can still read it).
+		assert.Equal(t, http.StatusOK, do(http.MethodGet, idB, keyMaster, ""))
+	})
+
 	// Guard the local nested-dir put: a scoped id round-trips on disk.
 	t.Run("scoped archive is retrievable by exact id", func(t *testing.T) {
 		require.Equal(t, "team-a", archiveNamespace(idA))
