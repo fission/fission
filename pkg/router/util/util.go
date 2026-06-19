@@ -5,15 +5,12 @@
 package util
 
 import (
-	"net/http"
-
 	v1 "k8s.io/api/networking/v1"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
-	"github.com/fission/fission/pkg/utils/httpmux"
 )
 
 func GetIngressSpec(namespace string, trigger *fv1.HTTPTrigger) *v1.Ingress {
@@ -203,12 +200,4 @@ func GetDeployLabels(trigger *fv1.HTTPTrigger) map[string]string {
 		"functionName":     trigger.Spec.FunctionReference.Name,
 		"triggerNamespace": trigger.Namespace,
 	}
-}
-
-// IsWebsocketRequest reports whether request is a websocket upgrade handshake.
-// It delegates to httpmux.IsWebSocketUpgrade so the data plane uses the same
-// RFC-6455-correct, token-list-aware detector as the mux (a former naive
-// string compare missed "Connection: keep-alive, Upgrade" and case variants).
-func IsWebsocketRequest(request *http.Request) bool {
-	return httpmux.IsWebSocketUpgrade(request)
 }

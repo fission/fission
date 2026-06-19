@@ -25,7 +25,7 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/error/network"
-	routerutil "github.com/fission/fission/pkg/router/util"
+	"github.com/fission/fission/pkg/utils/httpmux"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
@@ -290,7 +290,7 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 		// WebSocket functions. The only cost is no otel span for the upgrade itself
 		// (a hijacked bidirectional connection isn't meaningfully traceable anyway).
 		rt := otelTransport
-		if routerutil.IsWebsocketRequest(newReq) {
+		if httpmux.IsWebSocketUpgrade(newReq) {
 			rt = transport
 		}
 		resp, err := rt.RoundTrip(newReq)
