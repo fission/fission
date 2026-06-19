@@ -112,18 +112,6 @@ func TestFirstMatchWins(t *testing.T) {
 		"registration order is precedence")
 }
 
-func TestPatternInContext(t *testing.T) {
-	t.Parallel()
-	var got string
-	m := New()
-	m.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
-		got = Pattern(r)
-		w.WriteHeader(http.StatusOK)
-	}).Methods("GET")
-	do(t, m.Handler(), http.MethodGet, "/healthz")
-	assert.Equal(t, "/healthz", got)
-}
-
 func TestMiddlewareOrder(t *testing.T) {
 	t.Parallel()
 	var order []string

@@ -5,18 +5,18 @@
 package router
 
 import (
-	"fmt"
 	"net/http"
 	"slices"
 	"time"
 
-	"github.com/gorilla/mux"
 	"k8s.io/apimachinery/pkg/types"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	config "github.com/fission/fission/pkg/featureconfig"
 	"github.com/fission/fission/pkg/utils"
+	"github.com/fission/fission/pkg/utils/httpmux"
 	"github.com/fission/fission/pkg/utils/httpsecurity"
+	"github.com/fission/fission/pkg/utils/metrics"
 )
 
 // This file holds the route-shape derivation and mux-registration helpers
@@ -55,7 +55,7 @@ func triggerMethods(trigger *fv1.HTTPTrigger) []string {
 // deriveRouteShape computes the registrations a trigger produces: the
 // exact/prefix path forms and the final method set (with OPTIONS appended
 // for CORS triggers so the preflight reaches the CORSAllowlist wrapper
-// instead of gorilla's 405).
+// instead of the mux's 405).
 func deriveRouteShape(trigger *fv1.HTTPTrigger) routeShape {
 	shape := routeShape{
 		host:    trigger.Spec.Host,
@@ -86,31 +86,37 @@ func (s routeShape) claimsHome() bool {
 }
 
 // registerRouteShape registers a shape onto a mux with the given handler:
-// up to two gorilla routes (exact and/or prefix), each gated by the shape's
+// up to two httpmux routes (exact and/or prefix), each gated by the shape's
 // methods and optional host.
 //
-// gorilla's Route.Methods MUTATES the slice it is handed (it uppercases the
-// entries in place) and then keeps it as the route's matcher. Passing the
-// shape's slice directly would (a) corrupt the caller's canonical copy (the
-// route table's spec, or the informer-owned trigger object) and (b) race
-// with the still-serving previous mux whose matcher shares the same backing
-// array — so each registration gets its own clone.
-func registerRouteShape(r *mux.Router, shape routeShape, handler http.Handler) {
+// The method slice is cloned per registration. httpmux's Route.Methods does
+// not mutate its argument (it compares case-insensitively at match time), but
+// it RETAINS the slice as the route's matcher — passing the shape's slice
+// directly would keep a live reference into the route table's canonical spec
+// or the informer-owned trigger object, which a concurrent reconcile could
+// mutate under the still-serving previous mux. The clone severs that.
+//
+// .Methods is called UNCONDITIONALLY (even for an empty shape.methods): in
+// httpmux an empty method set is a DEAD route (matches nothing), which is the
+// derived empty-method shape the router must preserve. Skipping the call for an
+// empty set would silently widen the route to match every method — see
+// TestRouteShapeEmptyMethods / httpmux TestEmptyMethodsMatchesNothing.
+func registerRouteShape(m *httpmux.Mux, shape routeShape, handler http.Handler) {
 	if shape.exactPath != "" {
-		route := r.Handle(shape.exactPath, handler).Methods(slices.Clone(shape.methods)...)
+		route := m.Handle(shape.exactPath, handler).Methods(slices.Clone(shape.methods)...)
 		if shape.host != "" {
 			route.Host(shape.host)
 		}
 	}
 	if shape.prefixPath != "" {
-		route := r.PathPrefix(shape.prefixPath).Handler(handler).Methods(slices.Clone(shape.methods)...)
+		route := m.HandlePrefix(shape.prefixPath, handler).Methods(slices.Clone(shape.methods)...)
 		if shape.host != "" {
 			route.Host(shape.host)
 		}
 	}
 }
 
-// internalRouteShapes returns the internal listener's route pair for a
+// internalRoutePair returns the internal listener's route pair for a
 // function: the exact /fission-function/... URL and its slash subtree.
 // utils.UrlForFunction folds the default namespace — the form every internal
 // publisher builds.
@@ -119,31 +125,39 @@ func internalRoutePair(key types.NamespacedName) (exact, prefix string) {
 	return exact, exact + "/"
 }
 
-// validateRouteTemplate reports whether a shape's gorilla path templates
-// compile. Two failure classes, both reachable through admitted triggers
-// (there is no HTTPTrigger admission webhook and CEL cannot run gorilla's
-// parser): a capturing group ({sort:(asc|desc)}) makes gorilla PANIC at
-// registration — which, unguarded, crashes the router's rebuild goroutine
-// and CrashLoops the process for as long as the trigger exists — and a
-// malformed template (unbalanced braces, empty var) records a route error
-// that silently never matches. Both paths (legacy buildMuxes and the
-// incremental apply) reject the trigger through triggerConfigError instead,
-// surfacing RouteAdmitted=False/InvalidRouteTemplate.
-func validateRouteTemplate(shape routeShape) (err error) {
-	defer func() {
-		if rec := recover(); rec != nil {
-			err = fmt.Errorf("invalid route template: %v", rec)
-		}
-	}()
-	scratch := mux.NewRouter()
+// registerInternalRoute registers a function's internal-listener route pair —
+// the exact /fission-function/... URL plus its slash subtree — onto the
+// internal mux. No method gate (the HMAC verifier the bundle wraps is the
+// access control). Shared by the legacy buildMuxes and the incremental
+// buildIncrementalMuxes so the two paths register the internal routes
+// identically, mirroring registerRouteShape on the public side.
+func registerInternalRoute(m *httpmux.Mux, key types.NamespacedName, handler http.Handler) {
+	exact, prefix := internalRoutePair(key)
+	m.Handle(exact, handler)
+	m.HandlePrefix(prefix, handler)
+}
+
+// validateRouteTemplate reports whether a shape's path templates compile.
+// Templates reach the router unvalidated: there is no HTTPTrigger admission
+// webhook and CEL cannot run the template parser, so a malformed template
+// (unbalanced braces, empty var name, an uncompilable regexp class) would
+// register a route that silently never matches. httpmux.CompilePattern returns
+// the compile error rather than panicking, and both apply paths (legacy
+// buildMuxes and the incremental materialize) reject the trigger through
+// triggerConfigError, surfacing RouteAdmitted=False/InvalidRouteTemplate.
+//
+// Unlike gorilla, httpmux accepts capturing groups such as {sort:(asc|desc)}
+// (it wraps each variable in a NAMED group), so that previously-rejected but
+// reasonable pattern now admits instead of erroring.
+func validateRouteTemplate(shape routeShape) error {
 	if shape.exactPath != "" {
-		if e := scratch.Handle(shape.exactPath, http.NotFoundHandler()).GetError(); e != nil {
-			return e
+		if err := httpmux.CompilePattern(shape.exactPath, httpmux.Exact); err != nil {
+			return err
 		}
 	}
 	if shape.prefixPath != "" {
-		if e := scratch.PathPrefix(shape.prefixPath).Handler(http.NotFoundHandler()).GetError(); e != nil {
-			return e
+		if err := httpmux.CompilePattern(shape.prefixPath, httpmux.Prefix); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -220,34 +234,42 @@ func (ts *HTTPTriggerSet) buildInternalFunctionHandler(fn *fv1.Function, fnTimeo
 // handling and the middleware chains. USE_ENCODED_PATH must be applied here
 // — i.e. on EVERY build, legacy or materialized — because the routers are
 // atomically swapped on reconciliation (the CLAUDE.md gotcha).
-func (ts *HTTPTriggerSet) newListenerMuxes(featureConfig *config.FeatureConfig) (public, internal *mux.Router) {
-	public = mux.NewRouter()
-	internal = mux.NewRouter()
+func (ts *HTTPTriggerSet) newListenerMuxes(featureConfig *config.FeatureConfig) (public, internal *httpmux.Mux) {
+	// Public listener: per-route metrics (httpmux labels each request by the
+	// matched route's pattern, and records 404/405 under constant labels — so
+	// path-scanning probes can't blow up Prometheus cardinality the way the
+	// old raw-path fallback could). Encoded-path matching must be set on every
+	// build, not once at startup, because the muxes are swapped atomically
+	// (the CLAUDE.md USE_ENCODED_PATH gotcha).
+	publicOpts := []httpmux.Option{httpmux.WithMetrics(metrics.HTTPRecorder{})}
+	var internalOpts []httpmux.Option
 	if ts.useEncodedPath {
-		public = public.UseEncodedPath()
-		internal = internal.UseEncodedPath()
+		publicOpts = append(publicOpts, httpmux.WithEncodedPath())
+		internalOpts = append(internalOpts, httpmux.WithEncodedPath())
 	}
 
-	// Panic recovery is the outermost middleware so it also catches panics
-	// in the metrics/auth middleware below. Applied to both listeners.
-	public.Use(panicRecoveryMiddleware(ts.logger))
-	internal.Use(panicRecoveryMiddleware(ts.logger))
-
-	// The internal mux deliberately omits the metrics middleware, the auth
-	// middleware, and the router-owned routes: those concerns are
-	// public-listener only.
-	public.Use(metricMiddleware)
+	// Panic recovery is added first so it wraps OUTERMOST (it also catches
+	// panics in the auth middleware and the dispatcher). Auth runs as a
+	// pre-match middleware. The internal mux deliberately omits both metrics
+	// and auth: those are public-listener concerns, and its HMAC verifier is
+	// wrapped by the bundle process, not here (keeps this unit-testable
+	// without HMAC env state).
+	panicRecover := panicRecoveryMiddleware(ts.logger)
+	publicMW := []func(http.Handler) http.Handler{panicRecover}
 	if featureConfig.AuthConfig.IsEnabled {
-		public.Use(authMiddleware(featureConfig))
+		publicMW = append(publicMW, authMiddleware(featureConfig))
 	}
-	return public, internal
+	publicOpts = append(publicOpts, httpmux.WithMiddleware(publicMW...))
+	internalOpts = append(internalOpts, httpmux.WithMiddleware(panicRecover))
+
+	return httpmux.New(publicOpts...), httpmux.New(internalOpts...)
 }
 
 // registerRouterOwnedRoutes adds the public listener's own endpoints: the
 // GKE-ingress "/" health fallback (unless a user trigger claims GET /), the
 // auth login endpoint, /router-healthz, /readyz, and /_version. All are
 // deny-all-CORS: none is a legitimate browser surface.
-func (ts *HTTPTriggerSet) registerRouterOwnedRoutes(public *mux.Router, featureConfig *config.FeatureConfig, homeHandled bool) {
+func (ts *HTTPTriggerSet) registerRouterOwnedRoutes(public *httpmux.Mux, featureConfig *config.FeatureConfig, homeHandled bool) {
 	if !homeHandled {
 		// A no-op 200 for "GET /": GKE Ingress (and other ingress
 		// implementations) use it as a health check, so it must not 404
@@ -259,7 +281,18 @@ func (ts *HTTPTriggerSet) registerRouterOwnedRoutes(public *mux.Router, featureC
 
 	if featureConfig.AuthConfig.IsEnabled {
 		path := featureConfig.AuthConfig.AuthUriPath
-		public.Handle(path, httpsecurity.DenyAllCORS(http.HandlerFunc(authLoginHandler(featureConfig)))).Methods(http.MethodPost, http.MethodOptions)
+		// AuthUriPath is operator-supplied. If it is not a valid route pattern
+		// (e.g. an unbalanced "{"), httpmux.Handler() would panic when this mux
+		// is built — in the rebuild goroutine, outside panicRecoveryMiddleware
+		// — and crash-loop the router. Validate up front and skip the login
+		// route on a bad value (logged) so a misconfiguration degrades to "no
+		// login endpoint" rather than a down router.
+		if err := httpmux.CompilePattern(path, httpmux.Exact); err != nil {
+			ts.logger.Error(err, "auth login path is not a valid route pattern; skipping the auth login route — "+
+				"auth is enabled but clients cannot log in until authUriPath is fixed", "path", path)
+		} else {
+			public.Handle(path, httpsecurity.DenyAllCORS(http.HandlerFunc(authLoginHandler(featureConfig)))).Methods(http.MethodPost, http.MethodOptions)
+		}
 	}
 
 	// Healthz stays on the public listener so existing readiness/liveness

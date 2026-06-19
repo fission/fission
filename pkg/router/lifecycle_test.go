@@ -11,10 +11,10 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/assert"
 
 	config "github.com/fission/fission/pkg/featureconfig"
+	"github.com/fission/fission/pkg/utils/httpmux"
 )
 
 func TestJitter(t *testing.T) {
@@ -110,8 +110,8 @@ func TestAuthMiddlewareExemptsProbes(t *testing.T) {
 }
 
 func TestMutableRouterNilReturns503(t *testing.T) {
-	mr := newMutableRouter(logr.Discard(), mux.NewRouter())
-	mr.router.Store(nil) // simulate the (should-never-happen) uninitialized state
+	mr := newMutableRouter(logr.Discard(), httpmux.New().Handler())
+	mr.handler.Store(nil) // simulate the (should-never-happen) uninitialized state
 
 	rec := httptest.NewRecorder()
 	assert.NotPanics(t, func() {

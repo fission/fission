@@ -44,16 +44,22 @@ const (
 // fluently restrict the method set and host (gorilla-style, keeping method and
 // path separate for readability).
 type Route struct {
-	pattern string
-	kind    MatchKind
-	methods []string // nil/empty = any method
-	host    string   // "" = any host
-	handler http.Handler
+	pattern    string
+	kind       MatchKind
+	methods    []string
+	methodsSet bool   // true once Methods() is called; an explicit empty set matches NO method
+	host       string // "" = any host
+	handler    http.Handler
 }
 
 // Methods restricts the route to the given HTTP methods (case-insensitive).
+// Calling it with an empty set produces a route that matches no method — a
+// dead route — which is distinct from never calling it (matches any method).
+// This matches gorilla/mux and lets callers (the router) register a derived
+// empty-method shape as a dead route rather than silently widening it to all.
 func (r *Route) Methods(methods ...string) *Route {
 	r.methods = methods
+	r.methodsSet = true
 	return r
 }
 
@@ -64,15 +70,15 @@ func (r *Route) Host(host string) *Route {
 }
 
 func (r *Route) matchesMethod(method string) bool {
-	if len(r.methods) == 0 {
-		return true
+	if !r.methodsSet {
+		return true // no method restriction → any method
 	}
 	for _, m := range r.methods {
 		if strings.EqualFold(m, method) {
 			return true
 		}
 	}
-	return false
+	return false // Methods() set an allowlist; an empty allowlist matches nothing
 }
 
 // Mux accumulates routes, middleware, and options, then compiles them into an
@@ -147,24 +153,28 @@ const (
 	patternMethodNotAllowed = "<method not allowed>"
 )
 
-// Handler compiles the registered routes into an http.Handler: each route's
-// handler is instrumented (if metrics are enabled), then the dispatcher is
-// wrapped with the middleware chain. Safe to call once configuration is done.
-func (m *Mux) Handler() http.Handler {
+// compile instruments and compiles every registered route. A compile error is
+// a registration bug: callers handling user-supplied patterns (the router)
+// must reject them up front via CompilePattern. Failing loud here surfaces it
+// rather than silently leaving a dead, never-matching route.
+func (m *Mux) compile() []*compiledRoute {
 	compiled := make([]*compiledRoute, len(m.routes))
 	for i, r := range m.routes {
-		// Templates compile to a regexp. A compile error here is a registration
-		// bug: callers handling user-supplied patterns (the router) must reject
-		// them up front via CompilePattern. Failing loud at build time surfaces
-		// it, rather than silently leaving a dead, never-matching route.
 		re, err := compilePattern(r.pattern, r.kind)
 		if err != nil {
 			panic(fmt.Errorf("httpmux: route %q has an invalid template (validate with CompilePattern before registering): %w", r.pattern, err))
 		}
 		compiled[i] = &compiledRoute{route: r, handler: instrument(m.recorder, r.pattern, r.handler), re: re}
 	}
+	return compiled
+}
+
+// Handler compiles the registered routes into an http.Handler: each route's
+// handler is instrumented (if metrics are enabled), then the dispatcher is
+// wrapped with the middleware chain. Safe to call once configuration is done.
+func (m *Mux) Handler() http.Handler {
 	var h http.Handler = &dispatcher{
-		routes:           compiled,
+		routes:           m.compile(),
 		encodedPath:      m.encodedPath,
 		notFound:         instrument(m.recorder, patternNotFound, http.HandlerFunc(http.NotFound)),
 		methodNotAllowed: instrument(m.recorder, patternMethodNotAllowed, http.HandlerFunc(methodNotAllowedHandler)),
@@ -174,6 +184,23 @@ func (m *Mux) Handler() http.Handler {
 		h = m.middleware[i](h)
 	}
 	return h
+}
+
+// Match reports the pattern of the first route that would handle req — matched
+// by host, path, and method, in registration order, exactly as ServeHTTP does
+// — and whether any route matched.
+//
+// It is for TESTS AND DIAGNOSTICS, not the request path: it recompiles every
+// route on each call (like Handler), so it is O(routes) per call. It ignores
+// middleware and metrics (it answers "which route", not "what response") and
+// panics identically to Handler on an invalid template.
+func (m *Mux) Match(req *http.Request) (pattern string, matched bool) {
+	d := &dispatcher{routes: m.compile(), encodedPath: m.encodedPath}
+	cr, _, _ := d.match(req)
+	if cr == nil {
+		return "", false
+	}
+	return cr.route.pattern, true
 }
 
 func methodNotAllowedHandler(w http.ResponseWriter, _ *http.Request) {
@@ -221,18 +248,20 @@ type dispatcher struct {
 	methodNotAllowed http.Handler
 }
 
-func (d *dispatcher) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+// match scans routes in registration order and returns the first full match
+// (route + extracted vars). methodNotAllowed is true when a path matched but no
+// route's method did — the caller turns that into a 405 rather than a 404.
+func (d *dispatcher) match(r *http.Request) (matched *compiledRoute, vars map[string]string, methodNotAllowed bool) {
 	path := r.URL.Path
 	if d.encodedPath {
 		path = r.URL.EscapedPath()
 	}
-	methodNotAllowed := false
 	for _, cr := range d.routes {
 		rt := cr.route
 		if rt.host != "" && rt.host != r.Host {
 			continue
 		}
-		ok, vars := cr.matchPath(path)
+		ok, v := cr.matchPath(path)
 		if !ok {
 			continue
 		}
@@ -242,7 +271,15 @@ func (d *dispatcher) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			methodNotAllowed = true
 			continue
 		}
-		cr.handler.ServeHTTP(w, withMatch(r, rt.pattern, vars))
+		return cr, v, false
+	}
+	return nil, nil, methodNotAllowed
+}
+
+func (d *dispatcher) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	cr, vars, methodNotAllowed := d.match(r)
+	if cr != nil {
+		cr.handler.ServeHTTP(w, withVars(r, vars))
 		return
 	}
 	if methodNotAllowed {

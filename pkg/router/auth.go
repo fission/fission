@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v4"
-	"github.com/gorilla/mux"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	config "github.com/fission/fission/pkg/featureconfig"
@@ -64,7 +63,11 @@ func checkAuthToken(r *http.Request) error {
 	return err
 }
 
-func authMiddleware(featureConfig *config.FeatureConfig) mux.MiddlewareFunc {
+// authMiddleware gates the public listener on a valid JWT. It runs as an
+// httpmux middleware, i.e. BEFORE route matching, so an unauthenticated request
+// to an unknown path returns 401 rather than 404 (it does not reveal which
+// paths exist). The router-owned probe/login endpoints are exempted by path.
+func authMiddleware(featureConfig *config.FeatureConfig) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Exempt the router-owned probe endpoints: kubelet liveness

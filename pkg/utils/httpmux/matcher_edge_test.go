@@ -74,6 +74,24 @@ func TestHandlerPanicsOnInvalidTemplate(t *testing.T) {
 	assert.Panics(t, func() { _ = m.Handler() })
 }
 
+// TestEmptyMethodsMatchesNothing pins the dead-route semantic the router relies
+// on (TestRouteShapeEmptyMethods): Methods() called with an empty set matches
+// NO method — distinct from never calling Methods(), which matches any. Without
+// this distinction a trigger that derives an empty method set would silently
+// widen to match-all. Aligns httpmux with gorilla/mux.
+func TestEmptyMethodsMatchesNothing(t *testing.T) {
+	t.Parallel()
+	m := New()
+	m.Handle("/dead", ok("")).Methods() // explicit empty allowlist → dead route
+	m.Handle("/any", ok(""))            // no Methods() call → any method
+	for _, method := range []string{http.MethodGet, http.MethodPost, http.MethodOptions} {
+		_, deadOK := m.Match(httptest.NewRequest(method, "/dead", nil))
+		assert.False(t, deadOK, "empty Methods() set must match no method (%s)", method)
+		_, anyOK := m.Match(httptest.NewRequest(method, "/any", nil))
+		assert.True(t, anyOK, "no Methods() call must match any method (%s)", method)
+	}
+}
+
 // TestTemplateMultipleVars: a template with several variables extracts them all
 // (guards the SubexpNames index mapping that a single-var test can't catch).
 func TestTemplateMultipleVars(t *testing.T) {

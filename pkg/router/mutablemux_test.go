@@ -10,12 +10,21 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gorilla/mux"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/fission/fission/pkg/utils/httpmux"
 	"github.com/fission/fission/pkg/utils/httpserver"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
+	"github.com/fission/fission/pkg/utils/metrics"
 )
+
+// muxForHandler builds a single-route httpmux handler (metrics wired, like the
+// public listener) for the mutable-swap test.
+func muxForHandler(h http.HandlerFunc) http.Handler {
+	m := httpmux.New(httpmux.WithMetrics(metrics.HTTPRecorder{}))
+	m.HandleFunc("/", h)
+	return m.Handler()
+}
 
 func OldHandler(responseWriter http.ResponseWriter, request *http.Request) {
 	_, err := responseWriter.Write([]byte("old handler"))
@@ -58,12 +67,9 @@ func TestMutableMux(t *testing.T) {
 
 	// make a simple mutable router
 	log.Print("Create mutable router")
-	muxRouter := mux.NewRouter()
-	muxRouter.Use(metricMiddleware)
-	muxRouter.HandleFunc("/", OldHandler)
 	logger := loggerfactory.GetLogger()
 
-	mr := newMutableRouter(logger, muxRouter)
+	mr := newMutableRouter(logger, muxForHandler(OldHandler))
 	ctx := t.Context()
 
 	// start http server
@@ -89,10 +95,7 @@ func TestMutableMux(t *testing.T) {
 
 	// change the muxer
 	log.Print("Change mux router")
-	newMuxRouter := mux.NewRouter()
-	newMuxRouter.Use(metricMiddleware)
-	newMuxRouter.HandleFunc("/", NewHandler)
-	mr.updateRouter(newMuxRouter)
+	mr.updateRouter(muxForHandler(NewHandler))
 
 	// connect and verify the new handler
 	log.Print("Verify new handler")

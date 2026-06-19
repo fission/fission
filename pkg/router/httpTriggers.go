@@ -14,7 +14,6 @@ import (
 
 	"github.com/bep/debounce"
 	"github.com/go-logr/logr"
-	"github.com/gorilla/mux"
 	"golang.org/x/sync/errgroup"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -31,6 +30,7 @@ import (
 	"github.com/fission/fission/pkg/info"
 	"github.com/fission/fission/pkg/router/routetable"
 	"github.com/fission/fission/pkg/throttler"
+	"github.com/fission/fission/pkg/utils/httpmux"
 	"github.com/fission/fission/pkg/utils/httpsecurity"
 )
 
@@ -157,9 +157,9 @@ func (ts *HTTPTriggerSet) subscribeRouter(ctx context.Context, mgr *errgroup.Gro
 		if err != nil {
 			return err
 		}
-		mr.updateRouter(public)
+		mr.updateRouter(public.Handler())
 		if internalMR != nil {
-			internalMR.updateRouter(internal)
+			internalMR.updateRouter(internal.Handler())
 		}
 		ts.logger.Info("skipping continuous trigger updates")
 		return nil
@@ -211,9 +211,10 @@ func (ts *HTTPTriggerSet) routerReadinessHandler(w http.ResponseWriter, r *http.
 // panicRecoveryMiddleware keeps a single panicking request (e.g. a write
 // failure deep inside the reverse proxy) from crashing the whole router
 // process and dropping every other in-flight request. It is installed inside
-// buildMuxes so it survives the atomic mux swap and applies to both the public
-// and internal listeners.
-func panicRecoveryMiddleware(logger logr.Logger) mux.MiddlewareFunc {
+// newListenerMuxes (used by both buildMuxes and the incremental
+// buildIncrementalMuxes) so it survives the atomic mux swap and applies to both
+// the public and internal listeners.
+func panicRecoveryMiddleware(logger logr.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			defer func() {
@@ -288,13 +289,13 @@ func precomputePolicies(fns map[string]*fv1.Function, fnTimeoutMap map[types.UID
 	return policies
 }
 
-func (ts *HTTPTriggerSet) buildMuxes(ctx context.Context, fnTimeoutMap map[types.UID]int) (public, internal *mux.Router, err error) {
+func (ts *HTTPTriggerSet) buildMuxes(ctx context.Context, fnTimeoutMap map[types.UID]int) (public, internal *httpmux.Mux, err error) {
 	featureConfig, err := config.GetFeatureConfig(ts.logger)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	public, internal = ts.newListenerMuxes(featureConfig)
+	publicMux, internalMux := ts.newListenerMuxes(featureConfig)
 
 	// HTTP triggers setup by the user — public listener only.
 	homeHandled := false
@@ -331,7 +332,7 @@ func (ts *HTTPTriggerSet) buildMuxes(ctx context.Context, fnTimeoutMap map[types
 
 		shape := deriveRouteShape(&trigger)
 		handler := ts.buildTriggerHandler(&trigger, rr, fnTimeoutMap)
-		registerRouteShape(public, shape, handler)
+		registerRouteShape(publicMux, shape, handler)
 		ts.logger.V(1).Info("registered trigger route",
 			"trigger", trigger.Name, "exact", shape.exactPath, "prefix", shape.prefixPath, "methods", shape.methods)
 
@@ -347,15 +348,14 @@ func (ts *HTTPTriggerSet) buildMuxes(ctx context.Context, fnTimeoutMap map[types
 	for i := range ts.functions {
 		fn := ts.functions[i]
 		handler := ts.buildInternalFunctionHandler(&fn, fnTimeoutMap)
-		exact, prefix := internalRoutePair(types.NamespacedName{Namespace: fn.Namespace, Name: fn.Name})
-		internal.Handle(exact, handler)
-		internal.PathPrefix(prefix).Handler(handler)
-		ts.logger.V(1).Info("add internal handler and prefix route for function", "router", exact, "function", fn.Name)
+		key := types.NamespacedName{Namespace: fn.Namespace, Name: fn.Name}
+		registerInternalRoute(internalMux, key, handler)
+		ts.logger.V(1).Info("add internal handler and prefix route for function", "function", fn.Name)
 	}
 
-	ts.registerRouterOwnedRoutes(public, featureConfig, homeHandled)
+	ts.registerRouterOwnedRoutes(publicMux, featureConfig, homeHandled)
 
-	return public, internal, nil
+	return publicMux, internalMux, nil
 }
 
 // toAllowlistConfig converts an HTTPTriggerCorsConfig (the user-facing
@@ -403,10 +403,12 @@ func triggerConfigError(trigger *fv1.HTTPTrigger) (reason string, err error) {
 	if e := trigger.Spec.IngressConfig.Validate(); e != nil {
 		return fv1.HTTPTriggerReasonInvalidIngressConfig, e
 	}
-	// Gorilla template compile check: a capturing group would PANIC at mux
-	// registration (crashing the rebuild goroutine), a malformed template
-	// would register a silently-dead route. CEL cannot express this, so the
-	// router is the gate.
+	// httpmux template compile check: a malformed template (unbalanced braces,
+	// empty var name, or an uncompilable regexp class) would register a
+	// silently-dead route — and would panic httpmux.Handler() at build time if
+	// it reached the mux. CompilePattern returns the error instead, and CEL
+	// cannot express this, so the router is the gate. (Unlike gorilla, capturing
+	// groups such as {sort:(asc|desc)} are valid here and admit.)
 	if e := validateRouteTemplate(deriveRouteShape(trigger)); e != nil {
 		return fv1.HTTPTriggerReasonInvalidRouteTemplate, e
 	}
@@ -519,9 +521,9 @@ func (ts *HTTPTriggerSet) updateRouter(ctx context.Context) {
 			}
 			continue
 		}
-		ts.mutableRouter.updateRouter(public)
+		ts.mutableRouter.updateRouter(public.Handler())
 		if ts.internalMutableRouter != nil {
-			ts.internalMutableRouter.updateRouter(internal)
+			ts.internalMutableRouter.updateRouter(internal.Handler())
 		}
 		muxRebuilds.WithLabelValues("public", "legacy").Inc()
 		muxRebuilds.WithLabelValues("internal", "legacy").Inc()

@@ -37,7 +37,6 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.opentelemetry.io/otel"
 	"golang.org/x/sync/errgroup"
@@ -66,6 +65,7 @@ import (
 	"github.com/fission/fission/pkg/throttler"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/crmanager"
+	"github.com/fission/fission/pkg/utils/httpmux"
 	"github.com/fission/fission/pkg/utils/httpsecurity"
 	"github.com/fission/fission/pkg/utils/httpserver"
 	fissionmetrics "github.com/fission/fission/pkg/utils/metrics"
@@ -221,14 +221,14 @@ const internalListenerMaxBodyBytes int64 = 64 << 20
 
 // router constructs the public and internal mutable routers and wires
 // them to httpTriggerSet's reconciliation loop. Both routers are
-// initialised with empty mux.Router instances; the trigger set fills
-// them in on first sync. The USE_ENCODED_PATH setting (see issue
+// initialised with empty httpmux handlers (everything 404s); the trigger set
+// fills them in on first sync. The USE_ENCODED_PATH setting (see issue
 // https://github.com/fission/fission/issues/1317) is applied by
-// httpTriggerSet.buildMuxes on every reconciliation rather than here,
-// so that the feature stays on across the atomic mux swaps.
+// newListenerMuxes on every reconciliation rather than here, so that the
+// feature stays on across the atomic mux swaps.
 func router(ctx context.Context, logger logr.Logger, mgr *errgroup.Group, httpTriggerSet *HTTPTriggerSet) (*mutableRouter, *mutableRouter, error) {
-	publicMR := newMutableRouter(logger, mux.NewRouter())
-	internalMR := newMutableRouter(logger.WithName("internal"), mux.NewRouter())
+	publicMR := newMutableRouter(logger, httpmux.New().Handler())
+	internalMR := newMutableRouter(logger.WithName("internal"), httpmux.New().Handler())
 
 	err := httpTriggerSet.subscribeRouter(ctx, mgr, publicMR, internalMR)
 	if err != nil {

@@ -16,14 +16,16 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	config "github.com/fission/fission/pkg/featureconfig"
 	"github.com/fission/fission/pkg/router/routetable"
+	"github.com/fission/fission/pkg/utils/httpmux"
 )
 
 // This file is the incremental route-update path (RFC-0013 phase 1), the
 // default since ROUTER_INCREMENTAL_ROUTES landed. The reconcilers feed
 // per-event diffs into the route table; handler-only changes (canary weight
 // ticks, function updates) swap an atomic pointer and never rebuild a mux;
-// shape changes signal the debounced materializer, which rebuilds the gorilla
+// shape changes signal the debounced materializer, which rebuilds the httpmux
 // muxes from a table snapshot through the same registration helpers as the
 // legacy path (routeshape.go).
 //
@@ -302,6 +304,37 @@ func (ts *HTTPTriggerSet) materializeLoop(ctx context.Context) {
 	}
 }
 
+// buildIncrementalMuxes builds the public + internal listener muxes from a
+// route-table materialization snapshot: the precedence-ordered public routes,
+// the internal function-invocation routes (GHSA split — never on the public
+// mux), and the router-owned routes. Registration goes through the same helpers
+// as the legacy buildMuxes (routeshape.go), so the two paths cannot drift.
+// materialize swaps in .Handler() of each; tests introspect the *httpmux.Mux.
+func (ts *HTTPTriggerSet) buildIncrementalMuxes(featureConfig *config.FeatureConfig, m routetable.Materialization) (public, internal *httpmux.Mux) {
+	publicMux, internalMux := ts.newListenerMuxes(featureConfig)
+
+	// Precedence-ordered registration (phase 2): hosted before host-less,
+	// exact before prefix, longest prefix first, creation-time tiebreak.
+	// httpmux dispatches to the first matching registration, so the order IS
+	// the precedence.
+	for _, r := range m.Routes {
+		shape := routeShape{host: r.Host, methods: r.Methods}
+		if r.Exact {
+			shape.exactPath = r.Path
+		} else {
+			shape.prefixPath = r.Path
+		}
+		registerRouteShape(publicMux, shape, r.Handler)
+	}
+
+	for _, ispec := range ts.routeTable.InternalSnapshot() {
+		registerInternalRoute(internalMux, ispec.Key, ispec.Handler)
+	}
+
+	ts.registerRouterOwnedRoutes(publicMux, featureConfig, m.HomeClaimed)
+	return publicMux, internalMux
+}
+
 // materialize rebuilds both listener muxes from a route-table snapshot and
 // swaps them in, then marks the conditions of the triggers whose shape
 // changes were in this batch. Registration goes through the same helpers as
@@ -331,36 +364,12 @@ func (ts *HTTPTriggerSet) materialize(ctx context.Context) {
 		return
 	}
 
-	public, internal := ts.newListenerMuxes(featureConfig)
-
-	// Precedence-ordered registration (phase 2): hosted before host-less,
-	// exact before prefix, longest prefix first, creation-time tiebreak.
-	// gorilla dispatches to the first matching registration, so the order IS
-	// the precedence.
 	m := ts.routeTable.Materialization()
-	for _, r := range m.Routes {
-		shape := routeShape{host: r.Host, methods: r.Methods}
-		if r.Exact {
-			shape.exactPath = r.Path
-		} else {
-			shape.prefixPath = r.Path
-		}
-		registerRouteShape(public, shape, r.Handler)
-	}
+	publicMux, internalMux := ts.buildIncrementalMuxes(featureConfig, m)
 
-	// Internal listener: the function invocation routes (GHSA split — these
-	// must never appear on the public mux).
-	for _, ispec := range ts.routeTable.InternalSnapshot() {
-		exact, prefix := internalRoutePair(ispec.Key)
-		internal.Handle(exact, ispec.Handler)
-		internal.PathPrefix(prefix).Handler(ispec.Handler)
-	}
-
-	ts.registerRouterOwnedRoutes(public, featureConfig, m.HomeClaimed)
-
-	ts.mutableRouter.updateRouter(public)
+	ts.mutableRouter.updateRouter(publicMux.Handler())
 	if ts.internalMutableRouter != nil {
-		ts.internalMutableRouter.updateRouter(internal)
+		ts.internalMutableRouter.updateRouter(internalMux.Handler())
 	}
 	ts.materializeDirty.Store(false)
 	muxRebuilds.WithLabelValues("public", "shape_change").Inc()

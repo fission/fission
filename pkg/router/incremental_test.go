@@ -13,7 +13,6 @@ import (
 
 	"github.com/bep/debounce"
 	"github.com/go-logr/logr"
-	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -27,6 +26,7 @@ import (
 	fissionfake "github.com/fission/fission/pkg/generated/clientset/versioned/fake"
 	"github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
 	"github.com/fission/fission/pkg/router/routetable"
+	"github.com/fission/fission/pkg/utils/httpmux"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
 
@@ -45,14 +45,21 @@ func newIncrementalTS(t testing.TB, objs ...client.Object) (*HTTPTriggerSet, cli
 		resolver:                   makeFunctionReferenceResolver(logger, cl),
 	}
 	ts.enableIncrementalRoutes()
-	ts.mutableRouter = newMutableRouter(logger, mux.NewRouter())
-	ts.internalMutableRouter = newMutableRouter(logger, mux.NewRouter())
+	ts.mutableRouter = newMutableRouter(logger, httpmux.New().Handler())
+	ts.internalMutableRouter = newMutableRouter(logger, httpmux.New().Handler())
 	return ts, cl
 }
 
-// muxes returns the currently-swapped-in routers.
-func muxes(ts *HTTPTriggerSet) (public, internal *mux.Router) {
-	return ts.router.Load(), ts.internalMutableRouter.router.Load()
+// muxes rebuilds the listener muxes from the current route-table snapshot — the
+// same registration materialize() last swapped in — so tests can introspect
+// registered routes via httpmux.Match without driving the proxy handlers. Every
+// caller materializes first, so the rebuilt muxes match what is being served.
+func muxes(ts *HTTPTriggerSet) (public, internal *httpmux.Mux) {
+	fc, err := ts.featureConfigFn(ts.logger)
+	if err != nil {
+		panic(fmt.Errorf("muxes: feature config: %w", err))
+	}
+	return ts.buildIncrementalMuxes(fc, ts.routeTable.Materialization())
 }
 
 // requireSignal / requireNoSignal assert on the debounced materializer
@@ -384,13 +391,13 @@ func TestIncrementalLegacyParity(t *testing.T) {
 		{http.MethodGet, "/router-healthz", ""}, {http.MethodGet, "/readyz", ""}, {http.MethodGet, "/_version", ""},
 		{http.MethodGet, "/no-such-route", ""},
 	}
-	matchOn := func(r *mux.Router, p probe) bool {
+	matchOn := func(m *httpmux.Mux, p probe) bool {
 		req := httptest.NewRequest(p.method, p.path, nil)
 		if p.host != "" {
 			req.Host = p.host
 		}
-		var match mux.RouteMatch
-		return r.Match(req, &match) && match.Handler != nil
+		_, ok := m.Match(req)
+		return ok
 	}
 	for _, p := range corpus {
 		assert.Equal(t, matchOn(legacyPublic, p), matchOn(incrPublic, p),
@@ -558,7 +565,7 @@ func TestIncrementalConflictConditions(t *testing.T) {
 // regression test: a shadowed trigger must KEEP its RouteAdmitted=False/
 // RouteConflict condition through handler swaps and resync passes — the
 // NoChange/HandlerSwapped condition path must not flip a loser to True while
-// gorilla still dispatches its shape to the winner.
+// the mux still dispatches its shape to the winner.
 func TestIncrementalConflictLoserSurvivesHandlerSwap(t *testing.T) {
 	fn := incrFn("fn", "default", 1)
 	older := incrTrigger("older", "default", 1, "/dup", "fn")
