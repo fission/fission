@@ -15,13 +15,12 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/hashicorp/go-retryablehttp"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
-	"golang.org/x/net/context/ctxhttp"
 
 	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 	"github.com/fission/fission/pkg/builder"
 	ferror "github.com/fission/fission/pkg/error"
+	"github.com/fission/fission/pkg/utils/httpretry"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
@@ -34,7 +33,7 @@ type (
 	client struct {
 		logger     logr.Logger
 		url        string
-		httpClient *retryablehttp.Client
+		httpClient *http.Client
 	}
 )
 
@@ -79,13 +78,16 @@ func MakeClientNS(logger logr.Logger, builderUrl string, masterSecret []byte, na
 // makeBuilderClient builds the retryable HTTP builder client, layering the
 // caller's signer (via sign) over the otel-instrumented default transport.
 func makeBuilderClient(logger logr.Logger, builderUrl string, sign func(base http.RoundTripper) http.RoundTripper) ClientInterface {
-	hc := retryablehttp.NewClient()
-	hc.ErrorHandler = retryablehttp.PassthroughErrorHandler
-	hc.HTTPClient.Transport = sign(otelhttp.NewTransport(hc.HTTPClient.Transport))
+	rt := sign(otelhttp.NewTransport(http.DefaultTransport))
+	// Retry is the outermost transport so the signer re-signs each attempt with
+	// a fresh timestamp (replaces hashicorp/go-retryablehttp; the prior
+	// PassthroughErrorHandler is moot — this transport returns the final
+	// response/error as-is).
+	rt = httpretry.New(rt, httpretry.DefaultOptions())
 	return &client{
 		logger:     logger.WithName("builder_client"),
 		url:        strings.TrimSuffix(builderUrl, "/"),
-		httpClient: hc,
+		httpClient: &http.Client{Transport: rt},
 	}
 }
 
@@ -101,7 +103,13 @@ func (c *client) Build(ctx context.Context, req *builder.PackageBuildRequest) (*
 		return nil, fmt.Errorf("error marshaling json: %w", err)
 	}
 
-	resp, err := ctxhttp.Post(ctx, c.httpClient.StandardClient(), c.url, "application/json", bytes.NewReader(body))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.url, bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("error creating http request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("error sending request: %w", err)
 	}
@@ -126,12 +134,12 @@ func (c *client) Build(ctx context.Context, req *builder.PackageBuildRequest) (*
 func (c *client) Clean(ctx context.Context, srcPkgFilename string) error {
 	logger := otelUtils.LoggerWithTraceID(ctx, c.logger)
 
-	req, err := http.NewRequest(http.MethodDelete, c.getCleanUrl(srcPkgFilename), http.NoBody)
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, c.getCleanUrl(srcPkgFilename), http.NoBody)
 	if err != nil {
 		return fmt.Errorf("error creating http request: %w", err)
 	}
 
-	resp, err := ctxhttp.Do(ctx, c.httpClient.StandardClient(), req)
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		logger.Error(err, "error sending clean request")
 		return err
