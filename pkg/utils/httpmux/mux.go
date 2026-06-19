@@ -10,12 +10,13 @@
 //
 // Routes are matched in REGISTRATION ORDER, first match wins; callers control
 // precedence by the order they register (the router feeds the precedence-
-// ordered routetable.Materialization). Template ({var}/{var:regex}) matching is
-// added in a later phase; this file handles static exact and prefix routes.
+// ordered routetable.Materialization). Patterns may be static paths, prefixes,
+// or {var}/{var:regexp} templates (see template.go).
 package httpmux
 
 import (
 	"net/http"
+	"regexp"
 	"strings"
 )
 
@@ -62,17 +63,6 @@ func (r *Route) matchesMethod(method string) bool {
 		}
 	}
 	return false
-}
-
-// matchesPath reports whether path matches this route and returns any extracted
-// path variables (none for static exact/prefix routes — templates come later).
-func (r *Route) matchesPath(path string) (bool, map[string]string) {
-	switch r.kind {
-	case Prefix:
-		return strings.HasPrefix(path, r.pattern), nil
-	default: // Exact
-		return path == r.pattern, nil
-	}
 }
 
 // Mux accumulates routes, middleware, and options, then compiles them into an
@@ -153,7 +143,12 @@ const (
 func (m *Mux) Handler() http.Handler {
 	compiled := make([]*compiledRoute, len(m.routes))
 	for i, r := range m.routes {
-		compiled[i] = &compiledRoute{route: r, handler: instrument(m.recorder, r.pattern, r.handler)}
+		// Templates compile to a regexp; a compile error (which the router
+		// prevents by pre-validating via CompilePattern) leaves re nil, so the
+		// route falls back to a never-matching static compare rather than
+		// panicking.
+		re, _ := compilePattern(r.pattern, r.kind)
+		compiled[i] = &compiledRoute{route: r, handler: instrument(m.recorder, r.pattern, r.handler), re: re}
 	}
 	var h http.Handler = &dispatcher{
 		routes:           compiled,
@@ -174,7 +169,33 @@ func methodNotAllowedHandler(w http.ResponseWriter, _ *http.Request) {
 
 type compiledRoute struct {
 	route   *Route
-	handler http.Handler // instrumented
+	handler http.Handler   // instrumented
+	re      *regexp.Regexp // non-nil for {var}/{var:regexp} templates
+}
+
+// matchPath reports whether path matches the route and returns any extracted
+// path variables (nil for static routes).
+func (cr *compiledRoute) matchPath(path string) (bool, map[string]string) {
+	if cr.re != nil {
+		sub := cr.re.FindStringSubmatch(path)
+		if sub == nil {
+			return false, nil
+		}
+		var vars map[string]string
+		for i, name := range cr.re.SubexpNames() {
+			if name != "" {
+				if vars == nil {
+					vars = make(map[string]string, len(sub))
+				}
+				vars[name] = sub[i]
+			}
+		}
+		return true, vars
+	}
+	if cr.route.kind == Prefix {
+		return strings.HasPrefix(path, cr.route.pattern), nil
+	}
+	return path == cr.route.pattern, nil
 }
 
 // dispatcher is the built matcher: it scans routes in registration order and
@@ -198,7 +219,7 @@ func (d *dispatcher) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if rt.host != "" && rt.host != r.Host {
 			continue
 		}
-		ok, vars := rt.matchesPath(path)
+		ok, vars := cr.matchPath(path)
 		if !ok {
 			continue
 		}
