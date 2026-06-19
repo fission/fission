@@ -9,11 +9,11 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	hmacauth "github.com/fission/fission/pkg/auth/hmac"
+	"github.com/fission/fission/pkg/utils/httpmux"
 )
 
 // TestMakeClientNS proves the namespace-scoped client signs with the per-namespace
@@ -26,16 +26,15 @@ func TestMakeClientNS(t *testing.T) {
 
 	var principal string
 	var sawRequest bool
-	r := mux.NewRouter()
-	r.Use(hmacauth.ServiceVerifierNamespaceFromHeader(master, nil, hmacauth.ServiceStoragesvc,
-		hmacauth.VerifierOpts{SkewSec: 60}))
-	r.HandleFunc("/v1/archive", func(w http.ResponseWriter, req *http.Request) {
+	m := httpmux.New(httpmux.WithMiddleware(hmacauth.ServiceVerifierNamespaceFromHeader(master, nil, hmacauth.ServiceStoragesvc,
+		hmacauth.VerifierOpts{SkewSec: 60})))
+	m.HandleFunc("/v1/archive", func(w http.ResponseWriter, req *http.Request) {
 		principal, _ = hmacauth.AuthenticatedNamespace(req.Context())
 		sawRequest = true
 		w.WriteHeader(http.StatusOK)
 	}).Methods(http.MethodHead)
 
-	srv := httptest.NewServer(r)
+	srv := httptest.NewServer(m.Handler())
 	defer srv.Close()
 
 	t.Run("namespace-scoped client is attributed to its namespace", func(t *testing.T) {

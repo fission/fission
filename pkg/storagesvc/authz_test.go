@@ -15,11 +15,11 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	hmacauth "github.com/fission/fission/pkg/auth/hmac"
+	"github.com/fission/fission/pkg/utils/httpmux"
 )
 
 func TestArchiveNamespace(t *testing.T) {
@@ -116,12 +116,12 @@ func TestArchiveAuthzHandlers(t *testing.T) {
 	require.NoError(t, err)
 	ss := MakeStorageService(logr.Discard(), sc, 0, master, nil)
 
-	r := mux.NewRouter()
-	r.Use(hmacauth.ServiceVerifierNamespaceFromHeader(master, nil, hmacauth.ServiceStoragesvc,
-		hmacauth.VerifierOpts{SkewSec: 60, Now: func() time.Time { return now }}))
-	r.HandleFunc("/v1/archive", ss.downloadHandler).Queries("id", "{id}").Methods(http.MethodGet)
-	r.HandleFunc("/v1/archive", ss.deleteHandler).Methods(http.MethodDelete)
-	r.HandleFunc("/v1/archive", ss.infoHandler).Methods(http.MethodHead)
+	m := httpmux.New(httpmux.WithMiddleware(hmacauth.ServiceVerifierNamespaceFromHeader(master, nil, hmacauth.ServiceStoragesvc,
+		hmacauth.VerifierOpts{SkewSec: 60, Now: func() time.Time { return now }})))
+	m.HandleFunc("/v1/archive", ss.getOrListHandler).Methods(http.MethodGet) // ?id= → download
+	m.HandleFunc("/v1/archive", ss.deleteHandler).Methods(http.MethodDelete)
+	m.HandleFunc("/v1/archive", ss.infoHandler).Methods(http.MethodHead)
+	r := m.Handler()
 
 	// Seed archives directly through the backend (the upload path is covered by
 	// TestGetUploadFileNameScoping); returns the stored id.

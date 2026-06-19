@@ -9,34 +9,34 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/assert"
 
 	hmacauth "github.com/fission/fission/pkg/auth/hmac"
+	"github.com/fission/fission/pkg/utils/httpmux"
 )
 
 // TestExecutorVerifierMiddlewareWiring guards the wiring contract in
-// (*Executor).GetHandler: the HMAC verifier is registered before the
-// metrics middleware, /healthz bypasses signing, and unsigned requests
-// to a non-bypass path are rejected with 401.
+// (*Executor).GetHandler: the HMAC verifier wraps the mux as the outermost
+// middleware, /healthz bypasses signing, and unsigned requests to a non-bypass
+// path are rejected with 401.
 //
-// This mirrors the precedent in pkg/storagesvc/storagesvc_auth_test.go
-// and runs without requiring a full Executor instance.
+// This mirrors the precedent in pkg/storagesvc/storagesvc_auth_test.go and runs
+// without requiring a full Executor instance.
 func TestExecutorVerifierMiddlewareWiring(t *testing.T) {
 	master := []byte("test-master-must-be-32-bytes-min!!")
 
-	r := mux.NewRouter()
-	r.Use(hmacauth.ServiceVerifier(master, nil, hmacauth.ServiceExecutor, hmacauth.VerifierOpts{
+	m := httpmux.New(httpmux.WithMiddleware(hmacauth.ServiceVerifier(master, nil, hmacauth.ServiceExecutor, hmacauth.VerifierOpts{
 		SkewSec:      60,
 		Bypass:       []string{"/healthz"},
 		MaxBodyBytes: hmacauth.DefaultMaxBodyBytes,
-	}))
-	r.HandleFunc("/v2/getServiceForFunction", func(w http.ResponseWriter, _ *http.Request) {
+	})))
+	m.HandleFunc("/v2/getServiceForFunction", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}).Methods(http.MethodPost)
-	r.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
+	m.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}).Methods(http.MethodGet)
+	r := m.Handler()
 
 	t.Run("rejects unsigned /v2/getServiceForFunction", func(t *testing.T) {
 		rr := httptest.NewRecorder()
@@ -55,19 +55,18 @@ func TestExecutorVerifierMiddlewareWiring(t *testing.T) {
 	})
 
 	t.Run("empty master short-circuits to pass-through", func(t *testing.T) {
-		r2 := mux.NewRouter()
-		r2.Use(hmacauth.ServiceVerifier(nil, nil, hmacauth.ServiceExecutor, hmacauth.VerifierOpts{
+		m2 := httpmux.New(httpmux.WithMiddleware(hmacauth.ServiceVerifier(nil, nil, hmacauth.ServiceExecutor, hmacauth.VerifierOpts{
 			SkewSec:      60,
 			Bypass:       []string{"/healthz"},
 			MaxBodyBytes: hmacauth.DefaultMaxBodyBytes,
-		}))
-		r2.HandleFunc("/v2/getServiceForFunction", func(w http.ResponseWriter, _ *http.Request) {
+		})))
+		m2.HandleFunc("/v2/getServiceForFunction", func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusOK)
 		}).Methods(http.MethodPost)
 
 		rr := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodPost, "/v2/getServiceForFunction", nil)
-		r2.ServeHTTP(rr, req)
+		m2.Handler().ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusOK, rr.Code,
 			"empty master must short-circuit the verifier and pass requests through")
 	})

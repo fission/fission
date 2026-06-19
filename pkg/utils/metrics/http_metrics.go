@@ -5,19 +5,11 @@
 package metrics
 
 import (
-	"fmt"
-	"net/http"
+	"strconv"
+	"time"
 
-	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus"
-
-	"github.com/fission/fission/pkg/router/util"
 )
-
-type ResponseWriterWrapper struct {
-	http.ResponseWriter
-	statusCode int
-}
 
 var (
 	httpRequestsTotal = prometheus.NewCounterVec(
@@ -53,40 +45,25 @@ func init() {
 	Registry.MustRegister(httpRequestInFlight)
 }
 
-func (rw *ResponseWriterWrapper) WriteHeader(statuscode int) {
-	rw.statusCode = statuscode
-	rw.ResponseWriter.WriteHeader(statuscode)
+// HTTPRecorder records HTTP request metrics into this package's vecs, labelled
+// by a low-cardinality path (the matched route pattern). It exists so routing
+// packages can drive HTTP metrics without this package knowing anything about
+// routing — it satisfies pkg/utils/httpmux.Recorder structurally, so httpmux
+// invokes it per matched route without importing back into metrics. The zero
+// value is ready to use.
+type HTTPRecorder struct{}
+
+func (HTTPRecorder) InFlightInc(path, method string) {
+	httpRequestInFlight.With(prometheus.Labels{"path": path, "method": method}).Inc()
 }
 
-func (rw *ResponseWriterWrapper) Flush() {
-	if f, ok := rw.ResponseWriter.(http.Flusher); ok {
-		f.Flush()
-	}
+func (HTTPRecorder) InFlightDec(path, method string) {
+	httpRequestInFlight.With(prometheus.Labels{"path": path, "method": method}).Dec()
 }
 
-func HTTPMetricMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if util.IsWebsocketRequest(r) {
-			next.ServeHTTP(w, r)
-			return
-		}
-		labels := make(prometheus.Labels, 0)
-		labels["path"] = r.URL.Path
-		if route := mux.CurrentRoute(r); route != nil {
-			if routePath, err := route.GetPathTemplate(); err == nil {
-				labels["path"] = routePath
-			}
-		}
-		labels["method"] = r.Method
-		rw := ResponseWriterWrapper{w, http.StatusOK}
-		httpRequestInFlight.With(labels).Inc()
-		httpRequestDuration := prometheus.NewTimer(httpRequestDuration.With(labels))
-		defer func() {
-			httpRequestDuration.ObserveDuration()
-			httpRequestInFlight.With(labels).Dec()
-			labels["code"] = fmt.Sprintf("%d", rw.statusCode)
-			httpRequestsTotal.With(labels).Inc()
-		}()
-		next.ServeHTTP(&rw, r)
-	})
+func (HTTPRecorder) Observe(path, method string, statusCode int, duration time.Duration) {
+	labels := prometheus.Labels{"path": path, "method": method}
+	httpRequestDuration.With(labels).Observe(duration.Seconds())
+	labels["code"] = strconv.Itoa(statusCode)
+	httpRequestsTotal.With(labels).Inc()
 }

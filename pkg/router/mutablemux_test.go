@@ -15,7 +15,6 @@ import (
 
 	"github.com/fission/fission/pkg/utils/httpserver"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
-	"github.com/fission/fission/pkg/utils/metrics"
 )
 
 func OldHandler(responseWriter http.ResponseWriter, request *http.Request) {
@@ -60,7 +59,7 @@ func TestMutableMux(t *testing.T) {
 	// make a simple mutable router
 	log.Print("Create mutable router")
 	muxRouter := mux.NewRouter()
-	muxRouter.Use(metrics.HTTPMetricMiddleware)
+	muxRouter.Use(metricMiddleware)
 	muxRouter.HandleFunc("/", OldHandler)
 	logger := loggerfactory.GetLogger()
 
@@ -91,7 +90,7 @@ func TestMutableMux(t *testing.T) {
 	// change the muxer
 	log.Print("Change mux router")
 	newMuxRouter := mux.NewRouter()
-	newMuxRouter.Use(metrics.HTTPMetricMiddleware)
+	newMuxRouter.Use(metricMiddleware)
 	newMuxRouter.HandleFunc("/", NewHandler)
 	mr.updateRouter(newMuxRouter)
 

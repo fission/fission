@@ -15,7 +15,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/gorilla/mux"
 	"golang.org/x/sync/errgroup"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -25,6 +24,7 @@ import (
 	"github.com/fission/fission/pkg/executor/client"
 	"github.com/fission/fission/pkg/executor/executortype"
 	"github.com/fission/fission/pkg/executor/fscache"
+	"github.com/fission/fission/pkg/utils/httpmux"
 	"github.com/fission/fission/pkg/utils/httpsecurity"
 	"github.com/fission/fission/pkg/utils/httpserver"
 	"github.com/fission/fission/pkg/utils/metrics"
@@ -358,38 +358,38 @@ func (executor *Executor) dumpDebugInfo(w http.ResponseWriter, r *http.Request) 
 
 // GetHandler returns an http.Handler.
 func (executor *Executor) GetHandler() http.Handler {
-	r := mux.NewRouter()
-	// Register the HMAC verifier middleware before the metrics
-	// middleware so 401 rejections are counted at the same layer as
-	// other auth failures and the metrics middleware sees the post-
-	// verification request. The master secret (when set via
-	// FISSION_INTERNAL_AUTH_SECRET on the executor pod) is derived
-	// per-service for ServiceExecutor so a leak of this executor's
-	// runtime memory cannot forge requests on other Fission internal
-	// channels (storagesvc, fetcher, builder, router-internal). An
-	// empty master means the underlying Verifier short-circuits to
-	// pass-through, preserving backwards compatibility for installs
-	// with internalAuth disabled. /healthz is bypassed so kubelet
-	// probes continue to pass without signing. See
+	// The HMAC verifier wraps the whole mux as the OUTERMOST middleware so 401
+	// rejections are handled at the auth layer and the per-route metrics see
+	// only post-verification requests. The master secret (when set via
+	// FISSION_INTERNAL_AUTH_SECRET on the executor pod) is derived per-service
+	// for ServiceExecutor so a leak of this executor's runtime memory cannot
+	// forge requests on other Fission internal channels (storagesvc, fetcher,
+	// builder, router-internal). An empty master means the underlying Verifier
+	// short-circuits to pass-through, preserving backwards compatibility for
+	// installs with internalAuth disabled. /healthz and /readyz are bypassed so
+	// kubelet probes continue to pass without signing. See
 	// docs/internal-auth/00-design.md.
 	master := []byte(os.Getenv("FISSION_INTERNAL_AUTH_SECRET"))
 	masterOld := []byte(os.Getenv("FISSION_INTERNAL_AUTH_SECRET_OLD"))
-	r.Use(hmacauth.ServiceVerifier(master, masterOld, hmacauth.ServiceExecutor, hmacauth.VerifierOpts{
+	verifier := hmacauth.ServiceVerifier(master, masterOld, hmacauth.ServiceExecutor, hmacauth.VerifierOpts{
 		SkewSec:      60,
 		Bypass:       []string{"/healthz", "/readyz"},
 		MaxBodyBytes: hmacauth.DefaultMaxBodyBytes,
 		Logger:       executor.logger.WithName("hmac"),
-	}))
-	r.Use(metrics.HTTPMetricMiddleware)
-	r.HandleFunc("/v2/getServiceForFunction", executor.getServiceForFunctionAPI).Methods("POST")
-	r.HandleFunc("/v2/ensureCapacity", executor.ensureCapacityHandler).Methods("POST")
-	r.HandleFunc("/v2/tapService", executor.tapService).Methods("POST") // for backward compatibility
-	r.HandleFunc("/v2/tapServices", executor.tapServices).Methods("POST")
-	r.HandleFunc("/healthz", executor.healthHandler).Methods("GET")
-	r.HandleFunc("/readyz", executor.readyzHandler).Methods("GET")
-	r.HandleFunc("/v2/unTapService", executor.unTapService).Methods("POST")
-	r.HandleFunc("/v2/debugInfo", executor.dumpDebugInfo).Methods("GET")
-	return r
+	})
+	m := httpmux.New(
+		httpmux.WithMiddleware(verifier),
+		httpmux.WithMetrics(metrics.HTTPRecorder{}),
+	)
+	m.HandleFunc("/v2/getServiceForFunction", executor.getServiceForFunctionAPI).Methods("POST")
+	m.HandleFunc("/v2/ensureCapacity", executor.ensureCapacityHandler).Methods("POST")
+	m.HandleFunc("/v2/tapService", executor.tapService).Methods("POST") // for backward compatibility
+	m.HandleFunc("/v2/tapServices", executor.tapServices).Methods("POST")
+	m.HandleFunc("/v2/unTapService", executor.unTapService).Methods("POST")
+	m.HandleFunc("/v2/debugInfo", executor.dumpDebugInfo).Methods("GET")
+	m.HandleFunc("/healthz", executor.healthHandler).Methods("GET")
+	m.HandleFunc("/readyz", executor.readyzHandler).Methods("GET")
+	return m.Handler()
 }
 
 // Serve starts an HTTP server.

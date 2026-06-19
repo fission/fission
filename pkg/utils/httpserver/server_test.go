@@ -14,11 +14,11 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/fission/fission/pkg/utils/httpmux"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
 
@@ -28,7 +28,10 @@ func TestStartServer(t *testing.T) {
 
 	ctx := t.Context()
 	logger := loggerfactory.GetLogger()
-	m := mux.NewRouter()
+	// A free port (not a hardcoded one) avoids a bind conflict with anything
+	// else on the runner. httpmux's Handle("/") is exact, so /notfound still 404s.
+	addr := freePort(t)
+	m := httpmux.New()
 	m.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, err := w.Write([]byte("test handler"))
@@ -38,9 +41,19 @@ func TestStartServer(t *testing.T) {
 	}))
 
 	mgr.Go(func() error {
-		StartServer(ctx, logger, mgr, "test", "8999", m)
+		StartServer(ctx, logger, mgr, "test", addr, m.Handler())
 		return nil
 	})
+
+	// Wait for the server to start accepting connections before requesting.
+	require.Eventually(t, func() bool {
+		c, err := net.DialTimeout("tcp", addr, 50*time.Millisecond)
+		if err != nil {
+			return false
+		}
+		_ = c.Close()
+		return true
+	}, 3*time.Second, 20*time.Millisecond)
 
 	tests := []struct {
 		Name       string
@@ -50,13 +63,13 @@ func TestStartServer(t *testing.T) {
 	}{
 		{
 			Name:       "test handler",
-			URL:        "http://localhost:8999",
+			URL:        "http://" + addr,
 			StatusCode: http.StatusOK,
 			Body:       "test handler",
 		},
 		{
 			Name:       "not found",
-			URL:        "http://localhost:8999/notfound",
+			URL:        "http://" + addr + "/notfound",
 			StatusCode: http.StatusNotFound,
 			Body:       "404 page not found\n",
 		},
