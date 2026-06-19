@@ -164,6 +164,25 @@ jobs:
           esac
           SKAFFOLD_PROFILE="$PROFILE" make skaffold-deploy
 
+      # The 6-way-parallel integration suite resolves short in-cluster names
+      # (executor.fission, storagesvc.fission, router-internal.fission, ...) on
+      # every cold-start RPC. Go's resolver fires the A and AAAA queries
+      # concurrently; on this single-node kind cluster the two UDP datagrams
+      # race through kube-proxy's DNAT and are intermittently dropped, surfacing
+      # as "lookup executor.fission: i/o timeout" cascades that fail dozens of
+      # otherwise-passing tests at once. single-request-reopen serialises the
+      # A/AAAA queries (Go's resolver honours the resolv.conf option), removing
+      # the race. CI-only hardening of the control-plane pods.
+      - name: Harden in-cluster DNS for the parallel test load
+        timeout-minutes: 6
+        run: |
+          set -euo pipefail
+          kubectl -n fission patch deploy --all --type merge -p \
+            '{"spec":{"template":{"spec":{"dnsConfig":{"options":[{"name":"single-request-reopen"}]}}}}}'
+          for d in $(kubectl -n fission get deploy -o name); do
+            kubectl -n fission rollout status "$d" --timeout=5m
+          done
+
       # Pin the v1.34 leg back to the legacy data plane (RFC-0002 gates off):
       # kind-ci deploys with the EndpointSlice path on everywhere, so without
       # this the executor-RPC warm path would lose all CI coverage. The
