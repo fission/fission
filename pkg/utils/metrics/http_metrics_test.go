@@ -35,3 +35,16 @@ func TestHTTPRecorder(t *testing.T) {
 	assert.Equal(t, before+1, testutil.ToFloat64(httpRequestsTotal.WithLabelValues(path, method, code)),
 		"request counter incremented under {path, method, code}")
 }
+
+// BenchmarkHTTPRecorder measures the per-request metrics cost (inc + observe +
+// dec) an instrumented public-listener request pays. WithLabelValues avoids the
+// per-call prometheus.Labels map the prior With(Labels{...}) form allocated.
+func BenchmarkHTTPRecorder(b *testing.B) {
+	var rec HTTPRecorder
+	b.ReportAllocs()
+	for b.Loop() {
+		rec.InFlightInc("/bench", "GET")
+		rec.Observe("/bench", "GET", 200, time.Millisecond)
+		rec.InFlightDec("/bench", "GET")
+	}
+}
