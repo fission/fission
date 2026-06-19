@@ -224,8 +224,8 @@ const internalListenerMaxBodyBytes int64 = 64 << 20
 // initialised with empty httpmux handlers (everything 404s); the trigger set
 // fills them in on first sync. The USE_ENCODED_PATH setting (see issue
 // https://github.com/fission/fission/issues/1317) is applied by
-// httpTriggerSet.buildMuxes on every reconciliation rather than here,
-// so that the feature stays on across the atomic mux swaps.
+// newListenerMuxes on every reconciliation rather than here, so that the
+// feature stays on across the atomic mux swaps.
 func router(ctx context.Context, logger logr.Logger, mgr *errgroup.Group, httpTriggerSet *HTTPTriggerSet) (*mutableRouter, *mutableRouter, error) {
 	publicMR := newMutableRouter(logger, httpmux.New().Handler())
 	internalMR := newMutableRouter(logger.WithName("internal"), httpmux.New().Handler())

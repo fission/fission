@@ -317,6 +317,31 @@ func TestRouteShapeInternalNamespaceFolding(t *testing.T) {
 		"internal prefix must not glob past the path-segment boundary")
 }
 
+// TestRouteShapeMethodNotAllowedVsNotFound pins the user-visible status codes
+// end-to-end through buildMuxes→Handler(): a known path with a disallowed method
+// is 405 (the method-gate, which the OPTIONS/CORS preflight path relies on), an
+// unknown path is 404. Driven through the real served handler, not just Match.
+func TestRouteShapeMethodNotAllowedVsNotFound(t *testing.T) {
+	ts := newShapeTS(t, []fv1.Function{shapeFn("fn")},
+		[]fv1.HTTPTrigger{shapeTrigger("t", func(tr *fv1.HTTPTrigger) {
+			tr.Spec.RelativeURL = "/hello"
+			tr.Spec.Methods = []string{http.MethodGet}
+		})})
+	public, _, err := ts.buildMuxes(t.Context(), nil)
+	require.NoError(t, err)
+	h := public.Handler()
+
+	// POST /hello (GET-only) and GET /nope never reach the function handler —
+	// the dispatcher answers 405 / 404 before dispatch (no proxy plumbing run).
+	rrMethod := httptest.NewRecorder()
+	h.ServeHTTP(rrMethod, httptest.NewRequest(http.MethodPost, "/hello", nil))
+	assert.Equal(t, http.StatusMethodNotAllowed, rrMethod.Code, "known path + wrong method → 405")
+
+	rrMiss := httptest.NewRecorder()
+	h.ServeHTTP(rrMiss, httptest.NewRequest(http.MethodGet, "/nope", nil))
+	assert.Equal(t, http.StatusNotFound, rrMiss.Code, "unknown path → 404")
+}
+
 // TestRouteShapeTemplates pins path-template support ({var}, {var:regex})
 // through the shared registration helpers: the route table treats the template
 // as an opaque shape string and httpmux compiles it at build time, so patterned

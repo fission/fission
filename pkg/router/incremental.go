@@ -328,9 +328,7 @@ func (ts *HTTPTriggerSet) buildIncrementalMuxes(featureConfig *config.FeatureCon
 	}
 
 	for _, ispec := range ts.routeTable.InternalSnapshot() {
-		exact, prefix := internalRoutePair(ispec.Key)
-		internalMux.Handle(exact, ispec.Handler)
-		internalMux.HandlePrefix(prefix, ispec.Handler)
+		registerInternalRoute(internalMux, ispec.Key, ispec.Handler)
 	}
 
 	ts.registerRouterOwnedRoutes(publicMux, featureConfig, m.HomeClaimed)

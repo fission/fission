@@ -279,7 +279,7 @@ func (d *dispatcher) match(r *http.Request) (matched *compiledRoute, vars map[st
 func (d *dispatcher) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	cr, vars, methodNotAllowed := d.match(r)
 	if cr != nil {
-		cr.handler.ServeHTTP(w, withMatch(r, cr.route.pattern, vars))
+		cr.handler.ServeHTTP(w, withVars(r, vars))
 		return
 	}
 	if methodNotAllowed {

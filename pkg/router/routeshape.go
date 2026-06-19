@@ -116,13 +116,25 @@ func registerRouteShape(m *httpmux.Mux, shape routeShape, handler http.Handler) 
 	}
 }
 
-// internalRouteShapes returns the internal listener's route pair for a
+// internalRoutePair returns the internal listener's route pair for a
 // function: the exact /fission-function/... URL and its slash subtree.
 // utils.UrlForFunction folds the default namespace — the form every internal
 // publisher builds.
 func internalRoutePair(key types.NamespacedName) (exact, prefix string) {
 	exact = utils.UrlForFunction(key.Name, key.Namespace)
 	return exact, exact + "/"
+}
+
+// registerInternalRoute registers a function's internal-listener route pair —
+// the exact /fission-function/... URL plus its slash subtree — onto the
+// internal mux. No method gate (the HMAC verifier the bundle wraps is the
+// access control). Shared by the legacy buildMuxes and the incremental
+// buildIncrementalMuxes so the two paths register the internal routes
+// identically, mirroring registerRouteShape on the public side.
+func registerInternalRoute(m *httpmux.Mux, key types.NamespacedName, handler http.Handler) {
+	exact, prefix := internalRoutePair(key)
+	m.Handle(exact, handler)
+	m.HandlePrefix(prefix, handler)
 }
 
 // validateRouteTemplate reports whether a shape's path templates compile.
@@ -242,12 +254,13 @@ func (ts *HTTPTriggerSet) newListenerMuxes(featureConfig *config.FeatureConfig) 
 	// and auth: those are public-listener concerns, and its HMAC verifier is
 	// wrapped by the bundle process, not here (keeps this unit-testable
 	// without HMAC env state).
-	publicMW := []func(http.Handler) http.Handler{panicRecoveryMiddleware(ts.logger)}
+	panicRecover := panicRecoveryMiddleware(ts.logger)
+	publicMW := []func(http.Handler) http.Handler{panicRecover}
 	if featureConfig.AuthConfig.IsEnabled {
 		publicMW = append(publicMW, authMiddleware(featureConfig))
 	}
 	publicOpts = append(publicOpts, httpmux.WithMiddleware(publicMW...))
-	internalOpts = append(internalOpts, httpmux.WithMiddleware(panicRecoveryMiddleware(ts.logger)))
+	internalOpts = append(internalOpts, httpmux.WithMiddleware(panicRecover))
 
 	return httpmux.New(publicOpts...), httpmux.New(internalOpts...)
 }
@@ -275,7 +288,8 @@ func (ts *HTTPTriggerSet) registerRouterOwnedRoutes(public *httpmux.Mux, feature
 		// route on a bad value (logged) so a misconfiguration degrades to "no
 		// login endpoint" rather than a down router.
 		if err := httpmux.CompilePattern(path, httpmux.Exact); err != nil {
-			ts.logger.Error(err, "auth login path is not a valid route pattern; skipping the auth login route", "path", path)
+			ts.logger.Error(err, "auth login path is not a valid route pattern; skipping the auth login route — "+
+				"auth is enabled but clients cannot log in until authUriPath is fixed", "path", path)
 		} else {
 			public.Handle(path, httpsecurity.DenyAllCORS(http.HandlerFunc(authLoginHandler(featureConfig)))).Methods(http.MethodPost, http.MethodOptions)
 		}

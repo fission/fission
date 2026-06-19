@@ -125,6 +125,38 @@ func TestInternalListenerLiteralPathMatching(t *testing.T) {
 	}
 }
 
+// TestAuthPreMatch401OnUnknownPath pins the security-relevant ordering: auth is
+// wired as an httpmux PRE-match middleware (newListenerMuxes), so an
+// unauthenticated request to an unknown path returns 401 — the dispatcher's 404
+// is never reached — rather than disclosing which paths exist. The exempt probe
+// paths stay reachable without a token.
+func TestAuthPreMatch401OnUnknownPath(t *testing.T) {
+	t.Setenv("JWT_SIGNING_KEY", "test-key") // authMiddleware verifies against this
+	ts := newTestTriggerSet(t, nil, nil)
+	fc := &config.FeatureConfig{}
+	fc.AuthConfig.IsEnabled = true
+	fc.AuthConfig.AuthUriPath = "/auth/login"
+
+	public, _ := ts.newListenerMuxes(fc)
+	public.HandleFunc("/known", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}).Methods(http.MethodGet)
+	ts.registerRouterOwnedRoutes(public, fc, false)
+	h := public.Handler()
+
+	serve := func(method, path string) int {
+		rr := httptest.NewRecorder()
+		h.ServeHTTP(rr, httptest.NewRequest(method, path, nil))
+		return rr.Code
+	}
+	assert.Equal(t, http.StatusUnauthorized, serve(http.MethodGet, "/does-not-exist"),
+		"auth pre-match must 401 an unknown path, not 404 (no path-existence disclosure)")
+	assert.Equal(t, http.StatusUnauthorized, serve(http.MethodGet, "/known"),
+		"a known route without a token must 401, not serve")
+	assert.NotEqual(t, http.StatusUnauthorized, serve(http.MethodGet, "/readyz"),
+		"/readyz must be exempt from auth (probes carry no token)")
+}
+
 // TestRouterOwnedRoutesSkipInvalidAuthPath pins the operator-misconfig guard: a
 // malformed AuthUriPath (httpmux would panic compiling it) must NOT crash the
 // mux build — the login route is skipped (logged) and the rest of the listener
