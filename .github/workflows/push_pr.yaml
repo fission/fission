@@ -177,8 +177,12 @@ jobs:
         timeout-minutes: 6
         run: |
           set -euo pipefail
-          kubectl -n fission patch deploy --all --type merge -p \
-            '{"spec":{"template":{"spec":{"dnsConfig":{"options":[{"name":"single-request-reopen"}]}}}}}'
+          # kubectl patch takes no --all, so patch each Deployment, then wait
+          # for every rollout (patch-all-first so the rollouts run in parallel).
+          for d in $(kubectl -n fission get deploy -o name); do
+            kubectl -n fission patch "$d" --type merge -p \
+              '{"spec":{"template":{"spec":{"dnsConfig":{"options":[{"name":"single-request-reopen"}]}}}}}'
+          done
           for d in $(kubectl -n fission get deploy -o name); do
             kubectl -n fission rollout status "$d" --timeout=5m
           done
