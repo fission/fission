@@ -8,10 +8,23 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
+
+// scanOnly builds a dispatcher over m's routes with the fast-path index
+// DISABLED, so it always linear-scans — the oracle the indexed dispatcher must
+// match for every request.
+func scanOnly(m *Mux) http.Handler {
+	return &dispatcher{
+		routes:           m.compile(),
+		encodedPath:      m.encodedPath,
+		notFound:         http.HandlerFunc(http.NotFound),
+		methodNotAllowed: http.HandlerFunc(methodNotAllowedHandler),
+	}
+}
 
 // --- White-box eligibility: which literal exacts make it into the index ---
 
@@ -167,4 +180,129 @@ func BenchmarkExactIndexBuild(b *testing.B) {
 			}
 		})
 	}
+}
+
+// TestExactFastPathMatchesScanDifferential is the strongest fast-path guard: for
+// a corpus of route sets crossed with requests, the indexed dispatcher and a
+// forced linear scan (scanOnly) must return identical status and body. Any
+// future shadowing regression — a {var:regexp} no longer treated as a shadow, a
+// prefix-length probe off by one, a host leak — diverges here even if nobody
+// wrote a targeted case for it.
+func TestExactFastPathMatchesScanDifferential(t *testing.T) {
+	t.Parallel()
+	routeSets := []struct {
+		name     string
+		register func(*Mux)
+		encoded  bool
+	}{
+		{"regexp template + shadowed and unshadowed exacts", func(m *Mux) {
+			m.Handle(`/bank/{html:[a-zA-Z0-9./]+}`, ok("tmpl")).Methods("GET")
+			m.Handle("/bank/index.html", ok("exact")).Methods("GET") // shadowed by the template
+			m.Handle("/elsewhere", ok("plain")).Methods("GET")       // unshadowed
+		}, false},
+		{"bare {var} before an exact it matches", func(m *Mux) {
+			m.Handle("/a/{id}", ok("var")).Methods("GET")
+			m.Handle("/a/me", ok("exact")).Methods("GET")
+		}, false},
+		{"prefix not ending in slash", func(m *Mux) {
+			m.HandlePrefix("/ap", ok("pfx")).Methods("GET") // shadows /api and /apex
+			m.Handle("/api", ok("api")).Methods("GET")
+			m.Handle("/apex", ok("apex")).Methods("GET")
+			m.Handle("/other", ok("other")).Methods("GET") // unshadowed
+		}, false},
+		{"prefix longer than a sibling exact does not shadow it", func(m *Mux) {
+			m.HandlePrefix("/apix/", ok("pfx")).Methods("GET")
+			m.Handle("/api", ok("api")).Methods("GET")
+		}, false},
+		{"host-qualified bucket, no host-less fallback", func(m *Mux) {
+			m.Handle("/h", ok("a")).Methods("GET").Host("a.com")
+			m.Handle("/h", ok("b")).Methods("POST").Host("b.com")
+		}, false},
+		{"dual registration boundary", func(m *Mux) {
+			m.Handle("/api", ok("exact")).Methods("GET")
+			m.HandlePrefix("/api/", ok("pfx")).Methods("GET")
+		}, false},
+		{"encoded path", func(m *Mux) {
+			m.Handle("/fn/a%20b", ok("enc")).Methods("GET")
+			m.HandlePrefix("/fn/a%20b/", ok("sub")).Methods("GET")
+		}, true},
+	}
+	methods := []string{http.MethodGet, http.MethodPost, http.MethodOptions}
+	paths := []string{
+		"/bank/index.html", "/bank/x/y.css", "/bank/oops!", "/elsewhere",
+		"/a/me", "/a/123", "/a/1/2",
+		"/ap", "/api", "/apex", "/apix", "/apix/sub", "/other",
+		"/h", "/api/", "/api/v1",
+		"/fn/a%20b", "/fn/a%20b/sub", "/nope",
+	}
+	hosts := []string{"", "a.com", "b.com"}
+	for _, rs := range routeSets {
+		t.Run(rs.name, func(t *testing.T) {
+			t.Parallel()
+			var opts []Option
+			if rs.encoded {
+				opts = append(opts, WithEncodedPath())
+			}
+			indexed := New(opts...)
+			rs.register(indexed)
+			scan := New(opts...)
+			rs.register(scan)
+			indexedH, scanH := indexed.Handler(), scanOnly(scan)
+			for _, method := range methods {
+				for _, path := range paths {
+					for _, host := range hosts {
+						req := httptest.NewRequest(method, path, nil)
+						if host != "" {
+							req.Host = host
+						}
+						ir, sr := httptest.NewRecorder(), httptest.NewRecorder()
+						indexedH.ServeHTTP(ir, req)
+						scanH.ServeHTTP(sr, req)
+						assert.Equalf(t, sr.Code, ir.Code, "status: %s %s host=%q", method, path, host)
+						assert.Equalf(t, sr.Body.String(), ir.Body.String(), "body: %s %s host=%q", method, path, host)
+					}
+				}
+			}
+		})
+	}
+}
+
+// TestExactIndexWellFormed ties the index back to the authoritative route slice:
+// every bucketed route is a literal exact present in routes whose pattern equals
+// its key, and a bucket preserves registration order. Guards the index from
+// drifting from the slice it projects.
+func TestExactIndexWellFormed(t *testing.T) {
+	t.Parallel()
+	m := New()
+	m.Handle("/a", ok("")).Methods("GET")
+	m.Handle("/a", ok("")).Methods("POST") // multi-exact bucket
+	m.Handle("/b/{id}", ok(""))            // template — never a key
+	m.HandlePrefix("/c/", ok(""))          // prefix — never a key
+	m.Handle("/c/x", ok(""))               // shadowed by /c/ — excluded
+	routes := m.compile()
+	idx := buildExactIndex(routes)
+
+	for path, bucket := range idx {
+		lastPos := -1
+		for _, cr := range bucket {
+			assert.Nil(t, cr.re, "bucket route must be a literal (re==nil)")
+			assert.Equal(t, Exact, cr.route.kind, "bucket route must be Exact kind")
+			assert.Equal(t, path, cr.route.pattern, "bucket route pattern must equal its key")
+			pos := slices.Index(routes, cr)
+			assert.Greater(t, pos, lastPos, "bucket preserves registration order")
+			lastPos = pos
+		}
+	}
+	assert.Len(t, idx["/a"], 2, "both exacts at /a share the bucket")
+	assert.NotContains(t, idx, "/c/x", "shadowed exact is excluded")
+	assert.NotContains(t, idx, "/b/{id}", "template is never a key")
+}
+
+// TestExactIndexEngagedAtScale guards that the optimization actually engages: a
+// refactor that disabled indexing would pass every correctness test while
+// silently reverting to an O(routes) scan, but would fail here.
+func TestExactIndexEngagedAtScale(t *testing.T) {
+	t.Parallel()
+	idx := buildExactIndex(exactMux(1000).compile())
+	assert.Len(t, idx, 1000, "every unshadowed exact must be indexed")
 }

@@ -27,6 +27,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -290,6 +291,9 @@ func buildExactIndex(routes []*compiledRoute) map[string][]*compiledRoute {
 	for l := range prefixLenSet {
 		prefixLens = append(prefixLens, l)
 	}
+	// Ascending so the shadow check probes shorter prefixes first (cheaper
+	// substring hash, likelier to match) and iterates deterministically.
+	slices.Sort(prefixLens)
 
 	shadowed := func(p string) bool {
 		for _, l := range prefixLens {
