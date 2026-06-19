@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gorilla/websocket"
+	"github.com/coder/websocket"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -97,34 +97,31 @@ func TestWebsocket(t *testing.T) {
 		}
 		dctx, dcancel := context.WithTimeout(ctx, 10*time.Second)
 		defer dcancel()
-		c2, _, err := websocket.DefaultDialer.DialContext(dctx, wsURL, hdr)
+		c2, _, err := websocket.Dial(dctx, wsURL, &websocket.DialOptions{HTTPHeader: hdr})
 		if !assert.NoErrorf(c, err, "websocket dial %q", wsURL) {
 			return
 		}
-		if err := c2.SetReadDeadline(time.Now().Add(10 * time.Second)); !assert.NoError(c, err) {
-			_ = c2.Close()
+		// One bounded context covers the write + read round-trip (coder/websocket
+		// has no SetReadDeadline; the context carries the deadline instead).
+		ioCtx, iocancel := context.WithTimeout(ctx, 10*time.Second)
+		defer iocancel()
+		if err := c2.Write(ioCtx, websocket.MessageText, []byte("hello-from-test")); !assert.NoError(c, err, "websocket write") {
+			_ = c2.CloseNow()
 			return
 		}
-		if err := c2.WriteMessage(websocket.TextMessage, []byte("hello-from-test")); !assert.NoError(c, err, "websocket write") {
-			_ = c2.Close()
-			return
-		}
-		_, msg, err := c2.ReadMessage()
+		_, msg, err := c2.Read(ioCtx)
 		if !assert.NoError(c, err, "websocket read") {
-			_ = c2.Close()
+			_ = c2.CloseNow()
 			return
 		}
 		if !assert.Equalf(c, "hello-from-test", string(msg),
 			"broadcast.js should echo the sent frame back to the same client (got %q)", string(msg)) {
-			_ = c2.Close()
+			_ = c2.CloseNow()
 			return
 		}
 		conn = c2
 	}, 90*time.Second, 2*time.Second)
 	require.NotNil(t, conn, "websocket round-trip never succeeded")
-	defer func() { _ = conn.Close() }()
-
-	// Polite close.
-	_ = conn.WriteMessage(websocket.CloseMessage,
-		websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
+	// Politely close with a normal-closure frame.
+	defer func() { _ = conn.Close(websocket.StatusNormalClosure, "") }()
 }
