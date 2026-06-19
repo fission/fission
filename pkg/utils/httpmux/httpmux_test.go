@@ -198,6 +198,22 @@ func TestMetricsRecorded(t *testing.T) {
 	assert.Equal(t, 1, rec.maxFlt, "in-flight incremented during the request")
 }
 
+func TestMetricsRecordsUnmatchedUnderFixedLabel(t *testing.T) {
+	t.Parallel()
+	rec := &fakeRecorder{}
+	m := New(WithMetrics(rec))
+	m.Handle("/only-post", ok("")).Methods("POST")
+	h := m.Handler()
+
+	do(t, h, http.MethodGet, "/only-post") // 405: path matches, method doesn't
+	do(t, h, http.MethodGet, "/nope")      // 404: nothing matches
+
+	assert.Equal(t, []string{
+		"<method not allowed> GET 405",
+		"<not found> GET 404",
+	}, rec.observed, "unmatched requests are recorded under fixed, low-cardinality labels (not the raw path)")
+}
+
 func TestWebsocketBypassesMetrics(t *testing.T) {
 	t.Parallel()
 	rec := &fakeRecorder{}

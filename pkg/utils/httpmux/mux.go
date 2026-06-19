@@ -139,6 +139,14 @@ func (m *Mux) add(pattern string, kind MatchKind, h http.Handler) *Route {
 	return r
 }
 
+// Constant patterns under which unmatched requests are recorded, so 404/405
+// stay visible in metrics WITHOUT the unbounded label cardinality that
+// recording the raw request path would cause (e.g. path-scanning probes).
+const (
+	patternNotFound         = "<not found>"
+	patternMethodNotAllowed = "<method not allowed>"
+)
+
 // Handler compiles the registered routes into an http.Handler: each route's
 // handler is instrumented (if metrics are enabled), then the dispatcher is
 // wrapped with the middleware chain. Safe to call once configuration is done.
@@ -147,12 +155,21 @@ func (m *Mux) Handler() http.Handler {
 	for i, r := range m.routes {
 		compiled[i] = &compiledRoute{route: r, handler: instrument(m.recorder, r.pattern, r.handler)}
 	}
-	var h http.Handler = &dispatcher{routes: compiled, encodedPath: m.encodedPath}
+	var h http.Handler = &dispatcher{
+		routes:           compiled,
+		encodedPath:      m.encodedPath,
+		notFound:         instrument(m.recorder, patternNotFound, http.HandlerFunc(http.NotFound)),
+		methodNotAllowed: instrument(m.recorder, patternMethodNotAllowed, http.HandlerFunc(methodNotAllowedHandler)),
+	}
 	// Apply middleware so the first-added wraps outermost (runs first).
 	for i := len(m.middleware) - 1; i >= 0; i-- {
 		h = m.middleware[i](h)
 	}
 	return h
+}
+
+func methodNotAllowedHandler(w http.ResponseWriter, _ *http.Request) {
+	http.Error(w, "405 method not allowed", http.StatusMethodNotAllowed)
 }
 
 type compiledRoute struct {
@@ -161,10 +178,13 @@ type compiledRoute struct {
 }
 
 // dispatcher is the built matcher: it scans routes in registration order and
-// dispatches the first full match.
+// dispatches the first full match, falling back to instrumented 405/404
+// handlers.
 type dispatcher struct {
-	routes      []*compiledRoute
-	encodedPath bool
+	routes           []*compiledRoute
+	encodedPath      bool
+	notFound         http.Handler
+	methodNotAllowed http.Handler
 }
 
 func (d *dispatcher) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -192,8 +212,8 @@ func (d *dispatcher) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if methodNotAllowed {
-		http.Error(w, "405 method not allowed", http.StatusMethodNotAllowed)
+		d.methodNotAllowed.ServeHTTP(w, r)
 		return
 	}
-	http.NotFound(w, r)
+	d.notFound.ServeHTTP(w, r)
 }
