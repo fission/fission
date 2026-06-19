@@ -6,6 +6,7 @@ require (
 	dario.cat/mergo v1.0.2
 	github.com/IBM/sarama v1.50.3
 	github.com/bep/debounce v1.2.1
+	github.com/coder/websocket v1.8.15
 	github.com/dchest/uniuri v1.2.0
 	github.com/dustin/go-humanize v1.0.1
 	github.com/fatih/color v1.19.0
@@ -19,7 +20,6 @@ require (
 	github.com/google/go-containerregistry/pkg/authn/kubernetes v0.0.0-20260604213829-6849394e8a65
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/mux v1.8.1
-	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674
 	github.com/influxdata/influxdb v1.12.4
 	github.com/kedacore/keda/v2 v2.20.1
 	github.com/mholt/archives v0.1.5
@@ -57,6 +57,7 @@ require (
 require (
 	github.com/docker/docker-credential-helpers v0.9.3 // indirect
 	github.com/google/jsonschema-go v0.4.3 // indirect
+	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/segmentio/asm v1.1.3 // indirect
 	github.com/segmentio/encoding v0.5.4 // indirect
