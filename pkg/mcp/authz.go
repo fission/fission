@@ -87,8 +87,11 @@ func (a *Authorizer) verifyToken(_ context.Context, token string, _ *http.Reques
 		}
 		return a.signingKey, nil
 	})
-	if err != nil || !parsed.Valid {
+	if err != nil {
 		return nil, fmt.Errorf("%w: %v", auth.ErrInvalidToken, err)
+	}
+	if !parsed.Valid {
+		return nil, fmt.Errorf("%w: token is invalid", auth.ErrInvalidToken)
 	}
 
 	scope, ok := parseScopeClaim(claims[claimAllowedNamespaces])
