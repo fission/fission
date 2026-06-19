@@ -273,7 +273,7 @@ func validArchiveURL(urlStr string) (bool, error) {
 	// Parse the URL string into a URL object
 	parsedURL, err := url.Parse(urlStr)
 	if err != nil {
-		return false, fmt.Errorf("failed to parse URL: %v", err)
+		return false, fmt.Errorf("failed to parse URL: %w", err)
 	}
 
 	// Check if the path starts with /v1/archive
