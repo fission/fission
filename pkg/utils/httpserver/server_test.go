@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/hashicorp/go-retryablehttp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -63,10 +62,10 @@ func TestStartServer(t *testing.T) {
 			Body:       "404 page not found\n",
 		},
 	}
-	client := retryablehttp.NewClient()
+	client := &http.Client{}
 	for _, test := range tests {
 		t.Run(test.Name, func(t *testing.T) {
-			resp, err := client.Get(test.URL)
+			resp, err := client.Get(test.URL) //nolint:noctx
 			require.NoError(t, err, "failed to make get request %s", test.URL)
 			defer resp.Body.Close()
 			require.Equal(t, test.StatusCode, resp.StatusCode)

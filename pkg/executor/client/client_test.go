@@ -11,7 +11,6 @@ import (
 	"testing"
 
 	"github.com/go-logr/logr"
-	"github.com/hashicorp/go-retryablehttp"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -42,18 +41,15 @@ func (s *errorRecordingSink) errors() int {
 	return s.errCalls
 }
 
-// newTestClient builds a client pointed at url with retries disabled (so 5xx
-// responses don't add backoff delay to the test).
+// newTestClient builds a client pointed at url with a plain http.Client (no
+// retry transport) so 5xx responses don't add backoff delay to the test.
 func newTestClient(sink logr.LogSink, url string) *client {
-	hc := retryablehttp.NewClient()
-	hc.RetryMax = 0
-	hc.Logger = nil
 	return &client{
 		logger:      logr.New(sink),
 		executorURL: url,
 		tappedByURL: make(map[string]TapServiceRequest),
 		requestChan: make(chan TapServiceRequest, 100),
-		httpClient:  hc,
+		httpClient:  &http.Client{},
 	}
 }
 

@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/hashicorp/go-retryablehttp"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -25,6 +24,7 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 	ferror "github.com/fission/fission/pkg/error"
+	"github.com/fission/fission/pkg/utils/httpretry"
 	"github.com/fission/fission/pkg/utils/metrics"
 )
 
@@ -76,7 +76,7 @@ type (
 		executorURL string
 		tappedByURL map[string]TapServiceRequest
 		requestChan chan TapServiceRequest
-		httpClient  *retryablehttp.Client
+		httpClient  *http.Client
 		// consecutive flushTaps failures; with the RFC-0002 warm path these
 		// batched taps are the only liveness signal for index-admitted pods,
 		// so persistent failure must escalate (see flushTaps).
@@ -116,12 +116,14 @@ type (
 // storagesvcClient.HMACSecretFromEnv(); the same env var
 // (FISSION_INTERNAL_AUTH_SECRET) backs every internal channel.
 func MakeClient(logger logr.Logger, executorURL string, masterSecret []byte) ClientInterface {
-	hc := retryablehttp.NewClient()
-	var rt http.RoundTripper = otelhttp.NewTransport(hc.HTTPClient.Transport)
+	var rt http.RoundTripper = otelhttp.NewTransport(http.DefaultTransport)
 	if len(masterSecret) > 0 {
 		rt = hmacauth.ServiceSigner(masterSecret, hmacauth.ServiceExecutor, rt, time.Now)
 	}
-	hc.HTTPClient.Transport = rt
+	// Retry is the outermost transport so the signer re-signs each attempt with
+	// a fresh timestamp (replaces hashicorp/go-retryablehttp).
+	rt = httpretry.New(rt, httpretry.DefaultOptions())
+	hc := &http.Client{Transport: rt}
 	c := &client{
 		logger:      logger.WithName("executor_client"),
 		executorURL: strings.TrimSuffix(executorURL, "/"),
@@ -142,7 +144,7 @@ func (c *client) GetServiceForFunction(ctx context.Context, fn *fv1.Function) (s
 		return "", fmt.Errorf("could not marshal request body for getting service for function: %w", err)
 	}
 
-	req, err := retryablehttp.NewRequestWithContext(ctx, "POST", executorURL, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, "POST", executorURL, bytes.NewReader(body))
 	if err != nil {
 		return "", fmt.Errorf("could not create request for getting service for function: %w", err)
 	}
@@ -183,7 +185,7 @@ func (c *client) EnsureCapacity(ctx context.Context, fn *fv1.Function, observedR
 		return "", fmt.Errorf("could not marshal request body for ensuring capacity for function: %w", err)
 	}
 
-	req, err := retryablehttp.NewRequestWithContext(ctx, "POST", executorURL, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, "POST", executorURL, bytes.NewReader(body))
 	if err != nil {
 		return "", fmt.Errorf("could not create request for ensuring capacity for function: %w", err)
 	}
@@ -220,7 +222,7 @@ func (c *client) UnTapService(ctx context.Context, fnMeta metav1.ObjectMeta, exe
 	if err != nil {
 		return fmt.Errorf("could not marshal request body for getting service for function: %w", err)
 	}
-	req, err := retryablehttp.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("could not create request for untap service for function: %w", err)
 	}
@@ -327,7 +329,7 @@ func (c *client) _tapService(ctx context.Context, tapSvcReqs []TapServiceRequest
 		return err
 	}
 
-	req, err := retryablehttp.NewRequestWithContext(ctx, "POST", executorURL, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, "POST", executorURL, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("could not create request for tap service request: %w", err)
 	}
