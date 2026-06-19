@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/bep/debounce"
-	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -27,6 +26,7 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
+	"github.com/fission/fission/pkg/utils/httpmux"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
 
@@ -75,9 +75,8 @@ func shapeTrigger(name string, mutate func(*fv1.HTTPTrigger)) fv1.HTTPTrigger {
 	return tr
 }
 
-// TestRouteShapeExactPath pins the RelativeURL form: an exact gorilla route
-// gated by the trigger's methods — no implicit prefix matching, no method
-// widening.
+// TestRouteShapeExactPath pins the RelativeURL form: an exact route gated by
+// the trigger's methods — no implicit prefix matching, no method widening.
 func TestRouteShapeExactPath(t *testing.T) {
 	ts := newShapeTS(t, []fv1.Function{shapeFn("fn")},
 		[]fv1.HTTPTrigger{shapeTrigger("t", func(tr *fv1.HTTPTrigger) {
@@ -203,8 +202,8 @@ func TestRouteShapeHostQualified(t *testing.T) {
 	reqMatches := func(host string) bool {
 		req := httptest.NewRequest(http.MethodGet, "/hosted", nil)
 		req.Host = host
-		var match mux.RouteMatch
-		return public.Match(req, &match) && match.Handler != nil
+		_, ok := public.Match(req)
+		return ok
 	}
 	assert.True(t, reqMatches("api.example.com"), "matching host must route")
 	assert.False(t, reqMatches("other.example.com"), "non-matching host must not route")
@@ -213,7 +212,7 @@ func TestRouteShapeHostQualified(t *testing.T) {
 
 // TestRouteShapeCORSAppendsOptions pins the CORS preflight plumbing: a
 // trigger with a CorsConfig gets OPTIONS appended to its registered methods
-// so the preflight reaches the CORSAllowlist wrapper instead of gorilla's
+// so the preflight reaches the CORSAllowlist wrapper instead of the mux's
 // 405; a trigger without CorsConfig does NOT gain OPTIONS.
 func TestRouteShapeCORSAppendsOptions(t *testing.T) {
 	ts := newShapeTS(t, []fv1.Function{shapeFn("fn")}, []fv1.HTTPTrigger{
@@ -248,7 +247,7 @@ func TestRouteShapeGKEHomeFallback(t *testing.T) {
 		public, _, err := ts.buildMuxes(t.Context(), nil)
 		require.NoError(t, err)
 		rr := httptest.NewRecorder()
-		public.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/", nil))
+		public.Handler().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/", nil))
 		assert.Equal(t, http.StatusOK, rr.Code, "the GKE-ingress health fallback must answer GET / with 200")
 	})
 	t.Run("user trigger on GET / suppresses the fallback", func(t *testing.T) {
@@ -318,12 +317,12 @@ func TestRouteShapeInternalNamespaceFolding(t *testing.T) {
 		"internal prefix must not glob past the path-segment boundary")
 }
 
-// TestRouteShapeGorillaTemplates pins gorilla path-template support
-// ({var}, {var:regex}) through the shared registration helpers: the route
-// table treats the template as an opaque shape string and gorilla compiles
-// it at registration, so patterned RelativeURLs must keep matching exactly
-// as they always have (real-world example: /bank/{html:[a-zA-Z0-9\.\/]+}).
-func TestRouteShapeGorillaTemplates(t *testing.T) {
+// TestRouteShapeTemplates pins path-template support ({var}, {var:regex})
+// through the shared registration helpers: the route table treats the template
+// as an opaque shape string and httpmux compiles it at build time, so patterned
+// RelativeURLs must keep matching exactly as they always have (real-world
+// example: /bank/{html:[a-zA-Z0-9\.\/]+}).
+func TestRouteShapeTemplates(t *testing.T) {
 	ts := newShapeTS(t, []fv1.Function{shapeFn("fn")}, []fv1.HTTPTrigger{
 		shapeTrigger("regex", func(tr *fv1.HTTPTrigger) {
 			tr.Spec.RelativeURL = `/bank/{html:[a-zA-Z0-9\.\/]+}`
@@ -344,43 +343,47 @@ func TestRouteShapeGorillaTemplates(t *testing.T) {
 	assert.False(t, muxMatches(public, http.MethodGet, "/accounts/123/txns"), "plain {var} must not span segments")
 }
 
-// TestRouteShapeInvalidTemplatesRejected pins the template-compile gate:
-// a capturing-group template (which would PANIC gorilla at registration and
-// crash the router's rebuild goroutine) and a malformed template (which
-// would register a silently-dead route) are both rejected by
-// triggerConfigError, the build does not panic, the bad routes 404, and a
-// healthy sibling keeps serving.
+// TestRouteShapeInvalidTemplatesRejected pins the template-compile gate: a
+// malformed template — unbalanced braces, or an uncompilable regexp class —
+// would register a silently-dead route, so triggerConfigError rejects it; the
+// build does not panic, the bad routes 404, and a healthy sibling keeps
+// serving.
+//
+// Behavioral change from gorilla: a capturing-group template ({sort:(asc|desc)})
+// used to PANIC gorilla at registration and so was rejected. httpmux wraps each
+// variable in a NAMED group, so that pattern now compiles and is ADMITTED — the
+// "healthy" sibling below exercises it.
 func TestRouteShapeInvalidTemplatesRejected(t *testing.T) {
 	ts := newShapeTS(t, []fv1.Function{shapeFn("fn")}, []fv1.HTTPTrigger{
-		shapeTrigger("capture", func(tr *fv1.HTTPTrigger) {
-			tr.Spec.RelativeURL = `/bad/{sort:(asc|desc)}` // capturing group
-		}),
 		shapeTrigger("unbalanced", func(tr *fv1.HTTPTrigger) {
-			tr.Spec.RelativeURL = `/bad/{id`
+			tr.Spec.RelativeURL = `/bad/{id` // unbalanced brace
+		}),
+		shapeTrigger("badclass", func(tr *fv1.HTTPTrigger) {
+			tr.Spec.RelativeURL = `/bad/{id:[}` // uncompilable character class
 		}),
 		shapeTrigger("healthy", func(tr *fv1.HTTPTrigger) {
-			tr.Spec.RelativeURL = `/good/{sort:(?:asc|desc)}` // non-capturing is fine
+			tr.Spec.RelativeURL = `/good/{sort:(asc|desc)}` // capturing group is valid in httpmux
 		}),
 	})
 
-	var public *mux.Router
+	var public *httpmux.Mux
 	require.NotPanics(t, func() {
 		var err error
 		public, _, err = ts.buildMuxes(t.Context(), nil)
 		require.NoError(t, err)
-	}, "a capturing-group template must never panic the mux build")
+	}, "a malformed template must never panic the mux build")
 
-	assert.False(t, muxMatches(public, http.MethodGet, "/bad/asc"), "capturing-group route must be skipped")
-	assert.True(t, muxMatches(public, http.MethodGet, "/good/asc"), "non-capturing sibling must serve")
+	assert.False(t, muxMatches(public, http.MethodGet, "/bad/anything"), "unbalanced-template route must be skipped")
+	assert.True(t, muxMatches(public, http.MethodGet, "/good/asc"), "capturing-group sibling must serve")
 	assert.False(t, muxMatches(public, http.MethodGet, "/good/other"), "the alternation still constrains matching")
 
-	for _, name := range []string{"capture", "unbalanced"} {
+	for _, name := range []string{"unbalanced", "badclass"} {
 		tr := shapeTrigger(name, nil)
 		switch name {
-		case "capture":
-			tr.Spec.RelativeURL = `/bad/{sort:(asc|desc)}`
 		case "unbalanced":
 			tr.Spec.RelativeURL = `/bad/{id`
+		case "badclass":
+			tr.Spec.RelativeURL = `/bad/{id:[}`
 		}
 		reason, err := triggerConfigError(&tr)
 		require.Error(t, err, "%s must be rejected by config validation", name)

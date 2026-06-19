@@ -6,12 +6,12 @@ package router
 
 // Mux build + match benchmarks (RFC-0013 phase 0 baselines).
 //
-// BenchmarkBuildMuxes measures the cost of one full mux rebuild at N
-// triggers + N functions — which today is also the cost of a single canary
-// weight tick, since any trigger or function event rebuilds everything.
-// BenchmarkMuxMatch pins gorilla's per-request linear route scan at 10k
-// routes (first/last/miss positions) — the evidence input for the RFC's
-// phase-3 gate (build the native matcher only if p99 match overhead > 1ms).
+// BenchmarkBuildMuxes measures the cost of one full mux rebuild (registration
+// + Handler() compile) at N triggers + N functions — which on the legacy path
+// is also the cost of a single canary weight tick, since any trigger or
+// function event rebuilds everything.
+// BenchmarkMuxMatch pins httpmux's per-request linear route scan at 10k routes
+// (first/last/miss positions) — the native matcher built in RFC-0013 phase 3.
 
 import (
 	"fmt"
@@ -19,13 +19,13 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/gorilla/mux"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/router/routetable"
+	"github.com/fission/fission/pkg/utils/httpmux"
 )
 
 // benchRouteSet builds N functions and N triggers (trigger bench-i routes
@@ -66,30 +66,52 @@ func BenchmarkBuildMuxes(b *testing.B) {
 			ctx := b.Context()
 			b.ReportAllocs()
 			for b.Loop() {
-				if _, _, err := ts.buildMuxes(ctx, fnTimeout); err != nil {
+				public, internal, err := ts.buildMuxes(ctx, fnTimeout)
+				if err != nil {
 					b.Fatal(err)
 				}
+				// Handler() is where templates compile and the dispatcher is
+				// assembled — part of the real rebuild cost the swap pays.
+				_ = public.Handler()
+				_ = internal.Handler()
 			}
 		})
 	}
 }
 
+// nopResponseWriter discards everything: a reusable sink so the match loop
+// measures dispatch (scan + the trivial matched/404 handler), not per-iteration
+// httptest.NewRecorder allocations.
+type nopResponseWriter struct{ h http.Header }
+
+func (w *nopResponseWriter) Header() http.Header {
+	if w.h == nil {
+		w.h = http.Header{}
+	}
+	return w.h
+}
+func (w *nopResponseWriter) Write(b []byte) (int, error) { return len(b), nil }
+func (w *nopResponseWriter) WriteHeader(int)             {}
+
 func BenchmarkMuxMatch(b *testing.B) {
 	const n = 10000
-	fns, triggers, fnTimeout := benchRouteSet(n)
-	ts := newShapeTS(b, fns, triggers)
-	public, _, err := ts.buildMuxes(b.Context(), fnTimeout)
-	if err != nil {
-		b.Fatal(err)
+	// Register the same 10k exact routes buildMuxes would, with no-op handlers
+	// so the loop measures the dispatcher's scan, not proxy work. Handler()
+	// compiles once (static paths compile to no regexp), exactly as production.
+	m := httpmux.New()
+	ok := http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})
+	for i := range n {
+		m.HandleFunc(fmt.Sprintf("/bench-%d", i), ok).Methods(http.MethodGet)
 	}
+	h := m.Handler()
 
 	cases := []struct {
 		name string
 		path string
 	}{
-		// gorilla matches in registration order: the first route is the
-		// best case, the last is the worst case, and a miss walks the
-		// entire route list before falling through to 404.
+		// httpmux matches in registration order: the first route is the best
+		// case, the last is the worst case, and a miss walks the entire route
+		// list before falling through to 404.
 		{name: "first-route", path: "/bench-0"},
 		{name: "last-route", path: fmt.Sprintf("/bench-%d", n-1)},
 		{name: "miss", path: "/no-such-route"},
@@ -97,10 +119,10 @@ func BenchmarkMuxMatch(b *testing.B) {
 	for _, tc := range cases {
 		b.Run(tc.name, func(b *testing.B) {
 			req := httptest.NewRequest(http.MethodGet, tc.path, nil)
+			w := &nopResponseWriter{}
 			b.ReportAllocs()
 			for b.Loop() {
-				var match mux.RouteMatch
-				public.Match(req, &match)
+				h.ServeHTTP(w, req)
 			}
 		})
 	}

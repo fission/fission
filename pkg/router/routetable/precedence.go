@@ -14,7 +14,7 @@ import (
 
 // Phase 2 of RFC-0013: specified route precedence and observable conflicts.
 //
-// gorilla/mux dispatches to the FIRST registered route that matches, so the
+// httpmux dispatches to the FIRST registered route that matches, so the
 // materializer controls precedence purely through registration order. Until
 // this phase the order was an accident of cache list order; it is now:
 //
@@ -22,7 +22,7 @@ import (
 //  2. Exact paths before prefixes.
 //  3. Among prefixes, longest prefix first.
 //  4. Method sets filter rather than rank (a non-matching method falls
-//     through to the next route / 405, exactly as gorilla already behaves).
+//     through to the next route / 405, exactly as the mux already behaves).
 //  5. Exact-duplicate shapes (same host + same path/prefix, overlapping
 //     methods): oldest creationTimestamp first, then lexicographic
 //     namespace/name. The loser stays registered (shadowed — it starts

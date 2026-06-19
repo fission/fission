@@ -16,17 +16,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gorilla/mux"
 	"golang.org/x/sync/errgroup"
 	"k8s.io/apimachinery/pkg/util/wait"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	config "github.com/fission/fission/pkg/featureconfig"
+	"github.com/fission/fission/pkg/utils/httpmux"
 	"github.com/fission/fission/pkg/utils/httpserver"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
+	"github.com/fission/fission/pkg/utils/metrics"
 )
 
-func GetRouterWithAuth() *mux.Router {
+func GetRouterWithAuth() http.Handler {
 	testHandler := func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, err := io.WriteString(w, "OK")
@@ -40,15 +41,17 @@ func GetRouterWithAuth() *mux.Router {
 	featureConfig.AuthConfig.JWTIssuer = "fission"
 	featureConfig.AuthConfig.JWTExpiryTime = 120
 
-	muxRouter := mux.NewRouter()
-	muxRouter.Use(authMiddleware(&featureConfig))
-	muxRouter.Use(metricMiddleware)
-
-	muxRouter.HandleFunc("/auth/login", authLoginHandler(&featureConfig)).Methods("POST")
+	// Mirror the public listener: auth runs as a pre-match middleware, metrics
+	// per route. The auth middleware exempts the login + healthz paths by path.
+	m := httpmux.New(
+		httpmux.WithMiddleware(authMiddleware(&featureConfig)),
+		httpmux.WithMetrics(metrics.HTTPRecorder{}),
+	)
+	m.HandleFunc("/auth/login", authLoginHandler(&featureConfig)).Methods("POST")
 	// We should be able to access health without login
-	muxRouter.HandleFunc("/router-healthz", routerHealthHandler).Methods("GET")
-	muxRouter.HandleFunc("/test", testHandler).Methods("GET")
-	return muxRouter
+	m.HandleFunc("/router-healthz", routerHealthHandler).Methods("GET")
+	m.HandleFunc("/test", testHandler).Methods("GET")
+	return m.Handler()
 }
 
 func TestRouterAuth(t *testing.T) {

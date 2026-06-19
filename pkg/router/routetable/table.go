@@ -7,12 +7,12 @@
 // It splits a route's SHAPE (path/prefix/methods/host — changes rarely,
 // human-driven) from its HANDLER (function snapshots, canary weights —
 // changes constantly). Handlers live behind a stable HandlerRef registered
-// into the gorilla mux once per shape; the steady-churn class (canary weight
+// into the httpmux mux once per shape; the steady-churn class (canary weight
 // ticks, function updates) becomes a single atomic pointer store with zero
 // mux rebuild, while shape changes signal the materializer to rebuild.
 //
 // The package is deliberately free of fission-internal imports: it knows
-// nothing about resolution, functionHandlers, or gorilla — callers hand it
+// nothing about resolution, functionHandlers, or the mux — callers hand it
 // shapes and opaque http.Handlers.
 package routetable
 

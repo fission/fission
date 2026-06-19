@@ -8,9 +8,9 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/gorilla/mux"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/fission/fission/pkg/utils/httpmux"
 )
 
 const (
@@ -29,7 +29,7 @@ func setFunctionMetadataToHeader(meta *metav1.ObjectMeta, request *http.Request)
 // setPathInfoToHeaders set URL path params and full URL path to request header
 func setPathInfoToHeader(request *http.Request) {
 	// retrieve url params and add them to request header
-	vars := mux.Vars(request)
+	vars := httpmux.Vars(request)
 	for k, v := range vars {
 		request.Header.Set(fmt.Sprintf("X-Fission-Params-%v", k), v)
 	}

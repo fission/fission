@@ -12,26 +12,25 @@ import (
 	"time"
 
 	"github.com/bep/debounce"
-	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	hmacauth "github.com/fission/fission/pkg/auth/hmac"
+	"github.com/fission/fission/pkg/utils/httpmux"
 	"github.com/fission/fission/pkg/utils/httpsecurity"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
 
-// muxMatches reports whether the gorilla/mux router would dispatch
-// `path` (with `method`) to a registered route. It is used in unit
-// tests to assert route registration without actually running the
-// downstream handler — handlers in this package require additional
-// tsRoundTripperParams plumbing that has no place in a routing test.
-func muxMatches(r *mux.Router, method, path string) bool {
-	req := httptest.NewRequest(method, path, nil)
-	var match mux.RouteMatch
-	return r.Match(req, &match) && match.Handler != nil
+// muxMatches reports whether the mux would dispatch `path` (with `method`) to a
+// registered route. It is used in unit tests to assert route registration
+// without actually running the downstream handler — handlers in this package
+// require additional tsRoundTripperParams plumbing that has no place in a
+// routing test (httpmux.Match answers "which route", not "what response").
+func muxMatches(m *httpmux.Mux, method, path string) bool {
+	_, ok := m.Match(httptest.NewRequest(method, path, nil))
+	return ok
 }
 
 // newTestTriggerSet builds an HTTPTriggerSet wired with a minimal
@@ -79,10 +78,10 @@ func TestPublicMuxDoesNotRegisterInternalFunctionRoute(t *testing.T) {
 		"public listener must not route /fission-function/myns/example/sub")
 
 	// And calling ServeHTTP on the public mux must 404 the internal
-	// path (the gorilla/mux NotFoundHandler defaults to 404 when no
-	// route matches, so this is the user-visible behaviour).
+	// path (httpmux's dispatcher 404s when no route matches, so this is
+	// the user-visible behaviour).
 	rr := httptest.NewRecorder()
-	publicMux.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/fission-function/myns/example", nil))
+	publicMux.Handler().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/fission-function/myns/example", nil))
 	assert.Equal(t, http.StatusNotFound, rr.Code,
 		"public listener must respond 404 for /fission-function/...")
 
@@ -91,6 +90,38 @@ func TestPublicMuxDoesNotRegisterInternalFunctionRoute(t *testing.T) {
 		"internal listener must route /fission-function/myns/example")
 	assert.True(t, muxMatches(internalMux, http.MethodPost, "/fission-function/myns/example/sub"),
 		"internal listener must route /fission-function/myns/example/sub via the prefix handler")
+}
+
+// TestInternalListenerLiteralPathMatching pins the Phase-3 path-normalization
+// decision for the HMAC-signed internal listener: httpmux matches paths
+// LITERALLY and does NOT clean "." / ".." / "//" the way gorilla did by
+// default. This is the correct policy here — the listener verifies an HMAC over
+// the RAW request-URI, so gorilla's clean-and-301-redirect would have produced
+// a path the signature no longer covers; and legit publishers always build
+// clean paths via utils.UrlForFunction. Non-canonical forms therefore simply
+// fail to match (404) rather than being silently rewritten onto a function.
+func TestInternalListenerLiteralPathMatching(t *testing.T) {
+	fn := fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "example", Namespace: "myns"}}
+	ts := newTestTriggerSet(t, []fv1.Function{fn}, nil)
+	_, internalMux, err := ts.buildMuxes(t.Context(), nil)
+	require.NoError(t, err)
+
+	// Canonical paths match: the exact route and its slash-prefix subtree.
+	assert.True(t, muxMatches(internalMux, http.MethodPost, "/fission-function/myns/example"),
+		"the canonical function path must match")
+	assert.True(t, muxMatches(internalMux, http.MethodPost, "/fission-function/myns/example/sub"),
+		"a clean subpath must match the prefix route")
+
+	// Non-canonical forms are matched literally — i.e. not at all — so they
+	// can neither sneak onto a function route nor trigger a surprise redirect.
+	for _, p := range []string{
+		"/fission-function/myns//example",        // doubled slash
+		"/fission-function/myns/./example",       // dot segment
+		"/fission-function/myns/../myns/example", // parent traversal
+	} {
+		assert.False(t, muxMatches(internalMux, http.MethodPost, p),
+			"non-canonical path %q must not match (httpmux matches literally, no cleaning)", p)
+	}
 }
 
 // TestPublicMuxStillServesHealthAndVersion ensures the listener split
@@ -104,11 +135,11 @@ func TestPublicMuxStillServesHealthAndVersion(t *testing.T) {
 	require.NoError(t, err)
 
 	rr := httptest.NewRecorder()
-	publicMux.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/router-healthz", nil))
+	publicMux.Handler().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/router-healthz", nil))
 	assert.Equal(t, http.StatusOK, rr.Code, "/router-healthz must stay on the public listener")
 
 	rr = httptest.NewRecorder()
-	publicMux.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/_version", nil))
+	publicMux.Handler().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/_version", nil))
 	assert.Equal(t, http.StatusOK, rr.Code, "/_version must stay on the public listener")
 
 	// Symmetric guard: the internal listener must NOT serve
@@ -116,11 +147,11 @@ func TestPublicMuxStillServesHealthAndVersion(t *testing.T) {
 	// without HMAC creds — which would otherwise mask a misconfigured
 	// listener).
 	rr = httptest.NewRecorder()
-	internalMux.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/router-healthz", nil))
+	internalMux.Handler().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/router-healthz", nil))
 	assert.Equal(t, http.StatusNotFound, rr.Code, "internal listener must not serve /router-healthz")
 
 	rr = httptest.NewRecorder()
-	internalMux.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/_version", nil))
+	internalMux.Handler().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/_version", nil))
 	assert.Equal(t, http.StatusNotFound, rr.Code, "internal listener must not serve /_version")
 }
 
@@ -149,7 +180,7 @@ func TestInternalListenerRejectsUnsignedRequests(t *testing.T) {
 		SkewSec:      60,
 		MaxBodyBytes: internalListenerMaxBodyBytes,
 	})
-	wrapped := verifier(internalMux)
+	wrapped := verifier(internalMux.Handler())
 
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/fission-function/myns/example", nil)
@@ -202,7 +233,7 @@ func TestPublicListener_SecurityHeadersPresentOnRouterOwnedRoutes(t *testing.T) 
 	ts := newTestTriggerSet(t, nil, nil)
 	publicMux, _, err := ts.buildMuxes(t.Context(), nil)
 	require.NoError(t, err)
-	wrapped := httpsecurity.SecurityHeaders(publicMux)
+	wrapped := httpsecurity.SecurityHeaders(publicMux.Handler())
 
 	rr := httptest.NewRecorder()
 	wrapped.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/router-healthz", nil))
@@ -214,7 +245,7 @@ func TestPublicListener_SecurityHeadersPresentOnRouterOwnedRoutes(t *testing.T) 
 
 // TestPublicListener_RouterOwnedRoutesRejectCrossOriginPreflight pins the
 // round-3 per-route DenyAllCORS wrap on router-owned routes. Each route
-// registers OPTIONS alongside its real verb so gorilla/mux routes the
+// registers OPTIONS alongside its real verb so the mux routes the
 // preflight to the wrapped DenyAllCORS handler, which returns 403.
 func TestPublicListener_RouterOwnedRoutesRejectCrossOriginPreflight(t *testing.T) {
 	ts := newTestTriggerSet(t, nil, nil)
@@ -227,7 +258,7 @@ func TestPublicListener_RouterOwnedRoutesRejectCrossOriginPreflight(t *testing.T
 			req := httptest.NewRequest(http.MethodOptions, path, nil)
 			req.Header.Set("Origin", "https://attacker.example")
 			req.Header.Set("Access-Control-Request-Method", "GET")
-			publicMux.ServeHTTP(rr, req)
+			publicMux.Handler().ServeHTTP(rr, req)
 			assert.Equal(t, http.StatusForbidden, rr.Code,
 				"cross-origin preflight to %s must be 403 from DenyAllCORS", path)
 		})
@@ -297,7 +328,7 @@ func TestInternalListener_RejectsCrossOriginPreflight(t *testing.T) {
 		SkewSec:      60,
 		MaxBodyBytes: internalListenerMaxBodyBytes,
 	})
-	wrapped := httpsecurity.SecurityHeaders(httpsecurity.DenyAllCORS(verifier(internalMux)))
+	wrapped := httpsecurity.SecurityHeaders(httpsecurity.DenyAllCORS(verifier(internalMux.Handler())))
 
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodOptions, "/fission-function/myns/example", nil)
