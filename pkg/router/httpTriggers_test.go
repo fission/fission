@@ -18,6 +18,7 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	hmacauth "github.com/fission/fission/pkg/auth/hmac"
+	config "github.com/fission/fission/pkg/featureconfig"
 	"github.com/fission/fission/pkg/utils/httpmux"
 	"github.com/fission/fission/pkg/utils/httpsecurity"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
@@ -121,6 +122,47 @@ func TestInternalListenerLiteralPathMatching(t *testing.T) {
 	} {
 		assert.False(t, muxMatches(internalMux, http.MethodPost, p),
 			"non-canonical path %q must not match (httpmux matches literally, no cleaning)", p)
+	}
+}
+
+// TestRouterOwnedRoutesSkipInvalidAuthPath pins the operator-misconfig guard: a
+// malformed AuthUriPath (httpmux would panic compiling it) must NOT crash the
+// mux build — the login route is skipped (logged) and the rest of the listener
+// keeps serving. Without the CompilePattern guard this panics in the rebuild
+// goroutine, outside panicRecoveryMiddleware, and crash-loops the router.
+func TestRouterOwnedRoutesSkipInvalidAuthPath(t *testing.T) {
+	ts := newTestTriggerSet(t, nil, nil)
+	fc := &config.FeatureConfig{}
+	fc.AuthConfig.IsEnabled = true
+	fc.AuthConfig.AuthUriPath = "/auth/{" // unbalanced brace → uncompilable
+
+	m := httpmux.New()
+	require.NotPanics(t, func() {
+		ts.registerRouterOwnedRoutes(m, fc, false)
+		_ = m.Handler() // compile: would panic if the bad path were registered
+	}, "a malformed AuthUriPath must not panic the mux build")
+
+	assert.True(t, muxMatches(m, http.MethodGet, "/router-healthz"),
+		"router-owned probe routes must still register despite the bad auth path")
+	assert.False(t, muxMatches(m, http.MethodPost, "/auth/{"),
+		"the malformed auth login route must be skipped")
+}
+
+// TestPublicListenerLiteralPathMatching mirrors the internal-listener test on
+// the public side: httpmux matches user-trigger paths literally, with no
+// gorilla-style "." / ".." / "//" cleaning or 301 redirect. A non-canonical
+// request to a registered exact route therefore 404s rather than being
+// redirected onto it.
+func TestPublicListenerLiteralPathMatching(t *testing.T) {
+	ts := newTestTriggerSet(t, nil, nil)
+	publicMux, _, err := ts.buildMuxes(t.Context(), nil)
+	require.NoError(t, err)
+	// /router-healthz is a registered exact route; non-canonical forms of it
+	// do not match (literal matching, no cleaning).
+	assert.True(t, muxMatches(publicMux, http.MethodGet, "/router-healthz"))
+	for _, p := range []string{"/router-healthz/.", "/foo/../router-healthz", "//router-healthz"} {
+		assert.False(t, muxMatches(publicMux, http.MethodGet, p),
+			"non-canonical %q must not match the exact route (no path cleaning)", p)
 	}
 }
 

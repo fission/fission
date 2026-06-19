@@ -95,6 +95,12 @@ func (s routeShape) claimsHome() bool {
 // directly would keep a live reference into the route table's canonical spec
 // or the informer-owned trigger object, which a concurrent reconcile could
 // mutate under the still-serving previous mux. The clone severs that.
+//
+// .Methods is called UNCONDITIONALLY (even for an empty shape.methods): in
+// httpmux an empty method set is a DEAD route (matches nothing), which is the
+// derived empty-method shape the router must preserve. Skipping the call for an
+// empty set would silently widen the route to match every method — see
+// TestRouteShapeEmptyMethods / httpmux TestEmptyMethodsMatchesNothing.
 func registerRouteShape(m *httpmux.Mux, shape routeShape, handler http.Handler) {
 	if shape.exactPath != "" {
 		route := m.Handle(shape.exactPath, handler).Methods(slices.Clone(shape.methods)...)
@@ -262,7 +268,17 @@ func (ts *HTTPTriggerSet) registerRouterOwnedRoutes(public *httpmux.Mux, feature
 
 	if featureConfig.AuthConfig.IsEnabled {
 		path := featureConfig.AuthConfig.AuthUriPath
-		public.Handle(path, httpsecurity.DenyAllCORS(http.HandlerFunc(authLoginHandler(featureConfig)))).Methods(http.MethodPost, http.MethodOptions)
+		// AuthUriPath is operator-supplied. If it is not a valid route pattern
+		// (e.g. an unbalanced "{"), httpmux.Handler() would panic when this mux
+		// is built — in the rebuild goroutine, outside panicRecoveryMiddleware
+		// — and crash-loop the router. Validate up front and skip the login
+		// route on a bad value (logged) so a misconfiguration degrades to "no
+		// login endpoint" rather than a down router.
+		if err := httpmux.CompilePattern(path, httpmux.Exact); err != nil {
+			ts.logger.Error(err, "auth login path is not a valid route pattern; skipping the auth login route", "path", path)
+		} else {
+			public.Handle(path, httpsecurity.DenyAllCORS(http.HandlerFunc(authLoginHandler(featureConfig)))).Methods(http.MethodPost, http.MethodOptions)
+		}
 	}
 
 	// Healthz stays on the public listener so existing readiness/liveness

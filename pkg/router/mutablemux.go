@@ -47,5 +47,9 @@ func (mr *mutableRouter) ServeHTTP(responseWriter http.ResponseWriter, request *
 func (mr *mutableRouter) updateRouter(handler http.Handler) {
 	// Store the address of a fresh local so each swap publishes its own
 	// *http.Handler; Load() in ServeHTTP reads whichever was last stored.
+	// A nil handler argument stores a non-nil *http.Handler boxing a nil
+	// interface — which is why ServeHTTP also checks *handler != nil (it
+	// degrades to 503 rather than nil-dereferencing). Callers pass
+	// Mux.Handler(), which never returns nil, so that guard is belt-and-braces.
 	mr.handler.Store(&handler)
 }

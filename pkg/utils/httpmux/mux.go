@@ -188,11 +188,12 @@ func (m *Mux) Handler() http.Handler {
 
 // Match reports the pattern of the first route that would handle req — matched
 // by host, path, and method, in registration order, exactly as ServeHTTP does
-// — and whether any route matched. It ignores middleware and metrics (it
-// answers "which route", not "what response"), and compiles routes the same
-// way Handler does (panicking identically on an invalid template). Intended for
-// tests and diagnostics, where asserting registration must not drive the
-// matched handler.
+// — and whether any route matched.
+//
+// It is for TESTS AND DIAGNOSTICS, not the request path: it recompiles every
+// route on each call (like Handler), so it is O(routes) per call. It ignores
+// middleware and metrics (it answers "which route", not "what response") and
+// panics identically to Handler on an invalid template.
 func (m *Mux) Match(req *http.Request) (pattern string, matched bool) {
 	d := &dispatcher{routes: m.compile(), encodedPath: m.encodedPath}
 	cr, _, _ := d.match(req)
