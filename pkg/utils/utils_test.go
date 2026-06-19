@@ -21,6 +21,26 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 )
 
+func TestUrlForFunction(t *testing.T) {
+	t.Parallel()
+	// "default" is metav1.NamespaceDefault: it is folded out of the path so the
+	// URL matches the form the router actually registers; other namespaces are
+	// kept. A hardcoded /fission-function/default/<name> would not resolve.
+	tests := []struct {
+		name, namespace, want string
+	}{
+		{"fn", "default", "/fission-function/fn"},
+		{"fn", "ns1", "/fission-function/ns1/fn"},
+		{"my-fn", "team-a", "/fission-function/team-a/my-fn"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.namespace, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tc.want, UrlForFunction(tc.name, tc.namespace))
+		})
+	}
+}
+
 func TestIsURL(t *testing.T) {
 	tests := []struct {
 		name string
