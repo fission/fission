@@ -27,6 +27,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -173,8 +174,10 @@ func (m *Mux) compile() []*compiledRoute {
 // handler is instrumented (if metrics are enabled), then the dispatcher is
 // wrapped with the middleware chain. Safe to call once configuration is done.
 func (m *Mux) Handler() http.Handler {
+	routes := m.compile()
 	var h http.Handler = &dispatcher{
-		routes:           m.compile(),
+		routes:           routes,
+		exact:            buildExactIndex(routes),
 		encodedPath:      m.encodedPath,
 		notFound:         instrument(m.recorder, patternNotFound, http.HandlerFunc(http.NotFound)),
 		methodNotAllowed: instrument(m.recorder, patternMethodNotAllowed, http.HandlerFunc(methodNotAllowedHandler)),
@@ -195,7 +198,8 @@ func (m *Mux) Handler() http.Handler {
 // middleware and metrics (it answers "which route", not "what response") and
 // panics identically to Handler on an invalid template.
 func (m *Mux) Match(req *http.Request) (pattern string, matched bool) {
-	d := &dispatcher{routes: m.compile(), encodedPath: m.encodedPath}
+	routes := m.compile()
+	d := &dispatcher{routes: routes, exact: buildExactIndex(routes), encodedPath: m.encodedPath}
 	cr, _, _ := d.match(req)
 	if cr == nil {
 		return "", false
@@ -240,22 +244,116 @@ func (cr *compiledRoute) matchPath(path string) (bool, map[string]string) {
 
 // dispatcher is the built matcher: it scans routes in registration order and
 // dispatches the first full match, falling back to instrumented 405/404
-// handlers.
+// handlers. An exact-path index (exact) short-circuits the scan for literal
+// routes that nothing can shadow — the function-invocation hot path.
 type dispatcher struct {
-	routes           []*compiledRoute
+	routes []*compiledRoute
+	// exact is the fast-path index: path → its routes (in registration order),
+	// for paths nothing can shadow. See buildExactIndex for the invariant. nil
+	// when no route qualifies.
+	exact            map[string][]*compiledRoute
 	encodedPath      bool
 	notFound         http.Handler
 	methodNotAllowed http.Handler
 }
 
-// match scans routes in registration order and returns the first full match
-// (route + extracted vars). methodNotAllowed is true when a path matched but no
-// route's method did — the caller turns that into a 405 rather than a 404.
+// buildExactIndex builds the exact-path fast-path lookup. A literal exact route
+// is included only when no "matcher" route — a template ({var}/{var:regexp}, of
+// either kind) or a prefix route — matches its path; otherwise an earlier
+// matcher could shadow it and the registration-order scan, not the map, must
+// decide. Shadowing depends only on the path, so every literal exact at a path
+// shares eligibility and a key's bucket holds all of them.
+//
+// This is a pure optimization: a request whose path is a key is resolved
+// entirely within that bucket (no other route can match the path), replicating
+// the scan's host/method/405 behaviour; every other request falls through to
+// the scan. Excluding a route from the map never changes behaviour, only speed.
+func buildExactIndex(routes []*compiledRoute) map[string][]*compiledRoute {
+	// Matchers split two ways. A literal prefix Q shadows path P iff
+	// P[:len(Q)] == Q, so prefixes go into a set probed by length — O(distinct
+	// prefix lengths) per path instead of O(prefixes), which keeps the build
+	// near-linear even when prefixes scale with routes (the internal listener
+	// registers one per function). Templates need a regexp run, so they stay
+	// pairwise (there are typically few).
+	prefixSet := make(map[string]struct{})
+	prefixLenSet := make(map[int]struct{})
+	var templates []*compiledRoute
+	for _, cr := range routes {
+		switch {
+		case cr.re != nil:
+			templates = append(templates, cr)
+		case cr.route.kind == Prefix:
+			prefixSet[cr.route.pattern] = struct{}{}
+			prefixLenSet[len(cr.route.pattern)] = struct{}{}
+		}
+	}
+	prefixLens := make([]int, 0, len(prefixLenSet))
+	for l := range prefixLenSet {
+		prefixLens = append(prefixLens, l)
+	}
+	// Ascending so the shadow check probes shorter prefixes first (cheaper
+	// substring hash, likelier to match) and iterates deterministically.
+	slices.Sort(prefixLens)
+
+	shadowed := func(p string) bool {
+		for _, l := range prefixLens {
+			if l <= len(p) {
+				if _, ok := prefixSet[p[:l]]; ok {
+					return true
+				}
+			}
+		}
+		for _, t := range templates {
+			if ok, _ := t.matchPath(p); ok {
+				return true
+			}
+		}
+		return false
+	}
+
+	var idx map[string][]*compiledRoute
+	for _, cr := range routes {
+		if cr.re != nil || cr.route.kind != Exact {
+			continue // not a literal exact
+		}
+		p := cr.route.pattern
+		if shadowed(p) {
+			continue
+		}
+		if idx == nil {
+			idx = make(map[string][]*compiledRoute)
+		}
+		idx[p] = append(idx[p], cr)
+	}
+	return idx
+}
+
+// match returns the first full match (route + extracted vars). methodNotAllowed
+// is true when a path matched but no route's method did — the caller turns that
+// into a 405 rather than a 404.
 func (d *dispatcher) match(r *http.Request) (matched *compiledRoute, vars map[string]string, methodNotAllowed bool) {
 	path := r.URL.Path
 	if d.encodedPath {
 		path = r.URL.EscapedPath()
 	}
+	// Fast path: the bucket holds every route that can match this path (see
+	// buildExactIndex), so resolving it here is identical to the scan, O(1).
+	if bucket, ok := d.exact[path]; ok {
+		for _, cr := range bucket {
+			rt := cr.route
+			if rt.host != "" && rt.host != r.Host {
+				continue
+			}
+			if !rt.matchesMethod(r.Method) {
+				methodNotAllowed = true
+				continue
+			}
+			return cr, nil, false // literal exact → no vars
+		}
+		return nil, nil, methodNotAllowed
+	}
+	// Slow path: templates, prefixes, and shadowed exacts, in registration
+	// order, first full match wins.
 	for _, cr := range d.routes {
 		rt := cr.route
 		if rt.host != "" && rt.host != r.Host {

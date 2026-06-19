@@ -53,17 +53,20 @@ func init() {
 // value is ready to use.
 type HTTPRecorder struct{}
 
+// All three use WithLabelValues (positional, matching each vec's label order)
+// rather than With(prometheus.Labels{...}): the map form allocates a map per
+// call on every instrumented request, while WithLabelValues hits the vec's
+// internal child cache without that per-request allocation.
+
 func (HTTPRecorder) InFlightInc(path, method string) {
-	httpRequestInFlight.With(prometheus.Labels{"path": path, "method": method}).Inc()
+	httpRequestInFlight.WithLabelValues(path, method).Inc()
 }
 
 func (HTTPRecorder) InFlightDec(path, method string) {
-	httpRequestInFlight.With(prometheus.Labels{"path": path, "method": method}).Dec()
+	httpRequestInFlight.WithLabelValues(path, method).Dec()
 }
 
 func (HTTPRecorder) Observe(path, method string, statusCode int, duration time.Duration) {
-	labels := prometheus.Labels{"path": path, "method": method}
-	httpRequestDuration.With(labels).Observe(duration.Seconds())
-	labels["code"] = strconv.Itoa(statusCode)
-	httpRequestsTotal.With(labels).Inc()
+	httpRequestDuration.WithLabelValues(path, method).Observe(duration.Seconds())
+	httpRequestsTotal.WithLabelValues(path, method, strconv.Itoa(statusCode)).Inc()
 }

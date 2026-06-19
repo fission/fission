@@ -5,8 +5,6 @@
 package util
 
 import (
-	"net/http"
-
 	v1 "k8s.io/api/networking/v1"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -202,9 +200,4 @@ func GetDeployLabels(trigger *fv1.HTTPTrigger) map[string]string {
 		"functionName":     trigger.Spec.FunctionReference.Name,
 		"triggerNamespace": trigger.Namespace,
 	}
-}
-
-func IsWebsocketRequest(request *http.Request) bool {
-	return request.Header.Get("Upgrade") == "websocket" &&
-		request.Header.Get("Connection") == "Upgrade"
 }
