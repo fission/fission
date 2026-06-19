@@ -7,8 +7,6 @@ package httpmux
 import (
 	"net/http"
 	"time"
-
-	"golang.org/x/net/http/httpguts"
 )
 
 // Recorder records per-request HTTP metrics. The mux invokes it for each
@@ -84,15 +82,4 @@ func instrument(rec Recorder, pattern string, h http.Handler) http.Handler {
 		return h
 	}
 	return Instrument(rec, func(*http.Request) string { return pattern }, h)
-}
-
-// IsWebSocketUpgrade reports whether r is a websocket upgrade handshake
-// (Upgrade: websocket + Connection: Upgrade, per RFC 6455). Connection is a
-// comma-separated token list, so it is parsed with the canonical httpguts
-// tokenizer rather than a string compare — a naive Get(...) == "Upgrade" misses
-// the common "Connection: keep-alive, Upgrade" form and any case variation.
-// Exported so the router's data plane shares this one correct detector.
-func IsWebSocketUpgrade(r *http.Request) bool {
-	return httpguts.HeaderValuesContainsToken(r.Header["Upgrade"], "websocket") &&
-		httpguts.HeaderValuesContainsToken(r.Header["Connection"], "upgrade")
 }

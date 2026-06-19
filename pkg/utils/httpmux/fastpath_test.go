@@ -42,41 +42,43 @@ func TestExactIndexEligibility(t *testing.T) {
 
 // --- Black-box precedence: the fast path must never change the winner ---
 
-// TestExactFastPathTemplateRegisteredFirstWins: a template registered BEFORE a
-// literal exact at a path it matches must still win — the literal is shadowed
-// out of the index, so the scan (registration order) decides.
-func TestExactFastPathTemplateRegisteredFirstWins(t *testing.T) {
+// TestExactFastPathPrecedence: first-match precedence holds with the index — a
+// template or prefix registered BEFORE a literal exact at a path it matches
+// still wins, because the literal is shadowed out of the index and the
+// registration-order scan decides.
+func TestExactFastPathPrecedence(t *testing.T) {
 	t.Parallel()
-	m := New()
-	m.Handle("/{x}", ok("template")).Methods("GET") // registered first
-	m.Handle("/specific", ok("exact")).Methods("GET")
-	assert.Equal(t, "template", do(t, m.Handler(), http.MethodGet, "/specific").Body.String(),
-		"the earlier template must win even though a literal exact for the path exists")
-}
-
-// TestExactFastPathExactRegisteredFirstWins: the mirror — a literal exact
-// registered BEFORE a template that also matches it still wins. It is shadowed
-// out of the index (a template matches its path), so the scan decides, and the
-// scan hits the exact first.
-func TestExactFastPathExactRegisteredFirstWins(t *testing.T) {
-	t.Parallel()
-	m := New()
-	m.Handle("/specific", ok("exact")).Methods("GET") // registered first
-	m.Handle("/{x}", ok("template")).Methods("GET")
-	assert.Equal(t, "exact", do(t, m.Handler(), http.MethodGet, "/specific").Body.String())
-	assert.Equal(t, "template", do(t, m.Handler(), http.MethodGet, "/other").Body.String(),
-		"the template still serves paths with no literal exact")
-}
-
-// TestExactFastPathPrefixRegisteredFirstWins: a prefix registered before a
-// literal exact under it still wins.
-func TestExactFastPathPrefixRegisteredFirstWins(t *testing.T) {
-	t.Parallel()
-	m := New()
-	m.HandlePrefix("/api/", ok("prefix")).Methods("GET") // registered first
-	m.Handle("/api/v1", ok("exact")).Methods("GET")
-	assert.Equal(t, "prefix", do(t, m.Handler(), http.MethodGet, "/api/v1").Body.String(),
-		"the earlier prefix must win over a shadowed literal exact")
+	cases := []struct {
+		name     string
+		register func(*Mux)
+		reqPath  string
+		want     string
+	}{
+		{"template before exact", func(m *Mux) {
+			m.Handle("/{x}", ok("template")).Methods("GET")
+			m.Handle("/specific", ok("exact")).Methods("GET")
+		}, "/specific", "template"},
+		{"exact before template", func(m *Mux) {
+			m.Handle("/specific", ok("exact")).Methods("GET")
+			m.Handle("/{x}", ok("template")).Methods("GET")
+		}, "/specific", "exact"},
+		{"template still serves non-literal paths", func(m *Mux) {
+			m.Handle("/specific", ok("exact")).Methods("GET")
+			m.Handle("/{x}", ok("template")).Methods("GET")
+		}, "/other", "template"},
+		{"prefix before exact", func(m *Mux) {
+			m.HandlePrefix("/api/", ok("prefix")).Methods("GET")
+			m.Handle("/api/v1", ok("exact")).Methods("GET")
+		}, "/api/v1", "prefix"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			m := New()
+			tc.register(m)
+			assert.Equal(t, tc.want, do(t, m.Handler(), http.MethodGet, tc.reqPath).Body.String())
+		})
+	}
 }
 
 // TestExactFastPath404And405: within an indexed path, method/host resolution and

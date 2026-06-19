@@ -247,11 +247,9 @@ func (cr *compiledRoute) matchPath(path string) (bool, map[string]string) {
 // routes that nothing can shadow — the function-invocation hot path.
 type dispatcher struct {
 	routes []*compiledRoute
-	// exact maps a literal (non-template) exact path to the routes registered
-	// at it, IN REGISTRATION ORDER — but only for paths no template/prefix
-	// route can match (see buildExactIndex). For such a path the bucket holds
-	// every route that matches it, so the lookup fully replaces the scan; the
-	// map is nil when no route qualifies.
+	// exact is the fast-path index: path → its routes (in registration order),
+	// for paths nothing can shadow. See buildExactIndex for the invariant. nil
+	// when no route qualifies.
 	exact            map[string][]*compiledRoute
 	encodedPath      bool
 	notFound         http.Handler
@@ -309,19 +307,13 @@ func buildExactIndex(routes []*compiledRoute) map[string][]*compiledRoute {
 		return false
 	}
 
-	eligible := make(map[string]bool) // memoised per distinct path
 	var idx map[string][]*compiledRoute
 	for _, cr := range routes {
 		if cr.re != nil || cr.route.kind != Exact {
 			continue // not a literal exact
 		}
 		p := cr.route.pattern
-		e, seen := eligible[p]
-		if !seen {
-			e = !shadowed(p)
-			eligible[p] = e
-		}
-		if !e {
+		if shadowed(p) {
 			continue
 		}
 		if idx == nil {
@@ -340,9 +332,8 @@ func (d *dispatcher) match(r *http.Request) (matched *compiledRoute, vars map[st
 	if d.encodedPath {
 		path = r.URL.EscapedPath()
 	}
-	// Fast path: a literal exact route nothing shadows. The bucket holds every
-	// route that can match this path, so resolving host/method within it (and
-	// the 405 flag) is identical to the scan, without walking the whole table.
+	// Fast path: the bucket holds every route that can match this path (see
+	// buildExactIndex), so resolving it here is identical to the scan, O(1).
 	if bucket, ok := d.exact[path]; ok {
 		for _, cr := range bucket {
 			rt := cr.route
