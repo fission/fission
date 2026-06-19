@@ -13,7 +13,6 @@ import (
 	apiv1 "k8s.io/api/core/v1"
 	k8s_err "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -209,11 +208,7 @@ func (cn *Container) getDeploymentSpec(ctx context.Context, fn *fv1.Function, ta
 	var ownerReferences []metav1.OwnerReference
 	if cn.enableOwnerReferences {
 		ownerReferences = []metav1.OwnerReference{
-			*metav1.NewControllerRef(fn, schema.GroupVersionKind{
-				Group:   "fission.io",
-				Version: "v1",
-				Kind:    "Function",
-			}),
+			*metav1.NewControllerRef(fn, fv1.SchemeGroupVersion.WithKind("Function")),
 		}
 	}
 	deployment := &appsv1.Deployment{

@@ -14,7 +14,6 @@ import (
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	k8s_err "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/go-logr/logr"
@@ -166,11 +165,7 @@ func (hpaops *HpaOperations) CreateOrGetHpa(ctx context.Context, fn *fv1.Functio
 	var ownerReferences []metav1.OwnerReference
 	if hpaops.enableOwnerReferences {
 		ownerReferences = []metav1.OwnerReference{
-			*metav1.NewControllerRef(fn, schema.GroupVersionKind{
-				Group:   "fission.io",
-				Version: "v1",
-				Kind:    "Function",
-			}),
+			*metav1.NewControllerRef(fn, fv1.SchemeGroupVersion.WithKind("Function")),
 		}
 	}
 

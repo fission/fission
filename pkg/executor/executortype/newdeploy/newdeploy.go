@@ -16,7 +16,6 @@ import (
 	k8s_err "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -238,11 +237,7 @@ func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function
 	var ownerReferences []metav1.OwnerReference
 	if deploy.enableOwnerReferences {
 		ownerReferences = []metav1.OwnerReference{
-			*metav1.NewControllerRef(fn, schema.GroupVersionKind{
-				Group:   "fission.io",
-				Version: "v1",
-				Kind:    "Function",
-			}),
+			*metav1.NewControllerRef(fn, fv1.SchemeGroupVersion.WithKind("Function")),
 		}
 	}
 
@@ -396,11 +391,7 @@ func (deploy *NewDeploy) createOrGetSvc(ctx context.Context, fn *fv1.Function, d
 	var ownerReferences []metav1.OwnerReference
 	if deploy.enableOwnerReferences {
 		ownerReferences = []metav1.OwnerReference{
-			*metav1.NewControllerRef(fn, schema.GroupVersionKind{
-				Group:   "fission.io",
-				Version: "v1",
-				Kind:    "Function",
-			}),
+			*metav1.NewControllerRef(fn, fv1.SchemeGroupVersion.WithKind("Function")),
 		}
 	}
 
