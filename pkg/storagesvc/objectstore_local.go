@@ -92,6 +92,12 @@ func (s *localObjectStore) put(name string, r io.Reader, _ int64) (string, error
 	if _, err := io.Copy(f, r); err != nil {
 		return "", err
 	}
+	// io.Copy can succeed while the final Close (which flushes buffered writes)
+	// fails on a full or failing disk, storing a truncated archive but reporting
+	// success. Surface that error rather than leaving it to the deferred Close.
+	if err := f.Close(); err != nil {
+		return "", err
+	}
 	// id is the absolute path of the stored file.
 	return filepath.Join(s.containerPath, rel), nil
 }
