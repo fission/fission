@@ -7,6 +7,7 @@ package metrics
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/prometheus/client_golang/prometheus"
 
@@ -68,6 +69,19 @@ func (rw *ResponseWriterWrapper) Flush() {
 // handlers) where the registered pattern is known at wiring time.
 func InstrumentHandler(path string, next http.Handler) http.Handler {
 	return instrument(func(*http.Request) string { return path }, next)
+}
+
+// RegisterHandler registers h on mux under pattern (a stdlib ServeMux pattern
+// such as "POST /v1/archive") with per-route metrics instrumentation. The
+// low-cardinality path label is the pattern's path — the pattern minus any
+// leading "METHOD " token — keeping the pattern the single source of truth for
+// both routing and the metric label.
+func RegisterHandler(mux *http.ServeMux, pattern string, h http.HandlerFunc) {
+	path := pattern
+	if _, p, ok := strings.Cut(pattern, " "); ok {
+		path = p
+	}
+	mux.Handle(pattern, InstrumentHandler(path, h))
 }
 
 // InstrumentHandlerFunc wraps next, deriving the path label per request via

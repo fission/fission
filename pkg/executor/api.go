@@ -358,26 +358,19 @@ func (executor *Executor) dumpDebugInfo(w http.ResponseWriter, r *http.Request) 
 // GetHandler returns an http.Handler.
 func (executor *Executor) GetHandler() http.Handler {
 	m := http.NewServeMux()
-	// Each route carries its own metrics instrumentation keyed on the route's
-	// path (the pattern minus its leading "METHOD " token, kept as the single
-	// source of truth); the HMAC verifier wraps the whole mux below (replacing
-	// the gorilla Use(verifier)/Use(metrics) chain — verifier outermost,
-	// metrics inner, so behavior is unchanged).
-	handle := func(pattern string, h http.HandlerFunc) {
-		label := pattern
-		if _, path, ok := strings.Cut(pattern, " "); ok {
-			label = path
-		}
-		m.Handle(pattern, metrics.InstrumentHandler(label, h))
-	}
-	handle("POST /v2/getServiceForFunction", executor.getServiceForFunctionAPI)
-	handle("POST /v2/ensureCapacity", executor.ensureCapacityHandler)
-	handle("POST /v2/tapService", executor.tapService) // for backward compatibility
-	handle("POST /v2/tapServices", executor.tapServices)
-	handle("POST /v2/unTapService", executor.unTapService)
-	handle("GET /v2/debugInfo", executor.dumpDebugInfo)
-	handle("GET /healthz", executor.healthHandler)
-	handle("GET /readyz", executor.readyzHandler)
+	// Each route carries its own metrics instrumentation keyed on its path
+	// (metrics.RegisterHandler derives the label from the pattern); the HMAC
+	// verifier wraps the whole mux below (replacing the gorilla
+	// Use(verifier)/Use(metrics) chain — verifier outermost, metrics inner, so
+	// behavior is unchanged).
+	metrics.RegisterHandler(m, "POST /v2/getServiceForFunction", executor.getServiceForFunctionAPI)
+	metrics.RegisterHandler(m, "POST /v2/ensureCapacity", executor.ensureCapacityHandler)
+	metrics.RegisterHandler(m, "POST /v2/tapService", executor.tapService) // for backward compatibility
+	metrics.RegisterHandler(m, "POST /v2/tapServices", executor.tapServices)
+	metrics.RegisterHandler(m, "POST /v2/unTapService", executor.unTapService)
+	metrics.RegisterHandler(m, "GET /v2/debugInfo", executor.dumpDebugInfo)
+	metrics.RegisterHandler(m, "GET /healthz", executor.healthHandler)
+	metrics.RegisterHandler(m, "GET /readyz", executor.readyzHandler)
 
 	// The HMAC verifier wraps the whole mux as the OUTERMOST layer so 401
 	// rejections are handled at the auth layer and the metrics instrumentation
