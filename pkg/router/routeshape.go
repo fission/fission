@@ -17,7 +17,6 @@ import (
 	config "github.com/fission/fission/pkg/featureconfig"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/httpsecurity"
-	"github.com/fission/fission/pkg/utils/metrics"
 )
 
 // This file holds the route-shape derivation and mux-registration helpers
@@ -237,7 +236,7 @@ func (ts *HTTPTriggerSet) newListenerMuxes(featureConfig *config.FeatureConfig) 
 	// The internal mux deliberately omits the metrics middleware, the auth
 	// middleware, and the router-owned routes: those concerns are
 	// public-listener only.
-	public.Use(metrics.HTTPMetricMiddleware)
+	public.Use(metricMiddleware)
 	if featureConfig.AuthConfig.IsEnabled {
 		public.Use(authMiddleware(featureConfig))
 	}

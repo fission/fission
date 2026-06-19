@@ -5,95 +5,33 @@
 package metrics
 
 import (
-	"bufio"
-	"context"
-	"fmt"
-	"io"
-	"log"
-	"net/http"
-	"net/http/httptest"
-	"sync"
 	"testing"
 	"time"
 
-	"github.com/gorilla/mux"
-	"github.com/stretchr/testify/require"
+	"github.com/prometheus/client_golang/prometheus/testutil"
+	"github.com/stretchr/testify/assert"
 )
 
-var dataRow = []byte("I'm the data Row\n")
+// TestHTTPRecorder verifies the recorder drives the package's HTTP metric vecs:
+// the in-flight gauge balances across inc/dec and the counter increments under
+// the {path, method, code} label set. (The request-level wiring — websocket
+// bypass, status capture, per-route labelling — is exercised in
+// pkg/utils/httpmux, which owns it.)
+func TestHTTPRecorder(t *testing.T) {
+	const path, method, code = "/metrics-recorder-test", "POST", "201"
+	rec := HTTPRecorder{}
 
-func chunkedHandler(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithCancel(r.Context())
-	ticker := time.NewTicker(time.Second) // We may set it to 10 secs
-	var wg sync.WaitGroup
-	wg.Go(func() {
-		for {
-			select {
-			case <-ticker.C:
-				_, _ = w.Write(dataRow)
-				if f, ok := w.(http.Flusher); ok {
-					f.Flush()
-				}
-			case <-ctx.Done():
-				return
-			}
-		}
-	})
+	before := testutil.ToFloat64(httpRequestsTotal.WithLabelValues(path, method, code))
 
-	// Emulate some work
-	time.Sleep(5 * time.Second)
+	rec.InFlightInc(path, method)
+	assert.Equal(t, float64(1), testutil.ToFloat64(httpRequestInFlight.WithLabelValues(path, method)),
+		"in-flight gauge incremented")
 
-	// Telling the loop that keeps the connection alive to end
-	cancel()
+	rec.Observe(path, method, 201, 5*time.Millisecond)
+	rec.InFlightDec(path, method)
 
-	// Waiting until the loop ends
-	wg.Wait()
-}
-
-func TestChunked(t *testing.T) {
-	mr := mux.NewRouter()
-	mr.Use(HTTPMetricMiddleware)
-	mr.Handle("/", http.HandlerFunc(chunkedHandler))
-	s := httptest.NewServer(mr)
-	defer s.Close()
-
-	resp, err := http.Get(s.URL)
-	require.NoError(t, err)
-	require.Contains(t, resp.TransferEncoding, "chunked")
-	defer resp.Body.Close()
-
-	r := bufio.NewReader(resp.Body)
-	for {
-		line, err := readChunkedResponseLine(r)
-		if err != nil {
-			if err == io.EOF {
-				return
-			}
-			log.Fatal(err.Error())
-		}
-		if len(line) == 0 {
-			log.Println("Alive!")
-			continue
-		}
-
-		fmt.Println(string(line)) // we got the final response
-		require.Equal(t, dataRow, append(line, '\n'))
-	}
-}
-
-func readChunkedResponseLine(r *bufio.Reader) ([]byte, error) {
-	line, isPrefix, err := r.ReadLine()
-	if err != nil {
-		return nil, err
-	}
-
-	if isPrefix {
-		rest, err := readChunkedResponseLine(r)
-		if err != nil {
-			return nil, err
-		}
-		line = append(line, rest...)
-	}
-
-	return line, nil
+	assert.Zero(t, testutil.ToFloat64(httpRequestInFlight.WithLabelValues(path, method)),
+		"in-flight gauge balanced after dec")
+	assert.Equal(t, before+1, testutil.ToFloat64(httpRequestsTotal.WithLabelValues(path, method, code)),
+		"request counter incremented under {path, method, code}")
 }

@@ -9,10 +9,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/assert"
 
 	hmacauth "github.com/fission/fission/pkg/auth/hmac"
+	"github.com/fission/fission/pkg/utils/httpmux"
 )
 
 // TestVerifierMiddlewareWiring exercises the middleware chain that
@@ -24,17 +24,17 @@ import (
 func TestVerifierMiddlewareWiring(t *testing.T) {
 	master := []byte("test-master-must-be-32-bytes-min")
 
-	r := mux.NewRouter()
-	r.Use(hmacauth.ServiceVerifier(master, nil, hmacauth.ServiceStoragesvc, hmacauth.VerifierOpts{
+	m := httpmux.New(httpmux.WithMiddleware(hmacauth.ServiceVerifier(master, nil, hmacauth.ServiceStoragesvc, hmacauth.VerifierOpts{
 		SkewSec: 60,
 		Bypass:  []string{"/healthz"},
-	}))
-	r.HandleFunc("/v1/archive", func(w http.ResponseWriter, _ *http.Request) {
+	})))
+	m.HandleFunc("/v1/archive", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}).Methods(http.MethodGet)
-	r.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
+	m.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}).Methods(http.MethodGet)
+	r := m.Handler()
 
 	t.Run("rejects unsigned /v1/archive", func(t *testing.T) {
 		rr := httptest.NewRecorder()
