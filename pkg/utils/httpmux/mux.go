@@ -12,9 +12,19 @@
 // precedence by the order they register (the router feeds the precedence-
 // ordered routetable.Materialization). Patterns may be static paths, prefixes,
 // or {var}/{var:regexp} templates (see template.go).
+//
+// Paths are matched LITERALLY against r.URL.Path (or r.URL.EscapedPath under
+// WithEncodedPath): httpmux does NOT clean or redirect non-canonical paths
+// (".", "..", "//") the way gorilla/mux does by default. This is safe for exact,
+// method-gated routes behind an outermost auth verifier (a non-canonical path
+// simply 404s). A future consumer that routes security-sensitive paths — the
+// router's HMAC-signed internal listener, which signs the raw request-URI — must
+// decide its normalization policy explicitly and test "..", "//", and
+// encoded-slash inputs at that boundary.
 package httpmux
 
 import (
+	"fmt"
 	"net/http"
 	"regexp"
 	"strings"
@@ -143,11 +153,14 @@ const (
 func (m *Mux) Handler() http.Handler {
 	compiled := make([]*compiledRoute, len(m.routes))
 	for i, r := range m.routes {
-		// Templates compile to a regexp; a compile error (which the router
-		// prevents by pre-validating via CompilePattern) leaves re nil, so the
-		// route falls back to a never-matching static compare rather than
-		// panicking.
-		re, _ := compilePattern(r.pattern, r.kind)
+		// Templates compile to a regexp. A compile error here is a registration
+		// bug: callers handling user-supplied patterns (the router) must reject
+		// them up front via CompilePattern. Failing loud at build time surfaces
+		// it, rather than silently leaving a dead, never-matching route.
+		re, err := compilePattern(r.pattern, r.kind)
+		if err != nil {
+			panic(fmt.Errorf("httpmux: route %q has an invalid template (validate with CompilePattern before registering): %w", r.pattern, err))
+		}
 		compiled[i] = &compiledRoute{route: r, handler: instrument(m.recorder, r.pattern, r.handler), re: re}
 	}
 	var h http.Handler = &dispatcher{
