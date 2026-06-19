@@ -328,7 +328,7 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 	storePath, err := utils.RootJoin(fetcher.sharedVolumePath, req.Filename)
 	if err != nil {
 		logger.Error(err, "filename", req.Filename)
-		return http.StatusBadRequest, fmt.Errorf("%s, request: %v", err, req)
+		return http.StatusBadRequest, fmt.Errorf("%w, request: %v", err, req)
 	}
 
 	// verify first if the file already exists.
@@ -343,7 +343,7 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 	tmpPath, err := utils.RootJoin(fetcher.sharedVolumePath, storePath+".tmp")
 	if err != nil {
 		logger.Error(err, "filename", req.Filename)
-		return http.StatusBadRequest, fmt.Errorf("%s, request: %v", err, req)
+		return http.StatusBadRequest, fmt.Errorf("%w, request: %v", err, req)
 	}
 
 	if req.FetchType == fv1.FETCH_URL {
@@ -488,7 +488,7 @@ func (fetcher *Fetcher) FetchSecretsAndCfgMaps(ctx context.Context, secrets []fv
 			secretDir, err := utils.RootJoin(fetcher.sharedSecretPath, filepath.Join(secret.Namespace, secret.Name))
 			if err != nil {
 				logger.Error(err, "directory", secretDir, "secret_name", secret.Name, "secret_namespace", secret.Namespace)
-				return http.StatusBadRequest, fmt.Errorf("%s, request: %v", err, secret)
+				return http.StatusBadRequest, fmt.Errorf("%w, request: %v", err, secret)
 			}
 
 			err = utils.RootMkdirAll(fetcher.sharedSecretPath, secretDir, 0750)
@@ -534,7 +534,7 @@ func (fetcher *Fetcher) FetchSecretsAndCfgMaps(ctx context.Context, secrets []fv
 			configDir, err := utils.RootJoin(fetcher.sharedConfigPath, filepath.Join(config.Namespace, config.Name))
 			if err != nil {
 				logger.Error(err, "directory", configDir, "config_map_name", config.Name, "config_map_namespace", config.Namespace)
-				return http.StatusBadRequest, fmt.Errorf("%s, request: %v", err,
+				return http.StatusBadRequest, fmt.Errorf("%w, request: %v", err,
 					config)
 			}
 
