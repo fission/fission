@@ -96,7 +96,7 @@ func resourceConflictCheck(ctx context.Context, c cmd.Client, fr *FissionResourc
 
 	fnList, err := getAllFunctions(ctx, c, namespace)
 	if err != nil {
-		return fmt.Errorf("unable to get Functions %v", err.Error())
+		return fmt.Errorf("unable to get Functions %w", err)
 	}
 	for _, sObj := range fr.Functions {
 		for _, cObj := range fnList {
@@ -109,7 +109,7 @@ func resourceConflictCheck(ctx context.Context, c cmd.Client, fr *FissionResourc
 
 	envList, err := getAllEnvironments(ctx, c, namespace)
 	if err != nil {
-		return fmt.Errorf("unable to get Environments %v", err.Error())
+		return fmt.Errorf("unable to get Environments %w", err)
 	}
 	for _, sObj := range fr.Environments {
 		for _, cObj := range envList {
@@ -122,7 +122,7 @@ func resourceConflictCheck(ctx context.Context, c cmd.Client, fr *FissionResourc
 
 	pkgList, err := getAllPackages(ctx, c, namespace)
 	if err != nil {
-		return fmt.Errorf("unable to get Packages %v", err.Error())
+		return fmt.Errorf("unable to get Packages %w", err)
 	}
 	for _, sObj := range fr.Packages {
 		for _, cObj := range pkgList {
@@ -135,7 +135,7 @@ func resourceConflictCheck(ctx context.Context, c cmd.Client, fr *FissionResourc
 
 	httptriggerList, err := getAllHTTPTriggers(ctx, c, namespace)
 	if err != nil {
-		return fmt.Errorf("unable to get HTTPTrigger %v", err.Error())
+		return fmt.Errorf("unable to get HTTPTrigger %w", err)
 	}
 	for _, sObj := range fr.HttpTriggers {
 		for _, cObj := range httptriggerList {
@@ -148,7 +148,7 @@ func resourceConflictCheck(ctx context.Context, c cmd.Client, fr *FissionResourc
 
 	mqtriggerList, err := getAllMessageQueueTriggers(ctx, c, "", namespace)
 	if err != nil {
-		return fmt.Errorf("unable to get Message Queue Trigger %v", err.Error())
+		return fmt.Errorf("unable to get Message Queue Trigger %w", err)
 	}
 	for _, sObj := range fr.MessageQueueTriggers {
 		for _, cObj := range mqtriggerList {
@@ -161,7 +161,7 @@ func resourceConflictCheck(ctx context.Context, c cmd.Client, fr *FissionResourc
 
 	timetriggerList, err := getAllTimeTriggers(ctx, c, namespace)
 	if err != nil {
-		return fmt.Errorf("unable to get Time Trigger %v", err.Error())
+		return fmt.Errorf("unable to get Time Trigger %w", err)
 	}
 	for _, sObj := range fr.TimeTriggers {
 		for _, cObj := range timetriggerList {
@@ -174,7 +174,7 @@ func resourceConflictCheck(ctx context.Context, c cmd.Client, fr *FissionResourc
 
 	kubewatchtriggerList, err := getAllKubeWatchTriggers(ctx, c, namespace)
 	if err != nil {
-		return fmt.Errorf("unable to get Kubernetes Watch Trigger %v", err.Error())
+		return fmt.Errorf("unable to get Kubernetes Watch Trigger %w", err)
 	}
 	for _, sObj := range fr.KubernetesWatchTriggers {
 		for _, cObj := range kubewatchtriggerList {
