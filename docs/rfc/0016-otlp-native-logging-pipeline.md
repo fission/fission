@@ -118,6 +118,17 @@ Fields: `fission.request.id`, `trace_id`, `fission.function.{name,uid,namespace}
 It is opt-in via the existing `DISPLAY_ACCESS_LOG` flag (chart `router.displayAccessLog`, default false) — previously an orphaned env var, now wired — so it adds no per-request log volume unless an operator wants log-based correlation.
 `fission function logs --request-id <id>` resolves an invocation to its function and time window via these records once the operator's collector ships them to the backend.
 
+### 1b. Metrics at the collection layer (no instrumentation change)
+
+Fission keeps instrumenting **metrics** with the Prometheus client library (mature, pull-based, the Kubernetes-native standard the chart's ServiceMonitor/PodMonitor and shipped Grafana dashboards are built on) — it does **not** migrate the ~39 metric definitions to the OpenTelemetry metrics API.
+That migration would be high-churn (every call site) and break backward compatibility: the OTel→Prometheus exporter renames series (`otel_scope_*` labels, `target_info`, unit/counter suffixes), which the dashboards and operators' alerts query by exact name.
+The Prometheus client carries no maintenance burden here (plain counters/gauges/histograms; no custom collectors, native histograms, or exemplars), so there is little to gain and real risk to take.
+
+Instead, the **same operator-run collector** unifies metrics into the OpenTelemetry pipeline at the **collection layer**: its `prometheus` receiver scrapes the existing `/metrics:8080` endpoints (exactly the targets the ServiceMonitor already selects, by the `svc:` label) and converts them to OTLP, alongside the logs (`filelog`) and the access record.
+This gives the vendor-neutral, single-pipeline benefit with **zero instrumentation change and full backward compatibility** — the Prometheus scrape path keeps working in parallel.
+A reference config is in `test/integration/otel/metrics-collector.reference.yaml`.
+A process-native OTel `MeterProvider` (for in-process exemplars linking metrics↔traces, or push) remains a possible future **opt-in** — gated like `OTEL_LOGS_ENABLED`, with name-preserving exporter options — not a wholesale migration.
+
 ### 2. Control-plane OTLP logs (optional follow-up)
 
 By default control-plane components (router, executor, …) log structured records to **stdout**, which the operator's external collector scrapes like any pod — so no Fission code change is required for collection.

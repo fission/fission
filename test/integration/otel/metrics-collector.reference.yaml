@@ -1,0 +1,75 @@
+# SPDX-FileCopyrightText: The Fission Authors
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# REFERENCE (not run by CI) — collection-layer metrics for RFC-0016.
+#
+# Fission instruments metrics with the Prometheus client library and exposes
+# them at /metrics:8080 on every control-plane component (scraped today by the
+# chart's ServiceMonitor/PodMonitor). To bring metrics into the SAME OpenTelemetry
+# pipeline as traces and logs — without changing a single line of instrumentation
+# and without breaking the existing Prometheus scrape path — point an OpenTelemetry
+# Collector's `prometheus` receiver at those same /metrics endpoints. The
+# ServiceMonitor (Prometheus) path and this OTLP path coexist; metric names are
+# unchanged, so shipped Grafana dashboards and operator alerts keep working.
+#
+# This config is a starting point operators adapt: set the metrics backend
+# endpoint, and grant the Collector ServiceAccount the RBAC the Kubernetes
+# service-discovery needs (a ClusterRole with get/list/watch on
+# pods/services/endpoints/nodes, bound to the Collector's ServiceAccount).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-metrics-collector-config
+  namespace: fission-logging
+data:
+  config.yaml: |
+    receivers:
+      # Scrape the Fission control-plane /metrics the same way the chart's
+      # ServiceMonitor/PodMonitor do: discover pods in the fission namespace and
+      # keep the ones that carry the `svc:` label the monitors select on. The
+      # metrics port is 8080 (METRICS_ADDR).
+      prometheus:
+        config:
+          scrape_configs:
+            - job_name: fission-control-plane
+              scrape_interval: 30s
+              kubernetes_sd_configs:
+                - role: pod
+                  namespaces:
+                    names: [fission]
+              relabel_configs:
+                - source_labels: [__meta_kubernetes_pod_label_svc]
+                  regex: router|executor|storagesvc|buildermgr|mqtrigger|canaryconfig|webhook-service
+                  action: keep
+                # Target the 8080 metrics port regardless of the pod's declared ports.
+                - source_labels: [__meta_kubernetes_pod_ip]
+                  target_label: __address__
+                  replacement: $$1:8080
+                - source_labels: [__meta_kubernetes_namespace]
+                  target_label: k8s_namespace_name
+                - source_labels: [__meta_kubernetes_pod_name]
+                  target_label: k8s_pod_name
+                - source_labels: [__meta_kubernetes_pod_label_svc]
+                  target_label: fission_component
+    processors:
+      batch:
+        timeout: 10s
+    exporters:
+      # Send metrics to the operator's OTLP metrics backend (Prometheus
+      # remote-write-compatible store, Grafana Mimir, a vendor endpoint, ...).
+      # Replace with the real endpoint; the ServiceMonitor scrape can stay on in
+      # parallel during migration.
+      otlphttp/metrics:
+        metrics_endpoint: http://REPLACE-ME-otlp-metrics-backend:4318/v1/metrics
+        tls:
+          insecure: true
+    service:
+      telemetry:
+        logs:
+          level: warn
+      pipelines:
+        metrics:
+          receivers: [prometheus]
+          processors: [batch]
+          exporters: [otlphttp/metrics]
