@@ -312,6 +312,25 @@ jobs:
           EOF
           kubectl rollout status deploy/test-registry -n default --timeout=3m
 
+      # CI-ONLY OpenTelemetry Collector + Loki for the RFC-0016 OTLP logging
+      # read-path test (TestFunctionLogsLokiCorrelation). Fission bundles no log
+      # backend — collection is operator-run (see
+      # docs/rfc/0016-otlp-native-logging-pipeline.md) — so this stands up the
+      # operator's side in CI: the collector tails the router's per-invocation
+      # access record (router.displayAccessLog on via kind-ci) and pushes it to
+      # Loki's OTLP endpoint, where the `loki` logdb driver queries it by
+      # request id. One leg covers the pipeline; other legs leave
+      # FISSION_TEST_LOKI unset so the test skips (like the Gateway/registry
+      # gates). Manifests live in test/integration/otel/, not the chart.
+      - name: Deploy OTel Collector + Loki (RFC-0016 logging)
+        if: ${{ matrix.kindversion == 'v1.34.8' }}
+        timeout-minutes: 5
+        run: |
+          kubectl apply -f test/integration/otel/loki.yaml
+          kubectl apply -f test/integration/otel/otel-collector.yaml
+          kubectl rollout status deploy/loki -n fission-logging --timeout=3m
+          kubectl rollout status daemonset/otel-collector -n fission-logging --timeout=3m
+
       # Port-forward is started inside the Go test step rather than as a
       # standalone step, because background processes started with `&` may
       # not survive across GitHub Actions steps on every runner image.
@@ -452,7 +471,18 @@ jobs:
             export FISSION_TEST_REGISTRY_NODE=localhost:30500
             export FISSION_TEST_OCI_PRODUCER=1
           fi
-          trap "kill $PF_PID $PF_PID_INT $PF_PID_MCP $PF_PID_REG 2>/dev/null || true" EXIT
+          # OTel Collector + Loki (RFC-0016), deployed on the 1.34 leg. Forward
+          # Loki so the in-process `loki` logdb driver reaches it via LOKI_URL;
+          # FISSION_TEST_LOKI gates TestFunctionLogsLokiCorrelation (unset
+          # elsewhere => the test skips).
+          PF_PID_LOKI=""
+          if [ "${{ matrix.kindversion }}" = "v1.34.8" ]; then
+            ( while true; do kubectl port-forward svc/loki 3100:3100 -n fission-logging || true; sleep 1; done ) >/tmp/pf-loki.log 2>&1 &
+            PF_PID_LOKI=$!
+            export LOKI_URL=http://127.0.0.1:3100
+            export FISSION_TEST_LOKI=1
+          fi
+          trap "kill $PF_PID $PF_PID_INT $PF_PID_MCP $PF_PID_REG $PF_PID_LOKI 2>/dev/null || true" EXIT
 
           # Export the master HMAC secret so the framework's RouterClient
           # signs /fission-function/... requests against the internal

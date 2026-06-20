@@ -20,6 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	hmacauth "github.com/fission/fission/pkg/auth/hmac"
+	"github.com/fission/fission/pkg/utils/correlation"
 )
 
 // RouterClient wraps an HTTP client pointed at the Fission router (typically
@@ -84,16 +85,26 @@ func (r *RouterClient) BaseURL() string { return r.baseURL }
 // Get performs a single GET against `path` (joined to BaseURL) and returns the
 // body. Non-2xx is returned as an error.
 func (r *RouterClient) Get(ctx context.Context, path string) (status int, body string, err error) {
-	return r.do(ctx, http.MethodGet, path, "", nil)
+	return r.do(ctx, http.MethodGet, path, "", nil, nil)
+}
+
+// GetWithRequestID performs a GET carrying a caller-supplied
+// X-Fission-Request-ID header. RFC-0015's correlation middleware honors an
+// inbound id, so the router's access record (RFC-0016) reports exactly this
+// value — letting a test assert an end-to-end, deterministic correlation id
+// without parsing the minted response header.
+func (r *RouterClient) GetWithRequestID(ctx context.Context, path, requestID string) (status int, body string, err error) {
+	return r.do(ctx, http.MethodGet, path, "", nil,
+		http.Header{correlation.HeaderRequestID: []string{requestID}})
 }
 
 // Post performs a single POST against `path` with the given content type and
 // body. Returns status, response body, and any transport-level error.
 func (r *RouterClient) Post(ctx context.Context, path, contentType string, body []byte) (status int, respBody string, err error) {
-	return r.do(ctx, http.MethodPost, path, contentType, body)
+	return r.do(ctx, http.MethodPost, path, contentType, body, nil)
 }
 
-func (r *RouterClient) do(ctx context.Context, method, path, contentType string, body []byte) (int, string, error) {
+func (r *RouterClient) do(ctx context.Context, method, path, contentType string, body []byte, header http.Header) (int, string, error) {
 	// /fission-function/... lives only on the internal listener after
 	// GHSA-3g33-6vg6-27m8; route to the internal base URL.
 	// `r.internal` is always non-empty after framework setup
@@ -112,6 +123,11 @@ func (r *RouterClient) do(ctx context.Context, method, path, contentType string,
 	req, err := http.NewRequestWithContext(ctx, method, url, reqBody)
 	if err != nil {
 		return 0, "", err
+	}
+	for k, vs := range header {
+		for _, v := range vs {
+			req.Header.Add(k, v)
+		}
 	}
 	if contentType != "" {
 		req.Header.Set("Content-Type", contentType)

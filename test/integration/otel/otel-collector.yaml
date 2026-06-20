@@ -1,0 +1,96 @@
+# SPDX-FileCopyrightText: The Fission Authors
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# CI-ONLY OpenTelemetry Collector for the RFC-0016 OTLP logging integration
+# test. NOT part of the Fission Helm chart — Fission emits structured logs and
+# delegates collection to an operator-run external collector
+# (docs/rfc/0016-otlp-native-logging-pipeline.md). This DaemonSet plays that
+# operator role in CI: it tails the router pod's stdout, keeps the per-invocation
+# access record (msg="function access", opt-in via router.displayAccessLog),
+# hoists the function identity the record carries to OTLP resource attributes,
+# and pushes to Loki's native OTLP endpoint. Loki then indexes
+# fission.function.uid/namespace as labels so the `loki` logdb driver can query
+# the record by request id.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector-config
+  namespace: fission-logging
+data:
+  config.yaml: |
+    receivers:
+      filelog:
+        # The router pod's container log on the node. The access record rides
+        # the router's normal stdout (zap JSON).
+        include: [/var/log/pods/fission_router-*/*/*.log]
+        start_at: beginning
+        operators:
+          # Strip the CRI/containerd wrapper, leaving the zap JSON as the body.
+          - type: container
+          # Parse the zap JSON into attributes; the body stays the JSON string
+          # so Loki's `| json` pipeline can re-extract fission_request_id.
+          # Non-JSON lines are dropped rather than failing the pipeline.
+          - type: json_parser
+            parse_from: body
+            parse_to: attributes
+            on_error: drop_quiet
+          # Keep only the per-invocation access record. Every other router log
+          # line is noise for this correlation index.
+          - type: filter
+            expr: 'attributes.msg != "function access"'
+    processors:
+      # Hoist the function identity from the log record up to resource
+      # attributes so the Loki OTLP endpoint promotes them to stream labels.
+      groupbyattrs:
+        keys: [fission.function.uid, fission.function.namespace, fission.function.name]
+      batch:
+        timeout: 1s
+    exporters:
+      otlphttp/loki:
+        logs_endpoint: http://loki.fission-logging.svc:3100/otlp/v1/logs
+        tls:
+          insecure: true
+    service:
+      telemetry:
+        logs:
+          level: warn
+      pipelines:
+        logs:
+          receivers: [filelog]
+          processors: [groupbyattrs, batch]
+          exporters: [otlphttp/loki]
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: otel-collector
+  namespace: fission-logging
+  labels: {app: otel-collector}
+spec:
+  selector:
+    matchLabels: {app: otel-collector}
+  template:
+    metadata:
+      labels: {app: otel-collector}
+    spec:
+      # Pod logs under /var/log/pods are root-owned on the node.
+      securityContext:
+        runAsUser: 0
+      containers:
+        - name: otel-collector
+          image: otel/opentelemetry-collector-contrib:0.116.0
+          args: ["--config=/etc/otel/config.yaml"]
+          volumeMounts:
+            - {name: config, mountPath: /etc/otel}
+            - {name: varlogpods, mountPath: /var/log/pods, readOnly: true}
+          # Watching one pod's logs and forwarding a handful of records is
+          # cheap; keep the footprint small so it never crowds the test workload.
+          resources:
+            requests: {cpu: 20m, memory: 64Mi}
+            limits: {memory: 192Mi}
+      volumes:
+        - name: config
+          configMap: {name: otel-collector-config}
+        - name: varlogpods
+          hostPath: {path: /var/log/pods}
