@@ -1,8 +1,9 @@
 # RFC-0017: Function Developer Debugging Toolkit (CLI)
 
-- Status: Partially implemented.
-  Phase 1 (`fission function describe`, with an invocability headline), phase 2 (`fission function test` enrichment), and the CLI side of phase 3 (`logs --request-id/--trace-id`, shipped with RFC-0016) are implemented.
-  The parts that need unbuilt **server** surfaces — the deep `/v2/diag/function` invocability endpoint (RFC-0015 phase 5), real streaming `--follow` (RFC-0016 phase 5), and the cold-start metrics panel (a CLI→Prometheus query path) — remain.
+- Status: Partially implemented ([#3519](https://github.com/fission/fission/pull/3519) + follow-up).
+  Phase 1 (`fission function describe`), phase 2 (`fission function test` enrichment), and phase 3 (`logs --request-id/--trace-id` + real streaming `--follow`) are implemented.
+  The `describe` invocability headline reads the **RFC-0002 EndpointSlice data-plane** state (the `fission.io/served` label) via the k8s API — chosen over a CLI-reachable executor `/v2/diag/function` endpoint, which would have meant bypassing the executor's HMAC auth or adding CLI-side signing for marginal extra detail.
+  Only the cold-start metrics panel (a CLI→Prometheus query path, needs a metric that does not yet exist) remains.
   See "As implemented".
 - Tracking issue: —
 - Supersedes: —

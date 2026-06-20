@@ -5,7 +5,8 @@
   The router per-invocation access record landed in [#3517](https://github.com/fission/fission/pull/3517).
   Collection is delegated to an **operator-run external collector** — Fission does not bundle a collector container in the chart; it emits the structured logs an external pipeline ingests.
   A reference OpenTelemetry Collector + Loki wiring exercises the full round-trip on one CI leg (`test/integration/otel/`, not the chart).
-  Control-plane OTLP log push, streaming `--follow`, and the InfluxDB deprecation cutover remain.
+  Streaming `--follow` is implemented (the kubernetes driver follows the pod stream, the loki driver opens the `/tail` WebSocket).
+  InfluxDB is deprecated (the driver warns and is disabled by default); only the control-plane OTLP log push and the env-image per-line helpers (separate `fission/environments` repo) remain.
   See "As implemented".
 - Tracking issue: —
 - Supersedes: the InfluxDB-v1.x + Fluent-Bit logging path (deprecated by this RFC)
@@ -233,6 +234,9 @@ Concrete surface:
 - `pkg/fission-cli/cmd/function/log.go` + `flag` — new `--request-id` / `--trace-id` / `--level` flags wire into the filter; a one-shot query now surfaces a backend error (bad query / auth / unreachable) instead of swallowing it; the CLI warns when a correlation filter is set against a backend that does not index it.
 - `pkg/router/metrics.go` (`functionHandler.logAccessRecord`) + `config.go` — the per-invocation access record (section 1a), emitted to router stdout, opt-in via the pre-existing `DISPLAY_ACCESS_LOG` flag (`router.displayAccessLog`, default false) which was an orphaned env var until now.
   Threaded through the router config like `ROUTER_STRUCTURED_ERRORS`.
+- **Streaming `--follow`** (phase 5) — an optional `LogStreamer` interface (`pkg/fission-cli/logdb`): `--follow` streams live to stdout when the driver supports it, otherwise falls back to the one-second poll.
+  The kubernetes driver follows the pod log stream (`PodLogOptions.Follow`, one goroutine per env container, line-buffered under a lock); the loki driver opens the `/tail` WebSocket (`coder/websocket`, already vendored) and renders frames through the shared `lokiEntry` mapper.
+  `writeLogEntry` now takes `io.Writer` so a live stream renders without buffering; a cancelled context is a clean stop.
 
 The Loki adapter queries against the schema in "Structured-log standard" below, which the operator's external collector produces from the function pod labels + the access record — so it is immediately useful for a cluster already running a collector + Loki with that schema.
 
