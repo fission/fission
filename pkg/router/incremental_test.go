@@ -72,6 +72,25 @@ func requireSignal(t *testing.T, ts *HTTPTriggerSet) {
 	case <-time.After(500 * time.Millisecond):
 		t.Fatal("expected a materialize signal, got none")
 	}
+	// A batch of shape changes may emit more than one send: the debouncer
+	// coalesces calls within its window, but two changes spaced just over the
+	// (1ms test) window — easy under -race load — each fire onto the buffered
+	// channel. The test cares only that a materialize was signalled, not how
+	// many times, so drain the stragglers; otherwise a later requireNoSignal is
+	// tripped by a leftover from this batch.
+	drainSignals(ts)
+}
+
+// drainSignals empties the materializer channel, settling briefly so a
+// debounced send still in flight (≤ the 1ms test window) is also consumed.
+func drainSignals(ts *HTTPTriggerSet) {
+	for {
+		select {
+		case <-ts.updateRouterRequestChannel:
+		case <-time.After(10 * time.Millisecond):
+			return
+		}
+	}
 }
 
 func requireNoSignal(t *testing.T, ts *HTTPTriggerSet) {

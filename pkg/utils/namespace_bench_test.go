@@ -12,7 +12,7 @@ import (
 // resolverWithTenants builds a NamespaceResolver holding n tenant namespaces.
 func resolverWithTenants(n int) *NamespaceResolver {
 	tenants := make(map[string]string, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		ns := fmt.Sprintf("team-%03d", i)
 		tenants[ns] = ns
 	}

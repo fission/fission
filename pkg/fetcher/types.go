@@ -99,7 +99,7 @@ type (
 	// checksum.
 	ArchiveUploadResponse struct {
 		ArchiveDownloadUrl string       `json:"archiveDownloadUrl,omitempty"`
-		Checksum           fv1.Checksum `json:"checksum,omitempty"`
+		Checksum           fv1.Checksum `json:"checksum"`
 		// OCI is set when the artifact was published as an OCI image
 		// (digest-pinned; ImagePullSecrets are stamped by the caller).
 		OCI *fv1.OCIArchive `json:"oci,omitempty"`

@@ -149,7 +149,7 @@ func TestExactFastPathEncodedPath(t *testing.T) {
 // targets.
 func exactMux(n int) *Mux {
 	m := New()
-	for i := 0; i < n; i++ {
+	for i := range n {
 		p := fmt.Sprintf("/fission-function/ns/fn-%d", i)
 		m.Handle(p, ok("")).Methods("POST")
 		m.HandlePrefix(p+"/", ok("")).Methods("POST")

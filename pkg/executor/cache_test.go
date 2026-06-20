@@ -27,7 +27,6 @@ import (
 func TestExecutorCacheOptionsTierSplit(t *testing.T) {
 	perTypeOverrides := func(opts crcache.Options) (secret, cm, rs *crcache.ByObject) {
 		for obj, bo := range opts.ByObject {
-			bo := bo
 			switch obj.(type) {
 			case *corev1.Secret:
 				secret = &bo
