@@ -1,6 +1,6 @@
 # RFC-0012: OCI-Native Package Delivery as the Default Cold-Start Path
 
-- Status: Implemented (phases 1–4; phase 5 docs/UX tracked post-merge)
+- Status: Implemented (phases 1–4, [#3494](https://github.com/fission/fission/pull/3494); phase 5 docs/UX tracked post-merge)
 - Tracking issue: —
 - Supersedes: — (builds directly on RFC-0001, shipped in #3484)
 - Targets: Fission v1.27+ (phases independently shippable; the default flip and the producer can land in different minors)

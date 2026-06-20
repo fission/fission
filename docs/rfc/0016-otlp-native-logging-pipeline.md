@@ -1,8 +1,11 @@
 # RFC-0016: Cloud-Native, OTLP-Native Logging Pipeline
 
-- Status: Proposed — the read path (driver registry + Loki reference adapter + request-ID/trace-ID/level filtering) and the router per-invocation access record are implemented.
+- Status: Partially implemented.
+  The read path — driver registry + Loki reference adapter + request-ID/trace-ID/level filtering — landed in [#3516](https://github.com/fission/fission/pull/3516).
+  The router per-invocation access record landed in [#3517](https://github.com/fission/fission/pull/3517).
   Collection is delegated to an **operator-run external collector** — Fission does not bundle a collector container in the chart; it emits the structured logs an external pipeline ingests.
-  Control-plane OTLP log push is an optional follow-up.
+  A reference OpenTelemetry Collector + Loki wiring exercises the full round-trip on one CI leg (`test/integration/otel/`, not the chart).
+  Control-plane OTLP log push, streaming `--follow`, and the InfluxDB deprecation cutover remain.
   See "As implemented".
 - Tracking issue: —
 - Supersedes: the InfluxDB-v1.x + Fluent-Bit logging path (deprecated by this RFC)

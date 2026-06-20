@@ -1,6 +1,6 @@
 # RFC-0013: Incremental Router Route Updates
 
-- Status: Implemented (phases 0–2; phase 3 not built — its benchmark gate was not crossed, see "As shipped")
+- Status: Implemented (phases 0–2, [#3493](https://github.com/fission/fission/pull/3493); phase 3 not built — its benchmark gate was not crossed, see "As shipped")
 - Tracking issue: —
 - Supersedes: —
 - Targets: Fission v1.27+ (phases 0–2); phase 3 conditional on benchmark evidence

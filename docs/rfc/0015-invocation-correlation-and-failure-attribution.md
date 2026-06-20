@@ -1,6 +1,6 @@
 # RFC-0015: Invocation Correlation & Failure Attribution
 
-- Status: Proposed — phases 1–4 implemented; phase 5 (diagnostics surface) folded into RFC-0017 (planned) (see "As implemented").
+- Status: Implemented (phases 1–4, [#3515](https://github.com/fission/fission/pull/3515)); phase 5 (diagnostics surface) folded into RFC-0017 (planned) (see "As implemented").
 - Tracking issue: [#693](https://github.com/fission/fission/issues/693) (return a traceable ID to the caller)
 - Supersedes: —
 - Targets: Fission v1.N+ (phased; each phase independently shippable)
