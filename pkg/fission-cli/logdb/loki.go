@@ -31,6 +31,13 @@ import (
 const (
 	lokiQueryRangePath = "/loki/api/v1/query_range"
 	lokiHTTPTimeout    = 30 * time.Second
+	// defaultLokiLookback floors the query_range start. The CLI's default
+	// Since is the epoch, which would make the range span decades; Loki
+	// rejects any range over max_query_length (default 30d) with a 400. Floor
+	// the window to a recent span that stays well under that default so a
+	// no-bound `fission function logs --dbtype loki` works against a stock
+	// Loki. A caller asking for a tighter (more recent) Since is honored.
+	defaultLokiLookback = 7 * 24 * time.Hour
 )
 
 type loki struct {
@@ -127,9 +134,13 @@ func (l loki) GetLogs(ctx context.Context, filter LogFilter, output *bytes.Buffe
 	params.Set("query", query)
 	params.Set("limit", strconv.Itoa(filter.RecordLimit))
 	params.Set("direction", direction)
-	if !filter.Since.IsZero() {
-		params.Set("start", strconv.FormatInt(filter.Since.UnixNano(), 10))
+	// Floor the start to a recent window: the caller's Since may be the epoch
+	// (the CLI default), which Loki rejects as exceeding max_query_length.
+	start := filter.Since
+	if floor := time.Now().Add(-defaultLokiLookback); start.Before(floor) {
+		start = floor
 	}
+	params.Set("start", strconv.FormatInt(start.UnixNano(), 10))
 	params.Set("end", strconv.FormatInt(time.Now().UnixNano(), 10))
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, l.endpoint+lokiQueryRangePath+"?"+params.Encode(), nil)
