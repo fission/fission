@@ -64,12 +64,16 @@ func (opts *ListPodsSubCommand) do(input cli.Input) error {
 // two never drift; READY is ready/total.
 func printFunctionPodsTo(out io.Writer, pods []*corev1.Pod) {
 	w := util.NewTabWriter(out)
-	fmt.Fprintln(w, "NAME\tNAMESPACE\tREADY\tSTATUS\tIP\tEXECUTORTYPE\tMANAGED")
+	// SERVED reflects the RFC-0002 data-plane state: a pod carries
+	// fission.io/served=true only while it is published to its function's
+	// EndpointSlice and actually handling traffic (the idle reaper strips it).
+	fmt.Fprintln(w, "NAME\tNAMESPACE\tREADY\tSTATUS\tIP\tEXECUTORTYPE\tMANAGED\tSERVED")
 	for _, pod := range pods {
 		ready, total := utils.PodContainerReadyStatus(pod)
-		fmt.Fprintf(w, "%s\t%s\t%d/%d\t%s\t%s\t%s\t%s\n",
+		fmt.Fprintf(w, "%s\t%s\t%d/%d\t%s\t%s\t%s\t%s\t%s\n",
 			pod.Name, pod.Namespace, ready, total, pod.Status.Phase,
-			valueOr(pod.Status.PodIP), valueOr(pod.Labels[v1.EXECUTOR_TYPE]), valueOr(pod.Labels[v1.MANAGED]))
+			valueOr(pod.Status.PodIP), valueOr(pod.Labels[v1.EXECUTOR_TYPE]), valueOr(pod.Labels[v1.MANAGED]),
+			valueOr(pod.Labels[v1.SERVED_LABEL]))
 	}
 	w.Flush()
 }
