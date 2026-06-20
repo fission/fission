@@ -51,6 +51,7 @@ manifests:
           mcp.allowInsecure: "true"
           namespace: fission
           networkPolicy.enabled: "false"
+          router.displayAccessLog: "false"
           openTelemetry.otlpCollectorEndpoint: ""
           openTelemetry.otlpInsecure: "true"
           podMonitor.additionalPodMonitorLabels.release: prometheus
@@ -148,6 +149,12 @@ profiles:
       # CNIs (kindnet enforces NetworkPolicy from kind v0.27 / k8s 1.30+).
       - op: replace
         path: /manifests/helm/releases/0/setValues/networkPolicy.enabled
+        value: true
+      # Exercise the RFC-0016 per-invocation access record in CI so the
+      # structured "function access" log is covered end-to-end (verifiable in
+      # the kind-logs artifact); off by default for users.
+      - op: replace
+        path: /manifests/helm/releases/0/setValues/router.displayAccessLog
         value: true
       # Exercise the Gateway API route provider in CI (paired with an Envoy
       # Gateway install + a Gateway in the fission namespace in push_pr.yaml,

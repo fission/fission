@@ -39,6 +39,7 @@ type functionHandler struct {
 	tsRoundTripperParams     *tsRoundTripperParams
 	isDebugEnv               bool
 	structuredErrors         bool
+	accessLog                bool
 	functionTimeoutMap       map[k8stypes.UID]int
 	// Hoisted per-route state (RFC-0014): computed once at mux build instead
 	// of per request. rtLogger is the round tripper's named logger;

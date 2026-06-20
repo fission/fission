@@ -11,7 +11,9 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 
+	"github.com/fission/fission/pkg/utils/correlation"
 	"github.com/fission/fission/pkg/utils/metrics"
+	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
 var (
@@ -159,4 +161,37 @@ func (fh functionHandler) collectFunctionMetric(start time.Time, rrt *RetryingRo
 	fh.logger.V(1).Info("Request complete", "function", fh.function.Name,
 		"retry", rrt.totalRetry, "total-time", duration,
 		"content-length", resp.ContentLength)
+
+	fh.logAccessRecord(rrt, req, resp, path, duration)
+}
+
+// logAccessRecord emits one structured per-invocation record (RFC-0016) — the
+// request id, trace id, function identity, chosen backend, status, and latency
+// — to stdout, where an external log collector ingests it. It is the
+// correlation key that lets `fission function logs --request-id <id>` resolve
+// an invocation to its function and time window. Off by default
+// (DISPLAY_ACCESS_LOG / router.displayAccessLog) so it adds no per-request log
+// volume unless an operator opts into log-based correlation.
+func (fh functionHandler) logAccessRecord(rrt *RetryingRoundTripper, req *http.Request, resp *http.Response, path string, duration time.Duration) {
+	if !fh.accessLog {
+		return
+	}
+	var backend string
+	if rrt.serviceURL != nil {
+		backend = rrt.serviceURL.Host
+	}
+	ctx := req.Context()
+	fh.logger.Info("function access",
+		"fission.request.id", correlation.FromContext(ctx),
+		"trace_id", otelUtils.TraceIDFromContext(ctx),
+		"fission.function.name", fh.function.Name,
+		"fission.function.uid", string(fh.function.UID),
+		"fission.function.namespace", fh.function.Namespace,
+		"http.method", req.Method,
+		"http.path", path,
+		"http.status_code", resp.StatusCode,
+		"backend", backend,
+		"retry", rrt.totalRetry,
+		"duration_ms", duration.Milliseconds(),
+	)
 }

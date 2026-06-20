@@ -66,6 +66,7 @@ type HTTPTriggerSet struct {
 	tsRoundTripperParams       *tsRoundTripperParams
 	isDebugEnv                 bool
 	structuredErrors           bool
+	accessLog                  bool
 	useEncodedPath             bool
 	syncDebouncer              func(func())
 	// ready flips true after the first successful mux build; routerReadinessHandler
