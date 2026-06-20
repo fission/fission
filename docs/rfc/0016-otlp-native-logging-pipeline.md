@@ -1,8 +1,11 @@
 # RFC-0016: Cloud-Native, OTLP-Native Logging Pipeline
 
-- Status: Proposed — the read path (driver registry + Loki reference adapter + request-ID/trace-ID/level filtering) and the router per-invocation access record are implemented.
+- Status: Partially implemented.
+  The read path — driver registry + Loki reference adapter + request-ID/trace-ID/level filtering — landed in [#3516](https://github.com/fission/fission/pull/3516).
+  The router per-invocation access record landed in [#3517](https://github.com/fission/fission/pull/3517).
   Collection is delegated to an **operator-run external collector** — Fission does not bundle a collector container in the chart; it emits the structured logs an external pipeline ingests.
-  Control-plane OTLP log push is an optional follow-up.
+  A reference OpenTelemetry Collector + Loki wiring exercises the full round-trip on one CI leg (`test/integration/otel/`, not the chart).
+  Control-plane OTLP log push, streaming `--follow`, and the InfluxDB deprecation cutover remain.
   See "As implemented".
 - Tracking issue: —
 - Supersedes: the InfluxDB-v1.x + Fluent-Bit logging path (deprecated by this RFC)
@@ -239,8 +242,8 @@ The Loki adapter queries against the schema in "Structured-log standard" below, 
    Pure CLI change, unit-testable against an `httptest` Loki stub; immediately useful where Loki + a collector already run.
 2. **Router access record** (implemented) — emit the per-invocation correlation record in `collectFunctionMetric`, opt-in via `DISPLAY_ACCESS_LOG`.
    Consumes RFC-0015's request-ID.
-3. **External-collector wiring docs** — operator guidance for pointing an OTel Collector / Promtail / Vector at the function-namespace pod logs + the router access record, exporting to Loki with the `fission.function.*` label mapping.
-   No Fission chart container.
+3. **External-collector wiring** (CI integration implemented) — a reference OpenTelemetry Collector + Loki wiring proves the pipeline end to end on one CI leg (`test/integration/otel/` + `TestFunctionLogsLokiCorrelation`): the Collector tails the router access record, hoists `fission.function.*` to resource attributes, and pushes to Loki's OTLP endpoint, which indexes them as the labels the read path queries.
+   The manifests are CI-only — no Fission chart container — and double as operator guidance for pointing an OTel Collector / Promtail / Vector at the access record + function-namespace pod logs.
 4. **(Optional) Control-plane OTLP log push** — add an OTLP log exporter/provider to `pkg/utils/otel/provider.go` (`go.mod` bump) so control-plane components can *push* logs to the operator's `OTEL_EXPORTER_OTLP_ENDPOINT` instead of relying on stdout scraping.
    Additive transport; the stdout access record already works without it.
 5. **Streaming follow** — add `StreamingLogDatabase`; implement Loki `/tail` and the `kubernetes` follow stream; rewrite the CLI loop.
@@ -270,7 +273,8 @@ The Loki adapter queries against the schema in "Structured-log standard" below, 
   Registry register/lookup table tests; `loki.go` LogQL construction and response parsing against an `httptest.Server` (no real Loki), mirroring the `influxdb.go` style; access-record field assertions via a test `logr` sink in `functionHandler_test.go`; log-exporter init covered like `provider_test.go`.
 - **Integration.**
   The access record is exercised in the standard suite by enabling `DISPLAY_ACCESS_LOG` in kind-ci and asserting the structured `function access` record appears in the router logs after an invocation (the kind-logs artifact).
-  A full Loki-backed `fission function logs --db-type loki --request-id` test needs an operator collector + Loki stood up in CI — a follow-up, since Fission no longer bundles either.
+  A full Loki-backed round-trip — `TestFunctionLogsLokiCorrelation` — runs on one CI leg: a CI-only OpenTelemetry Collector + Loki (manifests in `test/integration/otel/`, **not** the chart) stand in for the operator's pipeline, the test invokes a function with a known `X-Fission-Request-ID`, and asserts `fission function logs --dbtype loki --request-id <id>` returns the access record for exactly that invocation.
+  It is gated on `FISSION_TEST_LOKI` so it skips on legs (and locally) without the stack, mirroring the Gateway-API / OCI-registry gates.
   The `kubernetes` driver path needs no backend and stays the default smoke test.
 - **Backward compat.**
   Assert the `influxdb` driver still registers and warns; assert the default `--db-type` remains `kubernetes`.

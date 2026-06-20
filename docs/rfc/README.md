@@ -18,11 +18,11 @@ Each document carries a `Status` header naming the implementing PRs and, where a
 | [0007](0007-gateway-api-route-provider.md) | Gateway API Route Provider | Implemented ([#3478](https://github.com/fission/fission/pull/3478)) |
 | [0008](0008-streaming-invocation-path.md) | Streaming Invocation Path (SSE / chunked / WebSocket) | Implemented ([#3482](https://github.com/fission/fission/pull/3482)) |
 | [0011](0011-functions-as-mcp-tools.md) | Functions as MCP Tools & AI Gateway | Part A implemented ([#3483](https://github.com/fission/fission/pull/3483)); Part B deferred |
-| [0012](0012-oci-default-package-delivery.md) | OCI-Native Package Delivery as the Default Cold-Start Path | Implemented (phases 1–4) |
-| [0013](0013-incremental-router-routes.md) | Incremental Router Route Updates | Implemented (phases 0–2; phase 3 gated, not built) |
+| [0012](0012-oci-default-package-delivery.md) | OCI-Native Package Delivery as the Default Cold-Start Path | Implemented (phases 1–4, [#3494](https://github.com/fission/fission/pull/3494)) |
+| [0013](0013-incremental-router-routes.md) | Incremental Router Route Updates | Implemented (phases 0–2, [#3493](https://github.com/fission/fission/pull/3493); phase 3 gated, not built) |
 | [0014](0014-router-hot-path-efficiency.md) | Router Hot-Path Efficiency | Implemented ([#3491](https://github.com/fission/fission/pull/3491)) |
 | [0015](0015-invocation-correlation-and-failure-attribution.md) | Invocation Correlation & Failure Attribution | Implemented ([#3515](https://github.com/fission/fission/pull/3515)); phase 5 folded into RFC-0017 |
-| [0016](0016-otlp-native-logging-pipeline.md) | Cloud-Native, OTLP-Native Logging Pipeline | Proposed (read path + router access record implemented; collection is operator-run) |
+| [0016](0016-otlp-native-logging-pipeline.md) | Cloud-Native, OTLP-Native Logging Pipeline | Partially implemented (read path [#3516](https://github.com/fission/fission/pull/3516), access record [#3517](https://github.com/fission/fission/pull/3517); operator-run collection proven by a CI OTel Collector + Loki leg; OTLP push / streaming / deprecation cutover remain) |
 
 ## Companion material
 

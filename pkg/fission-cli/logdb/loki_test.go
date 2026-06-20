@@ -8,7 +8,9 @@ import (
 	"bytes"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -96,4 +98,32 @@ func TestLokiGetLogs(t *testing.T) {
 	out := buf.String()
 	assert.Contains(t, out, "line one")
 	assert.Contains(t, out, "line two")
+}
+
+// TestLokiGetLogsFloorsEpochStart guards the regression where the CLI's default
+// Since (the epoch) made the query_range span decades, which Loki rejects with
+// "the query time range exceeds the limit". The adapter must floor the start to
+// the recent lookback window.
+func TestLokiGetLogsFloorsEpochStart(t *testing.T) {
+	var gotStart string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotStart = r.URL.Query().Get("start")
+		_, _ = w.Write([]byte(`{"status":"success","data":{"resultType":"streams","result":[]}}`))
+	}))
+	defer srv.Close()
+
+	t.Setenv("LOKI_URL", srv.URL)
+	l, err := NewLoki(t.Context(), LogDBOptions{})
+	require.NoError(t, err)
+
+	err = l.GetLogs(t.Context(), LogFilter{FuncUid: "u1", Since: time.Unix(0, 0), RecordLimit: 10}, new(bytes.Buffer))
+	require.NoError(t, err)
+
+	startNanos, perr := strconv.ParseInt(gotStart, 10, 64)
+	require.NoErrorf(t, perr, "start must be a unix-nano integer, got %q", gotStart)
+	start := time.Unix(0, startNanos)
+	assert.WithinDuration(t, time.Now().Add(-defaultLokiLookback), start, time.Hour,
+		"epoch Since must be floored to the recent lookback window, not sent as 1970")
+	assert.Truef(t, start.After(time.Unix(0, 0).Add(time.Hour)),
+		"start must not be the epoch; got %s", start)
 }

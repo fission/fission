@@ -1,0 +1,111 @@
+# SPDX-FileCopyrightText: The Fission Authors
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+# CI-ONLY Loki backend for the RFC-0016 OTLP logging integration test
+# (TestFunctionLogsLokiCorrelation). This is NOT part of the Fission Helm chart
+# — Fission bundles no log backend (see docs/rfc/0016-otlp-native-logging-pipeline.md,
+# "Collection — operators run an external collector"). It plays the operator's
+# backend so CI can exercise the read path (the `loki` logdb driver) end to end.
+#
+# Single-binary Loki with filesystem storage and OTLP ingestion. The OTLP
+# resource attributes the collector sets — fission.function.uid /
+# fission.function.namespace — are promoted to Loki stream labels
+# (fission_function_uid / fission_function_namespace, dots folded to
+# underscores) so the LogQL the `loki` driver builds
+# ({fission_function_uid="<uid>"} | json | fission_request_id="<id>") selects
+# the router access record.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: fission-logging
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: loki-config
+  namespace: fission-logging
+data:
+  loki.yaml: |
+    auth_enabled: false
+    server:
+      http_listen_port: 3100
+      grpc_listen_port: 9096
+      log_level: warn
+    common:
+      instance_addr: 127.0.0.1
+      path_prefix: /loki
+      storage:
+        filesystem:
+          chunks_directory: /loki/chunks
+          rules_directory: /loki/rules
+      replication_factor: 1
+      ring:
+        kvstore:
+          store: inmemory
+    schema_config:
+      configs:
+        - from: 2024-01-01
+          store: tsdb
+          object_store: filesystem
+          schema: v13
+          index:
+            prefix: index_
+            period: 24h
+    limits_config:
+      allow_structured_metadata: true
+      # Promote the collector's fission.function.* resource attributes to index
+      # labels so the read-path stream selector resolves. Loki folds dots to
+      # underscores in label names.
+      otlp_config:
+        resource_attributes:
+          attributes_config:
+            - action: index_label
+              attributes:
+                - fission.function.uid
+                - fission.function.namespace
+                - fission.function.name
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: loki
+  namespace: fission-logging
+  labels: {app: loki}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: loki}
+  template:
+    metadata:
+      labels: {app: loki}
+    spec:
+      containers:
+        - name: loki
+          image: grafana/loki:3.4.1
+          args: ["-config.file=/etc/loki/loki.yaml"]
+          ports:
+            - {name: http, containerPort: 3100}
+          readinessProbe:
+            httpGet: {path: /ready, port: 3100}
+            initialDelaySeconds: 15
+            periodSeconds: 5
+          volumeMounts:
+            - {name: config, mountPath: /etc/loki}
+            - {name: storage, mountPath: /loki}
+      volumes:
+        - name: config
+          configMap: {name: loki-config}
+        - name: storage
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: loki
+  namespace: fission-logging
+  labels: {app: loki, svc: loki}
+spec:
+  selector: {app: loki}
+  ports:
+    - {name: http, port: 3100, targetPort: 3100}
