@@ -172,14 +172,16 @@ func writeTempCode(t *testing.T, content string) string {
 func TestRunLocalFlow(t *testing.T) {
 	f := &fakeRuntime{echo: "hello-from-fn"}
 	cfg := runConfig{
-		image:        "img:test",
-		envVersion:   2,
-		entrypoint:   "main",
-		codePath:     writeTempCode(t, "print('hi')"),
-		functionMeta: metav1.ObjectMeta{Name: "myfn", Namespace: "default"},
-		method:       http.MethodPost,
-		body:         "input-body",
-		headers:      []string{"X-Custom:1"},
+		image:         "img:test",
+		containerPort: envContainerPort,
+		specialize:    true,
+		envVersion:    2,
+		entrypoint:    "main",
+		codePath:      writeTempCode(t, "print('hi')"),
+		functionMeta:  metav1.ObjectMeta{Name: "myfn", Namespace: "default"},
+		method:        http.MethodPost,
+		body:          "input-body",
+		headers:       []string{"X-Custom:1"},
 	}
 
 	var stdout, stderr bytes.Buffer
@@ -213,11 +215,13 @@ func TestRunLocalFlow(t *testing.T) {
 func TestRunLocalV1UsesTextSpecialize(t *testing.T) {
 	f := &fakeRuntime{echo: "v1-ok"}
 	cfg := runConfig{
-		image:        "img:v1",
-		envVersion:   1,
-		codePath:     writeTempCode(t, "code"),
-		functionMeta: metav1.ObjectMeta{Name: "fn1", Namespace: "default"},
-		method:       http.MethodGet,
+		image:         "img:v1",
+		containerPort: envContainerPort,
+		specialize:    true,
+		envVersion:    1,
+		codePath:      writeTempCode(t, "code"),
+		functionMeta:  metav1.ObjectMeta{Name: "fn1", Namespace: "default"},
+		method:        http.MethodGet,
 	}
 
 	var stdout, stderr bytes.Buffer
@@ -235,12 +239,14 @@ func TestRunLocalKeepLeavesContainer(t *testing.T) {
 	t.Cleanup(func() { _ = f.Stop(context.Background(), "") })
 
 	cfg := runConfig{
-		image:        "img:test",
-		envVersion:   2,
-		codePath:     writeTempCode(t, "x"),
-		functionMeta: metav1.ObjectMeta{Name: "fn", Namespace: "default"},
-		method:       http.MethodGet,
-		keep:         true,
+		image:         "img:test",
+		containerPort: envContainerPort,
+		specialize:    true,
+		envVersion:    2,
+		codePath:      writeTempCode(t, "x"),
+		functionMeta:  metav1.ObjectMeta{Name: "fn", Namespace: "default"},
+		method:        http.MethodGet,
+		keep:          true,
 	}
 
 	var stdout, stderr bytes.Buffer
@@ -248,4 +254,28 @@ func TestRunLocalKeepLeavesContainer(t *testing.T) {
 
 	assert.False(t, f.stopped, "container should be left running with --keep")
 	assert.Contains(t, stderr.String(), "Keeping container")
+}
+
+func TestRunLocalContainerExecutorSkipsSpecialize(t *testing.T) {
+	f := &fakeRuntime{echo: "container-ok"}
+	cfg := runConfig{
+		image:         "user/myapp:test",
+		containerPort: 9000, // a container function's own server port, not 8888
+		specialize:    false,
+		functionMeta:  metav1.ObjectMeta{Name: "cfn", Namespace: "default"},
+		method:        http.MethodPost,
+		body:          "payload",
+	}
+
+	var stdout, stderr bytes.Buffer
+	require.NoError(t, runLocal(t.Context(), f, cfg, &stdout, &stderr))
+
+	// The user image is its own server: invoke runs, but no specialize call is made.
+	assert.Equal(t, "container-ok", stdout.String())
+	assert.Empty(t, f.specializePath, "container executor must not call specialize")
+	assert.Empty(t, f.specializeBody)
+	assert.Equal(t, "payload", string(f.invokeBody))
+	// Function-metadata headers are still attached for parity with the cluster.
+	assert.Equal(t, "cfn", f.invokeHeaders.Get("X-Fission-Function-Name"))
+	assert.True(t, f.stopped)
 }

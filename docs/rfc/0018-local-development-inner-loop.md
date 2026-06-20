@@ -169,7 +169,15 @@ Knowledge transfer for the implementing session — the surfaces this RFC reuses
 ## As implemented (phases 0–1)
 
 Phases 0 and 1 shipped together on `feat/rfc-0018-function-run-local`.
-The result is a working interpreted one-shot inner loop: `fission function run --image <env-image> --code f.py [--env <name>] [invoke flags]` starts the real env runtime in Docker, replays `/v2/specialize`, invokes over the shared `DoHTTPRequest` path, prints the response, and tears down (unless `--keep`).
+The result is a working interpreted one-shot inner loop: `fission function run-local --image <env-image> --code f.py [--env <name>] [invoke flags]` starts the real env runtime in Docker, replays `/v2/specialize`, invokes over the shared `DoHTTPRequest` path, prints the response, and tears down (unless `--keep`).
+
+The command is named **`run-local`** (alias `runl`), not a bare `run` — mirroring the existing `run-container` and avoiding ambiguity for users.
+
+All three executor types are supported, dispatched by `--executor` (default `poolmgr`):
+
+- **poolmgr** and **newdeploy** collapse to the same local shape — both run an environment runtime image and load code via the specialize contract — so they share one code path (`resolveEnvRun` → `specialize`).
+- **container** runs the user's own `--image` server directly: no `--env`, no `--code`, no bind mount, and **no specialize** call (the image *is* the function server).
+  It publishes the function's own port (`--port`, default 8888) and gates readiness with an HTTP probe (`waitForServer`) since there is no specialize call to do so.
 
 What matched the design, and the two deviations worth recording:
 
@@ -183,7 +191,7 @@ What matched the design, and the two deviations worth recording:
   Against a real container this was insufficient: Docker's userland proxy binds the published host port the instant the container starts, so the specialize dial *connects* (no connection-refused) but the proxy severs it with an `EOF`/reset until the in-container server is actually listening.
   The retry predicate now also covers connection-reset/premature-EOF (`network.Error.IsConnResetError`), which is a genuine robustness improvement for the in-cluster path too (a freshly-Ready pod can reset early connections the same way); specialize is idempotent, so retrying on a reset is safe.
 
-Files: `pkg/fission-cli/cmd/function/{run.go,run_local.go,run_test.go,run_local_docker_test.go}`, the `httpx.PostWithConnRetry` helper + `network.Error.IsConnResetError`, two new flags (`--env-version`, `--keep`), and the `run` command registration.
+Files: `pkg/fission-cli/cmd/function/{run.go,run_local.go,run_test.go,run_local_docker_test.go}`, the `httpx.PostWithConnRetry` helper + `network.Error.IsConnResetError`, two new flags (`--env-version`, `--keep`) plus reused `--executor`/`--port`/`--code`/`--env`/`--image`, and the `run-local` command registration.
 The Docker e2e (`run_local_docker_test.go`) is gated behind `FISSION_RUN_DOCKER_TESTS=1` so it never runs in default CI; the unit flow test (`TestRunLocalFlow`) exercises specialize + invoke end-to-end through the real `httpx`/`DoHTTPRequest` code with only the container engine faked.
 
 Carried forward (not yet built): the env-CRD path is wired (`--env` resolves `Runtime.Image` + `Version`), but `--watch`, `--build`, `--env-from`, `--query`, source-archive/`--src` builder envs, and a blocking persistent-server mode remain phases 2–5 below.
@@ -191,7 +199,8 @@ Carried forward (not yet built): the env-CRD path is wired (`--env` resolves `Ru
 ## Phased implementation
 
 0. **Scaffold** — add `run.go`/`run_local.go` skeleton + flags; export `DoHTTPRequest` from `test.go`; factor the specialize retry loop out of `oci_specialize.go` into a shared helper without changing in-cluster behavior. ✅ **shipped** Ships as a hidden/alpha command.
-1. **MVP: interpreted, one-shot** — `fission function run --env <interpreted> --code f.py [--image …] [invoke flags]`: resolve env image → `docker run` → bind-mount → `/v2/specialize` with retry → single invoke via the shared path with `X-Fission-*` headers → print → teardown. ✅ **shipped** Cluster-less with `--image`.
+1. **MVP: interpreted, one-shot** — `fission function run-local --env <interpreted> --code f.py [--image …] [invoke flags]`: resolve env image → `docker run` → bind-mount → `/v2/specialize` with retry → single invoke via the shared path with `X-Fission-*` headers → print → teardown. ✅ **shipped** (all executor types via `--executor`: poolmgr/newdeploy specialize, container runs the user image directly).
+   Cluster-less with `--image`.
    This alone collapses the loop to container-start + sub-second.
 2. **Watch + persistent server** — `--watch` (re-specialize without restart, restart fallback), `--keep`, `--env-from`/`-e`.
 3. **Builder leg** — run `Builder.Image` locally, stream build logs, feed the deploy dir to the runtime.

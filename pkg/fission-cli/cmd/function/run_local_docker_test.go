@@ -40,28 +40,52 @@ RUN printf '%s\n' \
 CMD ["python", "/server.py"]
 `
 
-func TestRunLocalDockerE2E(t *testing.T) {
+// fakeContainerDockerfile stands in for a container-executor function image: its
+// own server on a non-8888 port that simply echoes, with no specialize endpoint —
+// exercising the container path (no bind mount, no specialize, custom port).
+const fakeContainerDockerfile = `FROM python:3.12-alpine
+RUN printf '%s\n' \
+  'from http.server import BaseHTTPRequestHandler, HTTPServer' \
+  'class H(BaseHTTPRequestHandler):' \
+  '    def _ok(self):' \
+  '        self.send_response(200); self.end_headers()' \
+  '    def do_GET(self):' \
+  '        self._ok(); self.wfile.write(b"container-local")' \
+  '    def do_POST(self):' \
+  '        self._ok(); self.wfile.write(b"container-local")' \
+  'HTTPServer(("0.0.0.0", 9000), H).serve_forever()' > /server.py
+CMD ["python", "/server.py"]
+`
+
+func requireDocker(t *testing.T) {
+	t.Helper()
 	if os.Getenv(dockerTestEnvVar) != "1" {
 		t.Skipf("set %s=1 (and have a running Docker daemon) to run the Docker-backed e2e test", dockerTestEnvVar)
 	}
 	if _, err := exec.LookPath("docker"); err != nil {
 		t.Skip("docker CLI not found on PATH")
 	}
+}
+
+func TestRunLocalDockerE2E(t *testing.T) {
+	requireDocker(t)
 
 	const image = "fission-rfc0018-fakeenv:test"
-	buildFakeEnvImage(t, image)
+	buildFakeImage(t, image, fakeEnvDockerfile)
 
 	rt, err := newDockerRuntime(logr.Logger{})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = rt.Close() })
 
 	cfg := runConfig{
-		image:        image,
-		envVersion:   2,
-		entrypoint:   "main",
-		codePath:     writeTempCode(t, "print('hi')"),
-		functionMeta: metav1.ObjectMeta{Name: "myfn", Namespace: "default"},
-		method:       "GET",
+		image:         image,
+		containerPort: envContainerPort,
+		specialize:    true,
+		envVersion:    2,
+		entrypoint:    "main",
+		codePath:      writeTempCode(t, "print('hi')"),
+		functionMeta:  metav1.ObjectMeta{Name: "myfn", Namespace: "default"},
+		method:        "GET",
 	}
 
 	var stdout, stderr bytes.Buffer
@@ -69,10 +93,33 @@ func TestRunLocalDockerE2E(t *testing.T) {
 	assert.Equal(t, "hello-local", stdout.String())
 }
 
-func buildFakeEnvImage(t *testing.T, image string) {
+func TestRunLocalDockerContainerExecutorE2E(t *testing.T) {
+	requireDocker(t)
+
+	const image = "fission-rfc0018-fakecontainer:test"
+	buildFakeImage(t, image, fakeContainerDockerfile)
+
+	rt, err := newDockerRuntime(logr.Logger{})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = rt.Close() })
+
+	cfg := runConfig{
+		image:         image,
+		containerPort: 9000, // the function's own server port, not the env 8888
+		specialize:    false,
+		functionMeta:  metav1.ObjectMeta{Name: "cfn", Namespace: "default"},
+		method:        "GET",
+	}
+
+	var stdout, stderr bytes.Buffer
+	require.NoError(t, runLocal(t.Context(), rt, cfg, &stdout, &stderr))
+	assert.Equal(t, "container-local", stdout.String())
+}
+
+func buildFakeImage(t *testing.T, image, dockerfile string) {
 	t.Helper()
 	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(dir+"/Dockerfile", []byte(fakeEnvDockerfile), 0o644))
+	require.NoError(t, os.WriteFile(dir+"/Dockerfile", []byte(dockerfile), 0o644))
 
 	build := exec.CommandContext(t.Context(), "docker", "build", "-t", image, dir)
 	if out, err := build.CombinedOutput(); err != nil {

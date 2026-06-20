@@ -23,11 +23,12 @@ import (
 
 // The env runtime contract (mirrors the in-cluster fetcher/specialize layout):
 // the deploy package is mounted under localMountPath, the runtime listens on
-// containerPort for both /v2/specialize and invocation, and the v2 target file
-// is "deployarchive" (v1 is "user").
+// envContainerPort for both /v2/specialize and invocation, and the v2 target
+// file is "deployarchive" (v1 is "user"). Container-executor functions bring
+// their own server image and listen on a function-defined port instead.
 const (
 	localMountPath       = "/userfunc"
-	containerPort        = 8888
+	envContainerPort     = 8888
 	targetFilenameDeploy = "deployarchive" // v2
 	targetFilenameUser   = "user"          // v1
 
@@ -63,14 +64,17 @@ type localRuntime interface {
 	Close() error
 }
 
-// containerSpec is the minimal description of the env runtime container `run`
-// starts: the image, the host directory bind-mounted as the userfunc volume,
-// the host port published to the container's 8888, and extra env vars.
+// containerSpec is the minimal description of the container `run-local` starts:
+// the image, an optional host directory bind-mounted as the userfunc volume
+// (empty for container-executor functions, which carry their own code), the
+// host port published to ContainerPort, the in-container port the server
+// listens on, and extra env vars.
 type containerSpec struct {
-	Image    string
-	HostDir  string
-	HostPort int
-	Env      []string
+	Image         string
+	HostDir       string
+	HostPort      int
+	ContainerPort int
+	Env           []string
 }
 
 // loadRequest is the wire shape of the env server's /v2/specialize body. It is
@@ -176,9 +180,20 @@ func (d *dockerRuntime) PullImage(ctx context.Context, image string) error {
 }
 
 func (d *dockerRuntime) StartContainer(ctx context.Context, spec containerSpec) (string, error) {
-	port, ok := network.PortFrom(containerPort, network.TCP)
+	if spec.ContainerPort < 1 || spec.ContainerPort > 65535 {
+		return "", fmt.Errorf("invalid container port %d", spec.ContainerPort)
+	}
+	port, ok := network.PortFrom(uint16(spec.ContainerPort), network.TCP)
 	if !ok {
-		return "", fmt.Errorf("invalid container port %d", containerPort)
+		return "", fmt.Errorf("invalid container port %d", spec.ContainerPort)
+	}
+	hostConfig := &container.HostConfig{
+		PortBindings: network.PortMap{port: []network.PortBinding{{HostIP: netip.MustParseAddr("127.0.0.1"), HostPort: strconv.Itoa(spec.HostPort)}}},
+	}
+	// Container-executor functions carry their own code in the image; only env
+	// runtimes need the userfunc bind mount.
+	if spec.HostDir != "" {
+		hostConfig.Binds = []string{spec.HostDir + ":" + localMountPath}
 	}
 	created, err := d.cli.ContainerCreate(ctx, client.ContainerCreateOptions{
 		Config: &container.Config{
@@ -186,10 +201,7 @@ func (d *dockerRuntime) StartContainer(ctx context.Context, spec containerSpec) 
 			Env:          spec.Env,
 			ExposedPorts: network.PortSet{port: struct{}{}},
 		},
-		HostConfig: &container.HostConfig{
-			Binds:        []string{spec.HostDir + ":" + localMountPath},
-			PortBindings: network.PortMap{port: []network.PortBinding{{HostIP: netip.MustParseAddr("127.0.0.1"), HostPort: strconv.Itoa(spec.HostPort)}}},
-		},
+		HostConfig: hostConfig,
 	})
 	if err != nil {
 		return "", fmt.Errorf("creating container: %w", err)
