@@ -98,6 +98,17 @@ var (
 			Help: "Mux materializations that failed before the swap; the served mux is stale until a retry succeeds (the resync loop re-arms it).",
 		},
 	)
+	// Failure attribution (RFC-0015). component: router|executor|fetcher|
+	// function|timeout; reason: a stable taxonomy value. A spike in executor/*
+	// is an alertable platform problem, vs function/* (user code). Client
+	// disconnects (499) are excluded as benign churn.
+	invocationFailures = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "fission_invocation_failures_total",
+			Help: "Count of failed function invocations attributed by component and reason (RFC-0015).",
+		},
+		[]string{"component", "reason"},
+	)
 )
 
 func init() {
@@ -111,6 +122,7 @@ func init() {
 	registry.MustRegister(resyncDrift)
 	registry.MustRegister(resyncFailures)
 	registry.MustRegister(materializeFailures)
+	registry.MustRegister(invocationFailures)
 }
 
 // collectFunctionMetric records the per-call counters and the

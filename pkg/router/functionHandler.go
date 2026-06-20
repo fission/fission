@@ -6,9 +6,11 @@ package router
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httputil"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -16,7 +18,9 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	ferror "github.com/fission/fission/pkg/error"
+	"github.com/fission/fission/pkg/error/network"
 	"github.com/fission/fission/pkg/router/streaming"
+	"github.com/fission/fission/pkg/utils/correlation"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
@@ -34,6 +38,7 @@ type functionHandler struct {
 	fnWeightDistributionList []functionWeightDistribution
 	tsRoundTripperParams     *tsRoundTripperParams
 	isDebugEnv               bool
+	structuredErrors         bool
 	functionTimeoutMap       map[k8stypes.UID]int
 	// Hoisted per-route state (RFC-0014): computed once at mux build instead
 	// of per request. rtLogger is the round tripper's named logger;
@@ -177,11 +182,34 @@ func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *h
 	proxy.ServeHTTP(responseWriter, request)
 }
 
-// getProxyErrorHandler returns a reverse proxy error handler
+// classifyFunctionError returns the stable reason for a function-side
+// round-trip error (the component is always ComponentFunction) (RFC-0015).
+// Connection-refused is checked before dial because a refused connection is
+// itself a dial error; everything else is the function returning or closing
+// unexpectedly.
+func classifyFunctionError(err error) string {
+	if netErr := network.Adapter(err); netErr != nil {
+		switch {
+		case netErr.IsConnRefusedError():
+			return ferror.ReasonConnectionRefused
+		case netErr.IsDialError():
+			return ferror.ReasonDialError
+		}
+	}
+	return ferror.ReasonFunctionError
+}
+
+// getProxyErrorHandler returns a reverse proxy error handler that, in addition
+// to the legacy status mapping, attributes the failure to a component + reason
+// (RFC-0015) and — unless ROUTER_STRUCTURED_ERRORS is off — returns a JSON body
+// carrying that attribution plus the request id and trace id. Status codes are
+// identical to the legacy handler.
 func (fh functionHandler) getProxyErrorHandler(start time.Time, rrt *RetryingRoundTripper) func(rw http.ResponseWriter, req *http.Request, err error) {
 	return func(rw http.ResponseWriter, req *http.Request, err error) {
 		var status int
 		var msg string
+		var component ferror.Component
+		var reason string
 		ctx := req.Context()
 		logger := otelUtils.LoggerWithTraceID(ctx, fh.logger)
 		// A server-initiated streaming abort (idle/max-duration) surfaces as
@@ -189,10 +217,16 @@ func (fh functionHandler) getProxyErrorHandler(start time.Time, rrt *RetryingRou
 		// Surface it as a 504 with the real reason instead of masquerading as a
 		// client-close 499, and log it where an operator can see it.
 		streamCause := context.Cause(ctx)
+		var invErr *ferror.InvocationError
 		switch {
 		case errors.Is(streamCause, errStreamIdleTimeout) || errors.Is(streamCause, errStreamMaxDuration):
 			status = http.StatusGatewayTimeout
 			msg = streamCause.Error()
+			component = ferror.ComponentTimeout
+			reason = ferror.ReasonStreamMaxDuration
+			if errors.Is(streamCause, errStreamIdleTimeout) {
+				reason = ferror.ReasonStreamIdle
+			}
 			// The abort was already logged at Info by the watchdog/max-duration
 			// callback; this is just the HTTP outcome for a pre-first-byte abort.
 			logger.V(1).Info(msg, "function", fh.function, "status", http.StatusText(status))
@@ -203,17 +237,32 @@ func (fh functionHandler) getProxyErrorHandler(start time.Time, rrt *RetryingRou
 			// Reference: https://httpstatuses.com/499
 			status = 499
 			msg = "client closes the connection"
+			component = ferror.ComponentRouter
+			reason = ferror.ReasonClientDisconnect
 			logger.V(1).Info(msg, "function", fh.function, "status", "Client Closed Request")
 		case errors.Is(err, context.DeadlineExceeded):
 			status = http.StatusGatewayTimeout
 			msg = "no response from function before timeout"
+			component = ferror.ComponentTimeout
+			reason = ferror.ReasonFunctionTimeout
 			logger.Info(msg, "function", fh.function, "status", http.StatusText(status))
+		case errors.As(err, &invErr):
+			// The round-tripper already attributed this failure (executor /
+			// resolver origin); the wrapped error keeps the status unchanged.
+			status, _ = ferror.GetHTTPError(err)
+			msg = "error sending request to function"
+			component = invErr.Component
+			reason = invErr.Reason
+			logger.Info(msg, "function", fh.function,
+				"status", http.StatusText(status), "component", component, "reason", reason)
 		default:
 			code, _ := ferror.GetHTTPError(err)
 			status = code
 			msg = "error sending request to function"
+			component = ferror.ComponentFunction
+			reason = classifyFunctionError(err)
 			logger.Info(msg, "function", fh.function,
-				"status", http.StatusText(status), "code", code)
+				"status", http.StatusText(status), "code", code, "component", component, "reason", reason)
 		}
 
 		go func() {
@@ -229,13 +278,60 @@ func (fh functionHandler) getProxyErrorHandler(start time.Time, rrt *RetryingRou
 			}
 		}()
 
-		// TODO: return error message that contains traceable UUID back to user. Issue #693
-		rw.WriteHeader(status)
-		_, err = rw.Write([]byte(msg))
-		if err != nil {
-			logger.Error(err,
-				"error writing HTTP response", "function", fh.function,
-			)
+		// A client disconnect (499) is benign churn, not a server-side failure,
+		// so it is excluded from the failure-attribution counter.
+		if status != 499 {
+			invocationFailures.WithLabelValues(string(component), reason).Inc()
 		}
+
+		fh.writeInvocationError(rw, req, status, component, reason, msg, err)
+	}
+}
+
+// writeInvocationError writes the failure response: a structured JSON body
+// (RFC-0015) carrying the attribution, request id, and trace id, or — when
+// ROUTER_STRUCTURED_ERRORS is off — the legacy plain-text body verbatim. The
+// raw error detail is included only when the caller opted in via X-Fission-Debug
+// AND the router runs in debug mode, so internal detail never leaks by default.
+// Issue #693 (a traceable id in the response) is resolved here.
+func (fh functionHandler) writeInvocationError(rw http.ResponseWriter, req *http.Request, status int, component ferror.Component, reason, legacyMsg string, cause error) {
+	if !fh.structuredErrors {
+		rw.WriteHeader(status)
+		if _, werr := rw.Write([]byte(legacyMsg)); werr != nil {
+			fh.logger.Error(werr, "error writing HTTP response", "function", fh.function)
+		}
+		return
+	}
+
+	ctx := req.Context()
+	body := ferror.InvocationError{
+		Component: component,
+		Reason:    reason,
+		RequestID: correlation.FromContext(ctx),
+		TraceID:   otelUtils.TraceIDFromContext(ctx),
+	}
+	if fh.isDebugEnv && cause != nil && strings.EqualFold(req.Header.Get(correlation.HeaderDebug), "true") {
+		body.Message = cause.Error()
+	}
+
+	// Set the attribution header before writing the status so it survives even
+	// the marshal-failure fallback below.
+	rw.Header().Set(correlation.HeaderComponent, string(component))
+
+	payload, merr := json.Marshal(body)
+	if merr != nil {
+		// Never emit a half-written body: fall back to plain text.
+		rw.WriteHeader(status)
+		if _, werr := rw.Write([]byte(legacyMsg)); werr != nil {
+			fh.logger.Error(werr, "error writing fallback HTTP response", "function", fh.function)
+		}
+		fh.logger.Error(merr, "error marshaling structured error body; wrote plain text", "function", fh.function)
+		return
+	}
+
+	rw.Header().Set("Content-Type", "application/json")
+	rw.WriteHeader(status)
+	if _, werr := rw.Write(payload); werr != nil {
+		fh.logger.Error(werr, "error writing HTTP response", "function", fh.function)
 	}
 }

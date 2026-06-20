@@ -212,7 +212,10 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 				// user function bugs.
 				statusCode, errMsg := ferror.GetHTTPError(err)
 				if statusCode == http.StatusTooManyRequests {
-					return nil, err
+					// Executor signalled saturation (/v2/ensureCapacity 429).
+					// Wrap for attribution; the inner error keeps the 429 status
+					// via GetHTTPError's unwrap.
+					return nil, ferror.NewInvocationError(ferror.ComponentExecutor, ferror.ReasonCapacityExceeded, err)
 				}
 				if roundTripper.isDebugEnv {
 					return &http.Response{
@@ -226,7 +229,11 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 						Header:        make(http.Header),
 					}, nil
 				}
-				return nil, ferror.MakeError(http.StatusInternalServerError, err.Error())
+				// A resolver/executor error reaching here is a provisioning
+				// failure (specialization, RPC). Attribute it to the executor;
+				// the wrapped 500 ferror.Error keeps the status unchanged.
+				return nil, ferror.NewInvocationError(ferror.ComponentExecutor, ferror.ReasonSpecializationFailed,
+					ferror.MakeError(http.StatusInternalServerError, err.Error()))
 			}
 			if roundTripper.serviceURL == nil {
 				// No current resolver returns Release with a nil SvcURL, but if
@@ -385,7 +392,7 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 
 	e := errors.New("unable to get service url for connection")
 	logger.Error(e, "exceeded max retries for function")
-	return nil, e
+	return nil, ferror.NewInvocationError(ferror.ComponentExecutor, ferror.ReasonExecutorUnavailable, e)
 }
 
 // jitter adds up to 20% positive random jitter to a backoff duration so that

@@ -5,6 +5,7 @@
 package client
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -14,6 +15,10 @@ import (
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/utils/correlation"
 )
 
 // errorRecordingSink counts Error-level log calls so a test can assert that
@@ -50,6 +55,50 @@ func newTestClient(sink logr.LogSink, url string) *client {
 		tappedByURL: make(map[string]TapServiceRequest),
 		requestChan: make(chan TapServiceRequest, 100),
 		httpClient:  &http.Client{},
+	}
+}
+
+// TestRequestIDPropagation locks RFC-0015: the executor RPCs carry the
+// per-invocation X-Fission-Request-ID from the context so the executor can
+// correlate a cold-start with the router request that triggered it.
+func TestRequestIDPropagation(t *testing.T) {
+	t.Parallel()
+	fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "fn", Namespace: "default"}}
+
+	tests := []struct {
+		name string
+		call func(c *client, ctx context.Context) error
+	}{
+		{
+			name: "GetServiceForFunction",
+			call: func(c *client, ctx context.Context) error {
+				_, err := c.GetServiceForFunction(ctx, fn)
+				return err
+			},
+		},
+		{
+			name: "EnsureCapacity",
+			call: func(c *client, ctx context.Context) error {
+				_, err := c.EnsureCapacity(ctx, fn, 0, 0)
+				return err
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var gotID string
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				gotID = r.Header.Get(correlation.HeaderRequestID)
+				_, _ = w.Write([]byte("10.0.0.1:8888"))
+			}))
+			defer srv.Close()
+
+			c := newTestClient(&errorRecordingSink{}, srv.URL)
+			ctx := correlation.NewContext(t.Context(), "req-xyz")
+			require.NoError(t, tc.call(c, ctx))
+			assert.Equal(t, "req-xyz", gotID, "executor RPC must carry the request id")
+		})
 	}
 }
 

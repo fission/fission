@@ -21,6 +21,7 @@ Each document carries a `Status` header naming the implementing PRs and, where a
 | [0012](0012-oci-default-package-delivery.md) | OCI-Native Package Delivery as the Default Cold-Start Path | Implemented (phases 1–4) |
 | [0013](0013-incremental-router-routes.md) | Incremental Router Route Updates | Implemented (phases 0–2; phase 3 gated, not built) |
 | [0014](0014-router-hot-path-efficiency.md) | Router Hot-Path Efficiency | Implemented ([#3491](https://github.com/fission/fission/pull/3491)) |
+| [0015](0015-invocation-correlation-and-failure-attribution.md) | Invocation Correlation & Failure Attribution | Proposed (phases 1–4 implemented) |
 
 ## Companion material
 

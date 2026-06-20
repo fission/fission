@@ -24,6 +24,7 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 	ferror "github.com/fission/fission/pkg/error"
+	"github.com/fission/fission/pkg/utils/correlation"
 	"github.com/fission/fission/pkg/utils/httpretry"
 	"github.com/fission/fission/pkg/utils/metrics"
 )
@@ -149,6 +150,7 @@ func (c *client) GetServiceForFunction(ctx context.Context, fn *fv1.Function) (s
 		return "", fmt.Errorf("could not create request for getting service for function: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	correlation.SetRequestIDHeader(ctx, req)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -190,6 +192,7 @@ func (c *client) EnsureCapacity(ctx context.Context, fn *fv1.Function, observedR
 		return "", fmt.Errorf("could not create request for ensuring capacity for function: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	correlation.SetRequestIDHeader(ctx, req)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {

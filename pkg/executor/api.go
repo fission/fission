@@ -24,6 +24,7 @@ import (
 	"github.com/fission/fission/pkg/executor/client"
 	"github.com/fission/fission/pkg/executor/executortype"
 	"github.com/fission/fission/pkg/executor/fscache"
+	"github.com/fission/fission/pkg/utils/correlation"
 	"github.com/fission/fission/pkg/utils/httpmux"
 	"github.com/fission/fission/pkg/utils/httpsecurity"
 	"github.com/fission/fission/pkg/utils/httpserver"
@@ -401,9 +402,14 @@ func (executor *Executor) GetHandler() http.Handler {
 // deny is defense-in-depth if a future regression exposes this port via
 // Ingress.
 func (executor *Executor) Serve(ctx context.Context, mgr *errgroup.Group, port int) {
+	// correlation.Middleware (inside OTEL, outside the HMAC verifier which lives
+	// in GetHandler) extracts the inbound X-Fission-Request-ID into the request
+	// context so a cold-start specialization and its fetcher call carry the same
+	// id as the router request that triggered them (RFC-0015). The verifier signs
+	// method + URI + body only, so the header never affects the signature.
 	handler := httpsecurity.SecurityHeaders(
 		httpsecurity.DenyAllCORS(
-			otelUtils.GetHandlerWithOTEL(executor.GetHandler(), "fission-executor", otelUtils.UrlsToIgnore("/healthz")),
+			otelUtils.GetHandlerWithOTEL(correlation.Middleware(executor.GetHandler()), "fission-executor", otelUtils.UrlsToIgnore("/healthz")),
 		),
 	)
 	httpserver.StartServer(ctx, executor.logger, mgr, "executor", fmt.Sprintf("%d", port), handler)

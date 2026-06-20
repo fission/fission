@@ -16,6 +16,8 @@ import (
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/errgroup"
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
@@ -36,6 +38,7 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/cache"
 	"github.com/fission/fission/pkg/crd"
+	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/executor/executortype"
 	"github.com/fission/fission/pkg/executor/fscache"
 	"github.com/fission/fission/pkg/executor/metrics"
@@ -346,6 +349,12 @@ func (gpm *GenericPoolManager) MarkSpecializationFailure(ctx context.Context, fn
 	key := crd.CacheKeyURGFromMeta(fnMeta)
 	otelUtils.SpanTrackEvent(ctx, "MarkSpecializationFailure",
 		attribute.KeyValue{Key: "key", Value: attribute.StringValue(key.String())})
+	// Mark the active cold-start span errored so a failed specialization shows
+	// as the failing phase in the trace (RFC-0015), complementing the
+	// coldstart/specialize child span set in specializePod.
+	span := trace.SpanFromContext(ctx)
+	span.SetStatus(codes.Error, ferror.ReasonSpecializationFailed)
+	span.SetAttributes(attribute.String("coldstart.failure_reason", ferror.ReasonSpecializationFailed))
 	logger := otelUtils.LoggerWithTraceID(ctx, gpm.logger)
 	logger.Info("marking specialization failure", "key", key)
 	gpm.fsCache.MarkSpecializationFailure(key)

@@ -65,6 +65,7 @@ type HTTPTriggerSet struct {
 	updateRouterRequestChannel chan struct{}
 	tsRoundTripperParams       *tsRoundTripperParams
 	isDebugEnv                 bool
+	structuredErrors           bool
 	useEncodedPath             bool
 	syncDebouncer              func(func())
 	// ready flips true after the first successful mux build; routerReadinessHandler
