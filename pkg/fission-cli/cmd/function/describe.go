@@ -171,7 +171,7 @@ func invocability(fn *fv1.Function, active []*corev1.Pod) string {
 	case string(metav1.ConditionTrue):
 		switch {
 		case serving > 0:
-			return fmt.Sprintf("Yes (%d warm pod(s), %d serving)", warm, serving)
+			return fmt.Sprintf("Yes (%d of %d warm pod(s) serving)", serving, warm)
 		case warm > 0:
 			return fmt.Sprintf("Yes (%d warm pod(s))", warm)
 		default:

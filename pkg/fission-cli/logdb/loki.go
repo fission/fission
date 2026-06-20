@@ -120,13 +120,17 @@ func buildLogQL(filter LogFilter) (string, error) {
 	return query, nil
 }
 
+// lokiStream is one labeled stream of [unix_nanos, line] values, the element
+// shape shared by the query_range and /tail responses.
+type lokiStream struct {
+	Stream map[string]string `json:"stream"`
+	Values [][2]string       `json:"values"` // [ unix_nanos_string, line ]
+}
+
 // lokiQueryRangeResponse is the subset of Loki's query_range response we read.
 type lokiQueryRangeResponse struct {
 	Data struct {
-		Result []struct {
-			Stream map[string]string `json:"stream"`
-			Values [][2]string       `json:"values"` // [ unix_nanos_string, line ]
-		} `json:"result"`
+		Result []lokiStream `json:"result"`
 	} `json:"data"`
 }
 
@@ -215,10 +219,7 @@ func lokiEntry(streamLabels map[string]string, value [2]string) (LogEntry, error
 
 // lokiTailResponse is the subset of a /tail WebSocket frame we read.
 type lokiTailResponse struct {
-	Streams []struct {
-		Stream map[string]string `json:"stream"`
-		Values [][2]string       `json:"values"` // [ unix_nanos_string, line ]
-	} `json:"streams"`
+	Streams []lokiStream `json:"streams"`
 }
 
 // StreamLogs tails Loki live over the /tail WebSocket, rendering each new line
@@ -233,10 +234,21 @@ func (l loki) StreamLogs(ctx context.Context, filter LogFilter, out io.Writer) e
 	if filter.RecordLimit > 0 {
 		params.Set("limit", strconv.Itoa(filter.RecordLimit))
 	}
-	// The tail endpoint is WebSocket: http(s):// -> ws(s)://.
-	wsURL := strings.Replace(l.endpoint, "http", "ws", 1) + lokiTailPath + "?" + params.Encode()
+	// The tail endpoint is WebSocket: parse the base URL and swap the scheme
+	// (http->ws, https->wss) so a host that happens to contain "http" is safe.
+	u, err := url.Parse(l.endpoint)
+	if err != nil {
+		return fmt.Errorf("invalid loki endpoint %q: %w", l.endpoint, err)
+	}
+	if u.Scheme == "https" {
+		u.Scheme = "wss"
+	} else {
+		u.Scheme = "ws"
+	}
+	u.Path = lokiTailPath
+	u.RawQuery = params.Encode()
 
-	conn, _, err := websocket.Dial(ctx, wsURL, nil)
+	conn, _, err := websocket.Dial(ctx, u.String(), nil)
 	if err != nil {
 		return fmt.Errorf("error opening loki tail stream: %w", err)
 	}

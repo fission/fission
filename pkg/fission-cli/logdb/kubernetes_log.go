@@ -164,14 +164,31 @@ func followContainer(ctx context.Context, kc kubernetes.Interface, ns, podName, 
 	}
 	defer stream.Close()
 
-	sc := bufio.NewScanner(stream)
-	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024) // tolerate long log lines
-	for sc.Scan() {
-		if _, err := fmt.Fprintf(out, "%s%s\n", prefix, sc.Text()); err != nil {
+	if filter.Details {
+		fn := filter.FunctionObject
+		if _, err := fmt.Fprintf(out, "\n=== Function=%s Namespace=%s Pod=%s Container=%s\n", fn.Name, ns, podName, container); err != nil {
 			return err
 		}
 	}
-	return sc.Err()
+
+	// bufio.Reader (not Scanner) so a log line larger than the scanner's token
+	// cap doesn't abort the whole follow session — matches the unbounded
+	// one-shot io.Copy.
+	r := bufio.NewReader(stream)
+	for {
+		line, rerr := r.ReadString('\n')
+		if len(line) > 0 {
+			if _, werr := fmt.Fprintf(out, "%s%s", prefix, line); werr != nil {
+				return werr
+			}
+		}
+		if rerr != nil {
+			if errors.Is(rerr, io.EOF) {
+				return nil
+			}
+			return rerr
+		}
+	}
 }
 
 // lockedWriter serializes concurrent writes from multiple pod-log streams onto
@@ -188,9 +205,8 @@ func (l *lockedWriter) Write(p []byte) (int, error) {
 }
 
 func streamContainerLog(ctx context.Context, kubernetesClient kubernetes.Interface, pod *v1.Pod, logFilter LogFilter, output *bytes.Buffer) (err error) {
-	FETCHER := "fetcher"
 	for _, container := range pod.Spec.Containers {
-		if container.Name == FETCHER {
+		if container.Name == fetcherContainer {
 			continue
 		}
 		tailLines := int64(logFilter.RecordLimit)
