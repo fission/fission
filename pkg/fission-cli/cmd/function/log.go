@@ -68,6 +68,28 @@ func (opts *LogSubCommand) do(input cli.Input) error {
 		console.Warn(fmt.Sprintf("--request-id/--trace-id/--level filters are only applied by the loki dbtype and are ignored for %q", dbType))
 	}
 
+	// Live streaming: when --follow is set and the driver can tail (kubernetes
+	// follows the pod stream, loki opens a /tail WebSocket), stream straight to
+	// stdout instead of the one-second poll loop below. Drivers that can't
+	// stream fall through to polling.
+	if input.Bool(flagkey.FnLogFollow) {
+		if streamer, ok := logDB.(logdb.LogStreamer); ok {
+			return streamer.StreamLogs(input.Context(), logdb.LogFilter{
+				Pod:            fnPod,
+				PodNamespace:   input.String(flagkey.NamespacePod),
+				Function:       f.Name,
+				FuncUid:        string(f.UID),
+				RecordLimit:    recordLimit,
+				FunctionObject: f,
+				Details:        input.Bool(flagkey.FnLogDetail),
+				AllPods:        allPods,
+				RequestID:      input.String(flagkey.FnLogRequestID),
+				TraceID:        input.String(flagkey.FnLogTraceID),
+				Level:          input.String(flagkey.FnLogLevel),
+			}, os.Stdout)
+		}
+	}
+
 	requestChan := make(chan struct{})
 	// responseChan carries each iteration's result so the one-shot exit returns
 	// the backend error by type, with no err variable shared across goroutines.

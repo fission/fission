@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/coder/websocket"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -126,4 +127,50 @@ func TestLokiGetLogsFloorsEpochStart(t *testing.T) {
 		"epoch Since must be floored to the recent lookback window, not sent as 1970")
 	assert.Truef(t, start.After(time.Unix(0, 0).Add(time.Hour)),
 		"start must not be the epoch; got %s", start)
+}
+
+// TestLokiStreamLogs exercises the /tail WebSocket path: a test server upgrades
+// the connection, emits one tail frame, and closes; StreamLogs must render the
+// line in the shared CLI format and return cleanly on the normal close.
+func TestLokiStreamLogs(t *testing.T) {
+	var gotPath, gotQuery string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotQuery = r.URL.Query().Get("query")
+		c, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer c.CloseNow()
+		// One tail frame, then a normal close.
+		_ = c.Write(r.Context(), websocket.MessageText,
+			[]byte(`{"streams":[{"stream":{"k8s_pod_name":"pod-1","fission_function_uid":"u1"},"values":[["1700000000000000000","tail line one"]]}]}`))
+		_ = c.Close(websocket.StatusNormalClosure, "")
+	}))
+	defer srv.Close()
+
+	l := loki{endpoint: srv.URL, client: &http.Client{Timeout: lokiHTTPTimeout}}
+	var buf bytes.Buffer
+	err := l.StreamLogs(t.Context(), LogFilter{FuncUid: "u1", RecordLimit: 10}, &buf)
+	require.NoError(t, err)
+
+	assert.Equal(t, lokiTailPath, gotPath, "tail uses the /tail endpoint")
+	assert.Contains(t, gotQuery, `fission_function_uid="u1"`, "tail query is built from the filter")
+	assert.Contains(t, buf.String(), "tail line one", "the tailed line is rendered")
+}
+
+func TestLokiEntry(t *testing.T) {
+	t.Parallel()
+	entry, err := lokiEntry(
+		map[string]string{"fission_function_uid": "u1", "k8s_pod_name": "p1", "fission_function_name": "fn"},
+		[2]string{"1700000000000000000", "hello\n"},
+	)
+	require.NoError(t, err)
+	assert.Equal(t, "hello", entry.Message, "trailing newline trimmed")
+	assert.Equal(t, "u1", entry.FuncUid)
+	assert.Equal(t, "p1", entry.Pod)
+	assert.Equal(t, "fn", entry.FuncName)
+
+	_, err = lokiEntry(map[string]string{}, [2]string{"not-a-number", "x"})
+	require.Error(t, err, "a non-numeric timestamp is an error")
 }

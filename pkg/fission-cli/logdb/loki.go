@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -18,10 +19,17 @@ import (
 	"strings"
 	"time"
 
+	"github.com/coder/websocket"
+	"github.com/coder/websocket/wsjson"
+
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/fission-cli/console"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
+
+// loki implements both one-shot queries (LogDatabase) and live tailing
+// (LogStreamer).
+var _ LogStreamer = loki{}
 
 // loki is the reference OTLP-backend query adapter (RFC-0016): it queries a
 // Loki instance over the HTTP query_range API using LogQL. It assumes function
@@ -30,6 +38,7 @@ import (
 // produces.
 const (
 	lokiQueryRangePath = "/loki/api/v1/query_range"
+	lokiTailPath       = "/loki/api/v1/tail"
 	lokiHTTPTimeout    = 30 * time.Second
 	// defaultLokiLookback floors the query_range start. The CLI's default
 	// Since is the epoch, which would make the range span decades; Loki
@@ -164,23 +173,14 @@ func (l loki) GetLogs(ctx context.Context, filter LogFilter, output *bytes.Buffe
 	var entries []LogEntry
 	for _, stream := range parsed.Data.Result {
 		for _, v := range stream.Values {
-			ns, err := strconv.ParseInt(v[0], 10, 64)
+			entry, err := lokiEntry(stream.Stream, v)
 			if err != nil {
 				// Best-effort: skip one malformed row rather than discard the
 				// whole batch of valid lines over a single bad timestamp.
-				console.Warn(fmt.Sprintf("skipping loki log entry with invalid timestamp %q: %v", v[0], err))
+				console.Warn(fmt.Sprintf("skipping loki log entry: %v", err))
 				continue
 			}
-			entries = append(entries, LogEntry{
-				Timestamp: time.Unix(0, ns).UTC(),
-				Message:   strings.TrimSuffix(v[1], "\n"),
-				Stream:    stream.Stream["stream"],
-				Container: stream.Stream["k8s_container_name"],
-				Namespace: stream.Stream["fission_function_namespace"],
-				FuncName:  stream.Stream["fission_function_name"],
-				FuncUid:   stream.Stream["fission_function_uid"],
-				Pod:       stream.Stream["k8s_pod_name"],
-			})
+			entries = append(entries, entry)
 		}
 	}
 	sort.Sort(ByTimestamp(entries, filter.Reverse))
@@ -191,4 +191,79 @@ func (l loki) GetLogs(ctx context.Context, filter LogFilter, output *bytes.Buffe
 		}
 	}
 	return nil
+}
+
+// lokiEntry builds a LogEntry from a stream's labels and a [unix_nanos, line]
+// value, mapping the RFC-0016 label schema onto the entry fields. Shared by the
+// query_range read path and the /tail stream.
+func lokiEntry(streamLabels map[string]string, value [2]string) (LogEntry, error) {
+	ns, err := strconv.ParseInt(value[0], 10, 64)
+	if err != nil {
+		return LogEntry{}, fmt.Errorf("invalid timestamp %q: %w", value[0], err)
+	}
+	return LogEntry{
+		Timestamp: time.Unix(0, ns).UTC(),
+		Message:   strings.TrimSuffix(value[1], "\n"),
+		Stream:    streamLabels["stream"],
+		Container: streamLabels["k8s_container_name"],
+		Namespace: streamLabels["fission_function_namespace"],
+		FuncName:  streamLabels["fission_function_name"],
+		FuncUid:   streamLabels["fission_function_uid"],
+		Pod:       streamLabels["k8s_pod_name"],
+	}, nil
+}
+
+// lokiTailResponse is the subset of a /tail WebSocket frame we read.
+type lokiTailResponse struct {
+	Streams []struct {
+		Stream map[string]string `json:"stream"`
+		Values [][2]string       `json:"values"` // [ unix_nanos_string, line ]
+	} `json:"streams"`
+}
+
+// StreamLogs tails Loki live over the /tail WebSocket, rendering each new line
+// in the shared CLI format until the context is cancelled.
+func (l loki) StreamLogs(ctx context.Context, filter LogFilter, out io.Writer) error {
+	query, err := buildLogQL(filter)
+	if err != nil {
+		return err
+	}
+	params := url.Values{}
+	params.Set("query", query)
+	if filter.RecordLimit > 0 {
+		params.Set("limit", strconv.Itoa(filter.RecordLimit))
+	}
+	// The tail endpoint is WebSocket: http(s):// -> ws(s)://.
+	wsURL := strings.Replace(l.endpoint, "http", "ws", 1) + lokiTailPath + "?" + params.Encode()
+
+	conn, _, err := websocket.Dial(ctx, wsURL, nil)
+	if err != nil {
+		return fmt.Errorf("error opening loki tail stream: %w", err)
+	}
+	defer conn.CloseNow()
+
+	for {
+		var frame lokiTailResponse
+		if err := wsjson.Read(ctx, conn, &frame); err != nil {
+			// A cancelled context (user stopped --follow) or a normal close is a
+			// clean exit, not an error.
+			if ctx.Err() != nil || errors.Is(err, io.EOF) ||
+				websocket.CloseStatus(err) == websocket.StatusNormalClosure {
+				return nil
+			}
+			return fmt.Errorf("error reading loki tail stream: %w", err)
+		}
+		for _, stream := range frame.Streams {
+			for _, v := range stream.Values {
+				entry, err := lokiEntry(stream.Stream, v)
+				if err != nil {
+					console.Warn(fmt.Sprintf("skipping loki tail entry: %v", err))
+					continue
+				}
+				if err := writeLogEntry(out, entry, filter.Details); err != nil {
+					return err
+				}
+			}
+		}
+	}
 }

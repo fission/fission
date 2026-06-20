@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"sort"
 	"strings"
 	"time"
@@ -23,6 +24,17 @@ const (
 
 type LogDatabase interface {
 	GetLogs(context.Context, LogFilter, *bytes.Buffer) error
+}
+
+// LogStreamer is an optional capability a driver implements when it can tail
+// logs live. `fission function logs --follow` uses StreamLogs when the selected
+// driver supports it (the kubernetes driver follows the pod log stream, the
+// loki driver opens a /tail WebSocket), and falls back to one-second GetLogs
+// polling otherwise. StreamLogs writes lines to out as they arrive in the
+// driver's native format and blocks until the context is cancelled or the
+// stream ends.
+type LogStreamer interface {
+	StreamLogs(ctx context.Context, filter LogFilter, out io.Writer) error
 }
 
 type LogFilter struct {
@@ -79,7 +91,7 @@ func ByTimestamp(entries []LogEntry, desc bool) ByTimestampSort {
 // writeLogEntry renders one entry into output — the detailed multi-line form
 // (with --detail) or the compact "[timestamp] message" form — shared by every
 // driver so the CLI output is identical regardless of backend.
-func writeLogEntry(output *bytes.Buffer, entry LogEntry, details bool) error {
+func writeLogEntry(output io.Writer, entry LogEntry, details bool) error {
 	var msg string
 	if details {
 		msg = fmt.Sprintf("Timestamp: %s\nNamespace: %s\nFunction Name: %s\nFunction ID: %s\nPod: %s\nContainer: %s\nStream: %s\nLog: %s\n---\n",
@@ -87,7 +99,7 @@ func writeLogEntry(output *bytes.Buffer, entry LogEntry, details bool) error {
 	} else {
 		msg = fmt.Sprintf("[%s] %s\n", entry.Timestamp, entry.Message)
 	}
-	if _, err := output.WriteString(msg); err != nil {
+	if _, err := io.WriteString(output, msg); err != nil {
 		return fmt.Errorf("error copying pod log: %w", err)
 	}
 	return nil
