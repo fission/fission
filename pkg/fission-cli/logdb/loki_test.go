@@ -141,7 +141,7 @@ func TestLokiStreamLogs(t *testing.T) {
 		if err != nil {
 			return
 		}
-		defer c.CloseNow()
+		defer func() { _ = c.CloseNow() }()
 		// One tail frame, then a normal close.
 		_ = c.Write(r.Context(), websocket.MessageText,
 			[]byte(`{"streams":[{"stream":{"k8s_pod_name":"pod-1","fission_function_uid":"u1"},"values":[["1700000000000000000","tail line one"]]}]}`))

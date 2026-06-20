@@ -252,7 +252,7 @@ func (l loki) StreamLogs(ctx context.Context, filter LogFilter, out io.Writer) e
 	if err != nil {
 		return fmt.Errorf("error opening loki tail stream: %w", err)
 	}
-	defer conn.CloseNow()
+	defer func() { _ = conn.CloseNow() }()
 
 	for {
 		var frame lokiTailResponse
