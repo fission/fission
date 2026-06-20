@@ -1,0 +1,99 @@
+// SPDX-FileCopyrightText: The Fission Authors
+//
+// SPDX-License-Identifier: Apache-2.0
+
+package logdb
+
+import (
+	"bytes"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestBuildLogQL(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		filter   LogFilter
+		wantErr  bool
+		contains []string
+		absent   []string
+	}{
+		{
+			name:     "uid + namespace selectors",
+			filter:   LogFilter{FuncUid: "u1", PodNamespace: "default"},
+			contains: []string{`fission_function_uid="u1"`, `fission_function_namespace="default"`},
+			absent:   []string{"| json"},
+		},
+		{
+			name:     "correlation filters add a json pipeline",
+			filter:   LogFilter{FuncUid: "u1", RequestID: "req-9", TraceID: "abc", Level: "error"},
+			contains: []string{`fission_function_uid="u1"`, "| json", `fission_request_id="req-9"`, `trace_id="abc"`, `level="error"`},
+		},
+		{
+			name:     "falls back to function name when no label selector",
+			filter:   LogFilter{Function: "myfn"},
+			contains: []string{`fission_function_name="myfn"`},
+		},
+		{
+			name:    "errors when nothing is selectable (avoids an empty Loki matcher)",
+			filter:  LogFilter{},
+			wantErr: true,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			q, err := buildLogQL(tc.filter)
+			if tc.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			for _, c := range tc.contains {
+				assert.Contains(t, q, c)
+			}
+			for _, a := range tc.absent {
+				assert.NotContains(t, q, a)
+			}
+		})
+	}
+}
+
+func TestLokiGetLogs(t *testing.T) {
+	var gotQuery, gotDirection, gotLimit string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.Query().Get("query")
+		gotDirection = r.URL.Query().Get("direction")
+		gotLimit = r.URL.Query().Get("limit")
+		_, _ = w.Write([]byte(`{"status":"success","data":{"resultType":"streams","result":[
+			{"stream":{"fission_function_uid":"u1","k8s_pod_name":"pod-1","fission_function_namespace":"default"},
+			 "values":[["1700000000000000000","line one"],["1700000001000000000","line two"]]}]}}`))
+	}))
+	defer srv.Close()
+
+	t.Setenv("LOKI_URL", srv.URL)
+	l, err := NewLoki(t.Context(), LogDBOptions{})
+	require.NoError(t, err)
+
+	buf := new(bytes.Buffer)
+	err = l.GetLogs(t.Context(), LogFilter{
+		FuncUid: "u1", PodNamespace: "default", RequestID: "req-9", RecordLimit: 100, Reverse: true,
+	}, buf)
+	require.NoError(t, err)
+
+	// LogQL + query params built from the filter.
+	assert.Contains(t, gotQuery, `fission_function_uid="u1"`)
+	assert.Contains(t, gotQuery, `fission_request_id="req-9"`)
+	assert.Equal(t, "backward", gotDirection, "Reverse=true must map to backward")
+	assert.Equal(t, "100", gotLimit)
+
+	// Lines parsed out of the streams response and written in order.
+	out := buf.String()
+	assert.Contains(t, out, "line one")
+	assert.Contains(t, out, "line two")
+}

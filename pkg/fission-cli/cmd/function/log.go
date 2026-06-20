@@ -61,12 +61,21 @@ func (opts *LogSubCommand) do(input cli.Input) error {
 		return fmt.Errorf("failed to get log from %s: %w", dbType, err)
 	}
 
+	// Correlation filters are only honored by backends that index those fields
+	// (the loki adapter); warn rather than silently return unfiltered logs.
+	if dbType != logdb.LOKI &&
+		(input.String(flagkey.FnLogRequestID) != "" || input.String(flagkey.FnLogTraceID) != "" || input.String(flagkey.FnLogLevel) != "") {
+		console.Warn(fmt.Sprintf("--request-id/--trace-id/--level filters are only applied by the loki dbtype and are ignored for %q", dbType))
+	}
+
 	requestChan := make(chan struct{})
-	responseChan := make(chan struct{})
+	// responseChan carries each iteration's result so the one-shot exit returns
+	// the backend error by type, with no err variable shared across goroutines.
+	responseChan := make(chan error)
 	ctx := input.Context()
 	warn := true
 
-	go func(ctx context.Context, requestChan, responseChan chan struct{}) {
+	go func(ctx context.Context, requestChan chan struct{}, responseChan chan error) {
 		t := time.Unix(0, 0*int64(time.Millisecond))
 		detail := input.Bool(flagkey.FnLogDetail)
 		for {
@@ -84,30 +93,32 @@ func (opts *LogSubCommand) do(input cli.Input) error {
 					Details:        detail,
 					WarnUser:       warn,
 					AllPods:        allPods,
+					RequestID:      input.String(flagkey.FnLogRequestID),
+					TraceID:        input.String(flagkey.FnLogTraceID),
+					Level:          input.String(flagkey.FnLogLevel),
 				}
 
 				buf := new(bytes.Buffer)
-				err = logDB.GetLogs(ctx, logFilter, buf)
+				qerr := logDB.GetLogs(ctx, logFilter, buf)
 				t = time.Now().UTC() // next time fetch values from this time
-				if err != nil {
-					console.Verbose(2, "error querying logs: %s", err)
+				if qerr != nil {
+					console.Verbose(2, "error querying logs: %s", qerr)
 					if dbType == logdb.KUBERNETES { // in case of Kubernetes log we print pod namespace warning once
 						warn = false
 					}
-					responseChan <- struct{}{}
+					responseChan <- qerr
 					continue
 				}
-				_, err = io.Copy(os.Stdout, buf)
-				if err != nil {
-					console.Verbose(2, "eror copying logs: %s", err)
-					responseChan <- struct{}{}
+				if _, cerr := io.Copy(os.Stdout, buf); cerr != nil {
+					console.Verbose(2, "error copying logs: %s", cerr)
+					responseChan <- cerr
 					continue
 				}
 
 				if dbType == logdb.KUBERNETES { // in case of Kubernetes log we print pods info only once. And then print new logs
 					detail = false
 				}
-				responseChan <- struct{}{}
+				responseChan <- nil
 			case <-ctx.Done():
 				return
 			}
@@ -118,12 +129,11 @@ func (opts *LogSubCommand) do(input cli.Input) error {
 		requestChan <- struct{}{}
 		time.Sleep(1 * time.Second)
 
-		<-responseChan
+		qerr := <-responseChan
 		if !input.Bool(flagkey.FnLogFollow) {
-			ctx.Done()
-			break
+			// One-shot query: surface a backend error (bad query, auth,
+			// unreachable) instead of swallowing it and exiting 0.
+			return qerr
 		}
 	}
-
-	return nil
 }

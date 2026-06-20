@@ -5,6 +5,7 @@
 package logdb
 
 import (
+	"context"
 	"sort"
 	"testing"
 	"time"
@@ -61,4 +62,25 @@ func TestGetLogDB(t *testing.T) {
 		_, err := GetLogDB("mysql", t.Context(), LogDBOptions{})
 		require.Error(t, err)
 	})
+}
+
+func TestLogDBRegistry(t *testing.T) {
+	// Built-in drivers self-register via init().
+	supported := supportedDrivers()
+	assert.Contains(t, supported, KUBERNETES, "kubernetes driver must be registered")
+	assert.Contains(t, supported, INFLUXDB, "influxdb driver must be registered")
+	assert.Contains(t, supported, LOKI, "loki driver must be registered")
+
+	// A registered driver is resolved by GetLogDB.
+	Register("fake-test-driver", func(_ context.Context, _ LogDBOptions) (LogDatabase, error) {
+		return kubernetesLogs{}, nil
+	})
+	db, err := GetLogDB("fake-test-driver", t.Context(), LogDBOptions{})
+	require.NoError(t, err)
+	assert.NotNil(t, db)
+
+	// An unknown driver errors and names the supported drivers so the user can fix it.
+	_, err = GetLogDB("mysql", t.Context(), LogDBOptions{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), KUBERNETES)
 }
