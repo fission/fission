@@ -56,6 +56,7 @@ func describeFunctionPod() *corev1.Pod {
 				fv1.FUNCTION_NAMESPACE: "default",
 				fv1.EXECUTOR_TYPE:      "poolmgr",
 				fv1.MANAGED:            "false",
+				fv1.SERVED_LABEL:       fv1.SERVED_VALUE,
 			},
 		},
 		Status: corev1.PodStatus{
@@ -105,6 +106,8 @@ func TestFunctionDescribe(t *testing.T) {
 		assert.Contains(t, out, "1/2", "partially-ready pod count (ready/total order)")
 		assert.Contains(t, out, "Invocable", "invocability headline")
 		assert.Contains(t, out, "Yes", "ready function with a warm pod is invocable")
+		assert.Contains(t, out, "serving", "served pod surfaced in the invocability headline (RFC-0002 data plane)")
+		assert.Contains(t, out, "SERVED", "pods table has a SERVED column")
 	})
 
 	t.Run("a not-Ready function reports not invocable", func(t *testing.T) {

@@ -154,18 +154,29 @@ func describePodsTo(out io.Writer, active []*corev1.Pod) {
 // pods — so it needs no executor diagnostics endpoint. A Ready function with no
 // warm pod is still invocable (it cold-starts), which is called out.
 func invocability(fn *fv1.Function, active []*corev1.Pod) string {
-	warm := 0
+	warm, serving := 0, 0
 	for _, pod := range active {
-		if ready, total := utils.PodContainerReadyStatus(pod); total > 0 && ready == total {
-			warm++
+		ready, total := utils.PodContainerReadyStatus(pod)
+		if total == 0 || ready != total {
+			continue
+		}
+		warm++
+		// fission.io/served=true means the pod is published to its function's
+		// EndpointSlice and actually serving traffic (RFC-0002 data plane).
+		if pod.Labels[fv1.SERVED_LABEL] == fv1.SERVED_VALUE {
+			serving++
 		}
 	}
 	switch util.ConditionStatus(fn.Status.Conditions, fv1.FunctionConditionReady) {
 	case string(metav1.ConditionTrue):
-		if warm > 0 {
+		switch {
+		case serving > 0:
+			return fmt.Sprintf("Yes (%d of %d warm pod(s) serving)", serving, warm)
+		case warm > 0:
 			return fmt.Sprintf("Yes (%d warm pod(s))", warm)
+		default:
+			return "Yes (cold start on first call)"
 		}
-		return "Yes (cold start on first call)"
 	case string(metav1.ConditionFalse):
 		return "No - function not Ready (see CONDITIONS)"
 	default:
