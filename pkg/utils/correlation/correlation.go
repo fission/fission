@@ -78,6 +78,16 @@ func FromContext(ctx context.Context) string {
 	return id
 }
 
+// SetRequestIDHeader propagates the request id from ctx onto an outgoing
+// request, when present, so a downstream service correlates with the
+// originating invocation (RFC-0015). The header rides outside any HMAC
+// canonical string (method + URI + body), so it never affects a signature.
+func SetRequestIDHeader(ctx context.Context, req *http.Request) {
+	if id := FromContext(ctx); id != "" {
+		req.Header.Set(HeaderRequestID, id)
+	}
+}
+
 // Middleware resolves the request id once per request — honoring an inbound
 // X-Fission-Request-ID or minting one — then makes it available three ways:
 // on the inbound request header (so the reverse proxy forwards it to the

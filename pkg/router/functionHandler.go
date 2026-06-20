@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -183,21 +182,21 @@ func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *h
 	proxy.ServeHTTP(responseWriter, request)
 }
 
-// classifyFunctionError attributes a function-side round-trip error to a stable
-// reason (RFC-0015). Connection-refused is checked first via errors.Is on the
-// syscall errno — robust to the raw *net.OpError the ReverseProxy transport
-// surfaces (network.IsConnRefusedError only matches *url.Error, which the
-// proxy path never produces) — and a refused connection is itself a dial
-// error, so it must win over the dial check. Everything else is the function
-// returning or closing unexpectedly.
-func classifyFunctionError(err error) (ferror.Component, string) {
-	if errors.Is(err, syscall.ECONNREFUSED) {
-		return ferror.ComponentFunction, ferror.ReasonConnectionRefused
+// classifyFunctionError returns the stable reason for a function-side
+// round-trip error (the component is always ComponentFunction) (RFC-0015).
+// Connection-refused is checked before dial because a refused connection is
+// itself a dial error; everything else is the function returning or closing
+// unexpectedly.
+func classifyFunctionError(err error) string {
+	if netErr := network.Adapter(err); netErr != nil {
+		switch {
+		case netErr.IsConnRefusedError():
+			return ferror.ReasonConnectionRefused
+		case netErr.IsDialError():
+			return ferror.ReasonDialError
+		}
 	}
-	if netErr := network.Adapter(err); netErr != nil && netErr.IsDialError() {
-		return ferror.ComponentFunction, ferror.ReasonDialError
-	}
-	return ferror.ComponentFunction, ferror.ReasonFunctionError
+	return ferror.ReasonFunctionError
 }
 
 // getProxyErrorHandler returns a reverse proxy error handler that, in addition
@@ -260,7 +259,8 @@ func (fh functionHandler) getProxyErrorHandler(start time.Time, rrt *RetryingRou
 			code, _ := ferror.GetHTTPError(err)
 			status = code
 			msg = "error sending request to function"
-			component, reason = classifyFunctionError(err)
+			component = ferror.ComponentFunction
+			reason = classifyFunctionError(err)
 			logger.Info(msg, "function", fh.function,
 				"status", http.StatusText(status), "code", code, "component", component, "reason", reason)
 		}

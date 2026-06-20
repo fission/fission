@@ -5,6 +5,7 @@
 package network
 
 import (
+	"errors"
 	"net"
 	"net/url"
 	"os"
@@ -51,32 +52,17 @@ func (e Error) IsDialError() bool {
 	return false
 }
 
-// IsConnRefusedError returns true if an error is a "connection refused" error
+// IsConnRefusedError returns true if an error is a "connection refused" error.
+// It matches both the raw *net.OpError carrying ECONNREFUSED (what a direct
+// transport dial surfaces) via errors.Is, and the *url.Error string form (what
+// an http.Client surfaces).
 func (e Error) IsConnRefusedError() bool {
-	urlErr, ok := e.err.(*url.Error)
-	if !ok {
-		return false
-	}
-
-	if strings.Contains(urlErr.Error(), "connection refused") {
+	if errors.Is(e.err, syscall.ECONNREFUSED) {
 		return true
 	}
-
-	netOpErr, ok := e.err.(*net.OpError)
-	if !ok {
-		return false
+	if urlErr, ok := errors.AsType[*url.Error](e.err); ok {
+		return strings.Contains(urlErr.Error(), "connection refused")
 	}
-
-	switch t := netOpErr.Err.(type) {
-	case *os.SyscallError:
-		if errno, ok := t.Err.(syscall.Errno); ok {
-			switch errno {
-			case syscall.ECONNREFUSED:
-				return true
-			}
-		}
-	}
-
 	return false
 }
 

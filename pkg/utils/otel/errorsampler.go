@@ -130,12 +130,9 @@ func (p *errorExportProcessor) ForceFlush(context.Context) error { return nil }
 // — the historical behavior — so installs that do not set the env are
 // unaffected.
 func baseSamplerFromEnv() sdktrace.Sampler {
-	arg := func() float64 {
-		f, err := strconv.ParseFloat(os.Getenv("OTEL_TRACES_SAMPLER_ARG"), 64)
-		if err != nil {
-			return 1
-		}
-		return f
+	ratio := 1.0
+	if f, err := strconv.ParseFloat(os.Getenv("OTEL_TRACES_SAMPLER_ARG"), 64); err == nil {
+		ratio = f
 	}
 	switch os.Getenv("OTEL_TRACES_SAMPLER") {
 	case "always_on", "parentbased_always_on", "":
@@ -143,9 +140,9 @@ func baseSamplerFromEnv() sdktrace.Sampler {
 	case "always_off", "parentbased_always_off":
 		return sdktrace.ParentBased(sdktrace.NeverSample())
 	case "traceidratio":
-		return sdktrace.TraceIDRatioBased(arg())
+		return sdktrace.TraceIDRatioBased(ratio)
 	case "parentbased_traceidratio":
-		return sdktrace.ParentBased(sdktrace.TraceIDRatioBased(arg()))
+		return sdktrace.ParentBased(sdktrace.TraceIDRatioBased(ratio))
 	default:
 		return sdktrace.ParentBased(sdktrace.AlwaysSample())
 	}

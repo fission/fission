@@ -96,9 +96,7 @@ func TestClassifyFunctionError(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			component, reason := classifyFunctionError(tc.err)
-			assert.Equal(t, ferror.ComponentFunction, component)
-			assert.Equal(t, tc.wantReason, reason)
+			assert.Equal(t, tc.wantReason, classifyFunctionError(tc.err))
 		})
 	}
 }

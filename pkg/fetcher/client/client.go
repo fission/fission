@@ -148,9 +148,7 @@ func sendRequest(logger logr.Logger, ctx context.Context, httpClient *http.Clien
 		httpReq.Header.Set("Content-Type", "application/json")
 		// Carry the per-invocation request id (RFC-0015) to the fetcher so a
 		// specialization's logs/traces correlate with the triggering request.
-		if id := correlation.FromContext(ctx); id != "" {
-			httpReq.Header.Set(correlation.HeaderRequestID, id)
-		}
+		correlation.SetRequestIDHeader(ctx, httpReq)
 
 		resp, err = httpClient.Do(httpReq)
 
