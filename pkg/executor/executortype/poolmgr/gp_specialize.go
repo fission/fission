@@ -12,12 +12,16 @@ import (
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	k8s_err "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	apiv1 "k8s.io/api/core/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	ferror "github.com/fission/fission/pkg/error"
 	fetcherClient "github.com/fission/fission/pkg/fetcher/client"
 	storagesvcClient "github.com/fission/fission/pkg/storagesvc/client"
 	"github.com/fission/fission/pkg/utils"
@@ -80,10 +84,28 @@ func fetcherSigningNamespace(pod *apiv1.Pod) (namespace string, nsScoped bool) {
 	return "", false
 }
 
-// specializePod chooses a pod, copies the required user-defined function to that pod
+// specializePod runs the specialization inside a cold-start child span
+// (RFC-0015): on failure the span is marked errored with the failure reason, so
+// a trace shows specialization as the failing phase (the error-biased sampler
+// guarantees such a trace is recorded even when head sampling would drop it).
+func (gp *GenericPool) specializePod(ctx context.Context, pod *apiv1.Pod, fn *fv1.Function) error {
+	ctx, span := otel.Tracer("fission-executor").Start(ctx, "coldstart/specialize")
+	span.SetAttributes(otelUtils.GetAttributesForFunction(fn)...)
+	defer span.End()
+
+	err := gp.doSpecializePod(ctx, pod, fn)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, ferror.ReasonSpecializationFailed)
+		span.SetAttributes(attribute.String("coldstart.failure_reason", ferror.ReasonSpecializationFailed))
+	}
+	return err
+}
+
+// doSpecializePod chooses a pod, copies the required user-defined function to that pod
 // (via fetcher), and calls the function-run container to load it, resulting in a
 // specialized pod.
-func (gp *GenericPool) specializePod(ctx context.Context, pod *apiv1.Pod, fn *fv1.Function) error {
+func (gp *GenericPool) doSpecializePod(ctx context.Context, pod *apiv1.Pod, fn *fv1.Function) error {
 	logger := otelUtils.LoggerWithTraceID(ctx, gp.logger)
 
 	// for fetcher we don't need to create a service, just talk to the pod directly

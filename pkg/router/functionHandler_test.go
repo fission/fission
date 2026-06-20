@@ -6,11 +6,15 @@ package router
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"syscall"
 	"testing"
 	"time"
 
@@ -23,6 +27,7 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
+	"github.com/fission/fission/pkg/utils/correlation"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
 
@@ -72,6 +77,93 @@ func TestProxyErrorHandler(t *testing.T) {
 		require.Containsf(t, respRecorder.Body.String(), cause.Error(),
 			"504 body should carry the abort reason for %v", cause)
 	}
+}
+
+func TestClassifyFunctionError(t *testing.T) {
+	t.Parallel()
+	connRefused := &net.OpError{Op: "dial", Net: "tcp", Err: &os.SyscallError{Syscall: "connect", Err: syscall.ECONNREFUSED}}
+	dialErr := &net.OpError{Op: "dial", Net: "tcp", Err: errors.New("i/o timeout")}
+
+	tests := []struct {
+		name       string
+		err        error
+		wantReason string
+	}{
+		{name: "connection refused", err: connRefused, wantReason: ferror.ReasonConnectionRefused},
+		{name: "dial error", err: dialErr, wantReason: ferror.ReasonDialError},
+		{name: "generic non-network error", err: errors.New("boom"), wantReason: ferror.ReasonFunctionError},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			component, reason := classifyFunctionError(tc.err)
+			assert.Equal(t, ferror.ComponentFunction, component)
+			assert.Equal(t, tc.wantReason, reason)
+		})
+	}
+}
+
+// TestProxyErrorHandlerStructuredBody pins the RFC-0015 structured failure body:
+// the JSON carries {component, reason, requestId}, the status code is unchanged
+// from the legacy mapping, and the X-Fission-Component header attributes the
+// failure. Verbose Message is gated behind debug.
+func TestProxyErrorHandlerStructuredBody(t *testing.T) {
+	logger := loggerfactory.GetLogger()
+	fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "dummy", Namespace: "dummy-bar"}}
+
+	newHandler := func(debug bool) func(http.ResponseWriter, *http.Request, error) {
+		fh := &functionHandler{logger: logger, function: fn, structuredErrors: true, isDebugEnv: debug}
+		return fh.getProxyErrorHandler(time.Now(), &RetryingRoundTripper{})
+	}
+
+	t.Run("executor capacity exceeded keeps 429 and attributes executor", func(t *testing.T) {
+		errHandler := newHandler(false)
+		invErr := ferror.NewInvocationError(ferror.ComponentExecutor, ferror.ReasonCapacityExceeded,
+			ferror.MakeError(ferror.ErrorTooManyRequests, "busy"))
+
+		req := httptest.NewRequest(http.MethodGet, "http://foobar.com", nil)
+		req = req.WithContext(correlation.NewContext(req.Context(), "req-123"))
+		rec := httptest.NewRecorder()
+		errHandler(rec, req, invErr)
+
+		require.Equal(t, http.StatusTooManyRequests, rec.Code)
+		assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
+		assert.Equal(t, string(ferror.ComponentExecutor), rec.Header().Get(correlation.HeaderComponent))
+
+		var body ferror.InvocationError
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+		assert.Equal(t, ferror.ComponentExecutor, body.Component)
+		assert.Equal(t, ferror.ReasonCapacityExceeded, body.Reason)
+		assert.Equal(t, "req-123", body.RequestID)
+		assert.Empty(t, body.Message, "raw detail must not leak without debug")
+	})
+
+	t.Run("function dial error attributes function with 500", func(t *testing.T) {
+		errHandler := newHandler(false)
+		dialErr := &net.OpError{Op: "dial", Net: "tcp", Err: errors.New("i/o timeout")}
+
+		req := httptest.NewRequest(http.MethodGet, "http://foobar.com", nil)
+		rec := httptest.NewRecorder()
+		errHandler(rec, req, dialErr)
+
+		require.Equal(t, http.StatusInternalServerError, rec.Code)
+		var body ferror.InvocationError
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+		assert.Equal(t, ferror.ComponentFunction, body.Component)
+		assert.Equal(t, ferror.ReasonDialError, body.Reason)
+	})
+
+	t.Run("debug header reveals raw detail only in debug env", func(t *testing.T) {
+		errHandler := newHandler(true)
+		req := httptest.NewRequest(http.MethodGet, "http://foobar.com", nil)
+		req.Header.Set(correlation.HeaderDebug, "true")
+		rec := httptest.NewRecorder()
+		errHandler(rec, req, errors.New("verbose detail"))
+
+		var body ferror.InvocationError
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+		assert.Contains(t, body.Message, "verbose detail")
+	})
 }
 
 // recordingExecutor implements eclient.ClientInterface and records the Function

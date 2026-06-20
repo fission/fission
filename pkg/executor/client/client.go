@@ -24,9 +24,20 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 	ferror "github.com/fission/fission/pkg/error"
+	"github.com/fission/fission/pkg/utils/correlation"
 	"github.com/fission/fission/pkg/utils/httpretry"
 	"github.com/fission/fission/pkg/utils/metrics"
 )
+
+// setCorrelationHeader propagates the per-invocation request id (RFC-0015) from
+// ctx onto an outgoing executor RPC so the executor can correlate a cold-start
+// with the router request that triggered it. The header rides outside the HMAC
+// canonical string (method + URI + body), so it never affects the signature.
+func setCorrelationHeader(ctx context.Context, req *http.Request) {
+	if id := correlation.FromContext(ctx); id != "" {
+		req.Header.Set(correlation.HeaderRequestID, id)
+	}
+}
 
 // tapFailureEscalation is the consecutive-failure count at which flushTaps
 // switches from a V(1) note to an error log (3 failures = ~15s of lost taps).
@@ -149,6 +160,7 @@ func (c *client) GetServiceForFunction(ctx context.Context, fn *fv1.Function) (s
 		return "", fmt.Errorf("could not create request for getting service for function: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	setCorrelationHeader(ctx, req)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -190,6 +202,7 @@ func (c *client) EnsureCapacity(ctx context.Context, fn *fv1.Function, observedR
 		return "", fmt.Errorf("could not create request for ensuring capacity for function: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	setCorrelationHeader(ctx, req)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {

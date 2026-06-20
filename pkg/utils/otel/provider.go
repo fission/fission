@@ -80,17 +80,26 @@ func InitProvider(ctx context.Context, logger logr.Logger, serviceName string) (
 	if err != nil {
 		return nil, err
 	}
-	tracerProvider := sdktrace.NewTracerProvider(
-		sdktrace.WithResource(res),
-	)
 	traceExporter, err := getTraceExporter(ctx, logger)
 	if err != nil {
 		return nil, err
 	}
 
+	tpOpts := []sdktrace.TracerProviderOption{sdktrace.WithResource(res)}
 	if traceExporter != nil {
-		bsp := sdktrace.NewBatchSpanProcessor(traceExporter)
-		tracerProvider.RegisterSpanProcessor(bsp)
+		// Pin the head sampler explicitly from OTEL_TRACES_SAMPLER (previously
+		// ignored) and wrap it so failed invocations are always recorded
+		// (RFC-0015): the base decides export volume for successful traces, and
+		// errorExportProcessor force-exports error spans the base dropped. Only
+		// applied when an exporter exists, so tracing stays fully inert (no span
+		// recording) when OTEL_EXPORTER_OTLP_ENDPOINT is unset.
+		tpOpts = append(tpOpts, sdktrace.WithSampler(errorBiasedSampler{base: baseSamplerFromEnv()}))
+	}
+	tracerProvider := sdktrace.NewTracerProvider(tpOpts...)
+
+	if traceExporter != nil {
+		tracerProvider.RegisterSpanProcessor(sdktrace.NewBatchSpanProcessor(traceExporter))
+		tracerProvider.RegisterSpanProcessor(newErrorExportProcessor(traceExporter, logger))
 	}
 
 	otel.SetTracerProvider(tracerProvider)

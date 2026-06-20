@@ -64,6 +64,7 @@ import (
 	"github.com/fission/fission/pkg/tenant"
 	"github.com/fission/fission/pkg/throttler"
 	"github.com/fission/fission/pkg/utils"
+	"github.com/fission/fission/pkg/utils/correlation"
 	"github.com/fission/fission/pkg/utils/crmanager"
 	"github.com/fission/fission/pkg/utils/httpmux"
 	"github.com/fission/fission/pkg/utils/httpsecurity"
@@ -251,8 +252,11 @@ func serve(ctx context.Context, logger logr.Logger, mgr *errgroup.Group, port in
 	// routes is wired inside buildMuxes; user-trigger routes do NOT
 	// get DenyAllCORS so user functions remain free to emit their own
 	// CORS responses (opt-in HTTPTrigger.CorsConfig lands in a follow-up).
+	// correlation.Middleware sits inside the OTEL handler so it observes the
+	// extracted SpanContext, and honors/mints X-Fission-Request-ID for every
+	// request — user-trigger proxies and router-owned routes alike.
 	publicHandler := httpsecurity.SecurityHeaders(
-		otelUtils.GetHandlerWithOTEL(publicMR, "fission-router", otelUtils.UrlsToIgnore("/router-healthz")),
+		otelUtils.GetHandlerWithOTEL(correlation.Middleware(publicMR), "fission-router", otelUtils.UrlsToIgnore("/router-healthz")),
 	)
 	mgr.Go(func() error {
 		httpserver.StartServer(ctx, logger, mgr, "router", fmt.Sprintf("%d", port), publicHandler)
@@ -269,7 +273,11 @@ func serve(ctx context.Context, logger logr.Logger, mgr *errgroup.Group, port in
 	// the NetworkPolicy still gating the port.
 	master := []byte(os.Getenv("FISSION_INTERNAL_AUTH_SECRET"))
 	masterOld := []byte(os.Getenv("FISSION_INTERNAL_AUTH_SECRET_OLD"))
-	internalHandlerInner := otelUtils.GetHandlerWithOTEL(internalMR, "fission-router-internal")
+	// correlation.Middleware is wrapped inside both the OTEL handler and the
+	// HMAC verifier (added below): the verifier still signs only method + URI +
+	// body, so the request-id header it sets post-verification never
+	// participates in the signature.
+	internalHandlerInner := otelUtils.GetHandlerWithOTEL(correlation.Middleware(internalMR), "fission-router-internal")
 	// Use the per-service derived key for ServiceRouterInternal so a
 	// leak of the router's runtime memory cannot forge requests on
 	// other Fission internal channels (storagesvc, fetcher, builder,
@@ -423,6 +431,10 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	if err != nil {
 		return fmt.Errorf("error making HTTP trigger set: %w", err)
 	}
+	// Structured failure-attribution error bodies (RFC-0015). Set on the
+	// trigger set (not threaded through the constructor) so every functionHandler
+	// it builds inherits it; the escape hatch restores the legacy plain-text body.
+	triggers.structuredErrors = cfg.structuredErrors
 	// Incremental route updates (RFC-0013): per-event route-table diffs +
 	// handler indirection; muxes rebuild only on shape changes. The escape
 	// hatch (ROUTER_INCREMENTAL_ROUTES=false) reinstates the legacy

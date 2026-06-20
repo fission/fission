@@ -64,6 +64,11 @@ type routerConfig struct {
 	// (RFC-0013). Default true; ROUTER_INCREMENTAL_ROUTES=false is the
 	// escape hatch reinstating the legacy full-rebuild loop for one release.
 	incrementalRoutes bool
+	// structuredErrors selects the JSON failure-attribution error body
+	// (RFC-0015). Default true; ROUTER_STRUCTURED_ERRORS=false is the escape
+	// hatch restoring the legacy plain-text error body for callers that scrape
+	// it. Status codes are identical either way.
+	structuredErrors bool
 }
 
 // loadRouterConfig parses the router's environment configuration. Behavior is
@@ -207,6 +212,18 @@ func loadRouterConfig(logger logr.Logger) (routerConfig, error) {
 			logger.Error(err, "failed to parse 'ROUTER_ENDPOINTSLICE_ENDPOINT_LB' - endpoint LB stays off", "value", raw)
 		} else {
 			cfg.endpointSliceEndpointLB = endpointLB
+		}
+	}
+
+	// Structured error responses (RFC-0015). Default ON; unparsable values keep
+	// the default and log — the escape hatch must not be able to brick startup.
+	cfg.structuredErrors = true
+	if raw := os.Getenv("ROUTER_STRUCTURED_ERRORS"); raw != "" {
+		structured, err := strconv.ParseBool(raw)
+		if err != nil {
+			logger.Error(err, "failed to parse 'ROUTER_STRUCTURED_ERRORS' - structured error responses stay enabled", "value", raw)
+		} else {
+			cfg.structuredErrors = structured
 		}
 	}
 

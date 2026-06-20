@@ -22,6 +22,7 @@ import (
 	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/fetcher"
+	"github.com/fission/fission/pkg/utils/correlation"
 )
 
 type (
@@ -145,6 +146,11 @@ func sendRequest(logger logr.Logger, ctx context.Context, httpClient *http.Clien
 			return nil, err
 		}
 		httpReq.Header.Set("Content-Type", "application/json")
+		// Carry the per-invocation request id (RFC-0015) to the fetcher so a
+		// specialization's logs/traces correlate with the triggering request.
+		if id := correlation.FromContext(ctx); id != "" {
+			httpReq.Header.Set(correlation.HeaderRequestID, id)
+		}
 
 		resp, err = httpClient.Do(httpReq)
 
