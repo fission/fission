@@ -1,6 +1,8 @@
 # RFC-0017: Function Developer Debugging Toolkit (CLI)
 
-- Status: Partially implemented — phase 1 (`fission function describe` over existing data) is implemented; phases 2–4 (`test` enrichment, `logs` correlation/streaming surfacing, cold-start hints) are planned.
+- Status: Partially implemented.
+  Phase 1 (`fission function describe`, with an invocability headline), phase 2 (`fission function test` enrichment), and the CLI side of phase 3 (`logs --request-id/--trace-id`, shipped with RFC-0016) are implemented.
+  The parts that need unbuilt **server** surfaces — the deep `/v2/diag/function` invocability endpoint (RFC-0015 phase 5), real streaming `--follow` (RFC-0016 phase 5), and the cold-start metrics panel (a CLI→Prometheus query path) — remain.
   See "As implemented".
 - Tracking issue: —
 - Supersedes: —
@@ -94,7 +96,19 @@ Each section is sourced independently and best-effort: a missing/unreadable pack
 Like `kubectl describe`, the command is human-readable only — `getmeta -o json` / `package info -o json` remain the machine-readable surfaces.
 Unit tests cover the rendering, the failed-build log, graceful degradation, and the not-found error; an integration test (`TestFunctionDescribe`) runs the real command against a warmed function.
 
-The invocability panel (RFC-0015 `/v2/diag/function`), recent-invocations (RFC-0016 access records), recent-log tail, and cold-start hints are deferred to later phases, gated on those surfaces.
+`describe` also renders an **Invocability** headline ("can I call this right now?") synthesized from the data it already has — the `Ready` condition plus the count of fully-ready pods — so it needs no executor endpoint: a Ready function with a warm pod reads `Yes (N warm pod(s))`, a Ready function with none reads `Yes (cold start on first call)`, and a not-Ready function reads `No`.
+The deeper executor-state view (`/v2/diag/function`: PoolCache/endpoint state, last cold-start error) remains future work.
+
+Phase 2 — `fission function test` enrichment — is implemented in `pkg/fission-cli/cmd/function/test.go`:
+
+- The per-invocation **request id** (`X-Fission-Request-ID`, RFC-0015) is echoed to **stderr** (keeping stdout clean for the function body) on every call, so the developer can immediately `fission function logs --request-id <id>`.
+- On failure, when the router attributed the error (the `X-Fission-Component` header is present), `test` renders a one-line diagnosis — `✗ function "x" failed in executor (specialization_failed) — status 503, request abc` — parsing the structured `{component, reason, message}` body (`pkg/error.InvocationError`); the debug `message` is shown when the server included it.
+  Absent the header (a server predating RFC-0015, or a function's own error response), it falls back to the raw body, so it degrades cleanly.
+  A correlated-logs hint naming the request id is printed after the existing pod-log/log-db grab.
+
+The structured-failure rendering is a pure, table-tested helper (`renderInvocationFailure`); the request-id echo and the structured `logs` filters (`--request-id`/`--trace-id`, RFC-0016) complete the CLI side of phase 3.
+
+Recent-invocations (RFC-0016 access records), a recent-log tail, real streaming `--follow` (RFC-0016 phase 5), and cold-start hints (a CLI→Prometheus path over `fission_function_cold_starts_total`) are deferred — they depend on server-side surfaces this CLI-only RFC does not build.
 
 ## Backward compatibility & migration
 

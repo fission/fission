@@ -99,6 +99,25 @@ func TestFunctionDescribe(t *testing.T) {
 		assert.Contains(t, out, "poolmgr-nodejs-hello-abc", "pod name")
 		assert.Contains(t, out, "2/2", "fully-ready pod count")
 		assert.Contains(t, out, "1/2", "partially-ready pod count (ready/total order)")
+		assert.Contains(t, out, "Invocable", "invocability headline")
+		assert.Contains(t, out, "Yes", "ready function with a warm pod is invocable")
+	})
+
+	t.Run("a not-Ready function reports not invocable", func(t *testing.T) {
+		fn := describeFunction()
+		fn.Status.Conditions = []metav1.Condition{
+			{Type: fv1.FunctionConditionReady, Status: metav1.ConditionFalse, Reason: "PackageFailed", Message: "build failed"},
+		}
+		pkg := &fv1.Package{
+			ObjectMeta: metav1.ObjectMeta{Name: "hello-pkg", Namespace: "default"},
+			Status:     fv1.PackageStatus{BuildStatus: fv1.BuildStatusFailed},
+		}
+		setDescribeClients(t, []runtime.Object{fn, pkg})
+
+		out := captureStdout(t, func() error { return Describe(describeInput("hello", "default")) })
+
+		assert.Contains(t, out, "Invocable", "invocability headline")
+		assert.Contains(t, out, "No", "not-Ready function is not invocable")
 	})
 
 	t.Run("a failed build shows the build log", func(t *testing.T) {

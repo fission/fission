@@ -92,6 +92,7 @@ func describeFunctionTo(out io.Writer, fn *fv1.Function, pkg *fv1.Package, pods 
 	fmt.Fprintf(w, "Environment:\t%s\n", environmentRef(fn.Spec.Environment))
 	fmt.Fprintf(w, "Executor:\t%s\n", valueOr(string(fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType)))
 	fmt.Fprintf(w, "Package:\t%s\n", valueOr(fn.Spec.Package.PackageRef.Name))
+	fmt.Fprintf(w, "Invocable:\t%s\n", invocability(fn, pods))
 	fmt.Fprintf(w, "Created:\t%s\n", util.AgeOf(fn.CreationTimestamp))
 	if line := kvLine(fn.Labels); line != "" {
 		fmt.Fprintf(w, "Labels:\t%s\n", line)
@@ -144,6 +145,33 @@ func describePodsTo(out io.Writer, pods []corev1.Pod) {
 			valueOr(pod.Status.PodIP), valueOr(pod.Labels[fv1.EXECUTOR_TYPE]), valueOr(pod.Labels[fv1.MANAGED]))
 	}
 	w.Flush()
+}
+
+// invocability answers "can I call this right now, and if not, why?" from the
+// data describe already has — the Ready condition and the count of fully-ready
+// pods — so it needs no executor diagnostics endpoint. A Ready function with no
+// warm pod is still invocable (it cold-starts), which is called out.
+func invocability(fn *fv1.Function, pods []corev1.Pod) string {
+	warm := 0
+	for i := range pods {
+		if pods[i].DeletionTimestamp != nil {
+			continue
+		}
+		if ready, total := utils.PodContainerReadyStatus(&pods[i]); total > 0 && ready == total {
+			warm++
+		}
+	}
+	switch util.ConditionStatus(fn.Status.Conditions, fv1.FunctionConditionReady) {
+	case string(metav1.ConditionTrue):
+		if warm > 0 {
+			return fmt.Sprintf("Yes (%d warm pod(s))", warm)
+		}
+		return "Yes (cold start on first call)"
+	case string(metav1.ConditionFalse):
+		return "No - function not Ready (see CONDITIONS)"
+	default:
+		return util.NoneValue
+	}
 }
 
 // environmentRef renders the environment reference, qualifying with the

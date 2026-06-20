@@ -6,6 +6,7 @@ package function
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -23,6 +24,7 @@ import (
 
 	"github.com/go-logr/logr"
 
+	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/cmd/httptrigger"
@@ -30,6 +32,7 @@ import (
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
 	"github.com/fission/fission/pkg/utils"
+	"github.com/fission/fission/pkg/utils/correlation"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
@@ -141,12 +144,23 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 		return fmt.Errorf("error reading response from function: %w", err)
 	}
 
+	// Echo the per-invocation request id (RFC-0015) to stderr — keeping stdout
+	// clean for the function body — so the developer can correlate this call.
+	reqID := resp.Header.Get(correlation.HeaderRequestID)
+	if reqID != "" {
+		fmt.Fprintf(os.Stderr, "Request ID: %s\n", reqID)
+	}
+
 	if resp.StatusCode < 400 {
 		os.Stdout.Write(body)
 		return nil
 	}
 
-	console.Errorf("calling function %s: %d; Please try again or fix the error: %s\n", m.Name, resp.StatusCode, string(body))
+	// On failure, render the structured RFC-0015 attribution when the router
+	// produced one (X-Fission-Component header), else the legacy raw body.
+	renderInvocationFailure(os.Stderr, m.Name, resp.StatusCode,
+		resp.Header.Get(correlation.HeaderComponent), reqID, body)
+
 	err = util.FunctionPodLogs(input.Context(), m.Name, m.Namespace, opts.Client())
 	if err != nil {
 		console.Errorf("getting function logs: %v. Try to get logs from log database.", err)
@@ -155,7 +169,36 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 			console.Errorf("getting function logs from log database: %v", err)
 		}
 	}
+	if reqID != "" {
+		fmt.Fprintf(os.Stderr, "Correlated logs: fission function logs --name %s --request-id %s --dbtype loki\n", m.Name, reqID)
+	}
 	return errors.New("error getting function response")
+}
+
+// renderInvocationFailure writes a one-line diagnosis for a failed `function
+// test`. When the router attributed the failure (RFC-0015), signalled by the
+// X-Fission-Component header, it names the responsible component, the stable
+// reason, and the request id; otherwise it falls back to the raw response body,
+// so it degrades cleanly against a server that predates RFC-0015.
+func renderInvocationFailure(out io.Writer, fnName string, statusCode int, component, reqID string, body []byte) {
+	if component == "" {
+		fmt.Fprintf(out, "✗ function %q returned %d: %s\n", fnName, statusCode, strings.TrimSpace(string(body)))
+		return
+	}
+	var ie ferror.InvocationError
+	_ = json.Unmarshal(body, &ie) // body may be empty/non-JSON; the header is authoritative for the component
+	line := fmt.Sprintf("✗ function %q failed in %s", fnName, component)
+	if ie.Reason != "" {
+		line += fmt.Sprintf(" (%s)", ie.Reason)
+	}
+	line += fmt.Sprintf(" — status %d", statusCode)
+	if reqID != "" {
+		line += fmt.Sprintf(", request %s", reqID)
+	}
+	fmt.Fprintln(out, line)
+	if ie.Message != "" {
+		fmt.Fprintf(out, "  detail: %s\n", ie.Message)
+	}
 }
 
 func doHTTPRequest(ctx context.Context, url string, headers []string, method, body string) (*http.Response, error) {

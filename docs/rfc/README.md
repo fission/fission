@@ -23,7 +23,7 @@ Each document carries a `Status` header naming the implementing PRs and, where a
 | [0014](0014-router-hot-path-efficiency.md) | Router Hot-Path Efficiency | Implemented ([#3491](https://github.com/fission/fission/pull/3491)) |
 | [0015](0015-invocation-correlation-and-failure-attribution.md) | Invocation Correlation & Failure Attribution | Implemented ([#3515](https://github.com/fission/fission/pull/3515)); phase 5 folded into RFC-0017 |
 | [0016](0016-otlp-native-logging-pipeline.md) | Cloud-Native, OTLP-Native Logging Pipeline | Partially implemented (read path [#3516](https://github.com/fission/fission/pull/3516), access record [#3517](https://github.com/fission/fission/pull/3517), CI round-trip [#3518](https://github.com/fission/fission/pull/3518); OTLP push / streaming / deprecation cutover remain) |
-| [0017](0017-function-developer-debugging-toolkit.md) | Function Developer Debugging Toolkit (CLI) | Partially implemented (phase 1 — `function describe`); `test`/`logs` enrichment + cold-start hints planned |
+| [0017](0017-function-developer-debugging-toolkit.md) | Function Developer Debugging Toolkit (CLI) | Partially implemented (`function describe` + invocability, `test` enrichment, `logs` correlation flags); server-dependent diag endpoint / streaming / cold-start metrics remain |
 
 ## Companion material
 
