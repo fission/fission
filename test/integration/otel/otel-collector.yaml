@@ -79,7 +79,11 @@ spec:
         runAsUser: 0
       containers:
         - name: otel-collector
-          image: otel/opentelemetry-collector-contrib:0.116.0
+          # Pin a statically-linked release: the distroless image ships no glibc
+          # loader, and 0.116.0's binary was anomalously built glibc-dynamic, so
+          # it fails with `exec /otelcol-contrib: no such file or directory`.
+          # 0.119.0+ reverted to a static binary.
+          image: otel/opentelemetry-collector-contrib:0.127.0
           args: ["--config=/etc/otel/config.yaml"]
           volumeMounts:
             - {name: config, mountPath: /etc/otel}
