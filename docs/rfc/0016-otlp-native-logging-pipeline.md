@@ -6,7 +6,9 @@
   Collection is delegated to an **operator-run external collector** — Fission does not bundle a collector container in the chart; it emits the structured logs an external pipeline ingests.
   A reference OpenTelemetry Collector + Loki wiring exercises the full round-trip on one CI leg (`test/integration/otel/`, not the chart).
   Streaming `--follow` is implemented (the kubernetes driver follows the pod stream, the loki driver opens the `/tail` WebSocket).
-  InfluxDB is deprecated (the driver warns and is disabled by default); only the control-plane OTLP log push and the env-image per-line helpers (separate `fission/environments` repo) remain.
+  Control-plane OTLP **log push** is implemented (opt-in via `OTEL_LOGS_ENABLED`): a `LoggerProvider` + `otlploggrpc` exporter in `pkg/utils/otel`, and a zap→OTLP bridge in `loggerfactory` so control-plane logs (carrying `trace_id`) are pushed alongside traces.
+  InfluxDB is deprecated (the driver warns and is disabled by default).
+  Everything in this repo is now implemented; only the env-image per-line helpers remain, and those live in the separate `fission/environments` repo.
   See "As implemented".
 - Tracking issue: —
 - Supersedes: the InfluxDB-v1.x + Fluent-Bit logging path (deprecated by this RFC)
@@ -237,6 +239,10 @@ Concrete surface:
 - **Streaming `--follow`** (phase 5) — an optional `LogStreamer` interface (`pkg/fission-cli/logdb`): `--follow` streams live to stdout when the driver supports it, otherwise falls back to the one-second poll.
   The kubernetes driver follows the pod log stream (`PodLogOptions.Follow`, one goroutine per env container, line-buffered under a lock); the loki driver opens the `/tail` WebSocket (`coder/websocket`, already vendored) and renders frames through the shared `lokiEntry` mapper.
   `writeLogEntry` now takes `io.Writer` so a live stream renders without buffering; a cancelled context is a clean stop.
+- **Control-plane OTLP log push** (phase 4) — `pkg/utils/otel/provider.go` `InitProvider` stands up a `sdklog.LoggerProvider` (batch processor + `otlploggrpc` exporter) and registers it globally, parallel to the `TracerProvider`; `pkg/utils/loggerfactory` tees the zap core to the `contrib/bridges/otelzap` bridge so each record is also emitted to that provider (carrying `trace_id`), gated to the console level.
+  **Opt-in**: requires `OTEL_LOGS_ENABLED=true` in addition to the OTLP endpoint (Helm `openTelemetry.logsEnabled`, default false), so enabling traces alone does not start pushing logs on upgrade.
+  Inert (global LoggerProvider stays no-op) when not enabled.
+  go.mod adds the OTel log SDK/exporter/bridge at the v1.44.0 line (core unchanged).
 
 The Loki adapter queries against the schema in "Structured-log standard" below, which the operator's external collector produces from the function pod labels + the access record — so it is immediately useful for a cluster already running a collector + Loki with that schema.
 
