@@ -27,7 +27,14 @@ data:
         start_at: beginning
         operators:
           # Strip the CRI/containerd wrapper, leaving the zap JSON as the body.
+          # add_metadata_from_filepath is disabled: it parses k8s identity from
+          # the log file path and needs log.file.path (off by default in the
+          # receiver), which otherwise makes every emit fail with
+          # "type '<nil>' cannot be parsed as log path field". We don't use the
+          # path metadata — the function identity comes from the access-record
+          # body below.
           - type: container
+            add_metadata_from_filepath: false
           # Parse the zap JSON into attributes; the body stays the JSON string
           # so Loki's `| json` pipeline can re-extract fission_request_id.
           # Non-JSON lines are dropped rather than failing the pipeline.
