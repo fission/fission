@@ -26,6 +26,13 @@ type LogDBOptions struct {
 	Client cmd.Client
 }
 
+func init() {
+	// The zero-dependency default: reads pod logs directly from the Kubernetes API.
+	Register(KUBERNETES, func(_ context.Context, opts LogDBOptions) (LogDatabase, error) {
+		return NewKubernetesEndpoint(opts)
+	})
+}
+
 type kubernetesLogs struct {
 	client cmd.Client
 }

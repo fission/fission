@@ -108,9 +108,12 @@ var (
 	FnLogPod                = Flag{Type: String, Name: flagkey.FnLogPod, Usage: "Function pod name (use the latest pod name if unspecified)"}
 	FnLogFollow             = Flag{Type: Bool, Name: flagkey.FnLogFollow, Short: "f", Usage: "Specify if the logs should be streamed"}
 	FnLogDetail             = Flag{Type: Bool, Name: flagkey.FnLogDetail, Short: "d", Usage: "Display detailed information"}
-	FnLogDBType             = Flag{Type: String, Name: flagkey.FnLogDBType, Usage: "Log database type, e.g. influxdb (currently influxdb and kubernetes logs are supported)", DefaultValue: "kubernetes"}
-	FnLogReverseQuery       = Flag{Type: Bool, Name: flagkey.FnLogReverseQuery, Short: "r", Usage: "Specify the log reverse query base on time, it will be invalid if the 'follow' flag is specified. valid for dbtype as influxdb"}
+	FnLogDBType             = Flag{Type: String, Name: flagkey.FnLogDBType, Usage: "Log database type: kubernetes (default), loki, or influxdb (deprecated)", DefaultValue: "kubernetes"}
+	FnLogReverseQuery       = Flag{Type: Bool, Name: flagkey.FnLogReverseQuery, Short: "r", Usage: "Specify the log reverse query base on time, it will be invalid if the 'follow' flag is specified. valid for dbtype as influxdb or loki"}
 	FnLogCount              = Flag{Type: Int, Name: flagkey.FnLogCount, Usage: "Get N most recent log records", DefaultValue: 20}
+	FnLogRequestID          = Flag{Type: String, Name: flagkey.FnLogRequestID, Usage: "Filter logs to a single invocation by its X-Fission-Request-ID (loki dbtype)"}
+	FnLogTraceID            = Flag{Type: String, Name: flagkey.FnLogTraceID, Usage: "Filter logs by trace id (loki dbtype)"}
+	FnLogLevel              = Flag{Type: String, Name: flagkey.FnLogLevel, Usage: "Filter logs by level, e.g. error (loki dbtype)"}
 	NamespacePod            = Flag{Type: String, Name: flagkey.NamespacePod, Usage: "Namespace in which function's pod are created. If not specified, function's namespace is used. Note: version <1.18 used fission-function as pod's default ns."}
 	FnTestBody              = Flag{Type: String, Name: flagkey.FnTestBody, Short: "b", Usage: "Request body"}
 	FnTestTimeout           = Flag{Type: Duration, Name: flagkey.FnTestTimeout, Short: "t", Usage: "Length of time to wait for the response. If set to zero or negative number, no timeout is set", DefaultValue: 60 * time.Second}

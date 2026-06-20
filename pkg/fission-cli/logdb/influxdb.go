@@ -19,6 +19,7 @@ import (
 	influxdbClient "github.com/influxdata/influxdb/client/v2"
 
 	ferror "github.com/fission/fission/pkg/error"
+	"github.com/fission/fission/pkg/fission-cli/console"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
@@ -26,6 +27,13 @@ const (
 	INFLUXDB_DATABASE = "fissionFunctionLog"
 	INFLUXDB_URL      = "http://influxdb:8086/query"
 )
+
+func init() {
+	Register(INFLUXDB, func(ctx context.Context, opts LogDBOptions) (LogDatabase, error) {
+		console.Warn("the influxdb log driver is deprecated (InfluxDB v1.x is end-of-life); migrate to the loki driver or the OTLP logging pipeline (RFC-0016)")
+		return NewInfluxDB(ctx, opts)
+	})
+}
 
 func NewInfluxDB(ctx context.Context, logDBOptions LogDBOptions) (InfluxDB, error) {
 
@@ -136,17 +144,8 @@ func (influx InfluxDB) GetLogs(ctx context.Context, filter LogFilter, output *by
 	sort.Sort(ByTimestamp(logEntries, filter.Reverse))
 
 	for _, logEntry := range logEntries {
-		if filter.Details {
-			msg := fmt.Sprintf("Timestamp: %s\nNamespace: %s\nFunction Name: %s\nFunction ID: %s\nPod: %s\nContainer: %s\nStream: %s\nLog: %s\n---\n",
-				logEntry.Timestamp, logEntry.Namespace, logEntry.FuncName, logEntry.FuncUid, logEntry.Pod, logEntry.Container, logEntry.Stream, logEntry.Message)
-			if _, err := output.WriteString(msg); err != nil {
-				return fmt.Errorf("error copying pod log: %w", err)
-			}
-		} else {
-			msg := fmt.Sprintf("[%s] %s\n", logEntry.Timestamp, logEntry.Message)
-			if _, err := output.WriteString(msg); err != nil {
-				return fmt.Errorf("error copying pod log: %w", err)
-			}
+		if err := writeLogEntry(output, logEntry, filter.Details); err != nil {
+			return err
 		}
 	}
 

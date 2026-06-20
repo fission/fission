@@ -61,6 +61,13 @@ func (opts *LogSubCommand) do(input cli.Input) error {
 		return fmt.Errorf("failed to get log from %s: %w", dbType, err)
 	}
 
+	// Correlation filters are only honored by backends that index those fields
+	// (the loki adapter); warn rather than silently return unfiltered logs.
+	if dbType != logdb.LOKI &&
+		(input.String(flagkey.FnLogRequestID) != "" || input.String(flagkey.FnLogTraceID) != "" || input.String(flagkey.FnLogLevel) != "") {
+		console.Warn(fmt.Sprintf("--request-id/--trace-id/--level filters are only applied by the loki dbtype and are ignored for %q", dbType))
+	}
+
 	requestChan := make(chan struct{})
 	responseChan := make(chan struct{})
 	ctx := input.Context()
@@ -84,6 +91,9 @@ func (opts *LogSubCommand) do(input cli.Input) error {
 					Details:        detail,
 					WarnUser:       warn,
 					AllPods:        allPods,
+					RequestID:      input.String(flagkey.FnLogRequestID),
+					TraceID:        input.String(flagkey.FnLogTraceID),
+					Level:          input.String(flagkey.FnLogLevel),
 				}
 
 				buf := new(bytes.Buffer)
@@ -120,10 +130,10 @@ func (opts *LogSubCommand) do(input cli.Input) error {
 
 		<-responseChan
 		if !input.Bool(flagkey.FnLogFollow) {
-			ctx.Done()
-			break
+			// One-shot query: surface a backend error (bad query, auth,
+			// unreachable) instead of swallowing it and exiting 0. err is set
+			// by the goroutine before it signals responseChan (happens-before).
+			return err
 		}
 	}
-
-	return nil
 }
