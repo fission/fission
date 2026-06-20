@@ -143,6 +143,21 @@ func Commands() *cobra.Command {
 		},
 	})
 
+	runCmd := wrapper.SubCommand(&cobra.Command{
+		Use:   "run",
+		Short: "Alpha: Run a function locally against its environment runtime image (RFC-0018)",
+		Long: "Alpha: Run a function locally in Docker against its real environment runtime image — " +
+			"no cluster round-trip. Resolve the runtime image from --env (cluster) or pass --image directly " +
+			"(cluster-less), then specialize and invoke the same way the cluster does.",
+	}, Run, flag.FlagSet{
+		Required: []flag.Flag{flag.PkgCode},
+		Optional: []flag.Flag{
+			flag.FnName, flag.FnEnvName, flag.FnImageName, flag.FnRunEnvVersion,
+			flag.FnEntryPoint, flag.HtMethod, flag.FnTestHeader, flag.FnTestBody,
+			flag.FnSubPath, flag.FnRunKeep, flag.NamespaceFunction,
+		},
+	})
+
 	runContainerCmd := wrapper.SubCommand(&cobra.Command{
 		Use:     "run-container",
 		Aliases: []string{"runc"},
@@ -219,7 +234,7 @@ func Commands() *cobra.Command {
 		Short:   "Create, update and manage functions",
 	}
 	command.AddCommand(createCmd, getCmd, getmetaCmd, describeCmd, updateCmd, deleteCmd, listCmd, logsCmd, testCmd,
-		runContainerCmd, updateContainerCmd, listPodsCmd, waitCmd, toolsCmd)
+		runCmd, runContainerCmd, updateContainerCmd, listPodsCmd, waitCmd, toolsCmd)
 
 	return command
 }

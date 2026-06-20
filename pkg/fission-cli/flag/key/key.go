@@ -83,6 +83,8 @@ const (
 	FnRequestsPerPod        = "requestsperpod"
 	FnOnceOnly              = "onceonly"
 	FnSubPath               = "subpath"
+	FnRunEnvVersion         = "env-version"
+	FnRunKeep               = "keep"
 	FnGracePeriod           = "graceperiod"
 	FnLogAllPods            = "all-pods"
 	FnRetainPods            = "retainpods"

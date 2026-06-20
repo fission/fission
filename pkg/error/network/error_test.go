@@ -6,6 +6,7 @@ package network
 
 import (
 	"errors"
+	"io"
 	"net"
 	"net/url"
 	"os"
@@ -48,6 +49,47 @@ func TestIsConnRefusedError(t *testing.T) {
 			netErr := Adapter(tc.err)
 			require.NotNil(t, netErr)
 			assert.Equal(t, tc.want, netErr.IsConnRefusedError())
+		})
+	}
+}
+
+func TestIsConnResetError(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{
+			name: "raw ECONNRESET",
+			err:  &net.OpError{Op: "read", Net: "tcp", Err: &os.SyscallError{Syscall: "read", Err: syscall.ECONNRESET}},
+			want: true,
+		},
+		{
+			// What an http.Client surfaces when a server (behind Docker's
+			// port-proxy) accepts then closes before responding: a *url.Error
+			// wrapping the io.EOF sentinel, matched via errors.Is unwrapping.
+			name: "url.Error premature EOF",
+			err:  &url.Error{Op: "Post", URL: "http://x", Err: io.EOF},
+			want: true,
+		},
+		{
+			name: "url.Error connection reset by peer string",
+			err:  &url.Error{Op: "Post", URL: "http://x", Err: errors.New("read: connection reset by peer")},
+			want: true,
+		},
+		{
+			name: "connection refused is not a reset",
+			err:  &url.Error{Op: "Get", URL: "http://x", Err: errors.New("connection refused")},
+			want: false,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			netErr := Adapter(tc.err)
+			require.NotNil(t, netErr)
+			assert.Equal(t, tc.want, netErr.IsConnResetError())
 		})
 	}
 }
