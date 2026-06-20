@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"testing"
 
 	"github.com/go-logr/logr"
@@ -114,6 +115,52 @@ func TestRunLocalDockerContainerExecutorE2E(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	require.NoError(t, runLocal(t.Context(), rt, cfg, &stdout, &stderr))
 	assert.Equal(t, "container-local", stdout.String())
+}
+
+// fakeBuilderDockerfile stands in for an env builder image: a server on 8001
+// implementing the build protocol — it copies the staged source
+// (/packages/<srcPkgFilename>) to an artifact dir and returns its name.
+const fakeBuilderDockerfile = `FROM python:3.12-alpine
+RUN printf '%s\n' \
+  'import json, os, shutil' \
+  'from http.server import BaseHTTPRequestHandler, HTTPServer' \
+  'class H(BaseHTTPRequestHandler):' \
+  '    def do_POST(self):' \
+  '        n = int(self.headers.get("Content-Length", 0))' \
+  '        req = json.loads(self.rfile.read(n) or b"{}")' \
+  '        art = req["srcPkgFilename"] + "-out"' \
+  '        shutil.copytree(os.path.join("/packages", req["srcPkgFilename"]), os.path.join("/packages", art))' \
+  '        self.send_response(200); self.send_header("Content-Type", "application/json"); self.end_headers()' \
+  '        self.wfile.write(json.dumps({"artifactFilename": art, "buildLogs": "fake build ok"}).encode())' \
+  'HTTPServer(("0.0.0.0", 8001), H).serve_forever()' > /builder.py
+CMD ["python", "/builder.py"]
+`
+
+func TestRunBuilderDockerE2E(t *testing.T) {
+	requireDocker(t)
+
+	const image = "fission-rfc0018-fakebuilder:test"
+	buildFakeImage(t, image, fakeBuilderDockerfile)
+
+	rt, err := newDockerRuntime(logr.Logger{})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = rt.Close() })
+
+	// Source directory the builder compiles.
+	srcDir := t.TempDir()
+	require.NoError(t, os.WriteFile(srcDir+"/main.go", []byte("package main"), 0o644))
+
+	dst := filepath.Join(t.TempDir(), "deployarchive")
+	cfg := runConfig{builderImage: image, codePath: srcDir, buildCommand: "go build"}
+
+	var stderr bytes.Buffer
+	require.NoError(t, runBuilder(t.Context(), rt, cfg, dst, &stderr))
+
+	// The artifact (the staged source) was collected to dst.
+	got, err := os.ReadFile(filepath.Join(dst, "main.go"))
+	require.NoError(t, err)
+	assert.Equal(t, "package main", string(got))
+	assert.Contains(t, stderr.String(), "fake build ok")
 }
 
 func buildFakeImage(t *testing.T, image, dockerfile string) {

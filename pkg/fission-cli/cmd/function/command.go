@@ -155,8 +155,11 @@ func Commands() *cobra.Command {
 		Optional: []flag.Flag{
 			flag.FnName, flag.FnExecutorType, flag.PkgCode, flag.FnEnvName, flag.FnImageName,
 			flag.FnRunEnvVersion, flag.FnEntryPoint, flag.FnPort,
-			flag.HtMethod, flag.FnTestHeader, flag.FnTestBody,
-			flag.FnSubPath, flag.FnRunKeep, flag.NamespaceFunction,
+			flag.HtMethod, flag.FnTestHeader, flag.FnTestBody, flag.FnSubPath,
+			flag.FnRunKeep, flag.FnRunWatch, flag.FnRunEnvVar, flag.FnRunEnvFile,
+			flag.FnSecret, flag.FnCfgMap, flag.FnRunDebugPort,
+			flag.FnRunBuild, flag.FnRunBuilderImage, flag.FnBuildCmd,
+			flag.NamespaceFunction,
 		},
 	})
 

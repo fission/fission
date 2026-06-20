@@ -7,11 +7,10 @@ package function
 import (
 	"context"
 	"fmt"
-	"net"
 	"net/netip"
-	"os"
 	"path/filepath"
 	"strconv"
+	"time"
 
 	"github.com/go-logr/logr"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -28,6 +27,8 @@ import (
 // their own server image and listen on a function-defined port instead.
 const (
 	localMountPath       = "/userfunc"
+	secretsMountPath     = "/secrets" // /secrets/<ns>/<name>/<key>, matching the fetcher
+	configsMountPath     = "/configs" // /configs/<ns>/<name>/<key>, matching the fetcher
 	envContainerPort     = 8888
 	targetFilenameDeploy = "deployarchive" // v2
 	targetFilenameUser   = "user"          // v1
@@ -64,17 +65,26 @@ type localRuntime interface {
 	Close() error
 }
 
-// containerSpec is the minimal description of the container `run-local` starts:
-// the image, an optional host directory bind-mounted as the userfunc volume
-// (empty for container-executor functions, which carry their own code), the
-// host port published to ContainerPort, the in-container port the server
-// listens on, and extra env vars.
+// bindMount is one host-dir → container-dir bind mount.
+type bindMount struct {
+	HostDir      string
+	ContainerDir string
+}
+
+// portMapping publishes a container port on a host port.
+type portMapping struct {
+	Host      int
+	Container int
+}
+
+// containerSpec describes a container `run-local` starts: the image, its bind
+// mounts (userfunc code, secrets, configmaps), the ports published to the host
+// (runtime/invoke port plus optional debug port), and extra env vars.
 type containerSpec struct {
-	Image         string
-	HostDir       string
-	HostPort      int
-	ContainerPort int
-	Env           []string
+	Image  string
+	Mounts []bindMount
+	Ports  []portMapping
+	Env    []string
 }
 
 // loadRequest is the wire shape of the env server's /v2/specialize body. It is
@@ -120,32 +130,13 @@ func specializeURL(hostPort, envVersion int) string {
 	return fmt.Sprintf("http://127.0.0.1:%d/specialize", hostPort)
 }
 
-// freePort asks the OS for an unused localhost TCP port.
-func freePort() (int, error) {
-	l, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		return 0, err
-	}
-	defer l.Close()
-	return l.Addr().(*net.TCPAddr).Port, nil
-}
-
-// prepareSourceMount lays a single source file out as the runtime expects under
-// a fresh temp dir: <dir>/<targetFilename>. Returns the host directory to mount.
-func prepareSourceMount(codePath string, envVersion int) (string, error) {
-	dir, err := os.MkdirTemp("", "fission-run-")
-	if err != nil {
-		return "", fmt.Errorf("creating local mount dir: %w", err)
-	}
-	src, err := os.ReadFile(codePath)
-	if err != nil {
-		return "", fmt.Errorf("reading source %q: %w", codePath, err)
-	}
-	dst := filepath.Join(dir, targetFilename(envVersion))
-	if err := os.WriteFile(dst, src, 0o644); err != nil {
-		return "", fmt.Errorf("writing source into mount: %w", err)
-	}
-	return dir, nil
+// stopQuietly tears down a container with a bounded, cancellation-immune context
+// so teardown still runs after Ctrl-C (the container outlives ctx) but a wedged
+// daemon can't hang CLI exit.
+func stopQuietly(ctx context.Context, rt localRuntime, id string) {
+	stopCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+	defer cancel()
+	_ = rt.Stop(stopCtx, id)
 }
 
 // dockerRuntime is the moby/moby/client-backed localRuntime.
@@ -180,28 +171,32 @@ func (d *dockerRuntime) PullImage(ctx context.Context, image string) error {
 }
 
 func (d *dockerRuntime) StartContainer(ctx context.Context, spec containerSpec) (string, error) {
-	if spec.ContainerPort < 1 || spec.ContainerPort > 65535 {
-		return "", fmt.Errorf("invalid container port %d", spec.ContainerPort)
+	exposed := network.PortSet{}
+	bindings := network.PortMap{}
+	for _, p := range spec.Ports {
+		if p.Container < 1 || p.Container > 65535 {
+			return "", fmt.Errorf("invalid container port %d", p.Container)
+		}
+		port, ok := network.PortFrom(uint16(p.Container), network.TCP)
+		if !ok {
+			return "", fmt.Errorf("invalid container port %d", p.Container)
+		}
+		exposed[port] = struct{}{}
+		bindings[port] = []network.PortBinding{{HostIP: netip.MustParseAddr("127.0.0.1"), HostPort: strconv.Itoa(p.Host)}}
 	}
-	port, ok := network.PortFrom(uint16(spec.ContainerPort), network.TCP)
-	if !ok {
-		return "", fmt.Errorf("invalid container port %d", spec.ContainerPort)
+
+	binds := make([]string, 0, len(spec.Mounts))
+	for _, m := range spec.Mounts {
+		binds = append(binds, m.HostDir+":"+m.ContainerDir)
 	}
-	hostConfig := &container.HostConfig{
-		PortBindings: network.PortMap{port: []network.PortBinding{{HostIP: netip.MustParseAddr("127.0.0.1"), HostPort: strconv.Itoa(spec.HostPort)}}},
-	}
-	// Container-executor functions carry their own code in the image; only env
-	// runtimes need the userfunc bind mount.
-	if spec.HostDir != "" {
-		hostConfig.Binds = []string{spec.HostDir + ":" + localMountPath}
-	}
+
 	created, err := d.cli.ContainerCreate(ctx, client.ContainerCreateOptions{
 		Config: &container.Config{
 			Image:        spec.Image,
 			Env:          spec.Env,
-			ExposedPorts: network.PortSet{port: struct{}{}},
+			ExposedPorts: exposed,
 		},
-		HostConfig: hostConfig,
+		HostConfig: &container.HostConfig{Binds: binds, PortBindings: bindings},
 	})
 	if err != nil {
 		return "", fmt.Errorf("creating container: %w", err)

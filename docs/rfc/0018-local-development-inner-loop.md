@@ -1,6 +1,6 @@
 # RFC-0018: Local-Development Inner Loop for Function Developers
 
-- Status: Partially implemented (phases 0–1; branch `feat/rfc-0018-function-run-local`)
+- Status: Implemented (phases 0–5 except `--remote`; branch `feat/rfc-0018-function-run-local`)
 - Tracking issue: —
 - Supersedes: —
 - Targets: Fission v1.N+ (phased; an interpreted-language MVP ships first)
@@ -194,7 +194,26 @@ What matched the design, and the two deviations worth recording:
 Files: `pkg/fission-cli/cmd/function/{run.go,run_local.go,run_test.go,run_local_docker_test.go}`, the `httpx.PostWithConnRetry` helper + `network.Error.IsConnResetError`, two new flags (`--env-version`, `--keep`) plus reused `--executor`/`--port`/`--code`/`--env`/`--image`, and the `run-local` command registration.
 The Docker e2e (`run_local_docker_test.go`) is gated behind `FISSION_RUN_DOCKER_TESTS=1` so it never runs in default CI; the unit flow test (`TestRunLocalFlow`) exercises specialize + invoke end-to-end through the real `httpx`/`DoHTTPRequest` code with only the container engine faked.
 
-Carried forward (not yet built): the env-CRD path is wired (`--env` resolves `Runtime.Image` + `Version`), but `--watch`, `--build`, `--env-from`, `--query`, source-archive/`--src` builder envs, and a blocking persistent-server mode remain phases 2–5 below.
+### Phases 2–5 (as implemented)
+
+Phases 2, 3, 4 (the local bridges), and 5 followed, all behind the generalized `containerSpec` (multiple bind mounts + published ports):
+
+- **Phase 2 — env bridges + hot reload.**
+  `-e KEY=VALUE` (repeatable) and `--env-from <file>` feed the container's env; `--watch` (fsnotify on the source's parent dir, debounced) re-runs `materialize` + `specialize` on each save without restarting the container, serving until Ctrl-C.
+  `--watch` is env-executors-only (container functions carry their own prebuilt image).
+- **Phase 3 — builder leg.**
+  `--build` runs the env's builder image (`run_builder.go`), reproducing buildermgr's contract — stage source under `/packages`, POST `{srcPkgFilename, command}` to `:8001`, collect the artifact — and lays the result at the single deploy target so the runtime specializes it.
+  The builder image/command come from `--builder-image`/`--buildcmd` (cluster-less) or the resolved environment.
+  The deploy target is `targetFilename(envVersion)`, shared with the interpreted path so a v1 env and a builder env never disagree on where the code lands.
+- **Phase 4 — fidelity bridges (local).**
+  `--secret`/`--configmap` read the named cluster objects and materialize them (one file per key) at `/secrets/<ns>/<name>` and `/configs/<ns>/<name>`, the fetcher's on-disk layout.
+  The temp dirs holding decrypted Secret data are owned by `do()` and reclaimed on every exit path.
+  `--remote` (approach C) is **not** built — it is a separate cluster-side architecture (dev-pod + source sync) and warrants its own RFC/PR.
+- **Phase 5 — debugger.**
+  `--debug-port N` publishes an additional `127.0.0.1:N→N` port for delve/debugpy to attach to.
+
+The shared connect-retry (`httpx.PostWithConnRetry` for specialize, `httpx.WaitReady` for the container/builder readiness probe) is factored onto one backoff core; `utils.FindFreePort` is reused for host ports.
+Gated Docker e2e tests cover the env, container-executor, and builder legs end-to-end against a real daemon.
 
 ## Phased implementation
 
@@ -202,11 +221,10 @@ Carried forward (not yet built): the env-CRD path is wired (`--env` resolves `Ru
 1. **MVP: interpreted, one-shot** — `fission function run-local --env <interpreted> --code f.py [--image …] [invoke flags]`: resolve env image → `docker run` → bind-mount → `/v2/specialize` with retry → single invoke via the shared path with `X-Fission-*` headers → print → teardown. ✅ **shipped** (all executor types via `--executor`: poolmgr/newdeploy specialize, container runs the user image directly).
    Cluster-less with `--image`.
    This alone collapses the loop to container-start + sub-second.
-2. **Watch + persistent server** — `--watch` (re-specialize without restart, restart fallback), `--keep`, `--env-from`/`-e`.
-3. **Builder leg** — run `Builder.Image` locally, stream build logs, feed the deploy dir to the runtime.
-   Enables Go/Java/.NET.
-4. **Fidelity bridges + remote** — `--secrets-from`/`--configmap-from` materializing real objects into `/secrets`/`/configs`, a port-forward helper for dependencies, and `--remote` (approach C) for users without local Docker or needing true cluster networking.
-5. **Debug** — map the env image's debug port; document delve/debugpy attach.
+2. **Watch + persistent server** — `--watch` (re-specialize without restart), `--keep`, `--env-from`/`-e`. ✅ **shipped**
+3. **Builder leg** — run `Builder.Image` locally, stream build logs, feed the deploy artifact to the runtime. ✅ **shipped** (enables Go/Java/.NET via `--build`).
+4. **Fidelity bridges + remote** — `--secret`/`--configmap` materializing real objects into `/secrets`/`/configs`. ✅ **shipped** (local bridges); `--remote` (approach C) **deferred** to its own RFC/PR — a port-forward helper and the cluster dev-pod path are a distinct architecture, not local Docker.
+5. **Debug** — `--debug-port` publishes the env image's debug port for delve/debugpy attach. ✅ **shipped**
 
 ## Backward compatibility & migration
 

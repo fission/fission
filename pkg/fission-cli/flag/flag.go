@@ -134,6 +134,12 @@ var (
 	FnSubPath               = Flag{Type: String, Name: flagkey.FnSubPath, Usage: "Sub Path to check if function internally supports routing"}
 	FnRunEnvVersion         = Flag{Type: Int, Name: flagkey.FnRunEnvVersion, Usage: "Environment API version of the runtime image when running locally with --image (ignored when --env resolves it)", DefaultValue: 2}
 	FnRunKeep               = Flag{Type: Bool, Name: flagkey.FnRunKeep, Usage: "Keep the local function container and mount running after the invocation instead of tearing it down"}
+	FnRunWatch              = Flag{Type: Bool, Name: flagkey.FnRunWatch, Short: "w", Usage: "Serve the function locally and re-specialize on source change (hot reload); env executors only"}
+	FnRunDebugPort          = Flag{Type: Int, Name: flagkey.FnRunDebugPort, Usage: "Publish an additional container port for a debugger (delve/debugpy) to attach to"}
+	FnRunEnvVar             = Flag{Type: StringSlice, Name: flagkey.FnRunEnvVar, Short: "e", Usage: "Set a runtime env var KEY=VALUE in the local container (repeatable)"}
+	FnRunEnvFile            = Flag{Type: String, Name: flagkey.FnRunEnvFile, Usage: "Read runtime env vars from a file (one KEY=VALUE per line); -e overrides"}
+	FnRunBuild              = Flag{Type: Bool, Name: flagkey.FnRunBuild, Usage: "Compile the source with the environment builder image before running (compiled environments)"}
+	FnRunBuilderImage       = Flag{Type: String, Name: flagkey.FnRunBuilderImage, Usage: "Builder image to use with --build when running cluster-less (defaults to the environment's builder image)"}
 	FnLogAllPods            = Flag{Type: Bool, Name: flagkey.FnLogAllPods, Usage: "Get all pod's logs in the function."}
 	FnRetainPods            = Flag{Type: Int, Name: flagkey.FnRetainPods, Usage: "Number of pods to retain after pods specialization.", DefaultValue: 0}
 	// Termination Grace Period configurable at function creation/update only for container functions

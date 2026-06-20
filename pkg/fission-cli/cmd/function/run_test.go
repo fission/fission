@@ -14,7 +14,9 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -112,9 +114,11 @@ func TestShortID(t *testing.T) {
 type fakeRuntime struct {
 	echo string // body returned on invoke
 
+	mu             sync.Mutex // guards fields written by the server goroutine
 	srv            *http.Server
 	pulled         []string
 	stopped        bool
+	lastSpec       containerSpec
 	specializePath string
 	specializeBody []byte
 	invokeHeaders  http.Header
@@ -126,23 +130,44 @@ func (f *fakeRuntime) PullImage(ctx context.Context, image string) error {
 	return nil
 }
 
+// getSpecializePath / setSpecializePath synchronize access for tests (like
+// --watch) that read the field while the server goroutine is still running.
+func (f *fakeRuntime) getSpecializePath() string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.specializePath
+}
+
+func (f *fakeRuntime) setSpecializePath(s string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.specializePath = s
+}
+
 func (f *fakeRuntime) StartContainer(ctx context.Context, spec containerSpec) (string, error) {
+	f.lastSpec = spec
 	mux := http.NewServeMux()
 	record := func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		f.mu.Lock()
 		f.specializePath = r.URL.Path
-		f.specializeBody, _ = io.ReadAll(r.Body)
+		f.specializeBody = body
+		f.mu.Unlock()
 		w.WriteHeader(http.StatusOK)
 	}
 	mux.HandleFunc("/v2/specialize", record)
 	mux.HandleFunc("/specialize", record)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		f.mu.Lock()
 		f.invokeHeaders = r.Header.Clone()
-		f.invokeBody, _ = io.ReadAll(r.Body)
+		f.invokeBody = body
+		f.mu.Unlock()
 		w.Header().Set(correlation.HeaderRequestID, "test-req-1")
 		fmt.Fprint(w, f.echo)
 	})
 
-	ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", spec.HostPort))
+	ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", spec.Ports[0].Host))
 	if err != nil {
 		return "", err
 	}
@@ -254,6 +279,82 @@ func TestRunLocalKeepLeavesContainer(t *testing.T) {
 
 	assert.False(t, f.stopped, "container should be left running with --keep")
 	assert.Contains(t, stderr.String(), "Keeping container")
+}
+
+func TestParseEnvFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".env")
+	require.NoError(t, os.WriteFile(path, []byte("# a comment\nFOO=bar\n\n  BAZ=qux  \n"), 0o644))
+
+	got, err := parseEnvFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"FOO=bar", "BAZ=qux"}, got)
+
+	bad := filepath.Join(dir, "bad.env")
+	require.NoError(t, os.WriteFile(bad, []byte("NOTAVAR\n"), 0o644))
+	_, err = parseEnvFile(bad)
+	require.Error(t, err)
+}
+
+func TestRunLocalPropagatesEnvAndPorts(t *testing.T) {
+	f := &fakeRuntime{echo: "ok"}
+	cfg := runConfig{
+		image:         "img:test",
+		containerPort: envContainerPort,
+		specialize:    true,
+		envVersion:    2,
+		codePath:      writeTempCode(t, "x"),
+		functionMeta:  metav1.ObjectMeta{Name: "fn", Namespace: "default"},
+		method:        http.MethodGet,
+		env:           []string{"FOO=bar"},
+		debugPort:     5005,
+		extraMounts:   []bindMount{{HostDir: t.TempDir(), ContainerDir: "/secrets/default/s1"}},
+	}
+
+	var stdout, stderr bytes.Buffer
+	require.NoError(t, runLocal(t.Context(), f, cfg, &stdout, &stderr))
+
+	assert.Equal(t, []string{"FOO=bar"}, f.lastSpec.Env)
+	// The userfunc mount comes first, then the materialized secret mount.
+	require.Len(t, f.lastSpec.Mounts, 2)
+	assert.Equal(t, localMountPath, f.lastSpec.Mounts[0].ContainerDir)
+	assert.Equal(t, "/secrets/default/s1", f.lastSpec.Mounts[1].ContainerDir)
+	// The invoke port plus the debug port are both published.
+	require.Len(t, f.lastSpec.Ports, 2)
+	assert.Equal(t, envContainerPort, f.lastSpec.Ports[0].Container)
+	assert.Equal(t, 5005, f.lastSpec.Ports[1].Container)
+	assert.Equal(t, 5005, f.lastSpec.Ports[1].Host)
+}
+
+func TestRunLocalWatchReloadsOnChange(t *testing.T) {
+	f := &fakeRuntime{echo: "ok"}
+	code := writeTempCode(t, "v1")
+	cfg := runConfig{
+		image:         "img:test",
+		containerPort: envContainerPort,
+		specialize:    true,
+		envVersion:    2,
+		codePath:      code,
+		functionMeta:  metav1.ObjectMeta{Name: "fn", Namespace: "default"},
+		method:        http.MethodGet,
+		watch:         true,
+	}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	t.Cleanup(cancel)
+	done := make(chan error, 1)
+	go func() { done <- runLocal(ctx, f, cfg, io.Discard, io.Discard) }()
+
+	// Wait for the initial specialize, then edit the source and expect a re-specialize.
+	require.Eventually(t, func() bool { return f.getSpecializePath() == "/v2/specialize" }, 3*time.Second, 10*time.Millisecond)
+	f.setSpecializePath("")
+	require.NoError(t, os.WriteFile(code, []byte("v2"), 0o644))
+	require.Eventually(t, func() bool { return f.getSpecializePath() == "/v2/specialize" }, 3*time.Second, 10*time.Millisecond,
+		"editing the source should trigger a re-specialize")
+
+	cancel()
+	require.NoError(t, <-done)
+	assert.True(t, f.stopped)
 }
 
 func TestRunLocalContainerExecutorSkipsSpecialize(t *testing.T) {

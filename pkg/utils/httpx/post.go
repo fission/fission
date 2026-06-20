@@ -42,13 +42,10 @@ func PostWithConnRetry(ctx context.Context, client *http.Client, url, contentTyp
 			return nil
 		}
 
-		netErr := network.Adapter(err)
-		if netErr != nil && (netErr.IsConnRefusedError() || netErr.IsDialError() || netErr.IsConnResetError()) && i < maxRetries-1 {
-			logger.Error(netErr, "error connecting, retrying", "url", url)
-			select {
-			case <-ctx.Done():
-				return fmt.Errorf("post %s: %w", url, ctx.Err())
-			case <-time.After(500 * time.Duration(2*i+1) * time.Millisecond):
+		if isStartupConnError(err) && i < maxRetries-1 {
+			logger.Error(network.Adapter(err), "error connecting, retrying", "url", url)
+			if berr := backoff(ctx, i); berr != nil {
+				return fmt.Errorf("post %s: %w", url, berr)
 			}
 			continue
 		}
@@ -59,4 +56,46 @@ func PostWithConnRetry(ctx context.Context, client *http.Client, url, contentTyp
 		return fmt.Errorf("post %s: %w", url, err)
 	}
 	return fmt.Errorf("post %s after %d retries: %w", url, maxRetries, err)
+}
+
+// WaitReady polls url with GET until the server returns any HTTP response (i.e.
+// it is up), retrying the same connection-level failures as PostWithConnRetry
+// while the server starts. Used to gate a server that has no specialize/load call
+// to drive readiness (e.g. a container-executor function's own image).
+func WaitReady(ctx context.Context, client *http.Client, url string, maxRetries int) error {
+	var err error
+	for i := range maxRetries {
+		var resp *http.Response
+		resp, err = ctxhttp.Get(ctx, client, url)
+		if err == nil {
+			resp.Body.Close()
+			return nil
+		}
+		if isStartupConnError(err) && i < maxRetries-1 {
+			if berr := backoff(ctx, i); berr != nil {
+				return fmt.Errorf("get %s: %w", url, berr)
+			}
+			continue
+		}
+		return fmt.Errorf("get %s: %w", url, err)
+	}
+	return fmt.Errorf("get %s after %d retries: %w", url, maxRetries, err)
+}
+
+// isStartupConnError reports whether err is the kind of connection-level failure
+// a not-yet-ready server produces (refused / dial / reset / premature-EOF), and
+// so is worth retrying for an idempotent request.
+func isStartupConnError(err error) bool {
+	netErr := network.Adapter(err)
+	return netErr != nil && (netErr.IsConnRefusedError() || netErr.IsDialError() || netErr.IsConnResetError())
+}
+
+// backoff waits the i-th attempt's delay, returning ctx.Err() if canceled first.
+func backoff(ctx context.Context, i int) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(500 * time.Duration(2*i+1) * time.Millisecond):
+		return nil
+	}
 }
