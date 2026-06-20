@@ -60,6 +60,15 @@ func Commands() *cobra.Command {
 		Optional: []flag.Flag{flag.NamespaceFunction, flag.Output},
 	})
 
+	describeCmd := wrapper.SubCommand(&cobra.Command{
+		Use:     "describe",
+		Aliases: []string{},
+		Short:   "Describe a function's health in one view (summary, conditions, build, pods)",
+	}, Describe, flag.FlagSet{
+		Required: []flag.Flag{flag.FnName},
+		Optional: []flag.Flag{flag.NamespaceFunction},
+	})
+
 	updateCmd := wrapper.SubCommand(&cobra.Command{
 		Use:     "update",
 		Aliases: []string{},
@@ -209,7 +218,7 @@ func Commands() *cobra.Command {
 		Aliases: []string{"fn"},
 		Short:   "Create, update and manage functions",
 	}
-	command.AddCommand(createCmd, getCmd, getmetaCmd, updateCmd, deleteCmd, listCmd, logsCmd, testCmd,
+	command.AddCommand(createCmd, getCmd, getmetaCmd, describeCmd, updateCmd, deleteCmd, listCmd, logsCmd, testCmd,
 		runContainerCmd, updateContainerCmd, listPodsCmd, waitCmd, toolsCmd)
 
 	return command
