@@ -69,6 +69,12 @@ type routerConfig struct {
 	// hatch restoring the legacy plain-text error body for callers that scrape
 	// it. Status codes are identical either way.
 	structuredErrors bool
+	// accessLog emits one structured per-invocation access record to stdout
+	// (RFC-0016) for an external log collector to ingest — the correlation key
+	// behind `fission function logs --request-id`. Wired to the existing
+	// DISPLAY_ACCESS_LOG flag (chart: router.displayAccessLog, default false);
+	// off adds no per-request log volume.
+	accessLog bool
 }
 
 // loadRouterConfig parses the router's environment configuration. Behavior is
@@ -224,6 +230,18 @@ func loadRouterConfig(logger logr.Logger) (routerConfig, error) {
 			logger.Error(err, "failed to parse 'ROUTER_STRUCTURED_ERRORS' - structured error responses stay enabled", "value", raw)
 		} else {
 			cfg.structuredErrors = structured
+		}
+	}
+
+	// Per-invocation access record (RFC-0016), wired to the existing
+	// DISPLAY_ACCESS_LOG flag (chart: router.displayAccessLog). Default OFF;
+	// unparsable values keep the default and log (opt-in must not brick startup).
+	if raw := os.Getenv("DISPLAY_ACCESS_LOG"); raw != "" {
+		access, err := strconv.ParseBool(raw)
+		if err != nil {
+			logger.Error(err, "failed to parse 'DISPLAY_ACCESS_LOG' - access record stays disabled", "value", raw)
+		} else {
+			cfg.accessLog = access
 		}
 	}
 

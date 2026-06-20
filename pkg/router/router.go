@@ -435,6 +435,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	// trigger set (not threaded through the constructor) so every functionHandler
 	// it builds inherits it; the escape hatch restores the legacy plain-text body.
 	triggers.structuredErrors = cfg.structuredErrors
+	triggers.accessLog = cfg.accessLog
 	// Incremental route updates (RFC-0013): per-event route-table diffs +
 	// handler indirection; muxes rebuild only on shape changes. The escape
 	// hatch (ROUTER_INCREMENTAL_ROUTES=false) reinstates the legacy

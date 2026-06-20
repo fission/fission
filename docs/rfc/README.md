@@ -22,7 +22,7 @@ Each document carries a `Status` header naming the implementing PRs and, where a
 | [0013](0013-incremental-router-routes.md) | Incremental Router Route Updates | Implemented (phases 0–2; phase 3 gated, not built) |
 | [0014](0014-router-hot-path-efficiency.md) | Router Hot-Path Efficiency | Implemented ([#3491](https://github.com/fission/fission/pull/3491)) |
 | [0015](0015-invocation-correlation-and-failure-attribution.md) | Invocation Correlation & Failure Attribution | Implemented ([#3515](https://github.com/fission/fission/pull/3515)); phase 5 folded into RFC-0017 |
-| [0016](0016-otlp-native-logging-pipeline.md) | Cloud-Native, OTLP-Native Logging Pipeline | Proposed (read path implemented) |
+| [0016](0016-otlp-native-logging-pipeline.md) | Cloud-Native, OTLP-Native Logging Pipeline | Proposed (read path + router access record implemented; collection is operator-run) |
 
 ## Companion material
 
