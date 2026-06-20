@@ -46,6 +46,14 @@ router stdout (access record, zap JSON)
   resource attributes (`groupbyattrs`), and pushes to Loki's OTLP endpoint.
   No Kubernetes RBAC is needed: the function identity comes from the router log
   body, not pod labels, so the Collector reads only the node's pod-log files.
+- `metrics-collector.reference.yaml` — **reference, not run by CI** (RFC-0016
+  §1b): a Collector `prometheus` receiver that scrapes Fission's existing
+  `/metrics:8080` endpoints (the same targets the chart's ServiceMonitor
+  selects) and exports them as OTLP. This brings **metrics** into the same
+  OpenTelemetry pipeline as traces and logs at the collection layer, with **no
+  instrumentation change** and full backward compatibility (the Prometheus
+  scrape path keeps working). Operators adapt the backend endpoint + grant the
+  Collector ServiceAccount the Kubernetes service-discovery RBAC.
 
 ## Running the test locally
 
