@@ -378,14 +378,6 @@ func GetEnvVarFromStringSlice(params []string) []v1.EnvVar {
 	return envVarList
 }
 
-func UrlForFunction(name, namespace string) string {
-	prefix := "/fission-function"
-	if namespace != metav1.NamespaceDefault {
-		prefix = fmt.Sprintf("/fission-function/%s", namespace)
-	}
-	return fmt.Sprintf("%v/%v", prefix, name)
-}
-
 func ParseAnnotations(annotations []string) (map[string]string, error) {
 	var invalidAnnotations string
 	annotationMap := make(map[string]string)

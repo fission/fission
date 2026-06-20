@@ -134,7 +134,7 @@ func save(data []byte, specDir string, specFile string, truncate bool) error {
 	newFile := false
 	if _, err := os.Stat(filename); os.IsNotExist(err) {
 		if truncate {
-			return fmt.Errorf("spec file does not exists")
+			return fmt.Errorf("spec file does not exist")
 		}
 		newFile = true
 	}
@@ -521,7 +521,7 @@ func (fr *FissionResources) Validate(input cli.Input, client cmd.Client) ([]stri
 	// we do not error on unreferenced functions (you can call a function through workflows,
 	// `fission function test`, etc.)
 
-	// Index envs, warn on functions referencing an environment for which spes does not exist
+	// Index envs, warn on functions referencing an environment for which spec does not exist
 	environments := make(map[string]struct{})
 	for _, e := range fr.Environments {
 		environments[fmt.Sprintf("%s:%s", e.Name, e.Namespace)] = struct{}{}

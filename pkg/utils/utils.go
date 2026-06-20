@@ -109,7 +109,7 @@ func FileSize(filePath string) (int64, error) {
 func GetFileChecksum(fileName string) (*fv1.Checksum, error) {
 	f, err := os.Open(fileName)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open file %v: %v", fileName, err)
+		return nil, fmt.Errorf("failed to open file %v: %w", fileName, err)
 	}
 	defer f.Close()
 

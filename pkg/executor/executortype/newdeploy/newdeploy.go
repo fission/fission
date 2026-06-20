@@ -16,7 +16,6 @@ import (
 	k8s_err "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -238,11 +237,7 @@ func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function
 	var ownerReferences []metav1.OwnerReference
 	if deploy.enableOwnerReferences {
 		ownerReferences = []metav1.OwnerReference{
-			*metav1.NewControllerRef(fn, schema.GroupVersionKind{
-				Group:   "fission.io",
-				Version: "v1",
-				Kind:    "Function",
-			}),
+			*metav1.NewControllerRef(fn, fv1.SchemeGroupVersion.WithKind("Function")),
 		}
 	}
 
@@ -396,11 +391,7 @@ func (deploy *NewDeploy) createOrGetSvc(ctx context.Context, fn *fv1.Function, d
 	var ownerReferences []metav1.OwnerReference
 	if deploy.enableOwnerReferences {
 		ownerReferences = []metav1.OwnerReference{
-			*metav1.NewControllerRef(fn, schema.GroupVersionKind{
-				Group:   "fission.io",
-				Version: "v1",
-				Kind:    "Function",
-			}),
+			*metav1.NewControllerRef(fn, fv1.SchemeGroupVersion.WithKind("Function")),
 		}
 	}
 
@@ -432,40 +423,14 @@ func (deploy *NewDeploy) createOrGetSvc(ctx context.Context, fn *fv1.Function, d
 		},
 	}
 
-	existingSvc, err := deploy.kubernetesClient.CoreV1().Services(svcNamespace).Get(ctx, svcName, metav1.GetOptions{})
-	if err == nil {
-		// to adopt orphan service (the managed-by check upgrades Services
-		// created before RFC-0002 so their slices become router-visible)
-		if existingSvc.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL] != deploy.instanceID ||
-			existingSvc.Labels[fv1.MANAGED_BY_LABEL] != fv1.MANAGED_BY_VALUE {
-			existingSvc.Annotations = service.Annotations
-			existingSvc.Labels = service.Labels
-			existingSvc.OwnerReferences = service.OwnerReferences
-			existingSvc.Spec.Ports = service.Spec.Ports
-			existingSvc.Spec.Selector = service.Spec.Selector
-			existingSvc.Spec.Type = service.Spec.Type
-			existingSvc, err = deploy.kubernetesClient.CoreV1().Services(svcNamespace).Update(ctx, existingSvc, metav1.UpdateOptions{})
-			if err != nil {
-				logger.Error(err, "error adopting service", "service", svcName, "ns", svcNamespace)
-				return nil, err
-			}
-		}
-		return existingSvc, err
-	} else if k8s_err.IsNotFound(err) {
-		svc, err := deploy.kubernetesClient.CoreV1().Services(svcNamespace).Create(ctx, service, metav1.CreateOptions{})
-		if err != nil {
-			if k8s_err.IsAlreadyExists(err) {
-				svc, err = deploy.kubernetesClient.CoreV1().Services(svcNamespace).Get(ctx, svcName, metav1.GetOptions{})
-			}
-			if err != nil {
-				return nil, err
-			}
-		}
-		otelUtils.SpanTrackEvent(ctx, "createdService", otelUtils.GetAttributesForSvc(svc)...)
-
-		return svc, nil
+	svc, created, err := util.CreateOrAdoptService(ctx, deploy.kubernetesClient, logger, deploy.instanceID, svcNamespace, service)
+	if err != nil {
+		return nil, err
 	}
-	return nil, err
+	if created {
+		otelUtils.SpanTrackEvent(ctx, "createdService", otelUtils.GetAttributesForSvc(svc)...)
+	}
+	return svc, nil
 }
 
 func (deploy *NewDeploy) deleteSvc(ctx context.Context, ns string, name string) error {

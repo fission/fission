@@ -178,12 +178,6 @@ func TestApplyLabelsAndAnnotations(t *testing.T) {
 	})
 }
 
-func TestUrlForFunction(t *testing.T) {
-	t.Parallel()
-	assert.Equal(t, "/fission-function/fn", UrlForFunction("fn", metav1.NamespaceDefault))
-	assert.Equal(t, "/fission-function/ns1/fn", UrlForFunction("fn", "ns1"))
-}
-
 func TestGetSpecDir(t *testing.T) {
 	t.Parallel()
 	in := dummy.TestFlagSet()

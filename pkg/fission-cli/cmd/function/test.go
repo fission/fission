@@ -29,6 +29,7 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/console"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
+	"github.com/fission/fission/pkg/utils"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
@@ -61,7 +62,7 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 	if err != nil {
 		return fmt.Errorf("error getting router URL: %w", err)
 	}
-	fnURI := util.UrlForFunction(m.Name, m.Namespace)
+	fnURI := utils.UrlForFunction(m.Name, m.Namespace)
 	if input.IsSet(flagkey.FnSubPath) {
 		subPath := input.String(flagkey.FnSubPath)
 		if !strings.HasPrefix(subPath, "/") {

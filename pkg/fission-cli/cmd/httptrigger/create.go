@@ -5,12 +5,10 @@
 package httptrigger
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
-	"os"
 	"strings"
-
-	"errors"
 
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -72,8 +70,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	fallbackURL := ""
 
 	if triggerUrl == "" && prefix == "" {
-		console.Error("You need to supply either Prefix or URL/RelativeURL")
-		os.Exit(1)
+		return errors.New("you need to supply either Prefix or URL/RelativeURL")
 	}
 
 	if triggerUrl != "" && prefix != "" {

@@ -44,15 +44,15 @@ func (opts *DumpSubCommand) do(input cli.Input) error {
 		// support, but as files on disk these should not be world-readable.
 		err = os.Mkdir(outputDir, 0o700)
 		if err != nil {
-			panic(err)
+			return fmt.Errorf("error creating dump directory %q: %w", outputDir, err)
 		}
 	} else if err != nil {
-		panic(fmt.Errorf("error checking dump directory status: %w", err))
+		return fmt.Errorf("error checking dump directory status: %w", err)
 	}
 
 	outputDir, err = filepath.Abs(outputDir)
 	if err != nil {
-		panic(fmt.Errorf("error creating dump directory for dumping files: %w", err))
+		return fmt.Errorf("error resolving absolute dump directory path: %w", err)
 	}
 
 	k8sClient := opts.Client().KubernetesClient
@@ -116,7 +116,7 @@ func (opts *DumpSubCommand) do(input cli.Input) error {
 		if _, err := os.Stat(dir); os.IsNotExist(err) {
 			err = os.MkdirAll(dir, 0o700)
 			if err != nil {
-				panic(err)
+				return fmt.Errorf("error creating dump subdirectory %q: %w", dir, err)
 			}
 		}
 		wg.Go(func() {

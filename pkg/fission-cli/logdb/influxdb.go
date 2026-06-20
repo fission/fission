@@ -191,8 +191,8 @@ func (influx InfluxDB) query(ctx context.Context, query influxdbClient.Query) (*
 	response := influxdbClient.Response{}
 	decoder := json.NewDecoder(resp.Body)
 	decoder.UseNumber()
-	if decoder.Decode(&response) != nil {
-		return nil, fmt.Errorf("failed to decode influxdb response: %v", err)
+	if err := decoder.Decode(&response); err != nil {
+		return nil, fmt.Errorf("failed to decode influxdb response: %w", err)
 	}
 	return &response, nil
 }

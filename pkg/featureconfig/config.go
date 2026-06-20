@@ -26,19 +26,19 @@ func GetFeatureConfig(logger logr.Logger) (*FeatureConfig, error) {
 	// read the file
 	b64EncodedContent, err := os.ReadFile(FeatureConfigFile)
 	if err != nil {
-		return nil, fmt.Errorf("error reading YAML file %s: %v", FeatureConfigFile, err)
+		return nil, fmt.Errorf("error reading YAML file %s: %w", FeatureConfigFile, err)
 	}
 
 	// b64 decode file
 	yamlContent, err := base64.StdEncoding.DecodeString(string(b64EncodedContent))
 	if err != nil {
-		return nil, fmt.Errorf("error b64 decoding the config : %v", err)
+		return nil, fmt.Errorf("error b64 decoding the config : %w", err)
 	}
 
 	// unmarshal into feature config
 	err = yaml.Unmarshal(yamlContent, featureConfig)
 	if err != nil {
-		return nil, fmt.Errorf("error unmarshalling YAML config %v", err)
+		return nil, fmt.Errorf("error unmarshalling YAML config %w", err)
 	}
 
 	if featureConfig.AuthConfig.AuthUriPath == "" {
