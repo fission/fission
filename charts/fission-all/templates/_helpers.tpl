@@ -75,6 +75,8 @@ Helper template to construct image names with repository and tag
   value: "{{ .Values.openTelemetry.otlpCollectorEndpoint }}"
 - name: OTEL_EXPORTER_OTLP_INSECURE
   value: "{{ .Values.openTelemetry.otlpInsecure }}"
+- name: OTEL_LOGS_ENABLED
+  value: "{{ .Values.openTelemetry.logsEnabled }}"
 {{- if .Values.openTelemetry.otlpHeaders }}
 - name: OTEL_EXPORTER_OTLP_HEADERS
   value: "{{ .Values.openTelemetry.otlpHeaders }}"

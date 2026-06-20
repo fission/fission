@@ -91,3 +91,33 @@ func TestGetTraceExporter(t *testing.T) {
 		}
 	}
 }
+
+func TestGetLogExporter(t *testing.T) {
+	ctx := t.Context()
+	// No endpoint -> nil exporter, no error (control-plane log push stays inert).
+	exp, err := getLogExporter(ctx, OtelConfig{})
+	if err != nil {
+		t.Fatalf("getLogExporter() with no endpoint err = %v, want nil", err)
+	}
+	if exp != nil {
+		t.Errorf("getLogExporter() with no endpoint = %#v, want nil", exp)
+	}
+	// Endpoint set but logs not opted in -> nil (traces alone do not push logs).
+	exp, err = getLogExporter(ctx, OtelConfig{endpoint: "localhost:4317", insecure: true})
+	if err != nil {
+		t.Fatalf("getLogExporter() without logsEnabled err = %v, want nil", err)
+	}
+	if exp != nil {
+		t.Errorf("getLogExporter() without logsEnabled = %#v, want nil (opt-in gate)", exp)
+	}
+	// Endpoint set AND logs enabled -> a non-nil exporter (creation is lazy).
+	exp, err = getLogExporter(ctx, OtelConfig{endpoint: "localhost:4317", insecure: true, logsEnabled: true})
+	if err != nil {
+		t.Fatalf("getLogExporter() with endpoint+logsEnabled err = %v, want nil", err)
+	}
+	if exp == nil {
+		t.Error("getLogExporter() with endpoint+logsEnabled = nil, want non-nil")
+	} else {
+		_ = exp.Shutdown(ctx)
+	}
+}

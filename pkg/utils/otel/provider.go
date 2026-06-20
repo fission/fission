@@ -14,8 +14,11 @@ import (
 	"github.com/go-logr/logr"
 	"go.opentelemetry.io/contrib/propagators/autoprop"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	otellogglobal "go.opentelemetry.io/otel/log/global"
+	sdklog "go.opentelemetry.io/otel/sdk/log"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
@@ -24,15 +27,19 @@ import (
 )
 
 const (
-	OtelEnvPrefix      = "OTEL_"
-	OtelEndpointEnvVar = "OTEL_EXPORTER_OTLP_ENDPOINT"
-	OtelInsecureEnvVar = "OTEL_EXPORTER_OTLP_INSECURE"
-	OtelPropagaters    = "OTEL_PROPAGATORS"
+	OtelEnvPrefix         = "OTEL_"
+	OtelEndpointEnvVar    = "OTEL_EXPORTER_OTLP_ENDPOINT"
+	OtelInsecureEnvVar    = "OTEL_EXPORTER_OTLP_INSECURE"
+	OtelPropagaters       = "OTEL_PROPAGATORS"
+	OtelLogsEnabledEnvVar = "OTEL_LOGS_ENABLED"
 )
 
 type OtelConfig struct {
 	endpoint string
 	insecure bool
+	// logsEnabled opts control-plane logs into the OTLP push (RFC-0016 ph4);
+	// off by default so enabling traces alone does not change log behavior.
+	logsEnabled bool
 }
 
 // parseOtelConfig parses the environment variables OTEL_EXPORTER_OTLP_ENDPOINT and
@@ -44,6 +51,7 @@ func parseOtelConfig() OtelConfig {
 		insecure = true
 	}
 	config.insecure = insecure
+	config.logsEnabled, _ = strconv.ParseBool(os.Getenv(OtelLogsEnabledEnvVar))
 	return config
 }
 
@@ -68,6 +76,22 @@ func getTraceExporter(ctx context.Context, logger logr.Logger) (*otlptrace.Expor
 		return nil, err
 	}
 	return exporter, nil
+}
+
+// getLogExporter builds the OTLP gRPC log exporter (RFC-0016 phase 4), mirroring
+// the trace exporter's endpoint/insecure handling. Returns nil when no endpoint
+// is configured, so log push stays inert by default.
+func getLogExporter(ctx context.Context, cfg OtelConfig) (*otlploggrpc.Exporter, error) {
+	if cfg.endpoint == "" || !cfg.logsEnabled {
+		return nil, nil
+	}
+	opts := []otlploggrpc.Option{otlploggrpc.WithEndpoint(cfg.endpoint)}
+	if cfg.insecure {
+		opts = append(opts, otlploggrpc.WithInsecure())
+	} else {
+		opts = append(opts, otlploggrpc.WithTLSCredentials(credentials.NewClientTLSFromCert(nil, "")))
+	}
+	return otlploggrpc.New(ctx, opts...)
 }
 
 // Initializes an OTLP exporter, and configures the corresponding trace and metric providers.
@@ -104,7 +128,25 @@ func InitProvider(ctx context.Context, logger logr.Logger, serviceName string) (
 
 	otel.SetTracerProvider(tracerProvider)
 	otel.SetTextMapPropagator(autoprop.NewTextMapPropagator())
-	// Shutdown will flush any remaining spans and shut down the exporter.
+
+	// Control-plane OTLP log push (RFC-0016 phase 4): when an OTLP endpoint is
+	// configured, stand up a LoggerProvider and register it globally so the zap
+	// bridge in loggerfactory pushes control-plane logs (carrying trace_id) as
+	// OTLP records. Inert when the endpoint is unset (the global stays no-op).
+	var loggerProvider *sdklog.LoggerProvider
+	logExporter, err := getLogExporter(ctx, parseOtelConfig())
+	if err != nil {
+		return nil, err
+	}
+	if logExporter != nil {
+		loggerProvider = sdklog.NewLoggerProvider(
+			sdklog.WithResource(res),
+			sdklog.WithProcessor(sdklog.NewBatchProcessor(logExporter)),
+		)
+		otellogglobal.SetLoggerProvider(loggerProvider)
+	}
+
+	// Shutdown will flush any remaining spans/logs and shut down the exporters.
 	return func(ctx context.Context) {
 		if ctx.Err() != nil {
 			// if the context is already cancelled, create a new one with a timeout of 30 seconds
@@ -119,6 +161,11 @@ func InitProvider(ctx context.Context, logger logr.Logger, serviceName string) (
 		if traceExporter != nil {
 			if err = traceExporter.Shutdown(ctx); err != nil {
 				logger.Error(err, "error shutting down trace exporter")
+			}
+		}
+		if loggerProvider != nil {
+			if err = loggerProvider.Shutdown(ctx); err != nil {
+				logger.Error(err, "error shutting down logger provider")
 			}
 		}
 	}, nil

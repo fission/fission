@@ -1138,6 +1138,11 @@ openTelemetry:
   ## Set this flag to false if you are using secure endpoint for the collector.
   ##
   otlpInsecure: true
+  ## RFC-0016 phase 4: also push control-plane logs (carrying trace_id) to the
+  ## OTLP collector, in addition to traces. Off by default so enabling traces
+  ## alone does not change log behavior; requires otlpCollectorEndpoint set.
+  ##
+  logsEnabled: false
   ## Key-value pairs to be used as headers associated with gRPC or HTTP requests to the collector.
   ## Eg. otlpHeaders: "key1=value1,key2=value2"
   ##
